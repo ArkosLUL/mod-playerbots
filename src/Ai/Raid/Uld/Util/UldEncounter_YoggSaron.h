@@ -435,6 +435,9 @@ constexpr float ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS = 30.0f;
 // skull: one pull had a bot flip between two orientations once a second for 48 seconds.
 constexpr float ULDUAR_YOGG_SARON_FACING_TOLERANCE = 0.1f;
 
+// Headings tried when turning a bot with no target off the skulls, 22.5 degrees apart.
+constexpr uint32 ULDUAR_YOGG_SARON_SKULL_HEADINGS = 16;
+
 // Facing a skull is decided by where the bot stands, not by what it points at: set facing,
 // AttackAction and PlayerbotAI::CastSpell each turn it back at its target inside the same tick. So the
 // answer is a sidestep around the tentacle, and 15 yd is enough of one - one pull measured a median
@@ -562,6 +565,15 @@ extern const Position ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE;
 // from all three illusion entrances. Anywhere in front, set behind picks its spot at the 3D distance
 // as a floor radius, walks the bot 15 yd out of range, and reach melee walks it back.
 extern const Position ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT;
+
+// Where ranged and healers hit the Brain from, one per illusion room: a few yards in from the exit
+// portal on that room's side. Door to spot to portal is 53, 62 and 71 yd against 93-106 through the
+// middle, and the exit lead drops to its floor from 10.6 s. All within 36.3 yd of the melee spot for
+// heals, and on the floor by navprobe, PATHFIND_NORMAL from the door, to the portal and from the melee
+// spot. West for Stormwind, south for Icecrown, north for the Chamber.
+extern const Position ULDUAR_YOGG_SARON_BRAIN_WEST_SPOT;
+extern const Position ULDUAR_YOGG_SARON_BRAIN_SOUTH_SPOT;
+extern const Position ULDUAR_YOGG_SARON_BRAIN_NORTH_SPOT;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE;
@@ -660,8 +672,9 @@ uint32 YoggSaronSanityOf(Player* player);
 // The bot's boots if they carry Nitro Boosts, else null.
 Item* YoggSaronNitroBoots(Player* bot);
 
-// The spot a bot hits the Brain from once its room is done: behind it for melee, the brain room middle
-// for everyone else, which has every melee spot inside heal range.
+// The spot a bot hits the Brain from once its room is done: behind it for melee, the portal spot of the
+// room it came up from for everyone else. The brain room middle when that spot can't see the Brain or
+// the room isn't known yet. Probed as `yogg.brainspot`.
 Position YoggSaronBrainSpot(Player* bot);
 
 // A bot's phase 3 station. Healers take the melee spot with the tank: it is 18.5 yd straight behind
@@ -1017,10 +1030,10 @@ bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position 
 
 // Drops an unfinished MoveTo booking once the bot has stood still past ULDUAR_YOGG_SARON_WALK_STALL_MS.
 // MoveTo refuses the point it already issued for MaxWaitForMove (5 s) whether the bot is still walking
-// or not, and below the platform a forced spline dies after a yard or two, so that 5 s floor is the
-// whole difference between a run and a crawl: one healer covered 24 of its 56 yd in 54 s at 0.45 yd/s
-// and healed almost nothing all wave. Why the spline dies there is not established - navprobe calls the
-// same route PATHFIND_NORMAL and complete - so this fixes the symptom and `yogg.walkstep` measures it.
+// or not, so a walk something else stopped stood out that 5 s: one healer covered 24 of its 56 yd in
+// 54 s at 0.45 yd/s. Below the platform the stops were a moving bot's potion use and the skull turn's
+// SetFacingTo, both fixed at the source. This stays for whatever stops a walk next, and `yogg.walkstep`
+// counts how often it has to.
 void YoggSaronReleaseStalledWalk(PlayerbotAI* botAI, char const* node, Position const& destination);
 
 // Window in which a counterable fear can land, for the shared anti-fear component. Yogg-Saron fears

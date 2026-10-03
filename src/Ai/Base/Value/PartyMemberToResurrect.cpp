@@ -7,6 +7,16 @@
 #include "PartyMemberToResurrect.h"
 #include "Playerbots.h"
 
+namespace
+{
+constexpr uint32 SPELL_YOGG_SARON_SANITY = 63050;
+}
+
+bool ResurrectBringsBackInsane(Player* dead, Player* living)
+{
+    return dead && living && living->HasAura(SPELL_YOGG_SARON_SANITY) && !dead->HasAura(SPELL_YOGG_SARON_SANITY);
+}
+
 class IsTargetOfResurrectSpell : public SpellEntryPredicate
 {
 public:
@@ -27,7 +37,10 @@ public:
 class FindDeadPlayer : public FindPlayerPredicate
 {
 public:
-    FindDeadPlayer(PartyMemberValue* value, bool battleRez) : value(value), battleRez(battleRez) {}
+    FindDeadPlayer(PartyMemberValue* value, Player* reviver, bool battleRez)
+        : value(value), reviver(reviver), battleRez(battleRez)
+    {
+    }
 
     bool Check(Unit* unit) override
     {
@@ -40,17 +53,22 @@ public:
         if (battleRez && !player->HasPlayerFlag(PLAYER_FLAGS_GHOST) && player->GetUInt32Value(PLAYER_SELF_RES_SPELL))
             return false;
 
+        // Skipped rather than vetoed later, so the next corpse in line still gets the res.
+        if (ResurrectBringsBackInsane(player, reviver))
+            return false;
+
         return !value->IsTargetOfSpellCast(player, predicate);
     }
 
 private:
     PartyMemberValue* value;
+    Player* reviver;
     bool battleRez;
     IsTargetOfResurrectSpell predicate;
 };
 
 Unit* PartyMemberToResurrect::Calculate()
 {
-    FindDeadPlayer finder(this, battleRez);
+    FindDeadPlayer finder(this, bot, battleRez);
     return FindPartyMember(finder);
 }

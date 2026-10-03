@@ -122,6 +122,12 @@ Adding `"offensive potion"` to `burstCooldownNames` is what buys the tank-hold d
 per-boss window for free. The `OffensivePotionTrigger` expresses "want to" (DPS, in combat,
 boss target) behind its own `POTION_HOLD_MS` dwell (above); the multiplier decides "not yet".
 
+**An instant potion doesn't stop a moving bot.** `UseItemAction::UseItem` stops a moving bot and
+fails; on any walk that yields its tick the action re-fired every tick and stopped it every time,
+never drinking. Yogg-Saron ranged crossed the brain level at ~3 yd/s that way. Items whose on-use
+spells all lack cast time and channel and that are potions (`IsPotion`) now skip the stop; food,
+drink, bandages and cast-time items keep it.
+
 **Expansion gating.** The ladder originally gated only on `RequiredLevel`, so a level-68-70 bot drank
 WotLK potions. `RandomItemMgr::IsAllowedForLevelExpansion(itemId, level)` is the shared rule,
 extracted from three inlined copies:

@@ -573,7 +573,7 @@ Guardians rode down in lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero i
 survived. Brain level: Influence Tentacle →
 nearest other illusion add → the Brain. Boss room:
 **leftover Guardian of Yogg-Saron** → **Marked** Immortal Guardian (36064) → Immortal Guardian (33988) →
-a Constrictor holding somebody → Crusher (**ranged only**, below) → Constrictor → Corruptor → Yogg. Phase 3 melee skip Constrictor and
+a Constrictor holding somebody → Crusher (**ranged only**, below; phase 3 ranged take a leftover one first) → Constrictor → Corruptor → Yogg. Phase 3 melee skip Constrictor and
 Corruptor and take a Guardian only within 20 yd of the phase 3 melee spot
 (`ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE`).
 
@@ -591,6 +591,12 @@ Guardians spawned untouched; they killed the raid inside 77 s and none went belo
 Guardian has 527,555 health, so ten ranged reach Weakened in about 7.5 s. Melee wait for guardian control
 to bring one to the tank: it holds the tank within 5 yd of the spot, and a full-health Guardian swings
 from up to 14 yd.
+
+**Except a leftover Crusher, which phase 3 ranged kill first** (tier 0 beside the leftover Guardians).
+Below the Guardians nobody ever hit one: in two later pulls a Crusher and two Corruptors outlived
+the whole phase and Diminish Power sat on the average raider 55% and 46% of it, while the Corruptors'
+debuffs came to 28-44 raider-seconds in all, so they stay last. The tank parks every Guardian on the
+melee spot, so the 20 yd window keeps melee on Guardians all phase; left that way by choice.
 
 **Nobody hits a Guardian a tank does not lead on.** `SetInCombatWithZone` hands a fresh one a
 threatless first victim, and heal threat reaches every Guardian in combat, so one pull's left the tank
@@ -1169,6 +1175,13 @@ under 60 with no portal walk pending walks to a well as `refill`, and `topping` 
 Probed as `yogg.sanity` (`low`, `topping`, `refill` or `idle`, the walk's reason, not a level) and
 `yogg.benched`.
 
+**No res for a corpse without Sanity.** Sanity is death-persistent (AttributesEx3 0x100000), an
+Insane death has lost it, and the Voice's Insane Periodic 64554 re-applies Insane to any player
+without it: every Rebirth on one in four pulls came back charmed 2-8 s later and died again, three
+on one corpse. `FindDeadPlayer` skips a corpse with none while the reviver has it, so the next one
+still gets the res (a multiplier would block every corpse ranked behind), and `SelfResurrectTrigger`
+stands down the same way.
+
 ## The brain room
 
 **Induce Madness `64059` is a 60,000 ms cast.** On completion everyone at **z ≤ 300** loses all 100
@@ -1305,16 +1318,23 @@ tentacles, where the melee on them are, carrying the middle's own z because the 
 239.7 to 244 and an averaged z stations it in the air; the middle is the fallback with nothing alive to
 centre on.
 
-**A forced walk below the platform dies after a yard or two, and `MoveTo` then refuses the same point
-for 5 s.** `IsDuplicateMove` rejects a destination within 0.01 yd of the last one for `MaxWaitForMove`,
+**A forced walk below the platform was stopped after a yard or two, and `MoveTo` then refuses the
+same point for 5 s.** `IsDuplicateMove` rejects a destination within 0.01 yd of the last one for `MaxWaitForMove`,
 so a dead spline cannot be relaunched inside that window and the walk advances in ~2 yd hops: the healer
 station covered 24 of its 56 yd in 54 s, **0.45 yd/s** against a run of 7, and `healer arrived` never
 fired once in three waves. `ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS` then ended it for good, because its
 `fresh` escape wants a gap in the asking and these nodes ask every tick — which left six ranged
-motionless where they stopped for 21 s until Induce Madness charmed all six. Why the spline dies is
-**not established**: the identical call on the platform carries 47 yd per spline and arrives 49 times in
-50, and navprobe calls the Chamber route `PATHFIND_NORMAL`, 10 polys, 61.84 yd, complete. So it is fixed
-and measured rather than explained. `YoggSaronReleaseStalledWalk` drops the booking once the bot has
+motionless where they stopped for 21 s until Induce Madness charmed all six. Two things stopped it,
+both outside the walk:
+
+- **The offensive potion.** A walk reading `dup` returns false, so the tick fell through to
+  `offensive potion` (armed on a boss target, the Brain counts), and `UseItemAction::UseItem` stops
+  a moving bot and fails. Ranged went cleared room to Brain at 3.0-3.9 yd/s standing half the time,
+  against 10.3 for melee and healers; every walk under 6 yd/s but one had it failing, and it was
+  never drunk. Fixed at the source ([../../systems/consumables-and-burst.md](../../systems/consumables-and-burst.md)).
+- **The skull turn** on a bot with no target (healer station, regroup, walk-in), below.
+
+`YoggSaronReleaseStalledWalk` stays for the next one: it drops the booking once the bot has
 stood still past 500 ms — the `ReleaseStalledWalk` shape Hodir and Algalon already carry, where
 `!isMoving()` is what keeps it off a walk that is still running — the give-up expires after
 `WALK_RETRY_MS`, and `yogg.walkstep` records the yards still to go on every release.
@@ -1350,9 +1370,13 @@ alive" read, the `yogg.tentacle` probe included.
 Sanity, 30 yd** — and its target filter is exactly `target->HasInArc(M_PI, caster)`, so only players
 with the skull in their front 180° are hit. Four per room, despawned when the last Influence Tentacle
 dies. It was entirely unhandled: **149 gaze hits for 137,815 damage** and 298 Sanity in one wipe.
-`yogg-saron laughing skull` faces away from the centroid of the skulls in arc, at `ACTION_EMERGENCY`
+`yogg-saron laughing skull` turns a bot with no target off the skulls, at `ACTION_EMERGENCY`
 beside the Yogg gaze node — the two cannot share a bot and never need to, since Yogg's own Lunatic
 Gaze is a P3 self aura on the platform and the skulls only exist below it. Probed as `yogg.skull`.
+**Never while moving**: `Unit::SetFacingTo` lays a spline on the spot and ends a point walk. **The
+heading is judged on every skull in range**, the one of 16 with fewest ahead, nearest the current on
+a tie, turning only for a strict gain: off the centroid of those in arc, the in-arc set changed with
+the heading and reprisal-held melee spun 1.13 ↔ 4.79 rad every snapshot, 4.5-10 s apiece.
 
 **Facing away must never cost a tick.** The node returned `true` whenever any skull was in arc, and
 the engine ends a tick at the first action returning true, so at `ACTION_EMERGENCY` it starved the dps
@@ -1417,8 +1441,16 @@ one-shot walk to the brain room middle died on the healer's first heal, leaving 
 it at the Stormwind doorway 55 yd out, which 30 yd of reach counts as in range. `yogg-saron brain
 spot` (`ACTION_RAID`, walk latch) owns the walk while `rti` is `square`, which `GoToBrainRoom` now only
 sets: melee go to `ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT` (1969.0, -25.4, 237.474), 12.3 yd west and
-30.1 yd 3D, settled z and `PATHFIND_NORMAL` under `--nav 0x09` from all three entrances; everyone else
-goes to the brain room middle, 11.5 yd from it.
+30.1 yd 3D, settled z and `PATHFIND_NORMAL` under `--nav 0x09` from all three entrances.
+
+**Ranged and healers stand by their room's exit portal**, not the middle: west (1948.05, -23.76,
+241.785) for Stormwind, south (1992.4, -52.8, 240.585) for Icecrown, north (1994.6, -0.1, 240.292)
+for the Chamber. Door → spot → portal is 53, 62 and 71 yd against 93-106 through the middle, and the
+exit lead drops from 10.6 s to its 5 s floor. Settled z, `PATHFIND_NORMAL` from the door, to the
+portal and from the melee spot, all within 36.3 yd of it for heals. The room is latched per bot
+(`lastIllusionRoom`), and a spot is used only once a ray from it reaches the Brain's hit sphere,
+cached per spot (the built navprobe predates `los`); otherwise the middle. Probed as
+`yogg.brainspot`.
 
 **The way out outranks that walk, and had to be told so.** Both are `MOVEMENT_FORCED`, and
 `YoggSaronMoveToExitPortalAction` returned false until it stood within 2 yd of a portal, so the engine
@@ -1468,7 +1500,7 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Thirty `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
+**Thirty-one `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,
@@ -1477,7 +1509,7 @@ not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `y
 `yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
 `yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour`,
 `yogg.judgement`, `yogg.spread`, `yogg.sanity`, `yogg.stunned`, `yogg.tankhold`, `yogg.walkstep`, `yogg.reprisal`,
-`yogg.benched` and `yogg.nitro`,
+`yogg.benched`, `yogg.nitro` and `yogg.brainspot`,
 beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
 Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
 circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
@@ -1487,9 +1519,11 @@ afterwards.
 all, which is the only way the room-tag leak shows; `--brain` prints what the healer landed per room
 beside how close it came to its station, every walk down there that stalled or gave up, the deaths
 reflect and gaze did most of, the reprisal holds, and per Induce Madness catch the time left at its
-first `leaving`, its flips back to `safe`, refused exit walk and casting; `--sanity` prints each
-bot's trips below (down > lowest, then what came back), the bench, and Insane split into caught
-below and drained to 0.
+first `leaving`, its flips back to `safe`, refused exit walk and casting, plus walk speed to the Brain
+per role, turns on the spot below and brain spot picks; `--sanity` prints each bot's trips below
+(down > lowest, then what came back), the bench, Insane split into caught below and drained to 0,
+and Rebirths on a corpse with no Sanity; `--phase3` each phase 2 leftover's fate and Diminish
+Power's uptime.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its

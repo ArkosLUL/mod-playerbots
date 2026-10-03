@@ -1350,6 +1350,37 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.cast_windows(rows, 64059), [(1000, 2000), (4000, 4000)])
         self.assertEqual(yogg_saron.cast_windows([row(0, 1)], 64059), [])
 
+    def test_a_walk_to_the_brain_reads_its_speed_and_the_time_it_stood(self):
+        def row(t, x, z=240.0, o=0.0):
+            return [t, 9, x, 0.0, z, o]
+
+        states = [(0, "fighting"), (1000, "tobrain"), (5000, "atbrain"), (6000, "tobrain")]
+        rows = [row(1000, 0.0), row(2000, 10.0), row(3000, 10.0), row(4000, 20.0), row(5000, 30.0)]
+        # the open tobrain at the end never arrived, so it is no walk
+        self.assertEqual(yogg_saron.walk_speeds(states, rows), [(4.0, 30.0, 1.0)])
+        self.assertEqual(yogg_saron.walk_speeds([(0, "tobrain")], rows), [])
+
+    def test_only_a_turn_while_standing_below_counts_as_a_spin(self):
+        def row(t, x, z, o):
+            return [t, 9, x, 0.0, z, o]
+
+        rows = [row(0, 0.0, 240.0, 1.13), row(250, 0.0, 240.0, 4.79), row(500, 0.0, 240.0, 1.13),
+                row(750, 5.0, 240.0, 4.79), row(1000, 5.0, 330.0, 1.13), row(1250, 5.0, 240.0, 1.2)]
+        # the third turn walked, the fourth was up on the platform, the last was too small
+        self.assertEqual(yogg_saron.facing_flips(rows, 300.0), 2)
+
+    def test_a_res_counts_against_insane_only_on_a_corpse_with_no_sanity(self):
+        casts = [(10000, 1, 2), (20000, 1, 3), (30000, 1, 4)]
+        deaths = [(5000, 2, False), (15000, 3, True), (25000, 4, False)]
+        insane = [(1000, 2), (16000, 2), (31000, 9)]
+        self.assertEqual(yogg_saron.res_into_insane(casts, deaths, insane),
+                         [(10000, 1, 2, 6.0), (30000, 1, 4, None)])
+
+    def test_aura_seconds_clip_to_the_window_and_close_what_is_still_up(self):
+        rows = [(0, 1, False), (4000, 1, True), (2000, 2, False), (9000, 3, False)]
+        # 1: 1-4 s, 2: 2-10 s, 3: 9-10 s inside a 1-10 s window
+        self.assertEqual(yogg_saron.aura_seconds(rows, 1000, 10000), 12.0)
+
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
         self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))

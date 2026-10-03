@@ -232,7 +232,7 @@ public:
 
 private:
     // Kill order for wherever the bot is standing, as a tier index. npos means "not a target here".
-    static size_t TierOf(Unit* unit, bool brainLevel);
+    static size_t TierOf(Unit* unit, bool brainLevel, bool phaseThreeRanged = false);
 
     // Whether the Brain is open to hit. Only worked out once a Brain turns up, most calls never meet one.
     struct BrainApproach

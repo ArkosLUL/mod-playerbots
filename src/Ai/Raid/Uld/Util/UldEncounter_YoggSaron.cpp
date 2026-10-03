@@ -31,6 +31,7 @@
 #include "Item.h"
 #include "GameObject.h"
 #include "LastMovementValue.h"
+#include "Map.h"
 #include "Group.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -66,6 +67,9 @@ const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE = Position(1925.6553f, 
 const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_MIDDLE = Position(2104.5667f, -25.509348f, 242.64679f);
 const Position ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE = Position(1980.1971f, -27.854689f, 236.06789f);
 const Position ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT = Position(1969.0f, -25.4f, 237.474f);
+const Position ULDUAR_YOGG_SARON_BRAIN_WEST_SPOT = Position(1948.05f, -23.76f, 241.785f);
+const Position ULDUAR_YOGG_SARON_BRAIN_SOUTH_SPOT = Position(1992.4f, -52.8f, 240.585f);
+const Position ULDUAR_YOGG_SARON_BRAIN_NORTH_SPOT = Position(1994.6f, -0.1f, 240.292f);
 const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_ENTRANCE = Position(1954.06f, 21.66f, 239.71f);
 const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE = Position(1950.11f, -79.284f, 239.98982f);
 const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE = Position(2048.63f, -25.5f, 239.72f);
@@ -106,6 +110,11 @@ struct YoggSaronEncounterState
 
     // When the Induce Madness each bot decided to leave for ends. See YoggSaronLeavingBrainLevel.
     std::unordered_map<ObjectGuid, uint32> leavingUntilMs;
+
+    // The illusion room each bot was last in, which picks its brain spot after it has walked out.
+    std::unordered_map<ObjectGuid, YoggSaronRoom> lastIllusionRoom;
+    // Whether each portal spot (west, south, north) sees the Brain: -1 not asked yet. Neither moves.
+    std::array<int8, 3> brainSpotSight{-1, -1, -1};
 
     // Nothing in the world counts the transformation dialogue down, so the window is timed off the
     // tick Yogg was first seen without his barrier. The second is when the ring actually lit, which is
@@ -543,8 +552,71 @@ Item* YoggSaronNitroBoots(Player* bot)
 
 Position YoggSaronBrainSpot(Player* bot)
 {
-    return PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsHeal(bot) ? ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT
-                                                                  : ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE;
+    if (PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsHeal(bot))
+        return ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+
+    YoggSaronRoom const here = YoggSaronRoomOf(bot);
+    if (here == YOGG_SARON_ROOM_STORMWIND || here == YOGG_SARON_ROOM_ICECROWN || here == YOGG_SARON_ROOM_CHAMBER)
+        state.lastIllusionRoom[bot->GetGUID()] = here;
+
+    auto const came = state.lastIllusionRoom.find(bot->GetGUID());
+    YoggSaronRoom const room = came == state.lastIllusionRoom.end() ? YOGG_SARON_ROOM_NONE : came->second;
+
+    uint8 index = 0;
+    Position const* spot = nullptr;
+    char const* name = "middle";
+    switch (room)
+    {
+        case YOGG_SARON_ROOM_STORMWIND:
+            index = 0;
+            spot = &ULDUAR_YOGG_SARON_BRAIN_WEST_SPOT;
+            name = "west";
+            break;
+        case YOGG_SARON_ROOM_ICECROWN:
+            index = 1;
+            spot = &ULDUAR_YOGG_SARON_BRAIN_SOUTH_SPOT;
+            name = "south";
+            break;
+        case YOGG_SARON_ROOM_CHAMBER:
+            index = 2;
+            spot = &ULDUAR_YOGG_SARON_BRAIN_NORTH_SPOT;
+            name = "north";
+            break;
+        default:
+            break;
+    }
+
+    // Line of sight from the floor up to the Brain wasn't checked offline, and without it the resolver
+    // never picks the Brain, so the spot has to earn it once. Same ray IsWithinLOSInMap casts.
+    if (spot && state.brainSpotSight[index] < 0)
+    {
+        if (Creature* brain = bot->FindNearestCreature(NPC_BRAIN, 200.0f))
+        {
+            Position const eye(spot->GetPositionX(), spot->GetPositionY(),
+                               spot->GetPositionZ() + bot->GetCollisionHeight());
+            Position const hit = brain->GetHitSpherePointFor(eye);
+            state.brainSpotSight[index] =
+                brain->GetMap()->isInLineOfSight(eye.GetPositionX(), eye.GetPositionY(), eye.GetPositionZ(),
+                                                 hit.GetPositionX(), hit.GetPositionY(), hit.GetPositionZ(),
+                                                 brain->GetPhaseMask(), LINEOFSIGHT_ALL_CHECKS,
+                                                 VMAP::ModelIgnoreFlags::Nothing)
+                    ? 1
+                    : 0;
+        }
+    }
+
+    if (!spot || state.brainSpotSight[index] != 1)
+    {
+        spot = &ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE;
+        name = "middle";
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.brainspot", name);
+
+    return *spot;
 }
 
 Position const& YoggSaronPhaseThreeSpot(Player* bot)

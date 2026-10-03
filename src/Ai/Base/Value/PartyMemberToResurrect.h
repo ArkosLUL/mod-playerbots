@@ -9,8 +9,14 @@
 
 #include "PartyMemberValue.h"
 
+class Player;
 class PlayerbotAI;
 class Unit;
+
+// True when raising dead brings it straight back Insane: Yogg-Saron's Insane Periodic (64554) charms any
+// player without Sanity (63050), Sanity survives death, and an Insane death has already lost it. Keyed on
+// living carrying it, so it's false everywhere else.
+bool ResurrectBringsBackInsane(Player* dead, Player* living);
 
 class PartyMemberToResurrect : public PartyMemberValue
 {

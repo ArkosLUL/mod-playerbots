@@ -75,6 +75,18 @@ float HeadingGap(float from, float to)
     return gap > static_cast<float>(M_PI) ? 2.0f * static_cast<float>(M_PI) - gap : gap;
 }
 
+// Skulls in the front half of a heading from (x, y): what Lunatic Gaze's HasInArc(pi) would hit.
+uint32 SkullsAhead(std::vector<Position> const& skulls, float x, float y, float heading)
+{
+    uint32 ahead = 0;
+    for (Position const& skull : skulls)
+        if (HeadingGap(std::atan2(skull.GetPositionY() - y, skull.GetPositionX() - x), heading) <
+            static_cast<float>(M_PI) / 2.0f)
+            ++ahead;
+
+    return ahead;
+}
+
 }  // namespace
 
 const Position ULDUAR_YOGG_SARON_BOSS_ROOM_RESTORE_POINT = Position(1928.8923f, -24.871964f, 324.88956f, 6.247805f);
@@ -577,7 +589,7 @@ void YoggSaronPetGuardAction::Unhush(Creature* pet)
     hushed.erase(it);
 }
 
-size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
+size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool phaseThreeRanged)
 {
     constexpr size_t none = std::numeric_limits<size_t>::max();
 
@@ -608,9 +620,9 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
     {
         case NPC_GUARDIAN_OF_YS:
             return 0;
-        // Immortal Guardians only exist in phase 3, and they go before the tentacles phase 2 leaves
+        // Immortal Guardians only exist in phase 3, and they go before most of what phase 2 leaves
         // behind. One pull spent phase 3's first 50 s on a Crusher and two Corruptors while five loose
-        // Guardians killed the raid.
+        // Guardians killed the raid. The Crusher is the exception, below.
         // Shadow Beacon swaps a guardian's entry to the marked one, then pours 750,000 of healing into
         // it over 20 s, 176% of its own max health, and into Yogg too when he is within 20 yd of it.
         // Focusing it is the only way it reaches Weakened before that lands, and the entry swap makes it
@@ -622,8 +634,11 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
         // Then the Crusher. Diminish Power is a 5-minute channel taking 21% off every point of damage
         // the raid does, multiplicative across tentacles, undispellable and unkickable - only a melee
         // hit (worth ~1.5 s) or the tentacle's death stops it.
+        // Phase 3 ranged take a leftover one first: with nobody on it, it sat on half the raid for all of
+        // phase 3 in two pulls running. Only the Crusher, the Corruptors' debuffs were dispelled inside
+        // seconds.
         case NPC_CRUSHER_TENTACLE:
-            return 4;
+            return phaseThreeRanged ? 0 : 4;
         // Ahead of the Crusher while it holds somebody. 99k health dies in about 2 s under the ranged,
         // and one pull left four raiders squeezed for 11.5-23.3 s with all nine ranged on a Crusher.
         case NPC_CONSTRICTOR_TENTACLE:
@@ -700,6 +715,8 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     constexpr float targetSwitchDistance = 10.0f;
 
     bool const brainLevel = YoggSaronOnBrainLevel(bot);
+    bool const phaseThreeRanged =
+        !brainLevel && PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot) && YoggSaronInPhase3(botAI);
 
     std::vector<uint32> entries;
     size_t tierCount = 0;
@@ -745,7 +762,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     std::vector<size_t> tiers;
     tiers.reserve(candidates.size());
     for (Unit* unit : candidates)
-        tiers.push_back(TierOf(unit, brainLevel));
+        tiers.push_back(TierOf(unit, brainLevel, phaseThreeRanged));
 
     // Best tier first, and stop at the first one with anything allowed in it: only that tier is ever
     // used, so the rest would just be line of sight rays for nothing. Keep the visit order inside a
@@ -784,7 +801,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     size_t currentTier = none;
     if (currentTarget && IsAllowedTarget(currentTarget, brain))
-        currentTier = TierOf(currentTarget, brainLevel);
+        currentTier = TierOf(currentTarget, brainLevel, phaseThreeRanged);
 
     if (currentTier != none && currentTier <= desiredTier)
     {
@@ -1362,7 +1379,12 @@ bool YoggSaronMoveToExitPortalAction::Execute(Event /*event*/)
 
 bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
 {
-    std::vector<Unit*> const skulls = GetYoggSaronSkullsInArc(botAI);
+    // SetFacingTo lays a spline on the spot, which ends any walk under way: healer, regroup and walk-in
+    // walks below kept dying after a yard or two. A walk faces where it goes anyway.
+    if (bot->isMoving())
+        return false;
+
+    std::vector<Position> const skulls = GetYoggSaronSkullsInRange(botAI);
     if (skulls.empty())
         return false;
 
@@ -1376,25 +1398,32 @@ bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
     if (target && target->IsAlive())
         return false;
 
-    float x = 0.0f;
-    float y = 0.0f;
-    for (Unit* skull : skulls)
+    // Judged on every skull in range, not the ones in arc. Turning off the in-arc ones brought the
+    // others round in front, and melee in a reprisal hold flipped between two headings four times a
+    // second. Fewest ahead wins, nearest the current heading on a tie, and only a strict gain turns.
+    float const x = bot->GetPositionX();
+    float const y = bot->GetPositionY();
+    float const current = bot->GetOrientation();
+
+    uint32 const now = SkullsAhead(skulls, x, y, current);
+    uint32 fewest = now;
+    float heading = current;
+    for (uint32 i = 0; i < ULDUAR_YOGG_SARON_SKULL_HEADINGS; ++i)
     {
-        x += skull->GetPositionX();
-        y += skull->GetPositionY();
+        float const candidate = 2.0f * static_cast<float>(M_PI) * i / ULDUAR_YOGG_SARON_SKULL_HEADINGS;
+        uint32 const ahead = SkullsAhead(skulls, x, y, candidate);
+        if (ahead < fewest || (ahead == fewest && ahead < now &&
+                               HeadingGap(current, candidate) < HeadingGap(current, heading)))
+        {
+            fewest = ahead;
+            heading = candidate;
+        }
     }
 
-    x /= skulls.size();
-    y /= skulls.size();
-
-    // Away from the centroid. Four skulls to a room can be spread wide enough that no heading clears
-    // all of them, and the middle of the ones that are in arc is the heading that clears the most.
-    float const away = Position::NormalizeOrientation(bot->GetAngle(x, y) + static_cast<float>(M_PI));
-
-    if (HeadingGap(bot->GetOrientation(), away) <= ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+    if (fewest >= now || HeadingGap(current, heading) <= ULDUAR_YOGG_SARON_FACING_TOLERANCE)
         return false;
 
-    bot->SetFacingTo(away);
+    bot->SetFacingTo(heading);
 
     // The tick is never claimed. Walking into the room and leaving it both sit below this node and
     // both matter more than a heading, and a heading needs no tick of its own to hold once nothing

@@ -9,9 +9,11 @@
 #include "Corpse.h"
 #include "CreatureAI.h"
 #include "GenericBuffUtils.h"
+#include "Group.h"
 #include "ItemVisitors.h"
 #include "LastSpellCastValue.h"
 #include "ObjectGuid.h"
+#include "PartyMemberToResurrect.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -344,6 +346,17 @@ bool SelfResurrectTrigger::IsActive()
     if (resSpell == SPELL_REINCARNATION_SELF_RES && sPlayerbotAIConfig.battleRezBossOnly &&
         !AttackersValue::IsInBossFight(botAI))
         return false;
+
+    // Rises charmed again otherwise, and the self-res is gone for nothing.
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsAlive() && ResurrectBringsBackInsane(bot, member))
+                return false;
+        }
+    }
 
     return true;
 }

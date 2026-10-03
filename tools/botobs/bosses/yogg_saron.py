@@ -14,12 +14,15 @@
     yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure,
                                     who reflect and gaze killed and the reprisal holds, and where
                                     Induce Madness caught whoever it charmed and what their way out
-                                    lost, Nitro Boosts
+                                    lost, Nitro Boosts, the walk to the Brain per role, turns on the
+                                    spot below, brain spot picks
     yogg_saron.py <file> --phase3   Immortal Guardians, who pulled them off the tanks, the bot tank's
-                                    targets and taunts, beacon heals, Lunatic Gaze
+                                    targets and taunts, beacon heals, Lunatic Gaze, phase 2 leftovers
+                                    and Diminish Power
     yogg_saron.py <file> --crush    Crush, who took it and what each cone was aimed at, the body's
                                     knockback and who walked into it, Death Rays
-    yogg_saron.py <file> --sanity   Sanity minima, each trip below, who sat a wave out, where it went
+    yogg_saron.py <file> --sanity   Sanity minima, each trip below, who sat a wave out, where it went,
+                                    Rebirths on a corpse with no Sanity
 
 The fight has three rooms, five mechanics that kill and nothing in the world to sweep for two of
 them, so most of what matters here is in `note` rows rather than in the snapshot:
@@ -94,6 +97,15 @@ SPELL_BRAIN_LINK_OK = 63804
 # portal was actually used.
 SPELL_ILLUSION_ROOM = 63988
 SPELL_NITRO_BOOSTS_USE = 55004
+SPELL_DIMINISH_POWER = 64145
+
+# A step under this between samples is standing still, and a turn past this while standing is a spin:
+# the skull turn flipped bots between headings 3.7 rad apart.
+WALK_STILL_YD = 0.3
+FLIP_TURN = 1.2
+
+# A leftover tentacle last sampled at or under this was killed, not just out of the sweep.
+LEFTOVER_DEAD_PCT = 1.0
 SPELL_HAND_OF_PROTECTION = (10278, 5599, 1022)
 
 # A Guardian's death nova is 15 yd (62714 and 65209 both carry radius index 18) and the ranged station
@@ -1557,6 +1569,7 @@ def show_brain(trace: Trace) -> None:
     if nitro or nitro_notes:
         users = collections.Counter(trace.name(rec.get("s", 0)) for rec in nitro)
         print(f"  Nitro Boosts     : {len(nitro)} used {dict(users)}, probe {dict(nitro_notes)}")
+    show_brain_walks(trace)
     if madness:
         print(f"  Induce Madness   : {len(madness)} rows")
 
@@ -1568,6 +1581,35 @@ def show_brain(trace: Trace) -> None:
 
     show_brain_waves(trace)
     show_stalled_walks(trace)
+
+
+def show_brain_walks(trace: Trace) -> None:
+    """How fast the walk from a cleared room to the Brain went per role, how often bots below turned on
+    the spot, and which brain spot each non-melee was sent to."""
+    states: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "yogg.roomstate"):
+        states[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
+    rows = snapshot_rows(trace, roster_guids(trace))
+
+    walks: dict[str, list[tuple[float, float, float]]] = collections.defaultdict(list)
+    for guid, own in states.items():
+        walks[trace.role(guid)] += walk_speeds(own, rows.get(guid, []))
+    for role, done in sorted(walks.items()):
+        if done:
+            speed = statistics.median(yards / seconds for seconds, yards, _ in done)
+            standing = statistics.median(still for _, _, still in done)
+            print(f"  walk to the Brain: {role:6} {len(done):2} walks, median {speed:4.1f} yd/s,"
+                  f" standing {standing:4.1f} s")
+
+    turns = collections.Counter()
+    for guid, own in rows.items():
+        turns[trace.role(guid)] += facing_flips(own, BRAIN_LEVEL_Z)
+    if sum(turns.values()):
+        print(f"  turns on the spot below (over {FLIP_TURN} rad between samples): {dict(turns)}")
+
+    spots = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.brainspot"))
+    if spots:
+        print(f"  brain spots      : {dict(spots)}")
 
 
 def reprisal_deaths(deaths: list[dict], hits: list[dict], window_ms: int = REPRISAL_DEATH_WINDOW_MS) -> list[dict]:
@@ -2401,6 +2443,69 @@ def sanity_trips(heights: list[tuple[int, float]], sanity: list[tuple[int, int]]
     return trips
 
 
+def walk_speeds(states: list[tuple[int, str]], rows: list[list],
+                still_yd: float = WALK_STILL_YD) -> list[tuple[float, float, float]]:
+    """(seconds, yards, seconds standing) of each walk from a cleared illusion room to the Brain: a
+    yogg.roomstate tobrain followed straight by atbrain. `states` are (t, txt) and `rows` the bot's
+    [t, guid, x, y, ...] snapshot rows, both in time order."""
+    out = []
+    for (start, state), (stop, nxt) in zip(states, states[1:]):
+        if state != "tobrain" or nxt != "atbrain" or stop <= start:
+            continue
+        span = [row for row in rows if start <= row[0] <= stop]
+        steps = [(b[0] - a[0], math.dist(a[2:4], b[2:4])) for a, b in zip(span, span[1:])]
+        if not steps:
+            continue
+        standing = sum(ms for ms, step in steps if step < still_yd) / 1000.0
+        out.append(((stop - start) / 1000.0, sum(step for _, step in steps), standing))
+    return out
+
+
+def facing_flips(rows: list[list], level_z: float, still_yd: float = WALK_STILL_YD,
+                 turn: float = FLIP_TURN) -> int:
+    """Samples below `level_z` where a bot standing still had turned more than `turn` radians since the
+    last one, off [t, guid, x, y, z, o, ...] rows in time order."""
+    flips = 0
+    for a, b in zip(rows, rows[1:]):
+        if b[4] >= level_z or math.dist(a[2:4], b[2:4]) >= still_yd:
+            continue
+        if abs((b[5] - a[5] + math.pi) % (2 * math.pi) - math.pi) > turn:
+            flips += 1
+    return flips
+
+
+def res_into_insane(casts: list[tuple[int, int, int]], deaths: list[tuple[int, int, bool]],
+                    insane: list[tuple[int, int]]) -> list[tuple[int, int, int, float | None]]:
+    """Resurrections cast on a corpse that died without Sanity, as (t, caster, target, seconds until it
+    went Insane again or None). `casts` are (t, caster, target), `deaths` (t, guid, kept Sanity) and
+    `insane` (t, guid), all in time order. Voice re-applies Insane to anyone without Sanity, so these
+    come back charmed."""
+    out = []
+    for t, caster, target in casts:
+        died = [kept for when, guid, kept in deaths if guid == target and when <= t]
+        if not died or died[-1]:
+            continue
+        again = next((when for when, guid in insane if guid == target and when > t), None)
+        out.append((t, caster, target, (again - t) / 1000.0 if again is not None else None))
+    return out
+
+
+def aura_seconds(rows: list[tuple[int, int, bool]], start: int, stop: int) -> float:
+    """Unit-seconds an aura was up inside [start, stop], from (t, guid, removed) rows in time order.
+    One still up at `stop` counts to there."""
+    opened: dict[int, int] = {}
+    total = 0
+    for t, guid, removed in rows:
+        if not removed:
+            opened.setdefault(guid, t)
+        elif guid in opened:
+            began = opened.pop(guid)
+            total += max(0, min(t, stop) - max(began, start))
+    for began in opened.values():
+        total += max(0, stop - max(began, start))
+    return total / 1000.0
+
+
 def held_still(rows: list[list], when: int, radius: float) -> float:
     """Seconds the bot had been standing within `radius` of where it was at `when`."""
     spot = None
@@ -2823,6 +2928,7 @@ def show_sanity(trace: Trace) -> None:
 
     show_sanity_trips(trace, rows)
     show_sanity_sources(trace)
+    show_res_into_insane(trace)
 
 
 def show_sanity_trips(trace: Trace, rows: list[dict]) -> None:
@@ -2859,6 +2965,23 @@ def show_sanity_trips(trace: Trace, rows: list[dict]) -> None:
                                   if rec.get("txt") == "1")
     if benched:
         print(f"  benched under the brain team floor: {dict(benched)}")
+
+
+def show_res_into_insane(trace: Trace) -> None:
+    """Rebirths spent on a corpse that died without Sanity, which the Voice charms again on its feet."""
+    rebirth = {spell for spell, name in trace.spells.items() if name == "Rebirth"}
+    casts = [(rec["t"], rec.get("s", 0), rec.get("tgt", 0)) for rec in trace.of("cast") if rec.get("sp") in rebirth]
+    if not casts:
+        return
+    deaths = sorted((rec["t"], rec.get("g", 0), any(aura[0] == SPELL_SANITY for aura in rec.get("auras", [])))
+                    for rec in death_records(trace))
+    insane = sorted((rec["t"], rec.get("d", 0)) for rec in trace.of("aura")
+                    if rec.get("sp") == SPELL_INSANE and not rec.get("r"))
+    wasted = res_into_insane(casts, deaths, insane)
+    print(f"  Rebirth: {len(casts)} cast, {len(wasted)} on a corpse with no Sanity")
+    for when, caster, target, again in wasted:
+        tail = f", Insane again {again:.1f} s later" if again is not None else ""
+        print(f"    {clock(when)} {trace.name(caster)} -> {trace.name(target)}{tail}")
 
 
 def show_threat(trace: Trace) -> None:
@@ -3266,6 +3389,36 @@ def show_phase3(trace: Trace) -> None:
             share = f"{away * 100 // len(gazing)}% of {len(gazing)}" if gazing else "-"
             print(f"    {trace.name(guid):14} {spot:5.1f} yd  away {share}")
 
+    show_phase3_leftovers(trace, start, alive_end)
+
+
+def show_phase3_leftovers(trace: Trace, start: int, stop: int) -> None:
+    """The tentacles phase 2 left standing: where each one ended, and how long Diminish Power, the
+    Crusher's 20% off the raid's damage, sat on the average raider while it lived."""
+    tentacles = {guid: entry for entry in TENTACLE_NAMES for guid in guids_of_entry(trace, entry)}
+    rows = snapshot_rows(trace, set(tentacles))
+    left = []
+    for guid, own in rows.items():
+        before = [row for row in own if row[0] <= start]
+        after = [row for row in own if row[0] >= start]
+        if before and after and before[-1][6] > 0:
+            left.append((guid, before[-1][6], after[-1]))
+    if left:
+        print(f"\n  phase 2 leftovers  : {len(left)}")
+        for guid, at_start, last in sorted(left, key=lambda item: item[2][0]):
+            # Sampling stops with the anchor, so a tentacle going quiet is not a kill: only one sampled
+            # at the bottom of its health bar is.
+            fate = "killed" if last[6] <= LEFTOVER_DEAD_PCT else "still up"
+            print(f"    {TENTACLE_NAMES[tentacles[guid]]:11} {at_start:5.1f}% at phase 3,"
+                  f" last seen {clock(last[0])} at {last[6]:.1f}%, {fate}")
+
+    roster = roster_guids(trace)
+    applied = [(rec["t"], rec.get("d", 0), bool(rec.get("r"))) for rec in trace.of("aura")
+               if rec.get("sp") == SPELL_DIMINISH_POWER and rec.get("d") in roster]
+    if applied and stop > start and roster:
+        share = aura_seconds(applied, start, stop) / ((stop - start) / 1000.0) / len(roster)
+        print(f"    Diminish Power on the average raider: {share * 100:.0f}% of phase 3")
+
 
 def nova_warning(series: list[tuple[int, float]], gate: float, when: int) -> float | None:
     """Seconds from the first sample at or under `gate` to `when`, or None when it never got there.
@@ -3479,11 +3632,11 @@ SECTIONS = (
     ("portals", "portal waves, assignments, and who never walked for one", show_portals),
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
     ("tentacles", "platform tentacle stock, Shattered Illusion stuns, leftovers at phase 3", show_tentacles),
-    ("brain", "brain room, the Brain, skulls, reprisal deaths and holds, Induce Madness, stalled walks",
-     show_brain),
-    ("phase3", "Immortal Guardians, beacon heals, Lunatic Gaze", show_phase3),
+    ("brain", "brain room, the Brain, skulls, reprisal deaths and holds, Induce Madness, stalled walks,"
+     " walk speed to the Brain, turns on the spot", show_brain),
+    ("phase3", "Immortal Guardians, beacon heals, Lunatic Gaze, phase 2 leftovers", show_phase3),
     ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
-    ("sanity", "Sanity minima, trips below and the bench", show_sanity),
+    ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),
 )
 
 

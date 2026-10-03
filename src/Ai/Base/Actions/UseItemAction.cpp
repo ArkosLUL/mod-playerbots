@@ -12,6 +12,31 @@
 #include "PlayerbotTextMgr.h"
 #include "Playerbots.h"
 
+namespace
+{
+
+// An instant potion works at a run. Stopping for one cost far more than the potion: the action fails
+// on the stop, retries the next tick the bot walks again, and stopped it every time.
+bool UsableOnTheMove(ItemTemplate const* proto)
+{
+    if (!proto->IsPotion())
+        return false;
+
+    for (uint8 i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+    {
+        if (proto->Spells[i].SpellId <= 0)
+            continue;
+
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(proto->Spells[i].SpellId);
+        if (!spellInfo || spellInfo->CalcCastTime() || spellInfo->IsChanneled())
+            return false;
+    }
+
+    return true;
+}
+
+}  // namespace
+
 bool UseItemAction::Execute(Event event)
 {
     std::string name = event.getParam();
@@ -186,7 +211,7 @@ bool UseItemAction::UseItem(Item* item, ObjectGuid goGuid, Item* itemTarget, Uni
     bot->ClearUnitState(UNIT_STATE_CHASE);
     bot->ClearUnitState(UNIT_STATE_FOLLOW);
 
-    if (bot->isMoving())
+    if (bot->isMoving() && !UsableOnTheMove(item->GetTemplate()))
     {
         bot->StopMoving();
         botAI->SetNextCheckDelay(sPlayerbotAIConfig.globalCoolDown);
