@@ -13,6 +13,7 @@
 #include "RaidObs.h"
 #include "UldData.h"
 
+#include <array>
 #include <unordered_map>
 #include <vector>
 
@@ -25,6 +26,8 @@ class Unit;
 enum UlduarAlgalonIds
 {
     PB_NPC_ALGALON = 32871,
+    SPELL_ALGALON_COSMIC_SMASH_DAMAGE = 62311,
+    SPELL_ALGALON_COSMIC_SMASH_DAMAGE_25 = 64596,
     PB_NPC_LIVING_CONSTELLATION = 33052,
     PB_NPC_COLLAPSING_STAR = 32955,
     PB_NPC_BLACK_HOLE = 32953,
@@ -43,6 +46,8 @@ enum UlduarAlgalonIds
 
 // He casts Ascend the moment he leaves a 47 yd disc around home or drops under Z 410.
 constexpr float ULDUAR_ALGALON_ROOM_RADIUS = 47.0f;
+// His combat reach is 9 (model 28641), so his swing lands at 9 + 1.5 + 4/3 on a player.
+constexpr float ULDUAR_ALGALON_MELEE_REACH = 11.83f;
 constexpr float ULDUAR_ALGALON_ROOM_Z_MIN = 410.0f;
 constexpr float ULDUAR_ALGALON_ROOM_Z_MAX = 425.0f;
 // Constellations spawn up to 67 yd out from home, well past the room edge.
@@ -53,6 +58,10 @@ constexpr float ULDUAR_ALGALON_SHELTER_RADIUS = 6.0f;
 // Big Bang's 64445 strips every phase a second after the hit and the field pulses every second, so a
 // bot still inside it then is phased again for 10s. Exits clear it with room to spare.
 constexpr float ULDUAR_ALGALON_HOLE_EXIT_RADIUS = 8.0f;
+// A walk whose straight line passes this close to a hole clips its field and phases the walker into
+// the void Dark Matter. A blocked walk detours via a point this far round the hole.
+constexpr float ULDUAR_ALGALON_HOLE_PATH_CLEARANCE = 7.5f;
+constexpr float ULDUAR_ALGALON_HOLE_DETOUR_RADIUS = 9.5f;
 
 // The handler parks this far past the hole on the far side, so the chase drags the constellation
 // through the field while the handler stays outside it.
@@ -86,45 +95,56 @@ constexpr int32 ULDUAR_ALGALON_SOAK_DISPERSION_MS = 5000;
 // An external needs the priest to still reach a hole after the GCD.
 constexpr int32 ULDUAR_ALGALON_EXTERNAL_MIN_REMAINING_MS = 4000;
 
-// Collapsing Star pacing. Each death is 16-21k to the whole raid, and Collapse drains 1% max health a
-// second, so four ignored stars explode within seconds of each other.
-constexpr float ULDUAR_ALGALON_STAR_PACING_RAID_HP_PCT = 80.0f;
+// Collapsing Star pacing. Each death is Black Hole Explosion on everyone unphased (64122 up to 16,912,
+// 65108 up to 21,525), and Collapse drains 1% max health a second, so four ignored stars explode within
+// seconds of each other.
 constexpr uint32 ULDUAR_ALGALON_STAR_PACING_GAP_MS = 8000;
-// Below this Collapse finishes the star anyway, so the raid picks the moment instead.
-constexpr float ULDUAR_ALGALON_STAR_FINISH_HP_PCT = 15.0f;
+constexpr uint32 ULDUAR_ALGALON_STAR_EXPLOSION_MAX_10 = 16913;
+constexpr uint32 ULDUAR_ALGALON_STAR_EXPLOSION_MAX_25 = 21526;
+// One gap plus a kill, per star still to go off.
+constexpr uint32 ULDUAR_ALGALON_STAR_SERIAL_SECONDS = 16;
+// The black hole lands where the star dies and phases everyone in its field.
+constexpr float ULDUAR_ALGALON_STAR_CLEAR_RADIUS = 7.0f;
+// A star last seen this low collapsed on its own rather than being killed.
+constexpr float ULDUAR_ALGALON_STAR_COLLAPSED_HP_PCT = 2.0f;
 constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_10 = 2;
 constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_25 = 3;
 
 // Cosmic Smash: full damage inside 6 yd, doubled dmg/dist to 10, dmg/dist past that. Impact is ~4.8s
 // after the marker lands, one marker on 10-man, three on 25-man.
-constexpr float ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS = 12.0f;
+constexpr float ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS = 15.0f;
 constexpr float ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE = 15.0f;
 constexpr float ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE = 10.0f;
+// Inside this the generic movers are held until the marker expires.
+constexpr float ULDUAR_ALGALON_COSMIC_SMASH_HOLD_RADIUS = 19.0f;
 constexpr float ULDUAR_ALGALON_DODGE_SEARCH_RADIUS = 24.0f;
 // The marker creatures live 10s but the meteor lands ~4.8s in; past this they mark nothing.
 constexpr uint32 ULDUAR_ALGALON_MARKER_LIFETIME_MS = 5500;
 
-// Algalon formation. The raid arrives from +Y, so the tank slot sits on the -Y edge of the worm hole
-// square. Rings hang off that slot because the tank is what healers have to stay in range of.
+// Algalon formation, anchored on his landing spot. He is held where he lands, so
+// every ring slot stays outside his reach: at the end of the intro he swings at a random player, and
+// whenever he loses his tank he swings at whoever is next, and anyone in reach is one hit.
 //
-// Every radius and arc below is navprobe-verified on map 603: flat WMO floor at Z 417.321, 19/19
-// points on mesh. The arcs are trimmed because the two -Y worm hole spots sit level with the tank
-// slot; the trims keep every slot at least 7.7 yd from all four.
-constexpr float ULDUAR_ALGALON_HEALER_RADIUS = 14.0f;
-constexpr float ULDUAR_ALGALON_RANGED_INNER_RADIUS = 20.5f;
-constexpr float ULDUAR_ALGALON_RANGED_OUTER_RADIUS = 27.0f;
+// Healers 0-3 at 19 yd, inner ranged 4-9 at 25 yd, outer ranged 10-17 at 31 yd, each ring ordered to
+// alternate sides so a short raid still spreads. Every slot is at least 8 yd from the four worm hole
+// spots, and healers are within 27 yd of the tank slot.
 constexpr uint8 ULDUAR_ALGALON_HEALER_SLOTS = 4;
 constexpr uint8 ULDUAR_ALGALON_RANGED_INNER_SLOTS = 6;
 constexpr uint8 ULDUAR_ALGALON_RANGED_OUTER_SLOTS = 8;
 constexpr uint8 ULDUAR_ALGALON_TOTAL_SLOTS =
     ULDUAR_ALGALON_HEALER_SLOTS + ULDUAR_ALGALON_RANGED_INNER_SLOTS + ULDUAR_ALGALON_RANGED_OUTER_SLOTS;
-constexpr float ULDUAR_ALGALON_HEALER_ARC_CENTER = 1.5708f;        // +Y, 35..145 degrees
-constexpr float ULDUAR_ALGALON_HEALER_ARC_WIDTH = 1.9199f;
-constexpr float ULDUAR_ALGALON_RANGED_INNER_ARC_CENTER = 1.7977f;  // 28..178 degrees
-constexpr float ULDUAR_ALGALON_RANGED_INNER_ARC_WIDTH = 2.6180f;
-constexpr float ULDUAR_ALGALON_RANGED_OUTER_ARC_CENTER = 1.5708f;  // 0..180 degrees
-constexpr float ULDUAR_ALGALON_RANGED_OUTER_ARC_WIDTH = 3.1416f;
 constexpr float ULDUAR_ALGALON_SLOT_TOLERANCE = 2.0f;
+// Melee wait on an arc this far out on the +Y (entrance) side until a swap tank holds him, 8 degrees
+// apart.
+constexpr float ULDUAR_ALGALON_MELEE_STAGE_RADIUS = 21.0f;
+constexpr float ULDUAR_ALGALON_MELEE_STAGE_STEP = 0.1396f;
+constexpr uint8 ULDUAR_ALGALON_MELEE_STAGE_SPOTS = 10;
+// Melee go in anyway this long after the intro, so a pull nobody picked up doesn't idle them.
+constexpr uint32 ULDUAR_ALGALON_MELEE_RELEASE_MS = 5000;
+// A human tank is told to taunt this often while a swap or a pickup is theirs to make.
+constexpr uint32 ULDUAR_ALGALON_TANK_CALL_MS = 5000;
+// Humans are told to step into a hole with this much of the Big Bang cast left.
+constexpr int32 ULDUAR_ALGALON_HIDE_CALL_MS = 3000;
 // How far a slot buried under a hole may be stepped aside before the formation gives up on it.
 constexpr float ULDUAR_ALGALON_SLOT_DISPLACE_RADIUS = 12.0f;
 
@@ -133,9 +153,12 @@ constexpr uint32 ULDUAR_ALGALON_STATE_TICK_MS = 250;
 // A walk standing still this long was stopped short and has to be issued again.
 constexpr uint32 ULDUAR_ALGALON_STALL_MS = 500;
 
-// Algalon's home, and the tank slot 18.7 yd out on the -Y edge, 10.2 yd clear of the nearest worm hole.
+// Algalon's home and landing spot. Both tank slots are 8 yd from it, inside his reach, so a tank holding
+// him from either doesn't move him and a swap taunt doesn't either.
 extern const Position ULDUAR_ALGALON_ROOM_CENTER;
 extern const Position ULDUAR_ALGALON_TANK_SLOT;
+extern const Position ULDUAR_ALGALON_OFFTANK_SLOT;
+extern const std::array<Position, ULDUAR_ALGALON_TOTAL_SLOTS> ULDUAR_ALGALON_RING_SLOTS;
 
 // Written as its number into algalon.phase.
 enum class AlgalonPhase : uint32
@@ -174,11 +197,17 @@ struct AlgalonEncounterState
     RaidObs::ObsValue<ObjectGuid> focusStar{"algalon.focusstar"};
     RaidObs::ObsGuidSet starTeam{"algalon.starteam"};
     RaidObs::ObsValue<ObjectGuid> handler{"algalon.handler"};
+    // The two tanks that trade him on Phase Punch, latched for the pull: two bot tanks when the raid has
+    // them, else the group's main and first assist tank, one of whom may be a human.
+    RaidObs::ObsGuidSet swapPair{"algalon.swappair"};
 
     ObjectGuid boss;
     bool engaged = false;
     bool engagedSeen = false;
+    bool meleeReleased = false;
     uint32 introEndMs = 0;
+    uint32 lastTankCallMs = 0;
+    bool bigBangHideCalled = false;
     uint32 nextBigBangMs = 0;
     uint32 bigBangCount = 0;
     bool bigBangCasting = false;
@@ -251,8 +280,18 @@ bool AlgalonHoleNear(Player* bot, float radius, Position* hole = nullptr);
 Player* GetAlgalonBossTank(PlayerbotAI* botAI);
 bool IsAlgalonSwapTank(Player* player);
 uint8 GetAlgalonPhasePunchStacks(Player* player);
-// The swap tank that takes him when his target is nobody who should have him.
+// The swap tank that takes him when his target is nobody who should have him, a bot before a human.
+// Before the pull it is the one waiting on the tank slot for the end of the intro.
 Player* GetAlgalonPickupTank(PlayerbotAI* botAI);
+// Due to taunt him now: he is loose, or the holder is deep enough in Phase Punch to hand him over.
+bool AlgalonShouldPickUp(Player* bot);
+bool AlgalonShouldSwap(Player* bot);
+// A swap tank or the handler not holding him stays off him while a swap tank does. After a taunt both
+// tanks build threat at the same rate, so the one carrying the stacks takes him straight back, and a
+// tank outside the pair would take him from both.
+bool AlgalonYieldsBoss(Player* bot);
+// The swap tank not holding him, busy with an add rather than idle on its slot.
+bool AlgalonOffTankWorking(Player* bot);
 
 // Constellations in phase 1, Unleashed Dark Matter in phase 2: a third tank, else the swap tank not
 // holding Algalon.
@@ -273,19 +312,28 @@ uint8 AlgalonAliveStarCount(PlayerbotAI* botAI);
 
 bool AlgalonCosmicSmashThreatens(Player* bot);
 bool AlgalonCosmicSmashMarkerNear(PlayerbotAI* botAI, Position const& spot, float radius);
+// Close enough to a live marker that the generic movers are held until it lands.
+bool AlgalonSmashHoldsGround(Player* bot);
 // Every marker and hole a dodge or an exit must stay clear of.
 std::vector<EncounterHelpers::HazardCircle> GetAlgalonDodgeHazards(Player* bot, float markerClearance);
 bool AlgalonSpotInRoom(float x, float y);
+// A straight walk from the bot to (x, y) would clip a hole's field. The hole it is already leaving
+// doesn't count.
+bool AlgalonPathCrossesHole(Player* bot, float x, float y);
 
-// Ranged and healers ring the tank slot; melee and the other tanks keep normal positioning.
+// Ranged and healers ring his landing spot.
 bool AlgalonTakesRingSlot(Player* bot);
+// A melee bot kept outside his reach until a swap tank holds him.
+bool AlgalonMeleeStaged(Player* bot);
 bool TryGetAlgalonSlotPosition(uint8 slotIndex, Position& position);
-// The spot this bot should stand on, stepped aside when a hole buried it. Traced as algalon.spot.
-bool TryGetAlgalonSlot(Player* bot, Position& position);
+// The spot this bot should stand on, stepped aside when a hole buried it, or a waypoint round a hole in
+// the way. Traced as algalon.spot.
+bool TryGetAlgalonSlot(Player* bot, Position& position, bool* waypoint = nullptr);
 // The undisplaced slot, untraced, for dodges that prefer to land near it.
 bool GetAlgalonSlotAnchor(Player* bot, Position& slot);
 
-// Stars, constellations and Dark Matter the bot's own job doesn't cover.
+// Stars, constellations and Dark Matter the bot's own job doesn't cover, and Algalon himself for the
+// swap tank yielding him.
 void AppendAlgalonTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions);
 // Same rule for damage already on its way: false vetoes a hit on this unit.
 bool AlgalonMayDamage(Player* bot, Unit* target);

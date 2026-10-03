@@ -43,6 +43,7 @@ float AlgalonTargetGuardMultiplier::GetValue(Action* action)
 
     switch (target->GetEntry())
     {
+        case PB_NPC_ALGALON:
         case PB_NPC_COLLAPSING_STAR:
         case PB_NPC_LIVING_CONSTELLATION:
         case PB_NPC_UNLEASHED_DARK_MATTER:

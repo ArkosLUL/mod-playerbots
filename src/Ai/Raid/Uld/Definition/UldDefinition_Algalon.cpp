@@ -43,10 +43,8 @@ bool AlgalonStarTeamFocused(PlayerbotAI* botAI)
     return IsAlgalonStarTeam(botAI->GetBot()) && GetAlgalonFocusStar(botAI) && AlgalonEngaged(botAI);
 }
 
-bool AlgalonSwapTankEngaged(PlayerbotAI* botAI)
-{
-    return IsAlgalonSwapTank(botAI->GetBot()) && AlgalonEngaged(botAI);
-}
+
+bool AlgalonYielding(PlayerbotAI* botAI) { return AlgalonYieldsBoss(botAI->GetBot()); }
 
 bool AlgalonHandlerKiting(PlayerbotAI* botAI)
 {
@@ -58,7 +56,9 @@ bool AlgalonHandlerKiting(PlayerbotAI* botAI)
     return constellation && constellation->GetVictim() == bot;
 }
 
-// Only the roles the formation places. Melee and the tank not holding him keep every generic mover.
+// Only the roles the formation places: the rings and the swap tanks. Melee keep every generic mover once
+// released, and so does the swap tank not holding him while it works an add; idle, it keeps its spot in
+// his reach rather than following someone out of it.
 bool AlgalonFormationHolds(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -68,9 +68,15 @@ bool AlgalonFormationHolds(PlayerbotAI* botAI)
     if (AlgalonTakesRingSlot(bot))
         return true;
 
-    Player* holder = AlgalonEngaged(botAI) ? GetAlgalonBossTank(botAI) : nullptr;
-    return holder && IsAlgalonSwapTank(holder) ? holder == bot : botAI->IsMainTank(bot);
+    if (!IsAlgalonSwapTank(bot))
+        return false;
+
+    return !AlgalonEngaged(botAI) || !AlgalonOffTankWorking(bot);
 }
+
+bool AlgalonMeleeHeldBack(PlayerbotAI* botAI) { return AlgalonMeleeStaged(botAI->GetBot()); }
+
+bool AlgalonSmashHold(PlayerbotAI* botAI) { return AlgalonEngaged(botAI) && AlgalonSmashHoldsGround(botAI->GetBot()); }
 
 void DefineAlgalon(EncounterBuilder& e)
 {
@@ -84,6 +90,7 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Node<AlgalonLeaveBlackHoleTrigger, AlgalonLeaveBlackHoleAction>(ACTION_EMERGENCY + 4, EncounterRow::Mover);
     e.Node<AlgalonTankPickupTrigger, AlgalonTankPickupAction>(ACTION_RAID + 8);
     e.Node<AlgalonPhasePunchSwapTrigger, AlgalonPhasePunchSwapAction>(ACTION_RAID + 7);
+    e.Node<AlgalonYieldBossTrigger, AlgalonYieldBossAction>(ACTION_RAID + 7);
     e.Node<AlgalonConstellationTauntTrigger, AlgalonConstellationTauntAction>(ACTION_RAID + 6);
     e.Node<AlgalonDarkMatterTankTrigger, AlgalonDarkMatterTankAction>(ACTION_RAID + 5);
     e.Node<AlgalonConstellationKiteTrigger, AlgalonConstellationKiteAction>(ACTION_RAID + 4, EncounterRow::Mover);
@@ -103,9 +110,13 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Block("algalon big bang spell movers", Role::Any, AlgalonHidingNow,
             Family::Charge | Family::Blink | Family::Disengage);
 
-    // The class "lose aggro" nodes taunt on cooldown whenever someone else holds him, 4 stacks or not.
-    // The swap, pickup, constellation and Dark Matter nodes taunt through CastClassTaunt instead.
-    e.Block("algalon taunt guard", Role::Tank, AlgalonSwapTankEngaged, Family::Taunt);
+    // The class "lose aggro" nodes taunt on cooldown whenever someone else holds him, 4 stacks or not, and
+    // a tank outside the pair would take him from both. The swap, pickup, constellation and Dark Matter
+    // nodes taunt through CastClassTaunt instead.
+    e.Block("algalon taunt guard", Role::Tank, AlgalonEngaged, Family::Taunt);
+    // The target exclusions keep every picker off him for the yielding tank except "attack rti target",
+    // which follows a skull the raid put on him.
+    e.Block("algalon yield skull", Role::Tank, AlgalonYielding, Family::AttackRti);
 
     e.OwnTargeting("algalon star team", Role::Dps, AlgalonStarTeamFocused);
 
@@ -124,6 +135,17 @@ void DefineAlgalon(EncounterBuilder& e)
     // can't reach.
     e.OwnMovement("algalon control movement", Role::Ranged | Role::Tank, AlgalonFormationHolds,
                   Family::Attack | Family::Reach | Family::ReachHeal);
+
+    // At the end of the intro he swings at a random player, so melee wait outside his reach until a swap
+    // tank has him: Reach and Charge would take them straight in the moment he turns selectable.
+    e.OwnMovement("algalon melee staging", Role::Melee, AlgalonMeleeHeldBack, Family::Attack);
+    e.Block("algalon melee staging charges", Role::Melee, AlgalonMeleeHeldBack, Family::Charge);
+
+    // A dodged melee bot is walked straight back to 6-12 yd of the impact by "reach melee" otherwise,
+    // inside the doubled damage band. Until the marker expires the generic movers are held; the
+    // encounter's own still run, and its slot walks already avoid a live marker.
+    e.OwnMovement("algalon smash hold", Role::Any, AlgalonSmashHold, Family::Attack);
+    e.Block("algalon smash hold charges", Role::Melee, AlgalonSmashHold, Family::Charge);
 
     e.Tick(AlgalonTickEncounterState);
 }

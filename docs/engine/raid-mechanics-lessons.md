@@ -134,6 +134,12 @@ Every distance helper measures differently, and a large-model boss inflates all 
   of reach, so they fell through to the boss.
 - **Selection units must match margin units.** Picking by `GetHealth()` while the switch margin is in
   percentage points inverts the pick between adds with unequal max health.
+- **Measure a formation from where the boss stands, against his reach.** Algalon's rings hung off the
+  tank's slot, which put healers 7 yd and a mage 1.9 yd from a boss whose swing lands at 11.8 yd.
+  Harmless while he holds still on his tank, one hit each the moment he doesn't.
+- **A boss that opens on a random player** (`AttackStart(SelectTargetFromPlayerList(...))` when an
+  intro ends) is answered by staging, not by taunt speed: the pickup tank waits inside his reach and
+  taunts on the first selectable tick, and everyone else waits outside it until a tank holds him.
 
 ## Crowd control and threat on adds
 
@@ -154,6 +160,14 @@ What lands on a raid add is not what PvP experience predicts.
 - **An add that calls `DoResetThreatList` on a timer can be neither tanked, taunted nor redirected.**
   Read its `UpdateAI` before designing any of the three. Freya's Detonating Lasher re-rolls a uniformly
   random player every 10s, which leaves geometry plus a snare as the only handling.
+- **The swap tank not holding the boss must not damage him.** After a taunt both tanks build threat at
+  the same rate, so the one carrying the debuff stacks takes him straight back, white swings included
+  (no action carries those, so a damage-action veto misses them). A swap fired by the tank *not*
+  holding him also never fires when that tank is a human: the bot holding him has to call it.
+- **A pacing gate with a bypass recreates the stacking it exists to prevent.** Algalon's "finish any
+  star under 15 %" skipped the gap and the health check, and put two raid-wide explosions 3.2 s apart.
+  Override only for what is worse than the hit it delays: no shelter before Big Bang, or stars whose own
+  collapse is about to stack them anyway.
 - **Read `speed_run` before designing any relocation.** An add faster than a player can be neither
   kited nor ferried: the bot walks the whole distance taking uninterrupted melee, out of healer range,
   dealing nothing, and still arrives with the add on top of it. Freya's lasher is 8.0 yd/s against 7.0,

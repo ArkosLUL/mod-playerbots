@@ -43,16 +43,18 @@ void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
         last.clear();
 }
 
-bool InRoom(float x, float y) { return AlgalonSpotInRoom(x, y); }
-
-// Nearest ground clear of every marker and hole, near the bot's own slot when it has one.
-Position FindAlgalonClearSpot(Player* bot, float markerClearance)
+// Nearest ground clear of every marker and hole, near the bot's own slot when it has one. With
+// `pathClear` the walk there must not clip another hole's field either: that phases the bot into the
+// void Dark Matter, which is still better than a meteor or staying in the field, so callers fall back.
+Position FindAlgalonClearSpot(Player* bot, float markerClearance, bool pathClear)
 {
     Position anchor;
     Position const* prefer = GetAlgalonSlotAnchor(bot, anchor) ? &anchor : nullptr;
+    auto const reachable = [bot, pathClear](float x, float y)
+    { return AlgalonSpotInRoom(x, y) && (!pathClear || !AlgalonPathCrossesHole(bot, x, y)); };
     return FindNearestPositionClearOfHazards(bot, GetAlgalonDodgeHazards(bot, markerClearance),
                                              ULDUAR_ALGALON_DODGE_SEARCH_RADIUS, 2.0f, static_cast<float>(M_PI) / 8.0f,
-                                             prefer, &InRoom);
+                                             prefer, reachable);
 }
 }  // namespace
 
@@ -113,9 +115,25 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
 {
     // FleePosition clamps to AiPlayerbot.FleeDistance (5 yd), inside the doubled damage band.
-    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE);
+    char const* branch = "clear";
+    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE, true);
     if (clear == Position())
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE);
+    {
+        branch = "min";
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, true);
+    }
+
+    if (clear == Position())
+    {
+        branch = "cross";
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, false);
+    }
+
+    if (clear == Position())
+        branch = "none";
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "algalon.dodge", branch);
 
     if (clear == Position())
         return false;
@@ -128,7 +146,10 @@ bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
 
 bool AlgalonLeaveBlackHoleAction::Execute(Event /*event*/)
 {
-    Position const clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS);
+    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS, true);
+    if (clear == Position())
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS, false);
+
     if (clear == Position())
         return false;
 
@@ -136,6 +157,21 @@ bool AlgalonLeaveBlackHoleAction::Execute(Event /*event*/)
     ReleaseStalledWalk(botAI, bot);
     return MoveTo(bot->GetMapId(), clear.GetPositionX(), clear.GetPositionY(), clear.GetPositionZ(), false, false,
                   false, false, MovementPriority::MOVEMENT_FORCED, true);
+}
+
+bool AlgalonYieldBossAction::Execute(Event /*event*/)
+{
+    Unit* boss = GetAlgalon(botAI);
+    if (!boss)
+        return false;
+
+    if (bot->GetVictim() == boss)
+        bot->AttackStop();
+
+    if (AI_VALUE(Unit*, "current target") == boss)
+        context->GetValue<Unit*>("current target")->Set(nullptr);
+
+    return true;
 }
 
 bool AlgalonTakeBossAction::Execute(Event /*event*/)
@@ -231,13 +267,25 @@ bool AlgalonStarMarkAction::Execute(Event /*event*/)
 bool AlgalonRaidPositionAction::Execute(Event /*event*/)
 {
     Position slot;
-    if (!TryGetAlgalonSlot(bot, slot))
+    bool waypoint = false;
+    if (!TryGetAlgalonSlot(bot, slot, &waypoint))
     {
         _slotReached = false;
         return false;
     }
 
     float const distance = bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY());
+
+    // A waypoint round a hole is never somewhere to hold: the next check hands out the next leg.
+    if (waypoint)
+    {
+        _slotReached = false;
+        if (distance <= ULDUAR_ALGALON_SLOT_TOLERANCE)
+            return false;
+
+        return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(), false, false,
+                      false, true, MovementPriority::MOVEMENT_COMBAT, true);
+    }
 
     // Reach then hold, with a deadband. Re-issuing on every yard of drift restarts the spline, and a
     // moving bot can't start a cast.

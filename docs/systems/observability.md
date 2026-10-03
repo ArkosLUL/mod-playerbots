@@ -392,6 +392,10 @@ traces not one ice block, Toasty Fire or icicle was ever sampled — the units t
 The sweep sees only its anchor's phase, so the anchor is the first roster player in the normal phase:
 one bot inside an Algalon hole would otherwise drop every hole, star and constellation from the rows.
 
+Nearest is still a cap. A 25-man Algalon room holds 11 constellations, 4 stars, holes, void Dark Matter
+and six meteor markers, and markers far from the anchor never made a row. A short-lived hazard the
+encounter already scans for is written as a `haz` circle by that scan, once per unit.
+
 `haz` is the other channel and the two never meet — `snap.hz` is what a sweep found, `haz` what nothing
 can sweep for. Only `snap.hz` feeds the death block's containment test, so a `haz` mechanic reaches the
 timeline and never a `STOOD IN` line. A `lane` carries no geometry to test anyway: an origin, no heading

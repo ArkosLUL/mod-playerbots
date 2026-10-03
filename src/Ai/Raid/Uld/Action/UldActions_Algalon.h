@@ -59,6 +59,15 @@ public:
     bool Execute(Event event) override;
 };
 
+class AlgalonYieldBossAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon yield boss action";
+
+    AlgalonYieldBossAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
 // Taunts Algalon onto this tank, and walks to him if the taunt can't reach.
 class AlgalonTakeBossAction : public AttackAction
 {

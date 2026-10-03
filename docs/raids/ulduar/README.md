@@ -144,7 +144,7 @@ Ulduar boss has a dedicated redirect action yet.
 | Iron Assembly | Three bosses, one tank each, plus a Fusion Punch swap | boss entries |
 | Mimiron | Four phases, each a different creature with a fresh threat table; phase 3 has two tankable units split MT/AT0 | 33432 / 33651 / 33670 |
 | Thorim | Raid splits into arena and gauntlet squads with a tank each, plus an Unbalancing Strike swap | boss present |
-| Algalon | Phase Punch forces an MT ↔ AT0 swap on a stack timer | boss present |
+| Algalon | Phase Punch forces a swap on a stack timer between a swap pair: two bot tanks, else MT + AT0 | boss present |
 | Razorscale — **airborne only** | The MT holds nothing while she flies; Dark Rune adds belong to assist tanks. Ground phases are single-tank and the generic node is *correct*, so this is phase-gated, not blanket | boss Z vs 440 |
 | Freya | The add tank is the sink whenever the Snaplasher or Conservator is up, and `freya redirect threat` owns the choice | boss present |
 

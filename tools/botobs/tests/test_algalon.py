@@ -14,6 +14,7 @@ import json
 import pathlib
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -34,6 +35,7 @@ TREE = 5004      # heal
 AGONY = 5005     # ranged, the star team
 SHIV = 5006      # melee
 TRUESHOT = 5007  # ranged, still waiting when Big Bang 1 lands
+BRAWL = 5008     # melee, one-shot when the intro ends
 
 CREATURE = 1 << 32
 ALGALON = CREATURE | 1
@@ -62,11 +64,16 @@ ROSTER = [
     {"g": AGONY, "n": "Agony", "r": "ranged", "c": "warlock", "h": 0},
     {"g": SHIV, "n": "Shiv", "r": "melee", "c": "rogue", "h": 0},
     {"g": TRUESHOT, "n": "Trueshot", "r": "ranged", "c": "hunter", "h": 0},
+    {"g": BRAWL, "n": "Brawl", "r": "melee", "c": "warrior", "h": 0},
 ]
 
 # Offsets in yards from ULDUAR_ALGALON_TANK_SLOT.
 HOME = {BULWARK: (0, 0), AEGIS: (3, 0), MERCY: (0, 14), TREE: (8, 12), AGONY: (-10, 18), SHIV: (2, 3),
-        TRUESHOT: (10, 18)}
+        TRUESHOT: (10, 18), BRAWL: (0, 9)}
+
+# At 85% everyone is still above the 10-man explosion's top roll of 16,913.
+MAX_HP = {BULWARK: 40000, AEGIS: 40000, MERCY: 21000, TREE: 21000, AGONY: 22000, SHIV: 24000, TRUESHOT: 22000,
+          BRAWL: 24000}
 
 
 def spot(dx: float, dy: float) -> tuple[float, float]:
@@ -80,6 +87,8 @@ def row(guid: int, offset, hp: float, target: int) -> list:
 
 def player_hp(guid: int, when: int) -> float:
     if guid == TRUESHOT and when >= 48000:
+        return 0.0
+    if guid == BRAWL and when >= 8100:
         return 0.0
     if guid == BULWARK and 48000 <= when < 55000:
         return 35.0
@@ -98,12 +107,14 @@ def player_target(guid: int, when: int) -> int:
     return ALGALON
 
 
+# Nobody during the intro, Brawl for his first swing, Aegis on threat for a second, Shiv on threat off
+# Aegis, and Mercy once the fifth stack phases Bulwark out.
+BOSS_TARGETS = ((8000, 0), (8500, BRAWL), (20000, BULWARK), (21000, AEGIS), (60000, BULWARK), (75000, AEGIS),
+                (77000, SHIV), (89000, BULWARK), (90000, MERCY))
+
+
 def boss_target(when: int) -> int:
-    if when < 60000:
-        return BULWARK
-    if when < 75000:
-        return AEGIS
-    return SHIV if when < 77000 else BULWARK
+    return next((victim for until, victim in BOSS_TARGETS if when < until), AEGIS)
 
 
 def snap(when: int) -> dict:
@@ -171,6 +182,16 @@ def cast(when: int, caster: int, spell: int, target: int = 0, cast_ms: int = 0) 
     return {"t": when, "e": "cast", "s": caster, "sp": spell, "tgt": target, "ct": cast_ms}
 
 
+def move(when: int, guid: int, by: str, ok: int = 1) -> dict:
+    return {"t": when, "e": "move", "g": guid, "k": "point", "x": 0.0, "y": 0.0, "z": 417.3, "ok": ok, "r": "",
+            "by": by, "pr": 0}
+
+
+def death(when: int, guid: int, killer: int, amount: int, offset) -> dict:
+    x, y = spot(*offset)
+    return {"t": when, "e": "death", "g": guid, "killer": killer, "blow": [killer, amount], "x": x, "y": y}
+
+
 def probe_notes(handler: int) -> list[dict]:
     rows = [
         note(0, MERCY, "algalon.phase", 1), note(8000, MERCY, "algalon.phase", 2),
@@ -208,6 +229,19 @@ def probe_notes(handler: int) -> list[dict]:
     for guid, slot in ((MERCY, 0), (TREE, 1), (AGONY, 4), (TRUESHOT, 5)):
         rows += [note(8000, guid, "algalon.slot", slot), note(8000, guid, "algalon.spot", "slot")]
     rows += [note(20000, TRUESHOT, "algalon.spot", "smash"), note(26000, TRUESHOT, "algalon.spot", "slot")]
+    rows += [note(0, SHIV, "algalon.spot", "stage"), note(6000, SHIV, "algalon.spot", "none"),
+             note(0, BRAWL, "algalon.spot", "stage")]
+    rows += [note(8000, BULWARK, "algalon.swappair", 1), note(8000, AEGIS, "algalon.swappair", 1),
+             note(8000, MERCY, "algalon.pull", f"inreach=4 victim={BRAWL}"),
+             note(40000, MERCY, "algalon.call", "bigbang"), note(90000, MERCY, "algalon.call", "bigbang"),
+             note(30000, AGONY, "algalon.stardeath", "killed 15.6"),
+             note(33000, AGONY, "algalon.stardeath", "collapsed -"),
+             note(20400, TRUESHOT, "algalon.dodge", "clear")]
+    for guid, changes in ((BULWARK, ((8000, "hold"), (59000, "yield"), (76800, "take"), (77000, "hold"),
+                                     (89000, "out"))),
+                          (AEGIS, ((8000, "yield"), (59800, "take"), (60000, "hold"), (77000, "yield"),
+                                   (89900, "take"), (90000, "hold")))):
+        rows += [note(when, guid, "algalon.tankrole", value) for when, value in changes]
     return rows
 
 
@@ -229,6 +263,21 @@ def algalon_pull(with_notes: bool = True, handler: int = AEGIS) -> list[dict]:
         {"t": 1, "e": "unit", "g": WORM, "en": al.NPC_WORM_HOLE, "n": "Worm Hole"},
         {"t": 1, "e": "unit", "g": UNLEASHED, "en": al.NPC_UNLEASHED_DARK_MATTER, "n": "Unleashed Dark Matter"},
         {"t": 1, "e": "unit", "g": PHASED_MATTER, "en": al.NPC_DARK_MATTER, "n": "Dark Matter"},
+        *({"t": 1, "e": "unit", "g": member["g"], "n": member["n"], "mhp": MAX_HP[member["g"]]} for member in ROSTER),
+
+        # His first swing one-shots Brawl, who stood in his reach when the intro ended.
+        dmg(8100, ALGALON, BRAWL, 0, 40000, over=16000),
+        death(8100, BRAWL, ALGALON, 40000, HOME[BRAWL]),
+
+        # Aegis steals him on threat at 20 s and Bulwark taunts him back. Then taunts for the swap, off
+        # Shiv, and off Mercy after Bulwark's fifth stack.
+        cast(20900, BULWARK, 355, ALGALON), cast(59800, AEGIS, 62124, ALGALON),
+        cast(76800, BULWARK, 355, ALGALON), cast(89900, AEGIS, 62124, ALGALON),
+        dmg(89400, ALGALON, MERCY, 0, 15000),
+
+        # Trueshot dodges the meteor dropped on him, then the ring walks him back inside 15 yd.
+        move(20400, TRUESHOT, al.SMASH_MOVER), move(22000, TRUESHOT, "algalon raid position action"),
+        move(64000, TREE, "algalon raid position action"),
 
         cast(9000, ALGALON, al.SPELL_QUANTUM_STRIKE[0], BULWARK),
         dmg(9000, ALGALON, BULWARK, al.SPELL_QUANTUM_STRIKE[0], 27000),
@@ -253,6 +302,7 @@ def algalon_pull(with_notes: bool = True, handler: int = AEGIS) -> list[dict]:
         cast(40000, ALGALON, al.SPELL_BIG_BANG[0], cast_ms=8000),
         *phased(AGONY, al.SPELL_BLACK_HOLE_PHASE, 44000, 49000),
         *phased(SHIV, al.SPELL_BLACK_HOLE_PHASE, 44000, 49000),
+        aura(49000, SHIV, al.SPELL_BIG_BANG_UNPHASE),
         *phased(SHIV, al.SPELL_BLACK_HOLE_PHASE, 49500, 60500, pulses_until=50500),
         *phased(MERCY, al.SPELL_BLACK_HOLE_PHASE, 45000, 49000),
         *phased(TREE, al.SPELL_BLACK_HOLE_PHASE, 46000, 49000),
@@ -280,7 +330,10 @@ def algalon_pull(with_notes: bool = True, handler: int = AEGIS) -> list[dict]:
         {"t": END, "e": "end", "out": "reset"},
     ]
     if with_notes:
-        records += probe_notes(handler)
+        x, y = spot(*HOME[TRUESHOT])
+        records += probe_notes(handler) + [
+            {"t": 20000, "e": "haz", "sp": al.SPELL_COSMIC_SMASH[0], "shape": "circle", "x": x, "y": y, "z": 417.3,
+             "ttl": 5500, "rad": 6.0}]
     records += [snap(when) for when in range(0, END, 500)]
     return records
 
@@ -413,29 +466,36 @@ class SyntheticPull(unittest.TestCase):
         row = {row["guid"]: row for row in al.constellation_rows(self.trace)}[DORMANT]
         self.assertEqual((row["active"], row["removed"], row["how"], row["spent"]), (None, 79500, "phase2", []))
 
-    def test_both_marker_entries_on_one_spot_are_one_impact(self):
-        markers, stray = al.smash_rows(self.trace)
-        self.assertEqual(stray, [])
-        (marker,) = markers
-        self.assertEqual((marker["seen"], marker["impact"]), (20000, 24800))
-        self.assertAlmostEqual(marker["near"][TRUESHOT][0], 12.0)
-        self.assertAlmostEqual(marker["near"][TRUESHOT][1], 0.0)
-        ((hit, distance),) = marker["hits"]
-        self.assertEqual(hit["d"], TREE)
-        self.assertEqual(al.band(distance), "6-10")
+    def test_a_meteor_wave_times_the_dodge_and_names_the_walk_back(self):
+        self.assertEqual(al.meteors(self.trace)[1], "haz")
+        (wave,) = al.smash_waves(self.trace)
+        self.assertEqual((wave["seen"], wave["impact"], len(wave["meteors"])), (20000, 24800, 1))
+        rows = {row["guid"]: row for row in al.wave_rows(self.trace, wave)}
+        self.assertNotIn(BULWARK, rows)
+        trueshot = rows[TRUESHOT]
+        self.assertAlmostEqual(trueshot["at_seen"], 0.0)
+        self.assertAlmostEqual(trueshot["at_impact"], 12.0)
+        self.assertEqual((trueshot["moved"], trueshot["dodge"], trueshot["back"]),
+                         (400, "clear", "algalon raid position action"))
+        self.assertEqual(rows[TREE]["damage"], 9000)
+        self.assertEqual(al.band(rows[TREE]["at_impact"]), "6-10")
 
     def test_tanks_read_the_punch_the_swap_and_the_pickup(self):
         self.assertEqual(al.punched_out(self.trace), [(89000, BULWARK)])
-        self.assertEqual(al.boss_victims(self.trace), [(0, BULWARK), (60000, AEGIS), (75000, SHIV), (77000, BULWARK)])
-        self.assertEqual(al.pickups(self.trace), [(75000, 77000, SHIV)])
+        self.assertEqual(al.boss_victims(self.trace), [
+            (0, 0), (8000, BRAWL), (8500, BULWARK), (20000, AEGIS), (21000, BULWARK), (60000, AEGIS),
+            (75000, SHIV), (77000, BULWARK), (89000, MERCY), (90000, AEGIS)])
+        self.assertEqual(al.pickups(self.trace), [(8000, 8500, BRAWL), (75000, 77000, SHIV), (89000, 90000, MERCY)])
         self.assertEqual(max(count for _, count, _ in al.phase_punch(self.trace)[BULWARK]), 5)
 
-    def test_formation_measures_each_ring_bot_from_its_slot(self):
+    def test_formation_measures_each_ring_bot_from_its_slot_and_from_him(self):
         rows = {row["guid"]: row for row in al.ring_rows(self.trace)}
         self.assertEqual(set(rows), {MERCY, TREE, AGONY, TRUESHOT})
         self.assertEqual(rows[MERCY]["slot"], 0)
         self.assertAlmostEqual(rows[MERCY]["to_tank"], 14.0)
-        if al.RINGS:
+        self.assertAlmostEqual(rows[MERCY]["to_boss"], 10.0)
+        self.assertEqual((rows[MERCY]["in_reach"], rows[AGONY]["in_reach"]), (1.0, 0.0))
+        if al.ring_slots():
             self.assertAlmostEqual(rows[MERCY]["to_slot"], al.dist2(spot(0, 14), al.slot_position(0)))
 
     def test_dark_matter_stays_loose_across_a_scan_it_missed(self):
@@ -448,16 +508,83 @@ class SyntheticPull(unittest.TestCase):
         (row,) = al.dark_matter_rows(self.trace)
         self.assertEqual((row["killed"], row["despawned"]), (None, 99500))
 
+    def test_the_pull_names_who_stood_in_his_reach_and_whom_he_took(self):
+        row = al.pull_row(self.trace)
+        self.assertEqual((row["t"], row["probe"], row["inreach"], row["victim"]), (8000, True, 4, BRAWL))
+        self.assertEqual(row["inside"], [SHIV, BRAWL, MERCY, TREE])
+        self.assertEqual(row["tanked"], (8500, BULWARK))
+        self.assertEqual([rec["g"] for rec in row["deaths"]], [BRAWL])
+        self.assertEqual(row["stage"], {SHIV: 0.75, BRAWL: 1.0})
+
+    def test_loose_windows_carry_their_cause_and_the_pickup(self):
+        windows = al.loose_windows(self.trace)
+        self.assertEqual([(w["start"], w["stop"], w["cause"], w["detail"]) for w in windows], [
+            (8000, 8500, "intro end", ""), (75000, 77000, "threat", "off Aegis"),
+            (89000, 90000, "5th stack", "Bulwark")])
+        self.assertEqual([[rec["d"] for rec in w["hits"]] for w in windows], [[BRAWL], [SHIV], [MERCY]])
+        self.assertEqual([[rec["g"] for rec in w["deaths"]] for w in windows], [[BRAWL], [], []])
+        self.assertEqual([(w["ender"], w["taunt"]) for w in windows],
+                         [(BULWARK, None), (BULWARK, 76800), (AEGIS, 89900)])
+        self.assertIn("3 window(s), 3.5 s loose, 1 death(s) while loose, 1 of them his", render(self.trace, "loose"))
+
+    def test_swaps_time_the_due_swap_and_find_the_threat_steal(self):
+        self.assertEqual(al.swap_pair(self.trace), (frozenset({BULWARK, AEGIS}), "algalon.swappair"))
+        self.assertEqual(al.swap_dues(self.trace),
+                         [{"t": 56500, "tank": BULWARK, "taken": 60000, "by": AEGIS, "missed": None}])
+        self.assertEqual(al.threat_steals(self.trace), [(20000, BULWARK, AEGIS)])
+        text = render(self.trace, "swaps")
+        self.assertIn("swap due 0:56.500: Bulwark at 4 stacks, Aegis had him 3.5 s later", text)
+        self.assertIn("algalon.call: 0:40.000 bigbang (Mercy), 1:30.000 bigbang (Mercy)", text)
+        self.assertIn("algalon.tankrole Bulwark: hold 63.0 s", text)
+
+    def test_reach_splits_the_time_the_pair_held_him_from_the_loose_time(self):
+        rows = al.reach_rows(self.trace)
+        self.assertEqual(set(rows), {SHIV, BRAWL, MERCY, TREE})
+        self.assertEqual(rows[BRAWL], [0, 500])
+        # Tree is still phased when Shiv's window opens
+        self.assertEqual((rows[SHIV][1], rows[MERCY][1], rows[TREE][1]), (3500, 3500, 2500))
+
+    def test_phasing_tells_big_bang_from_stray_and_names_the_stray_cause(self):
+        rows = al.phasing_rows(self.trace)
+        stray = [(row["guid"], row["start"], row["cause"]) for row in rows if row["label"] == "stray"]
+        self.assertEqual(stray, [(SHIV, 49500, "re-phase"), (TREE, 65000, "walked in (algalon raid position action)")])
+        self.assertEqual(sum(1 for row in rows if row["label"] == "Big Bang"), 9)
+        tree = next(row for row in rows if row["guid"] == TREE and row["start"] == 46000)
+        self.assertEqual((tree["matter"], tree["died"]), (3000, False))
+
+    def test_stars_carry_what_each_death_landed_into(self):
+        first, second = al.star_rows(self.trace)
+        self.assertEqual((first["note"], first["window"], first["meteor"], first["bang"], first["below"]),
+                         (("killed", 15.6), "open", False, None, []))
+        self.assertEqual(first["nearest"][1], AGONY)
+        self.assertAlmostEqual(first["nearest"][0], 15.62, places=2)
+        self.assertEqual((second["note"], second["window"], second["weakest"]), (("collapsed", None), "gap",
+                                                                                 (17850, MERCY, 85.0)))
+        self.assertEqual(second["below"], [])
+
+    def test_deaths_are_read_by_the_mechanic_that_killed(self):
+        self.assertEqual([(row["guid"], row["cause"]) for row in al.death_rows(self.trace)],
+                         [(BRAWL, "Algalon melee (intro end)"), (TRUESHOT, "Big Bang")])
+
     def test_the_verdict_lists_every_failure_in_time_order(self):
         self.assertEqual([line for _, line in al.failures(self.trace)], [
+            "4 player(s) inside 11.83 yd of him when the intro ended @ 8.0s (Shiv, Brawl, Mercy, Tree)",
+            "Algalon loose 0.5 s @ 8.0s (intro end): 1 death",
+            "threat steal @ 20.0s: Aegis pulled him off Bulwark with no taunt",
+            "Cosmic Smash @ 24.8s: inside 10 yd at the impact: Tree 6.3",
+            "Cosmic Smash @ 24.8s: dodged, then walked back inside 15 yd by the impact: Trueshot 12.0"
+            " (algalon raid position action)",
             "Shiv on stars for 4.0 s outside the star team, from 30.0s",
             "stars died 3.0 s apart @ 33.0s",
             "Big Bang 1 @ 40.0s: 1 non-soaker hit unphased (Trueshot)",
             "re-phase loop: Shiv @ 44.0s (2 applications, 16.5 s phased)",
             "re-phase loop: Tree @ 65.0s (1 application, 11.0 s phased)",
+            "Algalon loose 2.0 s @ 75.0s (threat, off Aegis): 0 deaths",
             "Algalon on Shiv (melee) for 2.0 s @ 75.0s",
             "Unleashed Dark Matter loose for 5.0 s (mostly on Agony) @ 85.0s",
+            "Algalon loose 1.0 s @ 89.0s (5th stack, Bulwark): 0 deaths",
             "Phase Punch phased Bulwark out @ 89.0s",
+            "Algalon on Mercy (heal) for 1.0 s @ 89.0s",
             "Big Bang 2 @ 90.0s: soaker Bulwark phased at the impact",
             "Big Bang 2 @ 90.0s: nobody alive and unphased within 120 yd at +0.0 s",
             "evade 4.1 s after Big Bang 2 (Ascend at +0.3 s, pull ended reset)",
@@ -475,7 +602,7 @@ class SyntheticPull(unittest.TestCase):
         self.assertIn("despawned 1:39.500", text)
         self.assertIn("absent from this trace: algalon.backup", text)
         self.assertIn("evade 4.1 s after Big Bang 2", text)
-        self.assertEqual(text.count(" marker, impact "), 1)
+        self.assertEqual(text.count("wave 0:20.000: 1 meteor(s), impact 0:24.800"), 1)
         self.assertNotIn("no failures detected", text)
 
 
@@ -525,18 +652,202 @@ class WithoutProbes(unittest.TestCase):
 
     def test_the_verdict_names_the_probes_the_events_imply(self):
         lines = [line for _, line in al.failures(self.trace)]
-        self.assertEqual(lines[0], "missing probes: algalon.bigbang, algalon.handler, algalon.hide, algalon.holes,"
-                                   " algalon.phase, algalon.slot, algalon.soaker, algalon.spot, algalon.starwindow")
+        self.assertEqual(lines[0], "missing probes: algalon.bigbang, algalon.dodge, algalon.handler,"
+                                   " algalon.hide, algalon.holes, algalon.phase, algalon.pull, algalon.slot,"
+                                   " algalon.soaker, algalon.spot, algalon.stardeath, algalon.starwindow,"
+                                   " algalon.swappair, algalon.tankrole")
         self.assertIn("Big Bang 1 @ 40.0s: 2 non-soakers hit unphased (Aegis, Trueshot)", lines)
         self.assertIn("evade 4.1 s after Big Bang 2 (Ascend at +0.3 s, pull ended reset)", lines)
+
+    def test_the_intro_end_and_the_pair_fall_back_to_his_first_victim_and_the_roster(self):
+        self.assertEqual(al.swap_pair(self.trace), (frozenset({BULWARK, AEGIS}), "roster tanks"))
+        row = al.pull_row(self.trace)
+        self.assertEqual((row["t"], row["probe"], row["inreach"], row["victim"]), (8000, False, None, BRAWL))
+        self.assertEqual([w["cause"] for w in al.loose_windows(self.trace)], ["intro end", "threat", "5th stack"])
+
+    def test_meteors_fall_back_to_the_33105_markers(self):
+        self.assertEqual(al.meteors(self.trace)[1], "33105 markers")
+        (wave,) = al.smash_waves(self.trace)
+        self.assertEqual((wave["seen"], wave["impact"]), (20000, 24800))
+        rows = {row["guid"]: row for row in al.wave_rows(self.trace, wave)}
+        self.assertEqual((rows[TRUESHOT]["moved"], rows[TRUESHOT]["dodge"]), (400, None))
 
     def test_every_section_says_what_it_is_missing(self):
         text = render(self.trace)
         self.assertIn("absent from this trace: algalon.phase; P1 from his first cast", text)
+        self.assertIn("absent from this trace: haz meteors; read off 33105 markers", text)
+        self.assertIn("absent from this trace: algalon.swappair, algalon.tankrole, algalon.call", text)
         self.assertIn("absent from this trace: algalon.bigbang, algalon.soaker, algalon.backup, algalon.hide,"
                       " algalon.defensive", text)
         self.assertIn("absent from this trace: algalon.slot, algalon.spot", text)
         self.assertIn("no star team recorded", text)
+
+
+TANK_A, TANK_B = 6101, 6102
+OPENER, LOOSE, BURST, SMASHED, STRAY, BANGED, UNPHASED, BARRAGED, DOTTED, WIPED = range(6111, 6121)
+D_BOSS, D_HOLE, D_MATTER, D_CONSTELLATION, D_METEOR = (CREATURE | n for n in range(101, 106))
+
+# (guid, name, role, dies at, killed by, spell, offset from the tank slot, the cause it reads as)
+DEATH_CASES = (
+    (OPENER, "Opener", "melee", 1200, D_BOSS, 0, (3, 0), "Algalon melee (intro end)"),
+    (LOOSE, "Loose", "ranged", 20000, D_BOSS, 0, (-30, 10), "Algalon melee (loose)"),
+    (BURST, "Burst", "heal", 25000, D_METEOR, al.SPELL_COSMIC_SMASH[0], (-30, 12), "star explosion"),
+    (TANK_A, "Tanka", "tank", 30000, D_BOSS, 0, (0, -2), "Algalon on tank"),
+    (SMASHED, "Smashed", "melee", 40000, D_METEOR, al.SPELL_COSMIC_SMASH[0], (37, 0), "Cosmic Smash"),
+    (STRAY, "Stray", "ranged", 50000, D_MATTER, 0, (-30, 14), "Dark Matter while phased (stray)"),
+    (BANGED, "Banged", "ranged", 61000, D_MATTER, 0, (-30, 16), "Dark Matter while phased (Big Bang)"),
+    (UNPHASED, "Unphased", "heal", 63000, D_BOSS, al.SPELL_BIG_BANG[0], (-30, 18), "Big Bang"),
+    (BARRAGED, "Barraged", "melee", 70000, D_CONSTELLATION, al.SPELL_CONSTELLATION_BARRAGE[0], (-30, 20),
+     "Constellation Barrage"),
+    (DOTTED, "Dotted", "ranged", 71000, D_HOLE, al.SPELL_BLACK_HOLE_DOT, (-30, 22), "Black Hole DoT"),
+    (WIPED, "Wiped", "heal", 80000, WIPED, None, (-30, 24), "wipe command"),
+)
+DEATH_TARGETS = ((1000, 0), (1500, OPENER), (19500, TANK_A), (20500, LOOSE), (30000, TANK_A))
+
+
+def death_snap(when: int) -> dict:
+    units = [row(guid, offset, 0.0 if when >= dies else 100.0, 0) for guid, _, _, dies, _, _, offset, _ in DEATH_CASES]
+    units.append(row(TANK_B, (2, -2), 100.0, 0))
+    units.append(row(D_BOSS, (0, 0), 100.0, next((victim for until, victim in DEATH_TARGETS if when < until), TANK_B)))
+    if 35000 <= when <= 40000:
+        units.append(row(D_METEOR, (30, 0), 100.0, 0))
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def death_pull() -> list[dict]:
+    roster = [{"g": guid, "n": name, "r": role, "c": "warrior", "h": 0} for guid, name, role, *_ in DEATH_CASES]
+    roster.append({"g": TANK_B, "n": "Tankb", "r": "tank", "c": "warrior", "h": 0})
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 0,
+         "boss": "algalon-the-observer", "roster": roster},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": D_BOSS, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        {"t": 1, "e": "unit", "g": D_HOLE, "en": al.NPC_BLACK_HOLE, "n": "Black Hole"},
+        {"t": 1, "e": "unit", "g": D_MATTER, "en": al.NPC_DARK_MATTER, "n": "Dark Matter"},
+        {"t": 1, "e": "unit", "g": D_CONSTELLATION, "en": al.NPC_LIVING_CONSTELLATION, "n": "Living Constellation"},
+        {"t": 1, "e": "unit", "g": D_METEOR, "en": al.NPC_COSMIC_SMASH_MARKERS[1], "n": "Algalon Asteroid Target"},
+        note(0, OPENER, "algalon.phase", 1), note(1000, OPENER, "algalon.phase", 2),
+        cast(55000, D_BOSS, al.SPELL_BIG_BANG[0], cast_ms=8000),
+        # a star's burst does most of Burst's damage before a meteor lands the blow
+        dmg(23000, D_HOLE, BURST, al.SPELL_BLACK_HOLE_EXPLOSION[0], 20000),
+        *phased(STRAY, al.SPELL_BLACK_HOLE_PHASE, 48000, 50000),
+        {"t": 80000, "e": "death", "g": WIPED, "killer": WIPED, "cause": "reset"},
+    ]
+    for guid, _, _, dies, source, spell, offset, _ in DEATH_CASES:
+        if spell is not None:
+            records += [dmg(dies, source, guid, spell, 3000, over=1000), death(dies, guid, source, 3000, offset)]
+    records += [death_snap(when) for when in range(0, 90000, 500)]
+    records.append({"t": 90000, "e": "end", "out": "wipe"})
+    return records
+
+
+class DeathCauses(unittest.TestCase):
+    """One death per mechanic the classifier tells apart."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, death_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_each_death_reads_as_its_mechanic(self):
+        rows = {row["guid"]: row for row in al.death_rows(self.trace)}
+        self.assertEqual({guid: rows[guid]["cause"] for guid, *_ in DEATH_CASES},
+                         {guid: cause for guid, *_, cause in DEATH_CASES})
+        self.assertEqual(rows[LOOSE]["detail"], "threat, off Tanka")
+        self.assertEqual(rows[BURST]["detail"], "87% of the last 3 s")
+        self.assertEqual(rows[SMASHED]["detail"], "6-10 yd")
+
+    def test_the_table_counts_cause_by_role(self):
+        text = render(self.trace, "deaths")
+        self.assertRegex(text, r"Algalon melee \(loose\) +- +- +- +1 +1")
+        self.assertRegex(text, r"Algalon on tank +1 +- +- +- +1")
+
+    def test_a_stray_phase_that_ended_in_a_death_is_a_failure(self):
+        self.assertIn("stray phase ended in a death: Stray @ 48.0s (walked in)",
+                      [line for _, line in al.failures(self.trace)])
+
+
+SLOT_SOURCE = """
+const Position ULDUAR_ALGALON_ROOM_CENTER = Position(1632.668f, -302.7656f, 417.3211f);
+const std::array<Position, ULDUAR_ALGALON_TOTAL_SLOTS> ULDUAR_ALGALON_RING_SLOTS = {{
+    Position(1651.668f, -302.766f, 417.321f),  // healer, 19 yd at 0 deg
+    Position(1613.668f, -302.766f, 417.321f),
+    Position(1632.668f, -277.766f, 417.321f),  // inner ranged
+}};
+const Position ULDUAR_ALGALON_TANK_SLOT = Position(1632.668f, -310.766f, 417.321f);
+"""
+
+
+class Contracts(unittest.TestCase):
+    """The payloads and source tables the reader parses."""
+
+    def test_stardeath_reads_how_and_the_nearest_yards(self):
+        self.assertEqual(al.parse_stardeath("killed 12.3"), ("killed", 12.3))
+        self.assertEqual(al.parse_stardeath("collapsed -"), ("collapsed", None))
+        self.assertEqual(al.parse_stardeath(None), ("", None))
+
+    def test_a_wave_reads_the_dodge_it_set_not_the_idle_after_it(self):
+        wave = {"seen": 1000, "impact": 6000}
+        spans = [("idle", 0, 1200), ("clear", 1200, 4000), ("idle", 4000, 9000)]
+        self.assertEqual(al.wave_dodge(spans, wave), "clear")
+        self.assertIsNone(al.wave_dodge([("idle", 0, 9000)], wave))
+        self.assertIsNone(al.wave_dodge([("min", 0, 900)], wave))
+
+    def test_pull_reads_the_reach_count_and_the_victim(self):
+        self.assertEqual(al.parse_pull("inreach=3 victim=5008"), (3, 5008))
+        self.assertEqual(al.parse_pull("victim=5008"), (None, 5008))
+        self.assertEqual(al.parse_pull(None), (None, 0))
+
+    def test_the_slot_table_reads_every_position_in_order(self):
+        self.assertEqual(al.parse_ring_slots(SLOT_SOURCE), [
+            (1651.668, -302.766, 417.321), (1613.668, -302.766, 417.321), (1632.668, -277.766, 417.321)])
+        self.assertEqual(al.parse_ring_slots(SLOT_SOURCE.replace("RING_SLOTS", "OTHER_SLOTS")), [])
+        self.assertEqual(al.parse_ring_slots("extern const std::array<Position, ULDUAR_ALGALON_TOTAL_SLOTS>"
+                                             " ULDUAR_ALGALON_RING_SLOTS;"), [])
+
+    def test_ring_slots_come_from_the_table_else_from_the_arcs(self):
+        arcs = {"HEALER": (14.0, 1.5708, 1.9199), "RANGED_INNER": (20.5, 1.7977, 2.618),
+                "RANGED_OUTER": (27.0, 1.5708, 3.1416)}
+
+        def old_radius(name: str) -> float:
+            for ring, values in arcs.items():
+                for suffix, value in zip(("_RADIUS", "_ARC_CENTER", "_ARC_WIDTH"), values):
+                    if name == f"ULDUAR_ALGALON_{ring}{suffix}":
+                        return value
+            raise al.Unknown(name)
+
+        with tempfile.TemporaryDirectory() as folder:
+            table, bare = pathlib.Path(folder) / "table.cpp", pathlib.Path(folder) / "bare.cpp"
+            table.write_text(SLOT_SOURCE, encoding="utf-8")
+            bare.write_text(SLOT_SOURCE.replace("RING_SLOTS", "OTHER_SLOTS"), encoding="utf-8")
+            try:
+                with mock.patch.object(al, "ALGALON_SOURCE", table):
+                    al.ring_slots.cache_clear()
+                    self.assertEqual(al.ring_slots(),
+                                     ((1651.668, -302.766), (1613.668, -302.766), (1632.668, -277.766)))
+                    self.assertIsNone(al.slot_position(3))
+                with mock.patch.object(al, "ALGALON_SOURCE", bare), mock.patch.object(al, "radius", old_radius):
+                    al.ring_slots.cache_clear()
+                    self.assertEqual(len(al.ring_slots()), 18)
+                    self.assertAlmostEqual(al.dist2(al.slot_position(0), al.TANK_SLOT), 14.0)
+                with mock.patch.object(al, "ALGALON_SOURCE", bare / "missing.cpp"):
+                    al.ring_slots.cache_clear()
+                    self.assertEqual(al.ring_slots(), tuple(al.arc_slots()))
+            finally:
+                al.ring_slots.cache_clear()
+
+    def test_an_explosion_is_survivable_above_its_top_roll_or_at_full_health(self):
+        trace = types.SimpleNamespace(header={"diff": 1}, maxhp={1: 23000, 2: 30000, 4: 30000, 5: 20000})
+        rows = ((1, 100.0), (2, 80.0), (3, 10.0), (4, 70.0), (5, 99.0))
+        up = {guid: [guid, 0.0, 0.0, 0.0, 0.0, hp] for guid, hp in rows}
+        self.assertEqual(al.explosion_safe_hp(trace), 21526)
+        self.assertEqual(al.below_safe(trace, up), [(19800, 5, 99.0), (21000, 4, 70.0)])
+        trace.header = {"diff": 2}
+        self.assertEqual((al.explosion_safe_hp(trace), al.below_safe(trace, up)), (16913, []))
 
 
 class EveryView(unittest.TestCase):

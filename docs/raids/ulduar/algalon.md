@@ -14,11 +14,12 @@ leaving it casts Ascend, so nothing may pull him or a tank past the edge. His de
 
 | Mechanic | Ids and cadence | Handling |
 |---|---|---|
+| His melee | combat reach 9 (model 28641), so **11.83 yd** on a player; runs 15 yd/s | Nobody but the swap tanks inside it |
 | Quantum Strike | 64395, every 3-4.5 s, 15.7-17.3 k / 34-36 k physical | Two tanks or nothing |
 | Phase Punch | 64412, every 15.5 s, 45 s aura, 5th stack phases the tank 10 s (64417) | Swap at **4** |
-| Collapsing Star | 32955, every 60 s, tops up to 4 alive | Star team kills one at a time; each death 16-21 k to the raid |
+| Collapsing Star | 32955, 117 k / 234 k, every 60 s, tops up to 4 alive | Star team kills one at a time; each death is Black Hole Explosion on everyone unphased, 16.1-16.9 k / 20.5-21.5 k shadow |
 | Black Hole / Worm Hole | 32953 / 34099, 6 yd field (62168 / 65250) pulsing every second, no target cap | Phases for 10 s plus the 62169 DoT (~17.5 k) |
-| Cosmic Smash | markers 33104/33105, impact ~4.8 s later, 1 / 3 markers | `< 6` yd full, `6-10` `dmg/dist*2`, `>= 10` `dmg/dist` |
+| Cosmic Smash | markers 33104/33105, impact ~4.8 s later, 1 / 3 meteors, 41.4-43.6 k / 53.6-56.4 k fire | `< 6` yd full, `6-10` `dmg/dist*2`, `>= 10` `dmg/dist` |
 | Living Constellation | 33052, 11 total, 3 activate every 50 s | Handler collects them, spends spare holes on them |
 | Big Bang | 64443 / 64584, every 90.5 s, 8 s cast | 76-89 k / 107-113 k **physical** at 50 000 yd; pierces immunity, Divine Shield included |
 | Phase 2 | at 20 % HP | Stars, constellations and holes despawn; 4 Worm Holes spawn on the fixed square |
@@ -61,6 +62,10 @@ The Phase Punch queued behind the cast lands on the soaker while everyone else i
 5th stack then leaves nobody unphased. So a holder at 3 stacks with the cast ≤ 15 s away hands over to
 a partner at ≤ 1.
 
+Humans get two raid warnings: at cast start, who soaks and that everyone else should stand by a hole;
+with 3 s left, into the hole and stay in it. Inside for the whole cast they are fed to the phase-16
+Dark Matter, and stepping out early lets the 10 s phase lapse before the hit.
+
 Everyone else keeps fighting until the walk to the nearest hole plus 2.5 s is all that is left of the
 cast (`wait`): the phase only has to cover the hit, so hiding early buys nothing. The run breaks a cast
 pinning the feet, re-issues a stalled walk and holds its tick while walking; an `Exclusive` rule keeps
@@ -81,9 +86,26 @@ summon only tops up to four: four ignored stars explode within seconds of each o
 team** of 2 damage dealers (3 on 25-man), ranged first and melee only to fill a raid short on ranged,
 kills them; the target exclusions keep every other bot on Algalon, and an `OwnTargeting` rule keeps
 `dps assist` from pulling the team back, since a star is no attacker until something hits it. The team
-is cleared (`algalon.focusstar`) onto the **lowest-health** star only when the raid's weakest member is
-above 80 % and 8 s have passed since the last explosion, overridden below 15 % star health and while
-`urgent`. The tracker marks it with the **star** icon for humans; skull would pull every bot's
+is cleared (`algalon.focusstar`) onto a star only while every gate is open, and `urgent` is the one
+override of them all:
+
+- not during the Big Bang cast (the raid is running for holes);
+- not while a Cosmic Smash marker is live (an explosion on top of an impact killed 8 in one pull);
+- not within 8 s of the last explosion, counted per star rather than from the star count. A "finish
+  stars under 15 %" bypass put two explosions 3.2 s apart and killed 12;
+- not while any living, unphased raid member is below the explosion's top roll (16.9 k / 21.5 k), or
+  below full health if their maximum is lower. A percentage gate can't work: 80 % of a 26 k clothie is
+  below one 25-man explosion;
+- the **lowest-health** star at least 7 yd from every raid member, since its hole lands where it dies
+  and phases whoever is in the field. The star the team is already on keeps it down to 5 yd, so a
+  drift past the edge doesn't flip the team between stars.
+
+The last two give way to a **deadline**. A star's health is its seconds left, and spacing i explosions
+takes i gaps plus the kills, 16 s each, so once the i-th shortest-lived star is down to `16 x i` %, the
+lowest star is opened wherever it is and whatever the raid's health. A wave's four stars spawn and drain
+together; without the deadline the gates could hold until all four went off in the same second.
+
+The tracker marks the focus star with the **star** icon for humans; skull would pull every bot's
 `attack rti target`. A skull a player puts on a star or add wins over the exclusions. An AoE multiplier
 holds area damage while two or more stars live, heals excepted.
 
@@ -93,6 +115,13 @@ Holes exist only where a star died (it wanders 25 yd from its spawn first, so an
 every constellation eats one. With a Big Bang ≤ 30 s away one hole is kept out of the kite, and
 `urgent` (no hole, cast due or running) puts every ranged DPS on the star team. A slot buried under a
 hole is stepped aside from the slot itself; a bot standing in one outside a cast leaves it.
+
+A bot phased outside a cast is alone in the void with the phase-16 Dark Matter, which kills a healer in
+about 3 s. So no walk may clip a field: dodges and exits reject ground whose straight path passes within
+7.5 yd of a hole, and a bot already beside one may not walk closer to it. Only a bot inside a field, or
+phased, may cross its own. When every path crosses a hole the dodge and the exit take one anyway: the
+void is still better than a meteor or staying phased. A slot walk with a hole in the way goes round it
+via a point 9.5 yd off the hole that has a clear line on to the slot (`blocked`).
 
 ## Constellations: the handler collects them
 
@@ -113,22 +142,60 @@ The Worm Holes are the Big Bang shelter. Unleashed Dark Matter picks a random pl
 taunts the loose one hurting the most fragile victim first, everyone else is kept on Algalon, and AoE
 is free with no stars left. With no bot handler, Dark Matter is left to whoever it chases.
 
-## Cosmic Smash and the formation
+## Cosmic Smash
 
 The dodge clears **15 yd** from every marker (10 yd if nothing clears), 8 yd from every hole, stays
-44 yd inside the room and prefers ground near the bot's slot.
+44 yd inside the room and prefers ground near the bot's slot. It fires anywhere inside 15 yd, and an
+`OwnMovement` rule holds every generic mover for bots within 19 yd of a live marker: melee started the
+dodge within 0.3 s, then `reach melee` walked them back to 6-12 yd before the impact. Charge and
+Intercept are blocked for melee there too.
 
-The raid enters from +Y, so the tank slot is on the **−Y** edge of the worm hole square at
-`(1632.7, -321.5)`, 18.7 yd from home and 10.2 yd clear of the nearest hole spot, and belongs to whoever
-holds him; there is no drag action, he follows through normal chase. Ranged and healers ring it at
-14 / 20.5 / 27 yd, healers innermost, 18 slots, filled centre-out and latched per instance. The trimmed
-arcs keep every slot ≥ 7.7 yd from all four hole spots; all 19 points are navprobe-verified, flat at
-Z 417.321. The formation yields while a marker is within 15 yd of the **slot**, not the bot: a bot
-that already dodged passes trivially and walks back under it.
+## The formation is anchored on him
 
-The class taunt nodes are blocked for both swap tanks; the swap, pickup, handler and Dark Matter nodes
-taunt through `CastClassTaunt`. The pickup covers his random target at the end of the intro and a
-phased holder.
+At the end of the intro the core makes him `AttackStart` a **random player** within 150 yd, and he does
+the same to whoever is next on threat whenever he loses his tank. Anyone inside his reach is one swing
+(25-67 k on cloth), so the formation is anchored on his landing spot (`ROOM_CENTER`), where he is
+tanked:
+
+- **Tank slots** 8 yd from him, the holder's on the −Y side and the other swap tank's at bearing 240°.
+  Both are inside his reach, so holding him from either doesn't move him, and neither does a swap
+  taunt. Before the pull the pickup tank waits on the tank slot and taunts on the first selectable
+  tick.
+- **Rings** at 19 yd (4 healer slots), 25 yd (6) and 31 yd (8), each ordered to alternate sides so a
+  short raid still spreads, all at least 8 yd from the four worm hole spots. Ranged at 31 yd are still
+  in range: spell range adds both combat reaches.
+- **Melee** wait on an arc 21 yd out on the +Y (entrance) side until a swap tank holds him, or 5 s
+  after the intro; an `OwnMovement` rule and a Charge block keep reach and charges from taking them in
+  early.
+
+All 30 points (18 slots, two tank slots, ten staging spots) are navprobe-verified, flat at Z 417.321.
+The formation yields while a marker is within 15 yd of the **slot**, not the bot: a bot that already
+dodged passes trivially and walks back under it.
+
+## Tanks: the swap pair
+
+The pair is **two bot tanks when the raid has them**, so a human tank is free to do what they like;
+otherwise the group's main tank and first assist, one of whom may be human. It is re-derived until the
+pull and latched at engage; during the pull a member who dies or leaves is replaced by the next living
+tank, bots first, or the survivor eats the 5th Phase Punch with nobody to take him. Bots swap by the
+tank not holding him taunting at the holder's 4th stack, so a human partner never would; the bot holder
+raid-warns them instead ("`<name>`, taunt Algalon now") every 5 s while the swap is due, and a human
+who is the only one able to pick him up while he is loose is told the same. With a human partner the
+bot still taunts him back at the human's 4th stack.
+
+Every swap tank or handler not holding him **yields** while a swap tank does: no damage on him (target guard and
+exclusions, a node that drops auto-attack, and a block on `attack rti target` for a skull on him).
+After a taunt both tanks build threat at the same rate, so the one carrying the stacks would take him
+straight back; without this the bot took him off a human tank by threat within 1-15 s in every pull. A
+tank outside the pair would take him from both. The yielding swap tank works the adds and otherwise
+keeps its slot in his reach. Its threat then trails the melee, so when the holder drops him his next
+swing can land on a damage dealer until the pickup taunt lands.
+
+The pickup prefers a bot, then fewer stacks, but never a bot already at 4 stacks over a human with
+fewer. The class taunt nodes are blocked for every tank while he is engaged; the swap, pickup, handler
+and Dark Matter nodes taunt through `CastClassTaunt`. The handler is a bot tank outside the pair, else
+the pair bot not holding him. Misdirection and Tricks of the Trade on the main tank stay off for the
+whole fight (`UldThreatRedirectMultiplier`).
 
 ## The trace
 
@@ -138,15 +205,25 @@ Raid-wide values, all written by the instance tick: `algalon.phase` (0 idle, 1 i
 3 phase 2, 4 won), `algalon.bigbang` (the cast's ordinal while latched, else 0), `algalon.soaker`,
 `algalon.backup`, `algalon.urgent`, `algalon.holes`, `algalon.focusstar`, `algalon.handler`. Per guid:
 `algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam` (urgent recruits aren't
-recorded). Derived per bot, each inside the helper that derives it: `algalon.hide`
+recorded), `algalon.swappair`. Derived per bot, each inside the helper that derives it: `algalon.hide`
 (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`), `algalon.kite`
-(`taunt`/`hole`/`parked`/`kept`/`none`), `algalon.spot` (`slot`/`buried`/`smash`/`none`),
-`algalon.defensive` (the pick, on change only). `algalon.starwindow`
-(`urgent`/`finishing`/`gap`/`raidhp`/`open`/`none`) is computed in the tick but written on the tracker
-bot, since the tick runs on whichever bot comes first. `algalon.holelost` (`kite`/`stray`/`phase2`) is
-an event, one per hole, skipped when every summon goes at once on a kill or Ascend.
+(`taunt`/`hole`/`parked`/`kept`/`none`), `algalon.spot`
+(`tank`/`offtank`/`stage`/`slot`/`buried`/`blocked`/`smash`/`none`), `algalon.dodge`
+(`idle`/`clear`/`min`/`cross`/`none`, where `cross` means only a path over a hole was clear),
+`algalon.defensive` (the pick, on change only). `algalon.tankrole`
+(`hold`/`yield`/`take`/`call`/`out`/`none`) per pair bot and `algalon.starwindow`
+(`urgent`/`bigbang`/`smash`/`gap`/`deadline`/`raidhp`/`near`/`open`/`none`) are computed in the tick; the window is
+written on the tracker bot, since the tick runs on whichever bot comes first.
 
-Slots are handed out before any trace opens, so the tick restates `algalon.slot` into each new trace.
+Events: `algalon.holelost` (`kite`/`stray`/`phase2`), one per hole, skipped when every summon goes at
+once on a kill or Ascend; `algalon.stardeath` (`killed`/`collapsed` and the nearest raid member's
+distance), the only record of how a star died, since damage rows cover players alone; `algalon.pull`
+(`inreach=N victim=GUID`) at the tick the intro ends; `algalon.call` (`swap`/`loose`/`bigbang`/`hide`)
+per raid warning, sent only when a human is in the raid. Each meteor is written as a `haz` circle (62311 / 64596, the impact point, 6 yd): the sweep
+keeps the 40 units nearest its anchor and on 25-man drops some markers.
+
+Slots and the swap pair are latched before any trace opens, so the tick restates them into each new
+trace.
 `algalon.hide` stays silent until he has been seen, or every earlier Ulduar trace carries a row of it
 per bot.
 
@@ -156,10 +233,24 @@ markers, stars and constellations as swept `snap.u` rows, and the damage rows. T
 unphased roster player; on older traces a phased anchor drops the room's units from the rows.
 
 **`tools/botobs/bosses/algalon.py` reads all of it**; `--verdict` is the entry point, one line per
-detected failure: `--phases`, `--bigbang` (holes at the cast, soaker and backup health, who was hit
-unphased, tank-alone seconds, re-phase loops, void Dark Matter damage, evade after), `--stars`,
-`--holes`, `--constellations`, `--smash`, `--tanks`, `--formation`, `--darkmatter`. Its banner names
-declared keys the pull never wrote.
+detected failure, and `--deaths` the second, every death classified by the mechanic that killed it,
+counted by cause and role with humans starred. Then:
+
+- `--pull`: who stood inside his 11.83 yd when the intro ended, his first victim, how soon a pair tank
+  had him;
+- `--loose`: every window his victim was no swap tank, with its cause (intro end, 5th stack, holder
+  died or phased, threat), the deaths in it and how it ended;
+- `--swaps`: the pair, stack timelines, swaps due and their latency, missed swaps, calls, threat steals;
+- `--bigbang` (holes at the cast, soaker and backup health, who was hit unphased, tank-alone seconds,
+  re-phase loops, void Dark Matter damage, evade after), `--stars` (how each died, the window, a live
+  meteor, raid health against the top roll), `--smash` (per wave and bot: distance, dodge latency and
+  branch, distance at impact, what walked it back), `--phasing` (each phase application, Big Bang or
+  stray, and the stray cause), `--reach`, `--phases`, `--holes`, `--constellations`, `--tanks`,
+  `--formation`, `--darkmatter`.
+
+Traces from before these probes fall back to what the records alone say: intro end from his first
+swing, the pair from the roster tanks, meteors from the 33105 markers. Its banner names declared keys
+the pull never wrote.
 
 ## Not supported
 

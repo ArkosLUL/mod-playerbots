@@ -61,7 +61,16 @@ class AlgalonTankPickupTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon tank pickup";
 
-    AlgalonTankPickupTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 1000) {}
+    AlgalonTankPickupTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+class AlgalonYieldBossTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon yield boss";
+
+    AlgalonYieldBossTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 500) {}
     bool IsActive() override;
 };
 
