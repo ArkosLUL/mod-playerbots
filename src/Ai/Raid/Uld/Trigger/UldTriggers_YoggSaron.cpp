@@ -779,6 +779,9 @@ bool YoggSaronGuardianControlTrigger::IsActive()
     // Fire while a guardian is loose - not Weakened and not held by a tank - or while one at the stack is
     // not the bot's target. Taunting without hitting builds nothing to keep it, and the action decides
     // whether the lead on the one it holds is worth leaving.
+    if (YoggSaronGuardianLoose(botAI))
+        return true;
+
     Unit* current = AI_VALUE(Unit*, "current target");
 
     GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
@@ -787,10 +790,6 @@ bool YoggSaronGuardianControlTrigger::IsActive()
         Unit* unit = botAI->GetUnit(guid);
         if (!IsYoggSaronHoldableGuardian(unit))
             continue;
-
-        Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
-        if (!victim || !PlayerbotAI::IsTank(victim))
-            return true;
 
         if (unit != current && unit->GetExactDist2d(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) <=
                                    ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE)

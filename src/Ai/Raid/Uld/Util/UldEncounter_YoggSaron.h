@@ -461,8 +461,8 @@ constexpr float ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS = 3.0f;
 // How early to leave the brain level before Induce Madness lands. It strips all 100 Sanity from
 // anyone at or below z 300, and no Sanity means Insane, whose removal kills the player outright - so
 // a mind control is always a death. The lead is taken out of the window the raid has to damage the
-// Brain, so it is measured rather than flat: a bot standing on a portal needs the floor, one deep in
-// an illusion room can be ~120 yd out. From the Brain the walk out takes 1.5-2.8 s for melee and
+// Brain, so it is measured rather than flat: a bot standing on a portal needs the floor, one just in
+// from the Chamber door is about 44 yd out. From the Brain the walk out takes 1.5-2.8 s for melee and
 // 2.9-4.2 s for the healer, so 5 s still surfaces melee with about 3 s spare.
 //
 // Timed at base run speed. Illusion Room (63988) adds 30% down there, but bots made 4-6 yd/s on the way
@@ -659,7 +659,8 @@ bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI);
 // Whether Induce Madness is close enough that the bot has to start walking for an exit portal. It
 // strips all 100 Sanity from anyone below z 300 and Insane's removal kills outright, so a mind
 // control is always a death - and no Sanity Well reaches the brain level, they are all on the
-// platform. The lead is measured against the walk the bot actually faces.
+// platform. The lead is measured against the walk the bot actually faces, and only once it is in the
+// brain room.
 bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI);
 
 // Whether the bot has already decided to leave for this Induce Madness. Latched until the cast ends, so
@@ -952,6 +953,9 @@ Position YoggSaronBodyRoute(Player* bot, Position const& spot);
 // Empowered stacks left and only Titanic Storm can finish it.
 bool IsYoggSaronHoldableGuardian(Unit* unit);
 bool YoggSaronHoldableGuardianWithin(Player* bot, float radius);
+
+// A holdable Guardian among the bot's nearest npcs whose victim is not a tank, so a taunt is owed.
+bool YoggSaronGuardianLoose(PlayerbotAI* botAI);
 
 // Whether a non-tank may hit this Guardian: a tank is its victim and leads the bot's threat on it by
 // the start share, or the keep share for one the bot is already on. With no tank alive in the group

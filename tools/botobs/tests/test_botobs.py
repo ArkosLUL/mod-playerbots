@@ -1381,6 +1381,22 @@ class YoggPhases(unittest.TestCase):
         # 1: 1-4 s, 2: 2-10 s, 3: 9-10 s inside a 1-10 s window
         self.assertEqual(yogg_saron.aura_seconds(rows, 1000, 10000), 12.0)
 
+    def test_decided_outside_counts_decisions_past_the_radius(self):
+        rows = {1: [[0, 1, 0.0, 0.0], [5000, 1, 60.0, 0.0]], 2: [[0, 2, 10.0, 0.0]], 3: []}
+        # 1 decided at 6 s from 60 yd out, 2 from 10 yd, 3 has no row to read
+        self.assertEqual(yogg_saron.decided_outside({1: 6000, 2: 6000, 3: 6000}, rows, (0.0, 0.0), 50.0), 1)
+        self.assertEqual(yogg_saron.decided_outside({1: 4000}, rows, (0.0, 0.0), 50.0), 0)
+
+    def test_swings_in_gaze_count_taunts_since_the_turn_onto_that_victim(self):
+        victims = {7: [(0, 100), (1000, 200), (2000, 200), (3000, 200)], 8: [(0, 300)]}
+        gazes = [(1500, 5500)]
+        swings = [(3500, 7, 200), (6000, 8, 300)]
+        # a taunt before the turn onto 200 does not count, one after it does; the second swing is
+        # outside the gaze
+        self.assertEqual(yogg_saron.swings_in_gaze(swings, gazes, [(500, 7)], victims), (1, 0))
+        self.assertEqual(yogg_saron.swings_in_gaze(swings, gazes, [(500, 7), (2500, 7)], victims), (1, 1))
+        self.assertEqual(yogg_saron.swings_in_gaze(swings, gazes, [(2500, 8)], victims), (1, 0))
+
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
         self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))

@@ -475,18 +475,24 @@ bool YoggSaronLeaveBrainLevelNow(PlayerbotAI* botAI)
             // 25 of 120 calls in one pull.
             bool const latched = YoggSaronLeavingBrainLevel(bot);
 
+            // Only decided in the brain room. Out of an illusion room the way out runs through it anyway,
+            // and from the back of the Chamber the lead read 40-43 s for a 14-15 s walk: eight of nine
+            // left the Brain with 36 s to go.
+            bool const inBrainRoom = YoggSaronRoomOf(bot) == YOGG_SARON_ROOM_BRAIN;
+
             // Every millisecond of lead is damage the Brain does not take, so it is measured against
             // the walk the bot actually faces rather than set flat for the worst case.
             uint32 lead = ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS;
-            GameObject* portal =
-                latched ? nullptr : bot->FindNearestGameObject(GO_FLEE_TO_THE_SURFACE_PORTAL, 200.0f);
+            GameObject* portal = latched || !inBrainRoom
+                                     ? nullptr
+                                     : bot->FindNearestGameObject(GO_FLEE_TO_THE_SURFACE_PORTAL, 200.0f);
             if (portal)
             {
                 lead = std::max(lead, static_cast<uint32>(bot->GetDistance2d(portal) / baseMoveSpeed[MOVE_RUN] *
                                                           ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY * 1000.0f));
             }
 
-            if (latched || castingTimeLeft < lead)
+            if (latched || (inBrainRoom && castingTimeLeft < lead))
             {
                 leave = true;
                 branch = castingTimeLeft < ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS ? "late" : "leaving";
@@ -1240,6 +1246,22 @@ bool YoggSaronHoldableGuardianWithin(Player* bot, float radius)
         for (Creature* guardian : guardians)
             if (IsYoggSaronHoldableGuardian(guardian))
                 return true;
+    }
+
+    return false;
+}
+
+bool YoggSaronGuardianLoose(PlayerbotAI* botAI)
+{
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsYoggSaronHoldableGuardian(unit))
+            continue;
+
+        Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
+        if (!victim || !PlayerbotAI::IsTank(victim))
+            return true;
     }
 
     return false;

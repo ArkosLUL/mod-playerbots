@@ -1480,6 +1480,19 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
         }
     }
 
+    // No taunt needs facing, so the tank turns away and still leaves guardian control its tick. Claiming
+    // it left a Guardian peeled by heal threat on the healers for the whole 4 s: all four deaths in a kill.
+    if (botAI->IsTank(bot) && YoggSaronGuardianLoose(botAI))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.gaze", "tankfree");
+
+        if (!bot->isMoving() && HeadingGap(bot->GetOrientation(), away) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+            bot->SetFacingTo(away);
+
+        return false;
+    }
+
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.gaze", "away");
 

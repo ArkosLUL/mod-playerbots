@@ -1199,7 +1199,11 @@ Every millisecond of lead is damage the Brain does not take, so the lead is **me
 (`SPELL_AURA_MOD_SPEED_ALWAYS`), bots made 4-6 yd/s on the way out, and the boosted figure read
 `safe` with no time left: five bots charmed in one pull, each with 34-69 Sanity. **`leaving` latches
 until the cast ends** (`YoggSaronLeavingBrainLevel`): asked fresh, the lead shrank as the bot walked,
-it flipped back to `safe` 20 times in that pull, and the brain spot walk took it back.
+it flipped back to `safe` 20 times in that pull, and the brain spot walk took it back. **It is
+decided only in the brain room**, since the way out of an illusion room runs through it: from the
+back of the Chamber room (141-150 yd) the lead read 40-43 s, so eight of nine latched at the door with
+36 s left, walked out in 14-15 s, and left the Brain at 30.7%, a whole extra wave. Brain under 30%
+still sends a bot out from anywhere.
 `yogg-saron exit hold cast multiplier` zeroes cast-time spells and channels while latched below;
 a mage channelled Evocation for 5 s 51 yd from a portal. A flat worst-case lead threw away a third of every window for a
 bot standing next to a portal. From the Brain the walk out takes 1.5-2.8 s for melee and 2.9-4.2 s for
@@ -1520,7 +1524,8 @@ all, which is the only way the room-tag leak shows; `--brain` prints what the he
 beside how close it came to its station, every walk down there that stalled or gave up, the deaths
 reflect and gaze did most of, the reprisal holds, and per Induce Madness catch the time left at its
 first `leaving`, its flips back to `safe`, refused exit walk and casting, plus walk speed to the Brain
-per role, turns on the spot below and brain spot picks; `--sanity` prints each bot's trips below
+per role, turns on the spot below, brain spot picks and per wave exits decided outside the brain
+room (not in the wave that ends phase 2); `--sanity` prints each bot's trips below
 (down > lowest, then what came back), the bench, Insane split into caught below and drained to 0,
 and Rebirths on a corpse with no Sanity; `--phase3` each phase 2 leftover's fate and Diminish
 Power's uptime.
@@ -1550,7 +1555,8 @@ stunned removal; the tentacles alive at phase 3; who sat on a stunned Crusher, a
 5 s of a stun lifting. Under `--phase3`: Yogg's health and each role's target split per 10 s, one row per
 Immortal Guardian (first victim, when and to whom it left a tank, first hit, lowest health, share at the
 stack, gone at 10% or less), each bot tank's target split and Hand of Reckoning cooldown at every
-non-tank swing, `yogg.tankhold`,
+non-tank swing, how many of those swings came mid-gaze and whether a taunt reached the Guardian
+between its turn onto that victim and the swing, `yogg.tankhold`,
 each beacon's marked guardians' distance to Yogg and his health over the heal, gaze cost inside vs
 outside, and each healer's distance to the melee spot and facing during gazes. Under `--fervor`: each
 Fervor run, whether it came back inside 16.2 yd while holding and what walked it back, novas on holders,
@@ -1608,6 +1614,12 @@ turn it back into the gaze. One pull took 660,442 from it over 244 hits, its #2 
   needs 100°, which 6-8% of ranged gaze samples had against 23-60% at 60°.
 - **`away`**: everyone else, including any moving bot since a walk faces its path, faces away and
   claims the tick.
+- **`tankfree`**: a tank with a Guardian loose (`YoggSaronGuardianLoose`: holdable, victim not a tank)
+  faces away but leaves the tick to guardian control. Taunt, Growl, Dark Command, Hand of Reckoning
+  and Righteous Defense all have `FacingCasterFlags` 0, so it taunts with its back to Yogg. Claiming
+  it cost one kill all four of its deaths: each time the tank's Guardian had just died to Titanic
+  Storm, a fresh one peeled onto a healer or ranged by heal threat mid-gaze and one-shot them (30-53k)
+  with Hand of Reckoning ready; outside gazes 15 other peels were taunted back before a swing.
 
 **`rti` is a room tag, so never write one as a targeting hint.** `"cross"` is Stormwind's tag: a
 boss-room bot given it is teleported into Stormwind by `yogg-saron fall from floor` the moment it dips

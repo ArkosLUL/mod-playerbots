@@ -15,10 +15,10 @@
                                     who reflect and gaze killed and the reprisal holds, and where
                                     Induce Madness caught whoever it charmed and what their way out
                                     lost, Nitro Boosts, the walk to the Brain per role, turns on the
-                                    spot below, brain spot picks
+                                    spot below, brain spot picks, exits decided outside the brain room
     yogg_saron.py <file> --phase3   Immortal Guardians, who pulled them off the tanks, the bot tank's
-                                    targets and taunts, beacon heals, Lunatic Gaze, phase 2 leftovers
-                                    and Diminish Power
+                                    targets and taunts, swings on the raid during a gaze, beacon heals,
+                                    Lunatic Gaze, phase 2 leftovers and Diminish Power
     yogg_saron.py <file> --crush    Crush, who took it and what each cone was aimed at, the body's
                                     knockback and who walked into it, Death Rays
     yogg_saron.py <file> --sanity   Sanity minima, each trip below, who sat a wave out, where it went,
@@ -332,6 +332,12 @@ ROOM_MIDDLES = {
     "chamber": (2104.5667, -25.509348),
 }
 
+# The module's ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE and _RADIUS, its "in the brain room" test.
+BRAIN_ROOM_MIDDLE = (1980.1971, -27.854689)
+BRAIN_ROOM_RADIUS = 50.0
+# Phase 3 starts when the Brain drops under this, and the exit leaves from anywhere then.
+BRAIN_PHASE_3_PCT = 30.0
+
 # Induce Madness is cast in the tick AddPortals spawns the wave's portals, so the wave note plus the
 # cast time is when anyone still underground loses all 100 Sanity.
 INDUCE_MADNESS_CAST_MS = 60000
@@ -377,6 +383,9 @@ EMPOWERING_SHADOWS_RADIUS = 20.0
 SPELL_WEAKENED = 64162
 SPELL_HAND_OF_RECKONING = 62124
 TAUNT_COOLDOWN_MS = 8000
+# What a tank can turn a Guardian back with: the class taunts, Growl 6795 and Righteous Defense 31789,
+# whose cast row on the Guardian sits beside the one on the friendly target.
+GUARDIAN_TAUNTS = set(TAUNT_SPELLS) | {6795, 31789}
 
 # Phase 2's platform tentacles, and both Crush cones (64147 in 10-man, 65201 in 25-man).
 TENTACLE_NAMES = {NPC_CRUSHER_TENTACLE: "Crusher", NPC_CONSTRICTOR_TENTACLE: "Constrictor",
@@ -1735,7 +1744,9 @@ def show_brain_waves(trace: Trace) -> None:
 
     The room runs from the first team member below the platform to the first `tobrain`, the tick the
     room's door opened. Induce Madness ends 60 s after the wave note, so "left" is what remained when
-    a bot decided to go and "spare" is what remained when it surfaced."""
+    a bot decided to go and "spare" is what remained when it surfaced. A decision taken outside the
+    brain room is counted, since the walk in is the walk out until there, except in the wave that ends
+    phase 2."""
     waves = [(rec["t"], int(rec.get("txt", 0))) for rec in notes(trace, "yogg.wave")]
     team = {rec.get("g", 0) for rec in notes(trace, "yogg.brainteam") if rec.get("txt") == "1"}
     if not waves or not team:
@@ -1864,9 +1875,14 @@ def show_brain_waves(trace: Trace) -> None:
                   if pairs else f"{median_or_dash(from_middle, '4.1f')} yd /   -")
         healer += f" (closest {closest:4.1f}, {landed:3} heals)" if closest is not None else f" ({landed:3} heals)"
         hit = f"{(first_hit - door) / 1000:4.1f} s" if first_hit and door else "   -"
+        outside = 0
+        if brain_rows and brain_rows[-1][6] >= BRAIN_PHASE_3_PCT:
+            outside = decided_outside(decided, rows, BRAIN_ROOM_MIDDLE, BRAIN_ROOM_RADIUS)
+        outside_note = f", {outside} decided outside the brain room" if outside else ""
         print(f"    wave {ordinal} {room:9} {clear}  {one:3}/{held_snaps:<3} {top:>4}  {walking}  {healer}"
               f"  behind {swings:2}  hit {hit}  healer@Brain {median_or_dash(at_brain, '4.1f')} yd"
-              f"  exit {median_or_dash(left, '4.1f')}/{median_or_dash(spare, '4.1f')} s  Brain -{lost:.1f}%")
+              f"  exit {median_or_dash(left, '4.1f')}/{median_or_dash(spare, '4.1f')} s  Brain -{lost:.1f}%"
+              f"{outside_note}")
 
 
 def walk_outcomes(walks: list[tuple[int, str]], steps: list[tuple[int, str]]) -> dict:
@@ -2504,6 +2520,36 @@ def aura_seconds(rows: list[tuple[int, int, bool]], start: int, stop: int) -> fl
     for began in opened.values():
         total += max(0, stop - max(began, start))
     return total / 1000.0
+
+
+def decided_outside(decided: dict[int, int], rows: dict[int, list[list]], middle: tuple[float, float],
+                    radius: float) -> int:
+    """How many exit decisions, guid -> time, came while the bot stood more than `radius` from
+    `middle`, read off its last snapshot_rows row at or before the decision."""
+    count = 0
+    for guid, when in decided.items():
+        row = row_before(rows.get(guid, []), when)
+        count += bool(row) and math.dist(row[2:4], middle) > radius
+    return count
+
+
+def swings_in_gaze(swings: list[tuple[int, int, int]], gazes: list[tuple[int, int]],
+                   taunts: list[tuple[int, int]], victims: dict[int, list[tuple[int, int]]]) -> tuple[int, int]:
+    """Of Guardian swings on the raid, as (t, guardian, victim): how many landed inside a gaze window,
+    and how many of those had a taunt cast on that Guardian since it turned on that victim. `taunts`
+    are (t, guardian) and `victims` each Guardian's (t, victim) samples, all in time order."""
+    inside = taunted = 0
+    for when, guardian, victim in swings:
+        if not any(first <= when <= last for first, last in gazes):
+            continue
+        inside += 1
+        since = when
+        for t, target in reversed([sample for sample in victims.get(guardian, []) if sample[0] <= when]):
+            if target != victim:
+                break
+            since = t
+        taunted += any(since <= t <= when and target == guardian for t, target in taunts)
+    return inside, taunted
 
 
 def held_still(rows: list[list], when: int, radius: float) -> float:
@@ -3319,6 +3365,19 @@ def show_phase3(trace: Trace) -> None:
     if held:
         print(f"    yogg.tankhold    : {dict(held)}")
 
+    # The gaze action used to claim the tank's tick for all 4 s, so a Guardian peeled in one went
+    # untaunted until it had swung.
+    gazes = [(rec["t"], rec["t"] + LUNATIC_GAZE_MS) for rec in trace.of("cast")
+             if rec.get("sp") == SPELL_LUNATIC_GAZE_YOGG and start <= rec["t"] <= alive_end]
+    if swings:
+        taunt_casts = sorted((rec["t"], rec.get("tgt", 0)) for rec in trace.of("cast")
+                             if rec.get("s") in tanks and rec.get("sp") in GUARDIAN_TAUNTS)
+        victims = {guid: [(row[0], row[8]) for row in rows.get(guid, [])] for guid in guardians}
+        inside, taunted = swings_in_gaze([(rec["t"], rec.get("s", 0), rec.get("d", 0)) for rec in swings],
+                                         gazes, taunt_casts, victims)
+        print(f"    swings on the raid during a gaze: {inside} of {len(swings)},"
+              f" taunted between the turn and the swing {taunted}")
+
     beacons = [rec["t"] for rec in trace.of("cast") if rec.get("sp") == SPELL_SHADOW_BEACON and start <= rec["t"] <= stop]
     heals = [rec for rec in trace.of("cast") if rec.get("sp") in SPELL_EMPOWERING_SHADOWS and start <= rec["t"] <= stop]
     print(f"\n  Shadow Beacons     : {len(beacons)}")
@@ -3336,9 +3395,6 @@ def show_phase3(trace: Trace) -> None:
         inside = sum(1 for yards in reach if yards <= EMPOWERING_SHADOWS_RADIUS)
         print(f"    {clock(group[0])}  {len(casters)} heals, Guardians {', '.join(f'{yards:.1f}' for yards in reach)} yd"
               f" from Yogg ({inside} inside {EMPOWERING_SHADOWS_RADIUS:.0f}), Yogg {change} over the next 20 s")
-
-    gazes = [(rec["t"], rec["t"] + LUNATIC_GAZE_MS) for rec in trace.of("cast")
-             if rec.get("sp") == SPELL_LUNATIC_GAZE_YOGG and start <= rec["t"] <= alive_end]
 
     def inside_gaze(when: int) -> bool:
         return any(first <= when <= last for first, last in gazes)
@@ -3633,8 +3689,9 @@ SECTIONS = (
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
     ("tentacles", "platform tentacle stock, Shattered Illusion stuns, leftovers at phase 3", show_tentacles),
     ("brain", "brain room, the Brain, skulls, reprisal deaths and holds, Induce Madness, stalled walks,"
-     " walk speed to the Brain, turns on the spot", show_brain),
-    ("phase3", "Immortal Guardians, beacon heals, Lunatic Gaze, phase 2 leftovers", show_phase3),
+     " walk speed to the Brain, turns on the spot, exits decided outside the brain room", show_brain),
+    ("phase3", "Immortal Guardians, swings on the raid during a gaze, beacon heals, Lunatic Gaze,"
+     " phase 2 leftovers", show_phase3),
     ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
     ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),
 )
