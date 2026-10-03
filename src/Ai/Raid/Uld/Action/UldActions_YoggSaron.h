@@ -392,6 +392,17 @@ public:
     bool Execute(Event event) override;
 };
 
+// Uses the boots and lets the walk go on in the same tick.
+class YoggSaronNitroBoostsAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron nitro boosts action";
+
+    YoggSaronNitroBoostsAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class YoggSaronMoveToExitPortalAction : public MovementAction
 {
 public:

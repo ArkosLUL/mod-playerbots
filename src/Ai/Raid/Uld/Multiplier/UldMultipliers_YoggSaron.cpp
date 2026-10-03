@@ -220,6 +220,20 @@ float YoggSaronIllusionMultiTargetHoldMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
+float YoggSaronExitHoldCastMultiplier::GetValue(Action* action)
+{
+    CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+    if (!spellAction || bot->GetMapId() != ULDUAR_MAP_ID || !YoggSaronOnBrainLevel(bot) ||
+        !YoggSaronLeavingBrainLevel(bot))
+        return 1.0f;
+
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(AI_VALUE2(uint32, "spell id", spellAction->getSpell()));
+    if (!spellInfo)
+        return 1.0f;
+
+    return spellInfo->CalcCastTime() || spellInfo->IsChanneled() ? 0.0f : 1.0f;
+}
+
 float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
 {
     if (!action)

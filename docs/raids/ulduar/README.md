@@ -100,7 +100,7 @@ is no Sated/Exhaustion check anywhere, and no Drums or Time Warp — lust is sha
 |---|---|---|---|
 | Razorscale | grounded (`Z <= 440`) | same | Zero damage taken while airborne; every landing, harpoon knockdowns included, is a real burn window |
 | Mimiron | always | all three mechs alive | P1-P3 damage counts; all three up is P4, the enrage burn |
-| Yogg-Saron | P2 or P3 | P3 | P1 damage lands on Sara and is wasted. Opens only on the Brain (P2) and Yogg (P3), both in `BossTakesNoVictim`: before that the base gate held every bot cooldown for a whole 663 s pull |
+| Yogg-Saron | P2 or P3 | P3 | P1 damage lands on Sara and is wasted. Opens only on the Brain (P2) and Yogg (P3), both in `BossTakesNoVictim`: before that the base gate held every bot cooldown for a whole 663 s pull. Read from the boss state, not sight: the brain level is 88-150 yd from Yogg, past `SightDistance`, and the fall-through lusted in P2 |
 | Assembly of Iron | always | exactly one member alive | They resurrect each other; also covers the hard mode, since Steelbreaker-last means the survivor is empowered |
 | Freya | same as `allowLust` | no `SPELL_ATTUNED_TO_NATURE` 62519, **or** HP ≤ 25% | 150 stacks of +8% healing received, so damage lands only in the final phase; the adds that strip it are not boss-flagged |
 | Thorim | arena floor (`Z <= 429.6`) | same | Largely redundant, but cheap insurance against a stray lust while he is immune |

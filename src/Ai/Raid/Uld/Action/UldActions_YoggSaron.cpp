@@ -34,6 +34,10 @@
 #include "CellImpl.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
+#include "Item.h"
+#include "Opcodes.h"
+#include "WorldPacket.h"
+#include "WorldSession.h"
 #include <TankAssistStrategy.h>
 
 using namespace EncounterHelpers;
@@ -1271,6 +1275,26 @@ bool YoggSaronBrainSpotAction::Execute(Event /*event*/)
                   true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
+bool YoggSaronNitroBoostsAction::Execute(Event /*event*/)
+{
+    Item* boots = YoggSaronNitroBoots(bot);
+    if (!boots || bot->CanUseItem(boots) != EQUIP_ERR_OK || bot->IsNonMeleeSpellCast(true))
+        return false;
+
+    // Same packet UseTinkerAction sends: the use spell is the enchant's, not in the bot's spellbook.
+    WorldPacket packet(CMSG_USE_ITEM);
+    packet << boots->GetBagSlot() << boots->GetSlot() << uint8(1) << uint32(SPELL_NITRO_BOOSTS_USE)
+           << boots->GetGUID() << uint32(0) << uint8(0);
+    packet << uint32(TARGET_FLAG_NONE) << bot->GetPackGUID();
+    bot->GetSession()->HandleUseItemOpcode(packet);
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.nitro", "used");
+
+    // The walk to the Brain still wants this tick.
+    return false;
+}
+
 bool YoggSaronMoveToExitPortalAction::Execute(Event /*event*/)
 {
     // Three of these are permanently spawned around the brain level, and a window can end with the bot
@@ -1289,6 +1313,16 @@ bool YoggSaronMoveToExitPortalAction::Execute(Event /*event*/)
         // far enough apart that a blocked route to one says nothing about the others.
         if (!YoggSaronWalkMakingProgress(botAI, "exit", portal->GetPosition()))
             continue;
+
+        // The brain spot walk is forced too, and a forced move waits out another forced one's hold, up to
+        // 5 s: exits stood 4.0 and 4.4 s refused behind it in two pulls and were charmed.
+        // 2D, since the walk stores its end at the ground height it pathed to.
+        LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+        if (last.lastMoveShort.GetExactDist2d(portal->GetPositionX(), portal->GetPositionY()) > 1.0f)
+            last.clear();
+
+        // A spline that died reads as a duplicate of itself until the hold runs out: one bot stood 3.5 s.
+        YoggSaronReleaseStalledWalk(botAI, "exit", portal->GetPosition());
 
         MoveTo(bot->GetMapId(), portal->GetPositionX(), portal->GetPositionY(), portal->GetPositionZ(), false, false,
                false, true, MovementPriority::MOVEMENT_FORCED, true, false);

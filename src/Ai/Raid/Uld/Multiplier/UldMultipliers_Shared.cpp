@@ -20,6 +20,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "PriestActions.h"
+#include "RaidEncounter.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "SharedDefines.h"
@@ -33,6 +34,7 @@
 #include "UldEncounter_Razorscale.h"
 #include "UldEncounter_Thorim.h"
 #include "UldEncounter_YoggSaron.h"
+#include "UldEncounterGate.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "UldTriggers.h"
@@ -219,16 +221,11 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
     }
 
     // P1 damage lands on Sara and is wasted; P3 is the body burn, with no Shadow Barrier and no
-    // Guardian soaking it up. Sara has to be part of the check because Yogg himself is not summoned
-    // until the P2 transition, so P1 would otherwise fall through ungated. Presence is not the
-    // encounter though: Sara is a static spawn that LoadAllGrids() makes findable from instance
-    // creation, and she stands 114yd from Auriaya's room and 167yd from Vezax, so matching on sight
-    // alone shut the gate for two unrelated bosses. She only enters combat when JustEngagedWith
-    // calls SetInCombatWithZone().
-    Unit* const yoggSaron = bot->FindNearestCreature(NPC_YOGG_SARON, sPlayerbotAIConfig.sightDistance, true);
-    Unit* const saraPhaseOne = bot->FindNearestCreature(NPC_SARA_PHASE_1, sPlayerbotAIConfig.sightDistance, true);
-
-    if ((yoggSaron && yoggSaron->IsInCombat()) || (saraPhaseOne && saraPhaseOne->IsInCombat()))
+    // Guardian soaking it up. Presence is not the encounter: Sara is a static spawn that LoadAllGrids()
+    // makes findable from instance creation, 114yd from Auriaya's room and 167yd from Vezax. Sight isn't
+    // either: the brain level is 88-150yd from Yogg, past SightDistance, and a bot there fell through to
+    // the permissive default below and lusted in phase 2. The boss state is.
+    if (bot->GetMapId() == ULDUAR_MAP_ID && BossStateGateLive(botAI, ULD_BOSS_YOGGSARON))
     {
         uint32 const phase = YoggSaronPhase(botAI);
 

@@ -15,6 +15,7 @@
 
 class PlayerbotAI;
 class Creature;
+class Item;
 class Player;
 class Unit;
 
@@ -92,6 +93,8 @@ enum UlduarYoggSaronIds
     SPELL_LUNATIC_GAZE_SKULL = 64168,  // 64167 on a Laughing Skull fires this every second, 30 yd
     SPELL_SHADOW_NOVA_SARA = 65719,  // only cast from a Guardian's JustDied, so the cast is its death
     SPELL_SHATTERED_ILLUSION = 64173,  // stun on every platform tentacle once a brain room is cleared
+    SPELL_NITRO_BOOSTS_USE = 55004,  // the boots' use spell, 3 min; casts the buff below, no backfire in a raid
+    SPELL_NITRO_BOOSTS_BUFF = 54861,  // +150% run speed, 5 s
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
     // One per illusion, opened by the Brain the moment the last Influence Tentacle in that room dies.
     // The entries run in the same order as ACTION_ILLUSION_DRAGONS/ICECROWN/STORMWIND.
@@ -121,6 +124,16 @@ constexpr float ULDUAR_YOGG_SARON_BRAIN_LEVEL_MAX_Z = 250.0f;
 // pulls behind Yogg and faces away to conserve it. With Freya absent there are no Sanity Wells, so the
 // drain is one-way - kept low so only near-Insane bots pull out. Confirm in-game.
 constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
+
+// Under this a bot sits the next wave out and refills at a well. A trip down cost a median 22 Sanity, 64
+// at worst, and there's no time to top up between waves: the next portals open ~22 s after the team is
+// back, with a 35 yd walk to the nearest well and 65 yd from it to a portal spot.
+constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY = 60;
+
+// Nitro Boosts (boots enchant), on the walk from a cleared illusion room to the Brain. Shorter walks end
+// before 5 s of +150% buys anything.
+constexpr uint32 ULDUAR_YOGG_SARON_NITRO_BOOSTS_ENCHANT = 3606;
+constexpr float ULDUAR_YOGG_SARON_NITRO_MIN_WALK = 40.0f;
 
 // A cloud summons a Guardian on any player within 8.5 yd. SelectNearbyTarget's 6 yd goes through
 // _IsWithinDist, which adds both GetObjectSize() values, and that returns UNIT_FIELD_COMBATREACH
@@ -443,6 +456,10 @@ constexpr float ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS = 3.0f;
 // Brain, so it is measured rather than flat: a bot standing on a portal needs the floor, one deep in
 // an illusion room can be ~120 yd out. From the Brain the walk out takes 1.5-2.8 s for melee and
 // 2.9-4.2 s for the healer, so 5 s still surfaces melee with about 3 s spare.
+//
+// Timed at base run speed. Illusion Room (63988) adds 30% down there, but bots made 4-6 yd/s on the way
+// out once casts and refused moves counted, and the faster number said "safe" with no time left: five
+// charmed in one pull, all with Sanity to spare.
 constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS = 5000;
 constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 2.0f;
 
@@ -628,6 +645,16 @@ bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI);
 // platform. The lead is measured against the walk the bot actually faces.
 bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI);
 
+// Whether the bot has already decided to leave for this Induce Madness. Latched until the cast ends, so
+// a bot closing on the portal can't talk itself back to the Brain. Reads the latch only, no sweep.
+bool YoggSaronLeavingBrainLevel(Player* bot);
+
+// Sanity stacks (63050). 0 with no aura, which is Insane or out of the fight.
+uint32 YoggSaronSanityOf(Player* player);
+
+// The bot's boots if they carry Nitro Boosts, else null.
+Item* YoggSaronNitroBoots(Player* bot);
+
 // The spot a bot hits the Brain from once its room is done: behind it for melee, the brain room middle
 // for everyone else, which has every melee spot inside heal range.
 Position YoggSaronBrainSpot(Player* bot);
@@ -691,6 +718,9 @@ YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI);
 // one healer, then ranged to fill, each band by GUID, tanks never. Melee because the room is a 60 s
 // race on foot, and because it takes them out of the Crush ring for the length of every window - they
 // stand inside an 8 degree wedge in 6.5% of samples against 1.3% for ranged.
+//
+// Bots benched for low Sanity are skipped, and their portals go to whoever's next in that order. Too few
+// left means empty portals, never a low bot sent down.
 std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI);
 
 // What this bot should be doing about the next portal wave.

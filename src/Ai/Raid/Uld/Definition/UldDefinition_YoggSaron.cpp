@@ -152,6 +152,8 @@ void DefineYoggSaron(EncounterBuilder& e)
     // Over reach melee and set behind, so a bot arriving in front of the Brain goes round to the spot
     // rather than being walked out of range and back. Under the exit walk.
     e.Node<YoggSaronBrainSpotTrigger, YoggSaronBrainSpotAction>(ACTION_RAID);
+    // Just over the brain spot walk it speeds up. It never claims the tick, so the walk still runs.
+    e.Node<YoggSaronNitroBoostsTrigger, YoggSaronNitroBoostsAction>(ACTION_RAID + 0.5f);
 
     // The set dps priority row owns every non-tank's target, so the generic picker stands down rather
     // than pull bots back onto whatever is nearest. This is the exact test that row fires on: zeroing
@@ -171,7 +173,10 @@ void DefineYoggSaron(EncounterBuilder& e)
             Family::Blink | Family::Disengage);
     e.Block("yogg-saron displacement guard multiplier", Role::Any, YoggSaronInPhase1, Family::Charge,
             {"killing spree"});
-    e.Block("yogg-saron displacement guard multiplier", Role::Any, YoggSaronBrainIsTarget, Family::Charge);
+    // Killing Spree on the Brain lands the rogue on its model, 21 yd above the floor, where nothing walks
+    // it out: one stood there 20 s until Induce Madness charmed it.
+    e.Block("yogg-saron displacement guard multiplier", Role::Any, YoggSaronBrainIsTarget, Family::Charge,
+            {"killing spree"});
 
     // Everything else that could put a held bot back on a tentacle. Not the whole Attack family: the dps
     // resolver is an AttackAction itself, and it is what drops the target. The assist is already blocked.
@@ -198,6 +203,7 @@ void DefineYoggSaron(EncounterBuilder& e)
     // Whether an action is AoE is its threat type, which any action can override.
     e.Multiplier<YoggSaronPhase1AoeHoldMultiplier>(Family::AnyAction);
     e.Multiplier<YoggSaronIllusionMultiTargetHoldMultiplier>(Family::AnyAction);
+    e.Multiplier<YoggSaronExitHoldCastMultiplier>(Family::Spell);
 
     e.Block("yogg-saron stack food guard multiplier", Role::Any, YoggSaronInsideRing, 0, {"food", "drink"});
 

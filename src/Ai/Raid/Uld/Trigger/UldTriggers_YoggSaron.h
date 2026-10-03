@@ -254,6 +254,17 @@ public:
     bool IsActive() override;
 };
 
+// Nitro Boosts on the walk from a cleared illusion room to the Brain, the longest walk of the wave and
+// all of it time off the Brain. Never on the way out.
+class YoggSaronNitroBoostsTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron nitro boosts trigger";
+
+    YoggSaronNitroBoostsTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 class YoggSaronMoveToExitPortalTrigger : public YoggSaronTrigger
 {
 public:

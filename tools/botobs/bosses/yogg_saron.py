@@ -13,12 +13,13 @@
     yogg_saron.py <file> --tentacles  tentacle stock at each brain room door, stun removal, leftovers at P3
     yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure,
                                     who reflect and gaze killed and the reprisal holds, and where
-                                    Induce Madness caught whoever it charmed
+                                    Induce Madness caught whoever it charmed and what their way out
+                                    lost, Nitro Boosts
     yogg_saron.py <file> --phase3   Immortal Guardians, who pulled them off the tanks, the bot tank's
                                     targets and taunts, beacon heals, Lunatic Gaze
     yogg_saron.py <file> --crush    Crush, who took it and what each cone was aimed at, the body's
                                     knockback and who walked into it, Death Rays
-    yogg_saron.py <file> --sanity   Sanity minima and where they went
+    yogg_saron.py <file> --sanity   Sanity minima, each trip below, who sat a wave out, where it went
 
 The fight has three rooms, five mechanics that kill and nothing in the world to sweep for two of
 them, so most of what matters here is in `note` rows rather than in the snapshot:
@@ -92,6 +93,7 @@ SPELL_BRAIN_LINK_OK = 63804
 # snapshot ever samples one, and a click that failed leaves nothing behind - this is the only proof a
 # portal was actually used.
 SPELL_ILLUSION_ROOM = 63988
+SPELL_NITRO_BOOSTS_USE = 55004
 SPELL_HAND_OF_PROTECTION = (10278, 5599, 1022)
 
 # A Guardian's death nova is 15 yd (62714 and 65209 both carry radius index 18) and the ranged station
@@ -1362,7 +1364,26 @@ def show_brain(trace: Trace) -> None:
     madness = [rec for rec in trace.of("dmg") + trace.of("aura") if rec.get("sp") == SPELL_INDUCE_MADNESS]
     exits = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.exit"))
     if exits:
-        print(f"  exit decisions   : {dict(exits)}")
+        # A safe after a leaving inside the same cast is the bot talking itself back to the Brain.
+        brain_rows = snapshot_rows(trace, guids_of_entry(trace, NPC_BRAIN))
+        casts = cast_windows([row for rows in brain_rows.values() for row in rows], SPELL_INDUCE_MADNESS)
+        flips, left_in = 0, {}
+        for rec in notes(trace, "yogg.exit"):
+            guid = rec.get("g", 0)
+            window = next((i for i, (start, stop) in enumerate(casts) if start <= rec["t"] <= stop), None)
+            if window is None:
+                continue
+            if rec.get("txt") != "safe":
+                left_in[guid] = window
+            elif left_in.get(guid) == window:
+                flips += 1
+        print(f"  exit decisions   : {dict(exits)}, {flips} back to safe after leaving")
+
+    nitro = [rec for rec in trace.of("cast") if rec.get("sp") == SPELL_NITRO_BOOSTS_USE]
+    nitro_notes = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.nitro"))
+    if nitro or nitro_notes:
+        users = collections.Counter(trace.name(rec.get("s", 0)) for rec in nitro)
+        print(f"  Nitro Boosts     : {len(nitro)} used {dict(users)}, probe {dict(nitro_notes)}")
     if madness:
         print(f"  Induce Madness   : {len(madness)} rows")
 
@@ -1450,23 +1471,26 @@ def show_madness_caught(trace: Trace) -> None:
     it strips all 100 Sanity from whoever is still below the platform when its 60 s cast ends and
     teleports them up in the same effect, so the Insane aura and the spot that teleport started from
     are the whole record. The Flee portals are game objects, which no trace carries, so the distance is
-    measured against the spots this pull's own clean exits went up from."""
-    charmed: dict[int, int] = {}
-    for rec in trace.of("aura"):
-        if rec.get("sp") == SPELL_INSANE and not rec.get("r"):
-            charmed.setdefault(rec.get("d", 0), rec["t"])
+    measured against the spots this pull's own clean exits went up from.
+
+    Under each catch, what the way out lost: the time left when it first decided to go, how often it
+    went back to safe, how long its exit walk was refused, and how long it spent casting."""
+    charmed, clean, caught, rows = madness_split(trace)
     if not charmed:
         return
-
-    rows = snapshot_rows(trace, roster_guids(trace))
-    surfaced = sorted((when, guid, x, y, z) for guid, track in rows.items()
-                      for when, x, y, z in surfacings(track, BRAIN_LEVEL_Z))
-    clean, caught = madness_teleports(surfaced, charmed, MADNESS_CHARM_MS)
     ways_out = [(row[2], row[3]) for row in clean]
+
+    verdicts = collections.defaultdict(list)
+    for rec in notes(trace, "yogg.exit"):
+        verdicts[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
+    walks = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("by") == "yogg-saron move to exit portal action":
+            walks[rec.get("g", 0)].append((rec["t"], str(rec.get("r", ""))))
 
     names = ", ".join(f"{trace.name(guid)}({trace.role(guid)})"
                       for guid in sorted(charmed, key=lambda guid: trace.name(guid)))
-    print(f"  caught by it     : {len(charmed)} went Insane - {names}")
+    print(f"  caught by it     : {len(caught)} of {len(charmed)} Insane - {names}")
     for when, guid, x, y, z in caught:
         gap = min((math.dist((x, y), spot) for spot in ways_out), default=0.0)
         height = f"{z - BRAIN_FLOOR_Z:.1f} yd in the air" if z > BRAIN_FLOOR_Z else "on the floor"
@@ -1474,6 +1498,19 @@ def show_madness_caught(trace: Trace) -> None:
               f" at ({x:7.1f},{y:6.1f},{z:6.1f}) {height:18}"
               f" {gap:5.1f} yd from the nearest way out, held still"
               f" {held_still(rows[guid], when, 1.0):5.1f} s")
+        casting = [(row[0], row[11] if len(row) > 11 else 0) for row in rows[guid] if row[4] < BRAIN_LEVEL_Z]
+        left, flips, refused, cast = exit_losses(verdicts[guid], walks[guid], casting, when)
+        if left is None:
+            print(f"{'':16}never decided to leave")
+        else:
+            print(f"{'':16}decided with {left:4.1f} s left, back to safe {flips}x,"
+                  f" exit walk refused {refused:4.1f} s, casting {cast:4.1f} s")
+
+    teleported = {guid for _, guid, *_ in caught}
+    for guid in sorted(set(charmed) - teleported, key=lambda guid: charmed[guid]):
+        spot = at(trace, guid, charmed[guid])
+        where = "below" if spot and spot[2] < BRAIN_LEVEL_Z else "on the platform"
+        print(f"    {clock(charmed[guid]):>10} {trace.name(guid):14} {trace.role(guid):6} drained to 0, {where}")
 
 
 def show_brain_waves(trace: Trace) -> None:
@@ -2098,6 +2135,99 @@ def madness_teleports(surfaced: list[tuple], charmed_at: dict[int, int], window_
     return clean, caught
 
 
+def madness_split(trace: Trace) -> tuple[dict[int, int], list[tuple], list[tuple], dict[int, list[list]]]:
+    """Every Insane (guid -> when), the ascents that clicked a portal, the ones Induce Madness
+    teleported, and the snapshot rows behind them. An Insane with no teleport in front of it was
+    drained to 0 Sanity instead."""
+    charmed: dict[int, int] = {}
+    for rec in trace.of("aura"):
+        if rec.get("sp") == SPELL_INSANE and not rec.get("r"):
+            charmed.setdefault(rec.get("d", 0), rec["t"])
+    rows = snapshot_rows(trace, roster_guids(trace))
+    surfaced = sorted((when, guid, x, y, z) for guid, track in rows.items()
+                      for when, x, y, z in surfacings(track, BRAIN_LEVEL_Z))
+    clean, caught = madness_teleports(surfaced, charmed, MADNESS_CHARM_MS)
+    return charmed, clean, caught, rows
+
+
+def cast_windows(rows: list[list], spell: int) -> list[tuple[int, int]]:
+    """(start, end) of each run of samples casting `spell`, off [t, *row] snapshot rows in time order."""
+    windows, start, last = [], None, None
+    for row in sorted(rows, key=lambda row: row[0]):
+        casting = len(row) > 11 and row[11] == spell
+        if casting and start is None:
+            start = row[0]
+        elif not casting and start is not None:
+            windows.append((start, last))
+            start = None
+        if casting:
+            last = row[0]
+    if start is not None:
+        windows.append((start, last))
+    return windows
+
+
+def exit_losses(verdicts: list[tuple[int, str]], walks: list[tuple[int, str]], casting: list[tuple[int, int]],
+                end: int, window_ms: int = INDUCE_MADNESS_CAST_MS) -> tuple[float | None, int, float, float]:
+    """What a bot caught by Induce Madness lost on the way out, over the `window_ms` before `end`, when
+    the cast ended. `verdicts` are its yogg.exit notes as (t, txt), `walks` its exit portal moves as
+    (t, outcome) and `casting` its samples as (t, spell being cast or 0).
+
+    Returns the seconds left at its first leaving or late verdict (None if it never had one), how many
+    times it went back to safe after that, the seconds its exit walk was refused, and the seconds it
+    spent casting after deciding."""
+    start = end - window_ms
+    first = next((t for t, txt in verdicts if start <= t <= end and txt in ("leaving", "late")), None)
+    if first is None:
+        return None, 0, 0.0, 0.0
+
+    flips = sum(1 for t, txt in verdicts if first < t <= end and txt == "safe")
+
+    refused, since = 0.0, None
+    for t, outcome in walks:
+        if not first <= t <= end:
+            continue
+        if outcome == "wait":
+            since = t if since is None else since
+        elif since is not None:
+            refused += (t - since) / 1000.0
+            since = None
+    if since is not None:
+        refused += (end - since) / 1000.0
+
+    samples = [(t, spell) for t, spell in casting if first <= t <= end]
+    cast = sum((nxt - t) / 1000.0 for (t, spell), (nxt, _) in zip(samples, samples[1:] + [(end, 0)]) if spell)
+
+    return (end - first) / 1000.0, flips, refused, cast
+
+
+def sanity_trips(heights: list[tuple[int, float]], sanity: list[tuple[int, int]],
+                 level_z: float) -> list[tuple[int, int, int | None, int | None, int | None]]:
+    """Each trip below `level_z` as (down, up, Sanity going down, lowest below, Sanity coming up).
+    `heights` is (t, z) and `sanity` (t, stacks), both in time order. A trip still below at the end
+    closes on the last sample."""
+    def level(when: int) -> int | None:
+        held = [stacks for t, stacks in sanity if t <= when]
+        return held[-1] if held else None
+
+    spans, start = [], None
+    for t, z in heights:
+        if z < level_z and start is None:
+            start = t
+        elif z >= level_z and start is not None:
+            spans.append((start, t))
+            start = None
+    if start is not None:
+        spans.append((start, heights[-1][0]))
+
+    trips = []
+    for down, up in spans:
+        at_down = level(down)
+        seen = [stacks for t, stacks in sanity if down <= t <= up] + ([at_down] if at_down is not None else [])
+        trips.append((down, up, at_down, min(seen) if seen else None, level(up)))
+    return trips
+
+
 def held_still(rows: list[list], when: int, radius: float) -> float:
     """Seconds the bot had been standing within `radius` of where it was at `when`."""
     spot = None
@@ -2477,9 +2607,8 @@ def show_sanity_sources(trace: Trace) -> None:
         seen.add(key)
         lost[spell] += SANITY_COSTS[spell]
 
-    insane = sorted({rec.get("d", 0) for rec in trace.of("aura")
-                     if rec.get("sp") == SPELL_INSANE and not rec.get("r")})
-    madness = len(insane) * 100
+    charmed, _, caught, _ = madness_split(trace)
+    madness = len(caught) * 100
 
     total = sum(lost.values()) + madness
     if not total:
@@ -2491,9 +2620,9 @@ def show_sanity_sources(trace: Trace) -> None:
     for label, stacks in sorted(rows, key=lambda row: -row[1]):
         print(f"    {label:22} {stacks:5}  {stacks * 100.0 / total:4.1f}%")
     print(f"    {'total':22} {total:5}")
-    if insane:
-        print(f"    Induce Madness is {len(insane)} bots x 100, every one still below the platform"
-              f" when the cast ended")
+    if charmed:
+        drained = len(charmed) - len(caught)
+        print(f"    Insane: {len(caught)} caught below by Induce Madness (100 each), {drained} drained to 0")
 
 
 def show_sanity(trace: Trace) -> None:
@@ -2519,7 +2648,44 @@ def show_sanity(trace: Trace) -> None:
     if insane:
         print(f"  went Insane: {', '.join(trace.name(g) for g in insane)}")
 
+    show_sanity_trips(trace, rows)
     show_sanity_sources(trace)
+
+
+def show_sanity_trips(trace: Trace, rows: list[dict]) -> None:
+    """Each bot's trips below as Sanity going down > lowest, then what it got back before the next one,
+    plus who sat a wave out under the brain team's floor."""
+    series: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for rec in rows:
+        if not rec.get("r") and rec.get("st") is not None:
+            series[rec.get("d", 0)].append((rec["t"], rec["st"]))
+
+    heights = snapshot_rows(trace, set(series))
+    lines = []
+    for guid, track in heights.items():
+        trips = sanity_trips([(row[0], row[4]) for row in track], series[guid], BRAIN_LEVEL_Z)
+        if not trips:
+            continue
+        parts = []
+        for index, (down, up, at_down, low, at_up) in enumerate(trips):
+            part = f"{at_down}>{low}"
+            nxt = trips[index + 1][0] if index + 1 < len(trips) else None
+            if nxt is not None and at_up is not None:
+                peak = max([stacks for t, stacks in series[guid] if up <= t <= nxt] + [at_up])
+                if peak > at_up:
+                    part += f" +{peak - at_up}"
+            parts.append(part)
+        lines.append((trips[0][0], f"    {trace.name(guid):14} {trace.role(guid):6} {', '.join(parts)}"))
+
+    if lines:
+        print("  trips below, Sanity down > lowest, then what came back before the next:")
+        for _, line in sorted(lines):
+            print(line)
+
+    benched = collections.Counter(trace.name(rec.get("g", 0)) for rec in notes(trace, "yogg.benched")
+                                  if rec.get("txt") == "1")
+    if benched:
+        print(f"  benched under the brain team floor: {dict(benched)}")
 
 
 def show_threat(trace: Trace) -> None:
@@ -3128,7 +3294,7 @@ SECTIONS = (
      show_brain),
     ("phase3", "Immortal Guardians, beacon heals, Lunatic Gaze", show_phase3),
     ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
-    ("sanity", "Sanity minima", show_sanity),
+    ("sanity", "Sanity minima, trips below and the bench", show_sanity),
 )
 
 

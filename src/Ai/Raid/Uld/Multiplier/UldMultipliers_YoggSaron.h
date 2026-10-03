@@ -68,6 +68,20 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Cast-time spells and channels, held while a bot walks out ahead of Induce Madness. Each one stops the
+// walk: a mage channelled Evocation for 5 s, 51 yd from the portal, and was charmed short of it. Instants
+// still go.
+class YoggSaronExitHoldCastMultiplier : public Multiplier
+{
+public:
+    YoggSaronExitHoldCastMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron exit hold cast multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+};
+
 // Phase 1 walks back to the stack or the station, held in two cases:
 // - A Sara's Fervor holder near a live nova. The dodge only fires inside 17 yd, so the station, the
 //   leash and the reach nodes walked the bot straight back in: 31 of 44 runs were inside the blast

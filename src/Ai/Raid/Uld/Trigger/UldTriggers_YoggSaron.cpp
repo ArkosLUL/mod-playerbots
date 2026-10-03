@@ -177,11 +177,17 @@ bool YoggSaronSanityTrigger::IsActive()
     // it is low. One that got there stays until full whatever spawns: +20 every 2 s is a short wait. A
     // brain team bot heading for its portal keeps heading there, and one already in a well leaves for it
     // once it is past low: topping outranks the portal walk.
+    //
+    // Refill is a bot benched under the brain team floor. It has the whole wave, ~80 s, to get to 100,
+    // so it goes whatever the platform holds.
     char const* reason = nullptr;
     if (bot->GetDistance(sanityWell) < 1.0f && !YoggSaronPortalWalkPending(botAI))
         reason = "topping";
     else if (sanityAuraStacks < 40)
         reason = "low";
+    else if (IsPhase2() && sanityAuraStacks < static_cast<int>(ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY) &&
+             !YoggSaronPortalWalkPending(botAI))
+        reason = "refill";
     else if (IsPhase2() && YoggSaronPlatformIdle(botAI) && !YoggSaronPortalWalkPending(botAI))
         reason = "idle";
 
@@ -541,6 +547,30 @@ bool YoggSaronBrainSpotTrigger::IsActive()
         return false;
 
     return YoggSaronWalkMakingProgress(botAI, "brainspot", spot);
+}
+
+bool YoggSaronNitroBoostsTrigger::IsActive()
+{
+    if (!IsInBrainLevel() || bot->HasAura(SPELL_NITRO_BOOSTS_BUFF) || !YoggSaronNitroBoots(bot) ||
+        YoggSaronLeavingBrainLevel(bot))
+        return false;
+
+    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_TO_BRAIN)
+        return false;
+
+    Position const spot = YoggSaronBrainSpot(bot);
+    if (bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_NITRO_MIN_WALK)
+        return false;
+
+    // 3 min against 80 s waves, so every third wave.
+    if (bot->HasSpellCooldown(SPELL_NITRO_BOOSTS_USE))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.nitro", "cooldown");
+        return false;
+    }
+
+    return true;
 }
 
 bool YoggSaronMoveToExitPortalTrigger::IsActive()

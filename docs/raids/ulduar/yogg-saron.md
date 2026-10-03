@@ -342,7 +342,9 @@ gap, so neither is aimed at anything, while the gap-closers come back in P2 and 
 orbit to land on - except onto the Brain, which hangs 25 yd over its room's floor with nothing
 underneath it and whose 30 yd combat reach hides the gap from `GetDistance`: one feral druid charged it
 from 50 yd, stood in the air for 23 s with every room node reading `yogg.room = none`, and was charmed
-where it hung. A third rule zeroes the family whenever the current target is the Brain.
+where it hung. A third rule zeroes the family whenever the current target is the Brain, plus
+`killing spree`, which is outside it: it put a rogue on the Brain's model at z 265 for 20 s until
+Induce Madness charmed it.
  Catch the whole `CastReachTargetSpellAction` family: the Fury chain is charge →
 intercept → `reach melee`, so a partial veto only moves the problem down the list, and `reach melee`
 surviving is what walks melee in on foot. Blink and Disengage are plain `CastSpellAction`s and have to
@@ -1057,7 +1059,7 @@ bot derives the same team from its own seat, except healers, which go priest, dr
 first: `PlayerbotAI::CanCastSpell` refuses a cast-time spell while moving, and a holy paladin moved
 31-62% of its room time with 82% of its heals on a cast time. The trigger and the action used to build the list
 differently — one skipped the master, the other did not — so they disagreed about who was on it;
-`GetYoggSaronBrainTeam` is the single owner now.
+`GetYoggSaronBrainTeam` is the single owner now, and benches low Sanity (see the Sanity Well walk).
 
 **Phase 2 always hands phase 3 some tentacles.** `AddPortals` cuts `_summonSpeed` by 0.1 a wave, so
 by the sixth a Crusher spawns every 20-24 s, a Corruptor every 12-16 and a Constrictor every 6-8. The
@@ -1104,9 +1106,20 @@ giving +20 Sanity every 2 s and **-50% damage done**. `yogg-saron sanity` walks 
 well below 40, keeps one inside 1 yd there until 100 unless its portal walk is pending, and in phase 2 also walks it at any Sanity under
 100 while no Guardian, Crusher, Constrictor or Corruptor lives, unless it is a brain team bot with a
 portal walk pending. One pull had 66 s of that (27, 15, 11, 7 and 6 s) with 20 of 23 raiders under
-100 and wells a median 35-42 yd away. Stunned tentacles outlasted the brain team in 5 of 6 waves, so
-the idle time mostly comes after it returns. Probed as `yogg.sanity`: `low`, `topping` or `idle`,
-the walk's reason rather than a Sanity level.
+100 and wells a median 35-42 yd away; a later one had 0 s. Stunned tentacles outlasted the brain team
+in 5 of 6 waves, so the idle time mostly comes after it returns.
+
+**A brain team bot under 60 Sanity sits the next wave out.** The team ratchets down: a trip cost a
+median 22 Sanity, 64 at worst, and Justice went 100 → 72 → 56 → 40 → 28 → 22 → 10 over six waves.
+Topping up between waves doesn't fit: returns land 35 yd from the nearest well ~22 s before the next
+portals, and that well is 65 yd from a portal spot, so the spread lead sends the bot off as it
+arrives. `GetYoggSaronBrainTeam` skips `ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY` (60) and fills from
+the next in order, leaving portals empty rather than sending a low bot. The benched set is decided
+when the team is back (portals down, the Brain not casting 64059), which adds one plan rebuild per
+wave so the replacement has the ~20 s to walk, and the rebuild at portal arrival reuses it. A bot
+under 60 with no portal walk pending walks to a well as `refill`, and `topping` holds it to 100.
+Probed as `yogg.sanity` (`low`, `topping`, `refill` or `idle`, the walk's reason, not a level) and
+`yogg.benched`.
 
 ## The brain room
 
@@ -1121,7 +1134,13 @@ inside the 60 s kills everyone in it: one Chamber wave charmed eight bots in a s
 faster is the only cure, so every walk below is on that clock.
 
 Every millisecond of lead is damage the Brain does not take, so the lead is **measured, not flat**:
-`max(5 s, distance / runSpeed × 2)`. A flat worst-case lead threw away a third of every window for a
+`max(5 s, distance / 7 yd/s × 2)`, at **base** run speed. Illusion Room 63988 adds 30%
+(`SPELL_AURA_MOD_SPEED_ALWAYS`), bots made 4-6 yd/s on the way out, and the boosted figure read
+`safe` with no time left: five bots charmed in one pull, each with 34-69 Sanity. **`leaving` latches
+until the cast ends** (`YoggSaronLeavingBrainLevel`): asked fresh, the lead shrank as the bot walked,
+it flipped back to `safe` 20 times in that pull, and the brain spot walk took it back.
+`yogg-saron exit hold cast multiplier` zeroes cast-time spells and channels while latched below;
+a mage channelled Evocation for 5 s 51 yd from a portal. A flat worst-case lead threw away a third of every window for a
 bot standing next to a portal. From the Brain the walk out takes 1.5-2.8 s for melee and 2.9-4.2 s for
 the healer; a 10 s floor surfaced every bot with 7-8 s unused, ~2.5% of the Brain a wave at the ~41k
 DPS the team puts into it. Induce Madness is cast in the tick `AddPortals` spawns the portals, so
@@ -1361,7 +1380,16 @@ another turned round 7.4 yd from a portal, and Induce Madness charmed both. So t
 stands down while `YoggSaronShouldLeaveBrainLevel` holds - cached per trigger pass, since it costs a
 game object search and two nodes now ask it - the exit node claims its tick while it is still walking,
 and it uses the portal from `INTERACTION_DISTANCE` rather than 2 yd. Losing the rotation for the 3-6 s
-of the walk out is the trade, against a charm that is always a death.
+of the walk out is the trade, against a charm that is always a death. The exit also clears a forced
+hold aimed elsewhere, since `IsWaitingForLastMove` makes a forced move wait out another's (exits sat
+4.0 and 4.4 s refused behind the brain spot walk), and releases a stalled spline that otherwise reads
+as `dup` (3.5 s standing).
+
+**Nitro Boosts on the walk to the Brain.** Boots enchant 3606 casts 55004 (3 min, no backfire in a
+raid) for 54861, +150% run speed for 5 s: about 7.5 s saved, every third wave. `yogg-saron nitro
+boosts` fires on `tobrain` with the brain spot over 40 yd away, never once leaving, and never claims
+the tick. 15 bots carry it and none had ever used it: `UseTinkerAction` takes stat auras only.
+Probed as `yogg.nitro` (`used` or `cooldown`).
 
 **No Sanity Well reaches the brain level.** All five stand on the platform and nothing restores Sanity
 underground, so `yogg-saron sanity` could only ever walk a bot at something it would never get to. It
@@ -1392,7 +1420,7 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Twenty-eight `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
+**Thirty `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,
@@ -1400,7 +1428,8 @@ not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `y
 `yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
 `yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
 `yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour`,
-`yogg.judgement`, `yogg.spread`, `yogg.sanity`, `yogg.stunned`, `yogg.tankhold`, `yogg.walkstep` and `yogg.reprisal`,
+`yogg.judgement`, `yogg.spread`, `yogg.sanity`, `yogg.stunned`, `yogg.tankhold`, `yogg.walkstep`, `yogg.reprisal`,
+`yogg.benched` and `yogg.nitro`,
 beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
 Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
 circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
@@ -1409,7 +1438,10 @@ afterwards.
 `--portals` tells a bot that walked for a portal and lost the race from one whose node never ran at
 all, which is the only way the room-tag leak shows; `--brain` prints what the healer landed per room
 beside how close it came to its station, every walk down there that stalled or gave up, the deaths
-reflect and gaze did most of, and the reprisal holds.
+reflect and gaze did most of, the reprisal holds, and per Induce Madness catch the time left at its
+first `leaving`, its flips back to `safe`, refused exit walk and casting; `--sanity` prints each
+bot's trips below (down > lowest, then what came back), the bench, and Insane split into caught
+below and drained to 0.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its

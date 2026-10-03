@@ -15,6 +15,7 @@
 #include <list>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "AiObjectContext.h"
@@ -27,6 +28,7 @@
 #include "DBCEnums.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
+#include "Item.h"
 #include "GameObject.h"
 #include "LastMovementValue.h"
 #include "Group.h"
@@ -36,6 +38,7 @@
 #include "Playerbots.h"
 #include "RaidObs.h"
 #include "Spell.h"
+#include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "ThreatManager.h"
@@ -93,6 +96,16 @@ struct YoggSaronEncounterState
     uint32 waveOrdinal = 0;
     uint32 slotWave = 0;
     bool slotPortalsUp = false;
+
+    // Under ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY for the wave the plan is for. Decided when the team
+    // is back from the last one, and the rebuild when the portals arrive reuses it, so a Psychosis tick
+    // in between can't swap somebody out at the last second.
+    RaidObs::ObsGuidSet benched{"yogg.benched"};
+    // The wave whose plan was already rebuilt off the returned team's Sanity.
+    uint32 returnPlanWave = 0;
+
+    // When the Induce Madness each bot decided to leave for ends. See YoggSaronLeavingBrainLevel.
+    std::unordered_map<ObjectGuid, uint32> leavingUntilMs;
 
     // Nothing in the world counts the transformation dialogue down, so the window is timed off the
     // tick Yogg was first seen without his barrier. The second is when the ring actually lit, which is
@@ -446,22 +459,29 @@ bool YoggSaronLeaveBrainLevelNow(PlayerbotAI* botAI)
         if (induceMadness && induceMadness->m_spellInfo->Id == SPELL_INDUCE_MADNESS)
         {
             uint32 const castingTimeLeft = induceMadness->GetCastTimeRemaining();
+            uint32 const now = getMSTime();
+
+            // Once leaving, stays leaving. Asked fresh every tick, the lead shrank as the bot walked and
+            // flipped back to safe, the brain spot walk took it back, and it came round again too late:
+            // 25 of 120 calls in one pull.
+            bool const latched = YoggSaronLeavingBrainLevel(bot);
 
             // Every millisecond of lead is damage the Brain does not take, so it is measured against
             // the walk the bot actually faces rather than set flat for the worst case.
             uint32 lead = ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS;
-            GameObject* portal = bot->FindNearestGameObject(GO_FLEE_TO_THE_SURFACE_PORTAL, 200.0f);
-            float const speed = bot->GetSpeed(MOVE_RUN);
-            if (portal && speed > 0.0f)
+            GameObject* portal =
+                latched ? nullptr : bot->FindNearestGameObject(GO_FLEE_TO_THE_SURFACE_PORTAL, 200.0f);
+            if (portal)
             {
-                lead = std::max(lead, static_cast<uint32>(bot->GetDistance2d(portal) / speed *
+                lead = std::max(lead, static_cast<uint32>(bot->GetDistance2d(portal) / baseMoveSpeed[MOVE_RUN] *
                                                           ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY * 1000.0f));
             }
 
-            if (castingTimeLeft < lead)
+            if (latched || castingTimeLeft < lead)
             {
                 leave = true;
                 branch = castingTimeLeft < ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS ? "late" : "leaving";
+                YoggSaronStateFor(bot).leavingUntilMs[bot->GetGUID()] = now + castingTimeLeft;
             }
         }
     }
@@ -496,6 +516,29 @@ bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI)
     }
 
     return leave;
+}
+
+bool YoggSaronLeavingBrainLevel(Player* bot)
+{
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+    auto const latch = state.leavingUntilMs.find(bot->GetGUID());
+
+    // Signed: an end still in the future must not read as a timer wrap.
+    return latch != state.leavingUntilMs.end() && static_cast<int32>(latch->second - getMSTime()) > 0;
+}
+
+uint32 YoggSaronSanityOf(Player* player)
+{
+    Aura const* sanity = player ? player->GetAura(SPELL_SANITY) : nullptr;
+    return sanity ? sanity->GetStackAmount() : 0;
+}
+
+Item* YoggSaronNitroBoots(Player* bot)
+{
+    Item* boots = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_FEET);
+    return boots && boots->GetEnchantmentId(PERM_ENCHANTMENT_SLOT) == ULDUAR_YOGG_SARON_NITRO_BOOSTS_ENCHANT
+               ? boots
+               : nullptr;
 }
 
 Position YoggSaronBrainSpot(Player* bot)
@@ -667,6 +710,8 @@ std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI)
     if (masterTakesOne && size)
         --size;
 
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+
     std::vector<Player*> melee, healers, ranged;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
@@ -675,6 +720,9 @@ std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI)
             continue;
 
         if (masterTakesOne && member == master)
+            continue;
+
+        if (state.benched.count(member->GetGUID()))
             continue;
 
         if (PlayerbotAI::IsHeal(member))
@@ -731,6 +779,33 @@ std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI)
     return team;
 }
 
+namespace
+{
+// Through the tracked set one member at a time, so the trace gets a note per change rather than a clear
+// and refill every rebuild.
+void YoggSaronBenchLowSanity(Player* bot, YoggSaronEncounterState& state)
+{
+    std::unordered_set<ObjectGuid> low;
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsAlive() && YoggSaronSanityOf(member) < ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY)
+                low.insert(member->GetGUID());
+        }
+    }
+
+    std::vector<ObjectGuid> const was(state.benched.begin(), state.benched.end());
+    for (ObjectGuid guid : was)
+        if (!low.count(guid))
+            state.benched.erase(guid);
+
+    for (ObjectGuid guid : low)
+        state.benched.insert(guid);
+}
+}  // namespace
+
 YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
 {
     Player* bot = botAI->GetBot();
@@ -748,6 +823,17 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     // The wave the spread is for: the one that is up, or the next one if none is.
     uint32 const assignmentWave = wave.ordinal + (wave.portalsUp ? 0 : 1);
 
+    // The team is back once this wave's Induce Madness is over, the first moment its Sanity says who
+    // can go again. Rebuilt then as well, so a replacement still has the ~20 s before the portals.
+    bool teamBack = false;
+    if (!wave.portalsUp && wave.ordinal && state.returnPlanWave != assignmentWave)
+    {
+        Creature* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
+        teamBack = brain && brain->IsAlive() && !brain->FindCurrentSpellBySpellId(SPELL_INDUCE_MADNESS);
+    }
+
+    bool const newWave = state.slotWave != assignmentWave;
+
     // Latched per wave. Nearest-first off live positions churns every tick as bots walk, and two
     // bots swapping spots mid-approach costs both of them the window.
     //
@@ -755,8 +841,15 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     // number before and after they spawn, so without the second test the assignment stands from
     // the moment the previous wave's portals despawned - 55 s and a whole room fight earlier, off
     // positions nobody is standing in any more.
-    if (state.slotWave != assignmentWave || (wave.portalsUp && !state.slotPortalsUp))
+    if (newWave || teamBack || (wave.portalsUp && !state.slotPortalsUp))
     {
+        if (teamBack)
+            state.returnPlanWave = assignmentWave;
+
+        // Not when the portals arrive. That rebuild only moves spots.
+        if (newWave || teamBack)
+            YoggSaronBenchLowSanity(bot, state);
+
         state.slotWave = assignmentWave;
         state.slotPortalsUp = wave.portalsUp;
         state.portalSlot.clear();

@@ -1305,6 +1305,29 @@ class YoggPhases(unittest.TestCase):
         self.assertIsNone(yogg_saron.crush_blame(walks, 3, 60000, spot, True))
         self.assertEqual(yogg_saron.crush_blame(walks, 4, 60000, spot, True)["by"], "malady")
 
+    def test_a_trip_below_reads_sanity_going_down_its_lowest_and_coming_up(self):
+        heights = [(0, 330.0), (1000, 240.0), (2000, 240.0), (3000, 330.0), (4000, 240.0), (5000, 240.0)]
+        sanity = [(0, 100), (1500, 80), (2500, 70), (3500, 90), (4500, 60)]
+        self.assertEqual(yogg_saron.sanity_trips(heights, sanity, 300.0),
+                         [(1000, 3000, 100, 70, 70), (4000, 5000, 90, 60, 60)])
+        self.assertEqual(yogg_saron.sanity_trips([(0, 330.0)], sanity, 300.0), [])
+
+    def test_an_exit_is_charged_for_refused_walks_casts_and_going_back_to_safe(self):
+        verdicts = [(-5000, "late"), (1000, "safe"), (50000, "leaving"), (52000, "safe"), (54000, "leaving")]
+        walks = [(50000, "wait"), (51000, "wait"), (53000, "dup"), (55000, "wait")]
+        casting = [(50000, 0), (51000, 12051), (53000, 12051), (55000, 0)]
+        # the late from the cast before is outside this one, and a refusal still running at the end counts
+        self.assertEqual(yogg_saron.exit_losses(verdicts, walks, casting, 60000), (10.0, 1, 8.0, 4.0))
+        self.assertEqual(yogg_saron.exit_losses([(50000, "safe")], walks, casting, 60000), (None, 0, 0.0, 0.0))
+
+    def test_cast_windows_split_on_the_samples_casting_the_spell(self):
+        def row(t, spell):
+            return [t, 9, 0.0, 0.0, 0.0, 0.0, 100.0, 0, 0, 0, 0, spell]
+
+        rows = [row(0, 0), row(1000, 64059), row(2000, 64059), row(3000, 0), row(4000, 64059)]
+        self.assertEqual(yogg_saron.cast_windows(rows, 64059), [(1000, 2000), (4000, 4000)])
+        self.assertEqual(yogg_saron.cast_windows([row(0, 1)], 64059), [])
+
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
         self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))
