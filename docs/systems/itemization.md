@@ -487,15 +487,23 @@ the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
 
 - `kRankScale = {1.0, 0.8, 0.6}` for ranks 1-3. Ranks 4-6 are filler alternates and get no score
   change (they still get the gate bypass). Flat-ish on purpose: ranks 1-3 of a slot are
-  near-equivalent picks, and against `EquipUpgradeThreshold` (1.1) a 2.5% nudge is invisible.
+  near-equivalent picks, and against `EquipUpgradeThreshold` (1.07) a 2.5% nudge is invisible.
 - `phaseScale = 1 - Bis.PhaseDecay * (cap.phase - entryPhase)`, floored at 0. Without it a leftover
   pre-raid rank-1 piece is worth exactly as much as the current tier's rank-1, the two bonuses
   cancel, and the equipped lower-ilvl piece keeps the slot on `ItemSet.BonusWeight` (x1.15) times
-  `EquipUpgradeThreshold` (x1.1) alone — a 26.5% raw-stat wall.
+  `EquipUpgradeThreshold` (x1.07) alone — a 23% raw-stat wall.
 
-Open: `Bis.ScoreBonus` and `PhaseDecay` were tuned while item scores still carried the ilvl × quality
-multiplier. Without it a higher-ilvl challenger loses that built-in edge, so the BiS bonus pulls
-relatively harder; re-check both against real equip decisions.
+**`EquipUpgradeThreshold` is 1.07, not upstream's 1.1.** Upstream's removal of the ilvl × quality
+multiplier (#2790) acted like a ~5% stiffer threshold per item-level step. Measured on the WotLK lists
+with the sim weights (stat lines only, no procs or set bonuses), 1.1 → 1.07:
+
+| Decision | Old formula | 1.1 | 1.07 |
+|---|---|---|---|
+| Same item one step up (normal → heroic, 10 → 25) | 96-100% | 87-99% | 94-100% |
+| New phase's rank-1 replaces the old phase's | 90% | 87% | 94% |
+| Unlisted higher-ilvl item beats a listed rank 1-3 | 11% | 8.2% | 9.0% |
+
+`Bis.ScoreBonus` and `PhaseDecay` needed no change. Leveling bots were not measured.
 
 `PhaseDecay` defaults to 1.0, so only the bot's current phase carries any bonus. One global value
 covers all three expansions even though Vanilla's `P1..P6` sit closer together in ilvl than WotLK's
@@ -605,7 +613,7 @@ Defaults below are the shipped values in `conf/playerbots.conf.dist`.
 | Key | Default | Meaning |
 |---|---|---|
 | `AiPlayerbot.AutoEquipUpgradeLoot` | 1 | Auto-equip looted upgrades |
-| `AiPlayerbot.EquipUpgradeThreshold` | 1.1 | Score ratio needed to swap |
+| `AiPlayerbot.EquipUpgradeThreshold` | 1.07 | Score ratio needed to swap |
 | `AiPlayerbot.ItemSet.UseForUpgrades` | 1 | Master switch for set-bonus scoring on runtime paths |
 | `AiPlayerbot.ItemSet.BonusWeight` | 0.15 | Boost per set bonus kept or gained |
 | `AiPlayerbot.ItemSet.ProgressWeight` | 0.03 | Per-piece nudge toward the next threshold |

@@ -289,7 +289,7 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
     uint8 entryPhase = 0;
     uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_source_, &entryPhase);
 
-    // Ranks 4-6 are filler alternates, and against EquipUpgradeThreshold (1.1) a ~2.5% nudge is
+    // Ranks 4-6 are filler alternates, and against EquipUpgradeThreshold (1.07) a ~2.5% nudge is
     // invisible anyway. They still get the spec-gate pass, just no score change.
     if (!rank || rank > 3)
         return 1.0f;

@@ -760,7 +760,7 @@ bool PlayerbotAIConfig::Initialize()
     ulduarXT002HardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarXT002HardMode", false);
     autoPickReward = sConfigMgr->GetOption<std::string>("AiPlayerbot.AutoPickReward", "yes");
     autoEquipUpgradeLoot = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoEquipUpgradeLoot", true);
-    equipUpgradeThreshold = sConfigMgr->GetOption<float>("AiPlayerbot.EquipUpgradeThreshold", 1.1f);
+    equipUpgradeThreshold = sConfigMgr->GetOption<float>("AiPlayerbot.EquipUpgradeThreshold", 1.07f);
     itemSetUseForUpgrades = sConfigMgr->GetOption<bool>("AiPlayerbot.ItemSet.UseForUpgrades", true);
     itemSetBonusWeight = sConfigMgr->GetOption<float>("AiPlayerbot.ItemSet.BonusWeight", 0.25f);
     itemSetProgressWeight = sConfigMgr->GetOption<float>("AiPlayerbot.ItemSet.ProgressWeight", 0.03f);

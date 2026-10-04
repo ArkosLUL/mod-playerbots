@@ -293,8 +293,9 @@ AiPlayerbot.RandomBotShowCloak = 1
 AiPlayerbot.AutoEquipUpgradeLoot = 1
 
 # Threshold for auto equipping upgrades
-# Default: 1.1 (Equip when the equipment score of the new item is 1.1 times higher than the currently equipped item)
-AiPlayerbot.EquipUpgradeThreshold = 1.1
+# Item scores are plain stat sums, so the same item one difficulty step up is often only 10-15% better.
+# Default: 1.07 (Equip when the equipment score of the new item is 1.07 times higher than the currently equipped item)
+AiPlayerbot.EquipUpgradeThreshold = 1.07
 
 # Take item set (tier) bonuses into account when bots pick upgrades and vote on loot.
 # When disabled, set bonuses only affect initial gearing, so bots break active 2/4/6-piece
