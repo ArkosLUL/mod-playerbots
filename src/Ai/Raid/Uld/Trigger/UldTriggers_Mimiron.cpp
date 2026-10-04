@@ -360,12 +360,18 @@ bool MimironDodgeFlamesTrigger::IsActive()
     if (!nodes)
         return false;
 
+    bool const lowHealth = bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT;
+
+    // The core carrier walks through to a corpse whatever the count: the corpse lasts 25 s and a
+    // landing takes 30 to 45% off the unit. Otherwise each dodge undoes the walk and the corpse rots.
+    if (IsMimironCoreFetchDue(botAI, bot))
+        return lowHealth;
+
     // Standing in it beats the round trip while the bot can afford it. One node ticks about 3100
     // against a 22000 to 24000 pool, so a healthy bot has seven ticks of margin and the dodge costs
     // 24 yd of uptime; two nodes halve that margin to about four seconds, which is not enough to
     // notice a health bar moving and then walk out, so they overrule the health gate outright.
-    return nodes >= ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE ||
-           bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT;
+    return nodes >= ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE || lowHealth;
 }
 
 bool MimironFireBotTrigger::IsActive()

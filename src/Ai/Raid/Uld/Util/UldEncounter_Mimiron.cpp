@@ -175,10 +175,11 @@ MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
         {
             case NPC_FLAMES_SPREAD:
                 spread.push_back(unit->GetPosition());
-                hazards.flames.push_back(unit->GetPosition());
-                break;
-            case NPC_FLAMES_INITIAL:
-                hazards.flames.push_back(unit->GetPosition());
+                // Only a node with the aura burns. The Flames (Initial) seed never does: it sits on its
+                // first node's spot and outlives its fire by minutes. A put-out node drops the aura
+                // 2.5 s before it despawns.
+                if (unit->HasAura(SPELL_MIMIRON_FLAMES_AURA))
+                    hazards.flames.push_back(unit->GetPosition());
                 break;
             case NPC_FROST_BOMB:
                 hazards.bombs.push_back(unit->GetPosition());
@@ -1622,6 +1623,15 @@ Creature* GetMimironCoreCorpse(Player* bot)
     }
 
     return nearest;
+}
+
+bool IsMimironCoreFetchDue(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || GetMimironCoreCarrier(botAI) != bot)
+        return false;
+
+    return bot->GetItemCount(ITEM_MIMIRON_MAGNETIC_CORE, false) < ULDUAR_MIMIRON_CORE_BANK &&
+           GetMimironCoreCorpse(bot);
 }
 
 bool TakeMimironCore(Player* bot, Creature* corpse)

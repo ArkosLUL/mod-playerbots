@@ -61,8 +61,8 @@ enum UlduarMimironIds
 
     // Mimiron hard mode ("Firefighter", Big Red Button pressed): mechs empowered, two extra hazards.
     // NPC_MIMIRON (the boss; sits in his pod, never a bot attack target) comes from core ulduar.h via UldScripts.h.
-    NPC_FLAMES_INITIAL = 34363,    // fire seed dropped on players, spawns a spreading node (non-selectable)
     NPC_FLAMES_SPREAD = 34121,     // persistent spreading ground-fire node (non-selectable)
+    SPELL_MIMIRON_FLAMES_AURA = 64561,  // what makes a node burn: ticks 64566 every second
     NPC_FROST_BOMB = 34149,        // VX-001's Frost Bomb; detonates in a large AoE
     NPC_EMERGENCY_FIRE_BOT = 34147,  // puts the flames out; three spawn every 45s
 
@@ -252,7 +252,8 @@ constexpr float ULDUAR_MIMIRON_CORE_USE_RANGE = 12.0f;
 // How many cores the carrier banks before spending any, then spends back to back for one unbroken
 // 40 s on the floor. Not fewer add holes: DO_DISABLE_AERIAL delays the unit's event map 25 s on every
 // landing and its UpdateAI returns for the whole 20 s aura, so each landing is 45 s with no Assault
-// Bot, chained or not.
+// Bot, chained or not. The hold only protects an Assault Bot still to spawn, so it ends once the next
+// one is up.
 constexpr uint32 ULDUAR_MIMIRON_CORE_BANK = 2;
 
 // Escape hatches out of that hold. item_template 46029 has duration 60, so a banked core expires;
@@ -263,8 +264,8 @@ constexpr float ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT = 25.0f;
 
 // How far the carrier will go looking for an Assault Bot corpse. They die wherever the raid stopped
 // them, and the corpse only lasts 25 s, so the node has to start walking rather than wait for the bot
-// to happen to be standing on one.
-constexpr float ULDUAR_MIMIRON_CORE_SEARCH_RANGE = 60.0f;
+// to happen to be standing on one. The whole room: it is 80 yd across, ~13 s at run speed.
+constexpr float ULDUAR_MIMIRON_CORE_SEARCH_RANGE = 90.0f;
 
 // How far to look for a Magnetic Core that is already down. 34068 casts 64436 on itself 3 s after the
 // use and despawns at 25 s, so a live one covers the arming, the 20 s landing and the 2 s climb back.
@@ -514,6 +515,9 @@ bool IsMimironAcuAirborne(PlayerbotAI* botAI, Player* bot);
 // An Assault Bot corpse that still has its Magnetic Core: one core per corpse, taken off the corpse's
 // own loot when the loot was filled, so a player who looted it first leaves nothing for the bot.
 Creature* GetMimironCoreCorpse(Player* bot);
+
+// The carrier has room in its bank and such a corpse is waiting: the 25 s fetch is on.
+bool IsMimironCoreFetchDue(PlayerbotAI* botAI, Player* bot);
 
 // Moves that corpse's core into the bot's bags and marks the corpse spent. False on full bags.
 bool TakeMimironCore(Player* bot, Creature* corpse);

@@ -22,6 +22,14 @@ carry aura 64561, which ticks 64566 for ~3.1k a second inside **3 yd**, and they
 entries are non-selectable trigger creatures, found by scanning `"nearest npcs"` — the same idiom as
 Freya's beams.
 
+**Only a node carrying 64561 is fire.** The seed is a NullCreatureAI that parks its first spread node
+on its own spot and never burns, and it outlives its fire: `EVENT_FLAMES_SPREAD` breaks without
+rescheduling once `_createTime < GetData(10)`, so it never reaches its despawn. A put-out node drops
+the aura 2.5 s before it despawns. Counting the seed made every seed spot two nodes, which overrides
+the dodge's health gate: on 2026-10-04 (9425) 192 of 636 fire dodges were a healthy bot beside one
+burning node, 104 had no burning node in reach at all (10-11 bare seeds from 6:00), and only ~200
+were real. `ReadMimironFirefighterHazards` reads the aura.
+
 **So where the raid stands is where the fire goes, and that is the only lever over it.** Four things
 put fire out and nothing else does: the Frost Bomb, VX-001's Flame Suppressant (65192, 10 yd around
 itself every 10 s in phase 2 — which also lands a 51% cast slow, so it is not a place to stand), one
@@ -1136,6 +1144,17 @@ Holy Shield 3 → 14-17 and Consecration 0 → 7-10 with the tank's target held.
 in phase 4 (mines 3, Shock Blast 2, Killing Spree 1, Frost Bomb 2) and 3 ranged after it to Rocket
 Strike; the fixes are in the Shock Blast, formation, barrage, Rocket Strike and tank spot sections.
 
+2026-10-04, Heroism now 15 s into phase 4 (it went 17.9 s in): **kill at 9:52.5** (1219; phases 89,
+138, 145 s), 7.5 s inside the berserk. Before it: 9425 at the berserk (phase 3 252 s, see the core
+section), 0216 wiped in phase 2 and 0614 was called in phase 3 with the unit at 67% (one landing of
+15.8 points, three melee dead since phase 2, the second core lost). Two open items:
+
+- **Phase 2 barrage melee pinned between beams and fire.** Shadow died in fire at ~3:00 in 0216 and
+  0614, every flee bearing refused (`cone9 fire2`); the window took 74-292k of fire against 18-20k in
+  the clean pulls.
+- **The MK II's opening swing.** In all 7 pulls since 09-30 its first victim is a random raid member
+  with the tank 24-34 yd off; in 0216 that one-shot Tree (27.6k), and phase 2 on four healers wiped.
+
 **Open, not fixed: the raid meets phase 2 as one clump.** All 25 sit inside a 60° arc for the whole
 30 s handover, melee and ranged 0-5° apart, and `EVENT_SPELL_RAPID_BURST` is scheduled at **0 ms**,
 so the first cast lands at P2 −0.2 s and the first two to four cones hit everybody: **567,766** and
@@ -1194,7 +1213,7 @@ happened to be standing on a corpse it returned false forever. And the carrier c
 ranged bot pinned 22 yd out, which is never within loot range of anything.
 
 `GetMimironCoreCarrier` picks the first alive non-tank melee bot in group order instead (still group
-order, so every bot agrees without coordinating), the corpse search widened to 60 yd, and the action
+order, so every bot agrees without coordinating), the corpse search covers the room (`ULDUAR_MIMIRON_CORE_SEARCH_RANGE` 90: 80 yd across, ~13 s), and the action
 walks to the corpse before looting it. Corpses last 25 s
 (`TEMPSUMMON_CORPSE_TIMED_DESPAWN`), which is the entire window.
 
@@ -1244,6 +1263,21 @@ of three escapes: the second is in the bags, the held one has under
 `_CORE_HOLD_RELEASE_PCT` (25%), where the phase ends before another core could matter. The expiry
 escape is the one that fires on a slow pull: `item_template` 46029 has **`duration` 60**, and the
 observed wait for a second core was 32 s and 52 s.
+
+**And it ends once the next Assault Bot is up** (`hold-bot-up`): a landing only delays one still to
+spawn. On 2026-10-04 the hold ran 43, 50 and 53 s with the next one up at the loot or 11-19 s after,
+so the first landing came 33-45 s late; and in 0614 the expiry walk took the carrier off a corpse
+11.6 yd away, its own `walk-acu` leg held the lock, and a Bomb Bot step-out, spray escapes and fire
+dodges kept it off until the corpse rotted.
+
+**The fetch walks through fire.** 9425 lost its first three cores: the carrier logged `walk-corpse`
+28 yd from two corpses and for 25 s each the fire dodge (above the core node, FORCED) threw it back
+every 2 s at full health, off one burning node plus its seed; the third died 66 yd out, past the old
+60 yd search. Stuck behind that fire line 4:30-6:02, it landed the first core at 7:27, 198 s into
+the phase (~60 s before), and phase 3 took 252 s. While `IsMimironCoreFetchDue` (carrier, room in the
+bank, a corpse waiting) the dodge waits for the 60% health gate alone. This closes the 09-23 open
+item. Still open: the spray-lane escape steps the carrier 0.4-1 yd out each tick, and its walk steps
+back in.
 
 **The chain needs a latch, because the count cannot tell.** One core left after spending the first
 of a pair reads as a bank of one: on 2026-09-21 the second went back to `hold` when the landing ended
@@ -1832,7 +1866,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `phase` | 0 none, 1-4 the phase, 5 a handover. Per instance |
 | `core` | The Magnetic Core window is open, which is not the same as the unit being on the floor. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
-| `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) or `hold-expiring` (the held one was about to) |
+| `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) `hold-expiring` (the held one was about to) or `hold-bot-up` (the next Assault Bot is up) |
 | `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `tankspot` | A Firefighter phase 4 tank spot move, `x,y <old>><new>` nodes within 14 yd. Per instance |

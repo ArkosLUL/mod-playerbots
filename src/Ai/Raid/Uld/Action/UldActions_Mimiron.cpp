@@ -1687,19 +1687,21 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
         return waitUnderAcu("pending");
 
     // Then chain the bank rather than spending each core as it arrives, for one unbroken 40 s on the
-    // floor; the adds lose 45 s per landing either way. Three ways out of the hold, and the expiry is
-    // the one that fires on a slow pull: the observed wait for a second core was 32 s and 52 s
-    // against a 60 s item. The reason is noted at the use itself, since noting it here alternates
-    // with walk-acu on every tick of the walk.
+    // floor; the adds lose 45 s per landing either way. Out of the hold early when the held core is
+    // about to expire (60 s item), the unit is low, or the next Assault Bot is already up: a landing
+    // only delays one still to spawn, so waiting on it buys nothing. The reason is noted at the use
+    // itself, since noting it here alternates with walk-acu on every tick of the walk.
     char const* release = nullptr;
     if (chaining)
         release = "chain";
     else if (held < ULDUAR_MIMIRON_CORE_BANK && !acuLow)
     {
-        if (!expiring)
+        if (expiring)
+            release = "hold-expiring";
+        else if (bot->FindNearestCreature(NPC_ASSAULT_BOT, ULDUAR_MIMIRON_CORE_SEARCH_RANGE, true))
+            release = "hold-bot-up";
+        else
             return waitUnderAcu("hold");
-
-        release = "hold-expiring";
     }
 
     // 64444 places its summon by nearest entry, so the core only reaches the ACU from underneath it.
