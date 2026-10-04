@@ -230,6 +230,66 @@ Creature* Resolve(Player* bot, ObjectGuid const& guid)
     return creature && creature->IsAlive() ? creature : nullptr;
 }
 
+bool IsKiteHole(AlgalonEncounterState const& state, AlgalonScanUnit const& hole)
+{
+    for (auto const& kite : state.kiteHoleAssignments)
+        if (kite.second == hole.guid)
+            return true;
+
+    return false;
+}
+
+// Nearest, but not a hole a constellation is being walked into unless it is the only one.
+AlgalonScanUnit const* NearestShelter(AlgalonEncounterState const& state, Position const& from)
+{
+    AlgalonScanUnit const* nearest = nullptr;
+    float bestDistance = std::numeric_limits<float>::max();
+    for (AlgalonScanUnit const& hole : state.holes)
+    {
+        float const distance = from.GetExactDist2d(hole.position) + (IsKiteHole(state, hole) ? 1000.0f : 0.0f);
+        if (distance < bestDistance)
+        {
+            nearest = &hole;
+            bestDistance = distance;
+        }
+    }
+
+    return nearest;
+}
+
+// The hole a hider runs to this cast: the one latched for it, else the nearest shelter.
+AlgalonScanUnit const* ShelterHole(Player* bot, AlgalonEncounterState const& state)
+{
+    auto const latched = state.shelterAssignments.find(bot->GetGUID());
+    if (latched != state.shelterAssignments.end())
+        if (AlgalonScanUnit const* hole = FindScanned(state.holes, latched->second))
+            return hole;
+
+    return NearestShelter(state, bot->GetPosition());
+}
+
+// The hole nearest the hold spot, where the ringed raid stands, while a Big Bang is due and another is left
+// for the kite.
+AlgalonScanUnit const* RaidShelterHole(AlgalonEncounterState const& state, uint32 now)
+{
+    if (!ReservedHoles(state, now) || state.holes.size() < 2)
+        return nullptr;
+
+    AlgalonScanUnit const* nearest = nullptr;
+    float bestDistance = std::numeric_limits<float>::max();
+    for (AlgalonScanUnit const& hole : state.holes)
+    {
+        float const distance = hole.position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT);
+        if (distance < bestDistance)
+        {
+            nearest = &hole;
+            bestDistance = distance;
+        }
+    }
+
+    return nearest;
+}
+
 struct AlgalonRoomCreatureCheck
 {
     bool operator()(Creature* creature) const
@@ -356,7 +416,11 @@ void ScanRoom(Player* bot, Creature* boss, AlgalonEncounterState& state, uint32 
             {
                 auto const seen = state.markerSeenMs.find(unit.guid);
                 if (seen == state.markerSeenMs.end())
+                {
                     NoteMeteor(boss, creature);
+                    state.nextSmashImpactMs =
+                        now + ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_MS + ULDUAR_ALGALON_COSMIC_SMASH_INTERVAL_MS;
+                }
 
                 uint32 const seenMs = seen != state.markerSeenMs.end() ? seen->second : now;
                 markerSeenMs[unit.guid] = seenMs;
@@ -414,10 +478,7 @@ void ScanRoom(Player* bot, Creature* boss, AlgalonEncounterState& state, uint32 
         if (FindScanned(state.holes, hole.guid))
             continue;
 
-        char const* reason = phaseTwoStarted ? "phase2" : "stray";
-        for (auto const& kite : state.kiteHoleAssignments)
-            if (kite.second == hole.guid)
-                reason = "kite";
+        char const* reason = IsKiteHole(state, hole) ? "kite" : (phaseTwoStarted ? "phase2" : "stray");
 
         RaidObs::Note(bot, "algalon.holelost", reason);
     }
@@ -1064,10 +1125,18 @@ struct StarBlackout
     char const* label;
 };
 
+struct MergedBlackout
+{
+    StarSpan span;
+    std::string label;
+};
+
 struct StarPlan
 {
     // An explosion in one of these lands on a raid that can't take it.
     std::vector<StarBlackout> blackouts;
+    // The same time with overlaps joined, for sums: three meteors are six markers.
+    std::vector<MergedBlackout> merged;
     bool hadDeath = false;
     int32 lastDeath = 0;
     // Each star's death at its measured loss, the team's damage included for the one it is on.
@@ -1106,6 +1175,39 @@ StarPlan PlanStars(AlgalonEncounterState const& state, uint32 now)
         plan.blackouts.push_back({{impact - static_cast<int32>(ULDUAR_ALGALON_STAR_IMPACT_LEAD_MS),
                                    impact + static_cast<int32>(ULDUAR_ALGALON_STAR_IMPACT_TAIL_MS)},
                                   "smash"});
+    }
+
+    // Off the clock too: a marker shows 4.8 s ahead, too late to plan a kill round it.
+    if (state.nextSmashImpactMs)
+    {
+        for (uint8 i = 0; i < ULDUAR_ALGALON_SMASH_FORECAST; ++i)
+        {
+            int32 const impact = MsUntil(state.nextSmashImpactMs, now) +
+                                 i * static_cast<int32>(ULDUAR_ALGALON_COSMIC_SMASH_INTERVAL_MS);
+            plan.blackouts.push_back({{impact - static_cast<int32>(ULDUAR_ALGALON_STAR_IMPACT_LEAD_MS),
+                                       impact + static_cast<int32>(ULDUAR_ALGALON_STAR_IMPACT_TAIL_MS)},
+                                      "smash"});
+        }
+    }
+
+    std::vector<StarBlackout> sorted = plan.blackouts;
+    std::sort(sorted.begin(), sorted.end(),
+              [](StarBlackout const& a, StarBlackout const& b) { return a.span.from < b.span.from; });
+    for (StarBlackout const& blackout : sorted)
+    {
+        if (blackout.span.to < 0)
+            continue;
+
+        if (plan.merged.empty() || blackout.span.from > plan.merged.back().span.to)
+        {
+            plan.merged.push_back({blackout.span, blackout.label});
+            continue;
+        }
+
+        MergedBlackout& last = plan.merged.back();
+        last.span.to = std::max(last.span.to, blackout.span.to);
+        if (last.label.find(blackout.label) == std::string::npos)
+            last.label += std::string("+") + blackout.label;
     }
 
     plan.hadDeath = state.lastStarDeathMs != 0;
@@ -1164,15 +1266,21 @@ int32 StarSeparation(StarPlan const& plan, StarSpan when, AlgalonScanUnit const*
     return nearest;
 }
 
-// When the team's kill would land: the walk, then its speed, which only the star already being hit can tell.
+// When the team's kill would land: the walk, then its speed. The focus shows it once the team hits it. Any
+// other star is planned up to the speed the team last showed, or one it just left, still dying that fast,
+// reads as clear at the nominal speed and is opened again next tick.
 StarSpan FinishBand(AlgalonEncounterState const& state, Group* group, AlgalonScanUnit const& star)
 {
     int32 const walk = static_cast<int32>(TeamWalkSeconds(state, group, star) * IN_MILLISECONDS);
-    bool const measured = star.guid == state.focusStar.Get() && star.lossMeasured &&
-                          star.lossPctPerSec >= ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC;
-    float const fast = measured ? star.lossPctPerSec : ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC;
-    float const slow = measured ? star.lossPctPerSec : ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC;
-    return {walk + StarDeathAt(star, fast), walk + StarDeathAt(star, slow)};
+    if (star.guid == state.focusStar.Get() && star.lossMeasured &&
+        star.lossPctPerSec >= ULDUAR_ALGALON_STAR_KILL_MEASURED_PCT_PER_SEC)
+    {
+        int32 const finish = walk + StarDeathAt(star, star.lossPctPerSec);
+        return {finish, finish};
+    }
+
+    float const fast = std::max(ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC, state.teamKillPctPerSec);
+    return {walk + StarDeathAt(star, fast), walk + StarDeathAt(star, ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC)};
 }
 
 // Spacing i explosions takes i gaps plus the kills, plus the walk and every blackout on the way, so the i-th
@@ -1187,7 +1295,7 @@ bool SerialDue(StarPlan const& plan, AlgalonEncounterState const& state, Group* 
 
     int32 budget = static_cast<int32>((index + 1) * ULDUAR_ALGALON_STAR_SERIAL_SECONDS * IN_MILLISECONDS) +
                    static_cast<int32>(TeamWalkSeconds(state, group, star) * IN_MILLISECONDS);
-    for (StarBlackout const& blackout : plan.blackouts)
+    for (MergedBlackout const& blackout : plan.merged)
         budget += std::max(0, std::min(death, blackout.span.to) - std::max(0, blackout.span.from));
 
     return death <= budget;
@@ -1211,6 +1319,42 @@ bool RaidAffordsExplosion(Player* bot, Group* group)
     }
 
     return true;
+}
+
+// Each star by guid counter with its health and forecast death, soonest first, then the blackouts, in
+// seconds from now.
+std::string DescribeStarPlan(AlgalonEncounterState const& state, uint32 now)
+{
+    StarPlan const plan = PlanStars(state, now);
+    std::vector<std::pair<int32, AlgalonScanUnit const*>> deaths;
+    for (auto const& [star, death] : plan.deaths)
+        deaths.emplace_back(death, star);
+
+    std::sort(deaths.begin(), deaths.end(),
+              [](auto const& a, auto const& b) { return a.first < b.first; });
+    std::string stars;
+    for (auto const& [death, star] : deaths)
+    {
+        if (!stars.empty())
+            stars += ", ";
+
+        stars += std::to_string(star->guid.GetCounter()) + " " + std::to_string(static_cast<int32>(star->healthPct)) +
+                 "% " + std::to_string(death / IN_MILLISECONDS) + "s";
+    }
+
+    std::vector<std::string> parts;
+    if (!stars.empty())
+        parts.push_back(stars);
+
+    for (MergedBlackout const& blackout : plan.merged)
+        parts.push_back(blackout.label + " " + std::to_string(blackout.span.from / IN_MILLISECONDS) + ".." +
+                        std::to_string(blackout.span.to / IN_MILLISECONDS));
+
+    std::string text;
+    for (std::string const& part : parts)
+        text += (text.empty() ? "" : " | ") + part;
+
+    return text;
 }
 
 // The star the team may kill now, or nullptr with the reason it may not. Every death is planned against the
@@ -1501,19 +1645,8 @@ bool FarHoleSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, Po
     if (AlgalonStaysOut(bot))
         return false;
 
-    AlgalonScanUnit const* nearest = nullptr;
-    float best = std::numeric_limits<float>::max();
-    for (AlgalonScanUnit const& hole : state.holes)
-    {
-        float const distance = hole.position.GetExactDist2d(anchor);
-        if (distance < best)
-        {
-            nearest = &hole;
-            best = distance;
-        }
-    }
-
-    if (!nearest || best <= ULDUAR_ALGALON_FAR_HOLE_YARDS)
+    AlgalonScanUnit const* nearest = NearestShelter(state, anchor);
+    if (!nearest || nearest->position.GetExactDist2d(anchor) <= ULDUAR_ALGALON_FAR_HOLE_YARDS)
         return false;
 
     if (SpotOffFrom(boss, nearest->position, anchor, ULDUAR_ALGALON_NEAR_HOLE_STANDOFF, spot))
@@ -1565,6 +1698,15 @@ char const* SwapTankSlot(Player* bot, PlayerbotAI* botAI, Position& slot)
     bool const pairHolds = holder && IsAlgalonSwapTank(holder);
     if (pairHolds && holder == bot)
     {
+        // Facing him, the pull's first holder builds threat and blocks; on the walk out he hits its back.
+        AlgalonEncounterState const* state = FindState(bot);
+        if (state && state->firstHolder == bot->GetGUID() &&
+            getMSTimeDiff(state->firstHoldMs, getMSTime()) < ULDUAR_ALGALON_PULL_HOLD_MS)
+        {
+            slot = ULDUAR_ALGALON_PICKUP_SLOT;
+            return "pickup";
+        }
+
         slot = ULDUAR_ALGALON_TANK_SLOT;
         return "tank";
     }
@@ -1837,6 +1979,43 @@ bool AlgalonInPhaseOne(PlayerbotAI* botAI)
 
 bool IsAlgalonPhased(Unit const* unit) { return unit && !(unit->GetPhaseMask() & PHASEMASK_NORMAL); }
 
+bool AlgalonInOpener(PlayerbotAI* botAI)
+{
+    AlgalonEncounterState const* state = FindState(botAI ? botAI->GetBot() : nullptr);
+    if (!state)
+        return false;
+
+    AlgalonPhase const phase = state->phase.Get();
+    if (phase == AlgalonPhase::Intro)
+        return true;
+
+    return phase == AlgalonPhase::One && state->introEndMs &&
+           getMSTimeDiff(state->introEndMs, getMSTime()) <= ULDUAR_ALGALON_OPENER_MS;
+}
+
+Player* GetAlgalonOpenerTank(PlayerbotAI* botAI)
+{
+    Player* holder = GetAlgalonBossTank(botAI);
+    if (holder && IsAlgalonSwapTank(holder))
+        return holder;
+
+    Unit* boss = GetAlgalon(botAI);
+    return boss && boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ? GetAlgalonPickupTank(botAI) : nullptr;
+}
+
+char const* AlgalonThreatRedirectSpell(Player* bot)
+{
+    switch (bot->getClass())
+    {
+        case CLASS_HUNTER:
+            return "misdirection";
+        case CLASS_ROGUE:
+            return "tricks of the trade";
+        default:
+            return nullptr;
+    }
+}
+
 void AlgalonTickEncounterState(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -1881,6 +2060,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     {
         state->introEndMs = now;
         state->nextBigBangMs = now + ULDUAR_ALGALON_FIRST_BIG_BANG_MS;
+        state->nextSmashImpactMs = now + ULDUAR_ALGALON_FIRST_SMASH_IMPACT_MS;
         NotePull(group, boss, *state);
     }
 
@@ -1896,6 +2076,23 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         return;
 
     ReleaseMelee(boss, *state, now);
+
+    // Only the pickup itself: a pair tank first taking him later, off a non-tank, would walk him back in.
+    if (!state->firstHoldMs && state->introEndMs)
+    {
+        Player* holder = BossHolder(boss);
+        if (holder && state->swapPair.count(holder->GetGUID()))
+        {
+            state->firstHoldMs = now;
+            if (getMSTimeDiff(state->introEndMs, now) <= ULDUAR_ALGALON_PULL_HOLD_MS)
+                state->firstHolder = holder->GetGUID();
+        }
+    }
+
+    // A forecast meteor that never showed moves on a cycle.
+    while (state->nextSmashImpactMs && MsUntil(state->nextSmashImpactMs, now) +
+                                               static_cast<int32>(ULDUAR_ALGALON_STAR_IMPACT_TAIL_MS) < 0)
+        state->nextSmashImpactMs += ULDUAR_ALGALON_COSMIC_SMASH_INTERVAL_MS;
 
     bool const casting = CurrentBigBang(boss) != nullptr;
     if (casting && !state->bigBangCasting)
@@ -1944,6 +2141,10 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
 
     ElectStarTeam(bot, *state);
 
+    if (AlgalonScanUnit const* focus = FindScanned(state->stars, state->focusStar.Get()))
+        if (focus->lossMeasured && focus->lossPctPerSec >= ULDUAR_ALGALON_STAR_KILL_MEASURED_PCT_PER_SEC)
+            state->teamKillPctPerSec = std::min(focus->lossPctPerSec, ULDUAR_ALGALON_STAR_KILL_PEAK_PCT_PER_SEC);
+
     AlgalonScanUnit const* star = nullptr;
     char const* window = StarWindow(bot, boss, *state, now, star);
     ObjectGuid const previous = state->focusStar.Get();
@@ -1966,8 +2167,16 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     state->focusStar = next;
 
     if (RaidObs::Active())
+    {
         if (Player* tracker = FindTracker(group))
+        {
             RaidObs::NoteDerived(tracker, "algalon.starwindow", window);
+            if (state->lastStarWindow != window)
+                RaidObs::NoteDerived(tracker, "algalon.starplan", DescribeStarPlan(*state, now));
+        }
+
+        state->lastStarWindow = window;
+    }
 }
 
 bool AlgalonBigBangCasting(PlayerbotAI* botAI) { return CurrentBigBang(GetAlgalon(botAI)) != nullptr; }
@@ -2164,11 +2373,13 @@ int32 AlgalonHideSlackMs(Player* bot)
     if (!state || !botAI || state->holes.empty())
         return std::numeric_limits<int32>::max();
 
-    float nearest = std::numeric_limits<float>::max();
-    for (AlgalonScanUnit const& hole : state->holes)
-        nearest = std::min(nearest, bot->GetExactDist2d(hole.position));
+    // The hole it will run to, not the nearest: past a kite hole the run is longer.
+    AlgalonScanUnit const* shelter = ShelterHole(bot, *state);
+    if (!shelter)
+        return std::numeric_limits<int32>::max();
 
-    float const walk = std::max(0.0f, nearest - (ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f));
+    float const walk =
+        std::max(0.0f, bot->GetExactDist2d(shelter->position) - (ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f));
     float const speed = std::max(1.0f, bot->GetSpeed(MOVE_RUN));
     int32 const walkMs = static_cast<int32>(walk / speed * IN_MILLISECONDS);
     return AlgalonBigBangRemainingMs(botAI) - walkMs - ULDUAR_ALGALON_HIDE_MARGIN_MS;
@@ -2218,38 +2429,15 @@ bool GetAlgalonShelter(Player* bot, Position& shelter)
     if (!state || state->holes.empty())
         return false;
 
-    auto const latched = state->shelterAssignments.find(bot->GetGUID());
-    if (latched != state->shelterAssignments.end())
-    {
-        if (AlgalonScanUnit const* hole = FindScanned(state->holes, latched->second))
-        {
-            shelter = hole->position;
-            return true;
-        }
-    }
-
-    // Nearest, but not the hole a constellation is being walked into unless it is the only one.
-    AlgalonScanUnit const* nearest = nullptr;
-    float bestDistance = std::numeric_limits<float>::max();
-    for (AlgalonScanUnit const& hole : state->holes)
-    {
-        bool kiteTarget = false;
-        for (auto const& kite : state->kiteHoleAssignments)
-            kiteTarget = kiteTarget || kite.second == hole.guid;
-
-        float const distance = bot->GetExactDist2d(hole.position) + (kiteTarget ? 1000.0f : 0.0f);
-        if (distance < bestDistance)
-        {
-            nearest = &hole;
-            bestDistance = distance;
-        }
-    }
-
-    if (!nearest)
+    AlgalonScanUnit const* hole = ShelterHole(bot, *state);
+    if (!hole)
         return false;
 
-    state->shelterAssignments[bot->GetGUID()] = nearest->guid;
-    shelter = nearest->position;
+    auto const latched = state->shelterAssignments.find(bot->GetGUID());
+    if (latched == state->shelterAssignments.end() || latched->second != hole->guid)
+        state->shelterAssignments[bot->GetGUID()] = hole->guid;
+
+    shelter = hole->position;
     return true;
 }
 
@@ -2378,6 +2566,24 @@ bool AlgalonYieldsBoss(Player* bot)
     return !AlgalonShouldPickUp(bot) && !AlgalonShouldSwap(bot);
 }
 
+Player* AlgalonLoneHolder(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    AlgalonEncounterState const* state = FindState(bot);
+    Player* holder = GetAlgalonBossTank(botAI);
+    if (!state || !holder || !IsAlgalonSwapTank(holder) || !CanStayOut(holder))
+        return nullptr;
+
+    for (ObjectGuid const& guid : state->swapPair)
+    {
+        Player* partner = FindGroupMember(bot->GetGroup(), guid);
+        if (partner && partner != holder && CanStayOut(partner))
+            return nullptr;
+    }
+
+    return holder;
+}
+
 bool AlgalonOffTankWorking(Player* bot)
 {
     PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
@@ -2470,12 +2676,24 @@ bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot)
     if (latched != state->kiteHoleAssignments.end())
         hole = FindScanned(state->holes, latched->second);
 
+    // With a Big Bang due the raid hides in the hole by the hold spot. Walked into, it closes on them, and
+    // left out of their pick it sends them on to a hole they may not reach.
+    AlgalonScanUnit const* raidHole = RaidShelterHole(*state, getMSTime());
+    if (hole && hole == raidHole)
+    {
+        hole = nullptr;
+        state->kiteHoleAssignments.erase(bot->GetGUID());
+    }
+
     if (!hole)
     {
         // Nearest to the constellation, not the handler: it is what has to arrive.
         float bestDistance = std::numeric_limits<float>::max();
         for (AlgalonScanUnit const& candidate : state->holes)
         {
+            if (&candidate == raidHole)
+                continue;
+
             float const distance = constellation->GetExactDist2d(candidate.position);
             if (distance < bestDistance)
             {

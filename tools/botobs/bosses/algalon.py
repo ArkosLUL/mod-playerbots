@@ -10,10 +10,11 @@
     algalon.py <file> --hold            the edge hold: where he stood, every pickup's drag to the tank slot
     algalon.py <file> --taunts          every taunt cast at him, non-tanks flagged, pair taunts that missed
     algalon.py <file> --reach           seconds each raid member outside the pair stood in his reach
-    algalon.py <file> --bigbang         every Big Bang: holes, soaker and backup changes, who it hit, what followed
+    algalon.py <file> --bigbang         every Big Bang: holes, soaker and backup changes, who it hit and where runners
+                                        ran, what followed
     algalon.py <file> --soak            every Big Bang's soakers: the hit, healers, kit, reserved buttons spent
     algalon.py <file> --phasing         every hole phase: Big Bang or stray, and what put a stray one there
-    algalon.py <file> --stars           star deaths, what each landed into, the kill window, the team
+    algalon.py <file> --stars           star deaths, what each landed into, the kill window, the star plan, the team
     algalon.py <file> --collateral      star health lost beyond the drain while unfocused, casts on stars
     algalon.py <file> --holes           hole stock, empty seconds before each Big Bang, holes lost, urgency
     algalon.py <file> --constellations  activations, victims, the handler and kite branches, removals
@@ -41,6 +42,8 @@ What the generic views get wrong here, and what this reads instead:
 - **`algalon.soaker`, `algalon.backup`, `algalon.focusstar` and `algalon.handler` are raid-wide
   latches**: `g` is whichever bot's tick flipped them and the guid is in `txt`. `algalon.hide`, `kite`
   and `spot` are per bot and change-only, so a value holds until that bot's next row.
+- **`algalon.shelter` is per bot but cleared without a row when a Big Bang starts**, so a runner's hole
+  is the row it wrote inside that cast, never one held over from an earlier cast.
 - **A Big Bang can have several soakers.** One phased or dead mid-cast is replaced, so the soaker a
   view names is the last; `--bigbang` and `--soak` list every change and what preceded it.
 - **A kill the tracker keeps going stays under the `algalon.starwindow` label it opened with**, so a
@@ -127,6 +130,9 @@ SPELL_GUARDIAN_SPIRIT = 47788
 SOAK_SPELLS = (SPELL_DISPERSION, SPELL_PAIN_SUPPRESSION, SPELL_GUARDIAN_SPIRIT)
 SPELL_RIGHTEOUS_DEFENSE = 31789
 SPELL_ICE_BLOCK = 45438
+SPELL_TRICKS_OF_THE_TRADE = 57934
+SPELL_MISDIRECTION = 34477
+REDIRECT_IDS = {SPELL_TRICKS_OF_THE_TRADE: "Tricks of the Trade", SPELL_MISDIRECTION: "Misdirection"}
 # matched by name, which covers every rank; the ids only cover a trace that names no spells
 TAUNT_IDS = {355: "Taunt", 62124: "Hand of Reckoning", SPELL_RIGHTEOUS_DEFENSE: "Righteous Defense", 6795: "Growl",
              56222: "Dark Command", 49576: "Death Grip", 1161: "Challenging Shout", 5209: "Challenging Roar",
@@ -233,6 +239,9 @@ ON_SLOT_YD = _radius_or("ULDUAR_ALGALON_HOLDER_ON_SPOT_RADIUS", 3.0)
 # the melee release timer, a uint32 in the source
 DRAG_DUE_MS = 8000
 HOLD_STEP_MS = 5000
+HOLDER_TARGET_MS = 1000
+# a threat redirect this soon after phase 1 opened lands while the holder's lead is still thin
+OPENER_MS = 20000
 # a taunt took when his victim became the caster this soon; a later change is still shown
 TAUNT_TAKE_MS = 600
 TAUNT_LATE_MS = 3000
@@ -1285,6 +1294,50 @@ def hold_faults(trace: Trace) -> list[tuple[int, str]]:
     return out
 
 
+def holder_target_runs(trace: Trace) -> list[dict]:
+    """`{start, stop, tank, target}` per stretch his victim was a swap tank whose own target column named
+    something other than him, `target` the one it held longest and 0 for none. A stretch ends at the
+    tank's death when that comes before the next sample."""
+    def build(trace: Trace) -> list[dict]:
+        boss = boss_guid(trace)
+        if boss is None:
+            return []
+        samples = samples_of(trace)
+        pair, _ = swap_pair(trace)
+        runs: list[dict] = []
+        current = None
+        for when, him, weight in samples.unit_steps(boss):
+            victim = target_of(him) if alive(him) else 0
+            row = (samples.frame(when).get(victim) or samples.row(victim, when)) if victim in pair else None
+            if not alive(row) or target_of(row) == boss:
+                current = None
+                continue
+            if current is None or current["tank"] != victim:
+                current = {"start": when, "stop": when, "tank": victim, "held": collections.Counter()}
+                runs.append(current)
+            current["stop"] = when + weight
+            current["held"][target_of(row)] += weight
+        deaths = death_records(trace)
+        return [{"start": run["start"], "tank": run["tank"], "target": run["held"].most_common(1)[0][0],
+                 "stop": min((rec["t"] for rec in deaths
+                              if rec.get("g") == run["tank"] and run["start"] <= rec["t"] < run["stop"]),
+                             default=run["stop"])}
+                for run in runs]
+    return cached(trace, "_algalon_holder_targets", build)
+
+
+def holder_target_faults(trace: Trace) -> list[tuple[int, str]]:
+    out = []
+    for run in holder_target_runs(trace):
+        span = run["stop"] - run["start"]
+        if span < HOLDER_TARGET_MS:
+            continue
+        aim = f"targeted {trace.name(run['target'])}" if run["target"] else "had no target"
+        out.append((run["start"], f"holder {trace.name(run['tank'])} {aim} for {span / 1000:.1f} s"
+                                  f" @ {secs(run['start'])}"))
+    return out
+
+
 # --------------------------------------------------------------------------------------------- taunts
 
 def taunt_casts(trace: Trace) -> list[dict]:
@@ -1387,6 +1440,31 @@ def taunt_faults(trace: Trace) -> list[tuple[int, str]]:
                 continue
             line += f", {took} took"
         out.append((first, line))
+    return out
+
+
+def redirect_faults(trace: Trace) -> list[tuple[int, str]]:
+    """Tricks of the Trade or Misdirection cast in the first OPENER_MS of phase 1 on anyone outside the
+    swap pair, one line per press."""
+    begin = phase_start(trace, "P1")
+    if begin is None:
+        return []
+    pair, _ = swap_pair(trace)
+    out = []
+    last: dict[tuple, int] = {}
+    for rec in trace.of("cast"):
+        spell, when = rec.get("sp"), rec["t"]
+        if spell not in REDIRECT_IDS or rec.get("tr") or not begin <= when <= begin + OPENER_MS:
+            continue
+        key = (rec.get("s"), spell)
+        if when - last.get(key, -(1 << 62)) <= ECHO_MS:
+            continue
+        last[key] = when
+        target = rec.get("tgt") or 0
+        if target not in pair:
+            on = who(trace, target) if target else "nobody"
+            out.append((when, f"{spell_name(trace, spell, REDIRECT_IDS)} on {on}, not a swap tank, @ {secs(when)}"
+                              f" ({trace.name(rec.get('s'))})"))
     return out
 
 
@@ -1592,6 +1670,7 @@ def build_big_bang_rows(trace: Trace) -> list[dict]:
     finish = trace.of("end")[-1] if trace.of("end") else None
     healers = {guid for guid in roster if trace.role(guid) == "heal"}
     blocks = ice_blocks(trace)
+    shelters = notes(trace, "algalon.shelter")
 
     casts = big_bang_casts(trace)
     out = []
@@ -1652,7 +1731,7 @@ def build_big_bang_rows(trace: Trace) -> list[dict]:
                 gaps[guid] = min(dist2(found[1:3], spot) for spot in hole_spots)
 
         watched = sanctioned | {soaker}
-        out.append({
+        row = {
             **cast,
             "holes": present,
             "hole_gaps": gaps,
@@ -1688,8 +1767,39 @@ def build_big_bang_rows(trace: Trace) -> list[dict]:
             "loops": [loop for loop in loops if loop["start"] < tail and loop["stop"] > start],
             "matter": taken,
             "hide": collections.Counter(value for value in at_impact.values() if value is not None),
-        })
+        }
+        row["runners"] = runner_holes(trace, row, shelters)
+        out.append(row)
     return out
+
+
+def runner_holes(trace: Trace, row: dict, shelters: list[dict]) -> list[dict]:
+    """Per non-soaker hit while on a hide run: the hole its last `algalon.shelter` inside the cast named
+    and the nearest hole present at the cast start, each `(spot, yd)` from where the runner stood then."""
+    samples = samples_of(trace)
+    start = row["start"]
+    spots = {hole: tuple(found[1:3]) for hole in row["holes"] if (found := samples.row(hole, start))}
+    out = []
+    for guid in row["stray"]:
+        if row["at_impact"].get(guid) != "run":
+            continue
+        named = [hole for rec in shelters if rec.get("g") == guid and start <= rec["t"] <= row["end"]
+                 if (hole := as_guid(rec.get("txt")))]
+        found = (samples.row(named[-1], start) or samples.after(named[-1], start)) if named else None
+        ran = tuple(found[1:3]) if found else None
+        stood = samples.row(guid, start)
+        here = tuple(stood[1:3]) if stood else None
+        nearest = min(spots.values(), key=lambda spot: dist2(spot, here)) if spots and here else None
+        out.append({"guid": guid, "hole": named[-1] if named else 0,
+                    "ran": (ran, dist2(ran, here) if ran and here else None),
+                    "nearest": (nearest, dist2(nearest, here) if nearest else None)})
+    return out
+
+
+def hole_label(spot, gap) -> str:
+    if spot is None:
+        return "-"
+    return f"({spot[0]:.0f},{spot[1]:.0f})" + (f" {gap:.1f} yd" if gap is not None else "")
 
 
 def nearhole_shares(trace: Trace, row: dict) -> list[tuple[int, float | None, float]]:
@@ -1739,7 +1849,8 @@ def show_bigbang(trace: Trace) -> None:
     if not rows:
         print("  no Big Bang was cast")
         return
-    show_absent(trace, "algalon.bigbang", "algalon.soaker", "algalon.backup", "algalon.hide", "algalon.defensive")
+    show_absent(trace, "algalon.bigbang", "algalon.soaker", "algalon.backup", "algalon.hide", "algalon.defensive",
+                "algalon.shelter")
     show_vetoes(trace, "algalon ice block hold")
 
     for row in rows:
@@ -1776,6 +1887,9 @@ def show_bigbang(trace: Trace) -> None:
         if row["stray"]:
             print(f"      {len(row['stray'])} non-soaker(s) hit: " + ", ".join(
                 f"{trace.name(g)} (hide {row['at_impact'].get(g) or '-'})" for g in row["stray"]))
+        for run in row["runners"]:
+            print(f"        {trace.name(run['guid'])} ran to {hole_label(*run['ran'])},"
+                  f" nearest hole {hole_label(*run['nearest'])}")
         if row["waited"]:
             left = sorted((ms, trace.name(g)) for g, ms in row["waited"].items() if ms is not None)
             still = sorted(trace.name(g) for g, ms in row["waited"].items() if ms is None)
@@ -2433,6 +2547,12 @@ def show_stars(trace: Trace) -> None:
     if total:
         print("  algalon.starwindow, every tracker's rows as one timeline: " + ", ".join(
             f"{value} {held / 1000:.1f} s ({held * 100.0 / total:.0f}%)" for value, held in window.most_common()))
+    plans = latch_spans(trace, "algalon.starplan", pull_end(trace))
+    if plans:
+        windows = window_spans(trace)
+        print("  algalon.starplan, every tracker's rows as one timeline, beside the window it was written under:")
+        for value, start, _ in plans:
+            print(f"    {clock(start):>9}  {value_at(windows, start) or '-':9} {value}")
     for opened in window_opens(trace):
         print(f"  window {opened['kind']} {clock(opened['t'])}: focus star {opened['middle']:.1f} yd from the team's"
               f" mean position, {opened['mean']:.1f} yd from its {opened['members']} member(s) on average")
@@ -3505,7 +3625,9 @@ def failures(trace: Trace) -> list[tuple[int | None, str]]:
     out += soak_faults(trace)
     out += bang_faults(trace)
     out += taunt_faults(trace)
+    out += redirect_faults(trace)
     out += hold_faults(trace)
+    out += holder_target_faults(trace)
     team = star_team(trace)
     if team["members"]:
         for guid, held in team["off"].most_common():
@@ -3581,11 +3703,11 @@ SECTIONS = (
     ("hold", "the edge hold: his distance from A and C, every pickup's drag to the tank slot", show_hold),
     ("taunts", "every taunt cast at him, non-tanks flagged, pair taunts that missed", show_taunts),
     ("reach", "seconds each raid member outside the pair stood alive and unphased in his reach", show_reach),
-    ("bigbang", "every Big Bang: holes and their reach, soaker and backup changes, who it hit, tank-alone time",
-     show_bigbang),
+    ("bigbang", "every Big Bang: holes and their reach, soaker and backup changes, who it hit and where its runners"
+                " ran, tank-alone time", show_bigbang),
     ("soak", "every Big Bang's soakers: the hit, healers, kit, reserved buttons spent", show_soak),
     ("phasing", "every hole phase: Big Bang or stray, its cause, Dark Matter, walk guard vetoes", show_phasing),
-    ("stars", "star deaths, health against the drain, the kill window and the star team", show_stars),
+    ("stars", "star deaths, health against the drain, the kill window, the star plan and the star team", show_stars),
     ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),
     ("constellations", "activations, victims, handler and kite branches, removals", show_constellations),

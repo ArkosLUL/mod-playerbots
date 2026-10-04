@@ -9,6 +9,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "Position.h"
+#include "RaidRedirectThreat.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
@@ -93,6 +94,18 @@ public:
 
     AlgalonYieldBossAction(PlayerbotAI* ai) : Action(ai, Name) {}
     bool Execute(Event event) override;
+};
+
+class AlgalonThreatRedirectAction : public RaidRedirectThreatAction
+{
+public:
+    static constexpr char const* Name = "algalon threat redirect action";
+
+    AlgalonThreatRedirectAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name) {}
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
 };
 
 // Taunts Algalon onto this tank, and walks to him if the taunt can't reach.

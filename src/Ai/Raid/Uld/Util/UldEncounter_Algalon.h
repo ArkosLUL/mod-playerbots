@@ -14,6 +14,7 @@
 #include "UldData.h"
 
 #include <array>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -162,11 +163,15 @@ constexpr uint32 ULDUAR_ALGALON_STAR_LOG_STEP_MS = 500;
 // Less log than this reads as the drain: a slope over one or two samples is noise.
 constexpr uint32 ULDUAR_ALGALON_STAR_LOG_MIN_MS = 2000;
 constexpr float ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC = 1.0f;
-// A star the team drops part-killed keeps dying from the DoTs on it too (2.1-2.5%/s measured).
-constexpr float ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC = 2.0f;
-// The team's kill speed, slowest and fastest (3.6-5.2%/s measured on 25-man).
-constexpr float ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC = 3.5f;
-constexpr float ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC = 5.5f;
+// A star the team drops part-killed keeps dying from casts in flight, channels and DoTs (5.8%/s measured).
+constexpr float ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC = 5.0f;
+// The team's kill speed over a whole kill, slowest and fastest (6.2-7.8%/s measured on 25-man).
+constexpr float ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC = 5.5f;
+constexpr float ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC = 9.0f;
+// A focus losing less than this is still the walk in, not the kill.
+constexpr float ULDUAR_ALGALON_STAR_KILL_MEASURED_PCT_PER_SEC = 3.5f;
+// The fastest 4 s slope worth planning for: the last 15% has gone at 16%/s in a second.
+constexpr float ULDUAR_ALGALON_STAR_KILL_PEAK_PCT_PER_SEC = 12.0f;
 // A star whose own death would land badly is only acted on this close to it: a fresh wave's four all die
 // together and would read as due at the spawn, and the serial deadline already paces them.
 constexpr uint32 ULDUAR_ALGALON_STAR_DUE_HORIZON_MS = 30000;
@@ -175,10 +180,15 @@ constexpr uint32 ULDUAR_ALGALON_STAR_KEEP_GAP_MS = 6000;
 // No explosion from just before the cast until the raid is back out of the void.
 constexpr uint32 ULDUAR_ALGALON_STAR_BIG_BANG_LEAD_MS = 1000;
 constexpr uint32 ULDUAR_ALGALON_STAR_BIG_BANG_TAIL_MS = 3000;
-// Nor around a meteor's impact.
+// Nor around a meteor's impact: it takes 6-11k off everyone, and the healers need seconds to undo it.
 constexpr uint32 ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_MS = 4800;
-constexpr uint32 ULDUAR_ALGALON_STAR_IMPACT_LEAD_MS = 2000;
-constexpr uint32 ULDUAR_ALGALON_STAR_IMPACT_TAIL_MS = 1500;
+constexpr uint32 ULDUAR_ALGALON_STAR_IMPACT_LEAD_MS = 4000;
+constexpr uint32 ULDUAR_ALGALON_STAR_IMPACT_TAIL_MS = 5000;
+// Meteors fall on a fixed clock (Repeat(25s + 500ms)): the first lands 30.9 s after the intro ends.
+constexpr uint32 ULDUAR_ALGALON_FIRST_SMASH_IMPACT_MS = 30900;
+constexpr uint32 ULDUAR_ALGALON_COSMIC_SMASH_INTERVAL_MS = 25500;
+// Predicted impacts the star plan looks ahead to.
+constexpr uint8 ULDUAR_ALGALON_SMASH_FORECAST = 3;
 // Forecast to die this soon, a star is a hazard whatever its health: at 3.4%/s the 5% line is 1.5 s.
 constexpr uint32 ULDUAR_ALGALON_STAR_DYING_MS = 4000;
 
@@ -219,6 +229,13 @@ constexpr uint8 ULDUAR_ALGALON_MELEE_STAGE_SPOTS = 10;
 // somewhere else, and after the second wait whoever holds him, so a pull nobody picks up doesn't idle them.
 constexpr uint32 ULDUAR_ALGALON_MELEE_RELEASE_MS = 8000;
 constexpr uint32 ULDUAR_ALGALON_MELEE_RELEASE_ANYWAY_MS = 20000;
+// Threat redirects go on the tank from the intro until this long after it. Tricks reaches 20 yd and
+// Misdirection 100; CanCastSpell lets an out of range cast through.
+constexpr uint32 ULDUAR_ALGALON_OPENER_MS = 20000;
+constexpr float ULDUAR_ALGALON_TRICKS_RANGE = 20.0f;
+constexpr float ULDUAR_ALGALON_MISDIRECTION_RANGE = 100.0f;
+// The pull's first holder keeps him on the pickup slot this long, facing him, before the walk out.
+constexpr uint32 ULDUAR_ALGALON_PULL_HOLD_MS = 3000;
 // A human tank is told to taunt this often while a swap or a pickup is theirs to make.
 constexpr uint32 ULDUAR_ALGALON_TANK_CALL_MS = 5000;
 // Humans are told to step into a hole with this much of the Big Bang cast left.
@@ -297,6 +314,9 @@ struct AlgalonEncounterState
     bool engagedSeen = false;
     bool meleeReleased = false;
     uint32 introEndMs = 0;
+    // The pull's first swap tank to hold him, and when.
+    ObjectGuid firstHolder;
+    uint32 firstHoldMs = 0;
     uint32 lastTankCallMs = 0;
     bool bigBangHideCalled = false;
     uint32 nextBigBangMs = 0;
@@ -320,6 +340,12 @@ struct AlgalonEncounterState
     // Dropped part-killed: the log restarts, and until it fills the star reads as dying at the dropped rate,
     // or the old slope still carries the team's damage and makes it due again next tick.
     std::unordered_set<ObjectGuid> droppedStars;
+    // The speed the team last showed on its focus, capped at the peak.
+    float teamKillPctPerSec = 0.0f;
+    // The next meteor not yet marked.
+    uint32 nextSmashImpactMs = 0;
+    // The window last traced, so the plan behind it is noted once per change.
+    std::string lastStarWindow;
     // Opened at a deadline, the kill keeps the deadline's looser position test.
     bool focusByDeadline = false;
     // Far-side bearing per handler, latched with its kite hole, or the park spot turns as it walks round.
@@ -340,6 +366,12 @@ bool AlgalonPresent(PlayerbotAI* botAI);
 bool AlgalonEngaged(PlayerbotAI* botAI);
 bool AlgalonInPhaseOne(PlayerbotAI* botAI);
 bool IsAlgalonPhased(Unit const* unit);
+// From the intro until ULDUAR_ALGALON_OPENER_MS after it.
+bool AlgalonInOpener(PlayerbotAI* botAI);
+// The swap tank holding him, or the one about to take him while the intro runs.
+Player* GetAlgalonOpenerTank(PlayerbotAI* botAI);
+// "misdirection" or "tricks of the trade" for the classes that redirect threat, else nullptr.
+char const* AlgalonThreatRedirectSpell(Player* bot);
 
 // Runs from the definition tick, at most once per ULDUAR_ALGALON_STATE_TICK_MS per instance.
 void AlgalonTickEncounterState(PlayerbotAI* botAI);
@@ -411,6 +443,9 @@ bool AlgalonShouldSwap(Player* bot);
 // tanks build threat at the same rate, so the one carrying the stacks takes him straight back, and a
 // tank outside the pair would take him from both.
 bool AlgalonYieldsBoss(Player* bot);
+// The swap tank holding him when the other is dead or phased. Not stacks: the old holder keeps its 4 for the
+// aura's 45 s after every swap, so that would be most of the fight.
+Player* AlgalonLoneHolder(PlayerbotAI* botAI);
 // The swap tank not holding him, busy with an add rather than idle on its slot.
 bool AlgalonOffTankWorking(Player* bot);
 

@@ -74,6 +74,15 @@ public:
     bool IsActive() override;
 };
 
+class AlgalonThreatRedirectTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon threat redirect";
+
+    AlgalonThreatRedirectTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 500) {}
+    bool IsActive() override;
+};
+
 class AlgalonTankPickupTrigger : public Trigger
 {
 public:

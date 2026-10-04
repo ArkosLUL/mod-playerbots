@@ -111,10 +111,15 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
         static std::set<std::string> const anyone = {"dispersion",       "pain suppression",
                                                      "guardian spirit on party", "hand of sacrifice on party",
                                                      "divine sacrifice", "lay on hands on party"};
+        static std::set<std::string> const externals = {"pain suppression", "guardian spirit on party",
+                                                        "hand of sacrifice on party", "lay on hands on party"};
         std::string const& name = action->getName();
         Reserve reserve;
         reserve.alwaysForSwapTanks = always.count(name) > 0;
         reserve.swapTanksOnly = !anyone.count(name) && (reserve.alwaysForSwapTanks || IsHeldTankDefensive(name));
+        // Never a bubble: he leaves a paladin under one.
+        reserve.holderOwn = IsHeldTankDefensive(name) || name == "lay on hands";
+        reserve.holderExternal = externals.count(name) > 0;
         CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
         if (spellAction && (anyone.count(name) || reserve.swapTanksOnly))
             reserve.spellId = context->GetValue<uint32>("spell id", spellAction->getSpell())->Get();
@@ -129,6 +134,19 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
     bool const swapTank = IsAlgalonSwapTank(bot);
     if (reserve.swapTanksOnly && !swapTank)
         return 1.0f;
+
+    // With nobody to take him off it, a holder that dies first soaks nothing either.
+    if ((reserve.holderOwn || reserve.holderExternal) && !AlgalonBigBangCasting(botAI))
+    {
+        if (Player* lone = AlgalonLoneHolder(botAI))
+        {
+            if (reserve.holderOwn && lone == bot)
+                return 1.0f;
+
+            if (reserve.holderExternal && action->GetTarget() == lone)
+                return 1.0f;
+        }
+    }
 
     if (reserve.alwaysForSwapTanks && swapTank)
         return 0.0f;

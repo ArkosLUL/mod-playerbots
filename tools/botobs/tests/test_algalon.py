@@ -685,7 +685,7 @@ class WithoutProbes(unittest.TestCase):
         self.assertIn("absent from this trace: haz meteors; read off 33105 markers", text)
         self.assertIn("absent from this trace: algalon.swappair, algalon.tankrole, algalon.call", text)
         self.assertIn("absent from this trace: algalon.bigbang, algalon.soaker, algalon.backup, algalon.hide,"
-                      " algalon.defensive", text)
+                      " algalon.defensive, algalon.shelter", text)
         self.assertIn("absent from this trace: algalon.slot, algalon.spot", text)
         self.assertIn("no star team recorded", text)
 
@@ -1051,7 +1051,10 @@ class EdgeHold(unittest.TestCase):
         self.assertEqual(al.span_totals({0: al.window_spans(self.trace)})["bigbang"], 8000)
         self.assertEqual(al.span_totals(probes.holder_spans(self.trace, "algalon.starwindow", EDGE_END))["bigbang"],
                          34000)
-        self.assertIn("bigbang 8.0 s", render(self.trace, "stars"))
+        text = render(self.trace, "stars")
+        self.assertIn("bigbang 8.0 s", text)
+        # a trace from before the star plan prints nothing for it, not even its absence
+        self.assertNotIn("starplan", text)
 
     def test_window_opens_measure_the_team_against_the_focus_star(self):
         opens = [(row["t"], row["kind"], row["star"], row["members"], round(row["middle"], 2))
@@ -1168,6 +1171,118 @@ class HandOver(unittest.TestCase):
         text = render(self.trace, "stars")
         for label in ("spacing 1.0 s (2%)", "prebang 5.0 s (10%)", "smash 22.0 s (42%)"):
             self.assertIn(label, text)
+
+
+E_CONSTELLATION, E_FAR_HOLE = CREATURE | 231, CREATURE | 222
+FAR_HOLE_SPOT = (40, 60)
+
+
+def holder_aim(when: int) -> int:
+    """Bulwark's own target: nothing for 1.5 s after the pickup and for half a second at 33 s, the
+    constellation for the second Mighty holds him, for 7 s from 25 s and from 36 s until he dies."""
+    if 8000 <= when < 9500 or 33000 <= when < 33500:
+        return 0
+    if 20000 <= when < 21000 or 25000 <= when < 32000 or when >= 36000:
+        return E_CONSTELLATION
+    return E_BOSS
+
+
+def opener_snap(snap: dict) -> dict:
+    units = []
+    for unit in snap["u"]:
+        if unit[0] in (HOLDER, PARTNER):
+            unit = unit[:7] + [holder_aim(snap["t"]) if unit[0] == HOLDER else E_BOSS] + unit[8:]
+        units.append(unit)
+    units.append(edge_row(E_CONSTELLATION, (-10, 20), 100.0))
+    if snap["t"] >= 22000:
+        units.append(edge_row(E_FAR_HOLE, FAR_HOLE_SPOT, 100.0))
+    return {**snap, "u": units}
+
+
+def opener_pull() -> list[dict]:
+    """The edge pull with the holder's own target off him, threat redirects around phase 1's start, two
+    bots hit by Big Bang on a hide run, and the star planner's rows."""
+    redirect = al.SPELL_TRICKS_OF_THE_TRADE
+    records = [opener_snap(rec) if rec.get("e") == "snap" else rec for rec in edge_pull()]
+    return records + [
+        {"t": 1, "e": "unit", "g": E_CONSTELLATION, "en": al.NPC_LIVING_CONSTELLATION, "n": "Living Constellation"},
+        {"t": 1, "e": "unit", "g": E_FAR_HOLE, "en": al.NPC_BLACK_HOLE, "n": "Black Hole"},
+
+        # In the intro, the press, its triggered echo and a second row of it, one on the holder, one on a
+        # dps, and one after the opener.
+        cast(7000, ROGUE, redirect, WARRIOR), cast(9400, ROGUE, redirect, WARRIOR),
+        {**cast(9450, ROGUE, redirect, WARRIOR), "tr": 1}, cast(9900, ROGUE, redirect, WARRIOR),
+        cast(10000, HUNTER, al.SPELL_MISDIRECTION, HOLDER), cast(15000, HUNTER, al.SPELL_MISDIRECTION, CASTER),
+        cast(29000, HUNTER, al.SPELL_MISDIRECTION, CASTER),
+
+        # Mighty runs to the far hole. Smartface's only shelter row is older than the cast.
+        note(20000, MAGE, "algalon.shelter", E_HOLE), note(31000, WARRIOR, "algalon.shelter", E_FAR_HOLE),
+        note(30000, WARRIOR, "algalon.hide", "wait"), note(34000, WARRIOR, "algalon.hide", "run"),
+        note(30000, MAGE, "algalon.hide", "run"),
+        dmg(38000, E_BOSS, WARRIOR, al.SPELL_BIG_BANG[1], 50000), dmg(38000, E_BOSS, MAGE, al.SPELL_BIG_BANG[1], 50000),
+
+        note(12000, CASTER, "algalon.starplan", "s1 98% 8s | s2 98% 60s | bang 18..26"),
+        note(20000, CASTER, "algalon.starplan", "s2 72% 4s | bang 10..18"),
+        note(21000, PRIEST, "algalon.starplan", "s2 69% 3s | smash 2..11 | bang 9..17"),
+    ]
+
+
+class Opener(unittest.TestCase):
+    """The holder's own target, threat redirects at the opener, where Big Bang runners ran, the star plan."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, opener_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_holder_targeting_something_else_is_read_only_while_he_is_on_it(self):
+        self.assertEqual(al.holder_target_runs(self.trace), [
+            {"start": 8000, "stop": 9500, "tank": HOLDER, "target": 0},
+            {"start": 25000, "stop": 32000, "tank": HOLDER, "target": E_CONSTELLATION},
+            {"start": 33000, "stop": 33500, "tank": HOLDER, "target": 0},
+            # cut at his death, not the next sample
+            {"start": 36000, "stop": 39200, "tank": HOLDER, "target": E_CONSTELLATION}])
+        self.assertEqual(al.holder_target_faults(self.trace), [
+            (8000, "holder Bulwark had no target for 1.5 s @ 8.0s"),
+            (25000, "holder Bulwark targeted Living Constellation for 7.0 s @ 25.0s"),
+            (36000, "holder Bulwark targeted Living Constellation for 3.2 s @ 36.0s")])
+
+    def test_a_redirect_in_the_opener_on_anyone_outside_the_pair_is_a_failure(self):
+        self.assertEqual(al.redirect_faults(self.trace), [
+            (9400, "Tricks of the Trade on Mighty (melee), not a swap tank, @ 9.4s (Assasin)"),
+            (15000, "Misdirection on Druidica (ranged), not a swap tank, @ 15.0s (Trueshot)")])
+        lines = [line for _, line in al.failures(self.trace)]
+        self.assertIn("Tricks of the Trade on Mighty (melee), not a swap tank, @ 9.4s (Assasin)", lines)
+        self.assertIn("holder Bulwark targeted Living Constellation for 7.0 s @ 25.0s", lines)
+
+    def test_each_runner_hit_names_the_hole_it_ran_to_and_the_nearest(self):
+        (row,) = al.big_bang_rows(self.trace)
+        far, near = spot(*FAR_HOLE_SPOT), spot(*HOLE_SPOT)
+        mighty, smartface = row["runners"]
+        self.assertEqual((mighty["guid"], mighty["hole"], mighty["ran"][0], mighty["nearest"][0]),
+                         (WARRIOR, E_FAR_HOLE, far, near))
+        self.assertAlmostEqual(mighty["ran"][1], 50.0)
+        self.assertAlmostEqual(mighty["nearest"][1], 39.05, places=2)
+        self.assertEqual((smartface["guid"], smartface["hole"], smartface["ran"]), (MAGE, 0, (None, None)))
+        self.assertAlmostEqual(smartface["nearest"][1], 45.0)
+        text = render(self.trace, "bigbang")
+        self.assertIn(f"Mighty ran to ({far[0]:.0f},{far[1]:.0f}) 50.0 yd,"
+                      f" nearest hole ({near[0]:.0f},{near[1]:.0f}) 39.1 yd", text)
+        self.assertIn(f"Smartface ran to -, nearest hole ({near[0]:.0f},{near[1]:.0f}) 45.0 yd", text)
+        self.assertNotIn("algalon.shelter", text)
+
+    def test_the_star_plan_reads_beside_the_window_it_was_written_under(self):
+        text = render(self.trace, "stars")
+        self.assertRegex(text, r"0:12\.000 +open +s1 98% 8s \| s2 98% 60s \| bang 18\.\.26")
+        self.assertRegex(text, r"0:20\.000 +gap +s2 72% 4s \| bang 10\.\.18")
+        self.assertRegex(text, r"0:21\.000 +deadline +s2 69% 3s \| smash 2\.\.11 \| bang 9\.\.17")
+
+    def test_every_section_renders(self):
+        self.assertIn("VERDICT", render(self.trace))
 
 
 SLOT_SOURCE = """

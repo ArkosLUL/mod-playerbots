@@ -42,6 +42,9 @@ private:
         bool swapTanksOnly = false;
         // A bubble or a self Lay on Hands puts Forbearance on the tank, which blocks Divine Protection.
         bool alwaysForSwapTanks = false;
+        // Released to a holder nobody can take him from: its own button, or one cast on it.
+        bool holderOwn = false;
+        bool holderExternal = false;
     };
 
     std::unordered_map<Action*, Reserve> reserves;

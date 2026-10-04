@@ -120,8 +120,35 @@ bool AlgalonLeaveBlackHoleTrigger::IsActive()
     return !AlgalonBigBangCasting(botAI) && AlgalonHoleNear(bot, ULDUAR_ALGALON_SHELTER_RADIUS);
 }
 
-// At the end of the intro he swings at a random player, and a phased tank drops him the same way.
-bool AlgalonTankPickupTrigger::IsActive() { return AlgalonShouldPickUp(bot); }
+// Misdirection and Tricks on the pull go to the tank holding him, or the one about to. Out of range the
+// rogue waits: the class value would give Tricks to a dps, who then pulls him.
+bool AlgalonThreatRedirectTrigger::IsActive()
+{
+    char const* spell = AlgalonThreatRedirectSpell(bot);
+    if (!spell || IsAlgalonPhased(bot) || !AlgalonInOpener(botAI))
+        return false;
+
+    Player* tank = GetAlgalonOpenerTank(botAI);
+    if (!tank || tank == bot)
+        return false;
+
+    float const range =
+        bot->getClass() == CLASS_ROGUE ? ULDUAR_ALGALON_TRICKS_RANGE : ULDUAR_ALGALON_MISDIRECTION_RANGE;
+    return bot->GetExactDist(tank) <= range && botAI->CanCastSpell(spell, tank);
+}
+
+// At the end of the intro he swings at a random player, and a phased tank drops him the same way. A holder
+// that got him by threat still targets whatever it hit before, a constellation for a former handler.
+bool AlgalonTankPickupTrigger::IsActive()
+{
+    if (AlgalonShouldPickUp(bot))
+        return true;
+
+    Unit* boss = GetAlgalon(botAI);
+    return boss && !boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) && boss->GetVictim() == bot &&
+           IsAlgalonSwapTank(bot) && !IsAlgalonPhased(bot) && AlgalonEngaged(botAI) &&
+           AI_VALUE(Unit*, "current target") != boss;
+}
 
 bool AlgalonPhasePunchSwapTrigger::IsActive() { return AlgalonShouldSwap(bot); }
 

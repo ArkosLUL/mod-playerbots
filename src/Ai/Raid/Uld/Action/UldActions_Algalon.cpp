@@ -265,6 +265,14 @@ bool AlgalonYieldBossAction::Execute(Event /*event*/)
     return true;
 }
 
+Player* AlgalonThreatRedirectAction::GetRedirectTank() { return GetAlgalonOpenerTank(botAI); }
+
+Unit* AlgalonThreatRedirectAction::GetThreatDumpTarget()
+{
+    Unit* boss = GetAlgalon(botAI);
+    return boss && !boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ? boss : nullptr;
+}
+
 bool AlgalonTakeBossAction::Execute(Event /*event*/)
 {
     Unit* boss = GetAlgalon(botAI);
@@ -282,9 +290,12 @@ bool AlgalonTakeBossAction::Execute(Event /*event*/)
         last.clear();
     }
 
-    // After a taunt the walk to the tank slot goes out next tick, not once the last walk runs out.
+    // After a taunt the walk to the tank slot goes out next tick, not once the last walk runs out. The taunt
+    // moves him, not the bot's own target: a former handler would keep chasing its constellation.
     if (boss->GetVictim() != bot && CastClassTaunt(botAI, boss))
     {
+        // Before the clear: Attack stops a walk booked below combat, and a dodge under way is forced.
+        Attack(boss);
         last.clear();
         return true;
     }
@@ -293,6 +304,7 @@ bool AlgalonTakeBossAction::Execute(Event /*event*/)
     Player* holder = victim ? victim->ToPlayer() : nullptr;
     if (victim != bot && (!holder || !IsAlgalonSwapTank(holder) || soaking) && CastBackupTaunt(botAI, bot, boss))
     {
+        Attack(boss);
         last.clear();
         return true;
     }

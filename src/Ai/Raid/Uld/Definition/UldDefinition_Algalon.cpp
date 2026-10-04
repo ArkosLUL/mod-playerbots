@@ -94,6 +94,7 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Node<AlgalonConstellationKiteTrigger, AlgalonConstellationKiteAction>(ACTION_RAID + 4, EncounterRow::Mover);
     e.Node<AlgalonStarTeamTrigger, AlgalonStarTeamAction>(ACTION_RAID + 3);
     e.Node<AlgalonStarMarkTrigger, AlgalonStarMarkAction>(ACTION_RAID + 2);
+    e.Node<AlgalonThreatRedirectTrigger, AlgalonThreatRedirectAction>(ACTION_RAID + 1);
     e.Node<AlgalonRaidPositionTrigger, AlgalonRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);
 
     // First, so a phased bot's held cast or item use is traced under it.
@@ -112,6 +113,10 @@ void DefineAlgalon(EncounterBuilder& e)
     // a tank outside the pair would take him from both; an Arms warrior's snare chain ends in Mocking Blow.
     // The swap, pickup, constellation and Dark Matter nodes taunt through CastClassTaunt instead.
     e.Block("algalon taunt guard", Role::Any, AlgalonEngaged, Family::Taunt);
+    // Tricks goes to the holder from the redirect node or nowhere: the class value hands it to the strongest
+    // melee dps when the tank is out of 20 yd or the rogue is low on threat, and that dps pulled him.
+    e.Block("algalon class tricks", Role::Any, AlgalonEngaged, 0,
+            {"tricks of the trade", "tricks of the trade on main tank"});
     // The target exclusions keep every picker off him for the yielding tank except "attack rti target",
     // which follows a skull the raid put on him.
     e.Block("algalon yield skull", Role::Tank, AlgalonYielding, Family::AttackRti);

@@ -183,6 +183,11 @@ What lands on a raid add is not what PvP experience predicts.
   dead moves nothing, its DoTs finish it inside the window the drop was meant to avoid.
 - **A slot leash fights `reach spell`.** It walks half the gap to an out-of-range target, the slot node
   walks the bot back, and the target is never reached. Give the mover its own spot in range instead.
+- **A taunt moves the boss, not the bot's own target.** A tank that taunts off an add keeps the add targeted, so
+  reach walks it to the add, the slot walk back, and a damage guard zeroes every swing: set the target with the
+  taunt, and retarget a holder that got the boss by threat.
+- **A redirect's fallback target can be what pulls aggro.** Out of the tank's range Tricks of the Trade went to
+  the strongest melee dps, which then pulled the boss at the pull; on an opener it goes to the tank or waits.
 - **A movement booking outlives the action that made it.** `MoveTo` refuses an equal priority until the
   booked walk time runs out, so a forced kite walk kept a tank walking into a hole 1.7 s after it took the
   boss, and refused its exit too. Drop the booking on a role change, and let a walk that must land within a
