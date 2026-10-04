@@ -1945,7 +1945,7 @@ bool YoggSaronBotTankAlive(PlayerbotAI* botAI)
         if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member))
             continue;
 
-        if (member->GetSession() && member->GetSession()->IsBot())
+        if (member->GetSession() && member->GetSession()->IsHeadless())
             return true;
     }
 

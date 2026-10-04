@@ -123,6 +123,7 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
 Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin = M_PI / 12.0f);
 void CommandPetAttack(PlayerbotAI* botAI, Unit* target);
 void StopPet(PlayerbotAI* botAI);
+uint32 GetSelfImmunitySpell(Player* bot);
 bool IsDpsCooldownAction(Player* bot, Action* action);
 bool IsTauntAction(Player* bot, Action* action);
 bool IsAoeThreatAction(Player* bot, Action* action);

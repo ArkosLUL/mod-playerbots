@@ -5,6 +5,7 @@
  */
 
 #include "RandomItemMgr.h"
+#include "PlayerbotsDatabase.h"
 #include "DBCStores.h"
 #include "ItemTemplate.h"
 #include "Playerbots.h"
@@ -1073,7 +1074,7 @@ bool RandomItemMgr::CanEquipForBot(Player* player, ItemTemplate const* proto)
     if (!player || !proto)
         return false;
 
-    if (player->BotCanUseItem(proto) != EQUIP_ERR_OK)
+    if (player->CanUseItem(proto) != EQUIP_ERR_OK)
         return false;
 
     if (proto->InventoryType == INVTYPE_NON_EQUIP)

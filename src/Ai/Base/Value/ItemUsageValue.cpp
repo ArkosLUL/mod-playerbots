@@ -120,6 +120,8 @@ uint32 GetRecipeSkill(ItemTemplate const* proto)
     return 0;
 }
 
+#include <unordered_set>
+
 ItemUsage ItemUsageValue::Calculate()
 {
     ParsedItemUsage const parsed = ParseItemUsageQualifier(qualifier);
@@ -155,7 +157,7 @@ ItemUsage ItemUsageValue::Calculate()
                 if (bot->HasSpell(proto->Spells[2].SpellId))
                     needItem = false;
                 else
-                    needItem = bot->BotCanUseItem(proto) == EQUIP_ERR_OK;
+                    needItem = bot->CanUseItem(proto) == EQUIP_ERR_OK;
             }
         }
 
@@ -240,7 +242,7 @@ ItemUsage ItemUsageValue::Calculate()
     if (isLootFromItem && botNeedsItemForQuest)
         return ITEM_USAGE_QUEST;
 
-    // If this is not a selfbot acting alone and the master needs this quest item, defer to the master
+    // If this is not a SelfBot acting alone and the master needs this quest item, defer to the master
     if (!IsSelfBot(bot) && masterNeedsItemForQuest)
         return ITEM_USAGE_NONE;
 
@@ -1267,13 +1269,13 @@ ItemUsage LootUsageValue::Calculate()
 
 ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, int32 randomPropertyId)
 {
-    if (bot->BotCanUseItem(itemProto) != EQUIP_ERR_OK)
+    if (bot->CanUseItem(itemProto) != EQUIP_ERR_OK)
         return ITEM_USAGE_NONE;
 
     if (itemProto->InventoryType == INVTYPE_NON_EQUIP)
         return ITEM_USAGE_NONE;
 
-    Item* pItem = Item::CreateItem(itemProto->ItemId, 1, bot, false, 0, true);
+    Item* pItem = Item::CreateItem(itemProto->ItemId, 1, bot);
     if (!pItem)
         return ITEM_USAGE_NONE;
 
@@ -1600,6 +1602,12 @@ bool ItemUsageValue::IsItemUsefulForQuest(Player* player, ItemTemplate const* pr
     if (!botAI)
         return false;
 
+    // Core loot gating predicate: also covers quest source items (ItemDrop,
+    // e.g. quest keys). The local objective check below is kept because this
+    // predicate skips non-raid quests for raid groups.
+    if (player->HasQuestForItem(proto->ItemId))
+        return true;
+
     for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
     {
         uint32 entry = player->GetQuestSlotQuestId(slot);
@@ -1787,8 +1795,43 @@ bool ItemUsageValue::IsItemUsefulForSkill(ItemTemplate const* proto)
     return false;
 }
 
+namespace
+{
+    // Crafting chains can be cyclic: Remember which items are already being evaluated
+    // further up the stack and stop as soon as a cycle closes.
+    thread_local std::unordered_set<uint32> itemsBeingEvaluated;
+
+    class UsefullSpellRecursionGuard
+    {
+    public:
+        explicit UsefullSpellRecursionGuard(uint32 itemId)
+            : _itemId(itemId), _entered(itemsBeingEvaluated.insert(itemId).second)
+        {
+        }
+
+        ~UsefullSpellRecursionGuard()
+        {
+            if (_entered)
+                itemsBeingEvaluated.erase(_itemId);
+        }
+
+        UsefullSpellRecursionGuard(UsefullSpellRecursionGuard const&) = delete;
+        UsefullSpellRecursionGuard& operator=(UsefullSpellRecursionGuard const&) = delete;
+
+        bool Entered() const { return _entered; }
+
+    private:
+        uint32 _itemId;
+        bool _entered;
+    };
+}
+
 bool ItemUsageValue::IsItemNeededForUsefullSpell(ItemTemplate const* proto, bool checkAllReagents)
 {
+    UsefullSpellRecursionGuard guard(proto->ItemId);
+    if (!guard.Entered())
+        return false;
+
     for (auto spellId : SpellsUsingItem(proto->ItemId, bot))
     {
         SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);

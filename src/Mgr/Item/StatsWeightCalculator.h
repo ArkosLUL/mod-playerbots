@@ -70,7 +70,6 @@ public:
     // The item in the contested slot (null: no slot context), scored as removed: its set piece doesn't
     // count, and hit, expertise, armor pen and defense clip to the room left without it, penalty or not.
     void SetReplacedItem(Item const* item);
-    void SetQualityBlend(bool apply) { enable_quality_blend_ = apply; }
     void SetPvpSpec(bool isPvp) { pvpSpec_ = isPvp; }
     // Only for scoring things a bot can swap freely (gems, enchants): lets an under-cap tank spend
     // sockets on defense. Leave it off for whole-item scoring, or gear picks flip as the cap is
@@ -133,7 +132,6 @@ private:
     int tab;
     bool enable_overflow_penalty_;
     bool enable_item_set_bonus_;
-    bool enable_quality_blend_;
     bool enable_cap_priority_ = false;
     bool enable_bis_bonus_ = false;
     // Resolved on first use and fixed for this calculator's lifetime, like progression_tier_: it costs a

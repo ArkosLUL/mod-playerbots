@@ -53,3 +53,9 @@ local.properties
 
 # Python bytecode from the botobs reader modules
 __pycache__/
+
+#
+# Agent tooling
+#
+.agents/plans/**
+.claude/settings.local.json

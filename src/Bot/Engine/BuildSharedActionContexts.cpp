@@ -34,7 +34,8 @@
 #include "WotlkDungeonActionContext.h"
 #include "ZAActionContext.h"
 
-void AiObjectContext::BuildSharedActionContexts(SharedNamedObjectContextList<Action>& actionContexts)
+void AiObjectContext::BuildSharedActionContexts(
+    SharedNamedObjectContextList<Action>& actionContexts)
 {
     actionContexts.Add(new ActionContext());
     actionContexts.Add(new ChatActionContext());
@@ -48,7 +49,7 @@ void AiObjectContext::BuildSharedActionContexts(SharedNamedObjectContextList<Act
     actionContexts.Add(new RaidMagtheridonActionContext());
     actionContexts.Add(new RaidSSCActionContext());
     actionContexts.Add(new RaidTempestKeepActionContext());
-    actionContexts.Add(new RaidHyjalSummitActionContext());
+    actionContexts.Add(new RaidHyjalActionContext());
     actionContexts.Add(new RaidBlackTempleActionContext());
     actionContexts.Add(new RaidZulAmanActionContext());
     actionContexts.Add(new RaidSunwellActionContext());
@@ -66,6 +67,7 @@ void AiObjectContext::BuildSharedActionContexts(SharedNamedObjectContextList<Act
     actionContexts.Add(new TbcDungeonMechanarActionContext());
     actionContexts.Add(new TbcDungeonUnderbogActionContext());
     actionContexts.Add(new TbcDungeonMagistersTerraceActionContext());
+    actionContexts.Add(new TbcDungeonHellfireRampartsActionContext());
     actionContexts.Add(new WotlkDungeonUKActionContext());
     actionContexts.Add(new WotlkDungeonNexActionContext());
     actionContexts.Add(new WotlkDungeonANActionContext());

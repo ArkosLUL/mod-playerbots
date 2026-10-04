@@ -7,6 +7,7 @@
 #include "BisListMgr.h"
 #include "AiFactory.h"
 #include "BisDatasetMgr.h"
+#include "PlayerbotsDatabase.h"
 #include "DatabaseEnv.h"
 #include "Field.h"
 #include "ItemTemplate.h"
@@ -22,7 +23,8 @@
 
 void BisListMgr::LoadAll()
 {
-    // Two independent tables: either can be absent without disabling the other.
+    // Two independent tables, an empty one doesn't disable the other. playerbots_bis_gear is read through a
+    // prepared statement though, so if that table is missing the playerbots DB fails to open at startup.
     LoadGear();
     LoadRanked();
 }
@@ -31,8 +33,8 @@ void BisListMgr::LoadGear()
 {
     _bis.clear();
 
-    QueryResult result = PlayerbotsDatabase.Query(
-        "SELECT class, tab, slot, faction, auto_gear_score_limit, item_id FROM playerbots_bis_gear");
+    PlayerbotsDatabasePreparedStatement* stmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_BIS_GEAR);
+    PreparedQueryResult result = PlayerbotsDatabase.Query(stmt);
     if (!result)
     {
         LOG_INFO("server.loading", "playerbots_bis_gear table missing or empty");

@@ -383,7 +383,7 @@ bool SlotOf(RaidObs::ObsGuidMap<uint8> const& slots, Player* bot, uint8& slot)
 bool IsBotPlayer(Player const* member)
 {
     WorldSession const* session = member ? member->GetSession() : nullptr;
-    return session && session->IsBot();
+    return session && session->IsHeadless();
 }
 
 // Struck once per pull. Every pick is bot-only: a human in the raid still occupies their role, but

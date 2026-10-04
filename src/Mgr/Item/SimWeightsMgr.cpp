@@ -12,6 +12,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "PlayerbotsDatabase.h"
 #include "QueryResult.h"
 #include "StatsCollector.h"
 #include <algorithm>

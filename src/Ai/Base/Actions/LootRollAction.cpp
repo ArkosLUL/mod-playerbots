@@ -35,9 +35,9 @@ bool LootRollAction::Execute(Event /*event*/)
     if (!group)
         return false;
 
-    std::vector<Roll*> const& rolls = group->GetRolls();
+    std::vector<Roll const*> rolls = group->GetRolls();
     bool voted = false;
-    for (Roll* const roll : rolls)
+    for (Roll const* roll : rolls)
     {
         if (!roll)
             continue;
