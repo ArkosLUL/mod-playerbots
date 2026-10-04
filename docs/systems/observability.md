@@ -507,7 +507,8 @@ it for something that happens once and is in no other stream; nothing uses it to
 Everything above this section is raid-agnostic and already covers every instance map — only the `note`
 stream needs per-raid wiring, because only the encounter code knows what an assignment is. Converted:
 Ulduar (Thorim, Vezax, Algalon, Iron Assembly, Hodir, XT-002, Mimiron, Flame Leviathan,
-Yogg-Saron), Black Temple, Hyjal, SSC, Tempest Keep, Obsidian Sanctum. Still bare: ICC's `IccInstanceState` (`std::map`, needs an ordered container
+Yogg-Saron), Black Temple, SSC, Obsidian Sanctum. Still bare: Hyjal and Tempest Keep (upstream's
+rewrites replaced the converted code), ICC's `IccInstanceState` (`std::map`, needs an ordered container
 variant), SWP's instance-keyed nested maps (the inner map must be default-constructible, which a
 kind-carrying container is not), and Naxx's function-local statics. Timestamps, thresholds and caches
 are left bare on purpose.
@@ -557,8 +558,8 @@ steps return, run `systemctl disable --now systemd-timesyncd`, then `wsl --shutd
 logins every ~31 s, and the DB callbacks logged the whole batch in during one world tick: ~1.1-1.7 s
 with the world thread busy and the map threads idle. A login cost ~20 ms and ~77 synchronous queries
 from module hooks — ~46 of them mod-individual-progression's account-name lookup, ~22
-mod-weapon-visual's per-item subquery. `PlayerbotHolder::ProcessPendingLogins` now queues loaded
-characters and logs them in under a 10 ms budget per world tick (at least one), so a batch enters
+mod-weapon-visual's per-item subquery. `PlayerbotHolder::UpdatePendingLogins` now runs the login callbacks
+under a 10 ms budget per world tick (at least one), so a batch enters
 over ~1.5-2.5 s; an alt whose master left while it was queued is dropped, not logged in as a random
 bot. Traces from older builds still carry these stalls: discount gaps until Playerbots.log prints the
 last `N/N Bot ... logged in`. Both modules carry local patches (account kind cached per account, no

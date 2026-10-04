@@ -186,8 +186,9 @@ so the "heroic comes free" reasoning does not apply. See [ulduar/README.md](uldu
 
 ## Anti-fear (`RaidAntiFear.h`)
 
-One shared component in `src/Ai/Raid/`, replacing what used to be five hand-copied
-per-boss implementations (BWL Nefarian, Kara Nightbane, TK Solarian, TK Kael'thas, Hyjal Archimonde).
+One shared component in `src/Ai/Raid/`, so no encounter hand-copies its own. Upstream's Hyjal and
+Tempest Keep rewrites don't use it: Archimonde keeps upstream's own Tremor Totem code, and Solarian
+and Kael'thas get no anti-fear.
 `RaidAntiFearTrigger` / `RaidAntiFearAction` / `RaidAntiFearTotemGuardMultiplier` are abstract;
 concrete subclasses supply only `FearWindowActive()`.
 
@@ -234,8 +235,8 @@ WotLK content — Naxxramas, Obsidian Sanctum, Eye of Eternity, Vault of Archavo
 mechanics; all 15 Naxx boss spell enums were checked, and Gluth's vanilla Terrifying Roar (29685)
 does not exist in this build.
 
-`SPELL_FEAR_WARD = 6346` is defined here, but still duplicated in `KaraHelpers.h`, `TKHelpers.h`,
-`SSCHelpers.h` and `HyjalHelpers.h` — deliberately left alone to keep the change contained.
+`SPELL_FEAR_WARD = 6346` is defined here, but still duplicated in `KaraHelpers.h` and `SSCHelpers.h`
+— deliberately left alone to keep the change contained.
 
 ## Per-instance state
 

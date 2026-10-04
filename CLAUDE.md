@@ -8,4 +8,6 @@
 
 - **Never call a mechanic impossible from a partial check:** a stat comparison misses the unit's own spells (a siege engine "too slow" to escape carries Steam Rush), and a clean negative usually means the wrong table, since spell behaviour is spread across the DBC, `spell_linked_spell` and `EffectTriggerSpell` chains well below the spellbook entry. Check the unit's spellbook and all three first. See [docs/engine/pitfalls.md](docs/engine/pitfalls.md).
 
+- **Run `python apps/codestyle/codestyle-cpp.py` from the module root before committing C++ changes:** it is the CI codestyle check. It scans all of `src`, so a failure in a file you didn't touch isn't yours to fix.
+
 - **Close a finished implementation cycle with `git add` + `git commit`**, no prompt needed. Stage only the files you changed: other sessions edit this tree at the same time.

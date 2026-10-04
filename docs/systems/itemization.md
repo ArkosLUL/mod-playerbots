@@ -20,17 +20,18 @@ Two startup caches feed it, built in `PlayerbotFactory::Init()`:
 is worth and **must mirror `ApplyEnchantAndGemsNew`'s eligibility filters exactly** — level gates,
 expansion gates, progression gates, item-side skill gates. Otherwise item *scoring* values sockets by
 gems the bot cannot actually slot. There is one deliberate exception, documented at
-`StatsWeightCalculator.cpp:985`: the tank cap-priority flag stays **off** in `BestGemScore` (see
+`StatsWeightCalculator.cpp:978`: the tank cap-priority flag stays **off** in `BestGemScore` (see
 below).
+
+Upstream's gem quality cap (a gem no better than the item's quality, #2795) lives in the gem loop this
+fork replaced and is deliberately not ported: it would block the sim's epic gems in blue pre-raid items.
 
 ## The scoring pipeline
 
 `StatsCollector::CollectItemStats` → `StatsWeightCalculator::CalculateItem` → `itemScore`.
 
-- `weight_` is multiplied by `CalcMixedGearScore(ilvl, quality)` (`StatsWeightCalculator.cpp:264-274`),
-  roughly `ilvl * 1.1^quality` — a few hundred. **Raw gem/enchant scores live in un-multiplied
-  stat-sum space**, so adding the two directly is off by two orders of magnitude. Anything mixing
-  them must use a ratio, not a sum.
+- An item's `weight_` is a plain weighted stat sum, the same space as gem and enchant scores: upstream
+  dropped the `ilvl * 1.1^quality` multiplier (#2790), so ilvl and quality count only through stats.
 - `CalculateEnchant` calls `Reset()`, which wipes `weight_` and the collector. Scoring an enchant
   mid-`CalculateItem` therefore needs a **separate calculator instance**.
 - `StatsCollector::CollectEnchantStats` (`StatsCollector.cpp:236-264`) handles only
@@ -55,7 +56,7 @@ EquipAction keeps refusing. Weapons already worn are never re-sorted without a n
 ### Talent-driven stat weights
 
 `GenerateBasicWeights` is flat per spec; **stat-conversion talents belong in
-`GenerateAdditionalWeights`** (`StatsWeightCalculator.cpp:787-837`), gated on `HasAura` — safe there
+`GenerateAdditionalWeights`** (`StatsWeightCalculator.cpp:782-830`), gated on `HasAura` — safe there
 because `Randomize` runs `InitTalentsTree` (`PlayerbotFactory.cpp:959`) before `InitEquipment` and
 `ApplyEnchantAndGemsNew`. Convention: **added weight = conversion ratio × the target stat's weight**.
 Careful Aim and Mental Dexterity each convert 100% of Intellect to attack power and each add 1.1
@@ -128,13 +129,17 @@ it; those stay unclipped. `PLAYER_EXPERTISE` already includes the rating part
 `python apps/simweights/generate_weights.py --weights <weights.json>`, which writes a dated
 `data/sql/playerbots/updates/*_playerbots_sim_weights.sql` for the module's DB updater.
 
+**Feral weapon DPS:** `StatsCollector` turns a feral weapon's DPS into attack power
+(`getFeralBonus`), and the sim's weapon DPS slope for a cat already holds that attack power (wowsim
+`weaponFeralAP` reads the bonus main-hand DPS the slope adds). So when sim weights apply to a feral,
+`GenerateWeights` keeps the hand-written `MELEE_DPS` weight instead of the slope.
+
 **Known gaps:**
 - `MELEE_DPS` takes the sim's main-hand slope, and `StatsCollector` counts an off-hand weapon's DPS
   under the same stat, so dual wielders overvalue off-hand weapon DPS (the off-hand slope is ~40%
   of the main hand's).
-- `StatsCollector` gives feral weapons no feral attack power, so bear weapons (hand-written) score
-  far too low: the sim puts bear threat at ~51 per weapon DPS against the bots' 3. Cats read the
-  sim's weapon DPS slope instead.
+- Bear weapons (hand-written weights) get feral attack power now, but were not re-checked against
+  the sim's ~51 threat per weapon DPS; before that they scored at the bots' 3.
 - `InitEquipment` clears the gear first and uses one calculator for the whole gear-up, so a
   generated bot is weighted at P1 whatever tier it is geared from.
 - Haste still steps between some phases, from real haste breakpoints the ±300 rating step doesn't
@@ -144,7 +149,7 @@ it; those stay unclipped. `PLAYER_EXPERTISE` already includes the rating part
 
 ## Set bonuses
 
-Set scoring lives only in `StatsWeightCalculator::CalculateItemSetMod` (`:897-920`). It was
+Set scoring lives only in `StatsWeightCalculator::CalculateItemSetMod` (`:890-913`). It was
 effectively dead until the delta model landed, for three separate reasons worth remembering:
 
 - `multiplier += 0.1f * itemCount` applied only while `itemCount < max_items`, so a **complete** set
@@ -186,7 +191,7 @@ entirely. It is now derived from what the bot would actually slot:
 
 ```
 socketValue = Σ BestGemScore(cls, tab, lvl, pvp, socketColor) over sockets
-multiplier  = 1 + Socket.ValueFactor * (socketValue / baseWeight)      // baseWeight = pre-quality-blend weight_
+multiplier  = 1 + Socket.ValueFactor * (socketValue / baseWeight)      // baseWeight = the item's stat-sum weight_
             = 1 + Socket.WeightPerSocket * socketNum                   // fallback when baseWeight ≈ 0
 multiplier  = min(multiplier, Socket.MaxMultiplier)
 ```
@@ -324,7 +329,8 @@ skills; `level * 5` stays for weapon and secondary skills. Accepted side effect:
 learn 401-450 recipes, which touches `GuildTaskMgr` and item-usage logic.
 
 The Eternal Belt Buckle has no skill requirement, so it goes to every bot clearing the level gate,
-not only Blacksmiths.
+not only Blacksmiths. Upstream's `TryApplyBeltBuckle` duplicates `ApplyPrismaticSocket` and is
+deliberately not kept.
 
 `AutoMaintenanceOnLevelupAction` calls `InitEquipment(true)` but historically never
 `ApplyEnchantAndGemsNew`, so gear swapped in on level-up stayed bare until a full maintenance run.
@@ -353,17 +359,17 @@ would never switch off and every socket would go into a dead stat permanently.
 re-rank whole gear pieces and churn equips as it crosses the cap. The cost is a slightly conservative
 socket estimate for under-cap tanks.
 
-**Block value is weighted 0.7** (`StatsWeightCalculator.cpp:743`), raised from 0.5 so `3849 'Titanium
+**Block value is weighted 0.7** (`StatsWeightCalculator.cpp:738`), raised from 0.5 so `3849 'Titanium
 Plating'` (+81 block value, 56.7) takes a tank shield over `1071 '+18 Stamina'` (55.8) — a 0.9 margin,
 so the shield enchant is not stable across gear changes. Gemming cannot move: no gem in the DBC carries
-`ITEM_MOD_BLOCK_VALUE` or `ITEM_MOD_BLOCK_RATING`. Shield *selection* does move — `StatsCollector.cpp:54`
+`ITEM_MOD_BLOCK_VALUE` or `ITEM_MOD_BLOCK_RATING`. Shield *selection* does move — `StatsCollector.cpp:57`
 feeds `proto->Block` into the stat sum, and raid shields carry 0–259 of it (mean 223).
 
 ## Enhancement shaman gemming
 
 Target: haste in yellow and blue sockets, Stark Ametrine (+20 AP +10 haste) as the red-socket bonus
 filler, Relentless Earthsiege meta with one Tear. Each weight in the branch
-(`StatsWeightCalculator.cpp:657-674`) holds a boundary, so **re-check gem picks before moving any**.
+(`StatsWeightCalculator.cpp:652-669`) holds a boundary, so **re-check gem picks before moving any**.
 At level 80 the [sim weights](#sim-stat-weights) replace them and cross two of these: crit beats
 Agility in P1-P3 (2.1 vs 1.8, so Chaotic Skyflare can take the meta) and haste passes 2.7 from P4.
 
@@ -486,6 +492,10 @@ the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
   pre-raid rank-1 piece is worth exactly as much as the current tier's rank-1, the two bonuses
   cancel, and the equipped lower-ilvl piece keeps the slot on `ItemSet.BonusWeight` (x1.15) times
   `EquipUpgradeThreshold` (x1.1) alone — a 26.5% raw-stat wall.
+
+Open: `Bis.ScoreBonus` and `PhaseDecay` were tuned while item scores still carried the ilvl × quality
+multiplier. Without it a higher-ilvl challenger loses that built-in edge, so the BiS bonus pulls
+relatively harder; re-check both against real equip decisions.
 
 `PhaseDecay` defaults to 1.0, so only the bot's current phase carries any bonus. One global value
 covers all three expansions even though Vanilla's `P1..P6` sit closer together in ilvl than WotLK's

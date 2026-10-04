@@ -4,7 +4,7 @@ Scoring itself lives in [itemization.md](itemization.md); this is the decision l
 
 ## Per-item loot decision
 
-`StoreLootAction::IsLootAllowed` (`src/Ai/Base/Actions/LootAction.cpp:466`) checks in this order:
+`StoreLootAction::IsLootAllowed` (`src/Ai/Base/Actions/LootAction.cpp:512`) checks in this order:
 
 1. always-loot whitelist
 2. `MaxCount` cap
@@ -45,7 +45,7 @@ Two independent stat systems drive a roll, and **the bugs live in their disagree
   plus the `smartNeedBySpec` off-spec safety net, which runs only in the loot path via
   `AdjustUsageForOffspec`.
 
-`FinalizeRollVote` (`ItemUsageValue.cpp:2478`) under `AiPlayerbot.Roll.UpgradesOnly = 1` forces
+`FinalizeRollVote` (`ItemUsageValue.cpp:2526`) under `AiPlayerbot.Roll.UpgradesOnly = 1` forces
 PASS on everything except a computed NEED whose usage is `ITEM_USAGE_EQUIP`/`REPLACE` (downgraded to
 GREED). **So every wrong GREED means the item was misclassified as a genuine equip-upgrade** — the
 bug is in the classifier, never in the greed fallback. Shipped default is `Roll.UpgradesOnly = 0`.

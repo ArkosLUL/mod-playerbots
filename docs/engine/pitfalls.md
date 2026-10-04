@@ -192,9 +192,9 @@ tick, by `RequestSpellInterrupt` on the caster.
   generatePath = true` it goes through `SearchForBestPath` (`MovementActions.cpp:240`, height check
   at `:1733`); an off-mesh point or a Z outside the height band returns `INVALID_HEIGHT` and `MoveTo`
   returns `false`. Raw ring geometry (`center + r·cos θ`) is exactly the shape that produces off-mesh
-  points. Void Reaver's ranged never spread for this reason, and because
-  `VoidReaverMaintainPositionsMultiplier` disables `CombatFormationMoveAction`, the spread action was
-  the *only* thing that could position them — so they froze permanently.
+  points. Void Reaver's old ring spread froze its ranged this way: `VoidReaverMaintainPositionsMultiplier`
+  disables `CombatFormationMoveAction`, so the failed spread was the *only* thing that could position
+  them. `FleePosition` picks reachable ground and avoids this.
 
   **`exact_waypoint = true` skips `SearchForBestPath` entirely, so such a node structurally cannot log
   `nopath`** — an absence of `nopath` from it is not evidence the destination was reachable, and
@@ -353,7 +353,7 @@ tick, by `RequestSpellInterrupt` on the caster.
 - **A walk stopped short is never re-issued.** The same check refuses an *exact* repeat for
   `MaxWaitForMove` (5000 ms) whether or not the bot is still moving, so an action that holds its
   destination gets `Duplicate` while the bot stands wherever something stopped it:
-  `UseItemAction::Execute` calls `StopMoving()` on a moving bot (`UseItemAction.cpp:188-193`) and a mana
+  `UseItemAction::Execute` calls `StopMoving()` on a moving bot (`UseItemAction.cpp:253-258`) and a mana
   gem runs at relevance 90, and Disengage throws a hunter back. Hodir lost a mage 6.5 yd short of its
   dodge and a hunter out of its shelter that way. Clear `last movement` once the bot has stood still a
   beat past the issue (`ReleaseStalledWalk`, 500 ms). `MOVEMENT_FORCED` does not lift this: forced
@@ -630,6 +630,10 @@ Related traps:
   merge that drops either side **silently unregisters raid strategies** and nothing fails to compile.
 - **`rerere` holds 123 cached resolutions and must not be trusted** on a merge that spans a refactor —
   it will replay a resolution written against code that has since moved.
+- **Fork-only `ai_playerbot_texts` rows take ids from 30001 up** (`id` is a signed smallint). Upstream
+  numbers its texts straight up from its last id, so a fork text inside that range fails the next
+  upstream insert on a duplicate key, and a failed playerbots update stops the worldserver. Texts
+  load by name, so moving an id is safe.
 - **A core merge's SQL half does not apply itself.** The worldserver image sets
   `AC_UPDATES_ENABLE_DATABASES=0` by design (`apps/docker/Dockerfile`), so new
   `data/sql/updates/db_world` files run only when `ac-db-import` is rebuilt from the merged checkout
