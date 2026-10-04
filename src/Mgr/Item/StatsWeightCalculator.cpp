@@ -421,7 +421,14 @@ void StatsWeightCalculator::GenerateWeights(Player* player)
     GenerateBasicWeights(player);
     GenerateAdditionalWeights(player);
     if (SimWeightsActive())
+    {
+        float const handWrittenMeleeDps = stats_weights_[STATS_TYPE_MELEE_DPS];
         SimWeights::Merge(sim_weights_, sim_measured_, sim_anchor_, stats_weights_);
+        // The sim's weapon dps slope for a feral already holds the attack power the form makes from weapon
+        // dps, and StatsCollector adds that attack power too, so keep the slope out or it counts twice.
+        if (cls == CLASS_DRUID && (type_ & CollectorType::MELEE))
+            stats_weights_[STATS_TYPE_MELEE_DPS] = handWrittenMeleeDps;
+    }
     ApplyWeightFinetune(player);
 }
 
