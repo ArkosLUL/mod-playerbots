@@ -120,8 +120,8 @@ bool AlgalonLeaveBlackHoleTrigger::IsActive()
     return !AlgalonBigBangCasting(botAI) && AlgalonHoleNear(bot, ULDUAR_ALGALON_SHELTER_RADIUS);
 }
 
-// Misdirection and Tricks on the pull go to the tank holding him, or the one about to. Out of range the
-// rogue waits: the class value would give Tricks to a dps, who then pulls him.
+// Misdirection and Tricks on the pull go to the tank holding him. Out of range the rogue waits: the class
+// value would give Tricks to a dps, who then pulls him.
 bool AlgalonThreatRedirectTrigger::IsActive()
 {
     char const* spell = AlgalonThreatRedirectSpell(bot);
@@ -161,7 +161,7 @@ bool AlgalonYieldBossTrigger::IsActive()
 
 bool AlgalonConstellationTauntTrigger::IsActive()
 {
-    if (IsAlgalonPhased(bot) || !AlgalonEngaged(botAI) || AlgalonBigBangCasting(botAI))
+    if (IsAlgalonPhased(bot) || !AlgalonEngaged(botAI) || AlgalonBigBangCasting(botAI) || AlgalonTakesBossNow(bot))
         return false;
 
     Unit* constellation = GetAlgalonHandlerConstellation(bot);
@@ -178,7 +178,7 @@ bool AlgalonDarkMatterTankTrigger::IsActive()
 
 bool AlgalonConstellationKiteTrigger::IsActive()
 {
-    if (IsAlgalonPhased(bot) || !AlgalonEngaged(botAI) || AlgalonBigBangCasting(botAI))
+    if (IsAlgalonPhased(bot) || !AlgalonEngaged(botAI) || AlgalonBigBangCasting(botAI) || AlgalonTakesBossNow(bot))
         return false;
 
     Unit* constellation = GetAlgalonHandlerConstellation(bot);
@@ -219,6 +219,7 @@ bool AlgalonRaidPositionTrigger::IsActive()
     if (AlgalonOffTankWorking(bot))
         return false;
 
+    // With a pickup or swap due the spot is the way back to him; the constellations follow.
     Unit* constellation = GetAlgalonHandlerConstellation(bot);
-    return !constellation || constellation->GetVictim() != bot;
+    return !constellation || constellation->GetVictim() != bot || AlgalonTakesBossNow(bot);
 }

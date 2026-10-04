@@ -121,8 +121,9 @@ kills them; the target exclusions keep every other bot on Algalon, and an `OwnTa
 is cleared (`algalon.focusstar`) onto a star only when its death is **planned**. Splash near him takes
 1-2.4 %/s on top of the drain, so a star's forecast death is its health over its measured loss (the slope of a
 4 s log, never under the drain), not its health. A kill lands at its health over 9-5.5 %/s (whole kills ran
-6.2-7.8 %/s) plus the team's walk (mean distance past 28 yd at 7 yd/s), or over its own slope once the team
-is on it (3.5 %/s or more). Any other star is planned up to the speed the team last showed on its focus (capped
+6.2-7.8 %/s) plus the team's walk (mean distance past 28 yd at 7 yd/s) and a 2 s start (every kill's first
+2 s only matched the drain; none for a star already losing 3.5 %/s), or over its own slope once the team is on
+it. Any other star is planned up to the speed the team last showed on its focus (capped
 at 12 %/s): one just dropped keeps dying that fast, and planned at 9 %/s it was opened again every other tick.
 A death is **clear** outside 1 s before Big Bang to
 3 s after the hit and 4 s before to 5 s after a meteor impact (6-11 k on everyone, then the explosion: 3-4 died
@@ -134,8 +135,10 @@ two marker creatures each) and turned far stars due. In order, `urgent` overridi
 
 - not during the Big Bang cast (the raid is running for holes);
 - the kill under way continues while its finish stays 6 s clear, or while dropping it wouldn't help: dropped,
-  a star dies anyway from casts in flight, channels, DoTs and the drain (5 %/s; 22 % went in 3.8 s), as one did
-  into an impact and one 1.5 s into a cast. A dropped star's log restarts;
+  a star keeps dying at its own slope, capped at 5 %/s, from casts in flight, channels and DoTs (22 % went in
+  3.8 s), as one did into an impact and one 1.5 s into a cast; one barely hit only drains. So a kill is dropped
+  only if the star would then die clear, or sooner than the kill lands. Its log is kept: a flat 5 %/s made a star
+  never hit look due, and the team was sent back to it 4 times in 2 s;
 - not within 8 s of the last explosion. A "finish stars under 15 %" bypass put two explosions 3.2 s apart
   and killed 12;
 - a **due** star is opened whatever the raid's health, soonest death first: its own death isn't clear and is
@@ -219,7 +222,9 @@ that hole on the far side (clamped 44 yd from centre), so the chase drags one th
 yields its tick. The far side is latched with the hole, and the walk goes round any hole it would clip, at
 combat priority: a straight forced walk crossed the field, and its booking refused both the tank slot walk
 and the exit when the handler took him as Big Bang began. Its movement rule still passes its taunts, the pickup and the swap: all are
-`AttackAction`s, and a swap it can't make phases the holder out. Constellations are excluded from
+`AttackAction`s, and a swap it can't make phases the holder out. A pickup or swap due on it lifts the rule, the
+kite and its constellation taunts, and the slot walk takes it back to him: kiting 50-60 yd out, it never came
+back and the holder died at 4 stacks. Constellations are excluded from
 everyone else's pickers.
 
 ## Phase 2
@@ -297,9 +302,10 @@ pickup node, which then only retargets: a former handler kept its constellation,
 walk took turns, the target guard zeroed every attack and he hit its back (20 k/s against 12 k), killing a
 holder in four of six pulls. The handler is a bot tank outside the pair, else the pair bot not holding him.
 
-The class "on main tank" redirects stay off for the whole fight (`UldThreatRedirectMultiplier`). From the intro
-until 20 s after it, hunters cast Misdirection (100 yd, from the intro) and rogues Tricks of the Trade (20 yd,
-else they wait) on the holder, or the pickup tank before he is selectable. The class Tricks node is blocked all
+The class "on main tank" redirects stay off for the whole fight (`UldThreatRedirectMultiplier`). For 20 s
+after the intro, hunters cast Misdirection (100 yd) and rogues Tricks of the Trade (20 yd, else they wait)
+on the swap tank he attacks, never before: he took the other tank, and a Misdirection cast in the intro on the
+pickup tank pulled him off at 10-11 s, both pulls. The class Tricks node is blocked all
 fight: out of the tank's 20 yd, or with the rogue low on threat, it tricks the strongest melee dps in reach, and
 that DK pulled him in 7 of 8 pulls 13.7-21.2 s in.
 

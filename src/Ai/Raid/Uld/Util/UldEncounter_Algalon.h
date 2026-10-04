@@ -16,7 +16,6 @@
 #include <array>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -163,8 +162,12 @@ constexpr uint32 ULDUAR_ALGALON_STAR_LOG_STEP_MS = 500;
 // Less log than this reads as the drain: a slope over one or two samples is noise.
 constexpr uint32 ULDUAR_ALGALON_STAR_LOG_MIN_MS = 2000;
 constexpr float ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC = 1.0f;
-// A star the team drops part-killed keeps dying from casts in flight, channels and DoTs (5.8%/s measured).
+// The keep-or-drop test reads a dropped star as dying at its own slope capped here: casts in flight, channels
+// and DoTs (5.8%/s measured).
 constexpr float ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC = 5.0f;
+// On top of the walk: in every kill measured the team's first 2 s on a star only matched the drain (target
+// switch, first casts, DoTs ramping).
+constexpr uint32 ULDUAR_ALGALON_STAR_KILL_START_MS = 2000;
 // The team's kill speed over a whole kill, slowest and fastest (6.2-7.8%/s measured on 25-man).
 constexpr float ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC = 5.5f;
 constexpr float ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC = 9.0f;
@@ -229,7 +232,7 @@ constexpr uint8 ULDUAR_ALGALON_MELEE_STAGE_SPOTS = 10;
 // somewhere else, and after the second wait whoever holds him, so a pull nobody picks up doesn't idle them.
 constexpr uint32 ULDUAR_ALGALON_MELEE_RELEASE_MS = 8000;
 constexpr uint32 ULDUAR_ALGALON_MELEE_RELEASE_ANYWAY_MS = 20000;
-// Threat redirects go on the tank from the intro until this long after it. Tricks reaches 20 yd and
+// Threat redirects go on the tank he attacks for this long after the intro. Tricks reaches 20 yd and
 // Misdirection 100; CanCastSpell lets an out of range cast through.
 constexpr uint32 ULDUAR_ALGALON_OPENER_MS = 20000;
 constexpr float ULDUAR_ALGALON_TRICKS_RANGE = 20.0f;
@@ -335,11 +338,9 @@ struct AlgalonEncounterState
     std::vector<AlgalonScanUnit> darkMatter;
     std::unordered_map<ObjectGuid, uint32> markerSeenMs;
     std::unordered_map<ObjectGuid, uint32> starSeenMs;
-    // (ms, health %) per star, one sample per ULDUAR_ALGALON_STAR_LOG_STEP_MS.
+    // (ms, health %) per star, one sample per ULDUAR_ALGALON_STAR_LOG_STEP_MS. Kept across a drop: its slope
+    // is how fast the star still dies, from DoTs and casts in flight or the drain alone.
     std::unordered_map<ObjectGuid, std::vector<std::pair<uint32, float>>> starHealthLog;
-    // Dropped part-killed: the log restarts, and until it fills the star reads as dying at the dropped rate,
-    // or the old slope still carries the team's damage and makes it due again next tick.
-    std::unordered_set<ObjectGuid> droppedStars;
     // The speed the team last showed on its focus, capped at the peak.
     float teamKillPctPerSec = 0.0f;
     // The next meteor not yet marked.
@@ -366,9 +367,10 @@ bool AlgalonPresent(PlayerbotAI* botAI);
 bool AlgalonEngaged(PlayerbotAI* botAI);
 bool AlgalonInPhaseOne(PlayerbotAI* botAI);
 bool IsAlgalonPhased(Unit const* unit);
-// From the intro until ULDUAR_ALGALON_OPENER_MS after it.
+// The first ULDUAR_ALGALON_OPENER_MS after the intro.
 bool AlgalonInOpener(PlayerbotAI* botAI);
-// The swap tank holding him, or the one about to take him while the intro runs.
+// The swap tank holding him. Never the pickup tank during the intro: he can take the other one, and a
+// Misdirection already on the pickup tank then pulls him off.
 Player* GetAlgalonOpenerTank(PlayerbotAI* botAI);
 // "misdirection" or "tricks of the trade" for the classes that redirect threat, else nullptr.
 char const* AlgalonThreatRedirectSpell(Player* bot);
@@ -439,6 +441,9 @@ Player* GetAlgalonPickupTank(PlayerbotAI* botAI);
 // Due to taunt him now: he is loose, or the holder is deep enough in Phase Punch to hand him over.
 bool AlgalonShouldPickUp(Player* bot);
 bool AlgalonShouldSwap(Player* bot);
+// A pickup or swap due on this bot. It beats the handler's constellation work, whose kite would hold the walk
+// back to him from out of taunt range.
+bool AlgalonTakesBossNow(Player* bot);
 // A swap tank or the handler not holding him stays off him while a swap tank does. After a taunt both
 // tanks build threat at the same rate, so the one carrying the stacks takes him straight back, and a
 // tank outside the pair would take him from both.

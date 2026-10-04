@@ -328,8 +328,7 @@ void NoteMeteor(Creature* boss, Creature* marker)
     RaidObs::NoteHazardCircle(boss->GetMap(), spell, impact, 6.0f, ULDUAR_ALGALON_MARKER_LIFETIME_MS);
 }
 
-// Appends to the star's health log and sets its loss rate from the slope. A short log reads as the drain, or
-// as the dropped rate for a star the team left part-killed.
+// Appends to the star's health log and sets its loss rate from the slope. A short log reads as the drain.
 void LogStarHealth(AlgalonEncounterState const& state, AlgalonScanUnit& star, uint32 now,
                    std::unordered_map<ObjectGuid, std::vector<std::pair<uint32, float>>>& logs)
 {
@@ -349,8 +348,6 @@ void LogStarHealth(AlgalonEncounterState const& state, AlgalonScanUnit& star, ui
     if (star.lossMeasured)
         star.lossPctPerSec = std::max(ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC,
                                       (log.front().second - star.healthPct) * IN_MILLISECONDS / static_cast<float>(span));
-    else if (state.droppedStars.count(star.guid))
-        star.lossPctPerSec = ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC;
 
     logs[star.guid] = std::move(log);
 }
@@ -434,8 +431,6 @@ void ScanRoom(Player* bot, Creature* boss, AlgalonEncounterState& state, uint32 
     state.markerSeenMs = std::move(markerSeenMs);
     state.starSeenMs = std::move(starSeenMs);
     state.starHealthLog = std::move(starHealthLog);
-    for (auto dropped = state.droppedStars.begin(); dropped != state.droppedStars.end();)
-        dropped = state.starSeenMs.count(*dropped) ? std::next(dropped) : state.droppedStars.erase(dropped);
 
     bool const phaseTwoStarted = state.wormHolesSeen && !hadWormHoles;
     // By guid, not by count: a death in the same scan as the minute's refill leaves the count unchanged.
@@ -1266,21 +1261,23 @@ int32 StarSeparation(StarPlan const& plan, StarSpan when, AlgalonScanUnit const*
     return nearest;
 }
 
-// When the team's kill would land: the walk, then its speed. The focus shows it once the team hits it. Any
-// other star is planned up to the speed the team last showed, or one it just left, still dying that fast,
-// reads as clear at the nominal speed and is opened again next tick.
+// When the team's kill would land: the walk, the start, then its speed. The focus shows it once the team hits
+// it. Any other star is planned up to the speed the team last showed, or one it just left, still dying that
+// fast, reads as clear at the nominal speed and is opened again next tick; for the same reason a star already
+// losing kill speed pays no start.
 StarSpan FinishBand(AlgalonEncounterState const& state, Group* group, AlgalonScanUnit const& star)
 {
     int32 const walk = static_cast<int32>(TeamWalkSeconds(state, group, star) * IN_MILLISECONDS);
-    if (star.guid == state.focusStar.Get() && star.lossMeasured &&
-        star.lossPctPerSec >= ULDUAR_ALGALON_STAR_KILL_MEASURED_PCT_PER_SEC)
+    bool const hit = star.lossMeasured && star.lossPctPerSec >= ULDUAR_ALGALON_STAR_KILL_MEASURED_PCT_PER_SEC;
+    if (hit && star.guid == state.focusStar.Get())
     {
         int32 const finish = walk + StarDeathAt(star, star.lossPctPerSec);
         return {finish, finish};
     }
 
+    int32 const start = walk + (hit ? 0 : static_cast<int32>(ULDUAR_ALGALON_STAR_KILL_START_MS));
     float const fast = std::max(ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC, state.teamKillPctPerSec);
-    return {walk + StarDeathAt(star, fast), walk + StarDeathAt(star, ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC)};
+    return {start + StarDeathAt(star, fast), start + StarDeathAt(star, ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC)};
 }
 
 // Spacing i explosions takes i gaps plus the kills, plus the walk and every blackout on the way, so the i-th
@@ -1380,9 +1377,10 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
     StarPlan const plan = PlanStars(state, now);
     int32 const gap = static_cast<int32>(ULDUAR_ALGALON_STAR_PACING_GAP_MS);
 
-    // Ahead of the gap, or any other death drops a kill half done. Dropping a star a few % from dead doesn't
-    // move its explosion, since its DoTs and the drain finish it anyway, so that only counts when it would
-    // then die clear.
+    // Ahead of the gap, or any other death drops a kill half done. A dropped star keeps dying at its own
+    // slope, capped at the dropped rate, so dropping one a few % from dead doesn't move its explosion: a drop
+    // is only taken when the star would then die clear, or sooner than the kill lands. One barely hit reads
+    // near the drain.
     if (AlgalonScanUnit const* focus = FindScanned(state.stars, state.focusStar.Get()))
     {
         bool const placed =
@@ -1394,9 +1392,10 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
         {
             int32 const keep = static_cast<int32>(ULDUAR_ALGALON_STAR_KEEP_GAP_MS);
             StarSpan const finish = FinishBand(state, group, *focus);
-            int32 const dropped = StarDeathAt(*focus, ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC);
+            int32 const dropped =
+                StarDeathAt(*focus, std::min(focus->lossPctPerSec, ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC));
             if (!StarCollision(plan, finish, focus, keep) ||
-                (StarCollision(plan, {dropped, dropped}, focus, keep) && finish.to < dropped))
+                (StarCollision(plan, {dropped, dropped}, focus, keep) && finish.to <= dropped))
             {
                 star = focus;
                 return state.focusByDeadline ? "deadline" : "open";
@@ -1985,22 +1984,14 @@ bool AlgalonInOpener(PlayerbotAI* botAI)
     if (!state)
         return false;
 
-    AlgalonPhase const phase = state->phase.Get();
-    if (phase == AlgalonPhase::Intro)
-        return true;
-
-    return phase == AlgalonPhase::One && state->introEndMs &&
+    return state->phase.Get() == AlgalonPhase::One && state->introEndMs &&
            getMSTimeDiff(state->introEndMs, getMSTime()) <= ULDUAR_ALGALON_OPENER_MS;
 }
 
 Player* GetAlgalonOpenerTank(PlayerbotAI* botAI)
 {
     Player* holder = GetAlgalonBossTank(botAI);
-    if (holder && IsAlgalonSwapTank(holder))
-        return holder;
-
-    Unit* boss = GetAlgalon(botAI);
-    return boss && boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ? GetAlgalonPickupTank(botAI) : nullptr;
+    return holder && IsAlgalonSwapTank(holder) ? holder : nullptr;
 }
 
 char const* AlgalonThreatRedirectSpell(Player* bot)
@@ -2150,15 +2141,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     ObjectGuid const previous = state->focusStar.Get();
     ObjectGuid const next = star ? star->guid : ObjectGuid::Empty;
     if (next != previous)
-    {
-        if (FindScanned(state->stars, previous))
-        {
-            state->droppedStars.insert(previous);
-            state->starHealthLog.erase(previous);
-        }
-
         state->focusByDeadline = false;
-    }
 
     // One way: a kill taken again at a deadline keeps the deadline's looser position test from then on.
     if (star && !std::strcmp(window, "deadline"))
@@ -2549,6 +2532,8 @@ bool AlgalonShouldSwap(Player* bot)
 
     return IsAlgalonPhased(holder) || SwapDue(*state, holder, bot, getMSTime());
 }
+
+bool AlgalonTakesBossNow(Player* bot) { return AlgalonShouldPickUp(bot) || AlgalonShouldSwap(bot); }
 
 bool AlgalonYieldsBoss(Player* bot)
 {

@@ -36,13 +36,13 @@ bool AlgalonStarTeamFocused(PlayerbotAI* botAI)
     return IsAlgalonStarTeam(botAI->GetBot()) && GetAlgalonFocusStar(botAI) && AlgalonEngaged(botAI);
 }
 
-
 bool AlgalonYielding(PlayerbotAI* botAI) { return AlgalonYieldsBoss(botAI->GetBot()); }
 
+// Not with a pickup or swap due: the walk back to him runs on the movers this would hold.
 bool AlgalonHandlerKiting(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (!AlgalonEngaged(botAI) || GetAlgalonHandler(botAI) != bot)
+    if (!AlgalonEngaged(botAI) || GetAlgalonHandler(botAI) != bot || AlgalonTakesBossNow(bot))
         return false;
 
     Unit* constellation = GetAlgalonHandlerConstellation(bot);
