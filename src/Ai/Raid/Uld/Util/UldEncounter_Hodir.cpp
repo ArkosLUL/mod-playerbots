@@ -1251,6 +1251,11 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
     if (!bot || !boss)
         return nullptr;
 
+    // He dies before anyone freed now could pay for the damage the block soaked: 0.44M and 0.78M of
+    // it in the last two kills' final waves. Trapped raiders are found separately and still get freed.
+    if (boss->GetHealthPct() < ULDUAR_HODIR_LAST_WAVE_HEALTH_PCT)
+        return nullptr;
+
     Group* group = bot->GetGroup();
     if (!group)
         return nullptr;

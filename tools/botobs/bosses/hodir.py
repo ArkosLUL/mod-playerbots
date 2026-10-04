@@ -111,6 +111,8 @@ BITING_COLD_ARM_IN_STARLIGHT = 5
 SHED = "hodir biting cold shed"
 # A shed leg this close to where the bot already stands goes nowhere: MoveTo calls it there or a dup.
 OWN_SPOT_YD = 0.5
+# An instant still costs the global cooldown, so the breaker split counts it as this much casting.
+CAST_FLOOR_MS = 1000
 
 
 # Pure pieces, kept free of the trace so the tests can hand them numbers.
@@ -262,6 +264,26 @@ def starlight_rule(value: str) -> str:
     `held`, so it reads apart from a sweep that found nothing."""
     words = value.split(" ")
     return " ".join(words[:2]) if words[0] == "held" else words[0]
+
+
+def breaker_cast_split(casts: list[tuple[int, int | None]], own: int, blocks: set[int],
+                       boss: int | None) -> collections.Counter:
+    """Casting ms per place it went, from `(cast time, target)` pairs a breaker started while its
+    block lived: `own`, `other blocks`, `Hodir`, `ground/self` (no target) or `other`."""
+    out: collections.Counter = collections.Counter()
+    for ms, target in casts:
+        if target == own:
+            where = "own"
+        elif not target:
+            where = "ground/self"
+        elif target in blocks:
+            where = "other blocks"
+        elif target == boss:
+            where = "Hodir"
+        else:
+            where = "other"
+        out[where] += max(ms, CAST_FLOOR_MS)
+    return out
 
 
 def reach_shares(walks: list[float | None], budgets: tuple[float, ...]) -> tuple[float, tuple[float, ...]]:
@@ -1032,22 +1054,29 @@ def show_churn(trace: Trace) -> None:
         print(f"    {action:34} {count:4}  {into[action]:4} into a live pool")
 
 
-def block_target_spans(trace: Trace, blocks: set[int]) -> dict[int, list[tuple[int, int]]]:
-    """Per bot, the windows hodir.dpstarget named one of `blocks` - the time it was shooting ice
-    instead of Hodir. Humans are left out: nothing assigns them a block."""
+def dps_target_windows(trace: Trace) -> dict[int, list[tuple[int, int, int]]]:
+    """Per bot, `(low, high, target)` for each window hodir.dpstarget named a guid. Humans are left
+    out: nothing assigns them a target."""
     marks: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
     for rec in notes(trace, "hodir.dpstarget"):
         if rec["g"] not in trace.humans:
             marks[rec["g"]].append((rec["t"], str(rec.get("txt", "")).split(" ")[-1]))
 
     end = pull_end(trace)
-    out: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    out: dict[int, list[tuple[int, int, int]]] = collections.defaultdict(list)
     for guid, rows in marks.items():
         rows.sort()
         for index, (when, value) in enumerate(rows):
-            if value.isdigit() and int(value) in blocks:
-                out[guid].append((when, rows[index + 1][0] if index + 1 < len(rows) else end))
+            if value.isdigit():
+                out[guid].append((when, rows[index + 1][0] if index + 1 < len(rows) else end, int(value)))
     return out
+
+
+def block_target_spans(trace: Trace, blocks: set[int]) -> dict[int, list[tuple[int, int]]]:
+    """Per bot, the windows hodir.dpstarget named one of `blocks` - the time it was shooting ice
+    instead of Hodir."""
+    return {guid: [(low, high) for low, high, target in windows if target in blocks]
+            for guid, windows in dps_target_windows(trace).items()}
 
 
 def show_blocks(trace: Trace) -> None:
@@ -1062,6 +1091,12 @@ def show_blocks(trace: Trace) -> None:
     blocks = track(trace, guids_of_entry(trace, NPC_HELPER_BLOCK), ("t", "x", "y"))
     fires = fire_starts(trace)
     casts = [-1] + (freeze_casts(trace, boss) if boss is not None else [])
+    health = boss_rows(trace, boss) if boss is not None else []
+    targets = dps_target_windows(trace)
+    started: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if not rec.get("tr") and rec.get("s") in targets and rec.get("t", -1) >= 0:
+            started[rec["s"]].append(rec)
     for index, cast in enumerate(casts):
         low = max(0, cast)
         high = casts[index + 1] if index + 1 < len(casts) else end
@@ -1072,7 +1107,9 @@ def show_blocks(trace: Trace) -> None:
         spawned = min(rows[0][0] for _, rows in batch)
         next_fire = next((when for when in fires if when > spawned), None)
         fire = f"{(next_fire - spawned) / 1000:.1f}s later" if next_fire else "none"
-        print(f"  {label}: {len(batch)} blocks from {clock(spawned)}, next fire {fire}")
+        hp = health_at(health, spawned)
+        at = f", Hodir {hp:.1f}%" if hp is not None else ""
+        print(f"  {label}: {len(batch)} blocks from {clock(spawned)}{at}, next fire {fire}")
 
         # Only the mage block holds up the next fire, so bot-time on ice after the last one is down is
         # time the boss could have had. Split out because the two are worth arguing about separately.
@@ -1085,6 +1122,25 @@ def show_blocks(trace: Trace) -> None:
             tail = (f", {after / 1000:.0f}s of it after the last mage was free" if mages
                     else " (no mage block named in this trace)")
             print(f"    bots on ice {on_ice / 1000:.0f}s{tail}")
+
+        # Every second a mage breaker casts elsewhere is a second later the wave's fire comes back.
+        lives = {guid: (rows[0][0], rows[-1][0]) for guid, rows in batch if kinds.get(guid) == "mage"}
+        split: collections.Counter = collections.Counter()
+        for guid, windows in targets.items():
+            for start, stop, block in windows:
+                if block not in lives:
+                    continue
+                born, died = lives[block]
+                split += breaker_cast_split(
+                    [(rec.get("ct", 0), rec.get("tgt")) for rec in started[guid]
+                     if max(start, born) <= rec["t"] < min(stop, died)],
+                    block, set(blocks), boss)
+        if split:
+            own = split.pop("own", 0)
+            off = sum(split.values())
+            where = ": " + ", ".join(f"{place} {ms / 1000:.1f}" for place, ms in split.most_common()) if off else ""
+            print(f"    mage breakers cast on their block {own / 1000:.1f}s, elsewhere {off / 1000:.1f}s"
+                  f" ({off / (own + off) * 100:.0f}%){where}")
 
         for guid, rows in sorted(batch, key=lambda item: item[1][-1][0]):
             life = (rows[-1][0] - rows[0][0]) / 1000

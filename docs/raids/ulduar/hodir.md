@@ -146,7 +146,11 @@ block-breaking. Mage first, the next fire came 20.0 / 23.9 / 26.3 / 31.5 s after
 2026-09-19, but the first mage block still took 7.5-19.8 s, not ~5: its breakers first cast on it
 0.5-13 s after it spawned, held by the post-freeze shelter run, the shed and dodges. Three breakers
 free it in **4.4-11.0 s**, and the block carries no mechanic, so that time scales with how many shoot
-it.
+it. **No helper block gets breakers once Hodir is under 12%** (`_LAST_WAVE_HEALTH_PCT`; trapped
+raiders still do): a freed mage's fire comes ~15 s after the landing at best and the last fire's
+Singed runs 25 s past it. The last wave went up at 7.6 / 9.9% (the one before at 31.7-36.7%) and
+soaked 0.44M / 0.78M; on 2026-09-27 its fire burned 2.8 s before the kill, on 2026-10-04 no mage got
+out at all.
 
 **Toasty Fire grants no Flash-Freeze exemption.** It is 11 yd and only blocks Biting Cold. The one
 exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, radius index 40 → 9 yd.
@@ -515,14 +519,28 @@ Traced 2026-09-27 on the shed-floor build, 25-man: **kill at 2:57.25 with 0 deat
 dps with a fire 248k, without one **174k** (145k on 09-23); fire back 15.6 / 19.7 / 15.4 s; ranged /
 healers in Starlight only **9.5 / 11.6%**, which the 10 yd Starlight edge and the latch drop answer.
 
-**Still open: mage-block breakers spend about half their cast time off their block** (50-54% over
-four pulls, instants counted as 1 s). The blocks are attackers, so the `X on attacker` DoTs (relevance
-19-19.5, over the single-target ones at 5-18) spread over all eight blocks and Hodir, and AoE fires on
-the count: in one wave Fel Immolated seven other blocks and Agony Corrupted five without touching
-their own, and Power channelled Blizzard through a whole 9 s block. Every slow mage block lost one or
-two breakers this way; that wave's fire came 19.7 s after the freeze against 14.3-15.6. Fix shape:
-`Family::DebuffOnAttacker` in Hodir's `OwnTargeting`, as Kologarn and Vezax pass it (single-target
-DoTs stay), plus a multiplier zeroing `ActionThreatType::Aoe` spells.
+**Mage-block breakers spent about half their cast time off their block** (42-54% over five pulls,
+instants counted as 1 s). The blocks are attackers, so the `X on attacker` DoTs (relevance 19-19.5,
+over the single-target ones at 5-18) spread over all eight blocks and Hodir, ~34 s of 200 s on
+2026-10-04, and AoE fires on the count: in one wave Fel Immolated seven other blocks and Agony
+Corrupted five without touching their own, and Power channelled Blizzard through a whole 9 s block.
+That wave's fire came 19.7 s after the freeze against 14.3-15.6. So Hodir's `OwnTargeting` blocks
+`Family::DebuffOnAttacker` too, as Kologarn and Vezax do (single-target DoTs stay), and
+`HodirBreakerAoeHoldMultiplier` zeroes `ActionThreatType::Aoe` spells, heals aside, while the target is
+an ice block.
+
+Traced 2026-10-04 on the lust-hold build: **kill at 2:53.76, 223.3k, 0 deaths**. Heroism at 0:20.4,
+0.1 s after the first fire; ranged / healers in Starlight **25.8 / 32.8%**, `held noreach` 7% of caster
+time. Without lust the opener's mage blocks took 9.4 / 9.9 s (7.7 / 8.4 with it) and the first fire
+came 3 s later. Felesta, a human DK, Dark Commanded him four times and held him 39.7 s, 9-20 yd off
+the held fire: 0:24-0:40 ran 307k against 368k on 09-27 with the same buffs up, so the hold's gain is
+not readable from this pull.
+
+**Still open: a breaker's Starlight stand walks it back out of range of its block.** `reach spell`
+walks the breaker in and `hodir raid position action` walks it back, every ~0.5 s: 80 flips with a
+mage block targeted on 2026-10-04 (14 on 09-27), 77 of them holding a Starlight stand, 26 bot-s in the
+last wave alone. Both pass `OwnMovement`, since `Family::Reach` is kept. Fix shape:
+`HodirRaidPositionTrigger::IsActive` stands down while the current target is an ice block.
 
 **Two high-churn probes are not defects, and re-tuning them is wasted work.** `hodir.shuttle` reverses
 `crowd ↔ held` 3,357 times at a 959 ms median, which is exactly the designed chain — `_SHUTTLE_HALF_LEG`
@@ -539,7 +557,8 @@ melee gap to him against the 8 yd it takes to swing, the Singed ramp and the tim
 burning, how **boss dps with a fire burning against with none**, whether a legal buff stand existed at
 all against whether it was inside each walk budget, caster time by Starlight rule (`held noreach`
 included), Biting Cold by stack, time stood still at the shed's arm point out of a fire, the
-bot-seconds a block wave spent on ice after the last mage was free, post-freeze shelter moves, stalled
+bot-seconds a block wave spent on ice after the last mage was free, Hodir's health as each wave went
+up, where the mage breakers' casting went, post-freeze shelter moves, stalled
 walks, shed legs sent onto the bot's own spot (refused, so the stall count cannot see them), and
 **the roles each mover walked** — the one line that names a gate that stopped gating.
 Traces older than `hodir.hold` fall back to `hodir.centre`.

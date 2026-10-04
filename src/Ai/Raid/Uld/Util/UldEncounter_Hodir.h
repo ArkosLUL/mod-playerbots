@@ -346,6 +346,11 @@ static_assert(ULDUAR_HODIR_LATE_BLOCK_BREAKERS <= ULDUAR_HODIR_HELPER_BLOCK_BREA
 // so eight blocks against a 10-man's three ranged still leaves someone on the boss.
 constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE = 2;
 
+// No helper block below this. A freed mage's fire comes ~15s after the landing at best, and the last
+// fire's Singed runs 25s past it anyway; 12% is 21.6s at the cache's 216.5k. The last wave went up at
+// 7.6% and 9.9%, the one before at 31.7-36.7%.
+constexpr float ULDUAR_HODIR_LAST_WAVE_HEALTH_PCT = 12.0f;
+
 // Frozen Blows' melee add-on lands 12645-28929 on a 45287 hp tank in 25man - a max roll is 64% of
 // the pool - and two arrive about 2.4s apart. Below this, taunting into an open window is a death.
 constexpr float ULDUAR_HODIR_TAUNT_HEALTH_FLOOR = 50.0f;
@@ -483,7 +488,8 @@ bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block);
 // rather than per block, and drawn from the ranged only - a melee that leaves makes a 21 yd round trip
 // for a block a ranged bot can shoot from nearer where it already stands. Asked once per bot rather
 // than once per block, because the sweep it needs is not cheap and one Flash Freeze puts up eight.
-// Mages first with ULDUAR_HODIR_MAGE_BLOCK_BREAKERS each, then druids, shamans and priests.
+// Mages first with ULDUAR_HODIR_MAGE_BLOCK_BREAKERS each, then druids, shamans and priests. None at
+// all once Hodir is under ULDUAR_HODIR_LAST_WAVE_HEALTH_PCT.
 Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot);
 
 // "mage", "druid", "shaman" or "priest" for a helper's ice block, nullptr for anything else.

@@ -13,6 +13,7 @@
 #include "UldActions_Hodir.h"
 #include "UldEncounterGate.h"
 #include "UldEncounter_Hodir.h"
+#include "UldMultipliers_Hodir.h"
 #include "UldTriggers_Hodir.h"
 
 namespace Family = RaidEncounterRules::Family;
@@ -109,7 +110,13 @@ void DefineHodir(EncounterBuilder& e)
     // on it - they keep healing while the raid takes 14000 every two seconds - so they keep the generic
     // picker. "attack rti target" is left alone on purpose: bots set no marks here, but a mark the
     // player sets should still win.
-    e.OwnTargeting("hodir guard multiplier", Role::Any, HodirOwnsTargets);
+    //
+    // "X on attacker" goes too. Ice blocks count as attackers, and those DoTs outrank the plain ones,
+    // so they went on every block and Hodir: 34s of the breakers' 200s of casting in one kill. The
+    // plain DoTs on the current target stay.
+    e.OwnTargeting("hodir guard multiplier", Role::Any, HodirOwnsTargets,
+                   Family::DpsAssist | Family::TankAssist | Family::DebuffOnAttacker);
+    e.Multiplier<HodirBreakerAoeHoldMultiplier>(Family::Spell);
 
     // Everyone, every role, for the whole 9s Flash Freeze cast: the shelter run is the only thing that
     // matters and only the dodge may interrupt it. The shelter action can't defend itself: MoveTo

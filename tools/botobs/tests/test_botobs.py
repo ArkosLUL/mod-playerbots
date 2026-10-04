@@ -897,6 +897,12 @@ class HodirReader(unittest.TestCase):
         self.assertEqual(hodir.starlight_rule("held noreach"), "held noreach")
         self.assertEqual(hodir.starlight_rule("far"), "far")
 
+    def test_breaker_cast_split_buckets_by_target_and_counts_an_instant_as_a_second(self):
+        split = hodir.breaker_cast_split(
+            [(2500, 7), (0, 7), (0, 8), (1500, 1), (0, None), (0, 42)], own=7, blocks={7, 8}, boss=1)
+        self.assertEqual(split, {"own": 3500, "other blocks": 1000, "Hodir": 1500, "ground/self": 1000,
+                                 "other": 1000})
+
     def test_singed_reaches_the_cap_and_the_hole_is_only_counted_with_a_fire_up(self):
         curve = hodir.singed_curve([1000, 2000, 3000], cap=3, duration=4000)
         self.assertEqual(hodir.ramp_ms(curve, 500, cap=3), 2500)
