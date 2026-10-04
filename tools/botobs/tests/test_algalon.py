@@ -1005,8 +1005,8 @@ class EdgeHold(unittest.TestCase):
             (39300, PARTNER, "Hand of Reckoning", HOLDER, "took")])
         self.assertEqual(sorted(line for _, line in al.taunt_faults(self.trace)), [
             "non-tank taunt at Algalon: Mighty (melee) Mocking Blow 1x from 20.0s",
-            "non-tank taunt at Algalon: Wolf (Trueshot's pet) Growl 1x from 15.0s",
             "pickup taunt missed @ 20.2s: Dragon Righteous Defense while he was on Mighty"])
+        self.assertRegex(render(self.trace, "taunts"), r"Wolf \(Trueshot's pet\) +Growl +on Bulwark; NON-TANK")
         self.assertIn("algalon taunt guard vetoes: Mighty mocking blow 1", render(self.trace, "taunts"))
 
     def test_soak_reads_the_hit_the_healers_and_the_kit(self):
@@ -1110,6 +1110,64 @@ class EdgeHold(unittest.TestCase):
         self.assertIn("swap pair, MISSED", text)
         self.assertIn("soaker DIED +1.2 s after the hit", text)
         self.assertNotIn("absent from this trace: algalon.spot=pickup", text)
+
+
+def handover_pull() -> list[dict]:
+    """The edge pull with the soak handed on twice mid-cast, Smartface dying and then Dragon phased by a
+    hole; the wolf's second Growl taking him; and the star tracker writing the planner's labels."""
+    records = [rec for rec in edge_pull()
+               if rec.get("e") != "note" or rec.get("k") not in ("algalon.soaker", "algalon.starwindow")]
+    return records + [
+        note(30000, PRIEST, "algalon.soaker", MAGE), note(31100, PRIEST, "algalon.soaker", PARTNER),
+        note(33050, PRIEST, "algalon.soaker", HOLDER), note(38500, PRIEST, "algalon.soaker", 0),
+        note(30000, PRIEST, "algalon.backup", PRIEST), note(38500, PRIEST, "algalon.backup", 0),
+        death(31000, MAGE, E_BOSS, 9000, (-70, 0)),
+        *phased(PARTNER, al.SPELL_BLACK_HOLE_PHASE, 33000, 39000),
+        cast(45000, WOLF, 2649, E_BOSS), dmg(45300, E_BOSS, WOLF, 0, 5000),
+        note(8000, CASTER, "algalon.starwindow", "none"), note(12000, CASTER, "algalon.starwindow", "open"),
+        note(20000, CASTER, "algalon.starwindow", "spacing"), note(21000, CASTER, "algalon.starwindow", "deadline"),
+        note(25000, CASTER, "algalon.starwindow", "prebang"), note(30000, CASTER, "algalon.starwindow", "bigbang"),
+        note(38000, PRIEST, "algalon.starwindow", "smash"),
+    ]
+
+
+class HandOver(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, handover_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_every_soaker_of_the_cast_is_listed_with_what_moved_the_latch(self):
+        (row,) = al.big_bang_rows(self.trace)
+        self.assertEqual(row["soaker"], HOLDER)
+        self.assertEqual(row["soakers"], [(30000, MAGE, ""), (31100, PARTNER, "Smartface died 0:31.000"),
+                                          (33050, HOLDER, "Dragon phased 0:33.000"), (38500, 0, "")])
+        self.assertEqual(row["backups"], [(30000, PRIEST, ""), (38500, 0, "")])
+        chain = ("algalon.soaker during the cast: 0:30.000 Smartface, 0:31.100 Dragon (Smartface died 0:31.000),"
+                 " 0:33.050 Bulwark (Dragon phased 0:33.000), 0:38.500 cleared")
+        bang = render(self.trace, "bigbang")
+        self.assertIn(chain, bang)
+        self.assertIn("algalon.backup during the cast: 0:30.000 Prayer, 0:38.500 cleared", bang)
+        self.assertIn(chain, render(self.trace, "soak"))
+
+    def test_a_pet_counts_in_the_verdict_only_once_a_growl_took(self):
+        self.assertEqual([(row["t"], row["outcome"]) for row in al.taunt_casts(self.trace) if row["caster"] == WOLF],
+                         [(15000, "missed"), (45000, "took")])
+        self.assertIn("non-tank taunt at Algalon: Wolf (Trueshot's pet) Growl 2x from 15.0s, 1 took",
+                      [line for _, line in al.failures(self.trace)])
+
+    def test_the_planner_labels_count_in_the_window_timeline_and_open_nothing(self):
+        totals = al.span_totals({0: al.window_spans(self.trace)})
+        self.assertEqual((totals["spacing"], totals["prebang"], totals["smash"]), (1000, 5000, 22000))
+        self.assertEqual([(row["t"], row["kind"]) for row in al.window_opens(self.trace)],
+                         [(12000, "open"), (21000, "deadline")])
+        text = render(self.trace, "stars")
+        for label in ("spacing 1.0 s (2%)", "prebang 5.0 s (10%)", "smash 22.0 s (42%)"):
+            self.assertIn(label, text)
 
 
 SLOT_SOURCE = """

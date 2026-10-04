@@ -36,11 +36,28 @@ void BreakCastPinningTheFeet(PlayerbotAI* botAI, Player* bot)
 
 // MoveTo refuses a point it already issued for MaxWaitForMove, moving or not, so a walk stopped short
 // (a mana gem's StopMoving, Disengage) is never issued again unless the booking is dropped.
+LastMovement& Booking(PlayerbotAI* botAI)
+{
+    return botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+}
+
 void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
 {
-    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    LastMovement& last = Booking(botAI);
     if (!bot->isMoving() && last.msTime && getMSTimeDiff(last.msTime, getMSTime()) > ULDUAR_ALGALON_STALL_MS)
         last.clear();
+}
+
+// A walk waits behind a booking of equal priority until it runs out. The walks that must land within a
+// second drop one they didn't make.
+void DropForeignBooking(PlayerbotAI* botAI, Position const& own, MovementPriority upTo)
+{
+    LastMovement& last = Booking(botAI);
+    if (last.msTime && last.priority <= upTo &&
+        std::hypot(last.lastMoveToX - own.GetPositionX(), last.lastMoveToY - own.GetPositionY()) > 0.5f)
+    {
+        last.clear();
+    }
 }
 
 // How close the walk to a spot may pass another hole: with margin, then just outside its 6 yd field, then
@@ -152,6 +169,10 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 
     BreakCastPinningTheFeet(botAI, bot);
     ReleaseStalledWalk(botAI, bot);
+    // Not a dodge still under way: the hole isn't checked against the meteor.
+    if (!AlgalonCosmicSmashThreatens(bot))
+        DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_FORCED);
+    _walk = shelter;
 
     if (MoveTo(bot->GetMapId(), shelter.GetPositionX(), shelter.GetPositionY(), shelter.GetPositionZ(), false,
                false, false, false, MovementPriority::MOVEMENT_FORCED, true))
@@ -217,8 +238,16 @@ bool AlgalonLeaveBlackHoleAction::Execute(Event /*event*/)
 
     BreakCastPinningTheFeet(botAI, bot);
     ReleaseStalledWalk(botAI, bot);
-    return MoveTo(bot->GetMapId(), clear.GetPositionX(), clear.GetPositionY(), clear.GetPositionZ(), false, false,
-                  false, false, MovementPriority::MOVEMENT_FORCED, true);
+    DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_FORCED);
+    if (MoveTo(bot->GetMapId(), clear.GetPositionX(), clear.GetPositionY(), clear.GetPositionZ(), false, false,
+               false, false, MovementPriority::MOVEMENT_FORCED, true))
+    {
+        _walk = clear;
+        return true;
+    }
+
+    // Its own walk still running answers Waiting; giving the tick away would let a cast pin the feet.
+    return bot->isMoving();
 }
 
 bool AlgalonYieldBossAction::Execute(Event /*event*/)
@@ -242,13 +271,31 @@ bool AlgalonTakeBossAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
+    // Handed the soak on its way into a hole: stop, or the run carries it into the field while the walk
+    // back waits behind its booking.
+    bool const soaking = AlgalonBigBangLatched(bot) && GetAlgalonBigBangSoaker(botAI) == bot;
+    LastMovement& last = Booking(botAI);
+    if (soaking && last.msTime && AlgalonWalkEntersField(bot, last.lastMoveToX, last.lastMoveToY,
+                                                         ULDUAR_ALGALON_SHELTER_RADIUS))
+    {
+        bot->StopMoving();
+        last.clear();
+    }
+
+    // After a taunt the walk to the tank slot goes out next tick, not once the last walk runs out.
     if (boss->GetVictim() != bot && CastClassTaunt(botAI, boss))
+    {
+        last.clear();
         return true;
+    }
 
     Unit* victim = boss->GetVictim();
     Player* holder = victim ? victim->ToPlayer() : nullptr;
-    if (victim != bot && (!holder || !IsAlgalonSwapTank(holder)) && CastBackupTaunt(botAI, bot, boss))
+    if (victim != bot && (!holder || !IsAlgalonSwapTank(holder) || soaking) && CastBackupTaunt(botAI, bot, boss))
+    {
+        last.clear();
         return true;
+    }
 
     // Taunts on cooldown or out of reach: walk in and hit him.
     if (AI_VALUE(Unit*, "current target") != boss)
@@ -314,9 +361,22 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "algalon.kite", "hole");
 
+    // The park spot is past the hole, so the straight walk there crosses it.
+    Position next;
+    if (!AlgalonWalkAround(bot, spot, next))
+        return false;
+
+    // Combat, not forced, so the exit and the meteor dodge always win over it.
     ReleaseStalledWalk(botAI, bot);
-    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
-                  false, false, MovementPriority::MOVEMENT_FORCED, true);
+    DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_COMBAT);
+    if (!MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false, false,
+                false, MovementPriority::MOVEMENT_COMBAT, true))
+    {
+        return false;
+    }
+
+    _walk = next;
+    return true;
 }
 
 bool AlgalonStarTeamAction::Execute(Event /*event*/)

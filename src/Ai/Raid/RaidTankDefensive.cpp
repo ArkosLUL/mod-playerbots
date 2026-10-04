@@ -156,6 +156,24 @@ char const* ReadyTankDefensive(Player* bot, bool physicalOnly, uint32 withinMs)
     return nullptr;
 }
 
+char const* RunningTankDefensive(Player* bot, bool physicalOnly, uint32 forMs)
+{
+    if (!bot)
+        return nullptr;
+
+    for (TankDefensive const& entry : TANK_DEFENSIVES)
+    {
+        if (!entry.tank || entry.playerClass != bot->getClass() || (physicalOnly && entry.magicOnly))
+            continue;
+
+        Aura const* aura = bot->GetAura(entry.spellId);
+        if (aura && (aura->GetDuration() < 0 || static_cast<uint32>(aura->GetDuration()) >= forMs))
+            return entry.castName;
+    }
+
+    return nullptr;
+}
+
 bool IsHeldTankDefensive(std::string const& actionName)
 {
     for (TankDefensive const& entry : TANK_DEFENSIVES)

@@ -70,7 +70,7 @@ class AlgalonLeaveBlackHoleTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon leave black hole";
 
-    AlgalonLeaveBlackHoleTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 500) {}
+    AlgalonLeaveBlackHoleTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 250) {}
     bool IsActive() override;
 };
 

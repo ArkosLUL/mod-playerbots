@@ -48,6 +48,12 @@ Every guide keeps one player out; Warcraft Tavern names the main tank with Physi
 the instance tick. Every role reads that latch, never the live cast: in the tick's first 250 ms of a
 cast nobody is the soaker yet, and every bot, tank included, would run for a hole.
 
+A human holder with no physical button for the hit (none back in time, none running past it) hands it to the
+bot partner if that has one and ≤ 2 stacks: twice a human holder with Forbearance up ended in a hole and a
+priest soaked while the bot tank hid. Mid cast, a soaker phased or dead is replaced by the bot partner
+(≤ 3 stacks) before the backup, and its run into a hole is stopped. The elected soaker taunts him off the
+other swap tank, Righteous Defense included.
+
 Big Bang's second effect applies **64445, which strips every phase a second after the hit**, Phase
 Punch's included; it ignores phase, so it reaches everyone. The soaker is alone for about a second.
 It casts `NextTankDefensive(..., physicalOnly)` at ≤ 3 s remaining, skipping Anti-Magic Shell. The hit plus
@@ -78,8 +84,9 @@ The Phase Punch queued behind the cast lands on the soaker while everyone else i
 5th stack then leaves nobody unphased. So a holder at 3 stacks with the cast ≤ 15 s away hands over to
 a partner at ≤ 1.
 
-Humans get two raid warnings: at cast start, who soaks and that everyone else should stand by a hole;
-with 3 s left, into the hole and stay in it. Inside for the whole cast they are fed to the phase-16
+Humans get two raid warnings: at cast start, who soaks (a human holder handed the soak is named: "Dragon,
+hide too: Bulwark takes it") and that everyone else should stand by a hole; with 3 s left, everyone but the
+soaker into the hole and stay in it. Inside for the whole cast they are fed to the phase-16
 Dark Matter, and stepping out early lets the 10 s phase lapse before the hit.
 
 Everyone else keeps fighting until the walk to the nearest hole plus 2.5 s is all that is left of the
@@ -89,7 +96,10 @@ every other mover off the hider and a `Block` stops Charge, Blink and Disengage.
 8 yd off the hole**: still inside when 64445 strips the phase means phased again within a second for
 10 s, and the hole is invisible from inside, so the exit reads the cached position. Phased bots are left
 out of the `Exclusive` because phase-16 Dark Matter (33089, 8 static spawns on the star points) attacks
-them in the void.
+them in the void. Until 8 yd out only the exit runs (`AlgalonLeaveFieldMultiplier`; an `Exclusive` holds
+movement alone): a Chain Heal started on phasing and a mana gem stopping the walk left 11 bots phased again.
+The exit, the hide run (not over a meteor dodge under way) and a taunt drop a movement booking another
+action made, since an equal priority waits it out.
 
 **Threat survives the hide, and this is not a bug to re-audit.** `CombatManager.cpp:53` gates only
 *entering* combat on `InSamePhase`, and `ThreatManager` only marks phased entries offline: he re-picks
@@ -97,53 +107,65 @@ the top unphased entry when the phase drops.
 
 ## Stars: an assigned team, paced
 
-Collapse drains **1 % of max health per second**, so an ignored star dies after ~100 s, and the 60 s
+Collapse drains **1 % of max health per second**, so an untouched star dies after ~100 s, and the 60 s
 summon only tops up to four: four ignored stars explode within seconds of each other. A latched **star
 team** of 2 damage dealers (3 on 25-man), ranged first and melee only to fill a raid short on ranged,
 kills them; the target exclusions keep every other bot on Algalon, and an `OwnTargeting` rule keeps
 `dps assist` from pulling the team back, since a star is no attacker until something hits it. The team
-is cleared (`algalon.focusstar`) onto a star only while every gate is open, and `urgent` is the one
-override of them all:
+is cleared (`algalon.focusstar`) onto a star only when its death is **planned**. Splash near him takes
+1-2.4 %/s on top of the drain, so a star's forecast death is its health over its measured loss (the slope of a
+4 s log, never under the drain), not its health. A kill lands at its health over 5.5-3.5 %/s plus the team's
+walk (mean distance past 28 yd at 7 yd/s), or over its own slope once the team is on it. A death is **clear**
+outside 1 s before Big Bang to 3 s after the hit and 2 s before to 1.5 s after a meteor impact (8 died to an
+explosion on top of one), and 8 s from the last explosion and every other star's forecast death. In order,
+`urgent` overriding all:
 
 - not during the Big Bang cast (the raid is running for holes);
-- not while a Cosmic Smash marker is live (an explosion on top of an impact killed 8 in one pull);
-- not within 8 s of the last explosion, counted per star rather than from the star count. A "finish
-  stars under 15 %" bypass put two explosions 3.2 s apart and killed 12;
+- the kill under way continues while its finish stays 6 s clear, or while dropping it wouldn't help: dropped a
+  few % from dead, a star dies anyway from its DoTs and the drain (2 %/s), as one did into an impact and one
+  1.5 s into a cast. A dropped star's log restarts;
+- not within 8 s of the last explosion. A "finish stars under 15 %" bypass put two explosions 3.2 s apart
+  and killed 12;
+- a **due** star is opened whatever the raid's health, soonest death first: its own death isn't clear and is
+  ≤ 30 s off (a fresh wave forecasts four deaths together; the next rule paces those), or it dies no later
+  than an i-th soonest within i × 16 s (a gap plus a kill each) plus the walk and any blackout before it. Never one within 9 yd
+  of a swap tank or the handler (a hole under the holder sets him loose; it did twice), given a choice not
+  within 16 yd of him, and only with a clear finish. When the soonest can't be touched, nothing lands near
+  its death: killing another instead put two explosions 0.2 and 1.3 s apart and killed 30. With no due star
+  clear, the one landing furthest from the rest is still taken if that beats their own deaths;
 - not while any living, unphased raid member is below the explosion's top roll (16.9 k / 21.5 k), or
   below full health if their maximum is lower. A percentage gate can't work: 80 % of a 26 k clothie is
   below one 25-man explosion;
-- the **lowest-health** star at least 7 yd from every raid member, since its hole lands where it dies
-  and phases whoever is in the field, 9 yd from the swap tanks and the handler, and 16 yd from him (his
-  melee ring). The star the team is already on keeps it down to 5 yd from the raid, so a drift past the
-  edge doesn't flip the team between stars.
+- the star soonest to die at least 7 yd from every raid member, since its hole lands where it dies and
+  phases whoever is in the field, 9 yd from the swap tanks and the handler, and 16 yd from him (his melee
+  ring), with a clear finish. The star the team is already on keeps it down to 5 yd from the raid, so a
+  drift past the edge doesn't flip the team between stars.
 
-The last two give way to a **deadline**. A star's health is its seconds left, and spacing i explosions
-takes i gaps plus the kills, 16 s each, plus the team's walk into range (mean distance past 28 yd at 7 yd/s),
-so once the i-th shortest-lived star is down to that, the lowest star is opened whatever the raid's health,
-but never within 9 yd of a swap tank or the handler (a hole under the holder sets him loose; it did twice)
-and, given a choice, not within 16 yd of him. A wave's four stars spawn and drain together; without the
-deadline the gates could hold until all four went off in the same second. `urgent` takes any star.
+A wave's four stars spawn and drain together; without the deadline the gates could hold until all four went
+off in the same second. `urgent` takes the lowest star anywhere.
 
 **Splash breaks the pacing.** Stars died chewed, 75% gone in 11 s with nobody sent, two 1.4 s apart, from
 Starfall, Blade Flurry, Death and Decay, Pestilence diseases, warrior cleaves, Divine Storm and Avenger's
-Shield; the Aoe threat type covers almost none of them. While any star lives, `AlgalonSplashHoldMultiplier`
-holds Starfall, Blade Flurry, Sweeping Strikes and Bladestorm outright (self auras that hit whatever comes near),
-and anything else that splashes (`SpellSplashes`, `MULTI_TARGET_ACTIONS`, HotR, Avenger's Shield, Seed of
-Corruption, Mind Sear, Living Bomb, Corpse Explosion, the Aoe threat type) while a star is within 12 yd of the
-bot or its target, not counting the star the bot is hitting; friendly spells are never held. Humans'
-Consecration, HotR and Death and Decay still chew them.
+Shield; the Aoe threat type covers almost none of them. `AlgalonSplashHoldMultiplier` holds Starfall, Blade
+Flurry, Sweeping Strikes and Bladestorm all of phase 1 (self auras that hit whatever comes near; one started
+before a wave spawns still runs when it lands). While a star lives, other splash (`SpellSplashes`,
+`MULTI_TARGET_ACTIONS`, HotR, Avenger's Shield, Seed of Corruption, Mind Sear, Living Bomb, Corpse Explosion,
+the Aoe threat type) is held while a star is within 15 yd of the bot or its target (glyphed Pestilence; diseases
+landed on one 12.5 yd out), and ground AoE that sits 8-10 s while stars wander in within 25 yd of where it
+lands: Consecration, Magma Totem and Explosive Trap round the bot; Death and Decay, Blizzard, Flamestrike,
+Hurricane, Rain of Fire and Volley round its target. The star the bot is hitting doesn't count; friendly spells
+are never held. Humans' Consecration, HotR and Death and Decay still chew them.
 
 **The team works a far star from a spot of its own**: from its ring slot, `reach spell` walks half the gap and
 the slot node walks it back, so a deadline star 35-68 yd out drained untouched. A ranged team member whose focus
 star is over 28 yd from its slot stands 25 yd from the star towards the slot (`star`), outside his reach.
 
-**A star at 5% or less is a hazard** for the dodge: anyone unphased within 8 yd steps off it, since it dies
+**A star at 5% or less, or forecast dead within 4 s, is a hazard** for the dodge: anyone unphased within 8 yd steps off it, since it dies
 within seconds whoever is on it (`algalon.hazard`). As with a meteor, the generic movers are held within 12 yd
 of it and a slot within 8 yd of it waits (`smash`).
 
 The tracker marks the focus star with the **star** icon for humans; skull would pull every bot's
-`attack rti target`. A skull a player puts on a star or add wins over the exclusions. An AoE multiplier
-holds area damage while two or more stars live, heals excepted.
+`attack rti target`. A skull a player puts on a star or add wins over the exclusions.
 
 ## Holes are a resource
 
@@ -163,12 +185,14 @@ via a point 9.5 yd off the hole that has a clear line on to the slot (`blocked`)
 The generic movers know nothing of holes, and holes land beside him where melee stand: 34 stray phases in
 four pulls came off `reach melee`, `set behind` and `reach spell`. `AlgalonWalkGuardMultiplier` holds reach,
 reach-to-heal, set behind and rear flank when the stop point (melee range of the target, 28 yd for spells, both
-set-behind spots) is within 7.5 yd of a hole or the walk passes within 6.3 yd of one. A held bot waits; holes
+set-behind spots) is within 7.5 yd of a hole or the walk passes within 6.3 yd of one; for a phased bot within
+8 yd, the hole it left included, since reach walked melee back in before the strip. A held bot waits; holes
 live until a constellation eats one or phase 2.
 
 **A far hole is approached before the cast.** Within 15 s of it or during it, a bot whose nearest hole is over
 35 yd from its own spot (a melee bot's is him) waits 30 yd from that hole (`nearhole`), with the generic movers
-held: three ranged 45-64 yd from the only hole couldn't make it in 8 s. Swap tanks and the handler are left out.
+held: three ranged 45-64 yd from the only hole couldn't make it in 8 s. With that spot in his reach (healers
+ring him), the nearest point 30 yd round the hole that isn't. Swap tanks and the handler are left out.
 
 ## Constellations: the handler collects them
 
@@ -179,7 +203,9 @@ the enrage, and guides agree nobody damages them. The **handler**, a third tank 
 not holding Algalon, and always a bot, taunts every loose one onto itself and **stays out** of Big Bang
 holding them (`hold`), with a physical defensive like the soaker. With a spare hole it parks 9 yd past
 that hole on the far side (clamped 44 yd from centre), so the chase drags one through the field, then
-yields its tick. Its movement rule still passes its taunts, the pickup and the swap: all are
+yields its tick. The far side is latched with the hole, and the walk goes round any hole it would clip, at
+combat priority: a straight forced walk crossed the field, and its booking refused both the tank slot walk
+and the exit when the handler took him as Big Bang began. Its movement rule still passes its taunts, the pickup and the swap: all are
 `AttackAction`s, and a swap it can't make phases the holder out. Constellations are excluded from
 everyone else's pickers.
 
@@ -270,7 +296,9 @@ recorded), `algalon.swappair`. Derived per bot, each inside the helper that deri
 path over a hole was clear),
 `algalon.defensive` (the pick, on change only). `algalon.tankrole`
 (`hold`/`yield`/`take`/`call`/`out`/`none`) per pair bot and `algalon.starwindow`
-(`urgent`/`bigbang`/`smash`/`gap`/`deadline`/`raidhp`/`near`/`open`/`none`) are computed in the tick; the window is
+(`urgent`/`bigbang`/`smash`/`prebang`/`spacing`/`gap`/`deadline`/`raidhp`/`near`/`open`/`none`; `smash`, `prebang` and
+`spacing` name what a kill's finish would land on: an impact, the Big Bang window, another star's death) are
+computed in the tick; the window is
 written on the tracker bot, since the tick runs on whichever bot comes first.
 
 Events: `algalon.holelost` (`kite`/`stray`/`phase2`), one per hole, skipped when every summon goes at

@@ -8,6 +8,7 @@
 #include "ObjectGuid.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "Position.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
@@ -57,6 +58,10 @@ public:
 
     AlgalonBigBangHideAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
     bool Execute(Event event) override;
+
+private:
+    // Its own last walk, so a booking another action made can be told apart and dropped.
+    Position _walk;
 };
 
 class AlgalonCosmicSmashAction : public MovementAction
@@ -75,6 +80,10 @@ public:
 
     AlgalonLeaveBlackHoleAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
     bool Execute(Event event) override;
+
+private:
+    // The exit is searched round the bot every tick, so the booking can't say whose it is.
+    Position _walk;
 };
 
 class AlgalonYieldBossAction : public Action
@@ -138,6 +147,7 @@ public:
 
 private:
     bool _spotReached = false;
+    Position _walk;
 };
 
 class AlgalonStarTeamAction : public AttackAction

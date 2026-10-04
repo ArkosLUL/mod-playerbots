@@ -63,6 +63,9 @@ private:
         // Self auras that hit whatever comes near for their whole duration.
         Always,
         Near,
+        // Ground AoE that sits there for 8-10 s while stars wander into it, dropped at the feet or at the target.
+        GroundAtBot,
+        GroundAtTarget,
     };
 
     std::unordered_map<Action*, Splash> splashes;
@@ -74,6 +77,16 @@ class AlgalonWalkGuardMultiplier : public Multiplier
 {
 public:
     AlgalonWalkGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon walk guard") {}
+    float GetValue(Action* action) override;
+};
+
+// Algalon: a phased bot still inside a field when Big Bang strips the phase is phased again for 10 s, and the
+// strip comes a second after the hit. A cast started there pins the feet and an item use stops the walk, so
+// until it is out only the exit runs. Exclusive rules only hold movement.
+class AlgalonLeaveFieldMultiplier : public Multiplier
+{
+public:
+    AlgalonLeaveFieldMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon leave field") {}
     float GetValue(Action* action) override;
 };
 

@@ -17,6 +17,7 @@
 #include "ReachTargetActions.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "UldActions_Algalon.h"
 #include "UldEncounter_Algalon.h"
 
 #include <algorithm>
@@ -145,6 +146,9 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
     if (cached == splashes.end())
     {
         static std::set<std::string> const always = {"starfall", "blade flurry", "sweeping strikes", "bladestorm"};
+        static std::set<std::string> const groundAtBot = {"consecration", "magma totem", "explosive trap"};
+        static std::set<std::string> const groundAtTarget = {"death and decay", "blizzard", "flamestrike",
+                                                             "hurricane",       "rain of fire", "volley"};
         // Chains and detonations the spell test can't see, on top of the shared list.
         static std::set<std::string> const chains = {"hammer of the righteous", "avenger's shield",
                                                      "seed of corruption",      "mind sear",
@@ -153,6 +157,10 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
         Splash splash = Splash::None;
         if (always.count(name))
             splash = Splash::Always;
+        else if (groundAtBot.count(name))
+            splash = Splash::GroundAtBot;
+        else if (groundAtTarget.count(name))
+            splash = Splash::GroundAtTarget;
         else if (!dynamic_cast<CastHealingSpellAction*>(action) && !CastsPositiveSpell(botAI, action) &&
                  (action->getThreatType() == Action::ActionThreatType::Aoe || MULTI_TARGET_ACTIONS.count(name) ||
                   chains.count(name) || SpellSplashes(botAI, action)))
@@ -161,15 +169,34 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
         cached = splashes.emplace(action, splash).first;
     }
 
-    if (cached->second == Splash::None || !AlgalonAliveStarCount(botAI) || !AlgalonEngaged(botAI))
+    if (cached->second == Splash::None || !AlgalonEngaged(botAI))
         return 1.0f;
 
+    // All of phase 1: one started before a wave spawns still runs when it lands.
     if (cached->second == Splash::Always)
-        return 0.0f;
+        return AlgalonInPhaseOne(botAI) ? 0.0f : 1.0f;
+
+    if (!AlgalonAliveStarCount(botAI))
+        return 1.0f;
 
     // The star being hit is the team's to kill; only another one nearby is at risk.
     Unit* target = AI_VALUE(Unit*, "current target");
     ObjectGuid const targetGuid = target ? target->GetGUID() : ObjectGuid::Empty;
+    switch (cached->second)
+    {
+        case Splash::GroundAtBot:
+            return AlgalonStarWithin(botAI, bot->GetPosition(), ULDUAR_ALGALON_GROUND_SPLASH_RADIUS, targetGuid)
+                       ? 0.0f
+                       : 1.0f;
+        case Splash::GroundAtTarget:
+            return target && AlgalonStarWithin(botAI, target->GetPosition(), ULDUAR_ALGALON_GROUND_SPLASH_RADIUS,
+                                               targetGuid)
+                       ? 0.0f
+                       : 1.0f;
+        default:
+            break;
+    }
+
     if (AlgalonStarWithin(botAI, bot->GetPosition(), ULDUAR_ALGALON_SPLASH_RADIUS, targetGuid))
         return 0.0f;
 
@@ -181,11 +208,15 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
 float AlgalonWalkGuardMultiplier::GetValue(Action* action)
 {
     // Holes first: most of the fight there is none, and this weighs every reach in the room.
-    if (!action || !AlgalonHoleNear(bot, ULDUAR_ALGALON_SCAN_RADIUS) || IsAlgalonPhased(bot) ||
-        !AlgalonEngaged(botAI) || AlgalonShouldRunForShelter(bot))
+    if (!action || !AlgalonHoleNear(bot, ULDUAR_ALGALON_SCAN_RADIUS) || !AlgalonEngaged(botAI) ||
+        AlgalonShouldRunForShelter(bot))
     {
         return 1.0f;
     }
+
+    // A phased bot back inside a field at the strip is phased again.
+    float const stand =
+        IsAlgalonPhased(bot) ? ULDUAR_ALGALON_HOLE_EXIT_RADIUS : ULDUAR_ALGALON_FIELD_STAND_CLEARANCE;
 
     std::string const& name = action->getName();
     if (name == "set behind" || name == "rear flank")
@@ -203,7 +234,7 @@ float AlgalonWalkGuardMultiplier::GetValue(Action* action)
             float const angle = Position::NormalizeOrientation(target->GetOrientation() +
                                                                side * 3.0f * static_cast<float>(M_PI) / 5.0f);
             if (AlgalonWalkEntersField(bot, target->GetPositionX() + std::cos(angle) * distance,
-                                       target->GetPositionY() + std::sin(angle) * distance))
+                                       target->GetPositionY() + std::sin(angle) * distance, stand))
             {
                 return 0.0f;
             }
@@ -227,7 +258,15 @@ float AlgalonWalkGuardMultiplier::GetValue(Action* action)
 
     float const angle = target->GetAngle(bot);
     return AlgalonWalkEntersField(bot, target->GetPositionX() + std::cos(angle) * range,
-                                  target->GetPositionY() + std::sin(angle) * range)
+                                  target->GetPositionY() + std::sin(angle) * range, stand)
                ? 0.0f
                : 1.0f;
+}
+
+float AlgalonLeaveFieldMultiplier::GetValue(Action* action)
+{
+    if (!action || !IsAlgalonPhased(bot) || action->getName() == AlgalonLeaveBlackHoleAction::Name)
+        return 1.0f;
+
+    return AlgalonPhasedInField(bot) ? 0.0f : 1.0f;
 }

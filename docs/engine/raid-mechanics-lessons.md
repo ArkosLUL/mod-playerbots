@@ -176,10 +176,18 @@ What lands on a raid add is not what PvP experience predicts.
   HotR, Avenger's Shield, Multi-Shot, Chain Lightning, Seed of Corruption and Mind Sear fail even the spell
   area test. A hold on "don't hit the add next to the boss" needs `SpellSplashes` plus the named list in
   `RaidSplash.h`, and self auras held outright: they hit whatever comes near for their whole duration.
-- **Collateral breaks "health is lifetime".** A draining add timed by its health dies early and next to
-  whoever chewed it; trace which deaths were drain and which were splash before tuning the timing.
+- **A draining add's lifetime is its health over its measured loss.** Splash near the boss took Algalon's
+  stars 1-2.4 %/s past the drain, so timed by health they died early and next to whoever chewed them; trace
+  drain and splash deaths apart before tuning. Plan each death against the others: killing a substitute when
+  the soonest-dying one can't be touched put two explosions 0.2 and 1.3 s apart. Dropping one a few % from
+  dead moves nothing, its DoTs finish it inside the window the drop was meant to avoid.
 - **A slot leash fights `reach spell`.** It walks half the gap to an out-of-range target, the slot node
   walks the bot back, and the target is never reached. Give the mover its own spot in range instead.
+- **A movement booking outlives the action that made it.** `MoveTo` refuses an equal priority until the
+  booked walk time runs out, so a forced kite walk kept a tank walking into a hole 1.7 s after it took the
+  boss, and refused its exit too. Drop the booking on a role change, and let a walk that must land within a
+  second drop one it didn't make. An `Exclusive` rule holds movement only; holding a cast or an item use
+  needs a multiplier.
 - **Mocking Blow is a taunt.** It is a `MELEE_ACTION`, and an Arms warrior's snare chain falls back to it;
   `ClassifyAction` counts it in `Family::Taunt`, so a taunt guard has to cover every role, not tanks.
 - **Read `speed_run` before designing any relocation.** An add faster than a player can be neither

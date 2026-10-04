@@ -15,6 +15,8 @@
 
 #include <array>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 class Player;
@@ -147,8 +149,38 @@ constexpr float ULDUAR_ALGALON_STAR_TEAM_REACH = 28.0f;
 constexpr float ULDUAR_ALGALON_STAR_TEAM_STANDOFF = 25.0f;
 constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_10 = 2;
 constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_25 = 3;
-// Splash that would also land on a star this close to the bot or its target is held.
-constexpr float ULDUAR_ALGALON_SPLASH_RADIUS = 12.0f;
+// Splash that would also land on a star this close to the bot or its target is held. 15 is glyphed
+// Pestilence; diseases landed on a star 12.5 yd out.
+constexpr float ULDUAR_ALGALON_SPLASH_RADIUS = 15.0f;
+// Ground AoE sits there 8-10 s and stars wander ~1.7 yd/s, so it's held while one is this close to where it lands.
+constexpr float ULDUAR_ALGALON_GROUND_SPLASH_RADIUS = 25.0f;
+
+// Star death forecast. Splash near him takes 1-2.4%/s on top of the drain, so a star's health isn't its
+// seconds left; the slope of its health log is.
+constexpr uint32 ULDUAR_ALGALON_STAR_LOG_MS = 4000;
+constexpr uint32 ULDUAR_ALGALON_STAR_LOG_STEP_MS = 500;
+// Less log than this reads as the drain: a slope over one or two samples is noise.
+constexpr uint32 ULDUAR_ALGALON_STAR_LOG_MIN_MS = 2000;
+constexpr float ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC = 1.0f;
+// A star the team drops part-killed keeps dying from the DoTs on it too (2.1-2.5%/s measured).
+constexpr float ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC = 2.0f;
+// The team's kill speed, slowest and fastest (3.6-5.2%/s measured on 25-man).
+constexpr float ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC = 3.5f;
+constexpr float ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC = 5.5f;
+// A star whose own death would land badly is only acted on this close to it: a fresh wave's four all die
+// together and would read as due at the spawn, and the serial deadline already paces them.
+constexpr uint32 ULDUAR_ALGALON_STAR_DUE_HORIZON_MS = 30000;
+// A kill already running only stops for an explosion this close, so it doesn't flip on a tick of noise.
+constexpr uint32 ULDUAR_ALGALON_STAR_KEEP_GAP_MS = 6000;
+// No explosion from just before the cast until the raid is back out of the void.
+constexpr uint32 ULDUAR_ALGALON_STAR_BIG_BANG_LEAD_MS = 1000;
+constexpr uint32 ULDUAR_ALGALON_STAR_BIG_BANG_TAIL_MS = 3000;
+// Nor around a meteor's impact.
+constexpr uint32 ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_MS = 4800;
+constexpr uint32 ULDUAR_ALGALON_STAR_IMPACT_LEAD_MS = 2000;
+constexpr uint32 ULDUAR_ALGALON_STAR_IMPACT_TAIL_MS = 1500;
+// Forecast to die this soon, a star is a hazard whatever its health: at 3.4%/s the 5% line is 1.5 s.
+constexpr uint32 ULDUAR_ALGALON_STAR_DYING_MS = 4000;
 
 // Cosmic Smash: full damage inside 6 yd, doubled dmg/dist to 10, dmg/dist past that. Impact is ~4.8s
 // after the marker lands, one marker on 10-man, three on 25-man.
@@ -233,6 +265,10 @@ struct AlgalonScanUnit
     bool active = false;
     // Stars only: Collapse drains 1% a second from here, so health against age says whether anything hit it.
     uint32 firstSeenMs = 0;
+    // Stars only: health lost per second over the log, never under the drain. `lossMeasured` once the log
+    // covers ULDUAR_ALGALON_STAR_LOG_MIN_MS.
+    float lossPctPerSec = ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC;
+    bool lossMeasured = false;
 };
 
 struct AlgalonEncounterState
@@ -279,6 +315,15 @@ struct AlgalonEncounterState
     std::vector<AlgalonScanUnit> darkMatter;
     std::unordered_map<ObjectGuid, uint32> markerSeenMs;
     std::unordered_map<ObjectGuid, uint32> starSeenMs;
+    // (ms, health %) per star, one sample per ULDUAR_ALGALON_STAR_LOG_STEP_MS.
+    std::unordered_map<ObjectGuid, std::vector<std::pair<uint32, float>>> starHealthLog;
+    // Dropped part-killed: the log restarts, and until it fills the star reads as dying at the dropped rate,
+    // or the old slope still carries the team's damage and makes it due again next tick.
+    std::unordered_set<ObjectGuid> droppedStars;
+    // Opened at a deadline, the kill keeps the deadline's looser position test.
+    bool focusByDeadline = false;
+    // Far-side bearing per handler, latched with its kite hole, or the park spot turns as it walks round.
+    std::unordered_map<ObjectGuid, float> kiteBearings;
     bool wormHolesSeen = false;
 
     uint32 lastStarDeathMs = 0;
@@ -293,6 +338,7 @@ bool AlgalonInRoom(Player* bot);
 bool AlgalonPresent(PlayerbotAI* botAI);
 // In combat and not beaten.
 bool AlgalonEngaged(PlayerbotAI* botAI);
+bool AlgalonInPhaseOne(PlayerbotAI* botAI);
 bool IsAlgalonPhased(Unit const* unit);
 
 // Runs from the definition tick, at most once per ULDUAR_ALGALON_STATE_TICK_MS per instance.
@@ -398,7 +444,14 @@ bool AlgalonSpotInRoom(float x, float y);
 // leaving doesn't count.
 bool AlgalonPathCrossesHole(Player* bot, float x, float y, float clearance = ULDUAR_ALGALON_HOLE_PATH_CLEARANCE);
 // A generic mover stopping at (x, y) would leave the bot standing at a field's edge, or walk it through one.
-bool AlgalonWalkEntersField(Player* bot, float x, float y);
+// A phased bot passes the exit radius: still inside a field when the phase drops, it is phased again.
+bool AlgalonWalkEntersField(Player* bot, float x, float y,
+                            float standClearance = ULDUAR_ALGALON_FIELD_STAND_CLEARANCE);
+// Where to walk next on the way to `to`: `to` itself, or a point round a hole the straight walk would clip.
+// False when the way is blocked and nothing goes round.
+bool AlgalonWalkAround(Player* bot, Position const& to, Position& next);
+// Phased with a hole within its exit radius: walking out is all that counts until it is outside.
+bool AlgalonPhasedInField(Player* bot);
 // A star other than `except` within `radius` of the spot.
 bool AlgalonStarWithin(PlayerbotAI* botAI, Position const& spot, float radius, ObjectGuid const& except);
 // Its hole is too far to reach in the cast, so it is walking towards it before Big Bang.

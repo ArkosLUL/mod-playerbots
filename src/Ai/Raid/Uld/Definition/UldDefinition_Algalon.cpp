@@ -96,6 +96,8 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Node<AlgalonStarMarkTrigger, AlgalonStarMarkAction>(ACTION_RAID + 2);
     e.Node<AlgalonRaidPositionTrigger, AlgalonRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);
 
+    // First, so a phased bot's held cast or item use is traced under it.
+    e.Multiplier<AlgalonLeaveFieldMultiplier>(Family::AnyAction);
     e.Multiplier<AlgalonCooldownReserveMultiplier>(Family::Spell);
     e.Block("algalon ice block hold", Role::Any, AlgalonCooldownsHeld, 0, {"ice block"});
 
