@@ -572,23 +572,45 @@ std::vector<Position> GetFreyaSunBeamPositions(PlayerbotAI* botAI, float searchR
 }
 
 std::vector<EncounterHelpers::HazardCircle> BuildFreyaEscapeHazards(std::vector<Position> const& bombs,
-                                                                    std::vector<Position> const& beams)
+                                                                    std::vector<Position> const& beams,
+                                                                    std::vector<Position> const& lashers)
 {
     std::vector<EncounterHelpers::HazardCircle> hazards;
-    hazards.reserve(bombs.size() + beams.size());
+    hazards.reserve(bombs.size() + beams.size() + lashers.size());
     for (Position const& bomb : bombs)
         hazards.emplace_back(bomb, ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS);
 
     for (Position const& beam : beams)
         hazards.emplace_back(beam, ULDUAR_FREYA_SUN_BEAM_CLEARANCE);
 
+    for (Position const& lasher : lashers)
+        hazards.emplace_back(lasher, ULDUAR_FREYA_DETONATE_RADIUS);
+
     return hazards;
+}
+
+std::vector<Position> GetFreyaEscapeLasherPositions(PlayerbotAI* botAI, float searchRadius)
+{
+    Player* bot = botAI->GetBot();
+
+    // Same exclusion as the camp: melee and tanks are standing on what they are hitting, and a spot
+    // that owes the pile 15 yd is not a firing position for them. Only the ones under _LASHER_BAIL_PCT
+    // count, for the same reason the camp counts only those - Detonate lands when a lasher dies, so a
+    // healthy one is not a blast, and clearing all ten is a retreat from something faster than a bot.
+    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
+        return {};
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    return GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, searchRadius);
 }
 
 std::vector<EncounterHelpers::HazardCircle> GetFreyaEscapeHazards(PlayerbotAI* botAI, float searchRadius)
 {
     return BuildFreyaEscapeHazards(GetFreyaNatureBombPositions(botAI->GetBot(), searchRadius),
-                                   GetFreyaSunBeamPositions(botAI, searchRadius));
+                                   GetFreyaSunBeamPositions(botAI, searchRadius),
+                                   GetFreyaEscapeLasherPositions(botAI, searchRadius));
 }
 
 Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI)

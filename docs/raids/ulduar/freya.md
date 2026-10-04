@@ -174,6 +174,14 @@ Ground Tremor is the control — 50000 yd, nothing dodges it, flat across all th
 get harder: the raid got tighter, nearest-neighbour **0.6 yd** against 1.3, and only the two mechanics
 that scale with tightness moved.
 
+**`1791059738` is the current kill, and the three fixes it produced are untested.** 7:03, hard mode,
+10 deaths over 9 players, **729k** a minute taken against the 899k above, Nature's Fury **35k** against
+105k, nearest-neighbour **1.31 yd**. Per mechanic: Detonate **179 hits in 19 blasts**, median **9**
+victims, inside the 6.7-10.4 band; 54 bombs in 7 volleys for **17 hits**, escape latency median
+**0.65s** on a 6s fuse; **27** Iron Roots traps in 9 volleys of 3, most released under 1s, worst
+**25.3s**. Four of the deaths were melee in the pile, one a human, one a 5.2s bomb reaction. The other
+four are what the lasher-hazard and pinned-bot fixes below address, and nothing has re-run since.
+
 Expect this stack to be broken up regularly. `EVENT_FREYA_NATURE_BOMB` repeats every **18s** for the
 whole fight, dropping one bomb per player at their own feet — `urand(7,10)` players **within 70 yd**
 in 25-man, 3-4 in 10-man (`boss_freya.cpp:645-660`). Damage 64587 is 5850-6150 in **10 yd** with **no
@@ -216,11 +224,20 @@ casts nothing — free for melee, out of range at the escape spot either way, an
 and healers. A blanket hold shell is out for the same reason: with a bomb up, bots sit 10-14 yd from
 one **34%** of the time.
 
-**Both escapes route around both hazards** (`GetFreyaEscapeHazards`: bombs at CLEAR, beams at
-`_SUN_BEAM_CLEARANCE`). They sit at the same relevance, so a bot reading only its own kind alternates
-forever — **30%** of bomb destinations landed inside a beam and **61%** of beam destinations inside a
-bomb, which is what killed the healer and the druid in `1788613108`. Each falls back to its own hazard
-alone before giving up: somebody else's hazard beats your own.
+**Both escapes route around all three hazards** (`GetFreyaEscapeHazards`: bombs at CLEAR, beams at
+`_SUN_BEAM_CLEARANCE`, low lashers at `_DETONATE_RADIUS`). They sit at the same relevance, so a bot
+reading only its own kind alternates forever — **30%** of bomb destinations landed inside a beam and
+**61%** of beam destinations inside a bomb, which is what killed the healer and the druid in
+`1788613108`. Each falls back to its own hazard alone before giving up: somebody else's hazard beats
+your own.
+
+**The lasher third is per bot: only ranged and healers pay it** (`GetFreyaEscapeLasherPositions`). An
+exit that clears a beam has no other reason to know the pile is there — in `1791059738` a Sunbeam
+during a lasher finish sent five of the back line to **one point**, 0.04-1.04 yd apart and 9-10 yd from
+lashers at 5-9%, and three died in the blasts. Melee and tanks get `{}` and keep `freya lasher about to
+blow`: owing them the pile is the `45d9a3e36` lattice again. Only lashers under `_LASHER_BAIL_PCT`
+count, as in the camp. When nothing clears both, the step-out drops the bombs before the blast — a bomb
+is a 6s fuse on a spot the bot can still walk off, a lasher under 15% is not.
 
 **The main tank answers a bomb by moving Freya** (`freya tank nature bomb`, `ACTION_RAID + 4`), because
 bombs land at players' feet and the melee stack is on her. **23 of 48** landed within 10 yd of her, her
@@ -395,6 +412,14 @@ went nowhere on **57-67%** of them; `Nightwarrior` held one coordinate for 3.0s,
 through four move orders. Both latches also break on `IsMovementPreventedByCasting()`, or a pinned bot
 sits out the full hold. See [pitfalls](../../engine/pitfalls.md) for the general rule.
 
+**Casting is not the only way to be pinned.** All six walk-only nodes return false on
+`UNIT_STATE_NOT_MOVE` (root, stun, died, distracted) before touching the motion master — otherwise the
+latch claims the tick for a walk that never starts, and the body below it throws away the cast the
+pinned bot could still have used. In `1791059738` Iron Roots landed **102 ms** into a bomb escape; the
+bot held that latch for 3.7s and died at **100% health** inside four bombs. `freya break iron roots`
+outranks the escapes but wins only one tick, because `Attack` reports false once the bot is already
+swinging at the root — so falling through is what leaves the pinned bot its rotation and its root.
+
 The `freya avoid aoe hold` rule zeroes the generic `avoid aoe`, which sits at `ACTION_EMERGENCY` (90),
 outranks every Freya node, and replaces a 15 yd escape with a flat `AiPlayerbot.FleeDistance` (5 yd) hop
 on a bearing of its own — it took the tick back from Nightwarrior's dodge 1.9s before it died. Freya
@@ -463,7 +488,12 @@ which never reaches the lockout branch.
 It is fully telegraphed: a **2000 ms** cast, repeating `25s..35s` (a range, so no timer predicts it).
 So the handling is Ignis's Flame Jets trio, ported. `FreyaGroundTremorCastGateMultiplier` caches the
 remaining window per millisecond and blocks any candidate whose `CalcCastTime` would not land first;
-`freya ground tremor hold cast` (`ACTION_EMERGENCY + 2`) stops a cast already in flight. Unlike Ignis,
+`freya ground tremor hold cast` (`ACTION_EMERGENCY + 2`) stops a cast already in flight, reading
+`CURRENT_GENERIC_SPELL` **and** `CURRENT_CHANNELED_SPELL`. The gate keeps ordinary casts from starting
+at all — **328** vetoes in `1791059738` — so a channel already running when the tremor begins is the
+only thing left for the hold, and reading one slot meant it never fired once in 164 pushes. `m_timer`
+carries what is left in either slot, a channel's remaining duration included, so one compare serves
+both. Unlike Ignis,
 **heals are gated too, and that is the point** — holding a Chain Heal for under 2s beats losing Nature
 for 10. Bots blocked here fall through to the instants already in their rotation. Stopping first also
 dodges the lockout outright: `Spell::EffectInterruptCast` applies `ProhibitSpellSchool` **only if it

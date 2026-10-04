@@ -42,6 +42,15 @@ void FreyaClearCastBlockingMove(Player* bot)
         bot->InterruptNonMeleeSpells(true);
 }
 
+// Every escape below is a walk, and each one throws away the bot's own cast to start it. A rooted or
+// stunned bot gets neither: the walk never happens, the latch goes on reporting that it did, and the
+// cast it lost was the only thing it could still do. Iron Roots lands mid-escape, so the pinned bot
+// has to fall through to its rotation and to the node that kills the root holding it.
+bool FreyaBotCannotWalk(Player* bot)
+{
+    return bot->HasUnitState(UNIT_STATE_NOT_MOVE);
+}
+
 // Every other living raid member near the bot. Nature's Fury has no ground marker to route around - the
 // raid itself is the hazard, and the carrier is the only one who can move away from it.
 std::vector<Position> GetFreyaAlliesNear(PlayerbotAI* botAI, float radius)
@@ -123,6 +132,12 @@ bool FreyaMoveAwayNatureBombAction::isUseful()
 
 bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
 {
+    if (FreyaBotCannotWalk(bot))
+    {
+        bombSpotMs = 0;
+        return false;
+    }
+
     // Not FleePosition: it clamps its travel to AiPlayerbot.FleeDistance (5 yd), which cannot clear a
     // 10 yd blast the bot is standing in the middle of, and it only ever reads one hazard. A volley
     // drops a bomb on every player, so the melee stack ends up under several overlapping ones.
@@ -137,7 +152,8 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
     // escapes sit at the same relevance, so a bot that reads only its own hazard alternates between
     // them forever. Built from the bombs already in hand rather than collected a second time.
     std::vector<HazardCircle> const hazards =
-        BuildFreyaEscapeHazards(bombs, GetFreyaSunBeamPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS));
+        BuildFreyaEscapeHazards(bombs, GetFreyaSunBeamPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS),
+                                GetFreyaEscapeLasherPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS));
 
     auto const stillClear = [&hazards](Position const& spot)
     {
@@ -235,6 +251,12 @@ bool FreyaTankNatureBombAction::isUseful()
 
 bool FreyaTankNatureBombAction::Execute(Event /*event*/)
 {
+    if (FreyaBotCannotWalk(bot))
+    {
+        kiteSpotMs = 0;
+        return false;
+    }
+
     Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
     if (!boss || !boss->IsAlive())
     {
@@ -678,6 +700,12 @@ bool FreyaDodgeUnstableSunBeamAction::isUseful()
 
 bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
 {
+    if (FreyaBotCannotWalk(bot))
+    {
+        dodgeSpotMs = 0;
+        return false;
+    }
+
     // Every beam in the search area is routed around, not just the one the bot is standing in, or it
     // sidesteps one beam straight into another. FleePosition cannot do this: it clamps travel to
     // AiPlayerbot.FleeDistance (5 yd), which does not clear a 12 yd beam, and it only reads one hazard.
@@ -718,7 +746,9 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
     // the same relevance, so a bot that reads only its own hazard alternates between them forever. The
     // beams are the ones already collected above.
     Position safe = FindNearestPositionClearOfHazards(
-        bot, BuildFreyaEscapeHazards(GetFreyaNatureBombPositions(bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS), beams),
+        bot,
+        BuildFreyaEscapeHazards(GetFreyaNatureBombPositions(bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS), beams,
+                                GetFreyaEscapeLasherPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS)),
         ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
 
     if (safe == Position())
@@ -754,6 +784,12 @@ bool FreyaNaturesFuryBailAction::isUseful()
 
 bool FreyaNaturesFuryBailAction::Execute(Event /*event*/)
 {
+    if (FreyaBotCannotWalk(bot))
+    {
+        bailSpotMs = 0;
+        return false;
+    }
+
     auto const stillClear = [this](Position const& spot)
     { return CountFreyaRaidNear(botAI, spot, ULDUAR_FREYA_NATURES_FURY_RADIUS, bot) == 0; };
 
@@ -814,6 +850,12 @@ bool FreyaStepOutOfSunbeamAction::isUseful()
 
 bool FreyaStepOutOfSunbeamAction::Execute(Event /*event*/)
 {
+    if (FreyaBotCannotWalk(bot))
+    {
+        stepSpotMs = 0;
+        return false;
+    }
+
     Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
     Unit* target = boss ? GetFreyaSunbeamTarget(boss) : nullptr;
     if (!target)
@@ -846,6 +888,17 @@ bool FreyaStepOutOfSunbeamAction::Execute(Event /*event*/)
     HazardSweepCache sweep;
 
     Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+
+    // Drop the bombs before the blast when nothing clears both. A bomb is a six second fuse on a spot
+    // the bot can still walk off, where a lasher under 15% goes off on its own schedule.
+    if (safe == Position())
+    {
+        std::vector<EncounterHelpers::HazardCircle> blastAndBeam = BuildFreyaEscapeHazards(
+            {}, {}, GetFreyaEscapeLasherPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS));
+        blastAndBeam.emplace_back(beam, ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS);
+
+        safe = FindNearestPositionClearOfHazards(bot, blastAndBeam, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+    }
 
     // Barely outside the beam beats standing in it, which is what the raid did with every volley of a
     // pull that took 271k a minute off this one spell.
@@ -905,6 +958,12 @@ bool FreyaLasherAboutToBlowAction::isUseful()
 
 bool FreyaLasherAboutToBlowAction::Execute(Event /*event*/)
 {
+    if (FreyaBotCannotWalk(bot))
+    {
+        bailSpotMs = 0;
+        return false;
+    }
+
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
@@ -1048,7 +1107,15 @@ bool FreyaGroundTremorHoldCastAction::Execute(Event /*event*/)
         return false;
 
     Spell* tremor = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+
+    // A channel keeps its own slot, and it is the only case left for this node: the cast gate already
+    // stops a long cast from starting inside the window, but a Blizzard or a Volley that was already
+    // running when Freya began the tremor can only be stopped here. For both slots m_timer holds what
+    // is left, a channel's remaining duration included, so the compare below reads the same either way.
     Spell* own = bot->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (!own)
+        own = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+
     if (!tremor || !own)
         return false;
 

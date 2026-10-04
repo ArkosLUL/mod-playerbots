@@ -429,7 +429,15 @@ std::vector<EncounterHelpers::HazardCircle> GetFreyaEscapeHazards(PlayerbotAI* b
 // The same list from hazards the caller already holds, so an escape that collected the bombs to test
 // its own spot does not collect them again to route around them.
 std::vector<EncounterHelpers::HazardCircle> BuildFreyaEscapeHazards(std::vector<Position> const& bombs,
-                                                                    std::vector<Position> const& beams);
+                                                                    std::vector<Position> const& beams,
+                                                                    std::vector<Position> const& lashers = {});
+
+// The lashers an escape owes clearance to, which is none of them for melee and tanks. Stepping out of
+// a beam or a bomb is otherwise the one move that has no reason to know the pile is there: a sunbeam
+// exit aimed five of the back line at one spot 9 yd from lashers at 5% and three of them died in the
+// blasts. Melee keep `freya lasher about to blow` instead - owing them the pile is the 45d9a3e36
+// lattice, which halved their damage.
+std::vector<Position> GetFreyaEscapeLasherPositions(PlayerbotAI* botAI, float searchRadius);
 
 // The bot the ranged half and the healers gather on: lowest-GUID living ranged DPS in the group on
 // this map, so every bot picks the same one with no shared state. A live bot rather than a fixed
