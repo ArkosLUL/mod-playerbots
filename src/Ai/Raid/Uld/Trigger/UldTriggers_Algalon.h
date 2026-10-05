@@ -92,6 +92,15 @@ public:
     bool IsActive() override;
 };
 
+class AlgalonExplosionPersonalTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon explosion personal";
+
+    AlgalonExplosionPersonalTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 class AlgalonShadowAuraTrigger : public Trigger
 {
 public:

@@ -193,6 +193,22 @@ bool AlgalonExplosionCoverAction::Execute(Event /*event*/)
     return true;
 }
 
+bool AlgalonExplosionPersonalAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = GetAlgalonExplosionPersonal(botAI);
+    if (!spellId)
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false, true))
+        bot->InterruptNonMeleeSpells(false);
+
+    if (!botAI->CastSpell(spellId, bot))
+        return false;
+
+    ClaimAlgalonExplosionPersonal(bot, spellId);
+    return true;
+}
+
 bool AlgalonShadowAuraAction::Execute(Event /*event*/) { return botAI->CastSpell("shadow resistance aura", bot); }
 
 bool AlgalonBigBangHideAction::Execute(Event /*event*/)

@@ -144,8 +144,10 @@ constexpr uint32 ULDUAR_ALGALON_BIG_BANG_STILL_MS = 3000;
 constexpr float ULDUAR_ALGALON_TANK_DEFENSIVE_PCT = 60.0f;
 constexpr float ULDUAR_ALGALON_TANK_LAY_ON_HANDS_PCT = 25.0f;
 // Every tank death came 2-6 s after a star explosion or a meteor, with the healers on the raid. Through this
-// window the holder keeps a damage cutter up whatever its health.
+// window the holder keeps a damage cutter up while under the percentage: above it, a third of the cutters went
+// on a tank at 76-100% and none were left for the deaths after two minutes.
 constexpr uint32 ULDUAR_ALGALON_TANK_WINDOW_LEAD_MS = 1000;
+constexpr float ULDUAR_ALGALON_TANK_WINDOW_PCT = 80.0f;
 constexpr uint32 ULDUAR_ALGALON_TANK_WINDOW_TAIL_MS = 5000;
 // After one bot casts a cutter, the aura takes a moment to show on the tank; nobody else casts in that time.
 constexpr uint32 ULDUAR_ALGALON_TANK_DEFENSIVE_CLAIM_MS = 1000;
@@ -154,6 +156,12 @@ constexpr float ULDUAR_ALGALON_SACRIFICE_MIN_PCT = 50.0f;
 // Aura Mastery and Divine Guardian last 6 s, so they go up this close to a star's forecast death.
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS = 2000;
 constexpr float ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT = 3.0f;
+// A bot that wouldn't survive the explosion presses its own button this close to it. Under Aura Mastery the
+// largest of 87 hits was 79% of the uncovered top roll, and Divine Guardian is a flat -20%.
+constexpr uint32 ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS = 1500;
+constexpr float ULDUAR_ALGALON_COVERED_EXPLOSION_FACTOR = 0.8f;
+// A paladin aura's reach.
+constexpr float ULDUAR_ALGALON_AURA_RANGE = 40.0f;
 // Healers pick by health %, and every explosion puts clothies below a tank losing ~15k/s, so the pair
 // gets healers of its own. Never more than the raid keeps: the star window waits for the raid to top up.
 constexpr uint8 ULDUAR_ALGALON_TANK_HEALERS_10 = 1;
@@ -396,6 +404,8 @@ struct AlgalonEncounterState
     uint32 layOnHandsClaimMs = 0;
     // The star the last explosion cover went up for.
     ObjectGuid coverStar;
+    // Per bot, the star it last pressed a personal button for.
+    std::unordered_map<ObjectGuid, ObjectGuid> personalStars;
     // Bots whose Nitro Boosts were ready at the cast start: their hide walk is timed boosted.
     std::unordered_set<ObjectGuid> nitroRunners;
     uint32 lastSmashImpactMs = 0;
@@ -502,6 +512,9 @@ void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut);
 // "aura mastery" or "divine sacrifice" when this paladin covers the star about to explode, else nullptr.
 char const* GetAlgalonExplosionCover(PlayerbotAI* botAI);
 void ClaimAlgalonExplosionCover(Player* bot, char const* cover);
+// This bot's own button against the star about to die, when the hit would kill it; 0 otherwise.
+uint32 GetAlgalonExplosionPersonal(PlayerbotAI* botAI);
+void ClaimAlgalonExplosionPersonal(Player* bot, uint32 spellId);
 // Runs Shadow Resistance Aura while stars live.
 bool IsAlgalonShadowAuraPaladin(Player* bot);
 

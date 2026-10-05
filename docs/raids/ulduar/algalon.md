@@ -372,7 +372,8 @@ holder soaked it. With none running (`RunningTankDefensive` or a Pain Suppressio
 Guardian Spirit aura) the next goes up:
 
 - `window`: from 1 s before a raid-wide hit (a star forecast to die, a meteor's impact) to 5 s after it,
-  whatever its health, so they run back to back through it;
+  back to back, while the holder is under 80% and no Phase Punch swap is due (by stacks, so a human partner
+  counts): at any health, 10 of 35 went on tanks at 76-100% and none were left for the deaths after 2:20;
 - `low`: under 60%.
 
 The first provider able takes it, cheapest first: the partner's Hand of Sacrifice (idle, in plate), the
@@ -381,8 +382,10 @@ Hand of Sacrifice (non-healers first), Pain Suppression, Guardian Spirit. Able: 
 spell range and sight, its `CanCastSpell` passing, and its mana (`CanCastSpell` skips both range and cost;
 runes aren't checked), a Hand caster at ≥ 50% without its own Hand on him, and with no disperser latched a
 button back by the next hit unless the holder is alone. Each bot asks whether it is first; a cast claims 1 s, so
-nobody stacks a second while the aura lands. The caster interrupts its own cast. `loh`: under 25%, Lay on Hands
-from another paladin, else the holder's own (Forbearance), over a running cutter.
+nobody stacks a second while the aura lands. The caster interrupts its own cast. `loh`: under 25%, over a running
+cutter: with none running, the holder's own Divine Protection first (it and a self Lay on Hands share
+Forbearance, and a self Lay on Hands locked an unspent one), then Lay on Hands from another paladin, else the
+holder's own.
 
 **Cooldowns** (`AlgalonCooldownReserveMultiplier`): Dispersion is held whenever casting it now leaves it
 cooling down at the next soak. With a disperser latched nothing else is held, except Divine Shield for swap
@@ -402,11 +405,21 @@ up, one per star:
   while stars live (a `Block` holds its other auras, released in phase 2). Prayer of Shadow Protection already
   gives 130 and both are aura 143, highest only, so the aura alone adds nothing; Aura Mastery takes it to 260
   for 6 s and recalculates the running aura.
-- Else Divine Sacrifice from a paladin bot with Divine Guardian (53527/53530), never the holder, ≥ 50%. The
+- Else Divine Sacrifice from a paladin bot with Divine Guardian (53527/53530, by `HasTalent`: a passive talent
+  is never in the spell map `HasSpell` reads, so it never fired before), never the holder, ≥ 50%. The
   tick removes 64205 from bots at once: left up it splits 30% of the party's damage onto the paladin, and the
   procced 70940 (raid within 30 yd −10/20%, 6 s) stays.
 
 The class Divine Sacrifice node is blocked while stars live and Aura Mastery all fight.
+
+**Personal buttons** (`ACTION_EMERGENCY`, after the cover): 23 of 41 explosion deaths had one ready, and bots
+press them only once already low. With a star dying within 1.5 s, an unphased bot outside the swap pair under the
+top roll (× 0.8 with Divine Guardian on it or within 40 yd of the Aura Mastery paladin; the largest of 87 hits
+under Aura Mastery was 79% of it) casts the cheapest that leaves it alive, once per star and none while one
+runs: Shadow Ward, Anti-Magic Shell (by id 48707: the name lookup misses "Anti-Magic Shell"), Barkskin,
+Shamanistic Rage, Cloak of Shadows (a 90% resist, not a cut), Icebound Fortitude, Dispersion (never the
+disperser's, nor one not back for the next soak), Divine Protection, Ice Block, Divine Shield. The immunities
+are skipped within 20 s of a cast.
 
 ## The trace
 
@@ -439,7 +452,8 @@ drain-only health, else `chewed`, and the nearest raid member's distance; older 
 only record of how a star died, since damage rows cover players alone; `algalon.soakkit`
 (`def=<button|dispersion|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.tankdef`
 (`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
-(`aura mastery`/`divine sacrifice` on the caster); `algalon.nitro` (`hide` on a bot using its boots on the
+(`aura mastery`/`divine sacrifice` on the caster); `algalon.personal` (the button's spell name);
+`algalon.nitro` (`hide` on a bot using its boots on the
 run); `algalon.handover` (`nodef` on a
 holder handing him over for want of a defensive); `algalon.pull`
 (`inreach=N victim=GUID`) at the tick the intro ends; `algalon.call` (`swap`/`loose`/`bigbang`/`hide`)

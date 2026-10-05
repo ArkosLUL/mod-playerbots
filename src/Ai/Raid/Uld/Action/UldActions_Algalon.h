@@ -88,6 +88,15 @@ public:
     bool Execute(Event event) override;
 };
 
+class AlgalonExplosionPersonalAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon explosion personal action";
+
+    AlgalonExplosionPersonalAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
 class AlgalonShadowAuraAction : public Action
 {
 public:

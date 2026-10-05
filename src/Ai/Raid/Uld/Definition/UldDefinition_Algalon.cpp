@@ -97,6 +97,8 @@ void DefineAlgalon(EncounterBuilder& e)
     // Instants, below the hide, the dodge and the exit: those come first, and the cast follows on the next tick.
     e.Node<AlgalonTankDefensiveTrigger, AlgalonTankDefensiveAction>(ACTION_EMERGENCY + 2);
     e.Node<AlgalonExplosionCoverTrigger, AlgalonExplosionCoverAction>(ACTION_EMERGENCY + 1);
+    // After the cover: a bot that survives the hit under it keeps its button.
+    e.Node<AlgalonExplosionPersonalTrigger, AlgalonExplosionPersonalAction>(ACTION_EMERGENCY);
     // Ahead of the slot walk: the tank he's hitting from 70%, the partner and the healer itself from half.
     e.Node<AlgalonTankHealCriticalTrigger, AlgalonTankHealAction>(ACTION_RAID + 9);
     e.Node<AlgalonTankPickupTrigger, AlgalonTankPickupAction>(ACTION_RAID + 8);

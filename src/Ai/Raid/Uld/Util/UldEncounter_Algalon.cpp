@@ -2231,10 +2231,12 @@ uint32 SacrificeReady(Player* paladin, Player* holder)
     return ExternalReady(paladin, "hand of sacrifice", holder);
 }
 
+// A passive talent is only in the talent map, never the spell map HasSpell reads.
 bool HasDivineGuardian(Player* paladin)
 {
-    return paladin->HasSpell(SPELL_ALGALON_DIVINE_GUARDIAN_RANK_1) ||
-           paladin->HasSpell(SPELL_ALGALON_DIVINE_GUARDIAN_RANK_2);
+    uint8 const spec = paladin->GetActiveSpec();
+    return paladin->HasTalent(SPELL_ALGALON_DIVINE_GUARDIAN_RANK_1, spec) ||
+           paladin->HasTalent(SPELL_ALGALON_DIVINE_GUARDIAN_RANK_2, spec);
 }
 
 // One cover per explosion: Divine Guardian on anyone, or Aura Mastery on the shadow aura paladin.
@@ -2947,6 +2949,15 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
     // A full heal, so over a cutter too. Another paladin's first: on himself it puts up Forbearance.
     if (holder->GetHealthPct() < ULDUAR_ALGALON_TANK_LAY_ON_HANDS_PCT && !claimed(state->layOnHandsClaimMs))
     {
+        // Forbearance from either locks the other out, and an unspent Divine Protection is lost to a self Lay on
+        // Hands for two minutes.
+        if (IsBot(holder) && !TankCutRunning(holder) && !claimed(state->tankCutClaimMs))
+        {
+            uint32 const spellId = ExternalReady(holder, "divine protection", holder);
+            if (usable(holder, spellId))
+                return holder == bot ? AlgalonTankCut{holder, spellId, "low"} : none;
+        }
+
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* paladin = ref->GetSource();
@@ -2969,8 +2980,12 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
     if (TankCutRunning(holder) || claimed(state->tankCutClaimMs))
         return none;
 
+    Player* partner = PairPartner(group, *state, holder);
+    // The partner takes him within a second, and a cutter on the outgoing tank is spent for nothing. By stacks,
+    // so a human partner counts too.
+    bool const swapping = partner && CanStayOut(partner) && SwapDue(*state, holder, partner, now);
     char const* why = nullptr;
-    if (RaidHitWindow(*state, now))
+    if (RaidHitWindow(*state, now) && !swapping && holder->GetHealthPct() < ULDUAR_ALGALON_TANK_WINDOW_PCT)
         why = "window";
     else if (holder->GetHealthPct() < ULDUAR_ALGALON_TANK_DEFENSIVE_PCT)
         why = "low";
@@ -2981,7 +2996,6 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
     { return provider == bot ? AlgalonTankCut{holder, spellId, why} : none; };
 
     // The partner is idle in plate, so the 30% it takes over costs it least.
-    Player* partner = PairPartner(group, *state, holder);
     if (IsBot(partner))
     {
         uint32 const spellId = SacrificeReady(partner, holder);
@@ -3121,6 +3135,126 @@ void ClaimAlgalonExplosionCover(Player* bot, char const* cover)
     state->coverStar = star->guid;
     if (RaidObs::Active())
         RaidObs::Note(bot, "algalon.cover", cover);
+}
+
+namespace
+{
+struct PersonalButton
+{
+    char const* spell;
+    // By id where the name lookup misses: it compares the DBC name, and "anti magic shell" isn't "Anti-Magic Shell".
+    uint32 spellId;
+    // What is left of the hit, by factor and by flat absorb.
+    float factor;
+    uint32 absorb;
+    // Magic immunity: strips the hole's phase aura or keeps it off.
+    bool immunity;
+};
+
+// Cheapest cooldown first, so a bubble or a block only goes when nothing shorter will do. Cloak is a 90% chance
+// to resist, not a cut, so it sits behind the sure ones on the same cooldown.
+PersonalButton const PERSONAL_BUTTONS[] = {
+    {"shadow ward", 0, 1.0f, 3300, false},       {"anti magic shell", 48707, 0.25f, 0, true},
+    {"barkskin", 0, 0.8f, 0, false},             {"shamanistic rage", 0, 0.7f, 0, false},
+    {"cloak of shadows", 0, 0.1f, 0, true},      {"icebound fortitude", 0, 0.7f, 0, false},
+    {"dispersion", 0, 0.1f, 0, false},           {"divine protection", 0, 0.5f, 0, false},
+    {"ice block", 0, 0.0f, 0, true},             {"divine shield", 0, 0.0f, 0, true},
+};
+
+uint32 PersonalButtonId(Player* bot, PersonalButton const& button)
+{
+    if (button.spellId)
+        return bot->HasSpell(button.spellId) ? button.spellId : 0;
+
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    return botAI ? botAI->GetAiObjectContext()->GetValue<uint32>("spell id", button.spell)->Get() : 0;
+}
+
+// Divine Guardian on the bot itself, or within 40 yd of the shadow aura paladin under Aura Mastery.
+bool ExplosionCoversBot(Player* bot, Group* group, AlgalonEncounterState const& state)
+{
+    if (bot->HasAura(SPELL_ALGALON_DIVINE_GUARDIAN))
+        return true;
+
+    Player* auraPaladin = FindGroupMember(group, state.shadowAuraPaladin.Get());
+    return auraPaladin && auraPaladin->HasAura(SPELL_ALGALON_AURA_MASTERY) &&
+           bot->IsWithinDistInMap(auraPaladin, ULDUAR_ALGALON_AURA_RANGE);
+}
+}  // namespace
+
+uint32 GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    AlgalonEncounterState const* state = FindState(bot);
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!state || !group || state->phase.Get() != AlgalonPhase::One || state->bigBangCasting ||
+        IsAlgalonPhased(bot) || state->swapPair.count(bot->GetGUID()))
+        return 0;
+
+    AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS);
+    if (!star)
+        return 0;
+
+    auto const pressed = state->personalStars.find(bot->GetGUID());
+    if (pressed != state->personalStars.end() && pressed->second == star->guid)
+        return 0;
+
+    float hit = static_cast<float>(bot->GetMap()->Is25ManRaid() ? ULDUAR_ALGALON_STAR_EXPLOSION_MAX_25
+                                                                : ULDUAR_ALGALON_STAR_EXPLOSION_MAX_10);
+    if (ExplosionCoversBot(bot, group, *state))
+        hit *= ULDUAR_ALGALON_COVERED_EXPLOSION_FACTOR;
+
+    float const health = static_cast<float>(bot->GetHealth());
+    if (health > hit)
+        return 0;
+
+    // One already running: two stars close together would otherwise spend a second one.
+    for (PersonalButton const& button : PERSONAL_BUTTONS)
+    {
+        uint32 const spellId = PersonalButtonId(bot, button);
+        if (spellId && bot->HasAura(spellId))
+            return 0;
+    }
+
+    uint32 const now = getMSTime();
+    bool const immunityHeld = BigBangDueWithin(*state, ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS, now);
+    int32 const untilHit = AlgalonMsToBigBangHit(botAI);
+    for (PersonalButton const& button : PERSONAL_BUTTONS)
+    {
+        if ((button.immunity && immunityHeld) || hit * button.factor - button.absorb >= health)
+            continue;
+
+        uint32 const spellId = PersonalButtonId(bot, button);
+        SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+        if (!info || !CanPay(bot, info) || !botAI->CanCastSpell(spellId, bot))
+            continue;
+
+        // The soaker's, and a backup's that wouldn't be back for the hit: the reserve's own test.
+        if (!std::strcmp(button.spell, "dispersion") &&
+            (state->disperser.Get() == bot->GetGUID() || untilHit == 0 ||
+             AlgalonCooldownMs(bot, spellId) > untilHit - ULDUAR_ALGALON_SOAK_DISPERSION_MS))
+            continue;
+
+        return spellId;
+    }
+
+    return 0;
+}
+
+void ClaimAlgalonExplosionPersonal(Player* bot, uint32 spellId)
+{
+    AlgalonEncounterState* state = FindState(bot);
+    AlgalonScanUnit const* star =
+        state ? ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS) : nullptr;
+    if (!star)
+        return;
+
+    state->personalStars[bot->GetGUID()] = star->guid;
+    if (RaidObs::Active())
+    {
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+        RaidObs::Note(bot, "algalon.personal", info ? info->SpellName[0] : "?");
+    }
 }
 
 bool IsAlgalonShadowAuraPaladin(Player* bot)
