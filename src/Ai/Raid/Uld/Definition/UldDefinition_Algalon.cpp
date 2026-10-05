@@ -94,6 +94,8 @@ bool AlgalonSmashChargeHold(PlayerbotAI* botAI)
                                         ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE + target->GetCombatReach());
 }
 
+bool AlgalonTrimming(PlayerbotAI* botAI) { return GetAlgalonTrimStar(botAI->GetBot()) != nullptr; }
+
 void DefineAlgalon(EncounterBuilder& e)
 {
     // A survival ranking. Missing Big Bang is 76-112k or a reset, Cosmic Smash lands ~4.8s after its
@@ -206,6 +208,10 @@ void DefineAlgalon(EncounterBuilder& e)
 
     // A bot walking towards a hole it couldn't reach in the cast would be walked back to him by reach.
     e.OwnMovement("algalon far hole", Role::Any, AlgalonGoingToFarHole, Family::Attack);
+
+    // Moving cancels a wand: the slot walk took a trimmer off its star every tick.
+    e.OwnMovement("algalon star trim", Role::Ranged, AlgalonTrimming, 0,
+                  {AlgalonBigBangHideAction::Name, AlgalonCosmicSmashAction::Name, AlgalonLeaveBlackHoleAction::Name});
 
     e.Tick(AlgalonTickEncounterState);
 }

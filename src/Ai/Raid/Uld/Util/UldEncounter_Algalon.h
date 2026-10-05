@@ -144,8 +144,8 @@ constexpr int32 ULDUAR_ALGALON_HIDE_CAST_SLACK_MS = 250;
 constexpr float ULDUAR_ALGALON_NITRO_MIN_WALK = 10.0f;
 // Cast remaining when the soaker's defensive goes up, so it also covers his swings until the raid is back.
 constexpr int32 ULDUAR_ALGALON_SOAK_DEFENSIVE_MS = 3000;
-// Dispersion only lasts 6s.
-constexpr int32 ULDUAR_ALGALON_SOAK_DISPERSION_MS = 5000;
+// Dispersion only lasts 6s. Up this long before the hit it covers the hit and every star dying under it.
+constexpr int32 ULDUAR_ALGALON_SOAK_DISPERSION_MS = 5400;
 // An external needs the priest to still reach a hole after the GCD.
 constexpr int32 ULDUAR_ALGALON_EXTERNAL_MIN_REMAINING_MS = 4000;
 // The hit takes the soaker to ~20% and the raid is back a second later, so the healers' first cast
@@ -208,27 +208,45 @@ constexpr uint32 ULDUAR_ALGALON_FAR_HOLE_SECONDS = 15;
 
 // Stars die under Big Bang: Black Hole Explosion only hits its caster's phase, so a star dying while the raid
 // is phased hits the soaker alone, in Dispersion. The drain is exact, a tick a second from the spawn, so the
-// death lands on a tick inside this window round the hit; 64445 strips the phase a second after it.
-constexpr int32 ULDUAR_ALGALON_UNDER_LEAD_MS = 2000;
+// death lands on a tick inside this window round the hit; 64445 strips the phase a second after it. The
+// window opens once everyone is in. It can't open sooner: the tanks hold him until the cast starts or he
+// resets, and the soaker's Dispersion lasts 6 s.
+constexpr int32 ULDUAR_ALGALON_UNDER_LEAD_MS = 4000;
 constexpr int32 ULDUAR_ALGALON_UNDER_TAIL_MS = 600;
-// With a star under, every hider goes in this much earlier: the last were phased only 0.2-0.6 s before the
-// hit. Stretched so they are in a pulse and a half before the earliest such death, up to the cap.
-constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_EXTRA_MS = 2500;
+// With a star under, every hider goes in this much earlier, handler and tanks too, so those who were near
+// their hole at the cast are in before the window opens. Stretched so they are in a pulse and a half before
+// the earliest such death, up to the cap.
+constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_EXTRA_MS = 3000;
 constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_STRETCH_MS = 4000;
 constexpr int32 ULDUAR_ALGALON_UNDER_DEATH_LEAD_MS = 1500;
 // The team brings a star to this far above its band (% of max health), since casts in flight land after it
-// stops, and a wand trims the rest; the plan keeps the trims this long before the cast.
-constexpr float ULDUAR_ALGALON_UNDER_BULK_BUFFER_PCT = 8.0f;
-constexpr int32 ULDUAR_ALGALON_UNDER_TRIM_ALLOWANCE_MS = 6000;
+// stops, and wands trim the rest. A new star joins the plan only while its work leaves the trims this long,
+// one wand's time for the whole buffer.
+constexpr float ULDUAR_ALGALON_UNDER_BULK_BUFFER_PCT = 5.0f;
+constexpr int32 ULDUAR_ALGALON_UNDER_TRIM_ALLOWANCE_MS = 18000;
 constexpr float ULDUAR_ALGALON_UNDER_TRIM_RANGE = 28.0f;
+// A wand takes off about this much, and a star gets up to this many.
+constexpr float ULDUAR_ALGALON_UNDER_TRIM_PCT_PER_SEC = 0.3f;
+constexpr size_t ULDUAR_ALGALON_UNDER_TRIMMERS_PER_STAR = 2;
+// In this stretch before the cast a planned star whose work has no longer fitted for a second is handed to
+// pacing, which can still kill it before the cast. Later none leaves for that: pacing couldn't kill it in time
+// either.
+constexpr int32 ULDUAR_ALGALON_UNDER_RELEASE_FROM_MS = 15000;
+constexpr int32 ULDUAR_ALGALON_UNDER_RELEASE_TO_MS = 8000;
+constexpr uint32 ULDUAR_ALGALON_UNDER_LATE_HOLD_MS = 1000;
+// A soaker missing this long ends the plan; less is a phase or a re-election.
+constexpr uint32 ULDUAR_ALGALON_UNDER_SOAKER_GRACE_MS = 2000;
 // The plan holds until the strip is past, and phased bots keep clear of an under-star its last seconds.
 constexpr uint32 ULDUAR_ALGALON_UNDER_KEEP_MS = 1200;
 constexpr int32 ULDUAR_ALGALON_UNDER_DYING_MS = 3000;
 // The team's speed until it shows one, and its walk and start per star. The bulk starts once the work left
 // plus this slack reaches the cast, so the trims have time and a low star sits exposed to splash no longer.
-constexpr float ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC = 7.0f;
+constexpr float ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC = 6.0f;
 constexpr int32 ULDUAR_ALGALON_UNDER_SWITCH_MS = 3000;
-constexpr int32 ULDUAR_ALGALON_UNDER_BULK_SLACK_MS = 20000;
+constexpr int32 ULDUAR_ALGALON_UNDER_BULK_SLACK_MS = 35000;
+// With a star under, a ring hider waits this close to its hole before the cast, so it is in by the window:
+// from 28-34 yd the walk alone took up to 5 s.
+constexpr float ULDUAR_ALGALON_UNDER_HOLE_REACH = 22.0f;
 
 // Collapsing Star pacing. Each death is Black Hole Explosion on everyone unphased (64122 up to 16,912,
 // 65108 up to 21,525), and Collapse drains 1% max health a second, so four ignored stars explode within
@@ -488,10 +506,21 @@ struct AlgalonEncounterState
     std::unordered_set<ObjectGuid> underStars;
     uint32 underFromMs = 0;
     uint32 underToMs = 0;
+    // The cast count the plan was made under: a cast starting begins the next plan from scratch.
+    uint32 underPlanCycle = 0;
+    // Planned stars handed back to pacing, never planned again.
+    std::unordered_set<ObjectGuid> underReleased;
+    // Per planned star, since when its work has overrun the cast in the release stretch.
+    std::unordered_map<ObjectGuid, uint32> underLateMs;
+    // Since when no disperser has been latched while stars were planned.
+    uint32 underNoSoakMs = 0;
+    // The under-star the team is taking down, kept until it is done: re-picked each tick, the team moved on
+    // every 3 s and only matched the drain.
+    ObjectGuid bulkStar;
     // With no hole at all, the star killed before the cast to make one.
     ObjectGuid shelterStar;
-    // Per under-star, the bot trimming it with a wand.
-    std::unordered_map<ObjectGuid, ObjectGuid> trimmers;
+    // Per under-star, the bots trimming it with a wand.
+    std::unordered_map<ObjectGuid, std::vector<ObjectGuid>> trimmers;
     uint32 lastSmashImpactMs = 0;
 
     std::vector<AlgalonScanUnit> stars;

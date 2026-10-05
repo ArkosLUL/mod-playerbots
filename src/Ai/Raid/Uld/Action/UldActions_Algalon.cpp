@@ -476,6 +476,13 @@ bool AlgalonStarTrimAction::Execute(Event /*event*/)
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
+    // Moving cancels a wand, and a walk already issued keeps going: one re-cast every tick and never landed.
+    if (bot->isMoving())
+    {
+        bot->StopMoving();
+        Booking(botAI).clear();
+    }
+
     if (!botAI->CastSpell(SPELL_ALGALON_WAND_SHOOT, star))
         return false;
 

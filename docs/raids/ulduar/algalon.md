@@ -94,7 +94,8 @@ Dark Matter, and stepping out early lets the 10 s phase lapse before the hit.
 Everyone else keeps fighting until the walk to its hole plus 2.5 s is all that is left of the
 cast (`wait`). Its hole is the nearest one not claimed by the kite, and the wait, the run and the far-hole
 approach all read that same hole: timed off a nearer kite hole, 13 bots left 2.4-4.7 s before the hit for one
-35-52 yd away and died on the way: the phase only has to cover the hit, so hiding early buys nothing. The run breaks a cast
+35-52 yd away and died on the way: the phase only has to cover the hit, so hiding early buys nothing, bar a star
+dying under it (Stars). The run breaks a cast
 pinning the feet, re-issues a stalled walk and holds its tick while walking; an `Exclusive` rule keeps
 every other mover off the hider and a `Block` stops Charge, Blink and Disengage. **Once phased, step
 8 yd off the hole**: still inside when 64445 strips the phase means phased again within a second for
@@ -127,9 +128,10 @@ dying while the raid hides hits the soaker alone, ~2 k in Dispersion. Across thr
 77, each lost 8-13 to one dying after the first cast, and with 4 healers the raid never refilled between them.
 The drain is exact: Collapse (62018) deals `CountPctFromMaxHealth(1)` a second on a clock from the spawn, so the
 scan reads health, that tick and the time to the next (`GetPeriodicTimer`) and knows the second it dies
-untouched. The window is hit − 2 s to hit + 0.6 s (64445 strips the phase a second after the hit), re-anchored
+untouched. The window is hit − 4 s to hit + 0.6 s (64445 strips the phase a second after the hit), re-anchored
 on the real cast and kept until 1.2 s after the hit; a star's band is the health (lo, hi] that dies on a tick in
-it.
+it. It can't open sooner: the tanks hold him until the cast starts or he resets, the soaker's Dispersion (up
+≤ 5.4 s before the hit) lasts 6 s, and each second in the void costs everyone 1.3-1.9 k of 62169.
 
 | Wave (T0 = intro end) | Spawn | Untouched death | Plan |
 |---|---|---|---|
@@ -139,19 +141,30 @@ it.
 | 4 | 196.5 s, 4 | 296.5 | under Big Bang 3, ~17.5% each |
 
 - **Plan**, per tick outside the cast, only with a disperser latched (a tank soaker would take each explosion
-  whole): every star whose drain death isn't before the window, while the team's work fits before the cast less
-  6 s for the trims (at its speed less the drain, which moves the band), smallest first; the rest are paced.
+  whole), started afresh at each cast: a new star joins if its drain death isn't before the window and the
+  team's work fits before the cast less 18 s, one wand's trim (at 6 %/s, or the measured speed when lower, less
+  the drain, which moves the band), smallest first; the rest are paced. **A planned star stays planned**:
+  re-planned each tick, all were dropped 6 s before the cast, and three died together after the strip and killed
+  18. It is released for good (`algalon.underdrop`) only `early`, dying before hit − 5 s (the stretch's reach);
+  `late`, between cast −15 and −8 s once its bulk plus trims (0.3 %/s a wand) have overrun the cast for 1 s
+  (one trimmer missing a tick doubles the estimate), so pacing kills it first; or `nosoak`, no disperser for
+  2 s (a shorter gap is a phase or a re-election).
 - **Shelter**: with no hole at all, the star nearest the hold spot is paced dead before the cast.
 - Pacing and `urgent` ignore under-stars (`urgent` takes one only when nothing else is left).
-- **Bulk** (`algalon.starwindow` `under`): with no paced kill, the team takes the under-star with most left down
-  to its band plus 8% (casts in flight), once the work left plus 20 s reaches the cast; DoTs and channels are held
-  on under-stars (the target guard), since they keep hitting.
-- **Trim**: a bot with a wand (Shoot 5019), the team's first, takes each finished one into its band, live from
-  the star's own clock; the tick stops any wand on a star the team isn't killing that isn't a trimmer's above its
-  band. Running for its hole it stops; the soaker trims only well before its Dispersion, and no wand starts over a
-  channel (it would cancel it).
-- **Hide**: with a star under, every margin (handler and tanks included) gains 2.5 s, stretched so all are in
-  1.5 s before the earliest drain death, capped at 4 s.
+- **Bulk** (`algalon.starwindow` `under`): with no paced kill, the team takes an under-star down to its band plus
+  5% and stays on it until done (re-picked each tick, it moved every ~3 s and only matched the drain), the one
+  with most left next; a bulk starts once the work left plus 35 s reaches the cast. DoTs and channels are held on under-stars
+  (the target guard); the tick interrupts any cast or channel on one at its line, the band itself for its
+  trimmers, a paced kill's focus excepted.
+- **Trim**: up to two bots with a wand (Shoot 5019), off the team first, take each finished one into its band,
+  live from the star's own clock; the team trims only with no kill or bulk on (a member walking to the next star
+  re-cast Shoot every tick and never shot). The trimmer stops moving first, and an `OwnMovement` rule holds every
+  mover but the hide, the dodge and the exit; it yields to a meteor or dying-star dodge, and within 15 s of the
+  cast only one within 22 yd of its hole trims. The tick stops any wand on a star the team isn't killing that isn't
+  a trimmer's above its band. Running for its hole it stops; the soaker trims only well before its Dispersion,
+  and no wand starts over a channel (it would cancel it).
+- **Hide**: with a star under, every margin (handler and tanks included) gains 3 s, stretched so all are in
+  1.5 s before the earliest drain death, capped at 4 s; the handler no longer waits on stragglers.
 - Phased bots keep 8 yd off an under-star in its last 3 s (exit and leave trigger): its hole lands under them at
   the strip.
 
@@ -252,7 +265,7 @@ set-behind spots) is within 7.5 yd of a hole or the walk passes within 6.3 yd of
 live until a constellation eats one or phase 2.
 
 **A far hole is approached before the cast.** Within 15 s of it or during it, a bot whose hole is over
-35 yd from its own spot (a melee bot's is him) waits 30 yd from that hole (`nearhole`), with the generic movers
+35 yd from its own spot (a melee bot's is him) waits 30 yd from that hole (`nearhole`; with a star under, over 22 yd and at 22), with the generic movers
 held: three ranged 45-64 yd from the only hole couldn't make it in 8 s. With that spot in his reach (healers
 ring him), the nearest point 30 yd round the hole that isn't. Swap tanks and the handler are left out.
 
@@ -265,7 +278,7 @@ the enrage, and guides agree nobody damages them. The **handler**, a third tank 
 not holding Algalon, and always a bot, taunts every loose one onto itself. At Big Bang it **hides last**,
 since they follow it in and close the hole (65509, 6 yd) while those already inside stay phased: 62168 is
 owned by each target, and a despawning caster strips only area and single-target auras. It takes its kite
-hole, nobody else's, else its shelter, and waits there (`hold`) until every hider bound for that hole is in
+hole, nobody else's, else its shelter, and (with no star under) waits there (`hold`) until every hider bound for that hole is in
 (bots by shelter, humans by the nearest hole, kite hole included), or until its walk plus 2 s is left: a tank
 is caught out under its walk plus 1.5 s, and with the same threshold a 250 ms tick read that first. From 10 s
 before the cast it only taunts (`gather`), keeping its kite hole unless that became the raid's: a constellation
@@ -510,7 +523,7 @@ only record of how a star died, since damage rows cover players alone; `algalon.
 (`def=<button|dispersion|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.tankdef`
 (`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
 (`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (`start|stop <star counter> <hp%>` on the
-wand); `algalon.personal` (the button's spell name);
+wand); `algalon.underdrop` (`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.personal` (the button's spell name);
 `algalon.nitro` (`hide` on a bot using its boots on the
 run); `algalon.handover` (`nodef` on a
 holder handing him over for want of a defensive); `algalon.pull`
@@ -549,7 +562,9 @@ counted by cause and role with humans starred. Then:
   up and damage covered against uncovered; per explosion death the personal buttons pressed or ready;
   `window` cutters on a holder at 80% or more;
 - `--stars` also: per star its plan, window, forecast against actual death, offset from the hit, who its
-  explosion hit unphased and its trims; `--constellations` the kite runs (stages, retries, eaten) and parked
+  explosion hit unphased and its trims; per focus span the loss beyond the drain and the switches between
+  under-stars, each release, each trimmer's starts and shots fired, with verdicts for a release within 8 s of the
+  cast, over one switch per star and 3 Shoot starts in 2 s; `--constellations` the kite runs (stages, retries, eaten) and parked
   stretches with none eaten; `--bigbang` Nitro Boosts per hider;
 - `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
 - `--tankheal`: the tank healers, each healer's share on the pair, itself and others, Beacon time on holder

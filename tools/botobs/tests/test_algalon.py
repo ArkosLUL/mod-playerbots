@@ -2173,6 +2173,141 @@ class SmashCharge(unittest.TestCase):
                       al.smash_faults(self.trace))
 
 
+UD_TRACKER, UD_LOCK, UD_MAGE = 8301, 8302, 8303
+UD_STAR_A, UD_STAR_B, UD_STAR_C = (CREATURE | n for n in (501, 502, 503))
+UD_END = 50000
+UD_FOCUS = ((12000, UD_STAR_A), (16000, UD_STAR_B), (20000, UD_STAR_A), (24000, UD_STAR_B), (28000, 0))
+# what each loses a second beyond the drain while it holds the focus
+UD_EXTRA = {UD_STAR_A: 2.0, UD_STAR_B: 3.0}
+
+
+def ud_star_hp(star: int, when: int) -> float:
+    lost = when / 1000.0
+    for (start, held), (stop, _) in zip(UD_FOCUS, UD_FOCUS[1:]):
+        if held == star:
+            lost += max(0, min(when, stop) - start) / 1000.0 * UD_EXTRA[star]
+    return 100.0 - lost
+
+
+def shoot(when: int, caster: int, star: int, fired: bool = False) -> dict:
+    rec = cast(when, caster, al.SPELL_WAND_SHOOT, star)
+    if fired:
+        rec["tr"] = 1
+    return rec
+
+
+def underdrop_pull(drop: tuple[str, ...] = (), shots: bool = True) -> list[dict]:
+    """Three stars planned under Big Bang 1 (cast 0:40). The focus goes A, B, A, B; A is released early 14 s
+    before the cast, C late 4 s before it. The mage restarts its wand on C three times in 0.4 s, the
+    warlock starts once on B after wanding B off the trim. `drop` leaves out the notes of those keys,
+    `shots` False every Shoot cast."""
+    roster = [
+        {"g": UD_TRACKER, "n": "Tracker", "r": "tank", "c": "warrior", "h": 0},
+        {"g": UD_LOCK, "n": "Lock", "r": "ranged", "c": "warlock", "h": 0},
+        {"g": UD_MAGE, "n": "Mage", "r": "ranged", "c": "mage", "h": 0},
+    ]
+    a, b, c = (guid & 0xFFFFFFFF for guid in (UD_STAR_A, UD_STAR_B, UD_STAR_C))
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 0,
+         "boss": "algalon-the-observer", "roster": roster},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ALGALON, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        *({"t": 1, "e": "unit", "g": guid, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star"}
+          for guid in (UD_STAR_A, UD_STAR_B, UD_STAR_C)),
+        note(10000, UD_TRACKER, "algalon.starplan", f"{a} 78% 30s u, {b} 80% 32s u, {c} 82% 34s u | under 34..39"),
+        note(30000, UD_TRACKER, "algalon.starplan", f"{b} 50% 15s u, {c} 70% 20s | under 14..19"),
+        note(12000, UD_TRACKER, "algalon.starwindow", "under"), note(28000, UD_TRACKER, "algalon.starwindow", "none"),
+        *(note(when, UD_TRACKER, "algalon.focusstar", star) for when, star in UD_FOCUS),
+        note(26000, UD_TRACKER, "algalon.underdrop", f"early {a} 60 14000"),
+        note(36000, UD_TRACKER, "algalon.underdrop", f"late {c} 64 4000"),
+        *(note(when, UD_MAGE, "algalon.trim", f"start {c} 70") for when in (30000, 30200, 30400)),
+        note(35000, UD_MAGE, "algalon.trim", f"stop {c} 64"),
+        note(30000, UD_LOCK, "algalon.trim", f"start {b} 46"), note(35000, UD_LOCK, "algalon.trim", f"stop {b} 41"),
+        cast(40000, ALGALON, al.SPELL_BIG_BANG[0], cast_ms=8000),
+        {"t": UD_END, "e": "end", "out": "wipe"},
+    ]
+    if shots:
+        records += [shoot(18000, UD_LOCK, UD_STAR_B), shoot(19000, UD_LOCK, UD_STAR_B, True),
+                    *(shoot(when, UD_MAGE, UD_STAR_C) for when in (30000, 30200, 30400)),
+                    shoot(31900, UD_MAGE, UD_STAR_C, True), shoot(33400, UD_MAGE, UD_STAR_C, True),
+                    shoot(30000, UD_LOCK, UD_STAR_B),
+                    *(shoot(when, UD_LOCK, UD_STAR_B, True) for when in (31500, 33000, 34500))]
+    for when in range(0, UD_END, 500):
+        units = [row(guid, (0, 12), 100.0, ALGALON) for guid in (UD_TRACKER, UD_LOCK, UD_MAGE)]
+        units.append(row(ALGALON, (0, 4), 90.0, UD_TRACKER))
+        units += [row(star, (index * 10, 30), ud_star_hp(star, when), 0)
+                  for index, star in enumerate((UD_STAR_A, UD_STAR_B, UD_STAR_C))]
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return [rec for rec in records if rec.get("e") != "note" or rec.get("k") not in drop]
+
+
+class UnderBulk(unittest.TestCase):
+    """How the team worked the under-stars down: focus switches, releases and the wands."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, underdrop_pull())
+        cls.lines = [line for _, line in al.failures(cls.trace)]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_an_underdrop_note_reads_the_reason_the_star_its_health_and_the_time_to_the_cast(self):
+        self.assertEqual(al.parse_underdrop("late 1478 45 6200"), ("late", 1478, 45.0, 6200))
+        self.assertEqual(al.parse_underdrop("early 1478"), ("early", 1478, None, None))
+
+    def test_each_focus_span_reads_the_loss_beyond_the_drain(self):
+        self.assertEqual([(row["star"], row["start"], row["under"], row["first"], row["last"], row["beyond"])
+                          for row in al.focus_rates(self.trace)],
+                         [(UD_STAR_A, 12000, True, 88.0, 76.0, 2.0), (UD_STAR_B, 16000, True, 84.0, 68.0, 3.0),
+                          (UD_STAR_A, 20000, True, 72.0, 60.0, 2.0), (UD_STAR_B, 24000, True, 64.0, 48.0, 3.0)])
+
+    def test_a_release_inside_8_s_of_the_cast_is_a_failure(self):
+        self.assertIn("under-star star 3 (503) released late 4.0 s before Big Bang 1's cast, at 64% @ 36.0s",
+                      self.lines)
+        self.assertEqual(sum(" released " in line for line in self.lines), 1)
+
+    def test_the_focus_switching_more_than_once_per_under_star_is_a_failure(self):
+        (cycle,) = al.under_cycles(self.trace)
+        self.assertEqual((cycle["n"], cycle["stars"], cycle["visited"], cycle["switches"], cycle["first_switch"]),
+                         (1, [501, 502, 503], 2, 3, 16000))
+        self.assertIn("Big Bang 1: the focus switched 3 times between 2 under-stars, from 16.0s", self.lines)
+
+    def test_a_trimmer_restarting_shoot_is_a_failure(self):
+        self.assertEqual(al.trim_shots(self.trace), {
+            503: [{"bot": UD_MAGE, "starts": [30000, 30200, 30400], "fired": 2}],
+            502: [{"bot": UD_LOCK, "starts": [30000], "fired": 3}]})
+        self.assertIn("Mage started Shoot 3 times within 2 s on star 3 (503) @ 30.0s (3 starts, 2 shot(s) fired)",
+                      self.lines)
+        self.assertEqual(sum("started Shoot" in line for line in self.lines), 1)
+
+    def test_the_stars_section_shows_the_spans_the_releases_and_the_trimmers(self):
+        text = render(self.trace, "stars")
+        self.assertIn("    star 3 (503): Mage 3 start(s), 2 shot(s) fired\n", text)
+        self.assertIn("    Big Bang 1: 3 under-star(s), the focus on 2 of them switched 3 time(s) between them\n"
+                      "      star 1 (501): released early 0:26.000 at 60%, 14.0 s before the cast\n"
+                      "      star 2 (502): not released\n"
+                      "      star 3 (503): released late 0:36.000 at 64%, 4.0 s before the cast\n", text)
+        self.assertIn(" 0:12.000 ..  0:16.000  under     star 1 (501)     u   88.0% >  76.0% in  4.0 s, +2.0 %/s",
+                      text)
+
+    def test_an_older_trace_reads_without_the_new_rows(self):
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, underdrop_pull(drop=("algalon.underdrop",), shots=False))
+            text = render(trace, "stars")
+            self.assertIn("no algalon.underdrop row: nothing released, or a trace from before the probe", text)
+            self.assertIn("star 3 (503): Mage 0 start(s), 0 shot(s) fired", text)
+            self.assertEqual([line for _, line in al.under_faults(trace)],
+                             ["Big Bang 1: the focus switched 3 times between 2 under-stars, from 16.0s"])
+        with tempfile.TemporaryDirectory() as folder:
+            bare = load(folder, underdrop_pull(drop=("algalon.underdrop", "algalon.starplan", "algalon.focusstar",
+                                                     "algalon.trim"), shots=False))
+            self.assertEqual(al.under_faults(bare), [])
+            self.assertNotIn("under-stars per Big Bang", render(bare, "stars"))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

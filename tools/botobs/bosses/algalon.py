@@ -15,7 +15,9 @@
     algalon.py <file> --soak            every Big Bang's soakers: the hit, healers, kit, reserved buttons spent
     algalon.py <file> --phasing         every hole phase: Big Bang or stray, and what put a stray one there
     algalon.py <file> --stars           star deaths, what each landed into, the kill window, the star plan, its
-                                        death against the Big Bang hit, who the explosion hit, wand trims, the team
+                                        death against the Big Bang hit, who the explosion hit, wand trims and the
+                                        shots that fired, under-stars per Big Bang with focus switches and releases,
+                                        each focus span's loss beyond the drain, the team
     algalon.py <file> --collateral      star health lost beyond the drain while unfocused, casts on stars
     algalon.py <file> --holes           hole stock, empty seconds before each Big Bang, holes lost, urgency
     algalon.py <file> --constellations  activations, victims, the handler's kite stages and what each kite ate,
@@ -87,6 +89,8 @@ What the generic views get wrong here, and what this reads instead:
 - **`algalon.starplan` names a star by its guid's low 32 bits** and gives every time in seconds from the note
   itself, so a window or forecast is the note's stamp plus those seconds, good to a second. `u` marks a star
   planned to die under the Big Bang, and an older trace carries no mark.
+- **A wand's Shoot (5019) writes an untriggered `cast` row each time the bot starts it** and a triggered
+  one per shot that fired, so a trimmer that keeps restarting it shows many starts and few shots.
 - **`--defensives` reads the cutters off the cast and aura rows**, so it reads older traces too;
   `algalon.tankdef` only adds why one was cast. Last Stand's cast 12975 is a dummy whose aura is 12976.
 - **An explosion is covered by Divine Guardian (70940) or Aura Mastery**, never by Divine Sacrifice
@@ -146,6 +150,7 @@ SPELL_BLACK_HOLE_EXPLOSION = (64122, 65108)
 SPELL_BLACK_HOLE_DOT = 62169
 SPELL_CONSTELLATION_BARRAGE = (64599, 64607)
 SPELL_ASCEND = 64487
+SPELL_WAND_SHOOT = 5019
 SPELL_DISPERSION = 47585
 SPELL_PAIN_SUPPRESSION = 33206
 SPELL_GUARDIAN_SPIRIT = 47788
@@ -359,6 +364,11 @@ PERSONAL_LOOK_MS = 5000
 IMMUNITY_HOLD_MS = 20000
 WINDOW_CUT_PCT = 80.0
 STAR_PLAN_SLACK_MS = 1000
+# the planner keeps a cast's under-stars until the strip is past
+PLAN_KEEP_MS = 1200
+UNDER_DROP_LATE_MS = 8000
+TRIM_RESTART_MS = 2000
+TRIM_RESTARTS = 3
 STAR_BANG_MS = 60000
 PARKED_MS = 3000
 PARKED_HOLE_YD = 10.0
@@ -2738,6 +2748,140 @@ def trim_runs(trace: Trace) -> dict[int, list[dict]]:
     return cached(trace, "_algalon_trims", build)
 
 
+def star_by_counter(trace: Trace) -> dict[int, int]:
+    return cached(trace, "_algalon_star_counters",
+                  lambda trace: {guid & 0xFFFFFFFF: guid for guid in guids_of_entry(trace, NPC_COLLAPSING_STAR)})
+
+
+def counter_label(trace: Trace, counter: int) -> str:
+    """`star N (counter)`, N from `star_labels`, the counter being how the star notes name it."""
+    labels = cached(trace, "_algalon_star_labels", star_labels)
+    guid = star_by_counter(trace).get(counter)
+    return f"{labels[guid]} ({counter})" if guid in labels else str(counter)
+
+
+def parse_underdrop(text) -> tuple[str, int, float | None, int | None]:
+    """`algalon.underdrop` reads `<early|late|nosoak> <star guid counter> <health %> <ms to the next Big Bang
+    cast>`."""
+    why, counter, pct, ms = (str(text or "").strip().split(" ") + ["", "", "", ""])[:4]
+    try:
+        health = float(pct)
+    except ValueError:
+        health = None
+    try:
+        to_cast = int(ms)
+    except ValueError:
+        to_cast = None
+    return why, as_guid(counter), health, to_cast
+
+
+def bang_cycles(trace: Trace) -> list[dict]:
+    """`{n, low, high}` per Big Bang the planner worked toward, `[low, high)` running from the previous
+    cast's end to this one's, each plus PLAN_KEEP_MS. The last runs on for the cast that never came."""
+    out = []
+    low = -(1 << 62)
+    for cast in big_bang_casts(trace):
+        out.append({"n": cast["n"], "low": low, "high": cast["end"] + PLAN_KEEP_MS})
+        low = out[-1]["high"]
+    out.append({"n": len(out) + 1, "low": low, "high": 1 << 62})
+    return out
+
+
+def under_cycles(trace: Trace) -> list[dict]:
+    """Per Big Bang with an under-star: `{n, stars, releases, visited, switches, first_switch}`. `stars` are
+    the counters any `algalon.starplan` marked `u` toward it, `releases` each one's `algalon.underdrop`
+    as `{t, why, hp, to_cast}`, and `switches` how often the focus went from one star the plan then marked
+    `u` to another, a focus on any other star in between skipped."""
+    def build(trace: Trace) -> list[dict]:
+        drops = []
+        for rec in sorted(notes(trace, "algalon.underdrop"), key=lambda rec: rec["t"]):
+            why, counter, health, to_cast = parse_underdrop(rec.get("txt"))
+            drops.append((counter, {"t": rec["t"], "why": why, "hp": health, "to_cast": to_cast}))
+        out = []
+        for cycle in bang_cycles(trace):
+            low, high = cycle["low"], cycle["high"]
+            releases: dict[int, dict] = {}
+            for counter, drop in drops:
+                if low <= drop["t"] < high:
+                    releases.setdefault(counter, drop)
+            stars = set(releases) | {counter for plan in starplans(trace) if low <= plan["t"] < high
+                                     for counter, entry in plan["stars"].items() if entry["mark"] == "u"}
+            if not stars:
+                continue
+            held = [(row["start"], row["star"] & 0xFFFFFFFF) for row in focus_rates(trace)
+                    if row["under"] and low <= row["start"] < high]
+            switches = [start for (_, before), (start, after) in zip(held, held[1:]) if after != before]
+            out.append({"n": cycle["n"], "stars": sorted(stars), "releases": releases,
+                        "visited": len({counter for _, counter in held}), "switches": len(switches),
+                        "first_switch": switches[0] if switches else None})
+        return out
+    return cached(trace, "_algalon_under_cycles", build)
+
+
+def focus_rates(trace: Trace) -> list[dict]:
+    """Per span `algalon.focusstar` named a star: `{star, start, stop, window, under, first, last, secs, beyond}`,
+    the star's health at its first and last sample in the span and what it lost a second beyond the drain,
+    None with under two samples. `under` is whether the plan then marked it `u`."""
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        windows = window_spans(trace)
+        out = []
+        for value, start, stop in latch_spans(trace, "algalon.focusstar", pull_end(trace)):
+            star = as_guid(value)
+            if not star:
+                continue
+            plan = plan_of(trace, star, start)
+            row = {"star": star, "start": start, "stop": stop, "window": value_at(windows, start),
+                   "under": bool(plan and plan["mark"] == "u"), "first": None, "last": None, "secs": 0.0,
+                   "beyond": None}
+            timed = samples.timed(star, start, stop)
+            if timed:
+                (low, first), (high, last) = timed[0], timed[-1]
+                row.update(first=first[5], last=last[5], secs=(high - low) / 1000.0)
+                if high > low:
+                    row["beyond"] = (first[5] - last[5]) / row["secs"] - 1.0
+            out.append(row)
+        return out
+    return cached(trace, "_algalon_focus_rates", build)
+
+
+def trim_shots(trace: Trace) -> dict[int, list[dict]]:
+    """Per star counter with a wand run, per trimmer: `{bot, starts, fired}`, when it started Shoot on the
+    star and how many shots fired, from its first `algalon.trim start` to its last run's stop."""
+    def build(trace: Trace) -> dict[int, list[dict]]:
+        shoots = [rec for rec in trace.of("cast") if rec.get("sp") == SPELL_WAND_SHOOT]
+        out: dict[int, list[dict]] = {}
+        for counter, runs in trim_runs(trace).items():
+            star = star_by_counter(trace).get(counter)
+            rows = []
+            for bot in dict.fromkeys(run["bot"] for run in runs):
+                own = [run for run in runs if run["bot"] == bot]
+                begun = [run["start"] for run in own if run["start"] is not None]
+                if not begun:
+                    continue
+                low = min(begun)
+                high = own[-1]["stop"] if own[-1]["stop"] is not None else pull_end(trace)
+                mine = [rec for rec in shoots if rec.get("s") == bot and star and rec.get("tgt") == star
+                        and low <= rec["t"] <= high]
+                rows.append({"bot": bot, "starts": [rec["t"] for rec in mine if not rec.get("tr")],
+                             "fired": sum(1 for rec in mine if rec.get("tr"))})
+            out[counter] = rows
+        return out
+    return cached(trace, "_algalon_trim_shots", build)
+
+
+def densest(stamps: list[int], span: int, least: int) -> tuple[int, int | None]:
+    """`(count, from)`: the most of the sorted `stamps` within `span` ms of one another, and the first stamp
+    opening `least` of them, None when none does."""
+    best, found = 0, None
+    for index, when in enumerate(stamps):
+        count = bisect.bisect_right(stamps, when + span) - index
+        best = max(best, count)
+        if found is None and count >= least:
+            found = when
+    return best, found
+
+
 def bang_hit(trace: Trace, when: int) -> dict | None:
     """The Big Bang whose hit lands nearest `when`, within STAR_BANG_MS: `{n, rel, inside}`, `rel` being
     `when` less the hit and `inside` whether `when` fell in the cast."""
@@ -2919,6 +3063,42 @@ def star_plan_line(trace: Trace, row: dict) -> str:
     return "; ".join(parts)
 
 
+def release_label(drop: dict) -> str:
+    health = "-" if drop["hp"] is None else f"{drop['hp']:.0f}%"
+    before = "" if drop["to_cast"] is None else f", {drop['to_cast'] / 1000:.1f} s before the cast"
+    return f"released {drop['why']} {clock(drop['t'])} at {health}{before}"
+
+
+def show_under_cycles(trace: Trace) -> None:
+    cycles = under_cycles(trace)
+    if not cycles:
+        return
+    print("  under-stars per Big Bang, every star an algalon.starplan marked u toward it:")
+    for cycle in cycles:
+        print(f"    Big Bang {cycle['n']}: {len(cycle['stars'])} under-star(s), the focus on {cycle['visited']} of them"
+              f" switched {cycle['switches']} time(s) between them")
+        for counter in cycle["stars"]:
+            drop = cycle["releases"].get(counter)
+            print(f"      {counter_label(trace, counter)}: {release_label(drop) if drop else 'not released'}")
+    if "algalon.underdrop" not in emitted(trace):
+        print("    no algalon.underdrop row: nothing released, or a trace from before the probe")
+
+
+def show_focus_rates(trace: Trace) -> None:
+    rows = focus_rates(trace)
+    if not rows:
+        return
+    print("  focus spans, the star's health and what it lost beyond the 1 %/s drain, u for an under-star:")
+    for row in rows:
+        if row["first"] is None:
+            health = "never sampled"
+        else:
+            beyond = "-" if row["beyond"] is None else f"{row['beyond']:+.1f} %/s"
+            health = f"{row['first']:5.1f}% > {row['last']:5.1f}% in {row['secs']:4.1f} s, {beyond}"
+        print(f"    {clock(row['start']):>9} .. {clock(row['stop']):>9}  {row['window'] or '-':9}"
+              f" {counter_label(trace, row['star'] & 0xFFFFFFFF):16} {'u' if row['under'] else ' '}  {health}")
+
+
 def star_flags(row: dict) -> str:
     flags = " <8s" if row["gap"] is not None and row["gap"] < STAR_GAP_MS else ""
     flags += " lowhp" if row["below"] else ""
@@ -2982,7 +3162,14 @@ def show_stars(trace: Trace) -> None:
             print(f"    {clock(start):>9}  {value_at(windows, start) or '-':9} {value}")
     trims = trim_runs(trace)
     if trims:
-        print(f"  algalon.trim: {sum(len(runs) for runs in trims.values())} wand run(s) on {len(trims)} star(s)")
+        print(f"  algalon.trim: {sum(len(runs) for runs in trims.values())} wand run(s) on {len(trims)} star(s),"
+              f" each trimmer's Shoot starts and the shots that fired:")
+        for counter, rows in trim_shots(trace).items():
+            print(f"    {counter_label(trace, counter)}: " + "; ".join(
+                f"{trace.name(row['bot'])} {len(row['starts'])} start(s), {row['fired']} shot(s) fired"
+                for row in rows))
+    show_under_cycles(trace)
+    show_focus_rates(trace)
     for opened in window_opens(trace):
         print(f"  window {opened['kind']} {clock(opened['t'])}: focus star {opened['middle']:.1f} yd from the team's"
               f" mean position, {opened['mean']:.1f} yd from its {opened['members']} member(s) on average")
@@ -3016,6 +3203,31 @@ def window_faults(trace: Trace) -> list[tuple[int, str]]:
                           f" the star team's mean position")
             for opened in window_opens(trace)
             if opened["kind"] in ("deadline", "urgent") and opened["middle"] > TEAM_FAR_YD]
+
+
+def under_faults(trace: Trace) -> list[tuple[int, str]]:
+    """An under-star released inside UNDER_DROP_LATE_MS of the cast, the focus going back to one of a cast's
+    under-stars (a latched bulk switches one fewer times than it visits), and a trimmer restarting Shoot."""
+    out = []
+    for cycle in under_cycles(trace):
+        for counter, drop in cycle["releases"].items():
+            if drop["to_cast"] is not None and drop["to_cast"] < UNDER_DROP_LATE_MS:
+                health = "-" if drop["hp"] is None else f"{drop['hp']:.0f}%"
+                out.append((drop["t"], f"under-star {counter_label(trace, counter)} released {drop['why']}"
+                                       f" {drop['to_cast'] / 1000:.1f} s before Big Bang {cycle['n']}'s cast, at"
+                                       f" {health} @ {secs(drop['t'])}"))
+        if cycle["visited"] and cycle["switches"] >= cycle["visited"]:
+            out.append((cycle["first_switch"], f"Big Bang {cycle['n']}: the focus switched {cycle['switches']} times"
+                                               f" between {cycle['visited']} under-stars, from"
+                                               f" {secs(cycle['first_switch'])}"))
+    for counter, rows in trim_shots(trace).items():
+        for row in rows:
+            count, at = densest(row["starts"], TRIM_RESTART_MS, TRIM_RESTARTS)
+            if at is not None:
+                out.append((at, f"{trace.name(row['bot'])} started Shoot {count} times within"
+                                f" {TRIM_RESTART_MS // 1000} s on {counter_label(trace, counter)} @ {secs(at)}"
+                                f" ({len(row['starts'])} starts, {row['fired']} shot(s) fired)"))
+    return out
 
 
 # ----------------------------------------------------------------------------------------- collateral
@@ -4819,6 +5031,7 @@ def failures(trace: Trace) -> list[tuple[int | None, str]]:
     out += star_faults(trace)
     out += collateral_faults(trace)
     out += window_faults(trace)
+    out += under_faults(trace)
     out += soak_faults(trace)
     out += bang_faults(trace)
     out += taunt_faults(trace)
@@ -4908,7 +5121,8 @@ SECTIONS = (
     ("soak", "every Big Bang's soakers: the hit, healers, kit, reserved buttons spent", show_soak),
     ("phasing", "every hole phase: Big Bang or stray, its cause, Dark Matter, walk guard vetoes", show_phasing),
     ("stars", "star deaths, health against the drain, the kill window, the star plan against the death and the Big"
-              " Bang hit, wand trims, the star team", show_stars),
+              " Bang hit, wand trims and shots, under-star switches and releases, focus span loss, the star team",
+     show_stars),
     ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),
     ("constellations", "activations, victims, handler and kite stages, what each kite ate, parked stretches,"
