@@ -26,6 +26,11 @@ leaving it casts Ascend, so nothing may pull him or a tank past the edge. His de
 | Unleashed Dark Matter | 34097, one per Worm Hole per 30 s, random target, never despawns | Handler collects them; 10 yd/s, so tanked, never kited |
 | Ascend | 64487 at 6 min | Also the zero-target Big Bang path |
 
+**His hits are retail, not inflated.** Upstream PR #26675 (`2026_07_18_04.sql`) raised `DamageModifier`
+35→190 / 70→285, so a 25-man main hand rolls 66.9-92.1 k before armor, off hand half, both every 1.0 s;
+23 pulls measured 53-61 k per swing before armor against Wrath Classic's ~66 k. Spells are stock Spell.dbc,
+and mod-dungeon-scale only adds ×1.2 health (41.8 M, retail by chance). Tank deaths are a healing problem.
+
 ## He resets the moment nobody unphased is left
 
 `EnterEvadeMode` looks for an **alive player in his phase** within 120 yd, and `Creature::SelectVictim`
@@ -309,15 +314,43 @@ pickup tank pulled him off at 10-11 s, both pulls. The class Tricks node is bloc
 fight: out of the tank's 20 yd, or with the rogue low on threat, it tricks the strongest melee dps in reach, and
 that DK pulled him in 7 of 8 pulls 13.7-21.2 s in.
 
+## Healers: tank healers on the swap pair
+
+Healers pick the lowest health %, and every explosion puts a clothie below a tank losing ~15 k/s: over 71
+tank deaths in 23 traces the tank got a median 31 k healing and 15 k shields in its last 6 s against 90 k
+taken, while the same healers put 67 k into others. Main hand, off hand and Quantum Strike can land inside
+1.5 s, so only what is already on him or an instant saves him.
+
+The tick latches **tank healers**, bots only, ranked holy paladin, discipline priest, resto druid, resto
+shaman, holy priest: 2 on 25-man, 1 on 10-man, never more than half the living healers (humans counted),
+since the star `raidhp` window waits on the rest topping up the raid. Re-derived until the pull; in it the
+dead or departed are replaced and the list trimmed. A phased one stays: Big Bang phases them all.
+
+A tank healer heals the holder (else the lower pair tank), itself under 50 %, then the partner:
+
+- under 50 %, its fastest spell at `ACTION_RAID + 9`, ahead of the slot walk;
+- else under 95 % holder / 85 % partner (the partner first only when 15 % lower), shields and HoTs first
+  (Sacred Shield follows the holder), then efficient heals, at `ACTION_MEDIUM_HEAL + 0.75`, under the mana
+  tools.
+
+Never a button the cooldown reserve keeps (it doesn't see these direct casts), nor a cast outlasting its hide
+slack; the Big Bang nodes still win. A holy paladin keeps Beacon on the partner. `AlgalonTankHealerMultiplier`
+zeroes its party heals and any heal or reach-to-heal on anyone but the pair and itself, and a `Block` stops
+the class Beacon, Sacred Shield, Earth Shield and Divine Hymn nodes for it.
+
+Not `"focus heal targets"`: it is a combat strategy saved to the DB, so a bot leaving mid-fight keeps a stale
+filter and heals nobody afterwards, and it overwrites a human's setting.
+
 ## The trace
 
 Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
 
 Raid-wide values, all written by the instance tick: `algalon.phase` (0 idle, 1 intro, 2 phase 1,
 3 phase 2, 4 won), `algalon.bigbang` (the cast's ordinal while latched, else 0), `algalon.soaker`,
-`algalon.backup`, `algalon.urgent`, `algalon.holes`, `algalon.focusstar`, `algalon.handler`. Per guid:
-`algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam` (urgent recruits aren't
-recorded), `algalon.swappair`. Derived per bot, each inside the helper that derives it: `algalon.hide`
+`algalon.backup`, `algalon.urgent`, `algalon.holes`, `algalon.focusstar`, `algalon.handler`,
+`algalon.tankhealslots`. Per guid: `algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam`
+(urgent recruits aren't recorded), `algalon.swappair`, `algalon.tankhealer`. Derived per bot, each inside the
+helper that derives it: `algalon.tankheal` (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
 (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`), `algalon.kite`
 (`taunt`/`hole`/`parked`/`kept`/`none`), `algalon.spot`
 (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`), `algalon.hazard`
@@ -369,6 +402,9 @@ counted by cause and role with humans starred. Then:
 - `--collateral`: per star the health lost beyond drain while nobody was sent, and every cast on a star by caster
   and spell;
 - `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
+- `--tankheal`: the tank healers, each healer's share on the pair, itself and others, Beacon time on holder
+  and partner, and per tank death the 6 s / 2 s damage against healing, shields and healing elsewhere, with
+  each tank healer's state; on older traces the deaths and shares alone;
 - `--bigbang` (holes at the cast, soaker and backup health, who was hit unphased, tank-alone seconds,
   re-phase loops, void Dark Matter damage, evade after), `--stars` (how each died, the window, a live
   meteor, raid health against the top roll), `--smash` (per wave and bot: distance, dodge latency and

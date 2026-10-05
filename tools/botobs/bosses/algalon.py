@@ -20,6 +20,8 @@
     algalon.py <file> --constellations  activations, victims, the handler and kite branches, removals
     algalon.py <file> --smash           every Cosmic Smash wave: who stood near it, the dodge, damage
     algalon.py <file> --tanks           Phase Punch stacks, swaps, non-tank pickups, Quantum Strike
+    algalon.py <file> --tankheal        tank healers, each healer's share on the pair, Beacon, healing against
+                                        damage before every tank death
     algalon.py <file> --formation       each ring bot's distance to its slot and to him, spot branches
     algalon.py <file> --darkmatter      phase 2 Unleashed Dark Matter: loose seconds, handler damage, kills
     algalon.py <file> --verdict         one line per detected failure, in time order
@@ -71,6 +73,10 @@ What the generic views get wrong here, and what this reads instead:
   from its first row to its last, gaps included.
 - **While `algalon.urgent` reads 1 every ranged dps is on the star team** without being written into
   `algalon.starteam`, so star time there is not off-team.
+- **A `heal` row's `a` is gross**, overheal in `oh`; shields land as `abs` rows credited to their caster.
+  Beacon of Light's copy is a heal row of its own from the paladin, so it counts as that paladin's.
+- **`--tankheal` reads a trace from before the tank healers too**: with no `algalon.tankhealer` it still
+  measures every tank death and each healer's share, so pulls before and after them compare directly.
 """
 from __future__ import annotations
 
@@ -285,6 +291,14 @@ NEW_HOLE_YD = 7.0
 STAR_NOTE_MS = 2000
 STAR_NEAR_YD = 9.0
 DEATH_ROLES = ("tank", "heal", "melee", "ranged")
+# A tank death is read over this long before it, and its spike over the shorter span.
+TANKHEAL_WINDOW_MS = 6000
+TANKHEAL_BURST_MS = 2000
+# More than this of an assigned tank healer's healing on anyone but the pair and itself is a fault.
+TANKHEAL_OTHERS_SHARE = 0.30
+TANKHEAL_RANGE_YD = 40.0
+TANKHEAL_VETO = "algalon tank healer focus"
+SPELL_BEACON_OF_LIGHT = 53563
 
 
 def secs(ms: int) -> str:
@@ -3218,6 +3232,239 @@ def show_tanks(trace: Trace) -> None:
         print(f"  furthest from the room centre: {far:.1f} yd at {clock(when)} (room {ROOM_RADIUS:.0f} yd)")
 
 
+# --------------------------------------------------------------------------------------- tank healers
+
+def tank_healer_spans(trace: Trace) -> dict[int, list[tuple[int, int]]]:
+    """Per bot on `algalon.tankhealer`, the `(start, stop)` stretches it held the pair."""
+    def build(trace: Trace) -> dict[int, list[tuple[int, int]]]:
+        out = {}
+        for guid, spans in holder_spans(trace, "algalon.tankhealer", pull_end(trace)).items():
+            held = [(start, stop) for value, start, stop in spans if value == "1"]
+            if held:
+                out[guid] = held
+        return out
+    return cached(trace, "_algalon_tank_healers", build)
+
+
+def assigned_at(spans, guid: int, when: int) -> bool:
+    return any(start <= when < stop for start, stop in spans.get(guid, ()))
+
+
+def effective(rec: dict) -> int:
+    """A `heal` row's `a` is gross; overheal is in `oh`."""
+    return rec.get("a", 0) - rec.get("oh", 0)
+
+
+def roster_healers(trace: Trace) -> list[int]:
+    return [guid for guid in roster_guids(trace) if trace.role(guid) == "heal"]
+
+
+def healer_shares(trace: Trace) -> list[dict]:
+    """Per healer, effective healing plus shields on the swap pair, on itself and on everyone else: over
+    the whole pull, and over the stretches it was a tank healer."""
+    pair, _ = swap_pair(trace)
+    spans = tank_healer_spans(trace)
+    healers = roster_healers(trace) + sorted(set(spans) - set(roster_healers(trace)))
+    totals = {guid: {"all": collections.Counter(), "assigned": collections.Counter()} for guid in healers}
+    rows = [(rec["t"], rec.get("s", 0), rec.get("d", 0), effective(rec)) for rec in trace.of("heal")]
+    rows += [(rec["t"], rec.get("s", 0), rec.get("d", 0), rec.get("a", 0)) for rec in trace.of("abs")]
+    for when, source, target, amount in rows:
+        if source not in totals or amount <= 0:
+            continue
+        bucket = "self" if target == source else "tanks" if target in pair else "others"
+        totals[source]["all"][bucket] += amount
+        if assigned_at(spans, source, when):
+            totals[source]["assigned"][bucket] += amount
+    return [{"guid": guid, **totals[guid]} for guid in healers]
+
+
+def share_of(counts: collections.Counter, bucket: str) -> float | None:
+    total = sum(counts.values())
+    return counts[bucket] / total if total else None
+
+
+def tank_death_rows(trace: Trace) -> list[dict]:
+    """Per swap tank his melee killed: what it took and got in the TANKHEAL_WINDOW_MS before, what the
+    healers put into everyone else meanwhile, and where each tank healer was."""
+    def build(trace: Trace) -> list[dict]:
+        pair, _ = swap_pair(trace)
+        spans = tank_healer_spans(trace)
+        healers = set(roster_healers(trace)) | set(spans)
+        samples = samples_of(trace)
+        phased = all_phases(trace)
+        branches = holder_spans(trace, "algalon.tankheal")
+        vetoes = [rec for rec in trace.of("veto") if rec.get("m") == TANKHEAL_VETO]
+        out = []
+        for row in death_rows(trace):
+            guid, when = row["guid"], row["t"]
+            if guid not in pair or row["cause"] != "Algalon on tank":
+                continue
+            low = when - TANKHEAL_WINDOW_MS
+            taken = [rec for rec in victim_hits(trace).get(guid, []) if low <= rec["t"] <= when]
+            heals = [rec for rec in trace.of("heal") if low <= rec["t"] <= when]
+            on_tank = [rec for rec in heals if rec.get("d") == guid]
+            tank_spot = position_at(samples, guid, when)
+            states = []
+            for healer in sorted(spans):
+                if not any(start <= when and stop >= low for start, stop in spans[healer]):
+                    continue
+                spot = position_at(samples, healer, when)
+                states.append({
+                    "guid": healer,
+                    "alive": alive(samples.row(healer, when)),
+                    "phased": phased_at(phased, healer, when),
+                    "distance": dist2(spot, tank_spot) if spot and tank_spot else None,
+                    "branch": value_at(branches.get(healer, []), when),
+                    "vetoes": sum(1 for rec in vetoes if rec.get("g") == healer and low <= rec["t"] <= when),
+                    "healed": sum(effective(rec) for rec in on_tank if rec.get("s") == healer),
+                })
+            up = [healer for healer in roster_healers(trace)
+                  if alive(samples.row(healer, when)) and not phased_at(phased, healer, when)]
+            out.append({
+                "t": when, "guid": guid,
+                "taken": sum(rec.get("a", 0) + rec.get("ab", 0) for rec in taken),
+                "burst": sum(rec.get("a", 0) + rec.get("ab", 0) for rec in taken
+                             if rec["t"] >= when - TANKHEAL_BURST_MS),
+                "healed": sum(effective(rec) for rec in on_tank),
+                "by_tank_healers": sum(effective(rec) for rec in on_tank
+                                       if assigned_at(spans, rec.get("s", 0), rec["t"])),
+                "absorbed": sum(rec.get("a", 0) for rec in trace.of("abs")
+                                if rec.get("d") == guid and low <= rec["t"] <= when),
+                "elsewhere": sum(effective(rec) for rec in heals
+                                 if rec.get("s") in healers and rec.get("d") != guid),
+                "healers": states,
+                "up": len(up),
+            })
+        return out
+    return cached(trace, "_algalon_tank_deaths", build)
+
+
+def beacon_seconds(trace: Trace) -> tuple[int, int]:
+    """Milliseconds Beacon of Light sat on the tank he was hitting and on any other swap tank."""
+    pair, _ = swap_pair(trace)
+    victims = victim_samples(trace)
+    stamps = [when for when, _ in victims]
+    end = pull_end(trace)
+    opened: dict[int, int] = {}
+    spans = []
+    for rec in sorted(trace.of("aura"), key=lambda rec: rec["t"]):
+        if rec.get("sp") != SPELL_BEACON_OF_LIGHT or rec.get("d") not in pair:
+            continue
+        target = rec["d"]
+        if rec.get("r"):
+            if target in opened:
+                spans.append((target, opened.pop(target), rec["t"]))
+        else:
+            opened.setdefault(target, rec["t"])
+    spans += [(target, start, end) for target, start in opened.items()]
+    holder = other = 0
+    for target, start, stop in spans:
+        for when in range(start, stop, 500):
+            index = bisect.bisect_right(stamps, when)
+            victim = victims[index - 1][1] if index else 0
+            if victim == target:
+                holder += 500
+            else:
+                other += 500
+    return holder, other
+
+
+def tankheal_summary(trace: Trace) -> str | None:
+    rows = tank_death_rows(trace)
+    if not rows:
+        return None
+
+    def k(values) -> str:
+        return f"{statistics.median(values) / 1000:.0f}k"
+
+    healers = roster_healers(trace)
+    shares = [share for row in healer_shares(trace) if row["guid"] in healers
+              if (share := share_of(row["all"], "tanks")) is not None]
+    spread = f"; healers' share on the pair {min(shares):.0%}-{max(shares):.0%}" if shares else ""
+    return (f"{len(rows)} tank death{'s' if len(rows) != 1 else ''}; medians over the"
+            f" {TANKHEAL_WINDOW_MS // 1000} s before: took {k(r['taken'] for r in rows)}"
+            f" ({k(r['burst'] for r in rows)} in {TANKHEAL_BURST_MS // 1000} s), healed {k(r['healed'] for r in rows)}"
+            f" + {k(r['absorbed'] for r in rows)} shields, {k(r['elsewhere'] for r in rows)} into others;"
+            f" every healer alive and unphased in {sum(r['up'] == len(healers) for r in rows)} of {len(rows)}"
+            + spread)
+
+
+def show_tankheal(trace: Trace) -> None:
+    print("TANK HEALERS")
+    if boss_guid(trace) is None:
+        print("  Algalon was never sampled")
+        return
+    spans = tank_healer_spans(trace)
+    show_absent(trace, "algalon.tankhealer", "algalon.tankheal")
+    for guid, held in sorted(spans.items(), key=lambda item: trace.name(item[0])):
+        stretches = ", ".join(f"{clock(start)}-{clock(stop)}" for start, stop in held)
+        print(f"  tank healer: {label_of(trace, guid)} {stretches}")
+
+    print("  effective healing plus shields, on the swap pair / itself / everyone else:")
+    for row in healer_shares(trace):
+        total = sum(row["all"].values())
+        if not total:
+            continue
+        cells = " ".join(f"{bucket} {share_of(row['all'], bucket):.0%}" for bucket in ("tanks", "self", "others"))
+        line = f"    {label_of(trace, row['guid']):28} {total:>10,}  {cells}"
+        if sum(row["assigned"].values()):
+            line += "  assigned: " + " ".join(f"{bucket} {share_of(row['assigned'], bucket):.0%}"
+                                              for bucket in ("tanks", "self", "others"))
+        print(line)
+
+    holder, other = beacon_seconds(trace)
+    if holder or other:
+        print(f"  Beacon of Light: {holder / 1000:.1f} s on the tank he was hitting, {other / 1000:.1f} s on the other")
+
+    rows = tank_death_rows(trace)
+    print(f"  swap tanks his melee killed: {len(rows)}")
+    for row in rows:
+        print(f"    {clock(row['t']):>9} {who(trace, row['guid'])}: took {row['taken']:,} in"
+              f" {TANKHEAL_WINDOW_MS // 1000} s ({row['burst']:,} in {TANKHEAL_BURST_MS // 1000} s), healed"
+              f" {row['healed']:,} ({row['by_tank_healers']:,} by tank healers), shields {row['absorbed']:,};"
+              f" healers into others {row['elsewhere']:,}")
+        for state in row["healers"]:
+            where = "dead" if not state["alive"] else "phased" if state["phased"] else (
+                f"{state['distance']:.1f} yd" if state["distance"] is not None else "unsampled")
+            print(f"      {label_of(trace, state['guid']):28} {where}, {state['branch'] or '-'},"
+                  f" healed it {state['healed']:,}, {state['vetoes']} veto rows")
+    summary = tankheal_summary(trace)
+    if summary:
+        print(f"  {summary}")
+
+
+def tankheal_faults(trace: Trace) -> list[tuple[int, str]]:
+    out = []
+    spans = tank_healer_spans(trace)
+    for row in tank_death_rows(trace):
+        for state in row["healers"]:
+            if (state["alive"] and not state["phased"] and state["distance"] is not None
+                    and state["distance"] <= TANKHEAL_RANGE_YD and assigned_at(spans, state["guid"], row["t"])):
+                out.append((row["t"], f"{trace.name(row['guid'])} died @ {secs(row['t'])} with tank healer"
+                                      f" {trace.name(state['guid'])} alive, unphased and {state['distance']:.0f} yd"
+                                      f" away: healed {row['healed']:,} of {row['taken']:,} taken in"
+                                      f" {TANKHEAL_WINDOW_MS // 1000} s"))
+    for row in healer_shares(trace):
+        others = share_of(row["assigned"], "others")
+        if row["guid"] in spans and others is not None and others > TANKHEAL_OTHERS_SHARE:
+            start = spans[row["guid"]][0][0]
+            out.append((start, f"tank healer {trace.name(row['guid'])} put {others:.0%} of its healing on others"))
+    for guid, held in spans.items():
+        if guid in trace.humans:
+            out.append((held[0][0], f"human {trace.name(guid)} assigned as a tank healer @ {secs(held[0][0])}"))
+    cap = len(roster_healers(trace)) // 2
+    edges = sorted([(start, 1) for held in spans.values() for start, _ in held]
+                   + [(stop, -1) for held in spans.values() for _, stop in held])
+    count = 0
+    for when, step in edges:
+        count += step
+        if count > cap:
+            out.append((when, f"{count} tank healers @ {secs(when)} with {len(roster_healers(trace))} healers"
+                              f" in the raid"))
+            break
+    return out
+
+
 # ------------------------------------------------------------------------------------------ formation
 
 def parse_ring_slots(text: str) -> list[tuple[float, float, float]]:
@@ -3510,6 +3757,12 @@ def tank_probes(trace: Trace) -> dict[str, str]:
         out["algalon.tankrole"] = "a bot tank was in the swap pair"
     if intro_end(trace) is not None:
         out["algalon.pull"] = "the intro ended"
+    # The pair gets at most half the healers, and only bots.
+    healers = roster_healers(trace)
+    if len(healers) >= 2 and any(guid not in trace.humans for guid in healers):
+        out["algalon.tankhealer"] = "two healers or more, a bot among them"
+    if any(guid not in trace.humans for guid in tank_healer_spans(trace)):
+        out["algalon.tankheal"] = "a bot was a tank healer"
     return out
 
 
@@ -3648,6 +3901,7 @@ def failures(trace: Trace) -> list[tuple[int | None, str]]:
 
     out += smash_faults(trace)
     out += tank_faults(trace)
+    out += tankheal_faults(trace)
 
     for when, guid in punched_out(trace):
         out.append((when, f"Phase Punch phased {trace.name(guid)} out @ {secs(when)}"))
@@ -3713,6 +3967,8 @@ SECTIONS = (
     ("constellations", "activations, victims, handler and kite branches, removals", show_constellations),
     ("smash", "every Cosmic Smash wave: who stood near it, the dodge, distance at the impact", show_smash),
     ("tanks", "Phase Punch stacks, swaps, non-tank pickups, Quantum Strike", show_tanks),
+    ("tankheal", "tank healers, each healer's share on the pair, Beacon, healing against damage before every tank"
+                 " death", show_tankheal),
     ("formation", "each ring bot's distance to its slot and to him, spot branches, stalls", show_formation),
     ("darkmatter", "phase 2 Unleashed Dark Matter: loose seconds, handler damage, kills", show_darkmatter),
     ("verdict", "one line per detected failure, in time order", show_verdict),

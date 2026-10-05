@@ -38,6 +38,8 @@ bool AlgalonStarTeamFocused(PlayerbotAI* botAI)
 
 bool AlgalonYielding(PlayerbotAI* botAI) { return AlgalonYieldsBoss(botAI->GetBot()); }
 
+bool AlgalonTankHealing(PlayerbotAI* botAI) { return IsAlgalonTankHealer(botAI->GetBot()); }
+
 // Not with a pickup or swap due: the walk back to him runs on the movers this would hold.
 bool AlgalonHandlerKiting(PlayerbotAI* botAI)
 {
@@ -86,6 +88,8 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Node<AlgalonLeaveBlackHoleTrigger, AlgalonLeaveBlackHoleAction>(ACTION_EMERGENCY + 4, EncounterRow::Mover);
     // Below the exit: a healer still inside the field when the phase drops is phased again.
     e.Node<AlgalonSoakerRescueTrigger, AlgalonSoakerRescueAction>(ACTION_EMERGENCY + 3);
+    // A tank under half dies to one more swing and Quantum Strike, so its heal goes ahead of the slot walk.
+    e.Node<AlgalonTankHealCriticalTrigger, AlgalonTankHealAction>(ACTION_RAID + 9);
     e.Node<AlgalonTankPickupTrigger, AlgalonTankPickupAction>(ACTION_RAID + 8);
     e.Node<AlgalonPhasePunchSwapTrigger, AlgalonPhasePunchSwapAction>(ACTION_RAID + 7);
     e.Node<AlgalonYieldBossTrigger, AlgalonYieldBossAction>(ACTION_RAID + 7);
@@ -96,11 +100,19 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Node<AlgalonStarMarkTrigger, AlgalonStarMarkAction>(ACTION_RAID + 2);
     e.Node<AlgalonThreatRedirectTrigger, AlgalonThreatRedirectAction>(ACTION_RAID + 1);
     e.Node<AlgalonRaidPositionTrigger, AlgalonRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);
+    e.Node<AlgalonTankBeaconTrigger, AlgalonTankBeaconAction>(ACTION_MEDIUM_HEAL + 1.0f);
+    // Above the party heal bands, below the mana tools (Divine Plea, Hymn of Hope, Innervate, Mana Tide).
+    e.Node<AlgalonTankHealTrigger, AlgalonTankHealAction>(ACTION_MEDIUM_HEAL + 0.75f);
 
     // First, so a phased bot's held cast or item use is traced under it.
     e.Multiplier<AlgalonLeaveFieldMultiplier>(Family::AnyAction);
     e.Multiplier<AlgalonCooldownReserveMultiplier>(Family::Spell);
+    e.Multiplier<AlgalonTankHealerMultiplier>(Family::Spell | Family::ReachHeal);
     e.Block("algalon ice block hold", Role::Any, AlgalonCooldownsHeld, 0, {"ice block"});
+    // The encounter places these on the swap pair itself; the class nodes would move them to the main tank.
+    e.Block("algalon tank healer buffs", Role::Heal, AlgalonTankHealing, 0,
+            {"beacon of light on tank", "beacon of light on main tank", "sacred shield on tank",
+             "sacred shield on main tank", "earth shield on main tank", "earth shield on party", "divine hymn"});
 
     // Every other mover would walk a hider back out of its hole, and MoveTo answers Duplicate from the
     // run's second tick, so the run can't defend itself.

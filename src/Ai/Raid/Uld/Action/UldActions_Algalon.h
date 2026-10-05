@@ -52,6 +52,24 @@ public:
     bool Execute(Event event) override;
 };
 
+class AlgalonTankHealAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon tank heal action";
+
+    AlgalonTankHealAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
+class AlgalonTankBeaconAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon tank beacon action";
+
+    AlgalonTankBeaconAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
 class AlgalonBigBangHideAction : public MovementAction
 {
 public:

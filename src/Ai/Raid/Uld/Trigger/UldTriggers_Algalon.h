@@ -47,6 +47,33 @@ public:
     bool IsActive() override;
 };
 
+class AlgalonTankHealCriticalTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon tank heal critical";
+
+    AlgalonTankHealCriticalTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+class AlgalonTankHealTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon tank heal";
+
+    AlgalonTankHealTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+class AlgalonTankBeaconTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon tank beacon";
+
+    AlgalonTankBeaconTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 1000) {}
+    bool IsActive() override;
+};
+
 class AlgalonBigBangHideTrigger : public Trigger
 {
 public:

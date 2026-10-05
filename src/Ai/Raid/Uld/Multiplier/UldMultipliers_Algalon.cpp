@@ -155,6 +155,37 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
     return untilHit == 0 || CooldownMs(bot, reserve.spellId) > untilHit ? 0.0f : 1.0f;
 }
 
+float AlgalonTankHealerMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    auto cached = heals.find(action);
+    if (cached == heals.end())
+    {
+        Heal heal = Heal::None;
+        if (dynamic_cast<CastAoeHealSpellAction*>(action))
+            heal = Heal::Party;
+        else if (dynamic_cast<CastHealingSpellAction*>(action) || dynamic_cast<ReachPartyMemberToHealAction*>(action))
+            heal = Heal::Targeted;
+
+        cached = heals.emplace(action, heal).first;
+    }
+
+    if (cached->second == Heal::None || !IsAlgalonTankHealer(bot))
+        return 1.0f;
+
+    if (cached->second == Heal::Party)
+        return 0.0f;
+
+    Unit* target = action->GetTarget();
+    if (!target || target == bot)
+        return 1.0f;
+
+    Player* player = target->ToPlayer();
+    return player && IsAlgalonSwapTank(player) ? 1.0f : 0.0f;
+}
+
 float AlgalonSplashHoldMultiplier::GetValue(Action* action)
 {
     if (!action)

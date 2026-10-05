@@ -231,6 +231,8 @@ def probe_notes(handler: int) -> list[dict]:
     rows += [note(20000, TRUESHOT, "algalon.spot", "smash"), note(26000, TRUESHOT, "algalon.spot", "slot")]
     rows += [note(0, SHIV, "algalon.spot", "stage"), note(6000, SHIV, "algalon.spot", "none"),
              note(0, BRAWL, "algalon.spot", "stage")]
+    rows += [note(8000, MERCY, "algalon.tankhealer", 1), note(8000, MERCY, "algalon.tankhealslots", 1),
+             note(8000, MERCY, "algalon.tankheal", "full")]
     rows += [note(8000, BULWARK, "algalon.swappair", 1), note(8000, AEGIS, "algalon.swappair", 1),
              note(8000, MERCY, "algalon.pull", f"inreach=4 victim={BRAWL}"),
              note(40000, MERCY, "algalon.call", "bigbang"), note(90000, MERCY, "algalon.call", "bigbang"),
@@ -662,7 +664,7 @@ class WithoutProbes(unittest.TestCase):
         self.assertEqual(lines[0], "missing probes: algalon.bigbang, algalon.dodge, algalon.handler,"
                                    " algalon.hazard, algalon.hide, algalon.holes, algalon.phase, algalon.pull,"
                                    " algalon.slot, algalon.soaker, algalon.soakkit, algalon.spot, algalon.stardeath,"
-                                   " algalon.starwindow, algalon.swappair, algalon.tankrole")
+                                   " algalon.starwindow, algalon.swappair, algalon.tankhealer, algalon.tankrole")
         self.assertIn("Big Bang 1 @ 40.0s: 2 non-soakers hit unphased (Aegis, Trueshot)", lines)
         self.assertIn("evade 4.1 s after Big Bang 2 (Ascend at +0.3 s, pull ended reset)", lines)
 
@@ -1396,6 +1398,127 @@ const std::array<Position, ULDUAR_ALGALON_TOTAL_SLOTS> ULDUAR_ALGALON_RING_SLOTS
         self.assertEqual(al.below_safe(trace, up), [(19800, 5, 99.0), (21000, 4, 70.0)])
         trace.header = {"diff": 2}
         self.assertEqual((al.explosion_safe_hp(trace), al.below_safe(trace, up)), (16913, []))
+
+
+TH_TANK, TH_PARTNER, TH_HOLY, TH_DISC, TH_RESTO, TH_SHAMAN, TH_DPS = range(8001, 8008)
+TH_DEATH = 20000
+TH_END = 30000
+
+
+def heal(when: int, source: int, target: int, amount: int, over: int = 0) -> dict:
+    return {"t": when, "e": "heal", "s": source, "d": target, "sp": 48782, "a": amount, "oh": over, "hp": 50.0}
+
+
+def absorb(when: int, caster: int, target: int, amount: int) -> dict:
+    return {"t": when, "e": "abs", "d": target, "s": caster, "sp": 48066, "a": amount}
+
+
+def tankheal_pull() -> list[dict]:
+    """Two bot tank healers and a human one on four healers; the holder dies with the paladin 10 yd off and
+    the priest phased."""
+    roster = [
+        {"g": TH_TANK, "n": "Tanka", "r": "tank", "c": "paladin", "h": 0},
+        {"g": TH_PARTNER, "n": "Tankb", "r": "tank", "c": "paladin", "h": 0},
+        {"g": TH_HOLY, "n": "Holy", "r": "heal", "c": "paladin", "h": 0},
+        {"g": TH_DISC, "n": "Disc", "r": "heal", "c": "priest", "h": 0},
+        {"g": TH_RESTO, "n": "Resto", "r": "heal", "c": "druid", "h": 1},
+        {"g": TH_SHAMAN, "n": "Shaman", "r": "heal", "c": "shaman", "h": 0},
+        {"g": TH_DPS, "n": "Dps", "r": "ranged", "c": "mage", "h": 0},
+    ]
+    home = {TH_TANK: (0, 0), TH_PARTNER: (3, 0), TH_HOLY: (0, 10), TH_DISC: (6, 12), TH_RESTO: (0, 50),
+            TH_SHAMAN: (-8, 12), TH_DPS: (10, 20)}
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 1,
+         "boss": "algalon-the-observer", "roster": roster},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ALGALON, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        *({"t": 1, "e": "unit", "g": member["g"], "n": member["n"], "mhp": 30000} for member in roster),
+        note(1000, TH_TANK, "algalon.swappair", 1), note(1000, TH_PARTNER, "algalon.swappair", 1),
+        *(note(1000, guid, "algalon.tankhealer", 1) for guid in (TH_HOLY, TH_DISC, TH_RESTO)),
+        note(1000, TH_HOLY, "algalon.tankhealslots", 2),
+        note(16000, TH_HOLY, "algalon.tankheal", "holder"),
+        # Beacon on the partner for 10 s, then on the holder for 2.
+        {"t": 2000, "e": "aura", "d": TH_PARTNER, "s": TH_HOLY, "sp": al.SPELL_BEACON_OF_LIGHT, "r": 0, "st": 1,
+         "dur": 60000, "p": 1},
+        {"t": 12000, "e": "aura", "d": TH_PARTNER, "s": TH_HOLY, "sp": al.SPELL_BEACON_OF_LIGHT, "r": 1, "st": 1,
+         "dur": 0, "p": 1},
+        {"t": 12000, "e": "aura", "d": TH_TANK, "s": TH_HOLY, "sp": al.SPELL_BEACON_OF_LIGHT, "r": 0, "st": 1,
+         "dur": 60000, "p": 1},
+        {"t": 14000, "e": "aura", "d": TH_TANK, "s": TH_HOLY, "sp": al.SPELL_BEACON_OF_LIGHT, "r": 1, "st": 1,
+         "dur": 0, "p": 1},
+        *phased(TH_DISC, al.SPELL_BLACK_HOLE_PHASE, 18000, 25000),
+        # 83k in the 6 s before the death, 63k of it in the last 2.
+        dmg(15000, ALGALON, TH_TANK, 0, 20000), dmg(18500, ALGALON, TH_TANK, 0, 25000),
+        dmg(19200, ALGALON, TH_TANK, al.SPELL_QUANTUM_STRIKE[1], 18000),
+        dmg(TH_DEATH, ALGALON, TH_TANK, 0, 20000, hp=10.0, over=5000),
+        death(TH_DEATH, TH_TANK, ALGALON, 20000, home[TH_TANK]),
+        heal(16000, TH_HOLY, TH_TANK, 8000), heal(17500, TH_HOLY, TH_HOLY, 2000),
+        heal(17000, TH_DISC, TH_DPS, 12000), absorb(15500, TH_DISC, TH_TANK, 5000),
+        heal(19000, TH_SHAMAN, TH_TANK, 4000, over=1000),
+        {"t": 17000, "e": "veto", "g": TH_HOLY, "m": al.TANKHEAL_VETO, "a": "flash of light on party"},
+        {"t": TH_END, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, TH_END, 500):
+        units = [row(guid, offset, 0.0 if guid == TH_TANK and when > TH_DEATH else 100.0, ALGALON)
+                 for guid, offset in home.items()]
+        units.append(row(ALGALON, (0, 4), 90.0, TH_TANK if when <= TH_DEATH else TH_PARTNER))
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return records
+
+
+class TankHeal(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, tankheal_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_tank_death_reads_damage_against_healing_over_the_six_seconds_before(self):
+        (row,) = al.tank_death_rows(self.trace)
+        self.assertEqual({key: row[key] for key in ("t", "guid", "taken", "burst", "healed", "by_tank_healers",
+                                                    "absorbed", "elsewhere", "up")},
+                         {"t": TH_DEATH, "guid": TH_TANK, "taken": 83000, "burst": 63000, "healed": 11000,
+                          "by_tank_healers": 8000, "absorbed": 5000, "elsewhere": 14000, "up": 3})
+        states = {state["guid"]: state for state in row["healers"]}
+        self.assertEqual(set(states), {TH_HOLY, TH_DISC, TH_RESTO})
+        holy = states[TH_HOLY]
+        self.assertEqual((holy["alive"], holy["phased"], round(holy["distance"], 1), holy["branch"], holy["vetoes"],
+                          holy["healed"]), (True, False, 10.0, "holder", 1, 8000))
+        self.assertTrue(states[TH_DISC]["phased"])
+
+    def test_shares_split_the_pair_self_and_everyone_else(self):
+        shares = {row["guid"]: row for row in al.healer_shares(self.trace)}
+        self.assertEqual(dict(shares[TH_HOLY]["all"]), {"tanks": 8000, "self": 2000})
+        self.assertEqual(dict(shares[TH_DISC]["assigned"]), {"tanks": 5000, "others": 12000})
+        self.assertEqual(dict(shares[TH_SHAMAN]["assigned"]), {})
+
+    def test_beacon_time_splits_on_the_tank_he_hit(self):
+        self.assertEqual(al.beacon_seconds(self.trace), (2000, 10000))
+
+    def test_faults_name_the_idle_tank_healer_the_spread_the_human_and_the_cap(self):
+        self.assertEqual([line for _, line in al.tankheal_faults(self.trace)], [
+            "Tanka died @ 20.0s with tank healer Holy alive, unphased and 10 yd away: healed 11,000 of 83,000 taken"
+            " in 6 s",
+            "tank healer Disc put 71% of its healing on others",
+            "human Resto assigned as a tank healer @ 1.0s",
+            "3 tank healers @ 1.0s with 4 healers in the raid",
+        ])
+
+    def test_the_section_ends_on_the_summary_line(self):
+        text = render(self.trace, "tankheal")
+        self.assertIn("tank healer: Resto (heal)* 0:01.000-0:30.000", text)
+        self.assertIn("Beacon of Light: 2.0 s on the tank he was hitting, 10.0 s on the other", text)
+        self.assertIn("1 tank death; medians over the 6 s before: took 83k (63k in 2 s), healed 11k + 5k shields,"
+                      " 14k into others; every healer alive and unphased in 0 of 1; healers' share on the pair"
+                      " 29%-100%", text)
+
+    def test_the_probes_are_owed_once_a_bot_could_hold_the_pair(self):
+        expected = al.expected_probes(self.trace)
+        self.assertIn("algalon.tankhealer", expected)
+        self.assertIn("algalon.tankheal", expected)
 
 
 class EveryView(unittest.TestCase):

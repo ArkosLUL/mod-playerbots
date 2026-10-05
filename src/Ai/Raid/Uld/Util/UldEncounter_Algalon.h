@@ -116,6 +116,17 @@ constexpr float ULDUAR_ALGALON_RESCUE_HP_PCT = 60.0f;
 constexpr float ULDUAR_ALGALON_RESCUE_LAY_ON_HANDS_PCT = 30.0f;
 // A healer still has one global cooldown to spend on the soaker before its walk to the hole.
 constexpr int32 ULDUAR_ALGALON_PREP_GCD_MS = 1500;
+// Healers pick by health %, and every explosion puts clothies below a tank losing ~15k/s, so the pair
+// gets healers of its own. Never more than the raid keeps: the star window waits for the raid to top up.
+constexpr uint8 ULDUAR_ALGALON_TANK_HEALERS_10 = 1;
+constexpr uint8 ULDUAR_ALGALON_TANK_HEALERS_25 = 2;
+// Main hand, off hand and Quantum Strike can land inside 1.5 s, so under this only the fastest heal will do.
+constexpr float ULDUAR_ALGALON_TANK_CRITICAL_PCT = 50.0f;
+constexpr float ULDUAR_ALGALON_TANK_HEALER_SELF_PCT = 50.0f;
+constexpr float ULDUAR_ALGALON_HOLDER_TOPOFF_PCT = 95.0f;
+constexpr float ULDUAR_ALGALON_OFFTANK_TOPOFF_PCT = 85.0f;
+// The partner only goes ahead of a holder below its top-off when it's this much lower.
+constexpr float ULDUAR_ALGALON_OFFTANK_MARGIN_PCT = 15.0f;
 // Run speed for walk estimates made for someone else, without their speed to hand.
 constexpr float ULDUAR_ALGALON_RUN_SPEED = 7.0f;
 // A hole further than this can't be reached in the cast, so the bot walks towards it beforehand, to this
@@ -311,6 +322,9 @@ struct AlgalonEncounterState
     // The two tanks that trade him on Phase Punch, latched for the pull: two bot tanks when the raid has
     // them, else the group's main and first assist tank, one of whom may be a human.
     RaidObs::ObsGuidSet swapPair{"algalon.swappair"};
+    // Bot healers on the swap pair alone, latched for the pull like the pair.
+    RaidObs::ObsGuidSet tankHealers{"algalon.tankhealer"};
+    RaidObs::ObsValue<uint32> tankHealerSlots{"algalon.tankhealslots"};
 
     ObjectGuid boss;
     bool engaged = false;
@@ -397,6 +411,20 @@ Player* GetAlgalonRescueTarget(PlayerbotAI* botAI);
 char const* GetAlgalonSoakerExternal(PlayerbotAI* botAI, Player* soaker);
 char const* GetAlgalonSoakerPrep(PlayerbotAI* botAI, Player* soaker);
 char const* GetAlgalonRescueSpell(PlayerbotAI* botAI, Player* soaker);
+
+// Engaged and on the tank healer list. False after a kill or wipe and off the map.
+bool IsAlgalonTankHealer(Player* bot);
+struct AlgalonTankHealPick
+{
+    Player* target = nullptr;
+    // Low enough that only the fastest heal will do.
+    bool critical = false;
+};
+// Who this tank healer heals next: the holder, the partner, or itself. Traced as algalon.tankheal.
+AlgalonTankHealPick GetAlgalonTankHealPick(PlayerbotAI* botAI);
+char const* GetAlgalonTankHealSpell(PlayerbotAI* botAI, AlgalonTankHealPick const& pick);
+// The swap tank he isn't hitting, unless this paladin's Beacon is already on it.
+Player* GetAlgalonBeaconTarget(PlayerbotAI* botAI);
 
 // What this bot does about the current Big Bang. Traced as algalon.hide.
 enum class AlgalonHideRole : uint8

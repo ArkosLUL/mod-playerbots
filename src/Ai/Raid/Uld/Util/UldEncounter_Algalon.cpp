@@ -6,6 +6,7 @@
 
 #include "UldEncounter_Algalon.h"
 
+#include "AiFactory.h"
 #include "AiObjectContext.h"
 #include "CellImpl.h"
 #include "Chat.h"
@@ -26,6 +27,8 @@
 #include "SharedDefines.h"
 #include "Spell.h"
 #include "SpellAuras.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "Timer.h"
 #include "UldEncounterGate.h"
 #include "Unit.h"
@@ -40,6 +43,7 @@
 #include <iterator>
 #include <limits>
 #include <list>
+#include <set>
 #include <string>
 #include <tuple>
 
@@ -579,6 +583,127 @@ void EnsureSwapPair(Player* bot, Creature* boss, AlgalonEncounterState& state)
         ObjectGuid const first = *state.swapPair.begin();
         state.swapPair.insert(first);
     }
+}
+
+// Beacon and Sacred Shield cover both tanks from one healer, then shields, then hots.
+uint8 TankHealerRank(Player* member)
+{
+    switch (member->getClass())
+    {
+        case CLASS_PALADIN:
+            return 0;
+        case CLASS_PRIEST:
+            return AiFactory::GetPlayerSpecTab(member) == PRIEST_TAB_DISCIPLINE ? 1 : 4;
+        case CLASS_DRUID:
+            return 2;
+        case CLASS_SHAMAN:
+            return 3;
+        default:
+            return 5;
+    }
+}
+
+bool BetterTankHealer(Player* a, Player* b)
+{
+    uint8 const aRank = TankHealerRank(a);
+    uint8 const bRank = TankHealerRank(b);
+    return aRank != bRank ? aRank < bRank : a->GetGUID() < b->GetGUID();
+}
+
+// Humans count towards the raid's healers but are never handed the tanks.
+uint8 TankHealerSlots(Player* bot, Group* group)
+{
+    uint8 healers = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (InFight(member) && PlayerbotAI::IsHeal(member))
+            ++healers;
+    }
+
+    uint8 const wanted =
+        bot->GetMap()->Is25ManRaid() ? ULDUAR_ALGALON_TANK_HEALERS_25 : ULDUAR_ALGALON_TANK_HEALERS_10;
+    return std::min<uint8>(wanted, healers / 2);
+}
+
+// Re-derived until the pull like the pair. During it a dead or departed healer is replaced and the list
+// trimmed to what the living healers allow. A phased one stays: Big Bang phases them all at once.
+void EnsureTankHealers(Player* bot, Creature* boss, AlgalonEncounterState& state)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return;
+
+    uint8 const slots = TankHealerSlots(bot, group);
+    state.tankHealerSlots = slots;
+
+    std::vector<Player*> candidates;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (InFight(member) && IsBot(member) && PlayerbotAI::IsHeal(member))
+            candidates.push_back(member);
+    }
+
+    std::sort(candidates.begin(), candidates.end(), BetterTankHealer);
+    if (!boss->IsInCombat() && candidates.size() > slots)
+        candidates.resize(slots);
+
+    std::vector<ObjectGuid> leaving;
+    for (ObjectGuid const& guid : state.tankHealers)
+    {
+        auto const same = [&guid](Player* healer) { return healer->GetGUID() == guid; };
+        if (std::none_of(candidates.begin(), candidates.end(), same))
+            leaving.push_back(guid);
+    }
+
+    for (ObjectGuid const& guid : leaving)
+        state.tankHealers.erase(guid);
+
+    for (Player* candidate : candidates)
+    {
+        if (state.tankHealers.size() >= slots)
+            break;
+
+        state.tankHealers.insert(candidate->GetGUID());
+    }
+
+    while (state.tankHealers.size() > slots)
+    {
+        Player* worst = nullptr;
+        for (ObjectGuid const& guid : state.tankHealers)
+        {
+            Player* healer = FindGroupMember(group, guid);
+            if (healer && (!worst || BetterTankHealer(worst, healer)))
+                worst = healer;
+        }
+
+        if (!worst)
+            break;
+
+        state.tankHealers.erase(worst->GetGUID());
+    }
+
+    // Latched before the pull opened a trace; a no-op insert writes the set into the new one.
+    if (RaidObs::Active() && !state.tankHealers.empty())
+    {
+        ObjectGuid const first = *state.tankHealers.begin();
+        state.tankHealers.insert(first);
+    }
+}
+
+// CanCastSpell lets an out of range cast through.
+bool TankHealReachable(Player* bot, Player* target)
+{
+    return CanStayOut(target) && bot->GetDistance2d(target) <= sPlayerbotAIConfig.healDistance &&
+           bot->IsWithinLOSInMap(target);
+}
+
+uint32 CastTimeMs(PlayerbotAI* botAI, char const* spell)
+{
+    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    return info ? info->CalcCastTime(botAI->GetBot()) : 0;
 }
 
 Player* PairPartner(Group* group, AlgalonEncounterState const& state, Player* tank)
@@ -2046,6 +2171,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         return;
 
     EnsureSwapPair(bot, boss, *state);
+    EnsureTankHealers(bot, boss, *state);
 
     if (!state->introEndMs && boss->IsInCombat() && !boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
     {
@@ -2302,6 +2428,194 @@ char const* GetAlgalonRescueSpell(PlayerbotAI* botAI, Player* soaker)
             return heal;
 
     return nullptr;
+}
+
+bool IsAlgalonTankHealer(Player* bot)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    return state && state->engaged && state->tankHealers.count(bot->GetGUID());
+}
+
+AlgalonTankHealPick GetAlgalonTankHealPick(PlayerbotAI* botAI)
+{
+    AlgalonTankHealPick pick;
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    AlgalonEncounterState const* state = FindState(bot);
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!state || !group || !state->engaged || !state->tankHealers.count(bot->GetGUID()) || IsAlgalonPhased(bot))
+        return pick;
+
+    std::vector<Player*> pair;
+    for (ObjectGuid const& guid : state->swapPair)
+        if (Player* tank = FindGroupMember(group, guid))
+            pair.push_back(tank);
+
+    // Loose, or on someone outside the pair: the lower pair tank is the one he lands on next.
+    Player* holder = GetAlgalonBossTank(botAI);
+    if (std::find(pair.begin(), pair.end(), holder) == pair.end())
+    {
+        holder = nullptr;
+        for (Player* tank : pair)
+            if (CanStayOut(tank) && (!holder || tank->GetHealthPct() < holder->GetHealthPct()))
+                holder = tank;
+    }
+
+    Player* partner = nullptr;
+    for (Player* tank : pair)
+        if (tank != holder)
+            partner = tank;
+
+    auto const reachable = [bot](Player* tank) { return tank && TankHealReachable(bot, tank); };
+    auto const below = [](Player* unit, float pct) { return unit && unit->GetHealthPct() < pct; };
+
+    char const* branch = "full";
+    if (reachable(holder) && below(holder, ULDUAR_ALGALON_TANK_CRITICAL_PCT))
+    {
+        pick = {holder, true};
+        branch = "holder";
+    }
+    else if (below(bot, ULDUAR_ALGALON_TANK_HEALER_SELF_PCT))
+    {
+        pick = {bot, true};
+        branch = "self";
+    }
+    else if (reachable(partner) && below(partner, ULDUAR_ALGALON_TANK_CRITICAL_PCT))
+    {
+        pick = {partner, true};
+        branch = "offtank";
+    }
+    else
+    {
+        bool const holderNeeds = reachable(holder) && below(holder, ULDUAR_ALGALON_HOLDER_TOPOFF_PCT);
+        bool const partnerNeeds = reachable(partner) && below(partner, ULDUAR_ALGALON_OFFTANK_TOPOFF_PCT);
+        bool const partnerFirst = partnerNeeds && holderNeeds &&
+                                  partner->GetHealthPct() + ULDUAR_ALGALON_OFFTANK_MARGIN_PCT <= holder->GetHealthPct();
+        if (holderNeeds && !partnerFirst)
+        {
+            pick.target = holder;
+            branch = "holder";
+        }
+        else if (partnerNeeds)
+        {
+            pick.target = partner;
+            branch = "offtank";
+        }
+        else if ((holder && !reachable(holder) && below(holder, ULDUAR_ALGALON_HOLDER_TOPOFF_PCT)) ||
+                 (partner && !reachable(partner) && below(partner, ULDUAR_ALGALON_OFFTANK_TOPOFF_PCT)))
+        {
+            branch = "range";
+        }
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "algalon.tankheal", branch);
+
+    return pick;
+}
+
+// Never Lay on Hands, Pain Suppression, Guardian Spirit or Hand of Sacrifice: the cooldown reserve keeps
+// those for Big Bang and doesn't see a cast made from here.
+char const* GetAlgalonTankHealSpell(PlayerbotAI* botAI, AlgalonTankHealPick const& pick)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    Player* target = pick.target;
+    if (!bot || !target)
+        return nullptr;
+
+    bool const onHolder = target != bot && GetAlgalonBossTank(botAI) == target;
+    bool const shieldable = !target->HasAura(SPELL_ALGALON_WEAKENED_SOUL);
+    std::vector<char const*> spells;
+    switch (bot->getClass())
+    {
+        case CLASS_PALADIN:
+            if (pick.critical)
+                spells = {"holy shock", "flash of light", "holy light"};
+            else
+            {
+                // One Sacred Shield per paladin, so it follows the holder.
+                if (onHolder)
+                    spells.push_back("sacred shield");
+                spells.insert(spells.end(), {"holy light", "flash of light"});
+            }
+            break;
+        case CLASS_PRIEST:
+            if (shieldable)
+                spells.push_back("power word: shield");
+            if (pick.critical)
+                spells.insert(spells.end(), {"penance", "flash heal"});
+            else
+                spells.insert(spells.end(), {"prayer of mending", "renew", "penance", "greater heal", "flash heal"});
+            break;
+        case CLASS_DRUID:
+            if (pick.critical)
+                spells = {"swiftmend", "nourish", "regrowth"};
+            else
+                spells = {"lifebloom", "rejuvenation", "nourish", "regrowth"};
+            break;
+        case CLASS_SHAMAN:
+            if (pick.critical)
+                spells = {"riptide", "lesser healing wave", "healing wave"};
+            else
+            {
+                // One Earth Shield per target, whoever cast it.
+                if (onHolder && !botAI->HasAura("earth shield", target))
+                    spells.push_back("earth shield");
+                spells.insert(spells.end(), {"riptide", "healing wave", "lesser healing wave"});
+            }
+            break;
+        default:
+            break;
+    }
+
+    static std::set<std::string> const layers = {"sacred shield", "prayer of mending", "renew", "rejuvenation",
+                                                 "riptide"};
+    int32 const slack = AlgalonHideSlackMs(bot);
+    for (char const* spell : spells)
+    {
+        if (layers.count(spell) && botAI->HasAura(spell, target, false, true))
+            continue;
+
+        if (!std::strcmp(spell, "lifebloom") && botAI->HasAura(spell, target, true, true))
+            continue;
+
+        // Its walk to the hole would cut the cast off.
+        if (slack != std::numeric_limits<int32>::max() &&
+            static_cast<int32>(CastTimeMs(botAI, spell)) + ULDUAR_ALGALON_PREP_GCD_MS > slack)
+            continue;
+
+        if (botAI->CanCastSpell(spell, target))
+            return spell;
+    }
+
+    return nullptr;
+}
+
+Player* GetAlgalonBeaconTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    AlgalonEncounterState const* state = FindState(bot);
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!state || !group || bot->getClass() != CLASS_PALADIN || !IsAlgalonTankHealer(bot))
+        return nullptr;
+
+    // Before the pickup the pickup tank is the one he lands on.
+    Player* holder = GetAlgalonBossTank(botAI);
+    if (!holder || !state->swapPair.count(holder->GetGUID()))
+        holder = GetAlgalonPickupTank(botAI);
+
+    Player* target = nullptr;
+    for (ObjectGuid const& guid : state->swapPair)
+    {
+        Player* tank = FindGroupMember(group, guid);
+        if (tank && tank != holder && TankHealReachable(bot, tank))
+            target = tank;
+    }
+
+    // A lone holder still gets the paladin's self heals through it.
+    if (!target && holder && TankHealReachable(bot, holder))
+        target = holder;
+
+    return target && !botAI->HasAura("beacon of light", target, false, true) ? target : nullptr;
 }
 
 Player* GetAlgalonBigBangSoaker(PlayerbotAI* botAI)

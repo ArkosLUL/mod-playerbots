@@ -153,6 +153,19 @@ bool AlgalonSoakerRescueAction::Execute(Event /*event*/)
     return heal && botAI->CastSpell(heal, soaker);
 }
 
+bool AlgalonTankHealAction::Execute(Event /*event*/)
+{
+    AlgalonTankHealPick const pick = GetAlgalonTankHealPick(botAI);
+    char const* heal = GetAlgalonTankHealSpell(botAI, pick);
+    return heal && botAI->CastSpell(heal, pick.target);
+}
+
+bool AlgalonTankBeaconAction::Execute(Event /*event*/)
+{
+    Player* target = GetAlgalonBeaconTarget(botAI);
+    return target && botAI->CastSpell("beacon of light", target);
+}
+
 bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 {
     Position shelter;

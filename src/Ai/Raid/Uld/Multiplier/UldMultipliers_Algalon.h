@@ -50,6 +50,25 @@ private:
     std::unordered_map<Action*, Reserve> reserves;
 };
 
+// Algalon: a tank healer heals the swap pair and itself, nobody else. Its class rotation still runs whenever
+// that's who it would heal; party heals and heals on anyone else are left to the raid's other healers.
+class AlgalonTankHealerMultiplier : public Multiplier
+{
+public:
+    AlgalonTankHealerMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon tank healer focus") {}
+    float GetValue(Action* action) override;
+
+private:
+    enum class Heal : uint8
+    {
+        None,
+        Party,
+        Targeted,
+    };
+
+    std::unordered_map<Action*, Heal> heals;
+};
+
 // Algalon: stars die one at a time on purpose, each death 16-21k to the whole raid. Splash that lands on
 // one kills it on its own clock, near whoever stands there, and can bring two down together. The threat
 // type misses most of it, so the spell and the name decide.

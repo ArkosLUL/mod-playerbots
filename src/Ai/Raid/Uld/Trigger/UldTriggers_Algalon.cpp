@@ -86,6 +86,39 @@ bool AlgalonSoakerRescueTrigger::IsActive()
     return GetAlgalonRescueSpell(botAI, soaker) != nullptr;
 }
 
+// A tank healer's tank gets its fastest heal ahead of the slot walk; the rest of its healing waits behind the
+// mana tools. The class rotations heal whoever is lowest in percent, and the encounter vetoes those for it.
+bool AlgalonTankHealCriticalTrigger::IsActive()
+{
+    if (!IsAlgalonTankHealer(bot))
+        return false;
+
+    AlgalonTankHealPick const pick = GetAlgalonTankHealPick(botAI);
+    return pick.critical && GetAlgalonTankHealSpell(botAI, pick);
+}
+
+bool AlgalonTankHealTrigger::IsActive()
+{
+    if (!IsAlgalonTankHealer(bot))
+        return false;
+
+    AlgalonTankHealPick const pick = GetAlgalonTankHealPick(botAI);
+    return pick.target && !pick.critical && GetAlgalonTankHealSpell(botAI, pick);
+}
+
+// Beacon on the swap tank he isn't hitting doubles every heal on the holder onto the partner.
+bool AlgalonTankBeaconTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_PALADIN || !IsAlgalonTankHealer(bot) || IsAlgalonPhased(bot) ||
+        GetAlgalonTankHealPick(botAI).critical)
+    {
+        return false;
+    }
+
+    Player* target = GetAlgalonBeaconTarget(botAI);
+    return target && botAI->CanCastSpell("beacon of light", target);
+}
+
 bool AlgalonBigBangHideTrigger::IsActive() { return GetAlgalonHideRole(bot) == AlgalonHideRole::Run; }
 
 bool AlgalonCosmicSmashTrigger::IsActive()
