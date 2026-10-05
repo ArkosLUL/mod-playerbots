@@ -96,7 +96,7 @@ void DefineAlgalon(EncounterBuilder& e)
     // Instants, below the hide, the dodge and the exit: those come first, and the cast follows on the next tick.
     e.Node<AlgalonTankDefensiveTrigger, AlgalonTankDefensiveAction>(ACTION_EMERGENCY + 2);
     e.Node<AlgalonExplosionCoverTrigger, AlgalonExplosionCoverAction>(ACTION_EMERGENCY + 1);
-    // A tank under half dies to one more swing and Quantum Strike, so its heal goes ahead of the slot walk.
+    // Ahead of the slot walk: the tank he's hitting from 70%, the partner and the healer itself from half.
     e.Node<AlgalonTankHealCriticalTrigger, AlgalonTankHealAction>(ACTION_RAID + 9);
     e.Node<AlgalonTankPickupTrigger, AlgalonTankPickupAction>(ACTION_RAID + 8);
     e.Node<AlgalonPhasePunchSwapTrigger, AlgalonPhasePunchSwapAction>(ACTION_RAID + 7);
@@ -111,7 +111,8 @@ void DefineAlgalon(EncounterBuilder& e)
     // One global cooldown a pull, above the party heal bands so the heals don't starve it until the first star.
     e.Node<AlgalonShadowAuraTrigger, AlgalonShadowAuraAction>(ACTION_MEDIUM_HEAL + 2.0f);
     e.Node<AlgalonTankBeaconTrigger, AlgalonTankBeaconAction>(ACTION_MEDIUM_HEAL + 1.0f);
-    // Above the party heal bands, below the mana tools (Divine Plea, Hymn of Hope, Innervate, Mana Tide).
+    // Under the party heal bands, which run when they land on a tank and are vetoed otherwise, and under
+    // Judgement of Light on purpose: its procs are about a quarter of a holy paladin's healing here.
     e.Node<AlgalonTankHealTrigger, AlgalonTankHealAction>(ACTION_MEDIUM_HEAL + 0.75f);
 
     // First, so a phased bot's held cast or item use is traced under it.

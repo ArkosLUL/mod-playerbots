@@ -148,6 +148,9 @@ constexpr uint8 ULDUAR_ALGALON_TANK_HEALERS_10 = 1;
 constexpr uint8 ULDUAR_ALGALON_TANK_HEALERS_25 = 2;
 // Main hand, off hand and Quantum Strike can land inside 1.5 s, so under this only the fastest heal will do.
 constexpr float ULDUAR_ALGALON_TANK_CRITICAL_PCT = 50.0f;
+// The tank he's hitting gets the fast heals from here: a main hand swing plus Quantum Strike is 26-31k
+// on a ~45k tank, so one global spent on anything else at 65% loses it.
+constexpr float ULDUAR_ALGALON_HOLDER_URGENT_PCT = 70.0f;
 constexpr float ULDUAR_ALGALON_TANK_HEALER_SELF_PCT = 50.0f;
 constexpr float ULDUAR_ALGALON_HOLDER_TOPOFF_PCT = 95.0f;
 constexpr float ULDUAR_ALGALON_OFFTANK_TOPOFF_PCT = 85.0f;

@@ -194,7 +194,9 @@ about 3 s. So no walk may clip a field: dodges and exits reject ground whose str
 phased, may cross the one it is in, no other. When every path is blocked the dodge and the exit first take
 one kept 6.3 yd off every hole (`field`, just outside the 6 yd field), and only then one across a hole: the
 void is still better than a meteor or staying phased. A slot walk with a hole in the way goes round it
-via a point 9.5 yd off the hole that has a clear line on to the slot (`blocked`).
+via a point 9.5 yd off the hole that has a clear line on to the slot (`blocked`); phased bots too, all but
+the hole they leave: Big Bang's strip can land mid-walk, and a tank healer walking 5 yd past a hole was
+phased again for 10 s while its tank died.
 
 The generic movers know nothing of holes, and holes land beside him where melee stand: 34 stray phases in
 four pulls came off `reach melee`, `set behind` and `reach spell`. `AlgalonWalkGuardMultiplier` holds reach,
@@ -324,10 +326,16 @@ dead or departed are replaced and the list trimmed. A phased one stays: Big Bang
 
 A tank healer heals the holder (else the lower pair tank), itself under 50 %, then the partner:
 
-- under 50 %, its fastest spell at `ACTION_RAID + 9`, ahead of the slot walk;
+- under 50 %, and the holder under 70 %, its fastest spell at `ACTION_RAID + 9`, ahead of the slot walk.
+  A holder went from full to dead in 1.3 s (two main hands, Quantum Strike, an off hand: 50 k), after the
+  paladin spent its global at 65 % on Judgement. The paladin's order is Holy Shock, Flash of Light only
+  if Infusion of Light made it instant, Holy Light, Flash: hard cast, Flash heals a third of Holy Light;
 - else under 95 % holder / 85 % partner (the partner first only when 15 % lower), shields and HoTs first
   (Sacred Shield follows the holder), then efficient heals, at `ACTION_MEDIUM_HEAL + 0.75`, under the mana
-  tools.
+  tools and, on purpose, Judgement of Light (its procs are a quarter of the paladin's healing).
+
+Over the first 3 pulls tank deaths with under 5 dead fell from 26 in 23 pulls to 2, and those with every
+healer up from 37/71 to 1/9.
 
 Never a button the tank cutter sequence spends, nor a cast outlasting its hide
 slack; the Big Bang nodes still win. A holy paladin keeps Beacon on the partner. `AlgalonTankHealerMultiplier`

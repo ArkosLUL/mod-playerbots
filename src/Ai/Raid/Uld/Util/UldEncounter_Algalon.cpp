@@ -2120,11 +2120,12 @@ char const* DeriveSlot(Player* bot, Position& position, bool& found)
         branch = "buried";
     }
 
-    // A phased bot is already in the void; for everyone else the walk itself can clip a field.
-    if (!IsAlgalonPhased(bot) && bot->GetExactDist2d(position) > ULDUAR_ALGALON_SLOT_TOLERANCE)
+    // Phased bots too: Big Bang's strip can land mid-walk, and a field the walk clips then phases them again
+    // for 10s.
+    if (bot->GetExactDist2d(position) > ULDUAR_ALGALON_SLOT_TOLERANCE)
     {
-        if (AlgalonScanUnit const* hole =
-                HoleAcrossPath(*state, bot->GetPosition(), position.GetPositionX(), position.GetPositionY(), false))
+        if (AlgalonScanUnit const* hole = HoleAcrossPath(*state, bot->GetPosition(), position.GetPositionX(),
+                                                         position.GetPositionY(), IsAlgalonPhased(bot)))
         {
             Position waypoint;
             found = FindHoleDetour(bot, *state, *hole, position, waypoint);
@@ -2748,6 +2749,11 @@ AlgalonTankHealPick GetAlgalonTankHealPick(PlayerbotAI* botAI)
         pick = {partner, true};
         branch = "offtank";
     }
+    else if (reachable(holder) && below(holder, ULDUAR_ALGALON_HOLDER_URGENT_PCT))
+    {
+        pick = {holder, true};
+        branch = "holder";
+    }
     else
     {
         bool const holderNeeds = reachable(holder) && below(holder, ULDUAR_ALGALON_HOLDER_TOPOFF_PCT);
@@ -2793,7 +2799,13 @@ char const* GetAlgalonTankHealSpell(PlayerbotAI* botAI, AlgalonTankHealPick cons
     {
         case CLASS_PALADIN:
             if (pick.critical)
-                spells = {"holy shock", "flash of light", "holy light"};
+            {
+                // Flash goes ahead of Holy Light only when Infusion of Light makes it instant. Hard cast
+                // it heals about a third as much for nearly the same cast time.
+                bool const instantFlash = !CastTimeMs(botAI, "flash of light");
+                spells = {"holy shock", instantFlash ? "flash of light" : "holy light",
+                          instantFlash ? "holy light" : "flash of light"};
+            }
             else
             {
                 // One Sacred Shield per paladin, so it follows the holder.
