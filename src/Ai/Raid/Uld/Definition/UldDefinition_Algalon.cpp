@@ -81,6 +81,19 @@ bool AlgalonGoingToFarHole(PlayerbotAI* botAI) { return AlgalonHeadsForFarHole(b
 
 bool AlgalonSmashHold(PlayerbotAI* botAI) { return AlgalonEngaged(botAI) && AlgalonSmashHoldsGround(botAI->GetBot()); }
 
+// Where the charge lands too, not just where the bot stands: he can stand on the impact, and Feral Charge
+// lands behind him.
+bool AlgalonSmashChargeHold(PlayerbotAI* botAI)
+{
+    if (AlgalonSmashHold(botAI))
+        return true;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    return AlgalonEngaged(botAI) && target &&
+           AlgalonCosmicSmashMarkerNear(botAI, target->GetPosition(),
+                                        ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE + target->GetCombatReach());
+}
+
 void DefineAlgalon(EncounterBuilder& e)
 {
     // A survival ranking. Missing Big Bang is 76-112k or a reset, Cosmic Smash lands ~4.8s after its
@@ -189,7 +202,7 @@ void DefineAlgalon(EncounterBuilder& e)
     // inside the doubled damage band. Until the marker expires the generic movers are held; the
     // encounter's own still run, and its slot walks already avoid a live marker.
     e.OwnMovement("algalon smash hold", Role::Any, AlgalonSmashHold, Family::Attack);
-    e.Block("algalon smash hold charges", Role::Melee, AlgalonSmashHold, Family::Charge);
+    e.Block("algalon smash hold charges", Role::Melee, AlgalonSmashChargeHold, Family::Charge);
 
     // A bot walking towards a hole it couldn't reach in the cast would be walked back to him by reach.
     e.OwnMovement("algalon far hole", Role::Any, AlgalonGoingToFarHole, Family::Attack);

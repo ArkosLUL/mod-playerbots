@@ -171,6 +171,8 @@ RESERVED_NAMES = frozenset(RESERVED_IDS.values())
 SOAK_NODES = ("algalon soaker prep action", "algalon soaker rescue action")
 PRIEST_CLASS = (5, "priest")
 SMASH_MOVER = "algalon cosmic smash action"
+# A charge writes a cast row, never a move row. Feral Charge (cat) lands behind its target.
+SPELL_CHARGES = {11578: "charge", 20252: "intercept", 49376: "feral charge - cat", 16979: "feral charge - bear"}
 
 
 def _anchor_or(name: str, fallback):
@@ -248,6 +250,8 @@ IMPACT_MAX_MS = 6500
 SMASH_NEAR_YD = 20.0
 SMASH_INSIDE_YD = 10.0
 SMASH_CLEAR_YD = 15.0
+# a charge has landed by then
+CHARGE_LAND_MS = 1000
 METEOR_LIVE_MS = 5500
 STALL_MS = 3000
 PICKUP_MS = 1000
@@ -2401,6 +2405,17 @@ def moves_of(trace: Trace) -> dict[int, list[dict]]:
     return cached(trace, "_algalon_moves", build)
 
 
+def charges_of(trace: Trace) -> dict[int, list[dict]]:
+    """Charge `cast` rows by caster, in time order."""
+    def build(trace: Trace) -> dict[int, list[dict]]:
+        out: dict[int, list[dict]] = collections.defaultdict(list)
+        for rec in trace.of("cast"):
+            if rec.get("sp") in SPELL_CHARGES and not rec.get("tr"):
+                out[rec.get("s", 0)].append(rec)
+        return out
+    return cached(trace, "_algalon_charges", build)
+
+
 def victim_hits(trace: Trace) -> dict[int, list[dict]]:
     """Every `dmg` row by victim, in time order."""
     def build(trace: Trace) -> dict[int, list[dict]]:
@@ -3456,7 +3471,8 @@ def wave_dodge(spans, wave: dict):
 
 def wave_rows(trace: Trace, wave: dict) -> list[dict]:
     """Per raid member within SMASH_NEAR_YD of a meteor when it showed or when it hit: how soon the
-    dodge set off, the probe's verdict, where it stood at the impact, and what walked it back."""
+    dodge set off, the probe's verdict, where it stood at the impact, and what brought it back: the last
+    walk, or a charge that closed in on the meteor."""
     samples = samples_of(trace)
     dodges = holder_spans(trace, "algalon.dodge", pull_end(trace))
     rows = []
@@ -3472,6 +3488,9 @@ def wave_rows(trace: Trace, wave: dict) -> list[dict]:
         dodge = next((rec for rec in moves if rec.get("by") == SMASH_MOVER), None)
         back = next((rec for rec in reversed(moves)
                      if dodge and rec["t"] > dodge["t"] and rec.get("by") != SMASH_MOVER), None)
+        charge = next((rec for rec in reversed(charges_of(trace).get(guid, []))
+                       if dodge and dodge["t"] < rec["t"] <= wave["impact"]
+                       and charged_in(samples, wave, guid, rec["t"])), None)
         rows.append({
             "guid": guid,
             "at_seen": at_seen,
@@ -3479,9 +3498,15 @@ def wave_rows(trace: Trace, wave: dict) -> list[dict]:
             "dodge": wave_dodge(dodges.get(guid, []), wave),
             "at_impact": at_impact,
             "damage": sum(rec.get("a", 0) for rec in wave["hits"] if rec.get("d") == guid),
-            "back": back.get("by") if back else None,
+            "back": SPELL_CHARGES[charge["sp"]] if charge else back.get("by") if back else None,
         })
     return sorted(rows, key=lambda row: math.inf if row["at_impact"] is None else row["at_impact"])
+
+
+def charged_in(samples: Samples, wave: dict, guid: int, when: int) -> bool:
+    before = to_meteor(wave, position_at(samples, guid, when))
+    after = to_meteor(wave, position_at(samples, guid, min(when + CHARGE_LAND_MS, wave["impact"])))
+    return before is not None and after is not None and after < before
 
 
 def band(distance: float) -> str:
@@ -3507,7 +3532,7 @@ def show_smash(trace: Trace) -> None:
         rows = wave_rows(trace, wave)
         if rows:
             print(f"      {'who':28} {'at seen':>7} {'moved':>7} {'dodge':>6} {'at impact':>9} {'damage':>8}"
-                  f"  walked back by")
+                  f"  brought back by")
         for row in rows:
             moved = "-" if row["moved"] is None else f"+{row['moved'] / 1000:.1f}s"
             impact = "-" if row["at_impact"] is None else f"{row['at_impact']:.1f}"
@@ -3525,7 +3550,7 @@ def show_smash(trace: Trace) -> None:
 
 
 def smash_faults(trace: Trace) -> list[tuple[int, str]]:
-    """Verdict lines: who stood inside SMASH_INSIDE_YD at an impact, and who dodged and was walked back
+    """Verdict lines: who stood inside SMASH_INSIDE_YD at an impact, and who dodged and was brought back
     inside SMASH_CLEAR_YD by something else before it."""
     out = []
     for wave in smash_waves(trace):
@@ -3538,7 +3563,7 @@ def smash_faults(trace: Trace) -> list[tuple[int, str]]:
         back = [row for row in rows
                 if row["back"] and row["at_impact"] is not None and row["at_impact"] < SMASH_CLEAR_YD]
         if back:
-            out.append((wave["impact"], f"Cosmic Smash @ {secs(wave['impact'])}: dodged, then walked back inside"
+            out.append((wave["impact"], f"Cosmic Smash @ {secs(wave['impact'])}: dodged, then brought back inside"
                                         f" {SMASH_CLEAR_YD:.0f} yd by the impact: " + ", ".join(
                                             f"{trace.name(row['guid'])} {row['at_impact']:.1f} ({row['back']})"
                                             for row in back)))

@@ -579,7 +579,7 @@ class SyntheticPull(unittest.TestCase):
             "star chewed: star 2 lost 60.0% beyond its drain while not the focus star, 30.0% of it in 10 s from 10.0s",
             "threat steal @ 20.0s: Aegis pulled him off Bulwark with no taunt",
             "Cosmic Smash @ 24.8s: inside 10 yd at the impact: Tree 6.3",
-            "Cosmic Smash @ 24.8s: dodged, then walked back inside 15 yd by the impact: Trueshot 12.0"
+            "Cosmic Smash @ 24.8s: dodged, then brought back inside 15 yd by the impact: Trueshot 12.0"
             " (algalon raid position action)",
             "Shiv on stars for 4.0 s outside the star team, from 30.0s",
             "stars died 3.0 s apart @ 33.0s",
@@ -2111,6 +2111,66 @@ class OlderStarsUnder(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             self.assertIn("Nitro Boosts: no algalon.nitro row or 54861 aura in this trace, 3 hider(s)",
                           render(load(folder, bare), "bigbang"))
+
+
+CAT, ARCHER = 7301, 7302
+METEOR_SPOT = (0, 30)
+
+
+def charge_pull() -> list[dict]:
+    """A cat dodges the meteor and walks to its slot, then Feral Charge lands it on the impact. A hunter
+    dodges and the slot walk alone takes it back inside 15 yd."""
+    def offset(guid: int, when: int) -> tuple[float, float]:
+        if when < 20400:
+            return (0, 18) if guid == CAT else (12, 30)
+        if guid == CAT:
+            return (0, 4) if when < 23000 else (0, 28)
+        return (25, 30) if when < 22000 else (13, 30)
+
+    x, y = spot(*METEOR_SPOT)
+    return [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 0, "boss": "algalon-the-observer",
+         "roster": [{"g": CAT, "n": "Cat", "r": "melee", "c": "druid", "h": 0},
+                    {"g": ARCHER, "n": "Archer", "r": "ranged", "c": "hunter", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ALGALON, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        {"t": 20000, "e": "haz", "sp": al.SPELL_COSMIC_SMASH[0], "shape": "circle", "x": x, "y": y, "z": 417.3,
+         "ttl": 5500, "rad": 6.0},
+        move(20400, CAT, al.SMASH_MOVER), move(21000, CAT, "algalon raid position action"),
+        move(20400, ARCHER, al.SMASH_MOVER), move(22000, ARCHER, "algalon raid position action"),
+        cast(22900, CAT, 49376, ALGALON),
+        dmg(24800, ALGALON, CAT, al.SPELL_COSMIC_SMASH[0], 40000),
+        dmg(24800, ALGALON, ARCHER, al.SPELL_COSMIC_SMASH[0], 5000),
+        *({"t": when, "e": "snap", "u": [row(CAT, offset(CAT, when), 100.0, ALGALON),
+                                         row(ARCHER, offset(ARCHER, when), 100.0, ALGALON),
+                                         row(ALGALON, (0, 26), 90.0, 0)], "hz": []}
+          for when in range(0, 26000, 200)),
+        {"t": 26000, "e": "end", "out": "wipe"},
+    ]
+
+
+class SmashCharge(unittest.TestCase):
+    """A charge after the dodge is what took the bot back, not the slot walk before it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, charge_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_charge_that_closed_in_is_named_over_the_walk(self):
+        (wave,) = al.smash_waves(self.trace)
+        rows = {row["guid"]: row for row in al.wave_rows(self.trace, wave)}
+        self.assertEqual((rows[CAT]["back"], rows[ARCHER]["back"]),
+                         ("feral charge - cat", "algalon raid position action"))
+        self.assertAlmostEqual(rows[CAT]["at_impact"], 2.0)
+        self.assertAlmostEqual(rows[ARCHER]["at_impact"], 13.0)
+        self.assertIn((24800, "Cosmic Smash @ 24.8s: dodged, then brought back inside 15 yd by the impact:"
+                              " Cat 2.0 (feral charge - cat), Archer 13.0 (algalon raid position action)"),
+                      al.smash_faults(self.trace))
 
 
 class EveryView(unittest.TestCase):

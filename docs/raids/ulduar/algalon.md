@@ -308,8 +308,10 @@ is free with no stars left. With no bot handler, Dark Matter is left to whoever 
 The dodge clears **15 yd** from every marker (10 yd if nothing clears), 8 yd from every hole, stays
 44 yd inside the room and prefers ground near the bot's slot. It fires anywhere inside 15 yd, and an
 `OwnMovement` rule holds every generic mover for bots within 19 yd of a live marker: melee started the
-dodge within 0.3 s, then `reach melee` walked them back to 6-12 yd before the impact. Charge and
-Intercept are blocked for melee there too.
+dodge within 0.3 s, then `reach melee` walked them back to 6-12 yd before the impact. Melee charges
+(Charge, Intercept, Feral Charge) are blocked there too, and wherever the bot stands while its target is
+within 15 yd plus that target's reach of a marker: he can stand on the impact, and a cat's Feral Charge
+from its slot 27 yd out landed behind him, 1.9 yd from it.
 
 ## He is held at the edge
 
@@ -556,7 +558,7 @@ counted by cause and role with humans starred. Then:
 - `--bigbang` (holes at the cast, soaker and backup health, who was hit unphased, tank-alone seconds,
   re-phase loops, void Dark Matter damage, evade after), `--stars` (how each died, the window, a live
   meteor, raid health against the top roll), `--smash` (per wave and bot: distance, dodge latency and
-  branch, distance at impact, what walked it back), `--phasing` (each phase application, Big Bang or
+  branch, distance at impact, what brought it back: a walk or a charge), `--phasing` (each phase application, Big Bang or
   stray, and the stray cause), `--reach`, `--phases`, `--holes`, `--constellations`, `--tanks`,
   `--formation`, `--darkmatter`.
 
