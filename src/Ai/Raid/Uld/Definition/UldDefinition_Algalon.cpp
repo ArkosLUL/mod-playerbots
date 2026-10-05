@@ -40,6 +40,11 @@ bool AlgalonYielding(PlayerbotAI* botAI) { return AlgalonYieldsBoss(botAI->GetBo
 
 bool AlgalonTankHealing(PlayerbotAI* botAI) { return IsAlgalonTankHealer(botAI->GetBot()); }
 
+bool AlgalonShadowAuraHeld(PlayerbotAI* botAI)
+{
+    return AlgalonInPhaseOne(botAI) && IsAlgalonShadowAuraPaladin(botAI->GetBot());
+}
+
 // Not with a pickup or swap due: the walk back to him runs on the movers this would hold.
 bool AlgalonHandlerKiting(PlayerbotAI* botAI)
 {
@@ -88,6 +93,9 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Node<AlgalonLeaveBlackHoleTrigger, AlgalonLeaveBlackHoleAction>(ACTION_EMERGENCY + 4, EncounterRow::Mover);
     // Below the exit: a healer still inside the field when the phase drops is phased again.
     e.Node<AlgalonSoakerRescueTrigger, AlgalonSoakerRescueAction>(ACTION_EMERGENCY + 3);
+    // Instants, below the hide, the dodge and the exit: those come first, and the cast follows on the next tick.
+    e.Node<AlgalonTankDefensiveTrigger, AlgalonTankDefensiveAction>(ACTION_EMERGENCY + 2);
+    e.Node<AlgalonExplosionCoverTrigger, AlgalonExplosionCoverAction>(ACTION_EMERGENCY + 1);
     // A tank under half dies to one more swing and Quantum Strike, so its heal goes ahead of the slot walk.
     e.Node<AlgalonTankHealCriticalTrigger, AlgalonTankHealAction>(ACTION_RAID + 9);
     e.Node<AlgalonTankPickupTrigger, AlgalonTankPickupAction>(ACTION_RAID + 8);
@@ -100,6 +108,8 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Node<AlgalonStarMarkTrigger, AlgalonStarMarkAction>(ACTION_RAID + 2);
     e.Node<AlgalonThreatRedirectTrigger, AlgalonThreatRedirectAction>(ACTION_RAID + 1);
     e.Node<AlgalonRaidPositionTrigger, AlgalonRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);
+    // One global cooldown a pull, above the party heal bands so the heals don't starve it until the first star.
+    e.Node<AlgalonShadowAuraTrigger, AlgalonShadowAuraAction>(ACTION_MEDIUM_HEAL + 2.0f);
     e.Node<AlgalonTankBeaconTrigger, AlgalonTankBeaconAction>(ACTION_MEDIUM_HEAL + 1.0f);
     // Above the party heal bands, below the mana tools (Divine Plea, Hymn of Hope, Innervate, Mana Tide).
     e.Node<AlgalonTankHealTrigger, AlgalonTankHealAction>(ACTION_MEDIUM_HEAL + 0.75f);
@@ -109,6 +119,13 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Multiplier<AlgalonCooldownReserveMultiplier>(Family::Spell);
     e.Multiplier<AlgalonTankHealerMultiplier>(Family::Spell | Family::ReachHeal);
     e.Block("algalon ice block hold", Role::Any, AlgalonCooldownsHeld, 0, {"ice block"});
+    // The cover node spends these on the star about to die. The class nodes fire on a hurt raid, after it.
+    e.Block("algalon explosion cover hold", Role::Any, AlgalonInPhaseOne, 0, {"divine sacrifice"});
+    e.Block("algalon aura mastery hold", Role::Any, AlgalonEngaged, 0, {"aura mastery"});
+    // The aura slot is exclusive, so the paladin's own buff strategy would trade it back on the next GCD.
+    e.Block("algalon shadow aura hold", Role::Any, AlgalonShadowAuraHeld, 0,
+            {"devotion aura", "retribution aura", "concentration aura", "crusader aura", "sanctity aura",
+             "shadow resistance aura", "fire resistance aura", "frost resistance aura"});
     // The encounter places these on the swap pair itself; the class nodes would move them to the main tank.
     e.Block("algalon tank healer buffs", Role::Heal, AlgalonTankHealing, 0,
             {"beacon of light on tank", "beacon of light on main tank", "sacred shield on tank",

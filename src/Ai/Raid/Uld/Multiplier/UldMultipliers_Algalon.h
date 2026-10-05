@@ -25,10 +25,13 @@ private:
     std::unordered_map<Action*, bool> damagesCurrentTarget;
 };
 
-// Algalon: the soak buttons are kept for Big Bang. Divine Protection, Shield Wall, Pain Suppression and
-// the rest cool down for two minutes or more against a 90.5 s cast, so one spent on the way is missing at
-// the hit, and the raid is phased for a second after it. A button that will be back in time stays free. The
-// soak, external and rescue actions cast directly and never meet this.
+// Algalon: Dispersion is kept for Big Bang. With it latched for the next hit the tanks hide and their buttons
+// are free, never a bubble. The holder's own and every external on him are the tank defensive node's, one at
+// a time; Pain Suppression, Guardian Spirit, Hand of Sacrifice and Lay on Hands go on the other swap tank
+// alone. With no disperser a tank soaks, and the soak buttons are kept: Divine Protection,
+// Shield Wall, Pain Suppression and the rest cool down for two minutes or more against a 90.5 s cast, so one
+// spent on the way is missing at the hit. A button that will be back in time stays free. The encounter's own
+// actions cast directly and never meet this.
 class AlgalonCooldownReserveMultiplier : public Multiplier
 {
 public:
@@ -39,6 +42,8 @@ private:
     struct Reserve
     {
         uint32 spellId = 0;
+        bool bubble = false;
+        bool dispersion = false;
         bool swapTanksOnly = false;
         // A bubble or a self Lay on Hands puts Forbearance on the tank, which blocks Divine Protection.
         bool alwaysForSwapTanks = false;

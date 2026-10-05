@@ -46,52 +46,45 @@ phase whoever ticks. Markers are dropped 5.5 s after they appear: the creatures 
 lands at ~4.8. The wipe reset keys on the instance too: boss gone, guid changed, or out of combat
 after being in it.
 
-## Big Bang: the holder stays out
+## Big Bang: a shadow priest soaks
 
-Every guide keeps one player out; Warcraft Tavern names the main tank with Physical defensives. The
-**soaker** is his victim at cast start (the pickup tank if that is no swap tank), latched per cast by
-the instance tick. Every role reads that latch, never the live cast: in the tick's first 250 ms of a
-cast nobody is the soaker yet, and every bot, tank included, would run for a hole.
+Every guide keeps one player out. The **soaker** is a bot whose Dispersion (47585, −90%, 6 s; 120 s
+cooldown, 75 s glyphed against the 90.5 s cycle) is back by the time it casts it, ≤ 5 s before the hit; a
+second one is the **backup** and stays out too. Inside it a priest took ~6 k of the hit, so **both swap tanks
+hide** with the raid and keep their buttons for his swings. For the cast and 3 s after it he skips
+`UpdateVictim`, can't move, and holds Quantum Strike and Phase Punch (`boss_algalon_the_observer.cpp:649`,
+`:754-764`): a hiding holder stays his victim and nobody is swung at. Outside the cast the tick latches the
+next hit's **disperser**; that latch picks between this and the tank soak below. The soak is latched per cast
+too, and every role reads that latch, never the live cast: in the tick's first 250 ms of a cast nobody is the
+soaker yet, and every bot would run for a hole.
 
-A human holder with no physical button for the hit (none back in time, none running past it) hands it to the
-bot partner if that has one and ≤ 2 stacks: twice a human holder with Forbearance up ended in a hole and a
-priest soaked while the bot tank hid. Mid cast, a soaker phased or dead is replaced by the bot partner
-(≤ 3 stacks) before the backup, and its run into a hole is stopped. The elected soaker taunts him off the
-other swap tank, Righteous Defense included.
+Dispersion is checked by spell id and cooldown: `CanCastSpell` refuses during a channel, and a shadow priest
+is nearly always in Mind Flay. The button follows what the bot can cast, not its slot. The disperser skips the far-hole approach; no external or prep goes on it. Mid
+cast a dead or phased priest soaker is replaced by the backup, else the bot swap tank with ≤ 3 stacks, whose
+run into a hole is stopped. A swap tank or handler that can't be in its hole 1.5 s before the hit (one field
+pulse and slack) stays put (`noshelter`) and casts its physical button at ≤ 3 s.
 
 Big Bang's second effect applies **64445, which strips every phase a second after the hit**, Phase
-Punch's included; it ignores phase, so it reaches everyone. The soaker is alone for about a second.
-It casts `NextTankDefensive(..., physicalOnly)` at ≤ 3 s remaining, skipping Anti-Magic Shell. The hit plus
-the Quantum Strike and Phase Punch landing with it took a soaker with no defensive from full to 21-24%, and his
-next swing, 1.2-2.6 s later while the healers were still phased, killed him. A **backup** priest with Dispersion also stays out and casts it at ≤ 5 s (it lasts 6 s): a soaker dying
-to the hit with everyone else phased is a reset, and the backup is promoted if that happens. The
-button follows what the bot can cast, not its slot, and Dispersion is checked by spell id and cooldown:
-`CanCastSpell` refuses during a channel, and a shadow priest is nearly always in Mind Flay. A disc or
-holy priest puts Pain Suppression or Guardian Spirit on the soaker before hiding, a paladin Hand of
-Sacrifice.
+Punch's included; it ignores phase, so it reaches everyone. The soaker is alone for about a second. Back out
+of the field, a healer's first cast for 4 s after the hit goes on the soaker while under 60%, instants first,
+Lay on Hands under 30% (Forbearance only blocks a self-cast).
 
-**The buttons are reserved by their own cooldown** (`AlgalonCooldownReserveMultiplier`), not a window: Divine
-Protection, Shield Wall, Pain Suppression and the rest cool down 2-3 min against a 90.5 s cast, and a 20 s hold
-saw every one spent on the way. A button is held whenever casting it now leaves it cooling down at the next hit,
-so in practice only Barkskin, Vampiric Blood and glyphed Dispersion run between casts. Swap tanks never cast
-Divine Shield or Lay on Hands (a bubble or self Lay on Hands puts Forbearance on them, which blocks Divine
-Protection 2 min), nor Lay on Hands on others. The soak, external and rescue actions cast directly and pass.
-A **lone holder** (the other swap tank dead or phased; not its stacks, which linger 45 s after every swap)
-gets them back outside the cast: its
-own buttons and self Lay on Hands, never Divine Shield, and Pain Suppression, Guardian Spirit, Hand of Sacrifice
-and Lay on Hands cast on it; a holder that dies first soaks nothing. The class triggers still pick the moment.
-Ice Block is held 20 s before the cast and cancelled by the hide: it pins the mage and Big Bang goes through it.
+**Without a disperser a tank soaks**: his victim at cast start (the pickup tank if that is no swap tank). It
+casts `NextTankDefensive(..., physicalOnly)` at ≤ 3 s remaining, skipping Anti-Magic Shell: the hit plus his
+next swings took a tank with none from full to 21-24%, and the swing 1.2-2.6 s later killed it while the
+healers were still phased. Then:
 
-A holder with no physical button back by the time the soak needs it (`ReadyTankDefensive`: cooldown and, for
-Divine Protection, Forbearance run out in time; not `NextTankDefensive`, which also answers 0 on the GCD or mid
-channel) hands him to a bot partner that has one and ≤ 2 stacks, 15 s out. Healers spend one global cooldown on the soaker before hiding
-(shield, renew, rejuvenation, lifebloom, riptide, earth shield, sacred shield): only what is already on him
-ticks in the second he is alone. Back out of the field, a healer's first cast for 4 s after the hit goes on
-him while he is under 60%, instants first, Lay on Hands under 30% (Forbearance only blocks a self-cast).
-
-The Phase Punch queued behind the cast lands on the soaker while everyone else is still phased, and a
-5th stack then leaves nobody unphased. So a holder at 3 stacks with the cast ≤ 15 s away hands over to
-a partner at ≤ 1.
+- A human holder with no physical button for the hit (none back in time, none running past it) hands it to
+  the bot partner if that has one and ≤ 2 stacks. The elected soaker taunts him off the other swap tank,
+  Righteous Defense included. Mid cast the bot partner (≤ 3 stacks) replaces a lost soaker before the backup.
+- A disc or holy priest puts Pain Suppression or Guardian Spirit on it before hiding, a paladin Hand of
+  Sacrifice. Healers spend one global cooldown on it before hiding (shield, renew, rejuvenation, lifebloom,
+  riptide, earth shield, sacred shield): only what is already on it ticks in the second it is alone.
+- A bot holder with no physical button back by the time the soak needs it (`ReadyTankDefensive`: cooldown
+  and, for Divine Protection, Forbearance run out in time) hands him to a bot partner that has one and ≤ 2
+  stacks, 15 s out. A holder at 3 stacks with the cast ≤ 15 s away hands over to a partner at ≤ 1: the
+  Phase Punch behind the cast lands on the soaker, and a 5th stack leaves nobody unphased.
+- The soak buttons are reserved (see "Cooldowns").
 
 Humans get two raid warnings: at cast start, who soaks (a human holder handed the soak is named: "Dragon,
 hide too: Bulwark takes it") and that everyone else should stand by a hole; with 3 s left, everyone but the
@@ -221,8 +214,11 @@ They never melee and Arcane Barrage hits a random raid member, so a constellatio
 while alive, and who it chases matters only at Big Bang: it follows its victim into a hole and closes it
 on the raid. They are killable (260 k / 521 k) but 11 of them cost 16-34 % of Algalon's health against
 the enrage, and guides agree nobody damages them. The **handler**, a third tank or else the swap tank
-not holding Algalon, and always a bot, taunts every loose one onto itself and **stays out** of Big Bang
-holding them (`hold`), with a physical defensive like the soaker. With a spare hole it parks 9 yd past
+not holding Algalon, and always a bot, taunts every loose one onto itself. At Big Bang it **hides last**,
+since they follow it in and close the hole (65509, 6 yd) while those already inside stay phased: 62168 is
+owned by each target, and a despawning caster strips only area and single-target auras. It takes its kite
+hole, nobody else's, else its shelter, and waits there (`hold`) until every hider bound for that hole is in
+(bots by shelter, humans by the nearest hole, kite hole included), or until its walk plus 1.5 s is left. With a spare hole it parks 9 yd past
 that hole on the far side (clamped 44 yd from centre), so the chase drags one through the field, then
 yields its tick. The far side is latched with the hole, and the walk goes round any hole it would clip, at
 combat priority: a straight forced walk crossed the field, and its booking refused both the tank slot walk
@@ -333,7 +329,7 @@ A tank healer heals the holder (else the lower pair tank), itself under 50 %, th
   (Sacred Shield follows the holder), then efficient heals, at `ACTION_MEDIUM_HEAL + 0.75`, under the mana
   tools.
 
-Never a button the cooldown reserve keeps (it doesn't see these direct casts), nor a cast outlasting its hide
+Never a button the tank cutter sequence spends, nor a cast outlasting its hide
 slack; the Big Bang nodes still win. A holy paladin keeps Beacon on the partner. `AlgalonTankHealerMultiplier`
 zeroes its party heals and any heal or reach-to-heal on anyone but the pair and itself, and a `Block` stops
 the class Beacon, Sacred Shield, Earth Shield and Divine Hymn nodes for it.
@@ -341,17 +337,68 @@ the class Beacon, Sacred Shield, Earth Shield and Divine Hymn nodes for it.
 Not `"focus heal targets"`: it is a combat strategy saved to the DB, so a bot leaving mid-fight keeps a stale
 filter and heals nobody afterwards, and it overwrites a human's setting.
 
+## Cooldowns: the tanks first
+
+Each swing is 8-23 k and Quantum Strike ~10 k on a ~44 k tank, so from 60% one burst kills it in 1.3 s, and
+every tank death in the traces came 2-6 s after a star explosion or a meteor, with the healers on the raid.
+The class nodes reach a tank late: Pain Suppression and Hand of Sacrifice at ≤ 10% ("protect party member"),
+Divine Protection only as Divine Shield's fallback under 25%.
+
+**One damage cutter at a time on the holder** (his victim, a swap tank, unphased; humans too), from
+`ACTION_EMERGENCY + 2`, never from the cast's start until 3 s after it (he swings at nothing), unless the
+holder soaked it. With none running (`RunningTankDefensive` or a Pain Suppression, Hand of Sacrifice or
+Guardian Spirit aura) the next goes up:
+
+- `window`: from 1 s before a raid-wide hit (a star forecast to die, a meteor's impact) to 5 s after it,
+  whatever its health, so they run back to back through it;
+- `low`: under 60%.
+
+The first provider able takes it, cheapest first: the partner's Hand of Sacrifice (idle, in plate), the
+holder's own physical button (counted while back within a GCD, so the externals wait for it), other paladins'
+Hand of Sacrifice (non-healers first), Pain Suppression, Guardian Spirit. Able: a bot, alive, unphased, in
+spell range and sight, its `CanCastSpell` passing, and its mana (`CanCastSpell` skips both range and cost;
+runes aren't checked), a Hand caster at ≥ 50% without its own Hand on him, and with no disperser latched a
+button back by the next hit unless the holder is alone. Each bot asks whether it is first; a cast claims 1 s, so
+nobody stacks a second while the aura lands. The caster interrupts its own cast. `loh`: under 25%, Lay on Hands
+from another paladin, else the holder's own (Forbearance), over a running cutter.
+
+**Cooldowns** (`AlgalonCooldownReserveMultiplier`): Dispersion is held whenever casting it now leaves it
+cooling down at the next soak. With a disperser latched nothing else is held, except Divine Shield for swap
+tanks (he leaves a bubbled paladin). The holder's own buttons, self Lay on Hands included, and every external on
+him are the node's: the class nodes would stack a second on the same dip. Pain Suppression, Guardian Spirit,
+Hand of Sacrifice and Lay on Hands on party pass only onto the other swap tank. Without one the soak buttons are held by their own cooldown, not a window:
+Divine Protection, Shield Wall, Pain Suppression and the rest cool down 2-3 min against a 90.5 s cast, and a
+20 s hold saw every one spent on the way. Swap tanks then never cast Divine Shield or Lay on Hands (Forbearance
+blocks Divine Protection 2 min), nor Lay on Hands on others; a **lone holder** (the other swap tank dead or
+phased; not its stacks, which linger 45 s after every swap) gets its own and the externals back outside the
+cast, never Divine Shield. The encounter's own actions cast directly and pass. Ice Block is held 20 s before
+the cast and cancelled by the hide: it pins the mage and Big Bang goes through it.
+
+**Explosion cover** (`ACTION_EMERGENCY + 1`): with a star forecast to die within 2 s (or at ≤ 3%) and none
+up, one per star:
+
+- Aura Mastery from the **shadow aura paladin**, a bot with Aura Mastery that runs Shadow Resistance Aura
+  while stars live (a `Block` holds its other auras, released in phase 2). Prayer of Shadow Protection already
+  gives 130 and both are aura 143, highest only, so the aura alone adds nothing; Aura Mastery takes it to 260
+  for 6 s and recalculates the running aura.
+- Else Divine Sacrifice from a paladin bot with Divine Guardian (53527/53530), never the holder, ≥ 50%. The
+  tick removes 64205 from bots at once: left up it splits 30% of the party's damage onto the paladin, and the
+  procced 70940 (raid within 30 yd −10/20%, 6 s) stays.
+
+The class Divine Sacrifice node is blocked while stars live and Aura Mastery all fight.
+
 ## The trace
 
 Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
 
 Raid-wide values, all written by the instance tick: `algalon.phase` (0 idle, 1 intro, 2 phase 1,
 3 phase 2, 4 won), `algalon.bigbang` (the cast's ordinal while latched, else 0), `algalon.soaker`,
-`algalon.backup`, `algalon.urgent`, `algalon.holes`, `algalon.focusstar`, `algalon.handler`,
-`algalon.tankhealslots`. Per guid: `algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam`
+`algalon.backup`, `algalon.disperser`, `algalon.shadowaura`, `algalon.urgent`, `algalon.holes`,
+`algalon.focusstar`, `algalon.handler`, `algalon.tankhealslots`. Per guid: `algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam`
 (urgent recruits aren't recorded), `algalon.swappair`, `algalon.tankhealer`. Derived per bot, each inside the
 helper that derives it: `algalon.tankheal` (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
-(`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`), `algalon.kite`
+(`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is the handler waiting to go
+last), `algalon.kite`
 (`taunt`/`hole`/`parked`/`kept`/`none`), `algalon.spot`
 (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`), `algalon.hazard`
 (`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`, where `cross` means only a
@@ -365,11 +412,13 @@ written on the tracker bot, since the tick runs on whichever bot comes first, wi
 change: every star's guid counter, health and forecast death, soonest first, then the merged blackouts, in
 seconds from now (`2136 28% 3s, 2133 85% 83s | smash 2..11 | prebang 59..71`).
 
-Events: `algalon.holelost` (`kite`/`stray`/`phase2`), one per hole, skipped when every summon goes at
+Events: `algalon.holelost` (`kite`/`stray`/`phase2`/`bigbang`, the last a hole lost during the cast), one per hole, skipped when every summon goes at
 once on a kill or Ascend; `algalon.stardeath` (`killed` as the focus star, `drained` within 3% of its
 drain-only health, else `chewed`, and the nearest raid member's distance; older traces say `collapsed`), the
 only record of how a star died, since damage rows cover players alone; `algalon.soakkit`
-(`def=<button|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.handover` (`nodef` on a
+(`def=<button|dispersion|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.tankdef`
+(`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
+(`aura mastery`/`divine sacrifice` on the caster); `algalon.handover` (`nodef` on a
 holder handing him over for want of a defensive); `algalon.pull`
 (`inreach=N victim=GUID`) at the tick the intro ends; `algalon.call` (`swap`/`loose`/`bigbang`/`hide`)
 per raid warning, sent only when a human is in the raid. Each meteor is written as a `haz` circle (62311 / 64596, the impact point, 6 yd): the sweep
@@ -401,6 +450,9 @@ counted by cause and role with humans starred. Then:
   and every reserved button spent earlier;
 - `--collateral`: per star the health lost beyond drain while nobody was sent, and every cast on a star by caster
   and spell;
+- `--defensives`: every cutter, Lay on Hands and Guardian Spirit on a swap tank with its health and whether it
+  lived 10 s; per tank death its last 6 s of hits, cutters up and `algalon.tankdef`; per explosion the cover
+  up and damage covered against uncovered;
 - `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
 - `--tankheal`: the tank healers, each healer's share on the pair, itself and others, Beacon time on holder
   and partner, and per tank death the 6 s / 2 s damage against healing, shields and healing elsewhere, with

@@ -41,24 +41,6 @@ bool CastsPositiveSpell(PlayerbotAI* botAI, Action* action)
     SpellInfo const* spellInfo = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     return spellInfo && spellInfo->IsPositive();
 }
-
-// The cooldown casting it now would start, talents included.
-int32 CooldownMs(Player* bot, uint32 spellId)
-{
-    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
-    if (!info)
-        return 0;
-
-    int32 recovery = static_cast<int32>(info->RecoveryTime);
-    int32 category = static_cast<int32>(info->CategoryRecoveryTime);
-    if (recovery > 0)
-        bot->ApplySpellMod(spellId, SPELLMOD_COOLDOWN, recovery);
-
-    if (category > 0 && !info->HasAttribute(SPELL_ATTR6_NO_CATEGORY_COOLDOWN_MODS))
-        bot->ApplySpellMod(spellId, SPELLMOD_COOLDOWN, category);
-
-    return std::max(recovery, category);
-}
 }  // namespace
 
 float AlgalonTargetGuardMultiplier::GetValue(Action* action)
@@ -108,13 +90,14 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
     if (cached == reserves.end())
     {
         static std::set<std::string> const always = {"divine shield", "lay on hands", "lay on hands on party"};
-        static std::set<std::string> const anyone = {"dispersion",       "pain suppression",
-                                                     "guardian spirit on party", "hand of sacrifice on party",
-                                                     "divine sacrifice", "lay on hands on party"};
+        static std::set<std::string> const anyone = {"dispersion", "pain suppression", "guardian spirit on party",
+                                                     "hand of sacrifice on party", "lay on hands on party"};
         static std::set<std::string> const externals = {"pain suppression", "guardian spirit on party",
                                                         "hand of sacrifice on party", "lay on hands on party"};
         std::string const& name = action->getName();
         Reserve reserve;
+        reserve.bubble = name == "divine shield";
+        reserve.dispersion = name == "dispersion";
         reserve.alwaysForSwapTanks = always.count(name) > 0;
         reserve.swapTanksOnly = !anyone.count(name) && (reserve.alwaysForSwapTanks || IsHeldTankDefensive(name));
         // Never a bubble: he leaves a paladin under one.
@@ -135,6 +118,33 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
     if (reserve.swapTanksOnly && !swapTank)
         return 1.0f;
 
+    // The soak casts it with SOAK_DISPERSION_MS of the cast left.
+    int32 const untilHit = AlgalonMsToBigBangHit(botAI);
+    if (reserve.dispersion)
+        return untilHit == 0 || AlgalonCooldownMs(bot, reserve.spellId) > untilHit - ULDUAR_ALGALON_SOAK_DISPERSION_MS
+                   ? 0.0f
+                   : 1.0f;
+
+    // A priest soaks the next hit and the tanks hide, so their buttons and the externals go on keeping them
+    // alive. Never a bubble: he leaves a paladin under one. The holder's own are the tank defensive node's,
+    // one at a time; the class nodes would stack a second on the same dip, a self Lay on Hands included.
+    if (AlgalonDispersionSoak(bot))
+    {
+        if (reserve.bubble)
+            return 0.0f;
+
+        Player* holder = GetAlgalonBossTank(botAI);
+        if (reserve.holderOwn)
+            return bot == holder ? 0.0f : 1.0f;
+
+        if (!reserve.holderExternal)
+            return 1.0f;
+
+        Unit* target = action->GetTarget();
+        Player* player = target ? target->ToPlayer() : nullptr;
+        return player && player != holder && IsAlgalonSwapTank(player) ? 1.0f : 0.0f;
+    }
+
     // With nobody to take him off it, a holder that dies first soaks nothing either.
     if ((reserve.holderOwn || reserve.holderExternal) && !AlgalonBigBangCasting(botAI))
     {
@@ -151,8 +161,7 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
     if (reserve.alwaysForSwapTanks && swapTank)
         return 0.0f;
 
-    int32 const untilHit = AlgalonMsToBigBangHit(botAI);
-    return untilHit == 0 || CooldownMs(bot, reserve.spellId) > untilHit ? 0.0f : 1.0f;
+    return untilHit == 0 || AlgalonCooldownMs(bot, reserve.spellId) > untilHit ? 0.0f : 1.0f;
 }
 
 float AlgalonTankHealerMultiplier::GetValue(Action* action)

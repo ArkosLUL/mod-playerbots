@@ -166,6 +166,35 @@ bool AlgalonTankBeaconAction::Execute(Event /*event*/)
     return target && botAI->CastSpell("beacon of light", target);
 }
 
+bool AlgalonTankDefensiveAction::Execute(Event /*event*/)
+{
+    AlgalonTankCut const cut = GetAlgalonTankCut(botAI);
+    if (!cut.spellId)
+        return false;
+
+    // A heal half cast is worth less than the tank.
+    if (bot->IsNonMeleeSpellCast(false, true))
+        bot->InterruptNonMeleeSpells(false);
+
+    if (!botAI->CastSpell(cut.spellId, cut.target))
+        return false;
+
+    ClaimAlgalonTankCut(bot, cut);
+    return true;
+}
+
+bool AlgalonExplosionCoverAction::Execute(Event /*event*/)
+{
+    char const* cover = GetAlgalonExplosionCover(botAI);
+    if (!cover || !botAI->CastSpell(cover, bot))
+        return false;
+
+    ClaimAlgalonExplosionCover(bot, cover);
+    return true;
+}
+
+bool AlgalonShadowAuraAction::Execute(Event /*event*/) { return botAI->CastSpell("shadow resistance aura", bot); }
+
 bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 {
     Position shelter;

@@ -18,6 +18,7 @@
 #include "LastMovementValue.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
+#include "PaladinHelper.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -261,9 +262,18 @@ AlgalonScanUnit const* NearestShelter(AlgalonEncounterState const& state, Positi
     return nearest;
 }
 
-// The hole a hider runs to this cast: the one latched for it, else the nearest shelter.
+// The hole a hider runs to this cast: the one latched for it, else the nearest shelter. A handler holding
+// constellations takes the one it was walking them to, where nobody else hides, since they close it behind it.
 AlgalonScanUnit const* ShelterHole(Player* bot, AlgalonEncounterState const& state)
 {
+    if (state.handler.Get() == bot->GetGUID() && AlgalonHoldsConstellation(bot))
+    {
+        auto const kite = state.kiteHoleAssignments.find(bot->GetGUID());
+        if (kite != state.kiteHoleAssignments.end())
+            if (AlgalonScanUnit const* hole = FindScanned(state.holes, kite->second))
+                return hole;
+    }
+
     auto const latched = state.shelterAssignments.find(bot->GetGUID());
     if (latched != state.shelterAssignments.end())
         if (AlgalonScanUnit const* hole = FindScanned(state.holes, latched->second))
@@ -477,7 +487,14 @@ void ScanRoom(Player* bot, Creature* boss, AlgalonEncounterState& state, uint32 
         if (FindScanned(state.holes, hole.guid))
             continue;
 
-        char const* reason = IsKiteHole(state, hole) ? "kite" : (phaseTwoStarted ? "phase2" : "stray");
+        // Lost during the cast and no kite hole: the handler's constellations followed it into the raid's.
+        char const* reason = "stray";
+        if (IsKiteHole(state, hole))
+            reason = "kite";
+        else if (phaseTwoStarted)
+            reason = "phase2";
+        else if (state.bigBangCasting)
+            reason = "bigbang";
 
         RaidObs::Note(bot, "algalon.holelost", reason);
     }
@@ -717,10 +734,11 @@ Player* PairPartner(Group* group, AlgalonEncounterState const& state, Player* ta
 
 // The holder has nothing physical left for the coming hit and the partner has. Divine Protection is a
 // 2-3 minute cooldown against a 90.5 s cast, so whoever spent it last can't soak this one. Bots only: a
-// human's buttons are theirs to spend.
+// human's buttons are theirs to spend. A tank soak only: with a disperser latched the holder hides.
 bool DefensiveHandoverDue(AlgalonEncounterState const& state, Player* holder, Player* taker, uint32 now)
 {
-    if (!IsBot(holder) || !IsBot(taker) || GetAlgalonPhasePunchStacks(taker) > ULDUAR_ALGALON_HANDOVER_PARTNER_STACKS ||
+    if (!state.disperser.Get().IsEmpty() || !IsBot(holder) || !IsBot(taker) ||
+        GetAlgalonPhasePunchStacks(taker) > ULDUAR_ALGALON_HANDOVER_PARTNER_STACKS ||
         !BigBangDueWithin(state, ULDUAR_ALGALON_EARLY_SWAP_SECONDS, now))
         return false;
 
@@ -731,9 +749,10 @@ bool DefensiveHandoverDue(AlgalonEncounterState const& state, Player* holder, Pl
     return !ReadyTankDefensive(holder, true, within) && ReadyTankDefensive(taker, true, within);
 }
 
-// Whether `taker` should take him off `holder`: the 4th stack, or a holder deep in stacks or out of
-// defensives with a Big Bang close, since the holder at the cast soaks it and the Phase Punch queued
-// behind the cast lands while the rest of the raid is phased.
+// Whether `taker` should take him off `holder`: the 4th stack, or, when a tank soaks, a holder deep in stacks
+// or out of defensives with a Big Bang close: the holder at the cast soaks it and the Phase Punch queued
+// behind the cast lands while the rest of the raid is phased. A hiding holder takes that punch with the raid
+// back.
 bool SwapDue(AlgalonEncounterState const& state, Player* holder, Player* taker, uint32 now)
 {
     uint8 const own = GetAlgalonPhasePunchStacks(taker);
@@ -744,7 +763,8 @@ bool SwapDue(AlgalonEncounterState const& state, Player* holder, Player* taker, 
     if (theirs >= ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS || DefensiveHandoverDue(state, holder, taker, now))
         return true;
 
-    return theirs >= ULDUAR_ALGALON_EARLY_SWAP_STACKS && own <= ULDUAR_ALGALON_EARLY_SWAP_PARTNER_STACKS &&
+    return state.disperser.Get().IsEmpty() && theirs >= ULDUAR_ALGALON_EARLY_SWAP_STACKS &&
+           own <= ULDUAR_ALGALON_EARLY_SWAP_PARTNER_STACKS &&
            BigBangDueWithin(state, ULDUAR_ALGALON_EARLY_SWAP_SECONDS, now);
 }
 
@@ -823,8 +843,10 @@ void CallBigBang(Group* group, Creature* boss, AlgalonEncounterState& state, boo
     if (castStarted)
     {
         state.bigBangHideCalled = false;
+        char const* const kit =
+            soaker && soaker->HasSpell(SPELL_ALGALON_DISPERSION) ? " with Dispersion" : " with a defensive";
         std::string stays =
-            soaker ? soaker->GetName() + " stays out with a defensive. Everyone else" : std::string("Everyone");
+            soaker ? soaker->GetName() + " stays out" + kit + ". Everyone else" : std::string("Everyone");
         // A human holder handed the soak is told outright, or it stays out and takes him back.
         Player* holder = BossHolder(boss);
         if (soaker && holder && holder != soaker && !IsBot(holder) && state.swapPair.count(holder->GetGUID()))
@@ -922,7 +944,11 @@ void NoteSoakKit(Group* group, AlgalonEncounterState const& state)
         return;
 
     char const* ready =
-        ReadyTankDefensive(soaker, true, ULDUAR_ALGALON_BIG_BANG_CAST_MS - ULDUAR_ALGALON_SOAK_DEFENSIVE_MS);
+        soaker->HasSpell(SPELL_ALGALON_DISPERSION) &&
+                soaker->GetSpellCooldownDelay(SPELL_ALGALON_DISPERSION) <=
+                    static_cast<uint32>(ULDUAR_ALGALON_BIG_BANG_CAST_MS - ULDUAR_ALGALON_SOAK_DISPERSION_MS)
+            ? "dispersion"
+            : ReadyTankDefensive(soaker, true, ULDUAR_ALGALON_BIG_BANG_CAST_MS - ULDUAR_ALGALON_SOAK_DEFENSIVE_MS);
     RaidObs::Note(soaker, "algalon.soakkit",
                   std::string("def=") + (ready ? ready : "none") +
                       " forbearance=" + (soaker->HasAura(SPELL_ALGALON_FORBEARANCE) ? "1" : "0"));
@@ -942,6 +968,27 @@ void ReleaseMelee(Creature* boss, AlgalonEncounterState& state, uint32 now)
     if (onSpot || (held && sinceIntro >= ULDUAR_ALGALON_MELEE_RELEASE_MS) ||
         sinceIntro >= ULDUAR_ALGALON_MELEE_RELEASE_ANYWAY_MS)
         state.meleeReleased = true;
+}
+
+// A bot whose Dispersion is back by the time the soak casts it, `castByMs` from now. Its 90% leaves a priest
+// about 6k of the hit, so the tanks hide and keep their buttons for his swings.
+Player* ElectDisperser(Group* group, int32 castByMs, Player* except)
+{
+    Player* best = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member == except || !CanStayOut(member) || !IsBot(member) || !member->HasSpell(SPELL_ALGALON_DISPERSION) ||
+            static_cast<int64>(member->GetSpellCooldownDelay(SPELL_ALGALON_DISPERSION)) > castByMs)
+        {
+            continue;
+        }
+
+        if (!best || member->GetGUID() < best->GetGUID())
+            best = member;
+    }
+
+    return best;
 }
 
 Player* ElectBackup(Group* group, Player* soaker)
@@ -1014,6 +1061,18 @@ void ElectBigBangSoakers(Player* bot, Creature* boss, AlgalonEncounterState& sta
     if (!group)
         return;
 
+    Spell* cast = CurrentBigBang(boss);
+    int32 const remaining =
+        cast ? static_cast<int32>(cast->GetCastTimeRemaining()) : static_cast<int32>(ULDUAR_ALGALON_BIG_BANG_CAST_MS);
+    int32 const castBy = remaining - ULDUAR_ALGALON_SOAK_DISPERSION_MS;
+    if (Player* disperser = ElectDisperser(group, castBy, nullptr))
+    {
+        Player* backup = ElectDisperser(group, castBy, disperser);
+        state.bigBangSoaker = disperser->GetGUID();
+        state.bigBangBackup = backup ? backup->GetGUID() : ObjectGuid::Empty;
+        return;
+    }
+
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     Unit* victim = boss->GetVictim();
     Player* holder = victim ? victim->ToPlayer() : nullptr;
@@ -1044,8 +1103,9 @@ void ElectBigBangSoakers(Player* bot, Creature* boss, AlgalonEncounterState& sta
 }
 
 // The soaker is the one thing standing between the raid and a reset. If it died or got phased mid
-// cast, the bot swap tank takes the duty, else the backup, and someone else backs that up. The tank
-// first: he stays on a tank once the raid is back, and a priest out of Dispersion dies to his next swing.
+// cast, the bot swap tank takes the duty, else the backup, and someone else backs that up. The tank goes
+// first after a tank soaker, since he stays on a tank once the raid is back; after a priest the backup priest
+// does, already out under Dispersion, so no tank is stopped on its way into a hole.
 void KeepBigBangSoaker(Player* bot, AlgalonEncounterState& state)
 {
     Group* group = bot->GetGroup();
@@ -1056,9 +1116,13 @@ void KeepBigBangSoaker(Player* bot, AlgalonEncounterState& state)
     Player* backup = FindGroupMember(group, state.bigBangBackup);
     if (!CanStayOut(soaker))
     {
+        bool const priestLost =
+            soaker ? soaker->HasSpell(SPELL_ALGALON_DISPERSION) : !state.disperser.Get().IsEmpty();
+        bool const backupFirst = priestLost && CanStayOut(backup);
         // One stack under the swap: the Phase Punch behind the hit takes it to the swap, not past it.
-        if (Player* partner =
-                SoakingPartner(group, state, soaker, ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS - 1))
+        if (Player* partner = backupFirst ? nullptr
+                                          : SoakingPartner(group, state, soaker,
+                                                           ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS - 1))
         {
             soaker = partner;
             state.bigBangSoaker = soaker->GetGUID();
@@ -1760,7 +1824,9 @@ bool SpotOffFrom(Unit* boss, Position const& origin, Position const& toward, flo
 bool FarHoleSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, Position const& anchor,
                  Position& spot)
 {
-    if (state.holes.empty() || state.swapPair.count(bot->GetGUID()) || state.handler.Get() == bot->GetGUID())
+    // The disperser soaks the coming hit where it stands.
+    if (state.holes.empty() || state.swapPair.count(bot->GetGUID()) || state.handler.Get() == bot->GetGUID() ||
+        state.disperser.Get() == bot->GetGUID())
         return false;
 
     if (!state.bigBangCasting && !BigBangDueWithin(state, ULDUAR_ALGALON_FAR_HOLE_SECONDS, getMSTime()))
@@ -2071,6 +2137,171 @@ char const* DeriveSlot(Player* bot, Position& position, bool& found)
     return branch;
 }
 
+// The star forecast to die soonest within `leadMs`, from its own slope, or one already this low.
+AlgalonScanUnit const* ExplodingStar(AlgalonEncounterState const& state, uint32 leadMs)
+{
+    AlgalonScanUnit const* soonest = nullptr;
+    int32 best = std::numeric_limits<int32>::max();
+    for (AlgalonScanUnit const& star : state.stars)
+    {
+        int32 const death =
+            star.healthPct <= ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT ? 0 : StarDeathAt(star, star.lossPctPerSec);
+        if (death <= static_cast<int32>(leadMs) && death < best)
+        {
+            soonest = &star;
+            best = death;
+        }
+    }
+
+    return soonest;
+}
+
+// From just before a star explosion or a meteor until the healers, who spend those seconds on the raid, are
+// back on the tanks.
+bool RaidHitWindow(AlgalonEncounterState const& state, uint32 now)
+{
+    for (uint32 const hit : {state.lastStarDeathMs, state.lastSmashImpactMs})
+        if (hit && getMSTimeDiff(hit, now) <= ULDUAR_ALGALON_TANK_WINDOW_TAIL_MS)
+            return true;
+
+    if (ExplodingStar(state, ULDUAR_ALGALON_TANK_WINDOW_LEAD_MS))
+        return true;
+
+    for (auto const& [marker, seenMs] : state.markerSeenMs)
+    {
+        int32 const impact = MsUntil(seenMs + ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_MS, now);
+        if (impact >= 0 && impact <= static_cast<int32>(ULDUAR_ALGALON_TANK_WINDOW_LEAD_MS))
+            return true;
+    }
+
+    return false;
+}
+
+// RunningTankDefensive's buttons, or an external on it.
+bool TankCutRunning(Player* holder)
+{
+    return RunningTankDefensive(holder, true, 0) || holder->HasAura(SPELL_ALGALON_PAIN_SUPPRESSION) ||
+           holder->HasAura(SPELL_ALGALON_HAND_OF_SACRIFICE) || holder->HasAura(SPELL_ALGALON_GUARDIAN_SPIRIT);
+}
+
+// CanCastSpell skips the cost, and a provider out of mana would keep its turn while every cast fails. Runes
+// aren't checked.
+bool CanPay(Player* caster, SpellInfo const* info)
+{
+    if (info->PowerType >= MAX_POWERS || info->PowerType == POWER_RUNE)
+        return true;
+
+    return static_cast<int32>(caster->GetPower(Powers(info->PowerType))) >=
+           info->CalcPowerCost(caster, info->GetSchoolMask());
+}
+
+// The provider's spell id when it can put `spell` on `target` now, else 0. Range and sight are checked here:
+// CanCastSpell lets an out of range cast through.
+uint32 ExternalReady(Player* provider, char const* spell, Player* target)
+{
+    PlayerbotAI* providerAI = GET_PLAYERBOT_AI(provider);
+    if (!providerAI || !CanStayOut(provider))
+        return 0;
+
+    uint32 const spellId = providerAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info || !CanPay(provider, info))
+        return 0;
+
+    if (provider != target && (!provider->IsWithinDistInMap(target, info->GetMaxRange(true, provider)) ||
+                               !provider->IsWithinLOSInMap(target)))
+        return 0;
+
+    return providerAI->CanCastSpell(spellId, target) ? spellId : 0;
+}
+
+// The class rule: it moves 30% of his hits onto the paladin, and one Hand per paladin on a target.
+uint32 SacrificeReady(Player* paladin, Player* holder)
+{
+    if (paladin == holder || paladin->getClass() != CLASS_PALADIN ||
+        paladin->GetHealthPct() < ULDUAR_ALGALON_SACRIFICE_MIN_PCT ||
+        ai::paladin::HasAnyPaladinHandFromCaster(holder, paladin))
+        return 0;
+
+    return ExternalReady(paladin, "hand of sacrifice", holder);
+}
+
+bool HasDivineGuardian(Player* paladin)
+{
+    return paladin->HasSpell(SPELL_ALGALON_DIVINE_GUARDIAN_RANK_1) ||
+           paladin->HasSpell(SPELL_ALGALON_DIVINE_GUARDIAN_RANK_2);
+}
+
+// One cover per explosion: Divine Guardian on anyone, or Aura Mastery on the shadow aura paladin.
+bool ExplosionCovered(Group* group, AlgalonEncounterState const& state)
+{
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (InFight(member) && member->HasAura(SPELL_ALGALON_DIVINE_GUARDIAN))
+            return true;
+    }
+
+    Player* auraPaladin = FindGroupMember(group, state.shadowAuraPaladin.Get());
+    return auraPaladin && auraPaladin->HasAura(SPELL_ALGALON_AURA_MASTERY);
+}
+
+// Aura Mastery only doubles the paladin's own aura, and Prayer of Shadow Protection already gives the 130 that
+// Shadow Resistance Aura does (both aura 143, highest only), so the aura is worth running only from a paladin
+// with Aura Mastery.
+Player* ElectShadowAuraPaladin(Group* group)
+{
+    Player* best = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || !InFight(member) || member->getClass() != CLASS_PALADIN ||
+            !member->HasActiveSpell(SPELL_ALGALON_AURA_MASTERY) ||
+            !memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", "shadow resistance aura")->Get())
+            continue;
+
+        if (!best || member->GetGUID() < best->GetGUID())
+            best = member;
+    }
+
+    return best;
+}
+
+// Per hole, the hiders still out: bots by their shelter, humans by the nearest hole, kite hole included, since
+// the call only says "a black hole".
+void CountHidersOut(Group* group, AlgalonEncounterState& state)
+{
+    auto const nearest = [&state](Player* human)
+    {
+        AlgalonScanUnit const* best = nullptr;
+        for (AlgalonScanUnit const& hole : state.holes)
+            if (!best || human->GetExactDist2d(hole.position) < human->GetExactDist2d(best->position))
+                best = &hole;
+
+        return best;
+    };
+
+    state.hidersOut.clear();
+    if (!state.bigBangCasting)
+        return;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!CanStayOut(member))
+            continue;
+
+        ObjectGuid const guid = member->GetGUID();
+        if (guid == state.bigBangSoaker.Get() || guid == state.bigBangBackup.Get() || guid == state.handler.Get())
+            continue;
+
+        AlgalonScanUnit const* hole = IsBot(member) ? ShelterHole(member, state) : nearest(member);
+        if (hole)
+            ++state.hidersOut[hole->guid];
+    }
+}
+
 }  // namespace
 
 Unit* GetAlgalon(PlayerbotAI* botAI) { return botAI ? FindAlgalon(botAI->GetBot()) : nullptr; }
@@ -2237,6 +2468,35 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     state->bigBangCasting = casting;
     state->bigBang = casting ? state->bigBangCount : 0;
     state->holeCount = static_cast<uint32>(state->holes.size());
+    CountHidersOut(group, *state);
+
+    // Held through the cast: the soak itself puts the disperser's Dispersion on cooldown.
+    if (!casting)
+    {
+        int32 const castBy = state->nextBigBangMs ? MsUntil(state->nextBigBangMs, now) +
+                                                        static_cast<int32>(ULDUAR_ALGALON_BIG_BANG_CAST_MS) -
+                                                        ULDUAR_ALGALON_SOAK_DISPERSION_MS
+                                                  : std::numeric_limits<int32>::max();
+        Player* disperser = ElectDisperser(group, castBy, nullptr);
+        state->disperser = disperser ? disperser->GetGUID() : ObjectGuid::Empty;
+    }
+
+    for (auto const& [marker, seenMs] : state->markerSeenMs)
+    {
+        uint32 const impact = seenMs + ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_MS;
+        if (MsUntil(impact, now) <= 0 && (!state->lastSmashImpactMs || MsUntil(impact, state->lastSmashImpactMs) > 0))
+            state->lastSmashImpactMs = impact;
+    }
+
+    // Cast for the Divine Guardian it procs, which stays; left up, it splits the party's explosion damage onto
+    // the paladin.
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (IsBot(member) && member->HasAura(SPELL_ALGALON_DIVINE_SACRIFICE, member->GetGUID()))
+            member->RemoveOwnedAura(SPELL_ALGALON_DIVINE_SACRIFICE);
+    }
+
     state->urgent = phase == AlgalonPhase::One && state->holes.empty() &&
                     (casting || BigBangDueWithin(*state, ULDUAR_ALGALON_SHELTER_WINDOW_SECONDS, now));
 
@@ -2253,8 +2513,12 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     if (phase != AlgalonPhase::One)
     {
         state->focusStar = ObjectGuid::Empty;
+        state->shadowAuraPaladin = ObjectGuid::Empty;
         return;
     }
+
+    Player* auraPaladin = ElectShadowAuraPaladin(group);
+    state->shadowAuraPaladin = auraPaladin ? auraPaladin->GetGUID() : ObjectGuid::Empty;
 
     ElectStarTeam(bot, *state);
 
@@ -2513,8 +2777,8 @@ AlgalonTankHealPick GetAlgalonTankHealPick(PlayerbotAI* botAI)
     return pick;
 }
 
-// Never Lay on Hands, Pain Suppression, Guardian Spirit or Hand of Sacrifice: the cooldown reserve keeps
-// those for Big Bang and doesn't see a cast made from here.
+// Never Lay on Hands, Pain Suppression, Guardian Spirit or Hand of Sacrifice: the tank defensive node spends
+// those one at a time.
 char const* GetAlgalonTankHealSpell(PlayerbotAI* botAI, AlgalonTankHealPick const& pick)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -2618,6 +2882,230 @@ Player* GetAlgalonBeaconTarget(PlayerbotAI* botAI)
     return target && !botAI->HasAura("beacon of light", target, false, true) ? target : nullptr;
 }
 
+bool AlgalonDispersionSoak(Player* bot)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    return state && state->engaged && !state->disperser.Get().IsEmpty();
+}
+
+AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
+{
+    AlgalonTankCut const none;
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    AlgalonEncounterState const* state = FindState(bot);
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!state || !group || !state->engaged || IsAlgalonPhased(bot))
+        return none;
+
+    // Every provider is the holder, a paladin or a priest; the rest of the raid asks this every tick.
+    Player* holder = GetAlgalonBossTank(botAI);
+    if (!holder || !IsAlgalonSwapTank(holder) || !CanStayOut(holder) ||
+        (bot != holder && bot->getClass() != CLASS_PALADIN && bot->getClass() != CLASS_PRIEST))
+        return none;
+
+    // Nothing reaches a hiding holder from the cast's start until he moves again; a tank that soaked is still in
+    // his reach.
+    uint32 const now = getMSTime();
+    if (state->bigBangCasting ||
+        (state->lastBigBangEndMs && getMSTimeDiff(state->lastBigBangEndMs, now) < ULDUAR_ALGALON_BIG_BANG_STILL_MS &&
+         state->lastSoaker != holder->GetGUID()))
+        return none;
+
+    auto const claimed = [now](uint32 claimMs)
+    { return claimMs && getMSTimeDiff(claimMs, now) < ULDUAR_ALGALON_TANK_DEFENSIVE_CLAIM_MS; };
+
+    // With no disperser a tank soaks the next hit, and what it and its externals need then stays unspent unless
+    // back in time, or the holder is alone and dying first soaks nothing.
+    int32 const untilHit = AlgalonMsToBigBangHit(botAI);
+    bool const reserved = state->disperser.Get().IsEmpty() && AlgalonLoneHolder(botAI) != holder;
+    auto const usable = [&](Player* provider, uint32 spellId)
+    { return spellId && (!reserved || AlgalonCooldownMs(provider, spellId) <= untilHit); };
+
+    // A full heal, so over a cutter too. Another paladin's first: on himself it puts up Forbearance.
+    if (holder->GetHealthPct() < ULDUAR_ALGALON_TANK_LAY_ON_HANDS_PCT && !claimed(state->layOnHandsClaimMs))
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* paladin = ref->GetSource();
+            if (paladin == holder || !IsBot(paladin) || paladin->getClass() != CLASS_PALADIN)
+                continue;
+
+            uint32 const spellId = ExternalReady(paladin, "lay on hands", holder);
+            if (usable(paladin, spellId))
+                return paladin == bot ? AlgalonTankCut{holder, spellId, "loh"} : none;
+        }
+
+        if (IsBot(holder))
+        {
+            uint32 const spellId = ExternalReady(holder, "lay on hands", holder);
+            if (usable(holder, spellId))
+                return holder == bot ? AlgalonTankCut{holder, spellId, "loh"} : none;
+        }
+    }
+
+    if (TankCutRunning(holder) || claimed(state->tankCutClaimMs))
+        return none;
+
+    char const* why = nullptr;
+    if (RaidHitWindow(*state, now))
+        why = "window";
+    else if (holder->GetHealthPct() < ULDUAR_ALGALON_TANK_DEFENSIVE_PCT)
+        why = "low";
+    else
+        return none;
+
+    auto const turn = [&](Player* provider, uint32 spellId)
+    { return provider == bot ? AlgalonTankCut{holder, spellId, why} : none; };
+
+    // The partner is idle in plate, so the 30% it takes over costs it least.
+    Player* partner = PairPartner(group, *state, holder);
+    if (IsBot(partner))
+    {
+        uint32 const spellId = SacrificeReady(partner, holder);
+        if (usable(partner, spellId))
+            return turn(partner, spellId);
+    }
+
+    // Off cooldown within a global cooldown counts: the externals wait for it rather than spend a longer one.
+    if (IsBot(holder))
+    {
+        if (char const* own = ReadyTankDefensive(holder, true, ULDUAR_ALGALON_PREP_GCD_MS))
+        {
+            PlayerbotAI* holderAI = GET_PLAYERBOT_AI(holder);
+            uint32 const ownId = holderAI->GetAiObjectContext()->GetValue<uint32>("spell id", own)->Get();
+            SpellInfo const* info = ownId ? sSpellMgr->GetSpellInfo(ownId) : nullptr;
+            if (usable(holder, ownId) && info && CanPay(holder, info))
+            {
+                uint32 const spellId = holder == bot ? NextTankDefensive(botAI, bot, nullptr, true) : 0;
+                return spellId ? AlgalonTankCut{holder, spellId, why} : none;
+            }
+        }
+    }
+
+    for (bool const healers : {false, true})
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* paladin = ref->GetSource();
+            if (paladin == partner || !IsBot(paladin) || PlayerbotAI::IsHeal(paladin) != healers)
+                continue;
+
+            uint32 const spellId = SacrificeReady(paladin, holder);
+            if (usable(paladin, spellId))
+                return turn(paladin, spellId);
+        }
+    }
+
+    for (char const* spell : {"pain suppression", "guardian spirit"})
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* priest = ref->GetSource();
+            if (!IsBot(priest) || priest->getClass() != CLASS_PRIEST)
+                continue;
+
+            uint32 const spellId = ExternalReady(priest, spell, holder);
+            if (usable(priest, spellId))
+                return turn(priest, spellId);
+        }
+    }
+
+    return none;
+}
+
+int32 AlgalonCooldownMs(Player* bot, uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!info)
+        return 0;
+
+    int32 recovery = static_cast<int32>(info->RecoveryTime);
+    int32 category = static_cast<int32>(info->CategoryRecoveryTime);
+    if (recovery > 0)
+        bot->ApplySpellMod(spellId, SPELLMOD_COOLDOWN, recovery);
+
+    if (category > 0 && !info->HasAttribute(SPELL_ATTR6_NO_CATEGORY_COOLDOWN_MODS))
+        bot->ApplySpellMod(spellId, SPELLMOD_COOLDOWN, category);
+
+    return std::max(recovery, category);
+}
+
+void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut)
+{
+    AlgalonEncounterState* state = FindState(bot);
+    if (!state || !cut.target)
+        return;
+
+    bool const layOnHands = !std::strcmp(cut.why, "loh");
+    (layOnHands ? state->layOnHandsClaimMs : state->tankCutClaimMs) = getMSTime();
+
+    // `<why> <tank health %> <tank> <spell name>`, the name last since it holds spaces.
+    if (RaidObs::Active())
+    {
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(cut.spellId);
+        char pct[16];
+        std::snprintf(pct, sizeof(pct), "%.0f", cut.target->GetHealthPct());
+        RaidObs::Note(bot, "algalon.tankdef",
+                      std::string(cut.why) + " " + pct + " " + RaidObs::DescribeAssignment(cut.target->GetGUID()) +
+                          " " + (info ? info->SpellName[0] : "?"));
+    }
+}
+
+char const* GetAlgalonExplosionCover(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    AlgalonEncounterState const* state = FindState(bot);
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!state || !group || state->phase.Get() != AlgalonPhase::One || state->bigBangCasting ||
+        bot->getClass() != CLASS_PALADIN || IsAlgalonPhased(bot))
+        return nullptr;
+
+    AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS);
+    if (!star || star->guid == state->coverStar || ExplosionCovered(group, *state))
+        return nullptr;
+
+    // Its own aura is the one it doubles, so only with that aura up.
+    Player* auraPaladin = FindGroupMember(group, state->shadowAuraPaladin.Get());
+    PlayerbotAI* auraAI = auraPaladin ? GET_PLAYERBOT_AI(auraPaladin) : nullptr;
+    if (auraAI && auraAI->HasAura("shadow resistance aura", auraPaladin, false, true) &&
+        ExternalReady(auraPaladin, "aura mastery", auraPaladin))
+        return auraPaladin == bot ? "aura mastery" : nullptr;
+
+    // Not the holder: its global cooldowns go on him.
+    Player* holder = GetAlgalonBossTank(botAI);
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* paladin = ref->GetSource();
+        if (paladin == holder || !IsBot(paladin) || paladin->getClass() != CLASS_PALADIN ||
+            !HasDivineGuardian(paladin) || paladin->GetHealthPct() < ULDUAR_ALGALON_SACRIFICE_MIN_PCT)
+            continue;
+
+        if (ExternalReady(paladin, "divine sacrifice", paladin))
+            return paladin == bot ? "divine sacrifice" : nullptr;
+    }
+
+    return nullptr;
+}
+
+void ClaimAlgalonExplosionCover(Player* bot, char const* cover)
+{
+    AlgalonEncounterState* state = FindState(bot);
+    AlgalonScanUnit const* star =
+        state ? ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS) : nullptr;
+    if (!star)
+        return;
+
+    state->coverStar = star->guid;
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "algalon.cover", cover);
+}
+
+bool IsAlgalonShadowAuraPaladin(Player* bot)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    return state && state->engaged && state->shadowAuraPaladin.Get() == bot->GetGUID();
+}
+
 Player* GetAlgalonBigBangSoaker(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -2652,7 +3140,16 @@ bool AlgalonStaysOut(Player* bot)
         return false;
 
     ObjectGuid const guid = bot->GetGUID();
-    return state->bigBangSoaker.Get() == guid || state->bigBangBackup.Get() == guid || AlgalonHoldsConstellation(bot);
+    return state->bigBangSoaker.Get() == guid || state->bigBangBackup.Get() == guid;
+}
+
+bool AlgalonTankCaughtOut(Player* bot)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    if (!state || (!state->swapPair.count(bot->GetGUID()) && state->handler.Get() != bot->GetGUID()))
+        return false;
+
+    return GetAlgalonHideRole(bot) == AlgalonHideRole::NoShelter;
 }
 
 bool AlgalonCanDisperse(Player* bot)
@@ -2679,7 +3176,23 @@ int32 AlgalonHideSlackMs(Player* bot)
         std::max(0.0f, bot->GetExactDist2d(shelter->position) - (ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f));
     float const speed = std::max(1.0f, bot->GetSpeed(MOVE_RUN));
     int32 const walkMs = static_cast<int32>(walk / speed * IN_MILLISECONDS);
-    return AlgalonBigBangRemainingMs(botAI) - walkMs - ULDUAR_ALGALON_HIDE_MARGIN_MS;
+    int32 const remaining = AlgalonBigBangRemainingMs(botAI);
+
+    // Caught mid run, or in the field too late to be phased, it would have no button up; standing, it casts one.
+    bool const tank = state->swapPair.count(bot->GetGUID()) || state->handler.Get() == bot->GetGUID();
+    if (tank && remaining < walkMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS)
+        return std::numeric_limits<int32>::max();
+
+    // Its constellations follow it in and close the hole, so while others still head there it goes last.
+    int32 margin = ULDUAR_ALGALON_HIDE_MARGIN_MS;
+    if (AlgalonHoldsConstellation(bot))
+    {
+        auto const out = state->hidersOut.find(shelter->guid);
+        if (out != state->hidersOut.end() && out->second)
+            margin = ULDUAR_ALGALON_LAST_IN_MARGIN_MS;
+    }
+
+    return remaining - walkMs - margin;
 }
 
 bool AlgalonShouldRunForShelter(Player* bot) { return AlgalonHideSlackMs(bot) <= 0; }
@@ -2701,14 +3214,16 @@ AlgalonHideRole GetAlgalonHideRole(Player* bot)
         role = AlgalonHideRole::Soak;
     else if (state->bigBangBackup.Get() == guid)
         role = AlgalonHideRole::Backup;
-    else if (AlgalonHoldsConstellation(bot))
-        role = AlgalonHideRole::Hold;
-    else if (state->holes.empty())
-        role = AlgalonHideRole::NoShelter;
-    else if (!AlgalonShouldRunForShelter(bot))
-        role = AlgalonHideRole::Wait;
     else
-        role = GetAlgalonShelter(bot, shelter) ? AlgalonHideRole::Run : AlgalonHideRole::NoShelter;
+    {
+        int32 const slack = AlgalonHideSlackMs(bot);
+        if (slack == std::numeric_limits<int32>::max())
+            role = AlgalonHideRole::NoShelter;
+        else if (slack > 0)
+            role = AlgalonHoldsConstellation(bot) ? AlgalonHideRole::Hold : AlgalonHideRole::Wait;
+        else
+            role = GetAlgalonShelter(bot, shelter) ? AlgalonHideRole::Run : AlgalonHideRole::NoShelter;
+    }
 
     // Only once he has been seen, or every Ulduar trace before him carries a row of these per bot.
     if (RaidObs::Active() && state && !state->boss.IsEmpty())
@@ -2840,7 +3355,8 @@ bool AlgalonShouldSwap(Player* bot)
     if (!holder || holder == bot || !IsAlgalonSwapTank(holder))
         return false;
 
-    // The holder is this cast's soaker. Taking him now leaves the soaker hiding and the wrong tank out.
+    // Mid cast the holder soaks or hides with the taker. Taking him now leaves the soaker hiding and the wrong
+    // tank out, or a hider out of its hole.
     if (AlgalonBigBangCasting(botAI))
         return false;
 
@@ -2916,8 +3432,8 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
         return nullptr;
     }
 
-    // Loose ones first: a constellation follows its victim into a hole during Big Bang and closes it on
-    // the raid, so every one ends up on the handler, who stays out. Barrage hits a random raid member
+    // Loose ones first: a constellation follows its victim into a hole during Big Bang and closes it, so every
+    // one ends up on the handler, who goes into its hole last. Barrage hits a random raid member
     // anyway, so holding them costs nothing. Only a spare hole takes one away.
     Creature* loose = nullptr;
     Creature* held = nullptr;

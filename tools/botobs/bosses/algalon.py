@@ -22,6 +22,8 @@
     algalon.py <file> --tanks           Phase Punch stacks, swaps, non-tank pickups, Quantum Strike
     algalon.py <file> --tankheal        tank healers, each healer's share on the pair, Beacon, healing against
                                         damage before every tank death
+    algalon.py <file> --defensives      damage cutters and Lay on Hands on the swap tanks, every swap tank death,
+                                        cover at every star explosion
     algalon.py <file> --formation       each ring bot's distance to its slot and to him, spot branches
     algalon.py <file> --darkmatter      phase 2 Unleashed Dark Matter: loose seconds, handler damage, kills
     algalon.py <file> --verdict         one line per detected failure, in time order
@@ -36,14 +38,17 @@ What the generic views get wrong here, and what this reads instead:
   64417 included, about a second after the hit. Who a Big Bang could hit is read off those spans,
   who it did hit off its `dmg` rows. A row while the aura is held is a refresh; a new application
   right after a removal is the re-phase loop a bot still inside the field gets.
-- **The soaker, the backup and a handler on `algalon.hide=hold` stay out on purpose**, so Big Bang
-  damage on them is not a failure. Everyone else hit was unphased at the impact.
+- **The soaker and the backup stay out on purpose**, so Big Bang damage on them is not a failure.
+  Everyone else hit was unphased at the impact. Before the Dispersion soak a handler on
+  `algalon.hide=hold` stayed out too; on a trace with `algalon.disperser`, `hold` is the handler
+  waiting to hide last, so a hit on it counts.
 - **A creature's death reaches no record.** A star died where a Black Hole Explosion burst names it
   or a hole appears on its last spot; a constellation left through a hole when both rows vanish
   together.
-- **`algalon.soaker`, `algalon.backup`, `algalon.focusstar` and `algalon.handler` are raid-wide
-  latches**: `g` is whichever bot's tick flipped them and the guid is in `txt`. `algalon.hide`, `kite`
-  and `spot` are per bot and change-only, so a value holds until that bot's next row.
+- **`algalon.soaker`, `algalon.backup`, `algalon.disperser`, `algalon.shadowaura`, `algalon.focusstar`
+  and `algalon.handler` are raid-wide latches**: `g` is whichever bot's tick flipped them and the guid
+  is in `txt`. `algalon.hide`, `kite` and `spot` are per bot and change-only, so a value holds until
+  that bot's next row.
 - **`algalon.shelter` is per bot but cleared without a row when a Big Bang starts**, so a runner's hole
   is the row it wrote inside that cast, never one held over from an earlier cast.
 - **A Big Bang can have several soakers.** One phased or dead mid-cast is replaced, so the soaker a
@@ -77,6 +82,11 @@ What the generic views get wrong here, and what this reads instead:
   Beacon of Light's copy is a heal row of its own from the paladin, so it counts as that paladin's.
 - **`--tankheal` reads a trace from before the tank healers too**: with no `algalon.tankhealer` it still
   measures every tank death and each healer's share, so pulls before and after them compare directly.
+- **`--defensives` reads the cutters off the cast and aura rows**, so it reads older traces too;
+  `algalon.tankdef` only adds why one was cast. Last Stand's cast 12975 is a dummy whose aura is 12976.
+- **An explosion is covered by Divine Guardian (70940) or Aura Mastery**, never by Divine Sacrifice
+  itself: bots cancel 64205 as it lands and keep the Divine Guardian it procs. No talent reaches the
+  trace, so a paladin counts as able to cover once seen covering, or while `algalon.shadowaura` names it.
 """
 from __future__ import annotations
 
@@ -97,6 +107,7 @@ from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.geometry import NUMBER, Unknown, anchor, dist2, first_seen, frames, guids_of_entry, radius  # noqa: E402
 from raidobs.paths import RAID_ROOT  # noqa: E402
 from raidobs.probes import emitted_keys, holder_spans, latch_spans, silent_keys  # noqa: E402
+from raidobs.records import STRIP_AT_DEATH_MS  # noqa: E402
 from raidobs.space import show_share, threat_share  # noqa: E402
 from raidobs.stuck import stall_windows  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, death_records, notes, roster_guids  # noqa: E402
@@ -299,6 +310,28 @@ TANKHEAL_OTHERS_SHARE = 0.30
 TANKHEAL_RANGE_YD = 40.0
 TANKHEAL_VETO = "algalon tank healer focus"
 SPELL_BEACON_OF_LIGHT = 53563
+
+SPELL_HAND_OF_SACRIFICE = 6940
+SPELL_AURA_MASTERY = 31821
+SPELL_DIVINE_SACRIFICE = 64205
+SPELL_DIVINE_GUARDIAN = 70940
+# The `tank` rows of the table in RaidTankDefensive.cpp.
+TANK_BUTTONS = {12975: "Last Stand", 871: "Shield Wall", 498: "Divine Protection", 22812: "Barkskin",
+                22842: "Frenzied Regeneration", 61336: "Survival Instincts", 48707: "Anti-Magic Shell",
+                55233: "Vampiric Blood", 48792: "Icebound Fortitude"}
+TANK_BUTTON_NAMES = frozenset(TANK_BUTTONS.values())
+CUTTERS = {**TANK_BUTTONS, SPELL_PAIN_SUPPRESSION: "Pain Suppression", SPELL_HAND_OF_SACRIFICE: "Hand of Sacrifice",
+           SPELL_GUARDIAN_SPIRIT: "Guardian Spirit"}
+CUTTER_AURAS = {**CUTTERS, 12976: "Last Stand"}
+TANK_SAVES = {**CUTTERS, **{rank: "Lay on Hands" for rank in (633, 2800, 10310, 27154, 48788)}}
+TANK_SAVE_NAMES = frozenset(TANK_SAVES.values())
+COVER_SPELLS = {SPELL_AURA_MASTERY: "Aura Mastery", SPELL_DIVINE_SACRIFICE: "Divine Sacrifice"}
+SAVE_LIVED_MS = 10000
+TANKDEF_NOTE_MS = 10000
+# Aura Mastery and Divine Sacrifice both cool down this long; Aura Mastery and Divine Guardian last COVER_MS.
+COVER_COOLDOWN_MS = 120000
+COVER_MS = 6000
+SACRIFICE_HELD_MS = 1000
 
 
 def secs(ms: int) -> str:
@@ -1670,8 +1703,15 @@ def build_big_bang_rows(trace: Trace) -> list[dict]:
     holes = hole_guids(trace)
     soakers = latch_spans(trace, "algalon.soaker", end)
     backups = latch_spans(trace, "algalon.backup", end)
+    dispersers = latch_spans(trace, "algalon.disperser", end)
+    dispersion_era = "algalon.disperser" in emitted(trace)
     hole_count = latch_spans(trace, "algalon.holes", end)
     hide = holder_spans(trace, "algalon.hide", end)
+    kiteholes = holder_spans(trace, "algalon.kitehole", end)
+    lost = notes(trace, "algalon.holelost")
+    kits = notes(trace, "algalon.soakkit")
+    dispersions = [rec for rec in trace.of("cast") if rec.get("sp") == SPELL_DISPERSION and not rec.get("tr")]
+    pair, _ = swap_pair(trace)
     phased = phased_spans(trace)
     loops = rephase_loops(trace)
     hits = [rec for rec in trace.of("dmg") if rec.get("sp") in SPELL_BIG_BANG]
@@ -1701,7 +1741,17 @@ def build_big_bang_rows(trace: Trace) -> list[dict]:
         backup = last_set_in(backups, start, stop)
         at_impact = {guid: value_at(spans, stop - 1) for guid, spans in hide.items()}
         holding = {guid for guid, value in at_impact.items() if value == "hold"}
-        sanctioned = ({soaker, backup} | holding) - {0}
+        sanctioned = ({soaker, backup} | (set() if dispersion_era else holding)) - {0}
+
+        kit = [parse_soakkit(rec.get("txt")).get("def") for rec in kits
+               if rec.get("g") == soaker and start - BANG_LEAD_MS <= rec["t"] <= stop]
+        if soaker and (last_set_in(dispersers, start, stop) == soaker or "dispersion" in kit
+                       or any(rec.get("s") == soaker and start <= rec["t"] <= stop for rec in dispersions)):
+            kind = "dispersion"
+        elif soaker:
+            kind = "tank" if soaker in pair else trace.role(soaker)
+        else:
+            kind = "-"
 
         # Per bot that was on `wait` inside the cast: ms left before the impact when it set off, or
         # None if it was still waiting at the impact.
@@ -1747,6 +1797,11 @@ def build_big_bang_rows(trace: Trace) -> list[dict]:
         watched = sanctioned | {soaker}
         row = {
             **cast,
+            "impact": impact,
+            "kind": kind,
+            "handlers": hold_handlers(trace, hide, kiteholes, shelters, phased, start, impact),
+            "lost": [(rec["t"], str(rec.get("txt", ""))) for rec in lost
+                     if start <= rec["t"] <= stop + SOAKER_TAIL_MS],
             "holes": present,
             "hole_gaps": gaps,
             "unreachable": sorted(((gap, guid) for guid, gap in gaps.items()
@@ -1785,6 +1840,33 @@ def build_big_bang_rows(trace: Trace) -> list[dict]:
         row["runners"] = runner_holes(trace, row, shelters)
         out.append(row)
     return out
+
+
+def hold_handlers(trace: Trace, hide, kiteholes, shelters: list[dict], phased, start: int,
+                  impact: int) -> list[dict]:
+    """Per bot on `algalon.hide=hold` inside the cast: when it first held, when it set off for its hole
+    (`run` or `in` right after its last hold, None if that came after the impact), the hole its
+    `algalon.shelter` inside the cast or else its `algalon.kitehole` named, how far it stood from that
+    hole as it set off, and whether it was phased at the impact."""
+    samples = samples_of(trace)
+    out = []
+    for guid, spans in hide.items():
+        held = [index for index, (value, begin, until) in enumerate(spans)
+                if value == "hold" and begin < impact and until > start]
+        if not held:
+            continue
+        after = spans[held[-1] + 1] if held[-1] + 1 < len(spans) else None
+        went = after[1] if after and after[0] in ("run", "in") and after[1] <= impact else None
+        named = [hole for rec in shelters if rec.get("g") == guid and start <= rec["t"] <= impact
+                 if (hole := as_guid(rec.get("txt")))]
+        hole = named[-1] if named else last_set_in(kiteholes.get(guid, []), start, impact)
+        found = (samples.row(hole, start) or samples.after(hole, start)) if hole else None
+        spot = tuple(found[1:3]) if found else None
+        stood = position_at(samples, guid, went if went is not None else impact)
+        out.append({"guid": guid, "hold": spans[held[0]][1], "went": went, "hole": hole, "spot": spot,
+                    "gap": dist2(spot, stood) if spot and stood else None,
+                    "phased": phased_at(phased, guid, impact)})
+    return sorted(out, key=lambda handler: handler["hold"])
 
 
 def runner_holes(trace: Trace, row: dict, shelters: list[dict]) -> list[dict]:
@@ -1864,7 +1946,7 @@ def show_bigbang(trace: Trace) -> None:
         print("  no Big Bang was cast")
         return
     show_absent(trace, "algalon.bigbang", "algalon.soaker", "algalon.backup", "algalon.hide", "algalon.defensive",
-                "algalon.shelter")
+                "algalon.shelter", "algalon.disperser")
     show_vetoes(trace, "algalon ice block hold")
 
     for row in rows:
@@ -1877,7 +1959,8 @@ def show_bigbang(trace: Trace) -> None:
             first, then = row["soaker_hp"]
             health = f"{first:.0f}% -> {then:.0f}%" if first is not None and then is not None else "health -"
             died = f", died {clock(row['soaker_death'])}" if row["soaker_death"] is not None else ""
-            print(f"      soaker {who(trace, row['soaker'])} from {row['soaker_from']}, {health}{died}")
+            print(f"      soaker {who(trace, row['soaker'])} from {row['soaker_from']}, {row['kind']} soak,"
+                  f" {health}{died}")
         else:
             print("      soaker unknown")
         if row["soakers"]:
@@ -1885,6 +1968,15 @@ def show_bigbang(trace: Trace) -> None:
         print(f"      backup {who(trace, row['backup']) if row['backup'] else '-'}")
         if row["backups"]:
             print(f"      algalon.backup during the cast: {chain_label(trace, row['backups'])}")
+        for handler in row["handlers"]:
+            went = (f"went {clock(handler['went'])}, {(row['impact'] - handler['went']) / 1000:.1f} s before the"
+                    f" impact" if handler["went"] is not None else "still on hold at the impact")
+            print(f"      on hold: {trace.name(handler['guid'])} from {clock(handler['hold'])}, {went}, hole"
+                  f" {hole_label(handler['spot'], handler['gap'])}; {'phased' if handler['phased'] else 'unphased'}"
+                  f" at the impact")
+        if row["lost"]:
+            print("      algalon.holelost during the cast: " + ", ".join(f"{clock(when)} {reason}"
+                                                                      for when, reason in row["lost"]))
 
         saves = [f"{clock(when)} {text} ({trace.name(guid)})" for when, guid, text in row["defensives"]]
         saves += [f"{clock(when)} {trace.name(caster)} {trace.spell(spell)} -> {trace.name(target)}"
@@ -2033,6 +2125,9 @@ def soak_rows(trace: Trace) -> list[dict]:
             row = {
                 "n": bang["n"], "start": start, "end": bang["end"], "impact": impact, "soaker": soaker,
                 "soakers": bang["soakers"],
+                "kind": bang["kind"],
+                "stray": [(guid, bang["victims"][guid].get("a", 0), bang["at_impact"].get(guid))
+                          for guid in bang["stray"]],
                 "hit": hit,
                 "hp": (hit.get("hp") if hit else first[5] if alive(first) else None,
                        then[5] if then and len(then) > 5 else None),
@@ -2084,7 +2179,7 @@ def show_soak(trace: Trace) -> None:
     if not rows:
         print("  no Big Bang was cast")
         return
-    show_absent(trace, "algalon.soaker", "algalon.soakkit", "algalon.handover")
+    show_absent(trace, "algalon.soaker", "algalon.soakkit", "algalon.handover", "algalon.disperser")
     if not any(rec.get("a") in SOAK_NODES for rec in trace.of("act")):
         print(f"  absent from this trace: act rows of {' and '.join(SOAK_NODES)}")
     show_vetoes(trace, "algalon cooldown reserve")
@@ -2099,9 +2194,12 @@ def show_soak(trace: Trace) -> None:
                   else "health -")
         landed = (f"hit {clock(hit['t'])} for {hit.get('a', 0):,}, {hit.get('ab', 0):,} absorbed" if hit
                   else "not hit")
-        print(f"      soaker {label_of(trace, row['soaker'])}: {landed}; {health}")
+        print(f"      soaker {label_of(trace, row['soaker'])}, {row['kind']} soak: {landed}; {health}")
         if row["soakers"]:
             print(f"      algalon.soaker during the cast: {chain_label(trace, row['soakers'])}")
+        if row["stray"]:
+            print("      hit unphased besides the soaker and backup: " + ", ".join(
+                f"{trace.name(guid)} {amount:,} (hide {hide or '-'})" for guid, amount, hide in row["stray"]))
         taken: collections.Counter = collections.Counter()
         for rec in row["later"]:
             taken[trace.spell(rec.get("sp"))] += rec.get("a", 0)
@@ -2132,9 +2230,22 @@ def show_soak(trace: Trace) -> None:
                           else f"soaker alive {SOAK_AFTER_MS // 1000} s after the hit"))
 
 
+def reserve_free(trace: Trace, press: dict) -> bool:
+    """Whether the reserve let a press outside a soak through: one the tank defensive or explosion cover
+    node noted, or, with a disperser latched, a damage cutter or Lay on Hands on a swap tank."""
+    picks = cached(trace, "_algalon_node_picks", lambda trace: [
+        rec for key in ("algalon.tankdef", "algalon.cover") for rec in notes(trace, key)])
+    if any(rec.get("g") == press["caster"] and abs(rec["t"] - press["t"]) <= ECHO_MS for rec in picks):
+        return True
+    pair, _ = swap_pair(trace)
+    target = press["caster"] if press["name"] in TANK_BUTTON_NAMES else press["tgt"] or press["caster"]
+    dispersers = cached(trace, "_algalon_dispersers", lambda trace: latch_spans(trace, "algalon.disperser"))
+    return bool(as_guid(value_at(dispersers, press["t"]))) and press["name"] in TANK_SAVE_NAMES and target in pair
+
+
 def soak_faults(trace: Trace) -> list[tuple[int, str]]:
     """The soaker dying soon after the hit, and a pair tank or priest spending a reserved button outside
-    every soak with a Big Bang still to come."""
+    every soak with a Big Bang still to come, unless the reserve let it through."""
     out = []
     rows = soak_rows(trace)
     for row in rows:
@@ -2145,6 +2256,8 @@ def soak_faults(trace: Trace) -> list[tuple[int, str]]:
     pair, _ = swap_pair(trace)
     for row in rows:
         for press in row["earlier"]:
+            if reserve_free(trace, press):
+                continue
             if press["caster"] in pair or class_of(trace, press["caster"]) in PRIEST_CLASS:
                 target = f" on {trace.name(press['tgt'])}" if press["tgt"] and press["tgt"] != press["caster"] else ""
                 out.append((press["t"], f"{trace.name(press['caster'])} spent {press['name']}{target}"
@@ -2272,9 +2385,10 @@ def star_deaths(trace: Trace) -> list[dict]:
             burst["hits"] += 1
             burst["damage"] += rec.get("a", 0)
             burst["last"] = rec["t"]
+            burst["rows"].append(rec)
             continue
         burst = {"t": rec["t"], "last": rec["t"], "star": source, "how": "explosion", "hits": 1,
-                 "damage": rec.get("a", 0)}
+                 "damage": rec.get("a", 0), "rows": [rec]}
         bursts.append(burst)
         latest[source] = burst
 
@@ -2296,7 +2410,7 @@ def star_deaths(trace: Trace) -> list[dict]:
             if seen_hole and gone - GONE_MS <= seen_hole[0] <= gone + HOLE_MATCH_MS:
                 hole = hole or dist2(samples.row(guid, seen_hole[0])[1:3], spot) <= HOLE_MATCH_YD
         if hole:
-            bursts.append({"t": gone, "last": gone, "star": star, "how": "hole", "hits": 0, "damage": 0})
+            bursts.append({"t": gone, "last": gone, "star": star, "how": "hole", "hits": 0, "damage": 0, "rows": []})
 
     bursts.sort(key=lambda burst: burst["t"])
     previous = None
@@ -2891,7 +3005,7 @@ def show_constellations(trace: Trace) -> None:
     spent = sum(len(row["spent"]) for row in rows if row["how"] == "hole")
     lost = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "algalon.holelost"))
     print(f"  holes spent on constellations: {spent} seen swallowed, algalon.holelost kite {lost['kite']},"
-          f" stray {lost['stray']}")
+          f" stray {lost['stray']}, bigbang {lost['bigbang']}")
 
 
 # ---------------------------------------------------------------------------------------------- smash
@@ -3465,6 +3579,310 @@ def tankheal_faults(trace: Trace) -> list[tuple[int, str]]:
     return out
 
 
+# ---------------------------------------------------------------------------------------- defensives
+
+def aura_spans(trace: Trace, spells) -> dict[int, list[tuple[int, int, int, int]]]:
+    """Per unit, `(start, stop, spell, caster)` per stretch it wore one of `spells`. A row while the aura
+    is held is a refresh; one still on when the file ends runs to the end."""
+    end = pull_end(trace)
+    wearing: dict[tuple[int, int], tuple[int, int]] = {}
+    out: dict[int, list[tuple[int, int, int, int]]] = collections.defaultdict(list)
+    for rec in trace.of("aura"):
+        spell = rec.get("sp")
+        if spell not in spells:
+            continue
+        key = (rec.get("d", 0), spell)
+        if not rec.get("r"):
+            wearing.setdefault(key, (rec["t"], rec.get("s", 0)))
+        elif key in wearing:
+            start, caster = wearing.pop(key)
+            out[key[0]].append((start, rec["t"], spell, caster))
+    for (guid, spell), (start, caster) in wearing.items():
+        out[guid].append((start, end, spell, caster))
+    return {guid: sorted(spans) for guid, spans in out.items()}
+
+
+def wearing_at(spans, guid: int, when: int, slack: int = 0) -> list[tuple[int, int, int, int]]:
+    """The `aura_spans` stretches on `guid` that cover `when`, or came off at most `slack` before it."""
+    return [span for span in spans.get(guid, ()) if span[0] <= when < span[1] + slack]
+
+
+def victim_at(trace: Trace, when: int) -> int:
+    victims = victim_samples(trace)
+    index = bisect.bisect_right(victims, (when, 1 << 62))
+    return victims[index - 1][1] if index else 0
+
+
+def parse_tankdef(text) -> tuple[str, float | None, int, str]:
+    """`algalon.tankdef` reads `<why> <tank health %> <tank guid> <spell name>`, the name last since it can
+    hold spaces."""
+    why, pct, guid, name = (str(text or "").strip().split(" ", 3) + ["", "", "", ""])[:4]
+    try:
+        health = float(pct)
+    except ValueError:
+        health = None
+    return why, health, as_guid(guid), name
+
+
+def tankdef_notes(trace: Trace) -> list[dict]:
+    def build(trace: Trace) -> list[dict]:
+        out = []
+        for rec in notes(trace, "algalon.tankdef"):
+            why, pct, target, name = parse_tankdef(rec.get("txt"))
+            out.append({"t": rec["t"], "caster": rec.get("g", 0), "why": why, "pct": pct, "target": target,
+                        "name": name})
+        return out
+    return cached(trace, "_algalon_tankdef", build)
+
+
+def tank_saves(trace: Trace) -> list[dict]:
+    """`{t, caster, target, spell, name, hp, died, why}` per press of a damage cutter or Lay on Hands that
+    landed on a swap tank: the tank's health at the cast, its death within SAVE_LIVED_MS, and the reason
+    its `algalon.tankdef` note gave. A tank button only goes on its caster; a triggered row is an echo."""
+    def build(trace: Trace) -> list[dict]:
+        pair, _ = swap_pair(trace)
+        samples = samples_of(trace)
+        deaths = combat_deaths(trace)
+        picks = tankdef_notes(trace)
+        out = []
+        last: dict[tuple, int] = {}
+        for rec in trace.of("cast"):
+            spell, caster, when = rec.get("sp"), rec.get("s"), rec["t"]
+            if spell not in TANK_SAVES or rec.get("tr"):
+                continue
+            target = caster if spell in TANK_BUTTONS else rec.get("tgt") or caster
+            if target not in pair or when - last.get((caster, spell), -(1 << 62)) <= ECHO_MS:
+                continue
+            last[(caster, spell)] = when
+            row = samples.row(target, when)
+            pick = next((note for note in picks if note["caster"] == caster and note["target"] == target
+                         and abs(note["t"] - when) <= ECHO_MS), None)
+            out.append({
+                "t": when, "caster": caster, "target": target, "spell": spell,
+                "name": spell_name(trace, spell, TANK_SAVES),
+                "hp": row[5] if alive(row) else None,
+                "died": next((death["t"] for death in deaths
+                              if death.get("g") == target and when < death["t"] <= when + SAVE_LIVED_MS), None),
+                "why": pick["why"] if pick else None,
+            })
+        return out
+    return cached(trace, "_algalon_saves", build)
+
+
+def tank_deaths(trace: Trace) -> list[dict]:
+    """Per swap tank death the wipe command didn't cause: the hits of its last TANKHEAL_WINDOW_MS, the
+    damage cutters it wore as it fell, the saves cast on it in that span, and the `algalon.tankdef` notes
+    naming it in the TANKDEF_NOTE_MS before."""
+    def build(trace: Trace) -> list[dict]:
+        pair, _ = swap_pair(trace)
+        worn = aura_spans(trace, CUTTER_AURAS)
+        phased = all_phases(trace)
+        out = []
+        for row in death_rows(trace):
+            guid, when = row["guid"], row["t"]
+            if guid not in pair or row["cause"] == "wipe command":
+                continue
+            low = when - TANKHEAL_WINDOW_MS
+            out.append({
+                "t": when, "guid": guid, "cause": row["cause"], "phased": phased_at(phased, guid, when),
+                "hits": [rec for rec in victim_hits(trace).get(guid, []) if low <= rec["t"] <= when],
+                "up": wearing_at(worn, guid, when, STRIP_AT_DEATH_MS),
+                "cast": [save for save in tank_saves(trace) if save["target"] == guid and low <= save["t"] <= when],
+                "notes": [note for note in tankdef_notes(trace)
+                          if note["target"] == guid and when - TANKDEF_NOTE_MS <= note["t"] <= when],
+            })
+        return out
+    return cached(trace, "_algalon_tank_cuts", build)
+
+
+def cover_providers(trace: Trace) -> dict[int, list[int]]:
+    """Per bot able to cover an explosion, the spells it covers with: Aura Mastery for the
+    `algalon.shadowaura` paladin and anyone seen casting it, Divine Sacrifice for anyone whose cast put up
+    Divine Guardian."""
+    def build(trace: Trace) -> dict[int, list[int]]:
+        bots = {guid for guid in roster_guids(trace) if guid not in trace.humans}
+        mastery = {as_guid(value) for value, _, _ in latch_spans(trace, "algalon.shadowaura")}
+        mastery |= {rec.get("s") for rec in trace.of("cast") if rec.get("sp") == SPELL_AURA_MASTERY}
+        guardian = {rec.get("s") for rec in trace.of("aura") if rec.get("sp") == SPELL_DIVINE_GUARDIAN}
+        out: dict[int, list[int]] = collections.defaultdict(list)
+        for spell, casters in ((SPELL_AURA_MASTERY, mastery), (SPELL_DIVINE_SACRIFICE, guardian)):
+            for guid in sorted(casters & bots):
+                out[guid].append(spell)
+        return dict(out)
+    return cached(trace, "_algalon_cover_providers", build)
+
+
+def cover_ready(trace: Trace, when: int) -> list[tuple[int, int]]:
+    """`(bot, spell)` per cover provider that could have covered an explosion at `when`: alive, unphased,
+    and that spell not cast in the COVER_COOLDOWN_MS before."""
+    casts = cached(trace, "_algalon_cover_casts", lambda trace: [
+        (rec["t"], rec.get("s"), rec.get("sp")) for rec in trace.of("cast") if rec.get("sp") in COVER_SPELLS])
+    samples = samples_of(trace)
+    phased = all_phases(trace)
+    out = []
+    for guid, spells in cover_providers(trace).items():
+        if not alive(samples.row(guid, when - 1)) or phased_at(phased, guid, when):
+            continue
+        out += [(guid, spell) for spell in spells
+                if not any(caster == guid and cast == spell and when - COVER_COOLDOWN_MS < at <= when
+                           for at, caster, cast in casts)]
+    return out
+
+
+def explosion_rows(trace: Trace) -> list[dict]:
+    """Per star explosion: its hits, the raid members wearing Divine Guardian and Aura Mastery at its first
+    hit, the `algalon.cover` notes in the COVER_MS before it, and with no cover up, the providers that were
+    ready."""
+    def build(trace: Trace) -> list[dict]:
+        roster = roster_guids(trace)
+        guardian = aura_spans(trace, (SPELL_DIVINE_GUARDIAN,))
+        mastery = aura_spans(trace, (SPELL_AURA_MASTERY,))
+        covers = notes(trace, "algalon.cover")
+        out = []
+        for star in star_rows(trace):
+            if star["how"] != "explosion":
+                continue
+            when = star["t"]
+            row = {
+                "t": when, "bang": star["bang"], "hits": star["rows"],
+                "guardians": sorted(guid for guid in guardian if guid in roster and wearing_at(guardian, guid, when)),
+                "mastery": sorted(guid for guid in mastery if wearing_at(mastery, guid, when)),
+                "notes": [(rec["t"], rec.get("g", 0), str(rec.get("txt", ""))) for rec in covers
+                          if when - COVER_MS <= rec["t"] <= when],
+            }
+            row["covered"] = bool(row["guardians"] or row["mastery"])
+            row["ready"] = [] if row["covered"] else cover_ready(trace, when)
+            out.append(row)
+        return out
+    return cached(trace, "_algalon_explosions", build)
+
+
+def hit_means(hits: list[dict]) -> tuple[float | None, float | None]:
+    """Mean damage per hit, absorbs included, and mean resisted, None where no hit carries `rs`."""
+    if not hits:
+        return None, None
+    resisted = [rec["rs"] for rec in hits if "rs" in rec]
+    return (statistics.fmean(rec.get("a", 0) + rec.get("ab", 0) for rec in hits),
+            statistics.fmean(resisted) if resisted else None)
+
+
+def held_sacrifices(trace: Trace) -> list[dict]:
+    """`{t, caster, held, bots}` per bot's Divine Sacrifice that stayed on bots past SACRIFICE_HELD_MS, held
+    being the longest. The tick cancels only a bot's own; a human's runs its course."""
+    spans = sorted((start, caster, stop - start, guid)
+                   for guid, items in aura_spans(trace, (SPELL_DIVINE_SACRIFICE,)).items() if guid not in trace.humans
+                   for start, stop, _, caster in items
+                   if caster not in trace.humans and stop - start > SACRIFICE_HELD_MS)
+    out: list[dict] = []
+    for start, caster, held, guid in spans:
+        group = next((group for group in reversed(out)
+                      if group["caster"] == caster and start - group["t"] <= ECHO_MS), None)
+        if group is None:
+            group = {"t": start, "caster": caster, "held": 0, "bots": []}
+            out.append(group)
+        group["held"] = max(group["held"], held)
+        group["bots"].append(guid)
+    return out
+
+
+def tankdef_label(trace: Trace, note: dict) -> str:
+    health = "-" if note["pct"] is None else f"{note['pct']:.0f}%"
+    return f"{clock(note['t'])} {trace.name(note['caster'])} {note['why']} {health} {note['name']}"
+
+
+def cover_label(trace: Trace, ready: list[tuple[int, int]]) -> str:
+    return ", ".join(f"{trace.name(guid)}'s {COVER_SPELLS[spell]}" for guid, spell in ready)
+
+
+def show_defensives(trace: Trace) -> None:
+    print("TANK DEFENSIVES AND EXPLOSION COVER")
+    if boss_guid(trace) is None:
+        print("  Algalon was never sampled")
+        return
+    show_absent(trace, "algalon.tankdef", "algalon.cover", "algalon.shadowaura")
+
+    saves = tank_saves(trace)
+    print(f"  damage cutters and Lay on Hands on a swap tank: {len(saves)}")
+    for save in saves:
+        health = "-" if save["hp"] is None else f"{save['hp']:.0f}%"
+        fate = (f"died +{(save['died'] - save['t']) / 1000:.1f} s" if save["died"] is not None
+                else f"lived {SAVE_LIVED_MS // 1000} s")
+        why = f", algalon.tankdef {save['why']}" if save["why"] else ""
+        print(f"    {clock(save['t']):>9} {trace.name(save['caster'])} {save['name']} -> {trace.name(save['target'])}"
+              f" at {health}, {fate}{why}")
+
+    deaths = tank_deaths(trace)
+    print(f"  swap tank deaths: {len(deaths)}")
+    for death in deaths:
+        up = ", ".join(spell_name(trace, spell, CUTTER_AURAS) for _, _, spell, _ in death["up"]) or "none"
+        cast = ", ".join(f"{clock(save['t'])} {trace.name(save['caster'])} {save['name']}"
+                         for save in death["cast"]) or "none"
+        print(f"    {clock(death['t']):>9} {label_of(trace, death['guid'])}, {death['cause']}"
+              f"{', phased' if death['phased'] else ''}")
+        print(f"      cutters up: {up}; cast on it in the {TANKHEAL_WINDOW_MS // 1000} s before: {cast}")
+        for rec in death["hits"]:
+            spell = trace.spells.get(rec.get("sp")) or trace.spell(rec.get("sp"))
+            absorbed = f", {rec['ab']:,} absorbed" if rec.get("ab") else ""
+            print(f"      {(rec['t'] - death['t']) / 1000:+5.1f} s  {spell:22} {rec.get('a', 0):>7,}{absorbed}"
+                  f" -> {rec.get('hp', 0):.0f}%")
+        print(f"      algalon.tankdef in the {TANKDEF_NOTE_MS // 1000} s before: "
+              + ("; ".join(tankdef_label(trace, note) for note in death["notes"]) or "none"))
+
+    providers = cover_providers(trace)
+    print("  cover providers: " + ("; ".join(
+        f"{trace.name(guid)} {', '.join(COVER_SPELLS[spell] for spell in spells)}"
+        for guid, spells in sorted(providers.items(), key=lambda item: trace.name(item[0]))) or "none seen"))
+    explosions = explosion_rows(trace)
+    print(f"  star explosions: {len(explosions)}")
+    for row in explosions:
+        landed, resisted = hit_means(row["hits"])
+        cover = []
+        if row["guardians"]:
+            cover.append(f"Divine Guardian on {len(row['guardians'])}")
+        if row["mastery"]:
+            cover.append("Aura Mastery on " + ", ".join(trace.name(guid) for guid in row["mastery"]))
+        parts = [", ".join(cover) or "no cover"]
+        parts += [f"algalon.cover {clock(when)} {text} ({trace.name(guid)})" for when, guid, text in row["notes"]]
+        if row["ready"]:
+            parts.append(f"ready: {cover_label(trace, row['ready'])}")
+        if row["bang"]:
+            parts.append(f"Big Bang {row['bang']} casting")
+        mean = "-" if landed is None else f"{landed:,.0f}"
+        rs = "-" if resisted is None else f"{resisted:,.0f}"
+        print(f"    {clock(row['t']):>9} {len(row['hits']):3} hits, per hit {mean} landed, {rs} resisted;"
+              f" {'; '.join(parts)}")
+    for label, group in (("covered", [row for row in explosions if row["covered"]]),
+                         ("uncovered", [row for row in explosions if not row["covered"]])):
+        hits = [rec for row in group for rec in row["hits"]]
+        landed, resisted = hit_means(hits)
+        if landed is not None:
+            rs = "-" if resisted is None else f"{resisted:,.0f}"
+            print(f"  {label + ':':10} {len(group)} explosion(s), {len(hits)} hits, per hit {landed:,.0f} landed"
+                  f" (absorbs included), {rs} resisted")
+
+    held = held_sacrifices(trace)
+    print(f"  Divine Sacrifice up past {SACRIFICE_HELD_MS / 1000:.0f} s on a bot: " + ("; ".join(
+        f"{clock(row['t'])} {trace.name(row['caster'])}'s {row['held'] / 1000:.1f} s on"
+        f" {', '.join(sorted(trace.name(guid) for guid in row['bots']))}" for row in held) or "never"))
+
+
+def defensive_faults(trace: Trace) -> list[tuple[int, str]]:
+    out = []
+    for row in tank_deaths(trace):
+        if not row["up"] and not row["cast"] and not row["phased"]:
+            out.append((row["t"], f"{trace.name(row['guid'])} died @ {secs(row['t'])} with no damage cutter up and"
+                                  f" none cast on it in the {TANKHEAL_WINDOW_MS // 1000} s before"))
+    for row in held_sacrifices(trace):
+        out.append((row["t"], f"Divine Sacrifice from {trace.name(row['caster'])} up {row['held'] / 1000:.1f} s"
+                              f" @ {secs(row['t'])} on {', '.join(sorted(trace.name(guid) for guid in row['bots']))}"))
+    for row in explosion_rows(trace):
+        # The cover node stands down through a Big Bang cast, with the raid in the holes.
+        if row["ready"] and not row["bang"]:
+            out.append((row["t"], f"star explosion @ {secs(row['t'])} with no cover up, ready:"
+                                  f" {cover_label(trace, row['ready'])}"))
+    return out
+
+
 # ------------------------------------------------------------------------------------------ formation
 
 def parse_ring_slots(text: str) -> list[tuple[float, float, float]]:
@@ -3735,6 +4153,7 @@ def expected_probes(trace: Trace) -> dict[str, str]:
     if any(guid in samples.rows for guid in guids_of_entry(trace, NPC_UNLEASHED_DARK_MATTER)):
         out.setdefault("algalon.handler", "Unleashed Dark Matter spawned")
     out.update(tank_probes(trace))
+    out.update(defensive_probes(trace))
     # Calls go to humans only, so a bot-only raid writes none.
     if big_bang_casts(trace) and any(guid in trace.humans for guid in roster_guids(trace)):
         out["algalon.call"] = "a Big Bang was cast with a human in the raid"
@@ -3763,6 +4182,29 @@ def tank_probes(trace: Trace) -> dict[str, str]:
         out["algalon.tankhealer"] = "two healers or more, a bot among them"
     if any(guid not in trace.humans for guid in tank_healer_spans(trace)):
         out["algalon.tankheal"] = "a bot was a tank healer"
+    return out
+
+
+def defensive_probes(trace: Trace) -> dict[str, str]:
+    boss = boss_guid(trace)
+    if boss is None or boss not in samples_of(trace).rows:
+        return {}
+    out = {}
+    bots = {guid for guid in roster_guids(trace) if guid not in trace.humans}
+    casters = {(rec.get("s"), rec.get("sp")) for rec in trace.of("cast") if rec.get("s") in bots}
+    # The roster names no spec, so a ranged priest stands for a shadow priest with Dispersion.
+    if (any(class_of(trace, guid) in PRIEST_CLASS and trace.role(guid) == "ranged" for guid in bots)
+            or any(spell == SPELL_DISPERSION for _, spell in casters)):
+        out["algalon.disperser"] = "a shadow priest bot was in the raid"
+    if any(spell == SPELL_AURA_MASTERY for _, spell in casters):
+        out["algalon.shadowaura"] = "a paladin bot cast Aura Mastery"
+    if cover_providers(trace) and explosion_rows(trace):
+        out["algalon.cover"] = "a star exploded with a bot able to cover it"
+    # During a cast the soak's own nodes spend these buttons, and they write no note.
+    bangs = big_bang_casts(trace)
+    if any(save["caster"] in bots and save["target"] == victim_at(trace, save["t"])
+           and not any(cast["start"] <= save["t"] <= cast["end"] for cast in bangs) for save in tank_saves(trace)):
+        out["algalon.tankdef"] = "a bot put a damage cutter on the tank he was hitting"
     return out
 
 
@@ -3902,6 +4344,7 @@ def failures(trace: Trace) -> list[tuple[int | None, str]]:
     out += smash_faults(trace)
     out += tank_faults(trace)
     out += tankheal_faults(trace)
+    out += defensive_faults(trace)
 
     for when, guid in punched_out(trace):
         out.append((when, f"Phase Punch phased {trace.name(guid)} out @ {secs(when)}"))
@@ -3969,6 +4412,8 @@ SECTIONS = (
     ("tanks", "Phase Punch stacks, swaps, non-tank pickups, Quantum Strike", show_tanks),
     ("tankheal", "tank healers, each healer's share on the pair, Beacon, healing against damage before every tank"
                  " death", show_tankheal),
+    ("defensives", "damage cutters and Lay on Hands on the swap tanks, every swap tank death, cover at every star"
+                   " explosion", show_defensives),
     ("formation", "each ring bot's distance to its slot and to him, spot branches, stalls", show_formation),
     ("darkmatter", "phase 2 Unleashed Dark Matter: loose seconds, handler damage, kills", show_darkmatter),
     ("verdict", "one line per detected failure, in time order", show_verdict),

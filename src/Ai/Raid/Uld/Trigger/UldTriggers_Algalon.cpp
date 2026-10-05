@@ -18,12 +18,12 @@ using namespace EncounterHelpers;
 // Algalon the Observer
 //
 
-// Whoever holds him stays out and eats the hit: he resets the moment nobody alive is left unphased.
-// Big Bang is physical, so a tank's armour and a physical defensive do the work. The button follows
-// what the bot can cast, not its slot: a promoted backup is still a priest.
+// The soaker stays out and eats the hit: he resets the moment nobody alive is left unphased. Big Bang is
+// physical, so a tank's armour and a physical defensive do the work, for a tank with no hole in reach too.
+// The button follows what the bot can cast, not its slot: a promoted backup is still a priest.
 bool AlgalonBigBangSoakTrigger::IsActive()
 {
-    if (IsAlgalonPhased(bot) || !AlgalonBigBangLatched(bot) || !AlgalonStaysOut(bot))
+    if (IsAlgalonPhased(bot) || !AlgalonBigBangLatched(bot) || (!AlgalonStaysOut(bot) && !AlgalonTankCaughtOut(bot)))
         return false;
 
     int32 const remaining = AlgalonBigBangRemainingMs(botAI);
@@ -49,8 +49,9 @@ bool AlgalonBigBangExternalTrigger::IsActive()
     if (AlgalonBigBangRemainingMs(botAI) < ULDUAR_ALGALON_EXTERNAL_MIN_REMAINING_MS)
         return false;
 
+    // Dispersion leaves a priest about 6k of the hit; these belong on the tanks.
     Player* soaker = GetAlgalonBigBangSoaker(botAI);
-    if (!soaker || soaker == bot || GetAlgalonBigBangBackup(botAI) == bot)
+    if (!soaker || soaker == bot || GetAlgalonBigBangBackup(botAI) == bot || soaker->HasSpell(SPELL_ALGALON_DISPERSION))
         return false;
 
     return GetAlgalonSoakerExternal(botAI, soaker) != nullptr;
@@ -67,7 +68,7 @@ bool AlgalonSoakerPrepTrigger::IsActive()
     }
 
     Player* soaker = GetAlgalonBigBangSoaker(botAI);
-    if (!soaker || soaker == bot || IsAlgalonPhased(soaker))
+    if (!soaker || soaker == bot || IsAlgalonPhased(soaker) || soaker->HasSpell(SPELL_ALGALON_DISPERSION))
         return false;
 
     return GetAlgalonSoakerPrep(botAI, soaker) != nullptr;
@@ -117,6 +118,17 @@ bool AlgalonTankBeaconTrigger::IsActive()
 
     Player* target = GetAlgalonBeaconTarget(botAI);
     return target && botAI->CanCastSpell("beacon of light", target);
+}
+
+bool AlgalonTankDefensiveTrigger::IsActive() { return GetAlgalonTankCut(botAI).spellId != 0; }
+
+bool AlgalonExplosionCoverTrigger::IsActive() { return GetAlgalonExplosionCover(botAI) != nullptr; }
+
+bool AlgalonShadowAuraTrigger::IsActive()
+{
+    return IsAlgalonShadowAuraPaladin(bot) && AlgalonInPhaseOne(botAI) &&
+           !botAI->HasAura("shadow resistance aura", bot, false, true) &&
+           botAI->CanCastSpell("shadow resistance aura", bot);
 }
 
 bool AlgalonBigBangHideTrigger::IsActive() { return GetAlgalonHideRole(bot) == AlgalonHideRole::Run; }

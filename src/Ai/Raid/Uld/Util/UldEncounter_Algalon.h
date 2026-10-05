@@ -48,6 +48,13 @@ enum UlduarAlgalonIds
     SPELL_ALGALON_FORBEARANCE = 25771,
     SPELL_ALGALON_WEAKENED_SOUL = 6788,
     SPELL_ALGALON_ICE_BLOCK = 45438,
+    SPELL_ALGALON_AURA_MASTERY = 31821,
+    SPELL_ALGALON_DIVINE_SACRIFICE = 64205,
+    // Procced by the talent on a Divine Sacrifice cast: the raid within 30 yd takes 10/20% less for 6 s, and it
+    // stays when the sacrifice is cancelled.
+    SPELL_ALGALON_DIVINE_GUARDIAN = 70940,
+    SPELL_ALGALON_DIVINE_GUARDIAN_RANK_1 = 53527,
+    SPELL_ALGALON_DIVINE_GUARDIAN_RANK_2 = 53530,
 };
 
 // He casts Ascend the moment he leaves a 47 yd disc around home or drops under Z 410.
@@ -116,6 +123,25 @@ constexpr float ULDUAR_ALGALON_RESCUE_HP_PCT = 60.0f;
 constexpr float ULDUAR_ALGALON_RESCUE_LAY_ON_HANDS_PCT = 30.0f;
 // A healer still has one global cooldown to spend on the soaker before its walk to the hole.
 constexpr int32 ULDUAR_ALGALON_PREP_GCD_MS = 1500;
+// A bot in the field this long before the hit is phased by then: one field pulse and some slack. The handler
+// goes in this late while others still head for its hole, and a tank that can't make it stays out.
+constexpr int32 ULDUAR_ALGALON_LAST_IN_MARGIN_MS = 1500;
+// After the cast he holds still and his Quantum Strike and Phase Punch wait this long (EVENT_RESUME_UPDATING).
+constexpr uint32 ULDUAR_ALGALON_BIG_BANG_STILL_MS = 3000;
+// His swings run 8-23k and Quantum Strike ~10k on a ~44k tank, so from 60% one burst kills it in 1.3 s.
+constexpr float ULDUAR_ALGALON_TANK_DEFENSIVE_PCT = 60.0f;
+constexpr float ULDUAR_ALGALON_TANK_LAY_ON_HANDS_PCT = 25.0f;
+// Every tank death came 2-6 s after a star explosion or a meteor, with the healers on the raid. Through this
+// window the holder keeps a damage cutter up whatever its health.
+constexpr uint32 ULDUAR_ALGALON_TANK_WINDOW_LEAD_MS = 1000;
+constexpr uint32 ULDUAR_ALGALON_TANK_WINDOW_TAIL_MS = 5000;
+// After one bot casts a cutter, the aura takes a moment to show on the tank; nobody else casts in that time.
+constexpr uint32 ULDUAR_ALGALON_TANK_DEFENSIVE_CLAIM_MS = 1000;
+// Hand of Sacrifice and Divine Sacrifice move damage onto the paladin.
+constexpr float ULDUAR_ALGALON_SACRIFICE_MIN_PCT = 50.0f;
+// Aura Mastery and Divine Guardian last 6 s, so they go up this close to a star's forecast death.
+constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS = 2000;
+constexpr float ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT = 3.0f;
 // Healers pick by health %, and every explosion puts clothies below a tank losing ~15k/s, so the pair
 // gets healers of its own. Never more than the raid keeps: the star window waits for the raid to top up.
 constexpr uint8 ULDUAR_ALGALON_TANK_HEALERS_10 = 1;
@@ -314,6 +340,11 @@ struct AlgalonEncounterState
     RaidObs::ObsValue<uint32> bigBang{"algalon.bigbang"};
     RaidObs::ObsValue<ObjectGuid> bigBangSoaker{"algalon.soaker"};
     RaidObs::ObsValue<ObjectGuid> bigBangBackup{"algalon.backup"};
+    // A bot with Dispersion back for the next hit, latched outside the cast. Set, the tanks hide and keep their
+    // buttons for themselves; empty, a tank soaks and its buttons are reserved.
+    RaidObs::ObsValue<ObjectGuid> disperser{"algalon.disperser"};
+    // The paladin running Shadow Resistance Aura while stars live, so its Aura Mastery doubles it.
+    RaidObs::ObsValue<ObjectGuid> shadowAuraPaladin{"algalon.shadowaura"};
     RaidObs::ObsValue<bool> urgent{"algalon.urgent"};
     RaidObs::ObsValue<uint32> holeCount{"algalon.holes"};
     RaidObs::ObsValue<ObjectGuid> focusStar{"algalon.focusstar"};
@@ -344,6 +375,13 @@ struct AlgalonEncounterState
     ObjectGuid lastSoaker;
     // The Big Bang cycle the defensive hand-over was last traced for.
     uint32 handoverNoted = 0;
+    // Per hole, hiders still out during the cast, for the handler that goes in last.
+    std::unordered_map<ObjectGuid, uint8> hidersOut;
+    uint32 tankCutClaimMs = 0;
+    uint32 layOnHandsClaimMs = 0;
+    // The star the last explosion cover went up for.
+    ObjectGuid coverStar;
+    uint32 lastSmashImpactMs = 0;
 
     std::vector<AlgalonScanUnit> stars;
     std::vector<AlgalonScanUnit> holes;
@@ -426,6 +464,30 @@ char const* GetAlgalonTankHealSpell(PlayerbotAI* botAI, AlgalonTankHealPick cons
 // The swap tank he isn't hitting, unless this paladin's Beacon is already on it.
 Player* GetAlgalonBeaconTarget(PlayerbotAI* botAI);
 
+// A disperser is latched for the next hit: the tanks hide and keep their buttons for him.
+bool AlgalonDispersionSoak(Player* bot);
+// The cooldown casting it now would start, talents included.
+int32 AlgalonCooldownMs(Player* bot, uint32 spellId);
+
+// A damage cutter or Lay on Hands this bot puts on the holder now. Cheapest first and one at a time, so each
+// bot asks whether it is the first provider able to: the partner's Hand of Sacrifice, the holder's own
+// button, other paladins' Hand of Sacrifice, Pain Suppression, Guardian Spirit. Traced as algalon.tankdef.
+struct AlgalonTankCut
+{
+    Player* target = nullptr;
+    uint32 spellId = 0;
+    // "window" (raid damage due or just landed), "low" or "loh".
+    char const* why = nullptr;
+};
+AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI);
+void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut);
+
+// "aura mastery" or "divine sacrifice" when this paladin covers the star about to explode, else nullptr.
+char const* GetAlgalonExplosionCover(PlayerbotAI* botAI);
+void ClaimAlgalonExplosionCover(Player* bot, char const* cover);
+// Runs Shadow Resistance Aura while stars live.
+bool IsAlgalonShadowAuraPaladin(Player* bot);
+
 // What this bot does about the current Big Bang. Traced as algalon.hide.
 enum class AlgalonHideRole : uint8
 {
@@ -443,11 +505,12 @@ AlgalonHideRole GetAlgalonHideRole(Player* bot);
 // The Run branch alone, untraced and without latching a shelter, for rule predicates.
 bool AlgalonShouldRunForShelter(Player* bot);
 // How long this bot can still fight before it has to run for its hole; INT32_MAX when it has no hole to run
-// to or doesn't hide.
+// to, doesn't hide, or is a tank that can't reach one in time.
 int32 AlgalonHideSlackMs(Player* bot);
-// The soaker, the backup, and a handler holding constellations: one follows its victim into a hole
-// and closes it on the raid.
+// The soaker and the backup. A handler holding constellations hides last: they follow it in and close its hole.
 bool AlgalonStaysOut(Player* bot);
+// A tank still out with no hole it can reach before the hit, which takes it on its own button.
+bool AlgalonTankCaughtOut(Player* bot);
 bool AlgalonHoldsConstellation(Player* bot);
 // By spell id: CanCastSpell refuses during a channel, and a shadow priest is nearly always in Mind Flay.
 bool AlgalonCanDisperse(Player* bot);

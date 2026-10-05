@@ -1347,6 +1347,12 @@ const std::array<Position, ULDUAR_ALGALON_TOTAL_SLOTS> ULDUAR_ALGALON_RING_SLOTS
         self.assertIsNone(al.wave_dodge([("idle", 0, 9000)], wave))
         self.assertIsNone(al.wave_dodge([("min", 0, 900)], wave))
 
+    def test_tankdef_keeps_a_spell_named_in_several_words(self):
+        self.assertEqual(al.parse_tankdef("window 72 8101 Hand of Sacrifice"),
+                         ("window", 72.0, 8101, "Hand of Sacrifice"))
+        self.assertEqual(al.parse_tankdef("loh 18 8102 Lay on Hands"), ("loh", 18.0, 8102, "Lay on Hands"))
+        self.assertEqual(al.parse_tankdef(None), ("", None, 0, ""))
+
     def test_pull_reads_the_reach_count_and_the_victim(self):
         self.assertEqual(al.parse_pull("inreach=3 victim=5008"), (3, 5008))
         self.assertEqual(al.parse_pull("victim=5008"), (None, 5008))
@@ -1519,6 +1525,286 @@ class TankHeal(unittest.TestCase):
         expected = al.expected_probes(self.trace)
         self.assertIn("algalon.tankhealer", expected)
         self.assertIn("algalon.tankheal", expected)
+
+
+DF_TANK, DF_PARTNER, DF_HOLY, DF_RET, DF_DISC, DF_SHADE, DF_MAGE = range(8101, 8108)
+DF_STAR_A, DF_STAR_B, DF_HOLE_A, DF_HOLE_B = (CREATURE | n for n in (301, 302, 321, 322))
+DF_DEATH = 30000
+DF_BANG = 36000
+DF_END = 60000
+DF_HOME = {DF_TANK: (0, 0), DF_PARTNER: (3, 0), DF_HOLY: (0, 12), DF_RET: (2, 3), DF_DISC: (-6, 12),
+           DF_SHADE: (8, 15), DF_MAGE: (-8, 18)}
+DF_HOLE_B_SPOT = (20, 30)
+DF_NEW_KEYS = ("algalon.disperser", "algalon.shadowaura", "algalon.tankdef", "algalon.cover")
+DF_SPELLS = {64592: "Quantum Strike", 6940: "Hand of Sacrifice", 498: "Divine Protection", 871: "Shield Wall",
+             33206: "Pain Suppression", 48788: "Lay on Hands", 64205: "Divine Sacrifice", 70940: "Divine Guardian",
+             31821: "Aura Mastery", 47585: "Dispersion", 64122: "Black Hole Explosion", 64443: "Big Bang"}
+
+
+def buff(when: int, target: int, spell: int, caster: int, removed: bool = False) -> dict:
+    return {"t": when, "e": "aura", "d": target, "s": caster, "sp": spell, "r": int(removed), "st": 1,
+            "dur": 0 if removed else 10000, "p": 1}
+
+
+def worn(target: int, spell: int, caster: int, start: int, stop: int) -> list[dict]:
+    return [buff(start, target, spell, caster), buff(stop, target, spell, caster, True)]
+
+
+def blast(when: int, star: int, victim: int, amount: int, resisted: int, absorbed: int = 0) -> dict:
+    return {**dmg(when, star, victim, al.SPELL_BLACK_HOLE_EXPLOSION[0], amount), "ab": absorbed, "rs": resisted}
+
+
+def df_hp(guid: int, when: int) -> float:
+    if guid == DF_TANK:
+        return 0.0 if when >= DF_DEATH else 72.0 if when < 12000 else 55.0
+    if guid == DF_PARTNER:
+        return 0.0 if when >= 55000 else 20.0 if when >= 50000 else 80.0
+    return 30.0 if guid == DF_MAGE and when >= 44000 else 100.0
+
+
+def defensives_pull(drop: tuple[str, ...] = ()) -> list[dict]:
+    """A paladin holder whose Hand of Sacrifice and Divine Protection run out before his swings kill it; the
+    warrior partner takes him, holds the constellation through Big Bang and goes last into a hole that
+    closes behind it, then dies after Lay on Hands. A shadow priest soaks, the mage is caught out. One
+    explosion lands under the ret's Divine Guardian, whose Divine Sacrifice stays up 1.7 s; the other lands
+    uncovered with the holy paladin's Aura Mastery ready. `drop` leaves out the notes of those keys."""
+    roster = [
+        {"g": DF_TANK, "n": "Tanka", "r": "tank", "c": "paladin", "h": 0},
+        {"g": DF_PARTNER, "n": "Tankb", "r": "tank", "c": "warrior", "h": 0},
+        {"g": DF_HOLY, "n": "Holy", "r": "heal", "c": "paladin", "h": 0},
+        {"g": DF_RET, "n": "Ret", "r": "melee", "c": "paladin", "h": 0},
+        {"g": DF_DISC, "n": "Disc", "r": "heal", "c": "priest", "h": 0},
+        {"g": DF_SHADE, "n": "Shade", "r": "ranged", "c": "priest", "h": 0},
+        {"g": DF_MAGE, "n": "Mage", "r": "ranged", "c": "mage", "h": 0},
+    ]
+    covered = (DF_RET, DF_MAGE, DF_SHADE, DF_HOLY, DF_DISC)
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 1,
+         "boss": "algalon-the-observer", "roster": roster},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ALGALON, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        {"t": 1, "e": "unit", "g": DF_STAR_A, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star"},
+        {"t": 1, "e": "unit", "g": DF_STAR_B, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star"},
+        {"t": 1, "e": "unit", "g": DF_HOLE_A, "en": al.NPC_BLACK_HOLE, "n": "Black Hole"},
+        {"t": 1, "e": "unit", "g": DF_HOLE_B, "en": al.NPC_BLACK_HOLE, "n": "Black Hole"},
+        *({"t": 1, "e": "unit", "g": member["g"], "n": member["n"], "mhp": 30000} for member in roster),
+        *({"t": 1, "e": "spell", "sp": spell, "n": name} for spell, name in DF_SPELLS.items()),
+
+        note(1000, DF_TANK, "algalon.swappair", 1), note(1000, DF_PARTNER, "algalon.swappair", 1),
+        note(1000, DF_HOLY, "algalon.disperser", DF_SHADE), note(1000, DF_HOLY, "algalon.shadowaura", DF_HOLY),
+        note(1000, DF_HOLY, "algalon.handler", DF_PARTNER),
+
+        # The holder's cutters, a triggered echo and a holy paladin's own Divine Protection; a Pain
+        # Suppression claimed at 26 s never goes out.
+        cast(8000, DF_RET, al.SPELL_HAND_OF_SACRIFICE, DF_TANK),
+        {**cast(8000, DF_RET, al.SPELL_HAND_OF_SACRIFICE, DF_TANK), "tr": 1},
+        *worn(DF_TANK, al.SPELL_HAND_OF_SACRIFICE, DF_RET, 8000, 20000),
+        cast(9000, DF_HOLY, 498),
+        cast(15000, DF_TANK, 498), *worn(DF_TANK, 498, DF_TANK, 15000, 27000),
+        cast(25000, DF_PARTNER, 871), *worn(DF_PARTNER, 871, DF_PARTNER, 25000, 37000),
+        note(8000, DF_RET, "algalon.tankdef", f"window 72 {DF_TANK} Hand of Sacrifice"),
+        note(15000, DF_TANK, "algalon.tankdef", f"low 55 {DF_TANK} Divine Protection"),
+        note(26000, DF_DISC, "algalon.tankdef", f"window 60 {DF_TANK} Pain Suppression"),
+        dmg(23000, ALGALON, DF_TANK, 0, 9000, hp=70.0), dmg(25000, ALGALON, DF_TANK, 0, 15000, hp=60.0),
+        {**dmg(27500, ALGALON, DF_TANK, al.SPELL_QUANTUM_STRIKE[1], 12000, hp=35.0), "ab": 2000},
+        dmg(DF_DEATH, ALGALON, DF_TANK, 0, 14000, hp=0.0, over=3000),
+        death(DF_DEATH, DF_TANK, ALGALON, 14000, DF_HOME[DF_TANK]),
+
+        # Star A under Divine Guardian, star B with nothing up.
+        cast(18500, DF_RET, al.SPELL_DIVINE_SACRIFICE), note(18500, DF_RET, "algalon.cover", "divine sacrifice"),
+        *(rec for guid in (DF_RET, DF_MAGE) for rec in worn(guid, al.SPELL_DIVINE_SACRIFICE, DF_RET, 18500, 20200)),
+        *(rec for guid in covered for rec in worn(guid, al.SPELL_DIVINE_GUARDIAN, DF_RET, 18500, 24500)),
+        blast(20000, DF_STAR_A, DF_MAGE, 8000, 3000), blast(20000, DF_STAR_A, DF_SHADE, 8000, 3000),
+        blast(20000, DF_STAR_A, DF_HOLY, 8000, 3000), blast(20000, DF_STAR_A, DF_DISC, 6000, 3000, absorbed=2000),
+        blast(35000, DF_STAR_B, DF_MAGE, 12000, 2000), blast(35000, DF_STAR_B, DF_SHADE, 12000, 2000),
+        blast(35000, DF_STAR_B, DF_RET, 12000, 2000),
+
+        cast(DF_BANG, ALGALON, al.SPELL_BIG_BANG[0], cast_ms=8000),
+        note(DF_BANG, DF_HOLY, "algalon.bigbang", 1), note(44500, DF_HOLY, "algalon.bigbang", 0),
+        note(DF_BANG, DF_HOLY, "algalon.soaker", DF_SHADE), note(44500, DF_HOLY, "algalon.soaker", 0),
+        note(DF_BANG, DF_SHADE, "algalon.soakkit", "def=dispersion forbearance=0"),
+        note(DF_BANG, DF_SHADE, "algalon.hide", "soak"), note(44500, DF_SHADE, "algalon.hide", "none"),
+        note(DF_BANG, DF_MAGE, "algalon.hide", "wait"), note(41000, DF_MAGE, "algalon.hide", "run"),
+        note(DF_BANG, DF_PARTNER, "algalon.hide", "hold"), note(42500, DF_PARTNER, "algalon.hide", "run"),
+        note(43200, DF_PARTNER, "algalon.hide", "in"), note(45000, DF_PARTNER, "algalon.hide", "none"),
+        note(42500, DF_PARTNER, "algalon.shelter", DF_HOLE_B), note(43300, DF_HOLY, "algalon.holelost", "bigbang"),
+        *(note(when, guid, "algalon.hide", value) for guid in (DF_HOLY, DF_DISC, DF_RET)
+          for when, value in ((DF_BANG, "wait"), (40000, "run"), (41000, "in"), (45000, "none"))),
+        *(rec for guid in (DF_HOLY, DF_DISC, DF_RET) for rec in phased(guid, al.SPELL_BLACK_HOLE_PHASE, 41000, 45000)),
+        *phased(DF_PARTNER, al.SPELL_BLACK_HOLE_PHASE, 43200, 45000),
+        cast(43000, DF_SHADE, al.SPELL_DISPERSION),
+        dmg(44000, ALGALON, DF_SHADE, al.SPELL_BIG_BANG[0], 6000, hp=80.0),
+        dmg(44000, ALGALON, DF_MAGE, al.SPELL_BIG_BANG[0], 20000, hp=30.0),
+
+        # The partner, after the hit.
+        cast(46000, DF_DISC, al.SPELL_PAIN_SUPPRESSION, DF_PARTNER),
+        *worn(DF_PARTNER, al.SPELL_PAIN_SUPPRESSION, DF_DISC, 46000, 54000),
+        note(46000, DF_DISC, "algalon.tankdef", f"window 80 {DF_PARTNER} Pain Suppression"),
+        cast(50000, DF_HOLY, 48788, DF_PARTNER),
+        note(50000, DF_HOLY, "algalon.tankdef", f"loh 20 {DF_PARTNER} Lay on Hands"),
+        cast(50000, DF_HOLY, al.SPELL_AURA_MASTERY), *worn(DF_HOLY, al.SPELL_AURA_MASTERY, DF_HOLY, 50000, 56000),
+        dmg(54000, ALGALON, DF_PARTNER, 0, 15000, hp=5.0), dmg(55000, ALGALON, DF_PARTNER, 0, 12000, hp=0.0, over=4000),
+        death(55000, DF_PARTNER, ALGALON, 12000, DF_HOME[DF_PARTNER]),
+        {"t": DF_END, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, DF_END, 500):
+        units = [row(guid, offset, df_hp(guid, when), ALGALON) for guid, offset in DF_HOME.items()]
+        units.append(row(ALGALON, (0, 4), 90.0, DF_TANK if when < DF_DEATH else DF_PARTNER))
+        if 20500 <= when:
+            units.append(row(DF_HOLE_A, (-20, 30), 100.0, 0))
+        if 35500 <= when <= 43000:
+            units.append(row(DF_HOLE_B, DF_HOLE_B_SPOT, 100.0, 0))
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return [rec for rec in records if rec.get("e") != "note" or rec.get("k") not in drop]
+
+
+class Defensives(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, defensives_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_saves_on_a_swap_tank_read_its_health_its_fate_and_the_note(self):
+        self.assertEqual([(save["t"], save["caster"], save["target"], save["name"], save["hp"], save["died"],
+                           save["why"]) for save in al.tank_saves(self.trace)], [
+            (8000, DF_RET, DF_TANK, "Hand of Sacrifice", 72.0, None, "window"),
+            (15000, DF_TANK, DF_TANK, "Divine Protection", 55.0, None, "low"),
+            (25000, DF_PARTNER, DF_PARTNER, "Shield Wall", 80.0, None, None),
+            (46000, DF_DISC, DF_PARTNER, "Pain Suppression", 80.0, 55000, "window"),
+            (50000, DF_HOLY, DF_PARTNER, "Lay on Hands", 20.0, 55000, "loh")])
+
+    def test_a_tank_death_reads_its_hits_the_cutters_up_and_the_notes(self):
+        first, second = al.tank_deaths(self.trace)
+        self.assertEqual((first["guid"], first["cause"], first["phased"], first["up"], first["cast"]),
+                         (DF_TANK, "Algalon on tank", False, [], []))
+        self.assertEqual([rec["t"] for rec in first["hits"]], [25000, 27500, DF_DEATH])
+        self.assertEqual([(note["t"], note["caster"], note["why"], note["pct"], note["name"])
+                          for note in first["notes"]], [(26000, DF_DISC, "window", 60.0, "Pain Suppression")])
+        self.assertEqual([save["name"] for save in second["cast"]], ["Lay on Hands"])
+        self.assertEqual([note["why"] for note in second["notes"]], ["window", "loh"])
+
+    def test_an_explosion_is_covered_by_divine_guardian_or_aura_mastery(self):
+        covered, bare = al.explosion_rows(self.trace)
+        self.assertEqual((covered["t"], len(covered["guardians"]), covered["mastery"], covered["covered"],
+                          covered["notes"], covered["ready"]),
+                         (20000, 5, [], True, [(18500, DF_RET, "divine sacrifice")], []))
+        self.assertEqual((al.hit_means(covered["hits"]), al.hit_means(bare["hits"])), ((8000, 3000), (12000, 2000)))
+        # Ret's Divine Sacrifice is on cooldown, the holy paladin's Aura Mastery is not.
+        self.assertEqual((bare["covered"], bare["ready"]), (False, [(DF_HOLY, al.SPELL_AURA_MASTERY)]))
+
+    def test_the_faults_name_the_bare_death_the_held_sacrifice_and_the_uncovered_explosion(self):
+        self.assertEqual([line for _, line in al.defensive_faults(self.trace)], [
+            "Tanka died @ 30.0s with no damage cutter up and none cast on it in the 6 s before",
+            "Divine Sacrifice from Ret up 1.7 s @ 18.5s on Mage, Ret",
+            "star explosion @ 35.0s with no cover up, ready: Holy's Aura Mastery"])
+
+    def test_big_bang_reads_the_dispersion_soak_and_the_handler_going_in_last(self):
+        (row,) = al.big_bang_rows(self.trace)
+        self.assertEqual((row["soaker"], row["kind"], row["stray"], row["lost"]),
+                         (DF_SHADE, "dispersion", [DF_MAGE], [(43300, "bigbang")]))
+        (handler,) = row["handlers"]
+        self.assertEqual((handler["guid"], handler["hold"], handler["went"], handler["hole"], handler["phased"]),
+                         (DF_PARTNER, DF_BANG, 42500, DF_HOLE_B, True))
+        hole = spot(*DF_HOLE_B_SPOT)
+        bang = render(self.trace, "bigbang")
+        self.assertIn(f"on hold: Tankb from 0:36.000, went 0:42.500, 1.5 s before the impact, hole"
+                      f" ({hole[0]:.0f},{hole[1]:.0f}) 34.5 yd; phased at the impact", bang)
+        self.assertIn("algalon.holelost during the cast: 0:43.300 bigbang", bang)
+        soak = render(self.trace, "soak")
+        self.assertIn("soaker Shade (ranged), dispersion soak:", soak)
+        self.assertIn("hit unphased besides the soaker and backup: Mage 20,000 (hide run)", soak)
+
+    def test_the_verdict_takes_the_new_lines_and_frees_what_the_reserve_let_through(self):
+        lines = [line for _, line in al.failures(self.trace)]
+        for line in ("Tanka died @ 30.0s with no damage cutter up and none cast on it in the 6 s before",
+                     "Big Bang 1 @ 36.0s: 1 non-soaker hit unphased (Mage)",
+                     "star explosion @ 35.0s with no cover up, ready: Holy's Aura Mastery"):
+            self.assertIn(line, lines)
+        self.assertEqual(al.soak_faults(self.trace), [])
+
+    def test_the_new_probes_are_owed_and_written(self):
+        expected = al.expected_probes(self.trace)
+        for key in DF_NEW_KEYS:
+            self.assertIn(key, expected)
+        missing = next((line for _, line in al.failures(self.trace) if line.startswith("missing probes")), "")
+        self.assertFalse([key for key in DF_NEW_KEYS if key in missing])
+
+    def test_the_section_lists_saves_deaths_explosions_and_the_held_sacrifice(self):
+        text = render(self.trace, "defensives")
+        for line in ("0:08.000 Ret Hand of Sacrifice -> Tanka at 72%, lived 10 s, algalon.tankdef window",
+                     "0:50.000 Holy Lay on Hands -> Tankb at 20%, died +5.0 s, algalon.tankdef loh",
+                     "0:30.000 Tanka (tank), Algalon on tank",
+                     "cutters up: none; cast on it in the 6 s before: none",
+                     "algalon.tankdef in the 10 s before: 0:26.000 Disc window 60% Pain Suppression",
+                     "cover providers: Holy Aura Mastery; Ret Divine Sacrifice",
+                     "0:20.000   4 hits, per hit 8,000 landed, 3,000 resisted; Divine Guardian on 5; algalon.cover"
+                     " 0:18.500 divine sacrifice (Ret)",
+                     "covered:   1 explosion(s), 4 hits, per hit 8,000 landed (absorbs included), 3,000 resisted",
+                     "uncovered: 1 explosion(s), 3 hits, per hit 12,000 landed (absorbs included), 2,000 resisted",
+                     "Divine Sacrifice up past 1 s on a bot: 0:18.500 Ret's 1.7 s on Mage, Ret"):
+            self.assertIn(line, text)
+        self.assertNotIn("\n  absent from this trace", text)
+
+
+class OlderDefensives(unittest.TestCase):
+    """The same pull as a trace from before the Dispersion soak, the tank defensive node and the cover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, defensives_pull(drop=DF_NEW_KEYS + ("algalon.soakkit",)))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_records_still_name_the_soak_the_saves_and_the_cover(self):
+        (row,) = al.big_bang_rows(self.trace)
+        self.assertEqual(row["kind"], "dispersion")
+        self.assertEqual([save["why"] for save in al.tank_saves(self.trace)], [None] * 5)
+        self.assertEqual(al.cover_providers(self.trace),
+                         {DF_HOLY: [al.SPELL_AURA_MASTERY], DF_RET: [al.SPELL_DIVINE_SACRIFICE]})
+        self.assertIn("star explosion @ 35.0s with no cover up, ready: Holy's Aura Mastery",
+                      [line for _, line in al.defensive_faults(self.trace)])
+
+    def test_without_the_disperser_the_reserve_holds_the_tank_buttons(self):
+        self.assertEqual([line for _, line in al.soak_faults(self.trace)], [
+            "Tanka spent Divine Protection @ 15.0s, outside a Big Bang soak",
+            "Tankb spent Shield Wall @ 25.0s, outside a Big Bang soak"])
+
+    def test_the_verdict_owes_every_new_key(self):
+        missing = next(line for _, line in al.failures(self.trace) if line.startswith("missing probes"))
+        for key in DF_NEW_KEYS:
+            self.assertIn(key, missing)
+        self.assertIn("absent from this trace: algalon.tankdef, algalon.cover, algalon.shadowaura",
+                      render(self.trace, "defensives"))
+
+
+class DispersionEra(unittest.TestCase):
+    """The synthetic pull written after the Dispersion soak: `hold` no longer keeps a handler out."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, algalon_pull() + [note(8000, MERCY, "algalon.disperser", 0)])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_handler_hit_on_hold_counts(self):
+        first = al.big_bang_rows(self.trace)[0]
+        self.assertEqual((first["kind"], first["stray"]), ("tank", [AEGIS, TRUESHOT]))
+        self.assertEqual([(handler["guid"], handler["hold"], handler["went"], handler["phased"])
+                          for handler in first["handlers"]], [(AEGIS, 40000, None, False)])
+        self.assertIn("Big Bang 1 @ 40.0s: 2 non-soakers hit unphased (Aegis, Trueshot)",
+                      [line for _, line in al.failures(self.trace)])
+        self.assertIn("on hold: Aegis from 0:40.000, still on hold at the impact, hole -; unphased at the impact",
+                      render(self.trace, "bigbang"))
 
 
 class EveryView(unittest.TestCase):

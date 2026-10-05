@@ -70,6 +70,33 @@ public:
     bool Execute(Event event) override;
 };
 
+class AlgalonTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon tank defensive action";
+
+    AlgalonTankDefensiveAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
+class AlgalonExplosionCoverAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon explosion cover action";
+
+    AlgalonExplosionCoverAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
+class AlgalonShadowAuraAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon shadow aura action";
+
+    AlgalonShadowAuraAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
 class AlgalonBigBangHideAction : public MovementAction
 {
 public:

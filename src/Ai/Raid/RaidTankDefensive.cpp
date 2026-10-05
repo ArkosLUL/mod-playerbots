@@ -44,10 +44,14 @@ struct TankDefensive
     uint32 windowMs;
     uint8 cutPct;
     bool tank;
+    // The buff when the cast is a dummy that triggers it: Last Stand 12975 puts up 12976.
+    uint32 auraId = 0;
+
+    uint32 AuraSpell() const { return auraId ? auraId : spellId; }
 };
 
 std::array<TankDefensive, 11> const TANK_DEFENSIVES = { {
-    { CLASS_WARRIOR, "last stand", 12975, false, 20000, 0, true },                // 180s
+    { CLASS_WARRIOR, "last stand", 12975, false, 20000, 0, true, 12976 },         // 180s
     { CLASS_WARRIOR, "shield wall", 871, false, 12000, 60, true },                // 300s
     { CLASS_PALADIN, "divine protection", 498, false, 12000, 50, true },          // 180s
     { CLASS_DRUID, "barkskin", 22812, false, 12000, 20, true },                   //  60s
@@ -83,7 +87,7 @@ TankDefensive const* PickDefensive(PlayerbotAI* botAI, Player* bot, bool physica
 
         // One at a time: anything still running means the bot is already covered, and stacking the
         // next one on top spends two buttons on one window.
-        if (bot->HasAura(entry.spellId))
+        if (bot->HasAura(entry.AuraSpell()))
         {
             running = true;
             return &entry;
@@ -166,7 +170,7 @@ char const* RunningTankDefensive(Player* bot, bool physicalOnly, uint32 forMs)
         if (!entry.tank || entry.playerClass != bot->getClass() || (physicalOnly && entry.magicOnly))
             continue;
 
-        Aura const* aura = bot->GetAura(entry.spellId);
+        Aura const* aura = bot->GetAura(entry.AuraSpell());
         if (aura && (aura->GetDuration() < 0 || static_cast<uint32>(aura->GetDuration()) >= forMs))
             return entry.castName;
     }
