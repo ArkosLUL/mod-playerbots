@@ -200,6 +200,15 @@ public:
     bool IsActive() override;
 };
 
+class AlgalonStarTrimTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon star trim";
+
+    AlgalonStarTrimTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 class AlgalonStarTeamTrigger : public Trigger
 {
 public:

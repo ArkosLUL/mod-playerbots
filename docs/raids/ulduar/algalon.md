@@ -17,7 +17,7 @@ leaving it casts Ascend, so nothing may pull him or a tank past the edge. His de
 | His melee | combat reach 9 (model 28641), so **11.83 yd** on a player; runs 15 yd/s | Nobody but the swap tanks inside it |
 | Quantum Strike | 64395, every 3-4.5 s, 15.7-17.3 k / 34-36 k physical | Two tanks or nothing |
 | Phase Punch | 64412, every 15.5 s, 45 s aura, 5th stack phases the tank 10 s (64417) | Swap at **4** |
-| Collapsing Star | 32955, 117 k / 234 k, every 60 s, tops up to 4 alive | Star team kills one at a time; each death is Black Hole Explosion on everyone unphased, 16.1-16.9 k / 20.5-21.5 k shadow |
+| Collapsing Star | 32955, 117 k / 234 k, every 60 s, tops up to 4 alive | Timed to die under Big Bang, else the star team kills one at a time; each death is Black Hole Explosion on everyone unphased, 16.1-16.9 k / 20.5-21.5 k shadow |
 | Black Hole / Worm Hole | 32953 / 34099, 6 yd field (62168 / 65250) pulsing every second, no target cap | Phases for 10 s plus the 62169 DoT (~17.5 k) |
 | Cosmic Smash | markers 33104/33105, impact ~4.8 s later, 1 / 3 meteors, 41.4-43.6 k / 53.6-56.4 k fire | `< 6` yd full, `6-10` `dmg/dist*2`, `>= 10` `dmg/dist` |
 | Living Constellation | 33052, 11 total, 3 activate every 50 s | Handler collects them, spends spare holes on them |
@@ -120,7 +120,42 @@ far-hole approach. The swap tanks have none.
 *entering* combat on `InSamePhase`, and `ThreatManager` only marks phased entries offline: he re-picks
 the top unphased entry when the phase drops.
 
-## Stars: an assigned team, paced
+## Stars: under Big Bang, else paced
+
+**Stars die under Big Bang** ("killing stars under"): Black Hole Explosion only hits its caster's phase, so one
+dying while the raid hides hits the soaker alone, ~2 k in Dispersion. Across three pulls explosions killed 42 of
+77, each lost 8-13 to one dying after the first cast, and with 4 healers the raid never refilled between them.
+The drain is exact: Collapse (62018) deals `CountPctFromMaxHealth(1)` a second on a clock from the spawn, so the
+scan reads health, that tick and the time to the next (`GetPeriodicTimer`) and knows the second it dies
+untouched. The window is hit − 2 s to hit + 0.6 s (64445 strips the phase a second after the hit), re-anchored
+on the real cast and kept until 1.2 s after the hit; a star's band is the health (lo, hi] that dies on a tick in
+it.
+
+| Wave (T0 = intro end) | Spawn | Untouched death | Plan |
+|---|---|---|---|
+| 1 | 16.5 s, 4 | 116.5 | one shelter kill, 3 under Big Bang 1 (hit 98), ~18.5% extra each |
+| 2 | 76.5 s, 1 | 176.5, before Big Bang 2's hit (188.5) | under Big Bang 1 (~78% in ~20 s), else paced |
+| 3 | 136.5 s, 4 | 236.5 | under Big Bang 2, ~48% each |
+| 4 | 196.5 s, 4 | 296.5 | under Big Bang 3, ~17.5% each |
+
+- **Plan**, per tick outside the cast, only with a disperser latched (a tank soaker would take each explosion
+  whole): every star whose drain death isn't before the window, while the team's work fits before the cast less
+  6 s for the trims (at its speed less the drain, which moves the band), smallest first; the rest are paced.
+- **Shelter**: with no hole at all, the star nearest the hold spot is paced dead before the cast.
+- Pacing and `urgent` ignore under-stars (`urgent` takes one only when nothing else is left).
+- **Bulk** (`algalon.starwindow` `under`): with no paced kill, the team takes the under-star with most left down
+  to its band plus 8% (casts in flight), once the work left plus 20 s reaches the cast; DoTs and channels are held
+  on under-stars (the target guard), since they keep hitting.
+- **Trim**: a bot with a wand (Shoot 5019), the team's first, takes each finished one into its band, live from
+  the star's own clock; the tick stops any wand on a star the team isn't killing that isn't a trimmer's above its
+  band. Running for its hole it stops; the soaker trims only well before its Dispersion, and no wand starts over a
+  channel (it would cancel it).
+- **Hide**: with a star under, every margin (handler and tanks included) gains 2.5 s, stretched so all are in
+  1.5 s before the earliest drain death, capped at 4 s.
+- Phased bots keep 8 yd off an under-star in its last 3 s (exit and leave trigger): its hole lands under them at
+  the strip.
+
+**Paced**, the rest:
 
 Collapse drains **1 % of max health per second**, so an untouched star dies after ~100 s, and the 60 s
 summon only tops up to four: four ignored stars explode within seconds of each other. A latched **star
@@ -457,20 +492,23 @@ last), `algalon.kite`
 path over a hole was clear),
 `algalon.defensive` (the pick, on change only). `algalon.tankrole`
 (`hold`/`yield`/`take`/`call`/`out`/`none`) per pair bot and `algalon.starwindow`
-(`urgent`/`bigbang`/`smash`/`prebang`/`spacing`/`gap`/`deadline`/`raidhp`/`near`/`open`/`none`; `smash`, `prebang` and
+(`urgent`/`under`/`bigbang`/`smash`/`prebang`/`spacing`/`gap`/`deadline`/`raidhp`/`near`/`open`/`none`; `smash`, `prebang` and
 `spacing` name what a kill's finish would land on: an impact, the Big Bang window, another star's death) are
 computed in the tick; the window is
 written on the tracker bot, since the tick runs on whichever bot comes first, with `algalon.starplan` on each
 change: every star's guid counter, health and forecast death, soonest first, then the merged blackouts, in
-seconds from now (`2136 28% 3s, 2133 85% 83s | smash 2..11 | prebang 59..71`).
+seconds from now (`2136 28% 3s, 2133 85% 83s u | smash 2..11 | prebang 59..71 | under 66..69`; `u` an
+under-star at its drain death, `s` the shelter star).
 
 Events: `algalon.holelost` (`kite`/`stray`/`phase2`/`bigbang`, the last a hole lost during the cast), one per hole, skipped when every summon goes at
-once on a kill or Ascend; `algalon.stardeath` (`killed` as the focus star, `drained` within 3% of its
+once on a kill or Ascend; `algalon.stardeath` (`under`/`early`/`late` for an under-star inside, before or after
+its window, else `killed` as the focus star, `drained` within 3% of its
 drain-only health, else `chewed`, and the nearest raid member's distance; older traces say `collapsed`), the
 only record of how a star died, since damage rows cover players alone; `algalon.soakkit`
 (`def=<button|dispersion|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.tankdef`
 (`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
-(`aura mastery`/`divine sacrifice` on the caster); `algalon.personal` (the button's spell name);
+(`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (`start|stop <star counter> <hp%>` on the
+wand); `algalon.personal` (the button's spell name);
 `algalon.nitro` (`hide` on a bot using its boots on the
 run); `algalon.handover` (`nodef` on a
 holder handing him over for want of a defensive); `algalon.pull`
@@ -506,7 +544,11 @@ counted by cause and role with humans starred. Then:
   and spell;
 - `--defensives`: every cutter, Lay on Hands and Guardian Spirit on a swap tank with its health and whether it
   lived 10 s; per tank death its last 6 s of hits, cutters up and `algalon.tankdef`; per explosion the cover
-  up and damage covered against uncovered;
+  up and damage covered against uncovered; per explosion death the personal buttons pressed or ready;
+  `window` cutters on a holder at 80% or more;
+- `--stars` also: per star its plan, window, forecast against actual death, offset from the hit, who its
+  explosion hit unphased and its trims; `--constellations` the kite runs (stages, retries, eaten) and parked
+  stretches with none eaten; `--bigbang` Nitro Boosts per hider;
 - `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
 - `--tankheal`: the tank healers, each healer's share on the pair, itself and others, Beacon time on holder
   and partner, and per tank death the 6 s / 2 s damage against healing, shields and healing elsewhere, with

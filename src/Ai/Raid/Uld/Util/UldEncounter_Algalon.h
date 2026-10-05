@@ -49,6 +49,9 @@ enum UlduarAlgalonIds
     SPELL_ALGALON_FORBEARANCE = 25771,
     SPELL_ALGALON_WEAKENED_SOUL = 6788,
     SPELL_ALGALON_ICE_BLOCK = 45438,
+    // The star's drain: CountPctFromMaxHealth(1) every 1000 ms from its spawn.
+    SPELL_ALGALON_COLLAPSE = 62018,
+    SPELL_ALGALON_WAND_SHOOT = 5019,
     SPELL_ALGALON_AURA_MASTERY = 31821,
     SPELL_ALGALON_DIVINE_SACRIFICE = 64205,
     // Procced by the talent on a Divine Sacrifice cast: the raid within 30 yd takes 10/20% less for 6 s, and it
@@ -202,6 +205,30 @@ constexpr float ULDUAR_ALGALON_RUN_SPEED = 7.0f;
 constexpr float ULDUAR_ALGALON_FAR_HOLE_YARDS = 35.0f;
 constexpr float ULDUAR_ALGALON_NEAR_HOLE_STANDOFF = 30.0f;
 constexpr uint32 ULDUAR_ALGALON_FAR_HOLE_SECONDS = 15;
+
+// Stars die under Big Bang: Black Hole Explosion only hits its caster's phase, so a star dying while the raid
+// is phased hits the soaker alone, in Dispersion. The drain is exact, a tick a second from the spawn, so the
+// death lands on a tick inside this window round the hit; 64445 strips the phase a second after it.
+constexpr int32 ULDUAR_ALGALON_UNDER_LEAD_MS = 2000;
+constexpr int32 ULDUAR_ALGALON_UNDER_TAIL_MS = 600;
+// With a star under, every hider goes in this much earlier: the last were phased only 0.2-0.6 s before the
+// hit. Stretched so they are in a pulse and a half before the earliest such death, up to the cap.
+constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_EXTRA_MS = 2500;
+constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_STRETCH_MS = 4000;
+constexpr int32 ULDUAR_ALGALON_UNDER_DEATH_LEAD_MS = 1500;
+// The team brings a star to this far above its band (% of max health), since casts in flight land after it
+// stops, and a wand trims the rest; the plan keeps the trims this long before the cast.
+constexpr float ULDUAR_ALGALON_UNDER_BULK_BUFFER_PCT = 8.0f;
+constexpr int32 ULDUAR_ALGALON_UNDER_TRIM_ALLOWANCE_MS = 6000;
+constexpr float ULDUAR_ALGALON_UNDER_TRIM_RANGE = 28.0f;
+// The plan holds until the strip is past, and phased bots keep clear of an under-star its last seconds.
+constexpr uint32 ULDUAR_ALGALON_UNDER_KEEP_MS = 1200;
+constexpr int32 ULDUAR_ALGALON_UNDER_DYING_MS = 3000;
+// The team's speed until it shows one, and its walk and start per star. The bulk starts once the work left
+// plus this slack reaches the cast, so the trims have time and a low star sits exposed to splash no longer.
+constexpr float ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC = 7.0f;
+constexpr int32 ULDUAR_ALGALON_UNDER_SWITCH_MS = 3000;
+constexpr int32 ULDUAR_ALGALON_UNDER_BULK_SLACK_MS = 20000;
 
 // Collapsing Star pacing. Each death is Black Hole Explosion on everyone unphased (64122 up to 16,912,
 // 65108 up to 21,525), and Collapse drains 1% max health a second, so four ignored stars explode within
@@ -388,6 +415,16 @@ struct AlgalonScanUnit
     // covers ULDUAR_ALGALON_STAR_LOG_MIN_MS.
     float lossPctPerSec = ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC;
     bool lossMeasured = false;
+    // Stars only, at the scan: health, the drain per tick and the time to the next tick.
+    uint32 health = 0;
+    uint32 tickHp = 0;
+    int32 nextTickMs = 0;
+    // Planned to die under the coming Big Bang, and its band for that, from this scan: (underLo, underHi].
+    bool under = false;
+    uint32 underLo = 0;
+    uint32 underHi = 0;
+    // An under-star in its last seconds: phased bots keep clear, since it dies where they'd stand at the strip.
+    bool underDying = false;
 };
 
 struct AlgalonEncounterState
@@ -447,6 +484,14 @@ struct AlgalonEncounterState
     std::unordered_map<ObjectGuid, ObjectGuid> personalStars;
     // Bots whose Nitro Boosts were ready at the cast start: their hide walk is timed boosted.
     std::unordered_set<ObjectGuid> nitroRunners;
+    // Stars planned to die under the coming or running cast, frozen through it, and the window (absolute ms).
+    std::unordered_set<ObjectGuid> underStars;
+    uint32 underFromMs = 0;
+    uint32 underToMs = 0;
+    // With no hole at all, the star killed before the cast to make one.
+    ObjectGuid shelterStar;
+    // Per under-star, the bot trimming it with a wand.
+    std::unordered_map<ObjectGuid, ObjectGuid> trimmers;
     uint32 lastSmashImpactMs = 0;
 
     std::vector<AlgalonScanUnit> stars;
@@ -551,6 +596,12 @@ void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut);
 // "aura mastery" or "divine sacrifice" when this paladin covers the star about to explode, else nullptr.
 char const* GetAlgalonExplosionCover(PlayerbotAI* botAI);
 void ClaimAlgalonExplosionCover(Player* bot, char const* cover);
+// The under-star this bot trims with its wand now, or nullptr: assigned to it, above its band and not too
+// close to its bottom.
+Unit* GetAlgalonTrimStar(Player* bot);
+bool AlgalonStarPlannedUnder(Player* bot, ObjectGuid const& star);
+// A star dying under the running cast within `radius`: where a phased bot would come back inside a new hole.
+bool AlgalonUnderStarNear(Player* bot, float radius);
 // This bot's own button against the star about to die, when the hit would kill it; 0 otherwise.
 uint32 GetAlgalonExplosionPersonal(PlayerbotAI* botAI);
 void ClaimAlgalonExplosionPersonal(Player* bot, uint32 spellId);

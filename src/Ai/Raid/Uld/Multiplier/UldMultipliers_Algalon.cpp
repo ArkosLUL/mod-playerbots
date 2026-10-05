@@ -70,6 +70,25 @@ float AlgalonTargetGuardMultiplier::GetValue(Action* action)
     if (!target)
         return 1.0f;
 
+    if (target->GetEntry() == PB_NPC_COLLAPSING_STAR && AlgalonStarPlannedUnder(bot, target->GetGUID()))
+    {
+        auto lingering = lingers.find(action);
+        if (lingering == lingers.end())
+        {
+            CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+            uint32 const spellId =
+                spellAction ? context->GetValue<uint32>("spell id", spellAction->getSpell())->Get() : 0;
+            SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+            bool const lasts = info && (info->IsChanneled() || info->HasAura(SPELL_AURA_PERIODIC_DAMAGE) ||
+                                        info->HasAura(SPELL_AURA_PERIODIC_LEECH) ||
+                                        info->HasAura(SPELL_AURA_PERIODIC_DAMAGE_PERCENT));
+            lingering = lingers.emplace(action, lasts).first;
+        }
+
+        if (lingering->second)
+            return 0.0f;
+    }
+
     switch (target->GetEntry())
     {
         case PB_NPC_ALGALON:

@@ -23,6 +23,8 @@ public:
 
 private:
     std::unordered_map<Action*, bool> damagesCurrentTarget;
+    // DoTs and channels keep hitting after the team stops, so none goes on a star planned under Big Bang.
+    std::unordered_map<Action*, bool> lingers;
 };
 
 // Algalon: Dispersion is kept for Big Bang. With it latched for the next hit the tanks hide and their buttons

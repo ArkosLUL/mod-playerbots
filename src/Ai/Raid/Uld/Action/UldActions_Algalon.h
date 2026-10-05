@@ -216,6 +216,15 @@ private:
     Position _walk;
 };
 
+class AlgalonStarTrimAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon star trim action";
+
+    AlgalonStarTrimAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
 class AlgalonStarTeamAction : public AttackAction
 {
 public:

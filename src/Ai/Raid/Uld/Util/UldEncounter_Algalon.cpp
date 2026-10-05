@@ -27,6 +27,7 @@
 #include "ServerFacade.h"
 #include "SharedDefines.h"
 #include "Spell.h"
+#include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -407,6 +408,11 @@ void ScanRoom(Player* bot, Creature* boss, AlgalonEncounterState& state, uint32 
                 auto const seen = state.starSeenMs.find(unit.guid);
                 unit.firstSeenMs = seen != state.starSeenMs.end() ? seen->second : now;
                 starSeenMs[unit.guid] = unit.firstSeenMs;
+                unit.health = creature->GetHealth();
+                unit.tickHp = std::max<uint32>(1, creature->CountPctFromMaxHealth(1));
+                if (AuraEffect const* drain = creature->GetAuraEffect(SPELL_ALGALON_COLLAPSE, EFFECT_0))
+                    unit.nextTickMs = std::max(0, drain->GetPeriodicTimer());
+                unit.under = state.underStars.count(unit.guid) > 0;
                 LogStarHealth(state, unit, now, starHealthLog);
                 state.stars.push_back(unit);
                 break;
@@ -471,7 +477,14 @@ void ScanRoom(Player* bot, Creature* boss, AlgalonEncounterState& state, uint32 
 
             float const drainedTo = 100.0f - static_cast<float>(getMSTimeDiff(star.firstSeenMs, now)) / IN_MILLISECONDS;
             char const* cause = "chewed";
-            if (star.guid == state.focusStar.Get())
+            if (star.under)
+            {
+                // Before, inside or after the window it was planned to die in.
+                int32 const sinceFrom = static_cast<int32>(now - state.underFromMs);
+                int32 const sinceTo = static_cast<int32>(now - state.underToMs);
+                cause = sinceFrom < 0 ? "early" : (sinceTo > 0 ? "late" : "under");
+            }
+            else if (star.guid == state.focusStar.Get())
                 cause = "killed";
             else if (star.healthPct >= drainedTo - ULDUAR_ALGALON_STAR_DRAIN_SLACK_PCT)
                 cause = "drained";
@@ -1260,8 +1273,10 @@ bool StarPassesFilter(AlgalonEncounterState const& state, Group* group, Unit* bo
 AlgalonScanUnit const* LowestStar(AlgalonEncounterState const& state)
 {
     AlgalonScanUnit const* lowest = nullptr;
+    // One planned under the cast only when nothing else is left: it dies there anyway.
     for (AlgalonScanUnit const& star : state.stars)
-        if (!lowest || star.healthPct < lowest->healthPct)
+        if (!lowest || lowest->under > star.under ||
+            (lowest->under == star.under && star.healthPct < lowest->healthPct))
             lowest = &star;
 
     return lowest;
@@ -1297,6 +1312,13 @@ struct StarSpan
 };
 
 int32 MsUntil(uint32 when, uint32 now) { return static_cast<int32>(when - now); }
+
+// The drain's death of a star, in ms from its scan: the next tick plus a second per tick of health left.
+int32 DrainDeathMs(AlgalonScanUnit const& star)
+{
+    uint32 const ticks = (star.health + star.tickHp - 1) / star.tickHp;
+    return star.nextTickMs + (static_cast<int32>(ticks) - 1) * static_cast<int32>(IN_MILLISECONDS);
+}
 
 int32 StarDeathAt(AlgalonScanUnit const& star, float lossPctPerSec)
 {
@@ -1396,8 +1418,10 @@ StarPlan PlanStars(AlgalonEncounterState const& state, uint32 now)
 
     plan.hadDeath = state.lastStarDeathMs != 0;
     plan.lastDeath = plan.hadDeath ? MsUntil(state.lastStarDeathMs, now) : 0;
+    // Under-stars die inside the cast's blackout, on the plan of their own.
     for (AlgalonScanUnit const& star : state.stars)
-        plan.deaths.emplace_back(&star, StarDeathAt(star, star.lossPctPerSec));
+        if (!star.under)
+            plan.deaths.emplace_back(&star, StarDeathAt(star, star.lossPctPerSec));
 
     return plan;
 }
@@ -1516,6 +1540,10 @@ std::string DescribeStarPlan(AlgalonEncounterState const& state, uint32 now)
     for (auto const& [star, death] : plan.deaths)
         deaths.emplace_back(death, star);
 
+    for (AlgalonScanUnit const& star : state.stars)
+        if (star.under)
+            deaths.emplace_back(star.tickHp ? DrainDeathMs(star) : 0, &star);
+
     std::sort(deaths.begin(), deaths.end(),
               [](auto const& a, auto const& b) { return a.first < b.first; });
     std::string stars;
@@ -1524,8 +1552,14 @@ std::string DescribeStarPlan(AlgalonEncounterState const& state, uint32 now)
         if (!stars.empty())
             stars += ", ";
 
+        // Under-stars by their drain death, marked `u`; the shelter star `s`.
+        int32 const shown = star->under && star->tickHp ? DrainDeathMs(*star) : death;
         stars += std::to_string(star->guid.GetCounter()) + " " + std::to_string(static_cast<int32>(star->healthPct)) +
-                 "% " + std::to_string(death / IN_MILLISECONDS) + "s";
+                 "% " + std::to_string(shown / IN_MILLISECONDS) + "s";
+        if (star->under)
+            stars += " u";
+        else if (star->guid == state.shelterStar)
+            stars += " s";
     }
 
     std::vector<std::string> parts;
@@ -1535,6 +1569,10 @@ std::string DescribeStarPlan(AlgalonEncounterState const& state, uint32 now)
     for (MergedBlackout const& blackout : plan.merged)
         parts.push_back(blackout.label + " " + std::to_string(blackout.span.from / IN_MILLISECONDS) + ".." +
                         std::to_string(blackout.span.to / IN_MILLISECONDS));
+
+    if (!state.underStars.empty())
+        parts.push_back("under " + std::to_string(MsUntil(state.underFromMs, now) / IN_MILLISECONDS) + ".." +
+                        std::to_string(MsUntil(state.underToMs, now) / IN_MILLISECONDS));
 
     std::string text;
     for (std::string const& part : parts)
@@ -1570,7 +1608,8 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
     // slope, capped at the dropped rate, so dropping one a few % from dead doesn't move its explosion: a drop
     // is only taken when the star would then die clear, or sooner than the kill lands. One barely hit reads
     // near the drain.
-    if (AlgalonScanUnit const* focus = FindScanned(state.stars, state.focusStar.Get()))
+    AlgalonScanUnit const* focus = FindScanned(state.stars, state.focusStar.Get());
+    if (focus && !focus->under)
     {
         bool const placed =
             state.focusByDeadline
@@ -1672,7 +1711,7 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
 
     std::vector<AlgalonScanUnit const*> open;
     for (AlgalonScanUnit const& candidate : state.stars)
-        if (StarPassesFilter(state, group, boss, candidate, StarFilter::Clear))
+        if (!candidate.under && StarPassesFilter(state, group, boss, candidate, StarFilter::Clear))
             open.push_back(&candidate);
 
     std::sort(open.begin(), open.end(), [&plan](AlgalonScanUnit const* a, AlgalonScanUnit const* b)
@@ -2370,6 +2409,319 @@ char const* AlgalonThreatRedirectSpell(Player* bot)
     }
 }
 
+namespace
+{
+// The health (lo, hi] that has the drain alone kill a star on a tick inside [fromMs, toMs], both ms from the
+// time `nextTickMs` was read. Tick k lands at nextTickMs + (k - 1) s.
+bool UnderBand(uint32 tickHp, int32 nextTickMs, int32 fromMs, int32 toMs, uint32& lo, uint32& hi)
+{
+    int32 const first = fromMs - nextTickMs;
+    int32 const last = toMs - nextTickMs;
+    if (last < 0)
+        return false;
+
+    int32 const second = static_cast<int32>(IN_MILLISECONDS);
+    int32 const kLo = first <= 0 ? 1 : (first + second - 1) / second + 1;
+    int32 const kHi = last / second + 1;
+    if (kHi < kLo)
+        return false;
+
+    lo = static_cast<uint32>(kLo - 1) * tickHp;
+    hi = static_cast<uint32>(kHi) * tickHp;
+    return true;
+}
+
+uint32 BulkBufferHp(AlgalonScanUnit const& star)
+{
+    return static_cast<uint32>(star.tickHp * ULDUAR_ALGALON_UNDER_BULK_BUFFER_PCT);
+}
+
+// What the team still has to take off a star before the wand: down to its band plus the buffer.
+uint32 BulkLeftHp(AlgalonScanUnit const& star)
+{
+    uint32 const stop = star.underHi + BulkBufferHp(star);
+    return star.health > stop ? star.health - stop : 0;
+}
+
+// The band falls with the drain, so the gap closes at the team's speed less the drain.
+int32 BulkWorkMs(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
+{
+    uint32 const left = BulkLeftHp(star);
+    if (!left)
+        return 0;
+
+    float const pctPerSec = std::max(ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC, state.teamKillPctPerSec);
+    float const closing = std::max(1.0f, pctPerSec - ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC);
+    return static_cast<int32>(left / (star.tickHp * closing) * IN_MILLISECONDS) + ULDUAR_ALGALON_UNDER_SWITCH_MS;
+}
+
+// Through the cast and until the strip is past: the window is the running cast's.
+bool UnderFrozen(AlgalonEncounterState const& state, uint32 now)
+{
+    return state.bigBangCasting ||
+           (state.lastBigBangEndMs && getMSTimeDiff(state.lastBigBangEndMs, now) < ULDUAR_ALGALON_UNDER_KEEP_MS);
+}
+
+// Each scan rebuilds the stars, so the bands come from the latched window every tick.
+void MarkUnder(AlgalonEncounterState& state, uint32 now)
+{
+    int32 const from = MsUntil(state.underFromMs, now);
+    int32 const to = MsUntil(state.underToMs, now);
+    bool const frozen = UnderFrozen(state, now);
+    for (AlgalonScanUnit& star : state.stars)
+    {
+        star.under = state.underStars.count(star.guid) > 0;
+        star.underLo = 0;
+        star.underHi = 0;
+        if (star.under && star.tickHp)
+            UnderBand(star.tickHp, star.nextTickMs, from, to, star.underLo, star.underHi);
+
+        star.underDying =
+            star.under && frozen && star.tickHp && DrainDeathMs(star) <= ULDUAR_ALGALON_UNDER_DYING_MS;
+    }
+}
+
+// With no hole at all, the star nearest the hold spot dies before the cast for one; latched until it does.
+void PlanShelterStar(AlgalonEncounterState& state)
+{
+    if (!state.holes.empty())
+    {
+        state.shelterStar = ObjectGuid::Empty;
+        return;
+    }
+
+    if (FindScanned(state.stars, state.shelterStar))
+        return;
+
+    AlgalonScanUnit const* nearest = nullptr;
+    for (AlgalonScanUnit const& star : state.stars)
+        if (!nearest || star.position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT) <
+                            nearest->position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT))
+            nearest = &star;
+
+    state.shelterStar = nearest ? nearest->guid : ObjectGuid::Empty;
+}
+
+// Every star the drain can bring to its death inside the next cast's window is planned under it, while the
+// team can do the damage before the cast; the rest are paced. Only with a soaker in Dispersion: the soaker
+// takes each explosion, and a tank would take them whole. Frozen through the cast.
+void PlanUnderStars(AlgalonEncounterState& state, uint32 now)
+{
+    if (UnderFrozen(state, now))
+    {
+        MarkUnder(state, now);
+        return;
+    }
+
+    state.underStars.clear();
+    PlanShelterStar(state);
+    if (state.disperser.Get().IsEmpty() || !state.nextBigBangMs || state.phase.Get() != AlgalonPhase::One)
+    {
+        MarkUnder(state, now);
+        return;
+    }
+
+    int32 const toHit = MsUntil(state.nextBigBangMs, now) + static_cast<int32>(ULDUAR_ALGALON_BIG_BANG_CAST_MS);
+    int32 const from = toHit - ULDUAR_ALGALON_UNDER_LEAD_MS;
+    int32 const to = toHit + ULDUAR_ALGALON_UNDER_TAIL_MS;
+    state.underFromMs = now + static_cast<uint32>(std::max(0, from));
+    state.underToMs = now + static_cast<uint32>(std::max(0, to));
+
+    std::vector<AlgalonScanUnit*> candidates;
+    for (AlgalonScanUnit& star : state.stars)
+    {
+        star.underLo = 0;
+        star.underHi = 0;
+        if (star.guid == state.shelterStar || !star.tickHp || DrainDeathMs(star) < from ||
+            !UnderBand(star.tickHp, star.nextTickMs, from, to, star.underLo, star.underHi))
+            continue;
+
+        candidates.push_back(&star);
+    }
+
+    // Too much for the team before the cast, its trims included: the biggest jobs are paced instead.
+    int32 const available =
+        toHit - static_cast<int32>(ULDUAR_ALGALON_BIG_BANG_CAST_MS) - ULDUAR_ALGALON_UNDER_TRIM_ALLOWANCE_MS;
+    std::sort(candidates.begin(), candidates.end(), [&state](AlgalonScanUnit const* a, AlgalonScanUnit const* b)
+              { return BulkWorkMs(state, *a) < BulkWorkMs(state, *b); });
+
+    int32 work = 0;
+    for (AlgalonScanUnit const* star : candidates)
+    {
+        int32 const own = BulkWorkMs(state, *star);
+        if (work + own > available)
+            break;
+
+        work += own;
+        state.underStars.insert(star->guid);
+    }
+
+    MarkUnder(state, now);
+}
+
+// The under-star the team works down next, most left first, once the work left plus the slack reaches the
+// cast.
+AlgalonScanUnit const* UnderBulkStar(AlgalonEncounterState const& state, uint32 now)
+{
+    if (state.bigBangCasting || !state.nextBigBangMs)
+        return nullptr;
+
+    AlgalonScanUnit const* next = nullptr;
+    int32 work = 0;
+    for (AlgalonScanUnit const& star : state.stars)
+    {
+        if (!star.under || !BulkLeftHp(star))
+            continue;
+
+        work += BulkWorkMs(state, star);
+        if (!next || BulkLeftHp(star) > BulkLeftHp(*next))
+            next = &star;
+    }
+
+    if (!next || MsUntil(state.nextBigBangMs, now) > work + ULDUAR_ALGALON_UNDER_BULK_SLACK_MS)
+        return nullptr;
+
+    return next;
+}
+
+bool HasWand(Player* bot)
+{
+    Item* ranged = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
+    return ranged && ranged->GetTemplate()->Class == ITEM_CLASS_WEAPON &&
+           ranged->GetTemplate()->SubClass == ITEM_SUBCLASS_WEAPON_WAND && bot->HasSpell(SPELL_ALGALON_WAND_SHOOT);
+}
+
+// Able to trim `star` now: unphased, in wand reach and sight, not running for its hole.
+bool CanTrim(AlgalonEncounterState const& state, Player* bot, Creature* star)
+{
+    if (!CanStayOut(bot) || !IsDamageDealer(bot) || !HasWand(bot) || state.swapPair.count(bot->GetGUID()) ||
+        state.handler.Get() == bot->GetGUID())
+        return false;
+
+    if (state.bigBangCasting && AlgalonHideSlackMs(bot) <= 0)
+        return false;
+
+    // Its Dispersion is due: casting it stops the wand, and the wand would start again over it.
+    ObjectGuid const guid = bot->GetGUID();
+    bool const soaks = state.disperser.Get() == guid || state.bigBangSoaker.Get() == guid ||
+                       state.bigBangBackup.Get() == guid;
+    int32 const toHit = MsUntil(state.underFromMs, getMSTime()) + ULDUAR_ALGALON_UNDER_LEAD_MS;
+    if (soaks && (bot->HasAura(SPELL_ALGALON_DISPERSION) ||
+                  toHit <= ULDUAR_ALGALON_SOAK_DISPERSION_MS + ULDUAR_ALGALON_PREP_GCD_MS))
+        return false;
+
+    return bot->GetExactDist2d(star) <= ULDUAR_ALGALON_UNDER_TRIM_RANGE && bot->IsWithinLOSInMap(star);
+}
+
+// The live band, from the star's own drain clock now rather than the last scan.
+bool LiveUnderBand(AlgalonEncounterState const& state, Creature* star, uint32 now, uint32& lo, uint32& hi)
+{
+    AuraEffect const* drain = star->GetAuraEffect(SPELL_ALGALON_COLLAPSE, EFFECT_0);
+    if (!drain)
+        return false;
+
+    return UnderBand(std::max<uint32>(1, star->CountPctFromMaxHealth(1)), std::max(0, drain->GetPeriodicTimer()),
+                     MsUntil(state.underFromMs, now), MsUntil(state.underToMs, now), lo, hi);
+}
+
+// A trimmer per under-star the team has finished with and still above its band; a wand shot that reached
+// the band stops.
+void AssignTrimmers(Player* bot, Group* group, AlgalonEncounterState& state, uint32 now)
+{
+    // A wand on a star the team isn't killing: only its trimmer's, and only above its band.
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        Spell* shooting = member ? member->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL) : nullptr;
+        if (!shooting || shooting->GetSpellInfo()->Id != SPELL_ALGALON_WAND_SHOOT || !IsBot(member))
+            continue;
+
+        ObjectGuid const target = shooting->m_targets.GetUnitTargetGUID();
+        if (target == state.focusStar.Get() || !FindScanned(state.stars, target))
+            continue;
+
+        Creature* star = Resolve(bot, target);
+        uint32 lo = 0;
+        uint32 hi = 0;
+        auto const trimmer = state.trimmers.find(target);
+        bool const assigned = trimmer != state.trimmers.end() && trimmer->second == member->GetGUID();
+        if (!star || !assigned || !state.underStars.count(target) || !LiveUnderBand(state, star, now, lo, hi) ||
+            star->GetHealth() <= hi)
+        {
+            member->InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
+            if (RaidObs::Active() && star)
+                RaidObs::Note(member, "algalon.trim",
+                              "stop " + std::to_string(target.GetCounter()) + " " +
+                                  std::to_string(static_cast<int32>(star->GetHealthPct())));
+        }
+    }
+
+    for (auto it = state.trimmers.begin(); it != state.trimmers.end();)
+        it = state.underStars.count(it->first) ? std::next(it) : state.trimmers.erase(it);
+
+    for (AlgalonScanUnit const& scanned : state.stars)
+    {
+        Creature* star = scanned.under ? Resolve(bot, scanned.guid) : nullptr;
+        uint32 lo = 0;
+        uint32 hi = 0;
+        // The team's to finish first, and one in its band needs nothing.
+        if (!star || BulkLeftHp(scanned) || !LiveUnderBand(state, star, now, lo, hi) || star->GetHealth() <= hi)
+        {
+            state.trimmers.erase(scanned.guid);
+            continue;
+        }
+
+        auto const current = state.trimmers.find(scanned.guid);
+        Player* holder = current != state.trimmers.end() ? FindGroupMember(group, current->second) : nullptr;
+        if (holder && CanTrim(state, holder, star))
+            continue;
+
+        Player* best = nullptr;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!IsBot(member) || !CanTrim(state, member, star) ||
+                std::any_of(state.trimmers.begin(), state.trimmers.end(),
+                            [member](auto const& entry) { return entry.second == member->GetGUID(); }))
+                continue;
+
+            // The team first, then the nearest.
+            bool const team = state.starTeam.count(member->GetGUID()) > 0;
+            bool const bestTeam = best && state.starTeam.count(best->GetGUID()) > 0;
+            if (!best || team > bestTeam ||
+                (team == bestTeam && member->GetExactDist2d(star) < best->GetExactDist2d(star)))
+                best = member;
+        }
+
+        if (best)
+            state.trimmers[scanned.guid] = best->GetGUID();
+        else
+            state.trimmers.erase(scanned.guid);
+    }
+}
+
+// With a star dying under the running cast, how much earlier every hider goes in.
+int32 UnderHideExtraMs(AlgalonEncounterState const& state, int32 remaining, uint32 now)
+{
+    if (!state.bigBangCasting || state.underStars.empty())
+        return 0;
+
+    // Drain deaths are from the last scan.
+    int32 const age = state.lastTickMs ? static_cast<int32>(getMSTimeDiff(state.lastTickMs, now)) : 0;
+    int32 earliest = std::numeric_limits<int32>::max();
+    for (AlgalonScanUnit const& star : state.stars)
+        if (star.under && star.tickHp)
+            earliest = std::min(earliest, DrainDeathMs(star) - age);
+
+    int32 extra = ULDUAR_ALGALON_UNDER_HIDE_EXTRA_MS;
+    if (earliest != std::numeric_limits<int32>::max())
+        extra = std::max(extra, remaining - earliest + ULDUAR_ALGALON_UNDER_DEATH_LEAD_MS -
+                                    ULDUAR_ALGALON_HIDE_MARGIN_MS);
+
+    return std::min(extra, ULDUAR_ALGALON_UNDER_HIDE_STRETCH_MS);
+}
+}  // namespace
+
 void AlgalonTickEncounterState(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -2455,6 +2807,14 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         ++state->bigBangCount;
         state->nextBigBangMs = now + ULDUAR_ALGALON_BIG_BANG_INTERVAL_MS;
         state->shelterAssignments.clear();
+        // The window was planned off the predicted cast; the real one's hit decides.
+        if (Spell* bang = CurrentBigBang(boss))
+        {
+            uint32 const hit = now + static_cast<uint32>(std::max(0, bang->GetCastTimeRemaining()));
+            state->underFromMs = hit - ULDUAR_ALGALON_UNDER_LEAD_MS;
+            state->underToMs = hit + ULDUAR_ALGALON_UNDER_TAIL_MS;
+        }
+
         state->nitroRunners.clear();
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
@@ -2535,6 +2895,8 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     state->shadowAuraPaladin = auraPaladin ? auraPaladin->GetGUID() : ObjectGuid::Empty;
 
     ElectStarTeam(bot, *state);
+    PlanUnderStars(*state, now);
+    AssignTrimmers(bot, group, *state, now);
 
     if (AlgalonScanUnit const* focus = FindScanned(state->stars, state->focusStar.Get()))
         if (focus->lossMeasured && focus->lossPctPerSec >= ULDUAR_ALGALON_STAR_KILL_MEASURED_PCT_PER_SEC)
@@ -2542,6 +2904,15 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
 
     AlgalonScanUnit const* star = nullptr;
     char const* window = StarWindow(bot, boss, *state, now, star);
+    // No paced kill now: the team takes the next under-star down towards its band.
+    if (!star && !state->bigBangCasting)
+    {
+        if (AlgalonScanUnit const* bulk = UnderBulkStar(*state, now))
+        {
+            star = bulk;
+            window = "under";
+        }
+    }
     ObjectGuid const previous = state->focusStar.Get();
     ObjectGuid const next = star ? star->guid : ObjectGuid::Empty;
     if (next != previous)
@@ -3354,12 +3725,13 @@ int32 AlgalonHideSlackMs(Player* bot)
         return std::numeric_limits<int32>::max();
 
     // Its constellations follow it in and close the hole, so while others still head there it goes last.
-    int32 margin = ULDUAR_ALGALON_HIDE_MARGIN_MS;
+    int32 const underExtra = UnderHideExtraMs(*state, remaining, getMSTime());
+    int32 margin = ULDUAR_ALGALON_HIDE_MARGIN_MS + underExtra;
     if (AlgalonHoldsConstellation(bot))
     {
         auto const out = state->hidersOut.find(shelter->guid);
         if (out != state->hidersOut.end() && out->second)
-            margin = ULDUAR_ALGALON_LAST_IN_MARGIN_MS + ULDUAR_ALGALON_HOLD_LEAVE_LEAD_MS;
+            margin = ULDUAR_ALGALON_LAST_IN_MARGIN_MS + ULDUAR_ALGALON_HOLD_LEAVE_LEAD_MS + underExtra;
     }
 
     return remaining - walkMs - margin;
@@ -4047,11 +4419,53 @@ std::vector<HazardCircle> GetAlgalonDodgeHazards(Player* bot, float markerCleara
     for (AlgalonScanUnit const& hole : state->holes)
         hazards.emplace_back(hole.position, ULDUAR_ALGALON_HOLE_EXIT_RADIUS);
 
+    // In the void, a star dying under the cast is a hole where the bot would stand at the strip.
+    bool const phased = IsAlgalonPhased(bot);
     for (AlgalonScanUnit const& star : state->stars)
-        if (StarDying(star))
+        if (StarDying(star) || (phased && star.underDying))
             hazards.emplace_back(star.position, ULDUAR_ALGALON_STAR_DYING_RADIUS);
 
     return hazards;
+}
+
+bool AlgalonStarPlannedUnder(Player* bot, ObjectGuid const& star)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    return state && state->underStars.count(star) > 0;
+}
+
+Unit* GetAlgalonTrimStar(Player* bot)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    if (!state || !state->engaged || IsAlgalonPhased(bot))
+        return nullptr;
+
+    for (auto const& [guid, trimmer] : state->trimmers)
+    {
+        if (trimmer != bot->GetGUID())
+            continue;
+
+        Creature* star = Resolve(bot, guid);
+        uint32 lo = 0;
+        uint32 hi = 0;
+        uint32 const now = getMSTime();
+        if (!star || !LiveUnderBand(*state, star, now, lo, hi) || star->GetHealth() <= hi)
+            return nullptr;
+
+        return star;
+    }
+
+    return nullptr;
+}
+
+bool AlgalonUnderStarNear(Player* bot, float radius)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    if (!state)
+        return false;
+
+    return std::any_of(state->stars.begin(), state->stars.end(), [bot, radius](AlgalonScanUnit const& star)
+                       { return star.underDying && bot->GetExactDist2d(star.position) < radius; });
 }
 
 bool AlgalonSpotInRoom(float x, float y)

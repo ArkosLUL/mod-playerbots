@@ -1807,6 +1807,312 @@ class DispersionEra(unittest.TestCase):
                       render(self.trace, "bigbang"))
 
 
+UN_TANK, UN_PARTNER, UN_HOLY, UN_WARL, UN_ROGUE, UN_MAGE, UN_BOW = range(8201, 8208)
+UN_STAR_A, UN_STAR_B, UN_STAR_C, UN_HOLE_A, UN_HOLE_B, UN_CON_A, UN_CON_B = (
+    CREATURE | n for n in (401, 402, 403, 421, 422, 431, 432))
+UN_END = 60000
+UN_HOME = {UN_TANK: (0, 0), UN_PARTNER: (3, 0), UN_HOLY: (0, 12), UN_WARL: (8, 15), UN_ROGUE: (2, 3),
+           UN_MAGE: (-8, 18), UN_BOW: (6, 14)}
+UN_HOLE_A_SPOT = (-20, 30)
+UN_HOLE_B_SPOT = (20, 30)
+UN_DEATHS = {UN_WARL: 34000, UN_ROGUE: 28000}
+UN_NEW_KEYS = ("algalon.nitro", "algalon.personal", "algalon.trim", "algalon.kite", "algalon.starplan",
+               "algalon.stardeath")
+UN_SPELLS = {47891: "Shadow Ward", 45438: "Ice Block", 642: "Divine Shield", 31224: "Cloak of Shadows",
+             6940: "Hand of Sacrifice", 64122: "Black Hole Explosion", 64443: "Big Bang"}
+
+
+def un_hp(guid: int, when: int) -> float:
+    return 0.0 if when >= UN_DEATHS.get(guid, 1 << 30) else 100.0
+
+
+def un_offset(guid: int, when: int):
+    """The partner kites 8 yd off the centre of the hole it was sent to, once it has crossed."""
+    if guid == UN_PARTNER and 9000 <= when < 13000:
+        return UN_HOLE_A_SPOT[0], UN_HOLE_A_SPOT[1] - 8
+    if guid == UN_PARTNER and 43000 <= when < 49000:
+        return UN_HOLE_B_SPOT[0], UN_HOLE_B_SPOT[1] - 8
+    return UN_HOME[guid]
+
+
+def under_pull(drop: tuple[str, ...] = ()) -> list[dict]:
+    """Three stars planned to die under Big Bang 1, the window 0:32 .. 0:40: one dies inside it, one 4 s
+    early, one 4.5 s late. A kite that eats a constellation, and one that parks 6 s beside a hole with nothing
+    eaten while the other constellation chases a tank at the cast start. The warlock dies to an explosion
+    with Shadow Ward ready, the rogue after pressing Cloak of Shadows; the mage casts Ice Block inside a
+    hole's phase. `drop` leaves out the notes of those keys."""
+    roster = [
+        {"g": UN_TANK, "n": "Tanka", "r": "tank", "c": "warrior", "h": 0},
+        {"g": UN_PARTNER, "n": "Tankb", "r": "tank", "c": "paladin", "h": 0},
+        {"g": UN_HOLY, "n": "Holy", "r": "heal", "c": "paladin", "h": 0},
+        {"g": UN_WARL, "n": "Warl", "r": "ranged", "c": "warlock", "h": 0},
+        {"g": UN_ROGUE, "n": "Rogue", "r": "melee", "c": "rogue", "h": 0},
+        {"g": UN_MAGE, "n": "Mage", "r": "ranged", "c": "mage", "h": 0},
+        {"g": UN_BOW, "n": "Bow", "r": "ranged", "c": "hunter", "h": 0},
+    ]
+    one, two, three = (guid & 0xFFFFFFFF for guid in (UN_STAR_A, UN_STAR_B, UN_STAR_C))
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 0,
+         "boss": "algalon-the-observer", "roster": roster},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ALGALON, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        *({"t": 1, "e": "unit", "g": guid, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star"}
+          for guid in (UN_STAR_A, UN_STAR_B, UN_STAR_C)),
+        *({"t": 1, "e": "unit", "g": guid, "en": al.NPC_BLACK_HOLE, "n": "Black Hole"}
+          for guid in (UN_HOLE_A, UN_HOLE_B)),
+        *({"t": 1, "e": "unit", "g": guid, "en": al.NPC_LIVING_CONSTELLATION, "n": "Living Constellation"}
+          for guid in (UN_CON_A, UN_CON_B)),
+        *({"t": 1, "e": "unit", "g": member["g"], "n": member["n"], "mhp": 30000} for member in roster),
+        *({"t": 1, "e": "spell", "sp": spell, "n": name} for spell, name in UN_SPELLS.items()),
+
+        note(1000, UN_HOLY, "algalon.swappair", 1), note(1000, UN_PARTNER, "algalon.swappair", 1),
+        note(1000, UN_HOLY, "algalon.handler", UN_PARTNER),
+        note(5000, UN_PARTNER, "algalon.kitehole", UN_HOLE_A), note(40000, UN_PARTNER, "algalon.kitehole", UN_HOLE_B),
+
+        # Window cutters on a holder: only the first is spent at 80% or more.
+        note(10000, UN_HOLY, "algalon.tankdef", f"window 85 {UN_PARTNER} Hand of Sacrifice"),
+        note(12000, UN_HOLY, "algalon.tankdef", f"window 60 {UN_PARTNER} Hand of Sacrifice"),
+        note(14000, UN_HOLY, "algalon.tankdef", f"low 90 {UN_PARTNER} Divine Protection"),
+
+        # Forecast deaths at 34 s, 28 s and 40 s; the window opens 12 s after the note and shuts 20 s after.
+        note(20000, UN_HOLY, "algalon.starplan",
+             f"{two} 80% 8s u, {one} 90% 14s u, {three} 70% 20s u | smash 40..50 | under 12..20"),
+        note(22000, UN_BOW, "algalon.trim", f"start {one} 100"), note(26000, UN_BOW, "algalon.trim", f"stop {one} 55"),
+        note(28000, UN_HOLY, "algalon.stardeath", "early 9.0"), note(34000, UN_HOLY, "algalon.stardeath", "under 11.0"),
+        note(44500, UN_HOLY, "algalon.stardeath", "late 7.0"),
+
+        # The warlock cast Shadow Ward early on; the rogue pressed Cloak of Shadows a second before star B.
+        cast(1000, UN_WARL, 47891, UN_WARL),
+        note(27000, UN_ROGUE, "algalon.personal", "Cloak of Shadows"),
+
+        # Star B explodes on the rogue and Bow, star A inside the cast on the warlock and the phased mage, star
+        # C on the mage, phased again.
+        dmg(28000, UN_STAR_B, UN_ROGUE, al.SPELL_BLACK_HOLE_EXPLOSION[0], 20000, hp=0.0, over=4000),
+        blast(28000, UN_STAR_B, UN_BOW, 5000, 0),
+        death(28000, UN_ROGUE, UN_STAR_B, 20000, UN_HOME[UN_ROGUE]),
+        cast(30000, ALGALON, al.SPELL_BIG_BANG[0], cast_ms=8000),
+        aura(33000, UN_MAGE, al.SPELL_BLACK_HOLE_PHASE), aura(39000, UN_MAGE, al.SPELL_BLACK_HOLE_PHASE, True),
+        dmg(34000, UN_STAR_A, UN_WARL, al.SPELL_BLACK_HOLE_EXPLOSION[0], 20000, hp=0.0, over=4000),
+        blast(34000, UN_STAR_A, UN_MAGE, 5000, 0),
+        death(34000, UN_WARL, UN_STAR_A, 20000, UN_HOME[UN_WARL]),
+        dmg(38000, ALGALON, UN_TANK, al.SPELL_BIG_BANG[0], 45000),
+        aura(44000, UN_MAGE, al.SPELL_BLACK_HOLE_PHASE), aura(45000, UN_MAGE, al.SPELL_BLACK_HOLE_PHASE, True),
+        cast(44200, UN_MAGE, 45438, UN_MAGE),
+        blast(44500, UN_STAR_C, UN_MAGE, 5000, 0),
+        cast(50000, UN_HOLY, 642, UN_HOLY),
+
+        # Hide runs through the cast: Holy has a note for its Nitro Boosts, Bow only the aura, Mage neither.
+        note(30000, UN_HOLY, "algalon.hide", "wait"), note(32000, UN_HOLY, "algalon.hide", "run"),
+        note(35000, UN_HOLY, "algalon.hide", "in"), note(40000, UN_HOLY, "algalon.hide", "none"),
+        note(32500, UN_BOW, "algalon.hide", "run"), note(35000, UN_BOW, "algalon.hide", "in"),
+        note(40000, UN_BOW, "algalon.hide", "none"),
+        note(33000, UN_MAGE, "algalon.hide", "run"), note(35000, UN_MAGE, "algalon.hide", "in"),
+        note(40000, UN_MAGE, "algalon.hide", "none"),
+        note(32100, UN_HOLY, "algalon.nitro", "hide"), aura(32600, UN_BOW, al.SPELL_NITRO_BOOSTS),
+
+        # Kite 1: taunt, stage, wait, cross, park beside the hole; its constellation leaves with the hole at
+        # 12 s. Kite 2 parks 6 s beside the other hole and nothing goes through it.
+        note(1000, UN_PARTNER, "algalon.kite", "none"), note(5000, UN_PARTNER, "algalon.kite", "taunt"),
+        note(6000, UN_PARTNER, "algalon.kite", "stage"), note(7000, UN_PARTNER, "algalon.kite", "wait"),
+        note(8000, UN_PARTNER, "algalon.kite", "cross"), note(9000, UN_PARTNER, "algalon.kite", "parked"),
+        note(13000, UN_PARTNER, "algalon.kite", "kept"),
+        note(40000, UN_PARTNER, "algalon.kite", "stage"), note(41000, UN_PARTNER, "algalon.kite", "wait"),
+        note(42000, UN_PARTNER, "algalon.kite", "cross"), note(43000, UN_PARTNER, "algalon.kite", "parked"),
+        note(49000, UN_PARTNER, "algalon.kite", "none"),
+        {"t": UN_END, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, UN_END, 500):
+        units = [row(guid, un_offset(guid, when), un_hp(guid, when), ALGALON) for guid in UN_HOME]
+        units.append(row(ALGALON, (0, 4), 90.0, UN_TANK))
+        for star, until in ((UN_STAR_A, 34000), (UN_STAR_B, 28000), (UN_STAR_C, 44500)):
+            if when <= until:
+                units.append(row(star, (0, 30), 100.0 - when / 1000.0, 0))
+        if when <= 12000:
+            units.append(row(UN_HOLE_A, UN_HOLE_A_SPOT, 100.0, 0))
+        if 5000 <= when <= 12000:
+            units.append(row(UN_CON_A, UN_HOLE_A_SPOT if when == 12000 else (-20, 24), 100.0, UN_PARTNER))
+        if when >= 3000:
+            units.append(row(UN_HOLE_B, UN_HOLE_B_SPOT, 100.0, 0))
+        if when >= 20000:
+            units.append(row(UN_CON_B, (10, 20), 100.0, UN_TANK))
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return [rec for rec in records if rec.get("e") != "note" or rec.get("k") not in drop]
+
+
+class StarsUnder(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, under_pull())
+        cls.lines = [line for _, line in al.failures(cls.trace)]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_star_plan_reads_the_marks_and_the_under_window(self):
+        self.assertEqual(al.parse_starplan("2136 28% 3s u, 2133 85% 83s s, 2134 50% 9s | smash 2..11 | under -1..9"), {
+            "stars": {2136: {"hp": 28, "secs": 3, "mark": "u"}, 2133: {"hp": 85, "secs": 83, "mark": "s"},
+                      2134: {"hp": 50, "secs": 9, "mark": ""}},
+            "under": (-1, 9)})
+        self.assertEqual(al.parse_starplan("smash 26..35 | prebang 89..101"), {"stars": {}, "under": None})
+        self.assertEqual(al.parse_starplan(None), {"stars": {}, "under": None})
+
+    def test_a_trim_note_reads_the_action_the_star_and_its_health(self):
+        self.assertEqual(al.parse_trim("start 1858 100"), ("start", 1858, 100.0))
+        self.assertEqual(al.parse_trim("stop 1858 -"), ("stop", 1858, None))
+        self.assertEqual(al.parse_trim(""), ("", 0, None))
+
+    def test_a_star_carries_its_plan_window_and_wand_runs(self):
+        rows = {row["star"]: row for row in al.star_rows(self.trace)}
+        a = rows[UN_STAR_A]
+        self.assertEqual((a["plan"]["mark"], a["plan"]["window"], a["plan"]["forecast"]),
+                         ("u", (32000, 40000), 34000))
+        self.assertEqual((a["cause"], a["bang_hit"]), ("under", {"n": 1, "rel": -4000, "inside": True}))
+        self.assertEqual(a["unphased"], [UN_WARL])
+        self.assertEqual(a["trims"], [{"bot": UN_BOW, "start": 22000, "start_hp": 100.0, "stop": 26000,
+                                       "stop_hp": 55.0}])
+        self.assertEqual(rows[UN_STAR_B]["bang_hit"], {"n": 1, "rel": -10000, "inside": False})
+        self.assertEqual(rows[UN_STAR_B]["unphased"], [UN_BOW, UN_ROGUE])
+        self.assertEqual((rows[UN_STAR_C]["unphased"], rows[UN_STAR_C]["bang_hit"]["rel"]), ([], 6500))
+
+    def test_the_stars_section_shows_what_each_was_planned_to_do(self):
+        text = render(self.trace, "stars")
+        self.assertIn("plan under window 0:32.000..0:40.000, forecast death +0.0 s off; died under; 4.0 s before"
+                      " Big Bang 1's hit, inside its cast; explosion hit unphased: Warl; trim Bow 0:22.000 100%"
+                      " .. 0:26.000 55%", text)
+        self.assertIn("explosion hit unphased: nobody", text)
+        self.assertIn("algalon.trim: 1 wand run(s) on 1 star(s)", text)
+
+    def test_an_under_star_dying_outside_its_window_is_a_failure(self):
+        self.assertIn("under-star died early @ 28.0s, 4.0 s before its window 0:32.000..0:40.000", self.lines)
+        self.assertIn("under-star died late @ 44.5s, 4.5 s after its window 0:32.000..0:40.000", self.lines)
+        self.assertEqual(sum(line.startswith("under-star died") for line in self.lines), 2)
+        # dying under the cast is the plan, so it is not a star dying in a Big Bang by accident
+        self.assertNotIn("star died during Big Bang 1's cast @ 34.0s", self.lines)
+
+    def test_the_window_decides_the_cause_when_the_probe_never_wrote_one(self):
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, under_pull(drop=("algalon.stardeath",)))
+            self.assertEqual({row["star"]: row["cause"] for row in al.star_rows(trace)},
+                             {UN_STAR_A: "under", UN_STAR_B: "early", UN_STAR_C: "late"})
+            self.assertIn("under-star died early @ 28.0s, 4.0 s before its window 0:32.000..0:40.000",
+                          [line for _, line in al.failures(trace)])
+
+    def test_a_kite_reads_its_stage_timeline_and_whether_it_ate(self):
+        first, second = al.kite_runs(self.trace)
+        self.assertEqual([(stage, start) for stage, start, _ in first["stages"]], [
+            ("taunt", 5000), ("stage", 6000), ("wait", 7000), ("cross", 8000), ("parked", 9000)])
+        self.assertEqual((first["start"], first["stop"], [row["guid"] for row in first["eaten"]], first["retries"]),
+                         (5000, 13000, [UN_CON_A], 0))
+        self.assertEqual((second["start"], second["stop"], second["eaten"]), (40000, 49000, []))
+        text = render(self.trace, "constellations")
+        self.assertIn("kite runs, 1 of 2 ended with a constellation eaten:", text)
+        self.assertIn("Tankb 0:05.000 .. 0:13.000: taunt 0:05.000 > stage 0:06.000 > wait 0:07.000 > cross 0:08.000"
+                      " > parked 0:09.000; eaten 1 at 0:12.000", text)
+        self.assertIn("parked 6.0 s from 0:43.000, Tankb 8.0 yd from its kite hole, none eaten", text)
+
+    def test_a_pass_that_missed_counts_a_retry(self):
+        extra = [note(10000, UN_PARTNER, "algalon.kite", "stage"), note(11000, UN_PARTNER, "algalon.kite", "parked")]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, under_pull() + extra)
+            self.assertEqual([run["retries"] for run in al.kite_runs(trace)], [1, 0])
+
+    def test_a_stretch_parked_beside_the_hole_with_nothing_eaten_is_a_failure(self):
+        eaten, bare = al.parked_stretches(self.trace)
+        self.assertEqual((eaten["guid"], eaten["eaten"], bare["guid"], bare["eaten"], bare["hole"]),
+                         (UN_PARTNER, True, UN_PARTNER, False, UN_HOLE_B))
+        self.assertAlmostEqual(bare["gap"], 8.0, places=1)
+        self.assertIn("Tankb parked 6.0 s @ 43.0s, 8.0 yd from its kite hole, with no constellation eaten",
+                      self.lines)
+        self.assertEqual(sum(" parked " in line for line in self.lines), 1)
+
+    def test_a_constellation_on_anyone_but_the_handler_at_the_cast_start_is_a_failure(self):
+        self.assertEqual([(row["n"], row["guid"], row["victim"], row["handler"])
+                          for row in al.loose_at_bang(self.trace)], [(1, UN_CON_B, UN_TANK, UN_PARTNER)])
+        self.assertIn("Big Bang 1 @ 30.0s: a constellation loose on Tanka, not the handler Tankb", self.lines)
+
+    def test_an_immunity_that_took_a_phase_off_is_a_failure(self):
+        self.assertEqual([(row["t"], row["guid"], row["name"], row["start"], row["stop"])
+                          for row in al.immunity_strips(self.trace)], [(44200, UN_MAGE, "Ice Block", 44000, 45000)])
+        self.assertIn("Mage cast Ice Block while phased @ 44.2s and lost its phase aura", self.lines)
+        self.assertEqual(sum("while phased" in line for line in self.lines), 1)
+
+    def test_big_bang_names_each_hider_that_used_nitro_boosts(self):
+        self.assertEqual(al.nitro_uses(self.trace), {UN_HOLY: [32100], UN_BOW: [32600]})
+        self.assertEqual(al.bang_hiders(self.trace, al.big_bang_rows(self.trace)[0]), [UN_BOW, UN_HOLY, UN_MAGE])
+        self.assertIn("Nitro Boosts: used by Holy 0:32.100, Bow 0:32.600; hid without: Mage",
+                      render(self.trace, "bigbang"))
+
+    def test_an_explosion_death_reads_the_buttons_pressed_and_the_ones_ready(self):
+        rogue, warlock = al.explosion_deaths(self.trace)
+        self.assertEqual((rogue["guid"], rogue["used"], rogue["ready"]), (UN_ROGUE, [(27000, "Cloak of Shadows")], []))
+        self.assertEqual((warlock["guid"], warlock["used"], warlock["ready"]), (UN_WARL, [], ["Shadow Ward"]))
+        self.assertIn("Warl died to a star explosion @ 34.0s with Shadow Ward ready and no personal button pressed",
+                      self.lines)
+        self.assertEqual(sum("no personal button pressed" in line for line in self.lines), 1)
+        text = render(self.trace, "defensives")
+        self.assertIn("deaths to a star explosion: 2", text)
+        self.assertIn("0:28.000 Rogue (melee): personal buttons pressed Cloak of Shadows 0:27.000", text)
+        self.assertIn("0:34.000 Warl (ranged): personal buttons pressed none; ready and unpressed: Shadow Ward", text)
+
+    def test_a_button_cast_right_before_the_death_counts_as_pressed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, under_pull() + [cast(32500, UN_WARL, 47891, UN_WARL)])
+            warlock = al.explosion_deaths(trace)[1]
+            self.assertEqual((warlock["used"], warlock["ready"]), ([(32500, "Shadow Ward")], []))
+
+    def test_an_immunity_is_held_back_when_a_big_bang_is_due(self):
+        extra = [cast(2000, UN_WARL, 31224, UN_WARL)]
+        moved = [{**rec, "t": 40000} if rec.get("e") == "cast" and rec.get("sp") == al.SPELL_BIG_BANG[0] else rec
+                 for rec in under_pull() + extra]
+        with tempfile.TemporaryDirectory() as folder, mock.patch.dict(al.PERSONAL_COOLDOWN_MS,
+                                                                       {"cloak of shadows": 1000}):
+            free = al.explosion_deaths(load(folder, under_pull() + extra))[1]["ready"]
+            held = al.explosion_deaths(load(folder, moved))[1]["ready"]
+        self.assertEqual((free, held), (["Cloak of Shadows", "Shadow Ward"], ["Shadow Ward"]))
+
+    def test_a_cutter_cast_on_a_holder_at_80_percent_or_more_is_listed(self):
+        self.assertEqual([(note["t"], note["pct"], note["name"]) for note in al.window_cuts(self.trace)],
+                         [(10000, 85.0, "Hand of Sacrifice")])
+        self.assertIn("`window` cutters on a holder at 80% or more: 1", render(self.trace, "defensives"))
+
+    def test_every_section_renders(self):
+        self.assertTrue(render(self.trace))
+
+
+class OlderStarsUnder(unittest.TestCase):
+    """The same pull as a trace from before the under-star plan, the kite stages and the new notes."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, under_pull(drop=UN_NEW_KEYS))
+        cls.lines = [line for _, line in al.failures(cls.trace)]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_sections_still_read_what_the_records_say(self):
+        text = render(self.trace, "stars", "constellations", "defensives", "bigbang")
+        self.assertIn("Nitro Boosts: used by Bow 0:32.600; hid without: Holy, Mage", text)
+        self.assertIn("deaths to a star explosion: 2", text)
+        self.assertNotIn("kite runs", text)
+        self.assertNotIn("algalon.trim:", text)
+
+    def test_no_under_star_line_without_a_plan(self):
+        self.assertFalse([line for line in self.lines if line.startswith("under-star")])
+        self.assertIn("star died during Big Bang 1's cast @ 34.0s", self.lines)
+        self.assertIn("Mage cast Ice Block while phased @ 44.2s and lost its phase aura", self.lines)
+
+    def test_a_trace_without_any_nitro_says_so(self):
+        bare = [rec for rec in under_pull(drop=UN_NEW_KEYS) if rec.get("sp") != al.SPELL_NITRO_BOOSTS]
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertIn("Nitro Boosts: no algalon.nitro row or 54861 aura in this trace, 3 hider(s)",
+                          render(load(folder, bare), "bigbang"))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
