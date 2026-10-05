@@ -353,6 +353,57 @@ static constexpr float RITUAL_NEARBY_RANGE = 30.0f;
 static constexpr uint32 RITUAL_MIN_PARTICIPANTS = 3;  // caster + 2 helpers
 static constexpr uint32 RITUAL_MIN_MISSING = 3;       // don't bother for a single missing stone
 
+static constexpr uint32 SPELL_IMPROVED_HEALTHSTONE_R1 = 18692;
+static constexpr uint32 SPELL_IMPROVED_HEALTHSTONE_R2 = 18693;
+
+static uint32 ReadyRitualRank(Player* warlock)
+{
+    if (GetSoulShardCount(warlock) < 1)
+        return 0;
+
+    if (warlock->HasSpell(SPELL_RITUAL_OF_SOULS_R2))
+        return warlock->HasSpellCooldown(SPELL_RITUAL_OF_SOULS_R2) ? 0 : 2;
+    if (warlock->HasSpell(SPELL_RITUAL_OF_SOULS_R1))
+        return warlock->HasSpellCooldown(SPELL_RITUAL_OF_SOULS_R1) ? 0 : 1;
+    return 0;
+}
+
+// The soulwell hands out improved stones only when its owner has Improved Healthstone, so the
+// talented warlock should be the one casting. A higher ritual rank still wins over the talent.
+static bool IsPreferredRitualCaster(Player* bot, Group* group)
+{
+    Player* best = nullptr;
+    uint32 bestPreference = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member->getClass() != CLASS_WARLOCK || !member->IsAlive() || member->IsInCombat())
+            continue;
+        if (member != bot && !bot->IsWithinDistInMap(member, RITUAL_NEARBY_RANGE))
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || !memberAI->HasStrategy("ritualofsouls", BOT_STATE_NON_COMBAT))
+            continue;
+
+        uint32 ritualRank = ReadyRitualRank(member);
+        if (!ritualRank)
+            continue;
+
+        uint32 talentRank = member->HasAura(SPELL_IMPROVED_HEALTHSTONE_R2) ? 2
+                            : (member->HasAura(SPELL_IMPROVED_HEALTHSTONE_R1) ? 1 : 0);
+        uint32 preference = ritualRank * 3 + talentRank;  // talent rank is 0-2, ritual rank decides first
+        if (best && (preference < bestPreference ||
+                     (preference == bestPreference && best->GetGUID() < member->GetGUID())))
+            continue;
+
+        best = member;
+        bestPreference = preference;
+    }
+
+    return best == bot;
+}
+
 bool RitualOfSoulsTrigger::IsActive()
 {
     if (bot->IsInCombat())
@@ -369,6 +420,9 @@ bool RitualOfSoulsTrigger::IsActive()
     if (FindGroupRitualPortal(botAI, false) || FindGroupSoulwell(botAI))
         return false;
 
+    if (!IsPreferredRitualCaster(bot, group))
+        return false;
+
     uint32 nearbyMembers = 0;  // alive, out of combat, in range (incl. self) -> potential participants
     uint32 missing = 0;        // of those, how many lack a healthstone
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -376,7 +430,7 @@ bool RitualOfSoulsTrigger::IsActive()
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || member->IsInCombat())
             continue;
-        if (member != bot && bot->GetDistance(member) > RITUAL_NEARBY_RANGE)
+        if (member != bot && !bot->IsWithinDistInMap(member, RITUAL_NEARBY_RANGE))
             continue;
 
         ++nearbyMembers;

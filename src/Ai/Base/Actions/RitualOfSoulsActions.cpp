@@ -13,11 +13,12 @@
 #include "Timer.h"
 
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 namespace
 {
-    GameObject* FindGroupOwnedGO(PlayerbotAI* botAI, uint32 entry, bool excludeSelf, float range)
+    GameObject* FindGroupOwnedGO(PlayerbotAI* botAI, uint32 entry, float range)
     {
         Player* bot = botAI->GetBot();
         Group* group = bot->GetGroup();
@@ -29,16 +30,38 @@ namespace
             return nullptr;
 
         ObjectGuid ownerGuid = go->GetOwnerGUID();
-        if (!ownerGuid)
-            return nullptr;
-
-        if (excludeSelf && ownerGuid == bot->GetGUID())
-            return nullptr;
-
-        if (!group->IsMember(ownerGuid))
+        if (!ownerGuid || !group->IsMember(ownerGuid))
             return nullptr;
 
         return go;
+    }
+
+    // The core keeps the portal on its caster's GO list but not the soulwell, so finding a soulwell
+    // takes a grid search. Only worth doing for a while after the group's last portal was seen.
+    constexpr uint32 SOULWELL_SEARCH_WINDOW_MS = 190000;  // 3 min soulwell + slack
+
+    std::unordered_map<ObjectGuid, uint32> lastPortalSeen;
+    std::mutex lastPortalSeenMutex;
+
+    void StampPortalSeen(ObjectGuid groupGuid)
+    {
+        uint32 now = getMSTime();
+        std::lock_guard<std::mutex> lock(lastPortalSeenMutex);
+        for (auto it = lastPortalSeen.begin(); it != lastPortalSeen.end();)
+        {
+            if (getMSTimeDiff(it->second, now) >= SOULWELL_SEARCH_WINDOW_MS)
+                it = lastPortalSeen.erase(it);
+            else
+                ++it;
+        }
+        lastPortalSeen[groupGuid] = now;
+    }
+
+    bool PortalSeenRecently(ObjectGuid groupGuid)
+    {
+        std::lock_guard<std::mutex> lock(lastPortalSeenMutex);
+        auto it = lastPortalSeen.find(groupGuid);
+        return it != lastPortalSeen.end() && getMSTimeDiff(it->second, getMSTime()) < SOULWELL_SEARCH_WINDOW_MS;
     }
 
     // Reservation slots (one per helper) so a whole raid doesn't stampede a single portal. Overshoot
@@ -93,16 +116,45 @@ namespace
 
 GameObject* FindGroupRitualPortal(PlayerbotAI* botAI, bool excludeSelf, float range)
 {
-    if (GameObject* go = FindGroupOwnedGO(botAI, GO_SOUL_PORTAL_R1, excludeSelf, range))
-        return go;
-    return FindGroupOwnedGO(botAI, GO_SOUL_PORTAL_R2, excludeSelf, range);
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        // other maps update on other threads, so their GO lists are off limits
+        if (!member || member->getClass() != CLASS_WARLOCK || !member->IsInMap(bot))
+            continue;
+
+        GameObject* portal = member->GetGameObject(SPELL_RITUAL_OF_SOULS_R2);
+        if (!portal)
+            portal = member->GetGameObject(SPELL_RITUAL_OF_SOULS_R1);
+        if (!portal)
+            continue;
+
+        StampPortalSeen(group->GetGUID());
+
+        if (excludeSelf && member == bot)
+            continue;
+
+        if (bot->IsWithinDistInMap(portal, range))
+            return portal;
+    }
+
+    return nullptr;
 }
 
 GameObject* FindGroupSoulwell(PlayerbotAI* botAI, float range)
 {
-    if (GameObject* go = FindGroupOwnedGO(botAI, GO_SOULWELL_R1, false, range))
+    Group* group = botAI->GetBot()->GetGroup();
+    if (!group || !PortalSeenRecently(group->GetGUID()))
+        return nullptr;
+
+    if (GameObject* go = FindGroupOwnedGO(botAI, GO_SOULWELL_R1, range))
         return go;
-    return FindGroupOwnedGO(botAI, GO_SOULWELL_R2, false, range);
+    return FindGroupOwnedGO(botAI, GO_SOULWELL_R2, range);
 }
 
 bool JoinRitualOfSoulsAction::Execute(Event /*event*/)

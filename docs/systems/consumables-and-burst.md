@@ -252,12 +252,25 @@ The mechanic itself (ritual channel, participant count, soulwell spawn, healthst
 server-side. The module supplies three behaviours: the warlock casts, helpers walk to the portal and
 click, and anyone lacking a healthstone walks to the soulwell and clicks.
 
-**The interesting part is the strategy-override architecture.** One toggle,
-`nc +ritualofsouls` (off by default), registers the *same* name `"ritualofsouls"` in two places: a
-base `RitualOfSoulsStrategy` (join + soulwell, all classes) and a `WarlockRitualOfSoulsStrategy`
-(base plus the cast trigger) in the warlock context. Strategy lookup resolves through the class
-context first, so the warlock override wins for warlocks and the base serves everyone else — no
-duplicated triggers.
+**The interesting part is the strategy-override architecture.** One name, `"ritualofsouls"` (on by
+default outside battlegrounds), is registered in two places: a base `RitualOfSoulsStrategy` (join +
+soulwell, all classes) and a `WarlockRitualOfSoulsStrategy` (base plus the cast trigger) in the
+warlock context. Strategy lookup resolves through the class context first, so the warlock override
+wins for warlocks and the base serves everyone else — no duplicated triggers.
+
+**The caster is picked, not raced.** `go_soulwell` (core `go_scripts.cpp`) chooses the stone spell
+from the *soulwell owner's* Improved Healthstone aura (18693 R2 / 18692 R1), so the talented warlock
+must cast. Among nearby warlock bots with the strategy, a shard, and the ritual off cooldown, the
+winner is: higher ritual rank (a Fel soulwell beats an improved Master one), then talent rank, then
+lowest GUID. Only the winner scans members' bags; the group cast reservation stays as backstop.
+
+**Lookups stay cheap; triggers check every 2 s.** A ritual portal sits on its caster's GO list
+(`Unit::AddGameObject`), so `FindGroupRitualPortal` reads same-map warlocks' `GetGameObject(spellId)`
+— no grid search, and never another map's lists (other thread). The soulwell is *not* on that list,
+so it needs a grid search; each portal sighting stamps the group, and `FindGroupSoulwell` searches
+only within 190 s of it (180 s soulwell + slack). A soulwell whose portal no group bot saw is
+invisible. Don't use the ritual's cooldown as a "ritual happened" signal: its on-event timing runs
+through `Spell::finish(false)` and `Unit::RemoveGameObject` and isn't provable by reading.
 
 Reusable patterns this established:
 
@@ -268,13 +281,15 @@ Reusable patterns this established:
   GUID for helper slots and on the group GUID so only one warlock casts. Shape taken from
   `soulstoneReservations` (`WarlockActions.cpp:250-266`).
 
-**Documented UX gotcha:** the chat command invokes the action directly and works with the toggle off,
-but helpers will not respond unless *their* toggle is on — so a command-cast is only useful when the
-group has the strategy enabled.
+**UX gotchas:** the chat command invokes the cast action directly, bypassing the caster pick, but
+helpers only respond with *their* strategy on. Bots with a saved `nc` string (logged out while
+grouped with a real player) reload that list, so they lack the default until sent
+`nc +ritualofsouls` once.
 
-Ids to confirm against the DB rather than trust: Soulwell GO ~181621, Ritual of Souls spells 29893
-(R1) / 58887 (R2), and the participant requirement, which lives in the ritual GO's
-`gameobject_template` row (`type = 18`, `GAMEOBJECT_TYPE_RITUAL`).
+Ids (DBC-verified): Ritual of Souls 29893 R1 / 58887 R2 (Soul Shard reagent, 300 s category
+cooldown, cooldown-on-event); portals 181622 / 193168; soulwells 181621 / 193169. The participant
+requirement lives in the portal's `gameobject_template` row (`type = 18`,
+`GAMEOBJECT_TYPE_SUMMONING_RITUAL`).
 
 ## Battle rez
 

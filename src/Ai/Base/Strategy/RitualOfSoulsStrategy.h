@@ -11,7 +11,6 @@
 
 class PlayerbotAI;
 
-// Opt-in non-combat strategy, off by default. Enable with "nc +ritualofsouls".
 // Base version (all classes): join a group member's ritual and grab from the resulting soulwell.
 // Warlocks get an override that additionally casts the ritual (WarlockRitualOfSoulsStrategy).
 class RitualOfSoulsStrategy : public NonCombatStrategy
