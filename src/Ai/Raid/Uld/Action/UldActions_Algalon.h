@@ -213,7 +213,6 @@ public:
     bool Execute(Event event) override;
 
 private:
-    bool _spotReached = false;
     Position _walk;
 };
 

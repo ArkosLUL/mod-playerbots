@@ -3657,7 +3657,7 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
     if (loose)
     {
         chosen = loose;
-        branch = "taunt";
+        branch = AlgalonKitingBehind(bot, loose) ? "behind" : "taunt";
     }
     else if (held && gathering)
         branch = "gather";
@@ -3682,72 +3682,272 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
     return chosen;
 }
 
-bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot)
+namespace
+{
+// `offset` from the hole along `angle`, else either side by the swing: in the room, still that side of the
+// hole and outside its field, and off every other hole's.
+bool KiteSpotNear(AlgalonEncounterState const& state, AlgalonScanUnit const& hole, float angle, float offset,
+                  Position& spot)
+{
+    for (float const swing : {0.0f, ULDUAR_ALGALON_KITE_SWING, -ULDUAR_ALGALON_KITE_SWING})
+    {
+        float const bearing = angle + swing;
+        float x = hole.position.GetPositionX() + std::cos(bearing) * offset;
+        float y = hole.position.GetPositionY() + std::sin(bearing) * offset;
+        ClampIntoRoom(x, y);
+
+        float const dx = x - hole.position.GetPositionX();
+        float const dy = y - hole.position.GetPositionY();
+        if (std::hypot(dx, dy) < ULDUAR_ALGALON_KITE_MIN_OFFSET || dx * std::cos(angle) + dy * std::sin(angle) <= 0.0f)
+            continue;
+
+        bool const clear =
+            std::none_of(state.holes.begin(), state.holes.end(), [&](AlgalonScanUnit const& other)
+                         { return other.guid != hole.guid &&
+                                  other.position.GetExactDist2d(x, y) < ULDUAR_ALGALON_HOLE_EXIT_RADIUS; });
+        if (!clear)
+            continue;
+
+        spot = Position(x, y, hole.position.GetPositionZ());
+        return true;
+    }
+
+    return false;
+}
+
+// Not the raid's hole with a Big Bang due, nor the only one the swap tanks reach from the hold spot.
+bool KiteableHole(AlgalonEncounterState const& state, AlgalonScanUnit const& hole, uint32 now)
+{
+    if (&hole == RaidShelterHole(state, now))
+        return false;
+
+    if (hole.position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT) > ULDUAR_ALGALON_TANK_SHELTER_REACH)
+        return true;
+
+    return std::any_of(state.holes.begin(), state.holes.end(), [&hole](AlgalonScanUnit const& other)
+        { return other.guid != hole.guid &&
+                 other.position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT) <= ULDUAR_ALGALON_TANK_SHELTER_REACH; });
+}
+
+// The far spot fits, and for held ones the stage spot on their side too.
+bool KiteHoleFits(AlgalonEncounterState const& state, AlgalonScanUnit const& hole, Position const& from, bool loose)
+{
+    Position spot;
+    float const toward = hole.position.GetAngle(&from);
+    float const away = Position::NormalizeOrientation(toward + static_cast<float>(M_PI));
+    return KiteSpotNear(state, hole, away, ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET, spot) &&
+           (loose || KiteSpotNear(state, hole, toward, ULDUAR_ALGALON_KITE_STAGE_OFFSET, spot));
+}
+
+void DropKite(AlgalonEncounterState& state, ObjectGuid const& guid)
+{
+    state.kiteHoleAssignments.erase(guid);
+    state.kites.erase(guid);
+}
+
+// No hole to spare, or the raid gathering for Big Bang: a loose one is taunted from where the handler stands.
+bool BehindAllowed(AlgalonEncounterState const& state, uint32 now)
+{
+    return !state.bigBangCasting && !BigBangDueWithin(state, ULDUAR_ALGALON_GATHER_LEAD_SECONDS, now) &&
+           state.holes.size() > ReservedHoles(state, now);
+}
+}  // namespace
+
+bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot, char const*& stage)
 {
     AlgalonEncounterState* state = FindState(bot);
     if (!state || !constellation)
         return false;
 
+    uint32 const now = getMSTime();
+    ObjectGuid const guid = bot->GetGUID();
+
+    // Where they come from: every one on the handler, or the loose one it is about to taunt.
+    std::vector<Creature*> held;
+    bool allCasting = true;
+    bool anyCasting = false;
+    float qx = 0.0f;
+    float qy = 0.0f;
+    for (AlgalonScanUnit const& scanned : state->constellations)
+    {
+        Creature* unit = scanned.active ? Resolve(bot, scanned.guid) : nullptr;
+        if (!unit || unit->GetVictim() != bot)
+            continue;
+
+        held.push_back(unit);
+        qx += unit->GetPositionX();
+        qy += unit->GetPositionY();
+        bool const casting = unit->HasUnitState(UNIT_STATE_CASTING);
+        allCasting = allCasting && casting;
+        anyCasting = anyCasting || casting;
+    }
+
+    bool const loose = constellation->GetVictim() != bot;
+    Position const from = loose || held.empty()
+                              ? constellation->GetPosition()
+                              : Position(qx / held.size(), qy / held.size(), constellation->GetPositionZ());
+
     AlgalonScanUnit const* hole = nullptr;
-    auto const latched = state->kiteHoleAssignments.find(bot->GetGUID());
+    auto const latched = state->kiteHoleAssignments.find(guid);
     if (latched != state->kiteHoleAssignments.end())
         hole = FindScanned(state->holes, latched->second);
 
-    // With a Big Bang due the raid hides in the hole by the hold spot. Walked into, it closes on them, and
-    // left out of their pick it sends them on to a hole they may not reach.
-    AlgalonScanUnit const* raidHole = RaidShelterHole(*state, getMSTime());
-    if (hole && hole == raidHole)
+    // A loose one gets the hole nearest itself, never one picked for another.
+    auto const previous = state->kites.find(guid);
+    bool const otherTarget =
+        loose && (previous == state->kites.end() || previous->second.looseTarget != constellation->GetGUID());
+    if (hole && (!KiteableHole(*state, *hole, now) || otherTarget))
     {
         hole = nullptr;
-        state->kiteHoleAssignments.erase(bot->GetGUID());
+        DropKite(*state, guid);
     }
 
     if (!hole)
     {
-        // Nearest to the constellation, not the handler: it is what has to arrive.
-        float bestDistance = std::numeric_limits<float>::max();
+        // Nearest to where they come from, not to the handler: they are what has to arrive.
+        std::vector<AlgalonScanUnit const*> candidates;
         for (AlgalonScanUnit const& candidate : state->holes)
-        {
-            if (&candidate == raidHole)
-                continue;
+            if (KiteableHole(*state, candidate, now))
+                candidates.push_back(&candidate);
 
-            float const distance = constellation->GetExactDist2d(candidate.position);
-            if (distance < bestDistance)
+        std::sort(candidates.begin(), candidates.end(), [&from](AlgalonScanUnit const* a, AlgalonScanUnit const* b)
+                  { return from.GetExactDist2d(a->position) < from.GetExactDist2d(b->position); });
+
+        for (AlgalonScanUnit const* candidate : candidates)
+        {
+            if (KiteHoleFits(*state, *candidate, from, loose))
             {
-                hole = &candidate;
-                bestDistance = distance;
+                hole = candidate;
+                break;
             }
         }
 
         if (!hole)
         {
-            state->kiteHoleAssignments.erase(bot->GetGUID());
+            DropKite(*state, guid);
             return false;
         }
 
-        state->kiteHoleAssignments[bot->GetGUID()] = hole->guid;
-        state->kiteBearings.erase(bot->GetGUID());
+        state->kiteHoleAssignments[guid] = hole->guid;
+        AlgalonKite fresh;
+        fresh.sinceMs = now;
+        if (loose)
+            fresh.looseTarget = constellation->GetGUID();
+        state->kites[guid] = fresh;
     }
 
-    // Past the hole on the far side of where the constellation was, so the chase drags it through the
-    // field. Latched: the handler walks round the hole, and a bearing read off the constellation each tick
-    // would turn with it.
-    auto bearing = state->kiteBearings.find(bot->GetGUID());
-    if (bearing == state->kiteBearings.end())
-        bearing = state->kiteBearings
-                      .emplace(bot->GetGUID(), Position::NormalizeOrientation(hole->position.GetAngle(constellation) +
-                                                                              static_cast<float>(M_PI)))
-                      .first;
+    AlgalonKite& kite = state->kites[guid];
+    float const toward = hole->position.GetAngle(&from);
+    float const away = Position::NormalizeOrientation(toward + static_cast<float>(M_PI));
 
-    float const farAngle = bearing->second;
-    float x = hole->position.GetPositionX() + std::cos(farAngle) * ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET;
-    float y = hole->position.GetPositionY() + std::sin(farAngle) * ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET;
+    auto const enter = [&kite, now](AlgalonKiteStage next)
+    {
+        kite.stage = next;
+        kite.sinceMs = now;
+        kite.hasSpot = false;
+    };
 
-    // He evades if dragged past 47 yd, and so would the tank walking him out there on a swap.
-    ClampIntoRoom(x, y);
+    if (loose)
+    {
+        // Latched, or it would circle the hole with the one chasing someone else; a new one once out of reach.
+        stage = "behind";
+        if (!kite.hasSpot || constellation->GetExactDist2d(kite.spot) > ULDUAR_ALGALON_TAUNT_REACH)
+            kite.hasSpot = KiteSpotNear(*state, *hole, away, ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET, kite.spot);
+    }
+    else
+    {
+        // Already past the hole from them, after a taunt from behind or a pass round: it waits where it is.
+        if (kite.stage == AlgalonKiteStage::Stage)
+        {
+            float const dx = bot->GetPositionX() - hole->position.GetPositionX();
+            float const dy = bot->GetPositionY() - hole->position.GetPositionY();
+            float const out = std::hypot(dx, dy);
+            if (out >= ULDUAR_ALGALON_KITE_MIN_OFFSET && out <= ULDUAR_ALGALON_KITE_STAGE_OFFSET &&
+                dx * std::cos(away) + dy * std::sin(away) >= out * 0.5f)
+                enter(AlgalonKiteStage::Cross);
+        }
 
-    spot = ValidateFloorPoint(bot, Position(x, y, hole->position.GetPositionZ()));
+        // A pass that missed: one rests beside the handler outside the field.
+        if (kite.stage == AlgalonKiteStage::Parked &&
+            getMSTimeDiff(kite.sinceMs, now) >= ULDUAR_ALGALON_KITE_RETRY_MS &&
+            std::any_of(held.begin(), held.end(), [bot, hole](Creature* unit)
+                        { return bot->GetExactDist2d(unit) <= ULDUAR_ALGALON_KITE_BESIDE &&
+                                 hole->position.GetExactDist2d(unit) > ULDUAR_ALGALON_CONSTELLATION_EAT_RADIUS; }))
+            enter(AlgalonKiteStage::Stage);
+
+        // A walk that never arrives was blocked or pushed off: the next call starts over.
+        if ((kite.stage == AlgalonKiteStage::Stage || kite.stage == AlgalonKiteStage::Cross) &&
+            getMSTimeDiff(kite.sinceMs, now) >= ULDUAR_ALGALON_KITE_STALL_MS)
+        {
+            DropKite(*state, guid);
+            return false;
+        }
+
+        if (kite.stage == AlgalonKiteStage::Wait &&
+            (allCasting || (anyCasting && getMSTimeDiff(kite.sinceMs, now) >= ULDUAR_ALGALON_KITE_WAIT_MS)))
+            enter(AlgalonKiteStage::Cross);
+
+        if (!kite.hasSpot)
+        {
+            bool const near = kite.stage == AlgalonKiteStage::Stage || kite.stage == AlgalonKiteStage::Wait;
+            kite.hasSpot = KiteSpotNear(*state, *hole, near ? toward : away,
+                                        near ? ULDUAR_ALGALON_KITE_STAGE_OFFSET : ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET,
+                                        kite.spot);
+        }
+
+        // Arrived, the spot stays for the next stage: waiting at it, or parked at it.
+        if (kite.hasSpot && bot->GetExactDist2d(kite.spot) <= ULDUAR_ALGALON_SLOT_TOLERANCE &&
+            (kite.stage == AlgalonKiteStage::Stage || kite.stage == AlgalonKiteStage::Cross))
+        {
+            Position const reached = kite.spot;
+            enter(kite.stage == AlgalonKiteStage::Stage ? AlgalonKiteStage::Wait : AlgalonKiteStage::Parked);
+            kite.spot = reached;
+            kite.hasSpot = true;
+        }
+
+        static char const* const names[] = {"stage", "wait", "cross", "parked"};
+        stage = names[static_cast<uint8>(kite.stage)];
+    }
+
+    if (!kite.hasSpot)
+    {
+        DropKite(*state, guid);
+        return false;
+    }
+
+    spot = ValidateFloorPoint(bot, kite.spot);
     return true;
+}
+
+bool AlgalonKiteBehind(Player* bot, Unit* constellation, Position& spot)
+{
+    AlgalonEncounterState* state = FindState(bot);
+    if (!state || !constellation || constellation->GetVictim() == bot || !BehindAllowed(*state, getMSTime()))
+        return false;
+
+    char const* stage = nullptr;
+    if (!GetAlgalonKiteSpot(bot, constellation, spot, stage))
+        return false;
+
+    // Out of taunt reach from there: no kite hole is held for it, or everyone else's pick would skip it.
+    if (constellation->GetExactDist2d(spot) > ULDUAR_ALGALON_TAUNT_REACH)
+    {
+        DropKite(*state, bot->GetGUID());
+        return false;
+    }
+
+    return true;
+}
+
+bool AlgalonKitingBehind(Player* bot, Unit* constellation)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    if (!state || !constellation || constellation->GetVictim() == bot || !BehindAllowed(*state, getMSTime()))
+        return false;
+
+    auto const kite = state->kites.find(bot->GetGUID());
+    return kite != state->kites.end() && kite->second.hasSpot &&
+           kite->second.looseTarget == constellation->GetGUID();
 }
 
 Unit* GetAlgalonLooseDarkMatter(Player* bot)

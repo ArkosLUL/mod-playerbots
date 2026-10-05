@@ -234,11 +234,29 @@ hole, nobody else's, else its shelter, and waits there (`hold`) until every hide
 (bots by shelter, humans by the nearest hole, kite hole included), or until its walk plus 2 s is left: a tank
 is caught out under its walk plus 1.5 s, and with the same threshold a 250 ms tick read that first. From 10 s
 before the cast it only taunts (`gather`), keeping its kite hole unless that became the raid's: a constellation
-keeps its victim 9.5 s from the cast start, and one chasing a healer closed a hole a ranged was walking to. With a spare hole it parks 9 yd past
-that hole on the far side (clamped 44 yd from centre), so the chase drags one through the field, then
-yields its tick. The far side is latched with the hole, and the walk goes round any hole it would clip, at
-combat priority: a straight forced walk crossed the field, and its booking refused both the tank slot walk
-and the exit when the handler took him as Big Bang began. Its movement rule still passes its taunts, the pickup and the swap: all are
+keeps its victim 9.5 s from the cast start, and one chasing a healer closed a hole a ranged was walking to.
+
+**A spare hole eats one, only if it comes across the hole at the handler.** It chases at 7 yd/s (run speed),
+rests 3-3.5 yd off its victim, and is eaten within about 6.5 yd of the centre, never at 7.4-9.8 yd even after
+20 s there. Parked 9 yd past the hole and circling it at 9.5 yd, the handler kept them trailing outside the
+field; in a pursuit simulation circling with them behind never got one eaten. But Arcane Barrage is a 2 s cast
+every 5 s, standing still, and a wave casts in sync: starting round at their cast, they cut across at 2.4-4.3 yd.
+So, per handler (`algalon.kite`), with the walk going round any hole it would clip:
+
+- `stage`: to 11 yd out on their side (from the centre of the held ones);
+- `wait`: there until all of them cast, or any after 6 s;
+- `cross`: round to 8 yd past the hole, just outside the 7.5 yd that phases a player (straight there when
+  already past it from them);
+- `parked`: waits; one resting beside it outside the field after 3 s means the pass missed, and it stages again.
+  A walk still under way after 12 s starts over.
+
+A spot clamped into the room (44 yd) must stay 7.8 yd from the hole, on its side, and 8 yd off every other
+hole, else ±30°; a hole needs both spots. A loose one is taunted from the far spot of the hole nearest it
+(`behind`) when that is within 28 yd of it, the handler holding there while the taunt cools, so it comes straight
+across; not while gathering or with no hole spare. Never kited: the raid's hole with Big Bang due, and the only
+hole within 35 yd of the hold spot, the swap tanks' reach. The walks run at combat priority: a straight forced
+walk crossed the field, and its booking refused both the tank slot walk and the exit when the handler took him
+as Big Bang began. Its movement rule still passes its taunts, the pickup and the swap: all are
 `AttackAction`s, and a swap it can't make phases the holder out. A pickup or swap due on it lifts the rule, the
 kite and its constellation taunts, and the slot walk takes it back to him: kiting 50-60 yd out, it never came
 back and the holder died at 4 stacks. Constellations are excluded from
@@ -433,7 +451,7 @@ Raid-wide values, all written by the instance tick: `algalon.phase` (0 idle, 1 i
 helper that derives it: `algalon.tankheal` (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
 (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is the handler waiting to go
 last), `algalon.kite`
-(`taunt`/`hole`/`parked`/`kept`/`gather`/`none`), `algalon.spot`
+(`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`none`; older traces `hole`), `algalon.spot`
 (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`), `algalon.hazard`
 (`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`, where `cross` means only a
 path over a hole was clear),

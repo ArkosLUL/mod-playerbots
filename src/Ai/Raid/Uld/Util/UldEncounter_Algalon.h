@@ -82,9 +82,28 @@ constexpr float ULDUAR_ALGALON_FIELD_PATH_CLEARANCE = 6.3f;
 // A generic mover may not stop closer than this to a hole: the bot would stand on the field's edge.
 constexpr float ULDUAR_ALGALON_FIELD_STAND_CLEARANCE = 7.5f;
 
-// The handler parks this far past the hole on the far side, so the chase drags the constellation
-// through the field while the handler stays outside it.
-constexpr float ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET = 9.0f;
+// A constellation chases at run speed and rests 3-3.5 yd off its victim, and is eaten within about 6.5 yd of
+// a hole's centre. So it has to come at the handler across the hole: the handler waits this far past the hole,
+// just outside the 7.5 yd that phases a player, and never under the minimum once clamped into the room.
+constexpr float ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET = 8.0f;
+constexpr float ULDUAR_ALGALON_KITE_MIN_OFFSET = 7.8f;
+// Held ones trail right behind the handler, so it first waits this far out on their side of the hole for
+// their Arcane Barrage: 2 s standing still every 5 s, in sync for a wave. Going round then, it is far enough
+// ahead that they cut straight across. Past the wait it goes on the first of them casting.
+constexpr float ULDUAR_ALGALON_KITE_STAGE_OFFSET = 11.0f;
+constexpr uint32 ULDUAR_ALGALON_KITE_WAIT_MS = 6000;
+// Parked this long with one resting beside it and outside the field, the pass missed: stage again. A walk to
+// the stage or far spot still under way after the stall time was blocked or pushed off: the kite starts over.
+constexpr uint32 ULDUAR_ALGALON_KITE_RETRY_MS = 3000;
+constexpr uint32 ULDUAR_ALGALON_KITE_STALL_MS = 12000;
+constexpr float ULDUAR_ALGALON_KITE_BESIDE = 5.0f;
+constexpr float ULDUAR_ALGALON_CONSTELLATION_EAT_RADIUS = 6.5f;
+// A spot clamped into the room or onto another field is tried this far either side.
+constexpr float ULDUAR_ALGALON_KITE_SWING = static_cast<float>(M_PI) / 6.0f;
+// A loose one is taunted from the far side of a hole when that spot is within taunt reach of it.
+constexpr float ULDUAR_ALGALON_TAUNT_REACH = 28.0f;
+// The swap tanks' walk from the hold spot in the cast. The only hole within it is never kited.
+constexpr float ULDUAR_ALGALON_TANK_SHELTER_REACH = 35.0f;
 // Park points and dodges stay this far inside the room edge.
 constexpr float ULDUAR_ALGALON_ROOM_CLAMP = 44.0f;
 
@@ -335,6 +354,26 @@ enum class AlgalonPhase : uint32
     Won = 4,
 };
 
+// How far the handler is in walking held constellations through a hole.
+enum class AlgalonKiteStage : uint8
+{
+    Stage,
+    Wait,
+    Cross,
+    Parked,
+};
+
+struct AlgalonKite
+{
+    AlgalonKiteStage stage = AlgalonKiteStage::Stage;
+    uint32 sinceMs = 0;
+    // Latched per stage, or the walk would turn as the constellations shift.
+    Position spot;
+    bool hasSpot = false;
+    // The loose one the far spot was picked for, taunted from there.
+    ObjectGuid looseTarget;
+};
+
 // One creature from the room scan. Positions stay valid for phased bots, which can't see the room.
 struct AlgalonScanUnit
 {
@@ -428,8 +467,8 @@ struct AlgalonEncounterState
     std::string lastStarWindow;
     // Opened at a deadline, the kill keeps the deadline's looser position test.
     bool focusByDeadline = false;
-    // Far-side bearing per handler, latched with its kite hole, or the park spot turns as it walks round.
-    std::unordered_map<ObjectGuid, float> kiteBearings;
+    // Per handler, reset whenever its kite hole is latched.
+    std::unordered_map<ObjectGuid, AlgalonKite> kites;
     bool wormHolesSeen = false;
 
     uint32 lastStarDeathMs = 0;
@@ -583,8 +622,14 @@ Player* GetAlgalonHandler(PlayerbotAI* botAI);
 // A loose constellation to taunt first, else one already on the handler while a hole is spare to drag it
 // through. Traced as algalon.kite.
 Unit* GetAlgalonHandlerConstellation(Player* bot);
-// Where the handler parks to drag its constellation through a spare hole.
-bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot);
+// Where the handler walks to drag its constellations through a spare hole, and the stage, traced as
+// algalon.kite. For a loose one, the far-side spot it taunts from ("behind").
+bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot, char const*& stage);
+// The far-side spot to taunt a loose constellation from, latching it; false when it is out of taunt reach, no
+// hole is spare or the raid is gathering for Big Bang.
+bool AlgalonKiteBehind(Player* bot, Unit* constellation, Position& spot);
+// Read-only, for rule predicates: a far-side spot is latched for this loose constellation.
+bool AlgalonKitingBehind(Player* bot, Unit* constellation);
 // A Dark Matter on anyone but the handler, the one hurting the most fragile victim first.
 Unit* GetAlgalonLooseDarkMatter(Player* bot);
 

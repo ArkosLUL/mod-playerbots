@@ -381,8 +381,26 @@ bool AlgalonConstellationTauntAction::Execute(Event /*event*/)
     if (!constellation)
         return false;
 
+    // From the far side of a spare hole it comes straight across and is eaten on the way.
+    Position behind;
+    bool const fromBehind = AlgalonKiteBehind(bot, constellation, behind);
+    if (fromBehind && bot->GetExactDist2d(behind) > ULDUAR_ALGALON_SLOT_TOLERANCE)
+    {
+        Position next;
+        if (!AlgalonWalkAround(bot, behind, next))
+            return false;
+
+        ReleaseStalledWalk(botAI, bot);
+        return MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false,
+                      false, false, MovementPriority::MOVEMENT_COMBAT, true);
+    }
+
     if (CastClassTaunt(botAI, constellation))
         return true;
+
+    // On the spot with the taunt still cooling: hitting it would walk the handler off the line.
+    if (fromBehind)
+        return false;
 
     // Hits hold it until the taunt is back.
     if (AI_VALUE(Unit*, "current target") != constellation)
@@ -410,29 +428,18 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
 {
     Unit* constellation = GetAlgalonHandlerConstellation(bot);
     Position spot;
-    if (!constellation || !GetAlgalonKiteSpot(bot, constellation, spot))
-    {
-        _spotReached = false;
+    char const* stage = nullptr;
+    if (!constellation || !GetAlgalonKiteSpot(bot, constellation, spot, stage))
         return false;
-    }
-
-    float const distance = bot->GetExactDist2d(spot);
-    if (_spotReached && distance > ULDUAR_ALGALON_SLOT_TOLERANCE * 2.0f)
-        _spotReached = false;
-
-    // Once parked the constellation walks itself into the hole, and the tick goes back to everything else.
-    if (_spotReached || distance <= ULDUAR_ALGALON_SLOT_TOLERANCE)
-    {
-        _spotReached = true;
-        if (RaidObs::Active())
-            RaidObs::NoteDerived(bot, "algalon.kite", "parked");
-        return false;
-    }
 
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "algalon.kite", "hole");
+        RaidObs::NoteDerived(bot, "algalon.kite", stage);
 
-    // The park spot is past the hole, so the straight walk there crosses it.
+    // Waiting for their cast or for them to come across: the tick goes back to everything else.
+    if (bot->GetExactDist2d(spot) <= ULDUAR_ALGALON_SLOT_TOLERANCE)
+        return false;
+
+    // The far spot is past the hole, so the straight walk there crosses it.
     Position next;
     if (!AlgalonWalkAround(bot, spot, next))
         return false;

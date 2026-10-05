@@ -54,7 +54,7 @@ bool AlgalonHandlerKiting(PlayerbotAI* botAI)
         return false;
 
     Unit* constellation = GetAlgalonHandlerConstellation(bot);
-    return constellation && constellation->GetVictim() == bot;
+    return constellation && (constellation->GetVictim() == bot || AlgalonKitingBehind(bot, constellation));
 }
 
 // Only the roles the formation places: the rings and the swap tanks. Melee keep every generic mover once
