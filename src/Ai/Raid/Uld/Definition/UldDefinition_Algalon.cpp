@@ -27,6 +27,14 @@ bool AlgalonCooldownsHeld(PlayerbotAI* botAI)
             IsAlgalonPhased(botAI->GetBot()));
 }
 
+// No explosion reaches a phased bot, only the hole's DoT and Dark Matter: Barkskins spent there were
+// cooling down for the stars dying 4 s after the strip.
+bool AlgalonPhasedButtonsHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return AlgalonEngaged(botAI) && IsAlgalonPhased(bot) && bot->GetHealthPct() > ULDUAR_ALGALON_PHASED_BUTTON_PCT;
+}
+
 // Phased bots are left out: inside the void they are safe, and phase-16 Dark Matter is on them.
 bool AlgalonHidingNow(PlayerbotAI* botAI) { return AlgalonShouldRunForShelter(botAI->GetBot()); }
 
@@ -142,6 +150,8 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Multiplier<AlgalonHideCastMultiplier>(Family::Spell);
     e.Block("algalon phase immunity hold", Role::Any, AlgalonCooldownsHeld, 0,
             {"ice block", "divine shield", "cloak of shadows", "anti magic shell"});
+    e.Block("algalon phased button hold", Role::Any, AlgalonPhasedButtonsHeld, 0,
+            {"barkskin", "shadow ward", "icebound fortitude", "shamanistic rage", "divine protection"});
     // The cover node spends these on the star about to die. The class nodes fire on a hurt raid, after it.
     e.Block("algalon explosion cover hold", Role::Any, AlgalonInPhaseOne, 0, {"divine sacrifice"});
     e.Block("algalon aura mastery hold", Role::Any, AlgalonEngaged, 0, {"aura mastery"});

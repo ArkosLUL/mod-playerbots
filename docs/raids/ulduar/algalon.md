@@ -466,15 +466,19 @@ blocks Divine Protection 2 min), nor Lay on Hands on others; a **lone holder** (
 phased; not its stacks, which linger 45 s after every swap) gets its own and the externals back outside the
 cast, never Divine Shield. The encounter's own actions cast directly and pass.
 
-**Explosion cover** (`ACTION_EMERGENCY + 1`): with a star forecast to die within 2 s (or at ≤ 3%) and none
-up, one per star:
+**Explosion cover** (`ACTION_EMERGENCY + 1`): with a star forecast to die within 2 s (or at ≤ 5%: a chewed one
+went from 4.8% to dead between scans) and none up, one per star. Both covers and the personal buttons act only on
+a star still alive: the scan lags a death by up to 250 ms, the explosion drops a bot under its line, and 11 of 21
+presses and an Aura Mastery went on stars already dead, two bots then dying at the next with theirs cooling.
+Neither acts on a star dying inside its Big Bang window (it hits the soaker alone). The paladin due to cover takes
+no `window` Hand of Sacrifice (both fired in one tick, the Hand first, and the star died uncovered):
 
 - Aura Mastery from the **shadow aura paladin**, a bot with Aura Mastery that runs Shadow Resistance Aura
   while stars live (a `Block` holds its other auras, released in phase 2). Prayer of Shadow Protection already
   gives 130 and both are aura 143, highest only, so the aura alone adds nothing; Aura Mastery takes it to 260
   for 6 s and recalculates the running aura.
 - Else Divine Sacrifice from a paladin bot with Divine Guardian (53527/53530, by `HasTalent`: a passive talent
-  is never in the spell map `HasSpell` reads, so it never fired before), never the holder, ≥ 50%. The
+  is never in the spell map `HasSpell` reads, so it never fired before), ≥ 50%, the holder last (one global). The
   tick removes 64205 from bots at once: left up it splits 30% of the party's damage onto the paladin, and the
   procced 70940 (raid within 30 yd −10/20%, 6 s) stays.
 
@@ -483,11 +487,17 @@ The class Divine Sacrifice node is blocked while stars live and Aura Mastery all
 **Personal buttons** (`ACTION_EMERGENCY`, after the cover): 23 of 41 explosion deaths had one ready, and bots
 press them only once already low. With a star dying within 1.5 s, an unphased bot outside the swap pair under the
 top roll (× 0.8 with Divine Guardian on it or within 40 yd of the Aura Mastery paladin; the largest of 87 hits
-under Aura Mastery was 79% of it) casts the cheapest that leaves it alive, once per star and none while one
+under Aura Mastery was 79% of it), times the stars dying within 3 s of it up to 3 (three inside a second killed
+18 who were each above one hit), each covered only if it dies before the cover ends, casts the cheapest that
+leaves it alive (a channel is broken first: it fails every cast check), once per star and none while one
 runs: Shadow Ward, Anti-Magic Shell (by id 48707: the name lookup misses "Anti-Magic Shell"), Barkskin,
 Shamanistic Rage, Cloak of Shadows (a 90% resist, not a cut), Icebound Fortitude, Dispersion (never the
 disperser's, nor one not back for the next soak), Divine Protection, Ice Block, Divine Shield. The immunities
-are skipped within 20 s of a cast.
+are skipped within 20 s of a cast. With none that saves it, a healthstone (not on the move: it stops the bot),
+else a healing potion, when 3.5 k lands whole and lifts it over the line: warriors, hunters, elemental and
+restoration shamans and holy and discipline priests have no button (14 of 37 explosion deaths). Phased and above 35%, a bot keeps Barkskin, Shadow Ward, Icebound Fortitude, Shamanistic Rage and Divine
+Protection (a `Block`): no explosion reaches it there, and Barkskins spent in the void were cooling at the stars
+dying after the strip.
 
 ## The trace
 
@@ -523,7 +533,7 @@ only record of how a star died, since damage rows cover players alone; `algalon.
 (`def=<button|dispersion|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.tankdef`
 (`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
 (`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (`start|stop <star counter> <hp%>` on the
-wand); `algalon.underdrop` (`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.personal` (the button's spell name);
+wand); `algalon.underdrop` (`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.personal` (the button's spell name, or `healthstone`/`healing potion`);
 `algalon.nitro` (`hide` on a bot using its boots on the
 run); `algalon.handover` (`nodef` on a
 holder handing him over for want of a defensive); `algalon.pull`
@@ -559,7 +569,9 @@ counted by cause and role with humans starred. Then:
   and spell;
 - `--defensives`: every cutter, Lay on Hands and Guardian Spirit on a swap tank with its health and whether it
   lived 10 s; per tank death its last 6 s of hits, cutters up and `algalon.tankdef`; per explosion the cover
-  up and damage covered against uncovered; per explosion death the personal buttons pressed or ready;
+  up and damage covered against uncovered; per explosion death the personal buttons pressed or ready; per
+  explosion each bot under its line with its buttons and consumables, each press and cover beside its star's
+  death, with verdicts for one after the death, a press while phased and a failed cover with another ready;
   `window` cutters on a holder at 80% or more;
 - `--stars` also: per star its plan, window, forecast against actual death, offset from the hit, who its
   explosion hit unphased and its trims; per focus span the loss beyond the drain and the switches between

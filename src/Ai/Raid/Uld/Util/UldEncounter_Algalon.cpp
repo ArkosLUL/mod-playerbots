@@ -6,6 +6,7 @@
 
 #include "UldEncounter_Algalon.h"
 
+#include "Action.h"
 #include "AiFactory.h"
 #include "AiObjectContext.h"
 #include "CellImpl.h"
@@ -15,6 +16,7 @@
 #include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "InstanceScript.h"
+#include "Item.h"
 #include "LastMovementValue.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
@@ -2185,16 +2187,33 @@ char const* DeriveSlot(Player* bot, Position& position, bool& found)
     return branch;
 }
 
-// The star forecast to die soonest within `leadMs`, from its own slope, or one already this low.
-AlgalonScanUnit const* ExplodingStar(AlgalonEncounterState const& state, uint32 leadMs)
+// When a star dies, from its own slope, or now once at `lowPct` or less.
+int32 ExplosionDueMs(AlgalonScanUnit const& star, float lowPct)
+{
+    return star.healthPct <= lowPct ? 0 : StarDeathAt(star, star.lossPctPerSec);
+}
+
+// Planned under the coming cast and its drain still ends inside the window: it hits the soaker alone, in
+// Dispersion, and a cover spent on it is gone for the stars after the strip.
+bool DiesUnder(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
+{
+    return star.under && star.tickHp && state.lastTickMs &&
+           DrainDeathMs(star) <= MsUntil(state.underToMs, state.lastTickMs);
+}
+
+// The star forecast to die soonest within `leadMs`. With `bot`, only one still alive: the scan lags a death
+// by up to a tick, the explosion drops the bot under its line, and 11 of 21 buttons went on stars already
+// gone.
+AlgalonScanUnit const* ExplodingStar(AlgalonEncounterState const& state, uint32 leadMs,
+                                     float lowPct = ULDUAR_ALGALON_EXPLOSION_LOW_PCT, Player* bot = nullptr)
 {
     AlgalonScanUnit const* soonest = nullptr;
     int32 best = std::numeric_limits<int32>::max();
     for (AlgalonScanUnit const& star : state.stars)
     {
-        int32 const death =
-            star.healthPct <= ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT ? 0 : StarDeathAt(star, star.lossPctPerSec);
-        if (death <= static_cast<int32>(leadMs) && death < best)
+        int32 const death = ExplosionDueMs(star, lowPct);
+        if (death <= static_cast<int32>(leadMs) && death < best && !DiesUnder(state, star) &&
+            (!bot || Resolve(bot, star.guid)))
         {
             soonest = &star;
             best = death;
@@ -2202,6 +2221,33 @@ AlgalonScanUnit const* ExplodingStar(AlgalonEncounterState const& state, uint32 
     }
 
     return soonest;
+}
+
+// The hit to survive from `first` and the live stars dying within the stack window of it, the soonest few,
+// each covered only if it dies before the cover running on the bot ends.
+float StackedHit(AlgalonEncounterState const& state, Player* bot, AlgalonScanUnit const& first, float topRoll,
+                 int32 coverMs)
+{
+    int32 const from = ExplosionDueMs(first, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
+    std::vector<int32> deaths;
+    for (AlgalonScanUnit const& star : state.stars)
+    {
+        int32 const death = ExplosionDueMs(star, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
+        if (death <= from + static_cast<int32>(ULDUAR_ALGALON_EXPLOSION_STACK_MS) && !DiesUnder(state, star) &&
+            Resolve(bot, star.guid))
+            deaths.push_back(death);
+    }
+
+    if (deaths.empty())
+        deaths.push_back(from);
+
+    std::sort(deaths.begin(), deaths.end());
+    deaths.resize(std::min<size_t>(deaths.size(), ULDUAR_ALGALON_EXPLOSION_STACK_MAX));
+    float hit = 0.0f;
+    for (int32 const death : deaths)
+        hit += topRoll * (death <= coverMs ? ULDUAR_ALGALON_COVERED_EXPLOSION_FACTOR : 1.0f);
+
+    return hit;
 }
 
 // From just before a star explosion or a meteor until the healers, who spend those seconds on the raid, are
@@ -3471,6 +3517,11 @@ bool AlgalonDispersionSoak(Player* bot)
     return state && state->engaged && !state->disperser.Get().IsEmpty();
 }
 
+namespace
+{
+Player* ExplosionCoverProvider(PlayerbotAI* botAI, char const*& cover);
+}  // namespace
+
 AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
 {
     AlgalonTankCut const none;
@@ -3553,8 +3604,13 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
     auto const turn = [&](Player* provider, uint32 spellId)
     { return provider == bot ? AlgalonTankCut{holder, spellId, why} : none; };
 
+    // The paladin due to cover the same explosion keeps its global for that: both nodes fired in one tick, the
+    // cutter went first and the star died uncovered.
+    char const* cover = nullptr;
+    Player* coverer = !std::strcmp(why, "window") ? ExplosionCoverProvider(botAI, cover) : nullptr;
+
     // The partner is idle in plate, so the 30% it takes over costs it least.
-    if (IsBot(partner))
+    if (IsBot(partner) && partner != coverer)
     {
         uint32 const spellId = SacrificeReady(partner, holder);
         if (usable(partner, spellId))
@@ -3562,7 +3618,7 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
     }
 
     // Off cooldown within a global cooldown counts: the externals wait for it rather than spend a longer one.
-    if (IsBot(holder))
+    if (IsBot(holder) && holder != coverer)
     {
         if (char const* own = ReadyTankDefensive(holder, true, ULDUAR_ALGALON_PREP_GCD_MS))
         {
@@ -3582,7 +3638,7 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* paladin = ref->GetSource();
-            if (paladin == partner || !IsBot(paladin) || PlayerbotAI::IsHeal(paladin) != healers)
+            if (paladin == partner || paladin == coverer || !IsBot(paladin) || PlayerbotAI::IsHeal(paladin) != healers)
                 continue;
 
             uint32 const spellId = SacrificeReady(paladin, holder);
@@ -3646,47 +3702,74 @@ void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut)
     }
 }
 
-char const* GetAlgalonExplosionCover(PlayerbotAI* botAI)
+namespace
 {
+// Who covers the star about to explode, and with what: one per star, none while one is up.
+Player* ExplosionCoverProvider(PlayerbotAI* botAI, char const*& cover)
+{
+    cover = nullptr;
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     AlgalonEncounterState const* state = FindState(bot);
     Group* group = bot ? bot->GetGroup() : nullptr;
-    if (!state || !group || state->phase.Get() != AlgalonPhase::One || state->bigBangCasting ||
-        bot->getClass() != CLASS_PALADIN || IsAlgalonPhased(bot))
+    if (!state || !group || state->phase.Get() != AlgalonPhase::One || state->bigBangCasting)
         return nullptr;
 
-    AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS);
+    AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS,
+                                                ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT, bot);
     if (!star || star->guid == state->coverStar || ExplosionCovered(group, *state))
         return nullptr;
 
     // Its own aura is the one it doubles, so only with that aura up.
     Player* auraPaladin = FindGroupMember(group, state->shadowAuraPaladin.Get());
     PlayerbotAI* auraAI = auraPaladin ? GET_PLAYERBOT_AI(auraPaladin) : nullptr;
-    if (auraAI && auraAI->HasAura("shadow resistance aura", auraPaladin, false, true) &&
+    if (auraAI && !IsAlgalonPhased(auraPaladin) &&
+        auraAI->HasAura("shadow resistance aura", auraPaladin, false, true) &&
         ExternalReady(auraPaladin, "aura mastery", auraPaladin))
-        return auraPaladin == bot ? "aura mastery" : nullptr;
-
-    // Not the holder: its global cooldowns go on him.
-    Player* holder = GetAlgalonBossTank(botAI);
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
-        Player* paladin = ref->GetSource();
-        if (paladin == holder || !IsBot(paladin) || paladin->getClass() != CLASS_PALADIN ||
-            !HasDivineGuardian(paladin) || paladin->GetHealthPct() < ULDUAR_ALGALON_SACRIFICE_MIN_PCT)
-            continue;
+        cover = "aura mastery";
+        return auraPaladin;
+    }
 
-        if (ExternalReady(paladin, "divine sacrifice", paladin))
-            return paladin == bot ? "divine sacrifice" : nullptr;
+    // The holder last: its globals go on him. It pays one, since the tick strips 64205 at once.
+    Player* holder = GetAlgalonBossTank(botAI);
+    for (bool const holderTurn : {false, true})
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* paladin = ref->GetSource();
+            if ((paladin == holder) != holderTurn || !IsBot(paladin) || paladin->getClass() != CLASS_PALADIN ||
+                IsAlgalonPhased(paladin) || !HasDivineGuardian(paladin) ||
+                paladin->GetHealthPct() < ULDUAR_ALGALON_SACRIFICE_MIN_PCT)
+                continue;
+
+            if (ExternalReady(paladin, "divine sacrifice", paladin))
+            {
+                cover = "divine sacrifice";
+                return paladin;
+            }
+        }
     }
 
     return nullptr;
+}
+}  // namespace
+
+char const* GetAlgalonExplosionCover(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->getClass() != CLASS_PALADIN)
+        return nullptr;
+
+    char const* cover = nullptr;
+    return ExplosionCoverProvider(botAI, cover) == bot ? cover : nullptr;
 }
 
 void ClaimAlgalonExplosionCover(Player* bot, char const* cover)
 {
     AlgalonEncounterState* state = FindState(bot);
-    AlgalonScanUnit const* star =
-        state ? ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS) : nullptr;
+    AlgalonScanUnit const* star = state ? ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS,
+                                                        ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT, bot)
+                                        : nullptr;
     if (!star)
         return;
 
@@ -3728,50 +3811,89 @@ uint32 PersonalButtonId(Player* bot, PersonalButton const& button)
     return botAI ? botAI->GetAiObjectContext()->GetValue<uint32>("spell id", button.spell)->Get() : 0;
 }
 
-// Divine Guardian on the bot itself, or within 40 yd of the shadow aura paladin under Aura Mastery.
-bool ExplosionCoversBot(Player* bot, Group* group, AlgalonEncounterState const& state)
+// How long the bot stays covered: Divine Guardian on it, or within 40 yd of the shadow aura paladin under Aura
+// Mastery. 0 when neither.
+int32 ExplosionCoverMs(Player* bot, Group* group, AlgalonEncounterState const& state)
 {
-    if (bot->HasAura(SPELL_ALGALON_DIVINE_GUARDIAN))
-        return true;
+    int32 left = 0;
+    if (Aura const* guardian = bot->GetAura(SPELL_ALGALON_DIVINE_GUARDIAN))
+        left = guardian->GetDuration();
 
     Player* auraPaladin = FindGroupMember(group, state.shadowAuraPaladin.Get());
-    return auraPaladin && auraPaladin->HasAura(SPELL_ALGALON_AURA_MASTERY) &&
-           bot->IsWithinDistInMap(auraPaladin, ULDUAR_ALGALON_AURA_RANGE);
+    Aura const* mastery = auraPaladin ? auraPaladin->GetAura(SPELL_ALGALON_AURA_MASTERY) : nullptr;
+    if (mastery && bot->IsWithinDistInMap(auraPaladin, ULDUAR_ALGALON_AURA_RANGE))
+        left = std::max(left, mastery->GetDuration());
+
+    return left;
+}
+
+bool ItemCoolingDown(Player* bot, Item* item)
+{
+    ItemTemplate const* proto = item->GetTemplate();
+    for (uint8 i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+        if (proto->Spells[i].SpellTrigger == ITEM_SPELLTRIGGER_ON_USE && proto->Spells[i].SpellId > 0 &&
+            bot->HasSpellCooldown(static_cast<uint32>(proto->Spells[i].SpellId)))
+            return true;
+
+    return false;
+}
+
+// A healthstone, else a healing potion, usable now: all a third of the raid has against the hit, and they
+// only used them once already low. Not the healthstone on the move: using it stops the bot, mid dodge too.
+char const* ReadyConsumable(PlayerbotAI* botAI)
+{
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    bool const moving = botAI->GetBot()->isMoving();
+    for (char const* name : {"healthstone", "healing potion"})
+    {
+        if (moving && !std::strcmp(name, "healthstone"))
+            continue;
+
+        Action* action = context->GetAction(name);
+        if (!action || !action->isPossible() || !action->isUseful())
+            continue;
+
+        std::vector<Item*> const items = context->GetValue<std::vector<Item*>>("inventory items", name)->Get();
+        if (!items.empty() && !ItemCoolingDown(botAI->GetBot(), items.front()))
+            return name;
+    }
+
+    return nullptr;
 }
 }  // namespace
 
-uint32 GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
+AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
 {
+    AlgalonPersonalPick pick;
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     AlgalonEncounterState const* state = FindState(bot);
     Group* group = bot ? bot->GetGroup() : nullptr;
     if (!state || !group || state->phase.Get() != AlgalonPhase::One || state->bigBangCasting ||
         IsAlgalonPhased(bot) || state->swapPair.count(bot->GetGUID()))
-        return 0;
+        return pick;
 
-    AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS);
+    AlgalonScanUnit const* star =
+        ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS, ULDUAR_ALGALON_EXPLOSION_LOW_PCT, bot);
     if (!star)
-        return 0;
+        return pick;
 
     auto const pressed = state->personalStars.find(bot->GetGUID());
     if (pressed != state->personalStars.end() && pressed->second == star->guid)
-        return 0;
+        return pick;
 
-    float hit = static_cast<float>(bot->GetMap()->Is25ManRaid() ? ULDUAR_ALGALON_STAR_EXPLOSION_MAX_25
-                                                                : ULDUAR_ALGALON_STAR_EXPLOSION_MAX_10);
-    if (ExplosionCoversBot(bot, group, *state))
-        hit *= ULDUAR_ALGALON_COVERED_EXPLOSION_FACTOR;
-
+    float const topRoll = static_cast<float>(
+        bot->GetMap()->Is25ManRaid() ? ULDUAR_ALGALON_STAR_EXPLOSION_MAX_25 : ULDUAR_ALGALON_STAR_EXPLOSION_MAX_10);
+    float const hit = StackedHit(*state, bot, *star, topRoll, ExplosionCoverMs(bot, group, *state));
     float const health = static_cast<float>(bot->GetHealth());
     if (health > hit)
-        return 0;
+        return pick;
 
     // One already running: two stars close together would otherwise spend a second one.
     for (PersonalButton const& button : PERSONAL_BUTTONS)
     {
         uint32 const spellId = PersonalButtonId(bot, button);
         if (spellId && bot->HasAura(spellId))
-            return 0;
+            return pick;
     }
 
     uint32 const now = getMSTime();
@@ -3793,26 +3915,34 @@ uint32 GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
              AlgalonCooldownMs(bot, spellId) > untilHit - ULDUAR_ALGALON_SOAK_DISPERSION_MS))
             continue;
 
-        return spellId;
+        pick.spellId = spellId;
+        return pick;
     }
 
-    return 0;
+    // Only where the heal lands whole and lifts the bot over the line: a full bot under it would burn its one
+    // potion for nothing.
+    float const heal = static_cast<float>(ULDUAR_ALGALON_EXPLOSION_CONSUMABLE_HEAL);
+    if (static_cast<float>(bot->GetMaxHealth()) - health >= heal && health + heal > hit)
+        pick.consumable = ReadyConsumable(botAI);
+
+    return pick;
 }
 
-void ClaimAlgalonExplosionPersonal(Player* bot, uint32 spellId)
+void ClaimAlgalonExplosionPersonal(Player* bot, AlgalonPersonalPick const& pick)
 {
     AlgalonEncounterState* state = FindState(bot);
-    AlgalonScanUnit const* star =
-        state ? ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS) : nullptr;
+    AlgalonScanUnit const* star = state ? ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS,
+                                                        ULDUAR_ALGALON_EXPLOSION_LOW_PCT, bot)
+                                        : nullptr;
     if (!star)
         return;
 
     state->personalStars[bot->GetGUID()] = star->guid;
-    if (RaidObs::Active())
-    {
-        SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
-        RaidObs::Note(bot, "algalon.personal", info ? info->SpellName[0] : "?");
-    }
+    if (!RaidObs::Active())
+        return;
+
+    SpellInfo const* info = pick.spellId ? sSpellMgr->GetSpellInfo(pick.spellId) : nullptr;
+    RaidObs::Note(bot, "algalon.personal", pick.consumable ? pick.consumable : (info ? info->SpellName[0] : "?"));
 }
 
 bool IsAlgalonShadowAuraPaladin(Player* bot)

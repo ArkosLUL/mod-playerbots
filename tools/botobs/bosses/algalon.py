@@ -27,7 +27,9 @@
     algalon.py <file> --tankheal        tank healers, each healer's share on the pair, Beacon, healing against
                                         damage before every tank death
     algalon.py <file> --defensives      damage cutters and Lay on Hands on the swap tanks, every swap tank death,
-                                        cover at every star explosion, personal buttons at each explosion death
+                                        cover at every star explosion and the bots under its line with their
+                                        buttons, every personal press and cover against its star's death,
+                                        personal buttons at each explosion death
     algalon.py <file> --formation       each ring bot's distance to its slot and to him, spot branches
     algalon.py <file> --darkmatter      phase 2 Unleashed Dark Matter: loose seconds, handler damage, kills
     algalon.py <file> --verdict         one line per detected failure, in time order
@@ -48,7 +50,8 @@ What the generic views get wrong here, and what this reads instead:
   waiting to hide last, so a hit on it counts.
 - **A creature's death reaches no record.** A star died where a Black Hole Explosion burst names it
   or a hole appears on its last spot; a constellation left through a hole when both rows vanish
-  together.
+  together. A burst's `s` is usually the Black Hole the star left, so it names the star whose last
+  spot that hole spawned on.
 - **`algalon.soaker`, `algalon.backup`, `algalon.disperser`, `algalon.shadowaura`, `algalon.focusstar`
   and `algalon.handler` are raid-wide latches**: `g` is whichever bot's tick flipped them and the guid
   is in `txt`. `algalon.hide`, `kite` and `spot` are per bot and change-only, so a value holds until
@@ -96,6 +99,10 @@ What the generic views get wrong here, and what this reads instead:
 - **An explosion is covered by Divine Guardian (70940) or Aura Mastery**, never by Divine Sacrifice
   itself: bots cancel 64205 as it lands and keep the Divine Guardian it procs. No talent reaches the
   trace, so a paladin counts as able to cover once seen covering, or while `algalon.shadowaura` names it.
+- **`algalon.personal` and `algalon.cover` name no star.** A press counts as for the first star dying within
+  PRESS_AHEAD_MS after it, else one that exploded within PRESS_STALE_MS before it, which the scan still listed.
+- **A bot's personal buttons are its class's** (Dispersion and Shamanistic Rage once seen cast, being talents),
+  so one never pressed in the trace reads ready.
 """
 from __future__ import annotations
 
@@ -360,6 +367,28 @@ PERSONAL_COOLDOWN_MS = {"shadow ward": 30000, "anti magic shell": 45000, "barksk
 PERSONAL_IMMUNE = frozenset(("anti magic shell", "cloak of shadows", "ice block", "divine shield"))
 PERSONAL_IDS = {**IMMUNITIES, 498: "Divine Protection", 22812: "Barkskin", 48792: "Icebound Fortitude",
                 30823: "Shamanistic Rage", SPELL_DISPERSION: "Dispersion", 47891: "Shadow Ward"}
+PERSONAL_LABELS = {name.lower().replace("-", " "): name for name in PERSONAL_IDS.values()}
+# every bot of the class has these. Dispersion and Shamanistic Rage are talents, counted once seen cast
+CLASS_BUTTONS = {2: ("divine protection", "divine shield"), 4: ("cloak of shadows",),
+                 6: ("anti magic shell", "icebound fortitude"), 8: ("ice block",), 9: ("shadow ward",),
+                 11: ("barkskin",)}
+CLASS_IDS = {"paladin": 2, "rogue": 4, "death knight": 6, "deathknight": 6, "mage": 8, "warlock": 9, "druid": 11}
+SPELL_FORBEARANCE = 25771
+FORBEARANCE_BUTTONS = frozenset(("divine protection", "divine shield"))
+# the "algalon phased button hold" list. The immunities have a hold of their own, Dispersion none
+PHASED_HELD = frozenset(("barkskin", "shadow ward", "icebound fortitude", "shamanistic rage", "divine protection"))
+PHASED_BUTTON_PCT = _radius_or("ULDUAR_ALGALON_PHASED_BUTTON_PCT", 35.0)
+COVERED_FACTOR = _radius_or("ULDUAR_ALGALON_COVERED_EXPLOSION_FACTOR", 0.8)
+# by name, so it also reads the "healthstone"/"healing potion" an `algalon.personal` row names; the ids only
+# for a trace that names no spells
+CONSUMABLE = re.compile(r"healthstone|healing (?:potion|injector)|rejuvenation potion", re.I)
+CONSUMABLE_IDS = {47875: "Master Healthstone", 47876: "Master Healthstone", 47877: "Master Healthstone",
+                  43185: "Healing Potion", 67489: "Runic Healing Injector", 53761: "Rejuvenation Potion"}
+COVER_NODE = "algalon explosion cover action"
+# a press goes on the star the scan says dies next, up to 2 s out on a forecast seen running 4.2 s late, or
+# on one already exploded that the scan still lists (seen up to 0.5 s after)
+PRESS_AHEAD_MS = 5000
+PRESS_STALE_MS = 1000
 PERSONAL_LOOK_MS = 5000
 IMMUNITY_HOLD_MS = 20000
 WINDOW_CUT_PCT = 80.0
@@ -2515,19 +2544,21 @@ def show_phasing(trace: Trace) -> None:
 # ---------------------------------------------------------------------------------------------- stars
 
 def star_deaths(trace: Trace) -> list[dict]:
-    """`{t, star, how, hits, damage, gap, raid_min}` per star death, in order. `how` is `explosion` for
-    a Black Hole Explosion burst, `hole` for a star that left no burst but a hole on its last spot."""
+    """`{t, star, source, how, hits, damage, gap, raid_min}` per star death, in order. `how` is `explosion`
+    for a Black Hole Explosion burst, `hole` for a star that left no burst but a hole on its last spot.
+    `source` is the burst's own `s`: the star, or the Black Hole it left, which names no star."""
     samples = samples_of(trace)
     end = pull_end(trace)
     roster = roster_guids(trace)
     stars = guids_of_entry(trace, NPC_COLLAPSING_STAR)
     black = guids_of_entry(trace, NPC_BLACK_HOLE)
 
+    # keyed by source: each explosion has its own, so stars dying close together never merge
     bursts: list[dict] = []
     latest: dict = {}
     for rec in sorted((rec for rec in trace.of("dmg") if rec.get("sp") in SPELL_BLACK_HOLE_EXPLOSION),
                       key=lambda rec: rec["t"]):
-        source = rec.get("s") if rec.get("s") in stars else None
+        source = rec.get("s")
         burst = latest.get(source)
         if burst and rec["t"] - burst["last"] <= BURST_GAP_MS:
             burst["hits"] += 1
@@ -2535,20 +2566,22 @@ def star_deaths(trace: Trace) -> list[dict]:
             burst["last"] = rec["t"]
             burst["rows"].append(rec)
             continue
-        burst = {"t": rec["t"], "last": rec["t"], "star": source, "how": "explosion", "hits": 1,
-                 "damage": rec.get("a", 0), "rows": [rec]}
+        burst = {"t": rec["t"], "last": rec["t"], "star": source if source in stars else None, "source": source,
+                 "how": "explosion", "hits": 1, "damage": rec.get("a", 0), "rows": [rec]}
         bursts.append(burst)
         latest[source] = burst
 
+    def spawned_on(burst: dict, spot) -> bool:
+        seen_source = samples.seen(burst["source"]) if burst["source"] else None
+        return bool(seen_source) and dist2(samples.row(burst["source"], seen_source[0])[1:3], spot) <= HOLE_MATCH_YD
+
     named = {burst["star"] for burst in bursts}
-    for star in sorted(stars - named):
-        seen = samples.seen(star)
-        if not seen or seen[1] >= end - GONE_MS:
-            continue
-        gone = seen[1]
+    gone_stars = sorted((seen[1], star) for star in stars - named
+                        if (seen := samples.seen(star)) and seen[1] < end - GONE_MS)
+    for gone, star in gone_stars:
         spot = samples.row(star, gone)[1:3]
-        blind = next((burst for burst in bursts if burst["star"] is None and abs(burst["t"] - gone) <= HOLE_MATCH_MS),
-                     None)
+        blind = min((burst for burst in bursts if burst["star"] is None and abs(burst["t"] - gone) <= HOLE_MATCH_MS),
+                    key=lambda burst: (not spawned_on(burst, spot), abs(burst["t"] - gone)), default=None)
         if blind:
             blind["star"] = star
             continue
@@ -2558,7 +2591,8 @@ def star_deaths(trace: Trace) -> list[dict]:
             if seen_hole and gone - GONE_MS <= seen_hole[0] <= gone + HOLE_MATCH_MS:
                 hole = hole or dist2(samples.row(guid, seen_hole[0])[1:3], spot) <= HOLE_MATCH_YD
         if hole:
-            bursts.append({"t": gone, "last": gone, "star": star, "how": "hole", "hits": 0, "damage": 0, "rows": []})
+            bursts.append({"t": gone, "last": gone, "star": star, "source": None, "how": "hole", "hits": 0,
+                           "damage": 0, "rows": []})
 
     bursts.sort(key=lambda burst: burst["t"])
     previous = None
@@ -4360,10 +4394,18 @@ def cover_ready(trace: Trace, when: int) -> list[tuple[int, int]]:
 
 def explosion_rows(trace: Trace) -> list[dict]:
     """Per star explosion: its hits, the raid members wearing Divine Guardian and Aura Mastery at its first
-    hit, the `algalon.cover` notes in the COVER_MS before it, and with no cover up, the providers that were
-    ready."""
+    hit, the `algalon.cover` notes in the COVER_MS before it, with no cover up the providers that were
+    ready, and `under`: per unphased bot outside the swap pair at or under its line before the hit (the top
+    roll, times COVERED_FACTOR with Divine Guardian on it or Aura Mastery up) `{guid, hp, line, landed,
+    absorbed, died, pressed, consumables, buttons}`, `landed` None when the explosion missed it and
+    `pressed`/`consumables` the `presses` of the PERSONAL_LOOK_MS before."""
     def build(trace: Trace) -> list[dict]:
         roster = roster_guids(trace)
+        pair, _ = swap_pair(trace)
+        samples = samples_of(trace)
+        phased = all_phases(trace)
+        safe = explosion_safe_hp(trace)
+        deaths = death_records(trace)
         guardian = aura_spans(trace, (SPELL_DIVINE_GUARDIAN,))
         mastery = aura_spans(trace, (SPELL_AURA_MASTERY,))
         covers = notes(trace, "algalon.cover")
@@ -4381,6 +4423,29 @@ def explosion_rows(trace: Trace) -> list[dict]:
             }
             row["covered"] = bool(row["guardians"] or row["mastery"])
             row["ready"] = [] if row["covered"] else cover_ready(trace, when)
+            row["under"] = []
+            for guid, unit in samples.frame(when - 1).items():
+                if (guid not in roster or guid in trace.humans or guid in pair or not alive(unit)
+                        or phased_at(phased, guid, when) or (hp := health_of(trace, guid, unit)) is None):
+                    continue
+                covered = row["mastery"] or wearing_at(guardian, guid, when, STRIP_AT_DEATH_MS)
+                line = round(safe * (COVERED_FACTOR if covered else 1.0))
+                if hp > line:
+                    continue
+                hits = [rec for rec in star["rows"] if rec.get("d") == guid]
+                used = presses(trace, guid, when - PERSONAL_LOOK_MS, when)
+                row["under"].append({
+                    "guid": guid, "hp": hp, "line": line,
+                    "landed": sum(rec.get("a", 0) for rec in hits) if hits else None,
+                    "absorbed": sum(rec.get("ab", 0) for rec in hits),
+                    "died": any(rec.get("ok", 0) > 0 for rec in hits) or bool(star["source"]) and any(
+                        rec.get("g") == guid and rec.get("killer") == star["source"]
+                        and when <= rec["t"] <= star["last"] + KILL_MATCH_MS for rec in deaths),
+                    "pressed": [(at, name) for at, name in used if press_kind(name) != "consumable"],
+                    "consumables": [(at, name) for at, name in used if press_kind(name) == "consumable"],
+                    "buttons": button_states(trace, guid, when),
+                })
+            row["under"].sort(key=lambda entry: trace.name(entry["guid"]))
             out.append(row)
         return out
     return cached(trace, "_algalon_explosions", build)
@@ -4433,41 +4498,159 @@ def personal_casts(trace: Trace) -> dict[int, list[tuple[int, str, str]]]:
     return cached(trace, "_algalon_personal_casts", build)
 
 
+def consumable_uses(trace: Trace) -> dict[int, list[tuple[int, str]]]:
+    """Per bot, `(t, spell name)` for each healthstone, healing potion or injector it used."""
+    def build(trace: Trace) -> dict[int, list[tuple[int, str]]]:
+        out: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+        for rec in trace.of("cast"):
+            guid, name = rec.get("s"), spell_name(trace, rec.get("sp"), CONSUMABLE_IDS)
+            if guid in trace.roles and guid not in trace.humans and not rec.get("tr") and CONSUMABLE.search(name):
+                out[guid].append((rec["t"], name))
+        return dict(out)
+    return cached(trace, "_algalon_consumables", build)
+
+
+def press_kind(text: str) -> str:
+    """The personal button a name is, in the table's lower-case spelling, `consumable` for a healthstone or
+    potion, else the name itself."""
+    name = text.lower().replace("-", " ")
+    return name if name in PERSONAL_COOLDOWN_MS else "consumable" if CONSUMABLE.search(name) else name
+
+
+def personal_notes(trace: Trace) -> dict[int, list[dict]]:
+    def build(trace: Trace) -> dict[int, list[dict]]:
+        out: dict[int, list[dict]] = collections.defaultdict(list)
+        for rec in notes(trace, "algalon.personal"):
+            out[rec.get("g", 0)].append(rec)
+        return dict(out)
+    return cached(trace, "_algalon_personal_notes", build)
+
+
+def presses(trace: Trace, guid: int, low: int, high: int) -> list[tuple[int, str]]:
+    """`(t, name)` per personal button, healthstone or potion `guid` used in `[low, high]`: its
+    `algalon.personal` rows, then the cast rows with no row of the same kind within ECHO_MS."""
+    used = [(rec["t"], str(rec.get("txt", ""))) for rec in personal_notes(trace).get(guid, ())
+            if low <= rec["t"] <= high]
+    casts = [(at, label) for at, _, label in personal_casts(trace).get(guid, ())] + consumable_uses(trace).get(guid, [])
+    for at, label in sorted(casts):
+        if low <= at <= high and not any(abs(at - seen) <= ECHO_MS and press_kind(name) == press_kind(label)
+                                         for seen, name in used):
+            used.append((at, label))
+    return sorted(used)
+
+
+def class_buttons(trace: Trace, guid: int) -> tuple[str, ...]:
+    found = class_of(trace, guid)
+    return CLASS_BUTTONS.get(CLASS_IDS.get(found.lower()) if isinstance(found, str) else found, ())
+
+
+def button_states(trace: Trace, guid: int, when: int) -> list[tuple[str, str, int | None]]:
+    """`(button, state, since)` per personal button `guid` had at `when`: its class's own and any other it was
+    seen casting. `state` is `cooling` since its last cast, `forbearance` since that went up, `held` (an
+    immunity with a Big Bang due within IMMUNITY_HOLD_MS, the disperser's Dispersion) or `ready`."""
+    casts = personal_casts(trace).get(guid, [])
+    forbearance = cached(trace, "_algalon_forbearance", lambda trace: aura_spans(trace, (SPELL_FORBEARANCE,)))
+    dispersers = {as_guid(value) for value, _, _ in
+                  cached(trace, "_algalon_dispersers", lambda trace: latch_spans(trace, "algalon.disperser"))}
+    starts = cached(trace, "_algalon_bang_starts", lambda trace: [cast["start"] for cast in big_bang_casts(trace)])
+    bang_due = any(0 <= start - when <= IMMUNITY_HOLD_MS for start in starts)
+    labels = {name: label for _, name, label in casts}
+    out = []
+    for name in sorted(set(class_buttons(trace, guid)) | set(labels)):
+        last = max((at for at, seen, _ in casts if seen == name and at <= when), default=None)
+        # slack: a death strips it at the death's own stamp
+        worn = wearing_at(forbearance, guid, when, STRIP_AT_DEATH_MS) if name in FORBEARANCE_BUTTONS else []
+        if last is not None and when - last < PERSONAL_COOLDOWN_MS[name]:
+            state, since = "cooling", last
+        elif worn:
+            state, since = "forbearance", worn[0][0]
+        elif (bang_due and name in PERSONAL_IMMUNE) or (name == "dispersion" and guid in dispersers):
+            state, since = "held", None
+        else:
+            state, since = "ready", None
+        out.append((labels.get(name) or PERSONAL_LABELS.get(name, name), state, since))
+    return out
+
+
+def button_label(button: tuple[str, str, int | None]) -> str:
+    label, state, since = button
+    return f"{label} {state}" + (f" since {clock(since)}" if since is not None else "")
+
+
 def explosion_deaths(trace: Trace) -> list[dict]:
-    """Per death a star explosion owns: `{t, guid, used, ready}`. `used` is the personal buttons it pressed in
-    the PERSONAL_LOOK_MS before, from its `algalon.personal` rows and its cast rows. `ready` is the buttons it
-    has been seen casting earlier in the trace that were off cooldown, immunities left out when a Big Bang
-    was due within IMMUNITY_HOLD_MS, and Dispersion for the elected disperser; empty for a bot never seen to
-    press one, which the data cannot say anything about."""
+    """Per death a star explosion owns: `{t, guid, used, ready}`. `used` is what it pressed in the
+    PERSONAL_LOOK_MS before, by `presses`. `ready` is the `button_states` buttons ready at the death, for a bot
+    outside the swap pair that pressed nothing."""
     def build(trace: Trace) -> list[dict]:
         pair, _ = swap_pair(trace)
-        casts = personal_casts(trace)
-        picks = notes(trace, "algalon.personal")
-        dispersers = {as_guid(value) for value, _, _ in latch_spans(trace, "algalon.disperser")}
-        starts = [cast["start"] for cast in big_bang_casts(trace)]
         out = []
         for row in death_rows(trace):
             if row["cause"] != "star explosion":
                 continue
             guid, when = row["guid"], row["t"]
-            low = when - PERSONAL_LOOK_MS
-            used = [(rec["t"], str(rec.get("txt", ""))) for rec in picks
-                    if rec.get("g") == guid and low <= rec["t"] <= when]
-            for at, name, label in casts.get(guid, ()):
-                if low <= at <= when and not any(abs(at - seen) <= ECHO_MS and seen_name.lower() == label.lower()
-                                                 for seen, seen_name in used):
-                    used.append((at, label))
+            used = presses(trace, guid, when - PERSONAL_LOOK_MS, when)
             ready = []
             if guid not in trace.humans and guid not in pair and not used:
-                held = any(0 <= start - when <= IMMUNITY_HOLD_MS for start in starts)
-                for name in sorted({name for at, name, _ in casts.get(guid, ()) if at < when}):
-                    last = max(at for at, seen, _ in casts[guid] if seen == name and at < when)
-                    if (when - last >= PERSONAL_COOLDOWN_MS[name] and not (held and name in PERSONAL_IMMUNE)
-                            and not (name == "dispersion" and guid in dispersers)):
-                        ready.append(next(label for _, seen, label in casts[guid] if seen == name))
-            out.append({"t": when, "guid": guid, "used": sorted(used), "ready": ready})
+                ready = [label for label, state, _ in button_states(trace, guid, when) if state == "ready"]
+            out.append({"t": when, "guid": guid, "used": used, "ready": ready})
         return out
     return cached(trace, "_algalon_explosion_deaths", build)
+
+
+def press_star(trace: Trace, when: int) -> dict | None:
+    """The `star_rows` death a press or cover at `when` was for: the first within PRESS_AHEAD_MS after it,
+    else the last within PRESS_STALE_MS before it, which had exploded already."""
+    deaths = star_rows(trace)
+    ahead = next((row for row in deaths if when < row["t"] <= when + PRESS_AHEAD_MS), None)
+    return ahead or next((row for row in reversed(deaths) if when - PRESS_STALE_MS <= row["t"] <= when), None)
+
+
+def press_rows(trace: Trace) -> list[dict]:
+    """`{t, guid, kind, text, died, phased}` per `algalon.personal` (kind `personal`) and `algalon.cover` (kind
+    `cover`) row, `died` the death of the `press_star` it was for, or None."""
+    def build(trace: Trace) -> list[dict]:
+        phased = hole_phases(trace)
+        out = []
+        for kind, key in (("personal", "algalon.personal"), ("cover", "algalon.cover")):
+            for rec in notes(trace, key):
+                star, guid = press_star(trace, rec["t"]), rec.get("g", 0)
+                out.append({"t": rec["t"], "guid": guid, "kind": kind, "text": str(rec.get("txt", "")),
+                            "died": star["t"] if star else None, "phased": phased_at(phased, guid, rec["t"])})
+        return sorted(out, key=lambda row: row["t"])
+    return cached(trace, "_algalon_presses", build)
+
+
+def press_name(row: dict) -> str:
+    if row["kind"] == "cover":
+        return next((name for name in COVER_SPELLS.values() if name.lower() == row["text"].lower()), row["text"])
+    return row["text"]
+
+
+def failed_covers(trace: Trace) -> list[dict]:
+    """`{t, guid, ready}` per FAILED run of the cover node, `ready` the other providers' `cover_ready` then."""
+    def build(trace: Trace) -> list[dict]:
+        return [{"t": rec["t"], "guid": rec.get("g", 0),
+                 "ready": [(guid, spell) for guid, spell in cover_ready(trace, rec["t"]) if guid != rec.get("g")]}
+                for rec in trace.of("act") if rec.get("a") == COVER_NODE and rec.get("vd") == "FAILED"]
+    return cached(trace, "_algalon_failed_covers", build)
+
+
+def phased_buttons(trace: Trace) -> list[dict]:
+    """`{t, guid, label, pct}` per PHASED_HELD button a bot outside the swap pair cast inside a hole's phase
+    above PHASED_BUTTON_PCT, where no explosion reaches it."""
+    def build(trace: Trace) -> list[dict]:
+        pair, _ = swap_pair(trace)
+        samples = samples_of(trace)
+        phased = hole_phases(trace)
+        out = []
+        for guid, casts in personal_casts(trace).items():
+            for at, name, label in casts:
+                row = samples.row(guid, at)
+                if (name in PHASED_HELD and guid not in pair and phased_at(phased, guid, at) and alive(row)
+                        and row[5] > PHASED_BUTTON_PCT):
+                    out.append({"t": at, "guid": guid, "label": label, "pct": row[5]})
+        return sorted(out, key=lambda row: row["t"])
+    return cached(trace, "_algalon_phased_buttons", build)
 
 
 def window_cuts(trace: Trace) -> list[dict]:
@@ -4525,7 +4708,9 @@ def show_defensives(trace: Trace) -> None:
         f"{trace.name(guid)} {', '.join(COVER_SPELLS[spell] for spell in spells)}"
         for guid, spells in sorted(providers.items(), key=lambda item: trace.name(item[0]))) or "none seen"))
     explosions = explosion_rows(trace)
-    print(f"  star explosions: {len(explosions)}")
+    safe = explosion_safe_hp(trace)
+    print(f"  star explosions: {len(explosions)}; under each, every unphased bot at or under its line ({safe:,},"
+          f" {round(safe * COVERED_FACTOR):,} covered) before it: health, the hit, presses, buttons")
     for row in explosions:
         landed, resisted = hit_means(row["hits"])
         cover = []
@@ -4543,6 +4728,14 @@ def show_defensives(trace: Trace) -> None:
         rs = "-" if resisted is None else f"{resisted:,.0f}"
         print(f"    {clock(row['t']):>9} {len(row['hits']):3} hits, per hit {mean} landed, {rs} resisted;"
               f" {'; '.join(parts)}")
+        for entry in row["under"]:
+            hit = "not hit" if entry["landed"] is None else f"hit {entry['landed']:,}" + (
+                f" +{entry['absorbed']:,} absorbed" if entry["absorbed"] else "")
+            pressed = ", ".join(f"{name} {clock(at)}" for at, name in entry["pressed"]) or "none"
+            buttons = ", ".join(button_label(button) for button in entry["buttons"]) or "no button"
+            used = "".join(f"; used {name} {clock(at)}" for at, name in entry["consumables"])
+            print(f"      {label_of(trace, entry['guid'])} {entry['hp']:,} of {entry['line']:,}, {hit}"
+                  f"{', died' if entry['died'] else ''}; pressed {pressed}; {buttons}{used}")
     for label, group in (("covered", [row for row in explosions if row["covered"]]),
                          ("uncovered", [row for row in explosions if not row["covered"]])):
         hits = [rec for row in group for rec in row["hits"]]
@@ -4551,6 +4744,26 @@ def show_defensives(trace: Trace) -> None:
             rs = "-" if resisted is None else f"{resisted:,.0f}"
             print(f"  {label + ':':10} {len(group)} explosion(s), {len(hits)} hits, per hit {landed:,.0f} landed"
                   f" (absorbs included), {rs} resisted")
+
+    pressed = press_rows(trace)
+    for kind, title in (("personal", "personal presses"), ("cover", "explosion covers")):
+        group = [row for row in pressed if row["kind"] == kind]
+        print(f"  {title} (algalon.{kind}): {len(group)}")
+        for row in group:
+            star = "no star died near it" if row["died"] is None else (
+                f"its star died {clock(row['died'])} ({(row['died'] - row['t']) / 1000:+.2f} s)"
+                + (", already dead" if row["died"] <= row["t"] else ""))
+            print(f"    {clock(row['t']):>9} {trace.name(row['guid'])} {press_name(row)}: {star}"
+                  f"{', phased' if row['phased'] else ''}")
+    failed = failed_covers(trace)
+    print(f"  cover node runs that FAILED: {len(failed)}")
+    for row in failed:
+        print(f"    {clock(row['t']):>9} {trace.name(row['guid'])}; other covers ready:"
+              f" {cover_label(trace, row['ready']) or 'none'}")
+    spent = phased_buttons(trace)
+    print(f"  personal buttons cast in a hole's phase above {PHASED_BUTTON_PCT:.0f}%: {len(spent)}")
+    for row in spent:
+        print(f"    {clock(row['t']):>9} {trace.name(row['guid'])} {row['label']} at {row['pct']:.0f}%")
 
     lost = explosion_deaths(trace)
     print(f"  deaths to a star explosion: {len(lost)}")
@@ -4587,6 +4800,18 @@ def defensive_faults(trace: Trace) -> list[tuple[int, str]]:
         if row["ready"] and not row["bang"]:
             out.append((row["t"], f"star explosion @ {secs(row['t'])} with no cover up, ready:"
                                   f" {cover_label(trace, row['ready'])}"))
+    for row in press_rows(trace):
+        if row["died"] is not None and row["died"] <= row["t"]:
+            what = f"pressed {press_name(row)}" if row["kind"] == "personal" else f"cast {press_name(row)} for cover"
+            out.append((row["t"], f"{trace.name(row['guid'])} {what} @ {secs(row['t'])},"
+                                  f" {(row['t'] - row['died']) / 1000:.2f} s after its star died"))
+    for row in phased_buttons(trace):
+        out.append((row["t"], f"{trace.name(row['guid'])} spent {row['label']} @ {secs(row['t'])} inside a hole's"
+                              f" phase, at {row['pct']:.0f}%"))
+    for row in failed_covers(trace):
+        if row["ready"]:
+            out.append((row["t"], f"{trace.name(row['guid'])}'s cover failed @ {secs(row['t'])} with"
+                                  f" {cover_label(trace, row['ready'])} ready"))
     return out
 
 
@@ -5132,7 +5357,8 @@ SECTIONS = (
     ("tankheal", "tank healers, each healer's share on the pair, Beacon, healing against damage before every tank"
                  " death", show_tankheal),
     ("defensives", "damage cutters and Lay on Hands on the swap tanks, every swap tank death, cover at every star"
-                   " explosion, personal buttons at each explosion death", show_defensives),
+                   " explosion and the bots under its line, every personal press and cover against its star's death,"
+                   " personal buttons at each explosion death", show_defensives),
     ("formation", "each ring bot's distance to its slot and to him, spot branches, stalls", show_formation),
     ("darkmatter", "phase 2 Unleashed Dark Matter: loose seconds, handler damage, kills", show_darkmatter),
     ("verdict", "one line per detected failure, in time order", show_verdict),

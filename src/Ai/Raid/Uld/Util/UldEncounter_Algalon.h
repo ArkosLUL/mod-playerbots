@@ -175,13 +175,24 @@ constexpr uint32 ULDUAR_ALGALON_TANK_WINDOW_TAIL_MS = 5000;
 constexpr uint32 ULDUAR_ALGALON_TANK_DEFENSIVE_CLAIM_MS = 1000;
 // Hand of Sacrifice and Divine Sacrifice move damage onto the paladin.
 constexpr float ULDUAR_ALGALON_SACRIFICE_MIN_PCT = 50.0f;
-// Aura Mastery and Divine Guardian last 6 s, so they go up this close to a star's forecast death.
+// A star this low counts as exploding whatever its slope.
+constexpr float ULDUAR_ALGALON_EXPLOSION_LOW_PCT = 3.0f;
+// Aura Mastery and Divine Guardian last 6 s, so they go up this close to a star's forecast death, or with it
+// this low: a star chewed by splash went from 4.8% to dead between two scans.
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS = 2000;
-constexpr float ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT = 3.0f;
+constexpr float ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT = 5.0f;
 // A bot that wouldn't survive the explosion presses its own button this close to it. Under Aura Mastery the
 // largest of 87 hits was 79% of the uncovered top roll, and Divine Guardian is a flat -20%.
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS = 1500;
 constexpr float ULDUAR_ALGALON_COVERED_EXPLOSION_FACTOR = 0.8f;
+// Stars dying this close after the first count as one hit to survive: three inside a second killed 18 bots
+// who were each above one hit before the first.
+constexpr uint32 ULDUAR_ALGALON_EXPLOSION_STACK_MS = 3000;
+constexpr uint32 ULDUAR_ALGALON_EXPLOSION_STACK_MAX = 3;
+// The least a healthstone or healing potion heals, for whether one lifts a bot over the line.
+constexpr uint32 ULDUAR_ALGALON_EXPLOSION_CONSUMABLE_HEAL = 3500;
+// Phased and above this, a bot keeps its personal buttons: no explosion reaches it there.
+constexpr float ULDUAR_ALGALON_PHASED_BUTTON_PCT = 35.0f;
 // A paladin aura's reach.
 constexpr float ULDUAR_ALGALON_AURA_RANGE = 40.0f;
 // Healers pick by health %, and every explosion puts clothies below a tank losing ~15k/s, so the pair
@@ -631,9 +642,16 @@ Unit* GetAlgalonTrimStar(Player* bot);
 bool AlgalonStarPlannedUnder(Player* bot, ObjectGuid const& star);
 // A star dying under the running cast within `radius`: where a phased bot would come back inside a new hole.
 bool AlgalonUnderStarNear(Player* bot, float radius);
-// This bot's own button against the star about to die, when the hit would kill it; 0 otherwise.
-uint32 GetAlgalonExplosionPersonal(PlayerbotAI* botAI);
-void ClaimAlgalonExplosionPersonal(Player* bot, uint32 spellId);
+// This bot's own button against the star about to die, when the hit would kill it, else a healthstone or a
+// healing potion ("healthstone"/"healing potion" actions); empty otherwise.
+struct AlgalonPersonalPick
+{
+    uint32 spellId = 0;
+    char const* consumable = nullptr;
+    explicit operator bool() const { return spellId || consumable; }
+};
+AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI);
+void ClaimAlgalonExplosionPersonal(Player* bot, AlgalonPersonalPick const& pick);
 // Runs Shadow Resistance Aura while stars live.
 bool IsAlgalonShadowAuraPaladin(Player* bot);
 

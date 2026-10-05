@@ -195,17 +195,20 @@ bool AlgalonExplosionCoverAction::Execute(Event /*event*/)
 
 bool AlgalonExplosionPersonalAction::Execute(Event /*event*/)
 {
-    uint32 const spellId = GetAlgalonExplosionPersonal(botAI);
-    if (!spellId)
-        return false;
-
-    if (bot->IsNonMeleeSpellCast(false, true))
+    // Before the pick: a channel fails every button's cast check and the item use alike.
+    if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
-    if (!botAI->CastSpell(spellId, bot))
+    AlgalonPersonalPick const pick = GetAlgalonExplosionPersonal(botAI);
+    if (!pick)
         return false;
 
-    ClaimAlgalonExplosionPersonal(bot, spellId);
+    bool const used =
+        pick.consumable ? botAI->DoSpecificAction(pick.consumable, Event(), true) : botAI->CastSpell(pick.spellId, bot);
+    if (!used)
+        return false;
+
+    ClaimAlgalonExplosionPersonal(bot, pick);
     return true;
 }
 

@@ -124,7 +124,7 @@ bool AlgalonTankDefensiveTrigger::IsActive() { return GetAlgalonTankCut(botAI).s
 
 bool AlgalonExplosionCoverTrigger::IsActive() { return GetAlgalonExplosionCover(botAI) != nullptr; }
 
-bool AlgalonExplosionPersonalTrigger::IsActive() { return GetAlgalonExplosionPersonal(botAI) != 0; }
+bool AlgalonExplosionPersonalTrigger::IsActive() { return static_cast<bool>(GetAlgalonExplosionPersonal(botAI)); }
 
 bool AlgalonShadowAuraTrigger::IsActive()
 {

@@ -2308,6 +2308,199 @@ class UnderBulk(unittest.TestCase):
             self.assertNotIn("under-stars per Big Bang", render(bare, "stars"))
 
 
+PX_TANK, PX_PARTNER, PX_HOLY, PX_RET, PX_LOCK, PX_ROGUE, PX_TREE, PX_MAGE, PX_FROST = range(8401, 8410)
+PX_STAR_A, PX_STAR_B, PX_HOLE_A, PX_HOLE_B = (CREATURE | n for n in (601, 602, 621, 622))
+PX_END = 40000
+PX_HOME = {PX_TANK: (0, 0), PX_PARTNER: (3, 0), PX_HOLY: (0, 12), PX_RET: (2, 3), PX_LOCK: (8, 15),
+           PX_ROGUE: (-2, 3), PX_TREE: (-6, 12), PX_MAGE: (-8, 18), PX_FROST: (4, 4)}
+PX_STAR_SPOTS = {PX_STAR_A: (-20, 30), PX_STAR_B: (20, 30)}
+PX_SPELLS = {64122: "Black Hole Explosion", 498: "Divine Protection", 25771: "Forbearance", 22812: "Barkskin",
+             48792: "Icebound Fortitude", 31224: "Cloak of Shadows", 47877: "Master Healthstone",
+             64205: "Divine Sacrifice", 70940: "Divine Guardian", 47891: "Shadow Ward", 45438: "Ice Block"}
+
+
+def px_hp(guid: int, when: int) -> float:
+    if guid == PX_LOCK:
+        return 60.0 if when < 20000 else 0.0
+    if guid == PX_MAGE:
+        return 80.0 if when < 20000 else 20.0
+    if guid == PX_TREE:
+        return 90.0 if when < 15000 else 75.0
+    if guid == PX_FROST:
+        return 30.0 if when < 6000 else 70.0
+    return 80.0 if guid == PX_HOLY else 100.0
+
+
+def presses_pull(drop: tuple[str, ...] = ()) -> list[dict]:
+    """Two stars explode 0.6 s apart, each from the Black Hole it leaves, the second star gone from the scans
+    first. Before the first: the ret's cover fails with the holy paladin's Divine Sacrifice ready, the mage
+    uses a healthstone, the druid spends Barkskin in a hole at 90% and the death knight Icebound Fortitude in
+    one at 30%. The warlock and the death knight wear Divine Guardian; the warlock dies with Shadow Ward never
+    pressed. After the second, the holy paladin covers and the rogue presses Cloak of Shadows, both too late;
+    at 30 s the holy paladin's own cover fails with nobody else ready. `drop` leaves out the notes of those
+    keys."""
+    roster = [
+        {"g": PX_TANK, "n": "Tanka", "r": "tank", "c": 1, "h": 0},
+        {"g": PX_PARTNER, "n": "Tankb", "r": "tank", "c": 2, "h": 0},
+        {"g": PX_HOLY, "n": "Holy", "r": "heal", "c": 2, "h": 0},
+        {"g": PX_RET, "n": "Ret", "r": "melee", "c": 2, "h": 0},
+        {"g": PX_LOCK, "n": "Lock", "r": "ranged", "c": 9, "h": 0},
+        {"g": PX_ROGUE, "n": "Rogue", "r": "melee", "c": 4, "h": 0},
+        {"g": PX_TREE, "n": "Tree", "r": "heal", "c": 11, "h": 0},
+        {"g": PX_MAGE, "n": "Mage", "r": "ranged", "c": 8, "h": 0},
+        {"g": PX_FROST, "n": "Frost", "r": "melee", "c": 6, "h": 0},
+    ]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 0,
+         "boss": "algalon-the-observer", "roster": roster},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ALGALON, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        *({"t": 1, "e": "unit", "g": guid, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star"}
+          for guid in (PX_STAR_A, PX_STAR_B)),
+        *({"t": 1, "e": "unit", "g": guid, "en": al.NPC_BLACK_HOLE, "n": "Black Hole"}
+          for guid in (PX_HOLE_A, PX_HOLE_B)),
+        *({"t": 1, "e": "unit", "g": member["g"], "n": member["n"], "mhp": 20000} for member in roster),
+        *({"t": 1, "e": "spell", "sp": spell, "n": name} for spell, name in PX_SPELLS.items()),
+        note(1000, PX_TANK, "algalon.swappair", 1), note(1000, PX_PARTNER, "algalon.swappair", 1),
+
+        cast(5000, PX_HOLY, 498), buff(5000, PX_HOLY, al.SPELL_FORBEARANCE, PX_HOLY),
+        *phased(PX_FROST, al.SPELL_BLACK_HOLE_PHASE, 2000, 6000), cast(3000, PX_FROST, 48792),
+        *phased(PX_TREE, al.SPELL_BLACK_HOLE_PHASE, 10000, 14000), cast(12000, PX_TREE, 22812),
+        *worn(PX_FROST, al.SPELL_DIVINE_GUARDIAN, PX_HOLY, 15000, 21000),
+        *worn(PX_LOCK, al.SPELL_DIVINE_GUARDIAN, PX_HOLY, 15000, 20000),
+        note(18000, PX_MAGE, "algalon.personal", "healthstone"), cast(18000, PX_MAGE, 47877),
+        {"t": 19500, "e": "act", "g": PX_RET, "a": al.COVER_NODE, "rel": 91.0, "vd": "FAILED"},
+
+        blast(20000, PX_HOLE_A, PX_LOCK, 15000, 3000), blast(20000, PX_HOLE_A, PX_MAGE, 12000, 3000),
+        blast(20000, PX_HOLE_A, PX_HOLY, 10000, 3000), blast(20000, PX_HOLE_A, PX_TREE, 11000, 3000),
+        blast(20000, PX_HOLE_A, PX_ROGUE, 9000, 3000),
+        death(20000, PX_LOCK, PX_HOLE_A, 15000, PX_HOME[PX_LOCK]),
+        blast(20600, PX_HOLE_B, PX_MAGE, 3000, 1000), blast(20600, PX_HOLE_B, PX_ROGUE, 9000, 1000),
+
+        cast(20640, PX_HOLY, al.SPELL_DIVINE_SACRIFICE), note(20640, PX_HOLY, "algalon.cover", "divine sacrifice"),
+        *(rec for guid in (PX_HOLY, PX_MAGE, PX_TREE) for rec in worn(guid, al.SPELL_DIVINE_GUARDIAN, PX_HOLY, 20640,
+                                                                      26640)),
+        note(20700, PX_ROGUE, "algalon.personal", "Cloak of Shadows"), cast(20700, PX_ROGUE, 31224),
+        {"t": 30000, "e": "act", "g": PX_HOLY, "a": al.COVER_NODE, "rel": 91.0, "vd": "FAILED"},
+        {"t": PX_END, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, PX_END, 500):
+        units = [row(guid, offset, px_hp(guid, when), ALGALON) for guid, offset in PX_HOME.items()]
+        units.append(row(ALGALON, (0, 4), 90.0, PX_TANK))
+        for star, gone in ((PX_STAR_A, 20000), (PX_STAR_B, 19500)):
+            if when <= gone:
+                units.append(row(star, PX_STAR_SPOTS[star], 5.0, 0))
+        for hole, star, born in ((PX_HOLE_A, PX_STAR_A, 20500), (PX_HOLE_B, PX_STAR_B, 21000)):
+            if when >= born:
+                units.append(row(hole, PX_STAR_SPOTS[star], 100.0, 0))
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return [rec for rec in records if rec.get("e") != "note" or rec.get("k") not in drop]
+
+
+class ExplosionPresses(unittest.TestCase):
+    """Who stood under each explosion's line, what they pressed, and presses that came too late or in a hole."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, presses_pull())
+        cls.lines = [line for _, line in al.failures(cls.trace)]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_explosions_from_black_holes_stay_apart_and_name_the_star_on_their_spot(self):
+        self.assertEqual([(row["t"], row["star"], row["source"], row["hits"]) for row in al.star_deaths(self.trace)],
+                         [(20000, PX_STAR_A, PX_HOLE_A, 5), (20600, PX_STAR_B, PX_HOLE_B, 2)])
+
+    def test_each_bot_under_the_line_reads_its_health_hit_presses_and_buttons(self):
+        first, second = al.explosion_rows(self.trace)
+        # Divine Guardian lowers the warlock's line and lifts the death knight out of it.
+        self.assertEqual([(entry["guid"], entry["hp"], entry["line"], entry["landed"], entry["died"],
+                           entry["pressed"], entry["consumables"], entry["buttons"]) for entry in first["under"]], [
+            (PX_HOLY, 16000, 16913, 10000, False, [], [],
+             [("Divine Protection", "cooling", 5000), ("Divine Shield", "forbearance", 5000)]),
+            (PX_LOCK, 12000, 13530, 15000, True, [], [], [("Shadow Ward", "ready", None)]),
+            (PX_MAGE, 16000, 16913, 12000, False, [], [(18000, "healthstone")], [("Ice Block", "ready", None)]),
+            (PX_TREE, 15000, 16913, 11000, False, [], [], [("Barkskin", "cooling", 12000)])])
+        self.assertEqual([(entry["guid"], entry["landed"]) for entry in second["under"]],
+                         [(PX_HOLY, None), (PX_MAGE, 3000), (PX_TREE, None)])
+
+    def test_every_press_and_cover_reads_its_star_death(self):
+        self.assertEqual([(row["t"], row["guid"], row["kind"], al.press_name(row), row["died"])
+                          for row in al.press_rows(self.trace)], [
+            (18000, PX_MAGE, "personal", "healthstone", 20000),
+            (20640, PX_HOLY, "cover", "Divine Sacrifice", 20600),
+            (20700, PX_ROGUE, "personal", "Cloak of Shadows", 20600)])
+
+    def test_a_press_or_cover_after_its_star_died_is_a_failure(self):
+        self.assertIn("Holy cast Divine Sacrifice for cover @ 20.6s, 0.04 s after its star died", self.lines)
+        self.assertIn("Rogue pressed Cloak of Shadows @ 20.7s, 0.10 s after its star died", self.lines)
+        self.assertEqual(sum("after its star died" in line for line in self.lines), 2)
+
+    def test_a_held_button_cast_in_a_hole_above_the_line_is_a_failure(self):
+        self.assertEqual([(row["t"], row["guid"], row["label"], row["pct"]) for row in al.phased_buttons(self.trace)],
+                         [(12000, PX_TREE, "Barkskin", 90.0)])
+        self.assertIn("Tree spent Barkskin @ 12.0s inside a hole's phase, at 90%", self.lines)
+        self.assertEqual(sum("inside a hole's phase" in line for line in self.lines), 1)
+
+    def test_a_failed_cover_with_another_paladin_ready_is_a_failure(self):
+        self.assertEqual([(row["t"], row["guid"], row["ready"]) for row in al.failed_covers(self.trace)],
+                         [(19500, PX_RET, [(PX_HOLY, al.SPELL_DIVINE_SACRIFICE)]), (30000, PX_HOLY, [])])
+        self.assertIn("Ret's cover failed @ 19.5s with Holy's Divine Sacrifice ready", self.lines)
+        self.assertEqual(sum("cover failed" in line for line in self.lines), 1)
+
+    def test_an_explosion_death_counts_its_class_buttons_as_ready(self):
+        (lock,) = al.explosion_deaths(self.trace)
+        self.assertEqual((lock["guid"], lock["used"], lock["ready"]), (PX_LOCK, [], ["Shadow Ward"]))
+        self.assertIn("Lock died to a star explosion @ 20.0s with Shadow Ward ready and no personal button pressed",
+                      self.lines)
+
+    def test_the_section_lists_the_line_the_presses_the_failed_covers_and_the_phased_buttons(self):
+        text = render(self.trace, "defensives")
+        for line in ("star explosions: 2; under each, every unphased bot at or under its line (16,913, 13,530 covered)",
+                     "      Holy (heal) 16,000 of 16,913, hit 10,000; pressed none; Divine Protection cooling since"
+                     " 0:05.000, Divine Shield forbearance since 0:05.000\n",
+                     "      Lock (ranged) 12,000 of 13,530, hit 15,000, died; pressed none; Shadow Ward ready\n",
+                     "      Mage (ranged) 16,000 of 16,913, hit 12,000; pressed none; Ice Block ready;"
+                     " used healthstone 0:18.000\n",
+                     "      Tree (heal) 15,000 of 16,913, hit 11,000; pressed none; Barkskin cooling since 0:12.000\n",
+                     "      Tree (heal) 15,000 of 16,913, not hit; pressed none; Barkskin cooling since 0:12.000\n",
+                     "personal presses (algalon.personal): 2\n     0:18.000 Mage healthstone: its star died 0:20.000"
+                     " (+2.00 s)\n     0:20.700 Rogue Cloak of Shadows: its star died 0:20.600 (-0.10 s), already dead",
+                     "explosion covers (algalon.cover): 1\n     0:20.640 Holy Divine Sacrifice: its star died 0:20.600"
+                     " (-0.04 s), already dead",
+                     "cover node runs that FAILED: 2\n     0:19.500 Ret; other covers ready: Holy's Divine Sacrifice\n"
+                     "     0:30.000 Holy; other covers ready: none",
+                     "personal buttons cast in a hole's phase above 35%: 1\n     0:12.000 Tree Barkskin at 90%"):
+            self.assertIn(line, text)
+
+
+class OlderPresses(unittest.TestCase):
+    """The same pull from before `algalon.personal` and `algalon.cover`: the records still carry the rest."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, presses_pull(drop=("algalon.personal", "algalon.cover")))
+        cls.lines = [line for _, line in al.failures(cls.trace)]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_casts_and_act_rows_still_read(self):
+        self.assertEqual(al.press_rows(self.trace), [])
+        self.assertFalse([line for line in self.lines if "after its star died" in line])
+        self.assertIn("Tree spent Barkskin @ 12.0s inside a hole's phase, at 90%", self.lines)
+        self.assertIn("Ret's cover failed @ 19.5s with Holy's Divine Sacrifice ready", self.lines)
+        mage = next(entry for entry in al.explosion_rows(self.trace)[0]["under"] if entry["guid"] == PX_MAGE)
+        self.assertEqual(mage["consumables"], [(18000, "Master Healthstone")])
+        text = render(self.trace, "defensives")
+        self.assertIn("personal presses (algalon.personal): 0\n  explosion covers (algalon.cover): 0\n", text)
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
