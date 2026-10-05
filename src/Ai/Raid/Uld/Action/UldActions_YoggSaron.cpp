@@ -1312,16 +1312,8 @@ bool YoggSaronBrainSpotAction::Execute(Event /*event*/)
 
 bool YoggSaronNitroBoostsAction::Execute(Event /*event*/)
 {
-    Item* boots = YoggSaronNitroBoots(bot);
-    if (!boots || bot->CanUseItem(boots) != EQUIP_ERR_OK || bot->IsNonMeleeSpellCast(true))
+    if (!UseNitroBoosts(bot))
         return false;
-
-    // Same packet UseTinkerAction sends: the use spell is the enchant's, not in the bot's spellbook.
-    WorldPacket packet(CMSG_USE_ITEM);
-    packet << boots->GetBagSlot() << boots->GetSlot() << uint8(1) << uint32(SPELL_NITRO_BOOSTS_USE)
-           << boots->GetGUID() << uint32(0) << uint8(0);
-    packet << uint32(TARGET_FLAG_NONE) << bot->GetPackGUID();
-    bot->GetSession()->HandleUseItemOpcode(packet);
 
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.nitro", "used");

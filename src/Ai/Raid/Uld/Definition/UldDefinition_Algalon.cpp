@@ -23,7 +23,8 @@ namespace
 bool AlgalonCooldownsHeld(PlayerbotAI* botAI)
 {
     return AlgalonEngaged(botAI) &&
-           (AlgalonBigBangCasting(botAI) || AlgalonBigBangWithin(botAI, ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS));
+           (AlgalonBigBangCasting(botAI) || AlgalonBigBangWithin(botAI, ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS) ||
+            IsAlgalonPhased(botAI->GetBot()));
 }
 
 // Phased bots are left out: inside the void they are safe, and phase-16 Dark Matter is on them.
@@ -119,7 +120,9 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Multiplier<AlgalonLeaveFieldMultiplier>(Family::AnyAction);
     e.Multiplier<AlgalonCooldownReserveMultiplier>(Family::Spell);
     e.Multiplier<AlgalonTankHealerMultiplier>(Family::Spell | Family::ReachHeal);
-    e.Block("algalon ice block hold", Role::Any, AlgalonCooldownsHeld, 0, {"ice block"});
+    e.Multiplier<AlgalonHideCastMultiplier>(Family::Spell);
+    e.Block("algalon phase immunity hold", Role::Any, AlgalonCooldownsHeld, 0,
+            {"ice block", "divine shield", "cloak of shadows", "anti magic shell"});
     // The cover node spends these on the star about to die. The class nodes fire on a hurt raid, after it.
     e.Block("algalon explosion cover hold", Role::Any, AlgalonInPhaseOne, 0, {"divine sacrifice"});
     e.Block("algalon aura mastery hold", Role::Any, AlgalonEngaged, 0, {"aura mastery"});

@@ -551,7 +551,7 @@ bool YoggSaronBrainSpotTrigger::IsActive()
 
 bool YoggSaronNitroBoostsTrigger::IsActive()
 {
-    if (!IsInBrainLevel() || bot->HasAura(SPELL_NITRO_BOOSTS_BUFF) || !YoggSaronNitroBoots(bot) ||
+    if (!IsInBrainLevel() || bot->HasAura(NITRO_BOOSTS_SPEED_SPELL) || !GetNitroBoostBoots(bot) ||
         YoggSaronLeavingBrainLevel(bot))
         return false;
 
@@ -563,7 +563,7 @@ bool YoggSaronNitroBoostsTrigger::IsActive()
         return false;
 
     // 3 min against 80 s waves, so every third wave.
-    if (bot->HasSpellCooldown(SPELL_NITRO_BOOSTS_USE))
+    if (bot->HasSpellCooldown(NITRO_BOOSTS_USE_SPELL))
     {
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "yogg.nitro", "cooldown");

@@ -548,14 +548,6 @@ uint32 YoggSaronSanityOf(Player* player)
     return sanity ? sanity->GetStackAmount() : 0;
 }
 
-Item* YoggSaronNitroBoots(Player* bot)
-{
-    Item* boots = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_FEET);
-    return boots && boots->GetEnchantmentId(PERM_ENCHANTMENT_SLOT) == ULDUAR_YOGG_SARON_NITRO_BOOSTS_ENCHANT
-               ? boots
-               : nullptr;
-}
-
 Position YoggSaronBrainSpot(Player* bot)
 {
     if (PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsHeal(bot))

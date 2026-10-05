@@ -17,6 +17,7 @@
 #include <vector>
 
 class Action;
+class Item;
 class Player;
 class PlayerbotAI;
 class Unit;
@@ -137,6 +138,20 @@ Position ValidateFloorPoint(Player* bot, Position const& point);
 Position ValidateStaticFloorPoint(Player* bot, Position const& point);
 // Class taunt. Non-tank classes return false.
 bool CastClassTaunt(PlayerbotAI* botAI, Unit* target);
+
+// Nitro Boosts, the engineering boots tinker: +150% run speed for 5 s on a 3 min cooldown. The generic
+// tinker action skips it, so it is only ever spent on an encounter's walk.
+inline constexpr uint32 NITRO_BOOSTS_ENCHANT = 3606;
+inline constexpr uint32 NITRO_BOOSTS_USE_SPELL = 55004;
+inline constexpr uint32 NITRO_BOOSTS_SPEED_SPELL = 54861;
+inline constexpr float NITRO_BOOSTS_SPEED_FACTOR = 2.5f;
+inline constexpr uint32 NITRO_BOOSTS_DURATION_MS = 5000;
+
+// The bot's boots if they carry Nitro Boosts, else null.
+Item* GetNitroBoostBoots(Player* bot);
+// Boots on, off cooldown and usable now.
+bool NitroBoostsReady(Player* bot);
+bool UseNitroBoosts(Player* bot);
 
 }
 

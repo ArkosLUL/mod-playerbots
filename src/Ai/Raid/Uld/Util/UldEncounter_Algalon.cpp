@@ -1835,6 +1835,10 @@ bool FarHoleSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, Po
     if (AlgalonStaysOut(bot))
         return false;
 
+    // At 17.5 yd/s the boots cover a far hole within the cast.
+    if (state.bigBangCasting ? state.nitroRunners.count(bot->GetGUID()) > 0 : NitroBoostsReady(bot))
+        return false;
+
     AlgalonScanUnit const* nearest = NearestShelter(state, anchor);
     if (!nearest || nearest->position.GetExactDist2d(anchor) <= ULDUAR_ALGALON_FAR_HOLE_YARDS)
         return false;
@@ -2449,6 +2453,13 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         ++state->bigBangCount;
         state->nextBigBangMs = now + ULDUAR_ALGALON_BIG_BANG_INTERVAL_MS;
         state->shelterAssignments.clear();
+        state->nitroRunners.clear();
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (IsBot(member) && NitroBoostsReady(member))
+                state->nitroRunners.insert(member->GetGUID());
+        }
         ElectBigBangSoakers(bot, boss, *state);
         NoteSoakKit(group, *state);
         CallBigBang(group, boss, *state, true);
@@ -3187,7 +3198,20 @@ int32 AlgalonHideSlackMs(Player* bot)
     float const walk =
         std::max(0.0f, bot->GetExactDist2d(shelter->position) - (ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f));
     float const speed = std::max(1.0f, bot->GetSpeed(MOVE_RUN));
-    int32 const walkMs = static_cast<int32>(walk / speed * IN_MILLISECONDS);
+    int32 walkMs = static_cast<int32>(walk / speed * IN_MILLISECONDS);
+    // Boots not yet used run the first stretch boosted. Once used, the speed above already carries them.
+    if (state->nitroRunners.count(bot->GetGUID()) && !bot->HasAura(NITRO_BOOSTS_SPEED_SPELL) &&
+        walk > ULDUAR_ALGALON_NITRO_MIN_WALK)
+    {
+        float const fast = speed * NITRO_BOOSTS_SPEED_FACTOR;
+        float const boosted = fast * NITRO_BOOSTS_DURATION_MS / IN_MILLISECONDS;
+        walkMs = walk <= boosted
+                     ? static_cast<int32>(walk / fast * IN_MILLISECONDS)
+                     : static_cast<int32>(NITRO_BOOSTS_DURATION_MS + (walk - boosted) / speed * IN_MILLISECONDS);
+        // Never under the unboosted cutoff walk, or a step inside it adds most of a second at once.
+        walkMs = std::max(walkMs, static_cast<int32>(ULDUAR_ALGALON_NITRO_MIN_WALK / speed * IN_MILLISECONDS));
+    }
+
     int32 const remaining = AlgalonBigBangRemainingMs(botAI);
 
     // Caught mid run, or in the field too late to be phased, it would have no button up; standing, it casts one.
@@ -3201,13 +3225,34 @@ int32 AlgalonHideSlackMs(Player* bot)
     {
         auto const out = state->hidersOut.find(shelter->guid);
         if (out != state->hidersOut.end() && out->second)
-            margin = ULDUAR_ALGALON_LAST_IN_MARGIN_MS;
+            margin = ULDUAR_ALGALON_LAST_IN_MARGIN_MS + ULDUAR_ALGALON_HOLD_LEAVE_LEAD_MS;
     }
 
     return remaining - walkMs - margin;
 }
 
 bool AlgalonShouldRunForShelter(Player* bot) { return AlgalonHideSlackMs(bot) <= 0; }
+
+void AlgalonBoostHideRun(Player* bot, float walk)
+{
+    AlgalonEncounterState* state = FindState(bot);
+    if (!state || walk <= ULDUAR_ALGALON_NITRO_MIN_WALK || !state->nitroRunners.count(bot->GetGUID()) ||
+        bot->HasAura(NITRO_BOOSTS_SPEED_SPELL))
+        return;
+
+    // Gone for good, the slack would keep timing a boosted walk. A refused use is tried again next tick.
+    if (!NitroBoostsReady(bot))
+    {
+        state->nitroRunners.erase(bot->GetGUID());
+        return;
+    }
+
+    if (!UseNitroBoosts(bot))
+        return;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "algalon.nitro", "hide");
+}
 
 AlgalonHideRole GetAlgalonHideRole(Player* bot)
 {
@@ -3470,6 +3515,9 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
         }
     }
 
+    uint32 const now = getMSTime();
+    bool const gathering =
+        state->bigBangCasting || BigBangDueWithin(*state, ULDUAR_ALGALON_GATHER_LEAD_SECONDS, now);
     char const* branch = "none";
     Unit* chosen = nullptr;
     if (loose)
@@ -3477,12 +3525,20 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
         chosen = loose;
         branch = "taunt";
     }
-    else if (held && state->holes.size() > ReservedHoles(*state, getMSTime()))
+    else if (held && gathering)
+        branch = "gather";
+    else if (held && state->holes.size() > ReservedHoles(*state, now))
         chosen = held;
     else if (held)
         branch = "kept";
 
-    if (!chosen)
+    // Gathering keeps the kite hole: the handler still hides in it, last, where nobody else does. Not the
+    // raid's: a kite hole is left out of everyone else's pick.
+    AlgalonScanUnit const* raidHole = RaidShelterHole(*state, now);
+    auto const kite = state->kiteHoleAssignments.find(bot->GetGUID());
+    bool const keepKite = held && gathering &&
+                          !(raidHole && kite != state->kiteHoleAssignments.end() && kite->second == raidHole->guid);
+    if (!chosen && !keepKite)
         state->kiteHoleAssignments.erase(bot->GetGUID());
 
     // Once it is on the handler the kite owns the key, as hole or parked.

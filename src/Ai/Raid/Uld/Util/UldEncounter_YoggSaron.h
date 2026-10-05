@@ -93,8 +93,6 @@ enum UlduarYoggSaronIds
     SPELL_LUNATIC_GAZE_SKULL = 64168,  // 64167 on a Laughing Skull fires this every second, 30 yd
     SPELL_SHADOW_NOVA_SARA = 65719,  // only cast from a Guardian's JustDied, so the cast is its death
     SPELL_SHATTERED_ILLUSION = 64173,  // stun on every platform tentacle once a brain room is cleared
-    SPELL_NITRO_BOOSTS_USE = 55004,  // the boots' use spell, 3 min; casts the buff below, no backfire in a raid
-    SPELL_NITRO_BOOSTS_BUFF = 54861,  // +150% run speed, 5 s
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
     // One per illusion, opened by the Brain the moment the last Influence Tentacle in that room dies.
     // The entries run in the same order as ACTION_ILLUSION_DRAGONS/ICECROWN/STORMWIND.
@@ -132,7 +130,6 @@ constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY = 60;
 
 // Nitro Boosts (boots enchant), on the walk from a cleared illusion room to the Brain. Shorter walks end
 // before 5 s of +150% buys anything.
-constexpr uint32 ULDUAR_YOGG_SARON_NITRO_BOOSTS_ENCHANT = 3606;
 constexpr float ULDUAR_YOGG_SARON_NITRO_MIN_WALK = 40.0f;
 
 // A cloud summons a Guardian on any player within 8.5 yd. SelectNearbyTarget's 6 yd goes through
@@ -669,9 +666,6 @@ bool YoggSaronLeavingBrainLevel(Player* bot);
 
 // Sanity stacks (63050). 0 with no aura, which is Insane or out of the fight.
 uint32 YoggSaronSanityOf(Player* player);
-
-// The bot's boots if they carry Nitro Boosts, else null.
-Item* YoggSaronNitroBoots(Player* bot);
 
 // The spot a bot hits the Brain from once its room is done: behind it for melee, the portal spot of the
 // room it came up from for everyone else. The brain room middle when that spot can't see the Brain or

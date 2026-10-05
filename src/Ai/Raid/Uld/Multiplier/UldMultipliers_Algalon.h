@@ -55,6 +55,18 @@ private:
     std::unordered_map<Action*, Reserve> reserves;
 };
 
+// Algalon: a bot only thinks again once its cast ends, so during Big Bang a cast or channel longer than its
+// hide slack would start its run late.
+class AlgalonHideCastMultiplier : public Multiplier
+{
+public:
+    AlgalonHideCastMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon hide cast") {}
+    float GetValue(Action* action) override;
+
+private:
+    std::unordered_map<Action*, uint32> spellIds;
+};
+
 // Algalon: a tank healer heals the swap pair and itself, nobody else. Its class rotation still runs whenever
 // that's who it would heal; party heals and heals on anyone else are left to the raid's other healers.
 class AlgalonTankHealerMultiplier : public Multiplier

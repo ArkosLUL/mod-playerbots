@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <set>
 #include <string>
 
@@ -162,6 +163,32 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
         return 0.0f;
 
     return untilHit == 0 || AlgalonCooldownMs(bot, reserve.spellId) > untilHit ? 0.0f : 1.0f;
+}
+
+float AlgalonHideCastMultiplier::GetValue(Action* action)
+{
+    if (!action || !AlgalonBigBangLatched(bot))
+        return 1.0f;
+
+    auto cached = spellIds.find(action);
+    if (cached == spellIds.end())
+    {
+        CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+        uint32 const spellId =
+            spellAction ? context->GetValue<uint32>("spell id", spellAction->getSpell())->Get() : 0;
+        cached = spellIds.emplace(action, spellId).first;
+    }
+
+    SpellInfo const* info = cached->second ? sSpellMgr->GetSpellInfo(cached->second) : nullptr;
+    if (!info)
+        return 1.0f;
+
+    int32 const slack = AlgalonHideSlackMs(bot);
+    if (slack == std::numeric_limits<int32>::max())
+        return 1.0f;
+
+    int32 const castMs = info->IsChanneled() ? info->GetDuration() : static_cast<int32>(info->CalcCastTime(bot));
+    return castMs + ULDUAR_ALGALON_HIDE_CAST_SLACK_MS > slack ? 0.0f : 1.0f;
 }
 
 float AlgalonTankHealerMultiplier::GetValue(Action* action)

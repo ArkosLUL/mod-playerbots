@@ -105,6 +105,17 @@ movement alone): a Chain Heal started on phasing and a mana gem stopping the wal
 The exit, the hide run (not over a meteor dodge under way) and a taunt drop a movement booking another
 action made, since an equal priority waits it out.
 
+A bot only thinks again when its cast ends, so during the cast a cast or channel longer than its slack is held
+(`AlgalonHideCastMultiplier`): a 1.9 s Shadow Bolt started just before the slack ran out made a warlock late.
+Ice Block, Divine Shield, Cloak of Shadows and Anti-Magic Shell are held 20 s before the cast, through it and
+while phased ("algalon phase immunity hold"): magic immunity strips 62168 (arcane) or keeps it off, and two
+rogues who Cloaked inside were hit. The hide also cancels Ice Block, which pins the mage.
+
+**Nitro Boosts** (boots enchant 3606, use 55004, +150% for 5 s, 3 min; `EncounterHelpers`): bots whose boots
+are ready at the cast start are latched, time their walk boosted (never under the 10 yd walk unboosted), use
+them on a run over 10 yd (a refused use retries next tick; the latch drops once they can't fire) and skip the
+far-hole approach. The swap tanks have none.
+
 **Threat survives the hide, and this is not a bug to re-audit.** `CombatManager.cpp:53` gates only
 *entering* combat on `InSamePhase`, and `ThreatManager` only marks phased entries offline: he re-picks
 the top unphased entry when the phase drops.
@@ -220,7 +231,10 @@ not holding Algalon, and always a bot, taunts every loose one onto itself. At Bi
 since they follow it in and close the hole (65509, 6 yd) while those already inside stay phased: 62168 is
 owned by each target, and a despawning caster strips only area and single-target auras. It takes its kite
 hole, nobody else's, else its shelter, and waits there (`hold`) until every hider bound for that hole is in
-(bots by shelter, humans by the nearest hole, kite hole included), or until its walk plus 1.5 s is left. With a spare hole it parks 9 yd past
+(bots by shelter, humans by the nearest hole, kite hole included), or until its walk plus 2 s is left: a tank
+is caught out under its walk plus 1.5 s, and with the same threshold a 250 ms tick read that first. From 10 s
+before the cast it only taunts (`gather`), keeping its kite hole unless that became the raid's: a constellation
+keeps its victim 9.5 s from the cast start, and one chasing a healer closed a hole a ranged was walking to. With a spare hole it parks 9 yd past
 that hole on the far side (clamped 44 yd from centre), so the chase drags one through the field, then
 yields its tick. The far side is latched with the hole, and the walk goes round any hole it would clip, at
 combat priority: a straight forced walk crossed the field, and its booking refused both the tank slot walk
@@ -379,8 +393,7 @@ Divine Protection, Shield Wall, Pain Suppression and the rest cool down 2-3 min 
 20 s hold saw every one spent on the way. Swap tanks then never cast Divine Shield or Lay on Hands (Forbearance
 blocks Divine Protection 2 min), nor Lay on Hands on others; a **lone holder** (the other swap tank dead or
 phased; not its stacks, which linger 45 s after every swap) gets its own and the externals back outside the
-cast, never Divine Shield. The encounter's own actions cast directly and pass. Ice Block is held 20 s before
-the cast and cancelled by the hide: it pins the mage and Big Bang goes through it.
+cast, never Divine Shield. The encounter's own actions cast directly and pass.
 
 **Explosion cover** (`ACTION_EMERGENCY + 1`): with a star forecast to die within 2 s (or at ≤ 3%) and none
 up, one per star:
@@ -407,7 +420,7 @@ Raid-wide values, all written by the instance tick: `algalon.phase` (0 idle, 1 i
 helper that derives it: `algalon.tankheal` (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
 (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is the handler waiting to go
 last), `algalon.kite`
-(`taunt`/`hole`/`parked`/`kept`/`none`), `algalon.spot`
+(`taunt`/`hole`/`parked`/`kept`/`gather`/`none`), `algalon.spot`
 (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`), `algalon.hazard`
 (`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`, where `cross` means only a
 path over a hole was clear),
@@ -426,7 +439,8 @@ drain-only health, else `chewed`, and the nearest raid member's distance; older 
 only record of how a star died, since damage rows cover players alone; `algalon.soakkit`
 (`def=<button|dispersion|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.tankdef`
 (`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
-(`aura mastery`/`divine sacrifice` on the caster); `algalon.handover` (`nodef` on a
+(`aura mastery`/`divine sacrifice` on the caster); `algalon.nitro` (`hide` on a bot using its boots on the
+run); `algalon.handover` (`nodef` on a
 holder handing him over for want of a defensive); `algalon.pull`
 (`inreach=N victim=GUID`) at the tick the intro ends; `algalon.call` (`swap`/`loose`/`bigbang`/`hide`)
 per raid warning, sent only when a human is in the raid. Each meteor is written as a `haz` circle (62311 / 64596, the impact point, 6 yd): the sweep

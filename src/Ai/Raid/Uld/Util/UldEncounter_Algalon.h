@@ -16,6 +16,7 @@
 #include <array>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -105,11 +106,20 @@ constexpr uint32 ULDUAR_ALGALON_BIG_BANG_INTERVAL_MS = 90500;
 constexpr uint32 ULDUAR_ALGALON_BIG_BANG_CAST_MS = 8000;
 // How early the raid needs a hole standing, and keeps the last one out of the kite.
 constexpr uint32 ULDUAR_ALGALON_SHELTER_WINDOW_SECONDS = 30;
-// Ice Block stays unspent this long before a cast: it pins the mage for 10 s, and Big Bang goes through it.
+// Ice Block, Divine Shield, Cloak of Shadows and Anti-Magic Shell stay unspent this long before a cast and
+// while phased. Magic immunity strips the hole's phase aura (62168, arcane) or keeps it off, and Ice Block also
+// pins the mage.
 constexpr uint32 ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS = 20;
+// Every constellation goes on the handler before the cast: from its start they keep their victim 9.5 s and
+// follow it into a hole, closing it on whoever is still walking there.
+constexpr uint32 ULDUAR_ALGALON_GATHER_LEAD_SECONDS = 10;
 // Hiders keep fighting until their walk plus this margin is all that's left of the cast. The phase only
 // has to cover the hit, and 64445 brings everyone back a second after it, so hiding early buys nothing.
 constexpr int32 ULDUAR_ALGALON_HIDE_MARGIN_MS = 2500;
+// A bot only thinks again once its cast ends, so a cast running past its hide slack holds the run back.
+constexpr int32 ULDUAR_ALGALON_HIDE_CAST_SLACK_MS = 250;
+// Nitro Boosts only on a run longer than this.
+constexpr float ULDUAR_ALGALON_NITRO_MIN_WALK = 10.0f;
 // Cast remaining when the soaker's defensive goes up, so it also covers his swings until the raid is back.
 constexpr int32 ULDUAR_ALGALON_SOAK_DEFENSIVE_MS = 3000;
 // Dispersion only lasts 6s.
@@ -123,9 +133,11 @@ constexpr float ULDUAR_ALGALON_RESCUE_HP_PCT = 60.0f;
 constexpr float ULDUAR_ALGALON_RESCUE_LAY_ON_HANDS_PCT = 30.0f;
 // A healer still has one global cooldown to spend on the soaker before its walk to the hole.
 constexpr int32 ULDUAR_ALGALON_PREP_GCD_MS = 1500;
-// A bot in the field this long before the hit is phased by then: one field pulse and some slack. The handler
-// goes in this late while others still head for its hole, and a tank that can't make it stays out.
+// A bot in the field this long before the hit is phased by then: one field pulse and some slack. A tank that
+// can't make it stays out.
 constexpr int32 ULDUAR_ALGALON_LAST_IN_MARGIN_MS = 1500;
+// The handler going last leaves this much earlier, or one 250 ms tick reads it as caught out first.
+constexpr int32 ULDUAR_ALGALON_HOLD_LEAVE_LEAD_MS = 500;
 // After the cast he holds still and his Quantum Strike and Phase Punch wait this long (EVENT_RESUME_UPDATING).
 constexpr uint32 ULDUAR_ALGALON_BIG_BANG_STILL_MS = 3000;
 // His swings run 8-23k and Quantum Strike ~10k on a ~44k tank, so from 60% one burst kills it in 1.3 s.
@@ -384,6 +396,8 @@ struct AlgalonEncounterState
     uint32 layOnHandsClaimMs = 0;
     // The star the last explosion cover went up for.
     ObjectGuid coverStar;
+    // Bots whose Nitro Boosts were ready at the cast start: their hide walk is timed boosted.
+    std::unordered_set<ObjectGuid> nitroRunners;
     uint32 lastSmashImpactMs = 0;
 
     std::vector<AlgalonScanUnit> stars;
@@ -510,6 +524,8 @@ bool AlgalonShouldRunForShelter(Player* bot);
 // How long this bot can still fight before it has to run for its hole; INT32_MAX when it has no hole to run
 // to, doesn't hide, or is a tank that can't reach one in time.
 int32 AlgalonHideSlackMs(Player* bot);
+// Uses the bot's Nitro Boosts on its hide run when they were ready at the cast start and the walk is long enough.
+void AlgalonBoostHideRun(Player* bot, float walk);
 // The soaker and the backup. A handler holding constellations hides last: they follow it in and close its hole.
 bool AlgalonStaysOut(Player* bot);
 // A tank still out with no hole it can reach before the hit, which takes it on its own button.

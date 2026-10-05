@@ -211,6 +211,7 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 
     BreakCastPinningTheFeet(botAI, bot);
     ReleaseStalledWalk(botAI, bot);
+    AlgalonBoostHideRun(bot, bot->GetExactDist2d(shelter) - (ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f));
     // Not a dodge still under way: the hole isn't checked against the meteor.
     if (!AlgalonCosmicSmashThreatens(bot))
         DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_FORCED);

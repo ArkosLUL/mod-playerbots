@@ -1947,7 +1947,9 @@ def show_bigbang(trace: Trace) -> None:
         return
     show_absent(trace, "algalon.bigbang", "algalon.soaker", "algalon.backup", "algalon.hide", "algalon.defensive",
                 "algalon.shelter", "algalon.disperser")
-    show_vetoes(trace, "algalon ice block hold")
+    # Older traces carry the block under the Ice Block name it had before Cloak and Divine Shield joined it.
+    show_vetoes(trace, next((name for name in ("algalon phase immunity hold", "algalon ice block hold")
+                             if vetoes(trace, name)), "algalon phase immunity hold"))
 
     for row in rows:
         src = "" if row["src"] == "cast" else f"  (from {row['src']})"

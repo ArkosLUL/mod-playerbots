@@ -899,4 +899,31 @@ bool CastClassTaunt(PlayerbotAI* botAI, Unit* target)
     }
 }
 
+Item* GetNitroBoostBoots(Player* bot)
+{
+    Item* boots = bot ? bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_FEET) : nullptr;
+    return boots && boots->GetEnchantmentId(PERM_ENCHANTMENT_SLOT) == NITRO_BOOSTS_ENCHANT ? boots : nullptr;
+}
+
+bool NitroBoostsReady(Player* bot)
+{
+    Item* boots = GetNitroBoostBoots(bot);
+    return boots && !bot->HasSpellCooldown(NITRO_BOOSTS_USE_SPELL) && bot->CanUseItem(boots) == EQUIP_ERR_OK;
+}
+
+bool UseNitroBoosts(Player* bot)
+{
+    if (!NitroBoostsReady(bot) || bot->IsNonMeleeSpellCast(false, true, true))
+        return false;
+
+    // The packet UseTinkerAction sends: the use spell is the enchant's, not in the bot's spellbook.
+    Item* boots = GetNitroBoostBoots(bot);
+    WorldPacket packet(CMSG_USE_ITEM);
+    packet << boots->GetBagSlot() << boots->GetSlot() << uint8(1) << uint32(NITRO_BOOSTS_USE_SPELL)
+           << boots->GetGUID() << uint32(0) << uint8(0);
+    packet << uint32(TARGET_FLAG_NONE) << bot->GetPackGUID();
+    bot->GetSession()->HandleUseItemOpcode(packet);
+    return true;
+}
+
 }
