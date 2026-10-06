@@ -216,6 +216,7 @@ SHELTER_RADIUS = _radius_or("ULDUAR_ALGALON_SHELTER_RADIUS", 6.0)
 # combat reach 9 + 1.5 + 4/3 against a player
 MELEE_REACH = _radius_or("ULDUAR_ALGALON_MELEE_REACH", 11.83)
 DODGE_TRIGGER_YD = _radius_or("ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS", 12.0)
+CONSTELLATION_LOW_Z = _radius_or("ULDUAR_ALGALON_CONSTELLATION_LOW_Z", 5.0)
 
 ALGALON_SOURCE = RAID_ROOT / "Uld" / "Util" / "UldEncounter_Algalon.cpp"
 RING_SLOT_TABLE = re.compile(r"\bULDUAR_ALGALON_RING_SLOTS\s*=\s*\{\{?(.*?)\}?\};", re.S)
@@ -229,6 +230,12 @@ BIG_BANG_CAST_MS = 8000
 # the soaker latch clears to 0 a tick or two after the hit
 SOAKER_TAIL_MS = 1500
 SHELTER_WINDOW_MS = 30000
+GATHER_LEAD_MS = 10000
+# every class taunt the handler can be (Taunt, Hand of Reckoning, Growl, Dark Command)
+TAUNT_COOLDOWN_MS = 8000
+KITE_BLOCKED_MS = 5000
+# the longest a woken constellation took to come down was 23 s
+STUCK_MIN_MS = 25000
 STAR_GAP_MS = 8000
 ENRAGE_MS = 360000
 PHASE_AURA_MS = 10000
@@ -2196,6 +2203,11 @@ def kite_faults(trace: Trace) -> list[tuple[int, str]]:
     for row in immunity_strips(trace):
         out.append((row["t"], f"{trace.name(row['guid'])} cast {row['name']} while phased @ {secs(row['t'])} and lost"
                               f" its phase aura"))
+    blocked = kite_blocked(trace)
+    if sum(blocked.values()) >= KITE_BLOCKED_MS:
+        out.append((0, f"kite blocked {sum(blocked.values()) / 1000:.1f} s: the handler taunted with one held and a"
+                       f" hole spare (none loose but one in the air {blocked['stuck'] / 1000:.1f} s, taunt cooling"
+                       f" {blocked['cooling'] / 1000:.1f} s)"))
     return out
 
 
@@ -3521,10 +3533,11 @@ def kite_runs(trace: Trace) -> list[dict]:
     followed a `parked`, a pass that missed."""
     def build(trace: Trace) -> list[dict]:
         out = []
-        for guid, spans in holder_spans(trace, "algalon.kite", pull_end(trace)).items():
+        for guid, spans in handler_kite_tracks(trace).items():
             run: list[tuple[str, int, int]] = []
             for span in spans + [("", pull_end(trace), pull_end(trace))]:
-                if span[0] in KITE_STAGES:
+                # another bot's stint in between ends the run too
+                if span[0] in KITE_STAGES and (not run or run[-1][2] == span[1]):
                     run.append(span)
                     continue
                 if run:
@@ -3536,7 +3549,7 @@ def kite_runs(trace: Trace) -> list[dict]:
                         "retries": sum(1 for before, after in zip(run, run[1:])
                                        if before[0] == "parked" and after[0] == "stage"),
                     })
-                run = []
+                run = [span] if span[0] in KITE_STAGES else []
         return sorted(out, key=lambda item: (item["start"], item["guid"]))
     return cached(trace, "_algalon_kite_runs", build)
 
@@ -3572,6 +3585,93 @@ def parked_stretches(trace: Trace) -> list[dict]:
                                 "eaten": bool(eaten_between(trace, start, stop + EATEN_SLACK_MS))})
         return sorted(out, key=lambda item: item["start"])
     return cached(trace, "_algalon_parked", build)
+
+
+def handler_kite_spans(trace: Trace) -> list[tuple[str, int, int, int]]:
+    """`(value, start, stop, guid)` of `algalon.kite` while its bot was the elected handler: a tank's last note
+    otherwise runs on through the other tank's stints."""
+    end = pull_end(trace)
+    kite = holder_spans(trace, "algalon.kite", end)
+    out = []
+    for value, start, stop in latch_spans(trace, "algalon.handler", end):
+        guid = as_guid(value)
+        for held, low, high in kite.get(guid, []):
+            low, high = max(low, start), min(high, stop)
+            if low < high:
+                out.append((held, low, high, guid))
+    return out
+
+
+def handler_kite_tracks(trace: Trace) -> dict[int, list[tuple[str, int, int]]]:
+    """`handler_kite_spans` per bot; every bot's own notes on a trace without `algalon.handler`."""
+    if not latch_spans(trace, "algalon.handler"):
+        return holder_spans(trace, "algalon.kite", pull_end(trace))
+    tracks: dict[int, list[tuple[str, int, int]]] = collections.defaultdict(list)
+    for value, start, stop, guid in handler_kite_spans(trace):
+        tracks[guid].append((value, start, stop))
+    return dict(tracks)
+
+
+def stuck_constellations(trace: Trace) -> dict[int, float]:
+    """Per woken constellation that never came within CONSTELLATION_LOW_Z of the floor, the lowest it got
+    above it: no hole can take one up there, and it evades home after each wave wakes it."""
+    samples = samples_of(trace)
+    out = {}
+    for row in constellation_rows(trace):
+        if row["active"] is None or row["how"] in ("phase2", "despawn"):
+            continue
+        until = row["removed"] if row["removed"] is not None else pull_end(trace)
+        if until - row["active"] < STUCK_MIN_MS:
+            continue
+        heights = [found[3] - ROOM_CENTER[2] for found in samples.between(row["guid"], row["active"], until)
+                   if alive(found) and len(found) > 3]
+        if heights and min(heights) > CONSTELLATION_LOW_Z:
+            out[row["guid"]] = min(heights)
+    return out
+
+
+def kite_blocked(trace: Trace) -> dict[str, int]:
+    """Milliseconds the handler sat in `taunt` while it held a constellation low enough for a hole, a hole was
+    spare and no Big Bang was gathering: `stuck` with no such one loose (only one up in the air), `cooling`
+    with its class taunt cast within TAUNT_COOLDOWN_MS."""
+    def build(trace: Trace) -> dict[str, int]:
+        samples = samples_of(trace)
+        end = pull_end(trace)
+        holes = latch_spans(trace, "algalon.holes", end)
+        casts = [cast["start"] for cast in big_bang_casts(trace)]
+        constellations = guids_of_entry(trace, NPC_LIVING_CONSTELLATION)
+        woke = {row["guid"]: row["active"] for row in constellation_rows(trace) if row["active"] is not None}
+        taunts = collections.defaultdict(list)
+        for rec in trace.of("cast"):
+            if rec.get("sp") in TAUNT_IDS and rec.get("sp") != SPELL_RIGHTEOUS_DEFENSE and not rec.get("tr"):
+                taunts[rec.get("s")].append(rec["t"])
+        out = {"stuck": 0, "cooling": 0}
+        for value, start, stop, handler in handler_kite_spans(trace):
+            if value != "taunt":
+                continue
+            for index, when, weight in samples.steps(start, stop):
+                ahead = [cast - when for cast in casts if cast + BIG_BANG_CAST_MS > when]
+                lead = min(ahead) if ahead else None
+                if lead is not None and lead <= GATHER_LEAD_MS:
+                    continue
+                reserved = 1 if lead is not None and lead <= SHELTER_WINDOW_MS else 0
+                if int(value_at(holes, when) or 0) <= reserved:
+                    continue
+                frame = [(guid, row) for guid, row in samples.units[index].items()
+                         if guid in constellations and alive(row) and len(row) > 3]
+                low = [row for _, row in frame if target_of(row) and row[3] - ROOM_CENTER[2] <= CONSTELLATION_LOW_Z]
+                high = [guid for guid, row in frame
+                        if guid in woke and woke[guid] <= when and row[3] - ROOM_CENTER[2] > CONSTELLATION_LOW_Z]
+                if not any(target_of(row) == handler for row in low):
+                    continue
+                if all(target_of(row) == handler for row in low):
+                    # a stale `taunt` with nothing up there is not this
+                    if high:
+                        out["stuck"] += weight
+                elif any(0 <= when - cast < TAUNT_COOLDOWN_MS for cast in taunts.get(handler, [])):
+                    out["cooling"] += weight
+        return out
+    return cached(trace, "_algalon_kite_blocked", build)
 
 
 def loose_at_bang(trace: Trace) -> list[dict]:
@@ -3619,7 +3719,9 @@ def show_constellations(trace: Trace) -> None:
         if row["removed"] is not None:
             left = (f"{row['how']} at {clock(row['removed'])}, {(row['removed'] - row['active']) / 1000:.1f} s awake,"
                     f" last on {trace.name(row['last_victim'])}")
-        print(f"    woke {clock(row['active'])}  chased {chase or 'nobody'}\n      left: {left}")
+        stuck = stuck_constellations(trace).get(row["guid"])
+        air = f"; stuck in the air, never below +{stuck:.1f} yd" if stuck is not None else ""
+        print(f"    woke {clock(row['active'])}  chased {chase or 'nobody'}\n      left: {left}{air}")
 
     held: collections.Counter = collections.Counter()
     for row in woke:
@@ -3633,14 +3735,23 @@ def show_constellations(trace: Trace) -> None:
     if handler:
         print("  algalon.handler: " + ", ".join(f"{clock(start)} {trace.name(as_guid(value))}"
                                                for value, start, _ in handler))
-    kite = holder_spans(trace, "algalon.kite", pull_end(trace))
-    totals = span_totals(kite)
-    if totals:
-        print("  algalon.kite: " + ", ".join(f"{value} {held / 1000:.1f} s" for value, held in totals.most_common()))
-        busy = sorted(((sum(stop - start for value, start, stop in spans if value not in ("none", "")), guid)
-                       for guid, spans in kite.items()), reverse=True)
+    own = handler_kite_spans(trace)
+    if own:
+        totals: collections.Counter = collections.Counter()
+        busy: collections.Counter = collections.Counter()
+        for value, start, stop, guid in own:
+            totals[value] += stop - start
+            if value not in ("none", ""):
+                busy[guid] += stop - start
+        print("  algalon.kite, the handler's own: "
+              + ", ".join(f"{value} {held / 1000:.1f} s" for value, held in totals.most_common()))
         print("    by bot, outside none: " + ", ".join(f"{trace.name(guid)} {held / 1000:.1f} s"
-                                                     for held, guid in busy if held))
+                                                     for guid, held in busy.most_common()))
+    blocked = kite_blocked(trace)
+    if sum(blocked.values()):
+        print(f"  kite blocked {sum(blocked.values()) / 1000:.1f} s, taunting with one held, a hole spare and no Big"
+              f" Bang gathering: none loose but one in the air {blocked['stuck'] / 1000:.1f} s, taunt cooling"
+              f" {blocked['cooling'] / 1000:.1f} s")
     runs = kite_runs(trace)
     if runs:
         print(f"  kite runs, {sum(1 for run in runs if run['eaten'])} of {len(runs)} ended with a constellation"

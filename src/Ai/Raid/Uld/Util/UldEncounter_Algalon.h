@@ -101,6 +101,9 @@ constexpr uint32 ULDUAR_ALGALON_KITE_RETRY_MS = 3000;
 constexpr uint32 ULDUAR_ALGALON_KITE_STALL_MS = 12000;
 constexpr float ULDUAR_ALGALON_KITE_BESIDE = 5.0f;
 constexpr float ULDUAR_ALGALON_CONSTELLATION_EAT_RADIUS = 6.5f;
+// Higher above the floor than this, a hole can't take one (npc_living_constellation::SpellHit): on its way down
+// after waking (2-23 s), or stuck there. One spawned outside the room never came below 16 yd.
+constexpr float ULDUAR_ALGALON_CONSTELLATION_LOW_Z = 5.0f;
 // A spot clamped into the room or onto another field is tried this far either side.
 constexpr float ULDUAR_ALGALON_KITE_SWING = static_cast<float>(M_PI) / 6.0f;
 // A loose one is taunted from the far side of a hole when that spot is within taunt reach of it.

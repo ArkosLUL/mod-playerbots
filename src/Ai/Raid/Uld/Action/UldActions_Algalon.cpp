@@ -432,8 +432,16 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
     Unit* constellation = GetAlgalonHandlerConstellation(bot);
     Position spot;
     char const* stage = nullptr;
-    if (!constellation || !GetAlgalonKiteSpot(bot, constellation, spot, stage))
+    if (!constellation)
         return false;
+
+    if (!GetAlgalonKiteSpot(bot, constellation, spot, stage))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "algalon.kite", "nohole");
+
+        return false;
+    }
 
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "algalon.kite", stage);

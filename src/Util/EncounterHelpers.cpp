@@ -879,24 +879,37 @@ Position ValidateStaticFloorPoint(Player* bot, Position const& point)
     return Position(x, y, z);
 }
 
-bool CastClassTaunt(PlayerbotAI* botAI, Unit* target)
+namespace
 {
-    if (!target)
-        return false;
-
-    switch (botAI->GetBot()->getClass())
+char const* ClassTauntSpell(Player* bot)
+{
+    switch (bot->getClass())
     {
         case CLASS_WARRIOR:
-            return botAI->CastSpell("taunt", target);
+            return "taunt";
         case CLASS_PALADIN:
-            return botAI->CastSpell("hand of reckoning", target);
+            return "hand of reckoning";
         case CLASS_DEATH_KNIGHT:
-            return botAI->CastSpell("dark command", target);
+            return "dark command";
         case CLASS_DRUID:
-            return botAI->CastSpell("growl", target);
+            return "growl";
         default:
-            return false;
+            return nullptr;
     }
+}
+}  // namespace
+
+bool CastClassTaunt(PlayerbotAI* botAI, Unit* target)
+{
+    char const* taunt = ClassTauntSpell(botAI->GetBot());
+    return target && taunt && botAI->CastSpell(taunt, target);
+}
+
+bool ClassTauntReady(PlayerbotAI* botAI)
+{
+    char const* taunt = ClassTauntSpell(botAI->GetBot());
+    uint32 const spellId = taunt ? botAI->GetAiObjectContext()->GetValue<uint32>("spell id", taunt)->Get() : 0;
+    return spellId && !botAI->GetBot()->HasSpellCooldown(spellId);
 }
 
 Item* GetNitroBoostBoots(Player* bot)

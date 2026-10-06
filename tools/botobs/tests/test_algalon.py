@@ -2501,6 +2501,89 @@ class OlderPresses(unittest.TestCase):
         self.assertIn("personal presses (algalon.personal): 0\n  explosion covers (algalon.cover): 0\n", text)
 
 
+KB_HELD = CREATURE | 81
+KB_STUCK = CREATURE | 82
+KB_LOOSE = CREATURE | 83
+KB_END = 30000
+
+
+def kb_snap(when: int) -> dict:
+    units = [row(AEGIS, (3, 0), 100.0, ALGALON), row(BULWARK, (0, 0), 100.0, ALGALON),
+             row(MERCY, (0, 14), 100.0, 0), row(ALGALON, (0, 4), 90.0, BULWARK),
+             row(KB_HELD, (6, 6), 100.0, AEGIS)]
+    # Woken on Mercy, then home and evaded: never within 5 yd of the floor.
+    stuck = row(KB_STUCK, (40, 0), 100.0, MERCY if 1000 <= when < 1500 else 0)
+    stuck[3] = 433.0
+    units.append(stuck)
+    if 6000 <= when < 12000:
+        units.append(row(KB_LOOSE, (2, 14), 100.0, MERCY))
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def kite_blocked_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 1,
+         "boss": "algalon-the-observer", "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ALGALON, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        *({"t": 1, "e": "unit", "g": guid, "en": al.NPC_LIVING_CONSTELLATION, "n": "Living Constellation"}
+          for guid in (KB_HELD, KB_STUCK, KB_LOOSE)),
+        note(0, MERCY, "algalon.phase", 2), note(1000, AEGIS, "algalon.handler", AEGIS),
+        note(1000, MERCY, "algalon.holes", 2),
+        # Bulwark's own note runs on, but it never was the handler.
+        note(1000, BULWARK, "algalon.kite", "taunt"),
+        note(2000, AEGIS, "algalon.kite", "taunt"), note(12000, AEGIS, "algalon.kite", "none"),
+        cast(5500, AEGIS, 62124, KB_LOOSE),
+        {"t": KB_END, "e": "end", "out": "reset"},
+    ]
+    return records + [kb_snap(when) for when in range(0, KB_END, 500)]
+
+
+class KiteBlocked(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, kite_blocked_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_only_the_elected_handler_counts_toward_the_kite_branches(self):
+        self.assertEqual([(value, start, stop, guid) for value, start, stop, guid in al.handler_kite_spans(self.trace)],
+                         [("taunt", 2000, 12000, AEGIS), ("none", 12000, KB_END, AEGIS)])
+        self.assertIn("algalon.kite, the handler's own: none 18.0 s, taunt 10.0 s",
+                      render(self.trace, "constellations"))
+
+    def test_a_constellation_that_never_came_down_is_flagged(self):
+        self.assertEqual(list(al.stuck_constellations(self.trace)), [KB_STUCK])
+        self.assertIn("stuck in the air, never below +15.7 yd", render(self.trace, "constellations"))
+
+    def test_taunting_with_one_held_and_a_hole_spare_is_a_blocked_kite(self):
+        self.assertEqual(al.kite_blocked(self.trace), {"stuck": 4000, "cooling": 6000})
+        self.assertIn("kite blocked 10.0 s: the handler taunted with one held and a hole spare (none loose but one in"
+                      " the air 4.0 s, taunt cooling 6.0 s)", [line for _, line in al.failures(self.trace)])
+
+    def test_a_stale_taunt_with_nothing_in_the_air_is_not_blocked_by_a_stuck_one(self):
+        landed = []
+        for rec in kite_blocked_pull():
+            if rec.get("e") == "snap":
+                rec = {**rec, "u": [[*unit[:3], 417.3, *unit[4:]] if unit[0] == KB_STUCK else unit
+                                    for unit in rec["u"]]}
+            landed.append(rec)
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, landed)
+            self.assertEqual(al.kite_blocked(trace)["stuck"], 0)
+            self.assertEqual(al.stuck_constellations(trace), {})
+
+    def test_one_removed_before_it_could_come_down_is_not_stuck(self):
+        cut = [rec for rec in kite_blocked_pull() if rec.get("e") != "snap" or rec["t"] < 10000]
+        cut += [{**kb_snap(when), "u": [unit for unit in kb_snap(when)["u"] if unit[0] != KB_STUCK]}
+                for when in range(10000, KB_END, 500)]
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(al.stuck_constellations(load(folder, cut)), {})
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

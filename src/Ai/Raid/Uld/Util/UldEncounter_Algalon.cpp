@@ -12,6 +12,7 @@
 #include "CellImpl.h"
 #include "Chat.h"
 #include "Creature.h"
+#include "CreatureAI.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
@@ -426,6 +427,9 @@ void ScanRoom(Player* bot, Creature* boss, AlgalonEncounterState& state, uint32 
                 state.holes.push_back(unit);
                 break;
             case PB_NPC_LIVING_CONSTELLATION:
+                // Evading leaves it selectable; its script's flag drops on the reset. One stuck in the air lost its
+                // victim and evaded home after every wave, and counted as loose all pull.
+                unit.active = unit.active && creature->AI() && creature->AI()->GetData(0);
                 state.constellations.push_back(unit);
                 break;
             case PB_NPC_UNLEASHED_DARK_MATTER:
@@ -4302,6 +4306,16 @@ Player* GetAlgalonHandler(PlayerbotAI* botAI)
     return state ? FindGroupMember(bot->GetGroup(), state->handler) : nullptr;
 }
 
+namespace
+{
+bool ConstellationLow(Unit const* unit)
+{
+    return unit->GetPositionZ() - ULDUAR_ALGALON_ROOM_CENTER.GetPositionZ() <= ULDUAR_ALGALON_CONSTELLATION_LOW_Z;
+}
+
+bool HeldKitePossible(AlgalonEncounterState const& state, Player* bot, uint32 now);
+}  // namespace
+
 Unit* GetAlgalonHandlerConstellation(Player* bot)
 {
     AlgalonEncounterState* state = FindState(bot);
@@ -4317,8 +4331,13 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
     // Loose ones first: a constellation follows its victim into a hole during Big Bang and closes it, so every
     // one ends up on the handler, who goes into its hole last. Barrage hits a random raid member
     // anyway, so holding them costs nothing. Only a spare hole takes one away.
+    uint32 const now = getMSTime();
+    bool const gathering =
+        state->bigBangCasting || BigBangDueWithin(*state, ULDUAR_ALGALON_GATHER_LEAD_SECONDS, now);
     Creature* loose = nullptr;
     Creature* held = nullptr;
+    // Only a low one is worth a kite: a hole can't take one still up in the air.
+    Creature* heldLow = nullptr;
     float looseDistance = std::numeric_limits<float>::max();
     for (AlgalonScanUnit const& constellation : state->constellations)
     {
@@ -4329,8 +4348,13 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
         if (unit->GetVictim() == bot)
         {
             held = held ? held : unit;
+            heldLow = heldLow || !ConstellationLow(unit) ? heldLow : unit;
             continue;
         }
+
+        // Up in the air it waits until it lands, bar the gather: one is stuck up there for each wave.
+        if (!gathering && !ConstellationLow(unit))
+            continue;
 
         float const distance = bot->GetExactDist2d(unit->GetPositionX(), unit->GetPositionY());
         if (distance < looseDistance)
@@ -4340,20 +4364,26 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
         }
     }
 
-    uint32 const now = getMSTime();
-    bool const gathering =
-        state->bigBangCasting || BigBangDueWithin(*state, ULDUAR_ALGALON_GATHER_LEAD_SECONDS, now);
+    bool const spare = state->holes.size() > ReservedHoles(*state, now);
+    // Taunted one at a time 8 s apart after every swap, the loose ones held the kite for most of a pull. A pass
+    // past its stage walk is finished first: taunting from behind latches a new kite and drops it.
+    auto const pass = state->kites.find(bot->GetGUID());
+    bool const passUnderWay = pass != state->kites.end() && pass->second.looseTarget.IsEmpty() &&
+                              pass->second.stage != AlgalonKiteStage::Stage;
+    bool const kiteFirst = loose && heldLow && !gathering && spare &&
+                           (passUnderWay || !ClassTauntReady(GET_PLAYERBOT_AI(bot))) &&
+                           HeldKitePossible(*state, bot, now);
     char const* branch = "none";
     Unit* chosen = nullptr;
-    if (loose)
+    if (loose && !kiteFirst)
     {
         chosen = loose;
         branch = AlgalonKitingBehind(bot, loose) ? "behind" : "taunt";
     }
     else if (held && gathering)
         branch = "gather";
-    else if (held && state->holes.size() > ReservedHoles(*state, now))
-        chosen = held;
+    else if (heldLow && spare)
+        chosen = heldLow;
     else if (held)
         branch = "kept";
 
@@ -4436,6 +4466,37 @@ void DropKite(AlgalonEncounterState& state, ObjectGuid const& guid)
     state.kites.erase(guid);
 }
 
+// Its latched hole still kiteable, else one that fits from where the low held ones are.
+bool HeldKitePossible(AlgalonEncounterState const& state, Player* bot, uint32 now)
+{
+    float qx = 0.0f;
+    float qy = 0.0f;
+    uint32 count = 0;
+    for (AlgalonScanUnit const& scanned : state.constellations)
+    {
+        Creature* unit = scanned.active ? Resolve(bot, scanned.guid) : nullptr;
+        if (!unit || unit->GetVictim() != bot || !ConstellationLow(unit))
+            continue;
+
+        qx += unit->GetPositionX();
+        qy += unit->GetPositionY();
+        ++count;
+    }
+
+    if (!count)
+        return false;
+
+    auto const latched = state.kiteHoleAssignments.find(bot->GetGUID());
+    if (latched != state.kiteHoleAssignments.end())
+        if (AlgalonScanUnit const* hole = FindScanned(state.holes, latched->second))
+            if (KiteableHole(state, *hole, now))
+                return true;
+
+    Position const from(qx / count, qy / count, bot->GetPositionZ());
+    return std::any_of(state.holes.begin(), state.holes.end(), [&](AlgalonScanUnit const& hole)
+                       { return KiteableHole(state, hole, now) && KiteHoleFits(state, hole, from, false); });
+}
+
 // No hole to spare, or the raid gathering for Big Bang: a loose one is taunted from where the handler stands.
 bool BehindAllowed(AlgalonEncounterState const& state, uint32 now)
 {
@@ -4462,7 +4523,7 @@ bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot, char c
     for (AlgalonScanUnit const& scanned : state->constellations)
     {
         Creature* unit = scanned.active ? Resolve(bot, scanned.guid) : nullptr;
-        if (!unit || unit->GetVictim() != bot)
+        if (!unit || unit->GetVictim() != bot || !ConstellationLow(unit))
             continue;
 
         held.push_back(unit);
@@ -4547,6 +4608,9 @@ bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot, char c
     }
     else
     {
+        // On the handler now, so the pass is its own, not the taunt's.
+        kite.looseTarget = ObjectGuid::Empty;
+
         // Already past the hole from them, after a taunt from behind or a pass round: it waits where it is.
         if (kite.stage == AlgalonKiteStage::Stage)
         {

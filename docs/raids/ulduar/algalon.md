@@ -275,7 +275,11 @@ They never melee and Arcane Barrage hits a random raid member, so a constellatio
 while alive, and who it chases matters only at Big Bang: it follows its victim into a hole and closes it
 on the raid. They are killable (260 k / 521 k) but 11 of them cost 16-34 % of Algalon's health against
 the enrage, and guides agree nobody damages them. The **handler**, a third tank or else the swap tank
-not holding Algalon, and always a bot, taunts every loose one onto itself. At Big Bang it **hides last**,
+not holding Algalon, and always a bot, taunts every loose one onto itself. One counts only while its script
+has it active: one spawned 53 yd out and 26 yd up never came below 16 yd, evaded home ~8.5 s after each wave
+woke it, still selectable, and held the handler on `taunt` 80 s with the rest held and holes spare. More than 5 yd
+above the floor, where no hole takes one (2-23 s of descent after waking), it isn't kited, nor taunted outside
+the gather. At Big Bang it **hides last**,
 since they follow it in and close the hole (65509, 6 yd) while those already inside stay phased: 62168 is
 owned by each target, and a despawning caster strips only area and single-target auras. It takes its kite
 hole, nobody else's, else its shelter, and (with no star under) waits there (`hold`) until every hider bound for that hole is in
@@ -301,7 +305,10 @@ So, per handler (`algalon.kite`), with the walk going round any hole it would cl
 A spot clamped into the room (44 yd) must stay 7.8 yd from the hole, on its side, and 8 yd off every other
 hole, else ±30°; a hole needs both spots. A loose one is taunted from the far spot of the hole nearest it
 (`behind`) when that is within 28 yd of it, the handler holding there while the taunt cools, so it comes straight
-across; not while gathering or with no hole spare. Never kited: the raid's hole with Big Bang due, and the only
+across; not while gathering or with no hole spare. Loose ones go first only while the class taunt is ready:
+taunted one per 8 s after every swap, they held the kite 71 s of a pull. With it cooling, held ones go to a spare
+hole if one fits, and a pass past its stage walk is finished first (taunting from behind latches a new kite and
+drops it). Never kited: the raid's hole with Big Bang due, and the only
 hole within 35 yd of the hold spot, the swap tanks' reach. The walks run at combat priority: a straight forced
 walk crossed the field, and its booking refused both the tank slot walk and the exit when the handler took him
 as Big Bang began. Its movement rule still passes its taunts, the pickup and the swap: all are
@@ -511,7 +518,7 @@ Raid-wide values, all written by the instance tick: `algalon.phase` (0 idle, 1 i
 helper that derives it: `algalon.tankheal` (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
 (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is the handler waiting to go
 last), `algalon.kite`
-(`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`none`; older traces `hole`), `algalon.spot`
+(`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`nohole`/`none`; older traces `hole`), `algalon.spot`
 (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`), `algalon.hazard`
 (`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`, where `cross` means only a
 path over a hole was clear),
@@ -576,8 +583,9 @@ counted by cause and role with humans starred. Then:
 - `--stars` also: per star its plan, window, forecast against actual death, offset from the hit, who its
   explosion hit unphased and its trims; per focus span the loss beyond the drain and the switches between
   under-stars, each release, each trimmer's starts and shots fired, with verdicts for a release within 8 s of the
-  cast, over one switch per star and 3 Shoot starts in 2 s; `--constellations` the kite runs (stages, retries, eaten) and parked
-  stretches with none eaten; `--bigbang` Nitro Boosts per hider;
+  cast, over one switch per star and 3 Shoot starts in 2 s; `--constellations` the kite runs (stages, retries, eaten) and
+  branch time, both from the elected handler alone, parked stretches with none eaten, a constellation stuck in the air, and
+  seconds the kite was blocked (verdict from 5 s); `--bigbang` Nitro Boosts per hider;
 - `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
 - `--tankheal`: the tank healers, each healer's share on the pair, itself and others, Beacon time on holder
   and partner, and per tank death the 6 s / 2 s damage against healing, shields and healing elsewhere, with

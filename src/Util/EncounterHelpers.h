@@ -138,6 +138,8 @@ Position ValidateFloorPoint(Player* bot, Position const& point);
 Position ValidateStaticFloorPoint(Player* bot, Position const& point);
 // Class taunt. Non-tank classes return false.
 bool CastClassTaunt(PlayerbotAI* botAI, Unit* target);
+// The class taunt is known and off cooldown.
+bool ClassTauntReady(PlayerbotAI* botAI);
 
 // Nitro Boosts, the engineering boots tinker: +150% run speed for 5 s on a 3 min cooldown. The generic
 // tinker action skips it, so it is only ever spent on an encounter's walk.
