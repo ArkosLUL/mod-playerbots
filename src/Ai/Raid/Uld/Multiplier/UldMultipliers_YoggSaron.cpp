@@ -191,10 +191,12 @@ float YoggSaronPhase1AoeHoldMultiplier::GetValue(Action* action)
         return 1.0f;
 
     // Brain level first: no grid sweep for the bots under the floor.
-    if (YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase1(botAI))
+    if (YoggSaronOnBrainLevel(bot))
         return 1.0f;
 
-    return YoggSaronPhase1AoeHold(botAI) ? 0.0f : 1.0f;
+    // Past phase 1 only the Guardians left over from it matter, and the sweep finds none once they're dead.
+    bool const hold = YoggSaronInPhase1(botAI) ? YoggSaronPhase1AoeHold(botAI) : YoggSaronLeftoverAoeHold(botAI);
+    return hold ? 0.0f : 1.0f;
 }
 
 float YoggSaronIllusionMultiTargetHoldMultiplier::GetValue(Action* action)

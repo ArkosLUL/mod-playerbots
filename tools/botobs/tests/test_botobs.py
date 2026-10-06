@@ -1429,6 +1429,22 @@ class YoggPhases(unittest.TestCase):
         self.assertTrue(yogg_saron.in_phase3_position("ranged", away, False, crusher))
         self.assertFalse(yogg_saron.in_phase3_position("ranged", away, True, crusher))
         self.assertFalse(yogg_saron.in_phase3_position("melee", away, False, crusher))
+        # a shifted ranged station counts, and the ranged spot then doesn't
+        standby = yogg_saron.PHASE_3_RANGED_STANDBY_SPOTS[2][1]
+        self.assertTrue(yogg_saron.in_phase3_position("ranged", standby, False, None, standby))
+        self.assertFalse(yogg_saron.in_phase3_position("ranged", ranged_spot, False, None, standby))
+
+    def test_ranged_station_steps_off_a_live_crusher(self):
+        self.assertEqual(yogg_saron.ranged_station([]), ("ranged spot", yogg_saron.PHASE_3_RANGED_SPOT))
+        # the leftover Crusher of 2026-10-06, 7.3 yd from the ranged spot: -15 is 17.4 yd off it, +15 4.9
+        self.assertEqual(yogg_saron.ranged_station([(2019.9, -11.7)])[0], "-30")
+        # nothing clears two Crushers this close, so the furthest from the nearer one
+        name, _ = yogg_saron.ranged_station([(2019.9, -11.7), (2017.0, -37.0)])
+        self.assertEqual(name, "+30")
+
+    def test_nova_gaps_measure_consecutive_deaths(self):
+        self.assertEqual(yogg_saron.nova_gaps([13819, 10000, 15686]), [3819, 1867])
+        self.assertEqual(yogg_saron.nova_gaps([5000]), [])
 
     def test_skull_ticks_read_what_the_victim_was_doing(self):
         rows = {1: [[0, 1, 0, 0, 0, 0, 100, 0, 0, 1], [2000, 1, 0, 0, 0, 0, 100, 0, 55, 0]],

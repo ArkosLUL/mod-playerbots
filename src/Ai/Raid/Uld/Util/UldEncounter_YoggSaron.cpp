@@ -78,6 +78,9 @@ const Position ULDUAR_YOGG_SARON_P1_RANGED_SPOT = Position(1958.78f, -25.587f, 3
 const Position ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT = Position(1973.315f, -5.246f, 324.889f);
 const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT = Position(1998.5377f, -22.90317f, 324.8895f);
 const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT = Position(2018.7628f, -18.896868f, 327.07245f);
+const std::vector<Position> ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS = {
+    Position(2019.18f, -29.08f, 327.154f), Position(2015.72f, -9.16f, 327.155f),
+    Position(2016.95f, -39.03f, 327.678f), Position(2010.26f, -0.55f, 327.291f)};
 const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH = Position(1995.0f, 4.0f, 326.731f);
 const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH = Position(1995.0f, -50.0f, 325.688f);
 
@@ -637,8 +640,45 @@ Position YoggSaronBrainSpot(Player* bot)
 
 Position const& YoggSaronPhaseThreeSpot(Player* bot)
 {
-    return PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot) ? ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT
-                                                                   : ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+    if (!PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot))
+        return ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+
+    // Wide enough to see any Crusher near a standby spot from wherever the bot is, so one still walking
+    // over from the brain team's exit picks the same spot as the rest.
+    float const standbyReach = 40.0f;
+    std::list<Creature*> crushers;
+    bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE,
+                                        bot->GetExactDist(&ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT) + standbyReach);
+
+    auto const clearance = [&crushers](Position const& spot)
+    {
+        float nearest = std::numeric_limits<float>::max();
+        for (Creature* crusher : crushers)
+            if (crusher->IsAlive())
+                nearest = std::min(nearest, crusher->GetExactDist2d(spot));
+
+        return nearest;
+    };
+
+    Position const* best = &ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
+    float bestClearance = clearance(*best);
+    if (bestClearance >= ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE)
+        return *best;
+
+    for (Position const& spot : ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS)
+    {
+        float const spotClearance = clearance(spot);
+        if (spotClearance >= ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE)
+            return spot;
+
+        if (spotClearance > bestClearance)
+        {
+            best = &spot;
+            bestClearance = spotClearance;
+        }
+    }
+
+    return *best;
 }
 
 std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI)
@@ -2447,6 +2487,40 @@ bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI)
         // The focus side covers a parked Guardian standing next to a focus burned out at the station.
         if (YoggSaronDistanceFromMiddle(guardian) <= ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS ||
             (focus && guardian->GetExactDist2d(focus) <= ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool YoggSaronLeftoverGuardianKillable(PlayerbotAI* botAI, Unit* guardian)
+{
+    return guardian && guardian->IsAlive() && !YoggSaronGuardianWaitsOutNovaGap(botAI->GetBot(), guardian) &&
+           !YoggSaronGuardianWaitsOnLowerNeighbour(guardian);
+}
+
+bool YoggSaronLeftoverAoeHold(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (target && !target->IsAlive())
+        target = nullptr;
+
+    std::list<Creature*> guardians;
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance);
+
+    for (Creature* guardian : guardians)
+    {
+        if (guardian == target || !guardian->IsAlive() ||
+            guardian->GetHealthPct() >= ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT)
+        {
+            continue;
+        }
+
+        if (guardian->GetExactDist2d(bot) <= ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS ||
+            (target && guardian->GetExactDist2d(target) <= ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS))
         {
             return true;
         }

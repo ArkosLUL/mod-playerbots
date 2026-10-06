@@ -669,6 +669,10 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
     bool allowed = true;
     switch (candidate->GetEntry())
     {
+        // Only ever reached after phase 1, YoggSaronPhase1Focus picks before that.
+        case NPC_GUARDIAN_OF_YS:
+            allowed = YoggSaronLeftoverGuardianKillable(botAI, candidate);
+            break;
         case NPC_BRAIN:
             if (!brain.approachable)
                 brain.approachable = brain.brainLevel && YoggSaronBrainRoomApproachable(botAI);
@@ -946,13 +950,29 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
         currentTarget = nullptr;
     }
 
+    // Same for the ones left when the barrier lands. A null resolve keeps the old target, so without the
+    // drop the bot would keep swinging at one waiting out its gap.
+    bool const leftovers = !phaseOne && !YoggSaronOnBrainLevel(bot);
+    if (leftovers && currentTarget && currentTarget->GetEntry() == NPC_GUARDIAN_OF_YS && currentTarget->IsAlive() &&
+        !YoggSaronLeftoverGuardianKillable(botAI, currentTarget))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.leftover",
+                                 YoggSaronGuardianDiedWithin(bot, ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS) ? "spaced"
+                                                                                                    : "chain");
+
+        DropTarget(currentTarget);
+        currentTarget = nullptr;
+    }
+
     // The AoE hold only stops new casts. A Blizzard already channeling keeps ticking for up to 8 s, and
     // the hold came on 2.6-5.3 s before each splash kill it was replayed against. Channel check first,
     // so the sweep only runs for a bot that has one going.
-    if (phaseOne)
+    if (phaseOne || leftovers)
     {
         Spell* channel = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-        if (channel && channel->GetSpellInfo()->IsAffectingArea() && YoggSaronPhase1AoeHold(botAI))
+        if (channel && channel->GetSpellInfo()->IsAffectingArea() &&
+            (phaseOne ? YoggSaronPhase1AoeHold(botAI) : YoggSaronLeftoverAoeHold(botAI)))
             bot->InterruptSpell(CURRENT_CHANNELED_SPELL);
     }
 

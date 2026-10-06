@@ -41,7 +41,8 @@ private:
 
 // Phase 1 AoE, held while it would finish a Guardian nobody is on. With the raid on one focus, the
 // Guardian next to it on the stack still lost 5.6%/s, and two of those died 2 s apart around a focus
-// kill during the handover: three novas in 3.4 s on the melee pile. Heals are never held.
+// kill during the handover: three novas in 3.4 s on the melee pile. Heals are never held. Covers the
+// Guardians phase 1 leaves behind too, until the last one dies.
 class YoggSaronPhase1AoeHoldMultiplier : public Multiplier
 {
 public:

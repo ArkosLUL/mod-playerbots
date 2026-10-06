@@ -229,7 +229,9 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
     {
         uint32 const phase = YoggSaronPhase(botAI);
 
-        return {phase == 2 || phase == 3, phase == 3};
+        // Lust is the phase 3 node's alone, once the raid has taken its spots. Phase 3 opens with Yogg as
+        // the only target until a Guardian spawns, so the stock path cast 6.8 s in, before anyone stood.
+        return {phase == 2 || phase == 3, false};
     }
 
     return {};

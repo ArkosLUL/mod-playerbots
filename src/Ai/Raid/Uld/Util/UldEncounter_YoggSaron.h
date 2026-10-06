@@ -489,6 +489,12 @@ constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 2.0f;
 constexpr float ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS = 15.0f;
 constexpr float ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH = 30.0f;
 
+// How far the ranged station keeps from a live Crusher. Inside its 10.83 yd reach a ranged bot's first
+// hit makes it the victim, and the Crush cone runs through everyone stacked behind it: seven dead in 2 s
+// on a station 7.3 yd from a leftover one. 15.8 is a hunter's Auto Shot dead zone, plus 2 for where
+// bots actually stop.
+constexpr float ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE = 18.0f;
+
 // Phase 3 melee only take a Guardian this close to the melee spot, everything else goes to Yogg.
 // Guardian control keeps the tank within 5 yd of the spot and a full-health Guardian swings from up
 // to 14 yd.
@@ -616,6 +622,11 @@ extern const Position ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 
+// Where the ranged stand instead while a Crusher is too close to their spot, tried in this order: the
+// ranged spot turned -15, +15, -30 and +30 degrees round Yogg's middle, same 39 yd out. On the floor by
+// navprobe with straight paths from the ranged spot, 21.6-25.2 yd from the melee spot.
+extern const std::vector<Position> ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS;
+
 // Where a Shadow Beacon marked Guardian is walked to without Thorim: north and south of the melee spot,
 // 27.3 yd from it (PATHFIND_NORMAL, on the floor by navprobe), 33.0 and 28.5 yd from Yogg's middle,
 // 33-39 yd from the ranged spot and over 40 from every Sanity Well.
@@ -711,7 +722,8 @@ Position YoggSaronBrainSpot(Player* bot);
 
 // A bot's phase 3 station. Healers take the melee spot with the tank: it is 18.5 yd straight behind
 // Yogg, outside his knockback and within heal range of the ranged spot, and a Guardian chasing a healer
-// walks into the tank there.
+// walks into the tank there. Ranged move to a standby spot while a live Crusher is within
+// ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE of theirs, the same one for every bot.
 Position const& YoggSaronPhaseThreeSpot(Player* bot);
 
 // Laughing Skulls within gaze range that are in the bot's front 180 degrees, which is the exact test
@@ -936,6 +948,15 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI);
 // the focus, where AoE kills it on nobody's schedule. 4 of 13 deaths on one pull were that, three of
 // them within 2 s of another nova. Reads the focus without re-picking it.
 bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI);
+
+// The Guardians still alive when Shadow Barrier lands keep the nova gap and the chain rule: their nova
+// still hits for ~25k, and finished 1-2 s apart at the handover spot they killed 3, 7 and 4 melee in
+// three pulls. No park floor, there's no stack left to keep them off.
+bool YoggSaronLeftoverGuardianKillable(PlayerbotAI* botAI, Unit* guardian);
+
+// After phase 1, true while a Guardian other than the bot's target sits below the gap floor within
+// 10 yd of the bot or its target, where AoE would kill it out of turn.
+bool YoggSaronLeftoverAoeHold(PlayerbotAI* botAI);
 
 // The Guardian the tank should pull in, or null while every one of them is already where it should be
 // or already walking at a tank. The raid's focus first: the tank gets one taunt per Guardian death at

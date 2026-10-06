@@ -2,7 +2,8 @@
 """Score a Yogg-Saron pull from a RaidObs trace: phases, clouds, portals, the brain room, Crush.
 
     yogg_saron.py <file>            every section
-    yogg_saron.py <file> --phases   phase timeline, the Keepers freed, and what happened before the pull
+    yogg_saron.py <file> --phases   phase timeline, the Keepers freed, what happened before the pull,
+                                    and how far apart the Guardians left at the handover died
     yogg_saron.py <file> --clouds   cloud-orbit exposure per role, and who summoned each Guardian
     yogg_saron.py <file> --fervor   Sara's Fervor runs that came back into the nova, novas on holders,
                                     Guardians only runners summoned
@@ -17,7 +18,8 @@
                                     lost, Nitro Boosts, the walk to the Brain per role, turns on the
                                     spot below, brain spot picks, exits decided outside the brain room,
                                     what bots were doing when a skull's gaze hit them
-    yogg_saron.py <file> --phase3   Heroism against when the raid was in position, Immortal Guardians,
+    yogg_saron.py <file> --phase3   Heroism against when the raid was in position, which ranged station a
+                                    leftover Crusher left them, Immortal Guardians,
                                     who pulled them off the tanks, how much of the time they were at full
                                     power or Weakened, Drain Life channels and how fast they were cut,
                                     the bot tank's targets and taunts, swings on the raid during a gaze,
@@ -378,6 +380,11 @@ PHASE_3_MELEE_SPOT = (1998.5377, -22.90317, 324.8895)
 PHASE_3_MELEE_GUARDIAN_RANGE = 20.0
 PHASE_3_RANGED_SPOT = (2018.7628, -18.896868, 327.07245)
 PHASE_3_STATION_RADIUS = 15.0
+# ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS in the module's order, the ranged spot turned -15, +15,
+# -30 and +30 degrees round Yogg, and the clearance from a live Crusher that sends the ranged there.
+PHASE_3_RANGED_STANDBY_SPOTS = (("-15", (2019.18, -29.08, 327.154)), ("+15", (2015.72, -9.16, 327.155)),
+                                ("-30", (2016.95, -39.03, 327.678)), ("+30", (2010.26, -0.55, 327.291)))
+PHASE_3_RANGED_CRUSHER_CLEARANCE = 18.0
 # The module's Heroism gate in phase 3: this share of the living raid at its station, or standing still
 # in reach of a live target. Reach is the bots' spell distance past both combat reaches, a player's 1.5
 # and the target's, which only Yogg and the Crusher have, or melee range.
@@ -448,6 +455,12 @@ def back_to_back(deaths: list[tuple[int, float]],
     """Consecutive Guardian deaths no further apart than the window, each as (t, radius)."""
     ordered = sorted(deaths)
     return [(a, b) for a, b in zip(ordered, ordered[1:]) if b[0] - a[0] <= window_ms]
+
+
+def nova_gaps(times) -> list[int]:
+    """Time between consecutive Guardian deaths, in ms."""
+    ordered = sorted(times)
+    return [b - a for a, b in zip(ordered, ordered[1:])]
 
 
 def kill_kind(on_it: int, non_tanks: int) -> str:
@@ -808,6 +821,18 @@ def show_handover(trace: Trace) -> None:
         print(f"    Guardians alive at the ring: {len(alive)}{where}")
     elif before:
         print(f"    last phase 1 Guardian died {(ring - max(before)) / 1000:.1f} s before the ring")
+
+    # The ones left at the ring die after the barrier, where the phase 1 nova gap used to stop. Two 1-2 s
+    # apart left melee no time to be healed between them: 3, 7 and 4 dead in three pulls.
+    after = [when for when in deaths.values() if when > ring]
+    gaps = nova_gaps(after + [max(before)] if before and after else after)
+    if gaps:
+        said = ", ".join(f"{gap / 1000.0:.1f}" for gap in gaps)
+        print(f"    leftover deaths after the ring: gaps {said} s, under {NOVA_GAP_MS / 1000:.0f} s: "
+              f"{sum(1 for gap in gaps if gap < NOVA_GAP_MS)}")
+    left = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.leftover"))
+    if left:
+        print(f"    yogg.leftover         : {dict(left)}")
 
     ate = []
     for rec in trace.of("act"):
@@ -2619,13 +2644,31 @@ def guardian_power_shares(health: list[float]) -> tuple[float, float]:
             sum(1 for hp in health if hp < 10) / len(health))
 
 
+def ranged_station(crushers: list[tuple[float, float]]) -> tuple[str, tuple[float, float, float]]:
+    """The module's phase 3 ranged station against the live Crushers' (x, y): the ranged spot, else the
+    first standby spot clear of every one, else whichever stands furthest from the nearest."""
+    def clearance(spot: tuple[float, float, float]) -> float:
+        return min((math.dist(spot[:2], crusher) for crusher in crushers), default=math.inf)
+
+    best = ("ranged spot", PHASE_3_RANGED_SPOT)
+    if clearance(best[1]) >= PHASE_3_RANGED_CRUSHER_CLEARANCE:
+        return best
+    for name, spot in PHASE_3_RANGED_STANDBY_SPOTS:
+        if clearance(spot) >= PHASE_3_RANGED_CRUSHER_CLEARANCE:
+            return name, spot
+        if clearance(spot) > clearance(best[1]):
+            best = (name, spot)
+    return best
+
+
 def in_phase3_position(role: str, where: tuple[float, float, float], moving: bool,
-                       target: tuple[float, float, float, float] | None) -> bool:
+                       target: tuple[float, float, float, float] | None,
+                       ranged_spot: tuple[float, float, float] = PHASE_3_RANGED_SPOT) -> bool:
     """The module's Heroism test for one raider: on the platform and inside its phase 3 station, or
     standing still in reach of a live target given as (x, y, z, combat reach)."""
     if where[2] < BRAIN_LEVEL_Z:
         return False
-    spot = PHASE_3_RANGED_SPOT if role == "ranged" else PHASE_3_MELEE_SPOT
+    spot = ranged_spot if role == "ranged" else PHASE_3_MELEE_SPOT
     if math.dist(where[:2], spot[:2]) <= PHASE_3_STATION_RADIUS:
         return True
     if moving or not target:
@@ -3381,8 +3424,16 @@ def show_phase3(trace: Trace) -> None:
 
     # Heroism against the module's own gate for it, so a late one reads as either the gate or the cast.
     placed_at = None
+    first_station = None
     for snap in snaps:
         units = {row[0]: row for row in snap.get("u", [])}
+        crushers = [(row[1], row[2]) for guid, row in units.items()
+                    if trace.entries.get(guid) == NPC_CRUSHER_TENTACLE and row[5] > 0]
+        station, ranged_spot = ranged_station(crushers)
+        if first_station is None:
+            near = min((math.dist(PHASE_3_RANGED_SPOT[:2], crusher) for crusher in crushers), default=None)
+            first_station = station + (f" (a Crusher {near:.1f} yd from the ranged spot)" if near is not None
+                                       and station != "ranged spot" else "")
         living = placed = 0
         for guid, row in units.items():
             if guid not in roster or row[5] <= 0 or len(row) <= 8:
@@ -3391,7 +3442,8 @@ def show_phase3(trace: Trace) -> None:
             aim = units.get(row[7])
             target = ((aim[1], aim[2], aim[3], COMBAT_REACH.get(trace.entries.get(row[7]), 0.0))
                       if aim and aim[5] > 0 else None)
-            placed += in_phase3_position(trace.role(guid), (row[1], row[2], row[3]), bool(row[8]), target)
+            placed += in_phase3_position(trace.role(guid), (row[1], row[2], row[3]), bool(row[8]), target,
+                                         ranged_spot)
         if living and placed >= LUST_POSITION_SHARE * living:
             placed_at = snap["t"]
             break
@@ -3408,6 +3460,14 @@ def show_phase3(trace: Trace) -> None:
     lust_gate = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.lustready"))
     if lust_gate:
         print(f"    yogg.lustready   : {dict(lust_gate)}")
+
+    # A leftover Crusher on the ranged spot killed seven ranged in 2 s as they walked onto it.
+    if first_station:
+        print(f"  ranged station     : {first_station} at the start")
+    station_notes = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.station")
+                                        if start <= rec["t"] <= stop)
+    if station_notes:
+        print(f"    yogg.station     : {dict(station_notes)}")
 
     if yogg and rows.get(yogg):
         line = []
@@ -3838,7 +3898,8 @@ def show_novas(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("phases", "phase timeline, the Keepers freed, and the pre-pull window", show_phases),
+    ("phases", "phase timeline, the Keepers freed, the pre-pull window, leftover Guardian deaths after the"
+     " handover", show_phases),
     ("clouds", "cloud-orbit exposure per role", show_clouds),
     ("fervor", "Sara's Fervor runs, novas on holders, Guardians runners summoned", show_fervor),
     ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them", show_novas),
@@ -3849,8 +3910,8 @@ SECTIONS = (
     ("brain", "brain room, the Brain, skulls, reprisal deaths and holds, Induce Madness, stalled walks,"
      " walk speed to the Brain, turns on the spot, exits decided outside the brain room, skull gaze ticks",
      show_brain),
-    ("phase3", "Heroism, Immortal Guardians, their power and Drain Life, swings on the raid during a gaze,"
-     " beacon heals and drags, Lunatic Gaze, phase 2 leftovers", show_phase3),
+    ("phase3", "Heroism, the ranged station, Immortal Guardians, their power and Drain Life, swings on the"
+     " raid during a gaze, beacon heals and drags, Lunatic Gaze, phase 2 leftovers", show_phase3),
     ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
     ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),
 )

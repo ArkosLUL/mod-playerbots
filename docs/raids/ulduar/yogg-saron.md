@@ -261,8 +261,9 @@ the core despawns them: `DespawnEntry` is never called with `NPC_GUARDIAN_OF_YS`
 `boss_yoggsaron_guardian_of_ys` has no `DoAction` so `ACTION_DESPAWN_ADDS` misses it, and its summon
 type is `TEMPSUMMON_CORPSE_DESPAWN`. Only spawning stops (`EVENT_SARA_P1_SUMMON` is scheduled under
 `EVENT_PHASE_ONE`). They keep `SetInCombatWithZone`, Dark Volley and `JustDied` → Shadow Nova, and the
-kill order still ranks them first — so the three cooldown nodes, `AppendYoggSaronTargetExclusions` and
-the P2 spacing circles all follow the Guardians instead. Left phase-1-gated, one pull focused two of
+kill order still ranks them first — so the three cooldown nodes and the P2 spacing circles follow the
+Guardians instead. `AppendYoggSaronTargetExclusions` does not: it reaches only `TargetValue` pickers,
+and the phase 2 resolver finds its own targets. Left phase-1-gated, one pull focused two of
 them down beside the back line and lost **eleven raiders in three seconds**.
 
 Three engine facts the spells themselves do not show:
@@ -861,6 +862,17 @@ with **no victim exemption and no swing gate**. Melee get it only for a stun abo
 otherwise off 33966, and a Constrictor beside a Crusher would have the circle and `reach melee` trade
 them every tick. The probe reads `yogg.crush=reach`.
 
+**The phase 3 ranged station is a forced walk onto a fixed point, so it has to dodge for itself.** A
+wave 4 Crusher alive at phase 3 stood 7.3 yd from `ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT`: positioning
+walked the ranged onto it (spacing can't cut a forced walk, and the release only frees a bot whose target
+is out of the station's reach), Shattered Illusion lifted at phase 3 start, and cones killed seven ranged
+at +3.6-5.9 s. `YoggSaronPhaseThreeSpot` now gives ranged the first of the ranged spot and four standby
+spots — the ranged spot turned −15, +15, −30, +30° round Yogg at 39.06 yd, navprobe on mesh with straight paths,
+21.6-25.2 yd from the melee spot — clear of every live Crusher by
+`ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE` 18 (reach 10.83, a hunter's 15.8 yd Auto Shot dead
+zone, 2 slack), else the furthest. Same answer for every bot; back to the ranged spot once the Crusher
+dies. That pull's pick was −30°, 27.5 yd off it. Probe `yogg.station` `walking` / `shifted`.
+
 ## Diminish Power is why the Crusher dies first
 
 `64145 Diminish Power` is a **5-minute channel** (`DurationIndex 5`), **−21% damage done raid-wide**
@@ -1011,6 +1023,16 @@ Guardians the 25 yd off the back line the anchor was chosen for.
 the anchor catches all nine melee where the fan caught a few: one pull's 2:05.6 nova killed four with
 nothing up, 1.3 s before the ring. The anchor bought reachability and the back line's safety, not this.
 
+**The leftovers keep phase 1's nova rules past the barrier.** Once it lands `YoggSaronPhase` reads 2, and
+the resolver had them tier 0, lowest first, with no gap, chain rule or AoE hold, while melee Whirlwind,
+Fan of Knives, Swipe and Divine Storm worked the pile: deaths came 1.9 / 1.0 / 2.1 s apart where earlier
+pulls had 3.3-5.8, and the second nova killed 4, 3 and 7 melee in three pulls. Now
+`YoggSaronLeftoverGuardianKillable` (gap and chain, no park floor — no stack left) gates them in
+`IsAllowedTarget` and in `Execute`'s drop, since a null resolve keeps the old target (`yogg.leftover`
+`spaced` / `chain`), and `YoggSaronLeftoverAoeHold` — a non-target leftover under 30% within 10 yd of the
+bot or its target — holds AoE and cuts area channels. `lastGuardianDeathMs` still stamps: 65719 goes out
+on every leftover death.
+
 **The walk has to outlive the ring.** "Yogg without the barrier" ends on the tick the barrier lands,
 and melee released there walk straight back under the knock back — three of nine were inside 13.3 yd
 again within 600 ms. `ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS` (6 s) keeps `clearing` true past it, and the
@@ -1111,7 +1133,8 @@ against 2 for the click meant `holding` did not imply clickable. Portals taken p
 **The brain team is melee first, then exactly one healer, then ranged; tanks never.** The room is a
 60 s race on foot, and it doubles as the Crush answer above. Order within each band by GUID so every
 bot derives the same team from its own seat, except healers: Val'anyr's wielder (46017, its heals
-shield) first — item level can't pick it, Tree and the next priest averaged 227.9 and 228.0 — then
+shield) first — item level can't pick it, Tree and the next priest averaged 227.9 and 228.0; Tree landed
+201-394 heals a wave against Prayer's 55-74 alone — then
 priest, druid, shaman, paladin: `PlayerbotAI::CanCastSpell` refuses a cast-time spell while moving, and a holy paladin moved
 31-62% of its room time with 82% of its heals on a cast time. The trigger and the action used to build the list
 differently — one skipped the master, the other did not — so they disagreed about who was on it;
@@ -1395,7 +1418,8 @@ Induce Madness at 263.9 s and dead at 323.9 s. With a live target it turns only 
 facing's 45° so nothing turns it back: a skull off to the side clears that way, one behind the target is
 the facing walk's. Yielding outright left a ranged bot 15 s with a skull at +85° and its target at −10°,
 64 → 8 Sanity in one Icecrown visit; 29-34% of skull ticks hit a still bot with a target, 62-67% a
-walking one. It corrects a heading only past `ULDUAR_YOGG_SARON_FACING_TOLERANCE`
+walking one; with the turn, 18% and the skull's share of Sanity lost 38.6-41.9% → 33.5%. It corrects
+a heading only past `ULDUAR_YOGG_SARON_FACING_TOLERANCE`
 (0.1 rad, ~6°), and never claims the tick. The 30 yd read is measured plainly too:
 `GetCreatureListWithEntryInGrid` is bounding-radius inclusive, and **164 of 235** probe flips in one
 pull had no skull inside 30 yd at all.
@@ -1537,8 +1561,9 @@ and Rebirths on a corpse with no Sanity; `--phase3` each phase 2 leftover's fate
 Power's uptime; `--phases` the Keepers freed, off their passives; `--brain` skull gaze ticks split
 walking / still with a target / still without, and `yogg.skullturn`; `--phase3` Heroism against when
 80% of the raid was first in position (the trigger's test), Guardian samples at 90%+ health and
-Weakened, Drain Life channels cut inside 1.5 s or run full, each beacon's nearest other Guardian, and
-`yogg.beacondrag`.
+Weakened, Drain Life channels cut inside 1.5 s or run full, each beacon's nearest other Guardian,
+`yogg.beacondrag`, the ranged station at phase 3 start and `yogg.station`; `--phases` the gaps between
+leftover Guardian deaths after the ring, and `yogg.leftover`.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
@@ -1739,17 +1764,27 @@ raid's damage, the bot tank dead at +63 / +67 s.
   standing, since `Attack`'s facing turn ends a walk; releases on the heal aura or 3 s after the mark
   ends. A claimed Guardian isn't holdable, so guardian control leaves it, and the gaze node leaves a
   dragger's tick free (`drag`). Probed as `yogg.beacondrag`. **The human tank holds the pile at the melee
-  spot.** Before it: marked Guardians 5-12 yd from the pile and 15-19 from Yogg, +2.04% / +2.57%.
+  spot.** Before it: marked Guardians 5-12 yd from the pile and 15-19 from Yogg, +2.04% / +2.57%. First
+  pull with it: two dragged south, all three marked ≥25.8 yd from Yogg, Yogg −0.13% over 20 s; the third
+  had no dragger (the bot tank always holds Guardians) and topped a pile Guardian 82 → 99%. Only the two
+  draggers and the human tank targeted a marked one.
 - **Drain Life is kicked on purpose.** The interrupt node's casters include Immortal Guardians
   channelling 64159/64160 in phase 3; immunity set `-286` has SILENCE but not INTERRUPT, so Strangulate,
   Silencing Shot and Arcane Torrent are dropped for them; `interruptClaims` holds a cast for one kicker
-  for 1.5 s. By chance alone, 6-7 of 14 were cut inside 1.5 s and 5 ran full.
+  for 1.5 s. By chance alone, 6-7 of 14 were cut inside 1.5 s and 5 ran full; with it, 13 of 13.
 - **`yogg-saron phase 3 lust`** (`ACTION_RAID + 2`). `ShamanBoostTrigger` and the burst hold both want a
   boss target, and phase 3 shamans are on Guardians and tentacles: none in one pull, +39.7 s and +54.2 s
   in others. It casts once 80% of the living group stands at its phase 3 station (15 yd) or still in
   reach of a live target — nobody below z 300, Heroism reaches 100 yd — or 30 s in; not while Sated or
   Exhausted, nor with Heroism or Bloodlust already up. 80% came at +16.4 / +19.5 / +39.6 s. Probed as
-  `yogg.lust` and `yogg.lustready` (`position` / `timeout`).
+  `yogg.lust` and `yogg.lustready` (`position` / `timeout`). The stock path still cast first at +6.8 s,
+  Yogg being the only target until a Guardian spawns, against 80% at +19.7, so
+  `UlduarBurstWindowMultiplier`'s Yogg branch holds lust the whole fight and the node owns it (its action
+  casts by `CastSpell` under its own name).
+
+**Healers stay on the melee spot, by the user's choice**, at a known cost: Guardians hit healers 5
+times a Freya-only pull at ~41k, every Guardian leaves the tanks ~1 s after the first pickup on heal
+threat, and 65% of Guardian samples sit at 90%+ health. Unsolved.
 
 **Shadow Beacon heals the marked guardians, and Yogg when they stand near him.** It marks 3 guardians
 in 25-man every 45 s, and 10 s later each casts Empowering Shadows (64486): **37,500 a second for 20 s

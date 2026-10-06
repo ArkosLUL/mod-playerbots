@@ -782,7 +782,11 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
     }
 
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "yogg.station", "parked");
+        RaidObs::NoteDerived(bot, "yogg.station",
+                             &spot == &ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT ||
+                                     &spot == &ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT
+                                 ? "walking"
+                                 : "shifted");
 
     return true;
 }
