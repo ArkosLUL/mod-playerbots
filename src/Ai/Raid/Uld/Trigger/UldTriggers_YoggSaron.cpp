@@ -927,14 +927,21 @@ bool YoggSaronNovaExternalTrigger::IsActive()
     return victim && YoggSaronNovaExternalAction::PickExternal(botAI, victim);
 }
 
+bool YoggSaronShadowAuraTrigger::IsActive()
+{
+    return IsYoggSaronShadowAuraPaladin(bot) &&
+           !botAI->HasAura("shadow resistance aura", bot, false, true) &&
+           botAI->CanCastSpell("shadow resistance aura", bot);
+}
+
 bool YoggSaronNovaRaidCooldownTrigger::IsActive()
 {
     if (bot->getClass() != CLASS_PALADIN || !YoggSaronInPhase1Room(bot))
         return false;
 
-    // Cooldown before the raid sweep: Divine Sacrifice is down for 120 of every 130 seconds, so the
-    // count behind this almost never runs.
-    if (!botAI->CanCastSpell("divine sacrifice", bot))
+    // Cooldown before the raid sweep: both covers run 120 s against a nova every 10, so the count
+    // behind this almost never runs.
+    if (!YoggSaronNovaRaidCover(botAI))
         return false;
 
     return YoggSaronNovaHurtCount(botAI) >= ULDUAR_YOGG_SARON_NOVA_RAID_COUNT;

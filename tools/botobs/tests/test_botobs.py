@@ -1169,6 +1169,28 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.crossings([8.0, 12.0, 15.0], 2.8, 20.5), 0)
         self.assertEqual(yogg_saron.crossings([], 2.8, 20.5), 0)
 
+    def test_resisted_share_is_the_part_of_one_hit_resistance_took(self):
+        # 1791318599's worst hit on Angry: 21,770 landed against 5,442 resisted.
+        self.assertAlmostEqual(yogg_saron.resisted_share(21770, 5442), 0.2, places=3)
+        # A clean roll, which is the one the gate's 28,600 plans against.
+        self.assertEqual(yogg_saron.resisted_share(28600, 0), 0.0)
+        # A full resist is the whole hit, and a row with neither is not a divide by zero.
+        self.assertEqual(yogg_saron.resisted_share(0, 24000), 1.0)
+        self.assertEqual(yogg_saron.resisted_share(0, 0), 0.0)
+
+    def test_chain_pairs_counts_the_middle_nova_in_both_of_its_chains(self):
+        # 1791318444's pair that killed three melee at once, 2.7 s apart.
+        self.assertEqual(yogg_saron.chain_pairs([69565, 72306], 6000), [(69565, 72306)])
+        # Three inside the window is two pairs: the middle one ends the first and starts the second.
+        self.assertEqual(yogg_saron.chain_pairs([0, 3000, 6000], 6000), [(0, 3000), (3000, 6000)])
+        # Exactly the window still counts, a hair past it does not.
+        self.assertEqual(yogg_saron.chain_pairs([0, 6000], 6000), [(0, 6000)])
+        self.assertEqual(yogg_saron.chain_pairs([0, 6001], 6000), [])
+        # Out of order in, ordered out. A lone nova has nothing to pair with.
+        self.assertEqual(yogg_saron.chain_pairs([72306, 69565], 6000), [(69565, 72306)])
+        self.assertEqual(yogg_saron.chain_pairs([69565], 6000), [])
+        self.assertEqual(yogg_saron.chain_pairs([], 6000), [])
+
     def test_stun_window_ends_at_induce_madness_or_phase_3(self):
         # 1789568759: wave 1 ran its full stun, wave 6 lost it to phase 3 at +49.8 s.
         self.assertEqual(yogg_saron.stun_window(192654, 224354, 644834), (224354, 252654))

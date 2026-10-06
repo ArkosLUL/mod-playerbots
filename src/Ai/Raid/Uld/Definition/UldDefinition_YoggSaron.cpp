@@ -86,6 +86,10 @@ void DefineYoggSaron(EncounterBuilder& e)
         [](PlayerbotAI* ai) -> Trigger* { return new BossShadowResistanceTrigger(ai, "yogg-saron"); },
         "yogg-saron shadow resistance action",
         [](PlayerbotAI* ai) -> Action* { return new BossShadowResistanceAction(ai, "yogg-saron"); }, ACTION_RAID);
+    // Those two take the first paladin that answers and ask only whether the aura is up, from anybody.
+    // This one puts it on the paladin that can double it, which is the only way the slot pays for
+    // itself: Prayer of Shadow Protection already gives everyone the same 130.
+    e.Node<YoggSaronShadowAuraTrigger, YoggSaronShadowAuraAction>(ACTION_RAID);
     e.Node<YoggSaronGuardianPositioningTrigger, YoggSaronGuardianPositioningAction>(ACTION_RAID);
     e.Node<YoggSaronPhase1SpacingTrigger, YoggSaronPhase1SpacingAction>(ACTION_RAID + 2);
     // Under the spacing node, so a nova still wins the tick. It never contends with guardian
@@ -222,6 +226,18 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Block("yogg-saron nova cooldown hold", Role::Any, YoggSaronNovaHold, 0,
             {"pain suppression", "pain suppression on party", "guardian spirit on party",
              "hand of sacrifice on party", "divine sacrifice"});
+
+    // The aura slot is exclusive, so the paladin's own buff strategy trades it back on the next GCD:
+    // the bot tank took Shadow Resistance Aura and cast Devotion Aura again inside the same pull, in
+    // both pulls it took the aura at all.
+    e.Block("yogg-saron shadow aura hold", Role::Any, YoggSaronShadowAuraHeld, 0,
+            {"devotion aura", "retribution aura", "concentration aura", "crusader aura", "sanctity aura",
+             "shadow resistance aura", "fire resistance aura", "frost resistance aura"});
+
+    // The cover node spends this on the nova. Left to the class node it goes on an already hurt raid,
+    // which is after the hit: six casts over six pulls, every one from the holy paladin, and none of
+    // them from the paladin holding the aura it would have doubled.
+    e.Block("yogg-saron aura mastery hold", Role::Any, YoggSaronNovaHold, 0, {"aura mastery"});
 
     e.Multiplier<YoggSaronPhase1WalkGuardMultiplier>(Family::AnyMovement);
     e.Multiplier<YoggSaronAntiFearTotemGuardMultiplier>(Family::Spell);

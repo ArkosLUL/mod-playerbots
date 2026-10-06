@@ -1980,21 +1980,47 @@ bool YoggSaronNovaCandidate(Player* member)
 {
     return member && member->IsAlive() && !PlayerbotAI::IsRanged(member) && !PlayerbotAI::IsHeal(member);
 }
+
+// Bots only, since Aura Mastery doubles the caster's own aura and nothing here can press a human's.
+// Lowest GUID, so every bot picks the same paladin without a latch to keep.
+Player* ElectShadowAuraPaladin(Group* group)
+{
+    Player* best = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || !member->IsAlive() || member->getClass() != CLASS_PALADIN ||
+            !member->HasActiveSpell(SPELL_AURA_MASTERY) ||
+            !memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", "shadow resistance aura")->Get())
+            continue;
+
+        if (!best || member->GetGUID() < best->GetGUID())
+            best = member;
+    }
+
+    return best;
+}
 }  // namespace
 
 std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
 {
     Player* bot = botAI->GetBot();
 
-    // Standing in a nova is the price of killing a Guardian at all, and two things turn that price
-    // into a death. Sara's Fervor doubles it: +100% damage taken for 15 s, measured at 39,430 and
-    // 45,340 against pools of 23,000-30,000, every one of them lethal from full health. And an
-    // unresisted nova is over the full bar of all but the two biggest melee, so a small pool with
-    // nothing left to press has to leave rather than mitigate.
+    // Standing in a nova is the price of killing a Guardian at all, and Sara's Fervor is what turns
+    // that price into a death: +100% damage taken for 15 s, measured at 39,430, 39,443 and 45,340
+    // against pools of 23,000-30,000, every one of them lethal from full health. A holder leaves
+    // whatever else is true.
+    //
+    // A small pool with nothing left to press leaves as well, but not in phase 1. There the walk does
+    // not arrive and it costs Guardians: 44 of 74 step-outs took the nova they ran from anyway, and the
+    // ones that did get clear stopped on the station band, 0.1 yd off the second cloud orbit, which is
+    // where 72% of all melee cloud dodging came from. The phase read goes last because it is a boss
+    // state gate and a creature search, against a flag and two field reads ahead of it.
     bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR);
     bool const atRange = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
     bool const fragile = !atRange && bot->GetMaxHealth() <= ULDUAR_YOGG_SARON_NOVA_STEP_OUT_POOL;
-    if (!fervor && !atRange && !fragile)
+    if (!fervor && !atRange && (!fragile || YoggSaronInPhase1(botAI)))
         return {};
 
     std::list<Creature*> guardians;
@@ -2119,6 +2145,38 @@ uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
     }
 
     return count;
+}
+
+bool IsYoggSaronShadowAuraPaladin(Player* bot)
+{
+    if (!bot || bot->getClass() != CLASS_PALADIN || !YoggSaronInPhase1Room(bot))
+        return false;
+
+    Group* group = bot->GetGroup();
+
+    return group && ElectShadowAuraPaladin(group) == bot;
+}
+
+bool YoggSaronShadowAuraHeld(PlayerbotAI* botAI)
+{
+    return botAI && IsYoggSaronShadowAuraPaladin(botAI->GetBot());
+}
+
+char const* YoggSaronNovaRaidCover(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->getClass() != CLASS_PALADIN)
+        return nullptr;
+
+    // Aura Mastery first: it costs the caster nothing, where Divine Sacrifice redirects 30% of the
+    // raid's damage onto it. Only with the aura up from this bot, since its own is the one it doubles,
+    // and 130 shadow resistance becoming 260 for 6 s is the only state here that beats the 130 Prayer
+    // of Shadow Protection already gives everyone.
+    if (IsYoggSaronShadowAuraPaladin(bot) && botAI->HasAura("shadow resistance aura", bot, false, true) &&
+        botAI->CanCastSpell("aura mastery", bot))
+        return "aura mastery";
+
+    return botAI->CanCastSpell("divine sacrifice", bot) ? "divine sacrifice" : nullptr;
 }
 
 Player* YoggSaronNovaVictim(PlayerbotAI* botAI)

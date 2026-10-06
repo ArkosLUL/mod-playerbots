@@ -64,7 +64,7 @@ phase-3-control node. `IsDesignatedBotTank` falls back to the first living bot t
 
 | Spell | Shape | Answer |
 |---|---|---|
-| Shadow Nova 62714 / 65209 | instant, uninterruptible, DBC 15 yd but **16.2 measured**, on Guardian **death**, also hitting other Guardians (below) | ranged and healers stand off; melee mitigate it, the smallest pools step out (below) |
+| Shadow Nova 62714 / 65209 | instant, uninterruptible, DBC 15 yd but **16.2 measured**, on Guardian **death**, also hitting other Guardians (below) | ranged and healers stand off; melee mitigate it and hold their ground, only a Fervor holder leaves (below) |
 | Dark Volley 63038 / 65330 | 1500 ms cast, 35 yd, `InterruptFlags` 0xF | interrupt it — distance is no answer |
 
 ~97% of raid damage across both wipes. Which of the two leads flips with how many Guardians are up:
@@ -97,13 +97,31 @@ bar, and the deaths from full health there came from **two in one tick** instead
 with it down a single one did. Even the aura-up worst of **25,025** is over the smallest melee pool, so
 it would have, had it landed there.
 
-**Keep Shadow Resistance Aura up; losing it is what uncovers the unresisted roll.** Shadow Resistance
-Aura 48943, Shadow Protection 48169 and Prayer of Shadow Protection 48170 are all aura **143**
-(`MOD_RESISTANCE_EXCLUSIVE`, highest wins), so only the strongest counts and the raid wants the aura
-rather than the priest buff. Mean mitigation barely moves without it (22.2% against 21.4%); what goes is
-the floor on the roll. One pull ran three paladins instead of four and the ret picked **Retribution Aura
-54043** over 48943, on a fight where this spell is most of the damage the raid takes. That pick belongs
-to the class aura logic, not to this strategy.
+**Keep 130 shadow resistance up; losing it is what uncovers the unresisted roll.** Mean mitigation
+barely moves without it (22.2% against 21.4%); what goes is the floor on the roll, and with it up a
+later **759 hits over six pulls resisted a median 21-22% and never under 10%**.
+
+Where the 130 comes from barely matters, which is the part worth knowing. In `Spell.dbc` Shadow
+Resistance Aura 48943 and Prayer of Shadow Protection 48170 both carry EffectBasePoints **129**, so 130,
+both on aura **143** `MOD_RESISTANCE_EXCLUSIVE` (48169 too), and `Unit.cpp` reads them with
+`GetMaxPositiveAuraModifierByMiscMask` — **the highest, never the sum**. So the priest buff covers the
+raid on its own, and the exclusive aura slot is worth spending only where something can beat 130.
+
+**Aura Mastery 31821 is the only thing that does, so the aura goes to the paladin that has it.** It is
+aura **108** `ADD_PCT_MODIFIER` on all three effects with 99 base points, so **+100% for 6 s**: 130
+becomes **260**, which is the one state in the fight above the Prayer's floor. Left to the class logic
+the two never meet — over six pulls the aura landed on the bot protection tank in 2 of them and it cast
+**Devotion Aura** back inside the same pull both times, while the holy paladin pressed Aura Mastery once
+a pull holding a different aura, off its own critical-heal node and so after the hit. One earlier pull
+ran three paladins and the ret picked **Retribution Aura 54043** over 48943 on the same reasoning gap.
+
+So `IsYoggSaronShadowAuraPaladin` elects the lowest-GUID **bot** paladin that knows Aura Mastery and can
+cast a resistance aura (a human's aura cannot be doubled by a bot), `yogg-saron shadow aura action` puts
+it up, and `yogg-saron shadow aura hold` blocks every other aura on that bot — the slot is exclusive, so
+its own buff strategy trades it back on the next GCD. `yogg-saron aura mastery hold` keeps the class node
+off the cooldown. The trigger tests `HasAura(…, bot, false, true)`: **its own copy**, because a human's
+sits on every raider and otherwise reads as already done, which is why no bot had ever taken the aura
+while one was played.
 
 Healers were already putting 20,000-23,000 HPS into nine melee and out-healing it **1.7 to 1**, and two
 novas in one tick killed eight from full: an instant that empties a bar is mitigated or not survived.
@@ -168,24 +186,37 @@ own button and a healer its external, `…_NOVA_NOW_WINDOW_MS` (5 s) always cove
 At the wider gate the raid emptied **eight** cooldowns onto one nova whose worst hit was 16,290, then
 had nothing for the next eight and lost three bots from full health.
 
-**Below `…_NOVA_STEP_OUT_POOL` (26,000) a melee leaves instead of mitigating.** Surviving 28,600 needs
-**18%** off for the 23,387 shaman down to 0.1% for a 28,582 paladin, so any 20% button saves every
-melee — but supply does not: 13-16 cooldowns exist per phase 1 against 11 novas hitting 7-10 raiders
-each. So the three smallest pools also get `GetYoggSaronNovaThreats`, gated at 10% and only while the
-hit kills them **after their own best button** (`YoggSaronNovaAfterOwnButton`), which rides the phase 1
-dodge rather than a new node. One with Shamanistic Rage up or ready keeps swinging. Watch the Guardian
-count against the **10** Sara needs inside 15 yd: one pull landed 11, so the margin is one kill.
+**`…_NOVA_STEP_OUT_POOL` (26,000) no longer reaches a bot in phase 1: melee mitigate or die there.**
+Surviving 28,600 needs **18%** off for the 23,387 shaman down to 0.1% for a 28,582 paladin, so any 20%
+button saves every melee — but supply does not: 13-16 cooldowns exist per phase 1 against 11 novas
+hitting 7-10 raiders each. That was the case for sending the three smallest pools out, and measurement
+killed it twice over.
 
-**The step-out aims at the station, because its own default destination wakes a Guardian.** The nova
-clear radius is 20 yd and the Guardians are on the pile, so the nearest clear spot sits **~19 yd** out,
-where orbits 1 and 2 both reach — neither of the two radii below that no orbit reaches. Across the
-three pulls that have a step-out, **100%** of melee nova destinations landed where an orbit reaches and
-70-100% where two do, and those bots then dodged the cloud they woke: Shadow **9 of 10** and **10 of
-11** cloud dodges inside 20 s of its own step-out, Totemist and Assasin 7 of 8, against **0 of 1** for
-every melee that never steps out. So phase 1 sets `HazardSet::preferred` to the station's **band alone**
-(`…_P1_RANGED_STATION_RADIUS` ± `…_P1_RANGED_BAND_TOLERANCE`), which is already the only-orbit-2 band
-and so costs no summon of its own: orbit 2 runs through the station and 14 bots wake that cloud every
-lap anyway.
+**It did not work.** Of 74 melee step-outs over six pulls, **44 took the nova they ran from anyway** (28
+for over half the bar) and 30 got clear. The lead is why: a median **0.6-3.5 s** by pull against the
+**2.5 s** the walk takes, because focus fire cuts a Guardian's time under 10% to 0.9-1.0 s.
+
+**And it cost the one thing phase 1 cannot spare.** The destination preference is the station band,
+which is **0.1 yd** off orbit 2 (21.5 against 21.4), so a step-out that did arrive parked a melee bot on
+a summon circle: **133 of 185** melee cloud dodges (**72%**) fell inside 20 s of that bot's own step-out,
+and melee feet woke **25 of 85** Guardians, 17 right behind a dodge. Sara needs **10** inside 15 yd and
+the raid produced 11-16, so every extra Guardian is another nova rather than progress.
+
+**Standing in it is survivable, which is what makes the trade one-sided.** Over 403 nova hits on melee
+inside phase 1, the three pools under 26,000 lost a median **62%** of the bar and **86%** at the 90th,
+and the five above it a median 54% with **0 of 301** hits reaching 90%. The one 100% was Totemist taking
+23,424 of 23,497 and living. All four phase 1 melee deaths were cases no walk reaches: a Fervor hit of
+**154%** that landed 1.7 s after the aura, and three bots caught by **two novas 2.7 s apart**. So the
+chain is the hazard left (below), and it is a mitigation problem — the second Guardian is not low when
+the first detonates.
+
+**After phase 1 the gate still fires, because there is no cloud to wake.** The leftover Guardians took
+**101** melee hits with **68** of them bare, so leaving is free there and worth having.
+
+**The station band survives as the Fervor holder's destination**, and that is who `HazardSet::preferred`
+is for now. It is the only-orbit-2 band, so it costs no summon of its own — orbit 2 runs through the
+station and 14 bots wake that cloud every lap anyway, and Fervor runners woke **1 Guardian in 85**.
+Without it a run ends ~19 yd out, where orbits 1 and 2 both reach.
 
 The blob (`…_P1_RANGED_STACK_RADIUS` of `…_P1_RANGED_SPOT`) came out of the test: asking
 for both left `FindNearestPositionClearOfHazards` **0 to 2** acceptable points of the ~200 its grid
@@ -193,9 +224,13 @@ offers a bot 0-6 yd from the middle — rings 2 yd apart, 16 bearings, against a
 away — so one cloud circle emptied the set and only **11%** and **15%** of step-outs reached it. The
 band on its own offers **11 to 16**. Widening the tolerance is not the fix: ±1.0 *is* the band, 1.13 yd
 either side of 21.5. **Not the tank**, which holds the Guardians on the pile, nor
-a melee healer — `IsMelee` is `!IsRanged`, and Fervor opens the gate with no pool test. Judge it on the
-melee nova row of `--clouds`, not on the raid's own feet: that ran **46-63%** across all ten pulls with
-and without a step-out, because the pile drifts onto orbit 1 for cloud dodges too.
+a melee healer — `IsMelee` is `!IsRanged`.
+
+**There are two raid-wide covers, and Aura Mastery goes first.** `YoggSaronNovaRaidCover` picks it over
+Divine Sacrifice whenever the elected paladin has its own aura up and the cooldown ready, because it
+costs the caster nothing where Divine Sacrifice redirects 30% of the raid's damage onto it. Both run
+120 s against a nova every 10, both share the one `ClaimYoggSaronNovaWindow` claim, and `yogg.novaraid`
+records which went.
 
 **The raid-wide button waits for a chained nova, or it is never there for one.**
 `YoggSaronNovaHurtCount` flags a member on `GetHealth() <= expected`, and one nova's `expected` is the
@@ -324,6 +359,11 @@ Orbit 2's four are the station's designed cost: 4.2 laps, one each, exactly the 
 
 Nowhere is clear of every orbit — gaps are 9.4-9.9 yd against the 17 yd a cloud sweeps — and no
 sidestep outruns one, because a spot clear of an orbit now is under it seconds later.
+
+**No radius outside the 2.8 yd core is ever clear of every orbit, so moving a station cannot help.**
+The orbits are **9.8 yd** apart and `…_CLOUD_SUMMON_REACH` is **8.5**, so a gap between two of them is
+9.8 - 17.0, which is negative: every radius past the core is inside some orbit's reach. The station band
+is the best there is, the one radius only a single orbit reaches.
 
 **Dodging anyway cost a phase.** With the trigger widened to 18 yd to buy warning, the node was asked
 on nearly every tick against a clear radius unsatisfiable within 25 yd of Sara: it fired **8,260x**,
@@ -1019,6 +1059,11 @@ times** a window, ending it at 0.0-21.5 yd out. It now stands the **walk** down 
 keeps taunting, because `…_P1_TAUNT_RANGE` (30) covers the room from 21.5 yd out, which also keeps the
 Guardians the 25 yd off the back line the anchor was chosen for.
 
+Confirmed again over six later pulls: the median bot **0.0-0.2 yd** from the anchor, the bot front line
+**0.0-10.3 yd** across on bearing 108-117°, melee 0 of 9 in the ring every pull, and the tank at
+**21.5 yd** when the ring lit with **0 or 1** crossings against one to four, the two walks' refusals
+down from 46-97 each to **15-16** in total.
+
 **Three to six Guardians are alive at the ring in every pull, and the pile is one blast.** A nova on
 the anchor catches all nine melee where the fan caught a few: one pull's 2:05.6 nova killed four with
 nothing up, 1.3 s before the ring. The anchor bought reachability and the back line's safety, not this.
@@ -1597,8 +1642,9 @@ outside, and each healer's distance to the melee spot and facing during gazes. U
 Fervor run, whether it came back inside 16.2 yd while holding and what walked it back, novas on holders,
 and Guardians only runners summoned. Under `--clouds`, beside the orbit shares and the spawn
 attribution: where each dodge reason sends each role, how many orbits can reach it there, and how many
-of a melee bot's cloud dodges fell inside 20 s of its own step-out. A step-out that wakes the next
-Guardian leaves no other trace, since the note says only why it moved. Under `--threat`, beside
+of a melee bot's cloud dodges fell inside 20 s of its own step-out, and how many step-outs **took the
+nova they ran from anyway**, which is the only thing that says whether leaving worked. A step-out that
+wakes the next Guardian leaves no other trace, since the note says only why it moved. Under `--threat`, beside
 Guardian time on target and the taunts
 that landed: how long each tank's damage stayed frozen **while it was moving** and the node pairs that
 took turns on it, then every taunt **attempt** from the action rows with its verdict and how far off it
@@ -1608,7 +1654,10 @@ nova with the warning each gate gave, the raiders in reach and how many were bac
 a share of their pool and what it resisted, how many hits resisted nothing, who it would have killed and
 what was up on them, the raid-wide auras live at that instant, the deaths, and the back-line bots a nova
 caught before and after phase 1 — one is somebody who walked in, the whole stack is somebody who walked
-a Guardian to them.
+a Guardian to them. Also who carried each of the two 130 sources and whether Aura Mastery was pressed by
+one of them, and every pair of novas inside 6 s on one bar with what the pair took off it: that pair is
+what kills once melee stop walking, and a removal row counts as evidence of a holder because a buff put
+up before the pull shows only when it comes off.
 
 **Do not add a Sanity level probe** (`yogg.sanity` is a walk reason). 63050 is already in the aura stream — 467 and 819 rows across the two
 attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic

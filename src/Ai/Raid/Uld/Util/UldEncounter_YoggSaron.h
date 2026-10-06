@@ -100,6 +100,9 @@ enum UlduarYoggSaronIds
     SPELL_EMPOWERING_SHADOWS_25 = 64486,
     SPELL_GUARDIAN_DRAIN_LIFE = 64159,  // 5 s channel below 85% health, heals the Guardian 10x the drain
     SPELL_GUARDIAN_DRAIN_LIFE_H = 64160,
+    // +100% to the caster's own aura for 6 s (aura 108 on all three effects, 99 base points), so it is
+    // worth something only on the paladin carrying Shadow Resistance Aura.
+    SPELL_AURA_MASTERY = 31821,
     SPELL_HEROISM_SHAMAN = 32182,
     SPELL_BLOODLUST_SHAMAN = 2825,
     SPELL_SATED = 57724,
@@ -191,11 +194,20 @@ constexpr float ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT = 50.0f;
 // recorded 26,692 - 65209 has two SCHOOL_DAMAGE effects and the trace records one row per raider, so
 // the real hit is higher than any row shows. Below this figure a bot at full health never looked at
 // risk, so the ladder only ever fired after the hit.
+//
+// Still the unresisted figure even though a later 759 hits over six pulls resisted a median 21-22% and
+// never under 10%: that run had 130 shadow resistance up throughout, and the raid keeps it only while
+// somebody holds Prayer of Shadow Protection or the aura.
 constexpr uint32 ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE = 28600;
 
 // Melee at or under this pool die to an unresisted nova whichever reduction they own, so they leave the
 // blast instead. Above it a 20% cut is enough and the ladder covers them: the smallest melee needs 18%
 // off, the biggest 0.1%.
+//
+// Only reaches a bot after phase 1. In phase 1 the walk out cost Guardians and delivered nothing: 44 of
+// 74 step-outs took the nova they ran from anyway, and the 30 that got clear landed on the station band,
+// which is 0.1 yd off the second cloud orbit. After phase 1 there is no cloud to wake and leaving is
+// free.
 constexpr uint32 ULDUAR_YOGG_SARON_NOVA_STEP_OUT_POOL = 26000;
 
 // Two gates. A Guardian first dropping under 20% detonated a median 4.8 s later and as late as 11.5,
@@ -892,6 +904,20 @@ bool YoggSaronNovaHold(PlayerbotAI* botAI);
 // How many melee and tanks on the stack the next nova would take that far down, which is what decides
 // whether the one raid-wide cooldown is worth spending.
 uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI);
+
+// The one paladin that carries Shadow Resistance Aura here, lowest GUID of the bot paladins that know
+// Aura Mastery. Prayer of Shadow Protection already gives the same 130 on the same exclusive aura 143
+// and the core takes the highest of those rather than the sum, so the aura slot buys the raid nothing
+// unless the paladin holding it can double it to 260.
+bool IsYoggSaronShadowAuraPaladin(Player* bot);
+
+// Whether this bot should be left alone to hold that aura, which is what keeps its own buff strategy
+// from trading the exclusive slot back on the next GCD.
+bool YoggSaronShadowAuraHeld(PlayerbotAI* botAI);
+
+// Which raid-wide cover this paladin can give the next nova, or null for none. Shared so the trigger
+// and the action cannot pick different buttons.
+char const* YoggSaronNovaRaidCover(PlayerbotAI* botAI);
 
 // The raider a healer external belongs on: whoever the nova leaves furthest past dead, which puts a
 // Sara's Fervor holder first and the smallest health pool next. Never the bot itself, and nullptr when

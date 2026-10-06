@@ -237,6 +237,17 @@ NOVA_RAID_AURAS = {64205: "divine sacrifice", 70940: "divine guardian"}
 # The cast, as opposed to the pair of auras it puts on the raid. 30% of raid damage redirected to the
 # paladin for 10 s, plus 20% off everyone for 6 s where the second rank of the talent is trained.
 SPELL_DIVINE_SACRIFICE = 64205
+# The other raid-wide cover: +100% to the caster's own resistance aura for 6 s, so it only does
+# anything on the paladin holding one.
+SPELL_AURA_MASTERY = 31821
+NOVA_RAID_COVERS = {SPELL_DIVINE_SACRIFICE: "divine sacrifice", SPELL_AURA_MASTERY: "aura mastery"}
+# Shadow Resistance Aura ranks 1-5 and Prayer of Shadow Protection. Both are aura 143
+# SPELL_AURA_MOD_RESISTANCE_EXCLUSIVE and max rank of either gives 130, and the core takes the highest
+# rather than the sum, so holding both is worth exactly one of them.
+SPELL_SHADOW_AURA_RANKS = (19876, 19895, 19896, 27151, 48943)
+SPELL_PRAYER_OF_SHADOW_PROTECTION = 48170
+# Two novas this close leave no room for a heal between them, which is what killed three melee at once.
+NOVA_CHAIN_MS = 6000
 FERVOR_MS = 15000
 P1_SPACING = "yogg-saron phase 1 spacing action"
 # Real summons measured their approach out to 8.71 centre to centre, and a pass is read off every
@@ -1029,6 +1040,20 @@ def beyond_reach(spots: list[tuple[float, float]], healers: list[tuple[float, fl
     return out, len(spots)
 
 
+def resisted_share(landed: int, resisted: int) -> float:
+    """The share of one hit that resistance took off, 0.0 when the hit landed nothing at all."""
+    total = landed + resisted
+    return resisted / total if total > 0 else 0.0
+
+
+def chain_pairs(stamps: list[int], window_ms: int) -> list[tuple[int, int]]:
+    """Consecutive stamps no further apart than `window_ms`. Three in a row is two pairs, because the
+    middle one is both the end of one chain and the start of the next."""
+    ordered = sorted(stamps)
+    return [(first, second) for first, second in zip(ordered, ordered[1:])
+            if second - first <= window_ms]
+
+
 def cooldown_gap(presses: list[int], cooldown_ms: int, when: int) -> int | None:
     """How long after `when` the earliest of `presses` comes back off cooldown, or None if one was
     already available then. Nothing pressed is also None: the button was in hand."""
@@ -1207,8 +1232,16 @@ def show_stepout_leads(trace: Trace) -> None:
         if rec.get("ok") and rec.get("by") == "yogg-saron phase 1 spacing action":
             issued[rec.get("g", 0)].append(rec["t"])
 
+    # Who each nova actually hit, so a step-out can be scored on whether it got the bot out rather
+    # than on how early it left.
+    struck: dict[int, set[int]] = collections.defaultdict(set)
+    for rec in trace.of("dmg"):
+        if rec.get("sp") in SPELL_SHADOW_NOVAS:
+            struck[rec.get("s")].add(rec.get("d"))
+
     leads: dict[str, list[float]] = collections.defaultdict(list)
     dodged_nothing: collections.Counter = collections.Counter()
+    caught: collections.Counter = collections.Counter()
     for rec in notes(trace, "yogg.p1dodge"):
         reason = str(rec.get("txt", ""))
         when = rec["t"]
@@ -1229,6 +1262,7 @@ def show_stepout_leads(trace: Trace) -> None:
             spot = at(trace, caster, when)
             if spot and math.dist(spot[:2], here[:2]) <= NOVA_TRIGGER_RADIUS:
                 lead = (fired - when) / 1000.0
+                caught[reason] += guid in struck.get(caster, set())
                 break
 
         if lead is None:
@@ -1251,7 +1285,8 @@ def show_stepout_leads(trace: Trace) -> None:
                 else "no nova to measure against")
         print(f"    {reason:7} {len(got) + missed:3}  {says}"
               f"   over 5 s early {sum(1 for one in got if one > 5):2}"
-              f"   dodged nothing inside {STEP_OUT_LEAD_MS // 1000} s {missed:2}")
+              f"   dodged nothing inside {STEP_OUT_LEAD_MS // 1000} s {missed:2}"
+              f"   took it anyway {caught[reason]:2} of {len(got)}")
 
 
 def show_cloud_spawns(trace: Trace) -> None:
@@ -3846,26 +3881,65 @@ def show_novas(trace: Trace) -> None:
     # The raid-wide button against the nova that needed it. Spending it is only visible as a cast: the
     # aura lands on all 25, so every row of it looks the same whoever pressed. Divine Sacrifice is the
     # press and Divine Guardian the 20% its talent procs alongside, so counting the cast counts once.
-    presses = [(rec["t"], trace.name(rec.get("s")))
+    presses = [(rec["t"], trace.name(rec.get("s")), NOVA_RAID_COVERS[rec["sp"]])
                for rec in sorted(trace.of("cast"), key=lambda rec: rec["t"])
-               if rec.get("sp") == SPELL_DIVINE_SACRIFICE and rec.get("s") in roster]
+               if rec.get("sp") in NOVA_RAID_COVERS and rec.get("s") in roster]
     print(f"  raid-wide mitigation: {len(presses)} presses, {RAID_COOLDOWN_MS // 1000} s each")
-    for when, who in presses:
-        print(f"    {clock(when):>9}  {who:14} back at {clock(when + RAID_COOLDOWN_MS)}")
+    for when, who, what in presses:
+        print(f"    {clock(when):>9}  {who:14} {what:16} back at {clock(when + RAID_COOLDOWN_MS)}")
     if lethal:
         first = min(when for _, when in lethal)
-        gap = cooldown_gap([when for when, _ in presses], RAID_COOLDOWN_MS, first)
+        gap = cooldown_gap([when for when, _, _ in presses], RAID_COOLDOWN_MS, first)
         says = "one was in hand" if gap is None else f"the earliest was back {gap / 1000:.1f} s too late"
         print(f"    against the first nova that killed, at {clock(first)}: {says}")
 
     # What the gate's own figure is worth. Resistance is rolled per hit, so the median is not a floor,
     # but it is what decides whether a single nova can kill the pool the gate is comparing against.
-    shares = [rec.get("rs", 0) / (rec["a"] + rec.get("rs", 0)) for rec in rows_all
+    shares = [resisted_share(rec["a"], rec.get("rs", 0)) for rec in rows_all
               if rec["a"] + rec.get("rs", 0) > 0]
     if shares:
         print(f"  a nova landed a median {statistics.median(rec['a'] for rec in rows_all):,.0f} against "
               f"the {NOVA_EXPECTED_DAMAGE:,} the gate assumes, resisted median "
               f"{statistics.median(shares) * 100:.1f}% (min {min(shares) * 100:.1f}%)")
+
+    # Where the 130 comes from. Shadow Resistance Aura and Prayer of Shadow Protection both give it on
+    # the same exclusive aura 143 and the core takes the highest rather than the sum, so the question is
+    # not the total: it is whether the raid carries the 130 itself, and whether the paladin on the aura
+    # is one that can double it to 260. Removals count as well as applications, because a buff put up
+    # before the pull shows up only when it comes off.
+    def named(guids: set) -> str:
+        return ", ".join(sorted(f"{trace.name(one)}{' (human)' if one in trace.humans else ''}"
+                                for one in guids)) or "nobody"
+
+    holders = {rec.get("s") for rec in trace.of("aura") if rec.get("sp") in SPELL_SHADOW_AURA_RANKS}
+    prayer = {rec.get("s") for rec in trace.of("aura")
+              if rec.get("sp") == SPELL_PRAYER_OF_SHADOW_PROTECTION}
+    mastery = {rec.get("s") for rec in trace.of("cast") if rec.get("sp") == SPELL_AURA_MASTERY}
+    print(f"  the 130 shadow resistance: aura from {named(holders)}, prayer from {named(prayer)}")
+    print(f"    Aura Mastery pressed by {named(mastery)}, of those holding the aura: "
+          f"{named(holders & mastery)}")
+
+    # Pairs with no room for a heal between them. This is what the melee pile dies to once stepping out
+    # is off the table, and a step-out cannot answer it anyway: the second Guardian is not low when the
+    # first detonates.
+    landed: dict[int, dict[int, int]] = collections.defaultdict(dict)
+    for source in hits:
+        for rec in hits[source]:
+            landed[rec["d"]][hits[source][0]["t"]] = rec["a"]
+    pairs = []
+    for guid, mine in landed.items():
+        pool = trace.maxhp.get(guid) or 0
+        if not pool:
+            continue
+        for first, second in chain_pairs(list(mine), NOVA_CHAIN_MS):
+            pairs.append(((mine[first] + mine[second]) / pool * 100, trace.name(guid), second - first))
+    if pairs:
+        pairs.sort(reverse=True)
+        over = sum(1 for share, _, _ in pairs if share >= 100)
+        print(f"  two novas inside {NOVA_CHAIN_MS // 1000} s on one bar: {len(pairs)} pairs, median "
+              f"{statistics.median(share for share, _, _ in pairs):.0f}% of it, {over} over the whole bar")
+        for share, who, gap in pairs[:3]:
+            print(f"    {who:14} {share:5.0f}%  {gap / 1000:.1f} s apart")
 
     # What each gate is worth as a warning, which is what decides where a gate can sit at all: one
     # shorter than the walk is a step-out that arrives after the blast.

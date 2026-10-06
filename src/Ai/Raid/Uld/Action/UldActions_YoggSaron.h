@@ -548,9 +548,21 @@ private:
                                                        "hand of sacrifice"};
 };
 
-// Divine Sacrifice, for the 20% the Divine Guardian talent hangs off it. The split it puts back on the
-// paladin is survivable here: the pool is 40% of his health times the raid size and it breaks under 20%
-// health, and across four pulls no caster went below 62%.
+// Puts Shadow Resistance Aura up and leaves it there, so Aura Mastery has something worth doubling.
+class YoggSaronShadowAuraAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron shadow aura action";
+
+    YoggSaronShadowAuraAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+// One cover per nova window: Aura Mastery, or Divine Sacrifice for the 20% the Divine Guardian talent
+// hangs off it. The split Divine Sacrifice puts back on the paladin is survivable here: the pool is 40%
+// of his health times the raid size and it breaks under 20% health, and across four pulls no caster went
+// below 62%.
 class YoggSaronNovaRaidCooldownAction : public Action
 {
 public:

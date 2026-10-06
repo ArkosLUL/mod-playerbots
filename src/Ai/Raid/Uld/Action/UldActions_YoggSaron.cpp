@@ -301,11 +301,12 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
         }
     }
 
-    // A nova step-out otherwise lands on the inner orbit: the clear radius is 20 yd and the Guardians
-    // are on the pile, so the nearest safe spot sits ~19 yd out while that orbit summons from 3.1 to
-    // 20.4. One pull put every melee step-out there and woke 7 of its 16 Guardians off that orbit,
-    // which nothing but a player's feet can reach. The station band is the one radius only the second
-    // orbit reaches, and the back line already wakes that cloud.
+    // Only a Sara's Fervor holder reaches this now, and it has to be clear of the blast rather than
+    // mitigate it. The station band is the one radius only the second orbit reaches and the back line
+    // already wakes that cloud, so it costs the raid almost nothing: Fervor runners woke 1 Guardian in
+    // 85. Without the preference a step-out lands on the inner orbit instead, because the clear radius
+    // is 20 yd and the Guardians are on the pile, so the nearest safe spot sits ~19 yd out while that
+    // orbit summons from 3.1 to 20.4.
     //
     // The band alone, not the band and the back line's blob together: the sweep tests rings 2 yd apart
     // and 16 bearings around the bot, and both tests at once leave it 0 to 2 points of the ~200 it
@@ -1928,15 +1929,24 @@ bool YoggSaronNovaExternalAction::Execute(Event /*event*/)
     return botAI->CastSpell(external, victim);
 }
 
+bool YoggSaronShadowAuraAction::Execute(Event /*event*/)
+{
+    return botAI->CastSpell("shadow resistance aura", bot);
+}
+
 bool YoggSaronNovaRaidCooldownAction::Execute(Event /*event*/)
 {
+    char const* cover = YoggSaronNovaRaidCover(botAI);
+    if (!cover)
+        return false;
+
     if (!ClaimYoggSaronNovaWindow(bot))
         return false;
 
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "yogg.novaraid", "divine sacrifice");
+        RaidObs::NoteDerived(bot, "yogg.novaraid", cover);
 
-    // Through the class node rather than CastSpell, so the cancel action stays its continuer: the split
-    // keeps running for 10 s whether the nova has landed or not.
-    return botAI->DoSpecificAction("divine sacrifice");
+    // Through the class node rather than CastSpell, so Divine Sacrifice's cancel action stays its
+    // continuer: the split keeps running for 10 s whether the nova has landed or not.
+    return botAI->DoSpecificAction(cover);
 }

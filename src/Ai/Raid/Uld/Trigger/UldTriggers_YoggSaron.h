@@ -442,6 +442,17 @@ public:
     bool IsActive() override;
 };
 
+// Shadow Resistance Aura on the one paladin whose Aura Mastery can double it, and its own copy of the
+// aura: a human's sits on every raider and would otherwise read as already done.
+class YoggSaronShadowAuraTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron shadow aura trigger";
+
+    YoggSaronShadowAuraTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 // Covers both fears the fight has: Malady of the Mind in P2 and Deafening Roar in P3. Complements
 // the malady spread node, which handles the bot who is already feared.
 class YoggSaronAntiFearTrigger : public RaidAntiFearTrigger
