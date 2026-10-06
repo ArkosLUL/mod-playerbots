@@ -154,8 +154,6 @@ bool AlgalonCosmicSmashTrigger::IsActive()
     return smash || star;
 }
 
-bool AlgalonStarTrimTrigger::IsActive() { return GetAlgalonTrimStar(bot) != nullptr; }
-
 // A bot still inside the field when its 10s phase ends is phased again within a second, and while
 // phased it can't see the hole at all, only the cached position.
 bool AlgalonLeaveBlackHoleTrigger::IsActive()

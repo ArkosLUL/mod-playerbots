@@ -468,42 +468,6 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
     return true;
 }
 
-bool AlgalonStarTrimAction::Execute(Event /*event*/)
-{
-    Unit* star = GetAlgalonTrimStar(bot);
-    if (!star)
-        return false;
-
-    // Already shooting it: the tick stops the wand once the star is in its band.
-    Spell* shooting = bot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL);
-    if (shooting && shooting->m_targets.GetUnitTargetGUID() == star->GetGUID())
-        return true;
-
-    // A wand cancels a channel, Dispersion included.
-    Spell* channel = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-    if (channel && channel->GetSpellInfo()->Id == SPELL_ALGALON_DISPERSION)
-        return false;
-
-    if (bot->IsNonMeleeSpellCast(false))
-        bot->InterruptNonMeleeSpells(false);
-
-    // Moving cancels a wand, and a walk already issued keeps going: one re-cast every tick and never landed.
-    if (bot->isMoving())
-    {
-        bot->StopMoving();
-        Booking(botAI).clear();
-    }
-
-    if (!botAI->CastSpell(SPELL_ALGALON_WAND_SHOOT, star))
-        return false;
-
-    if (RaidObs::Active())
-        RaidObs::Note(bot, "algalon.trim",
-                      "start " + std::to_string(star->GetGUID().GetCounter()) + " " +
-                          std::to_string(static_cast<int32>(star->GetHealthPct())));
-    return true;
-}
-
 bool AlgalonStarTeamAction::Execute(Event /*event*/)
 {
     Unit* star = GetAlgalonFocusStar(botAI);

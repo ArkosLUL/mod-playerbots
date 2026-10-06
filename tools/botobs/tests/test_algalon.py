@@ -2275,6 +2275,14 @@ class UnderBulk(unittest.TestCase):
                          (1, [501, 502, 503], 2, 3, 16000))
         self.assertIn("Big Bang 1: the focus switched 3 times between 2 under-stars, from 16.0s", self.lines)
 
+    def test_an_under_star_still_above_its_band_when_the_cast_begins_is_a_failure(self):
+        (cycle,) = al.under_cycles(self.trace)
+        self.assertEqual((cycle["band"], cycle["at_cast"]), ((4.0, 9.6), {501: 44.0, 502: 36.0, 503: 60.0}))
+        self.assertIn("under-star star 2 (502) at 36.0% when Big Bang 1's cast began, above its band 4.0..9.6%"
+                      " @ 40.0s", self.lines)
+        # released ones are pacing's
+        self.assertEqual(sum("above its band" in line for line in self.lines), 1)
+
     def test_a_trimmer_restarting_shoot_is_a_failure(self):
         self.assertEqual(al.trim_shots(self.trace), {
             503: [{"bot": UD_MAGE, "starts": [30000, 30200, 30400], "fired": 2}],
@@ -2287,9 +2295,12 @@ class UnderBulk(unittest.TestCase):
         text = render(self.trace, "stars")
         self.assertIn("    star 3 (503): Mage 3 start(s), 2 shot(s) fired\n", text)
         self.assertIn("    Big Bang 1: 3 under-star(s), the focus on 2 of them switched 3 time(s) between them\n"
-                      "      star 1 (501): released early 0:26.000 at 60%, 14.0 s before the cast\n"
-                      "      star 2 (502): not released\n"
-                      "      star 3 (503): released late 0:36.000 at 64%, 4.0 s before the cast\n", text)
+                      "      star 1 (501): released early 0:26.000 at 60%, 14.0 s before the cast; at the cast 44.0%,"
+                      " band 4.0..9.6%\n"
+                      "      star 2 (502): not released; at the cast 36.0%, band 4.0..9.6%\n"
+                      "      star 3 (503): released late 0:36.000 at 64%, 4.0 s before the cast; at the cast 60.0%,"
+                      " band 4.0..9.6%\n", text)
+        self.assertIn("    bulk beyond the drain: median +3.0 %/s over 4 span(s), planned +5.0\n", text)
         self.assertIn(" 0:12.000 ..  0:16.000  under     star 1 (501)     u   88.0% >  76.0% in  4.0 s, +2.0 %/s",
                       text)
 
@@ -2299,8 +2310,10 @@ class UnderBulk(unittest.TestCase):
             text = render(trace, "stars")
             self.assertIn("no algalon.underdrop row: nothing released, or a trace from before the probe", text)
             self.assertIn("star 3 (503): Mage 0 start(s), 0 shot(s) fired", text)
-            self.assertEqual([line for _, line in al.under_faults(trace)],
-                             ["Big Bang 1: the focus switched 3 times between 2 under-stars, from 16.0s"])
+            self.assertEqual([line for _, line in al.under_faults(trace)], [
+                f"under-star star {n} ({counter}) at {health}% when Big Bang 1's cast began, above its band 4.0..9.6%"
+                " @ 40.0s" for n, counter, health in ((1, 501, "44.0"), (2, 502, "36.0"), (3, 503, "60.0"))
+            ] + ["Big Bang 1: the focus switched 3 times between 2 under-stars, from 16.0s"])
         with tempfile.TemporaryDirectory() as folder:
             bare = load(folder, underdrop_pull(drop=("algalon.underdrop", "algalon.starplan", "algalon.focusstar",
                                                      "algalon.trim"), shots=False))

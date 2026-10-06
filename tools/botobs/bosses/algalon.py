@@ -16,12 +16,14 @@
     algalon.py <file> --phasing         every hole phase: Big Bang or stray, and what put a stray one there
     algalon.py <file> --stars           star deaths, what each landed into, the kill window, the star plan, its
                                         death against the Big Bang hit, who the explosion hit, wand trims and the
-                                        shots that fired, under-stars per Big Bang with focus switches and releases,
-                                        each focus span's loss beyond the drain, the team
+                                        shots that fired (older traces), under-stars per Big Bang with focus
+                                        switches, releases and health at the cast against the band, each focus
+                                        span's loss beyond the drain and the bulk's median, the team
     algalon.py <file> --collateral      star health lost beyond the drain while unfocused, casts on stars
     algalon.py <file> --holes           hole stock, empty seconds before each Big Bang, holes lost, urgency
-    algalon.py <file> --constellations  activations, victims, the handler's kite stages and what each kite ate,
-                                        stretches parked beside the hole, removals
+    algalon.py <file> --constellations  activations, victims, one stuck in the air, the handler's kite stages and
+                                        what each kite ate, seconds the kite was blocked, stretches parked beside
+                                        the hole, removals
     algalon.py <file> --smash           every Cosmic Smash wave: who stood near it, the dodge, damage
     algalon.py <file> --tanks           Phase Punch stacks, swaps, non-tank pickups, Quantum Strike
     algalon.py <file> --tankheal        tank healers, each healer's share on the pair, Beacon, healing against
@@ -217,6 +219,9 @@ SHELTER_RADIUS = _radius_or("ULDUAR_ALGALON_SHELTER_RADIUS", 6.0)
 MELEE_REACH = _radius_or("ULDUAR_ALGALON_MELEE_REACH", 11.83)
 DODGE_TRIGGER_YD = _radius_or("ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS", 12.0)
 CONSTELLATION_LOW_Z = _radius_or("ULDUAR_ALGALON_CONSTELLATION_LOW_Z", 5.0)
+UNDER_LEAD_MS = int(_radius_or("ULDUAR_ALGALON_UNDER_LEAD_MS", 4000.0))
+UNDER_TAIL_MS = int(_radius_or("ULDUAR_ALGALON_UNDER_TAIL_MS", 600.0))
+UNDER_TEAM_PCT = _radius_or("ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC", 6.0)
 
 ALGALON_SOURCE = RAID_ROOT / "Uld" / "Util" / "UldEncounter_Algalon.cpp"
 RING_SLOT_TABLE = re.compile(r"\bULDUAR_ALGALON_RING_SLOTS\s*=\s*\{\{?(.*?)\}?\};", re.S)
@@ -2834,10 +2839,11 @@ def bang_cycles(trace: Trace) -> list[dict]:
 
 
 def under_cycles(trace: Trace) -> list[dict]:
-    """Per Big Bang with an under-star: `{n, stars, releases, visited, switches, first_switch}`. `stars` are
-    the counters any `algalon.starplan` marked `u` toward it, `releases` each one's `algalon.underdrop`
-    as `{t, why, hp, to_cast}`, and `switches` how often the focus went from one star the plan then marked
-    `u` to another, a focus on any other star in between skipped."""
+    """Per Big Bang with an under-star: `{n, stars, releases, visited, switches, first_switch, cast, band,
+    at_cast}`. `stars` are the counters any `algalon.starplan` marked `u` toward it, `releases` each one's
+    `algalon.underdrop` as `{t, why, hp, to_cast}`, and `switches` how often the focus went from one star the
+    plan then marked `u` to another, a focus on any other star in between skipped. `at_cast` is each live
+    one's health % when the cast began and `band` the health then that can still die in the window."""
     def build(trace: Trace) -> list[dict]:
         drops = []
         for rec in sorted(notes(trace, "algalon.underdrop"), key=lambda rec: rec["t"]):
@@ -2857,9 +2863,21 @@ def under_cycles(trace: Trace) -> list[dict]:
             held = [(row["start"], row["star"] & 0xFFFFFFFF) for row in focus_rates(trace)
                     if row["under"] and low <= row["start"] < high]
             switches = [start for (_, before), (start, after) in zip(held, held[1:]) if after != before]
+            # the drain is 1% of max a second: a star at h% when the cast starts dies h-1 to h s later, by
+            # where its clock stands, so a tick of slack on top
+            cast = next((cast for cast in big_bang_casts(trace) if cast["n"] == cycle["n"]), None)
+            band = ((cast["end"] - UNDER_LEAD_MS - cast["start"]) / 1000.0,
+                    (cast["end"] + UNDER_TAIL_MS - cast["start"]) / 1000.0 + 1.0) if cast else None
+            at_cast = {}
+            for counter in stars:
+                guid = star_by_counter(trace).get(counter)
+                found = samples_of(trace).row(guid, cast["start"]) if cast and guid else None
+                if found and alive(found) and samples_of(trace).present(guid, cast["start"]):
+                    at_cast[counter] = found[5]
             out.append({"n": cycle["n"], "stars": sorted(stars), "releases": releases,
                         "visited": len({counter for _, counter in held}), "switches": len(switches),
-                        "first_switch": switches[0] if switches else None})
+                        "first_switch": switches[0] if switches else None, "cast": cast["start"] if cast else None,
+                        "band": band, "at_cast": at_cast})
         return out
     return cached(trace, "_algalon_under_cycles", build)
 
@@ -3125,7 +3143,11 @@ def show_under_cycles(trace: Trace) -> None:
               f" switched {cycle['switches']} time(s) between them")
         for counter in cycle["stars"]:
             drop = cycle["releases"].get(counter)
-            print(f"      {counter_label(trace, counter)}: {release_label(drop) if drop else 'not released'}")
+            health = cycle["at_cast"].get(counter)
+            band = cycle["band"]
+            where = (f"; at the cast {health:.1f}%, band {band[0]:.1f}..{band[1]:.1f}%"
+                     if health is not None and band else "")
+            print(f"      {counter_label(trace, counter)}: {release_label(drop) if drop else 'not released'}{where}")
     if "algalon.underdrop" not in emitted(trace):
         print("    no algalon.underdrop row: nothing released, or a trace from before the probe")
 
@@ -3135,6 +3157,11 @@ def show_focus_rates(trace: Trace) -> None:
     if not rows:
         return
     print("  focus spans, the star's health and what it lost beyond the 1 %/s drain, u for an under-star:")
+    bulk = sorted(row["beyond"] for row in rows
+                  if row["under"] and row["window"] == "under" and row["beyond"] is not None)
+    if bulk:
+        print(f"    bulk beyond the drain: median {bulk[len(bulk) // 2]:+.1f} %/s over {len(bulk)} span(s),"
+              f" planned {UNDER_TEAM_PCT - 1.0:+.1f}")
     for row in rows:
         if row["first"] is None:
             health = "never sampled"
@@ -3252,8 +3279,9 @@ def window_faults(trace: Trace) -> list[tuple[int, str]]:
 
 
 def under_faults(trace: Trace) -> list[tuple[int, str]]:
-    """An under-star released inside UNDER_DROP_LATE_MS of the cast, the focus going back to one of a cast's
-    under-stars (a latched bulk switches one fewer times than it visits), and a trimmer restarting Shoot."""
+    """An under-star released inside UNDER_DROP_LATE_MS of the cast, one still above its band when the cast began,
+    the focus going back to one of a cast's under-stars (a latched bulk switches one fewer times than it visits),
+    and a trimmer restarting Shoot (traces from before the bulk took them into the band)."""
     out = []
     for cycle in under_cycles(trace):
         for counter, drop in cycle["releases"].items():
@@ -3262,6 +3290,12 @@ def under_faults(trace: Trace) -> list[tuple[int, str]]:
                 out.append((drop["t"], f"under-star {counter_label(trace, counter)} released {drop['why']}"
                                        f" {drop['to_cast'] / 1000:.1f} s before Big Bang {cycle['n']}'s cast, at"
                                        f" {health} @ {secs(drop['t'])}"))
+        band = cycle["band"]
+        for counter, health in sorted(cycle["at_cast"].items()):
+            if band and counter not in cycle["releases"] and health > band[1]:
+                out.append((cycle["cast"], f"under-star {counter_label(trace, counter)} at {health:.1f}% when Big Bang"
+                                           f" {cycle['n']}'s cast began, above its band {band[0]:.1f}..{band[1]:.1f}%"
+                                           f" @ {secs(cycle['cast'])}"))
         if cycle["visited"] and cycle["switches"] >= cycle["visited"]:
             out.append((cycle["first_switch"], f"Big Bang {cycle['n']}: the focus switched {cycle['switches']} times"
                                                f" between {cycle['visited']} under-stars, from"
@@ -5457,12 +5491,13 @@ SECTIONS = (
     ("soak", "every Big Bang's soakers: the hit, healers, kit, reserved buttons spent", show_soak),
     ("phasing", "every hole phase: Big Bang or stray, its cause, Dark Matter, walk guard vetoes", show_phasing),
     ("stars", "star deaths, health against the drain, the kill window, the star plan against the death and the Big"
-              " Bang hit, wand trims and shots, under-star switches and releases, focus span loss, the star team",
+              " Bang hit, wand trims and shots (older traces), under-star switches, releases and health at the cast,"
+              " focus span loss and the bulk's median, the star team",
      show_stars),
     ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),
-    ("constellations", "activations, victims, handler and kite stages, what each kite ate, parked stretches,"
-                       " removals", show_constellations),
+    ("constellations", "activations, victims, one stuck in the air, the handler's kite stages, what each kite ate,"
+                       " seconds the kite was blocked, parked stretches, removals", show_constellations),
     ("smash", "every Cosmic Smash wave: who stood near it, the dodge, distance at the impact", show_smash),
     ("tanks", "Phase Punch stacks, swaps, non-tank pickups, Quantum Strike", show_tanks),
     ("tankheal", "tank healers, each healer's share on the pair, Beacon, healing against damage before every tank"

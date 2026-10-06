@@ -142,27 +142,26 @@ it. It can't open sooner: the tanks hold him until the cast starts or he resets,
 
 - **Plan**, per tick outside the cast, only with a disperser latched (a tank soaker would take each explosion
   whole), started afresh at each cast: a new star joins if its drain death isn't before the window and the
-  team's work fits before the cast less 18 s, one wand's trim (at 6 %/s, or the measured speed when lower, less
-  the drain, which moves the band), smallest first; the rest are paced. **A planned star stays planned**:
+  team's work ends 5 s before the cast (at 6 %/s, or the measured speed when lower, less the drain, which moves
+  the band: the bulk's own, averaged over a span from past its first casts and dropped after a cycle with none,
+  else a paced kill's), smallest first; the rest are paced. **A planned star stays planned**:
   re-planned each tick, all were dropped 6 s before the cast, and three died together after the strip and killed
   18. It is released for good (`algalon.underdrop`) only `early`, dying before hit − 5 s (the stretch's reach);
-  `late`, between cast −15 and −8 s once its bulk plus trims (0.3 %/s a wand) have overrun the cast for 1 s
-  (one trimmer missing a tick doubles the estimate), so pacing kills it first; or `nosoak`, no disperser for
+  `late`, between cast −15 and −8 s once its bulk, behind every star the bulk takes first (latched, then most
+  left), has overrun the cast for 1 s, so pacing kills it first; or
+  `nosoak`, no disperser for
   2 s (a shorter gap is a phase or a re-election).
 - **Shelter**: with no hole at all, the star nearest the hold spot is paced dead before the cast.
 - Pacing and `urgent` ignore under-stars (`urgent` takes one only when nothing else is left).
-- **Bulk** (`algalon.starwindow` `under`): with no paced kill, the team takes an under-star down to its band plus
-  5% and stays on it until done (re-picked each tick, it moved every ~3 s and only matched the drain), the one
-  with most left next; a bulk starts once the work left plus 35 s reaches the cast. DoTs and channels are held on under-stars
-  (the target guard); the tick interrupts any cast or channel on one at its line, the band itself for its
-  trimmers, a paced kill's focus excepted.
-- **Trim**: up to two bots with a wand (Shoot 5019), off the team first, take each finished one into its band,
-  live from the star's own clock; the team trims only with no kill or bulk on (a member walking to the next star
-  re-cast Shoot every tick and never shot). The trimmer stops moving first, and an `OwnMovement` rule holds every
-  mover but the hide, the dodge and the exit; it yields to a meteor or dying-star dodge, and within 15 s of the
-  cast only one within 22 yd of its hole trims. The tick stops any wand on a star the team isn't killing that isn't
-  a trimmer's above its band. Running for its hole it stops; the soaker trims only well before its Dispersion,
-  and no wand starts over a channel (it would cancel it).
+- **Bulk** (`algalon.starwindow` `under`): with no paced kill, the team takes an under-star to half a tick under
+  its band's top and stays on it until done (re-picked each tick, it moved every ~3 s and only matched the drain),
+  the one with most left next; a bulk starts once the work left plus 35 s reaches the cast. A spell landing after
+  the line is 1-2% of a 4-5 tick band; one overshooting below it is released `early`. No wands: they took
+  0.2-0.3 %/s each, a damage dealer off him against the enrage, and a far star nobody could wand died after the
+  strip and killed 5. The DoTs' ticks to come count as done (they tick on once the team stops); at the line the
+  tick interrupts any cast, channel or wand on the star, a paced kill's focus excepted, and the target guard holds
+  a new DoT within 10% of it (Curse of Agony is ~6%; a nuke with a DoT rider like Fireball is a nuke). Holding
+  DoTs and channels outright, the bulk ran +1.9 %/s beyond the drain against +5 planned.
 - **Hide**: with a star under, every margin (handler and tanks included) gains 3 s, stretched so all are in
   1.5 s before the earliest drain death, capped at 4 s; the handler no longer waits on stragglers.
 - Phased bots keep 8 yd off an under-star in its last 3 s (exit and leave trigger): its hole lands under them at
@@ -539,7 +538,7 @@ drain-only health, else `chewed`, and the nearest raid member's distance; older 
 only record of how a star died, since damage rows cover players alone; `algalon.soakkit`
 (`def=<button|dispersion|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.tankdef`
 (`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
-(`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (`start|stop <star counter> <hp%>` on the
+(`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (older traces: `start|stop <star counter> <hp%>` on the
 wand); `algalon.underdrop` (`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.personal` (the button's spell name, or `healthstone`/`healing potion`);
 `algalon.nitro` (`hide` on a bot using its boots on the
 run); `algalon.handover` (`nodef` on a
@@ -582,8 +581,10 @@ counted by cause and role with humans starred. Then:
   `window` cutters on a holder at 80% or more;
 - `--stars` also: per star its plan, window, forecast against actual death, offset from the hit, who its
   explosion hit unphased and its trims; per focus span the loss beyond the drain and the switches between
-  under-stars, each release, each trimmer's starts and shots fired, with verdicts for a release within 8 s of the
-  cast, over one switch per star and 3 Shoot starts in 2 s; `--constellations` the kite runs (stages, retries, eaten) and
+  under-stars, each release, each under-star's health at the cast against its band (h% then dies h−1 to h s
+  later), the median bulk speed and, on older traces, each trimmer's starts and shots fired, with verdicts for a
+  release within 8 s of the cast, one above its band at the cast, over one switch per star and 3 Shoot starts in
+  2 s; `--constellations` the kite runs (stages, retries, eaten) and
   branch time, both from the elected handler alone, parked stretches with none eaten, a constellation stuck in the air, and
   seconds the kite was blocked (verdict from 5 s); `--bigbang` Nitro Boosts per hider;
 - `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;

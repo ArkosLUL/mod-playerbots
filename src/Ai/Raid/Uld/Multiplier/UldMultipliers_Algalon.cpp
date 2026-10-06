@@ -79,13 +79,14 @@ float AlgalonTargetGuardMultiplier::GetValue(Action* action)
             uint32 const spellId =
                 spellAction ? context->GetValue<uint32>("spell id", spellAction->getSpell())->Get() : 0;
             SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-            bool const lasts = info && (info->IsChanneled() || info->HasAura(SPELL_AURA_PERIODIC_DAMAGE) ||
-                                        info->HasAura(SPELL_AURA_PERIODIC_LEECH) ||
-                                        info->HasAura(SPELL_AURA_PERIODIC_DAMAGE_PERCENT));
+            bool const lasts = info && !info->IsChanneled() && !info->HasEffect(SPELL_EFFECT_SCHOOL_DAMAGE) &&
+                               (info->HasAura(SPELL_AURA_PERIODIC_DAMAGE) || info->HasAura(SPELL_AURA_PERIODIC_LEECH) ||
+                                info->HasAura(SPELL_AURA_PERIODIC_DAMAGE_PERCENT));
             lingering = lingers.emplace(action, lasts).first;
         }
 
-        if (lingering->second)
+        if (lingering->second &&
+            AlgalonUnderStarRoomPct(bot, target->GetGUID()) < ULDUAR_ALGALON_UNDER_DOT_ROOM_PCT)
             return 0.0f;
     }
 

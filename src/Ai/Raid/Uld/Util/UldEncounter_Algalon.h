@@ -51,7 +51,6 @@ enum UlduarAlgalonIds
     SPELL_ALGALON_ICE_BLOCK = 45438,
     // The star's drain: CountPctFromMaxHealth(1) every 1000 ms from its spawn.
     SPELL_ALGALON_COLLAPSE = 62018,
-    SPELL_ALGALON_WAND_SHOOT = 5019,
     SPELL_ALGALON_AURA_MASTERY = 31821,
     SPELL_ALGALON_DIVINE_SACRIFICE = 64205,
     // Procced by the talent on a Divine Sacrifice cast: the raid within 30 yd takes 10/20% less for 6 s, and it
@@ -233,15 +232,11 @@ constexpr int32 ULDUAR_ALGALON_UNDER_TAIL_MS = 600;
 constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_EXTRA_MS = 3000;
 constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_STRETCH_MS = 4000;
 constexpr int32 ULDUAR_ALGALON_UNDER_DEATH_LEAD_MS = 1500;
-// The team brings a star to this far above its band (% of max health), since casts in flight land after it
-// stops, and wands trim the rest. A new star joins the plan only while its work leaves the trims this long,
-// one wand's time for the whole buffer.
-constexpr float ULDUAR_ALGALON_UNDER_BULK_BUFFER_PCT = 5.0f;
-constexpr int32 ULDUAR_ALGALON_UNDER_TRIM_ALLOWANCE_MS = 18000;
-constexpr float ULDUAR_ALGALON_UNDER_TRIM_RANGE = 28.0f;
-// A wand takes off about this much, and a star gets up to this many.
-constexpr float ULDUAR_ALGALON_UNDER_TRIM_PCT_PER_SEC = 0.3f;
-constexpr size_t ULDUAR_ALGALON_UNDER_TRIMMERS_PER_STAR = 2;
+// A new star joins the plan only while the team's work on it ends this long before the cast.
+constexpr int32 ULDUAR_ALGALON_UNDER_FINISH_MS = 5000;
+// A DoT's ticks to come count as done, so a new one is held within this much of the stop line (% of max health):
+// Curse of Agony, the biggest, is ~6% of a 25-man star.
+constexpr float ULDUAR_ALGALON_UNDER_DOT_ROOM_PCT = 10.0f;
 // In this stretch before the cast a planned star whose work has no longer fitted for a second is handed to
 // pacing, which can still kill it before the cast. Later none leaves for that: pacing couldn't kill it in time
 // either.
@@ -254,7 +249,7 @@ constexpr uint32 ULDUAR_ALGALON_UNDER_SOAKER_GRACE_MS = 2000;
 constexpr uint32 ULDUAR_ALGALON_UNDER_KEEP_MS = 1200;
 constexpr int32 ULDUAR_ALGALON_UNDER_DYING_MS = 3000;
 // The team's speed until it shows one, and its walk and start per star. The bulk starts once the work left
-// plus this slack reaches the cast, so the trims have time and a low star sits exposed to splash no longer.
+// plus this slack reaches the cast, so a low star sits exposed to splash no longer.
 constexpr float ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC = 6.0f;
 constexpr int32 ULDUAR_ALGALON_UNDER_SWITCH_MS = 3000;
 constexpr int32 ULDUAR_ALGALON_UNDER_BULK_SLACK_MS = 35000;
@@ -449,6 +444,8 @@ struct AlgalonScanUnit
     bool lossMeasured = false;
     // Stars only, at the scan: health, the drain per tick and the time to the next tick.
     uint32 health = 0;
+    // Stars only: what the DoTs on it still deal, its own drain left out.
+    uint32 pendingHp = 0;
     uint32 tickHp = 0;
     int32 nextTickMs = 0;
     // Planned to die under the coming Big Bang, and its band for that, from this scan: (underLo, underHi].
@@ -533,8 +530,14 @@ struct AlgalonEncounterState
     ObjectGuid bulkStar;
     // With no hole at all, the star killed before the cast to make one.
     ObjectGuid shelterStar;
-    // Per under-star, the bots trimming it with a wand.
-    std::unordered_map<ObjectGuid, std::vector<ObjectGuid>> trimmers;
+    // The bulk's own speed, over a span on one star from past its first casts, and the cast count it was taken
+    // under. A paced kill holds nothing back and runs faster.
+    float bulkPctPerSec = 0.0f;
+    uint32 bulkMeasuredCycle = 0;
+    uint32 focusSinceMs = 0;
+    ObjectGuid bulkFrom;
+    uint32 bulkFromMs = 0;
+    float bulkFromPct = 0.0f;
     uint32 lastSmashImpactMs = 0;
 
     std::vector<AlgalonScanUnit> stars;
@@ -639,10 +642,9 @@ void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut);
 // "aura mastery" or "divine sacrifice" when this paladin covers the star about to explode, else nullptr.
 char const* GetAlgalonExplosionCover(PlayerbotAI* botAI);
 void ClaimAlgalonExplosionCover(Player* bot, char const* cover);
-// The under-star this bot trims with its wand now, or nullptr: assigned to it, above its band and not too
-// close to its bottom.
-Unit* GetAlgalonTrimStar(Player* bot);
 bool AlgalonStarPlannedUnder(Player* bot, ObjectGuid const& star);
+// How far an under-star is above its stop line, in % of max health; 100 for any other star.
+float AlgalonUnderStarRoomPct(Player* bot, ObjectGuid const& star);
 // A star dying under the running cast within `radius`: where a phased bot would come back inside a new hole.
 bool AlgalonUnderStarNear(Player* bot, float radius);
 // This bot's own button against the star about to die, when the hit would kill it, else a healthstone or a
