@@ -180,8 +180,9 @@ constexpr float ULDUAR_ALGALON_SACRIFICE_MIN_PCT = 50.0f;
 // A star this low counts as exploding whatever its slope.
 constexpr float ULDUAR_ALGALON_EXPLOSION_LOW_PCT = 3.0f;
 // Aura Mastery and Divine Guardian last 6 s, so they go up this close to a star's forecast death, or with it
-// this low: a star chewed by splash went from 4.8% to dead between two scans.
-constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS = 2000;
+// this low: a star chewed by splash went from 4.8% to dead between two scans. The slope runs about a second late
+// on a paced kill, and a 2 s lead opened one second before the explosion.
+constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS = 3500;
 constexpr float ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT = 5.0f;
 // A bot that wouldn't survive the explosion presses its own button this close to it. Under Aura Mastery the
 // largest of 87 hits was 79% of the uncovered top roll, and Divine Guardian is a flat -20%.

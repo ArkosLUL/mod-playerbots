@@ -1342,6 +1342,24 @@ struct StarSpan
 
 int32 MsUntil(uint32 when, uint32 now) { return static_cast<int32>(when - now); }
 
+// Until the last impact of a live meteor whose clearance covers the walk from `from` to `to`, or 0.
+int32 SmashOnTheWayMs(AlgalonEncounterState const& state, Position const& from, Position const& to, uint32 now)
+{
+    int32 latest = 0;
+    for (AlgalonScanUnit const& marker : state.markers)
+    {
+        auto const seen = state.markerSeenMs.find(marker.guid);
+        if (seen == state.markerSeenMs.end() ||
+            SegmentDistance(from, to.GetPositionX(), to.GetPositionY(), marker.position) >
+                ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE)
+            continue;
+
+        latest = std::max(latest, MsUntil(seen->second + ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_MS, now));
+    }
+
+    return latest;
+}
+
 // The drain's death of a star, in ms from its scan: the next tick plus a second per tick of health left.
 int32 DrainDeathMs(AlgalonScanUnit const& star)
 {
@@ -3957,7 +3975,15 @@ int32 AlgalonHideSlackMs(Player* bot)
             margin = ULDUAR_ALGALON_LAST_IN_MARGIN_MS + ULDUAR_ALGALON_HOLD_LEAVE_LEAD_MS;
     }
 
-    return remaining - walkMs - margin;
+    // A meteor landing on the way or by the hole before the bot is phased: it stays where it dodged until the
+    // impact, unless that leaves it out at the hit. The hide walked two back into one (44 k and 50 k).
+    int32 const slack = remaining - walkMs - margin;
+    int32 const impact = SmashOnTheWayMs(*state, bot->GetPosition(), shelter->position, getMSTime());
+    if (impact > slack && impact < walkMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS &&
+        remaining - impact >= walkMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS)
+        return impact;
+
+    return slack;
 }
 
 bool AlgalonShouldRunForShelter(Player* bot) { return AlgalonHideSlackMs(bot) <= 0; }

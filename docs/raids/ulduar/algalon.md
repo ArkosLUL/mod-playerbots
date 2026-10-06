@@ -103,7 +103,9 @@ every other mover off the hider and a `Block` stops Charge, Blink and Disengage.
 out of the `Exclusive` because phase-16 Dark Matter (33089, 8 static spawns on the star points) attacks
 them in the void. Until 8 yd out only the exit runs (`AlgalonLeaveFieldMultiplier`; an `Exclusive` holds
 movement alone): a Chain Heal started on phasing and a mana gem stopping the walk left 11 bots phased again.
-The exit, the hide run (not over a meteor dodge under way) and a taunt drop a movement booking another
+A hider whose walk or hole lies within 15 yd of a meteor landing before it would be phased waits where it
+dodged until the impact, unless that leaves less than its walk plus 1.5 s (the hide walked two back into one,
+44 k and 50 k). The exit, the hide run (not over a meteor dodge under way) and a taunt drop a movement booking another
 action made, since an equal priority waits it out.
 
 A bot only thinks again when its cast ends, so during the cast a cast or channel longer than its slack is held
@@ -472,8 +474,9 @@ blocks Divine Protection 2 min), nor Lay on Hands on others; a **lone holder** (
 phased; not its stacks, which linger 45 s after every swap) gets its own and the externals back outside the
 cast, never Divine Shield. The encounter's own actions cast directly and pass.
 
-**Explosion cover** (`ACTION_EMERGENCY + 1`): with a star forecast to die within 2 s (or at ≤ 5%: a chewed one
-went from 4.8% to dead between scans) and none up, one per star. Both covers and the personal buttons act only on
+**Explosion cover** (`ACTION_EMERGENCY + 1`): with a star forecast to die within 3.5 s (the slope runs ~1 s late
+on a paced kill, and a 2 s lead opened 1 s before one; both covers last 6 s), or at ≤ 5% (a chewed one went from
+4.8% to dead between scans), and none up, one per star. Both covers and the personal buttons act only on
 a star still alive: the scan lags a death by up to 250 ms, the explosion drops a bot under its line, and 11 of 21
 presses and an Aura Mastery went on stars already dead, two bots then dying at the next with theirs cooling.
 Neither acts on a star dying inside its Big Bang window (it hits the soaker alone). The paladin due to cover takes
