@@ -3821,9 +3821,14 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
     uint32 const now = getMSTime();
     bool const immunityHeld = BigBangDueWithin(*state, ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS, now);
     int32 const untilHit = AlgalonMsToBigBangHit(botAI);
+    // The top roll is the worst case: a druid died with Barkskin ready at 11.4 k, which left 13.8 k of it but
+    // only 9.6 k of the 12.0 k that landed.
+    uint32 strongest = 0;
+    float strongestLeft = std::numeric_limits<float>::max();
     for (PersonalButton const& button : PERSONAL_BUTTONS)
     {
-        if ((button.immunity && immunityHeld) || hit * button.factor - button.absorb >= health)
+        float const left = hit * button.factor - button.absorb;
+        if ((button.immunity && immunityHeld) || (left >= health && left >= strongestLeft))
             continue;
 
         uint32 const spellId = PersonalButtonId(bot, button);
@@ -3837,8 +3842,14 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
              AlgalonCooldownMs(bot, spellId) > untilHit - ULDUAR_ALGALON_SOAK_DISPERSION_MS))
             continue;
 
-        pick.spellId = spellId;
-        return pick;
+        if (left < health)
+        {
+            pick.spellId = spellId;
+            return pick;
+        }
+
+        strongest = spellId;
+        strongestLeft = left;
     }
 
     // Only where the heal lands whole and lifts the bot over the line: a full bot under it would burn its one
@@ -3846,6 +3857,9 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
     float const heal = static_cast<float>(ULDUAR_ALGALON_EXPLOSION_CONSUMABLE_HEAL);
     if (static_cast<float>(bot->GetMaxHealth()) - health >= heal && health + heal > hit)
         pick.consumable = ReadyConsumable(botAI);
+
+    if (!pick.consumable)
+        pick.spellId = strongest;
 
     return pick;
 }

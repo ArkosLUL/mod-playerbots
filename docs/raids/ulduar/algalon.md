@@ -504,7 +504,9 @@ Shamanistic Rage, Cloak of Shadows (a 90% resist, not a cut), Icebound Fortitude
 disperser's, nor one not back for the next soak), Divine Protection, Ice Block, Divine Shield. The immunities
 are skipped within 20 s of a cast. With none that saves it, a healthstone (not on the move: it stops the bot),
 else a healing potion, when 3.5 k lands whole and lifts it over the line: warriors, hunters, elemental and
-restoration shamans and holy and discipline priests have no button (14 of 37 explosion deaths). Phased and above 35%, a bot keeps Barkskin, Shadow Ward, Icebound Fortitude, Shamanistic Rage and Divine
+restoration shamans and holy and discipline priests have no button (14 of 37 explosion deaths). Failing both,
+the strongest button: the top roll is the worst case, and a druid at 11.4 k died with Barkskin ready (13.8 k
+left of the top roll, 9.6 k of the 12.0 k that landed). Phased and above 35%, a bot keeps Barkskin, Shadow Ward, Icebound Fortitude, Shamanistic Rage and Divine
 Protection (a `Block`): no explosion reaches it there, and Barkskins spent in the void were cooling at the stars
 dying after the strip.
 
