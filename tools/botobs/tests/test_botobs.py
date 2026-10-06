@@ -1403,6 +1403,39 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.swings_in_gaze(swings, gazes, [(500, 7), (2500, 7)], victims), (1, 1))
         self.assertEqual(yogg_saron.swings_in_gaze(swings, gazes, [(2500, 8)], victims), (1, 0))
 
+    def test_keepers_read_off_the_passives_in_script_order(self):
+        self.assertEqual(yogg_saron.keepers_from_auras([62702, 62670, 62670, 12345]), ["Freya", "Thorim"])
+        self.assertEqual(yogg_saron.keepers_from_auras([]), [])
+
+    def test_drain_life_spans_pair_each_apply_with_its_remove(self):
+        rows = [(1000, 7, 1, 0), (1300, 8, 2, 0), (1400, 7, 1, 1), (6300, 8, 2, 1), (9000, 7, 3, 0)]
+        # 7 on 1 cut after 400 ms, 8 on 2 ran its 5 s, 7 on 3 never closed
+        self.assertEqual(yogg_saron.drain_life_spans(rows), [400, 5000])
+
+    def test_guardian_power_splits_full_and_weakened(self):
+        self.assertEqual(yogg_saron.guardian_power_shares([100.0, 95.0, 50.0, 9.9]), (0.5, 0.25))
+        self.assertEqual(yogg_saron.guardian_power_shares([]), (0.0, 0.0))
+
+    def test_in_phase3_position_takes_the_station_or_a_target_in_reach(self):
+        melee_spot = yogg_saron.PHASE_3_MELEE_SPOT
+        ranged_spot = yogg_saron.PHASE_3_RANGED_SPOT
+        self.assertTrue(yogg_saron.in_phase3_position("melee", melee_spot, True, None))
+        self.assertTrue(yogg_saron.in_phase3_position("ranged", ranged_spot, False, None))
+        # below the platform never counts, even on the station's x and y
+        self.assertFalse(yogg_saron.in_phase3_position("melee", (melee_spot[0], melee_spot[1], 240.0), False, None))
+        # 60 yd off the station: in reach of a Crusher 30 yd away for ranged, not while walking, not for melee
+        away = (ranged_spot[0] + 60.0, ranged_spot[1], ranged_spot[2])
+        crusher = (away[0] + 30.0, away[1], away[2], 8.0)
+        self.assertTrue(yogg_saron.in_phase3_position("ranged", away, False, crusher))
+        self.assertFalse(yogg_saron.in_phase3_position("ranged", away, True, crusher))
+        self.assertFalse(yogg_saron.in_phase3_position("melee", away, False, crusher))
+
+    def test_skull_ticks_read_what_the_victim_was_doing(self):
+        rows = {1: [[0, 1, 0, 0, 0, 0, 100, 0, 0, 1], [2000, 1, 0, 0, 0, 0, 100, 0, 55, 0]],
+                2: [[0, 2, 0, 0, 0, 0, 100, 0, 0, 0]]}
+        states = yogg_saron.skull_tick_states([(1000, 1), (2500, 1), (1000, 2), (1000, 3)], rows)
+        self.assertEqual(states, {"walking": 1, "still with a target": 1, "still without": 1})
+
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
         self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))

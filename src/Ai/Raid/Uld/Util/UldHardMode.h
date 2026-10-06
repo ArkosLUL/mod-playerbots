@@ -79,14 +79,14 @@ bool IsXT002HardModeActive(PlayerbotAI* botAI);
 bool IsXT002HeartbreakActive(Player* bot, Unit* xt002);
 
 // Yogg-Saron: hard mode is the reduced-Keeper achievement ladder - the raid frees fewer than 4 Keepers
-// before the pull, losing that Keeper's support. The handling is tuned for the hardest single-Keeper
-// case, Thorim only: with Freya absent there are no Sanity Wells, so sanity is a one-way drain.
+// before the pull, losing that Keeper's support. Which ones are up is read from the instance, see
+// YoggThorimKeeperActive; this config flag only tags the trace.
 bool IsYoggSaronHardModeActive(PlayerbotAI* botAI);
 
 // Whether Thorim is among the Keepers the raid freed, read from the instance's persistent watchers
 // mask. Which Keepers are up is chosen in-instance, so unlike the hard-mode switch this cannot come
-// from config. It decides whether Immortal Guardians can be brought to Weakened for Thorim's Titanic
-// Storm to execute, or have to fall back to the cheat instakill.
+// from config. With him, Titanic Storm executes Weakened Immortal Guardians. Without him they can't die,
+// so phase 3 keeps them low in a pile and drags Shadow Beacon marked ones clear.
 bool YoggThorimKeeperActive(PlayerbotAI* botAI);
 
 #endif

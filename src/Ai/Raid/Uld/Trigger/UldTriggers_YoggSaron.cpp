@@ -330,17 +330,21 @@ bool YoggSaronSetDpsPriorityTrigger::IsActive()
 
 bool YoggSaronDarkVolleyTrigger::IsActive()
 {
-    std::vector<char const*> const spells = YoggSaronInterruptSpells(bot);
-    if (spells.empty())
+    if (!YoggSaronCanInterrupt(bot))
         return false;
 
     // Answer for this bot, not for the raid. The node sits at ACTION_EMERGENCY + 1, so a bot that
     // claims the tick and only then finds every caster out of reach has spent the whole tick on
     // nothing - 63 of 92 attempts in one pull.
-    for (Unit* caster : GetYoggSaronDarkVolleyCasters(botAI))
-        for (char const* spell : spells)
+    for (Unit* caster : GetYoggSaronInterruptCasters(botAI))
+    {
+        if (YoggSaronInterruptClaimedByOther(bot, caster))
+            continue;
+
+        for (char const* spell : YoggSaronInterruptSpellsFor(bot, caster))
             if (botAI->CanCastSpell(spell, caster))
                 return true;
+    }
 
     return false;
 }
@@ -697,6 +701,41 @@ bool YoggSaronLunaticGazeTrigger::IsActive()
         return true;
 
     return yoggsaron->HasAura(SPELL_LUNATIC_GAZE_YS);
+}
+
+bool YoggSaronBeaconDragTrigger::IsActive()
+{
+    // Class first: the drag pick sweeps from Yogg.
+    bool const mayDrag =
+        PlayerbotAI::IsTank(bot) ||
+        (!PlayerbotAI::IsHeal(bot) && (bot->getClass() == CLASS_PALADIN || bot->getClass() == CLASS_DEATH_KNIGHT));
+    if (!mayDrag || !botAI->CanMove() || YoggSaronOnBrainLevel(bot))
+        return false;
+
+    return YoggSaronBeaconDragGuardian(botAI, false) != nullptr;
+}
+
+bool YoggSaronPhase3LustTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_SHAMAN || bot->HasAura(SPELL_SATED) || bot->HasAura(SPELL_EXHAUSTION))
+        return false;
+
+    if (!botAI->CanCastSpell("heroism", bot) && !botAI->CanCastSpell("bloodlust", bot))
+        return false;
+
+    // Sated stops a second cast on anyone the first reached, not a second shaman spending its own on the
+    // rest while the first is still up.
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && (member->HasAura(SPELL_HEROISM_SHAMAN) || member->HasAura(SPELL_BLOODLUST_SHAMAN)))
+                return false;
+        }
+    }
+
+    return YoggSaronPhase3LustReady(botAI);
 }
 
 bool YoggSaronPhase3PositioningTrigger::IsActive()

@@ -93,6 +93,18 @@ enum UlduarYoggSaronIds
     SPELL_LUNATIC_GAZE_SKULL = 64168,  // 64167 on a Laughing Skull fires this every second, 30 yd
     SPELL_SHADOW_NOVA_SARA = 65719,  // only cast from a Guardian's JustDied, so the cast is its death
     SPELL_SHATTERED_ILLUSION = 64173,  // stun on every platform tentacle once a brain room is cleared
+    SPELL_SHADOW_BEACON = 64465,  // 10 s mark on a Guardian, entry swapped to 36064 while it lasts
+    // Landed by Yogg's missile right after the mark ends: 37,500 a second for 20 s (25), on every ally
+    // within 20 yd of the marked Guardian when it lands. One application, not an area aura.
+    SPELL_EMPOWERING_SHADOWS_10 = 64468,
+    SPELL_EMPOWERING_SHADOWS_25 = 64486,
+    SPELL_GUARDIAN_DRAIN_LIFE = 64159,  // 5 s channel below 85% health, heals the Guardian 10x the drain
+    SPELL_GUARDIAN_DRAIN_LIFE_H = 64160,
+    SPELL_HEROISM_SHAMAN = 32182,
+    SPELL_BLOODLUST_SHAMAN = 2825,
+    SPELL_SATED = 57724,
+    SPELL_EXHAUSTION = 57723,
+    ITEM_VALANYR = 46017,  // Val'anyr, Hammer of Ancient Kings
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
     // One per illusion, opened by the Brain the moment the last Influence Tentacle in that room dies.
     // The entries run in the same order as ACTION_ILLUSION_DRAGONS/ICECROWN/STORMWIND.
@@ -435,11 +447,14 @@ constexpr float ULDUAR_YOGG_SARON_FACING_TOLERANCE = 0.1f;
 // Headings tried when turning a bot with no target off the skulls, 22.5 degrees apart.
 constexpr uint32 ULDUAR_YOGG_SARON_SKULL_HEADINGS = 16;
 
-// Facing a skull is decided by where the bot stands, not by what it points at: set facing,
-// AttackAction and PlayerbotAI::CastSpell each turn it back at its target inside the same tick. So the
-// answer is a sidestep around the tentacle, and 15 yd is enough of one - one pull measured a median
-// 4.3 yd from the tentacle against 22.4 yd to the skull, with the two inside 90 degrees of each other
-// in 459 of 640 samples.
+// How far a bot with a target may turn off it to get a skull out of its front half: 40 degrees, under
+// set facing's 45, so nothing turns it back. AttackAction and CastSpell allow 60.
+constexpr float ULDUAR_YOGG_SARON_SKULL_TARGET_TURN = 0.6981f;
+constexpr float ULDUAR_YOGG_SARON_SKULL_TARGET_STEP = 0.0873f;
+
+// A skull straight behind the target can't be turned from, only walked round, and 15 yd is enough of a
+// sidestep: one pull measured a median 4.3 yd from the tentacle against 22.4 yd to the skull, with the
+// two inside 90 degrees of each other in 459 of 640 samples.
 constexpr float ULDUAR_YOGG_SARON_ILLUSION_FACING_SEARCH_RADIUS = 15.0f;
 
 // The sweep needs a circle to ring outward from, and a bot has no business standing under a skull
@@ -536,6 +551,22 @@ constexpr uint32 ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS = 1000;
 // action drops the ones it cannot reach, and a short list here would hide a cast from a bot who could.
 constexpr float ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS = 40.0f;
 
+// How long one bot's kick holds a cast for itself, so the next bot spends its cooldown elsewhere.
+constexpr uint32 ULDUAR_YOGG_SARON_INTERRUPT_CLAIM_MS = 1500;
+
+// Phase 3 without Thorim: how far from Yogg to look for Shadow Beacon marked Guardians, and how long a
+// dragger holds one after the mark ends if the heal hasn't shown up. Yogg's missile goes out the moment
+// the mark ends and flies at 30 yd/s, 0.3-1.1 s from the drag spots.
+constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_SEARCH_RADIUS = 70.0f;
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_HEAL_WAIT_MS = 3000;
+constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_ARRIVED_RADIUS = 3.0f;
+
+// Heroism waits for the raid to be fighting in its phase 3 spots: this share of the living group at its
+// station or standing in reach of its target, or the fallback after phase 3 starts. 80% came 16-20 s in
+// on two pulls and 40 s in on a third, where ranged were still out on leftover tentacles.
+constexpr float ULDUAR_YOGG_SARON_LUST_POSITION_SHARE = 0.8f;
+constexpr uint32 ULDUAR_YOGG_SARON_LUST_FALLBACK_MS = 30000;
+
 // Everything the raid has to clear out of an illusion room before the Brain can be touched: the
 // Influence Tentacle and the six entries Creature::UpdateEntry disguises it as. Nothing else in the
 // rooms is a target - the dragons, Garona, King Llane and the Immolated Champion are faction 35 and
@@ -584,6 +615,12 @@ extern const Position ULDUAR_YOGG_SARON_P1_RANGED_SPOT;
 extern const Position ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
+
+// Where a Shadow Beacon marked Guardian is walked to without Thorim: north and south of the melee spot,
+// 27.3 yd from it (PATHFIND_NORMAL, on the floor by navprobe), 33.0 and 28.5 yd from Yogg's middle,
+// 33-39 yd from the ranged spot and over 40 from every Sanity Well.
+extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH;
+extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH;
 
 // Yogg-Saron phase read, and the one place the encounter is recognised at all. Yogg is not reliably
 // on a bot's threat list, so it scans for the creature instead of going through "find target", and
@@ -687,8 +724,19 @@ std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI);
 // no bearing on which skulls matter.
 std::vector<Position> GetYoggSaronSkullsInRange(PlayerbotAI* botAI);
 
-// Whether standing at (x, y) and facing (targetX, targetY) leaves every one of `skulls` outside the
-// front 180 degrees, which is the exact filter spell_yogg_saron_lunatic_gaze picks its targets with.
+// How far one heading is off another, 0 to pi either way round.
+float YoggSaronHeadingGap(float from, float to);
+
+// Skulls in the front half of a heading from (x, y): what Lunatic Gaze's HasInArc(pi) would hit.
+uint32 YoggSaronSkullsAhead(std::vector<Position> const& skulls, float x, float y, float heading);
+
+// The heading within ULDUAR_YOGG_SARON_SKULL_TARGET_TURN of `targetBearing` with the fewest skulls ahead,
+// nearest the target on a tie, and how many that is.
+uint32 YoggSaronAngledSkullHeading(std::vector<Position> const& skulls, float x, float y, float targetBearing,
+                                   float& heading);
+
+// Whether a bot at (x, y) attacking (targetX, targetY) has a heading it may keep that leaves every one
+// of `skulls` outside its front 180 degrees, the exact filter spell_yogg_saron_lunatic_gaze uses.
 bool YoggSaronFacingClearOfSkulls(std::vector<Position> const& skulls, float x, float y, float targetX,
                                   float targetY);
 
@@ -766,14 +814,24 @@ bool YoggSaronReprisalHold(PlayerbotAI* botAI);
 // Nearest living group healer in the bot's own illusion room, or null.
 Player* YoggSaronRoomHealer(PlayerbotAI* botAI);
 
-// Guardians casting Dark Volley right now, for the interrupt node. Shared between trigger and action
-// so the two cannot disagree about what is being kicked.
-std::vector<Unit*> GetYoggSaronDarkVolleyCasters(PlayerbotAI* botAI);
+// What the interrupt node kicks: phase 1 Guardians casting Dark Volley, and in phase 3 Immortal
+// Guardians channelling Drain Life. Shared between trigger and action so the two cannot disagree about
+// what is being kicked.
+std::vector<Unit*> GetYoggSaronInterruptCasters(PlayerbotAI* botAI);
 
 // Interrupts this bot can aim, in the order the action tries them, empty for a class with none.
 // Avenger's Shield is left out - it picks its own target and cannot be pointed at a named Guardian.
 std::vector<char const*> YoggSaronInterruptSpells(Player* bot);
 bool YoggSaronCanInterrupt(Player* bot);
+
+// The same list for one caster. An Immortal Guardian's immunity set takes silences but not interrupts,
+// so Strangulate, Silencing Shot and Arcane Torrent would only burn their cooldowns on one.
+std::vector<char const*> YoggSaronInterruptSpellsFor(Player* bot, Unit* caster);
+
+// Whether another bot's kick already holds this cast, and taking it for this bot. One kick per cast:
+// Drain Life comes round every ~14.5 s per Guardian and the raid has about one kick a second.
+bool YoggSaronInterruptClaimedByOther(Player* bot, Unit* caster);
+void ClaimYoggSaronInterrupt(Player* bot, Unit* caster);
 
 // Crushers mid Diminish Power channel, not in its 1.5 s cast. 64148 on the tentacle breaks the channel
 // on a taken melee swing or melee-class spell, and only once it is channelling, so a Judgement during
@@ -943,9 +1001,25 @@ bool YoggSaronBodyDetour(Player* bot, Position const& destination, Position& way
 // line to it crosses the body. Latch a walk on the spot, never on this: the waypoint moves with the bot.
 Position YoggSaronBodyRoute(Player* bot, Position const& spot);
 
-// An Immortal Guardian still worth a taunt or a hit: alive and not Weakened. A Weakened one has no
-// Empowered stacks left and only Titanic Storm can finish it.
+// An Immortal Guardian still worth a taunt or a hit: alive, not Weakened and not being dragged off a
+// Shadow Beacon. A Weakened one has no Empowered stacks left and only Titanic Storm can finish it.
 bool IsYoggSaronHoldableGuardian(Unit* unit);
+
+// Phase 3 without Thorim. The marked Guardian this bot drags clear of Yogg and the pile, or nullptr. With
+// `claim` it also takes one: bot tanks first while another tank holds the pile, then ret paladins and
+// dps Death Knights, by GUID, never a bot some unmarked Guardian is hitting, since that one would
+// follow it out. The claim lasts until the heal has landed.
+Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim);
+
+// Whether the bot holds a drag claim. A read of the claim map only, no sweep.
+bool YoggSaronBeaconDragging(Player* bot);
+
+// The drag spot nearer the bot.
+Position const& YoggSaronBeaconDragSpot(Player* bot);
+
+// Whether a shaman should cast Heroism or Bloodlust now: phase 3, and the raid at its stations or in
+// reach of its targets, see ULDUAR_YOGG_SARON_LUST_POSITION_SHARE, or the fallback has run out.
+bool YoggSaronPhase3LustReady(PlayerbotAI* botAI);
 bool YoggSaronHoldableGuardianWithin(Player* bot, float radius);
 
 // A holdable Guardian among the bot's nearest npcs whose victim is not a tank, so a taunt is owed.

@@ -22,6 +22,7 @@
 #include "Position.h"
 #include "RaidObs.h"
 #include "UldEncounter_YoggSaron.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
 #include "RtiValue.h"
@@ -67,24 +68,22 @@ bool IsYoggSaronFocusedGuardian(Unit* unit)
     return entry == NPC_GUARDIAN_OF_YS || entry == NPC_IMMORTAL_GUARDIAN || entry == NPC_MARKED_IMMORTAL_GUARDIAN;
 }
 
-// How far one heading is off another, 0 to pi either way round.
-float HeadingGap(float from, float to)
+// The taunt a tank class points at one Guardian. None of them needs facing.
+bool CastYoggSaronTaunt(PlayerbotAI* botAI, Unit* guardian)
 {
-    float const gap = Position::NormalizeOrientation(from - to);
-
-    return gap > static_cast<float>(M_PI) ? 2.0f * static_cast<float>(M_PI) - gap : gap;
-}
-
-// Skulls in the front half of a heading from (x, y): what Lunatic Gaze's HasInArc(pi) would hit.
-uint32 SkullsAhead(std::vector<Position> const& skulls, float x, float y, float heading)
-{
-    uint32 ahead = 0;
-    for (Position const& skull : skulls)
-        if (HeadingGap(std::atan2(skull.GetPositionY() - y, skull.GetPositionX() - x), heading) <
-            static_cast<float>(M_PI) / 2.0f)
-            ++ahead;
-
-    return ahead;
+    switch (botAI->GetBot()->getClass())
+    {
+        case CLASS_WARRIOR:
+            return botAI->CastSpell("taunt", guardian);
+        case CLASS_PALADIN:
+            return botAI->CastSpell("hand of reckoning", guardian);
+        case CLASS_DEATH_KNIGHT:
+            return botAI->CastSpell("dark command", guardian);
+        case CLASS_DRUID:
+            return botAI->CastSpell("growl", guardian);
+        default:
+            return false;
+    }
 }
 
 }  // namespace
@@ -626,7 +625,7 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool p
         // Shadow Beacon swaps a guardian's entry to the marked one, then pours 750,000 of healing into
         // it over 20 s, 176% of its own max health, and into Yogg too when he is within 20 yd of it.
         // Focusing it is the only way it reaches Weakened before that lands, and the entry swap makes it
-        // a free signal.
+        // a free signal. Only with Thorim, see IsAllowedTarget.
         case NPC_MARKED_IMMORTAL_GUARDIAN:
             return 1;
         case NPC_IMMORTAL_GUARDIAN:
@@ -687,10 +686,18 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
         case NPC_CORRUPTOR_TENTACLE:
             allowed = !phaseThreeMelee();
             break;
+        // Without Thorim a marked one is healed to full whatever the raid does, and it's being dragged
+        // clear of the pile, so every hit on it is wasted.
+        case NPC_MARKED_IMMORTAL_GUARDIAN:
+            if (!YoggThorimKeeperActive(botAI))
+            {
+                allowed = false;
+                break;
+            }
+            [[fallthrough]];
         // Below 10% it is Weakened, and nothing but Thorim's Titanic Storm can finish one, so holding
         // there is a dead tick for the rest of the fight. Above it, only once a tank leads on threat.
         case NPC_IMMORTAL_GUARDIAN:
-        case NPC_MARKED_IMMORTAL_GUARDIAN:
             allowed = candidate->GetHealthPct() > 10 &&
                       (!phaseThreeMelee() ||
                        candidate->GetExactDist2d(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) <=
@@ -1024,16 +1031,24 @@ int32 YoggSaronDarkVolleyInterruptAction::GetInterrupterIndex()
 
 bool YoggSaronDarkVolleyInterruptAction::CastClassInterrupt(Unit* target)
 {
-    for (char const* spell : YoggSaronInterruptSpells(bot))
+    if (YoggSaronInterruptClaimedByOther(bot, target))
+        return false;
+
+    for (char const* spell : YoggSaronInterruptSpellsFor(bot, target))
+    {
         if (botAI->CanCastSpell(spell, target) && botAI->CastSpell(spell, target))
+        {
+            ClaimYoggSaronInterrupt(bot, target);
             return true;
+        }
+    }
 
     return false;
 }
 
 bool YoggSaronDarkVolleyInterruptAction::Execute(Event /*event*/)
 {
-    std::vector<Unit*> casters = GetYoggSaronDarkVolleyCasters(botAI);
+    std::vector<Unit*> casters = GetYoggSaronInterruptCasters(botAI);
     if (casters.empty())
         return false;
 
@@ -1380,16 +1395,6 @@ bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
     if (skulls.empty())
         return false;
 
-    // Never while there is something to kill. An illusion room is a 60 s race for eight Influence
-    // Tentacles, there is no way out until they are dead, and everyone still inside when Induce
-    // Madness lands loses all 100 Sanity - against 1750 damage and 2 Sanity a second for looking at a
-    // skull. A bot cannot face away from what it is attacking in any case: set facing, AttackAction
-    // and CastSpell each turn it back within the same tick. Turning anyway cost one pull six melee,
-    // who stood on one spot flipping between two headings for 48 s apiece with a tentacle 78 yd away.
-    Unit* target = AI_VALUE(Unit*, "current target");
-    if (target && target->IsAlive())
-        return false;
-
     // Judged on every skull in range, not the ones in arc. Turning off the in-arc ones brought the
     // others round in front, and melee in a reprisal hold flipped between two headings four times a
     // second. Fewest ahead wins, nearest the current heading on a tie, and only a strict gain turns.
@@ -1397,23 +1402,47 @@ bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
     float const y = bot->GetPositionY();
     float const current = bot->GetOrientation();
 
-    uint32 const now = SkullsAhead(skulls, x, y, current);
+    uint32 const now = YoggSaronSkullsAhead(skulls, x, y, current);
+
+    // With a target, only inside 40 degrees of it, where set facing and the casts leave the bot alone. That
+    // clears a skull off to the side: one ranged bot stood 15 s with one at 85 degrees and its target at
+    // -10, and lost 56 Sanity. A skull behind the target is the illusion facing walk's. Turning further
+    // got turned straight back, six melee flipping between two headings for 48 s apiece.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsAlive())
+    {
+        float heading = current;
+        uint32 const fewest = YoggSaronAngledSkullHeading(skulls, x, y, bot->GetAngle(target), heading);
+        if (fewest < now && YoggSaronHeadingGap(current, heading) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+        {
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "yogg.skullturn", "angled");
+
+            bot->SetFacingTo(heading);
+        }
+
+        return false;
+    }
+
     uint32 fewest = now;
     float heading = current;
     for (uint32 i = 0; i < ULDUAR_YOGG_SARON_SKULL_HEADINGS; ++i)
     {
         float const candidate = 2.0f * static_cast<float>(M_PI) * i / ULDUAR_YOGG_SARON_SKULL_HEADINGS;
-        uint32 const ahead = SkullsAhead(skulls, x, y, candidate);
+        uint32 const ahead = YoggSaronSkullsAhead(skulls, x, y, candidate);
         if (ahead < fewest || (ahead == fewest && ahead < now &&
-                               HeadingGap(current, candidate) < HeadingGap(current, heading)))
+                               YoggSaronHeadingGap(current, candidate) < YoggSaronHeadingGap(current, heading)))
         {
             fewest = ahead;
             heading = candidate;
         }
     }
 
-    if (fewest >= now || HeadingGap(current, heading) <= ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+    if (fewest >= now || YoggSaronHeadingGap(current, heading) <= ULDUAR_YOGG_SARON_FACING_TOLERANCE)
         return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.skullturn", "free");
 
     bot->SetFacingTo(heading);
 
@@ -1440,7 +1469,7 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "yogg.gaze", "healer");
 
-        if (!bot->isMoving() && HeadingGap(bot->GetOrientation(), away) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+        if (!bot->isMoving() && YoggSaronHeadingGap(bot->GetOrientation(), away) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
             bot->SetFacingTo(away);
 
         return false;
@@ -1465,11 +1494,23 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
             if (RaidObs::Active())
                 RaidObs::NoteDerived(bot, "yogg.gaze", "angled");
 
-            if (HeadingGap(bot->GetOrientation(), heading) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+            if (YoggSaronHeadingGap(bot->GetOrientation(), heading) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
                 bot->SetFacingTo(heading);
 
             return false;
         }
+    }
+
+    // A beacon dragger is walking a Guardian clear, and a turn on the move ends the walk.
+    if (YoggSaronBeaconDragging(bot))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.gaze", "drag");
+
+        if (!bot->isMoving() && YoggSaronHeadingGap(bot->GetOrientation(), away) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+            bot->SetFacingTo(away);
+
+        return false;
     }
 
     // No taunt needs facing, so the tank turns away and still leaves guardian control its tick. Claiming
@@ -1479,7 +1520,7 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "yogg.gaze", "tankfree");
 
-        if (!bot->isMoving() && HeadingGap(bot->GetOrientation(), away) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+        if (!bot->isMoving() && YoggSaronHeadingGap(bot->GetOrientation(), away) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
             bot->SetFacingTo(away);
 
         return false;
@@ -1491,6 +1532,58 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
     bot->SetFacingTo(away);
 
     return true;
+}
+
+bool YoggSaronBeaconDragAction::Execute(Event /*event*/)
+{
+    Unit* guardian = YoggSaronBeaconDragGuardian(botAI, true);
+    if (!guardian)
+        return false;
+
+    if (guardian->GetVictim() != bot)
+    {
+        if (!CastYoggSaronTaunt(botAI, guardian))
+            return false;
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.beacondrag", "taunt");
+
+        return true;
+    }
+
+    Position const& spot = YoggSaronBeaconDragSpot(bot);
+    if (bot->GetExactDist2d(spot) > ULDUAR_YOGG_SARON_BEACON_DRAG_ARRIVED_RADIUS &&
+        YoggSaronWalkMakingProgress(botAI, "beacondrag", spot))
+    {
+        Position const destination = YoggSaronBodyRoute(bot, spot);
+        MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ(),
+               false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+        return true;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.beacondrag", "hold");
+
+    if (AI_VALUE(Unit*, "current target") != guardian)
+        Attack(guardian);
+
+    return true;
+}
+
+bool YoggSaronPhase3LustAction::Execute(Event /*event*/)
+{
+    for (char const* spell : {"heroism", "bloodlust"})
+    {
+        if (botAI->CanCastSpell(spell, bot) && botAI->CastSpell(spell, bot))
+        {
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "yogg.lust", "cast");
+
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
@@ -1668,22 +1761,7 @@ bool YoggSaronGuardianControlAction::ControlPhaseOne()
     return Attack(hold);
 }
 
-bool YoggSaronGuardianControlAction::Taunt(Unit* guardian)
-{
-    switch (bot->getClass())
-    {
-        case CLASS_WARRIOR:
-            return botAI->CastSpell("taunt", guardian);
-        case CLASS_PALADIN:
-            return botAI->CastSpell("hand of reckoning", guardian);
-        case CLASS_DEATH_KNIGHT:
-            return botAI->CastSpell("dark command", guardian);
-        case CLASS_DRUID:
-            return botAI->CastSpell("growl", guardian);
-        default:
-            return false;
-    }
-}
+bool YoggSaronGuardianControlAction::Taunt(Unit* guardian) { return CastYoggSaronTaunt(botAI, guardian); }
 
 bool YoggSaronGuardianControlAction::Defend(Unit* guardian)
 {

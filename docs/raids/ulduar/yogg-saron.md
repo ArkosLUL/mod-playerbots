@@ -572,7 +572,8 @@ Guardians rode down in lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero i
 228,396 over 16 hits and killed all eight melee in **16 ms**. Four earlier single novas were all
 survived. Brain level: Influence Tentacle →
 nearest other illusion add → the Brain. Boss room:
-**leftover Guardian of Yogg-Saron** → **Marked** Immortal Guardian (36064) → Immortal Guardian (33988) →
+**leftover Guardian of Yogg-Saron** → **Marked** Immortal Guardian (36064, only with Thorim; without him
+never a target) → Immortal Guardian (33988) →
 a Constrictor holding somebody → Crusher (**ranged only**, below; phase 3 ranged take a leftover one first) → Constrictor → Corruptor → Yogg. Phase 3 melee skip Constrictor and
 Corruptor and take a Guardian only within 20 yd of the phase 3 melee spot
 (`ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE`).
@@ -1109,8 +1110,9 @@ against 2 for the click meant `holding` did not imply clickable. Portals taken p
 
 **The brain team is melee first, then exactly one healer, then ranged; tanks never.** The room is a
 60 s race on foot, and it doubles as the Crush answer above. Order within each band by GUID so every
-bot derives the same team from its own seat, except healers, which go priest, druid, shaman, paladin
-first: `PlayerbotAI::CanCastSpell` refuses a cast-time spell while moving, and a holy paladin moved
+bot derives the same team from its own seat, except healers: Val'anyr's wielder (46017, its heals
+shield) first — item level can't pick it, Tree and the next priest averaged 227.9 and 228.0 — then
+priest, druid, shaman, paladin: `PlayerbotAI::CanCastSpell` refuses a cast-time spell while moving, and a holy paladin moved
 31-62% of its room time with 82% of its heals on a cast time. The trigger and the action used to build the list
 differently — one skipped the master, the other did not — so they disagreed about who was on it;
 `GetYoggSaronBrainTeam` is the single owner now, and benches low Sanity (see the Sanity Well walk).
@@ -1388,15 +1390,19 @@ resolver, the walk into the room and the exit — while `set facing` (37), `Atta
 `PlayerbotAI::CastSpell` each turned the bot back at its target inside the same tick. A bot flipped
 between two orientations about once a second and stood on one coordinate for **48 s** with an
 Influence Tentacle 78 yd away; **six of nine melee** went that way in one pull, four of them caught by
-Induce Madness at 263.9 s and dead at 323.9 s. It now yields outright while the bot has a live target
-— fighting is worth more than 1750 damage and 2 Sanity a second, and a bot cannot face away from what
-it is attacking in any case — corrects a heading only past `ULDUAR_YOGG_SARON_FACING_TOLERANCE`
+Induce Madness at 263.9 s and dead at 323.9 s. With a live target it turns only within 40° of it
+(`YoggSaronAngledSkullHeading`, 5° steps, strict gain, probe `yogg.skullturn` `angled`), inside set
+facing's 45° so nothing turns it back: a skull off to the side clears that way, one behind the target is
+the facing walk's. Yielding outright left a ranged bot 15 s with a skull at +85° and its target at −10°,
+64 → 8 Sanity in one Icecrown visit; 29-34% of skull ticks hit a still bot with a target, 62-67% a
+walking one. It corrects a heading only past `ULDUAR_YOGG_SARON_FACING_TOLERANCE`
 (0.1 rad, ~6°), and never claims the tick. The 30 yd read is measured plainly too:
 `GetCreatureListWithEntryInGrid` is bounding-radius inclusive, and **164 of 235** probe flips in one
 pull had no skull inside 30 yd at all.
 
-**Where the bot stands is the only thing that can hold a facing.** The heading is not the bot's to
-keep, but the side of the tentacle it fights from is, and the geometry is generous: with the
+**Where the bot stands holds a facing the turn can't.** `YoggSaronFacingClearOfSkulls` asks the same
+40° question, so the walk never fights a turn that already fixed the spot. The side of the tentacle it
+fights from is the bot's to pick, and the geometry is generous: with the
 tentacle and the nearest skull inside 90° of each other in **459 of 640** samples — median
 separation 72° — the bot was nearer the tentacle in **73%** of those, a median 4.3 yd against 22.4
 yd to the skull, so a sidestep of a few yards swings the skull behind. `yogg-saron illusion facing`
@@ -1528,7 +1534,11 @@ per role, turns on the spot below, brain spot picks and per wave exits decided o
 room (not in the wave that ends phase 2); `--sanity` prints each bot's trips below
 (down > lowest, then what came back), the bench, Insane split into caught below and drained to 0,
 and Rebirths on a corpse with no Sanity; `--phase3` each phase 2 leftover's fate and Diminish
-Power's uptime.
+Power's uptime; `--phases` the Keepers freed, off their passives; `--brain` skull gaze ticks split
+walking / still with a target / still without, and `yogg.skullturn`; `--phase3` Heroism against when
+80% of the raid was first in position (the trigger's test), Guardian samples at 90%+ health and
+Weakened, Drain Life channels cut inside 1.5 s or run full, each beacon's nearest other Guardian, and
+`yogg.beacondrag`.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
@@ -1673,8 +1683,9 @@ it for as long as it lasted. It now stands down on the walk latch.
 
 ## Reduced Keepers
 
-The raid frees fewer than 4 Keepers, losing that Keeper's support. Tuned for the hardest single-Keeper
-case, **Thorim only**. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK` — preferred over Sara's
+The raid frees fewer than 4 Keepers, losing that Keeper's support: each passive is +10% damage done,
+plus Freya +20% healing, Mimiron +20% speed, Thorim +20% health and Titanic Storm. Freya-only rooms ran
+4-9 s slower than a three-Keeper kill. Handled cases: **Thorim only** and **Freya only**. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK` — preferred over Sara's
 `GetData(DATA_GET_KEEPERS_COUNT)`, which gives a count only, because reading the mask confirms
 **which** Keeper. It is a **raid choice, unrelated to the `ulduarYoggSaronHardMode` config flag**.
 
@@ -1702,12 +1713,43 @@ raid's whole job is Weakened. Observed: one kill's 45 guardians each cast Weaken
 snapshots at 10% or less. Thorim's casts never reach the recorder, so `--phase3` counts that as the
 Storm's kill.
 
-**A phase 3 without Thorim is therefore a forced wipe** — accepted, not a defect: the price of playing
-it straight everywhere. Guardians spawn one per 10 s with no cap and a live one never
-times out (the `TEMPSUMMON_CORPSE_TIMED_DESPAWN, 5000` is a *corpse* lifetime); `SPELL_EMPOWERED`
-gives +180% damage per stack at `healthPct / 10` capped at 9, so an untouched guardian swings at
-×17.2; and anything under 85% starts Drain Life — 16,665 damage and **166,650 self-heal, 39.2% of its
-own max health**, every ~14.5 s on a *random* player within 40 yd with no LOS and no threat component.
+**Without Thorim nothing kills them, and it is still winnable** — real raids kill with no Keeper at
+all. Guardians spawn one per 10 s with no cap and a live one never times out (the
+`TEMPSUMMON_CORPSE_TIMED_DESPAWN, 5000` is a *corpse* lifetime); `SPELL_EMPOWERED` gives +180% damage
+per stack at `healthPct / 10` capped at 9, so an untouched guardian swings at ×17.2; and anything under
+85% starts Drain Life (64160, 5 s channel) — 16,665 damage and **166,650 self-heal, 31.6% of its own
+max health**, every ~14.5 s on a *random* player within 40 yd with no LOS and no threat component. So
+the phase is: **keep them piled and low, interrupt Drain Life, drag beacons clear, Heroism** — the guides'
+plan. The pile needs no area code of its own: a bot on a piled Guardian fires its class area attacks
+(`AoeTrigger`, 3 within 8 yd of the target), and those reach Yogg too, since `Spell.cpp`'s area check
+adds the target's combat reach (Yogg's 30) for a player-controlled caster only. Two Freya-only wipes:
+Guardians at 90%+ health in 51% / 64% of samples and Weakened 13% / 1%, Yogg 12.7% / 3.8% of the
+raid's damage, the bot tank dead at +63 / +67 s.
+
+- **Marked Guardians are not dps targets** (`IsAllowedTarget`): the heal resets them whatever the raid
+  does. With Thorim they stay tier 1.
+- **`yogg-saron beacon drag`** (`ACTION_RAID + 4`, over guardian control). The heal is one application:
+  the 10 s mark ends, the entry reverts to 33988 and Yogg's 64467 missile (30 yd/s) sets it off
+  0.3-1.1 s later on every ally within 20 yd of the Guardian. The pile tank can't separate a marked one,
+  the pile follows whoever holds it, so a second bot taunts it off and walks it to the nearer drag spot:
+  north (1995.0, 4.0, 326.731) or south (1995.0, −50.0, 325.688), navprobe PATHFIND_NORMAL 27.3 yd from
+  the melee spot, 33.0 / 28.5 yd from Yogg, over 40 yd from every well. Claims (`beaconDrags`): bot
+  tanks while another tank lives, then non-heal paladins and Death Knights, by GUID, taunt off cooldown,
+  **never a bot an unmarked Guardian is hitting** — that one would follow it out. It attacks only once
+  standing, since `Attack`'s facing turn ends a walk; releases on the heal aura or 3 s after the mark
+  ends. A claimed Guardian isn't holdable, so guardian control leaves it, and the gaze node leaves a
+  dragger's tick free (`drag`). Probed as `yogg.beacondrag`. **The human tank holds the pile at the melee
+  spot.** Before it: marked Guardians 5-12 yd from the pile and 15-19 from Yogg, +2.04% / +2.57%.
+- **Drain Life is kicked on purpose.** The interrupt node's casters include Immortal Guardians
+  channelling 64159/64160 in phase 3; immunity set `-286` has SILENCE but not INTERRUPT, so Strangulate,
+  Silencing Shot and Arcane Torrent are dropped for them; `interruptClaims` holds a cast for one kicker
+  for 1.5 s. By chance alone, 6-7 of 14 were cut inside 1.5 s and 5 ran full.
+- **`yogg-saron phase 3 lust`** (`ACTION_RAID + 2`). `ShamanBoostTrigger` and the burst hold both want a
+  boss target, and phase 3 shamans are on Guardians and tentacles: none in one pull, +39.7 s and +54.2 s
+  in others. It casts once 80% of the living group stands at its phase 3 station (15 yd) or still in
+  reach of a live target — nobody below z 300, Heroism reaches 100 yd — or 30 s in; not while Sated or
+  Exhausted, nor with Heroism or Bloodlust already up. 80% came at +16.4 / +19.5 / +39.6 s. Probed as
+  `yogg.lust` and `yogg.lustready` (`position` / `timeout`).
 
 **Shadow Beacon heals the marked guardians, and Yogg when they stand near him.** It marks 3 guardians
 in 25-man every 45 s, and 10 s later each casts Empowering Shadows (64486): **37,500 a second for 20 s
@@ -1719,7 +1761,7 @@ Empowered's +50% scale per stack lets a full-health guardian swing from a median
 the tank at the P3 melee spot, 19.0 yd from Yogg in 3D, three marked guardians stood 11-16 yd from him
 and healed him **+3.84%, 1.69M of 44.0M**, over exactly those 20 s, against −0.98% from the raid in
 the 56 s before. Only a tank spot ~34 yd out keeps them clear, and melee cannot reach Yogg from there,
-so the spot stays and marked guardians die first; `--phase3` reads Yogg's health across every beacon.
+so the spot stays: with Thorim marked guardians die first, without him they are dragged; `--phase3` reads Yogg's health across every beacon.
 
 `yogg-saron guardian control` is **not** gated on Thorim, or on hard mode. Hard mode means *fewer*
 Keepers, so demanding both asked for exactly the case where Thorim is least likely to be there — and

@@ -2,7 +2,7 @@
 """Score a Yogg-Saron pull from a RaidObs trace: phases, clouds, portals, the brain room, Crush.
 
     yogg_saron.py <file>            every section
-    yogg_saron.py <file> --phases   phase timeline and what happened before the pull
+    yogg_saron.py <file> --phases   phase timeline, the Keepers freed, and what happened before the pull
     yogg_saron.py <file> --clouds   cloud-orbit exposure per role, and who summoned each Guardian
     yogg_saron.py <file> --fervor   Sara's Fervor runs that came back into the nova, novas on holders,
                                     Guardians only runners summoned
@@ -15,10 +15,14 @@
                                     who reflect and gaze killed and the reprisal holds, and where
                                     Induce Madness caught whoever it charmed and what their way out
                                     lost, Nitro Boosts, the walk to the Brain per role, turns on the
-                                    spot below, brain spot picks, exits decided outside the brain room
-    yogg_saron.py <file> --phase3   Immortal Guardians, who pulled them off the tanks, the bot tank's
-                                    targets and taunts, swings on the raid during a gaze, beacon heals,
-                                    Lunatic Gaze, phase 2 leftovers and Diminish Power
+                                    spot below, brain spot picks, exits decided outside the brain room,
+                                    what bots were doing when a skull's gaze hit them
+    yogg_saron.py <file> --phase3   Heroism against when the raid was in position, Immortal Guardians,
+                                    who pulled them off the tanks, how much of the time they were at full
+                                    power or Weakened, Drain Life channels and how fast they were cut,
+                                    the bot tank's targets and taunts, swings on the raid during a gaze,
+                                    beacon heals and how far marked Guardians were from Yogg and the rest,
+                                    beacon drags, Lunatic Gaze, phase 2 leftovers and Diminish Power
     yogg_saron.py <file> --crush    Crush, who took it and what each cone was aimed at, the body's
                                     knockback and who walked into it, Death Rays
     yogg_saron.py <file> --sanity   Sanity minima, each trip below, who sat a wave out, where it went,
@@ -372,6 +376,25 @@ PHASE_NAMES = {0: "idle", 1: "phase 1", 2: "phase 2", 3: "phase 3"}
 NPC_IMMORTAL_GUARDIAN = 33988
 PHASE_3_MELEE_SPOT = (1998.5377, -22.90317, 324.8895)
 PHASE_3_MELEE_GUARDIAN_RANGE = 20.0
+PHASE_3_RANGED_SPOT = (2018.7628, -18.896868, 327.07245)
+PHASE_3_STATION_RADIUS = 15.0
+# The module's Heroism gate in phase 3: this share of the living raid at its station, or standing still
+# in reach of a live target. Reach is the bots' spell distance past both combat reaches, a player's 1.5
+# and the target's, which only Yogg and the Crusher have, or melee range.
+LUST_POSITION_SHARE = 0.8
+SPELL_DISTANCE = 28.5
+PLAYER_COMBAT_REACH = 1.5
+MELEE_REACH = 5.0
+COMBAT_REACH = {NPC_YOGG_SARON: 30.0, NPC_CRUSHER_TENTACLE: 8.0}
+SPELL_LUSTS = {32182: "Heroism", 2825: "Bloodlust"}
+# An Immortal Guardian's 5 s channel, 10 and 25. A kick that lands inside the first 1.5 s keeps most of
+# its 166,650 heal off.
+SPELL_GUARDIAN_DRAIN_LIFE = (64159, 64160)
+DRAIN_CUT_MS = 1500
+DRAIN_FULL_MS = 4500
+# Each Keeper's passive on the raid, in the boss script's Keeper order. Which ones show up is the only
+# record of which were freed.
+KEEPER_PASSIVES = {62670: "Freya", 62650: "Hodir", 62671: "Mimiron", 62702: "Thorim"}
 SPELL_LUNATIC_GAZE_YOGG = 64163
 LUNATIC_GAZE_MS = 4000
 SPELL_SHADOW_BEACON = 64465
@@ -530,6 +553,9 @@ def show_phases(trace: Trace) -> None:
     for phase, start, stop in spans:
         print(f"  {PHASE_NAMES.get(phase, phase):8} {clock(start):>9} -> {clock(stop):>9}"
               f"  ({(stop - start) / 1000.0:6.1f} s)")
+
+    keepers = keepers_from_auras(rec.get("sp") for rec in trace.of("aura") if rec.get("sp") in KEEPER_PASSIVES)
+    print(f"\n  Keepers freed           : {', '.join(keepers) or 'none seen'}")
 
     # How late the raid noticed. t=0 is the `pull src=bossstate` row, which the recorder writes when
     # the boss state goes IN_PROGRESS - that is inside Sara's InitFight, so t=0 is the pull itself.
@@ -1545,6 +1571,19 @@ def show_brain(trace: Trace) -> None:
                     f" {out_of_range} of {len(near)} flips with none inside {LAUGHING_SKULL_RADIUS:.0f}")
         print(f"  skulls in arc    : {dict(skulls)}{tail}")
 
+    # A walk faces its path, so only a still bot can turn off a skull.
+    ticks = [(rec["t"], rec.get("d", 0)) for rec in trace.of("dmg")
+             if rec.get("sp") == SPELL_LUNATIC_GAZE_SKULL and rec.get("d") in roster_guids(trace)]
+    if ticks:
+        states = skull_tick_states(ticks, snapshot_rows(trace, {victim for _, victim in ticks}))
+        total = sum(states.values()) or 1
+        print(f"  skull gaze ticks : {len(ticks)}, "
+              + ", ".join(f"{name} {states[name] * 100 // total}%"
+                          for name in ("walking", "still with a target", "still without")))
+    turns = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.skullturn"))
+    if turns:
+        print(f"  yogg.skullturn   : {dict(turns)}")
+
     reach = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.tentacle"))
     if reach:
         print(f"  tentacle reach   : {dict(reach)}")
@@ -2552,6 +2591,67 @@ def swings_in_gaze(swings: list[tuple[int, int, int]], gazes: list[tuple[int, in
     return inside, taunted
 
 
+def keepers_from_auras(spell_ids) -> list[str]:
+    """The freed Keepers, in the boss script's order, from the spell ids of auras seen on the raid."""
+    seen = set(spell_ids)
+    return [name for spell, name in KEEPER_PASSIVES.items() if spell in seen]
+
+
+def drain_life_spans(rows: list[tuple[int, int, int, int]]) -> list[int]:
+    """How long each Drain Life channel ran, in ms, from its aura rows on the victim as (t, caster,
+    victim, removed) in time order. A channel still open at the end is left out."""
+    opened: dict[tuple[int, int], int] = {}
+    spans = []
+    for when, caster, victim, removed in rows:
+        if not removed:
+            opened[(caster, victim)] = when
+        elif (caster, victim) in opened:
+            spans.append(when - opened.pop((caster, victim)))
+    return spans
+
+
+def guardian_power_shares(health: list[float]) -> tuple[float, float]:
+    """Of Immortal Guardian health samples, the share at 90% or more, all nine Empowered stacks, and the
+    share under 10%, Weakened."""
+    if not health:
+        return 0.0, 0.0
+    return (sum(1 for hp in health if hp >= 90) / len(health),
+            sum(1 for hp in health if hp < 10) / len(health))
+
+
+def in_phase3_position(role: str, where: tuple[float, float, float], moving: bool,
+                       target: tuple[float, float, float, float] | None) -> bool:
+    """The module's Heroism test for one raider: on the platform and inside its phase 3 station, or
+    standing still in reach of a live target given as (x, y, z, combat reach)."""
+    if where[2] < BRAIN_LEVEL_Z:
+        return False
+    spot = PHASE_3_RANGED_SPOT if role == "ranged" else PHASE_3_MELEE_SPOT
+    if math.dist(where[:2], spot[:2]) <= PHASE_3_STATION_RADIUS:
+        return True
+    if moving or not target:
+        return False
+    if role in ("ranged", "heal"):
+        return math.dist(where, target[:3]) - target[3] - PLAYER_COMBAT_REACH <= SPELL_DISTANCE
+    return math.dist(where, target[:3]) - target[3] <= MELEE_REACH
+
+
+def skull_tick_states(ticks: list[tuple[int, int]], rows: dict[int, list[list]]) -> collections.Counter:
+    """What each skull gaze tick, as (t, victim), found its victim doing on its last snapshot_rows row
+    at or before it: walking, still with a target, or still without one."""
+    states: collections.Counter = collections.Counter()
+    for when, victim in ticks:
+        row = row_before(rows.get(victim, []), when)
+        if not row:
+            continue
+        if row[9]:
+            states["walking"] += 1
+        elif row[8]:
+            states["still with a target"] += 1
+        else:
+            states["still without"] += 1
+    return states
+
+
 def held_still(rows: list[list], when: int, radius: float) -> float:
     """Seconds the bot had been standing within `radius` of where it was at `when`."""
     spot = None
@@ -3279,6 +3379,36 @@ def show_phase3(trace: Trace) -> None:
     print(f"  {clock(start)} -> {clock(stop)}, roster alive until {clock(alive_end)}, {len(deaths)} deaths,"
           f" first {first_death}")
 
+    # Heroism against the module's own gate for it, so a late one reads as either the gate or the cast.
+    placed_at = None
+    for snap in snaps:
+        units = {row[0]: row for row in snap.get("u", [])}
+        living = placed = 0
+        for guid, row in units.items():
+            if guid not in roster or row[5] <= 0 or len(row) <= 8:
+                continue
+            living += 1
+            aim = units.get(row[7])
+            target = ((aim[1], aim[2], aim[3], COMBAT_REACH.get(trace.entries.get(row[7]), 0.0))
+                      if aim and aim[5] > 0 else None)
+            placed += in_phase3_position(trace.role(guid), (row[1], row[2], row[3]), bool(row[8]), target)
+        if living and placed >= LUST_POSITION_SHARE * living:
+            placed_at = snap["t"]
+            break
+    ready = (f"{LUST_POSITION_SHARE:.0%} in position at +{(placed_at - start) / 1000:.1f} s" if placed_at
+             else f"never {LUST_POSITION_SHARE:.0%} in position")
+    lusts = sorted((rec["t"], rec.get("s"), rec.get("sp")) for rec in trace.of("cast")
+                   if rec.get("sp") in SPELL_LUSTS and rec.get("s") in roster and start <= rec["t"] <= stop)
+    if lusts:
+        when, caster, spell = lusts[0]
+        print(f"  lust               : {SPELL_LUSTS[spell]} by {trace.name(caster)} at +{(when - start) / 1000:.1f} s,"
+              f" {ready}")
+    else:
+        print(f"  lust               : none in phase 3, {ready}")
+    lust_gate = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.lustready"))
+    if lust_gate:
+        print(f"    yogg.lustready   : {dict(lust_gate)}")
+
     if yogg and rows.get(yogg):
         line = []
         for when in range(start, alive_end + 1, 10000):
@@ -3348,6 +3478,18 @@ def show_phase3(trace: Trace) -> None:
         print(f"    first off a tank : {len(flips)} of {len(guardians)}, median"
               f" +{statistics.median(seconds for seconds, _ in flips):.1f} s,"
               f" to {dict(collections.Counter(role for _, role in flips))}")
+    # Without Thorim nothing kills them, so how much of the time they spent at full power is the phase.
+    full, weak = guardian_power_shares([row[6] for guid in guardians for row in rows.get(guid, [])
+                                        if start <= row[0] <= alive_end and row[6] > 0])
+    print(f"    power            : {full:.0%} of Guardian samples at 90% health or more, {weak:.0%} Weakened")
+    drains = sorted((rec["t"], rec.get("s", 0), rec.get("d", 0), rec.get("r", 0)) for rec in trace.of("aura")
+                    if rec.get("sp") in SPELL_GUARDIAN_DRAIN_LIFE and start <= rec["t"] <= stop)
+    spans = drain_life_spans(drains)
+    if spans:
+        cut = sum(1 for ms in spans if ms <= DRAIN_CUT_MS)
+        ran = sum(1 for ms in spans if ms >= DRAIN_FULL_MS)
+        print(f"    Drain Life       : {len(spans)} channels, {cut} cut inside {DRAIN_CUT_MS / 1000:.1f} s,"
+              f" {ran} ran the full 5 s")
 
     # A bot tank's target, and whether its taunt was even available when a Guardian swung at the raid.
     swings = [rec for rec in melee_hits if trace.role(rec.get("d")) != "tank"]
@@ -3393,8 +3535,24 @@ def show_phase3(trace: Trace) -> None:
         after = row_before(rows.get(yogg, []), group[0] + EMPOWERING_SHADOWS_MS) if yogg else None
         change = f"{after[6] - before[6]:+.2f}%" if before and after else "-"
         inside = sum(1 for yards in reach if yards <= EMPOWERING_SHADOWS_RADIUS)
+        # The heal lands on every Guardian within 20 yd of a marked one too, which resets the pile.
+        marked = {rec.get("s") for rec in casters}
+        others = []
+        for guid in guardians - marked:
+            row = row_before(rows.get(guid, []), group[0])
+            if row and row[6] > 0 and group[0] - row[0] <= 1500:
+                others.append(row[2:4])
+        nearest = []
+        for rec in casters:
+            spot = at(trace, rec.get("s"), rec["t"])
+            if spot and others:
+                nearest.append(min(math.dist(spot[:2], other) for other in others))
+        pile = f", nearest other Guardian {', '.join(f'{yards:.1f}' for yards in nearest)} yd" if nearest else ""
         print(f"    {clock(group[0])}  {len(casters)} heals, Guardians {', '.join(f'{yards:.1f}' for yards in reach)} yd"
-              f" from Yogg ({inside} inside {EMPOWERING_SHADOWS_RADIUS:.0f}), Yogg {change} over the next 20 s")
+              f" from Yogg ({inside} inside {EMPOWERING_SHADOWS_RADIUS:.0f}){pile}, Yogg {change} over the next 20 s")
+    drags = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beacondrag"))
+    if drags:
+        print(f"    yogg.beacondrag  : {dict(drags)}")
 
     def inside_gaze(when: int) -> bool:
         return any(first <= when <= last for first, last in gazes)
@@ -3680,7 +3838,7 @@ def show_novas(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("phases", "phase timeline and the pre-pull window", show_phases),
+    ("phases", "phase timeline, the Keepers freed, and the pre-pull window", show_phases),
     ("clouds", "cloud-orbit exposure per role", show_clouds),
     ("fervor", "Sara's Fervor runs, novas on holders, Guardians runners summoned", show_fervor),
     ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them", show_novas),
@@ -3689,9 +3847,10 @@ SECTIONS = (
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
     ("tentacles", "platform tentacle stock, Shattered Illusion stuns, leftovers at phase 3", show_tentacles),
     ("brain", "brain room, the Brain, skulls, reprisal deaths and holds, Induce Madness, stalled walks,"
-     " walk speed to the Brain, turns on the spot, exits decided outside the brain room", show_brain),
-    ("phase3", "Immortal Guardians, swings on the raid during a gaze, beacon heals, Lunatic Gaze,"
-     " phase 2 leftovers", show_phase3),
+     " walk speed to the Brain, turns on the spot, exits decided outside the brain room, skull gaze ticks",
+     show_brain),
+    ("phase3", "Heroism, Immortal Guardians, their power and Drain Life, swings on the raid during a gaze,"
+     " beacon heals and drags, Lunatic Gaze, phase 2 leftovers", show_phase3),
     ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
     ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),
 )

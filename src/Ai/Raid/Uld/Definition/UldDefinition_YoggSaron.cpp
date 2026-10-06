@@ -113,6 +113,11 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Node<YoggSaronLaughingSkullTrigger, YoggSaronLaughingSkullAction>(ACTION_EMERGENCY);
     e.Node<YoggSaronPhase3PositioningTrigger, YoggSaronPhase3PositioningAction>(ACTION_RAID);
     e.Node<YoggSaronGuardianControlTrigger, YoggSaronGuardianControlAction>(ACTION_RAID + 3);
+    // Over guardian control: a bot tank only drags with no unmarked Guardian of its own, and guardian
+    // control would walk it straight back to the pile.
+    e.Node<YoggSaronBeaconDragTrigger, YoggSaronBeaconDragAction>(ACTION_RAID + 4);
+    // Over the dps resolver and the rotation, under every dodge. One instant cast.
+    e.Node<YoggSaronPhase3LustTrigger, YoggSaronPhase3LustAction>(ACTION_RAID + 2);
     e.Node<YoggSaronSanityConservationTrigger, YoggSaronSanityConservationAction>(ACTION_RAID + 5);
     e.Node<YoggSaronSqueezeEscapeTrigger, YoggSaronSqueezeEscapeAction>(ACTION_RAID + 1);
     // Above the sanity conservation retreat: cutting somebody out of 7.5k a second beats walking

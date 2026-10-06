@@ -435,6 +435,28 @@ public:
     bool Execute(Event event) override;
 };
 
+// Taunts its Shadow Beacon marked Guardian off the pile and walks it to the nearer drag spot, holding
+// it there until the heal has landed. Attacks only once standing: the turn to face would end the walk.
+class YoggSaronBeaconDragAction : public AttackAction
+{
+public:
+    static constexpr char const* Name = "yogg-saron beacon drag action";
+
+    YoggSaronBeaconDragAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+class YoggSaronPhase3LustAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron phase 3 lust action";
+
+    YoggSaronPhase3LustAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class YoggSaronPhase3PositioningAction : public MovementAction
 {
 public:
@@ -446,7 +468,8 @@ public:
 };
 
 // The tank holds a stack spot and taunts loose Guardians onto it. Phase 3 does it so the raid cleaves
-// Immortal Guardians to Weakened for Thorim's Titanic Storm; phase 1 does it because a Guardian's
+// Immortal Guardians to Weakened, where Thorim's Titanic Storm executes them or, without him, they hit
+// for no bonus; phase 1 does it because a Guardian's
 // death location is the phase, and one that dies out among the casters neither hurts Sara nor spares
 // the back line.
 class YoggSaronGuardianControlAction : public AttackAction

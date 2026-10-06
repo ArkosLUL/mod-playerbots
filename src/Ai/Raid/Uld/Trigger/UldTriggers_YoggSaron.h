@@ -64,9 +64,9 @@ private:
     bool parked = false;
 };
 
-// Dark Volley is a 1.5s cast hitting everything within 35 yd, so it cannot be walked out of. The
-// always-on class interrupts only ever look at the bot's current target and caught under a third of
-// them.
+// Dark Volley is a 1.5s cast hitting everything within 35 yd, so it cannot be walked out of, and Drain
+// Life gives an Immortal Guardian back three Empowered stacks. The always-on class interrupts only ever
+// look at the bot's current target and caught under a third of the volleys and half the drains.
 class YoggSaronDarkVolleyTrigger : public YoggSaronTrigger
 {
 public:
@@ -328,6 +328,29 @@ public:
     bool IsActive() override;
 };
 
+// Phase 3 without Thorim: a Shadow Beacon marked Guardian heals every Guardian and Yogg within 20 yd of it
+// once its mark ends, and the pile tank can't separate it, the whole pile follows whoever holds it. So a
+// second bot taunts it off and walks it clear. See YoggSaronBeaconDragGuardian for who.
+class YoggSaronBeaconDragTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron beacon drag trigger";
+
+    YoggSaronBeaconDragTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// A shaman's own Heroism trigger wants a boss target, and in phase 3 shamans are on Guardians and
+// tentacles: one pull never cast it, another 40 s in. This one waits for the raid to be in place instead.
+class YoggSaronPhase3LustTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron phase 3 lust trigger";
+
+    YoggSaronPhase3LustTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 class YoggSaronPhase3PositioningTrigger : public YoggSaronTrigger
 {
 public:
@@ -337,8 +360,8 @@ public:
     bool IsActive() override;
 };
 
-// The tank taunts loose Immortal Guardians (P3) to the melee stack so they get cleaved to Weakened and
-// Thorim's Titanic Storm executes them.
+// The tank taunts loose Immortal Guardians (P3) to the melee stack so they get cleaved to Weakened, where
+// Thorim's Titanic Storm executes them or, without him, they hit for no bonus.
 class YoggSaronGuardianControlTrigger : public YoggSaronTrigger
 {
 public:
