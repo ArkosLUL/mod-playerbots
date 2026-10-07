@@ -127,6 +127,11 @@ uint32 NextMagicDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind,
     return NextDefensive(botAI, bot, noteKind, false, false, needMs);
 }
 
+uint32 NextPhysicalDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, uint32 needMs)
+{
+    return NextDefensive(botAI, bot, noteKind, true, false, needMs);
+}
+
 uint8 BestMagicDefensiveCut(PlayerbotAI* botAI, Player* bot, uint32 needMs)
 {
     bool running = false;

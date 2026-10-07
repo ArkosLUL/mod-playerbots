@@ -84,6 +84,8 @@ const std::vector<Position> ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS = {
     Position(2016.95f, -39.03f, 327.678f), Position(2010.26f, -0.55f, 327.291f)};
 const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH = Position(1983.68f, 13.27f, 327.472f);
 const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH = Position(1993.62f, -62.23f, 327.625f);
+const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH = Position(1986.0f, 7.63f, 326.797f);
+const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH = Position(1994.44f, -55.65f, 326.394f);
 
 namespace
 {
@@ -159,6 +161,39 @@ struct YoggSaronEncounterState
     // The side this beacon's draggers share, set at the first claim and cleared with the last.
     bool beaconDragSideSet = false;
     bool beaconDragNorth = true;
+    // Released drags, keyed by the Guardian: who dragged it and when the heal let it go. The dragger walks
+    // it back to the tank from here, and a hunter feigns off one that stayed on it.
+    struct BeaconReturn
+    {
+        ObjectGuid dragger;
+        uint32 releasedMs = 0;
+    };
+    std::unordered_map<ObjectGuid, BeaconReturn> beaconReturns;
+    // One external per victim of a healed Guardian, keyed by the victim.
+    std::unordered_map<ObjectGuid, uint32> beaconExternalClaims;
+
+    // Deafening Roar, see YoggSaronTickRoar. The claim is keyed by the roar's cast start.
+    bool roarExpected = false;
+    uint32 lastRoarMs = 0;
+    uint32 roarClaimKey = 0;
+    ObjectGuid roarClaimOwner;
+
+    // Per brain-room bot, latched in YoggSaronTickBrainHold. A bot that started the finish stays on it
+    // until that Induce Madness ends, so a tentacle turning up later can't stop it short.
+    enum BrainHoldMode : uint8
+    {
+        BRAIN_HOLD_NONE,
+        BRAIN_HOLD_DOTS,
+        BRAIN_HOLD_FULL,
+        BRAIN_HOLD_FINISH,
+    };
+    struct BrainHold
+    {
+        BrainHoldMode mode = BRAIN_HOLD_NONE;
+        uint32 seenMs = 0;
+        uint32 finishCastEndMs = 0;
+    };
+    std::unordered_map<ObjectGuid, BrainHold> brainHold;
 
     // Which bot's kick holds which cast, keyed by the caster, and when it was taken.
     std::unordered_map<ObjectGuid, std::pair<ObjectGuid, uint32>> interruptClaims;
@@ -209,6 +244,9 @@ struct YoggSaronPassReads
 
     bool leaveBrainLevelRead = false;
     bool leaveBrainLevel = false;
+
+    bool platformTentacleRead = false;
+    bool platformTentacleAlive = false;
 
     bool skullsInArcRead = false;
     std::vector<ObjectGuid> skullsInArc;
@@ -815,6 +853,7 @@ YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI)
     }
 
     state.phase3StartMs = 0;
+    state.lastRoarMs = 0;
 
     bool const portalsUp =
         bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS, true) != nullptr;
@@ -1384,6 +1423,8 @@ uint32 YoggSaronTauntSpellId(Player* player)
             return 56222;
         case CLASS_DRUID:
             return 6795;
+        case CLASS_HUNTER:
+            return SPELL_DISTRACTING_SHOT;
         default:
             return 0;
     }
@@ -1400,6 +1441,8 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
     if (!YoggSaronInPhase3(botAI) || YoggThorimKeeperActive(botAI))
     {
         state.beaconDrags.clear();
+        state.beaconReturns.clear();
+        state.beaconExternalClaims.clear();
         state.beaconDragSideSet = false;
         return nullptr;
     }
@@ -1420,6 +1463,9 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
             done = guardian->HasAura(SPELL_EMPOWERING_SHADOWS_25) ||
                    guardian->HasAura(SPELL_EMPOWERING_SHADOWS_10) ||
                    getMSTimeDiff(it->second.markEndedMs, now) >= ULDUAR_YOGG_SARON_BEACON_HEAL_WAIT_MS;
+
+            if (done && dragger)
+                state.beaconReturns[it->first] = {dragger->GetGUID(), now};
         }
 
         if (done && dragger && RaidObs::Active())
@@ -1427,6 +1473,11 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
 
         it = done ? state.beaconDrags.erase(it) : std::next(it);
     }
+
+    for (auto it = state.beaconReturns.begin(); it != state.beaconReturns.end();)
+        it = getMSTimeDiff(it->second.releasedMs, now) > ULDUAR_YOGG_SARON_BEACON_RETURN_MS
+                 ? state.beaconReturns.erase(it)
+                 : std::next(it);
 
     if (state.beaconDrags.empty())
         state.beaconDragSideSet = false;
@@ -1468,6 +1519,9 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
 
     std::vector<Player*> tanks;
     std::vector<Player*> backups;
+    // Last resort, for a mark nobody with a real taunt is left for: one pull had three marks and one
+    // dragger, and both undragged Guardians healed to full in the pile. Distracting Shot is only 6 s.
+    std::vector<Player*> hunters;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -1489,12 +1543,16 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
         else if (!PlayerbotAI::IsHeal(member) &&
                  (member->getClass() == CLASS_PALADIN || member->getClass() == CLASS_DEATH_KNIGHT))
             backups.push_back(member);
+        else if (member->getClass() == CLASS_HUNTER)
+            hunters.push_back(member);
     }
 
     auto const byGuid = [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); };
     std::sort(tanks.begin(), tanks.end(), byGuid);
     std::sort(backups.begin(), backups.end(), byGuid);
+    std::sort(hunters.begin(), hunters.end(), byGuid);
     tanks.insert(tanks.end(), backups.begin(), backups.end());
+    tanks.insert(tanks.end(), hunters.begin(), hunters.end());
     std::sort(marked.begin(), marked.end(),
               [](Creature* left, Creature* right) { return left->GetGUID() < right->GetGUID(); });
 
@@ -1555,6 +1613,261 @@ Position const& YoggSaronBeaconDragSpot(Player* bot)
 {
     return YoggSaronStateFor(bot).beaconDragNorth ? ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH
                                                   : ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH;
+}
+
+Position const& YoggSaronBeaconHunterSpot(Player* bot)
+{
+    return YoggSaronStateFor(bot).beaconDragNorth ? ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH
+                                                  : ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH;
+}
+
+Unit* YoggSaronBeaconReturning(Player* bot)
+{
+    uint32 const now = getMSTime();
+    for (auto const& [guid, release] : YoggSaronStateFor(bot).beaconReturns)
+    {
+        if (release.dragger != bot->GetGUID() ||
+            getMSTimeDiff(release.releasedMs, now) > ULDUAR_YOGG_SARON_BEACON_RETURN_MS)
+            continue;
+
+        Creature* guardian = ObjectAccessor::GetCreature(*bot, guid);
+        if (guardian && guardian->IsAlive() && guardian->GetVictim() == bot)
+            return guardian;
+    }
+
+    return nullptr;
+}
+
+namespace
+{
+// Still marked, or carrying the heal, and past the danger line.
+bool IsYoggSaronHealedGuardian(Unit* unit)
+{
+    if (!unit || !unit->IsAlive() || unit->GetHealthPct() < ULDUAR_YOGG_SARON_BEACON_DANGER_HEALTH_PCT)
+        return false;
+
+    uint32 const entry = unit->GetEntry();
+    if (entry == NPC_MARKED_IMMORTAL_GUARDIAN)
+        return true;
+
+    return entry == NPC_IMMORTAL_GUARDIAN &&
+           (unit->HasAura(SPELL_EMPOWERING_SHADOWS_25) || unit->HasAura(SPELL_EMPOWERING_SHADOWS_10));
+}
+}  // namespace
+
+Unit* YoggSaronHealedGuardianOn(PlayerbotAI* /*botAI*/, Player* victim)
+{
+    if (!victim)
+        return nullptr;
+
+    // The victim's own attacker set, no sweep: this is asked from block predicates.
+    for (Unit* attacker : victim->getAttackers())
+        if (attacker->GetVictim() == victim && IsYoggSaronHealedGuardian(attacker))
+            return attacker;
+
+    return nullptr;
+}
+
+Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    uint32 const now = getMSTime();
+
+    Player* best = nullptr;
+    bool bestDragger = false;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
+            !YoggSaronHealedGuardianOn(botAI, member))
+            continue;
+
+        bool const dragger = YoggSaronBeaconDragging(member) || YoggSaronBeaconReturning(member);
+        if (PlayerbotAI::IsTank(member) && !dragger)
+            continue;
+
+        auto const claim = state.beaconExternalClaims.find(member->GetGUID());
+        if (claim != state.beaconExternalClaims.end() &&
+            getMSTimeDiff(claim->second, now) < ULDUAR_YOGG_SARON_BEACON_EXTERNAL_CLAIM_MS)
+            continue;
+
+        // A bot presses its own first. A human gets one whatever they hold, since nothing says they'll press it.
+        if (IsYoggSaronBot(member) && (RunningTankDefensive(member, true, 0) || ReadyTankDefensive(member, true)))
+            continue;
+
+        if (!best || (dragger && !bestDragger) ||
+            (dragger == bestDragger && member->GetHealthPct() < best->GetHealthPct()))
+        {
+            best = member;
+            bestDragger = dragger;
+        }
+    }
+
+    return best;
+}
+
+bool ClaimYoggSaronBeaconExternal(PlayerbotAI* botAI, Player* victim)
+{
+    if (!victim)
+        return false;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(botAI->GetBot());
+    uint32 const now = getMSTime();
+
+    auto const claim = state.beaconExternalClaims.find(victim->GetGUID());
+    if (claim != state.beaconExternalClaims.end() &&
+        getMSTimeDiff(claim->second, now) < ULDUAR_YOGG_SARON_BEACON_EXTERNAL_CLAIM_MS)
+        return false;
+
+    state.beaconExternalClaims[victim->GetGUID()] = now;
+
+    return true;
+}
+
+bool YoggSaronBeaconImmunityHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_PALADIN && bot->getClass() != CLASS_MAGE)
+        return false;
+
+    return YoggSaronHealedGuardianOn(botAI, bot) != nullptr;
+}
+
+bool YoggSaronBeaconHunterHold(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    return bot->getClass() == CLASS_HUNTER && YoggSaronBeaconDragging(bot);
+}
+
+namespace
+{
+// Until the next roar, 0 once it's due or late. Max with no phase 3 clock yet.
+uint32 YoggSaronMsToRoar(YoggSaronEncounterState const& state, uint32 now)
+{
+    if (!state.phase3StartMs)
+        return std::numeric_limits<uint32>::max();
+
+    uint32 const next = state.lastRoarMs ? state.lastRoarMs + ULDUAR_YOGG_SARON_ROAR_PERIOD_MS
+                                         : state.phase3StartMs + ULDUAR_YOGG_SARON_ROAR_FIRST_MS;
+
+    return next > now ? next - now : 0;
+}
+}  // namespace
+
+bool YoggSaronRoarExpected(PlayerbotAI* botAI) { return YoggSaronStateFor(botAI->GetBot()).roarExpected; }
+
+bool YoggSaronRoarCasting(PlayerbotAI* botAI)
+{
+    Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+    if (!yogg || !yogg->IsAlive() || !yogg->HasUnitState(UNIT_STATE_CASTING))
+        return false;
+
+    Spell* cast = yogg->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+
+    return cast && cast->m_spellInfo->Id == SPELL_DEAFENING_ROAR;
+}
+
+Player* YoggSaronRoarPaladin(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    Group* group = bot->GetGroup();
+    if (!state.roarExpected || !group)
+        return nullptr;
+
+    uint32 const msToRoar = YoggSaronRoarCasting(botAI) ? 0 : YoggSaronMsToRoar(state, getMSTime());
+
+    struct Candidate
+    {
+        Player* player;
+        bool ready;
+        bool dragging;
+        bool aura;
+    };
+    std::vector<Candidate> candidates;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!IsYoggSaronBot(member) || member->getClass() != CLASS_PALADIN || !member->IsAlive() ||
+            member->GetMap() != bot->GetMap() ||
+            member->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT ||
+            !member->HasSpell(SPELL_AURA_MASTERY) || !member->HasSpell(SPELL_CONCENTRATION_AURA))
+            continue;
+
+        candidates.push_back({member, member->GetSpellCooldownDelay(SPELL_AURA_MASTERY) <= msToRoar,
+                              YoggSaronBeaconDragging(member) || YoggSaronBeaconReturning(member) != nullptr,
+                              member->HasAura(SPELL_CONCENTRATION_AURA, member->GetGUID())});
+    }
+
+    auto const best = std::min_element(candidates.begin(), candidates.end(),
+                                       [](Candidate const& left, Candidate const& right)
+                                       {
+                                           return std::make_tuple(!left.ready, left.dragging, !left.aura,
+                                                                  left.player->GetGUID()) <
+                                                  std::make_tuple(!right.ready, right.dragging, !right.aura,
+                                                                  right.player->GetGUID());
+                                       });
+
+    return best == candidates.end() ? nullptr : best->player;
+}
+
+bool YoggSaronRoarAuraHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_PALADIN)
+        return false;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    if (!state.roarExpected ||
+        (YoggSaronMsToRoar(state, getMSTime()) > ULDUAR_YOGG_SARON_ROAR_PRESWITCH_MS && !YoggSaronRoarCasting(botAI)))
+        return false;
+
+    return YoggSaronRoarPaladin(botAI) == bot;
+}
+
+bool ClaimYoggSaronRoar(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    if (!state.lastRoarMs || !YoggSaronRoarCasting(botAI))
+        return false;
+
+    if (state.roarClaimKey == state.lastRoarMs)
+        return state.roarClaimOwner == bot->GetGUID();
+
+    if (YoggSaronRoarPaladin(botAI) != bot &&
+        getMSTimeDiff(state.lastRoarMs, getMSTime()) < ULDUAR_YOGG_SARON_ROAR_HANDOFF_MS)
+        return false;
+
+    state.roarClaimKey = state.lastRoarMs;
+    state.roarClaimOwner = bot->GetGUID();
+
+    return true;
+}
+
+bool YoggSaronGazeActive(PlayerbotAI* botAI)
+{
+    Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+
+    return yogg && yogg->IsAlive() && yogg->HasAura(SPELL_LUNATIC_GAZE_YS);
+}
+
+bool YoggSaronOutsideGaze(Player* bot, Unit* yogg, Unit* target)
+{
+    if (!bot || !yogg || !target)
+        return false;
+
+    float const pi = static_cast<float>(M_PI);
+    float const offset = Position::NormalizeOrientation(bot->GetAngle(target) - bot->GetAngle(yogg));
+    float const separation = offset > pi ? 2.0f * pi - offset : offset;
+
+    return separation >= ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION;
 }
 
 bool YoggSaronPhase3LustReady(PlayerbotAI* botAI)
@@ -2190,7 +2503,10 @@ uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
 
 bool IsYoggSaronShadowAuraPaladin(Player* bot)
 {
-    if (!bot || bot->getClass() != CLASS_PALADIN || !YoggSaronInPhase1Room(bot))
+    // The room check is distance only, so without the roar test this would still lock a paladin to Shadow
+    // Resistance Aura in phase 3, when Aura Mastery is wanted with Concentration Aura instead.
+    if (!bot || bot->getClass() != CLASS_PALADIN || !YoggSaronInPhase1Room(bot) ||
+        YoggSaronStateFor(bot).roarExpected)
         return false;
 
     Group* group = bot->GetGroup();
@@ -2206,7 +2522,8 @@ bool YoggSaronShadowAuraHeld(PlayerbotAI* botAI)
 bool YoggSaronShadowAuraOtherHeld(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!bot || bot->getClass() != CLASS_PALADIN || !YoggSaronInPhase1Room(bot))
+    if (!bot || bot->getClass() != CLASS_PALADIN || !YoggSaronInPhase1Room(bot) ||
+        YoggSaronStateFor(bot).roarExpected)
         return false;
 
     Group* group = bot->GetGroup();
@@ -3112,19 +3429,45 @@ std::vector<Position> GetYoggSaronCrusherReaches(PlayerbotAI* botAI, float searc
     return reaches;
 }
 
+namespace
+{
+// Some brain-room bot is holding off the Brain, seen in the last couple of seconds so a team that died
+// below doesn't hold it forever.
+bool YoggSaronBrainHoldInForce(Player* bot)
+{
+    uint32 const now = getMSTime();
+    for (auto const& [guid, hold] : YoggSaronStateFor(bot).brainHold)
+        if ((hold.mode == YoggSaronEncounterState::BRAIN_HOLD_FULL ||
+             hold.mode == YoggSaronEncounterState::BRAIN_HOLD_DOTS) &&
+            getMSTimeDiff(hold.seenMs, now) < 2000)
+            return true;
+
+    return false;
+}
+}  // namespace
+
 bool YoggSaronCrusherStunHolds(PlayerbotAI* botAI, Unit* crusher)
 {
     if (!crusher || !crusher->IsAlive() || !crusher->HasAura(SPELL_SHATTERED_ILLUSION))
         return false;
 
-    // The stun comes off in the same tick Induce Madness lands, or when phase 3 starts.
+    // The stun comes off in the same tick Induce Madness lands, or when phase 3 starts. A held Brain only
+    // goes under once the brain team finishes it, so the stun lasts until shortly before that instead.
     Creature* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
-    if (!brain || !brain->IsAlive() || brain->GetHealthPct() <= ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT)
+    if (!brain || !brain->IsAlive())
         return false;
+
+    bool const held = brain->GetHealthPct() > ULDUAR_YOGG_SARON_BRAIN_HOLD_GUARD_PCT &&
+                      YoggSaronBrainHoldInForce(botAI->GetBot());
+    if (!held && brain->GetHealthPct() <= ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT)
+        return false;
+
+    uint32 const lead = held ? ULDUAR_YOGG_SARON_BRAIN_RESUME_MS + ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS
+                             : ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS;
 
     Spell* induceMadness = brain->GetCurrentSpell(CURRENT_GENERIC_SPELL);
     return induceMadness && induceMadness->m_spellInfo->Id == SPELL_INDUCE_MADNESS &&
-           induceMadness->GetCastTimeRemaining() > static_cast<int32>(ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS);
+           induceMadness->GetCastTimeRemaining() > static_cast<int32>(lead);
 }
 
 bool YoggSaronInCrusherReach(PlayerbotAI* botAI, float radius)
@@ -3497,6 +3840,135 @@ bool YoggSaronInduceMadnessWithin(PlayerbotAI* botAI, uint32 ms)
            induceMadness->GetCastTimeRemaining() <= static_cast<int32>(ms);
 }
 
+// Any Crusher, Corruptor or Constrictor alive on the platform. Swept from Yogg, which a bot on the brain
+// level still finds inside its 200 yd.
+bool YoggSaronPlatformTentacleAlive(PlayerbotAI* botAI)
+{
+    YoggSaronPassReads* reads = YoggSaronPassReadsFor(botAI);
+    if (reads && reads->platformTentacleRead)
+        return reads->platformTentacleAlive;
+
+    bool alive = false;
+    if (Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON))
+    {
+        std::list<Creature*> tentacles;
+        yogg->GetCreatureListWithEntryInGrid(tentacles,
+                                             {NPC_CRUSHER_TENTACLE, NPC_CORRUPTOR_TENTACLE, NPC_CONSTRICTOR_TENTACLE},
+                                             ULDUAR_YOGG_SARON_PET_LEFTOVER_SEARCH_RADIUS);
+        alive = std::any_of(tentacles.begin(), tentacles.end(), [](Creature* tentacle) { return tentacle->IsAlive(); });
+    }
+
+    if (reads)
+    {
+        reads->platformTentacleRead = true;
+        reads->platformTentacleAlive = alive;
+    }
+
+    return alive;
+}
+
+// The brain team's hold on the Brain, latched here so the resolver, the rules and the multiplier read one
+// answer per tick. Stops new DoTs first and all damage at the hold line while the platform has a
+// tentacle on it, then finishes with ULDUAR_YOGG_SARON_BRAIN_RESUME_MS of Induce Madness left, or as soon
+// as the platform is clear. A finish stays on for the rest of that cast.
+void YoggSaronTickBrainHold(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    ObjectGuid const guid = bot->GetGUID();
+
+    if (!bot->IsAlive() || PlayerbotAI::IsHeal(bot) || YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_BRAIN)
+    {
+        state.brainHold.erase(guid);
+        return;
+    }
+
+    Creature* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
+    Spell* induceMadness = brain && brain->IsAlive() ? brain->GetCurrentSpell(CURRENT_GENERIC_SPELL) : nullptr;
+    if (!induceMadness || induceMadness->m_spellInfo->Id != SPELL_INDUCE_MADNESS)
+    {
+        state.brainHold.erase(guid);
+        return;
+    }
+
+    uint32 const now = getMSTime();
+    uint32 const left = static_cast<uint32>(std::max(0, induceMadness->GetCastTimeRemaining()));
+    uint32 const castEndMs = now + left;
+
+    YoggSaronEncounterState::BrainHold& hold = state.brainHold[guid];
+    hold.seenMs = now;
+
+    // The same cast as the finish if its end lands within a second of it.
+    bool const finishing = hold.mode == YoggSaronEncounterState::BRAIN_HOLD_FINISH &&
+                           (castEndMs > hold.finishCastEndMs ? castEndMs - hold.finishCastEndMs
+                                                             : hold.finishCastEndMs - castEndMs) < 1000;
+    if (finishing)
+        return;
+
+    float const health = brain->GetHealthPct();
+    YoggSaronEncounterState::BrainHoldMode mode = YoggSaronEncounterState::BRAIN_HOLD_NONE;
+    char const* branch = "open";
+    if (health > ULDUAR_YOGG_SARON_BRAIN_DOT_STOP_PCT)
+        mode = YoggSaronEncounterState::BRAIN_HOLD_NONE;
+    else if (!YoggSaronPlatformTentacleAlive(botAI))
+    {
+        mode = YoggSaronEncounterState::BRAIN_HOLD_FINISH;
+        branch = "clear";
+    }
+    else if (left <= ULDUAR_YOGG_SARON_BRAIN_RESUME_MS)
+    {
+        mode = YoggSaronEncounterState::BRAIN_HOLD_FINISH;
+        branch = "finish";
+    }
+    else if (health <= ULDUAR_YOGG_SARON_BRAIN_HOLD_PCT)
+    {
+        mode = YoggSaronEncounterState::BRAIN_HOLD_FULL;
+        branch = "hold";
+    }
+    else
+    {
+        mode = YoggSaronEncounterState::BRAIN_HOLD_DOTS;
+        branch = "dots";
+    }
+
+    hold.mode = mode;
+    if (mode == YoggSaronEncounterState::BRAIN_HOLD_FINISH)
+        hold.finishCastEndMs = castEndMs;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.brainhold", branch);
+}
+
+// Deafening Roar's clock. Paladins only, since only they read it: the press, the pre-switch and the
+// aura holds. The cast start is back-dated off Yogg's cast bar, so a late first look still keys the
+// same roar.
+void YoggSaronTickRoar(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_PALADIN)
+        return;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    state.roarExpected = bot->GetMap()->Is25ManRaid() && YoggSaronInPhase3(botAI) &&
+                         YoggKeepersFreedCount(botAI) < ULDUAR_YOGG_SARON_KEEPER_COUNT;
+    if (!state.roarExpected)
+        return;
+
+    uint32 const now = getMSTime();
+    if (!state.phase3StartMs)
+        state.phase3StartMs = now;
+
+    Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+    Spell* cast = yogg && yogg->IsAlive() ? yogg->GetCurrentSpell(CURRENT_GENERIC_SPELL) : nullptr;
+    if (!cast || cast->m_spellInfo->Id != SPELL_DEAFENING_ROAR)
+        return;
+
+    uint32 const elapsed = static_cast<uint32>(std::max(0, cast->GetCastTime() - cast->GetCastTimeRemaining()));
+    uint32 const start = now - elapsed;
+    if (!state.lastRoarMs || getMSTimeDiff(state.lastRoarMs, start) > ULDUAR_YOGG_SARON_ROAR_PERIOD_MS / 2)
+        state.lastRoarMs = start;
+}
+
 // Latched here, before the triggers run, so the resolver, the rules and the room state all read one
 // answer per tick. Stops under the stop line, starts again at the resume line. Only worth it with a
 // healer in the room to lift the bot back up, and never in the last seconds, when an uncleared room
@@ -3531,5 +4003,24 @@ void YoggSaronTick(PlayerbotAI* botAI)
     YoggSaronTickHandover(botAI);
     YoggSaronTickRtiMark(botAI);
     YoggSaronTickReprisal(botAI);
+    YoggSaronTickBrainHold(botAI);
+    YoggSaronTickRoar(botAI);
     TickYoggSaronObs(botAI);
+}
+
+bool YoggSaronBrainHeld(PlayerbotAI* botAI)
+{
+    YoggSaronEncounterState& state = YoggSaronStateFor(botAI->GetBot());
+    auto const it = state.brainHold.find(botAI->GetBot()->GetGUID());
+
+    return it != state.brainHold.end() && it->second.mode == YoggSaronEncounterState::BRAIN_HOLD_FULL;
+}
+
+bool YoggSaronBrainDotHeld(PlayerbotAI* botAI)
+{
+    YoggSaronEncounterState& state = YoggSaronStateFor(botAI->GetBot());
+    auto const it = state.brainHold.find(botAI->GetBot()->GetGUID());
+
+    return it != state.brainHold.end() && (it->second.mode == YoggSaronEncounterState::BRAIN_HOLD_FULL ||
+                                           it->second.mode == YoggSaronEncounterState::BRAIN_HOLD_DOTS);
 }

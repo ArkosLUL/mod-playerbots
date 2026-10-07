@@ -139,6 +139,16 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Node<YoggSaronNovaRaidCooldownTrigger, YoggSaronNovaRaidCooldownAction>(ACTION_EMERGENCY + 7);
     e.Node<YoggSaronNovaDefensiveTrigger, YoggSaronNovaDefensiveAction>(ACTION_EMERGENCY + 6);
     e.Node<YoggSaronNovaExternalTrigger, YoggSaronNovaExternalAction>(ACTION_EMERGENCY + 5);
+
+    // Phase 3's same pair against a beacon-healed Guardian, which hits a non-tank for 25-36k a few
+    // seconds after the heal. Level with the nova pair, which only runs in phase 1.
+    e.Node<YoggSaronBeaconDefensiveTrigger, YoggSaronBeaconDefensiveAction>(ACTION_EMERGENCY + 6);
+    e.Node<YoggSaronBeaconExternalTrigger, YoggSaronBeaconExternalAction>(ACTION_EMERGENCY + 5);
+
+    // Over everything: the roar's cast is 2.3 s and Aura Mastery is off the global cooldown. The aura it
+    // needs goes up ahead of time, as a raid node.
+    e.Node<YoggSaronRoarAuraMasteryTrigger, YoggSaronRoarAuraMasteryAction>(ACTION_EMERGENCY + 8);
+    e.Node<YoggSaronRoarAuraTrigger, YoggSaronRoarAuraAction>(ACTION_RAID + 1);
     // Level with the phase 2 dodge and above the dps resolver: where the bot stands has to be settled
     // before the reach node is asked to close on the target from there.
     e.Node<YoggSaronIllusionFacingTrigger, YoggSaronIllusionFacingAction>(ACTION_RAID + 3);
@@ -193,6 +203,13 @@ void DefineYoggSaron(EncounterBuilder& e)
             Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
                 Family::AttackLeastHp | Family::AttackRti | Family::DebuffOnAttacker | Family::Charge);
 
+    // Off the Brain while the brain team holds it, the same families as the reprisal hold. DoTs on
+    // attackers stop at the earlier line, since they keep ticking after the bot stops.
+    e.Block("yogg-saron brain hold", Role::Any, YoggSaronBrainHeld,
+            Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
+                Family::AttackLeastHp | Family::AttackRti | Family::Charge | Family::PetAttack);
+    e.Block("yogg-saron brain dot hold", Role::Any, YoggSaronBrainDotHeld, Family::DebuffOnAttacker);
+
     // A bot on its portal spot waits there. The portal walk is quiet once it arrives, so without this
     // reach takes it back to its target and the walk fetches it again for the whole lead. The Yogg dodges
     // are none of these and still move it.
@@ -213,6 +230,7 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Multiplier<YoggSaronPhase1AoeHoldMultiplier>(Family::AnyAction);
     e.Multiplier<YoggSaronIllusionMultiTargetHoldMultiplier>(Family::AnyAction);
     e.Multiplier<YoggSaronExitHoldCastMultiplier>(Family::Spell);
+    e.Multiplier<YoggSaronHeldTargetCastMultiplier>(Family::Spell);
 
     e.Block("yogg-saron stack food guard multiplier", Role::Any, YoggSaronInsideRing, 0, {"food", "drink"});
 
@@ -255,6 +273,26 @@ void DefineYoggSaron(EncounterBuilder& e)
     // of five deaths in the last pull were the same two bots dying again, 14 s and 8 s after coming
     // back. Only Rebirth, since Reincarnation runs from the dead engine where no encounter rule reaches.
     e.Block("yogg-saron battle rez hold", Role::Any, YoggSaronBattleRezHeld, 0, {"rebirth"});
+
+    // The roar paladin keeps its own Concentration Aura until it has pressed, or the buff strategy trades
+    // it back on the next global cooldown. The generic shadow resistance nodes add a strategy that would
+    // re-cast that aura on its own.
+    e.Block("yogg-saron roar aura hold", Role::Any, YoggSaronRoarAuraHeld, 0,
+            {"devotion aura", "retribution aura", "crusader aura", "sanctity aura", "shadow resistance aura",
+             "fire resistance aura", "frost resistance aura", "sara shadow resistance action",
+             "yogg-saron shadow resistance action"});
+
+    // Aura Mastery is the roar's in phase 3: the class nodes spend it on an already hurt raid. The press
+    // node casts it directly, past this.
+    e.Block("yogg-saron roar aura mastery hold", Role::Any, YoggSaronRoarExpected, 0, {"aura mastery"});
+
+    // An immunity on a healed Guardian's victim sheds it onto somebody else, at full power.
+    e.Block("yogg-saron beacon immunity hold", Role::Any, YoggSaronBeaconImmunityHeld, 0,
+            {"divine shield", "ice block"});
+
+    // A hunter's drag dies with Feign Death, and Deterrence pacifies the shot.
+    e.Block("yogg-saron beacon hunter hold", Role::Any, YoggSaronBeaconHunterHold, 0,
+            {"feign death", "deterrence"});
 
     e.Multiplier<YoggSaronPhase1WalkGuardMultiplier>(Family::AnyMovement);
     e.Multiplier<YoggSaronAntiFearTotemGuardMultiplier>(Family::Spell);

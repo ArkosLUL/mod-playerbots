@@ -1040,6 +1040,34 @@ class Ranking(unittest.TestCase):
 
 
 class YoggPhases(unittest.TestCase):
+    def test_damage_band_splits_guardians_at_the_floor_and_weakened(self):
+        guardian = yogg_saron.NPC_IMMORTAL_GUARDIAN
+        self.assertEqual(yogg_saron.damage_band(yogg_saron.NPC_YOGG_SARON, None, False), "yogg")
+        self.assertEqual(yogg_saron.damage_band(yogg_saron.NPC_CRUSHER_TENTACLE, None, False), "tentacle")
+        self.assertEqual(yogg_saron.damage_band(guardian, 30.5, False), "over 30")
+        # At the floor it's already under it, and the gaze is the only reason to be there.
+        self.assertEqual(yogg_saron.damage_band(guardian, 30.0, False), "10-30")
+        self.assertEqual(yogg_saron.damage_band(guardian, 20.0, True), "10-30 gaze")
+        self.assertEqual(yogg_saron.damage_band(guardian, 10.0, True), "weakened")
+        self.assertEqual(yogg_saron.damage_band(guardian, None, False), "guardian ?")
+        self.assertEqual(yogg_saron.damage_band(None, None, False), "other")
+
+    def test_roar_verdict_needs_a_press_and_no_silence(self):
+        self.assertEqual(yogg_saron.roar_verdict(False, 0), "uncovered")
+        self.assertEqual(yogg_saron.roar_verdict(True, 0), "covered")
+        self.assertEqual(yogg_saron.roar_verdict(True, 3), "partial")
+
+    def test_brain_hold_window_runs_from_the_first_hold_to_the_first_finish_after_it(self):
+        rows = [(1000, "open"), (2000, "dots"), (3000, "hold"), (4000, "clear"), (5000, "finish")]
+        self.assertEqual(yogg_saron.brain_hold_window(rows), (2000, 4000, "clear"))
+        self.assertEqual(yogg_saron.brain_hold_window([(1000, "hold")]), (1000, None, "never"))
+        self.assertIsNone(yogg_saron.brain_hold_window([(1000, "open"), (2000, "finish")]))
+
+    def test_drag_exposure_counts_only_the_window_after_the_heal(self):
+        hits = [(900, 7, 2000), (1500, 7, 9000), (4000, 7, 36000), (5000, 8, 26000), (30000, 7, 40000)]
+        self.assertEqual(yogg_saron.drag_exposure(hits, 1000, 20000), {7: (45000, 36000, 2), 8: (26000, 26000, 1)})
+        self.assertEqual(yogg_saron.drag_exposure([], 1000, 20000), {})
+
     def test_nova_warning_is_measured_from_the_first_sample_past_the_gate(self):
         series = [(0, 100.0), (1000, 45.0), (2000, 24.0), (3000, 18.0), (4000, 6.0)]
         # 1790877348's last pair gave 11.2 s at the 20% gate and 5.6 s at 10%, which is why the long

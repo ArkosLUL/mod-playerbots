@@ -32,6 +32,10 @@ uint32 NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, 
 // is how one bot reads whether another is already covered.
 uint32 NextMagicDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, uint32 needMs);
 
+// The same pick for an incoming physical hit, any role: Anti-Magic Shell and Cloak of Shadows are left
+// out, and a ret paladin's Divine Protection or a dps Death Knight's Icebound Fortitude count.
+uint32 NextPhysicalDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, uint32 needMs);
+
 // How much of that hit the bot can still take off by itself, as a percentage, so somebody else can work
 // out whether a second layer is needed on top. The cut of a button already running when there is one,
 // and 0 when the bot has nothing castable or only something that adds health rather than cutting damage.

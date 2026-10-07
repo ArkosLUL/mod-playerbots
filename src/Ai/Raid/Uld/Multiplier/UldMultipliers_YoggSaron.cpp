@@ -232,6 +232,41 @@ float YoggSaronExitHoldCastMultiplier::GetValue(Action* action)
     return spellInfo->CalcCastTime() || spellInfo->IsChanneled() ? 0.0f : 1.0f;
 }
 
+float YoggSaronHeldTargetCastMultiplier::GetValue(Action* action)
+{
+    CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+    if (!spellAction || bot->GetMapId() != ULDUAR_MAP_ID)
+        return 1.0f;
+
+    // Both reads are map lookups, no sweep.
+    bool const brainDots = YoggSaronOnBrainLevel(bot) && YoggSaronBrainDotHeld(botAI);
+    bool const hunterHold = !brainDots && YoggSaronBeaconHunterHold(botAI);
+    if (!brainDots && !hunterHold)
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    if (!target)
+        return 1.0f;
+
+    if (hunterHold)
+        return target->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN ? 0.0f : 1.0f;
+
+    if (target->GetEntry() != NPC_BRAIN)
+        return 1.0f;
+
+    if (YoggSaronBrainHeld(botAI))
+        return 0.0f;
+
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(AI_VALUE2(uint32, "spell id", spellAction->getSpell()));
+    if (!spellInfo)
+        return 1.0f;
+
+    return spellInfo->IsChanneled() || spellInfo->HasAura(SPELL_AURA_PERIODIC_DAMAGE) ||
+                   spellInfo->HasAura(SPELL_AURA_PERIODIC_LEECH)
+               ? 0.0f
+               : 1.0f;
+}
+
 float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
 {
     if (!action)

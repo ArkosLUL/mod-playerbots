@@ -101,8 +101,14 @@ enum UlduarYoggSaronIds
     SPELL_GUARDIAN_DRAIN_LIFE = 64159,  // 5 s channel below 85% health, heals the Guardian 10x the drain
     SPELL_GUARDIAN_DRAIN_LIFE_H = 64160,
     // +100% to the caster's own aura for 6 s (aura 108 on all three effects, 99 base points), so it is
-    // worth something only on the paladin carrying Shadow Resistance Aura.
+    // worth something only on the paladin carrying Shadow Resistance Aura. With the caster's own
+    // Concentration Aura up it also casts 64364, silence and interrupt immunity for 40 yd, but only on
+    // raiders carrying that caster's copy of the aura.
     SPELL_AURA_MASTERY = 31821,
+    SPELL_CONCENTRATION_AURA = 19746,
+    // 25-man with fewer than 4 Keepers: 2.3 s cast, then 4 s of silence within 50 yd.
+    SPELL_DEAFENING_ROAR = 64189,
+    SPELL_DISTRACTING_SHOT = 20736,  // 6 s taunt on an 8 s cooldown, 35 yd
     SPELL_HEROISM_SHAMAN = 32182,
     SPELL_BLOODLUST_SHAMAN = 2825,
     SPELL_SATED = 57724,
@@ -365,8 +371,19 @@ constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS = 13.0f;
 // starts. A Crusher swings as soon as it's free, at whoever hit it last, so melee need to be out of its
 // reach by then. 13 yd is under 2 s at run speed, doubled for the tick and the path.
 constexpr uint32 ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS = 4000;
-// Fastest the Brain went down in one pull was 5.34% in 5 s, so the lead above can cost ~4.3%.
+// Fastest the Brain went down in one pull was 5.34% in 5 s, so the lead above can cost ~4.3%. Not while
+// the brain team holds it, see ULDUAR_YOGG_SARON_BRAIN_HOLD_PCT.
 constexpr float ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT = 35.0f;
+
+// The brain team stops short of 30% while anything lives on the platform, so the stun runs on instead of
+// ending with phase 3: the last wave of two pulls hit 30% 43-45 s in and left 2.45M and 3.12M of
+// tentacles for phase 3. DoTs stop earlier since they keep ticking. The finish starts with this much
+// Induce Madness left, ~2% in ~2 s, before the exit lead. Under the guard a held Brain is going under
+// anyway, a human or a pet still on it, so the stun is read as if nobody held.
+constexpr float ULDUAR_YOGG_SARON_BRAIN_HOLD_PCT = 32.0f;
+constexpr float ULDUAR_YOGG_SARON_BRAIN_DOT_STOP_PCT = 36.0f;
+constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_RESUME_MS = 8000;
+constexpr float ULDUAR_YOGG_SARON_BRAIN_HOLD_GUARD_PCT = 31.0f;
 
 // Death Rays walk 9 yd legs every 1625 ms along a re-rolled cardinal axis, so the gap between these
 // two is about a second of travel. The Death Orb that drops them is a marker 27 yd overhead and never
@@ -503,14 +520,14 @@ constexpr float ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS = 3.0f;
 // anyone at or below z 300, and no Sanity means Insane, whose removal kills the player outright - so
 // a mind control is always a death. The lead is taken out of the window the raid has to damage the
 // Brain, so it is measured rather than flat: a bot standing on a portal needs the floor, one just in
-// from the Chamber door is about 44 yd out. From the Brain the walk out takes 1.5-2.8 s for melee and
-// 2.9-4.2 s for the healer, so 5 s still surfaces melee with about 3 s spare.
+// from the Chamber door is about 44 yd out. At 2x and 5 s bots left with a median 6.7 s and surfaced
+// with 4.7 s; the walk out took a median 2.2 s, 5.4 s at worst with 2 s of it stood at the portal.
 //
 // Timed at base run speed. Illusion Room (63988) adds 30% down there, but bots made 4-6 yd/s on the way
 // out once casts and refused moves counted, and the faster number said "safe" with no time left: five
 // charmed in one pull, all with Sanity to spare.
-constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS = 5000;
-constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 2.0f;
+constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS = 3000;
+constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 1.5f;
 
 // Phase 3 station. The radius is what the bot is allowed to drift inside, the leash is how far a tank
 // may wander before it is walked back - wider because a tank chasing a guardian to the room's edge is
@@ -528,6 +545,12 @@ constexpr float ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE = 18.0f;
 // Guardian control keeps the tank within 5 yd of the spot and a full-health Guardian swings from up
 // to 14 yd.
 constexpr float ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE = 20.0f;
+
+// Without Thorim a Guardian can't die, and a fresh or beacon-healed one is 425k: bringing every one to
+// Weakened took 75% of a pull's damage and left Yogg 3%. So only down to the floor, where it hits about
+// a third as hard as at full, and the rest goes on Yogg. Under the Weakened line it hits for ~2k.
+constexpr float ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT = 30.0f;
+constexpr float ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT = 10.0f;
 
 // A non-tank starts on an Immortal Guardian only while its own threat on it is under the start share of
 // the tank holding it, and lets go past the keep share. Taking one over needs 110% in melee and 130% at
@@ -595,6 +618,29 @@ constexpr uint32 ULDUAR_YOGG_SARON_INTERRUPT_CLAIM_MS = 1500;
 constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_SEARCH_RADIUS = 70.0f;
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_HEAL_WAIT_MS = 3000;
 constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_ARRIVED_RADIUS = 3.0f;
+
+// A beacon-healed Guardian climbs ~9% a second, and past this it hits a non-tank for ~17k and up. The
+// 25-36k hits that killed both draggers in one pull came 5-8 s after the heal, with no tank taking it.
+constexpr float ULDUAR_YOGG_SARON_BEACON_DANGER_HEALTH_PCT = 40.0f;
+// How long a released dragger walks its healed Guardian back toward the tank, and how long one external
+// holds its victim for itself.
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_RETURN_MS = 8000;
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_EXTERNAL_CLAIM_MS = 8000;
+// Hunter drags. Distracting Shot is a 6 s taunt against a 10 s mark, so it goes out with this much of the
+// mark left and still covers the heal 0.3-1.1 s after it. Feign Death if the Guardian is still on the
+// hunter this long after the release.
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_SHOT_LEFT_MS = 5000;
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_FEIGN_DELAY_MS = 1000;
+constexpr float ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE = 34.0f;
+
+// Deafening Roar comes 30 s into phase 3, then every 60 s. The paladin whose turn it is puts Concentration
+// Aura up this early, since the immunity only reaches raiders carrying its own copy. Another paladin may
+// take the roar this long after the cast starts.
+constexpr uint32 ULDUAR_YOGG_SARON_KEEPER_COUNT = 4;
+constexpr uint32 ULDUAR_YOGG_SARON_ROAR_FIRST_MS = 30000;
+constexpr uint32 ULDUAR_YOGG_SARON_ROAR_PERIOD_MS = 60000;
+constexpr uint32 ULDUAR_YOGG_SARON_ROAR_PRESWITCH_MS = 10000;
+constexpr uint32 ULDUAR_YOGG_SARON_ROAR_HANDOFF_MS = 500;
 
 // Heroism waits for the raid to be fighting in its phase 3 spots: this share of the living group at its
 // station or standing in reach of its target, or the fallback after phase 3 starts. 80% came 16-20 s in
@@ -664,6 +710,12 @@ extern const std::vector<Position> ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOT
 // spot, 28-30 from the nearest Sanity Well, still in heal range of the melee spot.
 extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH;
 extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH;
+
+// Where a hunter stands to pull a marked Guardian with Distracting Shot, on the line to each drag spot
+// but inside the shot's 35 yd. A Guardian that walks to the hunter stops ~29 yd off the pile. On the floor
+// by navprobe, PATHFIND_NORMAL 33.2 / 33.1 yd from the melee spot and 42 / 44 from the ranged spot.
+extern const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH;
+extern const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH;
 
 // Yogg-Saron phase read, and the one place the encounter is recognised at all. Yogg is not reliably
 // on a bot's threat list, so it scans for the creature instead of going through "find target", and
@@ -1091,15 +1143,63 @@ bool IsYoggSaronHoldableGuardian(Unit* unit);
 
 // Phase 3 without Thorim. The marked Guardian this bot drags clear of Yogg and the pile, or nullptr. With
 // `claim` it also takes one: bot tanks first while another tank holds the pile, then ret paladins and
-// dps Death Knights, by GUID, never a bot some unmarked Guardian is hitting, since that one would
-// follow it out. The claim lasts until the heal has landed.
+// dps Death Knights, then hunters, by GUID, never a bot some unmarked Guardian is hitting, since that one
+// would follow it out. The claim lasts until the heal has landed.
 Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim);
 
 // Whether the bot holds a drag claim. A read of the claim map only, no sweep.
 bool YoggSaronBeaconDragging(Player* bot);
 
-// The drag spot this beacon's draggers share, picked at the first claim.
+// The drag spot this beacon's draggers share, picked at the first claim, and the hunter spot on that side.
 Position const& YoggSaronBeaconDragSpot(Player* bot);
+Position const& YoggSaronBeaconHunterSpot(Player* bot);
+
+// The healed Guardian this bot dragged, while it is still on the bot within ULDUAR_YOGG_SARON_BEACON_RETURN_MS
+// of the release, or nullptr. The tank is ~39 yd away and a taunt reaches 30, so the dragger walks it back.
+Unit* YoggSaronBeaconReturning(Player* bot);
+
+// A Guardian the beacon heal is on, or still marked, that is hitting `victim` from the danger line up,
+// or nullptr.
+Unit* YoggSaronHealedGuardianOn(PlayerbotAI* botAI, Player* victim);
+
+// Who the next external against a healed Guardian goes to: draggers first, then the lowest, humans too.
+// Skips a bot whose own button is ready or running and anyone another external already holds.
+Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI);
+bool ClaimYoggSaronBeaconExternal(PlayerbotAI* botAI, Player* victim);
+
+// A healed Guardian is on this bot, so an immunity would just hand it to somebody else.
+bool YoggSaronBeaconImmunityHeld(PlayerbotAI* botAI);
+
+// A hunter whose drag claim hasn't seen the heal yet. Any damage on its Guardian is threat that keeps it
+// there once the taunt ends, and Feign Death or Deterrence would undo the pull.
+bool YoggSaronBeaconHunterHold(PlayerbotAI* botAI);
+
+// Deafening Roar is due this phase 3: 25-man, fewer than 4 Keepers. Latched by the tick.
+bool YoggSaronRoarExpected(PlayerbotAI* botAI);
+bool YoggSaronRoarCasting(PlayerbotAI* botAI);
+
+// The bot paladin whose Aura Mastery covers the next roar: off cooldown by then, own Concentration Aura
+// already up, lowest GUID. A dragger only if nobody else can, since from the drag spot its 40 yd reach
+// covers almost nobody. Every bot reads the same world, so they agree.
+Player* YoggSaronRoarPaladin(PlayerbotAI* botAI);
+
+// This bot is the roar paladin and the roar is under ULDUAR_YOGG_SARON_ROAR_PRESWITCH_MS away or being
+// cast, so it keeps Concentration Aura up.
+bool YoggSaronRoarAuraHeld(PlayerbotAI* botAI);
+
+// One Aura Mastery per roar. The roar paladin takes it at once, anyone else after the handoff delay, and
+// the owner keeps it so a failed press can retry.
+bool ClaimYoggSaronRoar(PlayerbotAI* botAI);
+
+// The brain team holds off the Brain, see ULDUAR_YOGG_SARON_BRAIN_HOLD_PCT. Latched per bot in the tick.
+// The DoT hold is true under a full hold too.
+bool YoggSaronBrainHeld(PlayerbotAI* botAI);
+bool YoggSaronBrainDotHeld(PlayerbotAI* botAI);
+
+// Lunatic Gaze is up on Yogg (64163 is a 4 s aura on him, not a channel), and whether a target sits far
+// enough round from him that the bot can hit it with Yogg out of its front arc.
+bool YoggSaronGazeActive(PlayerbotAI* botAI);
+bool YoggSaronOutsideGaze(Player* bot, Unit* yogg, Unit* target);
 
 // Whether a shaman should cast Heroism or Bloodlust now: phase 3, and the raid at its stations or in
 // reach of its targets, see ULDUAR_YOGG_SARON_LUST_POSITION_SHARE, or the fallback has run out.
@@ -1174,7 +1274,8 @@ bool YoggSaronInCrusherReach(PlayerbotAI* botAI, float radius);
 // A Crusher under Shattered Illusion can't swing or channel, so nothing it does can hurt a bot standing
 // in its reach. True only while that holds for at least ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS more: the
 // Brain is still casting Induce Madness with more than the lead left, and is above
-// ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT. Creatures take no cast pushback, so the cast bar is exact.
+// ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT. While the brain team holds, the floor is the hold guard and the
+// lead runs to the finish instead. Creatures take no cast pushback, so the cast bar is exact.
 bool YoggSaronCrusherStunHolds(PlayerbotAI* botAI, Unit* crusher);
 
 // Whether a forced walk is still closing on where it was sent. MoveTo's `ok` says a command was
@@ -1192,8 +1293,9 @@ bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position 
 // counts how often it has to.
 void YoggSaronReleaseStalledWalk(PlayerbotAI* botAI, char const* node, Position const& destination);
 
-// Window in which a counterable fear can land, for the shared anti-fear component. Yogg-Saron fears
-// in P2 (Malady of the Mind, which re-casts on removal) and again in P3 (Deafening Roar).
+// Window in which a counterable fear can land, for the shared anti-fear component. The only fear is
+// Malady of the Mind, cast in P2 but re-cast from the feared player on removal, so it can outlive P2.
+// Deafening Roar in P3 is a silence, not a fear.
 bool YoggSaronFearWindowActive(PlayerbotAI* botAI);
 
 #endif

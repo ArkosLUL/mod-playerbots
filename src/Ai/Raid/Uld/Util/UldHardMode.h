@@ -89,4 +89,7 @@ bool IsYoggSaronHardModeActive(PlayerbotAI* botAI);
 // so phase 3 keeps them low in a pile and drags Shadow Beacon marked ones clear.
 bool YoggThorimKeeperActive(PlayerbotAI* botAI);
 
+// How many Keepers the raid freed, off the same mask. Under 4 in 25-man, Yogg casts Deafening Roar.
+uint32 YoggKeepersFreedCount(PlayerbotAI* botAI);
+
 #endif

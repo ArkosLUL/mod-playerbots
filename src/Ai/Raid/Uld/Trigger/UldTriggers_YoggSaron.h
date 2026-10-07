@@ -442,6 +442,49 @@ public:
     bool IsActive() override;
 };
 
+// The roar paladin is missing its own Concentration Aura with the roar close.
+class YoggSaronRoarAuraTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron roar aura trigger";
+
+    YoggSaronRoarAuraTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// Deafening Roar is being cast and this paladin can answer it: its own Concentration Aura up and Aura
+// Mastery ready.
+class YoggSaronRoarAuraMasteryTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron roar aura mastery trigger";
+
+    YoggSaronRoarAuraMasteryTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// A beacon-healed Guardian past the danger line is hitting this bot, a dragger or a non-tank, and it has a
+// physical cut to press.
+class YoggSaronBeaconDefensiveTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron beacon defensive trigger";
+
+    YoggSaronBeaconDefensiveTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// Somebody a healed Guardian is hitting has no button of their own, and this healer or paladin has an
+// external in range for them.
+class YoggSaronBeaconExternalTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron beacon external trigger";
+
+    YoggSaronBeaconExternalTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 // Shadow Resistance Aura on the one paladin whose Aura Mastery can double it, and its own copy of the
 // aura: a human's sits on every raider and would otherwise read as already done.
 class YoggSaronShadowAuraTrigger : public YoggSaronTrigger
@@ -453,8 +496,8 @@ public:
     bool IsActive() override;
 };
 
-// Covers both fears the fight has: Malady of the Mind in P2 and Deafening Roar in P3. Complements
-// the malady spread node, which handles the bot who is already feared.
+// Covers Malady of the Mind, the fight's only fear. Complements the malady spread node, which handles the
+// bot who is already feared.
 class YoggSaronAntiFearTrigger : public RaidAntiFearTrigger
 {
 public:

@@ -121,7 +121,8 @@ it up, and `yogg-saron shadow aura hold` blocks every other aura on that bot —
 its own buff strategy trades it back on the next GCD. `yogg-saron aura mastery hold` keeps the class node
 off the cooldown. The trigger tests `HasAura(…, bot, false, true)`: **its own copy**, because a human's
 sits on every raider and otherwise reads as already done, which is why no bot had ever taken the aura
-while one was played.
+while one was played. The room check is distance only, so the election and both holds end on
+`roarExpected` (phase 3, below): Aura Mastery then goes with Concentration Aura.
 
 **And the other paladins have to keep off the slot, or the cover lands half a second late.** The core
 lets two copies of one paladin aura coexist per caster and gives the effects to the strongest, ties to
@@ -1407,7 +1408,9 @@ inside the 60 s kills everyone in it: one Chamber wave charmed eight bots in a s
 faster is the only cure, so every walk below is on that clock.
 
 Every millisecond of lead is damage the Brain does not take, so the lead is **measured, not flat**:
-`max(5 s, distance / 7 yd/s × 2)`, at **base** run speed. Illusion Room 63988 adds 30%
+`max(3 s, distance / 7 yd/s × 1.5)`, at **base** run speed; at 2× and 5 s two pulls decided with a
+median 6.7 s left and surfaced with 4.7 s (walk median 2.2 s, worst 5.4 s with 2 s stood at the
+portal), so the user cut it. Illusion Room 63988 adds 30%
 (`SPELL_AURA_MOD_SPEED_ALWAYS`), bots made 4-6 yd/s on the way out, and the boosted figure read
 `safe` with no time left: five bots charmed in one pull, each with 34-69 Sanity. **`leaving` latches
 until the cast ends** (`YoggSaronLeavingBrainLevel`): asked fresh, the lead shrank as the bot walked,
@@ -1664,10 +1667,24 @@ spot` (`ACTION_RAID`, walk latch) owns the walk while `rti` is `square`, which `
 sets: melee go to `ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT` (1969.0, -25.4, 237.474), 12.3 yd west and
 30.1 yd 3D, settled z and `PATHFIND_NORMAL` under `--nav 0x09` from all three entrances.
 
+**The brain team holds short of 30% while the platform has a tentacle**, the guides' line ("get him
+to ~32% and wait"): phase 3 lifts Shattered Illusion and leaves every tentacle alive. Two pulls
+entered the last wave at 35.3 / 37.5% and hit 30% 44.9 / 43.4 s in, cutting the stun 15-17 s short
+against a stunned platform taking 62-67k/s, and carried 2.45M / 3.12M of tentacles into phase 3.
+`YoggSaronTickBrainHold` latches per brain-room non-healer while Induce Madness is cast and a
+Crusher, Corruptor or Constrictor lives within 70 yd of Yogg: new DoTs stop at 36% (DoTs keep
+ticking), all damage at 32%, and the finish starts at 8 s left or the moment the platform is clear,
+latched for that cast; the fastest Brain loss seen was 5.34% in 5 s. Enforced by the resolver, its
+`dps target` fallback, `DropTarget` on a held Brain, the `brain hold` / `brain dot hold` blocks and
+`yogg-saron held target cast multiplier`. `YoggSaronCrusherStunHolds` drops its 35% floor while a hold
+is in force and the Brain is over 31% (a human or a pet can still push it), with the lead 8 + 4 s, so
+platform melee keep the stunned Crushers. If the Brain survives, the team leaves and finishes it next
+wave. Probed as `yogg.brainhold` (`open` / `dots` / `hold` / `finish` / `clear`).
+
 **Ranged and healers stand by their room's exit portal**, not the middle: west (1948.05, -23.76,
 241.785) for Stormwind, south (1992.4, -52.8, 240.585) for Icecrown, north (1994.6, -0.1, 240.292)
 for the Chamber. Door → spot → portal is 53, 62 and 71 yd against 93-106 through the middle, and the
-exit lead drops from 10.6 s to its 5 s floor. Settled z, `PATHFIND_NORMAL` from the door, to the
+exit lead drops from 10.6 s to its floor. Settled z, `PATHFIND_NORMAL` from the door, to the
 portal and from the melee spot, all within 36.3 yd of it for heals. The room is latched per bot
 (`lastIllusionRoom`), and a spot is used only once a ray from it reaches the Brain's hit sphere,
 cached per spot (the built navprobe predates `los`); otherwise the middle. Probed as
@@ -1684,7 +1701,9 @@ and it uses the portal from `INTERACTION_DISTANCE` rather than 2 yd. Losing the 
 of the walk out is the trade, against a charm that is always a death. The exit also clears a forced
 hold aimed elsewhere, since `IsWaitingForLastMove` makes a forced move wait out another's (exits sat
 4.0 and 4.4 s refused behind the brain spot walk), and releases a stalled spline that otherwise reads
-as `dup` (3.5 s standing).
+as `dup` (3.5 s standing). The brain spot walk clears one the same way (`YoggSaronTakeOverForcedWalk`):
+a bot landing 2.6 s before its door opened was still booked on the room walk to a far tentacle, had
+26 brain spot walks refused, ran 98 yd east and 177 back, and reached the Brain 15.9 s after the door.
 
 **Nitro Boosts on the walk to the Brain.** Boots enchant 3606 casts 55004 (3 min, no backfire in a
 raid) for 54861, +150% run speed for 5 s: about 7.5 s saved, every third wave. `yogg-saron nitro
@@ -1755,7 +1774,10 @@ arc and radius the raid and the leftover Guardians each hold in phase 2, and `yo
 heal reached with health then and 6 s later (present by a fresh row, not health: a Weakened Guardian's
 1 HP reads 0%), `yogg.beaconspot`, and the pets on each phase 2 leftover with its time to die. A
 Guardian's spawn is a Simple Teleport (64195) within 3 s of its first sample, else that sample:
-every Guardian casts it again at the wipe.
+every Guardian casts it again at the wipe. `--phase3` also gives each healed Guardian's holder, when a
+tank had it and what it did to non-tanks (hits, deaths, buttons, hunter shots), each Deafening Roar's
+silences against 64364 and Aura Mastery, and the damage split by role and Guardian health band;
+`--brain` a brain hold line per wave.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
@@ -1960,7 +1982,16 @@ plan. The pile needs no area code of its own: a bot on a piled Guardian fires it
 (`AoeTrigger`, 3 within 8 yd of the target), and those reach Yogg too, since `Spell.cpp`'s area check
 adds the target's combat reach (Yogg's 30) for a player-controlled caster only. Two Freya-only wipes:
 Guardians at 90%+ health in 51% / 64% of samples and Weakened 13% / 1%, Yogg 12.7% / 3.8% of the
-raid's damage, the bot tank dead at +63 / +67 s.
+raid's damage, the bot tank dead at +63 / +67 s. **Freya-only is 0-light here**: the guides make it a
+race on Yogg (Stars: tanks pick up adds, melee on Yogg; TrueWoW: Guardians kept low, tanked by him).
+Yogg 25 has 44.0M, so phase 3 is 13.2M; a Guardian 425k; full swings ~17× a Weakened one, 30% ~6×.
+
+**Guardians only down to 30%, the rest on Yogg, by the user's choice**
+(`ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT`). Bringing each to Weakened took 52% / 75% of two pulls'
+damage against Yogg's 17% / 3% (he went 29.97 → 26.14% in 100 s, → 27.82% in 145 s). Under the floor a
+Guardian is allowed only while Lunatic Gaze (64163) is up and it sits 65° or more off Yogg, the arc the
+gaze node angles for; one carrying 64486 / 64468 is skipped, its heal outruns any damage; with Thorim
+the 10% rule stays. Pets on the Guardian left are stopped so they follow the owner.
 
 - **Marked Guardians are not dps targets** (`IsAllowedTarget`): the heal resets them whatever the raid
   does. With Thorim they stay tier 1.
@@ -1978,14 +2009,45 @@ raid's damage, the bot tank dead at +63 / +67 s.
   them 0 → 79% and 54 → 80% in 6 s, the south spot 34-38 yd off. Five Guardians at full plus a fresh
   one: the bot tank carried four, took 102k in 8 hits and died, then 20 deaths in 20 s. Claims
   (`beaconDrags`): bot
-  tanks while another tank lives, then non-heal paladins and Death Knights, by GUID, taunt off cooldown,
+  tanks while another tank lives, then non-heal paladins and Death Knights, then hunters, by GUID, taunt
+off cooldown,
   **never a bot an unmarked Guardian is hitting** — that one would follow it out. It attacks only once
   standing, since `Attack`'s facing turn ends a walk; releases on the heal aura or 3 s after the mark
   ends. A claimed Guardian isn't holdable, so guardian control leaves it, and the gaze node leaves a
   dragger's tick free (`drag`). Probed as `yogg.beacondrag`. Before it: marked Guardians 5-12 yd from the pile and 15-19 from Yogg, +2.04% / +2.57%. First
   pull with it: two dragged south, all three marked ≥25.8 yd from Yogg, Yogg −0.13% over 20 s; the third
   had no dragger (the bot tank always holds Guardians) and topped a pile Guardian 82 → 99%. Only the two
-  draggers and the human tank targeted a marked one.
+  draggers and the human tank targeted a marked one. Two Freya-only pulls: one had one free dragger for
+  three marks and two healed to full in the pile on the only bot tank, dead 23 s later, then 20 deaths in
+  20 s; in the other each dragger died to its own healed Guardian 8 s after the heal (a 36k one-shot;
+  10 / 19 / 24k), a tank taking them 5-8 s after or never. Every death after the leftover Crusher's
+  was a high-health Guardian on a non-tank, 25-75k.
+- **Healed Guardians get a cooldown first.** One still marked or carrying 64486 / 64468 at 40% or more
+  (`BEACON_DANGER_HEALTH_PCT`, ~17k a hit) on a dragger or a non-tank: the victim presses
+  `NextPhysicalDefensive` (`ACTION_EMERGENCY + 6`, `yogg.dragdef`); a healer or paladin gives Pain
+  Suppression, Guardian Spirit or Hand of Sacrifice to one without a button of its own, draggers first,
+  humans included, one per victim per 8 s (`ACTION_EMERGENCY + 5`, `yogg.dragext`). Divine Shield and
+  Ice Block are blocked on such a victim: an immune victim sheds aggro (`ThreatManager.cpp:123-134`).
+  After the release the dragger walks back to the melee spot until a tank has it or 8 s pass
+  (`return`), since the tank is ~39 yd away and a taunt reaches 30, and guardian control taunts loose
+  Guardians highest health first.
+- **Hunters drag only marks nobody else can**, the Stars method. Spots north (1986.0, 7.63, 326.797)
+  and south (1994.44, −55.65, 326.394), navprobe PATHFIND_NORMAL 33.2 / 33.1 yd from the melee spot,
+  42 / 44 from the ranged spot, inside Distracting Shot's 35 yd (6 s taunt, 8 s cooldown, no Guardian
+  immunity): shot with ≤5 s of the mark left, so it covers the heal. No damage on it before then (the
+  multiplier; Feign Death and Deterrence blocked), and Feign Death if it is still on the hunter 1 s
+  into the heal with the taunt gone (`shot` / `feign`).
+- **Deafening Roar is covered by an Aura Mastery chain** (25-man, fewer than 4 Keepers: 30 s in, then
+  every 60 s, 2.3 s cast, 4 s silence within 50 yd). Two pulls: 21 / 23 / 18 silenced, healing 40k →
+  17k/s. 64364 reaches only raiders carrying the presser's own Concentration Aura
+  (`spell_paladin.cpp`), and each paladin's aura applies separately (`SpellAuras.cpp:2164-2168`).
+  `YoggSaronTickRoar` latches `roarExpected` and the cast start; `YoggSaronRoarPaladin` picks the bot
+  paladin with Aura Mastery ready by the roar, not dragging, its own Concentration up, then GUID, so
+  Holylight and Justice alternate. It switches to Concentration 10 s ahead (`ACTION_RAID + 1`, other
+  auras blocked) and presses during the cast (`ACTION_EMERGENCY + 8`, one per roar, others after
+  500 ms); class nodes are off Aura Mastery meanwhile. Probed as `yogg.roar`.
+- **A Brain Link walk stops at Crush range** (25 yd) of a live unstunned Crusher: one walked a bot 18 yd
+  from a leftover as phase 3 began, and the cone killed it.
 - **Drain Life is kicked on purpose.** The interrupt node's casters include Immortal Guardians
   channelling 64159/64160 in phase 3; immunity set `-286` has SILENCE but not INTERRUPT, so Strangulate,
   Silencing Shot and Arcane Torrent are dropped for them; `interruptClaims` holds a cast for one kicker

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <tuple>
 #include <vector>
 
 #include "AiObjectContext.h"
@@ -29,6 +30,7 @@
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "Spell.h"
+#include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "Unit.h"
 #include "Vehicle.h"
@@ -66,6 +68,14 @@ bool IsYoggSaronFocusedGuardian(Unit* unit)
     uint32 const entry = unit->GetEntry();
 
     return entry == NPC_GUARDIAN_OF_YS || entry == NPC_IMMORTAL_GUARDIAN || entry == NPC_MARKED_IMMORTAL_GUARDIAN;
+}
+
+// Drops a forced walk still booked for somewhere else, since a forced move waits out another forced one's
+// hold, up to 5 s. 2D, as the walk stores its end at the ground height it pathed to.
+void YoggSaronTakeOverForcedWalk(LastMovement& last, Position const& destination)
+{
+    if (last.lastMoveShort.GetExactDist2d(destination.GetPositionX(), destination.GetPositionY()) > 1.0f)
+        last.clear();
 }
 
 // The taunt a tank class points at one Guardian. None of them needs facing.
@@ -718,7 +728,7 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
             if (!brain.approachable)
                 brain.approachable = brain.brainLevel && YoggSaronBrainRoomApproachable(botAI);
 
-            allowed = *brain.approachable;
+            allowed = *brain.approachable && !YoggSaronBrainHeld(botAI);
             break;
         // Crush skips its own cone test inside 2 yd and re-aims onto whoever the tentacle is swinging
         // at, so a melee bot that was clear becomes collinear without moving. No angle answers that,
@@ -748,12 +758,37 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
         // Below 10% it is Weakened, and nothing but Thorim's Titanic Storm can finish one, so holding
         // there is a dead tick for the rest of the fight. Above it, only once a tank leads on threat.
         case NPC_IMMORTAL_GUARDIAN:
-            allowed = candidate->GetHealthPct() > 10 &&
+        {
+            float const health = candidate->GetHealthPct();
+            if (!brain.thorim)
+                brain.thorim = YoggThorimKeeperActive(botAI);
+
+            if (*brain.thorim)
+                allowed = health > ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT;
+            // The beacon heal puts 750k into a 425k Guardian over 20 s, so a hit while it runs is healed
+            // straight back.
+            else if (candidate->HasAura(SPELL_EMPOWERING_SHADOWS_25) || candidate->HasAura(SPELL_EMPOWERING_SHADOWS_10))
+                allowed = false;
+            // Down to the floor and no further, the rest goes on Yogg. Under it only while the gaze has
+            // the bot turned off Yogg anyway, and only one it can hit with him out of its front arc.
+            else if (health > ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT)
+                allowed = true;
+            else
+            {
+                if (!brain.gaze)
+                    brain.gaze = YoggSaronGazeActive(botAI);
+
+                allowed = *brain.gaze && health > ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT &&
+                          YoggSaronOutsideGaze(bot, YoggSaronNearestCreature(botAI, NPC_YOGG_SARON), candidate);
+            }
+
+            allowed = allowed &&
                       (!phaseThreeMelee() ||
                        candidate->GetExactDist2d(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) <=
                            ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE) &&
                       YoggSaronGuardianThreatAllows(bot, candidate, candidate->GetGUID() == bot->GetTarget());
             break;
+        }
         // Shadow Barrier is what phase 2 is read off, and it makes him immune.
         case NPC_YOGG_SARON:
             allowed = !candidate->HasAura(SPELL_SHADOW_BARRIER);
@@ -882,7 +917,9 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     // about Crush or Guardian threat though: it put melee on a lone live Crusher for ~150 bot-seconds
     // in one pull.
     Unit* fallback = AI_VALUE(Unit*, "dps target");
-    if (fallback && (fallback->GetEntry() == NPC_CRUSHER_TENTACLE || IsYoggSaronFocusedGuardian(fallback)) &&
+    if (fallback &&
+        (fallback->GetEntry() == NPC_CRUSHER_TENTACLE || fallback->GetEntry() == NPC_BRAIN ||
+         IsYoggSaronFocusedGuardian(fallback)) &&
         !IsAllowedTarget(fallback, brain))
         return nullptr;
 
@@ -1053,7 +1090,22 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
         return false;
     }
 
+    // Held off the Brain: the resolver no longer picks it, but auto attack, a channel and the pets would
+    // all carry on.
+    if (currentTarget && currentTarget->GetEntry() == NPC_BRAIN && YoggSaronBrainHeld(botAI))
+    {
+        DropTarget(currentTarget, true);
+        currentTarget = nullptr;
+    }
+
     Unit* target = phaseOne ? YoggSaronPhase1Focus(botAI) : ResolveTarget(currentTarget);
+
+    // PetAI never leaves a live victim, so a pet would stay on a Guardian the bot just left at the floor.
+    if (target && currentTarget && target != currentTarget && currentTarget->GetEntry() == NPC_IMMORTAL_GUARDIAN)
+        for (Unit* minion : bot->m_Controlled)
+            if (minion && minion->GetVictim() == currentTarget)
+                minion->AttackStop();
+
     if (!target)
     {
         // Melee still on a Crusher whose stun is about to lift. Holding it would have reach melee walk
@@ -1196,6 +1248,26 @@ bool YoggSaronBrainLinkAction::Execute(Event /*event*/)
         float const heading = fromMiddle > 0.1f ? std::atan2(y - middleY, x - middleX) : bot->GetOrientation();
         x = middleX + std::cos(heading) * ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
         y = middleY + std::sin(heading) * ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
+    }
+
+    // Not into a live Crusher's Crush either. A link left over from phase 2 walked one bot 18 yd from a
+    // leftover Crusher as phase 3 started, and the cone killed it. Waiting out there costs a shared hit a
+    // second.
+    std::list<Creature*> crushers;
+    bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, 80.0f);
+    for (Creature* crusher : crushers)
+    {
+        if (!crusher->IsAlive() || YoggSaronCrusherStunHolds(botAI, crusher))
+            continue;
+
+        float const gap = std::hypot(x - crusher->GetPositionX(), y - crusher->GetPositionY());
+        if (gap >= ULDUAR_YOGG_SARON_CRUSH_RANGE)
+            continue;
+
+        float const heading = gap > 0.1f ? std::atan2(y - crusher->GetPositionY(), x - crusher->GetPositionX())
+                                         : crusher->GetAngle(bot);
+        x = crusher->GetPositionX() + std::cos(heading) * ULDUAR_YOGG_SARON_CRUSH_RANGE;
+        y = crusher->GetPositionY() + std::sin(heading) * ULDUAR_YOGG_SARON_CRUSH_RANGE;
     }
 
     return MoveNear(bot->GetMapId(), x, y, bot->GetPositionZ(), sPlayerbotAIConfig.contactDistance,
@@ -1386,6 +1458,9 @@ bool YoggSaronBrainSpotAction::Execute(Event /*event*/)
 {
     Position const spot = YoggSaronBrainSpot(bot);
 
+    // A bot that landed just before the door opened is still booked on the walk to a tentacle across the
+    // room: one ran 98 yd east and 177 yd back with 26 of these refused behind it.
+    YoggSaronTakeOverForcedWalk(AI_VALUE(LastMovement&, "last movement"), spot);
     YoggSaronReleaseStalledWalk(botAI, "brainspot", spot);
 
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
@@ -1423,12 +1498,9 @@ bool YoggSaronMoveToExitPortalAction::Execute(Event /*event*/)
         if (!YoggSaronWalkMakingProgress(botAI, "exit", portal->GetPosition()))
             continue;
 
-        // The brain spot walk is forced too, and a forced move waits out another forced one's hold, up to
-        // 5 s: exits stood 4.0 and 4.4 s refused behind it in two pulls and were charmed.
-        // 2D, since the walk stores its end at the ground height it pathed to.
-        LastMovement& last = AI_VALUE(LastMovement&, "last movement");
-        if (last.lastMoveShort.GetExactDist2d(portal->GetPositionX(), portal->GetPositionY()) > 1.0f)
-            last.clear();
+        // The brain spot walk is forced too: exits stood 4.0 and 4.4 s refused behind it in two pulls and
+        // were charmed.
+        YoggSaronTakeOverForcedWalk(AI_VALUE(LastMovement&, "last movement"), portal->GetPosition());
 
         // A spline that died reads as a duplicate of itself until the hold runs out: one bot stood 3.5 s.
         YoggSaronReleaseStalledWalk(botAI, "exit", portal->GetPosition());
@@ -1605,7 +1677,10 @@ bool YoggSaronBeaconDragAction::Execute(Event /*event*/)
 {
     Unit* guardian = YoggSaronBeaconDragGuardian(botAI, true);
     if (!guardian)
-        return false;
+        return ReturnHealed();
+
+    if (bot->getClass() == CLASS_HUNTER)
+        return HunterDrag(guardian);
 
     if (guardian->GetVictim() != bot)
     {
@@ -1635,6 +1710,102 @@ bool YoggSaronBeaconDragAction::Execute(Event /*event*/)
         Attack(guardian);
 
     return true;
+}
+
+bool YoggSaronBeaconDragAction::HunterDrag(Unit* guardian)
+{
+    // No damage on it until the heal: any threat keeps it on the hunter once the taunt runs out.
+    if (bot->GetVictim() == guardian)
+    {
+        bot->AttackStop();
+        bot->InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
+    }
+
+    for (Unit* minion : bot->m_Controlled)
+        if (minion && minion->GetVictim() == guardian)
+            minion->AttackStop();
+
+    // One shot with the mark nearly done, so the 6 s taunt covers the heal after it.
+    Aura const* mark = guardian->GetAura(SPELL_SHADOW_BEACON);
+    bool const due = mark && mark->GetDuration() >= 0 &&
+                     static_cast<uint32>(mark->GetDuration()) <= ULDUAR_YOGG_SARON_BEACON_SHOT_LEFT_MS;
+    if (due && guardian->GetVictim() != bot && !guardian->HasAura(SPELL_DISTRACTING_SHOT, bot->GetGUID()) &&
+        bot->IsWithinDistInMap(guardian, ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE) &&
+        bot->IsWithinLOSInMap(guardian) && botAI->CastSpell("distracting shot", guardian))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.beacondrag", "shot");
+
+        return true;
+    }
+
+    // To the hunter spot, or short of it toward the Guardian when the spot is out of the shot's range.
+    Position destination = YoggSaronBeaconHunterSpot(bot);
+    float const reach = guardian->GetExactDist2d(destination);
+    if (reach > ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE && guardian->GetVictim() != bot)
+    {
+        float const share = (ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE - 2.0f) / reach;
+        destination.Relocate(guardian->GetPositionX() + (destination.GetPositionX() - guardian->GetPositionX()) * share,
+                             guardian->GetPositionY() + (destination.GetPositionY() - guardian->GetPositionY()) * share,
+                             destination.GetPositionZ());
+    }
+
+    if (bot->GetExactDist2d(destination) > ULDUAR_YOGG_SARON_BEACON_DRAG_ARRIVED_RADIUS &&
+        YoggSaronWalkMakingProgress(botAI, "beacondrag", destination))
+    {
+        Position const step = YoggSaronBodyRoute(bot, destination);
+        MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false, false,
+               true, MovementPriority::MOVEMENT_FORCED, true, false);
+        return true;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.beacondrag", "hold");
+
+    return true;
+}
+
+bool YoggSaronBeaconDragAction::ReturnHealed()
+{
+    Unit* guardian = YoggSaronBeaconReturning(bot);
+    if (!guardian)
+        return false;
+
+    // A hunter has nothing to hold it with. Once its taunt has run out, a Guardian still on it goes back
+    // to whoever is next on its threat, which is the tank that held it before the mark.
+    if (bot->getClass() == CLASS_HUNTER)
+    {
+        if (guardian->HasAura(SPELL_DISTRACTING_SHOT, bot->GetGUID()) || !botAI->CanCastSpell("feign death", bot))
+            return false;
+
+        Aura const* heal = guardian->GetAura(SPELL_EMPOWERING_SHADOWS_25);
+        if (!heal)
+            heal = guardian->GetAura(SPELL_EMPOWERING_SHADOWS_10);
+        if (heal && heal->GetMaxDuration() - heal->GetDuration() < static_cast<int32>(ULDUAR_YOGG_SARON_BEACON_FEIGN_DELAY_MS))
+            return false;
+
+        if (!botAI->CastSpell("feign death", bot))
+            return false;
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.beacondrag", "feign");
+
+        return true;
+    }
+
+    // Back to the melee spot with it, where the tank's taunt reaches: from the drag spot it can't.
+    Position const& spot = ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+    if (bot->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_BEACON_DRAG_ARRIVED_RADIUS ||
+        !YoggSaronWalkMakingProgress(botAI, "beaconreturn", spot))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.beacondrag", "return");
+
+    Position const step = YoggSaronBodyRoute(bot, spot);
+
+    return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronPhase3LustAction::Execute(Event /*event*/)
@@ -1711,9 +1882,14 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
 
     // Loose ones before the leash: a taunt is a cast, not a walk, and the Guardian is already heading
     // for a healer or a ranged while the tank would still be walking home. Heal threat pulls a fresh one
-    // off its threatless first victim about a second after it spawns.
+    // off its threatless first victim about a second after it spawns. Highest health first: a full or
+    // beacon-healed one hits a non-tank for 30-75k, a Weakened one for ~2k.
     std::sort(loose.begin(), loose.end(),
-              [](auto const& left, auto const& right) { return left.first < right.first; });
+              [](auto const& left, auto const& right)
+              {
+                  return std::make_tuple(-left.second->GetHealthPct(), left.first) <
+                         std::make_tuple(-right.second->GetHealthPct(), right.first);
+              });
     for (auto const& [distance, guardian] : loose)
     {
         if (Taunt(guardian))
@@ -1978,6 +2154,70 @@ bool YoggSaronNovaExternalAction::Execute(Event /*event*/)
 bool YoggSaronShadowAuraAction::Execute(Event /*event*/)
 {
     return botAI->CastSpell("shadow resistance aura", bot);
+}
+
+bool YoggSaronRoarAuraAction::Execute(Event /*event*/)
+{
+    if (!botAI->CastSpell("concentration aura", bot))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.roar", "preswitch");
+
+    return true;
+}
+
+bool YoggSaronRoarAuraMasteryAction::Execute(Event /*event*/)
+{
+    // Claimed only with the aura up and the button ready, so a paladin that can't press never takes the
+    // roar off one that can.
+    if (!botAI->HasAura("concentration aura", bot, false, true))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.roar", "noconc");
+
+        return false;
+    }
+
+    if (!ClaimYoggSaronRoar(botAI))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.roar", "claimed");
+
+        return false;
+    }
+
+    // Straight through CastSpell, past the hold that keeps the class nodes off Aura Mastery in phase 3.
+    if (!botAI->CastSpell("aura mastery", bot))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.roar", "press");
+
+    return true;
+}
+
+bool YoggSaronBeaconDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const defensive = NextPhysicalDefensive(botAI, bot, "yogg.dragdef", 0);
+
+    return defensive && botAI->CastSpell(defensive, bot);
+}
+
+bool YoggSaronBeaconExternalAction::Execute(Event /*event*/)
+{
+    Player* victim = YoggSaronBeaconExternalVictim(botAI);
+    if (!victim)
+        return false;
+
+    char const* external = YoggSaronNovaExternalAction::PickExternal(botAI, victim);
+    if (!external || !ClaimYoggSaronBeaconExternal(botAI, victim))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.dragext", external);
+
+    return botAI->CastSpell(external, victim);
 }
 
 bool YoggSaronNovaRaidCooldownAction::Execute(Event /*event*/)

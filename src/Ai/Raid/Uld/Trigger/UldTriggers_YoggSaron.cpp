@@ -714,13 +714,17 @@ bool YoggSaronLunaticGazeTrigger::IsActive()
 bool YoggSaronBeaconDragTrigger::IsActive()
 {
     // Class first: the drag pick sweeps from Yogg.
-    bool const mayDrag =
-        PlayerbotAI::IsTank(bot) ||
-        (!PlayerbotAI::IsHeal(bot) && (bot->getClass() == CLASS_PALADIN || bot->getClass() == CLASS_DEATH_KNIGHT));
-    if (!mayDrag || !botAI->CanMove() || YoggSaronOnBrainLevel(bot))
+    bool const mayDrag = PlayerbotAI::IsTank(bot) || bot->getClass() == CLASS_HUNTER ||
+                         (!PlayerbotAI::IsHeal(bot) &&
+                          (bot->getClass() == CLASS_PALADIN || bot->getClass() == CLASS_DEATH_KNIGHT));
+    if (!mayDrag || YoggSaronOnBrainLevel(bot))
         return false;
 
-    return YoggSaronBeaconDragGuardian(botAI, false) != nullptr;
+    // A dragger stays on the node after the heal, to walk its Guardian back or feign off it.
+    if (YoggSaronBeaconReturning(bot))
+        return true;
+
+    return botAI->CanMove() && YoggSaronBeaconDragGuardian(botAI, false) != nullptr;
 }
 
 bool YoggSaronPhase3LustTrigger::IsActive()
@@ -931,6 +935,47 @@ bool YoggSaronNovaExternalTrigger::IsActive()
         return false;
 
     Player* victim = YoggSaronNovaVictim(botAI);
+
+    return victim && YoggSaronNovaExternalAction::PickExternal(botAI, victim);
+}
+
+bool YoggSaronRoarAuraTrigger::IsActive()
+{
+    return YoggSaronRoarAuraHeld(botAI) && !botAI->HasAura("concentration aura", bot, false, true) &&
+           botAI->CanCastSpell("concentration aura", bot);
+}
+
+bool YoggSaronRoarAuraMasteryTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_PALADIN || !YoggSaronRoarExpected(botAI))
+        return false;
+
+    return YoggSaronRoarCasting(botAI) && botAI->HasAura("concentration aura", bot, false, true) &&
+           botAI->CanCastSpell("aura mastery", bot);
+}
+
+bool YoggSaronBeaconDefensiveTrigger::IsActive()
+{
+    // The attacker set before anything else, so a bot nobody is hitting pays nothing.
+    if (bot->getAttackers().empty() || !YoggSaronHealedGuardianOn(botAI, bot))
+        return false;
+
+    if (PlayerbotAI::IsTank(bot) && !YoggSaronBeaconDragging(bot) && !YoggSaronBeaconReturning(bot))
+        return false;
+
+    return NextPhysicalDefensive(botAI, bot, nullptr, 0) != 0;
+}
+
+bool YoggSaronBeaconExternalTrigger::IsActive()
+{
+    // Pain Suppression and Guardian Spirit are a healer's, Hand of Sacrifice any paladin's.
+    if (!PlayerbotAI::IsHeal(bot) && bot->getClass() != CLASS_PALADIN)
+        return false;
+
+    if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return false;
+
+    Player* victim = YoggSaronBeaconExternalVictim(botAI);
 
     return victim && YoggSaronNovaExternalAction::PickExternal(botAI, victim);
 }

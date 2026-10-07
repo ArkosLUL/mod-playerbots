@@ -242,6 +242,8 @@ private:
         std::optional<bool> approachable;
         // Filled on first use: most resolves never test a Guardian or a leftover tentacle.
         std::optional<bool> phaseThreeMelee;
+        std::optional<bool> thorim;
+        std::optional<bool> gaze;
     };
 
     bool IsAllowedTarget(Unit* candidate, BrainApproach& brain) const;
@@ -446,6 +448,12 @@ public:
     YoggSaronBeaconDragAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
+
+private:
+    // A hunter pulls with Distracting Shot instead of a taunt and a walk, and holds its fire.
+    bool HunterDrag(Unit* guardian);
+    // After the heal: walk the Guardian back toward the tank, or a hunter feigns it off.
+    bool ReturnHealed();
 };
 
 class YoggSaronPhase3LustAction : public Action
@@ -547,6 +555,52 @@ private:
     // through it, and it sheds threat.
     static constexpr char const* HEALER_EXTERNALS[] = {"pain suppression", "guardian spirit",
                                                        "hand of sacrifice"};
+};
+
+// The roar paladin's own Concentration Aura, ahead of the roar: Aura Mastery's immunity only reaches
+// raiders carrying the presser's own copy.
+class YoggSaronRoarAuraAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron roar aura action";
+
+    YoggSaronRoarAuraAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+// Aura Mastery during Deafening Roar's 2.3 s cast, one press per roar.
+class YoggSaronRoarAuraMasteryAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron roar aura mastery action";
+
+    YoggSaronRoarAuraMasteryAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+// The bot's own physical cut while a beacon-healed Guardian is hitting it.
+class YoggSaronBeaconDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron beacon defensive action";
+
+    YoggSaronBeaconDefensiveAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+// A healer's or paladin's external on whoever a healed Guardian is hitting with no button of their own.
+// None of them is an immunity, which would hand the Guardian to somebody else.
+class YoggSaronBeaconExternalAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron beacon external action";
+
+    YoggSaronBeaconExternalAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
 };
 
 // Puts Shadow Resistance Aura up and leaves it there, so Aura Mastery has something worth doubling.

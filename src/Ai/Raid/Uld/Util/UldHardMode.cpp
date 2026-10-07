@@ -104,3 +104,26 @@ bool YoggThorimKeeperActive(PlayerbotAI* botAI)
     // gossips. Which Keepers are up is a raid choice made in-instance, so it cannot come from config.
     return (instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK) & (1u << KEEPER_THORIM)) != 0;
 }
+
+uint32 YoggKeepersFreedCount(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return 0;
+
+    Map* map = bot->GetMap();
+    if (!map || !map->IsDungeon())
+        return 0;
+
+    InstanceScript* instance = ((InstanceMap*)map)->GetInstanceScript();
+    if (!instance)
+        return 0;
+
+    // Bits 0-3, as Sara's DATA_GET_KEEPERS_COUNT counts them.
+    uint32 const mask = instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK);
+    uint32 count = 0;
+    for (uint32 keeper = 0; keeper < 4; ++keeper)
+        count += (mask >> keeper) & 1u;
+
+    return count;
+}

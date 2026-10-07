@@ -83,6 +83,21 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Spells at something the bot is holding off, which the resolver alone can't stop: a class node aims at
+// "attackers" or the current target value on its own. On the Brain while the brain team holds, DoTs and
+// channels from the DoT line and everything from the hold line, and on a marked Guardian while a hunter
+// drags one, since its threat would keep the Guardian on it once Distracting Shot runs out.
+class YoggSaronHeldTargetCastMultiplier : public Multiplier
+{
+public:
+    YoggSaronHeldTargetCastMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron held target cast multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+};
+
 // Phase 1 walks back to the stack or the station, held in two cases:
 // - A Sara's Fervor holder near a live nova. The dodge only fires inside 17 yd, so the station, the
 //   leash and the reach nodes walked the bot straight back in: 31 of 44 runs were inside the blast
