@@ -123,6 +123,18 @@ off the cooldown. The trigger tests `HasAura(…, bot, false, true)`: **its own 
 sits on every raider and otherwise reads as already done, which is why no bot had ever taken the aura
 while one was played.
 
+**And the other paladins have to keep off the slot, or the cover lands half a second late.** The core
+lets two copies of one paladin aura coexist per caster and gives the effects to the strongest, ties to
+the lower caster GUID (`SpellAuras.cpp`, a local patch). Three paladins on 48943 is therefore not
+redundancy but a ping-pong: in one pull the effects changed hands **207 times in 110 s**, and the
+elected paladin pressed Aura Mastery 15 ms before a nova that still resisted a median **25.3%** because
+the dominance had not flipped to it yet. The next nova 3.2 s on resisted **40.0%**, the pull's highest.
+`yogg-saron shadow aura other hold` keeps every non-elected paladin off 48943 and off Aura Mastery, and
+names the two generic `shadow resistance action` nodes too, since their action adds a strategy that
+re-casts the aura by itself. Nothing else of theirs is held, so their own buff strategy puts Devotion or
+Concentration back in the slot on the next GCD. Only while somebody is elected, so a raid with no Aura
+Mastery anywhere keeps the generic nodes.
+
 Healers were already putting 20,000-23,000 HPS into nine melee and out-healing it **1.7 to 1**, and two
 novas in one tick killed eight from full: an instant that empties a bar is mitigated or not survived.
 All **25** phase 1 deaths across four pulls were this spell, and not one had a cooldown up.
@@ -177,6 +189,13 @@ low" reaction the ladder exists to replace: at 1:06 of one pull the buttons fire
 nova that killed two bots at 100% health. `expected` is `…_NOVA_EXPECTED_DAMAGE` per low Guardian in
 reach, at most `…_NOVA_MAX_CHAIN` (2) of them, doubled under Fervor.
 
+**It is the unresisted roll, though, so a bot carrying the 130 is planned against
+`…_NOVA_RESISTED_DAMAGE` (25,740).** Over **892** hits a nova landed a median **14,749**, a 90th
+percentile 20,798 and a 99th 23,702, and never resisted under **10.0%**. At 28,600 a full-health melee
+bot nothing on the table could kill still read as at risk, which is what emptied the externals below.
+`YoggSaronNovaDamageFrom` reads `GetResistance(SPELL_SCHOOL_SHADOW)` against `…_NOVA_RESISTED_AT` (130),
+covering the Prayer, the paladin aura, Aura Mastery and gear at once: one exclusive aura, highest only.
+
 **Two gates, and the tighter one decides whether to spend at all.** Over 48 novas a Guardian first
 dropping under **20%** detonated a median 4.8 s later and as late as 11.5; under **10%** a median 2.4 s
 and never later than 3.7 across one pull's 11. So `…_NOVA_NOW_HEALTH_PCT` (10) is where a bot spends its
@@ -213,6 +232,20 @@ the first detonates.
 **After phase 1 the gate still fires, because there is no cloud to wake.** The leftover Guardians took
 **101** melee hits with **68** of them bare, so leaving is free there and worth having.
 
+**Confirmed on the next pull, which exposed a different killer.** No melee dodge cited a nova at all,
+melee cloud dodges fell from 17-24 a pull to **6**, Guardians to **13** with 10 of 10 inside 15 yd, and
+phase 1 ran **110.4 s**, the fastest of seven. But five bots died to novas and **three were the same two
+dying again**: a battle rez strips every raid buff, so Totemist and Assasin came back carrying none of
+the nine they died with — no Prayer of Fortitude, Gift of the Wild, Blessing of Kings or Sanctuary, no
+Prayer of Shadow Protection — on bars at most **83%** and **87%** of the buffed pool, and each then died
+**from 100% of the new bar** to a single nova. Nothing re-buffs a raider in combat. `yogg-saron battle
+rez hold` holds `rebirth` until the handover, the first stretch of the fight with no nova in it.
+Reincarnation cannot be held the same way: it runs from the **dead engine**, which carries only `dead`,
+`stay`, `chat`, `default` and `follow`, so no encounter rule reaches it.
+
+`trace.maxhp` keeps the pool from before the first death, so a resurrected bot's percentages are wrong
+and the killing blow is the only witness to its real bar.
+
 **The station band survives as the Fervor holder's destination**, and that is who `HazardSet::preferred`
 is for now. It is the only-orbit-2 band, so it costs no summon of its own — orbit 2 runs through the
 station and 14 bots wake that cloud every lap anyway, and Fervor runners woke **1 Guardian in 85**.
@@ -229,8 +262,22 @@ a melee healer — `IsMelee` is `!IsRanged`.
 **There are two raid-wide covers, and Aura Mastery goes first.** `YoggSaronNovaRaidCover` picks it over
 Divine Sacrifice whenever the elected paladin has its own aura up and the cooldown ready, because it
 costs the caster nothing where Divine Sacrifice redirects 30% of the raid's damage onto it. Both run
-120 s against a nova every 10, both share the one `ClaimYoggSaronNovaWindow` claim, and `yogg.novaraid`
-records which went.
+120 s against a nova every 10, and `yogg.novaraid` records which went.
+
+**Both claims key on the Guardian, because every nova death landed on an uncovered nova.** One pull left
+**9 of 13** novas with nothing raid-wide up and **4 of its 5** deaths on one of those.
+`…_NOVA_WINDOW_MS` was a 10 s stretch of wall clock held by whoever took it: the elected paladin claimed
+it and spent Aura Mastery, its only cover since Retribution has no Divine Sacrifice, and the second
+Guardian of a **3.2 s** pair then went uncovered while two Divine Sacrifices sat ready. Guardians die
+1.8-4.5 s apart and 32 such pairs hit one bar inside 6 s in that pull, 8 for more than a whole bar, so
+the claim now names the lowest Guardian in reach — every paladin in the pile sweeps the same 17 yd, so
+they agree on which it is.
+
+`ClaimYoggSaronNovaExternal` keys on the same Guardian rather than on the victim. Per victim the raid
+emptied itself: **four** Hands of Sacrifice inside **15 s**, because `YoggSaronNovaVictim`'s worst pick
+flips between ticks and each flip read as a fresh bot to cover. Three went on novas that killed nobody
+and nothing was left for the four that did, while Lay on Hands kept arriving 0.03-0.4 s **after** the
+death.
 
 **The raid-wide button waits for a chained nova, or it is never there for one.**
 `YoggSaronNovaHurtCount` flags a member on `GetHealth() <= expected`, and one nova's `expected` is the
@@ -535,10 +582,13 @@ off a cloud.
 **Walks back wait for a cloud to pass.** 7 of the 69 Guardians raiders marked in those traces came off
 a cloud only Fervor runners touched, each off its own ground: 4 melee at 8-10 yd, three of them walking
 back, and 3 ranged or healers at 11.9-27.3 yd. The same multiplier holds the station walk, and the
-leash and `reach melee` from outside 6.5 yd, while `YoggSaronWalkCrossesCloud` puts a cloud within 9.5
-yd of the line now, halfway or on arrival. It samples the walk's own length: the 6 s lead is a quarter
-of the inner orbit. Nothing inside the leash is held, since the inner orbit reaches most of it, nor a
-bot already standing in a cloud. The station walk ignores clouds within 14.5 yd of the spot: orbit 2
+leash and `reach melee` from outside 6.5 yd, while `YoggSaronWalkCrossesCloud` refuses a line a cloud
+will come within 9.5 yd of. It walks the leg in `…_WALK_CLOUD_STEPS` (8) steps and pairs each with where
+the clouds will be by then, rather than testing every cloud position against the whole leg: an orbiting
+cloud crosses a radial path sooner or later, so that would refuse almost every route into the room.
+Capping the lead at one 6 s window instead left the rest of a long walk checked against clouds that had
+moved on, and the **17 s** run in from the door woke **3 of 13** Guardians in one pull. Nothing inside
+the leash is held, since the inner orbit reaches most of it, nor a bot already standing in a cloud. The station walk ignores clouds within 14.5 yd of the spot: orbit 2
 over the stack is its designed cost, and one more bot summons nothing extra.
 
 **Ranged and healers hold one spot on the second orbit.** Guardians die on Sara, so her spot is a
@@ -576,8 +626,14 @@ wrong one of the two and let a third of the novas through; at 6.5 a kill still c
 cannot reach the station. The cost is a narrower band against `reach melee`, and `yogg.p1leash` counts
 the flips.
 
-Nothing pins melee inside 2.89 yd, though — they get there because a Guardian walks to whoever holds
-threat and `meleeDistance` is 0.75. Left alone they sit at **2.5-2.9 yd** and wake nothing.
+**A melee bot that is neither tanking nor healing gets a tighter leash, because the pile wakes the
+inner orbit by standing still.** Orbit 1 is 11.6 yd out and a cloud wakes to anyone inside 8.5, so a
+foot past `…_P1_PILE_LEASH` (**3.1 yd**, the difference) summons a Guardian: **5 of 6** melee-foot
+wakes in one pull had a melee moving at the mark, and **10 of 10** of those melee stood past 3.1 yd, a
+median **4.5 yd** out. The pile's median is **1.79 yd**, but each bot sat outside 3.1 for **27-48%** of
+the phase, which is enough. `…_P1_PILE_RELEASE` (2.0) is its hysteresis. The wide 6.5/2.8 pair stays the
+tank's, because that one is about where the *Guardian* dies, which follows threat, not where this bot
+puts its feet.
 
 **What takes them out of the circle is their own cloud dodge, so the dodge aims back at it.**
 `set.preferred` asks for `…_P1_CLOUD_FREE_RADIUS` of the middle, for melee that are neither tank nor
@@ -588,6 +644,14 @@ ran out onto the second orbit's ring — while a spot in the circle was clear of
 past the route test in **111 of the 124**, and in 32 of the 38 that ran out. So melee feet woke **16 of
 102** Guardians, **11** of them inside 20 s of a dodge; the back line woke 20, the tanks 16, Sara's
 timer 46, and 4 could not be attributed. Preferred, not required, so it never holds a bot in a cloud.
+
+**The preference was not reaching the core once the step-out went** — **0 of 6** melee cloud dodges
+landed inside it and they ended a median **24.6 yd** out. `FindNearestPositionClearOfHazards` only
+offers points on rings around the bot, 16 bearings apart, which at 20 yd out are **7.8 yd** from each
+other against a 5.6 yd circle, so the core falls between two bearings. `YoggSaronSpacingAction::Execute`
+now tries the middle on the bot's own bearing before the rings, short of the edge because Sara stands
+there. A finer grid instead would clear the passability cache between the preferred and the plain sweep
+and quadruple the map queries on every dodge.
 
 ## Targeting is direct, never a raid icon
 
@@ -1079,6 +1143,15 @@ Confirmed again over six later pulls: the median bot **0.0-0.2 yd** from the anc
 **0.0-10.3 yd** across on bearing 108-117°, melee 0 of 9 in the ring every pull, and the tank at
 **21.5 yd** when the ring lit with **0 or 1** crossings against one to four, the two walks' refusals
 down from 46-97 each to **15-16** in total.
+
+**A front line that stacks perfectly is uniformly far from the healers, which is open.** After the ring
+lit, **9 of 11** melee and tanks left every healer's 38.5 yd at some point against **0-2 of 11** in the
+pulls before, a median gap of **25.9 yd**. The anchor is 21.5 yd out on bearing 109° and the healers
+stand at 21.5 on bearing 180°, so the two are **25.0 yd** apart before anyone moves; it never showed
+while melee were scattered, because some of them were always near a healer. The handover walk itself
+wakes nothing, though: over seven pulls **no** cloud was marked inside the window and **none** was
+within 8.5 yd of the anchor when the ring lit, since a cloud marks its Guardian 10 s ahead and phase 1
+ends first.
 
 **Three to six Guardians are alive at the ring in every pull, and the pile is one blast.** A nova on
 the anchor catches all nine melee where the fan caught a few: one pull's 2:05.6 nova killed four with
@@ -1677,7 +1750,14 @@ caught before and after phase 1 — one is somebody who walked in, the whole sta
 a Guardian to them. Also who carried each of the two 130 sources and whether Aura Mastery was pressed by
 one of them, and every pair of novas inside 6 s on one bar with what the pair took off it: that pair is
 what kills once melee stop walking, and a removal row counts as evidence of a holder because a buff put
-up before the pull shows only when it comes off.
+up before the pull shows only when it comes off. Plus which novas had nothing raid-wide up against
+which ones killed, every one-target external with whether its nova killed anybody, and which of those
+deaths were resurrected straight back into the pile.
+
+`--clouds` says how many melee-foot wakes had a melee **moving** at the mark and how far out those melee
+stood, against the 3.1 yd the inner orbit cannot reach; `--phases` says how many Guardians came off a
+cloud marked inside the handover window and how many clouds were within reach of the anchor when the
+ring lit. Both are zero in every pull so far.
 
 **Do not add a Sanity level probe** (`yogg.sanity` is a walk reason). 63050 is already in the aura stream — 467 and 819 rows across the two
 attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic

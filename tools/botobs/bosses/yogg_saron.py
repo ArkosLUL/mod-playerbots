@@ -175,6 +175,14 @@ NPC_OMINOUS_CLOUD = 33292
 CLOUD_ORBITS = (11.6, 21.4, 31.2, 41.0, 50.9, 60.8)
 CLOUD_SUMMON_REACH = 8.5
 CLOUD_SUMMON_DELAY_MS = 10000
+# Stand inside this and the inner orbit is out of summoning reach, so a melee foot past it is what wakes
+# a Guardian from the pile.
+PILE_LEASH = CLOUD_ORBITS[0] - CLOUD_SUMMON_REACH
+# A battle rez lands within a couple of seconds of the death it answers; past that it is a different one.
+REZ_WINDOW_MS = 5000
+# How long after coming back a second death still belongs to the first. Longer than this and the bot
+# lived through what killed it, and the next death is its own story.
+REZ_AGAIN_MS = 60000
 INFORM_CLOUD_MIN_RANGE = 20.0
 
 # ULDUAR_YOGG_SARON_P1_ROOM_RADIUS: past the outer orbit's reach no cloud touches a bot, and the phase 1
@@ -814,6 +822,26 @@ def show_handover(trace: Trace) -> None:
         print(f"      gap to the nearest healer: median {statistics.median(flat):.1f} yd, "
               f"worst {max(flat):.1f}" + (f"   {', '.join(loose)}" if loose else ""))
 
+    # Whether the walk to the anchor wakes anything. A cloud marks its Guardian 10 s before it arrives,
+    # so a walk inside the window could only show up as a Guardian after it, and the anchor sits 0.1 yd
+    # off the second orbit. Both came out zero over seven pulls, because phase 1 ends first and no cloud
+    # is left near the anchor by then.
+    clouds = guids_of_entry(trace, NPC_OMINOUS_CLOUD)
+    guardians = guids_of_entry(trace, NPC_GUARDIAN)
+    frames = [(snap["t"], {row[0]: (row[1], row[2]) for row in snap.get("u", [])})
+              for snap in trace.of("snap")]
+    born: dict[int, int] = {}
+    for when, spots in frames:
+        for guid in spots:
+            if guid in guardians and guid not in born:
+                born[guid] = when
+    woke = sum(1 for one in born.values() if down <= one - CLOUD_SUMMON_DELAY_MS <= ring)
+    at_ring = min(frames, key=lambda frame: abs(frame[0] - ring))[1] if frames else {}
+    near = sum(1 for guid in clouds if guid in at_ring
+               and math.dist(at_ring[guid], HANDOVER_MELEE_SPOT) <= CLOUD_SUMMON_REACH)
+    print(f"    Guardians from a cloud marked inside the window: {woke}, clouds within "
+          f"{CLOUD_SUMMON_REACH} yd of the anchor when the ring lit: {near}")
+
     # The bot tank has to stand at the anchor with the melee and still wants to hold whatever is left,
     # and both walks are forced. More than one crossing is the two trading the tick instead of a bot
     # walking somewhere, and a refused move is one that never got the motion master.
@@ -1061,6 +1089,25 @@ def beyond_reach(spots: list[tuple[float, float]], healers: list[tuple[float, fl
               if not any(math.dist(spot, healer) <= reach for healer in healers))
 
     return out, len(spots)
+
+
+def moving_at(spot, before, still_yd: float) -> bool:
+    """Whether the bot had moved more than `still_yd` between the two samples. A missing sample counts
+    as standing, because not knowing is not evidence of a walk."""
+    if not spot or not before:
+        return False
+
+    return math.dist(spot, before) > still_yd
+
+
+def rez_pairs(deaths: list[tuple[int, int]], rezzes: list[int],
+              window_ms: int) -> list[tuple[int, int, int | None]]:
+    """Each death with the first resurrection inside `window_ms` after it, or None when nobody came.
+    Matched on time because a battle rez cast row never names its target."""
+    ordered = sorted(rezzes)
+
+    return [(when, guid, next((one for one in ordered if when <= one <= when + window_ms), None))
+            for when, guid in sorted(deaths)]
 
 
 def resisted_share(landed: int, resisted: int) -> float:
@@ -1387,10 +1434,13 @@ def show_cloud_spawns(trace: Trace) -> None:
 
         mark = when - CLOUD_SUMMON_DELAY_MS
         _, marked = frame_at(mark)
+        _, before = frame_at(mark - 1000)
         who = []
         if cloud in marked:
             who = sorted((round(math.dist(marked[guid2], marked[cloud]), 1), trace.name(guid2),
-                          trace.role(guid2), moved_by(guid2, mark))
+                          trace.role(guid2), moved_by(guid2, mark),
+                          (moving_at(marked.get(guid2), before.get(guid2), WALK_STILL_YD),
+                           round(math.dist(marked[guid2], BODY), 1)))
                          for guid2 in roster
                          if guid2 in marked
                          and math.dist(marked[guid2], marked[cloud]) <= CLOUD_SUMMON_REACH)
@@ -1399,8 +1449,9 @@ def show_cloud_spawns(trace: Trace) -> None:
         detail.append((when, orbit, who))
 
     for when, orbit, who in detail:
-        names = ", ".join(f"{name}/{role} {gap}" + (f" <-{sent[0]} {sent[1]:.0f}s" if sent else "")
-                          for gap, name, role, sent in who) or "-"
+        names = ", ".join(f"{name}/{role} {gap}{'w' if step else ''}"
+                          + (f" <-{sent[0]} {sent[1]:.0f}s" if sent else "")
+                          for gap, name, role, sent, (step, _) in who) or "-"
         ring = f"orbit{orbit}" if orbit else "no cloud"
         print(f"  {clock(when):>9}  {ring:<9}  {names}")
 
@@ -1420,10 +1471,17 @@ def show_cloud_spawns(trace: Trace) -> None:
 
     # Melee separately from the back line: the back line's blob is one bearing of the 360 and it pays
     # for the station on purpose, while a melee foot on a cloud is a dodge that went the wrong way.
-    feet = [who for _, _, who in detail if any(role == "melee" for _, _, role, _ in who)]
-    sent = sum(1 for who in feet if any(role == "melee" and moved for _, _, role, moved in who))
+    feet = [who for _, _, who in detail if any(role == "melee" for _, _, role, _, _ in who)]
+    sent = sum(1 for who in feet if any(role == "melee" and moved for _, _, role, moved, _ in who))
+    walking = sum(1 for who in feet
+                  if any(role == "melee" and step for _, _, role, _, (step, _) in who))
+    out = [radial for who in feet for _, _, role, _, (_, radial) in who if role == "melee"]
     if feet:
-        print(f"  melee feet: {len(feet)} of {total}, of those with a dodge behind them: {sent}")
+        print(f"  melee feet: {len(feet)} of {total}, of those with a dodge behind them: {sent}, "
+              f"with a melee walking at the mark: {walking}   (w marks a walker above)")
+        past = sum(1 for one in out if one > PILE_LEASH)
+        print(f"    those melee stood a median {statistics.median(out):.1f} yd out, {past} of {len(out)}"
+              f" past the {PILE_LEASH:.1f} yd the inner orbit cannot reach")
 
 
 def show_portals(trace: Trace) -> None:
@@ -3861,6 +3919,7 @@ def show_novas(trace: Trace) -> None:
     for rec in death_records(trace):
         died[rec.get("g")].append(rec["t"])
 
+    covers: list[tuple[int, bool]] = []
     rows_all = [rec for rows in hits.values() for rec in rows]
     total, clean, worst_clean = nova_preresist(rows_all)
     print(f"  novas on raiders: {len(hits)}, {total} hits")
@@ -3909,6 +3968,7 @@ def show_novas(trace: Trace) -> None:
             print(f"      at risk: {', '.join(shields)}")
 
         raid_up = sorted({name for guid in roster for name in nova_cover(raid.get(guid, []), when)})
+        covers.append((when, bool(raid_up)))
         if raid_up:
             print(f"      raid-wide: {', '.join(raid_up)}")
 
@@ -3922,6 +3982,25 @@ def show_novas(trace: Trace) -> None:
 
     print(f"  novas that would have killed somebody: {at_risk}, with a button up on at least one: {covered}")
     print(f"  deaths to a nova: {len(lethal)}, of which had any button up: {len(lethal_covered)}")
+
+    # Which novas nothing raid-wide was up for, against which ones killed. Every death in the pull that
+    # the per-Guardian claim came from landed on an uncovered nova, and one of those went uncovered only
+    # because a bot held the window with nothing left to press.
+    bare = [when for when, had in covers if not had]
+    if covers:
+        fell = sum(1 for _, when in lethal if any(abs(when - one) <= 2000 for one in bare))
+        print(f"  novas with nothing raid-wide up: {len(bare)} of {len(covers)}, "
+              f"deaths on one of those: {fell} of {len(lethal)}")
+
+    # The one-target externals, which run 2 and 3 minutes against a phase with a nova every 8 s. Spent
+    # per victim they all went inside the first 15 s, on novas that killed nobody.
+    spent = [(rec["t"], trace.name(rec.get("s")), NOVA_EXTERNALS[rec["sp"]])
+             for rec in sorted(trace.of("cast"), key=lambda rec: rec["t"])
+             if rec.get("sp") in NOVA_EXTERNALS and rec.get("s") in roster]
+    print(f"  one-target externals: {len(spent)} presses")
+    for when, who, what in spent:
+        says = "on a nova that killed" if any(abs(when - one) <= 4000 for _, one in lethal) else ""
+        print(f"    {clock(when):>9}  {who:14} {what:18} {says}")
 
     # The handover sends the front line to one spot 25 yd round the station ring from the back line, so
     # a Guardian that followed it there cannot reach them. One back-line bot caught is somebody who
@@ -3946,6 +4025,23 @@ def show_novas(trace: Trace) -> None:
         gap = cooldown_gap([when for when, _, _ in presses], RAID_COOLDOWN_MS, first)
         says = "one was in hand" if gap is None else f"the earliest was back {gap / 1000:.1f} s too late"
         print(f"    against the first nova that killed, at {clock(first)}: {says}")
+
+    # A battle rez puts the bot back on a bar 13-17% smaller, with none of the raid buffs it died with,
+    # and the next nova kills it from full health. Counted here because the deaths above include the
+    # second and third ones, which no pool in the trace describes: trace.maxhp keeps the bar from before
+    # the first death, so the killing blow is the only witness to the real one.
+    back = sorted(spell for spell, name in trace.spells.items()
+                  if name in ("Rebirth", "Reincarnation"))
+    rezzes = [rec["t"] for rec in trace.of("cast") if rec.get("sp") in back]
+    pairs = rez_pairs(sorted((when, guid) for guid, when in lethal), rezzes, REZ_WINDOW_MS)
+    if pairs:
+        up = sum(1 for _, _, one in pairs if one is not None)
+        print(f"  of those deaths, resurrected straight back into it: {up} of {len(pairs)}")
+        for when, guid, one in pairs:
+            again = [other for other in died[guid] if when < other <= when + REZ_AGAIN_MS]
+            says = f"back {(one - when) / 1000:.1f} s later" if one else "stayed down"
+            lived = f", died again {(again[0] - when) / 1000:.0f} s on" if one and again else ""
+            print(f"    {clock(when):>9}  {trace.name(guid):14} {says}{lived}")
 
     # What the gate's own figure is worth. Resistance is rolled per hit, so the median is not a floor,
     # but it is what decides whether a single nova can kill the pool the gate is comparing against.

@@ -1169,6 +1169,37 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.crossings([8.0, 12.0, 15.0], 2.8, 20.5), 0)
         self.assertEqual(yogg_saron.crossings([], 2.8, 20.5), 0)
 
+    def test_moving_at_needs_two_samples_and_more_than_a_shuffle(self):
+        # 1791373666's 0:49.185 cloud: four of the five melee on it had stepped 1.5-2.6 yd.
+        self.assertTrue(yogg_saron.moving_at((1980.0, -22.0), (1978.0, -22.0), 0.3))
+        # Exactly the threshold is standing, since the test is strictly greater.
+        self.assertFalse(yogg_saron.moving_at((1980.0, -22.0), (1980.3, -22.0), 0.3))
+        self.assertFalse(yogg_saron.moving_at((1980.0, -22.0), (1980.0, -22.0), 0.3))
+        # A bot the snapshot missed counts as standing: not knowing is not evidence of a walk.
+        self.assertFalse(yogg_saron.moving_at(None, (1978.0, -22.0), 0.3))
+        self.assertFalse(yogg_saron.moving_at((1980.0, -22.0), None, 0.3))
+
+    def test_rez_pairs_matches_each_death_to_the_rez_that_answered_it(self):
+        # Totemist's Reincarnation 0.3 s after it died, and Assasin's Rebirth 1.3 s after.
+        self.assertEqual(yogg_saron.rez_pairs([(40347, 5127)], [40640], 5000),
+                         [(40347, 5127, 40640)])
+        self.assertEqual(yogg_saron.rez_pairs([(52146, 5135)], [53424], 5000),
+                         [(52146, 5135, 53424)])
+        # A rez past the window belongs to a later death, and one before it to an earlier one.
+        self.assertEqual(yogg_saron.rez_pairs([(40347, 5127)], [45348], 5000),
+                         [(40347, 5127, None)])
+        self.assertEqual(yogg_saron.rez_pairs([(40347, 5127)], [40000], 5000),
+                         [(40347, 5127, None)])
+        # Exactly the window still counts.
+        self.assertEqual(yogg_saron.rez_pairs([(40347, 5127)], [45347], 5000),
+                         [(40347, 5127, 45347)])
+        # The same bot twice takes the nearer rez each time, and out of order in means ordered out.
+        self.assertEqual(yogg_saron.rez_pairs([(52146, 5135), (40347, 5127)], [53424, 40640], 5000),
+                         [(40347, 5127, 40640), (52146, 5135, 53424)])
+        # Nobody came, and nobody died.
+        self.assertEqual(yogg_saron.rez_pairs([(112904, 5127)], [], 5000), [(112904, 5127, None)])
+        self.assertEqual(yogg_saron.rez_pairs([], [40640], 5000), [])
+
     def test_resisted_share_is_the_part_of_one_hit_resistance_took(self):
         # 1791318599's worst hit on Angry: 21,770 landed against 5,442 resisted.
         self.assertAlmostEqual(yogg_saron.resisted_share(21770, 5442), 0.2, places=3)

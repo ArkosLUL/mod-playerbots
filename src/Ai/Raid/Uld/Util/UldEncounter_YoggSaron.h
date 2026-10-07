@@ -166,6 +166,10 @@ constexpr float ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS = 9.5f;
 // sweeps a stationary bot for about 5.7 s, so a shorter lead puts the destination in its near future.
 constexpr uint32 ULDUAR_YOGG_SARON_CLOUD_LEAD_MS = 6000;
 
+// How many points along a walk are checked against where the clouds will be at that point. Eight puts
+// the longest walk in the room, the run in from the door at about 17 s, inside one lead per step.
+constexpr uint32 ULDUAR_YOGG_SARON_WALK_CLOUD_STEPS = 8;
+
 // Shadow Nova, the Guardian's death explosion: DBC radius 15, plus both object sizes at apply time,
 // which measured 16.2 at its furthest. Ranged and healers stay out of it; melee and tanks have to eat
 // it to kill the thing at all. The trigger sits inside the clear radius, and that band is margin
@@ -195,10 +199,16 @@ constexpr float ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT = 50.0f;
 // the real hit is higher than any row shows. Below this figure a bot at full health never looked at
 // risk, so the ladder only ever fired after the hit.
 //
-// Still the unresisted figure even though a later 759 hits over six pulls resisted a median 21-22% and
-// never under 10%: that run had 130 shadow resistance up throughout, and the raid keeps it only while
-// somebody holds Prayer of Shadow Protection or the aura.
+// Still the unresisted figure, and what a bot carrying no shadow resistance takes. A raid that has the
+// 130 never sees it: over 892 hits the resisted share ran a 21.5% median and never under 10.0%, so the
+// worst such a bot can roll is the second figure. Planning them against the first flagged a melee bot
+// at full health that nothing on the table could kill, and the raid emptied its externals on novas
+// that killed nobody. The gate reads the resistance itself rather than the aura, because Prayer of
+// Shadow Protection, the paladin aura and gear all land on the same exclusive aura 143 and only the
+// highest of them counts.
 constexpr uint32 ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE = 28600;
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RESISTED_DAMAGE = 25740;
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RESISTED_AT = 130;
 
 // Melee at or under this pool die to an unresisted nova whichever reduction they own, so they leave the
 // blast instead. Above it a 20% cut is enough and the ladder covers them: the smallest melee needs 18%
@@ -229,10 +239,13 @@ constexpr uint32 ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN = 2;
 // spell id appears nowhere in the core source, so only the DBC says so. Measured: it reached all 25 on
 // every cast, and the damage the split put back on the paladin never took one below 62%.
 constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RAID_COUNT = 3;
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_WINDOW_MS = 10000;
 
-// One healer external per victim, for the same reason as the Squeeze claim below.
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_CLAIM_MS = 3000;
+// How long one claim on a Guardian lasts, for the cover and the external alike: enough to outlive the
+// Guardian that took it, which detonates within 3.7 s of passing the tighter gate. Keying it on a
+// stretch of wall clock instead is what left the second Guardian of a pair uncovered. They die 1.8-4.5
+// s apart, one pull put 32 such pairs on a single bar and 8 of them took more than a whole bar, and
+// the bot holding the window had already spent its only button while two Divine Sacrifices sat ready.
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_WINDOW_MS = 10000;
 
 // The two places in the room a cloud cannot reach, both fixed by the orbits. Measured over four pulls
 // the six sit at 11.39-11.86 / 21.25-21.52 / 31.13-31.31 / 40.93-41.07 / 50.81-50.92 / 60.74-60.84 yd
@@ -275,6 +288,16 @@ constexpr float ULDUAR_YOGG_SARON_P1_ROOM_RADIUS =
 // orbit.
 constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 6.5f;
 constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS;
+
+// A melee bot that is not tanking gets a tighter one, because none of the above is about its own feet:
+// the inner orbit is 11.6 yd out and a cloud wakes to anyone inside 8.5, so past this radius the pile
+// summons a Guardian by standing still. It did: five melee at 3.8 yd woke one in the last pull and
+// another at 5.2 yd woke the next, and each bot sat outside the radius 27-48% of the phase although
+// the pile's median was 1.79 yd. The release has to clear it by more than a step or reach melee drags
+// the bot back out and the two trade the tick.
+constexpr float ULDUAR_YOGG_SARON_P1_PILE_LEASH =
+    ULDUAR_YOGG_SARON_CLOUD_ORBITS[0] - ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH;
+constexpr float ULDUAR_YOGG_SARON_P1_PILE_RELEASE = 2.0f;
 
 // How far the fetch can reach: Taunt 355, Hand of Reckoning 62124, Dark Command 56222 and Growl 6795
 // all share spell range index 4, so 30 yd whoever is tanking. Without it the pick is whatever is
@@ -927,9 +950,21 @@ bool IsYoggSaronShadowAuraPaladin(Player* bot);
 // from trading the exclusive slot back on the next GCD.
 bool YoggSaronShadowAuraHeld(PlayerbotAI* botAI);
 
+// Whether some other paladin should keep off the aura and off Aura Mastery. Two copies of the same aura
+// coexist per caster and only the strongest keeps its effects, so a second paladin running it costs the
+// elected one half a second of effect hand-off right when the cover is pressed, and a press from the
+// paladin whose copy is not the strongest does nothing at all. Only while there is an elected paladin,
+// so a raid with no Aura Mastery anywhere still gets the aura from the generic nodes.
+bool YoggSaronShadowAuraOtherHeld(PlayerbotAI* botAI);
+
 // Which raid-wide cover this paladin can give the next nova, or null for none. Shared so the trigger
 // and the action cannot pick different buttons.
 char const* YoggSaronNovaRaidCover(PlayerbotAI* botAI);
+
+// Whether a battle rez should wait for the handover. It strips every raid buff, so the bot comes back
+// on a bar 13-17% smaller with no Prayer of Shadow Protection, and one nova then kills it from full
+// health: that happened three times in one pull and the cooldown bought 14 s, 8 s and no life at all.
+bool YoggSaronBattleRezHeld(PlayerbotAI* botAI);
 
 // The raider a healer external belongs on: whoever the nova leaves furthest past dead, which puts a
 // Sara's Fervor holder first and the smallest health pool next. Never the bot itself, and nullptr when
@@ -939,7 +974,7 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI);
 // One external per victim, and one raid-wide cooldown per nova. True for the bot that takes the claim
 // and false for everyone else until it lapses; the window claim stays true for its owner so it can
 // retry across ticks.
-bool ClaimYoggSaronNovaExternal(PlayerbotAI* botAI, Player* victim);
+bool ClaimYoggSaronNovaExternal(PlayerbotAI* botAI);
 bool ClaimYoggSaronNovaWindow(Player* bot);
 
 // The Guardian no dps should touch: the higher-health half of a low pair standing close enough for one

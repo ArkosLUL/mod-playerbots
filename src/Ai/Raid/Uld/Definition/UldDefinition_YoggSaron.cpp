@@ -239,6 +239,23 @@ void DefineYoggSaron(EncounterBuilder& e)
     // them from the paladin holding the aura it would have doubled.
     e.Block("yogg-saron aura mastery hold", Role::Any, YoggSaronNovaHold, 0, {"aura mastery"});
 
+    // Every other paladin keeps off both, so the elected one owns the slot. Three of them ran the aura
+    // in the last pull and its effects changed hands 207 times in 110 s, which cost the elected paladin
+    // half a second to take them back right as it pressed the cover; and a press from a paladin whose
+    // copy is not the strongest doubles nothing, which is where the pull's second press went. The two
+    // generic nodes above are named here as well, because their action adds a strategy that re-casts
+    // the aura on its own afterwards. Nothing else of theirs is blocked, so the paladin's own buff
+    // strategy puts Devotion or Concentration back in the slot on the next GCD.
+    e.Block("yogg-saron shadow aura other hold", Role::Any, YoggSaronShadowAuraOtherHeld, 0,
+            {"shadow resistance aura", "aura mastery", "sara shadow resistance action",
+             "yogg-saron shadow resistance action"});
+
+    // Not back into the pile. A battle rez strips every raid buff, so the bot returns on a bar 13-17%
+    // smaller with no Prayer of Shadow Protection, and the next nova kills it from full health: three
+    // of five deaths in the last pull were the same two bots dying again, 14 s and 8 s after coming
+    // back. Only Rebirth, since Reincarnation runs from the dead engine where no encounter rule reaches.
+    e.Block("yogg-saron battle rez hold", Role::Any, YoggSaronBattleRezHeld, 0, {"rebirth"});
+
     e.Multiplier<YoggSaronPhase1WalkGuardMultiplier>(Family::AnyMovement);
     e.Multiplier<YoggSaronAntiFearTotemGuardMultiplier>(Family::Spell);
 

@@ -126,9 +126,16 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
     float const fromSara =
         bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
 
+    // A melee bot that is neither tanking nor healing is held tighter, inside the radius the inner orbit
+    // cannot be woken from. The wider pair stays the tank's: it is about where the Guardian dies, which
+    // follows whoever holds threat, not about where this bot puts its feet.
+    bool const pile = !botAI->IsTank(bot) && !PlayerbotAI::IsHeal(bot);
+    float const leash = pile ? ULDUAR_YOGG_SARON_P1_PILE_LEASH : ULDUAR_YOGG_SARON_P1_LEASH;
+    float const release = pile ? ULDUAR_YOGG_SARON_P1_PILE_RELEASE : ULDUAR_YOGG_SARON_P1_LEASH_RELEASE;
+
     // The release radius is what makes this hysteresis rather than a boundary: let go the instant the
     // bot crosses the leash, reach melee drags it straight back out and the two trade the tick.
-    bool const beyond = fromSara > (returning ? ULDUAR_YOGG_SARON_P1_LEASH_RELEASE : ULDUAR_YOGG_SARON_P1_LEASH);
+    bool const beyond = fromSara > (returning ? release : leash);
 
     if (!beyond && fromSara >= ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
     {

@@ -134,14 +134,13 @@ struct YoggSaronEncounterState
     // one tentacle. Keyed by victim rather than by window because grabs overlap.
     std::unordered_map<ObjectGuid, uint32> squeezeClaims;
 
-    // Which bot is covering which nova victim with an external, so two healers do not spend two
-    // three-minute cooldowns on one bot. Keyed per victim, like the Squeeze claim.
+    // One external and one raid-wide cover per Guardian, both keyed by the Guardian whose nova is
+    // coming. Per victim the externals emptied the raid in 15 s, because the worst victim flips between
+    // ticks and each flip looked like a fresh bot to cover; keyed by a stretch of clock the cover
+    // missed the second Guardian of a pair, which is the one that kills. The cover keeps its owner so
+    // the same bot can retry across ticks.
     std::unordered_map<ObjectGuid, uint32> novaClaims;
-
-    // The one raid-wide cooldown per nova. Keyed by window rather than victim because the cast covers
-    // everybody, and it stays true for its owner so the same bot can retry across ticks.
-    ObjectGuid novaClaimedBy;
-    uint32 novaWindowMs = 0;
+    std::unordered_map<ObjectGuid, std::pair<ObjectGuid, uint32>> novaCovers;
 
     // Phase 1's raid-wide kill target. See YoggSaronPhase1Focus.
     ObjectGuid phase1Focus;
@@ -1968,7 +1967,14 @@ uint32 YoggSaronNovaDamageFrom(std::vector<Creature*> const& low, Unit* target)
         return 0;
 
     count = std::min<uint32>(count, ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN);
-    uint32 const expected = count * ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE;
+
+    // The unresisted roll is only what a bot with no shadow resistance takes. Reading the resistance
+    // covers the Prayer, the paladin aura, Aura Mastery and gear at once, since they all land on the
+    // same exclusive aura and only the highest counts.
+    uint32 const each = target->GetResistance(SPELL_SCHOOL_SHADOW) >= ULDUAR_YOGG_SARON_NOVA_RESISTED_AT
+                            ? ULDUAR_YOGG_SARON_NOVA_RESISTED_DAMAGE
+                            : ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE;
+    uint32 const expected = count * each;
 
     // Fervor is +100% damage taken and DispelType 0, so it cannot be lifted. A holder caught in the
     // stack is the one bot a single nova kills from full health.
@@ -2140,8 +2146,12 @@ bool YoggSaronNovaNearby(PlayerbotAI* botAI)
 
 bool YoggSaronNovaHold(PlayerbotAI* botAI)
 {
-    // The 17 yd sweep first: the phase read is three 200 yd grid sweeps on every bot on the map.
-    return YoggSaronNovaNearby(botAI) || YoggSaronInPhase1(botAI);
+    // Any live Guardian in the room, and the phase read last because it is three 200 yd grid sweeps on
+    // every bot on the map. The 17 yd version let go while two Guardians were still alive just after
+    // phase 1, and the class nodes took over and spent Aura Mastery and a Divine Sacrifice on an
+    // already hurt raid.
+    return !YoggSaronLowGuardians(botAI->GetBot(), 100.0f, ULDUAR_YOGG_SARON_P1_ROOM_RADIUS).empty() ||
+           YoggSaronInPhase1(botAI);
 }
 
 uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
@@ -2192,6 +2202,32 @@ bool IsYoggSaronShadowAuraPaladin(Player* bot)
 bool YoggSaronShadowAuraHeld(PlayerbotAI* botAI)
 {
     return botAI && IsYoggSaronShadowAuraPaladin(botAI->GetBot());
+}
+
+bool YoggSaronShadowAuraOtherHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->getClass() != CLASS_PALADIN || !YoggSaronInPhase1Room(bot))
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    // Only while somebody is elected, so a raid with no Aura Mastery anywhere keeps the generic nodes.
+    Player* const elected = ElectShadowAuraPaladin(group);
+
+    return elected && elected != bot;
+}
+
+bool YoggSaronBattleRezHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !YoggSaronInPhase1Room(bot))
+        return false;
+
+    // Released for the handover, which is the first stretch of the fight with no nova in it.
+    return !YoggSaronHandoverState(botAI).clearing && YoggSaronInPhase1(botAI);
 }
 
 char const* YoggSaronNovaRaidCover(PlayerbotAI* botAI)
@@ -2258,16 +2294,38 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI)
     return victim;
 }
 
-bool ClaimYoggSaronNovaExternal(PlayerbotAI* botAI, Player* victim)
+namespace
 {
-    if (!victim)
+
+// The Guardian whose nova is coming: the lowest of the ones already past the wider gate. Every paladin
+// in the pile sweeps the same 17 yd, so they agree on it, which is what makes it usable as a claim key.
+ObjectGuid NovaGuardian(Player* bot)
+{
+    std::vector<Creature*> const low = YoggSaronLowGuardians(bot, ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT,
+                                                             ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS);
+    Creature* next = nullptr;
+    for (Creature* guardian : low)
+    {
+        if (!next || guardian->GetHealth() < next->GetHealth())
+            next = guardian;
+    }
+
+    return next ? next->GetGUID() : ObjectGuid::Empty;
+}
+
+}  // namespace
+
+bool ClaimYoggSaronNovaExternal(PlayerbotAI* botAI)
+{
+    ObjectGuid const guardian = NovaGuardian(botAI->GetBot());
+    if (!guardian)
         return false;
 
     YoggSaronEncounterState& state = YoggSaronStateFor(botAI->GetBot());
 
     uint32 const now = getMSTime();
-    uint32& claimed = state.novaClaims[victim->GetGUID()];
-    if (claimed && getMSTimeDiff(claimed, now) < ULDUAR_YOGG_SARON_NOVA_CLAIM_MS)
+    uint32& claimed = state.novaClaims[guardian];
+    if (claimed && getMSTimeDiff(claimed, now) < ULDUAR_YOGG_SARON_NOVA_WINDOW_MS)
         return false;
 
     claimed = now;
@@ -2277,14 +2335,18 @@ bool ClaimYoggSaronNovaExternal(PlayerbotAI* botAI, Player* victim)
 
 bool ClaimYoggSaronNovaWindow(Player* bot)
 {
+    ObjectGuid const guardian = NovaGuardian(bot);
+    if (!guardian)
+        return false;
+
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
 
-    if (state.novaWindowMs &&
-        getMSTimeDiff(state.novaWindowMs, getMSTime()) < ULDUAR_YOGG_SARON_NOVA_WINDOW_MS)
-        return state.novaClaimedBy == bot->GetGUID();
+    auto const held = state.novaCovers.find(guardian);
+    if (held != state.novaCovers.end() &&
+        getMSTimeDiff(held->second.second, getMSTime()) < ULDUAR_YOGG_SARON_NOVA_WINDOW_MS)
+        return held->second.first == bot->GetGUID();
 
-    state.novaWindowMs = getMSTime();
-    state.novaClaimedBy = bot->GetGUID();
+    state.novaCovers[guardian] = {bot->GetGUID(), getMSTime()};
 
     return true;
 }
@@ -2664,14 +2726,19 @@ bool YoggSaronWalkCrossesCloud(Player* bot, Position const& to, Position const* 
     if (found.empty())
         return false;
 
-    // Sampled at the walk's own length rather than the full lead: a 6 s lead is a quarter of the inner
-    // orbit and would hold walks that finish long before the cloud gets there.
+    // Matched in time, step by step: at each step the bot is part way along the leg and the cloud is
+    // where it will be by then. Capping the lead at one window left the rest of a long walk checked
+    // against clouds that had already moved on, and the run in from the door woke three Guardians in
+    // one pull. Testing every cloud position against the whole leg instead would refuse almost every
+    // route into the room, since an orbiting cloud sweeps across a radial path sooner or later.
     float const speed = bot->GetSpeed(MOVE_RUN);
-    uint32 const arrivalMs =
-        speed > 0.0f ? std::min(ULDUAR_YOGG_SARON_CLOUD_LEAD_MS, static_cast<uint32>(leg / speed * 1000.0f))
-                     : ULDUAR_YOGG_SARON_CLOUD_LEAD_MS;
+    uint32 const arrivalMs = speed > 0.0f ? static_cast<uint32>(leg / speed * 1000.0f) : 0;
 
-    std::vector<Position> samples;
+    float const originX = bot->GetPositionX();
+    float const originY = bot->GetPositionY();
+    float const legX = to.GetPositionX() - originX;
+    float const legY = to.GetPositionY() - originY;
+
     for (Creature* cloud : found)
     {
         if (!cloud->IsAlive())
@@ -2683,12 +2750,17 @@ bool YoggSaronWalkCrossesCloud(Player* bot, Position const& to, Position const* 
         if (exempt && cloud->GetExactDist2d(exempt) <= exemptRadius)
             continue;
 
-        samples.push_back(cloud->GetPosition());
-        samples.push_back(YoggSaronCloudLead(cloud, arrivalMs / 2));
-        samples.push_back(YoggSaronCloudLead(cloud, arrivalMs));
+        for (uint32 step = 0; step <= ULDUAR_YOGG_SARON_WALK_CLOUD_STEPS; ++step)
+        {
+            float const share = static_cast<float>(step) / ULDUAR_YOGG_SARON_WALK_CLOUD_STEPS;
+            Position const at = YoggSaronCloudLead(cloud, static_cast<uint32>(arrivalMs * share));
+            if (at.GetExactDist2d(originX + legX * share, originY + legY * share) <
+                ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS)
+                return true;
+        }
     }
 
-    return !samples.empty() && !YoggSaronRouteClearOfClouds(bot, samples, to.GetPositionX(), to.GetPositionY());
+    return false;
 }
 
 namespace

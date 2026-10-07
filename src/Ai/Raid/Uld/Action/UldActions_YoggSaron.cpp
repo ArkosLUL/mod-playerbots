@@ -199,9 +199,24 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
         auto const preferredAccept = [&accept, &set](float x, float y)
         { return accept(x, y) && set.preferred(x, y); };
 
-        safe = FindNearestPositionClearOfHazards(bot, set.hazards, SearchRadius(), 2.0f,
-                                                 static_cast<float>(M_PI) / 8.0f, &middle, preferredAccept,
-                                                 &sweep);
+        // The anchor on this bot's own bearing, tried before the rings. The sweep only offers points on
+        // rings around the bot, 16 bearings apart, and at 20 yd out those are 7.8 yd from each other
+        // against a 5.6 yd circle in the middle, so a preference for the middle falls between two
+        // bearings: 0 of 6 melee cloud dodges reached it in the last pull. A finer grid instead would
+        // clear the passability cache between the two sweeps and quadruple the map queries on every
+        // dodge. Short of the edge rather than at the middle, which is where Sara stands.
+        float const bearing = middle.GetAngle(bot->GetPositionX(), bot->GetPositionY());
+        float const inside = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS * 0.75f;
+        Position const core(middle.GetPositionX() + std::cos(bearing) * inside,
+                            middle.GetPositionY() + std::sin(bearing) * inside, bot->GetPositionZ());
+        if (preferredAccept(core.GetPositionX(), core.GetPositionY()) &&
+            stillClear(set.hazards, set.clear, core))
+            safe = core;
+
+        if (safe == Position())
+            safe = FindNearestPositionClearOfHazards(bot, set.hazards, SearchRadius(), 2.0f,
+                                                     static_cast<float>(M_PI) / 8.0f, &middle, preferredAccept,
+                                                     &sweep);
     }
 
     // Every candidate in a ring is the same walk away, so preferNear is free and decides the whole
@@ -1949,8 +1964,8 @@ bool YoggSaronNovaExternalAction::Execute(Event /*event*/)
         return false;
 
     // Claimed only once there is something to cast. A healer that claimed on sight would beat everybody
-    // else to the victim and then spend nothing on it.
-    if (!ClaimYoggSaronNovaExternal(botAI, victim))
+    // else to the nova and then spend nothing on it.
+    if (!ClaimYoggSaronNovaExternal(botAI))
         return false;
 
     if (RaidObs::Active())
