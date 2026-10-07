@@ -211,6 +211,12 @@ NOVA_CHAIN_RADIUS = 18.0
 SPELL_SARAS_FERVOR = 63138
 SPELL_SHADOW_NOVAS = (65209, 62714)
 NOVA_TRIGGER_RADIUS = 17.0
+# ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS. Past this a bot is clear of the blast, so a bot that was
+# out here and took the nova anyway was walked back in rather than never leaving.
+NOVA_CLEAR_RADIUS = 20.0
+# How far back to look for that step-out. The 20% gate gave 7.2-22.1 s of warning on every leftover
+# nova, so anything the bot did earlier than this belongs to a different Guardian.
+NOVA_WALK_BACK_MS = 12000
 FERVOR_NOVA_HEALTH_PCT = 50.0
 
 # How far ahead of a step-out to look for the nova it was dodging, and what the walk out of the blast
@@ -892,9 +898,55 @@ def show_handover(trace: Trace) -> None:
         said = ", ".join(f"{gap / 1000.0:.1f}" for gap in gaps)
         print(f"    leftover deaths after the ring: gaps {said} s, under {NOVA_GAP_MS / 1000:.0f} s: "
               f"{sum(1 for gap in gaps if gap < NOVA_GAP_MS)}")
+    # Where they detonate, which the leash decides in phase 1 and nothing decides after it. One pull's
+    # five all went off 20-26 yd out, inside the arc the raid stands in, and their novas are 9 of its 10
+    # deaths.
+    roster = roster_guids(trace)
+    for guid, when in sorted(deaths.items(), key=lambda one: one[1]):
+        if when <= ring:
+            continue
+
+        spot = at(trace, guid, when)
+        if not spot:
+            continue
+
+        caught = [other for other in roster
+                  if (seen := at(trace, other, when))
+                  and math.dist(seen[:2], spot[:2]) <= NOVA_TRIGGER_RADIUS]
+        print(f"      {clock(when):>9}  {math.dist(spot[:2], BODY):4.1f} yd out, {len(caught)} raiders "
+              f"inside {NOVA_TRIGGER_RADIUS:.0f} yd")
+
     left = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.leftover"))
     if left:
         print(f"    yogg.leftover         : {dict(left)}")
+
+    # Whose ground the raid is standing on once the leash is gone. In the pull this came from the raid
+    # held a 90-210 deg arc at a median 24.2 yd and the leftover Guardians held the same arc at 20.6,
+    # about 4 yd inside it, so every nova landed on somebody.
+    spans = [(start, stop) for phase, start, stop in phase_spans(trace) if phase == 2]
+    if spans:
+        start, stop = spans[0]
+        theirs, ours = [], []
+        for snap in trace.of("snap"):
+            if not start <= snap["t"] <= stop:
+                continue
+
+            for row in snap.get("u", []):
+                if row[0] in roster:
+                    ours.append((row[1], row[2]))
+                elif row[0] in guardians:
+                    theirs.append((row[1], row[2]))
+
+        for what, spots in (("raid", ours), ("Guardians", theirs)):
+            if not spots:
+                continue
+
+            out = sorted(math.dist(spot, BODY) for spot in spots)
+            arc = sector_share(spots, BODY, 30)
+            busiest = sorted(arc.items(), key=lambda one: -one[1])[:3]
+            said = ", ".join(f"{edge}-{edge + 30} deg {share * 100:.0f}%" for edge, share in busiest)
+            print(f"    phase 2 {what:10}: median {statistics.median(out):4.1f} yd out "
+                  f"({out[0]:.1f}-{out[-1]:.1f}), mostly {said}")
 
     ate = []
     for rec in trace.of("act"):
@@ -1089,6 +1141,36 @@ def beyond_reach(spots: list[tuple[float, float]], healers: list[tuple[float, fl
               if not any(math.dist(spot, healer) <= reach for healer in healers))
 
     return out, len(spots)
+
+
+def nearest_over_track(spots, other, clear_yd: float) -> tuple[float | None, bool]:
+    """The nearest this bot got to a point over the samples given, and whether it was ever further out
+    than `clear_yd`. A bot that stepped out of a blast and was walked back in answers both."""
+    gaps = [math.dist(spot, other) for spot in spots if spot]
+    if not gaps:
+        return None, False
+
+    return min(gaps), max(gaps) > clear_yd
+
+
+def sector_share(spots, origin, width: int) -> dict[int, float]:
+    """What share of the samples fell in each bearing sector around `origin`, keyed by the sector's
+    lower edge in degrees. Bearings wrap, so due east is sector 0 and never 360."""
+    if width <= 0:
+        return {}
+
+    counted: dict[int, int] = {}
+    for spot in spots:
+        if not spot:
+            continue
+
+        bearing = math.degrees(math.atan2(spot[1] - origin[1], spot[0] - origin[0])) % 360
+        edge = int(bearing // width) * width
+        counted[edge] = counted.get(edge, 0) + 1
+
+    total = sum(counted.values())
+
+    return {edge: count / total for edge, count in sorted(counted.items())} if total else {}
 
 
 def moving_at(spot, before, still_yd: float) -> bool:
@@ -4001,6 +4083,29 @@ def show_novas(trace: Trace) -> None:
     for when, who, what in spent:
         says = "on a nova that killed" if any(abs(when - one) <= 4000 for _, one in lethal) else ""
         print(f"    {clock(when):>9}  {who:14} {what:18} {says}")
+
+    # A step-out only counts if the bot stays out. Four healers in one pull reached 19.8 yd from the
+    # Guardian and the body detour returned them to 4.8 yd before it went off. Phase 1 is left out
+    # because melee stand in the blast there on purpose.
+    walked = late = 0
+    for source in hits:
+        fired = min(rec["t"] for rec in hits[source])
+        if fired <= p1_end:
+            continue
+
+        spot = at(trace, source, fired)
+        if not spot:
+            continue
+
+        for rec in hits[source]:
+            late += 1
+            path = [point[1:3] for point in tracks(trace, [rec.get("d")]).get(rec.get("d"), [])
+                    if fired - NOVA_WALK_BACK_MS <= point[0] <= fired]
+            if nearest_over_track(path, spot[:2], NOVA_CLEAR_RADIUS)[1]:
+                walked += 1
+    if late:
+        print(f"  hit by a nova after phase 1: {late}, of those clear of {NOVA_CLEAR_RADIUS:.0f} yd at "
+              f"some point in the {NOVA_WALK_BACK_MS / 1000:.0f} s before it: {walked}")
 
     # The handover sends the front line to one spot 25 yd round the station ring from the back line, so
     # a Guardian that followed it there cannot reach them. One back-line bot caught is somebody who

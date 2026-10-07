@@ -210,16 +210,6 @@ constexpr uint32 ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE = 28600;
 constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RESISTED_DAMAGE = 25740;
 constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RESISTED_AT = 130;
 
-// Melee at or under this pool die to an unresisted nova whichever reduction they own, so they leave the
-// blast instead. Above it a 20% cut is enough and the ladder covers them: the smallest melee needs 18%
-// off, the biggest 0.1%.
-//
-// Only reaches a bot after phase 1. In phase 1 the walk out cost Guardians and delivered nothing: 44 of
-// 74 step-outs took the nova they ran from anyway, and the 30 that got clear landed on the station band,
-// which is 0.1 yd off the second cloud orbit. After phase 1 there is no cloud to wake and leaving is
-// free.
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_STEP_OUT_POOL = 26000;
-
 // Two gates. A Guardian first dropping under 20% detonated a median 4.8 s later and as late as 11.5,
 // under 10% a median 2.4 s and never later than 3.7 over one pull's 11 novas. So a bot spends its own
 // button and a healer its external only at 10%, where a 5 s window always covers the hit and a Guardian

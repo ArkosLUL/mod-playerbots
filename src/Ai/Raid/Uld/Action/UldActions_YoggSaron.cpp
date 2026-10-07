@@ -279,10 +279,11 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
     // cleared.
     set.hazards.insert(set.hazards.end(), set.fallback.begin(), set.fallback.end());
 
-    // Who a destination preference is for. Not the tank, which its own control walk already holds on
-    // the cloud-free circle, and not a melee healer, which IsMelee being !IsRanged cannot tell apart.
-    bool const pileDodger =
-        PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot);
+    // Who a destination preference is for. Not a melee healer, which IsMelee being !IsRanged cannot tell
+    // apart. The tank is in: its control walk already aims at this same circle, so the preference agrees
+    // with it instead of pulling the other way, and with no preference at all the tank's dodges landed
+    // at 18.0 and 29.3 yd and it woke three of one pull's nine raid-summoned Guardians walking back.
+    bool const pileDodger = PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsHeal(bot);
 
     // With nothing about to detonate, a melee bot dodging a cloud otherwise steps out of its own swing
     // range and reach melee hauls it straight back - the two traded the tick 252 times in one pull.

@@ -135,6 +135,10 @@ re-casts the aura by itself. Nothing else of theirs is held, so their own buff s
 Concentration back in the slot on the next GCD. Only while somebody is elected, so a raid with no Aura
 Mastery anywhere keeps the generic nodes.
 
+It stops a **cast**, not an aura already in the slot: hand-offs fell **307 to 145** and casters from
+three to two, but the two left had 48943 up before the pull, so there was nothing to veto and the
+dominance still changed hands 145 times in 128 s.
+
 Healers were already putting 20,000-23,000 HPS into nine melee and out-healing it **1.7 to 1**, and two
 novas in one tick killed eight from full: an instant that empties a bar is mitigated or not survived.
 All **25** phase 1 deaths across four pulls were this spell, and not one had a cooldown up.
@@ -196,6 +200,15 @@ bot nothing on the table could kill still read as at risk, which is what emptied
 `YoggSaronNovaDamageFrom` reads `GetResistance(SPELL_SCHOOL_SHADOW)` against `…_NOVA_RESISTED_AT` (130),
 covering the Prayer, the paladin aura, Aura Mastery and gear at once: one exclusive aura, highest only.
 
+**A gate that wants this figure has to read it, never a copy.** `YoggSaronNovaHurtCount` spelt "the
+whole chain in reach" as `expected >= …_NOVA_MAX_CHAIN * …_NOVA_EXPECTED_DAMAGE`, an identity only while
+28,600 was the estimate's own ceiling; the resisted figure dropped that ceiling to **51,480** against a
+**57,200** test, unreachable for every bot carrying the 130, which is all of them. `yogg.novaraid` went
+**3 rows to 0** over three pulls, **16 of 16** novas had nothing raid-wide up, **9 of 9** deaths landed
+on one, and the hold still vetoed **22** Divine Sacrifice presses: the raid held the cooldown the whole
+fight and spent none of it. `YoggSaronNovaDamageEach` is the single per-nova figure now, read by the
+estimate, by that threshold and by the external gate.
+
 **Two gates, and the tighter one decides whether to spend at all.** Over 48 novas a Guardian first
 dropping under **20%** detonated a median 4.8 s later and as late as 11.5; under **10%** a median 2.4 s
 and never later than 3.7 across one pull's 11. So `…_NOVA_NOW_HEALTH_PCT` (10) is where a bot spends its
@@ -205,7 +218,7 @@ own button and a healer its external, `…_NOVA_NOW_WINDOW_MS` (5 s) always cove
 At the wider gate the raid emptied **eight** cooldowns onto one nova whose worst hit was 16,290, then
 had nothing for the next eight and lost three bots from full health.
 
-**`…_NOVA_STEP_OUT_POOL` (26,000) no longer reaches a bot in phase 1: melee mitigate or die there.**
+**Melee mitigate or die in phase 1: no pool gets one out of the blast there.**
 Surviving 28,600 needs **18%** off for the 23,387 shaman down to 0.1% for a 28,582 paladin, so any 20%
 button saves every melee — but supply does not: 13-16 cooldowns exist per phase 1 against 11 novas
 hitting 7-10 raiders each. That was the case for sending the three smallest pools out, and measurement
@@ -229,8 +242,13 @@ and the five above it a median 54% with **0 of 301** hits reaching 90%. The one 
 chain is the hazard left (below), and it is a mitigation problem — the second Guardian is not low when
 the first detonates.
 
-**After phase 1 the gate still fires, because there is no cloud to wake.** The leftover Guardians took
-**101** melee hits with **68** of them bare, so leaving is free there and worth having.
+**After phase 1 every melee leaves whatever its pool, and only a tank stays in.** The leftover
+Guardians took **101** melee hits with **68** of them bare, so leaving is free there. A pool gate let
+just **2 of 9** melee out and one of the seven it held back missed by **152 hp**, while what kills there
+is **two novas 8-9 s apart** taking a bot from 60-67%, not one from full — so the single-nova question
+was the wrong one and `…_NOVA_STEP_OUT_POOL` and the own-button test are gone. The tank is the exception
+in every phase: it holds the thing detonating, so walking out only drags the Guardian along behind it,
+and its pool is the one in the raid that can eat the blast.
 
 **Confirmed on the next pull, which exposed a different killer.** No melee dodge cited a nova at all,
 melee cloud dodges fell from 17-24 a pull to **6**, Guardians to **13** with 10 of 10 inside 15 yd, and
@@ -306,23 +324,25 @@ other ladder row still firing.
 Shield Wall needs a shield (871 carries `EquippedItemClass` 4, subclass mask 64), so `CanCastSpell`
 rejects both, and the pair ate eight novas of 15,258-22,250 with nothing up. **No warrior button closes
 it** — Enraged Regeneration (55694, no item requirement) heals 3% of max health a second for 10 s,
-against 36,321 arriving in 50 ms. And `…_NOVA_STEP_OUT_POOL` is still one nova's 28,600, so 30-31k
-pools never leave; re-measure once fewer Guardians are self-woken, since that is what puts two low at
-once.
+against 36,321 arriving in 50 ms. And nothing walks them out of phase 1 either (above), so the pair
+stands in every nova there.
 
 Three tiers, in that relevance order, because one cast covering 25 raiders beats any single bot's own:
 
 - **`yogg-saron nova raid cooldown`** — Divine Sacrifice, once the nova threatens `…_NOVA_RAID_COUNT`
-  (3) of the stack. Claimed per window by `ClaimYoggSaronNovaWindow` (`…_NOVA_WINDOW_MS` 10 s, the
-  spell's own duration), and cast through the class node so `cancel divine sacrifice` stays its
-  continuer.
+  (3) of the stack. Claimed per Guardian by `ClaimYoggSaronNovaWindow`, `…_NOVA_WINDOW_MS` (10 s) being
+  that Guardian's window rather than a stretch of clock, and cast through the class node so
+  `cancel divine sacrifice` stays its continuer.
 - **`yogg-saron nova defensive`** — the bot's own, from `NextMagicDefensive`, by **spell id**:
   shortest cooldown first and never two at once, so Anti-Magic Shell (45 s, and reachable only since
   the id replaced its name) goes ahead of Barkskin and Shamanistic Rage (60 s),
   then Cloak of Shadows (90 s), Icebound Fortitude (120 s), Divine Protection and Survival Instincts
   (180 s). No claim — a personal button covers one bot, so two bots firing is not an overlap.
 - **`yogg-saron nova external`** — a healer's, in worth order `pain suppression`, `guardian spirit`,
-  `hand of sacrifice`, claimed per victim by `ClaimYoggSaronNovaExternal`. `YoggSaronNovaVictim` takes
+  `hand of sacrifice`, claimed per Guardian by `ClaimYoggSaronNovaExternal` and only for a chained nova
+  or a Fervor holder: one nova against these pools reads as lethal on anything under about **86%** of
+  its bar, which spent **5 of a pull's 7** externals before the first nova that killed anybody, against
+  a median landed 17,048 and a worst 25,004 without Fervor. `YoggSaronNovaVictim` takes
   whoever the nova leaves furthest past dead **after their own button** (`BestMagicDefensiveCut`), so a
   rogue who dodges it outright comes behind a warrior who has nothing, and a Fervor holder is always
   first because its expected hit doubles. Hand of Protection is out: physical only, and it sheds threat.
@@ -577,7 +597,9 @@ closed. `yogg-saron phase 1 walk guard multiplier` zeroes the station, the leash
 out), `reach melee`, `reach spell` and
 `set behind` for a Fervor holder while a Guardian at or under 50% is within
 `ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS` (22). Casting is untouched, and the spacing node still steps it
-off a cloud.
+off a cloud. Past phase 1 the same radius holds **any** bot, Fervor or not, and the list carries
+`yogg-saron body detour action` and `combat formation move` as well, which are what walked the healers
+back into a leftover nova (below).
 
 **Walks back wait for a cloud to pass.** 7 of the 69 Guardians raiders marked in those traces came off
 a cloud only Fervor runners touched, each off its own ground: 4 melee at 8-10 yd, three of them walking
@@ -652,6 +674,12 @@ other against a 5.6 yd circle, so the core falls between two bearings. `YoggSaro
 now tries the middle on the bot's own bearing before the rings, short of the edge because Sara stands
 there. A finer grid instead would clear the passability cache between the preferred and the plain sweep
 and quadruple the map queries on every dodge.
+
+**The tank is in `pileDodger` as well, and its control walk already wanted that circle.** Left out on
+the grounds that the walk holds it there, the tank's dodge had no destination at all and landed at
+**18.0** and **29.3 yd**; it woke **3 of one pull's 16** Guardians, every one while walking and two
+inside a second of its own dodge, one of them an orbit-3 cloud **24.3 yd** out on a Fervor run. So the
+preference is melee and not a healer, rather than melee and neither a tank nor a healer.
 
 ## Targeting is direct, never a raid icon
 
@@ -1166,6 +1194,31 @@ pulls had 3.3-5.8, and the second nova killed 4, 3 and 7 melee in three pulls. N
 `spaced` / `chain`), and `YoggSaronLeftoverAoeHold` — a non-target leftover under 30% within 10 yd of the
 bot or its target — holds AoE and cuts area channels. `lastGuardianDeathMs` still stamps: 65719 goes out
 on every leftover death. First pull with it: 16.2 and 6.8 s apart, no handover nova deaths.
+
+**Spacing the deaths in time was half of it, and nothing decides where.** One pull left **five** alive
+at the ring and all five went off in phase 2 — gaps 18.8 / 7.8 / 6.8 / 9.3 / 8.2 s, none under the 6 s
+rule — and they are still **9 of that pull's 10 deaths**, the 2:24.790 nova killing **all four healers**
+from a Guardian **21.2 yd** out, standing in the back line stack. Phase 1 keeps them off the raid by
+geometry: the leash holds the Guardian near the middle, they die a median 3.1 yd out, and the back line
+was caught **0 of 16** times. All three rules that do it stop at the ring — the leash
+(`YoggSaronGuardianPositioningTrigger` reads `YoggSaronInPhase1`), the tank's control node (phases 1 and
+3 only) and the walk guard. After it the raid holds a **90-210°** arc at a median **24.2 yd** out and
+the Guardians hold the same arc at **20.6**, about 4 yd inside it, so a nova lands on somebody whoever
+is holding it: back line caught **9** times, and in phase 2 the Guardians were on a tank 68.5% of the
+time and on **ranged 31.5%**.
+
+**A step-out has to outlive the Guardian, not the bot's own clearance.** Four healers reached
+**19.8 yd** from one, past both the 17 yd trigger and the 20 yd clear radius, and the body detour
+returned them to **4.8 yd** — its own `…_BODY_DETOUR_RADIUS` (24) — before it detonated, because
+`YoggSaronPhase2SpacingTrigger` stands down the moment the bot is clear and the next node owns the tick
+at `ACTION_RAID - 1` against its `+ 3`. The walk guard now holds past phase 1 for the same reason it
+holds a Fervor run (above). **15 of 38** post-phase-1 nova hits had landed on a bot that was already
+clear of 20 yd.
+
+**Where the late ones come from stays as it is, by the user's choice.** Two of those five were woken by
+the back line in the **last 18 s** of phase 1 (marks at 1:50.7 with 6 bots in reach and 1:52.9 with 11),
+so their Guardians arrived 4-7 s before the ring and could not be killed. That is the station's own
+costed trade, 21.5 yd against orbit 2 at 21.4 (above), and it is not worth unpicking for this.
 
 **The walk has to outlive the ring.** "Yogg without the barrier" ends on the tick the barrier lands,
 and melee released there walk straight back under the knock back — three of nine were inside 13.3 yd
@@ -1697,7 +1750,8 @@ walking / still with a target / still without, and `yogg.skullturn`; `--phase3` 
 80% of the raid was first in position (the trigger's test), Guardian samples at 90%+ health and
 Weakened, Drain Life channels cut inside 1.5 s or run full, each beacon's nearest other Guardian,
 `yogg.beacondrag`, the ranged station at phase 3 start and `yogg.station`; `--phases` the gaps between
-leftover Guardian deaths after the ring, and `yogg.leftover`; `--phase3` the other Guardians each beacon
+leftover Guardian deaths after the ring with each one's radius and the raiders inside 17 yd of it, the
+arc and radius the raid and the leftover Guardians each hold in phase 2, and `yogg.leftover`; `--phase3` the other Guardians each beacon
 heal reached with health then and 6 s later (present by a fresh row, not health: a Weakened Guardian's
 1 HP reads 0%), `yogg.beaconspot`, and the pets on each phase 2 leftover with its time to die. A
 Guardian's spawn is a Simple Teleport (64195) within 3 s of its first sample, else that sample:
@@ -1752,7 +1806,8 @@ one of them, and every pair of novas inside 6 s on one bar with what the pair to
 what kills once melee stop walking, and a removal row counts as evidence of a holder because a buff put
 up before the pull shows only when it comes off. Plus which novas had nothing raid-wide up against
 which ones killed, every one-target external with whether its nova killed anybody, and which of those
-deaths were resurrected straight back into the pile.
+deaths were resurrected straight back into the pile, and how many hits after phase 1 landed on a bot
+that had already been clear of the 20 yd blast edge.
 
 `--clouds` says how many melee-foot wakes had a melee **moving** at the mark and how far out those melee
 stood, against the 3.1 yd the inner orbit cannot reach; `--phases` says how many Guardians came off a

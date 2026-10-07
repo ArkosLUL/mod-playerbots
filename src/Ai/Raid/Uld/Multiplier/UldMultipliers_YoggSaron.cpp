@@ -241,7 +241,8 @@ float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
     bool const positioning = name == "yogg-saron guardian positioning action";
     bool const station = name == "yogg-saron phase 1 station action";
     bool const reachMelee = name == "reach melee";
-    if (!positioning && !station && !reachMelee && name != "reach spell" && name != "set behind")
+    if (!positioning && !station && !reachMelee && name != "reach spell" && name != "set behind" &&
+        name != "yogg-saron body detour action" && name != "combat formation move")
         return 1.0f;
 
     // Plain distance and height before any sweep: this weighs every reach in Ulduar, and the brain room
@@ -249,11 +250,24 @@ float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
     if (!YoggSaronInPhase1Room(bot) || bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;
 
-    // Fervor is Sara's, so its sweep only ever runs in phase 1. The cloud sweep waits for the phase read,
-    // which is answered once per trigger pass: melee stand outside the leash all of phases 2 and 3.
+    // After phase 1 a step-out only works if the bot stays out, and nothing else keeps it there: no
+    // station, no leash, and the body detour hauls it back to its own 24 yd ring. Four healers reached
+    // 19.8 yd from a Guardian, the detour walked them to 4.8 yd, and one nova killed all four. Same
+    // radius the Fervor run holds on, the clear radius plus slack, so they stop past the blast edge.
+    // Phase 3 too, where a phase 2 leftover can still be alive; Immortal Guardians are entry 36064 and
+    // no sweep here finds them, so a low one that cannot die will not pin anybody.
+    //
+    // Both sweeps wait for this read, which is answered once per trigger pass, and Fervor is Sara's so
+    // its sweep only ever runs in phase 1.
+    if (!YoggSaronInPhase1(botAI))
+    {
+        return GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS).empty() ? 1.0f
+                                                                                            : 0.0f;
+    }
+
     bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR) &&
                         !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS).empty();
-    if ((!fervor && !positioning && !station && !reachMelee) || !YoggSaronInPhase1(botAI))
+    if (!fervor && !positioning && !station && !reachMelee)
         return 1.0f;
 
     if (!fervor && !WalkCrossesCloud(station, reachMelee))

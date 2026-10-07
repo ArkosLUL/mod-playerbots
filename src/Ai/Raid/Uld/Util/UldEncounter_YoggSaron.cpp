@@ -1954,6 +1954,16 @@ std::vector<Creature*> YoggSaronLowGuardians(Unit* from, float gate, float radiu
     return low;
 }
 
+// What one nova is worth against this target. The unresisted roll is only what a bot with no shadow
+// resistance takes, and the resistance covers the Prayer, the paladin aura, Aura Mastery and gear at
+// once, since they all land on the same exclusive aura and only the highest counts.
+uint32 YoggSaronNovaDamageEach(Unit* target)
+{
+    return target->GetResistance(SPELL_SCHOOL_SHADOW) >= ULDUAR_YOGG_SARON_NOVA_RESISTED_AT
+               ? ULDUAR_YOGG_SARON_NOVA_RESISTED_DAMAGE
+               : ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE;
+}
+
 uint32 YoggSaronNovaDamageFrom(std::vector<Creature*> const& low, Unit* target)
 {
     uint32 count = 0;
@@ -1968,13 +1978,7 @@ uint32 YoggSaronNovaDamageFrom(std::vector<Creature*> const& low, Unit* target)
 
     count = std::min<uint32>(count, ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN);
 
-    // The unresisted roll is only what a bot with no shadow resistance takes. Reading the resistance
-    // covers the Prayer, the paladin aura, Aura Mastery and gear at once, since they all land on the
-    // same exclusive aura and only the highest counts.
-    uint32 const each = target->GetResistance(SPELL_SCHOOL_SHADOW) >= ULDUAR_YOGG_SARON_NOVA_RESISTED_AT
-                            ? ULDUAR_YOGG_SARON_NOVA_RESISTED_DAMAGE
-                            : ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE;
-    uint32 const expected = count * each;
+    uint32 const expected = count * YoggSaronNovaDamageEach(target);
 
     // Fervor is +100% damage taken and DispelType 0, so it cannot be lifted. A holder caught in the
     // stack is the one bot a single nova kills from full health.
@@ -2050,15 +2054,19 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
     // against pools of 23,000-30,000, every one of them lethal from full health. A holder leaves
     // whatever else is true.
     //
-    // A small pool with nothing left to press leaves as well, but not in phase 1. There the walk does
-    // not arrive and it costs Guardians: 44 of 74 step-outs took the nova they ran from anyway, and the
-    // ones that did get clear stopped on the station band, 0.1 yd off the second cloud orbit, which is
-    // where 72% of all melee cloud dodging came from. The phase read goes last because it is a boss
-    // state gate and a creature search, against a flag and two field reads ahead of it.
+    // Melee leave once phase 1 is over, whatever their pool. In phase 1 they cannot: the walk does not
+    // arrive and it costs Guardians, 44 of 74 step-outs took the nova they ran from anyway and the ones
+    // that got clear stopped on the station band, 0.1 yd off the second cloud orbit. After it there is
+    // no cloud to wake and no Sara to feed, and what kills there is two novas 8 s apart taking a bot
+    // from 60%, not one from full, so a pool test is the wrong question - it let 2 of 9 melee leave and
+    // one of the seven it held back missed by 152 hp.
+    //
+    // Never a tank, whichever phase: it holds the thing that is detonating, so walking out drags the
+    // Guardian along behind it, and its pool is the one in the raid that can eat the blast. Both reads
+    // sit ahead of the phase gate, which is a boss state read and a creature search.
     bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR);
     bool const atRange = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
-    bool const fragile = !atRange && bot->GetMaxHealth() <= ULDUAR_YOGG_SARON_NOVA_STEP_OUT_POOL;
-    if (!fervor && !atRange && (!fragile || YoggSaronInPhase1(botAI)))
+    if (!fervor && !atRange && (botAI->IsTank(bot) || YoggSaronInPhase1(botAI)))
         return {};
 
     std::list<Creature*> guardians;
@@ -2070,13 +2078,10 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
         if (!guardian->IsAlive())
             continue;
 
-        // Three gates, widest first. A Fervor holder has to be clear of the blast rather than mitigate
-        // it, so it leaves on the longest warning anyone gets; a small pool with no Fervor waits for the
-        // tightest, because leaving is dps it does not get back and the Guardians still have to die
-        // inside 15 yd for Sara.
+        // Two gates, widest first. A Fervor holder has to be clear of the blast rather than mitigate it,
+        // so it leaves on the longest warning anyone gets.
         float const gate = fervor ? ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT
-                                  : (fragile ? ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT
-                                             : ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT);
+                                  : ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT;
         if (guardian->GetHealthPct() > gate)
             continue;
 
@@ -2090,15 +2095,6 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
             continue;
 
         low.push_back(guardian);
-    }
-
-    // What the hit is worth decides it for a melee bot: one its own cooldown still carries keeps
-    // swinging, and only one the nova kills whatever it presses walks out.
-    if (fragile && !fervor)
-    {
-        uint32 const expected = YoggSaronNovaDamageFrom(low, bot);
-        if (bot->GetHealth() > YoggSaronNovaAfterOwnButton(low, bot, expected))
-            return {};
     }
 
     return std::vector<Unit*>(low.begin(), low.end());
@@ -2174,14 +2170,17 @@ uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
         if (!YoggSaronNovaCandidate(member))
             continue;
 
-        // A chained nova only. One nova's 28,600 is the unresisted figure and every pool in the raid
-        // is under it, so a single Guardian low anywhere counted the whole melee group and three
-        // paladins spent Divine Sacrifice inside the first 73 s of a pull, 8 s short of coming back
-        // for the pair that killed five. Nothing resisted less than 10% over 234 hits and the median
-        // landed 14,411. Fervor doubles the answer below, which is right: one nova does kill a holder
-        // from full.
+        // A chained nova only. Every pool in the raid is under one nova's unresisted figure, so a
+        // single Guardian low anywhere counted the whole melee group and three paladins spent Divine
+        // Sacrifice inside the first 73 s of a pull, 8 s short of coming back for the pair that killed
+        // five. Fervor doubles the estimate, which is right: one nova does kill a holder from full.
+        //
+        // Against the same per-nova figure the estimate itself used, never a constant: this is a count
+        // test in damage clothing, and a constant here stops matching the moment the estimate reads
+        // anything off the target. Spelt as a constant it went unreachable for every bot carrying the
+        // 130 and the raid cover fired nothing for three pulls.
         uint32 const expected = YoggSaronNovaDamageFrom(low, member);
-        if (expected >= ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN * ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE &&
+        if (expected >= ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN * YoggSaronNovaDamageEach(member) &&
             YoggSaronNovaLeavesNothing(expected, member))
             ++count;
     }
@@ -2271,8 +2270,15 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI)
         if (bot->GetExactDist2d(member) > sPlayerbotAIConfig.spellDistance)
             continue;
 
+        // The whole chain in reach, or Fervor, which doubles the estimate below and is the one case a
+        // single nova finishes a holder from full health. One nova against these pools reads as lethal
+        // on any bot under about 86% of its bar, which spent five of a pull's seven externals before
+        // the first nova that killed anybody: they land a median 17,048 and never over 25,004 without
+        // Fervor. Same figure the raid cover measures against, so the two cannot disagree about which
+        // nova is worth a cooldown.
         uint32 const expected = YoggSaronNovaDamageFrom(low, member);
-        if (!YoggSaronNovaLeavesNothing(expected, member))
+        if (expected < ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN * YoggSaronNovaDamageEach(member) ||
+            !YoggSaronNovaLeavesNothing(expected, member))
             continue;
 
         // Whoever their own button still saves is not worth a three-minute external: a rogue who dodges

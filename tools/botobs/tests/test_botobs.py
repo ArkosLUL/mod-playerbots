@@ -1169,6 +1169,39 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.crossings([8.0, 12.0, 15.0], 2.8, 20.5), 0)
         self.assertEqual(yogg_saron.crossings([], 2.8, 20.5), 0)
 
+    def test_nearest_over_track_reports_the_walk_back_as_well_as_the_gap(self):
+        blast = (1980.0, -25.0)
+        # 1791390301's 2:24.790 healers: out to 19.8 yd from the Guardian, then back to 4.8.
+        near, cleared = yogg_saron.nearest_over_track(
+            [(1982.0, -25.0), (1999.8, -25.0), (1984.8, -25.0)], blast, 20.0)
+        self.assertAlmostEqual(near, 2.0)
+        self.assertFalse(cleared)
+        # Past the clear radius counts as having been out; exactly on it does not, the test is strict.
+        self.assertTrue(yogg_saron.nearest_over_track(
+            [(1982.0, -25.0), (2000.1, -25.0)], blast, 20.0)[1])
+        self.assertFalse(yogg_saron.nearest_over_track(
+            [(1982.0, -25.0), (2000.0, -25.0)], blast, 20.0)[1])
+        # A bot that never left, and one the snapshot never sampled.
+        self.assertEqual(yogg_saron.nearest_over_track([(1982.0, -25.0)], blast, 20.0), (2.0, False))
+        self.assertEqual(yogg_saron.nearest_over_track([], blast, 20.0), (None, False))
+        self.assertEqual(yogg_saron.nearest_over_track([None, None], blast, 20.0), (None, False))
+
+    def test_sector_share_buckets_bearings_and_wraps_at_360(self):
+        origin = (0.0, 0.0)
+        # Due east is sector 0, due north 90, due west 180, due south 270.
+        self.assertEqual(yogg_saron.sector_share([(1.0, 0.0)], origin, 30), {0: 1.0})
+        self.assertEqual(yogg_saron.sector_share([(0.0, 1.0)], origin, 30), {90: 1.0})
+        self.assertEqual(yogg_saron.sector_share([(-1.0, 0.0)], origin, 30), {180: 1.0})
+        # Just short of due east from below wraps to the last sector, never to 360.
+        self.assertEqual(yogg_saron.sector_share([(1.0, -0.001)], origin, 30), {330: 1.0})
+        # Shares, not counts, and the keys come out in order.
+        self.assertEqual(yogg_saron.sector_share([(1.0, 0.0), (1.0, 0.0), (0.0, 1.0)], origin, 30),
+                         {0: 2 / 3, 90: 1 / 3})
+        # Nothing to bucket, a width that cannot bucket, and a sample the snapshot missed.
+        self.assertEqual(yogg_saron.sector_share([], origin, 30), {})
+        self.assertEqual(yogg_saron.sector_share([(1.0, 0.0)], origin, 0), {})
+        self.assertEqual(yogg_saron.sector_share([None], origin, 30), {})
+
     def test_moving_at_needs_two_samples_and_more_than_a_shuffle(self):
         # 1791373666's 0:49.185 cloud: four of the five melee on it had stepped 1.5-2.6 yd.
         self.assertTrue(yogg_saron.moving_at((1980.0, -22.0), (1978.0, -22.0), 0.3))
