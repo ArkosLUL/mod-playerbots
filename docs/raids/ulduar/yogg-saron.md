@@ -640,6 +640,11 @@ the whole phase and Diminish Power sat on the average raider 55% and 46% of it, 
 debuffs came to 28-44 raider-seconds in all, so they stay last. The tank parks every Guardian on the
 melee spot, so the 20 yd window keeps melee on Guardians all phase; left that way by choice.
 
+**Phase 3 ranged only take a Corruptor or Constrictor their station reaches** (`PhaseThreeStationReaches`), or a Constrictor holding somebody; otherwise they fall to Yogg, whom the
+ranged spot reaches. During one beacon the marked Guardians were barred, the Weakened ones under 10%
+and the fresh one not yet held, so all nine walked toward a Corruptor 83 yd out through the pile: 72
+opposite `flee` / phase 3 positioning walks inside 1 s. The pets take those, below.
+
 **Nobody hits a Guardian a tank does not lead on.** `SetInCombatWithZone` hands a fresh one a
 threatless first victim, and heal threat reaches every Guardian in combat, so one pull's left the tank
 a median **+1.0 s** after spawning (43 of 45: healer 21, melee 10, pet 7, ranged 5) and put 36 swings of
@@ -879,6 +884,17 @@ rather than a latch: an uncommandable guardian can walk back in at any point. `y
 `pet acid spit` (cast for the pet at the hunter's target) and `shadowfiend` (spawns 3 yd from its
 target) while the target is a swinging Crusher.
 
+**In phase 3 the pets kill the far leftovers.** Owners rank every Guardian over them, and before this
+nothing sent a pet: Worm, Wolf and Ruirin followed their owners to the Guardians, and two felhunters
+reached a 745k Corruptor only through the Crusher fallback, sitting on it 63-86 yd from their owners
+at ~2k/s together; a human did most of its damage, it died at +68 s, and its 37 debuffs were dispelled
+in a median 0.1-0.8 s. `YoggSaronPhase3PetLeftover` picks one from Yogg within 70 yd — a holding
+Constrictor, then lowest health, then GUID — skipping any within 25 yd of a swinging Crusher, or the
+guard would pull the pet straight back. The trigger fires on it for a bot with a proper pet, and the
+action commands only those (`IsPet`: hunter, warlock, unholy ghoul), since a 30 s Treant or Spirit
+Wolf would spend its life walking; it is also `elsewhere` ahead of the owner's target when a pet is
+pulled off a Crusher. `yogg.petguard` reads `leftover` when one is sent.
+
 So `GetYoggSaronCrushWedges` raises a wedge **only for a Crusher that currently has something inside
 its melee range**, which keeps it armed for exactly the case the guard cannot close — an
 uncommandable guardian that got back in — and switches it off the rest of the time. It costs the
@@ -1076,7 +1092,7 @@ pulls had 3.3-5.8, and the second nova killed 4, 3 and 7 melee in three pulls. N
 `IsAllowedTarget` and in `Execute`'s drop, since a null resolve keeps the old target (`yogg.leftover`
 `spaced` / `chain`), and `YoggSaronLeftoverAoeHold` — a non-target leftover under 30% within 10 yd of the
 bot or its target — holds AoE and cuts area channels. `lastGuardianDeathMs` still stamps: 65719 goes out
-on every leftover death.
+on every leftover death. First pull with it: 16.2 and 6.8 s apart, no handover nova deaths.
 
 **The walk has to outlive the ring.** "Yogg without the barrier" ends on the tick the barrier lands,
 and melee released there walk straight back under the knock back — three of nine were inside 13.3 yd
@@ -1608,7 +1624,11 @@ walking / still with a target / still without, and `yogg.skullturn`; `--phase3` 
 80% of the raid was first in position (the trigger's test), Guardian samples at 90%+ health and
 Weakened, Drain Life channels cut inside 1.5 s or run full, each beacon's nearest other Guardian,
 `yogg.beacondrag`, the ranged station at phase 3 start and `yogg.station`; `--phases` the gaps between
-leftover Guardian deaths after the ring, and `yogg.leftover`.
+leftover Guardian deaths after the ring, and `yogg.leftover`; `--phase3` the other Guardians each beacon
+heal reached with health then and 6 s later (present by a fresh row, not health: a Weakened Guardian's
+1 HP reads 0%), `yogg.beaconspot`, and the pets on each phase 2 leftover with its time to die. A
+Guardian's spawn is a Simple Teleport (64195) within 3 s of its first sample, else that sample:
+every Guardian casts it again at the wipe.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
@@ -1755,6 +1775,13 @@ A sanity well the bot cannot reach is the same failure by another route: `yogg-s
 three bots stationary for 202, 164 and 96 s on a well they never got to, suppressing every node below
 it for as long as it lasted. It now stands down on the walk latch.
 
+**The walk back from a far leftover Crusher stays, by the user's choice.** After one died 70 yd off,
+every caster was within 30 yd of its Guardian at +2.6-6.5 s yet walked on to the station until
++13-16 s, at 0.8-6k/s against 10-15k/s parked: ~550k inside Heroism. Stopping in reach would spread
+the ranged round Yogg. In the same pull's steady state healers moved 0% of the time, tanks 6.5%, and
+melee 23%, switching Guardians 4-6 times in 37 s as each dropped under 10%; the body threw nobody in
+phase 3 or the end of phase 2.
+
 ## Reduced Keepers
 
 The raid frees fewer than 4 Keepers, losing that Keeper's support: each passive is +10% damage done,
@@ -1805,15 +1832,22 @@ raid's damage, the bot tank dead at +63 / +67 s.
 - **`yogg-saron beacon drag`** (`ACTION_RAID + 4`, over guardian control). The heal is one application:
   the 10 s mark ends, the entry reverts to 33988 and Yogg's 64467 missile (30 yd/s) sets it off
   0.3-1.1 s later on every ally within 20 yd of the Guardian. The pile tank can't separate a marked one,
-  the pile follows whoever holds it, so a second bot taunts it off and walks it to the nearer drag spot:
-  north (1995.0, 4.0, 326.731) or south (1995.0, −50.0, 325.688), navprobe PATHFIND_NORMAL 27.3 yd from
-  the melee spot, 33.0 / 28.5 yd from Yogg, over 40 yd from every well. Claims (`beaconDrags`): bot
+  the pile follows whoever holds it, so a second bot taunts it off and walks it to a drag spot: north
+  (1983.68, 13.27, 327.472) or south (1993.62, −62.23, 327.625), navprobe PATHFIND_NORMAL 39.3 / 39.8 yd
+  from the melee spot, 39.0 from Yogg, 47.6 / 50.1 from the ranged spot, 28-30 from the nearest well,
+  in heal range of the melee spot. **The side is the one whose nearest unmarked Guardian is farther**,
+  latched at a beacon's first claim so every dragger walks it (`yogg.beaconspot`). The heal is an area
+  aura applied once, at the cast, so whatever stands in reach then keeps it 20 s. From the old 27 yd
+  spots all three draggers took the nearer north one; the tank stood 5.8 yd off the melee spot toward
+  it, his two Guardians 7.2 / 12.9 yd out, 17.7-20.1 from the casters, and three stacked heals took
+  them 0 → 79% and 54 → 80% in 6 s, the south spot 34-38 yd off. Five Guardians at full plus a fresh
+  one: the bot tank carried four, took 102k in 8 hits and died, then 20 deaths in 20 s. Claims
+  (`beaconDrags`): bot
   tanks while another tank lives, then non-heal paladins and Death Knights, by GUID, taunt off cooldown,
   **never a bot an unmarked Guardian is hitting** — that one would follow it out. It attacks only once
   standing, since `Attack`'s facing turn ends a walk; releases on the heal aura or 3 s after the mark
   ends. A claimed Guardian isn't holdable, so guardian control leaves it, and the gaze node leaves a
-  dragger's tick free (`drag`). Probed as `yogg.beacondrag`. **The human tank holds the pile at the melee
-  spot.** Before it: marked Guardians 5-12 yd from the pile and 15-19 from Yogg, +2.04% / +2.57%. First
+  dragger's tick free (`drag`). Probed as `yogg.beacondrag`. Before it: marked Guardians 5-12 yd from the pile and 15-19 from Yogg, +2.04% / +2.57%. First
   pull with it: two dragged south, all three marked ≥25.8 yd from Yogg, Yogg −0.13% over 20 s; the third
   had no dragger (the bot tank always holds Guardians) and topped a pile Guardian 82 → 99%. Only the two
   draggers and the human tank targeted a marked one.
@@ -1834,6 +1868,12 @@ raid's damage, the bot tank dead at +63 / +67 s.
 **Healers stay on the melee spot, by the user's choice**, at a known cost: Guardians hit healers 5
 times a Freya-only pull at ~41k, every Guardian leaves the tanks ~1 s after the first pickup on heal
 threat, and 65% of Guardian samples sit at 90%+ health. Unsolved.
+
+**A bot tank holds the pile.** First pull with both tanks bots: Guardians on a tank 86% of samples
+until the beacon, no hits on ranged or healers, the first four at 0% by +28 / +35 / +41 / +53 s
+against a spawn every ~10.5 s, raid 83k/s (72% on Guardians; 39.8k/s the pull before). Heroism at
++8.5 s (80% in position at +7.5), Drain Life 13 of 18 cut inside 1.5 s and none full. The beacon
+wiped it. The ceiling: Yogg lost 2.5% in the 64 s before, ~19k/s, ~13 minutes for his last 30%.
 
 **Shadow Beacon heals the marked guardians, and Yogg when they stand near him.** It marks 3 guardians
 in 25-man every 45 s, and 10 s later each casts Empowering Shadows (64486): **37,500 a second for 20 s

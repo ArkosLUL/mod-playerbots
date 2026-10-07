@@ -238,6 +238,7 @@ private:
     struct BrainApproach
     {
         bool brainLevel = false;
+        bool phaseThreeRanged = false;
         std::optional<bool> approachable;
         // Filled on first use: most resolves never test a Guardian or a leftover tentacle.
         std::optional<bool> phaseThreeMelee;

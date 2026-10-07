@@ -650,7 +650,8 @@ bool YoggSaronPetGuardTrigger::IsActive()
             return true;
     }
 
-    return false;
+    // Last, it's the one with a phase read and two sweeps.
+    return bot->GetPet() && YoggSaronPhase3PetLeftover(botAI);
 }
 
 bool YoggSaronBodyDetourTrigger::IsActive()

@@ -333,6 +333,10 @@ constexpr uint32 ULDUAR_YOGG_SARON_SPACING_HOLD_MS = 3000;
 // hitting it and whoever its owner is hitting - both the Crusher the guard just pulled it from.
 constexpr float ULDUAR_YOGG_SARON_PET_TARGET_RADIUS = 40.0f;
 
+// How far from Yogg's middle the phase 3 pets look for leftover tentacles. Wave tentacles spawn up to
+// ~50 yd out.
+constexpr float ULDUAR_YOGG_SARON_PET_LEFTOVER_SEARCH_RADIUS = 70.0f;
+
 constexpr float ULDUAR_YOGG_SARON_CRUSH_RANGE = 25.0f;       // DBC radius 23 plus both object sizes
 constexpr float ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC = 8.0f;  // degrees either side of the facing
 constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;   // ~4 yd of lateral room at 20 yd
@@ -639,9 +643,12 @@ extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 // navprobe with straight paths from the ranged spot, 21.6-25.2 yd from the melee spot.
 extern const std::vector<Position> ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS;
 
-// Where a Shadow Beacon marked Guardian is walked to without Thorim: north and south of the melee spot,
-// 27.3 yd from it (PATHFIND_NORMAL, on the floor by navprobe), 33.0 and 28.5 yd from Yogg's middle,
-// 33-39 yd from the ranged spot and over 40 from every Sanity Well.
+// Where a Shadow Beacon marked Guardian is walked to without Thorim, whichever side the pile isn't on.
+// The heal goes on every Guardian within 20 yd of the marked one, once, as it's cast, and holds it at
+// full for 20 s. The tank and the Guardians on him drift up to ~13 yd off the melee spot, and from
+// 27 yd out that left two pile Guardians 18-20 yd from the casters, both reset. So ~39 yd out:
+// PATHFIND_NORMAL from the melee spot by navprobe, 39 yd from Yogg's middle, 48-50 from the ranged
+// spot, 28-30 from the nearest Sanity Well, still in heal range of the melee spot.
 extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH;
 extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH;
 
@@ -776,6 +783,11 @@ bool ClaimYoggSaronSqueezeRescue(PlayerbotAI* botAI, Player* victim);
 // Somewhere other than a Crusher Tentacle for a pet to be, nearest first. nullptr when the pet has
 // nothing else within reach, which is the only case worth silencing it for.
 Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet);
+
+// Phase 3: the leftover Corruptor or Constrictor every bot's pet goes for, or nullptr. A Constrictor
+// holding somebody first, then lowest health, then GUID, so all pets pile on one. Skips any with a
+// swinging Crusher within Crush range, the pet guard would only pull the pet back out.
+Unit* YoggSaronPhase3PetLeftover(PlayerbotAI* botAI);
 
 // Record a Brain Link pair, from the spell hook that sees 63803 or 63804 go out. Both ends read the
 // same record, so both walk.
@@ -1061,7 +1073,7 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim);
 // Whether the bot holds a drag claim. A read of the claim map only, no sweep.
 bool YoggSaronBeaconDragging(Player* bot);
 
-// The drag spot nearer the bot.
+// The drag spot this beacon's draggers share, picked at the first claim.
 Position const& YoggSaronBeaconDragSpot(Player* bot);
 
 // Whether a shaman should cast Heroism or Bloodlust now: phase 3, and the raid at its stations or in

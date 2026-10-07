@@ -502,10 +502,17 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
     if (target && (!target->IsAlive() || target->GetEntry() == NPC_CRUSHER_TENTACLE))
         target = nullptr;
 
+    // Phase 3 owners rank every Guardian above the leftover tentacles, so only their pets ever get to
+    // one. Proper pets only: a 30 s Treant or Spirit Wolf would spend half its life walking over there.
+    Unit* const leftover = bot->GetPet() ? YoggSaronPhase3PetLeftover(botAI) : nullptr;
+
     bool pulled = false;
     bool held = false;
+    bool sent = false;
     for (Creature* pet : owned)
     {
+        Unit* const petLeftover = pet->IsPet() ? leftover : nullptr;
+
         // Around the pet: a ranged owner can stand well outside any Crusher its pet is sitting on.
         std::list<Creature*> crushers;
         pet->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_CRUSH_RANGE);
@@ -529,6 +536,17 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
         if (!touching && !onCrusher && !ownerOnCrusher)
         {
             Unhush(pet);
+
+            // PetAI never leaves a live victim, so it has to be told, and it stays on it from there.
+            if (petLeftover && victim != petLeftover && pet->AI())
+            {
+                if (CharmInfo* charm = pet->GetCharmInfo())
+                    charm->SetIsCommandAttack(true);
+
+                pet->AI()->AttackStart(petLeftover);
+                sent = true;
+            }
+
             continue;
         }
 
@@ -540,7 +558,9 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
 
         // A pet already on another add only needs to stay on it, unless the pet itself is in the reach.
         Unit* elsewhere = nullptr;
-        if (!touching && victim && victim->IsAlive() && victim->GetEntry() != NPC_CRUSHER_TENTACLE)
+        if (petLeftover)
+            elsewhere = petLeftover;
+        else if (!touching && victim && victim->IsAlive() && victim->GetEntry() != NPC_CRUSHER_TENTACLE)
             elsewhere = victim;
         else
             elsewhere = target ? target : YoggSaronPetFallbackTarget(botAI, pet);
@@ -558,13 +578,17 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
             held = true;
 
         if (elsewhere && elsewhere != pet->GetVictim() && pet->AI())
+        {
             pet->AI()->AttackStart(elsewhere);
+            sent = sent || elsewhere == petLeftover;
+        }
         else if (!elsewhere && (touching || onCrusher))
             pet->GetMotionMaster()->MoveFollow(bot, PET_FOLLOW_DIST, pet->GetFollowAngle());
     }
 
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "yogg.petguard", pulled ? "pulled" : (held ? "held" : "clear"));
+        RaidObs::NoteDerived(bot, "yogg.petguard",
+                             pulled ? "pulled" : (sent ? "leftover" : (held ? "held" : "clear")));
 
     // Never claims the tick. Commanding a pet costs the bot nothing it was going to do with its own
     // body, and the node sits above the dps resolver only so it is asked before the pet swings again.
@@ -687,9 +711,14 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
         case NPC_CRUSHER_TENTACLE:
             allowed = !PlayerbotAI::IsMelee(bot) || YoggSaronCrusherStunHolds(botAI, candidate);
             break;
+        // Phase 3 ranged only take one their station reaches, or a Constrictor holding somebody. One
+        // across the room walked all nine through the Guardian pile while Yogg was in range of the
+        // station the whole time. The pets go for the far ones.
         case NPC_CONSTRICTOR_TENTACLE:
         case NPC_CORRUPTOR_TENTACLE:
-            allowed = !phaseThreeMelee();
+            allowed = !phaseThreeMelee() &&
+                      (!brain.phaseThreeRanged || YoggSaronConstrictorHolding(candidate) ||
+                       YoggSaronTrigger(botAI).PhaseThreeStationReaches(candidate));
             break;
         // Without Thorim a marked one is healed to full whatever the raid does, and it's being dragged
         // clear of the pile, so every hit on it is wasted.
@@ -756,6 +785,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     // the Brain through a wall it has not been let through yet.
     BrainApproach brain;
     brain.brainLevel = brainLevel;
+    brain.phaseThreeRanged = phaseThreeRanged;
 
     // "nearest npcs" cut down to these entries before its LOS test instead of after. Same units in the
     // same order, without a raycast for every pet and totem in the raid.

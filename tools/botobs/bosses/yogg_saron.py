@@ -24,7 +24,9 @@
                                     power or Weakened, Drain Life channels and how fast they were cut,
                                     the bot tank's targets and taunts, swings on the raid during a gaze,
                                     beacon heals and how far marked Guardians were from Yogg and the rest,
-                                    beacon drags, Lunatic Gaze, phase 2 leftovers and Diminish Power
+                                    which other Guardians the heal reached, beacon drags and the side
+                                    picked, Lunatic Gaze, phase 2 leftovers, the pets on each and
+                                    Diminish Power
     yogg_saron.py <file> --crush    Crush, who took it and what each cone was aimed at, the body's
                                     knockback and who walked into it, Death Rays
     yogg_saron.py <file> --sanity   Sanity minima, each trip below, who sat a wave out, where it went,
@@ -421,6 +423,12 @@ SPELL_SHADOW_BEACON = 64465
 SPELL_EMPOWERING_SHADOWS = (64468, 64486)
 EMPOWERING_SHADOWS_MS = 20000
 EMPOWERING_SHADOWS_RADIUS = 20.0
+# How long after the cast a Guardian the heal reached is read again. Three stacked heals took one from
+# 0% to 81% in this time.
+BEACON_SPLASH_LOOK_MS = 6000
+# Cast by a Guardian as it arrives, and by every one again as the raid wipes.
+SPELL_SIMPLE_TELEPORT = 64195
+GUARDIAN_SPAWN_TELEPORT_MS = 3000
 SPELL_WEAKENED = 64162
 SPELL_HAND_OF_RECKONING = 62124
 TAUNT_COOLDOWN_MS = 8000
@@ -472,6 +480,21 @@ def nova_gaps(times) -> list[int]:
     """Time between consecutive Guardian deaths, in ms."""
     ordered = sorted(times)
     return [b - a for a, b in zip(ordered, ordered[1:])]
+
+
+def beacon_splash(casters: list[tuple[float, float]], others: dict[int, tuple[float, float]],
+                  radius: float = EMPOWERING_SHADOWS_RADIUS) -> list[int]:
+    """The other Guardians a beacon heal reached: within `radius` of any caster at the cast. 64486 is an
+    area aura applied once, so whoever was in reach then keeps the 20 s heal wherever it walks after."""
+    return sorted(guid for guid, spot in others.items()
+                  if any(math.dist(spot, caster) <= radius for caster in casters))
+
+
+def guardian_spawn(first_seen: int, teleports: list[int]) -> int:
+    """When a phase 3 Guardian arrived: a Simple Teleport that came with its first sample, else that
+    sample. The cast at the wipe is not the arrival."""
+    near = [when for when in teleports if when <= first_seen + GUARDIAN_SPAWN_TELEPORT_MS]
+    return min(near) if near else first_seen
 
 
 def kill_kind(on_it: int, non_tanks: int) -> str:
@@ -3532,7 +3555,10 @@ def show_phase3(trace: Trace) -> None:
                 cells.append(f"{group} {' '.join(f'{value:.2f}' for value in share)}")
         print(f"    {clock(when)}  {' | '.join(cells)}")
 
-    teleports = {rec.get("s"): rec["t"] for rec in trace.of("cast") if rec.get("sp") == 64195}
+    teleports: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("sp") == SPELL_SIMPLE_TELEPORT:
+            teleports[rec.get("s")].append(rec["t"])
     melee_hits = [rec for rec in trace.of("dmg") if rec.get("s") in guardians and rec.get("sp") == 0]
     # The Guardian casts Weakened on itself, and that cast row reaches the file where the aura row may not.
     weakened = {rec.get("d") for rec in trace.of("aura") if rec.get("sp") == SPELL_WEAKENED and not rec.get("r")}
@@ -3548,7 +3574,7 @@ def show_phase3(trace: Trace) -> None:
         own = rows.get(guid)
         if not own:
             continue
-        spawned = teleports.get(guid, own[0][0])
+        spawned = guardian_spawn(own[0][0], teleports.get(guid, []))
         victim = next((row for row in own if row[8] in roster), None)
         hit = next((rec for rec in melee_hits if rec.get("s") == guid), None)
         lowest = min(row[6] for row in own)
@@ -3632,22 +3658,38 @@ def show_phase3(trace: Trace) -> None:
         inside = sum(1 for yards in reach if yards <= EMPOWERING_SHADOWS_RADIUS)
         # The heal lands on every Guardian within 20 yd of a marked one too, which resets the pile.
         marked = {rec.get("s") for rec in casters}
-        others = []
+        others: dict[int, tuple[float, float]] = {}
+        # Fresh rows only, not health: a Weakened Guardian sits at 1 HP, which the snapshot reads as 0%.
         for guid in guardians - marked:
             row = row_before(rows.get(guid, []), group[0])
-            if row and row[6] > 0 and group[0] - row[0] <= 1500:
-                others.append(row[2:4])
+            if row and group[0] - row[0] <= 1500:
+                others[guid] = (row[2], row[3])
         nearest = []
+        spots = []
         for rec in casters:
             spot = at(trace, rec.get("s"), rec["t"])
-            if spot and others:
-                nearest.append(min(math.dist(spot[:2], other) for other in others))
+            if spot:
+                spots.append(spot[:2])
+                if others:
+                    nearest.append(min(math.dist(spot[:2], other) for other in others.values()))
         pile = f", nearest other Guardian {', '.join(f'{yards:.1f}' for yards in nearest)} yd" if nearest else ""
         print(f"    {clock(group[0])}  {len(casters)} heals, Guardians {', '.join(f'{yards:.1f}' for yards in reach)} yd"
               f" from Yogg ({inside} inside {EMPOWERING_SHADOWS_RADIUS:.0f}){pile}, Yogg {change} over the next 20 s")
+        healed = beacon_splash(spots, others)
+        if healed:
+            changes = []
+            for guid in healed:
+                then = row_before(rows[guid], group[0])
+                later = row_before(rows[guid], group[0] + BEACON_SPLASH_LOOK_MS)
+                changes.append(f"{then[6]:.0f} -> {later[6]:.0f}%")
+            print(f"      other Guardians it reached: {len(healed)} ({', '.join(changes)}"
+                  f" over {BEACON_SPLASH_LOOK_MS // 1000} s)")
     drags = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beacondrag"))
     if drags:
         print(f"    yogg.beacondrag  : {dict(drags)}")
+    sides = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beaconspot"))
+    if sides:
+        print(f"    yogg.beaconspot  : {dict(sides)}")
 
     def inside_gaze(when: int) -> bool:
         return any(first <= when <= last for first, last in gazes)
@@ -3712,16 +3754,28 @@ def show_phase3_leftovers(trace: Trace, start: int, stop: int) -> None:
         after = [row for row in own if row[0] >= start]
         if before and after and before[-1][6] > 0:
             left.append((guid, before[-1][6], after[-1]))
+
+    roster = roster_guids(trace)
     if left:
+        # Owners rank every Guardian above these, so pets are the ones meant to take them.
+        pets = {guid for guid, owner in trace.owners.items() if owner in roster}
+        leftover_guids = {guid for guid, _, _ in left}
+        on: dict[int, set] = collections.defaultdict(set)
+        for snap in trace.of("snap"):
+            if start <= snap["t"] <= stop:
+                for row in snap.get("u", []):
+                    if row[0] in pets and len(row) > 7 and row[7] in leftover_guids:
+                        on[row[7]].add(row[0])
+
         print(f"\n  phase 2 leftovers  : {len(left)}")
         for guid, at_start, last in sorted(left, key=lambda item: item[2][0]):
             # Sampling stops with the anchor, so a tentacle going quiet is not a kill: only one sampled
             # at the bottom of its health bar is.
-            fate = "killed" if last[6] <= LEFTOVER_DEAD_PCT else "still up"
+            fate = f"killed at +{(last[0] - start) / 1000:.1f} s" if last[6] <= LEFTOVER_DEAD_PCT else "still up"
+            names = ", ".join(sorted(trace.name(pet) for pet in on[guid])) or "none"
             print(f"    {TENTACLE_NAMES[tentacles[guid]]:11} {at_start:5.1f}% at phase 3,"
-                  f" last seen {clock(last[0])} at {last[6]:.1f}%, {fate}")
+                  f" last seen {clock(last[0])} at {last[6]:.1f}%, {fate}; pets on it: {names}")
 
-    roster = roster_guids(trace)
     applied = [(rec["t"], rec.get("d", 0), bool(rec.get("r"))) for rec in trace.of("aura")
                if rec.get("sp") == SPELL_DIMINISH_POWER and rec.get("d") in roster]
     if applied and stop > start and roster:
@@ -3985,7 +4039,8 @@ SECTIONS = (
      " walk speed to the Brain, turns on the spot, exits decided outside the brain room, skull gaze ticks",
      show_brain),
     ("phase3", "Heroism, the ranged station, Immortal Guardians, their power and Drain Life, swings on the"
-     " raid during a gaze, beacon heals and drags, Lunatic Gaze, phase 2 leftovers", show_phase3),
+     " raid during a gaze, beacon heals, who else they reached, and drags, Lunatic Gaze, phase 2 leftovers"
+     " and the pets on them", show_phase3),
     ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
     ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),
 )

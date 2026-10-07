@@ -14,6 +14,7 @@
 #include <limits>
 #include <list>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -81,8 +82,8 @@ const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT = Position(2018.7628f, -18.
 const std::vector<Position> ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS = {
     Position(2019.18f, -29.08f, 327.154f), Position(2015.72f, -9.16f, 327.155f),
     Position(2016.95f, -39.03f, 327.678f), Position(2010.26f, -0.55f, 327.291f)};
-const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH = Position(1995.0f, 4.0f, 326.731f);
-const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH = Position(1995.0f, -50.0f, 325.688f);
+const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH = Position(1983.68f, 13.27f, 327.472f);
+const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH = Position(1993.62f, -62.23f, 327.625f);
 
 namespace
 {
@@ -156,6 +157,9 @@ struct YoggSaronEncounterState
         uint32 markEndedMs = 0;
     };
     std::unordered_map<ObjectGuid, BeaconDrag> beaconDrags;
+    // The side this beacon's draggers share, set at the first claim and cleared with the last.
+    bool beaconDragSideSet = false;
+    bool beaconDragNorth = true;
 
     // Which bot's kick holds which cast, keyed by the caster, and when it was taken.
     std::unordered_map<ObjectGuid, std::pair<ObjectGuid, uint32>> interruptClaims;
@@ -1397,6 +1401,7 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
     if (!YoggSaronInPhase3(botAI) || YoggThorimKeeperActive(botAI))
     {
         state.beaconDrags.clear();
+        state.beaconDragSideSet = false;
         return nullptr;
     }
 
@@ -1423,6 +1428,9 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
 
         it = done ? state.beaconDrags.erase(it) : std::next(it);
     }
+
+    if (state.beaconDrags.empty())
+        state.beaconDragSideSet = false;
 
     for (auto const& [guid, drag] : state.beaconDrags)
         if (drag.dragger == bot->GetGUID())
@@ -1498,6 +1506,32 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
 
         if (claim)
         {
+            // The side away from the pile, not the one nearer the dragger, so the pile stays out of the
+            // heal. Once per beacon, so every dragger walks the same way.
+            if (!state.beaconDragSideSet)
+            {
+                auto const clearance = [&unmarked](Position const& spot)
+                {
+                    float nearest = std::numeric_limits<float>::max();
+                    for (Creature* guardian : unmarked)
+                        if (guardian->IsAlive())
+                            nearest = std::min(nearest, guardian->GetExactDist2d(spot));
+
+                    return nearest;
+                };
+
+                float const north = clearance(ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH);
+                float const south = clearance(ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH);
+                state.beaconDragNorth = unmarked.empty()
+                                            ? bot->GetExactDist2d(ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH) <=
+                                                  bot->GetExactDist2d(ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH)
+                                            : north >= south;
+                state.beaconDragSideSet = true;
+
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "yogg.beaconspot", state.beaconDragNorth ? "north" : "south");
+            }
+
             state.beaconDrags[marked[i]->GetGUID()] = {bot->GetGUID(), 0};
             if (RaidObs::Active())
                 RaidObs::NoteDerived(bot, "yogg.beacondrag", "claim");
@@ -1520,10 +1554,8 @@ bool YoggSaronBeaconDragging(Player* bot)
 
 Position const& YoggSaronBeaconDragSpot(Player* bot)
 {
-    return bot->GetExactDist2d(ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH) <=
-                   bot->GetExactDist2d(ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH)
-               ? ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH
-               : ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH;
+    return YoggSaronStateFor(bot).beaconDragNorth ? ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH
+                                                  : ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH;
 }
 
 bool YoggSaronPhase3LustReady(PlayerbotAI* botAI)
@@ -2842,6 +2874,50 @@ Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet)
     }
 
     return nearest;
+}
+
+Unit* YoggSaronPhase3PetLeftover(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase3(botAI))
+        return nullptr;
+
+    // From Yogg, so every owner sends its pet to the same one.
+    Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+    if (!yogg)
+        return nullptr;
+
+    std::list<Creature*> leftovers;
+    yogg->GetCreatureListWithEntryInGrid(leftovers, {NPC_CORRUPTOR_TENTACLE, NPC_CONSTRICTOR_TENTACLE},
+                                         ULDUAR_YOGG_SARON_PET_LEFTOVER_SEARCH_RADIUS);
+    if (leftovers.empty())
+        return nullptr;
+
+    std::list<Creature*> crushers;
+    yogg->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_PET_LEFTOVER_SEARCH_RADIUS);
+
+    auto const rank = [](Creature* tentacle)
+    { return std::make_tuple(!YoggSaronConstrictorHolding(tentacle), tentacle->GetHealth(), tentacle->GetGUID()); };
+
+    Creature* best = nullptr;
+    for (Creature* leftover : leftovers)
+    {
+        if (!leftover->IsAlive())
+            continue;
+
+        bool const nearCrusher = std::any_of(crushers.begin(), crushers.end(), [botAI, leftover](Creature* crusher)
+            {
+                return crusher->IsAlive() && !YoggSaronCrusherStunHolds(botAI, crusher) &&
+                       crusher->GetExactDist2d(leftover) <= ULDUAR_YOGG_SARON_CRUSH_RANGE;
+            });
+        if (nearCrusher)
+            continue;
+
+        if (!best || rank(leftover) < rank(best))
+            best = leftover;
+    }
+
+    return best;
 }
 
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)

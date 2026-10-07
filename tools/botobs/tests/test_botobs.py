@@ -1468,6 +1468,19 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.nova_gaps([13819, 10000, 15686]), [3819, 1867])
         self.assertEqual(yogg_saron.nova_gaps([5000]), [])
 
+    def test_beacon_splash_takes_guardians_inside_the_radius_of_any_caster(self):
+        casters = [(1996.0, 0.5), (1995.3, 2.4)]
+        others = {7: (2001.5, -16.3), 8: (2010.0, -16.0), 9: (1975.5, 21.2)}
+        self.assertEqual(yogg_saron.beacon_splash(casters, others), [7])
+        self.assertEqual(yogg_saron.beacon_splash(casters, others, 22.0), [7, 8])
+        self.assertEqual(yogg_saron.beacon_splash([], others), [])
+
+    def test_guardian_spawn_ignores_the_teleport_at_the_wipe(self):
+        self.assertEqual(yogg_saron.guardian_spawn(467199, [467308, 542783]), 467308)
+        self.assertEqual(yogg_saron.guardian_spawn(467199, [466900]), 466900)
+        self.assertEqual(yogg_saron.guardian_spawn(456153, [542781]), 456153)
+        self.assertEqual(yogg_saron.guardian_spawn(456153, []), 456153)
+
     def test_skull_ticks_read_what_the_victim_was_doing(self):
         rows = {1: [[0, 1, 0, 0, 0, 0, 100, 0, 0, 1], [2000, 1, 0, 0, 0, 0, 100, 0, 55, 0]],
                 2: [[0, 2, 0, 0, 0, 0, 100, 0, 0, 0]]}
