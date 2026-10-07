@@ -4761,8 +4761,7 @@ void PlayerbotFactory::CleanupConsumables() // remove old consumables as part of
 void PlayerbotFactory::InitGlyphs(bool increment)
 {
     bot->InitGlyphsForLevel();
-    if (!increment && botAI &&
-        botAI->GetAiObjectContext()->GetValue<bool>("custom_glyphs")->Get())
+    if (botAI && botAI->GetAiObjectContext()->GetValue<bool>("custom_glyphs")->Get())
         return;   // // Added for custom Glyphs - custom glyphs flag test
 
     if (!increment)
@@ -5007,6 +5006,10 @@ void PlayerbotFactory::InitGlyphs(bool increment)
     }
 
     std::unordered_set<uint32> chosen;
+    for (uint32 slotIndex = 0; slotIndex < MAX_GLYPH_SLOT_INDEX; ++slotIndex)
+        if (uint32 kept = bot->GetGlyph(slotIndex))
+            chosen.insert(kept);
+
     for (uint32 slotIndex = 0; slotIndex < maxSlot; ++slotIndex)
     {
         uint8 realSlot = glyphOrder[slotIndex];
@@ -5048,7 +5051,8 @@ void PlayerbotFactory::InitGlyphs(bool increment)
                     glyph = entry->Effects[effect].MiscValue;
                 }
             }
-            if (!glyph)
+            // a kept glyph may already be this one, and SetGlyph won't catch the dup
+            if (!glyph || chosen.count(glyph))
             {
                 continue;
             }

@@ -1,4 +1,4 @@
-# Gear maintenance: bags, and clearing out old gear
+# Gear maintenance: bags, glyphs, and clearing out old gear
 
 What keeps a bot's bags usable over a long-running realm. Scoring and upgrade decisions are in
 [itemization.md](itemization.md); what a bot picks up and how it rolls is in [loot.md](loot.md).
@@ -87,3 +87,13 @@ swapped out. Both it and `EquipAction::GetSmallestBagSlot` now skip any slot who
 be invisible to both, or one will offer a slot the other refuses. `GetSmallestBagSize` keeps `0` for a
 genuinely empty slot and returns `uint32` max when every slot is occupied and none is replaceable, so
 `Calculate` yields `ITEM_USAGE_NONE`.
+
+## `maintenance` keeps glyphs
+
+`maintenance` (alt bots gated on `AiPlayerbot.AltMaintenanceGlyphs`) calls `InitGlyphs(true)`: every
+slotted glyph stays, hand-placed ones included, and only empty slots fill from
+`AiPlayerbot.PremadeSpecGlyph.<class>.<spec>`, skipping a premade glyph already held in another slot.
+`InitGlyphs(false)`, from the `talents` spec change and `Randomize`, wipes all six and refills.
+
+`glyph equip <ids>` sets the `custom_glyphs` value, which makes `InitGlyphs` leave glyphs alone in
+either mode. It lives in memory only: logout, a server restart or the `talents` command clears it.

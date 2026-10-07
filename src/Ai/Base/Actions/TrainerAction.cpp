@@ -214,7 +214,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
         factory.InitReputation();
         factory.InitSpecialSpells();
         factory.InitMounts();
-        factory.InitGlyphs(false);
+        factory.InitGlyphs(true);
         factory.InitKeyring();
         if (bot->GetLevel() >= sPlayerbotAIConfig.minEnchantingBotLevel)
             factory.ApplyEnchantAndGemsNew();
@@ -270,7 +270,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
             factory.InitMounts();
 
         if (sPlayerbotAIConfig.altMaintenanceGlyphs)
-            factory.InitGlyphs(false);
+            factory.InitGlyphs(true);
 
         if (sPlayerbotAIConfig.altMaintenanceKeyring)
             factory.InitKeyring();
