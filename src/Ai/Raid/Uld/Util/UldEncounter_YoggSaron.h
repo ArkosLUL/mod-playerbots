@@ -541,9 +541,9 @@ constexpr float ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH = 30.0f;
 // bots actually stop.
 constexpr float ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE = 18.0f;
 
-// Phase 3 melee only take a Guardian this close to the melee spot, everything else goes to Yogg.
-// Guardian control keeps the tank within 5 yd of the spot and a full-health Guardian swings from up
-// to 14 yd.
+// How close to the melee spot a Guardian must be for phase 3 melee to take it, during a gaze or once
+// beacon-healed. Guardian control keeps the tank within 5 yd of the spot and a full-health Guardian
+// swings from up to 14 yd.
 constexpr float ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE = 20.0f;
 
 // Without Thorim a Guardian can't die, and a fresh or beacon-healed one is 425k: bringing every one to
@@ -627,6 +627,24 @@ constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_SEARCH_RADIUS = 70.0f;
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_HEAL_WAIT_MS = 3000;
 constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_ARRIVED_RADIUS = 3.0f;
 
+// A drag whose taunt hasn't turned its Guardian this long after the cast goes to the next bot. One pull's
+// Hand of Reckoning missed and the dragger kept the claim on cooldown for 8 s. Every taunt has landed by
+// the second line: Distracting Shot flies at 40 yd/s, 0.85 s at its 34 yd.
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_TAUNT_CHECK_MS = 1500;
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_TAUNT_LAND_MS = 1000;
+
+// Shadow Beacon comes 45 s into phase 3, then 45 s after each one that lands, retried every 5 s. The
+// draggers walk out to a staging spot this long before it's due and give up this long after.
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_PERIOD_MS = 45000;
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_STAGE_LEAD_MS = 5000;
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_STAGE_TIMEOUT_MS = 8000;
+
+// Kickers held back for the marks' Drain Life while a beacon lasts, ready within this long. A channelling
+// Guardian doesn't move, so one channel during a drag keeps its mark in the pile, and in one pull every
+// kick went on unmarked channels while two marks healed eleven Guardians.
+constexpr uint32 ULDUAR_YOGG_SARON_MARK_KICKERS = 2;
+constexpr uint32 ULDUAR_YOGG_SARON_MARK_KICKER_READY_MS = 2000;
+
 // A beacon-healed Guardian climbs ~9% a second, and past this it hits a non-tank for ~17k and up. The
 // 25-36k hits that killed both draggers in one pull came 5-8 s after the heal, with no tank taking it.
 constexpr float ULDUAR_YOGG_SARON_BEACON_DANGER_HEALTH_PCT = 40.0f;
@@ -634,11 +652,10 @@ constexpr float ULDUAR_YOGG_SARON_BEACON_DANGER_HEALTH_PCT = 40.0f;
 // holds its victim for itself.
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_RETURN_MS = 8000;
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_EXTERNAL_CLAIM_MS = 8000;
-// A tank holding the pile presses its own button with a healed Guardian on it under the first line and
-// gets an external under the second. Every tank death in two pulls came 17-32 s after a heal, under three
-// or four Guardians at 84-100% with no external on it. Two healed ones at any health used to count as
-// well, and a tank spent its button at full health in one beacon and had none in the next.
-constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_DEFENSIVE_PCT = 60.0f;
+// A tank holding the pile presses its own button once this many Guardians on it carry another Guardian's
+// beacon heal, at any health, and gets an external under the line. A 60% line was one full-power swing, so
+// both tanks spent the 2 min button on a mild beacon and had none when a failed drag healed the pile.
+constexpr uint32 ULDUAR_YOGG_SARON_BEACON_PILE_RESET_GUARDIANS = 2;
 constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_EXTERNAL_PCT = 50.0f;
 
 // Both tanks stand on the melee spot, so Consecration keeps the whole pile on whoever has the most threat:
@@ -758,6 +775,13 @@ extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST;
 // by navprobe, PATHFIND_NORMAL 33.2 / 33.1 yd from the melee spot and 42 / 44 from the ranged spot.
 extern const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH;
 extern const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH;
+
+// Where a non-hunter dragger waits for the next beacon, 20 yd along the PATHFIND_NORMAL line from the melee
+// spot to each drag spot, on the floor by navprobe. A 30 yd taunt still reaches a mark anywhere in the
+// pile, and the walk after it is ~19 yd instead of ~39.
+extern const Position ULDUAR_YOGG_SARON_BEACON_STAGE_NORTH;
+extern const Position ULDUAR_YOGG_SARON_BEACON_STAGE_SOUTH;
+extern const Position ULDUAR_YOGG_SARON_BEACON_STAGE_NORTHEAST;
 
 // Yogg-Saron phase read, and the one place the encounter is recognised at all. Yogg is not reliably
 // on a bot's threat list, so it scans for the creature instead of going through "find target", and
@@ -958,9 +982,15 @@ bool YoggSaronReprisalHold(PlayerbotAI* botAI);
 Player* YoggSaronRoomHealer(PlayerbotAI* botAI);
 
 // What the interrupt node kicks: phase 1 Guardians casting Dark Volley, and in phase 3 Immortal
-// Guardians channelling Drain Life. Shared between trigger and action so the two cannot disagree about
-// what is being kicked.
+// Guardians channelling Drain Life, beacon marks first. A kicker held back for the marks gets only those.
+// Shared between trigger and action so the two cannot disagree about what is being kicked.
 std::vector<Unit*> GetYoggSaronInterruptCasters(PlayerbotAI* botAI);
+
+// A Guardian a beacon marks or a bot is dragging. A read of the drag claims, no sweep.
+bool YoggSaronMarkCaster(Unit* caster);
+
+// This bot is one of the kickers held back for the marks while a beacon lasts.
+bool YoggSaronMarkKicker(Player* bot);
 
 // Interrupts this bot can aim, in the order the action tries them, empty for a class with none.
 // Avenger's Shield is left out - it picks its own target and cannot be pointed at a named Guardian.
@@ -1197,11 +1227,19 @@ bool IsYoggSaronHoldableGuardian(Unit* unit);
 // Phase 3 without Thorim. The marked Guardian this bot drags clear of Yogg and the pile, or nullptr. With
 // `claim` it also takes one: bot tanks first while another tank holds the pile, then ret paladins and
 // dps Death Knights, then hunters, by GUID, never a bot some unmarked Guardian is hitting, since that one
-// would follow it out. The claim lasts until the heal has landed.
+// would follow it out. The claim lasts until the heal has landed, or is handed on when its taunt didn't
+// take within ULDUAR_YOGG_SARON_BEACON_TAUNT_CHECK_MS.
 Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim);
+
+// Stamps the taunt this bot just cast on the Guardian it drags.
+void YoggSaronBeaconTaunted(Player* bot);
 
 // Whether the bot holds a drag claim. A read of the claim map only, no sweep.
 bool YoggSaronBeaconDragging(Player* bot);
+
+// Where this bot waits for the next beacon, latched ULDUAR_YOGG_SARON_BEACON_STAGE_LEAD_MS before it's due,
+// or nullptr. A hunter waits at its hunter spot. Only until the first mark shows up.
+Position const* YoggSaronBeaconStageSpot(Player* bot);
 
 // The drag spot of this bot's own drag, picked when it claimed, and the hunter spot on that side.
 Position const& YoggSaronBeaconDragSpot(Player* bot);
@@ -1223,6 +1261,10 @@ bool ClaimYoggSaronBeaconExternal(PlayerbotAI* botAI, Player* victim);
 
 // Holdable Guardians whose victim is this tank, from its own attacker set.
 uint32 YoggSaronGuardiansOn(Player* tank);
+
+// Guardians on this tank carrying a beacon heal another Guardian cast, at any health. A returned mark
+// carries only its own, so it takes a heal that reached the pile.
+uint32 YoggSaronPileHealedOn(Player* tank);
 
 // The tank this bot is taking the pile from, see ULDUAR_YOGG_SARON_TANK_SWAP_PCT, or nullptr. Starts a swap
 // when the conditions hold and none is running, and ends one that no longer holds.

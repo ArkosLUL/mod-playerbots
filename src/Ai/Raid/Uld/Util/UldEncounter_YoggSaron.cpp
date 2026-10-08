@@ -87,6 +87,9 @@ const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH = Position(1993.62f, -62.23f,
 const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST = Position(2017.05f, 5.26f, 328.781f);
 const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH = Position(1986.0f, 7.63f, 326.797f);
 const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH = Position(1994.44f, -55.65f, 326.394f);
+const Position ULDUAR_YOGG_SARON_BEACON_STAGE_NORTH = Position(1990.94f, -4.40f, 325.104f);
+const Position ULDUAR_YOGG_SARON_BEACON_STAGE_SOUTH = Position(1996.06f, -42.75f, 324.889f);
+const Position ULDUAR_YOGG_SARON_BEACON_STAGE_NORTHEAST = Position(2009.52f, -6.19f, 326.989f);
 
 namespace
 {
@@ -94,15 +97,19 @@ struct YoggSaronBeaconLane
 {
     Position const* drag;
     Position const* hunter;
+    Position const* stage;
     char const* name;
 };
 
 // North-east is inside Distracting Shot's reach of the melee spot, so it is its own hunter spot.
 constexpr uint8 YOGG_SARON_BEACON_LANE_NORTHEAST = 2;
 std::array<YoggSaronBeaconLane, 3> const YOGG_SARON_BEACON_LANES = {
-    {{&ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH, &ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH, "north"},
-     {&ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH, &ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH, "south"},
-     {&ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST, &ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST, "northeast"}}};
+    {{&ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH, &ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH,
+      &ULDUAR_YOGG_SARON_BEACON_STAGE_NORTH, "north"},
+     {&ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH, &ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH,
+      &ULDUAR_YOGG_SARON_BEACON_STAGE_SOUTH, "south"},
+     {&ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST, &ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST,
+      &ULDUAR_YOGG_SARON_BEACON_STAGE_NORTHEAST, "northeast"}}};
 
 // Raid-wide answers folded once per instance, and the per-bot exposure probes paced off the same
 // state. Every number the last two attempts were read from came out of a throwaway script over raw
@@ -166,15 +173,27 @@ struct YoggSaronEncounterState
     uint32 lastGuardianDeathMs = 0;
 
     // Phase 3 without Thorim: who drags which Shadow Beacon marked Guardian, keyed by the Guardian, and
-    // when its mark ended, 0 while it lasts, and the lane it took in YOGG_SARON_BEACON_LANES. See
-    // YoggSaronBeaconDragGuardian.
+    // when its mark ended, 0 while it lasts, the lane it took in YOGG_SARON_BEACON_LANES, and when the
+    // dragger last taunted it. See YoggSaronBeaconDragGuardian.
     struct BeaconDrag
     {
         ObjectGuid dragger;
         uint32 markEndedMs = 0;
         uint8 lane = 0;
+        uint32 tauntMs = 0;
     };
     std::unordered_map<ObjectGuid, BeaconDrag> beaconDrags;
+    // The beacon clock, the staged draggers by lane and the kickers held for the marks. See
+    // YoggSaronTickBeacon. beaconClockMs is phase 3's start as the tick first saw it, lastMarkMs the last
+    // beacon's first mark, and stageDueMs the beacon the stagers were picked for, so a timed-out stage
+    // isn't picked again.
+    uint32 beaconClockMs = 0;
+    uint32 lastMarkMs = 0;
+    uint32 stageDueMs = 0;
+    uint32 beaconScanMs = 0;
+    bool markWindow = false;
+    std::unordered_map<ObjectGuid, uint8> beaconStages;
+    std::vector<ObjectGuid> markKickers;
     // Released drags, keyed by the Guardian: who dragged it and when the heal let it go. The dragger walks
     // it back to the tank from here, and a hunter feigns off one that stayed on it.
     struct BeaconReturn
@@ -1487,6 +1506,82 @@ uint32 YoggSaronTauntSpellId(Player* player)
 }
 
 bool IsYoggSaronBot(Player* player) { return player && player->GetSession() && player->GetSession()->IsHeadless(); }
+
+// The bots that may take a mark, in claim order: bot tanks while another tank is left holding the pile,
+// then ret paladins and dps Death Knights, then hunters, each by GUID. Never one an unmarked Guardian is
+// hitting, that one would follow it out, and only with its taunt ready within `tauntWithinMs`.
+std::vector<Player*> YoggSaronBeaconDraggerOrder(Player* bot, std::list<Creature*> const& unmarked,
+                                                 uint32 tauntWithinMs)
+{
+    std::vector<Player*> tanks;
+    Group* group = bot->GetGroup();
+    if (!group)
+        return tanks;
+
+    std::unordered_set<ObjectGuid> held;
+    for (Creature* guardian : unmarked)
+        if (guardian->IsAlive() && guardian->GetVictim())
+            held.insert(guardian->GetVictim()->GetGUID());
+
+    uint32 tanksAlive = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        if (Player* member = ref->GetSource(); member && member->IsAlive() && PlayerbotAI::IsTank(member))
+            ++tanksAlive;
+
+    std::vector<Player*> backups;
+    // Last resort, for a mark nobody with a real taunt is left for: one pull had three marks and one
+    // dragger, and both undragged Guardians healed to full in the pile. Distracting Shot is only 6 s.
+    std::vector<Player*> hunters;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!IsYoggSaronBot(member) || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
+            member->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT ||
+            held.count(member->GetGUID()) || YoggSaronBeaconDragging(member))
+            continue;
+
+        uint32 const taunt = YoggSaronTauntSpellId(member);
+        if (!taunt || !member->HasSpell(taunt) || member->GetSpellCooldownDelay(taunt) > tauntWithinMs)
+            continue;
+
+        // A bot tank only while another tank is left holding the pile.
+        if (PlayerbotAI::IsTank(member))
+        {
+            if (tanksAlive > 1)
+                tanks.push_back(member);
+        }
+        else if (!PlayerbotAI::IsHeal(member) &&
+                 (member->getClass() == CLASS_PALADIN || member->getClass() == CLASS_DEATH_KNIGHT))
+            backups.push_back(member);
+        else if (member->getClass() == CLASS_HUNTER)
+            hunters.push_back(member);
+    }
+
+    auto const byGuid = [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); };
+    std::sort(tanks.begin(), tanks.end(), byGuid);
+    std::sort(backups.begin(), backups.end(), byGuid);
+    std::sort(hunters.begin(), hunters.end(), byGuid);
+    tanks.insert(tanks.end(), backups.begin(), backups.end());
+    tanks.insert(tanks.end(), hunters.begin(), hunters.end());
+
+    return tanks;
+}
+
+bool YoggSaronDrainLifeChannelling(Unit* guardian)
+{
+    return guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE) ||
+           guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE_H);
+}
+
+// How long the Guardian has been channelling Drain Life, -1 when it isn't.
+int32 YoggSaronDrainLifeElapsed(Unit* guardian)
+{
+    Spell* channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE);
+    if (!channel)
+        channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE_H);
+
+    return channel ? std::max(0, channel->GetSpellInfo()->GetDuration() - channel->GetCastTimeRemaining()) : -1;
+}
 }  // namespace
 
 Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
@@ -1510,6 +1605,24 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
         Creature* guardian = ObjectAccessor::GetCreature(*bot, it->first);
         Player* dragger = ObjectAccessor::GetPlayer(*bot, it->second.dragger);
         bool done = !guardian || !guardian->IsAlive() || !dragger || !dragger->IsAlive();
+
+        // A taunt that didn't take goes to the next bot with one ready. A dragger whose Hand of Reckoning
+        // missed held its claim on cooldown for 8 s. Not under a Drain Life already running when the taunt
+        // landed: a casting Guardian skips its victim update, so that taunt only shows once the channel
+        // ends. One started later doesn't hide it, the update that starts a channel still switches.
+        int32 const channelMs = done ? -1 : YoggSaronDrainLifeElapsed(guardian);
+        uint32 const sinceTaunt = getMSTimeDiff(it->second.tauntMs, now);
+        if (!done && it->second.tauntMs && guardian->GetVictim() != dragger &&
+            sinceTaunt >= ULDUAR_YOGG_SARON_BEACON_TAUNT_CHECK_MS &&
+            (channelMs < 0 || sinceTaunt > static_cast<uint32>(channelMs) + ULDUAR_YOGG_SARON_BEACON_TAUNT_LAND_MS))
+        {
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(dragger, "yogg.beacondrag", "missed");
+
+            it = state.beaconDrags.erase(it);
+            continue;
+        }
+
         if (!done && guardian->GetEntry() != NPC_MARKED_IMMORTAL_GUARDIAN)
         {
             if (!it->second.markEndedMs)
@@ -1552,59 +1665,13 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
         if (guardian->IsAlive() && !state.beaconDrags.count(guardian->GetGUID()))
             marked.push_back(guardian);
 
-    Group* group = bot->GetGroup();
-    if (marked.empty() || !group)
+    if (marked.empty())
         return nullptr;
 
-    // Whoever an unmarked Guardian is hitting stays put: that one would follow it out and be healed too.
-    std::unordered_set<ObjectGuid> held;
     std::list<Creature*> unmarked;
     yogg->GetCreatureListWithEntryInGrid(unmarked, NPC_IMMORTAL_GUARDIAN, ULDUAR_YOGG_SARON_BEACON_DRAG_SEARCH_RADIUS);
-    for (Creature* guardian : unmarked)
-        if (guardian->IsAlive() && guardian->GetVictim())
-            held.insert(guardian->GetVictim()->GetGUID());
 
-    uint32 tanksAlive = 0;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-        if (Player* member = ref->GetSource(); member && member->IsAlive() && PlayerbotAI::IsTank(member))
-            ++tanksAlive;
-
-    std::vector<Player*> tanks;
-    std::vector<Player*> backups;
-    // Last resort, for a mark nobody with a real taunt is left for: one pull had three marks and one
-    // dragger, and both undragged Guardians healed to full in the pile. Distracting Shot is only 6 s.
-    std::vector<Player*> hunters;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!IsYoggSaronBot(member) || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
-            member->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT ||
-            held.count(member->GetGUID()) || YoggSaronBeaconDragging(member))
-            continue;
-
-        uint32 const taunt = YoggSaronTauntSpellId(member);
-        if (!taunt || !member->HasSpell(taunt) || member->HasSpellCooldown(taunt))
-            continue;
-
-        // A bot tank only while another tank is left holding the pile.
-        if (PlayerbotAI::IsTank(member))
-        {
-            if (tanksAlive > 1)
-                tanks.push_back(member);
-        }
-        else if (!PlayerbotAI::IsHeal(member) &&
-                 (member->getClass() == CLASS_PALADIN || member->getClass() == CLASS_DEATH_KNIGHT))
-            backups.push_back(member);
-        else if (member->getClass() == CLASS_HUNTER)
-            hunters.push_back(member);
-    }
-
-    auto const byGuid = [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); };
-    std::sort(tanks.begin(), tanks.end(), byGuid);
-    std::sort(backups.begin(), backups.end(), byGuid);
-    std::sort(hunters.begin(), hunters.end(), byGuid);
-    tanks.insert(tanks.end(), backups.begin(), backups.end());
-    tanks.insert(tanks.end(), hunters.begin(), hunters.end());
+    std::vector<Player*> const tanks = YoggSaronBeaconDraggerOrder(bot, unmarked, 0);
     std::sort(marked.begin(), marked.end(),
               [](Creature* left, Creature* right) { return left->GetGUID() < right->GetGUID(); });
 
@@ -1616,9 +1683,9 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
         if (claim)
         {
             // A lane of its own per mark. The heal stacks per caster on every Guardian within 20 yd, so
-            // marks dragged to one spot healed each other at up to 112.5k/s. Free lanes first, then the
-            // one furthest from the pile, north and south before north-east on a tie since its path
-            // leaves the pile only 55 degrees off north's, then the nearer.
+            // marks dragged to one spot healed each other at up to 112.5k/s. The staged lane if free, else
+            // free lanes first, then the one furthest from the pile, north and south before north-east on
+            // a tie since its path leaves the pile only 55 degrees off north's, then the nearer.
             std::array<bool, YOGG_SARON_BEACON_LANES.size()> taken{};
             for (auto const& [guid, drag] : state.beaconDrags)
                 taken[drag.lane] = true;
@@ -1634,20 +1701,27 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
             };
 
             uint8 lane = 0;
-            std::tuple<bool, float, bool, float> best;
-            for (uint8 index = 0; index < YOGG_SARON_BEACON_LANES.size(); ++index)
+            auto const staged = state.beaconStages.find(bot->GetGUID());
+            if (staged != state.beaconStages.end() && !taken[staged->second])
+                lane = staged->second;
+            else
             {
-                Position const& spot = *YOGG_SARON_BEACON_LANES[index].drag;
-                auto const key = std::make_tuple(taken[index], -clearance(spot),
-                                                 index == YOGG_SARON_BEACON_LANE_NORTHEAST, bot->GetExactDist2d(spot));
-                if (!index || key < best)
+                std::tuple<bool, float, bool, float> best;
+                for (uint8 index = 0; index < YOGG_SARON_BEACON_LANES.size(); ++index)
                 {
-                    lane = index;
-                    best = key;
+                    Position const& spot = *YOGG_SARON_BEACON_LANES[index].drag;
+                    auto const key = std::make_tuple(taken[index], -clearance(spot),
+                                                     index == YOGG_SARON_BEACON_LANE_NORTHEAST,
+                                                     bot->GetExactDist2d(spot));
+                    if (!index || key < best)
+                    {
+                        lane = index;
+                        best = key;
+                    }
                 }
             }
 
-            state.beaconDrags[marked[i]->GetGUID()] = {bot->GetGUID(), 0, lane};
+            state.beaconDrags[marked[i]->GetGUID()] = {bot->GetGUID(), 0, lane, 0};
             if (RaidObs::Active())
             {
                 RaidObs::NoteDerived(bot, "yogg.beaconspot", YOGG_SARON_BEACON_LANES[lane].name);
@@ -1661,6 +1735,13 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
     return nullptr;
 }
 
+void YoggSaronBeaconTaunted(Player* bot)
+{
+    for (auto& [guid, drag] : YoggSaronStateFor(bot).beaconDrags)
+        if (drag.dragger == bot->GetGUID())
+            drag.tauntMs = getMSTime();
+}
+
 bool YoggSaronBeaconDragging(Player* bot)
 {
     for (auto const& [guid, drag] : YoggSaronStateFor(bot).beaconDrags)
@@ -1668,6 +1749,21 @@ bool YoggSaronBeaconDragging(Player* bot)
             return true;
 
     return false;
+}
+
+Position const* YoggSaronBeaconStageSpot(Player* bot)
+{
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    if (state.markWindow)
+        return nullptr;
+
+    auto const it = state.beaconStages.find(bot->GetGUID());
+    if (it == state.beaconStages.end())
+        return nullptr;
+
+    YoggSaronBeaconLane const& lane = YOGG_SARON_BEACON_LANES[it->second];
+
+    return bot->getClass() == CLASS_HUNTER ? lane.hunter : lane.stage;
 }
 
 namespace
@@ -1742,6 +1838,38 @@ uint32 YoggSaronGuardiansOn(Player* tank)
     for (Unit* attacker : tank->getAttackers())
         if (attacker->GetVictim() == tank && IsYoggSaronHoldableGuardian(attacker))
             ++count;
+
+    return count;
+}
+
+uint32 YoggSaronPileHealedOn(Player* tank)
+{
+    if (!tank)
+        return 0;
+
+    // Every application, not GetAura: Empowering Shadows stacks per caster, and a returned mark carries its
+    // own next to anyone else's.
+    auto const healedByOther = [](Unit* guardian)
+    {
+        for (uint32 const spell : {SPELL_EMPOWERING_SHADOWS_25, SPELL_EMPOWERING_SHADOWS_10})
+        {
+            auto const range = guardian->GetAppliedAuras().equal_range(spell);
+            for (auto it = range.first; it != range.second; ++it)
+                if (it->second->GetBase()->GetCasterGUID() != guardian->GetGUID())
+                    return true;
+        }
+
+        return false;
+    };
+
+    uint32 count = 0;
+    for (Unit* attacker : tank->getAttackers())
+    {
+        uint32 const entry = attacker->GetEntry();
+        if (attacker->GetVictim() == tank && attacker->IsAlive() &&
+            (entry == NPC_IMMORTAL_GUARDIAN || entry == NPC_MARKED_IMMORTAL_GUARDIAN) && healedByOther(attacker))
+            ++count;
+    }
 
     return count;
 }
@@ -2335,7 +2463,24 @@ void YoggSaronReleaseStalledWalk(PlayerbotAI* botAI, char const* node, Position 
     last.clear();
 }
 
-std::vector<Unit*> GetYoggSaronInterruptCasters(PlayerbotAI* botAI)
+bool YoggSaronMarkCaster(Unit* caster)
+{
+    return caster->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN ||
+           yoggSaronStates.For(caster->GetInstanceId()).beaconDrags.count(caster->GetGUID());
+}
+
+bool YoggSaronMarkKicker(Player* bot)
+{
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+
+    return state.markWindow &&
+           std::find(state.markKickers.begin(), state.markKickers.end(), bot->GetGUID()) != state.markKickers.end();
+}
+
+namespace
+{
+// Every caster around the bot, marks first, whoever is asking.
+std::vector<Unit*> YoggSaronInterruptCastersAround(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
 
@@ -2366,12 +2511,24 @@ std::vector<Unit*> GetYoggSaronInterruptCasters(PlayerbotAI* botAI)
         std::list<Creature*> immortals;
         bot->GetCreatureListWithEntryInGrid(immortals, entry, ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS);
         for (Creature* guardian : immortals)
-        {
-            if (guardian->IsAlive() && (guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE) ||
-                                        guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE_H)))
+            if (guardian->IsAlive() && YoggSaronDrainLifeChannelling(guardian))
                 casters.push_back(guardian);
-        }
     }
+
+    // A channelling Guardian doesn't move, so a mark's Drain Life during the drag keeps it in the pile
+    // under the dragger's taunt. In one pull that healed seven Guardians, then eleven.
+    std::stable_partition(casters.begin(), casters.end(), YoggSaronMarkCaster);
+
+    return casters;
+}
+}  // namespace
+
+std::vector<Unit*> GetYoggSaronInterruptCasters(PlayerbotAI* botAI)
+{
+    std::vector<Unit*> casters = YoggSaronInterruptCastersAround(botAI);
+
+    if (YoggSaronMarkKicker(botAI->GetBot()))
+        casters.erase(std::find_if_not(casters.begin(), casters.end(), YoggSaronMarkCaster), casters.end());
 
     return casters;
 }
@@ -4308,15 +4465,17 @@ void YoggSaronNudgeDrainLifeKicker(PlayerbotAI* botAI)
         return;
 
     std::unordered_set<ObjectGuid> nudged;
-    for (Unit* guardian : GetYoggSaronInterruptCasters(botAI))
+    for (Unit* guardian : YoggSaronInterruptCastersAround(botAI))
     {
         Spell* channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE);
         if (!channel)
             channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE_H);
 
+        // A mark's channel gets no grace: the drag stands still for as long as it runs.
+        bool const mark = YoggSaronMarkCaster(guardian);
         if (!channel || state.kickNudges.count(guardian->GetGUID()) ||
-            channel->GetSpellInfo()->GetDuration() - channel->GetCastTimeRemaining() <
-                static_cast<int32>(ULDUAR_YOGG_SARON_KICK_LAST_RESORT_MS))
+            (!mark && channel->GetSpellInfo()->GetDuration() - channel->GetCastTimeRemaining() <
+                          static_cast<int32>(ULDUAR_YOGG_SARON_KICK_LAST_RESORT_MS)))
             continue;
 
         auto const claim = state.interruptClaims.find(guardian->GetGUID());
@@ -4333,7 +4492,7 @@ void YoggSaronNudgeDrainLifeKicker(PlayerbotAI* botAI)
             Player* member = ref->GetSource();
             PlayerbotAI* memberAI = IsYoggSaronBot(member) ? GET_PLAYERBOT_AI(member) : nullptr;
             if (!memberAI || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
-                nudged.count(member->GetGUID()))
+                nudged.count(member->GetGUID()) || (!mark && YoggSaronMarkKicker(member)))
                 continue;
 
             char const* ready = nullptr;
@@ -4386,6 +4545,155 @@ void YoggSaronNudgeDrainLifeKicker(PlayerbotAI* botAI)
             RaidObs::Note(bot, "yogg.kicknudge", pick->GetName() + " " + pickSpell);
     }
 }
+
+// Longest reach first: from the ranged station Counterspell and Spell Lock reach the pile and the
+// north-east lane, Wind Shear the pile. Then the shorter cooldown, healers last.
+void YoggSaronPickMarkKickers(Player* bot, YoggSaronEncounterState& state, Unit* mark)
+{
+    state.markKickers.clear();
+
+    using Rank = std::tuple<float, uint32, bool, ObjectGuid>;
+    std::vector<std::pair<Rank, Player*>> ranked;
+    for (GroupReference* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        PlayerbotAI* memberAI = IsYoggSaronBot(member) ? GET_PLAYERBOT_AI(member) : nullptr;
+        if (!memberAI || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
+            member->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT ||
+            YoggSaronBeaconDragging(member) || state.beaconStages.count(member->GetGUID()))
+            continue;
+
+        bool found = false;
+        Rank best;
+        for (char const* spell : YoggSaronInterruptSpellsFor(member, mark))
+        {
+            uint32 const id = memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
+            SpellInfo const* info = id ? sSpellMgr->GetSpellInfo(id) : nullptr;
+            if (!info || member->GetSpellCooldownDelay(id) > ULDUAR_YOGG_SARON_MARK_KICKER_READY_MS)
+                continue;
+
+            Rank const rank{-info->GetMaxRange(false), std::max(info->RecoveryTime, info->CategoryRecoveryTime),
+                            PlayerbotAI::IsHeal(member), member->GetGUID()};
+            if (!found || rank < best)
+            {
+                best = rank;
+                found = true;
+            }
+        }
+
+        if (found)
+            ranked.emplace_back(best, member);
+    }
+
+    std::sort(ranked.begin(), ranked.end(),
+              [](auto const& left, auto const& right) { return left.first < right.first; });
+
+    std::string names;
+    for (size_t i = 0; i < ranked.size() && i < ULDUAR_YOGG_SARON_MARK_KICKERS; ++i)
+    {
+        state.markKickers.push_back(ranked[i].second->GetGUID());
+        names += (names.empty() ? "" : " ") + ranked[i].second->GetName();
+    }
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.markkick", "reserve " + names);
+}
+
+// The beacon clock, read off each beacon's first mark, raid-wide and one bot a scan. Picks the stagers
+// ULDUAR_YOGG_SARON_BEACON_STAGE_LEAD_MS before the next beacon is due, and the kickers held for the marks
+// while a mark or a drag lasts.
+void YoggSaronTickBeacon(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot->IsAlive() || !bot->GetGroup() ||
+        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return;
+
+    constexpr uint32 scanIntervalMs = 200;
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    uint32 const now = getMSTime();
+    if (getMSTimeDiff(state.beaconScanMs, now) < scanIntervalMs)
+        return;
+
+    state.beaconScanMs = now;
+
+    if (!YoggSaronInPhase3(botAI) || YoggThorimKeeperActive(botAI))
+    {
+        state.beaconClockMs = 0;
+        state.lastMarkMs = 0;
+        state.stageDueMs = 0;
+        state.markWindow = false;
+        state.beaconStages.clear();
+        state.markKickers.clear();
+        return;
+    }
+
+    if (!state.beaconClockMs)
+        state.beaconClockMs = now;
+
+    Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+    if (!yogg)
+        return;
+
+    std::list<Creature*> found;
+    yogg->GetCreatureListWithEntryInGrid(found, NPC_MARKED_IMMORTAL_GUARDIAN,
+                                         ULDUAR_YOGG_SARON_BEACON_DRAG_SEARCH_RADIUS);
+    Unit* mark = nullptr;
+    for (Creature* guardian : found)
+        if (guardian->IsAlive())
+            mark = guardian;
+
+    // The stages stay until the window closes: the claim reads them for the lane.
+    bool const window = mark || !state.beaconDrags.empty();
+    if (window && !state.markWindow && mark)
+    {
+        state.markWindow = true;
+        state.lastMarkMs = now;
+        YoggSaronPickMarkKickers(bot, state, mark);
+    }
+    else if (!window && state.markWindow)
+    {
+        state.markWindow = false;
+        state.markKickers.clear();
+        state.beaconStages.clear();
+    }
+
+    if (window)
+        return;
+
+    uint32 const due = (state.lastMarkMs ? state.lastMarkMs : state.beaconClockMs) + ULDUAR_YOGG_SARON_BEACON_PERIOD_MS;
+    int32 const left = static_cast<int32>(due - now);
+    if (left < -static_cast<int32>(ULDUAR_YOGG_SARON_BEACON_STAGE_TIMEOUT_MS))
+    {
+        for (auto const& [guid, lane] : state.beaconStages)
+            if (Player* stager = ObjectAccessor::GetPlayer(*bot, guid); stager && RaidObs::Active())
+                RaidObs::NoteDerived(stager, "yogg.beaconstage", "timeout");
+
+        state.beaconStages.clear();
+        return;
+    }
+
+    if (left > static_cast<int32>(ULDUAR_YOGG_SARON_BEACON_STAGE_LEAD_MS) || state.stageDueMs == due)
+        return;
+
+    state.stageDueMs = due;
+
+    std::list<Creature*> unmarked;
+    yogg->GetCreatureListWithEntryInGrid(unmarked, NPC_IMMORTAL_GUARDIAN, ULDUAR_YOGG_SARON_BEACON_DRAG_SEARCH_RADIUS);
+    std::vector<Player*> const order =
+        YoggSaronBeaconDraggerOrder(bot, unmarked, static_cast<uint32>(std::max(0, left)));
+
+    size_t const count = std::min<size_t>(bot->GetMap()->Is25ManRaid() ? 3 : 1, YOGG_SARON_BEACON_LANES.size());
+    std::string names;
+    for (size_t i = 0; i < order.size() && i < count; ++i)
+    {
+        state.beaconStages[order[i]->GetGUID()] = static_cast<uint8>(i);
+        names += (names.empty() ? "" : " ") + order[i]->GetName();
+    }
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.beaconstage", "pick " + names);
+}
 }  // namespace
 
 void YoggSaronTick(PlayerbotAI* botAI)
@@ -4395,6 +4703,7 @@ void YoggSaronTick(PlayerbotAI* botAI)
     YoggSaronTickReprisal(botAI);
     YoggSaronTickBrainHold(botAI);
     YoggSaronTickRoar(botAI);
+    YoggSaronTickBeacon(botAI);
     YoggSaronNudgeDrainLifeKicker(botAI);
     TickYoggSaronObs(botAI);
 }

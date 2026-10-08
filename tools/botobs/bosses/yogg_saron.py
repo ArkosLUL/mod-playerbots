@@ -461,8 +461,9 @@ TAUNT_COOLDOWN_MS = 8000
 # whose cast row on the Guardian sits beside the one on the friendly target.
 GUARDIAN_TAUNTS = set(TAUNT_SPELLS) | {6795, 31789}
 
-# The module's phase 3 split: a Guardian is hit only above the floor and the rest goes on Yogg, under it
-# only during a Lunatic Gaze, and never once Weakened.
+# The module's phase 3 split: ranged hit a Guardian only above the floor and the rest goes on Yogg, under
+# it only during a Lunatic Gaze, and never once Weakened. Melee stay on Yogg but for a gaze or a
+# beacon-healed Guardian over the floor on a tank.
 GUARDIAN_FLOOR_PCT = 30.0
 GUARDIAN_WEAKENED_PCT = 10.0
 # Deafening Roar: 2.3 s cast, then 4 s of silence within 50 yd. Aura Mastery with the caster's own
@@ -474,6 +475,16 @@ ROAR_CAST_MS = 2300
 SPELL_DISTRACTING_SHOT = 20736
 SPELL_FEIGN_DEATH = 5384
 DRAG_WATCH_MS = 20000
+# When the module reads a drag taunt as taken or not, by when any taunt has landed, and how stale the
+# Guardian's row may be at the check.
+BEACON_TAUNT_CHECK_MS = 1500
+BEACON_TAUNT_LAND_MS = 1000
+TAUNT_ROW_SLACK_MS = 1000
+# Where a staged dragger waits, by lane in the module's order (north, south, north-east): the staging spot,
+# and the hunter spot a hunter waits at instead.
+BEACON_STAGE_SPOTS = ((1990.94, -4.40), (1996.06, -42.75), (2009.52, -6.19))
+BEACON_HUNTER_SPOTS = ((1986.0, 7.63), (1994.44, -55.65), (2017.05, 5.26))
+BEACON_LANES = ("north", "south", "northeast")
 # How long into phase 3 a Nitro Boosts use counts as the walk to the station.
 STATION_NITRO_WATCH_MS = 30000
 
@@ -3811,6 +3822,48 @@ def brain_hold_window(rows: list[tuple[int, str]]) -> tuple[int, int | None, str
     return held, None, "never"
 
 
+def taunt_outcome(rows: list[list], when: int, caster: int, spans: list[tuple[int, int]] | None = None,
+                  check_ms: int = BEACON_TAUNT_CHECK_MS) -> str:
+    """How a drag taunt at `when` read `check_ms` later, as the module reads it: `took` when the Guardian's
+    victim (row[8]) was the caster, `didn't take` otherwise, `-` with no fresh row, and `channelling` inside
+    one of its Drain Life `spans` (start, end) that began before the taunt landed, since a casting Guardian
+    skips its victim update. A channel begun later doesn't hide the switch."""
+    check = when + check_ms
+    if any(first <= when + BEACON_TAUNT_LAND_MS and check <= last for first, last in spans or ()):
+        return "channelling"
+    index = bisect.bisect_left([row[0] for row in rows], check)
+    if index >= len(rows) or rows[index][0] - check > TAUNT_ROW_SLACK_MS:
+        return "-"
+    return "took" if rows[index][8] == caster else "didn't take"
+
+
+def mark_drains(channels: list[tuple[int, int, int]], guardian: int, first: int, last: int) -> tuple[float, int, int]:
+    """One marked Guardian's Drain Life between its mark and the heal: (seconds channelled inside
+    [first, last], channels, of those cut before DRAIN_FULL_MS). Channels are (start, caster, ms)."""
+    seconds = 0.0
+    count = cut = 0
+    for began, caster, ms in channels:
+        if caster != guardian or began + ms < first or began > last:
+            continue
+        count += 1
+        cut += ms < DRAIN_FULL_MS
+        seconds += (min(began + ms, last) - max(began, first)) / 1000
+    return seconds, count, cut
+
+
+def stage_gaps(picked: list[tuple[str, tuple[float, float] | None]]) -> list[str]:
+    """Each stager, in lane order, and how far it stood from its lane's staging or hunter spot, whichever
+    is nearer, at the mark. `picked` is (name, where it stood or None)."""
+    out = []
+    for lane, (name, spot) in enumerate(picked[:len(BEACON_LANES)]):
+        if spot is None:
+            out.append(f"{name} {BEACON_LANES[lane]} -")
+            continue
+        gap = min(math.dist(spot, BEACON_STAGE_SPOTS[lane]), math.dist(spot, BEACON_HUNTER_SPOTS[lane]))
+        out.append(f"{name} {BEACON_LANES[lane]} {gap:.1f} yd")
+    return out
+
+
 def drag_exposure(hits: list[tuple[int, int, int]], heal_at: int, window_ms: int) -> dict[int, tuple[int, int, int]]:
     """Per victim, (total, biggest, count) of one Guardian's hits from its beacon heal to `window_ms`
     after. Hits are (t, victim, amount)."""
@@ -4314,6 +4367,15 @@ def show_phase3(trace: Trace) -> None:
              if rec.get("d") in tanks and start <= rec["t"] <= stop]
     flows += [(rec["t"], rec.get("d"), rec.get("a", 0) - rec.get("oh", 0)) for rec in trace.of("heal")
               if rec.get("d") in tanks and start <= rec["t"] <= stop]
+    # The drags themselves: every taunt at a marked Guardian, the stagers picked before each beacon and the
+    # kickers held for the marks.
+    drag_taunts = [(rec["t"], rec.get("s"), rec.get("sp"), rec.get("tgt", 0)) for rec in trace.of("cast")
+                   if rec.get("sp") in GUARDIAN_TAUNTS | {SPELL_DISTRACTING_SHOT} and rec.get("s") in roster
+                   and start <= rec["t"] <= stop]
+    by_name = {trace.name(guid): guid for guid in roster}
+    stage_picks = [(rec["t"], str(rec.get("txt", ""))[len("pick "):].split()) for rec in notes(trace, "yogg.beaconstage")
+                   if str(rec.get("txt", "")).startswith("pick ")]
+    kick_notes = [(rec["t"], str(rec.get("txt", ""))) for rec in notes(trace, "yogg.markkick")]
     print(f"\n  Shadow Beacons     : {len(beacons)}")
     yogg_spot = at(trace, yogg, start) if yogg else None
     for group in group_runs([rec["t"] for rec in heals], 1000, 0):
@@ -4360,6 +4422,20 @@ def show_phase3(trace: Trace) -> None:
             print(f"      other Guardians it reached: {len(healed)} ({', '.join(changes)}"
                   f" over {BEACON_SPLASH_LOOK_MS // 1000} s)")
         show_beacon_tanks(trace, group[0], marked | set(healed), rows, roster, tanks, flows, covers, died_at)
+        mark_at = max((when for when in beacons if when <= group[0]), default=group[0] - 10000)
+        pick = next((names for when, names in reversed(stage_picks) if mark_at - 20000 <= when <= mark_at), None)
+        if pick is not None:
+            stood = []
+            for name in pick:
+                spot = at(trace, by_name[name], mark_at) if name in by_name else None
+                stood.append((name, spot[:2] if spot else None))
+            print(f"      staged at the mark: {', '.join(stage_gaps(stood)) or 'nobody'}")
+        reserve = next((text for when, text in kick_notes
+                        if mark_at - 1000 <= when <= mark_at + 3000 and text.startswith("reserve")), None)
+        if reserve is not None:
+            landed = collections.Counter(text for when, text in kick_notes
+                                         if mark_at <= when <= group[0] and text.startswith("kick"))
+            print(f"      kick reserve: {reserve[len('reserve '):] or 'nobody'}, kicks on marks {dict(landed)}")
         for rec in casters:
             guardian = rec.get("s")
             own = rows.get(guardian, [])
@@ -4385,6 +4461,14 @@ def show_phase3(trace: Trace) -> None:
             tank = f"+{(tank_at - group[0]) / 1000:.1f} s" if tank_at else "never"
             print(f"      held by {trace.name(holder[8]) if holder and holder[8] else '-'} at the heal{hunter};"
                   f" a tank had it {tank}; non-tanks hit: {'; '.join(parts) or 'none'}")
+            # A missed taunt and a mark's own Drain Life are what kept marks in the pile.
+            spans = [(began, began + ms) for began, caster, ms in channels if caster == guardian]
+            tried = [f"{trace.name(who)} {trace.spells.get(spell, spell)} {clock(when)}"
+                     f" {taunt_outcome(own, when, who, spans)}"
+                     for when, who, spell, aim in drag_taunts if aim == guardian and mark_at - 300 <= when <= group[0]]
+            seconds, count, cut = mark_drains(channels, guardian, mark_at, group[0])
+            print(f"        taunts: {'; '.join(tried) or 'none'}; Drain Life {seconds:.1f} s in {count}"
+                  f" channel(s), {cut} cut")
     drags = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beacondrag"))
     if drags:
         print(f"    yogg.beacondrag  : {dict(drags)}")
@@ -4458,8 +4542,9 @@ def show_phase3(trace: Trace) -> None:
     if picks:
         print(f"    yogg.gaze        : {dict(picks)}")
 
-    # Where the damage went, by the target's band just before each gain. The module wants most of it on
-    # Yogg, Guardians only over the floor, and under it only inside a gaze.
+    # Where the damage went, by each bot's target and its band just before each gain. The module wants most
+    # of it on Yogg, Guardians only over the floor, and under it only inside a gaze. Area damage counts on
+    # the target, so a melee bot on Yogg cleaving the pile reads as all Yogg.
     bands: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for guid in roster:
         own = [row for row in rows.get(guid, []) if len(row) > 12 and start <= row[0] <= alive_end]
@@ -4482,7 +4567,7 @@ def show_phase3(trace: Trace) -> None:
 
     everyone = sum(bands.values(), collections.Counter())
     if everyone:
-        print(f"\n  damage split       : {sum(everyone.values()) / seconds / 1000:.0f}k/s  {split(everyone)}")
+        print(f"\n  damage split by each bot's target: {sum(everyone.values()) / seconds / 1000:.0f}k/s  {split(everyone)}")
         for role in ("ranged", "melee", "tank", "heal"):
             if sum(bands[role].values()) >= 1000 * seconds:
                 print(f"    {role:6}           : {sum(bands[role].values()) / seconds / 1000:.1f}k/s  {split(bands[role])}")

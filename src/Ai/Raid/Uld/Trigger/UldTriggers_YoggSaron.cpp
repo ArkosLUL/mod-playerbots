@@ -727,6 +727,11 @@ bool YoggSaronBeaconDragTrigger::IsActive()
     return botAI->CanMove() && YoggSaronBeaconDragGuardian(botAI, false) != nullptr;
 }
 
+bool YoggSaronBeaconStageTrigger::IsActive()
+{
+    return YoggSaronBeaconStageSpot(bot) && botAI->CanMove() && !YoggSaronOnBrainLevel(bot);
+}
+
 bool YoggSaronPhase3LustTrigger::IsActive()
 {
     if (bot->getClass() != CLASS_SHAMAN || bot->HasAura(SPELL_SATED) || bot->HasAura(SPELL_EXHAUSTION))
@@ -960,15 +965,16 @@ bool YoggSaronRoarAuraMasteryTrigger::IsActive()
 bool YoggSaronBeaconDefensiveTrigger::IsActive()
 {
     // The attacker set before anything else, so a bot nobody is hitting pays nothing.
-    if (bot->getAttackers().empty() || !YoggSaronHealedGuardianOn(botAI, bot))
+    if (bot->getAttackers().empty())
         return false;
 
-    // A tank holding the pile only by health.
-    if (PlayerbotAI::IsTank(bot) && !YoggSaronBeaconDragging(bot) && !YoggSaronBeaconReturning(bot) &&
-        bot->GetHealthPct() >= ULDUAR_YOGG_SARON_BEACON_TANK_DEFENSIVE_PCT)
-        return false;
+    // A tank holding the pile only once a failed drag has healed it, at any health: the pile climbs from
+    // the floor to 50-77% in 6 s.
+    if (PlayerbotAI::IsTank(bot) && !YoggSaronBeaconDragging(bot) && !YoggSaronBeaconReturning(bot))
+        return YoggSaronPileHealedOn(bot) >= ULDUAR_YOGG_SARON_BEACON_PILE_RESET_GUARDIANS &&
+               NextPhysicalDefensive(botAI, bot, nullptr, 0) != 0;
 
-    return NextPhysicalDefensive(botAI, bot, nullptr, 0) != 0;
+    return YoggSaronHealedGuardianOn(botAI, bot) && NextPhysicalDefensive(botAI, bot, nullptr, 0) != 0;
 }
 
 bool YoggSaronBeaconExternalTrigger::IsActive()

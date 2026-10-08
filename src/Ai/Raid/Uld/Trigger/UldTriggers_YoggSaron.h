@@ -340,6 +340,16 @@ public:
     bool IsActive() override;
 };
 
+// This bot is staged for the next Shadow Beacon and no mark is up yet. See YoggSaronTickBeacon.
+class YoggSaronBeaconStageTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron beacon stage trigger";
+
+    YoggSaronBeaconStageTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 // A shaman's own Heroism trigger wants a boss target, and in phase 3 shamans are on Guardians and
 // tentacles: one pull never cast it, another 40 s in. This one waits for the raid to be in place instead.
 class YoggSaronPhase3LustTrigger : public YoggSaronTrigger
@@ -463,8 +473,8 @@ public:
     bool IsActive() override;
 };
 
-// A beacon-healed Guardian past the danger line is hitting this bot, a dragger or a non-tank, and it has a
-// physical cut to press.
+// A beacon-healed Guardian past the danger line is hitting this bot, a dragger or a non-tank, or a failed
+// drag has healed the pile on this tank, and it has a physical cut to press.
 class YoggSaronBeaconDefensiveTrigger : public YoggSaronTrigger
 {
 public:

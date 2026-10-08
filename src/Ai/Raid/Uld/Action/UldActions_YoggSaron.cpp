@@ -717,8 +717,9 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
     if (!candidate || !candidate->IsAlive())
         return false;
 
-    // Phase 3 splits the raid: ranged take the Guardians and the phase 2 leftovers, melee stay on Yogg
-    // and only hit a Guardian that has come to the tank. Nobody hits one a tank is not holding.
+    // Phase 3 splits the raid: ranged take the Guardians and the phase 2 leftovers, melee stay on Yogg and
+    // only hit a Guardian near the tank during a gaze or once beacon-healed. Their area damage still
+    // reaches the pile. Nobody hits one a tank is not holding.
     auto const phaseThreeMelee = [this, &brain]()
     {
         if (!brain.phaseThreeMelee)
@@ -773,22 +774,35 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
             if (!brain.thorim)
                 brain.thorim = YoggThorimKeeperActive(botAI);
 
-            if (*brain.thorim)
-                allowed = health > ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT;
-            // Down to the floor and no further, the rest goes on Yogg. Under it only while the gaze has
-            // the bot turned off Yogg anyway, and only one it can hit with him out of its front arc.
-            // Beacon-healed ones too: most of it heals back, but three full ones left alone for the 20 s
-            // heal killed a tank in each of two pulls.
-            else if (health > ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT)
-                allowed = true;
-            else
+            auto const gazeTarget = [&]()
             {
                 if (!brain.gaze)
                     brain.gaze = YoggSaronGazeActive(botAI);
 
-                allowed = *brain.gaze && health > ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT &&
-                          YoggSaronOutsideGaze(bot, YoggSaronNearestCreature(botAI, NPC_YOGG_SARON), candidate);
+                return *brain.gaze && health > ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT &&
+                       YoggSaronOutsideGaze(bot, YoggSaronNearestCreature(botAI, NPC_YOGG_SARON), candidate);
+            };
+
+            if (*brain.thorim)
+                allowed = health > ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT;
+            // Melee only during a gaze or on a beacon-healed one a tank holds. Taking every tanked one over
+            // the floor kept them off Yogg for good, since the pile always has one: 9.2M into Guardians and
+            // 2.35M into Yogg in one pull.
+            else if (phaseThreeMelee())
+            {
+                Unit* victim = candidate->GetVictim();
+                bool const healed = candidate->HasAura(SPELL_EMPOWERING_SHADOWS_25) ||
+                                    candidate->HasAura(SPELL_EMPOWERING_SHADOWS_10);
+                allowed = (healed && health > ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT && victim &&
+                           victim->IsPlayer() && PlayerbotAI::IsTank(victim->ToPlayer())) ||
+                          gazeTarget();
             }
+            // Down to the floor and no further, the rest goes on Yogg. Under it only while the gaze has
+            // the bot turned off Yogg anyway, and only one it can hit with him out of its front arc.
+            // Beacon-healed ones too: most of it heals back, but three full ones left alone for the 20 s
+            // heal killed a tank in each of two pulls.
+            else
+                allowed = health > ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT || gazeTarget();
 
             allowed = allowed &&
                       (!phaseThreeMelee() ||
@@ -1179,12 +1193,29 @@ bool YoggSaronDarkVolleyInterruptAction::Execute(Event /*event*/)
     if (casters.empty())
         return false;
 
+    // Beacon marks first, they lead the list. The claim keeps a second bot off the same one.
+    size_t const marks = static_cast<size_t>(
+        std::find_if_not(casters.begin(), casters.end(), YoggSaronMarkCaster) - casters.begin());
+    for (size_t i = 0; i < marks; ++i)
+    {
+        if (!CastClassInterrupt(casters[i]))
+            continue;
+
+        if (RaidObs::Active())
+            RaidObs::Note(bot, "yogg.markkick", YoggSaronMarkKicker(bot) ? "kick reserve" : "kick");
+
+        return true;
+    }
+
     // Start each interrupter at its own slot. Several Guardians cast at once and the cooldowns run
     // 6-24s, so without the offset the whole raid spends its kicks on one volley.
-    size_t const start = static_cast<size_t>(GetInterrupterIndex()) % casters.size();
+    size_t const rest = casters.size() - marks;
+    if (!rest)
+        return false;
 
-    for (size_t i = 0; i < casters.size(); ++i)
-        if (CastClassInterrupt(casters[(start + i) % casters.size()]))
+    size_t const start = static_cast<size_t>(GetInterrupterIndex()) % rest;
+    for (size_t i = 0; i < rest; ++i)
+        if (CastClassInterrupt(casters[marks + (start + i) % rest]))
             return true;
 
     return false;
@@ -1695,6 +1726,7 @@ bool YoggSaronBeaconDragAction::Execute(Event /*event*/)
         if (!CastYoggSaronTaunt(botAI, guardian))
             return false;
 
+        YoggSaronBeaconTaunted(bot);
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "yogg.beacondrag", "taunt");
 
@@ -1733,7 +1765,9 @@ bool YoggSaronBeaconDragAction::HunterDrag(Unit* guardian)
         if (minion && minion->GetVictim() == guardian)
             minion->AttackStop();
 
-    // One shot with the mark nearly done, so the 6 s taunt covers the heal after it.
+    // One shot with the mark nearly done. Distracting Shot is a fixed threat and a 6 s taunt, not the match to
+    // top threat a real taunt gets, so the Guardian goes back once it runs out and only covers the heal if
+    // it goes out late.
     Aura const* mark = guardian->GetAura(SPELL_SHADOW_BEACON);
     bool const due = mark && mark->GetDuration() >= 0 &&
                      static_cast<uint32>(mark->GetDuration()) <= ULDUAR_YOGG_SARON_BEACON_SHOT_LEFT_MS;
@@ -1741,6 +1775,7 @@ bool YoggSaronBeaconDragAction::HunterDrag(Unit* guardian)
         bot->IsWithinDistInMap(guardian, ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE) &&
         bot->IsWithinLOSInMap(guardian) && botAI->CastSpell("distracting shot", guardian))
     {
+        YoggSaronBeaconTaunted(bot);
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "yogg.beacondrag", "shot");
 
@@ -1814,6 +1849,30 @@ bool YoggSaronBeaconDragAction::ReturnHealed()
 
     return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false, false,
                   true, MovementPriority::MOVEMENT_FORCED, true, false);
+}
+
+bool YoggSaronBeaconStageAction::Execute(Event /*event*/)
+{
+    Position const* spot = YoggSaronBeaconStageSpot(bot);
+    if (!spot)
+        return false;
+
+    bool const away = bot->GetExactDist2d(*spot) > ULDUAR_YOGG_SARON_BEACON_DRAG_ARRIVED_RADIUS;
+    if (away && YoggSaronWalkMakingProgress(botAI, "beaconstage", *spot))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.beaconstage", "walk");
+
+        Position const step = YoggSaronBodyRoute(bot, *spot);
+        MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false, false,
+               true, MovementPriority::MOVEMENT_FORCED, true, false);
+        return true;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.beaconstage", away ? "stuck" : "ready");
+
+    return true;
 }
 
 bool YoggSaronPhase3LustAction::Execute(Event /*event*/)

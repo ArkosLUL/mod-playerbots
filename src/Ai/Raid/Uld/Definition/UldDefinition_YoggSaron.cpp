@@ -120,6 +120,8 @@ void DefineYoggSaron(EncounterBuilder& e)
     // Over guardian control: a bot tank only drags with no unmarked Guardian of its own, and guardian
     // control would walk it straight back to the pile.
     e.Node<YoggSaronBeaconDragTrigger, YoggSaronBeaconDragAction>(ACTION_RAID + 4);
+    // Under the drag, which takes over at the first mark, and over guardian control for the same reason.
+    e.Node<YoggSaronBeaconStageTrigger, YoggSaronBeaconStageAction>(ACTION_RAID + 3.5f);
     // Over the dps resolver and the rotation, under every dodge. One instant cast.
     e.Node<YoggSaronPhase3LustTrigger, YoggSaronPhase3LustAction>(ACTION_RAID + 2);
     e.Node<YoggSaronSanityConservationTrigger, YoggSaronSanityConservationAction>(ACTION_RAID + 5);

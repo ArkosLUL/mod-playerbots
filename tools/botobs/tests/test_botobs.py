@@ -1102,6 +1102,33 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.area_worth((0.0, 0.0), [(yogg_saron.NPC_YOGG_SARON, 40.0, 0.0, 25.0, False)]),
                          (0, False))
 
+    def test_taunt_outcome_reads_the_victim_after_the_check_unless_channelling(self):
+        # Rows are [t, ..., victim at index 8]; the dragger is 5, the tank 9.
+        rows = [[1000] + [0] * 7 + [9], [2600] + [0] * 7 + [5], [6000] + [0] * 7 + [9]]
+        self.assertEqual(yogg_saron.taunt_outcome(rows, 1000, 5), "took")
+        self.assertEqual(yogg_saron.taunt_outcome(rows, 1000, 7), "didn't take")
+        # A channel already running as the taunt landed hides the victim switch, one begun after doesn't,
+        # and a stale row says nothing.
+        self.assertEqual(yogg_saron.taunt_outcome(rows, 1000, 7, [(1500, 7000)]), "channelling")
+        self.assertEqual(yogg_saron.taunt_outcome(rows, 1000, 7, [(2100, 7000)]), "didn't take")
+        self.assertEqual(yogg_saron.taunt_outcome(rows, 3000, 5), "-")
+        self.assertEqual(yogg_saron.taunt_outcome(rows, 9000, 5), "-")
+
+    def test_mark_drains_clips_channels_to_the_mark(self):
+        channels = [(500, 7, 5000), (4000, 7, 1200), (2000, 8, 5000), (12000, 7, 5000)]
+        seconds, count, cut = yogg_saron.mark_drains(channels, 7, 1000, 10000)
+        self.assertAlmostEqual(seconds, 5.7)
+        self.assertEqual((count, cut), (2, 1))
+        self.assertEqual(yogg_saron.mark_drains([], 7, 1000, 10000), (0.0, 0, 0))
+
+    def test_stage_gaps_reads_the_nearer_of_the_lane_spots(self):
+        north = yogg_saron.BEACON_STAGE_SPOTS[0]
+        hunter_south = yogg_saron.BEACON_HUNTER_SPOTS[1]
+        gaps = yogg_saron.stage_gaps([("Justice", (north[0] + 3.0, north[1])), ("Trueshot", hunter_south),
+                                      ("Gone", None)])
+        self.assertEqual(gaps, ["Justice north 3.0 yd", "Trueshot south 0.0 yd", "Gone northeast -"])
+        self.assertEqual(yogg_saron.stage_gaps([]), [])
+
     def test_drag_exposure_counts_only_the_window_after_the_heal(self):
         hits = [(900, 7, 2000), (1500, 7, 9000), (4000, 7, 36000), (5000, 8, 26000), (30000, 7, 40000)]
         self.assertEqual(yogg_saron.drag_exposure(hits, 1000, 20000), {7: (45000, 36000, 2), 8: (26000, 26000, 1)})

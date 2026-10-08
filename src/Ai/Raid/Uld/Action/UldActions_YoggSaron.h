@@ -464,6 +464,18 @@ private:
     bool ReturnHealed();
 };
 
+// Walks a dragger staged for the next Shadow Beacon to its staging spot round the body and holds it there
+// until the first mark. No swing: reach melee would walk it straight back to Yogg.
+class YoggSaronBeaconStageAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "yogg-saron beacon stage action";
+
+    YoggSaronBeaconStageAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class YoggSaronPhase3LustAction : public Action
 {
 public:

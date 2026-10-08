@@ -1794,7 +1794,11 @@ beacon's stacked heals, each tank's 20 s under a heal (taken / healed / buttons 
 damage on the healed ones, and area casts by worth-hitting count with `yogg.p3area` (by centre
 distance, so a lower bound: the module takes off each unit's size, several yards on an Empowered
 Guardian, which is why 100 of 440 casts read under 3 though every one followed `allowed`). Also: full
-Drain Lifes with a bot kick ready and in range and `yogg.kicknudge`; Guardians on each tank per 10 s
+Drain Lifes with a bot kick ready and in range and `yogg.kicknudge`; per marked Guardian its taunts
+(`took` / `didn't take` / `channelling`, read like the module) and its Drain Life seconds and cuts; per
+beacon the stagers' gap to their spot at the mark and the kick reserve with its kicks (`yogg.markkick`);
+the damage split is by each bot's target, so a melee bot on Yogg cleaving the pile reads all Yogg (38%
+there against 22% in the combat log); Guardians on each tank per 10 s
 (all / 30%+), each tank swap with both tanks' counts at +0/4/8 s, taunts back on the other tank 4 s
 later, Misdirection targets, each tank's buttons with its health, every Lay on Hands; every Aura Mastery
 per roar; per healer mana at +0/60/120/180 s, engine switches, gaze node fires by engine and mana
@@ -2006,7 +2010,12 @@ raid's damage, the bot tank dead at +63 / +67 s. **Freya-only is 0-light here**:
 race on Yogg (Stars: tanks pick up adds, melee on Yogg; TrueWoW: Guardians kept low, tanked by him).
 Yogg 25 has 44.0M, so phase 3 is 13.2M; a Guardian 425k; full swings ~17× a Weakened one, 30% ~6×.
 
-**Guardians only down to 30%, the rest on Yogg, by the user's choice**
+**Melee stay on Yogg, by the user's choice**: a Guardian only during a gaze (outside its arc, above
+Weakened) or beacon-healed (64486 / 64468, any caster) over the floor on a tank, within 20 yd of the melee
+spot and past the threat gate. Area damage still reaches the pile. Taking every tanked one over the floor
+put 9.15M into Guardians and 2.35M into Yogg (combat log): the pile always has one.
+
+**Ranged take Guardians only down to 30%, the rest on Yogg, by the user's choice**
 (`ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT`). Bringing each to Weakened took 52% / 75% of two pulls'
 damage against Yogg's 17% / 3% (he went 29.97 → 26.14% in 100 s, → 27.82% in 145 s). Under the floor a
 Guardian is allowed only while Lunatic Gaze (64163) is up and it sits 65° or more off Yogg, the arc the
@@ -2049,6 +2058,23 @@ off cooldown,
   20 s; in the other each dragger died to its own healed Guardian 8 s after the heal (a 36k one-shot;
   10 / 19 / 24k), a tank taking them 5-8 s after or never. Every death after the leftover Crusher's
   was a high-health Guardian on a non-tank, 25-75k.
+- **A taunt that didn't take hands the mark on** (`tauntMs`, `missed`): victim not the dragger 1.5 s
+  after its taunt (`BEACON_TAUNT_CHECK_MS`; Distracting Shot flies 40 yd/s, all land by 1 s) and the
+  claim goes to the next bot with a taunt ready. Not under a Drain Life already running when the taunt
+  landed: the Guardian's `UpdateAI` returns while casting, before `UpdateVictim`; a channel started
+  later doesn't hide the switch. One pull's wipe: Justice's Hand of Reckoning missed (combat log `MISS`)
+  and the claim sat on its cooldown 8 s. Death Grip is impossible (immunity set −286: GRIP,
+  PULL_TOWARDS, ROOT, SNARE).
+- **Draggers are pre-staged, by the user's choice** (`YoggSaronTickBeacon`, `yogg-saron beacon stage`,
+  `ACTION_RAID + 3.5`). Beacons come 45 s into phase 3, then 45 s after each that hits, retried every 5 s
+  (`boss_yoggsaron.cpp:1288, 1300, 1354`; seen 45.2 / 46.5 s apart). 5 s before the next is due (off the
+  last first mark) the claim's rules and order pick `RAID_MODE(1, 3)` stagers, lanes north / south /
+  north-east in order; the claim gives a stager its lane while free. Stagers walk round the body and
+  hold, no swing (`walk` / `ready` / `stuck`), until the first mark, or drop 8 s past due (`timeout`).
+  Spots 20 yd along each lane's PATHFIND_NORMAL straight line from the melee spot, floor by navprobe
+  with Z unchanged: north (1990.94, −4.40, 325.104), south (1996.06, −42.75, 324.889), north-east
+  (2009.52, −6.19, 326.989); hunters wait at their hunter spot. A 30 yd taunt still reaches the pile,
+  and the walk after it drops from ~39 to ~19 yd.
 - **Healed Guardians get a cooldown first.** One still marked or carrying 64486 / 64468 at 40% or more
   (`BEACON_DANGER_HEALTH_PCT`, ~17k a hit) on a dragger or a non-tank: the victim presses
   `NextPhysicalDefensive` (`ACTION_EMERGENCY + 6`, `yogg.dragdef`); a healer or paladin gives Pain
@@ -2057,12 +2083,14 @@ off cooldown,
   Ice Block are blocked on such a victim: an immune victim sheds aggro (`ThreatManager.cpp:123-134`).
   After the release the dragger walks back to the melee spot until a tank has it or 8 s pass
   (`return`), since the tank is ~39 yd away and a taunt reaches 30, and guardian control taunts loose
-  Guardians highest health first. **A tank holding the pile is covered too**, by health only: its own
-  button with a healed Guardian on it under 60% (`BEACON_TANK_DEFENSIVE_PCT`, the user's number), an
-  external under 50% (`BEACON_TANK_EXTERNAL_PCT`), draggers still first. Counting two healed ones at
-  any health spent Divine Protection at full health in one beacon and left none for the next (211k
-  taken, down to 31.7%). Before any cover: Dragon took 225k against 174k healed in 12 s under four
-  Guardians at 84-91%. The external skips a bot whose own button `ReadyTankDefensive` names, which now
+  Guardians highest health first. **A tank holding the pile is covered too**: its own button the moment
+  2+ Guardians on it carry a 64486 / 64468 application another Guardian cast (`YoggSaronPileHealedOn`,
+  `BEACON_PILE_RESET_GUARDIANS`, at any health, by the user's choice), an external under 50%
+  (`BEACON_TANK_EXTERNAL_PCT`), draggers still first. A returned mark carries only its own copy, so only
+  a heal reaching the pile counts. The 60% line before it was one full-power swing (~40%): both tanks
+  spent Divine Protection (2 min, beacons 45 s apart) on a mild first beacon and had none when a failed
+  drag healed 11 Guardians (Dragon 291k in 13 s, dead). Before any cover: Dragon took 225k against 174k
+  healed in 12 s under four Guardians at 84-91%. The external skips a bot whose own button `ReadyTankDefensive` names, which now
   counts the Avenging Wrath marker (61987, 30 s) as a lock on Divine Protection like Forbearance: the
   immunity script refuses both (`spell_pal_immunities`), and an Avenging Wrath at 11:31 left a tank
   with neither its button nor an external when the pile killed it. Tanks give no external here, and
@@ -2072,7 +2100,9 @@ off cooldown,
   (1986.0, 7.63, 326.797) and south (1994.44, −55.65, 326.394), north-east its own drag spot, navprobe
   PATHFIND_NORMAL 33.2 / 33.1 yd from the melee spot,
   42 / 44 from the ranged spot, inside Distracting Shot's 35 yd (6 s taunt, 8 s cooldown, no Guardian
-  immunity): shot with ≤5 s of the mark left, so it covers the heal. No damage on it before then (the
+  immunity): shot with ≤5 s of the mark left, so it covers the heal. It must be late: 20736 is effect 63,
+  a fixed threat for 6 s, where Taunt, Hand of Reckoning and Dark Command are effect 114, which
+  `Spell::EffectTaunt` matches to the top threat for good. No damage on it before then (the
   multiplier; Feign Death and Deterrence blocked), and Feign Death if it is still on the hunter 1 s
   into the heal with the taunt gone (`shot` / `feign`).
 - **Deafening Roar is covered by an Aura Mastery chain** (25-man, fewer than 4 Keepers: 30 s in, then
@@ -2127,6 +2157,13 @@ off cooldown,
   (the tick, one scan per 200 ms per instance) stops one bot's cast: a channel 1.5 s in with no claim,
   no free bot with a kick ready in range, none finishing its cast within 1 s; never a healer; shortest
   kick cooldown first, then the longest cast left; one per channel (`yogg.kicknudge`).
+  **Marks' channels go first**: a channelling Guardian doesn't move, so one kept each hunter's mark in
+  the pile on two beacons (7 and 11 others healed). Casters marked or dragged lead the list and skip
+  the nudge's 1.5 s wait. **Kicks are saved for them, by the user's choice**: from the first mark until no
+  mark or drag is left, `markKickers` holds `MARK_KICKERS` (2) bots not dragging or staging with a kick
+  ready within 2 s, longest reach first (Counterspell / Spell Lock 30 yd reach the pile and the
+  north-east lane from the ranged station, Wind Shear 25), then shorter cooldown, non-healer, GUID; they
+  kick only marks then and the nudge skips them for others (`yogg.markkick reserve` / `kick`).
 - **`yogg-saron phase 3 lust`** (`ACTION_RAID + 2`). `ShamanBoostTrigger` and the burst hold both want a
   boss target, and phase 3 shamans are on Guardians and tentacles: none in one pull, +39.7 s and +54.2 s
   in others. It casts once 80% of the living group stands at its phase 3 station (15 yd) or still in
