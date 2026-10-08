@@ -11,6 +11,9 @@
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
 
+class CastSpellAction;
+class Unit;
+
 // Yogg's body knocks players away once a second forever inside 13.3 yd, and the walk out of that ring
 // at the phase 1 to 2 handover is a forced move against reach melee's combat one. Neither wins
 // outright: the two traded a melee bot back and forth every ~300 ms for the whole walk, and 77 times
@@ -86,7 +89,9 @@ public:
 // Spells at something the bot is holding off, which the resolver alone can't stop: a class node aims at
 // "attackers" or the current target value on its own. On the Brain while the brain team holds, DoTs and
 // channels from the DoT line and everything from the hold line, and on a marked Guardian while a hunter
-// drags one, since its threat would keep the Guardian on it once Distracting Shot runs out.
+// drags one, since its threat would keep the Guardian on it once Distracting Shot runs out. A non-tank's
+// spells on an Immortal Guardian the threat gate refuses, kicks aside: two warlocks' "on attacker" DoTs
+// pulled the first Guardian of one phase 3 the second its root ended, and both died to it.
 class YoggSaronHeldTargetCastMultiplier : public Multiplier
 {
 public:
@@ -94,6 +99,19 @@ public:
         : Multiplier(botAI, "yogg-saron held target cast multiplier")
     {
     }
+
+    float GetValue(Action* action) override;
+
+private:
+    bool GuardianThreatHeld(CastSpellAction* spellAction, Unit* target);
+};
+
+// A non-tank's area spell in phase 3, held unless ULDUAR_YOGG_SARON_PHASE_3_AREA_MIN_WORTH units worth
+// hitting stand round its target and every Guardian there passes the threat gate.
+class YoggSaronPhase3AreaMultiplier : public Multiplier
+{
+public:
+    YoggSaronPhase3AreaMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "yogg-saron phase 3 area multiplier") {}
 
     float GetValue(Action* action) override;
 };

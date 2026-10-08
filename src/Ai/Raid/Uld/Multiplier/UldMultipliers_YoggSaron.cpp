@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <list>
 #include <set>
 #include <string>
 
@@ -238,18 +239,23 @@ float YoggSaronHeldTargetCastMultiplier::GetValue(Action* action)
     if (!spellAction || bot->GetMapId() != ULDUAR_MAP_ID)
         return 1.0f;
 
-    // Both reads are map lookups, no sweep.
+    // Both reads are map lookups, no sweep. Immortal Guardians only ever stand on the platform.
     bool const brainDots = YoggSaronOnBrainLevel(bot) && YoggSaronBrainDotHeld(botAI);
     bool const hunterHold = !brainDots && YoggSaronBeaconHunterHold(botAI);
-    if (!brainDots && !hunterHold)
+    bool const platform =
+        !brainDots && bot->GetPositionZ() >= ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT;
+    if (!brainDots && !hunterHold && !platform)
         return 1.0f;
 
     Unit* target = action->GetTarget();
     if (!target)
         return 1.0f;
 
-    if (hunterHold)
-        return target->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN ? 0.0f : 1.0f;
+    if (hunterHold && target->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN)
+        return 0.0f;
+
+    if (!brainDots)
+        return GuardianThreatHeld(spellAction, target) ? 0.0f : 1.0f;
 
     if (target->GetEntry() != NPC_BRAIN)
         return 1.0f;
@@ -265,6 +271,92 @@ float YoggSaronHeldTargetCastMultiplier::GetValue(Action* action)
                    spellInfo->HasAura(SPELL_AURA_PERIODIC_LEECH)
                ? 0.0f
                : 1.0f;
+}
+
+bool YoggSaronHeldTargetCastMultiplier::GuardianThreatHeld(CastSpellAction* spellAction, Unit* target)
+{
+    uint32 const entry = target->GetEntry();
+    if ((entry != NPC_IMMORTAL_GUARDIAN && entry != NPC_MARKED_IMMORTAL_GUARDIAN) || PlayerbotAI::IsTank(bot))
+        return false;
+
+    // Kicks still go, a Drain Life left running costs more than the threat.
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(AI_VALUE2(uint32, "spell id", spellAction->getSpell()));
+    if (spellInfo && spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST))
+        return false;
+
+    return !YoggSaronGuardianThreatAllows(bot, target, target->GetGUID() == bot->GetTarget());
+}
+
+float YoggSaronPhase3AreaMultiplier::GetValue(Action* action)
+{
+    // Only spells that hit each target for less than the single-target spell they replace. Divine Storm,
+    // Whirlwind, Chain Lightning, Starfall, Multi-Shot etc. hit the main target in full and stay out.
+    static std::set<std::string> const areaActions = {
+        "blizzard", "flamestrike", "blast wave", "dragon's breath", "cone of cold", "hurricane", "typhoon",
+        "volley", "mind sear", "rain of fire", "seed of corruption", "seed of corruption on attacker",
+        "fan of knives", "swipe (cat)", "death and decay", "blood boil", "cleave", "fire nova", "magma totem"};
+    if (!action || !areaActions.count(action->getName()))
+        return 1.0f;
+
+    if (bot->GetMapId() != ULDUAR_MAP_ID ||
+        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT || PlayerbotAI::IsTank(bot))
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    if (!target || target == bot)
+        target = AI_VALUE(Unit*, "current target");
+
+    if (!target || !YoggSaronInPhase3(botAI))
+        return 1.0f;
+
+    // The area trigger's own test: distance minus the unit's size. Yogg's reach is 30, so he counts from
+    // 38 yd off his middle, and the sweep has to reach that far.
+    std::list<Creature*> nearby;
+    target->GetCreatureListWithEntryInGrid(nearby,
+                                           {NPC_YOGG_SARON, NPC_IMMORTAL_GUARDIAN, NPC_MARKED_IMMORTAL_GUARDIAN,
+                                            NPC_CRUSHER_TENTACLE, NPC_CORRUPTOR_TENTACLE, NPC_CONSTRICTOR_TENTACLE},
+                                           ULDUAR_YOGG_SARON_PHASE_3_AREA_RADIUS + ULDUAR_YOGG_SARON_COMBAT_REACH);
+
+    // Same lines the dps resolver keeps: with Thorim down to Weakened, without him to the floor and
+    // never a marked one.
+    bool const thorim = YoggThorimKeeperActive(botAI);
+    float const floorPct =
+        thorim ? ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT : ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT;
+
+    // Mind Sear never hits its own target.
+    bool const sear = action->getName() == "mind sear";
+
+    uint32 worth = 0;
+    for (Creature* unit : nearby)
+    {
+        if (!unit->IsAlive() || (sear && unit == target) ||
+            unit->GetDistance(target->GetPosition()) > ULDUAR_YOGG_SARON_PHASE_3_AREA_RADIUS)
+            continue;
+
+        uint32 const entry = unit->GetEntry();
+        if (entry == NPC_IMMORTAL_GUARDIAN || entry == NPC_MARKED_IMMORTAL_GUARDIAN)
+        {
+            // One no tank holds yet turns on whoever hits it, and a dragged one is on its dragger.
+            if (!YoggSaronGuardianThreatAllows(bot, unit, false))
+            {
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "yogg.p3area", "fresh");
+
+                return 0.0f;
+            }
+
+            if ((entry == NPC_MARKED_IMMORTAL_GUARDIAN && !thorim) || unit->GetHealthPct() <= floorPct)
+                continue;
+        }
+
+        ++worth;
+    }
+
+    bool const allowed = worth >= ULDUAR_YOGG_SARON_PHASE_3_AREA_MIN_WORTH;
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.p3area", allowed ? "allowed" : "few");
+
+    return allowed ? 1.0f : 0.0f;
 }
 
 float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)

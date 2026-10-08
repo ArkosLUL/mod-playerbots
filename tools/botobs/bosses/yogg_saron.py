@@ -21,16 +21,19 @@
                                     hold short of 30%: from when, why it let go, what leaked and how
                                     many tentacles were up
     yogg_saron.py <file> --phase3   Heroism against when the raid was in position, which ranged station a
-                                    leftover Crusher left them, Immortal Guardians,
-                                    who pulled them off the tanks, how much of the time they were at full
-                                    power or Weakened, Drain Life channels and how fast they were cut,
-                                    the bot tank's targets and taunts, swings on the raid during a gaze,
-                                    beacon heals and how far marked Guardians were from Yogg and the rest,
-                                    which other Guardians the heal reached, beacon drags and the side
-                                    picked, who held each healed Guardian, what it did to non-tanks and
-                                    when a tank had it, Deafening Roar against Aura Mastery, Lunatic Gaze,
-                                    the damage split by Guardian health band, phase 2 leftovers, the pets
-                                    on each and Diminish Power
+                                    leftover Crusher left them, how fast each role and the brain team
+                                    reached its station and the Nitro Boosts spent on it, Immortal
+                                    Guardians, who pulled them off the tanks and with what, how much of
+                                    the time they were at full power or Weakened, Drain Life channels and
+                                    how fast they were cut, the bot tank's targets and taunts, swings on
+                                    the raid during a gaze, beacon heals and how far marked Guardians were
+                                    from Yogg, the rest and each other, which other Guardians the heal
+                                    reached, each tank's 20 s under it and the raid's damage on the healed
+                                    ones, beacon drags and the lane picked, who held each healed Guardian,
+                                    what it did to non-tanks and when a tank had it, Deafening Roar
+                                    against Aura Mastery, Lunatic Gaze, the damage split by Guardian health
+                                    band, area casts by how many units round the target were worth
+                                    hitting, phase 2 leftovers, the pets on each and Diminish Power
     yogg_saron.py <file> --crush    Crush, who took it and what each cone was aimed at, the body's
                                     knockback and who walked into it, Death Rays
     yogg_saron.py <file> --sanity   Sanity minima, each trip below, who sat a wave out, where it went,
@@ -467,6 +470,27 @@ ROAR_CAST_MS = 2300
 SPELL_DISTRACTING_SHOT = 20736
 SPELL_FEIGN_DEATH = 5384
 DRAG_WATCH_MS = 20000
+# How long into phase 3 a Nitro Boosts use counts as the walk to the station.
+STATION_NITRO_WATCH_MS = 30000
+
+# The module's phase 3 area rule: an area spell needs this many units worth hitting within the area
+# trigger's radius of the target, distance minus each unit's own reach. These are the actions it holds,
+# by spell name.
+PHASE_3_AREA_RADIUS = 8.0
+PHASE_3_AREA_MIN_WORTH = 3
+PHASE_3_AREA_SPELLS = {"Blizzard", "Flamestrike", "Blast Wave", "Dragon's Breath", "Cone of Cold", "Hurricane",
+                       "Typhoon", "Volley", "Mind Sear", "Rain of Fire", "Seed of Corruption", "Fan of Knives",
+                       "Swipe (Cat)", "Death and Decay", "Blood Boil", "Cleave", "Fire Nova", "Magma Totem"}
+# What a cast at a Guardian in the 3 s before it left its tank is read as: a DoT, or anything hitting an
+# area.
+FLIP_CAUSE_MS = 3000
+FLIP_DOTS = {"Corruption", "Immolate", "Unstable Affliction", "Curse of Agony", "Curse of Doom", "Haunt",
+             "Moonfire", "Insect Swarm", "Shadow Word: Pain", "Vampiric Touch", "Devouring Plague",
+             "Serpent Sting", "Flame Shock", "Rupture", "Living Bomb"}
+FLIP_AREA = PHASE_3_AREA_SPELLS | {"Divine Storm", "Consecration", "Whirlwind", "Thunder Clap", "Blade Flurry",
+                                   "Sweeping Strikes", "Multi-Shot", "Chain Lightning", "Starfall",
+                                   "Howling Blast", "Pestilence", "Explosive Trap", "Bladestorm", "Holy Wrath",
+                                   "Shockwave", "Hellfire", "Arcane Explosion"}
 
 # Phase 2's platform tentacles, and both Crush cones (64147 in 10-man, 65201 in 25-man).
 TENTACLE_NAMES = {NPC_CRUSHER_TENTACLE: "Crusher", NPC_CONSTRICTOR_TENTACLE: "Constrictor",
@@ -3688,6 +3712,179 @@ def drag_exposure(hits: list[tuple[int, int, int]], heal_at: int, window_ms: int
     return out
 
 
+def station_arrival(rows: list[list], spots: list[tuple], start: int,
+                    radius: float = PHASE_3_STATION_RADIUS) -> int | None:
+    """Ms from `start` to the first live snapshot_rows row on the platform within `radius` of any of
+    `spots`, which is where the module stops walking a bot to its phase 3 station, or None."""
+    for row in rows:
+        if (row[0] >= start and row[6] > 0 and row[4] >= BRAIN_LEVEL_Z
+                and any(math.dist(row[2:4], spot[:2]) <= radius for spot in spots)):
+            return row[0] - start
+    return None
+
+
+def stacked_heals(positions: list[tuple[float, float]], radius: float = EMPOWERING_SHADOWS_RADIUS) -> list[int]:
+    """The beacon heals each marked Guardian took at the cast: its own, plus one per other marked
+    Guardian within `radius`. 64486 stacks per caster."""
+    return [1 + sum(1 for other, there in enumerate(positions) if other != index and math.dist(here, there) <= radius)
+            for index, here in enumerate(positions)]
+
+
+def flip_cause(victim_role: str, spells: set[str]) -> str:
+    """Why a Guardian left its tank, from the spell names its new victim cast at it just before: `dot`
+    when all were DoTs, `aoe` when any hit an area, `direct` otherwise, and with nothing cast `heal
+    threat` for a healer and `none` for anyone else (ground AoE ticks, totems, pets)."""
+    if not spells:
+        return "heal threat" if victim_role == "heal" else "none"
+    if spells <= FLIP_DOTS:
+        return "dot"
+    return "aoe" if spells & FLIP_AREA else "direct"
+
+
+def area_worth(target: tuple[float, float], units: list[tuple[int, float, float, float, bool]],
+               radius: float = PHASE_3_AREA_RADIUS) -> tuple[int, bool]:
+    """(worth hitting, a loose Guardian) round a target (x, y) by the module's phase 3 area rule. Units
+    are (entry, x, y, health %, a tank is its victim). Worth: Yogg, leftover tentacles and Immortal
+    Guardians over the floor that a tank holds. Loose: a Guardian in the area no tank holds."""
+    worth = 0
+    loose = False
+    for entry, x, y, hp, on_tank in units:
+        if math.dist(target, (x, y)) - COMBAT_REACH.get(entry, 0.0) > radius:
+            continue
+        if entry == NPC_IMMORTAL_GUARDIAN:
+            loose = loose or not on_tank
+            if hp <= GUARDIAN_FLOOR_PCT or not on_tank:
+                continue
+        worth += 1
+    return worth, loose
+
+
+def show_phase3_arrival(trace: Trace, start: int, rows: dict[int, list[list]], roster: set) -> None:
+    """Seconds from phase 3 to each raider's station, by role and for the brain team, the Nitro Boosts
+    spent on the walk, and how long the walk sat released behind a target the station can't reach."""
+    nitro: dict[int, int] = collections.Counter(
+        rec.get("s") for rec in trace.of("cast")
+        if rec.get("sp") == SPELL_NITRO_BOOSTS_USE and start <= rec["t"] <= start + STATION_NITRO_WATCH_MS)
+    released: dict[int, int] = collections.Counter()
+    by_bot: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "yogg.station"):
+        if rec["t"] >= start:
+            by_bot[rec.get("g")].append((rec["t"], str(rec.get("txt", ""))))
+    groups: dict[str, list[tuple[int, int | None]]] = collections.defaultdict(list)
+    ranged_spots = [PHASE_3_RANGED_SPOT] + [spot for _, spot in PHASE_3_RANGED_STANDBY_SPOTS]
+    for guid in roster:
+        own = rows.get(guid, [])
+        then = row_before(own, start)
+        if not then or then[6] <= 0:
+            continue
+        role = trace.role(guid)
+        arrived = station_arrival(own, ranged_spots if role == "ranged" else [PHASE_3_MELEE_SPOT], start)
+        # Change-only notes, so a released stretch runs to the next note or the arrival.
+        cap = start + (arrived if arrived is not None else STATION_NITRO_WATCH_MS)
+        stamps = by_bot.get(guid, [])
+        for (when, txt), (after, _) in zip(stamps, stamps[1:] + [(cap, "")]):
+            if txt == "released":
+                released[guid] += max(0, min(after, cap) - when)
+        groups["brain team" if then[4] < BRAIN_LEVEL_Z else role].append((guid, arrived))
+    print("  station arrival    : seconds to within the station radius; Nitro in the first 30 s; released")
+    for group in ("ranged", "melee", "heal", "tank", "brain team"):
+        members = groups.get(group)
+        if not members:
+            continue
+        times = [arrived / 1000 for _, arrived in members if arrived is not None]
+        never = len(members) - len(times)
+        boots = sum(nitro[guid] for guid, _ in members)
+        held = [released[guid] / 1000 for guid, _ in members if released[guid]]
+        timing = f"median {statistics.median(times):4.1f} worst {max(times):4.1f}" if times else "none arrived"
+        print(f"    {group:10} {len(members):2}: {timing}{f', {never} never' if never else ''};"
+              f" Nitro {boots}; released {len(held)}"
+              + (f" (median {statistics.median(held):.1f} s)" if held else ""))
+    picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.nitro") if rec["t"] >= start)
+    if picks:
+        print(f"    yogg.nitro       : {dict(picks)}")
+
+
+def show_phase3_area(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], roster: set,
+                     tanks: set, guardians: set, yogg: int | None) -> None:
+    """Phase 3 area casts by the bot non-tanks, by how many units round the caster's target were worth
+    hitting by the module's rule, and whether a Guardian no tank held stood in the area."""
+    tentacles = {guid for entry in TENTACLE_NAMES for guid in guids_of_entry(trace, entry)}
+    units = snapshot_rows(trace, tentacles)
+    units.update({guid: rows[guid] for guid in guardians | ({yogg} if yogg else set()) if guid in rows})
+    stamps = {guid: [row[0] for row in own] for guid, own in units.items()}
+
+    def fresh(guid: int, when: int) -> list | None:
+        index = bisect.bisect_right(stamps.get(guid, []), when)
+        row = units[guid][index - 1] if index else None
+        return row if row and when - row[0] <= 1500 and row[6] > 0 else None
+
+    counts: collections.Counter = collections.Counter()
+    by_spell: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    loose_casts = 0
+    for rec in trace.of("cast"):
+        caster = rec.get("s")
+        name = trace.spells.get(rec.get("sp"), "")
+        # Triggered rows are the ticks of a channel or a ground effect, under the same name.
+        if (name not in PHASE_3_AREA_SPELLS or rec.get("tr") or caster not in roster or caster in tanks
+                or caster in trace.humans or not start <= rec["t"] <= stop):
+            continue
+        aimed = rec.get("tgt") or (row_before(rows.get(caster, []), rec["t"]) or [0] * 9)[8]
+        there = fresh(aimed, rec["t"]) if aimed in units else None
+        if not there:
+            counts["no target"] += 1
+            continue
+        # Mind Sear never hits its own target.
+        near = [(trace.entries.get(guid), row[2], row[3], row[6], row[8] in tanks)
+                for guid in units if (name != "Mind Sear" or guid != aimed) and (row := fresh(guid, rec["t"]))]
+        worth, loose = area_worth((there[2], there[3]), near)
+        band = f"{min(worth, PHASE_3_AREA_MIN_WORTH)}{'+' if worth >= PHASE_3_AREA_MIN_WORTH else ''}"
+        counts[band] += 1
+        by_spell[name]["casts"] += 1
+        by_spell[name]["under"] += worth < PHASE_3_AREA_MIN_WORTH
+        loose_casts += loose
+    total = sum(counts.values())
+    if total:
+        bands = "  ".join(f"{band}: {counts[band]}" for band in ("0", "1", "2", "3+", "no target") if counts[band])
+        print(f"\n  area spells        : {total} casts by non-tanks, worth hitting round the target {bands};"
+              f" a loose Guardian in the area {loose_casts}")
+        print("    by spell (under 3): " + ", ".join(f"{name} {spell['casts']} ({spell['under']})" for name, spell in
+                                               sorted(by_spell.items(), key=lambda item: -item[1]["casts"])))
+    picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.p3area")
+                                if start <= rec["t"] <= stop)
+    if picks:
+        print(f"    yogg.p3area      : {dict(picks)}")
+
+
+def show_beacon_tanks(trace: Trace, heal_at: int, healed: set, rows: dict[int, list[list]], roster: set,
+                      tanks: set, flows: list[tuple[int, int, int]], covers: dict[int, list[tuple[int, str]]],
+                      died_at: dict[int, list[int]]) -> None:
+    """One beacon heal's 20 s from the tanks' side: healed Guardians on each, damage taken against
+    healing landed, defensives and externals, death; then the raid's damage on the healed Guardians
+    and their health at the end. Flows are (t, tank, amount), damage negative and healing positive."""
+    stop = heal_at + EMPOWERING_SHADOWS_MS
+    for tank in sorted(tanks, key=trace.name):
+        then = row_before(rows.get(tank, []), heal_at)
+        if not then or then[6] <= 0:
+            continue
+        window = [amount for when, guid, amount in flows if guid == tank and heal_at <= when <= stop]
+        taken = -sum(amount for amount in window if amount < 0)
+        landed = sum(amount for amount in window if amount > 0)
+        on_it = max((sum(1 for guid in healed if (row := row_before(rows.get(guid, []), when)) and row[8] == tank)
+                     for when in range(heal_at, stop + 1, 2000)), default=0)
+        spent = sorted({name for when, name in covers[tank] if heal_at - BEACON_SPLASH_LOOK_MS <= when <= stop})
+        died = next((when for when in died_at[tank] if heal_at <= when <= stop), None)
+        print(f"      tank {trace.name(tank):14}: up to {on_it} healed on it, took {taken / 1000:.0f}k, healed"
+              f" {landed / 1000:.0f}k, {('used ' + '/'.join(spent)) if spent else 'nothing used'}"
+              + (f", died +{(died - heal_at) / 1000:.1f} s" if died else ""))
+    dealt = 0
+    for guid in roster:
+        own = [row for row in rows.get(guid, []) if len(row) > 12 and heal_at <= row[0] <= stop]
+        dealt += sum(max(0, row[12] - previous[12]) for previous, row in zip(own, own[1:]) if previous[8] in healed)
+    ends = [row[6] for guid in healed if (row := row_before(rows.get(guid, []), stop))]
+    print(f"      raid on the healed Guardians: {dealt / 1000:.0f}k in 20 s,"
+          f" health at the end {', '.join(f'{hp:.0f}%' for hp in ends) or '-'}")
+
+
 def show_phase3(trace: Trace) -> None:
     """Phase 3: whether ranged took the Guardians while melee stayed on Yogg, what the Guardians did to
     the raid, whether a beacon's heal reached Yogg, and what each Lunatic Gaze cost.
@@ -3764,6 +3961,7 @@ def show_phase3(trace: Trace) -> None:
                                         if start <= rec["t"] <= stop)
     if station_notes:
         print(f"    yogg.station     : {dict(station_notes)}")
+    show_phase3_arrival(trace, start, rows, roster)
 
     if yogg and rows.get(yogg):
         line = []
@@ -3807,6 +4005,10 @@ def show_phase3(trace: Trace) -> None:
     stormed = 0
     tanks = {guid for guid in roster if trace.role(guid) == "tank"}
     flips = []
+    casts_at: dict[int, list[tuple[int, int, str]]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("tgt") in guardians and start <= rec["t"] <= stop:
+            casts_at[rec["tgt"]].append((rec["t"], rec.get("s"), trace.spells.get(rec.get("sp"), "")))
     print(f"\n  Immortal Guardians : {len(guardians)}, Weakened {len(weakened & guardians)}")
     for guid in sorted(guardians, key=lambda g: rows[g][0][0] if rows.get(g) else 0):
         own = rows.get(guid)
@@ -3822,7 +4024,9 @@ def show_phase3(trace: Trace) -> None:
         flip = first_off_tank(own, tanks)
         flip_role = (trace.role(flip[8]) if flip[8] in roster else "other") if flip else ""
         if flip:
-            flips.append(((flip[0] - spawned) / 1000, flip_role))
+            cast = {name for when, caster, name in casts_at[guid]
+                    if caster == flip[8] and flip[0] - FLIP_CAUSE_MS <= when <= flip[0]}
+            flips.append(((flip[0] - spawned) / 1000, flip_role, flip_cause(flip_role, cast)))
         print(f"    {clock(spawned)}  first victim"
               f" {trace.role(victim[8]) if victim else '-':6} +{max(0, (victim[0] if victim else spawned) - spawned) / 1000:4.1f} s"
               f"  off a tank {flip_role or '-':6} +{max(0, (flip[0] if flip else spawned) - spawned) / 1000:4.1f} s"
@@ -3835,8 +4039,9 @@ def show_phase3(trace: Trace) -> None:
     print(f"    melee hits by victim role: {dict(by_role)}")
     if flips:
         print(f"    first off a tank : {len(flips)} of {len(guardians)}, median"
-              f" +{statistics.median(seconds for seconds, _ in flips):.1f} s,"
-              f" to {dict(collections.Counter(role for _, role in flips))}")
+              f" +{statistics.median(seconds for seconds, _, _ in flips):.1f} s,"
+              f" to {dict(collections.Counter(role for _, role, _ in flips))},"
+              f" cause {dict(collections.Counter(cause for _, _, cause in flips))}")
     # Without Thorim nothing kills them, so how much of the time they spent at full power is the phase.
     full, weak = guardian_power_shares([row[6] for guid in guardians for row in rows.get(guid, [])
                                         if start <= row[0] <= alive_end and row[6] > 0])
@@ -3892,6 +4097,10 @@ def show_phase3(trace: Trace) -> None:
             covers[rec.get("d")].append((rec["t"], name))
     hunter_casts = [(rec["t"], rec.get("s"), rec.get("sp"), rec.get("tgt", 0)) for rec in trace.of("cast")
                     if rec.get("sp") in (SPELL_DISTRACTING_SHOT, SPELL_FEIGN_DEATH) and start <= rec["t"] <= stop]
+    flows = [(rec["t"], rec.get("d"), -rec.get("a", 0)) for rec in trace.of("dmg")
+             if rec.get("d") in tanks and start <= rec["t"] <= stop]
+    flows += [(rec["t"], rec.get("d"), rec.get("a", 0) - rec.get("oh", 0)) for rec in trace.of("heal")
+              if rec.get("d") in tanks and start <= rec["t"] <= stop]
     print(f"\n  Shadow Beacons     : {len(beacons)}")
     yogg_spot = at(trace, yogg, start) if yogg else None
     for group in group_runs([rec["t"] for rec in heals], 1000, 0):
@@ -3924,6 +4133,10 @@ def show_phase3(trace: Trace) -> None:
         pile = f", nearest other Guardian {', '.join(f'{yards:.1f}' for yards in nearest)} yd" if nearest else ""
         print(f"    {clock(group[0])}  {len(casters)} heals, Guardians {', '.join(f'{yards:.1f}' for yards in reach)} yd"
               f" from Yogg ({inside} inside {EMPOWERING_SHADOWS_RADIUS:.0f}){pile}, Yogg {change} over the next 20 s")
+        # 64486 stacks per caster, so marked Guardians dragged to one spot heal each other.
+        stacks = stacked_heals(spots)
+        print(f"      marked pairs within {EMPOWERING_SHADOWS_RADIUS:.0f} yd: {(sum(stacks) - len(stacks)) // 2},"
+              f" heals each took {stacks}")
         healed = beacon_splash(spots, others)
         if healed:
             changes = []
@@ -3933,6 +4146,7 @@ def show_phase3(trace: Trace) -> None:
                 changes.append(f"{then[6]:.0f} -> {later[6]:.0f}%")
             print(f"      other Guardians it reached: {len(healed)} ({', '.join(changes)}"
                   f" over {BEACON_SPLASH_LOOK_MS // 1000} s)")
+        show_beacon_tanks(trace, group[0], marked | set(healed), rows, roster, tanks, flows, covers, died_at)
         for rec in casters:
             guardian = rec.get("s")
             own = rows.get(guardian, [])
@@ -4058,6 +4272,7 @@ def show_phase3(trace: Trace) -> None:
         for role in ("ranged", "melee", "tank", "heal"):
             if sum(bands[role].values()) >= 1000 * seconds:
                 print(f"    {role:6}           : {sum(bands[role].values()) / seconds / 1000:.1f}k/s  {split(bands[role])}")
+    show_phase3_area(trace, start, alive_end, rows, roster, tanks, guardians, yogg)
 
     healers = [guid for guid in roster if trace.role(guid) == "heal" and guid not in trace.humans]
     if healers and yogg_spot:
@@ -4431,9 +4646,10 @@ SECTIONS = (
     ("brain", "brain room, the Brain, skulls, reprisal deaths and holds, Induce Madness, stalled walks,"
      " walk speed to the Brain, turns on the spot, exits decided outside the brain room, skull gaze ticks,"
      " the hold short of phase 3", show_brain),
-    ("phase3", "Heroism, the ranged station, Immortal Guardians, their power and Drain Life, swings on the"
-     " raid during a gaze, beacon heals, who else they reached, drags and what the healed Guardian did to"
-     " its holder, Deafening Roar and Aura Mastery, Lunatic Gaze, the damage split, phase 2 leftovers and"
+    ("phase3", "Heroism, the ranged station, station arrival and Nitro, Immortal Guardians, why they left"
+     " the tanks, their power and Drain Life, swings on the raid during a gaze, beacon heals, stacked heals,"
+     " who else they reached, the tanks under them, drags and what the healed Guardian did to its holder,"
+     " Deafening Roar and Aura Mastery, Lunatic Gaze, the damage split, area casts, phase 2 leftovers and"
      " the pets on them", show_phase3),
     ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
     ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),

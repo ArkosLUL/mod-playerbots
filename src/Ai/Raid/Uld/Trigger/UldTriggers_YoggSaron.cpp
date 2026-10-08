@@ -941,7 +941,9 @@ bool YoggSaronNovaExternalTrigger::IsActive()
 
 bool YoggSaronRoarAuraTrigger::IsActive()
 {
-    return YoggSaronRoarAuraHeld(botAI) && !botAI->HasAura("concentration aura", bot, false, true) &&
+    // Read by the application. With another paladin's Concentration Aura up, ours stays on with no
+    // effects, and the name lookup walks effects so it never sees it.
+    return YoggSaronRoarAuraHeld(botAI) && !bot->HasAura(SPELL_CONCENTRATION_AURA, bot->GetGUID()) &&
            botAI->CanCastSpell("concentration aura", bot);
 }
 
@@ -950,7 +952,8 @@ bool YoggSaronRoarAuraMasteryTrigger::IsActive()
     if (bot->getClass() != CLASS_PALADIN || !YoggSaronRoarExpected(botAI))
         return false;
 
-    return YoggSaronRoarCasting(botAI) && botAI->HasAura("concentration aura", bot, false, true) &&
+    // Aura Mastery's immunity checks the application too, so an effectless copy still covers the raid.
+    return YoggSaronRoarCasting(botAI) && bot->HasAura(SPELL_CONCENTRATION_AURA, bot->GetGUID()) &&
            botAI->CanCastSpell("aura mastery", bot);
 }
 
@@ -960,7 +963,9 @@ bool YoggSaronBeaconDefensiveTrigger::IsActive()
     if (bot->getAttackers().empty() || !YoggSaronHealedGuardianOn(botAI, bot))
         return false;
 
-    if (PlayerbotAI::IsTank(bot) && !YoggSaronBeaconDragging(bot) && !YoggSaronBeaconReturning(bot))
+    // A tank holding the pile only once two healed ones are on it, or one with the tank under half.
+    if (PlayerbotAI::IsTank(bot) && !YoggSaronBeaconDragging(bot) && !YoggSaronBeaconReturning(bot) &&
+        bot->GetHealthPct() >= ULDUAR_YOGG_SARON_BEACON_TANK_COVER_PCT && YoggSaronHealedGuardiansOn(bot) < 2)
         return false;
 
     return NextPhysicalDefensive(botAI, bot, nullptr, 0) != 0;

@@ -1063,6 +1063,45 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.brain_hold_window([(1000, "hold")]), (1000, None, "never"))
         self.assertIsNone(yogg_saron.brain_hold_window([(1000, "open"), (2000, "finish")]))
 
+    def test_station_arrival_is_the_first_live_platform_row_inside_the_radius(self):
+        spot = (2018.8, -18.9, 327.1)
+        rows = [[900, 1, 2018.8, -18.9, 327.0, 0, 100.0],  # before the phase
+                [1000, 1, 1940.0, -30.0, 240.0, 0, 100.0],  # brain level
+                [2000, 1, 2018.0, -18.0, 260.0, 0, 100.0],  # under the spot, a floor down
+                [3000, 1, 2000.0, -18.9, 327.0, 0, 100.0],
+                [4000, 1, 2010.0, -18.9, 327.0, 0, 100.0]]
+        self.assertEqual(yogg_saron.station_arrival(rows, [spot], 1000), 3000)
+        self.assertEqual(yogg_saron.station_arrival(rows, [(1998.5, -22.9, 324.9), spot], 1000), 2000)
+        dead = [[3000, 1, 2018.0, -18.0, 327.0, 0, 0.0]]
+        self.assertIsNone(yogg_saron.station_arrival(dead, [spot], 1000))
+
+    def test_stacked_heals_counts_each_marked_neighbour_inside_the_radius(self):
+        # One beacon's three marks, two of them 8 yd apart and the third 25 yd off the first.
+        self.assertEqual(yogg_saron.stacked_heals([(0.0, 0.0), (8.0, 0.0), (25.0, 0.0)]), [2, 3, 2])
+        self.assertEqual(yogg_saron.stacked_heals([(0.0, 0.0), (21.0, 0.0), (42.0, 0.0)]), [1, 1, 1])
+        self.assertEqual(yogg_saron.stacked_heals([]), [])
+
+    def test_flip_cause_reads_dots_area_and_heal_threat(self):
+        self.assertEqual(yogg_saron.flip_cause("ranged", {"Corruption", "Immolate"}), "dot")
+        self.assertEqual(yogg_saron.flip_cause("ranged", {"Corruption", "Blizzard"}), "aoe")
+        self.assertEqual(yogg_saron.flip_cause("melee", {"Mortal Strike"}), "direct")
+        self.assertEqual(yogg_saron.flip_cause("heal", set()), "heal threat")
+        self.assertEqual(yogg_saron.flip_cause("ranged", set()), "none")
+
+    def test_area_worth_counts_yogg_by_his_reach_and_only_held_guardians_over_the_floor(self):
+        guardian = yogg_saron.NPC_IMMORTAL_GUARDIAN
+        # A full Guardian joining three low ones by the pile, Yogg 18.5 yd off: two worth hitting.
+        units = [(yogg_saron.NPC_YOGG_SARON, 18.5, 0.0, 25.0, False), (guardian, 0.0, 0.0, 100.0, True),
+                 (guardian, 2.0, 0.0, 25.0, True), (guardian, 0.0, 2.0, 12.0, True), (guardian, 3.0, 3.0, 30.0, True)]
+        self.assertEqual(yogg_saron.area_worth((0.0, 0.0), units), (2, False))
+        held = units + [(guardian, 4.0, 0.0, 80.0, True), (yogg_saron.NPC_CRUSHER_TENTACLE, 15.0, 0.0, 40.0, False)]
+        self.assertEqual(yogg_saron.area_worth((0.0, 0.0), held), (4, False))
+        loose = units + [(guardian, 1.0, 1.0, 100.0, False), (guardian, 30.0, 0.0, 100.0, False)]
+        self.assertEqual(yogg_saron.area_worth((0.0, 0.0), loose), (2, True))
+        # Yogg's middle 40 yd off is past his 30 yd reach plus the 8 yd area.
+        self.assertEqual(yogg_saron.area_worth((0.0, 0.0), [(yogg_saron.NPC_YOGG_SARON, 40.0, 0.0, 25.0, False)]),
+                         (0, False))
+
     def test_drag_exposure_counts_only_the_window_after_the_heal(self):
         hits = [(900, 7, 2000), (1500, 7, 9000), (4000, 7, 36000), (5000, 8, 26000), (30000, 7, 40000)]
         self.assertEqual(yogg_saron.drag_exposure(hits, 1000, 20000), {7: (45000, 36000, 2), 8: (26000, 26000, 1)})

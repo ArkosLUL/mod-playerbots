@@ -539,6 +539,11 @@ Related traps:
   `SPELL_EFFECT_APPLY_AREA_AURA_ENEMY`) skips its owner (`UnitAura::FillTargetMap`), a persistent one
   its caster (`DynObjAura::FillTargetMap`; `Unit::_IsValidAttackTarget` refuses self), so `HasAura`
   there never fires: read it on a target. No Frost Sphere ever carries its own Permafrost.
+- **A paladin aura can be on with no effects.** This core keeps a second paladin's copy of the same
+  aura applied but strips its effects while a stronger or equal one is up (`SpellAuras.cpp:724-744`, a
+  local patch), and `PlayerbotAI::HasAura(name, …)` walks effects, so it misses that copy. Read it by
+  the application, `unit->HasAura(spellId, casterGuid)`: Yogg-Saron's roar paladin recast
+  Concentration Aura five times and never pressed Aura Mastery.
 - **A debuff can sit below the cast.** It may be an `EffectTriggerSpell` or a `spell_linked_spell`
   row, so keying on the cast id's aura leaves the node dead: ToC's Burning Bite/Spray carry no aura,
   the debuff is Burning Bile 66869.

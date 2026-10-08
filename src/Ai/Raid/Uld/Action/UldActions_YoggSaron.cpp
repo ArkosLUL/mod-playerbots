@@ -30,6 +30,7 @@
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "Spell.h"
+#include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "Unit.h"
@@ -765,12 +766,10 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
 
             if (*brain.thorim)
                 allowed = health > ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT;
-            // The beacon heal puts 750k into a 425k Guardian over 20 s, so a hit while it runs is healed
-            // straight back.
-            else if (candidate->HasAura(SPELL_EMPOWERING_SHADOWS_25) || candidate->HasAura(SPELL_EMPOWERING_SHADOWS_10))
-                allowed = false;
             // Down to the floor and no further, the rest goes on Yogg. Under it only while the gaze has
             // the bot turned off Yogg anyway, and only one it can hit with him out of its front arc.
+            // Beacon-healed ones too: most of it heals back, but three full ones left alone for the 20 s
+            // heal killed a tank in each of two pulls.
             else if (health > ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT)
                 allowed = true;
             else
@@ -1835,9 +1834,17 @@ bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
             return false;
     }
 
+    // Boots on any long walk: nobody moves much once at the spot, so the 3 min cooldown costs nothing.
+    // The brain team surfaces 74-94 yd out, and ranged held west by a leftover Crusher stood 75 yd out
+    // on the Guardian spawn ring.
+    Position const& spot = YoggSaronPhaseThreeSpot(bot);
+    if (bot->GetExactDist2d(spot) > ULDUAR_YOGG_SARON_NITRO_MIN_WALK && !bot->HasAura(NITRO_BOOSTS_SPEED_SPELL) &&
+        UseNitroBoosts(bot) && RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.nitro", "station");
+
     // Round the body. The brain team surfaces west of Yogg and the melee spot is east of him: the
     // straight line passed 2 yd from his middle, and one pull's melee were thrown 31 times walking it.
-    Position const destination = YoggSaronBodyRoute(bot, YoggSaronPhaseThreeSpot(bot));
+    Position const destination = YoggSaronBodyRoute(bot, spot);
 
     return MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
                   destination.GetPositionZ(), false, false, false, true, MovementPriority::MOVEMENT_FORCED, true,
@@ -1892,6 +1899,18 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
               });
     for (auto const& [distance, guardian] : loose)
     {
+        // Already coming to another tank. Both tanks taunted the same fresh one together three times in
+        // one pull, and Hand of Reckoning was then on cooldown for most swings on the raid.
+        auto const& taunts = guardian->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT);
+        if (std::any_of(taunts.begin(), taunts.end(),
+                        [this](AuraEffect const* taunt)
+                        {
+                            Unit* caster = taunt->GetCaster();
+                            Player* tank = caster ? caster->ToPlayer() : nullptr;
+                            return tank && tank != bot && PlayerbotAI::IsTank(tank);
+                        }))
+            continue;
+
         if (Taunt(guardian))
         {
             if (RaidObs::Active())
@@ -2170,8 +2189,8 @@ bool YoggSaronRoarAuraAction::Execute(Event /*event*/)
 bool YoggSaronRoarAuraMasteryAction::Execute(Event /*event*/)
 {
     // Claimed only with the aura up and the button ready, so a paladin that can't press never takes the
-    // roar off one that can.
-    if (!botAI->HasAura("concentration aura", bot, false, true))
+    // roar off one that can. By the application: a copy left without effects still counts.
+    if (!bot->HasAura(SPELL_CONCENTRATION_AURA, bot->GetGUID()))
     {
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "yogg.roar", "noconc");

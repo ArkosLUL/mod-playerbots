@@ -552,6 +552,14 @@ constexpr float ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE = 20.0f;
 constexpr float ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT = 30.0f;
 constexpr float ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT = 10.0f;
 
+// Phase 3 area spells need this many units worth hitting within the area trigger's 8 yd of the target:
+// Yogg, a leftover tentacle, a Guardian over the floor that a tank holds. The trigger counts anything,
+// and Yogg's 30 yd reach puts him in every count at the pile, so a lone Guardian got Blizzard and Seed
+// of Corruption where a single-target spell takes it to the floor faster.
+constexpr float ULDUAR_YOGG_SARON_PHASE_3_AREA_RADIUS = 8.0f;
+constexpr uint32 ULDUAR_YOGG_SARON_PHASE_3_AREA_MIN_WORTH = 3;
+constexpr float ULDUAR_YOGG_SARON_COMBAT_REACH = 30.0f;
+
 // A non-tank starts on an Immortal Guardian only while its own threat on it is under the start share of
 // the tank holding it, and lets go past the keep share. Taking one over needs 110% in melee and 130% at
 // range. Without a gate one pull put 36 swings of 26-41k on non-tanks, 11 of them killing blows.
@@ -626,6 +634,9 @@ constexpr float ULDUAR_YOGG_SARON_BEACON_DANGER_HEALTH_PCT = 40.0f;
 // holds its victim for itself.
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_RETURN_MS = 8000;
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_EXTERNAL_CLAIM_MS = 8000;
+// A tank holding the pile gets cover from healed Guardians under this health. Every tank death in two
+// pulls came 17-32 s after a heal, under three or four Guardians at 84-100% with no external on it.
+constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_COVER_PCT = 50.0f;
 // Hunter drags. Distracting Shot is a 6 s taunt against a 10 s mark, so it goes out with this much of the
 // mark left and still covers the heal 0.3-1.1 s after it. Feign Death if the Guardian is still on the
 // hunter this long after the release.
@@ -702,14 +713,16 @@ extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 // navprobe with straight paths from the ranged spot, 21.6-25.2 yd from the melee spot.
 extern const std::vector<Position> ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS;
 
-// Where a Shadow Beacon marked Guardian is walked to without Thorim, whichever side the pile isn't on.
-// The heal goes on every Guardian within 20 yd of the marked one, once, as it's cast, and holds it at
-// full for 20 s. The tank and the Guardians on him drift up to ~13 yd off the melee spot, and from
-// 27 yd out that left two pile Guardians 18-20 yd from the casters, both reset. So ~39 yd out:
+// Where a Shadow Beacon marked Guardian is walked to without Thorim, one spot per marked Guardian. The
+// heal goes on every Guardian within 20 yd of the marked one, once, as it's cast, and holds it at full
+// for 20 s. The tank and the Guardians on him drift up to ~13 yd off the melee spot, and from 27 yd out
+// that left two pile Guardians 18-20 yd from the casters, both reset. So north and south are ~39 yd out:
 // PATHFIND_NORMAL from the melee spot by navprobe, 39 yd from Yogg's middle, 48-50 from the ranged
-// spot, 28-30 from the nearest Sanity Well, still in heal range of the melee spot.
+// spot, 28-30 from the nearest Sanity Well, still in heal range of the melee spot. North-east is 33.7 yd
+// from the melee spot, 48 from Yogg's middle, 24 from the ranged spot and 34 from north, PATHFIND_NORMAL.
 extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH;
 extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH;
+extern const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST;
 
 // Where a hunter stands to pull a marked Guardian with Distracting Shot, on the line to each drag spot
 // but inside the shot's 35 yd. A Guardian that walks to the hunter stops ~29 yd off the pile. On the floor
@@ -1150,7 +1163,7 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim);
 // Whether the bot holds a drag claim. A read of the claim map only, no sweep.
 bool YoggSaronBeaconDragging(Player* bot);
 
-// The drag spot this beacon's draggers share, picked at the first claim, and the hunter spot on that side.
+// The drag spot of this bot's own drag, picked when it claimed, and the hunter spot on that side.
 Position const& YoggSaronBeaconDragSpot(Player* bot);
 Position const& YoggSaronBeaconHunterSpot(Player* bot);
 
@@ -1161,9 +1174,11 @@ Unit* YoggSaronBeaconReturning(Player* bot);
 // A Guardian the beacon heal is on, or still marked, that is hitting `victim` from the danger line up,
 // or nullptr.
 Unit* YoggSaronHealedGuardianOn(PlayerbotAI* botAI, Player* victim);
+uint32 YoggSaronHealedGuardiansOn(Player* victim);
 
 // Who the next external against a healed Guardian goes to: draggers first, then the lowest, humans too.
-// Skips a bot whose own button is ready or running and anyone another external already holds.
+// A tank holding the pile only under ULDUAR_YOGG_SARON_BEACON_TANK_COVER_PCT. Skips a bot whose own
+// button is ready or running and anyone another external already holds.
 Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI);
 bool ClaimYoggSaronBeaconExternal(PlayerbotAI* botAI, Player* victim);
 

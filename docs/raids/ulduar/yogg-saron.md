@@ -1777,7 +1777,11 @@ Guardian's spawn is a Simple Teleport (64195) within 3 s of its first sample, el
 every Guardian casts it again at the wipe. `--phase3` also gives each healed Guardian's holder, when a
 tank had it and what it did to non-tanks (hits, deaths, buttons, hunter shots), each Deafening Roar's
 silences against 64364 and Aura Mastery, and the damage split by role and Guardian health band;
-`--brain` a brain hold line per wave.
+`--brain` a brain hold line per wave. `--phase3` also: station arrival per role and for the brain team
+(time to the 15 yd station radius, Nitro, `released` time), each Guardian's first-flip cause (`dot` /
+`aoe` / `direct` / `heal threat` / `none`, from the new victim's casts at it in the 3 s before), each
+beacon's stacked heals, each tank's 20 s under a heal (taken / healed / buttons / death) and the raid's
+damage on the healed ones, and area casts by worth-hitting count with `yogg.p3area`.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
@@ -1978,9 +1982,8 @@ per stack at `healthPct / 10` capped at 9, so an untouched guardian swings at ×
 85% starts Drain Life (64160, 5 s channel) — 16,665 damage and **166,650 self-heal, 31.6% of its own
 max health**, every ~14.5 s on a *random* player within 40 yd with no LOS and no threat component. So
 the phase is: **keep them piled and low, interrupt Drain Life, drag beacons clear, Heroism** — the guides'
-plan. The pile needs no area code of its own: a bot on a piled Guardian fires its class area attacks
-(`AoeTrigger`, 3 within 8 yd of the target), and those reach Yogg too, since `Spell.cpp`'s area check
-adds the target's combat reach (Yogg's 30) for a player-controlled caster only. Two Freya-only wipes:
+plan. Area spells on the pile reach Yogg, since `Spell.cpp`'s area check adds the target's combat reach
+(Yogg's 30) for a player-controlled caster only. Two Freya-only wipes:
 Guardians at 90%+ health in 51% / 64% of samples and Weakened 13% / 1%, Yogg 12.7% / 3.8% of the
 raid's damage, the bot tank dead at +63 / +67 s. **Freya-only is 0-light here**: the guides make it a
 race on Yogg (Stars: tanks pick up adds, melee on Yogg; TrueWoW: Guardians kept low, tanked by him).
@@ -1990,19 +1993,26 @@ Yogg 25 has 44.0M, so phase 3 is 13.2M; a Guardian 425k; full swings ~17× a Wea
 (`ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT`). Bringing each to Weakened took 52% / 75% of two pulls'
 damage against Yogg's 17% / 3% (he went 29.97 → 26.14% in 100 s, → 27.82% in 145 s). Under the floor a
 Guardian is allowed only while Lunatic Gaze (64163) is up and it sits 65° or more off Yogg, the arc the
-gaze node angles for; one carrying 64486 / 64468 is skipped, its heal outruns any damage; with Thorim
-the 10% rule stays. Pets on the Guardian left are stopped so they follow the owner.
+gaze node angles for; with Thorim the 10% rule stays. **A beacon-healed one (64486 / 64468) is fair
+game, by the user's choice**, though most of the damage heals back: skipped, three full ones sat on the
+tanks for the 20 s heal and killed a tank 17-32 s after it in both of two pulls. Pets on the Guardian left are stopped so they follow the owner.
 
 - **Marked Guardians are not dps targets** (`IsAllowedTarget`): the heal resets them whatever the raid
   does. With Thorim they stay tier 1.
 - **`yogg-saron beacon drag`** (`ACTION_RAID + 4`, over guardian control). The heal is one application:
   the 10 s mark ends, the entry reverts to 33988 and Yogg's 64467 missile (30 yd/s) sets it off
   0.3-1.1 s later on every ally within 20 yd of the Guardian. The pile tank can't separate a marked one,
-  the pile follows whoever holds it, so a second bot taunts it off and walks it to a drag spot: north
-  (1983.68, 13.27, 327.472) or south (1993.62, −62.23, 327.625), navprobe PATHFIND_NORMAL 39.3 / 39.8 yd
-  from the melee spot, 39.0 from Yogg, 47.6 / 50.1 from the ranged spot, 28-30 from the nearest well,
-  in heal range of the melee spot. **The side is the one whose nearest unmarked Guardian is farther**,
-  latched at a beacon's first claim so every dragger walks it (`yogg.beaconspot`). The heal is an area
+  the pile follows whoever holds it, so a second bot taunts it off and walks it to a lane of its own:
+  north (1983.68, 13.27, 327.472) or south (1993.62, −62.23, 327.625), navprobe PATHFIND_NORMAL 39.3 /
+  39.8 yd from the melee spot, 39.0 from Yogg, 47.6 / 50.1 from the ranged spot, 28-30 from the nearest
+  well, in heal range of the melee spot; or north-east (2017.05, 5.26, 328.781), PATHFIND_NORMAL 33.7 yd
+  from the melee spot, 48 from Yogg, 24 from the ranged spot, 34 from north. **Each claim takes the free
+  lane whose nearest unmarked Guardian is farthest**, north and south before north-east on a tie (its
+  path leaves the pile 55° off north's), then the nearer (`beaconDrags`' lane, `yogg.beaconspot`).
+  64486 stacks per caster (`SPELL_ATTR3_DOT_STACKING_RULE`), so marks dragged to one latched side healed
+  each other, up to 112.5k/s each: two pulls' second beacons had every marked pair inside 20 yd. West
+  and south-west were rejected (53 yd walks round Yogg), east (2028.3, −25.6) sat 11.5 yd from the
+  ranged spot, south-east (2010.2, −50.7) 20.2 from south. The heal is an area
   aura applied once, at the cast, so whatever stands in reach then keeps it 20 s. From the old 27 yd
   spots all three draggers took the nearer north one; the tank stood 5.8 yd off the melee spot toward
   it, his two Guardians 7.2 / 12.9 yd out, 17.7-20.1 from the casters, and three stacked heals took
@@ -2030,9 +2040,13 @@ off cooldown,
   Ice Block are blocked on such a victim: an immune victim sheds aggro (`ThreatManager.cpp:123-134`).
   After the release the dragger walks back to the melee spot until a tank has it or 8 s pass
   (`return`), since the tank is ~39 yd away and a taunt reaches 30, and guardian control taunts loose
-  Guardians highest health first.
-- **Hunters drag only marks nobody else can**, the Stars method. Spots north (1986.0, 7.63, 326.797)
-  and south (1994.44, −55.65, 326.394), navprobe PATHFIND_NORMAL 33.2 / 33.1 yd from the melee spot,
+  Guardians highest health first. **A tank holding the pile is covered too**: its own button with two
+  healed Guardians on it or one under 50% (`BEACON_TANK_COVER_PCT`), an external under 50%, draggers
+  still first. Before, no tank got either: Dragon took 225k against 174k healed in 12 s under four
+  Guardians at 84-91%, and the bot tank's Hand of Reckoning sat on cooldown for most swings.
+- **Hunters drag only marks nobody else can**, the Stars method, on their claim's lane: spots north
+  (1986.0, 7.63, 326.797) and south (1994.44, −55.65, 326.394), north-east its own drag spot, navprobe
+  PATHFIND_NORMAL 33.2 / 33.1 yd from the melee spot,
   42 / 44 from the ranged spot, inside Distracting Shot's 35 yd (6 s taunt, 8 s cooldown, no Guardian
   immunity): shot with ≤5 s of the mark left, so it covers the heal. No damage on it before then (the
   multiplier; Feign Death and Deterrence blocked), and Feign Death if it is still on the hunter 1 s
@@ -2045,7 +2059,33 @@ off cooldown,
   paladin with Aura Mastery ready by the roar, not dragging, its own Concentration up, then GUID, so
   Holylight and Justice alternate. It switches to Concentration 10 s ahead (`ACTION_RAID + 1`, other
   auras blocked) and presses during the cast (`ACTION_EMERGENCY + 8`, one per roar, others after
-  500 ms); class nodes are off Aura Mastery meanwhile. Probed as `yogg.roar`.
+  500 ms); class nodes are off Aura Mastery meanwhile. Probed as `yogg.roar`. Both read the paladin's
+  own Concentration by its application (`HasAura(19746, guid)`, see
+  [pitfalls](../../engine/pitfalls.md)): read by name, the turn paladin's effectless copy was invisible,
+  it recast the aura five times, never pressed, and the second roar silenced 22 in both pulls.
+- **Nitro Boosts on the phase 3 station walk** over 40 yd (`NITRO_MIN_WALK`) when ready
+  (`yogg.nitro station`); nobody walks far after. The brain team surfaces at (1924.7, −25.4, 328.5),
+  74 / 94 yd from the melee / ranged spot, and arrived +6-71 s; a released ranged walk boosts once its
+  leftover dies.
+- **No non-tank spell on a Guardian the threat gate refuses** (`YoggSaronHeldTargetCastMultiplier`,
+  kicks exempt): the "on attacker" DoTs skip the resolver. A leftover Crusher at 28.4% held one pull's
+  ranged 38 yd west of Yogg (Crusher first, station `released` 11 s), on the Guardian spawn ring (a
+  random angle, 38-48 yd out). The first one left its 4 s root, took Corruption and Immolate, and
+  one-shot both warlocks (51k) at +7.3 / +9.4 s with both tanks 56+ yd away.
+- **The bot tank skips a Guardian already carrying another tank's taunt** (`SPELL_AURA_MOD_TAUNT`):
+  both tanks taunted the same fresh one together three times a pull. Every Guardian still left its
+  first tank, 26 of 26 at a median +5 s.
+- **Area spells need three units worth hitting, by the user's choice** (`YoggSaronPhase3AreaMultiplier`).
+  `AoeTrigger` counts any attacker within 8 yd of the target, distance minus the unit's size, so Yogg
+  counts from 38 yd and a lone Guardian got Seed of Corruption (63 of 148) and Volley (56 of 120), each
+  target taking less than from a single-target spell. Held: blizzard, flamestrike, blast wave, dragon's
+  breath, cone of cold, hurricane, typhoon, volley, mind sear, rain of fire, both seed of corruption
+  actions, fan of knives, swipe (cat), death and decay, blood boil, cleave, fire nova, magma totem; each
+  needs `PHASE_3_AREA_MIN_WORTH` (Yogg, leftover tentacles, Guardians over the floor a tank holds; with
+  Thorim over 10%, marked ones too) within 8 yd of its target, Mind Sear not counting its own, and no
+  Guardian there failing the threat gate (`yogg.p3area` `few` / `fresh` / `allowed`). Divine Storm,
+  Whirlwind, Chain Lightning, Starfall, Blade Flurry, Sweeping Strikes, Multi-Shot and Howling Blast hit
+  the main target in full and stay. Before: 195 of 337 and 282 of 406 bot area casts had fewer than 3.
 - **A Brain Link walk stops at Crush range** (25 yd) of a live unstunned Crusher: one walked a bot 18 yd
   from a leftover as phase 3 began, and the cone killed it.
 - **Drain Life is kicked on purpose.** The interrupt node's casters include Immortal Guardians

@@ -84,11 +84,26 @@ const std::vector<Position> ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS = {
     Position(2016.95f, -39.03f, 327.678f), Position(2010.26f, -0.55f, 327.291f)};
 const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH = Position(1983.68f, 13.27f, 327.472f);
 const Position ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH = Position(1993.62f, -62.23f, 327.625f);
+const Position ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST = Position(2017.05f, 5.26f, 328.781f);
 const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH = Position(1986.0f, 7.63f, 326.797f);
 const Position ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH = Position(1994.44f, -55.65f, 326.394f);
 
 namespace
 {
+struct YoggSaronBeaconLane
+{
+    Position const* drag;
+    Position const* hunter;
+    char const* name;
+};
+
+// North-east is inside Distracting Shot's reach of the melee spot, so it is its own hunter spot.
+constexpr uint8 YOGG_SARON_BEACON_LANE_NORTHEAST = 2;
+std::array<YoggSaronBeaconLane, 3> const YOGG_SARON_BEACON_LANES = {
+    {{&ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH, &ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH, "north"},
+     {&ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH, &ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH, "south"},
+     {&ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST, &ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST, "northeast"}}};
+
 // Raid-wide answers folded once per instance, and the per-bot exposure probes paced off the same
 // state. Every number the last two attempts were read from came out of a throwaway script over raw
 // snapshot rows, which is the definition of a missing probe.
@@ -151,16 +166,15 @@ struct YoggSaronEncounterState
     uint32 lastGuardianDeathMs = 0;
 
     // Phase 3 without Thorim: who drags which Shadow Beacon marked Guardian, keyed by the Guardian, and
-    // when its mark ended, 0 while it lasts. See YoggSaronBeaconDragGuardian.
+    // when its mark ended, 0 while it lasts, and the lane it took in YOGG_SARON_BEACON_LANES. See
+    // YoggSaronBeaconDragGuardian.
     struct BeaconDrag
     {
         ObjectGuid dragger;
         uint32 markEndedMs = 0;
+        uint8 lane = 0;
     };
     std::unordered_map<ObjectGuid, BeaconDrag> beaconDrags;
-    // The side this beacon's draggers share, set at the first claim and cleared with the last.
-    bool beaconDragSideSet = false;
-    bool beaconDragNorth = true;
     // Released drags, keyed by the Guardian: who dragged it and when the heal let it go. The dragger walks
     // it back to the tank from here, and a hunter feigns off one that stayed on it.
     struct BeaconReturn
@@ -1443,7 +1457,6 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
         state.beaconDrags.clear();
         state.beaconReturns.clear();
         state.beaconExternalClaims.clear();
-        state.beaconDragSideSet = false;
         return nullptr;
     }
 
@@ -1478,9 +1491,6 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
         it = getMSTimeDiff(it->second.releasedMs, now) > ULDUAR_YOGG_SARON_BEACON_RETURN_MS
                  ? state.beaconReturns.erase(it)
                  : std::next(it);
-
-    if (state.beaconDrags.empty())
-        state.beaconDragSideSet = false;
 
     for (auto const& [guid, drag] : state.beaconDrags)
         if (drag.dragger == bot->GetGUID())
@@ -1563,35 +1573,44 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
 
         if (claim)
         {
-            // The side away from the pile, not the one nearer the dragger, so the pile stays out of the
-            // heal. Once per beacon, so every dragger walks the same way.
-            if (!state.beaconDragSideSet)
+            // A lane of its own per mark. The heal stacks per caster on every Guardian within 20 yd, so
+            // marks dragged to one spot healed each other at up to 112.5k/s. Free lanes first, then the
+            // one furthest from the pile, north and south before north-east on a tie since its path
+            // leaves the pile only 55 degrees off north's, then the nearer.
+            std::array<bool, YOGG_SARON_BEACON_LANES.size()> taken{};
+            for (auto const& [guid, drag] : state.beaconDrags)
+                taken[drag.lane] = true;
+
+            auto const clearance = [&unmarked](Position const& spot)
             {
-                auto const clearance = [&unmarked](Position const& spot)
+                float nearest = std::numeric_limits<float>::max();
+                for (Creature* guardian : unmarked)
+                    if (guardian->IsAlive())
+                        nearest = std::min(nearest, guardian->GetExactDist2d(spot));
+
+                return nearest;
+            };
+
+            uint8 lane = 0;
+            std::tuple<bool, float, bool, float> best;
+            for (uint8 index = 0; index < YOGG_SARON_BEACON_LANES.size(); ++index)
+            {
+                Position const& spot = *YOGG_SARON_BEACON_LANES[index].drag;
+                auto const key = std::make_tuple(taken[index], -clearance(spot),
+                                                 index == YOGG_SARON_BEACON_LANE_NORTHEAST, bot->GetExactDist2d(spot));
+                if (!index || key < best)
                 {
-                    float nearest = std::numeric_limits<float>::max();
-                    for (Creature* guardian : unmarked)
-                        if (guardian->IsAlive())
-                            nearest = std::min(nearest, guardian->GetExactDist2d(spot));
-
-                    return nearest;
-                };
-
-                float const north = clearance(ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH);
-                float const south = clearance(ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH);
-                state.beaconDragNorth = unmarked.empty()
-                                            ? bot->GetExactDist2d(ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH) <=
-                                                  bot->GetExactDist2d(ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH)
-                                            : north >= south;
-                state.beaconDragSideSet = true;
-
-                if (RaidObs::Active())
-                    RaidObs::NoteDerived(bot, "yogg.beaconspot", state.beaconDragNorth ? "north" : "south");
+                    lane = index;
+                    best = key;
+                }
             }
 
-            state.beaconDrags[marked[i]->GetGUID()] = {bot->GetGUID(), 0};
+            state.beaconDrags[marked[i]->GetGUID()] = {bot->GetGUID(), 0, lane};
             if (RaidObs::Active())
+            {
+                RaidObs::NoteDerived(bot, "yogg.beaconspot", YOGG_SARON_BEACON_LANES[lane].name);
                 RaidObs::NoteDerived(bot, "yogg.beacondrag", "claim");
+            }
         }
 
         return marked[i];
@@ -1609,17 +1628,21 @@ bool YoggSaronBeaconDragging(Player* bot)
     return false;
 }
 
-Position const& YoggSaronBeaconDragSpot(Player* bot)
+namespace
 {
-    return YoggSaronStateFor(bot).beaconDragNorth ? ULDUAR_YOGG_SARON_BEACON_DRAG_NORTH
-                                                  : ULDUAR_YOGG_SARON_BEACON_DRAG_SOUTH;
-}
+YoggSaronBeaconLane const& YoggSaronBeaconLaneOf(Player* bot)
+{
+    for (auto const& [guid, drag] : YoggSaronStateFor(bot).beaconDrags)
+        if (drag.dragger == bot->GetGUID())
+            return YOGG_SARON_BEACON_LANES[drag.lane];
 
-Position const& YoggSaronBeaconHunterSpot(Player* bot)
-{
-    return YoggSaronStateFor(bot).beaconDragNorth ? ULDUAR_YOGG_SARON_BEACON_HUNTER_NORTH
-                                                  : ULDUAR_YOGG_SARON_BEACON_HUNTER_SOUTH;
+    return YOGG_SARON_BEACON_LANES.front();
 }
+}  // namespace
+
+Position const& YoggSaronBeaconDragSpot(Player* bot) { return *YoggSaronBeaconLaneOf(bot).drag; }
+
+Position const& YoggSaronBeaconHunterSpot(Player* bot) { return *YoggSaronBeaconLaneOf(bot).hunter; }
 
 Unit* YoggSaronBeaconReturning(Player* bot)
 {
@@ -1668,6 +1691,19 @@ Unit* YoggSaronHealedGuardianOn(PlayerbotAI* /*botAI*/, Player* victim)
     return nullptr;
 }
 
+uint32 YoggSaronHealedGuardiansOn(Player* victim)
+{
+    if (!victim)
+        return 0;
+
+    uint32 count = 0;
+    for (Unit* attacker : victim->getAttackers())
+        if (attacker->GetVictim() == victim && IsYoggSaronHealedGuardian(attacker))
+            ++count;
+
+    return count;
+}
+
 Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -1688,7 +1724,8 @@ Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI)
             continue;
 
         bool const dragger = YoggSaronBeaconDragging(member) || YoggSaronBeaconReturning(member);
-        if (PlayerbotAI::IsTank(member) && !dragger)
+        if (PlayerbotAI::IsTank(member) && !dragger &&
+            member->GetHealthPct() >= ULDUAR_YOGG_SARON_BEACON_TANK_COVER_PCT)
             continue;
 
         auto const claim = state.beaconExternalClaims.find(member->GetGUID());
