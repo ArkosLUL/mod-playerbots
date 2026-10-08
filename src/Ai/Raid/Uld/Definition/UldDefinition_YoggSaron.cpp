@@ -145,9 +145,16 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Node<YoggSaronBeaconDefensiveTrigger, YoggSaronBeaconDefensiveAction>(ACTION_EMERGENCY + 6);
     e.Node<YoggSaronBeaconExternalTrigger, YoggSaronBeaconExternalAction>(ACTION_EMERGENCY + 5);
 
+    // Under the beacon pair, which a tank's own button and the externals answer first.
+    e.Node<YoggSaronTankLayOnHandsTrigger, YoggSaronTankLayOnHandsAction>(ACTION_EMERGENCY + 4);
+
     // Over everything: the roar's cast is 2.3 s and Aura Mastery is off the global cooldown. The aura it
     // needs goes up ahead of time, as a raid node.
     e.Node<YoggSaronRoarAuraMasteryTrigger, YoggSaronRoarAuraMasteryAction>(ACTION_EMERGENCY + 8);
+
+    // Above the roar press, so the engine is right before anything else runs. Only does anything on the
+    // non-combat engine, which a healer with no target always falls back to.
+    e.Node<YoggSaronHealerCombatEngineTrigger, YoggSaronHealerCombatEngineAction>(ACTION_EMERGENCY + 9);
     e.Node<YoggSaronRoarAuraTrigger, YoggSaronRoarAuraAction>(ACTION_RAID + 1);
     // Level with the phase 2 dodge and above the dps resolver: where the bot stands has to be settled
     // before the reach node is asked to close on the target from there.
@@ -294,6 +301,31 @@ void DefineYoggSaron(EncounterBuilder& e)
     // A hunter's drag dies with Feign Death, and Deterrence pacifies the shot.
     e.Block("yogg-saron beacon hunter hold", Role::Any, YoggSaronBeaconHunterHold, 0,
             {"feign death", "deterrence"});
+
+    // Its hop answers a ray at combat priority, which a forced walk refuses, and it outranks the Yogg dodge,
+    // so near a ray nothing moved the bot. Its spots also sat beside the ray.
+    e.Block("yogg-saron death ray avoid aoe hold", Role::Any, YoggSaronDeathRayNear, Family::AvoidAoe);
+
+    // The holder of a tank swap keeps its threat off the pile so the Guardians stay with the taker. Holy
+    // Shield and Shield of Righteousness stay.
+    e.Block("yogg-saron tank swap hold", Role::Tank, YoggSaronTankShedding, 0,
+            {"consecration", "hammer of the righteous", "avenger's shield", "hand of reckoning",
+             "righteous defense"});
+
+    // Avenging Wrath locks Divine Protection for 30 s: one tank pressed it and had no button left when the
+    // pile killed it.
+    e.Block("yogg-saron tank wrath hold", Role::Tank, YoggSaronTankWrathHeld, 0, {"avenging wrath"});
+
+    // Moves 30% of a dps's damage onto a tank already under the pile.
+    e.Block("yogg-saron tank sacrifice hold", Role::Tank, YoggSaronInPhase3, 0, {"hand of sacrifice on party"});
+
+    // Kept for the tanks: every pull spent all four on dps in phase 1. The tank node casts it directly.
+    e.Block("yogg-saron lay on hands hold", Role::Any, YoggSaronEncounterActive, 0, {"lay on hands on party"});
+    e.Block("yogg-saron lay on hands hold", Role::NonTank, YoggSaronEncounterActive, 0, {"lay on hands"});
+    e.Block("yogg-saron lay on hands hold", Role::Tank, YoggSaronBeforePhase3, 0, {"lay on hands"});
+
+    // A healer with no target is dropped straight back to the non-combat engine.
+    e.Block("yogg-saron healer target hold", Role::Heal, YoggSaronHealerTargetless, 0, {"drop target"});
 
     e.Multiplier<YoggSaronPhase1WalkGuardMultiplier>(Family::AnyMovement);
     e.Multiplier<YoggSaronAntiFearTotemGuardMultiplier>(Family::Spell);

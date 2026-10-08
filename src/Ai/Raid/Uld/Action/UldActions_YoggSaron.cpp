@@ -161,7 +161,8 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
     // Claim the tick without touching the motion master while the step is in flight, so combat
     // movement cannot drag the bot back into what it just left and the spline survives.
     if (latched && stillClear(set.hazards, set.clear, heldSpot) && !bot->IsMovementPreventedByCasting() &&
-        bot->GetExactDist2d(heldSpot.GetPositionX(), heldSpot.GetPositionY()) > CONTACT_DISTANCE)
+        bot->GetExactDist2d(heldSpot.GetPositionX(), heldSpot.GetPositionY()) > CONTACT_DISTANCE &&
+        HeldRouteAcceptable(heldSpot.GetPositionX(), heldSpot.GetPositionY()))
         return true;
 
     heldSpotMs = 0;
@@ -373,6 +374,7 @@ bool YoggSaronPhase1StationAction::Execute(Event /*event*/)
 bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
 {
     inDeathRay = false;
+    rays.clear();
 
     // Nothing in the core despawns the Guardians phase 1 leaves alive and JustDied still fires the
     // nova, so the blast outlives the phase that spawned them. In the fallback too, for the same
@@ -384,14 +386,15 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
         set.fallback.emplace_back(guardian->GetPosition(), ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
     }
 
-    std::list<Creature*> rays;
-    bot->GetCreatureListWithEntryInGrid(rays, NPC_DEATH_RAY,
+    std::list<Creature*> found;
+    bot->GetCreatureListWithEntryInGrid(found, NPC_DEATH_RAY,
                                         SearchRadius() + ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS);
-    for (Creature* ray : rays)
+    for (Creature* ray : found)
     {
         if (!ray->IsAlive())
             continue;
 
+        rays.push_back(ray->GetPosition());
         set.hazards.emplace_back(ray->GetPosition(), ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS);
         inDeathRay = inDeathRay || bot->GetExactDist2d(ray) < ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS;
     }
@@ -444,7 +447,13 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
 
 bool YoggSaronPhase2SpacingAction::RouteAcceptable(float x, float y) const
 {
-    return YoggSaronRouteClearOfBody(bot, x, y);
+    // Picking a spot past a ray walked bots through its lane, three Death Ray deaths in two pulls.
+    return YoggSaronRouteClearOfBody(bot, x, y) && YoggSaronRouteClearOfDeathRays(bot, rays, x, y);
+}
+
+bool YoggSaronPhase2SpacingAction::HeldRouteAcceptable(float x, float y) const
+{
+    return YoggSaronRouteClearOfDeathRays(bot, rays, x, y);
 }
 
 bool YoggSaronIllusionFacingAction::Collect(HazardSet& set)
@@ -1154,7 +1163,7 @@ bool YoggSaronDarkVolleyInterruptAction::CastClassInterrupt(Unit* target)
 
     for (char const* spell : YoggSaronInterruptSpellsFor(bot, target))
     {
-        if (botAI->CanCastSpell(spell, target) && botAI->CastSpell(spell, target))
+        if (YoggSaronInterruptReady(botAI, spell, target) && botAI->CastSpell(spell, target))
         {
             ClaimYoggSaronInterrupt(bot, target);
             return true;
@@ -1887,6 +1896,19 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
             atSpot.push_back(unit);
     }
 
+    if (Player* holder = YoggSaronTankSwapTake(botAI))
+        if (TakeFrom(holder))
+            return true;
+
+    // The holder of a swap leaves loose ones to the taker, or its taunts pull the pile straight back, and
+    // so does a low tank while the other one is healthy.
+    bool const shedding = YoggSaronTankShedding(botAI);
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.tankshed", shedding ? "shed" : "hold");
+
+    if (shedding || YoggSaronTankLowHold(bot))
+        loose.clear();
+
     // Loose ones before the leash: a taunt is a cast, not a walk, and the Guardian is already heading
     // for a healer or a ranged while the tank would still be walking home. Heal threat pulls a fresh one
     // off its threatless first victim about a second after it spawns. Highest health first: a full or
@@ -2037,6 +2059,33 @@ bool YoggSaronGuardianControlAction::Defend(Unit* guardian)
         return false;
 
     return botAI->CastSpell("righteous defense", victim);
+}
+
+bool YoggSaronGuardianControlAction::TakeFrom(Player* holder)
+{
+    // Up to three of the holder's attackers in one cast.
+    if (bot->getClass() == CLASS_PALADIN && botAI->CanCastSpell("righteous defense", holder) &&
+        botAI->CastSpell("righteous defense", holder))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.tankhold", "swap defense");
+
+        return true;
+    }
+
+    Unit* highest = nullptr;
+    for (Unit* attacker : holder->getAttackers())
+        if (attacker->GetVictim() == holder && IsYoggSaronHoldableGuardian(attacker) &&
+            (!highest || attacker->GetHealthPct() > highest->GetHealthPct()))
+            highest = attacker;
+
+    if (!highest || !Taunt(highest))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.tankhold", "swap taunt");
+
+    return true;
 }
 
 bool YoggSaronSanityConservationAction::Execute(Event /*event*/)
@@ -2237,6 +2286,28 @@ bool YoggSaronBeaconExternalAction::Execute(Event /*event*/)
         RaidObs::NoteDerived(bot, "yogg.dragext", external);
 
     return botAI->CastSpell(external, victim);
+}
+
+bool YoggSaronTankLayOnHandsAction::Execute(Event /*event*/)
+{
+    Player* tank = YoggSaronTankLayOnHandsTarget(botAI);
+    if (!tank || !ClaimYoggSaronTankLayOnHands(botAI, tank) || !botAI->CastSpell("lay on hands", tank))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.tankloh", tank->GetName());
+
+    return true;
+}
+
+bool YoggSaronHealerCombatEngineAction::Execute(Event /*event*/)
+{
+    botAI->ChangeEngine(BOT_STATE_COMBAT);
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.healerengine", "combat");
+
+    return true;
 }
 
 bool YoggSaronNovaRaidCooldownAction::Execute(Event /*event*/)

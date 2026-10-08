@@ -519,6 +519,16 @@ oscillating against hazards that never stop moving:
   the action clear `last movement` before moving. Rays only: a Crush wedge or the ring cutting in too
   would trade every tick with the detour.
 
+- **A Death Ray dodge never walks closer to a ray.** A ray turns every 1.6 s at ~5.5 yd/s, so a spot
+  clear of its current position can sit across its lane: two pulls lost three bots to dodges that
+  picked a spot past the ray or passed 5.9 yd from it. `RouteAcceptable` (and the held-spot latch, each
+  tick) rejects a walk whose closest approach to any ray is under min(current distance, 14 yd)
+  (`YoggSaronRouteClearOfDeathRays`). The generic `avoid aoe` is blocked within 14 yd of a live ray on
+  the platform (`yogg-saron death ray avoid aoe hold`): at relevance 90 over the dodge's 63 it took the
+  tick, its combat-priority hop was refused behind any forced walk, and its spots sat beside the ray.
+  Other walks (body detour, portal walk, Brain Link) still ignore rays; `--crush` names the last walk
+  before each hit.
+
 **Yogg-Saron was the only anchored Ulduar encounter with no movement guard.** Iron Assembly, Mimiron
 and Thorim each zero `ReachTargetAction` while a positioning node owns the bot
 ([../README.md](../README.md)); Yogg had a dps-target guard and a displacement guard, neither of which
@@ -1781,7 +1791,14 @@ silences against 64364 and Aura Mastery, and the damage split by role and Guardi
 (time to the 15 yd station radius, Nitro, `released` time), each Guardian's first-flip cause (`dot` /
 `aoe` / `direct` / `heal threat` / `none`, from the new victim's casts at it in the 3 s before), each
 beacon's stacked heals, each tank's 20 s under a heal (taken / healed / buttons / death) and the raid's
-damage on the healed ones, and area casts by worth-hitting count with `yogg.p3area`.
+damage on the healed ones, and area casts by worth-hitting count with `yogg.p3area` (by centre
+distance, so a lower bound: the module takes off each unit's size, several yards on an Empowered
+Guardian, which is why 100 of 440 casts read under 3 though every one followed `allowed`). Also: full
+Drain Lifes with a bot kick ready and in range and `yogg.kicknudge`; Guardians on each tank per 10 s
+(all / 30%+), each tank swap with both tanks' counts at +0/4/8 s, taunts back on the other tank 4 s
+later, Misdirection targets, each tank's buttons with its health, every Lay on Hands; every Aura Mastery
+per roar; per healer mana at +0/60/120/180 s, engine switches, gaze node fires by engine and mana
+cooldowns. `--crush` gives each Death Ray hit's last walk and whether the dodge or `avoid aoe` tried.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
@@ -2040,10 +2057,17 @@ off cooldown,
   Ice Block are blocked on such a victim: an immune victim sheds aggro (`ThreatManager.cpp:123-134`).
   After the release the dragger walks back to the melee spot until a tank has it or 8 s pass
   (`return`), since the tank is ~39 yd away and a taunt reaches 30, and guardian control taunts loose
-  Guardians highest health first. **A tank holding the pile is covered too**: its own button with two
-  healed Guardians on it or one under 50% (`BEACON_TANK_COVER_PCT`), an external under 50%, draggers
-  still first. Before, no tank got either: Dragon took 225k against 174k healed in 12 s under four
-  Guardians at 84-91%, and the bot tank's Hand of Reckoning sat on cooldown for most swings.
+  Guardians highest health first. **A tank holding the pile is covered too**, by health only: its own
+  button with a healed Guardian on it under 60% (`BEACON_TANK_DEFENSIVE_PCT`, the user's number), an
+  external under 50% (`BEACON_TANK_EXTERNAL_PCT`), draggers still first. Counting two healed ones at
+  any health spent Divine Protection at full health in one beacon and left none for the next (211k
+  taken, down to 31.7%). Before any cover: Dragon took 225k against 174k healed in 12 s under four
+  Guardians at 84-91%. The external skips a bot whose own button `ReadyTankDefensive` names, which now
+  counts the Avenging Wrath marker (61987, 30 s) as a lock on Divine Protection like Forbearance: the
+  immunity script refuses both (`spell_pal_immunities`), and an Avenging Wrath at 11:31 left a tank
+  with neither its button nor an external when the pile killed it. Tanks give no external here, and
+  `hand of sacrifice on party` is blocked for tanks in phase 3: it moved 30% of a dps's damage onto a
+  tank under the pile.
 - **Hunters drag only marks nobody else can**, the Stars method, on their claim's lane: spots north
   (1986.0, 7.63, 326.797) and south (1994.44, −55.65, 326.394), north-east its own drag spot, navprobe
   PATHFIND_NORMAL 33.2 / 33.1 yd from the melee spot,
@@ -2062,7 +2086,10 @@ off cooldown,
   500 ms); class nodes are off Aura Mastery meanwhile. Probed as `yogg.roar`. Both read the paladin's
   own Concentration by its application (`HasAura(19746, guid)`, see
   [pitfalls](../../engine/pitfalls.md)): read by name, the turn paladin's effectless copy was invisible,
-  it recast the aura five times, never pressed, and the second roar silenced 22 in both pulls.
+  it recast the aura five times, never pressed, and the second roar silenced 22 in both pulls. The
+  roar's start is re-dated only forward: each paladin back-dates it off Yogg's cast bar a few ms apart,
+  an earlier start wrapped `getMSTimeDiff`, re-keyed the claim, and a second paladin pressed on roar 1
+  with nobody left for roar 2 (13 silenced).
 - **Nitro Boosts on the phase 3 station walk** over 40 yd (`NITRO_MIN_WALK`) when ready
   (`yogg.nitro station`); nobody walks far after. The brain team surfaces at (1924.7, −25.4, 328.5),
   74 / 94 yd from the melee / ranged spot, and arrived +6-71 s; a released ranged walk boosts once its
@@ -2091,7 +2118,15 @@ off cooldown,
 - **Drain Life is kicked on purpose.** The interrupt node's casters include Immortal Guardians
   channelling 64159/64160 in phase 3; immunity set `-286` has SILENCE but not INTERRUPT, so Strangulate,
   Silencing Shot and Arcane Torrent are dropped for them; `interruptClaims` holds a cast for one kicker
-  for 1.5 s. By chance alone, 6-7 of 14 were cut inside 1.5 s and 5 ran full; with it, 13 of 13.
+  for 1.5 s. By chance alone, 6-7 of 14 were cut inside 1.5 s and 5 ran full; with it, 13 of 13. A
+  full Freya-only phase 3 still ran 54 of 219 full (10.7M healed), 29 of them with a bot kick ready and
+  in range. Spell Lock is on the list (the felhunter's spell, cast by the bot, so cooldown and range are
+  the bot's), and trigger and action ask `YoggSaronInterruptReady` (cooldown, power, stance, range):
+  `CanCastSpell` passes a pet spell on cooldown and counts out of range as castable. A bot mid-cast runs
+  no kick node, so **as the last resort only, by the user's choice**, `YoggSaronNudgeDrainLifeKicker`
+  (the tick, one scan per 200 ms per instance) stops one bot's cast: a channel 1.5 s in with no claim,
+  no free bot with a kick ready in range, none finishing its cast within 1 s; never a healer; shortest
+  kick cooldown first, then the longest cast left; one per channel (`yogg.kicknudge`).
 - **`yogg-saron phase 3 lust`** (`ACTION_RAID + 2`). `ShamanBoostTrigger` and the burst hold both want a
   boss target, and phase 3 shamans are on Guardians and tentacles: none in one pull, +39.7 s and +54.2 s
   in others. It casts once 80% of the living group stands at its phase 3 station (15 yd) or still in
@@ -2111,6 +2146,36 @@ until the beacon, no hits on ranged or healers, the first four at 0% by +28 / +3
 against a spawn every ~10.5 s, raid 83k/s (72% on Guardians; 39.8k/s the pull before). Heroism at
 +8.5 s (80% in position at +7.5), Drain Life 13 of 18 cut inside 1.5 s and none full. The beacon
 wiped it. The ceiling: Yogg lost 2.5% in the 64 s before, ~19k/s, ~13 minutes for his last 30%.
+
+**One pile, swapped on danger, by the user's choice** (two piles rejected). Both tanks share the melee
+spot, so Consecration kept the pile on whoever led threat: Dragon held 5-11 Guardians for 90 s against
+Bulwark's 0-3, every Misdirection went to Dragon, and 5 of Bulwark's 18 taunts were back on Dragon 4 s
+later. When the holder drops under 50% (`TANK_SWAP_PCT`) with 3+ Guardians, more than the other tank
+has, a tank at 70%+ not dragging takes the pile (`YoggSaronTankSwapTake`): Righteous Defense on the
+holder, then a taunt on its highest Guardian, before the loose loop. For 8 s (`TANK_SWAP_MS`, one
+cooldown) the holder sheds: consecration, hammer of the righteous, avenger's shield, hand of reckoning
+and righteous defense blocked, loose loop skipped; Holy Shield and Shield of Righteousness stay. It ends
+early on the holder's death or the taker under 50%. A tank under 50% also leaves loose Guardians to a
+tank at 70%+ (`YoggSaronTankLowHold`): soulstoned Dragon taunted straight back in and died again 14 s
+later. It moves the whole pile, so it buys a fresh bar and the holder's cooldown, not a lighter load.
+Probed as `yogg.tankswap` (`take`), `yogg.tankshed`, `yogg.tankhold` `swap defense` / `swap taunt`.
+
+**Lay on Hands is kept for the tanks, by the user's choice.** Every pull spent all four on dps in phase 1
+(two saves), so none was left in phase 3, where tank deaths ended both pulls. Blocked: `lay on hands on
+party` all fight, `lay on hands` for non-tanks all fight and for tanks before phase 3. In phase 3
+`yogg-saron tank lay on hands` (`ACTION_EMERGENCY + 4`, under the beacon pair) casts it directly on the
+lowest tank under 20% within 40 yd, humans and itself included, one paladin per tank per 3 s
+(`yogg.tankloh`). Watch phase 1 Shadow Nova deaths for the cost. **A tank keeps Avenging Wrath in phase 3**
+while Divine Protection is ready within 30 s (`yogg-saron tank wrath hold`), since its marker locks it.
+
+**Healers stay on the combat engine.** A bot with no target always drops to the non-combat engine
+(`invalid target` → `drop target` at 99, see [pitfalls](../../engine/pitfalls.md)), and phase 3 gives
+healers none, so all four ran it the whole phase: no Mana Tide, Hymn of Hope, Divine Plea, Innervate
+or mana potion (combat-engine only), `drink` refused in combat, mana 12% / 18% at +180 s, Lunatic Gaze
+fires 587 / 373 / 853 / 961 non-combat against 1-2 combat. `yogg-saron healer combat engine`
+(`ACTION_EMERGENCY + 9`) switches a healer in combat on the non-combat engine back
+(`yogg.healerengine`), and `drop target` is blocked for a healer in combat with no target. Out of combat
+it still drops, so drinking works. Other raids with a targetless healer have the same gap, unchecked.
 
 **Shadow Beacon heals the marked guardians, and Yogg when they stand near him.** It marks 3 guardians
 in 25-man every 45 s, and 10 s later each casts Empowering Shadows (64486): **37,500 a second for 20 s
@@ -2135,6 +2200,7 @@ then Yogg, for all of phase 3, a Guardian in 0 snapshots, so each of its 41 Hand
 wore off with nothing behind it and 29 of 36 non-tank swings came while it was on its 8 s cooldown.
 So in phase 3 `yogg-saron guardian control`, in order:
 
+0. Takes or sheds the pile in a tank swap (above).
 1. Taunts the nearest loose guardian (not Weakened, victim not a tank). Failing Hand of Reckoning, a
    paladin casts Righteous Defense on that guardian's victim: 40 yd to the ally, and its dummy effect
    (`SpellEffects.cpp`) casts 31790, range 50,000 yd, triggered on up to 3 of the ally's attackers, so

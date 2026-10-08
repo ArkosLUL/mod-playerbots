@@ -211,6 +211,21 @@ struct YoggSaronEncounterState
 
     // Which bot's kick holds which cast, keyed by the caster, and when it was taken.
     std::unordered_map<ObjectGuid, std::pair<ObjectGuid, uint32>> interruptClaims;
+    // Drain Life channels already given a last-resort nudge, keyed by the Guardian, and when any bot last
+    // looked. See YoggSaronNudgeDrainLifeKicker.
+    std::unordered_map<ObjectGuid, uint32> kickNudges;
+    uint32 kickScanMs = 0;
+
+    // Phase 3 tank swap, from the tank holding the pile to the one taking it. See YoggSaronTankSwapTake.
+    struct TankSwap
+    {
+        ObjectGuid from;
+        ObjectGuid to;
+        uint32 startMs = 0;
+    };
+    TankSwap tankSwap;
+    // One Lay on Hands per tank, keyed by the tank. The owner keeps it so a failed cast can retry.
+    std::unordered_map<ObjectGuid, std::pair<ObjectGuid, uint32>> tankLohClaims;
 
     // First time phase 3 was read for Heroism, cleared in phase 2.
     uint32 phase3StartMs = 0;
@@ -868,6 +883,9 @@ YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI)
 
     state.phase3StartMs = 0;
     state.lastRoarMs = 0;
+    state.tankSwap = YoggSaronEncounterState::TankSwap();
+    state.tankLohClaims.clear();
+    state.kickNudges.clear();
 
     bool const portalsUp =
         bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS, true) != nullptr;
@@ -1337,6 +1355,30 @@ bool YoggSaronRouteClearOfBody(Player* bot, float x, float y)
            ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
 }
 
+bool YoggSaronRouteClearOfDeathRays(Player* bot, std::vector<Position> const& rays, float x, float y)
+{
+    // A ray turns every 1.6 s at ~5.5 yd/s, so a spot clear of where it is now isn't enough when the walk
+    // there crosses its lane. Inside the clear radius the walk may only keep or gain distance.
+    constexpr float slack = 0.05f;
+    for (Position const& ray : rays)
+    {
+        float const now = ray.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY());
+        float const keep = std::min(now, ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS);
+        if (ClosestApproach(bot->GetPositionX(), bot->GetPositionY(), x, y, ray) < keep - slack)
+            return false;
+    }
+
+    return true;
+}
+
+bool YoggSaronDeathRayNear(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    return bot->GetPositionZ() > ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT &&
+           bot->FindNearestCreature(NPC_DEATH_RAY, ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS, true);
+}
+
 bool YoggSaronBodyDetour(Player* bot, Position const& destination, Position& waypoint)
 {
     if (YoggSaronRouteClearOfBody(bot, destination.GetPositionX(), destination.GetPositionY()))
@@ -1691,14 +1733,14 @@ Unit* YoggSaronHealedGuardianOn(PlayerbotAI* /*botAI*/, Player* victim)
     return nullptr;
 }
 
-uint32 YoggSaronHealedGuardiansOn(Player* victim)
+uint32 YoggSaronGuardiansOn(Player* tank)
 {
-    if (!victim)
+    if (!tank)
         return 0;
 
     uint32 count = 0;
-    for (Unit* attacker : victim->getAttackers())
-        if (attacker->GetVictim() == victim && IsYoggSaronHealedGuardian(attacker))
+    for (Unit* attacker : tank->getAttackers())
+        if (attacker->GetVictim() == tank && IsYoggSaronHoldableGuardian(attacker))
             ++count;
 
     return count;
@@ -1725,7 +1767,7 @@ Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI)
 
         bool const dragger = YoggSaronBeaconDragging(member) || YoggSaronBeaconReturning(member);
         if (PlayerbotAI::IsTank(member) && !dragger &&
-            member->GetHealthPct() >= ULDUAR_YOGG_SARON_BEACON_TANK_COVER_PCT)
+            member->GetHealthPct() >= ULDUAR_YOGG_SARON_BEACON_TANK_EXTERNAL_PCT)
             continue;
 
         auto const claim = state.beaconExternalClaims.find(member->GetGUID());
@@ -1764,6 +1806,163 @@ bool ClaimYoggSaronBeaconExternal(PlayerbotAI* botAI, Player* victim)
     state.beaconExternalClaims[victim->GetGUID()] = now;
 
     return true;
+}
+
+namespace
+{
+// Ends a swap once its window runs out, the holder dies, or the taker drops under the swap line.
+bool YoggSaronTankSwapLive(Player* bot, YoggSaronEncounterState& state)
+{
+    YoggSaronEncounterState::TankSwap& swap = state.tankSwap;
+    if (!swap.startMs)
+        return false;
+
+    Player* from = ObjectAccessor::GetPlayer(*bot, swap.from);
+    Player* to = ObjectAccessor::GetPlayer(*bot, swap.to);
+    if (getMSTimeDiff(swap.startMs, getMSTime()) >= ULDUAR_YOGG_SARON_TANK_SWAP_MS || !from || !from->IsAlive() ||
+        !to || !to->IsAlive() || to->GetHealthPct() < ULDUAR_YOGG_SARON_TANK_SWAP_PCT)
+    {
+        swap = YoggSaronEncounterState::TankSwap();
+        return false;
+    }
+
+    return true;
+}
+}  // namespace
+
+Player* YoggSaronTankSwapTake(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    if (YoggSaronTankSwapLive(bot, state))
+        return state.tankSwap.to == bot->GetGUID() ? ObjectAccessor::GetPlayer(*bot, state.tankSwap.from) : nullptr;
+
+    Group* group = bot->GetGroup();
+    if (!group || bot->GetHealthPct() < ULDUAR_YOGG_SARON_TANK_SWAP_TAKER_PCT || YoggSaronBeaconDragging(bot) ||
+        YoggSaronBeaconReturning(bot))
+        return nullptr;
+
+    uint32 const mine = YoggSaronGuardiansOn(bot);
+    Player* holder = nullptr;
+    uint32 holderCount = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
+            !PlayerbotAI::IsTank(member) || member->GetHealthPct() >= ULDUAR_YOGG_SARON_TANK_SWAP_PCT)
+            continue;
+
+        uint32 const count = YoggSaronGuardiansOn(member);
+        if (count >= ULDUAR_YOGG_SARON_TANK_SWAP_MIN_GUARDIANS && count > mine && count > holderCount)
+        {
+            holder = member;
+            holderCount = count;
+        }
+    }
+
+    if (!holder)
+        return nullptr;
+
+    state.tankSwap = {holder->GetGUID(), bot->GetGUID(), getMSTime()};
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.tankswap", "take " + holder->GetName() + " " + std::to_string(holderCount));
+
+    return holder;
+}
+
+bool YoggSaronTankShedding(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+
+    return state.tankSwap.from == bot->GetGUID() && YoggSaronTankSwapLive(bot, state);
+}
+
+bool YoggSaronTankLowHold(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group || bot->GetHealthPct() >= ULDUAR_YOGG_SARON_TANK_SWAP_PCT)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member != bot && member->IsAlive() && member->GetMap() == bot->GetMap() &&
+            PlayerbotAI::IsTank(member) && member->GetHealthPct() >= ULDUAR_YOGG_SARON_TANK_SWAP_TAKER_PCT)
+            return true;
+    }
+
+    return false;
+}
+
+bool YoggSaronTankWrathHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    return bot->getClass() == CLASS_PALADIN &&
+           ReadyTankDefensive(bot, true, ULDUAR_YOGG_SARON_TANK_WRATH_LOCK_MS) && YoggSaronInPhase3(botAI);
+}
+
+bool YoggSaronBeforePhase3(PlayerbotAI* botAI)
+{
+    uint32 const phase = YoggSaronPhase(botAI);
+
+    return phase == 1 || phase == 2;
+}
+
+Player* YoggSaronTankLayOnHandsTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group || bot->getClass() != CLASS_PALADIN ||
+        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return nullptr;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    uint32 const now = getMSTime();
+
+    Player* best = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMap() != bot->GetMap() || !PlayerbotAI::IsTank(member) ||
+            member->GetHealthPct() >= ULDUAR_YOGG_SARON_TANK_LOH_PCT ||
+            !bot->IsWithinDistInMap(member, ULDUAR_YOGG_SARON_TANK_LOH_RANGE))
+            continue;
+
+        auto const claim = state.tankLohClaims.find(member->GetGUID());
+        if (claim != state.tankLohClaims.end() && claim->second.first != bot->GetGUID() &&
+            getMSTimeDiff(claim->second.second, now) < ULDUAR_YOGG_SARON_TANK_LOH_CLAIM_MS)
+            continue;
+
+        // Forbearance from a tank's own Divine Protection bars it, and CanCastSpell reads that.
+        if ((!best || member->GetHealthPct() < best->GetHealthPct()) && botAI->CanCastSpell("lay on hands", member))
+            best = member;
+    }
+
+    return best;
+}
+
+bool ClaimYoggSaronTankLayOnHands(PlayerbotAI* botAI, Player* tank)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    uint32 const now = getMSTime();
+
+    auto const claim = state.tankLohClaims.find(tank->GetGUID());
+    if (claim != state.tankLohClaims.end() && claim->second.first != bot->GetGUID() &&
+        getMSTimeDiff(claim->second.second, now) < ULDUAR_YOGG_SARON_TANK_LOH_CLAIM_MS)
+        return false;
+
+    state.tankLohClaims[tank->GetGUID()] = {bot->GetGUID(), now};
+
+    return true;
+}
+
+bool YoggSaronHealerTargetless(PlayerbotAI* botAI)
+{
+    return botAI->GetBot()->IsInCombat() &&
+           !botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() && YoggSaronEncounterActive(botAI);
 }
 
 bool YoggSaronBeaconImmunityHeld(PlayerbotAI* botAI)
@@ -2193,6 +2392,8 @@ std::vector<char const*> YoggSaronInterruptSpells(Player* bot)
             return {"wind shear"};
         case CLASS_WARRIOR:
             return {"pummel", "shield bash"};
+        case CLASS_WARLOCK:
+            return {"spell lock"};
         default:
             if (bot->getRace() == RACE_BLOODELF)
                 return {"arcane torrent"};
@@ -2202,6 +2403,38 @@ std::vector<char const*> YoggSaronInterruptSpells(Player* bot)
 }
 
 bool YoggSaronCanInterrupt(Player* bot) { return !YoggSaronInterruptSpells(bot).empty(); }
+
+namespace
+{
+// Off cooldown, affordable, in stance and in range, without CanCastSpell, which can't answer for a bot mid
+// cast. Spell Lock is the felhunter's but the bot casts it, so its cooldown and range are the bot's.
+bool YoggSaronKickInReach(PlayerbotAI* botAI, char const* spell, Unit* caster)
+{
+    Player* bot = botAI->GetBot();
+    uint32 const id = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
+    SpellInfo const* info = id ? sSpellMgr->GetSpellInfo(id) : nullptr;
+    if (!info || bot->HasSpellCooldown(id) || info->CheckShapeshift(bot->GetShapeshiftForm()) != SPELL_CAST_OK ||
+        !bot->HasItemFitToSpellRequirements(info))
+        return false;
+
+    if (info->PowerType < MAX_POWERS &&
+        info->CalcPowerCost(bot, info->GetSchoolMask()) > static_cast<int32>(bot->GetPower(Powers(info->PowerType))))
+        return false;
+
+    if (info->RangeEntry && (info->RangeEntry->Flags & SPELL_RANGE_MELEE))
+        return bot->IsWithinMeleeRange(caster);
+
+    return bot->IsWithinCombatRange(caster, bot->GetSpellMaxRangeForTarget(caster, info));
+}
+}  // namespace
+
+bool YoggSaronInterruptReady(PlayerbotAI* botAI, char const* spell, Unit* caster)
+{
+    if (!YoggSaronKickInReach(botAI, spell, caster))
+        return false;
+
+    return botAI->CanCastSpell(botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get(), caster);
+}
 
 std::vector<char const*> YoggSaronInterruptSpellsFor(Player* bot, Unit* caster)
 {
@@ -4002,7 +4235,10 @@ void YoggSaronTickRoar(PlayerbotAI* botAI)
 
     uint32 const elapsed = static_cast<uint32>(std::max(0, cast->GetCastTime() - cast->GetCastTimeRemaining()));
     uint32 const start = now - elapsed;
-    if (!state.lastRoarMs || getMSTimeDiff(state.lastRoarMs, start) > ULDUAR_YOGG_SARON_ROAR_PERIOD_MS / 2)
+    // Forward only. Paladins read the cast bar a few ms apart, and a start just before the stored one
+    // wrapped getMSTimeDiff, re-keyed the roar and let a second paladin press.
+    int32 const sinceLast = static_cast<int32>(start - state.lastRoarMs);
+    if (!state.lastRoarMs || sinceLast > static_cast<int32>(ULDUAR_YOGG_SARON_ROAR_PERIOD_MS / 2))
         state.lastRoarMs = start;
 }
 
@@ -4033,6 +4269,123 @@ void YoggSaronTickReprisal(PlayerbotAI* botAI)
     else if (held)
         state.reprisalHold.erase(guid);
 }
+
+// Shortest cooldown first, so the cast that gets stopped buys the kick that's back soonest.
+uint32 YoggSaronKickRank(char const* spell)
+{
+    static constexpr char const* order[] = {"wind shear",  "kick",         "pummel",    "mind freeze",
+                                            "shield bash", "counterspell", "spell lock"};
+    for (uint32 rank = 0; rank < std::size(order); ++rank)
+        if (std::string(spell) == order[rank])
+            return rank;
+
+    return std::size(order);
+}
+
+// A bot mid cast never runs its kick node, so a Drain Life nobody kicked gets one bot's own cast stopped.
+// Last resort only: never while a free bot can kick it, or a ready one finishes its cast within the wait,
+// and never a healer's cast.
+void YoggSaronNudgeDrainLifeKicker(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group || !bot->IsAlive() || bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return;
+
+    // Raid-wide, so one bot a scan is plenty.
+    constexpr uint32 scanIntervalMs = 200;
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    uint32 const now = getMSTime();
+    if (getMSTimeDiff(state.kickScanMs, now) < scanIntervalMs)
+        return;
+
+    state.kickScanMs = now;
+    for (auto it = state.kickNudges.begin(); it != state.kickNudges.end();)
+        it = getMSTimeDiff(it->second, now) >= ULDUAR_YOGG_SARON_KICK_NUDGE_MS ? state.kickNudges.erase(it)
+                                                                              : std::next(it);
+
+    if (!YoggSaronInPhase3(botAI))
+        return;
+
+    std::unordered_set<ObjectGuid> nudged;
+    for (Unit* guardian : GetYoggSaronInterruptCasters(botAI))
+    {
+        Spell* channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE);
+        if (!channel)
+            channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE_H);
+
+        if (!channel || state.kickNudges.count(guardian->GetGUID()) ||
+            channel->GetSpellInfo()->GetDuration() - channel->GetCastTimeRemaining() <
+                static_cast<int32>(ULDUAR_YOGG_SARON_KICK_LAST_RESORT_MS))
+            continue;
+
+        auto const claim = state.interruptClaims.find(guardian->GetGUID());
+        if (claim != state.interruptClaims.end() &&
+            getMSTimeDiff(claim->second.second, now) < ULDUAR_YOGG_SARON_INTERRUPT_CLAIM_MS)
+            continue;
+
+        bool waiting = false;
+        Player* pick = nullptr;
+        char const* pickSpell = nullptr;
+        std::tuple<uint32, int32> pickKey;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            PlayerbotAI* memberAI = IsYoggSaronBot(member) ? GET_PLAYERBOT_AI(member) : nullptr;
+            if (!memberAI || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
+                nudged.count(member->GetGUID()))
+                continue;
+
+            char const* ready = nullptr;
+            for (char const* spell : YoggSaronInterruptSpellsFor(member, guardian))
+            {
+                if (YoggSaronKickInReach(memberAI, spell, guardian))
+                {
+                    ready = spell;
+                    break;
+                }
+            }
+
+            if (!ready)
+                continue;
+
+            Spell* cast = member->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+            if (cast && cast->getState() != SPELL_STATE_PREPARING)
+                cast = nullptr;
+
+            if (!cast)
+                cast = member->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+
+            if (!cast || cast->GetCastTimeRemaining() <= static_cast<int32>(ULDUAR_YOGG_SARON_KICK_WAIT_MS))
+            {
+                waiting = true;
+                break;
+            }
+
+            if (PlayerbotAI::IsHeal(member))
+                continue;
+
+            // Ties to the longest cast left, the bot that would otherwise be busy longest.
+            std::tuple<uint32, int32> const key{YoggSaronKickRank(ready), -cast->GetCastTimeRemaining()};
+            if (!pick || key < pickKey)
+            {
+                pick = member;
+                pickSpell = ready;
+                pickKey = key;
+            }
+        }
+
+        if (waiting || !pick)
+            continue;
+
+        GET_PLAYERBOT_AI(pick)->RequestSpellInterrupt();
+        state.kickNudges[guardian->GetGUID()] = now;
+        nudged.insert(pick->GetGUID());
+
+        if (RaidObs::Active())
+            RaidObs::Note(bot, "yogg.kicknudge", pick->GetName() + " " + pickSpell);
+    }
+}
 }  // namespace
 
 void YoggSaronTick(PlayerbotAI* botAI)
@@ -4042,6 +4395,7 @@ void YoggSaronTick(PlayerbotAI* botAI)
     YoggSaronTickReprisal(botAI);
     YoggSaronTickBrainHold(botAI);
     YoggSaronTickRoar(botAI);
+    YoggSaronNudgeDrainLifeKicker(botAI);
     TickYoggSaronObs(botAI);
 }
 

@@ -349,7 +349,7 @@ bool YoggSaronDarkVolleyTrigger::IsActive()
             continue;
 
         for (char const* spell : YoggSaronInterruptSpellsFor(bot, caster))
-            if (botAI->CanCastSpell(spell, caster))
+            if (YoggSaronInterruptReady(botAI, spell, caster))
                 return true;
     }
 
@@ -963,9 +963,9 @@ bool YoggSaronBeaconDefensiveTrigger::IsActive()
     if (bot->getAttackers().empty() || !YoggSaronHealedGuardianOn(botAI, bot))
         return false;
 
-    // A tank holding the pile only once two healed ones are on it, or one with the tank under half.
+    // A tank holding the pile only by health.
     if (PlayerbotAI::IsTank(bot) && !YoggSaronBeaconDragging(bot) && !YoggSaronBeaconReturning(bot) &&
-        bot->GetHealthPct() >= ULDUAR_YOGG_SARON_BEACON_TANK_COVER_PCT && YoggSaronHealedGuardiansOn(bot) < 2)
+        bot->GetHealthPct() >= ULDUAR_YOGG_SARON_BEACON_TANK_DEFENSIVE_PCT)
         return false;
 
     return NextPhysicalDefensive(botAI, bot, nullptr, 0) != 0;
@@ -973,8 +973,9 @@ bool YoggSaronBeaconDefensiveTrigger::IsActive()
 
 bool YoggSaronBeaconExternalTrigger::IsActive()
 {
-    // Pain Suppression and Guardian Spirit are a healer's, Hand of Sacrifice any paladin's.
-    if (!PlayerbotAI::IsHeal(bot) && bot->getClass() != CLASS_PALADIN)
+    // Pain Suppression and Guardian Spirit are a healer's, Hand of Sacrifice any paladin's but a tank's:
+    // it moves 30% of the victim's damage onto a tank already under the pile.
+    if ((!PlayerbotAI::IsHeal(bot) && bot->getClass() != CLASS_PALADIN) || PlayerbotAI::IsTank(bot))
         return false;
 
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
@@ -983,6 +984,17 @@ bool YoggSaronBeaconExternalTrigger::IsActive()
     Player* victim = YoggSaronBeaconExternalVictim(botAI);
 
     return victim && YoggSaronNovaExternalAction::PickExternal(botAI, victim);
+}
+
+bool YoggSaronTankLayOnHandsTrigger::IsActive()
+{
+    return YoggSaronTankLayOnHandsTarget(botAI) && YoggSaronInPhase3(botAI);
+}
+
+bool YoggSaronHealerCombatEngineTrigger::IsActive()
+{
+    return PlayerbotAI::IsHeal(bot) && bot->IsAlive() && bot->IsInCombat() &&
+           botAI->GetState() == BOT_STATE_NON_COMBAT && YoggSaronEncounterActive(botAI);
 }
 
 bool YoggSaronShadowAuraTrigger::IsActive()

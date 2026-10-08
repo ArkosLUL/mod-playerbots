@@ -99,6 +99,10 @@ protected:
     // way while their dodges sat refused for 1.7 and 2.1 s. Asked after Collect.
     virtual bool OverridesWalkInFlight() const { return false; }
 
+    // Whether the rest of the walk to the held spot is still fine, asked each tick the spot is held.
+    // Only for hazards that move onto the route rather than the spot.
+    virtual bool HeldRouteAcceptable(float /*x*/, float /*y*/) const { return true; }
+
 private:
     // Held destination. The hazards move - clouds orbit at 3 yd/s, a Crusher re-faces onto whoever it
     // is hitting - so a fresh sweep every tick answers a different question every tick and the bot
@@ -150,11 +154,15 @@ protected:
     float MaxFromMiddle() const override { return ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE; }
     bool RouteAcceptable(float x, float y) const override;
     bool OverridesWalkInFlight() const override { return inDeathRay; }
+    bool HeldRouteAcceptable(float x, float y) const override;
 
 private:
     // Death Rays only: they move onto a bot and kill in three ticks. Letting a Crush wedge or the body
     // ring cut in as well would have the detour and the dodge trade every tick.
     bool inDeathRay = false;
+
+    // Where the live rays stood on this tick's Collect, for the route check.
+    std::vector<Position> rays;
 };
 
 // Stand so that facing the tentacle faces away from the skulls. Facing itself cannot be held - set
@@ -496,6 +504,8 @@ private:
     bool Taunt(Unit* guardian);
     // Righteous Defense on whoever the Guardian is hitting, for when the taunt is down.
     bool Defend(Unit* guardian);
+    // The swap: Righteous Defense on the holder, then a taunt on the highest Guardian still on it.
+    bool TakeFrom(Player* holder);
 };
 
 // Reduced-Keeper hard mode: retreat to a safe ranged spot and face away from Yogg to conserve sanity.
@@ -599,6 +609,29 @@ public:
     static constexpr char const* Name = "yogg-saron beacon external action";
 
     YoggSaronBeaconExternalAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+// Lay on Hands on a tank about to die in phase 3. Straight through CastSpell, past the holds that keep it
+// off everyone else for the whole fight.
+class YoggSaronTankLayOnHandsAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron tank lay on hands action";
+
+    YoggSaronTankLayOnHandsAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+// Puts a healer back on the combat engine, which carries its mana cooldowns, potions and heal bands.
+class YoggSaronHealerCombatEngineAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron healer combat engine action";
+
+    YoggSaronHealerCombatEngineAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };

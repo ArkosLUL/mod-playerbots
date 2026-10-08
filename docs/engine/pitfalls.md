@@ -184,7 +184,8 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
 
 A bot mid-cast also runs **no triggers**: `UpdateAIInternal` yields while its spell prepares. So a
 mechanic that punishes an ongoing cast (Mistress' Kiss) can only be answered from another bot's
-tick, by `RequestSpellInterrupt` on the caster.
+tick, by `RequestSpellInterrupt` on the caster. A channel runs triggers but fails `CanCastSpell`, so a
+caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge).
 
 ## Movement that silently no-ops
 
@@ -593,6 +594,12 @@ Related traps:
 
 ## Before the pull, and out of combat
 
+- **A bot with no target runs the non-combat engine, in combat too.** Only `AttackAction` or a pull
+  enters the combat engine; `invalid target` is true for a null target and `drop target` (99) always
+  switches to non-combat. A fight that owns targeting and hands a healer none strands it there, without
+  the combat-only mana cooldowns and potions: Yogg-Saron's phase 3 healers ran dry. Switch it back and
+  block `drop target` while targetless in combat (`yogg-saron healer combat engine`).
+
 - **`AttackStop()` drops the victim and nothing else.** The `"current target"` AI value survives it —
   and that value is what the class rotation casts at and what `ReachTargetAction` walks to. Clear it
   explicitly: `context->GetValue<Unit*>("current target")->Set(nullptr)` (precedent
@@ -686,7 +693,9 @@ file-static `std::unordered_map<ObjectGuid, State>` defined in exactly one `.cpp
 header.
 
 For a per-instance clock (shared across bots), use the `PhaseStateFor` pattern: static mutex plus
-`unordered_map<instanceId, State>` with a staleness re-anchor.
+`unordered_map<instanceId, State>` with a staleness re-anchor. A timestamp each bot back-dates off a
+cast bar jitters by a few ms between bots, so compare it signed: an earlier one wraps `getMSTimeDiff`
+to ~4.29e9 and reads as a new event (Yogg-Saron's Roar double press).
 
 **A handout standing in for looting has to consume its source.** `StoreNewItem` off a corpse that
 nothing marks spent hands out a fresh item every time the last is used: Mimiron's core carrier minted

@@ -634,9 +634,38 @@ constexpr float ULDUAR_YOGG_SARON_BEACON_DANGER_HEALTH_PCT = 40.0f;
 // holds its victim for itself.
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_RETURN_MS = 8000;
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_EXTERNAL_CLAIM_MS = 8000;
-// A tank holding the pile gets cover from healed Guardians under this health. Every tank death in two
-// pulls came 17-32 s after a heal, under three or four Guardians at 84-100% with no external on it.
-constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_COVER_PCT = 50.0f;
+// A tank holding the pile presses its own button with a healed Guardian on it under the first line and
+// gets an external under the second. Every tank death in two pulls came 17-32 s after a heal, under three
+// or four Guardians at 84-100% with no external on it. Two healed ones at any health used to count as
+// well, and a tank spent its button at full health in one beacon and had none in the next.
+constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_DEFENSIVE_PCT = 60.0f;
+constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_EXTERNAL_PCT = 50.0f;
+
+// Both tanks stand on the melee spot, so Consecration keeps the whole pile on whoever has the most threat:
+// one held 5-11 Guardians for 90 s while the other held 0-3, and the other's taunts came back within 4 s.
+// So the other tank takes the pile once the holder is under the swap line with this many on it, and the
+// holder stops its area threat and taunts for one Righteous Defense cooldown.
+constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_PCT = 50.0f;
+constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_TAKER_PCT = 70.0f;
+constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MIN_GUARDIANS = 3;
+constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MS = 8000;
+
+// Lay on Hands is kept for a tank under this in phase 3, one paladin per tank per claim. Every pull spent
+// all four on dps in phase 1, and a tank death is what ended phase 3.
+constexpr float ULDUAR_YOGG_SARON_TANK_LOH_PCT = 20.0f;
+constexpr uint32 ULDUAR_YOGG_SARON_TANK_LOH_CLAIM_MS = 3000;
+constexpr float ULDUAR_YOGG_SARON_TANK_LOH_RANGE = 40.0f;
+
+// Avenging Wrath locks Divine Protection for 30 s, so a phase 3 tank only presses it with Divine
+// Protection that far from ready anyway.
+constexpr uint32 ULDUAR_YOGG_SARON_TANK_WRATH_LOCK_MS = 30000;
+
+// A Drain Life nobody has kicked by this point gets a mid-cast bot's own cast stopped so it can kick, but
+// only when no free bot can and no ready one finishes its cast within the wait. 29 of 54 full channels in
+// one pull had a ready kick in range on a bot busy casting. One nudge per channel.
+constexpr uint32 ULDUAR_YOGG_SARON_KICK_LAST_RESORT_MS = 1500;
+constexpr uint32 ULDUAR_YOGG_SARON_KICK_WAIT_MS = 1000;
+constexpr uint32 ULDUAR_YOGG_SARON_KICK_NUDGE_MS = 2000;
 // Hunter drags. Distracting Shot is a 6 s taunt against a 10 s mark, so it goes out with this much of the
 // mark left and still covers the heal 0.3-1.1 s after it. Feign Death if the Guardian is still on the
 // hunter this long after the release.
@@ -942,6 +971,10 @@ bool YoggSaronCanInterrupt(Player* bot);
 // so Strangulate, Silencing Shot and Arcane Torrent would only burn their cooldowns on one.
 std::vector<char const*> YoggSaronInterruptSpellsFor(Player* bot, Unit* caster);
 
+// Whether this bot can kick the caster with this spell right now. CanCastSpell alone passes a pet's spell
+// on cooldown and counts out of range as castable, which spent the node's tick on a cast that failed.
+bool YoggSaronInterruptReady(PlayerbotAI* botAI, char const* spell, Unit* caster);
+
 // Whether another bot's kick already holds this cast, and taking it for this bot. One kick per cast:
 // Drain Life comes round every ~14.5 s per Guardian and the raid has about one kick a second.
 bool YoggSaronInterruptClaimedByOther(Player* bot, Unit* caster);
@@ -1142,6 +1175,13 @@ void YoggSaronTick(PlayerbotAI* botAI);
 bool YoggSaronInBodyKnockback(Player* player);
 bool YoggSaronRouteClearOfBody(Player* bot, float x, float y);
 
+// Whether a straight walk from the bot to (x, y) stays out of every ray's clear radius, and inside one
+// never gets closer than the bot already is.
+bool YoggSaronRouteClearOfDeathRays(Player* bot, std::vector<Position> const& rays, float x, float y);
+
+// A live Death Ray within its clear radius of a bot on the platform. A short sweep, no phase read.
+bool YoggSaronDeathRayNear(PlayerbotAI* botAI);
+
 // A point to cross the room through when the straight line would go over the body. One is enough:
 // each leg halves the turn the next one has to make, so the bot walks the arc rather than the chord.
 bool YoggSaronBodyDetour(Player* bot, Position const& destination, Position& waypoint);
@@ -1174,13 +1214,40 @@ Unit* YoggSaronBeaconReturning(Player* bot);
 // A Guardian the beacon heal is on, or still marked, that is hitting `victim` from the danger line up,
 // or nullptr.
 Unit* YoggSaronHealedGuardianOn(PlayerbotAI* botAI, Player* victim);
-uint32 YoggSaronHealedGuardiansOn(Player* victim);
 
 // Who the next external against a healed Guardian goes to: draggers first, then the lowest, humans too.
-// A tank holding the pile only under ULDUAR_YOGG_SARON_BEACON_TANK_COVER_PCT. Skips a bot whose own
+// A tank holding the pile only under ULDUAR_YOGG_SARON_BEACON_TANK_EXTERNAL_PCT. Skips a bot whose own
 // button is ready or running and anyone another external already holds.
 Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI);
 bool ClaimYoggSaronBeaconExternal(PlayerbotAI* botAI, Player* victim);
+
+// Holdable Guardians whose victim is this tank, from its own attacker set.
+uint32 YoggSaronGuardiansOn(Player* tank);
+
+// The tank this bot is taking the pile from, see ULDUAR_YOGG_SARON_TANK_SWAP_PCT, or nullptr. Starts a swap
+// when the conditions hold and none is running, and ends one that no longer holds.
+Player* YoggSaronTankSwapTake(PlayerbotAI* botAI);
+
+// This bot is the holder of a running swap, so it keeps its area threat and taunts off the pile.
+bool YoggSaronTankShedding(PlayerbotAI* botAI);
+
+// A tank under the swap line while another is over the taker line leaves loose Guardians to that one. A
+// soulstoned tank taunted straight back into the pile and died again 14 s later.
+bool YoggSaronTankLowHold(Player* bot);
+
+// A phase 3 paladin tank keeps Avenging Wrath while Divine Protection is ready within its 30 s lock.
+bool YoggSaronTankWrathHeld(PlayerbotAI* botAI);
+
+bool YoggSaronBeforePhase3(PlayerbotAI* botAI);
+
+// The tank a bot paladin should Lay on Hands, under ULDUAR_YOGG_SARON_TANK_LOH_PCT and in range, lowest
+// first, humans too and the paladin itself if it tanks. nullptr when nobody needs it or it can't go out.
+Player* YoggSaronTankLayOnHandsTarget(PlayerbotAI* botAI);
+bool ClaimYoggSaronTankLayOnHands(PlayerbotAI* botAI, Player* tank);
+
+// A healer in combat during the encounter with no target. Phase 3 gives healers none, and a bot with no
+// target always drops to the non-combat engine, which has no mana cooldowns or potions.
+bool YoggSaronHealerTargetless(PlayerbotAI* botAI);
 
 // A healed Guardian is on this bot, so an immunity would just hand it to somebody else.
 bool YoggSaronBeaconImmunityHeld(PlayerbotAI* botAI);

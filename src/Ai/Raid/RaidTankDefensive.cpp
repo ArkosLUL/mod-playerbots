@@ -20,6 +20,8 @@ constexpr uint32 SPELL_DIVINE_PROTECTION = 498;
 // Divine Shield, Divine Protection, Hand of Protection and a self Lay on Hands put it up for 2 min, and
 // it blocks the other three.
 constexpr uint32 SPELL_FORBEARANCE = 25771;
+// Avenging Wrath's 30 s marker, which locks Divine Protection the same way.
+constexpr uint32 SPELL_AVENGING_WRATH_MARKER = 61987;
 
 // Weakest first, which here is shortest cooldown first: the strongest button stays in hand longest.
 // Bubbles are deliberately absent - a paladin under Divine Shield does no damage and holds nothing. So
@@ -152,9 +154,15 @@ char const* ReadyTankDefensive(Player* bot, bool physicalOnly, uint32 withinMs)
 
         if (entry.spellId == SPELL_DIVINE_PROTECTION)
         {
-            Aura const* forbearance = bot->GetAura(SPELL_FORBEARANCE);
-            if (forbearance &&
-                (forbearance->GetDuration() < 0 || static_cast<uint32>(forbearance->GetDuration()) > withinMs))
+            bool locked = false;
+            for (uint32 const lock : {SPELL_FORBEARANCE, SPELL_AVENGING_WRATH_MARKER})
+            {
+                Aura const* aura = bot->GetAura(lock);
+                locked = locked ||
+                         (aura && (aura->GetDuration() < 0 || static_cast<uint32>(aura->GetDuration()) > withinMs));
+            }
+
+            if (locked)
                 continue;
         }
 

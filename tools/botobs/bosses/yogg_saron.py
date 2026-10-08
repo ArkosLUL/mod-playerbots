@@ -24,18 +24,22 @@
                                     leftover Crusher left them, how fast each role and the brain team
                                     reached its station and the Nitro Boosts spent on it, Immortal
                                     Guardians, who pulled them off the tanks and with what, how much of
-                                    the time they were at full power or Weakened, Drain Life channels and
-                                    how fast they were cut, the bot tank's targets and taunts, swings on
-                                    the raid during a gaze, beacon heals and how far marked Guardians were
+                                    the time they were at full power or Weakened, Drain Life channels, how
+                                    fast they were cut and the kicks left unused, the bot tank's targets
+                                    and taunts, the Guardians on each tank, tank swaps, taunts that went
+                                    back to the other tank, Misdirection, the tanks' buttons, Lay on Hands,
+                                    swings on the raid during a gaze, beacon heals and how far marked Guardians were
                                     from Yogg, the rest and each other, which other Guardians the heal
                                     reached, each tank's 20 s under it and the raid's damage on the healed
                                     ones, beacon drags and the lane picked, who held each healed Guardian,
                                     what it did to non-tanks and when a tank had it, Deafening Roar
                                     against Aura Mastery, Lunatic Gaze, the damage split by Guardian health
                                     band, area casts by how many units round the target were worth
-                                    hitting, phase 2 leftovers, the pets on each and Diminish Power
+                                    hitting, healer mana and engine, phase 2 leftovers, the pets on each
+                                    and Diminish Power
     yogg_saron.py <file> --crush    Crush, who took it and what each cone was aimed at, the body's
-                                    knockback and who walked into it, Death Rays
+                                    knockback and who walked into it, Death Rays and the last walk
+                                    before each
     yogg_saron.py <file> --sanity   Sanity minima, each trip below, who sat a wave out, where it went,
                                     Rebirths on a corpse with no Sanity
 
@@ -498,6 +502,33 @@ TENTACLE_NAMES = {NPC_CRUSHER_TENTACLE: "Crusher", NPC_CONSTRICTOR_TENTACLE: "Co
 SPELL_CRUSH_CONES = (64147, 65201)
 # How long after a stun lifts a Crush still counts against it: melee get a 4 s lead to leave the reach.
 STUN_CRUSH_WATCH_MS = 5000
+
+# A Death Ray's damage, and how long before a hit the walks that took the bot there are read.
+SPELL_DEATH_RAY_DAMAGE = (63884, 63883)
+DEATH_RAY_LOOK_MS = 3000
+DEATH_RAY_DODGERS = ("yogg-saron phase 2 spacing action", "avoid aoe")
+
+# The phase 3 tank swap: how far apart the Guardians on each tank are read after a swap starts, and how
+# long after a taunt its Guardian sitting on the other tank counts as bounced back.
+TANK_SWAP_LOOKS_MS = (0, 4000, 8000)
+TAUNT_BOUNCE_MS = 4000
+SPELL_MISDIRECTION = 34477
+# A tank's own buttons and the externals it gives or takes, by spell id.
+TANK_BUTTONS = {31884: "Avenging Wrath", 498: "Divine Protection", 642: "Divine Shield", 6940: "Hand of Sacrifice",
+                48788: "Lay on Hands", 27154: "Lay on Hands", 33206: "Pain Suppression", 47788: "Guardian Spirit"}
+SPELL_LAY_ON_HANDS = (633, 2800, 10310, 27154, 48788)
+# When a healer's mana is read into phase 3, and what counts as a mana cooldown, by spell name.
+HEALER_MANA_LOOKS_MS = (0, 60000, 120000, 180000)
+HEALER_MANA_SPELLS = {"Mana Tide Totem", "Hymn of Hope", "Divine Plea", "Innervate", "Shadowfiend",
+                      "Divine Illumination", "Restore Mana"}
+GAZE_NODE = "yogg-saron lunatic gaze trigger"
+# Kicks against Drain Life: (name, cooldown ms, range yd), and the slack on range for both units' reach,
+# since the trace has positions, not combat reach.
+KICK_SPELLS = {57994: ("Wind Shear", 6000, 25.0), 1766: ("Kick", 10000, 5.0), 6552: ("Pummel", 10000, 5.0),
+               47528: ("Mind Freeze", 10000, 5.0), 72: ("Shield Bash", 12000, 5.0),
+               2139: ("Counterspell", 24000, 30.0), 19647: ("Spell Lock", 24000, 30.0),
+               19244: ("Spell Lock", 24000, 30.0)}
+KICK_RANGE_SLACK = 6.0
 
 
 def sara_kills_needed(trace: Trace) -> int | None:
@@ -2649,6 +2680,36 @@ def show_crush(trace: Trace) -> None:
     show_crush_hits(trace)
     show_crusher_reach(trace)
     show_diminish_power(trace)
+    show_death_rays(trace)
+
+
+def show_death_rays(trace: Trace) -> None:
+    """One line per Death Ray burst on a raider: the last walk that went out in the 3 s before, which is
+    often the dodge itself, and whether the Yogg dodge or avoid aoe tried to move it."""
+    roster = set(roster_guids(trace))
+    hits = sorted((rec["t"], rec.get("d")) for rec in trace.of("dmg")
+                  if rec.get("sp") in SPELL_DEATH_RAY_DAMAGE and rec.get("d") in roster)
+    if not hits:
+        return
+    moves: dict[int, list[tuple[int, str, bool]]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("g") in roster:
+            moves[rec.get("g")].append((rec["t"], str(rec.get("by", "")), bool(rec.get("ok"))))
+    died: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in death_records(trace):
+        died[rec.get("g", 0)].append(rec["t"])
+    print(f"\n  Death Ray hits     : {len(hits)}")
+    last: dict[int, int] = {}
+    for when, victim in hits:
+        burst = when - last.get(victim, -DEATH_RAY_LOOK_MS - 1) <= DEATH_RAY_LOOK_MS
+        last[victim] = when
+        if burst:
+            continue
+        mover, tried = ray_hit_movers(moves[victim], when)
+        dodges = ", ".join(f"{action} {'walked' if ok else 'refused'}" for action, ok in tried.items()) or "no dodge"
+        dead = any(when <= then <= when + DEATH_RAY_LOOK_MS for then in died[victim])
+        print(f"    {clock(when)}  {trace.name(victim):14} {trace.role(victim):6} last walk {mover}; {dodges}"
+              f"{'; died' if dead else ''}")
 
 
 def merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -2891,17 +2952,66 @@ def keepers_from_auras(spell_ids) -> list[str]:
     return [name for spell, name in KEEPER_PASSIVES.items() if spell in seen]
 
 
-def drain_life_spans(rows: list[tuple[int, int, int, int]]) -> list[int]:
-    """How long each Drain Life channel ran, in ms, from its aura rows on the victim as (t, caster,
+def drain_life_channels(rows: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int]]:
+    """Each Drain Life channel as (start, caster, ms), from its aura rows on the victim as (t, caster,
     victim, removed) in time order. A channel still open at the end is left out."""
     opened: dict[tuple[int, int], int] = {}
-    spans = []
+    channels = []
     for when, caster, victim, removed in rows:
         if not removed:
             opened[(caster, victim)] = when
         elif (caster, victim) in opened:
-            spans.append(when - opened.pop((caster, victim)))
-    return spans
+            began = opened.pop((caster, victim))
+            channels.append((began, caster, when - began))
+    return channels
+
+
+def drain_life_spans(rows: list[tuple[int, int, int, int]]) -> list[int]:
+    """How long each Drain Life channel ran, in ms, from the same rows as drain_life_channels."""
+    return [ms for _, _, ms in drain_life_channels(rows)]
+
+
+def ready_kickers(kicks: dict[int, tuple[list[int], int, float]], spots: dict[int, tuple[float, float]],
+                  channel: tuple[float, float], when: int, slack: float = KICK_RANGE_SLACK) -> int:
+    """How many bots had their kick off cooldown and the channelling Guardian in range at `when`. Kicks
+    are per bot (sorted cast times, cooldown ms, range yd), spots where each bot stood then."""
+    return sum(1 for guid, (casts, cooldown, reach) in kicks.items()
+               if guid in spots and not on_cooldown(casts, when, cooldown)
+               and math.dist(spots[guid], channel) <= reach + slack)
+
+
+def guardians_on(victims: dict[int, list[list]], tank: int, when: int, floor: float = 0.0,
+                 fresh_ms: int = 1500) -> int:
+    """Guardians whose snapshot_rows row just before `when`, no older than `fresh_ms`, has `tank` as its
+    target and health over `floor`."""
+    count = 0
+    for own in victims.values():
+        row = row_before(own, when)
+        if row and when - row[0] <= fresh_ms and row[8] == tank and row[6] > floor:
+            count += 1
+    return count
+
+
+def taunt_bounced(victim_rows: list[list], caster: int, when: int, tanks: set,
+                  after_ms: int = TAUNT_BOUNCE_MS) -> bool:
+    """Whether a Guardian `caster` taunted at `when` sat on another tank `after_ms` later, by its
+    snapshot_rows rows."""
+    row = row_before(victim_rows, when + after_ms)
+    return bool(row) and row[0] > when and row[8] in tanks and row[8] != caster
+
+
+def ray_hit_movers(moves: list[tuple[int, str, bool]], when: int,
+                   window_ms: int = DEATH_RAY_LOOK_MS) -> tuple[str, dict[str, bool]]:
+    """Over one bot's (t, action, ok) move rows: the last action whose walk went out in the `window_ms`
+    before a Death Ray hit, '-' for none, and per Death Ray dodger that tried, whether one of its walks
+    went out."""
+    inside = [(action, ok) for at_ms, action, ok in moves if when - window_ms <= at_ms <= when]
+    walked = [action for action, ok in inside if ok]
+    tried: dict[str, bool] = {}
+    for action, ok in inside:
+        if action in DEATH_RAY_DODGERS:
+            tried[action] = tried.get(action, False) or ok
+    return (walked[-1] if walked else "-"), tried
 
 
 def guardian_power_shares(health: list[float]) -> tuple[float, float]:
@@ -3845,8 +3955,10 @@ def show_phase3_area(trace: Trace, start: int, stop: int, rows: dict[int, list[l
     total = sum(counts.values())
     if total:
         bands = "  ".join(f"{band}: {counts[band]}" for band in ("0", "1", "2", "3+", "no target") if counts[band])
-        print(f"\n  area spells        : {total} casts by non-tanks, worth hitting round the target {bands};"
-              f" a loose Guardian in the area {loose_casts}")
+        # From each unit's centre, where the module takes off its size, so the count is a floor: an
+        # Empowered Guardian's size is several yards.
+        print(f"\n  area spells        : {total} casts by non-tanks, worth hitting by centre distance round the"
+              f" target (a lower bound) {bands}; a loose Guardian in the area {loose_casts}")
         print("    by spell (under 3): " + ", ".join(f"{name} {spell['casts']} ({spell['under']})" for name, spell in
                                                sorted(by_spell.items(), key=lambda item: -item[1]["casts"])))
     picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.p3area")
@@ -3883,6 +3995,91 @@ def show_beacon_tanks(trace: Trace, heal_at: int, healed: set, rows: dict[int, l
     ends = [row[6] for guid in healed if (row := row_before(rows.get(guid, []), stop))]
     print(f"      raid on the healed Guardians: {dealt / 1000:.0f}k in 20 s,"
           f" health at the end {', '.join(f'{hp:.0f}%' for hp in ends) or '-'}")
+
+
+def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], guardians: set,
+                      tanks: set, roster: set) -> None:
+    """How the Guardians split between the tanks: per 10 s, at each tank swap, after each taunt; then
+    Misdirection targets, the tanks' own buttons with their health, and every Lay on Hands of the pull."""
+    order = sorted(tanks, key=trace.name)
+    if not order:
+        return
+    victims = {guid: rows.get(guid, []) for guid in guardians}
+    print(f"\n  Guardians per tank : all/30%+ per 10 s, {' / '.join(trace.name(tank) for tank in order)}")
+    for when in range(start, stop, 10000):
+        cells = [f"{guardians_on(victims, tank, when)}/{guardians_on(victims, tank, when, GUARDIAN_FLOOR_PCT)}"
+                 for tank in order]
+        print(f"    {clock(when)}  {'  '.join(cells)}")
+    for rec in notes(trace, "yogg.tankswap"):
+        if start <= rec["t"] <= stop:
+            looks = "; ".join(f"+{look // 1000} s " + "/".join(str(guardians_on(victims, tank, rec["t"] + look))
+                                                                for tank in order) for look in TANK_SWAP_LOOKS_MS)
+            print(f"    swap {clock(rec['t'])} by {trace.name(rec.get('g', 0))}, {rec.get('txt', '')}: {looks}")
+    for key in ("yogg.tankshed", "yogg.tankloh"):
+        picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, key) if start <= rec["t"] <= stop)
+        if picks:
+            print(f"    {key:16} : {dict(picks)}")
+
+    taunts = [(rec["t"], rec.get("s"), rec.get("tgt")) for rec in trace.of("cast")
+              if rec.get("s") in tanks and rec.get("sp") in GUARDIAN_TAUNTS and rec.get("tgt") in guardians
+              and start <= rec["t"] <= stop]
+    for tank in order:
+        own = [(when, aim) for when, caster, aim in taunts if caster == tank]
+        if own:
+            back = sum(1 for when, aim in own if taunt_bounced(victims[aim], tank, when, tanks))
+            print(f"    taunts by {trace.name(tank):14}: {len(own)}, on another tank {TAUNT_BOUNCE_MS // 1000} s"
+                  f" later {back}")
+    redirects = collections.Counter(trace.name(rec.get("tgt", 0)) for rec in trace.of("cast")
+                                    if rec.get("sp") == SPELL_MISDIRECTION and start <= rec["t"] <= stop)
+    if redirects:
+        print(f"    Misdirection on  : {dict(redirects)}")
+    for tank in order:
+        pressed = []
+        for rec in trace.of("cast"):
+            name = TANK_BUTTONS.get(rec.get("sp"))
+            if name and rec.get("s") == tank and start <= rec["t"] <= stop and not rec.get("tr"):
+                row = row_before(rows.get(tank, []), rec["t"])
+                pressed.append(f"{name} {clock(rec['t'])}" + (f" at {row[6]:.0f}%" if row else ""))
+        print(f"    {trace.name(tank):14} buttons: {', '.join(pressed) or 'none'}")
+    for rec in trace.of("cast"):
+        if rec.get("sp") in SPELL_LAY_ON_HANDS and rec.get("s") in roster and not rec.get("tr"):
+            aim = rec.get("tgt") or rec.get("s")
+            print(f"    Lay on Hands {clock(rec['t'])} {trace.name(rec.get('s'))} on {trace.name(aim)}"
+                  f" ({trace.role(aim)})")
+
+
+def show_phase3_healers(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], roster: set) -> None:
+    """Per bot healer: mana into phase 3, how often it was put back on the combat engine, which engine its
+    Lunatic Gaze node fired on, and the mana cooldowns it cast. The non-combat engine has none of those
+    cooldowns, so a healer stuck on it runs dry."""
+    healers = sorted((guid for guid in roster if trace.role(guid) == "heal" and guid not in trace.humans),
+                     key=trace.name)
+    if not healers:
+        return
+    switches = collections.Counter(rec.get("g") for rec in notes(trace, "yogg.healerengine")
+                                   if start <= rec["t"] <= stop)
+    gaze: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for rec in trace.of("cov"):
+        for row in rec.get("r", []):
+            node = trace.covnodes.get(row[0], {})
+            if node.get("node") == GAZE_NODE and len(row) > 2:
+                gaze[rec.get("g")][node.get("engine", "?")] += row[2]
+    spent: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for rec in trace.of("cast"):
+        name = trace.spells.get(rec.get("sp"), "")
+        if rec.get("s") in healers and name in HEALER_MANA_SPELLS and start <= rec["t"] <= stop:
+            spent[rec.get("s")][name] += 1
+    print("\n  healers            : mana % at "
+          + "/".join(f"+{look // 1000}" for look in HEALER_MANA_LOOKS_MS)
+          + " s, switches to the combat engine, gaze node fires by engine, mana cooldowns")
+    for guid in healers:
+        mana = []
+        for look in HEALER_MANA_LOOKS_MS:
+            row = row_before(rows.get(guid, []), start + look) if start + look <= stop else None
+            mana.append(f"{row[7]:.0f}" if row and row[6] > 0 else "-")
+        fires = " ".join(f"{engine} {count}" for engine, count in sorted(gaze[guid].items())) or "-"
+        cooldowns = ", ".join(f"{name} {count}" for name, count in sorted(spent[guid].items())) or "none"
+        print(f"    {trace.name(guid):14} {'/'.join(mana):15} switches {switches[guid]:3}  gaze {fires:14} {cooldowns}")
 
 
 def show_phase3(trace: Trace) -> None:
@@ -4048,12 +4245,27 @@ def show_phase3(trace: Trace) -> None:
     print(f"    power            : {full:.0%} of Guardian samples at 90% health or more, {weak:.0%} Weakened")
     drains = sorted((rec["t"], rec.get("s", 0), rec.get("d", 0), rec.get("r", 0)) for rec in trace.of("aura")
                     if rec.get("sp") in SPELL_GUARDIAN_DRAIN_LIFE and start <= rec["t"] <= stop)
-    spans = drain_life_spans(drains)
-    if spans:
-        cut = sum(1 for ms in spans if ms <= DRAIN_CUT_MS)
-        ran = sum(1 for ms in spans if ms >= DRAIN_FULL_MS)
-        print(f"    Drain Life       : {len(spans)} channels, {cut} cut inside {DRAIN_CUT_MS / 1000:.1f} s,"
-              f" {ran} ran the full 5 s")
+    channels = drain_life_channels(drains)
+    if channels:
+        cut = sum(1 for _, _, ms in channels if ms <= DRAIN_CUT_MS)
+        full = [(began, caster) for began, caster, ms in channels if ms >= DRAIN_FULL_MS]
+        # A kick that was ready and in reach while the channel ran out sat on a bot busy casting.
+        kicks: dict[int, tuple[list[int], int, float]] = {}
+        for rec in trace.of("cast"):
+            kick = KICK_SPELLS.get(rec.get("sp"))
+            if kick and rec.get("s") in roster and rec.get("s") not in trace.humans:
+                kicks.setdefault(rec.get("s"), ([], kick[1], kick[2]))[0].append(rec["t"])
+        missed = 0
+        for began, caster in full:
+            spot = at(trace, caster, began)
+            spots = {guid: where[:2] for guid in kicks if (where := at(trace, guid, began))}
+            missed += bool(spot) and ready_kickers(kicks, spots, spot[:2], began) > 0
+        print(f"    Drain Life       : {len(channels)} channels, {cut} cut inside {DRAIN_CUT_MS / 1000:.1f} s,"
+              f" {len(full)} ran the full 5 s, {missed} of those with a bot kick ready and in range")
+        nudges = collections.Counter(str(rec.get("txt", "")).split(" ", 1)[-1] for rec in notes(trace, "yogg.kicknudge")
+                                     if start <= rec["t"] <= stop)
+        if nudges:
+            print(f"    yogg.kicknudge   : {dict(nudges)}")
 
     # A bot tank's target, and whether its taunt was even available when a Guardian swung at the raid.
     swings = [rec for rec in melee_hits if trace.role(rec.get("d")) != "tank"]
@@ -4070,6 +4282,7 @@ def show_phase3(trace: Trace) -> None:
     held = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.tankhold"))
     if held:
         print(f"    yogg.tankhold    : {dict(held)}")
+    show_phase3_tanks(trace, start, alive_end, rows, guardians, tanks, roster)
 
     # The gaze action used to claim the tank's tick for all 4 s, so a Guardian peeled in one went
     # untaunted until it had swung.
@@ -4198,11 +4411,12 @@ def show_phase3(trace: Trace) -> None:
             land = when + ROAR_CAST_MS
             silenced = {guid for t, guid in silences if when <= t <= land + 1500}
             immune = {guid for t, guid in immunes if when - 6000 <= t <= land + 500}
-            press = next(((t, caster) for t, caster in masteries if when - 6000 <= t <= land), None)
-            pressed = (f"Aura Mastery by {trace.name(press[1])} at {(press[0] - when) / 1000:+.1f} s" if press
-                       else "no Aura Mastery")
+            # Every press, so a second paladin spending its own on the same roar shows.
+            presses = [(t, caster) for t, caster in masteries if when - 6000 <= t <= land]
+            pressed = ("Aura Mastery by " + ", ".join(f"{trace.name(caster)} at {(t - when) / 1000:+.1f} s"
+                                                      for t, caster in presses) if presses else "no Aura Mastery")
             print(f"    {clock(when)}  silenced {len(silenced)}, immune {len(immune)}, {pressed}:"
-                  f" {roar_verdict(press is not None, len(silenced))}")
+                  f" {roar_verdict(bool(presses), len(silenced))}")
         presses = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.roar")
                                       if start <= rec["t"] <= stop)
         if presses:
@@ -4286,6 +4500,7 @@ def show_phase3(trace: Trace) -> None:
             away = sum(1 for row in gazing if facing_away(row[5], row[2:4], yogg_spot))
             share = f"{away * 100 // len(gazing)}% of {len(gazing)}" if gazing else "-"
             print(f"    {trace.name(guid):14} {spot:5.1f} yd  away {share}")
+    show_phase3_healers(trace, start, alive_end, rows, roster)
 
     show_phase3_leftovers(trace, start, alive_end)
 
@@ -4647,11 +4862,11 @@ SECTIONS = (
      " walk speed to the Brain, turns on the spot, exits decided outside the brain room, skull gaze ticks,"
      " the hold short of phase 3", show_brain),
     ("phase3", "Heroism, the ranged station, station arrival and Nitro, Immortal Guardians, why they left"
-     " the tanks, their power and Drain Life, swings on the raid during a gaze, beacon heals, stacked heals,"
-     " who else they reached, the tanks under them, drags and what the healed Guardian did to its holder,"
-     " Deafening Roar and Aura Mastery, Lunatic Gaze, the damage split, area casts, phase 2 leftovers and"
-     " the pets on them", show_phase3),
-    ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
+     " the tanks, their power and Drain Life, the tank split and swaps, swings on the raid during a gaze,"
+     " beacon heals, stacked heals, who else they reached, the tanks under them, drags and what the healed"
+     " Guardian did to its holder, Deafening Roar and Aura Mastery, Lunatic Gaze, the damage split, area"
+     " casts, healer mana, phase 2 leftovers and the pets on them", show_phase3),
+    ("crush", "Crush and who took it, knockback, Death Rays and the last walk before each", show_crush),
     ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),
 )
 

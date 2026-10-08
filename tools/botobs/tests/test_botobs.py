@@ -1564,6 +1564,48 @@ class YoggPhases(unittest.TestCase):
         rows = [(1000, 7, 1, 0), (1300, 8, 2, 0), (1400, 7, 1, 1), (6300, 8, 2, 1), (9000, 7, 3, 0)]
         # 7 on 1 cut after 400 ms, 8 on 2 ran its 5 s, 7 on 3 never closed
         self.assertEqual(yogg_saron.drain_life_spans(rows), [400, 5000])
+        self.assertEqual(yogg_saron.drain_life_channels(rows), [(1000, 7, 400), (1300, 8, 5000)])
+
+    def test_ready_kickers_need_the_kick_off_cooldown_and_the_channel_in_range(self):
+        kicks = {1: ([1000], 6000, 25.0), 2: ([5000], 10000, 5.0), 3: ([], 24000, 30.0)}
+        spots = {1: (0.0, 0.0), 2: (0.0, 0.0), 3: (50.0, 0.0)}
+        # 1 is back at 7 s and in reach, 2 is still on cooldown, 3 is ready but 40 yd out against 30 + slack
+        self.assertEqual(yogg_saron.ready_kickers(kicks, spots, (10.0, 0.0), 7000), 1)
+        self.assertEqual(yogg_saron.ready_kickers(kicks, spots, (10.0, 0.0), 6000), 0)
+        self.assertEqual(yogg_saron.ready_kickers(kicks, spots, (4.0, 0.0), 16000), 2)
+        self.assertEqual(yogg_saron.ready_kickers(kicks, {}, (4.0, 0.0), 16000), 0)
+
+    def test_guardians_on_counts_fresh_rows_aimed_at_the_tank_over_the_floor(self):
+        victims = {10: [[1000, 10, 0, 0, 0, 0, 80.0, 0, 5]],
+                   11: [[1000, 11, 0, 0, 0, 0, 20.0, 0, 5]],
+                   12: [[1000, 12, 0, 0, 0, 0, 90.0, 0, 6]],
+                   13: [[-2000, 13, 0, 0, 0, 0, 90.0, 0, 5]]}
+        self.assertEqual(yogg_saron.guardians_on(victims, 5, 1500), 2)
+        self.assertEqual(yogg_saron.guardians_on(victims, 5, 1500, 30.0), 1)
+        self.assertEqual(yogg_saron.guardians_on(victims, 6, 1500), 1)
+        # 13's only row is too old to say where it is now
+        self.assertEqual(yogg_saron.guardians_on(victims, 5, 3000), 0)
+
+    def test_taunt_bounced_reads_the_victim_after_the_window(self):
+        rows = [[1000, 9, 0, 0, 0, 0, 90.0, 0, 5], [3000, 9, 0, 0, 0, 0, 90.0, 0, 6],
+                [5500, 9, 0, 0, 0, 0, 90.0, 0, 5]]
+        tanks = {5, 6}
+        # 4 s after the taunt it's on 6, which is a bounce for 5 and a hold for 6.
+        self.assertTrue(yogg_saron.taunt_bounced(rows, 5, 1200, tanks))
+        self.assertFalse(yogg_saron.taunt_bounced(rows, 6, 1200, tanks))
+        # A non-tank victim is a loose Guardian, not a bounce, and no row after the taunt says nothing.
+        self.assertFalse(yogg_saron.taunt_bounced([[1000, 9, 0, 0, 0, 0, 90.0, 0, 7]], 6, 500, tanks))
+        self.assertFalse(yogg_saron.taunt_bounced(rows, 6, 6000, tanks))
+
+    def test_ray_hit_movers_names_the_last_walk_and_the_dodgers_that_tried(self):
+        moves = [(500, "yogg-saron body detour action", True), (1500, "avoid aoe", False),
+                 (2500, "yogg-saron phase 2 spacing action", False), (2600, "avoid aoe", True),
+                 (2700, "reach spell", True), (4500, "yogg-saron portal walk", True)]
+        mover, tried = yogg_saron.ray_hit_movers(moves, 3000)
+        self.assertEqual(mover, "reach spell")
+        self.assertEqual(tried, {"avoid aoe": True, "yogg-saron phase 2 spacing action": False})
+        self.assertEqual(yogg_saron.ray_hit_movers(moves, 1000), ("yogg-saron body detour action", {}))
+        self.assertEqual(yogg_saron.ray_hit_movers([], 3000), ("-", {}))
 
     def test_guardian_power_splits_full_and_weakened(self):
         self.assertEqual(yogg_saron.guardian_power_shares([100.0, 95.0, 50.0, 9.9]), (0.5, 0.25))

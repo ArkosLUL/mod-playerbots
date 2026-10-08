@@ -485,6 +485,26 @@ public:
     bool IsActive() override;
 };
 
+// A tank under ULDUAR_YOGG_SARON_TANK_LOH_PCT in phase 3 and this paladin can Lay on Hands it.
+class YoggSaronTankLayOnHandsTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron tank lay on hands trigger";
+
+    YoggSaronTankLayOnHandsTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// A healer in combat on the non-combat engine during the encounter.
+class YoggSaronHealerCombatEngineTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron healer combat engine trigger";
+
+    YoggSaronHealerCombatEngineTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 // Shadow Resistance Aura on the one paladin whose Aura Mastery can double it, and its own copy of the
 // aura: a human's sits on every raider and would otherwise read as already done.
 class YoggSaronShadowAuraTrigger : public YoggSaronTrigger
