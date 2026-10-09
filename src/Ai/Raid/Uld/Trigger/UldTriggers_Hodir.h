@@ -5,14 +5,8 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-//
-// Hodir
-//
-
-// The bot is carrying Biting Cold and has no Toasty Fire to shed it for free. Deliberately holds no
-// state: the raid position trigger instantiates this one to decide whether to stand down, and
-// anything latched here would be lost by that stack-allocated copy. The stack threshold lives on the
-// action.
+// Carrying Biting Cold with no Toasty Fire to shed it for free. Holds no state: the action owns the arm
+// threshold and the shed-to-floor latch.
 class HodirBitingColdTrigger : public Trigger
 {
 public:
@@ -23,7 +17,7 @@ public:
 };
 
 // A Snowpacked Icicle Target is up, and this bot is not inside the Safe Area it radiates. That NPC
-// is the only Flash Freeze exemption in the fight - a Toasty Fire does not grant one.
+// is the only Flash Freeze exemption in the fight, a Toasty Fire doesn't grant one.
 class HodirNearSnowpackedIcicleTrigger : public Trigger
 {
 public:
@@ -33,10 +27,8 @@ public:
     bool IsActive() override;
 };
 
-// This bot is the paladin that should be running Frost Resistance Aura, and is not running it yet.
-// The shared BossFrostResistanceTrigger is deliberately not used here: it takes the first paladin in
-// group order whatever its spec, so a three-paladin raid can lose Devotion off the tank or
-// Concentration off a healer, and it raises the aura through a ChangeStrategy that nothing removes.
+// Not the shared BossFrostResistanceTrigger: it takes the first paladin whatever its spec, so a tank can
+// lose Devotion or a healer Concentration, and it raises the aura through a ChangeStrategy nothing removes.
 class HodirFrostResistanceTrigger : public Trigger
 {
 public:
@@ -67,8 +59,7 @@ public:
     bool IsActive() override;
 };
 
-// Non-tank, non-healer DPS pick their own target: trapped raiders first, then helper blocks, then
-// the boss.
+// Everyone but healers: trapped raiders first, then helper blocks, then the boss. Tanks only get the boss.
 class HodirSetDpsPriorityTrigger : public Trigger
 {
 public:

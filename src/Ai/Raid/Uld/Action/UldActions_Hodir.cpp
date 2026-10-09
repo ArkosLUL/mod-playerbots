@@ -44,21 +44,16 @@ bool IsClearOfHazards(Position const& position, std::vector<HazardCircle> const&
     return true;
 }
 
-// PointMovementGenerator never launches a spline while IsMovementPreventedByCasting is true, so the
-// MoveTo below is accepted, books the movement slot for a second, and the bot stands still until the
-// cast ends. Blizzard held one caster in an Ice Shards pool for 5.7s and Evocation another for 3.5s;
-// both died there. Only the two nodes that run when the bot is already in danger call this - a cast
-// is worth more than a shed leg, and less than 14000 from Ice Shards or a Flash Freeze.
+// Any cast in flight blocks the spline: MoveTo still succeeds and the bot just stands there. Only nodes
+// already in danger call this: a cast is worth more than a shed leg, less than a 14000 hit.
 void BreakCastPinningTheFeet(PlayerbotAI* botAI, Player* bot)
 {
     if (bot->IsMovementPreventedByCasting())
         botAI->RequestSpellInterrupt();
 }
 
-// MoveTo refuses the point it already issued for MaxWaitForMove (5s), moving or not. So a walk stopped
-// short (UseItemAction calls StopMoving on a moving bot, Disengage throws it back) is never issued
-// again, and a mage stood 2.7s under two drifts that way. Drop the booking once the bot has stood
-// still past ULDUAR_HODIR_STALL_MS, which a spline that was just issued never does.
+// MoveTo refuses a point it issued for MaxWaitForMove (5s), moving or not, so a walk stopped short is never
+// reissued. Clear the booking once the bot stands still past the stall time, which a fresh spline never does.
 void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
 {
     LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
@@ -78,9 +73,8 @@ bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
     if (!shelter)
         return false;
 
-    // MoveInside answers false for a bot already inside the radius, so one caught inside a falling
-    // drift's blast falls through to the dodge below, which collects drifts at the same clear and
-    // walks it out. Nothing here has to push.
+    // MoveInside answers false inside the radius, so a bot caught in a falling drift's blast falls through
+    // to the dodge, which walks it out at the same clear.
     ReleaseStalledWalk(botAI, bot);
     return MoveInside(bot->GetMapId(), shelter->GetPositionX(), shelter->GetPositionY(),
                       shelter->GetPositionZ(), GetHodirShelterPark(shelter),
@@ -106,14 +100,8 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Hold the spot already chosen, arrival included, and re-validate it against the live hazard list
-    // rather than sweeping again. The sweep below rings outward from wherever the bot is standing in
-    // 2 yd steps, so deriving every tick just hands it another 2 yd hop - 4197 forced moves in a six
-    // minute pull, a fresh destination every 410ms, 71% under half a second apart, each accepted MoveTo
-    // clearing the MotionMaster so the walk never finished. Clearing the spot on arrival dropped
-    // through to that sweep in the same tick, which is where the loop came from. Only a spot that has
-    // stopped being clear is worth a new one; re-offering the same point answers Duplicate and returns
-    // false, which is correct, because the forced walk still holds the slot.
+    // Hold the spot through arrival, re-checked against live hazards: the sweep rings out from the bot, so
+    // re-deriving is another 2 yd hop. A Duplicate false here is fine, the forced walk still holds the slot.
     if (!IsEmptyPosition(_dest) && IsClearOfHazards(_dest, hazards))
     {
         float const remaining = bot->GetExactDist2d(&_dest);
@@ -132,10 +120,8 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
     Position preference;
     Position const* preferNear = GetHodirDodgePreference(botAI, bot, preference) ? &preference : nullptr;
 
-    // The shared helper rings outward and validates every candidate against the collision mesh, so
-    // the first hit is both the shortest walk and somewhere MoveTo will actually accept. FleePosition
-    // is the wrong tool here: it clamps travel to AiPlayerbot.FleeDistance and reads one hazard, so
-    // the second icicle of a volley leaves the bot standing in the blast.
+    // First hit is the shortest walk MoveTo will accept. Not FleePosition: it clamps travel to
+    // AiPlayerbot.FleeDistance and reads one hazard, so a second icicle leaves the bot in the blast.
     Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_DODGE_LEASH, 2.0f,
                                                       static_cast<float>(M_PI) / 8.0f, preferNear);
 
@@ -157,9 +143,8 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
     _dest = dest;
     _destDist = bot->GetExactDist2d(&_dest);
 
-    // FORCED so the dodge outranks the anchor walking the bot back in. A second icicle arriving
-    // mid-dodge still cannot preempt this one - IsWaitingForLastMove only yields to a strictly higher
-    // priority - which is what the 4.5 yd declump spacing is for. Do not escalate further.
+    // FORCED to outrank the anchor walking the bot back. A second icicle can't preempt it (IsWaitingForLastMove
+    // wants strictly higher), which is what the 4.5 yd declump spacing is for. Don't escalate further.
     return MoveTo(bot->GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false,
                   false, false, false, MovementPriority::MOVEMENT_FORCED);
 }
@@ -174,15 +159,13 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Shared with everything that steps aside for the shed, so the two cannot disagree about whether
-    // one is coming. It reads the aura rather than a zone lookup: that is what the bot is actually
-    // paid for, it costs no grid sweep, and it is the thing about to be lost.
+    // Same check everything that steps aside for the shed uses, so they can't disagree. It reads the buff
+    // auras, not a zone lookup: that's what the walk would lose, and it needs no grid sweep.
     if (!_shedding && !IsHodirBitingColdShedArmed(bot))
         return false;
 
-    // Once started, keep going down to the floor. A stack comes off only on the second moving tick and
-    // any stationary tick in between resets that progress, so stopping between stacks wastes the
-    // movement already spent.
+    // Once started, go down to the floor: a stack only drops on the second moving tick in a row, so
+    // stopping between stacks wastes the walk already done.
     if (_shedding && cold->GetStackAmount() <= ULDUAR_HODIR_BITING_COLD_SHED_FLOOR)
     {
         _shedding = false;
@@ -192,16 +175,13 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
 
     _shedding = true;
 
-    // A channel pins the feet for its whole length, so the legs below would be accepted and never
-    // walked: a warlock's 15s Drain Soul held it still from 3 stacks to 5. A normal cast ends and then
-    // walks, so only a channel is broken.
+    // A channel pins the feet for its whole length, so legs get accepted and never walked. A normal cast
+    // ends and then walks, so only a channel is broken.
     if (bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) && bot->IsMovementPreventedByCasting())
         botAI->RequestSpellInterrupt();
 
-    // The walk holds one leg instead of re-deriving under its own walk. Stateless it issued 6686 moves
-    // against 4122 refusals and turned the bot around a median 879ms apart, which is the movement slot
-    // the rest of the raid never got. On arrival it derives the next leg rather than stopping, because
-    // it is the chain that covers consecutive aura ticks - one leg cannot.
+    // Hold one leg till it's walked instead of re-deriving under the walk. On arrival derive the next leg,
+    // don't stop: only the chain covers consecutive aura ticks.
     if (!IsEmptyPosition(_leg))
     {
         float const remaining = bot->GetExactDist2d(&_leg);
@@ -242,10 +222,8 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
     float tolerance = 0.0f;
     if (GetHodirAnchor(botAI, bot, anchor, tolerance))
     {
-        // No arrival latch here. The trigger stands down inside the tolerance, which is what the latch
-        // used to be for, and holding one across ticks would swallow a re-anchor: a bot that has to
-        // move because Hodir walked onto its stand is usually still well inside twice the tolerance,
-        // so a latched action would refuse the move the trigger just asked for.
+        // No arrival latch: the trigger already stands down inside the tolerance, and a latch would swallow
+        // a re-anchor, since a bot Hodir walked onto is usually still inside twice the tolerance.
         if (bot->GetExactDist2d(&anchor) <= tolerance)
             return false;
 
@@ -255,10 +233,8 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
                       false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
     }
 
-    // No stand worth walking to, so the trigger fired on a broken constraint instead: too close to
-    // Hodir, too far to reach him, or sharing an icicle splash with a neighbour. Step to the nearest
-    // spot that fixes all three at once rather than to a formation spot - there isn't one any more,
-    // and inventing one is what used to walk bots back out of the buffs they were standing in.
+    // No stand, so a constraint broke: too close, too far, or sharing an icicle splash. Step to the nearest
+    // spot that fixes all three, never a home spot, which walks bots back out of the buffs they're in.
     std::vector<HazardCircle> hazards;
 
     // Only the neighbours the trigger's declump rule counts. Melee are stacked on him by design, so
@@ -285,9 +261,8 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
     if (hodir)
         hazards.emplace_back(hodir->GetPosition(), ULDUAR_HODIR_RANGED_MIN_BOSS_GAP);
 
-    // The far end of the band is a cap, not a circle to stand outside of, so it rides along as an
-    // accept rule. Without it the sweep rings outward and happily answers with a spot further out
-    // than the one that fired the trigger.
+    // The band's far end is a cap, not a circle to stand outside, so it goes in as an accept rule. Otherwise
+    // the outward sweep can answer further out than the spot that fired the trigger.
     auto inBand = [&](float x, float y)
     { return !hodir || hodir->GetExactDist2d(x, y) <= ULDUAR_HODIR_CASTER_MAX_BOSS_GAP; };
 
@@ -335,13 +310,8 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget()
             trappedAlly = unit;
     }
 
-    // Helper blocks are assigned, not searched for: one breaker each across every block that is up.
-    // A per-block cap multiplies by the eight helpers one Flash Freeze puts up at once, which is how
-    // the whole raid ended up on ice with as many as eleven bots on a single block. No stickiness
-    // needed either - the assignment is guid-ordered, so it does not move on its own.
-    //
-    // Skipped when a trapped raider is already in hand, since that outranks a helper below and the
-    // assignment costs a grid pass.
+    // Helper blocks come from a raid-wide breaker budget, not a per-block cap: one freeze puts up eight.
+    // Skipped with a trapped raider in hand, which outranks a helper anyway, to save the grid pass.
     Unit* helperBlock = trappedAlly ? nullptr : GetHodirAssignedHelperBlock(botAI, bot);
 
     std::vector<std::pair<uint32, Unit*>> const priority = {
@@ -359,10 +329,8 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget()
         }
     }
 
-    // No stickiness across entries. Holding a block because it outranks the boss on this list is what
-    // parked the raid on helper ice for the rest of the fight: the block outranks Hodir for as long as
-    // it lives, whether or not this bot is still assigned to it. The 10 yd margin in the scan above
-    // already stops two bots ping-ponging between adjacent blocks, which is all the hysteresis needed.
+    // No stickiness across entries: a block outranks Hodir while it lives, assigned to this bot or not, so
+    // holding one parks the bot on helper ice. The 10 yd margin above is all the hysteresis needed.
     if (!target)
         target = AI_VALUE(Unit*, "dps target");
 
@@ -386,7 +354,7 @@ bool HodirSetDpsPriorityAction::Execute(Event /*event*/)
         RaidObs::NoteDerived(bot, "hodir.dpstarget", value);
     }
 
-    // No threat wipe in this fight, and it is a race - nobody should be throttling.
+    // No threat wipe in this fight and it's a race, so nobody should be throttling.
     if (target == GetHodir(botAI))
         context->GetValue<bool>("neglect threat")->Set(true);
 
@@ -402,9 +370,8 @@ bool HodirSetDpsPriorityAction::Execute(Event /*event*/)
 
 bool HodirFrozenBlowsSwapAction::Execute(Event /*event*/)
 {
-    // Deliberately unprobed. Every taunt is an OK verdict on this action and every failed one a FAILED,
-    // both already in the act stream with a repeat count - and all four class taunts share an 8s
-    // cooldown, so a swap that has to wait for it retries at tick rate until it lands.
+    // No probe: every taunt already shows in the act stream as OK or FAILED. Class taunts are on an 8s
+    // cooldown, so a swap waiting on it retries at tick rate until it lands.
     return CastClassTaunt(botAI, GetHodir(botAI));
 }
 
@@ -431,15 +398,8 @@ bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "hodir.stormcloud", "rally " + RaidObs::DescribeDerived(rally));
 
-    // Holding still is the whole job. Storm Power is an area pulse at the carrier's own feet reaching
-    // 3 yd, and the carry has 6 charges spent about one a second, so a carrier that keeps walking
-    // spends them on whoever it happens to pass - measured p50 0-1 raiders inside the pulse, and 4.4%
-    // of raider-samples during a live carry. Lapping the raid was the best available answer while the
-    // carrier was the only thing that could move; now the receivers come instead.
-    //
-    // The rally is seeded from where this bot was standing when the cloud landed, so MoveInside
-    // ordinarily answers false straight away and the engine descends to whatever it can cast. It only
-    // walks when something else - a dodge, a shelter run - has pushed the carrier off the point.
+    // Holding still is the job: Storm Power pulses 3 yd round the carrier, so a walking carrier spends its
+    // charges on whoever it passes. The rally is where it stood, so this only walks once pushed off it.
     return MoveInside(bot->GetMapId(), rally.GetPositionX(), rally.GetPositionY(), rally.GetPositionZ(),
                       ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK, MovementPriority::MOVEMENT_COMBAT);
 }
@@ -454,9 +414,8 @@ bool HodirCollectStormPowerAction::Execute(Event /*event*/)
     if (!GetHodirStormCloudRally(botAI, bot, carrier, rally))
         return false;
 
-    // No cast is broken to get here, unlike the shelter run and the dodge. Those are avoiding a 14000
-    // hit; this is collecting a buff, and a caster that drops a cast to walk 3 yd has already spent
-    // more than the pulse is worth.
+    // No cast break here, unlike the dodge and the shelter run: dropping a cast to walk 3 yd for a buff
+    // costs more than the pulse is worth.
     return MoveInside(bot->GetMapId(), rally.GetPositionX(), rally.GetPositionY(), rally.GetPositionZ(),
                       ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK, MovementPriority::MOVEMENT_COMBAT);
 }

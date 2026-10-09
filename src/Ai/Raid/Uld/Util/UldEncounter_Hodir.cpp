@@ -33,19 +33,12 @@
 
 using namespace EncounterHelpers;
 
-// Where Hodir is held when no fire qualifies. The eight helpers spawn round the middle of the room
-// (boss_hodir.cpp hhd) and from here every one is inside its AttackStartCaster stand-off: priests
-// 16.3/15.5 of 17, druids 21.6/5.4 of 22, shamans 14.5/9.3 of 25, mages 23.2/6.5 of 30. So none of
-// them has to walk to reach him, and early on their zones land near where they spawned: Starlight a
-// median 9.8 yd from a druid's spawn, fires 8.2 from a mage's. They still drift later in a pull, for
-// reasons the trace can't show (friendly NPCs are not swept). The old corner hold dragged him 30-55 yd
-// out to every fire and back, 913 of the 1106 yd he walked across three pulls. navprobe settles this
-// point and 6/12 yd rings round it at 432.687.
+// Hold point when no fire qualifies. Every helper spawns inside its AttackStartCaster stand-off from
+// here, so none walks to reach him and early zones land near their spawns.
 const Position ULDUAR_HODIR_CENTRE = Position(1998.0f, -235.5f, 432.687f);
 
-// Which way the tank stands off the hold point when Hodir is already on top of it and the bearing to
-// him means nothing. North-east into the open floor, so the degenerate case never puts the tank spot
-// in the chamfered south-west corner.
+// Tank bearing when Hodir already stands on the hold point and the bearing to him means nothing.
+// North-east into open floor, away from the chamfered south-west corner.
 constexpr float ULDUAR_HODIR_HOLD_FALLBACK_BEARING = 1.0845f;
 
 Unit* GetHodir(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_HODIR); }
@@ -95,9 +88,8 @@ bool HodirTauntWouldBeSuicide(PlayerbotAI* botAI, Player* bot)
     if (!HodirFrozenBlowsActive(botAI, bot))
         return false;
 
-    // Somebody else has to already be holding him. With nobody on him the taunt is the rescue and has
-    // to survive whatever shape the bot is in, and a taunt at a creature victim is how the boss comes
-    // off a pet.
+    // Only while another player holds him: with nobody on him the taunt is the rescue whatever the
+    // bot's health, and a taunt is how he comes off a pet.
     Unit* boss = GetHodir(botAI);
     Unit* victim = boss ? boss->GetVictim() : nullptr;
     return victim && victim != bot && victim->IsPlayer() && victim->IsAlive();
@@ -132,27 +124,23 @@ struct HodirFireLatch
     Position stand;
 };
 
-// One entry per carry, keyed on the carrier rather than on the bot reading it: the carrier and every
-// receiver have to gather on the same point, so the first to derive it publishes and the rest read.
-// applied is the aura's apply time, which is what tells two carries apart - stacks only ever fall, so
-// a carry ending on one and a new one starting on one are the same number.
+// One per carry, keyed on the carrier, not the reader: carrier and receivers must gather on one point.
+// applied is the aura's apply time, which tells two carries apart; stack counts repeat across them.
 struct HodirStormRally
 {
     time_t applied = 0;
     Position rally;
 };
 
-// Where Hodir is held, one per instance so both tanks agree. fire is empty while the point is
-// ULDUAR_HODIR_CENTRE. bearing points from where he stood when the
-// point was adopted to the point, so the tank stands on the far side and he trails onto it. offSince
-// is when he was last seen parked off the point, 0 while he is on it.
+// Where Hodir is held, one per instance so both tanks agree. fire is empty on the centre; bearing runs
+// from where he stood at adoption to the point, so the tank stands past it and he trails onto it.
 struct HodirHoldLatch
 {
     bool set = false;
     ObjectGuid fire;
     Position point;
     float bearing = 0.0f;
-    uint32 offSince = 0;
+    uint32 offSince = 0;  // when he parked off the point, 0 while on it
 };
 
 struct HodirBotLatches
@@ -188,10 +176,8 @@ Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot)
         if (target && target->IsAlive())
             candidates.push_back(target);
 
-    // A drift stands at the spot its target will occupy - 0.0 yd apart across seven freezes - and it is
-    // on the floor from the first tick of the 9s cast while the target only appears at 3.9s. Staging on
-    // it is the difference between a 5.1s scramble over up to 35 yd and a 9s walk. Only while the cast
-    // is up: at any other time a drift is something to dodge, not somewhere to stand.
+    // A drift stands where its target will spawn and is down from the cast's first tick, the target
+    // only at 3.9s. Only while the cast is up: otherwise a drift is something to dodge.
     if (IsHodirFlashFreezeIncoming(botAI))
     {
         found.clear();
@@ -213,11 +199,8 @@ Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot)
 
     Creature* best = nullptr;
 
-    // Held until the pick leaves the floor rather than re-derived every tick. Nearest-to-self mostly
-    // holds itself, because walking at a shelter keeps it the nearest one, but a sideways dodge can
-    // carry a bot past the midpoint between two and re-picking there flips the destination. The drift
-    // hands over for free: it stops being a candidate when it lands, the latch drops, and the sweep
-    // below finds the target that just spawned where the bot is already standing.
+    // Latched, since a sideways dodge can carry a bot past the midpoint between two. A landed drift
+    // drops out, and the sweep picks the target that spawned where the bot already stands.
     if (auto held = latched.find(bot->GetGUID()); held != latched.end())
         for (Creature* candidate : candidates)
             if (candidate->GetGUID() == held->second)
@@ -228,11 +211,8 @@ Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot)
 
     if (!best)
     {
-        // Nearest the bot. Trigger and action both call this, and one derivation is what keeps them
-        // from disagreeing - but it never had to be the same answer for every bot. All three targets
-        // grant the Safe Area, and ranking from the ring centre instead sent bots a median 17.7 yd
-        // when their own was 9.8, walked two of them into a Flash Freeze, and left one standing 2.6 yd
-        // from a shelter while it ran 31.6 yd to another.
+        // Nearest the bot, not one shared centre: all three targets grant the Safe Area. Trigger and
+        // action both call this, so they never disagree.
         float bestDist = 0.0f;
         for (Creature* candidate : candidates)
         {
@@ -260,13 +240,8 @@ bool IsHodirInLandedShelter(PlayerbotAI* botAI, Player* bot)
            bot->GetExactDist2d(shelter) <= GetHodirShelterPark(shelter);
 }
 
-// Where Hodir is held: the Toasty Fire nearest the centre that is inside ULDUAR_HODIR_HOLD_FIRE_LEASH
-// of it, else the centre itself. On the fire and not near it, because the melee pack wraps round him
-// (p50 1.2 yd behind his centre) rather than lining up behind, so a fire at his feet is the one that
-// covers them - and it is the bots standing in a fire that proc Singed, never the fire itself.
-//
-// Nothing but Flash Freeze puts a fire out (npc_ulduar_toasty_fire::DoAction), so the pick holds until
-// the fire dies; re-picking while one burns walks him between two of them.
+// The live fire nearest the centre within ULDUAR_HODIR_HOLD_FIRE_LEASH, else the centre. On the fire,
+// not beside it: melee wrap round him. Only Flash Freeze puts a fire out, so the pick holds till it dies.
 static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
 {
     Unit* hodir = bot ? GetHodir(botAI) : nullptr;
@@ -309,9 +284,7 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
 
     ObjectGuid const fire = pick ? pick->GetGUID() : ObjectGuid::Empty;
 
-    // Out of combat he is standing on his spawn, so the bearing is taken fresh every tick and the tank
-    // pre-positions on the far side of the centre from him. It only latches once he is engaged, and a
-    // wipe drops it again.
+    // Out of combat the bearing is retaken every tick. Latches on engage; a wipe drops it.
     bool const engaged = hodir->IsInCombat();
     if (!engaged || !hold.set || hold.fire != fire)
     {
@@ -356,13 +329,8 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
     return &hold;
 }
 
-// Where a tank stands so Hodir stops on the hold point. The main tank goes past it on the far side
-// from where he came, and he trails onto it. The off-tank stands a quarter turn off that line, so a
-// Frozen Blows taunt walks him about 6 yd sideways and leaves him on the fire either way.
-//
-// Static floor check: the campfire gameobject a fire summons is in the dynamic tree, so the ordinary
-// one clips a spot behind a fire back to the fire's near edge - which is exactly the spot this asks
-// for, and how the tank ended up between Hodir and the fire he was meant to stand on.
+// Off-tank a quarter turn off the main tank's line, so a Frozen Blows taunt leaves him on the fire.
+// Static floor check: the campfire is in the dynamic tree, and the normal one clips this spot to its near edge.
 static Position HodirTankSpot(Player* bot, HodirHoldLatch const& hold, bool offTank)
 {
     float const angle = offTank ? hold.bearing - static_cast<float>(M_PI) / 2.0f : hold.bearing;
@@ -419,10 +387,8 @@ bool GetHodirStormCloudRally(PlayerbotAI* botAI, Player* bot, Player* carrier, P
     {
         entry.applied = applied;
 
-        // Seeded from where the carrier was standing when the cloud landed, so the gather point is
-        // already in the middle of whichever half of the raid the carrier belongs to: a melee carrier
-        // holds the melee on the boss, a ranged one holds the formation. Picking one point for the
-        // whole raid instead would walk half of it across the room for six seconds of buff.
+        // Seeded from where the carrier stood when the cloud landed, so a melee carrier gathers the
+        // melee and a ranged one the casters.
         entry.rally = ValidateStaticFloorPoint(bot, carrier->GetPosition());
     }
 
@@ -438,20 +404,8 @@ static float HodirBuffWalk(Player* bot)
                : ULDUAR_HODIR_BUFF_WALK_UNBUFFED;
 }
 
-// Where this bot stands if there is a Starlight zone it can use. Starlight is +50% to cast time and
-// all three attack timers, the fight's biggest throughput lever, and it is worth stacking for: one
-// Ice Shards hit is 41% of a health pool (p90 54%), so an icicle catching two bots in one zone costs
-// two heals rather than two lives. Any number may share a zone; what each gets is a bearing of its
-// own, taken from where it stands, so they spread around it instead of piling on a point.
-//
-// Usable means the resulting spot still reaches Hodir, is out of his melee range, and is within the
-// walk this bot will make for a buff; the nearest zone wins among those.
-//
-// The pick is latched per bot and held until the zone expires, because the boss moves under it. A
-// stand that stops qualifying is held for ULDUAR_HODIR_STARLIGHT_REJECT_DROP_MS, then dropped. Dropped
-// at once, a fresh sweep while Hodir is a yard past the band hands the bot a different zone that
-// rejects on the next tick and back: 1201 anchor moves a median 320ms apart. Never dropped, casters sat
-// on a zone they couldn't use for a third of the pull.
+// Any number may share a zone, each on its own bearing from where it stands, so they spread round it.
+// Latched per bot till the zone expires, since the boss moves under it.
 static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& out)
 {
     std::unordered_map<ObjectGuid, HodirStarlightLatch>& latched = HodirLatchesFor(bot).starlight;
@@ -474,15 +428,11 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
     // zones on the floor are ones no caster can use.
     Unit* hodir = GetHodir(botAI);
 
-    // Which rule kept the bot out, not which zone. A zone passed every gate on 85% of ranged ticks
-    // while they stood in one for 22%, so "was there one to have" and "was it offered" have to be
-    // separable from position alone.
+    // Which rule kept the bot out, not which zone, so "was there one" and "was it offered" read apart.
     char const* how = "none";
 
-    // The rule that keeps a bot off a stand point, or nullptr when it passes. Shared so a latched
-    // point is re-checked against exactly what a fresh pick faces, since the boss moves and a point
-    // that was good when it was picked can stop being one. The walk gate is not in here: it decides
-    // which zone is worth starting for, and a bot already on its way is past that question.
+    // Shared so a latched stand is re-checked against what a fresh pick faces. No walk gate here: a bot
+    // already on its way is past that question.
     auto standRejects = [&](Position const& stand) -> char const*
     {
         // Starlight's own inner edge and the caster band's outer one. A zone the bot cannot shoot the
@@ -512,7 +462,7 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
 
         if (stillUp)
         {
-            // Held through a short reject, dropped after a long one, for the reason above the function.
+            // Held through a short reject so a band-edge wobble can't swap zones, dropped after a long one.
             if (char const* reject = standRejects(held->second.stand))
             {
                 uint32 const now = getMSTime();
@@ -521,9 +471,7 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
 
                 if (getMSTimeDiff(held->second.rejectedSince, now) < ULDUAR_HODIR_STARLIGHT_REJECT_DROP_MS)
                 {
-                    // "held" so a latched stand standing down reads differently from a sweep that found
-                    // nothing: the first is a bot with a zone waiting for the boss to move back, the
-                    // second is a bot with no zone at all, and only the second wants more zones.
+                    // "held" so a bot waiting for the boss to drift back reads apart from one with no zone.
                     if (RaidObs::Active())
                         RaidObs::NoteDerived(bot, "hodir.starlight", std::string("held ") + reject);
 
@@ -590,9 +538,8 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
     if (found)
         latched[bot->GetGUID()] = HodirStarlightLatch{bestZone, out};
 
-    // The point itself is already hodir.anchor, which this becomes when it is found. The zone rides
-    // along because the value is otherwise only the rule: a re-latch onto a different zone still read
-    // "stand", NoteDerived emits on change, and so the swap above stayed invisible for a whole pull.
+    // The point is already hodir.anchor. The zone rides along since NoteDerived emits on change, and a
+    // re-latch onto another zone would still read "stand".
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "hodir.starlight",
                              found ? "stand " + RaidObs::DescribeDerived(bestZone) : std::string(how));
@@ -600,13 +547,8 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
     return found;
 }
 
-// Where this bot stands if a Toasty Fire is close enough to be worth the walk: the point nearest it
-// that is inside ULDUAR_HODIR_FIRE_STAND_RADIUS of the fire, which is the bot's own spot once it is
-// already in one. Second choice behind Starlight - +50% haste beats what a fire gives - but the two
-// are not exclusive, and a bot that has neither is walking for Biting Cold and procs nothing.
-//
-// The fire Hodir is held on needs no special case: with him standing on it, nothing within 8 yd of it
-// is 15 yd from him, so the caster band throws it out on its own.
+// Second choice behind Starlight, though the two stack. No case for the fire he's held on: nothing
+// within 8 yd of it is 15 from him, so the caster band throws it out.
 static bool FindHodirFireStand(PlayerbotAI* botAI, Player* bot, Position& out)
 {
     std::unordered_map<ObjectGuid, HodirFireLatch>& latched = HodirLatchesFor(bot).fireStand;
@@ -727,9 +669,8 @@ bool IsHodirIcicleLethal(Creature* icicle)
     TempSummon* summon = icicle->ToTempSummon();
     uint32 const remaining = summon ? summon->GetTimer() : 0;
 
-    // Both icicles are TEMPSUMMON_TIMED_DESPAWN, so GetTimer counts the 7000ms down. Anything else
-    // leaves it parked at its start value and every icicle reads live, which is the safe way to be
-    // wrong.
+    // Both icicles are TEMPSUMMON_TIMED_DESPAWN, so GetTimer counts the 7000ms down. Any other type
+    // parks it at its start and every icicle reads live, the safe way to be wrong.
     return !remaining || remaining > ULDUAR_HODIR_ICICLE_SPENT_MS;
 }
 
@@ -815,9 +756,8 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
     bool const mainTank = botAI->IsMainTank(bot);
     if (mainTank || botAI->IsAssistTankOfIndex(bot, 0, true))
     {
-        // Two points either side of the hold spot rather than wandering, because Hodir follows. Square
-        // to the line he is held on, so neither end drags him off the fire, and 6 yd apart covers two
-        // aura ticks.
+        // Two fixed ends square to the hold line, since he follows: neither drags him off the fire, and
+        // 6 yd apart spans two aura ticks.
         HodirHoldLatch const* hold = DeriveHodirHold(botAI, bot);
         if (!hold)
             return false;
@@ -840,9 +780,7 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         return true;
     }
 
-    // Inside a landed shelter while Flash Freeze is cast: shed across it rather than out of it, same
-    // shape as the Starlight shuttle below. Standing out the 9s cast adds two stacks, which is how a
-    // warlock went 5 -> 7 and died on the landing.
+    // In a landed shelter during the cast, shed across it: standing out the 9s cast adds two stacks.
     if (IsHodirFlashFreezeIncoming(botAI) && IsHodirInLandedShelter(botAI, bot))
     {
         Creature* shelter = GetHodirShelter(botAI, bot);
@@ -861,12 +799,8 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         return true;
     }
 
-    // A bot holding Starlight sheds across the zone rather than out of it. Same shape as the tank
-    // shuttle and for the same reason: two opposite points through a centre, taking whichever end is
-    // further so the leg is always the full length and IsDuplicateMove cannot refuse it for repeating
-    // the last destination. Both ends sit inside the zone, so the aura survives the shuttle - which is
-    // the whole point, because the shed outranks the anchor and would otherwise walk the bot out of
-    // the biggest throughput buff in the fight to save 800 a tick.
+    // In Starlight, shed across the zone with both ends inside it, full leg like the tank's: the shed
+    // outranks the anchor and would otherwise walk the bot out of the buff.
     Position zone;
     if (GetHodirStarlightZoneAt(botAI, bot, zone))
     {
@@ -885,14 +819,8 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         return true;
     }
 
-    // Everyone else steps to the nearest point clear of the rest of the raid, of every live icicle,
-    // and - for anyone who has to shoot from range - of Hodir himself. Sweeping for allies alone put
-    // three raiders on top of an icicle inside fourteen seconds and left a warlock dead at 7.7 yd from
-    // the boss, and the old no-allies branch was a blind 6 yd hop on a guid-derived bearing with no
-    // sweep and no floor check at all.
-    //
-    // distanceStep is the leg length, not a probe granularity: the helper rings outward from it, so
-    // 6 yd is the shortest move it can return and a shorter one would not span two aura ticks.
+    // Everyone else: nearest point clear of allies, live icicles and, for ranged, Hodir. distanceStep
+    // is the leg length, not a probe step: 6 yd is the shortest it returns and spans two aura ticks.
     bool crowded = false;
     auto sweepFor = [&](float declump, float smallClear, float bigClear)
     {
@@ -923,9 +851,8 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
     Position preference;
     Position const* preferNear = GetHodirDodgePreference(botAI, bot, preference) ? &preference : nullptr;
 
-    // At the room's edge the collision check pulls every probe on that side back onto the bot's own
-    // spot. That spot is clear of everything, so it can win, MoveTo refuses it as already there and
-    // the bot stands still while the stacks climb.
+    // At the room's edge the collision check pulls probes back onto the bot's own spot, which then wins
+    // and MoveTo refuses as already there.
     auto const goesSomewhere = [bot](float x, float y)
     { return bot->GetExactDist2d(x, y) >= ULDUAR_HODIR_SHUTTLE_HALF_LEG; };
 
@@ -934,9 +861,8 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         ULDUAR_HODIR_DODGE_LEASH, 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG, static_cast<float>(M_PI) / 8.0f,
         preferNear, goesSomewhere);
 
-    // Nothing clear with margin. The clears carry 2 yd over the radius that actually kills and the
-    // declump only stops two bots sharing one icicle, so both are worth giving up before standing
-    // still: a bot that cannot move sheds nothing.
+    // Nothing clear with margin: give up the clears' 2 yd and the declump before standing still, since
+    // a bot that can't move sheds nothing.
     if (!leg.GetPositionX() && !leg.GetPositionY())
         leg = FindNearestPositionClearOfHazards(
             bot,
@@ -1009,14 +935,8 @@ static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, fl
     if (!botAI->IsRanged(bot))
         return false;
 
-    // Ranged and healers get a buff or nothing. No boss mechanic asks them to stand anywhere in
-    // particular, so a home spot only ever walks them back out of the zone they just reached - which
-    // is what kept them in Starlight or a fire for 23-24% of a pull while one was in reach on half of
-    // their samples.
-    //
-    // Starlight first: +50% to every cast and swing beats what a fire gives, and the two are not
-    // exclusive anyway. Neither is gated on already holding the aura - that would hand the bot a new
-    // destination the moment the buff landed and start the trip again.
+    // Ranged and healers get a buff stand or nothing: a home spot only walks them back out of a zone.
+    // Neither is gated on holding the aura, which would re-target the bot the moment the buff landed.
     bool found = false;
     char const* kind = "none";
     Position stand;
@@ -1049,8 +969,8 @@ bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& toler
 
     if (RaidObs::Active())
     {
-        // Melee have no anchor by design, and "none" is the answer that says so - without it a melee
-        // bot standing on the boss is indistinguishable from one that never got told where to go.
+        // Melee have no anchor by design, and "none" says so: without it a melee bot on the boss reads
+        // the same as one that was never told where to go.
         std::string value = "none";
         if (found)
         {
@@ -1075,15 +995,7 @@ Player* GetHodirResistancePaladin(PlayerbotAI* /*botAI*/, Player* bot)
                                    SPELL_FROST_RESISTANCE_AURA_RANK_3, SPELL_FROST_RESISTANCE_AURA_RANK_2,
                                    SPELL_FROST_RESISTANCE_AURA_RANK_1};
 
-    // A paladin tank first, then any non-healer, then whoever is left. The aura reaches 40 yd (48945,
-    // radius index 23) and the two people it has to cover are the ones eating Frozen Blows melee -
-    // 63511 is 39999 base and lands a median 23691 after resists, against a 34-45k tank pool. A tank
-    // never leaves the hold point, so it holds them at 100% against 82% for a retribution paladin who runs
-    // the dodge and the shelter; every tank killing blow in 603_3_hodir_1787590072 landed with the aura
-    // off and the retribution paladin 44-60 yd away, two of them resisting nothing at all.
-    //
-    // The raid loses about ten points of coverage for it, which is the right trade: a resist point on
-    // the tank is ~6000 off a swing that kills, and on the raid ~700 off a tick the healers cover.
+    // Paladin tank first: a tank never leaves the hold point, so the 40 yd aura covers both Frozen Blows targets.
     Player* tank = nullptr;
     Player* dps = nullptr;
     Player* healer = nullptr;
@@ -1162,9 +1074,7 @@ bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block)
         std::sort(candidates.begin(), candidates.end(),
                   [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); });
 
-        // Start the window at an offset derived from the block, so blocks that are up together draw
-        // disjoint breaker sets. Taking the first five every time would put the same five bots on all
-        // of them, and one Flash Freeze puts up a block per helper.
+        // Window offset by block guid, so blocks up together draw disjoint breakers, not the same five.
         size_t const total = candidates.size();
         size_t const offset = total ? block->GetGUID().GetCounter() % total : 0;
 
@@ -1176,15 +1086,13 @@ bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block)
             }
     }
 
-    // Deliberately unprobed. Every block in range is asked about and a bot can come back a breaker for
-    // several of them in one pass, so a note per true answer just flaps between blocks - and the one it
-    // actually goes for is already in hodir.dpstarget.
+    // Unprobed on purpose: a bot can come back a breaker for several blocks per pass, and the one it
+    // goes for is already in hodir.dpstarget.
     return breaker;
 }
 
-// Who a helper block holds, in the order they get freed. The block is summoned by the helper inside
-// it (boss_hodir.cpp), so the summoner names it. Mages first because their fire brings back both the
-// Biting Cold shed and Singed; then Starlight, then Storm Cloud.
+// Freeing order. Mages first, since their fire brings back both the Biting Cold shed and Singed; then
+// Starlight, then Storm Cloud.
 enum class HodirHelperKind : uint8
 {
     Mage,
@@ -1251,8 +1159,8 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
     if (!bot || !boss)
         return nullptr;
 
-    // He dies before anyone freed now could pay for the damage the block soaked: 0.44M and 0.78M of
-    // it in the last two kills' final waves. Trapped raiders are found separately and still get freed.
+    // Too late for a freed helper to pay back the damage its block soaks. Trapped raiders are found
+    // separately and still get freed.
     if (boss->GetHealthPct() < ULDUAR_HODIR_LAST_WAVE_HEALTH_PCT)
         return nullptr;
 
@@ -1260,9 +1168,8 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
     if (!group)
         return nullptr;
 
-    // Ranged carry this. A melee that leaves the boss for a block makes a 21 yd round trip and gives up
-    // its whole uptime for it, while a ranged bot can shoot one from nearer where it already stands.
-    // Falls back to the rest when the raid has no ranged at all, or nobody would be freed.
+    // Ranged carry this: a melee leaving the boss for a block gives up all its uptime. Falls back to
+    // the rest only when the raid has no ranged.
     std::vector<Player*> ranged;
     std::vector<Player*> rest;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -1288,9 +1195,8 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
     if (std::find(candidates.begin(), candidates.end(), bot) == candidates.end())
         return nullptr;
 
-    // Swept from the boss rather than from the bot, and only as far as the room the fight happens in.
-    // A bot-centred sweep hands every bot a different block set and so a different assignment, and the
-    // raid then disagrees about who owns what.
+    // Swept from the boss, not the bot: a bot-centred sweep gives each bot its own block set, and the
+    // raid then disagrees on who owns what.
     std::list<Creature*> found;
     boss->GetCreatureListWithEntryInGrid(found, NPC_HODIR_FLASH_FREEZE_BLOCK, ULDUAR_HODIR_TRAPPED_ALLY_RANGE);
 
@@ -1306,10 +1212,8 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
         return nullptr;
     }
 
-    // Helper kind, then guid; guid, not live distance, on the bots. Distances to the bot change every
-    // tick, so ranking on them re-shuffles the assignment constantly and bots drop off a block and back
-    // onto the boss between one tick and the next. Sorted, both lists read the same to every bot, which
-    // is what lets the greedy pass below agree across the raid without any shared state.
+    // Helper kind, then guid. Sorted, both lists read the same to every bot, so the greedy pass below
+    // agrees across the raid with no shared state.
     std::sort(candidates.begin(), candidates.end(),
               [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); });
     std::sort(blocks.begin(), blocks.end(),
@@ -1345,11 +1249,8 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
     else
         budget = std::min<size_t>(budget, 1);
 
-    // Rank on where each bot stood when the wave went up, latched until no block is left. Live
-    // distances re-shuffle the assignment every tick and bots flick between a block and the boss; a
-    // guid rotation holds still but hands blocks to bots across the room, and they were spending
-    // 61.6% of their time on ice walking to one. The latch is both: every bot reads the same numbers
-    // for as long as the wave lasts, and they are the positions that were actually nearest.
+    // Ranked on where each bot stood when the wave went up, latched till no block is left: live
+    // distances re-shuffle every tick, and a guid rotation hands blocks across the room.
     std::vector<Position> spots(total);
     for (size_t i = 0; i < total; ++i)
     {

@@ -1,32 +1,5 @@
 #!/usr/bin/env python3
-"""Score a Hodir pull from a RaidObs trace: pace, where he was held, Singed, buffs, churn, ice blocks.
-
-    hodir.py <file>            every section
-    hodir.py <file> --pace     health at each 30 s, boss dps per 15 s, 0-3:00 against the cache pace
-    hodir.py <file> --hold     hodir.tankhold windows: his path, boss dps, time off the point; fire gaps,
-                               when lust went out
-    hodir.py <file> --singed   65280 on the boss by caster kind, and the stack count that implies
-    hodir.py <file> --buffs    Starlight, Toasty Fire, Storm Power, Biting Cold by role and by stack,
-                               time stood still at the shed's arm point, caster time by Starlight rule
-    hodir.py <file> --churn    walking undone, A-B-A flips, moves by action, stalls, shed legs that
-                               went nowhere, dodge walk-backs
-    hodir.py <file> --blocks   helper ice blocks per Flash Freeze, by the helper inside them
-
-What the generic views get wrong here, and what this reads instead:
-
-- **An aura on a creature is never recorded** (`ObsSession::Tracks` wants a player), so Singed on
-  Hodir has no `aura` row at all. Each proc is a triggered `cast` of 65280 with `tgt` = the boss,
-  and the stack count is modelled from those: +1 a proc, 25 at most, gone 25 s after the last.
-- **Toasty Fires and Starlight zones are never unit rows** that anything samples as such; they are
-  `snap.hz` rows (62821, 62807), clustered here into zones by spot.
-- **Boss dps comes off his own health column**, not `dealt`, which also counts ice blocks.
-- **The helper inside a block is not in the trace.** Helpers are friendly and never sampled, so the
-  kind comes from `hodir.dpstarget`, which writes it in front of the block guid from the centre-hold
-  build on. Older traces read `?`.
-- **The hold point is read off `hodir.hold`**; traces from before it carry `hodir.centre`, the ring
-  centre, which is the hold point plus the ring's own offset. On builds older than 87be6d955 the ring
-  followed fires by another rule, so "off the hold point" means nothing there.
-"""
+"""Score a Hodir pull from a RaidObs trace: pace, where he was held, Singed, buffs, churn, ice blocks."""
 from __future__ import annotations
 
 import bisect
@@ -287,9 +260,8 @@ def breaker_cast_split(casts: list[tuple[int, int | None]], own: int, blocks: se
 
 
 def reach_shares(walks: list[float | None], budgets: tuple[float, ...]) -> tuple[float, tuple[float, ...]]:
-    """`(share of samples where a legal stand existed at all, share inside each budget)`, as
-    percentages of every sample. Both denominators are the whole sample count: the share a bot could
-    reach only means something beside the share that was there to reach."""
+    """`(share of samples where a legal stand existed at all, share inside each budget)`, both over every
+    sample: the share a bot could reach only means something beside the share there was to reach."""
     if not walks:
         return 0.0, tuple(0.0 for _ in budgets)
     live = [walk for walk in walks if walk is not None]
@@ -299,9 +271,8 @@ def reach_shares(walks: list[float | None], budgets: tuple[float, ...]) -> tuple
 
 def dps_split(samples: list[tuple[int, float]], lit: list[tuple[int, int]], max_hp: int, end: int,
               step_cap: int = 2000) -> dict[str, tuple[float, int]]:
-    """Boss dps over `[0, end)` split by whether a fire was burning anywhere, as
-    `{"fire": (dps, ms)}`. A pair of samples further apart than `step_cap` is a hole in the trace
-    rather than a window anything held over, so it counts for neither."""
+    """Boss dps over `[0, end)` split by whether a fire burned anywhere, as `{"fire": (dps, ms)}`.
+    Samples further apart than `step_cap` are a hole in the trace and count for neither."""
     acc = {"fire": [0.0, 0], "none": [0.0, 0]}
     for (when, health), (nxt, after) in zip(samples, samples[1:]):
         span = min(nxt, end) - when
@@ -371,9 +342,8 @@ def off_point_ms(samples: list[tuple[int, float, float]], points: list[tuple[int
 
 def stalled_walks(moves: list[tuple[int, float, float, str]], rows: list[tuple[int, float, float, int]],
                   movers=(DODGE, SHELTER)) -> collections.Counter:
-    """Accepted moves by `movers` after which the bot stood still `STALL_MS` or more, over
-    `STALL_SHORT_YD` short of where it was sent, before any newer accepted move. `moves` and `rows` are
-    one bot's, in time order."""
+    """Accepted `movers` moves after which the bot stood still `STALL_MS`+, over `STALL_SHORT_YD` short of
+    where it was sent, before any newer accepted move. `moves` and `rows` are one bot's, in time order."""
     out = collections.Counter()
     times = [row[0] for row in rows]
     for index, (when, x, y, by) in enumerate(moves):
@@ -419,9 +389,8 @@ def band_ms(changes: list[tuple[int, int]], low: int, high: int, floor: int) -> 
 
 def still_armed_ms(samples: list[tuple[int, int]], changes: list[tuple[int, int]], fires: list[tuple[int, int]],
                    stars: list[tuple[int, int]], low: int, high: int, step_cap: int = 2000) -> int:
-    """Time inside `[low, high)` one bot stood still at the stacks the shed arms at or more, with no
-    fire on it. `samples` are `(t, moving)`, each counting until the next. The arm point is one higher
-    in Starlight, where standing at 4 is on purpose. A step wider than `step_cap` is a hole in the trace."""
+    """Time in `[low, high)` one bot stood still out of a fire at the shed's arm point or more, one higher
+    in Starlight. `samples` are `(t, moving)`, each lasting to the next; a step over `step_cap` is a hole."""
     total = 0
     for (when, moving), (nxt, _) in zip(samples, samples[1:]):
         if moving or when < low or when >= high or nxt - when > step_cap:
@@ -545,9 +514,8 @@ def tank_holder(trace: Trace) -> int | None:
 
 
 def hold_points(trace: Trace) -> list[tuple[int, tuple[float, float]]]:
-    """`(t, point)` for where he was being held. The hold is one latch per instance, so every writer's
-    note is current when written and they merge in time order. Traces from before `hodir.hold` carry
-    the ring centre instead, which is the point plus the ring's own offset."""
+    """`(t, point)` for where he was held, every writer's note merged in time order: one latch per instance.
+    Older traces carry `hodir.centre`, the ring centre, shifted back here by the ring's offset."""
     out = []
     for rec in notes(trace, "hodir.hold"):
         parts = str(rec.get("txt", "")).split(",")
@@ -570,10 +538,8 @@ def hold_points(trace: Trace) -> list[tuple[int, tuple[float, float]]]:
 
 def held_fire_coverage(trace: Trace, boss: int, points: list[tuple[int, tuple[float, float]]],
                        windows: list[tuple[int, int, str]]) -> dict[int, tuple[int, int]]:
-    """`(inside, near, live)` per window start: melee bots and pets inside the fire he was being held
-    on, how many stood within MELEE_NEAR_YD of him, and how many were alive at all. The first share is
-    what the hold is for, since the fire procs nothing by itself and the bots standing in it do; the
-    second says whether the pack was even there to be covered."""
+    """`(inside, near, live)` per window start: melee bots and pets in the held fire, within MELEE_NEAR_YD
+    of him, and alive. The second share says whether the pack was even there to be covered."""
     roles = {guid: trace.role(guid) for guid in roster_guids(trace)}
     out = {low: [0, 0, 0] for low, _, _ in windows}
     for snap in frames(trace):

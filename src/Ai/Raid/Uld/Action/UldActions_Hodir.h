@@ -11,9 +11,8 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-// None of the actions in this file override isUseful. Every one of these is reached from exactly one
-// trigger node, which is already the gate, and the obvious implementation - constructing that trigger
-// on the stack - silently breaks any trigger that keeps per-bot state.
+// No isUseful overrides: each action has exactly one trigger node, which is already the gate, and
+// building that trigger on the stack to check silently breaks any trigger with per-bot state.
 
 // Run to the Snowpacked Icicle Target the rest of the raid is running to. Standing inside its Safe
 // Area is the only way to survive Flash Freeze.
@@ -26,9 +25,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// Raise Frost Resistance Aura. Cast directly rather than through ChangeStrategy: the shared boss
-// resistance node adds "rfrost" and nothing anywhere removes it, so the pick outlives the encounter
-// and is wrong on the next pull. The hodir paladin aura rule holds the slot open while this runs.
+// Cast directly, not via ChangeStrategy: the shared node adds "rfrost" and nothing removes it, so the
+// pick outlives the encounter. The hodir paladin aura rule holds the slot open meanwhile.
 class HodirFrostResistanceAction : public Action
 {
 public:
@@ -53,9 +51,8 @@ private:
     float _destDist = 0.0f;
 };
 
-// Shed Biting Cold by moving. A stack only comes off on the second consecutive tick the server reads
-// the bot as moving, so this chains 6 yd legs down to ULDUAR_HODIR_BITING_COLD_SHED_FLOOR, holding each
-// one until it is walked rather than deriving a new one under its own walk.
+// Shed Biting Cold by moving: a stack drops only on the second moving tick in a row, so this chains 6 yd
+// legs down to ULDUAR_HODIR_BITING_COLD_SHED_FLOOR, each held until walked.
 class HodirBitingColdShedAction : public MovementAction
 {
 public:
@@ -106,9 +103,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// Feed Misdirection and Tricks of the Trade to whichever tank is holding Hodir right now. A taunt
-// sets threat equal to the top of the table rather than above it, so the swap leaves the incoming
-// tank at parity with the best DPS every time and the redirect is what buys back a lead.
+// Misdirection and Tricks go to whichever tank holds Hodir now. A taunt only matches top threat, so the
+// incoming tank is level with the best DPS and the redirect buys back the lead.
 class HodirRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
@@ -121,9 +117,8 @@ protected:
     Unit* GetThreatDumpTarget() override;
 };
 
-// Hold the carry still on its rally point so its six charges pulse into a gathering stack rather than
-// into whoever the carrier walks past. The state lives in the shared per-carry latch, not here: the
-// receivers below have to read the same point.
+// Hold the carrier on its rally so the charges pulse into a gathering stack. State is in the shared
+// per-carry latch, not here, since the receivers read the same point.
 class HodirSpreadStormCloudAction : public MovementAction
 {
 public:

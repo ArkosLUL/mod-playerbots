@@ -23,14 +23,18 @@ the first three yards and 21% in the fourth, so the edge is 3 and the medians th
 sampling blur — bots cover 1.75 yd between snapshots. 3 yd holds *one* bot at the 4.5 yd spacing
 icicles force, so Starlight is a **per-bot opportunity, never something to build a formation on**:
 `ULDUAR_HODIR_STARLIGHT_STAND_RADIUS` 1.5 plus 1.0 tolerance, `static_assert`ed to stay inside it, and
-a 30 yd search radius because the step runs per bot per tick. **Take the margin out of the stand
+a 30 yd search radius because the step runs per bot per tick. 2 + 1 summed to exactly the 3 yd edge,
+where a bot reporting arrived held Starlight one tick in five. Nothing caps how many bots try one zone:
+each takes its own bearing off the centre (`FindHodirStarlightStand`), and an icicle catching two costs
+two heals (one Ice Shards hit is 41% of a pool, p90 54%) against +50% haste for both. **Take the margin out of the stand
 radius, never the tolerance** — tolerance also stands the position trigger down, so trimming it just
 moves churn from the dodge to the anchor.
 
 **A Toasty Fire sheds Biting Cold and feeds Singed.** `spell_hodir_biting_cold_player_aura` sheds a
 stack on `isMoving() || HasAura(62821)` (`boss_hodir.cpp:1259`), so a bot standing in one sheds on
 every tick without walking a step, and magic damage cast from inside one procs Singed on its target.
-`62821` measures true to its 11 yd (with-aura p90 11.9).
+`62821` measures true to its 11 yd (with-aura p90 11.9). Its own aura is +4 Spirit and nothing else
+(aura 29, misc 4), so everything a fire is worth comes from the shed and Singed.
 
 **The caster band is 15-35** (`_RANGED_MIN_BOSS_GAP` / `_CASTER_MAX_BOSS_GAP`). Spell range is
 measured to the target's bounding radius and Hodir is a giant, so the book 30 understates him: ranged
@@ -60,7 +64,9 @@ one with neither, which gives up only the travel. 30 is the zone sweep's own rad
 so nothing it finds is thrown away unread. **One flat number cannot serve both**, and which one it
 should have been moved when the hold did: a legal Starlight stand sat inside 15 yd on **53.7%** of
 ranged samples on 2026-09-19 and on **6.6%** on the fire-hold build — same 15, same code, 57-60% of
-stands still on the floor and out of reach. See [pitfalls](../../engine/pitfalls.md).
+stands still on the floor and out of reach. See [pitfalls](../../engine/pitfalls.md). 30 is ~4 s of
+walking against a zone that lives 51 s: with him on a fire, 15 yd reaches 6.7% of the legal stands up
+and 30 reaches 30.5%.
 
 The two concentric rings round a fixed anchor are gone: a leftover of the corner hold, and also what
 kept ranged out of the buffs. Over the three 2026-09-19 evening pulls a usable stand sat within 15 yd
@@ -100,8 +106,8 @@ The only solid gameobjects in the room are the two doors at y -166 / -298 and th
   back along the drag, so he lands on it. The old 13 parked him ~9 yd short of the fire and left
   far-side melee outside its 11 yd: melee fire coverage 22.7-34.1% with a fire held ~41% of the time.
   Within `_HOLD_BEARING_MIN_GAP` 3 of the point there is no far side, so it takes a fixed bearing into
-  the open floor north-east of the centre. Out of combat it is re-taken every tick, so the tank
-  pre-positions past the centre from his spawn; a wipe drops the latch.
+  the open floor north-east of the centre. Out of combat it is re-taken every tick and latches on
+  engage; a wipe drops the latch.
 - **The off-tank stands 4.5 off the point, square to the hold bearing**, so a Frozen Blows taunt walks
   him ~6 yd sideways and leaves him on the fire either way. The tank Biting Cold shuttle runs its ±3 yd
   legs on the same axis, for the same reason: neither end may drag him off the fire.
@@ -136,7 +142,11 @@ SPELL_BITING_COLD_DAMAGE)`, `:1290`) is a magic-negative cast by the player on t
 `ULDUAR_HODIR_MAGE_BLOCK_BREAKERS` **5** each, then druid, shaman, priest at one each, inside the
 8-breaker budget — **which drops to `_LATE_BLOCK_BREAKERS` 3 once no mage block is left**, since
 nothing still on ice holds up the next fire and **170-176 bot-seconds a pull**, near a tenth of the
-ranged group's whole fight, went on ice after the last mage was already free. A block (32938, 110,675 hp) is summoned by the helper inside it, so
+ranged group's whole fight, went on ice after the last mage was already free. **The budget is one
+ceiling over every block up, never a per-block cap**: one freeze ices all eight helpers, so a cap per
+block multiplied, 8 × 5 slots over 18 eligible bots, and put every dps on ice, up to eleven on one block
+a median 21 yd from the boss. Breakers are ranged (melee only when the raid has none): a melee bot
+leaving him makes a ~21 yd round trip. A block (32938, 110,675 hp) is summoned by the helper inside it, so
 `ToTempSummon()->GetSummonerUnit()` names it, and `hodir.dpstarget` writes that kind before the guid.
 A freed mage casts its first fire 6s later (`EVENT_TRY_FREE_HELPER`, `ScheduleAbilities`,
 `:1094-1124`). At one breaker a block, the next fire came **17.9-40.8s (28.5 mean) after each freeze
@@ -246,7 +256,8 @@ spawn, 0.0 yd apart across all seven, which is why the run stages on it and uses
 
 ## Frost Resistance Aura belongs on a tank
 
-**Frozen Blows is 71% of everything the raid takes** — 3.93M of ~5.5M in one 25-man trace, against
+**Frozen Blows is 71% of everything the raid takes** — 3.93M of ~5.5M in one 25-man trace
+(`603_3_hodir_1787590072`), against
 929k for Biting Cold, Freeze and Ice Shards combined. `63511` is 39,999 base and lands a median
 23,691 after resists into a 34-45k tank pool, so the aura is the margin between a survivable swing
 and a killing blow. Every tank killing blow in that trace landed with it **off**, the retribution
@@ -356,8 +367,10 @@ for **22%**.
   always. 33173 is the drift: dodged **only while falling** and only inside 7.5 yd, because the
   shelter run parks on it at 9. The dodge stands down once a 33174 exists within 9 yd of it. 33174 is
   the shelter, and is never dodged.
-- The anchor is **not combat-gated**: `MoveInLineOfSight` is a no-op, so bots pre-position and the tank
-  pulls from its spot past the centre.
+- **Positioning and targeting wait for the pull** (`IsHodirEngaged`, Hodir `IsInCombat`):
+  `MoveInLineOfSight` is a no-op, so an anchor firing on sight walked the raid to its spots before
+  anyone pulled, and the targeting action's own `Attack()` pulled him. Whoever pulls flips both for the
+  whole raid at once.
 - **Melee are out of the position node entirely, not just its anchor.** `IsActive` gates on the same
   `!IsRanged` the anchor uses, because every fall-through rule below it wants the bot further from him
   and a melee bot doing its job breaks the 15 yd one on every tick. They ride the boss and get a fire
@@ -402,6 +415,15 @@ for **22%**.
   raider's block, picked by a GUID window offset per block so several blocks draw disjoint sets
   instead of the same five; helper blocks go by the mage-first budget above. Freeing outranks the boss (the trapped raider dies to the next
   freeze) but the block has little health, so only bots within 45 yd leave what they were doing.
+  Targeting keeps no stickiness across priority entries: a block outranks Hodir while it lives,
+  assigned or not, so holding the current one parked the raid on helper ice for the rest of the fight.
+- **Node relevance is a survival ranking**, since the engine stops at the first action that succeeds:
+  shelter run `ACTION_RAID + 6`, icicle dodge +5, Frozen Blows swap and threat redirect +4, targeting
+  +3, Storm Cloud carry and collect +2, Biting Cold shed +1, Frost Resistance and raid position +0.
+  Sheltering is the only failure that is death outright; targeting sits over the shed, which moves for
+  seconds and would starve it, and costs nothing since it returns false once the target is right;
+  position is last. The redirect never contends with the swap (hunters and rogues against tanks) and
+  outranks targeting so the charges go out before a bot switches to a block.
 
 ## Every mover here thrashes unless it latches
 
@@ -561,7 +583,11 @@ bot-seconds a block wave spent on ice after the last mage was free, Hodir's heal
 up, where the mage breakers' casting went, post-freeze shelter moves, stalled
 walks, shed legs sent onto the bot's own spot (refused, so the stall count cannot see them), and
 **the roles each mover walked** — the one line that names a gate that stopped gating.
-Traces older than `hodir.hold` fall back to `hodir.centre`.
+Traces older than `hodir.hold` fall back to `hodir.centre` less `LEGACY_RING_ANCHOR`'s offset (the
+probe once carried the ranged ring's centre), and before `87be6d955` "off the hold point" means
+nothing. Fires and Starlight zones reach a trace only as `snap.hz` rows, clustered into zones by spot;
+boss dps comes off his health column, since `dealt` counts the ice blocks too; and a helper's kind
+comes only from `hodir.dpstarget`, so it reads `?` before the centre-hold build.
 
 Each cause below is separate, and all of them are still easy to reintroduce.
 
@@ -676,8 +702,8 @@ That drift is what the hold latch and the Starlight latch re-derive against ever
 nearest shelter already cuts the tank's worst run from 31.6 yd to 2.6, so re-measure before adding a
 tank-specific pick.
 
-**The taunt floor may be set too low.** `ULDUAR_HODIR_TAUNT_HEALTH_FLOOR` ships at **50.0f**, but a
-max-roll `63511` is 28,929 against Bulwark's 45,287 pool — **63.9%** — and two land about 2.4s apart.
+**The taunt floor may be set too low.** `ULDUAR_HODIR_TAUNT_HEALTH_FLOOR` ships at **50.0f**, but
+`63511` lands 12,645-28,929, and a max roll against Bulwark's 45,287 pool — **63.9%** — and two land about 2.4s apart.
 A taunt accepted just above the floor can therefore still be a death inside an open Frozen Blows
 window. The investigation argued for 65%; 50 shipped, and nothing records why. Re-measure before
 raising it: the same trace showed the floor rejecting few enough taunts that the looser value may

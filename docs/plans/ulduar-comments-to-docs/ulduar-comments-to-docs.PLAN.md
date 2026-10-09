@@ -99,7 +99,7 @@ into the docs`, written to a scratchpad file and committed with `git commit -F`;
 - [x] Yogg-Saron
 - [x] Mimiron
 - [ ] Thorim
-- [ ] Hodir
+- [x] Hodir
 - [ ] Freya
 - [ ] XT-002
 - [ ] Flame Leviathan
