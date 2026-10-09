@@ -33,10 +33,8 @@ public:
     bool isUseful() override;
 };
 
-// The phase change hands the boss to whoever he happens to look at, and nothing else in the encounter
-// puts a tank on him: the target guard lets anything through once he is off the balcony, so the tank
-// branch of the dps picker can never fire, and phase 2 positioning wants him already tanked before it
-// will walk him anywhere. Without this the raid spent 15 s watching him eat the ranged camp.
+// Nothing else puts a tank on him at the phase change: the dps picker's tank branch can't fire once he's off
+// the balcony, and phase 2 positioning only walks him once he's already tanked.
 class ThorimTankPickupAction : public ThorimTakeBossAction
 {
 public:
@@ -47,9 +45,8 @@ public:
     bool isUseful() override;
 };
 
-// Attacks the add the encounter wants dead, rather than putting a raid icon on it. An icon is a sticky
-// override that RtiTargetValue hands back before the smart picker ever runs, and nothing clears it
-// until the bot leaves combat, so a mark that lands on the wrong unit cannot be taken back.
+// Attacks the add directly, never through a raid icon: RtiTargetValue hands an icon back ahead of the smart
+// picker until the bot leaves combat, so a wrong mark can't be taken back.
 class ThorimDpsPriorityAction : public AttackAction
 {
 public:
@@ -96,8 +93,7 @@ public:
     bool isUseful() override;
 };
 
-// Walks the upper hallway to Thorim's platform, then drops into the arena behind him. Owns the jump
-// outright - the corridor node used to, behind a 0.5 yd arrival test it could never reliably meet.
+// Walks the upper hallway to Thorim's platform, then drops into the arena behind him. Owns the jump.
 class ThorimBalconyAdvanceAction : public MovementAction
 {
 public:

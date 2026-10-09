@@ -45,16 +45,12 @@ bool ThorimPickingFor(PlayerbotAI* botAI)
     return botAI->GetState() == BOT_STATE_COMBAT && !botAI->IsHeal(botAI->GetBot());
 }
 
-// In phase 2 the pickup row owns the tank's target and there is one thing left alive worth hitting.
-// Letting "tank assist" keep voting held a tank on a Warbringer for the first 30s of the phase while
-// Thorim ate the ranged camp. Outside it "tank assist" holds whatever is swinging at the raid, which
-// beats steering a tank onto the ranged pick.
+// Phase 2 only: the pickup row owns the tank's target there, and a voting "tank assist" held a tank on an add.
+// Before that, "tank assist" holding whatever swings at the raid beats steering a tank onto the ranged pick.
 bool ThorimTankPicked(PlayerbotAI* botAI) { return ThorimPickingFor(botAI) && ThorimPhase2Active(botAI); }
 
-// Inside the encounter the picker row is the only target source, so nothing from it means nothing
-// legal to hit and standing still is the right answer. Releasing the generic pickers instead has bots
-// latch onto Thorim between add waves: he's untouchable on the balcony, the picker row drops him, and
-// the generic picker hands him straight back next tick.
+// Held for the whole split even with no pick, since nothing from the row means nothing legal to hit. Released,
+// the generic pickers hand Thorim on his balcony straight back every tick the row drops him.
 bool ThorimDpsPicked(PlayerbotAI* botAI)
 {
     return ThorimPickingFor(botAI) && (ThorimHasDpsTarget(botAI, botAI->GetBot()) || ThorimSplitActive(botAI));
@@ -62,9 +58,8 @@ bool ThorimDpsPicked(PlayerbotAI* botAI)
 
 bool ThorimPhase2DpsPicked(PlayerbotAI* botAI) { return ThorimPhase2Active(botAI) && ThorimDpsPicked(botAI); }
 
-// Another tank has him, human or bot, and he's this bot's target. Adds are still fair game, so
-// taunting one off a healer still works. The pickup row's own taunts go out through
-// DoSpecificAction, which never sees a multiplier.
+// Another tank, human or bot, has him and he's this bot's target. Adds stay fair game for taunts. The pickup
+// row's own taunts go through DoSpecificAction, which never sees a multiplier.
 bool ThorimTauntWouldSteal(PlayerbotAI* botAI)
 {
     if (!ThorimPhase2Active(botAI))
@@ -127,10 +122,8 @@ void DefineThorim(EncounterBuilder& e)
     e.Node<ThorimPhase2PositioningTrigger, ThorimPhase2PositioningAction>(ACTION_RAID);
     e.Node<ThorimSifBlizzardTrigger, ThorimSifBlizzardAction>(ACTION_RAID + 3);
 
-    // Charge Orb: it only ever fires while Thorim is still on the balcony. 3k a second for 15s across a
-    // 32 yd circle is phase 1's largest avoidable damage source, so it has to beat the ring and the add
-    // chase both. Lightning Charge has no node of its own - the cone answer is baked into the phase 2
-    // spot, and a second mover for the same point only fought the first one at the movement gate.
+    // Charge Orb is phase 1's largest avoidable damage, so it beats the arena ring and the add chase. Lightning
+    // Charge has no node: the phase 2 spot answers the cone, and a second mover only fought it at the movement gate.
     e.Node<ThorimChargedOrbTrigger, ThorimChargedOrbAction>(ACTION_RAID + 4);
 
     e.Node<ThorimRunicSmashTrigger, ThorimRunicSmashAction>(ACTION_RAID + 3);
@@ -144,37 +137,28 @@ void DefineThorim(EncounterBuilder& e)
 
     e.Multiplier<ThorimRunicBarrierMultiplier>(Family::Melee | Family::Reach | Family::ReachHeal);
 
-    // The picker row picks every non-tank target in phase 1. Without this the generic pickers don't
-    // lose, they alternate: the row goes quiet the moment the bot holds its pick, the engine falls
-    // through to "dps assist" at 50, and that retargets. A traced arena squad switched target twice a
-    // second all fight.
+    // Without this the generic pickers alternate with the row instead of losing: the row goes quiet once the bot
+    // holds its pick, the engine falls through to "dps assist" at 50, and that retargets.
     e.OwnTargeting("thorim disable automatic targeting", Role::Tank, ThorimTankPicked, DPS_PICKERS | Family::TankAssist);
     e.OwnTargeting("thorim disable automatic targeting", Role::NonTank, ThorimDpsPicked, DPS_PICKERS);
     e.OwnTargeting("thorim disable automatic targeting", Role::NonTank, ThorimPhase2DpsPicked, Family::TankAssist);
 
-    // Every melee DPS gets the "behind" strategy from AiFactory, so once the phase 2 ring row yields,
-    // SetBehindTargetAction walks all three stacks back into one arc behind the boss - and Chain
-    // Lightning jumps 5 yd here, so one arc is one chain. Scoped to a settled ring holder rather than the
-    // whole phase, because a permanent movement freeze is the Void Reaver failure. The balcony walk is
-    // listed because it's the one mover a bot that hasn't made it down yet has left.
+    // Stops "behind" (every melee DPS has it) walking the three stacks into one arc once the ring row yields.
+    // Exempts the balcony walk, the one mover a bot that hasn't made it down yet has left.
     e.OwnMovement("thorim movement guard", Role::Any, ThorimRingSettled,
                   Family::Attack | Family::Reach | Family::ReachHeal | Family::AvoidAoe,
                   {ThorimPhase2PositioningAction::Name, ThorimBalconyAdvanceAction::Name, ThorimSifBlizzardAction::Name});
 
-    // The arena squad has to keep one living body inside the box boss_thorim.cpp scans. Unlike the
-    // other guards this one keeps no attacks and no reach: corridor mobs sit ~92 yd from the arena
-    // centre, inside the 100 yd sight cap, so the chase is exactly what walks a bot out. The window is
-    // "currently outside" and closes on re-entry, so it can't become a permanent freeze.
+    // No attack or reach exemption here: corridor mobs sit inside the sight cap from the arena, so the chase is
+    // what walks a bot out. Open only while outside the leash, so it can't become a permanent freeze.
     e.Exclusive("thorim arena leash", Role::Any, ThorimLeashBreached, Family::AvoidAoe | PICKERS,
                 {ThorimArenaLeashAction::Name, ThorimArenaPositioningAction::Name, ThorimChargedOrbAction::Name,
                  ThorimSifBlizzardAction::Name, ThorimDpsPriorityAction::Name});
 
     e.Multiplier<ThorimArenaTargetGuardMultiplier>(Family::Attack | Family::Reach | Family::ReachHeal);
 
-    // The phase 1 arena formation, once a bot has reached its spot. The generic movers smear the squad
-    // east across the arena until it stands in the corridor mouth, where the adds stop seeing it and
-    // re-roll onto a healer. Keeps the chase: an add can land 38 yd from an outer ring slot, and a
-    // ranged bot that can't step into range is silent.
+    // Holds the arena formation once settled, or the generic movers smear the squad east into the corridor mouth.
+    // Keeps the chase: an add can land out of range of an outer slot.
     e.OwnMovement("thorim arena anchor guard", Role::Any, ThorimArenaSettled,
                   Family::Attack | Family::Reach | Family::ReachHeal | Family::AvoidAoe,
                   {ThorimArenaPositioningAction::Name, ThorimArenaLeashAction::Name, ThorimChargedOrbAction::Name,
@@ -187,9 +171,8 @@ void DefineThorim(EncounterBuilder& e)
                   {ThorimBalconyAdvanceAction::Name});
     e.Multiplier<ThorimBalconyGuardMultiplier>(Family::Attack | Family::Reach | Family::ReachHeal);
 
-    // The class "lose aggro" node taunts on its own cooldown and knows nothing about who is meant to
-    // be holding him, so a paladin ripped him off the human tank every 8s and the pair walked him
-    // across the arena. The pickup row owns the trade instead.
+    // The class "lose aggro" taunt knows nothing about who should hold him and rips him off the human tank.
+    // The pickup row owns the trade instead.
     e.Block("thorim taunt guard", Role::Any, ThorimTauntWouldSteal, Family::Taunt);
 
     e.Multiplier<BossNatureAspectHoldMultiplier>(Family::Spell, "thorim");

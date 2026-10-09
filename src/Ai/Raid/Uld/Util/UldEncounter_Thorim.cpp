@@ -48,9 +48,8 @@ const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1 = Position(2217.8877f
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1 = Position(2212.193f, -307.44992f, 412.1348f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2 = Position(2212.1353f, -318.20795f, 412.1348f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3 = Position(2212.1956f, -328.0144f, 412.1348f);
-// Both doorways are only ~18 yd wide (x 2126-2144), so 1 and 5 stay near the middle; 2 to 4 run up
-// the east side of the chamber, which is where the mesh smooths to anyway. Z is what navprobe
-// settles each point to, since the walk moves on exact waypoints and does not correct height.
+// 1 and 5 sit in the 18 yd necks (x 2126-2144), 2 to 4 hug the east wall, clear of the traps on the centreline.
+// Z is navprobe's settled height: the walk moves on exact waypoints and never corrects it.
 const Position ULDUAR_THORIM_BALCONY_1 = Position(2141.0f, -408.0f, 438.247f);
 const Position ULDUAR_THORIM_BALCONY_2 = Position(2151.0f, -396.0f, 438.247f);
 const Position ULDUAR_THORIM_BALCONY_3 = Position(2152.0f, -365.0f, 438.744f);
@@ -93,8 +92,7 @@ ThorimEncounterState& ThorimStateFor(Player* bot) { return thorimStates.For(bot-
 struct GauntletWaypoint
 {
     Position const* position;
-    // How close the walker has to be to count as standing at this waypoint. Straight out of the
-    // original hand-tuned lane walk, where the wider spots are the ones with room around them.
+    // How close counts as standing here. Hand-tuned, wider where the lane has room around the spot.
     float radius;
 };
 
@@ -136,9 +134,8 @@ ThorimEncounterState* FindState(Player const* bot)
     return bot ? thorimStates.Find(bot->GetInstanceId()) : nullptr;
 }
 
-// Both halves of the gate, in one place so the two cannot drift apart. Everything guarded by it
-// either sweeps the grid or writes raid-wide state, so a raid parked on another boss reaching it is
-// not free - and by distance alone Hodir's room does.
+// Upper half of the NearThorimEncounter gate. By distance alone Hodir's room passes, and everything
+// behind the gate sweeps the grid or writes raid-wide state.
 bool OnThorimBalcony(WorldObject const* who)
 {
     if (!who)
@@ -159,17 +156,13 @@ bool MemberCounts(Player const* member, uint32 instanceId)
            member->GetInstanceId() == instanceId;
 }
 
-// Who counts when handing out a formation slot. In the instance, alive or not - liveness is left out
-// on purpose. Both pickers number their members in group order, so a member dropping out of the count
-// renumbers everyone behind them and the whole formation shuffles over one death.
+// Alive or not, on purpose: dropping the dead from the count reshuffles the formation over one death.
 bool HoldsFormationSlot(Player const* member, uint32 instanceId)
 {
     return member && member->GetMapId() == ULDUAR_MAP_ID && member->GetInstanceId() == instanceId;
 }
 
-// One predicate for the trigger and the action alike. PlayerbotAI::IsRanged() already reports true
-// for healers, but the two sides used to test different things and could hand a healer two different
-// slots on alternating ticks.
+// One predicate for trigger and action, or a healer can get a different slot on alternating ticks.
 bool TakesRangedSpot(Player* member)
 {
     return member && !PlayerbotAI::IsTank(member) &&
@@ -228,8 +221,7 @@ void EnsureMeleeSlot(Player* bot)
     state.meleeSlots[bot->GetGUID()] = chosen;
 }
 
-// Same shape as EnsureMeleeSlot and for the same reason. This used to be a round robin counted over
-// group order on every call, which renumbers the whole camp behind anyone who dies.
+// Same shape as EnsureMeleeSlot. Latched, since a per-call round robin renumbers the camp behind every death.
 void EnsureRangedSlot(Player* bot)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -308,9 +300,8 @@ ThorimSquad SquadOf(ThorimEncounterState const& state, Player const* member)
     return itr == state.squads.end() ? ThorimSquad::Arena : static_cast<ThorimSquad>(itr->second);
 }
 
-// Least-loaded like the two above, but a tie goes to the spot nearest the bot, not the lowest index.
-// The arena squad starts on a ring round the landing point, so an index pick walks some of them
-// straight through it.
+// Least-loaded, ties to the spot nearest the bot: the arena squad starts ringed round the landing
+// point, and an index pick walks some of them straight through it.
 template <size_t N, typename TakesSlot>
 void EnsureNearestSlot(Player* bot, RaidObs::ObsGuidMap<uint8>& slots, std::array<Position const*, N> const& spots,
                        TakesSlot const& takesSlot)
@@ -386,9 +377,8 @@ bool IsBotPlayer(Player const* member)
     return session && session->IsHeadless();
 }
 
-// Struck once per pull. Every pick is bot-only: a human in the raid still occupies their role, but
-// nothing in this module can walk them anywhere, so spending a gauntlet slot on one just leaves the
-// corridor a body short.
+// Latched once per pull. Bot-only picks: nothing here can walk a human, so a human in a gauntlet slot
+// leaves the corridor a body short.
 void AssignThorimSquads(Player* bot)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -417,20 +407,15 @@ void AssignThorimSquads(Player* bot)
     if (roster.empty())
         return;
 
-    // The whole split hangs off which tank holds the arena, and GetMainTankGuid's fallback only sees
-    // tanks that are already alive and in the instance. Latch while the raid is still being summoned
-    // in and the main tank reads as nobody, which sends the raid's only tank down the corridor and
-    // leaves the arena untanked.
+    // GetMainTankGuid's fallback only sees tanks already alive in the instance. Latching while it reads
+    // empty sends the only tank down the corridor and leaves the arena untanked.
     if (PlayerbotAI::GetMainTankGuid(group).IsEmpty())
         return;
 
     bool const twentyFive = bot->GetRaidDifficulty() == Difficulty::RAID_DIFFICULTY_25MAN_NORMAL;
     uint32 healerQuota = twentyFive ? 2 : 1;
 
-    // The corridor is a race: Sif's channel runs 150s and phase 1 opens 20s after the pull, so the
-    // squad has about 170s to get a hit on Thorim from up top or hard mode is gone. Seven dps put ten
-    // bodies down there measuring 23.4k dps against roughly 3.9M of health the walk is gated on, which
-    // does not finish in time. Arena keeps the rest and the cap below still floors it.
+    // Sized to beat the ~170 s hard mode clock. The arena floor cap below still wins over it.
     uint32 dpsQuota = twentyFive ? 9 : 4;
 
     size_t const floorSize = static_cast<size_t>(ULDUAR_THORIM_ARENA_MIN_MEMBERS);
@@ -462,9 +447,7 @@ void AssignThorimSquads(Player* bot)
                 break;
             }
 
-    // A one-tank raid has no tank to spare. The IsMainTank guard below is only as good as whatever
-    // GetMainTankGuid resolves to, and when that reads wrong this is what still keeps the arena
-    // tanked - the adds spread onto the ranged and healers within seconds otherwise.
+    // A one-tank raid has none to spare. Backs up the IsMainTank guard for when GetMainTankGuid reads wrong.
     size_t tankCount = 0;
     for (Player* member : roster)
         if (PlayerbotAI::IsTank(member))
@@ -505,9 +488,8 @@ void AssignThorimSquads(Player* bot)
         --dpsQuota;
     }
 
-    // Bots only. A human is never picked above, so filing them here would file every one of them under
-    // the arena - including one who walks the whole corridor. TickHumanSquads reads theirs off
-    // position instead.
+    // Bots only: humans are never picked, so filing them here labels one walking the corridor as arena.
+    // TickHumanSquads reads theirs off position.
     for (Player* member : roster)
         if (IsBotPlayer(member))
             state.squads[member->GetGUID()] =
@@ -516,9 +498,8 @@ void AssignThorimSquads(Player* bot)
     state.squadsAssigned = true;
 }
 
-// Where the humans in the raid actually are, for the trace and nothing else - every consumer of
-// GetThorimSquad runs inside a trigger or an action, which only ever evaluate for a bot. The split
-// itself is still struck once and left alone; this only labels the people it cannot place.
+// Labels humans by position, for the trace only: every GetThorimSquad consumer runs for bots, and the
+// latched split is never touched.
 void TickHumanSquads(Player* bot)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -559,9 +540,8 @@ bool MeleeSlotOf(Player* bot, uint8& slot)
     return true;
 }
 
-// Anchoring the ring on the tank's bearing stops it rotating as the boss shuffles, so a recompute
-// does not shuffle everyone. The spot, not the tank standing on it: he is walked there and parked,
-// and reading him live means a step sideways or a death swings the whole ring behind him.
+// Off the tank spot, not the live tank, so neither the boss shuffling nor a tank's sidestep or death
+// swings the ring.
 float RingAnchorBearing(Unit* boss)
 {
     return std::atan2(ULDUAR_THORIM_PHASE2_TANK_SPOT.GetPositionY() - boss->GetPositionY(),
@@ -597,9 +577,8 @@ bool InLightningChargeCone(float bearing, float coneBearing)
     return AbsAngleDelta(bearing, coneBearing) <= halfWidth;
 }
 
-// Every live Blizzard zone plus the bunny, swept once per instance per interval. The bunny marks where
-// the next zone drops within 2s, and the zones behind it are where the damage is. Positions rather than
-// units because that is all the tests want, and a stale guid would need re-resolving on every bearing.
+// Live Blizzard zones plus the bunny, which marks where the next zone drops within 2 s. Positions, since
+// a stale guid would need re-resolving on every bearing.
 std::vector<Position> const& ThorimBlizzardSpots(Player* bot)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -634,14 +613,11 @@ bool RingBearingClearOfBlizzard(Unit* boss, float bearing, std::vector<Position>
     return true;
 }
 
-// Whether the spot we have been handed is worth breaking the deadband for. The deadband is there to
-// stop a bot chasing a ring point that drifts with the boss, not to hold it in fire, and at 8 yd both
-// slides come out under it: a whole cone dodge is a 5 yd chord or less. Both halves of each test
-// matter - if the spot is no better there is nothing to buy by walking to it.
+// Breaks the deadband for a dodge, which at r 8 is a 5 yd chord or less and would never clear it.
+// Only when the bot stands in the hazard and the spot does not.
 bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
-    // Cone first. It lands for 20k in one millisecond against a Blizzard tick's 3k, and it was the
-    // half nothing checked: nine cone hits over two pulls with a safe spot under 5 yd away.
+    // Cone first: 20k in one instant against a Blizzard tick's 3k.
     if (Unit* boss = GetThorim(botAI))
     {
         if (Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL))
@@ -670,9 +646,8 @@ bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& s
     return standingInOne;
 }
 
-// Raw ring geometry is exactly the shape that lands off the navmesh, and MoveTo would then fail
-// without telling anyone. The arena floor also has a hole south of y = -288, which is what the melee
-// range re-check catches.
+// Settled onto the mesh, since MoveTo fails silently off it. The melee range re-check catches the
+// floor hole south of y -288.
 bool RingPoint(Player* bot, Unit* boss, float bearing, Position& out)
 {
     float x = boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
@@ -709,27 +684,8 @@ std::array<Position, 7> const ULDUAR_THORIM_THUNDER_ORB_SPOTS = {
     Position(2092.95f, -263.00f, 433.30f), Position(2104.94f, -233.44f, 433.30f),
     Position(2124.30f, -222.60f, 433.30f)};
 
-// Where a camp slot stands while the orb that covers it is lit, one row per (orb, slot) pair the cone
-// actually reaches. Only five of the seven orbs reach the camp at all, and orbs 5 and 6 point away from
-// it entirely, so they have no rows.
-//
-// Solved offline and every row navprobed, point and path: 42.5 degrees off the cone bearing at every
-// settled boss position five traces show, 22 yd off the tank spot so the melee ring cannot bridge Chain
-// Lightning in, inside 32 of the boss so the shorter nukes still reach, and 9 from every other body
-// standing at the time - Chain Lightning jumps 8.0 centre to centre. Longest run is 25.6 yd, about
-// 3.7s, against a 4.9s worst measured warning, but the run is not capped at runtime: a bot commits to
-// its shelter from wherever it happens to be, which is home unless a Blizzard zone held its walk back
-// from the last shelter.
-//
-// Clearance from Sif's Blizzard track is a preference here, not a rule, and three of orb 2's four rows
-// cannot have it: the pocket that is both off that cone and 11 yd clear of the track runs to about 97
-// square yards, and four points 9 yd apart do not fit in it. Those three sit 7.6-8.2 yd out, inside the
-// measured 9.8 reach. Right trade anyway - a cone is 20k in one instant against a 3k tick, and standing
-// on a shelter was only 14% of the camp's Blizzard damage. Walking to one was 63%.
-//
-// Two rows are under 3 yd, because those slots sit at 34-37 degrees off cone at home - only just inside
-// the 37.5 arc, so the edge is close. They still walk: the camp's trigger moves at 1 yd, not the ring's
-// 3.
+// A camp slot's spot while that orb is lit, solved offline and navprobed: 42.5 deg off the cone, 22+ yd
+// off the tank spot, within 32 of the boss, 9+ from every other body (Chain Lightning jumps 8).
 struct ThorimShelterSpot
 {
     uint8 orbIndex;
@@ -748,12 +704,13 @@ std::array<ThorimShelterSpot, 12> const ULDUAR_THORIM_SHELTER_SPOTS = {{
     {2, 2, Position(2114.50f, -274.35f, 419.562f)},
     {2, 3, Position(2140.00f, -241.35f, 419.502f)},
     {3, 0, Position(2129.50f, -278.35f, 419.702f)},
+    // Both under 3 yd from a home just inside the arc: they walk only because the camp moves at 1 yd.
     {3, 1, Position(2126.00f, -269.85f, 419.761f)},
     {6, 5, Position(2133.50f, -246.85f, 419.652f)},
 }};
 
-// Which of the seven the lit orb is. Refuses a loose match rather than picking the nearest: a wrong
-// index is a bot walking confidently into the cone, and staying home is only as bad as today.
+// Refuses a loose match rather than picking the nearest: a wrong index walks the bot into the cone,
+// staying home doesn't.
 bool ThorimThunderOrbIndex(Unit* orb, uint8& index)
 {
     for (size_t i = 0; i < ULDUAR_THORIM_THUNDER_ORB_SPOTS.size(); ++i)
@@ -783,7 +740,7 @@ bool ThorimShelterFor(uint8 orbIndex, uint8 slot, Position& out)
     return false;
 }
 
-// The camp's cone test. Its own margin, not the ring's: see the header for why 2.5 rather than 15.
+// Camp cone test, with its own 2.5 deg margin: boss drift barely swings bearings at camp range.
 bool InLightningChargeConeRanged(float bearing, float coneBearing)
 {
     float const halfWidth =
@@ -791,11 +748,8 @@ bool InLightningChargeConeRanged(float bearing, float coneBearing)
     return AbsAngleDelta(bearing, coneBearing) <= halfWidth;
 }
 
-// Where this camp slot stands right now: its spot, or its shelter while an orb covering that spot is
-// lit. Sticky while lit, whatever the boss does mid warning. Home the moment it goes dark: Chain
-// Lightning lands 0.5-1.3s after every orb lights, and bots still walking home right then bridge the
-// stacked slots for it. Only costs an extra run when two orbs in a row cover the slot.
-// Reports whether it sheltered, and off which orb, purely so the caller can note it.
+// Home, or the shelter while a covering orb is lit. Home the moment it goes dark, so nobody is still
+// walking when the next Chain Lightning lands. Returns whether it sheltered, and off which orb.
 bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, Position& out, uint8& orbIndex)
 {
     out = RangedSpot(slot);
@@ -864,21 +818,13 @@ bool RingBearingSeparated(float candidate, uint8 slot,
     return true;
 }
 
-// The three ring bearings, solved as one answer for the instance. They used to be a latch per bot plus
-// a cone dodge and a Blizzard dodge per bot, each blind to the other two, and the slides walked one
-// slot onto another: 73 to 81% of ring points off their slot, one slot spread over 166 degrees, two
-// slots sharing a bearing. Chain Lightning multiplies 1.5x a hop, so a merged ring is an 8-hop chain
-// whose last hop is 17x the first - three and four melee bots at a time.
-//
-// When the arc will not hold everything the cheapest thing goes first: a Blizzard tick is about 3k, a
-// merged ring costs a 40-90k hop, and the cone lands about 20k in one instant. So zones are given up
-// first, separation second, and leaving the cone is never given up.
+// One answer for all three slots, so no slot's dodge walks it onto another. Relaxed cheapest first:
+// Blizzard zones (~3k a tick), then separation (a 40-90k hop), never the cone (~20k at once).
 void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
 
-    // Anchored on the tank's spot rather than the tank himself, and struck once: he is walked there and
-    // parked, and reading him live only hands the ring one more input that moves.
+    // Latched once a pull, off the tank spot rather than the live tank.
     if (!state.ringLatched)
     {
         state.ringAnchor = RingAnchorBearing(boss);
@@ -894,7 +840,7 @@ void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
     Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
     ObjectGuid const orbGuid = orb ? orb->GetGUID() : ObjectGuid::Empty;
 
-    // On the shared scan interval like the sweeps, except that a new orb re-solves at once - the cone
+    // On the shared scan interval like the sweeps, except that a new orb re-solves at once: the cone
     // is the one input the ring gets no warning of.
     if (orbGuid == state.ringOrb && state.ringSolveMs &&
         GetMSTimeDiffToNow(state.ringSolveMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
@@ -989,9 +935,7 @@ bool StaticMeleeSpot(Unit* boss, uint8 slot, Position& out)
     return true;
 }
 
-// The blast wave has no world object behind it, so a trace has nothing to sweep for and no way to
-// tell afterwards which lane was hot when somebody died in it. This scan is the only thing that
-// knows.
+// The blast wave has no world object, so this note is the trace's only record of which lane was hot.
 void NoteRunicSmashLane(Player* bot, Unit* colossus, bool leftLane, uint32 spellId)
 {
     if (!RaidObs::Active())
@@ -1013,10 +957,8 @@ void TickRunicSmash(PlayerbotAI* botAI, Player* bot)
 
     state.smashScanMs = getMSTime();
 
-    // The Colossus and the corridor adds are trash to the instance script, so nothing else opens a
-    // trace for the half of the fight that most often loses it. Named after Thorim: the gauntlet and
-    // the arena are one attempt. This has to happen before the first lane is noted below, or the
-    // hazard record has no trace to land in.
+    // Nothing else opens a trace for the gauntlet, whose mobs are trash to the instance script. Must run
+    // before the first lane note below, which needs a trace to land in.
     if (!state.gauntletTraced && bot->IsInCombat())
     {
         state.gauntletTraced = true;
@@ -1055,9 +997,8 @@ bool NearThorimEncounter(Player const* bot)
     if (!bot || bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_ENCOUNTER_PROXIMITY)
         return false;
 
-    // Under the wing ceiling covers the arena and the corridor. Above it, only the box does - which is
-    // the half that was missing, and why every node keyed off this one went quiet the moment the squad
-    // climbed the ramp.
+    // Below the wing ceiling is arena and corridor, above it only the balcony box. Without the box every
+    // node keyed off this goes quiet once the squad climbs the ramp.
     return bot->GetPositionZ() < ULDUAR_THORIM_WING_MAX_Z || OnThorimBalcony(bot);
 }
 
@@ -1067,11 +1008,8 @@ Unit* GetThorim(PlayerbotAI* botAI)
     if (!bot)
         return nullptr;
 
-    // Cached because the sight list it falls back to stops at AiPlayerbot.SightDistance, and the boss
-    // is 100-145 yd from the upper hallway and up to 176 yd from the ramp - so a corridor bot on the
-    // balcony could not see him, and with him went the split, the squad label and the walk down.
-    // ObjectAccessor has no range of its own, so once the guid is struck the answer holds anywhere in
-    // the wing. NearThorimEncounter is what still bounds the callers.
+    // Cached by guid: the sight list stops at AiPlayerbot.SightDistance, well short of the balcony.
+    // ObjectAccessor has no range, so NearThorimEncounter is what bounds the callers.
     ThorimEncounterState& state = ThorimStateFor(bot);
     if (state.bossGuid)
     {
@@ -1184,18 +1122,15 @@ bool ThorimDpsTargetAllowed(PlayerbotAI* botAI, Unit* target)
     if (!boss || boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
         return true;
 
-    // Phase 1. He and Sif fight from the balcony and neither can be touched from the floor, so holding
-    // either is pure lost throughput - and worse than that, the balcony is above the arena box, which
-    // is the state the arena target guard shuts a bot down for.
+    // Phase 1: neither he nor Sif can be hit from the floor, and both sit above the arena box, which the
+    // arena target guard shuts a bot down for.
     return target != boss && target->GetEntry() != NPC_SIF;
 }
 
 namespace
 {
 
-// One priority tier. Holds whatever the bot already has if it is still in this tier, and only trades
-// it for something meaningfully closer to `pivot` - the arena centre for the pile, the bot itself in
-// the corridor.
+// Holds the current target while it's in the tier, trading only for one clearly closer to `pivot`.
 Unit* SelectThorimTierTarget(Unit* currentTarget, std::vector<Unit*> const& candidates, Position const& pivot)
 {
     Unit* selected = nullptr;
@@ -1251,11 +1186,8 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
     if (!boss || !boss->IsAlive() || !boss->IsHostileTo(bot))
         return nullptr;
 
-    // Phase 2 is the boss, bar one exception: the Evokers that live through phase 1 keep shelling the
-    // camp from range, and a camp bot kills one without stepping off its spot. Champions and Warbringers
-    // are left alone on purpose - 1.1M of health for the 145k they deal is a trade this clock cannot
-    // afford, and a melee sent across the arena at an add is the failure the phase 1 branch below was
-    // written against.
+    // Phase 2 is the boss, except camp ranged clear surviving Evokers without leaving their spot.
+    // Champions and Warbringers cost more boss time than the damage they deal is worth.
     if (boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
     {
         if (GetThorimPhase2Role(botAI, bot) == ThorimPhase2Role::Ranged)
@@ -1280,9 +1212,8 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
 
     if (GetThorimSquad(botAI, bot) == ThorimSquad::Gauntlet)
     {
-        // Acolytes heal the pack, then whatever is already swinging, then the two the corridor is
-        // gated on. Walk-in trash last - it is only ever alive before the corridor opens, and the
-        // range filter has already dropped anything 50 yd away.
+        // Acolytes heal the pack, then the guards, then the two the corridor is gated on. Walk-in trash
+        // is only alive before the corridor opens, and the range filter drops anything past 50 yd.
         std::vector<std::vector<Unit*> const*> const tiers = {&targets.acolytes, &targets.guards,
                                                               &targets.trash};
         for (auto const* tier : tiers)
@@ -1295,20 +1226,16 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
         if (targets.runeGiant)
             return NoteThorimDpsTarget(bot, targets.runeGiant);
 
-        // Thorim is the last thing in the gauntlet, and hitting him is what ends phase 1 - boss_thorim
-        // starts the jump on DamageTaken from a player above z 430. Without this the squad runs out of
-        // targets the moment the Rune Giant dies and phase 2 waits on a human. Gated on the bot's own
-        // height, not the squad, or a corridor bot at z 412 gets pulled 150 yd out of its lane.
+        // Phase 2 only starts on damage from a player above z 430. Gated on the bot's own height, or a
+        // corridor bot at z 412 gets pulled 150 yd out of its lane.
         if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
             return NoteThorimDpsTarget(bot, boss);
 
         return NoteThorimDpsTarget(bot, nullptr);
     }
 
-    // Arena. Acolytes first whoever is asking - they come with the wave and heal it back up. After
-    // that the roles part company: a caster kills an Evoker from where it already stands, while a
-    // melee sent across the room at one walks straight past the Champion doing 41% of the damage the
-    // squad takes. Commoner is last either way; it barely hits and killing one buys nothing.
+    // Arena: Acolytes first for everyone, they heal the wave. Then casters take Evokers from where they
+    // stand and melee the Champions already on them. Commoners last, they barely hit.
     bool const melee = PlayerbotAI::IsMelee(bot);
     using TierOrder = std::array<std::vector<Unit*> const*, 6>;
     TierOrder const meleeTiers = {&targets.acolytes, &targets.champions, &targets.warbringers,
@@ -1317,15 +1244,12 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
                                    &targets.warbringers, &targets.commoners, &targets.trash};
     TierOrder const& tiers = melee ? meleeTiers : rangedTiers;
 
-    // Melee measure from themselves, exactly as the corridor branch above does, so a tier hands back
-    // its nearest rather than whichever one is deepest in the pile. Ranged keep the centre, and that
-    // shared pivot is what has them all focus the same unit.
+    // Melee pivot on themselves to get their nearest. Ranged share the centre, which makes them all focus
+    // the same unit.
     Position const& pivot = melee ? static_cast<Position const&>(*bot) : ULDUAR_THORIM_NEAR_ARENA_CENTER;
 
-    // Two passes for melee. The first skips any tier with nothing within reach, so a Champion standing
-    // on the bot beats an Evoker across the room; the second drops that test, so a melee bot with an
-    // empty patch around it still commits to the raid's focus rather than standing idle. Ranged run
-    // one pass - they have no reach limit to relax.
+    // Melee: first pass only within reach, so a Champion on the bot beats an Evoker across the room, then
+    // one without, so a bot with nothing near still commits instead of idling.
     for (int pass = 0; pass < (melee ? 2 : 1); ++pass)
     {
         bool const limitReach = melee && pass == 0;
@@ -1357,9 +1281,8 @@ bool ThorimHasDpsTarget(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot || !NearThorimEncounter(bot))
         return false;
 
-    // Both gates matter for a cached read: the entry survives the pull that wrote it, so without them
-    // a stale guid from the last attempt would shut the generic picker down on a bot the encounter is
-    // no longer steering.
+    // The cached entry outlives its pull, so without both gates a stale guid would shut the generic
+    // picker down on a bot the encounter no longer steers.
     Unit* boss = GetThorim(botAI);
     if (!boss || !boss->IsAlive())
         return false;
@@ -1377,9 +1300,8 @@ void ThorimClearStaleMarks(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot)
         return;
 
-    // Per bot and unlatched, because this is the half that pins: IsHighPriority short-circuits every
-    // find-target strategy for anything in here, so one stale entry outranks the whole priority list
-    // below it.
+    // Per bot and every call: IsHighPriority short-circuits every find-target strategy for anything in
+    // here, so one stale entry outranks the whole priority list.
     botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({});
 
     Group* group = bot->GetGroup();
@@ -1557,9 +1479,8 @@ uint8 ThorimAdvanceBalconyStep(Player* bot)
     auto const itr = steps.find(bot->GetGUID());
     uint8 step = itr == steps.end() ? 0 : itr->second;
 
-    // Passing the waypoint's y counts as reaching it. The hallway runs one way, so a bot shoved north
-    // of a point by a knockback or by the pile is already done with it, and sending it back south is
-    // how the squad ends up walking the same ground twice.
+    // Passing a waypoint's y counts as reaching it: the hallway runs one way, so a bot shoved north of a
+    // point is done with it.
     auto const reached = [bot](uint8 index)
     {
         Position const& here = GetThorimBalconyWaypoint(index);
@@ -1567,18 +1488,13 @@ uint8 ThorimAdvanceBalconyStep(Player* bot)
                bot->GetPositionY() > here.GetPositionY();
     };
 
-    // Down first. Going up is a judgement call and the latch exists to make it stick, but going down
-    // is not one: standing 40 yd south of the point you claim to have passed means you have not passed
-    // it. Without this a step held over from an earlier pull hands a bot a waypoint from the middle of
-    // the chain while it is still on the ramp, and the straight line there crosses a Paralytic Field
-    // bunny - ten of thirteen corridor bots in one trace, x 2141 up the middle instead of x 2151.
+    // Down first: a step held over from an earlier pull hands a bot on the ramp a mid-chain waypoint,
+    // and the straight line there crosses a Paralytic Field bunny.
     while (step > 0 && !reached(step - 1))
         --step;
 
-    // Runs one past the last waypoint. ULDUAR_THORIM_BALCONY_WAYPOINTS means arrived, and arrived has
-    // to be a latch rather than a distance test: once the squad is on the platform it is fighting
-    // Thorim and drifting off the mark, and re-anchoring it there every tick would fight "reach melee"
-    // exactly the way the arena picker used to fight "dps assist".
+    // ULDUAR_THORIM_BALCONY_WAYPOINTS means arrived, and that has to be a latch: on the platform the squad
+    // drifts while fighting, and re-anchoring it every tick would fight "reach melee".
     while (step < ULDUAR_THORIM_BALCONY_WAYPOINTS && reached(step))
         ++step;
 
@@ -1732,9 +1648,8 @@ bool ThorimStrayPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out)
 
     for (Unit* pet : bot->m_Controlled)
     {
-        // GetPet() would miss most of what matters here: a Frost death knight's Raise Dead, Feral
-        // Spirits and Army are guardians, not pets. Totems are skipped the other way - a shaman drops
-        // four, none of them move, and none of them can pull anything.
+        // m_Controlled, not GetPet(): Raise Dead, Feral Spirits and Army are guardians. Totems never move
+        // or pull anything.
         if (!pet || !pet->IsAlive() || pet->IsTotem())
             continue;
 
@@ -1744,12 +1659,8 @@ bool ThorimStrayPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out)
         if (!pet->IsInWorld() || pet->GetMapId() != bot->GetMapId())
             continue;
 
-        // The same boundary the owner is held to. A pet chasing an add that landed 24 yd out is doing
-        // its job; this only catches the ones that have left the room.
-        //
-        // The corridor squad has no room to be held to - it walks 300 yd of gauntlet - so its pets get
-        // the owner instead. Without this a pet sent at something it cannot reach walks the whole
-        // corridor to get there and never comes back.
+        // Arena pets get their owner's leash, which still covers an add 24 yd out. Gauntlet pets get the
+        // owner instead, or a pet sent at something unreachable walks the whole corridor.
         bool home;
         if (squad == ThorimSquad::Arena)
             home = ThorimInArenaBox(pet) && pet->GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) <=
@@ -1790,9 +1701,8 @@ void ThorimRecallPet(Player* bot, Unit* pet)
     pet->CastStop();
     pet->GetMotionMaster()->MoveFollow(bot, PET_FOLLOW_DIST, pet->GetFollowAngle());
 
-    // A guardian can have no CharmInfo at all, and for those the stop and the walk above are the whole
-    // recall. PetAI::CanAttack reads COMMAND_FOLLOW as "attack nothing while returning" and lets the
-    // pet fight again the moment IsReturning clears, so this holds it only for the walk home.
+    // Without CharmInfo the stop and walk above are the whole recall. PetAI::CanAttack lets a
+    // COMMAND_FOLLOW pet fight again once IsReturning clears, so this holds it only for the walk home.
     CharmInfo* charmInfo = pet->GetCharmInfo();
     if (!charmInfo)
         return;
@@ -1820,7 +1730,7 @@ bool ThorimArenaLeashBreached(PlayerbotAI* botAI, Player* bot)
                                                ULDUAR_THORIM_NEAR_ARENA_CENTER.GetPositionY());
 
     // Melee are the only ones with a reason to leave the pile, so they get the tighter radius and
-    // everyone else keeps the box backstop - their anchor already holds them at 10-14 yd.
+    // everyone else keeps the box backstop, since their anchor already holds them at 10-14 yd.
     bool const melee = !botAI->IsTank(bot) && !botAI->IsRanged(bot);
     float const leash = melee ? ULDUAR_THORIM_ARENA_MELEE_LEASH : ULDUAR_THORIM_ARENA_LEASH_RADIUS;
 
@@ -1830,11 +1740,8 @@ bool ThorimArenaLeashBreached(PlayerbotAI* botAI, Player* bot)
 namespace
 {
 
-// Drawn from the latched arena squad in group roster order, never from the survivors: bots die in
-// here, and ranking by who is still standing means one death renumbers everyone behind the corpse and
-// the whole formation shuffles mid-fight.
-//
-// Shared by the ring and by the Charge Orb dodge, so the two can never disagree about who is slot 3.
+// From the latched squad, dead included, so a death never renumbers the formation. Shared by the ring
+// and the Charge Orb dodge so the two agree on slots.
 bool ThorimArenaRingOrder(PlayerbotAI* botAI, Player* bot, size_t& slot, size_t& total)
 {
     Group* group = bot->GetGroup();
@@ -1885,15 +1792,8 @@ bool ThorimArenaRingOrder(PlayerbotAI* botAI, Player* bot, size_t& slot, size_t&
     return false;
 }
 
-// Settles a computed arena destination onto ground the bot can reach, and says whether it is still a
-// usable spot. Raw ring geometry is exactly the shape that lands off the navmesh, and MoveTo would
-// then fail without telling anyone.
-//
-// False means "use the centre instead". The collision walk drags the destination back towards the
-// bot, so a bot standing outside the pit - at the gate, or up on the north rim - gets handed its own
-// position. That spot then latches as "arrived", which frees the anchor guard to stop every mover,
-// while still being outside the leash, which stops the chase and the target pick. The bot never acts
-// again.
+// Settles a spot onto reachable ground. False means use the centre: the collision walk drags it back
+// toward a bot outside the pit, and a spot outside the leash would freeze that bot for good.
 bool ThorimSettleArenaPoint(Player* bot, Position& spot)
 {
     Position const& centre = ULDUAR_THORIM_NEAR_ARENA_CENTER;
@@ -1949,11 +1849,8 @@ bool GetThorimArenaRingSlot(PlayerbotAI* botAI, Player* bot, Position& out)
     return true;
 }
 
-// Writes the nearest spot clear of the charged Thunder Orb, or returns false when `from` is already
-// clear and there is nothing to do.
-//
-// Straight out from the orb rather than across the room: the shortest way out costs the fewest casts,
-// and it keeps each bot's bearing, so the ring comes out of this still spread.
+// Nearest spot clear of the charged orb, or false if `from` is already clear. Straight out from the
+// orb: the shortest way out, and it keeps each bot's bearing so the ring stays spread.
 bool ThorimPushOutOfOrbField(PlayerbotAI* botAI, Player* bot, Position const& from, Position& out)
 {
     Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_CHARGE_ORB);
@@ -1977,9 +1874,8 @@ bool ThorimPushOutOfOrbField(PlayerbotAI* botAI, Player* bot, Position const& fr
     Position spot(orb->GetPositionX() + std::cos(bearing) * danger,
                   orb->GetPositionY() + std::sin(bearing) * danger, centre.GetPositionZ());
 
-    // Every orb is 42 yd from the centre, so the centre clears the field by 5.7 yd and is always a
-    // usable fallback - both for a spot the leash rejects and for one the collision walk dragged back
-    // inside the field on the way into a wall.
+    // Every orb is 42 yd out, so the centre clears the field by 5.7 yd: a safe fallback for a spot the
+    // leash rejects or one the collision walk dragged back into the field.
     bool safe = ThorimSettleArenaPoint(bot, spot);
     if (safe && spot.GetExactDist2d(orb->GetPositionX(), orb->GetPositionY()) < ULDUAR_THORIM_CHARGED_ORB_RADIUS)
         safe = false;
@@ -2015,9 +1911,7 @@ bool GetThorimArenaAnchor(PlayerbotAI* botAI, Player* bot, Position& out)
         if (!GetThorimArenaRingSlot(botAI, bot, out))
             return false;
     }
-    // Melee form up on the tank spot before the pull and run free once the fight starts: adds land up
-    // to 24 yd out and pinning melee would cost every one of those swings. The tighter melee leash is
-    // what keeps them near the pile instead.
+    // Melee form up on the tank spot before the pull, then run free in combat on the 24 yd leash.
     else if (botAI->GetState() == BOT_STATE_COMBAT)
     {
         return false;
@@ -2044,9 +1938,8 @@ bool ThorimArenaAnchorNeedsMove(PlayerbotAI* /*botAI*/, Player* bot, Position co
     ThorimEncounterState& state = ThorimStateFor(bot);
     float const distance = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
 
-    // Arriving is what lets the anchor guard switch the movers off, so a spot the leash would reject
-    // must never count as arrival - otherwise the bot is frozen and out of bounds at the same time,
-    // and nothing left running can fix either half.
+    // Arrival lets the anchor guard switch the movers off, so a spot outside the leash never counts:
+    // the bot would be frozen and out of bounds at once.
     bool const spotIsLeashed =
         spot.GetExactDist2d(ULDUAR_THORIM_NEAR_ARENA_CENTER.GetPositionX(),
                             ULDUAR_THORIM_NEAR_ARENA_CENTER.GetPositionY()) <=
@@ -2257,11 +2150,8 @@ static ThorimPhase2Role ResolveThorimPhase2Role(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot)
         return ThorimPhase2Role::None;
 
-    // Whoever he is swinging at owns the anchor, ahead of anything the group ordering says.
-    // GetMainTankGuid reads the raid frame's main tank flag without a tank check, so a human wearing it
-    // takes that slot and the two bot tanks fall to assist index 0 and index 1 - and index 1 used to end
-    // up in the melee ring, which is a point measured off the boss. That is a tank orbiting him at 8 yd
-    // instead of walking him anywhere, and it left him 26 yd off the anchor for a whole pull.
+    // Whoever he is swinging at owns the anchor, ahead of group order: GetMainTankGuid reads the raid
+    // frame flag with no tank check, so a human wearing it bumps the bot tanks down.
     if (PlayerbotAI::IsTank(bot))
     {
         Unit* boss = GetThorim(botAI);
@@ -2278,7 +2168,7 @@ static ThorimPhase2Role ResolveThorimPhase2Role(PlayerbotAI* botAI, Player* bot)
     if (TakesRangedSpot(bot))
         return ThorimPhase2Role::Ranged;
 
-    // Every other tank waits on the off-tank bearing. Never the ring, for the reason above.
+    // Any other tank waits on the off-tank bearing, never the ring: a ring point is measured off the boss.
     if (PlayerbotAI::IsTank(bot))
         return ThorimPhase2Role::OffTank;
 
@@ -2300,9 +2190,8 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     if (!botAI || !bot)
         return false;
 
-    // Nothing up on the balcony has a spot down here yet. There is no walkable link between the two,
-    // so handing one out sends the bot back through the hallway, down the ramp and the whole corridor
-    // - about 300 yards - instead of over the edge. The balcony node drops it; this waits for that.
+    // No spot for a bot still on the balcony: the only walkable way down is ~300 yd back through the
+    // corridor. The balcony node drops it over the edge.
     if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
         return false;
 
@@ -2324,7 +2213,7 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
 
         position = RangedSpot(slot);
 
-        // No boss, no bearing, so no shelter - the spot on its own is still the right answer.
+        // No boss, no bearing, so no shelter. The spot on its own is still the right answer.
         if (!boss)
             return true;
 
@@ -2353,9 +2242,8 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
 
     if (role == ThorimPhase2Role::OffTank)
     {
-        // Once the swap hands him the boss he owns the anchor, same as the main tank. The ring point
-        // below is measured off the boss, so a tank towing him by it never arrives - it moves with
-        // every step, which is what walked Thorim 35 yd into the ranged camp.
+        // Holding the boss, he owns the anchor too: the ring point below is measured off the boss, so it
+        // moves with every step he tows him.
         if (boss->GetVictim() == bot)
         {
             position = ULDUAR_THORIM_PHASE2_TANK_SPOT;
@@ -2363,7 +2251,7 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
         }
 
         // Just off the main tank's bearing: inside taunt range for the Unbalancing Strike swap, and
-        // deliberately not rotated for Lightning Charge - moving a tank drags the boss.
+        // deliberately not rotated for Lightning Charge: moving a tank drags the boss.
         float const bearing = Position::NormalizeOrientation(RingAnchorBearing(boss) +
                                                              ULDUAR_THORIM_OFFTANK_BEARING_OFFSET);
         if (RingPoint(bot, boss, bearing, position))
@@ -2386,9 +2274,8 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     // walk two slots together. It only moves when the orb changes or a zone lands on the arc.
     float const bearing = RingSlotBearing(botAI, bot, boss, slot);
 
-    // Whole degrees, so a ring that is holding writes one line for the phase. Both terms: the latched
-    // base says which slot this is, the solved bearing says how far the dodges moved it, and the gap
-    // between two slots' solved bearings is the thing Chain Lightning reads.
+    // Whole degrees, so a holding ring writes one line a phase. Latched says which slot, solved how far
+    // the dodges moved it.
     ThorimEncounterState const* ringState = FindState(bot);
     float const latched = ringState ? ringState->ringSlots[slot].latched : bearing;
     RaidObs::NoteDerived(bot, "thorim.ringspot",
@@ -2473,10 +2360,8 @@ void ThorimSendPetToRingSlot(PlayerbotAI* botAI, Player* bot, Unit* pet)
     float const relative =
         Position::NormalizeOrientation(state->ringSlots[slot].composed - boss->GetOrientation());
 
-    // Range nought, the same as PetAI's own chase, so this moves the pet around him without ever
-    // deciding whether it is in reach. Nothing is commanded and nothing is stopped: a recall would
-    // take the pet off the boss, and the point here is that it keeps hitting him from a bearing that
-    // does not bridge two slots.
+    // Range 0 like PetAI's own chase, and no command or stop: the pet keeps hitting him, just from a
+    // bearing that doesn't bridge two slots.
     pet->GetMotionMaster()->MoveChase(boss, ChaseRange(0.0f, 0.0f),
                                       ChaseAngle(relative, ULDUAR_THORIM_PET_SLOT_TOLERANCE));
 }
@@ -2494,10 +2379,8 @@ bool ThorimRingWantsMove(PlayerbotAI* botAI, Player* bot, Position const& spot)
                                 ? ULDUAR_THORIM_RING_REPOSITION_TOLERANCE
                                 : ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
 
-    // Note: the escape is ored on outside the tolerance, not nested in the arrived branch. Nested, a
-    // bot standing in fire gets one move order and then re-latches on the next tick because it is
-    // still inside the 3 yd arrive test - so a refused order is never retried, and 40-60% of them
-    // come back refused.
+    // Escape ORed outside the tolerance, not nested under arrived: nested, a refused order is never
+    // retried, since the bot re-latches inside the 3 yd arrive test.
     return bot->GetDistance(spot) > tolerance || RingSpotBeatsTheDeadband(botAI, bot, spot);
 }
 
@@ -2625,9 +2508,8 @@ bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot)
     if (!ThorimPhase2Active(botAI))
         return false;
 
-    // Same floor test TryGetThorimPhase2Spot uses to refuse a spot: a bot still up on the balcony is
-    // not settled in a ring it cannot be standing in. The guard this feeds zeroes nearly every mover,
-    // so a stale latch up there froze two bots on the hallway for three minutes.
+    // Same floor test TryGetThorimPhase2Spot uses. The guard this feeds zeroes nearly every mover, so a
+    // stale latch on the balcony would freeze the bot up there.
     if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
         return false;
 
@@ -2641,9 +2523,8 @@ Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell)
     if (!bot)
         return nullptr;
 
-    // One 150 yd grid sweep per instance per interval, shared by every bot, so no two of them
-    // disagree about which orb is lit. A slot each, because a single one keyed on the marker turns
-    // into a rescan on every call the moment both markers are being asked for.
+    // One shared sweep per interval, so no two bots disagree on the lit orb. One cache slot per marker,
+    // or asking for both rescans on every call.
     ThorimEncounterState& state = ThorimStateFor(bot);
     bool const lightning = markerSpell == SPELL_THORIM_LIGHTNING_ORB_VISUAL;
     RaidObs::ObsValue<ObjectGuid>& cachedGuid = lightning ? state.lightningOrbGuid : state.chargedOrbGuid;
@@ -2678,9 +2559,8 @@ Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell)
 
 bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)
 {
-    // The gate used to come free: GetThorim was sight-limited, so a raid parked on Hodir never found
-    // him. It is not any more, and without this that raid reads an idle full-health Thorim as a reset
-    // on every tick.
+    // GetThorim has no range, so without this gate a raid parked on Hodir reads an idle full-health
+    // Thorim as a reset every tick.
     if (!NearThorimEncounter(botAI ? botAI->GetBot() : nullptr))
         return false;
 
@@ -2709,9 +2589,8 @@ bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)
         return false;
     }
 
-    // Idle before the raid has ever pulled him is the gate, not a reset. Reading it as one clears the
-    // squad split the corridor just formed and the next tick forms it again: 178 rounds of it during a
-    // single Hodir pull, which is where this was found.
+    // Idle before the first pull is not a reset: reading it as one clears the squad split the corridor
+    // just formed, and the next tick forms it again.
     if (!state->engagedSeen)
         return false;
 
@@ -2782,9 +2661,8 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     if (!firstThisCycle)
         return;
 
-    // The other half is one answer for the whole instance - the lane the squad walks, the split, the
-    // scan caches - so it goes with whichever bot notices first. Running it per bot would clear the
-    // squad split 25 times and AssignThorimSquads would re-form it 25 times behind us.
+    // Instance-wide half (lane, split, scan caches), run by whichever bot gets here first. Per bot, it
+    // would clear the split 25 times and AssignThorimSquads would re-form it behind each.
     state->runicSmashSide = 0;
     state->runicSmashSeenMs = 0;
     state->smashScanMs = 0;

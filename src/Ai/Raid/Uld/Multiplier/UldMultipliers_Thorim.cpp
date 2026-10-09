@@ -37,18 +37,12 @@
 
 using namespace EncounterHelpers;
 
-// Thorim
-//
-// The nodes that pick what to attack, as opposed to the ones that act on what is already picked. They
-// all derive from AttackAction, so a guard that zeroes AttackAction wholesale also zeroes the only
-// thing that could correct a bad target, and a bot holding one is stuck on it for the rest of the
-// pull. Thorim's balcony sits above the arena box, which is exactly how that happened.
+// Target pickers. They all derive from AttackAction, so a guard zeroing AttackAction wholesale must spare these
+// or a bot holding a bad target is stuck on it for the rest of the pull.
 static bool ThorimIsTargetSelectionAction(Action* action)
 {
-    // The encounter's own picker belongs here too, and it is an AttackAction rather than one of the
-    // generic siblings, so nothing below catches it. Leaving it out deadlocks the arena target guard
-    // against itself: the guard fires on a target outside the box, and the node it kills is the one
-    // that drops that target.
+    // The encounter's own picker too, which nothing below catches. Without it the arena target guard kills the
+    // node that drops the very target the guard fires on.
     return dynamic_cast<ThorimDpsPriorityAction*>(action) || dynamic_cast<DpsAssistAction*>(action) ||
            dynamic_cast<DpsAoeAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
            dynamic_cast<AggressiveTargetAction*>(action) || dynamic_cast<AttackAnythingAction*>(action) ||
@@ -60,9 +54,8 @@ float ThorimRunicBarrierMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    // Only the swing and the walk that sets it up. Casts, heals and hazard dodges are untouched: a
-    // blanket damage stop would throw away DPS the shield was never going to punish, and the gauntlet
-    // is on a 2:45 timer in hard mode.
+    // Only the swing and the walk to it: a blanket stop throws away DPS the shield never punishes, and the
+    // gauntlet is on the hard-mode clock.
     if (!dynamic_cast<MeleeAction*>(action) && !dynamic_cast<ReachTargetAction*>(action))
         return 1.0f;
 

@@ -22,14 +22,6 @@ class PlayerbotAI;
 class Unit;
 class WorldObject;
 
-// Thorim.
-//
-// Two halves that share nothing. The gauntlet is a corridor walk past the Runic Colossus, whose
-// Runic Smash rolls a blast wave up one side at a time and whose Runic Barrier answers every melee
-// swing with 2000 arcane. Phase 2 is a stationary fight on the arena floor where Chain Lightning
-// arcs 5 yd from victim to victim and Lightning Charge fires a 75 degree cone at whichever pillar
-// orb just lit up.
-
 enum UlduarThorimIds
 {
     // Thorim
@@ -51,25 +43,21 @@ enum UlduarThorimIds
     NPC_THORIM_THUNDER_ORB = 33378,  // the pillar orb that lights up 5s before Lightning Charge
     SPELL_UNBALANCING_STRIKE = 62130,
 
-    // The Runic Colossus corridor smash: a 5s cast that lights one row of hand bunnies, then rolls a
-    // 10 yd blast wave up the corridor on that side. Cancelled the moment the Colossus is engaged.
+    // Corridor smash, one side per 5s cast. Cancelled once the Colossus is engaged.
     SPELL_THORIM_RUNIC_SMASH_LEFT = 62057,
     SPELL_THORIM_RUNIC_SMASH_RIGHT = 62058,
-    // -51% damage taken plus a 2000 arcane damage shield on every melee swing. Recast every 20s for
-    // its own 20s duration, so it is up for effectively the whole approach.
+    // 2000 arcane back on every melee swing. Recast every 20s for 20s, so effectively always up.
     SPELL_THORIM_RUNIC_BARRIER = 62338,
-    // Lightning Charge has no cast bar. The only warning is this aura landing on a Thunder Orb;
-    // SpellInfoCorrections patches its amplitude to 5000ms, so it ticks once, 5s before the cone.
+    // Only warning before Lightning Charge, which has no cast bar. SpellInfoCorrections sets its amplitude to
+    // 5000ms, so it ticks once, 5s before the cone.
     SPELL_THORIM_LIGHTNING_ORB_VISUAL = 62186,
-    // Phase 1's orb marker, the counterpart to the visual above. It sits on one Thunder Orb for 15s
-    // and triggers Lightning Shock (62017) once a second: ~3k nature at 35 yd, measured in 3D.
+    // Phase 1 orb marker: 15s on one Thunder Orb, Lightning Shock (62017) every second, ~3k nature at 35 yd in 3D.
     SPELL_THORIM_CHARGE_ORB = 62016,
 
     // Thorim hard mode (arena gauntlet cleared fast enough that Sif joins the fight).
     NPC_SIF = 33196,              // spawns at Thorim's throne, drops into the arena when she joins
     NPC_SIF_BLIZZARD = 32879,     // walks the arena dropping the zones below, only ever exists in hard mode
-    // What actually hurts: a 10s, 8 yd zone the bunny drops every 2s, so up to six of them trail behind
-    // it, a median 26 yd back. Testing the bunny alone missed 16 of 20 melee Blizzard hits in one pull.
+    // The zones do the damage, not the bunny: 10s, 8 yd, one every 2s, so up to six trail behind it.
     SPELL_SIF_BLIZZARD_ZONE_10 = 62576,
     SPELL_SIF_BLIZZARD_ZONE_25 = 62602,
 };
@@ -77,189 +65,139 @@ enum UlduarThorimIds
 constexpr float ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD = 429.6094f;
 constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 
-// Thorim hard mode: bots clear Sif's moving Blizzard. DBC radius is 13, and the searcher applies
-// through IsWithinDistInMap, which adds both object sizes on top - Rune of Death is 13 in the DBC and
-// was measured landing at 15.4. At 12 the dodge stopped while still standing in it.
+// Trigger radius for the generic flee off the bunny, not a damage radius. Wide on purpose so it fires early.
 constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0f;
 
-// How far the melee ring and the camp keep off a Blizzard zone, and deliberately not the 15 above: that
-// one is the generic flee's trigger radius and is meant to fire early. Damage stops at 9.8 - measured
-// over 161 ticks, the corrected DBC 8 plus both combat reaches - so 11 leaves a yard of slack. At 15 the
-// slide grows from a median 3-7 yd of arc to 9-12 and buys nothing.
+// How far the ring and camp keep off a zone. Damage stops at 9.8 yd (corrected DBC 8 plus both combat
+// reaches), so 11 leaves a yard of slack.
 constexpr float ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE = 11.0f;
 
 // How far out the Blizzard sweep looks. Every bot reads whichever bot's sweep filled the cache last, so
 // it has to reach the whole trail from anywhere in the arena: the bunny's path alone spans 61 by 48 yd.
 constexpr float ULDUAR_THORIM_BLIZZARD_SCAN_RANGE = 70.0f;
 
-// How far a camp bot steps to get off a zone, and how far from Thorim it may end up doing it. Short on
-// purpose: the generic flee's 30 yd runs carried healers along the bunny's own path and into the cone.
-// 32 is the boss range the camp table was solved to.
+// How far a camp bot steps off a zone, and how far from Thorim it may end up. Short so the step can't run
+// along the bunny's path into the cone. 32 is the boss range the camp table was solved to.
 constexpr float ULDUAR_THORIM_CAMP_BLIZZARD_ESCAPE_RADIUS = 15.0f;
 constexpr float ULDUAR_THORIM_CAMP_MAX_BOSS_RANGE = 32.0f;
 
-// Cheap first gate for everything Thorim owns, and it takes both halves. Distance alone does not
-// separate the wings: Hodir's room sits 136-176 yd from the arena centre against a corridor that runs
-// out to 126 yd, and a radius through that 10 yd gap would be luck rather than a gate. Height does -
-// the gauntlet is at z 412, the arena floor at 420, and Hodir's floor at 433.
+// Cheap first gate for both halves. Distance alone reaches Hodir's room, height doesn't: corridor z 412,
+// arena 420, Hodir 433.
 constexpr float ULDUAR_THORIM_ENCOUNTER_PROXIMITY = 200.0f;
 constexpr float ULDUAR_THORIM_WING_MAX_Z = 425.0f;
 
-// The one part of the encounter that ceiling cannot admit: the ramp and the upper hallway run
-// z 425-438, over Hodir's 433. Height cannot separate those two and neither can distance - the far
-// end of the hallway is 177 yd out, inside Hodir's own 136-176 band - so this half of the gate is a
-// box. X does the work: Hodir sits at x 1980, and nothing else in Ulduar is in here.
+// The ramp and upper hallway (z 425-438) overlap Hodir on height and distance alike, so this half is a box.
+// X does the work: Hodir sits at x 1980 and nothing else in Ulduar is in here.
 constexpr float ULDUAR_THORIM_BALCONY_BOX_MIN_X = 2100.0f;
 constexpr float ULDUAR_THORIM_BALCONY_BOX_MAX_X = 2205.0f;
 constexpr float ULDUAR_THORIM_BALCONY_BOX_MIN_Y = -455.0f;
 constexpr float ULDUAR_THORIM_BALCONY_BOX_MAX_Y = -280.0f;
 constexpr float ULDUAR_THORIM_BALCONY_BOX_MAX_Z = 450.0f;
 
-// AiPlayerbot.SightDistance caps the "possible targets" values at 100 yd, and the Colossus is 131 yd
-// from the top pair of corridor waypoints - so its telegraph needs a wider, targeted grid lookup or
-// bots at the head of the corridor never see the hand go up.
+// Sight-capped target values stop at 100 yd and the Colossus is 131 yd from the top corridor waypoints.
 constexpr float ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE = 150.0f;
 
-// One telegraph is worth 5s of cast, 1s of delay and 3.5s of wave travel. Held a little past that so
-// the lane does not flip back while the last bunny is still firing.
+// 5s cast, 1s delay, 3.5s of wave travel, plus slack so the lane doesn't flip back while the last bunny fires.
 constexpr uint32 ULDUAR_THORIM_RUNIC_SMASH_LATCH_MS = 10000;
 
-// Both grid sweeps below are raid-wide answers, so they are computed once per instance per interval
-// rather than once per bot. Sharing the result also guarantees no two bots disagree about which lane
-// is hot or which orb is lit.
+// Raid-wide sweeps run once per instance per interval, so no two bots disagree on the hot lane or the lit orb.
 constexpr uint32 ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS = 500;
 
-// Runic Barrier's damage shield only punishes melee swings, so the bail is a health band rather than
-// a hard stop: below the first, step out of melee range; above the second, walk back in.
+// Barrier only punishes melee swings, so a health band: step out below the first, back in above the second.
 constexpr float ULDUAR_THORIM_BARRIER_BAIL_HEALTH_PCT = 55.0f;
 constexpr float ULDUAR_THORIM_BARRIER_RESUME_HEALTH_PCT = 80.0f;
 constexpr float ULDUAR_THORIM_BARRIER_BAIL_DISTANCE = 14.0f;  // clear of the 9.1 yd melee reach
 
-// Thorim's combat reach is 6.25 and a player's is 1.5, so melee connects out to 9.1 yd centre to
-// centre, and a radius 8 ring is inside that. Three slots 90 degrees apart stand 11.3 yd from each
-// other, clear of Chain Lightning's 8.0 yd jump - but only while they stay there, which is what the
-// separation below is for.
+// Melee reach is 9.1 yd centre to centre (combat reaches 6.25 and 1.5), so r 8 is inside it. Three slots 90
+// degrees apart are 11.3 yd from each other, clear of the 8 yd jump as long as they stay put.
 constexpr float ULDUAR_THORIM_MELEE_RING_RADIUS = 8.0f;
 constexpr uint8 ULDUAR_THORIM_MELEE_SLOTS = 3;
 
-// Closest two ring bearings may end up once the cone and Blizzard slides have moved them. At radius 8
-// two points d degrees apart are 2*8*sin(d/2) yd, so 60 degrees is exactly the 8.0 yd the spell jumps.
-// Tight on purpose: a lit cone forbids 105 degrees, and three slots plus the tank anchor need 240 of
-// the 255 that leaves. Slides that ignored this merged two slots and turned a 3-hop chain into an
-// 8-hop one, and at 1.5x a hop the eighth landed 89,760 against a first hop of 5,574.
+// Min gap between ring bearings after the cone and Blizzard slides. At r 8, 60 degrees is exactly the 8 yd jump.
+// Can't be wider: a lit cone forbids 105 degrees, and three slots plus the tank anchor need 240 of the 255 left.
 constexpr float ULDUAR_THORIM_RING_SLOT_SEPARATION = 1.0472f;  // 60 degrees
 
-// How far a pet may sit off its owner's ring bearing before it is sent back, and the tolerance the
-// chase itself is given. About 3 yd of arc at a pet's contact distance - tight enough to keep it out
-// of the gap between two slots, wide enough that it is not re-pathing every tick.
+// How far a pet may drift off its owner's ring bearing before it's sent back, also the chase's own tolerance.
+// About 3 yd of arc: keeps it out of the gap between slots without re-pathing every tick.
 constexpr float ULDUAR_THORIM_PET_SLOT_TOLERANCE = 0.3927f;  // 22.5 degrees
 
-// Chain Lightning is 8 targets at 1.5x per jump, so the eighth takes about 17x the first, and it jumps
-// 8.0 yd centre to centre: spell_jump_distance overrides 64390 to 5.0 and the reach test adds both
-// combat reaches. Six is the most the room fits at 11 yd apart while also staying 22 yd off the tank
-// spot and 12 clear of Sif's Blizzard loop, and 11 holds up with a bot off its point on either side.
+// Chain Lightning jumps 8 yd centre to centre (spell_jump_distance 5 plus both combat reaches). Six is the most
+// the room fits 11 yd apart, 22 off the tank spot and 12 off Sif's loop, and 11 holds with a bot off its point.
 constexpr uint8 ULDUAR_THORIM_RANGED_SLOTS = 6;
 
-// Phase 2 opening. He lands in the middle of the camp, the melee pile follows him to the anchor and
-// passes within 8 yd of every camp spot, and the first Chain Lightning lands 12.0-12.1s after he drops
-// below the floor line. So ranged wait somewhere clear of the pile until it has landed. Past the minimum
-// they go home once he is at the anchor or the lit cone covers their wait spot (it fires at ~16s).
-// Never past the max: Sif's first bunny walks by the wait spots from about 24s.
+// Ranged wait clear of the melee pile until the first Chain Lightning lands, 12.0-12.1s after he drops. Then
+// home once he's on the anchor or the lit cone covers the wait spot, never past the max: Sif's bunny comes by.
 constexpr uint8 ULDUAR_THORIM_OPENING_SLOTS = 4;
 constexpr uint32 ULDUAR_THORIM_OPENING_HOLD_MIN_MS = 12500;
 constexpr uint32 ULDUAR_THORIM_OPENING_HOLD_MAX_MS = 25000;
 // He settles 4.1-6.1 yd off the tank spot and is 12-23 yd off it while being dragged.
 constexpr float ULDUAR_THORIM_OPENING_SETTLED_RADIUS = 8.0f;
 
-// The off-tank sits just off the main tank's bearing, close enough to taunt through the Unbalancing
-// Strike swap. It does not separate the pair for Chain Lightning and never could: 20 degrees at the
-// 4-6 yd they hold off the boss is under 2 yd, and the two were measured 1.6-4.7 yd apart, well inside
-// the 8 yd jump. The chain routes through them from one slot to another.
+// Off-tank sits near the main tank's bearing, in taunt range for the Unbalancing Strike swap. Doesn't split
+// the pair for Chain Lightning: 20 degrees at the 4-6 yd they hold off the boss is under 2 yd.
 constexpr float ULDUAR_THORIM_OFFTANK_BEARING_OFFSET = 0.3491f;  // 20 degrees
 
-// Reach then hold. A tight deadband against a ring recomputed from a moving boss has the bot sliding
-// in place forever, and a moving bot casts nothing - the Sapphiron air phase failure.
+// Reach then hold: a tight deadband on a ring that moves with the boss keeps a bot sliding in place, and a
+// moving bot casts nothing.
 constexpr float ULDUAR_THORIM_RING_ARRIVE_TOLERANCE = 3.0f;
 constexpr float ULDUAR_THORIM_RING_REPOSITION_TOLERANCE = 5.0f;
 
-// How far out the add priority will reach. Arena adds land 19-24 yd from the centre and a ranged bot
-// sits up to 14 yd the other side of it, so 50 covers the room without letting an arena bot lock onto
-// something down the corridor.
+// Covers the arena (adds land 19-24 yd out, ranged stand on the far side) without reaching down the corridor.
 constexpr float ULDUAR_THORIM_DPS_TARGET_RANGE = 50.0f;
 
-// Within one priority tier, how much closer a candidate has to be before the bot drops what it is
-// already swinging at. Without a margin the pick oscillates between two adds that are the same
-// distance away and the bot never finishes a cast.
+// How much closer a same-tier add must be to switch, or the pick flips between equidistant adds mid-cast.
 constexpr float ULDUAR_THORIM_TARGET_SWITCH_MARGIN = 8.0f;
 
-// How far a melee bot will go for a higher-priority add before settling for the next tier down. Arena
-// adds land 19-24 yd from the centre and a Champion is on somebody a second or two later, so anything
-// past this has moved twice by the time the bot arrives. Ranged have no such limit - they hit an
-// Evoker from where they already stand, and it is melee that were measured spending the fight running.
+// How far melee go for a higher-tier add before settling for the next tier: past this it has moved twice by
+// the time they arrive. Ranged have no limit, they hit an Evoker from where they stand.
 constexpr float ULDUAR_THORIM_MELEE_TARGET_REACH = 15.0f;
 
-// spell_cone gives 62466 a 75 degree arc at 150 yd. The margin covers Thorim re-orienting onto the
-// orb between the tick that picks a rotation and the tick the bot finishes walking it. The clearance
-// is the extra step past the edge, so the bot that just walked out does not read as still inside.
+// spell_cone: 75 degrees at 150 yd. Margin covers Thorim turning onto the orb while the bot walks, clearance
+// keeps a bot that just stepped out from reading as still inside.
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE = 1.3090f;   // 75 degrees
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_MARGIN = 0.2618f;       // 15 degrees
 constexpr float ULDUAR_THORIM_RING_CONE_CLEARANCE = 0.0873f;           // 5 degrees
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_RANGE = 150.0f;
 
-// The camp's own margin, far tighter than the ring's 15 above. A yard of boss drift swings the bearing
-// 7 degrees at the ring's 8 yd but only 2-4 out at 15-32, and across 46 measured casts the cone bearing
-// moved at most 5.1 degrees over the whole 5 s warning. Wider than this and no shelter set fits the room.
+// Camp margin, far tighter than the ring's: a yard of boss drift is 7 degrees at 8 yd but 2-4 at 15-32 yd.
+// Any wider and no shelter set fits the room.
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN = 0.0436f;  // 2.5 degrees
 
 // How close a lit orb has to be to one of the seven known positions before the shelter table trusts the
 // match. Nothing within this and the bot stays home rather than walking off a guess.
 constexpr float ULDUAR_THORIM_THUNDER_ORB_MATCH_RADIUS = 4.0f;
 
-// The box boss_thorim.cpp scans every 5s for a living player. Find nobody in it and Thorim summons
-// the Lightning Orb, which wipes the raid outright - so these are copied from GetArenaPlayer() and
-// must never be widened.
+// ThorimAI::GetArenaPlayer()'s box, scanned every 5s for a living player. Nobody inside summons the
+// raid-wiping Lightning Orb, so never widen it.
 constexpr float ULDUAR_THORIM_ARENA_BOX_MIN_X = 2085.0f;
 constexpr float ULDUAR_THORIM_ARENA_BOX_MAX_X = 2185.0f;
 constexpr float ULDUAR_THORIM_ARENA_BOX_MIN_Y = -305.0f;
 constexpr float ULDUAR_THORIM_ARENA_BOX_MAX_Y = -214.0f;
 constexpr float ULDUAR_THORIM_ARENA_BOX_MAX_Z = 425.0f;
 
-// Arena adds all land 19-24 yd from the centre and the nearest box edge is 42 yd out, so this holds
-// the arena squad well inside the scan while still letting them chase anything that spawns. The
-// corridor mouth is 45.8 yd away, which is what makes the radius alone enough to keep them out of it.
+// Covers the add landings (19-24 yd out), well inside the box (42 yd) and short of the corridor mouth (45.8).
 constexpr float ULDUAR_THORIM_ARENA_LEASH_RADIUS = 30.0f;
 
-// What holds a corridor bot's pet, which has no room to be held to. Matches the range the picker
-// looks for a target in, so a pet further out than this is past anything its owner could even see
-// to kill. Wide enough for a real chase: pets sit 15-21 yd out normally and peak around 50.
+// Corridor pets have no room to be held to, so they're held to the owner. Same as the picker's range: a pet
+// past it is beyond anything the owner could see to kill.
 constexpr float ULDUAR_THORIM_PET_OWNER_LEASH_RADIUS = ULDUAR_THORIM_DPS_TARGET_RANGE;
 
 // The gauntlet stops taking bodies once the arena would drop this low.
 constexpr uint32 ULDUAR_THORIM_ARENA_MIN_MEMBERS = 3;
 
-// The phase 1 arena formation. The tank and the melee on him hold the centre; ranged and healers ring
-// them from outside the Dark Rune Champion's Whirlwind, close enough that an add anywhere in the pile
-// is still in range. Two radii rather than one so a 25 man ring is not shoulder to shoulder.
-//
-// These are as wide as the room allows. Arena adds jump to 19-24 yd from the centre, so anything at
-// or past 19 drops ranged into the landing zone, and the navmesh gives out past ~26 yd on the south
-// side. Wider matters twice over: Whirlwind is an 8 yd circle on an add standing on the tank, and
-// Deafening Thunder is a 15 yd blast centred on whoever the Stormhammer hit, so a tight ring hands
-// one hammer the whole squad's cast speed.
+// Ranged and healers ring the tank outside Champion Whirlwind, as wide as the room allows: adds land from 19 yd
+// out and the navmesh gives out past ~26 yd south. Two radii so a 25 man ring isn't shoulder to shoulder.
 constexpr float ULDUAR_THORIM_ARENA_RING_INNER = 13.0f;
 constexpr float ULDUAR_THORIM_ARENA_RING_OUTER = 18.0f;
 constexpr uint8 ULDUAR_THORIM_ARENA_RING_INNER_SLOTS = 5;
 
-// Charge Orb hangs on a Thunder Orb 13.5 yd above the floor and its 35 yd radius is measured in 3D,
-// so the field cuts the floor as a 32.3 yd circle - which is why a bot three yards from a victim
-// never took a tick. The margin covers the bot still walking when the next tick lands.
+// The 35 yd radius is 3D from an orb 13.5 yd up, so the field cuts the floor as a 32.3 yd circle. Margin
+// covers a bot still walking when the next tick lands.
 constexpr float ULDUAR_THORIM_CHARGED_ORB_RADIUS = 32.3f;
 constexpr float ULDUAR_THORIM_CHARGED_ORB_MARGIN = 4.0f;
 
-// Melee are leashed to the tank spot rather than to the box: 24 yd is the furthest an arena add ever
-// lands from the centre, so it costs no uptime, and it keeps the pile 21 yd short of the lever gate.
-// Standing at the gate is worse than it looks - boss_thorim_arena_npcs::CanAIAttack drops any target
-// past x 2180, so a bot that drifts there stops being attackable and the add re-rolls onto a healer.
+// Melee leash off the tank spot: 24 yd is the furthest an add lands, so no uptime lost. Keeps them off the
+// lever gate, where CanAIAttack drops any target past x 2180 and the add re-rolls onto a healer.
 constexpr float ULDUAR_THORIM_ARENA_MELEE_LEASH = 24.0f;
 
 extern const Position ULDUAR_THORIM_NEAR_ARENA_CENTER;
@@ -276,11 +214,8 @@ extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3;
-// The upper hallway, from the second doors to Thorim's platform. Chained in order, and deliberately
-// not down the middle: two Paralytic Field bunnies sit on the centre line at (2134.9, -390.8) and
-// (2134.9, -339.7), each a 12 yd circle that stuns for 15s with no cast bar and no world object to
-// see. The chamber between the two doorways is ~40 yd wide, so the way past is to hug the east side
-// and come back to the middle for the north doorway. Worst leg clears a bunny by 15.8 yd.
+// Upper hallway in walk order, off the centre line where two invisible Paralytic Field bunnies sit (12 yd,
+// 15s stun). Hugs the east wall, then back to the middle for the north doorway.
 extern const Position ULDUAR_THORIM_BALCONY_1;
 extern const Position ULDUAR_THORIM_BALCONY_2;
 extern const Position ULDUAR_THORIM_BALCONY_3;
@@ -296,41 +231,25 @@ extern const Position ULDUAR_THORIM_BALCONY_HOLD3_SPOT;
 extern const Position ULDUAR_THORIM_BALCONY_HOLD4_SPOT;
 extern const Position ULDUAR_THORIM_BALCONY_HOLD5_SPOT;
 extern const Position ULDUAR_THORIM_BALCONY_HOLD6_SPOT;
-// Where Thorim ends up, and he is dragged this far west so the melee on him cannot reach the ranged
-// camp. Chain Lightning jumps 5 yd body to body, so the two piles touching is what turns it from a
-// three man hit into an eight man one. The melee ring at radius 8 is walkable the whole way round,
-// the western arc on rim polys.
+// Dragged this far west so the melee on him can't bridge Chain Lightning into the camp. The r 8 ring is
+// walkable all the way round, the west arc on rim polys.
 extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
-// Six spots east of him, 22 to 32 yd out, spread over as much bearing as the room allows. Every spot
-// is 22 yd off the tank spot so the radius 8 melee ring cannot bridge into the camp, 12 yd clear of
-// Sif's Blizzard loop, and 11 from its nearest neighbour for Chain Lightning's jump. 32 is the outer
-// limit rather than the rim: past it the shorter caster nukes stop reaching the boss.
-//
-// The bearing spread is for Lightning Charge: a 75 degree cone off the boss, aimed at whichever of the
-// seven orbs lit up, 150 yd deep and instant, so there is nothing to react to. Packed into one 70
-// degree wedge all six sat in a single cone, which is a 13 target burst for 202k and ten dead inside
-// two seconds. Spread over 88 degrees the worst of the seven catches four.
-//
-// Four is as good as spread alone gets, and four is still a wipe: the seven cones between them leave
-// only a 16-28 degree wedge of bearing permanently clear at any anchor, nowhere near enough for six
-// spots 11 yd apart. So the spread is only half the answer and ThorimRangedSpot walks the covered slots
-// off to a shelter for the 5 s the orb is lit.
+// 22-32 yd east of the tank spot, 11 yd apart, 12 off Sif's loop. 22 keeps the melee ring from bridging in,
+// past 32 the shorter nukes stop reaching. One cone still covers up to four, so covered slots take a shelter.
 extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE6_SPOT;
-// Where the arena squad's ranged wait out the opening, two to a spot. Each is 12.8-15.6 yd from every
-// point the opening melee pile reached in five traces, 12 from the others, and in cast and heal range
-// of him on the anchor. Only good for the opening: Sif's bunny path runs 2.6-7.7 yd from them.
+// Arena ranged wait out the opening here, two to a spot, clear of the melee pile and in range of him on the
+// anchor. Opening only: Sif's bunny path runs right by them.
 extern const Position ULDUAR_THORIM_PHASE2_OPENING1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_OPENING2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_OPENING3_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_OPENING4_SPOT;
-// Only used when Thorim's live position cannot produce a ring point, and StaticMeleeSpot only takes
-// one within 11 yd of him, so these have to sit on the radius 8 ring around the tank spot. Park him
-// somewhere else and they are dead weight.
+// Fallback when his live position gives no ring point. StaticMeleeSpot only takes one within 11 yd of him,
+// so these sit on the r 8 ring round the tank spot.
 extern const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT;
@@ -338,18 +257,13 @@ extern const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT;
 // Unbalancing Strike swap without adding a body between the boss and the ranged.
 extern const Position ULDUAR_THORIM_PHASE2_OFFTANK_SPOT;
 
-// Both scans below are raid-wide answers, so they are folded once per instance per interval instead
-// of once per bot - and sharing the result is also what guarantees no two bots disagree about which
-// corridor lane is hot.
+// One per instance: raid-wide answers are folded once per interval, not once per bot.
 struct ThorimEncounterState
 {
-    // Held rather than re-derived, for the reason Vezax holds his: ranking the raid by guid every
-    // tick means one death renumbers everyone behind the corpse and the ring shuffles mid-fight.
+    // Latched: ranking the raid by guid every tick lets one death renumber everyone behind the corpse.
     RaidObs::ObsGuidMap<uint8> meleeSlots{"thorim.slot"};
 
-    // Same for the camp. It used to be a round robin over group order recomputed on every call, so a
-    // death renumbered everyone behind the corpse - one bot was seen walking spot 6 to 4 and back in
-    // 2.3 seconds. The shelter table below is keyed on this slot, so it has to hold still.
+    // Latched too. The shelter table below is keyed on this slot.
     RaidObs::ObsGuidMap<uint8> rangedSlots{"thorim.rangedslot"};
 
     // Opening wait spot per ranged bot: the arena squad's on the floor, the corridor squad's on the
@@ -364,11 +278,8 @@ struct ThorimEncounterState
     // When he first dropped below the floor line in combat. The whole opening is timed off this.
     RaidObs::ObsValue<uint32> phase2StartMs{"thorim.p2start"};
 
-    // The melee ring, one entry per slot rather than per bot. Every bot used to latch its own bearing
-    // off a live anchor and then dodge the cone and the Blizzard alone, blind to the other slots: 73
-    // to 81% of ring points sat off their slot, one slot's answers spread 166 degrees, and two slots
-    // regularly shared a bearing. Solved as a set now, so the three hold
-    // ULDUAR_THORIM_RING_SLOT_SEPARATION and everyone in a slot walks to the same point.
+    // One entry per slot, solved as a set: the three hold ULDUAR_THORIM_RING_SLOT_SEPARATION and everyone in a
+    // slot walks to the same point.
     struct RingSlot
     {
         float latched = 0.0f;   // off the anchor, struck once for the phase
@@ -381,9 +292,8 @@ struct ThorimEncounterState
     ObjectGuid ringOrb;
     uint32 ringSolveMs = 0;
 
-    // Whether one camp bot is standing on its shelter instead of its spot, and which orb decided that.
-    // Held while that orb is lit and wiped when it goes dark, so the walk home is over before the next
-    // orb lights and brings its Chain Lightning.
+    // Per camp bot, whether it's on its shelter and which orb sent it there. Wiped when that orb goes dark, so
+    // the walk home is done before the next orb lights and brings its Chain Lightning.
     struct RangedShelter
     {
         ObjectGuid orb;
@@ -393,27 +303,21 @@ struct ThorimEncounterState
 
     std::unordered_map<ObjectGuid, RangedShelter> rangedShelters;
 
-    // 0 = nothing seen yet, otherwise SPELL_THORIM_RUNIC_SMASH_LEFT / _RIGHT. The side is sticky and
-    // the timestamp is not: the timestamp says the wave is still rolling, the side says which lane
-    // the squad now walks, and that has to outlive the wave or the formation walks straight back.
+    // 0 until seen, else SPELL_THORIM_RUNIC_SMASH_LEFT / _RIGHT. The side is sticky (the lane to walk), the
+    // timestamp only says a wave is still rolling.
     RaidObs::ObsValue<uint32> runicSmashSide{"thorim.smashside"};
     uint32 runicSmashSeenMs = 0;
     uint32 smashScanMs = 0;
 
-    // Phase 1's Charge Orb and phase 2's Lightning Charge visual, cached apart. They used to share one
-    // slot keyed on the marker, so either caller evicted the other and nearly every call re-swept the
-    // grid - 78 turnovers in 15s in one trace, each a 150 yd sweep, with the guid flapping in step.
-    // The melee ring rotation hangs off that guid, which is what put six melee on a 90 degree bearing
-    // flip several times a second.
+    // Cached apart from lightningOrbGuid: a shared slot let each caller evict the other and re-sweep the grid.
     RaidObs::ObsValue<ObjectGuid> chargedOrbGuid{"thorim.chargedorb"};
     uint32 orbScanMs = 0;
 
     RaidObs::ObsValue<ObjectGuid> lightningOrbGuid{"thorim.lightningorb"};
     uint32 lightningOrbScanMs = 0;
 
-    // Where Sif's Blizzard zones and the bunny dropping them are, swept once per instance per interval
-    // rather than once per bot per tick. A zone never moves once dropped, so the interval can only miss
-    // a fresh one, and those come every 2s.
+    // Sif's Blizzard zones and bunny, swept once per instance per interval. Zones never move, so the interval
+    // only delays seeing a fresh one, and those come every 2s.
     std::vector<Position> blizzardSpots;
     uint32 blizzardScanMs = 0;
 
@@ -421,9 +325,8 @@ struct ThorimEncounterState
     // bot moved, not which hazard moved it.
     RaidObs::ObsGuidMap<Position> orbEscapes{"thorim.orbescape"};
 
-    // Struck once and then read straight out of the map. The sight-list lookup it replaces stops at
-    // AiPlayerbot.SightDistance, and the upper hallway is 100-145 yd from the platform, so every node
-    // keyed on the boss went dark the moment the corridor squad climbed the ramp.
+    // Struck once, then read from the map. Sight-capped lookups stop at 100 yd and the upper hallway is
+    // 100-145 yd from the platform.
     ObjectGuid bossGuid;
 
     ObjectGuid colossusGuid;
@@ -439,14 +342,12 @@ struct ThorimEncounterState
     RaidObs::ObsGuidMap<uint8> squads{"thorim.squad"};
     RaidObs::ObsValue<bool> squadsAssigned{"thorim.squadsassigned"};
 
-    // When the humans' entries in the map above were last refreshed. They are not struck with the
-    // rest: the split only ever picks bots, so a human who walks the corridor would otherwise be
-    // filed under the arena for the whole trace. Read from position, and only for the label.
+    // Humans' squad entries are refreshed from position, label only. The split only picks bots, so a human in
+    // the corridor would otherwise read as arena for the whole trace.
     uint32 humanSquadScanMs = 0;
 
-    // The split is struck before the pull, and RaidObs has no session open until the pull, so the
-    // change-only emit above lands in a trace that does not exist yet - which is why no Thorim trace
-    // has ever carried the one assignment that decides the fight. Re-noted once a session is up.
+    // The split is struck before the pull, when RaidObs has no session yet, so the change-only emit above is
+    // lost. Re-noted once a session is up.
     bool squadsNoted = false;
 
     // Which add each bot was told to burn. The trace can otherwise only show GetVictim(), which is
@@ -456,23 +357,18 @@ struct ThorimEncounterState
     // Bots the arena node took "follow master" away from, so the reset can hand it back.
     RaidObs::ObsGuidSet followMasterStripped{"thorim.followstripped"};
 
-    // Which pet was last sent back to its owner. Keyed by owner, because that is what a reader has:
-    // pets carry no snapshot row, so this note is the only place a trace says a pet left the arena.
-    // How far along the upper hallway each bot has walked. Monotonic on purpose: derived purely from
-    // position it would hand back the nearest waypoint, and the nearest one behind you is exactly how
-    // a squad ends up walking the corridor a second time.
+    // How far along the upper hallway each bot has walked. Monotonic: from position alone it'd hand back the
+    // nearest waypoint, and the one behind you walks the squad down the corridor again.
     RaidObs::ObsGuidMap<uint8> balconyStep{"thorim.balcony"};
 
+    // Last pet sent home, keyed by owner: pets have no snapshot row, so this is the only trace of a pet leaving.
     RaidObs::ObsGuidMap<ObjectGuid> petRecalls{"thorim.petrecall"};
 
-    // When each pet was last told to come home. Re-issuing MoveFollow every tick restarts the walk and
-    // the pet never arrives, and a plain "already commanded" latch would never fire twice for a pet
-    // that strays, comes back and strays again. Keyed by pet, so one stray pet cannot mute another.
+    // Last recall per pet. MoveFollow every tick restarts the walk so the pet never arrives, and a one-shot
+    // latch would miss a pet that strays twice. Keyed by pet so one stray can't mute another.
     std::unordered_map<ObjectGuid, uint32> petRecallMs;
 
-    // Phase 1 arrival latch. Its own set rather than ringArrived below: the two phases are mutually
-    // exclusive on the z threshold today, and sharing a latch across that is a trap waiting for the
-    // first time it stops being true.
+    // Phase 1 arrival latch, kept apart from ringArrived: only the z threshold keeps the two phases apart.
     RaidObs::ObsGuidSet arenaAnchorArrived{"thorim.arenaarrived"};
 
     // Reach-then-hold latch. A bot that has arrived stops issuing moves until it drifts past the
@@ -486,16 +382,12 @@ struct ThorimEncounterState
     // mid-fight and having the bots wipe it back off would be worse than the stale mark ever was.
     RaidObs::ObsValue<bool> marksCleared{"thorim.markscleared"};
 
-    // Whether this raid has ever had him in combat. An untouched Thorim looks identical to one that
-    // has just reset, and the reset path clears the squad split that the corridor forms up on before
-    // the pull - so without the latch the two fight each other every tick.
+    // Whether he's ever been engaged this raid. An untouched Thorim looks just reset, and the reset clears the
+    // squad split the corridor forms up on before the pull, so without this the two fight every tick.
     bool engagedSeen = false;
 
-    // Who has already had their own latches cleared since he was last in combat. The reset used to be
-    // gated on engagedSeen alone, which is raid-wide, so the first bot through closed the gate on the
-    // other 24 and they carried ringArrived, balconyStep and their melee slot into the next pull. One
-    // trace had ten of thirteen corridor bots start on a step they earned two attempts earlier.
-    // Cleared while he is engaged, so every pull gets a fresh round of resets.
+    // Bots whose latches were cleared since he was last in combat. Per bot: a raid-wide gate let the first bot
+    // through skip everyone else's reset. Cleared while he's engaged, so every pull gets a fresh round.
     std::unordered_set<ObjectGuid> resetDone;
 };
 
@@ -519,15 +411,12 @@ enum class ThorimPhase2Role : uint8
 // localized creature name, so a bot that is on an add goes blind to the boss.
 Unit* GetThorim(PlayerbotAI* botAI);
 
-// Wider, targeted lookup rather than the sight-capped target values: the Colossus is 131 yd from the
-// top pair of corridor waypoints, and that is exactly where its telegraph has to be visible.
+// Not sight-capped: the Colossus is 131 yd from the top corridor waypoints, right where its telegraph matters.
 Unit* GetThorimRunicColossus(PlayerbotAI* botAI);
 
-//
 // Target priority
-//
-// The encounter's own creatures, bucketed by entry in one sweep, for the same reason GetThorim reads
-// by entry.
+
+// Bucketed by entry in one sweep, same reason GetThorim reads by entry.
 struct ThorimEncounterTargets
 {
     std::vector<Unit*> acolytes;
@@ -543,64 +432,49 @@ struct ThorimEncounterTargets
 
 void GatherThorimEncounterTargets(PlayerbotAI* botAI, ThorimEncounterTargets& out);
 
-// Whether a bot may hold this target at all. False for Thorim and Sif while he still holds the
-// balcony: both are untouchable up there, and ThorimArenaTargetGuardMultiplier reads a target outside
-// the arena box as a reason to stop acting, so a bot that picks one stops doing anything at all.
+// False for Thorim and Sif while he's on the balcony: ThorimArenaTargetGuardMultiplier reads a target
+// outside the arena box as a reason to stop acting, so a bot holding one does nothing at all.
 bool ThorimDpsTargetAllowed(PlayerbotAI* botAI, Unit* target);
 
-// What this bot should be attacking, or nullptr to leave the generic picker alone. This is deliberately
-// not a raid icon: an icon is a sticky override - RtiTargetValue hands it back before the smart picker
-// runs and IsHighPriority pins it - so a wrong mark cannot be corrected until the bot leaves combat.
+// nullptr leaves the generic picker alone. Not a raid icon: RtiTargetValue hands an icon back before the
+// smart picker runs and IsHighPriority pins it, so a wrong mark sticks until the bot leaves combat.
 Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget);
 
-// Whether the encounter had a target for this bot on its last pass. Reads the answer GetThorimDpsTarget
-// already cached rather than working it out again: the targeting guard asks per action per tick, and
-// re-walking the candidate list that often is a grid-list walk nobody needs.
+// Reads what GetThorimDpsTarget cached on its last pass, since the targeting guard asks per action per tick.
 bool ThorimHasDpsTarget(PlayerbotAI* botAI, Player* bot);
 
-// Drops the icons and the pinned target left over from an earlier pull or an earlier target. Both
-// outlive the thing they were set for: an icon sits on the group until somebody overwrites it, and
-// "prioritized targets" is only reset when a bot leaves combat, so until this runs a bot can be held
-// on a corpse or on the balcony for the rest of the fight. Raid-wide half latched to run once.
+// Drops stale icons and pinned targets. Icons stay until overwritten and "prioritized targets" only resets
+// out of combat, so either can hold a bot on a corpse or the balcony all fight. Raid-wide half runs once.
 void ThorimClearStaleMarks(PlayerbotAI* botAI, Player* bot);
 
-//
 // Corridor gauntlet
-//
 constexpr uint8 ULDUAR_THORIM_GAUNTLET_WAYPOINTS = 6;
 
-// The two lanes are index-matched by y - entry i on one side is the same progress down the corridor
-// as entry i on the other - which is what makes a lane swap a straight index map. Each lane is
-// inside its own hand's 10 yd blast and 15.5-22.9 yd clear of the other's.
+// Lanes are index-matched by y, so a lane swap keeps the index. Each lane sits inside its own hand's 10 yd
+// blast and clear of the other's.
 Position const& GetThorimGauntletWaypoint(bool leftLane, uint8 index);
 
 // True when `who` is standing at one of this lane's waypoints, reporting the nearest one.
 bool ThorimGauntletLaneIndexInLane(WorldObject const* who, bool leftLane, uint8& index);
 bool ThorimGauntletLaneIndex(WorldObject const* who, uint8& index, bool& leftLane);
 
-// The waypoint index the squad is at: the master's, or this bot's own when the master matches no
-// waypoint at all - walking the centre line, or off fighting an add.
+// The squad's waypoint index: the master's, or this bot's own when the master is on none (centre line, or
+// off on an add).
 bool ThorimResolveGauntletIndex(PlayerbotAI* botAI, Player* bot, uint8& index);
 
-// The lane the squad should be in. Sticky once a hand has gone up, so the formation does not walk
-// everyone back into the lane they just dodged out of; false before the first telegraph, and once
-// the Colossus is engaged, because EVENT_RC_RUNIC_SMASH is cancelled in JustEngagedWith.
+// Sticky once a hand goes up, or the formation walks back into the lane it just left. False before the
+// first telegraph and once the Colossus is engaged, since JustEngagedWith cancels EVENT_RC_RUNIC_SMASH.
 bool ThorimPreferredGauntletLane(PlayerbotAI* botAI, bool& useLeftLane);
 
 // True only while a wave is still rolling, which is what separates the urgent dodge from the
 // standing lane preference.
 bool ThorimRunicSmashImminent(PlayerbotAI* botAI);
 
-//
 // Upper hallway
-//
 constexpr uint8 ULDUAR_THORIM_BALCONY_WAYPOINTS = 6;
 
-// How close counts as standing at a balcony waypoint, and at the last one, close enough to jump.
-// Wider than the corridor's 5-6 yd because nothing up here is dodging anything - the point is only to
-// keep the squad off the centre line. The drop used to ask for 0.5 yd of its own, which an
-// exact-waypoint MoveTo will not reliably hit, and a bot could circle the edge for the rest of the
-// fight.
+// Arrival radius for hallway waypoints, the last one included. Wide because nothing up here dodges
+// anything, and an exact-waypoint MoveTo won't reliably land inside a tight one.
 constexpr float ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE = 6.0f;
 
 // The platform wait spots, and how close counts as standing on one. 2D, since the walk moves on exact
@@ -618,95 +492,66 @@ Unit* GetThorimAncientRuneGiant(PlayerbotAI* botAI);
 // to and a boss to hit when the squad gets there.
 bool ThorimBalconyOpen(PlayerbotAI* botAI, Player* bot);
 
-// The waypoint this bot should be heading for, advancing the latch when it arrives. Counts a
-// waypoint reached on tolerance or on having passed its y, because the hallway runs one way and a
-// bot shoved sideways past a point should not turn around for it.
+// Advances the latch on arrival. Passing a waypoint's y counts too: the hallway runs one way, and a bot
+// shoved past a point shouldn't turn back for it.
 uint8 ThorimAdvanceBalconyStep(Player* bot);
 
-// Runic Barrier is recast every 20s for its own 20s duration, so "stop attacking while it is up"
-// would mean never attacking. Non-tank melee back out on a health band instead and keep their
-// target, so ranged and instant abilities carry on from outside the shield's reach. The encounter's
-// tick moves the band; the read only reports it.
+// Barrier is always up, so non-tank melee back out on a health band and keep their target for ranged and
+// instant casts. The tick moves the band, the read only reports it.
 void ThorimTickBarrierBail(PlayerbotAI* botAI, Player* bot);
 bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot);
 
-//
 // Phase 1 split
-//
-// The raid fights phase 1 in two halves and the arena half must never empty out: boss_thorim.cpp
-// scans a fixed box every 5 seconds and summons a raid-killing Lightning Orb the first time it finds
-// nobody alive inside it. There is no grace period, so this is a hard constraint rather than a
-// preference.
-//
-// Set MEMBER_FLAG_MAINTANK in the raid frame. Without it GetMainTankGuid falls back to the first tank
-// in roster order, and a human tank ahead of the bot main tank silently takes the role - which sends
-// the bot main tank down the corridor and leaves the arena untanked.
+
+// The arena must never empty: one 5s scan finding nobody alive in its box summons the raid-wiping
+// Lightning Orb. Set MEMBER_FLAG_MAINTANK, or a human tank earlier in roster order takes the role.
 bool ThorimSplitActive(PlayerbotAI* botAI);
 
-// Latched on first ask and stable for the rest of the pull. Anyone with no entry - a late arrival -
-// holds the arena, because that is the side that cannot wipe the raid by being short.
+// Latched on first ask for the pull. No entry (a late arrival) means arena, the side that can't wipe the
+// raid by being short.
 ThorimSquad GetThorimSquad(PlayerbotAI* botAI, Player* bot);
 
 // The boss script's own box, so the two sides cannot disagree about what counts as "in the arena".
 bool ThorimInArenaBox(WorldObject const* who);
 
-// The whole wing, arena and corridor and the hallway above them. Distance alone reaches Hodir's room,
-// so above the wing ceiling only the balcony box counts. Every node here is gated on it, which is why
-// it is the right shape for a cheap first test.
+// Arena, corridor and the hallway above. Distance alone reaches Hodir's room, so above the wing ceiling
+// only the balcony box counts.
 bool NearThorimEncounter(Player const* bot);
 
 // Melee are held to the tank spot and everyone else to the wider box radius, because melee are the
 // only ones who have to walk out to an add at all.
 bool ThorimArenaLeashBreached(PlayerbotAI* botAI, Player* bot);
 
-// Pets that have left the boundary their owner's squad is held to, and are not already walking back.
-// Nothing in this codebase ever recalls a pet, so one that ends up chasing something down the corridor
-// stays there, pulling packs the gauntlet squad has not reached. The arena squad is held to the room;
-// the corridor squad has no room, so it is held to the owner.
-//
-// A boundary and nothing else: this asks where the pet is, never what is standing on it. Pets have
-// the resistances and damage reduction to eat this fight, and none of this steers one around a hazard.
+// Pets outside their squad's bound (the room for the arena squad, the owner for the corridor) and not
+// already walking back. Position only, never hazards: pets have the resistances to eat this fight.
 bool ThorimStrayPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out);
 
-// Sends one strayed pet home and records it. Recall only - it never commands an attack, so it cannot
-// undo a stay or a follow the way the pet-attack trigger CombatStrategy dropped used to.
+// Recall only, never an attack command, so it can't undo a stay or a follow.
 void ThorimRecallPet(Player* bot, Unit* pet);
 
-// Pets and guardians of a ring bot that have drifted off its bearing. Chain Lightning does not care
-// whose body it lands on and PetAI parks a pet anywhere in a 90 degree arc behind the boss, so 8 to 10
-// pet bodies sit inside 10 yd of him every tick, all of them within 8 yd of a melee bot, and one
-// standing between two slots joins them back up. The trace cannot see this - RaidObs logs no damage to
-// a pet at all - so the core is the source: the chain skips totems and nothing else.
+// Pets and guardians off their owner's ring bearing. Chain Lightning skips only totems and PetAI parks pets
+// anywhere in a 90 degree arc behind the boss, so one between two slots bridges them.
 bool ThorimPetsOffRingSlot(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out);
 
-// Puts one pet back on its owner's ring bearing without taking it off the boss. A chase angle is
-// measured from the target's facing, so it is worked out again from Thorim's live orientation every
-// time rather than stored.
+// Back onto its owner's ring bearing, still on the boss. Chase angles are relative to the target's facing,
+// so this is worked out from his live orientation every time.
 void ThorimSendPetToRingSlot(PlayerbotAI* botAI, Player* bot, Unit* pet);
 
-// Where this bot stands in the arena. The tank holds the centre, ranged and healers get a ring slot
-// around him, and melee get the centre only while out of combat - pinning them in the fight would
-// cost uptime, and the leash is what holds them there instead. Trigger and action both go through
-// here so they cannot disagree.
-//
-// Not gated on ThorimSplitActive: that also requires combat, and the squad has to walk to its own
-// side of the room before the pull rather than after it.
+// Shared by trigger and action. Tank on the centre, ranged and healers on a ring, melee on the centre only
+// out of combat. Not gated on ThorimSplitActive, which needs combat: the squad walks over before the pull.
 bool GetThorimArenaAnchor(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // Updates this bot's arrival latch and reports whether it still needs to walk. Idempotent, so the
 // trigger and the action can both ask.
 bool ThorimArenaAnchorNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
 
-// A settled anchor holder, which is the only window the movement guard covers. Outside it the generic
-// movers are what bring a bot back, and freezing them permanently is the Void Reaver failure.
+// The only window the movement guard covers: outside it the generic movers are what bring a bot back.
 bool ThorimArenaAnchorSettled(PlayerbotAI* botAI, Player* bot);
 
 void ThorimNoteFollowMasterStripped(Player* bot);
 bool ThorimFollowMasterStripped(Player const* bot);
 
-//
 // Phase 2
-//
 bool ThorimPhase2Active(PlayerbotAI* botAI);
 
 // Time since he first dropped for phase 2. False before that and whenever he is out of combat: his walk
@@ -722,10 +567,8 @@ bool ThorimBalconyHoldSpot(PlayerbotAI* botAI, Player* bot, Position& out);
 ThorimPhase2Role GetThorimPhase2Role(PlayerbotAI* botAI, Player* bot);
 bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role role, Position& position);
 
-// Whether this bot still has somewhere to be. Reads the arrival latch, never writes it: the trigger
-// and the action both ask within a tick, and a version that latched from in here answered them
-// differently - the trigger cleared the latch and said go, the action re-armed it on the 3 yd test
-// and returned before MoveTo. Nothing moved. One bot stood in a Blizzard for 71s that way.
+// Reads the arrival latch, never writes it: trigger and action both ask within a tick, and latching here
+// gave them different answers, so the trigger said go and the action returned before MoveTo.
 bool ThorimRingWantsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
 
 // The latch itself. The trigger sets it when the answer above is "stay", the action clears it right
@@ -733,8 +576,7 @@ bool ThorimRingWantsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
 void ThorimRingMarkArrived(Player* bot);
 void ThorimRingClearArrived(Player* bot);
 
-// A settled ring holder, which is the only window the movement guard covers. Outside it the generic
-// movers are what bring a bot back, and freezing them permanently is the Void Reaver failure.
+// The only window the movement guard covers: outside it the generic movers are what bring a bot back.
 bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot);
 
 // Whether a spot is inside the reach of a live Blizzard zone or the bunny about to drop the next one.
@@ -750,9 +592,8 @@ bool ThorimCampSpotInLitCone(PlayerbotAI* botAI, Position const& spot);
 // range of the boss, favouring its own home or shelter. False when nothing within reach qualifies.
 bool ThorimCampBlizzardEscape(PlayerbotAI* botAI, Player* bot, Position& out);
 
-// The Thunder Orb carrying markerSpell, or nullptr. Both orb mechanics announce themselves the same
-// way and neither has a cast bar the bots can read: SPELL_THORIM_LIGHTNING_ORB_VISUAL is the 5 second
-// warning before phase 2's Lightning Charge, SPELL_THORIM_CHARGE_ORB is phase 1's 15 second field.
+// Thunder Orb carrying markerSpell, or nullptr. Neither orb mechanic has a cast bar, so the aura is the
+// only tell.
 Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell);
 
 // Where this bot should stand to be clear of the Charge Orb field, or false if it is already clear.
@@ -762,8 +603,8 @@ void ThorimNoteOrbEscape(Player* bot, Position const& spot);
 
 void ResetThorimEncounterState(Player* bot, bool clearInstance);
 bool ThorimEncounterStateIsStale(PlayerbotAI* botAI);
-// Nothing to reset means nothing to do, which keeps the reset node from swallowing every tick before
-// the pull - Thorim sits at full health on his balcony for the whole gauntlet.
+// Nothing to reset, nothing to do. Keeps the reset node from swallowing every tick before the pull, while
+// he sits at full health on his balcony through the gauntlet.
 bool ThorimBotHasEncounterState(Player* bot);
 
 #endif

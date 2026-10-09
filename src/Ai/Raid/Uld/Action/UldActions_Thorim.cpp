@@ -39,9 +39,8 @@ bool ThorimDpsPriorityAction::Execute(Event /*event*/)
 
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-    // Dropping the forbidden target is worth doing even when nothing better is in reach: holding it is
-    // what the arena target guard shuts the bot down for, and an empty target lets the generic picker
-    // have another go next tick.
+    // Drop a forbidden target even with nothing better in reach: the arena target guard shuts down a bot
+    // holding one, and an empty target lets the generic picker retry next tick.
     if (currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget))
     {
         bot->AttackStop();
@@ -106,15 +105,13 @@ bool ThorimPetLeashAction::Execute(Event /*event*/)
         for (Unit* pet : pets)
             ThorimRecallPet(bot, pet);
 
-    // Home first, bearing second: a pet still out in the corridor is pulling packs, one standing in the
-    // gap between two ring slots is only joining them up for the next Chain Lightning. The recall above
-    // stamps the same throttle, so a pet that just got sent home is left alone for a tick.
+    // Home before bearing: a pet out in the corridor pulls packs, one off its slot only bridges Chain Lightning.
+    // The recall stamps the same throttle, so a pet just sent home isn't redirected.
     if (ThorimPetsOffRingSlot(botAI, bot, pets))
         for (Unit* pet : pets)
             ThorimSendPetToRingSlot(botAI, bot, pet);
 
-    // False on purpose, same as the Razorscale and Mimiron pet nodes: this walked a pet, not the bot,
-    // so the bot still needs whatever node was going to act this tick.
+    // False on purpose: this moved a pet, not the bot, so the bot's own node still gets this tick.
     return false;
 }
 
@@ -155,9 +152,8 @@ bool ThorimArenaLeashAction::Execute(Event /*event*/)
         ThorimNoteFollowMasterStripped(bot);
     }
 
-    // Back to this bot's own spot, not to the middle: dragging the whole squad onto one point every
-    // time the fence trips would wreck the formation the fence exists to protect. The middle is the
-    // fallback, and never the nearest box edge - the edge is where a rounding error turns into a wipe.
+    // This bot's own spot, not the middle, or every fence trip collapses the formation the fence protects.
+    // The middle is only the fallback, never the nearest box edge: there a rounding error is a wipe.
     Position anchor = ULDUAR_THORIM_NEAR_ARENA_CENTER;
     GetThorimArenaAnchor(botAI, bot, anchor);
 
@@ -169,8 +165,8 @@ bool ThorimLaneMovementAction::MoveToGauntletWaypoint(bool leftLane, uint8 index
 {
     Position const& waypoint = GetThorimGauntletWaypoint(leftLane, index);
 
-    // The second waypoint has always moved at combat priority and without the shortened delay, in
-    // both lanes: it is the one where the squad rounds into the Colossus's line of sight.
+    // The second waypoint moves at combat priority without the shortened delay, in both lanes: it's where
+    // the squad rounds into the Colossus's line of sight.
     bool const combat = forceCombatPriority || index == 1;
 
     return MoveTo(bot->GetMapId(), waypoint.GetPositionX(), waypoint.GetPositionY(), waypoint.GetPositionZ(), false,
@@ -211,8 +207,8 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
     bool leftLane = false;
     if (ThorimGauntletLaneIndex(master, index, leftLane))
     {
-        // Same progress down the corridor as the master, but in whichever lane the last Runic Smash
-        // telegraph left safe - otherwise the formation walks everyone back into the blast.
+        // The master's progress, but in the lane the last Runic Smash telegraph left safe, or the formation
+        // walks everyone back into the blast.
         bool preferredLane = false;
         if (ThorimPreferredGauntletLane(botAI, preferredLane))
             leftLane = preferredLane;
@@ -235,19 +231,15 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
     if (!boss || !boss->IsAlive())
         return false;
 
-    // He has dropped for phase 2 and the bot has not, so the job up here is now the edge. Still walked
-    // as the chain though: the edge is on the centre line and so are both Paralytic Field bunnies, so
-    // a straight line to it from anywhere south of the second doors goes over one of them. Whole squad
-    // ate that once - ten bots, 5 to 12 yd off a bunny, stunned for up to 15s. The jump point is the
-    // last waypoint in the chain anyway, so the chain already ends where the jump starts.
+    // Still walked as the chain once he's down: the edge and both Paralytic Field bunnies sit on the centre line,
+    // so a straight line from south of the second doors crosses one. The chain ends at the jump point anyway.
     bool const bossDown = boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
 
     // Before the jump test, or the latch never reaches the end and a bot on the edge never jumps.
     uint8 const step = ThorimAdvanceBalconyStep(bot);
 
-    // Ranged wait out the first Chain Lightning up here, spread, instead of dropping in a stack. Ahead of
-    // the jump since hold 2 is inside the edge test, and only past BALCONY_5: a straight line to a hold
-    // from any earlier waypoint runs 7-9 yd from a Paralytic Field bunny.
+    // Ranged wait out the first Chain Lightning up here, spread. Ahead of the jump since hold 2 is inside the
+    // edge test, and only past BALCONY_5: a line to a hold from any earlier waypoint crosses a bunny's field.
     Position hold;
     if (bossDown && step >= ULDUAR_THORIM_BALCONY_WAYPOINTS - 1 && ThorimBalconyHoldSpot(botAI, bot, hold))
     {
@@ -258,10 +250,8 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
                       false, true, MovementPriority::MOVEMENT_COMBAT, true);
     }
 
-    // Distance, never the latch alone. A latch that says "past the last waypoint" used to be enough
-    // to fire the jump, and a step carried in from an earlier pull then fired it from the top of the
-    // ramp: one bot flew a 180 yd arc across the whole hallway. Arrive tolerance rather than the jump
-    // one, so a bot parked in the 3 to 6 yd gap between the two still goes.
+    // Distance, never the latch alone: a step left over from an earlier pull fires the jump from the top of the
+    // ramp. Same tolerance as the step latch, so a bot the walk counts as arrived also jumps.
     bool const atEdge =
         bot->GetExactDist2d(&ULDUAR_THORIM_JUMP_START_POINT) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE;
 
@@ -276,14 +266,12 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
     if (step >= ULDUAR_THORIM_BALCONY_WAYPOINTS && atEdge)
         return false;
 
-    // Clamps to the last waypoint, which is the edge - so a bot knocked past the end walks back to it
-    // instead of stalling. Nothing to cross from up there, both bunnies are well south.
+    // Clamps to the last waypoint, the edge, so a bot knocked past the end walks back instead of stalling.
+    // Both bunnies are well south, so nothing to cross from up there.
     Position const& waypoint = GetThorimBalconyWaypoint(step);
 
-    // Combat priority, because the hallway is walked in combat with a boss nothing up here can reach.
-    // At normal priority every step lost to "reach melee", which holds the mover for up to 5s and
-    // aims straight up the middle - which is where the two Paralytic Field bunnies sit. This route
-    // goes up the east wall and clears both by 16 yd, but only if it is the one issuing the walk.
+    // Combat priority: at normal, every step loses to "reach melee" on a boss nothing up here can reach, which
+    // holds the mover up to 5s and aims straight up the middle, over both Paralytic Field bunnies.
     return MoveTo(bot->GetMapId(), waypoint.GetPositionX(), waypoint.GetPositionY(), waypoint.GetPositionZ(), false,
                   false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
@@ -323,9 +311,8 @@ bool ThorimRunicBarrierBailAction::Execute(Event /*event*/)
     if (currentDistance >= ULDUAR_THORIM_BARRIER_BAIL_DISTANCE)
         return false;
 
-    // No AttackStop here on purpose: the target stays, so everything that is not a melee swing keeps
-    // landing from out here. FleePosition is no good either - it clamps travel to
-    // AiPlayerbot.FleeDistance and would leave the bot inside the shield's reach.
+    // No AttackStop: the target stays, so everything but a melee swing keeps landing from out here.
+    // Not FleePosition: it clamps travel to AiPlayerbot.FleeDistance and can leave the bot inside the shield's reach.
     return MoveAway(colossus, ULDUAR_THORIM_BARRIER_BAIL_DISTANCE - currentDistance);
 }
 
@@ -377,11 +364,8 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
 
     bool const ringSlot = role == ThorimPhase2Role::OffTank || role == ThorimPhase2Role::MeleeRing;
 
-    // Reach then hold. A tight deadband against a ring recomputed from a moving boss has the bot
-    // sliding in place forever, and a moving bot casts nothing.
-    //
-    // Leaving is cleared here, right before the move goes out. Arriving is set by the trigger, so the
-    // "stay" branch below only runs if the spot changed between the trigger's ask and this one.
+    // Arrival is set by the trigger and cleared here as the move goes out, so the "stay" branch below only
+    // runs if the spot changed between the trigger's ask and this one.
     if (ringSlot)
     {
         if (!ThorimRingWantsMove(botAI, bot, targetPosition))
@@ -416,7 +400,7 @@ bool ThorimSifBlizzardAction::Execute(Event event)
     if (!ThorimPhase2Active(botAI) || GetThorimPhase2Role(botAI, bot) != ThorimPhase2Role::Ranged)
         return MoveAwayFromCreatureAction::Execute(event);
 
-    // Nothing clear and cone-safe within reach: stand and take the 4-5k tick rather than run the trail.
+    // Nothing clear and cone-safe in reach: stand and take the tick rather than run the trail.
     Position escape;
     if (!ThorimCampBlizzardEscape(botAI, bot, escape))
         return false;

@@ -20,10 +20,8 @@ using namespace EncounterHelpers;
 
 bool ThorimDpsPriorityTrigger::IsActive()
 {
-    // Cheap gate first. This node runs for every bot in the instance on every tick, and everything
-    // below it walks the nearby-unit list. The wing rather than a flat 110 yd: the upper hallway is
-    // 105-176 yd out, and this is the only node that takes a forbidden target back off a bot, so a
-    // radius that stops short of the platform leaves the corridor squad stuck on the boss up there.
+    // Cheap gate first: this runs for every bot every tick, and everything below walks the nearby-unit list. The
+    // wing, not a flat 110 yd: the hallway runs past that, and only this node pulls a forbidden target off a bot.
     if (!NearThorimEncounter(bot))
         return false;
 
@@ -34,11 +32,8 @@ bool ThorimDpsPriorityTrigger::IsActive()
     if (botAI->IsHeal(bot))
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
-    // Same for a tank in phase 1: "tank assist" keeps it on whatever is swinging at the raid,
-    // the thorim disable automatic targeting rules leave that action alone there, and two live pickers
-    // on one bot is the oscillation this node exists to end. Phase 2 mutes tank assist instead, so
-    // the tank steers off this like everybody else - without it an off-tank waiting to swap has no
-    // picker at all and sits on whatever add it held when the boss dropped.
+    // Same for a tank in phase 1, where "tank assist" steers it and two live pickers on one bot is the oscillation.
+    // Phase 2 mutes tank assist, so this is the only picker an off-tank waiting to swap has.
     if (botAI->IsTank(bot) && !ThorimPhase2Active(botAI))
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
@@ -92,9 +87,8 @@ bool ThorimBalconyAdvanceTrigger::IsActive()
     if (GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
         return false;
 
-    // Deliberately no master check. The corridor leg follows whoever is leading it, but the hallway is
-    // the last thing between the squad and phase 2, and it has to get walked whether or not there is a
-    // human up here to walk behind.
+    // No master check on purpose: the hallway is the last thing before phase 2 and gets walked with or without a
+    // human up here to follow.
     return ThorimBalconyOpen(botAI, bot);
 }
 
@@ -122,7 +116,6 @@ bool ThorimFallFromFloorTrigger::IsActive()
     if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > 110.0f)
         return false;
 
-    // Check if bot is on the floor
     return bot->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT;
 }
 
@@ -131,9 +124,7 @@ bool ThorimPhase2PositioningTrigger::IsActive()
     if (!ThorimPhase2Active(botAI))
         return false;
 
-    // Same stand-down the arena node carries. Without it the anchor walks a bot straight back into
-    // the hazard it just dodged: the four ranged who took the most Blizzard damage in the hard mode
-    // trace were also the four who ran the furthest, in and out of it.
+    // Same stand-down the arena node carries, or the anchor walks a bot straight back into the zone it just left.
     ThorimSifBlizzardTrigger blizzard(botAI);
     if (blizzard.IsActive())
         return false;
@@ -149,9 +140,8 @@ bool ThorimPhase2PositioningTrigger::IsActive()
     Unit* boss = GetThorim(botAI);
     bool const holdsBoss = boss && boss->GetVictim() == bot;
 
-    // Whoever has him walks him to the anchor, and only that one; a second tank would drag him back.
-    // The off-tank counts here because his own ring point is measured off the boss, so towing him from
-    // that has the spot walking away as fast as he chases it and the pair drift across the room.
+    // Only whoever has him walks him to the anchor, a second tank would drag him back. The off-tank too: his ring
+    // point is measured off the boss, so towing from it drifts the pair across the room.
     if (role == ThorimPhase2Role::MainTank || (role == ThorimPhase2Role::OffTank && holdsBoss))
         return holdsBoss && bot->GetDistance(spot) > 1.0f;
 
@@ -160,15 +150,13 @@ bool ThorimPhase2PositioningTrigger::IsActive()
         if (bot->GetDistance(spot) <= 1.0f)
             return false;
 
-        // Wait out a zone on the spot or anywhere on the way there, rather than walk into it and get
-        // flung off again. The walk home is a straight line and happily crosses a live zone.
-        // Not while under the cone though: that is 10-36k against a 4-5k tick.
+        // Wait out a zone on the spot or on the straight walk there, rather than walk in and get flung off again.
+        // Not while under the cone though, that hits far harder than a tick.
         return !ThorimWalkUnderBlizzard(bot, *bot, spot) || ThorimCampSpotInLitCone(botAI, *bot);
     }
 
-    // Arrival is written here, where the "stay" answer shows up: the action only runs when there is a
-    // move to make, so it never gets that answer. Fine in a trigger since it only widens the tolerance,
-    // so a second ask this tick still says stay.
+    // Arrival is set here, since the action only runs when there's a move and never sees "stay". Safe in a
+    // trigger: it only widens the tolerance, so a second ask this tick still says stay.
     if (!ThorimRingWantsMove(botAI, bot, spot))
     {
         ThorimRingMarkArrived(bot);
@@ -188,9 +176,8 @@ bool ThorimRunicSmashTrigger::IsActive()
     if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
         return false;
 
-    // Only the corridor squad has a lane to be in. Without this an arena bot answers the telegraph
-    // too: ThorimResolveGauntletIndex falls back to the master's waypoint, and the master is down the
-    // corridor, so the dodge walks it 110 yd out of the arena and it never comes back.
+    // Corridor squad only: ThorimResolveGauntletIndex falls back to the master's waypoint, so an arena bot would
+    // answer the telegraph by walking 110 yd down the corridor and never come back.
     if (GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
         return false;
 
@@ -231,13 +218,10 @@ bool ThorimResetEncounterStateTrigger::IsActive()
     return ThorimBotHasEncounterState(bot) && ThorimEncounterStateIsStale(botAI);
 }
 
-//
-// Thorim
-//
 bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
 {
-    // The only tank node that reads the boss without an aura on the bot to prove it is at him, so it
-    // needs the wing test of its own now that the handle answers from anywhere on the map.
+    // The only tank node that reads the boss with no aura on the bot to prove it's near, and the boss handle
+    // answers from anywhere on the map.
     if (!NearThorimEncounter(bot))
         return false;
 
@@ -253,7 +237,6 @@ bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
     if (!isMainTank && !isFirstAssistTank)
         return false;
 
-    // This bot must be the off-tank, not the one currently holding the boss
     Unit* activeTank = boss->GetVictim();
     if (!activeTank || activeTank == bot)
         return false;
@@ -268,11 +251,9 @@ bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
     if (!partnerIsSwapTank)
         return false;
 
-    // Don't taunt while this bot still carries Unbalancing Strike (let it fall off first)
     if (bot->HasAura(SPELL_UNBALANCING_STRIKE))
         return false;
 
-    // Swap in once the active tank is suffering Unbalancing Strike
     return activeTank->HasAura(SPELL_UNBALANCING_STRIKE);
 }
 
@@ -310,8 +291,8 @@ bool ThorimTankPickupTrigger::IsActive()
     if (role != ThorimPhase2Role::OffTank)
         return false;
 
-    // Off-tank only covers when there is no main tank left to do it - he is the corridor tank and
-    // still running back at the phase change, and two of them answering is the ping-pong again.
+    // Off-tank covers only with no main tank left: he's the corridor tank, still running back at the phase change,
+    // and two of them answering is the ping-pong again.
     Group* group = bot->GetGroup();
     if (!group)
         return false;
@@ -329,11 +310,8 @@ bool ThorimSifBlizzardTrigger::IsActive()
     if (!IsThorimHardModeActive(botAI))
         return false;
 
-    // No tank dodges this in phase 2. It used to be "whoever holds him", and a human tank's taunt
-    // flipped that off for the half second it took the dodge to fire - which does not step out of the
-    // blizzard, it takes the farthest of eight compass rays out to 30 yd. A tank standing on the
-    // anchor went 30 yd into the middle, taunted the boss back from there, and towed him into the
-    // ranged camp. Blizzard costs a tank ~100k a pull; one swing of the boss on a clothie is 11-38k.
+    // No tank dodges in phase 2, by role: the holder check alone drops out for the half second after a human
+    // tank's taunt, and the 30 yd flee then tows the boss into the ranged camp.
     Unit* boss = GetThorim(botAI);
     if (boss && boss->GetVictim() == bot)
         return false;
@@ -344,17 +322,13 @@ bool ThorimSifBlizzardTrigger::IsActive()
         if (role == ThorimPhase2Role::MainTank || role == ThorimPhase2Role::OffTank)
             return false;
 
-        // The ring answers this itself now, by sliding along its own radius to a clear bearing. This
-        // node takes the furthest of eight rays out to 30 yd, which is how every accepted melee flee
-        // ended up asking for the full 30 and landing a median 35 yd off the boss - out of melee, and
-        // back in a Blizzard within 6s a quarter to half the time anyway.
+        // The ring slides along its own radius to a clear bearing instead. This node's flee takes the furthest of
+        // eight rays out to 30 yd, out of melee.
         if (role == ThorimPhase2Role::MeleeRing)
             return false;
 
-        // The camp tests the zones themselves at their real reach, not the bunny at 15: every home spot
-        // clears the zone path by 12.9 yd, so a bot at home never has to move. A bot under the cone
-        // leaves the Blizzard to its shelter walk. The test is flat, hence the floor check: a bot still
-        // on the balcony would otherwise dodge zones on the floor below it.
+        // The camp tests the zones at their real reach, not the bunny at 15. Under the cone the shelter walk wins.
+        // Flat test, hence the floor check, or a bot still on the balcony dodges zones on the floor below.
         if (role == ThorimPhase2Role::Ranged)
             return bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD && ThorimSpotUnderBlizzard(bot, *bot) &&
                    !ThorimCampSpotInLitCone(botAI, *bot);

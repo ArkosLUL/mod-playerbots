@@ -10,9 +10,8 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Thorim: Runic Barrier answers every melee swing with 2000 arcane, so a bot that has backed out on
-// the health band must not keep walking back in. Only the swing and the chase are held - the target
-// is deliberately kept, and everything that is not a melee hit carries on from out there.
+// Thorim: Runic Barrier answers every melee swing with 2000 arcane, so a bot backed out on the health band must
+// not walk back in. Holds only the swing and the chase: the target stays and everything else carries on.
 class ThorimRunicBarrierMultiplier : public Multiplier
 {
 public:
@@ -29,10 +28,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Thorim: the corridor squad once it is up on the platform. It holds Thorim as a target from 130 yd
-// out - the generic picker reads threat, not range, so an untouchable boss is still in the list - and
-// then "reach melee" walks it up the middle of the hallway into the Paralytic Field bunnies. Once he
-// is on the floor there is no walkable way down, so any reach walks the bot back through the hallway.
+// Thorim: the corridor squad on the platform. The generic picker reads threat, not range, so it holds the
+// untouchable boss from far out and "reach melee" walks it up the middle into the Paralytic Field bunnies.
 class ThorimBalconyGuardMultiplier : public Multiplier
 {
 public:
