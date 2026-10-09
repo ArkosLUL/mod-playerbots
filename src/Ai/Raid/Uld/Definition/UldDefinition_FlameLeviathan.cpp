@@ -50,19 +50,16 @@ void DefineFlameLeviathan(EncounterBuilder& e)
 {
     e.Node<FlameLeviathanFlameVentsTrigger, FlameLeviathanInterruptVentsAction>(ACTION_RAID + 4);
 
-    // Same action as the routine row below. The engine caches actions by name, so both rows drive one
-    // instance and one latched destination - still a single owner of the MotionMaster, just promoted
-    // above the rotation while being chased or standing in a hazard.
+    // Same action as the routine row: actions are cached by name, so both rows share one instance and one
+    // latched destination, just promoted while chased or in a hazard.
     e.Node<FlameLeviathanDriveUrgentTrigger, FlameLeviathanDriveAction>(ACTION_RAID + 3);
 
     e.Node<FlameLeviathanVehicleNearTrigger, FlameLeviathanEnterVehicleAction>(ACTION_RAID + 2);
     e.Node<FlameLeviathanOnVehicleTrigger, FlameLeviathanVehicleAction>(ACTION_RAID + 1);
     e.Node<FlameLeviathanOnVehicleTrigger, FlameLeviathanDriveAction>(ACTION_RAID + 0.5f);
 
-    // The drive row owns every vehicle's movement, attacks included. Two actions steering one
-    // MotionMaster bounce rather than compromise, and a lower priority only decides who wins each
-    // alternating tick. Boarding has to survive, or a bot that lost its vehicle can never take another,
-    // and so does leaving, or nobody gets out after the kill.
+    // Only the drive moves a vehicle, two movers on one MotionMaster bounce. Boarding and leaving stay, or a
+    // bot that lost its hull never boards again and nobody gets out after the kill.
     e.Exclusive("flame leviathan vehicle movement", Role::Any, FlameLeviathanRiding, 0,
                 {FlameLeviathanDriveAction::Name, FlameLeviathanEnterVehicleAction::Name, "leave vehicle"});
 

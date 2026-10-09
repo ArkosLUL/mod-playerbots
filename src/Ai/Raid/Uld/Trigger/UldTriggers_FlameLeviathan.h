@@ -5,9 +5,7 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-//
-// Flame Levi
-//
+// Flame Leviathan
 class FlameLeviathanOnVehicleTrigger : public Trigger
 {
 public:
@@ -26,8 +24,8 @@ public:
     bool IsActive() override;
 };
 
-// Flame Vents is a 10 second channel and Electroshock cancels it, so the channel is the whole
-// reaction window - this stays unthrottled.
+// Flame Vents is a 10 s channel and Electroshock cancels it, so the channel is the whole reaction window:
+// this stays unthrottled.
 class FlameLeviathanFlameVentsTrigger : public Trigger
 {
 public:

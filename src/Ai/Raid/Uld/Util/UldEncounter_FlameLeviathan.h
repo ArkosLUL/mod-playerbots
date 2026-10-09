@@ -16,30 +16,18 @@ class Player;
 class PlayerbotAI;
 class Unit;
 
-// Flame Leviathan.
-//
-// The whole fight is fought from vehicles, so nothing here reads a bot's own position or spells -
-// it reads the vehicle it is riding. A trigger and its action must call the same helper below or
-// the two derivations disagree about who is doing what.
-//
-// Pursued picks a vehicle every 31s and the boss drives at it, dropping Battering Ram; the pursued
-// vehicle kites the wall ring while choppers lay tar ahead of him and siege engines interrupt his
-// Flame Vents channel. Each tower left standing empowers him and adds its own ground hazard.
+// Flame Leviathan. Everything here reads the vehicle a bot rides, never the bot's own position or spells.
 
 enum UlduarFlameLeviathanIds
 {
-    // spawns that tower's periodic ground hazard).
+    // Hard-mode tower hazards, one ground NPC per tower.
     NPC_FL_THORIM_HAMMER_TARGET = 33364,     // Storm: static lightning-strike marks
-    // Flame. The target walks a waypoint path and every 2s summons NPC_FL_MIMIRONS_INFERNO, each
-    // of which burns for 30s - so the hazard is a line of about fifteen 9 yd patches trailing behind
-    // a moving head, not one circle. Dodging only the head leaves the whole trail unseen, and a hull
-    // standing in it loses about half its health every 5s.
+    // Flame: the head walks a path and drops an NPC_FL_MIMIRONS_INFERNO patch every 2 s, each burning
+    // 30 s, so the hazard is a trail behind a moving head, not one circle.
     NPC_FL_MIMIRONS_INFERNO_TARGET = 33369,
     NPC_FL_MIMIRONS_INFERNO = 33370,
-    // Frost. The reticle follows a random target and commits only once that target has stopped:
-    // FollowMovementGenerator informs on a finished spline with the target within 0.5 yd. It then
-    // stuns itself, summons NPC_FL_HODIRS_FURY overhead 5s later, and the strike lands ~1.1s after
-    // that. It stays stunned 5s more before it picks the next target.
+    // Frost: the reticle chases a random target and commits only once it stops (FollowMovementGenerator
+    // informs within 0.5 yd), striking ~6 s later. Then it stays stunned 5 s more.
     NPC_FL_HODIRS_FURY_TARGET = 33108,
     NPC_FL_HODIRS_FURY = 33212,
 
@@ -56,13 +44,8 @@ enum UlduarFlameLeviathanIds
     NPC_FL_PYRITE_CONTAINER = 33189,   // grabbable crate, +25 energy to a demolisher
     NPC_FL_MECHANOLIFT = 33214,        // shot down with Anti-Air Rocket to drop a crate
 
-    // Life tower. Four wards spawn once, 30s in, one per arena corner, and each fires a wave every
-    // 29s for the rest of the pull. npc_freya_ward_summon makes each add TEMPSUMMON_MANUAL_DESPAWN and
-    // zone-engages it at zero threat on every player, pet and vehicle within 250 yd. A rider's threat
-    // goes to its hull, and a victim only changes at 110% melee / 130% ranged, so the first hull to
-    // hit a fresh add holds it. That script is bound by world DB update 2026_09_10_03, and its type only
-    // sticks with core 4d4ae4f95: both summon paths reset it after IsSummonedBy. Without either the adds
-    // despawn after their summon duration, 3s and 10s.
+    // Life: four corner wards from 30 s in, each firing a wave every 29 s. The adds stay until killed only
+    // with world DB update 2026_09_10_03 and core 4d4ae4f95; the first hull to hit one holds it.
     NPC_FL_FREYA_WARD_TARGET = 33366,  // reticle at the corner
     NPC_FL_FREYA_WARD = 33367,         // the summoner itself, parked 40 yd overhead
     NPC_FL_WRITHING_LASHER = 33387,    // 190k hp, melees and Lashes its victim every 2s
@@ -85,15 +68,11 @@ enum UlduarFlameLeviathanIds
     SPELL_FL_TAR = 62286,              // pool spawns 9 yd BEHIND the chopper
     SPELL_FL_SPEED_BOOST = 62299,
 
-    // Hodir's Fury's 60s stun, on the vehicle as well as the crew. Cleared by fire, see
-    // ULDUAR_FL_HURL_BOULDER_MAX_RANGE.
+    // Hodir's Fury's 60 s stun, on the vehicle and the crew. Nothing dispels it, but the Flames Hurl Boulder
+    // and Mortar trigger remove it (spell_linked_spell -62297), and both are safe to aim at a frozen ally.
     SPELL_FL_HODIRS_FURY_STUN = 62297,
 
     // Salvaged Demolisher (33109) driver seat.
-    // Hurl Boulder triggers Boulder 62307, whose third effect triggers Flames 65045; Mortar 62634
-    // triggers 62635, whose third triggers Flames 65044. spell_linked_spell maps both Flames to
-    // -62297 ("Flames remove ice"), so either one thaws a frozen vehicle. Free, and the boulder's
-    // own damage is enemy-only, so aiming one at a frozen ally costs nothing.
     SPELL_FL_HURL_BOULDER = 62306,
     SPELL_FL_HURL_PYRITE_BARREL = 62490,
     SPELL_FL_DEMOLISHER_RAM = 62308,
@@ -117,68 +96,48 @@ enum FlameLeviathanTowerFlags
     FL_TOWER_ALL = 0xF
 };
 
-// Warning band past a hazard's own reach (FlameLeviathanHazardReach). 8 keeps a chopper on the old
-// flat 18 yd scan against Inferno, and gives a siege engine 8 yd of warning where it had under one.
+// Warning band past a hazard's own reach (FlameLeviathanHazardReach); 8 puts a chopper's Inferno scan at ~18 yd.
 constexpr float ULDUAR_FL_TOWER_HAZARD_MARGIN = 8.0f;
 
-// How far the clear step looks when it picks somewhere to go. Wider than the band above on purpose:
-// the step has to see the neighbouring patches of an Inferno trail, or it steps out of one and into
-// the next.
+// How far the clear step looks for other hazards. Wider than the band on purpose: it has to see the next
+// patches of an Inferno trail, or it steps out of one and into the next.
 constexpr float ULDUAR_FL_TOWER_HAZARD_CLEAR_SCAN = 45.0f;
 
-// What each hazard covers. Hodir's Fury (62297) and Thorim's Hammer (62912) are creature casts at a
-// destination, and WorldObjectSpellAreaTargetCheck adds no target size for those, so the radius is
-// flat from the hull's centre. Mimiron's Inferno (62910) is a dynamic object aura, and
-// DynObjAura::FillTargetMap's IsWithinDistInMap adds both object sizes: a 7.7 yd siege engine burns
-// out to 17.1 yd from a patch.
+// Fury and Hammer are creature casts at a destination, so their radius is flat from the hull's centre.
+// Inferno is a dynamic object aura, which adds both object sizes: a siege engine burns out to 17.1 yd.
 constexpr float ULDUAR_FL_FURY_RADIUS = 10.0f;
 constexpr float ULDUAR_FL_HAMMER_RADIUS = 7.0f;
 constexpr float ULDUAR_FL_INFERNO_RADIUS = 9.0f;
 
-// A Hodir's Fury reticle can only hurt from the moment it stops on a target: the 5000 ms fuse in
-// npc_hodirs_fury, then ~1.1 s from the strike NPC to 62297 (950-1164 ms measured). Before that it
-// chases at 12 yd/s, faster than any hull, and dodging it only drags it along.
+// A Fury reticle only hurts once stopped: the 5 s fuse in npc_hodirs_fury, then ~1.1 s to 62297. Before
+// that it chases at 12 yd/s, faster than any hull, and dodging only drags it along.
 constexpr uint32 ULDUAR_FL_FURY_ARMED_MS = 6500;
 // The fuse plus the 5 s it stays stunned after the strike. A reticle still stunned past this has
 // retargeted and stopped again between two scans.
 constexpr uint32 ULDUAR_FL_FURY_STUN_MS = 10000;
 
-// Flame Leviathan arena corners, taken from the four NPC_FREYA_WARD_TARGET spawn points in
-// boss_flame_leviathan.cpp's SummonTowerHelpers. The kite ring and every "is this inside the
-// arena" test are derived from these, so nothing else hardcodes arena geometry.
+// The four NPC_FREYA_WARD_TARGET spawns from SummonTowerHelpers. The kite ring and every in-arena test
+// derive from these, so nothing else hardcodes arena geometry.
 extern std::vector<Position> const ULDUAR_FL_ARENA_CORNERS;
 
-// Where each vehicle parks relative to the boss. Measured surface-to-surface (added to his combat
-// reach), because he has a large model and a raw centre distance would put melee inside him.
-// Ram's 15 yd cone is measured with the boss's 15 yd combat reach added, so 8 here is comfortably
-// inside it. Distance was never what made Ram miss - facing was.
+// Stand distances are added to his combat reach: he's huge, and a centre distance puts melee inside him.
+// Ram reaches 15 yd plus his 15 yd reach, so 8 is well inside it.
 constexpr float ULDUAR_FL_SIEGE_STAND_DIST = 8.0f;
 
-// Sonic Horn is a 35 yd cone and his reach adds another 15, so a chopper has no reason to sit on top
-// of him - 6 yd put it 21 yd from his centre, permanently inside Battering Ram's 25. Out here it
-// keeps every shot and is only in the blast while it chooses to be, i.e. on the tar lead.
+// Sonic Horn reaches 35 yd plus his 15, so 20 keeps every shot and keeps the chopper out of Battering
+// Ram's sphere except on the tar lead.
 constexpr float ULDUAR_FL_CHOPPER_STAND_DIST = 20.0f;
-// Where a demolisher wants to sit, measured the way every other stand distance is - outward from his
-// combat reach, not from his centre. HoldStation clamps it against ULDUAR_FL_HURL_BOULDER_MAX_RANGE,
-// which Hurl Pyrite Barrel shares: reach (15) plus this plus the arrival deadband lands outside 70,
-// and a barrel that will not cast drops the stack the raid does its boss damage with.
+// Outward from his reach like the others. HoldStation clamps it: reach 15 + 50 + the arrival deadband
+// lands past the barrel's 70 yd, and a barrel that won't cast drops the stack.
 constexpr float ULDUAR_FL_DEMOLISHER_BAND = 50.0f;
 
-// How far ahead of a moving boss a demolisher's station point is placed, as seconds of his own
-// travel, and the ceiling on what that comes to. A goal built off where he is now is short by
-// however long the hull takes to reach it: 2026-09-17 had demolishers past 70 yd 17-40% of the time
-// and 383 of 385 barrel `fail` frames were out there. He runs a straight line between turns, so his
-// heading is the lead. The cap keeps the closest the band can end up - reach plus band minus this,
-// about 44 yd from his centre - well outside Battering Ram's 25, which is the only thing that makes
-// being nearer expensive. Demolishers only: a chopper stands at 20 and would be led into that sphere.
+// Demolisher station lead in seconds of his travel, capped so the band stays ~44 yd from his centre,
+// clear of Battering Ram's 25. Demolishers only: a chopper at 20 would be led into the sphere.
 constexpr float ULDUAR_FL_STATION_LEAD_S = 1.5f;
 constexpr float ULDUAR_FL_STATION_LEAD_MAX = 10.0f;
 
-// A demolisher's fan swings from his rear toward the arena centre, so a hull that falls behind cuts
-// the inside of the circle he runs instead of chasing round the outside. On 2026-09-19 he ran a median
-// 55 yd from the centre, demolishers out-drove him by only 0.7-1.5 yd/s, and 65% of their station
-// frames past barrel range had them on the outside. Inside this he is near enough the middle that
-// the bearing to it is noise.
+// The demolisher fan swings toward the arena centre, so a hull falling behind cuts inside his circle.
+// Inside this radius the bearing to the centre is noise.
 constexpr float ULDUAR_FL_CENTRE_TURN_DEADZONE = 15.0f;
 constexpr float ULDUAR_FL_TAR_LEAD_DIST = 30.0f;      // how far ahead of him the lead chopper parks
 
@@ -204,17 +163,14 @@ constexpr uint32 ULDUAR_FL_SPEED_BOOST_COST = 50;
 constexpr uint32 ULDUAR_FL_INCREASED_SPEED_COST = 25;
 constexpr uint32 ULDUAR_FL_PYRITE_BARREL_COST = 5;
 
-// Blue Pyrite 68605: 10 s, 10 stacks. Every barrel that lands adds a stack and resets the duration,
-// and a periodic damage refresh keeps its tick timer, so one landing just before expiry loses nothing.
-// A refresh at 10 stacks buys ~90 stack-seconds. A burst barrel only brings its stack forward by the
-// refreshes it skips: #6 45, #7 36, #10 9. So the burst stops at 6 unless the tank covers the rest of
-// it plus four refreshes (~36 s), and refreshes take the stack the rest of the way.
+// Burst to 6 stacks, or to 10 when energy also covers the reserve (four refreshes). A burst barrel past
+// 6 gains little, while a refresh at 10 stacks buys ~90 stack-seconds.
 constexpr uint32 ULDUAR_FL_PYRITE_MAX_STACKS = 10;
 constexpr uint32 ULDUAR_FL_PYRITE_BURST_STACKS = 6;
 constexpr uint32 ULDUAR_FL_PYRITE_REFRESH_RESERVE = 20;
 
-// A refresh goes out this far ahead of the measured flight: the ~1.1 s between decisions plus the 1 s
-// GCD a boulder may have just started. Late loses the whole stack, early only a second or two of it.
+// Refresh lead on top of the measured flight: ~1.1 s between decisions plus a boulder's 1 s GCD. Late
+// loses the whole stack, early only a second of it.
 constexpr uint32 ULDUAR_FL_PYRITE_REFRESH_SLACK_MS = 2000;
 
 // A barrel lobs for 1-3 s. The first refresh leads by this until a landing has been timed, and a
@@ -231,47 +187,32 @@ constexpr uint32 ULDUAR_FL_STEAM_RUSH_GCD_MS = 2000;
 constexpr uint32 ULDUAR_FL_VENT_RUSH_LEAD_MS = 5000;
 constexpr uint32 ULDUAR_FL_VENT_INTERVAL_MS = 20000;
 
-// Ram, Electroshock and Sonic Horn are TARGET_UNIT_CONE_ENEMY_104: a frontal cone whose reach is
-// the effect radius, not the spell range. Electroshock and Sonic Horn carry RangeEntry ID 1, which
-// Spell::CheckRange short-circuits, so for those two the effect radius is the only limit there is.
-//
-// Ram is the exception and cost a release of missed casts: its RangeIndex is 11, a real 0-15 yd
-// entry, so CheckRange does enforce it and the effective reach is the 15, not the 18 yd effect
-// radius. FlameLeviathanInConeRange adds the target's object size on top, which hid the gap against
-// a boss with 15 yd of combat reach and does not hide it against a 1 yd lasher.
+// Cone reach is the effect radius for Electroshock and Sonic Horn (RangeEntry 1 skips CheckRange). Ram's
+// RangeIndex 11 is a real 0-15 yd entry, so CheckRange caps it at 15, not its 18 yd effect radius.
 constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS = 25.0f;
 constexpr float ULDUAR_FL_RAM_CONE_RADIUS = 15.0f;
 constexpr float ULDUAR_FL_SONIC_HORN_CONE_RADIUS = 35.0f;
 
-// Each cone also has its own width, from world.spell_cone; Spell::SelectImplicitConeTargets falls
-// back to 60 degrees for a spell with no row. These are half-widths already, because HasInArc
-// splits the arc it is handed. Nothing widens them at cast time: isInFront passes no target radius,
-// so the boss's 15 yd combat reach buys no slack, and CAST_ANGLE_IN_FRONT (120 degrees) is wider
-// than all three - which means CastVehicleSpell will not turn the vehicle for these on its own.
-// A siege engine 45 degrees off him passes that gate, casts, and Electroshock's 30 degrees finds
-// nothing: 71 casts landed once over five pulls.
+// Half the world.spell_cone widths (HasInArc halves what it's given), and isInFront adds no target radius.
+// CAST_ANGLE_IN_FRONT is 120 degrees, wider than all three, so CastVehicleSpell never turns for these.
 constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_HALF_ANGLE = 30.0f * float(M_PI) / 180.0f;
 constexpr float ULDUAR_FL_RAM_CONE_HALF_ANGLE = 50.0f * float(M_PI) / 180.0f;
 constexpr float ULDUAR_FL_SONIC_HORN_CONE_HALF_ANGLE = 25.0f * float(M_PI) / 180.0f;
 
-// Cooldowns the module keeps itself, because Spell::SendSpellCooldown returns early for a creature
-// caster and nothing enforces Electroshock's 10 s otherwise. The short one is for a shot that went
-// out and did not stop the channel: retry, but not at tick rate - each attempt costs 20 energy.
+// Kept by the module: Spell::SendSpellCooldown returns early for a creature caster, so nothing enforces
+// Electroshock's 10 s. Retry is for a shot that didn't stop the channel, each try costs 20 energy.
 constexpr uint32 ULDUAR_FL_ELECTROSHOCK_COOLDOWN_MS = 10000;
 constexpr uint32 ULDUAR_FL_ELECTROSHOCK_RETRY_MS = 3000;
 
-// Battering Ram is TARGET_DEST_TARGET_ENEMY at radius index 20: a 25 yd sphere centred on whoever he
-// is pursuing, not a cone off his front. Distance to him tells you nothing; distance to the Pursued
-// vehicle is the whole answer.
+// A 25 yd sphere on whoever he's pursuing (TARGET_DEST_TARGET_ENEMY, radius index 20), not a cone off
+// his front, so measure from the Pursued vehicle and never from him.
 constexpr float ULDUAR_FL_BATTERING_RAM_RADIUS = 25.0f;
 
 // He only casts it inside IsWithinCombatRange(victim, 15.0f), which adds both combat reaches on top.
 constexpr float ULDUAR_FL_BATTERING_RAM_CAST_RANGE = 15.0f;
 
-// Hurl Boulder is a lobbed shot with a real minimum range (RangeIndex 164), so a demolisher parked
-// on top of a frozen ally cannot thaw it and has to back off first. Mortar (RangeIndex 37) has no
-// minimum but only reaches 50. Hurl Pyrite Barrel shares RangeIndex 164, so this band is also the
-// one the pyrite stack lives or dies by.
+// Hurl Boulder's RangeIndex 164, shared by Hurl Pyrite Barrel: a demolisher on top of a frozen ally has
+// to back off to thaw it. Mortar (RangeIndex 37) has no minimum but stops at 50.
 constexpr float ULDUAR_FL_HURL_BOULDER_MIN_RANGE = 10.0f;
 constexpr float ULDUAR_FL_HURL_BOULDER_MAX_RANGE = 70.0f;
 constexpr float ULDUAR_FL_MORTAR_MAX_RANGE = 50.0f;
@@ -281,27 +222,20 @@ constexpr float ULDUAR_FL_MORTAR_MAX_RANGE = 50.0f;
 constexpr float ULDUAR_FL_FIRE_CANNON_MIN_RANGE = 10.0f;
 constexpr float ULDUAR_FL_FIRE_CANNON_MAX_RANGE = 70.0f;
 
-// Splash of the shot being aimed, used only to rank which add is worth hitting. Fire Cannon and
-// Hurl Boulder both land at radius index 9; Mortar's 62635 is index 42. Adds arrive in twos and
-// threes inside one 20 yd circle, so picking the densest one is worth the scan.
+// Splash of the aimed shot, only for ranking adds: Fire Cannon and Hurl Boulder land at radius index 9,
+// Mortar's 62635 at index 42.
 constexpr float ULDUAR_FL_CANNON_SPLASH = 20.0f;
 constexpr float ULDUAR_FL_MORTAR_SPLASH = 11.0f;
 
-// Where a posted siege engine sits relative to its corner: far enough out that the spawn point is
-// past Fire Cannon's 10 yd minimum, close enough that it is inside Ram's 15 yd cone. Ram
-// knocks back (Effect 98), and the engine parks on the arena side of the corner, so what it hits
-// goes deeper into the corner rather than out toward the raid.
+// Puts the spawn past Fire Cannon's 10 yd floor and inside Ram's 15. Parked on the arena side, so Ram's
+// knockback (Effect 98) throws adds deeper into the corner.
 constexpr float ULDUAR_FL_CORNER_STANDOFF = 12.0f;
 
-// The ground a posted engine holds round its post: Ram's ~20 yd throw from a post 12 yd in from the
-// spawn, plus margin. Its turret shoots adds in here first, and nobody else shoots an add whose victim
-// is a hull in here - a 76k Fire Cannon hit from elsewhere can pass the 130% ranged threat switch
-// and pull the add out of the corner.
+// Ram's ~20 yd throw from a post 12 yd in, plus margin. The post's turret shoots adds in here first, and
+// nobody else shoots one held here: a 76k Fire Cannon hit passes the 130% ranged switch and drags it out.
 constexpr float ULDUAR_FL_CORNER_HOLD_RADIUS = 30.0f;
 
-// Gap to hold between vehicles of one class: Hodir's Fury's 10 yd blast plus enough that a vehicle
-// drifting inside its arrival deadband does not close it. Half the fight ran with four or more
-// vehicles inside one such circle, so a single reticle could freeze a whole class for 60 s.
+// Hodir's Fury's 10 yd blast plus room for a vehicle drifting inside its arrival deadband.
 constexpr float ULDUAR_FL_STATION_SPACING = 12.0f;
 
 // The widest the fan may open. Past this the outer slots stop being "behind him" at all.
@@ -313,31 +247,27 @@ constexpr uint32 ULDUAR_FL_CRATE_GRAB_CEILING = 75;
 // A yard inside Grab Crate's 50 yd range (62479).
 constexpr float ULDUAR_FL_CRATE_GRAB_RANGE = 49.0f;
 
-// Demolishers do not regenerate energy (no UNIT_FLAG2_REGENERATE_POWER), so a full tank is 20
-// barrels and pyrite crates are the only refill. Below this a starved demolisher detours to a crate.
-// Nothing else needs the demolisher's energy: the mechanic seat pays for Increased Speed from its own.
+// Demolishers never regenerate (no UNIT_FLAG2_REGENERATE_POWER), so crates are the only refill. Below
+// this a starved demolisher detours to one.
 constexpr uint32 ULDUAR_FL_CRATE_DETOUR_ENERGY = 30;
 constexpr float ULDUAR_FL_CRATE_DETOUR_RADIUS = 60.0f;  // how far a starved demolisher leaves its band
 
-// Wall-hugging kite ring. The corners are inset off the walls so MoveTo has mesh to land on, and
-// each 90-degree corner is chamfered into two nodes so a kiting vehicle rounds it instead of
-// driving into it while the boss cuts the diagonal.
+// Kite ring corners, inset off the walls so MoveTo has mesh to land on and chamfered into two nodes so
+// a kiting hull rounds them instead of driving in while he cuts the diagonal.
 constexpr float ULDUAR_FL_KITE_WALL_INSET = 15.0f;
 constexpr float ULDUAR_FL_KITE_CORNER_CHAMFER = 35.0f;
 constexpr float ULDUAR_FL_KITE_ADVANCE_DIST = 30.0f;    // switch nodes on approach, never on arrival
 constexpr float ULDUAR_FL_KITE_BOSS_CLEARANCE = 50.0f;  // a node this close to him is not a destination
 
-// The Inferno trail loops 33-56 yd inside the ring, so a leg cutting across it burns. The next stretch
-// of a leg is checked against it every tick, and a blocked one steps round it this far at a time.
+// The Inferno trail loops just inside the ring, so a leg across it burns. Each tick checks the next
+// stretch of the leg, and a blocked one steps round it this far at a time.
 constexpr float ULDUAR_FL_KITE_FIRE_LOOKAHEAD = 30.0f;
 constexpr float ULDUAR_FL_KITE_DETOUR_STEP = 25.0f;
 
-// Flame Leviathan. The whole fight is from vehicles, and a trigger and its action must call the
-// same helper here or the two derivations disagree about who is doing what.
+// A trigger and its action must call the same helper here, or they disagree about who is doing what.
 
-// From the instance script, never through "find target" or "attackers": threat on this fight belongs
-// to the vehicle creature rather than the bot player, so the boss is usually absent from both. Nor
-// through the target scan, which stops at SightDistance while a posted engine sits up to 190 yd out.
+// From the instance script. Threat sits on the vehicle, so "attackers" usually lacks him, and the target
+// scan stops at SightDistance while a posted engine sits up to 190 yd out.
 Unit* FlameLeviathanBoss(PlayerbotAI* botAI);
 
 // The encounter's tick: opens the trace, which nothing else does for this fight, and resets the
@@ -362,11 +292,8 @@ bool FlameLeviathanIsPursued(Player* bot);
 
 bool FlameLeviathanIsVentChanneling(Unit* boss);
 
-// True for exactly one siege engine per channel: highest energy, guid breaking ties, and then the
-// channel is claimed so nobody else fires into it. Ranking alone is not enough - casting spends 20
-// energy, which promotes the next engine in the same tick, and four of them emptied 80 energy into
-// one channel 30 ms apart. The Ram energy reserve reads this too, so the fuel travels with the duty.
-// Never a Pursued engine: turning to face him mid-escape is how the first Ram lands.
+// One siege engine per channel: highest energy, guid on ties, then claimed, since a cast's 20 energy
+// promotes the next engine the same tick. Never a Pursued one, it would turn to face him mid-escape.
 bool FlameLeviathanIsVentInterrupter(PlayerbotAI* botAI, Player* bot);
 
 // Claims the channel now being cast at, so the ranking above stops handing it to the next engine.
@@ -377,29 +304,24 @@ void FlameLeviathanClaimVentChannel(Player* bot);
 // skipped channel keeps the 20 s cadence rather than going negative.
 uint32 FlameLeviathanMsToNextVent(Player* bot, Unit* boss);
 
-// A channel running, or one close enough that giving up the firing position now loses it. Only the
-// vent reserve reads this: there is exactly one engine in Electroshock range of him at a time, so
-// whatever walks it out of range costs the whole channel and not just a shot.
+// A channel running, or one due within the rush lead. Only the vent reserve reads it: it's the one engine
+// in Electroshock range, so walking it out costs the whole channel.
 bool FlameLeviathanVentWindowOpen(Player* bot, Unit* boss);
 
-// A cone spell lands nothing unless the vehicle is genuinely pointed at him, and CastVehicleSpell
-// only turns for targets outside 120 degrees - wider than any of these cones. Returns true when the
-// shot is on; otherwise starts the turn and leaves the cast for a later tick.
+// True when the shot is on; otherwise starts the turn and leaves the cast for a later tick.
+// CastVehicleSpell only turns outside 120 degrees, wider than any of these cones.
 bool FlameLeviathanFaceForCone(Unit* vehicleBase, Unit* target, float halfAngle, float radius);
 
-// The same test without the turn, for a vehicle whose facing is owed to something else - a posted
-// siege engine points at its corner, and turning it to chase an add off to one side would both undo
-// the post and throw the knockback sideways instead of into the corner.
+// The same test without the turn, for a vehicle whose facing belongs elsewhere: the vent reserve's to
+// him, an idle post's to its corner.
 bool FlameLeviathanInCone(Unit* vehicleBase, Unit* target, float halfAngle, float radius);
 
 // Alive, mounted, and neither the hull nor the driver frozen. Any role handed out by election has to
 // ask this, or a 60 s Hodir's Fury stun takes the role with the vehicle.
 bool FlameLeviathanCrewUsable(Player* member);
 
-// Nearest crewed vehicle held by Hodir's Fury's stun, inside the casting band of whatever will thaw
-// it. `from` is excluded, so a driver never aims at the hull it is sitting in - it could not cast
-// anyway. A gunner passes its turret instead, which deliberately leaves its own demolisher eligible:
-// the seat is not stunned when only the hull is, and Mortar has no minimum range.
+// Nearest frozen crewed vehicle in the thawing band, `from` excluded. A gunner passes its turret, so its
+// own frozen demolisher stays eligible: the seat isn't stunned with the hull, and Mortar has no minimum.
 Unit* FlameLeviathanFrozenVehicle(Player* bot, Unit* from, float minRange, float maxRange);
 
 // The vehicle currently wearing Pursued, or null.
@@ -416,44 +338,28 @@ bool FlameLeviathanIsRamTarget(Player* bot);
 // True while this vehicle is inside the 25 yd sphere Battering Ram drops on `centre`.
 bool FlameLeviathanInBatteringRamBlast(Unit* vehicleBase, Unit* centre);
 
-// The whole "get out of the blast" test in one place, because the urgent-drive trigger and the drive
-// action both ask it and a trigger that fires wider than its action just demotes the cast node for
-// nothing. True when this vehicle shares the blast with the ram centre and he is close enough to
-// fire. No switch prediction: the rule re-aims itself the moment the centre changes.
+// True when this vehicle shares the blast with the ram centre and he's close enough to fire. One test for
+// the urgent trigger and the drive action, since a wider trigger demotes the cast node for nothing.
 bool FlameLeviathanShouldClearBatteringRam(PlayerbotAI* botAI, Player* bot);
 
 // Lowest-guid chopper driver that is neither Pursued nor frozen. It runs ahead of the boss dropping
 // tar in his path; a Pursued chopper is already driving away from him and drops tar for free.
 bool FlameLeviathanIsTarLead(PlayerbotAI* botAI, Player* bot);
 
-// Best Freya's Ward add for a shot from `from`, or null. Ranked by how many other adds sit inside
-// `splash` of it, nearest breaking ties, because they arrive two or three to a circle and the guns
-// that matter are all area shots. Pass splash 0 for a single-target pick, and `around` to take only
-// adds within `aroundRadius` of that point.
-//
-// Skips an add a posted engine is holding - its victim is a siege hull inside
-// ULDUAR_FL_CORNER_HOLD_RADIUS of a post - unless `from` rides that hull.
-//
-// Reads "possible targets" rather than the bot's own "attackers": threat on this fight belongs to
-// the vehicle creature, so a crewed bot's attacker list is empty and the old add fallback built
-// from it never fired. The adds are ordinary attackable creatures, so unlike the tower reticles
-// they need no "nearest npcs" escape hatch.
+// Best Freya's Ward add for a shot from `from`: most adds inside `splash`, nearest on ties. Skips one a
+// posted engine holds unless `from` rides that hull. Off "possible targets": a crewed "attackers" is empty.
 Unit* FlameLeviathanBestAdd(PlayerbotAI* botAI, Unit* from, float minRange, float maxRange, float splash,
                             Position const* around = nullptr, float aroundRadius = 0.0f);
 
-// Corner this siege engine is posted to, or -1 for none. Siege hulls are ranked by guid once per
-// pull, and ranks 1..4 own corners 0..3. The vent reserve never posts: a posted engine is 98-188 yd
-// from the boss and out of Electroshock's reach, so posting every engine leaves Flame Vents running.
-// When the reserve is not rank 0, rank 0 takes the reserve's corner. Gated on the boss's Tower of
-// Life aura, which is on him from engage, so the engines can be posted before the first wave at 34 s.
+// Corner this siege engine is posted to, or -1. Ranks 1..4 own corners 0..3; the vent reserve never
+// posts and rank 0 takes its corner. Gated on his Tower of Life aura, on him from engage.
 int8 FlameLeviathanCornerPost(PlayerbotAI* botAI, Player* bot);
 
 // The same answer for whoever drives `hull`, for a gunner, whose seat has no rank of its own.
 int8 FlameLeviathanHullCornerPost(PlayerbotAI* botAI, Player* bot, Unit* hull);
 
-// The one siege engine kept on the boss while the others post. Elected by distance to him among
-// usable, non-Pursued engines, and kept until it stops being either. It keeps its facing on the boss
-// instead of turning for a Ram.
+// The siege engine kept on the boss while the others post: the nearest usable, non-Pursued one, kept
+// until it stops being either. It faces him rather than turning for a Ram.
 bool FlameLeviathanIsVentReserve(Player* bot);
 
 // Where that engine parks: ULDUAR_FL_CORNER_STANDOFF in from the corner, toward the arena centre.
@@ -472,21 +378,13 @@ float FlameLeviathanHazardReach(Unit* hazard, Unit* vehicle);
 // once per scan from the reticle's own stun.
 bool FlameLeviathanFuryArmed(Player* bot, Unit* reticle);
 
-// Nearest active-tower ground hazard to `from` (Storm strike, Flame trail, armed Frost reticle),
-// measured to its reach, counting only those within `margin` of it. Life tower is adds, not a ground
-// hazard, so it is never considered. Returns nullptr if none are in range.
-//
-// Hazards from towers in `strictMask` only count once `from` is inside their reach. Pass
-// FL_TOWER_STORM for a hull that owes the raid a firing position: eight marks land at once across a
-// 200x200 box, and on 2026-09-17 the vent reserve dodged a whole channel on the warning band while
-// inside the real 7 yd circle for about a second. Never Flames: a patch burns 30 s, and on 2026-09-19
-// three reserves that waited until they were inside one burned getting out.
+// Nearest active-tower hazard within `margin` of its reach, or null. `strictMask` towers count only once
+// inside their reach: Storm for a hull that owes a firing position, never Flames (a patch burns 30 s).
 Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask,
                                           float margin = ULDUAR_FL_TOWER_HAZARD_MARGIN, uint32 strictMask = 0);
 
-// Every active-tower ground hazard within radius of `from`, into `out`, an unarmed Fury excepted.
-// The Flame trail is a line of patches rather than one circle, so a step that only knows about the
-// nearest walks along it.
+// Every active-tower hazard within `radius` of `from`, an unarmed Fury excepted. A step that only knows
+// the nearest Inferno patch walks along the trail.
 void GetFlameLeviathanTowerHazards(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float radius,
                                    std::vector<Unit*>& out);
 
@@ -498,9 +396,8 @@ Position FlameLeviathanRearPoint(Unit* boss, float standDist, float bearingOffse
 // ULDUAR_FL_STATION_LEAD_MAX. Zero when he is standing still.
 float FlameLeviathanStationLead(Unit* boss);
 
-// Where this vehicle sits in its class's fan, as an angle off the class bearing. One station point
-// per class stacked the whole class on one spot, and a single Hodir's Fury then froze all of it.
-// `fanHalf`, when given, gets the angle from the fan's middle to its outermost slot.
+// This vehicle's angle off its class bearing in the fan, so one Hodir's Fury costs one vehicle. `fanHalf`
+// gets the angle from the fan's middle to its outermost slot.
 float FlameLeviathanStationBearingOffset(Player* bot, Unit* vehicleBase, float radius, float* fanHalf = nullptr);
 
 // How far to swing a fan built off his rear toward the arena centre, signed, and capped so its

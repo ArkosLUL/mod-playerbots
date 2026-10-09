@@ -1,69 +1,5 @@
 #!/usr/bin/env python3
-"""Score a Flame Leviathan pull from a RaidObs trace.
-
-    flame_leviathan.py <file>            every section
-    flame_leviathan.py <file> --hulls    why the vehicles died, crews on foot, drive branches, Pursued
-    flame_leviathan.py <file> --pyrite   Blue Pyrite per demolisher: stacks, barrel decisions, losses, crates
-    flame_leviathan.py <file> --ram      Battering Ram exposure, and every blast by target and splash
-    flame_leviathan.py <file> --fury     Hodir's Fury: chase, fuse, strike, and the dodge scan
-    flame_leviathan.py <file> --inferno  Mimiron's Inferno trail, measured to each hull's reach
-    flame_leviathan.py <file> --adds     Freya's Ward adds, and whether the world DB lets them live
-    flame_leviathan.py <file> --corners  corner containment, one row per ward wave
-    flame_leviathan.py <file> --vents    Flame Vents channels and interrupts
-
-**Battering Ram (62376)** is cast `me->CastSpell(me->GetVictim(), ...)` when the boss is
-`IsWithinCombatRange(victim, 15.0f)`, and its ImplicitTargetA is 53 = TARGET_DEST_TARGET_ENEMY with
-EffectRadiusIndex 20. It is therefore a 25 yd sphere centred on the **pursued vehicle**, not a cone
-off the boss's front. `--ram` scores every other vehicle against that sphere, the same test the module
-backs off on (`FlameLeviathanInBatteringRamBlast`), with the pursued vehicle read from `fl.pursued`.
-With nobody Pursued he still rams his threat victim, which the module tracks as `fl.ramtarget`; the
-per-blast list names which of the two each cast was aimed at.
-
-A demolisher cannot outrun him, and the gunner's **Increased Speed (62471)** is the only lever it has.
-Every vehicle spell is instant, so no `cast` row carries it and the module notes `fl.speed` instead,
-which `--hulls` prints per Pursued span.
-
-**Hodir's Fury** follows a random target at 12 yd/s and commits only once that target has stopped:
-`FollowMovementGenerator` informs on a finished spline with the target within 0.5 yd. It then stuns
-itself, summons the strike NPC 33212 overhead 5 s later, and 62297 lands ~1.1 s after that - a 10 yd
-blast with an undispellable 60 s stun, flat from the hull's centre. It stays stunned 5 s more before
-it retargets. `--fury` splits the time hulls spent inside the dodge scan by what the reticle was doing.
-
-**Mimiron's Inferno** is not one circle. `npc_mimirons_inferno` (33369) walks a waypoint path and
-every 2 s summons NPC 33370, each of which burns for 30 s - a line of about fifteen 9 yd patches. The
-patches are dynamic objects (62910), which is how `snap.hz` sees them, and `DynObjAura::FillTargetMap`
-adds both object sizes: a siege engine (7.7) burns out to 17.1 yd from a patch centre.
-
-**Freya's Ward** spawns four wards 30 s in, at the arena corners, each firing a wave every 29 s.
-`npc_freya_ward_summon` keeps each add until it dies and zone-engages it. It is bound by world DB
-update 2026_09_10_03, and its despawn type only sticks with core 4d4ae4f95. Without either the adds
-leave at their summon duration, 3 s for a Ward of Life and 10 s for a Lasher, damaged or not. `--adds`
-and `--corners` detect that and say so.
-
-**Blue Pyrite (68605)** is one stack per landed Hurl Pyrite Barrel, 10 s, 10 stacks, each landing
-resetting the duration. `fl.barrel` names the driver's decision: `burst`, `refresh`, `hold`, `dry` (no
-energy), `fail` (the core refused the cast: range, facing, LOS) or `not boss`. `--pyrite` blames every
-stack that falls to 0 on the worst decision in the 10 s before it, and counts barrels and crate credits
-off the demolisher's v13 power column. Every Grab Crate hit credits +25 until the crate despawns
-1300 ms later, repeats included.
-
-**Flame Vents (62396)** is a 10 s self-channel every 20 s that ticks 63847 eleven times. Only
-Electroshock stops it (`boss_flame_leviathan.cpp` breaks the channel on spell 62522 hitting him), so
-a channel with fewer than eleven ticks is an interrupt. `--vents` counts those, reads the `fl.vent`
-notes, names channels nobody fired at, and follows the `fl.reserve` engine through each channel.
-
-Things this file will not tell you, each of which has already fooled a reading of these traces:
-
-- **The snapshot cast column only catches spells with a cast time.** Ram, Mortar and Fire Cannon are
-  instant, so they never appear in it.
-- **`dmg` rows before v13 are written for roster players only**, so on those traces damage to a hull
-  cannot be attributed to a spell. The hull-attrition figures come from `snap` health deltas, which
-  is why they are shares and rates per 5 s; v13 adds the spell breakdown beside them.
-- **Riders are not at their vehicle's exact coordinates.** A turret gunner sits 0.20 yd off its
-  hull, so crews are matched to hulls by proximity, never by equal positions.
-- **Pre-fix traces flap `fl.pursued`.** A bot beyond SightDistance used to reset the shared state, so
-  the same hull drops out for a few hundred ms and comes back. Spans are merged across that.
-"""
+"""Score a Flame Leviathan pull from a RaidObs trace."""
 from __future__ import annotations
 
 import bisect
@@ -160,7 +96,7 @@ WAVE_WINDOW_MS = 3000
 KNOCKBACK_YD = 10.0             # an add moving this far inside a second was thrown
 
 # Weapon bands off Spell.dbc, as (vehicle entry, min, max, label). A cone is scored on range alone,
-# so the cone rows are an upper bound - facing is the action's problem, not this table's.
+# so the cone rows are an upper bound; facing is the action's problem, not this table's.
 WEAPON_BANDS = [
     (SIEGE, 10.0, 70.0, "siege turret, Fire Cannon"),
     (SIEGE, 0.0, 15.0, "siege driver, Ram cone"),
@@ -408,8 +344,7 @@ def rush_times(points: list[tuple[int, float, float]], gap_ms: int = 1500) -> li
 def rush_ready(power: list[tuple[int, float]], rushes: list[int], start: int, stop: int,
                cost: float = RUSH_COST, cooldown_ms: int = RUSH_COOLDOWN_MS) -> int | None:
     """The first `t` of a power track `[(t, energy)]` inside `[start, stop]` a siege engine could have
-    charged: the energy for it, and no charge in the cooldown before. A rush landing well after this was
-    held back by something the trace does not show, such as a cooldown stamped on a refused cast."""
+    charged: the energy for it, and no charge in the cooldown before."""
     for when, energy in power:
         if not start <= when <= stop or energy is None or energy < cost:
             continue
@@ -469,9 +404,7 @@ def move_outcomes(moves: list[dict]) -> dict[str, list[int]]:
     return out
 
 
-# ---------------------------------------------------------------------------------------------------
-# --hulls
-# ---------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------- --hulls
 
 CAUSES = ("Mimiron's Inferno", "Thorim's Hammer", "Battering Ram, pursued", "Battering Ram, sphere",
           "adds within 8 yd", "Flame Vents", "nothing positional (Missile Barrage, turrets)")
@@ -492,10 +425,8 @@ def vent_channels(trace: Trace):
 
 
 def hull_losses(fl: Fight):
-    """Hull health lost per snapshot interval, attributed to the first matching cause.
-
-    Returns (by cause, by hull and cause, hull-seconds by cause), all in health percentage points.
-    """
+    """Hull health points lost per snapshot interval, by first matching cause: (by cause, by hull and
+    cause, hull-seconds by cause)."""
     channels = vent_channels(fl.trace)
     by_cause: collections.Counter = collections.Counter()
     by_hull: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
@@ -569,9 +500,8 @@ def show_hulls(trace: Trace) -> int:
         for spell, amount in by_spell.most_common(10):
             print(f"     {trace.spell(spell):40s} {100 * amount / logged:5.1f}%")
 
-        # Thorim's Hammer is the one source here that hits everything on the map. Splitting it keeps
-        # a big share from reading as a dodge that never fires: outside the circle there is nothing
-        # to dodge, only a number that gets smaller the further out you already are.
+        # Thorim's Hammer hits every hull on the map, so split the circle from the falloff: only the
+        # circle is dodgeable, the rest is a floor.
         strikes = [rec for rec in hits if rec.get("sp") == HAMMER_SPELL]
         if strikes:
             direct = 0
@@ -588,9 +518,8 @@ def show_hulls(trace: Trace) -> int:
             print(f"\n  Thorim's Hammer: {direct} inside the {HAMMER_RADIUS:.0f} yd circle, {len(implied)} falloff"
                   f" (damage / max(dist - {HAMMER_FALLOFF_FLOOR:.0f}, 1), so every hull on the map is hit)")
             if implied:
-                # Which mark fired is not in the trace, so the nearest one is a guess and this is a
-                # scale rather than a number. It is the size that matters: the circle is worth
-                # dodging and everything outside it is a floor.
+                # The trace doesn't say which mark fired, so the nearest is a guess and this is a scale,
+                # not a figure.
                 print(f"     the falloff hits scale to a direct one of roughly"
                       f" {statistics.median(implied):,.0f}")
     else:
@@ -734,9 +663,7 @@ def show_pursued(fl: Fight) -> None:
               f"{statistics.median(close_losses):.0f} pts, range {close_losses[0]:.0f}-{close_losses[-1]:.0f}")
 
 
-# ---------------------------------------------------------------------------------------------------
-# --pyrite
-# ---------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------- --pyrite
 
 def crate_duplicates(casts: list[dict], despawn_ms: int = CRATE_DESPAWN_MS) -> dict[str, int]:
     """A Grab Crate ledger from `cast` rows: every grab after the first on the same crate, split by
@@ -759,9 +686,8 @@ def crate_duplicates(casts: list[dict], despawn_ms: int = CRATE_DESPAWN_MS) -> d
 
 
 def energy_steps(track: list[tuple[int, float]]) -> tuple[int, int]:
-    """`(barrels, credits)` off a demolisher's power track `[(t, energy)]`. Nothing else spends its
-    energy and nothing but a crate refills it, so a drop is barrels at 5 each and a rise is a credit,
-    counted once per 25 because the cap at 100 can clip one."""
+    """`(barrels, credits)` off a demolisher's power track `[(t, energy)]`: only barrels spend it and only
+    crates refill it. A rise counts once per 25, since the cap at 100 can clip one."""
     barrels = credits = 0
     for (_, before), (_, after) in zip(track, track[1:]):
         delta = after - before
@@ -773,10 +699,8 @@ def energy_steps(track: list[tuple[int, float]]) -> tuple[int, int]:
 
 
 def stack_losses(pyrite, barrel, window_ms: int = LOSS_WINDOW_MS) -> list[tuple[int, int, int, str | None]]:
-    """`(t, stacks, landed, cause)` for every fall of `fl.pyrite` spans to 0, `landed` being when the
-    stack that fell was reached. The cause is the worst `fl.barrel` state held in the window before the
-    fall: `dry`, then `fail`, then `not boss`. Anything else means the refresh landed too late or never
-    ran (`late`). None when no `fl.barrel` state covers the window."""
+    """`(t, stacks, landed, cause)` per fall of `fl.pyrite` to 0, `landed` when that stack was reached. The
+    cause is the worst `fl.barrel` state in the window before (`dry`, `fail`, `not boss`), else `late`."""
     out = []
     previous, reached = 0, 0
     for value, start, _stop in pyrite:
@@ -847,9 +771,8 @@ def show_pyrite(trace: Trace) -> int:
               f" {100 * at0 / span:4.0f}% {worst:7.1f}s {middle} {far}")
 
     if stacks:
-        # A demolisher out-drives him by 1-2 yd/s at best, so one that falls behind on the outside of the
-        # circle he runs stays out of range for tens of seconds. The station fan swings toward the
-        # centre for that reason, and this is what it has to shrink.
+        # The fan swings toward the centre so a demolisher behind him doesn't trail round the outside of
+        # his circle; this split is what it has to shrink.
         branch_at = drive_branch_at(fl)
         print("\n  station frames past 70 yd, by where he had the demolisher and whether it was outside his line:")
         for bot in sorted(windows, key=trace.name):
@@ -948,9 +871,7 @@ def show_pyrite(trace: Trace) -> int:
           f" {repeats} repeats inside the {CRATE_DESPAWN_MS} ms despawn, each credited"
           f" (same gunner {ledger['same']}, another {ledger['cross']}); {ledger['later']} later")
 
-    # The last snapshot at or before the cast, so this is the bar the gate read and not the one the
-    # +25 left behind. Reading 1.5 s further back gives the same figures on 2026-09-17, so a grab
-    # above the ceiling there is a real one and not the energize landing inside the sample.
+    # The last snapshot at or before the cast: the bar the gate read, not the one the +25 left.
     energy = []
     for rec in casts:
         hull = crews.get(rec.get("s"))
@@ -968,9 +889,7 @@ def show_pyrite(trace: Trace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------------------------------
-# --ram
-# ---------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------- --ram
 
 def ram_blasts(casts: list[dict], hits: list[dict], window_ms: int = RAM_HIT_WINDOW_MS,
                lead_ms: int = RAM_HIT_LEAD_MS) -> list[tuple[dict, list[dict]]]:
@@ -1097,9 +1016,7 @@ def show_ram(trace: Trace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------------------------------
-# --fury
-# ---------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------- --fury
 
 STILL_STEP_YD = 0.3
 
@@ -1218,9 +1135,7 @@ def show_fury(trace: Trace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------------------------------
-# --inferno
-# ---------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------ --inferno
 
 def show_inferno(trace: Trace) -> int:
     fl = fight(trace)
@@ -1329,16 +1244,11 @@ def show_inferno(trace: Trace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------------------------------
-# --adds
-# ---------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------- --adds
 
 def hammer_share(dist: float) -> float:
-    """Fraction of a full Thorim's Hammer a hull that far from the mark takes.
-
-    Mirrors spell_thorims_hammer::RecalculateDamage. A hit 50 yd out is about 1/44 of a direct one,
-    which is why hammer damage is most of a pull without anybody standing in a circle.
-    """
+    """Share of a full Thorim's Hammer a hull this far from the mark takes, per the falloff in
+    spell_thorims_hammer::RecalculateDamage: 1/44 of a direct hit at 50 yd."""
     if dist <= HAMMER_RADIUS:
         return 1.0
     return 1.0 / max(dist - HAMMER_FALLOFF_FLOOR, 1.0)
@@ -1351,17 +1261,8 @@ def off_cone_deg(origin: tuple[float, float, float], point: tuple[float, float])
 
 
 def hold_quality(tracks: dict[int, list[tuple]], fl: Fight) -> list[dict]:
-    """Per add: how long a siege engine took to claim it, and whether that engine could then shoot it.
-
-    Deliberately not the add's first victim. `npc_freya_ward_summon` zone-engages every player, pet
-    and vehicle within 250 yd at zero threat, so the first victim is settled before any bot can act
-    and it reads as a miss for every post. What a post is judged on is how fast it out-threats that,
-    and whether its guns bear afterwards.
-
-    `blind` is the dead band those guns leave: Fire Cannon will not fire under FIRE_CANNON_MIN and Ram
-    is a RAM_CONE_RADIUS cone, so an add inside the floor and outside the arc is one the post cannot
-    touch - and one FlameLeviathanHeldByAnotherPost keeps the rest of the fleet off.
-    """
+    """Per add: how long a siege engine took to claim it (not the zone-engage's first victim), and whether
+    it could then shoot it. `blind` is under FIRE_CANNON_MIN and outside the Ram cone."""
     rows = []
     for guid, track in sorted(tracks.items(), key=lambda kv: kv[1][0][0]):
         spawn = track[0]
@@ -1402,9 +1303,8 @@ def add_tracks(fl: Fight) -> dict[int, list[tuple]]:
 
 
 def add_fates(tracks: dict[int, list[tuple]], entries: dict[int, int], end: int) -> dict[str, list[int]]:
-    """Which adds were still up at the end, which left after exactly their summon duration (`timeout`,
-    damaged or not), which died, and which vanished at full health otherwise (`vanished`). A timeout is
-    tested before health: the raid wears adds down, and one last seen at 40% can still have timed out."""
+    """Adds still up at the end, gone after exactly their summon duration (`timeout`), dead, or gone at
+    full health otherwise (`vanished`). Timeout is tested first: one last seen at 40% can still time out."""
     fates: dict[str, list[int]] = {"died": [], "alive": [], "timeout": [], "vanished": []}
     for guid, track in tracks.items():
         first, last = track[0], track[-1]
@@ -1519,9 +1419,7 @@ def show_adds(trace: Trace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------------------------------
-# --corners
-# ---------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------ --corners
 
 def ward_waves(tracks: dict[int, list[tuple]]) -> list[tuple[int, int, list[int]]]:
     """`(corner, first seen, adds)` per wave: adds first seen within SPAWN_YD of a corner, grouped while
@@ -1624,10 +1522,8 @@ def show_corners(trace: Trace) -> int:
         print(f"  adds at a manned post a siege engine took over: {first_on_post} of {manned_adds}")
         print(f"  adds at a manned post that left {CORNER_HOLD_RADIUS:.0f} yd of it: {left_manned} of {manned_adds}")
 
-    # Taking the add is the easy half. Whether the post can then shoot it is what decides the wave:
-    # Fire Cannon will not fire under 10 yd and Ram is a cone, so an add in melee behind the engine
-    # that claimed it is safe from the post AND from the fleet, which FlameLeviathanHeldByAnotherPost
-    # holds off.
+    # Taking the add is the easy half. Under Fire Cannon's 10 yd floor and outside Ram's cone, a held add
+    # is safe from the post and from the fleet too.
     rows = [row for row in quality.values() if row["frames"]]
     if rows:
         frames = sum(row["frames"] for row in rows)
@@ -1646,9 +1542,7 @@ def show_corners(trace: Trace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------------------------------
-# --vents
-# ---------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------- --vents
 
 def show_vents(trace: Trace) -> int:
     fl = fight(trace)
@@ -1718,9 +1612,8 @@ def show_vents(trace: Trace) -> int:
                   f"  start {during[0][1]:5.1f}  closest {min(d for _, d in during):5.1f}  in reach {take(inside):>7s}"
                   f"  rush {take(rush):>7s}  {', '.join(fired) or 'no shot'}")
 
-            # What it was doing instead. A hazard branch here is the whole story of a lost channel:
-            # the dodge outranks the interrupt, and a hull it walks past the reach above drops the
-            # duty altogether, because the interrupter test is a range test.
+            # What it was doing instead. A hazard branch here explains a lost channel: the dodge outranks
+            # the interrupt, and past Electroshock's reach the engine drops the duty.
             dodging = [b for b in (branch_at(hull, t) for t, _ in during) if b.startswith("hazard")]
             lost = rush is not None and any(rush <= rec["t"] <= rush + 1000 and rec.get("g") == driver
                                             for rec in forced)

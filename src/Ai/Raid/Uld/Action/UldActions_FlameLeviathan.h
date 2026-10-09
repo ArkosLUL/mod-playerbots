@@ -14,9 +14,7 @@
 #include <optional>
 #include <vector>
 
-//
-//  Flame Leviathan
-//
+// Flame Leviathan
 
 // Every vehicle spell on this fight is instant, so casting never competes with driving. This action
 // owns the casts only; all movement belongs to FlameLeviathanDriveAction.
@@ -82,9 +80,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// The only thing that steers a vehicle on this encounter. Two actions sharing one MotionMaster
-// bounce rather than compromise, so kiting, hazard clearance, pyrite detours, the tar lead run and
-// holding station are all branches of this one action rather than competing nodes.
+// The only thing that steers a vehicle here: two actions on one MotionMaster bounce rather than compromise,
+// so every kind of movement is a branch of this one.
 class FlameLeviathanDriveAction : public MovementAction
 {
 public:
@@ -99,9 +96,8 @@ protected:
     // A step round the Inferno trail when the straight leg to `goal` crosses it. A kite passes
     // `mayClose` false, since a detour toward him trades a burn for Battering Ram.
     std::optional<Position> DetourAroundFire(Unit* boss, Position const& goal, bool mayClose);
-    // `keepInReachOf`, when set, ranks the clear points by whether the hull can still shoot him from
-    // there rather than by nearest, and parks facing him. Only the vent reserve passes it, and only
-    // against a Hammer mark.
+    // `keepInReachOf` ranks exits by whether the hull can still shoot him, not by nearest, and parks facing
+    // him. Only the vent reserve passes it.
     bool ClearHazard(Unit* hazard, Unit* keepInReachOf = nullptr);
     bool ClearBatteringRam(Unit* boss);
     bool DetourToCrate(Unit* boss);

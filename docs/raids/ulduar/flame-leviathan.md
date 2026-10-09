@@ -115,12 +115,21 @@ despite the name**, and never ignites anything.
   rejected on range; it stayed invisible while Ram only ever pointed at a boss with 15 yd of combat
   reach to hide the gap. `world.spell_cone` is the **width**: Ram 100°, Electroshock 60°, Sonic Horn
   50°, and the demolisher's Ram 62308 also 100° — check the **live** table, because
-  `data/sql/base/db_world/spell_cone.sql` has no row for any of them and reads as "engine default".
+  `data/sql/base/db_world/spell_cone.sql` has no row for any of them and reads as "engine default"
+  (`Spell::SelectImplicitConeTargets` falls back to 60°).
   `isInFront` passes no target radius, so
   his 15 yd reach widens the arc by nothing, and `CAST_ANGLE_IN_FRONT` is 120° — wider than all
   three, so `CastVehicleSpell` never turns the vehicle for them. Gate on both limits and turn the
   vehicle yourself, or the energy buys nothing and the interrupt election picks an engine that lands
   nothing: five wipes fired 71 Electroshocks, landed **one**, interrupted **0 of 40** channels.
+- **One Electroshock per channel.** `FlameLeviathanIsVentInterrupter` elects the usable, non-Pursued
+  engine in cone range with the most energy, and its first shot claims the channel
+  (`FlameLeviathanClaimVentChannel`, `fl.interrupter`) until he stops; a claimant that freezes hands it
+  back. Ranking alone re-elected every tick, since the winner's 20-energy cast promoted the next, and
+  four engines emptied 80 energy into one channel 30 ms apart. The Ram gate earmarks Electroshock's 20
+  for the current interrupter. A miss (the channel still running after the cast, `fl.vent miss`)
+  retries after `ULDUAR_FL_ELECTROSHOCK_RETRY_MS` (3 s): charging the 10 s cooldown left every engine
+  10 s out of step with the 20 s cycle.
 - **Never measure a cone with `IsWithinCombatRange`** — it adds *both* combat reaches, and his is 15,
   so asking for 25 answers yes out to 47.7. The cone check adds only the target's
   (`GetObjectSize`); `FlameLeviathanInConeRange` mirrors that.
@@ -208,7 +217,11 @@ replace each other, so anything that must commit to one latches it itself: the k
 `ClearHazard` its goal (below).
 
 Positioning: siege engines and non-lead choppers hold his **rear arc**; demolishers hold a 50 yd band
-and never close; one chopper (lowest guid, neither Pursued nor frozen) runs *ahead* of him, back
+and never close, their points led along his heading by `ULDUAR_FL_STATION_LEAD_S` (1.5 s of his run
+speed, capped at `_MAX` 10 yd, none while he stands), since a point built off where he is now is short
+by the hull's drive time. The point sits behind him, so the lead moves it closer, the safe way to be
+wrong, and the cap keeps the band ~44 yd from his centre, clear of Ram's 25; a chopper at 20 yd would
+be led into the sphere, so demolishers only; one chopper (lowest guid, neither Pursued nor frozen) runs *ahead* of him, back
 turned, so its tar pool lands in his path — clamped to stop short of the Battering Ram sphere, and
 giving the slot up entirely when the chase leaves no room. Each class fans out by guid rank. The
 demolisher fan swings from his rear toward the arena centre (`FlameLeviathanCentreTurn`), capped so its
@@ -404,7 +417,9 @@ faces the same add the cast node picked. `--corners` scores the hold, not the fi
 **A cone weapon and a parked facing will fight each other.** Ram and Sonic Horn need the vehicle
 turned, while `DriveTo`'s park block re-faces the boss every tick. `HoldStation` therefore faces
 whatever the cast node is about to shoot, using the same bands — including the exclusion, since the
-tar lead never shoots adds and so never turns for one.
+tar lead never shoots adds and so never turns for one. Nor does the vent reserve: it Rams only what is
+already in its cone and keeps facing him, because Electroshock is a 25 yd, 60° cone and a reserve
+turned onto an add would spend a tick turning back at every channel.
 
 **Hodir's Fury commits only on a stopped target.** `npc_hodirs_fury` picks a random target within
 200 yd every 30 s and `MoveFollow`s it at **12 yd/s**, faster than any hull. `FollowMovementGenerator`
@@ -460,6 +475,20 @@ and switched the tar lead, the vent interrupt and the corner posting off togethe
 until it was found six pulls later, with nothing in the traces naming the gate. The rider is now
 checked for `UNIT_STATE_STUNNED` only; the hull keeps the full test. `fl.vent`, `fl.reserve` and
 `fl.drive` exist so the next silent election failure is visible.
+
+## The trace
+
+- **A rider is not at its hull's coordinates**: a turret gunner sits 0.20 yd off, so
+  `flame_leviathan.py` matches crews by proximity (`CREW_YD`, 8 yd).
+- **No vehicle spell shows in the snapshot cast column**, which carries only spells with a cast time.
+- **A full Flame Vents channel is 11 `63847` ticks**, and only Electroshock ends one early, so fewer is
+  an interrupt; a channel the pull ended under is not scored.
+- `--hulls` attributes hull loss by position, each `snap` health delta to the first matching cause, so
+  its figures are shares; `dmg` covered roster players only before v13. `--inferno` reads the patches
+  (62910) from `snap.hz`. `--pyrite` reads the demolisher's v13 power column: barrels 5 energy, crate
+  credits +25. `fl.barrel` `dry` is no energy, `fail` the core refusing the cast. Pre-fix traces flap
+  `fl.pursued`, so the checker merges one hull's spans within `PURSUED_FLAP_MS` (1.5 s) and falls back
+  to the boss's target column without the notes.
 
 
 ## Baseline to beat — 2026-08-30, before the blast/freeze fixes
