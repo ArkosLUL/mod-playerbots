@@ -10,10 +10,6 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-//
-//  Razorscale
-//
-
 class RazorscaleAvoidDevouringFlameAction : public MovementAction
 {
 public:

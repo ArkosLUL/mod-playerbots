@@ -26,22 +26,19 @@ bool RazorscaleFlyingAloneTrigger::IsActive()
         return false;
     }
 
-    // Check if the boss is flying
     if (boss->GetPositionZ() < RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
     {
         return false;
     }
 
-    // Get the list of attackers
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
     if (attackers.empty())
     {
-        return true;  // No attackers implies flying alone
+        return true;
     }
 
     std::vector<Unit*> dark_rune_adds;
 
-    // Loop through attackers to find dark rune adds
     for (ObjectGuid const& guid : attackers)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -50,7 +47,6 @@ bool RazorscaleFlyingAloneTrigger::IsActive()
 
         uint32 entry = unit->GetEntry();
 
-        // Check for valid dark rune entries
         if (entry == RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER ||
             entry == RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN ||
             entry == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
@@ -59,7 +55,6 @@ bool RazorscaleFlyingAloneTrigger::IsActive()
         }
     }
 
-    // Return whether there are no dark rune adds
     return dark_rune_adds.empty();
 }
 
@@ -127,7 +122,6 @@ bool RazorscaleGroundedTrigger::IsActive()
         return false;
     }
 
-    // Check if the boss is flying
     if (boss->GetPositionZ() < RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
     {
         return true;
@@ -143,7 +137,6 @@ bool RazorscaleHarpoonAvailableTrigger::IsActive()
         return false;
     }
 
-    // Update the boss AI context in the helper
     RazorscaleBossHelper razorscaleHelper(botAI);
 
     if (!razorscaleHelper.UpdateBossAI())
@@ -161,14 +154,12 @@ bool RazorscaleHarpoonAvailableTrigger::IsActive()
 
 bool RazorscaleFuseArmorTrigger::IsActive()
 {
-    // Get the boss entity
     Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
     {
         return false;
     }
 
-    // Only proceed if this bot can actually tank
     if (!botAI->IsTank(bot))
         return false;
 
@@ -176,7 +167,6 @@ bool RazorscaleFuseArmorTrigger::IsActive()
     if (!group)
         return false;
 
-    // Iterate through group members to find the main tank with Fuse Armor
     for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
     {
         Player* member = gref->GetSource();

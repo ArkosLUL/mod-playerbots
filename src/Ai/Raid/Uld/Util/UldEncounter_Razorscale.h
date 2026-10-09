@@ -22,17 +22,9 @@ class Player;
 class PlayerbotAI;
 class Unit;
 
-// Razorscale.
-//
-// Two alternating phases. While she is flying the raid kills Dark Rune adds and the harpoon crews
-// reload; a harpoon volley grounds her, and the ground phase is the only window in which she takes
-// damage. Roles are assigned by health rather than by spec, and both the harpoon cooldowns and the
-// role assignments are held per bot so a re-derivation cannot flip them mid-phase.
-
 class RazorscaleBossHelper : public AiObject
 {
 public:
-    // Enums and constants specific to Razorscale
     enum RazorscaleUnits : uint32
     {
         UNIT_RAZORSCALE          = 33186,
@@ -64,7 +56,6 @@ public:
     static constexpr float DEVOURING_FLAME_RADIUS = 5.0f;
     static constexpr float DEVOURING_FLAME_CLEAR_RADIUS = DEVOURING_FLAME_RADIUS + 2.0f;
 
-    // Constants for arena parameters
     static constexpr float RAZORSCALE_FLYING_Z_THRESHOLD = 440.0f;
     static constexpr float RAZORSCALE_ARENA_CENTER_X = 587.54f;
     static constexpr float RAZORSCALE_ARENA_CENTER_Y = -175.04f;
@@ -76,7 +67,6 @@ public:
     static constexpr float HARPOON_SEARCH_RANGE = 200.0f;
     static constexpr std::size_t HARPOON_ENTRY_COUNT = 4;
 
-    // Structure for harpoon data
     struct HarpoonData
     {
         uint32 gameObjectEntry;
@@ -91,16 +81,16 @@ public:
     bool IsGroundPhase() const;
     bool IsFlyingPhase() const;
 
-    // Same phase reads against a boss unit the caller already holds, for code that must not run
-    // UpdateBossAI() first - it reassigns the raid's tank roles as a side effect.
+    // Same phase reads off a boss the caller already holds, for code that must not run UpdateBossAI()
+    // first: it reassigns the raid's tank roles as a side effect.
     static bool IsGroundPhaseFor(Unit* boss);
     static bool IsFlyingPhaseFor(Unit* boss);
 
     // Nearest live Devouring Flame patch within radius of the bot, or nullptr.
     static Unit* FindDevouringFlameNear(PlayerbotAI* botAI, float radius);
 
-    // Centres of the live patches within radius of the bot. The dodge sweep tests a dozen-plus
-    // candidate destinations against the same set, and one grid search beats one per candidate.
+    // Centres of the live patches within radius of the bot. The dodge sweep tests every candidate
+    // destination against the same set, and one grid search beats one per candidate.
     static void CollectDevouringFlames(Player* bot, float radius, std::vector<Position>& out);
 
     // True when one of the collected patches covers (x, y).
@@ -123,14 +113,12 @@ public:
 private:
     Unit* _boss;
 
-    // The cooldown that applies to every bot
+    // Seconds between role reassignments, tracked per bot.
     static const std::time_t _roleSwapCooldown = 10;
 };
 
-// Per-bot cache for the lookups every Razorscale trigger, action and multiplier repeats each tick.
-// The values behind them recompute on every read (100yd grid sweep, plus a LOS ray per npc for the
-// hostile list). Keyed on getMSTime(): a bot never ticks twice in one ms. Holds guids so a despawn
-// between reads drops out instead of dangling.
+// Per-bot cache of the lookups every Razorscale node repeats each tick, keyed on getMSTime() since a bot
+// never ticks twice in one ms. Holds guids so a despawn between reads drops out instead of dangling.
 class RazorscaleScan
 {
 public:
@@ -170,13 +158,12 @@ bool IsRazorscaleHarpoonCrew(PlayerbotAI* botAI, Player* bot);
 // the earlier GetHarpoonData() entry. Null when none is ready.
 GameObject* GetRazorscaleClosestReadyHarpoon(PlayerbotAI* botAI);
 
-// Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
-// Watcher (ranged caster) > Guardian. Lowest health Sentinel when two are up, so the raid focuses one
-// down instead of splitting across both. Returns nullptr when none are up.
+// Most urgent add first: Sentinel (whirlwinds the raid) > Watcher (ranged caster) > Guardian. Lowest
+// health Sentinel of two, so the raid finishes one instead of splitting across both.
 Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI);
 
-// What the skull belongs on right now: the boss whenever she is on the floor - harpoon knockdowns
-// included, since she is damageable then - and otherwise the add above.
+// Skull target: the boss whenever she's on the floor, harpoon knockdowns included since she takes
+// damage then. Otherwise the add above.
 Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI);
 
 #endif

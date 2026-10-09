@@ -71,7 +71,7 @@ void DefineRazorscale(EncounterBuilder& e)
     // about the fire, and a Devouring Flame patch is the one thing here that kills a bot outright.
     e.Node<RazorscaleDevouringFlamesTrigger, RazorscaleAvoidDevouringFlameAction>(ACTION_RAID + 4);
 
-    // Never consumes the tick - the pet order is a side effect, so this sits on top harmlessly.
+    // Never consumes the tick: the pet order is a side effect, so it sits on top harmlessly.
     e.Node<RazorscalePetControlTrigger, RazorscalePetControlAction>(ACTION_RAID + 5);
 
     e.Node<RazorscaleAvoidSentinelTrigger, RazorscaleAvoidSentinelAction>(ACTION_RAID + 2);
@@ -88,10 +88,8 @@ void DefineRazorscale(EncounterBuilder& e)
         "razorscale fire resistance action",
         [](PlayerbotAI* ai) -> Action* { return new BossFireResistanceAction(ai, "razorscale"); }, ACTION_RAID);
 
-    // The dodge wins on priority, but it lets go of the tick the moment the bot stands clear, and these
-    // would then walk it straight back onto the 5yd patch it just left. Avoid AoE sits at
-    // ACTION_EMERGENCY, outranks every row here and picks its bearing with no idea where the other
-    // patches are.
+    // The dodge lets go once the bot stands clear, and these would walk it straight back onto the patch.
+    // Avoid AoE too: it outranks every row here and picks its bearing blind to the other patches.
     e.Block("razorscale", Role::Any, RazorscaleHoldMovers,
             Family::Reach | Family::ReachHeal | Family::Charge | Family::CombatFormationMove | Family::TankFace |
                 Family::SetBehind | Family::RearFlank | Family::Follow | Family::AvoidAoe);

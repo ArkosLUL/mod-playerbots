@@ -66,8 +66,7 @@ bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float c
     float const step = std::max(clearRadius - bot->GetDistance2d(flame) + 1.0f, 1.0f);
     float const initAngle = flame->GetAngle(bot);
 
-    // Every candidate below sits within `step` of the bot, so one collect around him covers the whole
-    // sweep. A grid search per candidate is 17 of them for a picture that cannot change within a tick.
+    // Every candidate below sits within `step` of the bot, so one collect around him covers the whole sweep.
     std::vector<Position> flames;
     RazorscaleBossHelper::CollectDevouringFlames(bot, step + RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS,
                                                  flames);
@@ -93,8 +92,8 @@ bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float c
                                                                 bot->GetPositionZ(), x, y, z))
                 continue;
 
-            // A destination inside the next patch is what turns one dodge into a chain of them. She
-            // drops these every 6-12s and they stack up, so the whole arena has to be consulted.
+            // A destination inside another patch turns one dodge into a chain. She drops one every 6-12s
+            // and they stack up.
             if (RazorscaleBossHelper::DevouringFlameBlocks(flames, x, y))
                 continue;
 
@@ -127,8 +126,8 @@ bool RazorscaleAvoidDevouringFlameAction::isUseful()
 
 bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)
 {
-    // Marking is not done here - "razorscale kill target action" owns the skull for the whole fight,
-    // so it can hand it to the boss the moment she lands.
+    // No marking here: "razorscale kill target action" owns the skull all fight, so it can hand it to
+    // the boss the moment she lands.
     if (!botAI->IsRanged(bot))
         return false;
 
@@ -192,7 +191,6 @@ bool RazorscaleAvoidWhirlwindAction::Execute(Event /*event*/)
 
 bool RazorscaleAvoidWhirlwindAction::isUseful()
 {
-    // Tanks do not avoid Whirlwind
     if (botAI->IsTank(bot))
     {
         return false;
@@ -226,10 +224,8 @@ bool RazorscaleIgnoreBossAction::isUseful()
         return false;
     }
 
-    // Check if the boss is flying
     if (boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
     {
-        // Check if the bot is outside the designated area
         if (bot->GetDistance2d(RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
                                RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y) >
             RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS + 25.0f)
@@ -244,27 +240,23 @@ bool RazorscaleIgnoreBossAction::isUseful()
         if (!group)
             return false;
 
-        // Check if the boss is already set as the moon marker
-        int8 moonIndex = 4;  // Moon marker index
+        int8 moonIndex = 4;
         ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
         if (currentMoonTarget == boss->GetGUID())
-            return false;  // Moon marker is already correctly set, no further action needed
+            return false;
 
-        // Proceed to tank-specific logic
         Unit* mainTankUnit = AI_VALUE(Unit*, "main tank");
         Player* mainTank = mainTankUnit ? mainTankUnit->ToPlayer() : nullptr;
 
-        // If this bot is the main tank, it needs to set the moon marker
         if (mainTankUnit == bot)
             return true;
 
-        // If the main tank is a human, check if this bot is the lowest-indexed bot tank
-        if (mainTank && !GET_PLAYERBOT_AI(mainTank))  // Main tank is a human player
+        if (mainTank && !GET_PLAYERBOT_AI(mainTank))
         {
-            for (int i = 0; i < 3; ++i)  // Only iterate through the first 3 indexes
+            for (int i = 0; i < 3; ++i)
             {
-                if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))  // Valid bot tank
-                    return true;  // This bot should assign the marker
+                if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
+                    return true;
             }
         }
     }
@@ -285,7 +277,6 @@ bool RazorscaleIgnoreBossAction::Execute(Event /*event*/)
     if (!group)
         return false;
 
-    // Check if the bot is outside the designated area and move inside first
     if (bot->GetDistance2d(RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
                            RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y) >
         RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS + 25.0f)
@@ -298,36 +289,32 @@ bool RazorscaleIgnoreBossAction::Execute(Event /*event*/)
     if (!botAI->IsTank(bot))
         return false;
 
-    // Check if the boss is already set as the moon marker
     int8 moonIndex = 4;
     ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
     if (currentMoonTarget == boss->GetGUID())
-        return false;  // Moon marker is already correctly set
+        return false;
 
-    // Get the main tank and determine role
     Unit* mainTankUnit = AI_VALUE(Unit*, "main tank");
     Player* mainTank = mainTankUnit ? mainTankUnit->ToPlayer() : nullptr;
 
-    // If the main tank is a human, assign the moon marker using the lowest-indexed bot tank
-    if (mainTank && !GET_PLAYERBOT_AI(mainTank))  // Main tank is a real player
+    if (mainTank && !GET_PLAYERBOT_AI(mainTank))
     {
-        for (int i = 0; i < 3; ++i)  // Only iterate through the first 3 indexes
+        for (int i = 0; i < 3; ++i)
         {
-            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))  // Bot is a valid tank
+            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
             {
                 group->SetTargetIcon(moonIndex, bot->GetGUID(), boss->GetGUID());
                 SetNextMovementDelay(1000);
-                break;  // Assign the moon marker and stop
+                break;
             }
         }
     }
-    else if (mainTankUnit == bot)  // If this bot is the main tank
+    else if (mainTankUnit == bot)
     {
         group->SetTargetIcon(moonIndex, bot->GetGUID(), boss->GetGUID());
         SetNextMovementDelay(1000);
     }
 
-    // Tanks move inside the arena
     return MoveInside(ULDUAR_MAP_ID, RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
                       RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y, bot->GetPositionZ(),
                       RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS - 10.0f, MovementPriority::MOVEMENT_NORMAL);
@@ -345,11 +332,9 @@ bool RazorscaleGroundedAction::isUseful()
         if (!group)
             return false;
 
-        // Check if the boss is marked with Moon
         int8 moonIndex = 4;
         ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
 
-        // Useful only if the boss is currently marked with Moon
         return currentMoonTarget == boss->GetGUID();
     }
 
@@ -359,7 +344,6 @@ bool RazorscaleGroundedAction::isUseful()
         if (!group)
             return false;
 
-        // Find the main tank
         Player* mainTank = nullptr;
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
@@ -428,17 +412,15 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
     Unit* mainTankUnit = AI_VALUE(Unit*, "main tank");
     Player* mainTank = mainTankUnit ? mainTankUnit->ToPlayer() : nullptr;
 
-    if (mainTank && !GET_PLAYERBOT_AI(mainTank))  // Main tank is a human player
+    if (mainTank && !GET_PLAYERBOT_AI(mainTank))
     {
-        // Iterate through the first 3 bot tanks to handle the moon marker
         for (int i = 0; i < 3; ++i)
         {
-            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))  // Bot is a valid tank
+            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
             {
                 int8 moonIndex = 4;
                 ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
 
-                // If the moon marker is set to the boss, reset it
                 if (currentMoonTarget == boss->GetGUID())
                 {
                     group->SetTargetIcon(moonIndex, bot->GetGUID(), ObjectGuid::Empty);
@@ -448,12 +430,11 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
             }
         }
     }
-    else if (botAI->IsMainTank(bot))  // Bot is the main tank
+    else if (botAI->IsMainTank(bot))
     {
         int8 moonIndex = 4;
         ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
 
-        // If the moon marker is set to the boss, reset it
         if (currentMoonTarget == boss->GetGUID())
         {
             group->SetTargetIcon(moonIndex, bot->GetGUID(), ObjectGuid::Empty);
@@ -483,14 +464,12 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
 
         if (atInitialLandingPosition)
         {
-            // If at the initial landing position, use 12-yard radius with a
-            // 20 yard offset on the Y axis so everyone is behind the boss
+            // 20 yd off centre on Y on her first landing, so everyone stands behind her.
             return MoveInside(ULDUAR_MAP_ID, RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
                               RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y - 20.0f, bot->GetPositionZ(),
                               RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS - 12.0f, MovementPriority::MOVEMENT_COMBAT);
         }
 
-        // Otherwise, move inside a 12-yard radius around the arena center
         return MoveInside(ULDUAR_MAP_ID, RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
                           RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y, bot->GetPositionZ(), 12.0f,
                           MovementPriority::MOVEMENT_COMBAT);
@@ -505,7 +484,6 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
 
     RazorscaleBossHelper razorscaleHelper(botAI);
 
-    // Update the boss AI context
     if (!razorscaleHelper.UpdateBossAI())
         return false;
 
@@ -517,7 +495,6 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
     if (!closestHarpoon)
         return false;
 
-    // Find the nearest ranged DPS (not a healer) to the harpoon
     Player* closestRangedDPS = nullptr;
     float minDistance = std::numeric_limits<float>::max();
     GuidVector groupBots = AI_VALUE(GuidVector, "group members");
@@ -536,7 +513,6 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
         }
     }
 
-    // Only proceed if this bot is the closest ranged DPS
     if (closestRangedDPS != bot)
         return false;
 
@@ -549,7 +525,6 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
 
     SetNextMovementDelay(1000);
 
-    // Interact with the harpoon
     {
         WorldPacket usePacket(CMSG_GAMEOBJ_USE);
         usePacket << closestHarpoon->GetGUID();
@@ -571,7 +546,6 @@ bool RazorscaleHarpoonAction::isUseful()
 {
     RazorscaleBossHelper razorscaleHelper(botAI);
 
-    // Update the boss AI context to ensure we have the latest info
     if (!razorscaleHelper.UpdateBossAI())
         return false;
 
@@ -588,11 +562,9 @@ bool RazorscaleHarpoonAction::isUseful()
 
 bool RazorscaleFuseArmorAction::isUseful()
 {
-    // If this bot cannot tank at all, no need to do anything
     if (!botAI->IsTank(bot))
         return false;
 
-    // If this bot is the main tank AND has Fuse Armor at the threshold, return true immediately
     if (botAI->IsMainTank(bot))
     {
         Aura* fuseArmor = bot->GetAura(RazorscaleBossHelper::SPELL_FUSE_ARMOR);
@@ -600,7 +572,6 @@ bool RazorscaleFuseArmorAction::isUseful()
             return true;
     }
 
-    // Otherwise, check if there's any other main tank with high Fuse Armor
     Group* group = bot->GetGroup();
     if (!group)
         return false;
@@ -616,7 +587,6 @@ bool RazorscaleFuseArmorAction::isUseful()
             Aura* fuseArmor = member->GetAura(RazorscaleBossHelper::SPELL_FUSE_ARMOR);
             if (fuseArmor && fuseArmor->GetStackAmount() >= RazorscaleBossHelper::FUSEARMOR_THRESHOLD)
             {
-                // There is another main tank with high Fuse Armor
                 return true;
             }
         }
@@ -627,13 +597,7 @@ bool RazorscaleFuseArmorAction::isUseful()
 
 bool RazorscaleFuseArmorAction::Execute(Event /*event*/)
 {
-    // We already know from isUseful() that:
-    //  1) This bot can tank, AND
-    //  2) There is at least one main tank (possibly this bot) with Fuse Armor >= threshold.
-
     RazorscaleBossHelper bossHelper(botAI);
-
-    // Attempt to reassign the roles based on health/Fuse Armor debuff
     bossHelper.AssignRolesBasedOnHealth();
     return true;
 }

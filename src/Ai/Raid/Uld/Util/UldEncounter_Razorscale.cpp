@@ -238,11 +238,9 @@ bool RazorscaleBossHelper::AreRolesAssigned() const
     if (!group)
         return false;
 
-    // Retrieve the group member slot list (GUID + flags + other info)
     Group::MemberSlotList const& slots = group->GetMemberSlots();
     for (auto const& slot : slots)
     {
-        // Check if this member has the MAINTANK flag
         if (slot.flags & MEMBER_FLAG_MAINTANK)
         {
             return true;
@@ -254,12 +252,10 @@ bool RazorscaleBossHelper::AreRolesAssigned() const
 
 bool RazorscaleBossHelper::CanSwapRoles() const
 {
-    // Identify the GUID of the current bot
     ObjectGuid botGuid = bot->GetGUID();
     if (!botGuid)
         return false;
 
-    // If no entry exists yet for this bot, initialize it to 0
     auto& lastRoleSwapTime = razorscaleStates.For(bot->GetInstanceId()).lastRoleSwapTime;
     auto it = lastRoleSwapTime.find(botGuid);
     if (it == lastRoleSwapTime.end())
@@ -268,7 +264,6 @@ bool RazorscaleBossHelper::CanSwapRoles() const
         it = lastRoleSwapTime.find(botGuid);
     }
 
-    // Compare the current time against the stored time
     std::time_t currentTime = std::time(nullptr);
     std::time_t lastSwapTime = it->second;
 
@@ -277,7 +272,6 @@ bool RazorscaleBossHelper::CanSwapRoles() const
 
 void RazorscaleBossHelper::AssignRolesBasedOnHealth()
 {
-    // Check if enough time has passed since last swap
     if (!CanSwapRoles())
         return;
 
@@ -300,11 +294,9 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
         tankCandidates.push_back(member);
     }
 
-    // If there are no viable tanks, do nothing
     if (tankCandidates.empty())
         return;
 
-    // Sort by highest max health first
     std::sort(tankCandidates.begin(), tankCandidates.end(),
         [](Player* a, Player* b)
         {
@@ -312,12 +304,10 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
         }
     );
 
-    // Pick the top candidate
     Player* newMainTank = tankCandidates[0];
-    if (!newMainTank) // Safety check
+    if (!newMainTank)
         return;
 
-    // Unflag everyone from main tank
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -325,10 +315,8 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
             group->SetGroupMemberFlag(member->GetGUID(), false, MEMBER_FLAG_MAINTANK);
     }
 
-    // Assign the single main tank
     group->SetGroupMemberFlag(newMainTank->GetGUID(), true, MEMBER_FLAG_MAINTANK);
 
-    // Yell a message regardless of whether the new main tank is a bot or a real player
     const std::string playerName = newMainTank->GetName();
     const std::string text = playerName + " set as main tank!";
     bot->Yell(text, LANG_UNIVERSAL);
@@ -337,7 +325,6 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
     if (!botGuid)
         return;
 
-    // Set current time in the cooldown map for this bot to start cooldown
     razorscaleStates.For(bot->GetInstanceId()).lastRoleSwapTime[botGuid] = std::time(nullptr);
 }
 
@@ -407,9 +394,8 @@ std::array<ObjectGuid, RazorscaleBossHelper::HARPOON_ENTRY_COUNT> const& Razorsc
     if (!bot)
         return harpoons;
 
-    // One visit collects every harpoon in the order FindNearestGameObject's own searcher walks them
-    // (same phase filter, same cells). Replaying its range check per entry over that list then picks
-    // the same object it would.
+    // One visit, in the order FindNearestGameObject's own searcher walks them (same phase filter, same
+    // cells), so replaying its range check per entry over the list picks the same object it would.
     AnyRazorscaleHarpoonCheck anyHarpoon;
     std::vector<GameObject*> found;
     Acore::GameObjectListSearcher<AnyRazorscaleHarpoonCheck> searcher(bot, found, anyHarpoon);

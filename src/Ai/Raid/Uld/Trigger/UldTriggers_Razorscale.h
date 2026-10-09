@@ -5,9 +5,6 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-//
-// Razorscale
-//
 class RazorscaleFlyingAloneTrigger : public Trigger
 {
 public:

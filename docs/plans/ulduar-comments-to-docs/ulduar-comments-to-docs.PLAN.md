@@ -108,6 +108,6 @@ into the docs`, written to a scratchpad file and committed with `git commit -F`;
 - [ ] Algalon
 - [x] Ignis
 - [x] Auriaya
-- [ ] Kologarn
-- [ ] Razorscale
+- [x] Kologarn
+- [x] Razorscale
 - [ ] Shared files → README.md; then delete this plan
