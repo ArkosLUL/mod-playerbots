@@ -74,8 +74,7 @@ bool KologarnRubbleTankAction::Execute(Event event)
     if (rubble->GetVictim() != bot && botAI->DoSpecificAction("taunt spell", event, true))
         return true;
 
-    // Rubble run at 8.0 yd/s against a player's 7.0, so they are held clear of the raid rather than
-    // kited. The offset is lateral: -X is the lane an eyebeam target runs down.
+    // Held, not kited: rubble run 8.0 yd/s against a player's 7.0.
     Position const hold = GetKologarnRubbleHoldSpot(botAI, rubble);
     if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) < sPlayerbotAIConfig.followDistance)
         return false;
@@ -171,8 +170,8 @@ bool KologarnEyebeamAction::isUseful()
 
 bool KologarnEyebeamAction::Execute(Event /*event*/)
 {
-    // The eye chases its own target at 5.5 yd/s against a player's 7.0, so the one being chased
-    // outruns it - but only while it keeps moving. Everyone else just clears the 3 yd beam.
+    // The chased bot outruns the eye (5.5 yd/s against 7.0) only while it keeps moving. Everyone else
+    // just clears the 3 yd beam.
     if (Unit* chasing = GetKologarnEyebeamChasing(botAI, bot))
     {
         Position const step = GetKologarnEyebeamEscapeStep(bot, chasing);

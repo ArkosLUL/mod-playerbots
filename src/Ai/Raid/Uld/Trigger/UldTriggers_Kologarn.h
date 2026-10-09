@@ -5,13 +5,6 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-//
-// Kologarn
-//
-// Targeting is decided per role in code, with no raid target icons: Skull means "everyone DPS this"
-// and Moon is the CC channel, so borrowing them for a per-role split corrupts the generic engine
-// behaviour. Same model as the Eredar Twins in SWP.
-//
 class KologarnBodyTankTrigger : public Trigger
 {
 public:

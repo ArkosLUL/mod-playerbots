@@ -115,8 +115,8 @@ bool KologarnBodyUncoveredTrigger::IsActive()
     if (!botAI->IsTank(bot) && !botAI->IsMelee(bot))
         return false;
 
-    // Breath only fires when the victim is out of melee range *and* SelectNearbyTarget finds nobody
-    // else close, so any body in melee suppresses it - this bot standing there is already the fix.
+    // Breath needs the victim out of melee *and* SelectNearbyTarget finding nobody else close, so any
+    // body in melee stops it. This bot standing there is already the fix.
     if (bot->IsWithinMeleeRange(kologarn))
         return false;
 

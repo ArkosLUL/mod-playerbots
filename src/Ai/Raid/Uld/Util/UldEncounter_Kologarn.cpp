@@ -202,8 +202,8 @@ Unit* GetKologarnEyebeamChasing(PlayerbotAI* botAI, Player* bot)
     if (!bot)
         return nullptr;
 
-    // The eye MoveChases whoever summoned it, so its victim is the one spell target - and it can be
-    // well beyond the react radius while still closing, so this sweeps the whole room.
+    // The eye MoveChases its summoner, so its victim is the spell target. It can still be closing from
+    // past the react radius, so this sweeps the whole room.
     Unit* eye = GetKologarnNearestEyebeam(botAI, bot, ULDUAR_KOLOGARN_ROOM_SEARCH_RADIUS);
     return eye && eye->GetVictim() == bot ? eye : nullptr;
 }
@@ -248,7 +248,7 @@ Position GetKologarnEyebeamEscapeStep(Player* bot, Unit* eye)
 
         Position candidate(x, y, ULDUAR_KOLOGARN_WALKWAY_Z, bot->GetOrientation());
 
-        // Clamped flat against a wall - no ground gained, so it buys no distance from the beam.
+        // Clamped flat against a wall: no ground gained, so no distance from the beam.
         float const moved = candidate.GetExactDist2d(botX, botY);
         if (moved < ULDUAR_KOLOGARN_EYEBEAM_RADIUS)
             continue;

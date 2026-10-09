@@ -56,9 +56,8 @@ void DefineKologarn(EncounterBuilder& e)
     e.Node<KologarnBodyUncoveredTrigger, KologarnBodyUncoveredAction>(ACTION_EMERGENCY + 1);
     e.Node<KologarnEyebeamTrigger, KologarnEyebeamAction>(ACTION_EMERGENCY);
 
-    // The rows above pick every bot's target, so the generic pickers are shut out entirely. Otherwise
-    // "dps target", which falls back to a smart target when no raid icon is set and so is never null,
-    // fights the role assignment on alternating ticks.
+    // The rows above pick every bot's target. "dps target" falls back to a smart target with no icon set,
+    // so it's never null and would fight them on alternating ticks.
     e.OwnTargeting("kologarn disable automatic targeting", Role::Any, KologarnOwnsTargets,
                    Family::DpsAssist | Family::TankAssist | Family::DebuffOnAttacker);
 
