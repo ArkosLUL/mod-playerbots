@@ -467,6 +467,20 @@ from 50 yd, stood in the air for 23 s with every room node reading `yogg.room = 
 where it hung. A third rule zeroes the family whenever the current target is the Brain, plus
 `killing spree`, which is outside it: it put a rogue on the Brain's model at z 265 for 20 s until
 Induce Madness charmed it.
+
+**That druid was a cat, and only the cat's leap strands.** Feral Charge - Cat 49376 is
+`SPELL_EFFECT_JUMP_DEST` to a spot behind the target, which under the Brain is air. Warrior Charge
+11578 and Intercept 20252 are `SPELL_EFFECT_CHARGE`, and `Spell::CheckCast` paths a target whose
+combat reach exceeds melee range to its ring facing the caster at the caster's ground Z: 31.5 yd from
+the Brain, and navprobe reads that whole ring as floor (24/24 headings, settled z 239.0-241.2). So
+`yogg-saron brain charge` (`ACTION_RAID + 0.25`, over the brain spot walk, which outranks every class
+charge node) casts Charge or Intercept itself on the way in: Brain targeted, rti `square`, not
+leaving or held, and the ring at least `…_BRAIN_CHARGE_MIN_GAIN` (8 yd) nearer the brain spot than the
+bot. It clears `last movement` so the walk re-issues on landing. Worth ~1.5-2 s per warrior per wave.
+The block above stays, so no charge fires on the way out and cats never leap; `yogg-saron brain dash`
+gives them Dash (+70%, 15 s, 3 min) on the `tobrain` walk instead, never in the Chamber unless they
+lack Nitro boots, since both are aura 31 and only the higher counts. Probed as `yogg.charge` and
+`yogg.dash`.
  Catch the whole `CastReachTargetSpellAction` family: the Fury chain is charge →
 intercept → `reach melee`, so a partial veto only moves the problem down the list, and `reach melee`
 surviving is what walks melee in on foot. Blink and Disengage are plain `CastSpellAction`s and have to
@@ -1514,6 +1528,32 @@ always keeps one no lower GUID is also on, so two that race onto a free one sett
 Reprisal (63305) reflects 60% of every hit at its attacker, so the split changes nobody's incoming
 damage. Probed as `yogg.spread`: `free`, `shared` or `kept`.
 
+**In Icecrown and Stormwind a bot clears its share, then waits at the door.** Over nine pulls the whole
+team stood 106-130 yd from the melee spot when the door opened, having swarmed the last tentacle, and
+took 11-14 s to reach the Brain without Nitro. `YoggSaronTickIllusionShare` latches per bot per tick
+what it may take, and `YoggSaronIllusionTentacleAllowed` gates the resolver, its `dps target`
+fallback, the drop of a current target and `WalkIntoRoom`:
+
+- **Icecrown:** each bot joins the group (centroids of summon group 2) with the fewest bots planned so
+  far, ties east, west, south, so 9 → 3/3/3 and a 10-man's 3 → 1/1/1, reset per `waveOrdinal`. It
+  takes only its own group, and another only once its own is clear and nobody planned for that one is
+  alive in the room.
+- **Stormwind:** a bot whose first tentacle (held when it died) is inside
+  `…_STORMWIND_HELPER_RADIUS` (40 yd) of the stage spot, the two at 31 yd, keeps clearing. The rest
+  keep the one they are on or take one no other room member targets, so a 10-man or a death never
+  leaves one uncovered.
+- **Both:** a player's mark (`rti target`) is always allowed; everything lifts under
+  `…_SHARE_LIFT_MS` (25 s) of Induce Madness, since the slowest clear left ~29 s and an uncleared room
+  charms everyone. Healers, the Chamber and bots off the brain level have no limit.
+
+With nothing allowed and the room alive the room state reads `staged`: the illusion room node walks
+the bot to `…_ICECROWN_STAGE_SPOT` / `…_STORMWIND_STAGE_SPOT`, and `yogg-saron illusion stage hold`
+blocks the reprisal hold's target pickers except `AttackRti`. The spots sit on the navmesh path from
+the landing to the Brain, 6 / 3 yd past the landing: both doors are inside the brain room's 50 yd
+circle (Icecrown 49.0, Stormwind 45.7), so a bot at a door would read as already in the brain room.
+Arrival is 1.5 yd, since each spot is only ~3 yd inside either circle. The Chamber keeps plain spread.
+Probed as `yogg.share`: the group name, `orphan`, `first`, `helper`, `done`, `staged` or `lifted`.
+
 **Grim Reprisal is what kills the brain team, and only a hit triggers it.**
 `spell_yogg_saron_grim_reprisal_aura` casts 64039 for 60% of the hit at the attacker, totems skipped;
 63305's `ProcTypeMask` 0x222A8 has no `TAKEN_PERIODIC` bit and no `spell_proc` or linked override, so
@@ -1715,10 +1755,12 @@ as `dup` (3.5 s standing). The brain spot walk clears one the same way (`YoggSar
 a bot landing 2.6 s before its door opened was still booked on the room walk to a far tentacle, had
 26 brain spot walks refused, ran 98 yd east and 177 back, and reached the Brain 15.9 s after the door.
 
-**Nitro Boosts on the walk to the Brain.** Boots enchant 3606 casts 55004 (3 min, no backfire in a
-raid) for 54861, +150% run speed for 5 s: about 7.5 s saved, every third wave. `yogg-saron nitro
-boosts` fires on `tobrain` with the brain spot over 40 yd away, never once leaving, and never claims
-the tick. 15 bots carry it and none had ever used it: `UseTinkerAction` takes stat auras only.
+**Nitro Boosts on the walk out of the Chamber.** Boots enchant 3606 casts 55004 (3 min, no backfire
+in a raid) for 54861, +150% run speed for 5 s: about 7.5 s saved. `yogg-saron nitro boosts` fires on
+`tobrain` in the Chamber with the brain spot over 40 yd away, never once leaving, and never claims the
+tick. Chamber only: rooms cycle every three 80 s waves, so the boots went to whichever room came first
+and the Chamber, 155-175 yd from the Brain at door-open, had them in 2 of 9 pulls (14-20 s to the
+Brain without, 12.5 s with). A Chamber every 240 s against the 3 min cooldown finds them ready. 15 bots carry it and none had ever used it: `UseTinkerAction` takes stat auras only.
 Probed as `yogg.nitro` (`used` or `cooldown`).
 
 **No Sanity Well reaches the brain level.** All five stand on the platform and nothing restores Sanity
@@ -1750,7 +1792,7 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Thirty-one `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
+**Thirty-four `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,
@@ -1759,7 +1801,7 @@ not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `y
 `yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
 `yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour`,
 `yogg.judgement`, `yogg.spread`, `yogg.sanity`, `yogg.stunned`, `yogg.tankhold`, `yogg.walkstep`, `yogg.reprisal`,
-`yogg.benched`, `yogg.nitro` and `yogg.brainspot`,
+`yogg.benched`, `yogg.nitro`, `yogg.brainspot`, `yogg.share`, `yogg.dash` and `yogg.charge`,
 beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
 Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
 circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand

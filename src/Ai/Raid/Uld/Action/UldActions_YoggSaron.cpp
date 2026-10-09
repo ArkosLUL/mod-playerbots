@@ -71,6 +71,17 @@ bool IsYoggSaronFocusedGuardian(Unit* unit)
     return entry == NPC_GUARDIAN_OF_YS || entry == NPC_IMMORTAL_GUARDIAN || entry == NPC_MARKED_IMMORTAL_GUARDIAN;
 }
 
+// A cast or channel aimed at this unit, so a drop cuts that and lets a self-heal land.
+bool YoggSaronCastingAt(Player* bot, Unit* target)
+{
+    for (CurrentSpellTypes const type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL})
+        if (Spell* spell = bot->GetCurrentSpell(type))
+            if (spell->m_targets.GetUnitTarget() == target)
+                return true;
+
+    return false;
+}
+
 // Drops a forced walk still booked for somewhere else, since a forced move waits out another forced one's
 // hold, up to 5 s. 2D, as the walk stores its end at the ground height it pathed to.
 void YoggSaronTakeOverForcedWalk(LastMovement& last, Position const& destination)
@@ -717,6 +728,10 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
     if (!candidate || !candidate->IsAlive())
         return false;
 
+    // Only this bot's share of an Icecrown or Stormwind room.
+    if (brain.brainLevel && TierOf(candidate, true) <= 1 && !YoggSaronIllusionTentacleAllowed(botAI, candidate))
+        return false;
+
     // Phase 3 splits the raid: ranged take the Guardians and the phase 2 leftovers, melee stay on Yogg and
     // only hit a Guardian near the tank during a gaze or once beacon-healed. Their area damage still
     // reaches the pile. Nobody hits one a tank is not holding.
@@ -939,6 +954,9 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     // about Crush or Guardian threat though: it put melee on a lone live Crusher for ~150 bot-seconds
     // in one pull.
     Unit* fallback = AI_VALUE(Unit*, "dps target");
+    if (fallback && brainLevel && TierOf(fallback, true) <= 1 && !YoggSaronIllusionTentacleAllowed(botAI, fallback))
+        return nullptr;
+
     if (fallback &&
         (fallback->GetEntry() == NPC_CRUSHER_TENTACLE || fallback->GetEntry() == NPC_BRAIN ||
          IsYoggSaronFocusedGuardian(fallback)) &&
@@ -1087,16 +1105,17 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
     if (YoggSaronReprisalHold(botAI))
     {
         if (currentTarget)
-        {
-            bool aimedAtIt = false;
-            for (CurrentSpellTypes const type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL})
-                if (Spell* spell = bot->GetCurrentSpell(type))
-                    aimedAtIt = aimedAtIt || spell->m_targets.GetUnitTarget() == currentTarget;
-
-            DropTarget(currentTarget, aimedAtIt);
-        }
+            DropTarget(currentTarget, YoggSaronCastingAt(bot, currentTarget));
 
         return false;
+    }
+
+    // Off a tentacle outside its share, since a null resolve keeps the old target.
+    if (currentTarget && currentTarget->IsAlive() && YoggSaronOnBrainLevel(bot) && TierOf(currentTarget, true) <= 1 &&
+        !YoggSaronIllusionTentacleAllowed(botAI, currentTarget))
+    {
+        DropTarget(currentTarget, YoggSaronCastingAt(bot, currentTarget));
+        currentTarget = nullptr;
     }
 
     // Healers take no target in an illusion room or in phase 3. A target is what reach spell walks them
@@ -1399,7 +1418,7 @@ bool YoggSaronIllusionRoomAction::Execute(Event /*event*/)
     bool resultSetRtiMark = SetRtiMark(yoggSaronTrigger);
     bool resultGoToBrainRoom = GoToBrainRoom(yoggSaronTrigger);
 
-    return resultSetRtiMark || resultGoToBrainRoom || WalkIntoRoom();
+    return resultSetRtiMark || resultGoToBrainRoom || WalkIntoRoom() || WalkToStage();
 }
 
 bool YoggSaronIllusionRoomAction::WalkIntoRoom()
@@ -1407,8 +1426,8 @@ bool YoggSaronIllusionRoomAction::WalkIntoRoom()
     if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_WALKING_IN || PlayerbotAI::IsHeal(bot))
         return false;
 
-    // Walk at the nearest tentacle, because the middle is the one place in the room there is never one
-    // to fight. It is the centroid of the whole summon group, so they ring it: 27-29 yd out in
+    // Walk at the nearest tentacle it may take, because the middle is the one place in the room there is
+    // never one to fight. It is the centroid of the whole summon group, so they ring it: 27-29 yd out in
     // Stormwind, where two melee walked to within 8.4 and 0.0 yd of it and then back out again, 117 yd
     // of walking for a 79 yd trip and a first swing 16 s after landing. Getting a tentacle into line of
     // sight is all the dps resolver ever wanted, and the nearest one is the shortest way to do it.
@@ -1417,7 +1436,9 @@ bool YoggSaronIllusionRoomAction::WalkIntoRoom()
         return false;
 
     std::vector<Unit*> const mobs = GetYoggSaronRoomIllusionMobs(botAI);
-    Position const destination = mobs.empty() ? middle : mobs.front()->GetPosition();
+    auto const share = std::find_if(mobs.begin(), mobs.end(),
+                                    [this](Unit* mob) { return YoggSaronIllusionTentacleAllowed(botAI, mob); });
+    Position const destination = share == mobs.end() ? middle : (*share)->GetPosition();
 
     if (!YoggSaronWalkMakingProgress(botAI, "illusion", destination))
         return false;
@@ -1426,6 +1447,20 @@ bool YoggSaronIllusionRoomAction::WalkIntoRoom()
 
     return MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+}
+
+bool YoggSaronIllusionRoomAction::WalkToStage()
+{
+    Position spot;
+    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_STAGED || !YoggSaronIllusionStageSpot(bot, spot) ||
+        bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_STAGE_ARRIVED_RADIUS)
+        return false;
+
+    YoggSaronTakeOverForcedWalk(AI_VALUE(LastMovement&, "last movement"), spot);
+    YoggSaronReleaseStalledWalk(botAI, "stage", spot);
+
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronIllusionRoomAction::SetRtiMark(YoggSaronTrigger yoggSaronTrigger)
@@ -1515,6 +1550,41 @@ bool YoggSaronNitroBoostsAction::Execute(Event /*event*/)
         RaidObs::NoteDerived(bot, "yogg.nitro", "used");
 
     // The walk to the Brain still wants this tick.
+    return false;
+}
+
+bool YoggSaronBrainDashAction::Execute(Event /*event*/)
+{
+    if (!botAI->CastSpell("dash", bot))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.dash", "used");
+
+    // The walk to the Brain still wants this tick.
+    return false;
+}
+
+bool YoggSaronBrainChargeAction::Execute(Event /*event*/)
+{
+    Unit* brain = AI_VALUE(Unit*, "current target");
+    if (!brain || brain->GetEntry() != NPC_BRAIN)
+        return false;
+
+    for (char const* spell : {"charge", "intercept"})
+    {
+        if (!botAI->CanCastSpell(spell, brain) || !botAI->CastSpell(spell, brain))
+            continue;
+
+        // The brain spot walk's booking would refuse the same point for 5 s after landing.
+        AI_VALUE(LastMovement&, "last movement").clear();
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.charge", spell);
+
+        return true;
+    }
+
     return false;
 }
 

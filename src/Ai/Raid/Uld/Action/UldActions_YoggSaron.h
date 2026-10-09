@@ -369,6 +369,7 @@ private:
     bool SetRtiMark(YoggSaronTrigger yoggSaronTrigger);
     bool GoToBrainRoom(YoggSaronTrigger yoggSaronTrigger);
     bool WalkIntoRoom();
+    bool WalkToStage();
 };
 
 class YoggSaronIllusionHealerStationAction : public MovementAction
@@ -410,6 +411,27 @@ public:
     static constexpr char const* Name = "yogg-saron nitro boosts action";
 
     YoggSaronNitroBoostsAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+// Dash, and the walk goes on in the same tick.
+class YoggSaronBrainDashAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron brain dash action";
+
+    YoggSaronBrainDashAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+class YoggSaronBrainChargeAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron brain charge action";
+
+    YoggSaronBrainChargeAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };

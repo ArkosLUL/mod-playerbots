@@ -476,7 +476,7 @@ bool YoggSaronIllusionRoomTrigger::IsActive()
     if (GoToBrainRoomRequired())
         return true;
 
-    return WalkIntoRoomRequired();
+    return WalkIntoRoomRequired() || StageRequired();
 }
 
 bool YoggSaronIllusionRoomTrigger::WalkIntoRoomRequired()
@@ -484,6 +484,16 @@ bool YoggSaronIllusionRoomTrigger::WalkIntoRoomRequired()
     // Not the healer: it holds no target, so its room state reads walkingin until the door opens, and a
     // forced walk every tick would cost it every heal ranked below this node. It has its own station.
     return YoggSaronRoomStateOf(botAI) == YOGG_SARON_ROOM_STATE_WALKING_IN && !PlayerbotAI::IsHeal(bot);
+}
+
+bool YoggSaronIllusionRoomTrigger::StageRequired()
+{
+    Position spot;
+    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_STAGED || !YoggSaronIllusionStageSpot(bot, spot) ||
+        bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_STAGE_ARRIVED_RADIUS)
+        return false;
+
+    return YoggSaronWalkMakingProgress(botAI, "stage", spot);
 }
 
 bool YoggSaronIllusionRoomTrigger::GoToBrainRoomRequired()
@@ -566,14 +576,13 @@ bool YoggSaronNitroBoostsTrigger::IsActive()
         YoggSaronLeavingBrainLevel(bot))
         return false;
 
-    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_TO_BRAIN)
+    if (YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_CHAMBER || YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_TO_BRAIN)
         return false;
 
     Position const spot = YoggSaronBrainSpot(bot);
     if (bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_NITRO_MIN_WALK)
         return false;
 
-    // 3 min against 80 s waves, so every third wave.
     if (bot->HasSpellCooldown(NITRO_BOOSTS_USE_SPELL))
     {
         if (RaidObs::Active())
@@ -582,6 +591,67 @@ bool YoggSaronNitroBoostsTrigger::IsActive()
     }
 
     return true;
+}
+
+bool YoggSaronBrainDashTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_DRUID || !IsInBrainLevel() || bot->GetShapeshiftForm() != FORM_CAT ||
+        bot->HasAura(NITRO_BOOSTS_SPEED_SPELL) || YoggSaronLeavingBrainLevel(bot))
+        return false;
+
+    // Dash and Nitro Boosts are the same speed aura and only the higher one counts, so a bot with the
+    // boots leaves the Chamber walk to them.
+    YoggSaronRoom const room = YoggSaronRoomOf(bot);
+    if (room == YOGG_SARON_ROOM_CHAMBER && GetNitroBoostBoots(bot))
+        return false;
+
+    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_TO_BRAIN)
+        return false;
+
+    Position const spot = YoggSaronBrainSpot(bot);
+    if (bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_NITRO_MIN_WALK ||
+        botAI->HasAura("dash", bot))
+        return false;
+
+    if (!botAI->CanCastSpell("dash", bot))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.dash", "cooldown");
+        return false;
+    }
+
+    return true;
+}
+
+bool YoggSaronBrainChargeTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_WARRIOR || !IsInBrainLevel() || AI_VALUE(std::string, "rti") != "square" ||
+        !botAI->CanMove())
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive() || target->GetEntry() != NPC_BRAIN)
+        return false;
+
+    // Way in only: the exit walk owns the bot from here, and the hold has it off the Brain anyway.
+    if (YoggSaronLeavingBrainLevel(bot) || YoggSaronShouldLeaveBrainLevel(botAI) || YoggSaronBrainHeld(botAI))
+        return false;
+
+    // Where the charge lands: the floor ring at both combat reaches from the Brain, on the bot's side.
+    Position const spot = YoggSaronBrainSpot(bot);
+    float const walkLeft = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
+    if (walkLeft <= ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS)
+        return false;
+
+    float const reach = target->GetCombatReach() + bot->GetCombatReach();
+    float const angle = target->GetAngle(bot);
+    float const landX = target->GetPositionX() + std::cos(angle) * reach;
+    float const landY = target->GetPositionY() + std::sin(angle) * reach;
+    float const walkAfter = spot.GetExactDist2d(landX, landY);
+    if (walkLeft - walkAfter < ULDUAR_YOGG_SARON_BRAIN_CHARGE_MIN_GAIN)
+        return false;
+
+    return botAI->CanCastSpell("charge", target) || botAI->CanCastSpell("intercept", target);
 }
 
 bool YoggSaronMoveToExitPortalTrigger::IsActive()

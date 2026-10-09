@@ -1546,6 +1546,18 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.walk_speeds(states, rows), [(4.0, 30.0, 1.0)])
         self.assertEqual(yogg_saron.walk_speeds([(0, "tobrain")], rows), [])
 
+    def test_a_bot_is_on_the_brain_once_it_stops_in_the_brain_room_holding_it(self):
+        brain = 77
+
+        def row(t, x, target, moving):
+            return [t, 9, x, -27.85, 237.5, 0.0, 100.0, 100.0, target, moving]
+
+        rows = [row(1000, 1980.0, brain, 0), row(3000, 2040.0, brain, 0), row(4000, 1990.0, brain, 1),
+                row(5000, 1985.0, 5, 0), row(6000, 1985.0, brain, 0)]
+        # before the door, too far out, still walking and on something else all miss
+        self.assertEqual(yogg_saron.brain_arrival(rows, 2000, brain), 6000)
+        self.assertIsNone(yogg_saron.brain_arrival(rows, 7000, brain))
+
     def test_only_a_turn_while_standing_below_counts_as_a_spin(self):
         def row(t, x, z, o):
             return [t, 9, x, 0.0, z, o]

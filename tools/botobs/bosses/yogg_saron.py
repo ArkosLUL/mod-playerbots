@@ -17,9 +17,11 @@
                                     Induce Madness caught whoever it charmed and what their way out
                                     lost, Nitro Boosts, the walk to the Brain per role, turns on the
                                     spot below, brain spot picks, exits decided outside the brain room,
-                                    what bots were doing when a skull's gaze hit them, and per wave the
-                                    hold short of 30%: from when, why it let go, what leaked and how
-                                    many tentacles were up
+                                    what bots were doing when a skull's gaze hit them, the room shares,
+                                    and per wave who waited at the door, how far out the team stood
+                                    when it opened and when it reached the Brain, Nitro, Dash and
+                                    Brain charges, and the hold short of 30%: from when, why it let
+                                    go, what leaked and how many tentacles were up
     yogg_saron.py <file> --phase3   Heroism against when the raid was in position, which ranged station a
                                     leftover Crusher left them, how fast each role and the brain team
                                     reached its station and the Nitro Boosts spent on it, Immortal
@@ -116,6 +118,9 @@ SPELL_BRAIN_LINK_OK = 63804
 # portal was actually used.
 SPELL_ILLUSION_ROOM = 63988
 SPELL_NITRO_BOOSTS_USE = 55004
+SPELL_DASH = 33357
+# Warrior Charge and Intercept, the two the brain charge node casts at the Brain.
+SPELL_BRAIN_CHARGES = (11578, 20252)
 SPELL_DIMINISH_POWER = 64145
 
 # A step under this between samples is standing still, and a turn past this while standing is a spin:
@@ -379,6 +384,9 @@ ROOM_MIDDLES = {
 # The module's ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE and _RADIUS, its "in the brain room" test.
 BRAIN_ROOM_MIDDLE = (1980.1971, -27.854689)
 BRAIN_ROOM_RADIUS = 50.0
+BRAIN_MELEE_SPOT = (1969.0, -25.4)
+# Inside the brain room and short of its far wall, so a bot reads as on the Brain once it stops here.
+BRAIN_ARRIVAL_RADIUS = 45.0
 # Phase 3 starts when the Brain drops under this, and the exit leaves from anywhere then.
 BRAIN_PHASE_3_PCT = 30.0
 
@@ -1934,6 +1942,16 @@ def show_brain(trace: Trace) -> None:
     if spread:
         print(f"  tentacle picks   : {dict(spread)}")
 
+    # Icecrown groups and Stormwind roles, then the wait at the door. Emit on change, so a count is how
+    # often bots entered that share, not how long they held it.
+    shares = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.share"))
+    if shares:
+        print(f"  room shares      : {dict(shares)}")
+    for key, label in (("yogg.dash", "Dash"), ("yogg.charge", "Brain charges")):
+        found = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, key))
+        if found:
+            print(f"  {label:16} : {dict(found)}")
+
     show_brain_waves(trace)
     show_stalled_walks(trace)
 
@@ -2244,6 +2262,28 @@ def show_brain_waves(trace: Trace) -> None:
               f"  exit {median_or_dash(left, '4.1f')}/{median_or_dash(spare, '4.1f')} s  Brain -{lost:.1f}%"
               f"{outside_note}")
 
+        if door and brain:
+            staged, out, on_brain = 0, [], []
+            for guid in team - healers:
+                own = [row for row in rows.get(guid, []) if start <= row[0] <= stop]
+                at_door = row_before(own, door)
+                if not at_door or at_door[4] >= BRAIN_LEVEL_Z:
+                    continue
+                out.append(math.dist((at_door[2], at_door[3]), BRAIN_MELEE_SPOT))
+                before = [rec["txt"] for rec in state_notes if rec.get("g") == guid and start <= rec["t"] < door]
+                staged += bool(before) and before[-1] == "staged"
+                when = brain_arrival(own, door, brain)
+                if when is not None and when <= im_end:
+                    on_brain.append((when - door) / 1000)
+            casts = [rec for rec in trace.of("cast") if start <= rec["t"] <= stop and rec.get("s") in team]
+            boosts = {"nitro": sum(1 for rec in casts if rec.get("sp") == SPELL_NITRO_BOOSTS_USE),
+                      "dash": sum(1 for rec in casts if rec.get("sp") == SPELL_DASH),
+                      "charge": sum(1 for rec in casts if rec.get("sp") in SPELL_BRAIN_CHARGES and rec.get("tgt") == brain)}
+            print(f"      door open: {staged}/{len(out)} staged, {median_or_dash(out, '.0f')} yd from the melee spot,"
+                  f" on the Brain {median_or_dash(on_brain, '.1f')} s / last"
+                  f" {format(max(on_brain), '.1f') if on_brain else '-'} s,"
+                  f" {', '.join(f'{label} {n}' for label, n in boosts.items())}")
+
         window = brain_hold_window([note for note in hold_notes if start <= note[0] <= min(im_end, stop)])
         if window and brain_rows:
             held, let_go, why = window
@@ -2258,6 +2298,16 @@ def show_brain_waves(trace: Trace) -> None:
                 end = f"the Brain survived at {brain_rows[-1][6]:.1f}%"
             print(f"      brain hold: from {(im_end - held) / 1000:.1f} s left at"
                   f" {at_hold[6] if at_hold else 0:.1f}% with {tentacles_up(held)} tentacles up, {why}{go}{leak}; {end}")
+
+
+def brain_arrival(rows: list[list], door: int, brain: int, radius: float = BRAIN_ARRIVAL_RADIUS) -> int | None:
+    """When a bot first stood still in the brain room with the Brain targeted, at or after the door
+    opened. `rows` are its snapshot rows, [t, guid, x, y, z, o, hp, mana, target, moving, ...]."""
+    for row in rows:
+        if (row[0] >= door and len(row) > 9 and row[8] == brain and not row[9]
+                and math.dist((row[2], row[3]), BRAIN_ROOM_MIDDLE) < radius):
+            return row[0]
+    return None
 
 
 def walk_outcomes(walks: list[tuple[int, str]], steps: list[tuple[int, str]]) -> dict:
@@ -2291,8 +2341,8 @@ def show_stalled_walks(trace: Trace) -> None:
     steps = [(rec.get("g", 0), str(rec.get("txt", ""))) for rec in notes(trace, "yogg.walkstep")]
     # The exit walk is left out: it uses its portal at INTERACTION_DISTANCE, the same 5 yd that counts as
     # arrived, so a bot that got out cleanly often never records one. `caught by it` above is the honest
-    # measure of that walk. These three are the ones that leave a bot standing where it stopped.
-    below = {"illusion", "healer", "brainspot"}
+    # measure of that walk. These are the ones that leave a bot standing where it stopped.
+    below = {"illusion", "healer", "brainspot", "stage"}
 
     rows = {key: value for key, value in walk_outcomes(walks, steps).items()
             if key[1] in below and ("arrived" not in value["branches"] or value["short"])}

@@ -68,6 +68,11 @@ const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE = Position(1927.1511f, 
 const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE = Position(1925.6553f, -121.59296f, 239.98965f);
 const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_MIDDLE = Position(2104.5667f, -25.509348f, 242.64679f);
 const Position ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE = Position(1980.1971f, -27.854689f, 236.06789f);
+const Position ULDUAR_YOGG_SARON_ICECROWN_CLUSTERS[ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT] = {
+    Position(1901.60f, -107.58f, 240.09f), Position(1916.27f, -137.88f, 240.07f),
+    Position(1952.63f, -135.08f, 240.10f)};
+const Position ULDUAR_YOGG_SARON_ICECROWN_STAGE_SPOT = Position(1952.10f, -73.62f, 240.008f);
+const Position ULDUAR_YOGG_SARON_STORMWIND_STAGE_SPOT = Position(1955.17f, 18.87f, 239.721f);
 const Position ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT = Position(1969.0f, -25.4f, 237.474f);
 const Position ULDUAR_YOGG_SARON_BRAIN_WEST_SPOT = Position(1948.05f, -23.76f, 241.785f);
 const Position ULDUAR_YOGG_SARON_BRAIN_SOUTH_SPOT = Position(1992.4f, -52.8f, 240.585f);
@@ -144,6 +149,32 @@ struct YoggSaronEncounterState
 
     // The illusion room each bot was last in, which picks its brain spot after it has walked out.
     std::unordered_map<ObjectGuid, YoggSaronRoom> lastIllusionRoom;
+
+    // Who clears what in Icecrown and Stormwind, for the wave in shareWave. See
+    // YoggSaronIllusionTentacleAllowed.
+    uint32 shareWave = 0;
+    std::unordered_map<ObjectGuid, uint8> icecrownCluster;
+    enum StormwindRole : uint8
+    {
+        STORMWIND_FIRST,
+        STORMWIND_HELPER,
+        STORMWIND_DONE,
+    };
+    struct StormwindShare
+    {
+        ObjectGuid held;
+        bool heldNear = false;
+        StormwindRole role = STORMWIND_FIRST;
+    };
+    std::unordered_map<ObjectGuid, StormwindShare> stormwindShare;
+    // What each Icecrown or Stormwind bot may take, latched every tick in YoggSaronTickIllusionShare so
+    // the resolver, the room state and the stage hold read one answer. No entry means no limit.
+    struct IllusionShare
+    {
+        std::vector<ObjectGuid> allowed;
+        bool staged = false;
+    };
+    std::unordered_map<ObjectGuid, IllusionShare> illusionShare;
     // Whether each portal spot (west, south, north) sees the Brain: -1 not asked yet. Neither moves.
     std::array<int8, 3> brainSpotSight{-1, -1, -1};
 
@@ -303,6 +334,7 @@ struct YoggSaronPassReads
     bool healerStationRead = false;
     bool healerStationFound = false;
     Position healerStation;
+
 };
 
 thread_local YoggSaronPassReads yoggSaronPassReads;
@@ -540,9 +572,12 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
             // behind a doorway, the dps resolver will not pick what it cannot see, and nothing else
             // in the fight moves a bot once the portal has dropped it.
             Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
-            state = target && target->IsAlive() && bot->IsWithinLOSInMap(target)
-                        ? YOGG_SARON_ROOM_STATE_FIGHTING
-                        : YOGG_SARON_ROOM_STATE_WALKING_IN;
+            if (target && target->IsAlive() && bot->IsWithinLOSInMap(target))
+                state = YOGG_SARON_ROOM_STATE_FIGHTING;
+            else if (YoggSaronIllusionStaged(botAI))
+                state = YOGG_SARON_ROOM_STATE_STAGED;
+            else
+                state = YOGG_SARON_ROOM_STATE_WALKING_IN;
             break;
         }
         default:
@@ -551,7 +586,8 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
 
     if (RaidObs::Active())
     {
-        char const* names[] = {"none", "walkingin", "fighting", "doorshut", "tobrain", "atbrain", "reprisal"};
+        char const* names[] = {"none",   "walkingin", "fighting", "doorshut",
+                               "tobrain", "atbrain",  "reprisal", "staged"};
         RaidObs::NoteDerived(bot, "yogg.roomstate", names[state]);
     }
 
@@ -4427,6 +4463,204 @@ void YoggSaronTickReprisal(PlayerbotAI* botAI)
         state.reprisalHold.erase(guid);
 }
 
+// The share plans are per wave: the next team lands with nothing assigned.
+YoggSaronEncounterState& YoggSaronShareStateFor(Player* bot)
+{
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    if (state.shareWave != state.waveOrdinal)
+    {
+        state.shareWave = state.waveOrdinal;
+        state.icecrownCluster.clear();
+        state.stormwindShare.clear();
+    }
+
+    return state;
+}
+
+uint8 YoggSaronIcecrownClusterAt(Unit const* unit)
+{
+    uint8 nearest = 0;
+    for (uint8 cluster = 1; cluster < ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT; ++cluster)
+        if (unit->GetExactDist2d(ULDUAR_YOGG_SARON_ICECROWN_CLUSTERS[cluster]) <
+            unit->GetExactDist2d(ULDUAR_YOGG_SARON_ICECROWN_CLUSTERS[nearest]))
+            nearest = cluster;
+
+    return nearest;
+}
+
+// Joins the group with the fewest bots so far, nearest the landing first on a tie. Bots land one after
+// another, so nine come out 3/3/3 and a 10-man's three 1/1/1.
+uint8 YoggSaronIcecrownClusterOf(YoggSaronEncounterState& state, Player* bot)
+{
+    auto const it = state.icecrownCluster.find(bot->GetGUID());
+    if (it != state.icecrownCluster.end())
+        return it->second;
+
+    std::array<uint32, ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT> planned{};
+    for (auto const& [guid, cluster] : state.icecrownCluster)
+        ++planned[cluster];
+
+    // East, west, south.
+    constexpr std::array<uint8, ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT> byLandingDistance = {2, 0, 1};
+    uint8 joined = byLandingDistance[0];
+    for (uint8 const cluster : byLandingDistance)
+        if (planned[cluster] < planned[joined])
+            joined = cluster;
+
+    state.icecrownCluster[bot->GetGUID()] = joined;
+    return joined;
+}
+
+// Somebody planned for this group is still alive in the room. Reprisal-held counts, it comes back.
+bool YoggSaronIcecrownClusterManned(YoggSaronEncounterState const& state, Player* bot, uint8 cluster)
+{
+    for (auto const& [guid, planned] : state.icecrownCluster)
+    {
+        if (planned != cluster || guid == bot->GetGUID())
+            continue;
+
+        Player* member = ObjectAccessor::FindPlayer(guid);
+        if (member && member->IsAlive() && YoggSaronRoomOf(member) == YOGG_SARON_ROOM_ICECROWN)
+            return true;
+    }
+
+    return false;
+}
+
+// Another live damage dealer in the room has this tentacle targeted, humans included.
+bool YoggSaronTentacleHeldByOther(Player* bot, Unit* tentacle, YoggSaronRoom room)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member != bot && member->IsAlive() && !PlayerbotAI::IsHeal(member) &&
+            member->GetTarget() == tentacle->GetGUID() && YoggSaronRoomOf(member) == room)
+            return true;
+    }
+
+    return false;
+}
+
+// Latched here, before the triggers run, so the resolver, the room state and the stage hold all read
+// one answer per tick. See YoggSaronIllusionTentacleAllowed for the rules.
+void YoggSaronTickIllusionShare(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronRoom const room = YoggSaronRoomOf(bot);
+    bool const applies = (room == YOGG_SARON_ROOM_ICECROWN || room == YOGG_SARON_ROOM_STORMWIND) &&
+                         bot->IsAlive() && !PlayerbotAI::IsHeal(bot);
+
+    YoggSaronEncounterState& state = YoggSaronShareStateFor(bot);
+    if (!applies)
+    {
+        state.illusionShare.erase(bot->GetGUID());
+        return;
+    }
+
+    std::vector<Unit*> const mobs = GetYoggSaronRoomIllusionMobs(botAI);
+    YoggSaronEncounterState::IllusionShare& share = state.illusionShare[bot->GetGUID()];
+    share.allowed.clear();
+
+    auto const allow = [&share](Unit* mob) { share.allowed.push_back(mob->GetGUID()); };
+
+    std::string label;
+    if (YoggSaronInduceMadnessWithin(botAI, ULDUAR_YOGG_SARON_SHARE_LIFT_MS))
+    {
+        std::for_each(mobs.begin(), mobs.end(), allow);
+        label = "lifted";
+    }
+    else if (room == YOGG_SARON_ROOM_ICECROWN)
+    {
+        static constexpr char const* names[ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT] = {"west", "south", "east"};
+        uint8 const own = YoggSaronIcecrownClusterOf(state, bot);
+
+        std::array<bool, ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT> live{};
+        for (Unit* mob : mobs)
+            live[YoggSaronIcecrownClusterAt(mob)] = true;
+
+        if (live[own])
+        {
+            for (Unit* mob : mobs)
+                if (YoggSaronIcecrownClusterAt(mob) == own)
+                    allow(mob);
+
+            label = names[own];
+        }
+        else
+        {
+            for (uint8 cluster = 0; cluster < ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT; ++cluster)
+            {
+                if (!live[cluster] || YoggSaronIcecrownClusterManned(state, bot, cluster))
+                    continue;
+
+                for (Unit* mob : mobs)
+                    if (YoggSaronIcecrownClusterAt(mob) == cluster)
+                        allow(mob);
+            }
+
+            label = "orphan";
+        }
+    }
+    else
+    {
+        YoggSaronEncounterState::StormwindShare& stormwind = state.stormwindShare[bot->GetGUID()];
+        Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+        bool const onTentacle =
+            target && target->IsAlive() &&
+            std::find(ULDUAR_YOGG_SARON_ILLUSION_MOBS.begin(), ULDUAR_YOGG_SARON_ILLUSION_MOBS.end(),
+                      target->GetEntry()) != ULDUAR_YOGG_SARON_ILLUSION_MOBS.end();
+
+        // The role comes from the first tentacle the bot was on when it died, whoever killed it.
+        if (stormwind.role == YoggSaronEncounterState::STORMWIND_FIRST)
+        {
+            if (onTentacle)
+            {
+                stormwind.held = target->GetGUID();
+                stormwind.heldNear = target->GetExactDist2d(ULDUAR_YOGG_SARON_STORMWIND_STAGE_SPOT) <=
+                                     ULDUAR_YOGG_SARON_STORMWIND_HELPER_RADIUS;
+            }
+            else if (!stormwind.held.IsEmpty())
+            {
+                Unit* held = ObjectAccessor::GetUnit(*bot, stormwind.held);
+                if (!held || !held->IsAlive())
+                    stormwind.role = stormwind.heldNear ? YoggSaronEncounterState::STORMWIND_HELPER
+                                                        : YoggSaronEncounterState::STORMWIND_DONE;
+            }
+        }
+
+        if (stormwind.role == YoggSaronEncounterState::STORMWIND_DONE)
+        {
+            for (Unit* mob : mobs)
+                if ((onTentacle && mob == target) || !YoggSaronTentacleHeldByOther(bot, mob, room))
+                    allow(mob);
+
+            label = "done";
+        }
+        else
+        {
+            std::for_each(mobs.begin(), mobs.end(), allow);
+            label = stormwind.role == YoggSaronEncounterState::STORMWIND_HELPER ? "helper" : "first";
+        }
+    }
+
+    // A player's mark still wins.
+    Unit* marked = botAI->GetAiObjectContext()->GetValue<Unit*>("rti target")->Get();
+    if (marked && std::find(mobs.begin(), mobs.end(), marked) != mobs.end() &&
+        std::find(share.allowed.begin(), share.allowed.end(), marked->GetGUID()) == share.allowed.end())
+        allow(marked);
+
+    share.staged = !mobs.empty() && share.allowed.empty();
+    if (share.staged)
+        label = "staged";
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.share", label);
+}
+
 // Shortest cooldown first, so the cast that gets stopped buys the kick that's back soonest.
 uint32 YoggSaronKickRank(char const* spell)
 {
@@ -4696,11 +4930,48 @@ void YoggSaronTickBeacon(PlayerbotAI* botAI)
 }
 }  // namespace
 
+bool YoggSaronIllusionTentacleAllowed(PlayerbotAI* botAI, Unit* tentacle)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+    auto const it = state.illusionShare.find(bot->GetGUID());
+    if (it == state.illusionShare.end())
+        return true;
+
+    std::vector<ObjectGuid> const& allowed = it->second.allowed;
+    return std::find(allowed.begin(), allowed.end(), tentacle->GetGUID()) != allowed.end();
+}
+
+bool YoggSaronIllusionStaged(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+    auto const it = state.illusionShare.find(bot->GetGUID());
+
+    return it != state.illusionShare.end() && it->second.staged;
+}
+
+bool YoggSaronIllusionStageSpot(Player* bot, Position& spot)
+{
+    switch (YoggSaronRoomOf(bot))
+    {
+        case YOGG_SARON_ROOM_ICECROWN:
+            spot = ULDUAR_YOGG_SARON_ICECROWN_STAGE_SPOT;
+            return true;
+        case YOGG_SARON_ROOM_STORMWIND:
+            spot = ULDUAR_YOGG_SARON_STORMWIND_STAGE_SPOT;
+            return true;
+        default:
+            return false;
+    }
+}
+
 void YoggSaronTick(PlayerbotAI* botAI)
 {
     YoggSaronTickHandover(botAI);
     YoggSaronTickRtiMark(botAI);
     YoggSaronTickReprisal(botAI);
+    YoggSaronTickIllusionShare(botAI);
     YoggSaronTickBrainHold(botAI);
     YoggSaronTickRoar(botAI);
     YoggSaronTickBeacon(botAI);

@@ -150,8 +150,13 @@ constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
 constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY = 60;
 
 // Nitro Boosts (boots enchant), on the walk from a cleared illusion room to the Brain. Shorter walks end
-// before 5 s of +150% buys anything.
+// before 5 s of +150% buys anything. Chamber only: 3 min cooldown against a Chamber every 240 s, so it's
+// always ready for the longest walk out, where it used to go to whichever room came first.
 constexpr float ULDUAR_YOGG_SARON_NITRO_MIN_WALK = 40.0f;
+
+// A warrior's charge at the Brain lands on the floor ring at both combat reaches from it (31.5 yd), so
+// only worth breaking the walk for when that ring is at least this much nearer the bot's brain spot.
+constexpr float ULDUAR_YOGG_SARON_BRAIN_CHARGE_MIN_GAIN = 8.0f;
 
 // A cloud summons a Guardian on any player within 8.5 yd. SelectNearbyTarget's 6 yd goes through
 // _IsWithinDist, which adds both GetObjectSize() values, and that returns UNIT_FIELD_COMBATREACH
@@ -609,6 +614,17 @@ constexpr uint32 ULDUAR_YOGG_SARON_REPRISAL_ALL_IN_MS = 15000;
 constexpr float ULDUAR_YOGG_SARON_REPRISAL_REGROUP_RANGE = 25.0f;
 constexpr float ULDUAR_YOGG_SARON_REPRISAL_REGROUP_STOP = 15.0f;
 
+// Stormwind bots whose first tentacle sits inside this of the stage spot keep clearing once it dies,
+// the rest wait at the door. Takes the two at 31 yd, the next ones are 53 out.
+constexpr float ULDUAR_YOGG_SARON_STORMWIND_HELPER_RADIUS = 40.0f;
+
+// Induce Madness time left under which the Icecrown and Stormwind shares lift and everyone clears
+// whatever's alive. Slowest clear on record left about 29 s, and an uncleared room charms everyone in it.
+constexpr uint32 ULDUAR_YOGG_SARON_SHARE_LIFT_MS = 25000;
+
+// Close enough to the stage spot. Small because the spot is only ~3 yd inside either room circle.
+constexpr float ULDUAR_YOGG_SARON_STAGE_ARRIVED_RADIUS = 1.5f;
+
 // How often the per-bot exposure probes resample. They answer "where was this bot standing when the
 // thing that killed it went off", so a second is fine and a tick is 25 bots of noise.
 constexpr uint32 ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS = 1000;
@@ -726,6 +742,18 @@ extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE;
 
+// Icecrown's nine tentacles stand in three tight groups of three, 33-58 yd apart: west, south, east.
+// A tentacle belongs to the nearest centroid. creature_summon_groups summonerId 33890 group 2.
+constexpr uint8 ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT = 3;
+extern const Position ULDUAR_YOGG_SARON_ICECROWN_CLUSTERS[ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT];
+
+// Where a bot that's done its share of the room waits for the door, on the navmesh path from the landing
+// to the Brain. As close to the door as the room test allows: both doors sit inside the brain room's
+// 50 yd circle (Icecrown 49.0, Stormwind 45.7), so a bot standing at one reads as already in there.
+// 54.8 / 57.0 yd from their own room's middle, 53.7 / 53.0 from the brain room's, settled Z by navprobe.
+extern const Position ULDUAR_YOGG_SARON_ICECROWN_STAGE_SPOT;
+extern const Position ULDUAR_YOGG_SARON_STORMWIND_STAGE_SPOT;
+
 // Where melee hit the Brain from: 12.3 yd west of it and behind it, since it faces east for the whole
 // fight. 30.1 yd 3D against a 32.8 yd melee range (CombatReach 30), on the floor by navprobe and pathed
 // from all three illusion entrances. Anywhere in front, set behind picks its spot at the 3D distance
@@ -838,6 +866,8 @@ enum YoggSaronRoomState : uint32
     // Off the tentacles until healed, see YoggSaronReprisalHold. Has no target, so without its own
     // state it reads as walkingin and the walk-in node marches it back onto one.
     YOGG_SARON_ROOM_STATE_REPRISAL = 6,
+    // Done with its share of an Icecrown or Stormwind room, waiting at the door for the rest.
+    YOGG_SARON_ROOM_STATE_STAGED = 7,
 };
 
 YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI);
@@ -1356,6 +1386,20 @@ Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius, Position const*
 // YoggSaronLiveIllusionMob, which answers "is this room clear" and so returns whichever one the grid
 // visit happened to hand back; this one is for walking somewhere, where which one matters.
 std::vector<Unit*> GetYoggSaronRoomIllusionMobs(PlayerbotAI* botAI);
+
+// Whether this bot may take this tentacle. At door-open everybody stood 106-130 yd from the Brain, deep
+// in the room, so a bot that's done its share waits at the door instead of joining the last tentacle.
+// Icecrown: its own group only, and another one only once its own is clear and nobody of that group is
+// left in the room. Stormwind: a bot whose first tentacle was one of the two by the door keeps clearing,
+// the rest only keep the one they're on or take one nobody else is on, so a 10-man never leaves one
+// uncovered. No limit in the Chamber, for healers, or under ULDUAR_YOGG_SARON_SHARE_LIFT_MS.
+bool YoggSaronIllusionTentacleAllowed(PlayerbotAI* botAI, Unit* tentacle);
+
+// The room isn't clear but nothing left in it is this bot's to take, so it waits at the door.
+bool YoggSaronIllusionStaged(PlayerbotAI* botAI);
+
+// Where a staged bot waits. False outside Icecrown and Stormwind.
+bool YoggSaronIllusionStageSpot(Player* bot, Position& spot);
 
 // Where the brain team's healer stands in an illusion room: the middle of its live tentacles, which is
 // where the melee on them are. The room's own middle is the centroid of the whole summon group, so the

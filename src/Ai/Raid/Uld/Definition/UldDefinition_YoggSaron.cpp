@@ -43,9 +43,10 @@ bool YoggSaronTankTargetOwned(PlayerbotAI* botAI)
 }
 
 // The Brain's own position is 25 yd above its room's floor, so a leap at it leaves the bot hanging in
-// the air with nothing to walk on: one druid charged it, hung there for 23 s and was charmed by
-// Induce Madness. GetDistance hides the gap behind the Brain's combat reach, so 50 yd read as in
-// range. The Influence Tentacles stand on the floor, so charges stay available for those.
+// the air with nothing to walk on: one cat druid's Feral Charge (a jump to a spot behind the target)
+// hung it there for 23 s until Induce Madness charmed it. GetDistance hides the gap behind the Brain's
+// combat reach, so 50 yd read as in range. Warrior Charge and Intercept land on the floor instead, and
+// the brain charge node casts those itself on the way in. Charges at the tentacles stay available.
 bool YoggSaronBrainIsTarget(PlayerbotAI* botAI)
 {
     if (!YoggSaronOnBrainLevel(botAI->GetBot()))
@@ -182,6 +183,9 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Node<YoggSaronBrainSpotTrigger, YoggSaronBrainSpotAction>(ACTION_RAID);
     // Just over the brain spot walk it speeds up. It never claims the tick, so the walk still runs.
     e.Node<YoggSaronNitroBoostsTrigger, YoggSaronNitroBoostsAction>(ACTION_RAID + 0.5f);
+    e.Node<YoggSaronBrainDashTrigger, YoggSaronBrainDashAction>(ACTION_RAID + 0.5f);
+    // Over the brain spot walk, which outranks the class charge nodes, so they never fire on it.
+    e.Node<YoggSaronBrainChargeTrigger, YoggSaronBrainChargeAction>(ACTION_RAID + 0.25f);
 
     // The set dps priority row owns every non-tank's target, so the generic picker stands down rather
     // than pull bots back onto whatever is nearest. This is the exact test that row fires on: zeroing
@@ -211,6 +215,11 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Block("yogg-saron reprisal hold", Role::Any, YoggSaronReprisalHold,
             Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
                 Family::AttackLeastHp | Family::AttackRti | Family::DebuffOnAttacker | Family::Charge);
+
+    // A bot waiting at the door stays there. A player's mark still wins, which the share already allows.
+    e.Block("yogg-saron illusion stage hold", Role::Any, YoggSaronIllusionStaged,
+            Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
+                Family::AttackLeastHp | Family::DebuffOnAttacker | Family::Charge);
 
     // Off the Brain while the brain team holds it, the same families as the reprisal hold. DoTs on
     // attackers stop at the earlier line, since they keep ticking after the bot stops.

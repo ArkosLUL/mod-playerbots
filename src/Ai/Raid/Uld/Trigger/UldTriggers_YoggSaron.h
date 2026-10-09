@@ -217,6 +217,10 @@ private:
     // not pick a target it has no line of sight to. Two of the three rooms put their tentacles behind
     // a doorway, so the raid stood at the landing spot until Induce Madness landed.
     bool WalkIntoRoomRequired();
+
+    // Done with its share while the rest of the room is still alive: to the door, so the walk to the
+    // Brain starts there rather than 106-130 yd out.
+    bool StageRequired();
 };
 
 // The brain team's healer, back to its illusion room's middle while tentacles live. Chasing its own
@@ -262,6 +266,28 @@ public:
     static constexpr char const* Name = "yogg-saron nitro boosts trigger";
 
     YoggSaronNitroBoostsTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// A cat druid's Dash on the same walk, outside the Chamber unless it has no Nitro boots. Its own Feral
+// Charge stays blocked on the Brain: it leaps to a spot behind the target, which is mid-air there.
+class YoggSaronBrainDashTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron brain dash trigger";
+
+    YoggSaronBrainDashTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// A warrior's Charge or Intercept at the Brain on the walk in, never on the way out. Both land on the
+// floor ring round the Brain, where its oversized combat reach sends them, so they shorten the walk.
+class YoggSaronBrainChargeTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron brain charge trigger";
+
+    YoggSaronBrainChargeTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
     bool IsActive() override;
 };
 
