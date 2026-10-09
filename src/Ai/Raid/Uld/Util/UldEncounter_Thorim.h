@@ -42,6 +42,8 @@ enum UlduarThorimIds
     NPC_IRON_HONOR_GUARD = 32875,
     NPC_THORIM_THUNDER_ORB = 33378,  // the pillar orb that lights up 5s before Lightning Charge
     SPELL_UNBALANCING_STRIKE = 62130,
+    // On Thorim, one stack per Lightning Charge: +15% damage and melee haste each.
+    SPELL_THORIM_LIGHTNING_CHARGE_BUFF = 62279,
 
     // Corridor smash, one side per 5s cast. Cancelled once the Colossus is engaged.
     SPELL_THORIM_RUNIC_SMASH_LEFT = 62057,
@@ -278,6 +280,11 @@ struct ThorimEncounterState
     // When he first dropped below the floor line in combat. The whole opening is timed off this.
     RaidObs::ObsValue<uint32> phase2StartMs{"thorim.p2start"};
 
+    // Whoever he hit last scan, and whether that hold turn already got its call. See ThorimTickHumanTankCalls.
+    ObjectGuid humanCallHolder;
+    bool humanCallTurnDone = false;
+    uint32 humanCallScanMs = 0;
+
     // One entry per slot, solved as a set: the three hold ULDUAR_THORIM_RING_SLOT_SEPARATION and everyone in a
     // slot walks to the same point.
     struct RingSlot
@@ -500,6 +507,13 @@ uint8 ThorimAdvanceBalconyStep(Player* bot);
 // instant casts. The tick moves the band, the read only reports it.
 void ThorimTickBarrierBail(PlayerbotAI* botAI, Player* bot);
 bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot);
+
+// From 6 stacks, ~95 s into phase 2, his swings have about doubled.
+constexpr uint32 ULDUAR_THORIM_HUMAN_CALL_STACKS = 6;
+constexpr float ULDUAR_THORIM_HUMAN_CALL_LOW_PCT = 50.0f;
+// Calls a human holding him in phase 2: once per hold turn from ULDUAR_THORIM_HUMAN_CALL_STACKS, and
+// whenever he's under ULDUAR_THORIM_HUMAN_CALL_LOW_PCT. Bots keep their class triggers.
+void ThorimTickHumanTankCalls(PlayerbotAI* botAI);
 
 // Phase 1 split
 

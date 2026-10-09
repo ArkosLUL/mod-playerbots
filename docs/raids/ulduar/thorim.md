@@ -567,6 +567,11 @@ radius carrying a **-51% slow**, which also doubles every reposition. Mana is th
 of cooldowns: healers run **29-30% overheal** with Innervate, Mana Tide, Hymn of Hope, Shadowfiend, gems
 and potions all already spent. This is the encounter's actual remaining problem.
 
+**A human tank holding him in phase 2 is called** ([calls to human tanks](../README.md#calls-to-human-tanks)):
+once per hold turn from 6 Lightning Charge stacks (62279 on Thorim, ~95 s in, swings about doubled), and
+under 50% at any stack count, never while he carries Unbalancing Strike (a bot takes him next). Bot tanks have
+no timed rule here, only their class triggers, by the user's choice.
+
 **Chain Lightning is a hop-count problem.** 64390 carries `EffectChainAmplitude` **1.5**, so the
 multipliers are 1, 1.5, 2.25, 3.4, 5.1, 7.6, 11.4, 17.1 on a 4625-5375 base: hops 1-4 are noise, hop 5
 kills cloth, hops 6-8 kill outright. One measured cast ran 5,574 → 7,831 → 12,683 → 21,153 →

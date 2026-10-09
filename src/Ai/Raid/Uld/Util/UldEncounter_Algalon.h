@@ -377,6 +377,8 @@ constexpr uint32 ULDUAR_ALGALON_PULL_HOLD_MS = 3000;
 constexpr uint32 ULDUAR_ALGALON_TANK_CALL_MS = 5000;
 // Humans are told to step into a hole with this much of the Big Bang cast left.
 constexpr int32 ULDUAR_ALGALON_HIDE_CALL_MS = 3000;
+// A human soaker is told to press his button with this much of the cast left, a second ahead of a bot.
+constexpr int32 ULDUAR_ALGALON_HUMAN_SOAK_CALL_MS = 4000;
 // How far a slot buried under a hole may be stepped aside before the formation gives up on it.
 constexpr float ULDUAR_ALGALON_SLOT_DISPLACE_RADIUS = 12.0f;
 
@@ -496,6 +498,7 @@ struct AlgalonEncounterState
     uint32 firstHoldMs = 0;
     uint32 lastTankCallMs = 0;
     bool bigBangHideCalled = false;
+    bool humanSoakCalled = false;
     uint32 nextBigBangMs = 0;
     uint32 bigBangCount = 0;
     bool bigBangCasting = false;

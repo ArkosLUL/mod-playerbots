@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "AiObjectContext.h"
+#include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidTankDefensive.h"
 #include "CellImpl.h"
@@ -227,6 +228,7 @@ struct YoggSaronEncounterState
     std::unordered_map<ObjectGuid, BeaconReturn> beaconReturns;
     // One external per victim of a healed Guardian, keyed by the victim.
     std::unordered_map<ObjectGuid, uint32> beaconExternalClaims;
+    uint32 humanCallScanMs = 0;
 
     // Deafening Roar, see YoggSaronTickRoar. The claim is keyed by the roar's cast start.
     bool roarExpected = false;
@@ -4996,8 +4998,94 @@ bool YoggSaronIllusionStageSpot(Player* bot, Position& spot)
     }
 }
 
+namespace
+{
+bool YoggSaronHoldsPhase1Guardian(Player* human)
+{
+    for (Unit* attacker : human->getAttackers())
+        if (attacker->GetVictim() == human && attacker->GetEntry() == NPC_GUARDIAN_OF_YS && attacker->IsAlive())
+            return true;
+
+    return false;
+}
+
+// Only when the nova would kill him, like the bots' own rule. Anti-Magic Shell lasts 5 s so it waits for the
+// 10% gate; a 12 s button goes out at 20%, which leaves a human time to react.
+void YoggSaronCallHumanNova(Player* sender, Player* human)
+{
+    if (!YoggSaronInPhase1Room(human) || !YoggSaronHoldsPhase1Guardian(human))
+        return;
+
+    uint32 const weakest = ReadyTankDefensiveSpell(human, false, 0, 0);
+    uint32 const needMs = YoggSaronNovaNeedMs(human, weakest && IsMagicOnlyTankDefensive(weakest));
+    if (!needMs)
+        return;
+
+    CallHumanTankDefensive(sender, human, ReadyTankDefensiveSpell(human, false, 0, needMs), 0,
+                           "a Guardian next to you is about to explode", "yogg.humancall");
+}
+
+// Same lines the bots use: a pile the beacon healed, or the tank swap line.
+void YoggSaronCallHumanPile(Player* sender, Player* human)
+{
+    if (human->getAttackers().empty() || YoggSaronOnBrainLevel(human))
+        return;
+
+    uint32 const spellId = ReadyTankDefensiveSpell(human, true, 0, 0);
+    if (!spellId)
+        return;
+
+    uint32 const healed = YoggSaronPileHealedOn(human);
+    if (healed >= ULDUAR_YOGG_SARON_BEACON_PILE_RESET_GUARDIANS)
+    {
+        CallHumanTankDefensive(sender, human, spellId, 0,
+                               "the beacon healed " + std::to_string(healed) + " Guardians on you", "yogg.humancall");
+        return;
+    }
+
+    uint32 const pile = YoggSaronGuardiansOn(human);
+    if (pile >= ULDUAR_YOGG_SARON_TANK_SWAP_MIN_GUARDIANS && human->GetHealthPct() < ULDUAR_YOGG_SARON_TANK_SWAP_PCT)
+        CallHumanTankDefensive(sender, human, spellId, 0, std::to_string(pile) + " Guardians on you and you are low",
+                               "yogg.humancall");
+}
+
+// A human tank has no trigger to press his own defensive, so a bot tells him.
+void YoggSaronTickHumanTankCalls(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group || !bot->IsAlive())
+        return;
+
+    constexpr uint32 scanIntervalMs = 250;
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    uint32 const now = getMSTime();
+    if (getMSTimeDiff(state.humanCallScanMs, now) < scanIntervalMs)
+        return;
+
+    state.humanCallScanMs = now;
+
+    uint32 const phase = YoggSaronPhase(botAI);
+    if (phase != 1 && phase != 3)
+        return;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* human = ref->GetSource();
+        if (!human || IsYoggSaronBot(human) || !human->IsAlive() || human->GetMap() != bot->GetMap())
+            continue;
+
+        if (phase == 1)
+            YoggSaronCallHumanNova(bot, human);
+        else
+            YoggSaronCallHumanPile(bot, human);
+    }
+}
+}  // namespace
+
 void YoggSaronTick(PlayerbotAI* botAI)
 {
+    YoggSaronTickHumanTankCalls(botAI);
     YoggSaronTickHandover(botAI);
     YoggSaronTickRtiMark(botAI);
     YoggSaronTickReprisal(botAI);

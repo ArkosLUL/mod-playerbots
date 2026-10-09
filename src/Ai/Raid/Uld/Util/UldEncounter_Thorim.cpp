@@ -16,8 +16,10 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "RaidTankDefensive.h"
 #include "RtiTargetValue.h"
 #include "Timer.h"
 #include "UldScripts.h"
@@ -1547,6 +1549,54 @@ void ThorimTickBarrierBail(PlayerbotAI* botAI, Player* bot)
 
     if (bot->GetHealthPct() <= ULDUAR_THORIM_BARRIER_BAIL_HEALTH_PCT)
         state.barrierBailing.insert(bot->GetGUID());
+}
+
+void ThorimTickHumanTankCalls(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->GetMapId() != ULDUAR_MAP_ID || !ThorimPhase2Active(botAI))
+        return;
+
+    Unit* boss = GetThorim(botAI);
+    if (!boss)
+        return;
+
+    constexpr uint32 scanIntervalMs = 250;
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    uint32 const now = getMSTime();
+    if (getMSTimeDiff(state.humanCallScanMs, now) < scanIntervalMs)
+        return;
+
+    state.humanCallScanMs = now;
+
+    // Tracked for bots too, so a human taking him back after a bot's turn starts a new turn.
+    Unit* victim = boss->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    ObjectGuid const holderGuid = holder ? holder->GetGUID() : ObjectGuid::Empty;
+    if (holderGuid != state.humanCallHolder)
+    {
+        state.humanCallHolder = holderGuid;
+        state.humanCallTurnDone = false;
+    }
+
+    // Unbalancing Strike means a bot takes him in a moment, so a button now is wasted.
+    if (!holder || IsBotPlayer(holder) || holder->HasAura(SPELL_UNBALANCING_STRIKE))
+        return;
+
+    uint32 const spellId = ReadyTankDefensiveSpell(holder, true, 0, 0);
+    if (!spellId)
+        return;
+
+    if (holder->GetHealthPct() < ULDUAR_THORIM_HUMAN_CALL_LOW_PCT)
+    {
+        CallHumanTankDefensive(bot, holder, spellId, 0, "you are low", "thorim.humancall");
+        return;
+    }
+
+    uint32 const stacks = boss->GetAuraCount(SPELL_THORIM_LIGHTNING_CHARGE_BUFF);
+    if (!state.humanCallTurnDone && stacks >= ULDUAR_THORIM_HUMAN_CALL_STACKS)
+        state.humanCallTurnDone = CallHumanTankDefensive(
+            bot, holder, spellId, 0, "Thorim hits hard (" + std::to_string(stacks) + " stacks)", "thorim.humancall");
 }
 
 bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot)

@@ -247,6 +247,26 @@ does not exist in this build.
 `SPELL_FEAR_WARD = 6346` is defined here, but still duplicated in `KaraHelpers.h` and `SSCHelpers.h`
 — deliberately left alone to keep the change contained.
 
+## Calls to human tanks
+
+A human tank has no trigger to fire, so where a boss times a bot tank's defensive the encounter tells a
+human instead: `CallHumanTankDefensive` (`RaidHumanTankCall.h`), on Thorim phase 2, Yogg-Saron phases 1
+and 3 and Algalon. Calls key on who the boss or Guardians are hitting, never on role: `IsTank` reads a
+human Death Knight as a tank only in Blood. The button comes from `ReadyTankDefensiveSpell`, the same
+table bots use. No call while one of his buttons runs, or within 6 s of the last.
+
+Each call is two whispers from a group bot, to him only:
+
+- an addon message `PBCALL` `DEF<tab>spellId<tab>hitInMs<tab>reason`, shown as a DBM special warning (plus
+  a bar when `hitInMs` ≥ 1 s) by the `tools/addons/PlayerbotCalls` add-on, copied into the client's
+  `Interface\AddOns`. Stock DBM can't do this: its warnings fire only from its own boss mods, and the only
+  remote input, a shared timer bar, needs raid assist and reaches the whole raid;
+- a `CHAT_MSG_RAID_BOSS_WHISPER` fallback (center screen, warning sound), which the add-on hides.
+
+Traps: `Player::Whisper` ignores its boss-whisper flag, so the packet is built by hand. The client runs
+the fallback through `format()`, so a bare `%` breaks it. DBM's "Hide raid boss emote frame during boss
+fights" hides the fallback.
+
 ## Per-instance state
 
 Cross-bot state an encounter latches per instance (slots, clocks, held choices) lives in a

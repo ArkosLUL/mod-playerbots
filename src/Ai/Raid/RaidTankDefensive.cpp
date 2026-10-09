@@ -117,6 +117,39 @@ uint32 NextDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool
 
     return cast ? picked->spellId : 0;
 }
+
+// Needs no bot AI, so it answers for a human too.
+TankDefensive const* FindReadyTankDefensive(Player* bot, bool physicalOnly, uint32 withinMs, uint32 needMs)
+{
+    if (!bot)
+        return nullptr;
+
+    for (TankDefensive const& entry : TANK_DEFENSIVES)
+    {
+        if (!entry.tank || entry.playerClass != bot->getClass() || (physicalOnly && entry.magicOnly) ||
+            entry.windowMs < needMs)
+            continue;
+
+        if (entry.spellId == SPELL_DIVINE_PROTECTION)
+        {
+            bool locked = false;
+            for (uint32 const lock : {SPELL_FORBEARANCE, SPELL_AVENGING_WRATH_MARKER})
+            {
+                Aura const* aura = bot->GetAura(lock);
+                locked = locked ||
+                         (aura && (aura->GetDuration() < 0 || static_cast<uint32>(aura->GetDuration()) > withinMs));
+            }
+
+            if (locked)
+                continue;
+        }
+
+        if (bot->HasSpell(entry.spellId) && bot->GetSpellCooldownDelay(entry.spellId) <= withinMs)
+            return &entry;
+    }
+
+    return nullptr;
+}
 }  // namespace
 
 uint32 NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool physicalOnly)
@@ -144,33 +177,25 @@ uint8 BestMagicDefensiveCut(PlayerbotAI* botAI, Player* bot, uint32 needMs)
 
 char const* ReadyTankDefensive(Player* bot, bool physicalOnly, uint32 withinMs)
 {
-    if (!bot)
-        return nullptr;
+    TankDefensive const* entry = FindReadyTankDefensive(bot, physicalOnly, withinMs, 0);
+    return entry ? entry->castName : nullptr;
+}
 
+uint32 ReadyTankDefensiveSpell(Player* bot, bool physicalOnly, uint32 withinMs, uint32 needMs)
+{
+    TankDefensive const* entry = FindReadyTankDefensive(bot, physicalOnly, withinMs, needMs);
+    return entry ? entry->spellId : 0;
+}
+
+bool IsMagicOnlyTankDefensive(uint32 spellId)
+{
     for (TankDefensive const& entry : TANK_DEFENSIVES)
     {
-        if (!entry.tank || entry.playerClass != bot->getClass() || (physicalOnly && entry.magicOnly))
-            continue;
-
-        if (entry.spellId == SPELL_DIVINE_PROTECTION)
-        {
-            bool locked = false;
-            for (uint32 const lock : {SPELL_FORBEARANCE, SPELL_AVENGING_WRATH_MARKER})
-            {
-                Aura const* aura = bot->GetAura(lock);
-                locked = locked ||
-                         (aura && (aura->GetDuration() < 0 || static_cast<uint32>(aura->GetDuration()) > withinMs));
-            }
-
-            if (locked)
-                continue;
-        }
-
-        if (bot->HasSpell(entry.spellId) && bot->GetSpellCooldownDelay(entry.spellId) <= withinMs)
-            return entry.castName;
+        if (entry.tank && entry.spellId == spellId)
+            return entry.magicOnly;
     }
 
-    return nullptr;
+    return false;
 }
 
 char const* RunningTankDefensive(Player* bot, bool physicalOnly, uint32 forMs)

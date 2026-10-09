@@ -463,6 +463,11 @@ cutter: with none running, the holder's own Divine Protection first (it and a se
 Forbearance, and a self Lay on Hands locked an unspent one), then Lay on Hands from another paladin, else the
 holder's own.
 
+**A human holder is called instead** ([calls to human tanks](../README.md#calls-to-human-tanks)): on the same
+`window` / `low`, under the same reserve, when his own physical button is ready. The externals still go out for
+him unchanged, so he and a healer can both cover one window. A human Big Bang soaker is called once per cast at
+4 s left, a second before a bot presses, for reaction time.
+
 **Cooldowns** (`AlgalonCooldownReserveMultiplier`): Dispersion is held whenever casting it now leaves it
 cooling down at the next soak. With a disperser latched nothing else is held, except Divine Shield for swap
 tanks (he leaves a bubbled paladin). The holder's own buttons, self Lay on Hands included, and every external on

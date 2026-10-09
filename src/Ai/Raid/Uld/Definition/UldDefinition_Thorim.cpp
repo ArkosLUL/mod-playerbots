@@ -90,7 +90,11 @@ bool ThorimBalconyWalk(PlayerbotAI* botAI)
     return balconyAdvance.IsActive();
 }
 
-void TickThorim(PlayerbotAI* botAI) { ThorimTickBarrierBail(botAI, botAI->GetBot()); }
+void TickThorim(PlayerbotAI* botAI)
+{
+    ThorimTickBarrierBail(botAI, botAI->GetBot());
+    ThorimTickHumanTankCalls(botAI);
+}
 
 void DefineThorim(EncounterBuilder& e)
 {

@@ -44,6 +44,10 @@ uint8 BestMagicDefensiveCut(PlayerbotAI* botAI, Player* bot, uint32 needMs);
 // The cast name of a tank button off cooldown within `withinMs`, or nullptr, read for a hit still seconds
 // away: NextTankDefensive also answers 0 on the global cooldown, mid channel, or with one already running.
 char const* ReadyTankDefensive(Player* bot, bool physicalOnly, uint32 withinMs = 0);
+// The same pick as a spell id, skipping a row whose buff runs out within `needMs`. Works for a human tank.
+uint32 ReadyTankDefensiveSpell(Player* bot, bool physicalOnly, uint32 withinMs, uint32 needMs);
+// Anti-Magic Shell: worth nothing against a physical hit.
+bool IsMagicOnlyTankDefensive(uint32 spellId);
 // The cast name of a tank button already up on the bot that lasts at least `forMs` more, or nullptr.
 char const* RunningTankDefensive(Player* bot, bool physicalOnly, uint32 forMs);
 

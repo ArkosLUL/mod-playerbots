@@ -366,6 +366,10 @@ Three tiers, in that relevance order, because one cast covering 25 raiders beats
 Each claim is taken **after** the caster has something castable, or one that claimed on sight would
 beat the rest to the victim and then cast nothing.
 
+**A human holding a Guardian is called** ([calls to human tanks](../README.md#calls-to-human-tanks)) when
+the nova would kill him: Anti-Magic Shell at the 10% gate (5 s, so it can't go earlier), any other button at
+20%, which a 12 s button still covers and which leaves a human time to react.
+
 All of it is held off the class triggers by `YoggSaronNovaHold` — `yogg-saron nova defensive hold`
 over the melee row, `yogg-saron nova cooldown hold` over the externals and Divine Sacrifice. That is all
 of phase 1, because every death measured in it was a nova, and after it only while a Guardian lives
@@ -2173,7 +2177,8 @@ off cooldown,
   Guardians highest health first. **A tank holding the pile is covered too**: its own button the moment
   2+ Guardians on it carry a 64486 / 64468 application another Guardian cast (`YoggSaronPileHealedOn`,
   `BEACON_PILE_RESET_GUARDIANS`, at any health, by the user's choice), an external under 50%
-  (`BEACON_TANK_EXTERNAL_PCT`), draggers still first. A returned mark carries only its own copy, so only
+  (`BEACON_TANK_EXTERNAL_PCT`), draggers still first. A human tank is called on the same pile, and also at
+  3+ Guardians under 50% (the swap line), since he has no class trigger. A returned mark carries only its own copy, so only
   a heal reaching the pile counts. The 60% line before it was one full-power swing (~40%): both tanks
   spent Divine Protection (2 min, beacons 45 s apart) on a mild first beacon and had none when a failed
   drag healed 11 Guardians (Dragon 291k in 13 s, dead). Before any cover: Dragon took 225k against 174k

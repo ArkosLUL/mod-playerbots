@@ -1,0 +1,5 @@
+## Interface: 30300
+## Title: PlayerbotCalls
+## Notes: Shows the playerbots' defensive calls to a human tank as DBM special warnings.
+## Dependencies: DBM-Core
+PlayerbotCalls.lua

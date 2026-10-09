@@ -25,6 +25,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidTankDefensive.h"
 #include "ServerFacade.h"
@@ -2323,6 +2324,65 @@ bool TankCutRunning(Player* holder)
            holder->HasAura(SPELL_ALGALON_HAND_OF_SACRIFICE) || holder->HasAura(SPELL_ALGALON_GUARDIAN_SPIRIT);
 }
 
+// Why the holder needs a cut now, or nullptr. The partner takes him within a second when a swap is due, and a
+// cutter on the outgoing tank is spent for nothing. By stacks, so a human partner counts too.
+char const* TankCutReason(AlgalonEncounterState const& state, Player* holder, Player* partner, uint32 now)
+{
+    bool const swapping = partner && CanStayOut(partner) && SwapDue(state, holder, partner, now);
+    if (RaidHitWindow(state, now) && !swapping && holder->GetHealthPct() < ULDUAR_ALGALON_TANK_WINDOW_PCT)
+        return "window";
+
+    return holder->GetHealthPct() < ULDUAR_ALGALON_TANK_DEFENSIVE_PCT ? "low" : nullptr;
+}
+
+// A human holder has no trigger for his own button, so he's told in the spots a bot holder presses one, under
+// the same reserve: never the button his Big Bang soak needs.
+void CallHumanTankCut(Group* group, PlayerbotAI* botAI, Creature* boss, AlgalonEncounterState const& state,
+                      uint32 now)
+{
+    Player* holder = BossHolder(boss);
+    if (state.bigBangCasting || !holder || IsBot(holder) || !state.swapPair.count(holder->GetGUID()) ||
+        !CanStayOut(holder) || TankCutRunning(holder))
+        return;
+
+    if (state.lastBigBangEndMs && getMSTimeDiff(state.lastBigBangEndMs, now) < ULDUAR_ALGALON_BIG_BANG_STILL_MS &&
+        state.lastSoaker != holder->GetGUID())
+        return;
+
+    char const* why = TankCutReason(state, holder, PairPartner(group, state, holder), now);
+    uint32 const spellId = why ? ReadyTankDefensiveSpell(holder, true, 0, 0) : 0;
+    if (!spellId)
+        return;
+
+    bool const reserved = state.disperser.Get().IsEmpty() && AlgalonLoneHolder(botAI) != holder;
+    if (reserved && AlgalonCooldownMs(holder, spellId) > AlgalonMsToBigBangHit(botAI))
+        return;
+
+    if (Player* sender = FindTracker(group))
+        CallHumanTankDefensive(sender, holder, spellId, 0,
+                               std::strcmp(why, "window") ? "you are low" : "stars or meteors are hitting the raid",
+                               "algalon.humancall");
+}
+
+void CallHumanSoak(Group* group, Creature* boss, AlgalonEncounterState& state)
+{
+    Player* soaker = FindGroupMember(group, state.bigBangSoaker.Get());
+    Spell* cast = CurrentBigBang(boss);
+    if (state.humanSoakCalled || !soaker || IsBot(soaker) || !CanStayOut(soaker) || !cast)
+        return;
+
+    int32 const remaining = cast->GetCastTimeRemaining();
+    Player* sender = FindTracker(group);
+    if (remaining < 0 || remaining > ULDUAR_ALGALON_HUMAN_SOAK_CALL_MS || !sender)
+        return;
+
+    state.humanSoakCalled = true;
+    uint32 const hitInMs = static_cast<uint32>(remaining);
+    // Once per cast already, so an earlier call can't hold this one back.
+    CallHumanTankDefensive(sender, soaker, ReadyTankDefensiveSpell(soaker, true, 0, hitInMs), hitInMs,
+                           "Big Bang hits you", "algalon.humancall", 0);
+}
+
 // CanCastSpell skips the cost, and a provider out of mana would keep its turn while every cast fails. Runes
 // aren't checked.
 bool CanPay(Player* caster, SpellInfo const* info)
@@ -2967,11 +3027,13 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         ElectBigBangSoakers(bot, boss, *state);
         NoteSoakKit(group, *state);
         CallBigBang(group, boss, *state, true);
+        state->humanSoakCalled = false;
     }
     else if (casting)
     {
         KeepBigBangSoaker(bot, *state);
         CallBigBang(group, boss, *state, false);
+        CallHumanSoak(group, boss, *state);
     }
     else if (state->bigBangCasting)
     {
@@ -3022,6 +3084,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     if (phase != AlgalonPhase::Intro)
     {
         CallHumanTank(group, botAI, boss, *state, now);
+        CallHumanTankCut(group, botAI, boss, *state, now);
         NoteTankRoles(group, boss, *state, now);
         NoteHandover(group, boss, *state, now);
     }
@@ -3512,15 +3575,8 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
         return none;
 
     Player* partner = PairPartner(group, *state, holder);
-    // The partner takes him within a second, and a cutter on the outgoing tank is spent for nothing. By stacks,
-    // so a human partner counts too.
-    bool const swapping = partner && CanStayOut(partner) && SwapDue(*state, holder, partner, now);
-    char const* why = nullptr;
-    if (RaidHitWindow(*state, now) && !swapping && holder->GetHealthPct() < ULDUAR_ALGALON_TANK_WINDOW_PCT)
-        why = "window";
-    else if (holder->GetHealthPct() < ULDUAR_ALGALON_TANK_DEFENSIVE_PCT)
-        why = "low";
-    else
+    char const* why = TankCutReason(*state, holder, partner, now);
+    if (!why)
         return none;
 
     auto const turn = [&](Player* provider, uint32 spellId)
