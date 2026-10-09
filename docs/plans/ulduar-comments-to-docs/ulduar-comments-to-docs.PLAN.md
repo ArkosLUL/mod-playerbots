@@ -103,7 +103,7 @@ into the docs`, written to a scratchpad file and committed with `git commit -F`;
 - [x] Freya
 - [ ] XT-002
 - [ ] Flame Leviathan
-- [ ] Iron Assembly
+- [x] Iron Assembly
 - [ ] General Vezax
 - [ ] Algalon
 - [x] Ignis

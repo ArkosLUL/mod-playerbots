@@ -35,10 +35,8 @@ bool IronAssemblyLightningTendrilsTrigger::IsActive()
 
 bool IronAssemblyOverloadTrigger::IsActive()
 {
-    // Tanks hold through it. 20,000 nature is survivable in plate and lethal in cloth, and under the
-    // normal kill order Brundir dies last - so he is the only member alive during his own Overloads,
-    // his channel invincibility never applies, and a tank leaving would cost real uptime and let him
-    // drift toward the raid.
+    // Tanks hold through it: 20,000 nature is survivable in plate, and leaving costs uptime and lets
+    // Brundir drift toward the raid.
     if (botAI->IsTank(bot))
         return false;
 

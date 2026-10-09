@@ -51,14 +51,8 @@ bool TryGetIronAssemblyStation(PlayerbotAI* botAI, Player* bot, Position& statio
     return false;
 }
 
-// Shared shape for the hazard exits. FleePosition is deliberately not used: it clamps travel to
-// AiPlayerbot.FleeDistance and cannot clear a 20 yd blast, and it only reads one hazard.
-//
-// Ties inside the first clear ring break toward the bot's station. Without that the sweep takes the
-// first angle that passes, which is a fixed compass direction measured from wherever the bot happens
-// to be standing - so the answer slides as the bot walks and a raid leaving a rune picks a new escape
-// every tick instead of finishing the one it started. The station holds still while the bot moves,
-// which is what makes the same answer keep winning.
+// Not FleePosition: it clamps travel to AiPlayerbot.FleeDistance, short of a 20 yd blast, and reads
+// one hazard. Ties break toward the bot's station, which holds still, so the answer doesn't slide.
 bool TryGetIronAssemblyEscapeSpot(PlayerbotAI* botAI, Player* bot, std::vector<HazardCircle> const& hazards,
                                   Position& spot)
 {
@@ -111,9 +105,8 @@ bool IronAssemblyOverloadAction::Execute(Event /*event*/)
 
     std::vector<HazardCircle> hazards = {{brundir->GetPosition(), ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE}};
 
-    // Runes of Death count too, or the escape from one hazard walks straight into the other. Each at
-    // its own clearance: folding them in at Overload's would give up four more yards per rune than
-    // they need, and every yard of it is walked in a 5.5s cast window.
+    // Runes of Death too, or this escape walks into one. Each at its own clearance: Overload's would waste
+    // four yards per rune inside a 5.5s cast.
     std::vector<Position> const runes = GetIronAssemblyScan(botAI).RunesOfDeath();
     AddIronAssemblyHazards(runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE, hazards);
 
@@ -169,14 +162,8 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") != boss)
         return Attack(boss);
 
-    // Both ranked tanks share the empowered Steelbreaker, so something has to say which of them
-    // holds him. Whoever is carrying Overwhelming Power keeps him until Meltdown kills him: the buff
-    // kills its target either way and the next cast lands a second later on whoever inherited, so an
-    // early taunt saves nobody and only moves the boss. The off-tank is already second on threat and
-    // takes over on the tick after the carrier dies - which is the same path that recovers a boss a
-    // dps has ripped at a phase transition.
-    // The class taunt nodes get the same rule from IronAssemblyTauntGuardMultiplier; this cast goes
-    // straight to CastSpell and never passes it.
+    // Shared empowered Steelbreaker: the carrier keeps him until Meltdown, an early taunt saves nobody.
+    // IronAssemblyTauntGuardMultiplier covers the class taunt nodes but never sees this direct cast.
     Unit* const victim = boss->GetVictim();
     bool const shared = IsSteelbreakerEmpowered(botAI) && boss->GetEntry() == NPC_STEELBREAKER;
 
@@ -201,10 +188,8 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
         return false;
     }
 
-    // A rune on the spot has him hold where the escape parked him, and the boss follows him there
-    // instead of being dragged in and out with him. The ranged ring stays on this spot, so its near
-    // arc ends up ~12 yd from him, inside Meltdown's 15. Fine because a rune lasts 30s and the first
-    // Meltdown lands 43s into the phase.
+    // A rune on the spot holds him where the escape parked him. The ring stays on the spot, its near arc
+    // ~12 yd from him inside Meltdown: fine, a rune lasts 30s and the first Meltdown lands 43s in.
     Position step;
     if (!TryGetIronAssemblyRouteStep(botAI, bot, spot, step))
         return false;
@@ -265,9 +250,8 @@ Player* IronAssemblyRedirectThreatAction::GetRedirectTank()
     if (!group)
         return nullptr;
 
-    // Feed whoever actually holds the kill target. With one tank per member the group main tank is
-    // wrong for two of the three, which is exactly the case the redirect rubric says to narrow rather
-    // than veto - the old blanket veto left every hunter and rogue here with nothing to cast.
+    // Feed whoever holds the kill target: with one tank per member, the group main tank is wrong for two
+    // of the three.
     Unit* focus = IronAssemblyFocusTarget(botAI);
     if (focus)
     {
@@ -328,12 +312,8 @@ bool IronAssemblySetDpsPriorityAction::Execute(Event /*event*/)
     if (!focus)
         return false;
 
-    // Every tick, not only on a switch: PetAttackAction's node is commented out globally, so a pet
-    // holds whatever it first latched onto and never follows the kill order. Traced, two pets spent
-    // the whole Molgeim phase on Steelbreaker - 124 of 958 pet casts on the wrong member, and in hard
-    // mode that damage is not just misplaced, Molgeim's death hands it straight back. The call is
-    // above the early return because the early return is the common case; it no-ops when the pet is
-    // already there.
+    // Every tick and above the early return: PetAttackAction's node is commented out globally, so a pet
+    // keeps whatever it latched onto. No-op when the pet is already there.
     CommandPetAttack(botAI, focus);
 
     // Returning false once the bot is already on the right member is what lets the lower nodes run:
@@ -355,9 +335,8 @@ bool IronAssemblyRaidPositionAction::Execute(Event /*event*/)
 
     float const distance = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
 
-    // Reach then hold, with a deadband. Re-issuing a move on every yard of drift restarts the spline
-    // and a moving bot cannot start a cast, so it slides on the spot and never casts. Yielding once
-    // parked is also what keeps a bot available to interrupt Lightning Whirl.
+    // Reach then hold, with a deadband: a move per yard of drift restarts the spline, and a moving bot
+    // never casts or kicks Lightning Whirl.
     if (_spotReached && distance > ULDUAR_IRON_ASSEMBLY_SLOT_TOLERANCE * 2.0f)
         _spotReached = false;
 

@@ -10,10 +10,8 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Hard mode only, where the kill order saves Steelbreaker for last. Everything before him is spent on
-// one shared health pool, so burst held back loses the raid nothing, and the phase it is held for is
-// the one that kills them: Supercharge and then Electrical Charge compound on the survivor, and both
-// traced pulls lost two thirds of the raid inside it.
+// Hard mode only: burst waits until Steelbreaker is last, where Supercharge and Electrical Charge compound.
+// Before that it's one shared health pool, so holding costs nothing.
 class IronAssemblyHoldDpsCooldownsMultiplier : public Multiplier
 {
 public:
@@ -21,9 +19,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Whoever carries Overwhelming Power keeps the empowered Steelbreaker until Meltdown, and the tank node
-// already follows that. The class taunt nodes didn't: traced, a bot tank back from a soulstone took
-// him off a human carrying it, died to him 9s later and left nobody to inherit.
+// Whoever carries Overwhelming Power keeps the empowered Steelbreaker until Meltdown, so this zeroes
+// any class taunt while another grouped tank holds him.
 class IronAssemblyTauntGuardMultiplier : public Multiplier
 {
 public:

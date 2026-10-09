@@ -43,14 +43,8 @@ float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
     if (!IsIronAssemblyHardModeActive(botAI))
         return 1.0f;
 
-    // Both predicates, because each catches what the other misses. IsDpsCooldownAction is a
-    // dynamic_cast chain with no case for a potion, a tinker or any priest cooldown, and its racial
-    // branch keys on the bot's race while RacialsStrategy arms on HasSpell - the bots here carry
-    // Blood Fury and Berserking as Humans, Dwarves, Night Elves and Draenei, so that branch can never
-    // match. Traced, one pull spent 17 potions, 69 tinkers, 14 Blood Furies and both priest cooldowns
-    // on Brundir and Molgeim. The name registry has all of those; it is missing nine cooldowns the
-    // cast chain does have, so neither alone is enough. IsDps guards the name branch to keep today's
-    // exclusion of healers and tanks - Shadowfiend is a healer's mana, not a burst window.
+    // Both predicates, each misses some: IsDpsCooldownAction has no potion, tinker or priest case, and its
+    // racial branch keys on race, not HasSpell. IsDps keeps healers and tanks out of the name branch.
     std::string const name = action->getName();
     if (IsManaReturnCooldown(bot, name))
         return 1.0f;

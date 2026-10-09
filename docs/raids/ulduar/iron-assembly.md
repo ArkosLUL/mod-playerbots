@@ -14,7 +14,8 @@ for tanks, so a *tank's* ghoul is never redirected. Closing it means six wiring 
 has shown it costing anything, so it is left open on purpose.
 
 Kill order is the only thing `AiPlayerbot.UlduarIronAssemblyHardMode` changes: normally
-**Steelbreaker → Molgeim → Brundir**, hard mode **Brundir → Molgeim → Steelbreaker**. Molgeim is
+**Steelbreaker → Molgeim → Brundir**, which takes Fusion Punch off the tank earliest and never lets his
+phase 3 kit come up, hard mode **Brundir → Molgeim → Steelbreaker**. Molgeim is
 second either way, so Rune of Summoning is unreachable — deliberately, because
 `npc_assembly_lightning` no-ops `AttackStart`, `MoveInLineOfSight` and `EnterEvadeMode`: the
 Lightning Elementals have no threat table, so taunting and kiting both do nothing and only killing
@@ -26,8 +27,8 @@ is a phase check, and gating it left a raid that reached the state without the o
 tank on the empowered boss.
 
 His empowered kit is Fusion Punch (61903/63493, a dispellable Magic DoT on the tank; traced dispels
-strip it inside 0.6s), Static Disruption (61911/63495, a random target beyond 10 yd, 6 yd blast plus
-a 5 yd +75% nature vulnerability), Overwhelming Power, and **Electrical Charge (61902), which is
+strip it inside 0.6s), Static Disruption (61911/63495, a random target beyond 10 yd, triggering
+61912/63494: a 6 yd blast of 5,000 / 7,000 nature plus a 5 yd +75% nature vulnerability), Overwhelming Power, and **Electrical Charge (61902), which is
 +25% damage *and* a heal** — `Effect_2 = 136`, measured at 9.7% of his 12.05M bar on every phase-3
 death without exception. A corpse is worth ~1.17M to him, so the phase is decided by how few the
 raid feeds him: traced, the raid takes him to **3.08% with all 25 alive** — only the tank dies, and
@@ -73,8 +74,9 @@ Steelbreaker phase.
 
 Formation anchors on `(1587.18, 121.02, 427.27)`. navprobe: 8/8 headings clean at 20 and 30 yd, but
 the 45° and 135° diagonals settle to Z −27.7 and −438 at 40, and three of eight leave the mesh at 50
-— so **nothing anchor-centred sits outside 30 yd** and the slots use cardinals; a ring on another
-centre earns its own probe. Brundir parks at 28 yd, 38 from the ranged stack: more than his Overload
+— so **nothing anchor-centred sits outside 30 yd**, where every heading is clean; a ring on another
+centre earns its own probe. `ULDUAR_IRON_ASSEMBLY_ARENA_RADIUS` 78 stops short of both hall doors,
+(1671.31, 120.70) and (1501.49, 119.70), 84 and 86 yd out. Brundir parks at 28 yd, 38 from the ranged stack: more than his Overload
 needs, so the stack never reacts to it and someone is always parked and free to kick. **Tanks stand
 rather than drag**, so a boss follows its tank to the spot instead of being towed through the raid —
 and **`tank face` is vetoed for a tank holding an assignment**, being a second mover at the same
@@ -177,7 +179,8 @@ with a persistent area aura) — aiming at the carrier's feet makes the destinat
 never settle. navprobe: the 16 and 28 yd rings are both 16/16 on mesh at 22.5° steps. **Three steps,
 not four** — the melee spots are 90° apart, so a fourth puts Steelbreaker's furthest candidate on
 Molgeim's; three still clears 12 yd on either ring and keeps every Brundir candidate 33 yd off the
-stack.
+stack. A step moves the spot `2R·sin(step/2)`, so two already clear it (12.2 at 16, 21.4 at 28) and
+the third is spare.
 
 Deliberate non-behaviours: **tanks hold through Overload** (20,000 nature is survivable in plate and
 lethal in cloth, and under the normal order Brundir dies last, so his channel invincibility never
@@ -233,12 +236,14 @@ offensive potion for the Steelbreaker phase (traced: 19 vetoes, one cast). The g
 `IsDpsCooldownAction` is a `dynamic_cast` chain with no case for a potion, a tinker or any priest
 cooldown, and its racial branch keys on `getRace()` while `RacialsStrategy` arms on `HasSpell` —
 these bots carry Blood Fury and Berserking as Humans, Dwarves, Night Elves and Draenei, so it can
-never match. One pull spent **17 potions, 69 tinkers and 14 Blood Furies** on the first two bosses.
+never match. One pull spent **17 potions, 69 tinkers and 14 Blood Furies**, and both priest
+cooldowns, on the first two bosses.
 `IsBurstCooldownAction`'s registry names all of those and misses nine the chain catches, so the hold
 takes either, with `IsDps` on the name branch since a healer's Shadowfiend is mana, not burst.
 
 **Reading a pull:** `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
-Molgeim, 2 Brundir; **one row per transition — more means the state is not shared**), `focus` (what
+Molgeim, 2 Brundir; **one row per transition — more means the state is not shared**; the snapshot
+stream shows a death only as a boss row that stops appearing), `focus` (what
 the raid is killing, and whether a human's skull beat the order), `tank` (the boss a bot tank owns,
 or the branch that left it none — bot tanks only, so no row for a human one), `interrupt` (the duty
 a bot holds for Brundir's current cast), `spot` (the formation branch — a `-rune` or `-overload`
@@ -248,6 +253,10 @@ suffix names the hazard that shifted the stack, a bare `spread` is the boss-cent
 Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
 spell radius and the clearance bots keep — equal for Meltdown, which nobody dodges. Rune of Death
 and Rune of Power do, and are swept instead — only a swept hazard is tested against a death.
+
+`IronAssemblyScan` caches the three members and the Rune of Death sweep per bot per tick: the
+`possible targets no los` value behind them is a 100 yd sweep and a vector copy on every read, and a
+ranged bot asks for a member about a hundred times a tick.
 
 Core-version assumption: the strategy relies on recent upstream fixes — `#26470` (Rune of Death
 restricted to players), `#26449` (Brundir surviving Tendrils), `#26200` (Static Disruption preferring

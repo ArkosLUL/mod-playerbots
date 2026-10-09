@@ -5,12 +5,7 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-//
 // Iron Assembly
-//
-// Killing one member restores the other two to full, so focus fire is the encounter and everything
-// else is keeping people alive long enough to finish it.
-//
 
 // All three back at full health, which only happens on a fresh pull.
 class IronAssemblyResetEncounterStateTrigger : public Trigger
