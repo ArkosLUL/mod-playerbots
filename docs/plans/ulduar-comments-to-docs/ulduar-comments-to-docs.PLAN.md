@@ -101,7 +101,7 @@ into the docs`, written to a scratchpad file and committed with `git commit -F`;
 - [x] Thorim
 - [x] Hodir
 - [x] Freya
-- [ ] XT-002
+- [x] XT-002
 - [ ] Flame Leviathan
 - [x] Iron Assembly
 - [ ] General Vezax

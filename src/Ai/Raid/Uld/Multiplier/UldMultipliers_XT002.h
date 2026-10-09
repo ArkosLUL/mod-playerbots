@@ -10,10 +10,8 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// XT-002: holds the offensive burst cooldowns until the fight's real damage window, which differs
-// per mode - the first exposed Heart in hard mode, the sub-25% push in normal mode. Bloodlust is
-// decided separately because it is a 10 minute cooldown and the fight is shorter than that, so its
-// one use has to land on the longest phase rather than the first one.
+// XT-002: holds burst cooldowns for the real window, the first exposed Heart in hard mode and the sub-25%
+// push in normal. Bloodlust is separate: its one use has to land on the longest phase.
 class XT002BurstWindowMultiplier : public Multiplier
 {
 public:
@@ -34,11 +32,8 @@ private:
     Window cachedValue = {true, true};
 };
 
-// XT-002 normal mode: the safety floor that keeps bots from killing the exposed Heart and flipping
-// the raid into hard mode. Also stands down the generic DPS and tank targeting, which the encounter's
-// own priority action replaces, the generic movers for anyone pinned in place - anchored ranged DPS
-// and debuff carriers - a carrier's gap closers, which move it without being movers, and the
-// class-generic threat redirects that would aim at the wrong tank.
+// XT-002: normal mode Heart floor, so bots don't kill the Heart and flip the raid into hard mode. Also stands
+// down generic targeting, movers for pinned bots, carriers' gap closers and generic threat redirects.
 class XT002TargetGuardMultiplier : public Multiplier
 {
 public:

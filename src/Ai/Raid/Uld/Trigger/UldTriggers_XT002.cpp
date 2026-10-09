@@ -9,9 +9,7 @@
 #include "UldScripts.h"
 #include "Unit.h"
 
-//
 // XT-002 Deconstructor
-//
 
 namespace
 {
@@ -45,9 +43,7 @@ bool InsideXT002Hazard(PlayerbotAI* botAI, Player* bot)
 
 bool XT002DebuffCarrierTrigger::IsActive()
 {
-    // No proximity check: nobody else is going to step aside, so the carrier leaves whether or not
-    // someone happens to be standing next to it right now. Auras before XT, since his lookup is a scan
-    // and almost nobody is carrying.
+    // No proximity check: nobody steps aside, so the carrier leaves anyway. Auras first, XT's lookup is a scan.
     if (!bot->HasAura(GetXT002GravityBombSpellId(bot)) && !bot->HasAura(GetXT002SearingLightSpellId(bot)))
         return false;
 
@@ -62,9 +58,7 @@ bool XT002AvoidHazardTrigger::IsActive()
     // Ranged already stand outside the blast; pulling them out too would only break their casts.
     if (botAI->IsMelee(bot) && bot->FindNearestCreature(PB_NPC_XT002_BOOMBOT, ULDUAR_XT002_BOOMBOT_AVOID_RADIUS))
         hazardNear = true;
-    // Has to match the action's own gate, or this fires for a case the action declines and the tick is
-    // wasted. A carrier's puddles belong to "xt002 debuff carrier action", which is also what walks one
-    // off its own bomb.
+    // Must match the action's gate or the tick is wasted: a carrier's puddles belong to the carrier action.
     else if (!bot->HasAura(GetXT002SearingLightSpellId(bot)) && !bot->HasAura(GetXT002GravityBombSpellId(bot)) &&
              bot->FindNearestCreature(PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_RADIUS))
         hazardNear = true;
@@ -91,21 +85,16 @@ bool XT002RaidPositionTrigger::IsActive()
     if (bot->HasAura(GetXT002SearingLightSpellId(bot)) || bot->HasAura(GetXT002GravityBombSpellId(bot)))
         return false;
 
-    // Standing down for the hazard dodge, but only while the bot is really in a puddle by the same
-    // centre-to-centre measure the dodge scores with. FindNearestCreature subtracts object sizes, so
-    // it calls a bot too close that MoveClearOf already considers clear, and in that gap the dodge
-    // fails every tick while this node keeps yielding to it. One bot rode that out 64 yd from the
-    // boss for the rest of a fight.
+    // Stand down for the dodge only while really in a puddle by its centre to centre measure, or the dodge fails
+    // every tick in the FindNearestCreature size gap while this keeps yielding.
     XT002AvoidHazardTrigger avoidHazard(botAI);
     if (avoidHazard.IsActive() && InsideXT002Hazard(botAI, bot))
         return false;
 
     if (botAI->IsMainTank(bot))
     {
-        // Only while he is actually holding XT. The anchor outranks "reach melee", so a tank that has
-        // lost aggro would walk to the spot and stand there out of range with no way back - XT is a
-        // vehicle, and Vehicle::ApplyAllImmunities makes every one of them taunt-immune, so threat from
-        // damage is the only route. No victim at all is the Heart window, where the spot is right.
+        // Only while holding XT: the anchor outranks "reach melee", and XT is a vehicle, taunt-immune through
+        // Vehicle::ApplyAllImmunities. No victim means the Heart window, where the spot is right.
         Unit* victim = xt002->GetVictim();
         if (victim && victim != bot)
             return false;
@@ -115,9 +104,8 @@ bool XT002RaidPositionTrigger::IsActive()
 
     if (botAI->IsHeal(bot))
     {
-        // Stands down while anything is out of heal range. This node outranks "reach party member to
-        // heal", so without the check a healer could never close on a carrier parked out in the lot -
-        // the far cells sit 55 yd from the anchor against 40 yd of heal range.
+        // Stands down while anyone is out of heal range: this outranks "reach party member to heal", and the far
+        // cells are 55 yd from the anchor.
         PartyMemberToHealOutOfSpellRangeTrigger outOfHealRange(botAI);
         if (outOfHealRange.IsActive())
             return false;
