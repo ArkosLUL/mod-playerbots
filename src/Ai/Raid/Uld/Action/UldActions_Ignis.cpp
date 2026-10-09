@@ -69,10 +69,8 @@ bool IgnisMainTankPositionAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Ignis runs at 10 yd/s against a player's 7, so he stays glued to a tank moving at full speed
-    // and the walk needs no throttling. If he has fallen out of melee range anyway then something
-    // went wrong with his path, and walking further only drops him for good. Scorch is the
-    // exception: he is rooted for those three seconds and cannot follow anyone.
+    // No throttle needed, at 10 yd/s to a player's 7 he keeps up. Out of melee means his path broke and walking
+    // on loses him for good, unless he's rooted for Scorch.
     if (!bot->IsWithinMeleeRange(boss) && !IsIgnisScorchWindow(boss))
         return false;
 
@@ -106,9 +104,8 @@ bool IgnisConstructTankAction::Execute(Event event)
         if (botAI->DoSpecificAction("taunt spell", event, true))
             return true;
 
-        // Every taunt in the game is 30 yd, and a construct that has fixated on someone else clears
-        // that in seconds, so the tank walks it down rather than standing still. The next tick's taunt
-        // is what ends the chase - nothing else in this encounter brings the construct back.
+        // Out of taunt range (every taunt is 30 yd), so walk it down. Next tick's taunt ends the chase, nothing
+        // else here brings it back.
         return MoveTo(bot->GetMapId(), construct->GetPositionX(), construct->GetPositionY(),
                       construct->GetPositionZ(), false, false, false, true,
                       MovementPriority::MOVEMENT_FORCED, true, false);
@@ -116,9 +113,6 @@ bool IgnisConstructTankAction::Execute(Event event)
 
     if (IsIgnisConstructMolten(construct))
     {
-        // Fixed by tank index rather than by whichever pool is nearer: the anchor sits almost exactly
-        // between the two, so nearest-pool always resolves the same way and both constructs would
-        // shatter in one spot.
         Position const& pool = GetIgnisAssignedWaterPool(tankIndex);
 
         // Brittle comes off a once-a-second poll on the construct, so hold still once it is in range
@@ -132,8 +126,7 @@ bool IgnisConstructTankAction::Execute(Event event)
                       false, true, MovementPriority::MOVEMENT_FORCED, true, false);
     }
 
-    // Scorch only lights a patch away from the water, so until one is up there is nowhere to take the
-    // construct - hold it where it is instead of dragging it around the room.
+    // No lit patch yet: hold the construct where it is instead of dragging it around the room.
     Unit* scorchedGround = GetIgnisAssignedScorchedGround(botAI, construct, tankIndex);
     if (!scorchedGround)
         return false;
@@ -161,9 +154,8 @@ bool IgnisAttackBrittleConstructAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") != construct)
         return Attack(construct);
 
-    // Shatter needs one hit of 5000 (10-man) / 3000 (25-man) inside the 15 s window, which rotation
-    // filler often will not reach on its own. Falls through to the rotation when none of these is
-    // available rather than standing still waiting for a cooldown.
+    // Rotation filler often misses the single 5000 / 3000 hit Shatter needs. Returns false when none is castable,
+    // so the rotation runs instead of waiting on a cooldown.
     static std::unordered_map<uint8, std::vector<std::string>> const burstSpells = {
         {CLASS_MAGE, {"pyroblast", "frostbolt"}},
         {CLASS_HUNTER, {"chimera shot", "aimed shot"}},
@@ -238,8 +230,7 @@ bool IgnisFlameJetsHoldCastAction::Execute(Event /*event*/)
     if (!jets || !own)
         return false;
 
-    // A cast that still lands first is worth finishing - only the ones the knockback will eat are
-    // thrown away here, and stopping those frees the mana and the six seconds that follow.
+    // A cast that lands first is worth finishing. Only the ones the knockback would eat get stopped.
     if (own->GetCastTimeRemaining() < jets->GetCastTimeRemaining())
         return false;
 

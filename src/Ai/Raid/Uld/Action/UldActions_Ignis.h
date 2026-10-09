@@ -10,9 +10,7 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-//
 // Ignis the Furnace Master
-//
 class IgnisScorchedGroundAction : public MovementAction
 {
 public:
@@ -23,9 +21,7 @@ public:
     bool isUseful() override;
 };
 
-// Holds the boss on a three-slot arc around the room centre. Scorch summons its patch 20 yd along
-// the boss's facing and the boss faces the main tank, so this is what picks where every patch in the
-// fight lands - away from both water pools, where they light, and away from the raid.
+// Holds the boss on a three-slot arc around the room centre, which picks where every Scorch patch lands.
 class IgnisMainTankPositionAction : public MovementAction
 {
 public:
@@ -51,8 +47,7 @@ public:
     bool isUseful() override;
 };
 
-// One hit of 5000 (10-man) / 3000 (25-man) shatters a Brittle construct, and the blast is what
-// actually kills it - the raid's damage never would.
+// One hit of 5000 (10-man) / 3000 (25-man) shatters a Brittle construct, the only way it dies.
 class IgnisAttackBrittleConstructAction : public AttackAction
 {
 public:

@@ -34,7 +34,9 @@ clears both pools. The tank stands 9.5 yd off it — melee range is ~10.8, Ignis
 three axes that cannot collide. Patch to either pool then lands at 44–78 yd; the construct walk is
 ~45 yd, ~5 s against a 30 s Molten window.
 
-He works **three arc slots 60° apart**, advancing one on the rising edge of Scorch (62546). Ignis is
+He works **three arc slots 60° apart**, because a patch lives 30 s (`TEMPSUMMON_TIMED_DESPAWN` in
+`spell_ignis_scorch_aura`) against Scorch's 20 s repeat, so two are alive for 10 s of every 20. He
+advances one on the rising edge of Scorch (62546). Ignis is
 rooted and rotation-locked for those 3 s and the patch spawns from the orientation frozen at cast
 start, so the step is free and leaves him 16 yd from the patch — outside its 13 yd burn — where
 standing still would have left him 9 yd inside it. The slot is latched per instance id. A reactive
@@ -124,7 +126,9 @@ Every node is gated on `IsIgnisEngaged` — alive **and** in combat, since the b
 the whole 200 yd room. Lookups go through `GetIgnis`, not `"find target"`: a bot parked on a
 construct never has Ignis on its threat list, and a dormant construct carries
 `UNIT_FLAG_NOT_SELECTABLE`, which drops it out of `"possible targets"` entirely. The room is wider
-than SightDistance too, so the cached `"nearest npcs"` list goes blind at the pools.
+than SightDistance too, so the cached `"nearest npcs"` list goes blind at the pools: constructs spawn
+at x 543..631 / y 217..338 and Ignis starts at (586.5, 378.8), so a tank at a pool is ~120 yd from him,
+hence `ULDUAR_IGNIS_ROOM_SEARCH_RADIUS` 200.
 
 **`GetIgnisIf` never searches the grid.** It reads `instance->GetCreature(ULD_BOSS_IGNIS)`, puts it
 through the same acceptance test `FindNearestCreature` would have — entry, alive, `IsWithinDist`,

@@ -16,18 +16,6 @@ class PlayerbotAI;
 class Unit;
 class WorldObject;
 
-// Ignis the Furnace Master.
-//
-// The fight is about Iron Constructs. Ignis activates them, a construct parked in Scorched Ground
-// stacks Heat until it turns Molten, and a Molten construct dragged within 18 yd of one of the
-// room's two water pools turns Brittle. One big hit then shatters it, which is a ranged job since
-// the blast covers melee range. Every construct left alive stacks Strength of the Creator on the
-// boss, so the dragging is the damage race.
-//
-// Scorch drops its patch 20 yd along the boss's facing and the patch burns for 30 s, so the main
-// tank walks a fixed arc to fan them out. Flame Jets hits the whole raid and locks casting, and Slag
-// Pot picks one player to cook for ten seconds.
-
 enum UlduarIgnisIds
 {
     // Ignis the Furnace Master
@@ -54,53 +42,37 @@ enum UlduarIgnisIds
 // triggers (boss_ignis.cpp polls FindNearestCreature(NPC_WATER_TRIGGER, 18.0f) once a second).
 constexpr float ULDUAR_IGNIS_WATER_BRITTLE_RADIUS = 18.0f;
 
-// How far short of the water trigger the construct tank stops. The trigger sits at the bottom of a
-// channel whose bed runs 10-15 yd under the room floor and whose surface is ~1.8 yd under it, so
-// aiming at the trigger walks the tank into the water; the room side is back up at floor level from
-// 12 yd out. The construct follows into melee contact, ~5 yd back, which still leaves it inside the
-// 18 yd the core polls - that test is 3D and counts both bounding radii, so it reaches about 3 yd
-// further than the bare number.
+// Room floor is back at full height 12 yd out from the sunken trigger. The construct trails ~5 yd behind and
+// still trips the 18 yd poll, which is 3D and counts both bounding radii.
 constexpr float ULDUAR_IGNIS_WATER_STANDOFF = 12.0f;
 
-// Everyone but the construct tank clears Scorch's burning patch by this much; the tank parks the
-// tighter distance instead, so the construct walking into melee range ends up on it stacking Heat.
-// 62548 triggers its damage in a 13 yd radius, so anything under that is not actually a dodge.
+// Dodge for everyone else, sized over 62548's 13 yd burn. The construct tank parks inside on purpose, so the
+// construct following him into melee stacks Heat.
 constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_AVOID_RADIUS = 15.0f;
 constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_PARK_DISTANCE = 3.0f;
 
-// A Scorched Ground creature that lands this close to a water trigger never gets lit
-// (boss_ignis.cpp skips SPELL_SCORCHED_GROUND within 25 yd of the water), so it stacks no Heat and
-// the tank must not park a construct on it.
+// boss_ignis.cpp never lights a patch within 25 yd of a water trigger, so one there stacks no Heat.
 constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_INERT_WATER_RADIUS = 25.0f;
 
-// Molten wipes the construct's threat table and adds a heavy fire aura, so everyone who is not the
-// construct tank clears this much room. Sized against Shatter (62383, 18850 damage in 13 yd) rather
-// than the Molten pulse itself, which only reaches ~7 yd - the blast is what actually kills a bot.
+// Sized against Shatter (62383, 18850 in 13 yd), not the Molten pulse, which only reaches ~7 yd.
 constexpr float ULDUAR_IGNIS_MOLTEN_AVOID_RADIUS = 15.0f;
 
-// The construct spawns run x 543..631 / y 217..338 and Ignis starts at (586.5, 378.8), so a tank
-// standing at a water pool is already ~120 yd from the boss and further still from the far wall.
-// Everything Ignis-side searches the grid at this radius rather than going through "nearest npcs",
-// which is capped at AiPlayerbot.SightDistance (100 yd) and drops anything out of line of sight.
+// Whole room: a tank at a pool is ~120 yd from Ignis' spawn, past the 100 yd SightDistance cap and the LOS
+// filter on "nearest npcs".
 constexpr float ULDUAR_IGNIS_ROOM_SEARCH_RADIUS = 200.0f;
 
-// Scorch summons its patch at boss + 20 yd along the boss's facing, and the boss faces the main
-// tank, so where the tank stands is what picks the landing spot for every patch in the fight.
+// Scorch summons its patch 20 yd along the boss's facing, and he faces the main tank.
 constexpr float ULDUAR_IGNIS_SCORCH_SPAWN_RANGE = 20.0f;
 
-// Ignis' combat reach is 8.0, which puts melee range at roughly 10.8 yd centre to centre - the tank
-// radius is that with a little slack so a step off the spot does not drop him out of range.
+// Melee range is ~10.8 yd off Ignis' 8.0 combat reach. 9.5 leaves slack so a step off the spot keeps him in range.
 constexpr float ULDUAR_IGNIS_TANK_RADIUS = 9.5f;
 constexpr float ULDUAR_IGNIS_TANK_SPOT_TOLERANCE = 2.0f;
 
-// The tank works three slots 60 degrees apart, advancing one every Scorch, so the patches land in a
-// fan instead of on top of each other. A 60 degree step at this radius leaves him 17.3 yd from the
-// patch he just dropped and 26.8 yd from the one before - both outside the 13 yd burn.
+// Three slots 60 degrees apart, one step per Scorch, so the patches fan out instead of stacking.
 constexpr uint8 ULDUAR_IGNIS_TANK_ARC_SLOTS = 3;
 constexpr float ULDUAR_IGNIS_TANK_ARC_STEP = static_cast<float>(M_PI) / 3.0f;
 
-// Bearing from the anchor to the tank, and therefore the direction the patch fan points: south.
-// Patches south, water pools east and west, raid north - the three cannot collide.
+// South: patches south, pools east and west, raid north, so the three never overlap.
 constexpr float ULDUAR_IGNIS_TANK_BEARING = -static_cast<float>(M_PI) / 2.0f;
 
 // Melee are admitted to a Brittle construct only once its aura has less than this left, as a
@@ -115,10 +87,8 @@ extern const Position ULDUAR_IGNIS_BOSS_ANCHOR;
 extern const Position ULDUAR_IGNIS_WATER_POOL_WEST;
 extern const Position ULDUAR_IGNIS_WATER_POOL_EAST;
 
-// Ignis the Furnace Master. These search the grid rather than going through "find target": a bot
-// parked on an Iron Construct never has Ignis on its threat list, and a dormant construct carries
-// UNIT_FLAG_NOT_SELECTABLE, which drops it out of "possible targets" entirely. The room is also
-// wider than SightDistance, so the cached "nearest npcs" list goes blind at the water pools.
+// Not "find target": a bot parked on a construct never has Ignis on its threat list. Not "nearest npcs"
+// either, the room is wider than SightDistance.
 Unit* GetIgnis(PlayerbotAI* botAI);
 
 // GetIgnis, but null unless `wanted` holds for him. Same answer as testing GetIgnis's result, only
@@ -144,20 +114,14 @@ bool IsIgnisConstructBrittle(Unit const* construct);
 Unit* GetIgnisBrittleConstruct(PlayerbotAI* botAI);
 Unit* GetIgnisNearestMoltenConstruct(PlayerbotAI* botAI, WorldObject const* from);
 
-// The construct the tank is currently walking through the loop: nearest activated one that has not
-// turned Brittle yet. Once it is Brittle the tank is done and the raid takes over.
-//
-// Sticky per tank: a construct Ignis activates closer to the tank must not steal the walk, because
-// the one already picked up has had its threat wiped by Molten and would peel straight into the raid.
+// Nearest activated construct not yet Brittle, sticky per tank: a closer new one must not steal the walk, since
+// Molten wiped the held one's threat and it would peel into the raid.
 Unit* GetIgnisDrivenConstruct(PlayerbotAI* botAI, Player* tank);
 
-// The construct this tank has already claimed, or null - it never picks a new one. The encounter rules
-// ask per popped action, so this stays a hash lookup and never walks the grid.
+// Claimed construct or null, never picks a new one. Asked per popped action, so it stays a hash lookup.
 Unit* GetIgnisHeldConstruct(PlayerbotAI* botAI, Player* tank);
 
-// Scorched Ground the construct tank can actually use, i.e. one that is lit. Patches that land
-// within ULDUAR_IGNIS_SCORCHED_GROUND_INERT_WATER_RADIUS of the water are skipped by the core and
-// stack no Heat, so parking on one would stall the Heat -> Molten chain for good.
+// Nearest lit patch. One inside the inert water radius stacks no Heat, so parking there stalls Molten for good.
 Unit* GetIgnisNearestScorchedGround(PlayerbotAI* botAI, WorldObject const* from);
 Position const& GetIgnisNearestWaterPool(WorldObject const* from);
 
@@ -165,23 +129,20 @@ Position const& GetIgnisNearestWaterPool(WorldObject const* from);
 // fan instead of both walking to whichever patch happens to be closest.
 Unit* GetIgnisAssignedScorchedGround(PlayerbotAI* botAI, WorldObject const* from, int8 tankIndex);
 
-// 0 or 1 for the two assist tanks that kite constructs, -1 for everyone else. Assist tanks only, on
-// purpose: a raid without one skips the kiting path entirely rather than pulling the boss around
-// behind a construct or feeding a DPS to a Molten one.
+// 0 or 1 for the two assist tanks, -1 otherwise. Assist tanks only: a main tank kiting drags Ignis along, and a
+// DPS holding a Molten construct dies.
 int8 GetIgnisConstructTankIndex(PlayerbotAI* botAI, Player* bot);
 
-// Fixed by tank index, not by distance. The anchor sits almost exactly between the two pools, so
-// nearest-pool is a coin flip that always lands the same way and would stack both Molten pulses and
-// both Shatters in one spot.
+// By tank index, not distance: the anchor is nearly midway, so nearest-pool always picks the same one and both
+// constructs would shatter in one spot.
 Position const& GetIgnisAssignedWaterPool(int8 tankIndex);
 
-// Where the tank walks a Molten construct: ULDUAR_IGNIS_WATER_STANDOFF short of the pool, on the
-// bearing he is coming from. He has no reason to go in - the Brittle poll measures the construct.
+// ULDUAR_IGNIS_WATER_STANDOFF short of the pool, on the tank's own bearing. He has no reason to go in: the Brittle
+// poll measures the construct.
 Position GetIgnisWaterApproach(Player* tank, Position const& pool);
 
-// Where the main tank stands: an arc slot around the room-centre anchor, advanced one step on each
-// Scorch. Ignis is rooted for those 3 s, so the move costs nothing and does not disturb the patch.
-// `boss` is the caller's GetIgnis result, passed in so it is not looked up twice.
+// Arc slot around the anchor, advanced on each Scorch while Ignis is rooted. `boss` is the caller's GetIgnis
+// result, so it isn't looked up twice.
 Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot, Unit* boss);
 
 // The 3 s window in which Ignis is rooted and rotation-locked. The patch lands when it ends.

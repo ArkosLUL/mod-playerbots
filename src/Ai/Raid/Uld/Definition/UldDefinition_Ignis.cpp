@@ -24,9 +24,8 @@ namespace
 {
 bool InUlduar(PlayerbotAI* botAI) { return botAI->GetBot()->GetMapId() == ULDUAR_MAP_ID; }
 
-// The tanks whose spot the encounter owns right now. A construct tank counts only while it is holding
-// one: between constructs it has no spot of its own, and these rules are what would otherwise leave it
-// standing still with every generic mover taken off it.
+// Main tank, plus a construct tank only while it holds one: between constructs it has no spot, and blocking
+// its generic movers would leave it standing still.
 bool IgnisPlacedTank(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -55,16 +54,13 @@ void DefineIgnis(EncounterBuilder& e)
         ACTION_RAID);
     e.Node<IgnisScorchedGroundTrigger, IgnisScorchedGroundAction>(ACTION_RAID + 2);
 
-    // Where the main tank stands is where every fire patch lands, so his spot outranks everything
-    // else the raid does. The construct tanks share the band because no bot is ever both.
-    //
-    // An Iron Construct only dies to the Molten -> Brittle -> Shatter chain, and every one left alive
-    // is another stack of Strength of the Creator on the boss, so the kite outranks the raid's damage.
-    // Standing next to a Molten construct and sitting in a Slag Pot both kill a bot outright.
+    // Tank spots outrank the raid's damage: the main tank's spot picks where every patch lands, and the kite is
+    // the only way a construct dies. They share a band since no bot is ever both.
     e.Node<IgnisMainTankPositionTrigger, IgnisMainTankPositionAction>(ACTION_RAID + 4);
     e.Node<IgnisConstructTankTrigger, IgnisConstructTankAction>(ACTION_RAID + 4);
     e.Node<IgnisAttackBrittleConstructTrigger, IgnisAttackBrittleConstructAction>(ACTION_RAID + 3);
     e.Node<IgnisAttackBossTrigger, IgnisAttackBossAction>(ACTION_RAID + 0.5f);
+    // Standing by a Molten construct or sitting in a Slag Pot kills a bot outright.
     e.Node<IgnisMoltenConstructAvoidTrigger, IgnisMoltenConstructAvoidAction>(ACTION_EMERGENCY);
     e.Node<IgnisSlagPotHealTrigger, IgnisSlagPotHealAction>(ACTION_EMERGENCY + 1);
     e.Node<IgnisFlameJetsTrigger, IgnisFlameJetsHoldCastAction>(ACTION_EMERGENCY + 2);
@@ -73,24 +69,17 @@ void DefineIgnis(EncounterBuilder& e)
     // orders only fight the ride and leave the bot facing the wrong way when it drops.
     e.Exclusive("ignis", Role::Any, IgnisSlagPotRide);
 
-    // The construct tanks are parked on a Scorched Ground patch on purpose - that's what stacks Heat on
-    // the construct - so the dodge would undo the kite every tick. The main tank's arc rotation already
-    // steps him clear of every patch he drops, and a dodge on top of it would drag Ignis across the room.
-    //
-    // Both dodges, not just this encounter's: the generic one runs at ACTION_EMERGENCY, above the band
-    // the kite sits in, so leaving it on outranks the walk on nearly every tick spent in the fire.
+    // Both dodges, the generic one too: at ACTION_EMERGENCY it outranks the kite. The construct tank sits in a
+    // patch on purpose, and the main tank's arc already steps him clear.
     e.Block("ignis", Role::Any, IgnisParkedTank, Family::AvoidAoe, {IgnisScorchedGroundAction::Name});
 
-    // Only the three tanks the encounter places. Everyone else keeps every generic mover, which is
-    // also what keeps the ranged half spread and in range without an anchor of their own. Scoped on
-    // purpose: blanket suppression would leave the whole raid standing still if a replacement mover
-    // ever failed quietly.
+    // Placed tanks only: the rest keep their generic movers, which spread the ranged half, and a blanket block
+    // would freeze the whole raid if a replacement mover ever failed quietly.
     e.Block("ignis tank movement", Role::Any, IgnisTankHeld,
             Family::Reach | Family::ReachHeal | Family::Charge | Family::Follow | Family::Flee);
 
-    // The two attack rows own every target for the whole fight. Left on, the generic pickers re-pick
-    // the lowest-lifetime add on any tick the settled attack returns false, which here means walking
-    // off the Brittle construct and into the shatter blast.
+    // Whole fight, not just the Brittle window: left on, the generic pickers re-pick on any tick the settled
+    // attack returns false, walking bots off the Brittle construct into the shatter blast.
     e.OwnTargeting("ignis disable default targeting", Role::Any, IgnisOwnsTargets,
                    Family::DpsAssist | Family::TankAssist | Family::AttackRti);
 

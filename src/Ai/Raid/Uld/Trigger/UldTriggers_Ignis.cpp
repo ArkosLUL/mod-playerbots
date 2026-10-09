@@ -17,9 +17,7 @@
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
 
-//
 // Ignis the Furnace Master
-//
 static int32 GetIgnisBrittleTimeLeft(Unit* construct)
 {
     if (!construct)
@@ -39,9 +37,7 @@ bool IgnisScorchedGroundTrigger::IsActive()
     if (!IsIgnisEngaged(botAI))
         return false;
 
-    // Grid lookup rather than "nearest npcs", to match the action. The cached list is LOS-filtered
-    // and capped at SightDistance, so the two disagreeing leaves a bot burning in a patch it is
-    // being told to flee.
+    // Same grid lookup as the action. If the two disagree, the bot stays burning in a patch it's told to flee.
     Unit* patch = GetIgnisNearestScorchedGround(botAI, bot);
 
     return patch && bot->GetExactDist2d(patch) <= ULDUAR_IGNIS_SCORCHED_GROUND_AVOID_RADIUS;
@@ -114,10 +110,8 @@ bool IgnisAttackBossTrigger::IsActive()
     if (!boss)
         return false;
 
-    // Everyone else lands here, main tank included - the generic target pickers are switched off for
-    // the whole encounter, so without this node nobody would be on the boss at all. A construct tank
-    // drops out only while it is holding one: Ignis activates a construct every 30 s, and a tank with
-    // none in hand has nothing else in this encounter to do.
+    // The generic pickers are off all fight, so this puts everyone on the boss, main tank included. A construct
+    // tank drops out only while it holds one, between constructs it has nothing else to do.
     if (GetIgnisHeldConstruct(botAI, bot))
         return false;
 
@@ -137,8 +131,8 @@ bool IgnisMoltenConstructAvoidTrigger::IsActive()
     if (!boss)
         return false;
 
-    // Only the tank actually holding a construct stays in the pulse - eating it is his job. One
-    // between constructs clears it like anyone else.
+    // The tank holding a construct stays in the pulse, that's his job. One between constructs clears it like
+    // anyone else.
     if (GetIgnisHeldConstruct(botAI, bot))
         return false;
 
@@ -169,9 +163,8 @@ bool IgnisSlagPotHealTrigger::IsActive()
     if (!IsIgnisEngaged(botAI))
         return false;
 
-    // Sits above every other heal, so it has to wait for the ticks to open a gap - otherwise the
-    // whole healing team spends the ten seconds topping off a victim who is still at full health
-    // while the tank takes Flame Jets unhealed.
+    // Outranks every other heal, so wait for a gap, or the whole team tops off a full-health victim while the
+    // tank takes Flame Jets unhealed.
     Player* victim = GetIgnisSlagPotVictim(botAI);
 
     return victim && victim->GetHealthPct() < ULDUAR_IGNIS_SLAG_POT_HEAL_HP_PCT;

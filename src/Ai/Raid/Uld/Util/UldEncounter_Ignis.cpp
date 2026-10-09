@@ -36,9 +36,8 @@ const Position ULDUAR_IGNIS_BOSS_ANCHOR = Position(587.5f, 277.8f, 360.8f);
 const Position ULDUAR_IGNIS_WATER_POOL_WEST = Position(526.771f, 277.796f, 360.802f);
 const Position ULDUAR_IGNIS_WATER_POOL_EAST = Position(646.771f, 277.796f, 360.802f);
 
-// Construct each assist tank has committed to, so one Ignis activates nearer to him mid-walk cannot
-// steal the kite. Cleared once that construct turns Brittle or dies. Keyed by instance first: the
-// same tank GUID comes back on a re-pull and in a second raid running the fight concurrently.
+// Each assist tank's committed construct. Keyed by instance first: the same tank GUID comes back on a re-pull
+// and in a second raid running the fight at the same time.
 static RaidInstanceState<std::unordered_map<ObjectGuid, ObjectGuid>> ignisTankDrivenConstructGuid;
 
 static std::unordered_map<ObjectGuid, ObjectGuid>& IgnisDrivenConstructsFor(Player* tank)
@@ -65,10 +64,8 @@ Unit* GetIgnisIf(PlayerbotAI* botAI, bool (*wanted)(Creature const*))
         return ignis && wanted(ignis) ? ignis : nullptr;
     }
 
-    // Ignis is a single spawn that nothing summons, and the instance script tracks him from create to
-    // remove, so the grid search can only ever return him or nothing - and IgnisPassesSearchCheck is
-    // every test that search would put him through. Sweeping the room afterwards would only re-derive
-    // the answer already in hand, on exactly the ticks the fight can least afford it.
+    // One DB spawn, never summoned, tracked by the instance script from create to remove: the grid search could
+    // only return him or nothing, and IgnisPassesSearchCheck is every test it would run.
     Creature* tracked = instance->GetCreature(ULD_BOSS_IGNIS);
     if (!tracked || !wanted(tracked) || !IgnisPassesSearchCheck(bot, tracked))
         return nullptr;
@@ -118,9 +115,8 @@ bool IsIgnisConstructBrittle(Unit const* construct)
     return construct && (construct->HasAura(SPELL_IGNIS_BRITTLE_10) || construct->HasAura(SPELL_IGNIS_BRITTLE_25));
 }
 
-// Constructs are dormant and unselectable until Ignis activates them, and the walk to the water
-// takes the tank past SightDistance from the pack, so every lookup below searches the grid instead
-// of the bot's cached, LOS-filtered "nearest npcs" list.
+// Grid search, not the cached "nearest npcs": that list is LOS-filtered and the walk to the water leaves
+// SightDistance.
 static Unit* GetNearestIgnisConstructMatching(WorldObject const* from,
                                               std::function<bool(Unit const*)> const& predicate)
 {
@@ -154,9 +150,7 @@ Unit* GetIgnisBrittleConstruct(PlayerbotAI* botAI)
     std::vector<Creature*> constructs;
     CollectIgnisRoomCreatures(botAI->GetBot(), NPC_IGNIS_IRON_CONSTRUCT, constructs);
 
-    // Lowest GUID rather than nearest. Two constructs can be Brittle at once, and a raid split
-    // between them wastes the 15 s window on both - GUID order is the same everywhere, so every bot
-    // lands on the same one with nothing to coordinate through.
+    // Lowest GUID, the same pick on every bot: two can be Brittle at once, and a split raid wastes both windows.
     Unit* best = nullptr;
     for (Creature* construct : constructs)
     {
@@ -251,8 +245,7 @@ Unit* GetIgnisNearestScorchedGround(PlayerbotAI* /*botAI*/, WorldObject const* f
         if (!patch->IsAlive())
             continue;
 
-        // A patch that spawned next to the water never got lit, so it stacks no Heat on a construct
-        // parked in it - the kite would sit there forever waiting for Molten.
+        // Never lit next to the water, so a construct parked there would wait for Molten forever.
         Position const& pool = GetIgnisNearestWaterPool(patch);
         if (patch->GetExactDist2d(&pool) <= ULDUAR_IGNIS_SCORCHED_GROUND_INERT_WATER_RADIUS)
             continue;
@@ -368,10 +361,8 @@ Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {
     IgnisTankArcState& state = IgnisTankArcStateFor(bot);
 
-    // Rising edge, not "while up": the slot advances once per Scorch, at the start of the 3 s root.
-    // Ignis cannot turn or follow during those seconds and the patch spawns from the orientation he
-    // was frozen with, so the tank crosses to the next slot for free and is 17.3 yd clear when it
-    // lands. Only the main tank may consume the edge - anyone else asking would eat the transition.
+    // Rising edge, so one step per Scorch, at the start of the root. Only the main tank consumes it: anyone else
+    // asking would eat the transition.
     if (botAI->IsMainTank(bot))
     {
         bool const scorchUp = IsIgnisScorchWindow(boss);

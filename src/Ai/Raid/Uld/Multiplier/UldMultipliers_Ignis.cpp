@@ -61,8 +61,7 @@ float IgnisFlameJetsHoldCastMultiplier::GetValue(Action* action)
     if (!spellInfo)
         return 1.0f;
 
-    // Anything that still lands before the knockback is worth starting - only the casts Flame Jets
-    // would eat are held, so healers keep their short heals through the window.
+    // Only casts Flame Jets would eat are held, so healers keep their short heals through the window.
     uint32 const castTime = spellInfo->CalcCastTime();
     if (castTime == 0 && !spellInfo->IsChanneled())
         return 1.0f;

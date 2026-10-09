@@ -106,7 +106,7 @@ into the docs`, written to a scratchpad file and committed with `git commit -F`;
 - [ ] Iron Assembly
 - [ ] General Vezax
 - [ ] Algalon
-- [ ] Ignis
+- [x] Ignis
 - [x] Auriaya
 - [ ] Kologarn
 - [ ] Razorscale

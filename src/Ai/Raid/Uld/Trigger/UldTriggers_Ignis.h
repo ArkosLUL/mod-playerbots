@@ -5,9 +5,7 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-//
 // Ignis the Furnace Master
-//
 class IgnisScorchedGroundTrigger : public Trigger
 {
 public:
