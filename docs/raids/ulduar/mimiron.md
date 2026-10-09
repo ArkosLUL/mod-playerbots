@@ -52,7 +52,7 @@ pulls, with no node left within 24 yd of centre at the handover.
 The tank spot is **51.5 yd from Mimiron's own spawn** (2742.53, 2560.99), and he evades past **80 yd**
 from it on every tick (`boss_mimiron.cpp:394-398`) — that check is the only leash in the encounter,
 the MK II has none of its own. navprobe `--nav 0x09`: 0.223 to poly, flat at **Z 364.314**, 16/16 at
-12 yd.
+12 yd and 14/16 at 18 and 24, every miss in the raised west doorway alcove.
 
 The camp is a wedge of **per-bot slots** round the tank spot (`MimironPhase1CampSlot`): rows at **21, 27
 and 33 yd**, 6 apart, ±38°, 16 slots, never closer than 5.5 yd even full. Its centreline runs through
@@ -80,7 +80,8 @@ fixes only the north wedge.
 
 That margin is thin: 2 yd more westward drift puts the south edge back at 34%. `MimironPhase1CampTurn`
 turns the whole camp toward the room in 4° steps up to 16° until every slot sees the MK II
-(`Map::isInLineOfSight` along the `IsWithinLOSInMap` ray from a fixed 2 yd eye), raid-wide on the 250 ms
+(`Map::isInLineOfSight` along the `IsWithinLOSInMap` ray from a fixed 2 yd eye, fixed only so every bot
+builds the same camp: a 1.2 or 2.5 yd eye answers the same), raid-wide on the 250 ms
 scan; it rises at once and falls back only after 15 s (`mimiron.campturn`). In that stress case it
 clears with ≤ 8° in 98% of positions. The static turn was enough on its own on 2026-09-12:
 `follow <-> arc spread` **0**, from 58 and 49, and `campturn` never fired.
@@ -209,7 +210,8 @@ still got wrong, both fixed in the dodge itself.
 clean bearing at that distance and fell through to an unscreened `MoveAway`. It is now a ladder,
 `ULDUAR_MIMIRON_FLAMES_STEP_LADDER` = 3, 5, 7, 10 yd, each rung screened against the whole field by
 the same fan and the first clean one taken; only the last rung may fall back. Short rungs are safe
-precisely because they are screened, and what a short one saves is the walk home.
+precisely because they are screened, and what a short one saves is the walk home: the fixed hop cost
+melee **two thirds** of their time in range.
 
 **And it dodged whatever the cost.** A node ticks ~3.1k against a 22-24k pool, so a healthy bot has
 seven ticks of margin while the round trip costs 24 yd of uptime. The gate is `nodes >=
@@ -456,7 +458,9 @@ side, which is how the far side of the room used to report safe while the beams 
 Path 13395 is 19 waypoints at velocity **20.8988**, perimeter **707.0 yd** — a **33.8 s** lap, so
 **10.64 °/s** and **106.4°** per barrage, bearings strictly decreasing. A least-squares circle fits it
 at centre (2741.98, 2569.36), r = 113.2, which is **2.7 yd** from `ULDUAR_MIMIRON_ROOM_CENTER` — close
-enough to orbit about the room centre and stay within a couple of degrees over a whole cast.
+enough to orbit about the room centre and stay within a couple of degrees over a whole cast. The radius
+is not: about the room centre the polygon runs 110-116 yd, so `MimironOrbitAhead` reads it live off
+33576's position.
 
 **That rate only holds for a VX-001 standing at the room centre.** The bearing rate seen from an
 off-centre observer is not constant: at 15 yd it swings 9.2–12.5 °/s, at 30 yd **8.3–14.7 °/s**. Phase
@@ -641,6 +645,12 @@ resolves through `GetFirstAliveUnitByEntry` instead. **The same defect is still 
 other instance strategies**, so it is worth checking first on any boss whose script skips
 `DoZoneInCombat`.
 
+**Targets are set directly, never through a raid icon.** `mimiron set dps priority` owns every
+non-tank's `"current target"` while a mech is up. The old icon round-trip failed whenever a bot's `rti`
+string differed from the marking bot's, since icons are group-global. `MimironAerialCommandUnitAction`
+still puts the skull on the Assault Bot, else the Aerial Command Unit, for a human raid leader only:
+no bot reads it back.
+
 ## The two adds need opposite answers
 
 **Proximity Mine (34362)** carries `unit_flags = 2` (`UNIT_FLAG_NON_ATTACKABLE`): there is no
@@ -692,7 +702,9 @@ abandons the mech for an add somebody else can hit, and lands the bot in the `re
 **−285** carries. At 20,000 HP and 8.0 yd/s, a second of extra approach is most of a cast.
 `mimiron slow bomb bot` puts the class snare on whichever Bomb Bot the bot is already shooting:
 hunter `concussive shot`, shaman `frost shock`, warlock `curse of exhaustion`. Roots are deliberately
-absent — Entangling Roots and Frost Nova break on the first hit, and hitting it is the plan.
+absent — Entangling Roots and Frost Nova break on the first hit, and hitting it is the plan. Not through
+`AURA_INTERRUPT_FLAG_TAKE_DAMAGE`, which neither carries, but `AuraEffect::HandleBreakableCCAuraProc`:
+every proc-flagged root drops once damage passes the caster-level warrior `BaseHealth / 4.75`.
 
 Two gates keep it from being a waste of a global. It reads `"current target"` rather than scanning, so
 it can only fire on a Bomb Bot `mimiron set dps priority` already handed the bot — which also means
@@ -1239,6 +1251,11 @@ only when `IsMimironCoreUseReady`: airborne, no 64436, and no live 34068 within 
 carrier notes `pending`. The next pull into phase 3 used **two cores off two corpses**, 34 s apart, and
 landed cleanly twice.
 
+**`TakeMimironCore` hands the core over because bots cannot loot it in combat.** Looting is wired only
+into `LootNonCombatStrategy`, and the loot strategies discard 46029, a white consumable, as junk. The
+Assault Bot drops it at 100%, so the handover asks only what a player would still have to do: kill the
+bot, stand on the corpse, have bag room.
+
 **The floor is what pays, and neither gate covers the arming.** 2026-09-22 spent both banked cores
 into one landing, **0.2 s apart**, twice: 64444 is instant but its 34068 is not there to be found on
 the next tick, and the 64436 that creature casts only reaches the unit **3.8-4.4 s** later, so between
@@ -1729,6 +1746,8 @@ of phase-1 damage, about 250-390 dps a melee against the ~120 the adds section p
 
 Measured from the boss script: **47.75 s** from phase 1 to 2 (retreat 5 → elevator 6 → VX-001 summoned
 6 → 18 → 4 → 5 → 2 → 1.75), **24 s** to phase 3, **31.8 s** to phase 4. Nearly two minutes a pull.
+VX-001 boards the chassis **18.8 s** into the last one, and `GetMimironStagingFocus` returns it only
+then, so that is when `p4tank` goes out: still over twice the walk in from a phase 3 wedge slot.
 
 A defeated mech sets `UNIT_FLAG_NOT_SELECTABLE` and stays in the world — the MK II parks 58 yd off
 centre for phases 2 and 3 — and the next mech carries the same flag until its phase starts.
@@ -1859,11 +1878,12 @@ actions and multipliers read live.
 ## What a trace answers
 
 Position, verdicts and movement commands come from the raid-agnostic streams. The Mimiron rows, under
-`--notes mimiron.`:
+`--notes mimiron.`: `mimiron.py --walk` charges a moving sample to the bot's last accepted `move`
+within 6 s (`ATTRIBUTE_MS`), and `?` is a walk with none, a human or a chase.
 
 | Key | Says |
 |---|---|
-| `phase` | 0 none, 1-4 the phase, 5 a handover. Per instance |
+| `phase` | 0 none, 1-4 the phase, 5 a handover. 0 also covers the 1→2 handover until VX-001 is summoned ~17 s in (`GetMimironStagingFocus` sees only VX-001 and the Aerial Command Unit), so `mimiron.py` prints it as a `Z` span, then `H`. Per instance |
 | `core` | The Magnetic Core window is open, which is not the same as the unit being on the floor. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) `hold-expiring` (the held one was about to) or `hold-bot-up` (the next Assault Bot is up) |
@@ -1871,7 +1891,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `tankspot` | A Firefighter phase 4 tank spot move, `x,y <old>><new>` nodes within 14 yd. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
-| `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
+| `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°, since at whole degrees it changes every tick and one kill wrote 2,300 rows. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
 | `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, the barrage cone or a spray lane |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |

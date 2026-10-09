@@ -30,48 +30,32 @@ public:
     MimironFleeAction(PlayerbotAI* ai, std::string const name) : MovementAction(ai, name) {}
 
 protected:
-    // fallbackUnfiltered takes the plain MoveAway fan when every mine-clear bearing was refused. Set
-    // it for hazards that hurt more than a mine; the mine dodge itself passes false, because
-    // escaping one mine into another is not an escape.
-    // interrupt cancels an in-flight cast first. Set it for anything that kills outright: a bot
-    // that IsMovementPreventedByCasting cannot be moved at all, so the dodge is a no-op without it.
-    // what names the hazard for the trace, because a refused bearing writes no movement record and a
-    // flee that finds none is otherwise a silent gap.
-    // clearRadius, when set, replaces the flat distance with the per-bearing hop that lands the
-    // destination that far from `from`. One radius swept over a fan only reaches it on the
-    // straight-away bearing; every other lands short, which is how an escape sweeps eleven
-    // headings and stays inside the circle it was running from.
-    // sectorScreen keeps a hard-mode phase 2 bot off the other group's Rapid Burst line
-    // (GetMimironOtherGroupSector) while any bearing on its own side is left.
-    // allowFire as on MoveTowardClearOfMines below.
+    // fallbackUnfiltered: plain MoveAway fan if every mine-clear bearing is refused. The mine dodge passes false.
+    // interrupt: a casting bot can't be moved at all, so set it for anything that kills outright.
+    // clearRadius: hop solved per bearing to land on that circle; one flat distance only clears it straight away.
+    // sectorScreen: keeps a hard-mode phase 2 bot off the other group's Rapid Burst line while its own side has room.
     bool MoveAwayClearOfMines(Unit* from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                               bool fallbackUnfiltered = true, bool interrupt = false,
                               char const* what = "flee", float clearRadius = 0.0f,
                               bool sectorScreen = false, bool allowFire = false);
 
-    // Same fan, run away from a point rather than a unit. The ground fire is a field of 50 to 60
-    // nodes with no single unit to flee, so the flames dodge hands in its centroid.
+    // Same fan, fleeing a point: the fire has no single unit to flee, so the flames dodge passes its centroid.
     bool MoveAwayClearOfMines(Position const& from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                               bool fallbackUnfiltered = true, bool interrupt = false,
                               char const* what = "flee", float clearRadius = 0.0f);
 
-    // Same fan again, aimed at a destination instead of away from a hazard, by fleeing the point
-    // mirrored through the bot - so the straight-ahead bearing is the destination itself and the
-    // sweep supplies the alternatives.
-    // allowFire drops the ground-fire screen. Only for an escape from something that outdamages a
-    // node: a node is ~3100 a second, and a fan that refuses all eleven bearings for fire leaves
-    // the bot standing in a Water Spray line that one-shots it.
+    // Same fan aimed at `dest`, by fleeing the point mirrored through the bot. allowFire drops the fire screen,
+    // only for escapes from something deadlier than a ~3.1k/s node, like a Water Spray line.
     bool MoveTowardClearOfMines(Position const& dest,
                                 MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                                 bool fallbackUnfiltered = true, bool interrupt = false,
                                 char const* what = "step", bool allowFire = false);
 
 private:
-    // The fan itself. `fallbackFrom` is the unit the two public overloads were asked about, and is
-    // only ever used for the unfiltered MoveAway once every bearing has been refused; the point
-    // overload has no unit to hand it, so it walks straight away from `from` instead.
+    // fallbackFrom is only for the unfiltered MoveAway once every bearing is refused; without one, the
+    // fallback walks straight away from `from`.
     bool FleeFan(Position const& from, Unit* fallbackFrom, float distance, MovementPriority priority,
                  bool fallbackUnfiltered, bool interrupt, char const* what, float clearRadius = 0.0f,
                  bool allowFire = false, bool sectorScreen = false);
@@ -121,8 +105,7 @@ private:
     void NoteBarrageDecision(char const* branch, char const* direction, float cw);
 };
 
-// Where a bot stands when nothing is trying to kill it this second. The six fixed spots this replaced
-// stacked the raid into three clumps, which is the worst possible shape against anything conical.
+// Where a bot stands when nothing is trying to kill it this second.
 class MimironArcSpreadAction : public MovementAction
 {
 public:
@@ -180,15 +163,13 @@ public:
 private:
     void NoteCoreStep(char const* step);
 
-    // Set by every spend and cleared once the bags are empty with no core on the floor, so the next
-    // core in hand goes down the moment the live landing ends instead of waiting to bank again. The
-    // count alone can't tell: one core left after spending the first of a pair reads as a bank of one.
+    // Set on every spend, cleared once the bags are empty with no core down. The count alone can't tell:
+    // one core left after spending the first of a pair reads as a bank of one.
     bool chaining = false;
 };
 
-// Raise Frost Resistance Aura for phase 3. Cast directly rather than through ChangeStrategy: nothing
-// removes an added "rfrost", so the pick would outlive the phase. The mimiron paladin aura rule holds
-// the slot open while it runs.
+// Cast directly, not through ChangeStrategy: nothing removes an added "rfrost", so it would outlive phase 3.
+// The mimiron paladin aura rule holds the slot open meanwhile.
 class MimironFrostResistanceAction : public Action
 {
 public:
@@ -198,13 +179,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// One big defensive on the tank for the Plasma Blast window, spent when the cast starts rather than
-// when a health bar has already dropped. Six ticks totalling 54k to 119k land on a 43k pool in about
-// five seconds, so a threshold notices it around the third one.
-//
-// Exactly one button per window, tank or healer and never both: either alone carries it, and the
-// spare is worth more on the next window 22 s later. The tank's own cooldown goes first because it
-// costs the raid nothing; a healer only steps in when he has none left.
+// One big defensive per Plasma Blast window, spent at cast start: a health threshold only notices by the third
+// tick. Tank's own first since it costs the raid nothing, a healer external only when he has none, never both.
 class MimironPlasmaBlastDefensiveAction : public Action
 {
 public:
@@ -226,9 +202,8 @@ private:
     bool TankHasDefensive(Unit* victim);
 };
 
-// Phase 1 threat redirect. The MK II has to stay on the main tank through a 53 yd walk west, and the
-// rogue's own Tricks picker aims at the hardest-hitting melee during the opener instead - which is
-// what pulled the boss off the tank 2 to 3 s in on every measured pull.
+// Phase 1 only: the MK II must stay on the main tank through the walk west, and the generic Tricks picker
+// aims at the top melee instead.
 class MimironRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
@@ -242,9 +217,8 @@ protected:
     Unit* GetThreatDumpTarget() override;
 };
 
-// Owns "current target" for every non-tank while any mech is up. Raid icons stay cosmetic here: they
-// are group-global, and reading one back is what made the old rti round-trip fail whenever a bot had
-// a different "rti" string from the one the marking bot wrote.
+// Owns "current target" for every non-tank while any mech is up. Raid icons stay cosmetic: they're
+// group-global, so a bot whose "rti" string differs from the marker's reads back the wrong one.
 class MimironSetDpsPriorityAction : public AttackAction
 {
 public:
@@ -273,9 +247,8 @@ private:
     static char const* DescribeTargetRule(Unit* unit);
 };
 
-// Steps the shortest distance that clears every mine, rather than the safest point in the room. The
-// generic MoveAwayFromCreatureAction maximises min-distance-to-any-mine over a fan reaching 30 yd,
-// which in a fresh ten-mine field means a long run to a different answer every tick.
+// Shortest step that clears every mine. The generic MoveAwayFromCreatureAction maximises distance over a
+// 30 yd fan, which in a fresh field is a long run to a different answer every tick.
 class MimironProximityMineAction : public MimironFleeAction
 {
 public:
@@ -311,11 +284,8 @@ public:
     bool isUseful() override;
 };
 
-// Hard mode (Firefighter): step out of the persistent ground fire before it burns the bot down.
-// Hard mode (Firefighter): close on the target by the clear side of it. "reach melee" and
-// "reach spell" walk the straight line and stop where it ends, which in a Firefighter phase 3 is
-// inside a burning node two thirds of the time; they cannot be screened per encounter, because
-// the action names are registered once for every bot on the server.
+// Hard mode (Firefighter): close on the target by its clear side. Can't screen "reach melee"/"reach spell"
+// instead: action names are registered once for every bot on the server.
 class MimironApproachTargetAction : public MovementAction
 {
 public:
@@ -326,6 +296,7 @@ public:
     bool Execute(Event event) override;
 };
 
+// Hard mode (Firefighter): step out of the ground fire.
 class MimironDodgeFlamesAction : public MimironFleeAction
 {
 public:
@@ -337,9 +308,8 @@ public:
     bool isUseful() override;
 };
 
-// Hard mode (Firefighter): clear VX-001's Frost Bomb radius before it detonates. On the shared fan
-// rather than MoveAwayFromCreatureAction, whose own fan reaches 30 yd and which refuses to move at
-// all when no candidate clears the full radius - which at 30 yd is most of them.
+// Hard mode (Firefighter): clear the Frost Bomb before it goes off. Not MoveAwayFromCreatureAction: it won't
+// move at all unless a candidate clears the full 30 yd, which most don't.
 class MimironFrostBombAction : public MimironFleeAction
 {
 public:
@@ -364,9 +334,8 @@ public:
     bool isUseful() override;
 };
 
-// Bomb Bots are the one Mimiron add that takes a snare - immunity set -263 leaves SNARE, ROOT, STUN,
-// FREEZE, GRIP and KNOCKOUT off, all of which the Assault Bot's -285 carries. 20000 HP at 8.0 yd/s,
-// so every second of extra approach is most of a cast.
+// Bomb Bots are the one Mimiron add that takes a snare: immunity set -263 leaves SNARE and ROOT off, unlike
+// the Assault Bot's -285.
 class MimironSlowBombBotAction : public Action
 {
 public:

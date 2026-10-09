@@ -1,31 +1,5 @@
 #!/usr/bin/env python3
-"""Score a Mimiron pull from a RaidObs trace: who walked, what for, and what it cost.
-
-    mimiron.py <file>            every section
-    mimiron.py <file> --phases   phase spans, and every death by phase and killer
-    mimiron.py <file> --heal     the phase 2 healing race, 2.5 s at a time, and where the cooldowns went
-    mimiron.py <file> --walk     walking time per phase and role, charged to the move that started it
-    mimiron.py <file> --flips    A-B-A between one bot's moves, and what the formation walked back from
-    mimiron.py <file> --burst    every Rapid Burst: carrier, cone, outside, the ticks each took, and how
-                                 many crossed between melee and ranged
-    mimiron.py <file> --bomb     every Frost Bomb: who had to run, casting lost, where escapes landed
-    mimiron.py <file> --slots    how often formation slots moved, and why
-    mimiron.py <file> --spin     every Laser Barrage window, and the storm in the 15 s after it
-    mimiron.py <file> --p3       phase 3: the fire brigade, Water Spray, the Junk Bot pile, and how
-                                 long each core actually kept the unit on the floor
-
-What the generic views get wrong here, and what this reads instead:
-
-- **Phases come from `mimiron.phase`**: 1 to 4, 5 for a handover, 0 for nothing attackable, which
-  also covers the gap between the MK II dying and VX-001 arriving. They print as P1..P4, H1.., Z1..
-  A phase that comes round twice gets a letter (`P4`, then `P4b`), or one pull's deaths and walks
-  are counted under both spans.
-- **`snap.u[8]` says a bot is moving, not why.** Walking is charged to the bot's last accepted move
-  inside 6 s before the sample.
-- **A Frost Bomb's fuse starts at its summon, not at VX-001's cast.** 64623 has a 2 s cast and a
-  flight, and the bomb first shows up 2.5 to 4 s after it; the blast lands 10 s after that.
-- **A move record carries its destination only.** Where the bot started is its last sample before it.
-"""
+"""Score a Mimiron pull from a RaidObs trace: who walked, what for, and what it cost."""
 from __future__ import annotations
 
 import bisect
@@ -64,9 +38,8 @@ SPELL_ROCKET_STRIKE = (64402, 65034)
 SPELL_WATER_SPRAY = 64619
 SPELL_FROST_RESISTANCE_AURA = (19888, 19897, 19898, 27152, 48945)
 SPELL_LASER_BARRAGE = 63293
-# Raid cooldowns, named in --heal's events off the caster's cast record. Tranquility is every
-# player rank of the channel. Heroism and Bloodlust share a name here: only one of the two is ever
-# castable in a raid, and which it is says nothing but the faction.
+# Raid cooldowns for --heal's events, off the caster's cast record. Heroism and Bloodlust share one name:
+# a raid only ever has one of them, and which one says nothing but the faction.
 COOLDOWN_EVENTS = {64205: "guardian", 64843: "hymn", 31821: "mastery", 10060: "PI", 33206: "painsup",
                    32182: "lust", 2825: "lust",
                    **{rank: "tranq" for rank in (740, 8918, 9862, 9863, 26983, 48446, 48447)}}
@@ -89,8 +62,8 @@ SPRAY_LEAD_MS = 1000
 # The Aerial Command Unit rests at z 379.3 hovering and lands on 364.3, so anything above this is in
 # the air whatever the Magnetic Core latch says.
 ACU_FLOOR_Z = 366.3
-# How far back a landing looks for the uses that fed it: 64436 reaches the unit 3.8 to 4.4 s after the
-# use, and a banked second core goes in within a second of the first.
+# How far back a landing looks for the uses that fed it: 64436 reaches the unit about 4 s after the use,
+# and a banked second core goes in within a second of the first.
 CORE_LANDING_LOOKBACK_MS = 12000
 
 # ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE is an expression the source parser does not read.
@@ -147,9 +120,8 @@ def phases(trace: Trace) -> list[tuple[int, int, str]]:
         if label in ("H", "Z"):
             label = f"{label}{seen[label]}"
         elif seen[label] > 1:
-            # A phase can come round twice - one pull went P4, H4, P4 - and every view here keys on
-            # the label, so the second span would print under the first and double its deaths and
-            # yards. The first keeps its plain name, so span_of("P4") still finds the phase.
+            # Views key on the label, so a phase that comes round twice needs its own name or its deaths
+            # and yards count twice. The first keeps its plain name, so span_of("P4") still finds it.
             label += chr(ord("a") + seen[label] - 1)
         out.append((when, stop, label))
     return out
@@ -573,8 +545,7 @@ def burst_group(trace: Trace, guid) -> str:
 
 def burst_cross(trace: Trace, rows: list[dict]) -> collections.Counter:
     """Rapid Burst ticks keyed by (carrier group, victim group), melee and tanks against ranged and
-    healers. A bot standing in the other group's line takes every burst aimed at that group, which
-    is what the phase 2 melee sector opposite the wedge is for."""
+    healers: a bot in the other group's line takes every burst aimed at that group."""
     ticks: collections.Counter = collections.Counter()
     for row in rows:
         side = burst_group(trace, row["carrier"])
@@ -618,9 +589,8 @@ def show_burst(trace: Trace) -> None:
 # ----------------------------------------------------------------------------------------------- bomb
 
 def bomb_rows(trace: Trace) -> list[dict]:
-    """One row per Frost Bomb cast. The bomb exists only from the summon at the end of 64623's 2 s cast
-    and flight, and its 10 s fuse starts there, so everything keys off the bomb's first sample. A cast
-    with no bomb after it summoned nothing, and its row says so."""
+    """One row per Frost Bomb cast, keyed off the bomb's first sample: the 10 s fuse starts at the summon,
+    not the cast. A cast with no bomb after it summoned nothing."""
     roster = roster_guids(trace)
     vx = guids_of_entry(trace, NPC_VX001)
     bombs = guids_of_entry(trace, NPC_FROST_BOMB)
@@ -708,9 +678,8 @@ def show_bomb(trace: Trace) -> None:
 # ---------------------------------------------------------------------------------------------- slots
 
 def slot_churn(trace: Trace) -> dict[str, dict]:
-    """Per phase, how each bot's `mimiron.slot` changed: a new shape, a new count (somebody died or
-    came back), a new index, or the same index moved (the shape itself slid). Yards are what the slot
-    moved, to the whole yard the note rounds to."""
+    """Per phase, how each bot's `mimiron.slot` changed: new shape, new count (a death or a return), new
+    index, or the same index moved (the shape slid), with the yards it moved to the note's whole yard."""
     spans = phases(trace)
     last: dict[int, tuple] = {}
     out: dict[str, dict] = collections.defaultdict(
@@ -778,9 +747,8 @@ def dealt_between(samples: Samples, roster, low: int, high: int) -> int:
 
 
 def spin_rows(trace: Trace) -> list[dict]:
-    """One row per Spinning Up cast. VX-001's UpdateAI returns early for the whole channel and
-    barrage, so the window is 14.5 s in which nothing but the fire touches the raid - and then every
-    overdue event fires one per tick, which is what the 15 s after it measures."""
+    """One row per Spinning Up cast: the 14.5 s window in which only the fire touches the raid, and the
+    15 s after it, when every overdue event fires."""
     roster = roster_guids(trace)
     vx = guids_of_entry(trace, NPC_VX001)
     spans = phases(trace)
@@ -891,9 +859,8 @@ def show_spin(trace: Trace) -> None:
 # ------------------------------------------------------------------------------------------------- p3
 
 def spray_lanes(units: dict[int, list], firebot: int, flames: set[int]) -> list[tuple[float, float, float]]:
-    """`(x, y, facing)` of each line this fire bot can spray down next, built the way the hazard read
-    in the source builds them: its live facing, and the lane toward its nearest spread flame from
-    where its walk there stops."""
+    """`(x, y, facing)` of each line this fire bot can spray down next, as the C++ hazard read builds them:
+    its live facing, and the lane toward its nearest spread flame from where its walk there stops."""
     row = units.get(firebot)
     if not row or not living(row):
         return []
@@ -939,9 +906,8 @@ def core_ledger(trace: Trace, low: int, high: int) -> dict:
 
 
 def p3_rows(trace: Trace) -> dict:
-    """Phase 3 as the fire brigade and the Magnetic Core decide it: how long each Emergency Fire Bot
-    lived and how much of the raid was shooting it, what Water Spray cost, and how much faster the
-    Aerial Command Unit dies on the floor than in the air."""
+    """Phase 3: how long each Emergency Fire Bot lived and how much of the raid shot it, what Water Spray
+    cost, and how much faster the Aerial Command Unit dies on the floor than in the air."""
     span = span_of(phases(trace), "P3")
     if not span:
         return {}
@@ -1043,9 +1009,8 @@ def p3_rows(trace: Trace) -> dict:
         was, now = acu_hp(begin), acu_hp(end)
         return was - now if was is not None and now is not None else 0.0
 
-    # What the latch cannot say. A second core inside a live window replaces the first aura, the script
-    # runs its lift-off on that removal, and the unit climbs back out of melee reach with the new aura
-    # still on - latched the whole 20 s, on the floor for half a second of it.
+    # Off Z, not the latch: a second core in a live window replaces the aura, that removal runs the lift-off,
+    # and the unit climbs back out of reach with the new aura on, still latched.
     def floor_seconds(begin: int, end: int) -> float:
         inside = [z for when, z in acu_z if begin <= when <= end]
         if not inside:

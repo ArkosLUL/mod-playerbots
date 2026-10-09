@@ -10,17 +10,8 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Mimiron phase 1: the main tank's anchor is 53 yd from where he picks the boss up, and "reach
-// melee" is ACTION_HIGH against a formation at ACTION_RAID, so the two traded him back and forth
-// for the whole walk. Held only while the boss is his, which is also when he does not need it - it
-// is following him. Lose aggro and this lifts, so he can run back and taunt.
-//
-// Tank face too. It steps him about 5.6 yd off the anchor, just past the formation's tolerance, and
-// the formation walks him back, over and over. The MK II has no frontal ability, so pointing it away
-// from the raid buys nothing.
-//
-// Phase 3 as well, for "reach melee" only: the Aerial Command Unit is out of reach in the air, and
-// the tank chasing it under itself drifted the whole fight 14 yd off the centre spot.
+// Mimiron hard mode phase 1: holds the main tank's "reach melee" and tank face while the MK II is his, since both
+// fight the formation's anchor and the MK II has no frontal to aim. Phase 3 holds "reach melee" alone.
 class MimironTankAnchorGuardMultiplier : public Multiplier
 {
 public:
@@ -38,8 +29,7 @@ public:
 };
 
 // Mimiron phase 1: the main tank's own cooldowns go out only through the Plasma Blast window claim.
-// The class nodes fire on health, so they spent Divine Protection mid window after a healer external
-// had already covered it, and the next window got nothing and killed the tank.
+// The class nodes fire on health, so they doubled up on one window and left the next one bare.
 class MimironPlasmaDefensiveHoldMultiplier : public Multiplier
 {
 public:

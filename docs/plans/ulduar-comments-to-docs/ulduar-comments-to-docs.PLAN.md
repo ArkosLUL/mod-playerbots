@@ -97,7 +97,7 @@ into the docs`, written to a scratchpad file and committed with `git commit -F`;
 ## Status
 
 - [x] Yogg-Saron
-- [ ] Mimiron
+- [x] Mimiron
 - [ ] Thorim
 - [ ] Hodir
 - [ ] Freya

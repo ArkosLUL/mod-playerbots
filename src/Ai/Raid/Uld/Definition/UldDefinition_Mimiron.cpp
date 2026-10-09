@@ -28,11 +28,8 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-// The windows where taking the hit ends the bot: Shock Blast is 100000 in a 15 yd circle, the Laser
-// Barrage cone one-shots, a Rocket Strike lands on the ranged ring, and Firefighter's fire and Frost
-// Bomb both tick people down. Proximity Mines and Bomb Bots are left out on purpose - the mine row
-// sits below the whole ladder because eating one is healable, and letting it veto a charge would
-// contradict its own ranking.
+// Windows where a hit kills the bot. Mines and Bomb Bots stay out on purpose: a mine hit is healable and its
+// row ranks last, so letting it veto a charge would contradict that ranking.
 bool MimironLethalWindowActive(PlayerbotAI* botAI)
 {
     if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) && !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
@@ -60,9 +57,8 @@ bool MimironLethalWindowActive(PlayerbotAI* botAI)
     return frostBomb.IsActive();
 }
 
-// The barrage row owns every bot's position for the cast. It hands the tick back while a bot holds at
-// the band edge, and melee have no slot in phase 4, so the unstacker would walk them back into the
-// band. Otherwise only while the bot stands on its slot, the window the formation declines to act in.
+// Whole barrage: the dodge hands the tick back at the band edge and phase 4 melee have no slot, so the
+// unstacker would walk them back into the band. Otherwise only while the bot stands on its slot.
 bool MimironFormationHeld(PlayerbotAI* botAI)
 {
     MimironP3Wx2LaserBarrageTrigger barrage(botAI);
@@ -115,8 +111,7 @@ bool MimironNearRocket(PlayerbotAI* botAI)
     return rocket && bot->GetExactDist2d(rocket) < hold;
 }
 
-// Water Spray is instant, a 15 yd line, and 23000 to 26000 against a 22000 to 24000 pool, so nothing
-// may walk a bot back into one: two died to a spray 3.5 s after a "reach melee" leg put them in it.
+// Water Spray is an instant 15 yd line that one-shots, so nothing may walk a bot back into one.
 bool MimironFireHold(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -157,13 +152,8 @@ bool MimironPhase4MainTank(PlayerbotAI* botAI) { return IsMimironPhase4(botAI->G
 
 void DefineMimiron(EncounterBuilder& e)
 {
-    // Laser Barrage outranks everything else here: its cone one-shots. Ranked below it by
-    // what a hit actually costs - Shock Blast is 100000 damage in a 15 yd circle, a Proximity Mine
-    // is 3 yd and healable, which is why the mine dodge sits under the whole rest of the ladder.
-    //
-    // No Rapid Burst node. A bot steps 1.1 to 1.8 s into the 3 s cone and still takes a hit after
-    // it, so the step saved ~0.3 ticks and cost a walk back to the slot. Destinations are screened
-    // against the live cone instead, so nothing walks into one.
+    // Ranked by what a hit costs: the barrage cone one-shots, Shock Blast is 100000 in 15 yd, a mine is healable.
+    // No Rapid Burst node: a step lands too late to save a tick. Destinations are screened against the live cone.
     e.Node<MimironP3Wx2LaserBarrageTrigger, MimironP3Wx2LaserBarrageAction>(ACTION_RAID + 7);
     e.Node<MimironShockBlastTrigger, MimironShockBlastAction>(ACTION_RAID + 5.5f);
     e.Node(
@@ -188,17 +178,11 @@ void DefineMimiron(EncounterBuilder& e)
     e.Node<MimironSlowBombBotTrigger, MimironSlowBombBotAction>(ACTION_RAID + 2);
     // The action always returns false, so this only ever redirects the pet - the bot keeps its tick.
     e.Node<MimironPetControlTrigger, MimironPetControlAction>(ACTION_RAID);
-    // Hard mode (config-gated): step out of the persistent ground fire and clear the Frost Bomb.
-    //
-    // The bomb outranks the fire, and the gap between them is the point. Both used to sit on
-    // ACTION_RAID + 4 alongside the rocket strike, the queue breaks an exact tie by push order, and
-    // the engine stops the tick at the first action that returns true - so the fire step, which wins
-    // that tie, ended the tick 143 to 221 times a pull and the bomb node was reached 6 to 13. Fire is
-    // 3000 a second and healable; the explosion is 47000 in 30 yd against a 24000 health pool.
+    // Hard mode only. Bomb above fire, never tied: a tie goes by push order, and the fire step would end the tick
+    // first. Fire is 3000 a second and healable, the 30 yd blast one-shots.
     e.Node<MimironDodgeFlamesTrigger, MimironDodgeFlamesAction>(ACTION_RAID + 4);
-    // Below every Mimiron node and above the generic reach nodes at ACTION_HIGH, which is the whole
-    // point: the formation and the dodges answer first, and only a bot they left with nothing to do
-    // but walk at its target gets steered round the fire instead of into it.
+    // Under every Mimiron node and over the generic reach nodes at ACTION_HIGH: only a bot the formation and
+    // dodges left idle walks at its target, and this steers it round the fire.
     e.Node<MimironApproachTargetTrigger, MimironApproachTargetAction>(ACTION_RAID - 2);
     e.Node<MimironFrostBombTrigger, MimironFrostBombAction>(ACTION_RAID + 6);
     // Below the fire dodge, whose fan already refuses the spray line and the silence. A fire bot only
@@ -206,52 +190,43 @@ void DefineMimiron(EncounterBuilder& e)
     e.Node<MimironFireBotTrigger, MimironFireBotAction>(ACTION_RAID + 3);
     e.Node<MimironResetEncounterStateTrigger, MimironResetEncounterStateAction>(ACTION_RAID);
 
-    // The set dps priority row owns every non-tank's target, so the generic picker would drag bots back
-    // onto whatever is nearest each tick. Engaged, not merely present: that row doesn't run before the
-    // pull. "attack rti target" is left alone on purpose: a mark a player sets should still win.
+    // The set dps priority row owns every non-tank's target, or the generic picker drags bots to the nearest.
+    // Engaged only: that row is idle before the pull. "attack rti target" stays so a player's mark still wins.
     e.OwnTargeting("mimiron target guard", Role::NonTank, IsMimironEngaged, Family::DpsAssist);
 
     // Phase 4 focus row picks the main tank's target. VX-001 never takes a victim, so tank assist
-    // reads it as loose and pulls him off the MK II, twice a second, and his rotation never runs.
+    // reads it as loose and keeps pulling him off the MK II, so his rotation never runs.
     e.OwnTargeting("mimiron phase 4 tank target guard", Role::MainTank, MimironPhase4MainTank);
 
-    // A gap-closer moves the bot in a straight line and reads nothing about the ground, so it mustn't
-    // fire while the bot is dodging something that kills. "reach melee" is the same move without the
-    // spell: a melee bot thrown 12 yd clear of the fire was walked back into it on the next tick. The
-    // other reach actions stay, or ranged and healers are stranded when they're needed most. Killing
-    // Spree isn't a charge but teleports onto the target, and on VX-001 that's inside the barrage's
-    // boundary, where the beams hit at any bearing.
+    // Gap-closers and "reach melee" go straight at the target, blind to the ground. Other reaches stay or ranged
+    // and healers get stranded. Killing Spree teleports inside VX-001's barrage boundary, where beams ignore bearing.
     e.Block("mimiron charge guard", Role::Any, MimironLethalWindowActive, Family::Charge,
             {"reach melee", "killing spree"});
 
-    // The generic avoid aoe flees to the fire aura's own 3 yd radius, which in a field growing in 7 yd
-    // steps lands on the next node, takes the movement lock and returns false, so the Mimiron dodge is
-    // issued into a held lock. Measured: 642 evaluations, zero wins, seven in ten dodges refused.
+    // Generic avoid aoe flees only the aura's 3 yd, onto the next node of a field growing 7 yd a step, then
+    // returns false, so the Mimiron dodge runs into the movement lock it still holds.
     e.Block("mimiron avoid aoe guard", Role::Any, MimironFireFight, 0, {"avoid aoe"});
 
-    // The unstacker and the formation both move the same ranged bot, and on Firefighter they disagreed
-    // by construction: the wedge deals rows 6 yd apart and the unstack threshold was the same 6, so
-    // every bot on its slot got shoved off it. Tank face derives from the formation move and keeps the
-    // tank pointed away from the raid, so it isn't in this family.
+    // The unstacker and the formation both move the same ranged bot, so on its slot only the formation may.
+    // Tank face derives from the formation move but keeps the tank pointed away from the raid, so it isn't here.
     e.Block("mimiron formation guard", Role::Any, MimironFormationHeld, Family::CombatFormationMove);
 
     // The rogue's own Tricks picker hands the buff to the hardest-hitting melee in the opener, which
-    // then pulls the MK II off the tank 2 to 3 s later. The redirect threat row owns it instead.
+    // then pulls the MK II off the tank. The redirect threat row owns it instead.
     e.Block("mimiron generic redirect guard", Role::Any, MimironPhase1Active, 0, {"tricks of the trade"});
 
     e.Multiplier<MimironTankAnchorGuardMultiplier>(Family::TankFace | Family::Reach);
 
     // Eating or drinking stops the bot thinking for up to 18 s, so one that sits down near the fire
-    // doesn't dodge it. Clean ground only: healers gained 30 to 40% mana across one handover.
+    // doesn't dodge it. Near fire only: a handover drink on clean ground is worth the mana.
     e.Block("mimiron drink guard", Role::Any, MimironNearFire, 0, {"drink", "food"});
 
-    // Every mover that picks its destination from a unit rather than from the floor. The Frost Bomb flee
-    // stops at its clearance and lets go just inside it, so any of these walks the bot back into the
-    // blast for the whole 10 s fuse. The fire hold covers a window after the dodge rather than the fire
-    // being near, which is all of phase 3 and would strand melee and healers.
+    // Every mover that aims at a unit rather than the floor. The bomb flee lets go just inside its clearance, so
+    // any of these walks the bot back into the blast for the rest of the fuse.
     e.Block("mimiron frost bomb guard", Role::Any, MimironNearFrostBomb, 0,
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
              MimironApproachTargetAction::Name});
+    // A window after the dodge, not fire nearby: that's all of phase 3 and would strand melee and healers.
     e.Block("mimiron fire hold guard", Role::Any, MimironFireHold, 0,
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
              MimironApproachTargetAction::Name});
@@ -270,16 +245,13 @@ void DefineMimiron(EncounterBuilder& e)
             {"devotion aura", "retribution aura", "concentration aura", "crusader aura", "sanctity aura",
              "shadow resistance aura", "fire resistance aura", "mimiron fire resistance action"});
 
-    // Their trigger fires on the walk-in Rapid Burst, which healers top off anyway, and then all three
-    // are down for the stretch after the first barrage where the pulls die. Holding Divine Sacrifice
-    // holds its cancel too.
+    // Their trigger fires on the walk-in Rapid Burst, which healers top off anyway, leaving all three down for
+    // the storm after the first barrage. Holding Divine Sacrifice holds its cancel too.
     e.Block("mimiron storm cooldown hold", Role::Any, MimironRaidDropping, 0,
             {"divine sacrifice", "divine hymn", "power infusion"});
 
-    // Under Firefighter melee hold the sector opposite the ranged wedge in phases 2 and 4. VX-001 turns
-    // to face each Rapid Burst and Hand Pulse target, so "behind" moves every couple of seconds and
-    // walks the melee off their sector. Any mode during a barrage too: the dodge hands the tick back
-    // at the band edge, and set behind walked a melee straight back into the beams.
+    // Firefighter phases 2 and 4: melee hold the sector opposite the wedge, and VX-001 turns to each Rapid Burst
+    // and Hand Pulse target, so "behind" drifts off it. In any barrage it walks melee from the band edge into beams.
     e.Block("mimiron vx001 facing guard", Role::Any, MimironMeleeSector, Family::TankFace, {"set behind"});
 
     e.Tick(MimironTick);

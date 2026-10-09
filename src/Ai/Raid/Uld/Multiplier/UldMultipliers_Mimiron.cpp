@@ -50,9 +50,8 @@ float MimironTankAnchorGuardMultiplier::GetValue(Action* action)
     if (!dynamic_cast<TankFaceAction*>(action) && !reachMelee)
         return 1.0f;
 
-    // Phase 3, either mode. The unit hovers out of reach and holds 30 yd from whoever it is on, so
-    // walking toward it only drags it and the fight off the centre spot the tank is given, and the
-    // ranged wedge with it.
+    // Phase 3, either mode: the unit hovers out of reach and holds 30 yd off its target, so chasing it only
+    // drags the fight and the ranged wedge off the tank's centre spot.
     if (reachMelee && IsMimironAcuAirborne(botAI, bot))
         return 0.0f;
 
@@ -98,7 +97,6 @@ float MimironPlasmaDefensiveHoldMultiplier::GetValue(Action* action)
         return 1.0f;
 
     // "mimiron plasma blast defensive action" casts through CastSpell directly, so this never holds it.
-    // Plasma Blast only exists while the MK II fights alone. Engaged too: the MK II stands in the room
-    // unselectable before the pull, and trash nearby should keep the class nodes.
+    // Engaged too: the MK II stands unselectable in the room before the pull, and nearby trash keeps the class nodes.
     return IsMimironEngaged(botAI) && MimironPhase1Active(botAI) ? 0.0f : 1.0f;
 }

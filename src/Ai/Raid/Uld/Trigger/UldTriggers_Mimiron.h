@@ -5,14 +5,10 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-//
 // Mimiron
-//
 
-// "disperse distance" is bot state, not encounter state, so without this Mimiron's 6.0 outlives the
-// pull and the generic spread mover keeps walking bots around for the rest of the raid night. It
-// also clears a "disperse enable" typed inside Ulduar, which is the price of not needing to know who
-// set it.
+// "disperse distance" is bot state, so without this it outlives the pull and the unstacker keeps
+// walking bots in later fights. Also clears a "disperse enable" typed inside Ulduar: it can't tell who set it.
 class MimironResetEncounterStateTrigger : public Trigger
 {
 public:
@@ -94,9 +90,8 @@ public:
     bool IsActive() override;
 };
 
-// Live for the ~5 s the cannon is actually casting Plasma Blast on the tank. Six ticks totalling
-// 54k to 119k land on a 43k pool, so the button has to be down before the first one, not after a
-// health threshold notices the third.
+// Live while the cannon casts Plasma Blast: the button has to be down before the first of six ticks,
+// and a health threshold only notices around the third.
 class MimironPlasmaBlastDefensiveTrigger : public Trigger
 {
 public:
@@ -107,9 +102,8 @@ public:
     bool IsActive() override;
 };
 
-// Phase 1 only: feed the main tank so the MK II stays on him through the 53 yd walk west. Later
-// phases split two mechs across two tanks, which is why UldThreatRedirectMultiplier holds the
-// class-generic nodes for the whole encounter.
+// Phase 1 only, to keep the MK II on the main tank through the walk west. Later phases split two mechs
+// across two tanks.
 class MimironRedirectThreatTrigger : public Trigger
 {
 public:
