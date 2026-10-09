@@ -10,9 +10,8 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Backstop for the trio sync: the target split normally steers bots off a member that is too far
-// ahead, so this only catches damage the targeting cannot steer - a swing mid-animation, a DoT
-// already ticking.
+// Backstop for the trio sync: the target split already steers bots off a member that's too far ahead,
+// so this only catches what targeting can't, like a swing mid-animation or a DoT already ticking.
 class FreyaTrioSyncMultiplier : public Multiplier
 {
 public:
@@ -20,9 +19,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Freya: the lasher pack is AoE'd down together right up to the finish, and then the AoE has to stop
-// or the whole pile detonates at once. This is the "stop at low health" half of that - single-target
-// damage keeps running, which is what staggers the blasts.
+// Stops AoE on the lasher pile at the finish, or it all detonates at once. Single-target keeps running,
+// which is what staggers the blasts.
 class FreyaLasherFinishAoeMultiplier : public Multiplier
 {
 public:
@@ -30,9 +28,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Freya: a hunter holds one trap at a time and they share a 30s category cooldown, so the generic
-// Explosive Trap node is what stops Frost Trap ever going down. Damage is not what the wave needs;
-// -50% movement on something that outruns the raid at 8.0 yd/s is.
+// A hunter has one trap down at a time on a shared 30s category cooldown, so the generic Explosive Trap
+// would spend the Frost Trap. The wave needs -50% speed on lashers that outrun the raid, not damage.
 class FreyaLasherTrapReserveMultiplier : public Multiplier
 {
 public:
@@ -40,9 +37,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Freya hard mode: Ground Tremor interrupts the whole raid on a 2s telegraph and school-locks whoever
-// it cuts for 10s, so a cast that cannot land inside the telegraph is thrown away. Heals are held too,
-// unlike at Ignis: a Chain Heal delayed under 2s beats a resto shaman with no Nature for 10.
+// Hard mode: Ground Tremor interrupts the raid on a 2s telegraph and school-locks whoever it cuts for
+// 10s. Heals are held too, unlike Ignis: a Chain Heal held under 2s beats no Nature for 10.
 class FreyaGroundTremorCastGateMultiplier : public Multiplier
 {
 public:

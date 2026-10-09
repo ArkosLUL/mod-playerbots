@@ -31,21 +31,16 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// A point move never launches its spline while the bot is casting: PointMovementGenerator::DoInitialize
-// bails on IsMovementPreventedByCasting and DoUpdate calls StopMoving every tick until the cast ends,
-// while MoveTo still reports success. A channeled Blizzard or Volley therefore pins a bot inside the
-// blast it was just told to leave. Only bites when movement is genuinely blocked, so the rotation
-// survives the ticks where the bot could have walked anyway.
+// PointMovementGenerator won't launch a spline while the bot is casting, yet MoveTo still reports
+// success, so a channel pins the bot in the blast. Only interrupts when movement is really blocked.
 void FreyaClearCastBlockingMove(Player* bot)
 {
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 }
 
-// Every escape below is a walk, and each one throws away the bot's own cast to start it. A rooted or
-// stunned bot gets neither: the walk never happens, the latch goes on reporting that it did, and the
-// cast it lost was the only thing it could still do. Iron Roots lands mid-escape, so the pinned bot
-// has to fall through to its rotation and to the node that kills the root holding it.
+// Rooted or stunned: the walk never starts but the latch would claim it did, and the interrupt would
+// waste the one cast left. Falls through to the rotation and the node that kills the root.
 bool FreyaBotCannotWalk(Player* bot)
 {
     return bot->HasUnitState(UNIT_STATE_NOT_MOVE);
@@ -74,10 +69,8 @@ std::vector<Position> GetFreyaAlliesNear(PlayerbotAI* botAI, float radius)
     return allies;
 }
 
-// Straight out of the blasts the bot is standing in, on the bearing away from their centre. Only runs
-// once the ring sweep has failed on every clearance it has, so there is no clear spot left to find: the
-// job here is just to leave the circles, and crossing a fifth bomb on the way out still beats holding
-// still inside four.
+// Last resort once every ring sweep has failed: walk straight out, away from the covering bombs'
+// centre. Crossing another bomb on the way beats standing inside four.
 Position StepOffNatureBombs(Player* bot, std::vector<Position> const& bombs)
 {
     float sumX = 0.0f;
@@ -121,9 +114,8 @@ bool FreyaMoveAwayNatureBombAction::isUseful()
     if (!trigger.IsActive())
         return false;
 
-    // The trigger reaches out to the whole hazard search radius so this node still runs once the bot has
-    // stepped clear. Narrow it back to the blast here, plus the window in which the bot may still be
-    // holding a spot, so everyone else falls through to their own ladder without leaving a verdict.
+    // The trigger covers the whole search radius so a bot that stepped clear can still hold its spot.
+    // Narrow it back to the blast plus the latch window, so everyone else falls through without a verdict.
     if (bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS))
         return true;
 
@@ -138,9 +130,8 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Not FleePosition: it clamps its travel to AiPlayerbot.FleeDistance (5 yd), which cannot clear a
-    // 10 yd blast the bot is standing in the middle of, and it only ever reads one hazard. A volley
-    // drops a bomb on every player, so the melee stack ends up under several overlapping ones.
+    // Not FleePosition: it caps travel at FleeDistance (5 yd), short of a 10 yd blast, and reads one
+    // hazard only. A volley drops a bomb on every player, so the melee stack sits under several.
     std::vector<Position> bombs = GetFreyaNatureBombPositions(bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
     if (bombs.empty())
     {
@@ -148,9 +139,8 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Beams too, because a spot that clears both is the only one worth walking to or holding. Both
-    // escapes sit at the same relevance, so a bot that reads only its own hazard alternates between
-    // them forever. Built from the bombs already in hand rather than collected a second time.
+    // Beams and low lashers too: both escapes share a relevance, so a bot reading only its own hazard
+    // flips between them forever.
     std::vector<HazardCircle> const hazards =
         BuildFreyaEscapeHazards(bombs, GetFreyaSunBeamPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS),
                                 GetFreyaEscapeLasherPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS));
@@ -176,22 +166,16 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
     uint32 const now = getMSTime();
     bool const latched = bombSpotMs && getMSTimeDiff(bombSpotMs, now) < ULDUAR_FREYA_NATURE_BOMB_LATCH_MS;
 
-    // Claim the tick without touching the motion master while the escape is already in flight. Returning
-    // true is the point: the engine stops here, so combat movement never gets to pull the bot back onto
-    // the bomb it just stepped off, and the spline carrying it out survives. A bot whose cast is
-    // blocking movement is not in flight and never will be, so it falls through to the interrupt below.
+    // Escape in flight: claim the tick without touching the motion master, so combat movement can't pull
+    // the bot back onto the bomb. A cast-pinned bot isn't in flight, so it falls through to the interrupt.
     if (latched && stillClear(bombSpot) && !bot->IsMovementPreventedByCasting() &&
         bot->GetExactDist2d(bombSpot.GetPositionX(), bombSpot.GetPositionY()) > CONTACT_DISTANCE)
         return true;
 
     if (!covered(bot->GetPosition()))
     {
-        // Arrived, clear, and the bomb it fled is still counting down. A bomb goes off 6s after it lands
-        // and the walk out costs about two, so a melee bot that turns round the moment it arrives spends
-        // the rest of the fuse back inside the blast - which is how bots at full health die to a volley.
-        // Holding costs it nothing it has not already spent, because it is out of melee range at the
-        // escape spot either way. Ranged and healers are not held: they can cast from where they stand,
-        // and returning true here would silence them for the rest of the fuse.
+        // Arrived, and the bomb it fled still has fuse left. Melee hold here, since they're out of range
+        // either way. Ranged and healers don't: returning true would silence them for the whole fuse.
         if (latched && PlayerbotAI::IsMelee(bot) && stillClear(bombSpot) && covered(bombOrigin))
             return true;
 
@@ -217,9 +201,7 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
         safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS + 1.0f,
                                                  ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
 
-    // Down to the blast with no margin at all, and then straight out of it. Giving up instead leaves the
-    // bot standing in the circle for the rest of the fuse: one pull did that fifteen times, and a
-    // warlock died at full health with a bomb at its feet having issued no move at all.
+    // Then the bare blast radius, then straight out: giving up leaves the bot in the circle until it blows.
     if (safe == Position())
         safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_BLAST_RADIUS,
                                                  ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
@@ -289,15 +271,8 @@ bool FreyaTankNatureBombAction::Execute(Event /*event*/)
 
     kiteSpotMs = 0;
 
-    // Freya walks after whoever holds her, so every yard the tank takes drags the boss and her melee
-    // ring with it. Aim at the far side of her from the back line: FindNearestPositionClearOfHazards
-    // only reorders spots that are the same walk away, so this picks a direction without ever choosing
-    // a longer trip. No living ranged DPS means no back line to walk away from.
-    //
-    // Past the leash that preference flips to the anchor. Aiming away from the back line every volley
-    // with nothing pulling the other way is a bias that compounds - eighteen seconds a volley, and one
-    // pull ended with Freya 100 yd east of where she is tanked, six yards down the slope toward the
-    // water - so the same tie-break that walked her out is what walks her home.
+    // Aim past Freya, away from the back line. preferNear only reorders equally short walks.
+    // Past the leash aim at the anchor instead, or that bias compounds volley after volley.
     Position preferred = ULDUAR_FREYA_TANK_ANCHOR;
     if (boss->GetExactDist2d(&ULDUAR_FREYA_TANK_ANCHOR) <= ULDUAR_FREYA_TANK_LEASH)
     {
@@ -384,7 +359,7 @@ bool FreyaSetDpsPriorityAction::TakesEonarsGift(FreyaWaveState const& state)
     for (Unit* lasher : state.detonatingLashers)
         packUp = packUp || (lasher && lasher->IsAlive());
 
-    // Nothing is competing for the ranged, so the Gift takes all of them as it always did.
+    // Nothing competes for the ranged, so the Gift takes all of them.
     if (!packUp)
         return true;
 
@@ -437,10 +412,8 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
     {
         bool const isRanged = PlayerbotAI::IsRangedDps(bot);
 
-        // Two phases. While the pack is healthy every ranged bot points at the middle of it, because
-        // AoeTrigger measures 8 yd around the *current target*, so that pick is what makes class AoE
-        // fire at all. Once the pile is at the finish the lowest-health focus takes over and the
-        // detonations stagger instead of chaining.
+        // Healthy pack: aim at its middle, since AoeTrigger counts 8 yd around the current target. At
+        // the finish the lowest-health focus takes over, so the detonations stagger instead of chaining.
         Unit* lasher = nullptr;
         if (isRanged)
         {
@@ -449,9 +422,8 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
                 lasher = GetFreyaRangedLasherFocus(state);
         }
 
-        // The raid-wide focus can be most of the room away. Walking to it would put the bot inside the
-        // 15 yd blast, which is the one thing that keeps ranged safe here, so it shoots whatever it can
-        // already reach instead - and the two converge on their own as lashers close on players.
+        // A focus out of reach would walk the bot into the 15 yd blast, so shoot what's already in reach.
+        // The two converge as lashers close on players.
         float const reach = isRanged ? sPlayerbotAIConfig.spellDistance : ULDUAR_FREYA_MELEE_LASHER_RANGE;
         if (lasher && bot->GetExactDist2d(lasher) > reach)
             lasher = nullptr;
@@ -474,9 +446,8 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
         }
     }
 
-    // Hold the current target unless something strictly more urgent is up, so a churn of adds cannot
-    // keep resetting swing and cast timers. The trio slot is exempt: GetFreyaTrioAssignment is already
-    // stable by construction, and stickiness on top would freeze each bot onto its first pick.
+    // Keep the current target unless something strictly higher is up, so add churn can't reset swing timers.
+    // Not the trio slot: the split is already stable, and stickiness would freeze each bot's first pick.
     auto const priorityIndex = [&priority](Unit* unit) -> size_t
     {
         if (!unit || !unit->IsAlive())
@@ -517,10 +488,8 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    // Taunt only what this encounter actually claims. The rest of the ladder is borrowed for damage:
-    // taunting Freya would fight a human main tank whose raid roles are set differently, taunting a Storm
-    // Lasher or Water Spirit would mean owning Tidal Wave positioning, and a lasher drops the taunt again
-    // on its next 10s threat wipe anyway.
+    // Taunt only what the encounter owns: Freya may be on a human tank, taunting Storm Lasher or Water
+    // Spirit means owning Tidal Wave, and a lasher wipes the taunt on its next 10s threat reset.
     bool const owned = target == state.snaplasher || target == state.conservator;
     if (owned && target->GetVictim() != bot && CastClassTaunt(botAI, target))
         return true;
@@ -543,9 +512,8 @@ bool FreyaTankAddsAction::ParkConservator(Unit* conservator)
     if (!spore)
         return false;
 
-    // Pheromones is a 6 yd aura on the spore and the Conservator stops at melee range of the tank, so
-    // standing on the spore is what puts the boss in reach of everyone sheltering on it. Hold still once
-    // it is there rather than nudging it back and forth.
+    // The Conservator stops in melee range of the tank, so standing on the spore puts it inside the
+    // 6 yd aura. A yard of slack so it isn't nudged back and forth.
     if (conservator->GetExactDist2d(spore) <= ULDUAR_FREYA_SPORE_RADIUS - 1.0f)
         return false;
 
@@ -569,10 +537,8 @@ bool FreyaMoveToHealingSporeAction::Execute(Event /*event*/)
     if (distance <= ULDUAR_FREYA_SPORE_STAND_RANGE)
         return false;
 
-    // Stop on the near edge of the aura rather than the spore's centre. The centre is inside the spore's
-    // own collision, so the bot can never occupy it: MoveTo then re-issues the same unreachable point,
-    // IsDuplicateMove rejects it from the second tick on, and the tick falls through to the DPS chase
-    // which walks the bot straight back out of the aura.
+    // Stop at the aura's near edge: the centre is inside the spore's collision, IsDuplicateMove rejects
+    // the repeat, and the tick falls through to the DPS chase, which walks the bot back out.
     float const ratio = ULDUAR_FREYA_SPORE_STAND_RANGE / distance;
     float const x = target->GetPositionX() + (bot->GetPositionX() - target->GetPositionX()) * ratio;
     float const y = target->GetPositionY() + (bot->GetPositionY() - target->GetPositionY()) * ratio;
@@ -592,9 +558,8 @@ Player* FreyaRedirectThreatAction::GetRedirectTank()
     if (!group)
         return nullptr;
 
-    // One walk of the scan answers all three, and this runs every tick a hunter or rogue is up. The two
-    // adds have a real threat table that someone else is holding; Detonating Lashers reset threat every
-    // 10s, so no redirect can ever help there.
+    // One scan walk for all three, since this runs every tick for every hunter and rogue. Lashers are
+    // left out: they wipe threat every 10s, so no redirect helps.
     Unit* snaplasher = nullptr;
     Unit* conservator = nullptr;
     Unit* freya = nullptr;
@@ -706,9 +671,8 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Every beam in the search area is routed around, not just the one the bot is standing in, or it
-    // sidesteps one beam straight into another. FleePosition cannot do this: it clamps travel to
-    // AiPlayerbot.FleeDistance (5 yd), which does not clear a 12 yd beam, and it only reads one hazard.
+    // Route around every beam in range, or the bot sidesteps one into another. FleePosition can't: it
+    // caps travel at FleeDistance (5 yd) and reads one hazard only.
     std::vector<Position> beams = GetFreyaSunBeamPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
 
     if (beams.empty())
@@ -728,11 +692,8 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
 
     uint32 const now = getMSTime();
 
-    // Claim the tick without touching the motion master while the escape is already in flight. Returning
-    // true is the point: the engine stops here, so no lower node gets to re-aim the bot mid-dodge, and
-    // the spline that is actually carrying it out of the beam survives. A bot whose cast is blocking
-    // movement is not in flight and never will be, so it falls through to the interrupt below instead
-    // of sitting out the whole latch inside the beam.
+    // Dodge in flight: claim the tick without touching the motion master, so no lower node re-aims the
+    // bot. A cast-pinned bot isn't in flight, so it falls through to the interrupt.
     if (dodgeSpotMs && getMSTimeDiff(dodgeSpotMs, now) < ULDUAR_FREYA_SUN_BEAM_LATCH_MS && stillClear(dodgeSpot) &&
         !bot->IsMovementPreventedByCasting() &&
         bot->GetExactDist2d(dodgeSpot.GetPositionX(), dodgeSpot.GetPositionY()) > CONTACT_DISTANCE)
@@ -742,9 +703,8 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
 
     HazardSweepCache sweep;
 
-    // Bombs too, because a spot that clears both is the only one worth walking to. Both escapes sit at
-    // the same relevance, so a bot that reads only its own hazard alternates between them forever. The
-    // beams are the ones already collected above.
+    // Bombs and low lashers too: both escapes share a relevance, so a bot reading only its own hazard
+    // flips between them forever.
     Position safe = FindNearestPositionClearOfHazards(
         bot,
         BuildFreyaEscapeHazards(GetFreyaNatureBombPositions(bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS), beams,
@@ -807,10 +767,8 @@ bool FreyaNaturesFuryBailAction::Execute(Event /*event*/)
     Position safe;
     if (Unit* shelter = GetFreyaNaturesFuryShelter(botAI))
     {
-        // Another spore beats open floor by the whole of Conservator's Grip, which has no range and no
-        // duration and is only ever answered by Potent Pheromones. Stop on the near edge of the aura
-        // rather than the spore's centre: the centre sits inside its collision, so MoveTo would re-issue
-        // the same unreachable point until the mark expired.
+        // A spore beats open floor, as Pheromones is the only answer to the Grip. Stop at the aura's near
+        // edge: the centre is inside the spore's collision and MoveTo would re-issue it until the mark ends.
         float const distance = bot->GetExactDist2d(shelter);
         if (distance > ULDUAR_FREYA_SPORE_STAND_RANGE)
         {
@@ -878,9 +836,8 @@ bool FreyaStepOutOfSunbeamAction::Execute(Event /*event*/)
 
     stepSpotMs = 0;
 
-    // Bombs and beams belong in the same sweep: a spot that only clears the sunbeam is worth nothing if
-    // it sits in one of those, and both escapes hold this relevance, so a bot reading one hazard walks
-    // between them until something kills it.
+    // Bombs, beams and low lashers in the same sweep: the escapes share a relevance, so a bot reading one
+    // hazard walks between them until something kills it.
     std::vector<EncounterHelpers::HazardCircle> hazards =
         GetFreyaEscapeHazards(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
     hazards.emplace_back(beam, ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS);
@@ -900,8 +857,7 @@ bool FreyaStepOutOfSunbeamAction::Execute(Event /*event*/)
         safe = FindNearestPositionClearOfHazards(bot, blastAndBeam, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
     }
 
-    // Barely outside the beam beats standing in it, which is what the raid did with every volley of a
-    // pull that took 271k a minute off this one spell.
+    // Barely outside the beam beats standing in it.
     if (safe == Position())
         safe = FindNearestPositionClearOfHazards(bot, std::vector<Position>{beam}, ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS,
                                                  ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
@@ -937,9 +893,8 @@ bool FreyaTankHoldFreyaAction::Execute(Event /*event*/)
 
     holdMs = 0;
 
-    // Onto the anchor itself, not near it: Freya stops in melee range of wherever the tank ends up, so
-    // she settles a boss length short of this point either way. MOVEMENT_COMBAT, so a bomb volley still
-    // outranks the walk home.
+    // Onto the anchor itself: Freya stops in melee range of the tank, so she settles a boss length short
+    // anyway. MOVEMENT_COMBAT, so a bomb volley still outranks the walk home.
     if (!MoveTo(bot->GetMapId(), ULDUAR_FREYA_TANK_ANCHOR.GetPositionX(), ULDUAR_FREYA_TANK_ANCHOR.GetPositionY(),
                 ULDUAR_FREYA_TANK_ANCHOR.GetPositionZ(), false, false, false, true,
                 MovementPriority::MOVEMENT_COMBAT))
@@ -986,9 +941,8 @@ bool FreyaLasherAboutToBlowAction::Execute(Event /*event*/)
 
     uint32 const now = getMSTime();
 
-    // Claim the tick without touching the motion master while the walk is already in flight, so no
-    // lower node re-aims the bot back onto the pile mid-step. A bot whose cast is blocking movement is
-    // not in flight and never will be, so it falls through to the interrupt below.
+    // Walk in flight: claim the tick without touching the motion master, so no lower node re-aims the
+    // bot onto the pile. A cast-pinned bot isn't in flight, so it falls through to the interrupt.
     if (bailSpotMs && getMSTimeDiff(bailSpotMs, now) < ULDUAR_FREYA_LASHER_BAIL_LATCH_MS && stillClear(bailSpot) &&
         !bot->IsMovementPreventedByCasting() &&
         bot->GetExactDist2d(bailSpot.GetPositionX(), bailSpot.GetPositionY()) > CONTACT_DISTANCE)
@@ -1034,21 +988,16 @@ bool FreyaRangedCampAction::Execute(Event /*event*/)
     if (camp == Position())
         return false;
 
-    // Stop a spacing short of the camp, on the bearing the bot is already on, so the back line lands as
-    // a ring rather than on one square. Every bot keeps the direction it arrived from, which spreads
-    // them with no shared state; the alternative measured 0.6 yd between neighbours and handed every
-    // 8 yd hit the whole raid at once.
+    // Stop a spacing short of the camp on the bearing the bot came in on, so the back line lands as a
+    // ring instead of on one square, with no shared state.
     float const distance = bot->GetExactDist2d(camp.GetPositionX(), camp.GetPositionY());
     float const bearing =
         distance > CONTACT_DISTANCE ? camp.GetAngle(bot->GetPositionX(), bot->GetPositionY()) : bot->GetOrientation();
     float const x = camp.GetPositionX() + std::cos(bearing) * ULDUAR_FREYA_RANGED_CAMP_SPACING;
     float const y = camp.GetPositionY() + std::sin(bearing) * ULDUAR_FREYA_RANGED_CAMP_SPACING;
 
-    // No arrival latch: the trigger standing down inside the tolerance is what stops the churn, and a
-    // latch held across ticks would swallow the re-aim when the pack moves.
-    //
-    // MOVEMENT_COMBAT, not FORCED, so a Nature Bomb or a Sun Beam still outranks it - gathering is the
-    // lowest-value thing a bot can be doing on this encounter.
+    // No arrival latch: the trigger's tolerance stops the churn, and a latch would swallow the re-aim
+    // when the pack moves. MOVEMENT_COMBAT, so the bomb and beam escapes still outrank it.
     return MoveTo(bot->GetMapId(), x, y, camp.GetPositionZ(), false, false, false, false,
                   MovementPriority::MOVEMENT_COMBAT);
 }
@@ -1061,9 +1010,8 @@ bool FreyaFrostNovaLashersAction::isUseful()
 
 bool FreyaFrostNovaLashersAction::Execute(Event /*event*/)
 {
-    // Cast on self rather than through "frost nova": that action gates on the *current target* being
-    // within 10 yd, and a ranged mage's current target is the focused lasher, usually across the room.
-    // Frost Nova is a sphere on the caster, so the pack standing on the mage is what it actually needs.
+    // On self, not through "frost nova": that gates on the current target being within 10 yd, and a
+    // ranged mage's target is usually across the room. The nova is a sphere on the caster.
     return botAI->CastSpell("frost nova", bot);
 }
 
@@ -1088,9 +1036,8 @@ bool FreyaSummonArmyAction::isUseful()
 
 bool FreyaSummonArmyAction::Execute(Event /*event*/)
 {
-    // Cast by name rather than through the class node, which is what keeps the burst gates off it: the
-    // Ulduar window multiplier holds anything IsBurstCooldownAction recognises until Attuned to Nature
-    // is gone, and it matches on the action name.
+    // By name, not through the class node: IsBurstCooldownAction matches on the action name, and the
+    // Ulduar burst gate holds those until Attuned to Nature is gone.
     return botAI->CastSpell("army of the dead", bot);
 }
 
@@ -1108,10 +1055,8 @@ bool FreyaGroundTremorHoldCastAction::Execute(Event /*event*/)
 
     Spell* tremor = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
 
-    // A channel keeps its own slot, and it is the only case left for this node: the cast gate already
-    // stops a long cast from starting inside the window, but a Blizzard or a Volley that was already
-    // running when Freya began the tremor can only be stopped here. For both slots m_timer holds what
-    // is left, a channel's remaining duration included, so the compare below reads the same either way.
+    // The cast gate already stops long casts from starting, so a channel already running is all that's
+    // left. m_timer holds what's left in either slot, a channel's included, so one compare covers both.
     Spell* own = bot->GetCurrentSpell(CURRENT_GENERIC_SPELL);
     if (!own)
         own = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);

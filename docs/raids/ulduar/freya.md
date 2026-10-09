@@ -450,7 +450,9 @@ script filters only `isWorldBoss()` targets. They hold **12.5-18.9%** of all las
 only thing that takes a lasher off a bot at all — and the bot DK does open it: 9 casts, 213 taunts in
 `1788552829`. Deliberately **not** named `army of the dead`:
 `IsBurstCooldownAction` matches on the action name, and the Ulduar burst gate holds that list until
-Attuned to Nature drops, which is the whole add phase.
+Attuned to Nature drops, which is the whole add phase. A pull has exactly two lasher waves (`SpawnWave`
+rolls trio / Conservator / lashers per block of three, six waves in all, `boss_freya.cpp:369-381`), and
+42650's 10 min cooldown outlasts any pull, so each DK casts it on the first lasher wave only.
 
 Ranged focus is `GetFreyaLasherPackFocus`, the lasher with the most lashers within
 `ULDUAR_FREYA_LASHER_PACK_RADIUS` (8 yd): `AoeTrigger` counts attackers within 8 yd of the ***current
@@ -541,3 +543,11 @@ tick is the point, since that both stops the re-aim clearing the bot's own motio
 lower node re-pointing it mid-dodge. Unlatched, this node alone produced 584 of the raid's 1055
 direction flips, fighting the spore node at ~3 Hz while the raid stood still.
 
+
+**The per-tick lookups go through one scan**, `FreyaScan`, a per-bot `ManualSetValue<FreyaScan*>`
+(`"freya scan"` in `RaidUlduarValueContext`), as for Razorscale. Behind it: `Boss()` is `"find target"
+freya`, a threat-list walk with a wide-string name per unit; `PossibleTargets()` a 100 yd grid sweep;
+`Stalkers()` that sweep plus a LOS ray, tested on the entry first so only Healthy Spores and the two
+Sun Beam stalkers pay it; `LasherCamp()` the camp spot. It is tick-scoped on purpose: a queued action
+can be `AiPlayerbot.ExpireActionTime` old when popped. `GetFreyaBossByEntry` finds her without the
+target list, because the Ground Tremor nodes run wherever the gate is open, trash included.

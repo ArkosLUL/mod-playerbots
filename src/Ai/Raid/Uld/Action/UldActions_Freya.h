@@ -23,9 +23,8 @@ public:
     bool isUseful() override;
 
 private:
-    // The trigger fires at AVOID and the escape aims at CLEAR, so re-deriving every tick answers a bot
-    // on the rim with a ~2 yd step that combat movement undoes before the next one. Hold the first
-    // answer until it stops being safe or the bomb that prompted it is gone.
+    // The trigger fires at AVOID but the escape aims at CLEAR, so re-deriving each tick gives a short hop
+    // that combat movement undoes. Hold the first answer until it's unsafe or the bomb is gone.
     Position bombSpot;
     uint32 bombSpotMs = 0;
     // Where the bot fled from. A melee bot keeps its spot while this is still inside a blast, which is
@@ -49,9 +48,8 @@ private:
     uint32 kiteSpotMs = 0;
 };
 
-// Owns every DPS bot's target. Eonar's Gift > Ancient Conservator > the trio slot > Detonating
-// Lashers > Freya, with the ordering flipped once the trio is low enough that leaving it would let a
-// member revive.
+// Owns every DPS bot's target: Eonar's Gift > Ancient Conservator > trio slot > Detonating Lashers >
+// Freya, with the trio moved up once leaving it would let a member revive.
 class FreyaSetDpsPriorityAction : public AttackAction
 {
 public:
@@ -86,9 +84,8 @@ public:
 private:
     bool ParkConservator(Unit* conservator);
 
-    // Latched for the spore's whole life. Fresh spores keep appearing 20 yd from wherever the
-    // Conservator currently is, so re-deriving the destination every tick can flip it mid-walk and turn
-    // the tank around.
+    // Latched for the spore's whole life: new spores keep appearing 20 yd from wherever the Conservator
+    // is, so re-deriving each tick can flip the destination mid-walk.
     ObjectGuid parkedSpore;
 };
 
@@ -103,9 +100,8 @@ public:
     bool isUseful() override;
 };
 
-// Feeds Misdirection / Tricks to the tank that is actually holding what the raid is hitting. Detonating
-// Lashers wipe their threat list every 10s, so nothing here can help against those - this is for the
-// Snaplasher and the Conservator, which have real threat tables.
+// Feeds Misdirection / Tricks to the tank holding what the raid is hitting. Useless on Detonating
+// Lashers, which wipe their threat every 10s.
 class FreyaRedirectThreatAction : public Action
 {
 public:
@@ -119,9 +115,8 @@ private:
     Player* GetRedirectTank();
 };
 
-// Step a melee bot out of the blast of the lashers that are about to detonate. Only those, not the
-// whole pack: clearing every lasher would park melee outside the fight, which is what the 16 yd
-// lattice did before it was reverted.
+// Steps melee out of the blast of lashers about to detonate. Only those: clearing the whole pack parks
+// melee outside the fight.
 class FreyaLasherAboutToBlowAction : public MovementAction
 {
 public:
@@ -132,9 +127,8 @@ public:
     bool isUseful() override;
 
 private:
-    // Lashers die one by one, so re-deriving the exit every tick answers with a spot a yard along and
-    // clears the motion master doing it - the bot resets its walk instead of finishing it. Hold the
-    // first answer until it stops being clear or the bot arrives.
+    // Lashers die one by one, so re-deriving the exit each tick moves it a yard and restarts the walk.
+    // Hold the first answer until it stops being clear or the bot arrives.
     Position bailSpot;
     uint32 bailSpotMs = 0;
 };
@@ -175,9 +169,8 @@ public:
     bool isUseful() override;
 };
 
-// Eight ghouls with an AoE taunt, held for the wave that has no tank. Not named "army of the dead" on
-// purpose: that string is on IsBurstCooldownAction's list, and the Ulduar burst gate holds everything
-// on it until Attuned to Nature comes off Freya, which is the whole add phase.
+// Eight ghouls with an AoE taunt, for the wave nobody can tank. Not named "army of the dead": that name
+// is on IsBurstCooldownAction's list, which the Ulduar burst gate holds until Attuned to Nature drops.
 class FreyaSummonArmyAction : public Action
 {
 public:
@@ -188,9 +181,8 @@ public:
     bool isUseful() override;
 };
 
-// Hard mode: stop a cast Ground Tremor is about to eat. Worth more than the mana it saves -
-// Spell::EffectInterruptCast only applies the 10s school lockout if it finds a cast to cut, so
-// stopping first dodges the lockout outright.
+// Hard mode: stop a cast Ground Tremor would cut. EffectInterruptCast only applies the 10s school
+// lockout when it finds a cast to cut, so stopping first dodges it.
 class FreyaGroundTremorHoldCastAction : public Action
 {
 public:
@@ -223,16 +215,14 @@ public:
     bool isUseful() override;
 
 private:
-    // Beams keep spawning, so re-deriving the escape every tick answers with a spot a yard or two away,
-    // and every MoveTo clears the motion master - the bot never travels, and whatever walk a lower node
-    // had in flight dies with it. Hold the first answer until it stops being safe or the bot arrives.
+    // Beams keep spawning, so re-deriving each tick nudges the spot, and every MoveTo clears the motion
+    // master: the bot never gets anywhere. Hold the first answer until it's unsafe or the bot arrives.
     Position dodgeSpot;
     uint32 dodgeSpotMs = 0;
 };
 
-// Carry Nature's Fury out of the raid, preferably onto another Healthy Spore: the groups sheltering on
-// them stand 15 to 45 yd apart, which clears an 8 yd splash outright and keeps the carrier out of
-// Conservator's Grip.
+// Carry Nature's Fury out of the raid, onto another Healthy Spore if one's free: shelter groups sit far
+// enough apart to clear the 8 yd splash, and the carrier stays out of the Grip.
 class FreyaNaturesFuryBailAction : public MovementAction
 {
 public:

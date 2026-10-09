@@ -28,10 +28,8 @@ bool FreyaNearNatureBombTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    // Wider than the blast on purpose, so the node is still reached once the bot has stepped clear -
-    // that is what lets the action hold its spot instead of letting reach melee walk the bot back with
-    // most of the fuse still to run. The action narrows it again in isUseful, so a bot that is neither
-    // in a blast nor holding an escape costs nothing here.
+    // Wider than the blast so the node still runs after the bot steps clear and can hold its spot.
+    // isUseful narrows it again, so a bot with no blast and no escape held costs nothing.
     return bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS) != nullptr;
 }
 
@@ -78,22 +76,17 @@ bool FreyaRedirectThreatTrigger::IsActive()
 
 bool FreyaMoveToHealingSporeTrigger::IsActive()
 {
-    // Check for the Freya boss
     Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Conservator's Grip is a 50000 yd pacify-silence, so melee need a spore just as much as ranged.
-    // Tanks are excluded for two different reasons: the add tank already ends up inside the aura by
-    // walking the Conservator onto a spore, and moving it here as well would oscillate it between that
-    // spore and the one nearest itself. The main tank is out because it is holding Freya on her anchor,
-    // and a walk to a spore would take her along with it.
+    // The Grip pacifies melee as much as ranged. Tanks are out: the add tank reaches the aura by parking
+    // the Conservator, and the main tank would drag Freya off her anchor.
     if (botAI->IsTank(bot))
         return false;
 
-    // The pheromone aura is the thing that matters, and it is exact - a bot can be inside 6 yd of a
-    // spore that is still growing and not have it yet. It is also an aura lookup against a sweep, and
-    // most of the raid is already sheltered by the middle of the wave, so it goes first.
+    // The aura is what counts, and it's exact. Checked first: it's cheaper than the sweep, and most of
+    // the raid is already sheltered by mid-wave.
     if (bot->HasAura(SPELL_POTENT_PHEROMONES))
         return false;
 
@@ -106,9 +99,8 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
     if (!spore)
         return false;
 
-    // Distance stands the node down as well as the aura does. Waiting on the aura alone leaves a window
-    // where the bot is already standing on the spore and the node keeps ordering moves onto it, and each
-    // of those clears the motion master out from under whatever else was walking somewhere.
+    // Distance stands the node down too: the aura lands a moment late, and every move ordered onto the
+    // spore meanwhile clears the motion master under whatever else was walking.
     return bot->GetExactDist2d(spore) > ULDUAR_FREYA_SPORE_RADIUS - 1.0f;
 }
 
@@ -128,10 +120,8 @@ bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
     if (!IsFreyaHardModeActive(botAI))
         return false;
 
-    // The beam stalkers are non-selectable, so they never show up in attack-target lists - walk the
-    // stalker scan instead, which is the nearby-npc list with the entry tested before the
-    // line-of-sight ray. This runs for every bot every tick for as long as the gate is open, which is
-    // every stretch of Ulduar before Freya dies.
+    // Beam stalkers are non-selectable, so walk the stalker scan: nearby npcs, entry tested before the LOS
+    // ray. This runs every tick for every bot in Ulduar until Freya dies.
     for (ObjectGuid const& guid : GetFreyaScan(botAI).Stalkers())
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -186,10 +176,8 @@ bool FreyaRangedCampTrigger::IsActive()
     if (camp == Position())
         return false;
 
-    // The tolerance exists to stop churn, not to license standing in a blast that is about to go off,
-    // and a healer's 15 yd of slack is the whole Detonate radius. Only the lashers nearly dead count:
-    // a healthy one detonates nothing, and walking away from a pack that moves faster than the bot
-    // costs more damage than every detonation in the wave.
+    // The tolerance stops churn, it doesn't license standing in a blast: a healer's 15 yd of slack is all
+    // of Detonate. Only low lashers count: retreating from a pack faster than the bot costs more than Detonate.
     if (!GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_DETONATE_RADIUS)
              .empty())
         return true;
@@ -216,9 +204,8 @@ bool FreyaFrostNovaLashersTrigger::IsActive()
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    // The nova is a sphere on the caster, so what matters is how many lashers have closed on the mage,
-    // not what state a pile somewhere else is in. Two, so a single lasher the mage is already killing
-    // does not spend the cooldown.
+    // The nova is a sphere on the caster, so count lashers on the mage. Two, so one lasher the mage is
+    // already killing doesn't spend the cooldown.
     if (CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_NOVA_RADIUS) <
         ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS)
         return false;
@@ -302,9 +289,8 @@ bool FreyaStepOutOfSunbeamTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Melee and tanks are stacked on what they are hitting and cannot give up a second and a half of it.
-    // They lose little by staying: thirteen of one pull's sixteen beams were aimed at a ranged bot or
-    // its pet, which is not where the melee ball is standing.
+    // Melee and tanks can't give up a second and a half of damage, and lose little by staying: beams
+    // mostly go for ranged bots and their pets, away from the melee ball.
     if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
         return false;
 

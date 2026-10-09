@@ -51,10 +51,8 @@ float FreyaTrioSyncMultiplier::GetValue(Action* action)
     if (!isDamage)
         return 1.0f;
 
-    // Only a trio member is ever held back: FreyaTrioSyncSuppress returns false for anything else, and
-    // GatherFreyaWaveState fills those three slots by entry. So the entry of whatever the bot is
-    // already hitting settles this before the boss lookup and the wave sweep - which every Ulduar
-    // fight, not just this one, would otherwise pay on every damage action of every dps bot.
+    // Only a trio member is ever held, so the target's entry settles it before the boss lookup and the
+    // wave sweep, which every Ulduar fight would otherwise pay on each damage action.
     Unit* const target = AI_VALUE(Unit*, "current target");
     if (!target)
         return 1.0f;

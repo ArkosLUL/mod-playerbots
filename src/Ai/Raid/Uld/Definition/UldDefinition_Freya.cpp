@@ -40,18 +40,13 @@ void DefineFreya(EncounterBuilder& e)
     // melee stack is on the boss, so a volley buries her melee ring and the rest of the melee lose it.
     e.Node<FreyaTankNatureBombTrigger, FreyaTankNatureBombAction>(ACTION_RAID + 4);
 
-    // The two 8 yd circles, and the whole reason the raid has to be able to come apart: Nature's Fury
-    // fires five of them around one bot, Sunbeam drops one wherever its target is standing when the cast
-    // ends. Both sit with the other escapes, above the spore node - which would otherwise walk the
-    // carrier straight back into the ball it just left.
+    // The two 8 yd circles. Both sit with the other escapes, above the spore node, which would otherwise
+    // walk the carrier straight back into the ball.
     e.Node<FreyaNaturesFuryBailTrigger, FreyaNaturesFuryBailAction>(ACTION_RAID + 4);
     e.Node<FreyaStepOutOfSunbeamTrigger, FreyaStepOutOfSunbeamAction>(ACTION_RAID + 4);
 
-    // Detonating Lasher wave. Order is the doctrine: nothing here can be tanked, kited or outrun, so
-    // the raid answers the wave with crowd control and a camp it can AoE. Leave the blast of anything
-    // about to go off first - a bot that is dead does no crowd control - then root what has already
-    // closed, then snare what has not, then the ghouls, which are the one thing on the encounter that
-    // takes a lasher off a bot at all - and gather last, only when nothing urgent is asking.
+    // Detonating Lasher wave, which nothing can tank or outrun. Leave a blast first (a dead bot does no
+    // CC), then root, snare, ghouls, and gather last, only when nothing urgent is asking.
     e.Node<FreyaLasherAboutToBlowTrigger, FreyaLasherAboutToBlowAction>(ACTION_RAID + 3);
     e.Node<FreyaFrostNovaLashersTrigger, FreyaFrostNovaLashersAction>(ACTION_RAID + 2);
     e.Node<FreyaTrapLashersTrigger, FreyaTrapLashersAction>(ACTION_RAID + 2);
@@ -64,8 +59,8 @@ void DefineFreya(EncounterBuilder& e)
 
     e.Node<FreyaTankAddsTrigger, FreyaTankAddsAction>(ACTION_RAID + 1);
 
-    // Freya walks after whoever holds her, so every escape the tank takes moves her and nothing used to
-    // move her back. Under the bomb escape, which has to be able to leave the leash.
+    // Freya walks after whoever holds her, so every tank escape moves her. Under the bomb escape, which
+    // has to be able to leave the leash.
     e.Node<FreyaTankHoldFreyaTrigger, FreyaTankHoldFreyaAction>(ACTION_RAID + 1);
 
     e.Node<FreyaRedirectThreatTrigger, FreyaRedirectThreatAction>(ACTION_RAID + 1);
@@ -87,10 +82,8 @@ void DefineFreya(EncounterBuilder& e)
     e.Node<FreyaDodgeUnstableSunBeamTrigger, FreyaDodgeUnstableSunBeamAction>(ACTION_RAID + 4);
     e.Node<FreyaGroundTremorHoldCastTrigger, FreyaGroundTremorHoldCastAction>(ACTION_EMERGENCY + 2);
 
-    // The set dps priority row splits the trio wave three ways, and the generic picker would reclaim
-    // those targets on alternating ticks. Every tank is fenced off tank assist for the whole encounter:
-    // gating it on the add ladder having something let generic assist through on a pure Detonating
-    // Lasher wave, where the off-tank collected the wave and walked it into the raid stack.
+    // The generic picker would reclaim the trio split on alternating ticks. Tank assist is off for every
+    // tank all fight: gating it on the ladder let an off-tank drag a lasher wave into the raid stack.
     e.OwnTargeting("freya disable automatic targeting", Role::Dps, FreyaOwnsTargets, Family::DpsAssist);
     e.OwnTargeting("freya disable automatic targeting", Role::Tank, FreyaOwnsTargets, Family::TankAssist);
 
@@ -101,9 +94,8 @@ void DefineFreya(EncounterBuilder& e)
 
     e.Multiplier<FreyaLasherTrapReserveMultiplier>(Family::Spell);
 
-    // Every hazard here has a node that reads all of them at once: Nature Bomb, the Unstable Sun Beam
-    // and the lashers about to detonate. Avoid AoE sits at ACTION_EMERGENCY, outranks all three, and
-    // swaps their answer for a flat FleeDistance hop on a bearing of its own, which clears none of them.
+    // Avoid AoE sits at ACTION_EMERGENCY above every Freya escape, and swaps their all-hazard answer for
+    // a flat FleeDistance hop that clears none of them.
     e.Block("freya avoid aoe hold", Role::Any, FreyaAlive, Family::AvoidAoe);
 
     e.Multiplier<FreyaGroundTremorCastGateMultiplier>(Family::Spell);

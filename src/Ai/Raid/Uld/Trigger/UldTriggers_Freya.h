@@ -5,9 +5,6 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-//
-// Freya
-//
 class FreyaNearNatureBombTrigger : public Trigger
 {
 public:
@@ -18,7 +15,7 @@ public:
 };
 
 // The main tank, who walks Freya off a bomb field instead of standing in it. Bombs land at players'
-// feet and the melee stack is on the boss, so half of every volley drops inside her melee ring.
+// feet and the melee stack is on the boss, so volleys bury her melee ring.
 class FreyaTankNatureBombTrigger : public Trigger
 {
 public:
@@ -77,8 +74,8 @@ public:
     bool IsActive() override;
 };
 
-// A Detonating Lasher next to this bot is about to blow. Melee only: they are the ones standing on the
-// pile, and one below the bail line gives them about 2.6s to clear its 15 yd blast.
+// A Detonating Lasher next to this bot is about to blow. Melee only: they're the ones on the pile, and
+// a lasher under the bail line still leaves them time to clear its 15 yd blast.
 class FreyaLasherAboutToBlowTrigger : public Trigger
 {
 public:
@@ -88,9 +85,8 @@ public:
     bool IsActive() override;
 };
 
-// Ranged and healers hold one camp a fixed standoff from the pack so the lashers gather themselves
-// into a pile the raid can AoE. Nothing is walked anywhere: a lasher moves at 8.0 yd/s against a
-// player's 7.0.
+// Ranged and healers hold one camp a fixed standoff from the pack, so the lashers walk themselves into
+// a pile to AoE. Nobody leads them: a lasher runs 8.0 yd/s against a player's 7.0.
 class FreyaRangedCampTrigger : public Trigger
 {
 public:
@@ -100,9 +96,8 @@ public:
     bool IsActive() override;
 };
 
-// Frost Nova roots whatever has closed on the mage for a full 8s: it carries no
-// AURA_INTERRUPT_FLAG_TAKE_DAMAGE, so raid damage does not break it, and the lasher has no
-// CREATURE_FLAG_EXTRA_ALL_DIMINISH, so it never diminishes either.
+// Frost Nova holds the full 8s: no AURA_INTERRUPT_FLAG_TAKE_DAMAGE, so damage doesn't break it, and no
+// CREATURE_FLAG_EXTRA_ALL_DIMINISH on the lasher, so no DR either.
 class FreyaFrostNovaLashersTrigger : public Trigger
 {
 public:
@@ -123,11 +118,8 @@ public:
     bool IsActive() override;
 };
 
-// Army of the Dead on the lasher wave. Eight ghouls that AoE-taunt (43263, which filters only world
-// bosses) are worth more here than the damage they do, and two lasher waves a pull fit its 10 min
-// cooldown. Its own name is deliberately not "army of the dead": IsBurstCooldownAction matches on the
-// action name, and the Ulduar burst gates hold everything on that list until Attuned to Nature drops,
-// which is the whole add phase.
+// Army of the Dead on the lasher wave: the ghouls AoE-taunt through 43263, which filters only world
+// bosses, and that's worth more than their damage.
 class FreyaSummonArmyTrigger : public Trigger
 {
 public:
@@ -158,9 +150,8 @@ public:
     bool IsActive() override;
 };
 
-// The bot wearing Nature's Fury, with the raid still inside the splash. The mark ticks five times over
-// 10s and every tick covers 8 yd around the carrier, so one bot standing in the ball is five volleys
-// into it - 202k off a single mark on a healer, with seventeen bots in range.
+// The Nature's Fury carrier, with raid members still inside the splash. Five ticks over 10s, 8 yd
+// around the carrier each, so standing in the ball is five volleys into it.
 class FreyaNaturesFuryBailTrigger : public Trigger
 {
 public:
@@ -170,9 +161,8 @@ public:
     bool IsActive() override;
 };
 
-// A ranged bot or healer standing next to whoever Freya's Sunbeam is aimed at. The target itself can do
-// nothing - the blast lands where it is when the cast ends, not where it was when the cast started - so
-// its neighbours are the only ones with an answer.
+// A ranged bot or healer next to Freya's Sunbeam target. The beam lands where the target stands when
+// the cast ends, so only its neighbours can dodge it.
 class FreyaStepOutOfSunbeamTrigger : public Trigger
 {
 public:
