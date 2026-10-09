@@ -660,7 +660,7 @@ void YoggSaronPetGuardAction::Unhush(Creature* pet)
     hushed.erase(it);
 }
 
-size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool phaseThreeRanged)
+size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool phaseThreeRanged, bool beaconHealFirst)
 {
     constexpr size_t none = std::numeric_limits<size_t>::max();
 
@@ -710,12 +710,21 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool p
         // seconds.
         case NPC_CRUSHER_TENTACLE:
             return phaseThreeRanged ? 0 : 4;
-        // Ahead of the Crusher while it holds somebody. 99k health dies in about 2 s under the ranged,
-        // and one pull left four raiders squeezed for 11.5-23.3 s with all nine ranged on a Crusher.
+        // One a mark's heal reaches goes first with the Crusher. It has to die between two beacons or it's
+        // back to full: one left to the pets ended phase 3 at 88% after three beacons in a row. A 745k
+        // Corruptor takes the ranged about 7 s.
+        // Otherwise a Constrictor goes ahead of the Crusher while it holds somebody. 99k health dies in
+        // about 2 s under the ranged, and one pull left four raiders squeezed for 11.5-23.3 s with all nine
+        // ranged on a Crusher.
         case NPC_CONSTRICTOR_TENTACLE:
-            return YoggSaronConstrictorHolding(unit) ? 3 : 5;
         case NPC_CORRUPTOR_TENTACLE:
-            return 6;
+            if (beaconHealFirst && YoggSaronBeaconHealReaches(unit))
+                return 0;
+
+            if (entry == NPC_CORRUPTOR_TENTACLE)
+                return 6;
+
+            return YoggSaronConstrictorHolding(unit) ? 3 : 5;
         case NPC_YOGG_SARON:
             return 7;
         default:
@@ -846,6 +855,8 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     bool const brainLevel = YoggSaronOnBrainLevel(bot);
     bool const phaseThreeRanged =
         !brainLevel && PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot) && YoggSaronInPhase3(botAI);
+    // Marks are only dragged out to the spots without Thorim.
+    bool const beaconHealFirst = phaseThreeRanged && !YoggThorimKeeperActive(botAI);
 
     std::vector<uint32> entries;
     size_t tierCount = 0;
@@ -892,7 +903,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     std::vector<size_t> tiers;
     tiers.reserve(candidates.size());
     for (Unit* unit : candidates)
-        tiers.push_back(TierOf(unit, brainLevel, phaseThreeRanged));
+        tiers.push_back(TierOf(unit, brainLevel, phaseThreeRanged, beaconHealFirst));
 
     // Best tier first, and stop at the first one with anything allowed in it: only that tier is ever
     // used, so the rest would just be line of sight rays for nothing. Keep the visit order inside a
@@ -931,7 +942,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     size_t currentTier = none;
     if (currentTarget && IsAllowedTarget(currentTarget, brain))
-        currentTier = TierOf(currentTarget, brainLevel, phaseThreeRanged);
+        currentTier = TierOf(currentTarget, brainLevel, phaseThreeRanged, beaconHealFirst);
 
     if (currentTier != none && currentTier <= desiredTier)
     {
@@ -1273,6 +1284,20 @@ bool YoggSaronPhase3ControlAction::Execute(Event /*event*/)
         botAI->ChangeStrategy(REMOVE_STRATEGY_CHAR + tankFaceStrategy.getName(), BotState::BOT_STATE_COMBAT);
         acted = true;
     }
+bool YoggSaronMortalStrikeAction::Execute(Event /*event*/)
+{
+    // No walk and no target swap, only what is already in reach.
+    bool hot = false;
+    Unit* guardian = YoggSaronMortalStrikeTarget(botAI, hot);
+    if (!guardian || !botAI->CanCastSpell("mortal strike", guardian) || !botAI->CastSpell("mortal strike", guardian))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.mortalstrike", hot ? "hot" : "drain");
+
+    return true;
+}
+
 
     TankAssistStrategy tankAssistStrategy(botAI);
     if (!botAI->HasStrategy(tankAssistStrategy.getName(), BotState::BOT_STATE_COMBAT))

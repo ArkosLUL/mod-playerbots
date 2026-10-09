@@ -223,6 +223,9 @@ struct YoggSaronEncounterState
     uint32 stageDueMs = 0;
     uint32 beaconScanMs = 0;
     bool markWindow = false;
+    // The last yogg.healcut sample, raid-wide: the bot that runs the scan changes from tick to tick.
+    uint32 healCutScanMs = 0;
+    std::string healCutNote;
     std::unordered_map<ObjectGuid, uint8> beaconStages;
     std::vector<ObjectGuid> markKickers;
     // Released drags, keyed by the Guardian: who dragged it and when the heal let it go. The dragger walks
@@ -1618,6 +1621,17 @@ int32 YoggSaronDrainLifeElapsed(Unit* guardian)
 
     return channel ? std::max(0, channel->GetSpellInfo()->GetDuration() - channel->GetCastTimeRemaining()) : -1;
 }
+
+// Only the strongest cut counts in Unit::SpellHealingBonusTaken, a second one adds nothing.
+bool YoggSaronHealingCut(Unit* guardian)
+{
+    return guardian->GetMaxNegativeAuraModifier(SPELL_AURA_MOD_HEALING_PCT) <= ULDUAR_YOGG_SARON_HEALING_CUT_PCT;
+}
+
+bool YoggSaronBeaconHealOn(Unit* guardian)
+{
+    return guardian->HasAura(SPELL_EMPOWERING_SHADOWS_25) || guardian->HasAura(SPELL_EMPOWERING_SHADOWS_10);
+}
 }  // namespace
 
 Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
@@ -1908,6 +1922,45 @@ uint32 YoggSaronPileHealedOn(Player* tank)
     }
 
     return count;
+}
+
+Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, bool& hot)
+{
+    hot = false;
+    Player* bot = botAI->GetBot();
+    if (YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase3(botAI) || YoggThorimKeeperActive(botAI))
+        return nullptr;
+
+    // The grid radius counts both object sizes, so this covers melee reach. IsWithinMeleeRange decides.
+    constexpr float searchRadius = 10.0f;
+    std::list<Creature*> guardians;
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_IMMORTAL_GUARDIAN, searchRadius);
+
+    bool const gaze = YoggSaronGazeActive(botAI);
+    Creature* yogg = gaze ? YoggSaronNearestCreature(botAI, NPC_YOGG_SARON) : nullptr;
+
+    Unit* best = nullptr;
+    for (Creature* guardian : guardians)
+    {
+        if (!guardian->IsAlive() || YoggSaronHealingCut(guardian) || !bot->IsWithinMeleeRange(guardian))
+            continue;
+
+        bool const healed = YoggSaronBeaconHealOn(guardian);
+        if (!healed && !YoggSaronDrainLifeChannelling(guardian))
+            continue;
+
+        if ((gaze && (!yogg || !YoggSaronOutsideGaze(bot, yogg, guardian))) ||
+            !YoggSaronGuardianThreatAllows(bot, guardian, guardian->GetGUID() == bot->GetTarget()))
+            continue;
+
+        if (!best || std::make_tuple(!healed, guardian->GetHealth()) < std::make_tuple(!hot, best->GetHealth()))
+        {
+            best = guardian;
+            hot = healed;
+        }
+    }
+
+    return best;
 }
 
 Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI)
@@ -3754,20 +3807,40 @@ Unit* YoggSaronPhase3PetLeftover(PlayerbotAI* botAI)
     std::list<Creature*> crushers;
     yogg->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_PET_LEFTOVER_SEARCH_RADIUS);
 
-    auto const rank = [](Creature* tentacle)
-    { return std::make_tuple(!YoggSaronConstrictorHolding(tentacle), tentacle->GetHealth(), tentacle->GetGUID()); };
+    // One a beacon heal reaches has to die between two beacons or it's back to full, so the pets help the
+    // ranged on it first.
+    auto const rank = [thorim](Creature* tentacle)
+    {
+        return std::make_tuple(!YoggSaronConstrictorHolding(tentacle), thorim || !YoggSaronBeaconHealReaches(tentacle),
+                               tentacle->GetHealth(), tentacle->GetGUID());
+    };
 
     Creature* best = nullptr;
     for (Creature* leftover : leftovers)
     {
         if (!leftover->IsAlive())
             continue;
+bool YoggSaronBeaconHealReaches(Unit* unit)
+{
+    float const reach =
+        ULDUAR_YOGG_SARON_BEACON_HEAL_RADIUS + ULDUAR_YOGG_SARON_BEACON_HEAL_SLACK + unit->GetObjectSize();
+
+    for (YoggSaronBeaconLane const& lane : YOGG_SARON_BEACON_LANES)
+        for (Position const* spot : {lane.drag, lane.hunter})
+            if (unit->GetExactDist2d(spot->GetPositionX(), spot->GetPositionY()) <= reach)
+                return true;
+
+    return false;
+}
+
 
         bool const nearCrusher = std::any_of(crushers.begin(), crushers.end(), [botAI, leftover](Creature* crusher)
             {
                 return crusher->IsAlive() && !YoggSaronCrusherStunHolds(botAI, crusher) &&
                        crusher->GetExactDist2d(leftover) <= ULDUAR_YOGG_SARON_CRUSH_RANGE;
             });
+    bool const thorim = YoggThorimKeeperActive(botAI);
+
         if (nearCrusher)
             continue;
 
@@ -4864,6 +4937,51 @@ void YoggSaronTickBeacon(PlayerbotAI* botAI)
 
     if (!state.beaconClockMs)
         state.beaconClockMs = now;
+// Guardians carrying the beacon heal, and ones channelling Drain Life, that have a healing cut on them
+// out of all of them. Once a second, noted when it changes.
+void YoggSaronSampleHealCut(Player* bot, YoggSaronEncounterState& state, Creature* yogg, uint32 now)
+{
+    constexpr uint32 sampleIntervalMs = 1000;
+    if (!RaidObs::Active() || getMSTimeDiff(state.healCutScanMs, now) < sampleIntervalMs)
+        return;
+
+    state.healCutScanMs = now;
+
+    std::list<Creature*> guardians;
+    yogg->GetCreatureListWithEntryInGrid(guardians, NPC_IMMORTAL_GUARDIAN, ULDUAR_YOGG_SARON_BEACON_DRAG_SEARCH_RADIUS);
+
+    uint32 hot = 0;
+    uint32 hotCut = 0;
+    uint32 drain = 0;
+    uint32 drainCut = 0;
+    for (Creature* guardian : guardians)
+    {
+        if (!guardian->IsAlive())
+            continue;
+
+        bool const cut = YoggSaronHealingCut(guardian);
+        if (YoggSaronBeaconHealOn(guardian))
+        {
+            ++hot;
+            hotCut += cut;
+        }
+
+        if (YoggSaronDrainLifeChannelling(guardian))
+        {
+            ++drain;
+            drainCut += cut;
+        }
+    }
+
+    std::string note = "hot " + std::to_string(hotCut) + "/" + std::to_string(hot) + " drain " +
+                       std::to_string(drainCut) + "/" + std::to_string(drain);
+    if (note == state.healCutNote)
+        return;
+
+    state.healCutNote = std::move(note);
+    RaidObs::Note(bot, "yogg.healcut", state.healCutNote);
+}
+
 
     Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
     if (!yogg)
@@ -4887,6 +5005,7 @@ void YoggSaronTickBeacon(PlayerbotAI* botAI)
     }
     else if (!window && state.markWindow)
     {
+        state.healCutNote.clear();
         state.markWindow = false;
         state.markKickers.clear();
         state.beaconStages.clear();
@@ -4897,6 +5016,8 @@ void YoggSaronTickBeacon(PlayerbotAI* botAI)
 
     uint32 const due = (state.lastMarkMs ? state.lastMarkMs : state.beaconClockMs) + ULDUAR_YOGG_SARON_BEACON_PERIOD_MS;
     int32 const left = static_cast<int32>(due - now);
+    YoggSaronSampleHealCut(bot, state, yogg, now);
+
     if (left < -static_cast<int32>(ULDUAR_YOGG_SARON_BEACON_STAGE_TIMEOUT_MS))
     {
         for (auto const& [guid, lane] : state.beaconStages)

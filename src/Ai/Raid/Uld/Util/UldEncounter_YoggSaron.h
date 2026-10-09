@@ -675,6 +675,15 @@ constexpr uint32 ULDUAR_YOGG_SARON_BEACON_PILE_RESET_GUARDIANS = 2;
 constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_EXTERNAL_PCT = 50.0f;
 
 // Both tanks stand on the melee spot, so Consecration keeps the whole pile on whoever has the most threat:
+// Empowering Shadows heals everything on Yogg's side within 20 yd of the mark, tentacles too, 750k over
+// 20 s. The mark stands in its dragger's reach, a few yards off the spot. One pull's leftover Corruptor
+// 21.9 yd from the north drag spot went back to full after three beacons in a row.
+constexpr float ULDUAR_YOGG_SARON_BEACON_HEAL_RADIUS = 20.0f;
+constexpr float ULDUAR_YOGG_SARON_BEACON_HEAL_SLACK = 5.0f;
+
+// Mortal Strike's -50% healing. A weaker cut on the Guardian still leaves the strike worth it.
+constexpr int32 ULDUAR_YOGG_SARON_HEALING_CUT_PCT = -50;
+
 // one held 5-11 Guardians for 90 s while the other held 0-3, and the other's taunts came back within 4 s.
 // So the other tank takes the pile once the holder is under the swap line with this many on it, and the
 // holder stops its area threat and taunts for one Righteous Defense cooldown.
@@ -946,11 +955,16 @@ bool ClaimYoggSaronSqueezeRescue(PlayerbotAI* botAI, Player* victim);
 Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet);
 
 // Phase 3: the leftover Corruptor or Constrictor every bot's pet goes for, or nullptr. A Constrictor
-// holding somebody first, then lowest health, then GUID, so all pets pile on one. Skips any with a
-// swinging Crusher within Crush range, the pet guard would only pull the pet back out.
+// holding somebody first, then without Thorim one a beacon heal reaches, then lowest health, then GUID, so
+// all pets pile on one. Skips any with a swinging Crusher within Crush range, the pet guard would only
+// pull the pet back out.
 Unit* YoggSaronPhase3PetLeftover(PlayerbotAI* botAI);
 
 // Record a Brain Link pair, from the spell hook that sees 63803 or 63804 go out. Both ends read the
+// Whether a mark held at a drag or hunter spot would heal this unit, see
+// ULDUAR_YOGG_SARON_BEACON_HEAL_RADIUS. Geometry only, the callers check for Thorim.
+bool YoggSaronBeaconHealReaches(Unit* unit);
+
 // same record, so both walk.
 void YoggSaronNoteBrainLinkPair(Unit* owner, Unit* partner);
 
@@ -1304,6 +1318,11 @@ Player* YoggSaronTankSwapTake(PlayerbotAI* botAI);
 bool YoggSaronTankShedding(PlayerbotAI* botAI);
 
 // A tank under the swap line while another is over the taker line leaves loose Guardians to that one. A
+// Phase 3 without Thorim: the Guardian this warrior's Mortal Strike goes on, or nullptr. One carrying the
+// beacon heal first, then one channelling Drain Life, lowest health first. Only in melee reach, with no
+// healing cut on it yet, threat the bot may take, and outside a gaze. `hot` says it carries the heal.
+Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, bool& hot);
+
 // soulstoned tank taunted straight back into the pile and died again 14 s later.
 bool YoggSaronTankLowHold(Player* bot);
 

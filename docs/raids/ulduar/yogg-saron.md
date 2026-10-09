@@ -1006,7 +1006,7 @@ nothing sent a pet: Worm, Wolf and Ruirin followed their owners to the Guardians
 reached a 745k Corruptor only through the Crusher fallback, sitting on it 63-86 yd from their owners
 at ~2k/s together; a human did most of its damage, it died at +68 s, and its 37 debuffs were dispelled
 in a median 0.1-0.8 s. `YoggSaronPhase3PetLeftover` picks one from Yogg within 70 yd — a holding
-Constrictor, then lowest health, then GUID — skipping any within 25 yd of a swinging Crusher, or the
+Constrictor, then without Thorim one a beacon heal reaches (below), then lowest health, then GUID — skipping any within 25 yd of a swinging Crusher, or the
 guard would pull the pet straight back. The trigger fires on it for a bot with a proper pet, and the
 action commands only those (`IsPet`: hunter, warlock, unholy ghoul), since a 30 s Treant or Spirit
 Wolf would spend its life walking; it is also `elsewhere` ahead of the owner's target when a pet is
@@ -1838,7 +1838,9 @@ distance, so a lower bound: the module takes off each unit's size, several yards
 Guardian, which is why 100 of 440 casts read under 3 though every one followed `allowed`). Also: full
 Drain Lifes with a bot kick ready and in range and `yogg.kicknudge`; per marked Guardian its taunts
 (`took` / `didn't take` / `channelling`, read like the module) and its Drain Life seconds and cuts; per
-beacon the stagers' gap to their spot at the mark and the kick reserve with its kicks (`yogg.markkick`);
+beacon the stagers' gap to their spot at the mark, the kick reserve with its kicks (`yogg.markkick`) and
+the healing cut over its 20 s (`yogg.healcut`, plus the phase total and `yogg.mortalstrike`); per
+leftover tentacle the beacons that healed it (10%+ in the 20 s after);
 the damage split is by each bot's target, so a melee bot on Yogg cleaving the pile reads all Yogg (38%
 there against 22% in the combat log); Guardians on each tank per 10 s
 (all / 30%+), each tank swap with both tanks' counts at +0/4/8 s, taunts back on the other tank 4 s
@@ -2258,7 +2260,8 @@ it still drops, so drinking works. Other raids with a targetless healer have the
 
 **Shadow Beacon heals the marked guardians, and Yogg when they stand near him.** It marks 3 guardians
 in 25-man every 45 s, and 10 s later each casts Empowering Shadows (64486): **37,500 a second for 20 s
-on every ally within 20 yd, 750,000 — 176% of a guardian's own max health**.
+on every ally within 20 yd, 750,000 — 176% of a guardian's own max health**. Allies include tentacles,
+and it has no dispel type.
 `spell_yogg_saron_shadow_beacon_aura::OnApply` swaps the marked guardian's entry to 36064 — a free
 signal: `TierOf` puts Marked above unmarked so the raid reaches Weakened before the heal lands. The
 area check compares centre distance to 20 with no combat reach added for a creature caster, and
@@ -2267,6 +2270,26 @@ the tank at the P3 melee spot, 19.0 yd from Yogg in 3D, three marked guardians s
 and healed him **+3.84%, 1.69M of 44.0M**, over exactly those 20 s, against −0.98% from the raid in
 the 56 s before. Only a tank spot ~34 yd out keeps them clear, and melee cannot reach Yogg from there,
 so the spot stays: with Thorim marked guardians die first, without him they are dragged; `--phase3` reads Yogg's health across every beacon.
+
+**Without Thorim phase 3 is a race against the Guardians' healing.** Two Freya-only pulls (combat
+log): Empowering Shadows healed 9.6M / 10.0M and Drain Life 4.8M / 7.4M, more than all spawns
+(10.0M / 11.1M); late in the kill it ran 112-126k/s. Drain Life starts only under 85%, once per 9.5 s,
+and heals 8-10× the damage dealt (64160 EffectMultipleValue 10); kicks cut 129 of 185 but cap near one
+a second against 1.1-1.3 channels a second late. **Mortal Strike halves both** (aura 118, −50%; only
+the strongest cut counts in `SpellHealingBonusTaken`): ticks of 18,750 against 37,500, Drain Life 11-15k
+against 22-29k. **So `yogg-saron mortal strike`** (by the user's choice, Wound Poison declined): a
+warrior with it ready and the rage (`CanCastSpell` ignores rage) strikes a Guardian in melee reach with
+no cut, threat allowed, outside a gaze, one carrying the heal first, then one channelling, lowest health
+first; never Yogg, where one pull spent every strike. Probed as `yogg.mortalstrike` (`hot` / `drain`)
+and `yogg.healcut` (`hot a/b drain c/d`: Guardians under a cut out of those healing, sampled once a
+second raid-wide).
+
+**A leftover tentacle a mark's heal reaches dies first.** One pull's Corruptor 13-22 yd from the north
+and north-east drag spots took 2.01M of Empowering Shadows over three beacons, undoing what five pets,
+DoTs and a human put in; it ended at 88%. `YoggSaronBeaconHealReaches`: within 20 yd + 5 yd slack + its
+size of a drag or hunter spot. Without Thorim, phase 3 ranged rank such a Corruptor or Constrictor tier 0
+(`beaconHealFirst`; ~7 s for a 745k Corruptor, inside the first 45 s) where their station reaches it,
+and the pets take it first.
 
 `yogg-saron guardian control` is **not** gated on Thorim, or on hard mode. Hard mode means *fewer*
 Keepers, so demanding both asked for exactly the case where Thorim is least likely to be there — and

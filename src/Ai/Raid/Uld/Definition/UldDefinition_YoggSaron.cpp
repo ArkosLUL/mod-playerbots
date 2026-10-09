@@ -171,6 +171,9 @@ void DefineYoggSaron(EncounterBuilder& e)
     // An instant cast, so under every raid walk and dodge, and well over the paladin's own rotation,
     // which would only ever judge its current target.
     e.Node<YoggSaronDiminishPowerJudgementTrigger, YoggSaronDiminishPowerJudgementAction>(ACTION_RAID - 0.5f);
+    // Same reasoning for the warrior's Mortal Strike on a healing Guardian, over its own rotation, which
+    // would only ever strike Yogg.
+    e.Node<YoggSaronMortalStrikeTrigger, YoggSaronMortalStrikeAction>(ACTION_RAID - 0.5f);
     // Level with the room walk it replaces for the healer, and above heal reach, which every healer spec
     // wires at 38-40. Getting to the station is what puts the whole room in range, so it comes before a
     // step toward one mate; the trigger stands down inside 10 yd of the station and heal reach owns the

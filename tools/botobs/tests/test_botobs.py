@@ -1129,6 +1129,27 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(gaps, ["Justice north 3.0 yd", "Trueshot south 0.0 yd", "Gone northeast -"])
         self.assertEqual(yogg_saron.stage_gaps([]), [])
 
+    def test_heal_cut_seconds_holds_each_sample_until_the_next(self):
+        samples = [(0, "hot 0/3 drain 0/1"), (2000, "hot 1/3 drain 1/2"), (5000, "hot 0/0 drain 0/0")]
+        # 1-2 s of the first, 3 s of the second, the last one adds nothing.
+        self.assertEqual(yogg_saron.heal_cut_seconds(samples, 1000, 8000), (3.0, 12.0, 3.0, 7.0))
+        self.assertEqual(yogg_saron.heal_cut_seconds([], 0, 8000), (0.0, 0.0, 0.0, 0.0))
+        self.assertEqual(yogg_saron.heal_cut_seconds([(0, "garbled")], 0, 8000), (0.0, 0.0, 0.0, 0.0))
+
+    def test_heal_cut_line_skips_what_never_healed(self):
+        self.assertEqual(yogg_saron.heal_cut_line((3.0, 12.0, 3.0, 7.0)),
+                         "beacon heal 25% of 12 Guardian-s, Drain Life 43% of 7 Guardian-s")
+        self.assertEqual(yogg_saron.heal_cut_line((0.0, 0.0, 1.0, 4.0)), "Drain Life 25% of 4 Guardian-s")
+        self.assertEqual(yogg_saron.heal_cut_line((0.0, 0.0, 0.0, 0.0)), "nothing healing")
+
+    def test_beacon_heal_rises_counts_heals_a_tentacle_climbed_after(self):
+        # 1791489397's leftover Corruptor: 25% to 93% after the first heal, then two more back to full.
+        series = [(0, 25.0), (9000, 93.0), (30000, 55.0), (40000, 100.0), (70000, 83.0), (75000, 99.7),
+                  (100000, 60.0)]
+        self.assertEqual(yogg_saron.beacon_heal_rises(series, [500, 31000, 71000]), 3)
+        # Falling the whole time is not a heal, and a heal before the first sample has nothing to compare.
+        self.assertEqual(yogg_saron.beacon_heal_rises([(0, 80.0), (10000, 60.0)], [500, -5000]), 0)
+
     def test_drag_exposure_counts_only_the_window_after_the_heal(self):
         hits = [(900, 7, 2000), (1500, 7, 9000), (4000, 7, 36000), (5000, 8, 26000), (30000, 7, 40000)]
         self.assertEqual(yogg_saron.drag_exposure(hits, 1000, 20000), {7: (45000, 36000, 2), 8: (26000, 26000, 1)})

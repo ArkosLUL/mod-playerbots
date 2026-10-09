@@ -373,6 +373,23 @@ bool YoggSaronDiminishPowerJudgementTrigger::IsActive()
     return false;
 }
 
+bool YoggSaronMortalStrikeTrigger::IsActive()
+{
+    // Class, cooldown and rage first, the grid read only for a warrior that can swing it. CanCastSpell
+    // doesn't check rage.
+    if (bot->getClass() != CLASS_WARRIOR)
+        return false;
+
+    uint32 const spellId = AI_VALUE2(uint32, "spell id", "mortal strike");
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info || bot->HasSpellCooldown(spellId) ||
+        info->CalcPowerCost(bot, info->GetSchoolMask()) > static_cast<int32>(bot->GetPower(POWER_RAGE)))
+        return false;
+
+    bool hot = false;
+    return YoggSaronMortalStrikeTarget(botAI, hot) != nullptr;
+}
+
 bool YoggSaronMaladyOfTheMindTrigger::IsActive()
 {
     if (!IsPhase2())

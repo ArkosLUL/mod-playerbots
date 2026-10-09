@@ -130,6 +130,9 @@ FLIP_TURN = 1.2
 
 # A leftover tentacle last sampled at or under this was killed, not just out of the sweep.
 LEFTOVER_DEAD_PCT = 1.0
+# A leftover that gained this much in the 20 s after a beacon heal took it. Each mark's heal is 750k over
+# 20 s on everything on Yogg's side within 20 yd, and a Corruptor has 745k.
+LEFTOVER_BEACON_RISE_PCT = 10.0
 SPELL_HAND_OF_PROTECTION = (10278, 5599, 1022)
 
 # A Guardian's death nova is 15 yd (62714 and 65209 both carry radius index 18) and the ranged station
@@ -3957,6 +3960,47 @@ def flip_cause(victim_role: str, spells: set[str]) -> str:
 def area_worth(target: tuple[float, float], units: list[tuple[int, float, float, float, bool]],
                radius: float = PHASE_3_AREA_RADIUS) -> tuple[int, bool]:
     """(worth hitting, a loose Guardian) round a target (x, y) by the module's phase 3 area rule. Units
+def heal_cut_seconds(samples: list[tuple[int, str]], first: int, last: int) -> tuple[float, float, float, float]:
+    """Guardian-seconds from `yogg.healcut` samples between `first` and `last`: (beacon heal under a cut,
+    beacon heal in all, Drain Life under a cut, Drain Life in all). Each sample, "hot a/b drain c/d", holds
+    until the next one."""
+    totals = [0.0, 0.0, 0.0, 0.0]
+    for index, (when, text) in enumerate(samples):
+        until = samples[index + 1][0] if index + 1 < len(samples) else last
+        span = (min(until, last) - max(when, first)) / 1000
+        parts = text.split()
+        if span <= 0 or len(parts) != 4:
+            continue
+        hot_cut, hot = (int(value) for value in parts[1].split("/"))
+        drain_cut, drain = (int(value) for value in parts[3].split("/"))
+        for slot, value in enumerate((hot_cut, hot, drain_cut, drain)):
+            totals[slot] += value * span
+    return totals[0], totals[1], totals[2], totals[3]
+
+
+def heal_cut_line(seconds: tuple[float, float, float, float]) -> str:
+    hot_cut, hot, drain_cut, drain = seconds
+    parts = []
+    if hot:
+        parts.append(f"beacon heal {hot_cut / hot * 100:.0f}% of {hot:.0f} Guardian-s")
+    if drain:
+        parts.append(f"Drain Life {drain_cut / drain * 100:.0f}% of {drain:.0f} Guardian-s")
+    return ", ".join(parts) or "nothing healing"
+
+
+def beacon_heal_rises(series: list[tuple[int, float]], heals: list[int], look_ms: int = EMPOWERING_SHADOWS_MS,
+                      rise_pct: float = LEFTOVER_BEACON_RISE_PCT) -> int:
+    """How many of the beacon heals at `heals` a tentacle took: its health rose at least `rise_pct` in the
+    `look_ms` after one. `series` is (t, hp) in time order."""
+    count = 0
+    for when in heals:
+        then = next((hp for t, hp in reversed(series) if t <= when), None)
+        later = max((hp for t, hp in series if when < t <= when + look_ms), default=None)
+        if then is not None and later is not None and later - then >= rise_pct:
+            count += 1
+    return count
+
+
     are (entry, x, y, health %, a tank is its victim). Worth: Yogg, leftover tentacles and Immortal
     Guardians over the floor that a tank holds. Loose: a Guardian in the area no tank holds."""
     worth = 0
@@ -4469,6 +4513,8 @@ def show_phase3(trace: Trace) -> None:
                 then = row_before(rows[guid], group[0])
                 later = row_before(rows[guid], group[0] + BEACON_SPLASH_LOOK_MS)
                 changes.append(f"{then[6]:.0f} -> {later[6]:.0f}%")
+    # How much of the Guardians' healing ran under Mortal Strike's -50%.
+    cut_samples = [(rec["t"], str(rec.get("txt", ""))) for rec in notes(trace, "yogg.healcut")]
             print(f"      other Guardians it reached: {len(healed)} ({', '.join(changes)}"
                   f" over {BEACON_SPLASH_LOOK_MS // 1000} s)")
         show_beacon_tanks(trace, group[0], marked | set(healed), rows, roster, tanks, flows, covers, died_at)
@@ -4525,10 +4571,13 @@ def show_phase3(trace: Trace) -> None:
     sides = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beaconspot"))
     if sides:
         print(f"    yogg.beaconspot  : {dict(sides)}")
-    for key in ("yogg.dragdef", "yogg.dragext"):
+    for key in ("yogg.dragdef", "yogg.dragext", "yogg.mortalstrike"):
         picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, key) if start <= rec["t"] <= stop)
         if picks:
             print(f"    {key:16} : {dict(picks)}")
+        if cut_samples:
+            seconds = heal_cut_seconds(cut_samples, group[0], group[0] + EMPOWERING_SHADOWS_MS)
+            print(f"      healing cut over the heal: {heal_cut_line(seconds)}")
 
     # Silences against the Aura Mastery that should have covered them.
     roars = [rec["t"] for rec in trace.of("cast")
@@ -4572,6 +4621,8 @@ def show_phase3(trace: Trace) -> None:
                 if inside_gaze(rec["t"]):
                     heal_in += amount
                 else:
+    if cut_samples:
+        print(f"    yogg.healcut     : {heal_cut_line(heal_cut_seconds(cut_samples, start, stop))}")
                     heal_out += amount
         dealt_in = dealt_out = 0
         for guid in roster:
@@ -4671,7 +4722,8 @@ def show_phase3_leftovers(trace: Trace, start: int, stop: int) -> None:
             fate = f"killed at +{(last[0] - start) / 1000:.1f} s" if last[6] <= LEFTOVER_DEAD_PCT else "still up"
             names = ", ".join(sorted(trace.name(pet) for pet in on[guid])) or "none"
             print(f"    {TENTACLE_NAMES[tentacles[guid]]:11} {at_start:5.1f}% at phase 3,"
-                  f" last seen {clock(last[0])} at {last[6]:.1f}%, {fate}; pets on it: {names}")
+                  f" last seen {clock(last[0])} at {last[6]:.1f}%, {fate}; healed by {healed} beacon(s);"
+                  f" pets on it: {names}")
 
     applied = [(rec["t"], rec.get("d", 0), bool(rec.get("r"))) for rec in trace.of("aura")
                if rec.get("sp") == SPELL_DIMINISH_POWER and rec.get("d") in roster]
@@ -4707,12 +4759,18 @@ def defensive_spans(trace: Trace, until: int, wanted: dict[int, str]) -> dict[in
     roster = roster_guids(trace)
     opened: dict[tuple[int, int], int] = {}
     spans: dict[int, list[tuple]] = collections.defaultdict(list)
+        # A beacon heal reaching a leftover undoes whatever went into it, so it has to die between two.
+        heal_casts = [rec["t"] for rec in trace.of("cast")
+                      if rec.get("sp") in SPELL_EMPOWERING_SHADOWS and start <= rec["t"] <= stop]
+        heal_times = [first for first, _ in group_runs(heal_casts, 1000, 0)]
+
     for rec in trace.of("aura"):
         guid, spell = rec.get("d"), rec.get("sp")
         if spell not in wanted or guid not in roster or rec["t"] > until:
             continue
         key = (guid, spell)
         if not rec.get("r"):
+            healed = beacon_heal_rises([(row[0], row[6]) for row in rows[guid]], heal_times)
             opened.setdefault(key, rec["t"])
         elif key in opened:
             spans[guid].append((opened.pop(key), rec["t"], wanted[spell]))

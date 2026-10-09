@@ -240,7 +240,8 @@ public:
 
 private:
     // Kill order for wherever the bot is standing, as a tier index. npos means "not a target here".
-    static size_t TierOf(Unit* unit, bool brainLevel, bool phaseThreeRanged = false);
+    // `beaconHealFirst` puts a leftover a mark's heal reaches at the top, see YoggSaronBeaconHealReaches.
+    static size_t TierOf(Unit* unit, bool brainLevel, bool phaseThreeRanged = false, bool beaconHealFirst = false);
 
     // Whether the Brain is open to hit. Only worked out once a Brain turns up, most calls never meet one.
     struct BrainApproach
@@ -288,6 +289,18 @@ public:
     static constexpr char const* Name = "yogg-saron diminish power judgement action";
 
     YoggSaronDiminishPowerJudgementAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+// Mortal Strike's -50% halves both Guardian heals, the beacon's 37.5k ticks and Drain Life's leech, and on
+// Yogg it cuts nothing. One pull spent every phase 3 strike on Yogg while the Guardians healed 17.4M.
+class YoggSaronMortalStrikeAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron mortal strike action";
+
+    YoggSaronMortalStrikeAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };

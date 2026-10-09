@@ -87,6 +87,17 @@ public:
     bool IsActive() override;
 };
 
+// A warrior with Mortal Strike ready and the rage for it, and a Guardian for it, see
+// YoggSaronMortalStrikeTarget.
+class YoggSaronMortalStrikeTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron mortal strike trigger";
+
+    YoggSaronMortalStrikeTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 // Melee and tanks are leashed to Sara rather than stationed on her: a Guardian walks to whoever holds
 // threat, so where melee stand is where it dies, and only a death inside 15 yd of Sara advances the
 // phase at all.
