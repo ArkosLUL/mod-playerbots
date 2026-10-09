@@ -107,7 +107,7 @@ into the docs`, written to a scratchpad file and committed with `git commit -F`;
 - [ ] General Vezax
 - [ ] Algalon
 - [ ] Ignis
-- [ ] Auriaya
+- [x] Auriaya
 - [ ] Kologarn
 - [ ] Razorscale
 - [ ] Shared files → README.md; then delete this plan

@@ -39,7 +39,10 @@ out of heal range.
 
 **The pools are permanent**: summon 64457 has `DurationIndex 21` (−1), no SmartAI touches 34098, and
 the Defender's 30s respawn never despawns them, so up to 9 accumulate per pull. Hence stations: three
-tank spots 10 yd apart along her home facing, which runs away from the corridor at +x. The one in use
+tank spots 10 yd apart along her home facing, which runs away from the corridor at +x. From her spawn
+(1956.2, 49.32, 411.36) on facing (−0.955, 0.296) the tank spots sit 5/15/25 yd out and the nominal raid
+points 15 yd past each, all inside the floor at x 1909-1956, y 43-82: **a fourth station would put the
+stack past x 1908**, so three is all the floor holds. The one in use
 is whichever has the fewest pools within 15 yd of either of its spots — the raid's true footprint,
 arrival tolerance plus pool radius — ties to the lowest index. Only the tank computes it; everyone
 else inherits the move through the bearing, so no two bots can disagree.
@@ -60,14 +63,26 @@ the anchor take turns walking the bot back in.
 Kill order is **Sentries → Feral Defender → boss**: sentries stay dead and drop the boss's buff, where
 each Defender kill costs a pool and buys 35s. Targets are picked in code — bots set no icons, but a
 mark a player sets still wins. Melee take the Defender only within 15 yd of the boss, or they chase it
-across the room as it re-rolls aggro. It feigns at 1 HP wearing `UNIT_FLAG_NOT_SELECTABLE`, so it
-resolves through `GetFirstLiveUnitByEntry`, never `GetFirstAliveUnitByEntry`. Savage Pounce (64666)
+across the room as it re-rolls aggro. It feigns at 1 HP wearing `UNIT_FLAG_NOT_SELECTABLE`, so every
+candidate is checked with `IsDownOrFeigning` after `GetFirstAliveUnitByEntry`. Savage Pounce (64666)
 fires only at 8–25 yd from the sentry's own victim, so a tank holding it in melee is the whole
 counter — the taunt needs no positioning code behind it.
 
 **Every Auriaya trigger used to resolve the boss through `"find target"`**, which walks only the
 bot's own threat list: any bot fighting a sentry or the Defender silently lost its dodges and its
-anti-fear. All of them go through `GetAuriaya`, by entry, now.
+anti-fear. All of them go through `GetAuriaya`, by entry, now. `GetAuriaya` and `GetAuriayaRoomPools`
+share one scan per bot per tick (`RefreshedAuriayaRoomScan`, `thread_local`, keyed on `botAI` and
+`getMSTime()`), since each node otherwise ran both grid sweeps twice on the tick it fired, trigger then
+action. It is a cache, not a latch, so `thread_local` is safe.
+
+**Nothing pulls before a player does.** Every node that pulls waits for `IsAuriayaEngaged` (her
+`IsInCombat()`): targeting, the sentry taunt, the anchor and both rules. Ungated, the targeting
+action's own `Attack()` pulled the room for the first bot to see her, and the anchor walked the raid
+to its spots early. A Sentry's `JustEngagedWith` puts her in combat, so the flag covers any opener. The
+pool dodge, anti-fear and fall from floor run on presence. Relevance ranks urgency: fall from floor
+`ACTION_RAID + 4`, sentry taunt +3 (a loose Sentry buffs her and pounces anything 8-25 yd off), pool
+dodge and anti-fear +2, targeting +1, position last. The fall-from-floor teleport goes to the bot's own
+anchor, and to the master only without one, since the master may be out in the corridor.
 
 **No burst cooldown fired here, for a reason nothing in this room explains.** Sara (33134), the idle
 Yogg-Saron phase-1 NPC, is a static spawn 114 yd away, and `Map::OnCreateMap` loads every grid of an

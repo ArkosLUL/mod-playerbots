@@ -8,6 +8,5 @@
 
 #include "UldEncounter_Auriaya.h"
 
-// Runs behind the base class's shaman and totem-action checks, so the encounter lookup
-// only happens for the handful of actions that could take the earth slot.
+// Base class checks shaman and totem action first, so this only runs for actions that could take the earth slot.
 bool AuriayaAntiFearTotemGuardMultiplier::FearWindowActive() { return AuriayaFearWindowActive(botAI); }

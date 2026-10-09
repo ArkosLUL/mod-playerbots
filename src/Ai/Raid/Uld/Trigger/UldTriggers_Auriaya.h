@@ -7,9 +7,6 @@
 #include "UldEncounter_Auriaya.h"
 #include "Trigger.h"
 
-//
-// Auriaya
-//
 class AuriayaFallFromFloorTrigger : public Trigger
 {
 public:

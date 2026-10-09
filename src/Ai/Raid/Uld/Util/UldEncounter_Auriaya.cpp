@@ -59,16 +59,8 @@ std::vector<Unit*> CollectPossibleTargetsByEntry(Player* bot, uint32 entry)
     return targets;
 }
 
-// Auriaya and the room's pool list, once per bot per tick instead of once per node. Both are grid
-// sweeps - hers walks every hostile in sight through IsPossibleTarget - and each of her nodes takes
-// them twice on the tick it fires: the trigger takes them, then the action it gates takes them again.
-// Keyed on the bot and getMSTime(), the way the encounter gate is: a bot never ticks twice in one ms,
-// and two bots sharing a map thread inside that ms are told apart by the botAI. Per thread, because a
-// bot's tick runs on one thread start to finish.
-//
-// She is held as a guid and re-resolved, so a boss that dies mid-tick answers null rather than
-// dangling. The pools are held as pointers: everything reading them only measures distance, and
-// ground a pool covered at the top of the tick is still ground to stay off at the bottom of it.
+// Boss and pools once per bot per tick: a bot never ticks twice in one ms and runs a whole tick on
+// one thread. Boss kept as a guid so a mid-tick death reads null. Pools stay pointers, only used for distance.
 struct AuriayaRoomScan
 {
     PlayerbotAI* botAI = nullptr;
@@ -100,10 +92,8 @@ AuriayaRoomScan const& RefreshedAuriayaRoomScan(PlayerbotAI* botAI)
 }
 }  // namespace
 
-// Auriaya's lane. She spawns at (1956.2, 49.32, 411.36) facing (-0.955, 0.296), which points down
-// the room and directly away from the corridor at +x, so the fight walks that bearing in 10 yd steps
-// as her void zones pile up. Tank spots sit 5/15/25 yd out, the raid points 15 yd behind each. All
-// six are inside the floor at x 1909-1956, y 43-82.
+// Off her spawn (1956.2, 49.32) along her home facing (-0.955, 0.296), away from the corridor: tank
+// spots 5/15/25 yd out, raid points 15 yd past each. All six are on the floor, x 1909-1956, y 43-82.
 const Position ULDUAR_AURIAYA_MAINTANK_SPOTS[ULDUAR_AURIAYA_STATION_COUNT] = {
     Position(1951.42f, 50.79f, 411.36f), Position(1941.87f, 53.75f, 411.36f),
     Position(1932.32f, 56.71f, 411.36f)};
@@ -111,8 +101,6 @@ const Position ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[ULDUAR_AURIAYA_STATION_COUNT] 
     Position(1937.10f, 55.23f, 411.36f), Position(1927.54f, 58.19f, 411.36f),
     Position(1917.99f, 61.15f, 411.36f)};
 
-// Terrifying Screech repeats on a fixed 35s cycle from the pull, so the whole encounter is one long
-// fear window - there is no narrower slice worth reserving Tremor Totem for.
 bool AuriayaFearWindowActive(PlayerbotAI* botAI) { return AuriayaEncounterActive(botAI); }
 
 Unit* GetAuriaya(PlayerbotAI* botAI)
@@ -121,8 +109,7 @@ Unit* GetAuriaya(PlayerbotAI* botAI)
     if (!guid)
         return nullptr;
 
-    // Alive, because the sweep this replaced went through IsPossibleTarget and so never handed back a
-    // corpse. She can die inside the tick the scan was taken on.
+    // Alive check too: she can die after the scan in the same tick, and callers never expect a corpse.
     Unit* boss = botAI->GetUnit(guid);
     return boss && boss->IsAlive() ? boss : nullptr;
 }
@@ -145,8 +132,7 @@ Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI)
     if (Unit* sentry = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_SANCTUM_SENTRY))
         return sentry;
 
-    // Between lives the Defender lies feigned at 1 HP and unselectable, so IsAlive() alone would
-    // keep the raid pointed at something it cannot hit.
+    // Feigned at 1 HP and unselectable between lives, so IsAlive() alone isn't enough.
     Unit* defender = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_FERAL_DEFENDER);
 
     return IsDownOrFeigning(defender) ? nullptr : defender;
@@ -177,9 +163,7 @@ std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius)
     return pools;
 }
 
-// Score every station by how many pools foul it and take the lowest, ties to the lowest index. A
-// count over fixed geometry can only grow while the fight runs, so the station slides west and never
-// comes back east.
+// A count over fixed spots only ever grows, so the station moves west and never comes back.
 int GetAuriayaStationIndex(std::vector<Unit*> const& roomPools)
 {
     int best = 0;
@@ -232,14 +216,12 @@ bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<U
     if (!botAI->IsRanged(bot))
         return false;
 
-    // The stack has to sit inside the cone, and the cone points at whoever she is chasing. Reading
-    // her victim rather than a fixed bearing is what keeps this correct when a human holds her.
+    // Her victim, not a fixed bearing: the cone points at whoever she chases, human tank included.
     Unit* victim = boss->GetVictim();
     float bearing = victim && victim != boss
                         ? boss->GetAngle(victim)
                         : boss->GetOrientation();
 
-    // Round the bearing off so tank drift cannot shuffle the whole raid every tick.
     bearing = std::round(bearing / ULDUAR_AURIAYA_BEARING_QUANTUM) * ULDUAR_AURIAYA_BEARING_QUANTUM;
 
     out = Position(boss->GetPositionX() + std::cos(bearing) * ULDUAR_AURIAYA_RAID_STANDOFF,

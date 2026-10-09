@@ -51,8 +51,7 @@ struct AnyUnitOfEntriesInRangeCheck
 
 bool AuriayaFallFromFloorAction::Execute(Event /*event*/)
 {
-    // Prefer the bot's own anchor: it is a known-good spot in the room, where the master may well be
-    // standing out in the corridor.
+    // Anchor first, it's a known-good spot in the room and the master may be out in the corridor.
     Position anchor;
     float tolerance = 0.0f;
     if (GetAuriayaAnchor(botAI, bot, anchor, tolerance))
@@ -88,8 +87,7 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    // Off the boss and room-wide, so every pool that can foul a candidate is in the list however far
-    // the bot has drifted from its anchor. There are at most nine of them.
+    // Room-wide off the boss, so every pool near a candidate counts however far the bot has drifted.
     std::vector<Unit*> const& pools = GetAuriayaRoomPools(botAI);
     if (pools.empty())
         return false;
@@ -111,8 +109,7 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
     float bestClearance = -1.0f;
     float bestDisplacement = std::numeric_limits<float>::max();
 
-    // Nothing here can pick a point outside the leash, so a boxed-in bot settles for the least bad
-    // ground rather than running across the room to find clean ground.
+    // Nothing past the leash, so a boxed-in bot takes the least bad point instead of crossing the room.
     auto const consider = [&](float candX, float candY, bool isCurrent)
     {
         if (anchor.GetExactDist2d(candX, candY) > ULDUAR_AURIAYA_ESSENCE_LEASH)
@@ -129,8 +126,7 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
             clearance = std::min(clearance, distance);
         }
 
-        // Clearing the most pools wins; standing furthest from what is left breaks that tie; the
-        // shortest walk breaks the rest, so a bot already on the best ground stays put.
+        // Fewest pools, then furthest from the rest, then shortest walk, so a bot on the best ground stays put.
         float const displacement = bot->GetExactDist2d(candX, candY);
         bool const better = fouling != bestFouling      ? fouling < bestFouling
                             : clearance != bestClearance ? clearance > bestClearance
@@ -165,8 +161,7 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
         }
     }
 
-    // Already standing on the best ground it can reach - hand the tick back to the rotation instead
-    // of burning it on a move that goes nowhere.
+    // Already on the best ground it can reach, so hand the tick back to the rotation.
     if (!found || bestIsCurrent)
         return false;
 
@@ -223,8 +218,7 @@ bool AuriayaSetDpsPriorityAction::IsAllowedPriorityTarget(Unit* boss, Unit* cand
         if (IsDownOrFeigning(candidate))
             return false;
 
-        // It re-rolls aggro constantly and roams the room. Melee swing at it when it comes to them and
-        // otherwise stay on the boss, or they spend the fight chasing it.
+        // It re-rolls aggro and roams, so melee only take it near the boss or they chase it all fight.
         if (PlayerbotAI::IsMelee(bot) &&
             candidate->GetExactDist2d(boss) > ULDUAR_AURIAYA_MELEE_DEFENDER_RANGE)
         {
@@ -304,8 +298,8 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
 
     if (currentPriority < priorityCount)
     {
-        // Never downgrade off something at least as urgent as the new pick, and within one entry only
-        // switch for something meaningfully closer - otherwise two sentries ping-pong the whole raid.
+        // Never drop to a lower priority, and within one entry switch only for something 10 yd
+        // closer, or two sentries ping-pong the raid.
         if (currentPriority < desiredPriority)
             target = currentTarget;
         else if (currentPriority == desiredPriority && target &&
@@ -325,7 +319,7 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
     if (PlayerbotAI::IsMelee(bot))
         needsAttack = needsAttack || !bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
 
-    // Already on the right thing - yield so the lower nodes get the tick.
+    // Already on the right target, so yield the tick to the lower nodes.
     if (!needsAttack)
         return false;
 

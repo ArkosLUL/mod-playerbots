@@ -22,9 +22,8 @@ public:
     bool isUseful() override;
 };
 
-// Steps just far enough to clear a pool and no further, leashed to the bot's anchor. The generic
-// MoveAwayFromCreatureAction maximises distance from the nearest pool instead, which walks bots out
-// of the room once the pools have piled up.
+// Leashed to the anchor. Not MoveAwayFromCreatureAction: maximising distance from the nearest pool
+// walks bots out of the room once the pools pile up.
 class AuriayaSeepingEssenceAction : public MovementAction
 {
 public:
