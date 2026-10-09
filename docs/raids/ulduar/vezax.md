@@ -42,7 +42,8 @@ known cost of the one-camp stand, not an oversight.
 
 **The raid enters from the north** — trash at y 109-137, and the only door (194750, y 31.5) is
 `DOOR_TYPE_PASSAGE`, opening when he **dies**, on the way to Yogg. `ULDUAR_VEZAX_ARC_ORIENTATION` is
-**+1.5708**; the −1.5291 it replaced faced that exit and put every ranged and healer slot behind him.
+**+1.5708**, roughly his own spawn facing (o 1.658, north); the −1.5291 it replaced faced that exit
+and put every ranged and healer slot behind him.
 
 ## The camp sits in a 13.5 yd band, and both edges are invisible from the code
 
@@ -164,8 +165,9 @@ clears, walks straight back with the missile still inbound, and never casts.
 
 **Key the dodge off the cast, never the field.** The event picks a random target **beyond 12.5 yd**
 and falls back to any target. 62660 is instant with `Speed` 10 and `TARGET_DEST_TARGET_ENEMY`: the
-destination freezes at cast time and the missile takes 2.7-3.6s to arrive, and that flight is the
-entire reaction window. The boss is **never** in `UNIT_STATE_CASTING` for this one, so a trigger must
+destination freezes at cast time and the missile takes 2.7-3.6s to arrive (4.8s at the longest traced,
+~48 yd out), and that flight is the entire reaction window; crashes come every 10s, so one stored
+impact is enough. The boss is **never** in `UNIT_STATE_CASTING` for this one, so a trigger must
 not gate on that. The impact carries `KNOCK_BACK_DEST`, so standing still does not hold a formation
 together either. An earlier node keyed off the *field* (63277) and so moved only once the damage had
 already landed.
@@ -277,7 +279,9 @@ of them hit up to 14.
 `GetVezax` reads the instance object map (`ULD_DATA_VEZAX`) rather than sweeping for the entry:
 `PossibleTargetsValue` recalculates a 100 yd `ignoreLos` search on **every** call, and the movement
 rule asks once per candidate that reaches its predicate. It has neither a liveness filter nor a range
-of its own, so a dead boss is rejected explicitly and presence alone gates nothing.
+of its own, so a dead boss is rejected explicitly and presence alone gates nothing. Not `"find
+target"` either: that walks the bot's own threat list, so a bot switched to the Animus or a vapor lost
+the boss.
 
 ## The trace
 
@@ -289,7 +293,11 @@ are derived, each probed inside the helper that derives it so two call sites can
 `vezax.formation` (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode` (`off`/`pending`/`lost`/
 `animus`) are the exception: the encounter's tick writes them, since the formation gate is a rule
 predicate that runs only when the cheaper checks pass, and the hard-mode flags come from spell
-hooks nothing else traces.
+hooks nothing else traces. `outside` before the raid walks in is expected; `noboss` means the instance
+lookup came back empty and every formation gate is shut, which nothing else in the trace says.
+`vezax.mark` is a per-bot change-only latch, so `--mark` takes its windows from the 63276 aura. A
+kicked Searing Flames leaves no damage row, so `--boss` counts casts that landed, never hits per cast:
+on 2026-09-23 7 of 8 were kicked and "19 hits across 8 casts" read as if all had landed.
 
 **The in-flight missile is a `haz` circle** from `VezaxHazardListenerScript`, since it has no world
 object until it lands and the ~3s a bot can act in would otherwise be invisible. Take the destination

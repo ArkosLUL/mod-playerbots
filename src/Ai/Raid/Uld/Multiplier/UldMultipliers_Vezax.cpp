@@ -63,23 +63,15 @@ float VezaxHoldCastOutsideFieldMultiplier::GetValue(Action* action)
     if (!action || botAI->IsHeal(bot) || !botAI->IsRanged(bot) || botAI->IsMainTank(bot))
         return 1.0f;
 
-    // Damage, DoTs and the wand. Buffs and defensives stay available - a held bot that could not
-    // Barkskin through a leech tick is worse off than one that skipped a Shadow Bolt - and so does
-    // every movement action, or it would stop dodging. Debuffs are deliberately not exempt: a
-    // caster's DoTs are most of its mana here.
-    //
-    // Nothing exempts the class interrupts, and nothing needs to. Searing Flames is the only
-    // interruptible cast Vezax has, and its own node sits above this one and casts through
-    // botAI->CastSpell rather than a CastSpellAction, so a multiplier never sees it.
+    // Holds damage, DoTs and the wand, never buffs or movement. The Searing Flames kick goes through
+    // botAI->CastSpell rather than a CastSpellAction, so no multiplier sees it.
     if (!IsVezaxDamageAction(action))
         return 1.0f;
 
     if (!VezaxEncounterActive(botAI))
         return 1.0f;
 
-    // 63277, not the linked 65269 that actually carries the mana cost cut: the link trails the field
-    // by 11-15% of uptime, and a bot inside a field without it would hold its casts for something it
-    // cannot influence.
+    // 63277, not the linked 65269 with the cost cut: the link trails the field, and a bot can't fix that.
     return bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD) ? 1.0f : 0.0f;
 }
 

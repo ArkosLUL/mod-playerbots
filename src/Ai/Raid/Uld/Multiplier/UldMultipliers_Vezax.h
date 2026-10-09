@@ -10,12 +10,8 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Life Tap does nothing at all on this boss. Aura of Despair carries EFFECT_IMMUNITY to
-// SPELL_EFFECT_ENERGIZE, and the mana half of Life Tap is 31818, whose only effect is exactly that -
-// so the tap pays 2000 health and returns nothing. Nor does the Glyph of Life Tap buff land: 63320
-// procs on PROC_FLAG_DONE_SPELL_NONE_DMG_CLASS_POS, which is the energize, and it dies with it.
-// Traced: 289 taps across three warlocks, zero mana gained and zero 63321 applied, against +15 to
-// +22 points and one buff per tap for the same bots on Hodir.
+// Life Tap returns nothing here: its mana half, 31818, is a bare SPELL_EFFECT_ENERGIZE that Aura of
+// Despair is immune to, and the glyph proc (63320) rides that same energize.
 class VezaxSuppressLifeTapMultiplier : public Multiplier
 {
 public:
@@ -27,9 +23,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Outside a Shadow Crash field a caster pays full price for mana it cannot make back, so ranged dps
-// walk to a field rather than cast where they stand. Healers are the exception - they soak, but a
-// held heal lands inside the leech spikes that kill people.
+// Ranged dps don't cast outside a Shadow Crash field: full price buys mana that can't be made back.
+// Healers are exempt, since a held heal lands inside the leech spikes that kill people.
 class VezaxHoldCastOutsideFieldMultiplier : public Multiplier
 {
 public:

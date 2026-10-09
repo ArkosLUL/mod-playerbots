@@ -21,8 +21,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// Carry the mark away from everyone else. The leech skips whoever holds it, so this is not an escape
-// from its own damage - it is getting ten seconds of 5000-a-tick off the people standing nearby.
+// Carry the mark away from everyone else. The leech skips its holder, so this takes ten seconds of
+// 5000 a tick off the people nearby.
 class VezaxMarkOfTheFacelessAction : public MovementAction
 {
 public:

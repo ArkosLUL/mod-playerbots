@@ -70,8 +70,8 @@ bool VezaxMarkOfTheFacelessAction::Execute(Event /*event*/)
         ReleaseOtherWalk(botAI, spot);
     }
 
-    // FORCED, not COMBAT: IsWaitingForLastMove only yields to a strictly higher priority, so at
-    // COMBAT any dodge move still in flight swallows this one - and the debuff is ten seconds long.
+    // FORCED, not COMBAT: IsWaitingForLastMove only yields to a strictly higher priority, so at COMBAT
+    // a dodge move still in flight swallows this one.
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
@@ -192,9 +192,8 @@ bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
     if (!TryGetVezaxNearestHazard(bot, hazards, field))
         return false;
 
-    // Never walk into a spot a missile is about to land on. Fields overlap - one lands every 10s and
-    // lasts 20 - so the field worth soaking can sit exactly where the next crash is aimed, and
-    // without this the bot bounces between here and the dodge until it lands.
+    // Not into a field the next crash is aimed at: one lands every 10s and lasts 20, so they overlap, and
+    // the bot would bounce between here and the dodge.
     Position impact;
     if (TryGetVezaxShadowCrashImpact(botAI, impact) &&
         field.position.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
@@ -211,10 +210,8 @@ bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
         return false;
     }
 
-    // FORCED, not COMBAT: the dodge's own destination stays latched in IsWaitingForLastMove for
-    // seconds after it has stopped wanting it, and that swallowed a quarter of these moves. The dodge
-    // and the mark drop this walk before they move, and the soak already refuses any field under a
-    // pending missile.
+    // FORCED, not COMBAT: a finished dodge's destination stays latched in IsWaitingForLastMove for seconds.
+    // The dodge and the mark release this walk before they move.
     return MoveTo(bot->GetMapId(), field.position.GetPositionX(), field.position.GetPositionY(),
                   field.position.GetPositionZ(), false, false, false, true,
                   MovementPriority::MOVEMENT_FORCED, true);
@@ -264,9 +261,8 @@ bool VezaxRaidPositionAction::Execute(Event /*event*/)
     float const distance = bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY());
     float const tolerance = VezaxSlotTolerance(bot);
 
-    // Reach then hold, with a deadband. Re-issuing a move on every yard of drift restarts the spline,
-    // and a moving bot cannot start a cast - it slides on the spot and never casts. Yielding once
-    // parked also matters because every class interrupt sits below this node at ACTION_INTERRUPT.
+    // Reach then hold, with a deadband: a move per yard of drift restarts the spline and the bot never
+    // casts. Yielding once parked lets the class interrupts at ACTION_INTERRUPT through.
     if (_slotReached && distance > tolerance * 2.0f)
         _slotReached = false;
 

@@ -19,22 +19,14 @@ class Player;
 class PlayerbotAI;
 class Unit;
 
-// General Vezax.
-//
-// The Shadow Crash field (63277) is a buff worth standing in for anything that casts with mana, and
-// AvoidAoeAction cannot see it, so it is found here: a persistent area aura, and therefore a
-// DynamicObject.
-//
-// Saronite Vapors are deliberately ignored. A puddle only ever drops from `JustDied`, never from the
-// script's own despawn, so a raid that does not shoot them never makes one - and killing one calls
-// DoAction(1) on the boss, which destroys hard mode.
+// General Vezax. The Shadow Crash field (63277) is a persistent area aura, so a DynamicObject that
+// AvoidAoeAction can't see. Vapors are left alone: only a kill drops a puddle, and a kill ends hard mode.
 
 enum UlduarVezaxIds
 {
     // General Vezax
     SPELL_MARK_OF_THE_FACELESS = 63276,
-    // 62660 is the cast, 62659 the 10 yd impact, and 63277 the 8 yd field it leaves behind for 20s.
-    // Only the field is reactable - the impact resolves the instant the missile lands.
+    // 62660 is the cast, 62659 the 10 yd impact, 63277 the 8 yd field it leaves for 20s.
     SPELL_VEZAX_SHADOW_CRASH_CAST = 62660,
     SPELL_VEZAX_SHADOW_CRASH_DMG = 62659,
     SPELL_VEZAX_SHADOW_CRASH_FIELD = 63277,
@@ -56,34 +48,30 @@ enum UlduarVezaxIds
     NPC_VEZAX_SARONITE_VAPORS = 33488,
 };
 
-// Shadow Crash lands as a missile: 62660 is instant with Speed 10, so its destination is fixed at
-// cast time and a bot 26 yd out has ~2.6s to leave it. The impact (62659) is 10 yd and knocks back,
-// so standing still is not an option either way.
+// 62660 is instant with missile Speed 10, so the destination freezes at cast time and the flight is
+// the whole dodge window. The impact knocks back, so standing still never holds a spot.
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS = 10.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE = 12.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS = 25.0f;
-// How long past distance over speed a stored impact stays live. Traced landings came 92-203 ms after
-// that figure, so this covers them with room for a slow tick.
+// How long a stored impact outlives distance over speed. Landings trail that by up to 0.2s, the rest
+// is room for a slow tick.
 constexpr uint32 ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS = 500;
 
-// The Animus can't be taunted (immunity set -287 blocks ATTACK_ME and MOD_TAUNT), so a tank only keeps
-// it on threat. Everyone but tanks and redirectors waits until a tank has been its victim this long,
-// and never past the cap, so a dead tank doesn't park the raid on an invulnerable Vezax.
+// The Animus is taunt-immune, so only threat holds it. Everyone but tanks and redirectors waits until a
+// tank has been its victim this long, and the cap stops a dead tank parking the raid on the Barrier.
 constexpr uint32 ULDUAR_VEZAX_ANIMUS_TANK_LEAD_MS = 2000;
 constexpr uint32 ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS = 6000;
 // From this summon on the Animus is at least 38s out, past the 30s cooldown on Misdirection and
 // Tricks, so saving them from here has both ready when it lands.
 constexpr uint8 ULDUAR_VEZAX_REDIRECT_SAVE_SUMMON = 5;
 constexpr float ULDUAR_VEZAX_TRICKS_RANGE = 20.0f;
-// The Animus changes target at 110% of its victim's threat from melee range and 130% from further out.
-// Holding dps at 90% of the main tank leaves room for a cast already in flight, and lets him take it
-// back at 110% from whoever pulled it.
+// The Animus swaps victim at 110% threat in melee range, 130% outside. 90% of the main tank leaves room
+// for a cast in flight and lets him take it back at 110%.
 constexpr float ULDUAR_VEZAX_ANIMUS_THREAT_SHARE = 0.9f;
 // Close enough that the Animus, following its victim, ends up in the main tank's melee range.
 constexpr float ULDUAR_VEZAX_ANIMUS_BRING_BACK_RADIUS = 3.0f;
-// Shadow Crash skips anyone within this plus both combat reaches of him (SelectTarget -3, 3D), so
-// 12.5 yd for most players. Melee on the Animus's far side get picked, and one crash on the bunched
-// ball killed 4-6 of them. The margin covers the bosses shuffling.
+// Shadow Crash skips anyone within this plus both combat reaches (SelectTarget -3, 3D), so 12.5 yd for
+// most players. The margin covers the two bosses shuffling.
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_MIN_RANGE = 3.0f;
 constexpr float ULDUAR_VEZAX_ANIMUS_MELEE_MARGIN = 2.0f;
 // Sideways spacing between melee spots on the line between the two bosses, and how many spots.
@@ -94,72 +82,33 @@ constexpr uint8 ULDUAR_VEZAX_ANIMUS_MELEE_LANES = 5;
 // boundary is still inside it.
 constexpr float ULDUAR_VEZAX_HAZARD_RADIUS = 8.0f;
 constexpr float ULDUAR_VEZAX_HAZARD_CLEARANCE = 9.0f;
-// Wide enough to cover the whole ranged formation. Callers that only care about what is under
-// their own feet pass a tighter radius - the sweep is two grid searches and the raid runs it often.
+// Wide enough for the whole camp. Callers that only need what's under their feet pass the local one:
+// the sweep is two grid searches and the raid runs it often.
 constexpr float ULDUAR_VEZAX_HAZARD_SEARCH_RADIUS = 60.0f;
 constexpr float ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS = 25.0f;
 
-// The field is worth +100% magic damage, +100% cast speed and -70% mana cost for 20s, and it is the
-// entire mana economy here: Aura of Despair grants immunity to SPELL_EFFECT_ENERGIZE and to the
-// OBS_MOD_POWER and PERIODIC_ENERGIZE aura types, which between them kill regeneration, Life Tap,
-// mana gems, Evocation, Innervate and Replenishment. Only the damage and healing halves ride 63277
-// itself; the cast speed and mana cost are on 65269, linked through spell_linked_spell, so the DBC
-// row alone reads as if the field did nothing for mana.
-//
-// Healers walk to one as well, despite the -75% healing done. Nothing refills them otherwise and
-// every healer in a traced pull was below 5% mana before three minutes.
-//
-// 20 is where the reach curve flattens: a clear field sat within 15 yd for 27% of the time a caster
-// spent outside one and within 20 yd for 40%, and past 25 this would outgrow the local sweep radius.
+// How far a caster walks to soak a field, the whole mana economy here. Past 25 it outgrows the local
+// hazard sweep.
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 20.0f;
 
-// Vezax formation. He spawns dead centre of his room facing north (o 1.658) and the raid comes down
-// from the north: the trash pack sits at y 109-137, and the only door - 194750 at y 31.5 - is
-// DOOR_TYPE_PASSAGE, so it opens when he dies, on the way to Yogg. Everything the raid stands on goes
-// north of the anchor, leaving the southern half for the Mark of the Faceless spots. Every radius
-// below is navprobe-verified on map 603: the floor is a WMO with no holes at any bearing inside
-// 45 yd. It is flat at Z 342.378 out to about 24 yd north and then settles half a yard lower on WMO
-// rubble, which UpdateAllowedPositionZ absorbs - the camp spans that seam and nothing there is off
-// mesh.
+// Camp bearing: north, the side the raid comes in from. The southern half is left for the Mark spots.
 constexpr float ULDUAR_VEZAX_ARC_ORIENTATION = 1.5708f;
 
-// One camp for every healer and ranged bot, split into two groups that dodge in opposite directions.
-// A group is two files of five: files are the tangential axis, rows the radial one, and both are
-// measured from the boss so a ranged pull that leaves him off his spawn carries the whole camp with
-// him.
-//
-// Two limits bracket the radii, and neither is visible from here without the numbers behind it:
-//
-//   Floor, 24.5 yd. Mark of the Faceless picks at random from everyone the boss measures beyond
-//   15 yd, and falls back to everyone inside it when fewer than 9 qualify (4 in 10-man).
-//   WorldObject::GetDistance subtracts both combat reaches and Vezax's is 8.0, so his "15 yd" is
-//   24.5 yd of real distance. A camp inside that shares a pool with the melee ball and hands the
-//   mark to the tank, whose 9 neighbours then leech 5000 a second each into the boss at 20x.
-//
-//   Ceiling, 38 yd. ReachTargetAction tests IsWithinCombatRange(target, spellDistance), which adds
-//   the same two reaches to AiPlayerbot.SpellDistance of 28.5. Past that "reach spell" fires at
-//   ACTION_HIGH against this formation at ACTION_RAID and the two deadlock.
-//
-// Rows 27 to 36 sit in the middle of that band with ~2 yd of slack at each end for the boss drifting
-// off his spawn.
-//
-// The files set the strafe distance. Everyone in a group moves by the same vector, so the member on
-// the far side of the target has to cross the impact and ends up STRAFE minus the group's own width
-// away from it: 15 - 3 = 12 yd against a 10 yd impact. Widen the files and the strafe has to grow
-// with them. Flight time is no longer the binding constraint it was at 22 yd - the missile covers
-// boss to impact at 10 yd/s, so the front rank now gets 2.7s for a walk that needs 1.9s.
+// Two groups of two files by five rows, boss-relative. Rows 27 to 36 sit between the Mark floor (15)
+// and reach spell's stop (28.5), each plus both combat reaches, with ~2 yd slack at each end.
 constexpr float ULDUAR_VEZAX_CAMP_RADIUS = 31.5f;
 constexpr float ULDUAR_VEZAX_CAMP_ROW_SPACING = 2.25f;
 constexpr float ULDUAR_VEZAX_CAMP_FILE_SPACING = 3.0f;
-// Half the gap between the two groups' inner files. 4.0 puts them 5 yd apart, close enough that one
-// set of heals and one Bloodlust covers the camp, far enough that they are not one clump.
+// Each group's centre off the camp line. 4.0 puts the inner files 5 yd apart: one set of heals and one
+// lust cover both, but they're not one clump.
 constexpr float ULDUAR_VEZAX_CAMP_GROUP_OFFSET = 4.0f;
+// The far-side member crosses the impact, so this minus the group's 3 yd width has to clear 10 yd.
 constexpr float ULDUAR_VEZAX_CAMP_STRAFE = 15.0f;
 constexpr uint8 ULDUAR_VEZAX_CAMP_ROWS = 5;
 constexpr uint8 ULDUAR_VEZAX_CAMP_FILES = 2;
 
 // Slot index space, which a RaidObs trace writes as a bare number: [0,10) group L, [10,20) group R.
-// The main tank is not in here - it has exactly one holder and comes straight off IsMainTank.
+// The main tank isn't in here: it has exactly one holder and comes straight off IsMainTank.
 constexpr uint8 ULDUAR_VEZAX_GROUP_SLOTS = ULDUAR_VEZAX_CAMP_ROWS * ULDUAR_VEZAX_CAMP_FILES;
 constexpr uint8 ULDUAR_VEZAX_TOTAL_SLOTS = 2 * ULDUAR_VEZAX_GROUP_SLOTS;
 
@@ -168,37 +117,21 @@ constexpr uint8 ULDUAR_VEZAX_TOTAL_SLOTS = 2 * ULDUAR_VEZAX_GROUP_SLOTS;
 constexpr float ULDUAR_VEZAX_SLOT_TOLERANCE = 1.2f;
 constexpr float ULDUAR_VEZAX_TANK_SLOT_TOLERANCE = 3.0f;
 
-// Measured from him, and it has to hold everything the camp and reach spell put a caster on: reach
-// spell stops at 38 and the widest strafed slot sits at 41.4. That's what lets generic movement carry
-// a bot in so the gate opens on arrival. Widening it is what would put a bot on a path through a
-// wall, which is why it stays where it is.
+// Off him, and wide enough for reach spell's 38 yd stop and the widest strafed slot (41.4) so the gate
+// opens on arrival. Any wider puts bots on paths through walls.
 constexpr float ULDUAR_VEZAX_ARENA_RADIUS = 45.0f;
 constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;
 
-// Mark of the Faceless ticks ten times over 10s on a 40s cadence. Every tick the boss casts 63278 at
-// the marked bot and leeches 5000 from everyone else inside the radius, healing himself about 10x
-// what it takes. EffectMultipleValue on the HEALTH_LEECH effect reads 20, but three traced pulls
-// measure 9.4 to 10.3. It is the largest single thing in the fight: one untreated window put 8% of a
-// 27.6M boss back.
-//
-// The marked bot is the one person its own leech skips, so nobody has to outrun their own mark -
-// they have to leave everyone else. The radius reads 15 in the DBC but the area test is
-// IsWithinDist3d, which adds the target's own combat reach, so the real figure is about 16.5.
+// DBC 15, but IsWithinDist3d adds the victim's combat reach, so the leech reaches ~16.5. The marked bot
+// is the one person it skips.
 constexpr float ULDUAR_VEZAX_MARK_LEECH_RADIUS = 15.0f;
 constexpr float ULDUAR_VEZAX_MARK_BREAK_DISTANCE = 18.0f;
 
-// A marked camp member arcs around the boss on its own group's side, never across him: the southern
-// spots are a diameter away and the walk there drags the leech through the melee ball. Arc length at
-// CAMP_RADIUS, so 40 is 72.8 degrees off the camp bearing and the distance from the boss never
-// changes - the band holds and reach-spell stays quiet.
-//
-// A straight sideways step cannot work. The dodge strafes each group 15 yd outward, the same
-// direction a marked member of that group leaves in, so a 24 yd offset lands 3.5 yd from its own
-// neighbours and 39.6 yd from the boss. 40 yd of arc clears the widest strafed slot by 20.
+// Arc length at CAMP_RADIUS on the bot's own group's side, never across him through the melee. Keeps
+// its distance from him and clears the widest strafed slot by 20.
 constexpr float ULDUAR_VEZAX_MARK_SIDE_OFFSET = 40.0f;
 
-// A marked melee has no camp side to step to, so it takes one of three spots south of the boss,
-// opposite the camp and 50+ yd from its near row.
+// A marked melee has no camp side, so it takes the nearest of three spots south of him, opposite the camp.
 constexpr float ULDUAR_VEZAX_MARK_SPOT_RADIUS = 26.0f;
 constexpr float ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET = 2.3208f;  // pi/2 + 0.75, clear of the camp
 constexpr float ULDUAR_VEZAX_MARK_SPOT_TOLERANCE = 3.0f;
@@ -213,16 +146,13 @@ struct VezaxHazard
     float radius = ULDUAR_VEZAX_HAZARD_RADIUS;
 };
 
-// Slots are held, not re-derived. Ranking the raid by guid every tick means one death renumbers
-// everyone behind the corpse and the whole formation shuffles mid-fight, so an assignment is kept
-// until its holder is gone. The index space is laid out above next to the radii: [0,10) group L,
-// [10,20) group R, packed row-major inside each so the low bit is the file.
+// Slots are kept until the holder leaves: a guid rank re-derived every tick reshuffles the camp on a
+// death. Row-major inside each group, so the low bit is the file.
 struct VezaxEncounterState
 {
     RaidObs::ObsGuidMap<uint8> slotAssignments{"vezax.slot"};
 
-    // The crash in flight, from its cast. One is enough: they come every 10s and the longest traced
-    // flight is 4.8s.
+    // The crash in flight, from its cast. One is enough: they come every 10s and fly under 5s.
     Position crashImpact;
     uint32 crashCastMs = 0;
     uint32 crashWindowMs = 0;
@@ -233,34 +163,28 @@ struct VezaxEncounterState
     uint8 vaporSummons = 0;
 };
 
-// From the instance script rather than a target sweep. "find target" walks only the bot's own threat
-// list, so a bot that switched to the Animus or a vapor would stop seeing the boss; the entry sweep
-// that replaced it recalculates a 100 yd search on every call, and the movement multiplier asks once
-// per action per pass.
+// From the instance object map, not a target sweep: PossibleTargetsValue reruns a 100 yd search on
+// every call, and the movement rule asks once per candidate.
 Unit* GetVezax(PlayerbotAI* botAI);
 bool VezaxEncounterActive(PlayerbotAI* botAI);
 
-// Gate for the formation and the movement rule. Presence alone is not enough on this boss:
-// he is visible from outside his hall, so a presence gate sends bots walking into walls before the
-// pull and takes their generic movers away while they do it.
+// Gate for the formation and the movement rule. Not presence: he's visible from outside his hall, and
+// that walked bots into walls with their generic movers zeroed.
 bool VezaxFormationActive(PlayerbotAI* botAI);
 
 // The encounter's per-tick housekeeping: traces the formation gate's answer as `vezax.formation`.
 void TickVezax(PlayerbotAI* botAI);
 
-// One sweep per action execution - GetDynamicObjectPositions is a grid search, and repeating it per
-// hazard test across a 25-man raid is the per-tick cost the raid-mechanics notes warn about. Callers
-// gather once and pass the vector to every check below.
+// GetDynamicObjectPositions is a grid search, so gather once per execution and pass the vector to every
+// check below.
 void GatherVezaxHazards(Player* bot, std::vector<VezaxHazard>& hazards,
                         float searchRadius = ULDUAR_VEZAX_HAZARD_SEARCH_RADIUS);
 
 bool TryGetVezaxNearestHazard(Player* bot, std::vector<VezaxHazard> const& hazards,
                               VezaxHazard& hazard);
 
-// Anything with a mana bar that is not a healer. The field's -70% cost is MOD_POWER_COST_SCHOOL_PCT
-// with a school mask of 127, so it covers physical too and a hunter's shots get it as readily as a
-// mage's bolts - only the damage half is magic-only. Healers stay out of this list: they stand in
-// whichever field lands on the camp, but the -75% healing means one is never worth walking to.
+// Every camp member with a mana bar, healers included. The -70% cost is MOD_POWER_COST_SCHOOL_PCT with
+// mask 127, so it covers a hunter's shots too.
 bool VezaxCanSoakShadowCrashField(Player* bot);
 
 // Takes the bot because the camp is centred on the boss, not the anchor.
@@ -269,25 +193,21 @@ bool TryGetVezaxSlotPosition(Player* bot, uint8 slotIndex, Position& position);
 float VezaxSlotTolerance(Player* bot);
 void EnsureVezaxSlotAssignments(Player* bot);
 
-// The spot this bot should be standing on, hazards taken into account. False for melee, who hold the
-// boss instead; the main tank is answered here too, from the anchor, because a tank standing on
-// Vezax's spawn is what keeps him there for everyone else's radii.
+// False for melee, who hold the boss. The main tank gets the anchor: a tank on his spawn keeps him there.
 bool TryGetVezaxSlot(Player* bot, Position& position);
 
-// Where this bot goes while it carries the mark. A camp member steps sideways on its own group's
-// side; everyone else takes the nearest southern spot.
+// Where this bot carries the mark. A camp member arcs round him on its own group's side, anyone else
+// takes the nearest southern spot.
 bool TryGetVezaxMarkSpot(Player* bot, Position& position);
 
 // The nearest living ally carrying the mark, or nullptr. Not the bot itself: its own leech skips it.
 Unit* GetVezaxMarkedAlly(Player* bot);
 
-// Somewhere outside the leech around a marked ally. For melee, who otherwise stand in it for the
-// whole ten ticks - the camp is far enough out that no mark on the ball ever reaches it.
+// Somewhere outside the leech round a marked ally. Melee only: no mark in the ball reaches the camp.
 bool TryGetVezaxMarkBreakSpot(Player* bot, Unit* marked, Position& spot);
 
-// Where the missile now in flight will land, or false when none is. Read from what the cast hook
-// stored, not his current spell: his next cast takes that slot while the missile is still flying,
-// and the crash then lands with nobody seeing it.
+// Where the missile in flight will land. From the cast hook, not his current spell: his next cast takes
+// that slot while the missile still flies.
 bool TryGetVezaxShadowCrashImpact(PlayerbotAI* botAI, Position& impact);
 void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs);
 
@@ -319,8 +239,8 @@ bool VezaxDodgesShadowCrash(Player* bot);
 // Somewhere clear of that impact and still inside the band this bot's role is allowed to stand in.
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot);
 
-// Drop this instance's assignments once Vezax is gone, or they survive into the next pull and bots
-// walk to slots nobody is standing in.
+// Drop this instance's assignments once he's out of combat, wipes included, or they carry into the
+// next pull.
 void ResetVezaxEncounterState(Player* bot, bool clearInstance);
 bool VezaxHasEncounterState(Player* bot);
 
@@ -328,10 +248,8 @@ bool VezaxHasEncounterState(Player* bot);
 // Vezax is a boss and immune to them, so bash and hammer of justice would never connect.
 char const* VezaxReadyInterrupt(Player* bot, Unit* target);
 
-// One kick per Searing Flames. The cast is 2s on an 8s cadence in 25-man, so three bots answering the
-// same one leaves the next unanswered - and that one is 13875-16125 to the whole raid plus 75% of the
-// tank's armour. Lowest guid among the bots whose interrupt is actually off cooldown wins, which
-// rotates the duty for free as cooldowns come and go.
+// One kick per Searing Flames, or three bots spend theirs on one cast and miss the next. Lowest guid with
+// an interrupt off cooldown wins, so cooldowns rotate the duty.
 bool VezaxIsSearingFlamesInterrupter(Player* bot, Unit* boss);
 
 #endif

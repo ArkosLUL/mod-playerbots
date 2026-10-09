@@ -1,32 +1,5 @@
 #!/usr/bin/env python3
-"""Score a General Vezax pull from a RaidObs trace: the mark, Shadow Crash, fields, mana, vapors.
-
-    general_vezax.py <file>            every section
-    general_vezax.py <file> --boss     what he cast, Searing Flames, interrupters
-    general_vezax.py <file> --mark     every Mark of the Faceless window: leech, escape, boss health
-    general_vezax.py <file> --crash    every Shadow Crash: who it hit, which blocks dodged, his cast in flight
-    general_vezax.py <file> --field    field uptime, casts inside one, the soak and the cast hold
-    general_vezax.py <file> --mana     mana over the pull, Life Tap and what it returned
-    general_vezax.py <file> --vapors   who targeted or hit a vapor, and whether the Animus came
-    general_vezax.py <file> --animus   who held the Animus, the redirects, when lust went, who died
-    general_vezax.py <file> --band     each camp member's distance from the boss, not the anchor
-
-What the generic views get wrong here, and what this reads instead:
-
-- **The camp is boss-relative and he walks.** `postmortem.py --from`/`--band`/`--moves` measure from
-  a fixed point, `ULDUAR_VEZAX_ANCHOR` or his spot at the pull, and a camp member's radius from
-  either is off by a median 8 to 16 yd against the real one, wider than the band. Everything here
-  measures from where he stands at each sample.
-- **Saronite Vapors are never sampled**, so nothing says where one was. Targeting is read off the
-  bot's own target column against the vapor guids the unit rows name, and what hit one off the cast
-  rows aimed at those guids: a Starfall star never passes through the bot's target.
-- **Heals on a creature are never recorded** (`ObsSession::Tracks` wants a player), so the mark's
-  heal-back only shows as his health rate inside a window against outside one.
-- **`vezax.mark` is a per-bot change-only latch**: a bot that takes the same branch twice writes one
-  row. Windows come from the 63276 aura; the latch only names the branch where it changed.
-- **`vezax.slot` goes silent on the pull after a wipe** on any build where the state reset needed the
-  boss dead. The assignment carried over, so that pull cannot say who held which slot.
-"""
+"""Score a General Vezax pull from a RaidObs trace: the mark, Shadow Crash, fields, mana, vapors."""
 from __future__ import annotations
 
 import bisect
@@ -82,9 +55,8 @@ IMPACT_RADIUS = radius("ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS")
 LEECH_RADIUS = radius("ULDUAR_VEZAX_MARK_LEECH_RADIUS")
 ANCHOR = anchor("ULDUAR_VEZAX_ANCHOR")
 
-# Not constants in the source, they come out of the engine. Floor: the boss script picks a mark
-# target past 15 yd of GetDistance, which takes off his 8.0 reach and the player's 1.5. Ceiling:
-# ReachTargetAction's AiPlayerbot.SpellDistance of 28.5 plus the same two reaches.
+# Engine figures, not source constants: the mark's 15 yd of GetDistance and reach spell's 28.5, each
+# plus his 8.0 combat reach and the player's 1.5.
 BAND_FLOOR = 15.0 + 8.0 + 1.5
 BAND_CEILING = 28.5 + 8.0 + 1.5
 
@@ -129,12 +101,8 @@ def slots(trace: Trace) -> dict[int, int]:
 
 
 def blocks(trace: Trace) -> dict[int, str]:
-    """Latest `vezax.block` per bot, else the group its slot sits in.
-
-    The block is only written while the formation gate is open, so a slotted bot that never got inside
-    has nothing but its slot. `vezax.slot` goes silent on some older traces, which is why it is the
-    fallback and not the source.
-    """
+    """Latest `vezax.block` per bot, else its slot's group: the block is only written inside the gate,
+    and `vezax.slot` goes silent on some older traces."""
     out = {guid: ("R" if slot >= GROUP_SLOTS else "L") for guid, slot in slots(trace).items()}
     out.update({rec["g"]: str(rec.get("txt", "")) for rec in notes(trace, "vezax.block")})
     return out
@@ -283,11 +251,7 @@ def show_banner(trace: Trace) -> None:
 
 
 def searing_flames(trace: Trace, boss: int) -> tuple[list[int], list[int], list[dict]]:
-    """Every 62661 cast, the ones that did damage, and every hit.
-
-    A kicked cast leaves no damage at all, so hits counted against casts read as if every cast landed:
-    7 of the 8 on 2026-09-23 were kicked and the line said "19 hits across 8 casts".
-    """
+    """Every 62661 cast, the ones that did damage, and every hit. A kicked cast leaves no damage row."""
     hits = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_SEARING_FLAMES]
     starts = sorted(rec["t"] for rec in trace.of("cast")
                     if rec.get("s") == boss and rec.get("sp") == SPELL_SEARING_FLAMES)

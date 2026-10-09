@@ -104,7 +104,7 @@ into the docs`, written to a scratchpad file and committed with `git commit -F`;
 - [x] XT-002
 - [ ] Flame Leviathan
 - [x] Iron Assembly
-- [ ] General Vezax
+- [x] General Vezax
 - [ ] Algalon
 - [x] Ignis
 - [x] Auriaya

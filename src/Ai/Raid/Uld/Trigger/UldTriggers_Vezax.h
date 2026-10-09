@@ -7,11 +7,9 @@
 #include "UldEncounter_Vezax.h"
 #include "Trigger.h"
 
-//
 // General Vezax
-//
 
-// Vezax gone but this instance still holds slot assignments.
+// Vezax out of combat or dead, and this instance still holds slot assignments.
 class VezaxResetEncounterStateTrigger : public Trigger
 {
 public:
@@ -134,9 +132,8 @@ public:
     bool IsActive() override;
 };
 
-// Not on the boss and not on the Animus. The target guard silences the generic pickers here, so this
-// is the only thing that hands a bot a target at all - and a bot with none never calls Attack, never
-// reaches the combat engine and spends the fight buffing.
+// Not on the boss or the Animus. The target guard silences the generic pickers, so this is the only
+// target source, and a bot with none never calls Attack and spends the fight buffing.
 class VezaxHoldTargetTrigger : public Trigger
 {
 public:
