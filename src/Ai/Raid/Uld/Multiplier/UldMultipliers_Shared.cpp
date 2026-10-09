@@ -56,9 +56,8 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
     static uint32 const noRedirectBosses[] = {
         // "freya redirect threat" aims at the add tank while it holds the Snaplasher or the Conservator
         NPC_FREYA,
-        // Every phase is a different creature with a fresh threat table, and phase 3 splits VX-001
-        // and the Aerial Command Unit across two tanks. "mimiron redirect threat action" feeds the
-        // main tank through phase 1, which is the one phase a redirect helps.
+        // Each phase is a new creature with a fresh threat table, and P3 splits VX-001 and the ACU over
+        // two tanks. "mimiron redirect threat action" covers P1, the one phase a redirect helps
         NPC_LEVIATHAN_MKII, NPC_VX001, NPC_AERIAL_COMMAND_UNIT,
         // Arena and gauntlet squads each bring their own tank, then Unbalancing Strike swaps
         NPC_THORIM,
@@ -71,9 +70,8 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
             return 0.0f;
     }
 
-    // Razorscale holds nothing outside the permanent ground phase - the Dark Rune adds belong to the
-    // assist tanks, and the harpoon knockdowns above 50% put her on the floor with no tank on her at
-    // all. Only the ground phase is single-tank, and the generic node is right there.
+    // The MT holds nothing until the permanent ground phase: the Dark Rune adds go to the assist tanks,
+    // and a harpoon knockdown above 50% puts her on the floor with nobody tanking her
     if (Unit* razorscale = GetFirstAliveUnitByEntry(botAI, NPC_RAZORSCALE))
     {
         return RazorscaleBossHelper::IsFlyingPhaseFor(razorscale) ? 0.0f : 1.0f;
@@ -142,9 +140,8 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         }
     }
 
-    // The sweep above reads a cached list that lags the pull and drops unselectable units, and every
-    // mech is unselectable through a handover. A bot that resolves none falls through to the
-    // permissive default at the bottom and lusts, so the grid search finds them whatever their flags.
+    // The sweep lags the pull and skips unselectable units, which every mech is through a handover.
+    // Missing all three falls through to the open default below and lusts, hence the grid search
     if (!leviathanMkII)
         leviathanMkII = bot->FindNearestCreature(NPC_LEVIATHAN_MKII, sPlayerbotAIConfig.sightDistance, true);
     if (!vx001)
@@ -153,17 +150,13 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         aerialCommandUnit =
             bot->FindNearestCreature(NPC_AERIAL_COMMAND_UNIT, sPlayerbotAIConfig.sightDistance, true);
 
-    // The sweep above is capped at SightDistance, and her second flight point (619, -238, 475) sits
-    // past 100yd from most of the raid - so she has to be resolved off the threat list as well, or
-    // the fall-through at the bottom opens the gate instead of closing it. DoZoneInCombat() on her
-    // first flight point puts the whole raid on that list, and "find target" does not touch
-    // UpdateBossAI(), so the tank-reassignment hazard does not apply.
+    // The sweep stops at SightDistance, and her second flight point is past that for most of the raid.
+    // DoZoneInCombat puts the whole raid on her threat list, and "find target" never calls UpdateBossAI
     if (!razorscale)
         razorscale = AI_VALUE2(Unit*, "find target", "razorscale");
 
-    // She takes no damage at all while airborne, so every landing is a real burn window - harpoon
-    // knockdowns included. Lust is the exception: a knockdown is ~30s at full health, and spending a
-    // 10-minute cooldown there costs the permanent sub-50% ground phase the fight is balanced around.
+    // No damage taken while airborne, so every landing is a burn window, knockdowns included. Lust
+    // waits for the permanent ground phase, a knockdown is too short for a 10 min cooldown
     if (razorscale)
     {
         bool const grounded = razorscale->GetPositionZ() <= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
@@ -171,13 +164,8 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         return {grounded, RazorscaleBossHelper::IsGroundPhaseFor(razorscale)};
     }
 
-    // Damage in every phase counts, so only lust waits, and it waits for phase 4, where the kill is
-    // decided. Berserk at 10:00 against a 10-minute cooldown means one window or the other, and phase 2
-    // holds without it on five healers. Not the moment phase 4 opens: the raid spends that running
-    // from the opening Frost Bomb, and haste does nothing for a bot on the move.
-    // Selectable is what counts as fighting: a beaten mech isn't killed, the core parks it alive and
-    // unselectable (the MK II sits at 0.1% through P2 and P3), and a part in Self Repair goes the same
-    // way. Riding the chassis is P4.
+    // Only lust waits, for P4 plus a delay: the raid spends the P4 opening running from the Frost Bomb.
+    // A beaten or self-repairing mech stays alive but unselectable. P4 is all three selectable, VX riding
     auto const fighting = [](Unit const* mech) { return mech && !mech->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE); };
     if (leviathanMkII || vx001 || aerialCommandUnit)
     {
@@ -200,10 +188,8 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         return {true, aliveCount == 1};
     }
 
-    // Attuned to Nature is 150 stacks of +8% healing received, so nothing spent on Freya lands until
-    // the wave adds have taken it off her; the core drops it when it enters the final phase
-    // (boss_freya.cpp). Personal cooldowns wait with lust rather than opening on the adds: they are
-    // not boss-flagged, so HoldBurstUntilTankEngagedMultiplier zeroes burst on them anyway.
+    // Attuned to Nature makes damage on Freya pointless until the final phase removes it. Personal
+    // cooldowns wait too, the wave adds aren't boss-flagged so burst on them is zeroed anyway
     if (freya)
     {
         bool const finalPhase =
@@ -220,17 +206,13 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         return {onArenaFloor, onArenaFloor};
     }
 
-    // P1 damage lands on Sara and is wasted; P3 is the body burn, with no Shadow Barrier and no
-    // Guardian soaking it up. Presence is not the encounter: Sara is a static spawn that LoadAllGrids()
-    // makes findable from instance creation, 114yd from Auriaya's room and 167yd from Vezax. Sight isn't
-    // either: the brain level is 88-150yd from Yogg, past SightDistance, and a bot there fell through to
-    // the permissive default below and lusted in phase 2. The boss state is.
+    // P1 damage lands on Sara and is wasted, P3 is the body burn. Keyed on the boss state: Sara is
+    // findable from instance creation, and the brain room is past SightDistance from Yogg
     if (bot->GetMapId() == ULDUAR_MAP_ID && BossStateGateLive(botAI, ULD_BOSS_YOGGSARON))
     {
         uint32 const phase = YoggSaronPhase(botAI);
 
-        // Lust is the phase 3 node's alone, once the raid has taken its spots. Phase 3 opens with Yogg as
-        // the only target until a Guardian spawns, so the stock path cast 6.8 s in, before anyone stood.
+        // Lust belongs to the phase 3 node, which waits for the raid to reach its spots
         return {phase == 2 || phase == 3, false};
     }
 

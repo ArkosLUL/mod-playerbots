@@ -13,10 +13,8 @@
 #include "UldEncounter_YoggSaron.h"
 #include "UldMultipliers.h"
 
-// The kept Emergency Fire Bots are the raid's fire suppression, and only Mimiron's own dps picker
-// knew it: that node stands down for tanks, and the target guard beside it only zeroes
-// DpsAssistAction, so the generic tank picker killed the protected ones in one Firefighter pull.
-// Excluding them here covers every picker at once - tank, dps, dps aoe and the attackers.
+// The kept Emergency Fire Bots put out Mimiron's fire. Excluding them here covers every picker at once,
+// tank, dps, dps aoe and attackers, where Mimiron's own guards only reach dps assist
 void RaidUlduarStrategy::AppendTargetExclusions(GuidSet& exclusions, TargetValueExclusionType type)
 {
     for (ObjectGuid const& guid : GetMimironKeptFireBots(botAI, botAI->GetBot()))
@@ -24,9 +22,8 @@ void RaidUlduarStrategy::AppendTargetExclusions(GuidSet& exclusions, TargetValue
 
     AppendAlgalonTargetExclusions(botAI, exclusions);
 
-    // Dps and pets only. The tank still has to hold the shielded Guardian or it walks at the back line,
-    // and the phase 1 focus rule already refuses it as a kill target - this is what stops the DoTs,
-    // cleaves and pets that rule never reached from finishing it in the same tick as its neighbour.
+    // Dps and pets only, the tank still has to hold the shielded Guardian or it walks at the back line.
+    // Stops the DoTs, cleaves and pets the focus rule misses from killing it beside its neighbour
     if (type == TargetValueExclusionType::Dps || type == TargetValueExclusionType::Attacker)
         AppendYoggSaronTargetExclusions(botAI, exclusions);
 }
@@ -39,74 +36,32 @@ void RaidUlduarStrategy::OnTick()
 
 void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
-    //
-    // Flame Leviathan
-    //
     UldFlameLeviathanDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Razorscale
-    //
     UldRazorscaleDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Ignis
-    //
     UldIgnisDefinition().AddTriggerNodes(triggers);
 
-    //
-    // XT-002 Deconstructor
-    //
     UldXT002Definition().AddTriggerNodes(triggers);
 
-    //
-    // Iron Assembly
-    //
     UldIronAssemblyDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Kologarn
-    //
     UldKologarnDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Auriaya
-    //
     UldAuriayaDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Hodir
-    //
     UldHodirDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Freya
-    //
     UldFreyaDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Thorim
-    //
     UldThorimDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Mimiron
-    //
     UldMimironDefinition().AddTriggerNodes(triggers);
 
-    //
-    // General Vezax
-    //
     UldVezaxDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Yogg-Saron
-    //
     UldYoggSaronDefinition().AddTriggerNodes(triggers);
 
-    //
-    // Algalon the Observer
-    //
     UldAlgalonDefinition().AddTriggerNodes(triggers);
 }
 

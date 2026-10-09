@@ -9,18 +9,8 @@ class Player;
 class PlayerbotAI;
 class Unit;
 
-// Ulduar hard modes.
-//
-// Hard modes are optional harder versions of an encounter, activated by a raid choice
-// (leave towers up, keep Saronite Vapors alive, press Mimiron's button, ...). They are
-// NOT the 10/25 heroic difficulty flag, so the spell-id predicate trick does not apply.
-//
-// These are declared by config, not detected: the per-boss switch (e.g.
-// AiPlayerbot.UlduarVezaxHardMode, opt-in and default off) is the single source of truth, and while
-// it is on that boss' hard-mode handling is armed for the whole encounter. Nothing fires when there
-// is nothing to react to, because every per-boss trigger still checks its own mechanic (hazard
-// nearby, debuff on the bot, add alive). So the server owner must set the option to match what the
-// raid actually does.
+// Ulduar hard modes are a raid choice, not the 10/25 heroic flag. Each is its boss's config switch alone,
+// and the per-boss triggers still check their own mechanic, so the option must match what the raid does
 
 // General Vezax: the raid keeps six Saronite Vapors alive, which spawns the Saronite Animus (33524)
 // and gives Vezax the invulnerable Saronite Barrier until the Animus dies.
@@ -30,10 +20,8 @@ bool IsVezaxHardModeActive(PlayerbotAI* botAI);
 // he reaches his empowered phase 3.
 bool IsIronAssemblyHardModeActive(PlayerbotAI* botAI);
 
-// IsSteelbreakerEmpowered is a phase check and deliberately NOT gated on the option above: he is
-// empowered whenever he is alive with both Molgeim (32927) and Brundir (32857) dead, meaning two
-// Supercharges advanced him to phase 3 (Static Disruption, then Overwhelming Power on the tank). A
-// raid that reaches that state without the option set still needs the tank swap.
+// A phase check, not gated on the hard-mode option: alive with Molgeim and Brundir dead means phase 3,
+// and a raid that gets there without the option set still needs the tank swap
 bool IsSteelbreakerEmpowered(PlayerbotAI* botAI);
 // Overload for callers that already resolved the three members, so a per-tick path does not repeat
 // three grid lookups.
@@ -43,50 +31,35 @@ bool IsSteelbreakerEmpowered(PlayerbotAI* botAI, Unit* steelbreaker, Unit* molge
 // order kills him first. Returns nullptr if none are alive.
 Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI);
 
-// Flame Leviathan: hard mode = raid leaves towers standing. Each surviving tower empowers the boss
-// and spawns that tower's periodic ground hazard. Returns FL_TOWER_ALL when the option is on, 0
-// otherwise. Claiming all four towers costs nothing: hazards are found by NPC entry, so a tower the
-// raid did destroy simply contributes none.
+// Flame Leviathan: FL_TOWER_ALL when the option is on, else 0. Claiming all four is free, hazards are
+// found by NPC entry so a destroyed tower adds none
 uint32 FlameLeviathanActiveTowerMask(PlayerbotAI* botAI);
 
 // Thorim: hard mode = the arena gauntlet is cleared fast enough that Sif (33196) interrupts her
 // channel and joins the fight instead of despawning.
 bool IsThorimHardModeActive(PlayerbotAI* botAI);
 
-// Freya: hard mode = an Elder (Brightleaf/Stonebark/Ironbranch) was left alive when Freya was engaged,
-// permanently empowering her with an extra ability. The empower keeps firing for the rest of the fight
-// even after the Elder dies. The per-mechanic triggers carry the specific hazard check (rooted bot /
-// nearby Unstable Sun Beam), and those objects only ever exist in hard mode.
+// Freya: an Elder left alive at the pull empowers her for the whole fight, even after it dies. The
+// triggers check the hazard itself (rooted bot, Unstable Sun Beam), which only exists in hard mode
 bool IsFreyaHardModeActive(PlayerbotAI* botAI);
 
-// Mimiron: hard mode ("Firefighter") = a player pressed the Big Red Button before the pull, which
-// empowers the mechs for the whole fight and adds two hazards - a persistent, spreading ground fire
-// and VX-001's Frost Bomb. The phase 3 Emergency Fire Bots (34147) put that fire out; which of them
-// the raid keeps alive is GetMimironKeptFireBots.
+// Mimiron "Firefighter": the Big Red Button pressed before the pull adds the spreading fire and Frost
+// Bomb. GetMimironKeptFireBots picks the P3 Emergency Fire Bots kept alive to put the fire out
 bool IsMimironHardModeActive(PlayerbotAI* botAI);
 
-// XT-002 Deconstructor: hard mode = the raid kills the exposed Heart during one of the 75/50/25%
-// windows, which full-heals XT and gives him Heartbreak for the rest of the fight.
-//
-// Unlike the other Ulduar hard modes there is no server signal before the kill - the raid's intent
-// is the only input - so IsXT002HardModeActive is the config alone. It decides whether bots burn
-// the Heart down or stop at ULDUAR_XT002_HEART_SAFE_HP_PCT.
+// XT-002: the raid kills the exposed Heart. No server signal exists before that kill, and this decides
+// whether bots burn the Heart or stop at ULDUAR_XT002_HEART_SAFE_HP_PCT
 bool IsXT002HardModeActive(PlayerbotAI* botAI);
 
-// Hard mode is already live: XT carries Heartbreak (65737), so there will be no further Heart phase
-// and Life Sparks / Void Zones now spawn. Deliberately config-independent, so a Heartbreak the human
-// players triggered is handled too. Takes the XT the caller already found, since finding him is a scan.
+// XT already has Heartbreak, so no more Heart phases. Config-independent on purpose, so a Heartbreak
+// the humans triggered counts too
 bool IsXT002HeartbreakActive(Player* bot, Unit* xt002);
 
-// Yogg-Saron: hard mode is the reduced-Keeper achievement ladder - the raid frees fewer than 4 Keepers
-// before the pull, losing that Keeper's support. Which ones are up is read from the instance, see
-// YoggThorimKeeperActive; this config flag only tags the trace.
+// Yogg-Saron: fewer than 4 Keepers freed. Only tags the trace, the Keeper checks read the instance
 bool IsYoggSaronHardModeActive(PlayerbotAI* botAI);
 
-// Whether Thorim is among the Keepers the raid freed, read from the instance's persistent watchers
-// mask. Which Keepers are up is chosen in-instance, so unlike the hard-mode switch this cannot come
-// from config. With him, Titanic Storm executes Weakened Immortal Guardians. Without him they can't die,
-// so phase 3 keeps them low in a pile and drags Shadow Beacon marked ones clear.
+// Thorim freed, off the watchers mask since Keepers are picked in-instance. Without his Titanic Storm,
+// Weakened Immortal Guardians can't die, so P3 keeps them low in a pile
 bool YoggThorimKeeperActive(PlayerbotAI* botAI);
 
 // How many Keepers the raid freed, off the same mask. Under 4 in 25-man, Yogg casts Deafening Roar.

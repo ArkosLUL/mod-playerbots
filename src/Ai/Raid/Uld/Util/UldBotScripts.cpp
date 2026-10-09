@@ -73,10 +73,8 @@ public:
             return;
 
         {
-            // Both effects are TRIGGER_MISSILE aimed at TARGET_DEST_TARGET_ENEMY, so the spell
-            // carries a destination and no unit target - GetUniqueTargetInfo is empty for it. The
-            // destination is frozen at cast time, so this is where the missile lands however far the
-            // target walks in the meantime.
+            // Both effects are TRIGGER_MISSILE at TARGET_DEST_TARGET_ENEMY, so no unit target. The dest
+            // is frozen at cast, so this is where it lands however far the target walks
             Position impact;
             if (WorldLocation const* dst = spell->m_targets.GetDstPos())
                 impact.Relocate(dst->GetPositionX(), dst->GetPositionY(), dst->GetPositionZ());
@@ -95,10 +93,8 @@ public:
             InterruptVezaxCastersNear(caster, impact, ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS,
                                       &VezaxDodgesShadowCrash);
 
-            // Nothing sweeps for this: the field's DynamicObject only exists once the missile has
-            // landed, so the ~2s of flight - the only window a bot can act in - would otherwise be
-            // invisible in the trace. This hook already fires exactly once per cast, server-side,
-            // which is why the record is written here and not in the per-bot helper.
+            // The field's DynamicObject only exists once the missile lands, so the flight is traced
+            // here. This hook fires once per cast, a per-bot helper would write it once per bot
             if (RaidObs::Active())
                 RaidObs::NoteHazardCircle(caster->GetMap(), SPELL_VEZAX_SHADOW_CRASH_DMG, impact,
                                           ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS, flightMs);
@@ -106,9 +102,8 @@ public:
     }
 };
 
-// The boss script keeps its hard mode flag private, and a vapor's death and the Animus summon are
-// both casts by the vapor on itself, the first from JustDied. Prepare rather than cast, same as the
-// Guardian death listener below.
+// The boss script keeps its hard mode flag private, so vapor deaths and the Animus summon are read off
+// the vapor's self-casts, the first from JustDied. Prepare rather than cast, like the Guardian listener
 class VezaxVaporListenerScript : public AllSpellScript
 {
 public:
@@ -129,9 +124,8 @@ public:
     }
 };
 
-// Brain Link names its partner nowhere a bot can read: the aura script holds _targetGUID privately and
-// neither 63803 nor 63804 leaves an aura behind. But it casts one of the two on that partner every
-// second for the life of the link, so the cast is the pair, and both ends can be told about it.
+// Brain Link's partner is private to the aura script and 63803/63804 leave no aura, but one of the two
+// is cast at the partner every second, so the cast names the pair
 class YoggSaronBrainLinkListenerScript : public AllSpellScript
 {
 public:

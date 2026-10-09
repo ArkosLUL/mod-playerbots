@@ -26,9 +26,7 @@ bool IsSteelbreakerEmpowered(PlayerbotAI* /*botAI*/, Unit* steelbreaker, Unit* m
 
 bool IsSteelbreakerEmpowered(PlayerbotAI* botAI)
 {
-    // No hard-mode gate: this is a phase check, and Steelbreaker reaching phase 3 is a fact about the
-    // fight rather than a raid setting. Gating it meant a raid that got there without the option set
-    // lost the tank swap and chain-died to Meltdown.
+    // No hard-mode gate: phase 3 is a fact about the fight, not a raid setting
     IronAssemblyTargets targets;
     GatherIronAssemblyTargets(botAI, targets);
 
@@ -44,10 +42,8 @@ Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI)
     Unit* molgeim = targets.molgeim;
     Unit* brundir = targets.brundir;
 
-    // The kill order is the only thing the hard-mode option changes. Hard mode saves Steelbreaker for
-    // last so he reaches phase 3; otherwise he dies first, which takes Fusion Punch off the tank and
-    // means Static Disruption and Overwhelming Power never happen at all. Molgeim is second in both
-    // orders, so Rune of Summoning and its untauntable Lightning Elementals are never reached.
+    // Hard mode keeps Steelbreaker for phase 3, else he dies first and his phase 3 kit never shows up.
+    // Molgeim is second either way, so his Rune of Summoning never comes
     if (IsIronAssemblyHardModeActive(botAI))
     {
         if (brundir)

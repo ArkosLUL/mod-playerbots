@@ -9,11 +9,8 @@
 
 #include "Common.h"
 
-// The handful of Ulduar values that are not owned by one encounter. No behaviour lives here.
-//
-// Nothing boss-specific may be added: ids, tuning constants and positions belong in that boss's
-// UldEncounter_<Boss>.h. This file stays small on purpose: a shared bucket for "everything the
-// raid needs" is exactly how the previous 2400-line Ulduar header accumulated.
+// Ulduar values no single encounter owns, and no behaviour. Boss ids, tuning and positions go in that
+// boss's UldEncounter_<Boss>.h, never here
 constexpr uint32 ULDUAR_MAP_ID = 603;
 
 // Class spells the encounters name by id rather than by the bot's own spellbook.

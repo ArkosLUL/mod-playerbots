@@ -110,4 +110,5 @@ into the docs`, written to a scratchpad file and committed with `git commit -F`;
 - [x] Auriaya
 - [x] Kologarn
 - [x] Razorscale
-- [ ] Shared files → README.md; then delete this plan
+- [x] Shared files → README.md
+- [ ] Algalon (held back while another session edited it); then delete this plan

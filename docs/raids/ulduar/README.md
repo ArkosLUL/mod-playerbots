@@ -98,14 +98,16 @@ is no Sated/Exhaustion check anywhere, and no Drums or Time Warp — lust is sha
 
 | Boss | `allowAll` | `allowLust` | Why |
 |---|---|---|---|
-| Razorscale | grounded (`Z <= 440`) | same | Zero damage taken while airborne; every landing, harpoon knockdowns included, is a real burn window |
-| Mimiron | always | all three mechs alive | P1-P3 damage counts; all three up is P4, the enrage burn |
-| Yogg-Saron | P2 or P3 | P3 | P1 damage lands on Sara and is wasted. Opens only on the Brain (P2) and Yogg (P3), both in `BossTakesNoVictim`: before that the base gate held every bot cooldown for a whole 663 s pull. Read from the boss state, not sight: the brain level is 88-150 yd from Yogg, past `SightDistance`, and the fall-through lusted in P2 |
+| Razorscale | grounded (`Z <= 440`) | permanent ground phase (`IsGroundPhaseFor`) | Zero damage taken while airborne; every landing, harpoon knockdowns included, is a real burn window, but a ~30 s knockdown is too short for a 10-minute cooldown |
+| Mimiron | always | P4: all three parts selectable, VX-001 riding, after `ULDUAR_MIMIRON_PHASE4_LUST_DELAY_MS` (15 s) | P1-P3 damage counts. A beaten or self-repairing mech stays alive but unselectable, so selectable is what counts as fighting; the raid spends the P4 opening running from the Frost Bomb |
+| Yogg-Saron | P2 or P3 | never | `yogg-saron phase 3 lust` owns lust, waiting for the raid to reach its spots. P1 damage lands on Sara and is wasted. Opens only on the Brain (P2) and Yogg (P3), both in `BossTakesNoVictim`: before that the base gate held every bot cooldown for a whole 663 s pull. Read from the boss state, not sight: the brain level is 88-150 yd from Yogg, past `SightDistance`, and the fall-through lusted in P2 |
 | Assembly of Iron | always | exactly one member alive | They resurrect each other; also covers the hard mode, since Steelbreaker-last means the survivor is empowered |
 | Freya | same as `allowLust` | no `SPELL_ATTUNED_TO_NATURE` 62519, **or** HP ≤ 25% | 150 stacks of +8% healing received, so damage lands only in the final phase; the adds that strip it are not boss-flagged |
 | Thorim | arena floor (`Z <= 429.6`) | same | Largely redundant, but cheap insurance against a stray lust while he is immune |
 | Hodir | — | first Toasty Fire, or 30 s in | A definition rule (`hodir lust hold`), not this multiplier. Cast at the pull it ran on a no-fire opener and out before the freeze; see [hodir.md](hodir.md) |
-| Vezax, Algalon, Ignis, Auriaya, Kologarn, Flame Leviathan | — | — | No change; the pull is the right window |
+| XT-002 | the exposed Heart | same | `XT002BurstWindowMultiplier`, a definition multiplier: bursting the Heart kills it and starts hard mode, so the config decides |
+| Vezax | — | hard mode: the Animus summon or a vapor death | A definition rule (`vezax hard mode hold`, Starfall too) |
+| Algalon, Ignis, Auriaya, Kologarn, Flame Leviathan | — | — | No change; the pull is the right window |
 
 **Freya and Hodir are the only bosses with a fallback release** — `FREYA_LUST_FALLBACK_PCT = 25.0f`
 keeps lust from being held forever if the aura read ever misses, and Hodir's 30 s covers a pull with no
@@ -134,18 +136,18 @@ are inert.
 
 Before this work **no WotLK raid had either a redirect action or a veto**, so the generic main-tank
 node fired unconditionally — including on the encounters where the strategy deliberately puts a
-second tank, an add tank or a swap tank on what the DPS is hitting. This is the veto slice only; no
-Ulduar boss has a dedicated redirect action yet.
+second tank, an add tank or a swap tank on what the DPS is hitting. Freya, Hodir, Iron Assembly,
+XT-002 and Mimiron now also have dedicated redirect actions; Mimiron's feeds the main tank through
+phase 1, the one phase a redirect helps.
 
 **Veto — the main tank is actively wrong:**
 
 | Boss | Why | Gated on |
 |---|---|---|
-| Iron Assembly | Three bosses, one tank each, plus a Fusion Punch swap | boss entries |
 | Mimiron | Four phases, each a different creature with a fresh threat table; phase 3 has two tankable units split MT/AT0 | 33432 / 33651 / 33670 |
 | Thorim | Raid splits into arena and gauntlet squads with a tank each, plus an Unbalancing Strike swap | boss present |
 | Algalon | Phase Punch forces a swap on a stack timer between a swap pair: two bot tanks, else MT + AT0 | boss present |
-| Razorscale — **airborne only** | The MT holds nothing while she flies; Dark Rune adds belong to assist tanks. Ground phases are single-tank and the generic node is *correct*, so this is phase-gated, not blanket | boss Z vs 440 |
+| Razorscale — **outside the permanent ground phase** | The MT holds nothing while she flies; Dark Rune adds belong to assist tanks, and a harpoon knockdown above 50% puts her on the floor with nobody tanking her. Only the permanent ground phase is single-tank and the generic node *correct* there | `IsFlyingPhaseFor` |
 | Freya | The add tank is the sink whenever the Snaplasher or Conservator is up, and `freya redirect threat` owns the choice | boss present |
 
 **Do not veto** — the boss is main-tank-held all fight, so the generic node is right for the primary
@@ -156,11 +158,14 @@ combat, neither spell castable).
 XT-002 was already covered by `XT002TargetGuardMultiplier`, which vetoes for the whole encounter
 because the main tank is the wrong sink while a Pummeller is out.
 
+Iron Assembly is no longer in the veto: it has its own redirect action, and nothing else blocks the
+class-generic nodes there.
+
 Two load-bearing details: the multiplier `dynamic_cast`s to the two **concrete** redirect actions
-only, never the shared `BuffOnMainTankAction` base; and **Razorscale's phase is read straight off the
-unit's Z** rather than through `IsFlyingPhase()`, because the helper needs `UpdateBossAI()` first and
-that reassigns the main tank. The temporary harpoon knockdowns count as grounded, which is intended —
-she is tankable then, and a redirect during the knockdown is what puts her back on the MT.
+only, never the shared `BuffOnMainTankAction` base; and **Razorscale's phase comes from the static
+`IsFlyingPhaseFor(Unit*)`**, which takes the unit the multiplier already holds, so `UpdateBossAI()`
+(which reassigns the main tank) never runs. It holds outside `IsGroundPhaseFor` (Z ≤ 440, under 50%, no
+stun aura), harpoon knockdowns included.
 
 **No pull-window helper exists outside Naxx, RS and SWP.** If dedicated actions follow, use BT's
 stateless `boss->GetHealthPct() > 95.0f` idiom rather than building a combat clock — it needs no new
@@ -180,7 +185,6 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 |---|---|
 | **Razorscale** | Dark Rune Watcher/Guardian adds have no interrupt (focus and the Flame Breath cone are handled) |
 | **Freya** | Storm Lasher (Stormbolt, Lightning Lash) and Ancient Water Spirit (Tidal Wave) casts are not interrupted |
-| **Auriaya** | `AuriayaEncounterActive` is presence-only (`GetAuriaya(botAI) != nullptr`), so bots pull her on sight from up to 100 yd. Kologarn had the same defect and now gates on `IsInCombat()` |
 
 **Sev-2 CHEAT-ONLY** — works in the default config, breaks silently if `BotCheats` drops `raid`:
 Yogg Crusher/Constrictor tentacles, illusion-room adds and P2 movement (cheat instakill / teleport).
