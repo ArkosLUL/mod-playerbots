@@ -24,6 +24,7 @@
 #include "OSActionContext.h"
 #include "OnyActionContext.h"
 #include "RSActionContext.h"
+#include "RaidHealerEngine.h"
 #include "SSCActionContext.h"
 #include "SWPActionContext.h"
 #include "TKActionContext.h"
@@ -62,6 +63,7 @@ void AiObjectContext::BuildSharedActionContexts(
     actionContexts.Add(new RaidIccActionContext());
     actionContexts.Add(new RaidRsActionContext());
     actionContexts.Add(new RaidTrialOfTheCrusaderActionContext());
+    actionContexts.Add(new RaidHealerEngineActionContext());
     actionContexts.Add(new TbcDungeonAuchenaiCryptsActionContext());
     actionContexts.Add(new TbcDungeonSethekkHallsActionContext());
     actionContexts.Add(new TbcDungeonMechanarActionContext());

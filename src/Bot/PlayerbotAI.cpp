@@ -1650,7 +1650,7 @@ std::vector<std::string> const& PlayerbotAI::GetInstanceStrategies()
     static const std::vector<std::string> allInstanceStrategies =
     {
         "aq20", "aq40", "blacktemple", "bwl", "gruulslair", "hyjal", "icc", "karazhan",
-        "magtheridon", "moltencore", "naxx", "onyxia", "rs", "ssc", "sunwell", "tbc-ac",
+        "magtheridon", "moltencore", "naxx", "onyxia", "raid healer engine", "rs", "ssc", "sunwell", "tbc-ac",
         "tbc-mech", "tbc-mgt", "tbc-ramp", "tbc-seth", "tbc-ub", "tempestkeep", "trialofthecrusader", "ulduar",
         "voa", "wotlk-an", "wotlk-cos", "wotlk-dtk", "wotlk-eoe", "wotlk-fos", "wotlk-gd",
         "wotlk-hol", "wotlk-hos", "wotlk-nex", "wotlk-occ", "wotlk-ok", "wotlk-os", "wotlk-pos",
@@ -1672,6 +1672,14 @@ void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
     {
         engines[BOT_STATE_COMBAT]->removeStrategy(strat);
         engines[BOT_STATE_NON_COMBAT]->removeStrategy(strat);
+    }
+
+    // before the early return, so a raid with no strategy of its own still gets it
+    MapEntry const* mapEntry = sMapStore.LookupEntry(mapId);
+    if (mapEntry && mapEntry->IsRaid())
+    {
+        engines[BOT_STATE_COMBAT]->addStrategy("raid healer engine");
+        engines[BOT_STATE_NON_COMBAT]->addStrategy("raid healer engine");
     }
 
     std::string strategyName;

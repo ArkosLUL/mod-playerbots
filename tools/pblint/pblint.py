@@ -426,6 +426,10 @@ def check_raid_sites(sources, reg: Registry) -> list[Finding]:
     if block:
         listed = set(RE_ADD_STRATEGY_LIST.findall(block.group(1)))
     arms = set(re.findall(r'strategyName\s*=\s*"([^"]+)"', ai))
+    # A raid-wide strategy is added by name rather than picked by a map arm.
+    apply = re.search(r"void PlayerbotAI::ApplyInstanceStrategies\(.*?\n\}", ai, re.S)
+    if apply:
+        arms |= set(re.findall(r'addStrategy\(\s*"([^"]+)"', apply.group(0)))
 
     rel = "src/Bot/PlayerbotAI.cpp"
     for name in sorted(arms - listed):

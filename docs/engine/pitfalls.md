@@ -597,8 +597,9 @@ Related traps:
 - **A bot with no target runs the non-combat engine, in combat too.** Only `AttackAction` or a pull
   enters the combat engine; `invalid target` is true for a null target and `drop target` (99) always
   switches to non-combat. A fight that owns targeting and hands a healer none strands it there, without
-  the combat-only mana cooldowns and potions: Yogg-Saron's phase 3 healers ran dry. Switch it back and
-  block `drop target` while targetless in combat (`yogg-saron healer combat engine`).
+  the combat-only mana cooldowns and potions: Yogg-Saron's phase 3 healers ran dry. In raid boss fights
+  `raid healer engine` (`RaidHealerEngine.h`) switches it back and blocks `drop target` while
+  targetless; see [../raids/README.md](../raids/README.md).
 
 - **`AttackStop()` drops the victim and nothing else.** The `"current target"` AI value survives it —
   and that value is what the class rotation casts at and what `ReachTargetAction` walks to. Clear it

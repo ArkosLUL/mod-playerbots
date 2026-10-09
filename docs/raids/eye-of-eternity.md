@@ -50,7 +50,9 @@ Verified against `boss_malygos.cpp`:
 - **P1 suppresses no heal or buff cast — do not re-audit the rules for one.** The P1 rules block
   no `CastSpellAction` but the Blink, Disengage and Taunt families and, for non-tanks, Charge. The
   "Disc priests never shield on Malygos" report was a **generic priest bug** that merely reproduced
-  most visibly here — see [../classes/priest.md](../classes/priest.md).
+  most visibly here — see [../classes/priest.md](../classes/priest.md). P1 also leaves healers
+  targetless; only `raid healer engine` ([README.md](README.md)) keeps them on the combat engine,
+  where the shield lives.
 
 ## Phase model
 
