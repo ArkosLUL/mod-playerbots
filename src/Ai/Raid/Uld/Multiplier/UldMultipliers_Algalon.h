@@ -12,9 +12,8 @@
 
 #include <unordered_map>
 
-// Algalon: the target exclusions keep the pickers off stars, constellations and Dark Matter that
-// aren't the bot's job. This catches damage already aimed at one, and nothing else: heals, movement
-// and the pickers that would switch the bot back all pass.
+// Algalon: catches damage already aimed at a star, constellation or Dark Matter that isn't the bot's job.
+// Heals, movement and the pickers that would switch the bot back all pass.
 class AlgalonTargetGuardMultiplier : public Multiplier
 {
 public:
@@ -28,13 +27,8 @@ private:
     std::unordered_map<Action*, bool> lingers;
 };
 
-// Algalon: Dispersion is kept for Big Bang. With it latched for the next hit the tanks hide and their buttons
-// are free, never a bubble. The holder's own and every external on him are the tank defensive node's, one at
-// a time; Pain Suppression, Guardian Spirit, Hand of Sacrifice and Lay on Hands go on the other swap tank
-// alone. With no disperser a tank soaks, and the soak buttons are kept: Divine Protection,
-// Shield Wall, Pain Suppression and the rest cool down for two minutes or more against a 90.5 s cast, so one
-// spent on the way is missing at the hit. A button that will be back in time stays free. The encounter's own
-// actions cast directly and never meet this.
+// Algalon: keeps Dispersion, and with no disperser the tank soak buttons, for Big Bang unless back in time. The
+// holder's own and the externals on him are the tank defensive node's; the encounter's own actions cast directly.
 class AlgalonCooldownReserveMultiplier : public Multiplier
 {
 public:
@@ -89,9 +83,8 @@ private:
     std::unordered_map<Action*, Heal> heals;
 };
 
-// Algalon: stars die one at a time on purpose, each death 16-21k to the whole raid. Splash that lands on
-// one kills it on its own clock, near whoever stands there, and can bring two down together. The threat
-// type misses most of it, so the spell and the name decide.
+// Algalon: stars die one at a time on purpose, each death 16-21k to the whole raid, and splash kills one on
+// its own clock. The threat type misses most of it, so the spell and the name decide.
 class AlgalonSplashHoldMultiplier : public Multiplier
 {
 public:
@@ -122,9 +115,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Algalon: a phased bot still inside a field when Big Bang strips the phase is phased again for 10 s, and the
-// strip comes a second after the hit. A cast started there pins the feet and an item use stops the walk, so
-// until it is out only the exit runs. Exclusive rules only hold movement.
+// Algalon: a phased bot still in a field when Big Bang strips the phase a second after the hit is phased again.
+// A cast pins the feet and an item use stops the walk, so only the exit runs; Exclusive rules hold movement only.
 class AlgalonLeaveFieldMultiplier : public Multiplier
 {
 public:

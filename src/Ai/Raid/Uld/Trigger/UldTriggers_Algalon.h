@@ -5,12 +5,9 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-//
-// Algalon the Observer
-//
-// Everything reads the per-instance room scan, so no trigger sweeps on its own. The Big Bang and Cosmic
-// Smash reactions have hard deadlines and run every tick; the rest are paced.
-//
+// Algalon the Observer. Every trigger reads the per-instance room scan; the Big Bang and Cosmic Smash
+// reactions have hard deadlines and run every tick, the rest are paced.
+
 class AlgalonBigBangSoakTrigger : public Trigger
 {
 public:

@@ -13,9 +13,8 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-//
 // Algalon the Observer
-//
+
 class AlgalonBigBangSoakAction : public Action
 {
 public:

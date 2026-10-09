@@ -84,14 +84,12 @@ constexpr float ULDUAR_ALGALON_FIELD_PATH_CLEARANCE = 6.3f;
 // A generic mover may not stop closer than this to a hole: the bot would stand on the field's edge.
 constexpr float ULDUAR_ALGALON_FIELD_STAND_CLEARANCE = 7.5f;
 
-// A constellation chases at run speed and rests 3-3.5 yd off its victim, and is eaten within about 6.5 yd of
-// a hole's centre. So it has to come at the handler across the hole: the handler waits this far past the hole,
-// just outside the 7.5 yd that phases a player, and never under the minimum once clamped into the room.
+// A constellation rests 3-3.5 yd off its victim and is eaten within about 6.5 yd of a hole's centre, so the handler
+// waits this far past the hole, just outside the 7.5 yd that phases a player; clamped, never under the minimum.
 constexpr float ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET = 8.0f;
 constexpr float ULDUAR_ALGALON_KITE_MIN_OFFSET = 7.8f;
-// Held ones trail right behind the handler, so it first waits this far out on their side of the hole for
-// their Arcane Barrage: 2 s standing still every 5 s, in sync for a wave. Going round then, it is far enough
-// ahead that they cut straight across. Past the wait it goes on the first of them casting.
+// Held ones trail right behind, so the handler waits this far out on their side for their Arcane Barrage, 2 s
+// standing still every 5 s, then goes round ahead of them. Past the wait it goes on the first one casting.
 constexpr float ULDUAR_ALGALON_KITE_STAGE_OFFSET = 11.0f;
 constexpr uint32 ULDUAR_ALGALON_KITE_WAIT_MS = 6000;
 // Parked this long with one resting beside it and outside the field, the pass missed: stage again. A walk to
@@ -101,7 +99,7 @@ constexpr uint32 ULDUAR_ALGALON_KITE_STALL_MS = 12000;
 constexpr float ULDUAR_ALGALON_KITE_BESIDE = 5.0f;
 constexpr float ULDUAR_ALGALON_CONSTELLATION_EAT_RADIUS = 6.5f;
 // Higher above the floor than this, a hole can't take one (npc_living_constellation::SpellHit): on its way down
-// after waking (2-23 s), or stuck there. One spawned outside the room never came below 16 yd.
+// after waking, or stuck there.
 constexpr float ULDUAR_ALGALON_CONSTELLATION_LOW_Z = 5.0f;
 // A spot clamped into the room or onto another field is tried this far either side.
 constexpr float ULDUAR_ALGALON_KITE_SWING = static_cast<float>(M_PI) / 6.0f;
@@ -131,8 +129,7 @@ constexpr uint32 ULDUAR_ALGALON_BIG_BANG_CAST_MS = 8000;
 // How early the raid needs a hole standing, and keeps the last one out of the kite.
 constexpr uint32 ULDUAR_ALGALON_SHELTER_WINDOW_SECONDS = 30;
 // Ice Block, Divine Shield, Cloak of Shadows and Anti-Magic Shell stay unspent this long before a cast and
-// while phased. Magic immunity strips the hole's phase aura (62168, arcane) or keeps it off, and Ice Block also
-// pins the mage.
+// while phased: magic immunity strips the hole's phase aura (62168, arcane) or keeps it off.
 constexpr uint32 ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS = 20;
 // Every constellation goes on the handler before the cast: from its start they keep their victim 9.5 s and
 // follow it into a hole, closing it on whoever is still walking there.
@@ -167,9 +164,8 @@ constexpr uint32 ULDUAR_ALGALON_BIG_BANG_STILL_MS = 3000;
 // His swings run 8-23k and Quantum Strike ~10k on a ~44k tank, so from 60% one burst kills it in 1.3 s.
 constexpr float ULDUAR_ALGALON_TANK_DEFENSIVE_PCT = 60.0f;
 constexpr float ULDUAR_ALGALON_TANK_LAY_ON_HANDS_PCT = 25.0f;
-// Every tank death came 2-6 s after a star explosion or a meteor, with the healers on the raid. Through this
-// window the holder keeps a damage cutter up while under the percentage: above it, a third of the cutters went
-// on a tank at 76-100% and none were left for the deaths after two minutes.
+// Tanks die 2-6 s after a star explosion or a meteor, with the healers on the raid: through this window the
+// holder keeps a damage cutter up, only under the percentage so none is wasted on a healthy tank.
 constexpr uint32 ULDUAR_ALGALON_TANK_WINDOW_LEAD_MS = 1000;
 constexpr float ULDUAR_ALGALON_TANK_WINDOW_PCT = 80.0f;
 constexpr uint32 ULDUAR_ALGALON_TANK_WINDOW_TAIL_MS = 5000;
@@ -180,16 +176,14 @@ constexpr float ULDUAR_ALGALON_SACRIFICE_MIN_PCT = 50.0f;
 // A star this low counts as exploding whatever its slope.
 constexpr float ULDUAR_ALGALON_EXPLOSION_LOW_PCT = 3.0f;
 // Aura Mastery and Divine Guardian last 6 s, so they go up this close to a star's forecast death, or with it
-// this low: a star chewed by splash went from 4.8% to dead between two scans. The slope runs about a second late
-// on a paced kill, and a 2 s lead opened one second before the explosion.
+// this low. The lead allows for the slope running about a second late on a paced kill.
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS = 3500;
 constexpr float ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT = 5.0f;
-// A bot that wouldn't survive the explosion presses its own button this close to it. Under Aura Mastery the
-// largest of 87 hits was 79% of the uncovered top roll, and Divine Guardian is a flat -20%.
+// A bot that wouldn't survive the explosion presses its own button this close to it. Covered, the top roll
+// counts at 0.8: Divine Guardian is a flat -20%, and under Aura Mastery the worst hit was 79% of it.
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS = 1500;
 constexpr float ULDUAR_ALGALON_COVERED_EXPLOSION_FACTOR = 0.8f;
-// Stars dying this close after the first count as one hit to survive: three inside a second killed 18 bots
-// who were each above one hit before the first.
+// Stars dying this close after the first count as one hit to survive.
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_STACK_MS = 3000;
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_STACK_MAX = 3;
 // The least a healthstone or healing potion heals, for whether one lifts a bot over the line.
@@ -220,16 +214,12 @@ constexpr float ULDUAR_ALGALON_FAR_HOLE_YARDS = 35.0f;
 constexpr float ULDUAR_ALGALON_NEAR_HOLE_STANDOFF = 30.0f;
 constexpr uint32 ULDUAR_ALGALON_FAR_HOLE_SECONDS = 15;
 
-// Stars die under Big Bang: Black Hole Explosion only hits its caster's phase, so a star dying while the raid
-// is phased hits the soaker alone, in Dispersion. The drain is exact, a tick a second from the spawn, so the
-// death lands on a tick inside this window round the hit; 64445 strips the phase a second after it. The
-// window opens once everyone is in. It can't open sooner: the tanks hold him until the cast starts or he
-// resets, and the soaker's Dispersion lasts 6 s.
+// A star dying in this window round the hit explodes on the soaker alone; 64445 strips the phase a second
+// after the hit. No sooner: the tanks hold him until the cast starts, and Dispersion lasts 6 s.
 constexpr int32 ULDUAR_ALGALON_UNDER_LEAD_MS = 4000;
 constexpr int32 ULDUAR_ALGALON_UNDER_TAIL_MS = 600;
-// With a star under, every hider goes in this much earlier, handler and tanks too, so those who were near
-// their hole at the cast are in before the window opens. Stretched so they are in a pulse and a half before
-// the earliest such death, up to the cap.
+// With a star under, every hider goes in this much earlier, handler and tanks too, stretched up to the cap so
+// all are in a pulse and a half before the earliest such death.
 constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_EXTRA_MS = 3000;
 constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_STRETCH_MS = 4000;
 constexpr int32 ULDUAR_ALGALON_UNDER_DEATH_LEAD_MS = 1500;
@@ -238,9 +228,8 @@ constexpr int32 ULDUAR_ALGALON_UNDER_FINISH_MS = 5000;
 // A DoT's ticks to come count as done, so a new one is held within this much of the stop line (% of max health):
 // Curse of Agony, the biggest, is ~6% of a 25-man star.
 constexpr float ULDUAR_ALGALON_UNDER_DOT_ROOM_PCT = 10.0f;
-// In this stretch before the cast a planned star whose work has no longer fitted for a second is handed to
-// pacing, which can still kill it before the cast. Later none leaves for that: pacing couldn't kill it in time
-// either.
+// Between these two before the cast, a planned star whose work overruns the cast for the late hold goes back to
+// pacing, which can still kill it first. After that pacing couldn't make it either.
 constexpr int32 ULDUAR_ALGALON_UNDER_RELEASE_FROM_MS = 15000;
 constexpr int32 ULDUAR_ALGALON_UNDER_RELEASE_TO_MS = 8000;
 constexpr uint32 ULDUAR_ALGALON_UNDER_LATE_HOLD_MS = 1000;
@@ -254,13 +243,11 @@ constexpr int32 ULDUAR_ALGALON_UNDER_DYING_MS = 3000;
 constexpr float ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC = 6.0f;
 constexpr int32 ULDUAR_ALGALON_UNDER_SWITCH_MS = 3000;
 constexpr int32 ULDUAR_ALGALON_UNDER_BULK_SLACK_MS = 35000;
-// With a star under, a ring hider waits this close to its hole before the cast, so it is in by the window:
-// from 28-34 yd the walk alone took up to 5 s.
+// With a star under, a ring hider waits this close to its hole before the cast, so it is in by the window.
 constexpr float ULDUAR_ALGALON_UNDER_HOLE_REACH = 22.0f;
 
-// Collapsing Star pacing. Each death is Black Hole Explosion on everyone unphased (64122 up to 16,912,
-// 65108 up to 21,525), and Collapse drains 1% max health a second, so four ignored stars explode within
-// seconds of each other.
+// Each star death is Black Hole Explosion on everyone unphased, 64122 up to 16,912 and 65108 up to 21,525.
+// Collapse drains 1% max health a second, so four ignored stars explode within seconds of each other.
 constexpr uint32 ULDUAR_ALGALON_STAR_PACING_GAP_MS = 8000;
 constexpr uint32 ULDUAR_ALGALON_STAR_EXPLOSION_MAX_10 = 16913;
 constexpr uint32 ULDUAR_ALGALON_STAR_EXPLOSION_MAX_25 = 21526;
@@ -283,31 +270,28 @@ constexpr float ULDUAR_ALGALON_STAR_TEAM_REACH = 28.0f;
 constexpr float ULDUAR_ALGALON_STAR_TEAM_STANDOFF = 25.0f;
 constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_10 = 2;
 constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_25 = 3;
-// Splash that would also land on a star this close to the bot or its target is held. 15 is glyphed
-// Pestilence; diseases landed on a star 12.5 yd out.
+// Splash that would also land on a star this close to the bot or its target is held; 15 is glyphed Pestilence.
 constexpr float ULDUAR_ALGALON_SPLASH_RADIUS = 15.0f;
 // Ground AoE sits there 8-10 s and stars wander ~1.7 yd/s, so it's held while one is this close to where it lands.
 constexpr float ULDUAR_ALGALON_GROUND_SPLASH_RADIUS = 25.0f;
 
-// Star death forecast. Splash near him takes 1-2.4%/s on top of the drain, so a star's health isn't its
-// seconds left; the slope of its health log is.
+// Star death forecast. Splash near him adds to the drain, so a star's health isn't its seconds left; the
+// slope of its health log is.
 constexpr uint32 ULDUAR_ALGALON_STAR_LOG_MS = 4000;
 constexpr uint32 ULDUAR_ALGALON_STAR_LOG_STEP_MS = 500;
 // Less log than this reads as the drain: a slope over one or two samples is noise.
 constexpr uint32 ULDUAR_ALGALON_STAR_LOG_MIN_MS = 2000;
 constexpr float ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC = 1.0f;
-// The keep-or-drop test reads a dropped star as dying at its own slope capped here: casts in flight, channels
-// and DoTs (5.8%/s measured).
+// Keep-or-drop reads a dropped star as dying at its own slope up to this: casts in flight, channels, DoTs.
 constexpr float ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC = 5.0f;
-// On top of the walk: in every kill measured the team's first 2 s on a star only matched the drain (target
-// switch, first casts, DoTs ramping).
+// On top of the walk, the first 2 s on a star only match the drain: target switch, first casts, DoTs ramping.
 constexpr uint32 ULDUAR_ALGALON_STAR_KILL_START_MS = 2000;
-// The team's kill speed over a whole kill, slowest and fastest (6.2-7.8%/s measured on 25-man).
+// The team's kill speed over a whole kill, slowest and fastest.
 constexpr float ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC = 5.5f;
 constexpr float ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC = 9.0f;
 // A focus losing less than this is still the walk in, not the kill.
 constexpr float ULDUAR_ALGALON_STAR_KILL_MEASURED_PCT_PER_SEC = 3.5f;
-// The fastest 4 s slope worth planning for: the last 15% has gone at 16%/s in a second.
+// The fastest 4 s slope worth planning for: a kill's last second can run faster, but only for that second.
 constexpr float ULDUAR_ALGALON_STAR_KILL_PEAK_PCT_PER_SEC = 12.0f;
 // A star whose own death would land badly is only acted on this close to it: a fresh wave's four all die
 // together and would read as due at the spawn, and the serial deadline already paces them.
@@ -340,15 +324,8 @@ constexpr float ULDUAR_ALGALON_DODGE_SEARCH_RADIUS = 24.0f;
 // The marker creatures live 10s but the meteor lands ~4.8s in; past this they mark nothing.
 constexpr uint32 ULDUAR_ALGALON_MARKER_LIFETIME_MS = 5500;
 
-// Algalon formation. He lands in the middle and is walked out to the edge on the -Y side, between the two
-// star spawns there, so the stars wander past the raid less. A chase stops 1.5-12 yd short of his tank,
-// so every ring slot and melee waiting spot stays 13.5 yd from the whole line from his landing spot to the
-// tank slot: at the end of the intro he swings at a random player, whenever he loses his tank he swings
-// at whoever is next, and anyone in reach is one hit.
-//
-// Healers 0-3 at 19 yd from the hold, inner ranged 4-9 at 25 yd, outer ranged 10-17 at 31 yd, each ring
-// ordered to alternate sides so a short raid still spreads. Every slot is at least 8 yd from the four worm
-// hole spots, and healers are within 22 yd of the tank slot.
+// Rings at 19, 25 and 31 yd from the hold spot, each alternating sides so a short raid still spreads. Every
+// slot is at least 8 yd off the worm hole spots, and healers stay within 22 yd of the tank slot.
 constexpr uint8 ULDUAR_ALGALON_HEALER_SLOTS = 4;
 constexpr uint8 ULDUAR_ALGALON_RANGED_INNER_SLOTS = 6;
 constexpr uint8 ULDUAR_ALGALON_RANGED_OUTER_SLOTS = 8;
@@ -529,8 +506,8 @@ struct AlgalonEncounterState
     std::unordered_map<ObjectGuid, uint32> underLateMs;
     // Since when no disperser has been latched while stars were planned.
     uint32 underNoSoakMs = 0;
-    // The under-star the team is taking down, kept until it is done: re-picked each tick, the team moved on
-    // every 3 s and only matched the drain.
+    // The under-star the team is taking down, kept until it is done: re-picked each tick, the team kept
+    // switching and only matched the drain.
     ObjectGuid bulkStar;
     // With no hole at all, the star killed before the cast to make one.
     ObjectGuid shelterStar;
@@ -630,9 +607,8 @@ bool AlgalonDispersionSoak(Player* bot);
 // The cooldown casting it now would start, talents included.
 int32 AlgalonCooldownMs(Player* bot, uint32 spellId);
 
-// A damage cutter or Lay on Hands this bot puts on the holder now. Cheapest first and one at a time, so each
-// bot asks whether it is the first provider able to: the partner's Hand of Sacrifice, the holder's own
-// button, other paladins' Hand of Sacrifice, Pain Suppression, Guardian Spirit. Traced as algalon.tankdef.
+// A damage cutter or Lay on Hands this bot puts on the holder now. Cheapest first and one at a time, so each bot
+// asks whether it's the first provider able to. Traced as algalon.tankdef.
 struct AlgalonTankCut
 {
     Player* target = nullptr;
@@ -713,9 +689,8 @@ bool AlgalonShouldSwap(Player* bot);
 // A pickup or swap due on this bot. It beats the handler's constellation work, whose kite would hold the walk
 // back to him from out of taunt range.
 bool AlgalonTakesBossNow(Player* bot);
-// A swap tank or the handler not holding him stays off him while a swap tank does. After a taunt both
-// tanks build threat at the same rate, so the one carrying the stacks takes him straight back, and a
-// tank outside the pair would take him from both.
+// A swap tank or the handler not holding him stays off him while a swap tank does. After a taunt both build
+// threat at the same rate: the one with the stacks would take him straight back, a third tank from both.
 bool AlgalonYieldsBoss(Player* bot);
 // The swap tank holding him when the other is dead or phased. Not stacks: the old holder keeps its 4 for the
 // aura's 45 s after every swap, so that would be most of the fight.

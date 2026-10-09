@@ -27,8 +27,8 @@ bool AlgalonCooldownsHeld(PlayerbotAI* botAI)
             IsAlgalonPhased(botAI->GetBot()));
 }
 
-// No explosion reaches a phased bot, only the hole's DoT and Dark Matter: Barkskins spent there were
-// cooling down for the stars dying 4 s after the strip.
+// No explosion reaches a phased bot, only the hole's DoT and Dark Matter. A button spent there is still
+// cooling down for the stars dying after the strip.
 bool AlgalonPhasedButtonsHeld(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -65,9 +65,8 @@ bool AlgalonHandlerKiting(PlayerbotAI* botAI)
     return constellation && (constellation->GetVictim() == bot || AlgalonKitingBehind(bot, constellation));
 }
 
-// Only the roles the formation places: the rings and the swap tanks. Melee keep every generic mover once
-// released, and so does the swap tank not holding him while it works an add; idle, it keeps its spot in
-// his reach rather than following someone out of it.
+// Only the rings and the swap tanks. Melee keep the generic movers once released, and so does the swap tank
+// not holding him while it works an add; idle, it keeps its spot in his reach.
 bool AlgalonFormationHolds(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -104,9 +103,8 @@ bool AlgalonSmashChargeHold(PlayerbotAI* botAI)
 
 void DefineAlgalon(EncounterBuilder& e)
 {
-    // A survival ranking. Missing Big Bang is 76-112k or a reset, Cosmic Smash lands ~4.8s after its
-    // marker, and a bot left inside a hole when its phase ends is phased again. Position is last and
-    // yields as soon as it is parked.
+    // A survival ranking: a missed Big Bang is 76-112k or a reset, Cosmic Smash lands ~4.8s after its marker,
+    // and a bot inside a hole when its phase ends is phased again. Position is last and yields once parked.
     e.Node<AlgalonBigBangSoakTrigger, AlgalonBigBangSoakAction>(ACTION_EMERGENCY + 9);
     e.Node<AlgalonBigBangExternalTrigger, AlgalonBigBangExternalAction>(ACTION_EMERGENCY + 8);
     e.Node<AlgalonBigBangHideTrigger, AlgalonBigBangHideAction>(ACTION_EMERGENCY + 7, EncounterRow::Mover);
@@ -167,9 +165,8 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Block("algalon big bang spell movers", Role::Any, AlgalonHidingNow,
             Family::Charge | Family::Blink | Family::Disengage);
 
-    // The class "lose aggro" nodes taunt on cooldown whenever someone else holds him, 4 stacks or not, and
-    // a tank outside the pair would take him from both; an Arms warrior's snare chain ends in Mocking Blow.
-    // The swap, pickup, constellation and Dark Matter nodes taunt through CastClassTaunt instead.
+    // The class "lose aggro" nodes taunt whenever someone else holds him, 4 stacks or not, and an Arms warrior's
+    // snare chain ends in Mocking Blow. The encounter's own taunt nodes go through CastClassTaunt instead.
     e.Block("algalon taunt guard", Role::Any, AlgalonEngaged, Family::Taunt);
     // Tricks goes to the holder from the redirect node or nowhere: the class value hands it to the strongest
     // melee dps when the tank is out of 20 yd or the rogue is low on threat, and that dps pulled him.
@@ -195,9 +192,8 @@ void DefineAlgalon(EncounterBuilder& e)
                    AlgalonLeaveBlackHoleAction::Name, AlgalonTankPickupAction::Name, AlgalonPhasePunchSwapAction::Name,
                    AlgalonConstellationTauntAction::Name, AlgalonDarkMatterTankAction::Name});
 
-    // The generic movers would walk the ranged half off their slots, and the slot node would then fire
-    // again next tick and pace them all fight. ReachHeal still walks a healer to someone the rings
-    // can't reach.
+    // Otherwise the generic movers walk the ranged off their slots and the slot node walks them back every tick.
+    // ReachHeal still walks a healer to someone the rings can't reach.
     e.OwnMovement("algalon control movement", Role::Ranged | Role::Tank, AlgalonFormationHolds,
                   Family::Attack | Family::Reach | Family::ReachHeal);
 
@@ -206,9 +202,8 @@ void DefineAlgalon(EncounterBuilder& e)
     e.OwnMovement("algalon melee staging", Role::Melee, AlgalonMeleeHeldBack, Family::Attack);
     e.Block("algalon melee staging charges", Role::Melee, AlgalonMeleeHeldBack, Family::Charge);
 
-    // A dodged melee bot is walked straight back to 6-12 yd of the impact by "reach melee" otherwise,
-    // inside the doubled damage band. Until the marker expires the generic movers are held; the
-    // encounter's own still run, and its slot walks already avoid a live marker.
+    // Otherwise "reach melee" walks a dodged melee bot straight back to 6-12 yd of the impact, inside the
+    // doubled damage band. The encounter's own walks still run and already avoid a live marker.
     e.OwnMovement("algalon smash hold", Role::Any, AlgalonSmashHold, Family::Attack);
     e.Block("algalon smash hold charges", Role::Melee, AlgalonSmashChargeHold, Family::Charge);
 

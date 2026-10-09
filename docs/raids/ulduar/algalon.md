@@ -179,10 +179,11 @@ kills them; the target exclusions keep every other bot on Algalon, and an `OwnTa
 is cleared (`algalon.focusstar`) onto a star only when its death is **planned**. Splash near him takes
 1-2.4 %/s on top of the drain, so a star's forecast death is its health over its measured loss (the slope of a
 4 s log, never under the drain), not its health. A kill lands at its health over 9-5.5 %/s (whole kills ran
-6.2-7.8 %/s) plus the team's walk (mean distance past 28 yd at 7 yd/s) and a 2 s start (every kill's first
+6.2-7.8 %/s on 25-man) plus the team's walk (mean distance past 28 yd at 7 yd/s) and a 2 s start (every kill's first
 2 s only matched the drain; none for a star already losing 3.5 %/s), or over its own slope once the team is on
 it. Any other star is planned up to the speed the team last showed on its focus (capped
-at 12 %/s): one just dropped keeps dying that fast, and planned at 9 %/s it was opened again every other tick.
+at 12 %/s, `…_STAR_KILL_PEAK_PCT_PER_SEC`: a last 15% once went at 16 %/s, but only for a second): one
+just dropped keeps dying that fast, and planned at 9 %/s it was opened again every other tick.
 A death is **clear** outside 1 s before Big Bang to
 3 s after the hit and 4 s before to 5 s after a meteor impact (6-11 k on everyone, then the explosion: 3-4 died
 each time one landed 0.9-1.3 s after), and 8 s from the last explosion and every other star's forecast death.
@@ -266,7 +267,7 @@ set-behind spots) is within 7.5 yd of a hole or the walk passes within 6.3 yd of
 live until a constellation eats one or phase 2.
 
 **A far hole is approached before the cast.** Within 15 s of it or during it, a bot whose hole is over
-35 yd from its own spot (a melee bot's is him) waits 30 yd from that hole (`nearhole`; with a star under, over 22 yd and at 22), with the generic movers
+35 yd from its own spot (a melee bot's is him) waits 30 yd from that hole (`nearhole`; with a star under, over 22 yd and at 22, `…_UNDER_HOLE_REACH`, since from 28-34 yd the walk alone took up to 5 s), with the generic movers
 held: three ranged 45-64 yd from the only hole couldn't make it in 8 s. With that spot in his reach (healers
 ring him), the nearest point 30 yd round the hole that isn't. Swap tanks and the handler are left out.
 
@@ -611,6 +612,38 @@ counted by cause and role with humans starred. Then:
 Traces from before these probes fall back to what the records alone say: intro end from his first
 swing, the pair from the roster tanks, meteors from the 33105 markers. Its banner names declared keys
 the pull never wrote.
+
+What the reader infers, because no record says it outright:
+
+- **Phases**: without `algalon.phase`, P1 opens on his first cast (no record shows the intro's
+  unselectable flag), P2 at 20% or the first Worm Hole, and the 360 s enrage counts from P1. The intro
+  ends at his first swing when that comes before `algalon.pull` and the latch, which can trail it by a
+  tick (`INTRO_LEAD_MS`, 1.5 s). **His victim** is the target column plus his own swings: whoever he
+  one-shots dies between two snapshots, so a melee or Quantum Strike `dmg` row names a victim the column
+  never shows.
+- **Phased is an aura, never a place.** A row while 62168 / 65250 is held is the field's 1 s refresh. One
+  within `CHAIN_MS` (1.5 s) of a removal continues the stretch; a chained application, or a stretch past
+  `LOOP_MS` (10.5 s), is a bot still in the field. Who a Big Bang could hit comes from these spans, who
+  it did from its `dmg` rows; a `hold` handler's hit counts only on traces with `algalon.disperser`.
+- **Deaths and presence.** A star died where a Black Hole Explosion names it or a hole spawns on its last
+  spot (`star_deaths`); a constellation went through a hole when its rows and the hole's vanish
+  together. 33105 is the meteor, 33104 stands ~2 yd off it, and two meteors of one wave can land a yard
+  apart, so markers are never merged by place. A hole, constellation or Dark Matter counts from its first
+  row to its last, gaps included.
+- **Latches.** `algalon.shelter` clears without a row when a Big Bang starts. The soaker a view names is
+  the cast's last: `--bigbang` and `--soak` list every soaker and backup change with the previous holder's
+  phase or death within `CAUSE_MS` (1.5 s) before it. A kill the tracker keeps going stays under the
+  `algalon.starwindow` label it opened with, so a window opens only where the label turns `open` or
+  `deadline` or `algalon.urgent` turns 1. `algalon.starplan` rounds to whole seconds (`STAR_PLAN_SLACK_MS`
+  1 s either side). `--formation` measures each ring bot from its own slot, against the current source,
+  so a trace with no `algalon.spot=pickup` predates the edge hold.
+- **Casts and buttons.** A wand's Shoot (5019) writes an untriggered `cast` per start and a triggered one
+  per shot. Last Stand's cast 12975 is a dummy whose aura is 12976. No talent reaches the trace: a paladin
+  can cover once seen covering or while `algalon.shadowaura` names it; an explosion counts as covered by
+  70940 or Aura Mastery, never 64205, which bots cancel as it lands; a button never pressed reads ready.
+  `algalon.personal` and `algalon.cover` name no star, so a press counts for the first star dying within
+  `PRESS_AHEAD_MS` (5 s; the forecast ran up to 4.2 s late), else one that exploded within
+  `PRESS_STALE_MS` (1 s) before it (the scan listed a dead star up to 0.5 s on).
 
 ## Not supported
 

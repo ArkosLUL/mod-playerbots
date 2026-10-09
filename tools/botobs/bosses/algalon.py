@@ -1,111 +1,5 @@
 #!/usr/bin/env python3
-"""Score an Algalon the Observer pull from a RaidObs trace: Big Bang, stars, holes, constellations.
-
-    algalon.py <file>                   every section
-    algalon.py <file> --phases          phase spans, deaths per phase, boss health at each change, enrage
-    algalon.py <file> --pull            the intro's end: who stood in his reach, his first victim and swings
-    algalon.py <file> --deaths          every death by the mechanic that killed it, cause by role
-    algalon.py <file> --loose           every stretch he spent off the swap pair: cause, hits, deaths, pickup
-    algalon.py <file> --swaps           the swap pair, Phase Punch, swaps due and their latency, threat steals
-    algalon.py <file> --hold            the edge hold: where he stood, every pickup's drag to the tank slot
-    algalon.py <file> --taunts          every taunt cast at him, non-tanks flagged, pair taunts that missed
-    algalon.py <file> --reach           seconds each raid member outside the pair stood in his reach
-    algalon.py <file> --bigbang         every Big Bang: holes, soaker and backup changes, who it hit and where runners
-                                        ran, what followed
-    algalon.py <file> --soak            every Big Bang's soakers: the hit, healers, kit, reserved buttons spent
-    algalon.py <file> --phasing         every hole phase: Big Bang or stray, and what put a stray one there
-    algalon.py <file> --stars           star deaths, what each landed into, the kill window, the star plan, its
-                                        death against the Big Bang hit, who the explosion hit, wand trims and the
-                                        shots that fired (older traces), under-stars per Big Bang with focus
-                                        switches, releases and health at the cast against the band, each focus
-                                        span's loss beyond the drain and the bulk's median, the team
-    algalon.py <file> --collateral      star health lost beyond the drain while unfocused, casts on stars
-    algalon.py <file> --holes           hole stock, empty seconds before each Big Bang, holes lost, urgency
-    algalon.py <file> --constellations  activations, victims, one stuck in the air, the handler's kite stages and
-                                        what each kite ate, seconds the kite was blocked, stretches parked beside
-                                        the hole, removals
-    algalon.py <file> --smash           every Cosmic Smash wave: who stood near it, the dodge, damage
-    algalon.py <file> --tanks           Phase Punch stacks, swaps, non-tank pickups, Quantum Strike
-    algalon.py <file> --tankheal        tank healers, each healer's share on the pair, Beacon, healing against
-                                        damage before every tank death
-    algalon.py <file> --defensives      damage cutters and Lay on Hands on the swap tanks, every swap tank death,
-                                        cover at every star explosion and the bots under its line with their
-                                        buttons, every personal press and cover against its star's death,
-                                        personal buttons at each explosion death
-    algalon.py <file> --formation       each ring bot's distance to its slot and to him, spot branches
-    algalon.py <file> --darkmatter      phase 2 Unleashed Dark Matter: loose seconds, handler damage, kills
-    algalon.py <file> --verdict         one line per detected failure, in time order
-
-What the generic views get wrong here, and what this reads instead:
-
-- **Nothing counts from the pull.** The intro runs 26 s on a first pull and 8.5 s after, so the
-  6 min enrage runs from P1's start. `algalon.phase` names it; a trace without the probe falls back
-  to his first cast, and to 20 % health or the first Worm Hole for P2.
-- **Being phased is an aura, not a place, and it has no fixed length.** A hole's field re-applies
-  62168/65250 every second to whoever stands in it, and Big Bang's 64445 strips every phase aura,
-  64417 included, about a second after the hit. Who a Big Bang could hit is read off those spans,
-  who it did hit off its `dmg` rows. A row while the aura is held is a refresh; a new application
-  right after a removal is the re-phase loop a bot still inside the field gets.
-- **The soaker and the backup stay out on purpose**, so Big Bang damage on them is not a failure.
-  Everyone else hit was unphased at the impact. Before the Dispersion soak a handler on
-  `algalon.hide=hold` stayed out too; on a trace with `algalon.disperser`, `hold` is the handler
-  waiting to hide last, so a hit on it counts.
-- **A creature's death reaches no record.** A star died where a Black Hole Explosion burst names it
-  or a hole appears on its last spot; a constellation left through a hole when both rows vanish
-  together. A burst's `s` is usually the Black Hole the star left, so it names the star whose last
-  spot that hole spawned on.
-- **`algalon.soaker`, `algalon.backup`, `algalon.disperser`, `algalon.shadowaura`, `algalon.focusstar`
-  and `algalon.handler` are raid-wide latches**: `g` is whichever bot's tick flipped them and the guid
-  is in `txt`. `algalon.hide`, `kite` and `spot` are per bot and change-only, so a value holds until
-  that bot's next row.
-- **`algalon.shelter` is per bot but cleared without a row when a Big Bang starts**, so a runner's hole
-  is the row it wrote inside that cast, never one held over from an earlier cast.
-- **A Big Bang can have several soakers.** One phased or dead mid-cast is replaced, so the soaker a
-  view names is the last; `--bigbang` and `--soak` list every change and what preceded it.
-- **A kill the tracker keeps going stays under the `algalon.starwindow` label it opened with**, so a
-  window opens only where the label changes to `open` or `deadline`, or `algalon.urgent` turns 1.
-- **`algalon.starwindow` is written by whichever bot tracks the stars, and the tracker changes**, so
-  its rows read as one timeline, the latest winning. Summed per bot, the last tracker's final value
-  ran to the end of the pull.
-- **`postmortem.py --from`/`--band` measure every bot from one point**, and each ring bot has its own
-  slot in `ULDUAR_ALGALON_RING_SLOTS`; `--formation` measures from the slot.
-- **The tank slot, the hold spot and the ring come from today's source.** A trace with no
-  `algalon.spot=pickup` predates the edge hold, so `--hold` and `--formation` measure it against spots
-  its bots never used.
-- **A star loses 1 % of its health a second on its own**, so an untouched one reads 100 less its age
-  in seconds, and whatever it lost beyond that is damage.
-- **Only the first multiplier that zeroes an action writes a `veto` row**, and a row repeats only when
-  the verdict changes, so veto counts are rows rather than ticks and miss a guard behind another zero.
-- **His victim is the target column plus his own swings.** Whoever he one-shots dies between two
-  snapshots, so a melee or Quantum Strike row names a victim the column never shows. He is loose
-  whenever that victim is outside the swap pair, `algalon.swappair` or else the roster's tanks.
-- **The intro ends at his first swing when it beats the phase latch**, which trails the tracker's tick.
-- **33105 is the meteor**, the damage's own source; 33104 stands about 2 yd off it. Two meteors of one
-  wave can land a yard apart, so markers are never merged by place.
-- **A swept unit can drop out of the snapshots and come back** on traces from before the sweep's
-  anchor preferred an unphased player. A hole, a constellation or a Dark Matter counts as present
-  from its first row to its last, gaps included.
-- **While `algalon.urgent` reads 1 every ranged dps is on the star team** without being written into
-  `algalon.starteam`, so star time there is not off-team.
-- **A `heal` row's `a` is gross**, overheal in `oh`; shields land as `abs` rows credited to their caster.
-  Beacon of Light's copy is a heal row of its own from the paladin, so it counts as that paladin's.
-- **`--tankheal` reads a trace from before the tank healers too**: with no `algalon.tankhealer` it still
-  measures every tank death and each healer's share, so pulls before and after them compare directly.
-- **`algalon.starplan` names a star by its guid's low 32 bits** and gives every time in seconds from the note
-  itself, so a window or forecast is the note's stamp plus those seconds, good to a second. `u` marks a star
-  planned to die under the Big Bang, and an older trace carries no mark.
-- **A wand's Shoot (5019) writes an untriggered `cast` row each time the bot starts it** and a triggered
-  one per shot that fired, so a trimmer that keeps restarting it shows many starts and few shots.
-- **`--defensives` reads the cutters off the cast and aura rows**, so it reads older traces too;
-  `algalon.tankdef` only adds why one was cast. Last Stand's cast 12975 is a dummy whose aura is 12976.
-- **An explosion is covered by Divine Guardian (70940) or Aura Mastery**, never by Divine Sacrifice
-  itself: bots cancel 64205 as it lands and keep the Divine Guardian it procs. No talent reaches the
-  trace, so a paladin counts as able to cover once seen covering, or while `algalon.shadowaura` names it.
-- **`algalon.personal` and `algalon.cover` name no star.** A press counts as for the first star dying within
-  PRESS_AHEAD_MS after it, else one that exploded within PRESS_STALE_MS before it, which the scan still listed.
-- **A bot's personal buttons are its class's** (Dispersion and Shamanistic Rage once seen cast, being talents),
-  so one never pressed in the trace reads ready.
-"""
+"""Score an Algalon the Observer pull from a RaidObs trace: Big Bang, stars, holes, constellations."""
 from __future__ import annotations
 
 import bisect
@@ -239,7 +133,7 @@ GATHER_LEAD_MS = 10000
 # every class taunt the handler can be (Taunt, Hand of Reckoning, Growl, Dark Command)
 TAUNT_COOLDOWN_MS = 8000
 KITE_BLOCKED_MS = 5000
-# the longest a woken constellation took to come down was 23 s
+# a woken constellation comes down within 23 s
 STUCK_MIN_MS = 25000
 STAR_GAP_MS = 8000
 ENRAGE_MS = 360000
@@ -397,8 +291,8 @@ CONSUMABLE = re.compile(r"healthstone|healing (?:potion|injector)|rejuvenation p
 CONSUMABLE_IDS = {47875: "Master Healthstone", 47876: "Master Healthstone", 47877: "Master Healthstone",
                   43185: "Healing Potion", 67489: "Runic Healing Injector", 53761: "Rejuvenation Potion"}
 COVER_NODE = "algalon explosion cover action"
-# a press goes on the star the scan says dies next, up to 2 s out on a forecast seen running 4.2 s late, or
-# on one already exploded that the scan still lists (seen up to 0.5 s after)
+# a press is for the star the scan says dies next, on a forecast that can run late, or for one already
+# exploded that the scan still lists
 PRESS_AHEAD_MS = 5000
 PRESS_STALE_MS = 1000
 PERSONAL_LOOK_MS = 5000
@@ -516,10 +410,8 @@ def last_set_in(spans, low: int, high: int) -> int:
 
 
 def latch_chain(trace: Trace, spans, low: int, high: int, impact: int) -> list[tuple[int, int, str]]:
-    """`(t, guid, cause)` for the guid a raid-wide latch held at `low` and every change up to `high`, a
-    clear reading 0; a 0 already held at `low` is left out. `cause` is why the latch left the guid
-    before it: a hole phase that guid wore, or its death, within CAUSE_MS of the change. A clear from
-    `impact` on is the cast ending, so it has none."""
+    """`(t, guid, cause)` for the guid a raid-wide latch held at `low` and each change up to `high`, 0 a clear.
+    `cause`: the old guid's hole phase or death within CAUSE_MS; a clear from `impact` on is the cast ending."""
     phased = hole_phases(trace)
     deaths = death_records(trace)
     out: list[tuple[int, int, str]] = []
@@ -1276,9 +1168,8 @@ def holder_runs(trace: Trace) -> list[list]:
 
 
 def hold_pickups(trace: Trace) -> list[dict]:
-    """Each time a pair tank took him from someone else, the intro included: when it got onto the tank
-    slot, where he came to rest, who outside the pair stood in his reach on the way, and how far off
-    the slot the holder still was DRAG_DUE_MS in."""
+    """Each time a pair tank took him from someone else, the intro included: when it reached the tank slot, where
+    he came to rest, who outside the pair stood in his reach on the way, and the holder's gap DRAG_DUE_MS in."""
     def build(trace: Trace) -> list[dict]:
         boss = boss_guid(trace)
         if boss is None:
@@ -1425,9 +1316,8 @@ def hold_faults(trace: Trace) -> list[tuple[int, str]]:
 
 
 def holder_target_runs(trace: Trace) -> list[dict]:
-    """`{start, stop, tank, target}` per stretch his victim was a swap tank whose own target column named
-    something other than him, `target` the one it held longest and 0 for none. A stretch ends at the
-    tank's death when that comes before the next sample."""
+    """`{start, stop, tank, target}` per stretch his swap tank victim targeted something else, `target` the one held
+    longest (0 for none). A stretch ends at the tank's death when that beats the next sample."""
     def build(trace: Trace) -> list[dict]:
         boss = boss_guid(trace)
         if boss is None:
@@ -1471,9 +1361,7 @@ def holder_target_faults(trace: Trace) -> list[tuple[int, str]]:
 # --------------------------------------------------------------------------------------------- taunts
 
 def taunt_casts(trace: Trace) -> list[dict]:
-    """Every taunt cast at him: `{t, caster, name, before, took, outcome}`. Righteous Defense goes on a
-    friend, so it counts when he was hitting that friend; the area taunts have no target, so they count
-    when he stood within AREA_TAUNT_YD of the caster. `outcome` is `already` when he was on the caster,
+    """Every taunt cast at him, `{t, caster, name, before, took, outcome}`: `already` when he was on the caster,
     `took` when the caster became his victim within TAUNT_TAKE_MS, else `missed`."""
     def build(trace: Trace) -> list[dict]:
         boss = boss_guid(trace)
@@ -1680,9 +1568,8 @@ def big_bang_casts(trace: Trace) -> list[dict]:
 
 
 def phased_spans(trace: Trace, spells=PHASE_AURAS, chain_ms: int = CHAIN_MS) -> dict[int, list[list[int]]]:
-    """Per player, `[start, stop, applications]` per stretch it wore any of `spells`. A row while the
-    aura is held is the field's once-a-second refresh, never a new application; only an application
-    within `chain_ms` of a removal adds one. A stretch still open when the file ends runs to the end."""
+    """Per player, `[start, stop, applications]` per stretch wearing any of `spells`. A row while held is the
+    field's 1 s refresh; only an application within `chain_ms` of a removal adds one."""
     end = pull_end(trace)
     held: dict[int, set[int]] = collections.defaultdict(set)
     out: dict[int, list[list[int]]] = collections.defaultdict(list)
@@ -1717,9 +1604,8 @@ def phased_at(spans, guid: int, when: int) -> bool:
 
 
 def rephase_loops(trace: Trace) -> list[dict]:
-    """Hole phasing that went round again: an application chained onto a removal, or one stretch past
-    the aura's own 10 s, which only a bot standing in the field keeps up. Phase Punch's 64417 is left
-    out; it is not a hole."""
+    """Hole phasing that went round again: an application chained onto a removal, or a stretch past the aura's
+    own 10 s, which only a bot still standing in the field keeps up."""
     out = []
     for guid, spans in phased_spans(trace, HOLE_PHASE).items():
         for start, stop, applications in spans:
@@ -1927,10 +1813,8 @@ def build_big_bang_rows(trace: Trace) -> list[dict]:
 
 def hold_handlers(trace: Trace, hide, kiteholes, shelters: list[dict], phased, start: int,
                   impact: int) -> list[dict]:
-    """Per bot on `algalon.hide=hold` inside the cast: when it first held, when it set off for its hole
-    (`run` or `in` right after its last hold, None if that came after the impact), the hole its
-    `algalon.shelter` inside the cast or else its `algalon.kitehole` named, how far it stood from that
-    hole as it set off, and whether it was phased at the impact."""
+    """Per bot on `algalon.hide=hold` in the cast: first hold, set-off (`run`/`in` after its last hold, None past the
+    impact), its hole (`algalon.shelter`, else `algalon.kitehole`), its distance then, whether phased at the impact."""
     samples = samples_of(trace)
     out = []
     for guid, spans in hide.items():
@@ -1982,9 +1866,8 @@ def hole_label(spot, gap) -> str:
 
 
 def nearhole_shares(trace: Trace, row: dict) -> list[tuple[int, float | None, float]]:
-    """`(bot, nearest hole yd, share)` for each bot outside the pair that held `algalon.spot=nearhole` in
-    the NEARHOLE_LEAD_MS before the cast, or stood over NEARHOLE_YD from every hole at its start; the
-    share is of that lead."""
+    """`(bot, nearest hole yd, share of the lead)` per bot outside the pair on `algalon.spot=nearhole` in the
+    NEARHOLE_LEAD_MS before the cast, or over NEARHOLE_YD from every hole at its start."""
     spots = holder_spans(trace, "algalon.spot", pull_end(trace))
     pair, _ = swap_pair(trace)
     low, high = row["start"] - NEARHOLE_LEAD_MS, row["start"]
@@ -2256,9 +2139,8 @@ def record_index(trace: Trace, rec: dict) -> int:
 
 
 def soak_rows(trace: Trace) -> list[dict]:
-    """Per Big Bang: the soaker's hit and what came in the seconds after it, the healers' way back, what
-    was put on the soaker during the cast, its kit, and every reserved button pressed since the last
-    soak."""
+    """Per Big Bang: the soaker's hit and the seconds after, the healers' way back, what went on the soaker in the
+    cast, its kit, and every reserved button pressed since the last soak."""
     def build(trace: Trace) -> list[dict]:
         samples = samples_of(trace)
         roster = roster_guids(trace)
@@ -2561,9 +2443,8 @@ def show_phasing(trace: Trace) -> None:
 # ---------------------------------------------------------------------------------------------- stars
 
 def star_deaths(trace: Trace) -> list[dict]:
-    """`{t, star, source, how, hits, damage, gap, raid_min}` per star death, in order. `how` is `explosion`
-    for a Black Hole Explosion burst, `hole` for a star that left no burst but a hole on its last spot.
-    `source` is the burst's own `s`: the star, or the Black Hole it left, which names no star."""
+    """`{t, star, source, how, hits, damage, gap, raid_min}` per star death: `how` is `explosion` for a burst, `hole`
+    for no burst but a hole on its last spot. `source` is the burst's `s`, often the Black Hole the star left."""
     samples = samples_of(trace)
     end = pull_end(trace)
     roster = roster_guids(trace)
@@ -2632,9 +2513,8 @@ def span_totals(tracks) -> collections.Counter:
 
 
 def star_team(trace: Trace) -> dict:
-    """Who was on the star team, the share of each member's window-open time spent on the focus star,
-    and damage dealers off the team who spent time on any star. `drafted` is the ranged dps counted
-    in while `algalon.urgent` read 1."""
+    """The star team, each member's share of window-open time on the focus star, and dps off the team on any star.
+    `drafted` is the ranged dps counted in while `algalon.urgent` read 1."""
     samples = samples_of(trace)
     end = pull_end(trace)
     roster = roster_guids(trace)
@@ -2725,10 +2605,8 @@ UNDER_PART = re.compile(r"^under (-?\d+)\.\.(-?\d+)$")
 
 
 def parse_starplan(text) -> dict:
-    """`algalon.starplan` reads `<counter> <hp>% <s>s[ <u|s|o>]` per star, comma separated and soonest
-    first, then blackouts (`smash 2..11`) and `under <a>..<b>`, parts joined by ` | `. Returns
-    `{stars: {counter: {hp, secs, mark}}, under: (a, b) | None}`, the times in seconds from the note.
-    The mark is empty for a star of no plan, which is also all an older trace writes."""
+    """`algalon.starplan` reads `<counter> <hp>% <s>s[ <u|s|o>]` per star, comma separated, soonest first, then
+    blackouts (`smash 2..11`) and `under <a>..<b>`, joined by ` | `. Seconds from the note; older traces mark none."""
     stars: dict[int, dict] = {}
     under = None
     for part in str(text or "").split(" | "):
@@ -2839,11 +2717,8 @@ def bang_cycles(trace: Trace) -> list[dict]:
 
 
 def under_cycles(trace: Trace) -> list[dict]:
-    """Per Big Bang with an under-star: `{n, stars, releases, visited, switches, first_switch, cast, band,
-    at_cast}`. `stars` are the counters any `algalon.starplan` marked `u` toward it, `releases` each one's
-    `algalon.underdrop` as `{t, why, hp, to_cast}`, and `switches` how often the focus went from one star the
-    plan then marked `u` to another, a focus on any other star in between skipped. `at_cast` is each live
-    one's health % when the cast began and `band` the health then that can still die in the window."""
+    """Per Big Bang with an under-star: the stars any plan marked `u` for it, their releases, focus switches between
+    them (other stars skipped), each one's health at the cast, and `band`, the health then that dies in the window."""
     def build(trace: Trace) -> list[dict]:
         drops = []
         for rec in sorted(notes(trace, "algalon.underdrop"), key=lambda rec: rec["t"]):
@@ -2883,9 +2758,8 @@ def under_cycles(trace: Trace) -> list[dict]:
 
 
 def focus_rates(trace: Trace) -> list[dict]:
-    """Per span `algalon.focusstar` named a star: `{star, start, stop, window, under, first, last, secs, beyond}`,
-    the star's health at its first and last sample in the span and what it lost a second beyond the drain,
-    None with under two samples. `under` is whether the plan then marked it `u`."""
+    """Per `algalon.focusstar` span: the star's health at its first and last sample, `beyond` its loss a second past
+    the drain (None under two samples), and `under`, whether the plan then marked it `u`."""
     def build(trace: Trace) -> list[dict]:
         samples = samples_of(trace)
         windows = window_spans(trace)
@@ -2981,10 +2855,8 @@ def under_outside(row: dict) -> tuple[str, int | None] | None:
 
 
 def star_rows(trace: Trace) -> list[dict]:
-    """`star_deaths`, plus what each landed into: the probe's own note, the kill window, a live meteor,
-    a Big Bang cast, the nearest unphased raid member, who it could kill, and who it did. `class` is
-    this reader's own: `killed` when it was the focus star, `drained` when its health was within
-    DRAINED_SLACK of the drain alone, else `chewed`."""
+    """`star_deaths` plus what each landed into: probe note, window, meteor, Big Bang, nearest unphased member, who it
+    could kill and did. `class`: `killed` as focus, `drained` within DRAINED_SLACK of the drain alone, else `chewed`."""
     def build(trace: Trace) -> list[dict]:
         samples = samples_of(trace)
         roster = roster_guids(trace)
@@ -3058,9 +2930,8 @@ def focus_near(spans, when: int) -> int:
 
 
 def window_opens(trace: Trace) -> list[dict]:
-    """Each time the kill window opened, `open` or `deadline` on the merged `algalon.starwindow` or
-    `algalon.urgent` turning 1: the focus star, the team, its mean distance to the star and the
-    distance from the team's mean position."""
+    """Each kill window opening (`open`/`deadline` on the merged `algalon.starwindow`, or `algalon.urgent` turning
+    1): the focus star, the team, its mean distance to the star and the star's distance from the team's centre."""
     def build(trace: Trace) -> list[dict]:
         samples = samples_of(trace)
         end = pull_end(trace)
@@ -3279,9 +3150,8 @@ def window_faults(trace: Trace) -> list[tuple[int, str]]:
 
 
 def under_faults(trace: Trace) -> list[tuple[int, str]]:
-    """An under-star released inside UNDER_DROP_LATE_MS of the cast, one still above its band when the cast began,
-    the focus going back to one of a cast's under-stars (a latched bulk switches one fewer times than it visits),
-    and a trimmer restarting Shoot (traces from before the bulk took them into the band)."""
+    """An under-star released inside UNDER_DROP_LATE_MS of the cast or above its band at it, the focus going back to
+    one (a latched bulk switches one fewer times than it visits), and a trimmer restarting Shoot (older traces)."""
     out = []
     for cycle in under_cycles(trace):
         for counter, drop in cycle["releases"].items():
@@ -3361,9 +3231,8 @@ def star_excess(trace: Trace) -> list[dict]:
 
 
 def star_casts(trace: Trace) -> dict[str, collections.Counter]:
-    """`(caster, spell name)` counts of every cast a raid member or its pet put on a star, by who cast
-    it: the star team on the focus star, the team on another star, or someone off the team. A pet goes
-    with its owner's team."""
+    """`(caster, spell name)` counts of every cast on a star, split into the team on the focus star, the team on
+    another star, and anyone off the team. A pet counts with its owner."""
     stars = guids_of_entry(trace, NPC_COLLAPSING_STAR)
     end = pull_end(trace)
     roster = roster_guids(trace)
@@ -3561,10 +3430,8 @@ def eaten_between(trace: Trace, low: int, high: int) -> list[dict]:
 
 
 def kite_runs(trace: Trace) -> list[dict]:
-    """Per bot, each unbroken stretch of kite stages (`taunt`, `behind`, `stage`, `wait`, `cross`, `parked`, or an
-    older trace's `hole`): `{guid, start, stop, stages, eaten, retries}`. `eaten` lists the constellations
-    that went through a hole by EATEN_SLACK_MS after the stretch; `retries` counts a `stage` that
-    followed a `parked`, a pass that missed."""
+    """Per bot, each unbroken stretch of KITE_STAGES: `eaten`, the constellations through a hole by EATEN_SLACK_MS
+    after it, and `retries`, each `stage` after a `parked`, a pass that missed."""
     def build(trace: Trace) -> list[dict]:
         out = []
         for guid, spans in handler_kite_tracks(trace).items():
@@ -3589,10 +3456,8 @@ def kite_runs(trace: Trace) -> list[dict]:
 
 
 def parked_stretches(trace: Trace) -> list[dict]:
-    """`{guid, start, stop, hole, gap, eaten}` per `algalon.kite=parked` stretch of at least PARKED_MS whose
-    bot stood within PARKED_HOLE_YD of its kite hole once it had been parked that long, `eaten` being
-    whether a constellation went through a hole by the stretch's end. The hole is the bot's
-    `algalon.kitehole`, else the nearest one standing."""
+    """Per `algalon.kite=parked` stretch of PARKED_MS or more with the bot within PARKED_HOLE_YD of its kite hole by
+    then (`algalon.kitehole`, else the nearest), and whether a constellation went through a hole by its end."""
     def build(trace: Trace) -> list[dict]:
         samples = samples_of(trace)
         end = pull_end(trace)
@@ -3665,9 +3530,8 @@ def stuck_constellations(trace: Trace) -> dict[int, float]:
 
 
 def kite_blocked(trace: Trace) -> dict[str, int]:
-    """Milliseconds the handler sat in `taunt` while it held a constellation low enough for a hole, a hole was
-    spare and no Big Bang was gathering: `stuck` with no such one loose (only one up in the air), `cooling`
-    with its class taunt cast within TAUNT_COOLDOWN_MS."""
+    """Ms the handler sat in `taunt` holding a constellation low enough for a hole, a hole spare and no gather:
+    `stuck` with every loose one up in the air, `cooling` with its class taunt cast within TAUNT_COOLDOWN_MS."""
     def build(trace: Trace) -> dict[str, int]:
         samples = samples_of(trace)
         end = pull_end(trace)
@@ -3861,9 +3725,8 @@ def wave_dodge(spans, wave: dict):
 
 
 def wave_rows(trace: Trace, wave: dict) -> list[dict]:
-    """Per raid member within SMASH_NEAR_YD of a meteor when it showed or when it hit: how soon the
-    dodge set off, the probe's verdict, where it stood at the impact, and what brought it back: the last
-    walk, or a charge that closed in on the meteor."""
+    """Per raid member within SMASH_NEAR_YD of a meteor as it showed or hit: dodge latency, the probe's verdict,
+    where it stood at the impact, and what brought it back: the last walk, or a charge that closed in."""
     samples = samples_of(trace)
     dodges = holder_spans(trace, "algalon.dodge", pull_end(trace))
     rows = []
@@ -4444,9 +4307,8 @@ def tankdef_notes(trace: Trace) -> list[dict]:
 
 
 def tank_saves(trace: Trace) -> list[dict]:
-    """`{t, caster, target, spell, name, hp, died, why}` per press of a damage cutter or Lay on Hands that
-    landed on a swap tank: the tank's health at the cast, its death within SAVE_LIVED_MS, and the reason
-    its `algalon.tankdef` note gave. A tank button only goes on its caster; a triggered row is an echo."""
+    """Per damage cutter or Lay on Hands landing on a swap tank: its health then, its death within SAVE_LIVED_MS and
+    the `algalon.tankdef` reason. A tank button goes on its caster only; a triggered row is an echo."""
     def build(trace: Trace) -> list[dict]:
         pair, _ = swap_pair(trace)
         samples = samples_of(trace)
@@ -4478,9 +4340,8 @@ def tank_saves(trace: Trace) -> list[dict]:
 
 
 def tank_deaths(trace: Trace) -> list[dict]:
-    """Per swap tank death the wipe command didn't cause: the hits of its last TANKHEAL_WINDOW_MS, the
-    damage cutters it wore as it fell, the saves cast on it in that span, and the `algalon.tankdef` notes
-    naming it in the TANKDEF_NOTE_MS before."""
+    """Per swap tank death the wipe command didn't cause: its last TANKHEAL_WINDOW_MS of hits, the cutters it wore,
+    the saves cast on it then, and the `algalon.tankdef` notes naming it in the TANKDEF_NOTE_MS before."""
     def build(trace: Trace) -> list[dict]:
         pair, _ = swap_pair(trace)
         worn = aura_spans(trace, CUTTER_AURAS)
@@ -4504,9 +4365,8 @@ def tank_deaths(trace: Trace) -> list[dict]:
 
 
 def cover_providers(trace: Trace) -> dict[int, list[int]]:
-    """Per bot able to cover an explosion, the spells it covers with: Aura Mastery for the
-    `algalon.shadowaura` paladin and anyone seen casting it, Divine Sacrifice for anyone whose cast put up
-    Divine Guardian."""
+    """Per bot able to cover an explosion, its cover spells: Aura Mastery for the `algalon.shadowaura` paladin or
+    anyone seen casting it, Divine Sacrifice for anyone whose cast put up Divine Guardian."""
     def build(trace: Trace) -> dict[int, list[int]]:
         bots = {guid for guid in roster_guids(trace) if guid not in trace.humans}
         mastery = {as_guid(value) for value, _, _ in latch_spans(trace, "algalon.shadowaura")}
@@ -4538,12 +4398,8 @@ def cover_ready(trace: Trace, when: int) -> list[tuple[int, int]]:
 
 
 def explosion_rows(trace: Trace) -> list[dict]:
-    """Per star explosion: its hits, the raid members wearing Divine Guardian and Aura Mastery at its first
-    hit, the `algalon.cover` notes in the COVER_MS before it, with no cover up the providers that were
-    ready, and `under`: per unphased bot outside the swap pair at or under its line before the hit (the top
-    roll, times COVERED_FACTOR with Divine Guardian on it or Aura Mastery up) `{guid, hp, line, landed,
-    absorbed, died, pressed, consumables, buttons}`, `landed` None when the explosion missed it and
-    `pressed`/`consumables` the `presses` of the PERSONAL_LOOK_MS before."""
+    """Per star explosion: hits, cover worn, `algalon.cover` notes, ready providers when none was up, and `under`: each
+    unphased bot outside the pair at or under its line before the hit (top roll, times COVERED_FACTOR when covered)."""
     def build(trace: Trace) -> list[dict]:
         roster = roster_guids(trace)
         pair, _ = swap_pair(trace)
@@ -4690,9 +4546,8 @@ def class_buttons(trace: Trace, guid: int) -> tuple[str, ...]:
 
 
 def button_states(trace: Trace, guid: int, when: int) -> list[tuple[str, str, int | None]]:
-    """`(button, state, since)` per personal button `guid` had at `when`: its class's own and any other it was
-    seen casting. `state` is `cooling` since its last cast, `forbearance` since that went up, `held` (an
-    immunity with a Big Bang due within IMMUNITY_HOLD_MS, the disperser's Dispersion) or `ready`."""
+    """`(button, state, since)` per personal button of `guid` at `when`, its class's and any seen cast: `cooling`,
+    `forbearance`, `held` (immunity within IMMUNITY_HOLD_MS of a Big Bang, the disperser's Dispersion) or `ready`."""
     casts = personal_casts(trace).get(guid, [])
     forbearance = cached(trace, "_algalon_forbearance", lambda trace: aura_spans(trace, (SPELL_FORBEARANCE,)))
     dispersers = {as_guid(value) for value, _, _ in
@@ -4723,9 +4578,8 @@ def button_label(button: tuple[str, str, int | None]) -> str:
 
 
 def explosion_deaths(trace: Trace) -> list[dict]:
-    """Per death a star explosion owns: `{t, guid, used, ready}`. `used` is what it pressed in the
-    PERSONAL_LOOK_MS before, by `presses`. `ready` is the `button_states` buttons ready at the death, for a bot
-    outside the swap pair that pressed nothing."""
+    """Per death a star explosion owns: `used`, its `presses` in the PERSONAL_LOOK_MS before, and `ready`, its ready
+    `button_states` at the death when a bot outside the pair pressed nothing."""
     def build(trace: Trace) -> list[dict]:
         pair, _ = swap_pair(trace)
         out = []

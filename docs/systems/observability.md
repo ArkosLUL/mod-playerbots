@@ -256,12 +256,12 @@ else `7`. `0` still means no unit.
 | `spell` | `sp`,`n` — once per spell id |
 | `snap` | `u[]` rows `[guid,x,y,z,o,hp%,mana%,target,moving,moveGen,castingSpell,dealt,powerType,power%]`, `dealt` cumulative damage to non-raid targets, 0 off the roster and on pet rows; `powerType` the unit's own, so a vehicle's bar reads there and not in `mana%`; roster players, their pets and guardians, ridden vehicles and the swept creatures; `hz[]` swept dynamic objects `[spellId,x,y,z,radius,foe]` |
 | `dmg` | `s`,`d`,`sp`,`a`,`ok` overkill,`sc` school,`ab`,`rs`,`hp` before the hit — roster players and the non-hostile vehicles they ride |
-| `heal` | `s`,`d`,`sp`,`a`,`oh` overheal,`hp` after |
+| `heal` | `s`,`d`,`sp`,`a` gross,`oh` overheal,`hp` after; Beacon of Light's copy is its own row from the paladin |
 | `abs` | `d`,`s` shield caster,`sp`,`a` |
 | `aura` | `d`,`s` caster,`sp`,`r` 1=removed,`st` stacks,`dur` ms left,`p` 1=positive |
 | `cast` | `s`,`sp`,`tgt`,`ct` cast time,`tr` 1 when triggered, else absent — cast **start**, the reaction window; roster, its pets and watched creatures only |
 | `act` | `g`,`a`,`rel`,`vd`: OK, FAILED, IMPOSSIBLE, USELESS, PREREQ, UNKNOWN |
-| `veto` | `g`,`m` multiplier,`a` action it zeroed |
+| `veto` | `g`,`m` multiplier,`a` action it zeroed. Only the first multiplier to zero an action writes, again only when the verdict changes, so counts are rows, not ticks, and miss a guard behind another zero |
 | `covdef` | `d[]` rows `[id,node,strategy,engine,trigger?]`; `engine` c/n/d, `trigger` only when it differs from the node's name; chunked, so a `cov` may cite a chunk several records back |
 | `cov` | `g`,`r[]` rows `[id,checks,fires,pushes,won,shared,throttled,minimal,dead]`, trailing zeros trimmed - pad short rows back out |
 | `move` | `g`,`k` generator,`x`,`y`,`z`,`tgt`,`ok`,`r` reason,`by` owning action,`pr` priority; on `wait` also `hpr`,`hms` — the walk that beat it |

@@ -451,8 +451,7 @@ void ScanRoom(Player* bot, Creature* boss, AlgalonEncounterState& state, uint32 
                 state.holes.push_back(unit);
                 break;
             case PB_NPC_LIVING_CONSTELLATION:
-                // Evading leaves it selectable; its script's flag drops on the reset. One stuck in the air lost its
-                // victim and evaded home after every wave, and counted as loose all pull.
+                // Evading leaves it selectable; its script's flag drops on the reset.
                 unit.active = unit.active && creature->AI() && creature->AI()->GetData(0);
                 state.constellations.push_back(unit);
                 break;
@@ -495,9 +494,8 @@ void ScanRoom(Player* bot, Creature* boss, AlgalonEncounterState& state, uint32 
     if (!RaidObs::Active() || despawnedAll)
         return;
 
-    // Nothing in the trace says who killed a star, and the damage stream only records hits on players. A
-    // star nobody was sent to dies chewed by splash or drained out, and its health against its age says
-    // which.
+    // Nothing in the trace says who killed a star: damage rows only cover players. Its health against its
+    // age tells a drained star from a chewed one.
     if (!phaseTwoStarted)
     {
         for (AlgalonScanUnit const& star : previousStars)
@@ -775,9 +773,8 @@ Player* PairPartner(Group* group, AlgalonEncounterState const& state, Player* ta
     return nullptr;
 }
 
-// The holder has nothing physical left for the coming hit and the partner has. Divine Protection is a
-// 2-3 minute cooldown against a 90.5 s cast, so whoever spent it last can't soak this one. Bots only: a
-// human's buttons are theirs to spend. A tank soak only: with a disperser latched the holder hides.
+// The holder has nothing physical left for the coming hit and the partner has; Divine Protection cools 2-3 min
+// against a 90.5 s cast. Bots only, and a tank soak only: with a disperser latched the holder hides.
 bool DefensiveHandoverDue(AlgalonEncounterState const& state, Player* holder, Player* taker, uint32 now)
 {
     if (!state.disperser.Get().IsEmpty() || !IsBot(holder) || !IsBot(taker) ||
@@ -792,10 +789,8 @@ bool DefensiveHandoverDue(AlgalonEncounterState const& state, Player* holder, Pl
     return !ReadyTankDefensive(holder, true, within) && ReadyTankDefensive(taker, true, within);
 }
 
-// Whether `taker` should take him off `holder`: the 4th stack, or, when a tank soaks, a holder deep in stacks
-// or out of defensives with a Big Bang close: the holder at the cast soaks it and the Phase Punch queued
-// behind the cast lands while the rest of the raid is phased. A hiding holder takes that punch with the raid
-// back.
+// The 4th stack, or when a tank soaks, a holder deep in stacks or out of defensives with Big Bang close: the
+// Phase Punch behind the cast hits the soaker while the raid is phased; a hiding holder takes it with the raid back.
 bool SwapDue(AlgalonEncounterState const& state, Player* holder, Player* taker, uint32 now)
 {
     uint8 const own = GetAlgalonPhasePunchStacks(taker);
@@ -1145,10 +1140,8 @@ void ElectBigBangSoakers(Player* bot, Creature* boss, AlgalonEncounterState& sta
     state.bigBangBackup = backup ? backup->GetGUID() : ObjectGuid::Empty;
 }
 
-// The soaker is the one thing standing between the raid and a reset. If it died or got phased mid
-// cast, the bot swap tank takes the duty, else the backup, and someone else backs that up. The tank goes
-// first after a tank soaker, since he stays on a tank once the raid is back; after a priest the backup priest
-// does, already out under Dispersion, so no tank is stopped on its way into a hole.
+// A soaker lost mid cast is replaced at once, or he resets. After a tank soaker the bot swap tank goes first, since
+// he stays on a tank once the raid is back; after a priest the backup, already out, so no tank stops mid run.
 void KeepBigBangSoaker(Player* bot, AlgalonEncounterState& state)
 {
     Group* group = bot->GetGroup();
@@ -1522,10 +1515,8 @@ int32 StarSeparation(StarPlan const& plan, StarSpan when, AlgalonScanUnit const*
     return nearest;
 }
 
-// When the team's kill would land: the walk, the start, then its speed. The focus shows it once the team hits
-// it. Any other star is planned up to the speed the team last showed, or one it just left, still dying that
-// fast, reads as clear at the nominal speed and is opened again next tick; for the same reason a star already
-// losing kill speed pays no start.
+// When the team's kill would land: walk, start, then speed; the focus's own once hit. Others go up to the team's
+// last speed, or one it just left reads clear and is reopened; a star already losing kill speed pays no start.
 StarSpan FinishBand(AlgalonEncounterState const& state, Group* group, AlgalonScanUnit const& star)
 {
     int32 const walk = static_cast<int32>(TeamWalkSeconds(state, group, star) * IN_MILLISECONDS);
@@ -1559,9 +1550,7 @@ bool SerialDue(StarPlan const& plan, AlgalonEncounterState const& state, Group* 
     return death <= budget;
 }
 
-// Unavoidable and raid wide, so the weakest member decides whether it can be paid for: everyone must
-// survive its top roll. Phased members are out of its reach. Someone whose max health is below it can't
-// do better than full.
+// Raid wide and unavoidable: everyone unphased must survive its top roll, or be at full when their max is below it.
 bool RaidAffordsExplosion(Player* bot, Group* group)
 {
     if (!group)
@@ -1652,10 +1641,8 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
     StarPlan const plan = PlanStars(state, now);
     int32 const gap = static_cast<int32>(ULDUAR_ALGALON_STAR_PACING_GAP_MS);
 
-    // Ahead of the gap, or any other death drops a kill half done. A dropped star keeps dying at its own
-    // slope, capped at the dropped rate, so dropping one a few % from dead doesn't move its explosion: a drop
-    // is only taken when the star would then die clear, or sooner than the kill lands. One barely hit reads
-    // near the drain.
+    // Ahead of the gap, or any other death drops a kill half done. Dropped, a star keeps dying at its own slope
+    // up to the cap, so a drop only goes when that dies clear or sooner than the kill lands.
     AlgalonScanUnit const* focus = FindScanned(state.stars, state.focusStar.Get());
     if (focus && !focus->under)
     {
@@ -1682,11 +1669,8 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
     if (state.lastStarDeathMs && getMSTimeDiff(state.lastStarDeathMs, now) < ULDUAR_ALGALON_STAR_PACING_GAP_MS)
         return "gap";
 
-    // Due: its own death would land badly, or the serial deadline says so. Past that, waiting for raid health
-    // or clear ground means letting two go off at once. Never one under a swap tank or the handler: a hole
-    // there sets him loose.
-    // A serial deadline makes every star dying no later due too: of a tied wave only the last rank fires, and
-    // the soonest killable one is what should go.
+    // Due: its own death lands badly, or it dies no later than a star the serial deadline makes due, since in a
+    // tied wave only the last rank would fire. Waiting on raid health or clear ground lets two go off at once.
     int32 serialLine = std::numeric_limits<int32>::min();
     for (auto const& [candidate, death] : plan.deaths)
         if (SerialDue(plan, state, group, *candidate))
@@ -1972,9 +1956,8 @@ bool StarTeamSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, P
            SpotOffFrom(boss, star->position, anchor, ULDUAR_ALGALON_STAR_TEAM_STANDOFF, spot);
 }
 
-// Swap tanks wait inside his reach of the landing spot. Once a swap tank has him, the holder walks him out
-// to the tank slot and the other waits in his reach there; until then the pickup tank keeps its spot,
-// or a missed taunt would send it walking away from him while he is loose.
+// Swap tanks wait in his reach of the landing spot, then the holder walks him to the tank slot and the other
+// waits in his reach there. The pickup tank keeps its spot until then, or a missed taunt walks it away from him.
 char const* SwapTankSlot(Player* bot, PlayerbotAI* botAI, Position& slot)
 {
     Unit* boss = GetAlgalon(botAI);
@@ -2094,9 +2077,8 @@ bool ClearOfMarkers(AlgalonEncounterState const& state, float x, float y)
     return true;
 }
 
-// The first hole a straight walk would pass within `clearance` of. A walker inside a field, or phased by
-// one, is leaving that one and may cross it, but no other: a neighbour 8 yd off phases it all over again.
-// Nobody may come closer to a field it already stands beside.
+// The first hole a straight walk passes within `clearance` of. A walker in or phased by a field may cross only
+// that one, since a neighbour 8 yd off phases it again, and may not come closer to a field it stands beside.
 AlgalonScanUnit const* HoleAcrossPath(AlgalonEncounterState const& state, Position const& from, float x, float y,
                                       bool phased, float clearance = ULDUAR_ALGALON_HOLE_PATH_CLEARANCE)
 {
@@ -2127,9 +2109,8 @@ AlgalonScanUnit const* HoleAcrossPath(AlgalonEncounterState const& state, Positi
     return nullptr;
 }
 
-// Round the hole, preferring a point the slot is in clear sight of, so the next walk goes straight there.
-// A point that brings the slot no closer is skipped: standing on it, the bot's own spot wins every
-// later search and the walk stalls beside the hole.
+// Round the hole, preferring a point with a clear line on to the slot. A point that brings the slot no closer is
+// skipped: the bot's own spot would win every later search and the walk would stall beside the hole.
 bool FindHoleDetour(Player* bot, AlgalonEncounterState const& state, AlgalonScanUnit const& hole, Position const& to,
                     Position& waypoint)
 {
@@ -2247,9 +2228,8 @@ bool DiesUnder(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
            DrainDeathMs(star) <= MsUntil(state.underToMs, state.lastTickMs);
 }
 
-// The star forecast to die soonest within `leadMs`. With `bot`, only one still alive: the scan lags a death
-// by up to a tick, the explosion drops the bot under its line, and 11 of 21 buttons went on stars already
-// gone.
+// The star forecast to die soonest within `leadMs`. With `bot`, only one still alive: the scan lags a death by up
+// to a tick, and the explosion leaves the bot under its line, pressing for a star already gone.
 AlgalonScanUnit const* ExplodingStar(AlgalonEncounterState const& state, uint32 leadMs,
                                      float lowPct = ULDUAR_ALGALON_EXPLOSION_LOW_PCT, Player* bot = nullptr)
 {
@@ -2447,9 +2427,8 @@ bool ExplosionCovered(Group* group, AlgalonEncounterState const& state)
     return auraPaladin && auraPaladin->HasAura(SPELL_ALGALON_AURA_MASTERY);
 }
 
-// Aura Mastery only doubles the paladin's own aura, and Prayer of Shadow Protection already gives the 130 that
-// Shadow Resistance Aura does (both aura 143, highest only), so the aura is worth running only from a paladin
-// with Aura Mastery.
+// Prayer of Shadow Protection already gives Shadow Resistance Aura's 130 (both aura 143, highest only), so the
+// aura only pays from a paladin whose Aura Mastery doubles it.
 Player* ElectShadowAuraPaladin(Group* group)
 {
     Player* best = nullptr;
@@ -2679,10 +2658,8 @@ void ReleaseUnderStar(Group* group, AlgalonEncounterState& state, AlgalonScanUni
                           std::to_string(static_cast<int32>(star.healthPct)) + " " + std::to_string(toCastMs));
 }
 
-// Every star the drain can bring to its death inside the next cast's window is planned under it, while the
-// team can do the damage before the cast; the rest are paced. Only with a soaker in Dispersion: the soaker
-// takes each explosion, and a tank would take them whole. A planned star stays planned: dropped in the last
-// seconds, three died together after the strip and killed 18. Frozen through the cast.
+// Plans under the next cast every star the drain can kill in its window, if the team has time for the work.
+// Disperser only: a tank would take each explosion whole. A planned star stays planned; frozen through the cast.
 void PlanUnderStars(Group* group, AlgalonEncounterState& state, uint32 now)
 {
     if (UnderFrozen(state, now))
@@ -2825,9 +2802,8 @@ void PlanUnderStars(Group* group, AlgalonEncounterState& state, uint32 now)
     MarkUnder(state, now);
 }
 
-// The under-star the team works down, kept until it is done, then the one with most left. A bulk only starts
-// once the work left plus the slack reaches the cast; gated every tick, a team faster than the estimate
-// flipped on and off it.
+// The under-star the team works down, kept until done, then the one with most left. A bulk starts once the work
+// left plus the slack reaches the cast, then stays latched: gated each tick, a fast team flipped on and off it.
 AlgalonScanUnit const* UnderBulkStar(AlgalonEncounterState& state, uint32 now)
 {
     AlgalonScanUnit const* latched = FindScanned(state.stars, state.bulkStar);
@@ -3582,8 +3558,7 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
     auto const turn = [&](Player* provider, uint32 spellId)
     { return provider == bot ? AlgalonTankCut{holder, spellId, why} : none; };
 
-    // The paladin due to cover the same explosion keeps its global for that: both nodes fired in one tick, the
-    // cutter went first and the star died uncovered.
+    // The paladin due to cover the same explosion keeps its global for that: both nodes can fire in one tick.
     char const* cover = nullptr;
     Player* coverer = !std::strcmp(why, "window") ? ExplosionCoverProvider(botAI, cover) : nullptr;
 
@@ -3816,8 +3791,8 @@ bool ItemCoolingDown(Player* bot, Item* item)
     return false;
 }
 
-// A healthstone, else a healing potion, usable now: all a third of the raid has against the hit, and they
-// only used them once already low. Not the healthstone on the move: using it stops the bot, mid dodge too.
+// A healthstone, else a healing potion, usable now: all a third of the raid has against the hit. Not the
+// healthstone on the move: using it stops the bot, mid dodge too.
 char const* ReadyConsumable(PlayerbotAI* botAI)
 {
     AiObjectContext* context = botAI->GetAiObjectContext();
@@ -3877,8 +3852,7 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
     uint32 const now = getMSTime();
     bool const immunityHeld = BigBangDueWithin(*state, ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS, now);
     int32 const untilHit = AlgalonMsToBigBangHit(botAI);
-    // The top roll is the worst case: a druid died with Barkskin ready at 11.4 k, which left 13.8 k of it but
-    // only 9.6 k of the 12.0 k that landed.
+    // The top roll is the worst case, so with no button clearing it the strongest still goes up for a lower roll.
     uint32 strongest = 0;
     float strongestLeft = std::numeric_limits<float>::max();
     for (PersonalButton const& button : PERSONAL_BUTTONS)
@@ -4035,9 +4009,8 @@ int32 AlgalonHideSlackMs(Player* bot)
 
     int32 const underExtra = UnderHideExtraMs(*state, remaining, getMSTime());
     int32 margin = ULDUAR_ALGALON_HIDE_MARGIN_MS + underExtra;
-    // Its constellations follow it in and close the hole, so while others still head there it goes last. Not
-    // with a star under: the window opens once the others are due in, and waiting on a straggler would leave
-    // it out in it.
+    // Its constellations follow it in and close the hole, so it goes last while others still head there. Not with
+    // a star under: the window opens once the others are due in, and waiting on a straggler would leave it out.
     if (AlgalonHoldsConstellation(bot) && !underExtra)
     {
         auto const out = state->hidersOut.find(shelter->guid);
@@ -4046,7 +4019,7 @@ int32 AlgalonHideSlackMs(Player* bot)
     }
 
     // A meteor landing on the way or by the hole before the bot is phased: it stays where it dodged until the
-    // impact, unless that leaves it out at the hit. The hide walked two back into one (44 k and 50 k).
+    // impact, unless that leaves it out at the hit.
     int32 const slack = remaining - walkMs - margin;
     int32 const impact = SmashOnTheWayMs(*state, bot->GetPosition(), shelter->position, getMSTime());
     if (impact > slack && impact < walkMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS &&
@@ -4324,9 +4297,8 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
         return nullptr;
     }
 
-    // Loose ones first: a constellation follows its victim into a hole during Big Bang and closes it, so every
-    // one ends up on the handler, who goes into its hole last. Barrage hits a random raid member
-    // anyway, so holding them costs nothing. Only a spare hole takes one away.
+    // Loose ones first: a constellation follows its victim into a hole at Big Bang and closes it, so all end up
+    // on the handler, who hides last. Barrage hits a random raid member anyway, so holding them costs nothing.
     uint32 const now = getMSTime();
     bool const gathering =
         state->bigBangCasting || BigBangDueWithin(*state, ULDUAR_ALGALON_GATHER_LEAD_SECONDS, now);
@@ -4361,8 +4333,8 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
     }
 
     bool const spare = state->holes.size() > ReservedHoles(*state, now);
-    // Taunted one at a time 8 s apart after every swap, the loose ones held the kite for most of a pull. A pass
-    // past its stage walk is finished first: taunting from behind latches a new kite and drops it.
+    // Held ones go first while the taunt cools, or loose ones taunted 8 s apart after every swap hold the kite up.
+    // A pass past its stage walk is finished first: taunting from behind latches a new kite and drops it.
     auto const pass = state->kites.find(bot->GetGUID());
     bool const passUnderWay = pass != state->kites.end() && pass->second.looseTarget.IsEmpty() &&
                               pass->second.stage != AlgalonKiteStage::Stage;

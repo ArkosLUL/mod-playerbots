@@ -20,9 +20,7 @@
 
 using namespace EncounterHelpers;
 
-//
 // Algalon the Observer
-//
 
 namespace
 {
@@ -60,9 +58,8 @@ void DropForeignBooking(PlayerbotAI* botAI, Position const& own, MovementPriorit
     }
 }
 
-// How close the walk to a spot may pass another hole: with margin, then just outside its 6 yd field, then
-// anywhere. Clipping a field phases the bot into the void Dark Matter, which is still better than a meteor
-// or staying in the field, so callers fall back down the list.
+// How close a walk may pass another hole: with margin, then just outside its 6 yd field, then anywhere.
+// Callers fall back down the list: the void Dark Matter still beats a meteor or staying in the field.
 enum class AlgalonPathRule
 {
     Clear,

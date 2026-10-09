@@ -146,9 +146,8 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
                    ? 0.0f
                    : 1.0f;
 
-    // A priest soaks the next hit and the tanks hide, so their buttons and the externals go on keeping them
-    // alive. Never a bubble: he leaves a paladin under one. The holder's own are the tank defensive node's,
-    // one at a time; the class nodes would stack a second on the same dip, a self Lay on Hands included.
+    // A priest soaks and the tanks hide, so their buttons are free. The holder's own and the externals on it
+    // belong to the tank defensive node, one at a time: the class nodes would stack a second on the same dip.
     if (AlgalonDispersionSoak(bot))
     {
         if (reserve.bubble)

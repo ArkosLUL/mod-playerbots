@@ -14,12 +14,9 @@
 
 using namespace EncounterHelpers;
 
-//
 // Algalon the Observer
-//
 
-// The soaker stays out and eats the hit: he resets the moment nobody alive is left unphased. Big Bang is
-// physical, so a tank's armour and a physical defensive do the work, for a tank with no hole in reach too.
+// Big Bang is physical, so a tank soaks on armour and a physical button, also one with no hole in reach.
 // The button follows what the bot can cast, not its slot: a promoted backup is still a priest.
 bool AlgalonBigBangSoakTrigger::IsActive()
 {
