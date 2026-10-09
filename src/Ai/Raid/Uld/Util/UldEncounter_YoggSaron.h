@@ -68,6 +68,7 @@ enum UlduarYoggSaronIds
     NPC_DESCEND_INTO_MADNESS = 34072,
     NPC_MARKED_IMMORTAL_GUARDIAN = 36064,
     SPELL_SANITY = 63050,
+    SPELL_SARAS_BLESSING = 63134,  // heals 27,000, then 6,000 shadow every 2s for 20s
     SPELL_SARAS_FERVOR = 63138,  // +20% damage done and +100% damage taken, 15s
     SPELL_BRAIN_LINK = 63802,
     // The two the aura casts on its partner every second, apart and together. Neither leaves an aura,
@@ -674,7 +675,6 @@ constexpr uint32 ULDUAR_YOGG_SARON_BEACON_EXTERNAL_CLAIM_MS = 8000;
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_PILE_RESET_GUARDIANS = 2;
 constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_EXTERNAL_PCT = 50.0f;
 
-// Both tanks stand on the melee spot, so Consecration keeps the whole pile on whoever has the most threat:
 // Empowering Shadows heals everything on Yogg's side within 20 yd of the mark, tentacles too, 750k over
 // 20 s. The mark stands in its dragger's reach, a few yards off the spot. One pull's leftover Corruptor
 // 21.9 yd from the north drag spot went back to full after three beacons in a row.
@@ -684,6 +684,7 @@ constexpr float ULDUAR_YOGG_SARON_BEACON_HEAL_SLACK = 5.0f;
 // Mortal Strike's -50% healing. A weaker cut on the Guardian still leaves the strike worth it.
 constexpr int32 ULDUAR_YOGG_SARON_HEALING_CUT_PCT = -50;
 
+// Both tanks stand on the melee spot, so Consecration keeps the whole pile on whoever has the most threat:
 // one held 5-11 Guardians for 90 s while the other held 0-3, and the other's taunts came back within 4 s.
 // So the other tank takes the pile once the holder is under the swap line with this many on it, and the
 // holder stops its area threat and taunts for one Righteous Defense cooldown.
@@ -960,11 +961,11 @@ Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet);
 // pull the pet back out.
 Unit* YoggSaronPhase3PetLeftover(PlayerbotAI* botAI);
 
-// Record a Brain Link pair, from the spell hook that sees 63803 or 63804 go out. Both ends read the
 // Whether a mark held at a drag or hunter spot would heal this unit, see
 // ULDUAR_YOGG_SARON_BEACON_HEAL_RADIUS. Geometry only, the callers check for Thorim.
 bool YoggSaronBeaconHealReaches(Unit* unit);
 
+// Record a Brain Link pair, from the spell hook that sees 63803 or 63804 go out. Both ends read the
 // same record, so both walk.
 void YoggSaronNoteBrainLinkPair(Unit* owner, Unit* partner);
 
@@ -1170,13 +1171,14 @@ bool YoggSaronGuardianDiedWithin(Player* bot, uint32 ms);
 // Whether the raid may finish this Guardian where it stands: on the stack, or still above the park
 // floor. Never below the nova gap floor while the last nova is under 6 s old, or while a lower Guardian
 // stands inside nova chain range, which has to die first. The park floor is off without a living bot
-// tank, since nobody would ever fetch a parked one. The other two never are.
+// tank or in the handover, since nobody would fetch a parked one then. The other two never are.
 bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian);
 
 // The one Guardian every non-tank is on in phase 1, shared per instance, or null while every Guardian
 // is parked or waiting its turn. Per-bot holds let ranged and melee lock different Guardians, and the
 // two came down in lockstep and died 17 ms apart. Held until it dies, stops being killable, or drifts
-// past 15 yd while a killable one is on the stack.
+// past 15 yd while a killable one is on the stack. In the handover it's lowest first instead, and a
+// low one freed from its gap takes over.
 Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI);
 
 // True while a Guardian other than the focus sits below the gap floor within 10 yd of the middle or of
@@ -1188,6 +1190,12 @@ bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI);
 // still hits for ~25k, and finished 1-2 s apart at the handover spot they killed 3, 7 and 4 melee in
 // three pulls. No park floor, there's no stack left to keep them off.
 bool YoggSaronLeftoverGuardianKillable(PlayerbotAI* botAI, Unit* guardian);
+
+// Whether a killable Guardian should take the raid off the one it's on: under the gap floor and lower.
+// Whatever the raid works while a low one waits out its gap must not keep it, or the low one bleeds
+// out on nobody's schedule. Only under the floor, so two fresh ones trading places under splash don't
+// flip the raid back and forth.
+bool YoggSaronLowGuardianTakesOver(Unit* candidate, Unit* current);
 
 // After phase 1, true while a Guardian other than the bot's target sits below the gap floor within
 // 10 yd of the bot or its target, where AoE would kill it out of turn.
@@ -1310,6 +1318,11 @@ uint32 YoggSaronGuardiansOn(Player* tank);
 // carries only its own, so it takes a heal that reached the pile.
 uint32 YoggSaronPileHealedOn(Player* tank);
 
+// Phase 3 without Thorim: the Guardian this warrior's Mortal Strike goes on, or nullptr. One carrying the
+// beacon heal first, then one channelling Drain Life, lowest health first. Only in melee reach, with no
+// healing cut on it yet, threat the bot may take, and outside a gaze. `hot` says it carries the heal.
+Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, bool& hot);
+
 // The tank this bot is taking the pile from, see ULDUAR_YOGG_SARON_TANK_SWAP_PCT, or nullptr. Starts a swap
 // when the conditions hold and none is running, and ends one that no longer holds.
 Player* YoggSaronTankSwapTake(PlayerbotAI* botAI);
@@ -1318,11 +1331,6 @@ Player* YoggSaronTankSwapTake(PlayerbotAI* botAI);
 bool YoggSaronTankShedding(PlayerbotAI* botAI);
 
 // A tank under the swap line while another is over the taker line leaves loose Guardians to that one. A
-// Phase 3 without Thorim: the Guardian this warrior's Mortal Strike goes on, or nullptr. One carrying the
-// beacon heal first, then one channelling Drain Life, lowest health first. Only in melee reach, with no
-// healing cut on it yet, threat the bot may take, and outside a gaze. `hot` says it carries the heal.
-Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, bool& hot);
-
 // soulstoned tank taunted straight back into the pile and died again 14 s later.
 bool YoggSaronTankLowHold(Player* bot);
 

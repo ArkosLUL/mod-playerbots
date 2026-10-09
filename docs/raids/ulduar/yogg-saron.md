@@ -210,6 +210,15 @@ on one, and the hold still vetoed **22** Divine Sacrifice presses: the raid held
 fight and spent none of it. `YoggSaronNovaDamageEach` is the single per-nova figure now, read by the
 estimate, by that threshold and by the external gate.
 
+**A pair goes off one after the other, so "two low at once" misses it.** By the time the second
+Guardian is low the first is dead and the count is one: Justice took the second nova of a **5.05 s**
+pair at 45% with nothing pressed and his Divine Protection on cooldown. `YoggSaronNovaChained`, shared
+by the raid cover and the external gate, also counts a Guardian death in the last **6 s**
+(`…_P1_NOVA_GAP_MS`) and a Sara's Blessing holder; `YoggSaronNovaLeavesNothing` still has to hold. Not
+the 10 s window: Guardians die every 7-10 s in phase 1, so it would open on 8 of 9 novas. One button
+does not always save a bot that low — under 23,316 Hand of Sacrifice leaves 16,321 and Pain
+Suppression 13,990 against 12,929; Aura Mastery plus either, or Guardian Spirit, does.
+
 **Two gates, and the tighter one decides whether to spend at all.** Over 48 novas a Guardian first
 dropping under **20%** detonated a median 4.8 s later and as late as 11.5; under **10%** a median 2.4 s
 and never later than 3.7 across one pull's 11. So `…_NOVA_NOW_HEALTH_PCT` (10) is where a bot spends its
@@ -260,7 +269,10 @@ Prayer of Shadow Protection — on bars at most **83%** and **87%** of the buffe
 **from 100% of the new bar** to a single nova. Nothing re-buffs a raider in combat. `yogg-saron battle
 rez hold` holds `rebirth` until the handover, the first stretch of the fight with no nova in it.
 Reincarnation cannot be held the same way: it runs from the **dead engine**, which carries only `dead`,
-`stay`, `chat`, `default` and `follow`, so no encounter rule reaches it.
+`stay`, `chat`, `default` and `follow`, so no encounter rule reaches it. Ten later pulls: 9 deaths,
+all phase 1 melee in the pile and none to a leftover in phase 2; **4 were Totemist** (pool 23,757,
+under one nova's 25,740), 2 of them straight after his own Reincarnation. Left alone by the user's
+choice.
 
 `trace.maxhp` keeps the pool from before the first death, so a resurrected bot's percentages are wrong
 and the killing blow is the only witness to its real bar.
@@ -341,7 +353,7 @@ Three tiers, in that relevance order, because one cast covering 25 raiders beats
   (180 s). No claim — a personal button covers one bot, so two bots firing is not an overlap.
 - **`yogg-saron nova external`** — a healer's, in worth order `pain suppression`, `guardian spirit`,
   `hand of sacrifice`, claimed per Guardian by `ClaimYoggSaronNovaExternal` and only for a chained nova
-  or a Fervor holder: one nova against these pools reads as lethal on anything under about **86%** of
+  (`YoggSaronNovaChained`, above): one nova against these pools reads as lethal on anything under about **86%** of
   its bar, which spent **5 of a pull's 7** externals before the first nova that killed anybody, against
   a median landed 17,048 and a worst 25,004 without Fervor. `YoggSaronNovaVictim` takes
   whoever the nova leaves furthest past dead **after their own button** (`BestMagicDefensiveCut`), so a
@@ -844,7 +856,18 @@ cover the ~12 s fetch (taunt cooldown, the walk, and a taunted Guardian that sto
 against the 1.7-1.8%/s, peaking near 3%/s, that an untargeted Guardian near the station still loses to
 splash. Without a living bot tank nothing fetches, so the floor is off. The focus is still given up
 past **15 yd** for a killable one inside **6.5**, a gap that stops a Guardian on the boundary flipping
-it. `yogg.p1focus` records each change: `picked`, `parked`, `spaced`, `chain`, `abandoned`, `none`.
+it. `yogg.p1focus` records each change: `picked`, `parked`, `spaced`, `chain`, `abandoned`, `lower`,
+`none`.
+
+**The handover has no fetch, so no floor.** The tanks walk to the anchor and drag every Guardian off
+the stack, so each one parks at 35% and nothing brings it back: **7 of 9** pulls parked one to three
+there and killed 0-1 in the 18 s. One had all 10 ranged leave a 30% Guardian for a 99% one; both were
+low at the ring and went off 7.0 s apart. So while `YoggSaronHandoverState(botAI).active` the floor is
+off and the focus is lowest first, the stack test meaning nothing once no kill counts for Sara. They
+stand 18-21 yd out at bearing 104-117°, 21-26 yd from the station, so a kill there reaches the melee
+and tanks only. The raid still works the next Guardian while a low one waits out its gap, by the
+user's choice, but `YoggSaronLowGuardianTakesOver` — killable, under 30% and lower — gives it the
+focus back (`lower`). Only under 30%, so two fresh ones trading places under splash never flip it.
 
 **One focus does not space the novas.** On the 17:25 pull the focus held (6.4% of phase 1 on two or
 more Guardians, no back-line nova), but an untargeted Guardian on the stack still lost **5.6%/s** to
@@ -1219,6 +1242,10 @@ pulls had 3.3-5.8, and the second nova killed 4, 3 and 7 melee in three pulls. N
 `spaced` / `chain`), and `YoggSaronLeftoverAoeHold` — a non-target leftover under 30% within 10 yd of the
 bot or its target — holds AoE and cuts area channels. `lastGuardianDeathMs` still stamps: 65719 goes out
 on every leftover death. First pull with it: 16.2 and 6.8 s apart, no handover nova deaths.
+
+The resolver's "Guardians hold outright" kept all ten ranged on a **44%** one while the lowest sat free
+at **2.6%**, so `ResolveTarget` gives way to `YoggSaronLowGuardianTakesOver` between two Guardians of
+Yogg-Saron (`yogg.leftover` `lower`). Immortal Guardians still hold outright.
 
 **Spacing the deaths in time was half of it, and nothing decides where.** One pull left **five** alive
 at the ring and all five went off in phase 2 — gaps 18.8 / 7.8 / 6.8 / 9.3 / 8.2 s, none under the 6 s
@@ -1822,7 +1849,9 @@ walking / still with a target / still without, and `yogg.skullturn`; `--phase3` 
 Weakened, Drain Life channels cut inside 1.5 s or run full, each beacon's nearest other Guardian,
 `yogg.beacondrag`, the ranged station at phase 3 start and `yogg.station`; `--phases` the gaps between
 leftover Guardian deaths after the ring with each one's radius and the raiders inside 17 yd of it, the
-arc and radius the raid and the leftover Guardians each hold in phase 2, and `yogg.leftover`; `--phase3` the other Guardians each beacon
+arc and radius the raid and the leftover Guardians each hold in phase 2, `yogg.leftover`, Guardian
+deaths and `yogg.p1focus` changes inside the handover, and seconds with 3+ ranged on a higher Guardian
+while a low one was free to kill (8.3 s and 15.2 s on two pulls before the fix); `--phase3` the other Guardians each beacon
 heal reached with health then and 6 s later (present by a fresh row, not health: a Weakened Guardian's
 1 HP reads 0%), `yogg.beaconspot`, and the pets on each phase 2 leftover with its time to die. A
 Guardian's spawn is a Simple Teleport (64195) within 3 s of its first sample, else that sample:

@@ -949,9 +949,19 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         // Never downgrade off something at least as urgent, and inside one tier only switch for
         // something meaningfully closer - otherwise two tentacles ping-pong the whole raid. Guardians
         // hold outright: that tier is ordered by health, and an order that flips mid-fight would reset
-        // every swing and cast timer in the raid.
-        if (currentTier < desiredTier || !target || IsYoggSaronFocusedGuardian(currentTarget) ||
-            target->GetExactDist2d(bot) + targetSwitchDistance >= currentTarget->GetExactDist2d(bot))
+        // every swing and cast timer in the raid. Except a leftover freed from its gap: all ten ranged
+        // stayed on a 44% one while the lowest sat free at 2.6%.
+        bool const comeBack = currentTier == desiredTier && target &&
+                              target->GetEntry() == NPC_GUARDIAN_OF_YS &&
+                              currentTarget->GetEntry() == NPC_GUARDIAN_OF_YS &&
+                              YoggSaronLowGuardianTakesOver(target, currentTarget);
+        if (comeBack)
+        {
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "yogg.leftover", "lower");
+        }
+        else if (currentTier < desiredTier || !target || IsYoggSaronFocusedGuardian(currentTarget) ||
+                 target->GetExactDist2d(bot) + targetSwitchDistance >= currentTarget->GetExactDist2d(bot))
         {
             target = currentTarget;
         }
@@ -1274,16 +1284,6 @@ bool YoggSaronDiminishPowerJudgementAction::Execute(Event /*event*/)
     return false;
 }
 
-bool YoggSaronPhase3ControlAction::Execute(Event /*event*/)
-{
-    bool acted = false;
-
-    TankFaceStrategy tankFaceStrategy(botAI);
-    if (botAI->HasStrategy(tankFaceStrategy.getName(), BotState::BOT_STATE_COMBAT))
-    {
-        botAI->ChangeStrategy(REMOVE_STRATEGY_CHAR + tankFaceStrategy.getName(), BotState::BOT_STATE_COMBAT);
-        acted = true;
-    }
 bool YoggSaronMortalStrikeAction::Execute(Event /*event*/)
 {
     // No walk and no target swap, only what is already in reach.
@@ -1298,6 +1298,16 @@ bool YoggSaronMortalStrikeAction::Execute(Event /*event*/)
     return true;
 }
 
+bool YoggSaronPhase3ControlAction::Execute(Event /*event*/)
+{
+    bool acted = false;
+
+    TankFaceStrategy tankFaceStrategy(botAI);
+    if (botAI->HasStrategy(tankFaceStrategy.getName(), BotState::BOT_STATE_COMBAT))
+    {
+        botAI->ChangeStrategy(REMOVE_STRATEGY_CHAR + tankFaceStrategy.getName(), BotState::BOT_STATE_COMBAT);
+        acted = true;
+    }
 
     TankAssistStrategy tankAssistStrategy(botAI);
     if (!botAI->HasStrategy(tankAssistStrategy.getName(), BotState::BOT_STATE_COMBAT))

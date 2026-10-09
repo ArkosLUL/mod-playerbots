@@ -2793,6 +2793,24 @@ uint32 YoggSaronNovaDamageEach(Unit* target)
                : ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE;
 }
 
+// Worth a cooldown: two Guardians low at once, Fervor counting since it doubles the estimate, or the
+// second nova of a pair. A pair goes off one after the other, so a count of two never sees it, and
+// Justice took the second at 45% with nothing up. The second link is a Guardian death in the last 6 s,
+// not the 10 s window, which Guardians dying every 7-10 s keep open for nearly all of phase 1, or
+// Sara's Blessing, whose shadow tail lands anyway.
+//
+// Against the estimate's own per-nova figure, never a constant: as one it went unreachable for every
+// bot carrying the 130 and the raid cover fired nothing for three pulls.
+bool YoggSaronNovaChained(Player* bot, Unit* member, uint32 expected)
+{
+    if (!expected)
+        return false;
+
+    return expected >= ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN * YoggSaronNovaDamageEach(member) ||
+           member->HasAura(SPELL_SARAS_BLESSING) ||
+           YoggSaronGuardianDiedWithin(bot, ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS);
+}
+
 uint32 YoggSaronNovaDamageFrom(std::vector<Creature*> const& low, Unit* target)
 {
     uint32 count = 0;
@@ -3002,15 +3020,9 @@ uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
         // A chained nova only. Every pool in the raid is under one nova's unresisted figure, so a
         // single Guardian low anywhere counted the whole melee group and three paladins spent Divine
         // Sacrifice inside the first 73 s of a pull, 8 s short of coming back for the pair that killed
-        // five. Fervor doubles the estimate, which is right: one nova does kill a holder from full.
-        //
-        // Against the same per-nova figure the estimate itself used, never a constant: this is a count
-        // test in damage clothing, and a constant here stops matching the moment the estimate reads
-        // anything off the target. Spelt as a constant it went unreachable for every bot carrying the
-        // 130 and the raid cover fired nothing for three pulls.
+        // five.
         uint32 const expected = YoggSaronNovaDamageFrom(low, member);
-        if (expected >= ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN * YoggSaronNovaDamageEach(member) &&
-            YoggSaronNovaLeavesNothing(expected, member))
+        if (YoggSaronNovaChained(bot, member, expected) && YoggSaronNovaLeavesNothing(expected, member))
             ++count;
     }
 
@@ -3103,15 +3115,12 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI)
         if (bot->GetExactDist2d(member) > sPlayerbotAIConfig.spellDistance)
             continue;
 
-        // The whole chain in reach, or Fervor, which doubles the estimate below and is the one case a
-        // single nova finishes a holder from full health. One nova against these pools reads as lethal
-        // on any bot under about 86% of its bar, which spent five of a pull's seven externals before
-        // the first nova that killed anybody: they land a median 17,048 and never over 25,004 without
-        // Fervor. Same figure the raid cover measures against, so the two cannot disagree about which
-        // nova is worth a cooldown.
+        // Chained only. One nova against these pools reads as lethal on any bot under about 86% of its
+        // bar, which spent five of a pull's seven externals before the first nova that killed anybody:
+        // they land a median 17,048 and never over 25,004 without Fervor. Same test as the raid cover,
+        // so the two can't disagree about which nova is worth a cooldown.
         uint32 const expected = YoggSaronNovaDamageFrom(low, member);
-        if (expected < ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN * YoggSaronNovaDamageEach(member) ||
-            !YoggSaronNovaLeavesNothing(expected, member))
+        if (!YoggSaronNovaChained(bot, member, expected) || !YoggSaronNovaLeavesNothing(expected, member))
             continue;
 
         // Whoever their own button still saves is not worth a three-minute external: a rogue who dodges
@@ -3387,9 +3396,12 @@ bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian)
     if (YoggSaronGuardianWaitsOutNovaGap(botAI->GetBot(), guardian) || YoggSaronGuardianWaitsOnLowerNeighbour(guardian))
         return false;
 
-    // Group walk last, so it only runs for a Guardian that is actually parked.
+    // No floor in the handover: the tanks walk to the anchor and take every Guardian off the stack with
+    // them, so nothing fetches. 7 of 9 pulls parked one or more there and burned a fresh one while the
+    // parked one bled out. Group walk last, so it only runs for a Guardian that is actually parked.
     return YoggSaronGuardianOnTheStack(guardian) ||
-           guardian->GetHealthPct() > ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT || !YoggSaronBotTankAlive(botAI);
+           guardian->GetHealthPct() > ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT ||
+           YoggSaronHandoverState(botAI).active || !YoggSaronBotTankAlive(botAI);
 }
 
 Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
@@ -3410,6 +3422,10 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
     std::list<Creature*> guardians;
     bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance);
 
+    // The handover moved the pile to the anchor and no kill counts for Sara any more, so the stack test
+    // means nothing there. Lowest first instead.
+    bool const handover = YoggSaronHandoverState(botAI).active;
+
     Unit* best = nullptr;
     bool killableOnStack = false;
     for (Creature* guardian : guardians)
@@ -3418,13 +3434,17 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
             continue;
 
         killableOnStack = killableOnStack || YoggSaronGuardianOnTheStack(guardian);
-        if (YoggSaronPhase1GuardianPreferred(guardian, best))
+        if (handover ? !best || guardian->GetHealth() < best->GetHealth()
+                     : YoggSaronPhase1GuardianPreferred(guardian, best))
             best = guardian;
     }
 
     // Give up at 15 yd, pick up only inside 6.5: the gap stops a Guardian on the boundary flipping the
-    // raid's target back and forth.
-    bool const abandon = heldKillable && !YoggSaronGuardianCountsForSara(held) && killableOnStack;
+    // raid's target back and forth. Neither radius means anything in the handover, where the focus only
+    // moves for a low one freed from its gap.
+    bool const lower = handover && heldKillable && best && best != held && YoggSaronLowGuardianTakesOver(best, held);
+    bool const abandon =
+        heldKillable && (handover ? lower : !YoggSaronGuardianCountsForSara(held) && killableOnStack);
     if (heldKillable && !abandon)
         return held;
 
@@ -3437,6 +3457,8 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
         char const* reason = "picked";
         if (!best)
             reason = "none";
+        else if (lower)
+            reason = "lower";
         else if (abandon)
             reason = "abandoned";
         else if (held && held->IsAlive())
@@ -3490,6 +3512,12 @@ bool YoggSaronLeftoverGuardianKillable(PlayerbotAI* botAI, Unit* guardian)
 {
     return guardian && guardian->IsAlive() && !YoggSaronGuardianWaitsOutNovaGap(botAI->GetBot(), guardian) &&
            !YoggSaronGuardianWaitsOnLowerNeighbour(guardian);
+}
+
+bool YoggSaronLowGuardianTakesOver(Unit* candidate, Unit* current)
+{
+    return candidate->GetHealthPct() < ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT &&
+           candidate->GetHealth() < current->GetHealth();
 }
 
 bool YoggSaronLeftoverAoeHold(PlayerbotAI* botAI)
@@ -3787,11 +3815,26 @@ Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet)
     return nearest;
 }
 
+bool YoggSaronBeaconHealReaches(Unit* unit)
+{
+    float const reach =
+        ULDUAR_YOGG_SARON_BEACON_HEAL_RADIUS + ULDUAR_YOGG_SARON_BEACON_HEAL_SLACK + unit->GetObjectSize();
+
+    for (YoggSaronBeaconLane const& lane : YOGG_SARON_BEACON_LANES)
+        for (Position const* spot : {lane.drag, lane.hunter})
+            if (unit->GetExactDist2d(spot->GetPositionX(), spot->GetPositionY()) <= reach)
+                return true;
+
+    return false;
+}
+
 Unit* YoggSaronPhase3PetLeftover(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     if (YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase3(botAI))
         return nullptr;
+
+    bool const thorim = YoggThorimKeeperActive(botAI);
 
     // From Yogg, so every owner sends its pet to the same one.
     Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
@@ -3820,27 +3863,12 @@ Unit* YoggSaronPhase3PetLeftover(PlayerbotAI* botAI)
     {
         if (!leftover->IsAlive())
             continue;
-bool YoggSaronBeaconHealReaches(Unit* unit)
-{
-    float const reach =
-        ULDUAR_YOGG_SARON_BEACON_HEAL_RADIUS + ULDUAR_YOGG_SARON_BEACON_HEAL_SLACK + unit->GetObjectSize();
-
-    for (YoggSaronBeaconLane const& lane : YOGG_SARON_BEACON_LANES)
-        for (Position const* spot : {lane.drag, lane.hunter})
-            if (unit->GetExactDist2d(spot->GetPositionX(), spot->GetPositionY()) <= reach)
-                return true;
-
-    return false;
-}
-
 
         bool const nearCrusher = std::any_of(crushers.begin(), crushers.end(), [botAI, leftover](Creature* crusher)
             {
                 return crusher->IsAlive() && !YoggSaronCrusherStunHolds(botAI, crusher) &&
                        crusher->GetExactDist2d(leftover) <= ULDUAR_YOGG_SARON_CRUSH_RANGE;
             });
-    bool const thorim = YoggThorimKeeperActive(botAI);
-
         if (nearCrusher)
             continue;
 
@@ -4909,34 +4937,6 @@ void YoggSaronPickMarkKickers(Player* bot, YoggSaronEncounterState& state, Unit*
 // The beacon clock, read off each beacon's first mark, raid-wide and one bot a scan. Picks the stagers
 // ULDUAR_YOGG_SARON_BEACON_STAGE_LEAD_MS before the next beacon is due, and the kickers held for the marks
 // while a mark or a drag lasts.
-void YoggSaronTickBeacon(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    if (!bot->IsAlive() || !bot->GetGroup() ||
-        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
-        return;
-
-    constexpr uint32 scanIntervalMs = 200;
-    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
-    uint32 const now = getMSTime();
-    if (getMSTimeDiff(state.beaconScanMs, now) < scanIntervalMs)
-        return;
-
-    state.beaconScanMs = now;
-
-    if (!YoggSaronInPhase3(botAI) || YoggThorimKeeperActive(botAI))
-    {
-        state.beaconClockMs = 0;
-        state.lastMarkMs = 0;
-        state.stageDueMs = 0;
-        state.markWindow = false;
-        state.beaconStages.clear();
-        state.markKickers.clear();
-        return;
-    }
-
-    if (!state.beaconClockMs)
-        state.beaconClockMs = now;
 // Guardians carrying the beacon heal, and ones channelling Drain Life, that have a healing cut on them
 // out of all of them. Once a second, noted when it changes.
 void YoggSaronSampleHealCut(Player* bot, YoggSaronEncounterState& state, Creature* yogg, uint32 now)
@@ -4982,10 +4982,41 @@ void YoggSaronSampleHealCut(Player* bot, YoggSaronEncounterState& state, Creatur
     RaidObs::Note(bot, "yogg.healcut", state.healCutNote);
 }
 
+void YoggSaronTickBeacon(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot->IsAlive() || !bot->GetGroup() ||
+        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return;
+
+    constexpr uint32 scanIntervalMs = 200;
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    uint32 const now = getMSTime();
+    if (getMSTimeDiff(state.beaconScanMs, now) < scanIntervalMs)
+        return;
+
+    state.beaconScanMs = now;
+
+    if (!YoggSaronInPhase3(botAI) || YoggThorimKeeperActive(botAI))
+    {
+        state.beaconClockMs = 0;
+        state.lastMarkMs = 0;
+        state.stageDueMs = 0;
+        state.markWindow = false;
+        state.beaconStages.clear();
+        state.markKickers.clear();
+        state.healCutNote.clear();
+        return;
+    }
+
+    if (!state.beaconClockMs)
+        state.beaconClockMs = now;
 
     Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
     if (!yogg)
         return;
+
+    YoggSaronSampleHealCut(bot, state, yogg, now);
 
     std::list<Creature*> found;
     yogg->GetCreatureListWithEntryInGrid(found, NPC_MARKED_IMMORTAL_GUARDIAN,
@@ -5005,7 +5036,6 @@ void YoggSaronSampleHealCut(Player* bot, YoggSaronEncounterState& state, Creatur
     }
     else if (!window && state.markWindow)
     {
-        state.healCutNote.clear();
         state.markWindow = false;
         state.markKickers.clear();
         state.beaconStages.clear();
@@ -5016,8 +5046,6 @@ void YoggSaronSampleHealCut(Player* bot, YoggSaronEncounterState& state, Creatur
 
     uint32 const due = (state.lastMarkMs ? state.lastMarkMs : state.beaconClockMs) + ULDUAR_YOGG_SARON_BEACON_PERIOD_MS;
     int32 const left = static_cast<int32>(due - now);
-    YoggSaronSampleHealCut(bot, state, yogg, now);
-
     if (left < -static_cast<int32>(ULDUAR_YOGG_SARON_BEACON_STAGE_TIMEOUT_MS))
     {
         for (auto const& [guid, lane] : state.beaconStages)

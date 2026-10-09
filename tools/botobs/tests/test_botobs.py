@@ -1317,6 +1317,21 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.sector_share([(1.0, 0.0)], origin, 0), {})
         self.assertEqual(yogg_saron.sector_share([None], origin, 30), {})
 
+    def test_ranged_past_free_low_counts_only_a_low_one_free_to_kill(self):
+        low, fresh, other = 1, 2, 3
+        # 1791542813's handover: all ranged on a 99% Guardian beside one at 23.7%.
+        self.assertEqual(yogg_saron.ranged_past_free_low([(low, 23.7), (fresh, 99.0)], [fresh] * 10, False), 10)
+        # Inside the gap the low one waits by design, so working the next one is fine.
+        self.assertEqual(yogg_saron.ranged_past_free_low([(low, 23.7), (fresh, 99.0)], [fresh] * 10, True), 0)
+        # Nobody under the floor, nothing to come back to.
+        self.assertEqual(yogg_saron.ranged_past_free_low([(low, 30.0), (fresh, 99.0)], [fresh] * 10, False), 0)
+        # Two low ones side by side: the lowest is free, and the higher of the pair counts against it.
+        self.assertEqual(yogg_saron.ranged_past_free_low([(low, 5.0), (other, 20.0)], [other, other], False), 2)
+        # On the low one itself, on nothing, or on a Guardian that just died.
+        self.assertEqual(yogg_saron.ranged_past_free_low([(low, 5.0), (fresh, 99.0)], [low, 0, 0], False), 0)
+        self.assertEqual(yogg_saron.ranged_past_free_low([(low, 5.0), (fresh, 0.0)], [fresh, fresh, fresh], False), 0)
+        self.assertEqual(yogg_saron.ranged_past_free_low([], [fresh], False), 0)
+
     def test_moving_at_needs_two_samples_and_more_than_a_shuffle(self):
         # 1791373666's 0:49.185 cloud: four of the five melee on it had stepped 1.5-2.6 yd.
         self.assertTrue(yogg_saron.moving_at((1980.0, -22.0), (1978.0, -22.0), 0.3))
