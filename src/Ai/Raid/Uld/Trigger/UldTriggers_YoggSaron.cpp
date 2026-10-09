@@ -113,10 +113,8 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
     if (!botAI->IsTank(bot) && !PlayerbotAI::IsMelee(bot))
         return false;
 
-    // The handover wins over the leash and goes first: Sara is already down by then, so holding a bot
-    // on the leash only buys it a knock back a second for the rest of the fight. No radius of its own
-    // either, because the anchor is outside the ring and a bot that had arrived would hand itself
-    // straight back to the leash.
+    // The handover wins over the leash: Sara is already down, so holding a bot on the leash only buys knockbacks. No
+    // radius of its own: the anchor is outside the ring, and an arrived bot would hand itself back to the leash.
     if (YoggSaronHandoverState(botAI).clearing)
     {
         returning = false;
@@ -126,9 +124,8 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
     float const fromSara =
         bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
 
-    // A melee bot that is neither tanking nor healing is held tighter, inside the radius the inner orbit
-    // cannot be woken from. The wider pair stays the tank's: it is about where the Guardian dies, which
-    // follows whoever holds threat, not about where this bot puts its feet.
+    // A melee bot neither tanking nor healing is held tighter, inside the radius the inner orbit can't be woken from.
+    // The wider pair stays the tank's: it is about where the Guardian dies, which follows threat.
     bool const pile = !botAI->IsTank(bot) && !PlayerbotAI::IsHeal(bot);
     float const leash = pile ? ULDUAR_YOGG_SARON_P1_PILE_LEASH : ULDUAR_YOGG_SARON_P1_LEASH;
     float const release = pile ? ULDUAR_YOGG_SARON_P1_PILE_RELEASE : ULDUAR_YOGG_SARON_P1_LEASH_RELEASE;
@@ -143,7 +140,7 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
         return false;
     }
 
-    // A live phase-1 Guardian before the phase read, which is four 200 yd sweeps - melee sit outside
+    // A live phase-1 Guardian before the phase read, which is four 200 yd sweeps: melee sit outside
     // this leash for most of phases 2 and 3. The price is no walk back before the first spawn.
     bool const active = beyond && fromSara <= ULDUAR_YOGG_SARON_P1_ROOM_RADIUS &&
                         bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance, true) &&
@@ -180,13 +177,8 @@ bool YoggSaronSanityTrigger::IsActive()
     if (!sanityWell)
         return false;
 
-    // Standing in the well halves damage done, so a bot only walks to one with nothing to kill, unless
-    // it is low. One that got there stays until full whatever spawns: +20 every 2 s is a short wait. A
-    // brain team bot heading for its portal keeps heading there, and one already in a well leaves for it
-    // once it is past low: topping outranks the portal walk.
-    //
-    // Refill is a bot benched under the brain team floor. It has the whole wave, ~80 s, to get to 100,
-    // so it goes whatever the platform holds.
+    // A well halves damage done, so a bot goes only with nothing to kill, or when low, and stays until full. Topping
+    // outranks the portal walk. Refill is a benched brain team bot (~80 s wave to reach 100), so it always goes.
     char const* reason = nullptr;
     if (bot->GetDistance(sanityWell) < 1.0f && !YoggSaronPortalWalkPending(botAI))
         reason = "topping";
@@ -201,8 +193,7 @@ bool YoggSaronSanityTrigger::IsActive()
     if (!reason)
         return false;
 
-    // A well the bot cannot get to parked three of them stationary for 202, 164 and 96 s, suppressing
-    // everything below this node for as long as it lasted.
+    // A well the bot cannot get to would otherwise park it stationary, suppressing everything below this node.
     if (!YoggSaronWalkMakingProgress(botAI, "sanity", sanityWell->GetPosition()))
         return false;
 
@@ -217,17 +208,13 @@ bool YoggSaronPhase1SpacingTrigger::IsActive()
     if (!botAI->CanMove() || !YoggSaronInPhase1Room(bot))
         return false;
 
-    // Short-radius hazard reads first, phase read last. The gate leaves every Yogg trigger open
-    // between pulls, and YoggSaronInPhase1 is three 200 yd grid sweeps on every bot on the map.
-    //
-    // The cloud read is "I am standing in one", not "one is coming". Anticipating never worked - the
-    // orbit outruns the step - but a bot left inside the summon radius farms a Guardian every 10 s
-    // forever, because the aura re-arms the moment the last one lands.
+    // Short-radius hazard reads first, phase read last: YoggSaronInPhase1 is three 200 yd grid sweeps on every bot on
+    // the map. The cloud read is "I am standing in one", since the orbit outruns the step.
     bool hazardNear = bot->FindNearestCreature(NPC_OMINOUS_CLOUD, ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS, true);
 
     char const* reason = hazardNear ? "cloud" : nullptr;
 
-    // Shadow Nova is the other half, and only a Guardian about to detonate counts - running from every
+    // Shadow Nova is the other half, and only a Guardian about to detonate counts: running from every
     // one of them scattered the raid to the rim to be picked off one at a time.
     if (!hazardNear && !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS).empty())
         reason = bot->HasAura(SPELL_SARAS_FERVOR) ? "fervor" : "nova";
@@ -259,9 +246,7 @@ bool YoggSaronPhase1StationTrigger::IsActive()
     float const fromSpot = bot->GetDistance2d(ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionX(),
                                               ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionY());
 
-    // The band is what keeps the first and third orbits off the back line and it has 1.13 yd of margin
-    // in hand, so the parked latch widens only the stack radius. Widening the band instead hands the
-    // bot to a neighbouring orbit, which is the one thing the station exists to prevent.
+    // The band keeps the first and third orbits off the back line, so the parked latch widens only the stack radius.
     float const stack = ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS * (parked ? 1.5f : 1.0f);
 
     bool const offBand = std::abs(fromSara - ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS) >
@@ -313,25 +298,20 @@ bool YoggSaronPhase2SpacingTrigger::IsActive()
     if (!hazardNear)
         return false;
 
-    // Phase 3 as well: the body ring outlives phase 2, and with no node walking bots out of it one pull's
-    // melee were thrown 93 times in phase 3.
+    // Phase 3 as well: the body ring outlives phase 2, and no node would walk bots out of it.
     uint32 const phase = YoggSaronPhase(botAI);
     return phase == 2 || phase == 3;
 }
 
 bool YoggSaronSetDpsPriorityTrigger::IsActive()
 {
-    // Outside phase 2 a tank keeps the generic picker: the resolver would pull it off whatever it is
-    // holding, and in phase 3 guardian control owns it. In phase 2 that picker ranks by "not attacking
-    // me" then nearest by GetDistance, which takes off a Crusher's 8 yd combat reach, so it walks the
-    // tank into the one thing melee are barred from: one bot tank took 53 of a pull's 59 Crushes there,
-    // 807,919 damage, and died to one.
+    // Outside phase 2 a tank keeps the generic picker (the resolver would pull it off what it holds; phase 3 guardian
+    // control owns it). In phase 2 it walks the tank into a Crusher: GetDistance drops its 8 yd combat reach.
     if (botAI->IsTank(bot) && !IsPhase2())
         return false;
 
-    // Fight-wide rather than per phase, and it has to stay in step with the dps target guard rule in
-    // the definition: that zeroes the stock assist over exactly this window, so a narrower gate here
-    // would leave a non-tank with no target source at all.
+    // Fight-wide, and must match the dps target guard rule in the definition, which zeroes the stock assist over this
+    // window.
     return IsYoggSaronFight();
 }
 
@@ -340,9 +320,8 @@ bool YoggSaronDarkVolleyTrigger::IsActive()
     if (!YoggSaronCanInterrupt(bot))
         return false;
 
-    // Answer for this bot, not for the raid. The node sits at ACTION_EMERGENCY + 1, so a bot that
-    // claims the tick and only then finds every caster out of reach has spent the whole tick on
-    // nothing - 63 of 92 attempts in one pull.
+    // Answer for this bot, not the raid. The node sits at ACTION_EMERGENCY + 1, so claiming the tick and then finding
+    // every caster out of reach wastes the whole tick.
     for (Unit* caster : GetYoggSaronInterruptCasters(botAI))
     {
         if (YoggSaronInterruptClaimedByOther(bot, caster))
@@ -417,21 +396,15 @@ bool YoggSaronPhase3ControlTrigger::IsActive()
 
 bool YoggSaronBrainLinkTrigger::IsActive()
 {
-    // Not TooFarFromPlayerWithAura, which measures the gap to other holders of the same aura: Brain
-    // Link puts 63802 on one end only and keeps the partner's GUID inside the aura script, so that
-    // helper finds nobody to measure against. The pair comes off the cast instead, which both ends
-    // can read, so this fires for the partner as well as the owner.
-    //
-    // A brain team bot on its way to a portal keeps going: the link drops once the two ends are 10 yd
-    // apart vertically, and closing it kept one healer upstairs for a whole wave.
+    // Not TooFarFromPlayerWithAura: 63802 sits on one end only, so the pair is read off the cast, which both ends can
+    // see. A brain team bot heading for a portal keeps going: the link drops at 10 yd apart vertically.
     return IsPhase2() && YoggSaronBrainLinkTarget(botAI) != nullptr && !YoggSaronPortalWalkPending(botAI);
 }
 
 bool YoggSaronMoveToEnterPortalTrigger::IsActive()
 {
-    // The spread happens before the wave exists, so "diamond" - set by the walk itself - keeps the
-    // node live rather than ending it. The arena test is what stops it firing again underground,
-    // where the mark still reads diamond until the illusion room node renames it.
+    // The spread happens before the wave exists, so "diamond" (set by the walk) keeps the node live. The arena test
+    // stops it firing underground, where the mark reads diamond until the illusion room node renames it.
     std::string const rti = AI_VALUE(std::string, "rti");
     if (rti != "skull" && rti != "diamond")
         return false;
@@ -531,10 +504,8 @@ bool YoggSaronIllusionHealerStationTrigger::IsActive()
     if (!PlayerbotAI::IsHeal(bot) || !botAI->CanMove())
         return false;
 
-    // The middle of the room's live tentacles, not the room's own middle, which is the centroid of the
-    // whole summon group and so the one spot with nothing on it. In the Chamber that ring sits 36-44 yd
-    // out against a 38.5 yd heal range, which put the healer's own room beyond it: 17 heals landed that
-    // wave against 137 and 172 in the other two rooms.
+    // The middle of the room's live tentacles, not the room's own middle: the centroid of the summon group, the one
+    // spot with nothing on it. In the Chamber that ring sits 36-44 yd out, past the 38.5 yd heal range.
     Position station;
     if (!YoggSaronIllusionHealerStation(botAI, station))
         return false;
@@ -570,9 +541,8 @@ bool YoggSaronBrainSpotTrigger::IsActive()
     if (AI_VALUE(std::string, "rti") != "square")
         return false;
 
-    // The way out wins from the moment Induce Madness is close enough to walk for. Both walks are
-    // forced and the exit node cannot hold every tick of a 20 yd walk, so this one took the gaps and
-    // turned bots round yards short of a portal: two of one pull's four charms came from that.
+    // The way out wins once Induce Madness is close enough to walk for: both walks are forced and the exit node can't
+    // hold every tick of a 20 yd walk, so this one took the gaps and turned bots round short of a portal.
     if (YoggSaronShouldLeaveBrainLevel(botAI))
         return false;
 
@@ -673,21 +643,13 @@ bool YoggSaronBrainChargeTrigger::IsActive()
 
 bool YoggSaronMoveToExitPortalTrigger::IsActive()
 {
-    // The Brain sits at z 265 while its room's floor is z 236-244, so a radius to it was never "am I in
-    // the brain room" - it was that question plus a permanent 25 yd vertical tax, and two of the three
-    // portal arrivals land outside 60 yd before the bot takes a step. The level is the real test.
+    // The Brain sits at z 265 and its room's floor at z 236-244, so a radius to it adds a permanent 25 yd vertical tax.
+    // Two of the three portal arrivals land outside 60 yd. The level is the real test.
     if (!IsInBrainLevel() || !IsYoggSaronFight())
         return false;
 
-    // An illusion room has no exit to walk to until its door opens. All three Flee to the Surface
-    // portals sit in the brain chamber, 93 to 109 yd from an illusion room's middle and behind doors
-    // the Brain only opens when the last Influence Tentacle in that room dies. Without this the node
-    // starts hauling a bot at a shut door half a minute before Induce Madness lands: 53 of 62 walks in
-    // one pull came back as the same unreachable point re-issued.
-    //
-    // The brain chamber itself is exempt rather than routed through the same test: the portals are in
-    // there, so a bot that made it through can always leave, and the next wave's tentacles must not
-    // strand it.
+    // An illusion room has no exit until its door opens: the portals sit in the brain chamber behind doors that open
+    // when the room's last Influence Tentacle dies. The brain chamber itself is exempt.
     if (YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_BRAIN && !IsBrainRoomApproachable())
         return false;
 
@@ -728,9 +690,8 @@ bool YoggSaronPetGuardTrigger::IsActive()
     if (target && target->IsAlive() && target->GetEntry() == NPC_CRUSHER_TENTACLE)
         return true;
 
-    // From the pet, not the owner. With their owners 38 yd out this never fired for two pets sitting on
-    // a stunned Crusher, and they ate 8 Crushes in 4 s once the stun lifted. A passive pet may be one the
-    // action hushed and has to give back.
+    // From the pet, not the owner: with owners 38 yd out this never fired for pets on a stunned Crusher. A passive pet
+    // may be one the action hushed and has to give back.
     for (Unit* controlled : bot->m_Controlled)
     {
         Unit* victim = controlled->GetVictim();
@@ -768,9 +729,8 @@ bool YoggSaronBodyDetourTrigger::IsActive()
         ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
         return false;
 
-    // Nothing to route while the bot can already hit from where it stands - that is exactly when reach
-    // stands down too, so claiming the tick here would only cost it a cast. Combat reach counts: a
-    // full-health Guardian is several yards across.
+    // Nothing to route while the bot can already hit from where it stands, which is when reach stands down too. Combat
+    // reach counts: a full-health Guardian is several yards across.
     bool const inReach = botAI->IsMelee(bot) ? bot->IsWithinMeleeRange(target)
                                              : bot->IsWithinCombatRange(target, sPlayerbotAIConfig.spellDistance);
     if (inReach || YoggSaronRouteClearOfBody(bot, target->GetPositionX(), target->GetPositionY()))
@@ -783,9 +743,8 @@ bool YoggSaronBodyDetourTrigger::IsActive()
 
 bool YoggSaronLunaticGazeTrigger::IsActive()
 {
-    // 64163 is a 4-second aura Yogg puts on himself, ticking 64164 once a second at 130 yd on everyone
-    // with him in their own front 180 degrees. It is not a channel, so GetCurrentSpell never saw it. And
-    // "find target" walks the bot's own threat list, which Yogg is not reliably on.
+    // 64163 is a 4 s self aura on Yogg, ticking 64164 each second at 130 yd on everyone with him in their front 180
+    // degrees. Not a channel (GetCurrentSpell never saw it), and Yogg isn't reliably on the bot's threat list.
     Creature* yoggsaron = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
     if (!yoggsaron || !yoggsaron->IsAlive())
         return false;
@@ -903,29 +862,25 @@ bool YoggSaronGuardianControlTrigger::IsActive()
 
     uint32 const phase = YoggSaronPhase(botAI);
 
-    // Phase 1 wants the same thing for a harder reason. There a Guardian's death location is the phase:
-    // 65719 reaches Sara from 15 yd, so one killed further out is worth nothing, and one killed more
-    // than 6.5 yd out novas the back line as well as the melee pile. One pull lost 4 of its 13 kills
-    // 18-22 yd out and wiped one kill short of the transition.
+    // Phase 1 wants it harder: a Guardian's death location is the phase. 65719 reaches Sara from 15 yd, so one killed
+    // further out is worth nothing, and one killed more than 6.5 yd out novas the back line as well as the melee pile.
     if (phase == 1)
     {
-        // The designated bot tank rather than the main tank: IsBotMainTank goes false for every bot
-        // the moment a human holds main tank, which is how the phase 3 node stayed silent for a pull.
+        // The designated bot tank rather than the main tank: IsBotMainTank goes false for every bot the moment a human
+        // holds main tank.
         if (!IsDesignatedBotTank() || !YoggSaronInPhase1Room(bot))
             return false;
 
         return YoggSaronPhase1TauntTarget(botAI) != nullptr;
     }
 
-    // Not gated on Thorim. Which Keepers are up is a raid choice, and hard mode means fewer of them,
-    // so asking for both demanded exactly the case where Thorim is least likely to be there. Guardians
-    // parked on a tank beat guardians loose among the casters even where none of them can die.
+    // Not gated on Thorim: hard mode means fewer Keepers, so asking for both demands the case where he is least likely
+    // to be there. Guardians parked on a tank beat loose ones even where none can die.
     if (phase != 3)
         return false;
 
-    // Fire while a guardian is loose - not Weakened and not held by a tank - or while one at the stack is
-    // not the bot's target. Taunting without hitting builds nothing to keep it, and the action decides
-    // whether the lead on the one it holds is worth leaving.
+    // Fire while a guardian is loose (not Weakened, not held by a tank) or while one at the stack is not the bot's
+    // target. Taunting without hitting builds nothing; the action decides whether leaving the held one pays.
     if (YoggSaronGuardianLoose(botAI))
         return true;
 
@@ -956,7 +911,7 @@ bool YoggSaronSanityConservationTrigger::IsActive()
     if (!sanityAura || sanityAura->GetStackAmount() > ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD)
         return false;
 
-    // A linked bot must stay near its Brain Link partner - retreating would drain more sanity, not less.
+    // A linked bot must stay near its Brain Link partner: retreating would drain more sanity, not less.
     if (bot->HasAura(SPELL_BRAIN_LINK))
         return false;
 
@@ -969,7 +924,7 @@ bool YoggSaronSanityConservationTrigger::IsActive()
         return false;
 
     // Let the phase 2 spacing dodge win while a hazard is on top of the bot: a Death Ray still kills at
-    // low health. The Death Orb this used to test is a marker 27 yd overhead and never reaches anyone.
+    // low health. A Death Orb test is useless: it is a marker 27 yd overhead and never reaches anyone.
     if (bot->FindNearestCreature(NPC_DEATH_RAY, ULDUAR_YOGG_SARON_DEATH_RAY_TRIGGER_RADIUS, true))
         return false;
 
@@ -1005,10 +960,8 @@ bool YoggSaronSqueezeEscapeTrigger::IsActive()
 
 bool YoggSaronNovaDefensiveTrigger::IsActive()
 {
-    // Cheapest read first, as everywhere in this file: a plain distance, then a 17 yd sweep. A bot
-    // spends its own button at the 10% gate only, where the nova lands within 3.7 s and a Guardian
-    // sits for a fraction of the time it spends under 20% - at the wider gate the whole raid emptied
-    // its cooldowns onto the first nova and had nothing for the next eight.
+    // Cheapest read first: a plain distance, then a 17 yd sweep. A bot spends its own button at the 10% gate only,
+    // where the nova lands within 3.7 s; at 20% the raid emptied its cooldowns on the first nova.
     if (!YoggSaronInPhase1Room(bot))
         return false;
 

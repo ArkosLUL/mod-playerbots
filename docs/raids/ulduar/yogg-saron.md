@@ -9,7 +9,7 @@ That makes P1 a counter, not a damage race: 65719 is a flat **25,000**, so the p
 divided by it and a kill outside 15 yd buys nothing at all.
 
 **Never take that count from `creature_template`** — her row's 199,999 gives eight, and she measures
-**237,500 at 24 raiders** for **ten** ([../../engine/pitfalls.md](../../engine/pitfalls.md), boss
+**240,000 at 25 raiders** and **237,500 at 24** for **ten** ([../../engine/pitfalls.md](../../engine/pitfalls.md), boss
 health is scaled and moves with raid size). Read it off Sara's `unit` row; `yogg_saron.py --phases`
 does. On 2026-09-15 a pull wiped with **9 of the 10**, having spent four kills 18-22 yd out where they
 counted for nothing; the pull that transitioned did so 0.26 s after its tenth.
@@ -72,7 +72,9 @@ the nova led at 1,570,355 over 115 hits when two or three were alive, Dark Volle
 against the nova's 730,809 once 14 were. 25-man **normal** casts 63038, so the Dark Volley ids do not
 split 10/25; test both. The always-on class interrupts only look at the bot's current target and
 caught under a third of the volleys, hence `yogg-saron dark volley`, which offsets each interrupter by
-its index so the raid does not spend every cooldown on one cast.
+its index so the raid does not spend every cooldown on one cast. Its trigger answers for **this** bot
+(a caster in its own reach, not claimed by another): at `ACTION_EMERGENCY + 1` a bot that claimed the
+tick and only then found every caster out of reach spent it on nothing, **63 of 92** attempts in one pull.
 
 The nova is a **death explosion, not a cast** — `boss_yoggsaron_guardian_of_ys::JustDied` →
 `DoCastAOE` — so nothing interrupts or outranges it once the guardian dies inside the stack. **Its
@@ -85,7 +87,8 @@ healers do, and stand off (below).
 (enhancement shaman) and 24,812-25,492 (rogues) up to **30,549** (warrior). Across five pulls the
 ordinary hit held a **17,385-17,631** median either way, but the worst of it did not: **25,025** over
 515 hits with the raid's shadow resistance up, **26,692** over 137 with it down, and the unresisted roll
-only ever appeared in the second case — **0 of 515** against **9 of 137**.
+only ever appeared in the second case — **0 of 515** against **9 of 137**. Before resistance, one pull's
+138 hits ran a **23,547** median to a **27,034** ordinary maximum.
 
 So `…_NOVA_EXPECTED_DAMAGE` is **28,600**: a ret paladin died from a verified full **28,582** bar on a
 recorded 26,692, so 65209's two `SCHOOL_DAMAGE` effects outrun the one row the trace records per raider,
@@ -365,8 +368,10 @@ beat the rest to the victim and then cast nothing.
 
 All of it is held off the class triggers by `YoggSaronNovaHold` — `yogg-saron nova defensive hold`
 over the melee row, `yogg-saron nova cooldown hold` over the externals and Divine Sacrifice. That is all
-of phase 1, because every death measured in it was a nova, and after it only while a Guardian is within
-nova range (`YoggSaronNovaNearby`), so phase 2 spends normally on Crush and the Death Rays. Every one
+of phase 1, because every death measured in it was a nova, and after it only while a Guardian lives
+inside `…_P1_ROOM_RADIUS`, so phase 2 spends normally on Crush and the Death Rays once they are gone. A
+17 yd test let go while two were still alive just after phase 1, and the class nodes spent Aura Mastery
+and a Divine Sacrifice on an already hurt raid. The phase read goes last: three 200 yd sweeps a bot. Every one
 otherwise fires on "I am already low", which means after the nova: Totemist cast Shamanistic Rage nine
 times in one pull and died four times. Tanks and the back line keep theirs, for the Guardians one holds
 and the Dark Volley the other eats.
@@ -807,7 +812,8 @@ So spend it on the Guardian whose death location decides the phase. The generic 
 reactive — whoever last hit a raid member — and its aim decays as they pile up: on the focus Guardian
 **6 of 13 times**, all six with 1-5 alive, then rank 3, 3, 4, 6 and **7 of 9**. `yogg-saron guardian
 control` runs in phase 1 as well now, holding the tank inside the **2.8 yd** cloud-free circle rather
-than phase 3's 5.0 and taunting `YoggSaronPhase1TauntTarget`: the raid's focus first, skipping any
+than phase 3's 5.0 (a taunted Guardian dies where the tank stands, and outside 2.89 yd the inner orbit
+sweeps the pile: one pull fed it **8 of 23** Guardians that way) and taunting `YoggSaronPhase1TauntTarget`: the raid's focus first, skipping any
 Guardian already inside the leash or already walking at a tank, and **nothing it cannot reach**: Taunt
 355, Hand of Reckoning 62124, Dark Command 56222 and Growl 6795 all share spell range index 4, so
 `ULDUAR_YOGG_SARON_P1_TAUNT_RANGE` is **30 yd** - still the whole 21.5 yd back line, so this never
@@ -1939,6 +1945,14 @@ attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Repri
 Gaze 64168 in `dmg`. A removal row carries no stack count, so skip `r:1` rows when taking a minimum or
 every bot reads as Insane.
 
+**Four things the reader infers because no row records them.** A portal taken shows only as the bot's
+own Illusion Room cast (63988): the portal is never sampled and a failed click leaves nothing. Induce
+Madness leaves no damage or aura row, so the Insane aura is its only record and `SANITY_COSTS` leaves it
+out. The trace has no DmgClass, so a ranged bot's melee hits on a Crusher are matched by name
+(`MELEE_CLASS_NAMES`). And the exit walk uses its portal at `INTERACTION_DISTANCE`, the 5 yd that also
+counts as arrived, so a clean exit often leaves no `yogg.walk` row; `--brain`'s `caught by it` measures
+that walk instead.
+
 ## The Death Orb is not the hazard
 
 `NPC_DEATH_ORB` (33882) is a marker parked at z 353 while the raid stands at z ≈ 326 — **27 yards
@@ -2220,7 +2234,8 @@ off cooldown,
   from a leftover as phase 3 began, and the cone killed it.
 - **Drain Life is kicked on purpose.** The interrupt node's casters include Immortal Guardians
   channelling 64159/64160 in phase 3; immunity set `-286` has SILENCE but not INTERRUPT, so Strangulate,
-  Silencing Shot and Arcane Torrent are dropped for them; `interruptClaims` holds a cast for one kicker
+  Silencing Shot and Arcane Torrent are dropped for them, and Avenger's Shield is off the list because it
+  picks its own target; `interruptClaims` holds a cast for one kicker
   for 1.5 s. By chance alone, 6-7 of 14 were cut inside 1.5 s and 5 ran full; with it, 13 of 13. A
   full Freya-only phase 3 still ran 54 of 219 full (10.7M healed), 29 of them with a bot kick ready and
   in range. Spell Lock is on the list (the felhunter's spell, cast by the bot, so cooldown and range are

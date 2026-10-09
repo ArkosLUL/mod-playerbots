@@ -1,72 +1,8 @@
 #!/usr/bin/env python3
 """Score a Yogg-Saron pull from a RaidObs trace: phases, clouds, portals, the brain room, Crush.
 
-    yogg_saron.py <file>            every section
-    yogg_saron.py <file> --phases   phase timeline, the Keepers freed, what happened before the pull,
-                                    and how far apart the Guardians left at the handover died
-    yogg_saron.py <file> --clouds   cloud-orbit exposure per role, and who summoned each Guardian
-    yogg_saron.py <file> --fervor   Sara's Fervor runs that came back into the nova, novas on holders,
-                                    Guardians only runners summoned
-    yogg_saron.py <file> --novas    every Shadow Nova: the warning each health gate gave, who it
-                                    would have killed, and which cooldown covered them
-    yogg_saron.py <file> --threat   who the Guardians were on, redirects, and taunt aim
-    yogg_saron.py <file> --portals  portal waves, assignments and who got down
-    yogg_saron.py <file> --tentacles  tentacle stock at each brain room door, stun removal, leftovers at P3
-    yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure,
-                                    who reflect and gaze killed and the reprisal holds, and where
-                                    Induce Madness caught whoever it charmed and what their way out
-                                    lost, Nitro Boosts, the walk to the Brain per role, turns on the
-                                    spot below, brain spot picks, exits decided outside the brain room,
-                                    what bots were doing when a skull's gaze hit them, the room shares,
-                                    and per wave who waited at the door, how far out the team stood
-                                    when it opened and when it reached the Brain, Nitro, Dash and
-                                    Brain charges, and the hold short of 30%: from when, why it let
-                                    go, what leaked and how many tentacles were up
-    yogg_saron.py <file> --phase3   Heroism against when the raid was in position, which ranged station a
-                                    leftover Crusher left them, how fast each role and the brain team
-                                    reached its station and the Nitro Boosts spent on it, Immortal
-                                    Guardians, who pulled them off the tanks and with what, how much of
-                                    the time they were at full power or Weakened, Drain Life channels, how
-                                    fast they were cut and the kicks left unused, the bot tank's targets
-                                    and taunts, the Guardians on each tank, tank swaps, taunts that went
-                                    back to the other tank, Misdirection, the tanks' buttons, Lay on Hands,
-                                    swings on the raid during a gaze, beacon heals and how far marked Guardians were
-                                    from Yogg, the rest and each other, which other Guardians the heal
-                                    reached, each tank's 20 s under it and the raid's damage on the healed
-                                    ones, beacon drags and the lane picked, who held each healed Guardian,
-                                    what it did to non-tanks and when a tank had it, Deafening Roar
-                                    against Aura Mastery, Lunatic Gaze, the damage split by Guardian health
-                                    band, area casts by how many units round the target were worth
-                                    hitting, healer mana and engine, phase 2 leftovers, the pets on each
-                                    and Diminish Power
-    yogg_saron.py <file> --crush    Crush, who took it and what each cone was aimed at, the body's
-                                    knockback and who walked into it, Death Rays and the last walk
-                                    before each
-    yogg_saron.py <file> --sanity   Sanity minima, each trip below, who sat a wave out, where it went,
-                                    Rebirths on a corpse with no Sanity
-
-The fight has three rooms, five mechanics that kill and nothing in the world to sweep for two of
-them, so most of what matters here is in `note` rows rather than in the snapshot:
-
-- **Sara is FACTION_FRIENDLY for all of phase 1**, and the snapshot sweep keeps only units hostile to
-  the anchor, so her health bar - which *is* phase 1's progress - is never sampled. `yogg.phase` is
-  the only phase timeline a trace carries.
-- **The body's knockback has no world object.** 64022 is an infinite self aura on Yogg triggering
-  64020 every second, a 14 yd knock back that works out to a 13.26 yd horizontal ring on the floor.
-  It reaches the file only as a `haz` circle, which nothing tests a death against.
-- **Crush is a cone with no dynamic object either**, and its facing tracks whoever hit the tentacle
-  last. `yogg.crush` is the per-bot read and `haz` carries the geometry to check it against.
-- **A disguised Influence Tentacle keeps its own health while showing the disguise's entry**, because
-  Creature::UpdateEntry preserves current health. A Suit of Armor at 6% is not a damaged Suit of
-  Armor, it is a full-health tentacle.
-- **Portals are creatures (34072), not gameobjects**, one use each, despawning after 25 s, and only
-  RAID_MODE(4, 10) of the ten spots ever spawn. They are not hostile, so the snapshot sweep - which
-  keeps only units hostile to the anchor - never samples one. `yogg.wave` is the only record that a
-  wave happened at all, and the spot table below is the only record of where they were.
-
-`ObsValue` and `ObsGuidMap` emit on change only, so a key going quiet means "unchanged", never
-"never happened". A key missing from the whole trace is a different thing and is reported as such:
-that means the probe is not reaching the recorder, not that the mechanic never fired.
+Most of it is in `note` rows: Sara, the knockback, Crush's cone and portal creatures are never sampled. `ObsValue` and
+`ObsGuidMap` emit on change only: a quiet key means unchanged, a key missing from the trace never reached the recorder.
 """
 from __future__ import annotations
 
@@ -95,10 +31,8 @@ NPC_INFLUENCE_TENTACLE = 33943
 NPC_LAUGHING_SKULL = 33990
 NPC_CRUSHER_TENTACLE = 33966
 
-# The six entries Creature::UpdateEntry disguises an Influence Tentacle as, picked by where it spawned
-# rather than by which illusion is running. A tentacle wears one from the moment it is summoned and
-# only reverts to 33943 once something damages it, so counting 33943 alone counts revealed tentacles,
-# never the room.
+# Entries an Influence Tentacle is disguised as from the moment it is summoned, chosen by spawn point.
+# It reverts to 33943 only once damaged, so counting 33943 alone misses the room.
 NPC_TENTACLE_DISGUISES = (33433, 33567, 33716, 33717, 33718, 33719, 33720)
 
 SPELL_SANITY = 63050
@@ -113,9 +47,8 @@ SPELL_SQUEEZE = 64126
 SPELL_BRAIN_LINK = 63802
 SPELL_BRAIN_LINK_DAMAGE = 63803
 SPELL_BRAIN_LINK_OK = 63804
-# What a bot casts on itself the moment it takes a portal. The portal creature is not hostile so no
-# snapshot ever samples one, and a click that failed leaves nothing behind - this is the only proof a
-# portal was actually used.
+# Self-cast when a bot takes a portal. The portal creature is never sampled and a failed click
+# leaves nothing, so this is the only proof a portal was used.
 SPELL_ILLUSION_ROOM = 63988
 SPELL_NITRO_BOOSTS_USE = 55004
 SPELL_DASH = 33357
@@ -123,8 +56,7 @@ SPELL_DASH = 33357
 SPELL_BRAIN_CHARGES = (11578, 20252)
 SPELL_DIMINISH_POWER = 64145
 
-# A step under this between samples is standing still, and a turn past this while standing is a spin:
-# the skull turn flipped bots between headings 3.7 rad apart.
+# A step under this between samples is standing still, and a turn past this while standing is a spin.
 WALK_STILL_YD = 0.3
 FLIP_TURN = 1.2
 
@@ -135,28 +67,24 @@ LEFTOVER_DEAD_PCT = 1.0
 LEFTOVER_BEACON_RISE_PCT = 10.0
 SPELL_HAND_OF_PROTECTION = (10278, 5599, 1022)
 
-# A Guardian's death nova is 15 yd (62714 and 65209 both carry radius index 18) and the ranged station
-# is 21.5, so a Guardian dying more than 6.5 yd from the middle catches the whole raid rather than the
-# melee pile. Measured: novas at 2.2-4.0 yd hit 9-10 players, novas at 8.5-14.8 yd hit 22-24.
+# 62714 and 65209 both use radius index 18 (15 yd) and the ranged station is 21.5, so a Guardian
+# dying more than 6.5 yd from the middle catches the whole raid, not the melee pile.
 NOVA_RADIUS = 15.0
 RANGED_STATION = 21.5
 P1_LEASH = 6.5
 
-# ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS: inside this no orbit reaches, so it is the only ground in the
-# room a melee bot can stand on without farming a Guardian. The tank is held here and the melee dodge
-# aims here, which is why where a dodge lands is read against it.
+# Inside this no orbit reaches: the only ground a melee bot can stand on without farming a Guardian.
+# The tank is held here and the melee dodge aims here.
 P1_CLOUD_FREE_RADIUS = 2.8
 
-# ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE and _P1_RANGED_STACK_RADIUS, with the spot the back line
-# walks to. The band is what keeps a bot off the inner orbit and the blob is what keeps the raid's
-# exposure to one bearing, so a dodge that lands in both wakes nothing the back line would not have.
+# Back line band tolerance and stack radius around the station. The band keeps a bot off the inner
+# orbit, the blob keeps the raid's exposure to one bearing.
 RANGED_BAND_TOLERANCE = 1.0
 RANGED_STACK_RADIUS = 5.0
 RANGED_SPOT = (1958.78, -25.587)
 
-# ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT, the one place melee and the tank wait out the handover, and
-# AiPlayerbot.HealDistance, which decides whether standing there is worth a heal at all. No AC_ override
-# touches the heal range here, so it is the code default.
+# Where melee and the tank wait out the handover. Whether standing there is worth a heal is
+# decided by AiPlayerbot.HealDistance.
 HANDOVER_MELEE_SPOT = (1973.315, -5.246)
 HEAL_DISTANCE = 38.5
 
@@ -175,21 +103,13 @@ DODGE_MOVE_MS = 1500
 # A cloud dodge this soon after a step-out is a bot dodging the cloud its own step-out woke.
 DODGE_FOLLOWUP_MS = 20000
 
-# 65719 is a flat 25,000 against Sara, so what the phase costs is her health divided by it. Never
-# assume that number: mod-dungeon-scale scales raid boss health and the result moves with raid size -
-# 240,000 at 25 raiders, 237,500 at 24, against the 199,999 of her spawn row. Ten kills, not eight.
-# She is FACTION_FRIENDLY and no snapshot ever samples her, but the `unit` row carries her max health.
+# 65719 is a flat 25,000 on Sara, so the phase costs her health divided by it, and mod-dungeon-scale moves
+# her health with raid size. She is friendly and never sampled, but the `unit` row carries her max health.
 NPC_SARA = 33134
 SARA_NOVA_DAMAGE = 25000
 
-# The clouds. Six of them, one per orbit, circling the middle at a constant 3.0 yd/s; radii are the
-# midpoints of a four-pull spread that never drifted. A cloud summons on any player within 8.5 yd -
-# SelectNearbyTarget's 6 goes through _IsWithinDist, which adds both combat reaches - and the Guardian
-# appears 10 s later, because 63031 is a 10 s aura rather than the instant summon the C++ reads as.
-#
-# InformCloud, Sara's own 20-18-16-14-12-10 s timer, skips any cloud within 20 yd of her, so the
-# innermost orbit can only ever have been triggered by a player standing on it. That is what makes
-# attribution possible at all.
+# Six clouds, one per orbit, at 3.0 yd/s. One summons on a player within 8.5 yd (its 6 plus both reaches).
+# The Guardian lands 10 s later (63031 is a 10 s aura). Sara's timer skips clouds within 20 yd of her.
 NPC_OMINOUS_CLOUD = 33292
 CLOUD_ORBITS = (11.6, 21.4, 31.2, 41.0, 50.9, 60.8)
 CLOUD_SUMMON_REACH = 8.5
@@ -204,37 +124,32 @@ REZ_WINDOW_MS = 5000
 REZ_AGAIN_MS = 60000
 INFORM_CLOUD_MIN_RANGE = 20.0
 
-# ULDUAR_YOGG_SARON_P1_ROOM_RADIUS: past the outer orbit's reach no cloud touches a bot, and the phase 1
-# movers wait until a bot is inside it. A move by one of them that started further out is the gate
-# failing, or a build from before it.
+# Past the outer orbit's reach no cloud touches a bot, and the phase 1 movers wait until a bot is inside.
+# A move that started further out means the gate failed, or an old build.
 P1_ROOM_RADIUS = CLOUD_ORBITS[-1] + CLOUD_SUMMON_REACH
 # The gate reads GetDistance2d(x, y), which takes the bot's own 1.5 yd combat reach off, and the move
-# lands up to a bot tick after that read: another ~1 yd at run speed. The gated pull's worst was 71.3.
+# lands up to a bot tick after that read: another ~1 yd at run speed.
 ROOM_GATE_SLACK = 2.5
 P1_MOVERS = ("yogg-saron phase 1 station action", "yogg-saron phase 1 spacing action",
              "yogg-saron guardian positioning action", "yogg-saron guardian control action")
 
-# ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS. Two Guardian deaths closer than this land both novas on whoever is
-# inside both before the heals catch up. On 2026-09-16 a pair 17 ms apart killed two melee from full,
-# one 2.5 s apart killed five at the station, and three in 3.4 s killed two melee in the handover.
+# Two Guardian deaths closer than this land both novas on whoever is inside both before the heals catch up.
 NOVA_GAP_MS = 6000
 
-# ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT and ..._P1_NOVA_CHAIN_RADIUS. A nova also takes 25,000-27,501,
-# ~2.7%, off every other Guardian within 15 yd, so one dying beside another that low kills both at once.
+# ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT and ..._P1_NOVA_CHAIN_RADIUS. A nova takes ~2.7% off every other
+# Guardian within 15 yd, so one dying beside another that low kills both at once.
 NOVA_GAP_HEALTH_PCT = 30.0
 NOVA_CHAIN_RADIUS = 18.0
 
-# Sara's Fervor doubles the nova, so its holder leaves on the widest warning anyone gets, a Guardian
-# under ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT inside 17 yd. The nova reached players at 16.2, and a
-# walk back within 6 s of the aura dropping is still the run's.
+# Sara's Fervor doubles the nova, so its holder leaves on the widest warning: a Guardian under
+# FERVOR_NOVA_HEALTH_PCT within 17 yd. A walk back within 6 s of the aura dropping is still the run's.
 SPELL_SARAS_FERVOR = 63138
 SPELL_SHADOW_NOVAS = (65209, 62714)
 NOVA_TRIGGER_RADIUS = 17.0
 # ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS. Past this a bot is clear of the blast, so a bot that was
 # out here and took the nova anyway was walked back in rather than never leaving.
 NOVA_CLEAR_RADIUS = 20.0
-# How far back to look for that step-out. The 20% gate gave 7.2-22.1 s of warning on every leftover
-# nova, so anything the bot did earlier than this belongs to a different Guardian.
+# How far back to look for that step-out: anything the bot did earlier belongs to a different Guardian.
 NOVA_WALK_BACK_MS = 12000
 FERVOR_NOVA_HEALTH_PCT = 50.0
 
@@ -249,8 +164,7 @@ NOVA_WARNING_GATES = (FERVOR_NOVA_HEALTH_PCT, 20.0, 10.0)
 NOVA_REACH = 16.2
 FERVOR_AFTER_MS = 6000
 
-# The two gates the ladder fires on, and what a nova is worth, mirroring
-# src/Ai/Raid/Uld/Util/UldEncounter_YoggSaron.h. The damage is the unresisted hit, not the median:
+# The ladder's two gates and the nova's worth. The damage is the unresisted hit, not the median:
 # resistance is rolled per hit and the ones that kill roll none.
 NOVA_SOON_HEALTH_PCT = 20.0
 NOVA_NOW_HEALTH_PCT = 10.0
@@ -276,17 +190,16 @@ SPELL_DIVINE_SACRIFICE = 64205
 # anything on the paladin holding one.
 SPELL_AURA_MASTERY = 31821
 NOVA_RAID_COVERS = {SPELL_DIVINE_SACRIFICE: "divine sacrifice", SPELL_AURA_MASTERY: "aura mastery"}
-# Shadow Resistance Aura ranks 1-5 and Prayer of Shadow Protection. Both are aura 143
-# SPELL_AURA_MOD_RESISTANCE_EXCLUSIVE and max rank of either gives 130, and the core takes the highest
-# rather than the sum, so holding both is worth exactly one of them.
+# Shadow Resistance Aura ranks 1-5 and Prayer of Shadow Protection: both aura 143, 130 at max rank.
+# The core takes the highest, not the sum, so holding both is worth one.
 SPELL_SHADOW_AURA_RANKS = (19876, 19895, 19896, 27151, 48943)
 SPELL_PRAYER_OF_SHADOW_PROTECTION = 48170
 # Two novas this close leave no room for a heal between them, which is what killed three melee at once.
 NOVA_CHAIN_MS = 6000
 FERVOR_MS = 15000
 P1_SPACING = "yogg-saron phase 1 spacing action"
-# Real summons measured their approach out to 8.71 centre to centre, and a pass is read off every
-# snapshot within 0.7 s of the mark rather than the single nearest one.
+# A real summon approaches out to 8.71 centre to centre; a pass is read off every snapshot within 0.7 s
+# of the mark, not the single nearest one.
 CLOUD_MARK_REACH = 8.7
 CLOUD_MARK_WINDOW_MS = 700
 STATION_BAND = 1.5
@@ -303,28 +216,24 @@ TAUNT_SPELLS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command",
 TAUNT_ACTIONS = {"taunt", "hand of reckoning", "dark command", "growl"}
 TAUNT_RANGE = 30.0
 
-# The tentacle's own melee range on a player, centre to centre: CombatReach 8 on display 28814, plus
-# 1.5, plus 4/3, which is 10.83. No leeway, since it never moves. Same number as the module's
-# ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS, so the reader and the trigger agree on who is inside.
+# Tentacle melee range on a player, centre to centre: CombatReach 8 (display 28814) + 1.5 + 4/3 = 10.83.
+# No leeway, it never moves. Same as ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS.
 CRUSHER_MELEE_RANGE = 11.0
 
-# The tentacle faces whoever it is swinging at and turns the moment anybody else hits it, so either
-# sample around a Crush can name somebody else. The one facing nearest the bot the cone landed on is
-# the swing's: four of one pull's five cone kills needed the sample after, the tank's the one before.
+# The tentacle faces whoever it swings at and turns the moment anybody else hits it, so a sample around
+# a Crush can name somebody else. The facing nearest the bot the cone landed on is the swing's.
 CRUSH_AIM_LAG_MS = 500
 # A walk older than this did not put anybody in a cone that tracks a moving victim.
 CRUSH_WALK_BLAME_MS = 3000
 
-# 64145 is a channel, so it only exists while the tentacle keeps channelling, and the tentacle only
-# re-casts it once its victim is out of melee range. Counting cast starts misses every break that was
-# followed by a swing. The aura on the raid is the real measure.
+# 64145 is a channel the tentacle re-casts only once its victim is out of melee range, so counting cast
+# starts misses every break followed by a swing. The aura on the raid is the real measure.
 SPELL_DIMINISH_POWER = 64145
 CLASS_PALADIN = 2
 JUDGEMENT_SPELLS = {20271: "Judgement of Light", 53407: "Judgement of Justice", 53408: "Judgement of Wisdom"}
 
-# What a ranged bot hits a Crusher with once it is standing inside the tentacle's melee range: a
-# caster's weapon swing shows up only as its imbue proc, and a hunter inside Auto Shot's dead zone falls
-# back to its melee abilities. The trace has no DmgClass, so these are matched by name.
+# What a ranged bot hits a Crusher with inside its melee range: a caster's swing shows only as its imbue
+# proc, a hunter in Auto Shot's dead zone uses melee abilities. The trace has no DmgClass, so match by name.
 MELEE_CLASS_NAMES = {"Flametongue Attack", "Windfury Attack", "Raptor Strike", "Mongoose Bite", "Wing Clip"}
 
 # How soon after a Judgement the channel has to come off to count as that Judgement breaking it.
@@ -344,15 +253,14 @@ TENTACLE_SPENT_PCT = 20.0
 # floor, so what lands on the floor is a 13.26 yd ring. Nothing in the world can be swept for it.
 KNOCKBACK_RADIUS = 13.3
 
-# A thrown bot's movement generator reads EFFECT_MOTION_TYPE from the first sample of the flight. Height
-# missed most throws: one launched from 324.9 was only at 327.3 a sample later. A switch to it this near
-# the body, on the platform, is the body's knock back.
+# A thrown bot's movement generator reads EFFECT_MOTION_TYPE from the flight's first sample; height
+# alone misses most throws. A switch to it near the body, on the platform, is the body's knock back.
 EFFECT_MOTION_TYPE = 16
 LAUNCH_RADIUS = 18.0
 PLATFORM_Z = (320.0, 335.0)
 
 # How far back a throw looks for the walk that crossed the ring. A refused re-issue of the same walk
-# is not written as issued, so the one that counts can be a few throws old: 27 s at one phase 3 opening.
+# is not written as issued, so the one that counts can be several throws old.
 LAUNCH_BLAME_MS = 30000
 
 BODY = (1980.28, -25.5868)
@@ -434,9 +342,8 @@ PHASE_3_STATION_RADIUS = 15.0
 PHASE_3_RANGED_STANDBY_SPOTS = (("-15", (2019.18, -29.08, 327.154)), ("+15", (2015.72, -9.16, 327.155)),
                                 ("-30", (2016.95, -39.03, 327.678)), ("+30", (2010.26, -0.55, 327.291)))
 PHASE_3_RANGED_CRUSHER_CLEARANCE = 18.0
-# The module's Heroism gate in phase 3: this share of the living raid at its station, or standing still
-# in reach of a live target. Reach is the bots' spell distance past both combat reaches, a player's 1.5
-# and the target's, which only Yogg and the Crusher have, or melee range.
+# Phase 3 Heroism gate: this share of the living raid at its station, or standing still in reach of a
+# live target. Reach is spell distance past both combat reaches (player 1.5 plus the target's), or melee range.
 LUST_POSITION_SHARE = 0.8
 SPELL_DISTANCE = 28.5
 PLAYER_COMBAT_REACH = 1.5
@@ -459,8 +366,7 @@ SPELL_SHADOW_BEACON = 64465
 SPELL_EMPOWERING_SHADOWS = (64468, 64486)
 EMPOWERING_SHADOWS_MS = 20000
 EMPOWERING_SHADOWS_RADIUS = 20.0
-# How long after the cast a Guardian the heal reached is read again. Three stacked heals took one from
-# 0% to 81% in this time.
+# How long after the cast a Guardian the heal reached is read again.
 BEACON_SPLASH_LOOK_MS = 6000
 # Cast by a Guardian as it arrives, and by every one again as the raid wipes.
 SPELL_SIMPLE_TELEPORT = 64195
@@ -472,9 +378,8 @@ TAUNT_COOLDOWN_MS = 8000
 # whose cast row on the Guardian sits beside the one on the friendly target.
 GUARDIAN_TAUNTS = set(TAUNT_SPELLS) | {6795, 31789}
 
-# The module's phase 3 split: ranged hit a Guardian only above the floor and the rest goes on Yogg, under
-# it only during a Lunatic Gaze, and never once Weakened. Melee stay on Yogg but for a gaze or a
-# beacon-healed Guardian over the floor on a tank.
+# Phase 3 split: ranged hit a Guardian only above the floor, otherwise Yogg; under it only in a gaze,
+# never once Weakened. Melee stay on Yogg except for a gaze or a beacon-healed Guardian over the floor on a tank.
 GUARDIAN_FLOOR_PCT = 30.0
 GUARDIAN_WEAKENED_PCT = 10.0
 # Deafening Roar: 2.3 s cast, then 4 s of silence within 50 yd. Aura Mastery with the caster's own
@@ -499,9 +404,8 @@ BEACON_LANES = ("north", "south", "northeast")
 # How long into phase 3 a Nitro Boosts use counts as the walk to the station.
 STATION_NITRO_WATCH_MS = 30000
 
-# The module's phase 3 area rule: an area spell needs this many units worth hitting within the area
-# trigger's radius of the target, distance minus each unit's own reach. These are the actions it holds,
-# by spell name.
+# Phase 3 area rule: a spell needs this many units worth hitting within the trigger's radius of the target
+# (distance minus each unit's reach). The actions it holds, by spell name.
 PHASE_3_AREA_RADIUS = 8.0
 PHASE_3_AREA_MIN_WORTH = 3
 PHASE_3_AREA_SPELLS = {"Blizzard", "Flamestrike", "Blast Wave", "Dragon's Breath", "Cone of Cold", "Hurricane",
@@ -664,9 +568,8 @@ def home_ground(role: str, radius: float) -> bool:
 
 def came_back(series: list[tuple], trigger: float = NOVA_TRIGGER_RADIUS,
               reach: float = NOVA_REACH) -> tuple[int | None, float]:
-    """One Fervor hold as (t, distance to the nearest Guardian at or under the Fervor gate, or None):
-    when the bot first came back inside the nova's reach after getting past the trigger radius, and the
-    seconds it spent inside from then on. (None, 0.0) if it never got out or never came back."""
+    """(t first back inside the nova's reach after getting past the trigger radius, seconds inside from then).
+    (None, 0.0) if it never got out or never came back."""
     points = [(t, far) for t, far in series if far is not None]
     out = False
     back_at = None
@@ -683,9 +586,8 @@ def came_back(series: list[tuple], trigger: float = NOVA_TRIGGER_RADIUS,
 
 
 def missing_probes(trace: Trace) -> list[str]:
-    """`yogg.*` keys the source declares and this pull never emitted. Named outright rather than
-    resolved off the trace: a pull still filed under the map resolves to no boss, and a check keyed
-    on that matches no key at all and reports every one present."""
+    """`yogg.*` keys the source declares and this pull never emitted. Named outright, not resolved off the trace:
+    a pull filed under the map resolves to no boss, so a trace-keyed check would report every key present."""
     return [key for key, _, _ in silent_keys(emitted_keys(trace), "yogg-saron")]
 
 
@@ -713,10 +615,8 @@ def show_phases(trace: Trace) -> None:
     keepers = keepers_from_auras(rec.get("sp") for rec in trace.of("aura") if rec.get("sp") in KEEPER_PASSIVES)
     print(f"\n  Keepers freed           : {', '.join(keepers) or 'none seen'}")
 
-    # How late the raid noticed. t=0 is the `pull src=bossstate` row, which the recorder writes when
-    # the boss state goes IN_PROGRESS - that is inside Sara's InitFight, so t=0 is the pull itself.
-    # First damage is 20-30 s later and is not a pull marker: reading it as one is what hid a build
-    # whose encounter read did not open until 24 s in.
+    # t=0 is the `pull src=bossstate` row, written when the boss state goes IN_PROGRESS inside Sara's InitFight.
+    # First damage comes 20-30 s later and is not a pull marker.
     engaged = [rec["t"] for rec in notes(trace, "yogg.engaged") if rec.get("txt") == "engaged"]
     if engaged:
         late = min(engaged)
@@ -735,9 +635,8 @@ def show_phases(trace: Trace) -> None:
         in_p1 = [t for t in born.values() if 0 <= t <= (p1_end or 0)]
         print(f"  Guardians in phase 1    : {len(in_p1)}, {len(early)} of them before the pull")
 
-    # Where a Guardian died decides who its nova hits, and it is the only phase 1 number that moves
-    # the back line's damage. Creature deaths are not in the `death` stream, which is roster only, so
-    # the nova it casts at Sara on the way out is the record that it died at all.
+    # Where a Guardian died decides who its nova hits. Creature deaths are not in the `death` stream (roster
+    # only), so the nova it casts at Sara on the way out is the only record it died.
     novas = [(rec["t"], rec.get("s")) for rec in trace.of("cast")
              if rec.get("sp") == SPELL_SHADOW_NOVA_SARA and rec["t"] <= (p1_end or 0)]
     where = tracks(trace, guardians)
@@ -780,9 +679,8 @@ def show_phases(trace: Trace) -> None:
             print(f"      {clock(a[0]):>9} at {a[1]:4.1f} yd {kinds[a]:6}, {clock(b[0]):>9} at {b[1]:4.1f} yd "
                   f"{kinds[b]:6}  ({(b[0] - a[0]) / 1000:.3f} s apart)")
 
-        # A death beside a low Guardian: its nova takes ~2.7% off that one too, so the pair can go in
-        # one tick. The bots hold the higher one back; humans, splash and parked Guardians can still
-        # line one up.
+        # A death beside a low Guardian: its nova takes a few percent off that one too, so the pair can go in one
+        # tick. The bots hold the higher one back; humans, splash and parked Guardians can still line one up.
         chained = chain_deaths(trace, dead, guardians)
         print(f"    another Guardian under {NOVA_GAP_HEALTH_PCT:.0f}% inside {NOVA_CHAIN_RADIUS:.0f} yd: "
               f"{len(chained)}")
@@ -841,10 +739,8 @@ def show_room_gate(trace: Trace, p1_end: int) -> None:
 
 
 def show_handover(trace: Trace) -> None:
-    """Sara hits 0 and Yogg is summoned invisible in the same tick; 18 s of transformation dialogue
-    later ACTION_YOGG_SARON_APPEAR lights the knockback ring and summons the Brain together. Melee and
-    the tank walk to one anchor for the whole window, so the questions are who was still in the ring
-    when it appeared and whether the anchor held them somewhere the healers could reach."""
+    """Sara hits 0, Yogg is summoned invisible, and 18 s later ACTION_YOGG_SARON_APPEAR lights the knockback ring and
+    summons the Brain. Who was still in the ring, and did the anchor hold them within healer reach?"""
     down = first_seen(trace, guids_of_entry(trace, NPC_YOGG_SARON))
     ring = first_seen(trace, guids_of_entry(trace, NPC_BRAIN))
     if down is None or ring is None or ring <= down:
@@ -870,9 +766,8 @@ def show_handover(trace: Trace) -> None:
                           for role, v in sorted(inside.items()) if v)
         print(f"    in the {KNOCKBACK_RADIUS} yd ring when it lit: {parts}")
 
-    # Health off the same row as the position, because the dead are out of all of this: a corpse keeps
-    # its last spot in the snapshot and then releases to the entrance, which read as a 90 yd front line
-    # in the one pull that lost eight.
+    # Health from the same row, because the dead are out of all of this: a corpse keeps its last spot in
+    # the snapshot, then releases to the entrance.
     where = tracks(trace, roster, ("t", "x", "y", "hp"))
     stamps = {guid: [row[0] for row in rows] for guid, rows in where.items()}
 
@@ -923,10 +818,8 @@ def show_handover(trace: Trace) -> None:
         print(f"      gap to the nearest healer: median {statistics.median(flat):.1f} yd, "
               f"worst {max(flat):.1f}" + (f"   {', '.join(loose)}" if loose else ""))
 
-    # Whether the walk to the anchor wakes anything. A cloud marks its Guardian 10 s before it arrives,
-    # so a walk inside the window could only show up as a Guardian after it, and the anchor sits 0.1 yd
-    # off the second orbit. Both came out zero over seven pulls, because phase 1 ends first and no cloud
-    # is left near the anchor by then.
+    # Whether the walk to the anchor wakes anything. A cloud marks its Guardian 10 s before it arrives, so a
+    # walk inside that window shows up as a Guardian after it. Phase 1 ends before any cloud is left near the anchor.
     clouds = guids_of_entry(trace, NPC_OMINOUS_CLOUD)
     guardians = guids_of_entry(trace, NPC_GUARDIAN)
     frames = [(snap["t"], {row[0]: (row[1], row[2]) for row in snap.get("u", [])})
@@ -943,9 +836,8 @@ def show_handover(trace: Trace) -> None:
     print(f"    Guardians from a cloud marked inside the window: {woke}, clouds within "
           f"{CLOUD_SUMMON_REACH} yd of the anchor when the ring lit: {near}")
 
-    # The bot tank has to stand at the anchor with the melee and still wants to hold whatever is left,
-    # and both walks are forced. More than one crossing is the two trading the tick instead of a bot
-    # walking somewhere, and a refused move is one that never got the motion master.
+    # The bot tank stands at the anchor with the melee and still wants to hold what is left; both walks are
+    # forced. More than one crossing is the two trading the tick, and a refused move never got the motion master.
     far = RANGED_STATION - RANGED_BAND_TOLERANCE
     for guid in sorted((one for one in roster
                         if trace.role(one) == "tank" and one not in trace.humans), key=trace.name):
@@ -968,8 +860,8 @@ def show_handover(trace: Trace) -> None:
     if held:
         print(f"    yogg.handover         : {dict(held)}")
 
-    # Nothing fetches a parked Guardian here, so a park left the low one to bleed out while the raid
-    # burned a fresh one: 7 of 9 pulls parked one to three in this window and killed 0-1 in it.
+    # Nothing fetches a parked Guardian here, so a park leaves the low one to bleed out while the raid
+    # burns a fresh one.
     focus = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.p1focus")
                                 if down <= rec["t"] <= ring)
     killed = sum(1 for rec in trace.of("cast")
@@ -985,7 +877,7 @@ def show_handover(trace: Trace) -> None:
     before = [when for when in deaths.values() if when <= ring]
     if alive:
         # How far out they stood is the risk: they follow the front line, and two dying together on top
-        # of it is what killed five melee 10 s after one ring.
+        # of it kill melee.
         far = sorted(math.dist(spot[:2], BODY) for spot in
                      (at(trace, guid, ring) for guid in alive) if spot)
         where = f"  at {', '.join(f'{one:.1f}' for one in far)} yd out" if far else ""
@@ -993,17 +885,15 @@ def show_handover(trace: Trace) -> None:
     elif before:
         print(f"    last phase 1 Guardian died {(ring - max(before)) / 1000:.1f} s before the ring")
 
-    # The ones left at the ring die after the barrier, where the phase 1 nova gap used to stop. Two 1-2 s
-    # apart left melee no time to be healed between them: 3, 7 and 4 dead in three pulls.
+    # The ones left at the ring die after the barrier, past where the phase 1 nova gap stops. Two 1-2 s
+    # apart leave melee no time to be healed between them.
     after = [when for when in deaths.values() if when > ring]
     gaps = nova_gaps(after + [max(before)] if before and after else after)
     if gaps:
         said = ", ".join(f"{gap / 1000.0:.1f}" for gap in gaps)
         print(f"    leftover deaths after the ring: gaps {said} s, under {NOVA_GAP_MS / 1000:.0f} s: "
               f"{sum(1 for gap in gaps if gap < NOVA_GAP_MS)}")
-    # Where they detonate, which the leash decides in phase 1 and nothing decides after it. One pull's
-    # five all went off 20-26 yd out, inside the arc the raid stands in, and their novas are 9 of its 10
-    # deaths.
+    # Where they detonate, which the leash decides in phase 1 and nothing decides after it.
     roster = roster_guids(trace)
     for guid, when in sorted(deaths.items(), key=lambda one: one[1]):
         if when <= ring:
@@ -1023,9 +913,8 @@ def show_handover(trace: Trace) -> None:
     if left:
         print(f"    yogg.leftover         : {dict(left)}")
 
-    # The raid may work the next Guardian while a low one waits out its gap, but has to come back once
-    # it is free, or that one bleeds out on nobody's schedule. One handover had all ten ranged on a 99%
-    # Guardian beside a parked 30% one, and both were low at the ring.
+    # The raid may work the next Guardian while a low one waits out its gap, but has to come back once it is
+    # free, or that one bleeds out on nobody's schedule.
     died = sorted(deaths.values())
     end = max((when for when in died if when > ring), default=ring)
     ranged = {guid for guid in roster if trace.role(guid) == "ranged" and guid not in trace.humans}
@@ -1041,9 +930,7 @@ def show_handover(trace: Trace) -> None:
             past += (following["t"] - snap["t"]) / 1000.0
     print(f"    3+ ranged on a higher Guardian while a low one was free to kill: {past:.1f} s")
 
-    # Whose ground the raid is standing on once the leash is gone. In the pull this came from the raid
-    # held a 90-210 deg arc at a median 24.2 yd and the leftover Guardians held the same arc at 20.6,
-    # about 4 yd inside it, so every nova landed on somebody.
+    # Whose ground the raid is standing on once the leash is gone.
     spans = [(start, stop) for phase, start, stop in phase_spans(trace) if phase == 2]
     if spans:
         start, stop = spans[0]
@@ -1139,9 +1026,7 @@ def show_fervor(trace: Trace) -> None:
         back_at, inside = came_back(series)
         head = f"    {trace.name(guid):13} {trace.role(guid):6} {clock(start):>9} -> {clock(end):>9}"
         if back_at is None:
-            # Never getting out reads the same as never coming back, and they are opposite outcomes:
-            # one pull's warlock was walked to 3.5 yd off the pile and killed there without ever
-            # clearing the blast.
+            # Never getting out reads the same as never coming back, and they are opposite outcomes.
             out = max((far for _, far in series if far is not None), default=None)
             print(f"{head}  " + ("no reading" if out is None else
                                  "stayed out" if out >= NOVA_TRIGGER_RADIUS else
@@ -1223,24 +1108,15 @@ def show_runner_spawns(trace: Trace, holds: dict, p1_end: int, guardians: set) -
 
 
 def summon_bands(distance: float) -> tuple[int, ...]:
-    """Which cloud orbits can summon a Guardian on a bot this far from the middle, 1-indexed.
-
-    A cloud takes anyone within 8.5 yd, so every orbit reaches that far either side of itself. Two
-    numbers follow and the whole phase 1 layout rests on them: nothing reaches inside 3.1 yd, which is
-    the circle the melee pile stands in, and the only band one orbit alone reaches is 20.4-22.6 yd,
-    whose midpoint is the 21.5 yd station. Everywhere between 12.9 and 20.1 two orbits reach at once,
-    and that is where a nova step-out lands by default.
-    """
+    """Which cloud orbits can summon a Guardian on a bot this far from the middle, 1-indexed (each reaches 8.5 yd either
+    side)."""
     return tuple(index for index, ring in enumerate(CLOUD_ORBITS, 1)
                  if abs(distance - ring) < CLOUD_SUMMON_REACH)
 
 
 def dodge_followups(rows: list[tuple[int, str]], window_ms: int) -> tuple[int, int]:
     """Cloud dodges, and how many followed a nova or fervor one inside the window, over (t, reason).
-
-    A bot that steps out of a blast and then has to dodge a cloud woke that cloud by stepping out,
-    because the step-out lands it where an orbit reaches and the pile it left does not.
-    """
+    Stepping out of a blast lands the bot where an orbit reaches and the pile it left does not."""
     total = after = 0
     stepped: int | None = None
     for when, reason in sorted(rows):
@@ -1295,9 +1171,8 @@ def sector_share(spots, origin, width: int) -> dict[int, float]:
 
 
 def ranged_past_free_low(rows, targets, gap_running: bool) -> int:
-    """How many of `targets` sit on a Guardian with more health than the lowest one under the gap floor,
-    while that one is free to kill: no gap running, and the lowest never has a lower one beside it.
-    Rows are (guid, hp) for the Guardians in one snapshot; a target of 0 is nobody."""
+    """How many of `targets` sit on a Guardian healthier than the lowest one under the gap floor, while that one is free
+    to kill (no gap running, no lower one beside it). Rows are (guid, hp) per Guardian; a target of 0 is nobody."""
     if gap_running:
         return 0
 
@@ -1355,13 +1230,8 @@ def cooldown_gap(presses: list[int], cooldown_ms: int, when: int) -> int | None:
 
 
 def dodge_zone(distance: float) -> str:
-    """Which of phase 1's three bands a spot this far from the middle sits in.
-
-    "an orbit reaches" cannot answer where a dodge should have gone, because at the station band one
-    always does by design. These three can: inside the cloud-free circle nothing reaches, out to the
-    inner orbit's own reach the one orbit no timer can pick sweeps the spot, and past that the bot is on
-    the ring the back line already wakes.
-    """
+    """Which of phase 1's three bands a spot this far from the middle sits in: cloud-free circle, inner orbit's own
+    reach, or past it on the back line's ring. "An orbit reaches" cannot tell, the station always has one."""
     if distance <= P1_CLOUD_FREE_RADIUS:
         return "core"
 
@@ -1369,11 +1239,8 @@ def dodge_zone(distance: float) -> str:
 
 
 def crossings(distances: list[float], near: float, far: float) -> int:
-    """How many times a track went from inside `near` to beyond `far`.
-
-    Walking somewhere crosses once. More than that is two movers trading the tick, each clearing the
-    other's hold, so neither destination is ever reached and the bot ends the window mid-stride.
-    """
+    """How many times a track went from inside `near` to beyond `far`. One is a walk; more is two movers trading the
+    tick, each clearing the other's hold, so the bot ends the window mid-stride."""
     count = 0
     inside = False
     for distance in distances:
@@ -1429,13 +1296,8 @@ def show_clouds(trace: Trace) -> None:
 
 
 def show_dodge_destinations(trace: Trace) -> None:
-    """Where a phase 1 dodge sends a bot, and how many cloud orbits can reach it there.
-
-    Shadow Nova is cleared at 20 yd and the Guardians stand on the pile, so the nearest safe spot sits
-    just inside the inner orbit's outer edge, where two orbits reach at once: the step-out that saves a
-    bot from one blast is what wakes the Guardian for the next. The back line never has the problem,
-    because it starts at the station and moves outward from there.
-    """
+    """Where a phase 1 dodge sends a bot, and how many orbits reach it there. Shadow Nova clears at 20 yd, so the
+    nearest safe spot is just inside the inner orbit\'s edge, where two reach: the step-out wakes the next Guardian."""
     dodges: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
     for rec in notes(trace, "yogg.p1dodge"):
         dodges[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
@@ -1503,13 +1365,8 @@ def show_dodge_destinations(trace: Trace) -> None:
 
 
 def show_stepout_leads(trace: Trace) -> None:
-    """How long before the nova a melee step-out leaves, by what opened it.
-
-    Health cannot answer it. The Guardian that opened the window is often dead by the next snapshot and
-    the next lowest one reads as the cause, which is how a step-out comes out "opened on a Guardian at
-    100%". The nova a Guardian casts at Sara on the way out is its death, so the lead is the gap to the
-    first one from a Guardian that was inside the trigger radius when the bot decided to leave.
-    """
+    """How long before the nova a melee step-out leaves, by what opened it. Measured to the first Guardian nova (its
+    death) from one inside the trigger radius at decision time; health misleads, the opener is often dead by then."""
     p1_end = phase1_end(phase_spans(trace))
     if p1_end is None:
         return
@@ -1580,13 +1437,8 @@ def show_stepout_leads(trace: Trace) -> None:
 
 
 def show_cloud_spawns(trace: Trace) -> None:
-    """Which Guardians the raid summoned by standing on a cloud, and which Sara's timer sent.
-
-    Every Guardian appears at the cloud that summoned it, so the cloud is read off the spawn position
-    rather than guessed. Who marked it is read 10 s earlier, because 63031 is a 10 s aura and the
-    Guardian arrives at the end of it - attributing one without rewinding blames whoever happens to be
-    standing there when it lands.
-    """
+    """Which Guardians the raid summoned by standing on a cloud, and which Sara's timer sent. The cloud comes from the
+    spawn position, the marker from 10 s earlier (63031 is a 10 s aura), else it blames whoever stands there."""
     frames = [(snap["t"], {row[0]: (row[1], row[2]) for row in snap.get("u", [])})
               for snap in trace.of("snap")]
     if not frames:
@@ -1720,8 +1572,7 @@ def show_portals(trace: Trace) -> None:
         print(f"\n  brain team ({len(team)}): {dict(roles)}")
         print(f"    {names}")
 
-    # What the assignment cost. By group index it sent bots a median of 41-44 yd when the nearest
-    # spot was 12-15, so assigned-against-nearest is the number that says whether it is fixed.
+    # What the assignment cost: assigned-against-nearest says whether bots walk to the closest spot.
     assigned, nearest = [], []
     for rec in notes(trace, "yogg.portalslot"):
         slot = int(rec.get("txt", 0))
@@ -1752,21 +1603,16 @@ def show_portals(trace: Trace) -> None:
 
 
 def walked_for_a_portal(trace: Trace, guids: set[int], start: int, until: int) -> set[int]:
-    """Of `guids`, the ones whose walk-to-a-portal node ran at all in the window. The node is gated on
-    the bot's raid mark reading skull or diamond, and only a Flee portal click hands that mark back, so
-    a bot teleported out by Induce Madness or killed below the platform keeps its illusion room's mark
-    and the node never fires again. That bot never takes a step, which is a different failure from one
-    that walked to a spot somebody else had already used."""
+    """Of `guids`, those whose walk-to-a-portal node ran at all. It needs the skull or diamond raid mark, which only a
+    Flee click hands back, so a bot teleported out by Induce Madness or killed below never fires it."""
     return {rec.get("g", 0) for rec in trace.of("act")
             if rec.get("a") == "yogg-saron move to enter portal action"
             and rec.get("g") in guids and start <= rec["t"] <= until}
 
 
 def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
-    """How many of the wave's portals were taken, against how many bots were told to take one.
-    AddPortals spawns RAID_MODE(4, 10) of them per wave and each is one use, so the gap between
-    assigned and gone is bots that walked to a spot somebody else had already used - or, when the node
-    never ran at all, bots that never walked anywhere."""
+    """Portals taken against bots told to take one. AddPortals spawns RAID_MODE(4, 10) per wave, one use each, so the
+    gap is bots that walked to a used spot or, when the node never ran, never walked."""
     if not waves:
         return
 
@@ -1795,10 +1641,8 @@ def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
 
 
 def show_rooms(trace: Trace, waves: list[tuple[int, int]]) -> None:
-    """What each wave did with the room it landed in. A wave that never reaches `fighting` is a
-    room the raid stood in rather than cleared, and the gap between arriving and the first cast at a
-    tentacle is where that goes wrong: every tentacle is disguised on arrival, so a bot with none in
-    sight has nothing to reveal one with and the room reads as already clear."""
+    """What each wave did with its room. A wave that never reaches `fighting` was stood in, not cleared; every tentacle
+    is disguised on arrival, so a bot with none in sight has nothing to reveal one with and the room reads clear."""
     if not waves:
         return
 
@@ -1837,10 +1681,8 @@ def show_rooms(trace: Trace, waves: list[tuple[int, int]]) -> None:
 
 
 def show_frozen(trace: Trace) -> None:
-    """The longest a bot went holding a target and casting nothing at all. This is what a vetoed
-    walk looks like from outside: somewhere to be, no way to get there, and nothing moving the bot
-    instead. One pull left five of six bots in a room doing it for fifty seconds while the tentacle
-    they were pointed at sat at 87%."""
+    """Longest a bot went holding a target and casting nothing: what a vetoed walk looks like from outside, somewhere to
+    be and no way to get there."""
     frozen = idle_windows(trace, IDLE_MS)
     if not frozen:
         print(f"\n  nobody held a target for {IDLE_MS / 1000:.0f} s without casting")
@@ -1854,9 +1696,8 @@ def show_frozen(trace: Trace) -> None:
 
 
 def show_vetoes(trace: Trace) -> None:
-    """Which multiplier zeroed which action, and how often. A veto is cheap to write and easy to
-    get wrong: one that zeroes a walk with nothing walking in its place is a bot standing still, and
-    this says so long before the room view does."""
+    """Which multiplier zeroed which action, and how often. A veto that zeroes a walk with nothing walking in its place
+    is a bot standing still."""
     rows = veto_counts(trace)
     if not rows:
         return
@@ -1902,10 +1743,8 @@ def show_brain(trace: Trace) -> None:
 
     tentacles = guids_of_entry(trace, NPC_INFLUENCE_TENTACLE)
     if tentacles:
-        # Nothing in the trace says a creature died: the death stream is roster only, and so is dmg,
-        # so counting deaths there always reads zero. The snapshot does carry the last
-        # health each one was sampled at before it stopped appearing - a few percent for one the raid
-        # killed, near full for one the phase despawned - so that is what gets reported.
+        # Nothing in the trace says a creature died (death and dmg streams are roster only), so report the last
+        # health each was sampled at: a few percent if the raid killed it, near full if the phase despawned it.
         last = [rows[-1][1] for rows in tracks(trace, tentacles, ("t", "hp")).values() if rows]
         spent = sum(1 for hp in last if hp <= TENTACLE_SPENT_PCT)
         print(f"  Influence Tentacles seen: {len(tentacles)}, {spent} last seen under "
@@ -2032,9 +1871,8 @@ def show_brain_walks(trace: Trace) -> None:
 
 
 def reprisal_deaths(deaths: list[dict], hits: list[dict], window_ms: int = REPRISAL_DEATH_WINDOW_MS) -> list[dict]:
-    """Deaths below the platform that Grim Reprisal and the skulls' Lunatic Gaze did most of, over the
-    last few seconds of damage. Both are the room's own cost of fighting there, so this is the count the
-    reprisal hold exists to bring down."""
+    """Deaths below the platform that Grim Reprisal and the skulls' Lunatic Gaze did most of, over the last seconds of
+    damage. Both are the room's own cost; this is the count the reprisal hold exists to bring down."""
     killed = []
     for death in deaths:
         if death.get("z", BRAIN_LEVEL_Z) >= BRAIN_LEVEL_Z:
@@ -2101,14 +1939,8 @@ def target_split(targets: list[int]) -> tuple[int, float]:
 
 
 def show_madness_caught(trace: Trace) -> None:
-    """Who Induce Madness charmed, and where each of them was when it landed. It leaves no damage row:
-    it strips all 100 Sanity from whoever is still below the platform when its 60 s cast ends and
-    teleports them up in the same effect, so the Insane aura and the spot that teleport started from
-    are the whole record. The Flee portals are game objects, which no trace carries, so the distance is
-    measured against the spots this pull's own clean exits went up from.
-
-    Under each catch, what the way out lost: the time left when it first decided to go, how often it
-    went back to safe, how long its exit walk was refused, and how long it spent casting."""
+    """Who Induce Madness charmed and where each was when it landed. It leaves no damage row, so the Insane aura and the
+    teleport's start spot are the record; distance is against this pull's clean exits (Flee portals are not traced)."""
     charmed, clean, caught, rows = madness_split(trace)
     if not charmed:
         return
@@ -2148,15 +1980,8 @@ def show_madness_caught(trace: Trace) -> None:
 
 
 def show_brain_waves(trace: Trace) -> None:
-    """One row per wave for the brain team: how long its room took, whether it split over the
-    tentacles or walked them as one pack, where the healer stood, how the walk onto the Brain went and
-    how much of the window it used.
-
-    The room runs from the first team member below the platform to the first `tobrain`, the tick the
-    room's door opened. Induce Madness ends 60 s after the wave note, so "left" is what remained when
-    a bot decided to go and "spare" is what remained when it surfaced. A decision taken outside the
-    brain room is counted, since the walk in is the walk out until there, except in the wave that ends
-    phase 2."""
+    """One row per wave for the brain team: room time, split or one pack, healer spot, the walk onto the Brain, window
+    used. "left" is Induce Madness time remaining at the decision to go, "spare" at surfacing."""
     waves = [(rec["t"], int(rec.get("txt", 0))) for rec in notes(trace, "yogg.wave")]
     team = {rec.get("g", 0) for rec in notes(trace, "yogg.brainteam") if rec.get("txt") == "1"}
     if not waves or not team:
@@ -2258,9 +2083,7 @@ def show_brain_waves(trace: Trace) -> None:
 
         swings = sum(1 for rec in behind if (door or stop) <= rec["t"] <= min(im_end, stop))
 
-        # What the healer actually did with the room, which the distance alone does not say: one wave
-        # held it to 17 landed heals against 137 and 172 in the other two, because its station was
-        # 36-44 yd from its own room's tentacles and a heal reaches 38.5.
+        # What the healer actually did with the room, which the distance alone does not say.
         landed = sum(1 for rec in trace.of("heal")
                      if rec.get("s") in healers and arrived <= rec["t"] <= min(im_end, stop))
         closest = min(from_middle) if from_middle else None
@@ -2357,12 +2180,8 @@ def brain_arrival(rows: list[list], door: int, brain: int, radius: float = BRAIN
 
 
 def walk_outcomes(walks: list[tuple[int, str]], steps: list[tuple[int, str]]) -> dict:
-    """Per bot and node, how its forced walks went: which branches `yogg.walk` reported, and the yards
-    still to go each time the stall release let go of a MoveTo booking.
-
-    A walk that reports `walking` and never `arrived` is one the bot was still being sent on when the
-    wave ended. `yogg.walkstep` is emitted on every release rather than on change, so its count is how
-    many times the spline died short of where it was aimed."""
+    """Per bot and node, how its forced walks went: `yogg.walk` branches, and yards still to go at each stall release.
+    `walking` with no `arrived` was still going at wave end; `yogg.walkstep` fires per release."""
     out: dict = {}
 
     def row_for(guid: int, node: str) -> dict:
@@ -2378,16 +2197,12 @@ def walk_outcomes(walks: list[tuple[int, str]], steps: list[tuple[int, str]]) ->
 
 
 def show_stalled_walks(trace: Trace) -> None:
-    """The forced walks below the platform that never got where they were sent. Down there a forced
-    spline dies after a yard or two and MoveTo refuses the same point again for MaxWaitForMove, so the
-    walk advances in 5 s hops: one healer covered 24 of its 56 yd in 54 s and healed almost nothing all
-    wave. The watchdog then gives up, and a bot standing still in an uncleared illusion room is a charm
-    waiting to land - there is no exit from a room whose door has not opened."""
+    """Forced walks below the platform that never got where sent: a forced spline dies after a yard or two and MoveTo
+    refuses the same point for MaxWaitForMove, so the walk goes in 5 s hops. Standing still there is a charm."""
     walks = [(rec.get("g", 0), str(rec.get("txt", ""))) for rec in notes(trace, "yogg.walk")]
     steps = [(rec.get("g", 0), str(rec.get("txt", ""))) for rec in notes(trace, "yogg.walkstep")]
     # The exit walk is left out: it uses its portal at INTERACTION_DISTANCE, the same 5 yd that counts as
-    # arrived, so a bot that got out cleanly often never records one. `caught by it` above is the honest
-    # measure of that walk. These are the ones that leave a bot standing where it stopped.
+    # arrived, so a clean exit often records none. `caught by it` above measures that walk.
     below = {"illusion", "healer", "brainspot", "stage"}
 
     rows = {key: value for key, value in walk_outcomes(walks, steps).items()
@@ -2449,10 +2264,8 @@ def show_phase2(trace: Trace) -> None:
         print(f"  Brain Link         : {len(links)} links, "
               f"{sum(rec.get('a', 0) for rec in link_dmg):,} damage")
         for guid, start, stop in links:
-            # The aura holds the partner's GUID privately, but it casts 63803 (apart) or 63804
-            # (together) on that partner every second, so the cast names the pair exactly. Damage rows
-            # only name it while the two are already too far apart, which is the half that matters
-            # least.
+            # The aura keeps the partner's GUID private, but every second it casts 63803 (apart) or 63804 (together)
+            # on that partner, so the cast names the pair. Damage rows name it only once the two are far apart.
             partner = next((rec.get("tgt") for rec in trace.of("cast")
                             if rec.get("sp") in (SPELL_BRAIN_LINK_DAMAGE, SPELL_BRAIN_LINK_OK)
                             and rec.get("s") == guid and rec.get("tgt") not in (None, 0, guid)
@@ -2485,9 +2298,8 @@ def show_phase2(trace: Trace) -> None:
 
 
 def show_idle_platform(trace: Trace) -> None:
-    """Phase 2 time with nothing on the platform to kill, which is Sanity Well time. A window is a run
-    of snapshots with no Guardian, Crusher, Constrictor or Corruptor sampled alive, counted from the
-    first tentacle of the phase so the transformation before it does not read as idle."""
+    """Phase 2 time with nothing on the platform to kill (Sanity Well time): snapshot runs with no Guardian, Crusher,
+    Constrictor or Corruptor alive, counted from the first tentacle so the transformation does not read as idle."""
     killable = set()
     for entry in PLATFORM_KILLABLE:
         killable |= guids_of_entry(trace, entry)
@@ -2558,9 +2370,8 @@ def hp_removed(samples: list[tuple[int, float]], max_hp: int, start: int, end: i
 
 
 def show_tentacles(trace: Trace) -> None:
-    """What phase 2 leaves on the platform. Shattered Illusion is the only time the raid gains on it,
-    with no spawns, no Diminish Power and no Crush, so each wave reads as the tentacle stock when the
-    brain room door opened, what the stun took off it and when the platform was clear."""
+    """What phase 2 leaves on the platform. Shattered Illusion is the only time the raid gains on it (no spawns,
+    Diminish Power or Crush), so each wave reads as stock at the brain door, what the stun took, and when it cleared."""
     print("PLATFORM TENTACLES")
 
     spans = phase_spans(trace)
@@ -2842,9 +2653,8 @@ def snapshot_rows(trace: Trace, guids: set) -> dict[int, list[list]]:
 
 
 def surfacings(rows: list[list], level_z: float) -> list[tuple[int, float, float, float]]:
-    """(t, x, y, z) of the last sample below `level_z` before each crossing up past it. A bot leaves the
-    brain level either by clicking a Flee portal or by Induce Madness teleporting it out, and where it
-    was standing is what tells the two apart."""
+    """(t, x, y, z) of the last sample below `level_z` before each crossing up past it. A bot leaves via a Flee portal
+    or an Induce Madness teleport, and where it stood tells them apart."""
     out: list[tuple[int, float, float, float]] = []
     below: list | None = None
     for row in rows:
@@ -2868,9 +2678,8 @@ def madness_teleports(surfaced: list[tuple], charmed_at: dict[int, int], window_
 
 
 def madness_split(trace: Trace) -> tuple[dict[int, int], list[tuple], list[tuple], dict[int, list[list]]]:
-    """Every Insane (guid -> when), the ascents that clicked a portal, the ones Induce Madness
-    teleported, and the snapshot rows behind them. An Insane with no teleport in front of it was
-    drained to 0 Sanity instead."""
+    """Every Insane (guid -> when), the ascents that clicked a portal, the ones Induce Madness teleported, and the rows
+    behind them. An Insane with no teleport before it was drained to 0 Sanity."""
     charmed: dict[int, int] = {}
     for rec in trace.of("aura"):
         if rec.get("sp") == SPELL_INSANE and not rec.get("r"):
@@ -2901,13 +2710,8 @@ def cast_windows(rows: list[list], spell: int) -> list[tuple[int, int]]:
 
 def exit_losses(verdicts: list[tuple[int, str]], walks: list[tuple[int, str]], casting: list[tuple[int, int]],
                 end: int, window_ms: int = INDUCE_MADNESS_CAST_MS) -> tuple[float | None, int, float, float]:
-    """What a bot caught by Induce Madness lost on the way out, over the `window_ms` before `end`, when
-    the cast ended. `verdicts` are its yogg.exit notes as (t, txt), `walks` its exit portal moves as
-    (t, outcome) and `casting` its samples as (t, spell being cast or 0).
-
-    Returns the seconds left at its first leaving or late verdict (None if it never had one), how many
-    times it went back to safe after that, the seconds its exit walk was refused, and the seconds it
-    spent casting after deciding."""
+    """Over the `window_ms` before `end`: seconds left at the first leaving or late verdict (None if none), times it
+    went back to safe after that, seconds its exit walk was refused, and seconds spent casting after deciding."""
     start = end - window_ms
     first = next((t for t, txt in verdicts if start <= t <= end and txt in ("leaving", "late")), None)
     if first is None:
@@ -2935,9 +2739,8 @@ def exit_losses(verdicts: list[tuple[int, str]], walks: list[tuple[int, str]], c
 
 def sanity_trips(heights: list[tuple[int, float]], sanity: list[tuple[int, int]],
                  level_z: float) -> list[tuple[int, int, int | None, int | None, int | None]]:
-    """Each trip below `level_z` as (down, up, Sanity going down, lowest below, Sanity coming up).
-    `heights` is (t, z) and `sanity` (t, stacks), both in time order. A trip still below at the end
-    closes on the last sample."""
+    """Each trip below `level_z` as (down, up, Sanity going down, lowest below, Sanity coming up), inputs in time order.
+    A trip still below at the end closes on the last sample."""
     def level(when: int) -> int | None:
         held = [stacks for t, stacks in sanity if t <= when]
         return held[-1] if held else None
@@ -2962,9 +2765,8 @@ def sanity_trips(heights: list[tuple[int, float]], sanity: list[tuple[int, int]]
 
 def walk_speeds(states: list[tuple[int, str]], rows: list[list],
                 still_yd: float = WALK_STILL_YD) -> list[tuple[float, float, float]]:
-    """(seconds, yards, seconds standing) of each walk from a cleared illusion room to the Brain: a
-    yogg.roomstate tobrain followed straight by atbrain. `states` are (t, txt) and `rows` the bot's
-    [t, guid, x, y, ...] snapshot rows, both in time order."""
+    """(seconds, yards, seconds standing) of each walk from a cleared illusion room to the Brain: a yogg.roomstate
+    tobrain followed straight by atbrain."""
     out = []
     for (start, state), (stop, nxt) in zip(states, states[1:]):
         if state != "tobrain" or nxt != "atbrain" or stop <= start:
@@ -2993,10 +2795,8 @@ def facing_flips(rows: list[list], level_z: float, still_yd: float = WALK_STILL_
 
 def res_into_insane(casts: list[tuple[int, int, int]], deaths: list[tuple[int, int, bool]],
                     insane: list[tuple[int, int]]) -> list[tuple[int, int, int, float | None]]:
-    """Resurrections cast on a corpse that died without Sanity, as (t, caster, target, seconds until it
-    went Insane again or None). `casts` are (t, caster, target), `deaths` (t, guid, kept Sanity) and
-    `insane` (t, guid), all in time order. Voice re-applies Insane to anyone without Sanity, so these
-    come back charmed."""
+    """Resurrections cast on a corpse that died without Sanity, as (t, caster, target, seconds until it went Insane
+    again or None). Voice re-applies Insane to anyone without Sanity, so these come back charmed."""
     out = []
     for t, caster, target in casts:
         died = [kept for when, guid, kept in deaths if guid == target and when <= t]
@@ -3036,9 +2836,8 @@ def decided_outside(decided: dict[int, int], rows: dict[int, list[list]], middle
 
 def swings_in_gaze(swings: list[tuple[int, int, int]], gazes: list[tuple[int, int]],
                    taunts: list[tuple[int, int]], victims: dict[int, list[tuple[int, int]]]) -> tuple[int, int]:
-    """Of Guardian swings on the raid, as (t, guardian, victim): how many landed inside a gaze window,
-    and how many of those had a taunt cast on that Guardian since it turned on that victim. `taunts`
-    are (t, guardian) and `victims` each Guardian's (t, victim) samples, all in time order."""
+    """Of Guardian swings on the raid (t, guardian, victim): how many landed inside a gaze window, and how many of those
+    had a taunt cast on that Guardian since it turned on that victim."""
     inside = taunted = 0
     for when, guardian, victim in swings:
         if not any(first <= when <= last for first, last in gazes):
@@ -3109,9 +2908,8 @@ def taunt_bounced(victim_rows: list[list], caster: int, when: int, tanks: set,
 
 def ray_hit_movers(moves: list[tuple[int, str, bool]], when: int,
                    window_ms: int = DEATH_RAY_LOOK_MS) -> tuple[str, dict[str, bool]]:
-    """Over one bot's (t, action, ok) move rows: the last action whose walk went out in the `window_ms`
-    before a Death Ray hit, '-' for none, and per Death Ray dodger that tried, whether one of its walks
-    went out."""
+    """Over one bot's (t, action, ok) move rows: the last action whose walk went out in `window_ms` before a Death Ray
+    hit ('-' for none), and per dodger that tried, whether one of its walks went out."""
     inside = [(action, ok) for at_ms, action, ok in moves if when - window_ms <= at_ms <= when]
     walked = [action for action, ok in inside if ok]
     tried: dict[str, bool] = {}
@@ -3223,10 +3021,8 @@ def crush_aim_row(rows: list[list], when: int, hit_xy: tuple[float, float],
 
 def crush_blame(walks: list[dict], guid: int, when: int, spot: tuple[float, float], on_victim: bool,
                 window_ms: int = CRUSH_WALK_BLAME_MS) -> dict | None:
-    """The walk that had the bot moving in the last `window_ms` before a Crush, or None if it stood
-    still. A `wait` was refused behind a walk still in flight, so it moved nobody itself but says the
-    last accepted walk was still going, however long ago it was issued. For the tentacle's own victim
-    only a walk that ended in its reach counts, since standing there is what made it the victim."""
+    """The walk that had the bot moving in the last `window_ms` before a Crush, or None if it stood still. A refused
+    `wait` names the walk still in flight. For the tentacle\'s own victim only a walk ending in its reach counts."""
     blamed = None
     in_flight = False
     for rec in walks:
@@ -3254,9 +3050,8 @@ def crusher_alive_spans(trace: Trace, crushers: set) -> dict[int, tuple[int, int
 
 
 def show_crush_hits(trace: Trace) -> None:
-    """Every Crush split by who the tentacle was swinging at. A hit on its own victim is a bot inside
-    its melee range that hit it, and for anyone but the tank walking out is what would have stopped
-    it. A hit on anyone else is the cone, and the angle is the answer there."""
+    """Every Crush split by who the tentacle was swinging at. A hit on its own victim is a bot in melee range, which
+    walking out would have stopped for non-tanks; a hit on anyone else is the cone, and the angle is the answer."""
     crushers = guids_of_entry(trace, NPC_CRUSHER_TENTACLE)
     hits = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_CRUSH_CONE and rec.get("s") in crushers]
     if not hits:
@@ -3361,9 +3156,8 @@ def show_crusher_reach(trace: Trace) -> None:
 
 
 def show_diminish_power(trace: Trace) -> None:
-    """How long Diminish Power was actually up, read off the aura on the raid, and whether a paladin's
-    Judgement ever broke it. 64148 on the tentacle breaks the channel on any taken melee-class hit, and
-    every Judgement's damage is melee class, from about 19.5 yd out."""
+    """How long Diminish Power was up (the aura on the raid), and whether a paladin's Judgement broke it. 64148 on the
+    tentacle breaks the channel on any melee-class hit, and every Judgement is melee class, from about 19.5 yd."""
     crushers = guids_of_entry(trace, NPC_CRUSHER_TENTACLE)
     alive = crusher_alive_spans(trace, crushers)
     if not alive:
@@ -3435,14 +3229,8 @@ def body_launches(rows: list[list]) -> list[list]:
 
 
 def show_launches(trace: Trace) -> None:
-    """Who the body actually threw, and what walked them in. 64020 deals no damage, so a launch only
-    shows up in the movement.
-
-    The walk is the other half. Every other read of the ring asks where the bot is standing, so the
-    one thing none of them can catch is a walk that crosses the body - a straight line to a spot on
-    the far side, or a spot behind a target that sits inside the ring. The blame goes to the last walk
-    issued before the throw whose line passed inside the ring, not the one after it: by the time the
-    pulse lands a dodge node has usually already issued the walk back out."""
+    """Who the body threw, and what walked them in. 64020 deals no damage, so a launch shows only in movement. Blame
+    goes to the last walk issued before the throw whose line crossed the ring, not the dodge walk back out."""
     roster = roster_guids(trace)
     rows = snapshot_rows(trace, roster)
     spans = phase_spans(trace)
@@ -3490,9 +3278,8 @@ def show_launches(trace: Trace) -> None:
 
 
 def show_crush_melee(trace: Trace) -> None:
-    """What stood inside a Crusher's melee range. Crush is a 100% proc on the tentacle's own
-    white swing and UpdateAI will not swing at a victim out of melee range, so whatever is in there is
-    what fires every cone the raid eats - and a pet counts."""
+    """What stood inside a Crusher's melee range. Crush is a 100% proc on its white swing and UpdateAI will not swing at
+    a victim out of range, so whatever is in there fires every cone the raid eats, a pet included."""
     crushers = guids_of_entry(trace, NPC_CRUSHER_TENTACLE)
     if not crushers:
         return
@@ -3534,9 +3321,8 @@ def show_crush_melee(trace: Trace) -> None:
             print(f"    {trace.name(guid):28} {count:5} samples")
 
 
-# What each source takes off a 25-man Sanity bar, from spell_yogg_saron_sanity_reduce. Induce Madness
-# is not in here: it leaves no damage or aura row of its own, so the Insane aura is the only record
-# that it landed, and what it takes is the whole bar.
+# Sanity cost of each source on a 25-man bar (spell_yogg_saron_sanity_reduce). Induce Madness is absent:
+# it leaves no damage or aura row but the Insane aura, and takes the whole bar.
 SANITY_COSTS = {65301: 12, 63830: 3, 63881: 3, 63803: 2, 64168: 2, 64164: 4}
 SANITY_NAMES = {65301: "Psychosis", 63830: "Malady of the Mind", 63881: "Malady trigger",
                 63803: "Brain Link", 64168: "Lunatic Gaze (skull)", 64164: "Lunatic Gaze (Yogg)"}
@@ -3660,13 +3446,8 @@ def show_res_into_insane(trace: Trace) -> None:
 
 
 def show_threat(trace: Trace) -> None:
-    """Who the Guardians were actually beating on, and what the raid spent trying to change that.
-
-    The answer is not "nothing was tried": Misdirection goes to the tank and the tank taunts. It is
-    that one tank's taunt budget is roughly one cast per Guardian death, against a room where every
-    Guardian carries its own threat table from SetInCombatWithZone, so the question worth asking is
-    whether the budget was spent on the Guardian whose death location decides the phase.
-    """
+    """Who the Guardians were beating on, and what the raid spent changing that. One tank's taunt budget is about one
+    cast per Guardian death and each has its own threat table: was it spent where the death spot decides the phase?"""
     print("THREAT")
     spans = phase_spans(trace)
     p1_end = phase1_end(spans)
@@ -3731,9 +3512,8 @@ def show_threat(trace: Trace) -> None:
 
 
 def stalled_damage(samples: list[tuple[int, int, int]]) -> tuple[int, int]:
-    """Longest and total ms over (t, dealt, moving) where `dealt` never changed while `moving` was set.
-    Damage frozen on a bot that is on the move every tick is a bot being walked somewhere each time it
-    comes up, so it never stands still long enough to swing."""
+    """Longest and total ms over (t, dealt, moving) where `dealt` never changed while `moving` was set: a bot walked
+    every tick never stands still to swing."""
     longest = total = run = 0
     previous: tuple[int, int] | None = None
     for when, dealt, moving in samples:
@@ -3749,9 +3529,8 @@ def stalled_damage(samples: list[tuple[int, int, int]]) -> tuple[int, int]:
 
 
 def move_tug(rows: list[tuple[int, str]]) -> list[tuple[str, str, int]]:
-    """Issuer pairs that took turns, and how many reversals each made, over (t, issuer) in time order.
-    A reversal is one issuer's move, then another's, then the first one's again - a bot being pulled two
-    ways rather than walked somewhere once."""
+    """Issuer pairs that took turns, and each pair's reversals over (t, issuer): one issuer's move, another's, the
+    first's again, a bot pulled two ways instead of walked once."""
     counts: collections.Counter = collections.Counter()
     for first, second, third in zip(rows, rows[1:], rows[2:]):
         if first[1] != second[1] and first[1] == third[1]:
@@ -3761,9 +3540,8 @@ def move_tug(rows: list[tuple[int, str]]) -> list[tuple[str, str, int]]:
 
 
 def show_tank_engagement(trace: Trace, p1_end: int, tanks: set) -> None:
-    """Whether a phase 1 tank ever stood still long enough to swing. Nothing here gives a tank a target
-    of its own - the dps resolver stands down for one and the generic picker keeps whatever is already
-    selected - so a stale selection across the room leaves the reach walking at it every tick."""
+    """Whether a phase 1 tank ever stood still long enough to swing. Nothing gives a tank a target of its own (the dps
+    resolver stands down, the generic picker keeps the selection), so a stale one has it walking at it."""
     for guid, samples in snapshot_rows(trace, tanks).items():
         inside = [(row[0], row[12], row[9]) for row in samples if 0 <= row[0] <= p1_end]
         if len(inside) < 2:
@@ -3782,9 +3560,8 @@ def show_tank_engagement(trace: Trace, p1_end: int, tanks: set) -> None:
 
 
 def show_taunt_attempts(trace: Trace, p1_end: int, tanks: set) -> None:
-    """The taunts that never left the gun, which the cast rows cannot show. The pick has no range test
-    of its own, and all four class taunts reach 30 yd, so an out-of-range aim fails - and CastSpell
-    selects before it validates range, so the tank is left holding what it could not reach."""
+    """The taunts that never left the gun, which cast rows cannot show. The pick has no range test, all four taunts
+    reach 30 yd, and CastSpell selects before validating range, so the tank holds what it could not reach."""
     attempts = [rec for rec in trace.of("act")
                 if rec.get("a") in TAUNT_ACTIONS and rec.get("g") in tanks and 0 <= rec["t"] <= p1_end]
     if not attempts:
@@ -3819,9 +3596,8 @@ def taunt_aim(trace: Trace, rows: list[list], when: int) -> tuple[int, float] | 
 
 
 def focus_split(trace: Trace, guardians: set, roster: set, p1_end: int) -> tuple[float, float] | None:
-    """Share of phase 1 the bot non-tanks spent on one live Guardian against two or more, weighted by
-    the gap to the next snapshot. Two at once is how a pair comes down in lockstep. Humans are left out:
-    nothing picks their target."""
+    """Share of phase 1 the bot non-tanks spent on one live Guardian against two or more, weighted by the gap to the
+    next snapshot. Two at once brings a pair down in lockstep. Humans are left out: nothing picks their target."""
     frames = [snap for snap in trace.of("snap") if 0 <= snap["t"] <= p1_end]
     one = many = 0
     for snap, following in zip(frames, frames[1:]):
@@ -3879,9 +3655,8 @@ def on_cooldown(casts: list[int], when: int, cooldown_ms: int) -> bool:
 
 
 def damage_band(entry: int | None, hp: float | None, in_gaze: bool) -> str:
-    """Which phase 3 bucket a hit landed in, by its target's entry and health just before. Mirrors the
-    module's split: Guardians over the floor, between Weakened and the floor (inside a gaze or not),
-    Weakened, Yogg and the leftover tentacles."""
+    """Which phase 3 bucket a hit landed in, by its target's entry and health just before: Guardians over the floor,
+    between Weakened and the floor (in a gaze or not), Weakened, Yogg, leftover tentacles."""
     if entry == NPC_YOGG_SARON:
         return "yogg"
     if entry in TENTACLE_NAMES:
@@ -3906,9 +3681,8 @@ def roar_verdict(pressed: bool, silenced: int) -> str:
 
 
 def brain_hold_window(rows: list[tuple[int, str]]) -> tuple[int, int | None, str] | None:
-    """(held from, let go at, why) over one Induce Madness window's `yogg.brainhold` notes in time order,
-    every bot's together, or None when nobody held. Held is the first hold or dots; let go is the first
-    finish or clear after it, or None and "never"."""
+    """(held from, let go at, why) over one Induce Madness window\'s `yogg.brainhold` notes, every bot\'s, or None if
+    nobody held. Held is the first hold or dots; let go is the first finish or clear after it, else None and "never"."""
     held = next((when for when, txt in rows if txt in ("hold", "dots")), None)
     if held is None:
         return None
@@ -3920,10 +3694,8 @@ def brain_hold_window(rows: list[tuple[int, str]]) -> tuple[int, int | None, str
 
 def taunt_outcome(rows: list[list], when: int, caster: int, spans: list[tuple[int, int]] | None = None,
                   check_ms: int = BEACON_TAUNT_CHECK_MS) -> str:
-    """How a drag taunt at `when` read `check_ms` later, as the module reads it: `took` when the Guardian's
-    victim (row[8]) was the caster, `didn't take` otherwise, `-` with no fresh row, and `channelling` inside
-    one of its Drain Life `spans` (start, end) that began before the taunt landed, since a casting Guardian
-    skips its victim update. A channel begun later doesn't hide the switch."""
+    """How a drag taunt at `when` read `check_ms` later: `took` if the Guardian's victim (row[8]) was the caster,
+    `didn't take` otherwise, `-` with no fresh row, `channelling` inside a Drain Life span begun before the taunt."""
     check = when + check_ms
     if any(first <= when + BEACON_TAUNT_LAND_MS and check <= last for first, last in spans or ()):
         return "channelling"
@@ -3961,9 +3733,8 @@ def stage_gaps(picked: list[tuple[str, tuple[float, float] | None]]) -> list[str
 
 
 def heal_cut_seconds(samples: list[tuple[int, str]], first: int, last: int) -> tuple[float, float, float, float]:
-    """Guardian-seconds from `yogg.healcut` samples between `first` and `last`: (beacon heal under a cut,
-    beacon heal in all, Drain Life under a cut, Drain Life in all). Each sample, "hot a/b drain c/d", holds
-    until the next one."""
+    """Guardian-seconds from `yogg.healcut` samples between `first` and `last`: (beacon heal under a cut, beacon heal in
+    all, Drain Life under a cut, Drain Life in all). Each sample ("hot a/b drain c/d") holds until the next."""
     totals = [0.0, 0.0, 0.0, 0.0]
     for index, (when, text) in enumerate(samples):
         until = samples[index + 1][0] if index + 1 < len(samples) else last
@@ -4031,9 +3802,8 @@ def stacked_heals(positions: list[tuple[float, float]], radius: float = EMPOWERI
 
 
 def flip_cause(victim_role: str, spells: set[str]) -> str:
-    """Why a Guardian left its tank, from the spell names its new victim cast at it just before: `dot`
-    when all were DoTs, `aoe` when any hit an area, `direct` otherwise, and with nothing cast `heal
-    threat` for a healer and `none` for anyone else (ground AoE ticks, totems, pets)."""
+    """Why a Guardian left its tank, from the spells its new victim cast at it just before: `dot` if all DoTs, `aoe` if
+    any hit an area, `direct` otherwise; with nothing cast, `heal threat` for a healer, `none` for anyone else."""
     if not spells:
         return "heal threat" if victim_role == "heal" else "none"
     if spells <= FLIP_DOTS:
@@ -4043,9 +3813,8 @@ def flip_cause(victim_role: str, spells: set[str]) -> str:
 
 def area_worth(target: tuple[float, float], units: list[tuple[int, float, float, float, bool]],
                radius: float = PHASE_3_AREA_RADIUS) -> tuple[int, bool]:
-    """(worth hitting, a loose Guardian) round a target (x, y) by the module's phase 3 area rule. Units
-    are (entry, x, y, health %, a tank is its victim). Worth: Yogg, leftover tentacles and Immortal
-    Guardians over the floor that a tank holds. Loose: a Guardian in the area no tank holds."""
+    """(worth hitting, a loose Guardian) round a target (x, y) by the phase 3 area rule. Units: (entry, x, y, health %,
+    tank is its victim). Worth: Yogg, tentacles, Immortals over the floor on a tank. Loose: a Guardian no tank holds."""
     worth = 0
     loose = False
     for entry, x, y, hp, on_tank in units:
@@ -4160,9 +3929,8 @@ def show_phase3_area(trace: Trace, start: int, stop: int, rows: dict[int, list[l
 def show_beacon_tanks(trace: Trace, heal_at: int, healed: set, rows: dict[int, list[list]], roster: set,
                       tanks: set, flows: list[tuple[int, int, int]], covers: dict[int, list[tuple[int, str]]],
                       died_at: dict[int, list[int]]) -> None:
-    """One beacon heal's 20 s from the tanks' side: healed Guardians on each, damage taken against
-    healing landed, defensives and externals, death; then the raid's damage on the healed Guardians
-    and their health at the end. Flows are (t, tank, amount), damage negative and healing positive."""
+    """One beacon heal's 20 s from the tanks' side: healed Guardians on each, damage against healing, defensives, death;
+    then the raid's damage on them and their end health. Flows are (t, tank, amount), damage negative."""
     stop = heal_at + EMPOWERING_SHADOWS_MS
     for tank in sorted(tanks, key=trace.name):
         then = row_before(rows.get(tank, []), heal_at)
@@ -4239,9 +4007,8 @@ def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[
 
 
 def show_phase3_healers(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], roster: set) -> None:
-    """Per bot healer: mana into phase 3, how often it was put back on the combat engine, which engine its
-    Lunatic Gaze node fired on, and the mana cooldowns it cast. The non-combat engine has none of those
-    cooldowns, so a healer stuck on it runs dry."""
+    """Per healer: mana into phase 3, how often it was put back on the combat engine, which engine its Lunatic Gaze node
+    fired on, and the mana cooldowns cast. The non-combat engine has none of them, so a healer stuck on it runs dry."""
     healers = sorted((guid for guid in roster if trace.role(guid) == "heal" and guid not in trace.humans),
                      key=trace.name)
     if not healers:
@@ -4273,12 +4040,8 @@ def show_phase3_healers(trace: Trace, start: int, stop: int, rows: dict[int, lis
 
 
 def show_phase3(trace: Trace) -> None:
-    """Phase 3: whether ranged took the Guardians while melee stayed on Yogg, what the Guardians did to
-    the raid, whether a beacon's heal reached Yogg, and what each Lunatic Gaze cost.
-
-    Snapshot rows from snapshot_rows are [t, guid, x, y, z, o, hp, mana, target, moving, movegen,
-    casting, dealt]. A marked Guardian keeps its first entry in the trace, so marked and unmarked read
-    alike here; the Empowering Shadows cast is what names the marked ones."""
+    """Phase 3: ranged on Guardians while melee stays on Yogg, Guardian damage, beacon heals reaching Yogg, gaze cost.
+    Rows are snapshot_rows [t, guid, x, y, z, o, hp, mana, target, moving, movegen, casting, dealt]."""
     print("PHASE 3")
     span = next(((start, stop) for phase, start, stop in phase_spans(trace) if phase == 3), None)
     if not span:
@@ -4341,7 +4104,7 @@ def show_phase3(trace: Trace) -> None:
     if lust_gate:
         print(f"    yogg.lustready   : {dict(lust_gate)}")
 
-    # A leftover Crusher on the ranged spot killed seven ranged in 2 s as they walked onto it.
+    # A leftover Crusher on the ranged spot kills ranged bots as they walk onto it.
     if first_station:
         print(f"  ranged station     : {first_station} at the start")
     station_notes = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.station")
@@ -4386,9 +4149,8 @@ def show_phase3(trace: Trace) -> None:
     # The Guardian casts Weakened on itself, and that cast row reaches the file where the aura row may not.
     weakened = {rec.get("d") for rec in trace.of("aura") if rec.get("sp") == SPELL_WEAKENED and not rec.get("r")}
     weakened |= {rec.get("s") for rec in trace.of("cast") if rec.get("sp") == SPELL_WEAKENED}
-    # Thorim is not a watched creature, so Titanic Storm never reaches the file. A Guardian that leaves
-    # the snapshots while the raid is still alive, last seen at 10% or less, is the kill it makes. The
-    # sweep drops the Guardians once nobody is left alive to anchor it.
+    # Thorim is not a watched creature, so Titanic Storm never reaches the file. A Guardian that leaves the
+    # snapshots at 10% or less while the raid lives is its kill. The sweep drops Guardians once nobody anchors it.
     stormed = 0
     tanks = {guid for guid in roster if trace.role(guid) == "tank"}
     flips = []
@@ -4474,8 +4236,7 @@ def show_phase3(trace: Trace) -> None:
         print(f"    yogg.tankhold    : {dict(held)}")
     show_phase3_tanks(trace, start, alive_end, rows, guardians, tanks, roster)
 
-    # The gaze action used to claim the tank's tick for all 4 s, so a Guardian peeled in one went
-    # untaunted until it had swung.
+    # A Guardian peeled during a gaze goes untaunted until it has swung.
     gazes = [(rec["t"], rec["t"] + LUNATIC_GAZE_MS) for rec in trace.of("cast")
              if rec.get("sp") == SPELL_LUNATIC_GAZE_YOGG and start <= rec["t"] <= alive_end]
     if swings:
@@ -4686,9 +4447,8 @@ def show_phase3(trace: Trace) -> None:
     if picks:
         print(f"    yogg.gaze        : {dict(picks)}")
 
-    # Where the damage went, by each bot's target and its band just before each gain. The module wants most
-    # of it on Yogg, Guardians only over the floor, and under it only inside a gaze. Area damage counts on
-    # the target, so a melee bot on Yogg cleaving the pile reads as all Yogg.
+    # Where the damage went, by each bot's target and band before each gain. Area damage counts on the
+    # target, so a melee bot on Yogg cleaving the pile reads as all Yogg.
     bands: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for guid in roster:
         own = [row for row in rows.get(guid, []) if len(row) > 12 and start <= row[0] <= alive_end]
@@ -4782,9 +4542,7 @@ def show_phase3_leftovers(trace: Trace, start: int, stop: int) -> None:
 
 
 def nova_warning(series: list[tuple[int, float]], gate: float, when: int) -> float | None:
-    """Seconds from the first sample at or under `gate` to `when`, or None when it never got there.
-    Measured over 48 novas this ran a median 4.8 s at the 20% gate and 2.4 s at 10%, which is what sets
-    which button is worth starting."""
+    """Seconds from the first sample at or under `gate` to `when`, or None when it never got there."""
     first = next((t for t, hp in series if 0 < hp <= gate and t <= when), None)
     return None if first is None else (when - first) / 1000
 
@@ -4795,9 +4553,8 @@ def nova_cover(spans: list[tuple[int, int, str]], when: int) -> list[str]:
 
 
 def nova_preresist(rows: list[dict]) -> tuple[int, int, int]:
-    """(hits, hits that resisted nothing, the worst unresisted hit) over `dmg` rows. The unresisted hit
-    is the figure worth planning against: over one pull the damage before resistance ran a 23,547 median
-    against a 17,717 median after it, and every death from full health took a hit that resisted none."""
+    """(hits, hits that resisted nothing, the worst unresisted hit) over `dmg` rows. The unresisted hit is the figure to
+    plan against."""
     clean = [rec["a"] for rec in rows if not rec.get("rs")]
     return len(rows), len(clean), max(clean, default=0)
 
@@ -4923,17 +4680,14 @@ def show_novas(trace: Trace) -> None:
     print(f"  novas that would have killed somebody: {at_risk}, with a button up on at least one: {covered}")
     print(f"  deaths to a nova: {len(lethal)}, of which had any button up: {len(lethal_covered)}")
 
-    # Which novas nothing raid-wide was up for, against which ones killed. Every death in the pull that
-    # the per-Guardian claim came from landed on an uncovered nova, and one of those went uncovered only
-    # because a bot held the window with nothing left to press.
+    # Which novas nothing raid-wide was up for, against which ones killed.
     bare = [when for when, had in covers if not had]
     if covers:
         fell = sum(1 for _, when in lethal if any(abs(when - one) <= 2000 for one in bare))
         print(f"  novas with nothing raid-wide up: {len(bare)} of {len(covers)}, "
               f"deaths on one of those: {fell} of {len(lethal)}")
 
-    # The one-target externals, which run 2 and 3 minutes against a phase with a nova every 8 s. Spent
-    # per victim they all went inside the first 15 s, on novas that killed nobody.
+    # The one-target externals run 2 and 3 minutes against a phase with a nova every 8 s, so count them per victim.
     spent = [(rec["t"], trace.name(rec.get("s")), NOVA_EXTERNALS[rec["sp"]])
              for rec in sorted(trace.of("cast"), key=lambda rec: rec["t"])
              if rec.get("sp") in NOVA_EXTERNALS and rec.get("s") in roster]
@@ -4942,9 +4696,8 @@ def show_novas(trace: Trace) -> None:
         says = "on a nova that killed" if any(abs(when - one) <= 4000 for _, one in lethal) else ""
         print(f"    {clock(when):>9}  {who:14} {what:18} {says}")
 
-    # A step-out only counts if the bot stays out. Four healers in one pull reached 19.8 yd from the
-    # Guardian and the body detour returned them to 4.8 yd before it went off. Phase 1 is left out
-    # because melee stand in the blast there on purpose.
+    # A step-out only counts if the bot stays out. Phase 1 is left out because melee stand in the blast
+    # there on purpose.
     walked = late = 0
     for source in hits:
         fired = min(rec["t"] for rec in hits[source])
@@ -4965,18 +4718,16 @@ def show_novas(trace: Trace) -> None:
         print(f"  hit by a nova after phase 1: {late}, of those clear of {NOVA_CLEAR_RADIUS:.0f} yd at "
               f"some point in the {NOVA_WALK_BACK_MS / 1000:.0f} s before it: {walked}")
 
-    # The handover sends the front line to one spot 25 yd round the station ring from the back line, so
-    # a Guardian that followed it there cannot reach them. One back-line bot caught is somebody who
-    # walked in; the whole stack is somebody who walked a Guardian to them.
+    # The handover sends the front line 25 yd round the station ring from the back line, so a Guardian that
+    # followed it cannot reach them. One back-line bot caught walked in; the whole stack walked a Guardian in.
     for label, inside in (("in phase 1", lambda t: t <= p1_end), ("after it", lambda t: t > p1_end)):
         hit = {rec.get("d") for rows in hits.values() for rec in rows
                if inside(rec["t"]) and trace.role(rec.get("d")) in ("ranged", "heal")}
         verdict = ", ".join(sorted(trace.name(guid) for guid in hit)) if hit else "none"
         print(f"  back line caught by a nova {label}: {len(hit)} - {verdict}")
 
-    # The raid-wide button against the nova that needed it. Spending it is only visible as a cast: the
-    # aura lands on all 25, so every row of it looks the same whoever pressed. Divine Sacrifice is the
-    # press and Divine Guardian the 20% its talent procs alongside, so counting the cast counts once.
+    # The raid-wide button shows only as a cast: the aura lands on all 25 whoever pressed. Divine Sacrifice is
+    # the press and Divine Guardian the 20% its talent procs alongside, so counting the cast counts once.
     presses = [(rec["t"], trace.name(rec.get("s")), NOVA_RAID_COVERS[rec["sp"]])
                for rec in sorted(trace.of("cast"), key=lambda rec: rec["t"])
                if rec.get("sp") in NOVA_RAID_COVERS and rec.get("s") in roster]
@@ -4989,10 +4740,8 @@ def show_novas(trace: Trace) -> None:
         says = "one was in hand" if gap is None else f"the earliest was back {gap / 1000:.1f} s too late"
         print(f"    against the first nova that killed, at {clock(first)}: {says}")
 
-    # A battle rez puts the bot back on a bar 13-17% smaller, with none of the raid buffs it died with,
-    # and the next nova kills it from full health. Counted here because the deaths above include the
-    # second and third ones, which no pool in the trace describes: trace.maxhp keeps the bar from before
-    # the first death, so the killing blow is the only witness to the real one.
+    # A battle rez puts the bot back on a smaller bar with none of its raid buffs, so the next nova kills it
+    # from full. trace.maxhp keeps the bar from before the first death, so the killing blow is the only witness.
     back = sorted(spell for spell, name in trace.spells.items()
                   if name in ("Rebirth", "Reincarnation"))
     rezzes = [rec["t"] for rec in trace.of("cast") if rec.get("sp") in back]
@@ -5015,11 +4764,8 @@ def show_novas(trace: Trace) -> None:
               f"the {NOVA_EXPECTED_DAMAGE:,} the gate assumes, resisted median "
               f"{statistics.median(shares) * 100:.1f}% (min {min(shares) * 100:.1f}%)")
 
-    # Where the 130 comes from. Shadow Resistance Aura and Prayer of Shadow Protection both give it on
-    # the same exclusive aura 143 and the core takes the highest rather than the sum, so the question is
-    # not the total: it is whether the raid carries the 130 itself, and whether the paladin on the aura
-    # is one that can double it to 260. Removals count as well as applications, because a buff put up
-    # before the pull shows up only when it comes off.
+    # Aura 143 is exclusive, highest only, so ask whether the raid carries 130 itself and whether the paladin
+    # can double it to 260. Removals count too: a buff put up before the pull shows only when it comes off.
     def named(guids: set) -> str:
         return ", ".join(sorted(f"{trace.name(one)}{' (human)' if one in trace.humans else ''}"
                                 for one in guids)) or "nobody"
@@ -5032,9 +4778,8 @@ def show_novas(trace: Trace) -> None:
     print(f"    Aura Mastery pressed by {named(mastery)}, of those holding the aura: "
           f"{named(holders & mastery)}")
 
-    # Pairs with no room for a heal between them. This is what the melee pile dies to once stepping out
-    # is off the table, and a step-out cannot answer it anyway: the second Guardian is not low when the
-    # first detonates.
+    # Pairs with no room for a heal between them: what the melee pile dies to once stepping out is off the table.
+    # A step-out cannot answer it, since the second Guardian is not low when the first detonates.
     landed: dict[int, dict[int, int]] = collections.defaultdict(dict)
     for source in hits:
         for rec in hits[source]:

@@ -14,17 +14,8 @@
 class CastSpellAction;
 class Unit;
 
-// Yogg's body knocks players away once a second forever inside 13.3 yd, and the walk out of that ring
-// at the phase 1 to 2 handover is a forced move against reach melee's combat one. Neither wins
-// outright: the two traded a melee bot back and forth every ~300 ms for the whole walk, and 77 times
-// over one phase 2. So reach stands down over exactly the windows where an encounter node owns where
-// the bot stands, and nowhere else - it is the only generic way a bot closes on anything, so a blanket
-// zero strands the raid.
-//
-// Flee is the same problem from the other end of the room. Nothing in phase 1 is escaped by backing
-// off: Dark Volley reaches 35 yd and the nova is a death explosion, so the 3 yd a caster gives up only
-// costs it the station. One pull spent 957 of them, 96% ending further from the 21.5 yd band and a
-// third landing inside 20.1 where the innermost orbit summons.
+// Reach stands down only where an encounter node owns the bot's position: it is the only generic closer.
+// Flee is off in phase 1: Dark Volley reaches 35 yd, the nova is a death explosion, so backing off costs the station.
 class YoggSaronMovementGuardMultiplier : public Multiplier
 {
 public:
@@ -42,10 +33,8 @@ private:
     bool CrusherReachIsWrong();
 };
 
-// Phase 1 AoE, held while it would finish a Guardian nobody is on. With the raid on one focus, the
-// Guardian next to it on the stack still lost 5.6%/s, and two of those died 2 s apart around a focus
-// kill during the handover: three novas in 3.4 s on the melee pile. Heals are never held. Covers the
-// Guardians phase 1 leaves behind too, until the last one dies.
+// Phase 1 AoE, held while it would finish a Guardian nobody is on (an untargeted stack Guardian still loses 5.6%/s).
+// Heals are never held. Covers the Guardians phase 1 leaves behind too, until the last one dies.
 class YoggSaronPhase1AoeHoldMultiplier : public Multiplier
 {
 public:
@@ -57,10 +46,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Anything that hits more than one tentacle, held in an illusion room. Every tentacle a hit lands on
-// sends its own 60% back, so a cluster of three returns 180%: Sweeping Strikes and Bladestorm took a
-// warrior from full to dead in 2 s, faster than the reprisal hold can react. Most melee cleaves carry no
-// AoE threat type, hence the names. Heals are never held.
+// Anything hitting more than one tentacle, held in an illusion room: each tentacle reflects 60%, so three return 180%.
+// Most melee cleaves carry no AoE threat type, hence the names. Heals are never held.
 class YoggSaronIllusionMultiTargetHoldMultiplier : public Multiplier
 {
 public:
@@ -72,9 +59,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Cast-time spells and channels, held while a bot walks out ahead of Induce Madness. Each one stops the
-// walk: a mage channelled Evocation for 5 s, 51 yd from the portal, and was charmed short of it. Instants
-// still go.
+// Cast-time spells and channels, held while a bot walks out ahead of Induce Madness, since each one stops the walk.
+// Instants still go.
 class YoggSaronExitHoldCastMultiplier : public Multiplier
 {
 public:
@@ -86,12 +72,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Spells at something the bot is holding off, which the resolver alone can't stop: a class node aims at
-// "attackers" or the current target value on its own. On the Brain while the brain team holds, DoTs and
-// channels from the DoT line and everything from the hold line, and on a marked Guardian while a hunter
-// drags one, since its threat would keep the Guardian on it once Distracting Shot runs out. A non-tank's
-// spells on an Immortal Guardian the threat gate refuses, kicks aside: two warlocks' "on attacker" DoTs
-// pulled the first Guardian of one phase 3 the second its root ended, and both died to it.
+// Spells at something the bot is holding off, which the resolver can't stop: class nodes aim at "attackers" alone.
+// Held: Brain DoTs and channels, spells at a hunter-dragged Guardian, a non-tank's at a threat-gated Immortal Guardian.
 class YoggSaronHeldTargetCastMultiplier : public Multiplier
 {
 public:
@@ -116,12 +98,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Phase 1 walks back to the stack or the station, held in two cases:
-// - A Sara's Fervor holder near a live nova. The dodge only fires inside 17 yd, so the station, the
-//   leash and the reach nodes walked the bot straight back in: 31 of 44 runs were inside the blast
-//   again while still holding Fervor, and three of those bots died.
-// - A walk that would cross a cloud. 7 Guardians in 9 pulls came off a cloud that only a bot running
-//   from Fervor or walking back from it touched. The walk waits for the cloud to pass instead.
+// Phase 1 walks back to the stack or station, held for a Sara's Fervor holder near a live nova (dodge: inside 17 yd)
+// and for a walk that would cross a cloud, which waits for the cloud to pass.
 class YoggSaronPhase1WalkGuardMultiplier : public Multiplier
 {
 public:

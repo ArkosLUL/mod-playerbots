@@ -23,30 +23,23 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-// Its picker ranks by "not attacking me", then nearest by GetDistance, which takes off Yogg's 30 yd
-// combat reach, so Yogg always reads as nearest: it held one bot tank on him for all of phase 3 with no
-// Guardian ever targeted. Guardian control hands out a Guardian while one can still be held; 70 yd
-// covers the whole spawn ring, 38-48 yd round Yogg, from the melee spot 18.5 yd behind him.
+// Generic picker uses GetDistance, which takes off Yogg's 30 yd combat reach, so Yogg always reads nearest.
+// 70 yd covers the Guardian spawn ring (38-48 yd) from the melee spot 18.5 yd behind him.
 bool YoggSaronGuardianToHold(PlayerbotAI* botAI)
 {
     constexpr float guardianSearchRadius = 70.0f;
     return YoggSaronHoldableGuardianWithin(botAI->GetBot(), guardianSearchRadius) && YoggSaronInPhase3(botAI);
 }
 
-// The window the dps resolver owns a tank's target in, which has to match
-// YoggSaronSetDpsPriorityTrigger or a tank is left with no target source at all. Phase 2 is in it
-// because the generic picker walks a tank into a Crusher's reach and Crush is a 100% proc on the
-// tentacle's swing: 53 of one pull's 59 Crushes landed on the bot tank standing in one.
+// Must match YoggSaronSetDpsPriorityTrigger's window or a tank has no target source.
+// Phase 2 is in it: the generic picker walks a tank into a Crusher's reach and Crush is a sure proc.
 bool YoggSaronTankTargetOwned(PlayerbotAI* botAI)
 {
     return YoggSaronInPhase2(botAI) || YoggSaronGuardianToHold(botAI);
 }
 
-// The Brain's own position is 25 yd above its room's floor, so a leap at it leaves the bot hanging in
-// the air with nothing to walk on: one cat druid's Feral Charge (a jump to a spot behind the target)
-// hung it there for 23 s until Induce Madness charmed it. GetDistance hides the gap behind the Brain's
-// combat reach, so 50 yd read as in range. Warrior Charge and Intercept land on the floor instead, and
-// the brain charge node casts those itself on the way in. Charges at the tentacles stay available.
+// The Brain sits 25 yd above its room's floor, so a leap at it strands the bot in the air (Feral Charge).
+// Warrior Charge and Intercept land on the floor and the brain charge node casts those. Tentacle charges stay.
 bool YoggSaronBrainIsTarget(PlayerbotAI* botAI)
 {
     if (!YoggSaronOnBrainLevel(botAI->GetBot()))
@@ -64,9 +57,8 @@ bool YoggSaronCrusherIsTarget(PlayerbotAI* botAI)
            !YoggSaronCrusherStunHolds(botAI, target);
 }
 
-// Food and drink sit a bot down with no AI at all for up to 18 s. With no Guardian alive the raid drops
-// combat and eats wherever it stands: four melee sat down in the ring 8 s before it lit, and two were
-// still eating when it threw them. The back line on the 21.5 yd station keeps eating.
+// Eating sits a bot down with no AI for up to 18 s, so with no Guardian alive the raid drops combat and eats in place.
+// The back line on the 21.5 yd station keeps eating.
 bool YoggSaronInsideRing(PlayerbotAI* botAI)
 {
     Position const& middle = ULDUAR_YOGG_SARON_MIDDLE;
@@ -87,9 +79,8 @@ void DefineYoggSaron(EncounterBuilder& e)
         [](PlayerbotAI* ai) -> Trigger* { return new BossShadowResistanceTrigger(ai, "yogg-saron"); },
         "yogg-saron shadow resistance action",
         [](PlayerbotAI* ai) -> Action* { return new BossShadowResistanceAction(ai, "yogg-saron"); }, ACTION_RAID);
-    // Those two take the first paladin that answers and ask only whether the aura is up, from anybody.
-    // This one puts it on the paladin that can double it, which is the only way the slot pays for
-    // itself: Prayer of Shadow Protection already gives everyone the same 130.
+    // These two take the first paladin that answers; this one picks the paladin that can double the aura.
+    // Prayer of Shadow Protection already gives everyone the same 130.
     e.Node<YoggSaronShadowAuraTrigger, YoggSaronShadowAuraAction>(ACTION_RAID);
     e.Node<YoggSaronGuardianPositioningTrigger, YoggSaronGuardianPositioningAction>(ACTION_RAID);
     e.Node<YoggSaronPhase1SpacingTrigger, YoggSaronPhase1SpacingAction>(ACTION_RAID + 2);
@@ -131,14 +122,8 @@ void DefineYoggSaron(EncounterBuilder& e)
     // somebody else to a well.
     e.Node<YoggSaronSqueezeRescueTrigger, YoggSaronSqueezeRescueAction>(ACTION_RAID + 6);
 
-    // Shadow Nova is a death explosion in the middle of the melee pile, so melee cannot step out of it
-    // and all 25 phase 1 deaths over four pulls were this one spell. These three mitigate it instead,
-    // and they go above everything else because a nova lands in the next second or two and a bot that
-    // walks instead of pressing a button is a bot that dies walking.
-    //
-    // The raid cooldown is highest: one Divine Sacrifice covers 25 raiders, so it beats any single bot's
-    // own. The externals come last of the three because the bot's own button is cheaper than a healer's
-    // three-minute one, and the victim pick already skips anyone their own button saves.
+    // Shadow Nova goes off in the pile, so these mitigate instead of stepping out. Above everything, it lands in 1-2 s.
+    // Raid cooldown first (Divine Sacrifice covers 25), externals last: a bot's own button is cheaper than a 3 min one.
     e.Node<YoggSaronNovaRaidCooldownTrigger, YoggSaronNovaRaidCooldownAction>(ACTION_EMERGENCY + 7);
     e.Node<YoggSaronNovaDefensiveTrigger, YoggSaronNovaDefensiveAction>(ACTION_EMERGENCY + 6);
     e.Node<YoggSaronNovaExternalTrigger, YoggSaronNovaExternalAction>(ACTION_EMERGENCY + 5);
@@ -174,10 +159,8 @@ void DefineYoggSaron(EncounterBuilder& e)
     // Same reasoning for the warrior's Mortal Strike on a healing Guardian, over its own rotation, which
     // would only ever strike Yogg.
     e.Node<YoggSaronMortalStrikeTrigger, YoggSaronMortalStrikeAction>(ACTION_RAID - 0.5f);
-    // Level with the room walk it replaces for the healer, and above heal reach, which every healer spec
-    // wires at 38-40. Getting to the station is what puts the whole room in range, so it comes before a
-    // step toward one mate; the trigger stands down inside 10 yd of the station and heal reach owns the
-    // bot from there.
+    // Level with the room walk, above heal reach (38-40): the station puts the whole room in range.
+    // The trigger stands down inside 10 yd of the station and heal reach takes over.
     e.Node<YoggSaronIllusionHealerStationTrigger, YoggSaronIllusionHealerStationAction>(ACTION_RAID);
     // Level with the room walk, which a held bot never runs: its room state reads reprisal, not walkingin.
     e.Node<YoggSaronReprisalRegroupTrigger, YoggSaronReprisalRegroupAction>(ACTION_RAID);
@@ -190,26 +173,20 @@ void DefineYoggSaron(EncounterBuilder& e)
     // Over the brain spot walk, which outranks the class charge nodes, so they never fire on it.
     e.Node<YoggSaronBrainChargeTrigger, YoggSaronBrainChargeAction>(ACTION_RAID + 0.25f);
 
-    // The set dps priority row owns every non-tank's target, so the generic picker stands down rather
-    // than pull bots back onto whatever is nearest. This is the exact test that row fires on: zeroing
-    // the assist over a wider window leaves a bot with no target source. "attack rti target" is left
-    // alone on purpose: a mark a player sets should still win.
+    // The dps priority row owns every non-tank's target, so the generic picker stands down on the row's exact test.
+    // A wider window leaves a bot with no target source. "attack rti target" stays: a player's mark wins.
     e.OwnTargeting("yogg-saron dps target guard multiplier", Role::NonTank, YoggSaronEncounterActive,
                    Family::DpsAssist);
     e.OwnTargeting("yogg-saron dps target guard multiplier", Role::Tank, YoggSaronTankTargetOwned,
                    Family::TankAssist);
 
-    // Everything that moves a bot somewhere nobody picked. In phase 1 the room is six fixed cloud orbits,
-    // so any jump is a jump onto a ring: over one pull 13 of 20 casts left the bot with more orbits in
-    // summon range than it started with. Blink and Disengage stay off all fight, since both fire on
-    // "something is too close" rather than to close a gap. The gap-closers come back in phases 2 and 3,
-    // where there's no orbit to land on, and reach melee survives either way, so melee still walk in.
+    // Phase 1 is six fixed cloud orbits, so any jump lands on a ring. Blink and Disengage stay off all fight.
+    // Gap-closers return in phases 2 and 3, where no orbit is in the way. Reach melee survives either way.
     e.Block("yogg-saron displacement guard multiplier", Role::Any, YoggSaronEncounterActive,
             Family::Blink | Family::Disengage);
     e.Block("yogg-saron displacement guard multiplier", Role::Any, YoggSaronInPhase1, Family::Charge,
             {"killing spree"});
-    // Killing Spree on the Brain lands the rogue on its model, 21 yd above the floor, where nothing walks
-    // it out: one stood there 20 s until Induce Madness charmed it.
+    // Killing Spree on the Brain lands the rogue on its model, 21 yd above the floor, where nothing walks it out.
     e.Block("yogg-saron displacement guard multiplier", Role::Any, YoggSaronBrainIsTarget, Family::Charge,
             {"killing spree"});
 
@@ -231,16 +208,14 @@ void DefineYoggSaron(EncounterBuilder& e)
                 Family::AttackLeastHp | Family::AttackRti | Family::Charge | Family::PetAttack);
     e.Block("yogg-saron brain dot hold", Role::Any, YoggSaronBrainDotHeld, Family::DebuffOnAttacker);
 
-    // A bot on its portal spot waits there. The portal walk is quiet once it arrives, so without this
-    // reach takes it back to its target and the walk fetches it again for the whole lead. The Yogg dodges
-    // are none of these and still move it.
+    // A bot on its portal spot waits there, or reach takes it to its target and the portal walk fetches it again.
+    // The Yogg dodges are none of these and still move it.
     e.Block("yogg-saron portal spot hold", Role::Any, YoggSaronHoldingPortalSpot,
             Family::Reach | Family::ReachHeal | Family::SetBehind | Family::RearFlank |
                 Family::CombatFormationMove | Family::Charge | Family::Follow | Family::MoveRandom);
 
-    // Both put a pet in the Crusher's reach past the pet guard. Acid Spit is cast for the pet at the
-    // hunter's target, and Shadowfiend spawns 3 yd from its target and melees it, so the priest saves it
-    // for the next target that isn't a Crusher.
+    // Both put a pet in the Crusher's reach past the pet guard: Acid Spit is cast at the hunter's target,
+    // Shadowfiend spawns 3 yd from its target. The priest saves it for a non-Crusher.
     e.Block("yogg-saron crusher pet spell hold", Role::Any, YoggSaronCrusherIsTarget, 0,
             {"pet acid spit", "shadowfiend"});
 
@@ -256,10 +231,8 @@ void DefineYoggSaron(EncounterBuilder& e)
 
     e.Block("yogg-saron stack food guard multiplier", Role::Any, YoggSaronInsideRing, 0, {"food", "drink"});
 
-    // Every one of those buttons otherwise fires on "I am already low", which means after the nova
-    // rather than before it: Totemist cast Shamanistic Rage nine times in one pull and still died four
-    // times. Melee only, so the tank keeps its own against the Guardians it is holding and the back line
-    // keeps its own against Dark Volley.
+    // These buttons otherwise fire on "I am already low", which is after the nova. Melee only: the tank keeps its own
+    // against the Guardians it holds and the back line against Dark Volley.
     e.Block("yogg-saron nova defensive hold", Role::Melee, YoggSaronNovaHold, 0, HeldMagicDefensiveNames());
 
     // The externals and the raid cooldown, held for the same reason.
@@ -267,38 +240,26 @@ void DefineYoggSaron(EncounterBuilder& e)
             {"pain suppression", "pain suppression on party", "guardian spirit on party",
              "hand of sacrifice on party", "divine sacrifice"});
 
-    // The aura slot is exclusive, so the paladin's own buff strategy trades it back on the next GCD:
-    // the bot tank took Shadow Resistance Aura and cast Devotion Aura again inside the same pull, in
-    // both pulls it took the aura at all.
+    // The aura slot is exclusive, so the paladin's own buff strategy trades it back on the next GCD.
     e.Block("yogg-saron shadow aura hold", Role::Any, YoggSaronShadowAuraHeld, 0,
             {"devotion aura", "retribution aura", "concentration aura", "crusader aura", "sanctity aura",
              "shadow resistance aura", "fire resistance aura", "frost resistance aura"});
 
-    // The cover node spends this on the nova. Left to the class node it goes on an already hurt raid,
-    // which is after the hit: six casts over six pulls, every one from the holy paladin, and none of
-    // them from the paladin holding the aura it would have doubled.
+    // The cover node spends this on the nova; left to the class node it goes on an already hurt raid, after the hit.
     e.Block("yogg-saron aura mastery hold", Role::Any, YoggSaronNovaHold, 0, {"aura mastery"});
 
-    // Every other paladin keeps off both, so the elected one owns the slot. Three of them ran the aura
-    // in the last pull and its effects changed hands 207 times in 110 s, which cost the elected paladin
-    // half a second to take them back right as it pressed the cover; and a press from a paladin whose
-    // copy is not the strongest doubles nothing, which is where the pull's second press went. The two
-    // generic nodes above are named here as well, because their action adds a strategy that re-casts
-    // the aura on its own afterwards. Nothing else of theirs is blocked, so the paladin's own buff
-    // strategy puts Devotion or Concentration back in the slot on the next GCD.
+    // Every other paladin keeps off both so the elected one owns the slot; a press from a weaker copy doubles nothing.
+    // The two generic nodes above are named too, since their action adds a strategy that re-casts the aura.
     e.Block("yogg-saron shadow aura other hold", Role::Any, YoggSaronShadowAuraOtherHeld, 0,
             {"shadow resistance aura", "aura mastery", "sara shadow resistance action",
              "yogg-saron shadow resistance action"});
 
-    // Not back into the pile. A battle rez strips every raid buff, so the bot returns on a bar 13-17%
-    // smaller with no Prayer of Shadow Protection, and the next nova kills it from full health: three
-    // of five deaths in the last pull were the same two bots dying again, 14 s and 8 s after coming
-    // back. Only Rebirth, since Reincarnation runs from the dead engine where no encounter rule reaches.
+    // Not back into the pile: a battle rez strips every raid buff, so the bot returns on a smaller bar and dies again.
+    // Only Rebirth, since Reincarnation runs from the dead engine where no encounter rule reaches.
     e.Block("yogg-saron battle rez hold", Role::Any, YoggSaronBattleRezHeld, 0, {"rebirth"});
 
-    // The roar paladin keeps its own Concentration Aura until it has pressed, or the buff strategy trades
-    // it back on the next global cooldown. The generic shadow resistance nodes add a strategy that would
-    // re-cast that aura on its own.
+    // The roar paladin keeps Concentration Aura until it has pressed, or the buff strategy trades it back next GCD.
+    // The generic shadow resistance nodes add a strategy that would re-cast it.
     e.Block("yogg-saron roar aura hold", Role::Any, YoggSaronRoarAuraHeld, 0,
             {"devotion aura", "retribution aura", "crusader aura", "sanctity aura", "shadow resistance aura",
              "fire resistance aura", "frost resistance aura", "sara shadow resistance action",
@@ -326,14 +287,13 @@ void DefineYoggSaron(EncounterBuilder& e)
             {"consecration", "hammer of the righteous", "avenger's shield", "hand of reckoning",
              "righteous defense"});
 
-    // Avenging Wrath locks Divine Protection for 30 s: one tank pressed it and had no button left when the
-    // pile killed it.
+    // Avenging Wrath locks Divine Protection for 30 s, so a tank that pressed it has no button left against the pile.
     e.Block("yogg-saron tank wrath hold", Role::Tank, YoggSaronTankWrathHeld, 0, {"avenging wrath"});
 
     // Moves 30% of a dps's damage onto a tank already under the pile.
     e.Block("yogg-saron tank sacrifice hold", Role::Tank, YoggSaronInPhase3, 0, {"hand of sacrifice on party"});
 
-    // Kept for the tanks: every pull spent all four on dps in phase 1. The tank node casts it directly.
+    // Kept for the tanks, not spent on dps in phase 1. The tank node casts it directly.
     e.Block("yogg-saron lay on hands hold", Role::Any, YoggSaronEncounterActive, 0, {"lay on hands on party"});
     e.Block("yogg-saron lay on hands hold", Role::NonTank, YoggSaronEncounterActive, 0, {"lay on hands"});
     e.Block("yogg-saron lay on hands hold", Role::Tank, YoggSaronBeforePhase3, 0, {"lay on hands"});

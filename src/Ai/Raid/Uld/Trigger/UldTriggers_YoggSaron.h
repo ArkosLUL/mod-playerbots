@@ -7,9 +7,7 @@
 #include "UldEncounter_YoggSaron.h"
 #include "Trigger.h"
 
-//
 // Yogg-Saron
-//
 class YoggSaronTrigger : public Trigger
 {
 public:
@@ -29,15 +27,13 @@ public:
     bool IsBrainRoomApproachable();
     bool IsDesignatedBotTank();
 
-    // Whether the bot's phase 3 station still reaches a target from inside its radius. A fixed spot
-    // with a radius is a fence whenever the target sits further out than radius plus range, and the
-    // ranged spot is tuned so Yogg is reachable by 4.4 yd and nothing else in the room is.
+    // Whether the phase 3 station still reaches a target: a fixed spot is a fence when the target sits beyond radius
+    // plus range. The ranged spot is tuned so Yogg is reachable by 4.4 yd and nothing else is.
     bool PhaseThreeStationReaches(Unit* target);
 };
 
-// Clouds and Guardians in one node. Two nodes at the same relevance cannot share a bot - the engine
-// ends the tick at the first action returning true - so they would trade ticks and walk the bot down
-// the line between their two destinations.
+// Clouds and Guardians in one node: two nodes at the same relevance cannot share a bot (the engine ends the tick at the
+// first action returning true), so they would trade ticks and walk the bot down the line between them.
 class YoggSaronPhase1SpacingTrigger : public YoggSaronTrigger
 {
 public:
@@ -47,9 +43,8 @@ public:
     bool IsActive() override;
 };
 
-// Ranged and healers hold one spot on the second orbit instead of dodging clouds, because no radius
-// clears every orbit and the cloud outruns any sidestep. Standing there costs the whole back line one
-// Guardian per 45 s orbit, against the 2.7 a minute a phase of dodging cost.
+// Ranged and healers hold one spot on the second orbit instead of dodging clouds: no radius clears every orbit and the
+// cloud outruns any sidestep. It costs the back line one Guardian per 45 s orbit.
 class YoggSaronPhase1StationTrigger : public YoggSaronTrigger
 {
 public:
@@ -64,9 +59,8 @@ private:
     bool parked = false;
 };
 
-// Dark Volley is a 1.5s cast hitting everything within 35 yd, so it cannot be walked out of, and Drain
-// Life gives an Immortal Guardian back three Empowered stacks. The always-on class interrupts only ever
-// look at the bot's current target and caught under a third of the volleys and half the drains.
+// Dark Volley is a 1.5 s cast hitting everything within 35 yd, so it can't be walked out of, and Drain Life gives an
+// Immortal Guardian back three Empowered stacks. The always-on class interrupts only look at the bot's current target.
 class YoggSaronDarkVolleyTrigger : public YoggSaronTrigger
 {
 public:
@@ -98,9 +92,8 @@ public:
     bool IsActive() override;
 };
 
-// Melee and tanks are leashed to Sara rather than stationed on her: a Guardian walks to whoever holds
-// threat, so where melee stand is where it dies, and only a death inside 15 yd of Sara advances the
-// phase at all.
+// Melee and tanks are leashed to Sara, not stationed on her: a Guardian walks to whoever holds threat, so where melee
+// stand is where it dies, and only a death inside 15 yd of Sara advances the phase.
 class YoggSaronGuardianPositioningTrigger : public YoggSaronTrigger
 {
 public:
@@ -143,9 +136,8 @@ public:
     bool IsActive() override;
 };
 
-// One owner of every non-tank's target for the whole encounter, replacing the raid icons this fight
-// used to target through. An icon is a sticky override - RtiTargetValue hands it back before the smart
-// picker runs and IsHighPriority pins it - so a wrong mark could not be corrected until combat ended.
+// One owner of every non-tank's target for the whole encounter, replacing raid icons: an icon is a sticky override
+// (RtiTargetValue hands it back before the smart picker, IsHighPriority pins it), so a wrong mark can't be fixed.
 class YoggSaronSetDpsPriorityTrigger : public YoggSaronTrigger
 {
 public:
@@ -155,9 +147,8 @@ public:
     bool IsActive() override;
 };
 
-// Crush wedges and Death Rays in one node, for the reason recorded on the phase 1 pair: two nodes at
-// one relevance cannot share a bot, so they would trade ticks and walk it down the line between their
-// destinations.
+// Crush wedges and Death Rays in one node: two nodes at one relevance trade ticks and walk the bot down the line
+// between them.
 class YoggSaronPhase2SpacingTrigger : public YoggSaronTrigger
 {
 public:
@@ -224,9 +215,8 @@ private:
     bool GoToBrainRoomRequired();
     bool SetRtiMarkRequired();
 
-    // Nothing else in the fight moves a bot once a portal has dropped it, and the dps resolver will
-    // not pick a target it has no line of sight to. Two of the three rooms put their tentacles behind
-    // a doorway, so the raid stood at the landing spot until Induce Madness landed.
+    // Nothing else moves a bot once a portal drops it, and the dps resolver won't pick a target it has no line of sight
+    // to. Two of the three rooms put their tentacles behind a doorway.
     bool WalkIntoRoomRequired();
 
     // Done with its share while the rest of the room is still alive: to the door, so the walk to the
@@ -311,9 +301,8 @@ public:
     bool IsActive() override;
 };
 
-// The Laughing Skull cannot be targeted or killed - UNIT_FLAG_NOT_SELECTABLE, flags_extra 128 - and
-// its gaze picks targets by HasInArc(M_PI, caster), so turning around is the only defence. Four per
-// room, 1750 shadow damage and -2 Sanity a second each at 30 yd.
+// The Laughing Skull cannot be targeted or killed (UNIT_FLAG_NOT_SELECTABLE, flags_extra 128), and its gaze picks
+// targets by HasInArc(M_PI, caster), so turning around is the only defence.
 class YoggSaronLaughingSkullTrigger : public YoggSaronTrigger
 {
 public:
@@ -323,9 +312,8 @@ public:
     bool IsActive() override;
 };
 
-// The facing node corrects a heading; this one moves the bot so the heading it will be forced into is
-// already safe. Only while there is something to kill - clear of a fight, turning away is free and the
-// facing node handles it.
+// The facing node corrects a heading; this one moves the bot so the heading it will be forced into is already safe.
+// Only while there is something to kill: clear of a fight, turning away is free and the facing node handles it.
 class YoggSaronIllusionFacingTrigger : public YoggSaronTrigger
 {
 public:
@@ -344,9 +332,8 @@ public:
     bool IsActive() override;
 };
 
-// The walk to a target on the far side of Yogg. Everything else about the body ring asks where the bot
-// is standing; this asks where the walk is going, which is the only read that can stop a bot entering
-// it in the first place.
+// The walk to a target on the far side of Yogg. The rest of the body ring asks where the bot is; this asks where the
+// walk is going, the only read that stops a bot entering it.
 class YoggSaronBodyDetourTrigger : public YoggSaronTrigger
 {
 public:
@@ -365,9 +352,8 @@ public:
     bool IsActive() override;
 };
 
-// Phase 3 without Thorim: a Shadow Beacon marked Guardian heals every Guardian and Yogg within 20 yd of it
-// once its mark ends, and the pile tank can't separate it, the whole pile follows whoever holds it. So a
-// second bot taunts it off and walks it clear. See YoggSaronBeaconDragGuardian for who.
+// Phase 3 without Thorim: a beacon-marked Guardian heals everything within 20 yd of it once the mark ends, and the pile
+// follows its holder. So a second bot taunts it off and walks it clear (YoggSaronBeaconDragGuardian picks who).
 class YoggSaronBeaconDragTrigger : public YoggSaronTrigger
 {
 public:
@@ -387,8 +373,8 @@ public:
     bool IsActive() override;
 };
 
-// A shaman's own Heroism trigger wants a boss target, and in phase 3 shamans are on Guardians and
-// tentacles: one pull never cast it, another 40 s in. This one waits for the raid to be in place instead.
+// A shaman's own Heroism trigger wants a boss target, and in phase 3 shamans are on Guardians and tentacles. This one
+// waits for the raid to be in place instead.
 class YoggSaronPhase3LustTrigger : public YoggSaronTrigger
 {
 public:
@@ -451,13 +437,8 @@ public:
     bool IsActive() override;
 };
 
-// Shadow Nova is a death explosion inside the melee pile, so melee cannot dodge it and every one of 25
-// phase 1 deaths over four pulls was this spell. These three nodes mitigate it instead, and they fire
-// on a Guardian about to die rather than on a bot already hurt.
-//
-// The bot's own button. Two gates by button length: a 12 s one goes when the Guardian passes 20%, a 5 s
-// one waits for 10%, because the measured gap from gate to detonation runs 4.8 s median at 20% and 2.4 s
-// at 10%.
+// Shadow Nova is a death explosion in the melee pile, so these three nodes fire on a Guardian about to die. Own-button
+// gates by length: a 12 s button at 20%, a 5 s one at 10%, matching the gate-to-nova gap (4.8 s vs 2.4 s).
 class YoggSaronNovaDefensiveTrigger : public YoggSaronTrigger
 {
 public:

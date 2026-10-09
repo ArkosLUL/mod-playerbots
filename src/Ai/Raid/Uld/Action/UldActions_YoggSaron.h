@@ -47,10 +47,8 @@ public:
     YoggSaronMaladyOfTheMindAction(PlayerbotAI* ai) : MoveAwayFromPlayerWithDebuffAction(ai, Name, SPELL_MALADY_OF_THE_MIND, 15.0f) {}
 };
 
-// Latch and sweep shared by the two spacing nodes. Each phase puts everything it has to clear into one
-// node: two nodes at the same relevance cannot share a bot - the engine ends the tick at the first
-// action returning true - so a pair would trade ticks and walk the bot down the line between their
-// destinations.
+// Latch and sweep shared by the two spacing nodes. One node per phase: two at the same relevance cannot share
+// a bot, the engine ends the tick at the first action returning true, so a pair would trade ticks.
 class YoggSaronSpacingAction : public MovementAction
 {
 public:
@@ -63,18 +61,16 @@ protected:
     {
         std::vector<EncounterHelpers::HazardCircle> hazards;
 
-        // The retry, swept when nothing satisfies everything at once: whichever half of the set is
-        // the one that kills. Empty means no retry - the bot stays where it is rather than moving to
-        // a spot that is no better. fallbackClear is the retry's own shape test, null to drop it.
+        // The retry, swept when nothing satisfies everything at once. Empty means no retry, the bot stays put.
+        // fallbackClear is the retry's own shape test, null to drop it.
         std::vector<EncounterHelpers::HazardCircle> fallback;
         std::function<bool(float, float)> fallbackClear;
 
         // Shapes a circle cannot describe, like the Crush wedge. True means the spot is safe.
         std::function<bool(float, float)> clear;
 
-        // Where the bot would rather end up, on top of being safe. Tried first and dropped when
-        // nothing satisfies both, so it can never leave a bot standing in a hazard. Null means the
-        // first spot that clears everything will do.
+        // Where the bot would rather end up. Tried first, dropped when nothing satisfies both, so it can never leave
+        // a bot in a hazard. Null means the first spot that clears everything will do.
         std::function<bool(float, float)> preferred;
     };
 
@@ -94,9 +90,8 @@ protected:
     // default: for most hazards crossing one to leave another still beats standing still.
     virtual bool RouteAcceptable(float /*x*/, float /*y*/) const { return true; }
 
-    // Whether this tick's dodge may cut into a walk already in flight. A forced walk holds off every
-    // other forced move until it arrives, and one body detour walked two ranged into a Death Ray that
-    // way while their dodges sat refused for 1.7 and 2.1 s. Asked after Collect.
+    // Whether this tick's dodge may cut into a walk in flight. A forced walk holds off every other forced move
+    // until it arrives. Asked after Collect.
     virtual bool OverridesWalkInFlight() const { return false; }
 
     // Whether the rest of the walk to the held spot is still fine, asked each tick the spot is held.
@@ -104,9 +99,8 @@ protected:
     virtual bool HeldRouteAcceptable(float /*x*/, float /*y*/) const { return true; }
 
 private:
-    // Held destination. The hazards move - clouds orbit at 3 yd/s, a Crusher re-faces onto whoever it
-    // is hitting - so a fresh sweep every tick answers a different question every tick and the bot
-    // never arrives.
+    // Held destination. The hazards move (clouds orbit at 3 yd/s, a Crusher re-faces its victim), so a fresh
+    // sweep every tick answers a different question and the bot never arrives.
     Position heldSpot;
     uint32 heldSpotMs = 0;
 };
@@ -165,11 +159,8 @@ private:
     std::vector<Position> rays;
 };
 
-// Stand so that facing the tentacle faces away from the skulls. Facing itself cannot be held - set
-// facing, AttackAction and CastSpell each turn the bot back at its target inside the same tick - so
-// the only lever is which side of the tentacle the bot fights from. One pull ate 122,980 damage and
-// 272 Sanity with the tentacle and the nearest skull inside 90 degrees of each other in 459 of 640
-// samples, and the bot nearer the tentacle in 73% of those, which is a sidestep of a few yards.
+// Stand so facing the tentacle faces away from the skulls. Facing can't be held (set facing, AttackAction and
+// CastSpell turn the bot back in the same tick), so the lever is which side of the tentacle it fights from.
 class YoggSaronIllusionFacingAction : public YoggSaronSpacingAction
 {
 public:
@@ -192,9 +183,8 @@ private:
     Position roomMiddle;
 };
 
-// Walk around the body instead of through it. ReachCombatTo shortens its path to halfway, so a target
-// on the far side of Yogg puts the destination on top of him: one pull sent eight ranged and healers
-// to 7.6-9.4 yd of the middle in a single second and the knock back caught thirteen of them.
+// Walk around the body, not through it. ReachCombatTo shortens its path to halfway, so a target on Yogg's
+// far side puts the destination on top of him.
 class YoggSaronBodyDetourAction : public MovementAction
 {
 public:
@@ -205,9 +195,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// Keep pets and guardians out of a Crusher Tentacle's melee range. Nothing else can put one there:
-// melee bots are already barred from targeting a Crusher, and every Crush cone in one pull was
-// procced by somebody's pet while the nearest player stood 12 yd clear.
+// Keep pets and guardians out of a Crusher Tentacle's melee range. Melee bots can't target a Crusher,
+// so a pet is the only thing that can put one there.
 class YoggSaronPetGuardAction : public Action
 {
 public:
@@ -294,7 +283,7 @@ public:
 };
 
 // Mortal Strike's -50% halves both Guardian heals, the beacon's 37.5k ticks and Drain Life's leech, and on
-// Yogg it cuts nothing. One pull spent every phase 3 strike on Yogg while the Guardians healed 17.4M.
+// Yogg it cuts nothing.
 class YoggSaronMortalStrikeAction : public Action
 {
 public:
@@ -531,11 +520,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// The tank holds a stack spot and taunts loose Guardians onto it. Phase 3 does it so the raid cleaves
-// Immortal Guardians to Weakened, where Thorim's Titanic Storm executes them or, without him, they hit
-// for no bonus; phase 1 does it because a Guardian's
-// death location is the phase, and one that dies out among the casters neither hurts Sara nor spares
-// the back line.
+// Tank holds a stack spot and taunts loose Guardians onto it. Phase 3: the raid cleaves Immortal Guardians to
+// Weakened for Titanic Storm. Phase 1: a Guardian's death location is the phase.
 class YoggSaronGuardianControlAction : public AttackAction
 {
 public:
@@ -566,10 +552,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// Hand of Protection on somebody else's Constrictor Tentacle. The main tank is rescued like anyone
-// else: he is riding a vehicle and holding nothing while he is held, so the threat wipe costs less
-// than the grip does. Forbearance blocking his own Divine Shield and Lay on Hands for two minutes
-// afterwards is the price, and it is deliberate.
+// Hand of Protection on somebody else's Constrictor. The main tank is rescued too (held, he holds nothing), and
+// Forbearance locking his own Divine Shield and Lay on Hands for 2 min is the deliberate price.
 class YoggSaronSqueezeRescueAction : public Action
 {
 public:
@@ -581,7 +565,7 @@ public:
 };
 
 // Mitigate the next Shadow Nova instead of running from it: melee have to stand in the blast to kill a
-// Guardian at all, and one nova is 56-106% of a melee bot's health bar.
+// Guardian at all, and one nova is most of a melee bot's health bar.
 class YoggSaronNovaDefensiveAction : public Action
 {
 public:
@@ -606,10 +590,8 @@ public:
     static char const* PickExternal(PlayerbotAI* botAI, Player* victim);
 
 private:
-    // Whichever of these the healer has, in the order they are worth spending. Guardian Spirit absorbs
-    // the whole hit when it would otherwise be lethal, which is the only answer to a Fervored one-shot.
-    // Hand of Protection is absent on purpose: it only blocks physical, so a shadow blast goes straight
-    // through it, and it sheds threat.
+    // In spend order. Guardian Spirit absorbs the whole hit, the only answer to a Fervored one-shot. Hand of
+    // Protection is absent on purpose: physical only, so a shadow blast goes through it, and it sheds threat.
     static constexpr char const* HEALER_EXTERNALS[] = {"pain suppression", "guardian spirit",
                                                        "hand of sacrifice"};
 };
@@ -694,10 +676,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// One cover per nova window: Aura Mastery, or Divine Sacrifice for the 20% the Divine Guardian talent
-// hangs off it. The split Divine Sacrifice puts back on the paladin is survivable here: the pool is 40%
-// of his health times the raid size and it breaks under 20% health, and across four pulls no caster went
-// below 62%.
+// One cover per nova window: Aura Mastery, or Divine Sacrifice for the 20% Divine Guardian hangs off it.
+// Its split on the paladin is survivable: the pool is 40% of his health times raid size, broken under 20% health.
 class YoggSaronNovaRaidCooldownAction : public Action
 {
 public:

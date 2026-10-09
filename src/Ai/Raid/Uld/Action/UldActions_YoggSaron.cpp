@@ -61,9 +61,8 @@ struct AnyUnitOfEntriesInRangeCheck
     }
 };
 
-// Guardians the raid finishes one at a time instead of spreading over three. In phase 3 a Shadow
-// Beacon heal outruns split damage; in phase 1 two brought down together detonate together, and a
-// pair of Shadow Novas killed all eight melee inside 16 ms.
+// Guardians the raid finishes one at a time. Phase 3: a Shadow Beacon heal outruns split damage.
+// Phase 1: two brought down together detonate together.
 bool IsYoggSaronFocusedGuardian(Unit* unit)
 {
     uint32 const entry = unit->GetEntry();
@@ -116,10 +115,7 @@ bool YoggSaronGuardianPositioningAction::Execute(Event /*event*/)
 {
     if (YoggSaronHandoverState(botAI).clearing)
     {
-        // One spot rather than a fan. Letting each bot keep the bearing it already held spread the
-        // front line over 37 and 40 yd and put ten of eleven outside every healer's 38.5 yd at some
-        // point, and a pair of Guardians that had followed them out killed five of them standing on
-        // the same ring.
+        // One spot rather than a fan: bots keeping their own bearing spread the front line out of every healer's range.
         Position const& spot = ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT;
 
         return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
@@ -178,9 +174,8 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
 
     heldSpotMs = 0;
 
-    // Already outside everything, so this is what decides when a bot moves at all rather than where it
-    // ends up. It has to agree with the trigger: a circle here that the trigger does not read leaves a
-    // band where the bot sits in a hazard and the node is never asked.
+    // Already outside everything, so this decides when a bot moves, not where. Must agree with the trigger:
+    // a circle the trigger does not read leaves a band where the bot sits in a hazard and is never asked.
     if (stillClear(set.hazards, set.clear, bot->GetPosition()))
         return false;
 
@@ -211,23 +206,16 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
         return !set.fallbackClear || set.fallbackClear(x, y);
     };
 
-    // Somewhere the bot can still reach what it is killing, when such a spot exists. Without it the
-    // hold lapses every 3 s, reach melee walks the bot back toward its target, the bot lands in a
-    // hazard and this node walks it out again - 77 handovers between the two per melee bot over one
-    // phase 2. Dropped rather than enforced: a bot in a hazard has to move whether or not it can shoot
-    // from where it lands.
+    // A spot where the bot can still reach its target, when one exists. Without it the hold lapses, reach melee
+    // walks it back into a hazard and this node walks it out again. Dropped, not enforced: a hazard comes first.
     Position safe;
     if (set.preferred)
     {
         auto const preferredAccept = [&accept, &set](float x, float y)
         { return accept(x, y) && set.preferred(x, y); };
 
-        // The anchor on this bot's own bearing, tried before the rings. The sweep only offers points on
-        // rings around the bot, 16 bearings apart, and at 20 yd out those are 7.8 yd from each other
-        // against a 5.6 yd circle in the middle, so a preference for the middle falls between two
-        // bearings: 0 of 6 melee cloud dodges reached it in the last pull. A finer grid instead would
-        // clear the passability cache between the two sweeps and quadruple the map queries on every
-        // dodge. Short of the edge rather than at the middle, which is where Sara stands.
+        // Anchor on the bot's own bearing, tried before the rings: points 7.8 yd apart at 20 yd miss a 5.6 yd circle.
+        // A finer grid clears the passability cache between sweeps. Short of the edge: Sara stands in the middle.
         float const bearing = middle.GetAngle(bot->GetPositionX(), bot->GetPositionY());
         float const inside = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS * 0.75f;
         Position const core(middle.GetPositionX() + std::cos(bearing) * inside,
@@ -242,9 +230,8 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
                                                      &sweep);
     }
 
-    // Every candidate in a ring is the same walk away, so preferNear is free and decides the whole
-    // character of the dodge: biased at the middle it sidesteps along the orbit instead of running for
-    // the rim.
+    // Every candidate in a ring is the same walk away, so preferNear decides the dodge's character:
+    // biased at the middle it sidesteps along the orbit instead of running for the rim.
     if (safe == Position())
         safe = FindNearestPositionClearOfHazards(bot, set.hazards, SearchRadius(), 2.0f,
                                                  static_cast<float>(M_PI) / 8.0f, &middle, accept, &sweep);
@@ -257,9 +244,8 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
     if (safe == Position())
         return false;
 
-    // MOVEMENT_FORCED: IsWaitingForLastMove yields only to a strictly higher priority, and at combat
-    // priority a reach-spell walk already in flight wins the tick. Not even forced beats another forced
-    // walk, so a dodge allowed to cut in drops that walk's hold first.
+    // MOVEMENT_FORCED: IsWaitingForLastMove yields only to a strictly higher priority, and forced does not beat
+    // forced, so a dodge allowed to cut in drops that walk's hold first.
     if (OverridesWalkInFlight())
         AI_VALUE(LastMovement&, "last movement").clear();
 
@@ -302,17 +288,12 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
     // cleared.
     set.hazards.insert(set.hazards.end(), set.fallback.begin(), set.fallback.end());
 
-    // Who a destination preference is for. Not a melee healer, which IsMelee being !IsRanged cannot tell
-    // apart. The tank is in: its control walk already aims at this same circle, so the preference agrees
-    // with it instead of pulling the other way, and with no preference at all the tank's dodges landed
-    // at 18.0 and 29.3 yd and it woke three of one pull's nine raid-summoned Guardians walking back.
+    // Who a destination preference is for. IsMelee being !IsRanged can't tell a melee healer apart. The tank is in:
+    // its control walk aims at the same circle, so the preference agrees with it.
     bool const pileDodger = PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsHeal(bot);
 
-    // With nothing about to detonate, a melee bot dodging a cloud otherwise steps out of its own swing
-    // range and reach melee hauls it straight back - the two traded the tick 252 times in one pull.
-    // Requiring the candidate to stay in reach ends the trade, and the retry drops it when nothing
-    // satisfies both. Only toward a target on the stack: one further out is the tank's to fetch, and
-    // chasing it put melee at a median 12-14 yd, on the inner orbit, in both pulls of 2026-09-16.
+    // With nothing about to detonate, a melee dodge steps out of swing range and reach melee hauls it back. Require the
+    // candidate to stay in reach, only toward a target on the stack: one further out is the tank's to fetch.
     if (novas.empty() && PlayerbotAI::IsMelee(bot))
     {
         Unit* target = AI_VALUE(Unit*, "current target");
@@ -325,11 +306,8 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
             set.fallback = set.hazards;
         }
 
-        // Somewhere no orbit reaches, not merely clear of the cloud it is leaving. Of 124 melee cloud
-        // dodges only 56 ended inside the 2.8 yd circle: 30 stopped in the band the inner orbit sweeps
-        // and 38 ran out onto the second orbit's ring, which is where 11 of the 16 Guardians melee feet
-        // woke came from, and a spot in the circle was clear and walkable in 111 of the 124. Preferred
-        // rather than required, so it can never hold a bot in a cloud.
+        // Somewhere no orbit reaches, not merely clear of the cloud it is leaving. Preferred rather than required,
+        // so it can never hold a bot in a cloud.
         if (pileDodger)
         {
             set.preferred = [](float x, float y)
@@ -340,18 +318,8 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
         }
     }
 
-    // Only a Sara's Fervor holder reaches this now, and it has to be clear of the blast rather than
-    // mitigate it. The station band is the one radius only the second orbit reaches and the back line
-    // already wakes that cloud, so it costs the raid almost nothing: Fervor runners woke 1 Guardian in
-    // 85. Without the preference a step-out lands on the inner orbit instead, because the clear radius
-    // is 20 yd and the Guardians are on the pile, so the nearest safe spot sits ~19 yd out while that
-    // orbit summons from 3.1 to 20.4.
-    //
-    // The band alone, not the band and the back line's blob together: the sweep tests rings 2 yd apart
-    // and 16 bearings around the bot, and both tests at once leave it 0 to 2 points of the ~200 it
-    // offers, so one cloud near the bearing emptied the set and only 11-15% of step-outs reached it.
-    // The band on its own offers 11 to 16. Preferred rather than required, so this never holds a bot in
-    // the blast.
+    // Fervor holder only, and it has to be clear of the blast. Prefer the station band alone, the one radius only the
+    // second orbit reaches: band plus back-line blob leaves the sweep 0 to 2 of ~200 points. Preferred, never required.
     if (!novas.empty() && pileDodger)
     {
         set.preferred = [](float x, float y)
@@ -387,9 +355,8 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
     inDeathRay = false;
     rays.clear();
 
-    // Nothing in the core despawns the Guardians phase 1 leaves alive and JustDied still fires the
-    // nova, so the blast outlives the phase that spawned them. In the fallback too, for the same
-    // reason phase 1 does it: the nova is what the retry keeps when the rest cannot also be cleared.
+    // The core never despawns the Guardians phase 1 leaves alive and JustDied still fires the nova, so the blast
+    // outlives the phase. In the fallback too: the nova is what the retry keeps.
     for (Unit* guardian :
          GetYoggSaronNovaThreats(botAI, SearchRadius() + ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS))
     {
@@ -410,9 +377,8 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
         inDeathRay = inDeathRay || bot->GetExactDist2d(ray) < ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS;
     }
 
-    // Yogg's body, which is a hazard from the moment he emerges and stays one: 64022 triggers a 14 yd
-    // knock back off him every second for the rest of the fight, and nothing in the world can be swept
-    // for it. It costs melee nothing - his CombatReach is 30, so melee range on him is about 34 yd.
+    // Yogg's body is a hazard from the moment he emerges: 64022 knocks back 14 yd off him every second and nothing
+    // can be swept for it. Free for melee: his CombatReach is 30, so melee range on him is about 34 yd.
     set.hazards.emplace_back(ULDUAR_YOGG_SARON_MIDDLE, ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS);
 
     std::vector<Position> wedges = GetYoggSaronCrushWedges(botAI, SearchRadius() + ULDUAR_YOGG_SARON_CRUSH_RANGE);
@@ -421,10 +387,8 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
         set.clear = [wedges](float x, float y)
         { return !InYoggSaronCrushWedge(wedges, x, y, ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC); };
 
-        // The wedge is what the retry keeps, and the rays are what it gives up. Across two pulls a
-        // Death Ray killed once over 11 hits for 150,504; Crush killed four times over 19 hits for
-        // 485,964, about 25k a hit against melee pools. Dropping the wedge to keep the rays put bots
-        // back in the Crush line, which is where four of the five non-wipe deaths happened.
+        // The retry keeps the wedge and gives up the rays: Crush kills far more per hit than Death Ray, and dropping
+        // the wedge put bots back in the Crush line.
         set.fallbackClear = set.clear;
     }
 
@@ -458,7 +422,7 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
 
 bool YoggSaronPhase2SpacingAction::RouteAcceptable(float x, float y) const
 {
-    // Picking a spot past a ray walked bots through its lane, three Death Ray deaths in two pulls.
+    // A spot past a ray means walking through its lane.
     return YoggSaronRouteClearOfBody(bot, x, y) && YoggSaronRouteClearOfDeathRays(bot, rays, x, y);
 }
 
@@ -480,9 +444,8 @@ bool YoggSaronIllusionFacingAction::Collect(HazardSet& set)
     if (skulls.empty())
         return false;
 
-    // FindNearestPositionClearOfHazards returns nothing for an empty hazard list, and the constraint
-    // here is angular rather than radial, so the skulls go in as circles only to give the sweep
-    // something to ring outward from. Standing under one is worth avoiding on its own account.
+    // FindNearestPositionClearOfHazards returns nothing for an empty list and the constraint here is angular, so the
+    // skulls go in as circles only to give the sweep something to ring outward from.
     for (Position const& skull : skulls)
         set.hazards.emplace_back(skull, ULDUAR_YOGG_SARON_SKULL_CLEAR_RADIUS);
 
@@ -491,11 +454,8 @@ bool YoggSaronIllusionFacingAction::Collect(HazardSet& set)
     float const reach =
         botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
 
-    // Staying in reach is a requirement, not a preference the sweep may drop. A spot out of reach puts
-    // the bot back under reach melee, which walks it to the target and undoes this - one room spent
-    // fifty seconds trading those two while the tentacle sat at 87%. No fallback either: every
-    // candidate rejected here is one where the bot would be gazed anyway, so standing still and
-    // fighting through it beats a walk that buys nothing.
+    // Staying in reach is required, not a preference: out of reach, reach melee walks the bot back and undoes this.
+    // No fallback: every rejected candidate gets the bot gazed anyway, so fighting through it beats a useless walk.
     set.clear = [skulls, targetX, targetY, reach](float x, float y)
     {
         return std::hypot(targetX - x, targetY - y) <= reach &&
@@ -567,9 +527,8 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
         bool touching = false;
         for (Creature* crusher : crushers)
         {
-            // Either half is enough. Being the victim is what makes the tentacle swing, and standing
-            // in reach is what lets it: SetInCombatWithZone gives it a threat list holding the whole
-            // raid, so a pet that never attacked can still come up as the victim.
+            // Either half is enough: the victim makes it swing, reach lets it. SetInCombatWithZone puts the raid
+            // on its threat list, so a pet that never attacked can still come up as the victim.
             if (swinging(crusher) && (crusher->GetVictim() == pet || crusher->IsWithinMeleeRange(pet)))
             {
                 touching = true;
@@ -597,10 +556,8 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
             continue;
         }
 
-        // Passive, and driven by command from here. PetAI retargets a pet three ways, OwnerAttacked on
-        // every harmful spell the owner casts (Spell.cpp), KilledUnit picking its attacker or the
-        // owner's victim, and AttackedBy, and all three skip a passive pet. Pulling it off once it's in
-        // reach was too late: all five bot Crush deaths in one pull were cones aimed at a pet.
+        // Passive, driven by command. PetAI retargets three ways (OwnerAttacked, KilledUnit, AttackedBy) and all skip
+        // a passive pet. Pulling it off once it's in reach is too late.
         Hush(pet);
 
         // A pet already on another add only needs to stay on it, unless the pet itself is in the reach.
@@ -683,39 +640,24 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool p
         return entry == NPC_BRAIN ? 2 : none;
     }
 
-    // One boss-room ladder for both phases, led by whatever phase 1 left alive. Those carry over,
-    // keep casting a 35 yd Dark Volley nothing can be walked out of, and regenerate to full the moment
-    // the raid takes a portal. Left unordered they are picked off by nearest, which is how one pull
-    // put two Guardians' worth of damage into five of them for no kill while taking 736,000 back.
+    // One boss-room ladder for both phases, led by what phase 1 left alive: it keeps casting a 35 yd Dark Volley and
+    // regenerates to full at the portal, so unordered it is picked off by nearest for no kill.
     switch (entry)
     {
         case NPC_GUARDIAN_OF_YS:
             return 0;
-        // Immortal Guardians only exist in phase 3, and they go before most of what phase 2 leaves
-        // behind. One pull spent phase 3's first 50 s on a Crusher and two Corruptors while five loose
-        // Guardians killed the raid. The Crusher is the exception, below.
-        // Shadow Beacon swaps a guardian's entry to the marked one, then pours 750,000 of healing into
-        // it over 20 s, 176% of its own max health, and into Yogg too when he is within 20 yd of it.
-        // Focusing it is the only way it reaches Weakened before that lands, and the entry swap makes it
-        // a free signal. Only with Thorim, see IsAllowedTarget.
+        // Immortal Guardians exist only in phase 3 and go before most phase 2 leftovers (Crusher excepted, below).
+        // Shadow Beacon swaps the entry and pours 750,000 healing into it over 20 s, so focus it. Only with Thorim.
         case NPC_MARKED_IMMORTAL_GUARDIAN:
             return 1;
         case NPC_IMMORTAL_GUARDIAN:
             return 2;
-        // Then the Crusher. Diminish Power is a 5-minute channel taking 21% off every point of damage
-        // the raid does, multiplicative across tentacles, undispellable and unkickable - only a melee
-        // hit (worth ~1.5 s) or the tentacle's death stops it.
-        // Phase 3 ranged take a leftover one first: with nobody on it, it sat on half the raid for all of
-        // phase 3 in two pulls running. Only the Crusher, the Corruptors' debuffs were dispelled inside
-        // seconds.
+        // Then the Crusher. Diminish Power is a 5 minute channel cutting raid damage 21%, undispellable and unkickable:
+        // only a melee hit (~1.5 s) or its death stops it. Phase 3 ranged take a leftover one first.
         case NPC_CRUSHER_TENTACLE:
             return phaseThreeRanged ? 0 : 4;
-        // One a mark's heal reaches goes first with the Crusher. It has to die between two beacons or it's
-        // back to full: one left to the pets ended phase 3 at 88% after three beacons in a row. A 745k
-        // Corruptor takes the ranged about 7 s.
-        // Otherwise a Constrictor goes ahead of the Crusher while it holds somebody. 99k health dies in
-        // about 2 s under the ranged, and one pull left four raiders squeezed for 11.5-23.3 s with all nine
-        // ranged on a Crusher.
+        // One a mark's heal reaches goes first with the Crusher: it must die between two beacons or it is back to full.
+        // Otherwise a Constrictor goes ahead of the Crusher while it holds somebody (99k health, ~2 s of ranged).
         case NPC_CONSTRICTOR_TENTACLE:
         case NPC_CORRUPTOR_TENTACLE:
             if (beaconHealFirst && YoggSaronBeaconHealReaches(unit))
@@ -741,9 +683,8 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
     if (brain.brainLevel && TierOf(candidate, true) <= 1 && !YoggSaronIllusionTentacleAllowed(botAI, candidate))
         return false;
 
-    // Phase 3 splits the raid: ranged take the Guardians and the phase 2 leftovers, melee stay on Yogg and
-    // only hit a Guardian near the tank during a gaze or once beacon-healed. Their area damage still
-    // reaches the pile. Nobody hits one a tank is not holding.
+    // Phase 3 splits the raid: ranged take the Guardians and the phase 2 leftovers, melee stay on Yogg and only hit a
+    // Guardian near the tank during a gaze or once beacon-healed. Nobody hits one a tank is not holding.
     auto const phaseThreeMelee = [this, &brain]()
     {
         if (!brain.phaseThreeMelee)
@@ -765,16 +706,13 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
 
             allowed = *brain.approachable && !YoggSaronBrainHeld(botAI);
             break;
-        // Crush skips its own cone test inside 2 yd and re-aims onto whoever the tentacle is swinging
-        // at, so a melee bot that was clear becomes collinear without moving. No angle answers that,
-        // only not being there. Healers stay eligible: they are at range. The exception is Shattered
-        // Illusion: stunned, it neither swings nor channels, until shortly before the stun lifts.
+        // Crush skips its cone test inside 2 yd and re-aims at its victim, so a clear melee bot turns collinear
+        // without moving. Healers stay eligible (range). Shattered Illusion stuns it, no swing until near the end.
         case NPC_CRUSHER_TENTACLE:
             allowed = !PlayerbotAI::IsMelee(bot) || YoggSaronCrusherStunHolds(botAI, candidate);
             break;
-        // Phase 3 ranged only take one their station reaches, or a Constrictor holding somebody. One
-        // across the room walked all nine through the Guardian pile while Yogg was in range of the
-        // station the whole time. The pets go for the far ones.
+        // Phase 3 ranged only take one their station reaches, or a Constrictor holding somebody.
+        // The pets go for the far ones.
         case NPC_CONSTRICTOR_TENTACLE:
         case NPC_CORRUPTOR_TENTACLE:
             allowed = !phaseThreeMelee() &&
@@ -809,9 +747,8 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
 
             if (*brain.thorim)
                 allowed = health > ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT;
-            // Melee only during a gaze or on a beacon-healed one a tank holds. Taking every tanked one over
-            // the floor kept them off Yogg for good, since the pile always has one: 9.2M into Guardians and
-            // 2.35M into Yogg in one pull.
+            // Melee only during a gaze or on a beacon-healed one a tank holds. Taking every tanked one over the floor
+            // keeps them off Yogg for good, since the pile always has one.
             else if (phaseThreeMelee())
             {
                 Unit* victim = candidate->GetVictim();
@@ -821,10 +758,8 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
                            victim->IsPlayer() && PlayerbotAI::IsTank(victim->ToPlayer())) ||
                           gazeTarget();
             }
-            // Down to the floor and no further, the rest goes on Yogg. Under it only while the gaze has
-            // the bot turned off Yogg anyway, and only one it can hit with him out of its front arc.
-            // Beacon-healed ones too: most of it heals back, but three full ones left alone for the 20 s
-            // heal killed a tank in each of two pulls.
+            // Down to the floor, the rest goes on Yogg. Under it only while the gaze has the bot off Yogg
+            // anyway, and only one it can hit with him out of its front arc. Beacon-healed too: the heal kills tanks.
             else
                 allowed = health > ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT || gazeTarget();
 
@@ -874,14 +809,12 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         tierCount = 8;
     }
 
-    // The brain level needs the reach: its floor sits ~25 yd below the Brain and a portal drops the bot
-    // 60-72 yd from it, so sight distance alone leaves bots with nothing to shoot. Attack() itself caps
-    // at nothing but line of sight. The boss room is ~50 yd across and keeps the cheaper sweep.
+    // The brain level needs the reach: a portal drops the bot 60-72 yd out, past sight distance. Attack() caps at
+    // line of sight only. The boss room is ~50 yd across and keeps the cheaper sweep.
     float const range = brainLevel ? 200.0f : sPlayerbotAIConfig.sightDistance;
 
-    // The door as well as the tentacles. The Brain opens it in the same branch that fires when the
-    // last Influence Tentacle in the room dies, so a bot reading the tentacles alone can start hitting
-    // the Brain through a wall it has not been let through yet.
+    // The door as well as the tentacles: the Brain opens it in the branch that fires when the last Influence Tentacle
+    // dies, so reading tentacles alone can hit the Brain through a wall not yet opened.
     BrainApproach brain;
     brain.brainLevel = brainLevel;
     brain.phaseThreeRanged = phaseThreeRanged;
@@ -905,9 +838,8 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     for (Unit* unit : candidates)
         tiers.push_back(TierOf(unit, brainLevel, phaseThreeRanged, beaconHealFirst));
 
-    // Best tier first, and stop at the first one with anything allowed in it: only that tier is ever
-    // used, so the rest would just be line of sight rays for nothing. Keep the visit order inside a
-    // tier, ties go to whichever was found first.
+    // Best tier first, stop at the first one with anything allowed: the rest would be line of sight rays for nothing.
+    // Ties go to whichever was found first.
     Unit* target = nullptr;
     size_t desiredTier = none;
     for (size_t tier = 0; tier < tierCount && !target; ++tier)
@@ -946,11 +878,8 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     if (currentTier != none && currentTier <= desiredTier)
     {
-        // Never downgrade off something at least as urgent, and inside one tier only switch for
-        // something meaningfully closer - otherwise two tentacles ping-pong the whole raid. Guardians
-        // hold outright: that tier is ordered by health, and an order that flips mid-fight would reset
-        // every swing and cast timer in the raid. Except a leftover freed from its gap: all ten ranged
-        // stayed on a 44% one while the lowest sat free at 2.6%.
+        // Never downgrade off something as urgent, and inside a tier switch only for something meaningfully closer,
+        // or two tentacles ping-pong the raid. Guardians hold outright: a flipping health order resets every timer.
         bool const comeBack = currentTier == desiredTier && target &&
                               target->GetEntry() == NPC_GUARDIAN_OF_YS &&
                               currentTarget->GetEntry() == NPC_GUARDIAN_OF_YS &&
@@ -970,10 +899,8 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     if (target)
         return target;
 
-    // The illusion rooms hold adds the module does not enumerate, so a hard stop here would park a bot
-    // with nothing to do rather than let it shoot what is in front of it. The fallback knows nothing
-    // about Crush or Guardian threat though: it put melee on a lone live Crusher for ~150 bot-seconds
-    // in one pull.
+    // The illusion rooms hold adds the module does not enumerate, so a hard stop would park a bot. The fallback knows
+    // nothing about Crush or Guardian threat though: it put melee on a lone live Crusher.
     Unit* fallback = AI_VALUE(Unit*, "dps target");
     if (fallback && brainLevel && TierOf(fallback, true) <= 1 && !YoggSaronIllusionTentacleAllowed(botAI, fallback))
         return nullptr;
@@ -1085,9 +1012,8 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
 
     bool const phaseOne = !YoggSaronOnBrainLevel(bot) && YoggSaronInPhase1(botAI);
 
-    // Phase 1 is one shared target and no "dps target" fallback. A parked Guardian stays parked even
-    // when nothing else is killable: two killed out at the station on 2026-09-16 novaed the back line
-    // 2.5 s apart and took five raiders.
+    // Phase 1 is one shared target and no "dps target" fallback. A parked Guardian stays parked even when nothing
+    // else is killable.
     if (phaseOne && currentTarget && currentTarget->GetEntry() == NPC_GUARDIAN_OF_YS &&
         !YoggSaronPhase1GuardianKillable(botAI, currentTarget))
     {
@@ -1110,8 +1036,7 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
         currentTarget = nullptr;
     }
 
-    // The AoE hold only stops new casts. A Blizzard already channeling keeps ticking for up to 8 s, and
-    // the hold came on 2.6-5.3 s before each splash kill it was replayed against. Channel check first,
+    // The AoE hold only stops new casts: a Blizzard already channeling ticks for up to 8 s. Channel check first,
     // so the sweep only runs for a bot that has one going.
     if (phaseOne || leftovers)
     {
@@ -1139,9 +1064,8 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
         currentTarget = nullptr;
     }
 
-    // Healers take no target in an illusion room or in phase 3. A target is what reach spell walks them
-    // toward: 39 yd off a room's middle with half the team out of heal range, and in phase 3 41-45 yd
-    // from the tank chasing tentacles. With none, nothing turns them back toward Yogg either.
+    // Healers take no target in an illusion room or phase 3: a target is what reach spell walks them toward, away from
+    // the middle or the tank. With none, nothing turns them back toward Yogg either.
     Position roomMiddle;
     if (PlayerbotAI::IsHeal(bot) && (YoggSaronRoomMiddle(bot, roomMiddle) ||
                                      (!YoggSaronOnBrainLevel(bot) && YoggSaronInPhase3(botAI))))
@@ -1325,9 +1249,8 @@ bool YoggSaronBrainLinkAction::Execute(Event /*event*/)
     if (!partner)
         return false;
 
-    // Both ends run this, so both walk and the gap closes at twice the rate. Aiming at the partner
-    // instead is a chase, and a chase after somebody moving away at the same speed never arrives -
-    // one link ran 17 walks while the gap grew from 45.8 to 78.5 yd.
+    // Both ends run this, so the gap closes at twice the rate. Aiming at the partner is a chase after somebody
+    // moving away at the same speed, which never arrives.
     float x = (bot->GetPositionX() + partner->GetPositionX()) / 2.0f;
     float y = (bot->GetPositionY() + partner->GetPositionY()) / 2.0f;
 
@@ -1343,9 +1266,8 @@ bool YoggSaronBrainLinkAction::Execute(Event /*event*/)
         y = middleY + std::sin(heading) * ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
     }
 
-    // Not into a live Crusher's Crush either. A link left over from phase 2 walked one bot 18 yd from a
-    // leftover Crusher as phase 3 started, and the cone killed it. Waiting out there costs a shared hit a
-    // second.
+    // Not into a live Crusher's Crush either: a link left over from phase 2 can end there as phase 3 starts.
+    // Waiting out there costs a shared hit a second.
     std::list<Creature*> crushers;
     bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, 80.0f);
     for (Creature* crusher : crushers)
@@ -1381,9 +1303,8 @@ bool YoggSaronMoveToEnterPortalAction::Execute(Event /*event*/)
     if (!YoggSaronWalkMakingProgress(botAI, "enter", spot))
         return false;
 
-    // Straight across the room is straight through the body, which throws the bot back once a second
-    // for as long as it is inside the ring. One waypoint turns the crossing into an arc, and each leg
-    // halves the turn the next one has to make.
+    // Straight across the room is straight through the body, which throws the bot back once a second. One waypoint
+    // turns the crossing into an arc, and each leg halves the turn the next one has to make.
     Position const destination = YoggSaronBodyRoute(bot, spot);
 
     return MoveNear(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
@@ -1461,11 +1382,8 @@ bool YoggSaronIllusionRoomAction::WalkIntoRoom()
     if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_WALKING_IN || PlayerbotAI::IsHeal(bot))
         return false;
 
-    // Walk at the nearest tentacle it may take, because the middle is the one place in the room there is
-    // never one to fight. It is the centroid of the whole summon group, so they ring it: 27-29 yd out in
-    // Stormwind, where two melee walked to within 8.4 and 0.0 yd of it and then back out again, 117 yd
-    // of walking for a 79 yd trip and a first swing 16 s after landing. Getting a tentacle into line of
-    // sight is all the dps resolver ever wanted, and the nearest one is the shortest way to do it.
+    // Walk at the nearest tentacle it may take: the middle is the summon group's centroid, so they ring it and there
+    // is never one to fight there. The nearest one is the shortest way into line of sight, all the dps resolver wants.
     Position middle;
     if (!YoggSaronRoomMiddle(bot, middle))
         return false;
@@ -1567,8 +1485,7 @@ bool YoggSaronBrainSpotAction::Execute(Event /*event*/)
 {
     Position const spot = YoggSaronBrainSpot(bot);
 
-    // A bot that landed just before the door opened is still booked on the walk to a tentacle across the
-    // room: one ran 98 yd east and 177 yd back with 26 of these refused behind it.
+    // A bot that landed just before the door opened is still booked on the walk to a tentacle across the room.
     YoggSaronTakeOverForcedWalk(AI_VALUE(LastMovement&, "last movement"), spot);
     YoggSaronReleaseStalledWalk(botAI, "brainspot", spot);
 
@@ -1636,25 +1553,22 @@ bool YoggSaronMoveToExitPortalAction::Execute(Event /*event*/)
 
     for (GameObject* portal : portals)
     {
-        // Standing down is fatal here - Induce Madness lands, and a mind control is always a death - so
-        // a route going nowhere moves on to the next portal instead of giving up on the lot. They sit
-        // far enough apart that a blocked route to one says nothing about the others.
+        // Standing down is fatal (Induce Madness lands, and a mind control is a death), so a route going nowhere moves
+        // on to the next portal. They sit far apart, so a blocked route to one says nothing about the others.
         if (!YoggSaronWalkMakingProgress(botAI, "exit", portal->GetPosition()))
             continue;
 
-        // The brain spot walk is forced too: exits stood 4.0 and 4.4 s refused behind it in two pulls and
-        // were charmed.
+        // The brain spot walk is forced too, and would keep the exit refused until the bot is charmed.
         YoggSaronTakeOverForcedWalk(AI_VALUE(LastMovement&, "last movement"), portal->GetPosition());
 
-        // A spline that died reads as a duplicate of itself until the hold runs out: one bot stood 3.5 s.
+        // A spline that died reads as a duplicate of itself until the hold runs out.
         YoggSaronReleaseStalledWalk(botAI, "exit", portal->GetPosition());
 
         MoveTo(bot->GetMapId(), portal->GetPositionX(), portal->GetPositionY(), portal->GetPositionZ(), false, false,
                false, true, MovementPriority::MOVEMENT_FORCED, true, false);
 
-        // Claim the tick while still walking. Everything queued under this node is a walk somewhere
-        // else and only has to win one tick to turn the bot round, which is how two bots in one pull
-        // ended up back at the Brain from a few yards short of a portal and were charmed there.
+        // Claim the tick while still walking: everything queued under this node is a walk elsewhere and only has to win
+        // one tick to turn the bot round.
         if (bot->GetDistance2d(portal) > INTERACTION_DISTANCE)
             return true;
 
@@ -1678,19 +1592,16 @@ bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
     if (skulls.empty())
         return false;
 
-    // Judged on every skull in range, not the ones in arc. Turning off the in-arc ones brought the
-    // others round in front, and melee in a reprisal hold flipped between two headings four times a
-    // second. Fewest ahead wins, nearest the current heading on a tie, and only a strict gain turns.
+    // Judged on every skull in range, not the ones in arc: turning off the in-arc ones brings others round in front,
+    // and melee in a reprisal hold flipped headings four times a second. Fewest ahead wins, only a strict gain turns.
     float const x = bot->GetPositionX();
     float const y = bot->GetPositionY();
     float const current = bot->GetOrientation();
 
     uint32 const now = YoggSaronSkullsAhead(skulls, x, y, current);
 
-    // With a target, only inside 40 degrees of it, where set facing and the casts leave the bot alone. That
-    // clears a skull off to the side: one ranged bot stood 15 s with one at 85 degrees and its target at
-    // -10, and lost 56 Sanity. A skull behind the target is the illusion facing walk's. Turning further
-    // got turned straight back, six melee flipping between two headings for 48 s apiece.
+    // With a target, only inside 40 degrees of it, where set facing and the casts leave the bot alone: turning further
+    // gets turned straight back. A skull behind the target is the illusion facing walk's.
     Unit* target = AI_VALUE(Unit*, "current target");
     if (target && target->IsAlive())
     {
@@ -1729,9 +1640,8 @@ bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
 
     bot->SetFacingTo(heading);
 
-    // The tick is never claimed. Walking into the room and leaving it both sit below this node and
-    // both matter more than a heading, and a heading needs no tick of its own to hold once nothing
-    // is turning the bot back.
+    // The tick is never claimed: walking into the room and leaving it sit below this node and matter more than a
+    // heading, and a heading needs no tick of its own once nothing is turning the bot back.
     return false;
 }
 
@@ -1758,10 +1668,8 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
         return false;
     }
 
-    // A target far enough round from Yogg has a heading that keeps both. Set facing leaves the bot alone
-    // with its target inside 45 degrees (AttackAction and CastSpell inside 60), and the gaze needs Yogg
-    // inside 90. Turning (135 - separation) / 2 off the target, away from him, splits the spare evenly.
-    // Not while moving: a walk faces wherever it goes.
+    // A target far enough round from Yogg has a heading that keeps both: set facing leaves the bot alone inside 45
+    // degrees (60 for AttackAction, CastSpell), the gaze needs Yogg inside 90. Turn (135 less separation) / 2 off it.
     Unit* target = AI_VALUE(Unit*, "current target");
     if (target && target->IsAlive() && !bot->isMoving())
     {
@@ -1870,9 +1778,8 @@ bool YoggSaronBeaconDragAction::HunterDrag(Unit* guardian)
         if (minion && minion->GetVictim() == guardian)
             minion->AttackStop();
 
-    // One shot with the mark nearly done. Distracting Shot is a fixed threat and a 6 s taunt, not the match to
-    // top threat a real taunt gets, so the Guardian goes back once it runs out and only covers the heal if
-    // it goes out late.
+    // One shot with the mark nearly done. Distracting Shot is a fixed threat and a 6 s taunt, not a match to top
+    // threat, so the Guardian goes back once it runs out and the shot only covers the heal if it goes out late.
     Aura const* mark = guardian->GetAura(SPELL_SHADOW_BEACON);
     bool const due = mark && mark->GetDuration() >= 0 &&
                      static_cast<uint32>(mark->GetDuration()) <= ULDUAR_YOGG_SARON_BEACON_SHOT_LEFT_MS;
@@ -2008,15 +1915,13 @@ bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
     }
 
     // Boots on any long walk: nobody moves much once at the spot, so the 3 min cooldown costs nothing.
-    // The brain team surfaces 74-94 yd out, and ranged held west by a leftover Crusher stood 75 yd out
-    // on the Guardian spawn ring.
     Position const& spot = YoggSaronPhaseThreeSpot(bot);
     if (bot->GetExactDist2d(spot) > ULDUAR_YOGG_SARON_NITRO_MIN_WALK && !bot->HasAura(NITRO_BOOSTS_SPEED_SPELL) &&
         UseNitroBoosts(bot) && RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.nitro", "station");
 
-    // Round the body. The brain team surfaces west of Yogg and the melee spot is east of him: the
-    // straight line passed 2 yd from his middle, and one pull's melee were thrown 31 times walking it.
+    // Round the body. The brain team surfaces west of Yogg and the melee spot is east: the straight line
+    // passes 2 yd from his middle, so the knock back throws melee walking it.
     Position const destination = YoggSaronBodyRoute(bot, spot);
 
     return MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
@@ -2073,10 +1978,8 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
     if (shedding || YoggSaronTankLowHold(bot))
         loose.clear();
 
-    // Loose ones before the leash: a taunt is a cast, not a walk, and the Guardian is already heading
-    // for a healer or a ranged while the tank would still be walking home. Heal threat pulls a fresh one
-    // off its threatless first victim about a second after it spawns. Highest health first: a full or
-    // beacon-healed one hits a non-tank for 30-75k, a Weakened one for ~2k.
+    // Loose ones before the leash: a taunt is a cast, not a walk, and the Guardian is already heading for a healer or
+    // a ranged. Highest health first: a full or beacon-healed one hits a non-tank for 30-75k, a Weakened one for ~2k.
     std::sort(loose.begin(), loose.end(),
               [](auto const& left, auto const& right)
               {
@@ -2085,8 +1988,8 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
               });
     for (auto const& [distance, guardian] : loose)
     {
-        // Already coming to another tank. Both tanks taunted the same fresh one together three times in
-        // one pull, and Hand of Reckoning was then on cooldown for most swings on the raid.
+        // Already coming to another tank. Both taunting the same fresh one leaves Hand of Reckoning on cooldown
+        // for most swings on the raid.
         auto const& taunts = guardian->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT);
         if (std::any_of(taunts.begin(), taunts.end(),
                         [this](AuraEffect const* taunt)
@@ -2127,10 +2030,8 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
                       true, false);
     }
 
-    // A taunt with no threat behind it lasts 3 s, and Hand of Reckoning is back after 8. One bot tank
-    // taunted 41 times in a phase 3 while hitting Yogg, and 29 of 36 swings on the raid came with it
-    // on cooldown. Hold the one where the lead is thinnest, in reach before merely near the spot so
-    // holding it is not a walk off the leash.
+    // A taunt with no threat behind it lasts 3 s, and Hand of Reckoning is back after 8. Hold the one where the lead
+    // is thinnest, in reach before merely near the spot, so holding it is not a walk off the leash.
     Unit* hold = nullptr;
     float holdLead = 0.0f;
     for (Unit* guardian : inReach.empty() ? atSpot : inReach)
@@ -2163,15 +2064,8 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
 
 bool YoggSaronGuardianControlAction::ControlPhaseOne()
 {
-    // Inside the cloud-free circle, not the 5 yd the phase 3 stack uses. A taunted Guardian walks to
-    // the tank, so wherever the tank stands is where it dies, and outside 2.89 yd the innermost orbit
-    // sweeps the pile - one pull fed it 8 of its 23 Guardians that way. Taunt reaches 30 yd from here,
-    // which covers the whole 21.5 yd back line, so this is never a walk out after one.
-    //
-    // Not while the handover owns where the tank stands. Both walks are forced, so each cleared the
-    // other's hold and neither arrived: over seven pulls the walk to the anchor was refused 52-97 times
-    // a pull and this one 46-95, and the tank crossed between the middle and the anchor one to four
-    // times a window. The taunt below stays, because 30 yd covers the room from the anchor as well.
+    // Inside the cloud-free circle, not the 5 yd the phase 3 stack uses: a taunted Guardian dies where the tank stands.
+    // Not while the handover owns the tank's spot: both walks are forced, each clears the other's hold.
     if (!YoggSaronHandoverState(botAI).clearing &&
         bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) >
             ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS)
@@ -2195,9 +2089,8 @@ bool YoggSaronGuardianControlAction::ControlPhaseOne()
             return true;
     }
 
-    // Nothing to fetch, or the taunt is still on cooldown: hold the pile instead. A taunt that does
-    // not go out still leaves the bot selected on what it aimed at, and nothing here replaces that,
-    // so without this the tank stands on the middle with a stale target and never swings.
+    // Nothing to fetch, or the taunt is on cooldown: hold the pile. A taunt that does not go out leaves the bot
+    // selected on a stale aim and nothing else replaces it, so the tank never swings.
     Unit* hold = YoggSaronPhase1StackTarget(botAI);
     Unit* current = AI_VALUE(Unit*, "current target");
     if (!hold || current == hold)
@@ -2258,7 +2151,7 @@ bool YoggSaronSanityConservationAction::Execute(Event /*event*/)
     if (!yogg || !yogg->IsAlive())
         return false;
 
-    // Pull to the back of Yogg-Saron - the spot behind him, opposite his facing.
+    // Pull to the back of Yogg-Saron: the spot behind him, opposite his facing.
     float const behindDistance = 15.0f;
     float behindAngle = Position::NormalizeOrientation(yogg->GetOrientation() + M_PI);
     float behindX = yogg->GetPositionX() + behindDistance * cos(behindAngle);
@@ -2302,8 +2195,7 @@ bool YoggSaronSqueezeRescueAction::Execute(Event /*event*/)
     if (victim->HasAura(SPELL_FORBEARANCE))
         return false;
 
-    // The 3.3.5a name. It was Blessing of Protection in 2.x, and SpellIdValue matches the DBC string
-    // exactly - the old spelling resolves to no spell at all.
+    // 3.3.5a name: SpellIdValue matches the DBC string exactly, and the old spelling resolves to no spell.
     if (!botAI->CanCastSpell("hand of protection", victim))
         return false;
 

@@ -116,9 +116,7 @@ std::array<YoggSaronBeaconLane, 3> const YOGG_SARON_BEACON_LANES = {
      {&ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST, &ULDUAR_YOGG_SARON_BEACON_DRAG_NORTHEAST,
       &ULDUAR_YOGG_SARON_BEACON_STAGE_NORTHEAST, "northeast"}}};
 
-// Raid-wide answers folded once per instance, and the per-bot exposure probes paced off the same
-// state. Every number the last two attempts were read from came out of a throwaway script over raw
-// snapshot rows, which is the definition of a missing probe.
+// Raid-wide answers folded once per instance, and the per-bot exposure probes paced off the same state.
 struct YoggSaronEncounterState
 {
     RaidObs::ObsValue<uint32> phase{"yogg.phase"};
@@ -137,9 +135,8 @@ struct YoggSaronEncounterState
     uint32 slotWave = 0;
     bool slotPortalsUp = false;
 
-    // Under ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY for the wave the plan is for. Decided when the team
-    // is back from the last one, and the rebuild when the portals arrive reuses it, so a Psychosis tick
-    // in between can't swap somebody out at the last second.
+    // Under ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY for the wave the plan is for. Decided when the team is back
+    // and reused at the portal rebuild, so a Psychosis tick can't swap somebody out at the last second.
     RaidObs::ObsGuidSet benched{"yogg.benched"};
     // The wave whose plan was already rebuilt off the returned team's Sanity.
     uint32 returnPlanWave = 0;
@@ -178,10 +175,8 @@ struct YoggSaronEncounterState
     // Whether each portal spot (west, south, north) sees the Brain: -1 not asked yet. Neither moves.
     std::array<int8, 3> brainSpotSight{-1, -1, -1};
 
-    // Nothing in the world counts the transformation dialogue down, so the window is timed off the
-    // tick Yogg was first seen without his barrier. The second is when the ring actually lit, which is
-    // the tick the window closes: the walk out has to outlive it or melee are released into the knock
-    // back they were sent out to avoid.
+    // Start: first tick Yogg is seen without his barrier (nothing counts the dialogue down). Ring: the tick the
+    // ring lit, which closes the window. The walk out has to outlive it or melee eat the knock back.
     uint32 handoverStartMs = 0;
     uint32 handoverRingMs = 0;
 
@@ -189,11 +184,8 @@ struct YoggSaronEncounterState
     // one tentacle. Keyed by victim rather than by window because grabs overlap.
     std::unordered_map<ObjectGuid, uint32> squeezeClaims;
 
-    // One external and one raid-wide cover per Guardian, both keyed by the Guardian whose nova is
-    // coming. Per victim the externals emptied the raid in 15 s, because the worst victim flips between
-    // ticks and each flip looked like a fresh bot to cover; keyed by a stretch of clock the cover
-    // missed the second Guardian of a pair, which is the one that kills. The cover keeps its owner so
-    // the same bot can retry across ticks.
+    // One external and one raid-wide cover per Guardian, keyed by the Guardian whose nova is coming, not by victim
+    // or clock. The cover keeps its owner so the same bot can retry across ticks.
     std::unordered_map<ObjectGuid, uint32> novaClaims;
     std::unordered_map<ObjectGuid, std::pair<ObjectGuid, uint32>> novaCovers;
 
@@ -203,9 +195,8 @@ struct YoggSaronEncounterState
     // Stamped by each Guardian's 65719. 0 until the first one dies.
     uint32 lastGuardianDeathMs = 0;
 
-    // Phase 3 without Thorim: who drags which Shadow Beacon marked Guardian, keyed by the Guardian, and
-    // when its mark ended, 0 while it lasts, the lane it took in YOGG_SARON_BEACON_LANES, and when the
-    // dragger last taunted it. See YoggSaronBeaconDragGuardian.
+    // Phase 3 without Thorim: per marked Guardian, its dragger, when its mark ended (0 while it lasts), its lane
+    // in YOGG_SARON_BEACON_LANES and the last taunt. See YoggSaronBeaconDragGuardian.
     struct BeaconDrag
     {
         ObjectGuid dragger;
@@ -214,10 +205,8 @@ struct YoggSaronEncounterState
         uint32 tauntMs = 0;
     };
     std::unordered_map<ObjectGuid, BeaconDrag> beaconDrags;
-    // The beacon clock, the staged draggers by lane and the kickers held for the marks. See
-    // YoggSaronTickBeacon. beaconClockMs is phase 3's start as the tick first saw it, lastMarkMs the last
-    // beacon's first mark, and stageDueMs the beacon the stagers were picked for, so a timed-out stage
-    // isn't picked again.
+    // beaconClockMs is phase 3's start as first seen, lastMarkMs the last beacon's first mark, stageDueMs the
+    // beacon the stagers were picked for, so a timed-out stage isn't picked again. See YoggSaronTickBeacon.
     uint32 beaconClockMs = 0;
     uint32 lastMarkMs = 0;
     uint32 stageDueMs = 0;
@@ -293,9 +282,8 @@ YoggSaronEncounterState& YoggSaronStateFor(Player* bot) { return yoggSaronStates
 
 void TickYoggSaronObs(PlayerbotAI* botAI);
 
-// Sweeps every Yogg trigger repeats in one pass, answered once per pass. Valid only under the id
-// EncounterTriggerPassId hands out, so it can't outlive the trigger checks. thread_local is fine for a cache
-// of live world state: a whole pass runs on one thread. Never turn this into a latch.
+// Sweeps every Yogg trigger repeats, answered once per pass under the id EncounterTriggerPassId hands out.
+// thread_local is fine: a pass runs on one thread. Never turn this into a latch.
 constexpr uint32 YOGG_SARON_CACHED_CREATURES[] = {NPC_SARA_PHASE_1,         NPC_YOGG_SARON,         NPC_BRAIN,
                                                   NPC_SANITY_WELL,          NPC_GUARDIAN_OF_YS,     NPC_CRUSHER_TENTACLE,
                                                   NPC_CONSTRICTOR_TENTACLE, NPC_CORRUPTOR_TENTACLE};
@@ -414,11 +402,8 @@ Creature* YoggSaronNearestCreature(PlayerbotAI* botAI, uint32 entry)
 
 uint32 YoggSaronPhase(PlayerbotAI* botAI)
 {
-    // Ahead of the sweeps, so a bot anywhere else in Ulduar pays a map lookup rather than two 200 yd
-    // grid searches a tick. Sara's own combat flag used to sit here and could not do the job: she is
-    // FACTION_FRIENDLY through phase 1, CombatManager::CanBeginCombat refuses a combat reference while
-    // either side is friendly, and InitFight's SetInCombatWithZone therefore never touches her. The
-    // boss state is IN_PROGRESS from inside InitFight itself.
+    // Boss state, not Sara's combat flag: she is FACTION_FRIENDLY in phase 1, so SetInCombatWithZone skips her.
+    // Ahead of the sweeps so a bot elsewhere in Ulduar pays a map lookup, not two 200 yd grid searches a tick.
     if (!BossStateGateLive(botAI, ULD_BOSS_YOGGSARON))
         return 0;
 
@@ -427,10 +412,8 @@ uint32 YoggSaronPhase(PlayerbotAI* botAI)
     uint32 phase = 0;
     if (yogg && yogg->IsAlive() && yogg->HasAura(SPELL_SHADOW_BARRIER))
         phase = 2;
-    // The Brain, not the absence of a phase-1 Guardian. A test made only of absences is true between
-    // the phases it separates: the last Guardian dies ~9.5 s before the Shadow Barrier lands, and the
-    // whole raid used to run its phase 3 positioning through that gap. The Brain spawns with the first
-    // tentacle wave and lives to the end, so it is the positive fact.
+    // The Brain, not the absence of a phase-1 Guardian: the last one dies ~9.5 s before the Shadow Barrier
+    // lands and absences are true in that gap. The Brain spawns with the first tentacle wave and lives to the end.
     else if (yogg && yogg->IsAlive() && YoggSaronNearestCreature(botAI, NPC_BRAIN))
         phase = 3;
     // Sara last: only phase 1 needs her, so phases 2 and 3 skip her sweep.
@@ -515,10 +498,8 @@ bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI)
     uint32 doorEntry = 0;
     switch (YoggSaronRoomOf(bot))
     {
-        // Already through it, and out of reach of the room it came from. The Brain shuts all three
-        // doors when it prepares an illusion and opens exactly one in the same statement that fires
-        // when that room's last tentacle dies, so any door standing open means this wave is done.
-        // A radius cannot answer it from in here: the Chamber's far tentacles are 167 yd out.
+        // Any open door means this wave is done: the Brain shuts all three on prepare and opens one when that
+        // room's last tentacle dies. A radius can't tell from in here, the Chamber's far tentacles are 167 yd out.
         case YOGG_SARON_ROOM_BRAIN:
             for (uint32 entry = GO_CHAMBER_ILLUSION_DOORS; entry <= GO_STORMWIND_ILLUSION_DOORS; ++entry)
                 if (GameObject* open = YoggSaronNearestDoor(botAI, entry))
@@ -571,9 +552,8 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
                 break;
             }
 
-            // Line of sight is the whole difference. Two of the three rooms put their tentacles
-            // behind a doorway, the dps resolver will not pick what it cannot see, and nothing else
-            // in the fight moves a bot once the portal has dropped it.
+            // Line of sight is the difference: two rooms put tentacles behind a doorway, the dps resolver won't pick
+            // what it can't see, and nothing else moves a bot once the portal dropped it.
             Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
             if (target && target->IsAlive() && bot->IsWithinLOSInMap(target))
                 state = YOGG_SARON_ROOM_STATE_FIGHTING;
@@ -619,14 +599,12 @@ bool YoggSaronLeaveBrainLevelNow(PlayerbotAI* botAI)
             uint32 const castingTimeLeft = induceMadness->GetCastTimeRemaining();
             uint32 const now = getMSTime();
 
-            // Once leaving, stays leaving. Asked fresh every tick, the lead shrank as the bot walked and
-            // flipped back to safe, the brain spot walk took it back, and it came round again too late:
-            // 25 of 120 calls in one pull.
+            // Once leaving, stays leaving: asked fresh each tick the lead shrinks as the bot walks, reads safe again
+            // and the brain spot walk pulls it back.
             bool const latched = YoggSaronLeavingBrainLevel(bot);
 
-            // Only decided in the brain room. Out of an illusion room the way out runs through it anyway,
-            // and from the back of the Chamber the lead read 40-43 s for a 14-15 s walk: eight of nine
-            // left the Brain with 36 s to go.
+            // Only decided in the brain room. From an illusion room the way out runs through it, and from the back of
+            // the Chamber the lead overreads the walk.
             bool const inBrainRoom = YoggSaronRoomOf(bot) == YOGG_SARON_ROOM_BRAIN;
 
             // Every millisecond of lead is damage the Brain does not take, so it is measured against
@@ -964,11 +942,8 @@ YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI)
         ++state.waveOrdinal;
         state.wave = state.waveOrdinal;
     }
-    // A prediction nobody confirmed rolls on by a whole period rather than reading "any moment now"
-    // forever, which would keep the brain team parked on its spots for the rest of the fight.
-    //
-    // Signed, not getMSTimeDiff: that reads a prediction still in the future as a timer wrap, ~4.29e9 ms
-    // late, so every call pushed it another 80 s out and no trace ever showed a bot spreading.
+    // An unconfirmed prediction rolls on a whole period, else it reads 'any moment now' forever and parks the team.
+    // Signed, not getMSTimeDiff: that reads a future time as a timer wrap, ~4.29e9 ms late.
     else if (!portalsUp && state.nextWaveMs &&
              static_cast<int32>(now - state.nextWaveMs) > static_cast<int32>(ULDUAR_YOGG_SARON_PORTAL_WAVE_DEBOUNCE_MS))
     {
@@ -1033,11 +1008,8 @@ std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI)
     std::sort(melee.begin(), melee.end(), byGuid);
     std::sort(ranged.begin(), ranged.end(), byGuid);
 
-    // Val'anyr's wielder first, its heals also shield, and item level can't tell it from the next healer.
-    // Then by how much they heal on the move, then GUID. A moving bot can't start a cast-time spell and the
-    // room healer walks a lot: a holy paladin moved 31-62% of its room time with 82% of its heals on a cast
-    // time. Class decides it, since a healing priest is disc or holy and a healing druid resto, and every
-    // seat reads the same class and main hand.
+    // Val'anyr's wielder first, its heals also shield and item level can't tell it from the next healer.
+    // Then by heals on the move (a moving bot can't start a cast-time spell), then GUID.
     auto const wieldsValanyr = [](Player* healer)
     {
         Item* mainHand = healer->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
@@ -1138,13 +1110,8 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
 
     bool const newWave = state.slotWave != assignmentWave;
 
-    // Latched per wave. Nearest-first off live positions churns every tick as bots walk, and two
-    // bots swapping spots mid-approach costs both of them the window.
-    //
-    // Rebuilt once more when the portals actually arrive. The wave the plan is for is the same
-    // number before and after they spawn, so without the second test the assignment stands from
-    // the moment the previous wave's portals despawned - 55 s and a whole room fight earlier, off
-    // positions nobody is standing in any more.
+    // Latched per wave: nearest-first churns as bots walk, and a mid-approach swap costs both bots the window.
+    // Rebuilt once when the portals arrive, else the slots stand from the previous wave's despawn, 55 s earlier.
     if (newWave || teamBack || (wave.portalsUp && !state.slotPortalsUp))
     {
         if (teamBack)
@@ -1201,10 +1168,8 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     {
         spot = ULDUAR_YOGG_SARON_PORTAL_SPOTS[slot];
 
-        // A portal is one use and the click takes whichever is nearest, so a slot is a suggestion the
-        // raid routinely talks itself out of - in one wave five of six bots used somebody else's. The
-        // ones left over stood half a yard from a dead spot while three portals went unused, so what
-        // a bot walks to is a portal that is still there, not the one it was handed.
+        // A portal is one use and the click takes the nearest, so a slot is only a suggestion.
+        // Walk to a portal that is still there, not the one handed out.
         if (wave.portalsUp)
         {
             std::list<Creature*> portals;
@@ -1285,10 +1250,8 @@ bool YoggSaronHoldingPortalSpot(PlayerbotAI* botAI)
 
 namespace
 {
-// Yogg without the barrier is phase 3 as well, where ACTION_YOGG_SARON_START_P3 strips it again. The
-// Brain separates them: it is summoned in the same tick the barrier first lands, so it is up for
-// everything after this window and absent for the whole of it. The live check keeps the two sweeps
-// off every bot elsewhere in Ulduar.
+// Yogg without the barrier is also phase 3, where ACTION_YOGG_SARON_START_P3 strips it. The Brain tells them
+// apart: summoned the tick the barrier lands, so absent for this whole window. The live check spares other bots.
 bool YoggSaronHandoverOpen(PlayerbotAI* botAI)
 {
     if (!BossStateGateLive(botAI, ULD_BOSS_YOGGSARON))
@@ -1325,13 +1288,8 @@ void YoggSaronTickHandover(PlayerbotAI* botAI)
         state.handoverRingMs = 0;
 }
 
-// The mark is this fight's state machine - skull on the platform, diamond walking to a portal, the
-// room's own mark below, square once its door opens - and only the exit portal hands it back to skull.
-// Nothing else did, so a bot that left the brain level any other way kept a room mark for the rest of
-// the session and its walk to a portal was dead for good: Induce Madness teleports its victims out
-// without a click, and a bot killed down there never comes back up at all. One pull ended with twelve
-// bots marked that way, and nine of the ten on the next pull's brain team never walked to a portal.
-// A bot standing on the platform is not in an illusion room, whatever its mark says.
+// Only the exit portal resets the mark to skull, so Induce Madness or a death strands a room mark.
+// A bot on the platform is not in an illusion room, whatever its mark says.
 void YoggSaronTickRtiMark(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -1362,9 +1320,8 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
     if (!answer.active && !holding)
         return answer;
 
-    // No radius in the test, unlike the ring the walk used to aim at: the anchor is outside the
-    // clearance radius, so a bot that had arrived would read as not needing the handover any more and
-    // hand itself straight back to the leash.
+    // No radius in the test: the anchor is outside the clearance radius, so an arrived bot would read as not
+    // needing the handover and hand itself back to the leash.
     answer.clearing = botAI->IsTank(bot) || PlayerbotAI::IsMelee(bot);
 
     return answer;
@@ -1372,10 +1329,8 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
 
 bool YoggSaronInBodyKnockback(Player* player)
 {
-    // The height test carries as much weight as the radius. The brain room's middle sits 2.3 yd from
-    // the arena's in x and y and 93 yd below it, so a flat 2D ring swallows the whole room: every bot
-    // down there would read as standing in a knock back that cannot reach it, and the spacing node
-    // would push it off the spot the illusion room node had just walked it to.
+    // Height counts as much as radius: the brain room's middle is 2.3 yd from the arena's in x and y but
+    // 93 yd below, so a flat 2D ring swallows the room and spacing pushes bots off their spot.
     return player && player->GetPositionZ() > ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT &&
            player->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
                                  ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) <
@@ -1546,9 +1501,8 @@ uint32 YoggSaronTauntSpellId(Player* player)
 
 bool IsYoggSaronBot(Player* player) { return player && player->GetSession() && player->GetSession()->IsHeadless(); }
 
-// The bots that may take a mark, in claim order: bot tanks while another tank is left holding the pile,
-// then ret paladins and dps Death Knights, then hunters, each by GUID. Never one an unmarked Guardian is
-// hitting, that one would follow it out, and only with its taunt ready within `tauntWithinMs`.
+// Claim order: bot tanks while another tank holds the pile, then ret paladins and dps DKs, then hunters,
+// each by GUID. Never one an unmarked Guardian is hitting, and only with taunt ready within `tauntWithinMs`.
 std::vector<Player*> YoggSaronBeaconDraggerOrder(Player* bot, std::list<Creature*> const& unmarked,
                                                  uint32 tauntWithinMs)
 {
@@ -1656,10 +1610,8 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
         Player* dragger = ObjectAccessor::GetPlayer(*bot, it->second.dragger);
         bool done = !guardian || !guardian->IsAlive() || !dragger || !dragger->IsAlive();
 
-        // A taunt that didn't take goes to the next bot with one ready. A dragger whose Hand of Reckoning
-        // missed held its claim on cooldown for 8 s. Not under a Drain Life already running when the taunt
-        // landed: a casting Guardian skips its victim update, so that taunt only shows once the channel
-        // ends. One started later doesn't hide it, the update that starts a channel still switches.
+        // A taunt that didn't take goes to the next bot with one ready. Not under a Drain Life already running at
+        // the taunt: a casting Guardian skips its victim update. One started later doesn't hide it.
         int32 const channelMs = done ? -1 : YoggSaronDrainLifeElapsed(guardian);
         uint32 const sinceTaunt = getMSTimeDiff(it->second.tauntMs, now);
         if (!done && it->second.tauntMs && guardian->GetVictim() != dragger &&
@@ -1732,10 +1684,8 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
 
         if (claim)
         {
-            // A lane of its own per mark. The heal stacks per caster on every Guardian within 20 yd, so
-            // marks dragged to one spot healed each other at up to 112.5k/s. The staged lane if free, else
-            // free lanes first, then the one furthest from the pile, north and south before north-east on
-            // a tie since its path leaves the pile only 55 degrees off north's, then the nearer.
+            // A lane per mark: the heal stacks per caster on Guardians within 20 yd, up to 112.5k/s.
+            // Staged lane if free, else furthest free; N and S beat NE on a tie (55 deg off N), then nearer.
             std::array<bool, YOGG_SARON_BEACON_LANES.size()> taken{};
             for (auto const& [guid, drag] : state.beaconDrags)
                 taken[drag.lane] = true;
@@ -2386,9 +2336,8 @@ bool YoggSaronPhase3LustReady(PlayerbotAI* botAI)
 
 bool YoggSaronGuardianThreatAllows(Player* bot, Unit* guardian, bool holding)
 {
-    // Heal threat reaches every Guardian in combat, so a fresh one leaves its threatless first victim
-    // for a healer about a second after it spawns. A victim that is not a tank means nobody hits it
-    // until a taunt lands.
+    // Heal threat reaches every Guardian in combat, so a fresh one leaves its threatless first victim for a
+    // healer about a second after spawning. A non-tank victim means nobody hits it until a taunt lands.
     Player* tank = guardian->GetVictim() ? guardian->GetVictim()->ToPlayer() : nullptr;
     if (!tank || !PlayerbotAI::IsTank(tank))
     {
@@ -2452,9 +2401,8 @@ struct YoggSaronWalkLatch
     uint32 gaveUpMs = 0;
 };
 
-// Per bot, per node, never pruned while the instance lives. Most nodes walk to a handful of fixed
-// spots, but the detour waypoint moves with the bot and piles up a new latch every yard, so each node
-// gets its own list and only detour pays for that.
+// Per bot, per node, never pruned while the instance lives. Only detour's waypoint moves with the bot
+// (a new latch per yard), so each node gets its own list.
 using YoggSaronWalkLatches =
     std::unordered_map<ObjectGuid, std::unordered_map<std::string, std::vector<YoggSaronWalkLatch>>>;
 RaidInstanceState<YoggSaronWalkLatches> yoggSaronWalkLatches;
@@ -2486,18 +2434,14 @@ bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position 
         latch = &latches.back();
     }
 
-    // A gap in the asking starts a new attempt rather than continuing the old one. Without it a
-    // give-up outlives the walk that earned it: the node stands down, the bot ends up somewhere
-    // else entirely, and every later walk reads as "no closer than last time" forever.
+    // A gap in the asking starts a new attempt, else a give-up outlives its walk and every later walk
+    // reads as 'no closer than last time' forever.
     bool const fresh = getMSTimeDiff(latch->lastAskedMs, now) >= ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS;
     bool const arrived = distance <= ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS;
     latch->lastAskedMs = now;
 
-    // A give-up has to run out. The gap above is the only other way one clears, and the walks that
-    // matter most ask every tick, so the first give-up was the last word: six bots in one pull gave up
-    // the walk into the Chamber, stood still for 21 s and were charmed where they stopped. There is no
-    // way out of an illusion room that has not been cleared, so retrying a destination that may be
-    // unreachable beats a bot that has stopped for good.
+    // A give-up has to run out: the gap above rarely clears one, the walks that matter ask every tick. An
+    // uncleared illusion room has no way out, so retrying a maybe-unreachable destination beats stopping for good.
     if (latch->gaveUpMs && getMSTimeDiff(latch->gaveUpMs, now) >= ULDUAR_YOGG_SARON_WALK_RETRY_MS)
     {
         latch->gaveUpMs = 0;
@@ -2589,9 +2533,8 @@ std::vector<Unit*> YoggSaronInterruptCastersAround(PlayerbotAI* botAI)
         }
     }
 
-    // Drain Life heals an Immortal Guardian 166,650 over its 5 s, 31.6% of its health, which is three
-    // Empowered stacks back on one the raid just brought down. Bots only ever kicked it by chance, when it
-    // was their own target: half the channels ran a full 3.5-5 s.
+    // Drain Life heals an Immortal Guardian 166,650 over 5 s, 31.6% of its health, three Empowered stacks back.
+    // Bots only kicked it by chance, when it was their own target.
     if (!YoggSaronInPhase3(botAI))
         return casters;
 
@@ -2783,9 +2726,8 @@ std::vector<Creature*> YoggSaronLowGuardians(Unit* from, float gate, float radiu
     return low;
 }
 
-// What one nova is worth against this target. The unresisted roll is only what a bot with no shadow
-// resistance takes, and the resistance covers the Prayer, the paladin aura, Aura Mastery and gear at
-// once, since they all land on the same exclusive aura and only the highest counts.
+// What one nova is worth against this target. The unresisted roll is only for a bot with no shadow resistance;
+// Prayer, paladin aura, Aura Mastery and gear share one exclusive aura, so only the highest counts.
 uint32 YoggSaronNovaDamageEach(Unit* target)
 {
     return target->GetResistance(SPELL_SCHOOL_SHADOW) >= ULDUAR_YOGG_SARON_NOVA_RESISTED_AT
@@ -2793,14 +2735,8 @@ uint32 YoggSaronNovaDamageEach(Unit* target)
                : ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE;
 }
 
-// Worth a cooldown: two Guardians low at once, Fervor counting since it doubles the estimate, or the
-// second nova of a pair. A pair goes off one after the other, so a count of two never sees it, and
-// Justice took the second at 45% with nothing up. The second link is a Guardian death in the last 6 s,
-// not the 10 s window, which Guardians dying every 7-10 s keep open for nearly all of phase 1, or
-// Sara's Blessing, whose shadow tail lands anyway.
-//
-// Against the estimate's own per-nova figure, never a constant: as one it went unreachable for every
-// bot carrying the 130 and the raid cover fired nothing for three pulls.
+// Worth a cooldown: two Guardians low (Fervor doubles the estimate), the second nova of a pair (a Guardian
+// death in the last 6 s), or Sara's Blessing (shadow tail lands anyway). Per-nova estimate, never a constant.
 bool YoggSaronNovaChained(Player* bot, Unit* member, uint32 expected)
 {
     if (!expected)
@@ -2896,23 +2832,12 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
 {
     Player* bot = botAI->GetBot();
 
-    // Standing in a nova is the price of killing a Guardian at all, and Sara's Fervor is what turns
-    // that price into a death: +100% damage taken for 15 s, measured at 39,430, 39,443 and 45,340
-    // against pools of 23,000-30,000, every one of them lethal from full health. A holder leaves
-    // whatever else is true.
-    //
-    // Melee leave once phase 1 is over, whatever their pool. In phase 1 they cannot: the walk does not
-    // arrive and it costs Guardians, 44 of 74 step-outs took the nova they ran from anyway and the ones
-    // that got clear stopped on the station band, 0.1 yd off the second cloud orbit. After it there is
-    // no cloud to wake and no Sara to feed, and what kills there is two novas 8 s apart taking a bot
-    // from 60%, not one from full, so a pool test is the wrong question - it let 2 of 9 melee leave and
-    // one of the seven it held back missed by 152 hp.
-    //
-    // Never a tank, whichever phase: it holds the thing that is detonating, so walking out drags the
-    // Guardian along behind it, and its pool is the one in the raid that can eat the blast. Both reads
-    // sit ahead of the phase gate, which is a boss state read and a creature search.
+    // Fervor (+100% damage taken for 15 s) makes a nova lethal even from full health, so a holder always leaves.
     bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR);
+    // Melee leave only once phase 1 is over, whatever their pool: in it the walk costs Guardians. Never a tank,
+    // walking out drags its Guardian along and its pool is the one that can eat the blast.
     bool const atRange = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
+    // Both reads sit ahead of the phase gate, which is a boss state read and a creature search.
     if (!fervor && !atRange && (botAI->IsTank(bot) || YoggSaronInPhase1(botAI)))
         return {};
 
@@ -2932,12 +2857,8 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
         if (guardian->GetHealthPct() > gate)
             continue;
 
-        // At spell range the station clears a blast on the stack by about a yard - measured, the back
-        // line sits 16.2-17.0 yd from every low Guardian in phase 1 and none of them reached it - so
-        // dodging one the tank still holds there would only fight the station node. One that has left
-        // the stack can reach them: at the handover three walked to within 2.2 yd of the back line and
-        // two detonated there. Fervor reaches wherever the Guardian is heading, and a melee bot is in
-        // the blast whoever the Guardian is hitting.
+        // At spell range the station already clears a blast on the stack by about a yard, so dodging one fights it.
+        // Off the stack they can reach. Fervor reaches wherever the Guardian heads, and melee are in the blast anyway.
         if (atRange && !fervor && guardian->GetVictim() != bot && YoggSaronGuardianOnTheStack(guardian))
             continue;
 
@@ -2975,9 +2896,8 @@ uint32 YoggSaronNovaNeedMs(Unit* target, bool now)
     if (!YoggSaronNovaLeavesNothing(YoggSaronNovaDamageFrom(low, target), target))
         return 0;
 
-    // A Guardian already under the tighter gate detonates a median 2.4 s later and never later than
-    // 3.7, which a 5 s button covers; one that has only just passed 20% can take up to 11.5 s, so
-    // there only a 12 s button is worth starting.
+    // Under the tighter gate a nova lands within 3.7 s, which a 5 s button covers; just past 20% it can take
+    // 11.5 s, so only a 12 s button is worth starting.
     return YoggSaronNovaNeedFrom(low, target);
 }
 
@@ -2989,10 +2909,8 @@ bool YoggSaronNovaNearby(PlayerbotAI* botAI)
 
 bool YoggSaronNovaHold(PlayerbotAI* botAI)
 {
-    // Any live Guardian in the room, and the phase read last because it is three 200 yd grid sweeps on
-    // every bot on the map. The 17 yd version let go while two Guardians were still alive just after
-    // phase 1, and the class nodes took over and spent Aura Mastery and a Divine Sacrifice on an
-    // already hurt raid.
+    // Any live Guardian in the room; the phase read goes last, it is three 200 yd grid sweeps on every bot.
+    // Not 17 yd: that let go while two Guardians were still alive after phase 1.
     return !YoggSaronLowGuardians(botAI->GetBot(), 100.0f, ULDUAR_YOGG_SARON_P1_ROOM_RADIUS).empty() ||
            YoggSaronInPhase1(botAI);
 }
@@ -3017,10 +2935,8 @@ uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
         if (!YoggSaronNovaCandidate(member))
             continue;
 
-        // A chained nova only. Every pool in the raid is under one nova's unresisted figure, so a
-        // single Guardian low anywhere counted the whole melee group and three paladins spent Divine
-        // Sacrifice inside the first 73 s of a pull, 8 s short of coming back for the pair that killed
-        // five.
+        // A chained nova only: every pool in the raid is under one nova's unresisted figure, so a single low
+        // Guardian anywhere counted the whole melee group.
         uint32 const expected = YoggSaronNovaDamageFrom(low, member);
         if (YoggSaronNovaChained(bot, member, expected) && YoggSaronNovaLeavesNothing(expected, member))
             ++count;
@@ -3080,10 +2996,8 @@ char const* YoggSaronNovaRaidCover(PlayerbotAI* botAI)
     if (!bot || bot->getClass() != CLASS_PALADIN)
         return nullptr;
 
-    // Aura Mastery first: it costs the caster nothing, where Divine Sacrifice redirects 30% of the
-    // raid's damage onto it. Only with the aura up from this bot, since its own is the one it doubles,
-    // and 130 shadow resistance becoming 260 for 6 s is the only state here that beats the 130 Prayer
-    // of Shadow Protection already gives everyone.
+    // Aura Mastery first: free for the caster, where Divine Sacrifice redirects 30% of the raid's damage onto it.
+    // Only with its own aura up, the one it doubles: 130 resistance becoming 260 for 6 s beats the 130 Prayer gives.
     if (IsYoggSaronShadowAuraPaladin(bot) && botAI->HasAura("shadow resistance aura", bot, false, true) &&
         botAI->CanCastSpell("aura mastery", bot))
         return "aura mastery";
@@ -3115,10 +3029,8 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI)
         if (bot->GetExactDist2d(member) > sPlayerbotAIConfig.spellDistance)
             continue;
 
-        // Chained only. One nova against these pools reads as lethal on any bot under about 86% of its
-        // bar, which spent five of a pull's seven externals before the first nova that killed anybody:
-        // they land a median 17,048 and never over 25,004 without Fervor. Same test as the raid cover,
-        // so the two can't disagree about which nova is worth a cooldown.
+        // Chained only: one nova against these pools reads lethal on any bot under about 86% of its bar.
+        // Same test as the raid cover, so the two can't disagree about which nova is worth a cooldown.
         uint32 const expected = YoggSaronNovaDamageFrom(low, member);
         if (!YoggSaronNovaChained(bot, member, expected) || !YoggSaronNovaLeavesNothing(expected, member))
             continue;
@@ -3213,9 +3125,8 @@ void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions)
                 other->GetExactDist2d(guardian) > ULDUAR_YOGG_SARON_P1_NOVA_CHAIN_RADIUS)
                 continue;
 
-            // Shield whichever is further from death. Equal health is a real case - one pull had two at
-            // 2.0% die a millisecond apart - so the guid settles it rather than leaving both excluded
-            // and the pair waiting on each other.
+            // Shield whichever is further from death. Equal health happens, so the guid settles it instead of both
+            // being excluded and the pair waiting on each other.
             if (guardian->GetHealth() > other->GetHealth() ||
                 (guardian->GetHealth() == other->GetHealth() && other->GetGUID() < guardian->GetGUID()))
             {
@@ -3367,9 +3278,8 @@ bool YoggSaronGuardianWaitsOutNovaGap(Player* bot, Unit* guardian)
            YoggSaronGuardianDiedWithin(bot, ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS);
 }
 
-// A lower Guardian inside nova chain range dies first: finishing this one beside it novas the lower one for
-// ~2.7% of its health in the same tick. The lowest is never held, so the raid always has one to finish.
-// Health first, so the sweep only runs for a Guardian close to dying.
+// A lower Guardian inside nova chain range dies first: finishing this one novas it for ~2.7% of its health.
+// The lowest is never held. Health first, so the sweep only runs for a Guardian close to dying.
 bool YoggSaronGuardianWaitsOnLowerNeighbour(Unit* guardian)
 {
     if (guardian->GetHealthPct() >= ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT)
@@ -3396,9 +3306,8 @@ bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian)
     if (YoggSaronGuardianWaitsOutNovaGap(botAI->GetBot(), guardian) || YoggSaronGuardianWaitsOnLowerNeighbour(guardian))
         return false;
 
-    // No floor in the handover: the tanks walk to the anchor and take every Guardian off the stack with
-    // them, so nothing fetches. 7 of 9 pulls parked one or more there and burned a fresh one while the
-    // parked one bled out. Group walk last, so it only runs for a Guardian that is actually parked.
+    // No floor in the handover: the tanks walk to the anchor and take every Guardian off the stack with them.
+    // Group walk last, so it only runs for a Guardian that is actually parked.
     return YoggSaronGuardianOnTheStack(guardian) ||
            guardian->GetHealthPct() > ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT ||
            YoggSaronHandoverState(botAI).active || !YoggSaronBotTankAlive(botAI);
@@ -3439,9 +3348,8 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
             best = guardian;
     }
 
-    // Give up at 15 yd, pick up only inside 6.5: the gap stops a Guardian on the boundary flipping the
-    // raid's target back and forth. Neither radius means anything in the handover, where the focus only
-    // moves for a low one freed from its gap.
+    // Give up at 15 yd, pick up only inside 6.5: the gap stops a boundary Guardian flipping the raid's target.
+    // Neither radius applies in the handover, where focus only moves for a low one freed from its gap.
     bool const lower = handover && heldKillable && best && best != held && YoggSaronLowGuardianTakesOver(best, held);
     bool const abandon =
         heldKillable && (handover ? lower : !YoggSaronGuardianCountsForSara(held) && killableOnStack);
@@ -3593,11 +3501,8 @@ bool YoggSaronWalkCrossesCloud(Player* bot, Position const& to, Position const* 
     if (found.empty())
         return false;
 
-    // Matched in time, step by step: at each step the bot is part way along the leg and the cloud is
-    // where it will be by then. Capping the lead at one window left the rest of a long walk checked
-    // against clouds that had already moved on, and the run in from the door woke three Guardians in
-    // one pull. Testing every cloud position against the whole leg instead would refuse almost every
-    // route into the room, since an orbiting cloud sweeps across a radial path sooner or later.
+    // Matched in time, step by step: at each step the bot is part way along the leg and the cloud is where it
+    // will be. The whole leg against every cloud position refuses almost every route, an orbit crosses any radial path.
     float const speed = bot->GetSpeed(MOVE_RUN);
     uint32 const arrivalMs = speed > 0.0f ? static_cast<uint32>(leg / speed * 1000.0f) : 0;
 
@@ -3651,9 +3556,8 @@ struct IllusionMobInRangeCheck
     }
 };
 
-// Everything a pet may be pointed at instead of a Crusher Tentacle: the phase 2 half of the dps
-// resolver's ladder with the Crusher struck out. Influence Tentacles are deliberately absent - those
-// live 93 yd below the platform, in a room the pet's owner is not standing in.
+// Everything a pet may be pointed at instead of a Crusher Tentacle: the dps resolver's phase 2 ladder minus it.
+// No Influence Tentacles: they live 93 yd below the platform, in a room the owner isn't in.
 const std::vector<uint32> yoggSaronPetTargets = {NPC_GUARDIAN_OF_YS, NPC_CONSTRICTOR_TENTACLE,
                                                  NPC_CORRUPTOR_TENTACLE, NPC_MARKED_IMMORTAL_GUARDIAN,
                                                  NPC_IMMORTAL_GUARDIAN};
@@ -3673,11 +3577,8 @@ struct PetTargetInRangeCheck
     }
 };
 
-// Whether a Crusher Tentacle can produce a Crush cone at all. 64146 is a self-buff procced by its own
-// white swing at 100%, and UpdateAI swings only at a victim inside melee range - GetCombatReach of
-// both plus 4/3, floored at NOMINAL_MELEE_RANGE - so with nothing in reach there is no swing and no
-// cone. Pets count: every Crush in one pull was procced by a Felguard at 5.5 yd while the nearest
-// player stood 12 yd out.
+// Whether a Crusher Tentacle can produce a Crush cone at all: 64146 is a self-buff procced by its white swing
+// at 100%, and it only swings at a victim in melee range (both combat reaches plus 4/3, at least NOMINAL_MELEE_RANGE).
 bool YoggSaronCrusherCanSwing(PlayerbotAI* botAI, Creature* crusher)
 {
     // Stunned can't swing. It comes back inside the stun's exit lead, so the wedge is up before the stun
@@ -3697,9 +3598,8 @@ Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius, Position const*
     Player* bot = botAI->GetBot();
     Position const around = centre ? *centre : bot->GetPosition();
 
-    // One sweep, anchored on the bot because that is what carries the map and the phase, graded by the
-    // distance from `around`. The sweep has to reach the far side of the circle from wherever the bot
-    // is standing, and the membership test is what keeps the next room out.
+    // One sweep anchored on the bot, since it carries the map and the phase, graded by distance from `around`.
+    // It must reach the far side of the circle; the membership test keeps the next room out.
     float const sweep = bot->GetExactDist2d(around.GetPositionX(), around.GetPositionY()) + radius;
 
     std::vector<Unit*> found;
@@ -3760,9 +3660,8 @@ bool YoggSaronIllusionHealerStationNow(PlayerbotAI* botAI, Position& station)
     x /= static_cast<float>(mobs.size());
     y /= static_cast<float>(mobs.size());
 
-    // The room middle's own Z, not the tentacles' and not theirs averaged. The Chamber's floor ramps
-    // from 239.7 up to 244 across the room, so an averaged Z lands the station in the air on one side
-    // of it, and the middle is the one point in each room already known good.
+    // The room middle's own Z, not the tentacles' or their average: the Chamber floor ramps from 239.7 to 244,
+    // so an average puts the station in the air on one side.
     station = Position(x, y, middle.GetPositionZ());
 
     return true;
@@ -3881,22 +3780,16 @@ Unit* YoggSaronPhase3PetLeftover(PlayerbotAI* botAI)
 
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)
 {
-    // Room radius, not the 200 yd the rest of this fight sweeps at: the Stormwind and Chamber middles
-    // are 200.8 yd apart, so a hair more reach and a bot would read the next room's tentacles as its
-    // own. Getting that wrong is not a wasted tick - damaging the Brain while one lives is
-    // Unit::Kill(who, who) on whoever dealt it. From the brain room itself the reach has to cover
-    // whichever room the bot came out of.
-    //
-    // Inside an illusion room the circle sits on that room's middle rather than on the bot. The Chamber
-    // is 96 yd deep and a bot in its doorway reads only the near half: one pull's brain room healer
-    // called the room clear with the far tentacles alive, its station walk stood down at the door, and
-    // four melee died 90 yd past it with no heals.
+    // Room radius, not 200 yd: the Stormwind and Chamber middles are 200.8 yd apart. Damaging the Brain while one
+    // lives is Unit::Kill(who, who) on the dealer. From the brain room the reach covers whichever room it came from.
     Player* bot = botAI->GetBot();
     bool const brainRoom = YoggSaronRoomOf(bot) == YOGG_SARON_ROOM_BRAIN;
     float const radius = brainRoom ? ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS + ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS
                                    : ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS;
 
     Position middle;
+    // Inside an illusion room the circle sits on that room's middle, not the bot: the Chamber is 96 yd deep and
+    // a bot in its doorway reads only the near half.
     Position const around = !brainRoom && YoggSaronRoomMiddle(bot, middle) ? middle : bot->GetPosition();
 
     YoggSaronPassReads* reads = YoggSaronPassReadsFor(botAI);
@@ -4090,9 +3983,8 @@ Player* YoggSaronBrainLinkTarget(PlayerbotAI* botAI)
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return nullptr;
 
-    // Whichever end of the pair the bot is. Only the owner carries 63802 and the partner's GUID lives
-    // inside the aura script, so a HasAura test here would leave the partner standing still while the
-    // owner chased it - and chasing a bot walking away at the same speed never arrives.
+    // Whichever end of the pair the bot is: only the owner carries 63802 and the partner's GUID lives in the aura
+    // script, so a HasAura test would leave the partner standing still while the owner chased it.
     uint32 const now = getMSTime();
     std::vector<YoggSaronBrainLinkPair>& pairs = yoggSaronBrainLinkPairs.For(bot->GetInstanceId());
 
@@ -4187,9 +4079,8 @@ bool YoggSaronFearWindowActive(PlayerbotAI* botAI)
 
 namespace
 {
-// Which cloud orbits can reach this bot. The clouds themselves are in the snapshot, but "how many
-// rings could summon on me where I am standing" is a property of the room rather than of any unit in
-// it, and it is the number the whole phase 1 design turns on.
+// Which cloud orbits can reach this bot, i.e. how many rings could summon on it where it stands.
+// A property of the room, not of any unit in the snapshot.
 std::string DescribeCloudReach(Player* bot)
 {
     float const fromMiddle =
@@ -4291,9 +4182,8 @@ void TickYoggSaronObs(PlayerbotAI* botAI)
     {
         RaidObs::NoteDerived(bot, "yogg.cloudreach", DescribeCloudReach(bot));
 
-        // The ring lights up at ACTION_YOGG_SARON_APPEAR, which is also when the barrier lands and the
-        // phase read turns 2. Reading the ring through the handover as well is the only thing that
-        // says whether melee got out before it did.
+        // The ring lights at ACTION_YOGG_SARON_APPEAR, which is also when the barrier lands and the phase read turns 2,
+        // so reading it through the handover too is the only way to tell whether melee got out first.
         bool const handover = phase == 1 && YoggSaronHandoverState(botAI).active;
 
         if (phase != 1 || handover)
@@ -4341,10 +4231,8 @@ void TickYoggSaronObs(PlayerbotAI* botAI)
     size_t const skulls = GetYoggSaronSkullsInArc(botAI).size();
     RaidObs::NoteDerived(bot, "yogg.skull", skulls ? std::to_string(skulls) + " in arc" : "clear");
 
-    // Whether the room is being fought or only stood in. An illusion room is eight Influence Tentacles
-    // inside 60 s or 100 Sanity off everyone in it, and "did anybody ever get within reach of one" was
-    // the question the last trace could not answer: 11 bots managed 151 casts across three waves and
-    // killed none. Bucketed because a raw distance would emit a row every tick.
+    // Whether the room is being fought or only stood in (eight Influence Tentacles in 60 s, or 100 Sanity off all).
+    // Bucketed because a raw distance would emit a row every tick.
     Unit* tentacle = YoggSaronLiveIllusionMob(botAI, 200.0f);
     if (!tentacle)
     {
@@ -4431,10 +4319,8 @@ bool YoggSaronPlatformTentacleAlive(PlayerbotAI* botAI)
     return alive;
 }
 
-// The brain team's hold on the Brain, latched here so the resolver, the rules and the multiplier read one
-// answer per tick. Stops new DoTs first and all damage at the hold line while the platform has a
-// tentacle on it, then finishes with ULDUAR_YOGG_SARON_BRAIN_RESUME_MS of Induce Madness left, or as soon
-// as the platform is clear. A finish stays on for the rest of that cast.
+// Latched per tick for the resolver, rules and multiplier. DoTs stop first, all damage at the hold line while a
+// tentacle is on the platform; finish with ULDUAR_YOGG_SARON_BRAIN_RESUME_MS of Induce Madness left or when clear.
 void YoggSaronTickBrainHold(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -4503,9 +4389,8 @@ void YoggSaronTickBrainHold(PlayerbotAI* botAI)
         RaidObs::NoteDerived(bot, "yogg.brainhold", branch);
 }
 
-// Deafening Roar's clock. Paladins only, since only they read it: the press, the pre-switch and the
-// aura holds. The cast start is back-dated off Yogg's cast bar, so a late first look still keys the
-// same roar.
+// Deafening Roar's clock, paladins only since only they read it. The cast start is back-dated off Yogg's cast
+// bar, so a late first look keys the same roar.
 void YoggSaronTickRoar(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -4536,10 +4421,8 @@ void YoggSaronTickRoar(PlayerbotAI* botAI)
         state.lastRoarMs = start;
 }
 
-// Latched here, before the triggers run, so the resolver, the rules and the room state all read one
-// answer per tick. Stops under the stop line, starts again at the resume line. Only worth it with a
-// healer in the room to lift the bot back up, and never in the last seconds, when an uncleared room
-// charms everyone in it anyway.
+// Latched before the triggers so resolver, rules and room state read one answer per tick. Stops under the stop
+// line, resumes at the resume line. Only with a healer in the room, never in the last seconds (the room charms anyway).
 void YoggSaronTickReprisal(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -4774,9 +4657,8 @@ uint32 YoggSaronKickRank(char const* spell)
     return std::size(order);
 }
 
-// A bot mid cast never runs its kick node, so a Drain Life nobody kicked gets one bot's own cast stopped.
-// Last resort only: never while a free bot can kick it, or a ready one finishes its cast within the wait,
-// and never a healer's cast.
+// A bot mid cast never runs its kick node, so an unkicked Drain Life gets one bot's cast stopped. Last resort:
+// not while a free bot can kick it or a ready one finishes within the wait, and never a healer's cast.
 void YoggSaronNudgeDrainLifeKicker(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -4934,11 +4816,8 @@ void YoggSaronPickMarkKickers(Player* bot, YoggSaronEncounterState& state, Unit*
         RaidObs::Note(bot, "yogg.markkick", "reserve " + names);
 }
 
-// The beacon clock, read off each beacon's first mark, raid-wide and one bot a scan. Picks the stagers
-// ULDUAR_YOGG_SARON_BEACON_STAGE_LEAD_MS before the next beacon is due, and the kickers held for the marks
-// while a mark or a drag lasts.
-// Guardians carrying the beacon heal, and ones channelling Drain Life, that have a healing cut on them
-// out of all of them. Once a second, noted when it changes.
+// Guardians carrying the beacon heal, or channelling Drain Life, that have a healing cut on them, out of all of
+// them. Once a second, noted when it changes.
 void YoggSaronSampleHealCut(Player* bot, YoggSaronEncounterState& state, Creature* yogg, uint32 now)
 {
     constexpr uint32 sampleIntervalMs = 1000;
@@ -4982,6 +4861,8 @@ void YoggSaronSampleHealCut(Player* bot, YoggSaronEncounterState& state, Creatur
     RaidObs::Note(bot, "yogg.healcut", state.healCutNote);
 }
 
+// The beacon clock, read off each beacon's first mark, raid-wide and one bot a scan. Picks the stagers
+// ULDUAR_YOGG_SARON_BEACON_STAGE_LEAD_MS before the next beacon is due, and the kickers held while a mark lasts.
 void YoggSaronTickBeacon(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
