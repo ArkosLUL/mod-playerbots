@@ -75,6 +75,13 @@ public:
     virtual void InitMultipliers([[maybe_unused]] std::vector<Multiplier*>& multipliers) {}
     virtual void AppendTargetExclusions([[maybe_unused]] GuidSet& exclusions,
                                         [[maybe_unused]] TargetValueExclusionType type) {}
+    // What the target values call. candidates is the list the exclusions will filter, for a strategy that can skip
+    // work none of them needs.
+    virtual void AppendTargetExclusionsFor(GuidSet& exclusions, TargetValueExclusionType type,
+                                           [[maybe_unused]] GuidVector const& candidates)
+    {
+        AppendTargetExclusions(exclusions, type);
+    }
     virtual bool HasTargetExclusions() const { return false; }
     // Once per engine tick, before any trigger is checked. For housekeeping a predicate must not do.
     virtual void OnTick() {}

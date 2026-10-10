@@ -14,7 +14,7 @@
 #include "Strategy.h"
 #include "ThreatManager.h"
 
-GuidSet GatherStrategyTargetExclusions(PlayerbotAI* botAI, TargetValueExclusionType type)
+GuidSet GatherStrategyTargetExclusions(PlayerbotAI* botAI, TargetValueExclusionType type, GuidVector const& candidates)
 {
     GuidSet exclusions;
     if (!botAI || type == TargetValueExclusionType::None || !botAI->HasTargetExclusions())
@@ -26,7 +26,7 @@ GuidSet GatherStrategyTargetExclusions(PlayerbotAI* botAI, TargetValueExclusionT
         if (!strategy)
             continue;
 
-        strategy->AppendTargetExclusions(exclusions, type);
+        strategy->AppendTargetExclusionsFor(exclusions, type, candidates);
     }
 
     return exclusions;
@@ -39,7 +39,7 @@ TargetValueExclusionType FindTargetStrategy::GetExclusionType() { return TargetV
 Unit* TargetValue::FindTarget(FindTargetStrategy* strategy)
 {
     GuidVector attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
-    GuidSet const dynamicExclusions = GatherStrategyTargetExclusions(botAI, strategy->GetExclusionType());
+    GuidSet const dynamicExclusions = GatherStrategyTargetExclusions(botAI, strategy->GetExclusionType(), attackers);
     for (ObjectGuid const guid : attackers)
     {
         Unit* unit = botAI->GetUnit(guid);

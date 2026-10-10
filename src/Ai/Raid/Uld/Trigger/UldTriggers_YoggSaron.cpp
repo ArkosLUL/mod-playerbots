@@ -140,11 +140,10 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
         return false;
     }
 
-    // A live phase-1 Guardian before the phase read, which is four 200 yd sweeps: melee sit outside
-    // this leash for most of phases 2 and 3. The price is no walk back before the first spawn.
-    bool const active = beyond && fromSara <= ULDUAR_YOGG_SARON_P1_ROOM_RADIUS &&
-                        bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance, true) &&
-                        YoggSaronInPhase1(botAI);
+    // Phase before the Guardian sweep: melee sit outside this leash for most of phases 2 and 3. The Guardian
+    // test stays, it is why nothing walks back before the first spawn.
+    bool const active = beyond && fromSara <= ULDUAR_YOGG_SARON_P1_ROOM_RADIUS && YoggSaronInPhase1(botAI) &&
+                        bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance, true);
 
     if (active != returning && RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.p1leash", active ? "returning" : "held");
@@ -208,8 +207,11 @@ bool YoggSaronPhase1SpacingTrigger::IsActive()
     if (!botAI->CanMove() || !YoggSaronInPhase1Room(bot))
         return false;
 
-    // Short-radius hazard reads first, phase read last: YoggSaronInPhase1 is three 200 yd grid sweeps on every bot on
-    // the map. The cloud read is "I am standing in one", since the orbit outruns the step.
+    // Phase before the hazard sweeps, which would otherwise run all through phases 2 and 3.
+    if (!YoggSaronInPhase1(botAI))
+        return false;
+
+    // The cloud read is "I am standing in one", since the orbit outruns the step.
     bool hazardNear = bot->FindNearestCreature(NPC_OMINOUS_CLOUD, ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS, true);
 
     char const* reason = hazardNear ? "cloud" : nullptr;
@@ -219,7 +221,7 @@ bool YoggSaronPhase1SpacingTrigger::IsActive()
     if (!hazardNear && !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS).empty())
         reason = bot->HasAura(SPELL_SARAS_FERVOR) ? "fervor" : "nova";
 
-    if (!reason || !YoggSaronInPhase1(botAI))
+    if (!reason)
         return false;
 
     if (RaidObs::Active())
@@ -270,8 +272,12 @@ bool YoggSaronPhase2SpacingTrigger::IsActive()
     if (!botAI->CanMove())
         return false;
 
-    // Short-radius hazard reads first, phase read last, for the reason recorded on the phase 1
-    // trigger: YoggSaronInPhase2 is a 200 yd grid sweep on every bot on the map.
+    // Phase before the hazard sweeps: with no fight it is a boss state read, and this runs for every bot in Ulduar.
+    // Phase 3 as well: the body ring outlives phase 2, and no node would walk bots out of it.
+    uint32 const phase = YoggSaronPhase(botAI);
+    if (phase != 2 && phase != 3)
+        return false;
+
     bool hazardNear = bot->FindNearestCreature(NPC_DEATH_RAY, ULDUAR_YOGG_SARON_DEATH_RAY_TRIGGER_RADIUS, true);
 
     if (!hazardNear)
@@ -295,12 +301,7 @@ bool YoggSaronPhase2SpacingTrigger::IsActive()
     if (!hazardNear)
         hazardNear = !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS).empty();
 
-    if (!hazardNear)
-        return false;
-
-    // Phase 3 as well: the body ring outlives phase 2, and no node would walk bots out of it.
-    uint32 const phase = YoggSaronPhase(botAI);
-    return phase == 2 || phase == 3;
+    return hazardNear;
 }
 
 bool YoggSaronSetDpsPriorityTrigger::IsActive()
@@ -381,7 +382,7 @@ bool YoggSaronMaladyOfTheMindTrigger::IsActive()
 
 bool YoggSaronPhase3ControlTrigger::IsActive()
 {
-    if (!IsDesignatedBotTank() || !IsPhase3())
+    if (!IsPhase3() || !IsDesignatedBotTank())
         return false;
 
     // The strategy swap has to land once even with nothing left to kill, so it gates on its own state
@@ -783,6 +784,10 @@ bool YoggSaronPhase3LustTrigger::IsActive()
     if (bot->getClass() != CLASS_SHAMAN || bot->HasAura(SPELL_SATED) || bot->HasAura(SPELL_EXHAUSTION))
         return false;
 
+    // The ready test below starts with the same phase test, ahead of anything it writes.
+    if (!IsPhase3())
+        return false;
+
     if (!botAI->CanCastSpell("heroism", bot) && !botAI->CanCastSpell("bloodlust", bot))
         return false;
 
@@ -856,7 +861,7 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
 
 bool YoggSaronGuardianControlTrigger::IsActive()
 {
-    // Tank first: both branches below are tank-only and the phase read under them is two 200 yd sweeps.
+    // Tank first: both branches below are tank-only.
     if (!botAI->IsTank(bot))
         return false;
 
@@ -881,12 +886,12 @@ bool YoggSaronGuardianControlTrigger::IsActive()
 
     // Fire while a guardian is loose (not Weakened, not held by a tank) or while one at the stack is not the bot's
     // target. Taunting without hitting builds nothing; the action decides whether leaving the held one pays.
-    if (YoggSaronGuardianLoose(botAI))
+    GuidVector const targets = GetYoggSaronGuardiansInSight(botAI);
+    if (YoggSaronGuardianLoose(botAI, targets))
         return true;
 
     Unit* current = AI_VALUE(Unit*, "current target");
 
-    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
     for (ObjectGuid const& guid : targets)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -903,12 +908,12 @@ bool YoggSaronGuardianControlTrigger::IsActive()
 
 bool YoggSaronSanityConservationTrigger::IsActive()
 {
-    // The main tank must stay on the adds; never pull it out.
-    if (botAI->IsBotMainTank(bot))
-        return false;
-
     Aura* sanityAura = bot->GetAura(SPELL_SANITY);
     if (!sanityAura || sanityAura->GetStackAmount() > ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD)
+        return false;
+
+    // The main tank must stay on the adds; never pull it out.
+    if (botAI->IsBotMainTank(bot))
         return false;
 
     // A linked bot must stay near its Brain Link partner: retreating would drain more sanity, not less.
@@ -933,8 +938,7 @@ bool YoggSaronSanityConservationTrigger::IsActive()
 
 bool YoggSaronSqueezeRescueTrigger::IsActive()
 {
-    // Class first: it is free, and the fight test behind it is a pair of 200 yd grid sweeps run for
-    // every bot in Ulduar.
+    // Class first: it is free, and this runs for every bot in Ulduar.
     if (bot->getClass() != CLASS_PALADIN || !IsYoggSaronFight())
         return false;
 
@@ -1034,7 +1038,7 @@ bool YoggSaronBeaconExternalTrigger::IsActive()
 
 bool YoggSaronTankLayOnHandsTrigger::IsActive()
 {
-    return YoggSaronTankLayOnHandsTarget(botAI) && YoggSaronInPhase3(botAI);
+    return YoggSaronInPhase3(botAI) && YoggSaronTankLayOnHandsTarget(botAI);
 }
 
 bool YoggSaronHealerCombatEngineTrigger::IsActive()

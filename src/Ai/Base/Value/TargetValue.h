@@ -16,7 +16,8 @@ class ThreatManager;
 class Unit;
 enum class TargetValueExclusionType : uint8;
 
-GuidSet GatherStrategyTargetExclusions(PlayerbotAI* botAI, TargetValueExclusionType type);
+// candidates is the list the caller will filter with the result.
+GuidSet GatherStrategyTargetExclusions(PlayerbotAI* botAI, TargetValueExclusionType type, GuidVector const& candidates);
 
 class FindTargetStrategy
 {

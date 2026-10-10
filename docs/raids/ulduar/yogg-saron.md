@@ -39,12 +39,18 @@ no pull marker. Reading it as one produced the claim that 4 of 12 Guardians beat
 the first Guardian of every pull on record appears at 10.1-10.2 s, and none has ever beaten it.
 
 `YoggSaronPhase` is the single read every node routes through — phase 2 is Yogg with Shadow Barrier,
-phase 3 is Yogg without it plus the Brain, phase 1 is Sara, all behind that boss-state test, which
-also spares a bot elsewhere in Ulduar two 200 yd sweeps a tick — and it is what writes `yogg.phase`.
-She lives into P2/P3 at 1 health, so "Sara is alive" is no phase test by itself.
-The phase read's sweeps and the other 200 yd reads — Sanity Wells, illusion doors, the tentacle check,
-skulls in arc — are answered once per trigger pass through `EncounterTriggerPassId`, and live in actions
-and multipliers, where an earlier action can already have moved the phase.
+phase 3 is Yogg without it plus the Brain, phase 1 is Sara, all behind that boss-state test — and it
+is what writes `yogg.phase`. She lives into P2/P3 at 1 health, so "Sara is alive" is no phase test by
+itself.
+**Sara, Yogg and the Brain are read off the instance script, not swept for**
+(`YoggSaronFindNearestCreature`): the core registers one of each (`BOSS_YOGGSARON`, `DATA_SARA` 760,
+`DATA_BRAIN_OF_YOGG_SARON` 761), so the phase read is cheap in triggers, rules, multipliers, actions
+and the tick alike, and a phase test belongs **ahead** of any hazard sweep. It answers exactly as
+`FindNearestCreature(entry, 200, true)` would; past `|dx| + |dy| < 200` (deep room corners) it runs
+that sweep, see [raid-mechanics-lessons](../../engine/raid-mechanics-lessons.md).
+The other 200 yd reads — Sanity Wells, illusion doors, the tentacle check, skulls in arc — are answered
+once per trigger pass through `EncounterTriggerPassId`, and live in actions and multipliers, where an
+earlier action can already have changed them.
 
 **Phase 1 positioning waits for the room, not the pull.** With the raid still 72-96 yd out at t=0,
 every mover fired at once on 2026-09-16. Most bots took no damage until 25-53 s, and ranged running in
@@ -375,7 +381,7 @@ over the melee row, `yogg-saron nova cooldown hold` over the externals and Divin
 of phase 1, because every death measured in it was a nova, and after it only while a Guardian lives
 inside `…_P1_ROOM_RADIUS`, so phase 2 spends normally on Crush and the Death Rays once they are gone. A
 17 yd test let go while two were still alive just after phase 1, and the class nodes spent Aura Mastery
-and a Divine Sacrifice on an already hurt raid. The phase read goes last: three 200 yd sweeps a bot. Every one
+and a Divine Sacrifice on an already hurt raid. Every one
 otherwise fires on "I am already low", which means after the nova: Totemist cast Shamanistic Rage nine
 times in one pull and died four times. Tanks and the back line keep theirs, for the Guardians one holds
 and the Dark Volley the other eats.
@@ -682,9 +688,8 @@ never the band: there is no margin there to spend.
 (**6.5 yd**) the bot walks back to the middle, and it is not released until
 `ULDUAR_YOGG_SARON_P1_LEASH_RELEASE` — the **2.8 yd cloud-free radius**, not a boundary a step inside
 the leash. Anything between the two lets go of the bot somewhere the innermost orbit sweeps, and the
-old 12 let go of it on the orbit. The node reads a live Guardian before the phase, which is four 200 yd
-sweeps and would otherwise run every tick for melee standing outside the leash in P2 and P3; the price
-is no walk back before the first spawn.
+old 12 let go of it on the orbit. The node also needs a live Guardian in sight, so nothing walks back
+before the first spawn: once a cost guard ahead of the phase read, now kept only for that behaviour.
 
 **Why 6.5, and not the 15 the nova needs to reach Sara.** Two different radii are both 15:
 65719 reaching her, and 65209/62714 reaching the raid. The back line stands at 21.5, so a Guardian
@@ -914,7 +919,8 @@ at 1:57.37, and two melee held in the middle went 100% → 62-75% → 15-36% →
   and the humans. One pull then had two sit at or under 20% within 12.0 yd of each other for a
   continuous **8.0 s**, die at 2.0% a millisecond apart, and kill **eight melee from full health**;
   every other paired window across four pulls lasted 0.0-0.9 s. So `AppendYoggSaronTargetExclusions`
-  hands the higher-health half of such a pair to `RaidUlduarStrategy::AppendTargetExclusions` for
+  hands the higher-health half of such a pair to `RaidUlduarStrategy::AppendTargetExclusionsFor` (which
+  sweeps only when a Guardian is among the candidates) for
   `TargetValueExclusionType::Dps` and `::Attacker` — every dps, dps-aoe and attacker picker at once,
   pets included. `::Tank` is left out so the tank keeps holding it rather than letting it walk at the
   back line, and the guid breaks an exact health tie so one of the pair is always free to die.

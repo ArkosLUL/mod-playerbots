@@ -46,7 +46,8 @@ bool SeedOfCorruptionPending(PlayerbotAI* botAI, Unit* target)
 Unit* SeedOfCorruptionTargetValue::Calculate()
 {
     GuidVector const attackers = AI_VALUE(GuidVector, "attackers");
-    GuidSet const dynamicExclusions = GatherStrategyTargetExclusions(botAI, TargetValueExclusionType::Attacker);
+    GuidSet const dynamicExclusions =
+        GatherStrategyTargetExclusions(botAI, TargetValueExclusionType::Attacker, attackers);
     float const range = botAI->GetRange("spell");
 
     Unit* clean = nullptr;

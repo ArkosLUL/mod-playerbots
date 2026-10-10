@@ -86,7 +86,7 @@ bool YoggSaronMovementGuardMultiplier::CrusherReachIsWrong()
 
 float YoggSaronMovementGuardMultiplier::SetBehindGuard()
 {
-    // Arithmetic first. Below the platform there is no body, and the phase read is two 200 yd sweeps.
+    // Arithmetic first. Below the platform there is no body.
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;
 
@@ -138,7 +138,7 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
     if (action->getName() == "reach party member to heal")
         return 1.0f;
 
-    // Both windows sit near the platform middle and the phase read is two 200 yd sweeps, so the arithmetic goes first.
+    // Both windows sit near the platform middle, so the arithmetic goes first.
     // The brain room middle is 2.3 yd from the platform middle in 2d: the ring test would veto reach on the Brain.
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;

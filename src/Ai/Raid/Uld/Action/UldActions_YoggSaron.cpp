@@ -1945,7 +1945,7 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
 {
     Position const& spot = ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
 
-    GuidVector const targets = AI_VALUE(GuidVector, "nearest npcs");
+    GuidVector const targets = GetYoggSaronGuardiansInSight(botAI);
     std::vector<std::pair<float, Unit*>> loose;
     std::vector<Unit*> inReach;
     std::vector<Unit*> atSpot;

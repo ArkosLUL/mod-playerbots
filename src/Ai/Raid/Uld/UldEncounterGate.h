@@ -29,4 +29,11 @@ enum UlduarEncounterId
     ULD_BOSS_ALGALON = 13
 };
 
+// Ported the same way. The types InstanceScript::GetCreature is keyed by; a boss's own is its id above.
+enum UlduarObjectData
+{
+    ULD_DATA_SARA = 760,
+    ULD_DATA_BRAIN_OF_YOGG_SARON = 761
+};
+
 #endif

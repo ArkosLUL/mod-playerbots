@@ -270,6 +270,23 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   tick. One instance-keyed creature cache collapses that to one. **Cache guids, not pointers**, so a
   despawn inside the window drops out instead of dangling; and make the fill radius **wide**, since
   the sweep is anchored on whichever bot refreshed it while its answer serves the whole raid.
+- **A boss the instance script tracks needs no sweep.** `InstanceScript::GetCreature(type)` is a map
+  find for every entry in the script's `creatureData`, written and erased as the creature enters and
+  leaves the world. It equals `FindNearestCreature(entry, r, true)` only for an entry with **one**
+  creature per instance, after the sweep's own tests (`IsAlive`, `IsWithinDist(c, r)`, `InSamePhase`),
+  and only inside `|dx| + |dy| < r` at r = 200: `Cell::VisitCircle` drops three cells from each corner
+  of the 7×7 block, so a creature 150-200 yd off on a diagonal can be missed. Past that bound run the
+  sweep. Ids are ported in `UldEncounterGate.h`.
+- **`"nearest npcs"` casts a line-of-sight ray at every non-player unit** and has no cache. To pick a
+  few entries out of it, test the entry inside the searcher's check and ray only the matches — same
+  units, same order (`GetYoggSaronGuardiansInSight`, the Yogg-Saron resolver).
+- **Target exclusions run for every target value on every boss.** `Strategy::AppendTargetExclusionsFor`
+  gets the candidate list; a raid whose exclusions need a sweep returns first unless a candidate has
+  the entry it would exclude (`ObjectGuid::GetEntry`). Don't re-read `"attackers"` for it: the 1 s
+  refresh can hand back a different list than the caller holds.
+- **An open gate is not a live fight, and `z >= 300` is not Yogg's platform.** Triggers run for every
+  bot in the instance between pulls, so a sweep ahead of the live-phase test is paid raid-wide all
+  evening.
 - **Split on action family before testing anything.** Where everything a multiplier suppresses is
   either a `MovementAction` or a `CastSpellAction` — disjoint families — one `dynamic_cast` each way
   up front replaces a chain of a dozen for every rotation spell that falls through.

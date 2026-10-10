@@ -4,8 +4,8 @@
 
 The hot paths of the Yogg-Saron bot strategy, and the optimizations that leave behaviour untouched.
 The list comes from reading the code and counting sweeps per bot per tick; **nothing was measured**,
-so the ranking is by counted work, not by time. Nothing here is implemented. Each item is independent
-and can ship alone.
+so the ranking is by counted work, not by time. Items 1-4 are in; 5-9 are open, independent, and can
+each ship alone.
 
 Files: `src/Ai/Raid/Uld/` — `Util/UldEncounter_YoggSaron.{h,cpp}` (**enc**),
 `Trigger/UldTriggers_YoggSaron.cpp` (**trig**), `Action/UldActions_YoggSaron.{h,cpp}` (**act**),
@@ -19,7 +19,8 @@ the rest under `src/server/game/`. Line numbers are as of 2026-10-10.
 One bot tick is `Strategy::OnTick` → all triggers checked → actions popped by relevance, each through
 `isUseful` → every multiplier → `Execute` (`Engine.cpp:211-338`).
 
-- **The pass cache only covers trigger checks.** `YoggSaronPassReads` (enc:295) is keyed on
+- As it stood before items 1-4, kept for the reasoning behind 5-9: **the pass cache only covers
+  trigger checks.** `YoggSaronPassReads` (enc:295) is keyed on
   `EncounterTriggerPassId`, which is 0 in `YoggSaronTick`, in rule predicates, in multipliers and in
   actions. There every `YoggSaronNearestCreature` is a live `FindNearestCreature(entry, 200)`.
 - **`YoggSaronPhase` (enc:405) is behind almost everything** and costs 2 such sweeps in phase 1 (Yogg
@@ -38,82 +39,20 @@ One bot tick is `Strategy::OnTick` → all triggers checked → actions popped b
 **A** is identical by construction. **B** is identical given one game-data fact, named in the item,
 that has to be checked before it ships.
 
-### 1. Find Sara, Yogg-Saron and the Brain through the instance script (B, largest)
+### 1-4. Shipped 2026-10-10, live check still owed
 
-- **Where:** `YoggSaronNearestCreature` (enc:384-403), both `FindNearestCreature(entry, 200.0f, true)`
-  calls, and the raw one in `YoggSaronBrainSpot` (enc:722).
-- **Change:** the core already keeps their guids. `instance_ulduar.cpp:116,132,133` maps 33288 →
-  `BOSS_YOGGSARON` (12), 33134 → `DATA_SARA` (760), 33890 → `DATA_BRAIN_OF_YOGG_SARON` (761);
-  `InstanceScript::OnCreatureCreate/Remove` (`InstanceScript.cpp:75-88, 320-334`) writes and erases
-  them, and `Creature::AddToWorld` calls it for summons too. `bot->GetInstanceScript()->GetCreature(type)`
-  is a `std::map` find plus one hash lookup. Port the two `DATA_` ids beside `UlduarEncounterId` in
-  `UldEncounterGate.h`.
-- **Why identical:** the sweep returns the nearest creature with the entry that is alive,
-  `bot->IsWithinDist(c, 200)` and `bot->InSamePhase(c)` (`GridNotifiers.h:1354-1368`). The fact it
-  rests on: each entry has one creature per instance (Sara is the DB spawn; `boss_yoggsaron.cpp:791`
-  and `:950` summon the other two once per attempt), so "nearest" is "the one". Three cases:
-  - nothing registered → return null, no sweep;
-  - registered and `|dx| + |dy| < 200` → return it iff the three tests above hold. Every cell
-    `Cell::VisitCircle` cuts from the 7×7 block (`CellImpl.h:116-162`) is 2+3, 3+2 or 3+3 cells off,
-    so each point in it is more than 3 × 66.67 yd away in `|dx| + |dy|`; inside that bound the sweep
-    always visits the creature's cell;
-  - otherwise (deep corners of an illusion room) → run today's sweep.
-- **Saves:** every phase-read sweep for bots on the platform, in the brain room and in most of each
-  illusion room, in all four contexts. Also closes item 10 of
-  [ulduar-perf-followups](../ulduar-perf-followups/ulduar-perf-followups.PLAN.md) (the Lunatic Gaze
-  trigger sweeping 200 yd for every bot in Ulduar) with no boss-state gate.
-- **Check first:** `creature` has no second spawn of the three ids on map 603; type 12 is not reused
-  in `gameobjectData`.
+The instance-script lookup for Sara, Yogg and the Brain, the target-exclusion gate, the phase-first
+reorders and the entry-first Immortal Guardian list are in; what they established is in
+[yogg-saron.md](../../raids/ulduar/yogg-saron.md) and
+[raid-mechanics-lessons](../../engine/raid-mechanics-lessons.md). The database facts held: Sara is the
+only one of the three with a spawn, and data type 12 is not reused (`UlduarData` starts at 14).
 
-### 2. Skip the target-exclusion sweep when no candidate is a Guardian of Yogg-Saron (A)
+They passed the syntax check, pblint and codestyle only. **Not run:** the shadow comparison on a
+live pull (old sweep against new lookup for the three creatures and for the Guardian list, old
+exclusion set against new), and `pmon` before and after.
 
-- **Where:** `AppendYoggSaronTargetExclusions` (enc:3116) ← `RaidUlduarStrategy::AppendTargetExclusions`
-  (`UldStrategy.cpp:18`) ← `GatherStrategyTargetExclusions` (`TargetValue.cpp:17`) ←
-  `TargetValue::FindTarget`, both `AttackerWithoutAuraTargetValue` calcs, `WarlockValues.cpp:49`.
-- **Today:** every "dps target" read and every "attacker without aura" value (one per DoT a class
-  tracks) runs a 69.3 yd Guardian sweep with no gate — on every boss and trash pull in Ulduar.
-- **Change:** pass the caller's `attackers` list down (`GatherStrategyTargetExclusions(botAI, type,
-  attackers)` → `Strategy::AppendTargetExclusions(exclusions, type, candidates)`; `Strategy.h:76`, the
-  UB and MgT overrides take the new parameter and ignore it). Return before the sweep unless a
-  candidate guid has entry 33136; skip the gather when `attackers` is empty.
-- **Why identical:** this function only ever adds Guardian guids, and all four callers use the set
-  only to drop candidates. Re-reading the "attackers" value inside instead is **not** identical: it
-  has a 1 s refresh and can differ from the caller's copy.
-
-### 3. Test the phase before the hazard sweeps (A)
-
-The "phase read last, it is three 200 yd sweeps" comments predate the boss-state test and the pass
-cache. Inside a trigger the phase is cached, and with no fight it is one boss-state read, yet these
-run their sweeps first. Each is a swap of two side-effect-free operands of `&&` / `||`:
-
-| Site | Sweeps that run first | Wasted |
-|---|---|---|
-| `YoggSaronPhase2SpacingTrigger` (trig:268) | death ray, crush wedges, crusher reach, nova threats | all of phase 1; every bot in Ulduar between pulls |
-| `YoggSaronPhase1SpacingTrigger` (trig:206) | cloud, nova threats | phases 2-3 on the platform |
-| `YoggSaronGuardianPositioningTrigger` (trig:145) | sight-range Guardian search | melee outside the leash, phases 2-3 |
-| `YoggSaronGuardianToHold` (def:28) | two 70 yd Guardian lists | each tank-assist pop in phase 1 |
-| `YoggSaronNovaHold` (enc:2912) | 69 yd Guardian list, then `\|\| InPhase1` | phase 1 (swap so the phase short-circuits) |
-| `YoggSaronTankLayOnHandsTrigger` (trig:1035) | group walk + `CanCastSpell` | paladins outside phase 3 |
-| `YoggSaronPhase3LustTrigger` (trig:781) | two `CanCastSpell` + group walk | shamans outside phase 3 (add `IsPhase3()` after the Sated test; `YoggSaronPhase3LustReady` already returns false there before it writes) |
-| `YoggSaronPhase3ControlTrigger` (trig:384) | `IsDesignatedBotTank`, up to two group walks | tanks outside phase 3 |
-| `YoggSaronSanityConservationTrigger` (trig:904) | `IsBotMainTank` (a role lookup; a group walk for tanks) before the Sanity aura read | every tick, anywhere |
-
-Trace notes sit after the conjunction in all of them, and `GuardianPositioning` writes its `returning`
-latch from the same boolean.
-
-### 4. Read the Immortal Guardians without a raycast for every NPC (A)
-
-- **Where:** `YoggSaronGuardianLoose` (enc:1468), `YoggSaronGuardianControlTrigger` (trig:889),
-  `ControlPhaseThree` (act:1948). Each reads `"nearest npcs"`, which recomputes on every `Get()`: a
-  sight-range visit plus a line-of-sight ray for every non-player unit (pets, totems, tentacles), then
-  keeps only entries 33988/36064. The trigger reads it twice in one `IsActive`.
-- **Change:** one helper in enc using the entry-first check the resolver already has
-  (`AnyUnitOfEntriesInRangeCheck`, act:51), then the same `IsWithinLOSInMap` filter; the trigger
-  passes its list into `YoggSaronGuardianLoose`.
-- **Why identical:** `NearestNpcsValue` is `AnyUnitInObjectRangeCheck(bot, sightDistance)` →
-  `!IsPlayer() && IsWithinLOSInMap` (`NearestUnitsValue.cpp:10-23`); filtering by entry before the ray
-  keeps the same Guardians in the same order, and all three readers drop everything else.
-- **Saves:** per tank per tick in phase 3, three reads of ~50 rays become two of at most ~10.
+Left out of item 2: skipping the whole gather when the candidate list is empty. Other strategies'
+exclusion hooks were not checked for side effects.
 
 ### 5. Evaluate each resolver candidate once (A)
 
@@ -159,7 +98,7 @@ latch from the same boolean.
   `YoggSaronBrainRoomApproachable` call outside a pass (resolver, room state), for the brain team.
 - **Change:** store each door's guid in `YoggSaronEncounterState` on the first sweep that finds it;
   then resolve by guid and apply the sweep's own test, with the same `|dx| + |dy| < 200` rule and the
-  same fallback as item 1. A miss is never cached.
+  same sweep fallback as `YoggSaronFindNearestCreature`. A miss is never cached.
 - **Assumption:** one spawn each of 194635-194637 on map 603 (check `gameobject`).
 
 ### 9. Small ones (A)
@@ -201,14 +140,10 @@ Per item, before its commit:
 2. Items 3, 5, 6, 7, 9: the equivalence harness described in ulduar-perf-followups — old bodies from
    `git show HEAD:<file>`, new ones from the tree, compiled together with counting stubs over the
    enumerated inputs, with a red-capability check.
-3. Items 1, 4, 8: a temporary shadow build that computes both the old sweep and the new lookup and
-   logs any difference; one Yogg pull through all three phases and an illusion wave must log none.
-   Remove it before the commit.
-4. Item 2: the same shadow check on the exclusion set against the caller's candidates, on a Yogg
-   phase 1 pull and on any other boss.
-5. Cost: `.playerbots pmon` on one pull before and after, read as ratios between buckets only
+3. Item 8, and items 1, 2 and 4 after the fact: a temporary shadow build that computes both the old
+   sweep and the new lookup (or exclusion set) and logs any difference; one Yogg pull through all
+   three phases and an illusion wave, plus any other boss for item 2, must log none. Remove it before
+   the commit.
+4. Cost: `.playerbots pmon` on one pull before and after, read as ratios between buckets only
    ([observability](../../systems/observability.md)). Multipliers have their own bucket
    (`Engine.cpp:249`), which is what ranks item 6 against item 1.
-
-When item 1 ships, drop item 10 from ulduar-perf-followups and correct the three "phase read last"
-comments item 3 touches.

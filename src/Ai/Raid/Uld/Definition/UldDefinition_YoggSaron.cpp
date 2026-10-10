@@ -28,7 +28,7 @@ namespace
 bool YoggSaronGuardianToHold(PlayerbotAI* botAI)
 {
     constexpr float guardianSearchRadius = 70.0f;
-    return YoggSaronHoldableGuardianWithin(botAI->GetBot(), guardianSearchRadius) && YoggSaronInPhase3(botAI);
+    return YoggSaronInPhase3(botAI) && YoggSaronHoldableGuardianWithin(botAI->GetBot(), guardianSearchRadius);
 }
 
 // Must match YoggSaronSetDpsPriorityTrigger's window or a tank has no target source.

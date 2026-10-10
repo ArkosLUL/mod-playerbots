@@ -30,6 +30,7 @@
 #include "DBCEnums.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
+#include "InstanceScript.h"
 #include "Item.h"
 #include "GameObject.h"
 #include "LastMovementValue.h"
@@ -359,6 +360,45 @@ int32 YoggSaronCacheSlot(uint32 const* entries, size_t count, uint32 entry)
     return -1;
 }
 
+// FindNearestCreature(entry, 200, true), read off the instance script for the three it tracks, one each per instance.
+// Only inside |dx| + |dy| < 200: the sweep skips the corner cells of its 7x7 block, and all of them lie past that.
+Creature* YoggSaronFindNearestCreature(Player* bot, uint32 entry)
+{
+    constexpr float range = 200.0f;
+
+    uint32 type = 0;
+    switch (entry)
+    {
+        case NPC_YOGG_SARON:
+            type = ULD_BOSS_YOGGSARON;
+            break;
+        case NPC_SARA_PHASE_1:
+            type = ULD_DATA_SARA;
+            break;
+        case NPC_BRAIN:
+            type = ULD_DATA_BRAIN_OF_YOGG_SARON;
+            break;
+        default:
+            return bot->FindNearestCreature(entry, range, true);
+    }
+
+    InstanceScript* instance = bot->GetInstanceScript();
+    if (!instance)
+        return bot->FindNearestCreature(entry, range, true);
+
+    Creature* creature = instance->GetCreature(type);
+    if (!creature)
+        return nullptr;
+
+    float const taxicab = std::abs(bot->GetPositionX() - creature->GetPositionX()) +
+                          std::abs(bot->GetPositionY() - creature->GetPositionY());
+    if (creature->GetEntry() != entry || taxicab >= range)
+        return bot->FindNearestCreature(entry, range, true);
+
+    // The sweep's own three tests.
+    return creature->IsAlive() && bot->IsWithinDist(creature, range) && bot->InSamePhase(creature) ? creature : nullptr;
+}
+
 GameObject* YoggSaronNearestDoor(PlayerbotAI* botAI, uint32 entry)
 {
     Player* bot = botAI->GetBot();
@@ -389,11 +429,11 @@ Creature* YoggSaronNearestCreature(PlayerbotAI* botAI, uint32 entry)
         YoggSaronCacheSlot(YOGG_SARON_CACHED_CREATURES, std::size(YOGG_SARON_CACHED_CREATURES), entry);
     YoggSaronPassReads* reads = slot < 0 ? nullptr : YoggSaronPassReadsFor(botAI);
     if (!reads)
-        return bot->FindNearestCreature(entry, 200.0f, true);
+        return YoggSaronFindNearestCreature(bot, entry);
 
     if (!reads->creatureRead[slot])
     {
-        Creature* found = bot->FindNearestCreature(entry, 200.0f, true);
+        Creature* found = YoggSaronFindNearestCreature(bot, entry);
         reads->creatureRead[slot] = true;
         reads->creature[slot] = found ? found->GetGUID() : ObjectGuid::Empty;
         return found;
@@ -405,7 +445,7 @@ Creature* YoggSaronNearestCreature(PlayerbotAI* botAI, uint32 entry)
 uint32 YoggSaronPhase(PlayerbotAI* botAI)
 {
     // Boss state, not Sara's combat flag: she is FACTION_FRIENDLY in phase 1, so SetInCombatWithZone skips her.
-    // Ahead of the sweeps so a bot elsewhere in Ulduar pays a map lookup, not two 200 yd grid searches a tick.
+    // Ahead of the lookups, so a bot elsewhere in Ulduar pays one boss state read.
     if (!BossStateGateLive(botAI, ULD_BOSS_YOGGSARON))
         return 0;
 
@@ -418,7 +458,7 @@ uint32 YoggSaronPhase(PlayerbotAI* botAI)
     // lands and absences are true in that gap. The Brain spawns with the first tentacle wave and lives to the end.
     else if (yogg && yogg->IsAlive() && YoggSaronNearestCreature(botAI, NPC_BRAIN))
         phase = 3;
-    // Sara last: only phase 1 needs her, so phases 2 and 3 skip her sweep.
+    // Sara last: only phase 1 needs her.
     else if (YoggSaronNearestCreature(botAI, NPC_SARA_PHASE_1))
         phase = 1;
 
@@ -719,7 +759,7 @@ Position YoggSaronBrainSpot(Player* bot)
     // never picks the Brain, so the spot has to earn it once. Same ray IsWithinLOSInMap casts.
     if (spot && state.brainSpotSight[index] < 0)
     {
-        if (Creature* brain = bot->FindNearestCreature(NPC_BRAIN, 200.0f))
+        if (Creature* brain = YoggSaronFindNearestCreature(bot, NPC_BRAIN))
         {
             Position const eye(spot->GetPositionX(), spot->GetPositionY(),
                                spot->GetPositionZ() + bot->GetCollisionHeight());
@@ -1463,9 +1503,47 @@ bool YoggSaronHoldableGuardianWithin(Player* bot, float radius)
     return false;
 }
 
+namespace
+{
+// The check behind "nearest npcs", cut down to the Immortal Guardians before the range test.
+struct ImmortalGuardianInRangeCheck
+{
+    Acore::AnyUnitInObjectRangeCheck inRange;
+
+    bool operator()(Unit* unit)
+    {
+        uint32 const entry = unit->GetEntry();
+        return (entry == NPC_IMMORTAL_GUARDIAN || entry == NPC_MARKED_IMMORTAL_GUARDIAN) && inRange(unit);
+    }
+};
+}  // namespace
+
+GuidVector GetYoggSaronGuardiansInSight(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    float const range = sPlayerbotAIConfig.sightDistance;
+
+    std::vector<Unit*> found;
+    ImmortalGuardianInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, range)};
+    Acore::UnitListSearcher<ImmortalGuardianInRangeCheck> searcher(bot, found, check);
+    Cell::VisitObjects(bot, searcher, range);
+
+    GuidVector guardians;
+    for (Unit* unit : found)
+        if (bot->IsWithinLOSInMap(unit))
+            guardians.push_back(unit->GetGUID());
+
+    return guardians;
+}
+
 bool YoggSaronGuardianLoose(PlayerbotAI* botAI)
 {
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    return YoggSaronGuardianLoose(botAI, GetYoggSaronGuardiansInSight(botAI));
+}
+
+bool YoggSaronGuardianLoose(PlayerbotAI* botAI, GuidVector const& guardians)
+{
+    for (ObjectGuid const& guid : guardians)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!IsYoggSaronHoldableGuardian(unit))
@@ -2911,10 +2989,10 @@ bool YoggSaronNovaNearby(PlayerbotAI* botAI)
 
 bool YoggSaronNovaHold(PlayerbotAI* botAI)
 {
-    // Any live Guardian in the room; the phase read goes last, it is three 200 yd grid sweeps on every bot.
-    // Not 17 yd: that let go while two Guardians were still alive after phase 1.
-    return !YoggSaronLowGuardians(botAI->GetBot(), 100.0f, ULDUAR_YOGG_SARON_P1_ROOM_RADIUS).empty() ||
-           YoggSaronInPhase1(botAI);
+    // Phase 1, and after it while any Guardian in the room lives. Not 17 yd: that let go while two Guardians were
+    // still alive after phase 1.
+    return YoggSaronInPhase1(botAI) ||
+           !YoggSaronLowGuardians(botAI->GetBot(), 100.0f, ULDUAR_YOGG_SARON_P1_ROOM_RADIUS).empty();
 }
 
 uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
@@ -3113,8 +3191,13 @@ bool ClaimYoggSaronNovaWindow(Player* bot)
     return true;
 }
 
-void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions)
+void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions, GuidVector const& candidates)
 {
+    // Only Guardians are ever excluded, so the sweep is for nothing unless one is a candidate.
+    if (std::none_of(candidates.begin(), candidates.end(),
+                     [](ObjectGuid const& guid) { return guid.GetEntry() == NPC_GUARDIAN_OF_YS; }))
+        return;
+
     std::vector<Creature*> const low =
         YoggSaronLowGuardians(botAI->GetBot(), ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT,
                               ULDUAR_YOGG_SARON_P1_ROOM_RADIUS);

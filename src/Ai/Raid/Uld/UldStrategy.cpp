@@ -15,7 +15,8 @@
 
 // The kept Emergency Fire Bots put out Mimiron's fire. Excluding them here covers every picker at once,
 // tank, dps, dps aoe and attackers, where Mimiron's own guards only reach dps assist
-void RaidUlduarStrategy::AppendTargetExclusions(GuidSet& exclusions, TargetValueExclusionType type)
+void RaidUlduarStrategy::AppendTargetExclusionsFor(GuidSet& exclusions, TargetValueExclusionType type,
+                                                   GuidVector const& candidates)
 {
     for (ObjectGuid const& guid : GetMimironKeptFireBots(botAI, botAI->GetBot()))
         exclusions.insert(guid);
@@ -25,7 +26,7 @@ void RaidUlduarStrategy::AppendTargetExclusions(GuidSet& exclusions, TargetValue
     // Dps and pets only, the tank still has to hold the shielded Guardian or it walks at the back line.
     // Stops the DoTs, cleaves and pets the focus rule misses from killing it beside its neighbour
     if (type == TargetValueExclusionType::Dps || type == TargetValueExclusionType::Attacker)
-        AppendYoggSaronTargetExclusions(botAI, exclusions);
+        AppendYoggSaronTargetExclusions(botAI, exclusions, candidates);
 }
 
 void RaidUlduarStrategy::OnTick()

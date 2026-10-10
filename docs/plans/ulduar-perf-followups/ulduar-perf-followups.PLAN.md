@@ -68,12 +68,6 @@ the bot, so each yard adds a latch that lives for the server run and a detour ne
 give-up. Latches are split per node, so only detour scans pay. Evicting or re-keying changes which
 latch matches: a behaviour change, not a saving.
 
-### 10. The Yogg-Saron lunatic gaze trigger sweeps 200 yd for every bot in Ulduar
-
-`YoggSaronLunaticGazeTrigger` runs `FindNearestCreature(NPC_YOGG_SARON, 200)` every tick for every bot
-while its gate is open, which is the whole instance between pulls. Gating it on `BossStateGateLive`
-answers differently if Yogg outlives `IN_PROGRESS` at a wipe.
-
 ### 11. Two rule predicates build trigger objects per call
 
 `MimironLethalWindowActive` (`Uld/Definition/UldDefinition_Mimiron.cpp`) constructs five triggers and

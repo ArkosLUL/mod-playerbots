@@ -886,7 +886,8 @@ bool ClaimYoggSaronNovaWindow(Player* bot);
 
 // The Guardian no dps should touch: the higher-health half of a low pair close enough for one nova to finish the other.
 // The guid breaks an exact tie, so one of a pair is always free to die and the two never wait on each other.
-void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions);
+// candidates is the list the exclusions will filter.
+void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions, GuidVector const& candidates);
 
 // Which of two phase 1 Guardians the raid should be on: one inside the leash beats one outside whatever the health (a
 // kill out there does nothing for Sara), then lowest health. Shared so kill order and taunt agree across bots.
@@ -1096,8 +1097,14 @@ bool YoggSaronOutsideGaze(Player* bot, Unit* yogg, Unit* target);
 bool YoggSaronPhase3LustReady(PlayerbotAI* botAI);
 bool YoggSaronHoldableGuardianWithin(Player* bot, float radius);
 
-// A holdable Guardian among the bot's nearest npcs whose victim is not a tank, so a taunt is owed.
+// The Immortal Guardians "nearest npcs" holds, in its order. The entry is tested before the line of sight ray, so
+// only they get one.
+GuidVector GetYoggSaronGuardiansInSight(PlayerbotAI* botAI);
+
+// A holdable Guardian among those whose victim is not a tank, so a taunt is owed. The second form takes a list
+// already read.
 bool YoggSaronGuardianLoose(PlayerbotAI* botAI);
+bool YoggSaronGuardianLoose(PlayerbotAI* botAI, GuidVector const& guardians);
 
 // Whether a non-tank may hit this Guardian: a tank is its victim and leads the bot's threat on it by the start share
 // (keep share if already on it). With no tank alive in the group everyone may.
