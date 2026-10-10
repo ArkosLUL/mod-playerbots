@@ -2605,7 +2605,7 @@ UNDER_PART = re.compile(r"^under (-?\d+)\.\.(-?\d+)$")
 
 
 def parse_starplan(text) -> dict:
-    """`algalon.starplan` reads `<counter> <hp>% <s>s[ <u|s|o>]` per star, comma separated, soonest first, then
+    """`algalon.starplan` reads `<counter> <hp>% <s>s[ <u|s>]` per star, comma separated, soonest first, then
     blackouts (`smash 2..11`) and `under <a>..<b>`, joined by ` | `. Seconds from the note; older traces mark none."""
     stars: dict[int, dict] = {}
     under = None

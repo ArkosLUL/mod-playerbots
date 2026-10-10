@@ -168,7 +168,7 @@ exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, 
 | Mechanic | Ids | Numbers that drive the code |
 |---|---|---|
 | Flash Freeze | 61968 | **9s cast**, every 48-49s, 200 yd. Spares only 62464 carriers and pets |
-| Shelter chain | 33173 → `62460` → `65370` + `62463` | Drift spawns at T+0 where its target will stand, lands T+3.9 → Ice Shards 14,000 in **7 yd** → summons **33174**, 12s. Freeze lands **T+10.1** |
+| Shelter chain | 33173 → `62460` → `65370` + `62463` | Drift spawns at T+0 where its target will stand, lands T+3.9 → Ice Shards 14,000 in **7 yd** → summons **33174**, 12s. Cast ends **T+9.0** (targets drawn, fires wiped), blocks spawn **T+10.0** |
 | Trapped player | 61969 / 62226 | **300s**, and the *next* Flash Freeze **instakills**. Free by killing NPC **32926** (helpers: 32938) |
 | Small icicles | 62227 → 63545 → 33169 → `62457` | **Every 2s** on 1 random player, falls after 2s, **14,000 Frost in 4 yd** + knockback. Off for 12s (25m) / 24s (10m) after each Flash Freeze |
 | Biting Cold | 62038 / 62039 | **1005 ms ticks**, `200 · 2^stacks`. Stacks after 4 stationary ticks, sheds on the **second consecutive** tick the server reads `isMoving()` |
@@ -188,11 +188,14 @@ and `IsHodirHardModeActive` were deleted rather than left gating nothing.
 its single tick fires `EVENT_HARD_MODE_MISSED` and shatters the Rare Cache. So the target is halving
 this fight, not thirding it.
 
-## The Flash Freeze window is ten seconds and the shelter exists for six
+## The Flash Freeze window is the nine-second cast and the shelter exists for five
 
-The cast is 9s but the freeze lands at **+10.1s**, where the ice blocks spawn — the one trapping in
-seven casts applied `61969` at +10.03s. The drift lands at **+3.9s**, so the target covers only the
-last **6.2s**. The drift itself is on the floor from +0.0s and stands exactly where its target will
+**The cast's end, +9.0s, is the deadline, and "the landing" everywhere below.** `Spell::_cast` draws
+the target list there, `spell_hodir_flash_freeze` drops Safe Area carriers and pets from it, the
+2 s aura stuns everyone left, and the linked `62148` wipes the fires. The ice blocks spawn on that
+aura's first tick at **+10.0s** — the one trapping in seven casts applied `61969` at +10.03s — with
+no second Safe Area check, so nothing a bot does in that last second changes the outcome. The drift
+lands at **+3.9s**, so the target covers only the last **5.1s**. The drift itself is on the floor from +0.0s and stands exactly where its target will
 spawn, 0.0 yd apart across all seven, which is why the run stages on it and uses the whole cast.
 
 - **The run parks at 6 yd and releases at 8** (`ULDUAR_HODIR_SAFE_AREA_TOLERANCE` / `_RELEASE`, both

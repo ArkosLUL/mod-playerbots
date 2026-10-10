@@ -46,7 +46,7 @@ SINGED_MS = 25000
 # A small icicle detonates 3.7 s after it appears and splashes 4 yd; the dodge fires at 4.5.
 ICICLE_LIVE_MS = 3700
 ICICLE_TRIGGER = 4.5
-# Fires are wiped when the freeze lands, about 9 s after the cast starts.
+# The cast ends 9 s in: targets are picked and the fires wiped there, the blocks spawn a second later.
 FREEZE_LANDS_MS = 9000
 FIRE_MIN_LIFE_MS = 500
 UNDO_WINDOW_MS = 5000

@@ -1085,9 +1085,11 @@ dies. That pull's pick was −30°, 27.5 yd off it. Probe `yogg.station` `walkin
 with no distance pruning, **multiplicative** across tentacles (two up = −37.6%, three = −50.7%),
 `DispelType 0` so undispellable, and unkickable twice over — the tentacle is immune to
 `MECHANIC_INTERRUPT` and `MECHANIC_SILENCE` via `CreatureImmunitiesId -361`, and the channel carries
-flag `0x10`, not the `0x08` that makes one interruptible. It ignores LOS and immunities, and **it
-reaches the brain room**: the retail exemption keyed on aura `63988` is in the DBC but that aura is
-never cast in this build.
+flag `0x10`, not the `0x08` that makes one interruptible. It ignores LOS and immunities. **A cast
+skips anyone underground**: `ExcludeTargetAuraSpell` is Illusion Room `63988`, which every portal
+teleport (63989 / 63997 / 63998) force-casts and only `63993` on the way out removes. Seven pulls,
+245 trips: 2,977 applications, none on a carrier. A bot debuffed before its portal keeps it until that
+channel breaks (47 trips).
 
 Only two things stop it. A **melee hit or melee-class spell** buys ~1.5 s: `64148` on the tentacle
 has `ProcTypeMask 0x28` (taken melee swing, taken melee-class spell),

@@ -38,8 +38,9 @@ He works **three arc slots 60° apart**, because a patch lives 30 s (`TEMPSUMMON
 `spell_ignis_scorch_aura`) against Scorch's 20 s repeat, so two are alive for 10 s of every 20. He
 advances one on the rising edge of Scorch (62546). Ignis is
 rooted and rotation-locked for those 3 s and the patch spawns from the orientation frozen at cast
-start, so the step is free and leaves him 16 yd from the patch — outside its 13 yd burn — where
-standing still would have left him 9 yd inside it. The slot is latched per instance id. A reactive
+start, 20 yd along it (`boss_ignis.cpp:405`). With Ignis on the anchor the step is free and leaves
+him 17.3 yd from the patch — 26.1 on the 120° wrap from the third slot to the first — outside its
+13 yd burn, where standing still would have left him 10.5 yd from its centre. The slot is latched per instance id. A reactive
 "step out once it lands" was rejected as the documented oscillation pair.
 
 **Nothing pre-positions**: the tank walks the boss to the anchor in combat, from wherever the pull

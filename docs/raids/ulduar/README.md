@@ -158,8 +158,9 @@ combat, neither spell castable).
 XT-002 was already covered by `XT002TargetGuardMultiplier`, which vetoes for the whole encounter
 because the main tank is the wrong sink while a Pummeller is out.
 
-Iron Assembly is no longer in the veto: it has its own redirect action, and nothing else blocks the
-class-generic nodes there.
+Iron Assembly left the veto on purpose, in the rework that added its own redirect node: at
+`ACTION_RAID + 2` it outranks the class-generic nodes (`ACTION_HIGH + 7`) and spends the cooldown on
+whoever tanks the kill target, so they only fire with no kill target up.
 
 Two load-bearing details: the multiplier `dynamic_cast`s to the two **concrete** redirect actions
 only, never the shared `BuffOnMainTankAction` base; and **Razorscale's phase comes from the static
