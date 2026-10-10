@@ -701,6 +701,8 @@ bool AlgalonOffTankWorking(Player* bot);
 // Constellations in phase 1, Unleashed Dark Matter in phase 2: a third tank, else the swap tank not
 // holding Algalon.
 Player* GetAlgalonHandler(PlayerbotAI* botAI);
+// Whether this bot is the handler, for a predicate asked on every action: by guid, with no walk over the group.
+bool IsAlgalonHandler(Player* bot);
 // A loose constellation to taunt first, else one already on the handler while a hole is spare to drag it
 // through. Traced as algalon.kite.
 Unit* GetAlgalonHandlerConstellation(Player* bot);

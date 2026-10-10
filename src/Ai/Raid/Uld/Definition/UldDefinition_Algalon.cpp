@@ -58,7 +58,7 @@ bool AlgalonShadowAuraHeld(PlayerbotAI* botAI)
 bool AlgalonHandlerKiting(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (!AlgalonEngaged(botAI) || GetAlgalonHandler(botAI) != bot || AlgalonTakesBossNow(bot))
+    if (!AlgalonEngaged(botAI) || !IsAlgalonHandler(bot) || AlgalonTakesBossNow(bot))
         return false;
 
     Unit* constellation = GetAlgalonHandlerConstellation(bot);

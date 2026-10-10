@@ -67,8 +67,9 @@ enum class AlgalonPathRule
     Any,
 };
 
-// Nearest ground clear of every marker, hole and dying star, near the bot's own slot when it has one.
-Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRule rule)
+// Nearest ground clear of every marker, hole and dying star, near the bot's own slot when it has one. Searches
+// chained in one Execute share `sweep`: they walk the same grid, so each point's collision check is paid once.
+Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRule rule, HazardSweepCache& sweep)
 {
     Position anchor;
     Position const* prefer = GetAlgalonSlotAnchor(bot, anchor) ? &anchor : nullptr;
@@ -89,7 +90,7 @@ Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRul
     };
     return FindNearestPositionClearOfHazards(bot, GetAlgalonDodgeHazards(bot, markerClearance),
                                              ULDUAR_ALGALON_DODGE_SEARCH_RADIUS, 2.0f, static_cast<float>(M_PI) / 8.0f,
-                                             prefer, reachable);
+                                             prefer, reachable, &sweep);
 }
 
 // The class's second taunt, for when the first missed or is cooling down while he is off a swap tank.
@@ -248,23 +249,24 @@ bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
 {
     // FleePosition clamps to AiPlayerbot.FleeDistance (5 yd), inside the doubled damage band.
     char const* branch = "clear";
-    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE, AlgalonPathRule::Clear);
+    HazardSweepCache sweep;
+    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE, AlgalonPathRule::Clear, sweep);
     if (clear == Position())
     {
         branch = "min";
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Clear);
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Clear, sweep);
     }
 
     if (clear == Position())
     {
         branch = "field";
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Field);
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Field, sweep);
     }
 
     if (clear == Position())
     {
         branch = "cross";
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Any);
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Any, sweep);
     }
 
     if (clear == Position())
@@ -285,9 +287,10 @@ bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
 bool AlgalonLeaveBlackHoleAction::Execute(Event /*event*/)
 {
     Position clear;
+    HazardSweepCache sweep;
     for (AlgalonPathRule rule : {AlgalonPathRule::Clear, AlgalonPathRule::Field, AlgalonPathRule::Any})
     {
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS, rule);
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS, rule, sweep);
         if (clear != Position())
             break;
     }

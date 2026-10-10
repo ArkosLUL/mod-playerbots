@@ -49,6 +49,7 @@
 #include <iterator>
 #include <limits>
 #include <list>
+#include <optional>
 #include <set>
 #include <string>
 #include <tuple>
@@ -571,9 +572,8 @@ std::vector<Player*> OrderedTanks(Player* bot)
 }
 
 // Two bots trade him on their own; with one, the human tank has to be told when to taunt.
-std::vector<Player*> WantedSwapPair(Player* bot)
+std::vector<Player*> WantedSwapPair(std::vector<Player*> const& tanks)
 {
-    std::vector<Player*> const tanks = OrderedTanks(bot);
     std::vector<Player*> bots;
     std::copy_if(tanks.begin(), tanks.end(), std::back_inserter(bots), IsBot);
     std::vector<Player*> pair = bots.size() >= 2 ? bots : tanks;
@@ -585,7 +585,7 @@ std::vector<Player*> WantedSwapPair(Player* bot)
 
 // Re-derived until the pull, so a role change or a tank joining late still counts. During the pull a
 // member who died or left is replaced, or the survivor eats the 5th Phase Punch with nobody to take him.
-void EnsureSwapPair(Player* bot, Creature* boss, AlgalonEncounterState& state)
+void EnsureSwapPair(Player* bot, Creature* boss, AlgalonEncounterState& state, std::vector<Player*> const& tanks)
 {
     Group* group = bot->GetGroup();
     if (!group)
@@ -600,9 +600,9 @@ void EnsureSwapPair(Player* bot, Creature* boss, AlgalonEncounterState& state)
             leaving.push_back(guid);
     }
 
+    std::vector<Player*> const wanted = WantedSwapPair(tanks);
     if (!fighting)
     {
-        std::vector<Player*> const wanted = WantedSwapPair(bot);
         for (ObjectGuid const& guid : state.swapPair)
         {
             auto const same = [&guid](Player* tank) { return tank->GetGUID() == guid; };
@@ -616,10 +616,9 @@ void EnsureSwapPair(Player* bot, Creature* boss, AlgalonEncounterState& state)
 
     // OrderedTanks returns living tanks only, so a replacement is someone who can take him. Bots first:
     // a human has to be called.
-    std::vector<Player*> candidates = WantedSwapPair(bot);
+    std::vector<Player*> candidates = wanted;
     if (fighting)
     {
-        std::vector<Player*> const tanks = OrderedTanks(bot);
         candidates.clear();
         std::copy_if(tanks.begin(), tanks.end(), std::back_inserter(candidates), IsBot);
         std::copy_if(tanks.begin(), tanks.end(), std::back_inserter(candidates),
@@ -1181,9 +1180,9 @@ void KeepBigBangSoaker(Player* bot, AlgalonEncounterState& state)
 }
 
 // A bot tank outside the swap pair, else the pair bot not keeping him.
-Player* ElectHandler(Player* bot, AlgalonEncounterState const& state)
+Player* ElectHandler(Player* bot, AlgalonEncounterState const& state, std::vector<Player*> const& tanks)
 {
-    for (Player* tank : OrderedTanks(bot))
+    for (Player* tank : tanks)
         if (InFight(tank) && IsBot(tank) && !state.swapPair.count(tank->GetGUID()))
             return tank;
 
@@ -2374,9 +2373,9 @@ bool CanPay(Player* caster, SpellInfo const* info)
            info->CalcPowerCost(caster, info->GetSchoolMask());
 }
 
-// The provider's spell id when it can put `spell` on `target` now, else 0. Range and sight are checked here:
-// CanCastSpell lets an out of range cast through.
-uint32 ExternalReady(Player* provider, char const* spell, Player* target)
+// The provider's spell id for `spell` when it knows it, can pay for it and has it off cooldown, else 0. The
+// cooldown is also CanCastSpell's to refuse, but only after ExternalReaches has paid for range and sight.
+uint32 ExternalSpell(Player* provider, char const* spell)
 {
     PlayerbotAI* providerAI = GET_PLAYERBOT_AI(provider);
     if (!providerAI || !CanStayOut(provider))
@@ -2384,25 +2383,40 @@ uint32 ExternalReady(Player* provider, char const* spell, Player* target)
 
     uint32 const spellId = providerAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-    if (!info || !CanPay(provider, info))
-        return 0;
+    return info && CanPay(provider, info) && !provider->HasSpellCooldown(spellId) ? spellId : 0;
+}
+
+// Whether the provider can put an ExternalSpell id on `target` now. Range and sight are checked here:
+// CanCastSpell lets an out of range cast through.
+bool ExternalReaches(Player* provider, uint32 spellId, Player* target)
+{
+    PlayerbotAI* providerAI = GET_PLAYERBOT_AI(provider);
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!providerAI || !info)
+        return false;
 
     if (provider != target && (!provider->IsWithinDistInMap(target, info->GetMaxRange(true, provider)) ||
                                !provider->IsWithinLOSInMap(target)))
-        return 0;
+        return false;
 
-    return providerAI->CanCastSpell(spellId, target) ? spellId : 0;
+    return providerAI->CanCastSpell(spellId, target);
+}
+
+uint32 ExternalReady(Player* provider, char const* spell, Player* target)
+{
+    uint32 const spellId = ExternalSpell(provider, spell);
+    return spellId && ExternalReaches(provider, spellId, target) ? spellId : 0;
 }
 
 // The class rule: it moves 30% of his hits onto the paladin, and one Hand per paladin on a target.
-uint32 SacrificeReady(Player* paladin, Player* holder)
+uint32 SacrificeSpell(Player* paladin, Player* holder)
 {
     if (paladin == holder || paladin->getClass() != CLASS_PALADIN ||
         paladin->GetHealthPct() < ULDUAR_ALGALON_SACRIFICE_MIN_PCT ||
         ai::paladin::HasAnyPaladinHandFromCaster(holder, paladin))
         return 0;
 
-    return ExternalReady(paladin, "hand of sacrifice", holder);
+    return ExternalSpell(paladin, "hand of sacrifice");
 }
 
 // A passive talent is only in the talent map, never the spell map HasSpell reads.
@@ -2938,7 +2952,9 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     if (!group)
         return;
 
-    EnsureSwapPair(bot, boss, *state);
+    // Built once: the pair and the handler both read it, and each build walks the group four times.
+    std::vector<Player*> const tanks = OrderedTanks(bot);
+    EnsureSwapPair(bot, boss, *state, tanks);
     EnsureTankHealers(bot, boss, *state);
 
     if (!state->introEndMs && boss->IsInCombat() && !boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
@@ -3054,7 +3070,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     state->urgent = phase == AlgalonPhase::One && state->holes.empty() &&
                     (casting || BigBangDueWithin(*state, ULDUAR_ALGALON_SHELTER_WINDOW_SECONDS, now));
 
-    Player* handler = ElectHandler(bot, *state);
+    Player* handler = ElectHandler(bot, *state, tanks);
     state->handler = handler ? handler->GetGUID() : ObjectGuid::Empty;
 
     if (phase != AlgalonPhase::Intro)
@@ -3308,11 +3324,24 @@ AlgalonTankHealPick GetAlgalonTankHealPick(PlayerbotAI* botAI)
         if (tank != holder)
             partner = tank;
 
-    auto const reachable = [bot](Player* tank) { return tank && TankHealReachable(bot, tank); };
+    // Sight is a raycast: one per tank, and only for a tank whose health already asks for a heal.
+    std::optional<bool> holderReach;
+    std::optional<bool> partnerReach;
+    auto const reachable = [&](Player* tank)
+    {
+        if (!tank)
+            return false;
+
+        std::optional<bool>& reach = tank == holder ? holderReach : partnerReach;
+        if (!reach)
+            reach = TankHealReachable(bot, tank);
+
+        return *reach;
+    };
     auto const below = [](Player* unit, float pct) { return unit && unit->GetHealthPct() < pct; };
 
     char const* branch = "full";
-    if (reachable(holder) && below(holder, ULDUAR_ALGALON_TANK_CRITICAL_PCT))
+    if (below(holder, ULDUAR_ALGALON_TANK_CRITICAL_PCT) && reachable(holder))
     {
         pick = {holder, true};
         branch = "holder";
@@ -3322,20 +3351,20 @@ AlgalonTankHealPick GetAlgalonTankHealPick(PlayerbotAI* botAI)
         pick = {bot, true};
         branch = "self";
     }
-    else if (reachable(partner) && below(partner, ULDUAR_ALGALON_TANK_CRITICAL_PCT))
+    else if (below(partner, ULDUAR_ALGALON_TANK_CRITICAL_PCT) && reachable(partner))
     {
         pick = {partner, true};
         branch = "offtank";
     }
-    else if (reachable(holder) && below(holder, ULDUAR_ALGALON_HOLDER_URGENT_PCT))
+    else if (below(holder, ULDUAR_ALGALON_HOLDER_URGENT_PCT) && reachable(holder))
     {
         pick = {holder, true};
         branch = "holder";
     }
     else
     {
-        bool const holderNeeds = reachable(holder) && below(holder, ULDUAR_ALGALON_HOLDER_TOPOFF_PCT);
-        bool const partnerNeeds = reachable(partner) && below(partner, ULDUAR_ALGALON_OFFTANK_TOPOFF_PCT);
+        bool const holderNeeds = below(holder, ULDUAR_ALGALON_HOLDER_TOPOFF_PCT) && reachable(holder);
+        bool const partnerNeeds = below(partner, ULDUAR_ALGALON_OFFTANK_TOPOFF_PCT) && reachable(partner);
         bool const partnerFirst = partnerNeeds && holderNeeds &&
                                   partner->GetHealthPct() + ULDUAR_ALGALON_OFFTANK_MARGIN_PCT <= holder->GetHealthPct();
         if (holderNeeds && !partnerFirst)
@@ -3348,8 +3377,8 @@ AlgalonTankHealPick GetAlgalonTankHealPick(PlayerbotAI* botAI)
             pick.target = partner;
             branch = "offtank";
         }
-        else if ((holder && !reachable(holder) && below(holder, ULDUAR_ALGALON_HOLDER_TOPOFF_PCT)) ||
-                 (partner && !reachable(partner) && below(partner, ULDUAR_ALGALON_OFFTANK_TOPOFF_PCT)))
+        else if ((below(holder, ULDUAR_ALGALON_HOLDER_TOPOFF_PCT) && !reachable(holder)) ||
+                 (below(partner, ULDUAR_ALGALON_OFFTANK_TOPOFF_PCT) && !reachable(partner)))
         {
             branch = "range";
         }
@@ -3516,6 +3545,11 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
     auto const usable = [&](Player* provider, uint32 spellId)
     { return spellId && (!reserved || AlgalonCooldownMs(provider, spellId) <= untilHit); };
 
+    // The reserve goes ahead of range, sight and the cast check: every provider asks this of every other one
+    // each tick, and a reserved spell is refused again on the next.
+    auto const ready = [&](Player* provider, uint32 spellId, Player* target)
+    { return usable(provider, spellId) && ExternalReaches(provider, spellId, target) ? spellId : 0; };
+
     // A full heal, so over a cutter too. Another paladin's first: on himself it puts up Forbearance.
     if (holder->GetHealthPct() < ULDUAR_ALGALON_TANK_LAY_ON_HANDS_PCT && !claimed(state->layOnHandsClaimMs))
     {
@@ -3523,8 +3557,7 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
         // Hands for two minutes.
         if (IsBot(holder) && !TankCutRunning(holder) && !claimed(state->tankCutClaimMs))
         {
-            uint32 const spellId = ExternalReady(holder, "divine protection", holder);
-            if (usable(holder, spellId))
+            if (uint32 const spellId = ready(holder, ExternalSpell(holder, "divine protection"), holder))
                 return holder == bot ? AlgalonTankCut{holder, spellId, "low"} : none;
         }
 
@@ -3534,15 +3567,13 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
             if (paladin == holder || !IsBot(paladin) || paladin->getClass() != CLASS_PALADIN)
                 continue;
 
-            uint32 const spellId = ExternalReady(paladin, "lay on hands", holder);
-            if (usable(paladin, spellId))
+            if (uint32 const spellId = ready(paladin, ExternalSpell(paladin, "lay on hands"), holder))
                 return paladin == bot ? AlgalonTankCut{holder, spellId, "loh"} : none;
         }
 
         if (IsBot(holder))
         {
-            uint32 const spellId = ExternalReady(holder, "lay on hands", holder);
-            if (usable(holder, spellId))
+            if (uint32 const spellId = ready(holder, ExternalSpell(holder, "lay on hands"), holder))
                 return holder == bot ? AlgalonTankCut{holder, spellId, "loh"} : none;
         }
     }
@@ -3565,8 +3596,7 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
     // The partner is idle in plate, so the 30% it takes over costs it least.
     if (IsBot(partner) && partner != coverer)
     {
-        uint32 const spellId = SacrificeReady(partner, holder);
-        if (usable(partner, spellId))
+        if (uint32 const spellId = ready(partner, SacrificeSpell(partner, holder), holder))
             return turn(partner, spellId);
     }
 
@@ -3591,11 +3621,11 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* paladin = ref->GetSource();
-            if (paladin == partner || paladin == coverer || !IsBot(paladin) || PlayerbotAI::IsHeal(paladin) != healers)
+            if (!paladin || paladin->getClass() != CLASS_PALADIN || paladin == partner || paladin == coverer ||
+                !IsBot(paladin) || PlayerbotAI::IsHeal(paladin) != healers)
                 continue;
 
-            uint32 const spellId = SacrificeReady(paladin, holder);
-            if (usable(paladin, spellId))
+            if (uint32 const spellId = ready(paladin, SacrificeSpell(paladin, holder), holder))
                 return turn(paladin, spellId);
         }
     }
@@ -3605,11 +3635,10 @@ AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI)
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* priest = ref->GetSource();
-            if (!IsBot(priest) || priest->getClass() != CLASS_PRIEST)
+            if (!priest || priest->getClass() != CLASS_PRIEST || !IsBot(priest))
                 continue;
 
-            uint32 const spellId = ExternalReady(priest, spell, holder);
-            if (usable(priest, spellId))
+            if (uint32 const spellId = ready(priest, ExternalSpell(priest, spell), holder))
                 return turn(priest, spellId);
         }
     }
@@ -3842,10 +3871,11 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
         return pick;
 
     // One already running: two stars close together would otherwise spend a second one.
-    for (PersonalButton const& button : PERSONAL_BUTTONS)
+    std::array<uint32, std::size(PERSONAL_BUTTONS)> spellIds;
+    for (size_t i = 0; i < spellIds.size(); ++i)
     {
-        uint32 const spellId = PersonalButtonId(bot, button);
-        if (spellId && bot->HasAura(spellId))
+        spellIds[i] = PersonalButtonId(bot, PERSONAL_BUTTONS[i]);
+        if (spellIds[i] && bot->HasAura(spellIds[i]))
             return pick;
     }
 
@@ -3855,13 +3885,14 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
     // The top roll is the worst case, so with no button clearing it the strongest still goes up for a lower roll.
     uint32 strongest = 0;
     float strongestLeft = std::numeric_limits<float>::max();
-    for (PersonalButton const& button : PERSONAL_BUTTONS)
+    for (size_t i = 0; i < spellIds.size(); ++i)
     {
+        PersonalButton const& button = PERSONAL_BUTTONS[i];
         float const left = hit * button.factor - button.absorb;
         if ((button.immunity && immunityHeld) || (left >= health && left >= strongestLeft))
             continue;
 
-        uint32 const spellId = PersonalButtonId(bot, button);
+        uint32 const spellId = spellIds[i];
         SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
         if (!info || !CanPay(bot, info) || !botAI->CanCastSpell(spellId, bot))
             continue;
@@ -4225,8 +4256,11 @@ bool AlgalonYieldsBoss(Player* bot)
     // The pair and the handler are the tanks there are; reading the bot's role instead walks its
     // strategies, and the damage guard asks this for every action every damage dealer pops.
     AlgalonEncounterState const* state = FindState(bot);
-    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
-    if (!botAI || !state || (!state->swapPair.count(bot->GetGUID()) && state->handler.Get() != bot->GetGUID()))
+    if (!state || (!state->swapPair.count(bot->GetGUID()) && state->handler.Get() != bot->GetGUID()))
+        return false;
+
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI)
         return false;
 
     Player* holder = GetAlgalonBossTank(botAI);
@@ -4273,6 +4307,12 @@ Player* GetAlgalonHandler(PlayerbotAI* botAI)
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     AlgalonEncounterState const* state = FindState(bot);
     return state ? FindGroupMember(bot->GetGroup(), state->handler) : nullptr;
+}
+
+bool IsAlgalonHandler(Player* bot)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    return state && bot->GetGroup() && state->handler.Get() == bot->GetGUID();
 }
 
 namespace

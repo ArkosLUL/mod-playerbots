@@ -58,8 +58,8 @@ bool AlgalonBigBangExternalTrigger::IsActive()
 // healers are phased for a second after the hit, and whatever is already ticking on him is all he has.
 bool AlgalonSoakerPrepTrigger::IsActive()
 {
-    if (!AlgalonBigBangLatched(bot) || IsAlgalonPhased(bot) || AlgalonHideSlackMs(bot) <= ULDUAR_ALGALON_PREP_GCD_MS ||
-        !PlayerbotAI::IsHeal(bot))
+    if (!AlgalonBigBangLatched(bot) || IsAlgalonPhased(bot) || !PlayerbotAI::IsHeal(bot) ||
+        AlgalonHideSlackMs(bot) <= ULDUAR_ALGALON_PREP_GCD_MS)
     {
         return false;
     }

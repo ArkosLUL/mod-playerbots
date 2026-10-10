@@ -579,9 +579,9 @@ them.
 `pmon` afterwards. `AC_AI_PLAYERBOT_PERF_MON_ENABLED` is **0** by default, so it is off unless asked
 for.
 
-Two traps make its absolute numbers meaningless. **It does not time `isUseful` or the multipliers** —
-both show up only inside the single `PlayerbotAI::UpdateAIInternal I` bucket, which is exactly where
-most encounter cost hides. And its global mutex plus a per-call string build inflate every figure once
+Two traps make its absolute numbers meaningless. **It does not time `isUseful` or `isPossible`** —
+both show up only inside the single `PlayerbotAI::UpdateAIInternal I` bucket. Multipliers are timed
+per name (`Mult`, with block counts). And its global mutex plus a per-call string build inflate every figure once
 a thousand random bots are logged in. **Read ratios between buckets, never times.**
 
 ## Constraints

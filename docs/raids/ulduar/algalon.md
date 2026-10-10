@@ -645,6 +645,38 @@ What the reader infers, because no record says it outright:
   `PRESS_AHEAD_MS` (5 s; the forecast ran up to 4.2 s late), else one that exploded within
   `PRESS_STALE_MS` (1 s) before it (the scan listed a dead star up to 0.5 s on).
 
+## What it costs
+
+No trigger, multiplier or rule sweeps the map: `ScanRoom` runs once per instance per 250 ms and every
+helper reads its cached lists. Half the triggers are paced (250 ms to 2 s). What is dear is sight
+raycasts, `CanCastSpell` and the dodge's collision checks, so their order is deliberate:
+
+- **Tank-cut election** (`GetAlgalonTankCut`): the holder and every paladin and priest each walk the
+  whole provider list every tick the holder is hurt. Cooldown (`ExternalSpell`) and the Big Bang
+  reserve (`usable`) are tested **before** range, sight and the cast check (`ExternalReaches`); a
+  reserved or cooling spell is refused again every tick otherwise, after paying for all three.
+- **Tank-heal pick**: health before sight, and one sight test per tank per call (it was up to 7).
+- **Dodge and hole exit**: the fallback searches of one `Execute` share one `HazardSweepCache`.
+- `IsAlgalonHandler` compares guids; `GetAlgalonHandler` walks the group, so keep it out of rule
+  predicates.
+
+Each reorder was run against the old body over the states it can tell apart (3.5 M for the pick, 21 M
+for the election): same answer every time, never more raycasts.
+
+**Would change behaviour, do not re-propose:**
+- `state->engaged` / `state->phase` for the live `AlgalonEngaged`: 250 ms stale at the pull and a wipe.
+- A per-ms memo of `AlgalonHideSlackMs` or the hide role across the multipliers: an action that
+  returned false may already have used Nitro Boosts or latched a shelter.
+- One slot anchor per dodge `Execute`: `RawSlot` reads the clock (Big Bang due in 15 s, Nitro cooldown).
+- Sharing the tank-cut election between bots or moving it into the tick: claims change between askers.
+- An early return for non-handlers ahead of `GetAlgalonHandlerConstellation`: it erases a stale kite
+  hole, which every bot's shelter pick reads.
+- Id-based aura tests for the name-based `PlayerbotAI::HasAura`: the name covers every rank and
+  same-named procs.
+
+Open: helpers re-fetch the encounter state per call, see
+[the plan](../../plans/algalon-perf/algalon-perf.PLAN.md).
+
 ## Not supported
 
 **Single-tank raids.** The swap stays inert without a second tank rather than drafting one: a damage

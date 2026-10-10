@@ -287,6 +287,10 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
 - **An open gate is not a live fight, and `z >= 300` is not Yogg's platform.** Triggers run for every
   bot in the instance between pulls, so a sweep ahead of the live-phase test is paid raid-wide all
   evening.
+- **"Am I the first able provider" costs askers × candidates a tick.** Each bot evaluates everyone
+  ahead of it, so reject on what stays false for many ticks first — cooldown, a reserve — and only
+  then pay range, sight and `CanCastSpell`, which tests the cooldown itself but after the caller's
+  raycast. Likewise health before sight ([algalon.md](../raids/ulduar/algalon.md#what-it-costs)).
 - **Split on action family before testing anything.** Where everything a multiplier suppresses is
   either a `MovementAction` or a `CastSpellAction` — disjoint families — one `dynamic_cast` each way
   up front replaces a chain of a dozen for every rotation spell that falls through.
