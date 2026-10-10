@@ -100,6 +100,8 @@ subject in place of the lists, never mixed per item. It reaches a roll two ways:
 - **Score bonus** (`AiPlayerbot.Bis.ScoreBonus`, `Bis.PhaseDecay`) — applied in
   `StatsWeightCalculator::BisRankMultiplier`, gated on `SetBisBonus(true)`. That is set in
   `QueryItemUsageForEquip`, so it moves the `usage` that voting consumes; it is not equip-only.
+  The decay is measured between the dropped and the equipped item, not from the bot's progression
+  ([itemization.md](itemization.md#ranked-bis-lists)).
 
 Under `Roll.UpgradesOnly = 1` bots cap at GREED, so in practice the lists decide **GREED vs PASS**,
 not NEED vs GREED.

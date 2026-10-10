@@ -34,6 +34,14 @@ constexpr uint8_t TAB_FERAL_TANK = 10;
 constexpr uint8_t TAB_BLOOD_TANK = 11;
 constexpr uint8_t TAB_FURY_PROT = 12;
 
+struct Pairing
+{
+    // 2 upward
+    uint8_t rank = 0;
+    // 0: this rank drops the off hand
+    uint32_t item = 0;
+};
+
 struct Slot
 {
     uint8_t simSlot = 0;
@@ -46,9 +54,11 @@ struct Slot
     // ItemModType ids
     uint32_t reforgeFrom = 0;
     uint32_t reforgeTo = 0;
-    // rank 1's score over rank 2's, can be negative
-    bool hasDelta = false;
-    int32_t delta = 0;
+    // off hand a runner-up was simmed with where it isn't rank 1's, ascending rank
+    std::vector<Pairing> pairings;
+    // per rank from 2 up, its loss against rank 1 in tenths of a percent, can be negative.
+    // Empty or one fewer than items.
+    std::vector<int32_t> deltas;
 };
 
 struct Block
@@ -187,7 +197,26 @@ inline bool DecodeEnhancement(std::string_view enh, Slot& slot, std::string& err
     }
 }
 
-// <slot>:<item>[,<item>...][(<enh>[,<enh>...])][+<delta>], enh being e<spell>, g<gem> or r<from>-<to>
+// o<rank>-<off hand item>, needs slot.items
+inline bool DecodePairing(std::string_view pair, Slot& slot, std::string& error)
+{
+    std::size_t const dash = pair.find('-');
+    if (pair.empty() || pair.front() != 'o' || dash == std::string_view::npos)
+        return Fail(error, "pairing \"" + std::string(pair) + "\"");
+    std::optional<int32_t> rank = ParseInt(pair.substr(1, dash - 1));
+    std::optional<int32_t> item = ParseInt(pair.substr(dash + 1));
+    if (!rank || !item || *item < 0)
+        return Fail(error, "pairing \"" + std::string(pair) + "\"");
+    if (*rank < 2 || std::size_t(*rank) > slot.items.size())
+        return Fail(error, "pairing \"" + std::string(pair) + "\" names a rank the slot doesn't have");
+    if (!slot.pairings.empty() && *rank <= slot.pairings.back().rank)
+        return Fail(error, "pairings out of order, want ascending ranks");
+    slot.pairings.push_back({uint8_t(*rank), uint32_t(*item)});
+    return true;
+}
+
+// <slot>:<item>[,<item>...][(<enh>[,<enh>...])][(<pair>[,<pair>...])][+<delta>[,<delta>...]],
+// enh being e<spell>, g<gem> or r<from>-<to>, pair being o<rank>-<off hand item>
 inline bool DecodeSlot(std::string_view text, Slot& slot, std::string& error)
 {
     std::size_t const colon = text.find(':');
@@ -201,27 +230,28 @@ inline bool DecodeSlot(std::string_view text, Slot& slot, std::string& error)
 
     if (std::size_t const plus = rest.find('+'); plus != std::string_view::npos)
     {
-        std::optional<int32_t> delta = ParseInt(rest.substr(plus + 1));
-        if (!delta)
-            return Fail(error, "bad delta");
-        slot.delta = *delta;
-        slot.hasDelta = true;
+        for (std::string_view deltaText : Split(rest.substr(plus + 1), ','))
+        {
+            std::optional<int32_t> delta = ParseInt(deltaText);
+            if (!delta)
+                return Fail(error, "bad delta");
+            slot.deltas.push_back(*delta);
+        }
         rest = rest.substr(0, plus);
     }
 
-    if (std::size_t const open = rest.find('('); open != std::string_view::npos)
+    // last group first
+    std::vector<std::string_view> groups;
+    while (!rest.empty() && rest.back() == ')')
     {
-        if (rest.back() != ')')
-            return Fail(error, "unclosed '('");
-        std::string_view const enhs = rest.substr(open + 1, rest.size() - open - 2);
-        for (std::string_view enh : Split(enhs, ','))
-            if (!DecodeEnhancement(enh, slot, error))
-                return false;
-        // every value parsed is canonical, so a mismatch can only be the order
-        if (Enhancements(slot) != enhs)
-            return Fail(error, "enhancements out of order, want enchant, gems, reforge");
+        std::size_t const open = rest.rfind('(');
+        if (open == std::string_view::npos)
+            return Fail(error, "unmatched ')'");
+        groups.push_back(rest.substr(open + 1, rest.size() - open - 2));
         rest = rest.substr(0, open);
     }
+    if (rest.find('(') != std::string_view::npos)
+        return Fail(error, "unclosed '('");
 
     for (std::string_view itemText : Split(rest, ','))
     {
@@ -235,8 +265,40 @@ inline bool DecodeSlot(std::string_view text, Slot& slot, std::string& error)
     }
     if (slot.items.size() > MAX_RANKS)
         return Fail(error, "more than 6 items");
-    if (slot.hasDelta && slot.items.size() < 2)
-        return Fail(error, "a delta but no rank 2");
+    if (!slot.deltas.empty() && slot.deltas.size() != slot.items.size() - 1)
+        return Fail(error, std::to_string(slot.deltas.size()) + " deltas for " +
+                               std::to_string(slot.items.size()) + " items");
+
+    // Both groups are optional, so the first character says which one it is: e, g or r for
+    // enhancements, o for pairings.
+    bool sawEnhancements = false;
+    bool sawPairings = false;
+    for (auto group = groups.rbegin(); group != groups.rend(); ++group)
+    {
+        if (group->empty())
+            return Fail(error, "empty group");
+        if (group->front() == 'o')
+        {
+            if (sawPairings)
+                return Fail(error, "groups out of order, want enhancements then pairings");
+            sawPairings = true;
+            for (std::string_view pair : Split(*group, ','))
+                if (!DecodePairing(pair, slot, error))
+                    return false;
+            continue;
+        }
+        if (group->front() != 'e' && group->front() != 'g' && group->front() != 'r')
+            return Fail(error, "unknown group \"" + std::string(*group) + "\"");
+        if (sawEnhancements || sawPairings)
+            return Fail(error, "groups out of order, want enhancements then pairings");
+        sawEnhancements = true;
+        for (std::string_view enh : Split(*group, ','))
+            if (!DecodeEnhancement(enh, slot, error))
+                return false;
+        // every value parsed is canonical, so a mismatch can only be the order
+        if (Enhancements(slot) != *group)
+            return Fail(error, "enhancements out of order, want enchant, gems, reforge");
+    }
     return true;
 }
 

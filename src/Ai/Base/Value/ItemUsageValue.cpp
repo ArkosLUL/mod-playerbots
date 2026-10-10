@@ -1419,11 +1419,13 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         // spec weapon-speed preference, which is a no-op without it.
         int32 const contestedSlot = static_cast<int32>((dest & 0xFF) + i);
         calculator.SetReplacedItem(oldItem);
+        calculator.SetBisContest(itemProto->ItemId, oldItemProto->ItemId);
         float slotItemScore = calculator.CalculateItem(itemProto->ItemId, randomPropertyId, contestedSlot);
         float oldScore = calculator.CalculateItem(oldItemProto->ItemId,
                                                   oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID),
                                                   contestedSlot);
         calculator.SetReplacedItem(nullptr);
+        calculator.SetBisContest(0, 0);
 
         if (oldItem)
         {

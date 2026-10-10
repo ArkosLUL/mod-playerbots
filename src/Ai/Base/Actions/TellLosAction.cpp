@@ -151,6 +151,8 @@ bool TellCalculateItemAction::Execute(Event event)
     calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
     calculator.SetOverflowPenalty(false);
     calculator.SetBisBonus(true);
+    // nothing to compare against here, so the rank bonus prints undecayed
+    calculator.SetBisContest(item.itemId, item.itemId);
     if (sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass()))
         calculator.SetPvpSpec(true);
 

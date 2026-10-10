@@ -284,8 +284,7 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
     if (bis_source_.kind == BisSource::Kind::None)
         return 1.0f;
 
-    // Phase-limited, unlike the spec gates: a pre-raid BiS piece should stop pulling once the bot has
-    // progressed past it. Only this bot's own expansion is consulted.
+    // Only this bot's own expansion is consulted.
     uint8 entryPhase = 0;
     uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_source_, &entryPhase);
 
@@ -296,12 +295,12 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
 
     // Without this a leftover pre-raid rank-1 piece is worth exactly as much as the current tier's
     // rank-1, so the two bonuses cancel and the equipped lower-ilvl piece keeps the slot on the
-    // upgrade threshold alone. Measured from the source's phase, not the bot's: a dataset subject with
-    // no block at the bot's own phase would decay every item it ranks.
+    // upgrade threshold alone.
     float phaseScale = 1.0f;
-    if (sPlayerbotAIConfig.bisPhaseDecay > 0.0f && entryPhase < bis_source_.progress.phase)
+    uint8 const reference = BisReferencePhase(entryPhase);
+    if (sPlayerbotAIConfig.bisPhaseDecay > 0.0f && entryPhase < reference)
     {
-        uint8 const behind = bis_source_.progress.phase - entryPhase;
+        uint8 const behind = reference - entryPhase;
         phaseScale = std::max(0.0f, 1.0f - sPlayerbotAIConfig.bisPhaseDecay * behind);
     }
 
@@ -309,6 +308,26 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
     // left it below the upgrade threshold's own noise.
     static constexpr float kRankScale[3] = {1.0f, 0.8f, 0.6f};
     return 1.0f + sPlayerbotAIConfig.bisScoreBonus * kRankScale[rank - 1] * phaseScale;
+}
+
+// A slot comparison decays from the later-listed of its two items, not from the bot's progression,
+// or a bot still gearing in an older raid gets no bonus on anything that drops there.
+uint8 StatsWeightCalculator::BisReferencePhase(uint8 entryPhase) const
+{
+    // The source's phase, not the bot's: a dataset subject with no block at the bot's own phase
+    // would decay every item it ranks.
+    if (!bis_contest_[0] && !bis_contest_[1])
+        return bis_source_.progress.phase;
+
+    uint8 reference = entryPhase;
+    for (uint32 itemId : bis_contest_)
+    {
+        // ranks 4-6 count here too, they say which tier the item belongs to
+        uint8 phase = 0;
+        if (itemId && sBisListMgr->GetBisRankFor(itemId, bis_source_, &phase))
+            reference = std::max(reference, phase);
+    }
+    return reference;
 }
 
 float StatsWeightCalculator::CalculateEnchant(uint32 enchantId)

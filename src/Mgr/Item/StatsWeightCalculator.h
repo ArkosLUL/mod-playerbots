@@ -80,6 +80,13 @@ public:
     // would also steer bot generation (InitEquipment, autogear) and not just the loot/equip decision
     // it was calibrated for. QueryItemUsageForEquip turns it on.
     void SetBisBonus(bool apply) { enable_bis_bonus_ = apply; }
+    // The two items one slot comparison is between, 0 and 0 for none: the BiS phase decay is then
+    // measured between them. Has to be the same for both scores, or they aren't comparable.
+    void SetBisContest(uint32 itemA, uint32 itemB)
+    {
+        bis_contest_[0] = itemA;
+        bis_contest_[1] = itemB;
+    }
 
     // Where the weights come from, for calc: the sim row and item level, or why they're hand-written.
     std::string DescribeWeights();
@@ -107,6 +114,7 @@ public:
     void CalculateItemTypePenalty(ItemTemplate const* proto);
     float ApplyPreferredSpecWeapons(ItemTemplate const* proto, int32 slot);
     float BisRankMultiplier(ItemTemplate const* proto);
+    uint8 BisReferencePhase(uint8 entryPhase) const;
 
     bool NotBestArmorType(uint32 item_subclass_armor);
 
@@ -139,6 +147,7 @@ private:
     // Also pins the dataset snapshot, so a reload can't free the subject under us.
     bool bis_source_resolved_ = false;
     BisSource bis_source_;
+    uint32 bis_contest_[2] = {0, 0};
     uint32 replaced_item_set_ = 0;
     bool replaced_slot_ = false;
     // what the replaced item supplies toward each cap, in rating points

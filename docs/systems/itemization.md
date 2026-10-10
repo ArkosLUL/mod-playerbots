@@ -488,10 +488,20 @@ the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
 - `kRankScale = {1.0, 0.8, 0.6}` for ranks 1-3. Ranks 4-6 are filler alternates and get no score
   change (they still get the gate bypass). Flat-ish on purpose: ranks 1-3 of a slot are
   near-equivalent picks, and against `EquipUpgradeThreshold` (1.07) a 2.5% nudge is invisible.
-- `phaseScale = 1 - Bis.PhaseDecay * (cap.phase - entryPhase)`, floored at 0. Without it a leftover
+- `phaseScale = 1 - Bis.PhaseDecay * (reference - entryPhase)`, floored at 0. Without it a leftover
   pre-raid rank-1 piece is worth exactly as much as the current tier's rank-1, the two bonuses
   cancel, and the equipped lower-ilvl piece keeps the slot on `ItemSet.BonusWeight` (x1.15) times
   `EquipUpgradeThreshold` (x1.07) alone — a 23% raw-stat wall.
+- `reference` in a slot comparison (`SetBisContest`, set by `QueryItemUsageForEquip`) is the later
+  phase of the dropped and the equipped item's best listing; ranks 4-6 count, unlisted is 0. It
+  used to be the bot's progression phase, which zeroed 91% of rank 1-3 Ulduar-level list entries
+  for a tier-15 group still gearing in Ulduar. Without a contest it is the source's phase; `calc`
+  contests the item with itself, so it prints the undecayed bonus.
+- The reference depends on the pair, so scores are not one total order per bot. A three-item cycle
+  needs an unlisted item 23-25% above a later-phase rank-3 in raw score with an earlier-phase rank-1
+  within 7.5% of that rank-3; not guarded.
+- `EquipAction` scores without the bonus: for rings, trinkets (both slots full) and dual-wield
+  weapons it can refuse an item `QueryItemUsageForEquip` wanted on the bonus alone. Known gap.
 
 **`EquipUpgradeThreshold` is 1.07, not upstream's 1.1.** Upstream's removal of the ilvl × quality
 multiplier (#2790) acted like a ~5% stiffer threshold per item-level step. Measured on the WotLK lists
@@ -505,7 +515,7 @@ with the sim weights (stat lines only, no procs or set bonuses), 1.1 → 1.07:
 
 `Bis.ScoreBonus` and `PhaseDecay` needed no change. Leveling bots were not measured.
 
-`PhaseDecay` defaults to 1.0, so only the bot's current phase carries any bonus. One global value
+`PhaseDecay` defaults to 1.0, so of two compared items only the later-listed carries a bonus. One global value
 covers all three expansions even though Vanilla's `P1..P6` sit closer together in ilvl than WotLK's
 tiers; split it per expansion only with evidence that Vanilla bots cling to old gear.
 
@@ -533,9 +543,15 @@ refused or failed load keeps the snapshot already loaded; the version poll retri
 version.
 
 The subject is read at its own **effective phase** — its latest phase at or below the bot's
-progression cap that actually has a block, not the bot's raw cap — and
+progression cap that actually has a block, not the bot's raw cap — and outside a slot comparison
 `StatsWeightCalculator::BisRankMultiplier` decays from that same phase. Decaying from the bot's
 phase instead would flatten every item on a subject lagging the bot's own progression to 0.
+
+**Wire format.** `BisWire.h` must accept exactly what wowsim's `bisdata_wire.go` writes (format
+text: mod-bis-tooltip's README, "Block payload"), so a format change there lands in `BisWire.h` in
+the same go. One undecodable block refuses the whole dataset and every bot silently drops to the
+ranked lists while the addon keeps showing the dataset; the log line `Sim BiS dataset not loaded`
+and `.playerbots bis status` show it. Per-rank deltas and off-hand pairings are decoded but unused.
 
 **Exact vs palette.** The equipped item being the block's rank-1 pick for its slot ("exact") is
 what unlocks the sim's gems and reforge on that item. Any item in the slot gets the slot's sim

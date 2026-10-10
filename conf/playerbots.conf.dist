@@ -495,10 +495,12 @@ AiPlayerbot.Bis.GateBypass = 1
 AiPlayerbot.Bis.ScoreBonus = 0.25
 
 # Share of the bonus above an item loses for every content phase its best listing sits behind the
-# bot's own progression phase. Without it a leftover rank-1 piece from an old tier is worth as much
-# as the current tier's rank-1, the two bonuses cancel, and the equipped piece keeps the slot on the
-# set bonus and the upgrade threshold alone.
-# Default: 1.0 (only the bot's current phase counts; 0.5 halves per phase, 0 disables the decay)
+# item it is compared with (the dropped and the equipped item, whichever is listed later). Without
+# it a leftover rank-1 piece from an old tier is worth as much as the current tier's rank-1, the two
+# bonuses cancel, and the equipped piece keeps the slot on the set bonus and the upgrade threshold
+# alone. An item listed for an older tier keeps its full bonus against gear of that tier and against
+# unlisted gear, so bots still gearing in an older raid follow the lists there.
+# Default: 1.0 (only the later-listed item keeps a bonus; 0.5 halves per phase, 0 disables the decay)
 AiPlayerbot.Bis.PhaseDecay = 1.0
 
 # Sim BiS dataset: the BisTooltipAC export (world tables bistooltip_dataset, bistooltip_subject and
