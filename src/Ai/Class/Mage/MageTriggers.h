@@ -117,10 +117,13 @@ public:
 
 // The conserve rotation dumps a stack early, at 3 Arcane Blasts instead of 4, because the 4th cast
 // costs 175 % extra mana per stack and Missile Barrage only procs 40 % of the time.
+constexpr uint8 ARCANE_BLAST_CONSERVE_STACKS = 3;
+
 class ArcaneBlastConserveStackTrigger : public HasAuraStackTrigger
 {
 public:
-    ArcaneBlastConserveStackTrigger(PlayerbotAI* botAI) : HasAuraStackTrigger(botAI, "arcane blast", 3, 1) {}
+    ArcaneBlastConserveStackTrigger(PlayerbotAI* botAI)
+        : HasAuraStackTrigger(botAI, "arcane blast", ARCANE_BLAST_CONSERVE_STACKS, 1) {}
 };
 
 class ArcaneBlastConserveStackAndMediumManaTrigger : public TwoTriggers
@@ -128,6 +131,15 @@ class ArcaneBlastConserveStackAndMediumManaTrigger : public TwoTriggers
 public:
     ArcaneBlastConserveStackAndMediumManaTrigger(PlayerbotAI* botAI)
         : TwoTriggers(botAI, "arcane blast conserve stack", "medium mana") {}
+};
+
+// Arcane refills at the conserve threshold rather than the shared 15 % floor, so it doesn't stay
+// in the weaker conserve rotation while Evocation is ready.
+class ArcaneEvocationTrigger : public Trigger
+{
+public:
+    ArcaneEvocationTrigger(PlayerbotAI* botAI) : Trigger(botAI, "arcane evocation") {}
+    bool IsActive() override;
 };
 
 class CombustionTrigger : public BoostTrigger
@@ -177,6 +189,7 @@ class PresenceOfMindTrigger : public BoostTrigger
 {
 public:
     PresenceOfMindTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "presence of mind") {}
+    bool IsActive() override;
 };
 
 // CC, Interrupt, and Dispel Triggers

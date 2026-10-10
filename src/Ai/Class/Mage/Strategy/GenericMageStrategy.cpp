@@ -140,7 +140,6 @@ void GenericMageStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     RangedCombatStrategy::InitTriggers(triggers);
 
     // Threat Triggers
-    triggers.push_back(new TriggerNode("high threat", { NextAction("mirror image", 60.0f) }));
     triggers.push_back(new TriggerNode("medium threat", { NextAction("invisibility", 30.0f) }));
 
     // Defensive Triggers
@@ -188,6 +187,8 @@ void MageBoostStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     if (tab == MAGE_TAB_ARCANE)
     {
+        // Has to go first: Presence of Mind can't be cast while Arcane Power is running.
+        triggers.push_back(new TriggerNode("presence of mind", { NextAction("presence of mind", ACTION_HIGH + 9.5f) }));
         triggers.push_back(new TriggerNode("arcane power", { NextAction("arcane power", 29.0f) }));
         triggers.push_back(new TriggerNode("icy veins", { NextAction("icy veins", 28.5f) }));
         triggers.push_back(new TriggerNode("mirror image", { NextAction("mirror image", 28.0f) }));

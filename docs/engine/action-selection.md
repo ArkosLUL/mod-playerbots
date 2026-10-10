@@ -179,8 +179,10 @@ front replaces the whole chain for the common case. Encounter rules enforce this
 - There is no cast-while-moving model and no spell queue: any cast-time spell is refused outright
   while moving (see [pitfalls.md](pitfalls.md)), and casts are never clipped — the AI yields while
   `SPELL_STATE_PREPARING`. Deliberate clipping needs an explicit `cancel channel` node.
-- `CastTimeStrategy` multiplies relevance by 0.1 when the cast would outlast the target. That is what
-  makes the execute-swap to an instant work with no explicit node.
+- `CastTimeStrategy` multiplies relevance by 0.1 when the cast would outlast the target, but
+  multipliers run **after** the pop (`Engine.cpp:245-269`): the popped action still executes at any
+  relevance above 0, so this reorders nothing and there is **no execute-swap to an instant**. Only
+  `0.0f` changes what is cast.
 - `HasAura(..., maxStack = false, maxAuraAmount = -1)` is a **presence** check, not a stack check.
 - `CastBuffSpellAction` resolves the highest known rank by parsing the `Rank N` subtext, so spell ids
   never need hardcoding.

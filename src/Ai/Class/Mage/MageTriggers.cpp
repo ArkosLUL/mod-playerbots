@@ -13,6 +13,17 @@
 #include "SpellAuraEffects.h"
 #include "Value.h"
 
+namespace
+{
+constexpr uint32 SPELL_ARCANE_POWER = 12042;
+constexpr uint32 SPELL_PRESENCE_OF_MIND = 12043;
+constexpr uint32 SPELL_ICY_VEINS = 12472;
+constexpr uint32 SPELL_BLOODLUST = 2825;
+constexpr uint32 SPELL_HEROISM = 32182;
+constexpr uint32 SPELL_ARCANE_BLAST_STACK = 36032;
+constexpr float ARCANE_EVOCATION_MIN_FIGHT_SECONDS = 20.0f;
+}
+
 bool NoManaGemTrigger::IsActive()
 {
     static const std::vector<uint32> gemIds = {
@@ -98,6 +109,43 @@ bool DeepFreezeCooldownTrigger::IsActive()
     constexpr uint32 SPELL_DEEP_FREEZE = 44572;
     return !bot->HasSpell(SPELL_DEEP_FREEZE) ||
            SpellCooldownTrigger::IsActive();
+}
+
+bool PresenceOfMindTrigger::IsActive()
+{
+    // Arcane Power stays locked while Presence of Mind is up, and only a cast-time spell spends it.
+    // So it only opens an Arcane Power that's ready, and never without Arcane Blast to spend it on.
+    if (bot->HasSpellCooldown(SPELL_ARCANE_POWER) || !botAI->HasSpell("arcane blast"))
+        return false;
+
+    return BoostTrigger::IsActive();
+}
+
+bool ArcaneEvocationTrigger::IsActive()
+{
+    if (!AI_VALUE2(bool, "has mana", "self target") ||
+        AI_VALUE2(uint8, "mana", "self target") >= sPlayerbotAIConfig.mediumMana)
+        return false;
+
+    uint32 spellId = AI_VALUE2(uint32, "spell id", "evocation");
+    if (!spellId || bot->HasSpellCooldown(spellId))
+        return false;
+
+    // not in the middle of a burst, the channel would eat most of it
+    if (bot->HasAura(SPELL_PRESENCE_OF_MIND) || bot->HasAura(SPELL_ARCANE_POWER) || bot->HasAura(SPELL_ICY_VEINS) ||
+        bot->HasAura(SPELL_BLOODLUST) || bot->HasAura(SPELL_HEROISM))
+        return false;
+
+    // a held stack goes into Arcane Missiles first (the conserve node), the channel would let it expire
+    Aura const* stack = bot->GetAura(SPELL_ARCANE_BLAST_STACK);
+    if (stack && stack->GetStackAmount() >= ARCANE_BLAST_CONSERVE_STACKS)
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive())
+        return false;
+
+    return target->GetHealth() / AI_VALUE(float, "estimated group dps") >= ARCANE_EVOCATION_MIN_FIGHT_SECONDS;
 }
 
 const std::unordered_set<uint32> FlamestrikeNearbyTrigger::FLAMESTRIKE_SPELL_IDS = {

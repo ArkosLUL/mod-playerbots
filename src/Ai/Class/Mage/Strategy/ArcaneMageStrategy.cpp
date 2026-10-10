@@ -72,4 +72,14 @@ void ArcaneMageStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+
+    // Above the burst cooldowns (29.x), so the bot refills before it burns instead of running dry in them.
+    triggers.push_back(
+        new TriggerNode(
+            "arcane evocation",
+            {
+                NextAction("evocation", ACTION_HIGH + 9.8f)
+            }
+        )
+    );
 }
