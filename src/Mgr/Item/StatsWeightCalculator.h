@@ -78,7 +78,7 @@ public:
     void SetExcludeResilience(bool exclude) { exclude_resilience_ = exclude; }
     // Off by default on purpose. CalculateItem is the single scoring entry point, so leaving this on
     // would also steer bot generation (InitEquipment, autogear) and not just the loot/equip decision
-    // it was calibrated for. QueryItemUsageForEquip turns it on.
+    // it was calibrated for. QueryItemUsageForEquip and EquipAction turn it on.
     void SetBisBonus(bool apply) { enable_bis_bonus_ = apply; }
     // The two items one slot comparison is between, 0 and 0 for none: the BiS phase decay is then
     // measured between them. Has to be the same for both scores, or they aren't comparable.

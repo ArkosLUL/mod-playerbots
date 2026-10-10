@@ -180,6 +180,8 @@ void EquipAction::EquipItem(Item* item)
             StatsWeightCalculator calculator(bot);
             calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
             calculator.SetOverflowPenalty(false);
+            // same bonus ItemUsageValue scored with, or an item it wanted on the bonus gets refused here
+            calculator.SetBisBonus(true);
 
             auto isValidTG = [canTitanGrip](ItemTemplate const* proto)
             {
@@ -216,6 +218,7 @@ void EquipAction::EquipItem(Item* item)
             auto gainOver = [&](Item* main, Item* off, Item* leaving)
             {
                 calculator.SetReplacedItem(leaving);
+                calculator.SetBisContest(itemId, leaving ? leaving->GetTemplate()->ItemId : 0);
                 float const current =
                     score(mainHandItem, EQUIPMENT_SLOT_MAINHAND) + score(offHandItem, EQUIPMENT_SLOT_OFFHAND);
                 return score(main, EQUIPMENT_SLOT_MAINHAND) + score(off, EQUIPMENT_SLOT_OFFHAND) - current;
@@ -316,6 +319,7 @@ void EquipAction::EquipItem(Item* item)
                     StatsWeightCalculator calc(bot);
                     calc.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
                     calc.SetOverflowPenalty(false);
+                    calc.SetBisBonus(true);
 
                     int32 newItemRandomProp = item->GetItemRandomPropertyId();
                     int32 firstRandomProp = equippedItems[0]->GetItemRandomPropertyId();
@@ -324,11 +328,13 @@ void EquipAction::EquipItem(Item* item)
                     // Score the candidate once per slot, each time with the piece it would displace
                     // treated as removed, so the incumbent's set bonus and capped ratings count for it only.
                     calc.SetReplacedItem(equippedItems[0]);
+                    calc.SetBisContest(itemId, equippedItems[0]->GetTemplate()->ItemId);
                     float newItemScoreVsFirst = calc.CalculateItem(itemId, newItemRandomProp, dstSlot);
                     float firstItemScore = calc.CalculateItem(equippedItems[0]->GetTemplate()->ItemId, firstRandomProp,
                                                               dstSlot);
 
                     calc.SetReplacedItem(equippedItems[1]);
+                    calc.SetBisContest(itemId, equippedItems[1]->GetTemplate()->ItemId);
                     float newItemScoreVsSecond = calc.CalculateItem(itemId, newItemRandomProp, dstSlot + 1);
                     float secondItemScore = calc.CalculateItem(equippedItems[1]->GetTemplate()->ItemId, secondRandomProp,
                                                                dstSlot + 1);

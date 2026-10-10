@@ -479,8 +479,8 @@ half-measure: correct-for-era enchants on wrong-for-era items is expected, not a
 ## Ranked BiS lists
 
 `StatsWeightCalculator::BisRankMultiplier` is the last multiplier in `CalculateItem`, and the only
-one that is off by default — it needs `SetBisBonus(true)`, which only `QueryItemUsageForEquip` and
-the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
+one that is off by default — it needs `SetBisBonus(true)`, which only `QueryItemUsageForEquip`, `EquipAction`
+and the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
 `RandomItemMgr::CalculateItemWeight` all score without it.
 
     1 + Bis.ScoreBonus * kRankScale[rank - 1] * phaseScale
@@ -500,8 +500,9 @@ the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
 - The reference depends on the pair, so scores are not one total order per bot. A three-item cycle
   needs an unlisted item 23-25% above a later-phase rank-3 in raw score with an earlier-phase rank-1
   within 7.5% of that rank-3; not guarded.
-- `EquipAction` scores without the bonus: for rings, trinkets (both slots full) and dual-wield
-  weapons it can refuse an item `QueryItemUsageForEquip` wanted on the bonus alone. Known gap.
+- `EquipAction`'s own slot comparisons (rings and trinkets with both slots full, dual-wield weapon
+  layouts) set the bonus and contest the new item against the one leaving, matching
+  `QueryItemUsageForEquip` slot for slot. Without it they refuse an item wanted on the bonus alone.
 
 **`EquipUpgradeThreshold` is 1.07, not upstream's 1.1.** Upstream's removal of the ilvl × quality
 multiplier (#2790) acted like a ~5% stiffer threshold per item-level step. Measured on the WotLK lists
