@@ -179,6 +179,16 @@ uint8 BisDatasetSubject::RankFor(uint32 itemId, uint8 cap, uint8* outPhase) cons
     return best;
 }
 
+int8 BisDatasetSubject::RankOrder(uint32 itemA, uint32 itemB, uint8 cap) const
+{
+    auto const a = ranks.find(itemA);
+    auto const b = ranks.find(itemB);
+    if (a == ranks.end() || b == ranks.end())
+        return 0;
+
+    return BisRankOrder::Compare(a->second, b->second, cap);
+}
+
 std::shared_ptr<BisDatasetSnapshot const> BisDatasetMgr::Get() const
 {
     std::lock_guard<std::mutex> guard(_snapshotMutex);

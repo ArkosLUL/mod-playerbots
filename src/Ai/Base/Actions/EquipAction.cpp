@@ -340,9 +340,20 @@ void EquipAction::EquipItem(Item* item)
                                                                dstSlot + 1);
                     calc.SetReplacedItem(nullptr);
 
+                    // has to agree with ItemUsageValue: the sim rank when it has a say, scores otherwise
+                    auto beats = [&calc](ItemTemplate const* a, ItemTemplate const* b, int32 slot, float scoreA,
+                                         float scoreB)
+                    {
+                        int8 const rankOrder = calc.CompareBisRank(a, b, slot);
+                        return rankOrder ? rankOrder > 0 : scoreA > scoreB;
+                    };
+                    ItemTemplate const* firstProto = equippedItems[0]->GetTemplate();
+                    ItemTemplate const* secondProto = equippedItems[1]->GetTemplate();
+
                     // Determine which slot (if any) should be replaced
-                    bool betterThanFirst = newItemScoreVsFirst > firstItemScore;
-                    bool betterThanSecond = newItemScoreVsSecond > secondItemScore;
+                    bool betterThanFirst = beats(itemProto, firstProto, dstSlot, newItemScoreVsFirst, firstItemScore);
+                    bool betterThanSecond =
+                        beats(itemProto, secondProto, dstSlot + 1, newItemScoreVsSecond, secondItemScore);
 
                     // Early return if new item is not better than either equipped item
                     if (!betterThanFirst && !betterThanSecond)
@@ -351,7 +362,7 @@ void EquipAction::EquipItem(Item* item)
                     if (betterThanFirst && betterThanSecond)
                     {
                         // New item is better than both - replace the worse of the two equipped items
-                        if (firstItemScore > secondItemScore)
+                        if (beats(firstProto, secondProto, dstSlot, firstItemScore, secondItemScore))
                             dstSlot++; // Replace second slot (worse)
                         // else: keep dstSlot as-is (replace first slot)
                     }

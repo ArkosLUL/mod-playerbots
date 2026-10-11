@@ -563,6 +563,23 @@ strictly per hand (Titan's Grip is two independent matches; a 2H with no sim off
 it to the ordinary picker). Rings try the same finger first, then cross; finger fallback picks the
 sim's ring whose slot no exact match has claimed. Trinkets take nothing from the block.
 
+**Rank order** (`AiPlayerbot.BisDataset.RankOrder`). When the subject lists both the worn and the
+new item, the better-ranked one wins in both directions, whatever the scores say
+(`StatsWeightCalculator::CompareBisRank`, called by `QueryItemUsageForEquip` and `EquipAction`'s
+ring/trinket block, which must agree). The latest phase at or below the source's that lists
+**both** decides; a tie there or no common phase leaves it to the scores. Not the latest phase per
+item: a bot capped at P3 in P2 gear would drop a P2 rank 1 for anything on the P3 list.
+
+The scores also keep deciding for:
+
+- set pieces, either item: the rank assumes the sim's other pieces of that set;
+- main and off hand: dual wield is scored as a layout, and the sim ranks a main hand with its off
+  hand;
+- tanks: part-geared, following ranks slot by slot can lose the defense cap.
+
+Not guarded: a three-item cycle when the better-ranked item scores over 14.5% below the
+worse-ranked one and the bot also holds an unlisted item scoring between them.
+
 **Pin alignment**, after `ApplyPrismaticSocket`, comparing the sim's gem count `n` against the
 item's template sockets `T` (meta included) and its prismatic socket `P` (0 or 1):
 
@@ -646,6 +663,7 @@ Defaults below are the shipped values in `conf/playerbots.conf.dist`.
 | `AiPlayerbot.BisDataset.Enable` | 1 | Read `bistooltip_*` and prefer it per bot; no-op without the tables or with a placeholder export |
 | `AiPlayerbot.BisDataset.Enhancements` | 1 | Dataset enchants, pinned gems, palette; 0 leaves gems and enchants to the normal picker |
 | `AiPlayerbot.BisDataset.Reforges` | 1 | Sim reforge on exact rank-1 items; no-op without mod-reforging or `Reforging.Enable = 0` |
+| `AiPlayerbot.BisDataset.RankOrder` | 1 | Sim rank decides between two items the subject lists; see "Rank order" for what stays on scores |
 | `AiPlayerbot.BisDataset.PollSeconds` | 300 | World-thread version check; 0 = startup and the command only |
 | `AiPlayerbot.SimWeights.Enable` | 1 | Level-80 DPS weights from `playerbots_sim_weights`; no-op without the table |
 

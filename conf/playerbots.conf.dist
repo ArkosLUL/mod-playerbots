@@ -524,6 +524,13 @@ AiPlayerbot.BisDataset.Enhancements = 1
 # Default: 1 (enabled)
 AiPlayerbot.BisDataset.Reforges = 1
 
+# Let the sim's rank decide between an equipped item and a new one when the bot's subject lists
+# both: the better-ranked one is kept or taken, whatever the stat scores say. Set pieces, the two
+# weapon hands and tanks stay on the scores, because a rank there only holds with the rest of the
+# sim's set equipped.
+# Default: 1 (enabled)
+AiPlayerbot.BisDataset.RankOrder = 1
+
 # Seconds between checks for a new dataset version, on the world thread. 0 loads at startup and on
 # .playerbots bis reload only.
 # Default: 300

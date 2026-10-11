@@ -6,6 +6,7 @@
 
 #include "StatsWeightCalculator.h"
 #include "AiFactory.h"
+#include "BisDatasetMgr.h"
 #include "BisListMgr.h"
 #include "DBCStores.h"
 #include "ItemEnchantmentMgr.h"
@@ -270,16 +271,43 @@ float StatsWeightCalculator::CalculateItem(uint32 itemId, int32 randomPropertyId
     return weight_;
 }
 
+void StatsWeightCalculator::ResolveBisSource()
+{
+    if (bis_source_resolved_)
+        return;
+
+    bis_source_resolved_ = true;
+    bis_source_ = sBisListMgr->ResolveSource(player_, BisListMgr::ProgressForBot(player_));
+}
+
+int8 StatsWeightCalculator::CompareBisRank(ItemTemplate const* a, ItemTemplate const* b, int32 slot)
+{
+    // The sim ranks each slot with the rest of its own set worn, so a part-geared tank following it
+    // slot by slot can lose the defense cap.
+    if (!sPlayerbotAIConfig.bisDatasetRankOrder || is_tank_)
+        return 0;
+
+    // dual wield is scored as a whole layout, and the sim ranks a main hand with its off hand
+    if (slot == EQUIPMENT_SLOT_MAINHAND || slot == EQUIPMENT_SLOT_OFFHAND)
+        return 0;
+
+    // a set piece's rank counts on the sim's other pieces of that set
+    if (a->ItemSet || b->ItemSet)
+        return 0;
+
+    ResolveBisSource();
+    if (bis_source_.kind != BisSource::Kind::Dataset || !bis_source_.subject)
+        return 0;
+
+    return bis_source_.subject->RankOrder(a->ItemId, b->ItemId, bis_source_.progress.phase);
+}
+
 float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
 {
     if (sPlayerbotAIConfig.bisScoreBonus <= 0.0f)
         return 1.0f;
 
-    if (!bis_source_resolved_)
-    {
-        bis_source_resolved_ = true;
-        bis_source_ = sBisListMgr->ResolveSource(player_, BisListMgr::ProgressForBot(player_));
-    }
+    ResolveBisSource();
 
     if (bis_source_.kind == BisSource::Kind::None)
         return 1.0f;

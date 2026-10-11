@@ -793,6 +793,7 @@ bool PlayerbotAIConfig::Initialize()
     bisDatasetEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.BisDataset.Enable", true);
     bisDatasetEnhancements = sConfigMgr->GetOption<bool>("AiPlayerbot.BisDataset.Enhancements", true);
     bisDatasetReforges = sConfigMgr->GetOption<bool>("AiPlayerbot.BisDataset.Reforges", true);
+    bisDatasetRankOrder = sConfigMgr->GetOption<bool>("AiPlayerbot.BisDataset.RankOrder", true);
     bisDatasetPollSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.BisDataset.PollSeconds", 300);
     simWeightsEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.SimWeights.Enable", true);
     twoRoundsGearInit = sConfigMgr->GetOption<bool>("AiPlayerbot.TwoRoundsGearInit", false);

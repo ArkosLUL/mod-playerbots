@@ -8,6 +8,7 @@
 #define PLAYERBOTS_BISDATASETMGR_H
 
 #include "BisListMgr.h"
+#include "BisRankOrder.h"
 #include "BisWire.h"
 #include "Define.h"
 #include <array>
@@ -55,6 +56,9 @@ struct BisDatasetSubject
 
     // Best rank at or below cap and the latest phase holding it, like BisListMgr::GetBisRankFor.
     uint8 RankFor(uint32 itemId, uint8 cap, uint8* outPhase = nullptr) const;
+
+    // BisRankOrder::Compare on the two items' listings, 0 when either is unlisted.
+    int8 RankOrder(uint32 itemA, uint32 itemB, uint8 cap) const;
 };
 
 // An immutable load of the dataset. Readers keep the shared_ptr while they use any subject in it,

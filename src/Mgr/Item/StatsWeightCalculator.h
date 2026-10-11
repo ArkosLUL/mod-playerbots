@@ -87,6 +87,9 @@ public:
         bis_contest_[0] = itemA;
         bis_contest_[1] = itemB;
     }
+    // Which of two items the bot's sim BiS subject ranks higher for a slot: > 0 a, < 0 b. On 0 it
+    // has no say and the scores decide: either item unlisted, a set piece, a weapon hand, or a tank.
+    int8 CompareBisRank(ItemTemplate const* a, ItemTemplate const* b, int32 slot);
 
     // Where the weights come from, for calc: the sim row and item level, or why they're hand-written.
     std::string DescribeWeights();
@@ -113,6 +116,7 @@ public:
 
     void CalculateItemTypePenalty(ItemTemplate const* proto);
     float ApplyPreferredSpecWeapons(ItemTemplate const* proto, int32 slot);
+    void ResolveBisSource();
     float BisRankMultiplier(ItemTemplate const* proto);
     uint8 BisReferencePhase(uint8 entryPhase) const;
 

@@ -1426,11 +1426,15 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
                                                   contestedSlot);
         calculator.SetReplacedItem(nullptr);
         calculator.SetBisContest(0, 0);
+        // the sim ranked both for this bot: its order stands, whatever the stat scores say
+        int8 const rankOrder = calculator.CompareBisRank(itemProto, oldItemProto, contestedSlot);
 
         if (oldItem)
         {
             // uint32 oldStatWeight = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
-            if (slotItemScore || oldScore)
+            if (rankOrder)
+                shouldEquipInSlot = rankOrder > 0;
+            else if (slotItemScore || oldScore)
                 shouldEquipInSlot = slotItemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
         }
 
@@ -1456,7 +1460,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
         // Compare items based on item level, quality or itemId.
         bool isBetter = false;
-        if (slotItemScore > oldScore)
+        if (rankOrder ? rankOrder > 0 : slotItemScore > oldScore)
             isBetter = true;
         // else if (newItemPower == oldScore && itemProto->Quality > oldItemProto->Quality)
         //     isBetter = true;

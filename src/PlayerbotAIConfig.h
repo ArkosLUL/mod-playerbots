@@ -438,6 +438,7 @@ public:
     bool bisDatasetEnable;         // Prefer the sim BiS dataset (bistooltip_* tables) over the lists per bot
     bool bisDatasetEnhancements;   // Dataset enchants, pinned gems and gem palette; off uses the normal picker
     bool bisDatasetReforges;       // Sim reforge on exact rank-1 items, needs mod-reforging
+    bool bisDatasetRankOrder;      // Sim rank decides between two items the bot's subject both lists
     uint32 bisDatasetPollSeconds;  // World-thread dataset version check interval; 0 = startup and command only
     bool simWeightsEnable;         // Level-80 DPS stat weights from playerbots_sim_weights instead of the hand-written ones
     bool twoRoundsGearInit;
