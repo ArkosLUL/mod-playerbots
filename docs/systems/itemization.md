@@ -554,11 +554,25 @@ the same go. One undecodable block refuses the whole dataset and every bot silen
 ranked lists while the addon keeps showing the dataset; the log line `Sim BiS dataset not loaded`
 and `.playerbots bis status` show it. Per-rank deltas and off-hand pairings are decoded but unused.
 
-**Exact vs palette.** The equipped item being the block's rank-1 pick for its slot ("exact") is
-what unlocks the sim's gems and reforge on that item. Any item in the slot gets the slot's sim
-enchant when it fits (`IsFitToSpellRequirements` etc.). Every socket without a pin picks from the
-**palette** first — the block's gem ids across all slots, filtered through the same eligibility
-check as the gem cache — and from the full pool only when no palette gem fits. Weapons match
+**Exact, mirror, palette.** An item is "exact" when it is the rank-1 pick for its slot in the
+effective-phase block or, failing that, in the latest earlier phase's block; that block's gems,
+enchant and reforge then apply to it, so gear kept from an earlier tier stays gemmed as the sim
+gemmed it there. Any other item in the slot gets the effective-phase block's sim enchant when it
+fits (`IsFitToSpellRequirements` etc.).
+
+Every socket without a pin picks, in order:
+
+1. the **mirror** — the gem the effective-phase block most often puts in a socket of that color,
+   read off its rank-1 items' templates with the pin alignment below (an added socket is its own
+   color). Unique-equipped and limit-category gems rank first, or Dragon's Eyes and the Tear never
+   win on count. A gem the bot scores at 0 (all its stats past the bot's caps) is skipped;
+2. the **palette** — the block's gem ids across all slots, filtered through the same eligibility
+   check as the gem cache, best by the bot's score;
+3. the full pool.
+
+The bot's score cannot replace the mirror: hand-written tank weights put stamina 15× agility, so a
+palette-only prot paladin filled 13 of 15 sockets with the one stamina gem of an agility-first
+block. Meta-activation steering still picks palette, then pool. Weapons match
 strictly per hand (Titan's Grip is two independent matches; a 2H with no sim off-hand slot leaves
 it to the ordinary picker). Rings try the same finger first, then cross; finger fallback picks the
 sim's ring whose slot no exact match has claimed. Trinkets take nothing from the block.
@@ -630,7 +644,7 @@ threads read the map; the `shared_mutex` the patch adds around it makes that saf
 toggling it leaves already-reforged bots' stats drifted from their DB row until they relog.
 
 **Deliberate `BestGemScore` exception, the second one** (the tank cap-priority flag above is the
-first): the palette narrows *placement* — which gem a socket gets — never *valuation*.
+first): the mirror and the palette narrow *placement* — which gem a socket gets — never *valuation*.
 `BestGemScore` never sees it, so socket scoring stays independent of which subject a bot resolved
 to.
 
@@ -638,7 +652,9 @@ to.
 labels a raider "Blood tank" or "Feral tank" only when the raid's main-tank flag is set, so an
 unflagged tanking DK or bear misses its roster subject and falls to a tank spec subject or the
 lists. Pinned gems follow the sim whatever the bot's caps; only unpinned sockets are scored
-against them.
+against them. A hand-written weight of 0 on a mirrored gem's stats reads as "past the caps" and
+silently drops that gem to the palette. A reforge on an item that is exact in no phase is never
+touched, so one set while it was exact stays.
 
 ## Config
 

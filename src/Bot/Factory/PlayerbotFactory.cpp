@@ -12,6 +12,7 @@
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
 #include "BisDatasetMgr.h"
+#include "BisGemMirror.h"
 #include "BisListMgr.h"
 #include "BisReforge.h"
 #include "BisWire.h"
@@ -159,7 +160,7 @@ uint32 GetRuneforgeEnchantId(Player* bot, uint8 slot, Item* item)
     return 0;
 }
 
-// exact: the equipped item is the sim's rank 1, so its gems and reforge apply too
+// exact: the equipped item is rank 1 in the block sim belongs to, so its gems and reforge apply too
 struct BisSlotPlan
 {
     BisWire::Slot const* sim = nullptr;
@@ -202,40 +203,66 @@ BisGearPlan PlanBisGear(Player* bot)
     auto isRankOne = [](BisWire::Slot const* sim, uint32 entry)
     { return sim && entry && !sim->items.empty() && sim->items.front() == entry; };
 
-    // Weapons match per hand, so Titan's Grip is two independent matches and a 2H sim leaves the
-    // off hand alone. Trinkets carry nothing to apply.
-    for (BisWire::Slot const& sim : plan.block->slots)
+    uint8 const fingers[2] = {EQUIPMENT_SLOT_FINGER1, EQUIPMENT_SLOT_FINGER2};
+    uint32 const entries[2] = {entryAt(fingers[0]), entryAt(fingers[1])};
+    bool matched[2] = {false, false};
+    // the current block's sim rings an exact match has claimed
+    bool currentSimTaken[2] = {false, false};
+
+    // Latest phase first: an item kept from an earlier tier is still exact where the sim wore it.
+    for (uint8 phase = plan.source.progress.phase; phase > 0; --phase)
     {
-        uint8 const slot = BisWire::EQUIP_SLOT[sim.simSlot];
-        if (slot == EQUIPMENT_SLOT_FINGER1 || slot == EQUIPMENT_SLOT_FINGER2 || slot == EQUIPMENT_SLOT_TRINKET1 ||
-            slot == EQUIPMENT_SLOT_TRINKET2)
+        BisWire::Block const* block = plan.source.subject->BlockFor(phase);
+        if (!block)
             continue;
 
-        plan.slots[slot] = {&sim, isRankOne(&sim, entryAt(slot))};
-    }
+        bool const current = block == plan.block;
 
-    // Rings can sit in either finger: same finger first, then crossed. A ring that matches neither
-    // still takes whichever sim ring is left, for its enchant.
-    uint8 const fingers[2] = {EQUIPMENT_SLOT_FINGER1, EQUIPMENT_SLOT_FINGER2};
-    // sim slots 10 and 11 are the two fingers
-    BisWire::Slot const* sims[2] = {plan.block->Find(10), plan.block->Find(11)};
-    uint32 const entries[2] = {entryAt(fingers[0]), entryAt(fingers[1])};
-    bool simTaken[2] = {false, false};
-    bool matched[2] = {false, false};
-
-    for (uint8 pass = 0; pass < 2; ++pass)
-    {
-        for (uint8 i = 0; i < 2; ++i)
+        // Weapons match per hand, so Titan's Grip is two independent matches and a 2H sim leaves the
+        // off hand alone. Trinkets carry nothing to apply.
+        for (BisWire::Slot const& sim : block->slots)
         {
-            uint8 const j = pass ? 1 - i : i;
-            if (matched[i] || simTaken[j] || !isRankOne(sims[j], entries[i]))
+            uint8 const slot = BisWire::EQUIP_SLOT[sim.simSlot];
+            if (slot == EQUIPMENT_SLOT_FINGER1 || slot == EQUIPMENT_SLOT_FINGER2 || slot == EQUIPMENT_SLOT_TRINKET1 ||
+                slot == EQUIPMENT_SLOT_TRINKET2)
                 continue;
 
-            plan.slots[fingers[i]] = {sims[j], true};
-            matched[i] = simTaken[j] = true;
+            if (plan.slots[slot].exact)
+                continue;
+
+            if (isRankOne(&sim, entryAt(slot)))
+                plan.slots[slot] = {&sim, true};
+            else if (current)
+                plan.slots[slot] = {&sim, false};
+        }
+
+        // Rings can sit in either finger: same finger first, then crossed.
+        // sim slots 10 and 11 are the two fingers
+        BisWire::Slot const* sims[2] = {block->Find(10), block->Find(11)};
+        bool simTaken[2] = {false, false};
+        for (uint8 pass = 0; pass < 2; ++pass)
+        {
+            for (uint8 i = 0; i < 2; ++i)
+            {
+                uint8 const j = pass ? 1 - i : i;
+                if (matched[i] || simTaken[j] || !isRankOne(sims[j], entries[i]))
+                    continue;
+
+                plan.slots[fingers[i]] = {sims[j], true};
+                matched[i] = simTaken[j] = true;
+            }
+        }
+
+        if (current)
+        {
+            currentSimTaken[0] = simTaken[0];
+            currentSimTaken[1] = simTaken[1];
         }
     }
 
+    // A ring that matches nowhere still takes whichever of the current block's sim rings is left,
+    // for its enchant.
+    BisWire::Slot const* sims[2] = {plan.block->Find(10), plan.block->Find(11)};
     for (uint8 i = 0; i < 2; ++i)
     {
         if (matched[i] || !entries[i])
@@ -243,11 +270,11 @@ BisGearPlan PlanBisGear(Player* bot)
 
         for (uint8 j : {i, uint8(1 - i)})
         {
-            if (!sims[j] || simTaken[j])
+            if (!sims[j] || currentSimTaken[j])
                 continue;
 
             plan.slots[fingers[i]] = {sims[j], false};
-            simTaken[j] = true;
+            currentSimTaken[j] = true;
             break;
         }
     }
@@ -5736,6 +5763,69 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         return score;
     };
 
+    // What the sim puts in each socket color, read off its own rank 1 items. Scoring the palette
+    // instead fails for tanks, whose weights put stamina far above the agility the sim gems for.
+    BisGemMirror::Tally mirror;
+    if (enhance)
+    {
+        for (BisWire::Slot const& sim : plan.block->slots)
+        {
+            ItemTemplate const* simItem =
+                sim.items.empty() ? nullptr : sObjectMgr->GetItemTemplate(sim.items.front());
+            if (!simItem)
+                continue;
+
+            std::vector<uint8> colors;
+            for (uint8 i = 0; i < MAX_ITEM_PROTO_SOCKETS; ++i)
+            {
+                if (uint8 const color = static_cast<uint8>(simItem->Socket[i].Color))
+                    colors.push_back(color);
+            }
+
+            // a gem past the template sockets sat in an added socket, color 0
+            size_t const aligned = BisGemMirror::AlignedGems(sim.gems.size(), colors.size(), true);
+            auto colorAt = [&](size_t i) -> uint8 { return i < colors.size() ? colors[i] : uint8(0); };
+
+            bool fits = true;
+            for (size_t i = 0; i < aligned && fits; ++i)
+                fits = ((colorAt(i) & SOCKET_COLOR_META) != 0) == (gemColorOf(sim.gems[i]) == SOCKET_COLOR_META);
+
+            if (!fits)
+                continue;
+
+            for (size_t i = 0; i < aligned; ++i)
+            {
+                ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(sim.gems[i]);
+                bool const limited = gemTemplate && (gemTemplate->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) ||
+                                                     gemTemplate->ItemLimitCategory);
+                mirror.Add(colorAt(i), sim.gems[i], limited);
+            }
+        }
+    }
+
+    // The sim's gem for the socket's color. One whose stats are all past the bot's caps scores 0
+    // and is passed over, so these sockets stay cap-aware.
+    auto pickMirrorGem = [&](uint8 socketColor, int32& outEnchantId, uint32& outGemItem, float& outScore) -> bool
+    {
+        for (uint32 gem : mirror.Ranked(socketColor))
+        {
+            uint32 const enchantId = gemEnchantIfUsable(gem);
+            if (!enchantId || !gemBudgetOk(gem, gemsUsedById, gemsUsedByCategory))
+                continue;
+
+            float const score = socketScore(socketColor, gem, enchantId);
+            if (score <= 0.0f)
+                continue;
+
+            outEnchantId = static_cast<int32>(enchantId);
+            outGemItem = gem;
+            outScore = score;
+            return true;
+        }
+
+        return false;
+    };
+
     for (uint8 slot = 0; slot < EQUIPMENT_SLOT_END; ++slot)
     {
         if (slot == EQUIPMENT_SLOT_TABARD || slot == EQUIPMENT_SLOT_BODY)
@@ -5860,13 +5950,7 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         {
             std::vector<uint32> const& gems = simPlan.sim->gems;
             bool const hasPrismatic = itemSockets.size() > templateSockets;
-            size_t pins = 0;
-            if (gems.size() == itemSockets.size())
-                pins = gems.size();
-            else if (!hasPrismatic && gems.size() == templateSockets + 1)
-                pins = templateSockets;
-            else if (hasPrismatic && gems.size() == templateSockets)
-                pins = templateSockets;
+            size_t pins = BisGemMirror::AlignedGems(gems.size(), templateSockets, hasPrismatic);
 
             for (size_t i = 0; i < pins; ++i)
             {
@@ -5965,13 +6049,14 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         int32 enchId;
         uint32 gemItem;
         float score;
-        if (!pickGem(ms.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
+        if (!pickMirrorGem(ms.socketColor, enchId, gemItem, score) &&
+            !pickGem(ms.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
             continue;
 
         queueMeta(ms, enchId, gemItem);
     }
 
-    // Fill colored sockets with the best-stat gem for the class/spec.
+    // Fill colored sockets with the sim's gem for the color, else the best-stat gem for the class/spec.
     for (SocketToGem& s : coloredSockets)
     {
         if (s.pinned)
@@ -5980,7 +6065,8 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         int32 enchId;
         uint32 gemItem;
         float score;
-        if (!pickGem(s.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
+        if (!pickMirrorGem(s.socketColor, enchId, gemItem, score) &&
+            !pickGem(s.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
             continue;
 
         socketGem(s, enchId, gemItem, score);
