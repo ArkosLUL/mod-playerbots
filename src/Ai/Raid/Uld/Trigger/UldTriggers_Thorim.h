@@ -112,6 +112,17 @@ public:
 
 // An arena squad member whose pet has left the room. Pets are under no leash of their own and nothing
 // recalls them, so one that wanders down the corridor opens packs the gauntlet squad has not reached.
+// The elected paladin, until the aura is actually up. Its own buff strategy is held off every competing aura,
+// so nothing takes the slot back once this lands.
+class ThorimFrostAuraTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "thorim frost aura trigger";
+
+    ThorimFrostAuraTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 class ThorimPetLeashTrigger : public Trigger
 {
 public:

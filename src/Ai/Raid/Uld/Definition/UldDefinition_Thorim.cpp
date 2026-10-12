@@ -90,10 +90,13 @@ bool ThorimBalconyWalk(PlayerbotAI* botAI)
     return balconyAdvance.IsActive();
 }
 
+bool ThorimFrostAuraHeld(PlayerbotAI* botAI) { return IsThorimFrostAuraPaladin(botAI->GetBot()); }
+
 void TickThorim(PlayerbotAI* botAI)
 {
     ThorimTickBarrierBail(botAI, botAI->GetBot());
     ThorimTickHumanTankCalls(botAI);
+    ThorimTickFrostAuraPaladin(botAI);
 }
 
 void DefineThorim(EncounterBuilder& e)
@@ -111,6 +114,8 @@ void DefineThorim(EncounterBuilder& e)
     e.Node<ThorimUnbalancingStrikeSwapTrigger, ThorimUnbalancingStrikeSwapAction>(ACTION_RAID + 2);
     e.Node<ThorimTankPickupTrigger, ThorimTankPickupAction>(ACTION_RAID + 2);
     e.Node<ThorimDpsPriorityTrigger, ThorimDpsPriorityAction>(ACTION_RAID);
+
+    e.Node<ThorimFrostAuraTrigger, ThorimFrostAuraAction>(ACTION_RAID);
 
     // Recalls a pet, not the bot, so it competes with nothing and sits at the base rank.
     e.Node<ThorimPetLeashTrigger, ThorimPetLeashAction>(ACTION_RAID);
@@ -180,6 +185,11 @@ void DefineThorim(EncounterBuilder& e)
     e.Block("thorim taunt guard", Role::Any, ThorimTauntWouldSteal, Family::Taunt);
 
     e.Multiplier<BossNatureAspectHoldMultiplier>(Family::Spell, "thorim");
+
+    // The aura slot is exclusive, so the paladin's own buff strategy trades it back on the next GCD.
+    e.Block("thorim frost aura hold", Role::Any, ThorimFrostAuraHeld, 0,
+            {"devotion aura", "retribution aura", "concentration aura", "crusader aura", "sanctity aura",
+             "shadow resistance aura", "fire resistance aura"});
 
     e.Tick(TickThorim);
 }

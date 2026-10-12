@@ -110,13 +110,15 @@ constexpr float ULDUAR_THORIM_BARRIER_BAIL_HEALTH_PCT = 55.0f;
 constexpr float ULDUAR_THORIM_BARRIER_RESUME_HEALTH_PCT = 80.0f;
 constexpr float ULDUAR_THORIM_BARRIER_BAIL_DISTANCE = 14.0f;  // clear of the 9.1 yd melee reach
 
-// Melee reach is 9.1 yd centre to centre (combat reaches 6.25 and 1.5), so r 8 is inside it. Three slots 90
-// degrees apart are 11.3 yd from each other, clear of the 8 yd jump as long as they stay put.
-constexpr float ULDUAR_THORIM_MELEE_RING_RADIUS = 8.0f;
+// Melee reach is 9.08 yd centre to centre (combat reaches 6.25 and 1.5, plus 4/3), so this is about as far
+// out as the ring sits and still lands swings. The radius buys margin the slot gap below cannot: at 8.8 a 60
+// degree gap is 8.8 yd, past the 8 yd jump, and one Blizzard forbids 77 degrees of ring instead of 87.
+constexpr float ULDUAR_THORIM_MELEE_RING_RADIUS = 8.8f;
 constexpr uint8 ULDUAR_THORIM_MELEE_SLOTS = 3;
 
-// Min gap between ring bearings after the cone and Blizzard slides. At r 8, 60 degrees is exactly the 8 yd jump.
-// Can't be wider: a lit cone forbids 105 degrees, and three slots plus the tank anchor need 240 of the 255 left.
+// Min gap between ring bearings after the cone and Blizzard slides. 8.8 yd at the radius above, just past the
+// 8 yd jump. Can't be wider: a lit cone forbids 105 degrees, and three slots plus the tank anchor need 240 of
+// the 255 left.
 constexpr float ULDUAR_THORIM_RING_SLOT_SEPARATION = 1.0472f;  // 60 degrees
 
 // How far a pet may drift off its owner's ring bearing before it's sent back, also the chase's own tolerance.
@@ -344,6 +346,12 @@ struct ThorimEncounterState
 
     RaidObs::ObsGuidSet barrierBailing{"thorim.barrierbail"};
 
+    // The one bot paladin on Frost Resistance Aura, latched so the pick can't move between ticks. Frost is about
+    // half of what this fight deals, and the shared boss-aura node can never pick a bot for it: it answers only
+    // for the first living paladin in the group, so a human in that spot locks every bot out.
+    RaidObs::ObsValue<ObjectGuid> frostAuraPaladin{"thorim.frostaura"};
+    uint32 frostAuraScanMs = 0;
+
     // Which half of the raid each member belongs to, struck once and then left alone. Recomputing it
     // per tick is what let a role predicate flipping mid-fight walk the arena squad into the corridor.
     RaidObs::ObsGuidMap<uint8> squads{"thorim.squad"};
@@ -538,6 +546,14 @@ bool ThorimArenaLeashBreached(PlayerbotAI* botAI, Player* bot);
 
 // Pets outside their squad's bound (the room for the arena squad, the owner for the corridor) and not
 // already walking back. Position only, never hazards: pets have the resistances to eat this fight.
+// Re-elects the paladin holding Frost Resistance Aura. Nobody in normal mode, where Sif never leaves her
+// balcony.
+void ThorimTickFrostAuraPaladin(PlayerbotAI* botAI);
+
+// Whether this bot is that paladin. Drives both the cast and the hold that stops its own buff strategy from
+// trading the aura slot back.
+bool IsThorimFrostAuraPaladin(Player const* bot);
+
 bool ThorimStrayPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out);
 
 // Recall only, never an attack command, so it can't undo a stay or a follow.

@@ -130,6 +130,18 @@ public:
     bool isUseful() override;
 };
 
+// Puts Frost Resistance Aura on the one elected paladin. No ChangeStrategy, for the reason
+// BossNatureResistanceAction records: the added strategy is never taken off again and outlives the raid.
+class ThorimFrostAuraAction : public Action
+{
+public:
+    static constexpr char const* Name = "thorim frost aura action";
+
+    ThorimFrostAuraAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 // Sends a strayed pet back to the arena. Not a MovementAction: it moves the pet, not the bot, so it
 // has no business in the movement guards or the leash exemption lists.
 class ThorimPetLeashAction : public Action

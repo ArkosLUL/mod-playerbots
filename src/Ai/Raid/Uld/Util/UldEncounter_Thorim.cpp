@@ -22,6 +22,7 @@
 #include "RaidTankDefensive.h"
 #include "RtiTargetValue.h"
 #include "Timer.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"
 #include "WorldSession.h"
@@ -619,7 +620,7 @@ bool RingBearingClearOfBlizzard(Unit* boss, float bearing, std::vector<Position>
 // Only when the bot stands in the hazard and the spot does not.
 bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
-    // Cone first: 20k in one instant against a Blizzard tick's 3k.
+    // Cone first: 20k in one instant against a Blizzard tick's 4.3-4.9k.
     if (Unit* boss = GetThorim(botAI))
     {
         if (Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL))
@@ -648,8 +649,9 @@ bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& s
     return standingInOne;
 }
 
-// Settled onto the mesh, since MoveTo fails silently off it. The melee range re-check catches the
-// floor hole south of y -288.
+// Settled onto the mesh, since MoveTo fails silently off it. The range re-check below catches the floor hole
+// south of y -288. It is not a melee-range guard: GetDistance subtracts his 6.25 combat reach, so it only
+// rejects past 15.3 yd.
 bool RingPoint(Player* bot, Unit* boss, float bearing, Position& out)
 {
     float x = boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
@@ -806,7 +808,9 @@ bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, P
     return true;
 }
 
-// Whether a candidate bearing keeps clear of the tank anchor and of every other slot.
+// Whether a candidate bearing keeps clear of the tank anchor and of every other slot. The anchor is compared
+// by bearing alone while the tank sits nearer the boss (r 5.5), so 60 degrees off him is only 7.1 yd of ground
+// and a chain can still bridge the pair.
 bool RingBearingSeparated(float candidate, uint8 slot,
                           std::array<float, ULDUAR_THORIM_MELEE_SLOTS> const& taken, float anchor)
 {
@@ -820,8 +824,9 @@ bool RingBearingSeparated(float candidate, uint8 slot,
     return true;
 }
 
-// One answer for all three slots, so no slot's dodge walks it onto another. Relaxed cheapest first:
-// Blizzard zones (~3k a tick), then separation (a 40-90k hop), never the cone (~20k at once).
+// One answer for all three slots, so no slot's dodge walks it onto another. Relaxed cheapest first: separation
+// (one 40-90k hop), then Blizzard zones, never the cone (~20k at once). Zones outrank separation because a bot
+// holds its bearing while a zone sits on it: melee stood 6 to 14 ticks at 4.3-4.9k each, up to 73k.
 void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -883,9 +888,9 @@ void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
 
                     bool ok = !orb || !InLightningChargeCone(candidate, coneBearing);
                     if (ok && relax < 2)
-                        ok = RingBearingSeparated(candidate, slot, taken, state.ringAnchor);
-                    if (ok && relax < 1)
                         ok = RingBearingClearOfBlizzard(boss, candidate, zones);
+                    if (ok && relax < 1)
+                        ok = RingBearingSeparated(candidate, slot, taken, state.ringAnchor);
 
                     if (ok)
                     {
@@ -1549,6 +1554,62 @@ void ThorimTickBarrierBail(PlayerbotAI* botAI, Player* bot)
 
     if (bot->GetHealthPct() <= ULDUAR_THORIM_BARRIER_BAIL_HEALTH_PCT)
         state.barrierBailing.insert(bot->GetGUID());
+}
+
+namespace
+{
+
+// Bots only: a human paladin would take the pick and never act on it, which is exactly how the shared node
+// fails. Lowest guid wins so the pick holds still, and the aura has to be one this bot knows.
+Player* ElectThorimFrostAuraPaladin(Group* group)
+{
+    Player* best = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || !member->IsAlive() || member->GetMapId() != ULDUAR_MAP_ID ||
+            member->getClass() != CLASS_PALADIN ||
+            !memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", "frost resistance aura")->Get())
+            continue;
+
+        if (!best || member->GetGUID() < best->GetGUID())
+            best = member;
+    }
+
+    return best;
+}
+
+}  // namespace
+
+void ThorimTickFrostAuraPaladin(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !NearThorimEncounter(bot))
+        return;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return;
+
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    uint32 const now = getMSTime();
+    if (state.frostAuraScanMs &&
+        getMSTimeDiff(state.frostAuraScanMs, now) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
+        return;
+
+    state.frostAuraScanMs = now;
+
+    // Nobody in normal mode: Sif stays on her balcony casting nothing, so the aura would cost the raid Devotion
+    // for no return.
+    Player* paladin = IsThorimHardModeActive(botAI) ? ElectThorimFrostAuraPaladin(group) : nullptr;
+    state.frostAuraPaladin = paladin ? paladin->GetGUID() : ObjectGuid::Empty;
+}
+
+bool IsThorimFrostAuraPaladin(Player const* bot)
+{
+    ThorimEncounterState const* state = FindState(bot);
+    return bot && state && state->frostAuraPaladin.Get() == bot->GetGUID();
 }
 
 void ThorimTickHumanTankCalls(PlayerbotAI* botAI)
@@ -2338,6 +2399,23 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
 
     return StaticMeleeSpot(boss, slot, position);}
 
+namespace
+{
+
+// The slot this bot's pets belong on. A ring melee uses its own; everyone else gets one off its guid, stable
+// across ticks and an even spread over the three clusters. On a slot rather than away from one on purpose: a
+// chain held inside one cluster spends its late hops, the 5x to 17x ones, on pets, not the next slot's players.
+uint8 ThorimPetRingSlot(PlayerbotAI* botAI, Player* bot)
+{
+    uint8 slot = 0;
+    if (GetThorimPhase2Role(botAI, bot) == ThorimPhase2Role::MeleeRing && MeleeSlotOf(bot, slot))
+        return slot;
+
+    return static_cast<uint8>(bot->GetGUID().GetCounter() % ULDUAR_THORIM_MELEE_SLOTS);
+}
+
+}  // namespace
+
 bool ThorimPetsOffRingSlot(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out)
 {
     out.clear();
@@ -2345,19 +2423,12 @@ bool ThorimPetsOffRingSlot(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& 
     if (!botAI || !bot || !ThorimPhase2Active(botAI))
         return false;
 
-    if (GetThorimPhase2Role(botAI, bot) != ThorimPhase2Role::MeleeRing)
-        return false;
-
     Unit* boss = GetThorim(botAI);
     ThorimEncounterState const* state = FindState(bot);
     if (!boss || !state || !state->ringLatched)
         return false;
 
-    uint8 slot = 0;
-    if (!MeleeSlotOf(bot, slot))
-        return false;
-
-    float const bearing = state->ringSlots[slot].composed;
+    float const bearing = state->ringSlots[ThorimPetRingSlot(botAI, bot)].composed;
 
     for (Unit* pet : bot->m_Controlled)
     {
@@ -2399,16 +2470,12 @@ void ThorimSendPetToRingSlot(PlayerbotAI* botAI, Player* bot, Unit* pet)
     if (!boss || !state || !state->ringLatched)
         return;
 
-    uint8 slot = 0;
-    if (!MeleeSlotOf(bot, slot))
-        return;
-
     state->petRecallMs[pet->GetGUID()] = getMSTime();
 
     // A chase angle is measured off the target's facing, and Thorim turns with his tank, so the world
     // bearing is converted here every time rather than held.
-    float const relative =
-        Position::NormalizeOrientation(state->ringSlots[slot].composed - boss->GetOrientation());
+    float const relative = Position::NormalizeOrientation(
+        state->ringSlots[ThorimPetRingSlot(botAI, bot)].composed - boss->GetOrientation());
 
     // Range 0 like PetAI's own chase, and no command or stop: the pet keeps hitting him, just from a
     // bearing that doesn't bridge two slots.

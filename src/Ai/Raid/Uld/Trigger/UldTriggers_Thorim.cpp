@@ -199,6 +199,11 @@ bool ThorimRunicBarrierBailTrigger::IsActive()
     return colossus && bot->GetDistance(colossus) < ULDUAR_THORIM_BARRIER_BAIL_DISTANCE;
 }
 
+bool ThorimFrostAuraTrigger::IsActive()
+{
+    return IsThorimFrostAuraPaladin(bot) && !botAI->HasAura("frost resistance aura", bot);
+}
+
 bool ThorimPetLeashTrigger::IsActive()
 {
     std::vector<Unit*> pets;

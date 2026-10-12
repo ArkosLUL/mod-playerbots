@@ -89,6 +89,17 @@ bool ThorimArenaPositioningAction::Execute(Event /*event*/)
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
+bool ThorimFrostAuraAction::isUseful()
+{
+    ThorimFrostAuraTrigger thorimFrostAuraTrigger(botAI);
+    return thorimFrostAuraTrigger.IsActive();
+}
+
+bool ThorimFrostAuraAction::Execute(Event /*event*/)
+{
+    return botAI->DoSpecificAction("frost resistance aura", Event(), true);
+}
+
 bool ThorimPetLeashAction::isUseful()
 {
     ThorimPetLeashTrigger thorimPetLeashTrigger(botAI);

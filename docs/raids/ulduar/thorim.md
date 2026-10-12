@@ -191,16 +191,16 @@ Positioning has to clear 5 yd between stacks. The main tank drags Thorim to
 `ULDUAR_THORIM_PHASE2_TANK_SPOT` **(2110.7483, −252.65265, 419.440)**. Ranged and healers take one of
 `ULDUAR_THORIM_RANGED_SLOTS` = **6** spots, **latched per bot** (`EnsureRangedSlot`,
 `thorim.rangedslot`) — re-deriving it live is the exact bug that was fixed, because the shelter table
-is keyed by slot. Melee take a **dynamic ring of radius 8 around Thorim's live position**, three slots
+is keyed by slot. Melee take a **dynamic ring of radius 8.8 around Thorim's live position**, three slots
 at the ring anchor bearing +90 / +180 / +270 degrees, which leaves the whole tank side clear and puts
-the stacks 11.3 yd apart. The off-tank sits at +20 degrees, inside taunt range for the Unbalancing
+the stacks 12.4 yd apart. The off-tank sits at +20 degrees, inside taunt range for the Unbalancing
 Strike swap. Slots are sticky per guid, and **`RingAnchorBearing` reads only the tank spot** — the live
 tank was deliberately removed as an input, so the ring cannot rotate as the boss shuffles. That is the
 rule, not a fallback. Arrival uses a 3 yd / 5 yd deadband, because a tight one against a ring
 recomputed from a moving boss leaves the bot sliding in place — and a moving bot casts nothing.
 
-**The deadband breaks for a hazard.** At r 8 a whole cone dodge is a chord of 5 yd or less, so a settled
-bot in the cone never moved: **nine cone hits over two pulls** had a safe spot under 5 yd away.
+**The deadband breaks for a hazard.** At ring radius a whole cone dodge is a chord of about 5 yd, so a
+settled bot in the cone never moved: **nine cone hits over two pulls** had a safe spot under 5 yd away.
 `RingSpotBeatsTheDeadband` moves a bot standing in the cone or a Blizzard zone when the new spot is
 clear, and `ThorimRingWantsMove` ORs that escape outside the tolerance test: **40-60%** of move orders
 come back refused, and a nested escape re-latched inside 3 yd and was never retried. It reads the arrival
@@ -237,14 +237,27 @@ anchor and then dodged the cone and the Blizzard alone, blind to the other slots
 `thorim.ringspot` notes carried an offset, spread inside one slot ran 3-33°, and one slot's composed
 bearings spanned **166°** and reached its neighbour's median. `SolveRingBearings` answers all three at
 once for the instance now — everyone in a slot reads the same point, and no candidate is taken within
-`ULDUAR_THORIM_RING_SLOT_SEPARATION` (60°, exactly the 8 yd jump at r 8) of another slot or of the tank
-anchor. When the arc will not hold everything the cheapest thing goes first: zones (~3k a tick), then
-separation (a 40-90k hop), never the cone (~20k in one instant). The note now reads
-`slot N bearing B solved S`, and the gap between two slots' `solved` is what Chain Lightning reads.
+`ULDUAR_THORIM_RING_SLOT_SEPARATION` (60°, **8.8 yd at r 8.8**) of another slot or of the tank anchor.
+The note reads `slot N bearing B solved S`, and the gap between two slots' `solved` is what Chain
+Lightning reads. The latch works: 11 Oct carried **one latched bearing per slot** against September's
+3-33° of smear.
 
-A rotation always exists: sampling the r=8 ring every 10° across 890 snapshots with a Blizzard up, it is
-never fully covered, the clear fraction bottoms at 53%, and the arc to the nearest clear bearing is a
-median 3-7 yd, p90 6-10, max 15.1 — **blocked zero times**.
+**60° was exactly the jump at r 8, which is why the ring is 8.8.** Zero margin meant most honoured
+floors still bridged, so the radius carries the margin instead: a 60° gap is 8.8 yd, and one Blizzard
+forbids **77° of ring rather than 87**. The ceiling is real melee range **9.083 yd** — his `CombatReach`
+6.25 (`creature_model_info`, display 28977) plus a player's 1.5 plus 4/3. **`RingPoint`'s range check is
+not a melee-range guard**: `GetDistance` subtracts his 6.25, so it only rejects past **15.3 yd**.
+
+**Zones outrank separation when the arc will not hold everything**, the cone never (~20k in one
+instant). A bot holds its bearing while a zone sits on it, so giving zones up cost 6-14 consecutive ticks
+at 4.3-4.9k, against 40-90k once for a hop. **The anchor term is still angle-only** — the tank sits at
+r 5.5, so 60° off him is **7.1 yd** of ground and a chain still bridges the pair. Unfixed.
+
+**A rotation does not always exist.** The 890-snapshot sample behind that claim was too small. On
+11 Oct, with a median **4 zones up at once (max 6)**, the 11 yd clearance left under 105° of ring free —
+too little for three slots plus the anchor — in **14.5%** of one wipe's Blizzard snapshots and **31.1%**
+of the other's, and the whole ring in **5%**. The kill: **0%**. Where one exists the arc to the nearest
+clear bearing is still a median 3-7 yd, p90 6-10, max 15.1.
 
 ### The opening
 
@@ -398,9 +411,13 @@ a single 15 yd circle; the same clustering feeds Dark Rune Champion Whirlwind (1
 ## Hard mode
 
 Sif is summoned every pull and normally channels, then despawns after the 150s dominion timer. If the
-raid clears the gauntlet fast enough she joins instead and casts Frostbolt Volley (**62580**, raid-wide
-and unavoidable — healed through), Blizzard and Frost Nova (**62597**, teleport then point-blank). Her
-single-target **Frostbolt is 62583**.
+raid clears the gauntlet fast enough she joins instead and casts Frostbolt Volley (**62580**), Blizzard
+and Frost Nova (**62597**, teleport then point-blank). Her single-target **Frostbolt is 62583**.
+
+**Frostbolt Volley is the fight's floor.** `EffectRadiusIndex` 22 is a **200 yd** radius, it is instant,
+and `InterruptFlags` is 0, so nothing dodges, kicks or outranges it. It is **25-26% of all incoming
+damage in every pull**, only resistance and healing touch it, and it is why this fight has a survival
+ceiling at all.
 
 **Her ids do not split by difficulty.** `boss_thorim.cpp:56-59` casts 62580 / 62583 / 62597 flat in both
 sizes. The twin rows 62604 / 62601 / 62605 are what this doc carried before and **none of them is ever
@@ -425,6 +442,14 @@ plus a yard. 15 instead grows the ring's slide from a median 3-7 yd of arc to 9-
 `ThorimPhase2PositioningTrigger` stands down while `ThorimSifBlizzardTrigger` is active, as the arena
 anchor does: without it the anchor walked bots back into the zone they had left, and the four ranged who
 took the most Blizzard were the four who ran furthest.
+
+**That dodge excludes the melee ring outright**, which makes the ring solver melee's only answer to a
+Blizzard. While the solver could also give the zone test up, melee had none at all: the Blizzard action's
+verdicts name **only ranged and healers** in all three 11 Oct pulls. Ticks are **4,300-4,900 median,
+6,187 max** — not the ~3k this doc and the code comments carried — and melee stood **6-14 consecutive**
+of them, one bot 14 ticks for **72,853** over 11 s. That cost melee **320k and 457k** in the two wipes,
+more than Chain Lightning's whole 188k in one of them. The kill never exceeded **4 ticks**, the cleanest
+single difference between it and the wipes.
 
 **Frost Nova is two radii too, and the root is the wider one.** 62597 damages at **12 yd**
 (`EffectRadiusIndex` 32) and roots at **15** (index 18). Measured, hits stop at **11.6 yd** and roots
@@ -525,6 +550,10 @@ a pet on 52 of 55,171 rows, and across three later pulls the boss's victim **nev
 Pets deliberately do not dodge anything — they survive on their own resistances, and a pet AI that steps
 out of hazards is a cost with no payoff.
 
+**`thorim pet leash` reads `LOST … ran 0x` in coverage by design.** `won` is only stamped when `Execute`
+returns true, and this action returns false so the bot still gets its own node that tick. Its real
+evidence is the verdict stream, where it shows `FAILED` 25-31 times a pull.
+
 ## Aspect of the Wild has exactly one holder
 
 Thorim's nature damage earns the aura, but 49071 is `APPLY_AREA_AURA_RAID` + `MOD_RESISTANCE_EXCLUSIVE`,
@@ -552,6 +581,23 @@ Verified on `603_4_kologarn_1789240634` (one source, 9 recipients, the free hunt
 
 Kologarn, Freya, and VoA's Emalon and Archavon share the mechanism.
 
+## The frost aura needs a bot and a hold
+
+Frost is about **half of all incoming damage** here — one 11 Oct wipe took **~1.57 M** of it — and Frost
+Resistance Aura's 130 resistance is **20.4%** off every frost hit: the level-83 constant is
+`150+(83-60)·(83-67.5)` = **506.5**, so `130/(130+506.5)`. That wipe ran **no frost resistance at all**,
+worth ~320k; the other two had it up the whole fight by luck.
+
+Two things blocked it, both now handled Thorim-side. `BossFrostResistanceTrigger` returns
+`member == bot` for the **first alive paladin in group order**, so when that is a human nothing ever acts
+on it and no bot paladin can qualify. And Thorim pinned the hunter's aspect but not the paladin's aura,
+so the exclusive slot was traded back on the next GCD. `ThorimTickFrostAuraPaladin` latches
+`frostAuraPaladin` from **bot paladins only** (lowest guid, must know the spell), the
+`thorim frost aura` node casts it, and the `thorim frost aura hold` Block pins the slot against the
+competing auras. Nobody is elected in normal mode, where Sif never leaves her balcony.
+
+Nature needs nothing: Aspect of the Wild was up in all three 11 Oct pulls.
+
 ## Known gaps
 
 **The wipe is a damage race, and nothing positional answers it.** Tank intake reaches **190-260k per
@@ -559,11 +605,12 @@ Kologarn, Freya, and VoA's Emalon and Archavon share the mechanism.
 buff takes his melee from **6.8k to 15.6k a swing by +140 s**, Lightning Charge **13k → 28k**, and Chain
 Lightning peaks at **31.5k**. **The survival ceiling is ~190-200 s**: past it the tanks fall with
 healers at 13-17% mean mana and the rest melts in 20-30 s. Boss DPS over the arena's first 150 s
-measured **112.8 / 120.6 / 122.8 / 132.8k** on 19 Sep, so 25.101 M needs **189-222 s** — the kill did
-it in **187 s at 132.8k**, and the two wipes that ran the clock out died at **3.1% and 3.6%**, about
-seven seconds of raid damage short. Phase 2 intake is **3.0-5.0 M** against normal mode's **0.64 M**.
-**Sif is about half of that and most of it is undodgeable** — Frostbolt Volley 62580 is a **200 yd**
-radius carrying a **-51% slow**, which also doubles every reposition. Mana is the wall, and not for want
+measured **112.8-132.8k** on 19 Sep and **127.4 / 131.9 / 134.8k** on 11 Oct, so 25.101 M needs
+**186-197 s** — the 11 Oct kill did it in **196 s of arena**. Damage is no longer the binding
+constraint: the 19 Sep wipes died at **3.1% and 3.6%**, but the 11 Oct ones at **34.3% and 37.4%**,
+killed by the ceiling rather than falling short of it. Phase 2 intake is **3.0-5.0 M** against normal
+mode's **0.64 M**. **Sif is about half of that and most of it is undodgeable** — the Volley also carries
+a **-51% slow**, which doubles every reposition. Mana is the wall, and not for want
 of cooldowns: healers run **29-30% overheal** with Innervate, Mana Tide, Hymn of Hope, Shadowfiend, gems
 and potions all already spent. This is the encounter's actual remaining problem.
 
@@ -577,21 +624,29 @@ multipliers are 1, 1.5, 2.25, 3.4, 5.1, 7.6, 11.4, 17.1 on a 4625-5375 base: hop
 kills cloth, hops 6-8 kill outright. One measured cast ran 5,574 → 7,831 → 12,683 → 21,153 →
 17,923 → 43,189 → 69,855 → **89,760**, and two of those took three and four melee bots. Every jump
 seen was ≤ 7.9 yd against the 8.0 yd reach; the seed is `SelectTarget(Random)` off the threat list every
-**15 s**. **The tanks bridge**: at 3.4-7.6 yd off the boss they are inside the jump of more than one
+**15 s**. Improved, not fixed: 11 Oct still ran **6-8 hops on players**, peaking
+**46,815-65,530**. **The tanks bridge**: at 3.4-7.6 yd off the boss they are inside the jump of more than one
 slot, which is how a chain crossed the ring, and why the separation floor counts the anchor too. The
 camp is stacked by construction — 14 bots share 6 slots, so the tightest occupied pair is **0.00 yd in every
 pull** — which is pre-existing and accepted.
 
 **Pets chain, and the recorder cannot see it.** `dmg` is written for raid members only — **0 of
-1,223-1,317 rows per pull** name a pet — so every hop count here is a floor. The core settles what the
+1,047-1,525 rows per pull** name a pet — so every hop count here is a floor. The core settles what the
 trace cannot: `WorldObjectSpellTargetCheck` skips **totems and nothing else** under `TARGET_CHECK_ENEMY`,
-so pets and guardians take hops and can be the seed. Inside 10 yd of the boss sit **4.5-6.3 guardian and
-3.2-4.4 steerable pet bodies** per snapshot, 100% of them within 8 yd of a melee bot, and PetAI parks a
-pet anywhere in a 90° arc behind him — straight into the gaps the slot separation opens. They are chased
-onto their owner's slot bearing instead (`ThorimPetsOffRingSlot`, on the pet leash node), which costs no
-uptime: at ring radius a pet is still inside the 9.1 yd melee reach on any bearing. **A guardian with no
-`CharmInfo` still takes a move order**, so Army and Feral Spirits steer here even though a player cannot
-command them. Logging pet damage in `Bot/Obs` is still what it would take to count the real hops.
+so pets and guardians take hops and can be the seed. **24-28 pet bodies** sit inside 10 yd of him at
+once, **100% of them within 8 yd of a melee body**, and PetAI parks a pet anywhere in a 90° arc behind
+him — straight into the gaps the slot separation opens. They are chased onto a slot bearing instead
+(`ThorimPetsOffRingSlot`, on the pet leash node),
+which costs no uptime: at ring radius a pet is still inside the 9.1 yd melee reach on any bearing. **A
+guardian with no `CharmInfo` still takes a move order**, so Army and Feral Spirits steer here even though
+a player cannot command them.
+
+**Every bot's pets get a slot, not just a ring melee's.** The first cut covered `MeleeRing` owners only,
+about half the bodies: **ranged owners held 42-48%** and had none placed. A ring melee uses its own slot,
+everyone else one off its guid counter modulo 3 — stable per tick and an even spread, so a chain held in
+one cluster spends its late hops on pets rather than reaching the next slot's players. **Human-owned pets
+are 13-30% of the bodies and are not steerable at all**, no `PlayerbotAI`. Logging pet damage in
+`Bot/Obs` is still what it would take to count the real hops.
 
 **A bot-only raid never walks the corridor at all.** `ThorimGauntletPositioningTrigger` opens with
 `if (!master) return false;` and derives progress from the master's waypoint.
@@ -609,8 +664,9 @@ squad loses its corridor node for the final stretch and finishes on `follow`.
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It is left in
 because it is the difference between missing and making the clock.
 
-**The clock was beaten 4/4 on 19 Sep and 3/5 the week before.** Margins from the Touch of Dominion cast
-ran **+6.8 / +23.4 / +24.2 / +37.9 s**, against **+25.6 / +32.8 / +32.2 / -4.0 / -11.1 s** on 12 Sep. The
+**The clock is no longer the problem: 3/3 on 11 Oct at +18.6 / +30.0 / +31.0 s, 4/4 on 19 Sep, 3/5 the
+week before.** Margins from the Touch of Dominion cast ran **+6.8 / +23.4 / +24.2 / +37.9 s** on 19 Sep,
+against **+25.6 / +32.8 / +32.2 / -4.0 / -11.1 s** on 12 Sep. The
 spread is corridor-trash time and it is still Iron Honor Guard: **92.8 s** held on the slow pull against
 **48.6-51.4 s** on the rest, with Colossus and Rune Giant time identical in all four. That pull is the
 one that finished on **+6.8 s**, with a raider already dead before the floor and 2-3x the Champion
