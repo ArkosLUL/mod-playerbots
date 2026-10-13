@@ -16,12 +16,18 @@ They do not have equal health, which is what makes the sync hard. From `creature
 | Ancient Water Spirit | 188 748 | 524 300 |
 
 **Hardened Bark (62663) does not make the Snaplasher tankier.** It stacks to 99, applied by proc 62664
-when the Snaplasher is struck, and resets after 4s without a hit. Each stack is **+10%
+when the Snaplasher is struck (25-man: **64191** passive, **64190** stack), and resets after 4s without
+a hit. Each stack is **+10%
 `MOD_DAMAGE_PERCENT_DONE` (aura 79) and −5% movement speed (`MOD_DECREASE_SPEED`, aura 33)** — the DBC
 row is `EffectBasePoints` 9 and −6 with `DieSides` 1, so both need the `+1`; reading the base points
 raw gives the wrong +9 / −6. It is a threat to whoever tanks it, never a reason to stop damaging it.
 An earlier version of this strategy withheld all raid damage from the Snaplasher on the opposite
 assumption, which is why the trio could never die together.
+
+**It is at the cap for most of every trio wave, split or not.** Stacks at +2/+4/+6/+8/+10/+15s:
+**7/25/43/61/78/99** (combat log, 2026-10-11). It swings every 2.45s for **57-120k** on a non-tank and
+22-50k raw on a DK tank who avoided 76% of them, so whoever takes it off the tank dies: six of the
+deaths in the two resets of that day.
 
 **The Ancient Water Spirit's Tidal Wave is the trio's one real cone.** `62936` is `EffectRadiusIndex
 23` = **40 yd**, base damage 9,250-10,750 with a knock-back second effect, and it is fired **3 s after**
@@ -43,9 +49,16 @@ In 25-man that is 2.28M trio health inside 60s, a ~38k raid DPS floor. Lifebinde
 **How the bots solve it.** DPS bots are split three ways by `GetFreyaTrioAssignment`: a greedy load
 balance over *remaining* health, recomputed every tick. Every bot walks the same group order over the
 same numbers and reaches the same split, so it needs no shared state — and it self-corrects, since a
-member the raid over-kills sheds attackers on the next tick. Splitting rather than focus-firing also
-keeps roughly two thirds of the raid off the Snaplasher at any moment, which holds Hardened Bark far
-below its cap without anyone having to withhold damage.
+member the raid over-kills sheds attackers on the next tick.
+
+**A damage dealer near the tank's threat on the Snaplasher moves to a sibling**
+(`ShedSnaplasherThreat`, unverified until the next pull). The generic `threat` strategy is never added
+(`AiFactory.cpp`), so nothing else stops a bot overtaking. At `_SNAPLASHER_THREAT_SHED_PCT` (80%) of the
+highest living tank's threat the trio pick becomes the healthiest non-suppressed sibling, and returns
+under `_THREAT_RETURN_PCT` (60%); aggro flips at 110% in melee. The tank also gets
+`_SNAPLASHER_TANK_LEAD_MS` (5s) alone on a fresh one, since a ratio cannot cover the opener. Damage
+moves, none is withheld: with no sibling to hit, or no tank holding threat after the head start, the
+pick stands.
 
 `FreyaTrioSyncSuppress` is a backstop, not the mechanism: it only blocks damage on a member below
 `ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT` (10%) while a sibling is still above
@@ -174,13 +187,17 @@ Ground Tremor is the control — 50000 yd, nothing dodges it, flat across all th
 get harder: the raid got tighter, nearest-neighbour **0.6 yd** against 1.3, and only the two mechanics
 that scale with tightness moved.
 
-**`1791059738` is the current kill, and the three fixes it produced are untested.** 7:03, hard mode,
+**`1791059738` is the reference kill for the three fixes below.** 7:03, hard mode,
 10 deaths over 9 players, **729k** a minute taken against the 899k above, Nature's Fury **35k** against
 105k, nearest-neighbour **1.31 yd**. Per mechanic: Detonate **179 hits in 19 blasts**, median **9**
 victims, inside the 6.7-10.4 band; 54 bombs in 7 volleys for **17 hits**, escape latency median
 **0.65s** on a 6s fuse; **27** Iron Roots traps in 9 volleys of 3, most released under 1s, worst
 **25.3s**. Four of the deaths were melee in the pile, one a human, one a 5.2s bomb reaction. The other
-four are what the lasher-hazard and pinned-bot fixes below address, and nothing has re-run since.
+four are what the lasher-hazard and pinned-bot fixes below address.
+
+**Those fixes held in `1791743444`** (kill 6:33, one death, 812k a minute): 0 of 47 back-line beam
+escapes ordered with a lasher under 15% aimed inside 15.5 yd of one (nearest 18.4), the tremor hold ran
+31 times against never, and nobody died under a latch while rooted.
 
 Expect this stack to be broken up regularly. `EVENT_FREYA_NATURE_BOMB` repeats every **18s** for the
 whole fight, dropping one bomb per player at their own feet — `urand(7,10)` players **within 70 yd**
@@ -280,6 +297,10 @@ of the ladder is borrowed for damage: taunting Freya would fight a human main ta
 set differently, taunting a Storm Lasher or Water Spirit would mean owning Tidal Wave positioning, and a
 lasher drops the taunt on its next 10s threat wipe regardless.
 
+**Mocking Blow is a taunt, and Arms had it wired as a snare.** `piercing howl` fell back to it, so the
+`hamstring` snare trigger made a warrior taunt a Snaplasher at 64 stacks and die 270 ms later. The
+fallback is `hamstring` now, as in Fury.
+
 **Detonating Lashers cannot be tanked, ferried, or held by any threat redirect.** Every 10s each one
 casts Flame Lash, then `DoResetThreatList()` and charges a **uniformly random** player within 80 yd
 (`boss_freya.cpp:1256-1262`); they spawn the same way after a 5s submerge, and one that finds nobody
@@ -332,25 +353,31 @@ nulls any lasher past that reach, leaving it no add target at all. The wave stop
 Gift healed the survivors from ~5% back to ~65%, and sixteen living bots finished the pull on 9.5k
 raid DPS between them.
 
-**Doctrine: the camp is the back line's bail** — the melee one is melee-only and cannot reach them,
-and 15 of the 22 deaths in the table below were ranged or healers. It steps off the same thing:
-lashers under `_LASHER_BAIL_PCT`, never the healthy pack (see
+**Doctrine: the back line has its own bail, and it is per bot** — the melee one is melee-only, and 15
+of the 22 deaths in the table below were ranged or healers. It steps off the same thing: lashers under
+`_LASHER_BAIL_PCT`, never the healthy pack (see
 [Crowd control and threat on adds](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)
-for why ferrying an add faster than a player cannot work). `freya ranged camp` puts ranged DPS and
-healers `ULDUAR_FREYA_LASHER_CAMP_STANDOFF` (18 yd, three past the 15 yd blast) clear of the nearest
-**low** lasher, on the bearing the raid is already on so nobody crosses the pile to reach it.
-`GetFreyaLasherCampSpot` walks outward from their centroid in `_CAMP_STEP` (2 yd) until they all
-clear, capped at `_CAMP_MAX_STANDOFF` (28 yd) because past `AiPlayerbot.SpellDistance` (28.5) the
-far side of the pile is unreachable, sweeping bearings when collision blocks the first. **With none
-of them low it is `GetFreyaRangedCampAnchor`** — the lowest-GUID living ranged DPS, so every bot
-picks the same one with no shared state — which still gathers the back line into one ball for the
-AoE without asking it to walk; that is also the collision fallback, a live bot being always on the
-mesh where a computed point is not. `ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd) has to fit inside
-one AoE; `_HEALER_CAMP_TOLERANCE` (15 yd) gives healers the slack to also cover the melee group and
-the tanks. Neither survives a *low* lasher inside Detonate range: the trigger fires whatever the
-tolerance says, since a healer's slack is the whole blast. Tanks and melee are excluded: they are
-already stacked on what they are hitting, and a tank that left would take Freya or the Conservator
-with it.
+for why ferrying an add faster than a player cannot work). Inside `_DETONATE_RADIUS` of a low lasher,
+`freya ranged camp` walks a ranged DPS or healer to its own nearest spot
+`ULDUAR_FREYA_LASHER_CAMP_STANDOFF` (18 yd) from every low one, through the walk the melee bail uses
+(`StepOutOfBlasts`: latch, `MOVEMENT_FORCED`, cast interrupt, 16 yd when nothing clears 18). It stays
+on the camp node, under nova and trap, so a mage roots what is chasing it before walking. Unverified
+until the next pull.
+
+**While any lasher within `_HAZARD_SEARCH_RADIUS` is low the gather stands down**: a bot outside the
+blasts stays put, since the walk to the ball crosses one. Otherwise the camp is
+`GetFreyaRangedCampAnchor` — the lowest-GUID living ranged DPS, so every bot picks the same one with no
+shared state, and a live bot is always on the mesh where a computed point is not.
+`ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd) has to fit inside one AoE; `_HEALER_CAMP_TOLERANCE`
+(15 yd) gives healers the slack to also cover the melee group and the tanks. Tanks and melee are
+excluded: they are already stacked on what they are hitting, and a tank that left would take Freya or
+the Conservator with it.
+
+**The bail used to share one computed spot, and the ring put bots inside the blast.** The spot sat 18 yd
+from the low lashers on the raid's bearing and each bot stopped 6 yd short of it on its own side, so a
+bot between pile and spot was sent to **12 yd**: 80% of 189 camp orders in `1791743089` and all 66 in
+`1791743444` aimed inside 15.5 yd, costing 48 back-line Detonate hits and three dead in the first. A
+back line 25 yd off a ghoul-held pile took **0 of 70**.
 
 Bots stop `ULDUAR_FREYA_RANGED_CAMP_SPACING` (6 yd) short of the spot on the bearing they arrived on,
 so the back line lands as a ring rather than on one square — aiming every bot at the point itself put
@@ -427,9 +454,9 @@ answers all three of its hazards with nodes that read every hazard at once, so t
 nothing to add. XT-002 and Razorscale suppress it the same way. **Movement only**: nothing here zeroes
 `ReachTargetAction`.
 
-Node order: bail (`ACTION_RAID + 3`) → nova · trap · army (`+ 2`) → camp (`ACTION_RAID`). A dead bot
-does no crowd control, so leaving a blast outranks laying one; the camp is the lowest-value thing a bot
-can be doing here, so it sits under the Healthy Spore node and under the tank ladder, and
+Node order: melee bail (`ACTION_RAID + 3`) → nova · trap · army (`+ 2`) → camp (`ACTION_RAID`). A dead
+bot does no crowd control, so leaving a blast outranks laying one; the gather is the lowest-value thing
+a bot can be doing here, so it sits under the Healthy Spore node and under the tank ladder, and its
 `MOVEMENT_COMBAT` rather than `FORCED` keeps the Nature Bomb and Sun Beam escapes above it.
 
 The mage novas on **self**, not through the class `frost nova` node, which gates on the *current target*
@@ -446,9 +473,11 @@ Explosive Trap for the wave: traps share a **30s category cooldown** and only on
 damage node was spending the snare.
 
 `freya summon army` opens Army of the Dead on the wave. Its ghouls AoE-taunt through **43263**, whose
-script filters only `isWorldBoss()` targets. They hold **12.5-18.9%** of all lasher attention — the
-only thing that takes a lasher off a bot at all — and the bot DK does open it: 9 casts, 213 taunts in
-`1788552829`. Deliberately **not** named `army of the dead`:
+script filters only `isWorldBoss()` targets. **Cast on time it is the wave**: the only thing that takes
+a lasher off a bot at all, and on 2026-10-11 the ghouls held 7-10 of 10 lashers by +5.5s for **0.3k
+and 15.7k** of lasher melee and Flame Lash on the raid. Cast 6.1s late, 102k and a death at +6.5s;
+not cast at all (spent on Auriaya 9 minutes earlier), **416k in 20s** and five dead. The older
+12.5-18.9% share was measured over whole pulls. Deliberately **not** named `army of the dead`:
 `IsBurstCooldownAction` matches on the action name, and the Ulduar burst gate holds that list until
 Attuned to Nature drops, which is the whole add phase. A pull has exactly two lasher waves (`SpawnWave`
 rolls trio / Conservator / lashers per block of three, six waves in all, `boss_freya.cpp:369-381`), and
@@ -472,7 +501,9 @@ blast; they eat it, and the add tank works its normal ladder through a lasher wa
 
 **Threat redirect.** `freya redirect threat` feeds Misdirection / Tricks to assist tank 0 while the
 Snaplasher or Conservator is up, otherwise to whoever is holding Freya, falling back to the group main
-tank. `NPC_FREYA` is in `UldThreatRedirectMultiplier`'s block list so the class-generic main-tank node
+tank. The hunter's three redirected Steady Shots go into what that tank holds — Snaplasher, else
+Conservator, else Freya — and skip a trio member under the sync floor; shot into Freya they put the add
+tank on her table and nothing on the Snaplasher's. `NPC_FREYA` is in `UldThreatRedirectMultiplier`'s block list so the class-generic main-tank node
 stands down. This can do nothing for lashers — their threat table is wiped every 10s.
 
 Hard mode = Elders left alive at pull (Brightleaf 32915 / Stonebark 32914 / Ironbranch 32913). Per

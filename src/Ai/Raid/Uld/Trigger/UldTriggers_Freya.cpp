@@ -145,7 +145,7 @@ bool FreyaLasherAboutToBlowTrigger::IsActive()
         return false;
 
     // Tanks stay: one that walked would take Freya or the Conservator with it, and it survives the
-    // blasts anyway. Ranged and healers are already a camp's width clear.
+    // blasts anyway. Ranged and healers leave through the camp node, under the nova and the trap.
     if (botAI->IsTank(bot) || !PlayerbotAI::IsMelee(bot))
         return false;
 
@@ -172,15 +172,22 @@ bool FreyaRangedCampTrigger::IsActive()
     if (state.detonatingLashers.empty())
         return false;
 
+    // A low lasher in reach ends the gather: inside its blast the bot leaves, outside it stays put, since the
+    // walk to the ball would cross a blast. Only low ones count, the healthy pack is faster than the bot.
+    std::vector<Position> const blasts =
+        GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    if (!blasts.empty())
+    {
+        for (Position const& blast : blasts)
+            if (bot->GetExactDist2d(blast.GetPositionX(), blast.GetPositionY()) <= ULDUAR_FREYA_DETONATE_RADIUS)
+                return true;
+
+        return false;
+    }
+
     Position const camp = GetFreyaLasherCampSpot(botAI);
     if (camp == Position())
         return false;
-
-    // The tolerance stops churn, it doesn't license standing in a blast: a healer's 15 yd of slack is all
-    // of Detonate. Only low lashers count: retreating from a pack faster than the bot costs more than Detonate.
-    if (!GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_DETONATE_RADIUS)
-             .empty())
-        return true;
 
     // Healers get the wider band: they also have to stay in range of the melee group and the tanks,
     // and pulling them all the way into the ball would leave the far half of the raid unhealed.

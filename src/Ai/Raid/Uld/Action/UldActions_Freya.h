@@ -65,9 +65,18 @@ private:
     // Whether this bot is one of the few sent at Eonar's Gift while a lasher pack is up.
     bool TakesEonarsGift(FreyaWaveState const& state);
 
+    // The trio pick, moved to a sibling while this bot is too close to the tank's threat on the Snaplasher.
+    // Damage moves, none is held back: with no sibling left to hit the pick stands.
+    Unit* ShedSnaplasherThreat(FreyaWaveState const& state, Unit* assigned);
+
     // Which Gift the share is timing, and when this bot first saw it.
     ObjectGuid giftGuid;
     uint32 giftSeenMs = 0;
+
+    // Which Snaplasher the shed is timing, when this bot first saw it, and the last answer.
+    ObjectGuid snaplasherGuid;
+    uint32 snaplasherSeenMs = 0;
+    bool snaplasherShed = false;
 };
 
 // Main tank holds Freya; assist tank 0 works down the add ladder and, on the Conservator, walks it onto
@@ -112,19 +121,18 @@ public:
     bool isUseful() override;
 
 private:
-    Player* GetRedirectTank();
+    // dumpTarget is what that tank holds, so the redirected shots land on the table they are meant for.
+    Player* GetRedirectTank(Unit*& dumpTarget);
 };
 
-// Steps melee out of the blast of lashers about to detonate. Only those: clearing the whole pack parks
-// melee outside the fight.
-class FreyaLasherAboutToBlowAction : public MovementAction
+// The walk out of the blasts of lashers about to detonate, shared by the melee bail and the back line's.
+class FreyaLasherBailAction : public MovementAction
 {
-public:
-    static constexpr char const* Name = "freya lasher about to blow";
+protected:
+    FreyaLasherBailAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
-    FreyaLasherAboutToBlowAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
+    // Nearest spot `clearance` from every blast, settling for just outside them when the pile leaves no such spot.
+    bool StepOutOfBlasts(std::vector<Position> const& blasts, float clearance);
 
 private:
     // Lashers die one by one, so re-deriving the exit each tick moves it a yard and restarts the walk.
@@ -133,14 +141,26 @@ private:
     uint32 bailSpotMs = 0;
 };
 
-// Gather the ranged half and the healers a fixed standoff from the pack so the lashers pile onto one
-// spot the raid can AoE. The lashers do the walking - a player cannot outrun one, let alone lead one.
-class FreyaRangedCampAction : public MovementAction
+// Steps melee out of the blast of lashers about to detonate. Only those: clearing the whole pack parks
+// melee outside the fight.
+class FreyaLasherAboutToBlowAction : public FreyaLasherBailAction
+{
+public:
+    static constexpr char const* Name = "freya lasher about to blow";
+
+    FreyaLasherAboutToBlowAction(PlayerbotAI* botAI) : FreyaLasherBailAction(botAI, Name) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Balls the ranged half and the healers up on the anchor bot so the lashers pile onto one spot the raid can
+// AoE, and walks each of them out of the blasts once lashers get low. A player cannot outrun the healthy pack.
+class FreyaRangedCampAction : public FreyaLasherBailAction
 {
 public:
     static constexpr char const* Name = "freya ranged camp";
 
-    FreyaRangedCampAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+    FreyaRangedCampAction(PlayerbotAI* botAI) : FreyaLasherBailAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

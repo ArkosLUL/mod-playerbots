@@ -378,6 +378,46 @@ bool FreyaSetDpsPriorityAction::TakesEonarsGift(FreyaWaveState const& state)
     return GetFreyaRangedDpsRank(botAI) < ULDUAR_FREYA_GIFT_SHARE;
 }
 
+Unit* FreyaSetDpsPriorityAction::ShedSnaplasherThreat(FreyaWaveState const& state, Unit* assigned)
+{
+    if (!state.snaplasher)
+    {
+        snaplasherGuid.Clear();
+        snaplasherShed = false;
+        return assigned;
+    }
+
+    uint32 const now = getMSTime();
+    if (snaplasherGuid != state.snaplasher->GetGUID())
+    {
+        snaplasherGuid = state.snaplasher->GetGUID();
+        snaplasherSeenMs = now;
+        snaplasherShed = false;
+    }
+
+    if (assigned != state.snaplasher)
+        return assigned;
+
+    Unit* sibling = nullptr;
+    for (Unit* member : {state.stormLasher, state.waterSpirit})
+    {
+        if (!member || !member->IsAlive() || FreyaTrioSyncSuppress(state, member))
+            continue;
+
+        if (!sibling || member->GetHealth() > sibling->GetHealth())
+            sibling = member;
+    }
+
+    // Nowhere to move the damage, and the Snaplasher has to die inside the same window as the other two.
+    if (!sibling)
+        return assigned;
+
+    snaplasherShed = FreyaShedsSnaplasherThreat(botAI, state.snaplasher, getMSTimeDiff(snaplasherSeenMs, now),
+                                                snaplasherShed);
+
+    return snaplasherShed ? sibling : assigned;
+}
+
 Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 {
     FreyaWaveState state;
@@ -401,7 +441,7 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
         priority.push_back(state.conservator);
 
     // One slot for all three members; which one this bot takes is the greedy split, not entry order.
-    Unit* const trioMember = GetFreyaTrioAssignment(botAI, state);
+    Unit* const trioMember = ShedSnaplasherThreat(state, GetFreyaTrioAssignment(botAI, state));
     priority.push_back(trioMember);
 
     if (trioLocked)
@@ -552,7 +592,7 @@ bool FreyaRedirectThreatAction::isUseful()
     return bot->getClass() == CLASS_HUNTER || bot->getClass() == CLASS_ROGUE;
 }
 
-Player* FreyaRedirectThreatAction::GetRedirectTank()
+Player* FreyaRedirectThreatAction::GetRedirectTank(Unit*& dumpTarget)
 {
     Group* group = bot->GetGroup();
     if (!group)
@@ -591,8 +631,14 @@ Player* FreyaRedirectThreatAction::GetRedirectTank()
     if (snaplasher || conservator)
     {
         if (Player* assistTank = GetGroupAssistTank(bot, 0))
+        {
+            // The Snaplasher first, as on the add tank's own ladder: it is the one that kills whoever takes it.
+            dumpTarget = snaplasher ? snaplasher : conservator;
             return assistTank;
+        }
     }
+
+    dumpTarget = freya;
 
     // Otherwise feed whoever is actually holding Freya, which survives a swap or a tank death.
     if (freya)
@@ -616,7 +662,8 @@ Player* FreyaRedirectThreatAction::GetRedirectTank()
 
 bool FreyaRedirectThreatAction::Execute(Event /*event*/)
 {
-    Player* tank = GetRedirectTank();
+    Unit* dumpTarget = nullptr;
+    Player* tank = GetRedirectTank(dumpTarget);
     if (!tank || tank == bot)
         return false;
 
@@ -629,13 +676,19 @@ bool FreyaRedirectThreatAction::Execute(Event /*event*/)
     if (botAI->CanCastSpell("misdirection", tank))
         return botAI->CastSpell("misdirection", tank);
 
-    // Misdirection only moves the threat of the next three shots. Spend them on Freya rather than
-    // leaving them to whatever the rotation picks - never on an add the tank does not want.
-    Unit* freya = GetFreyaScanUnitByEntry(botAI, NPC_FREYA);
-    if (freya && bot->HasAura(SPELL_MISDIRECTION) && botAI->CanCastSpell("steady shot", freya))
-        return botAI->CastSpell("steady shot", freya);
+    // Misdirection only moves the threat of the next three shots. Spend them on what that tank is holding
+    // rather than leaving them to whatever the rotation picks: shot into Freya, they put the add tank on her
+    // table and nothing on the Snaplasher's.
+    if (!dumpTarget || !bot->HasAura(SPELL_MISDIRECTION))
+        return false;
 
-    return false;
+    // Cast from here, so the trio sync multiplier never sees it and the floor has to be asked directly.
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+    if (FreyaTrioSyncSuppress(state, dumpTarget))
+        return false;
+
+    return botAI->CanCastSpell("steady shot", dumpTarget) && botAI->CastSpell("steady shot", dumpTarget);
 }
 
 bool FreyaBreakIronRootsAction::isUseful()
@@ -913,27 +966,29 @@ bool FreyaLasherAboutToBlowAction::isUseful()
 
 bool FreyaLasherAboutToBlowAction::Execute(Event /*event*/)
 {
-    if (FreyaBotCannotWalk(bot))
-    {
-        bailSpotMs = 0;
-        return false;
-    }
-
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    std::vector<Position> blasts =
-        GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
-    if (blasts.empty())
+    return StepOutOfBlasts(
+        GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS),
+        ULDUAR_FREYA_LASHER_PACK_CLEAR);
+}
+
+bool FreyaLasherBailAction::StepOutOfBlasts(std::vector<Position> const& blasts, float clearance)
+{
+    if (FreyaBotCannotWalk(bot) || blasts.empty())
     {
         bailSpotMs = 0;
         return false;
     }
 
-    auto const stillClear = [&blasts](Position const& spot)
+    // What an exit has to keep, whichever sweep found it.
+    float const edge = ULDUAR_FREYA_DETONATE_RADIUS + 1.0f;
+
+    auto const stillClear = [&blasts, edge](Position const& spot)
     {
         for (Position const& blast : blasts)
-            if (blast.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_FREYA_LASHER_PACK_CLEAR)
+            if (blast.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < edge)
                 return false;
 
         return true;
@@ -952,14 +1007,13 @@ bool FreyaLasherAboutToBlowAction::Execute(Event /*event*/)
 
     HazardSweepCache sweep;
 
-    Position safe = FindNearestPositionClearOfHazards(bot, blasts, ULDUAR_FREYA_LASHER_PACK_CLEAR,
-                                                      ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+    Position safe =
+        FindNearestPositionClearOfHazards(bot, blasts, clearance, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
 
     // At the finish half the pile is under the bail line at once, and nowhere in the room clears all of
     // them by the full margin. Barely outside the blast beats standing in the middle of it.
-    if (safe == Position())
-        safe = FindNearestPositionClearOfHazards(bot, blasts, ULDUAR_FREYA_DETONATE_RADIUS + 1.0f,
-                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+    if (safe == Position() && clearance > edge)
+        safe = FindNearestPositionClearOfHazards(bot, blasts, edge, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
 
     if (safe == Position())
         return false;
@@ -984,6 +1038,16 @@ bool FreyaRangedCampAction::isUseful()
 
 bool FreyaRangedCampAction::Execute(Event /*event*/)
 {
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    // The trigger only lets a bot through here with a low lasher in reach when it stands in the blast. Each
+    // bot takes its own nearest exit: the ring below is a spacing short of the camp, which can be inside one.
+    std::vector<Position> const blasts =
+        GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    if (!blasts.empty())
+        return StepOutOfBlasts(blasts, ULDUAR_FREYA_LASHER_CAMP_STANDOFF);
+
     Position const camp = GetFreyaLasherCampSpot(botAI);
     if (camp == Position())
         return false;
@@ -997,7 +1061,7 @@ bool FreyaRangedCampAction::Execute(Event /*event*/)
     float const y = camp.GetPositionY() + std::sin(bearing) * ULDUAR_FREYA_RANGED_CAMP_SPACING;
 
     // No arrival latch: the trigger's tolerance stops the churn, and a latch would swallow the re-aim
-    // when the pack moves. MOVEMENT_COMBAT, so the bomb and beam escapes still outrank it.
+    // when the anchor moves. MOVEMENT_COMBAT, so the bomb and beam escapes still outrank it.
     return MoveTo(bot->GetMapId(), x, y, camp.GetPositionZ(), false, false, false, false,
                   MovementPriority::MOVEMENT_COMBAT);
 }

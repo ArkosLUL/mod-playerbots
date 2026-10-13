@@ -14,7 +14,6 @@ public:
         creators["charge"] = &charge;
         creators["death wish"] = &death_wish;
         creators["piercing howl"] = &piercing_howl;
-        creators["mocking blow"] = &mocking_blow;
         creators["heroic strike"] = &heroic_strike;
     }
 
@@ -39,20 +38,11 @@ private:
         );
     }
 
+    // Never Mocking Blow as the fallback: it is a taunt, and a damage dealer that taunts a raid add dies to it.
     static ActionNode* piercing_howl(PlayerbotAI* /*botAI*/)
     {
         return new ActionNode(
             "piercing howl",
-            /*P*/ {},
-            /*A*/ { NextAction("mocking blow") },
-            /*C*/ {}
-        );
-    }
-
-    static ActionNode* mocking_blow(PlayerbotAI* /*botAI*/)
-    {
-        return new ActionNode(
-            "mocking blow",
             /*P*/ {},
             /*A*/ { NextAction("hamstring") },
             /*C*/ {}

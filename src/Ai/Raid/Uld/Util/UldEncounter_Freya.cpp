@@ -19,6 +19,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "ThreatManager.h"
 #include "Timer.h"
 #include "UldScripts.h"
 #include "Unit.h"
@@ -67,8 +68,6 @@ struct FreyaUnfriendlyOfEntryCheck
 
     bool operator()(Unit* unit) { return unit->GetEntry() == entry && inRange(unit); }
 };
-
-Position ComputeFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state);
 }  // namespace
 
 const Position ULDUAR_FREYA_TANK_ANCHOR = Position(2360.0847f, -43.1235f, 425.333f);
@@ -677,94 +676,35 @@ Position GetFreyaLasherCampSpot(PlayerbotAI* botAI)
     return GetFreyaScan(botAI).LasherCamp();
 }
 
-namespace
-{
-Position ComputeFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
+bool FreyaShedsSnaplasherThreat(PlayerbotAI* botAI, Unit* snaplasher, uint32 seenForMs, bool shedding)
 {
     Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
 
-    // The anchor bot is what defines where the raid already is: every bot picks the same one, so every
-    // bot derives the same spot without shared state.
-    Player* anchor = GetFreyaRangedCampAnchor(botAI);
+    if (seenForMs < ULDUAR_FREYA_SNAPLASHER_TANK_LEAD_MS)
+        return true;
 
-    // Only lashers about to blow. They run 8.0 yd/s against a player's 7.0, so clearing the whole pack is a retreat
-    // that never ends, and a healthy lasher isn't a blast since Detonate only lands on death.
-    std::vector<Unit*> low;
-    float sumX = 0.0f;
-    float sumY = 0.0f;
-    float sumZ = 0.0f;
-    for (Unit* lasher : state.detonatingLashers)
+    float tankThreat = 0.0f;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
-        if (!lasher || !lasher->IsAlive() || lasher->GetHealthPct() >= ULDUAR_FREYA_LASHER_BAIL_PCT)
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || !botAI->IsTank(member))
             continue;
 
-        low.push_back(lasher);
-        sumX += lasher->GetPositionX();
-        sumY += lasher->GetPositionY();
-        sumZ += lasher->GetPositionZ();
+        tankThreat = std::max(tankThreat, snaplasher->GetThreatMgr().GetThreat(member));
     }
 
-    // Nothing low, but the camp still has to be one place or the pack focus has no ball behind it and class AoE
-    // never fires. The anchor is that place, the trigger's tolerance keeps it from churning.
-    if (low.empty())
-        return anchor ? anchor->GetPosition() : Position();
+    // Nobody is tanking it, and it still has to die with the other two.
+    if (tankThreat <= 0.0f)
+        return false;
 
-    Position centre;
-    centre.Relocate(sumX / low.size(), sumY / low.size(), sumZ / low.size());
+    float const pct = snaplasher->GetThreatMgr().GetThreat(bot) * 100.0f / tankThreat;
 
-    // Bearing from the pile toward where the raid already is, so the walk to the camp never crosses
-    // the pack.
-    float bearing = anchor && anchor->GetExactDist2d(&centre) > CONTACT_DISTANCE
-                        ? centre.GetAngle(anchor)
-                        : centre.GetAngle(bot);
-
-    // The first bearing is the one that keeps the raid where it stands; the sweep only runs when a
-    // tree trunk or the room edge is in the way.
-    for (float delta = 0.0f; delta <= static_cast<float>(M_PI); delta += static_cast<float>(M_PI) / 8.0f)
-    {
-        for (float sign : {1.0f, -1.0f})
-        {
-            // Straight ahead is one bearing, not two: at delta 0 the mirrored pass would re-test the
-            // six radii the first one has already rejected.
-            if (delta == 0.0f && sign < 0.0f)
-                continue;
-
-            float const angle = bearing + sign * delta;
-
-                // Walked outward, since clearance is owed to the nearest lasher and a wave spreads ~17 yd, so the
-                // first spot off the middle often has one standing on it.
-            for (float radius = ULDUAR_FREYA_LASHER_CAMP_STANDOFF; radius <= ULDUAR_FREYA_LASHER_CAMP_MAX_STANDOFF;
-                 radius += ULDUAR_FREYA_LASHER_CAMP_STEP)
-            {
-                float x = centre.GetPositionX() + std::cos(angle) * radius;
-                float y = centre.GetPositionY() + std::sin(angle) * radius;
-                float z = centre.GetPositionZ();
-
-                if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, centre.GetPositionX(), centre.GetPositionY(),
-                                                                    centre.GetPositionZ(), x, y, z))
-                    continue;
-
-                // Collision can pull the spot back toward the pile. Counted over the low set, not via
-                // CountFreyaLashersNear, which the nova, trap and pack focus need on every living lasher.
-                Position const candidate(x, y, z, 0.0f);
-                bool clear = true;
-                for (Unit* lasher : low)
-                    clear = clear && candidate.GetExactDist2d(lasher->GetPosition()) >
-                                         ULDUAR_FREYA_LASHER_CAMP_STANDOFF;
-
-                if (!clear)
-                    continue;
-
-                return candidate;
-            }
-        }
-    }
-
-    // Trees and the room edge can box in every bearing. A live bot is always on the mesh, which is the
-    // whole reason the anchor is a bot and not a fixed point, so fall back to standing on it.
-    return anchor ? anchor->GetPosition() : Position();
+    return pct >=
+           (shedding ? ULDUAR_FREYA_SNAPLASHER_THREAT_RETURN_PCT : ULDUAR_FREYA_SNAPLASHER_THREAT_SHED_PCT);
 }
-}  // namespace
 
 Unit* GetFreyaLasherPackFocus(FreyaWaveState const& state)
 {
@@ -871,11 +811,8 @@ Position const& FreyaScan::LasherCamp()
 {
     if (!FreshThisTick(campAtMs))
     {
-        // Gathered here, not taken from the first caller: the camp is one position per tick, so a narrowed or
-        // stale state would become every caller's answer.
-        FreyaWaveState state;
-        GatherFreyaWaveState(botAI, state);
-        camp = ComputeFreyaLasherCampSpot(botAI, state);
+        Player* anchor = GetFreyaRangedCampAnchor(botAI);
+        camp = anchor ? anchor->GetPosition() : Position();
     }
 
     return camp;

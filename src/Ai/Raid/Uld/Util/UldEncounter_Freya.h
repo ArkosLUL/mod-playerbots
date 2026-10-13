@@ -179,14 +179,10 @@ constexpr float ULDUAR_FREYA_LASHER_BAIL_PCT = 15.0f;
 // MoveTo resets the walk instead of finishing it.
 constexpr uint32 ULDUAR_FREYA_LASHER_BAIL_LATCH_MS = 3000;
 
-// Clearance from the nearest lasher under LASHER_BAIL_PCT. Not the pack centre, they spread ~17 yd, and not every
-// lasher, which is a retreat from something faster than the bot. 18 clears the 15 yd blast with room to spare.
+// How far the back line steps from every lasher under LASHER_BAIL_PCT. Not the pack centre, they spread ~17 yd,
+// and not every lasher, which is a retreat from something faster than the bot. 18 clears the 15 yd blast with
+// room to spare, and still shoots.
 constexpr float ULDUAR_FREYA_LASHER_CAMP_STANDOFF = 18.0f;
-
-// How far out the search may push a camp before giving up on a bearing. Past this the far side of the
-// pile is outside AiPlayerbot.SpellDistance (28.5) and the camp stops being a firing position.
-constexpr float ULDUAR_FREYA_LASHER_CAMP_MAX_STANDOFF = 28.0f;
-constexpr float ULDUAR_FREYA_LASHER_CAMP_STEP = 2.0f;
 
 // Eonar's Gift heals Freya 30-60% if it lives 12s. Five ranged kill it well inside that and leave the rest on
 // the lasher pack.
@@ -204,6 +200,15 @@ constexpr float ULDUAR_FREYA_HEALER_CAMP_TOLERANCE = 15.0f;
 // Bots stop this short of the camp spot on the bearing they came in on, so the back line forms a ring with no
 // shared state. Stops the pile, can't beat an 8 yd splash on its own.
 constexpr float ULDUAR_FREYA_RANGED_CAMP_SPACING = 6.0f;
+
+// Hardened Bark is at 99 stacks 15s into a trio wave, and one swing then kills anyone but a tank. Aggro flips at
+// 110% in melee, so a damage dealer this close to the tank's threat moves to a sibling until the tank is ahead.
+constexpr float ULDUAR_FREYA_SNAPLASHER_THREAT_SHED_PCT = 80.0f;
+constexpr float ULDUAR_FREYA_SNAPLASHER_THREAT_RETURN_PCT = 60.0f;
+
+// The tank's head start on a fresh Snaplasher. A ratio can't cover the opener: the tank's first hit is a few
+// thousand threat and one global of raid damage is several times that.
+constexpr uint32 ULDUAR_FREYA_SNAPLASHER_TANK_LEAD_MS = 5000;
 
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
 // and both multipliers cannot disagree about what is up.
@@ -246,8 +251,7 @@ public:
     // spore pick and the hazard sweep both read them in the same tick.
     GuidVector const& Stalkers();
 
-    // Where the back line gathers. The trigger, isUseful and Execute all ask for it in one tick, so
-    // it gathers the wave itself rather than trusting every caller to hand in the same one.
+    // Where the back line gathers: the anchor bot. The trigger, isUseful and Execute all ask for it in one tick.
     Position const& LasherCamp();
 
 private:
@@ -346,9 +350,13 @@ Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI);
 // of them without shared state. UINT32_MAX for anyone who is not ranged DPS.
 uint32 GetFreyaRangedDpsRank(PlayerbotAI* botAI);
 
-// Nearest spot on the raid's bearing that keeps every low lasher STANDOFF away, else the anchor bot. No wave state
-// parameter on purpose: the answer is cached per tick, so the first caller's state would become everyone's.
+// Where the back line balls up for the AoE: on the anchor bot. Never a computed point, a live bot is always on
+// the mesh. Empty when no ranged DPS bot is alive.
 Position GetFreyaLasherCampSpot(PlayerbotAI* botAI);
+
+// Whether this damage dealer has to leave the Snaplasher to a tank for now. `shedding` is the caller's own
+// memory of the last answer, which is what keeps a bot at the line from swapping target every tick.
+bool FreyaShedsSnaplasherThreat(PlayerbotAI* botAI, Unit* snaplasher, uint32 seenForMs, bool shedding);
 
 // Living lashers under maxPct within radius. The health filter is the point: clearing every lasher would push
 // melee out of the fight.
