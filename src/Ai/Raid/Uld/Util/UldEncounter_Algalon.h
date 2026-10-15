@@ -225,9 +225,6 @@ constexpr int32 ULDUAR_ALGALON_UNDER_HIDE_STRETCH_MS = 4000;
 constexpr int32 ULDUAR_ALGALON_UNDER_DEATH_LEAD_MS = 1500;
 // A new star joins the plan only while the team's work on it ends this long before the cast.
 constexpr int32 ULDUAR_ALGALON_UNDER_FINISH_MS = 5000;
-// A DoT's ticks to come count as done, so a new one is held within this much of the stop line (% of max health):
-// Curse of Agony, the biggest, is ~6% of a 25-man star.
-constexpr float ULDUAR_ALGALON_UNDER_DOT_ROOM_PCT = 10.0f;
 // Between these two before the cast, a planned star whose work overruns the cast for the late hold goes back to
 // pacing, which can still kill it first. After that pacing couldn't make it either.
 constexpr int32 ULDUAR_ALGALON_UNDER_RELEASE_FROM_MS = 15000;
@@ -622,9 +619,6 @@ void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut);
 // "aura mastery" or "divine sacrifice" when this paladin covers the star about to explode, else nullptr.
 char const* GetAlgalonExplosionCover(PlayerbotAI* botAI);
 void ClaimAlgalonExplosionCover(Player* bot, char const* cover);
-bool AlgalonStarPlannedUnder(Player* bot, ObjectGuid const& star);
-// How far an under-star is above its stop line, in % of max health; 100 for any other star.
-float AlgalonUnderStarRoomPct(Player* bot, ObjectGuid const& star);
 // A star dying under the running cast within `radius`: where a phased bot would come back inside a new hole.
 bool AlgalonUnderStarNear(Player* bot, float radius);
 // This bot's own button against the star about to die, when the hit would kill it, else a healthstone or a

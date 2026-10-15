@@ -403,6 +403,15 @@ void Note(Player* bot, char const* kind, std::string const& text)
     session->Emit(getMSTime(), "note", fields);
 }
 
+void LogHitsOn(Player* bot, uint32 entry)
+{
+    if (!Active())
+        return;
+
+    if (ObsSession* session = SessionFor(bot))
+        session->hitEntries.insert(entry);
+}
+
 void NoteAssignment(ObjectGuid guid, char const* kind, std::string const& value)
 {
     if (!Active() || !kind)

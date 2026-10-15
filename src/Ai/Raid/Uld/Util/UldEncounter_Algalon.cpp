@@ -940,6 +940,9 @@ void NotePull(Group* group, Creature* boss, AlgalonEncounterState const& state)
     if (!tracker)
         return;
 
+    // Splash near him takes stars off their plan, and only a hit row says whose.
+    RaidObs::LogHitsOn(tracker, PB_NPC_COLLAPSING_STAR);
+
     uint32 inReach = 0;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
@@ -4817,22 +4820,6 @@ std::vector<HazardCircle> GetAlgalonDodgeHazards(Player* bot, float markerCleara
             hazards.emplace_back(star.position, ULDUAR_ALGALON_STAR_DYING_RADIUS);
 
     return hazards;
-}
-
-bool AlgalonStarPlannedUnder(Player* bot, ObjectGuid const& star)
-{
-    AlgalonEncounterState const* state = FindState(bot);
-    return state && state->underStars.count(star) > 0;
-}
-
-float AlgalonUnderStarRoomPct(Player* bot, ObjectGuid const& guid)
-{
-    AlgalonEncounterState const* state = FindState(bot);
-    AlgalonScanUnit const* star = state ? FindScanned(state->stars, guid) : nullptr;
-    if (!star || !star->under || !star->tickHp)
-        return 100.0f;
-
-    return static_cast<float>(BulkLeftHp(*star)) / star->tickHp;
 }
 
 bool AlgalonUnderStarNear(Player* bot, float radius)

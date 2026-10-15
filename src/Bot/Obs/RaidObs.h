@@ -246,6 +246,9 @@ void NoteAssignment(ObjectGuid guid, char const* kind, std::string const& value)
 // two call sites can disagree about what was decided.
 void NoteDerived(Player* bot, char const* key, std::string const& value);
 
+// From now until the pull ends, every hit the roster or its pets land on this NPC entry is a `dmg` row.
+void LogHitsOn(Player* bot, uint32 entry);
+
 // A hazard with no world object behind it, so nothing can sweep for it: a cone, a rolling wave, a
 // rotating sweep. The helper that derives the geometry is the only thing that knows it exists.
 //

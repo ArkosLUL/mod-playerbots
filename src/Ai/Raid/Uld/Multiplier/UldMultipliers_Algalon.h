@@ -22,8 +22,8 @@ public:
 
 private:
     std::unordered_map<Action*, bool> damagesCurrentTarget;
-    // DoTs keep ticking after the team stops, so none goes on a star planned under Big Bang close to its stop
-    // line. A channel is broken at the line, and a nuke with a DoT rider (Fireball) is a nuke.
+    // No DoT on a star: it keeps ticking once the team moves on, past an under-star's band or a paced one's gap.
+    // A channel stops when it's broken, and a nuke with a small DoT rider (Fireball) is a nuke.
     std::unordered_map<Action*, bool> lingers;
 };
 

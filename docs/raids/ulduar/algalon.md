@@ -160,10 +160,14 @@ it. It can't open sooner: the tanks hold him until the cast starts or he resets,
   the one with most left next; a bulk starts once the work left plus 35 s reaches the cast. A spell landing after
   the line is 1-2% of a 4-5 tick band; one overshooting below it is released `early`. No wands: they took
   0.2-0.3 %/s each, a damage dealer off him against the enrage, and a far star nobody could wand died after the
-  strip and killed 5. The DoTs' ticks to come count as done (they tick on once the team stops); at the line the
-  tick interrupts any cast, channel or wand on the star, a paced kill's focus excepted, and the target guard holds
-  a new DoT within 10% of it (Curse of Agony is ~6%; a nuke with a DoT rider like Fireball is a nuke). Holding
-  DoTs and channels outright, the bulk ran +1.9 %/s beyond the drain against +5 planned.
+  strip and killed 5. At the line the tick interrupts any cast, channel or wand on the star, a paced kill's focus
+  excepted.
+- **No DoT on any star** (target guard): a non-channelled spell doing more by ticks than by its hit, at base values
+  (Moonfire, Immolate, Flame Shock; Fireball, Pyroblast, Holy Fire are nukes). Allowed, they ticked 12-24 s after
+  the team moved on, 16-24% beyond the drain and more than `pendingHp` counts (base ticks, no Haunt, Shadow
+  Embrace, Earth and Moon or crits): 6 of 7 under-stars in a kill and all 5 in a wipe went `early` (3 of 7 died
+  under with DoTs held), and a paced star's Insect Swarm and Moonfire killed it 3.6 s after its neighbour (6
+  dead). The bulk ran +1.6 %/s beyond the drain with them, +1.9 without. `pendingHp` still counts humans' DoTs.
 - **Hide**: with a star under, every margin (handler and tanks included) gains 3 s, stretched so all are in
   1.5 s before the earliest drain death, capped at 4 s; the handler no longer waits on stragglers.
 - Phased bots keep 8 yd off an under-star in its last 3 s (exit and leave trigger): its hole lands under them at
@@ -545,8 +549,9 @@ under-star at its drain death, `s` the shelter star).
 Events: `algalon.holelost` (`kite`/`stray`/`phase2`/`bigbang`, the last a hole lost during the cast), one per hole, skipped when every summon goes at
 once on a kill or Ascend; `algalon.stardeath` (`under`/`early`/`late` for an under-star inside, before or after
 its window, else `killed` as the focus star, `drained` within 3% of its
-drain-only health, else `chewed`, and the nearest raid member's distance; older traces say `collapsed`), the
-only record of how a star died, since damage rows cover players alone; `algalon.soakkit`
+drain-only health, else `chewed`, and the nearest raid member's distance; older traces say `collapsed`);
+the roster's hits on stars (pets under their owner) as `dmg` rows, from `RaidObs::LogHitsOn` at the intro end;
+`algalon.soakkit`
 (`def=<button|dispersion|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.tankdef`
 (`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
 (`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (older traces: `start|stop <star counter> <hp%>` on the
@@ -582,8 +587,8 @@ counted by cause and role with humans starred. Then:
   drag after each pickup and who was in his reach on it;
 - `--soak`: per Big Bang the soaker's health across the hit, the kit, the prep casts, the first heal after it
   and every reserved button spent earlier;
-- `--collateral`: per star the health lost beyond drain while nobody was sent, and every cast on a star by caster
-  and spell;
+- `--collateral`: per star the health lost beyond drain while nobody was sent, the damage on stars per star and
+  by source and spell, every cast on a star by caster and spell, and a verdict per bot DoT on a star;
 - `--defensives`: every cutter, Lay on Hands and Guardian Spirit on a swap tank with its health and whether it
   lived 10 s; per tank death its last 6 s of hits, cutters up and `algalon.tankdef`; per explosion the cover
   up and damage covered against uncovered; per explosion death the personal buttons pressed or ready; per

@@ -42,6 +42,42 @@ bool CastsPositiveSpell(PlayerbotAI* botAI, Action* action)
     SpellInfo const* spellInfo = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     return spellInfo && spellInfo->IsPositive();
 }
+
+// More of its damage comes from ticks than from the hit, at base values.
+bool MostlyPeriodic(SpellInfo const* info, Player* caster)
+{
+    if (!info || info->IsChanneled())
+        return false;
+
+    int32 const duration = info->GetMaxDuration();
+    float periodic = 0.0f;
+    float direct = 0.0f;
+    for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+    {
+        SpellEffectInfo const& effect = info->Effects[i];
+        if (effect.Effect == SPELL_EFFECT_SCHOOL_DAMAGE)
+        {
+            direct += static_cast<float>(effect.CalcValue(caster));
+            continue;
+        }
+
+        if (effect.Effect != SPELL_EFFECT_APPLY_AURA)
+            continue;
+
+        if (effect.ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE_PERCENT)
+            return true;
+
+        if (effect.ApplyAuraName != SPELL_AURA_PERIODIC_DAMAGE && effect.ApplyAuraName != SPELL_AURA_PERIODIC_LEECH)
+            continue;
+
+        if (duration <= 0 || effect.Amplitude <= 0)
+            return true;
+
+        periodic += static_cast<float>(effect.CalcValue(caster)) * static_cast<float>(duration / effect.Amplitude);
+    }
+
+    return periodic > direct;
+}
 }  // namespace
 
 float AlgalonTargetGuardMultiplier::GetValue(Action* action)
@@ -70,7 +106,7 @@ float AlgalonTargetGuardMultiplier::GetValue(Action* action)
     if (!target)
         return 1.0f;
 
-    if (target->GetEntry() == PB_NPC_COLLAPSING_STAR && AlgalonStarPlannedUnder(bot, target->GetGUID()))
+    if (target->GetEntry() == PB_NPC_COLLAPSING_STAR)
     {
         auto lingering = lingers.find(action);
         if (lingering == lingers.end())
@@ -79,14 +115,10 @@ float AlgalonTargetGuardMultiplier::GetValue(Action* action)
             uint32 const spellId =
                 spellAction ? context->GetValue<uint32>("spell id", spellAction->getSpell())->Get() : 0;
             SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-            bool const lasts = info && !info->IsChanneled() && !info->HasEffect(SPELL_EFFECT_SCHOOL_DAMAGE) &&
-                               (info->HasAura(SPELL_AURA_PERIODIC_DAMAGE) || info->HasAura(SPELL_AURA_PERIODIC_LEECH) ||
-                                info->HasAura(SPELL_AURA_PERIODIC_DAMAGE_PERCENT));
-            lingering = lingers.emplace(action, lasts).first;
+            lingering = lingers.emplace(action, MostlyPeriodic(info, bot)).first;
         }
 
-        if (lingering->second &&
-            AlgalonUnderStarRoomPct(bot, target->GetGUID()) < ULDUAR_ALGALON_UNDER_DOT_ROOM_PCT)
+        if (lingering->second)
             return 0.0f;
     }
 

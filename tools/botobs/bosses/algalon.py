@@ -197,6 +197,10 @@ SOAK_DAMAGE_MS = 3000
 HEAL_WAIT_MS = 10000
 HANDOVER_LEAD_MS = 20000
 CHEWED_PCT = 10.0
+# Mostly ticks, so it keeps going once the team moves off the star; bots hold these on stars.
+STAR_DOT_NAMES = frozenset(("Corruption", "Unstable Affliction", "Curse of Agony", "Curse of Doom", "Seed of Corruption",
+                            "Immolate", "Moonfire", "Insect Swarm", "Shadow Word: Pain", "Vampiric Touch",
+                            "Devouring Plague", "Flame Shock", "Serpent Sting", "Living Bomb"))
 # the probe's own allowance for drain-only health at death
 DRAINED_SLACK = _radius_or("ULDUAR_ALGALON_STAR_DRAIN_SLACK_PCT", 3.0)
 WORST_WINDOW_MS = 10000
@@ -3230,33 +3234,100 @@ def star_excess(trace: Trace) -> list[dict]:
     return cached(trace, "_algalon_excess", build)
 
 
+STAR_GROUPS = ("star team on the focus star", "star team on another star", "off the star team")
+
+
+def star_grouper(trace: Trace):
+    """`group(owner, star, when)`: which of STAR_GROUPS a hit or cast on a star falls in."""
+    end = pull_end(trace)
+    team = holder_spans(trace, "algalon.starteam", end)
+    focus = latch_spans(trace, "algalon.focusstar", end)
+    urgent = latch_spans(trace, "algalon.urgent", end)
+
+    def group(owner: int, star: int, when: int) -> str:
+        listed = (value_at(team.get(owner, []), when) == "1"
+                  or (value_at(urgent, when) == "1" and trace.role(owner) == "ranged"))
+        if not listed:
+            return STAR_GROUPS[2]
+        return STAR_GROUPS[0] if star == as_guid(value_at(focus, when)) else STAR_GROUPS[1]
+    return group
+
+
 def star_casts(trace: Trace) -> dict[str, collections.Counter]:
     """`(caster, spell name)` counts of every cast on a star, split into the team on the focus star, the team on
     another star, and anyone off the team. A pet counts with its owner."""
     stars = guids_of_entry(trace, NPC_COLLAPSING_STAR)
-    end = pull_end(trace)
     roster = roster_guids(trace)
-    team = holder_spans(trace, "algalon.starteam", end)
-    focus = latch_spans(trace, "algalon.focusstar", end)
-    urgent = latch_spans(trace, "algalon.urgent", end)
+    group = star_grouper(trace)
     out: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for rec in trace.of("cast"):
         target, who_cast = rec.get("tgt"), rec.get("s")
         owner = trace.owners.get(who_cast, who_cast)
         if target not in stars or owner not in roster:
             continue
-        when = rec["t"]
-        listed = (value_at(team.get(owner, []), when) == "1"
-                  or (value_at(urgent, when) == "1" and trace.role(owner) == "ranged"))
-        if not listed:
-            group = "off the star team"
-        elif target == as_guid(value_at(focus, when)):
-            group = "star team on the focus star"
-        else:
-            group = "star team on another star"
         name = trace.spells.get(rec.get("sp")) or trace.spell(rec.get("sp"))
-        out[group][(who_cast, name)] += 1
+        out[group(owner, target, rec["t"])][(who_cast, name)] += 1
     return out
+
+
+def star_hits(trace: Trace) -> tuple[dict[str, collections.Counter], dict[int, collections.Counter]]:
+    """From the star hit `dmg` rows: damage per `(owner, spell name)` in each of STAR_GROUPS, and per star per
+    owner. Both empty for a trace from before those rows."""
+    stars = guids_of_entry(trace, NPC_COLLAPSING_STAR)
+    roster = roster_guids(trace)
+    group = star_grouper(trace)
+    by_group: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    by_star: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for rec in trace.of("dmg"):
+        star, source = rec.get("d"), rec.get("s")
+        owner = trace.owners.get(source, source)
+        if star not in stars or owner not in roster:
+            continue
+        amount = rec.get("a", 0)
+        name = trace.spells.get(rec.get("sp")) or trace.spell(rec.get("sp")) or "melee"
+        by_group[group(owner, star, rec["t"])][(owner, name)] += amount
+        by_star[star][owner] += amount
+    return by_group, by_star
+
+
+def bot_star_dots(trace: Trace) -> dict[int, tuple[int, collections.Counter]]:
+    """Per bot, the first time it put a DoT on a star and its DoT casts on stars by name."""
+    stars = guids_of_entry(trace, NPC_COLLAPSING_STAR)
+    roster = roster_guids(trace)
+    out: dict[int, tuple[int, collections.Counter]] = {}
+    for rec in trace.of("cast"):
+        caster = rec.get("s")
+        owner = trace.owners.get(caster, caster)
+        if rec.get("tgt") not in stars or rec.get("tr") or owner not in roster or owner in trace.humans:
+            continue
+        name = trace.spells.get(rec.get("sp")) or trace.spell(rec.get("sp"))
+        if name not in STAR_DOT_NAMES:
+            continue
+        out.setdefault(owner, (rec["t"], collections.Counter()))[1][name] += 1
+    return out
+
+
+def show_star_hits(trace: Trace) -> None:
+    by_group, by_star = star_hits(trace)
+    if not by_star:
+        print("  no star hit rows: a trace from before they were logged")
+        return
+    print("  damage on stars, a pet with its owner:")
+    labels = star_labels(trace)
+    for star, owners in sorted(by_star.items(), key=lambda item: labels.get(item[0], "")):
+        top = ", ".join(f"{label_of(trace, guid)} {amount / 1000:.1f} k" for guid, amount in owners.most_common(4))
+        print(f"    {labels.get(star, star)}: {sum(owners.values()) / 1000:.1f} k; {top}")
+    for name in STAR_GROUPS:
+        counted = by_group.get(name)
+        if not counted:
+            continue
+        print(f"  damage on stars, {name}:")
+        by_owner: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+        for (guid, spell), amount in counted.items():
+            by_owner[guid][spell] += amount
+        for guid, spells in sorted(by_owner.items(), key=lambda item: -sum(item[1].values())):
+            print(f"    {label_of(trace, guid):34} {sum(spells.values()) / 1000:6.1f} k: "
+                  + ", ".join(f"{spell} {amount / 1000:.1f} k" for spell, amount in spells.most_common(6)))
 
 
 def show_collateral(trace: Trace) -> None:
@@ -3273,8 +3344,9 @@ def show_collateral(trace: Trace) -> None:
         worst = (f", worst {WORST_WINDOW_MS // 1000} s {row['worst']:.1f}% from {clock(row['worst_from'])}"
                  f" to {clock(row['worst_to'])}" if row["worst_from"] is not None else "")
         print(f"    {row['label']:8} spawned {clock(row['first'])}, {gone}: {row['excess']:5.1f}%{worst}")
+    show_star_hits(trace)
     groups = star_casts(trace)
-    for group in ("star team on the focus star", "star team on another star", "off the star team"):
+    for group in STAR_GROUPS:
         counted = groups.get(group)
         if not counted:
             continue
@@ -3291,10 +3363,14 @@ def show_collateral(trace: Trace) -> None:
 
 
 def collateral_faults(trace: Trace) -> list[tuple[int, str]]:
-    return [(row["crossed"], f"star chewed: {row['label']} lost {row['excess']:.1f}% beyond its drain while not the"
-                             f" focus star, {row['worst']:.1f}% of it in {WORST_WINDOW_MS // 1000} s from"
-                             f" {secs(row['worst_from'])}")
-            for row in star_excess(trace) if row["crossed"] is not None]
+    out = [(row["crossed"], f"star chewed: {row['label']} lost {row['excess']:.1f}% beyond its drain while not the"
+                            f" focus star, {row['worst']:.1f}% of it in {WORST_WINDOW_MS // 1000} s from"
+                            f" {secs(row['worst_from'])}")
+           for row in star_excess(trace) if row["crossed"] is not None]
+    for guid, (first, names) in bot_star_dots(trace).items():
+        out.append((first, f"DoT on a star: {trace.name(guid)} "
+                           + ", ".join(f"{name} {n}" for name, n in names.most_common())))
+    return out
 
 
 # ---------------------------------------------------------------------------------------------- holes

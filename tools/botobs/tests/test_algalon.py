@@ -803,7 +803,8 @@ STAR_A_SPOT, STAR_B_SPOT = (30, -30), (5, 10)
 EDGE_SPELLS = {62124: "Hand of Reckoning", 2649: "Growl", 694: "Mocking Blow", 31789: "Righteous Defense",
                33206: "Pain Suppression", 498: "Divine Protection", 6940: "Hand of Sacrifice", 53601: "Sacred Shield",
                48066: "Power Word: Shield", 20267: "Judgement of Light", 45438: "Ice Block", 48461: "Wrath",
-               53190: "Starfall", 22482: "Blade Flurry", 31803: "Holy Vengeance", 64584: "Big Bang"}
+               53190: "Starfall", 22482: "Blade Flurry", 31803: "Holy Vengeance", 64584: "Big Bang",
+               48463: "Moonfire"}
 
 
 def holder_offset(when: int) -> tuple[float, float]:
@@ -929,6 +930,10 @@ def edge_pull() -> list[dict]:
         {**cast(16500, ROGUE, 22482, E_STAR_B), "tr": 1}, {**cast(17000, PARTNER, 31803, E_STAR_B), "tr": 1},
         dmg(20000, E_STAR_A, ROGUE, al.SPELL_BLACK_HOLE_EXPLOSION[0], 1000),
         dmg(25000, E_STAR_B, ROGUE, al.SPELL_BLACK_HOLE_EXPLOSION[0], 1000),
+        # A DoT from the team on its focus, and hits on stars: the team's, the human's and a pet's.
+        cast(13000, CASTER, 48463, E_STAR_A),
+        dmg(15500, CASTER, E_STAR_A, 48461, 9000), dmg(16000, CASTER, E_STAR_A, 48463, 3000),
+        dmg(17000, PARTNER, E_STAR_B, 31803, 2500), dmg(17500, WOLF, E_STAR_B, 0, 1500),
 
         *(veto(when, ROGUE, "algalon splash hold", "blade flurry") for when in (16500, 17500)),
         veto(21000, WARRIOR, "algalon taunt guard", "mocking blow"),
@@ -1083,12 +1088,29 @@ class EdgeHold(unittest.TestCase):
                          (20.0, 14000, 18000, 16000))
         self.assertEqual(al.collateral_faults(self.trace), [
             (16000, "star chewed: star 2 lost 20.0% beyond its drain while not the focus star, 20.0% of it in 10 s"
-                    " from 14.0s")])
+                    " from 14.0s"),
+            (13000, "DoT on a star: Druidica Moonfire 1")])
+
+    def test_hits_on_stars_by_group_and_star(self):
+        by_group, by_star = al.star_hits(self.trace)
+        self.assertEqual(dict(by_group), {
+            "star team on the focus star": {(CASTER, "Wrath"): 9000, (CASTER, "Moonfire"): 3000},
+            "off the star team": {(PARTNER, "Holy Vengeance"): 2500, (HUNTER, "melee"): 1500}})
+        self.assertEqual(dict(by_star), {E_STAR_A: {CASTER: 12000}, E_STAR_B: {PARTNER: 2500, HUNTER: 1500}})
+        text = render(self.trace, "collateral")
+        self.assertIn("star 2: 4.0 k; Dragon (tank)* 2.5 k, Trueshot (ranged) 1.5 k", text)
+        self.assertRegex(text, r"Druidica \(ranged\) +12\.0 k: Wrath 9\.0 k, Moonfire 3\.0 k")
+
+    def test_star_hits_absent_before_the_probe(self):
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, [rec for rec in edge_pull()
+                                  if not (rec.get("e") == "dmg" and rec.get("d") in (E_STAR_A, E_STAR_B))])
+            self.assertIn("no star hit rows", render(trace, "collateral"))
 
     def test_casts_on_stars_split_by_team_and_focus(self):
         groups = al.star_casts(self.trace)
         self.assertEqual(dict(groups), {
-            "star team on the focus star": {(CASTER, "Wrath"): 1},
+            "star team on the focus star": {(CASTER, "Wrath"): 1, (CASTER, "Moonfire"): 1},
             "star team on another star": {(CASTER, "Starfall"): 2},
             "off the star team": {(ROGUE, "Blade Flurry"): 1, (PARTNER, "Holy Vengeance"): 1}})
         text = render(self.trace, "collateral")

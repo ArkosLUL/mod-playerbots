@@ -259,6 +259,8 @@ public:
     std::unordered_set<uint64> seenUnits;
     std::unordered_set<uint32> seenSpells;
     std::unordered_set<ObjectGuid> watched;
+    // NPC entries an encounter asked for: the roster's hits on them are logged like hits on a player.
+    std::unordered_set<uint32> hitEntries;
     std::unordered_map<uint64, BotTrace> bots;
 
     // getMSTime() wraps every ~49.7 days. The unsigned subtraction wraps with it, so reading the

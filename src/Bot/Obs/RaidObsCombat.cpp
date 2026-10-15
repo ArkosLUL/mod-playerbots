@@ -83,6 +83,17 @@ static Player* TrackedRider(ObsSession& s, Unit* vehicle, bool descend)
     return nullptr;
 }
 
+static ObsSession* HitOnEntrySession(Unit* attacker, Unit* victim)
+{
+    Creature* creature = victim->ToCreature();
+    ObsSession* session = creature && attacker ? SessionFor(victim) : nullptr;
+    if (!session || !session->hitEntries.count(creature->GetEntry()))
+        return nullptr;
+
+    Unit* source = attacker->GetCharmerOrOwnerOrSelf();
+    return source && source->IsPlayer() && session->Tracks(source) ? session : nullptr;
+}
+
 void NoteDamage(Unit* attacker, Unit* victim, SpellInfo const* spell, uint32 amount, int32 overkill,
                 uint32 schoolMask, uint32 absorb, uint32 resist)
 {
@@ -99,6 +110,9 @@ void NoteDamage(Unit* attacker, Unit* victim, SpellInfo const* spell, uint32 amo
         if (session && !TrackedRider(*session, victim, true))
             session = nullptr;
     }
+
+    if (!probe && !session)
+        session = HitOnEntrySession(attacker, victim);
 
     if (!session)
         return;
