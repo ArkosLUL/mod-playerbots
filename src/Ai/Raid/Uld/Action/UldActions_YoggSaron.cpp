@@ -1172,12 +1172,13 @@ bool YoggSaronDarkVolleyInterruptAction::Execute(Event /*event*/)
     }
 
     // Start each interrupter at its own slot. Several Guardians cast at once and the cooldowns run
-    // 6-24s, so without the offset the whole raid spends its kicks on one volley.
+    // 6-24s, so without the offset the whole raid spends its kicks on one volley. Not for Drain Life: it comes
+    // sorted by time left, and a kicked channel drops off the list.
     size_t const rest = casters.size() - marks;
     if (!rest)
         return false;
 
-    size_t const start = static_cast<size_t>(GetInterrupterIndex()) % rest;
+    size_t const start = YoggSaronInPhase3(botAI) ? 0 : static_cast<size_t>(GetInterrupterIndex()) % rest;
     for (size_t i = 0; i < rest; ++i)
         if (CastClassInterrupt(casters[marks + (start + i) % rest]))
             return true;
@@ -1211,13 +1212,30 @@ bool YoggSaronDiminishPowerJudgementAction::Execute(Event /*event*/)
 bool YoggSaronMortalStrikeAction::Execute(Event /*event*/)
 {
     // No walk and no target swap, only what is already in reach.
-    bool hot = false;
-    Unit* guardian = YoggSaronMortalStrikeTarget(botAI, hot);
+    char const* reason = nullptr;
+    Unit* guardian = YoggSaronMortalStrikeTarget(botAI, reason);
     if (!guardian || !botAI->CanCastSpell("mortal strike", guardian) || !botAI->CastSpell("mortal strike", guardian))
         return false;
 
     if (RaidObs::Active())
-        RaidObs::Note(bot, "yogg.mortalstrike", hot ? "hot" : "drain");
+        RaidObs::Note(bot, "yogg.mortalstrike", reason);
+
+    return true;
+}
+
+bool YoggSaronWarlockPetAction::Execute(Event /*event*/)
+{
+    char const* summon = YoggSaronWarlockSummon(botAI);
+    if (!summon)
+        return false;
+
+    // Fel Domination first when the warlock has it: 5.5 s off a 10 s summon.
+    char const* spell = botAI->CanCastSpell("fel domination", bot) ? "fel domination" : summon;
+    if (!botAI->CastSpell(spell, bot))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.warlockpet", spell);
 
     return true;
 }

@@ -1656,6 +1656,17 @@ int32 YoggSaronDrainLifeElapsed(Unit* guardian)
     return channel ? std::max(0, channel->GetSpellInfo()->GetDuration() - channel->GetCastTimeRemaining()) : -1;
 }
 
+// The Drain Life a kick can stop. A channel has no cast time, so Spell::EffectInterruptCast only takes it once it's
+// CASTING. A kick in its first update is spent for nothing, cooldown and all.
+Spell* YoggSaronDrainLifeKickable(Unit* guardian)
+{
+    Spell* channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE);
+    if (!channel)
+        channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE_H);
+
+    return channel && channel->getState() == SPELL_STATE_CASTING ? channel : nullptr;
+}
+
 // Only the strongest cut counts in Unit::SpellHealingBonusTaken, a second one adds nothing.
 bool YoggSaronHealingCut(Unit* guardian)
 {
@@ -1954,9 +1965,9 @@ uint32 YoggSaronPileHealedOn(Player* tank)
     return count;
 }
 
-Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, bool& hot)
+Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, char const*& reason)
 {
-    hot = false;
+    reason = nullptr;
     Player* bot = botAI->GetBot();
     if (YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase3(botAI) || YoggThorimKeeperActive(botAI))
         return nullptr;
@@ -1969,28 +1980,53 @@ Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, bool& hot)
     bool const gaze = YoggSaronGazeActive(botAI);
     Creature* yogg = gaze ? YoggSaronNearestCreature(botAI, NPC_YOGG_SARON) : nullptr;
 
+    static constexpr char const* reasons[] = {"hot", "drain", "low"};
     Unit* best = nullptr;
+    size_t bestTier = 0;
     for (Creature* guardian : guardians)
     {
         if (!guardian->IsAlive() || YoggSaronHealingCut(guardian) || !bot->IsWithinMeleeRange(guardian))
             continue;
 
-        bool const healed = YoggSaronBeaconHealOn(guardian);
-        if (!healed && !YoggSaronDrainLifeChannelling(guardian))
+        // Low enough to drain means its next channel comes within 10.5-14.5 s, mostly under the 10 s cut. Better
+        // than Yogg, where the cut does nothing.
+        size_t tier = 2;
+        if (YoggSaronBeaconHealOn(guardian))
+            tier = 0;
+        else if (YoggSaronDrainLifeChannelling(guardian))
+            tier = 1;
+        else if (guardian->GetHealthPct() >= ULDUAR_YOGG_SARON_DRAIN_LIFE_HEALTH_PCT)
             continue;
 
         if ((gaze && (!yogg || !YoggSaronOutsideGaze(bot, yogg, guardian))) ||
             !YoggSaronGuardianThreatAllows(bot, guardian, guardian->GetGUID() == bot->GetTarget()))
             continue;
 
-        if (!best || std::make_tuple(!healed, guardian->GetHealth()) < std::make_tuple(!hot, best->GetHealth()))
+        if (!best || std::make_tuple(tier, guardian->GetHealth()) < std::make_tuple(bestTier, best->GetHealth()))
         {
             best = guardian;
-            hot = healed;
+            bestTier = tier;
         }
     }
 
+    if (best)
+        reason = reasons[bestTier];
+
     return best;
+}
+
+char const* YoggSaronWarlockSummon(PlayerbotAI* botAI)
+{
+    static constexpr std::pair<char const*, char const*> pets[] = {{"felhunter", "summon felhunter"},
+                                                                   {"felguard", "summon felguard"},
+                                                                   {"imp", "summon imp"},
+                                                                   {"voidwalker", "summon voidwalker"},
+                                                                   {"succubus", "summon succubus"}};
+    for (auto const& [strategy, summon] : pets)
+        if (botAI->HasStrategy(strategy, BOT_STATE_NON_COMBAT))
+            return summon;
+
+    return nullptr;
 }
 
 Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI)
@@ -2618,14 +2654,24 @@ std::vector<Unit*> YoggSaronInterruptCastersAround(PlayerbotAI* botAI)
     if (!YoggSaronInPhase3(botAI))
         return casters;
 
+    // Kicks run on cooldown, each saves only the ticks its channel has left. So most time left first, and none on a
+    // channel down to its last tick while a fresh one is about a second away.
+    std::vector<std::pair<int32, Unit*>> drains;
     for (uint32 const entry : {NPC_IMMORTAL_GUARDIAN, NPC_MARKED_IMMORTAL_GUARDIAN})
     {
         std::list<Creature*> immortals;
         bot->GetCreatureListWithEntryInGrid(immortals, entry, ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS);
         for (Creature* guardian : immortals)
-            if (guardian->IsAlive() && YoggSaronDrainLifeChannelling(guardian))
-                casters.push_back(guardian);
+        {
+            Spell* channel = guardian->IsAlive() ? YoggSaronDrainLifeKickable(guardian) : nullptr;
+            if (channel && channel->GetCastTimeRemaining() >= ULDUAR_YOGG_SARON_KICK_MIN_LEFT_MS)
+                drains.emplace_back(channel->GetCastTimeRemaining(), guardian);
+        }
     }
+
+    std::stable_sort(drains.begin(), drains.end(), [](auto const& a, auto const& b) { return a.first > b.first; });
+    for (auto const& [left, guardian] : drains)
+        casters.push_back(guardian);
 
     // A channelling Guardian doesn't move, so a mark's Drain Life during the drag keeps it in the pile
     // under the dragger's taunt. In one pull that healed seven Guardians, then eleven.
@@ -4769,9 +4815,7 @@ void YoggSaronNudgeDrainLifeKicker(PlayerbotAI* botAI)
     std::unordered_set<ObjectGuid> nudged;
     for (Unit* guardian : YoggSaronInterruptCastersAround(botAI))
     {
-        Spell* channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE);
-        if (!channel)
-            channel = guardian->FindCurrentSpellBySpellId(SPELL_GUARDIAN_DRAIN_LIFE_H);
+        Spell* channel = YoggSaronDrainLifeKickable(guardian);
 
         // A mark's channel gets no grace: the drag stands still for as long as it runs.
         bool const mark = YoggSaronMarkCaster(guardian);

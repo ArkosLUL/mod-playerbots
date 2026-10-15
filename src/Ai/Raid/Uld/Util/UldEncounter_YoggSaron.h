@@ -515,6 +515,9 @@ constexpr float ULDUAR_YOGG_SARON_BEACON_HEAL_SLACK = 5.0f;
 // Mortal Strike's -50% healing. A weaker cut on the Guardian still leaves the strike worth it.
 constexpr int32 ULDUAR_YOGG_SARON_HEALING_CUT_PCT = -50;
 
+// An Immortal Guardian under this casts Drain Life, again 9.5 s after each channel ends, kicked or not.
+constexpr float ULDUAR_YOGG_SARON_DRAIN_LIFE_HEALTH_PCT = 85.0f;
+
 // Both tanks stand on the melee spot, so Consecration keeps the whole pile on whoever has the most threat. The other
 // tank takes it once the holder is under the swap line with this many on it; the holder sheds for a while.
 constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_PCT = 50.0f;
@@ -536,6 +539,9 @@ constexpr uint32 ULDUAR_YOGG_SARON_TANK_WRATH_LOCK_MS = 30000;
 constexpr uint32 ULDUAR_YOGG_SARON_KICK_LAST_RESORT_MS = 1500;
 constexpr uint32 ULDUAR_YOGG_SARON_KICK_WAIT_MS = 1000;
 constexpr uint32 ULDUAR_YOGG_SARON_KICK_NUDGE_MS = 2000;
+// Drain Life ticks once a second, so under this left it has one tick to go. Late in phase 3 a fresh channel starts
+// about every second and a kick there saves all five.
+constexpr int32 ULDUAR_YOGG_SARON_KICK_MIN_LEFT_MS = 1000;
 // Hunter drags. Distracting Shot is a 6 s taunt against a 10 s mark, so it goes out with this much left and covers the
 // heal 0.3-1.1 s after. Feign Death if the Guardian is still on the hunter this long after the release.
 constexpr uint32 ULDUAR_YOGG_SARON_BEACON_SHOT_LEFT_MS = 5000;
@@ -792,7 +798,9 @@ bool YoggSaronReprisalHold(PlayerbotAI* botAI);
 Player* YoggSaronRoomHealer(PlayerbotAI* botAI);
 
 // What the interrupt node kicks: phase 1 Guardians casting Dark Volley, phase 3 Immortal Guardians channelling Drain
-// Life, marks first. A kicker held back for the marks gets only those. Shared so trigger and action cannot disagree.
+// Life, marks first. Drain Life only once the channel has begun, most time left first, none with less than
+// ULDUAR_YOGG_SARON_KICK_MIN_LEFT_MS left. A kicker held back for the marks gets only those. Shared so trigger and
+// action cannot disagree.
 std::vector<Unit*> GetYoggSaronInterruptCasters(PlayerbotAI* botAI);
 
 // A Guardian a beacon marks or a bot is dragging. A read of the drag claims, no sweep.
@@ -1032,8 +1040,12 @@ uint32 YoggSaronGuardiansOn(Player* tank);
 uint32 YoggSaronPileHealedOn(Player* tank);
 
 // Phase 3 without Thorim: the Guardian this warrior's Mortal Strike goes on, or nullptr: one with the beacon heal
-// first, then one channelling Drain Life, lowest health first. Needs melee reach, no healing cut yet, threat to spare.
-Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, bool& hot);
+// first, then one channelling Drain Life, then one low enough to cast it, lowest health first. Needs melee reach, no
+// healing cut yet, threat to spare. reason is "hot", "drain" or "low".
+Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, char const*& reason);
+
+// The summon a warlock's non-combat pet strategy names ("summon felhunter" for nc +felhunter), or nullptr.
+char const* YoggSaronWarlockSummon(PlayerbotAI* botAI);
 
 // The tank this bot is taking the pile from, see ULDUAR_YOGG_SARON_TANK_SWAP_PCT, or nullptr. Starts a swap
 // when the conditions hold and none is running, and ends one that no longer holds.

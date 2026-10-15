@@ -294,6 +294,18 @@ public:
     bool Execute(Event event) override;
 };
 
+// Warlock pets are only summoned out of combat, so a warlock back from a death before phase 3 has none for the rest
+// of the fight. A felhunter's Spell Lock is one of the raid's Drain Life kicks.
+class YoggSaronWarlockPetAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron warlock pet action";
+
+    YoggSaronWarlockPetAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 // The TankAssist strategy swap one designated bot tank does for the raid at the start of phase 3.
 // TankFace goes with it: it would turn the tank back into Lunatic Gaze, which the face-away answers.
 class YoggSaronPhase3ControlAction : public Action

@@ -159,6 +159,8 @@ void DefineYoggSaron(EncounterBuilder& e)
     // Same reasoning for the warrior's Mortal Strike on a healing Guardian, over its own rotation, which
     // would only ever strike Yogg.
     e.Node<YoggSaronMortalStrikeTrigger, YoggSaronMortalStrikeAction>(ACTION_RAID - 0.5f);
+    // Same slot for the warlock's summon, so it waits for the station walk and beats the rotation.
+    e.Node<YoggSaronWarlockPetTrigger, YoggSaronWarlockPetAction>(ACTION_RAID - 0.5f);
     // Level with the room walk, above heal reach (38-40): the station puts the whole room in range.
     // The trigger stands down inside 10 yd of the station and heal reach takes over.
     e.Node<YoggSaronIllusionHealerStationTrigger, YoggSaronIllusionHealerStationAction>(ACTION_RAID);

@@ -8,6 +8,7 @@
 #include "GameObject.h"
 #include "Group.h"
 #include "Object.h"
+#include "Pet.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldEncounter_YoggSaron.h"
@@ -366,8 +367,22 @@ bool YoggSaronMortalStrikeTrigger::IsActive()
         info->CalcPowerCost(bot, info->GetSchoolMask()) > static_cast<int32>(bot->GetPower(POWER_RAGE)))
         return false;
 
-    bool hot = false;
-    return YoggSaronMortalStrikeTarget(botAI, hot) != nullptr;
+    char const* reason = nullptr;
+    return YoggSaronMortalStrikeTarget(botAI, reason) != nullptr;
+}
+
+bool YoggSaronWarlockPetTrigger::IsActive()
+{
+    // Class and pet first, both free.
+    if (bot->getClass() != CLASS_WARLOCK)
+        return false;
+
+    Pet* pet = bot->GetPet();
+    if ((pet && pet->IsAlive()) || YoggSaronOnBrainLevel(bot) || !IsPhase3())
+        return false;
+
+    char const* summon = YoggSaronWarlockSummon(botAI);
+    return summon && botAI->CanCastSpell(summon, bot);
 }
 
 bool YoggSaronMaladyOfTheMindTrigger::IsActive()

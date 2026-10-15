@@ -1883,10 +1883,12 @@ beacon's stacked heals, each tank's 20 s under a heal (taken / healed / buttons 
 damage on the healed ones, and area casts by worth-hitting count with `yogg.p3area` (by centre
 distance, so a lower bound: the module takes off each unit's size, several yards on an Empowered
 Guardian, which is why 100 of 440 casts read under 3 though every one followed `allowed`). Also: full
-Drain Lifes with a bot kick ready and in range and `yogg.kicknudge`; per marked Guardian its taunts
+Drain Lifes with a bot kick ready and in range and `yogg.kicknudge`; bot kicks cast before their channel began and
+how far into a cut channel the kick came; per marked Guardian its taunts
 (`took` / `didn't take` / `channelling`, read like the module) and its Drain Life seconds and cuts; per
 beacon the stagers' gap to their spot at the mark, the kick reserve with its kicks (`yogg.markkick`) and
-the healing cut over its 20 s (`yogg.healcut`, plus the phase total and `yogg.mortalstrike`); per
+the healing cut over its 20 s (`yogg.healcut`, plus the phase total, `yogg.mortalstrike`, every Mortal Strike's
+target and `yogg.warlockpet`); per
 leftover tentacle the beacons that healed it (10%+ in the 20 s after);
 the damage split is by each bot's target, so a melee bot on Yogg cleaving the pile reads all Yogg (38%
 there against 22% in the combat log); Guardians on each tank per 10 s
@@ -2265,6 +2267,18 @@ off cooldown,
   ready within 2 s, longest reach first (Counterspell / Spell Lock 30 yd reach the pile and the
   north-east lane from the ranged station, Wind Shear 25), then shorter cooldown, non-healer, GUID; they
   kick only marks then and the nudge skips them for others (`yogg.markkick reserve` / `kick`).
+  **Kicks run on cooldown, not reaction**: a bot with one ready kicks a median 140 ms in, and 96 of 145 came
+  ~160 ms after the kicker's cooldown ended. So each saves only the ticks its channel has left (1/s, the first
+  at 1 s), and the casters list Drain Life **most time left first, none under 1 s left**
+  (`KICK_MIN_LEFT_MS`; the slot offset stays for Dark Volley). **Only once the channel is CASTING**
+  (`YoggSaronDrainLifeKickable`): a channel has no cast time and `Spell::EffectInterruptCast` skips a
+  zero-cast-time spell still PREPARING, so a kick in its first update, 9.5 s after the last kick when the
+  Guardian recasts, did nothing: 29 of 174 / 34 of 168 kicks a pull. Replaying one pull's kicks youngest
+  first: Drain Life 12.15M → 11.27M.
+- **A warlock gets its demon back in phase 3** (`yogg-saron warlock pet`, `ACTION_RAID - 0.5`): pets are
+  summoned only out of combat, and one pull's warlock came back from a phase 2 death with no felhunter, no
+  Spell Lock all phase 3 (9 kicks the pull before). With no live pet it casts Fel Domination if it has it,
+  then the summon its `nc` pet strategy names (`YoggSaronWarlockSummon`), probed as `yogg.warlockpet`.
 - **`yogg-saron phase 3 lust`** (`ACTION_RAID + 2`). `ShamanBoostTrigger` and the burst hold both want a
   boss target, and phase 3 shamans are on Guardians and tentacles: none in one pull, +39.7 s and +54.2 s
   in others. It casts once 80% of the living group stands at its phase 3 station (15 yd) or still in
@@ -2330,14 +2344,17 @@ so the spot stays: with Thorim marked guardians die first, without him they are 
 
 **Without Thorim phase 3 is a race against the Guardians' healing.** Two Freya-only pulls (combat
 log): Empowering Shadows healed 9.6M / 10.0M and Drain Life 4.8M / 7.4M, more than all spawns
-(10.0M / 11.1M); late in the kill it ran 112-126k/s. Drain Life starts only under 85%, once per 9.5 s,
+(10.0M / 11.1M); late in the kill it ran 112-126k/s. A third kill (2026-10-15, a human tank) ran 261 s against 226: Drain Life
+12.15M over 233 channels, Empowering Shadows 10.30M, Yogg 52k/s against 66.8k. Both kills stop bringing new
+Guardians down ~3 min in: each low one drains every 10.5-14.5 s and kicks cap near one a second. Drain Life starts only under 85%, once per 9.5 s,
 and heals 8-10× the damage dealt (64160 EffectMultipleValue 10); kicks cut 129 of 185 but cap near one
 a second against 1.1-1.3 channels a second late. **Mortal Strike halves both** (aura 118, −50%; only
 the strongest cut counts in `SpellHealingBonusTaken`): ticks of 18,750 against 37,500, Drain Life 11-15k
 against 22-29k. **So `yogg-saron mortal strike`** (by the user's choice, Wound Poison declined): a
 warrior with it ready and the rage (`CanCastSpell` ignores rage) strikes a Guardian in melee reach with
 no cut, threat allowed, outside a gaze, one carrying the heal first, then one channelling, lowest health
-first; never Yogg, where one pull spent every strike. Probed as `yogg.mortalstrike` (`hot` / `drain`)
+first, then any under 85% (`low`, it drains every 10.5-14.5 s, mostly inside the 10 s cut); never Yogg,
+where one pull spent every strike and the next, before the `low` tier, half (13 of 26). Probed as `yogg.mortalstrike` (`hot` / `drain` / `low`)
 and `yogg.healcut` (`hot a/b drain c/d`: Guardians under a cut out of those healing, sampled once a
 second raid-wide).
 

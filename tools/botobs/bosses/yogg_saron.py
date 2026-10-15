@@ -455,6 +455,12 @@ KICK_SPELLS = {57994: ("Wind Shear", 6000, 25.0), 1766: ("Kick", 10000, 5.0), 65
                2139: ("Counterspell", 24000, 30.0), 19647: ("Spell Lock", 24000, 30.0),
                19244: ("Spell Lock", 24000, 30.0)}
 KICK_RANGE_SLACK = 6.0
+# A kick this far ahead of a Drain Life's aura hit the channel in its first update, which can't be interrupted.
+KICK_BEFORE_CHANNEL_MS = 150
+# Drain Life ticks once a second from 1 s in. A cut channel's aura closes a little either side of the kick's row.
+DRAIN_TICK_MS = 1000
+KICK_MATCH_SLACK_MS = 200
+MORTAL_STRIKE_SPELLS = (47485, 47486)
 
 
 def sara_kills_needed(trace: Trace) -> int | None:
@@ -2877,6 +2883,44 @@ def drain_life_spans(rows: list[tuple[int, int, int, int]]) -> list[int]:
     return [ms for _, _, ms in drain_life_channels(rows)]
 
 
+def kick_times_by_target(kicks: list[tuple[int, int]]) -> dict[int, list[int]]:
+    """Kick casts as (ms, target) grouped by target, each list sorted."""
+    by_target: dict[int, list[int]] = collections.defaultdict(list)
+    for when, target in kicks:
+        by_target[target].append(when)
+    for times in by_target.values():
+        times.sort()
+    return by_target
+
+
+def kicks_before_channel(kicks: list[tuple[int, int]], opens: list[tuple[int, int]],
+                         window_ms: int = KICK_BEFORE_CHANNEL_MS) -> int:
+    """How many kick casts, as (ms, Guardian), came at most `window_ms` before that Guardian's Drain Life opened, from
+    opens as (ms, Guardian). A channel can't be interrupted in its first update, so those kicks did nothing."""
+    opened = kick_times_by_target(opens)
+    count = 0
+    for when, guardian in kicks:
+        times = opened.get(guardian, [])
+        index = bisect.bisect_left(times, when)
+        count += index < len(times) and times[index] - when <= window_ms
+    return count
+
+
+def kick_ages(kicks: list[tuple[int, int]], channels: list[tuple[int, int, int]]) -> list[int]:
+    """For each channel from drain_life_channels cut short with a kick on its caster inside it, ms from its start to the
+    first such kick."""
+    by_guardian = kick_times_by_target(kicks)
+    ages = []
+    for began, caster, ms in channels:
+        if ms >= DRAIN_FULL_MS:
+            continue
+        times = by_guardian.get(caster, [])
+        index = bisect.bisect_left(times, began)
+        if index < len(times) and times[index] <= began + ms + KICK_MATCH_SLACK_MS:
+            ages.append(times[index] - began)
+    return ages
+
+
 def ready_kickers(kicks: dict[int, tuple[list[int], int, float]], spots: dict[int, tuple[float, float]],
                   channel: tuple[float, float], when: int, slack: float = KICK_RANGE_SLACK) -> int:
     """How many bots had their kick off cooldown and the channelling Guardian in range at `when`. Kicks
@@ -4214,6 +4258,18 @@ def show_phase3(trace: Trace) -> None:
             missed += bool(spot) and ready_kickers(kicks, spots, spot[:2], began) > 0
         print(f"    Drain Life       : {len(channels)} channels, {cut} cut inside {DRAIN_CUT_MS / 1000:.1f} s,"
               f" {len(full)} ran the full 5 s, {missed} of those with a bot kick ready and in range")
+        # Each kick saves only the ticks its channel has left, and kicks run on cooldown.
+        kick_casts = [(rec["t"], rec.get("tgt", 0)) for rec in trace.of("cast")
+                      if rec.get("sp") in KICK_SPELLS and rec.get("s") in roster and rec.get("s") not in trace.humans
+                      and start <= rec["t"] <= stop]
+        if kick_casts:
+            early = kicks_before_channel(kick_casts, [(when, caster) for when, caster, _, removed in drains
+                                                      if not removed])
+            ages = kick_ages(kick_casts, channels)
+            age_text = (f"cut channels kicked a median {statistics.median(ages) / 1000:.1f} s in,"
+                        f" {sum(age < DRAIN_TICK_MS for age in ages)} of {len(ages)} before the first tick"
+                        if ages else "no cut channel matched")
+            print(f"    bot kicks        : {len(kick_casts)} cast, {early} before the channel began (wasted); {age_text}")
         nudges = collections.Counter(str(rec.get("txt", "")).split(" ", 1)[-1] for rec in notes(trace, "yogg.kicknudge")
                                      if start <= rec["t"] <= stop)
         if nudges:
@@ -4378,10 +4434,16 @@ def show_phase3(trace: Trace) -> None:
     sides = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beaconspot"))
     if sides:
         print(f"    yogg.beaconspot  : {dict(sides)}")
-    for key in ("yogg.dragdef", "yogg.dragext", "yogg.mortalstrike"):
+    for key in ("yogg.dragdef", "yogg.dragext", "yogg.mortalstrike", "yogg.warlockpet"):
         picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, key) if start <= rec["t"] <= stop)
         if picks:
             print(f"    {key:16} : {dict(picks)}")
+    # The rotation's strikes too, which the probe never sees: on Yogg the cut does nothing.
+    kinds = {NPC_YOGG_SARON: "Yogg", NPC_IMMORTAL_GUARDIAN: "Guardians"}
+    strikes = collections.Counter(kinds.get(trace.entries.get(rec.get("tgt")), "other") for rec in trace.of("cast")
+                                  if rec.get("sp") in MORTAL_STRIKE_SPELLS and start <= rec["t"] <= stop)
+    if strikes:
+        print(f"    Mortal Strike    : {dict(strikes)}")
     if cut_samples:
         print(f"    yogg.healcut     : {heal_cut_line(heal_cut_seconds(cut_samples, start, stop))}")
 

@@ -92,6 +92,16 @@ public:
     bool IsActive() override;
 };
 
+// A phase 3 warlock with no demon and the summon its pet strategy names castable, see YoggSaronWarlockSummon.
+class YoggSaronWarlockPetTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron warlock pet trigger";
+
+    YoggSaronWarlockPetTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 // Melee and tanks are leashed to Sara, not stationed on her: a Guardian walks to whoever holds threat, so where melee
 // stand is where it dies, and only a death inside 15 yd of Sara advances the phase.
 class YoggSaronGuardianPositioningTrigger : public YoggSaronTrigger

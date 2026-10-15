@@ -1650,6 +1650,21 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.ready_kickers(kicks, spots, (4.0, 0.0), 16000), 2)
         self.assertEqual(yogg_saron.ready_kickers(kicks, {}, (4.0, 0.0), 16000), 0)
 
+    def test_kicks_before_channel_count_only_kicks_just_ahead_of_that_guardians_drain(self):
+        opens = [(10000, 7), (20000, 8)]
+        # 7 kicked 100 ms early, 7 kicked during, 8 kicked 400 ms early, 9 never drained
+        kicks = [(9900, 7), (10500, 7), (19600, 8), (5000, 9)]
+        self.assertEqual(yogg_saron.kicks_before_channel(kicks, opens), 1)
+        self.assertEqual(yogg_saron.kicks_before_channel(kicks, opens, window_ms=500), 2)
+        self.assertEqual(yogg_saron.kicks_before_channel([], opens), 0)
+
+    def test_kick_ages_time_the_first_kick_inside_each_cut_channel(self):
+        channels = [(1000, 7, 800), (3000, 8, 5000), (9000, 7, 2600), (20000, 9, 1500)]
+        # 7's first channel cut at 0.8 s, 8 ran full, 7's second cut by the 2.6 s kick, nobody kicked 9
+        kicks = [(1800, 7), (4000, 8), (11600, 7), (11700, 7)]
+        self.assertEqual(yogg_saron.kick_ages(kicks, channels), [800, 2600])
+        self.assertEqual(yogg_saron.kick_ages([], channels), [])
+
     def test_guardians_on_counts_fresh_rows_aimed_at_the_tank_over_the_floor(self):
         victims = {10: [[1000, 10, 0, 0, 0, 0, 80.0, 0, 5]],
                    11: [[1000, 11, 0, 0, 0, 0, 20.0, 0, 5]],
