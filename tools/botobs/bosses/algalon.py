@@ -1928,6 +1928,29 @@ def nitro_uses(trace: Trace) -> dict[int, list[int]]:
     return cached(trace, "_algalon_nitro", build)
 
 
+def speed_uses(trace: Trace) -> dict[int, list[tuple[int, str]]]:
+    """Per bot, `(t, spell)` per `algalon.speed` row: a class speed button on a hide run that would come in late."""
+    def build(trace: Trace) -> dict[int, list[tuple[int, str]]]:
+        out: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+        for rec in notes(trace, "algalon.speed"):
+            out[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
+        return dict(out)
+    return cached(trace, "_algalon_speed", build)
+
+
+def meal_faults(trace: Trace) -> list[tuple[int, str]]:
+    """A bot sitting down to eat or drink while he is engaged, when it stops thinking until it stands up."""
+    spans = phases(trace)[0]
+    out = []
+    for rec in trace.of("act"):
+        guid, when = rec.get("g"), rec["t"]
+        if (rec.get("a") in ("food", "drink") and rec.get("vd") == "OK" and guid not in trace.humans
+                and (phase := phase_at(spans, when)) in ("P1", "P2")):
+            meal = "eat" if rec["a"] == "food" else "drink"
+            out.append((when, f"{trace.name(guid)} sat down to {meal} @ {secs(when)} in {phase}"))
+    return out
+
+
 def bang_hiders(trace: Trace, row: dict) -> list[int]:
     """Bots on a hide `run` or `in` at any point from the cast start to the impact."""
     hide = holder_spans(trace, "algalon.hide", pull_end(trace))
@@ -1935,6 +1958,14 @@ def bang_hiders(trace: Trace, row: dict) -> list[int]:
                    if guid not in trace.humans and any(value in ("run", "in") and begin < row["impact"]
                                                        and until > row["start"] for value, begin, until in spans)),
                   key=trace.name)
+
+
+def show_speed(trace: Trace, row: dict) -> None:
+    used = sorted((when, guid, spell) for guid in bang_hiders(trace, row)
+                  for when, spell in speed_uses(trace).get(guid, ()) if row["start"] <= when <= row["impact"])
+    if used:
+        print("      class speed on a late run: "
+              + ", ".join(f"{trace.name(guid)} {spell} {clock(when)}" for when, guid, spell in used))
 
 
 def show_nitro(trace: Trace, row: dict) -> None:
@@ -2021,6 +2052,7 @@ def show_bigbang(trace: Trace) -> None:
                   f" {', '.join(still) or 'nobody'}")
 
         show_nitro(trace, row)
+        show_speed(trace, row)
         if row["soaker_phased"]:
             alone = "soaker phased at the impact"
         else:
@@ -5374,6 +5406,7 @@ def failures(trace: Trace) -> list[tuple[int | None, str]]:
     out += under_faults(trace)
     out += soak_faults(trace)
     out += bang_faults(trace)
+    out += meal_faults(trace)
     out += taunt_faults(trace)
     out += redirect_faults(trace)
     out += hold_faults(trace)

@@ -660,6 +660,7 @@ bool AlgalonShouldRunForShelter(Player* bot);
 // to, doesn't hide, or is a tank that can't reach one in time.
 int32 AlgalonHideSlackMs(Player* bot);
 // Uses the bot's Nitro Boosts on its hide run when they were ready at the cast start and the walk is long enough.
+// Without them, a hunter's Aspect of the Cheetah or a rogue's Sprint on a run that would come in late.
 void AlgalonBoostHideRun(Player* bot, float walk);
 // The soaker and the backup. A handler holding constellations hides last: they follow it in and close its hole.
 bool AlgalonStaysOut(Player* bot);

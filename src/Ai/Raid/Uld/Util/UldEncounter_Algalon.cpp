@@ -4024,6 +4024,29 @@ bool AlgalonCanDisperse(Player* bot)
     return bot && bot->HasSpell(SPELL_ALGALON_DISPERSION) && !bot->HasSpellCooldown(SPELL_ALGALON_DISPERSION);
 }
 
+namespace
+{
+// Boots not yet used run the first stretch boosted. Once used, the bot's speed already carries them.
+int32 HideWalkMs(AlgalonEncounterState const& state, Player* bot, float walk)
+{
+    float const speed = std::max(1.0f, bot->GetSpeed(MOVE_RUN));
+    int32 walkMs = static_cast<int32>(walk / speed * IN_MILLISECONDS);
+    if (state.nitroRunners.count(bot->GetGUID()) && !bot->HasAura(NITRO_BOOSTS_SPEED_SPELL) &&
+        walk > ULDUAR_ALGALON_NITRO_MIN_WALK)
+    {
+        float const fast = speed * NITRO_BOOSTS_SPEED_FACTOR;
+        float const boosted = fast * NITRO_BOOSTS_DURATION_MS / IN_MILLISECONDS;
+        walkMs = walk <= boosted
+                     ? static_cast<int32>(walk / fast * IN_MILLISECONDS)
+                     : static_cast<int32>(NITRO_BOOSTS_DURATION_MS + (walk - boosted) / speed * IN_MILLISECONDS);
+        // Never under the unboosted cutoff walk, or a step inside it adds most of a second at once.
+        walkMs = std::max(walkMs, static_cast<int32>(ULDUAR_ALGALON_NITRO_MIN_WALK / speed * IN_MILLISECONDS));
+    }
+
+    return walkMs;
+}
+}  // namespace
+
 int32 AlgalonHideSlackMs(Player* bot)
 {
     if (!AlgalonBigBangLatched(bot) || IsAlgalonPhased(bot) || AlgalonStaysOut(bot))
@@ -4041,20 +4064,7 @@ int32 AlgalonHideSlackMs(Player* bot)
 
     float const walk =
         std::max(0.0f, bot->GetExactDist2d(shelter->position) - (ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f));
-    float const speed = std::max(1.0f, bot->GetSpeed(MOVE_RUN));
-    int32 walkMs = static_cast<int32>(walk / speed * IN_MILLISECONDS);
-    // Boots not yet used run the first stretch boosted. Once used, the speed above already carries them.
-    if (state->nitroRunners.count(bot->GetGUID()) && !bot->HasAura(NITRO_BOOSTS_SPEED_SPELL) &&
-        walk > ULDUAR_ALGALON_NITRO_MIN_WALK)
-    {
-        float const fast = speed * NITRO_BOOSTS_SPEED_FACTOR;
-        float const boosted = fast * NITRO_BOOSTS_DURATION_MS / IN_MILLISECONDS;
-        walkMs = walk <= boosted
-                     ? static_cast<int32>(walk / fast * IN_MILLISECONDS)
-                     : static_cast<int32>(NITRO_BOOSTS_DURATION_MS + (walk - boosted) / speed * IN_MILLISECONDS);
-        // Never under the unboosted cutoff walk, or a step inside it adds most of a second at once.
-        walkMs = std::max(walkMs, static_cast<int32>(ULDUAR_ALGALON_NITRO_MIN_WALK / speed * IN_MILLISECONDS));
-    }
+    int32 const walkMs = HideWalkMs(*state, bot, walk);
 
     int32 const remaining = AlgalonBigBangRemainingMs(botAI);
 
@@ -4090,22 +4100,38 @@ bool AlgalonShouldRunForShelter(Player* bot) { return AlgalonHideSlackMs(bot) <=
 void AlgalonBoostHideRun(Player* bot, float walk)
 {
     AlgalonEncounterState* state = FindState(bot);
-    if (!state || walk <= ULDUAR_ALGALON_NITRO_MIN_WALK || !state->nitroRunners.count(bot->GetGUID()) ||
-        bot->HasAura(NITRO_BOOSTS_SPEED_SPELL))
+    if (!state || walk <= ULDUAR_ALGALON_NITRO_MIN_WALK || bot->HasAura(NITRO_BOOSTS_SPEED_SPELL))
         return;
 
-    // Gone for good, the slack would keep timing a boosted walk. A refused use is tried again next tick.
-    if (!NitroBoostsReady(bot))
+    if (state->nitroRunners.count(bot->GetGUID()))
     {
+        // Gone for good, the slack would keep timing a boosted walk. A refused use is tried again next tick.
+        if (NitroBoostsReady(bot))
+        {
+            if (UseNitroBoosts(bot) && RaidObs::Active())
+                RaidObs::Note(bot, "algalon.nitro", "hide");
+
+            return;
+        }
+
         state->nitroRunners.erase(bot->GetGUID());
-        return;
     }
 
-    if (!UseNitroBoosts(bot))
+    // Only a run already late: a hole closed in the cast sent two hunters 50 yd to the last one, and they got there
+    // 0.2 s before the hit, after the field's last pulse.
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI ||
+        AlgalonBigBangRemainingMs(botAI) >= HideWalkMs(*state, bot, walk) + ULDUAR_ALGALON_LAST_IN_MARGIN_MS)
+        return;
+
+    char const* const speed = bot->getClass() == CLASS_HUNTER  ? "aspect of the cheetah"
+                              : bot->getClass() == CLASS_ROGUE ? "sprint"
+                                                               : nullptr;
+    if (!speed || botAI->HasAura(speed, bot) || !botAI->CanCastSpell(speed, bot) || !botAI->CastSpell(speed, bot))
         return;
 
     if (RaidObs::Active())
-        RaidObs::Note(bot, "algalon.nitro", "hide");
+        RaidObs::Note(bot, "algalon.speed", speed);
 }
 
 AlgalonHideRole GetAlgalonHideRole(Player* bot)

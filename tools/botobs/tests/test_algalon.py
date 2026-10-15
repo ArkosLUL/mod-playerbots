@@ -1244,6 +1244,10 @@ def opener_pull() -> list[dict]:
         note(30000, WARRIOR, "algalon.hide", "wait"), note(34000, WARRIOR, "algalon.hide", "run"),
         note(30000, MAGE, "algalon.hide", "run"),
         dmg(38000, E_BOSS, WARRIOR, al.SPELL_BIG_BANG[1], 50000), dmg(38000, E_BOSS, MAGE, al.SPELL_BIG_BANG[1], 50000),
+        # Trueshot runs late on Aspect of the Cheetah; Druidica sits down to eat before the cast.
+        note(30000, HUNTER, "algalon.hide", "run"), note(33000, HUNTER, "algalon.speed", "aspect of the cheetah"),
+        {"t": 26000, "e": "act", "g": CASTER, "a": "food", "rel": 0, "vd": "OK"},
+        {"t": 27000, "e": "act", "g": CASTER, "a": "drink", "rel": 0, "vd": "USELESS"},
 
         note(12000, CASTER, "algalon.starplan", "s1 98% 8s | s2 98% 60s | bang 18..26"),
         note(20000, CASTER, "algalon.starplan", "s2 72% 4s | bang 10..18"),
@@ -1258,6 +1262,14 @@ class Opener(unittest.TestCase):
     def setUpClass(cls):
         cls.folder = tempfile.TemporaryDirectory()
         cls.trace = load(cls.folder.name, opener_pull())
+
+    def test_eating_while_he_is_engaged_is_a_failure(self):
+        self.assertEqual(al.meal_faults(self.trace), [(26000, "Druidica sat down to eat @ 26.0s in P1")])
+
+    def test_big_bang_lists_class_speed_on_a_late_run(self):
+        self.assertEqual(al.speed_uses(self.trace), {HUNTER: [(33000, "aspect of the cheetah")]})
+        self.assertIn("class speed on a late run: Trueshot aspect of the cheetah 0:33.000",
+                      render(self.trace, "bigbang"))
 
     @classmethod
     def tearDownClass(cls):

@@ -118,7 +118,12 @@ to the cast; Ice Block also pins the mage.
 **Nitro Boosts** (boots enchant 3606, use 55004, +150% for 5 s, 3 min; `EncounterHelpers`): bots whose boots
 are ready at the cast start are latched, time their walk boosted (never under the 10 yd walk unboosted), use
 them on a run over 10 yd (a refused use retries next tick; the latch drops once they can't fire) and skip the
-far-hole approach. The swap tanks have none.
+far-hole approach. The swap tanks have none. Without boots, or once they can't fire, a run already late (cast
+left under the walk plus 1.5 s) takes a hunter's Aspect of the Cheetah or a rogue's Sprint: a hole closed in the
+cast sent two hunters 50 yd to the last one, in 0.2 s before the hit, after the field's last pulse.
+
+Food and drink are blocked while he is engaged: eating stops the bot thinking, and a shaman back from
+Reincarnation at 22% ate through Big Bang.
 
 **Threat survives the hide, and this is not a bug to re-audit.** `CombatManager.cpp:53` gates only
 *entering* combat on `InSamePhase`, and `ThreatManager` only marks phased entries offline: he re-picks
@@ -564,7 +569,7 @@ the roster's hits on stars (pets under their owner) as `dmg` rows, from `RaidObs
 (`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (older traces: `start|stop <star counter> <hp%>` on the
 wand); `algalon.underdrop` (`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.personal` (the button's spell name, or `healthstone`/`healing potion`);
 `algalon.nitro` (`hide` on a bot using its boots on the
-run); `algalon.handover` (`nodef` on a
+run); `algalon.speed` (the class speed spell on a late run); `algalon.handover` (`nodef` on a
 holder handing him over for want of a defensive); `algalon.pull`
 (`inreach=N victim=GUID`) at the tick the intro ends; `algalon.call` (`swap`/`loose`/`bigbang`/`hide`)
 per raid warning, sent only when a human is in the raid. Each meteor is written as a `haz` circle (62311 / 64596, the impact point, 6 yd): the sweep
@@ -610,7 +615,8 @@ counted by cause and role with humans starred. Then:
   release within 8 s of the cast, one above its band at the cast, over one switch per star and 3 Shoot starts in
   2 s; `--constellations` the kite runs (stages, retries, eaten) and
   branch time, both from the elected handler alone, parked stretches with none eaten, a constellation stuck in the air, and
-  seconds the kite was blocked (verdict from 5 s); `--bigbang` Nitro Boosts per hider;
+  seconds the kite was blocked (verdict from 5 s); `--bigbang` Nitro Boosts per hider and class speed on late
+  runs; `--verdict` a bot sitting down to eat or drink while he is engaged;
 - `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
 - `--tankheal`: the tank healers, each healer's share on the pair, itself and others, Beacon time on holder
   and partner, and per tank death the 6 s / 2 s damage against healing, shields and healing elsewhere, with
