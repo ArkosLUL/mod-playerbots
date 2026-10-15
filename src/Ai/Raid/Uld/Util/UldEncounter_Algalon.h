@@ -49,6 +49,9 @@ enum UlduarAlgalonIds
     SPELL_ALGALON_FORBEARANCE = 25771,
     SPELL_ALGALON_WEAKENED_SOUL = 6788,
     SPELL_ALGALON_ICE_BLOCK = 45438,
+    SPELL_ALGALON_DIVINE_SHIELD = 642,
+    SPELL_ALGALON_CLOAK_OF_SHADOWS = 31224,
+    SPELL_ALGALON_ANTI_MAGIC_SHELL = 48707,
     // The star's drain: CountPctFromMaxHealth(1) every 1000 ms from its spawn.
     SPELL_ALGALON_COLLAPSE = 62018,
     SPELL_ALGALON_AURA_MASTERY = 31821,
@@ -179,6 +182,9 @@ constexpr float ULDUAR_ALGALON_EXPLOSION_LOW_PCT = 3.0f;
 // this low. The lead allows for the slope running about a second late on a paced kill.
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS = 3500;
 constexpr float ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT = 5.0f;
+// A cover only with this many under the explosion's line: a single one has its own button or a healthstone, and
+// covers spent on one or none left a star that caught 17 with nothing.
+constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_MIN_UNDER = 2;
 // A bot that wouldn't survive the explosion presses its own button this close to it. Covered, the top roll
 // counts at 0.8: Divine Guardian is a flat -20%, and under Aura Mastery the worst hit was 79% of it.
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS = 1500;
@@ -188,8 +194,8 @@ constexpr uint32 ULDUAR_ALGALON_EXPLOSION_STACK_MS = 3000;
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_STACK_MAX = 3;
 // The least a healthstone or healing potion heals, for whether one lifts a bot over the line.
 constexpr uint32 ULDUAR_ALGALON_EXPLOSION_CONSUMABLE_HEAL = 3500;
-// Phased and above this, a bot keeps its personal buttons: no explosion reaches it there.
-constexpr float ULDUAR_ALGALON_PHASED_BUTTON_PCT = 35.0f;
+// Above this, the class nodes leave a bot's personal buttons to the explosion node.
+constexpr float ULDUAR_ALGALON_BUTTON_HOLD_PCT = 35.0f;
 // A paladin aura's reach.
 constexpr float ULDUAR_ALGALON_AURA_RANGE = 40.0f;
 // Healers pick by health %, and every explosion puts clothies below a tank losing ~15k/s, so the pair

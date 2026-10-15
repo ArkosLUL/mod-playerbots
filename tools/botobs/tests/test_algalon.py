@@ -1722,7 +1722,8 @@ class Defensives(unittest.TestCase):
         self.assertEqual([line for _, line in al.defensive_faults(self.trace)], [
             "Tanka died @ 30.0s with no damage cutter up and none cast on it in the 6 s before",
             "Divine Sacrifice from Ret up 1.7 s @ 18.5s on Mage, Ret",
-            "star explosion @ 35.0s with no cover up, ready: Holy's Aura Mastery"])
+            "star explosion @ 35.0s with no cover up, ready: Holy's Aura Mastery",
+            "Ret cast divine sacrifice @ 18.5s with 1 under the explosion's line"])
 
     def test_big_bang_reads_the_dispersion_soak_and_the_handler_going_in_last(self):
         (row,) = al.big_bang_rows(self.trace)
@@ -2397,6 +2398,7 @@ def presses_pull(drop: tuple[str, ...] = ()) -> list[dict]:
         *({"t": 1, "e": "unit", "g": member["g"], "n": member["n"], "mhp": 20000} for member in roster),
         *({"t": 1, "e": "spell", "sp": spell, "n": name} for spell, name in PX_SPELLS.items()),
         note(1000, PX_TANK, "algalon.swappair", 1), note(1000, PX_PARTNER, "algalon.swappair", 1),
+        note(0, PX_TANK, "algalon.phase", 2),
 
         cast(5000, PX_HOLY, 498), buff(5000, PX_HOLY, al.SPELL_FORBEARANCE, PX_HOLY),
         *phased(PX_FROST, al.SPELL_BLACK_HOLE_PHASE, 2000, 6000), cast(3000, PX_FROST, 48792),
@@ -2474,11 +2476,22 @@ class ExplosionPresses(unittest.TestCase):
         self.assertIn("Rogue pressed Cloak of Shadows @ 20.7s, 0.10 s after its star died", self.lines)
         self.assertEqual(sum("after its star died" in line for line in self.lines), 2)
 
-    def test_a_held_button_cast_in_a_hole_above_the_line_is_a_failure(self):
-        self.assertEqual([(row["t"], row["guid"], row["label"], row["pct"]) for row in al.phased_buttons(self.trace)],
-                         [(12000, PX_TREE, "Barkskin", 90.0)])
+    def test_a_held_button_a_class_node_spent_above_the_line_is_a_failure(self):
+        self.assertEqual([(row["t"], row["guid"], row["label"], row["pct"], row["where"])
+                          for row in al.spent_buttons(self.trace)],
+                         [(5000, PX_HOLY, "Divine Protection", 80.0, "P1"), (12000, PX_TREE, "Barkskin", 90.0, "phased")])
         self.assertIn("Tree spent Barkskin @ 12.0s inside a hole's phase, at 90%", self.lines)
+        self.assertIn("Holy spent Divine Protection @ 5.0s in phase 1, not on a star, at 80%", self.lines)
         self.assertEqual(sum("inside a hole's phase" in line for line in self.lines), 1)
+
+    def test_a_cover_with_too_few_under_the_line_is_a_failure(self):
+        self.assertEqual(al.thin_covers(self.trace), [])
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(al, "COVER_MIN_UNDER", 6):
+            trace = load(folder, presses_pull())
+            self.assertEqual(al.thin_covers(trace),
+                             [{"t": 20640, "guid": PX_HOLY, "cover": "divine sacrifice", "under": 4}])
+            lines = [line for _, line in al.failures(trace)]
+        self.assertIn("Holy cast divine sacrifice @ 20.6s with 4 under the explosion's line", lines)
 
     def test_a_failed_cover_with_another_paladin_ready_is_a_failure(self):
         self.assertEqual([(row["t"], row["guid"], row["ready"]) for row in al.failed_covers(self.trace)],
@@ -2508,7 +2521,9 @@ class ExplosionPresses(unittest.TestCase):
                      " (-0.04 s), already dead",
                      "cover node runs that FAILED: 2\n     0:19.500 Ret; other covers ready: Holy's Divine Sacrifice\n"
                      "     0:30.000 Holy; other covers ready: none",
-                     "personal buttons cast in a hole's phase above 35%: 1\n     0:12.000 Tree Barkskin at 90%"):
+                     "covers cast with fewer than 2 under the explosion's line: 0",
+                     "explosion buttons a class node spent above 35%, phased or in P1: 2\n     0:05.000 Holy Divine"
+                     " Protection at 80%, P1\n     0:12.000 Tree Barkskin at 90%, phased"):
             self.assertIn(line, text)
 
 

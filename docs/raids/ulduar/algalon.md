@@ -110,9 +110,10 @@ action made, since an equal priority waits it out.
 
 A bot only thinks again when its cast ends, so during the cast a cast or channel longer than its slack is held
 (`AlgalonHideCastMultiplier`): a 1.9 s Shadow Bolt started just before the slack ran out made a warlock late.
-Ice Block, Divine Shield, Cloak of Shadows and Anti-Magic Shell are held 20 s before the cast, through it and
-while phased ("algalon phase immunity hold"): magic immunity strips 62168 (arcane) or keeps it off, and two
-rogues who Cloaked inside were hit. The hide also cancels Ice Block, which pins the mage.
+The class nodes hold Ice Block, Divine Shield, Cloak of Shadows and Anti-Magic Shell 20 s before the cast,
+through it and while phased ("algalon phase immunity hold"): magic immunity strips 62168 (arcane) or keeps it off,
+and two rogues who Cloaked inside were hit. The hide run cancels all four, so the explosion node may press them up
+to the cast; Ice Block also pins the mage.
 
 **Nitro Boosts** (boots enchant 3606, use 55004, +150% for 5 s, 3 min; `EncounterHelpers`): bots whose boots
 are ready at the cast start are latched, time their walk boosted (never under the 10 yd walk unboosted), use
@@ -486,7 +487,9 @@ cast, never Divine Shield. The encounter's own actions cast directly and pass.
 
 **Explosion cover** (`ACTION_EMERGENCY + 1`): with a star forecast to die within 3.5 s (the slope runs ~1 s late
 on a paced kill, and a 2 s lead opened 1 s before one; both covers last 6 s), or at ≤ 5% (a chewed one went from
-4.8% to dead between scans), and none up, one per star. Both covers and the personal buttons act only on
+4.8% to dead between scans), none up, and 2 or more living unphased raid members under the top roll (or below
+full when their maximum is lower), one per star. One alone has its own button or a healthstone: covers spent on
+none or one left a star that caught 17 with nothing (6 dead). Both covers and the personal buttons act only on
 a star still alive: the scan lags a death by up to 250 ms, the explosion drops a bot under its line, and 11 of 21
 presses and an Aura Mastery went on stars already dead, two bots then dying at the next with theirs cooling.
 Neither acts on a star dying inside its Big Bang window (it hits the soaker alone). The paladin due to cover takes
@@ -495,7 +498,9 @@ no `window` Hand of Sacrifice (both fired in one tick, the Hand first, and the s
 - Aura Mastery from the **shadow aura paladin**, a bot with Aura Mastery that runs Shadow Resistance Aura
   while stars live (a `Block` holds its other auras, released in phase 2). Prayer of Shadow Protection already
   gives 130 and both are aura 143, highest only, so the aura alone adds nothing; Aura Mastery takes it to 260
-  for 6 s and recalculates the running aura.
+  for 6 s and recalculates the running aura. The paladin keeps the aura while its Aura Mastery runs or is ready,
+  else it moves to the lowest-guid one whose is ready: on the lowest guid always, a holy paladin's Aura Mastery
+  never went up in two pulls.
 - Else Divine Sacrifice from a paladin bot with Divine Guardian (53527/53530, by `HasTalent`: a passive talent
   is never in the spell map `HasSpell` reads, so it never fired before), ≥ 50%, the holder last (one global). The
   tick removes 64205 from bots at once: left up it splits 30% of the party's damage onto the paladin, and the
@@ -512,13 +517,15 @@ leaves it alive (a channel is broken first: it fails every cast check), once per
 runs: Shadow Ward, Anti-Magic Shell (by id 48707: the name lookup misses "Anti-Magic Shell"), Barkskin,
 Shamanistic Rage, Cloak of Shadows (a 90% resist, not a cut), Icebound Fortitude, Dispersion (never the
 disperser's, nor one not back for the next soak), Divine Protection, Ice Block, Divine Shield. The immunities
-are skipped within 20 s of a cast. With none that saves it, a healthstone (not on the move: it stops the bot),
+held 20 s before the cast left four dying 0.4-0.9 s before it with one ready. With none that saves it, a healthstone (not on the move: it stops the bot),
 else a healing potion, when 3.5 k lands whole and lifts it over the line: warriors, hunters, elemental and
 restoration shamans and holy and discipline priests have no button (14 of 37 explosion deaths). Failing both,
 the strongest button: the top roll is the worst case, and a druid at 11.4 k died with Barkskin ready (13.8 k
-left of the top roll, 9.6 k of the 12.0 k that landed). Phased and above 35%, a bot keeps Barkskin, Shadow Ward, Icebound Fortitude, Shamanistic Rage and Divine
-Protection (a `Block`): no explosion reaches it there, and Barkskins spent in the void were cooling at the stars
-dying after the strip.
+left of the top roll, 9.6 k of the 12.0 k that landed). Above 35%, the class nodes leave Barkskin, Shadow Ward,
+Icebound Fortitude, Shamanistic Rage and Divine Protection to this node ("algalon explosion button hold"): while
+phased, where no explosion reaches, and through phase 1 outside the swap pair. They spent Barkskin on a meteor and
+at a cast, and two druids died to stars with it cooling. Shamanistic Rage is held too, costing an Enhancement
+shaman its mana.
 
 ## The trace
 
@@ -593,7 +600,8 @@ counted by cause and role with humans starred. Then:
   lived 10 s; per tank death its last 6 s of hits, cutters up and `algalon.tankdef`; per explosion the cover
   up and damage covered against uncovered; per explosion death the personal buttons pressed or ready; per
   explosion each bot under its line with its buttons and consumables, each press and cover beside its star's
-  death, with verdicts for one after the death, a press while phased and a failed cover with another ready;
+  death, with verdicts for one after the death, a held button a class node spent (phased, or in phase 1), a
+  cover cast with fewer than 2 under the line and a failed cover with another ready;
   `window` cutters on a holder at 80% or more;
 - `--stars` also: per star its plan, window, forecast against actual death, offset from the hit, who its
   explosion hit unphased and its trims; per focus span the loss beyond the drain and the switches between

@@ -285,9 +285,12 @@ CLASS_BUTTONS = {2: ("divine protection", "divine shield"), 4: ("cloak of shadow
 CLASS_IDS = {"paladin": 2, "rogue": 4, "death knight": 6, "deathknight": 6, "mage": 8, "warlock": 9, "druid": 11}
 SPELL_FORBEARANCE = 25771
 FORBEARANCE_BUTTONS = frozenset(("divine protection", "divine shield"))
-# the "algalon phased button hold" list. The immunities have a hold of their own, Dispersion none
-PHASED_HELD = frozenset(("barkskin", "shadow ward", "icebound fortitude", "shamanistic rage", "divine protection"))
-PHASED_BUTTON_PCT = _radius_or("ULDUAR_ALGALON_PHASED_BUTTON_PCT", 35.0)
+# the "algalon explosion button hold" list (older traces: "algalon phased button hold", phased only). The immunities
+# have a hold of their own, Dispersion none
+BUTTONS_HELD = frozenset(("barkskin", "shadow ward", "icebound fortitude", "shamanistic rage", "divine protection"))
+BUTTON_HOLD_PCT = _radius_or("ULDUAR_ALGALON_BUTTON_HOLD_PCT", _radius_or("ULDUAR_ALGALON_PHASED_BUTTON_PCT", 35.0))
+# ULDUAR_ALGALON_EXPLOSION_COVER_MIN_UNDER, a uint32 the declaration reader can't see
+COVER_MIN_UNDER = 2
 COVERED_FACTOR = _radius_or("ULDUAR_ALGALON_COVERED_EXPLOSION_FACTOR", 0.8)
 # by name, so it also reads the "healthstone"/"healing potion" an `algalon.personal` row names; the ids only
 # for a trace that names no spells
@@ -4710,22 +4713,51 @@ def failed_covers(trace: Trace) -> list[dict]:
     return cached(trace, "_algalon_failed_covers", build)
 
 
-def phased_buttons(trace: Trace) -> list[dict]:
-    """`{t, guid, label, pct}` per PHASED_HELD button a bot outside the swap pair cast inside a hole's phase
-    above PHASED_BUTTON_PCT, where no explosion reaches it."""
+def spent_buttons(trace: Trace) -> list[dict]:
+    """`{t, guid, label, pct, where}` per BUTTONS_HELD button a class node cast above BUTTON_HOLD_PCT, which the
+    explosion node should have had: inside a hole's phase (`phased`, where no explosion reaches), or in P1 for a bot
+    outside the swap pair (`P1`). A cast within ECHO_MS of the bot's `algalon.personal` row is the node's own."""
     def build(trace: Trace) -> list[dict]:
         pair, _ = swap_pair(trace)
         samples = samples_of(trace)
         phased = hole_phases(trace)
+        spans = phases(trace)[0]
+        pressed = personal_notes(trace)
         out = []
         for guid, casts in personal_casts(trace).items():
             for at, name, label in casts:
                 row = samples.row(guid, at)
-                if (name in PHASED_HELD and guid not in pair and phased_at(phased, guid, at) and alive(row)
-                        and row[5] > PHASED_BUTTON_PCT):
-                    out.append({"t": at, "guid": guid, "label": label, "pct": row[5]})
+                if (name not in BUTTONS_HELD or not alive(row) or row[5] <= BUTTON_HOLD_PCT
+                        or any(abs(rec["t"] - at) <= ECHO_MS for rec in pressed.get(guid, ()))):
+                    continue
+                if phased_at(phased, guid, at):
+                    where = "phased"
+                elif guid not in pair and phase_at(spans, at) == "P1":
+                    where = "P1"
+                else:
+                    continue
+                out.append({"t": at, "guid": guid, "label": label, "pct": row[5], "where": where})
         return sorted(out, key=lambda row: row["t"])
-    return cached(trace, "_algalon_phased_buttons", build)
+    return cached(trace, "_algalon_spent_buttons", build)
+
+
+def thin_covers(trace: Trace) -> list[dict]:
+    """`{t, guid, cover, under}` per `algalon.cover` cast with fewer than COVER_MIN_UNDER living, unphased raid
+    members below the explosion's line."""
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        roster = roster_guids(trace)
+        phased = all_phases(trace)
+        out = []
+        for rec in notes(trace, "algalon.cover"):
+            when = rec["t"]
+            up = {guid: row for guid, row in samples.frame(when - 1).items()
+                  if guid in roster and alive(row) and not phased_at(phased, guid, when)}
+            under = len(below_safe(trace, up))
+            if under < COVER_MIN_UNDER:
+                out.append({"t": when, "guid": rec.get("g", 0), "cover": str(rec.get("txt", "")), "under": under})
+        return out
+    return cached(trace, "_algalon_thin_covers", build)
 
 
 def window_cuts(trace: Trace) -> list[dict]:
@@ -4835,10 +4867,14 @@ def show_defensives(trace: Trace) -> None:
     for row in failed:
         print(f"    {clock(row['t']):>9} {trace.name(row['guid'])}; other covers ready:"
               f" {cover_label(trace, row['ready']) or 'none'}")
-    spent = phased_buttons(trace)
-    print(f"  personal buttons cast in a hole's phase above {PHASED_BUTTON_PCT:.0f}%: {len(spent)}")
+    thin = thin_covers(trace)
+    print(f"  covers cast with fewer than {COVER_MIN_UNDER} under the explosion's line: {len(thin)}")
+    for row in thin:
+        print(f"    {clock(row['t']):>9} {trace.name(row['guid'])} {row['cover']}, {row['under']} under")
+    spent = spent_buttons(trace)
+    print(f"  explosion buttons a class node spent above {BUTTON_HOLD_PCT:.0f}%, phased or in P1: {len(spent)}")
     for row in spent:
-        print(f"    {clock(row['t']):>9} {trace.name(row['guid'])} {row['label']} at {row['pct']:.0f}%")
+        print(f"    {clock(row['t']):>9} {trace.name(row['guid'])} {row['label']} at {row['pct']:.0f}%, {row['where']}")
 
     lost = explosion_deaths(trace)
     print(f"  deaths to a star explosion: {len(lost)}")
@@ -4880,9 +4916,13 @@ def defensive_faults(trace: Trace) -> list[tuple[int, str]]:
             what = f"pressed {press_name(row)}" if row["kind"] == "personal" else f"cast {press_name(row)} for cover"
             out.append((row["t"], f"{trace.name(row['guid'])} {what} @ {secs(row['t'])},"
                                   f" {(row['t'] - row['died']) / 1000:.2f} s after its star died"))
-    for row in phased_buttons(trace):
-        out.append((row["t"], f"{trace.name(row['guid'])} spent {row['label']} @ {secs(row['t'])} inside a hole's"
-                              f" phase, at {row['pct']:.0f}%"))
+    for row in spent_buttons(trace):
+        where = "inside a hole's phase" if row["where"] == "phased" else "in phase 1, not on a star"
+        out.append((row["t"], f"{trace.name(row['guid'])} spent {row['label']} @ {secs(row['t'])} {where},"
+                              f" at {row['pct']:.0f}%"))
+    for row in thin_covers(trace):
+        out.append((row["t"], f"{trace.name(row['guid'])} cast {row['cover']} @ {secs(row['t'])} with"
+                              f" {row['under']} under the explosion's line"))
     for row in failed_covers(trace):
         if row["ready"]:
             out.append((row["t"], f"{trace.name(row['guid'])}'s cover failed @ {secs(row['t'])} with"

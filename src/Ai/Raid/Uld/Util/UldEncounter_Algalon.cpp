@@ -1553,22 +1553,25 @@ bool SerialDue(StarPlan const& plan, AlgalonEncounterState const& state, Group* 
 }
 
 // Raid wide and unavoidable: everyone unphased must survive its top roll, or be at full when their max is below it.
-bool RaidAffordsExplosion(Player* bot, Group* group)
+uint32 RaidUnderExplosionLine(Player* bot, Group* group)
 {
     if (!group)
-        return true;
+        return 0;
 
     uint32 const blast =
         bot->GetMap()->Is25ManRaid() ? ULDUAR_ALGALON_STAR_EXPLOSION_MAX_25 : ULDUAR_ALGALON_STAR_EXPLOSION_MAX_10;
+    uint32 under = 0;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (CanStayOut(member) && member->GetHealth() < std::min(blast, member->GetMaxHealth()))
-            return false;
+            ++under;
     }
 
-    return true;
+    return under;
 }
+
+bool RaidAffordsExplosion(Player* bot, Group* group) { return !RaidUnderExplosionLine(bot, group); }
 
 // Each star by guid counter with its health and forecast death, soonest first, then the blackouts, in
 // seconds from now.
@@ -2445,10 +2448,13 @@ bool ExplosionCovered(Group* group, AlgalonEncounterState const& state)
 }
 
 // Prayer of Shadow Protection already gives Shadow Resistance Aura's 130 (both aura 143, highest only), so the
-// aura only pays from a paladin whose Aura Mastery doubles it.
-Player* ElectShadowAuraPaladin(Group* group)
+// aura only pays from a paladin whose Aura Mastery doubles it. Once that one is spent the aura moves to a
+// paladin whose Aura Mastery is back, or a second paladin's never goes up.
+Player* ElectShadowAuraPaladin(Group* group, ObjectGuid const& current)
 {
-    Player* best = nullptr;
+    Player* kept = nullptr;
+    Player* ready = nullptr;
+    Player* lowest = nullptr;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -2458,11 +2464,24 @@ Player* ElectShadowAuraPaladin(Group* group)
             !memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", "shadow resistance aura")->Get())
             continue;
 
-        if (!best || member->GetGUID() < best->GetGUID())
-            best = member;
+        if (member->GetGUID() == current)
+            kept = member;
+
+        if (!lowest || member->GetGUID() < lowest->GetGUID())
+            lowest = member;
+
+        if (!member->HasSpellCooldown(SPELL_ALGALON_AURA_MASTERY) && (!ready || member->GetGUID() < ready->GetGUID()))
+            ready = member;
     }
 
-    return best;
+    // Its own Aura Mastery doubles its own aura, so it keeps the slot while that runs.
+    if (kept && (kept->HasAura(SPELL_ALGALON_AURA_MASTERY) || !kept->HasSpellCooldown(SPELL_ALGALON_AURA_MASTERY)))
+        return kept;
+
+    if (ready)
+        return ready;
+
+    return kept ? kept : lowest;
 }
 
 // Per hole, the hiders still out: bots by their shelter, humans by the nearest hole, kite hole included, since
@@ -3091,7 +3110,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         return;
     }
 
-    Player* auraPaladin = ElectShadowAuraPaladin(group);
+    Player* auraPaladin = ElectShadowAuraPaladin(group, state->shadowAuraPaladin.Get());
     state->shadowAuraPaladin = auraPaladin ? auraPaladin->GetGUID() : ObjectGuid::Empty;
 
     ElectStarTeam(bot, *state);
@@ -3701,7 +3720,8 @@ Player* ExplosionCoverProvider(PlayerbotAI* botAI, char const*& cover)
 
     AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS,
                                                 ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT, bot);
-    if (!star || star->guid == state->coverStar || ExplosionCovered(group, *state))
+    if (!star || star->guid == state->coverStar || ExplosionCovered(group, *state) ||
+        RaidUnderExplosionLine(bot, group) < ULDUAR_ALGALON_EXPLOSION_COVER_MIN_UNDER)
         return nullptr;
 
     // Its own aura is the one it doubles, so only with that aura up.
@@ -3773,18 +3793,22 @@ struct PersonalButton
     // What is left of the hit, by factor and by flat absorb.
     float factor;
     uint32 absorb;
-    // Magic immunity: strips the hole's phase aura or keeps it off.
-    bool immunity;
 };
 
 // Cheapest cooldown first, so a bubble or a block only goes when nothing shorter will do. Cloak is a 90% chance
-// to resist, not a cut, so it sits behind the sure ones on the same cooldown.
+// to resist, not a cut, so it sits behind the sure ones on the same cooldown. The immunities go up to the cast:
+// the hide run strips them.
 PersonalButton const PERSONAL_BUTTONS[] = {
-    {"shadow ward", 0, 1.0f, 3300, false},       {"anti magic shell", 48707, 0.25f, 0, true},
-    {"barkskin", 0, 0.8f, 0, false},             {"shamanistic rage", 0, 0.7f, 0, false},
-    {"cloak of shadows", 0, 0.1f, 0, true},      {"icebound fortitude", 0, 0.7f, 0, false},
-    {"dispersion", 0, 0.1f, 0, false},           {"divine protection", 0, 0.5f, 0, false},
-    {"ice block", 0, 0.0f, 0, true},             {"divine shield", 0, 0.0f, 0, true},
+    {"shadow ward", 0, 1.0f, 3300},
+    {"anti magic shell", SPELL_ALGALON_ANTI_MAGIC_SHELL, 0.25f, 0},
+    {"barkskin", 0, 0.8f, 0},
+    {"shamanistic rage", 0, 0.7f, 0},
+    {"cloak of shadows", 0, 0.1f, 0},
+    {"icebound fortitude", 0, 0.7f, 0},
+    {"dispersion", 0, 0.1f, 0},
+    {"divine protection", 0, 0.5f, 0},
+    {"ice block", 0, 0.0f, 0},
+    {"divine shield", 0, 0.0f, 0},
 };
 
 uint32 PersonalButtonId(Player* bot, PersonalButton const& button)
@@ -3882,8 +3906,6 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
             return pick;
     }
 
-    uint32 const now = getMSTime();
-    bool const immunityHeld = BigBangDueWithin(*state, ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS, now);
     int32 const untilHit = AlgalonMsToBigBangHit(botAI);
     // The top roll is the worst case, so with no button clearing it the strongest still goes up for a lower roll.
     uint32 strongest = 0;
@@ -3892,7 +3914,7 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
     {
         PersonalButton const& button = PERSONAL_BUTTONS[i];
         float const left = hit * button.factor - button.absorb;
-        if ((button.immunity && immunityHeld) || (left >= health && left >= strongestLeft))
+        if (left >= health && left >= strongestLeft)
             continue;
 
         uint32 const spellId = spellIds[i];

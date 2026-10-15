@@ -222,9 +222,12 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
     if (bot->GetExactDist2d(shelter) <= ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f)
         return false;
 
-    // Big Bang goes through it, and the block holds the mage in place until the hit.
-    if (bot->HasAura(SPELL_ALGALON_ICE_BLOCK))
-        bot->RemoveAurasDueToSpell(SPELL_ALGALON_ICE_BLOCK);
+    // Big Bang goes through all four. Magic immunity keeps the field's phase off, and Ice Block also holds the mage
+    // in place until the hit.
+    for (uint32 const immunity : {SPELL_ALGALON_ICE_BLOCK, SPELL_ALGALON_DIVINE_SHIELD, SPELL_ALGALON_CLOAK_OF_SHADOWS,
+                                  SPELL_ALGALON_ANTI_MAGIC_SHELL})
+        if (bot->HasAura(immunity))
+            bot->RemoveAurasDueToSpell(immunity);
 
     BreakCastPinningTheFeet(botAI, bot);
     ReleaseStalledWalk(botAI, bot);
