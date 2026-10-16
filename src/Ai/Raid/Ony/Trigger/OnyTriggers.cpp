@@ -29,12 +29,19 @@ bool OnyxiaMainTankTrigger::IsActive()
     if (branch == TankBranch::None)
         return false;
 
-    if (branch != TankBranch::Hold)
+    if (branch != TankBranch::Hold && branch != TankBranch::Secure)
         return true;
 
-    // On the spot: only facing and the swing need keeping.
     Unit* boss = OnyxiaSnapshotFor(botAI).boss;
-    return boss && (bot->GetVictim() != boss || !bot->HasInArc(static_cast<float>(M_PI) / 2.0f, boss));
+    if (!boss)
+        return false;
+
+    // Building the lead is the generic tank rotation's job, this only makes sure he swings at her.
+    if (branch == TankBranch::Secure)
+        return bot->GetVictim() != boss;
+
+    // On the spot: only facing and the swing need keeping.
+    return bot->GetVictim() != boss || !bot->HasInArc(static_cast<float>(M_PI) / 2.0f, boss);
 }
 
 bool OnyxiaAntiFearTrigger::FearWindowActive() { return OnyHelpers::FearWindowActive(botAI); }

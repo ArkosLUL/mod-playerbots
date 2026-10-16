@@ -3,8 +3,9 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic 25-man pull with no `onyxia.*` probe pins the raw-record fallback behind each section, a
-second one carrying the probes pins the paths that read them, and the shared fixture shows every
-section reads empty on a trace that is not Onyxia rather than raising.
+second one carrying the probes pins the paths that read them, a third pins the tank's secure step and
+the taunt check, and the shared fixture shows every section reads empty on a trace that is not Onyxia
+rather than raising.
 """
 from __future__ import annotations
 
@@ -285,6 +286,37 @@ def probed_pull() -> list[dict]:
     return records + [probe_snap(when) for when in range(0, 10000, 1000)]
 
 
+def tank_pull() -> list[dict]:
+    """The main tank secures her, loses her to Shiv on the walk and taunts her back; then a taunt while
+    she is on him, one that misses, and a Hand of Reckoning that only shows by its damage part."""
+    def victim(when):
+        return MELEE if 6000 <= when < 6500 else TANK
+
+    def note(when, text):
+        return {"t": when, "e": "note", "g": TANK, "k": ony.TANK_KEY, "txt": text}
+
+    records = [
+        header(),
+        {"t": 0, "e": "pull", "boss": "onyxia", "src": "engage"},
+        {"t": 1, "e": "unit", "g": BOSS, "en": ony.NPC_ONYXIA, "n": "Onyxia", "b": 1},
+        note(0, "secure"),
+        note(5000, "drag"),
+        note(6000, "taunt"),
+        note(6100, "recover"),
+        note(7000, "hold"),
+        cast(6200, TANK, 62124, BOSS),
+        cast(8000, TANK, 355, BOSS),
+        cast(9000, MELEE, 355, BOSS),
+        cast(9500, MELEE, 62124, BOSS),
+        cast(9600, MELEE, ony.RECKONING_DAMAGE, BOSS, triggered=True),
+        {"t": 10000, "e": "end", "out": "wipe"},
+    ]
+    return records + [{"t": when, "e": "snap", "hz": [], "u": [
+        row(BOSS, (17.0, -212.5, -85.6), target=victim(when)),
+        row(TANK, (35.0, -212.5, -83.5), target=BOSS),
+        row(MELEE, around(when, 110.0, 5.0), target=BOSS)]} for when in range(0, 10001, 250)]
+
+
 def load(folder: str, name: str, records: list[dict]) -> Trace:
     path = pathlib.Path(folder) / name
     path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
@@ -519,6 +551,37 @@ class ProbedPull(unittest.TestCase):
         missing = ony.missing_probes(self.trace)
         self.assertNotIn(ony.PHASE_KEY, missing)
         self.assertIn(ony.ANCHOR_KEY, missing)
+
+
+class TankPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, "249_9_onyxia_1792000002.ndjson", tank_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_secure_ends_in_the_drag(self):
+        self.assertEqual(ony.secure_rows(self.trace, TANK), [{"start": 0, "stop": 5000, "next": "drag"}])
+
+    def test_a_loss_on_the_walk_counts(self):
+        self.assertEqual([(loss["start"], loss["guid"]) for loss in ony.walk_losses(self.trace, TANK)],
+                         [(6000, MELEE)])
+
+    def test_a_taunt_took_by_her_turn_or_by_reckoning_damage(self):
+        self.assertEqual([(row["t"], row["took"], row["already"]) for row in ony.taunt_rows(self.trace)],
+                         [(6200, True, False), (8000, False, True), (9000, False, False), (9500, True, False)])
+
+    def test_the_tank_section_prints_both_lines(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ony.show_tank(self.trace)
+        text = out.getvalue()
+        self.assertIn("5.0 s -> drag", text)
+        self.assertIn("aggro lost while he walked her to the spot: 1", text)
+        self.assertIn("taunts on her: 4 cast, 2 took, 1 on the caster already", text)
 
 
 class EveryView(unittest.TestCase):

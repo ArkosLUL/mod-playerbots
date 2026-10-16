@@ -78,6 +78,8 @@ struct OnyxiaState
     // Her victim while it is the main tank, and since when.
     ObjectGuid heldBy;
     uint32 heldSinceMs = 0;
+    // A bot main tank has built his lead in this hold and may walk her off.
+    bool secured = false;
 
     // The main tank reached the tank spot since she last landed or was pulled.
     bool tankArrived = false;
@@ -112,6 +114,7 @@ struct OnyxiaState
 
     std::unordered_map<ObjectGuid, Position> dodgeDestination;
     std::unordered_map<ObjectGuid, int8> flankSide;
+    std::unordered_map<ObjectGuid, Position> flankIssued;
 
     bool eggsTraced = false;
     std::unordered_map<ObjectGuid, bool> novaTraced;
@@ -365,6 +368,8 @@ char const* DescribeBranch(TankBranch branch)
             return "taunt";
         case TankBranch::Recover:
             return "recover";
+        case TankBranch::Secure:
+            return "secure";
         case TankBranch::Drag:
             return "drag";
         case TankBranch::Return:
@@ -399,10 +404,31 @@ TankBranch ComputeTankBranch(PlayerbotAI* botAI, OnyxiaSnapshot const& snap)
     if (bot->GetExactDist2d(&ONYXIA_TANK_SPOT) <= ONYXIA_TANK_SPOT_TOLERANCE)
         return TankBranch::Hold;
 
-    return StateFor(snap.boss).tankArrived ? TankBranch::Return : TankBranch::Drag;
+    OnyxiaState const& state = StateFor(snap.boss);
+    if (!state.secured)
+        return TankBranch::Secure;
+
+    return state.tankArrived ? TankBranch::Return : TankBranch::Drag;
 }
 
-uint8 ComputeThreatLatch(Player* bot, Creature* boss, OnyxiaPhase phase, Player* mainTank, uint8 previous)
+// His threat over the highest anyone else has on her list, pets included.
+float ThreatLead(Creature* boss, Unit const* tank)
+{
+    float own = 0.0f;
+    float next = 0.0f;
+    for (ThreatReference const* ref : boss->GetThreatMgr().GetUnsortedThreatList())
+    {
+        if (ref->GetVictim() == tank)
+            own = ref->GetThreat();
+        else
+            next = std::max(next, ref->GetThreat());
+    }
+
+    return next > 0.0f ? own / next : std::numeric_limits<float>::max();
+}
+
+uint8 ComputeThreatLatch(Player* bot, Creature* boss, OnyxiaPhase phase, Player* mainTank, bool secured,
+                         uint8 previous)
 {
     if (PlayerbotAI::IsHeal(bot) || mainTank == bot)
         return 0;
@@ -418,6 +444,11 @@ uint8 ComputeThreatLatch(Player* bot, Creature* boss, OnyxiaPhase phase, Player*
         return 0;
 
     if (boss->GetVictim() != mainTank || MainTankHeldMs(bot) < ONYXIA_THREAT_DWELL_MS)
+        return 1;
+
+    // A bot tank walks her off once he has his lead, and damage before that is what takes her off him
+    // on the way. A human tank only gets the dwell.
+    if (!secured && !IsRealPlayer(mainTank))
         return 1;
 
     // Straight off the threat manager: the "threat" AI value is a uint8 percentage and wraps past 255.
@@ -453,20 +484,38 @@ void UpdatePhase(OnyxiaState& state, OnyxiaPhase phase, uint32 now)
     state.lastPhase = phase;
 }
 
-void UpdateHold(OnyxiaState& state, Creature* boss, Player* mainTank, uint32 now)
+// Her threat is wiped on the way up and on the way down, so a hold only counts on the ground.
+void UpdateHold(OnyxiaState& state, Creature* boss, OnyxiaPhase phase, Player* mainTank, uint32 now)
 {
-    if (mainTank && boss->GetVictim() == mainTank)
+    if (mainTank && IsGrounded(phase) && boss->GetVictim() == mainTank)
     {
         if (state.heldBy != mainTank->GetGUID())
         {
             state.heldBy = mainTank->GetGUID();
             state.heldSinceMs = now ? now : 1;
+            state.secured = false;
         }
         return;
     }
 
     state.heldBy.Clear();
     state.heldSinceMs = 0;
+    state.secured = false;
+}
+
+// Latched for the rest of the hold: a lead that dips on the walk doesn't stop him halfway.
+void UpdateSecured(OnyxiaState& state, Creature* boss, Player* mainTank, uint32 now)
+{
+    if (state.secured || !mainTank || IsRealPlayer(mainTank) || !state.heldSinceMs ||
+        state.heldBy != mainTank->GetGUID())
+        return;
+
+    uint32 const held = getMSTimeDiff(state.heldSinceMs, now);
+    if (held < ONYXIA_SECURE_DWELL_MS)
+        return;
+
+    if (held >= ONYXIA_SECURE_MAX_MS || ThreatLead(boss, mainTank) >= ONYXIA_SECURE_LEAD)
+        state.secured = true;
 }
 
 void NoteLane(Player* bot, BreathLane const& lane)
@@ -1212,10 +1261,14 @@ bool RearFlankPointFor(PlayerbotAI* botAI, Position& point, bool forTrigger)
     if (forTrigger)
         return true;
 
-    // Side and angle stay put for the pull, so melee spread across the band instead of all picking
-    // one random spot each tick.
+    // The angle stays put for the pull, so melee spread across the band instead of all picking one
+    // random spot each tick. The side is the one the bot stands on, so when she turns it goes round
+    // on its own side instead of across her nose. Only just past her tail does it keep the old one,
+    // so a bot there doesn't dither.
     OnyxiaState& state = StateFor(boss);
     auto const side = state.flankSide.try_emplace(bot->GetGUID(), static_cast<int8>(bearing >= 0.0f ? 1 : -1)).first;
+    if (side->second * bearing < 0.0f && magnitude <= 180.0f - ONYXIA_FLANK_SIDE_SWITCH_DEG)
+        side->second = static_cast<int8>(-side->second);
     float const baseDeg = ONYXIA_FLANK_MIN_DEG + 5.0f * (bot->GetGUID().GetCounter() % 5);
     float const baseDepth = meleeRange * ONYXIA_FLANK_DEPTH;
 
@@ -1255,6 +1308,23 @@ bool RearFlankPointFor(PlayerbotAI* botAI, Position& point, bool forTrigger)
 
     point = fallback;
     return true;
+}
+
+bool FlankPointMoved(Player* bot, Position const& point)
+{
+    Creature* boss = GetOnyxia(bot);
+    if (!boss)
+        return false;
+
+    OnyxiaState const& state = StateFor(boss);
+    auto const issued = state.flankIssued.find(bot->GetGUID());
+    return issued == state.flankIssued.end() || issued->second.GetExactDist2d(&point) > ONYXIA_FLANK_REAIM;
+}
+
+void MarkFlankIssued(Player* bot, Position const& point)
+{
+    if (Creature* boss = GetOnyxia(bot))
+        StateFor(boss).flankIssued[bot->GetGUID()] = point;
 }
 
 uint8 DodgeReasons(PlayerbotAI* botAI)
@@ -1406,7 +1476,8 @@ void TickOnyxia(PlayerbotAI* botAI)
     RefreshAdds(bot, state, now);
 
     Player* mainTank = EffectiveMainTank(bot, boss);
-    UpdateHold(state, boss, mainTank, now);
+    UpdateHold(state, boss, phase, mainTank, now);
+    UpdateSecured(state, boss, mainTank, now);
     UpdateBreath(bot, boss, state, now);
 
     Unit* fireballTarget = FireballTarget(boss);
@@ -1425,7 +1496,7 @@ void TickOnyxia(PlayerbotAI* botAI)
     if (bot->IsAlive())
     {
         auto const previous = state.threat.find(bot->GetGUID());
-        uint8 const latch = ComputeThreatLatch(bot, boss, phase, mainTank,
+        uint8 const latch = ComputeThreatLatch(bot, boss, phase, mainTank, state.secured,
                                                previous == state.threat.end() ? 0 : previous->second);
         state.threat[bot->GetGUID()] = latch;
 

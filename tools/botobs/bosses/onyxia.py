@@ -3,7 +3,8 @@
 
     onyxia.py <file>            every section
     onyxia.py <file> --phase    phase spans, from onyxia.phase or her health and height
-    onyxia.py <file> --tank     her victims, aggro losses, the tank spot, Wing Buffet drift, tank branches
+    onyxia.py <file> --tank     her victims, aggro losses, the tank spot, Wing Buffet drift, tank branches,
+                                the secure step, which taunts on her took
     onyxia.py <file> --threat   first hit on her per bot against the pull and the tank's hold, lust
     onyxia.py <file> --layout   bearing and range off her facing by role, cone and tail hits by role
     onyxia.py <file> --eggs     egg whelps against cave whelps, who stood at the eggs, the egg pit
@@ -24,6 +25,9 @@ What the generic views miss here, and what this reads instead:
   behind it. Nova kills are read off the hits, never off the casts.
 - **Cave whelps are her own 17646 casts**, two at a time at the two cave mouths. A whelp first seen
   near a cave mouth right after one is a cave whelp; anything else hatched from an egg.
+- **A taunt that lands leaves no row on her**, auras are written for roster members only. It is read
+  off her victim turning to the caster, or off Hand of Reckoning's damage part 67485, which its taunt
+  effect casts only when it hits her while she is on someone else.
 """
 from __future__ import annotations
 
@@ -70,6 +74,9 @@ MISDIRECTION = 34477
 TRICKS = 57934
 FEAR_WARD = 6346
 TREMOR_TOTEM = 8143
+# Taunt, Mocking Blow, Growl, Dark Command, Hand of Reckoning, Righteous Defense's taunt, Death Grip's
+TAUNTS = frozenset({355, 694, 6795, 56222, 62124, 31790, 49560})
+RECKONING_DAMAGE = 67485
 
 # Kick, Pummel, Shield Bash, Mind Freeze, Counterspell, Wind Shear, Spell Lock, Silencing Shot,
 # Strangulate, Silence, every rank
@@ -215,6 +222,9 @@ FEAR_MS = 2000
 ERUPTION_MS = 4000
 LAYOUT_RANGE = 60.0
 FRESH_MS = 1000
+# A landed taunt turns her at once, so the next snapshot or two shows it; a threat takeover lands later.
+TAUNT_TOOK_MS = 600
+RECKONING_MS = 500
 # one snapshot gap longer than this is a hole in the trace, not time spent anywhere
 MAX_STEP_MS = 2000
 SHOWN = 12
@@ -564,6 +574,48 @@ def wing_buffets(trace: Trace, tank: int | None) -> list[dict]:
     return out
 
 
+def secure_rows(trace: Trace, tank: int | None) -> list[dict]:
+    """Each `secure` stretch of the main tank's branch and the branch after it: `drag` once he had his
+    lead, anything else when she left him first."""
+    branches = holder_spans(trace, TANK_KEY, pull_end(trace)).get(tank, []) if tank else []
+    return [{"start": start, "stop": stop, "next": branches[index + 1][0] if index + 1 < len(branches) else None}
+            for index, (held, start, stop) in enumerate(branches) if held == "secure"]
+
+
+def walk_losses(trace: Trace, tank: int | None) -> list[dict]:
+    """Aggro losses that began while he walked her to the tank spot."""
+    walks = [(start, stop) for held, start, stop in holder_spans(trace, TANK_KEY, pull_end(trace)).get(tank, [])
+             if held in ("drag", "return")] if tank else []
+    return [loss for loss in aggro_losses(trace, tank)
+            if any(start <= loss["start"] <= stop + FRESH_MS for start, stop in walks)]
+
+
+def taunt_rows(trace: Trace) -> list[dict]:
+    """Each taunt aimed at her: on the caster already when the samples either side of the cast show him,
+    or took when her victim turned to the caster within `TAUNT_TOOK_MS` or Hand of Reckoning's damage
+    part went off on her."""
+    boss = boss_guid(trace)
+    if boss is None:
+        return []
+    samples = samples_of(trace)
+    casts = [rec for rec in trace.of("cast") if rec.get("tgt") == boss]
+    reckonings = [(rec["t"], rec.get("s")) for rec in casts if rec.get("sp") == RECKONING_DAMAGE]
+    out = []
+    for rec in casts:
+        if rec.get("sp") not in TAUNTS:
+            continue
+        caster = rec.get("s")
+        before = samples.row(boss, rec["t"])
+        on_caster = [len(row) > 7 and row[7] == caster
+                     for _, row in samples.between(boss, rec["t"] + 1, rec["t"] + TAUNT_TOOK_MS)]
+        already = bool(before and len(before) > 7 and before[7] == caster and on_caster and on_caster[0])
+        turned = any(on_caster)
+        hit = any(source == caster and 0 <= when - rec["t"] <= RECKONING_MS for when, source in reckonings)
+        out.append({"t": rec["t"], "caster": caster, "spell": rec["sp"], "already": already,
+                    "took": not already and (turned or hit)})
+    return out
+
+
 def show_tank(trace: Trace) -> None:
     print("TANK")
     boss = boss_guid(trace)
@@ -629,11 +681,27 @@ def show_tank(trace: Trace) -> None:
             totals[held] += stop - start
         print(f"\n  {TANK_KEY}: {steps_line([f'{clock(start)} {held}' for held, start, _ in branches])}")
         print("  time per branch: " + ", ".join(f"{held} {span / 1000:.1f} s" for held, span in totals.most_common()))
+        secures = secure_rows(trace, tank)
+        if secures:
+            print("  secure: " + ", ".join(f"{clock(row['start'])} {(row['stop'] - row['start']) / 1000:.1f} s"
+                                         f" -> {row['next'] or 'end'}" for row in secures))
+        lost = walk_losses(trace, tank)
+        print(f"  aggro lost while he walked her to the spot: {len(lost)}"
+              + (" (" + ", ".join(f"{clock(loss['start'])} {trace.name(loss['guid'])}" for loss in lost) + ")"
+                 if lost else ""))
 
     cooldowns = [(start, held) for held, start, _ in holder_spans(trace, DEFENSIVE_KEY).get(tank, [])
                  if held not in ("none", "covered")] if tank else []
     if cooldowns:
         print(f"  {DEFENSIVE_KEY}: " + ", ".join(f"{clock(when)} {held}" for when, held in cooldowns))
+
+    taunts = taunt_rows(trace)
+    if taunts:
+        took = collections.Counter(row["caster"] for row in taunts if row["took"])
+        print(f"\n  taunts on her: {len(taunts)} cast, {sum(took.values())} took,"
+              f" {sum(row['already'] for row in taunts)} on the caster already")
+        cast_by = collections.Counter(row["caster"] for row in taunts)
+        print("    " + ", ".join(f"{trace.name(guid)} {count} (took {took[guid]})" for guid, count in cast_by.most_common()))
 
 
 def first_hits(trace: Trace) -> dict[int, tuple[int, str]]:

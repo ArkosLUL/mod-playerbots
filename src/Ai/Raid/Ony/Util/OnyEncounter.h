@@ -39,6 +39,7 @@ enum class TankBranch : uint8
     Pickup,   // waiting for her to land
     Taunt,    // she is grounded on someone else and the taunt is up
     Recover,  // she is on someone else and the taunt is down: walk in and hit her
+    Secure,   // she is on him but his lead is thin: tank her where she is before walking off
     Drag,     // walking her to the tank spot
     Return,   // back to the tank spot after a knockback
     Hold      // on the spot
@@ -82,7 +83,8 @@ Position const* MainTankDestination(TankBranch branch);
 bool MainTankWalkDue(Player* bot);
 void MarkMainTankWalk(Player* bot);
 
-// 0 free, 1 waiting for the main tank, 2 at the cap of his threat, 3 she is landing.
+// 0 free, 1 waiting for the main tank (under a bot one, until he has secured her), 2 at the cap of
+// his threat, 3 she is landing.
 uint8 ThreatHoldLatch(Player* bot);
 // Lust only in phase 3. Everything else gated on the main tank's hold, free in the air, held while
 // she lands.
@@ -104,6 +106,9 @@ bool GroundSlotFor(PlayerbotAI* botAI, Position& slot);
 bool AirSpotFor(PlayerbotAI* botAI, Position& spot);
 // Melee: the point on her flank, or false while they are already inside the band.
 bool RearFlankPointFor(PlayerbotAI* botAI, Position& point, bool forTrigger);
+// The flank point has moved off the one last issued, so a walk still in flight aims where she was.
+bool FlankPointMoved(Player* bot, Position const& point);
+void MarkFlankIssued(Player* bot, Position const& point);
 
 // DodgeReason bits; non-zero means the dodge owns this bot's movement.
 uint8 DodgeReasons(PlayerbotAI* botAI);

@@ -106,8 +106,8 @@ inline std::array<Position, 52> const LAVA_FISSURES = {{
 // from the two nearest fissures.
 Position const ONYXIA_TANK_SPOT(34.0f, -212.5f, -83.46f);
 // Where she settles in melee range of the tank spot, and what the raid lays out around while she is
-// still on her way. Estimated from her combat reach: refit it from a trace.
-Position const ONYXIA_BOSS_HOLD_SPOT(17.0f, -212.5f, -85.60f);
+// still on her way. Median of six holds with the tank on his spot; navprobe settles it at this z.
+Position const ONYXIA_BOSS_HOLD_SPOT(18.9f, -213.5f, -85.42f);
 // The main tank waits here while she comes down, in taunt range of the landing and clear of fissures
 // and eggs.
 Position const ONYXIA_P3_PICKUP(-32.0f, -205.0f, -87.84f);
@@ -149,6 +149,11 @@ constexpr float ONYXIA_DODGE_MAX_RADIUS = 45.0f;
 // Main tank.
 constexpr float ONYXIA_TANK_SPOT_TOLERANCE = 3.0f;
 constexpr uint32 ONYXIA_TANK_WALK_REISSUE_MS = 500;
+// He tanks her where he picked her up until he has held her this long with this lead over the next
+// highest threat, then walks. A human tank out-threating him can't pin him past the max.
+constexpr uint32 ONYXIA_SECURE_DWELL_MS = 5000;
+constexpr float ONYXIA_SECURE_LEAD = 1.25f;
+constexpr uint32 ONYXIA_SECURE_MAX_MS = 10000;
 
 // Threat: everyone but the main tank and the healers waits this long after he takes her, then stays
 // under the hold ratio of his threat until it drops to the release ratio.
@@ -183,6 +188,10 @@ constexpr float ONYXIA_FLANK_MIN_DEG = 100.0f;
 constexpr float ONYXIA_FLANK_MAX_DEG = 120.0f;
 constexpr float ONYXIA_FLANK_SLACK_DEG = 5.0f;
 constexpr float ONYXIA_FLANK_DEPTH = 0.6f;
+// A melee bot this close past her tail keeps the side it had.
+constexpr float ONYXIA_FLANK_SIDE_SWITCH_DEG = 20.0f;
+// Re-aim a flank walk in flight once its point has moved this far.
+constexpr float ONYXIA_FLANK_REAIM = 3.0f;
 
 // Phase 2 cells round each breath lane for ranged and healers.
 constexpr float ONYXIA_AIR_STEP_ALONG = 9.0f;

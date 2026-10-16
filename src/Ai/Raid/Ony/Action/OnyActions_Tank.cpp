@@ -26,8 +26,9 @@ bool OnyxiaMainTankAction::Execute(Event /*event*/)
     if (branch == TankBranch::Taunt && EncounterHelpers::CastClassTaunt(botAI, boss))
         return true;
 
-    // Taunt failed or is down: hit her and let the generic reach close the gap.
-    if (branch == TankBranch::Taunt || branch == TankBranch::Recover)
+    // Taunt failed or is down, or he is still building his lead: hit her and leave the moving to the
+    // generic reach and facing.
+    if (branch == TankBranch::Taunt || branch == TankBranch::Recover || branch == TankBranch::Secure)
         return bot->GetVictim() != boss && Attack(boss);
 
     // Acquiring her must not cost the walk, so this falls through.

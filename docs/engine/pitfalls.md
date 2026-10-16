@@ -287,6 +287,10 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
   `FindNearestPositionClearOfHazards` (`RaidBossHelpers.cpp`), which rings outward to the nearest spot
   clear of *every* hazard. Freya's Nature Bombs, Detonating Lashers and Unstable Sun Beams were all
   silently undodgeable until they moved onto it.
+- **Some bosses obey taunt diminishing returns.** `flags_extra` 0x80000
+  (`OBEYS_TAUNT_DIMINISHING_RETURNS`) runs taunts at 100/65/42/27% duration, then immune until 15 s
+  after the last one fades (`Unit::GetDiminishing`, `Spell.cpp` DR block). A taunt every 8 s plus a
+  Righteous Defense in between keeps such a boss immune. Onyxia carries it.
 - **A movement lock refuses anything not *strictly* above it.** `IsWaitingForLastMove`
   (`MovementActions.cpp:951-963`) compares priorities with `>`, so a move already in flight refuses
   the next move of the *same* priority until its lock expires — `distance / speed`, capped at

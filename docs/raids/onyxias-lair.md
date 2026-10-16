@@ -26,6 +26,9 @@ fissures live in `Util/OnyData.h`.
   the tunnel on the pull (x < -130) idles unless attacked: never target it.
 - **Eggs**: GO 176511, 119 in the two side caves (z -96..-90). A player within ~6.9 yd 3D hatches one;
   they respawn. Read live from the grid, never hard-coded.
+- **Taunts**: `flags_extra` 0x80000 `OBEYS_TAUNT_DIMINISHING_RETURNS` (see engine pitfalls). In the
+  2026-10-16 kill none of 22 taunts on her landed, not even the first of the pull: no 67485 on her, no
+  victim turn. Cause not found; nothing here relies on taunting her.
 - **Phase 3 whelps**: two at +10 s, then two every 30 s. **Eruption** 17731/69294 bursts 5 yd round
   every fissure on each Roar.
 
@@ -35,7 +38,7 @@ fissures live in `Util/OnyData.h`.
 |---|---|---|
 | EMERGENCY+6 | `onyxia dodge` (Mover, `MOVEMENT_FORCED`) | everyone: egg (8 yd 3D), live breath lane (20 yd, clear to 22), Blast Nova in its last 2 s within 17 yd (non-tanks), Fireball on the bot with a neighbour within 9.5 yd. One sweep clear of every live hazard; destination latched while it stays clear |
 | RAID+7 | `onyxia main tank cooldown` | MT on Flame Breath or below 35%: `NextTankDefensive` (`onyxia.defensive`) |
-| RAID+6 | `onyxia main tank` (Mover) | MT branch, traced `onyxia.tank`: pickup / taunt / recover / drag / return / hold |
+| RAID+6 | `onyxia main tank` (Mover) | MT branch, traced `onyxia.tank`: pickup / taunt / recover / secure / drag / return / hold |
 | RAID+5 | `onyxia anti fear` | Landing and Final |
 | RAID+4 | `onyxia redirect threat` | Misdirection/Tricks on the MT in the first 10 s after touch-down, not on the pull; the generic redirect nodes, plain Tricks included, are blocked all fight (a self-targeted Tricks on a DPS warrior is what lost the MT aggro) |
 | RAID+3 | `onyxia choose target` | the ladder below |
@@ -45,19 +48,22 @@ fissures live in `Util/OnyData.h`.
 **Main tank.** He tanks at `ONYXIA_TANK_SPOT (34.0, -212.5)` with his back to the north wall: bot
 knockback runs `MoveKnockbackFrom` → `MovePositionToFirstCollision`, so the wall stops Wing Buffet.
 The spot is on the floor, pathable from her home and the landing, and 7.1/7.5 yd clear of the nearest
-fissures. She settles in melee range at about `ONYXIA_BOSS_HOLD_SPOT (17, -212.5)` (estimated: refit
-from a trace). Branches: Landing → wait at `ONYXIA_P3_PICKUP (-32, -205)`, in taunt range of the
+fissures. She settles in melee range at `ONYXIA_BOSS_HOLD_SPOT (18.9, -213.5)` (refit from six holds,
+navprobe z). Branches: Landing → wait at `ONYXIA_P3_PICKUP (-32, -205)`, in taunt range of the
 landing; she is on someone else → taunt, or attack and let generic reach close if it is down; on him
-→ walk to the spot (drag, or return after a knockback) and hold facing her. The walk returns true only
-on the tick that issues it (re-issued after 500 ms stalled or 2 s), so his threat buttons run between.
+→ **secure**: tank her where she is, generic reach and facing allowed, until he has held her 5 s with
+1.25× the next threat on her list (or 10 s, so a human out-threating him can't pin him); latched for
+the hold, cleared when she leaves him or goes up → walk to the spot (drag, or return after a
+knockback) and hold facing her. The walk returns true only on the tick that issues it (re-issued
+after 500 ms stalled or 2 s), so his threat buttons run between.
 While he drags, waits or holds, generic movers, wander and avoid-aoe are blocked for him.
 
 **Threat** (`onyxia threat hold`, Spell | Melee; latch `onyxia.threat`, written in the tick): MT and
 healers free. Landing holds everyone (3). Ground/Final: hold (1) until her victim is the MT and has
-been for 3 s, then cap (2) at 90% of his threat and release at 80%. Read off `GetThreatMgr()`: the
-`threat` AI value is a uint8 and wraps. A dead MT is replaced by the living tank highest on her list;
-no tank, no hold. Misdirection/Tricks auras free the bot. Only damage aimed at her is zeroed.
-`onyxia taunt guard`: nobody but the MT taunts her.
+been for 3 s (a bot MT: until secured), then cap (2) at 90% of his threat and release at 80%. Read
+off `GetThreatMgr()`: the `threat` AI value is a uint8 and wraps. A dead MT is replaced by the living
+tank highest on her list; no tank, no hold. Misdirection/Tricks auras free the bot. Only damage aimed
+at her is zeroed. `onyxia taunt guard`: nobody but the MT taunts her.
 
 **Burst** (`onyxia burst window`): Bloodlust/Heroism only in Final; all burst waits for the MT to
 have held her 5 s on the ground, and with a human MT 15 s after touch-down. Free in the air, held while
@@ -70,8 +76,11 @@ radius 24 healers (spill to 30), 30 casters, 36 hunters, overflow from 42. Ancho
 her live position under a human one, re-latched after 6 yd or 20°. Every slot goes through
 `ValidateStaticFloorPoint` and is nudged off eggs and, from Landing on, fissures; a slot with no clean
 nudge traces `onyxia.slotfail`. Arrive within 0.5 yd, re-trigger past 3.5. Melee hold a stable
-per-bot angle of 100-120° on a side fixed per pull, at 0.6 of melee range, nudged off fissures in
-Final; the generic `rear flank` and formation movers are blocked for them.
+per-bot angle of 100-120° on the side they stand on (kept within 20° past her tail, so
+her turning never sends them across her nose), at 0.6 of melee range, nudged off fissures in Final;
+the generic `rear flank` and formation movers are blocked for them. A flank walk whose point moved more
+than 3 yd steps its booking down to `MOVEMENT_NORMAL` to re-aim: an equal-priority walk otherwise holds
+the stale point up to 5 s (two Cleave and Wing Buffet kills, 2026-10-16).
 
 **Phase 2 cells** (`onyxia.p2spot`): built once at lift-off per waypoint — every 9 yd along its lane,
 ±13.5/22.5/31.5 yd across — kept if on the floor (z -90.5..-82.5), 9.5 yd from every egg, 20 yd from
@@ -89,11 +98,12 @@ reach-heal onto anything within 12 yd of a live egg, and closers are blocked ont
 while a breath lane is live. Blink and Disengage are blocked all fight.
 
 **Trace hazards** (tracker bot): a `lane` per Deep Breath, an 8 yd circle per live egg once per pull,
-a 15 yd circle per Blast Nova. Reader: `tools/botobs/bosses/onyxia.py <trace>`.
+a 15 yd circle per Blast Nova. Reader: `tools/botobs/bosses/onyxia.py <trace>`; its tank
+section counts secure stretches, aggro lost on a walk, and taunts on her that took.
 
 ## Open risks
 
-- `ONYXIA_BOSS_HOLD_SPOT` is estimated.
+- Taunts may not land on her (above): the MT wins her back by threat only.
 - Lane-clear cells are scarce at some waypoints; the dodge is the guarantee.
 - Pit exits are 65-73 yd paths that may pass eggs; prevention is primary.
 - Tremor may not reach the MT from the slots in Final.
