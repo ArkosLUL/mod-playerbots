@@ -133,7 +133,8 @@ key two parts both register when copying; pblint cannot see that collision.
 Multipliers multiply, so independent gates AND together for free — the shared burst gate and a
 per-boss lust gate compose with no coordination. Returning `0.0f` is the standard veto idiom, and it
 is **final**: no later multiplier can hand the action back, so a rule phrased as "allow X here" only
-works if nothing else already vetoed X.
+works if nothing else already vetoed X. Traces credit the veto to the first rule or multiplier that
+zeroed it, in declaration order, so wiring order decides attribution.
 
 `dynamic_cast` is the identification mechanism, and **must be narrow**: cast to the concrete action
 (`CastMisdirectionOnMainTankAction`), never a shared base like `BuffOnMainTankAction` — that base
@@ -156,7 +157,13 @@ the encounter's own suppression into the action, not into a multiplier that will
 `TankAssistAction` are how a bot gets a target at all, and `AttackAction::Attack` is what calls
 `ChangeEngine(BOT_STATE_COMBAT)`, so zeroing them with nothing behind them strands every bot
 targetless in the non-combat engine: it buffs and heals and never fights. Vezax did this for two pulls
-that ended at 99% boss health. The trace tell is a `covdef` with no `c` engine.
+that ended at 99% boss health. The trace tell is a `covdef` with no `c` engine. A rule wider than its
+assigning node strands the bot the same way in the gap, so key an `OwnTargeting` predicate on
+`resolver != nullptr`.
+
+**A direct-attack action is the pet's only sender**: no generic strategy wires `pet attack`. Command
+the pet before the "already on the pick" early return, and let the trigger also fire while the pet is
+off the pick.
 
 **Test the action before resolving anything.** `Multiplier::GetValue` runs on every popped action that
 passed `isUseful()`, so a multiplier that looks up a boss first pays that lookup for every rotation

@@ -147,7 +147,9 @@ returns non-null. That reopens the hole exactly where the encounter node has not
 Freya's lasher waves generic assist took over and the off-tank towed ten detonating adds into the
 raid stack. Suppressing unconditionally is safe only if the ladder ends in a **terminal fallback**
 (the boss), so no role is left nodeless — Freya's main tank had none and held her only because it
-pulled her.
+pulled her. Without one, an unconditional rule strands the bot with no target source, so gate the
+rule on exactly `resolver != nullptr` and list the windows `dps assist` takes as known gaps (ToC,
+[trial-of-the-crusader/README.md](trial-of-the-crusader/README.md#targeting-is-direct-no-raid-icons)).
 
 **Healers are the exception: a ladder may give them nothing.** A targetless healer drops to the
 non-combat engine (no mana cooldowns, potions, shields or Beacon) and only `dps assist` brings it

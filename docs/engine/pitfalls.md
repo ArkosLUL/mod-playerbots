@@ -610,6 +610,9 @@ Related traps:
   set `SetNextCheckDelay` to 12-18 s scaled by what is missing, so nothing runs, dodges included,
   until it expires. Wherever a hazard outlives combat, such as a phase handover, veto `drink`/`food`
   near it (Mimiron's `mimiron drink guard` rule).
+- **A direct `Attack()` has no out-of-combat guard** and reaches `SightDistance` (100 yd), so every
+  branch of a resolver feeding it needs an in-combat unit, or the raid pulls itself
+  ([kologarn.md](../raids/ulduar/kologarn.md)).
 - **An encounter gate that requires `boss->IsInCombat()` leaves the strategy inert through the whole
   approach and the instant of the pull.** Generic tank and DPS behaviour therefore picks targets
   first, and the boss-specific rules inherit whatever state that left behind.
@@ -718,7 +721,9 @@ exists. **The proof technique generalises**: the first `combat formation move` f
 encounter that writes a shared value owes the next one a reset.
 
 `rti` and `rti cc` outlive the session too: `AiObjectContext::Save` persists them to the bot's DB
-store. An encounter that writes one restores it, through an ungated node where the encounter gate
+store. Group target icons don't: `Group::SetTargetIcon` keeps them in memory only, so a restart
+clears them and a migration resets `rti`, never icons. It also strips every other icon from that
+target, so a CC icon placed on a skulled unit erases the skull. An encounter that writes one restores it, through an ungated node where the encounter gate
 can close before cleanup.
 
 **A shared staleness flag cleared by the first actor starves every other actor.** Thorim's
@@ -749,6 +754,11 @@ This is a base-engine trap, not a boss-specific one. **Any encounter with an unt
 it**: the bot is held on a dead or wrong target for the rest of the fight. An encounter that retargets
 mid-pull must clear the mark itself — Thorim sets both the group icon and its own `prioritized
 targets` back to empty once per pull (`UldEncounter_Thorim.cpp:740`).
+
+**A skull is not proof of a player, and alone it does nothing.** `mark rti` (`MarkRtiStrategy`, off by
+default) makes a bot put its own `rti` icon on the lowest-health unmarked attacker. `attack rti
+target` is wired into no generic strategy, so a player's skull moves a bot only where an encounter
+reads it.
 
 **It outlives the pull as well.** `AttackersValue::Calculate` adds `prioritized targets` and the
 skull with only a line-of-sight check, and protection paladins, bears and protection warriors run
