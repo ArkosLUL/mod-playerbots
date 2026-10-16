@@ -1,4 +1,4 @@
-# w8-prepull-staging — ToC: bots wait on their opening spots before each boss engages
+# w8-prepull-staging — ToC: opening spots before each boss engages, and resistance auras
 
 Wave 4e. It runs after wave 4d (`w5-anubarak-rest`, `w3b-fc-defence-rest`, `w2-jaraxxus-rest`,
 `refine-beasts-2`) merges and branches from that merge: those lanes change the spots this one reads
@@ -9,7 +9,8 @@ numbers are as of `1846fc944`; core script paths are under
 `src/server/scripts/Northrend/CrusadersColiseum/TrialOfTheCrusader/` at the server root.
 
 Goal: each boss arrives at the same coordinates every pull, so bots wait on their spots before he
-engages, and the tanks catch him at once.
+engages, and the tanks catch him at once. Paladins also raise the resistance aura that fits each
+encounter.
 
 ## Facts
 
@@ -47,6 +48,31 @@ engages, and the tanks catch him at once.
   clears inside a pull"): a direct `Attack()` reaches 100 yd, `tank assist` runs out of combat, and
   Anub'arak is attackable inside 80 yd.
 
+**Resistance auras.**
+
+- Fire, Frost and Shadow Resistance Aura (rank 5: 48947, 48945, 48943) are `APPLY_AREA_AURA_RAID` +
+  `MOD_RESISTANCE_EXCLUSIVE`: one holder per school covers the raid, a second adds nothing, auras of
+  different schools from different paladins both apply. Shaman resistance totems and Aspect of the
+  Wild share the exclusive type for their school.
+- Schools (Spell.dbc `SchoolMask`, `modules/mod-spell-tweaks/data/dbc-reference/spell.reference.csv`
+  at the server root):
+  - fire: Gormok's Fire Bomb, Dreadscale's Burning Bile and Burning Spray, Jaraxxus' Fel Fireball,
+    Legion Flame, Incinerate Flesh and Infernal Eruption (Fel Lightning is fire + nature), the
+    Twins' Unleashed Light, Light Vortex and Touch of Light;
+  - frost: Arctic Breath, Penetrating Cold, Freezing Slash (physical + frost);
+  - shadow: the Twins' Dark counterparts, the burrowers' Shadow Strike;
+  - nature, which no paladin aura covers: Acidic Spew, Paralytic Spray, Molten Spew, Leeching Swarm;
+  - physical: Massive Crash, Impale.
+- The generic path (MC, BWL, Ulduar, e.g. `UldDefinition_Ignis.cpp:49-54`): `BossFireResistanceTrigger`
+  and its siblings (`src/Ai/Base/Trigger/BossAuraTriggers.cpp`) key on a boss name and pick the first
+  alive paladin in group order, whatever its spec. `BossFireResistanceAction`
+  (`src/Ai/Base/Actions/BossAuraActions.cpp`) adds `+rfire` to the combat engine and never removes
+  it; `rfire`/`rfrost`/`rshadow` are siblings of `barmor`/`baoe`/`bcast`/`bspeed`
+  (`PaladinAiObjectContext.cpp:46-57`), so that evicts the paladin's normal aura strategy for good.
+  The hunter path avoids it: no strategy change, `BossNatureAspectHoldMultiplier`
+  (`src/Ai/Base/Strategy/BossResistanceMultipliers.h`) holds the aura and reverts when the boss
+  dies (rationale at `BossAuraActions.cpp:50-57`).
+
 ## Scope
 
 1. **Window.** `ToCStagingEncounter(bot)` names the encounter about to start; it is non-None while
@@ -81,11 +107,27 @@ engages, and the tanks catch him at once.
    view, in `postmortem.py` or per boss reader as the investigator decides: each bot's distance to
    its stand at the release, the boss's first victim, time to a tank, any non-tank hit in the first
    5 s.
+5. **Resistance auras.** Paladins raise each encounter's aura from the staging window through the
+   fight (`ToCEncounterGateOpen`), then return to their normal aura.
+   - Schools per encounter from the facts above, the core script and the guide. Suggested: fire on
+     Gormok, the worms and Jaraxxus; frost on Icehowl and Anub'arak; fire and shadow on the Twins
+     when two paladins are free. Faction Champions from the 10/25 roster's damage mix. Log each
+     choice.
+   - One holder per school, re-picked on death; pick holders so the raid keeps its other auras where
+     it can (Devotion from another paladin), and log the rule.
+   - Cast directly and hold with a multiplier vetoing the holder's other aura nodes while the gate
+     holds, as the hunter path does. Never `ChangeStrategy`, which outlives the encounter. Leave the
+     generic `Base` triggers alone: other raids use them.
+   - Optional, investigator decides: a hunter on Aspect of the Wild for the worms and Anub'arak, via
+     `GetNatureResistanceHunter` (`src/Ai/Base/Util/GenericBuffUtils.h`).
+   - A `toc.aura` probe per paladin: the aura held, or `none`.
 
 ## Owns
 
 - a new `Staging` stem: `ToC{Actions,Triggers,Helpers}_Staging.*` and `ToCDefinition_Staging.cpp`;
-- its registration in `ToCStrategy.cpp`;
+- a new `ResistAura` stem in the same layout, or the auras folded into `Staging` if the investigator
+  prefers;
+- their registration in `ToCStrategy.cpp`;
 - the `jaraxxus intro main tank` node and its multiplier, to retire (`Jaraxxus` stem, those lines
   only);
 - a "Pre-pull staging" section in `docs/raids/trial-of-the-crusader/README.md`;

@@ -28,7 +28,7 @@ The merge stage alone edits this table.
 | 4d | w5-anubarak-rest | pending | | | From the 2026-10-16 25N pull |
 | 4d | w3b-fc-defence-rest | pending | | | From the 2026-10-16 25N pull; also owns the offence stem's CC |
 | 4d | refine-beasts-2 | pending | | | From the 2026-10-16 25H pulls |
-| 4e | w8-prepull-staging | pending | | | Branches from 4d's merges |
+| 4e | w8-prepull-staging | pending | | | Branches from 4d's merges; also paladin resistance auras |
 | 5 | w6-closeout | pending | | | |
 
 States: `pending`, `merged`, `blocked` (branch and worktree kept, reason in the lane brief),
