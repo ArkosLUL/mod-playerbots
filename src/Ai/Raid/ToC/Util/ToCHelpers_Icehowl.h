@@ -63,9 +63,11 @@ constexpr float ICEHOWL_SPREAD_MELEE_ROOM = 14.0f;
 // Whirl throws his tank ~31 yd and he follows, so the layout re-latches when he moves or turns this far
 constexpr float ICEHOWL_SPREAD_RELATCH_MOVE = 8.0f;
 constexpr float ICEHOWL_SPREAD_RELATCH_TURN_DEG = 30.0f;
-// His victim out of his reach for less than this keeps the layout as it stands. He runs 16 yd/s, so a
-// longer wait would walk the spread after him.
+// While he stands, his victim out of his reach for less than this keeps the layout as it stands
 constexpr uint32 ICEHOWL_SPREAD_VICTIM_GRACE_MS = 1000;
+// Chasing a Whirl-thrown tank he keeps it mostly in his reach, so a reach test misses his walk. While
+// he moves and this long after, the layout holds as latched with no re-latch or stand walk.
+constexpr uint32 ICEHOWL_SPREAD_SETTLE_MS = 500;
 // Past the ranged band by his drift before a re-latch, so an open bearing never reads as walled
 constexpr float ICEHOWL_SPREAD_PROBE = ICEHOWL_SPREAD_RANGED_MAX + ICEHOWL_SPREAD_RELATCH_MOVE + 1.0f;
 // Melee bearings stay this far round from his back. Past 90° off it he parries them and hastes his
@@ -110,14 +112,15 @@ bool IsIcehowlStaggered(Unit* icehowl);
 bool HasIcehowlFrothingRage(Unit* icehowl);
 
 // The bot's Arctic Breath stand: Icehowl's spot plus its own distance to him, clamped into its role's
-// band, along its bearing. False while the spread is off (another beast up, a charge, his victim out
-// of his melee range past the grace) and for a bot with no bearing: tanks, humans, one the deal
-// hasn't reached yet, melee with every bearing near his back walled.
+// band, along its bearing. False while the spread is off (another beast up, a charge, the daze, his
+// victim out of his melee range past the grace) or held while he moves, and for a bot with no bearing:
+// tanks, humans, one the deal hasn't reached yet, melee with every bearing near his back walled.
 bool GetIcehowlBreathStand(PlayerbotAI* botAI, IcehowlBreathStand& stand);
 
 // (x, y) within `degrees` of the stand's bearing and `yards` of its band
 bool IsOnIcehowlBreathStand(IcehowlBreathStand const& stand, float x, float y, float degrees, float yards);
 
+// Also true while the layout holds through his walk, when GetIcehowlBreathStand gives no stand
 bool HasIcehowlBreathSlot(PlayerbotAI* botAI);
 
 }

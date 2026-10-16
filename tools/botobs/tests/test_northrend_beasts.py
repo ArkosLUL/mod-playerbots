@@ -212,6 +212,18 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(rows[0]["trampled"], [])
         self.assertEqual(rows[1]["trampled"], [BLADE])
 
+    def test_only_a_daze_reads_its_window(self):
+        rows = nb.charges(self.trace)
+        self.assertEqual(set(rows[0]["daze"]), {HOLD, SWAP, MENDER, ARROW, BLADE})
+        self.assertIsNone(rows[1]["daze"])
+
+    def test_normal_has_no_berserk_line(self):
+        self.assertIsNone(nb.berserk(self.trace))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_banner(self.trace)
+        self.assertNotIn("Berserk", out.getvalue())
+
     def test_rider_spans_and_seconds(self):
         self.assertEqual(nb.rider_spans(self.trace), {MENDER: [(3000, 7000)]})
 
@@ -483,7 +495,10 @@ class EveryView(unittest.TestCase):
                 section(trace)
         text = out.getvalue()
         self.assertIn("not a Beasts pull", text)
-        for empty in ("no nb.stage rows", "no nb.tank rows", "no nb.charge cycle", "nobody carried a snobold"):
+        self.assertNotIn("Berserk", text)
+        for empty in ("no nb.stage rows", "no nb.tank rows", "no nb.charge cycle", "nobody carried a snobold",
+                      "Spray casts: none", "caster spread: no snapshot with both worms up",
+                      "nb.wormhold releases by cause: none"):
             self.assertIn(empty, text)
 
 
@@ -819,6 +834,269 @@ class TargetsPull(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             nb.show_targets(Trace(FULL))
         self.assertIn("no nb.dps pick sampled", out.getvalue())
+
+
+WALL = 5301    # tank, Icehowl's victim, takes a Toxin past the Spray's burst
+AIM = 5302     # ranged, the Spray's target
+BESIDE = 5303  # ranged, 6 yd off Aim, walks off the Spray
+ROAM = 5304    # ranged, joins Aim and Beside at 30 s, walks half the daze
+STILL = 5305   # heal, casts through the daze where it stands
+STAB = 5306    # melee, its hold drifts twice
+
+# 25H ids
+PARALYTIC_SPRAY = 67617
+PARALYTIC_TOXIN = 67620
+HEROIC_BREATH = 67652
+HEROIC_WHIRL = 67665
+
+HEROIC_SPOTS = {WALL: (60.0, 0.0), AIM: (0.0, 0.0), BESIDE: (6.0, 0.0), ROAM: (30.0, 0.0), STILL: (36.0, 0.0),
+                STAB: (62.0, 0.0)}
+
+
+def heroic_position(guid: int, when: int) -> tuple[float, float]:
+    # Roam stands 5.8 yd from Aim and Beside from 30 s, then walks 2 yd a snapshot from the daze's
+    # start until 111 s.
+    if guid == ROAM and 30000 <= when < 100000:
+        return 3.0, 5.0
+    if guid == ROAM and when >= 104000:
+        return 30.0 + 2.0 * min((when - 104000) // 500, 14), 0.0
+    return HEROIC_SPOTS[guid]
+
+
+def icehowl_spot(when: int) -> tuple[float, float]:
+    """At the origin, then 30 yd along x from the Whirl at 117 s to 120 s."""
+    if when <= 117000:
+        return 0.0, 0.0
+    if when < 120000:
+        return (when - 117000) / 100, 0.0
+    return 30.0, 0.0
+
+
+def heroic_snap(when: int) -> dict:
+    units = []
+    for guid in HEROIC_SPOTS:
+        moving = 1 if guid == ROAM and 104000 <= when < 111000 else 0
+        units.append([guid, *heroic_position(guid, when), 0.0, 0.0, 100.0, 100.0, 0, moving, 0, 0, 0])
+    if when < 40000:
+        units.append([ACIDMAW, 10.0, 30.0, 0.0, 0.0, 50.0, 0.0, AIM, 0, 0, 0, 0])
+        units.append([DREADSCALE, 60.0, 3.0, 0.0, 0.0, 50.0, 0.0, WALL, 0, 0, 0, 0])
+    if when >= 100000:
+        health = 40.0 if when < 500000 else (516000 - when) / 2500
+        units.append([ICEHOWL, *icehowl_spot(when), 0.0, 0.0, health, 0.0, WALL, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units}
+
+
+def debuff(when: int, target: int, spell: int, source: int, removed: bool = False) -> dict:
+    return {"t": when, "e": "aura", "d": target, "s": source, "sp": spell, "r": 1 if removed else 0, "st": 1}
+
+
+def cast(when: int, source: int, spell: int, target: int = 0, ct: int = 0, triggered: bool = False) -> dict:
+    rec = {"t": when, "e": "cast", "s": source, "sp": spell, "tgt": target, "ct": ct}
+    if triggered:
+        rec["tr"] = 1
+    return rec
+
+
+def move(when: int, guid: int, action: str, ok: bool = True) -> dict:
+    return {"t": when, "e": "move", "g": guid, "k": "point", "x": 0.0, "y": 0.0, "z": 0.0, "tgt": 0,
+            "ok": 1 if ok else 0, "r": "" if ok else "dup", "by": action, "pr": "combat"}
+
+
+def heroic_pull(berserk_row: bool = True, end: int = 515000) -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789800000000, "map": 649, "inst": 11, "diff": 3,
+         "boss": "gormok-the-impaler", "roster": [
+             {"g": WALL, "n": "Wall", "r": "tank", "c": "warrior", "h": 0},
+             {"g": AIM, "n": "Aim", "r": "ranged", "c": "hunter", "h": 0},
+             {"g": BESIDE, "n": "Beside", "r": "ranged", "c": "mage", "h": 0},
+             {"g": ROAM, "n": "Roam", "r": "ranged", "c": "warlock", "h": 0},
+             {"g": STILL, "n": "Still", "r": "heal", "c": "priest", "h": 0},
+             {"g": STAB, "n": "Stab", "r": "melee", "c": "rogue", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "gormok-the-impaler", "src": "engage"},
+        {"t": 1, "e": "unit", "g": GORMOK, "en": nb.NPC_GORMOK, "n": "Gormok the Impaler", "b": 1},
+        {"t": 1, "e": "unit", "g": ACIDMAW, "en": nb.NPC_ACIDMAW, "n": "Acidmaw", "b": 1},
+        {"t": 1, "e": "unit", "g": DREADSCALE, "en": nb.NPC_DREADSCALE, "n": "Dreadscale", "b": 1},
+        {"t": 1, "e": "unit", "g": ICEHOWL, "en": nb.NPC_ICEHOWL, "n": "Icehowl", "b": 1},
+
+        # Both worms up but for 20-25 s.
+        note(0, WALL, "nb.worm", "1"),
+        note(20000, WALL, "nb.worm", "3"),
+        note(25000, WALL, "nb.worm", "2"),
+        note(40000, WALL, "nb.worm", "0"),
+
+        note(5000, STAB, "nb.wormhold", "set melee stand"),
+        note(5400, STAB, "nb.wormhold", "release drift"),
+        note(5600, STAB, "nb.wormhold", "set melee stand"),
+        note(6000, STAB, "nb.wormhold", "release drift"),
+        note(7000, ROAM, "nb.wormhold", "set spread full"),
+        note(8000, ROAM, "nb.wormhold", "release drift"),
+        note(9000, STILL, "nb.wormhold", "set spread pair"),
+        note(9500, STILL, "nb.wormhold", "release spread"),
+
+        # A Spray on Aim, ending at 11.1 s with Beside 6 yd off. Its Toxin lands on both in one burst;
+        # Stab's comes before the splash, Wall's 600 ms after the burst's first, Still's Bile from the
+        # other worm.
+        cast(10000, ACIDMAW, PARALYTIC_SPRAY, AIM, 1100),
+        note(10200, BESIDE, "nb.wormmove", "move 13 spray full"),
+        note(10200, BESIDE, "nb.wormhold", "set spray full"),
+        note(10300, ROAM, "nb.wormmove", "hold spread"),
+        note(10600, BESIDE, "nb.wormmove", "hold spray"),
+        debuff(10500, STAB, PARALYTIC_TOXIN, ACIDMAW),
+        note(11000, BESIDE, "nb.wormhold", "release spray"),
+        note(11600, AIM, "nb.wormmove", "move 4 spray full"),
+        debuff(12400, AIM, PARALYTIC_TOXIN, ACIDMAW),
+        debuff(12450, BESIDE, PARALYTIC_TOXIN, ACIDMAW),
+        debuff(12500, STILL, nb.SPELL_BURNING_BILE, DREADSCALE),
+        debuff(12600, STILL, nb.SPELL_BURNING_BILE, DREADSCALE, removed=True),
+        debuff(13000, WALL, PARALYTIC_TOXIN, ACIDMAW),
+        debuff(16000, AIM, PARALYTIC_TOXIN, ACIDMAW, removed=True),
+        debuff(16000, BESIDE, PARALYTIC_TOXIN, ACIDMAW, removed=True),
+
+        # A clean charge: the daze runs 104-119 s.
+        note(100000, WALL, "nb.charge", "1"),
+        note(101000, WALL, "nb.charge", "2"),
+        note(102000, WALL, "nb.charge", "3"),
+        note(104000, WALL, "nb.charge", "4"),
+        note(100000, WALL, "nb.breath", "0"),
+        note(104000, WALL, "nb.breath", "4"),
+        move(103500, ROAM, "icehowl move to breath stand"),
+        move(104100, ROAM, "icehowl move to breath stand"),
+        *[move(when, ROAM, "reach spell", ok=False) for when in (104200, 104300, 104400, 104500)],
+        move(106100, ROAM, "icehowl move to breath stand"),
+        move(108100, ROAM, "icehowl move to breath stand"),
+        move(109100, ROAM, "reach spell"),
+        cast(103000, STILL, 48071, WALL, 2500),
+        cast(105000, STILL, 48071, WALL, 2500),
+        cast(110000, STILL, 48071, WALL, 2500),
+        cast(112000, ROAM, 47809, WALL, 2500),
+        cast(112500, ROAM, 47811, WALL, triggered=True),
+
+        # He Whirls at 117 s and walks 30 yd by 120 s, breathing on the way and after.
+        cast(117000, ICEHOWL, HEROIC_WHIRL, WALL),
+        note(119000, WALL, "nb.breath", "3"),
+        cast(119500, ICEHOWL, HEROIC_BREATH, WALL),
+        debuff(119500, WALL, HEROIC_BREATH, ICEHOWL),
+        note(120600, WALL, "nb.breath", "1"),
+        cast(122000, ICEHOWL, HEROIC_BREATH, WALL),
+        debuff(122000, WALL, HEROIC_BREATH, ICEHOWL),
+        {"t": end, "e": "end", "out": "wipe"},
+    ]
+    if berserk_row:
+        records.append(cast(508986, ICEHOWL, nb.SPELL_BERSERK, triggered=True))
+    stamps = [*range(0, 41000, 1000), *range(100000, 125500, 500), *range(505000, 515500, 500)]
+    records += [heroic_snap(when) for when in stamps if when <= end]
+    return records
+
+
+def load(folder: str, name: str, records: list[dict]) -> Trace:
+    path = pathlib.Path(folder) / name
+    path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+    return Trace(path)
+
+
+class HeroicPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, "649_11_gormok-the-impaler_1789800000.ndjson", heroic_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_berserk_reads_its_cast_row_and_each_beasts_health(self):
+        # Gormok is never sampled and the worms leave the snapshot at 40 s
+        self.assertEqual(nb.berserk(self.trace), {
+            "t": 508986, "cast": True, "reached": True,
+            "health": {"Gormok": None, "Acidmaw": None, "Dreadscale": None, "Icehowl": 3.0}})
+
+    def test_banner_prints_the_berserk_line(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_banner(self.trace)
+        self.assertIn("Berserk 26662 at 8:28.986 (cast): Gormok dead, Acidmaw dead, Dreadscale dead, Icehowl 3.0%",
+                      out.getvalue())
+
+    def test_daze_reads_a_moving_and_a_still_bot(self):
+        rows = nb.charges(self.trace)
+        self.assertEqual([(row["stop"], row["outcome"]) for row in rows], [(104000, "daze")])
+        daze = rows[0]["daze"]
+        # 30 snapshots in the 15 s, Roam moving in the first 14; a refused move or a triggered cast
+        # counts nowhere
+        self.assertAlmostEqual(daze[ROAM]["share"], 14 / 30)
+        self.assertAlmostEqual(daze[ROAM]["yards"], 28.0)
+        self.assertEqual(daze[ROAM]["mover"], ("icehowl move to breath stand", 3))
+        self.assertEqual(daze[ROAM]["casts"], 1)
+        self.assertEqual(daze[STILL], {"share": 0.0, "yards": 0.0, "mover": None, "casts": 2})
+
+    def test_breath_reads_nb_breath_the_whirl_and_his_walk(self):
+        rows = nb.breaths(self.trace)
+        self.assertEqual([(row["t"], row["state"], row["since_whirl"]) for row in rows],
+                         [(119500, "3", 2500), (122000, "1", 5000)])
+        self.assertEqual([row["walked"] for row in rows], [25.0, 20.0])
+
+    def test_spray_reads_the_splash_at_its_end_and_the_first_burst_of_its_debuff(self):
+        rows = nb.spray_casts(self.trace)
+        self.assertEqual([(row["t"], row["worm"], row["burning"], row["target"]) for row in rows],
+                         [(10000, ACIDMAW, False, AIM)])
+        self.assertEqual(rows[0]["inside"], {AIM, BESIDE})
+        self.assertEqual(rows[0]["took"], [AIM, BESIDE])
+
+    def test_spray_branches_inside_the_cast_only(self):
+        self.assertEqual(nb.spray_casts(self.trace)[0]["moves"],
+                         {BESIDE: collections.Counter({"move spray full": 1, "hold spray": 1})})
+
+    def test_hold_releases_by_cause_and_role(self):
+        self.assertEqual(nb.hold_releases(self.trace), {
+            "drift": collections.Counter({"melee": 2, "ranged": 1}),
+            "spread": collections.Counter({"heal": 1}),
+            "spray": collections.Counter({"ranged": 1})})
+
+    def test_caster_spread_skips_carriers_and_the_worms_under_ground(self):
+        # Two pairs, one while Aim and Beside carry Toxin, nothing under ground, three once Roam joins
+        spread = nb.caster_spread(self.trace)
+        self.assertEqual(spread["pairs"], [2] * 13 + [1] * 4 + [2] * 8 + [3] * 10)
+        self.assertEqual(spread["crowded"], 10)
+
+    def test_every_section_prints(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_banner(self.trace)
+            for _, _, section in nb.SECTIONS:
+                section(self.trace)
+        text = out.getvalue()
+        self.assertIn("pairs within 10 yd median 2, max 3; one beside two others in 29%", text)
+        self.assertIn("2.5 s after a Whirl, he moved 25.0 yd in the 4 s before", text)
+
+
+class BerserkWithoutRow(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.due = load(cls.folder.name, "649_12_gormok-the-impaler_1789800000.ndjson", heroic_pull(False))
+        cls.short = load(cls.folder.name, "649_13_gormok-the-impaler_1789800000.ndjson",
+                         heroic_pull(False, end=400000))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def banner(self, trace: Trace) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_banner(trace)
+        return out.getvalue()
+
+    def test_with_no_row_berserk_is_due_509_s_in(self):
+        self.assertEqual(nb.berserk(self.due), {
+            "t": 509000, "cast": False, "reached": True,
+            "health": {"Gormok": None, "Acidmaw": None, "Dreadscale": None, "Icehowl": 2.8}})
+        self.assertIn("Berserk 26662 at 8:29.000 (due, no cast row): Gormok dead, Acidmaw dead, Dreadscale dead,"
+                      " Icehowl 2.8%", self.banner(self.due))
+
+    def test_a_trace_ending_first_never_reaches_it(self):
+        self.assertEqual(nb.berserk(self.short), {"t": 509000, "cast": False, "reached": False, "health": {}})
+        self.assertIn("Berserk 26662 due at 8:29.000, not reached", self.banner(self.short))
 
 
 if __name__ == "__main__":

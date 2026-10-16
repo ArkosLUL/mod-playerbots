@@ -33,10 +33,14 @@ constexpr uint32 SPELL_ACIDIC_SPEW_TICK = 66819;  // row 602
 constexpr uint32 SPELL_MOLTEN_SPEW_TICK = 66820;  // row 611
 constexpr uint32 SPELL_SLIME_POOL_AURA = 66882;   // no row, one tick a second grows the pool
 constexpr uint32 SPELL_WORM_ENRAGE = 68335;       // no row, the survivor's once the other worm dies
+constexpr uint32 SPELL_PARALYTIC_SPRAY = 66901;   // row 604
+constexpr uint32 SPELL_BURNING_SPRAY = 66902;     // row 608
 
 constexpr float WORM_MELEE_RANGE = 9.3f;          // reach 6.5 + 1.5 + 4/3
 constexpr float WORM_SPEW_RANGE = 55.0f;
 constexpr float WORM_FLOOR_RADIUS = 35.0f;        // the worms surface up to 35 yd from ARENA_CENTER
+// Bot spots only. 2 yd inside Icehowl's gate-side charge end, so the floor is known to reach it.
+constexpr float WORM_SPOT_FLOOR_RADIUS = 44.0f;
 constexpr float WORM_TAUNT_STAND = 20.0f;         // the mobile holder's reach under ground
 constexpr float WORM_TANK_OFFSET = 8.5f;          // worm centre to its victim: chase stops at contact 0.5 + 6.5 + 1.5
 
@@ -51,6 +55,9 @@ constexpr float WORM_BILE_TRIGGER = 10.5f;
 constexpr float WORM_BILE_CLEARANCE = 12.0f;
 constexpr float WORM_SPREAD_TRIGGER = 10.0f;
 constexpr float WORM_SPREAD_CLEARANCE = 13.0f;
+// Spray's splash lands where its target stands as the cast ends
+constexpr float WORM_SPRAY_TRIGGER = WORM_SPLASH_RADIUS + 2.0f;
+constexpr float WORM_SPRAY_CLEARANCE = WORM_SPLASH_RADIUS + 3.0f;
 // Casters keep off the melee round the up mobile worm as one circle on it
 constexpr float WORM_MELEE_STACK_TRIGGER = WORM_MELEE_RANGE + WORM_SPREAD_TRIGGER;
 constexpr float WORM_MELEE_STACK_CLEARANCE = WORM_MELEE_RANGE + WORM_SPREAD_CLEARANCE;
@@ -74,6 +81,15 @@ constexpr float WORM_HOLD_MELEE_TURN_DEG = 20.0f;   // anchor worm turned, melee
 constexpr float WORM_HOLD_DRIFT = 6.0f;             // anchor worm moved, any other hold
 constexpr uint32 WORM_HOLD_FRESH_MS = 1000;         // a hold the plan hasn't confirmed this long guards nothing
 constexpr uint32 WORM_SEARCH_BACKOFF_MS = 1000;     // after a non-urgent search found no spot
+
+// A worm counts as settled once it hasn't walked or turned past these for WORM_SETTLE_MS
+constexpr uint32 WORM_SETTLE_MS = 500;
+constexpr float WORM_SETTLE_MOVE = 0.5f;
+constexpr float WORM_SETTLE_TURN_DEG = 5.0f;
+
+// The script schedules Spew 15-30 s after the engage, each emerge and each cast start
+constexpr uint32 WORM_SPEW_EARLIEST_MS = 15000;
+constexpr uint32 WORM_SPEW_LEAD_MS = 4000;
 
 // Path test
 constexpr float WORM_POOL_PATH_PAD = 1.0f;
@@ -105,6 +121,8 @@ constexpr uint32 WORM_WALK_LATCH_MS = 5000;
 static_assert(WORM_SWEEP_RADIUS < WORM_SWEEP_TRIGGER && WORM_SWEEP_TRIGGER < WORM_SWEEP_CLEARANCE, "sweep band");
 static_assert(WORM_SPLASH_RADIUS < WORM_BILE_TRIGGER && WORM_BILE_TRIGGER < WORM_BILE_CLEARANCE, "bile band");
 static_assert(WORM_SPREAD_TRIGGER < WORM_SPREAD_CLEARANCE, "spread band");
+static_assert(WORM_SPRAY_TRIGGER < WORM_SPRAY_CLEARANCE, "spray band");
+static_assert(WORM_SPEW_LEAD_MS < WORM_SPEW_EARLIEST_MS, "spew lead");
 static_assert(WORM_MELEE_STACK_TRIGGER < WORM_MELEE_STACK_CLEARANCE, "melee stack band");
 static_assert(WORM_POOL_TRIGGER_PAD < WORM_POOL_CLEARANCE_PAD, "pool band");
 static_assert(WORM_SPEW_TRIGGER_PAD < WORM_SPEW_CLEAR_PAD, "spew band");
@@ -142,6 +160,7 @@ enum class WormMoveReason : uint8
     Cure,
     Run,
     Pool,
+    Spray,
     Bile,
     Sweep,
     Spew,
@@ -156,6 +175,7 @@ enum class WormSpotTier : uint8
 {
     Stand,
     Full,
+    Pair,  // spread from every caster but one with no other neighbour
     NoSpread,
     Partner,
     Direct,
@@ -164,8 +184,10 @@ enum class WormSpotTier : uint8
     Loose,
     Cross  // urgent and nothing else found: the walk may cross a pool or Sweep
 };
-char const* WormSpotTierName(WormSpotTier tier);  // "stand", "full", "nospread", "partner", ...
+char const* WormSpotTierName(WormSpotTier tier);  // "stand", "full", "pair", "nospread", ...
 bool WormTierParks(WormSpotTier tier);
+// A Spray dodge lets go once it arrives, so melee walk back to their stand after the cast
+bool WormHoldParks(WormMoveReason reason, WormSpotTier tier);
 bool IsWormCureReason(WormMoveReason reason);     // cure or run
 
 struct WormHoldView
@@ -189,9 +211,13 @@ struct WormMovePlan
     Position preferNear;
     ObjectGuid partner;         // Cure: the Bile carrier; Run: the Toxin carrier
     Position partnerPos;
-    std::vector<EncounterHelpers::HazardCircle> circles;        // hard: pools, Bile, Sweep, stomp, own feet
+    std::vector<EncounterHelpers::HazardCircle> circles;        // hard: pools, Spray, Bile, Sweep, stomp, own feet
     std::vector<EncounterHelpers::HazardCircle> spreadCircles;  // casters' spread and the melee stack
-    std::vector<EncounterHelpers::HazardCircle> urgentCircles;  // pools, Bile, Sweep while cast
+    // spreadCircles less the pair partner's; empty when no peer can take a partner
+    std::vector<EncounterHelpers::HazardCircle> pairCircles;
+    bool pairable = false;      // there is a pair partner, even when its circle was the only spread one
+    bool spreadStrict = false;  // heroic with Dreadscale stationary: no nospread tier
+    std::vector<EncounterHelpers::HazardCircle> urgentCircles;  // pools, Spray, Bile, Sweep while cast
     // urgentCircles, a run's other Bile carriers, a held-out carrier's clean bots
     std::vector<EncounterHelpers::HazardCircle> escapeCircles;
     std::vector<EncounterHelpers::HazardCircle> looseCircles;   // escapeCircles less those clean bots

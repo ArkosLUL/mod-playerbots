@@ -40,6 +40,9 @@ using namespace EncounterHelpers;
 
 namespace TrialOfTheCrusaderHelpers
 {
+static_assert(WORM_SPOT_FLOOR_RADIUS == ICEHOWL_CHARGE_REACH_GATE - 2.0f,
+              "the spot floor sits 2 yd inside Icehowl's gate-side charge end");
+
 namespace
 {
 constexpr size_t SLOT_ACIDMAW = 0;
@@ -110,6 +113,28 @@ struct WormRead
     bool mobile = false;
     bool spewing = false;
     bool sweeping = false;
+    bool settled = false;    // hasn't walked or turned for WORM_SETTLE_MS
+    bool spewArmed = false;  // spewing, or its next Spew can come within WORM_SPEW_LEAD_MS
+};
+
+// Per worm slot, across reads
+struct WormSlotClock
+{
+    ObjectGuid guid;
+    uint32 motionMs = 0;
+    Position motionPos;  // carries the facing
+    uint32 spewScheduleMs = 0;
+    bool submerged = false;
+    bool spewing = false;
+};
+
+// A Spray being cast. The splash lands on its target's spot as the cast ends.
+struct WormSpray
+{
+    ObjectGuid target;  // empty: none
+    Position targetPos;
+    ObjectGuid worm;
+    bool burning = false;
 };
 
 struct WormPool
@@ -159,6 +184,8 @@ struct JormungarsState
 
     std::array<WormRead, SLOT_COUNT> worms;
     std::array<bool, SLOT_COUNT> spewNoted{};
+    std::array<WormSlotClock, SLOT_COUNT> clocks;
+    WormSpray spray;
 
     uint32 poolSearchMs = 0;
     bool poolSearched = false;
@@ -217,6 +244,13 @@ float AngleOffFacing(Position const& origin, float x, float y)
     float const diff = Position::NormalizeOrientation(
         std::atan2(y - origin.GetPositionY(), x - origin.GetPositionX()) - origin.GetOrientation());
     return diff > static_cast<float>(M_PI) ? TWO_PI - diff : diff;
+}
+
+// Radians in [0, pi] between two facings
+float TurnBetween(float from, float to)
+{
+    float const turn = Position::NormalizeOrientation(to - from);
+    return turn > static_cast<float>(M_PI) ? TWO_PI - turn : turn;
 }
 
 bool IsUp(WormRead const& worm) { return !worm.guid.IsEmpty() && !worm.submerged; }
@@ -317,6 +351,57 @@ void ReadWorm(Map* map, Unit* worm, uint32 spewCast, uint32 spewTick, WormRead& 
     snprintf(params, sizeof(params), "\"facing\":%.2f,\"arc\":%.1f,\"range\":%.0f", worm->GetOrientation(),
              HalfArcOf(spewTick) * 180.0f / static_cast<float>(M_PI), WORM_SPEW_RANGE);
     RaidObs::NoteHazard(map, spewTick, read.pos, "wedge", params, SPEW_NOTE_TTL_MS);
+}
+
+// A new guid in the slot is that worm's engage
+void ClockWorm(Unit* worm, WormRead& read, WormSlotClock& clock, uint32 now)
+{
+    if (!worm)
+        return;
+
+    bool const fresh = clock.guid != read.guid;
+    if (fresh)
+    {
+        clock = WormSlotClock();
+        clock.guid = read.guid;
+    }
+
+    if (fresh || (clock.submerged && !read.submerged) || (read.spewing && !clock.spewing))
+        clock.spewScheduleMs = now;
+
+    clock.submerged = read.submerged;
+    clock.spewing = read.spewing;
+
+    if (fresh || worm->isMoving() || read.pos.GetExactDist2d(clock.motionPos) > WORM_SETTLE_MOVE ||
+        TurnBetween(clock.motionPos.GetOrientation(), read.pos.GetOrientation()) > WORM_SETTLE_TURN_DEG * DEG_TO_RAD)
+    {
+        clock.motionMs = now;
+        clock.motionPos = read.pos;
+    }
+
+    read.settled = getMSTimeDiff(clock.motionMs, now) >= WORM_SETTLE_MS;
+    read.spewArmed =
+        read.spewing || getMSTimeDiff(clock.spewScheduleMs, now) >= WORM_SPEW_EARLIEST_MS - WORM_SPEW_LEAD_MS;
+}
+
+void ReadSpray(Unit* worm, WormRead const& read, uint32 sprayId, bool burning, WormSpray& spray)
+{
+    if (!worm || !IsUp(read) || read.mobile)
+        return;
+
+    Spell* cast = worm->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (!cast || cast->getState() != SPELL_STATE_PREPARING || cast->m_spellInfo->Id != sprayId)
+        return;
+
+    ObjectGuid const targetGuid = cast->m_targets.GetUnitTargetGUID();
+    Unit* target = targetGuid.IsEmpty() ? nullptr : ObjectAccessor::GetUnit(*worm, targetGuid);
+    if (!target)
+        return;
+
+    spray.target = targetGuid;
+    spray.targetPos = target->GetPosition();
+    spray.worm = read.guid;
+    spray.burning = burning;
 }
 
 void RefreshPools(Player* bot, Map* map, JormungarsState& state, uint32 now)
@@ -478,15 +563,31 @@ uint32 PinnedCastRemainingMs(Player* player)
     return static_cast<uint32>(remaining);
 }
 
-// Damage lands on this spot now: a pool (as big as it grows before a pinning cast ends), a spewing
-// worm's real cone, a Sweep being cast, or a Bile pulse with no Toxin on the bot for it to strip
+bool SprayLandsNear(JormungarsState const& state, ObjectGuid const& self, float x, float y)
+{
+    if (state.spray.target.IsEmpty())
+        return false;
+
+    if (state.spray.target != self)
+        return state.spray.targetPos.GetExactDist2d(x, y) < WORM_SPRAY_TRIGGER;
+
+    return std::any_of(state.roster.begin(), state.roster.end(), [&self, x, y](WormMember const& member)
+                       { return member.guid != self && member.pos.GetExactDist2d(x, y) < WORM_SPRAY_TRIGGER; });
+}
+
+// Damage lands on this spot now: a pool (as big as it grows before a pinning cast ends), a Spray
+// being cast on or beside the bot, a spewing worm's real cone, a Sweep being cast, or a Bile pulse
+// with no Toxin on the bot for it to strip
 bool UrgentAt(JormungarsState const& state, ObjectGuid const& self, float x, float y, bool toxin, bool sweepHolder,
-              float halfArc, uint32 castRemainingMs)
+              bool sprayDodge, float halfArc, uint32 castRemainingMs)
 {
     uint32 const castTicks = PoolTicksIn(castRemainingMs);
     for (WormPool const& pool : state.pools)
         if (pool.pos.GetExactDist2d(x, y) < std::max(pool.radius, PoolRadius(pool.tick + castTicks)))
             return true;
+
+    if (sprayDodge && SprayLandsNear(state, self, x, y))
+        return true;
 
     if (!toxin)
         for (WormMember const& member : state.roster)
@@ -614,6 +715,8 @@ void Disengage(Map* map, JormungarsState& state)
 
     state.worms.fill(WormRead());
     state.spewNoted.fill(false);
+    state.clocks.fill(WormSlotClock());
+    state.spray = WormSpray();
     state.poolSearched = false;
     state.poolGuids.clear();
     state.pools.clear();
@@ -662,7 +765,7 @@ void BreakPinnedCasts(PlayerbotAI* botAI, Map* map, JormungarsState const& state
 
         uint32 const remaining = static_cast<uint32>(std::max(cast->GetCastTimeRemaining(), 0));
         if (UrgentAt(state, member.guid, member.pos.GetPositionX(), member.pos.GetPositionY(), member.toxin,
-                     member.stationaryHolder, halfArc, remaining))
+                     member.stationaryHolder, true, halfArc, remaining))
             memberAI->RequestSpellInterrupt();
     }
 }
@@ -701,6 +804,13 @@ JormungarsState* Refresh(PlayerbotAI* botAI)
              state.worms[SLOT_ACIDMAW], state.spewNoted[SLOT_ACIDMAW]);
     ReadWorm(map, dreadscale, SPELL_MOLTEN_SPEW, sSpellMgr->GetSpellIdForDifficulty(SPELL_MOLTEN_SPEW_TICK, bot),
              state.worms[SLOT_DREADSCALE], state.spewNoted[SLOT_DREADSCALE]);
+    ClockWorm(acidmaw, state.worms[SLOT_ACIDMAW], state.clocks[SLOT_ACIDMAW], now);
+    ClockWorm(dreadscale, state.worms[SLOT_DREADSCALE], state.clocks[SLOT_DREADSCALE], now);
+    state.spray = WormSpray();
+    ReadSpray(acidmaw, state.worms[SLOT_ACIDMAW], sSpellMgr->GetSpellIdForDifficulty(SPELL_PARALYTIC_SPRAY, bot),
+              false, state.spray);
+    ReadSpray(dreadscale, state.worms[SLOT_DREADSCALE], sSpellMgr->GetSpellIdForDifficulty(SPELL_BURNING_SPRAY, bot),
+              true, state.spray);
     RefreshPools(bot, map, state, now);
     RefreshRoster(botAI, bot, map, state, now);
     PairRunners(state);
@@ -859,6 +969,22 @@ enum WormRuleFlag : uint8
     RULE_URGENT = 4,   // plan.urgentCircles, so the escape's too
     RULE_ESCAPE = 8,   // the escape's only
     RULE_CLEAN = 16,   // a held-out carrier's circle on a clean member: the loose escape drops it
+    RULE_PAIR = 32,    // the pair partner's spread circle: plan.pairCircles drops it
+};
+
+// How a spot answers to the casters' spread
+enum class SpreadTest : uint8
+{
+    Strict,
+    PairTolerant,
+    Skip
+};
+
+struct WormSpreadPeer
+{
+    ObjectGuid guid;
+    Position spot;  // its held spot
+    bool bot = false;
 };
 
 struct WormCircleRule
@@ -883,13 +1009,63 @@ struct WormRules
     bool hasStand = false;
     Position stand;
     bool reachCrossesPool = false;
+    ObjectGuid self;
+    std::vector<WormSpreadPeer> spreadPeers;  // empty while the spread is off for the bot
 };
+
+// No other peer stands within the trigger of this one's spot
+bool LoneSpreadPeer(WormRules const& rules, WormSpreadPeer const& peer)
+{
+    for (WormSpreadPeer const& other : rules.spreadPeers)
+        if (other.guid != peer.guid && other.spot.GetExactDist2d(peer.spot) < WORM_SPREAD_TRIGGER)
+            return false;
+
+    return true;
+}
+
+// The peer a pair spot may stand beside: the nearest lone one, else nullptr
+WormSpreadPeer const* PairPartnerOf(WormRules const& rules, Position const& from)
+{
+    WormSpreadPeer const* partner = nullptr;
+    float nearest = 0.0f;
+    for (WormSpreadPeer const& peer : rules.spreadPeers)
+    {
+        float const dist = peer.spot.GetExactDist2d(from);
+        if ((partner && dist >= nearest) || !LoneSpreadPeer(rules, peer))
+            continue;
+
+        partner = &peer;
+        nearest = dist;
+    }
+
+    return partner;
+}
+
+// Only the highest-guid bot of a too-close set fails, so one of them moves and the rest keep their
+// spots. A tolerant spot also holds beside one lone peer.
+bool SpreadFailsAt(WormRules const& rules, Position const& spot, bool pairTolerant)
+{
+    std::vector<WormSpreadPeer const*> nearPeers;
+    for (WormSpreadPeer const& peer : rules.spreadPeers)
+        if (peer.spot.GetExactDist2d(spot) < WORM_SPREAD_TRIGGER)
+            nearPeers.push_back(&peer);
+
+    if (nearPeers.empty())
+        return false;
+
+    if (pairTolerant && nearPeers.size() == 1 && LoneSpreadPeer(rules, *nearPeers.front()))
+        return false;
+
+    return std::none_of(nearPeers.begin(), nearPeers.end(),
+                        [&rules](WormSpreadPeer const* peer) { return peer->bot && rules.self < peer->guid; });
+}
 
 // The first rule whose trigger (x, y) fails, in reason order. A held spot answers to the drift deadband
 // instead of the melee stand and to roleAccept instead of the reach rule, which is about the bot's own
 // walk from where it stands.
-WormMoveReason FirstFailedRule(WormRules const& rules, float x, float y, bool heldSpot, bool skipSpread)
+WormMoveReason FirstFailedRule(WormRules const& rules, float x, float y, bool heldSpot, SpreadTest spread)
 {
+    bool const skipSpread = spread == SpreadTest::Skip;
     WormMoveReason first = WormMoveReason::None;
     for (WormCircleRule const& rule : rules.circles)
     {
@@ -916,6 +1092,10 @@ WormMoveReason FirstFailedRule(WormRules const& rules, float x, float y, bool he
                 return WormMoveReason::Spew;
     }
 
+    if (first == WormMoveReason::None && !skipSpread &&
+        SpreadFailsAt(rules, Position(x, y, 0.0f), spread == SpreadTest::PairTolerant))
+        first = WormMoveReason::Spread;
+
     if (first != WormMoveReason::None || heldSpot)
         return first;
 
@@ -927,13 +1107,20 @@ WormMoveReason FirstFailedRule(WormRules const& rules, float x, float y, bool he
 
 void FillCircles(WormRules const& rules, WormMovePlan& plan)
 {
+    bool paired = false;
     for (WormCircleRule const& rule : rules.circles)
     {
         HazardCircle const circle(rule.centre, rule.clearance);
         if (rule.flags & RULE_HARD)
             plan.circles.push_back(circle);
         if (rule.flags & RULE_SPREAD)
+        {
             plan.spreadCircles.push_back(circle);
+            if (rule.flags & RULE_PAIR)
+                paired = true;
+            else
+                plan.pairCircles.push_back(circle);
+        }
         if (rule.flags & RULE_URGENT)
             plan.urgentCircles.push_back(circle);
         if (rule.flags & (RULE_URGENT | RULE_ESCAPE))
@@ -943,6 +1130,10 @@ void FillCircles(WormRules const& rules, WormMovePlan& plan)
                 plan.looseCircles.push_back(circle);
         }
     }
+
+    plan.pairable = paired;
+    if (!paired)
+        plan.pairCircles.clear();
 }
 
 // A straight walk from the bot. A pool grows while it walks, so the pool counts at its size when the
@@ -1008,7 +1199,7 @@ struct WormAccept
 // the cross tier drops the path too.
 char const* AcceptFailure(WormAccept const& accept, float x, float y, bool escape, bool skipPath)
 {
-    if (ARENA_CENTER.GetExactDist2d(x, y) > WORM_FLOOR_RADIUS)
+    if (ARENA_CENTER.GetExactDist2d(x, y) > WORM_SPOT_FLOOR_RADIUS)
         return "path";
 
     for (Position const& cone : accept.cones)
@@ -1162,17 +1353,15 @@ bool AnchorDrifted(JormungarsState const& state, WormHold const& hold)
     if (!worm || !IsUp(*worm))
         return true;
 
+    // A walking worm passes any deadband every tick. The spot is judged where it stops.
+    if (!worm->settled)
+        return false;
+
     if (worm->pos.GetExactDist2d(hold.anchorPos) > (hold.melee ? WORM_HOLD_MELEE_DRIFT : WORM_HOLD_DRIFT))
         return true;
 
-    if (!hold.melee)
-        return false;
-
-    float turn = Position::NormalizeOrientation(worm->pos.GetOrientation() - hold.anchorPos.GetOrientation());
-    if (turn > static_cast<float>(M_PI))
-        turn = TWO_PI - turn;
-
-    return turn > WORM_HOLD_MELEE_TURN_DEG * DEG_TO_RAD;
+    float const turn = TurnBetween(hold.anchorPos.GetOrientation(), worm->pos.GetOrientation());
+    return hold.melee && turn > WORM_HOLD_MELEE_TURN_DEG * DEG_TO_RAD;
 }
 
 void ReleaseHold(Player* bot, JormungarsState& state, char const* cause)
@@ -1324,6 +1513,8 @@ char const* WormMoveReasonName(WormMoveReason reason)
             return "run";
         case WormMoveReason::Pool:
             return "pool";
+        case WormMoveReason::Spray:
+            return "spray";
         case WormMoveReason::Bile:
             return "bile";
         case WormMoveReason::Sweep:
@@ -1349,6 +1540,8 @@ char const* WormSpotTierName(WormSpotTier tier)
             return "stand";
         case WormSpotTier::Full:
             return "full";
+        case WormSpotTier::Pair:
+            return "pair";
         case WormSpotTier::NoSpread:
             return "nospread";
         case WormSpotTier::Partner:
@@ -1373,6 +1566,11 @@ bool WormTierParks(WormSpotTier tier)
 {
     return tier != WormSpotTier::Partial && tier != WormSpotTier::Escape && tier != WormSpotTier::Loose &&
            tier != WormSpotTier::Cross;
+}
+
+bool WormHoldParks(WormMoveReason reason, WormSpotTier tier)
+{
+    return WormTierParks(tier) && reason != WormMoveReason::Spray;
 }
 
 bool IsWormCureReason(WormMoveReason reason)
@@ -1445,7 +1643,7 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
     float const bx = bot->GetPositionX();
     float const by = bot->GetPositionY();
     float const halfArc = WormSpewHalfArc(botAI);
-    plan.urgent = UrgentAt(*state, self, bx, by, toxin, duty == BeastsTankDuty::WormStationary, halfArc,
+    plan.urgent = UrgentAt(*state, self, bx, by, toxin, duty == BeastsTankDuty::WormStationary, !cureWalk, halfArc,
                            PinnedCastRemainingMs(bot));
 
     WormRole const role = me ? me->role : RoleOf(bot);
@@ -1469,6 +1667,20 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
                                  pool.radiusSoon + WORM_POOL_CLEARANCE_PAD, RULE_HARD | RULE_URGENT});
         if (pool.pos.GetExactDist2d(bx, by) < pool.radius)
             plan.escapeFirst = true;
+    }
+
+    // Everyone round the target walks off it, and the target off them, so 10 yd opens within the cast
+    WormSpray const& spray = state->spray;
+    if (!cureWalk && !spray.target.IsEmpty())
+    {
+        if (spray.target != self)
+            rules.circles.push_back({WormMoveReason::Spray, spray.targetPos, WORM_SPRAY_TRIGGER, WORM_SPRAY_CLEARANCE,
+                                     RULE_HARD | RULE_URGENT});
+        else
+            for (WormMember const& member : state->roster)
+                if (member.guid != self && member.pos.GetExactDist2d(spray.targetPos) < 2.0f * WORM_SPRAY_TRIGGER)
+                    rules.circles.push_back({WormMoveReason::Spray, member.pos, WORM_SPRAY_TRIGGER,
+                                             WORM_SPRAY_CLEARANCE, RULE_HARD | RULE_URGENT});
     }
 
     // Toxin carriers want the pulse
@@ -1520,24 +1732,28 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
         }
     }
 
+    // Spew can't come before its earliest timer, and a cone kept up all the time turns with every
+    // facing swing of the Emerge cast
     for (WormRead const& worm : state->worms)
-        if (IsUp(worm) && worm.mobile)
+        if (IsUp(worm) && worm.mobile && worm.spewArmed)
             rules.cones.push_back(worm.pos);
 
     // Spray's splash is 10 yd round where it lands, so casters keep that far off each other and off the
-    // melee round the mobile worm. Nothing sprays while the stationary worm is under ground.
+    // melee round the mobile worm. Nothing sprays while the stationary worm is under ground. Carriers
+    // keep to their Bile and cure rules instead.
     bool const bothWorms = !state->worms[SLOT_ACIDMAW].guid.IsEmpty() && !state->worms[SLOT_DREADSCALE].guid.IsEmpty();
-    if (!cureWalk && caster && bothWorms && stationaryUp)
+    if (!cureWalk && caster && !toxin && !bile && bothWorms && stationaryUp)
     {
+        rules.self = self;
         for (WormMember const& member : state->roster)
-        {
-            // A cure pair has to stand together
-            if (member.guid == self || !IsCaster(member.role) || (toxin && member.bile) || (bile && member.toxin))
-                continue;
+            if (member.guid != self && IsCaster(member.role) && !member.toxin && !member.bile)
+                rules.spreadPeers.push_back({member.guid, HeldSpotOf(*state, member, now), member.bot});
 
-            rules.circles.push_back({WormMoveReason::Spread, HeldSpotOf(*state, member, now), WORM_SPREAD_TRIGGER,
-                                     WORM_SPREAD_CLEARANCE, RULE_SPREAD});
-        }
+        // Peer circles only guide the search, SpreadFailsAt decides who moves
+        WormSpreadPeer const* pairPartner = PairPartnerOf(rules, bot->GetPosition());
+        for (WormSpreadPeer const& peer : rules.spreadPeers)
+            rules.circles.push_back({WormMoveReason::Spread, peer.spot, 0.0f, WORM_SPREAD_CLEARANCE,
+                                     static_cast<uint8>(RULE_SPREAD | (&peer == pairPartner ? RULE_PAIR : 0))});
 
         if (mobileUp)
             rules.circles.push_back({WormMoveReason::Spread, mobileUp->pos, WORM_MELEE_STACK_TRIGGER,
@@ -1554,8 +1770,9 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
     rules.circles.push_back({WormMoveReason::None, bot->GetPosition(), 0.0f, FEET_CLEARANCE, RULE_HARD});
 
     // Worms parry from the front: melee bots get a dealt stand behind the mobile worm, unless a cure
-    // pairs them or their Bile keeps them off the stack
-    if (role == WormRole::Melee && !toxin && !bile && mobileUp && targetGuid == mobileUp->guid)
+    // pairs them or their Bile keeps them off the stack. A stand dealt off a walking worm is stale by
+    // the next tick, so generic reach follows it until it stops.
+    if (role == WormRole::Melee && !toxin && !bile && mobileUp && mobileUp->settled && targetGuid == mobileUp->guid)
     {
         rules.hasStand = true;
         rules.stand = MeleeStand(*state, self, mobileUp->pos);
@@ -1566,6 +1783,10 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
     rules.reachCrossesPool = !cureWalk && ReachCrossesPool(botAI, bot, *state, role, target, duty, heldOut);
 
     FillCircles(rules, plan);
+    // On heroic a shared Burning Bile kills at its first pulse
+    Map* map = bot->FindMap();
+    plan.spreadStrict =
+        map && map->IsHeroic() && stationaryUp && stationaryUp->guid == state->worms[SLOT_DREADSCALE].guid;
 
     auto const accept = std::make_shared<WormAccept>();
     accept->path = PathFrom(bot, *state);
@@ -1623,7 +1844,7 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
     {
         WormHold& hold = held->second;
         WormHoldView& view = hold.view;
-        bool const walkOnly = !WormTierParks(view.tier);
+        bool const walkOnly = !WormHoldParks(view.reason, view.tier);
         bool const cureHold = IsWormCureReason(view.reason);
         bool const partnerTier = view.tier == WormSpotTier::Partner || view.tier == WormSpotTier::Direct;
         float const dist = bot->GetExactDist2d(view.spot);
@@ -1640,8 +1861,13 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
         {
             float const x = view.spot.GetPositionX();
             float const y = view.spot.GetPositionY();
-            bool const skipSpread = partnerTier || view.tier == WormSpotTier::NoSpread;
-            WormMoveReason const failed = FirstFailedRule(rules, x, y, true, skipSpread);
+            SpreadTest spread = SpreadTest::Strict;
+            if (partnerTier || view.tier == WormSpotTier::NoSpread)
+                spread = SpreadTest::Skip;
+            else if (view.tier == WormSpotTier::Pair)
+                spread = SpreadTest::PairTolerant;
+
+            WormMoveReason const failed = FirstFailedRule(rules, x, y, true, spread);
             if (failed != WormMoveReason::None)
                 return WormMoveReasonName(failed);
 
@@ -1728,7 +1954,7 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
     if (cureWalk)
         plan.reason = carrier ? WormMoveReason::Run : WormMoveReason::Cure;
     else
-        plan.reason = FirstFailedRule(rules, bx, by, false, false);
+        plan.reason = FirstFailedRule(rules, bx, by, false, SpreadTest::Strict);
 
     if (plan.reason != WormMoveReason::None && !plan.urgent && SearchBackedOff(*state, self, now))
         plan.reason = WormMoveReason::None;

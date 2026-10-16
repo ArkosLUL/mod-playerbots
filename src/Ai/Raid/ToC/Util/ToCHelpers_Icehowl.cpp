@@ -232,24 +232,31 @@ struct BreathBearing
     bool meleeOnly;  // too short for the healer and ranged bands
 };
 
+// Also the nb.breath value
 enum class BreathSpread : uint8
 {
-    Off,
-    Up,
-    Grace  // his victim stepped out of his reach, the layout holds as latched
+    Off = 0,
+    Up = 1,
+    Grace = 2,   // his victim stepped out of his reach, the layout holds as latched
+    Moving = 3,  // he walks or just stopped, the layout holds as latched with no stands
+    Daze = 4,
 };
 
 struct IcehowlBreathState
 {
     RaidObs::ObsValue<uint32> arc{"nb.arc"};
+    RaidObs::ObsValue<uint8> breath{"nb.breath"};
 
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
 
+    BreathSpread spread = BreathSpread::Off;
     bool active = false;
     bool latched = false;
     bool victimOut = false;
     uint32 victimOutMs = 0;
+    bool movedSeen = false;  // 0 is a real getMSTime value
+    uint32 lastMovingMs = 0;
     Position spot;
     float front = 0.0f;  // bearing to his victim
     float anchor = 0.0f;
@@ -551,12 +558,19 @@ void DealBreath(IcehowlBreathState& state)
     }
 }
 
-// Off at once under a charge and in a heroic overlap, which the charge and worm rules own. A victim out
-// of his reach means he's walking after it (Whirl, the end of a charge), and the layout would chase
-// him, but a latched one holds through the grace: a tank at the edge of his reach flickers in and out.
+// Off at once under a charge and in a heroic overlap, which the charge and worm rules own. A latched
+// layout holds while he walks, and while he stands with his victim out of reach for the grace: a tank
+// at the edge of his reach flickers in and out.
 BreathSpread ReadBreathSpread(PlayerbotAI* botAI, Unit* icehowl, IcehowlBreathState& state, uint32 now,
                               Unit*& victim)
 {
+    // Stamped on every read, so the first latch after a charge also waits for him to settle
+    if (icehowl->isMoving())
+    {
+        state.lastMovingMs = now;
+        state.movedSeen = true;
+    }
+
     Creature* creature = icehowl->ToCreature();
     if (!creature || creature->GetReactState() == REACT_PASSIVE)
         return BreathSpread::Off;
@@ -569,9 +583,21 @@ BreathSpread ReadBreathSpread(PlayerbotAI* botAI, Unit* icehowl, IcehowlBreathSt
     if (IcehowlChargeLatched(botAI, start, end))
         return BreathSpread::Off;
 
+    // The stun holds his events 15 s, so the next breath lands 5-8 s after it ends, usually once a Whirl
+    // has moved him anyway. A stand walk here only eats the burn window.
+    if (IsIcehowlStaggered(icehowl))
+        return BreathSpread::Daze;
+
     victim = icehowl->GetVictim();
     if (!victim || !victim->ToPlayer())
         return BreathSpread::Off;
+
+    if (state.movedSeen && getMSTimeDiff(state.lastMovingMs, now) < ICEHOWL_SPREAD_SETTLE_MS)
+    {
+        // The grace counts only while he stands, or a chase would use it up
+        state.victimOut = false;
+        return state.latched ? BreathSpread::Moving : BreathSpread::Off;
+    }
 
     if (icehowl->IsWithinMeleeRange(victim))
     {
@@ -600,6 +626,12 @@ void TurnBreathOff(IcehowlBreathState& state)
     state.arc = 0;
 }
 
+void SetSpread(IcehowlBreathState& state, BreathSpread spread)
+{
+    state.spread = spread;
+    state.breath = static_cast<uint8>(spread);
+}
+
 // Every bot's trigger, action and multiplier ask, so one read per instance per ms.
 IcehowlBreathState* RefreshBreath(PlayerbotAI* botAI)
 {
@@ -621,20 +653,23 @@ IcehowlBreathState* RefreshBreath(PlayerbotAI* botAI)
     {
         state.slots.clear();
         state.rosterValid = false;
+        state.movedSeen = false;
         TurnBreathOff(state);
+        SetSpread(state, BreathSpread::Off);
         return &state;
     }
 
     Unit* victim = nullptr;
     BreathSpread const spread = ReadBreathSpread(botAI, icehowl, state, now, victim);
-    if (spread == BreathSpread::Off)
+    SetSpread(state, spread);
+    if (spread == BreathSpread::Off || spread == BreathSpread::Daze)
     {
         TurnBreathOff(state);
         return &state;
     }
 
-    // A drift toward a wall gets re-probed before it eats into a kept bearing's bands. Not in the grace:
-    // the bearing to a victim out of his reach is no front to latch.
+    // A drift toward a wall gets re-probed before it eats into a kept bearing's bands. Not in the grace,
+    // where the bearing to a victim out of his reach is no front to latch, nor while he moves.
     if (spread == BreathSpread::Up)
     {
         float const front = icehowl->GetAngle(victim);
@@ -766,10 +801,21 @@ bool GetIcehowlBreathStand(PlayerbotAI* botAI, IcehowlBreathStand& stand)
 
     IcehowlBreathState const* state = RefreshBreath(botAI);
     int32 step = 0;
-    bool const found = state && ResolveBreathStand(botAI, bot, *state, stand, step);
+    bool found = false;
+    bool held = false;
+    if (state && state->spread == BreathSpread::Moving)
+    {
+        if (BreathBearing const* bearing = SlotOf(*state, bot->GetGUID()))
+        {
+            step = bearing->step;
+            held = true;
+        }
+    }
+    else
+        found = state && ResolveBreathStand(botAI, bot, *state, stand, step);
 
     if (RaidObs::Active() && !IsBeastsTank(bot))
-        RaidObs::NoteDerived(bot, "nb.spread", found ? std::to_string(step) : std::string("none"));
+        RaidObs::NoteDerived(bot, "nb.spread", found || held ? std::to_string(step) : std::string("none"));
 
     return found;
 }

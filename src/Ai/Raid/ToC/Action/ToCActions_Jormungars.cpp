@@ -140,7 +140,7 @@ bool PartialCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
     return false;
 }
 
-// First tier with a spot: stand, escape when starting in a pool, full, nospread, partner, escape,
+// First tier with a spot: stand, escape when starting in a pool, full, pair, nospread, partner, escape,
 // loose, direct, partial, cross
 bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpotTier& tier)
 {
@@ -181,7 +181,15 @@ bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpo
     if (search(withSpread, fits, WormSpotTier::Full))
         return true;
 
-    if (!plan.spreadCircles.empty() && search(plan.circles, fits, WormSpotTier::NoSpread))
+    if (plan.pairable)
+    {
+        std::vector<HazardCircle> withPair = plan.circles;
+        withPair.insert(withPair.end(), plan.pairCircles.begin(), plan.pairCircles.end());
+        if (search(withPair, fits, WormSpotTier::Pair))
+            return true;
+    }
+
+    if (!plan.spreadStrict && !plan.spreadCircles.empty() && search(plan.circles, fits, WormSpotTier::NoSpread))
         return true;
 
     bool const cureWalk = IsWormCureReason(plan.reason);
@@ -433,7 +441,7 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
                                   WormSpotTierName(tier));
             return true;
         case RaidObs::MoveOutcome::AlreadyThere:
-            if (WormTierParks(tier))
+            if (WormHoldParks(reason, tier))
                 SetWormHold(botAI, spot, reason, tier, true);
 
             NoteWormMove(bot, "clear");
