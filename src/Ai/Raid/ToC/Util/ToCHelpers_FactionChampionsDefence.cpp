@@ -37,6 +37,7 @@ constexpr float MASS_DISPEL_RANGE = 30.0f;
 // Its friendly half, centre to centre around the point
 constexpr float MASS_DISPEL_ALLY_RADIUS = 15.0f;
 constexpr float PURGE_RANGE = 30.0f;
+constexpr float TOTEM_DUTY_RANGE = 30.0f;
 
 // Less than that left isn't worth a GCD
 constexpr int32 CC_MIN_LEFT_MS = 2000;
@@ -118,10 +119,12 @@ struct CcDispel
 struct FactionChampionsDefenceState
 {
     RaidObs::ObsValue<ObjectGuid> physical{"fc.physical"};
+    RaidObs::ObsGuidMap<ObjectGuid> totemKillers{"fc.totem"};
 
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
     std::vector<HazardSource> hazards;
+    std::vector<ObjectGuid> totems;  // champion totems, sorted by guid
     std::unordered_map<ObjectGuid, uint32> hazardNotedMs;
     std::unordered_map<ObjectGuid, CcDispel> ccDispels;  // dispeller -> member
     ObjectGuid massDispeller;
@@ -478,16 +481,27 @@ bool IsWarrior(uint32 entry)
            entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_WARRIOR);
 }
 
-std::vector<uint32> const& AoeCasterEntries()
+// AoE casters and totems, so one grid walk covers both
+std::vector<uint32> const& ScanEntries()
 {
     static std::vector<uint32> const entries = {
         static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_WARRIOR),
         static_cast<uint32>(ToCFactionChampions::NPC_HORDE_WARRIOR),
         static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_WARLOCK),
         static_cast<uint32>(ToCFactionChampions::NPC_HORDE_WARLOCK),
+        NPC_GROUNDING_TOTEM,
+        NPC_WINDFURY_TOTEM,
+        NPC_TREMOR_TOTEM,
     };
 
     return entries;
+}
+
+// The raid's own totems share the entries
+bool IsChampionTotem(Player* bot, Creature* totem)
+{
+    ObjectGuid const owner = totem->GetOwnerGUID();
+    return owner.IsCreature() && IsFactionChampion(owner.GetEntry()) && bot->IsValidAttackTarget(totem);
 }
 
 // Cooldown only, no CanCastSpell or power test: the top ranks of Kick, Pummel and Shield Bash sit on
@@ -528,13 +542,22 @@ ObjectGuid ElectHellfireKicker(std::vector<Member> const& members, Unit* warlock
 void UpdateHazards(FactionChampionsDefenceState& state, Player* bot, std::vector<Member> const& members, uint32 now)
 {
     std::list<Creature*> creatures;
-    bot->GetCreatureListWithEntryInGrid(creatures, AoeCasterEntries(), CHAMPION_SEARCH_RADIUS);
+    bot->GetCreatureListWithEntryInGrid(creatures, ScanEntries(), CHAMPION_SEARCH_RADIUS);
 
     state.hazards.clear();
+    state.totems.clear();
     for (Creature* creature : creatures)
     {
         if (!creature || !creature->IsAlive())
             continue;
+
+        if (creature->IsTotem())
+        {
+            if (IsChampionTotem(bot, creature))
+                state.totems.push_back(creature->GetGUID());
+
+            continue;
+        }
 
         HazardSource source;
         source.guid = creature->GetGUID();
@@ -565,6 +588,8 @@ void UpdateHazards(FactionChampionsDefenceState& state, Player* bot, std::vector
         state.hazards.push_back(source);
     }
 
+    std::sort(state.totems.begin(), state.totems.end());
+
     for (auto noted = state.hazardNotedMs.begin(); noted != state.hazardNotedMs.end();)
     {
         bool const active = std::any_of(state.hazards.begin(), state.hazards.end(),
@@ -583,6 +608,68 @@ void UpdateHazards(FactionChampionsDefenceState& state, Player* bot, std::vector
 
         noted->second = now;
         RaidObs::NoteHazardCircle(bot->GetMap(), source.spellId, source.pos, source.radius, HAZARD_NOTE_MS);
+    }
+}
+
+bool CanKillTotem(Member const& member, Creature* totem)
+{
+    Player* player = member.player;
+    return !member.healer && GET_PLAYERBOT_AI(player) && !player->HasUnitState(UNIT_STATE_LOST_CONTROL) &&
+           player->GetExactDist2d(totem) <= TOTEM_DUTY_RANGE;
+}
+
+// Latched, so a bot doesn't swap totems as the distances shift
+void UpdateTotemKillers(FactionChampionsDefenceState& state, Player* bot, std::vector<Member> const& members)
+{
+    Map* map = bot->FindMap();
+    auto const countedTotem = [&state, map](ObjectGuid guid) -> Creature*
+    {
+        bool const counts = std::find(state.totems.begin(), state.totems.end(), guid) != state.totems.end();
+        return counts && map ? map->GetCreature(guid) : nullptr;
+    };
+
+    std::vector<ObjectGuid> released;
+    for (auto const& hold : state.totemKillers.Raw())
+    {
+        Creature* totem = countedTotem(hold.second);
+        ObjectGuid const killerGuid = hold.first;
+        auto const killer = std::find_if(members.begin(), members.end(), [killerGuid](Member const& member)
+                                         { return member.player->GetGUID() == killerGuid; });
+        if (!totem || killer == members.end() || !CanKillTotem(*killer, totem))
+            released.push_back(hold.first);
+    }
+
+    for (ObjectGuid const& killer : released)
+        state.totemKillers.erase(killer);
+
+    for (ObjectGuid const& guid : state.totems)
+    {
+        auto const& holds = state.totemKillers.Raw();
+        bool const held =
+            std::any_of(holds.begin(), holds.end(), [guid](auto const& hold) { return hold.second == guid; });
+        Creature* totem = countedTotem(guid);
+        if (held || !totem)
+            continue;
+
+        Player* nearest = nullptr;
+        float nearestDist = 0.0f;
+        for (Member const& member : members)
+        {
+            if (!CanKillTotem(member, totem) || holds.count(member.player->GetGUID()))
+                continue;
+
+            float const dist = member.player->GetExactDist2d(totem);
+            bool const closer = !nearest || dist < nearestDist ||
+                                (dist == nearestDist && member.player->GetGUID() < nearest->GetGUID());
+            if (closer)
+            {
+                nearest = member.player;
+                nearestDist = dist;
+            }
+        }
+
+        if (nearest)
+            state.totemKillers.Set(nearest->GetGUID(), guid);
     }
 }
 
@@ -608,6 +695,7 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     std::vector<Member> const members = MembersOnMap(bot);
     UpdatePhysicalLatch(state, botAI, killTarget);
     UpdateHazards(state, bot, members, now);
+    UpdateTotemKillers(state, bot, members);
     UpdateCcDispels(state, members);
     UpdateMassDispel(state, botAI, members, killTarget);
     UpdatePurge(state, members, killTarget);
@@ -616,7 +704,7 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
 
 bool IgnoredBy(HazardSource const& source, Player* bot) { return source.kicker == bot->GetGUID(); }
 
-Creature* AliveChampion(Player* bot, ObjectGuid guid)
+Creature* AliveCreature(Player* bot, ObjectGuid guid)
 {
     Map* map = bot->FindMap();
     if (!map || guid.IsEmpty())
@@ -660,7 +748,7 @@ Unit* FactionChampionsMassDispelTarget(PlayerbotAI* botAI)
     if (!state || state->massDispeller != botAI->GetBot()->GetGUID())
         return nullptr;
 
-    return AliveChampion(botAI->GetBot(), state->massDispelTarget);
+    return AliveCreature(botAI->GetBot(), state->massDispelTarget);
 }
 
 Unit* FactionChampionsPurgeTarget(PlayerbotAI* botAI, char const*& spell)
@@ -669,7 +757,7 @@ Unit* FactionChampionsPurgeTarget(PlayerbotAI* botAI, char const*& spell)
     if (!state || state->purger != botAI->GetBot()->GetGUID())
         return nullptr;
 
-    Creature* target = AliveChampion(botAI->GetBot(), state->purgeTarget);
+    Creature* target = AliveCreature(botAI->GetBot(), state->purgeTarget);
     if (!target)
         return nullptr;
 
@@ -683,7 +771,17 @@ Unit* FactionChampionsPhysicalSwitchTarget(PlayerbotAI* botAI)
         return nullptr;
 
     FactionChampionsDefenceState* state = Refresh(botAI);
-    return state ? AliveChampion(botAI->GetBot(), state->physical.Get()) : nullptr;
+    return state ? AliveCreature(botAI->GetBot(), state->physical.Get()) : nullptr;
+}
+
+Unit* FactionChampionsTotemTarget(PlayerbotAI* botAI)
+{
+    FactionChampionsDefenceState* state = Refresh(botAI);
+    if (!state)
+        return nullptr;
+
+    auto const hold = state->totemKillers.find(botAI->GetBot()->GetGUID());
+    return hold != state->totemKillers.end() ? AliveCreature(botAI->GetBot(), hold->second) : nullptr;
 }
 
 bool FactionChampionsInAoe(PlayerbotAI* botAI)

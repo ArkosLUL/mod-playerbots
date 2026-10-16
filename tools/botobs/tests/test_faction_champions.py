@@ -53,6 +53,8 @@ GUARD = "faction champions target guard multiplier"
 REDIRECT = "faction champions threat redirect veto multiplier"
 PHYSICAL_GUARD = "faction champions physical switch guard multiplier"
 AOE_GUARD = "faction champions aoe guard multiplier"
+CC_GUARD = "faction champions cc guard multiplier"
+TOTEM_GUARD = "faction champions totem guard multiplier"
 
 # The latch: first on the paladin, off him while he's shielded, back, then the priest once he dies.
 KILL_ORDER = ((1000, 5000, PALADIN), (5000, 9000, DISC), (9000, 12250, PALADIN), (12250, 20000, DISC))
@@ -62,8 +64,8 @@ def kill_at(when: int) -> int:
     return next((guid for start, stop, guid in KILL_ORDER if start <= when < stop), 0)
 
 
-def row(guid: int, hp: float, target: int) -> list:
-    return [guid, 0.0, 0.0, 0.0, 0.0, hp, 80.0, target, 0, 0, 0, 0]
+def row(guid: int, hp: float, target: int, movegen: int = 0) -> list:
+    return [guid, 0.0, 0.0, 0.0, 0.0, hp, 80.0, target, 0, movegen, 0, 0]
 
 
 def snap(when: int) -> dict:
@@ -246,13 +248,15 @@ def champions_pull() -> list[dict]:
         dmg(18000, WARLOCK_C, MAGE, 68144),
         {"t": 12000, "e": "act", "g": ROGUE, "a": fc.AVOID_AOE_ACTION, "rel": 100.0, "vd": "OK"},
 
-        # Four of the eight multipliers, and one from another boss that must not count.
+        # Six of the ten multipliers, and one from another boss that must not count.
         {"t": 2000, "e": "veto", "g": TANK, "m": GUARD, "a": "tank assist"},
         {"t": 2000, "e": "veto", "g": MAGE, "m": GUARD, "a": "dps assist"},
         {"t": 2100, "e": "veto", "g": ROGUE, "m": REDIRECT, "a": "tricks of the trade"},
         {"t": 2100, "e": "veto", "g": ROGUE, "m": "vezax target guard multiplier", "a": "dps assist"},
         {"t": 6000, "e": "veto", "g": ROGUE, "m": PHYSICAL_GUARD, "a": "faction champions focus priority"},
         {"t": 12000, "e": "veto", "g": ROGUE, "m": AOE_GUARD, "a": "reach melee"},
+        {"t": 2200, "e": "veto", "g": LOCK, "m": CC_GUARD, "a": "fear on cc"},
+        {"t": 7000, "e": "veto", "g": ROGUE, "m": TOTEM_GUARD, "a": "faction champions focus priority"},
         {"t": 21000, "e": "end", "out": "wipe"},
     ]
     records += [snap(when) for when in range(0, 21000, 1000)]
@@ -324,6 +328,12 @@ class SyntheticPull(unittest.TestCase):
                          {MAGE: (3, 1, 1), LOCK: (1, 1, 0)})
         self.assertEqual(rows[MAGE]["spells"], collections.Counter({"Polymorph": 3}))
 
+    def test_without_fc_ccaura_only_a_fear_can_read_as_landed(self):
+        rows = fc.cc_casts(self.trace)
+        self.assertEqual({bot: row["landed"] for bot, row in rows.items()},
+                         {MAGE: {"Polymorph": None}, LOCK: {"Fear": 0}})
+        self.assertEqual(fc.cc_aura_held(self.trace), {})
+
     def test_a_heal_is_followed_only_inside_its_cast(self):
         rows = fc.heal_rows(self.trace)
         self.assertEqual([(row["spell"], row["window"], row["kill"], row["by"]) for row in rows], [
@@ -386,10 +396,12 @@ class SyntheticPull(unittest.TestCase):
             (11000, WARRIOR_C, "Bladestorm", {TANK: 2, ROGUE: 2}),
             (15000, WARLOCK_C, "Hellfire", {MAGE: 3})])
 
-    def test_vetoes_keep_the_eight_multipliers_only(self):
+    def test_vetoes_keep_the_ten_multipliers_only(self):
+        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 10)
         self.assertEqual(fc.fc_vetoes(self.trace), collections.Counter({
             (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1,
-            (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1}))
+            (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1,
+            (CC_GUARD, "fear on cc"): 1, (TOTEM_GUARD, "faction champions focus priority"): 1}))
 
     def test_every_section_renders(self):
         out = io.StringIO()
@@ -526,6 +538,159 @@ class KillEnding(unittest.TestCase):
         self.assertEqual([hold["died"] for hold in holds], [False, False, True, True])
 
 
+BOOMKIN = 5009
+BALANCE_C = CREATURE | 20
+ENH_C = CREATURE | 21
+TREANT = CREATURE | 22
+GROUNDING = CREATURE | 23
+RAID_TOTEM = CREATURE | 24
+
+
+def adds_snap(when: int) -> dict:
+    units = [row(guid, 100.0, 0) for guid in (TANK, ROGUE, LOCK, SHAMAN, BOOMKIN, RAID_TOTEM)]
+    units += [row(WARRIOR_C, 100.0, ROGUE), row(BALANCE_C, 100.0, TANK), row(ENH_C, 100.0, TANK),
+              # feared on the pre-roll sample too, which the uptime leaves out
+              row(MAGE_C, 100.0, TANK, fc.FLEEING if when in (-1000, 6000, 7000) else 0)]
+    if 3000 <= when <= 8000:
+        units.append(row(TREANT, 100.0, TANK))
+    if 7000 <= when <= 11000:
+        units.append(row(GROUNDING, 100.0, 0))
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def adds_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 1, "boss": "shocuul",
+         "roster": [
+             {"g": TANK, "n": "Bulwark", "r": "tank", "c": 1, "h": 0},
+             {"g": ROGUE, "n": "Shiv", "r": "melee", "c": 4, "h": 0},
+             {"g": LOCK, "n": "Agony", "r": "ranged", "c": 9, "h": 0},
+             {"g": SHAMAN, "n": "Totem", "r": "heal", "c": 7, "h": 0},
+             {"g": BOOMKIN, "n": "Druidica", "r": "ranged", "c": 11, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "shocuul", "src": "engage"},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
+        {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
+        {"t": 1, "e": "unit", "g": BALANCE_C, "en": 34460, "n": "Kavina Grovesong", "b": 1},
+        {"t": 1, "e": "unit", "g": ENH_C, "en": 34463, "n": "Shaabad", "b": 1},
+        {"t": 1, "e": "unit", "g": RAID_TOTEM, "en": 5925, "n": "Grounding Totem", "own": SHAMAN},
+        {"t": 2500, "e": "unit", "g": TREANT, "en": fc.NPC_TREANT, "n": "Treant", "own": BALANCE_C},
+        {"t": 6500, "e": "unit", "g": GROUNDING, "en": 5925, "n": "Grounding Totem", "own": ENH_C},
+
+        # A Cyclone held 3.1-9.1 s. The recast right after the landing finds its turn already taken, and
+        # a later one never lands.
+        cast(2000, BOOMKIN, 33786, WARRIOR_C, 1000),
+        note(3100, WARRIOR_C, fc.CC_AURA, 33786),
+        cast(3050, BOOMKIN, 33786, WARRIOR_C, 1000),
+        note(9100, WARRIOR_C, fc.CC_AURA, 0),
+        cast(10000, BOOMKIN, 33786, WARRIOR_C, 1000),
+        # fc.ccaura never records a root, so this one can't read as landed or not.
+        cast(14000, BOOMKIN, 53308, WARRIOR_C, 1500),
+        # A Fear turning the mage to fleeing at 6 s, and one that never does.
+        cast(4000, LOCK, 6215, MAGE_C, 1500),
+        cast(12000, LOCK, 6215, MAGE_C, 1500),
+
+        # Exhaustion: Shiv's cleared by his death, Bulwark's run out, Druidica's Sated gone before the
+        # pull, and Totem's lust at 12 s writing Agony's as a removal at full length then his own apply.
+        aura(-3000, BOOMKIN, BOOMKIN, 57724, True, 0),
+        aura(8000, ROGUE, ROGUE, 57723, True, 92000),
+        {"t": 8000, "e": "death", "g": ROGUE, "killer": WARRIOR_C},
+        cast(12000, SHAMAN, 2825, 0),
+        aura(12000, LOCK, SHAMAN, 57723, True, 600000),
+        aura(12001, LOCK, LOCK, 57723, False, 599999),
+        aura(12005, SHAMAN, SHAMAN, 57723, False, 599995),
+        aura(15000, TANK, TANK, 57723, True, 0),
+
+        # Arcane Explosion hits land 3 ms before their cast row.
+        dmg(997, MAGE_C, TANK, 68000),
+        cast(1000, MAGE_C, 68000, 0),
+        dmg(4997, MAGE_C, TANK, 68000),
+        dmg(4997, MAGE_C, ROGUE, 68000),
+        cast(5000, MAGE_C, 68000, 0),
+
+        # Force of Nature at 2 s; the treant hits two raiders.
+        cast(2000, BALANCE_C, 65861, 0),
+        dmg(4000, TREANT, TANK, 0),
+        dmg(5000, TREANT, ROGUE, 0),
+
+        # Grounding at 6.5 s: Shiv holds it until it's gone, Bulwark walks off it while it stands.
+        cast(6500, ENH_C, 65989, 0),
+        note(7500, ROGUE, fc.TOTEM, GROUNDING),
+        note(8000, TANK, fc.TOTEM, GROUNDING),
+        note(9000, TANK, fc.TOTEM, 0),
+        note(12000, ROGUE, fc.TOTEM, 0),
+        {"t": 7600, "e": "act", "g": ROGUE, "a": fc.KILL_TOTEM_ACTION, "rel": 100.0, "vd": "OK"},
+        {"t": 7700, "e": "act", "g": ROGUE, "a": fc.KILL_TOTEM_ACTION, "rel": 100.0, "vd": "FAILED"},
+        {"t": 20000, "e": "end", "out": "wipe"},
+    ]
+    records += [adds_snap(when) for when in range(-1000, 20000, 1000)]
+    return records
+
+
+class CcAndAdds(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_shocuul_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in adds_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_fc_ccaura_spans_add_up_per_spell(self):
+        self.assertEqual(fc.cc_aura_held(self.trace), {WARRIOR_C: collections.Counter({33786: 6000})})
+
+    def test_fear_uptime_counts_live_samples_from_the_pull(self):
+        uptime = fc.fear_uptime(self.trace)
+        self.assertEqual(uptime[MAGE_C], (2, 20))
+        self.assertEqual(uptime[WARRIOR_C], (0, 20))
+
+    def test_a_turn_lands_only_the_first_cast_whose_window_holds_it(self):
+        rows = fc.cc_casts(self.trace)
+        self.assertEqual({bot: (row["casts"], row["landed"]) for bot, row in rows.items()},
+                         {BOOMKIN: (4, {"Cyclone": 1, "Entangling Roots": None}), LOCK: (2, {"Fear": 1})})
+
+    def test_exhaustion_carried_in_is_a_first_row_removal(self):
+        self.assertEqual([(row["member"], row["spell"], row["t"], row["left"]) for row in fc.lust_carriers(self.trace)],
+                         [(ROGUE, 57723, 8000, 92000), (TANK, 57723, 15000, 0)])
+
+    def test_instant_aoe_rows_just_before_the_cast_belong_to_it(self):
+        self.assertEqual([(row["t"], row["name"], dict(row["hits"])) for row in fc.aoe_casts(self.trace)], [
+            (1000, "Arcane Explosion", {TANK: 1}), (5000, "Arcane Explosion", {TANK: 1, ROGUE: 1})])
+
+    def test_summons_and_their_units_leave_the_raid_totem_out(self):
+        self.assertEqual([(row["t"], row["caster"], row["spell"]) for row in fc.summon_casts(self.trace)],
+                         [(2000, BALANCE_C, 65861), (6500, ENH_C, 65989)])
+        self.assertEqual([(row["guid"], row["first"], row["last"], row["damage"], row["victims"])
+                          for row in fc.add_units(self.trace)],
+                         [(TREANT, 3000, 8000, 2000, 2), (GROUNDING, 7000, 11000, 0, 0)])
+
+    def test_a_totem_hold_is_gone_only_when_the_totem_left_inside_it(self):
+        self.assertEqual([(row["bot"], row["totem"], row["start"], row["stop"], row["gone"])
+                          for row in fc.totem_holds(self.trace)],
+                         [(ROGUE, GROUNDING, 7500, 12000, True), (TANK, GROUNDING, 8000, 9000, False)])
+
+    def test_the_new_sections_render(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_cc(self.trace)
+            fc.show_burst(self.trace)
+            fc.show_aoe(self.trace)
+            fc.show_adds(self.trace)
+        text = out.getvalue()
+        self.assertRegex(text, r"Noozle Whizzlestick +Mage +10\.0% of 20 +-")
+        self.assertRegex(text, r"Shocuul +Warrior +0\.0% of 20 +Cyclone 33786 6\.0s")
+        self.assertIn("Cyclone 3 (1 landed), Entangling Roots 1 (landed n/a)", text)
+        self.assertIn("Fear 2 (1 landed)", text)
+        self.assertIn("Exhaustion or Sated carried into the pull: 2 of 5, the last expired at 0:15.000", text)
+        self.assertRegex(text, r"Shiv +Exhaustion +0:08\.000  cleared, 92 s left")
+        self.assertIn("Force of Nature 0:02.000 (Kavina Grovesong)", text)
+        self.assertRegex(text, r"Treant \(Kavina Grovesong\) +0:03\.000 +0:08\.000 +5\.0s  2000 to 2 raider\(s\)")
+        self.assertIn("treants: 1, 2000 damage to the raid", text)
+        self.assertIn(f"{fc.KILL_TOTEM_ACTION}: 1 OK row(s)", text)
+
+
 class Source(unittest.TestCase):
     def test_the_kill_order_covers_the_champion_enum(self):
         text = CHAMPIONS_HEADER.read_text(encoding="utf-8")
@@ -564,6 +729,12 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.physical_holds(trace), [])
         self.assertEqual(fc.aoe_casts(trace), [])
         self.assertEqual(fc.fc_vetoes(trace), collections.Counter())
+        self.assertEqual(fc.cc_aura_held(trace), {})
+        self.assertEqual(fc.fear_uptime(trace), {})
+        self.assertEqual(fc.lust_carriers(trace), [])
+        self.assertEqual(fc.summon_casts(trace), [])
+        self.assertEqual(fc.add_units(trace), [])
+        self.assertEqual(fc.totem_holds(trace), [])
 
 
 if __name__ == "__main__":

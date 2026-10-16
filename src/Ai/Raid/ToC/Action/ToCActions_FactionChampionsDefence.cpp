@@ -156,6 +156,11 @@ bool FactionChampionsDispelCcAction::isUseful()
     return FactionChampionsDispelCcTarget(botAI, spell) != nullptr;
 }
 
+bool FactionChampionsKillTotemAction::Execute(Event /*event*/)
+{
+    return AttackDirect(FactionChampionsTotemTarget(botAI));
+}
+
 bool FactionChampionsPhysicalSwitchAction::Execute(Event /*event*/)
 {
     Unit* target = FactionChampionsPhysicalSwitchTarget(botAI);

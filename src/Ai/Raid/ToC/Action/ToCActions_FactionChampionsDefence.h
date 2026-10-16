@@ -6,6 +6,7 @@
 #include "MovementActions.h"
 #include "NamedObjectContext.h"
 #include "Position.h"
+#include "ToCActions_Shared.h"
 
 // Walks out of a Bladestorm or Hellfire, the two champion AoEs a bot can see coming
 class FactionChampionsAvoidAoeAction : public MovementAction
@@ -39,6 +40,14 @@ public:
     bool isUseful() override;
 };
 
+class FactionChampionsKillTotemAction : public ToCDirectAttackAction
+{
+public:
+    FactionChampionsKillTotemAction(
+        PlayerbotAI* botAI) : ToCDirectAttackAction(botAI, "faction champions kill totem") {}
+    bool Execute(Event event) override;
+};
+
 class FactionChampionsPhysicalSwitchAction : public AttackAction
 {
 public:
@@ -67,6 +76,8 @@ public:
             &ToCFactionChampionsDefenceActionContext::faction_champions_mass_dispel;
         creators["faction champions dispel cc"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_dispel_cc;
+        creators["faction champions kill totem"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_kill_totem;
         creators["faction champions physical switch"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_physical_switch;
         creators["faction champions purge kill target"] =
@@ -84,6 +95,10 @@ private:
 
     static Action* faction_champions_dispel_cc(PlayerbotAI* botAI) {
         return new FactionChampionsDispelCcAction(botAI);
+    }
+
+    static Action* faction_champions_kill_totem(PlayerbotAI* botAI) {
+        return new FactionChampionsKillTotemAction(botAI);
     }
 
     static Action* faction_champions_physical_switch(PlayerbotAI* botAI) {

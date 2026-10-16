@@ -37,6 +37,15 @@ protected:
     bool FearWindowActive() override;
 };
 
+// Class CC only on this bot's own assignment, and only a cast that lands and holds
+class FactionChampionsCcGuardMultiplier : public Multiplier
+{
+public:
+    FactionChampionsCcGuardMultiplier(
+        PlayerbotAI* botAI) : Multiplier(botAI, "faction champions cc guard multiplier") {}
+    float GetValue(Action* action) override;
+};
+
 void AddToCFactionChampionsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 ToCBurstWindow ToCFactionChampionsBurstWindow(PlayerbotAI* botAI);

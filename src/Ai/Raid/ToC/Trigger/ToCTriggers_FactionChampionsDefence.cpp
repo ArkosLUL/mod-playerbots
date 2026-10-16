@@ -1,5 +1,6 @@
 #include "ToCTriggers_FactionChampionsDefence.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
+#include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
 #include "Strategy.h"
 
@@ -13,6 +14,12 @@ bool FactionChampionsDispelCcTrigger::IsActive()
 {
     char const* spell = nullptr;
     return FactionChampionsDispelCcTarget(botAI, spell) != nullptr;
+}
+
+bool FactionChampionsKillTotemTrigger::IsActive()
+{
+    Unit* totem = FactionChampionsTotemTarget(botAI);
+    return totem && (AI_VALUE(Unit*, "current target") != totem || ToCPetOffPick(botAI, totem));
 }
 
 bool FactionChampionsPhysicalSwitchTrigger::IsActive()
@@ -37,6 +44,9 @@ void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& trigge
 
     triggers.push_back(new TriggerNode("faction champions dispel cc", {
         NextAction("faction champions dispel cc", ACTION_RAID + 3.5f) }));
+
+    triggers.push_back(new TriggerNode("faction champions kill totem", {
+        NextAction("faction champions kill totem", ACTION_RAID + 2.7f) }));
 
     triggers.push_back(new TriggerNode("faction champions physical switch", {
         NextAction("faction champions physical switch", ACTION_RAID + 2.5f) }));

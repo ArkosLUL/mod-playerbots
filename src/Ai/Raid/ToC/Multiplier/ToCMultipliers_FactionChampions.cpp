@@ -43,11 +43,28 @@ bool FactionChampionsAntiFearTotemGuardMultiplier::FearWindowActive()
     return FactionChampionsFearWindowActive(botAI);
 }
 
+float FactionChampionsCcGuardMultiplier::GetValue(Action* action)
+{
+    CastCrowdControlSpellAction* cc = dynamic_cast<CastCrowdControlSpellAction*>(action);
+    if (!cc || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return 1.0f;
+
+    uint8 icon = 0;
+    Unit* assigned = FactionChampionsCcTarget(botAI, icon);
+    // GetTarget only after the assignment test, Polymorph's cc target scans every attacker
+    if (!assigned || action->GetTarget() != assigned)
+        return 0.0f;
+
+    uint32 const spellId = AI_VALUE2(uint32, "spell id", cc->getSpell());
+    return FactionChampionsCcCastPays(botAI, assigned, spellId) ? 1.0f : 0.0f;
+}
+
 void AddToCFactionChampionsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new FactionChampionsSuppressAoeMultiplier(botAI));
     multipliers.push_back(new FactionChampionsThreatRedirectVetoMultiplier(botAI));
     multipliers.push_back(new FactionChampionsAntiFearTotemGuardMultiplier(botAI));
+    multipliers.push_back(new FactionChampionsCcGuardMultiplier(botAI));
 }
 
 // Lust and every cooldown go at the pull, each early kill makes the rest easier
