@@ -4,7 +4,6 @@
  * or (at your option) any later version.
  */
 
-// RaidOnyxiaStrategy.h
 #ifndef PLAYERBOTS_ONYSTRATEGY_H
 #define PLAYERBOTS_ONYSTRATEGY_H
 
@@ -17,6 +16,7 @@ public:
 
     std::string const getName() override { return "onyxia"; }
 
+    void OnTick() override;
     void InitTriggers(std::vector<TriggerNode*>& triggers) override;
     void InitMultipliers(std::vector<Multiplier*>& multipliers) override;
 };

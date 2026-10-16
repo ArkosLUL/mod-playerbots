@@ -23,7 +23,7 @@ new `.cpp` files are globbed automatically.
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.
 
-**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Ulduar, EoE, OS and Naxx so far, ToC
+**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Ulduar, EoE, OS, Onyxia and Naxx so far, ToC
 per [../plans/raid-encounter/raid-encounter.PLAN.md](../plans/raid-encounter/raid-encounter.PLAN.md))
 replace that wiring. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
 
@@ -203,7 +203,7 @@ concrete subclasses supply only `FearWindowActive()`.
 
 Behaviour: a **priest** casts Fear Ward (6346) on the group main tank, or the main healer if the tank
 already has it; a **shaman** drops Tremor Totem, gated on it not already being out. Consumers are
-Onyxia below 40% (Bellowing Roar 18431), Auriaya (Terrifying Screech 64386, fixed 35s cycle so the
+Onyxia from her phase 3 descent on (Bellowing Roar 18431), Auriaya (Terrifying Screech 64386, fixed 35s cycle so the
 totem stays up all fight), and Yogg-Saron P2/P3 (Malady of the Mind 63830/63881, Deafening Roar
 64189).
 

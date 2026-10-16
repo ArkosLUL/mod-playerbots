@@ -507,7 +507,7 @@ it for something that happens once and is in no other stream; nothing uses it to
 Everything above this section is raid-agnostic and already covers every instance map — only the `note`
 stream needs per-raid wiring, because only the encounter code knows what an assignment is. Converted:
 Ulduar (Thorim, Vezax, Algalon, Iron Assembly, Hodir, XT-002, Mimiron, Flame Leviathan,
-Yogg-Saron), Black Temple, SSC, Obsidian Sanctum. Still bare: Hyjal and Tempest Keep (upstream's
+Yogg-Saron), Black Temple, SSC, Obsidian Sanctum, Onyxia. Still bare: Hyjal and Tempest Keep (upstream's
 rewrites replaced the converted code), ICC's `IccInstanceState` (`std::map`, needs an ordered container
 variant), SWP's instance-keyed nested maps (the inner map must be default-constructible, which a
 kind-carrying container is not), and Naxx's function-local statics. Timestamps, thresholds and caches
