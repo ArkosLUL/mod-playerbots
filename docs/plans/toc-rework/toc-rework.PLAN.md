@@ -24,9 +24,11 @@ The merge stage alone edits this table.
 | 4 | w1a-beasts-rest | merged | `3553b1003` | Arctic Breath spread by bearing (step half cone + 6°, width from `spell_cone` at runtime), healers first, radius bands per role, melee within 57° of his back, `icehowl breath spread guard` vetoes `set behind`; Fire Bomb impact modelled from `TempSummon` age plus flight, dodge at `MOVEMENT_FORCED`; `NorthrendBeastsWalkAction` hoisted into the seam header; no coordinates; full table in brief | Merge resolved reader/doc conflicts with w1b and renamed w1b's `angle_off` to `wedge_angle_off`. Open: Fire Bomb vs worm dodge precedence in the heroic Gormok + worms overlap. Gaps: no Fire Bomb spread, no raid cooldown on Breath, humans/tanks hold no bearing, no spread in a worms + Icehowl overlap, walled melee stack, pinned casters eat the impact, bomb dodge ignores worm hazards, Whirl drags the spread, GO-floor probe unverified live |
 | 4b | w7-direct-targeting | merged | `13d2c544e` | One resolver per encounter (`IsToCDpsBot`), `OwnTargeting` predicate = resolver non-null (deliberate break from raids README "whole fight", now amended), definitions wired after each stem's multipliers (veto credit order); player skull first on every encounter (alive, in combat, selectable; not spheres), wins over the Pact twin and feeds `fc.switch`; no per-pull icon clear (icons memory-only); legacy `rti` reset once per strategy from `OnTick`; Beasts DPS nodes split per stem, order skull > snobold > Gormok > mobile worm > Icehowl; GormokSwap holder attacks Gormok; scarab pick nearest within 30 yd; sphere shooters own rule; FC keeps only CC icons; full table in brief | CMake re-run (new `Definition/`, `ToCActions_NorthrendBeasts.cpp`, `ToCTriggers_NorthrendBeasts.cpp`). Engine lessons folded into pitfalls/action-selection at merge. w6: `anub.focus` lives in the Anub'arak per-instance map to migrate. Gaps: `mark rti` bot skull reads as a player's, player `rti` reset on strategy rebuild, `dps assist` in the 1.5 s worm gap and P2 with no scarab in 30 yd, scarabs alive at emerge not picked, FC CC icons still group icons, no reader section for `jaraxxus.dps` |
 | 4c | refine-beasts | merged | `0bf1b5182` | Every worm reposition latches a per-bot spot hold (park 1 yd, walk back past 2.5) with a Block rule zeroing `reach melee`/`reach spell` by name, set behind, flank, formation, follow, flee and spell movers; escape spots released on arrival; walks path-tested against pools at end-of-walk size and Sweep, `cross` tier when urgent; casters spread 10/13 yd, melee one circle and two dealt rear-arc stands on the mobile worm; follow zeroed while a worm is engaged; stuck Toxin carrier seeks any Bile carrier; Icehowl 1 s victim grace, melee-only bearings at 14 yd, deal healers > melee > ranged +2; no coordinates; full table in brief | CMake re-run not needed (no new TU); rebuild needed. Outside ToC: `EncounterHelpers::SegmentCrossesCircle`. w6: move the ToC segment-distance copies (Jaraxxus, Anub'arak, Icehowl lane) onto it. Engine lessons folded into raid-mechanics-lessons/pitfalls at merge. Gaps: no tank turns Icehowl off the wall (3-4 bearings), Bile carriers pick in tick order, path test skips Spew/Bile and `cross` walks, Toxin'd stationary holder has no runner until submerge, heal reach walks healers through pools, melee split by guid parity, healer may lack reach of both holders and its target |
-| refine | w2-jaraxxus-rest | pending | | | Needs 649 traces from a build carrying w2 |
-| refine | w5-anubarak-rest | pending | | | Needs 649 traces from a build carrying w5 |
-| refine | w3b-fc-defence-rest | pending | | | Needs 649 traces from a build carrying w3b |
+| 4d | w2-jaraxxus-rest | pending | | | From the 2026-10-16 25N pull |
+| 4d | w5-anubarak-rest | pending | | | From the 2026-10-16 25N pull |
+| 4d | w3b-fc-defence-rest | pending | | | From the 2026-10-16 25N pull; also owns the offence stem's CC |
+| 4d | refine-beasts-2 | pending | | | From the 2026-10-16 25H pulls |
+| 4e | w8-prepull-staging | pending | | | Branches from 4d's merges |
 | 5 | w6-closeout | pending | | | |
 
 States: `pending`, `merged`, `blocked` (branch and worktree kept, reason in the lane brief),
@@ -183,6 +185,8 @@ approval). Each boss doc ends with "What a trace answers": probe keys and reader
 | 4 | `w1b-jormungars`, `w3b-fc-defence`, plus `refine-<boss>` for any boss with fresh traces |
 | 4b | `w7-direct-targeting` (chains into 4c) |
 | 4c | `refine-beasts` |
+| 4d | `w5-anubarak-rest`, `w3b-fc-defence-rest`, `w2-jaraxxus-rest`, `refine-beasts-2` (chains into 4e) |
+| 4e | `w8-prepull-staging` |
 | 5 | `w6-closeout` |
 
 A lane runs: investigate → 1-3 parallel implementers on disjoint files (up to 5 in `w0a`) →
