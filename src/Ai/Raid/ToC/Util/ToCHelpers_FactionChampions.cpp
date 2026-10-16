@@ -18,6 +18,7 @@
 #include "RaidObs.h"
 #include "RtiTargetValue.h"
 #include "Spell.h"
+#include "SpellAuraEffects.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
@@ -58,6 +59,8 @@ constexpr uint8 NOT_A_CHAMPION = static_cast<uint8>(std::size(KILL_ORDER));
 // Same radius as the encounter gate, which sees the whole arena from anywhere on its floor
 constexpr float CHAMPION_SEARCH_RADIUS = 200.0f;
 constexpr float COUNTERSPELL_RANGE = 30.0f;
+// Cyclone's third application, 1.5 s, holds no longer than its own cast
+constexpr int32 CC_MIN_HOLD_MS = 2500;
 
 constexpr uint8 ICON_COUNT = 8;
 constexpr uint8 NO_ICON = ICON_COUNT;
@@ -82,12 +85,14 @@ struct Champion
     bool inCombat = false;
     bool touchable = false;
     float healthPct = 0.0f;
+    uint32 ccAura = 0;  // a player's fear, stun or confuse on it
 };
 
 struct FactionChampionsState
 {
     RaidObs::ObsValue<ObjectGuid> killTarget{"fc.kill"};
     RaidObs::ObsGuidMap<ObjectGuid> ccTargets{"fc.cc"};
+    RaidObs::ObsGuidMap<uint32> ccAuras{"fc.ccaura"};
 
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
@@ -191,6 +196,18 @@ Creature* AliveCreature(Player* bot, ObjectGuid guid)
     return creature && creature->IsAlive() ? creature : nullptr;
 }
 
+// Erased by guid, so the trace hears each key go
+template <typename V>
+void EraseAll(RaidObs::ObsGuidMap<V>& map)
+{
+    std::vector<ObjectGuid> keys;
+    for (auto const& held : map.Raw())
+        keys.push_back(held.first);
+
+    for (ObjectGuid const& key : keys)
+        map.erase(key);
+}
+
 void EndPull(FactionChampionsState& state, Player* bot)
 {
     state.champions.clear();
@@ -203,14 +220,19 @@ void EndPull(FactionChampionsState& state, Player* bot)
         state.killTarget = ObjectGuid::Empty;
     }
 
-    std::vector<ObjectGuid> held;
-    for (auto const& [ccBot, target] : state.ccTargets.Raw())
-        held.push_back(ccBot);
-
-    for (ObjectGuid const& ccBot : held)
-        state.ccTargets.erase(ccBot);
-
+    EraseAll(state.ccTargets);
+    EraseAll(state.ccAuras);
     state.ccIcons.clear();
+}
+
+uint32 PlayerCcAura(Creature* creature)
+{
+    for (AuraType type : {SPELL_AURA_MOD_FEAR, SPELL_AURA_MOD_STUN, SPELL_AURA_MOD_CONFUSE})
+        for (AuraEffect const* effect : creature->GetAuraEffectsByType(type))
+            if (effect->GetCasterGUID().IsPlayer())
+                return effect->GetId();
+
+    return 0;
 }
 
 void ScanChampions(FactionChampionsState& state, Player* bot)
@@ -234,12 +256,35 @@ void ScanChampions(FactionChampionsState& state, Player* bot)
         champion.touchable = !(creature->IsImmunedToDamage(SPELL_SCHOOL_MASK_NORMAL) &&
                                creature->IsImmunedToDamage(SPELL_SCHOOL_MASK_MAGIC));
         champion.healthPct = creature->GetHealthPct();
+        champion.ccAura = PlayerCcAura(creature);
         state.champions.push_back(champion);
     }
 
     std::sort(state.champions.begin(), state.champions.end(),
               [](Champion const& a, Champion const& b)
               { return a.rank != b.rank ? a.rank < b.rank : a.guid < b.guid; });
+}
+
+// A creature's auras reach no other trace stream
+void UpdateCcAuras(FactionChampionsState& state)
+{
+    std::vector<ObjectGuid> cleared;
+    for (auto const& held : state.ccAuras.Raw())
+    {
+        ObjectGuid const guid = held.first;
+        bool const stillHeld = std::any_of(state.champions.begin(), state.champions.end(),
+                                           [guid](Champion const& champion)
+                                           { return champion.guid == guid && champion.ccAura; });
+        if (!stillHeld)
+            cleared.push_back(guid);
+    }
+
+    for (ObjectGuid const& guid : cleared)
+        state.ccAuras.erase(guid);
+
+    for (Champion const& champion : state.champions)
+        if (champion.ccAura)
+            state.ccAuras.Set(champion.guid, champion.ccAura);
 }
 
 bool IsChampionUnit(Unit* unit) { return unit->IsCreature() && IsFactionChampion(unit->GetEntry()); }
@@ -332,23 +377,17 @@ void UpdateKillLatch(FactionChampionsState& state, Player* bot)
     state.killTarget = next;
 }
 
+// Cyclone druids only: the CC targets stand in the melee pile, where Fear, Polymorph, Roots and Hibernate
+// break at once. Melee druids would leave cat form for it.
 bool IsCcBot(Player* member, Map* map)
 {
-    if (!member || !member->IsInWorld() || !member->IsAlive() || member->FindMap() != map)
+    if (!member || !member->IsInWorld() || !member->IsAlive() || member->FindMap() != map ||
+        member->getClass() != CLASS_DRUID || !IsToCDpsBot(member) || PlayerbotAI::IsMelee(member) ||
+        !member->HasSpell(SPELL_CYCLONE))
         return false;
 
-    switch (member->getClass())
-    {
-        case CLASS_MAGE:
-        case CLASS_WARLOCK:
-        case CLASS_DRUID:
-            break;
-        default:
-            return false;
-    }
-
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-    return memberAI && !PlayerbotAI::IsHeal(member) && memberAI->HasStrategy("cc", BOT_STATE_COMBAT);
+    return memberAI && memberAI->HasStrategy("cc", BOT_STATE_COMBAT);
 }
 
 uint8 FreeCcIcon(FactionChampionsState const& state)
@@ -438,6 +477,7 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
     }
 
     ScanChampions(*state, bot);
+    UpdateCcAuras(*state);
     Unit* skull = GetToCHumanSkull(botAI, &IsChampionUnit);
     state->skulled = skull ? skull->GetGUID() : ObjectGuid::Empty;
     UpdateKillLatch(*state, bot);
@@ -552,6 +592,62 @@ Player* CounterspellMage(Player* bot, Unit* target)
 
     return chosen;
 }
+
+// Any hit ends a take-damage aura. A CC with proc flags and no trigger spell gets a damage cap in
+// AuraEffect::CalculateAmount and breaks past it: Fear and Entangling Roots, DoT ticks included.
+bool BreaksOnDamage(SpellInfo const* info)
+{
+    if (info->AuraInterruptFlags & AURA_INTERRUPT_FLAG_TAKE_DAMAGE)
+        return true;
+
+    if (!info->ProcFlags || info->HasAura(SPELL_AURA_PROC_TRIGGER_SPELL))
+        return false;
+
+    return info->HasAura(SPELL_AURA_MOD_CONFUSE) || info->HasAura(SPELL_AURA_MOD_FEAR) ||
+           info->HasAura(SPELL_AURA_MOD_STUN) || info->HasAura(SPELL_AURA_MOD_ROOT) ||
+           info->HasAura(SPELL_AURA_TRANSFORM);
+}
+
+bool AllDiminish(Unit const* unit)
+{
+    Creature const* creature = unit->ToCreature();
+    return creature && creature->HasFlagsExtra(CREATURE_FLAG_EXTRA_ALL_DIMINISH);
+}
+
+// What Unit::ApplyDiminishingToDuration gives a player's cast at the level the next hit reads. Champions
+// carry ALL_DIMINISH, so they diminish like players. Negative is permanent.
+int32 NextCcDurationMs(Unit* target, SpellInfo const* info)
+{
+    int32 duration = info->GetMaxDuration();
+    DiminishingGroup const group = GetDiminishingReturnsGroupForSpell(info, false);
+    if (duration < 0 || group == DIMINISHING_NONE)
+        return duration;
+
+    // The cap reads the owner's ALL_DIMINISH, the scaling the target's own
+    Unit const* owner = target->GetOwner();
+    Unit const* drTarget = owner ? owner : target;
+
+    int32 const limit = GetDiminishingReturnsLimitDuration(group, info);
+    if (limit > 0 && duration > limit && (drTarget->IsPlayer() || AllDiminish(drTarget)))
+        duration = limit;
+
+    bool const likePlayer = drTarget->IsPlayer() || AllDiminish(target);
+    DiminishingReturnsType const type = GetDiminishingReturnsGroupType(group);
+    if (type != DRTYPE_ALL && !(type == DRTYPE_PLAYER && likePlayer))
+        return duration;
+
+    switch (target->GetDiminishing(group))
+    {
+        case DIMINISHING_LEVEL_2:
+            return duration / 2;
+        case DIMINISHING_LEVEL_3:
+            return duration / 4;
+        case DIMINISHING_LEVEL_IMMUNE:
+            return 0;
+        default:
+            return duration;
+    }
+}
 }
 
 bool IsFactionChampionHealer(uint32 entry)
@@ -654,6 +750,25 @@ Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint8& iconIndex)
 
     iconIndex = icon->second;
     return creature;
+}
+
+// Live first: multipliers still ask after the kill, and a refresh then would write the reset into the
+// next encounter's trace
+bool FactionChampionsCcCastPays(PlayerbotAI* botAI, Unit* target, uint32 spellId)
+{
+    if (!target || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return false;
+
+    uint8 icon = 0;
+    if (FactionChampionsCcTarget(botAI, icon) != target)
+        return false;
+
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!info || BreaksOnDamage(info) || target->IsImmunedToSpell(info))
+        return false;
+
+    int32 const holdMs = NextCcDurationMs(target, info);
+    return holdMs < 0 || holdMs > CC_MIN_HOLD_MS;
 }
 
 bool FactionChampionsCcIconsStale(PlayerbotAI* botAI)

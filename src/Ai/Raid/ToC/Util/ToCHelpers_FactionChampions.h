@@ -49,6 +49,8 @@ enum class ToCFactionChampions : uint32
 
 // The mage's only interrupt, one rank
 constexpr uint32 SPELL_COUNTERSPELL = 2139;
+// One rank, and damage doesn't break it
+constexpr uint32 SPELL_CYCLONE = 33786;
 
 // True if the entry is any Faction Champion (either faction roster). Pets are not champions.
 bool IsFactionChampion(uint32 entry);
@@ -76,8 +78,14 @@ bool FactionChampionsFocusBot(PlayerbotAI* botAI);
 // Live, and a champion that fears is still up: warlock, disc or shadow priest, warrior.
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 
-// This bot's CC target and its raid icon (RtiTargetValue index). Null when it has none.
+// This bot's CC target and its raid icon (RtiTargetValue index). Null when it has none. Only ranged dps
+// druids knowing Cyclone get one.
 Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint8& iconIndex);
+
+// Live, target is this bot's CC assignment, and spellId would land and hold on it: its aura doesn't
+// break on damage, the target isn't immune, and diminishing returns leave it over 2.5 s. So Cyclone
+// goes at 6 s and 3 s, never at 1.5 s.
+bool FactionChampionsCcCastPays(PlayerbotAI* botAI, Unit* target, uint32 spellId);
 
 // A CC icon on a champion no assignment gives it to, or once the pull is over a CC icon this encounter
 // placed still up. Clear does exactly what Stale tests.

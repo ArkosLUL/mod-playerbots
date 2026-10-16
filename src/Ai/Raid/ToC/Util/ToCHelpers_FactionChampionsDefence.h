@@ -45,6 +45,11 @@ constexpr uint32 SPELL_BARKSKIN = 65860;
 // The player spell
 constexpr uint32 SPELL_MASS_DISPEL = 32375;
 
+// The Enhancement Shaman's totems. The raid's own shamans summon the same entries.
+constexpr uint32 NPC_GROUNDING_TOTEM = 5925;
+constexpr uint32 NPC_WINDFURY_TOTEM = 6112;
+constexpr uint32 NPC_TREMOR_TOTEM = 5913;
+
 // Every reader below answers null or false unless Faction Champions is live, and for any bot its
 // rule doesn't name. All of them share one refresh per instance per millisecond.
 
@@ -64,6 +69,10 @@ Unit* FactionChampionsPurgeTarget(PlayerbotAI* botAI, char const*& spell);
 // Where a physical attacker goes while the kill target is immune to physical damage only (Hand of
 // Protection). Latched raid-wide, written to fc.physical.
 Unit* FactionChampionsPhysicalSwitchTarget(PlayerbotAI* botAI);
+
+// The champion totem this bot kills, written to fc.totem. Each goes to the nearest non-healer bot within
+// 30 yd holding none, and stays with it until the totem dies or the bot dies, loses control or is past 30 yd.
+Unit* FactionChampionsTotemTarget(PlayerbotAI* botAI);
 
 // The three below skip a Hellfire for its first 2 s for one bot, left in place to kick it: the first
 // by guid on the warlock, in melee range with a melee interrupt ready.

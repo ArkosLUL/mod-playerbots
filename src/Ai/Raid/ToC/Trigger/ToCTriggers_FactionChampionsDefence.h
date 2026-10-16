@@ -27,6 +27,13 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsKillTotemTrigger : public Trigger
+{
+public:
+    FactionChampionsKillTotemTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions kill totem") {}
+    bool IsActive() override;
+};
+
 class FactionChampionsPhysicalSwitchTrigger : public Trigger
 {
 public:
@@ -54,6 +61,8 @@ public:
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_mass_dispel;
         creators["faction champions dispel cc"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_dispel_cc;
+        creators["faction champions kill totem"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_kill_totem;
         creators["faction champions physical switch"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_physical_switch;
         creators["faction champions purge kill target"] =
@@ -71,6 +80,10 @@ private:
 
     static Trigger* faction_champions_dispel_cc(PlayerbotAI* botAI) {
         return new FactionChampionsDispelCcTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_kill_totem(PlayerbotAI* botAI) {
+        return new FactionChampionsKillTotemTrigger(botAI);
     }
 
     static Trigger* faction_champions_physical_switch(PlayerbotAI* botAI) {

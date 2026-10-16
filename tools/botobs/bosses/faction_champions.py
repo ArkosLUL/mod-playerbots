@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Score a Faction Champions pull from a RaidObs trace: focus, CC, kicks, burst, fears, dispels, AoE.
+"""Score a Faction Champions pull from a RaidObs trace: focus, CC, kicks, burst, fears, dispels, AoE, adds.
 
     faction_champions.py <file>            every section
     faction_champions.py <file> --kill     each kill target hold: why, how long, health, who was on it
-    faction_champions.py <file> --cc       each bot's CC assignment, and where its CC casts went
+    faction_champions.py <file> --cc       CC assignments, CC held on each champion, casts started and landed
     faction_champions.py <file> --heals    champion cast-time heals, and the interrupts that followed
-    faction_champions.py <file> --burst    lust, each bot's first burst cooldown, the burst vetoes
+    faction_champions.py <file> --burst    lust, Exhaustion carried in, first burst cooldowns, burst vetoes
     faction_champions.py <file> --fear     fears on the raid, Fear Ward and Tremor Totem
     faction_champions.py <file> --dispel   champion CC on the raid, the dispels on it, UA backlash
     faction_champions.py <file> --purge    raid offensive dispels on champions, kill target or not
     faction_champions.py <file> --hop      champion shields, fc.physical holds, Mass Dispel, the return
     faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast
-    faction_champions.py <file> --vetoes   the eight Faction Champions multipliers, by action
+    faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds
+    faction_champions.py <file> --vetoes   the ten Faction Champions multipliers, by action
 
 What the generic views get wrong here, and what this reads instead:
 
@@ -25,13 +26,22 @@ What the generic views get wrong here, and what this reads instead:
   creature, so a champion died when it left the snapshots while the fight went on.
 - **Heals and auras on a creature are never recorded.** A heal is its cast start and a kick is its
   own cast start, so both counts are upper bounds. Divine Shield, Ice Block or a Cyclone on a
-  champion shows only as an `immune` switch, the shields and Hand of Protection also as the
-  champion's cast, and a purge or Mass Dispel only as its own cast: `--hop` reads a `back` to the
-  shielded champion before the shield's own end as the sign it came off early.
+  champion shows as an `immune` switch, the shields and Hand of Protection also as the champion's
+  cast, and a purge or Mass Dispel only as its own cast: `--hop` reads a `back` to the shielded
+  champion before the shield's own end as the sign it came off early.
+- **`fc.ccaura` is the only record of CC on a champion.** It holds the spell of a player's fear,
+  stun or confuse aura on the champion (Cyclone, Polymorph, a stun), `0` when none; a fear also
+  shows as snapshot moveGen 9, fleeing. Roots aren't in it. `--cc` reads a Fear's landing off
+  moveGen and a Cyclone's or Polymorph's off this key, `n/a` without it and always for Roots. A CC
+  broken between two samples shows in neither: on 25N 52 of 67 Fears showed.
 - **`fc.kill` and `fc.physical` are raid-wide latches and `fc.switch` an event**, so the `g` on any
-  of them is whichever bot's tick made the call. `fc.cc` is per bot, keyed on the bot, `0` on a
-  release. A `skull` switch is a player's skull taking the latch: bots place no skull here, so the `g`
-  is still a bot, never the player who marked.
+  of them is whichever bot's tick made the call. `fc.cc` and `fc.totem` are per bot, keyed on the
+  bot, `0` on a release; `fc.ccaura` is keyed on the champion. A `skull` switch is a player's skull
+  taking the latch: bots place no skull here, so the `g` is still a bot, never the player who marked.
+- **Exhaustion or Sated applied before the trace shows only as its removal.** `--burst` reads a
+  member whose first row of either is a removal as carrying it into the pull. A fresh lust writes
+  the lust caster's copy as a removal with time left and the member's own apply a few ms later, so
+  that pair is no carry.
 - **Mass Dispel is cast at a point**, so its `cast` row names no target. `--hop` pairs it with a
   shield by time, and `--dispel` counts it apart from the dispels aimed at a raider, splitting off
   the casts inside a champion shield's duration, which are most likely the shield duty's.
@@ -39,6 +49,9 @@ What the generic views get wrong here, and what this reads instead:
   damage, or its holder died; the trace can't tell which.
 - **A crowd-AoE victim is a raid player.** `dmg` rows cover players only, while the champion's 3+
   check counts pets too, so a cast can fire on fewer victims than it needed.
+- **An instant AoE's `dmg` rows land 0-6 ms before its own `cast` row**, so pairing a hit with the
+  latest cast gives it to the cast before or to none. `--aoe` gives a row up to 50 ms before a cast
+  to that cast.
 - **Hellfire, Fan of Knives, Arcane Explosion and the Unstable Affliction backlash remap**, so every
   id of their spelldifficulty row counts.
 """
@@ -91,6 +104,8 @@ CHAMPION_PETS = (35465, 35610)
 KILL = "fc.kill"
 SWITCH = "fc.switch"
 CC = "fc.cc"
+CC_AURA = "fc.ccaura"
+TOTEM = "fc.totem"
 SWITCH_REASONS = ("first", "dead", "immune", "back", "skull", "reset")
 
 # Champion cast-time heals, every difficulty's id: (name, cast ms, ids). The cast row's own `ct` wins
@@ -118,9 +133,20 @@ CC_SPELLS = {
     33786: "Cyclone",
     **dict.fromkeys((339, 1062, 5195, 5196, 9852, 9853, 26989, 53308), "Entangling Roots"),
 }
+FEAR = "Fear"
+# fc.ccaura records fear, stun and confuse auras only, so a root never shows on it
+ON_CC_AURA = ("Polymorph", "Cyclone")
+# MotionMaster's FLEEING_MOTION_TYPE, snapshot column 9
+MOVEGEN_COLUMN = 9
+FLEEING = 9
+# a CC cast lands inside its cast time plus this, snapshot and refresh lag included
+LAND_SLACK_MS = 1000
 
 # Heroism, Bloodlust. The champions' own are 65983 and 65980.
 LUST_SPELLS = (32182, 2825)
+LUST_DEBUFFS = {57723: "Exhaustion", 57724: "Sated"}
+# a fresh lust's removal row and the member's own apply are a few ms apart
+REAPPLY_MS = 100
 
 FEARS = {65809: "Fear", 65543: "Psychic Scream", 65930: "Intimidating Shout"}
 SPELL_FEAR_WARD = 6346
@@ -139,12 +165,15 @@ FC_MULTIPLIERS = (
     "faction champions physical switch guard multiplier",
     "faction champions dispel guard multiplier",
     "faction champions purge guard multiplier",
+    "faction champions cc guard multiplier",
+    "faction champions totem guard multiplier",
 )
 COUNTERSPELL_ACTION = "faction champions counterspell kill target"
 ANTI_FEAR_ACTION = "faction champions anti fear"
 DISPEL_CC_ACTION = "faction champions dispel cc"
 PURGE_ACTION = "faction champions purge kill target"
 AVOID_AOE_ACTION = "faction champions avoid aoe"
+KILL_TOTEM_ACTION = "faction champions kill totem"
 
 MAGIC, CURSE, POISON, DISEASE = "magic", "curse", "poison", "disease"
 
@@ -217,6 +246,15 @@ CROWD_AOE = (
 )
 # ticking once a second for the whole window, so hits per victim mean something
 CHANNELS = ("Bladestorm", "Hellfire")
+# an instant AoE's victim rows land 0-6 ms before its cast row
+AOE_LEAD_MS = 50
+
+# The Enhancement Shaman's totems and the Balance Druid's Force of Nature, cast id -> name
+SUMMONS = {65989: "Grounding Totem", 65990: "Windfury Totem", 65992: "Tremor Totem", 65861: "Force of Nature"}
+NPC_TREANT = 36070
+# Grounding, Windfury and Tremor Totem, and the treant. The raid's own totems share these entries, so
+# a unit counts only with a champion owner.
+ADD_ENTRIES = frozenset((5925, 6112, 5913, NPC_TREANT))
 
 BURST_SOURCE = SRC_ROOT / "Ai" / "Base" / "Combat" / "BurstCooldowns.cpp"
 
@@ -377,9 +415,27 @@ class Samples:
             return []
         return found[1][bisect.bisect_left(found[0], low):bisect.bisect_left(found[0], high)]
 
+    def first_seen(self, guid: int) -> int | None:
+        found = self.rows.get(guid)
+        return found[0][0] if found else None
+
     def last_seen(self, guid: int) -> int | None:
         found = self.rows.get(guid)
         return found[0][-1] if found else None
+
+    def onsets(self, guid: int, column: int, value) -> list[int]:
+        """Stamps where a column turned to `value`, a first sample already at it included."""
+        found = self.rows.get(guid)
+        if not found:
+            return []
+        out = []
+        was = None
+        for when, row in zip(*found):
+            now = row[column] if len(row) > column else None
+            if now == value and was != value:
+                out.append(when)
+            was = now
+        return out
 
 
 def missing_probes(trace: Trace) -> list[str]:
@@ -484,23 +540,86 @@ def show_kill(trace: Trace) -> None:
           " or the hold still open at a kill")
 
 
+def cc_aura_onsets(trace: Trace) -> dict[int, list[tuple[int, int]]]:
+    """Per champion, `(t, spell)` each time `fc.ccaura` turned to a spell."""
+    return {guid: [(start, as_guid(value)) for value, start, _ in spans if as_guid(value)]
+            for guid, spans in holder_spans(trace, CC_AURA).items()}
+
+
+def cc_aura_held(trace: Trace) -> dict[int, collections.Counter]:
+    """Per champion, ms `fc.ccaura` held each spell. One still held at the end runs to it."""
+    out = {}
+    for guid, spans in holder_spans(trace, CC_AURA, pull_end(trace)).items():
+        held = collections.Counter()
+        for value, start, stop in spans:
+            if as_guid(value):
+                held[as_guid(value)] += stop - start
+        if held:
+            out[guid] = held
+    return out
+
+
+def fear_uptime(trace: Trace) -> dict[int, tuple[int, int]]:
+    """Per champion, `(feared, samples)` over its snapshot samples from the pull while alive."""
+    targets = champions(trace)
+    start = pull_start(trace)
+    out: dict[int, list[int]] = {}
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        for row in snap.get("u", []):
+            if row[0] in targets and row[5] > 0:
+                counts = out.setdefault(row[0], [0, 0])
+                counts[0] += len(row) > MOVEGEN_COLUMN and row[MOVEGEN_COLUMN] == FLEEING
+                counts[1] += 1
+    return {guid: (feared, total) for guid, (feared, total) in out.items()}
+
+
 def cc_casts(trace: Trace) -> dict[int, dict]:
-    """Per roster caster, its CC casts on champions and where they landed against the assignment."""
+    """Per roster caster, its CC casts on champions, where they went against the assignment, and
+    `landed`, spell name to casts landed, None where the trace can't say. A cast lands when, within
+    its cast time plus LAND_SLACK_MS, its target turned to fleeing (Fear) or `fc.ccaura` on it turned
+    to that spell (Cyclone, Polymorph); each such turn goes to the first cast whose window holds it."""
     targets = champions(trace)
     holds = cc_holds(trace)
     kill = kill_spans(trace)
     roster = roster_guids(trace)
+    samples = Samples(trace)
+    fears = {guid: samples.onsets(guid, MOVEGEN_COLUMN, FLEEING) for guid in targets}
+    auras = cc_aura_onsets(trace)
+    has_aura = bool(notes(trace, CC_AURA))
+    claimed: set[tuple[str, int, int]] = set()
     out: dict[int, dict] = {}
     for rec in trace.of("cast"):
         caster, target = rec.get("s"), rec.get("tgt")
         if rec.get("tr") or rec.get("sp") not in CC_SPELLS or target not in targets or caster not in roster:
             continue
-        row = out.setdefault(caster, {"casts": 0, "assigned": 0, "kill": 0, "spells": collections.Counter()})
+        name = CC_SPELLS[rec["sp"]]
+        row = out.setdefault(caster, {"casts": 0, "assigned": 0, "kill": 0, "spells": collections.Counter(),
+                                      "landed": {}})
         row["casts"] += 1
         row["assigned"] += held_at(holds.get(caster, []), rec["t"]) == target
         row["kill"] += held_at(kill, rec["t"]) == target
-        row["spells"][CC_SPELLS[rec["sp"]]] += 1
+        row["spells"][name] += 1
+
+        if name == FEAR:
+            kind, turns = "fear", fears[target]
+        elif has_aura and name in ON_CC_AURA:
+            kind, turns = "aura", [when for when, spell in auras.get(target, []) if spell == rec["sp"]]
+        else:
+            row["landed"][name] = None
+            continue
+        high = rec["t"] + (rec.get("ct") or 0) + LAND_SLACK_MS
+        turn = next((when for when in turns if rec["t"] <= when <= high and (kind, target, when) not in claimed),
+                    None)
+        if turn is not None:
+            claimed.add((kind, target, turn))
+        row["landed"][name] = row["landed"].get(name, 0) + (turn is not None)
     return out
+
+
+def cc_spell_name(trace: Trace, spell: int) -> str:
+    return f"{CC_SPELLS[spell]} {spell}" if spell in CC_SPELLS else trace.spell(spell)
 
 
 def show_cc(trace: Trace) -> None:
@@ -516,16 +635,38 @@ def show_cc(trace: Trace) -> None:
     else:
         print("  fc.cc never assigned anyone")
 
+    held = cc_aura_held(trace)
+    uptime = fear_uptime(trace)
+    has_aura = bool(notes(trace, CC_AURA))
+    shown = [(guid, name) for guid, name, _ in lineup(trace) if guid in held or guid in uptime]
+    if shown:
+        print(f"\n  {'on the champion':20} {'spec':20} {'feared':>15}  fc.ccaura held")
+        for guid, name in shown:
+            feared, total = uptime.get(guid, (0, 0))
+            share = f"{feared * 100.0 / total:.1f}% of {total}" if total else "-"
+            spells = (", ".join(f"{cc_spell_name(trace, spell)} {ms / 1000:.1f}s"
+                                for spell, ms in held[guid].most_common()) if guid in held
+                      else "-" if has_aura else "n/a")
+            print(f"  {trace.name(guid)[:20]:20} {name[:20]:20} {share:>15}  {spells}")
+
     rows = cc_casts(trace)
     if not rows:
         print("  no Polymorph, Fear, Cyclone or Entangling Roots cast on a champion")
         return
-    print(f"\n  {'bot':14} {'class':8} {'casts':>5} {'on assigned':>12} {'on kill':>8}  spells")
+    print(f"\n  {'bot':14} {'class':8} {'casts':>5} {'landed':>6} {'on assigned':>12} {'on kill':>8}  spells")
     for bot in sorted(rows, key=trace.name):
         row = rows[bot]
-        print(f"  {trace.name(bot)[:14]:14} {klass.get(bot, '?'):8} {row['casts']:5}"
-              f" {row['assigned'] * 100.0 / row['casts']:11.0f}% {row['kill']:8}  "
-              + ", ".join(f"{name} {count}" for name, count in row["spells"].most_common()))
+        known = [count for count in row["landed"].values() if count is not None]
+        landed = str(sum(known)) if len(known) == len(row["landed"]) else "n/a"
+        spells = ", ".join(
+            f"{name} {count} ({'landed n/a' if row['landed'][name] is None else str(row['landed'][name]) + ' landed'})"
+            for name, count in row["spells"].most_common())
+        print(f"  {trace.name(bot)[:14]:14} {klass.get(bot, '?'):8} {row['casts']:5} {landed:>6}"
+              f" {row['assigned'] * 100.0 / row['casts']:11.0f}% {row['kill']:8}  {spells}")
+    print(f"  feared is the share of the champion's live samples from the pull at moveGen {FLEEING}, fleeing;"
+          f" a cast landed when, inside its cast time + {LAND_SLACK_MS / 1000:.0f} s, its target turned to"
+          f" fleeing (Fear) or {CC_AURA} on it to that spell (Cyclone, Polymorph), n/a without {CC_AURA}"
+          " and for Roots; a CC broken between two samples never shows, so landed is a lower bound")
 
 
 def heal_rows(trace: Trace) -> list[dict]:
@@ -602,6 +743,31 @@ def burst_rows(trace: Trace) -> tuple[dict | None, dict[int, tuple[int, str]], c
     return lust, first, vetoes
 
 
+def lust_carriers(trace: Trace) -> list[dict]:
+    """Each roster member who carried Exhaustion or Sated into the pull, in removal order: `member`,
+    `spell`, `t` it came off, `left` ms at the removal (0 expired, else cleared by a death)."""
+    roster = roster_guids(trace)
+    start = pull_start(trace)
+    rows = [rec for rec in trace.of("aura") if rec.get("sp") in LUST_DEBUFFS and rec.get("d") in roster]
+    first: dict[int, int] = {}
+    for index, rec in enumerate(rows):
+        first.setdefault(rec["d"], index)
+
+    out = []
+    for member, index in first.items():
+        rec = rows[index]
+        if not rec.get("r") or rec["t"] < start:
+            continue
+        fresh = False
+        for later in rows[index + 1:]:
+            if later["t"] - rec["t"] > REAPPLY_MS:
+                break
+            fresh = fresh or (later["d"] == member and later["sp"] == rec["sp"] and not later.get("r"))
+        if not fresh:
+            out.append({"member": member, "spell": rec["sp"], "t": rec["t"], "left": rec.get("dur") or 0})
+    return sorted(out, key=lambda row: (row["t"], row["member"]))
+
+
 def show_burst(trace: Trace) -> None:
     print("BURST")
     start = pull_start(trace)
@@ -611,6 +777,18 @@ def show_burst(trace: Trace) -> None:
               f" ({(lust['t'] - start) / 1000:+.1f} s from the pull)")
     else:
         print("  no raid lust cast")
+
+    carried = lust_carriers(trace)
+    if carried:
+        expired = [row["t"] for row in carried if not row["left"]]
+        last = f"the last expired at {clock(max(expired))}" if expired else "none expired"
+        print(f"  Exhaustion or Sated carried into the pull: {len(carried)} of {len(roster_guids(trace))}, {last}")
+        for row in carried:
+            how = "expired" if not row["left"] else f"cleared, {row['left'] / 1000:.0f} s left"
+            print(f"    {trace.name(row['member'])[:14]:14} {LUST_DEBUFFS[row['spell']]:10}"
+                  f" {clock(row['t']):>9}  {how}")
+    else:
+        print("  nobody carried Exhaustion or Sated into the pull")
 
     klass = classes(trace)
     if first:
@@ -892,8 +1070,8 @@ def show_hop(trace: Trace) -> None:
 
 def aoe_casts(trace: Trace) -> list[dict]:
     """Every champion crowd-AoE cast, in time order: `t`, `caster`, `name`, and `hits`, roster victim
-    to rows from that cast. A row goes to its caster's latest cast of that spell still inside the
-    window."""
+    to rows from that cast. A row goes to its caster's latest cast of that spell starting no later
+    than AOE_LEAD_MS after it, if the row falls before that cast's start plus its window."""
     targets = champions(trace)
     roster = roster_guids(trace)
     cast_of = {spell: index for index, (_, ids, *_) in enumerate(CROWD_AOE) for spell in ids}
@@ -915,7 +1093,7 @@ def aoe_casts(trace: Trace) -> list[dict]:
         if index is None or rec.get("d") not in roster or rec.get("r"):
             continue
         key = (rec.get("s"), index)
-        found = bisect.bisect_right(stamps.get(key, []), rec["t"]) - 1
+        found = bisect.bisect_right(stamps.get(key, []), rec["t"] + AOE_LEAD_MS) - 1
         if found >= 0 and rec["t"] < casts[key][found]["t"] + CROWD_AOE[index][4]:
             casts[key][found]["hits"][rec["d"]] += 1
     return out
@@ -942,8 +1120,89 @@ def show_aoe(trace: Trace) -> None:
             print(f"  {name:18} {len(part):5} {per_cast:>17}  {per_victim:>15}  "
                   + ", ".join(f"{count} x{casts}" for count, casts in sorted(spread.items())))
     print(f"  {AVOID_AOE_ACTION}: {ok_rows(trace, AVOID_AOE_ACTION)} OK row(s)")
-    print("  a victim is a raid player hit by that cast (a `dmg` row), or feared by it for the two fears;"
-          " hits per victim is for the two channels, which tick once a second")
+    print("  a victim is a raid player hit by that cast (a `dmg` row), or feared by it for the two fears,"
+          f" from {AOE_LEAD_MS} ms before its cast row; hits per victim is for the two channels, which tick"
+          " once a second")
+
+
+def summon_casts(trace: Trace) -> list[dict]:
+    """Every champion totem and Force of Nature cast: `t`, `caster`, `spell`."""
+    targets = champions(trace)
+    return [{"t": rec["t"], "caster": rec["s"], "spell": rec["sp"]} for rec in trace.of("cast")
+            if rec.get("sp") in SUMMONS and rec.get("s") in targets and not rec.get("tr")]
+
+
+def add_units(trace: Trace) -> list[dict]:
+    """Every champion totem and treant the trace named, by first snapshot: `guid`, `entry`, `first`
+    and `last` snapshot (None if never sampled), and its `dmg` rows on the roster as `damage` and
+    `victims`."""
+    targets = champions(trace)
+    roster = roster_guids(trace)
+    samples = Samples(trace)
+    adds = {guid: entry for guid, entry in trace.entries.items()
+            if entry in ADD_ENTRIES and trace.owners.get(guid) in targets}
+    damage = collections.Counter()
+    victims: dict[int, set[int]] = collections.defaultdict(set)
+    for rec in trace.of("dmg"):
+        if rec.get("s") in adds and rec.get("d") in roster:
+            damage[rec["s"]] += rec.get("a", 0)
+            victims[rec["s"]].add(rec["d"])
+    out = [{"guid": guid, "entry": entry, "first": samples.first_seen(guid), "last": samples.last_seen(guid),
+            "damage": damage[guid], "victims": len(victims[guid])} for guid, entry in adds.items()]
+    return sorted(out, key=lambda row: (row["first"] is None, row["first"] or 0, row["guid"]))
+
+
+def totem_holds(trace: Trace) -> list[dict]:
+    """Each `fc.totem` hold: `bot`, `totem`, `start`, `stop`, and `gone`, whether the totem's last
+    snapshot fell inside the hold before the trace's last one."""
+    samples = Samples(trace)
+    final = samples.stamps[-1] if samples.stamps else None
+    out = []
+    for bot, spans in holder_spans(trace, TOTEM, pull_end(trace)).items():
+        for value, start, stop in spans:
+            totem = as_guid(value)
+            if not totem:
+                continue
+            last = samples.last_seen(totem)
+            out.append({"bot": bot, "totem": totem, "start": start, "stop": stop,
+                        "gone": last is not None and start <= last < stop and last != final})
+    return sorted(out, key=lambda row: (row["start"], row["bot"]))
+
+
+def show_adds(trace: Trace) -> None:
+    print("TOTEMS AND TREANTS")
+    casts = summon_casts(trace)
+    if casts:
+        print("  " + ", ".join(f"{SUMMONS[row['spell']]} {clock(row['t'])} ({trace.name(row['caster'])})"
+                               for row in casts))
+    else:
+        print("  no champion cast a totem or Force of Nature")
+
+    units = add_units(trace)
+    if units:
+        print(f"\n  {'unit':32} {'first':>9} {'last':>9} {'lived':>7}  damage to the raid")
+        for row in units:
+            seen = row["first"] is not None
+            lived = f"{(row['last'] - row['first']) / 1000:6.1f}s" if seen else "-"
+            hurt = f"{row['damage']} to {row['victims']} raider(s)" if row["entry"] == NPC_TREANT else ""
+            print(f"  {trace.name(row['guid'])[:32]:32} {clock(row['first']) if seen else '-':>9}"
+                  f" {clock(row['last']) if seen else '-':>9} {lived:>7}  {hurt}".rstrip())
+        treants = [row for row in units if row["entry"] == NPC_TREANT]
+        if treants:
+            print(f"  treants: {len(treants)}, {sum(row['damage'] for row in treants)} damage to the raid")
+
+    holds = totem_holds(trace)
+    if holds:
+        print(f"\n  {'fc.totem holder':14} {'at':>9} {'length':>7} {'totem':32} {'gone':>5}")
+        for row in holds:
+            print(f"  {trace.name(row['bot'])[:14]:14} {clock(row['start']):>9}"
+                  f" {(row['stop'] - row['start']) / 1000:6.1f}s {trace.name(row['totem'])[:32]:32}"
+                  f" {'yes' if row['gone'] else '-':>5}")
+    else:
+        print("  fc.totem never held a totem")
+    print(f"  {KILL_TOTEM_ACTION}: {ok_rows(trace, KILL_TOTEM_ACTION)} OK row(s)")
+    print("  first and last are the unit's snapshots; gone means the totem left the snapshots inside the"
+          " hold, killed or run out")
 
 
 def fc_vetoes(trace: Trace) -> collections.Counter:
@@ -969,15 +1228,16 @@ def show_vetoes(trace: Trace) -> None:
 
 SECTIONS = (
     ("kill", "each kill target hold: why, how long, health, who was on it", show_kill),
-    ("cc", "CC assignments, and where the CC casts went", show_cc),
+    ("cc", "CC assignments, CC held and fear uptime per champion, casts started and landed", show_cc),
     ("heals", "champion cast-time heals and the interrupts that followed", show_heals),
-    ("burst", "lust, first burst cooldown per bot, burst vetoes", show_burst),
+    ("burst", "lust, Exhaustion or Sated carried in, first burst cooldown per bot, burst vetoes", show_burst),
     ("fear", "fears on the raid, Fear Ward and Tremor Totem", show_fear),
     ("dispel", "champion CC on the raid, the dispels on it, Unstable Affliction backlash", show_dispel),
     ("purge", "raid offensive dispels on champions, kill target or not, by spell and class", show_purge),
     ("hop", "champion shields, fc.physical holds, Mass Dispel after a shield, the return", show_hop),
     ("aoe", "raid victims per champion crowd-AoE cast, hits per victim for the channels", show_aoe),
-    ("vetoes", "the eight Faction Champions multipliers, by action", show_vetoes),
+    ("adds", "champion totems and treants, treant damage, fc.totem holds", show_adds),
+    ("vetoes", "the ten Faction Champions multipliers, by action", show_vetoes),
 )
 
 
