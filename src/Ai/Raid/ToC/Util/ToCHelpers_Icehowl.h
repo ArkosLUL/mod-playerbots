@@ -56,11 +56,16 @@ constexpr float ICEHOWL_SPREAD_RANGED_MAX = 25.0f;
 // How far outside its band a bot may stand before it walks back
 constexpr float ICEHOWL_SPREAD_TRIGGER = 1.0f;
 constexpr float ICEHOWL_SPREAD_ARRIVE = 0.5f;
-// A bearing walled closer than this is dropped
+// A bearing walled closer than this is dropped, or kept for melee alone inside the melee arc with
+// room for their band
 constexpr float ICEHOWL_SPREAD_MIN_ROOM = 22.5f;
+constexpr float ICEHOWL_SPREAD_MELEE_ROOM = 14.0f;
 // Whirl throws his tank ~31 yd and he follows, so the layout re-latches when he moves or turns this far
 constexpr float ICEHOWL_SPREAD_RELATCH_MOVE = 8.0f;
 constexpr float ICEHOWL_SPREAD_RELATCH_TURN_DEG = 30.0f;
+// His victim out of his reach for less than this keeps the layout as it stands. He runs 16 yd/s, so a
+// longer wait would walk the spread after him.
+constexpr uint32 ICEHOWL_SPREAD_VICTIM_GRACE_MS = 1000;
 // Past the ranged band by his drift before a re-latch, so an open bearing never reads as walled
 constexpr float ICEHOWL_SPREAD_PROBE = ICEHOWL_SPREAD_RANGED_MAX + ICEHOWL_SPREAD_RELATCH_MOVE + 1.0f;
 // Melee bearings stay this far round from his back. Past 90° off it he parries them and hastes his
@@ -76,6 +81,7 @@ static_assert(ICEHOWL_SPREAD_HEALER_MIN - ICEHOWL_SPREAD_TRIGGER > ICEHOWL_WHIRL
 static_assert(ICEHOWL_SPREAD_RANGED_MIN - ICEHOWL_SPREAD_TRIGGER > ICEHOWL_RANGED_MIN_RANGE,
               "hunters stay past their minimum range");
 static_assert(ICEHOWL_SPREAD_MIN_ROOM - 1.0f >= ICEHOWL_SPREAD_RANGED_MIN, "a kept bearing fits the ranged band");
+static_assert(ICEHOWL_SPREAD_MELEE_ROOM >= ICEHOWL_SPREAD_MELEE_MAX + 1.0f, "a melee-only bearing fits the melee band");
 
 // A bot's Arctic Breath stand in Icehowl's frame: a breath aims by bearing, so a bot holds its stand
 // while it stays near the bearing from him and inside the radius band.
@@ -105,8 +111,8 @@ bool HasIcehowlFrothingRage(Unit* icehowl);
 
 // The bot's Arctic Breath stand: Icehowl's spot plus its own distance to him, clamped into its role's
 // band, along its bearing. False while the spread is off (another beast up, a charge, his victim out
-// of his melee range) and for a bot with no bearing: tanks, humans, one the deal hasn't reached yet,
-// melee with every bearing near his back walled.
+// of his melee range past the grace) and for a bot with no bearing: tanks, humans, one the deal
+// hasn't reached yet, melee with every bearing near his back walled.
 bool GetIcehowlBreathStand(PlayerbotAI* botAI, IcehowlBreathStand& stand);
 
 // (x, y) within `degrees` of the stand's bearing and `yards` of its band

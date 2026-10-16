@@ -31,7 +31,8 @@ public:
     bool IsActive() override;
 };
 
-// Pools, Spew, Sweep, Bile, the spray spread and the Toxin cure walk, all through one mover
+// Pools, Spew, Sweep, Bile, the spray spread, melee stands, reach round a pool and the Toxin cure
+// walk, all through one mover. Off while the bot stands on its held spot.
 class NorthrendWormsMisplacedTrigger : public Trigger
 {
 public:

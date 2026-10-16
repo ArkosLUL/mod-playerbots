@@ -73,12 +73,19 @@ protected:
     Unit* GetThreatDumpTarget() override;
 };
 
+// Every worm hazard through one mover. The spot it walks to is held: a bot pushed off walks back to it
+// rather than searching again from wherever it landed.
 class NorthrendWormsRepositionAction : public MovementAction
 {
 public:
     NorthrendWormsRepositionAction(
         PlayerbotAI* botAI, std::string const name = "northrend worms reposition") : MovementAction(botAI, name) {};
     bool Execute(Event event) override;
+
+private:
+    // Tells our own booking from another mover's once the hold it was for is gone
+    Position issuedSpot;
+    bool hasIssuedSpot = false;
 };
 
 class ToCJormungarsActionContext : public NamedObjectContext<Action>

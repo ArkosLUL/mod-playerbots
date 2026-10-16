@@ -10,7 +10,7 @@ Breath, snobolds, Fire Bomb, the worms and the Toxin cure.
     northrend_beasts.py <file> --breath    every Arctic Breath: target, who froze, who the cone predicts, spread
     northrend_beasts.py <file> --snobold   who carried a snobold and for how long, and what the DPS picked
     northrend_beasts.py <file> --bomb      every Fire Bomb: target, impact hits, who stood inside, dodges
-    northrend_beasts.py <file> --worms     worm forms, who each worm hit before a tank, Spew, pools, Sweep
+    northrend_beasts.py <file> --worms     worm forms, who each worm hit before a tank, Spew, pools, Sweep, holds
     northrend_beasts.py <file> --cure      Paralytic Toxin spans and how each ended, Bile pulses on the clean
 
 What the generic views get wrong here, and what this reads instead:
@@ -28,7 +28,8 @@ What the generic views get wrong here, and what this reads instead:
 - **Arctic Breath picks its victims once, at the cast**, inside half the cone's width of the target's
   bearing from Icehowl: 30° on 10N (`hdr.diff` 0), 12° on the rest. `--breath` predicts that set from
   the snapshot nearest the cast and prints it beside the `aura` applies; a mismatch is a bot that
-  moved between that snapshot and the cast.
+  moved between that snapshot and the cast. On 25N his casts never reach the `cast` stream, so with
+  no cast row it groups his `aura` applies into breaths instead, with no target and no prediction.
 - **Fire Bomb's impact has no world object.** The NPC is at best a `snap.u` row and nothing marks when
   66317 lands. Each bomb writes one `haz` `circle` row whose `ttl` is the modelled impact, not a
   measured one, so `--bomb` takes 66317 hits up to 1.5 s past it.
@@ -40,8 +41,8 @@ What the generic views get wrong here, and what this reads instead:
 - **The worms' threat wipe shows only in their target column.** Each resets its threat list under
   ground and comes up on whoever threatens it first, so `--worms` times each worm from its own Emerge
   cast (66947 in the snapshot's casting column) until a tank is the target again: `nb.worm` leaves 3
-  only at the later worm's emerge, up to 1.5 s after the first. `nb.cure` and `nb.wormmove` are
-  per-bot change-only notes too.
+  only at the later worm's emerge, up to 1.5 s after the first. `nb.cure`, `nb.wormmove` and
+  `nb.wormhold` are per-bot change-only notes too.
 - **Neither worm hazard reaches `snap.hz`.** The Spew cone is a `haz` `wedge` row, `arc` degrees either
   side of `facing`; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 to 11, so
   `--worms` rebuilds its radius from its first snapshot.
@@ -50,6 +51,8 @@ What the generic views get wrong here, and what this reads instead:
   snapshot gap off the pick.
 - **A cure has no record of its own.** The Bile pulse strips Toxin as it lands, so `--cure` calls a
   removal cured when a pulse hit the carrier within 250 ms of it.
+- **A Bile pulse names Dreadscale as its source**, never the carrier, so `--cure` gives each hit to the
+  carrier nearest its victim within the pulse's 10 yd, in the snapshot nearest the hit.
 """
 from __future__ import annotations
 
@@ -523,9 +526,22 @@ def breath_cone(trace: Trace, caster: int, target: int, when: int, half: float) 
             and (guid == target or angle_off(bearing(boss[1:3], row[1:3]), front) <= half)}
 
 
+def aura_breaths(applies: list[dict], icehowls: set[int]) -> list[tuple[int, int]]:
+    """`(first apply, caster)` per breath when only the auras say one landed: Icehowl's applies, a new
+    breath once one lands past `BREATH_VICTIM_MS` after the current one's first."""
+    out: list[tuple[int, int]] = []
+    for rec in sorted((rec for rec in applies if rec.get("s") in icehowls), key=lambda rec: rec["t"]):
+        if not out or rec["t"] > out[-1][0] + BREATH_VICTIM_MS:
+            out.append((rec["t"], rec["s"]))
+    return out
+
+
 def breaths(trace: Trace) -> list[dict]:
     """One row per Arctic Breath cast by Icehowl: its target, who froze, who the cone predicts, each
-    victim's `nb.spread` and the raid's `nb.arc` at the cast."""
+    victim's `nb.spread` and the raid's `nb.arc` at the cast.
+
+    A trace with no cast row for it, as on 25N, gets one row per burst of his aura applies instead,
+    with target 0 and no prediction."""
     icehowls = guids_of_entry(trace, NPC_ICEHOWL)
     roster = roster_guids(trace)
     half = breath_half_width(trace.header.get("diff", 0))
@@ -534,12 +550,13 @@ def breaths(trace: Trace) -> list[dict]:
     spread = holder_spans(trace, "nb.spread")
     arc = latch_spans(trace, "nb.arc")
 
+    casts = [(rec["t"], rec["s"], rec.get("tgt", 0)) for rec in trace.of("cast")
+             if rec.get("sp") in ARCTIC_BREATH and rec.get("s") in icehowls]
+    if not casts:
+        casts = [(when, caster, 0) for when, caster in aura_breaths(applies, icehowls)]
+
     out = []
-    for rec in trace.of("cast"):
-        if rec.get("sp") not in ARCTIC_BREATH or rec.get("s") not in icehowls:
-            continue
-        when = rec["t"]
-        target = rec.get("tgt", 0)
+    for when, caster, target in casts:
         victims: list[int] = []
         for hit in applies:
             if when <= hit["t"] <= when + BREATH_VICTIM_MS and hit["d"] not in victims:
@@ -548,7 +565,7 @@ def breaths(trace: Trace) -> list[dict]:
             "t": when,
             "target": target,
             "victims": victims,
-            "predicted": breath_cone(trace, rec["s"], target, when, half) if target else None,
+            "predicted": breath_cone(trace, caster, target, when, half) if target else None,
             "spread": {guid: value_at(spread.get(guid), when) for guid in victims},
             "arc": value_at(arc, when),
         })
@@ -571,11 +588,14 @@ def show_breath(trace: Trace) -> None:
         return ", ".join(trace.name(guid) for guid in sorted(guids, key=trace.name)) or "nobody"
 
     for row in rows:
-        print(f"  {clock(row['t'])}  on {trace.name(row['target'])} ({trace.role(row['target'])})"
-              f"  nb.arc {row['arc'] if row['arc'] is not None else '-'}")
+        target = f"{trace.name(row['target'])} ({trace.role(row['target'])})" if row["target"] else "?"
+        print(f"  {clock(row['t'])}  on {target}  nb.arc {row['arc'] if row['arc'] is not None else '-'}")
         frozen = ", ".join(f"{trace.name(guid)} [{row['spread'][guid] or '-'}]" for guid in row["victims"])
         print(f"    frozen [nb.spread]: {frozen or 'nobody'}")
-        predicted = "? (no snapshot)" if row["predicted"] is None else names(row["predicted"])
+        if row["predicted"] is not None:
+            predicted = names(row["predicted"])
+        else:
+            predicted = "? (no snapshot)" if row["target"] else "? (no cast row, so no target)"
         print(f"    in the cone: {predicted}")
 
     counts = [len(row["victims"]) for row in rows]
@@ -640,6 +660,7 @@ WORMS = (("Acidmaw", NPC_ACIDMAW), ("Dreadscale", NPC_DREADSCALE))
 SPELL_PARALYTIC_TOXIN = (66823, 67618, 67619, 67620)
 SPELL_BURNING_BILE = 66869
 SPELL_BILE_PULSE = (66870, 67621, 67622, 67623)
+BILE_PULSE_RADIUS = radius("WORM_SPLASH_RADIUS")
 SPELL_ACIDIC_SPEW_TICK = (66819, 67609, 67610, 67611)
 SPELL_MOLTEN_SPEW_TICK = (66820, 67635, 67636, 67637)
 SPELL_SLIME_POOL = (66881, 67638, 67639, 67640)
@@ -840,8 +861,14 @@ def drop_numbers(text: str) -> str:
 
 
 def wormmove_branches(trace: Trace) -> dict[int, collections.Counter]:
-    """`nb.wormmove` per bot by branch, the yards dropped: `move pool`, `hold spew`, `drag`, ..."""
+    """`nb.wormmove` per bot by branch, the yards dropped: `move pool full`, `hold spew`, `drag`, ..."""
     return branch_counts(trace, "nb.wormmove", drop_numbers)
+
+
+def wormhold_branches(trace: Trace) -> dict[int, collections.Counter]:
+    """`nb.wormhold` per bot by its first word and reason or cause, the tier dropped: `set pool`,
+    `park`, `unpark`, `release drift`, ..."""
+    return branch_counts(trace, "nb.wormhold", lambda text: " ".join(text.split()[:2]))
 
 
 def named(trace: Trace, guid: int) -> str:
@@ -900,14 +927,14 @@ def show_worms(trace: Trace) -> None:
 
     print(f"  Sweep hits: {by_role(trace, sweep_victims(trace)) or 'nobody'}")
 
-    branches = wormmove_branches(trace)
-    if not branches:
-        print("  nb.wormmove: none")
-        return
-    print("  nb.wormmove:")
-    for guid, counts in sorted(branches.items(), key=lambda item: trace.name(item[0])):
-        print(f"    {trace.name(guid)[:14]:14} {trace.role(guid):6} "
-              + ", ".join(f"{name} {n}" for name, n in counts.most_common()))
+    for title, branches in (("nb.wormmove", wormmove_branches(trace)), ("nb.wormhold", wormhold_branches(trace))):
+        if not branches:
+            print(f"  {title}: none")
+            continue
+        print(f"  {title}:")
+        for guid, counts in sorted(branches.items(), key=lambda item: trace.name(item[0])):
+            print(f"    {trace.name(guid)[:14]:14} {trace.role(guid):6} "
+                  + ", ".join(f"{name} {n}" for name, n in counts.most_common()))
 
 
 def toxin_stuck_ms(diff) -> int:
@@ -960,25 +987,63 @@ def toxin_spans(trace: Trace) -> list[dict]:
     return out
 
 
-def bile_spans(trace: Trace) -> list[dict]:
-    """Every Burning Bile span, with its pulse hits on anyone but the carrier who carried no Toxin at
-    the time: damage with nothing to cure."""
-    toxins: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
-    for guid, start, stop, _ in carried(trace, SPELL_PARALYTIC_TOXIN):
-        toxins[guid].append((start, stop))
-    pulses = [rec for rec in trace.of("dmg") if rec.get("sp") in SPELL_BILE_PULSE]
+def spans_by_guid(spans) -> dict[int, list[tuple[int, int]]]:
+    out: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for guid, start, stop, _ in spans:
+        out[guid].append((start, stop))
+    return out
 
-    out = []
-    for guid, start, stop, _ in carried(trace, (SPELL_BURNING_BILE,)):
-        clean: collections.Counter = collections.Counter()
-        for rec in pulses:
-            victim = rec.get("d", 0)
-            if rec.get("s") != guid or victim == guid or not start <= rec["t"] <= stop + CURE_WINDOW_MS:
-                continue
-            if any(low <= rec["t"] <= high + CURE_WINDOW_MS for low, high in toxins[victim]):
-                continue
-            clean[victim] += 1
-        out.append({"carrier": guid, "start": start, "stop": stop, "clean": clean})
+
+def carrying(spans: dict[int, list[tuple[int, int]]], guid: int, when: int) -> bool:
+    return any(low <= when <= high + CURE_WINDOW_MS for low, high in spans.get(guid, ()))
+
+
+def pulse_carrier(trace: Trace, hit: dict, spans: list[dict]) -> dict | None:
+    """The Bile span a pulse hit belongs to: the carrier nearest its victim within the pulse's reach,
+    in the snapshot nearest the hit, other than the victim, its span covering the hit. None when no
+    carrier is in reach or no snapshot places the victim."""
+    when, victim = hit["t"], hit.get("d", 0)
+    snap = nearest_frame(trace, when)
+    if snap is None:
+        return None
+    places = {row[0]: row[1:3] for row in snap.get("u", [])}
+    spot = places.get(victim)
+    if spot is None:
+        return None
+    best = None
+    for span in spans:
+        place = places.get(span["carrier"])
+        if span["carrier"] == victim or place is None or not span["start"] <= when <= span["stop"] + CURE_WINDOW_MS:
+            continue
+        gap = dist2(place, spot)
+        if gap <= BILE_PULSE_RADIUS and (best is None or gap < best[0]):
+            best = (gap, span)
+    return best[1] if best else None
+
+
+def bile_spans(trace: Trace) -> list[dict]:
+    """Every Burning Bile span, with the pulse hits given to it on bots carrying neither Bile nor Toxin
+    at the time, and their damage: damage with nothing to cure.
+
+    Every pulse row names Dreadscale as its source, so a hit goes to the carrier `pulse_carrier`
+    places by its victim, and one it places by nobody counts nowhere."""
+    toxins = spans_by_guid(carried(trace, SPELL_PARALYTIC_TOXIN))
+    bile = carried(trace, (SPELL_BURNING_BILE,))
+    biles = spans_by_guid(bile)
+    out = [{"carrier": guid, "start": start, "stop": stop, "clean": collections.Counter(), "damage": 0}
+           for guid, start, stop, _ in bile]
+
+    for rec in trace.of("dmg"):
+        if rec.get("sp") not in SPELL_BILE_PULSE:
+            continue
+        victim = rec.get("d", 0)
+        if carrying(toxins, victim, rec["t"]) or carrying(biles, victim, rec["t"]):
+            continue
+        span = pulse_carrier(trace, rec, out)
+        if span is None:
+            continue
+        span["clean"][victim] += 1
+        span["damage"] += int(rec.get("a", 0) or 0)
     return out
 
 
@@ -1007,11 +1072,16 @@ def show_cure(trace: Trace) -> None:
     if not biles:
         print("  no Burning Bile carried")
     else:
-        print("  Burning Bile, pulse hits on bots with no Toxin:")
+        print(f"  Burning Bile, pulse hits on bots carrying neither Bile nor Toxin (nearest carrier within"
+              f" {BILE_PULSE_RADIUS:.0f} yd):")
         for span in biles:
             clean = ", ".join(f"{named(trace, guid)} {n}" for guid, n in span["clean"].most_common()) or "none"
+            damage = f"  ({span['damage'] / 1000:.1f}k)" if span["damage"] else ""
             print(f"    {trace.name(span['carrier'])[:14]:14} {trace.role(span['carrier']):6}"
-                  f" {clock(span['start'])}-{clock(span['stop'])}  {clean}")
+                  f" {clock(span['start'])}-{clock(span['stop'])}  {clean}{damage}")
+        hits = sum(sum(span["clean"].values()) for span in biles)
+        damage = sum(span["damage"] for span in biles)
+        print(f"  raid: {hits} clean hit(s), {damage / 1000:.1f}k damage")
 
     branches = cure_branches(trace)
     if not branches:
@@ -1122,7 +1192,8 @@ SECTIONS = (
     ("breath", "every Arctic Breath: target, who froze, who the cone predicts, spread", show_breath),
     ("snobold", "snobold riders and the DPS picks", show_snobold),
     ("bomb", "every Fire Bomb: target, impact hits, who stood inside, dodges", show_bomb),
-    ("worms", "worm form spans, emerge pickups, Spew wedges, slime pools, Sweep, reposition branches", show_worms),
+    ("worms", "worm form spans, emerge pickups, Spew wedges, slime pools, Sweep, reposition and hold branches",
+     show_worms),
     ("cure", "Paralytic Toxin spans and how each ended, Burning Bile pulses on the clean, cure branches",
      show_cure),
 )
