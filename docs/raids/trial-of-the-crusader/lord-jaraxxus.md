@@ -26,7 +26,7 @@ Timers from engage; events run only while he is not casting, so they slip.
 | Ability | Ids | Timer | Effect |
 |---|---|---|---|
 | Fel Fireball | 66532/66963/66964/66965 | 5 s, then 10-15 s | on his victim; cast 2.5/2.0/2.5/2.0 s; 15.1k/24.4k/18.0k/34.1k fire plus a Magic DoT 5.8k/9.3k/7.8k/10.7k a second for 5 s |
-| Fel Lightning | 66528/67029/67030/67031 | 10-15 s, repeat | instant, random player, chains to 3/5/3/5 targets, 10 yd jumps; 7.9k/9.7k/9.7k/11.7k |
+| Fel Lightning | 66528/67029/67030/67031 | 10-15 s, repeat | instant, random player, chains to 3/5/3/5 targets; 7.9-9.1k/9.7-11.3k/9.7-11.3k/11.7-12.3k, each jump ×0.8/0.9/1.1/1.1 |
 | Incinerate Flesh | 66237/67049/67050/67051 | 24-26 s, then 20-25 s | random player; undispellable heal absorb 30k/60k/40k/85k for 15/15/12/12 s |
 | Burning Inferno | 66242/67059/67060/67061 | Incinerate expiring unhealed | every player, 2.4k/2.4k/3.9k/7.8k a second for 5 s |
 | Nether Power | 66228/67106/67107/67108 | 25-45 s, repeat; delays every event 5 s | full 5/10/5/10 stacks on himself, 30 s, +20% spell damage per stack, Magic |
@@ -42,6 +42,16 @@ for Legion Flame, Incinerate Flesh and Fel Lightning. The guide's Portal/Volcano
 INTERRUPT: Kick, Pummel, Shield Bash, Counterspell, Wind Shear, Mind Freeze and a Felhunter's Spell
 Lock land, Silencing Shot and Silence do not. The Fel Fireball DoT is Magic, so the generic party
 dispels strip it.
+
+**Fel Lightning.** Each jump takes the nearest player in sight within 10 yd of the last victim (the
+magic default; no `spell_jump_distance` row) by `IsWithinDist`, which adds both combat reaches:
+13 yd centre to centre, 3D. The jump multiplier is `EffectChainAmplitude`, so at the mean roll a
+full chain deals about 21k/43k/35k/73k before mitigation, and on 25H its fifth victim takes 17.6k.
+That is with no Nether Power stack: each one left on him adds 20%, ×2 at a full 5, ×3 at a full 10.
+Nearest-first keeps a stack's chains inside it: on the 2026-10-16 25N kill all 7 casts hit 5 (35k
+each with absorbs, 38% of the raid's damage taken), the 2 melee and tank picks only melee and tanks,
+the 5 caster picks the same five casters standing 0.4-3.3 yd apart. It was 98% of what ranged and
+healers took; every hit landed on full health and none fell below 59%.
 
 **Nether Power.** His `SpellHit` resets the stacks to full on each cast. A Spellsteal (30449)
 strips one: this core marks Nether Power unstealable (SpellInfoCorrections), so only the script's
@@ -92,7 +102,17 @@ The Warcraft Tavern guide, reconciled with the script:
   its add back off anyone else, tanks included; a lone assist tank takes Mistresses first. The boss
   is not walked to the portal for cleave: it spawns 15 yd from him anyway.
 - **Fel Fireball**: one interrupter per cast, the lowest guid among bots with an interrupt ready,
-  affordable, in range and not mid-cast.
+  affordable, in range and not mid-cast. It is the backstop: on the 2026-10-16 25N kill the generic
+  interrupt nodes kicked all 11 casts 7-103 ms in, one kick each, before the duty holder latched, so
+  coverage reads `fel fireball interruptible` NEVER and `interrupter` never `1`. `interrupter` is
+  change-only, so a trace can't tell a duty node beaten to the kick from a dead one.
+- **Fel Lightning**: no spread on any difficulty; the stack heals through it. The guide names the
+  stack as its alternative: Portal and Volcano stay in caster range (the heroic DPS check) and AoE
+  heals hit harder, at the risk of Legion Flame carriers inside it, which `avoid legion flame` walks
+  out. A spread holds every ranged and healer 13+ yd from each other and the melee ball, about one
+  30 yd ring of 14 slots on 25, on a floor navprobe cannot verify, against 60 s flames, heal range
+  and the adds; a melee or tank pick still chains in full. Reopen on a heroic death with a Fel
+  Lightning cast at 0 stacks in its last 5 s (`--boss`); one under stacks is a remover failure.
 - **Nether Power**: mages Spellsteal, non-healer shamans and priests Purge and Dispel Magic; healers
   only when no other remover lives and no Incinerate Flesh is up.
 - **Incinerate Flesh**: every healer in range heals the target, instants, HoTs and channels first,
@@ -140,14 +160,13 @@ is never an assist tank), so their order is arbitrary.
 
 ## Known gaps
 
-- No Fel Lightning spread: a 3-5 target chain with 10 yd jumps.
+- No heroic trace: the Fel Lightning no-spread decision is untested on 10H and 25H.
+- A human assist tank who leaves the Mistress gets no bot cover: on the 2026-10-16 25N kill she
+  spent 89% of her life on non-tanks.
 - No raid cooldown calls: Aura Mastery with Concentration Aura against the Kiss, Divine Sacrifice or
   Fire Resistance Aura through a Volcano.
 - Melee take Fel Inferno and heroic Portal and Volcano pulses; the guide answers with defensive
   cooldowns only.
-- `--flame` judges a tank carrier's repeat window: `flame` is change-only, so a second `tank`
-  window with no switch since the first holds no note. The fix seeds each window with the value
-  latched at its start.
 
 ## What a trace answers
 
@@ -159,22 +178,28 @@ the five multipliers and both rules. The Jaraxxus rows, under `--notes jaraxxus.
 | `netherpower` | latch | His Nether Power stacks, the only record: his auras are never traced |
 | `focus` | latch | The DPS kill-order add's guid, `0` for none; kept current under a skull |
 | `dps` | per bot | The DPS pick's branch: `skull`, `add`, `boss`, `none`. No reader section |
-| `addtank` | per assist tank | The add it holds, `0` for none |
+| `addtank` | per assist tank | The add it holds, `0` for none; absent when every assist tank is human |
 | `interrupter` | per bot | `1` holding Fel Fireball duty, only inside that cast: rewritten every tick he lives, so it drops to `0` as the cast ends |
 | `flame` | per bot | `carrier`, `relaxed` (nothing clear of raid and boss, so flames only), `tank` (a carrier holding him, flames only), `dodge`, `none`. Change-only: counts are switches, not legs |
 
 `tools/botobs/bosses/lord_jaraxxus.py` reads the rest, counting every difficulty id of a row; its
 banner names declared probes the pull never wrote.
 
-- `--boss`: each Fel Fireball landed, kicked or neither, by whom, and who held `interrupter` inside
-  it; Fel Lightning hits per cast against the chain cap, which decides whether a spread is worth
-  building.
+- `--boss`: each Fel Fireball landed, kicked or neither, by whom, how many ms in, and who held
+  `interrupter` inside it; kicks with nobody latched count by bots, with their median delay, and by
+  humans. Fel Lightning hits go to the nearest cast either side: an instant with no travel time
+  (Speed 0) writes its hits 0-3 ms before its `cast` row, one with a travel speed lands after it,
+  late by the flight time. Hits per cast against the chain cap, damage taken with absorbs and its
+  share of the raid's, the lowest health a hit landed on and left, lethal hits, deaths with it in
+  their last 5 s; per cast, the first victim, damage taken, the longest jump between sampled
+  victims against the 13 yd reach, and his Nether Power stacks.
 - `--nether`: the stack timeline, seconds at 1+ and at full; Spellsteal, Purge and Dispel Magic at
   him, those cast while stacked and those the count fell after; Nether Power landing on a mage.
 - `--incinerate`: per window, the target, how it ended (healed, expired, died), heals landed on the
   target, Burning Inferno in the 6 s after.
 - `--flame`: per carrier window (debuff and trail joined), yards walked, legs issued, nearest other
-  member and the boss against the carrier's 8 and 15 yd (not judged when its switches are all
-  `tank`), `flame` switches; flame-tick damage per bot, with the nearest sampled flame.
+  member and the boss against the carrier's 8 and 15 yd (not judged when every value it switched to
+  is `tank`, or with no switch the one latched at its start), `flame` switches; flame-tick damage
+  per bot, with the nearest sampled flame.
 - `--adds`: per add, first and last sample and the share of samples on a non-tank; `focus` and
   `addtank` changes; each Mistress' Kiss, how it ended, its punish and `kiss cast hold` vetoes.
