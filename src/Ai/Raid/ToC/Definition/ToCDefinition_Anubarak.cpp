@@ -1,8 +1,11 @@
 #include "ToCDefinitions.h"
 
+#include "AiObjectContext.h"
+#include "Creature.h"
 #include "PlayerbotAI.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Anubarak.h"
+#include "ToCMultipliers_Anubarak.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 
@@ -37,6 +40,17 @@ bool AnubarakSphereShooterHolds(PlayerbotAI* botAI)
     return AnubarakEngaged(botAI) && PlayerbotAI::IsRangedDps(bot) && GetAnubarakSphereToShoot(bot);
 }
 
+// An untouched sphere is a critter out of combat, which invalid target drops 0.2 s after every Attack()
+bool AnubarakShooterOnDutySphere(PlayerbotAI* botAI)
+{
+    if (!AnubarakEngaged(botAI))
+        return false;
+
+    Creature* sphere = GetAnubarakSphereToShoot(botAI->GetBot());
+    return sphere && IsFrostSphereFlying(sphere) &&
+           botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() == sphere;
+}
+
 void DefineAnubarak(EncounterBuilder& e)
 {
     e.OwnTargeting("anubarak dps target guard", Role::Any, AnubarakDpsTargetOwned, Family::DpsAssist);
@@ -46,6 +60,22 @@ void DefineAnubarak(EncounterBuilder& e)
                    Family::DpsAssist | Family::TankAssist);
     e.OwnTargeting("anubarak sphere shooter target guard", Role::Any, AnubarakSphereShooterHolds,
                    Family::DpsAssist);
+
+    // reach goes by name, so the walk to a battle res isn't blocked
+    e.Block("anubarak spike dodge hold", Role::Any, IsAnubarakDodgeHeld,
+            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Flee |
+                Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
+            {"reach melee", "reach spell"});
+    // any other walk replaces the leg's, and he stops wherever the tank stops
+    e.Block("anubarak boss drag hold", Role::Any, IsAnubarakDragInFlight,
+            Family::SetBehind | Family::TankFace | Family::CombatFormationMove | Family::Follow | Family::Charge,
+            {"reach melee"});
+    // he obeys taunt DR, so two tanks trading taunts soon leave him immune to both
+    e.Block("anubarak taunt guard", Role::Any, AnubarakTauntWouldSteal, Family::Taunt);
+    e.Block("anubarak sphere shooter drop guard", Role::Any, AnubarakShooterOnDutySphere, Family::DropTarget);
+
+    e.Multiplier<AnubarakThreatCapMultiplier>(Family::Spell | Family::Melee);
+    e.Multiplier<AnubarakSphereGuardMultiplier>(Family::Spell | Family::Attack);
 }
 }  // namespace
 

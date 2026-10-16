@@ -6,10 +6,24 @@
 #include "NamedObjectContext.h"
 #include "Trigger.h"
 
+class AnubarakKiterNeedsImmunityTrigger : public Trigger
+{
+public:
+    AnubarakKiterNeedsImmunityTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak kiter needs immunity") {}
+    bool IsActive() override;
+};
+
 class AnubarakPursuedBySpikeTrigger : public Trigger
 {
 public:
     AnubarakPursuedBySpikeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak pursued by spike") {}
+    bool IsActive() override;
+};
+
+class AnubarakKiterNeedsProtectionTrigger : public Trigger
+{
+public:
+    AnubarakKiterNeedsProtectionTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak kiter needs protection") {}
     bool IsActive() override;
 };
 
@@ -84,8 +98,12 @@ class ToCAnubarakTriggerContext : public NamedObjectContext<Trigger>
 public:
     ToCAnubarakTriggerContext() : NamedObjectContext<Trigger>()
     {
+        creators["anubarak kiter needs immunity"] =
+            &ToCAnubarakTriggerContext::anubarak_kiter_needs_immunity;
         creators["anubarak pursued by spike"] =
             &ToCAnubarakTriggerContext::anubarak_pursued_by_spike;
+        creators["anubarak kiter needs protection"] =
+            &ToCAnubarakTriggerContext::anubarak_kiter_needs_protection;
         creators["anubarak spike nearby"] =
             &ToCAnubarakTriggerContext::anubarak_spike_nearby;
         creators["anubarak burrower casting shadow strike"] =
@@ -107,8 +125,16 @@ public:
     }
 
 private:
+    static Trigger* anubarak_kiter_needs_immunity(PlayerbotAI* botAI) {
+        return new AnubarakKiterNeedsImmunityTrigger(botAI);
+    }
+
     static Trigger* anubarak_pursued_by_spike(PlayerbotAI* botAI) {
         return new AnubarakPursuedBySpikeTrigger(botAI);
+    }
+
+    static Trigger* anubarak_kiter_needs_protection(PlayerbotAI* botAI) {
+        return new AnubarakKiterNeedsProtectionTrigger(botAI);
     }
 
     static Trigger* anubarak_spike_nearby(PlayerbotAI* botAI) {

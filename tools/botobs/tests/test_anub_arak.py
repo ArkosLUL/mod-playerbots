@@ -26,9 +26,10 @@ FULL = BOTOBS / "fixtures" / "full-v12.ndjson"
 TANK = 5001
 HEAL = 5002
 KITE = 5003   # ranged, marked twice
-MELEE = 5004  # marked once, impaled
+MELEE = 5004  # human, marked once, impaled
 LATE = 5005   # west of the Web Door at the pull
 FLOAT = 5006  # still up in the coliseum at the pull, lands at 5 s, dies to the spike
+PALADIN = 5007
 
 CREATURE = 1 << 32
 SPIKE = CREATURE | 800  # lower guid than the boss, same name, also boss-flagged
@@ -44,6 +45,7 @@ PATCH_B = (X + 10.0, Y - 12.0)
 KITE_PATCH = (X - 20.0, Y + 14.0)
 FLYING_Z = 155.67
 PATCH_Z = 142.7
+FALLING_Z = 143.0
 PERMAFROST_10H = 67856
 IMPALE_10H = 67859
 COLD_10H = 68509
@@ -71,16 +73,34 @@ def boss_target(when: int) -> int:
 
 
 def spheres_at(when: int) -> list[tuple[int, tuple[float, float], float]]:
-    """`(guid, xy, z)` per sphere alive at `when`. S1 and S2 land at 8 s, S3 at 25 s, and the spike
-    takes S3, last sampled at 31 s."""
+    """`(guid, xy, z)` per sphere alive at `when`. S1 and S2 land at 8 s; S3 falls at 22 s, lands at 23 s,
+    and the spike takes it, last sampled at 31 s."""
     if when < 0:
         return []
     out = [(S1, PATCH_A, PATCH_Z if when >= 8000 else FLYING_Z),
            (S2, PATCH_B, PATCH_Z if when >= 8000 else FLYING_Z)]
     if when <= 31000:
-        out.append((S3, KITE_PATCH, PATCH_Z if when >= 25000 else FLYING_Z))
+        out.append((S3, KITE_PATCH, PATCH_Z if when >= 23000 else FALLING_Z if when >= 22000 else FLYING_Z))
     out += [(guid, (X + 5.0 * index, Y + 30.0), FLYING_Z) for index, guid in enumerate(SPHERES[3:])]
     return out
+
+
+# phase 3 x offset and moving flag: 6 yd east, a 1 yd shuffle, 4 yd west, then 4 yd east with a
+# 1 yd step back before he stops
+P3_WALK = {50000: (0.0, 1), 51000: (3.0, 1), 52000: (6.0, 0), 53000: (6.0, 1), 54000: (7.0, 0),
+           55000: (3.0, 1), 56000: (-1.0, 0), 57000: (-1.0, 1), 58000: (4.0, 1), 59000: (3.0, 0)}
+
+
+def boss_spot(when: int) -> tuple[float, float]:
+    """He walks 10 yd north at 12 s, while the tank is on a submerge leg, and stays there to the
+    submerge."""
+    if 12000 <= when < 20000:
+        return X + 10.0, Y + 15.0
+    return X + 10.0 + P3_WALK.get(when, (0.0, 0))[0], Y + 5.0
+
+
+def boss_moving(when: int) -> int:
+    return 1 if when == 11000 else P3_WALK.get(when, (0.0, 0))[1]
 
 
 def burrowers_at(when: int) -> list[list]:
@@ -98,7 +118,7 @@ def burrowers_at(when: int) -> list[list]:
 
 def player(guid: int, when: int) -> list:
     spots = {TANK: (X + 10.0, Y + 3.0, Z), HEAL: (X - 10.0, Y, Z), KITE: (X - 20.0, Y + 10.0, Z),
-             MELEE: (X + 10.0, Y + 6.0, Z), LATE: (640.0, 144.7, 144.0)}
+             MELEE: (X + 10.0, Y + 6.0, Z), LATE: (640.0, 144.7, 144.0), PALADIN: (X + 5.0, Y - 5.0, Z)}
     if guid == FLOAT:
         spot = (745.0, 135.0, 395.0) if when < 5000 else (X, Y - 10.0, Z)
     else:
@@ -112,9 +132,9 @@ def player(guid: int, when: int) -> list:
 
 
 def snap(when: int) -> dict:
-    units = [player(guid, when) for guid in (TANK, HEAL, KITE, MELEE, LATE, FLOAT)]
-    units.append([BOSS, X + 10.0, Y + 5.0, Z, 0.0, 100.0 - max(when, 0) / 1000.0, 0.0,
-                  boss_target(when), 0, 0, 0, 0])
+    units = [player(guid, when) for guid in (TANK, HEAL, KITE, MELEE, LATE, FLOAT, PALADIN)]
+    units.append([BOSS, *boss_spot(when), Z, 0.0, 100.0 - max(when, 0) / 1000.0, 0.0,
+                  boss_target(when), boss_moving(when), 0, 0, 0])
     if phase(when) == 2:
         units.append([SPIKE, X - 30.0, Y + 14.0, Z, 0.0, 100.0, 0.0, KITE, 0, 0, 0, 0])
     hz = []
@@ -138,6 +158,18 @@ def dmg(when: int, source: int, victim: int, spell: int, amount: int) -> dict:
     return {"t": when, "e": "dmg", "s": source, "d": victim, "sp": spell, "a": amount}
 
 
+def cast(when: int, source: int, spell: int, target: int) -> dict:
+    return {"t": when, "e": "cast", "s": source, "sp": spell, "tgt": target, "ct": 0}
+
+
+def veto(when: int, guid: int, multiplier: str, action: str) -> dict:
+    return {"t": when, "e": "veto", "g": guid, "m": multiplier, "a": action}
+
+
+def drop(when: int, guid: int) -> dict:
+    return {"t": when, "e": "act", "g": guid, "a": "drop target", "rel": 99.0, "vd": "OK"}
+
+
 def anub_pull(boss: str = "anub-arak", map_id: int = ab.MAP_TOC) -> list[dict]:
     records = [
         {"e": "hdr", "v": 13, "ts": 1789500000000, "map": map_id, "inst": 4, "diff": 2, "boss": boss,
@@ -145,9 +177,10 @@ def anub_pull(boss: str = "anub-arak", map_id: int = ab.MAP_TOC) -> list[dict]:
              {"g": TANK, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0},
              {"g": HEAL, "n": "Mercy", "r": "heal", "c": "priest", "h": 0},
              {"g": KITE, "n": "Trueshot", "r": "ranged", "c": "hunter", "h": 0},
-             {"g": MELEE, "n": "Arkos", "r": "melee", "c": "rogue", "h": 1},
+             {"g": MELEE, "n": "Arkos", "r": "melee", "c": "druid", "h": 1},
              {"g": LATE, "n": "Straggler", "r": "ranged", "c": "mage", "h": 0},
-             {"g": FLOAT, "n": "Drifter", "r": "melee", "c": "warrior", "h": 0}]},
+             {"g": FLOAT, "n": "Drifter", "r": "melee", "c": "warrior", "h": 0},
+             {"g": PALADIN, "n": "Justice", "r": "heal", "c": "paladin", "h": 0}]},
         {"t": 0, "e": "pull", "boss": boss, "src": "engage"},
         {"t": -2000, "e": "unit", "g": SPIKE, "en": 34660, "n": "Anub'arak", "b": 1},
         {"t": -2000, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
@@ -164,13 +197,26 @@ def anub_pull(boss: str = "anub-arak", map_id: int = ab.MAP_TOC) -> list[dict]:
         note(50000, TANK, "anub.phase", 3),
         note(10000, TANK, "anub.patch0", S1),
         note(10000, TANK, "anub.patch1", S2),
+        # side 1 loses its latch through the later marks, so S2 counts as a patch nobody latched
+        note(30500, TANK, "anub.patch1", 0),
+        note(39000, TANK, "anub.patch1", S2),
 
         # Kite shoots both tank patches down.
         note(7000, KITE, "anub.sphere", 0),
         note(7500, KITE, "anub.sphere", 1),
         note(8100, KITE, "anub.sphere", "none"),
-        {"t": 7000, "e": "cast", "s": KITE, "sp": 75, "tgt": S1, "ct": 0},
-        {"t": 7600, "e": "cast", "s": KITE, "sp": 75, "tgt": S2, "ct": 0},
+        cast(7000, KITE, 75, S1),
+        cast(7600, KITE, 75, S2),
+        # Late stocks S3 just before the first mark, then Kite shoots one while Melee kites
+        note(21000, LATE, "anub.sphere", "stock"),
+        drop(21200, LATE),
+        cast(21500, LATE, 133, S3),
+        note(26000, LATE, "anub.sphere", "none"),
+        note(34000, KITE, "anub.sphere", "kite"),
+        drop(34200, KITE),
+        cast(34500, KITE, 75, SPHERES[3]),
+        note(35500, KITE, "anub.sphere", "none"),
+        drop(50000, KITE),
 
         # B2 lands one Shadow Strike on Kite and has the second kicked.
         {"t": 3000, "e": "cast", "s": B2, "sp": ab.SPELL_SHADOW_STRIKE, "tgt": KITE, "ct": 8000},
@@ -202,10 +248,31 @@ def anub_pull(boss: str = "anub-arak", map_id: int = ab.MAP_TOC) -> list[dict]:
         note(28500, TANK, "anub.dodge", "lane"),
         note(29500, MELEE, "anub.dodge", "none"),
 
+        # Paladin covers Melee too late, Kite blocks its own last kite, and a Hand of Protection on
+        # somebody unmarked counts for nobody
+        note(34000, PALADIN, "anub.protect", "hop"),
+        cast(35500, PALADIN, 10278, MELEE),
+        note(36000, PALADIN, "anub.protect", "none"),
+        cast(37000, PALADIN, 10278, HEAL),
+        note(39000, KITE, "anub.protect", "self"),
+        cast(39100, KITE, 45438, KITE),
+        note(39600, KITE, "anub.protect", "none"),
+
         note(0, TANK, "anub.pickup", "attack"),
+        note(11500, TANK, "anub.pickup", "submerge"),
         note(40500, TANK, "anub.pickup", "taunt"),
-        {"t": 42500, "e": "cast", "s": TANK, "sp": 355, "tgt": BOSS, "ct": 0},
+        cast(41000, PALADIN, ab.SPELL_RIGHTEOUS_DEFENSE, HEAL),
+        cast(42500, TANK, 355, BOSS),
         note(43000, TANK, "anub.pickup", "hold"),
+        # he is back on the tank, so this one never reaches him
+        cast(44000, PALADIN, ab.SPELL_RIGHTEOUS_DEFENSE, HEAL),
+        cast(45000, MELEE, 6795, BOSS),
+
+        veto(30000, KITE, ab.THREAT_CAP, "auto shot"),
+        veto(45000, KITE, ab.THREAT_CAP, "auto shot"),
+        veto(45500, KITE, "anubarak sphere guard", "polymorph"),
+        veto(46000, KITE, ab.THREAT_CAP, "multi-shot"),
+        veto(46500, LATE, ab.THREAT_CAP, "frostbolt"),
 
         aura(50200, TANK, SWARM_10H, False),
         aura(50200, MELEE, SWARM_10H, False),
@@ -284,19 +351,34 @@ class SyntheticPull(unittest.TestCase):
     def test_a_window_opens_on_a_branch_written_before_its_aura(self):
         self.assertEqual(ab.branches_in([(900, "patch"), (1500, "hold")], 1000, 2000), ["patch", "hold"])
 
+    def test_each_window_reads_protection_on_the_kiter(self):
+        windows = ab.mark_windows(self.trace)
+        self.assertEqual([window["near"] for window in windows], [0, None, None, 200])
+        self.assertEqual([[(rec["t"], rec["s"]) for rec in window["hop"]] for window in windows],
+                         [[], [(35500, PALADIN)], [], []])
+        self.assertEqual([[rec["sp"] for rec in window["own"]] for window in windows], [[], [], [], [45438]])
+        self.assertEqual([[(rec["g"], rec["txt"]) for rec in window["protect"]] for window in windows],
+                         [[], [(PALADIN, "hop"), (PALADIN, "none")], [], [(KITE, "self"), (KITE, "none")]])
+
     def test_impale_on_anyone_but_the_kiter_is_stray(self):
         stray = ab.stray_impales(self.trace, ab.mark_windows(self.trace))
         self.assertEqual([(rec["t"], rec["d"]) for rec in stray], [(29000, TANK)])
 
     def test_spheres_split_flying_from_patches_by_height(self):
         self.assertEqual(ab.sphere_timeline(ab.Samples(self.trace)),
-                         [(-2000, 0, 0, 0), (0, 6, 0, 0), (8000, 4, 2, 2), (25000, 3, 3, 3),
-                          (32000, 3, 2, 2)])
+                         [(-2000, 0, 0, 0), (0, 6, 0, 0), (8000, 4, 2, 2), (22000, 3, 3, 2),
+                          (23000, 3, 3, 3), (32000, 3, 2, 2)])
+
+    def test_a_low_sphere_with_no_permafrost_on_it_is_falling(self):
+        samples = ab.Samples(self.trace)
+        kinds = samples.sphere_kinds(22000)
+        self.assertEqual((kinds[S1], kinds[S3], kinds[SPHERES[3]]), ("patch", "falling", "flying"))
+        self.assertEqual(samples.sphere_kinds(23000)[S3], "patch")
 
     def test_only_a_patch_gone_just_after_a_mark_is_consumed(self):
         samples = ab.Samples(self.trace)
         self.assertEqual(ab.patch_lives(self.trace, samples),
-                         {S1: (8000, 59000), S2: (8000, 59000), S3: (25000, 31000)})
+                         {S1: (8000, 59000), S2: (8000, 59000), S3: (22000, 31000)})
         self.assertEqual(ab.consumed_patches(self.trace, samples), {S3: (31000, 30000)})
 
     def test_heroic_spheres_left_at_each_submerge_and_phase_3(self):
@@ -304,7 +386,19 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(left, [("P2", 20000, 4), ("P3", 50000, 3), ("end", 59000, 3)])
 
     def test_sphere_shots_count_casts_aimed_at_one(self):
-        self.assertEqual(ab.sphere_shots(self.trace), {KITE: 2})
+        self.assertEqual(ab.sphere_shots(self.trace), {KITE: 3, LATE: 1})
+
+    def test_patch_supply_at_each_mark(self):
+        rows = ab.supply_rows(self.trace)
+        self.assertEqual([(row["tank"], row["other"], row["flying"], row["falling"]) for row in rows],
+                         [(2, 0, 3, 1), (1, 1, 3, 0), (1, 1, 3, 0), (1, 1, 3, 0)])
+        self.assertEqual([row["holders"] for row in rows], [[(LATE, "stock")], [(KITE, "kite")], [], []])
+
+    def test_each_duty_span_counts_its_holders_shots_and_drops(self):
+        self.assertEqual([(row["guid"], row["label"], row["start"], row["stop"], row["casts"], row["drops"])
+                          for row in ab.duty_spans(self.trace)],
+                         [(KITE, "0", 7000, 7500, 1, 0), (KITE, "1", 7500, 8100, 1, 0),
+                          (LATE, "stock", 21000, 26000, 1, 1), (KITE, "kite", 34000, 35500, 1, 1)])
 
     def test_burrower_submerges_read_from_a_gap_and_a_jump(self):
         rows = {row["guid"]: row for row in ab.burrower_rows(self.trace)}
@@ -333,11 +427,49 @@ class SyntheticPull(unittest.TestCase):
                          [("P1", "pull", 2000), ("P1b", "emerge", 3000), ("P3", "swarm", 0)])
         emerge = rows[1]
         self.assertEqual(dict(emerge["held"]), {"heal": 3000, "tank": 7000})
-        self.assertEqual([(rec["t"], rec["s"]) for rec in emerge["taunts"]], [(42500, TANK)])
+
+    def test_righteous_defense_counts_only_on_the_friend_he_is_hitting(self):
+        emerge = ab.threat_rows(self.trace)[1]
+        self.assertEqual([(rec["t"], rec["s"], rec["sp"]) for rec in emerge["taunts"]],
+                         [(41000, PALADIN, ab.SPELL_RIGHTEOUS_DEFENSE), (42500, TANK, 355), (45000, MELEE, 6795)])
 
     def test_the_drag_anchor_is_the_patch_midpoint_once_both_latch(self):
         rows = ab.threat_rows(self.trace)
         self.assertAlmostEqual(rows[1]["off_anchor"], 5.0)
+
+    def test_the_drag_anchor_is_none_with_a_side_unlatched(self):
+        samples = ab.Samples(self.trace)
+        latches = [ab.latch_spans(self.trace, key, 60000) for key in ("anub.patch0", "anub.patch1")]
+        self.assertIsNone(ab.drag_anchor(latches, samples, 9000))
+        self.assertIsNone(ab.drag_anchor(latches, samples, 33000))
+        point = ab.drag_anchor(latches, samples, 10000)
+        self.assertAlmostEqual(point[0], X + 10.0)
+        self.assertAlmostEqual(point[1], Y)
+
+    def test_off_anchor_leaves_out_samples_with_no_anchor_or_on_a_submerge_leg(self):
+        # 10 and 11 s only: no anchor before 10 s, a submerge leg from 11.5 s
+        self.assertAlmostEqual(ab.threat_rows(self.trace)[0]["off_anchor"], 5.0)
+
+    def test_his_legs_and_reversals_per_window(self):
+        rows = ab.threat_rows(self.trace)
+        self.assertEqual([(row["label"], row["legs"], round(row["yards"], 1), row["reversals"]) for row in rows],
+                         [("P1", 1, 10.0, 0), ("P1b", 0, 0, 0), ("P3", 3, 14.0, 2)])
+
+    def test_a_leg_runs_while_he_is_flagged_moving_and_drops_under_2_yd(self):
+        legs = ab.boss_legs(ab.Samples(self.trace), BOSS, 50000, 60000)
+        self.assertEqual([(leg["start"], leg["stop"], round(leg["yards"], 1)) for leg in legs],
+                         [(50000, 52000, 6.0), (55000, 56000, 4.0), (57000, 59000, 4.0)])
+
+    def test_a_leg_the_window_cuts_ends_on_its_last_moving_sample(self):
+        legs = ab.boss_legs(ab.Samples(self.trace), BOSS, 50000, 51500)
+        self.assertEqual([(leg["start"], leg["stop"], round(leg["yards"], 1)) for leg in legs],
+                         [(50000, 51000, 3.0)])
+
+    def test_pickup_rows_and_threat_cap_vetoes_per_window(self):
+        rows = ab.threat_rows(self.trace)
+        self.assertEqual(dict(rows[0]["pickup"]), {(TANK, "attack"): 1, (TANK, "submerge"): 1})
+        self.assertEqual(dict(rows[1]["pickup"]), {(TANK, "taunt"): 1, (TANK, "hold"): 1})
+        self.assertEqual([dict(row["capped"]) for row in rows], [{}, {KITE: 2, LATE: 1}, {}])
 
     def test_swarm_reads_the_probe_and_falls_back_to_the_aura(self):
         self.assertEqual(ab.swarm_span(self.trace), (50000, 60000, "anub.phase"))
@@ -367,6 +499,11 @@ class SyntheticPull(unittest.TestCase):
         text = out.getvalue()
         self.assertNotIn("not a Trial of the Crusader", text)
         self.assertIn(f"patch #{S3 & 0xFFFFFFFF} last seen 0:31.000", text)
+        self.assertIn("3 taunt(s): bot 2, human 1", text)
+        self.assertIn("anubarak threat cap vetoes: Trueshot 2, Straggler 1", text)
+        self.assertIn("Hand of Protection by Justice +2.5 s; anub.protect Justice hop +1.0 s", text)
+        self.assertIn("Ice Block +0.3 s; anub.protect Trueshot self +0.2 s", text)
+        self.assertIn("spans with a cast: side 0 1 of 1, side 1 1 of 1, kite 1 of 1, stock 1 of 1", text)
 
 
 def focus_pull() -> list[dict]:

@@ -20,9 +20,21 @@ bool IsAnubarakSurfaced(AnubarakPhase phase)
 
 }
 
+bool AnubarakKiterNeedsImmunityTrigger::IsActive()
+{
+    // only paladins and mages carry a self immunity that voids Impale
+    uint8 const cls = bot->getClass();
+    return AnubarakEngaged(botAI) && (cls == CLASS_PALADIN || cls == CLASS_MAGE) && AnubarakKiterNeedsImmunity(bot);
+}
+
 bool AnubarakPursuedBySpikeTrigger::IsActive()
 {
     return AnubarakEngaged(botAI) && bot->HasAura(SPELL_MARK);
+}
+
+bool AnubarakKiterNeedsProtectionTrigger::IsActive()
+{
+    return bot->getClass() == CLASS_PALADIN && AnubarakEngaged(botAI) && GetAnubarakKiterToProtect(bot) != nullptr;
 }
 
 bool AnubarakSpikeNearbyTrigger::IsActive()
@@ -93,8 +105,14 @@ bool AnubarakPenetratingColdOnRaidTrigger::IsActive()
 
 void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
+    triggers.push_back(new TriggerNode("anubarak kiter needs immunity", {
+        NextAction("anubarak kiter immunity", ACTION_EMERGENCY + 9) }));
+
     triggers.push_back(new TriggerNode("anubarak pursued by spike", {
         NextAction("anubarak kite spike to permafrost", ACTION_EMERGENCY + 8) }));
+
+    triggers.push_back(new TriggerNode("anubarak kiter needs protection", {
+        NextAction("anubarak protect kiter", ACTION_EMERGENCY + 7) }));
 
     triggers.push_back(new TriggerNode("anubarak spike nearby", {
         NextAction("anubarak avoid spike", ACTION_EMERGENCY + 6) }));
