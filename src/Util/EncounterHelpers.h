@@ -73,6 +73,10 @@ std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
 // A hazard and the distance a bot has to keep from it.
 using HazardCircle = std::pair<Position, float>;
 
+// Some point of the 2D segment, ends included, lies strictly inside the circle. The sweep below only
+// clears the spot itself, so an accept callback uses this to turn down a walk that crosses a hazard.
+bool SegmentCrossesCircle(Position const& from, Position const& to, HazardCircle const& circle);
+
 // Collision answers for one sweep grid. An escape that has to fall back walks the same rings at the
 // same angles again with a looser clearance, so most of what the second sweep asks the collision
 // check, the first has already asked - up to 240 questions a sweep, each one a navmesh raycast and a

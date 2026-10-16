@@ -20,6 +20,7 @@ BOTOBS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOTOBS))
 
 from bosses import northrend_beasts as nb  # noqa: E402
+from raidobs.probes import holder_spans  # noqa: E402
 from raidobs.trace import Trace  # noqa: E402
 
 FULL = BOTOBS / "fixtures" / "full-v12.ndjson"
@@ -393,6 +394,74 @@ class BreathAndBombPull(unittest.TestCase):
         self.assertNotIn("outside every bomb's window", text)
 
 
+def aura_breath_pull() -> list[dict]:
+    """The 25N shape: Icehowl's breath reaches the trace only as aura applies, never as a cast."""
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 649, "inst": 10, "diff": 1,
+         "boss": "gormok-the-impaler", "roster": [
+             {"g": HOLD, "n": "Hold", "r": "tank", "c": "warrior", "h": 0},
+             {"g": MENDER, "n": "Mender", "r": "heal", "c": "priest", "h": 0},
+             {"g": ARROW, "n": "Arrow", "r": "ranged", "c": "hunter", "h": 0},
+             {"g": BLADE, "n": "Blade", "r": "melee", "c": "rogue", "h": 0},
+             {"g": BOLT, "n": "Bolt", "r": "ranged", "c": "mage", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "gormok-the-impaler", "src": "engage"},
+        {"t": 1, "e": "unit", "g": GORMOK, "en": nb.NPC_GORMOK, "n": "Gormok the Impaler", "b": 1},
+        {"t": 1, "e": "unit", "g": ICEHOWL, "en": nb.NPC_ICEHOWL, "n": "Icehowl", "b": 1},
+        note(15000, MENDER, "nb.arc", "9"),
+        note(15000, ARROW, "nb.spread", "0"),
+        note(15000, BLADE, "nb.spread", "0"),
+
+        # One breath over 600 ms of applies, its removals ignored
+        frozen(20000, ARROW),
+        frozen(20000, BLADE),
+        frozen(20600, BOLT),
+        {"t": 25000, "e": "aura", "d": ARROW, "s": ICEHOWL, "sp": BREATH_ID, "r": 1, "st": 0},
+        # Not his, so no breath
+        {"t": 35000, "e": "aura", "d": MENDER, "s": GORMOK, "sp": BREATH_ID, "r": 0, "st": 1},
+        frozen(45000, MENDER),
+        {"t": 60000, "e": "end", "out": "wipe"},
+    ]
+    records += [{"t": when, "e": "snap", "u": [[guid, 0.0, 0.0, 0.0, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]
+                                              for guid in (HOLD, MENDER, ARROW, BLADE, BOLT, ICEHOWL)]}
+                for when in range(0, 60500, 500)]
+    return records
+
+
+class AuraOnlyBreath(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_10_gormok-the-impaler_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in aura_breath_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_burst_of_applies_reads_as_one_breath_with_no_target(self):
+        rows = nb.breaths(self.trace)
+        self.assertEqual([(row["t"], row["target"], row["victims"], row["predicted"]) for row in rows],
+                         [(20000, 0, [ARROW, BLADE, BOLT], None), (45000, 0, [MENDER], None)])
+
+    def test_spread_and_arc_are_read_as_of_the_first_apply(self):
+        row = nb.breaths(self.trace)[0]
+        self.assertEqual(row["spread"], {ARROW: "0", BLADE: "0", BOLT: None})
+        self.assertEqual(row["arc"], "9")
+
+    def test_a_new_breath_starts_past_the_victim_window(self):
+        applies = [{"t": when, "s": ICEHOWL} for when in (0, 1000, 1001, 1500)]
+        self.assertEqual(nb.aura_breaths(applies, {ICEHOWL}), [(0, ICEHOWL), (1001, ICEHOWL)])
+
+    def test_the_target_prints_as_unknown(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_breath(self.trace)
+        text = out.getvalue()
+        self.assertIn("on ?", text)
+        self.assertIn("2 breath(s), 2.0 frozen a breath, max 3", text)
+
+
 class EveryView(unittest.TestCase):
     def test_breath_and_bomb_read_empty_on_another_boss(self):
         trace = Trace(FULL)
@@ -422,19 +491,34 @@ DREADSCALE = 4294968020
 ACIDMAW = 4294968021
 POOL = 4294968030
 WARD = 5101    # tank, Dreadscale then the mobile Acidmaw, keeps Toxin 60 s
-BRACE = 5102   # tank on the stationary worm
+BRACE = 5102   # tank on the stationary worm, carries Bile from 27 s beside Soothe
 SOOTHE = 5103  # heal, Acidmaw's first target after the emerge, carries Bile, stands in the pool
 SHOT = 5104    # ranged, inside the Spew wedge, cured by a pulse
-EDGE = 5105    # melee, eats a pulse with no Toxin and a Sweep, dies at 105 s
+EDGE = 5105    # melee, eats two pulses with no Toxin and a Sweep, dies at 105 s
 
 WORM_SPOTS = {WARD: (18.0, 0.0), BRACE: (-5.0, 28.0), SOOTHE: (-20.0, -20.0), SHOT: (40.0, 2.0), EDGE: (4.0, 0.0)}
 # 4.9 yd from Soothe, so she is inside from the pool's 10th second
 POOL_SPOT = (-20.0, -15.1)
 
 
+def worm_position(guid: int, when: int) -> tuple[float, float]:
+    # Shot walks 8 yd from Soothe for its cure, Edge 5 yd from her. Brace, carrying Bile too, stands
+    # 7 yd from Edge at 28 s and 2 yd at 29 s.
+    if guid == SHOT and 25000 <= when <= 26000:
+        return -12.0, -20.0
+    if guid == EDGE and 27500 <= when <= 29500:
+        return -15.0, -20.0
+    if guid == BRACE and 27500 <= when <= 28500:
+        return -8.0, -20.0
+    if guid == BRACE and 28500 < when <= 29500:
+        return -13.0, -20.0
+    return WORM_SPOTS[guid]
+
+
 def worm_snap(when: int) -> dict:
     units = []
-    for guid, (x, y) in WORM_SPOTS.items():
+    for guid in WORM_SPOTS:
+        x, y = worm_position(guid, when)
         dead = guid == EDGE and when >= 105000
         units.append([guid, x, y, 0.0, 0.0, 0.0 if dead else 100.0, 100.0, 0, 0, 0, 0, 0])
     acidmaw_under = 40000 <= when < 48000
@@ -475,17 +559,24 @@ def worms_pull() -> list[dict]:
         note(40000, WARD, "nb.worm", "3"),
         note(50000, WARD, "nb.worm", "2"),
 
-        # Soothe's Bile cures Shot's Toxin at 26 s and lands on Edge, who carries nothing, at 28 s.
+        # Every pulse row names Dreadscale. Soothe's Bile cures Shot's Toxin at 26 s and lands on Edge,
+        # who carries nothing, at 28 s; Brace, nearer Edge by 29 s, takes that one. The 32 s hit on Shot
+        # has no carrier within 10 yd.
         aura(10000, SOOTHE, nb.SPELL_BURNING_BILE),
         aura(20000, SHOT, 66823),
         note(20100, SHOT, "nb.cure", f"seek {SOOTHE}"),
         note(20100, SOOTHE, "nb.cure", f"run {SHOT}"),
-        worm_dmg(26000, SOOTHE, SHOT, 66870),
-        worm_dmg(26000, SOOTHE, SOOTHE, 66870),
+        worm_dmg(26000, DREADSCALE, SHOT, 66870),
+        worm_dmg(26000, DREADSCALE, SOOTHE, 66870),
         aura(26000, SHOT, 66823, removed=True),
         note(26100, SHOT, "nb.cure", "none"),
         note(26100, SOOTHE, "nb.cure", "none"),
-        worm_dmg(28000, SOOTHE, EDGE, 66870),
+        aura(27000, BRACE, nb.SPELL_BURNING_BILE),
+        worm_dmg(28000, DREADSCALE, EDGE, 66870),
+        worm_dmg(29000, DREADSCALE, EDGE, 66870),
+        worm_dmg(29000, DREADSCALE, BRACE, 66870),
+        aura(29500, BRACE, nb.SPELL_BURNING_BILE, removed=True),
+        worm_dmg(32000, DREADSCALE, SHOT, 66870),
         aura(34000, SOOTHE, nb.SPELL_BURNING_BILE, removed=True),
 
         worm_dmg(30000, ACIDMAW, EDGE, 66794),
@@ -501,8 +592,22 @@ def worms_pull() -> list[dict]:
         aura(115000, WARD, 66823, removed=True),
 
         # A 24 degree Spew from Acidmaw facing +x: Shot inside and ticked, Edge's tick past the 3.5 s.
-        note(59000, SHOT, "nb.wormmove", "move 12.5 spew"),
+        note(59000, SHOT, "nb.wormmove", "move 12.5 spew full"),
+        note(59000, SHOT, "nb.wormhold", "set spew full"),
         note(59500, SHOT, "nb.wormmove", "hold spew"),
+        note(59800, SHOT, "nb.wormhold", "park"),
+        # Pushed off and walked back to the same spot: one latch, no second set
+        note(60200, SHOT, "nb.wormhold", "unpark"),
+        note(60800, SHOT, "nb.wormhold", "park"),
+        note(62000, SHOT, "nb.wormhold", "release spew"),
+        note(63000, SHOT, "nb.wormhold", "set spread nospread"),
+        note(63500, SHOT, "nb.wormhold", "park"),
+        note(66000, SHOT, "nb.wormhold", "release drift"),
+        note(45000, EDGE, "nb.wormhold", "set melee stand"),
+        note(50000, EDGE, "nb.wormhold", "release phase"),
+        note(100500, EDGE, "nb.wormhold", "set melee stand"),
+        note(101000, EDGE, "nb.wormhold", "park"),
+        note(105000, EDGE, "nb.wormhold", "release gone"),
         {"t": 60000, "e": "haz", "sp": 66819, "shape": "wedge", "x": 10.0, "y": 0.0, "z": 0.0, "ttl": 3500,
          "facing": 0.0, "arc": 12.0, "range": 55.0},
         note(60500, SHOT, "nb.wormmove", "clear"),
@@ -571,7 +676,18 @@ class WormPull(unittest.TestCase):
     def test_wormmove_branches_drop_the_yards(self):
         self.assertEqual(nb.wormmove_branches(self.trace), {
             WARD: collections.Counter({"approach": 1, "drag": 1}),
-            SHOT: collections.Counter({"move spew": 1, "hold spew": 1, "clear": 1, "none pool": 1})})
+            SHOT: collections.Counter({"move spew full": 1, "hold spew": 1, "clear": 1, "none pool": 1})})
+
+    def test_wormhold_counts_drop_the_tier(self):
+        self.assertEqual(nb.wormhold_branches(self.trace), {
+            SHOT: collections.Counter({"set spew": 1, "set spread": 1, "park": 3, "unpark": 1, "release spew": 1,
+                                       "release drift": 1}),
+            EDGE: collections.Counter({"set melee": 2, "park": 1, "release phase": 1, "release gone": 1})})
+
+    def test_every_wormhold_series_ends_on_a_release(self):
+        spans = holder_spans(self.trace, "nb.wormhold")
+        self.assertEqual({guid: track[-1][0].split()[0] for guid, track in spans.items()},
+                         {SHOT: "release", EDGE: "release"})
 
     def test_toxin_spans_end_cured_expired_or_died(self):
         rows = nb.toxin_spans(self.trace)
@@ -584,10 +700,23 @@ class WormPull(unittest.TestCase):
         self.assertEqual(nb.toxin_stuck_ms(2), 13500)
         self.assertEqual(nb.toxin_stuck_ms(3), 13500)
 
-    def test_bile_pulses_on_a_bot_with_no_toxin(self):
+    def test_each_clean_pulse_goes_to_the_carrier_nearest_its_victim(self):
         rows = nb.bile_spans(self.trace)
-        self.assertEqual([(row["carrier"], row["start"], row["stop"]) for row in rows], [(SOOTHE, 10000, 34000)])
-        self.assertEqual(rows[0]["clean"], collections.Counter({EDGE: 1}))
+        self.assertEqual([(row["carrier"], row["start"], row["stop"]) for row in rows],
+                         [(SOOTHE, 10000, 34000), (BRACE, 27000, 29500)])
+        self.assertEqual([row["clean"] for row in rows],
+                         [collections.Counter({EDGE: 1}), collections.Counter({EDGE: 1})])
+        self.assertEqual([row["damage"] for row in rows], [3000, 3000])
+
+    def test_a_pulse_with_no_carrier_in_reach_goes_nowhere(self):
+        hit = {"t": 32000, "d": SHOT}
+        self.assertIsNone(nb.pulse_carrier(self.trace, hit, nb.bile_spans(self.trace)))
+
+    def test_cure_prints_the_raid_total(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_cure(self.trace)
+        self.assertIn("raid: 2 clean hit(s), 6.0k damage", out.getvalue())
 
     def test_cure_branches_drop_the_guid(self):
         self.assertEqual(nb.cure_branches(self.trace), {
@@ -612,7 +741,8 @@ class WormPull(unittest.TestCase):
         text = out.getvalue()
         for empty in ("no nb.worm rows", "emerges, seconds until each worm targeted a tank: none",
                       "Spew wedges: none", "slime pools: none sampled", "Sweep hits: nobody",
-                      "nb.wormmove: none", "no Paralytic Toxin carried", "no Burning Bile carried",
+                      "nb.wormmove: none", "nb.wormhold: none", "no Paralytic Toxin carried",
+                      "no Burning Bile carried",
                       "nb.cure: none"):
             self.assertIn(empty, text)
 

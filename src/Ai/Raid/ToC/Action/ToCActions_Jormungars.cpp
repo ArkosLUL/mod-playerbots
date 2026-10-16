@@ -1,6 +1,7 @@
 #include "ToCActions_Jormungars.h"
 
 #include <cmath>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -29,12 +30,12 @@ constexpr float APPROACH_REAIM_DISTANCE = 3.0f;
 constexpr float SWEEP_RADIUS = 30.0f;
 constexpr float SWEEP_DISTANCE_STEP = 2.0f;
 constexpr float SWEEP_ANGLE_STEP = static_cast<float>(M_PI) / 8.0f;
-constexpr float WALK_ARRIVE = 1.0f;
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
 // A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
 // The partner keeps moving, so a straight cure walk stops short of the full reach
 constexpr float CURE_DIRECT_INSET = 1.0f;
+constexpr float CURE_PARTIAL_TURN = static_cast<float>(M_PI) / 8.0f;
 
 char const* const CLASS_TAUNTS[] = {"taunt", "hand of reckoning", "dark command", "growl"};
 
@@ -82,16 +83,142 @@ bool ClearOfCircles(std::vector<HazardCircle> const& circles, Position const& sp
 
 bool OnWormFloor(float x, float y) { return ARENA_CENTER.GetExactDist2d(x, y) <= WORM_FLOOR_RADIUS; }
 
-// The sweep's rays fan 22.5 degrees apart, so past ~30 yd they can straddle the partner's reach and
-// find nothing. Walks straight at the partner instead, if that spot is safe.
-Position DirectCureSpot(Player* bot, WormMovePlan const& plan)
+// A walk waits behind a booking of equal or higher priority until it runs out
+void DropForeignBooking(LastMovement& last, Position const& own, MovementPriority upTo)
 {
-    Position const& partner = plan.preferNear;
-    float const angle = partner.GetAngle(bot);
+    if (last.msTime && last.priority <= upTo && !BookedOn(last, own))
+        last.clear();
+}
+
+// The sweep's rays fan 22.5 degrees apart, so past ~30 yd they can straddle the partner's reach and
+// find nothing
+bool DirectCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
+{
+    Position const& partner = plan.partnerPos;
     float const reach = WORM_CURE_REACH - CURE_DIRECT_INSET;
-    Position const spot(partner.GetPositionX() + reach * std::cos(angle),
-                        partner.GetPositionY() + reach * std::sin(angle), partner.GetPositionZ());
-    return WormSpotStillSafe(plan, spot) ? spot : Position();
+    float const step = 2.0f * static_cast<float>(M_PI) / WORM_CURE_DIRECT_BEARINGS;
+    bool found = false;
+    float nearest = 0.0f;
+    for (uint32 bearing = 0; bearing < WORM_CURE_DIRECT_BEARINGS; ++bearing)
+    {
+        float const angle = step * bearing;
+        Position const candidate(partner.GetPositionX() + reach * std::cos(angle),
+                                 partner.GetPositionY() + reach * std::sin(angle), partner.GetPositionZ());
+        float const walk = bot->GetExactDist2d(candidate);
+        if ((found && walk >= nearest) || !WormSpotStillSafe(plan, candidate))
+            continue;
+
+        spot = candidate;
+        nearest = walk;
+        found = true;
+    }
+
+    return found;
+}
+
+// Partner out of search range and nothing clear round it: walk part of the way, bending off the
+// straight line when that's blocked
+bool PartialCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
+{
+    if (bot->GetExactDist2d(plan.partnerPos) <= WORM_SEARCH_RADIUS)
+        return false;
+
+    float const heading = bot->GetAngle(plan.partnerPos.GetPositionX(), plan.partnerPos.GetPositionY());
+    for (float const turn : {0.0f, CURE_PARTIAL_TURN, -CURE_PARTIAL_TURN, 2.0f * CURE_PARTIAL_TURN,
+                             -2.0f * CURE_PARTIAL_TURN})
+    {
+        float const x = bot->GetPositionX() + WORM_CURE_PARTIAL_STEP * std::cos(heading + turn);
+        float const y = bot->GetPositionY() + WORM_CURE_PARTIAL_STEP * std::sin(heading + turn);
+        Position const candidate(x, y, bot->GetPositionZ());
+        if (ClearOfCircles(plan.circles, candidate) && (!plan.escapeAccept || plan.escapeAccept(x, y)))
+        {
+            spot = candidate;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// First tier with a spot: stand, escape when starting in a pool, full, nospread, partner, escape,
+// loose, direct, partial, cross
+bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpotTier& tier)
+{
+    auto const fits = [&plan](float x, float y)
+    { return (!plan.accept || plan.accept(x, y)) && (!plan.roleAccept || plan.roleAccept(x, y)); };
+
+    if (plan.hasStand && ClearOfCircles(plan.circles, plan.stand) && ClearOfCircles(plan.spreadCircles, plan.stand) &&
+        fits(plan.stand.GetPositionX(), plan.stand.GetPositionY()))
+    {
+        spot = plan.stand;
+        tier = WormSpotTier::Stand;
+        return true;
+    }
+
+    HazardSweepCache sweep;
+    // The sweep returns nothing for an empty list, and urgency from a Spew cone alone leaves the escape
+    // no circle
+    std::vector<HazardCircle> const ownSpot = {{bot->GetPosition(), 0.0f}};
+    auto const search = [&](std::vector<HazardCircle> const& hazards, std::function<bool(float, float)> const& accept,
+                            WormSpotTier found)
+    {
+        Position const clear =
+            FindNearestPositionClearOfHazards(bot, hazards.empty() ? ownSpot : hazards, WORM_SEARCH_RADIUS,
+                                              SWEEP_DISTANCE_STEP, SWEEP_ANGLE_STEP, &plan.preferNear, accept, &sweep);
+        if (clear == Position())
+            return false;
+
+        spot = clear;
+        tier = found;
+        return true;
+    };
+
+    if (plan.escapeFirst && search(plan.escapeCircles, plan.escapeAccept, WormSpotTier::Escape))
+        return true;
+
+    std::vector<HazardCircle> withSpread = plan.circles;
+    withSpread.insert(withSpread.end(), plan.spreadCircles.begin(), plan.spreadCircles.end());
+    if (search(withSpread, fits, WormSpotTier::Full))
+        return true;
+
+    if (!plan.spreadCircles.empty() && search(plan.circles, fits, WormSpotTier::NoSpread))
+        return true;
+
+    bool const cureWalk = IsWormCureReason(plan.reason);
+    if (cureWalk && search(plan.circles, plan.accept, WormSpotTier::Partner))
+        return true;
+
+    if (plan.urgent)
+    {
+        if (!plan.escapeFirst && search(plan.escapeCircles, plan.escapeAccept, WormSpotTier::Escape))
+            return true;
+
+        // Same list as the escape's unless a held out Bile carrier keeps off clean bots
+        if (plan.looseCircles.size() != plan.escapeCircles.size() &&
+            search(plan.looseCircles, plan.escapeAccept, WormSpotTier::Loose))
+            return true;
+    }
+
+    if (cureWalk)
+    {
+        if (DirectCureSpot(bot, plan, spot))
+        {
+            tier = WormSpotTier::Direct;
+            return true;
+        }
+
+        if (PartialCureSpot(bot, plan, spot))
+        {
+            tier = WormSpotTier::Partial;
+            return true;
+        }
+    }
+
+    // Standing still in the damage is worse than walking through it. Near the floor edge, beside the
+    // up stationary worm or between two pools, every walk out can fail the path test.
+    return plan.urgent && (search(plan.escapeCircles, plan.crossAccept, WormSpotTier::Cross) ||
+                           (plan.looseCircles.size() != plan.escapeCircles.size() &&
+                            search(plan.looseCircles, plan.crossAccept, WormSpotTier::Cross)));
 }
 }  // namespace
 
@@ -237,10 +364,7 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
 {
     WormMovePlan plan;
     if (!GetWormMovePlan(botAI, plan) || plan.reason == WormMoveReason::None)
-    {
-        ClearWormWalk(bot);
         return false;
-    }
 
     if (!botAI->CanMove())
     {
@@ -248,34 +372,23 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
         return false;
     }
 
-    std::string const reason = WormMoveReasonName(plan.reason);
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
-
-    // Every MoveTo clears the MotionMaster, so a walk still carrying the bot to a safe spot is left alone
-    bool ownBooking = false;
-    Position latched;
-    uint32 latchedMs = 0;
-    if (GetWormWalk(bot, latched, latchedMs))
+    Position spot;
+    WormMoveReason reason = plan.reason;
+    WormSpotTier tier = WormSpotTier::Full;
+    if (plan.held)
     {
-        uint32 const age = getMSTimeDiff(latchedMs, getMSTime());
-        ownBooking = BookedOn(last, latched);
-        if (age < WORM_WALK_LATCH_MS && WormSpotStillSafe(plan, latched))
+        // Every MoveTo clears the MotionMaster, so the walk still carrying the bot to its spot is left alone
+        uint32 const age = getMSTimeDiff(plan.hold.issuedMs, getMSTime());
+        if (BookedOn(last, plan.hold.spot) && age < WORM_WALK_LATCH_MS && (bot->isMoving() || age < WALK_STALL_MS))
         {
-            if (bot->GetExactDist2d(latched) <= WALK_ARRIVE)
-            {
-                NoteWormMove(bot, "clear");
-                ClearWormWalk(bot);
-                return false;
-            }
-
-            if (ownBooking && (bot->isMoving() || age < WALK_STALL_MS))
-            {
-                NoteWormMove(bot, "hold " + reason);
-                return true;
-            }
+            NoteWormMove(bot, std::string("hold ") + WormMoveReasonName(plan.hold.reason));
+            return true;
         }
 
-        ClearWormWalk(bot);
+        spot = plan.hold.spot;
+        reason = plan.hold.reason;
+        tier = plan.hold.tier;
     }
 
     // PointMovementGenerator never starts a spline under a cast that pins the feet, and only damage
@@ -287,59 +400,46 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
         return false;
     }
 
-    auto const roleFits = [&plan](float x, float y)
-    { return (!plan.accept || plan.accept(x, y)) && (!plan.roleAccept || plan.roleAccept(x, y)); };
-
-    HazardSweepCache sweep;
-    Position spot = FindNearestPositionClearOfHazards(bot, plan.circles, SWEEP_RADIUS, SWEEP_DISTANCE_STEP,
-                                                      SWEEP_ANGLE_STEP, &plan.preferNear, roleFits, &sweep);
-    if (spot == Position())
-        spot = FindNearestPositionClearOfHazards(bot, plan.circles, SWEEP_RADIUS, SWEEP_DISTANCE_STEP,
-                                                 SWEEP_ANGLE_STEP, &plan.preferNear, plan.accept, &sweep);
-
-    if (spot == Position() && plan.urgent)
+    if (!plan.held && !FindWormSpot(bot, plan, spot, tier))
     {
-        // Urgency from a Spew cone alone leaves no urgent circle, and the sweep finds nothing without one
-        std::vector<HazardCircle> const ownFeet = { { bot->GetPosition(), 0.0f } };
-        spot = FindNearestPositionClearOfHazards(bot, plan.escapeCircles.empty() ? ownFeet : plan.escapeCircles,
-                                                 SWEEP_RADIUS, SWEEP_DISTANCE_STEP, SWEEP_ANGLE_STEP,
-                                                 &plan.preferNear, plan.escapeAccept, &sweep);
-    }
+        NoteWormMove(bot, std::string("none ") + WormMoveReasonName(reason));
+        if (plan.urgent)
+            return true;
 
-    bool const cureWalk = plan.reason == WormMoveReason::Cure || plan.reason == WormMoveReason::Run;
-    if (spot == Position() && cureWalk)
-        spot = DirectCureSpot(bot, plan);
-
-    if (spot == Position())
-    {
-        NoteWormMove(bot, "none " + reason);
-        return plan.urgent;
+        BackOffWormSearch(botAI);
+        return false;
     }
 
     if (pinned)
         bot->InterruptNonMeleeSpells(true);
 
     // Our own stale walk holds the booking and would refuse its replacement
-    if (ownBooking)
+    if ((hasIssuedSpot && BookedOn(last, issuedSpot)) || (plan.held && BookedOn(last, plan.hold.spot)))
         last.clear();
 
+    DropForeignBooking(last, spot, MovementPriority::MOVEMENT_COMBAT);
+
     MovementPriority const priority =
-        plan.urgent || cureWalk ? MovementPriority::MOVEMENT_FORCED : MovementPriority::MOVEMENT_COMBAT;
+        plan.urgent || IsWormCureReason(reason) ? MovementPriority::MOVEMENT_FORCED : MovementPriority::MOVEMENT_COMBAT;
     float const travel = bot->GetExactDist2d(spot);
     switch (TryMoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                       false, true, priority, true))
     {
         case RaidObs::MoveOutcome::Issued:
-            break;
+            SetWormHold(botAI, spot, reason, tier, false);
+            issuedSpot = spot;
+            hasIssuedSpot = true;
+            NoteWormMove(bot, "move " + Yards(travel) + " " + WormMoveReasonName(reason) + " " +
+                                  WormSpotTierName(tier));
+            return true;
         case RaidObs::MoveOutcome::AlreadyThere:
+            if (WormTierParks(tier))
+                SetWormHold(botAI, spot, reason, tier, true);
+
             NoteWormMove(bot, "clear");
             return false;
         default:
             NoteWormMove(bot, "locked");
             return plan.urgent;
     }
-
-    SetWormWalk(bot, spot);
-    NoteWormMove(bot, "move " + Yards(travel) + " " + reason);
-    return true;
 }

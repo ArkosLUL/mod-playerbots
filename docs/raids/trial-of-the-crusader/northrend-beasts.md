@@ -169,9 +169,10 @@ Combat reach 6.5, so melee stand within 9.3 yd of his centre.
 
 ## Acidmaw & Dreadscale
 
-Combat reach 6.5, so melee range is 9.3 yd; they run 9.45 yd/s, faster than a player. Dreadscale
-(34799) walks in mobile, Acidmaw (35144) comes up stationary by the gate. Timers restart at every
-emerge.
+Combat reach 6.5, so melee range is 9.3 yd; they run 9.45 yd/s, faster than a player. Neither
+carries a `NO_PARRY` bit (`flags_extra` 0x80001), so melee in a worm's front half are parried and
+haste its next swing. Dreadscale (34799) walks in mobile, Acidmaw (35144) comes up stationary by the
+gate. Timers restart at every emerge.
 
 - **Mobile**: chases its victim, melee every 2 s.
   - Bite on the victim, first at 20 s (Acidmaw) or 15 s (Dreadscale), then every 20 s.
@@ -279,46 +280,116 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
   [pitfalls.md](../../engine/pitfalls.md)). Holders sit it out unless they're runners; everyone does
   while an Icehowl charge is latched. First match:
   - **Run**: a runner past 8 yd of its stuck carrier. **Cure**: a Toxin carrier, neither stuck nor
-    carrying Bile, past 8 yd of the nearest Bile carrier. Both walk to 6 yd of the partner (the
-    pulse reaches 10 exact), clear of pools and, but for the `WormStationary` holder, Sweep. When
-    the ring search misses that disc (its rays fan 22.5° apart), they walk straight to 5 yd of the
-    partner if that spot is safe. Their spots clear only the real Spew cone, and a pair within 8 yd
-    triggers on it unpadded: the partner is often a mobile worm's tank, 8.5 yd ahead of it, and on
-    10N the 60° cone plus the 12° pad covers the whole 6 yd disc round it.
+    carrying Bile, past 8 yd of the nearest Bile carrier, keeping its partner while that one carries
+    Bile and is within 8 yd or no carrier is, so it doesn't flip between two. Both walk to 6 yd of
+    the partner (the pulse reaches 10 exact), clear of pools and, but for the `WormStationary`
+    holder, Sweep. Only that holder pairs with a member within 11 yd of the up stationary worm,
+    whose cure spots all lie inside the Sweep path's 16: others take the next carrier, a Toxin'd
+    stationary holder waits for the submerge. When the ring search misses that disc (its rays fan
+    22.5° apart), they take the nearest safe of 16 points 5 yd round the partner (`direct`); with
+    none and the partner past 30 yd, a 25 yd leg toward it, turned ±22.5° then ±45° when blocked
+    (`partial`). Their spots clear only the real Spew cone, and a pair within 8 yd triggers on it
+    unpadded: the partner is often a mobile worm's tank, 8.5 yd ahead of it, and on 10N the 60° cone
+    plus the 12° pad covers the whole 6 yd disc round it.
   - A **stuck** carrier, a holder or snared 70% or more, takes the nearest free runner: a bot
     Bile carrier (a human never answers) holding no duty, or a holder whose worm is under ground. A
     runner already within 8 yd serves that carrier, then last pairs hold while both qualify, so two
     runners don't trade carriers. Guide: free them while the worms are submerged; script: every Bite
-    restarts the snare, so a mobile Acidmaw's tank is never cured otherwise.
-  - Otherwise the first hazard the spot fails, centre to centre:
+    restarts the snare, so a mobile Acidmaw's tank is never cured otherwise. One holding no beast
+    with no runner walks to the nearest Bile carrier, a human too (`nb.cure` `seek`): on 25N three
+    melee kept Toxin 60 s with only the human tank carrying Bile. Holders still wait: a walking
+    holder drags its worm and turns its Spew.
+  - Otherwise the first rule the spot fails, centre to centre. A circle on another member sits on
+    that member's held spot while it has one, else on the member, not both: a carrier walking past a
+    held spot would release it in turn.
 
-    | Hazard | Who keeps clear | Trigger / clearance | Why |
+    | Rule | Who keeps clear | Trigger / clearance | Why |
     |---|---|---|---|
     | Pool | everyone | radius now + 1 / radius 5 s on + 2 | the full 11 yd would keep melee off the worm for 30 s |
     | Bile | a bot without Toxin, of every other carrier; a carrier holding no beast and not sent as a runner, of everyone but Toxin carriers | 10.5 / 12 | the pulse's 10 yd exact; guide: spread from everyone, melee too |
     | Sweep | all but the holder, of a stationary worm that is up; a melee whose target isn't a worm (Gormok in a heroic overlap) only during the cast, since `reach melee` would walk it back | 16 / 18 | its 15 yd circle |
     | Spew | everyone, of the up mobile worm's cone, always | cone + 5° / + 12° | a 1 s cast leaves no time to clear 55 yd; guide: never stand in front of the mobile worm |
-    | Spread | ranged and healers, of every player but a cure partner, while a stationary worm is engaged and both live | 9 / 11 | the Spray's 10 yd splash; a spread tighter than that buys nothing; guide `/range 10` |
+    | Spread | ranged and healers, of each other but a cure partner, and of the up mobile worm's melee as one 19.3 / 22.3 circle on it; while both live and the stationary worm is up | 10 / 13 | the Spray's 10 yd splash, centre to centre, cast only by the stationary worm; guide `/range 10`. Spacing off all 24, melee and tanks included, fed the 25N oscillation |
+    | Melee | a melee bot (not a tank) with neither debuff whose target is the up mobile worm, held to its stand | 2.5 off it / — | worms parry from the front |
+    | Reach | a bot holding no beast whose `reach melee` or `reach spell` walk to its stop point, 30 yd at most, would cross a pool | — | the reposition goes round it |
 
+  - **Melee stands**: 8.3 yd from the mobile worm's centre, 54° either side of its back by guid
+    parity among the roster's melee bots, two groups 13.4 yd apart; any spot such a bot takes sits
+    at least 108° off the worm's facing (`set behind`'s 3π/5). ±39° is the 10.5 yd minimum, and ±72°
+    leaves no margin for its turn.
   - Casters' spots also clear Gormok's stomp while he's engaged, so the two nodes don't alternate in
     a heroic overlap.
-  - Every spot stays within 35 yd of `ARENA_CENTER` (no coordinates: navprobe can't see the floor)
-    and outside the mobile worm's cone + 12°, its width from `GetSpellCone` on the remapped tick,
-    else 24°. It prefers the role's reach: melee within 1 yd inside melee range of their target (6
-    yd behind a worm), ranged within spell range of it, healers within heal range of both holders.
-  - **Urgent**, inside a pool, without Toxin within 10 yd of a Bile carrier, inside a Sweep being
-    cast or a Spew cone during the spew: `MOVEMENT_FORCED`; any other move waits a pinning cast out.
-    A cure walk moves forced too, the rest at `MOVEMENT_COMBAT`
-    ([pitfalls.md](../../engine/pitfalls.md): frequency decides forced ties; interrupt per
-    mechanic). The walk is latched until it arrives, its spot turns unsafe or 5 s pass.
-    `nb.wormmove`, `nb.cure`.
+  - **Every spot** stays within 35 yd of `ARENA_CENTER` (no coordinates: navprobe can't see the
+    floor; the stand, `direct` and `partial` points go unclipped, the floor test keeping them inside
+    the wall) and outside the mobile worm's cone + 12°, its width from `GetSpellCone` on the
+    remapped tick, else 24°. Its straight walk crosses no pool at its radius when the walk ends + 1
+    and, but for the `WormStationary` holder, no up stationary worm within 16; a circle the bot
+    starts in only has to be left, heading out; a `cross` spot skips this. Checked only at its end,
+    a 25N Bile carrier's spot ran its walk 2 yd from a pool's centre and killed it.
+  - **Role reach**, in combat-reach terms 1 yd inside the generic trigger: ranged within spell range
+    of the target (`reach spell` fires past ~37 yd, not the raw 28.5), a hunter also 15.3 from every
+    up worm (`Spell::CheckRange` adds melee range to its 5 yd minimum); melee and tanks within 8.3
+    of a worm, else melee range − 1; healers within heal range of both holders and their `party
+    member to heal`. A Bile carrier held off the stack has none.
+  - **Search**, over 30 yd in 2 yd and 22.5° steps, the first tier with a spot (`nb.wormmove`):
+    `stand`; `escape` first from inside a pool; `full` (every circle and reach); `nospread`; for a
+    cure or run `partner` (no reach); urgent only, `escape` (urgent circles, floor, cones, path),
+    then `loose`; for a cure or run `direct`, then `partial`; last, urgent only, `cross`: the
+    escape's, then loose's circles without the path test, since near the 35 yd floor edge, beside
+    the up stationary worm or between two pools every way out can fail it, and standing in the
+    damage is worse than walking through. So spread relaxes before reach, and a non-urgent move
+    never drops reach: with no spot it backs off 1 s (a search is up to 240 collision checks). A
+    held-out Bile carrier's escape still keeps off clean bots and only `loose` drops them: on 25N
+    five carriers took one spot within 90 ms. It prefers spots near the stand, a melee's point 6 yd
+    behind its worm, or a cure walk's partner, else near the bot shifted 0.5 yd along a bearing set
+    by guid, so bots in one ring of equal walks take different spots.
+  - **Held spot**, per bot (`nb.wormhold`): every walk latches its spot, parked within 1 yd and
+    walked back past 2.5, or past 1 when its own spot is urgent or it owes a cure walk
+    ([raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md): latch split by edge). The
+    trigger is off while the bot stands on it. Holds, with member circles on them, stand in for a
+    dealt caster layout: sticky, and found again on emerge and drift. A hold releases when
+    - a rule breaks at the spot. Walking: the urgent circles, floor, cones and path, plus partner
+      reach and rear arc unless urgent. Parked: every trigger its tier honoured (`nospread` skips
+      spread, `partner` and `direct` skip spread and reach), and the role reach at the generic
+      trigger itself, or a stand on the 8.3 yd edge would let go on the worm's first step;
+    - `nb.worm` changes, or, but for a cure or run hold, the target changes (not healers), the anchor
+      (the up mobile worm, else the stationary one) moves 2.5 yd or turns 20° from where it stood at
+      the first set for melee and tanks or moves 6 yd for the rest, a healer's heal target leaves
+      reach of the spot, or a cure walk is owed;
+    - a cure or run hold's partner changes, or a parked one's leaves 8 yd of the spot (the cure
+      trigger, so a partner shifting a yard sends nothing).
+
+    Escape, loose, partial and cross walks answer to the walking test alone (a partial one also to
+    its partner, a cross one without the path) and release on arrival, never parked: they ignore
+    reach, and the spot guard would strand the bot there ([pitfalls.md](../../engine/pitfalls.md)).
+  - **Urgent**, inside a pool or one that reaches the bot before its pinning cast or channel ends,
+    without Toxin within 10 yd of a Bile carrier, inside a Sweep being cast or a Spew cone during
+    the spew: `MOVEMENT_FORCED`; any other move waits a pinning cast out. A cure walk moves forced
+    too, the rest at `MOVEMENT_COMBAT` ([pitfalls.md](../../engine/pitfalls.md): frequency decides
+    forced ties; interrupt per mechanic). Either first drops another node's booking at
+    `MOVEMENT_COMBAT` or below, which a combat walk would wait out. `nb.cure`.
     - The urgent move breaks a pinning channel itself. A bot mid hard cast runs no triggers, so the
       per-instance read, on any other bot's tick, calls `RequestSpellInterrupt` on it.
     - When no cure spot is safe, the escape drops the partner reach, and a run's escape also clears
       the other Bile carriers the walk ignores; the walk resumes once the bot is clear.
-  - **`northrend worms move guard`**, while that walk is in flight, zeroes every other mover but
-    attacks, `avoid aoe` and Beasts nodes, spell movers included: charge, Intercept, Feral Charge,
-    `blink`, `disengage`.
+  - **`northrend worms move guard`**, while the walk to the held spot is in flight (under 5 s),
+    zeroes every other mover but attacks, `avoid aoe` and Beasts nodes, spell movers included:
+    charge, Intercept, Feral Charge, `blink`, `disengage`.
+  - **`northrend worms spot hold`**, while the plan confirmed the hold within 1 s, zeroes
+    `reach melee`, `reach spell`, `set behind`, rear flank, combat formation, follow, flee, run
+    away, move random, charge, blink and disengage; attacks, reach to heal and to resurrect (a
+    battle res) and `avoid aoe` run, so reach goes by name, not the Reach family. Flee, run away and
+    move random go since class escapes outrank `ACTION_MOVE`
+    ([raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md)); the hunter floor already
+    keeps a hunter past minimum range.
+  - **`northrend worms pool reach guard`** zeroes `reach melee` and `reach spell` while the Reach
+    rule's test holds, and that rule's move takes the bot round: zeroing reach alone would strand it
+    ([pitfalls.md](../../engine/pitfalls.md)). So neither holds while the bot's search backs off or
+    with the stop point past the 30 yd search radius: with no way round, generic reach walks it in.
+    A held-out melee Bile carrier is the Bile guard's.
+  - **`northrend worms follow guard`** zeroes follow for every bot while a worm is engaged: a
+    submerge drops every target, and the out-of-combat `follow` fought the spread every 0.3-1 s
+    (Malygos and Yogg-Saron precedent).
   - **`northrend worms bile reach guard`** zeroes `reach melee` and the charges for a Bile carrier
     that holds no beast and isn't a runner, so a melee walked off the stack stays off for the
     Bile's 24 s (guide: spread even as melee). Without it the Bile rule and `reach melee` trade the
@@ -327,7 +398,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
 
 ## Icehowl
 
-Combat reach 12, so melee range is 14.8 yd.
+Combat reach 12, so melee range is 14.8 yd. He runs 16 yd/s (`speed_run` 2.29), so he closes a
+Whirl throw in about 2 s.
 
 - **Whirl** (67345 / 67663 / 67664 / 67665), first at 10-12 s then every 15-20 s: 15 yd centre to
   centre, knockback ~31 yd. **Melee cannot dodge it here** — 14.8 is inside 15 — whatever the guide
@@ -392,25 +464,38 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
   behind him, healers apart). Per instance, read once per ms:
   - **On** while he is the only beast engaged, not passive, no charge is latched, and his victim is a
     player in his melee range: a victim out of reach means he is walking after it (Whirl, a charge's
-    end), and a heroic overlap is the worm rules'. Off keeps the deal; Icehowl disengaged clears it.
+    end), and a heroic overlap is the worm rules'. A latched layout holds, without re-latching, for
+    1 s from the first read with the victim out of reach until it is back: a tank at the edge of his
+    reach flipped `nb.arc` every ~100 ms on 25N, and a longer grace would chase him. A victim that
+    isn't a player turns it off at once. Off keeps the deal; Icehowl disengaged clears it.
   - **Bearings** step by half the cone plus 6° (18°, 36° on 10N; the cone from the remapped id's
     `spell_cone`, else 24°), the 6° covering 3° of stand error either side. They run outward from
     straight behind him, `k` = 0, 1, -1, 2, …, never within a step plus the 30° re-latch turn of his
     front (±126° at most, ±108° on 10N), so a breath on the tank misses them. Each is probed 34 yd
     out (the ranged band's 25, his 8 yd re-latch drift, 1 spare) along the player collision path
     (the floor is a GO, [README.md](README.md#arena-floor)) and kept with 22.5 yd of room, up to 11
-    (5 on 10N), a half circle; a walled one is replaced further round. They re-latch, `k` kept, when
-    he moves 8 yd, his victim's bearing turns 30° (Whirl throws the tank ~31 yd every 15-20 s and he
-    follows), or his drift cuts a kept bearing's room under 22.5.
-  - **Deal**, sticky while its bearing is kept: living non-tank bots of the group (humans can't be
-    moved, tanks hold him), rebuilt each second, dealt healers, ranged, then melee, each by guid. A
-    healer takes the bearing with fewest healers, then nearest 60° off his back (~27 yd from the tank
-    at 17 yd out, ~30 straight behind), then fewest bots; anyone else the fewest bots nearest his
-    back. About two share a bearing on 25-man, melee inside ranged: victims per breath step with
-    spacing ([pitfalls.md](../../engine/pitfalls.md)), and 20 bots spaced evenly, closer than the
-    half-width, would freeze three. Melee take only bearings within 57° of his back (90° less the
-    30° turn and 3° of stand error): past 90° he parries them and hastes his next swing, carrying
-    neither `NO_PARRY` flag. A melee with none kept gets no bearing, and `set behind` places it.
+    (5 on 10N), a half circle; a walled one is replaced further round. Within the melee arc (below)
+    one with 14 yd of room, the melee band plus 1, is kept for melee alone and outside that count: at
+    the wall those are often the only bearings near his back. The probe works on the GO floor: on
+    25N it kept 11 near the centre, 9 with him 26.5 yd out and 3-4 at 44-50, as a 48-50 yd wall
+    round `ARENA_CENTER` predicts. So few survive only at the wall with his back to it: a charge
+    ends there and his tank arrives from the centre, the reverse of the guide's tank with *its* back
+    to a wall. They re-latch, `k` kept, when he moves 8 yd, his victim's bearing turns 30° (Whirl
+    throws the tank ~31 yd every 15-20 s and he follows), or his drift cuts a kept bearing's room
+    under its own floor.
+  - **Deal**: living non-tank bots of the group (humans can't be moved, tanks hold him), rebuilt
+    each second, dealt healers, melee, then ranged, each by guid, or ranged fill the few bearings
+    near his back first. Sticky while its bearing is kept and holds fewer than 2 bots over the
+    emptiest one its role may take; past that, bots leave it last in deal order first and are dealt
+    again. On 25N every melee held −3, the only rear bearing at the latch, and stayed there after
+    re-latches added more. A healer takes the bearing with fewest healers, then nearest 60° off his
+    back (~27 yd from the tank at 17 yd out, ~30 straight behind), then fewest bots; anyone else the
+    fewest bots nearest his back. About two share a bearing on 25-man, melee inside ranged: victims
+    per breath step with spacing ([pitfalls.md](../../engine/pitfalls.md)), and 20 bots spaced
+    evenly, closer than the half-width, would freeze three. Melee take only bearings within 57° of
+    his back (90° less the 30° turn and 3° of stand error): past 90° he parries them and hastes his
+    next swing, carrying neither `NO_PARRY` flag; healers and ranged take no melee-only one. A melee
+    with none kept gets no bearing, and `set behind` places it.
   - **Stand**: his spot plus the bot's own distance clamped into its band, capped at the bearing's
     room − 1, less his drift along it since the probe
     ([raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md): clamp, don't chase).
@@ -442,11 +527,17 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 ## Known gaps
 
 - No Hand of Freedom or defensive for a Toxin-snared tank, no raid cooldown when a Spray lands on
-  several players, and melee still stack, so a Spray on one splashes the rest.
+  several players, and melee stand in two groups, so a Spray on one splashes its group.
 - DoTs aren't refreshed on both worms before a submerge (guide), and nothing chases the achievement
   (both worms within 10 s).
-- A healer's reach to both worm holders is only a preference: with the worms on opposite sides its
-  spot falls back to safety alone.
+- A healer needs heal reach of both holders and its heal target: with the worms far apart no spot
+  may have it, and the healer stays put, or escapes out of reach when urgent.
+- Melee split by guid parity, so the groups are uneven when some melee hit another target.
+- Bile carriers find their spots in tick order, not guid order.
+- The path test covers pools and Sweep, not Spew cones or Bile carriers on the way, a `cross`
+  walk takes no path test, and `reach party member to heal` still walks healers through pools, as
+  generic reach does past the search radius or while the search backs off.
+- A Toxin'd `WormStationary` holder gets no runner until its worm submerges.
 - A hunter that can't Steady Shot (moving, or too close) leaves held Misdirection charges to its
   rotation, which can spend them on its DPS target, the mobile worm, and hand the `WormStationary`
   holder threat on it: the mobile holder re-taunts, at the cost of taunt diminishing returns.
@@ -462,11 +553,10 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 - Humans and tanks hold no bearing, so a breath on one can catch the bots on that bearing, and with
   about two to a bearing on 25-man a breath still freezes two.
 - No spread in a heroic worms + Icehowl overlap.
-- Melee with every bearing within 57° of his back walled hold none, and `set behind` stacks them
-  behind him, so a breath on one freezes them all.
+- At the wall with his back to it he keeps 3-4 bearings: no tank turns his back to the open floor
+  (guide: the tank's back to a wall). Melee with every bearing within 57° of his back walled under
+  14 yd hold none, and `set behind` stacks them behind him, so a breath on one freezes them all.
 - With no wall tanking, Whirl moves him every 15-20 s and the whole spread walks after him.
-- Unverified live: if every bearing probe fails against the GO floor, `nb.arc` stays 0 and the
-  spread never runs.
 - The stomp and carrier walks (`MOVEMENT_COMBAT`) can't re-aim while their own walk is in flight
   until the booking runs out or the stall clear fires; a dodge spot `MoveTo` refuses (no path) while
   an earlier dodge walk is in flight notes `locked` until that booking expires.
@@ -489,9 +579,10 @@ Position, verdicts and movement come from the raid-agnostic streams. The Beasts 
 | `dodge` | The charge dodge's branch: `move <yd>` walk issued, its length; `tight` walk to a 13 yd spot; `hold` its own walk in flight; `clear` arrived, already there, or parked past 13; `stunned` can't move; `locked` another forced walk holds movement; `none` no spot within 30 yd |
 | `worm` | 0 no worm engaged, 1 Dreadscale mobile, 2 Acidmaw mobile, 3 a worm under ground, 4 lone Dreadscale, 5 lone Acidmaw. Per instance |
 | `cure` | A bot's pairing: `seek <Bile carrier>`, `run <Toxin carrier>` as its runner, `wait <runner>` or `wait` stuck with no runner, `none` |
-| `wormmove` | The reposition branch, as `dodge` with a reason (`cure`, `run`, `pool`, `bile`, `sweep`, `spew`, `spread`): `move <yd> <reason>`, `hold <reason>`, `clear`, `none <reason>`, `locked` (also a cast pinning a non-urgent move), `stunned`. Holders: `approach <yd>` under ground, `drag <yd>` |
+| `wormmove` | The reposition branch, as `dodge` with a reason (`cure`, `run`, `pool`, `bile`, `sweep`, `spew`, `spread`, `melee`, `reach`) and the search tier that found the spot (`stand`, `full`, `nospread`, `partner`, `direct`, `partial`, `escape`, `loose`, `cross`): `move <yd> <reason> <tier>`, `hold <reason>` its walk to the held spot in flight, `clear` already there, `none <reason>` (not urgent: a 1 s backoff), `locked` (also a cast pinning a non-urgent move), `stunned`. Holders: `approach <yd>` under ground, `drag <yd>` |
+| `wormhold` | A bot's held spot: `set <reason> <tier>` latched by a walk or an arrival (a walk back to it writes none), `park` within 1 yd, `unpark` pushed off it, walking back, `release <cause>`. Cause: a rule (`pool`, `bile`, `sweep`, `spew`, `spread`), `melee` the rear arc, `reach` the role reach at a parked spot, `path` off the floor or across a pool or Sweep, `target` the target or a cure or run partner changed, left or drifted out of 8 yd, `cure` a cure walk owed, `phase` `worm` changed, 0 included, `drift` the anchor worm moved or turned, `heal` the heal target out of reach, `arrived` an escape, loose, partial or cross walk ended, `gone` the bot died or left |
 | `spread` | A non-tank bot's bearing `k` from straight behind Icehowl (`0`, `1`, `-1`, …), or `none` while the layout is off or it holds none. Written when a trigger asks |
-| `arc` | Bearings the layout kept, 0 while it is off. Per instance |
+| `arc` | Bearings the layout kept, melee-only ones included, 0 while it is off. Per instance |
 | `bomb` | The Fire Bomb dodge's branch: `move <yd>` walk issued, its length; `tight` walk issued to a 9.5 yd spot; `hold` its own walk in flight; `pinned` a cast pins its feet; `stunned` can't move; `none` no spot within 20 yd; `locked` `MoveTo` refused the walk (a walk at `MOVEMENT_FORCED` or higher holds movement, or no path to the spot); `clear` outside every young bomb's trigger, or a beast is hitting it |
 
 The lane is a `haz` row, 66734, shape `lane`: origin 35 yd behind the centre, `ex`/`ey` its end,
@@ -514,20 +605,24 @@ neither, then the raid's on-pick share per branch (`--targets`); per charge the 
 outcome, who stood within 12 yd of the lane's end at it (nearest snapshot), dodge branches per bot
 and Trample victims (`--charge`); per Arctic Breath its target, who froze (applies within 1 s) with
 their `nb.spread`, who the cone held in the snapshot nearest the cast (30° or 12° off the target's
-bearing), `nb.arc`, and times frozen per bot (`--breath`); Snobolled! 66406 spans per rider with
-role and seconds carried, and each DPS's picks by rider role (`--snobold`); per bomb its target (the
-nearest member), the 66317 hits up to 1.5 s past the modelled impact, each given to the nearest bomb
-whose window holds it, who stood within 8 yd at the impact, and `nb.bomb` branches per bot, `clear`
+bearing), `nb.arc`, and times frozen per bot, or with no `cast` row (25N) his `aura` applies grouped
+into breaths, target `?` and no cone (`--breath`); Snobolled! 66406 spans per rider with role and
+seconds carried, and each DPS's picks by rider role (`--snobold`); per bomb its target (the nearest
+member), the 66317 hits up to 1.5 s past the modelled impact, each given to the nearest bomb whose
+window holds it, who stood within 8 yd at the impact, and `nb.bomb` branches per bot, `clear`
 included (`--bomb`); `worm` spans with their deaths, per emerge the seconds from each worm's own
 Emerge cast 66947 (the first engage: `worm` leaving 0) until it targeted a tank and the non-tanks it
 targeted first, per wedge the non-tanks inside at the nearest snapshot and the Spew tick victims by
 role over 3.5 s, per pool the bot-seconds inside its radius (`2 + 0.3 ×` whole seconds from its
-first snapshot) and its hits, Sweep victims by role and `wormmove` branches (`--worms`); Paralytic
-Toxin spans per carrier, ended `cured` (a Bile pulse on it within 250 ms of the removal), `died`,
-`expired` (59 s or more), `other` or `open`, with seconds carried and `stuck` past 18 s (13.5
-heroic), Burning Bile spans with pulse hits on others carrying no Toxin, and `cure` branches
-(`--cure`).
+first snapshot) and its hits, Sweep victims by role, `wormmove` and `wormhold` branches (`--worms`);
+Paralytic Toxin spans per carrier, ended `cured` (a Bile pulse on it within 250 ms of the removal),
+`died`, `expired` (59 s or more), `other` or `open`, with seconds carried and `stuck` past 18 s
+(13.5 heroic), Burning Bile spans with the pulse hits on bots carrying neither debuff, each given to
+the carrier nearest its victim within 10 yd in the nearest snapshot, their damage and the raid's
+total, and `cure` branches (`--cure`).
 
 Still invisible: creature auras, so Staggered Daze, Frothing Rage, Rising Anger and a lone worm's
 Enrage never get an aura row: `charge` 4 and 5 are the only record of how a charge ended, `worm` 4
-and 5 of the Enrage.
+and 5 of the Enrage. Icehowl's casts never reach the `cast` stream either, so an Arctic Breath is
+only its `aura` applies (caster Icehowl) and damage. A Bile pulse's `dmg` row always names
+Dreadscale as its source, never the carrier.

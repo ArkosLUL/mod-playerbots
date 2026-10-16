@@ -211,12 +211,12 @@ constexpr uint32 BREATH_ROSTER_INTERVAL_MS = 1000;
 // Bearing counts land on whole multiples of the step, this only absorbs float noise
 constexpr float BEARING_EPSILON_DEG = 0.001f;
 
-// Also the deal order
+// Also the deal order: melee before ranged, or the few bearings near his back fill with ranged first
 enum class BreathRole : uint8
 {
     Healer,
-    Ranged,
-    Melee
+    Melee,
+    Ranged
 };
 
 struct BreathMember
@@ -227,8 +227,16 @@ struct BreathMember
 
 struct BreathBearing
 {
-    int32 step;  // steps round from straight behind him, negative one way
-    float room;  // clear floor out along it
+    int32 step;      // steps round from straight behind him, negative one way
+    float room;      // clear floor out along it
+    bool meleeOnly;  // too short for the healer and ranged bands
+};
+
+enum class BreathSpread : uint8
+{
+    Off,
+    Up,
+    Grace  // his victim stepped out of his reach, the layout holds as latched
 };
 
 struct IcehowlBreathState
@@ -240,6 +248,8 @@ struct IcehowlBreathState
 
     bool active = false;
     bool latched = false;
+    bool victimOut = false;
+    uint32 victimOutMs = 0;
     Position spot;
     float front = 0.0f;  // bearing to his victim
     float anchor = 0.0f;
@@ -309,20 +319,31 @@ float RoomLeft(IcehowlBreathState const& state, BreathBearing const& bearing, Un
 
 bool RoomRanShort(IcehowlBreathState const& state, Unit* icehowl)
 {
-    return std::any_of(state.bearings.begin(), state.bearings.end(), [&state, icehowl](BreathBearing const& bearing)
-                       { return RoomLeft(state, bearing, icehowl) < ICEHOWL_SPREAD_MIN_ROOM; });
+    return std::any_of(state.bearings.begin(), state.bearings.end(),
+                       [&state, icehowl](BreathBearing const& bearing)
+                       {
+                           float const minRoom =
+                               bearing.meleeOnly ? ICEHOWL_SPREAD_MELEE_ROOM : ICEHOWL_SPREAD_MIN_ROOM;
+                           return RoomLeft(state, bearing, icehowl) < minRoom;
+                       });
 }
 
 // Past 90° off his back he parries melee and hastes his next swing
-bool CanSeat(IcehowlBreathState const& state, BreathRole role, int32 step)
+bool InMeleeArc(IcehowlBreathState const& state, int32 step)
 {
-    return role != BreathRole::Melee ||
-           static_cast<float>(std::abs(step)) * state.stepDeg <= ICEHOWL_SPREAD_MELEE_ARC_DEG + BEARING_EPSILON_DEG;
+    return static_cast<float>(std::abs(step)) * state.stepDeg <= ICEHOWL_SPREAD_MELEE_ARC_DEG + BEARING_EPSILON_DEG;
+}
+
+bool CanSeat(IcehowlBreathState const& state, BreathRole role, BreathBearing const& bearing)
+{
+    return role == BreathRole::Melee ? InMeleeArc(state, bearing.step) : !bearing.meleeOnly;
 }
 
 // Outward from his back, k = 0, 1, -1, 2, -2, ..., stopping short of his front by a step plus the turn
 // a re-latch allows, so a breath on his victim misses every bearing until the next re-latch. A bearing
-// the wall cuts short is skipped and the next one further round takes its place.
+// the wall cuts short is skipped and the next one further round takes its place. Inside the melee arc
+// one with room for the melee band stays, for melee only and outside the count: at the wall those are
+// often the only ones near his back.
 void ProbeBearings(Player* bot, Map* map, IcehowlBreathState& state)
 {
     state.bearings.clear();
@@ -336,7 +357,8 @@ void ProbeBearings(Player* bot, Map* map, IcehowlBreathState& state)
     float const sx = state.spot.GetPositionX();
     float const sy = state.spot.GetPositionY();
     float const sz = state.spot.GetPositionZ();
-    for (int32 i = 0; i <= 2 * reach && state.bearings.size() < wanted; ++i)
+    uint32 full = 0;
+    for (int32 i = 0; i <= 2 * reach && full < wanted; ++i)
     {
         int32 const k = (i % 2) ? (i + 1) / 2 : -(i / 2);
         float const angle = BearingAngle(state, k);
@@ -348,7 +370,12 @@ void ProbeBearings(Player* bot, Map* map, IcehowlBreathState& state)
         float const room =
             map->CheckCollisionAndGetValidCoords(bot, sx, sy, sz, x, y, z) ? std::hypot(x - sx, y - sy) : 0.0f;
         if (room >= ICEHOWL_SPREAD_MIN_ROOM)
-            state.bearings.push_back({k, room});
+        {
+            state.bearings.push_back({k, room, false});
+            ++full;
+        }
+        else if (room >= ICEHOWL_SPREAD_MELEE_ROOM && InMeleeArc(state, k))
+            state.bearings.push_back({k, room, true});
     }
 }
 
@@ -420,9 +447,11 @@ void RebuildRoster(Player* bot, IcehowlBreathState& state, uint32 now)
     state.dealDirty = true;
 }
 
-// Sticky: a bot keeps its bearing for as long as it's kept. Healers pick first, one to a bearing
-// where they can, nearest 60° off his back; the rest fill the emptiest bearing nearest his back. A
-// melee with no bearing near enough his back gets none, and `set behind` places it.
+// Sticky: a bot keeps its bearing while it's kept and holds no more than one over the emptiest one
+// its role may take. Past that the last in deal order goes first, so bots dealt onto the only bearing
+// near his back spread out once a re-latch adds more. Healers pick first, one to a bearing where they
+// can, nearest 60° off his back; the rest fill the emptiest bearing nearest his back. A melee with no
+// bearing near enough his back gets none, and `set behind` places it.
 void DealBreath(IcehowlBreathState& state)
 {
     size_t const count = state.bearings.size();
@@ -438,26 +467,54 @@ void DealBreath(IcehowlBreathState& state)
             ++healers[index];
     };
 
-    std::vector<BreathMember const*> unseated;
-    for (BreathMember const& member : state.roster)
+    // Per roster member, its bearing's index, or count while unseated
+    size_t const members = state.roster.size();
+    std::vector<size_t> seats(members, count);
+    for (size_t i = 0; i < members; ++i)
     {
+        BreathMember const& member = state.roster[i];
         auto const slot = state.slots.find(member.guid);
-        if (slot != state.slots.end())
+        if (slot == state.slots.end())
+            continue;
+
+        auto const kept = std::find_if(state.bearings.begin(), state.bearings.end(),
+                                       [&slot](BreathBearing const& bearing) { return bearing.step == slot->second; });
+        if (kept != state.bearings.end() && CanSeat(state, member.role, *kept))
         {
-            auto const kept = std::find_if(state.bearings.begin(), state.bearings.end(),
-                                           [&slot](BreathBearing const& bearing)
-                                           { return bearing.step == slot->second; });
-            if (kept != state.bearings.end() && CanSeat(state, member.role, kept->step))
-            {
-                seat(static_cast<size_t>(kept - state.bearings.begin()), member.role);
-                continue;
-            }
-
-            state.slots.erase(slot);
+            seats[i] = static_cast<size_t>(kept - state.bearings.begin());
+            seat(seats[i], member.role);
         }
-
-        unseated.push_back(&member);
+        else
+            state.slots.erase(slot);
     }
+
+    // Moving a bot needs a gap of 2, or it would only swap which bearing holds the extra one
+    for (size_t i = members; i-- > 0;)
+    {
+        if (seats[i] == count)
+            continue;
+
+        BreathRole const role = state.roster[i].role;
+        uint32 emptiest = std::numeric_limits<uint32>::max();
+        for (size_t index = 0; index < count; ++index)
+            if (CanSeat(state, role, state.bearings[index]))
+                emptiest = std::min(emptiest, occupants[index]);
+
+        if (occupants[seats[i]] < emptiest + 2)
+            continue;
+
+        --occupants[seats[i]];
+        if (role == BreathRole::Healer)
+            --healers[seats[i]];
+
+        state.slots.erase(state.roster[i].guid);
+        seats[i] = count;
+    }
+
+    std::vector<BreathMember const*> unseated;
+    for (size_t i = 0; i < members; ++i)
+        if (seats[i] == count)
+            unseated.push_back(&state.roster[i]);
 
     float const stepDeg = state.stepDeg;
     auto const healerKey = [&](size_t index)
@@ -479,7 +536,7 @@ void DealBreath(IcehowlBreathState& state)
         size_t best = count;
         for (size_t index = 0; index < count; ++index)
         {
-            if (!CanSeat(state, member->role, state.bearings[index].step))
+            if (!CanSeat(state, member->role, state.bearings[index]))
                 continue;
 
             if (best == count || (healer ? healerKey(index) < healerKey(best) : otherKey(index) < otherKey(best)))
@@ -494,30 +551,52 @@ void DealBreath(IcehowlBreathState& state)
     }
 }
 
-// Off under a charge and in a heroic overlap, which the charge and worm rules own. A victim out of his
-// reach means he's walking after it (Whirl, the end of a charge), and the layout would chase him.
-bool IsBreathSpreadUp(PlayerbotAI* botAI, Unit* icehowl, Unit*& victim)
+// Off at once under a charge and in a heroic overlap, which the charge and worm rules own. A victim out
+// of his reach means he's walking after it (Whirl, the end of a charge), and the layout would chase
+// him, but a latched one holds through the grace: a tank at the edge of his reach flickers in and out.
+BreathSpread ReadBreathSpread(PlayerbotAI* botAI, Unit* icehowl, IcehowlBreathState& state, uint32 now,
+                              Unit*& victim)
 {
     Creature* creature = icehowl->ToCreature();
     if (!creature || creature->GetReactState() == REACT_PASSIVE)
-        return false;
+        return BreathSpread::Off;
 
     if (GetBeastsStageMask(botAI) != BEASTS_STAGE_ICEHOWL)
-        return false;
+        return BreathSpread::Off;
 
     Position start;
     Position end;
     if (IcehowlChargeLatched(botAI, start, end))
-        return false;
+        return BreathSpread::Off;
 
     victim = icehowl->GetVictim();
-    return victim && victim->ToPlayer() && icehowl->IsWithinMeleeRange(victim);
+    if (!victim || !victim->ToPlayer())
+        return BreathSpread::Off;
+
+    if (icehowl->IsWithinMeleeRange(victim))
+    {
+        state.victimOut = false;
+        return BreathSpread::Up;
+    }
+
+    if (!state.latched)
+        return BreathSpread::Off;
+
+    if (!state.victimOut)
+    {
+        state.victimOut = true;
+        state.victimOutMs = now;
+    }
+
+    return getMSTimeDiff(state.victimOutMs, now) < ICEHOWL_SPREAD_VICTIM_GRACE_MS ? BreathSpread::Grace
+                                                                                  : BreathSpread::Off;
 }
 
 void TurnBreathOff(IcehowlBreathState& state)
 {
     state.active = false;
     state.latched = false;
+    state.victimOut = false;
     state.arc = 0;
 }
 
@@ -547,18 +626,23 @@ IcehowlBreathState* RefreshBreath(PlayerbotAI* botAI)
     }
 
     Unit* victim = nullptr;
-    if (!IsBreathSpreadUp(botAI, icehowl, victim))
+    BreathSpread const spread = ReadBreathSpread(botAI, icehowl, state, now, victim);
+    if (spread == BreathSpread::Off)
     {
         TurnBreathOff(state);
         return &state;
     }
 
-    // A drift toward a wall gets re-probed before it eats into the ranged band, so every kept bearing
-    // fits all three bands
-    float const front = icehowl->GetAngle(victim);
-    if (!state.latched || icehowl->GetExactDist2d(state.spot) > ICEHOWL_SPREAD_RELATCH_MOVE ||
-        AngleBetween(front, state.front) > DegToRad(ICEHOWL_SPREAD_RELATCH_TURN_DEG) || RoomRanShort(state, icehowl))
-        LatchBreath(bot, map, icehowl, front, state);
+    // A drift toward a wall gets re-probed before it eats into a kept bearing's bands. Not in the grace:
+    // the bearing to a victim out of his reach is no front to latch.
+    if (spread == BreathSpread::Up)
+    {
+        float const front = icehowl->GetAngle(victim);
+        if (!state.latched || icehowl->GetExactDist2d(state.spot) > ICEHOWL_SPREAD_RELATCH_MOVE ||
+            AngleBetween(front, state.front) > DegToRad(ICEHOWL_SPREAD_RELATCH_TURN_DEG) ||
+            RoomRanShort(state, icehowl))
+            LatchBreath(bot, map, icehowl, front, state);
+    }
 
     // Walled in on every bearing. Stays latched, or the walls get probed again every ms until he moves.
     if (state.bearings.empty())
