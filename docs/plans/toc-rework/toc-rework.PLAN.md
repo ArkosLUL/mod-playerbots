@@ -70,7 +70,7 @@ Verified constraints:
 | Scope | Every mechanic on 10N/25N/10H/25H, heroic-only included. No bot cheats: a cheat-only mechanic is a documented gap. |
 | Code outside ToC | Only where a brief says so, and listed in the lane report. `src/Ai/Raid/Uld/` is never touched. |
 | Oversized lane | Keep what hurts the raid most; move the rest into a new brief `docs/plans/toc-rework/<lane>-rest.PLAN.md` and report it as carried over. |
-| Findings | Confirmed bugs and minors are fixed; cleanups only when small. One re-review round, then the boss doc's "Known gaps". |
+| Findings | Bugs and minors are fixed; cleanups only when small; the rest goes to the boss doc's "Known gaps". |
 | Build and test | The user builds and pulls. Agents never build. |
 
 ## Naming contract
@@ -162,7 +162,7 @@ effort in the main tree, so a lane touching it will fail to merge: stay out of i
   plus `--spell-difficulty` once `w0b-tooling` has merged. Stay scoped: the whole tree carries known
   errors.
 - `python -m unittest discover -s tools/botobs/tests`.
-- In a lane with several implementers only the integrate agent runs checks.
+- In a split lane only the finisher runs checks.
 
 **Commit.** One commit per lane on `toc/<lane>`, staged by explicit path, never `-A`. Subject ≤72
 characters; body at most three lines, only a why the diff can't show; voice per
@@ -177,7 +177,7 @@ approval). Each boss doc ends with "What a trace answers": probe keys and reader
 
 ## Waves
 
-| Wave | Lanes, in parallel |
+| Wave | Lanes, two at a time |
 |---|---|
 | 1 | `w0a-restructure` (runs chained into wave 2) |
 | 2 | `w0b-tooling`, `w0c-foundation` |
@@ -189,9 +189,10 @@ approval). Each boss doc ends with "What a trace answers": probe keys and reader
 | 4e | `w8-prepull-staging` |
 | 5 | `w6-closeout` |
 
-A lane runs: investigate → 1-3 parallel implementers on disjoint files (up to 5 in `w0a`) →
-integrate and check → three reviewers (mechanics, conformance, observability and conventions) →
-skeptic verify → fix → one re-review → close and commit. A merge stage then lands every finished
+A lead agent runs each lane: investigate → implement → check → review the change (mechanics,
+conformance, observability and conventions) → fix → close and commit. Only a big lane splits:
+the lead hands its Task list to up to 3 implementers on disjoint files, and one finisher
+integrates, checks, reviews, fixes and commits. A merge stage then lands every finished
 lane on `Custom`, runs the checks on the merged tree, updates the status table and the README boss
 table, and removes merged worktrees and branches.
 
