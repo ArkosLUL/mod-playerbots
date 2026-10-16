@@ -5,7 +5,6 @@
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "LastMovementValue.h"
-#include "RtiTargetValue.h"
 #include "Timer.h"
 #include "Unit.h"
 #include "WorldSession.h"
@@ -142,10 +141,6 @@ bool TwinValkyrDodgeOrbAction::Execute(Event /*event*/)
 
 bool TwinValkyrTankHoldAction::HoldTwin(Unit* twin)
 {
-    char const* icon = TwinRtiIcon(twin);
-    if (icon)
-        SetRtiTarget(botAI, icon, twin);
-
     if (AI_VALUE(Unit*, "current target") != twin)
         return Attack(twin);
 
@@ -169,7 +164,6 @@ bool TwinValkyrMainTankHoldLightTwinAction::Execute(Event /*event*/)
     if (!fjola)
         return false;
 
-    MarkTargetWithSkull(bot, fjola);
     return HoldTwin(fjola);
 }
 
@@ -179,7 +173,6 @@ bool TwinValkyrAssistTankHoldDarkTwinAction::Execute(Event /*event*/)
     if (!eydis)
         return false;
 
-    MarkTargetWithCross(bot, eydis);
     return HoldTwin(eydis);
 }
 
@@ -195,22 +188,4 @@ Player* TwinValkyrRedirectThreatAction::GetRedirectTank()
 
 Unit* TwinValkyrRedirectThreatAction::GetThreatDumpTarget() { return GetTwinDpsTarget(botAI); }
 
-bool TwinValkyrFocusTwinAction::Execute(Event /*event*/)
-{
-    Unit* twin = GetTwinDpsTarget(botAI);
-    char const* icon = twin ? TwinRtiIcon(twin) : nullptr;
-    if (!icon)
-        return false;
-
-    // rti target is recalculated from the icon, so the icon has to sit on this twin
-    int32 const iconIndex = RtiTargetValue::GetRtiIndex(icon);
-    if (iconIndex >= 0)
-        MarkTargetWithIcon(bot, twin, static_cast<uint8>(iconIndex));
-
-    SetRtiTarget(botAI, icon, twin);
-
-    if (AI_VALUE(Unit*, "current target") != twin)
-        return Attack(twin);
-
-    return false;
-}
+bool TwinValkyrFocusTwinAction::Execute(Event /*event*/) { return AttackDirect(GetTwinDpsTarget(botAI)); }

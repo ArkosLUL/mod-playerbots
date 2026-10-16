@@ -5,6 +5,7 @@ Breath, snobolds, Fire Bomb, the worms and the Toxin cure.
     northrend_beasts.py <file>             every section
     northrend_beasts.py <file> --stage     which beasts were up when, deaths per stage, each beast's engage
     northrend_beasts.py <file> --tanks     tank duties, Gormok's victims with Impale stacks, swaps, defensives
+    northrend_beasts.py <file> --targets   each DPS bot's time on its nb.dps pick, another beast or neither
     northrend_beasts.py <file> --charge    every Icehowl charge: gaze, lane, outcome, who stood at its end
     northrend_beasts.py <file> --breath    every Arctic Breath: target, who froze, who the cone predicts, spread
     northrend_beasts.py <file> --snobold   who carried a snobold and for how long, and what the DPS picked
@@ -31,10 +32,11 @@ What the generic views get wrong here, and what this reads instead:
 - **Fire Bomb's impact has no world object.** The NPC is at best a `snap.u` row and nothing marks when
   66317 lands. Each bomb writes one `haz` `circle` row whose `ttl` is the modelled impact, not a
   measured one, so `--bomb` takes 66317 hits up to 1.5 s past it.
-- **`nb.tank`, `nb.swap`, `nb.snobold`, `nb.dodge`, `nb.spread`, `nb.bomb` and `nb.defensive` are
-  per-bot change-only notes**: a bot that stays on one answer writes one row, so counts here are
-  changes, not ticks. `nb.bomb` writes `clear` whenever a bot is outside every young bomb's trigger,
-  so a dodge that repeats the last one's branch still shows. `nb.arc` is one value for the raid.
+- **`nb.tank`, `nb.swap`, `nb.snobold`, `nb.dps`, `nb.dodge`, `nb.spread`, `nb.bomb` and
+  `nb.defensive` are per-bot change-only notes**: a bot that stays on one answer writes one row, so
+  counts here are changes, not ticks. `nb.bomb` writes `clear` whenever a bot is outside every young
+  bomb's trigger, so a dodge that repeats the last one's branch still shows. `nb.arc` is one value for
+  the raid.
 - **The worms' threat wipe shows only in their target column.** Each resets its threat list under
   ground and comes up on whoever threatens it first, so `--worms` times each worm from its own Emerge
   cast (66947 in the snapshot's casting column) until a tank is the target again: `nb.worm` leaves 3
@@ -43,6 +45,9 @@ What the generic views get wrong here, and what this reads instead:
 - **Neither worm hazard reaches `snap.hz`.** The Spew cone is a `haz` `wedge` row, `arc` degrees either
   side of `facing`; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 to 11, so
   `--worms` rebuilds its radius from its first snapshot.
+- **Nothing records what a bot attacks but the snapshot's target column**, its victim. `--targets`
+  reads it against the `nb.dps` pick in force at each snapshot, so every switch shows up to one
+  snapshot gap off the pick.
 - **A cure has no record of its own.** The Bile pulse strips Toxin as it lands, so `--cure` calls a
   removal cured when a pulse hit the carrier within 250 ms of it.
 """
@@ -294,6 +299,88 @@ def show_tanks(trace: Trace) -> None:
         print(f"  {title}:")
         for guid, counts in sorted(table.items(), key=lambda item: trace.name(item[0])):
             print(f"    {trace.name(guid)[:14]:14} " + ", ".join(f"{name} {n}" for name, n in counts.most_common()))
+
+
+NPC_SNOBOLD_VASSAL = 34800
+# nb.dps branch words, in the resolver's order
+DPS_BRANCHES = ("skull", "snobold", "gormok", "mobile", "icehowl")
+DPS_ROLES = ("melee", "ranged")
+
+
+def encounter_units(trace: Trace) -> set[int]:
+    """Every beast's and snobold's guid."""
+    entries = [entry for _, entry in BEASTS] + [NPC_SNOBOLD_VASSAL]
+    return {guid for entry in entries for guid in guids_of_entry(trace, entry)}
+
+
+def dps_bots(trace: Trace) -> set[int]:
+    return {guid for guid in roster_guids(trace) if trace.role(guid) in DPS_ROLES and guid not in trace.humans}
+
+
+def target_time(trace: Trace) -> dict[int, dict[str, collections.Counter]]:
+    """Per DPS bot and `nb.dps` branch, the sampled living ms its target column sat on its pick (`on`),
+    on another beast or snobold (`other`), or on anything else (`neither`). Time under `none`, or
+    before the bot's first `nb.dps` row, counts nowhere. A snapshot's ms run to the next one, capped
+    at 2 s."""
+    bots = dps_bots(trace)
+    picks = holder_spans(trace, "nb.dps", pull_end(trace))
+    units = encounter_units(trace)
+    snaps = frames(trace)
+    out: dict[int, dict[str, collections.Counter]] = collections.defaultdict(
+        lambda: collections.defaultdict(collections.Counter))
+    for index, snap in enumerate(snaps):
+        step = min(snaps[index + 1]["t"] - snap["t"], MAX_STEP_MS) if index + 1 < len(snaps) else 0
+        if step <= 0:
+            continue
+        for row in snap.get("u", []):
+            if row[0] not in bots or row[5] <= 0:
+                continue
+            held = value_at(picks.get(row[0]), snap["t"])
+            branch, pick = split_duty(held) if held is not None else ("", None)
+            if pick is None:
+                continue
+            target = row[7] if len(row) > 7 else 0
+            place = "on" if target == pick else ("other" if target in units else "neither")
+            out[row[0]][branch][place] += step
+    return {guid: dict(branches) for guid, branches in out.items()}
+
+
+def on_pick_share(table: dict[int, dict[str, collections.Counter]]) -> dict[str, tuple[float, int]]:
+    """Per branch, the raid's share of DPS time on its pick and the ms that share is of."""
+    totals: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    for branches in table.values():
+        for branch, places in branches.items():
+            totals[branch].update(places)
+    out = {}
+    for branch, places in totals.items():
+        total = sum(places.values())
+        if total:
+            out[branch] = (places["on"] / total, total)
+    return out
+
+
+def branch_rank(branch: str) -> int:
+    return DPS_BRANCHES.index(branch) if branch in DPS_BRANCHES else len(DPS_BRANCHES)
+
+
+def show_targets(trace: Trace) -> None:
+    print("DPS TARGETS  (sampled living seconds against each bot's nb.dps pick)")
+    table = target_time(trace)
+    if not table:
+        print("  no nb.dps pick sampled")
+        return
+
+    print(f"  {'bot':14} {'role':6} {'branch':8} {'on':>6} {'other':>6} {'neither':>7}")
+    for guid, branches in sorted(table.items(), key=lambda item: trace.name(item[0])):
+        for branch in sorted(branches, key=branch_rank):
+            places = branches[branch]
+            print(f"  {trace.name(guid)[:14]:14} {trace.role(guid):6} {branch:8} {places['on'] / 1000:6.1f}"
+                  f" {places['other'] / 1000:6.1f} {places['neither'] / 1000:7.1f}")
+
+    shares = on_pick_share(table)
+    print("\n  raid on its pick: " + ", ".join(
+        f"{branch} {share:.0%} of {total / 1000:.1f} s"
+        for branch, (share, total) in sorted(shares.items(), key=lambda item: branch_rank(item[0]))))
 
 
 def nearest_frame(trace: Trace, when: int) -> dict | None:
@@ -1030,6 +1117,7 @@ def show_bomb(trace: Trace) -> None:
 SECTIONS = (
     ("stage", "which beasts were up when, deaths per stage, each beast's engage", show_stage),
     ("tanks", "tank duties, Gormok's victims with Impale stacks, swaps, defensives", show_tanks),
+    ("targets", "each DPS bot's time on its nb.dps pick, another beast or neither, by branch", show_targets),
     ("charge", "every Icehowl charge: gaze, lane, outcome, who stood at its end", show_charge),
     ("breath", "every Arctic Breath: target, who froze, who the cone predicts, spread", show_breath),
     ("snobold", "snobold riders and the DPS picks", show_snobold),

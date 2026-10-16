@@ -58,6 +58,8 @@ struct TwinEssenceWant
 // Alive, else nullptr
 Unit* GetFjola(PlayerbotAI* botAI);
 Unit* GetEydis(PlayerbotAI* botAI);
+// Both twins stay non-attackable until the script releases them at the pull
+bool IsTwinAttackable(Unit* twin);
 
 // Fjola Light, Eydis Dark, anything else None
 TwinColour TwinColourOf(Unit* twin);
@@ -85,11 +87,9 @@ TwinEssenceWant GetWantedEssence(PlayerbotAI* botAI);
 bool TwinValkyrMustSwapEssence(PlayerbotAI* botAI, bool urgentOnly);
 Creature* GetEssencePortal(Player* bot, TwinColour colour);
 
-// The Pact twin while one casts, else Fjola under a lone tank, else the twin of the other colour than
-// the bot's essence
+// A player's skull on either twin, else the Pact twin while one casts, else Fjola under a lone tank,
+// else the twin of the other colour than the bot's essence
 Unit* GetTwinDpsTarget(PlayerbotAI* botAI);
-// "cross" for Eydis, "skull" for anything else
-char const* TwinRtiIcon(Unit* twin);
 
 // Only interrupts the twins aren't immune to, in range, off cooldown and affordable. Null for a real
 // player.

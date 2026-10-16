@@ -16,11 +16,13 @@ public:
     bool Execute(Event event) override;
 };
 
-class GormokFocusSnoboldAction : public AttackAction
+// Never taunts, that would pull him off the holder between swaps. The swap itself is
+// "gormok tank swap taunt".
+class GormokSwapTankHoldAction : public ToCDirectAttackAction
 {
 public:
-    GormokFocusSnoboldAction(
-        PlayerbotAI* botAI, std::string const name = "gormok focus snobold") : AttackAction(botAI, name) {};
+    GormokSwapTankHoldAction(PlayerbotAI* botAI, std::string const name = "gormok swap tank hold")
+        : ToCDirectAttackAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
@@ -75,8 +77,10 @@ public:
     {
         creators["gormok tank hold boss"] =
             &ToCGormokActionContext::gormok_tank_hold_boss;
-        creators["gormok focus snobold"] =
-            &ToCGormokActionContext::gormok_focus_snobold;
+        creators["gormok swap tank hold"] =
+            &ToCGormokActionContext::gormok_swap_tank_hold;
+        creators["gormok dps target"] =
+            &ToCGormokActionContext::gormok_dps_target;
         creators["gormok tank swap taunt"] =
             &ToCGormokActionContext::gormok_tank_swap_taunt;
         creators["gormok tank defensive"] =
@@ -94,8 +98,12 @@ private:
         return new GormokTankHoldBossAction(botAI);
     }
 
-    static Action* gormok_focus_snobold(PlayerbotAI* botAI) {
-        return new GormokFocusSnoboldAction(botAI);
+    static Action* gormok_swap_tank_hold(PlayerbotAI* botAI) {
+        return new GormokSwapTankHoldAction(botAI);
+    }
+
+    static Action* gormok_dps_target(PlayerbotAI* botAI) {
+        return new NorthrendBeastsDpsTargetAction(botAI, "gormok dps target");
     }
 
     static Action* gormok_tank_swap_taunt(PlayerbotAI* botAI) {

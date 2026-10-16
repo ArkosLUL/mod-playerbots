@@ -1,7 +1,6 @@
 #ifndef PLAYERBOTS_RAID_TOCHELPERS_ANUBARAK_H
 #define PLAYERBOTS_RAID_TOCHELPERS_ANUBARAK_H
 
-#include <string>
 #include <vector>
 
 #include "ObjectGuid.h"
@@ -61,10 +60,6 @@ constexpr uint32 ANUBARAK_SUBMERGE_PREP_MS = 65000;
 // Spike reach round a patch, plus the 3.5 yd/s * 1.5 s it walks before its first test, plus the drag's
 // arrive
 constexpr float ANUBARAK_SUBMERGE_PATCH_CLEARANCE = ANUBARAK_SPIKE_PATCH_REACH + 5.25f + ANUBARAK_DRAG_ARRIVE;
-
-// DPS focus mark. Side tanks mark their own pick under a side name with no group icon.
-constexpr char const* ANUBARAK_BURROWER_RTI = "cross";
-constexpr char const* ANUBARAK_SIDE_RTI[2] = {"square", "triangle"};
 
 // Written raw into anub.phase
 enum class AnubarakPhase : uint8
@@ -144,15 +139,17 @@ int8 GetAnubarakBurrowerTankSide(Player* player);
 bool IsAnubarakPickupTank(Player* bot);
 // IsTank can read false for a tank for a tick, so the spec is asked too
 bool IsAnubarakTankPlayer(Player* player);
-bool IsAnubarakSideRti(std::string const& rti);
 
 // Alive burrowers in the room, submerged ones too: they come back up where they went down
 std::vector<Creature*> GetAnubarakBurrowers(Player* bot);
 // What a side tank takes. Empty for a bot with no side, and with nothing selectable to take.
 AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI);
-// The burrower DPS focus. Only ones standing on Permafrost count, since one below 80% off it
-// submerges and comes back full. The one the cross already marks stays the pick while it qualifies.
+// The burrower DPS focus, latched per instance in anub.focus. Only ones standing on Permafrost count,
+// since one below 80% off it submerges and comes back full. The latched one stays while it qualifies.
 Creature* GetAnubarakFocusBurrower(Player* bot);
+// This DPS bot's target: a player's skull, the focus burrower, him while selectable, else while he's
+// down the nearest scarab in reach. Null outside the pull, for non-DPS and for a sphere shooter.
+Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI);
 // Nearest scarab within 30 yd hitting someone who isn't a tank
 Creature* GetAnubarakScarabToPickUp(Player* bot);
 // Lowest health Penetrating Cold carrier under 90% this healer can reach

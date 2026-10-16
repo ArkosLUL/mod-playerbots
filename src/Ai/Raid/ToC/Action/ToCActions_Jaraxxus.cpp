@@ -174,9 +174,6 @@ bool JaraxxusMainTankHoldBossAction::Execute(Event /*event*/)
     if (!jaraxxus)
         return false;
 
-    MarkTargetWithSkull(bot, jaraxxus);
-    SetRtiTarget(botAI, "skull", jaraxxus);
-
     if (AI_VALUE(Unit*, "current target") != jaraxxus)
         return Attack(jaraxxus);
 
@@ -205,18 +202,6 @@ bool JaraxxusAssistTankHoldAction::HoldAdd(uint8 index)
     Unit* add = GetJaraxxusAssistTankAdd(botAI, index);
     if (!add)
         return false;
-
-    if (index == 0)
-    {
-        MarkTargetWithSquare(bot, add);
-        SetRtiTarget(botAI, "square", add);
-    }
-    else
-    {
-        MarkTargetWithDiamond(bot, add);
-        SetRtiTarget(botAI, "diamond", add);
-    }
-    JaraxxusClaimRti(bot);
 
     bool attacked = false;
     if (AI_VALUE(Unit*, "current target") != add)
@@ -251,31 +236,7 @@ bool JaraxxusRemoveNetherPowerAction::Execute(Event /*event*/)
     return false;
 }
 
-bool JaraxxusFocusAddAction::Execute(Event /*event*/)
-{
-    Unit* add = GetJaraxxusFocusAdd(botAI);
-    if (!add)
-        return false;
-
-    MarkTargetWithCross(bot, add);
-    // the default rti sits on the boss, so without this dps assist yanks the bot back to him every tick
-    SetRtiTarget(botAI, "cross", add);
-    JaraxxusClaimRti(bot);
-    CommandPetAttack(botAI, add);
-
-    if (AI_VALUE(Unit*, "current target") != add)
-        return Attack(add);
-
-    return false;
-}
-
-bool JaraxxusResetFocusAction::Execute(Event /*event*/)
-{
-    SetRtiTarget(botAI, "skull");
-    context->GetValue<Unit*>("rti target")->Set(nullptr);
-    JaraxxusReleaseRti(bot);
-    return false;
-}
+bool JaraxxusDpsTargetAction::Execute(Event /*event*/) { return AttackDirect(GetJaraxxusDpsTarget(botAI)); }
 
 bool JaraxxusHealIncinerateTargetAction::Execute(Event /*event*/)
 {

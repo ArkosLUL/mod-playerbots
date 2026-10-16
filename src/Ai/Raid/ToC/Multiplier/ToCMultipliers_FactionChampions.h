@@ -16,15 +16,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Non-healers take their target from the focus node alone while a kill target is up
-class FactionChampionsTargetGuardMultiplier : public Multiplier
-{
-public:
-    FactionChampionsTargetGuardMultiplier(
-        PlayerbotAI* botAI) : Multiplier(botAI, "faction champions target guard multiplier") {}
-    float GetValue(Action* action) override;
-};
-
 // The script re-seeds threat every ~9 s, so a redirect onto the main tank buys nothing
 class FactionChampionsThreatRedirectVetoMultiplier : public Multiplier
 {

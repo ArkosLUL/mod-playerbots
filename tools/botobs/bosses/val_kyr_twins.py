@@ -7,7 +7,7 @@
     val_kyr_twins.py <file> --pact      every Twin's Pact: shield, break, kicks, outcome, duty, lust
     val_kyr_twins.py <file> --orbs      Unleashed hits taken or absorbed, tv.orb rules, Powering Up
     val_kyr_twins.py <file> --tanks     who each twin hit, taunts, where the twins stood
-    val_kyr_twins.py <file> --targets   how long each DPS bot hit the twin its colour sends it to
+    val_kyr_twins.py <file> --targets   how long each DPS bot hit the twin its rule sends it to
 
 Ids are listed for 10N, 25N, 10H and 25H: the Spell constructor remaps every cast to the map's
 difficulty, so rows carry that difficulty's id. Interrupts, taunts and lust are matched by the spell
@@ -780,9 +780,10 @@ def lone_tank_windows(trace: Trace, end: int) -> list[tuple[int, int]]:
 
 
 def target_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
-    """Per DPS bot, living sampled time on the twin the rule names (the Pact twin during a Pact, else
-    Fjola under a lone tank, else Eydis for a Light bot and Fjola for Dark or none), on the other
-    twin, or on neither, off its own `snap.u[7]`. Time with its colour unknown counts nowhere."""
+    """Per DPS bot, living sampled time on the twin the rule names (its `tv.target` twin while that
+    reads `skull`, else the Pact twin during a Pact, else Fjola under a lone tank, else Eydis for a
+    Light bot and Fjola for Dark or none), on the other twin, or on neither, off its own `snap.u[7]`.
+    Time with its colour unknown counts nowhere."""
     samples = samples or Samples(trace)
     end = pull_end(trace)
     twins = twin_guids(trace, samples)
@@ -792,6 +793,7 @@ def target_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     windows = pact_windows(trace, samples)
     lone = lone_tank_windows(trace, end)
     timelines = essence_timelines(trace)
+    picks = note_track(trace, "tv.target")
 
     out = []
     for guid in sorted(roster_guids(trace), key=trace.name):
@@ -802,7 +804,10 @@ def target_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
             row = samples.exact(guid, when)
             if not row or row[5] <= 0:
                 continue
-            want = next((twin for low, high, twin in windows if low <= when < high), None)
+            name, _, rule = str(value_at(picks.get(guid), when) or "").partition(":")
+            want = twins.get(name) if rule == "skull" else None
+            if want is None:
+                want = next((twin for low, high, twin in windows if low <= when < high), None)
             if want is None and any(low <= when < high for low, high in lone):
                 want = fjola
             if want is None:
@@ -870,7 +875,7 @@ SECTIONS = (
     ("pact", "every Pact: shield, break, kicks, outcome, interrupt duty, lust", show_pact),
     ("orbs", "Unleashed hits taken or absorbed, tv.orb rules, Powering Up, Empowered", show_orbs),
     ("tanks", "each twin's victim against her tv.tank, taunts, distances", show_tanks),
-    ("targets", "each DPS bot's time on the twin its colour names", show_targets),
+    ("targets", "each DPS bot's time on the twin its rule names", show_targets),
 )
 
 

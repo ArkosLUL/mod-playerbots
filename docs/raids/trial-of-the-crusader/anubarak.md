@@ -140,19 +140,20 @@ No ties, since a tie falls to insertion order:
 | EMERGENCY+3 | `anubarak burrower casting shadow strike` → `anubarak interrupt shadow strike` | a caster's interrupter | interrupt or stun; out of range, walks in first |
 | RAID+6 | `anubarak leeching swarm on tank` → `anubarak tank defensive` | his victim in `Swarm`, a defensive ready | `NextTankDefensive` on self |
 | RAID+5 | `anubarak ranged should seed permafrost` → `anubarak destroy frost sphere` | a sphere duty | attacks the sphere |
-| RAID+4 | `anubarak burrower should be focused` → `anubarak focus burrower` | DPS, a burrower on Permafrost or `cross` set | crosses the lowest-health one on Permafrost; with none, back to `skull`, clearing a stale cross |
-| RAID+3 | `anubarak burrower needs assist tank` → `anubarak assist tank hold burrower` | a side tank with a burrower to take, not the pickup tank while he is up; or a leftover `square`/`triangle` | holds one on its side's patch; with none, rti back to `skull` |
+| RAID+4 | `anubarak dps target` → `anubarak dps target` | DPS whose `GetAnubarakDpsTarget` pick isn't its current target or its pet's | attacks the pick, pet too |
+| RAID+3 | `anubarak burrower needs assist tank` → `anubarak assist tank hold burrower` | a side tank with a burrower to take, not the pickup tank while he is up | holds one on its side's patch |
 | RAID+2 | `anubarak scarab on raid` → `anubarak tank pick up scarab` | the pickup tank while he is down, a side tank with no burrower to take; a scarab within 30 yd on a non-tank | taunt, attack |
-| RAID+1 | `anubarak engaged by main tank` → `anubarak main tank hold boss` | the pickup tank while he is up | skull, leads him onto the anchor, or from 65 s onto the submerge spot |
+| RAID+1 | `anubarak engaged by main tank` → `anubarak main tank hold boss` | the pickup tank while he is up | leads him onto the anchor, or from 65 s onto the submerge spot |
 | MEDIUM_HEAL+5 | `anubarak penetrating cold on raid` → `anubarak heal penetrating cold` | healer, a carrier below 90% | first direct heal `CanCastSpell` allows, on the lowest |
 
-The **pickup tank** is the main tank while alive, else side 0's tank. `anubarak tank target guard`
-zeroes `TankAssist` and `DpsAssist` for it while he is up and for a side tank while it has a
-burrower to take, and `DpsAssist` for a sphere shooter, so generic targeting cannot pull any of them
-off its charge: a flying sphere is out of combat, never the dps target, so assist would swap the
-shooter off it every tick. A side tank with nothing to take (its burrowers submerged or on the other
-side) falls through to the scarab node and tank assist. `anubarak control tank movement multiplier`
-zeroes formation moves for a tank on him or a burrower.
+The **pickup tank** is the main tank while alive, else side 0's tank. Three rules, each the test of
+one hold node's trigger, zero `TankAssist` and `DpsAssist` for it while he is up (`anubarak pickup
+tank target guard`) and for a side tank while it has a burrower to take (`anubarak side tank target
+guard`), and `DpsAssist` for a sphere shooter (`anubarak sphere shooter target guard`), so generic
+targeting cannot pull any of them off its charge: a flying sphere is out of combat, never the dps
+target, so assist would swap the shooter off it every tick. A side tank with nothing to take (its
+burrowers submerged or on the other side) falls through to the scarab node and tank assist.
+`anubarak control tank movement multiplier` zeroes formation moves for a tank on him or a burrower.
 
 **Every taunt** (boss, burrower, scarab) first checks `CanCastSpell` and the spell's range:
 `CastSpell` selects and faces the target before failing, so a taunt on cooldown would do that every
@@ -188,11 +189,24 @@ holds no burrower side, the boss tank included. It walks to its patch (none latc
 point) only once its pick is on it; an untaunted one is attacked in place, since walking off leaves
 it on its victim and the patch walk and reach melee trade the tank back and forth. It skips the
 walk while the patch lies within 9 yd of the spike's lane, where the dodge would walk it straight
-back out. It marks its pick under its own rti, `square` side 0 and `triangle` side 1, with no group
-icon, so DPS never follow it, and hands the rti back to `skull` once it has nothing to take:
-`TankTargetValue` reads the rti first, so a leftover mark has it chase that icon next fight. **DPS
-hit a burrower only while it carries Permafrost** (`cross`): off it, one below 80% submerges and
-comes back full. A shooter on sphere duty skips it, or the two nodes swap its target every tick.
+back out.
+
+**DPS target directly, no raid icon** (`GetAnubarakDpsTarget`, DPS by `IsToCDpsBot`, only while
+he is engaged), first match:
+
+1. a player's skull on him, a burrower or a scarab, alive, in combat, selectable and attackable;
+   never a sphere, which heroic has six of for the pull;
+2. the **focus burrower** (`anub.focus`, per instance), kept while alive, selectable and on
+   Permafrost, else the lowest-health one that is, guid breaking a tie. Only Permafrost counts:
+   off it, one below 80% submerges and comes back full;
+3. him while selectable;
+4. while he is down, the nearest scarab within 30 yd that is selectable, attackable and in combat.
+   Each puts 20000 threat on a random player, so no tank gathers them; 30 yd is the tank pickup
+   reach.
+
+A sphere shooter gets no pick, or the sphere node (+5) and this one swap its target every tick.
+`anubarak dps target guard` zeroes `DpsAssist` exactly while there is a pick, so a bot without one
+keeps assist.
 
 **Sphere duty.** Shooters are the alive unmarked ranged DPS bots in the pit (within 60 yd of the
 room centre, below z 200) by guid, shooter *i* taking need *i*. A player never reads the assignment,
@@ -244,8 +258,10 @@ of its line to the kiter, a bot takes the nearest spot 13 yd from the spike and 
 within 30 yd, latched until within 2 yd of it or 1 s without dodging. Impale is a 6 yd cone, and
 clearance has to sit past the trigger radius ([pitfalls.md](../../engine/pitfalls.md)).
 
-**Scarabs get generic targeting; tanks taunt them off non-tanks.** Each puts 20000 threat on a random
-player, so threat cannot hold one; the guide only asks raiders to mind their scarab aggro.
+**Scarabs.** DPS take them only while he is down (branch 4 of the DPS target above); the guide only
+asks raiders to mind their scarab aggro. Phase 2's are 600 s summons (66340) and outlive the emerge,
+but once he is selectable the boss pick holds and `dps assist` stays zeroed, so leftovers fall to
+`anubarak scarab on raid` alone: tanks taunt them off non-tanks.
 
 **Shadow Strike** gets one interrupter per casting burrower, derived once per instance per ms, since
 25H's four a wave overlap their 8 s casts. Each goes to its victim if unmarked with an interrupt
@@ -271,8 +287,10 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 - The spike dodge ignores Permafrost, so a dodge can land in heroic's 80% slow.
 - Sphere and Shadow Strike duty are memoised for one group per instance per ms; two groups in one
   instance recompute them on every switch. Side tanks are latched per instance.
-- A side tank's `square`/`triangle` and a DPS's `cross` outlive a kill: stage 10 closes every
-  Anub'arak node before the leftover clause can hand the rti back.
+- While he is down, a DPS bot with no scarab within 30 yd falls back to `dps assist`, which can take
+  a burrower off Permafrost.
+- Scarabs alive at the emerge are no DPS pick once he surfaces; only side tanks with nothing to take
+  peel them off non-tanks.
 - Not handled: Hand of Protection or an immunity for a kiter with no patch, the phase 3 heal hold
   and stamina-buff cancel, Freezing Slash defensives, burrower pacing and ignoring burrowers once he
   is low, landing and regroup, scarab threat and Mandible stacks, Spider Frenzy spacing on 25H, the
@@ -293,6 +311,8 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 | `interrupter` | `1` while the bot holds Shadow Strike duty, `0` once the cast ends |
 | `pickup` | The pickup tank's step: `taunt` (off a non-tank), `attack`, `hold` (onto the anchor), `submerge` (onto the submerge spot) |
 | `defensive` | What the Swarm tank cast, `covered` (one running) or `none` |
+| `focus` | The focus burrower, 0 when none; kept current under a skull. Per instance |
+| `dps` | A DPS bot's pick: `skull`, `burrower`, `boss`, `scarab`, `none` (a sphere shooter too) |
 
 The marked player is the 67574 `aura` stream, so no key repeats it.
 
@@ -306,7 +326,8 @@ window: kiter, `kite` branches, seconds, outcome; Impale on anyone else; `dodge`
 (flying above z 150 and patches below 146 from the 34606 rows, Permafrost `hz`, patches gone within
 3 s of a mark ending, heroic spheres left, `sphere` and casts at a sphere), `--burrowers` (life,
 submerges, share of samples within 6.4 yd of a Permafrost centre, Shadow Strike casts and whether
-66134 damage followed, `interrupter`), `--threat` (his target by role per
+66134 damage followed, `interrupter`; each burrower's time holding `focus` and the share of living
+DPS bot samples on it meanwhile; `dps`), `--threat` (his target by role per
 surfaced window, time from each emerge to a tank, taunts, distance from the drag anchor, `pickup`),
 `--swarm` (phase 3 length, 66240 per bot, lust against the phase 3 start, Penetrating Cold windows
 and heals onto the carriers, `defensive`, deaths). The banner names declared probes the pull never

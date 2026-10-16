@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "NamedObjectContext.h"
+#include "ToCTriggers_NorthrendBeasts.h"
 #include "Trigger.h"
 
 class NorthrendWormsMobileTankDutyTrigger : public Trigger
@@ -52,6 +53,8 @@ public:
             &ToCJormungarsTriggerContext::northrend_worms_redirect_threat;
         creators["northrend worms misplaced"] =
             &ToCJormungarsTriggerContext::northrend_worms_misplaced;
+        creators["northrend worms dps target"] =
+            &ToCJormungarsTriggerContext::northrend_worms_dps_target;
     }
 
 private:
@@ -69,6 +72,10 @@ private:
 
     static Trigger* northrend_worms_misplaced(PlayerbotAI* botAI) {
         return new NorthrendWormsMisplacedTrigger(botAI);
+    }
+
+    static Trigger* northrend_worms_dps_target(PlayerbotAI* botAI) {
+        return new NorthrendBeastsDpsTargetTrigger(botAI, "northrend worms dps target", NorthrendBeastsStem::Worms);
     }
 };
 

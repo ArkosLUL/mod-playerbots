@@ -59,14 +59,21 @@ bool HasMistressKiss(Unit* unit);
 
 // Nether Portal, Infernal Volcano, Mistress of Pain or Felflame Infernal
 bool IsJaraxxusAdd(Unit* unit);
-// A Mistress, an Infernal, or a selectable (heroic) portal or volcano
-bool JaraxxusAnyAddAlive(PlayerbotAI* botAI);
 // Kill order, lowest guid first within a kind: selectable portal, selectable volcano, Mistress,
 // Infernal. Writes jaraxxus.focus, empty when none.
 Unit* GetJaraxxusFocusAdd(PlayerbotAI* botAI);
 // Index 0 takes Mistresses, index 1 Infernals, and each falls back to the other's kind (index 0 only
 // with no living index 1 tank). Writes jaraxxus.addtank for the bot, erased when null.
 Unit* GetJaraxxusAssistTankAdd(PlayerbotAI* botAI, uint8 index);
+
+// The tank holds' trigger tests. The tank targeting rule reads the same calls, so it never zeroes
+// tank assist for a tank no hold covers.
+bool JaraxxusMainTankHolds(PlayerbotAI* botAI);
+bool JaraxxusAssistTankHolds(PlayerbotAI* botAI, uint8 index);
+
+// DPS bots only, while the gate is open (his adds outlive the kill): a player's skull on him or an
+// add, else the kill-order add, else him once in combat. Writes jaraxxus.dps: skull, add, boss, none.
+Unit* GetJaraxxusDpsTarget(PlayerbotAI* botAI);
 
 bool JaraxxusIsFelFireballCasting(Unit* boss);
 // First interrupt the bot can cast on him right now, can pay for, and reaches from where it stands.
@@ -99,11 +106,6 @@ bool LegionFlameCrossesPath(Player* bot, Position const& to);
 bool DeriveLegionFlameDetour(Player* bot, Position const& anchor, float maxStep, Position& spot);
 // Any Legion Flame on the floor
 bool JaraxxusAnyLegionFlame(PlayerbotAI* botAI);
-
-// Bots whose rti the Jaraxxus actions set, so only those get it put back once the adds are dead
-void JaraxxusClaimRti(Player* bot);
-bool JaraxxusOwnsRti(Player* bot);
-void JaraxxusReleaseRti(Player* bot);
 
 }
 

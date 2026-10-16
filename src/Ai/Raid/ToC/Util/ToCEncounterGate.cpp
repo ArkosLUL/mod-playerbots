@@ -223,6 +223,16 @@ ToCEncounter ToCLiveEncounter(PlayerbotAI* botAI)
     return state ? state->live : ToCEncounter::None;
 }
 
+bool ToCGateOpen(PlayerbotAI* botAI, uint32 encounterId)
+{
+    return ToCEncounterGateOpen(botAI, static_cast<ToCEncounter>(encounterId));
+}
+
+bool ToCGateLive(PlayerbotAI* botAI, uint32 encounterId)
+{
+    return ToCEncounterIsLive(botAI, static_cast<ToCEncounter>(encounterId));
+}
+
 bool ToCEncounterOfTrigger(std::string const& triggerName, ToCEncounter& encounter)
 {
     for (EncounterPrefix const& entry : ENCOUNTER_PREFIXES)

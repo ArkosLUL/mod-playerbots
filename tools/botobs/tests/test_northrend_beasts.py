@@ -617,5 +617,79 @@ class WormPull(unittest.TestCase):
             self.assertIn(empty, text)
 
 
+ONPICK = 5201   # ranged, on its mobile-worm pick from 2 s, pick gone at 10 s
+OFFPICK = 5202  # melee, on the stationary worm until it dies at 8 s
+HOLDER = 5203   # tank, never scored
+PLAYER = 5204   # human ranged, never scored
+
+
+def targets_snap(when: int) -> dict:
+    targets = {ONPICK: ACIDMAW if when >= 2000 else 0, OFFPICK: DREADSCALE, HOLDER: DREADSCALE, PLAYER: DREADSCALE}
+    units = [[guid, 0.0, 0.0, 0.0, 0.0, 0.0 if guid == OFFPICK and when >= 8000 else 100.0, 100.0, target,
+              0, 0, 0, 0] for guid, target in targets.items()]
+    units.append([ACIDMAW, 10.0, 0.0, 0.0, 0.0, 100.0, 0.0, HOLDER, 0, 0, 0, 0])
+    units.append([DREADSCALE, -10.0, 0.0, 0.0, 0.0, 100.0, 0.0, HOLDER, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units}
+
+
+def targets_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789700000000, "map": 649, "inst": 9, "diff": 1,
+         "boss": "gormok-the-impaler", "roster": [
+             {"g": ONPICK, "n": "Onpick", "r": "ranged", "c": "mage", "h": 0},
+             {"g": OFFPICK, "n": "Offpick", "r": "melee", "c": "rogue", "h": 0},
+             {"g": HOLDER, "n": "Holder", "r": "tank", "c": "warrior", "h": 0},
+             {"g": PLAYER, "n": "Player", "r": "ranged", "c": "hunter", "h": 1}]},
+        {"t": 0, "e": "pull", "boss": "gormok-the-impaler", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ACIDMAW, "en": nb.NPC_ACIDMAW, "n": "Acidmaw", "b": 1},
+        {"t": 1, "e": "unit", "g": DREADSCALE, "en": nb.NPC_DREADSCALE, "n": "Dreadscale", "b": 1},
+        note(0, ONPICK, "nb.dps", f"mobile {ACIDMAW}"),
+        note(0, OFFPICK, "nb.dps", f"mobile {ACIDMAW}"),
+        note(0, PLAYER, "nb.dps", f"mobile {ACIDMAW}"),
+        note(10000, ONPICK, "nb.dps", "none"),
+        {"t": 8000, "e": "death", "g": OFFPICK, "killer": DREADSCALE, "x": 0.0, "y": 0.0, "z": 0.0},
+        {"t": 12000, "e": "end", "out": "wipe"},
+    ]
+    records += [targets_snap(when) for when in range(0, 13000, 1000)]
+    return records
+
+
+class TargetsPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_9_gormok-the-impaler_1789700000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in targets_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_living_time_on_the_pick_on_the_other_worm_or_neither(self):
+        # Onpick's first 2 s are on nothing, and its time under `none` counts nowhere. Offpick stops at
+        # its death.
+        self.assertEqual(nb.target_time(self.trace), {
+            ONPICK: {"mobile": collections.Counter({"on": 8000, "neither": 2000})},
+            OFFPICK: {"mobile": collections.Counter({"other": 8000})}})
+
+    def test_raid_share_on_the_pick_per_branch(self):
+        share, total = nb.on_pick_share(nb.target_time(self.trace))["mobile"]
+        self.assertEqual(total, 18000)
+        self.assertAlmostEqual(share, 8000 / 18000)
+
+    def test_targets_prints_the_share(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_targets(self.trace)
+        self.assertIn("raid on its pick: mobile 44% of 18.0 s", out.getvalue())
+
+    def test_targets_reads_empty_on_another_boss(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_targets(Trace(FULL))
+        self.assertIn("no nb.dps pick sampled", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

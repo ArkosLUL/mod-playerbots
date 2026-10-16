@@ -22,6 +22,7 @@
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Shared.h"
 
 namespace TrialOfTheCrusaderHelpers
 {
@@ -60,7 +61,6 @@ constexpr float COUNTERSPELL_RANGE = 30.0f;
 
 constexpr uint8 ICON_COUNT = 8;
 constexpr uint8 NO_ICON = ICON_COUNT;
-constexpr uint8 SKULL_ICON = static_cast<uint8>(RtiTargetValue::skullIndex);
 
 // Handed out in this order, each CC bot keeping its own
 constexpr std::array<uint8, 7> CC_ICONS = {
@@ -94,6 +94,9 @@ struct FactionChampionsState
     bool live = false;
     std::vector<Champion> champions;  // alive, in kill order
     ObjectGuid suspended;
+    // A player's skull on a champion. Group::SetTargetIcon strips every other icon off a target, so a
+    // CC icon put on this one would erase the skull.
+    ObjectGuid skulled;
     std::unordered_map<ObjectGuid, uint8> ccIcons;
     // "rti cc" is saved to the bot's DB store, so whatever it held before the first assignment goes back
     std::unordered_map<ObjectGuid, std::string> savedRtiCc;
@@ -192,6 +195,7 @@ void EndPull(FactionChampionsState& state, Player* bot)
 {
     state.champions.clear();
     state.suspended.Clear();
+    state.skulled.Clear();
 
     if (!state.killTarget.Get().IsEmpty())
     {
@@ -238,6 +242,8 @@ void ScanChampions(FactionChampionsState& state, Player* bot)
               { return a.rank != b.rank ? a.rank < b.rank : a.guid < b.guid; });
 }
 
+bool IsChampionUnit(Unit* unit) { return unit->IsCreature() && IsFactionChampion(unit->GetEntry()); }
+
 Champion const* FindCandidate(FactionChampionsState const& state, ObjectGuid guid)
 {
     if (guid.IsEmpty())
@@ -266,6 +272,22 @@ void UpdateKillLatch(FactionChampionsState& state, Player* bot)
     Champion const* suspended = FindCandidate(state, state.suspended);
     if (!suspended)
         state.suspended.Clear();
+
+    // Checked before the return to a suspended one, which would otherwise take the latch off the skull
+    Champion const* skulled = FindCandidate(state, state.skulled);
+    if (skulled && skulled->touchable)
+    {
+        if (skulled->guid != latched)
+        {
+            if (skulled->guid == state.suspended)
+                state.suspended.Clear();
+
+            RaidObs::Note(bot, "fc.switch", "skull");
+            state.killTarget = skulled->guid;
+        }
+
+        return;
+    }
 
     ObjectGuid next = latched;
     char const* reason = nullptr;
@@ -354,9 +376,10 @@ void UpdateCcAssignments(FactionChampionsState& state, Player* bot)
 
     ObjectGuid const killTarget = state.killTarget.Get();
     std::vector<ObjectGuid> candidates;
-    // Not the suspended one either: the latch goes back to it, and CC on it would break or block that
+    // Not the suspended one either: the latch goes back to it, and CC on it would break or block that.
+    // Nor the skulled one, even while it's immune and so not the latch.
     for (Champion const& champion : state.champions)
-        if (champion.guid != killTarget && champion.guid != state.suspended)
+        if (champion.guid != killTarget && champion.guid != state.suspended && champion.guid != state.skulled)
             candidates.push_back(champion.guid);
 
     std::vector<ObjectGuid> released;
@@ -415,16 +438,12 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
     }
 
     ScanChampions(*state, bot);
+    Unit* skull = GetToCHumanSkull(botAI, &IsChampionUnit);
+    state->skulled = skull ? skull->GetGUID() : ObjectGuid::Empty;
     UpdateKillLatch(*state, bot);
     UpdateCcAssignments(*state, bot);
     return state;
 }
-
-struct MarkWork
-{
-    bool moveSkull = false;
-    std::vector<uint8> clearIcons;
-};
 
 bool AssignmentGivesIcon(FactionChampionsState const& state, uint8 icon, ObjectGuid target)
 {
@@ -449,35 +468,32 @@ bool IsChampionGuid(Map* map, ObjectGuid guid)
     return creature && IsFactionChampion(creature->GetEntry());
 }
 
-// Marks on anything but a champion are left alone, and between pulls every mark is, unless it's
-// still where this encounter put it.
-MarkWork PendingMarks(FactionChampionsState const& state, Player* bot, Group* group)
+// CC icons on a champion only: the skull and marks on anything else are a player's. Between pulls, only
+// the CC icons still where this encounter put them.
+std::vector<uint8> StaleCcIcons(FactionChampionsState const& state, Player* bot, Group* group)
 {
-    MarkWork work;
+    std::vector<uint8> stale;
     if (state.live)
     {
-        ObjectGuid const killTarget = state.killTarget.Get();
-        work.moveSkull = !killTarget.IsEmpty() && group->GetTargetIcon(SKULL_ICON) != killTarget;
-
         Map* map = bot->FindMap();
         for (uint8 icon : CC_ICONS)
         {
             ObjectGuid const held = group->GetTargetIcon(icon);
             if (map && IsChampionGuid(map, held) && !AssignmentGivesIcon(state, icon, held))
-                work.clearIcons.push_back(icon);
+                stale.push_back(icon);
         }
 
-        return work;
+        return stale;
     }
 
-    for (uint8 icon = 0; icon < ICON_COUNT; ++icon)
+    for (uint8 icon : CC_ICONS)
     {
         ObjectGuid const placed = state.placedIcons[icon];
         if (!placed.IsEmpty() && group->GetTargetIcon(icon) == placed)
-            work.clearIcons.push_back(icon);
+            stale.push_back(icon);
     }
 
-    return work;
+    return stale;
 }
 
 // Counterspell only interrupts a spell passing these checks (Spell::EffectInterruptCast), so the
@@ -640,18 +656,14 @@ Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint8& iconIndex)
     return creature;
 }
 
-bool FactionChampionsMarksPending(PlayerbotAI* botAI)
+bool FactionChampionsCcIconsStale(PlayerbotAI* botAI)
 {
     FactionChampionsState* state = Refresh(botAI);
     Group* group = state ? botAI->GetBot()->GetGroup() : nullptr;
-    if (!group)
-        return false;
-
-    MarkWork const work = PendingMarks(*state, botAI->GetBot(), group);
-    return work.moveSkull || !work.clearIcons.empty();
+    return group && !StaleCcIcons(*state, botAI->GetBot(), group).empty();
 }
 
-void FactionChampionsApplyMarks(PlayerbotAI* botAI)
+void FactionChampionsClearStaleCcIcons(PlayerbotAI* botAI)
 {
     FactionChampionsState* state = Refresh(botAI);
     Player* bot = botAI->GetBot();
@@ -659,18 +671,7 @@ void FactionChampionsApplyMarks(PlayerbotAI* botAI)
     if (!group)
         return;
 
-    MarkWork const work = PendingMarks(*state, bot, group);
-    if (work.moveSkull)
-    {
-        if (Creature* killTarget = AliveCreature(bot, state->killTarget.Get()))
-        {
-            // Group::SetTargetIcon also takes any CC icon off it
-            EncounterHelpers::MarkTargetWithSkull(bot, killTarget);
-            state->placedIcons[SKULL_ICON] = killTarget->GetGUID();
-        }
-    }
-
-    for (uint8 icon : work.clearIcons)
+    for (uint8 icon : StaleCcIcons(*state, bot, group))
     {
         EncounterHelpers::ClearTargetIcon(bot, icon);
         state->placedIcons[icon].Clear();

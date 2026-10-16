@@ -5,9 +5,9 @@
 using namespace TrialOfTheCrusaderHelpers;
 
 // false, so the bot still gets its own action this tick
-bool FactionChampionsMarkTargetsAction::Execute(Event /*event*/)
+bool FactionChampionsClearCcIconsAction::Execute(Event /*event*/)
 {
-    FactionChampionsApplyMarks(botAI);
+    FactionChampionsClearStaleCcIcons(botAI);
     return false;
 }
 
@@ -15,11 +15,7 @@ bool FactionChampionsAntiFearAction::FearWindowActive() { return FactionChampion
 
 bool FactionChampionsFocusPriorityAction::Execute(Event /*event*/)
 {
-    Unit* killTarget = FactionChampionsKillTarget(botAI);
-    if (!killTarget || AI_VALUE(Unit*, "current target") == killTarget)
-        return false;
-
-    return Attack(killTarget);
+    return AttackDirect(FactionChampionsKillTarget(botAI));
 }
 
 // false, so the bot still gets its own action this tick

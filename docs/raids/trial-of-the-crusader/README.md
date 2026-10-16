@@ -109,7 +109,7 @@ Nodes keyed on these, each live on a difficulty only through the remap or all fo
 | `jaraxxus legion flame nearby` | Legion Flame |
 | `twin valkyr needs base essence`, `… vortex requires essence`, `… touched requires essence`, `… shield requires essence` | essences, Vortex casts, Touch, shields |
 | `twin valkyr pact interrupt duty` | Twin's Pact cast |
-| `anubarak burrower should be focused` | Permafrost on the burrower |
+| `anubarak dps target` | Permafrost on the burrower |
 | `anubarak penetrating cold on raid` | Penetrating Cold |
 | Anub'arak burst row | Leeching Swarm, lust only in phase 3, latched per instance |
 
@@ -117,7 +117,9 @@ Nodes keyed on these, each live on a difficulty only through the remap or all fo
 
 `src/Ai/Raid/ToC/` splits per stem: `Action/ToCActions_<Stem>`, `Trigger/ToCTriggers_<Stem>`,
 `Multiplier/ToCMultipliers_<Stem>`, `Util/ToCHelpers_<Stem>`. `NorthrendBeasts` holds what the three
-beasts share, `Shared` what several encounters use.
+beasts share, `Shared` what several encounters use. `Definition/ToCDefinition_<Encounter>.cpp` holds
+an encounter's rules: an `EncounterDefinition` with gate `ToCGate` and no rows or tick, its accessor
+declared in `Definition/ToCDefinitions.h`.
 
 **Seams.** A boss gains a trigger, action or multiplier by editing only its own stem:
 
@@ -125,24 +127,28 @@ beasts share, `Shared` what several encounters use.
   `AddToC<Stem>TriggerNodes` (both `Trigger/ToCTriggers_<Stem>.h`);
 - action: class plus entry in `ToC<Stem>ActionContext` (`Action/ToCActions_<Stem>.h`);
 - multiplier: `AddToC<Stem>Multipliers` (`Multiplier/ToCMultipliers_<Stem>.h`);
+- rule: the encounter's Definition file, wired in `ToCStrategy::InitMultipliers` right after its
+  stem multipliers, since a trace credits the first rule or multiplier that zeroes an action;
 - burst row: each encounter stem (`NorthrendBeasts`, `Jaraxxus`, `FactionChampions`, `TwinValkyr`,
   `Anubarak`) answers `ToC<Stem>BurstWindow` with a `ToCBurstWindow`. `ToCBurstWindowMultiplier`
   (`Multiplier/ToCMultipliers_Shared.{h,cpp}`) applies the live encounter's row to in-combat burst
   cooldowns, mana-return ones exempt: `allowLust` to Bloodlust/Heroism, `allowAll` to the rest.
   Every row ANDs with the shared tank-held-boss gate.
 
-The root only dispatches: `ToCStrategy.cpp` calls every stem's node and multiplier list, and
-`ToCActionContext.h`/`ToCTriggerContext.h` merge the stem contexts. The four registration sites name
-only these root classes. **Dispatch order is behaviour**: equal relevances pop in insertion order.
+The root only dispatches: `ToCStrategy.cpp` calls every stem's node and multiplier list and every
+Definition's rules, and `ToCActionContext.h`/`ToCTriggerContext.h` merge the stem contexts. The four
+registration sites name only these root classes. **Dispatch order is behaviour**: equal relevances
+pop in insertion order.
 
 **Encounter gate** (`Util/ToCEncounterGate.{h,cpp}`), read from the instance script once per
-instance per ms. Off map 649 the gate is open and nothing is live.
+instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` adapts both to an
+`EncounterGate` (id `static_cast<uint32>(ToCEncounter::X)`).
 
-- **Open** (`ToCEncounterGateOpen`, gates triggers): the stage's encounter is this one, pulled or
-  not, so pre-pull prep (an essence before the twins) runs. Beasts at stage 2 and Jaraxxus at stage
-  4 also stay open until the next encounter is live: the kill moves the stage while adds live on
-  (snobolds riding players when Gormok dies last, the Mistress and Infernals Jaraxxus's portals and
-  volcanoes summoned), and each trigger tests its own units.
+- **Open** (`ToCEncounterGateOpen`, gates triggers and Definition rules): the stage's encounter is
+  this one, pulled or not, so pre-pull prep (an essence before the twins) runs. Beasts at stage 2
+  and Jaraxxus at stage 4 also stay open until the next encounter is live: the kill moves the stage
+  while adds live on (snobolds riding players when Gormok dies last, the Mistress and Infernals
+  Jaraxxus's portals and volcanoes summoned), and each trigger tests its own units.
 - **Live** (`ToCEncounterIsLive`, `ToCLiveEncounter`, gates multipliers and burst rows): also
   `IsEncounterInProgress()` and one of its units alive and in combat, which keeps walk-ins, the
   Fizzlebang intro and the Lich King scene closed. Icehowl, Jaraxxus and the champions are found by
@@ -170,12 +176,52 @@ instance per ms. Off map 649 the gate is open and nothing is live.
 - Shared bases (`Action/ToCActions_Shared.h`): `ToCMainTankHoldAction::DragBossToAnchor` backs the
   tank 5 yd at a time toward an anchor while it tanks the boss and stands more than 12 yd from it;
   the boss follows, so it settles up to melee reach past that, possibly on a hazard. Where the spot
-  matters, measure arrival on the boss (Anub'arak's pre-submerge drag).
+  matters, measure arrival on the boss (Anub'arak's pre-submerge drag). `ToCDirectAttackAction` is
+  the base of every resolver action ([below](#targeting-is-direct-no-raid-icons)).
+- Shared helpers (`Util/ToCHelpers_Shared.h`): `IsToCDpsBot` (not a tank by role or spec, not a
+  healer) is the role every DPS resolver and its rule test; `GetToCHumanSkull` reads the human
+  skull and `ToCPetOffPick` is the resolver triggers' pet clause
+  ([below](#targeting-is-direct-no-raid-icons)).
 - `AvoidCreatureClusterAction` is the legacy `FleePosition` dodge, capped at
   `AiPlayerbot.FleeDistance` (5 yd), with no caller left. A new hazard uses `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
   [pitfalls.md](../../engine/pitfalls.md).
 - `IsBotInFrontalCone` and `CastClassTaunt` live in `src/Util/EncounterHelpers.{h,cpp}`; ToC keeps no
   copies.
+
+## Targeting is direct, no raid icons
+
+Every encounter picks each bot's target in code and attacks it ([ignis.md](../ulduar/ignis.md)).
+Bots mark no kill target.
+
+- **Resolver.** One function per encounter returns the bot's pick, or null outside its window or
+  role, and notes it through `RaidObs::NoteDerived` (change-only, per bot). Its trigger fires while
+  the pick exists and isn't `current target`, or the pet is off it (`ToCPetOffPick`); its action
+  derives from `ToCDirectAttackAction` and calls `AttackDirect(pick)`.
+- **Rule.** The encounter's DPS `OwnTargeting` predicate is `resolver(botAI) != nullptr`, so rule
+  and resolver cover the same window by construction. This breaks the raid-wide
+  [whole fight](../README.md#targeting-the-whole-fight) rule on purpose: no ToC resolver ends in a
+  terminal fallback, so a wider rule would leave a bot with no target source. Where the resolver
+  has nothing, `dps assist` takes over: Anub'arak's phase 2 with no scarab within 30 yd, and the
+  1.5 s between the two worms' submerges.
+- **Settling and pets.** `AttackDirect` commands the pet on every call, since no generic strategy
+  wires `pet attack`, then returns false once the bot is on the pick so lower nodes run. The
+  trigger's pet clause sends back a resummoned, revived or drawn-off pet at no tick's cost.
+- **Pre-pull.** Every resolver branch needs an in-combat unit: `Attack()` has no out-of-combat guard
+  and reaches 100 yd ([kologarn.md](../ulduar/kologarn.md)).
+- **Human skull.** Each resolver's first branch is `GetToCHumanSkull`: the group skull on a unit of
+  the encounter that is alive, in combat, selectable and attackable by the bot. Bots here place no
+  skull, so it's a player's, unless a bot runs `mark rti`. `attack rti target` is wired into no
+  generic strategy, so without this read a player's mark does nothing.
+- **CC icons.** Faction Champions' CC icons and `rti cc` are the only icons bots still place or
+  follow: `rti cc` is the generic class CC pipeline's only input (`RtiCcTrigger`,
+  `RtiTriggers.cpp:25-36`; `CcTargetValue.cpp:29`) and never drives DPS target choice.
+- **Legacy `rti`.** `rti` is saved per bot, so the strategy's first `OnTick` on map 649 resets the
+  tags older builds set (`cross`, `square`, `triangle`, `diamond`) to `skull`
+  (`ToCRestoreLegacyRti`). Once per strategy object, so a player's later `rti` order sticks until
+  the strategy is rebuilt.
+- **No icon clear at a pull.** Group icons live in memory only (`Group::SetTargetIcon` never writes
+  the DB), so no icon from an older build survives a restart, and a clear could only remove a
+  player's marks.
 
 ## What a trace answers
 

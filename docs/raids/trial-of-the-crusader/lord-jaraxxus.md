@@ -103,11 +103,22 @@ The Warcraft Tavern guide, reconciled with the script:
 - **Mistress' Kiss**: a kissed bot casts instants only; a cast already running is broken from outside.
 - **Lust** at the pull (default burst row): no enrage, and the heroic Portal at 20 s falls inside it.
 
+## Targeting
+
+Direct, no icon or `rti` ([README.md](README.md#targeting-is-direct-no-raid-icons)).
+
+- **DPS** (`IsToCDpsBot`): `GetJaraxxusDpsTarget`, while the gate is open since his adds outlive the
+  kill: a player's skull on him or an add, else the kill-order add, else him once in combat.
+  `jaraxxus dps target guard` zeroes `dps assist`.
+- **Tanks** `Attack()` their unit from their hold. `jaraxxus tank target guard` zeroes `tank assist`
+  on the three holds' own trigger tests (`JaraxxusMainTankHolds`, `JaraxxusAssistTankHolds`), so a
+  tank between holds keeps it.
+
 ## Node ladder
 
 No ties; names drop their `jaraxxus` prefix. Two contests decide the order: the EMERGENCY band
-beats every node, and Nether Power beats focus. Tank rows never share a bot (the main tank is never
-an assist tank), so their order is arbitrary.
+beats every node, and Nether Power beats the DPS target. Tank rows never share a bot (the main tank
+is never an assist tank), so their order is arbitrary.
 
 | Trigger → action | Relevance | Why here |
 |---|---|---|
@@ -118,9 +129,8 @@ an assist tank), so their order is arbitrary.
 | `engaged by main tank` → `main tank hold boss` | `+5` | Only while he is in combat ([Pull and wipe](#pull-and-wipe)). The drag to `ARENA_CENTER` tests only its next 5 yd step, since a tank-carried trail lies along the whole way back; a flame there sends the tank around the trail |
 | `add needs assist tank` → `assist tank hold add` | `+4` | Assist tank 0 |
 | `second add needs assist tank` → `assist tank hold second add` | `+3` | Assist tank 1 |
-| `nether power active` → `remove nether power` | `+2` | A remover is usually a focusing DPS too, and each stack is +20% spell damage for 30 s. Its own node, since class dispels sit under `ACTION_RAID` |
-| `add should be focused` → `focus add` | `+1` | Needs an add alive and the reset none, so the two never meet |
-| `focus stale` → `reset focus` | `ACTION_RAID` | Only writes `rti`, so returns `false` |
+| `nether power active` → `remove nether power` | `+2` | A remover is usually a DPS bot too, and each stack is +20% spell damage for 30 s. Its own node, since class dispels sit under `ACTION_RAID` |
+| `dps target` → `dps target` | `+1` | Fires only off the pick, so `false` once on it ([Targeting](#targeting)) |
 | `incinerate flesh on raid` → `heal incinerate target` | `ACTION_MEDIUM_HEAL + 5` | Above routine heals, below critical ones (30): the target's health reads full under the absorb, so no generic node picks it. Returns `false` with nothing castable, so routine heals still run |
 
 ## Traps
@@ -142,12 +152,13 @@ an assist tank), so their order is arbitrary.
 ## What a trace answers
 
 Position, verdicts and moves come from the raid-agnostic streams; `postmortem.py --vetoes` covers
-the five multipliers. The Jaraxxus rows, under `--notes jaraxxus.`:
+the five multipliers and both rules. The Jaraxxus rows, under `--notes jaraxxus.`:
 
 | Key | Shape | Says |
 |---|---|---|
 | `netherpower` | latch | His Nether Power stacks, the only record: his auras are never traced |
-| `focus` | latch | The DPS kill-order add's guid, `0` for none |
+| `focus` | latch | The DPS kill-order add's guid, `0` for none; kept current under a skull |
+| `dps` | per bot | The DPS pick's branch: `skull`, `add`, `boss`, `none`. No reader section |
 | `addtank` | per assist tank | The add it holds, `0` for none |
 | `interrupter` | per bot | `1` holding Fel Fireball duty, only inside that cast: rewritten every tick he lives, so it drops to `0` as the cast ends |
 | `flame` | per bot | `carrier`, `relaxed` (nothing clear of raid and boss, so flames only), `tank` (a carrier holding him, flames only), `dodge`, `none`. Change-only: counts are switches, not legs |

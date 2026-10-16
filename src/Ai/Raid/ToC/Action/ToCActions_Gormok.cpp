@@ -46,9 +46,6 @@ bool GormokTankHoldBossAction::Execute(Event /*event*/)
     if (!gormok)
         return false;
 
-    MarkTargetWithSkull(bot, gormok);
-    SetRtiTarget(botAI, "skull", gormok);
-
     if (AI_VALUE(Unit*, "current target") != gormok)
         return Attack(gormok);
 
@@ -69,13 +66,9 @@ bool GormokTankHoldBossAction::Execute(Event /*event*/)
     return DragBossToAnchor(gormok, ARENA_CENTER);
 }
 
-bool GormokFocusSnoboldAction::Execute(Event /*event*/)
+bool GormokSwapTankHoldAction::Execute(Event /*event*/)
 {
-    Unit* snobold = GetGormokSnoboldPick(botAI);
-    if (!snobold || AI_VALUE(Unit*, "current target") == snobold)
-        return false;
-
-    return Attack(snobold);
+    return AttackDirect(GetEngagedBeast(botAI, NorthrendBeast::Gormok));
 }
 
 bool GormokTankSwapTauntAction::Execute(Event /*event*/)

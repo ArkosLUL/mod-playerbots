@@ -63,11 +63,11 @@ public:
     bool Execute(Event event) override;
 };
 
-class AnubarakFocusBurrowerAction : public AttackAction
+class AnubarakDpsTargetAction : public ToCDirectAttackAction
 {
 public:
-    AnubarakFocusBurrowerAction(
-        PlayerbotAI* botAI, std::string const name = "anubarak focus burrower") : AttackAction(botAI, name) {};
+    AnubarakDpsTargetAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak dps target") : ToCDirectAttackAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
@@ -124,8 +124,8 @@ public:
             &ToCAnubarakActionContext::anubarak_tank_defensive;
         creators["anubarak destroy frost sphere"] =
             &ToCAnubarakActionContext::anubarak_destroy_frost_sphere;
-        creators["anubarak focus burrower"] =
-            &ToCAnubarakActionContext::anubarak_focus_burrower;
+        creators["anubarak dps target"] =
+            &ToCAnubarakActionContext::anubarak_dps_target;
         creators["anubarak assist tank hold burrower"] =
             &ToCAnubarakActionContext::anubarak_assist_tank_hold_burrower;
         creators["anubarak tank pick up scarab"] =
@@ -157,8 +157,8 @@ private:
         return new AnubarakDestroyFrostSphereAction(botAI);
     }
 
-    static Action* anubarak_focus_burrower(PlayerbotAI* botAI) {
-        return new AnubarakFocusBurrowerAction(botAI);
+    static Action* anubarak_dps_target(PlayerbotAI* botAI) {
+        return new AnubarakDpsTargetAction(botAI);
     }
 
     static Action* anubarak_assist_tank_hold_burrower(PlayerbotAI* botAI) {

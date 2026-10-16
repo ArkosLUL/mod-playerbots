@@ -105,15 +105,6 @@ bool NorthrendWormsTankHoldAction::Execute(Event /*event*/)
     }
 
     bool const mobile = duty == BeastsTankDuty::WormMobile;
-    if (mobile)
-    {
-        // In a heroic overlap Gormok's holder marks him, and two holders trading the skull every tick
-        // drag the DPS back and forth
-        if (!GetEngagedBeast(botAI, NorthrendBeast::Gormok))
-            MarkTargetWithSkull(bot, worm);
-
-        SetRtiTarget(botAI, "skull", worm);
-    }
 
     if (IsWormSubmerged(worm))
         return ApproachSubmerged(worm);

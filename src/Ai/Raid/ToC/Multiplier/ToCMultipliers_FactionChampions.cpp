@@ -1,7 +1,6 @@
 #include "ToCMultipliers_FactionChampions.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_FactionChampions.h"
-#include "ChooseTargetActions.h"
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
 #include "Playerbots.h"
@@ -19,22 +18,6 @@ float FactionChampionsSuppressAoeMultiplier::GetValue(Action* action)
     }
 
     return ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions) ? 0.0f : 1.0f;
-}
-
-float FactionChampionsTargetGuardMultiplier::GetValue(Action* action)
-{
-    // Assist makes its own pick and flips bots off the kill target. Tank assist even leaves the skull
-    // once a tank, itself included, holds it.
-    if (!dynamic_cast<DpsAssistAction*>(action) && !dynamic_cast<TankAssistAction*>(action))
-        return 1.0f;
-
-    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
-        return 1.0f;
-
-    if (!FactionChampionsFocusBot(botAI))
-        return 1.0f;
-
-    return FactionChampionsKillTarget(botAI) ? 0.0f : 1.0f;
 }
 
 float FactionChampionsThreatRedirectVetoMultiplier::GetValue(Action* action)
@@ -63,7 +46,6 @@ bool FactionChampionsAntiFearTotemGuardMultiplier::FearWindowActive()
 void AddToCFactionChampionsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new FactionChampionsSuppressAoeMultiplier(botAI));
-    multipliers.push_back(new FactionChampionsTargetGuardMultiplier(botAI));
     multipliers.push_back(new FactionChampionsThreatRedirectVetoMultiplier(botAI));
     multipliers.push_back(new FactionChampionsAntiFearTotemGuardMultiplier(botAI));
 }

@@ -116,11 +116,11 @@ protected:
     Unit* GetThreatDumpTarget() override;
 };
 
-class TwinValkyrFocusTwinAction : public AttackAction
+class TwinValkyrFocusTwinAction : public ToCDirectAttackAction
 {
 public:
     TwinValkyrFocusTwinAction(
-        PlayerbotAI* botAI, std::string const name = "twin valkyr focus twin") : AttackAction(botAI, name) {}
+        PlayerbotAI* botAI, std::string const name = "twin valkyr focus twin") : ToCDirectAttackAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 

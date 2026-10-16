@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "Define.h"
+#include "RaidEncounter.h"
 #include "Trigger.h"
 
 class PlayerbotAI;
@@ -58,6 +59,12 @@ bool ToCEncounterIsLive(PlayerbotAI* botAI, ToCEncounter encounter);
 
 // None between pulls and off a ToC instance.
 ToCEncounter ToCLiveEncounter(PlayerbotAI* botAI);
+
+// EncounterGate over the two above, for a ToC EncounterDefinition. encounterId is
+// static_cast<uint32>(ToCEncounter::X).
+bool ToCGateOpen(PlayerbotAI* botAI, uint32 encounterId);
+bool ToCGateLive(PlayerbotAI* botAI, uint32 encounterId);
+inline constexpr EncounterGate ToCGate{&ToCGateOpen, &ToCGateLive};
 
 // False for a name with no encounter prefix, which then stays ungated.
 bool ToCEncounterOfTrigger(std::string const& triggerName, ToCEncounter& encounter);

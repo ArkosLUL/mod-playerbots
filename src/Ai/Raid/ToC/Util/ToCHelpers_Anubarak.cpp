@@ -17,10 +17,10 @@
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
-#include "RtiTargetValue.h"
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 using namespace EncounterHelpers;
@@ -84,6 +84,7 @@ struct AnubarakState
     RaidObs::ObsValue<uint32> flying{"anub.flying"};
     RaidObs::ObsValue<ObjectGuid> patch0{"anub.patch0"};
     RaidObs::ObsValue<ObjectGuid> patch1{"anub.patch1"};
+    RaidObs::ObsValue<ObjectGuid> focusBurrower{"anub.focus"};
 
     // 0 is a real getMSTime value, hence the valid flags
     bool engagedSeen = false;
@@ -317,6 +318,7 @@ void ClearPullLatches(AnubarakState& state)
     state.sideTanks[1].Clear();
     state.patch0 = ObjectGuid::Empty;
     state.patch1 = ObjectGuid::Empty;
+    state.focusBurrower = ObjectGuid::Empty;
 }
 
 // The explicit main tank, else the first living tank, as GetMainTankGuid picks but with the spec
@@ -1014,6 +1016,50 @@ bool IsLooseBurrower(Creature* burrower, Player* bot)
     Player* victimPlayer = victim->ToPlayer();
     return !victimPlayer || GetAnubarakBurrowerTankSide(victimPlayer) < 0;
 }
+
+bool IsFocusableBurrower(Creature* burrower)
+{
+    return burrower && burrower->IsAlive() && !burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) &&
+           UnitOnPermafrost(burrower);
+}
+
+// No frost spheres: heroic has six for the pull, and only sphere duty spends them
+bool IsAnubarakSkullTarget(Unit* unit)
+{
+    uint32 const entry = unit->GetEntry();
+    return unit->IsCreature() && (entry == static_cast<uint32>(ToCNpcs::NPC_ANUBARAK) ||
+                                  entry == static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER) ||
+                                  entry == static_cast<uint32>(ToCNpcs::NPC_SWARM_SCARAB));
+}
+
+// Each scarab puts 20000 threat on a random player, so there's no tank to gather on: per bot, the
+// nearest one in the tanks' pickup reach
+Creature* NearestDpsScarab(Player* bot, AnubarakState const& state)
+{
+    Creature* nearest = nullptr;
+    float nearestDist = ANUBARAK_SCARAB_PICKUP_RANGE;
+    for (Creature* scarab : ResolveAlive(bot, state.scarabs))
+    {
+        if (scarab->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || scarab->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE) ||
+            !scarab->IsInCombat())
+            continue;
+
+        float const dist = bot->GetExactDist2d(scarab);
+        if (dist <= nearestDist)
+        {
+            nearest = scarab;
+            nearestDist = dist;
+        }
+    }
+
+    return nearest;
+}
+
+Unit* NoteDpsPick(Player* bot, Unit* pick, char const* branch)
+{
+    RaidObs::NoteDerived(bot, "anub.dps", branch);
+    return pick;
+}
 }
 
 namespace TrialOfTheCrusaderHelpers
@@ -1206,8 +1252,6 @@ bool IsAnubarakTankPlayer(Player* player)
     return player && (PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true));
 }
 
-bool IsAnubarakSideRti(std::string const& rti) { return rti == ANUBARAK_SIDE_RTI[0] || rti == ANUBARAK_SIDE_RTI[1]; }
-
 std::vector<Creature*> GetAnubarakBurrowers(Player* bot)
 {
     AnubarakState const* state = Sweep(bot);
@@ -1258,24 +1302,21 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
 
 Creature* GetAnubarakFocusBurrower(Player* bot)
 {
-    std::vector<Creature*> const burrowers = GetAnubarakBurrowers(bot);
-    if (burrowers.empty())
+    AnubarakState* state = Sweep(bot);
+    if (!state)
         return nullptr;
 
-    ObjectGuid marked;
-    if (Group* group = bot->GetGroup())
-        marked = group->GetTargetIcon(RtiTargetValue::crossIndex);
+    Creature* latched = ResolveCreature(bot, state->focusBurrower.Get());
+    if (IsFocusableBurrower(latched))
+        return latched;
 
     Creature* lowest = nullptr;
-    for (Creature* burrower : burrowers)
+    for (Creature* burrower : ResolveAlive(bot, state->burrowers))
     {
-        if (burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || !UnitOnPermafrost(burrower))
+        if (!IsFocusableBurrower(burrower))
             continue;
 
-        if (burrower->GetGUID() == marked)
-            return burrower;
-
-        // Guid breaks a tie so every bot marks the same one
+        // Guid breaks a tie, so the pick never hangs on the sweep's order
         float const pct = burrower->GetHealthPct();
         if (!lowest || pct < lowest->GetHealthPct() ||
             (!(lowest->GetHealthPct() < pct) && burrower->GetGUID() < lowest->GetGUID()))
@@ -1284,7 +1325,41 @@ Creature* GetAnubarakFocusBurrower(Player* bot)
         }
     }
 
+    state->focusBurrower = lowest ? lowest->GetGUID() : ObjectGuid::Empty;
     return lowest;
+}
+
+Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!IsToCDpsBot(bot) || !AnubarakEngaged(botAI))
+        return nullptr;
+
+    // Read first: a new pull's first read clears the focus latch
+    AnubarakPhase const phase = GetAnubarakPhase(botAI);
+
+    // The sphere node outranks this one, so with a pick here a shooter would swap targets every tick
+    if (PlayerbotAI::IsRangedDps(bot) && GetAnubarakSphereToShoot(bot))
+        return NoteDpsPick(bot, nullptr, "none");
+
+    // Read even under a skull, so the anub.focus latch stays current
+    Creature* burrower = GetAnubarakFocusBurrower(bot);
+
+    if (Unit* skull = GetToCHumanSkull(botAI, &IsAnubarakSkullTarget))
+        return NoteDpsPick(bot, skull, "skull");
+
+    if (burrower)
+        return NoteDpsPick(bot, burrower, "burrower");
+
+    Creature* boss = GetAnubarak(bot);
+    if (boss && !boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        return NoteDpsPick(bot, boss, "boss");
+
+    AnubarakState const* state = phase == AnubarakPhase::Submerged ? Sweep(bot) : nullptr;
+    if (Creature* scarab = state ? NearestDpsScarab(bot, *state) : nullptr)
+        return NoteDpsPick(bot, scarab, "scarab");
+
+    return NoteDpsPick(bot, nullptr, "none");
 }
 
 Creature* GetAnubarakScarabToPickUp(Player* bot)

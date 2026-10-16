@@ -73,9 +73,9 @@ second by the guide's danger table — Rogue and Warrior S, Hunter A, Enhancemen
 Retribution B, Warlock, Shadow Priest and Mage C, Balance D. Among healers the Holy Paladin heals
 most and his Cleanse strips the raid's CC; the Disc Priest's instants and dispels make her the next
 to kill or chain-CC; the Resto Shaman's cast heals are interruptible but killing him is faster; the
-Resto Druid, with no dispel, is least threatening. Mark every target, assign CC, and CC dangerous
-champions that are free. Lust and every DPS cooldown at the pull: each early kill makes the rest
-easier.
+Resto Druid, with no dispel, is least threatening. Mark every target (bots mark only CC targets and
+attack directly), assign CC, and CC dangerous champions that are free. Lust and every DPS cooldown
+at the pull: each early kill makes the rest easier.
 
 ## What the defence plays against
 
@@ -158,10 +158,10 @@ them.
 | Topic | Decision | Why |
 |---|---|---|
 | Kill order | Holy Paladin, Disc Priest, Resto Shaman, Resto Druid, then the danger table in the order above. The CC order too. Pets are never picked or CC'd | The guide's healers-first school: champion heals go to the most-injured friendly, the kill target. Pets carry no Aegis and no kill credit |
-| Kill latch | `FactionChampionsKillTarget`, one grid scan per instance so every bot agrees, keeps its target while attackable. On its death the best attackable champion takes over, else the best immune one. Turned immune to physical and magic damage both (Divine Shield, Ice Block, Cyclone), it is suspended for the best attackable other, if any (a newer suspension replaces it), and returns once attackable and no healthier than the current | A per-bot, per-tick lowest-health pick splits the raid. Divine Shield and Ice Block fire below 25%. Each half is asked apart: `IsImmunedToDamage` wants one aura covering the whole mask, and Ice Block 65802 is a physical aura plus a magic one |
-| Marks | `faction champions mark targets`, on the mechanic tracker of any role: skull on the kill target (a switch clears the old one); clears a CC icon from a champion not assigned it, and once not live only icons still where this encounter put them. CC bots place their own icons | `IsMechanicTrackerBot` elects any role, so a marker gated to non-healers goes silent under a healer tracker. A wipe despawns the champions, so between pulls a stray can't be told from a human's pre-pull mark |
-| Focus | Non-healers attack the kill target (`faction champions focus priority`), `DpsAssist`/`TankAssist` vetoed meanwhile. Tanks join; no taunt peel | `TankTargetValue` leaves the skull while a tank holds it. Taunt can't keep a champion (above), and the guide has no tank role |
-| CC | Each CC bot (non-healer mage, warlock or druid running `cc`) gets its own champion, in kill order skipping the kill target and a suspended one, kept while both stay valid, and its own icon (moon, square, triangle, diamond, circle, star, cross) through `SetRtiCcTarget`. Its prior `rti cc` comes back on release, or once not live through `toc restore rti cc`. The next kill target stays CC'd until its turn; a Cyclone on it at the switch is an ordinary suspension | Champions diminish like players, so CC bots piling on one moon burn its DR. CC on the suspended one breaks or blocks the latch's return. `rti cc` is saved to the bot's DB store and outlives the pull; the restore node has no encounter prefix, so it still runs after the kill closes the gate, for a bot dead then |
+| Kill latch | `FactionChampionsKillTarget`, one grid scan per instance so every bot agrees, keeps its target while attackable. On its death the best attackable champion takes over, else the best immune one. Turned immune to physical and magic damage both (Divine Shield, Ice Block, Cyclone), it is suspended for the best attackable other, if any (a newer suspension replaces it), and returns once attackable and no healthier than the current. A player's skull (`GetToCHumanSkull`: alive, in combat, selectable, attackable) on a champion that can be hurt outranks all of this (`skull`); CC skips the skulled champion, immune or not | A per-bot, per-tick lowest-health pick splits the raid. Divine Shield and Ice Block fire below 25%. Each half is asked apart: `IsImmunedToDamage` wants one aura covering the whole mask, and Ice Block 65802 is a physical aura plus a magic one. A player's skull wins; through the latch, Counterspell, purge, the physical switch and CC follow it too. `Group::SetTargetIcon` strips every other icon off its target, so a CC icon would erase the skull |
+| CC icons | The only icons bots place, each CC bot its own. `faction champions clear cc icons`, on the mechanic tracker of any role, clears a CC icon from a champion not assigned it, and once not live only CC icons still where this encounter put them | A CC bot whose restored `rti cc` names a leftover icon would CC whatever wears it. `IsMechanicTrackerBot` elects any role, so a node gated to non-healers goes silent under a healer tracker. A wipe despawns the champions, so between pulls a stray can't be told from a human's pre-pull mark |
+| Focus | Non-healers attack the kill target directly (`faction champions focus priority`, pet sent too). The rule `faction champions target guard multiplier` (the reader's name) zeroes `DpsAssist`/`TankAssist` exactly while that node has a kill target. Tanks join; no taunt peel | Assist makes its own pick and would take the bot off the kill target on any tick the settled focus node returns false. Taunt can't keep a champion (above), and the guide has no tank role |
+| CC | Each CC bot (non-healer mage, warlock or druid running `cc`) gets its own champion, in kill order skipping the kill target, a suspended and a skulled one, kept while both stay valid, and its own icon (moon, square, triangle, diamond, circle, star, cross) through `SetRtiCcTarget`. Its prior `rti cc` comes back on release, or once not live through `toc restore rti cc`. The next kill target stays CC'd until its turn; a Cyclone on it at the switch is an ordinary suspension | Champions diminish like players, so CC bots piling on one moon burn its DR. CC on the suspended one breaks or blocks the latch's return. `rti cc` is saved to the bot's DB store and outlives the pull; the restore node has no encounter prefix, so it still runs after the kill closes the gate, for a bot dead then |
 | Interrupts | One mage, first by guid within 30 yd and neither CC'd nor silenced, counterspells the kill target's cast-time or channelled helpful spell unless it is immune (`faction champions counterspell kill target`, which re-checks the duty when it pops) | No mage node interrupts its own target: there is no current-target counterspell, and every `… on enemy healer` node skips the bot's target. Rogue, shadow priest, warrior, paladin, warlock pet, DK and shaman already cover the kill target, their healer nodes the others |
 | AoE | Suppressed | Champion's Aegis. The guide exempts Death and Decay and Pestilence; the core doesn't confirm it |
 | Burst | Lust and every cooldown at the pull, per the guide (`ToCFactionChampionsBurstWindow` allows both). The base tank-held gate and `OffensivePotionTrigger` exempt the 28 entries (`BossHasNoStableVictim`) | Re-seeded threat lets a tank hold a champion only by chance, so that gate would stay shut |
@@ -180,8 +180,8 @@ them.
   AoE fear to burn trinkets, the tank-led "death ball", and kiting melee champions.
 - With no eligible champion left, physical attackers keep swinging at the Hand of Protection target.
 - Class CC nodes recast into diminishing-returns immunity.
-- Stage 6 closes the gate at the kill, before any cleanup runs: the skull stays on the last
-  champion and neither latch is cleared (no `reset` switch, no `kill` or `physical` `0`).
+- Stage 6 closes the gate at the kill, before any cleanup runs: neither latch is cleared (no
+  `reset` switch, no `kill` or `physical` `0`).
 - The instant crowd AoE (Fan of Knives, Divine Storm, Arcane Explosion, Frost Nova, Psychic Scream,
   Intimidating Shout) is unanswered: only spacing denies it, and the bots don't spread.
 - Cyclone, Blind, Intimidating Shout and Death Grip plus Chains of Ice can't be dispelled, and no
@@ -199,7 +199,7 @@ The Faction Champions rows, under `--notes fc.`:
 | Key | Says |
 |---|---|
 | `kill` | The kill target, `0` when cleared. Per instance. At a kill the last one runs to the trace end |
-| `switch` | Why the latch moved: `first` (from empty), `dead` (died, or left combat), `immune`, `back` (the suspended one returned), `reset` (not live, a wipe). An event, one row per switch |
+| `switch` | Why the latch moved: `first` (from empty), `dead` (died, or left combat), `immune`, `back` (the suspended one returned), `skull` (a player's skull took it), `reset` (not live, a wipe). An event, one row per switch |
 | `cc` | A CC bot's champion, keyed on the bot, `0` on release |
 | `physical` | The physical switch target, `0` when none. Per instance, restated each pull |
 

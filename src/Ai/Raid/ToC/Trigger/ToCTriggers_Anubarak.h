@@ -43,11 +43,10 @@ public:
     bool IsActive() override;
 };
 
-class AnubarakBurrowerShouldBeFocusedTrigger : public Trigger
+class AnubarakDpsTargetTrigger : public Trigger
 {
 public:
-    AnubarakBurrowerShouldBeFocusedTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, "anubarak burrower should be focused") {}
+    AnubarakDpsTargetTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak dps target") {}
     bool IsActive() override;
 };
 
@@ -95,8 +94,8 @@ public:
             &ToCAnubarakTriggerContext::anubarak_leeching_swarm_on_tank;
         creators["anubarak ranged should seed permafrost"] =
             &ToCAnubarakTriggerContext::anubarak_ranged_should_seed_permafrost;
-        creators["anubarak burrower should be focused"] =
-            &ToCAnubarakTriggerContext::anubarak_burrower_should_be_focused;
+        creators["anubarak dps target"] =
+            &ToCAnubarakTriggerContext::anubarak_dps_target;
         creators["anubarak burrower needs assist tank"] =
             &ToCAnubarakTriggerContext::anubarak_burrower_needs_assist_tank;
         creators["anubarak scarab on raid"] =
@@ -128,8 +127,8 @@ private:
         return new AnubarakRangedShouldSeedPermafrostTrigger(botAI);
     }
 
-    static Trigger* anubarak_burrower_should_be_focused(PlayerbotAI* botAI) {
-        return new AnubarakBurrowerShouldBeFocusedTrigger(botAI);
+    static Trigger* anubarak_dps_target(PlayerbotAI* botAI) {
+        return new AnubarakDpsTargetTrigger(botAI);
     }
 
     static Trigger* anubarak_burrower_needs_assist_tank(PlayerbotAI* botAI) {

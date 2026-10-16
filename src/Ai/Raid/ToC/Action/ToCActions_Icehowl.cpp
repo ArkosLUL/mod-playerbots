@@ -72,13 +72,6 @@ bool IcehowlTankHoldBossAction::Execute(Event /*event*/)
     if (!icehowl)
         return false;
 
-    // In a heroic overlap the earlier beast's holder marks that one, and two holders trading the skull
-    // every tick drag the DPS back and forth. He gets it once he's the only beast left.
-    if (GetBeastsStageMask(botAI) == BEASTS_STAGE_ICEHOWL)
-        MarkTargetWithSkull(bot, icehowl);
-
-    SetRtiTarget(botAI, "skull", icehowl);
-
     // Passive only inside the charge cycle, where he takes no victim at all
     Creature* creature = icehowl->ToCreature();
     bool const passive = creature && creature->GetReactState() == REACT_PASSIVE;

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "NamedObjectContext.h"
+#include "ToCTriggers_NorthrendBeasts.h"
 #include "Trigger.h"
 
 class GormokTankDutyTrigger : public Trigger
@@ -14,11 +15,11 @@ public:
     bool IsActive() override;
 };
 
-class GormokSnoboldOnRaidTrigger : public Trigger
+class GormokSwapTankDutyTrigger : public Trigger
 {
 public:
-    GormokSnoboldOnRaidTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "gormok snobold on raid") {}
+    GormokSwapTankDutyTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "gormok swap tank duty") {}
     bool IsActive() override;
 };
 
@@ -69,8 +70,10 @@ public:
     {
         creators["gormok tank duty"] =
             &ToCGormokTriggerContext::gormok_tank_duty;
-        creators["gormok snobold on raid"] =
-            &ToCGormokTriggerContext::gormok_snobold_on_raid;
+        creators["gormok swap tank duty"] =
+            &ToCGormokTriggerContext::gormok_swap_tank_duty;
+        creators["gormok dps target"] =
+            &ToCGormokTriggerContext::gormok_dps_target;
         creators["gormok tank swap needed"] =
             &ToCGormokTriggerContext::gormok_tank_swap_needed;
         creators["gormok tank defensive"] =
@@ -88,8 +91,12 @@ private:
         return new GormokTankDutyTrigger(botAI);
     }
 
-    static Trigger* gormok_snobold_on_raid(PlayerbotAI* botAI) {
-        return new GormokSnoboldOnRaidTrigger(botAI);
+    static Trigger* gormok_swap_tank_duty(PlayerbotAI* botAI) {
+        return new GormokSwapTankDutyTrigger(botAI);
+    }
+
+    static Trigger* gormok_dps_target(PlayerbotAI* botAI) {
+        return new NorthrendBeastsDpsTargetTrigger(botAI, "gormok dps target", NorthrendBeastsStem::Gormok);
     }
 
     static Trigger* gormok_tank_swap_needed(PlayerbotAI* botAI) {

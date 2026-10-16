@@ -56,6 +56,30 @@ key on their duty.
 - **`northrend beasts control tank movement multiplier`** zeroes `CombatFormationMoveAction` for a
   tank whose victim is an engaged beast.
 
+## Targeting
+
+Direct, no raid icons ([README.md](README.md#targeting-is-direct-no-raid-icons)).
+
+- **DPS** (`gormok dps target`, `northrend worms dps target`, `icehowl dps target`, trigger and action
+  under one name, `ACTION_RAID + 2`): `GetBeastsDpsTarget`, first match:
+  1. a player's skull on a beast or snobold (`GetToCHumanSkull`);
+  2. the bot's snobold pick (below);
+  3. Gormok;
+  4. the mobile worm while up, by form (`GetBeastOfDuty(WormMobile)`), never by its holder: a human
+     holder doesn't move the DPS;
+  5. Icehowl.
+
+  Every branch needs a unit in combat, the pre-pull guard (a direct `Attack()` reaches 100 yd), and
+  there's no live test, so a snobold outliving the kill still resolves. No stationary-worm branch:
+  both worms go under within 1.5 s, and `dps assist` covers that gap. One node per stem, since gating
+  keys on the name prefix and the naming contract has no Beasts-wide one; each fires only for its
+  own units (Gormok and snobolds, the worms, Icehowl) while `current target` or the pet's victim
+  differs. `icehowl dps target` sits ahead of the breath stand at the same relevance: a stand walk
+  in flight holds the tick until it lands. `nb.dps`.
+- **`northrend beasts dps target guard`** zeroes `dps assist` while `GetBeastsDpsTarget` has a pick.
+- **`northrend beasts tank target guard`** zeroes `tank assist` for a tank whose duty's beast is
+  engaged; each hold `Attack()`s its own beast.
+
 ## Arena bounds
 
 navprobe cannot verify an arena point ([README.md](README.md#arena-floor)), so the script bounds the
@@ -96,24 +120,25 @@ Combat reach 6.5, so melee stand within 9.3 yd of his centre.
 
 **What the bots do.**
 
-- **Hold** (`gormok tank duty` → `gormok tank hold boss`): duty `Gormok`; skull and RTI; class taunt
-  only while his victim isn't a tank; `DragBossToAnchor` toward `ARENA_CENTER`, except while an
-  Icehowl charge is latched: every charge line crosses the centre.
+- **Hold** (`gormok tank duty` → `gormok tank hold boss`): duty `Gormok`; class taunt only while his
+  victim isn't a tank; `DragBossToAnchor` toward `ARENA_CENTER`, except while an Icehowl charge is
+  latched: every charge line crosses the centre.
 - **Swap** (`gormok tank swap needed` → `gormok tank swap taunt`): duty `GormokSwap`, his victim the
   `Gormok` holder at ≥ 3 Impale stacks (`GORMOK_IMPALE_SWAP_STACKS`), the bot at 0; a failed taunt
   attacks him. 3 on every difficulty (guide: 3, heroic 2-3), and only once the bot's own Impale is
   gone, since a taunter resumes its stacks. `nb.swap`.
+- **Swap hold** (`gormok swap tank duty` → `gormok swap tank hold`, `ACTION_RAID + 1`): the
+  `GormokSwap` holder attacks him while he isn't its or its pet's target, its only target source
+  with `tank assist` off. No taunt, which would pull him off the holder between swaps, and no drag.
 - **Defensive** (`gormok tank defensive`): the `Gormok` holder he is hitting, at ≥ 5 stacks or ≥ 3 with
   no `GormokSwap` holder, casts `NextTankDefensive` (guide: rotate defensives at high stacks).
   `nb.defensive`.
-- **Snobolds** (`gormok snobold on raid` → `gormok focus snobold`): one pick per DPS, ranked by rider
-  healer > ranged > melee > tank, then snobold guid. Healer and ranged riders' snobolds are for every
-  DPS, melee and tank riders' for melee only; once Gormok isn't engaged, every rider's for every DPS
-  (guide: free healers first, both DPS roles attack them). A candidate is alive and rides a living
-  player: the seated ones never count, and a dead rider's snobold returns to Gormok. No raid icon,
-  since marks are never cleared in a pull ([pitfalls.md](../../engine/pitfalls.md));
-  `GormokSnoboldTargetGuardMultiplier` zeroes `dps assist` for a bot with a pick, so it can't flip
-  back to the skull. `nb.snobold`.
+- **Snobolds**, the DPS resolver's second branch (`GetGormokSnoboldPick`): one pick per DPS, ranked
+  by rider healer > ranged > melee > tank, then snobold guid. Healer and ranged riders' snobolds are
+  for every DPS, melee and tank riders' for melee only; once Gormok isn't engaged, every rider's for
+  every DPS (guide: free healers first, both DPS roles attack them). A candidate is alive and rides a
+  living player: the seated ones never count, and a dead rider's snobold returns to Gormok.
+  `nb.snobold`.
 - **Carrier** (`gormok snobolled` → `gormok bring snobold to melee`): a ranged DPS or healer carrying
   one while Gormok is engaged walks to 10 yd of his centre for melee to free it (guide);
   `GormokSnoboldCarrierMultiplier` holds its other movers until the snobold dies, `blink` and
@@ -210,16 +235,13 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
 
 **What the bots do.**
 
-- **Kill target**: the mobile worm (skull), Dreadscale first and the other after every swap. Guide:
-  kill Dreadscale first, or Acidmaw if Dreadscale won't die before the submerge; script: every melee
-  on a stationary worm eats Sweep, and a 25-man bot raid rarely kills Dreadscale in its first
-  45-50 s. No DPS balance: the survivor enrages the moment the first worm dies, and the 10 s only
-  times the achievement.
+- **Kill target**: the mobile worm (the resolver's `mobile` branch), Dreadscale first and the other
+  after every swap. Guide: kill Dreadscale first, or Acidmaw if Dreadscale won't die before the
+  submerge; script: every melee on a stationary worm eats Sweep, and a 25-man bot raid rarely kills
+  Dreadscale in its first 45-50 s. No DPS balance: the survivor enrages the moment the first worm
+  dies, and the 10 s only times the achievement.
 - **Holds** (`northrend worms mobile tank duty` → `northrend worms tank hold mobile worm`, `… stationary
   tank duty` → `… tank hold stationary worm`, `ACTION_RAID + 1`) take the worm from `GetBeastOfDuty`.
-  The mobile hold points RTI skull at its worm always but marks it only while Gormok isn't engaged,
-  so a heroic overlap doesn't trade the skull with Gormok's hold. The stationary worm gets no mark:
-  nothing reads one, and marks never clear ([pitfalls.md](../../engine/pitfalls.md)).
   - Under ground, the mobile holder closes to 20 yd and the stationary one into melee of the spot
     (it's rooted), at `MOVEMENT_COMBAT`, re-issued only once the worm stands 3 yd off where it was at
     the last issue (it moves once, 2.5 s in): the worm walks to its taunter
@@ -242,11 +264,11 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     front pointing the same way (guide: drag him off the pool so melee can attack). `nb.wormmove`
     `drag`.
 - **Redirect** (`northrend worms redirect threat`, `ACTION_RAID + 1`): rogues serve the `WormMobile`
-  holder, since Tricks moves the threat off whatever the rogue hits and melee hit the skull. Living
+  holder, since Tricks moves the threat off whatever the rogue hits and DPS hit that worm. Living
   hunters alternate by index among hunters, even to `WormMobile`, odd to `WormStationary` (mobile
   without one). It fires while that holder lives and the worm is under ground or hitting someone
-  else, or while a hunter holds Misdirection charges (35079), spent on its worm, not the rotation's
-  skull. Misdirection and Tricks go out from the submerge, the shots wait for the emerge.
+  else, or while a hunter holds Misdirection charges (35079), spent on its worm, not its DPS target.
+  Misdirection and Tricks go out from the submerge, the shots wait for the emerge.
   `northrend worms redirect guard` zeroes the generic main-tank Misdirection and Tricks while a worm
   is engaged. The threat wipe is the moment and the holders the targets
   ([README.md](../README.md#threat-redirect--the-rubric): multi-tank assignment at a phase
@@ -406,10 +428,9 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
     while the encounter is live: `set behind` moves melee in his front half to ±108° off his facing,
     off a wrapped bearing, and he faces each breath target for 5 s.
   - `nb.spread`, `nb.arc`.
-- **Hold** (`icehowl tank duty` → `icehowl tank hold boss`): RTI; skull only while he is the only
-  beast engaged, so in a heroic overlap two holds don't trade it every tick; taunt only while his
-  victim isn't a tank and he isn't passive; no drag, since every charge starts at the centre and
-  ends at the wall (guide: tank him at a wall).
+- **Hold** (`icehowl tank duty` → `icehowl tank hold boss`): taunt only while his victim isn't a tank
+  and he isn't passive; no drag, since every charge starts at the centre and ends at the wall
+  (guide: tank him at a wall).
 - **Defensive** (`icehowl frothing rage` → `icehowl tank defensive`): his victim under Frothing Rage
   casts `NextTankDefensive`, the only answer on heroic. `nb.defensive`.
 - **Burst row.** Lust, one 10-minute cooldown, is held through Gormok and the worms, then goes at the
@@ -427,8 +448,9 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 - A healer's reach to both worm holders is only a preference: with the worms on opposite sides its
   spot falls back to safety alone.
 - A hunter that can't Steady Shot (moving, or too close) leaves held Misdirection charges to its
-  rotation, which can spend them on the skull and hand the `WormStationary` holder threat on the
-  mobile worm: the mobile holder re-taunts, at the cost of taunt diminishing returns.
+  rotation, which can spend them on its DPS target, the mobile worm, and hand the `WormStationary`
+  holder threat on it: the mobile holder re-taunts, at the cost of taunt diminishing returns.
+- In the 1.5 s between the two worms' submerges DPS have no pick and fall back to `dps assist`.
 - No Hand of Protection on a snobolled healer or caster, no external on Ferocious Butt (guide).
 - Heroic Frothing Rage can't be dispelled; only the holder's defensive answers it.
 - Melee eat every Whirl.
@@ -460,7 +482,8 @@ Position, verdicts and movement come from the raid-agnostic streams. The Beasts 
 | `tank` | A tank bot's duty, `gormok`, `swap`, `wormmobile`, `wormstationary`, `icehowl` or `none`, then the beast's guid. Written when a trigger asks. Can move during a charge: Icehowl has no victim then, so pass 1 keeps nothing |
 | `swap` | The `GormokSwap` tank's read: `go v=<holder stacks>`, `wait mine=<own stacks>`, `wait v=<holder stacks>` |
 | `defensive` | The tank defensive picked, `covered` (one running) or `none` |
-| `snobold` | A DPS's pick, `<rider guid> <rider role>`, or `none` |
+| `snobold` | A DPS's pick, `<rider guid> <rider role>`, or `none`; kept current under a skull |
+| `dps` | A DPS bot's target, `<branch> <guid>` with branch `skull`, `snobold`, `gormok`, `mobile` or `icehowl`, or `none`. Written when a trigger or the rule asks |
 | `charge` | 0 none, 1 crash, 2 gaze, 3 charge, 4 daze, 5 rage. Per instance |
 | `gaze` | The gaze target. Per instance |
 | `dodge` | The charge dodge's branch: `move <yd>` walk issued, its length; `tight` walk to a 13 yd spot; `hold` its own walk in flight; `clear` arrived, already there, or parked past 13; `stunned` can't move; `locked` another forced walk holds movement; `none` no spot within 30 yd |
@@ -485,20 +508,22 @@ to see it young; `ttl` is the modelled time left to the impact, not a measured o
 `tools/botobs/bosses/northrend_beasts.py <file>` reads the rest: stage spans with the deaths in each
 and when each beast first targeted someone (`--stage`); duties per tank, every change of Gormok's
 victim with both holders' Impale stacks, peak stacks, `nb.swap` branches, `gormok tank swap taunt`
-verdicts and defensive picks (`--tanks`); per charge the gaze target, lane, outcome, who stood
-within 12 yd of the lane's end at it (nearest snapshot), dodge branches per bot and Trample victims
-(`--charge`); per Arctic Breath its target, who froze (applies within 1 s) with their `nb.spread`,
-who the cone held in the snapshot nearest the cast (30° or 12° off the target's bearing), `nb.arc`,
-and times frozen per bot (`--breath`); Snobolled! 66406 spans per rider with role and seconds
-carried, and each DPS's picks by rider role (`--snobold`); per bomb its target (the nearest member),
-the 66317 hits up to 1.5 s past the modelled impact, each given to the nearest bomb whose window
-holds it, who stood within 8 yd at the impact, and `nb.bomb` branches per bot, `clear` included
-(`--bomb`); `worm` spans with their deaths, per emerge the seconds from each worm's own Emerge cast
-66947 (the first engage: `worm` leaving 0) until it targeted a tank and the non-tanks it targeted
-first, per wedge the non-tanks inside at the nearest snapshot and the Spew tick victims by role over
-3.5 s, per pool the bot-seconds inside its radius (`2 + 0.3 ×` whole seconds from its first
-snapshot) and its hits, Sweep victims by role and `wormmove` branches (`--worms`); Paralytic Toxin
-spans per carrier, ended `cured` (a Bile pulse on it within 250 ms of the removal), `died`,
+verdicts and defensive picks (`--tanks`); per DPS bot (melee or ranged, no human) and `nb.dps`
+branch, the sampled living seconds its target sat on the pick, on another beast or snobold, or on
+neither, then the raid's on-pick share per branch (`--targets`); per charge the gaze target, lane,
+outcome, who stood within 12 yd of the lane's end at it (nearest snapshot), dodge branches per bot
+and Trample victims (`--charge`); per Arctic Breath its target, who froze (applies within 1 s) with
+their `nb.spread`, who the cone held in the snapshot nearest the cast (30° or 12° off the target's
+bearing), `nb.arc`, and times frozen per bot (`--breath`); Snobolled! 66406 spans per rider with
+role and seconds carried, and each DPS's picks by rider role (`--snobold`); per bomb its target (the
+nearest member), the 66317 hits up to 1.5 s past the modelled impact, each given to the nearest bomb
+whose window holds it, who stood within 8 yd at the impact, and `nb.bomb` branches per bot, `clear`
+included (`--bomb`); `worm` spans with their deaths, per emerge the seconds from each worm's own
+Emerge cast 66947 (the first engage: `worm` leaving 0) until it targeted a tank and the non-tanks it
+targeted first, per wedge the non-tanks inside at the nearest snapshot and the Spew tick victims by
+role over 3.5 s, per pool the bot-seconds inside its radius (`2 + 0.3 ×` whole seconds from its
+first snapshot) and its hits, Sweep victims by role and `wormmove` branches (`--worms`); Paralytic
+Toxin spans per carrier, ended `cured` (a Bile pulse on it within 250 ms of the removal), `died`,
 `expired` (59 s or more), `other` or `open`, with seconds carried and `stuck` past 18 s (13.5
 heroic), Burning Bile spans with pulse hits on others carrying no Toxin, and `cure` branches
 (`--cure`).

@@ -317,6 +317,22 @@ class LoneTank(unittest.TestCase):
         self.assertEqual((rows[SHIV]["right"], rows[SHIV]["wrong"]), (35000, 20000))
 
 
+class SkullPick(unittest.TestCase):
+    def test_a_skull_pick_outranks_the_pact_and_the_colour(self):
+        picks = [
+            # Shiv is sent to a skulled Fjola through Eydis's Pact, then back to its colour
+            note(26000, SHIV, "tv.target", "fjola:skull"),
+            note(34000, SHIV, "tv.target", "fjola:dark"),
+            # Frost is sent to a skulled Eydis through Fjola's Pact
+            note(36000, FROST, "tv.target", "eydis:skull"),
+            note(51000, FROST, "tv.target", "eydis:light"),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            rows = {row["guid"]: row for row in vk.target_rows(load(folder, twins_pull() + picks))}
+        self.assertEqual((rows[SHIV]["right"], rows[SHIV]["wrong"]), (43000, 12000))
+        self.assertEqual((rows[FROST]["right"], rows[FROST]["wrong"]), (30000, 25000))
+
+
 class TwoBrokenPacts(unittest.TestCase):
     def test_a_dead_bots_duty_does_not_carry_into_the_next_pact(self):
         with tempfile.TemporaryDirectory() as folder:
