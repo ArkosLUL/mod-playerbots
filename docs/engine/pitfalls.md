@@ -130,7 +130,9 @@ stopped appearing, and whatever it cast on the way out: Yogg's Guardians are cou
 Shadow Nova for exactly this reason.
 
 **A change-only key keeps a stale value across windows**, a dead bot's duty for one. Write an
-explicit `none` when the window opens, or have the reader cut spans at death.
+explicit `none` when the window opens, or have the reader cut spans at death. Nor does a per-bot
+change-only latch that coverage reads NEVER prove its node dead: a generic node may have taken the
+action first (generic interrupts kicked every Fel Fireball before Jaraxxus's duty node could).
 
 Churn is only legible inside the phase you care about. Mimiron's phase-1 flip-flop counts 57 A-B-A
 within phase 1 and disappears into ~700 across the whole pull, so `postmortem.py --probes --during
@@ -489,9 +491,15 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
   `GetFirstAliveUnitByEntry`, which reads `"possible targets"`, loses a submerged boss or a spike
   the same way. Resolve those through the instance guid slot or a grid search.
 - **A `NullCreatureAI` unit stays out of combat, so out of `"attackers"`, until something hits it.**
-  `dps assist` swaps a bot off it every tick unless the encounter vetoes `DpsAssist` for that bot.
+  `dps assist` swaps a bot off it every tick unless the encounter vetoes `DpsAssist` for that bot. An
+  out-of-combat critter also fails `IsPossibleTarget`, so `invalid target` → `drop target` clears an
+  `Attack()` on it 0.2 s later and drops the bot to the non-combat engine: shooting one needs
+  `drop target` blocked while it is the bot's duty target (Anub'arak's spheres).
 - **No mage counterspells what it is attacking.** Mages have no current-target counterspell node,
   and every `... on enemy healer` value (`EnemyHealerTargetValue`) skips the bot's own current target.
+- **No mage Polymorphs the `rti cc` mark in a raid.** `PolymorphTrigger` is a `HasCcTargetTrigger`,
+  which reads `rti cc target` only outside raids, and `CastPolymorphAction` aims at `cc target`, whose
+  scan lets a later attacker overwrite the marked one.
 - **Out of line of sight is an invalid target.** `AttackersValue::IsValidTarget` is `IsPossibleTarget`
   plus `IsWithinLOSInMap`, so a slot behind a wall fires `invalid target` → `drop target`, and
   `DropTargetAction` calls `ChangeEngine(BOT_STATE_NON_COMBAT)`: the bot stops fighting and `follow`

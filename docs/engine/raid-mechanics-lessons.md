@@ -55,7 +55,7 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
 
 ## Movement that oscillates
 
-Bots jiggling on the spot is one symptom with eight causes, plus a ninth that freezes them instead.
+Bots jiggling on the spot is one symptom with ten causes, plus an eleventh that freezes them instead.
 
 - **Two owners** — see above.
 - **A destination that chases a moving boss.** A boss-relative spot flips to his far side while he is
@@ -63,6 +63,16 @@ Bots jiggling on the spot is one symptom with eight causes, plus a ninth that fr
   chase**: keep the bearing the spot already holds, slide only along the segment `[boss, spot]`, and
   keep it continuous — at the clamp distance the clamped point must *equal* the unclamped one. A
   threshold that snaps between two positions is the bouncing mechanism itself.
+- **A drag re-planned while the boss walks.** A chasing creature stops on its next 400 ms recheck
+  once a still victim is inside its reach, wherever it stands, so a re-plan every tick against a
+  tight arrive overshoots and reverses him. Plan one leg on a boss that has stood still, never
+  re-plan mid-leg. To meet him face-on the tank walks it backwards (`MoveTo` `backwards = true`), so
+  any lead maths uses `MOVE_RUN_BACK`, not `MOVE_RUN`
+  ([Anub'arak](../raids/trial-of-the-crusader/anubarak.md)).
+- **A spot anchored on a moving unit.** It passes any distance deadband every tick: judge drift only
+  once the anchor's own `isMoving()` has been false a short while (500 ms), not by widening the
+  deadband. A "victim in melee range" test misses the walk, since a boss chasing a knocked-back tank
+  catches it in flight and keeps it mostly in reach.
 - **A hazard sweep that restarts from a fixed base.** "First clear heading from base" re-finds ground
   *behind* the formation the moment a hazard back there expires, and the whole formation reverses.
   Latch the heading and sweep **forward only** from where it already is; an expiring hazard behind
@@ -157,16 +167,21 @@ Every distance helper measures differently, and a large-model boss inflates all 
 
 What lands on a raid add is not what PvP experience predicts.
 
-- **Roots and CC do not break on damage in 3.3.5.** `Unit::DealDamage` removes exactly one thing: auras
-  carrying `AURA_INTERRUPT_FLAG_TAKE_DAMAGE` (`Unit.cpp:1032`). Frost Nova and Entangling Roots do not
-  carry it, so they hold their full duration through raid AoE; Freezing Trap does, so it never survives
-  one. Read the flag, not the reputation.
+- **CC breaks on damage two ways.** `Unit::DealDamage` removes auras carrying
+  `AURA_INTERRUPT_FLAG_TAKE_DAMAGE` (`Unit.cpp:1032`) on any hit: Polymorph, Freezing Trap. An aura
+  with proc flags and no `PROC_TRIGGER_SPELL` gets a damage cap in `AuraEffect::CalculateAmount`
+  (level-80 warrior base health / 4.75 = 2,652), and `HandleBreakableCCAuraProc` removes it past
+  that, DoT ticks included: Fear, Frost Nova, Entangling Roots (66 of 67 Fears on Faction Champions
+  broke within 30 ms of a hit). Cyclone has neither. Read both, not the reputation.
 - **A stunned creature takes no heal assist threat**: `ThreatManager::ForwardThreatForAssistingMe`
   skips `UNIT_STATE_CONTROLLED` units.
 - **Diminishing returns skip creatures.** `ApplyDiminishingToDuration` diminishes a creature only for a
   `DRTYPE_ALL` group — stun, cyclone, charge — or one carrying `CREATURE_FLAG_EXTRA_ALL_DIMINISH`.
   Root, fear and disorient are `DRTYPE_PLAYER`, so on an add with `flags_extra = 0` they land at full
-  duration every time. The 10s PvP duration cap is gated the same way. Taunt diminishes only on a
+  duration every time. The 10s PvP duration cap is gated the same way, and also needs a player
+  caster. Both tests read the owner first, so a player's pet counts as a player. To predict the next
+  duration, `Unit::GetDiminishing` returns the level the next hit lands at (non-const: it resets a
+  stale entry). Taunt diminishes only on a
   creature flagged `OBEYS_TAUNT_DIMINISHING_RETURNS` (0x80000), which turns immune at the fifth, so a
   plan built on repeated taunt-backs fails there (Twin Val'kyr).
 - **An add that calls `DoResetThreatList` on a timer can be neither tanked, taunted nor redirected.**
@@ -370,6 +385,16 @@ scripted raid encounters.
 - **A spell's Speed delays even a triggered instant**, so an aura sent with a telegraphed cast can
   land before the telegraphed hit (Fire Bomb's 66318 a second before its 66317). Read Speed and the
   corrections before timing a hazard off its aura.
+- **A `TARGET_DEST_TARGET_ENEMY` area spell picks its victims in `Spell::_cast`**, at the cast's end,
+  so the cast bar is the whole dodge window and a Speed only delays the damage.
+- **A chain spell jumps by `IsWithinDist`**, both combat reaches added (10 yd magic default + 1.5 +
+  1.5 = 13 yd centre to centre, 3D, in LOS, nearest first). `EffectChainAmplitude` multiplies each
+  jump (`Spell.cpp:8684`), so a chain can grow per jump, not only shrink.
+- **A hazard the script reschedules on a phase edge** (engage, emerge, each cast start) can't fire
+  before its earliest timer: arm the dodge only from that timer minus a lead, or facing swings in the
+  dead window cause dodges.
+- **A creature's totem shares entries with players' totems**; `Minion::InitStats` → `SetMinion`
+  sets its `OwnerGUID`, so tell a hostile one apart by owner entry.
 - **A script's own periodic damage can skip every mitigation.** `spell_valkyr_touch_aura` hits every
   player on the map (`ExcludeTargetAuraSpell` 0) with damage computed before absorbs.
 - **`EventMap::ExecuteEvent` always erases the event**, so one not re-scheduled with `Repeat` runs

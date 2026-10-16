@@ -77,6 +77,10 @@ own target is not boss-flagged. Lust is raid-wide and a healer often has nothing
 Deliberately **not** extended to personal cooldowns, which would let DPS burn them on trash while a
 tank holds a boss somewhere else.
 
+**Exhaustion and Sated outlive a pull**, so a lust spent on one boss is missing on the next within
+10 min. In a trace, one applied before it began shows only as its removal; a fresh lust writes the
+caster's copy as a removal with full time left, then the member's apply ~10 ms later.
+
 **`holdState` carries the boss GUID and must be `Reset()` on every path that skips
 `TankHasHeldBoss`** — without that, the previous boss's timer satisfies the dwell instantly on
 the next pull.

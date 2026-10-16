@@ -81,6 +81,12 @@ per-class override for free (Ritual of Souls uses this).
 
 **Names are resolved at runtime and fail silently** — see [pitfalls.md](pitfalls.md).
 
+**A node's prerequisites come from whichever action-node factory `Engine::Init` merges last**:
+strategies merge in name order, and within one a factory added later (a subclass's after its base's)
+wins. `BalanceDruidStrategy`'s `cyclone on cc` and `entangling roots on cc` need `moonkin form`, the
+generic druid nodes `caster form`: read the spec's own factory, and the trace's PREREQ rows, before
+building on a generic node's prerequisite.
+
 Per-raid wiring is four edits: `src/Ai/Raid/RaidStrategyContext.h` (key → strategy),
 `src/Bot/Engine/BuildSharedTriggerContexts.cpp`, `BuildSharedActionContexts.cpp`, and
 `PlayerbotAI::ApplyInstanceStrategies` (`src/Bot/PlayerbotAI.cpp:1623`) for the `allInstanceStrategies`

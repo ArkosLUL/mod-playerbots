@@ -259,7 +259,7 @@ else `7`. `0` still means no unit.
 | `heal` | `s`,`d`,`sp`,`a` gross,`oh` overheal,`hp` after; Beacon of Light's copy is its own row from the paladin |
 | `abs` | `d`,`s` shield caster,`sp`,`a` |
 | `aura` | `d`,`s` caster,`sp`,`r` 1=removed,`st` stacks,`dur` ms left,`p` 1=positive |
-| `cast` | `s`,`sp`,`tgt`,`ct` cast time,`tr` 1 when triggered, else absent — cast **start**, the reaction window; roster, its pets and watched creatures only |
+| `cast` | `s`,`sp`,`tgt`,`ct` cast time,`tr` 1 when triggered, else absent — cast **start**, the reaction window, for a spell with a cast time ([not an instant](#what-a-trace-cannot-tell-you)); roster, its pets and watched creatures only |
 | `act` | `g`,`a`,`rel`,`vd`: OK, FAILED, IMPOSSIBLE, USELESS, PREREQ, UNKNOWN |
 | `veto` | `g`,`m` multiplier,`a` action it zeroed. Only the first multiplier to zero an action writes, again only when the verdict changes, so counts are rows, not ticks, and miss a guard behind another zero |
 | `covdef` | `d[]` rows `[id,node,strategy,engine,trigger?]`; `engine` c/n/d, `trigger` only when it differs from the node's name; chunked, so a `cov` may cite a chunk several records back |
@@ -514,6 +514,14 @@ kind-carrying container is not), and Naxx's function-local statics. Timestamps, 
 are left bare on purpose.
 
 ## What a trace cannot tell you
+
+- **A `cast` row is the cast start only for a spell with a cast time.** A Speed 0 instant's `dmg`
+  rows land 0-6 ms *before* it, since `Spell::prepare` runs `cast(true)` before `OnSpellPrepare`
+  fires (`Spell.cpp:3798-3804`); one with a Speed (`Spell.cpp:4127`) lands after it by the flight.
+  Match a Speed 0 instant's hits to the nearest cast on either side.
+- **Snapshots ~240 ms apart miss a CC broken between two samples** (15 of 67 Fears on Faction
+  Champions never showed as moveGen 9), so a landing count from snapshots or a refresh-written probe
+  is a lower bound.
 
 - **Pet damage is not recorded.** `dmg` rows are written only for raid members and their vehicles, so
   nothing involving a pet as a damage source or a chain-lightning link can be confirmed from a trace.
