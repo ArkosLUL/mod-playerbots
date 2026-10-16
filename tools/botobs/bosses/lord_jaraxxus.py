@@ -3,7 +3,7 @@
 Legion Flame, the adds.
 
     lord_jaraxxus.py <file>               every section
-    lord_jaraxxus.py <file> --boss        Fel Fireball landed or kicked and by whom, Fel Lightning chains
+    lord_jaraxxus.py <file> --boss        Fel Fireball landed or kicked and by whom, Fel Lightning chains and their cost
     lord_jaraxxus.py <file> --nether      Nether Power stacks over the pull, the casts that stripped them
     lord_jaraxxus.py <file> --incinerate  every Incinerate Flesh: heals on it, how it ended, Burning Inferno
     lord_jaraxxus.py <file> --flame       every Legion Flame carrier's walk and spacing, who stood in fire
@@ -16,17 +16,23 @@ What the generic views miss here, and what this reads instead:
 - **His own auras are never recorded** (`NoteAura` wants a player), so Nether Power has no `aura`
   row. `jaraxxus.netherpower` carries his stacks, and a Spellsteal that took one shows as Nether
   Power landing on the mage.
+- **An instant with no travel time writes its hits before its `cast` row**: `Spell::prepare` casts
+  a spell with no cast time before the `OnSpellPrepare` hook fires, so Fel Lightning's (Speed 0)
+  come 0 to 3 ms before its row. One with a travel speed lands after the row, late by the flight
+  time. `--boss` gives each Fel Lightning hit the nearest cast on either side.
 - **`jaraxxus.interrupter` is `1` only inside a Fel Fireball cast**: every bot rewrites it each tick
   he lives, so it drops to `0` as the cast ends. `--boss` names who held `1` inside each.
 - **`jaraxxus.flame` is change-only per bot**: a carrier taking `carrier` on every leg writes one
   row, so branch counts are switches, not legs. Legs are the avoid action's accepted moves. A
   carrier holding him writes `tank` and clears the flames only, so the raid and boss spacing of
-  a window with nothing but `tank` is not judged.
+  a window whose every value is `tank` is not judged. The one latched at its start counts only
+  when the window wrote no switch: a repeat tank window writes no note.
 """
 from __future__ import annotations
 
 import bisect
 import collections
+import math
 import pathlib
 import statistics
 import sys
@@ -102,6 +108,10 @@ BOSS_CLEAR = radius("JARAXXUS_FLAME_CARRIER_BOSS_CLEAR")
 LAND_SLACK_MS = 1000
 # every jump of the chain lands with the cast
 CHAIN_MS = 2000
+# a jump reaches 10 yd plus both combat reaches (1.5 each), centre to centre
+JUMP_YD = 13.0
+# Fel Lightning this close before a death puts it among the causes
+LIGHTNING_DEATH_MS = 5000
 # an aura removed this close to its full duration ran out
 EXPIRE_SLACK_MS = 1000
 # Legion Flame hands over to its trail aura in the same tick
@@ -249,8 +259,9 @@ def show_banner(trace: Trace) -> None:
 
 
 def fel_fireballs(trace: Trace) -> list[dict]:
-    """Each Fel Fireball he started: whether it hit, the interrupts aimed at him inside the cast, and
-    who held the interrupter latch while it was up."""
+    """Each Fel Fireball he started: whether it hit, the interrupts aimed at him inside the cast, ms from
+    the cast start to the first of them on a kicked one, and who held the interrupter latch while it
+    was up."""
     bosses = boss_guids(trace)
     fallback = FIREBALL_CAST_MS[difficulty(trace)]
     hits = sorted(rec["t"] for rec in trace.of("dmg") if rec.get("sp") in FEL_FIREBALL)
@@ -268,33 +279,111 @@ def fel_fireballs(trace: Trace) -> list[dict]:
         inside = [(kick["t"], kick.get("s"), kick.get("sp")) for kick in kicks if start <= kick["t"] < stop]
         latched = [guid for guid, spans in latch.items()
                    if any(held == "1" and low < stop and high > start for held, low, high in spans)]
+        outcome = "landed" if landed else "kicked" if inside else "no hit"
         out.append({
             "start": start,
             "stop": stop,
-            "outcome": "landed" if landed else "kicked" if inside else "no hit",
+            "outcome": outcome,
             "kicks": inside,
+            "delay": inside[0][0] - start if outcome == "kicked" else None,
             "latched": sorted(latched),
         })
     return out
 
 
-def fel_lightning(trace: Trace) -> tuple[list[dict], int]:
-    """Each Fel Lightning he cast with the members its chain hit, and how many hits matched no cast."""
+def fel_lightning(trace: Trace, samples: Samples | None = None) -> tuple[list[dict], int]:
+    """Each Fel Lightning he cast with its chain's hits in order, what they took, the longest jump
+    between victims' sampled spots (None with no pair sampled) and his Nether Power stacks at the
+    cast (None before the first `jaraxxus.netherpower`); and how many hits matched no cast. A hit
+    goes to the nearest cast within CHAIN_MS on either side: casts are 10 s or more apart."""
+    samples = samples or Samples(trace)
     bosses = boss_guids(trace)
-    casts = sorted(rec["t"] for rec in trace.of("cast")
-                   if rec.get("s") in bosses and rec.get("sp") in FEL_LIGHTNING)
-    out = [{"t": when, "victims": [], "damage": 0} for when in casts]
+    timeline = nether_timeline(trace)
+    casts = [rec for rec in trace.of("cast") if rec.get("s") in bosses and rec.get("sp") in FEL_LIGHTNING]
+    stamps = [rec["t"] for rec in casts]
+    chains: list[list[dict]] = [[] for _ in casts]
     stray = 0
     for rec in trace.of("dmg"):
         if rec.get("sp") not in FEL_LIGHTNING:
             continue
-        index = bisect.bisect_right(casts, rec["t"]) - 1
-        if index < 0 or rec["t"] - casts[index] > CHAIN_MS:
+        index = bisect.bisect_left(stamps, rec["t"])
+        near = min((i for i in (index - 1, index) if 0 <= i < len(stamps)),
+                   key=lambda i: abs(stamps[i] - rec["t"]), default=None)
+        if near is None or abs(stamps[near] - rec["t"]) > CHAIN_MS:
             stray += 1
             continue
-        out[index]["victims"].append(rec.get("d"))
-        out[index]["damage"] += rec.get("a", 0)
+        chains[near].append({"t": rec["t"], "victim": rec.get("d"), "a": rec.get("a") or 0,
+                             "ab": rec.get("ab") or 0, "hp": rec.get("hp"), "ok": rec.get("ok") or 0})
+
+    out = []
+    for cast, chain in zip(casts, chains):
+        spots = [samples.row(hit["victim"], hit["t"], FRESH_MS) for hit in chain]
+        jumps = [math.dist(a[1:4], b[1:4]) for a, b in zip(spots, spots[1:]) if a and b]
+        damage = sum(hit["a"] for hit in chain)
+        absorbed = sum(hit["ab"] for hit in chain)
+        out.append({
+            "t": cast["t"],
+            "first": cast.get("tgt") or (chain[0]["victim"] if chain else 0),
+            "hits": chain,
+            "damage": damage,
+            "absorbed": absorbed,
+            "taken": damage + absorbed,
+            "jump": max(jumps, default=None),
+            "stacks": stacks_at(timeline, cast["t"], None),
+        })
     return out, stray
+
+
+def lightning_cost(trace: Trace, rows: list[dict]) -> dict:
+    """What the matched chains cost: taken (`a` + `ab`) and its share of all the roster took, the
+    lowest health a hit landed on and the lowest it left, lethal hits, and `(guid, t)` of the deaths
+    with Fel Lightning in their rewind's last LIGHTNING_DEATH_MS."""
+    roster = roster_guids(trace)
+    raid = sum((rec.get("a") or 0) + (rec.get("ab") or 0) for rec in trace.of("dmg") if rec.get("d") in roster)
+    hits = [hit for row in rows for hit in row["hits"]]
+    taken = sum(row["taken"] for row in rows)
+    # dmg.hp is health before the hit, so what a hit left needs the victim's max health
+    left = [hit["hp"] - hit["a"] * 100 / trace.maxhp[hit["victim"]] for hit in hits
+            if hit["hp"] is not None and trace.maxhp.get(hit["victim"])]
+    deaths = [(death.get("g"), death["t"]) for death in combat_deaths(trace)
+              if any(len(row) > 2 and row[2] in FEL_LIGHTNING
+                     and death["t"] - LIGHTNING_DEATH_MS <= row[0] <= death["t"]
+                     for row in death.get("rewind") or [])]
+    return {
+        "taken": taken,
+        "absorbed": sum(row["absorbed"] for row in rows),
+        "raid": raid,
+        "share": taken / raid if raid else None,
+        "landed": min((hit["hp"] for hit in hits if hit["hp"] is not None), default=None),
+        "left": min(left, default=None),
+        "lethal": sum(1 for hit in hits if hit["ok"] > 0),
+        "deaths": deaths,
+    }
+
+
+def show_lightning_cost(trace: Trace, rows: list[dict]) -> None:
+    cost = lightning_cost(trace, rows)
+
+    def pct(value):
+        return "-" if value is None else f"{value:.1f}%"
+
+    share = "" if cost["share"] is None else f", {cost['share'] * 100:.1f}% of the raid's {cost['raid']:,}"
+    print(f"  taken {cost['taken']:,} ({cost['absorbed']:,} of it absorbed){share}")
+    print(f"  lowest health a hit landed on {pct(cost['landed'])}, lowest a hit left {pct(cost['left'])},"
+          f" {cost['lethal']} lethal hit(s)")
+    deaths = cost["deaths"]
+    print(f"  {len(deaths)} death(s) with it in their last {LIGHTNING_DEATH_MS / 1000:.0f} s"
+          + (": " + ", ".join(f"{trace.name(guid)} {clock(when)}" for guid, when in deaths) if deaths else ""))
+
+    print(f"\n  {'at':>9} {'first victim':14} {'role':6} {'hits':>4} {'taken':>8} {'max jump':>8} {'np':>3}")
+    for row in rows:
+        jump = "-" if row["jump"] is None else f"{row['jump']:.1f}" + ("!" if row["jump"] > JUMP_YD else "")
+        stacks = "-" if row["stacks"] is None else str(row["stacks"])
+        print(f"  {clock(row['t']):>9} {trace.name(row['first'])[:14]:14} {trace.role(row['first']):6}"
+              f" {len(row['hits']):4} {row['taken']:8,} {jump:>8} {stacks:>3}")
+    print(f"  max jump is the longest hop between victims' sampled spots, ! past the {JUMP_YD:.0f} yd a jump"
+          " reaches;")
+    print("  np is his Nether Power stacks at the cast, each one +20% to every hit")
 
 
 def show_boss(trace: Trace) -> None:
@@ -314,32 +403,43 @@ def show_boss(trace: Trace) -> None:
     print(f"\n  Fel Fireball: {len(rows)} cast(s), {outcomes['landed']} landed, {outcomes['kicked']} kicked,"
           f" {outcomes['no hit']} neither")
     if rows:
-        print(f"  {'at':>9} {'outcome':8} {'kicked by':26} latched")
+        print(f"  {'at':>9} {'outcome':8} {'delay':>5} {'kicked by':26} latched")
         for row in rows:
             kicked = ", ".join(f"{trace.name(caster)} {trace.spells.get(spell) or trace.spell(spell)}"
                                for _, caster, spell in row["kicks"]) or "-"
             latched = ", ".join(trace.name(guid) for guid in row["latched"]) or "nobody"
-            print(f"  {clock(row['start']):>9} {row['outcome']:8} {kicked[:26]:26} {latched}")
+            delay = "-" if row["delay"] is None else str(row["delay"])
+            print(f"  {clock(row['start']):>9} {row['outcome']:8} {delay:>5} {kicked[:26]:26} {latched}")
+        print("  delay is ms from the cast start to the first kick")
     wasted = sum(len(row["kicks"]) for row in rows if row["outcome"] == "landed")
     if wasted:
         print(f"  {wasted} interrupt(s) fell inside a cast that still landed")
-    unlatched = sum(1 for row in rows if not row["latched"])
+    # interrupter is change-only, so a duty node beaten to the kick reads the same as a dead one
+    unlatched = [row for row in rows if not row["latched"] and row["outcome"] == "kicked"]
+    by_bot = [row["delay"] for row in unlatched if row["kicks"][0][1] not in trace.humans]
+    if by_bot:
+        print(f"  {len(by_bot)} kicked by a bot with nobody latched as interrupter,"
+              f" median {statistics.median(by_bot):.0f} ms in")
+    if len(unlatched) > len(by_bot):
+        print(f"  {len(unlatched) - len(by_bot)} kicked by a human with nobody latched")
+    unlatched = sum(1 for row in rows if not row["latched"] and row["outcome"] != "kicked")
     if unlatched:
         print(f"  {unlatched} cast(s) with nobody latched as interrupter")
 
-    lightning, stray = fel_lightning(trace)
-    hits = [len(row["victims"]) for row in lightning]
+    samples = Samples(trace)
+    lightning, stray = fel_lightning(trace, samples)
+    hits = [len(row["hits"]) for row in lightning]
     if lightning:
         print(f"\n  Fel Lightning: {len(lightning)} cast(s), {sum(hits)} hit(s),"
               f" {statistics.mean(hits):.1f} a cast against a chain of {CHAIN_CAP[difficulty(trace)]}")
         print("  hits per cast: " + ", ".join(f"{count} x{times}"
                                              for count, times in sorted(collections.Counter(hits).items())))
+        show_lightning_cost(trace, lightning)
     else:
         print("\n  no Fel Lightning cast")
     if stray:
         print(f"  {stray} Fel Lightning hit(s) matched no cast")
 
-    samples = Samples(trace)
     health = [row[5] for guid in bosses for _, row in samples.between(guid, 0, pull_end(trace))]
     if health:
         print(f"  boss health floor {min(health):.2f}%")
@@ -360,8 +460,8 @@ def nether_timeline(trace: Trace) -> list[tuple[int, int, int]]:
     return out
 
 
-def stacks_at(timeline, when: int) -> int:
-    return next((stacks for stacks, start, stop in timeline if start <= when < stop), 0)
+def stacks_at(timeline, when: int, unknown: int | None = 0) -> int | None:
+    return next((stacks for stacks, start, stop in timeline if start <= when < stop), unknown)
 
 
 def nether_uptime(trace: Trace) -> tuple[int, int, int]:
@@ -489,11 +589,14 @@ def show_incinerate(trace: Trace) -> None:
 def carrier_windows(trace: Trace, samples: Samples | None = None, raid_clear: float = RAID_CLEAR,
                     boss_clear: float = BOSS_CLEAR) -> list[dict]:
     """Each Legion Flame carrier, debuff and trail as one window: distance walked, legs issued, the
-    nearest other member and the boss over the trail, and the `jaraxxus.flame` switches inside it."""
+    nearest other member and the boss over the trail, and the `jaraxxus.flame` switches inside it.
+    `tank` is true when every switch inside it other than `none` is `tank`, and there was at least
+    one; a window with no switch goes by the value latched at its start."""
     samples = samples or Samples(trace)
     roster = roster_guids(trace)
     bosses = boss_guids(trace)
     branches = notes(trace, FLAME_KEY)
+    spans = holder_spans(trace, FLAME_KEY)
     legs = [rec for rec in trace.of("move") if rec.get("by") == AVOID and rec.get("ok")]
 
     out = []
@@ -501,6 +604,8 @@ def carrier_windows(trace: Trace, samples: Samples | None = None, raid_clear: fl
         guid, start, stop = window["guid"], window["start"], window["stop"]
         taken = collections.Counter(str(rec.get("txt", "")) for rec in branches
                                     if rec.get("g") == guid and start <= rec["t"] <= stop)
+        seed = next((value for value, low, high in spans.get(guid, ()) if low <= start < high), None)
+        held = (set(taken) or {seed}) - {"none", None}
         track = [(when, row) for when, row in samples.between(guid, start, stop) if row[5] > 0]
         near, him = [], []
         for when, row in track:
@@ -524,7 +629,7 @@ def carrier_windows(trace: Trace, samples: Samples | None = None, raid_clear: fl
             "boss_share": share(him, lambda gap: gap < boss_clear),
             "branches": taken,
             # a tank carrier drags him along, so the spacing it never kept is no verdict
-            "tank": set(taken) == {"tank"},
+            "tank": held == {"tank"},
         })
     return out
 
@@ -729,7 +834,7 @@ def show_adds(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("boss", "Fel Fireball landed or kicked and by whom, Fel Lightning hits per cast", show_boss),
+    ("boss", "Fel Fireball landed or kicked and by whom, Fel Lightning chains and their cost", show_boss),
     ("nether", "Nether Power stacks and the casts that stripped them", show_nether),
     ("incinerate", "Incinerate Flesh windows, heals on the target, Burning Inferno after", show_incinerate),
     ("flame", "Legion Flame carriers' walk and spacing, who stood in fire", show_flame),

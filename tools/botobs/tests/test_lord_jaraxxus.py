@@ -2,8 +2,9 @@
 
     python -m unittest discover -s tools/botobs/tests
 
-A synthetic 25H pull pins the arithmetic behind each section, and the shared fixture shows every section
-reads empty on a trace that is not Jaraxxus rather than raising.
+A synthetic 25H pull pins the arithmetic behind each section, two small traces pin the Fel Lightning
+chains with unlatched kicks and the flame value a tank carrier window goes by, and the shared fixture
+shows every section reads empty on a trace that is not Jaraxxus rather than raising.
 """
 from __future__ import annotations
 
@@ -34,6 +35,8 @@ OT = 6002
 MAGE = 6003
 ROGUE = 6004
 PRIEST = 6005
+HUNTER = 6006
+WARLOCK = 6007
 
 # 25H ids, so a reader that only knew the 10N id of a row would miss every one
 FEL_FIREBALL = 66965
@@ -100,13 +103,18 @@ def jaraxxus_pull() -> list[dict]:
              {"g": OT, "n": "Aegis", "r": "tank", "c": "paladin", "h": 0},
              {"g": MAGE, "n": "Frost", "r": "ranged", "c": "mage", "h": 0},
              {"g": ROGUE, "n": "Shiv", "r": "melee", "c": "rogue", "h": 0},
-             {"g": PRIEST, "n": "Mend", "r": "heal", "c": "priest", "h": 0}]},
+             {"g": PRIEST, "n": "Mend", "r": "heal", "c": "priest", "h": 0},
+             {"g": HUNTER, "n": "Volley", "r": "ranged", "c": "hunter", "h": 0},
+             {"g": WARLOCK, "n": "Hex", "r": "ranged", "c": "warlock", "h": 0}]},
         {"t": 0, "e": "pull", "boss": "lord-jaraxxus", "src": "engage"},
         {"t": 1, "e": "unit", "g": BOSS, "en": lj.NPC_JARAXXUS, "n": "Lord Jaraxxus", "b": 1},
         {"t": 1, "e": "unit", "g": MISTRESS, "en": lj.NPC_MISTRESS_OF_PAIN, "n": "Mistress of Pain"},
         {"t": 1, "e": "unit", "g": INFERNAL, "en": lj.NPC_FELFLAME_INFERNAL, "n": "Felflame Infernal"},
         {"t": 1, "e": "unit", "g": PORTAL, "en": lj.NPC_NETHER_PORTAL, "n": "Nether Portal"},
         {"t": 1, "e": "unit", "g": FLAME, "en": lj.NPC_LEGION_FLAME, "n": "Legion Flame"},
+        # only these two carry a max health, so what a hit left is skipped on everyone else
+        {"t": 1, "e": "unit", "g": MAGE, "n": "Frost", "c": "mage", "r": "ranged", "mhp": 20000},
+        {"t": 1, "e": "unit", "g": PRIEST, "n": "Mend", "c": "priest", "r": "heal", "mhp": 25000},
 
         # Three Fel Fireballs: the first lands (its DoT tick too), the second is kicked, and the third
         # lands with a kick that came after the cast went off.
@@ -124,13 +132,22 @@ def jaraxxus_pull() -> list[dict]:
         {"t": 32200, "e": "dmg", "s": BOSS, "d": TANK, "sp": FEL_FIREBALL, "a": 34000},
         {"t": 32500, "e": "cast", "s": ROGUE, "sp": KICK, "tgt": BOSS, "ct": 0},
 
-        # Fel Lightning chains to three, then one, and a stray hit matches neither cast.
-        {"t": 10000, "e": "cast", "s": BOSS, "sp": FEL_LIGHTNING, "tgt": MAGE, "ct": 0},
-        {"t": 10000, "e": "dmg", "s": BOSS, "d": MAGE, "sp": FEL_LIGHTNING, "a": 11700},
-        {"t": 10000, "e": "dmg", "s": BOSS, "d": PRIEST, "sp": FEL_LIGHTNING, "a": 11700},
-        {"t": 10001, "e": "dmg", "s": BOSS, "d": ROGUE, "sp": FEL_LIGHTNING, "a": 11700},
-        {"t": 20000, "e": "cast", "s": BOSS, "sp": FEL_LIGHTNING, "tgt": TANK, "ct": 0},
-        {"t": 20000, "e": "dmg", "s": BOSS, "d": TANK, "sp": FEL_LIGHTNING, "a": 11700},
+        # Fel Lightning chains to three, then one, each hit landing just before its cast row as the core
+        # writes an instant with no travel time, and a stray hit matches neither cast. The hunter's hit
+        # kills it, and the warlock dies too long after its hit for Fel Lightning to count.
+        {"t": 10000, "e": "dmg", "s": BOSS, "d": MAGE, "sp": FEL_LIGHTNING, "a": 11700, "ab": 0, "hp": 100.0,
+         "ok": 0},
+        {"t": 10001, "e": "dmg", "s": BOSS, "d": PRIEST, "sp": FEL_LIGHTNING, "a": 9000, "ab": 2700, "hp": 40.0,
+         "ok": 0},
+        {"t": 10001, "e": "dmg", "s": BOSS, "d": WARLOCK, "sp": FEL_LIGHTNING, "a": 11700, "ab": 0, "hp": 30.0,
+         "ok": 0},
+        {"t": 10002, "e": "cast", "s": BOSS, "sp": FEL_LIGHTNING, "tgt": MAGE, "ct": 0},
+        {"t": 20000, "e": "dmg", "s": BOSS, "d": HUNTER, "sp": FEL_LIGHTNING, "a": 6000, "ab": 5700, "hp": 20.0,
+         "ok": 1500},
+        {"t": 20000, "e": "death", "g": HUNTER, "killer": BOSS, "rewind": [[20000, BOSS, FEL_LIGHTNING, 6000]]},
+        {"t": 20001, "e": "cast", "s": BOSS, "sp": FEL_LIGHTNING, "tgt": HUNTER, "ct": 0},
+        {"t": 24000, "e": "death", "g": WARLOCK, "killer": MISTRESS,
+         "rewind": [[10001, BOSS, FEL_LIGHTNING, 11700], [23500, MISTRESS, 0, 4000]]},
         {"t": 25000, "e": "dmg", "s": BOSS, "d": MAGE, "sp": FEL_LIGHTNING, "a": 11700},
 
         # Nether Power: restated at 0 when the trace opens, 10 at 25 s, a Spellsteal takes two and a
@@ -210,13 +227,86 @@ def jaraxxus_pull() -> list[dict]:
     return records
 
 
+# The first caster stands 14 yd from the second, past a jump's reach, the other four within 3 yd of
+# each other; the sixth, a human, is never sampled.
+CASTERS = (6101, 6102, 6103, 6104, 6105, 6106)
+SPOTS = {6101: (-2.0, -3.0, -6.0), 6102: (2.0, 3.0, 6.0), 6103: (2.0, 3.0, 4.0), 6104: (4.0, 3.0, 4.0),
+         6105: (4.0, 6.0, 4.0)}
+FEL_LIGHTNING_25N = 67029
+FEL_FIREBALL_25N = 66963
+COUNTERSPELL = 2139
+
+
+def lightning_pull() -> list[dict]:
+    """Two full chains: five hits over 2 ms with the cast row on the last one, then five more whose
+    last hit is 1 ms before the row. Three Fel Fireballs are kicked with nobody latched, the last by
+    the human."""
+    a, b, c, d, e, human = CASTERS
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1792176436000, "map": 649, "inst": 3, "diff": 1,
+         "boss": "lord-jaraxxus", "roster": [{"g": guid, "n": f"Caster{guid}", "r": "ranged", "c": "mage",
+                                              "h": int(guid == human)} for guid in CASTERS]},
+        {"t": 0, "e": "pull", "boss": "lord-jaraxxus", "src": "engage"},
+        {"t": 1, "e": "unit", "g": BOSS, "en": lj.NPC_JARAXXUS, "n": "Lord Jaraxxus", "b": 1},
+        # nothing written before, so the first chain's stacks are unknown
+        {"t": 20000, "e": "note", "g": a, "k": "jaraxxus.netherpower", "txt": "10"},
+        {"t": 30000, "e": "end", "out": "kill"},
+    ]
+    hits = ((11855, a), (11856, b), (11856, c), (11856, d), (11857, e),
+            (25798, e), (25798, d), (25798, c), (25799, b), (25799, human))
+    records += [{"t": when, "e": "dmg", "s": BOSS, "d": victim, "sp": FEL_LIGHTNING_25N, "a": 5000, "ok": 0,
+                 "ab": 1000, "hp": 100.0} for when, victim in hits]
+    # the core writes the cast row of an instant with no travel time after its hits, so this row
+    # trails the hit sharing its ms
+    records += [{"t": 11857, "e": "cast", "s": BOSS, "sp": FEL_LIGHTNING_25N, "tgt": a, "ct": 0},
+                {"t": 25800, "e": "cast", "s": BOSS, "sp": FEL_LIGHTNING_25N, "tgt": e, "ct": 0}]
+    for start, kicker, delay in ((3000, a, 50), (15000, b, 150), (27000, human, 100)):
+        records += [{"t": start, "e": "cast", "s": BOSS, "sp": FEL_FIREBALL_25N, "tgt": a, "ct": 2000},
+                    {"t": start + delay, "e": "cast", "s": kicker, "sp": COUNTERSPELL, "tgt": BOSS, "ct": 0}]
+    for when in range(0, 31000, 1000):
+        units = [[guid, x, y, z, 0.0, 100.0, 100.0, BOSS, 0, 0, 0, 0] for guid, (x, y, z) in SPOTS.items()]
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return records
+
+
+def flame_pull() -> list[dict]:
+    """The tank carries Legion Flame twice on one `tank` note written before the first. The other tank
+    still holds `dodge` when its window opens and writes `tank` 100 ms in. The mage's window starts
+    on `none` and switches to `carrier`."""
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789600000000, "map": 649, "inst": 8, "diff": 3,
+         "boss": "lord-jaraxxus", "roster": [
+             {"g": TANK, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0},
+             {"g": OT, "n": "Aegis", "r": "tank", "c": "paladin", "h": 0},
+             {"g": MAGE, "n": "Frost", "r": "ranged", "c": "mage", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "lord-jaraxxus", "src": "engage"},
+        {"t": 1, "e": "unit", "g": BOSS, "en": lj.NPC_JARAXXUS, "n": "Lord Jaraxxus", "b": 1},
+        {"t": 2000, "e": "note", "g": OT, "k": "jaraxxus.flame", "txt": "dodge"},
+        {"t": 3000, "e": "note", "g": MAGE, "k": "jaraxxus.flame", "txt": "none"},
+        {"t": 4500, "e": "note", "g": TANK, "k": "jaraxxus.flame", "txt": "tank"},
+        {"t": 10100, "e": "note", "g": OT, "k": "jaraxxus.flame", "txt": "tank"},
+        {"t": 20100, "e": "note", "g": MAGE, "k": "jaraxxus.flame", "txt": "carrier"},
+        {"t": 60000, "e": "end", "out": "wipe"},
+    ]
+    for guid, start in ((TANK, 5000), (OT, 10000), (MAGE, 20000), (TANK, 40000)):
+        records += [aura(start, guid, BOSS, LEGION_FLAME, False, 2000),
+                    aura(start + 2000, guid, BOSS, LEGION_FLAME, True, 0),
+                    aura(start + 2000, guid, guid, LEGION_FLAME_TRAIL, False, 6000),
+                    aura(start + 8000, guid, guid, LEGION_FLAME_TRAIL, True, 0)]
+    return records
+
+
+def write_trace(records: list[dict], name: str) -> tuple[tempfile.TemporaryDirectory, Trace]:
+    folder = tempfile.TemporaryDirectory()
+    path = pathlib.Path(folder.name) / name
+    path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+    return folder, Trace(path)
+
+
 class SyntheticPull(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.folder = tempfile.TemporaryDirectory()
-        path = pathlib.Path(cls.folder.name) / "649_7_lord-jaraxxus_1789600000.ndjson"
-        path.write_text("\n".join(json.dumps(rec) for rec in jaraxxus_pull()) + "\n", encoding="utf-8")
-        cls.trace = Trace(path)
+        cls.folder, cls.trace = write_trace(jaraxxus_pull(), "649_7_lord-jaraxxus_1789600000.ndjson")
 
     @classmethod
     def tearDownClass(cls):
@@ -231,11 +321,27 @@ class SyntheticPull(unittest.TestCase):
     def test_the_interrupter_latch_is_read_inside_each_cast(self):
         self.assertEqual([row["latched"] for row in lj.fel_fireballs(self.trace)], [[], [ROGUE], [MAGE]])
 
-    def test_lightning_hits_group_by_cast(self):
+    def test_kick_delay_is_read_on_a_kicked_cast_only(self):
+        self.assertEqual([row["delay"] for row in lj.fel_fireballs(self.trace)], [None, 800, None])
+
+    def test_lightning_hits_go_to_the_cast_row_just_after_them(self):
         rows, stray = lj.fel_lightning(self.trace)
-        self.assertEqual([len(row["victims"]) for row in rows], [3, 1])
-        self.assertEqual(rows[0]["damage"], 35100)
+        self.assertEqual([len(row["hits"]) for row in rows], [3, 1])
+        self.assertEqual([row["first"] for row in rows], [MAGE, HUNTER])
+        self.assertEqual([(row["damage"], row["absorbed"], row["taken"]) for row in rows],
+                         [(32400, 2700, 35100), (6000, 5700, 11700)])
         self.assertEqual(stray, 1)
+
+    def test_lightning_cost(self):
+        rows, _ = lj.fel_lightning(self.trace)
+        cost = lj.lightning_cost(self.trace, rows)
+        self.assertEqual((cost["taken"], cost["absorbed"], cost["raid"]), (46800, 8400, 188300))
+        self.assertAlmostEqual(cost["share"], 46800 / 188300)
+        self.assertEqual(cost["landed"], 20.0)
+        # the mage's hit leaves 100 - 58.5, the priest's 40 - 36
+        self.assertAlmostEqual(cost["left"], 4.0)
+        self.assertEqual(cost["lethal"], 1)
+        self.assertEqual(cost["deaths"], [(HUNTER, 20000)])
 
     def test_nether_uptime_clips_to_the_pull_and_uses_the_heroic_cap(self):
         self.assertEqual(lj.nether_uptime(self.trace), (15000, 2000, 10))
@@ -305,6 +411,66 @@ class SyntheticPull(unittest.TestCase):
             for _, _, section in lj.SECTIONS:
                 section(self.trace)
         self.assertIn("Fel Fireball: 3 cast(s), 2 landed, 1 kicked", out.getvalue())
+        self.assertIn("1 cast(s) with nobody latched as interrupter", out.getvalue())
+        self.assertNotIn("kicked by a", out.getvalue())
+
+
+class FullChains(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder, cls.trace = write_trace(lightning_pull(), "649_3_lord-jaraxxus_1792176436.ndjson")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_every_hit_matches_its_cast(self):
+        rows, stray = lj.fel_lightning(self.trace)
+        self.assertEqual([len(row["hits"]) for row in rows], [5, 5])
+        self.assertEqual(stray, 0)
+
+    def test_the_longest_jump_is_3d_and_skips_an_unsampled_victim(self):
+        rows, _ = lj.fel_lightning(self.trace)
+        self.assertAlmostEqual(rows[0]["jump"], 14.0)
+        self.assertAlmostEqual(rows[1]["jump"], 3.0)
+
+    def test_stacks_at_each_cast_read_none_before_the_first_note(self):
+        rows, _ = lj.fel_lightning(self.trace)
+        self.assertEqual([row["stacks"] for row in rows], [None, 10])
+
+    def test_boss_reads_full_chains_and_no_stray(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            lj.show_boss(self.trace)
+        self.assertIn("2 cast(s), 10 hit(s), 5.0 a cast against a chain of 5", out.getvalue())
+        self.assertIn("hits per cast: 5 x2", out.getvalue())
+        self.assertIn("14.0!", out.getvalue())
+        self.assertNotIn("matched no cast", out.getvalue())
+
+    def test_unlatched_kicks_split_bots_from_humans(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            lj.show_boss(self.trace)
+        self.assertIn("Fel Fireball: 3 cast(s), 0 landed, 3 kicked", out.getvalue())
+        self.assertIn("2 kicked by a bot with nobody latched as interrupter, median 100 ms in", out.getvalue())
+        self.assertIn("1 kicked by a human with nobody latched", out.getvalue())
+        self.assertNotIn("cast(s) with nobody latched", out.getvalue())
+
+
+class RepeatTankWindow(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder, cls.trace = write_trace(flame_pull(), "649_8_lord-jaraxxus_1789600000.ndjson")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_latched_value_counts_only_when_the_window_wrote_no_switch(self):
+        rows = lj.carrier_windows(self.trace)
+        self.assertEqual([(row["guid"], row["start"], row["tank"]) for row in rows],
+                         [(TANK, 5000, True), (OT, 10000, True), (MAGE, 20000, False), (TANK, 40000, True)])
+        self.assertEqual([row["branches"] for row in rows], [{}, {"tank": 1}, {"carrier": 1}, {}])
 
 
 class EveryView(unittest.TestCase):
