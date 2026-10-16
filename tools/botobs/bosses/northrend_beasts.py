@@ -6,11 +6,11 @@ Breath, snobolds, Fire Bomb, the worms and the Toxin cure.
     northrend_beasts.py <file> --stage     which beasts were up when, deaths per stage, each beast's engage
     northrend_beasts.py <file> --tanks     tank duties, Gormok's victims with Impale stacks, swaps, defensives
     northrend_beasts.py <file> --targets   each DPS bot's time on its nb.dps pick, another beast or neither
-    northrend_beasts.py <file> --charge    every Icehowl charge: gaze, lane, outcome, who stood at its end
-    northrend_beasts.py <file> --breath    every Arctic Breath: target, who froze, who the cone predicts, spread
+    northrend_beasts.py <file> --charge    every Icehowl charge: gaze, lane, outcome, who stood at its end, the daze
+    northrend_beasts.py <file> --breath    every Arctic Breath: target, who froze, the cone, spread, nb.breath, his walk
     northrend_beasts.py <file> --snobold   who carried a snobold and for how long, and what the DPS picked
     northrend_beasts.py <file> --bomb      every Fire Bomb: target, impact hits, who stood inside, dodges
-    northrend_beasts.py <file> --worms     worm forms, who each worm hit before a tank, Spew, pools, Sweep, holds
+    northrend_beasts.py <file> --worms     worm forms, emerges, Spew, pools, Sweep, Spray, caster spread, holds
     northrend_beasts.py <file> --cure      Paralytic Toxin spans and how each ended, Bile pulses on the clean
 
 What the generic views get wrong here, and what this reads instead:
@@ -19,7 +19,12 @@ What the generic views get wrong here, and what this reads instead:
   hold Gormok and the worms at once: 1 Gormok, 2 a worm, 4 Icehowl, added up. 0 is a walk-in or the
   gap after a kill, where nothing is in combat.
 - **Creature auras are never recorded**, so Staggered Daze and Frothing Rage on Icehowl have no aura
-  row. `nb.charge` 4 and 5 are the only record of how a charge ended.
+  row. `nb.charge` 4 and 5 are the only record of how a charge ended, and `--charge` reads the daze
+  as the 15 s from the 4.
+- **Heroic Berserk 26662 shows only as a triggered `cast` row** on a beast. With none the banner
+  takes its due time, 509 s into the trace: the trace opens at Gormok's engage, 11 s after the
+  intro's end, and the script casts Berserk 520 s after that end. A dead creature drops out of the
+  snapshot, so a beast with no row in the 1.5 s before it reads dead.
 - **The charge has no world object.** Its path is a `haz` `lane` row, which never reaches `snap.hz`,
   so no death block says STOOD IN for Trample. `--charge` measures the lane's end against the nearest
   snapshot instead: the script tests contact on arrival, 12 yd round his end point.
@@ -36,8 +41,8 @@ What the generic views get wrong here, and what this reads instead:
 - **`nb.tank`, `nb.swap`, `nb.snobold`, `nb.dps`, `nb.dodge`, `nb.spread`, `nb.bomb` and
   `nb.defensive` are per-bot change-only notes**: a bot that stays on one answer writes one row, so
   counts here are changes, not ticks. `nb.bomb` writes `clear` whenever a bot is outside every young
-  bomb's trigger, so a dodge that repeats the last one's branch still shows. `nb.arc` is one value for
-  the raid.
+  bomb's trigger, so a dodge that repeats the last one's branch still shows. `nb.arc` and `nb.breath`
+  are one value for the raid.
 - **The worms' threat wipe shows only in their target column.** Each resets its threat list under
   ground and comes up on whoever threatens it first, so `--worms` times each worm from its own Emerge
   cast (66947 in the snapshot's casting column) until a tank is the target again: `nb.worm` leaves 3
@@ -46,6 +51,9 @@ What the generic views get wrong here, and what this reads instead:
 - **Neither worm hazard reaches `snap.hz`.** The Spew cone is a `haz` `wedge` row, `arc` degrees either
   side of `facing`; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 to 11, so
   `--worms` rebuilds its radius from its first snapshot.
+- **A Spray's `cast` row is its start.** The splash lands on its target when the cast ends, `ct`
+  later, so `--worms` reads who stood in it from the snapshot nearest that end. Its debuff arrives as
+  one burst of applies 1-3 s after the row, so the first burst 0.8-4 s after it is who took it.
 - **Nothing records what a bot attacks but the snapshot's target column**, its victim. `--targets`
   reads it against the `nb.dps` pick in force at each snapshot, so every switch shows up to one
   snapshot gap off the pick.
@@ -61,6 +69,7 @@ import collections
 import math
 import pathlib
 import re
+import statistics
 import sys
 
 # Run as a script from bosses/, so the raidobs package one level up is not on the path yet.
@@ -87,11 +96,18 @@ ARCTIC_BREATH = (66689, 67650, 67651, 67652)
 SPELL_SNOBOLLED = 66406
 SPELL_TRAMPLE = 66734
 SPELL_FIRE_BOMB_IMPACT = 66317
+SPELL_BERSERK = 26662
+WHIRL = (67345, 67663, 67664, 67665)
+
+HEROIC = (2, 3)
+BERSERK_DUE_MS = 509000
 
 STAGE_BITS = ((1, "gormok"), (2, "worms"), (4, "icehowl"))
 
 CHARGE_ACTIVE = ("1", "2", "3")
 CHARGE_OUTCOMES = {"0": "none", "4": "daze", "5": "rage"}
+# Staggered Daze's stun
+DAZE_MS = 15000
 
 SWAP_TAUNT = "gormok tank swap taunt"
 
@@ -110,6 +126,9 @@ BREATH_HALF_WIDTH_10N = 30.0
 BREATH_HALF_WIDTH = 12.0
 # The breath's stun lands with the cast, so an apply this long after it belongs to it.
 BREATH_VICTIM_MS = 1000
+# His walk before a breath is read over this long: a Whirl throw and his follow after the tank fit.
+BREATH_WALK_MS = 4000
+BREATH_STATES = {"0": "off", "1": "up", "2": "grace", "3": "moving", "4": "daze"}
 # A bomb's `ttl` is a model of the impact, so its hits are read this far past it.
 BOMB_HIT_SLACK_MS = 1500
 
@@ -143,6 +162,53 @@ def show_banner(trace: Trace) -> None:
 
     gone = [key for key, _, _ in silent_keys(emitted_keys(trace), encounter)]
     print("all nb.* probes present" if not gone else f"probes absent from this trace: {', '.join(gone)}")
+
+    rage = berserk(trace)
+    if rage is None:
+        return
+    if not rage["reached"]:
+        print(f"Berserk {SPELL_BERSERK} due at {clock(rage['t'])}, not reached")
+        return
+    health = ", ".join(f"{name} {health_text(hp)}" for name, hp in rage["health"].items())
+    print(f"Berserk {SPELL_BERSERK} at {clock(rage['t'])} ({'cast' if rage['cast'] else 'due, no cast row'}):"
+          f" {health}")
+
+
+def health_text(hp: float | None) -> str:
+    return "dead" if hp is None else f"{hp:.1f}%"
+
+
+def beast_health(trace: Trace, entry: int, when: int) -> float | None:
+    """A beast's health % in its last sampled row up to `when`, None with no living row in the
+    `NEAREST_TOLERANCE_MS` before it."""
+    guids = guids_of_entry(trace, entry)
+    snaps = frames(trace)
+    stamps = [snap["t"] for snap in snaps]
+    for snap in reversed(snaps[:bisect.bisect_right(stamps, when)]):
+        if snap["t"] < when - NEAREST_TOLERANCE_MS:
+            break
+        rows = [row[5] for row in snap.get("u", []) if row[0] in guids and row[5] > 0]
+        if rows:
+            return max(rows)
+    return None
+
+
+def berserk(trace: Trace) -> dict | None:
+    """Heroic only: when Berserk landed, from its cast row on a beast, else when it was due, whether
+    the trace reached it, and each beast's health then by name, None for dead."""
+    if trace.header.get("diff") not in HEROIC:
+        return None
+    beasts = {guid for _, entry in BEASTS for guid in guids_of_entry(trace, entry)}
+    cast = next((rec for rec in trace.of("cast") if rec.get("sp") == SPELL_BERSERK and rec.get("s") in beasts),
+                None)
+    when = cast["t"] if cast else BERSERK_DUE_MS
+    reached = when <= pull_end(trace)
+    return {
+        "t": when,
+        "cast": cast is not None,
+        "reached": reached,
+        "health": {name: beast_health(trace, entry, when) for name, entry in BEASTS} if reached else {},
+    }
 
 
 def stage_spans(trace: Trace) -> list[dict]:
@@ -458,7 +524,40 @@ def charges(trace: Trace) -> list[dict]:
             "inside": inside_lane_end(trace, stop, end_point) if end_point and outcome != "open" else set(),
             "dodges": dict(branches),
             "trampled": [rec.get("d") for rec in tramples if start <= rec["t"] <= stop + TRAMPLE_SLACK_MS],
+            "daze": daze_movement(trace, stop, min(stop + DAZE_MS, end)) if outcome == "daze" else None,
         })
+    return out
+
+
+def daze_movement(trace: Trace, start: int, stop: int) -> dict[int, dict]:
+    """Per roster member sampled alive in `[start, stop)`: the share of those snapshots it was moving
+    in, the yards between them, `(action, rows)` for the action owning most of its accepted moves
+    (None with none), and its untriggered cast rows, since procs outnumber them several times over."""
+    roster = roster_guids(trace)
+    samples: dict[int, list[tuple[float, float, bool]]] = collections.defaultdict(list)
+    for snap in frames(trace):
+        if not start <= snap["t"] < stop:
+            continue
+        for row in snap.get("u", []):
+            if row[0] in roster and row[5] > 0:
+                samples[row[0]].append((row[1], row[2], len(row) > 8 and bool(row[8])))
+
+    movers: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for rec in trace.of("move"):
+        if rec.get("ok") and start <= rec["t"] < stop:
+            movers[rec.get("g", 0)][rec.get("by") or "?"] += 1
+    casts = collections.Counter(rec.get("s", 0) for rec in trace.of("cast")
+                                if start <= rec["t"] < stop and not rec.get("tr"))
+
+    out = {}
+    for guid, rows in samples.items():
+        top = movers[guid].most_common(1)
+        out[guid] = {
+            "share": sum(1 for row in rows if row[2]) / len(rows),
+            "yards": sum(dist2(a, b) for a, b in zip(rows, rows[1:])),
+            "mover": top[0] if top else None,
+            "casts": casts[guid],
+        }
     return out
 
 
@@ -485,9 +584,23 @@ def show_charge(trace: Trace) -> None:
         for guid, counts in sorted(row["dodges"].items(), key=lambda item: trace.name(item[0])):
             print(f"    nb.dodge {trace.name(guid)[:14]:14} " + ", ".join(
                 f"{name} {n}" for name, n in counts.most_common()))
+        if row["daze"] is not None:
+            show_daze(trace, row["daze"])
 
     tally = collections.Counter(row["outcome"] for row in rows)
     print("\n  " + ", ".join(f"{outcome} {n}" for outcome, n in tally.most_common()))
+
+
+def show_daze(trace: Trace, table: dict[int, dict]) -> None:
+    if not table:
+        print(f"    daze ({DAZE_MS // 1000} s): nobody sampled")
+        return
+    print(f"    daze ({DAZE_MS // 1000} s), by share of snapshots moving:"
+          f"\n      {'bot':14} {'role':6} {'moving':>6} {'yards':>6} {'casts':>5}  top accepted mover")
+    for guid, stats in sorted(table.items(), key=lambda item: (-item[1]["share"], trace.name(item[0]))):
+        mover = f"{stats['mover'][0]} ({stats['mover'][1]})" if stats["mover"] else "-"
+        print(f"      {trace.name(guid)[:14]:14} {trace.role(guid):6} {stats['share']:6.0%} {stats['yards']:6.1f}"
+              f" {stats['casts']:5}  {mover}")
 
 
 def breath_half_width(diff) -> float:
@@ -536,9 +649,17 @@ def aura_breaths(applies: list[dict], icehowls: set[int]) -> list[tuple[int, int
     return out
 
 
+def walked(trace: Trace, guid: int, start: int, stop: int) -> float | None:
+    """Yards between where a unit stood at `start` and at `stop`, None when either is unsampled."""
+    first = at(trace, guid, start, NEAREST, NEAREST_TOLERANCE_MS)
+    last = at(trace, guid, stop, NEAREST, NEAREST_TOLERANCE_MS)
+    return None if first is None or last is None else dist2(first, last)
+
+
 def breaths(trace: Trace) -> list[dict]:
     """One row per Arctic Breath cast by Icehowl: its target, who froze, who the cone predicts, each
-    victim's `nb.spread` and the raid's `nb.arc` at the cast.
+    victim's `nb.spread`, the raid's `nb.arc` and `nb.breath` at the cast, ms since his last Whirl
+    cast row (None with none) and his displacement over the `BREATH_WALK_MS` before it.
 
     A trace with no cast row for it, as on 25N, gets one row per burst of his aura applies instead,
     with target 0 and no prediction."""
@@ -549,6 +670,11 @@ def breaths(trace: Trace) -> list[dict]:
                if rec.get("sp") in ARCTIC_BREATH and not rec.get("r") and rec.get("d") in roster]
     spread = holder_spans(trace, "nb.spread")
     arc = latch_spans(trace, "nb.arc")
+    state = latch_spans(trace, "nb.breath")
+    whirls: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("sp") in WHIRL:
+            whirls[rec.get("s", 0)].append(rec["t"])
 
     casts = [(rec["t"], rec["s"], rec.get("tgt", 0)) for rec in trace.of("cast")
              if rec.get("sp") in ARCTIC_BREATH and rec.get("s") in icehowls]
@@ -561,6 +687,7 @@ def breaths(trace: Trace) -> list[dict]:
         for hit in applies:
             if when <= hit["t"] <= when + BREATH_VICTIM_MS and hit["d"] not in victims:
                 victims.append(hit["d"])
+        whirl = max((stamp for stamp in whirls.get(caster, ()) if stamp <= when), default=None)
         out.append({
             "t": when,
             "target": target,
@@ -568,6 +695,9 @@ def breaths(trace: Trace) -> list[dict]:
             "predicted": breath_cone(trace, caster, target, when, half) if target else None,
             "spread": {guid: value_at(spread.get(guid), when) for guid in victims},
             "arc": value_at(arc, when),
+            "state": value_at(state, when),
+            "since_whirl": None if whirl is None else when - whirl,
+            "walked": walked(trace, caster, when - BREATH_WALK_MS, when),
         })
     return out
 
@@ -589,7 +719,12 @@ def show_breath(trace: Trace) -> None:
 
     for row in rows:
         target = f"{trace.name(row['target'])} ({trace.role(row['target'])})" if row["target"] else "?"
-        print(f"  {clock(row['t'])}  on {target}  nb.arc {row['arc'] if row['arc'] is not None else '-'}")
+        state = "-" if row["state"] is None else BREATH_STATES.get(row["state"], row["state"])
+        print(f"  {clock(row['t'])}  on {target}  nb.arc {row['arc'] if row['arc'] is not None else '-'}"
+              f"  nb.breath {state}")
+        whirl = "no Whirl before" if row["since_whirl"] is None else f"{row['since_whirl'] / 1000:.1f} s after a Whirl"
+        moved = "?" if row["walked"] is None else f"{row['walked']:.1f} yd"
+        print(f"    {whirl}, he moved {moved} in the {BREATH_WALK_MS // 1000} s before")
         frozen = ", ".join(f"{trace.name(guid)} [{row['spread'][guid] or '-'}]" for guid in row["victims"])
         print(f"    frozen [nb.spread]: {frozen or 'nobody'}")
         if row["predicted"] is not None:
@@ -660,7 +795,11 @@ WORMS = (("Acidmaw", NPC_ACIDMAW), ("Dreadscale", NPC_DREADSCALE))
 SPELL_PARALYTIC_TOXIN = (66823, 67618, 67619, 67620)
 SPELL_BURNING_BILE = 66869
 SPELL_BILE_PULSE = (66870, 67621, 67622, 67623)
-BILE_PULSE_RADIUS = radius("WORM_SPLASH_RADIUS")
+SPELL_PARALYTIC_SPRAY = (66901, 67615, 67616, 67617)
+SPELL_BURNING_SPRAY = (66902, 67627, 67628, 67629)
+# The Bile pulse's reach and the Spray's splash
+WORM_SPLASH_RADIUS = radius("WORM_SPLASH_RADIUS")
+WORM_SPREAD_TRIGGER = radius("WORM_SPREAD_TRIGGER")
 SPELL_ACIDIC_SPEW_TICK = (66819, 67609, 67610, 67611)
 SPELL_MOLTEN_SPEW_TICK = (66820, 67635, 67636, 67637)
 SPELL_SLIME_POOL = (66881, 67638, 67639, 67640)
@@ -683,6 +822,13 @@ TOXIN_STUCK_HEROIC_MS = 13500
 CURE_WINDOW_MS = 250
 # The row goes out at the 1 s cast and the last of the 2.5 s of ticks lands 3.5 s after it.
 SPEW_WINDOW_MS = 3500
+# A Spray's debuff lands as one burst 1-3 s after its cast row; a later apply has another source.
+SPRAY_APPLY_FROM_MS = 800
+SPRAY_APPLY_TO_MS = 4000
+SPRAY_BURST_MS = 400
+CASTER_ROLES = ("ranged", "heal")
+# nb.worm values with both worms alive and up
+BOTH_WORMS_UP = ("1", "2")
 # one snapshot gap longer than this is a hole in the trace, not time spent anywhere
 MAX_STEP_MS = 2000
 
@@ -871,6 +1017,104 @@ def wormhold_branches(trace: Trace) -> dict[int, collections.Counter]:
     return branch_counts(trace, "nb.wormhold", lambda text: " ".join(text.split()[:2]))
 
 
+def hold_releases(trace: Trace) -> dict[str, collections.Counter]:
+    """`nb.wormhold` releases raid-wide, per cause, counted by role."""
+    out: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    for rec in notes(trace, "nb.wormhold"):
+        words = str(rec.get("txt", "")).split()
+        if len(words) > 1 and words[0] == "release":
+            out[words[1]][trace.role(rec.get("g", 0))] += 1
+    return dict(out)
+
+
+def splash_inside(trace: Trace, target: int, when: int) -> set[int] | None:
+    """Living roster members within the splash of `target` in the snapshot nearest `when`, the target
+    included. None when that snapshot misses the target."""
+    snap = nearest_frame(trace, when)
+    if snap is None:
+        return None
+    rows = {row[0]: row for row in snap.get("u", [])}
+    aimed = rows.get(target)
+    if aimed is None:
+        return None
+    roster = roster_guids(trace)
+    return {guid for guid, row in rows.items()
+            if guid in roster and row[5] > 0 and dist2(row[1:3], aimed[1:3]) <= WORM_SPLASH_RADIUS}
+
+
+def spray_casts(trace: Trace) -> list[dict]:
+    """One row per Spray cast by a worm: its target, who stood in the splash at the cast's end, who
+    took its debuff from that worm (the first burst of applies, in order) and each bot's `spray`
+    `nb.wormmove` branches during the cast, the yards dropped."""
+    worms = {guid for _, entry in WORMS for guid in guids_of_entry(trace, entry)}
+    roster = roster_guids(trace)
+    applies = [rec for rec in trace.of("aura") if not rec.get("r") and rec.get("d") in roster]
+    moves = [(rec["t"], rec.get("g", 0), drop_numbers(str(rec.get("txt", ""))))
+             for rec in notes(trace, "nb.wormmove")]
+
+    out = []
+    for rec in trace.of("cast"):
+        burning = rec.get("sp") in SPELL_BURNING_SPRAY
+        if rec.get("s") not in worms or not (burning or rec.get("sp") in SPELL_PARALYTIC_SPRAY):
+            continue
+        when = rec["t"]
+        ends = when + int(rec.get("ct", 0) or 0)
+        debuff = (SPELL_BURNING_BILE,) if burning else SPELL_PARALYTIC_TOXIN
+        late = [hit for hit in applies if hit.get("sp") in debuff and hit.get("s") == rec["s"]
+                and when + SPRAY_APPLY_FROM_MS <= hit["t"] <= when + SPRAY_APPLY_TO_MS]
+        took: list[int] = []
+        for hit in late:
+            if hit["t"] <= late[0]["t"] + SPRAY_BURST_MS and hit["d"] not in took:
+                took.append(hit["d"])
+
+        branches: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+        for stamp, guid, text in moves:
+            if when <= stamp <= ends and text.split()[1:2] == ["spray"]:
+                branches[guid][text] += 1
+
+        out.append({
+            "t": when,
+            "worm": rec["s"],
+            "burning": burning,
+            "target": rec.get("tgt", 0),
+            "inside": splash_inside(trace, rec.get("tgt", 0), ends),
+            "took": took,
+            "moves": dict(branches),
+        })
+    return out
+
+
+def caster_spread(trace: Trace) -> dict:
+    """Over the snapshots with both worms up: per snapshot, the pairs of living casters carrying
+    neither Bile nor Toxin within `WORM_SPREAD_TRIGGER` of each other, and how many snapshots had one
+    such caster beside two others."""
+    up = [(start, stop) for value, start, stop in latch_spans(trace, "nb.worm", pull_end(trace))
+          if value in BOTH_WORMS_UP]
+    toxins = spans_by_guid(carried(trace, SPELL_PARALYTIC_TOXIN))
+    biles = spans_by_guid(carried(trace, (SPELL_BURNING_BILE,)))
+    casters = {guid for guid in roster_guids(trace) if trace.role(guid) in CASTER_ROLES}
+
+    pairs: list[int] = []
+    crowded = 0
+    for snap in frames(trace):
+        when = snap["t"]
+        if not any(start <= when < stop for start, stop in up):
+            continue
+        clean = [row for row in snap.get("u", []) if row[0] in casters and row[5] > 0
+                 and not carrying(toxins, row[0], when) and not carrying(biles, row[0], when)]
+        beside: collections.Counter = collections.Counter()
+        count = 0
+        for index, first in enumerate(clean):
+            for second in clean[index + 1:]:
+                if dist2(first[1:3], second[1:3]) <= WORM_SPREAD_TRIGGER:
+                    count += 1
+                    beside[first[0]] += 1
+                    beside[second[0]] += 1
+        pairs.append(count)
+        crowded += any(n >= 2 for n in beside.values())
+    return {"pairs": pairs, "crowded": crowded}
+
+
 def named(trace: Trace, guid: int) -> str:
     return f"{trace.name(guid)} ({trace.role(guid)})"
 
@@ -927,6 +1171,22 @@ def show_worms(trace: Trace) -> None:
 
     print(f"  Sweep hits: {by_role(trace, sweep_victims(trace)) or 'nobody'}")
 
+    show_sprays(trace)
+
+    spread = caster_spread(trace)
+    pairs = spread["pairs"]
+    if not pairs:
+        print("  caster spread: no snapshot with both worms up")
+    else:
+        print(f"  caster spread over {len(pairs)} snapshot(s) with both worms up, casters carrying neither debuff:"
+              f" pairs within {WORM_SPREAD_TRIGGER:.0f} yd median {statistics.median(pairs):g}, max {max(pairs)};"
+              f" one beside two others in {spread['crowded'] / len(pairs):.0%}")
+
+    releases = hold_releases(trace)
+    print("  nb.wormhold releases by cause:" + ("" if releases else " none"))
+    for cause, roles in sorted(releases.items(), key=lambda item: (-sum(item[1].values()), item[0])):
+        print(f"    {cause:10} {sum(roles.values()):5}  " + ", ".join(f"{role} {n}" for role, n in roles.most_common()))
+
     for title, branches in (("nb.wormmove", wormmove_branches(trace)), ("nb.wormhold", wormhold_branches(trace))):
         if not branches:
             print(f"  {title}: none")
@@ -937,8 +1197,27 @@ def show_worms(trace: Trace) -> None:
                   + ", ".join(f"{name} {n}" for name, n in counts.most_common()))
 
 
+def show_sprays(trace: Trace) -> None:
+    rows = spray_casts(trace)
+    print("  Spray casts:" + ("" if rows else " none"))
+
+    def names(guids) -> str:
+        return ", ".join(named(trace, guid) for guid in guids) or "nobody"
+
+    for row in rows:
+        kind, debuff = ("Burning", "Bile") if row["burning"] else ("Paralytic", "Toxin")
+        inside = "? (no snapshot)" if row["inside"] is None else names(sorted(row["inside"], key=trace.name))
+        worm = trace.name(row["worm"]).split()[0]
+        print(f"    {clock(row['t'])}  {worm:10} {kind:9} on {named(trace, row['target'])}")
+        print(f"      within {WORM_SPLASH_RADIUS:.0f} yd at the cast's end: {inside}")
+        print(f"      took {debuff}: {names(row['took'])}")
+        for guid, counts in sorted(row["moves"].items(), key=lambda item: trace.name(item[0])):
+            print(f"      nb.wormmove {trace.name(guid)[:14]:14} " + ", ".join(
+                f"{name} {n}" for name, n in counts.most_common()))
+
+
 def toxin_stuck_ms(diff) -> int:
-    return TOXIN_STUCK_HEROIC_MS if diff in (2, 3) else TOXIN_STUCK_MS
+    return TOXIN_STUCK_HEROIC_MS if diff in HEROIC else TOXIN_STUCK_MS
 
 
 def carried(trace: Trace, spells) -> list[tuple[int, int, int, bool]]:
@@ -1016,7 +1295,7 @@ def pulse_carrier(trace: Trace, hit: dict, spans: list[dict]) -> dict | None:
         if span["carrier"] == victim or place is None or not span["start"] <= when <= span["stop"] + CURE_WINDOW_MS:
             continue
         gap = dist2(place, spot)
-        if gap <= BILE_PULSE_RADIUS and (best is None or gap < best[0]):
+        if gap <= WORM_SPLASH_RADIUS and (best is None or gap < best[0]):
             best = (gap, span)
     return best[1] if best else None
 
@@ -1073,7 +1352,7 @@ def show_cure(trace: Trace) -> None:
         print("  no Burning Bile carried")
     else:
         print(f"  Burning Bile, pulse hits on bots carrying neither Bile nor Toxin (nearest carrier within"
-              f" {BILE_PULSE_RADIUS:.0f} yd):")
+              f" {WORM_SPLASH_RADIUS:.0f} yd):")
         for span in biles:
             clean = ", ".join(f"{named(trace, guid)} {n}" for guid, n in span["clean"].most_common()) or "none"
             damage = f"  ({span['damage'] / 1000:.1f}k)" if span["damage"] else ""
@@ -1188,12 +1467,13 @@ SECTIONS = (
     ("stage", "which beasts were up when, deaths per stage, each beast's engage", show_stage),
     ("tanks", "tank duties, Gormok's victims with Impale stacks, swaps, defensives", show_tanks),
     ("targets", "each DPS bot's time on its nb.dps pick, another beast or neither, by branch", show_targets),
-    ("charge", "every Icehowl charge: gaze, lane, outcome, who stood at its end", show_charge),
-    ("breath", "every Arctic Breath: target, who froze, who the cone predicts, spread", show_breath),
+    ("charge", "every Icehowl charge: gaze, lane, outcome, who stood at its end, each bot's daze", show_charge),
+    ("breath", "every Arctic Breath: target, who froze, who the cone predicts, spread, nb.breath, his Whirl walk",
+     show_breath),
     ("snobold", "snobold riders and the DPS picks", show_snobold),
     ("bomb", "every Fire Bomb: target, impact hits, who stood inside, dodges", show_bomb),
-    ("worms", "worm form spans, emerge pickups, Spew wedges, slime pools, Sweep, reposition and hold branches",
-     show_worms),
+    ("worms", "worm form spans, emerge pickups, Spew wedges, slime pools, Sweep, Spray casts, caster spread,"
+     " hold releases, reposition and hold branches", show_worms),
     ("cure", "Paralytic Toxin spans and how each ended, Burning Bile pulses on the clean, cure branches",
      show_cure),
 )
