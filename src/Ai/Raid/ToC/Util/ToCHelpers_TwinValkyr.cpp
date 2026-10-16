@@ -525,6 +525,8 @@ Unit* GetEydis(PlayerbotAI* botAI)
     return state ? ResolveAlive(botAI, state->eydis) : nullptr;
 }
 
+bool IsTwinAttackable(Unit* twin) { return twin && !twin->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE); }
+
 TwinColour TwinColourOf(Unit* twin)
 {
     if (!twin)
@@ -662,8 +664,13 @@ Unit* GetTwinDpsTarget(PlayerbotAI* botAI)
         return nullptr;
 
     Player* bot = botAI->GetBot();
-    Unit* target = GetTwinCastingPact(botAI);
-    char const* rule = "pact";
+    Unit* target = GetToCHumanSkull(botAI, [](Unit* unit) { return TwinColourOf(unit) != TwinColour::None; });
+    char const* rule = "skull";
+    if (!target)
+    {
+        target = GetTwinCastingPact(botAI);
+        rule = "pact";
+    }
     if (!target)
     {
         // The essence gives +50% against the other colour's twin and -50% against her sister
@@ -693,11 +700,6 @@ Unit* GetTwinDpsTarget(PlayerbotAI* botAI)
         target ? std::string(TwinColourOf(target) == TwinColour::Light ? "fjola" : "eydis") + ":" + rule : "none";
     RaidObs::NoteDerived(bot, "tv.target", probe);
     return target;
-}
-
-char const* TwinRtiIcon(Unit* twin)
-{
-    return TwinColourOf(twin) == TwinColour::Dark ? "cross" : "skull";
 }
 
 char const* TwinReadyInterrupt(Player* bot, Unit* twin)

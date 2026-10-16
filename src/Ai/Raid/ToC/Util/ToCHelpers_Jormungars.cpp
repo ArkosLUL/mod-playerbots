@@ -743,8 +743,8 @@ Unit* GetWormRedirectTarget(PlayerbotAI* botAI, Player*& holder)
     if (!state || !state->engaged)
         return nullptr;
 
-    // Tricks moves the threat off whatever the rogue hits, and melee hit the skull, so rogues serve the
-    // mobile worm. Only hunters, whose dump shot aims at the assigned worm, alternate.
+    // Tricks moves the threat off whatever the rogue hits, and DPS go for the mobile worm, so rogues
+    // serve that one. Only hunters, whose dump shot aims at the assigned worm, alternate.
     bool const hunter = bot->getClass() == CLASS_HUNTER;
     int32 const index = hunter ? HunterIndex(bot) : 0;
     if (index < 0)
@@ -763,7 +763,7 @@ Unit* GetWormRedirectTarget(PlayerbotAI* botAI, Player*& holder)
     if (!dutyHolder || !worm || !dutyHolder->IsAlive() || dutyHolder == bot)
         return nullptr;
 
-    // Charges left from a Misdirection cast under ground go into this worm, not the rotation's skull
+    // Charges left from a Misdirection cast under ground go into this worm, not the bot's DPS target
     bool const chargesLeft = hunter && bot->HasAura(SPELL_MISDIRECTION_PROC);
     if (!IsWormSubmerged(worm) && worm->GetVictim() == dutyHolder && !chargesLeft)
         return nullptr;

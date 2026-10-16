@@ -10,6 +10,14 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "Timer.h"
+#include "ToCActions_Shared.h"
+
+class NorthrendBeastsDpsTargetAction : public ToCDirectAttackAction
+{
+public:
+    NorthrendBeastsDpsTargetAction(PlayerbotAI* botAI, std::string const name) : ToCDirectAttackAction(botAI, name) {}
+    bool Execute(Event event) override;
+};
 
 // Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
 // re-derived each tick from a bot that's still walking never lands.

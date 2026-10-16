@@ -60,6 +60,10 @@ void AddToCIcehowlTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("icehowl frothing rage", {
         NextAction("icehowl tank defensive", ACTION_RAID + 6) }));
 
+    // Ahead of the breath stand: its walk holds the tick until it lands, and this switch doesn't stop it
+    triggers.push_back(new TriggerNode("icehowl dps target", {
+        NextAction("icehowl dps target", ACTION_RAID + 2) }));
+
     triggers.push_back(new TriggerNode("icehowl breath spread", {
         NextAction("icehowl move to breath stand", ACTION_RAID + 2) }));
 }

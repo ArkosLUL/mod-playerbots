@@ -1,6 +1,7 @@
 #include "ToCTriggers_TwinValkyr.h"
 #include "ToCData.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_TwinValkyr.h"
 #include "Playerbots.h"
 #include "Strategy.h"
@@ -14,12 +15,6 @@ bool WantsEssenceFor(PlayerbotAI* botAI, Player* bot, TwinEssenceReason reason)
 {
     TwinEssenceWant const want = GetWantedEssence(botAI);
     return want.reason == reason && want.colour != EssenceOf(bot);
-}
-
-// Both twins stay non-attackable until the script releases them at the pull.
-bool IsAttackableTwin(Unit* twin)
-{
-    return twin && !twin->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 }
 }  // namespace
 
@@ -57,13 +52,13 @@ bool TwinValkyrNeedsBaseEssenceTrigger::IsActive()
 bool TwinValkyrEngagedByMainTankTrigger::IsActive()
 {
     Unit* fjola = GetFjola(botAI);
-    return IsAttackableTwin(fjola) && IsTwinTank(bot, fjola);
+    return IsTwinAttackable(fjola) && IsTwinTank(bot, fjola);
 }
 
 bool TwinValkyrDarkbaneNeedsAssistTankTrigger::IsActive()
 {
     Unit* eydis = GetEydis(botAI);
-    if (!IsAttackableTwin(eydis) || !IsTwinTank(bot, eydis))
+    if (!IsTwinAttackable(eydis) || !IsTwinTank(bot, eydis))
         return false;
 
     // a lone tank holds both twins from the main tank node
@@ -89,14 +84,11 @@ bool TwinValkyrRedirectThreatTrigger::IsActive()
 
 bool TwinValkyrDpsTargetTrigger::IsActive()
 {
-    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsTank(bot, true) || PlayerbotAI::IsHeal(bot))
-        return false;
-
-    if (!ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr))
+    if (!IsToCDpsBot(bot) || !ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr))
         return false;
 
     Unit* twin = GetTwinDpsTarget(botAI);
-    return twin && (AI_VALUE(Unit*, "rti target") != twin || AI_VALUE(Unit*, "current target") != twin);
+    return twin && (AI_VALUE(Unit*, "current target") != twin || ToCPetOffPick(botAI, twin));
 }
 
 void AddToCTwinValkyrTriggerNodes(std::vector<TriggerNode*>& triggers)

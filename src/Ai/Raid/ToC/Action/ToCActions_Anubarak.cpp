@@ -1,18 +1,15 @@
 #include "ToCActions_Anubarak.h"
 
 #include <algorithm>
-#include <string>
 #include <vector>
 
 #include "Creature.h"
 #include "EncounterHelpers.h"
-#include "Group.h"
 #include "LastMovementValue.h"
 #include "Player.h"
 #include "Playerbots.h"
 #include "RaidObs.h"
 #include "RaidTankDefensive.h"
-#include "RtiTargetValue.h"
 #include "Spell.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -90,25 +87,6 @@ bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
     }
 
     return false;
-}
-
-// Only a cross this node could have left: on a burrower off Permafrost, or on something dead or gone
-void ClearStaleBurrowerCross(PlayerbotAI* botAI, Player* bot)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return;
-
-    ObjectGuid const guid = group->GetTargetIcon(RtiTargetValue::crossIndex);
-    if (guid.IsEmpty())
-        return;
-
-    Unit* marked = botAI->GetUnit(guid);
-    bool const stale = !marked || !marked->IsAlive() ||
-                       (marked->GetEntry() == static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER) &&
-                        !UnitOnPermafrost(marked));
-    if (stale)
-        ClearTargetIcon(bot, RtiTargetValue::crossIndex);
 }
 
 }
@@ -212,40 +190,19 @@ bool AnubarakDestroyFrostSphereAction::Execute(Event /*event*/)
     return sphere && Attack(sphere);
 }
 
-bool AnubarakFocusBurrowerAction::Execute(Event /*event*/)
-{
-    Creature* burrower = GetAnubarakFocusBurrower(bot);
-    if (!burrower)
-    {
-        SetRtiTarget(botAI, "skull");
-        ClearStaleBurrowerCross(botAI, bot);
-        return false;
-    }
-
-    MarkTargetWithCross(bot, burrower);
-    SetRtiTarget(botAI, ANUBARAK_BURROWER_RTI, burrower);
-    return Attack(burrower);
-}
+bool AnubarakDpsTargetAction::Execute(Event /*event*/) { return AttackDirect(GetAnubarakDpsTarget(botAI)); }
 
 bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
 {
     AnubarakBurrowerPick const pick = GetAnubarakBurrowerPick(botAI);
     Creature* target = pick.held ? pick.held : pick.loose;
     if (!target)
-    {
-        // TankTargetValue reads rti first, so a leftover side mark has this tank chase that icon next fight
-        if (IsAnubarakSideRti(AI_VALUE(std::string, "rti")))
-            SetRtiTarget(botAI, "skull");
-
         return false;
-    }
 
     // Taunts even with one already held: a wave brings more burrowers than there are side tanks
     if (pick.loose && TryClassTaunt(botAI, bot, pick.loose))
         return true;
 
-    // Own rti name with no group icon behind it, so DPS never follow this pick
-    SetRtiTarget(botAI, ANUBARAK_SIDE_RTI[pick.side], target);
     if (Attack(target))
         return true;
 
@@ -278,9 +235,6 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
     Creature* boss = GetAnubarak(bot);
     if (!boss || boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
         return false;
-
-    MarkTargetWithSkull(bot, boss);
-    SetRtiTarget(botAI, "skull", boss);
 
     // He never drops threat, so a taunt is only owed when a non-tank ended up with him
     Unit* victim = boss->GetVictim();

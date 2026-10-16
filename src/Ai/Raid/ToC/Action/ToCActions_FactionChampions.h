@@ -5,10 +5,10 @@
 #include "RaidAntiFear.h"
 #include "ToCActions_Shared.h"
 
-class FactionChampionsMarkTargetsAction : public Action
+class FactionChampionsClearCcIconsAction : public Action
 {
 public:
-    FactionChampionsMarkTargetsAction(PlayerbotAI* botAI) : Action(botAI, "faction champions mark targets") {}
+    FactionChampionsClearCcIconsAction(PlayerbotAI* botAI) : Action(botAI, "faction champions clear cc icons") {}
     bool Execute(Event event) override;
 };
 
@@ -21,10 +21,11 @@ protected:
     bool FearWindowActive() override;
 };
 
-class FactionChampionsFocusPriorityAction : public AttackAction
+class FactionChampionsFocusPriorityAction : public ToCDirectAttackAction
 {
 public:
-    FactionChampionsFocusPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, "faction champions focus priority") {}
+    FactionChampionsFocusPriorityAction(PlayerbotAI* botAI)
+        : ToCDirectAttackAction(botAI, "faction champions focus priority") {}
     bool Execute(Event event) override;
 };
 
@@ -56,8 +57,8 @@ class ToCFactionChampionsActionContext : public NamedObjectContext<Action>
 public:
     ToCFactionChampionsActionContext()
     {
-        creators["faction champions mark targets"] =
-            &ToCFactionChampionsActionContext::faction_champions_mark_targets;
+        creators["faction champions clear cc icons"] =
+            &ToCFactionChampionsActionContext::faction_champions_clear_cc_icons;
         creators["faction champions anti fear"] =
             &ToCFactionChampionsActionContext::faction_champions_anti_fear;
         creators["faction champions focus priority"] =
@@ -71,8 +72,8 @@ public:
     }
 
 private:
-    static Action* faction_champions_mark_targets(PlayerbotAI* botAI) {
-        return new FactionChampionsMarkTargetsAction(botAI);
+    static Action* faction_champions_clear_cc_icons(PlayerbotAI* botAI) {
+        return new FactionChampionsClearCcIconsAction(botAI);
     }
 
     static Action* faction_champions_anti_fear(PlayerbotAI* botAI) {

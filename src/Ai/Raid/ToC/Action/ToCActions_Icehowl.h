@@ -60,6 +60,8 @@ public:
             &ToCIcehowlActionContext::icehowl_tank_defensive;
         creators["icehowl move to breath stand"] =
             &ToCIcehowlActionContext::icehowl_move_to_breath_stand;
+        creators["icehowl dps target"] =
+            &ToCIcehowlActionContext::icehowl_dps_target;
     }
 
 private:
@@ -77,6 +79,10 @@ private:
 
     static Action* icehowl_move_to_breath_stand(PlayerbotAI* botAI) {
         return new IcehowlMoveToBreathStandAction(botAI);
+    }
+
+    static Action* icehowl_dps_target(PlayerbotAI* botAI) {
+        return new NorthrendBeastsDpsTargetAction(botAI, "icehowl dps target");
     }
 };
 

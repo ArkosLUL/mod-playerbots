@@ -1,6 +1,7 @@
 #include "ToCTriggers_Gormok.h"
 #include "ToCHelpers_Gormok.h"
 #include "ToCHelpers_NorthrendBeasts.h"
+#include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
 #include "Strategy.h"
 
@@ -12,9 +13,13 @@ bool GormokTankDutyTrigger::IsActive()
            GetEngagedBeast(botAI, NorthrendBeast::Gormok);
 }
 
-bool GormokSnoboldOnRaidTrigger::IsActive()
+bool GormokSwapTankDutyTrigger::IsActive()
 {
-    return GetGormokSnoboldPick(botAI) != nullptr;
+    if (GetBeastsTankDuty(botAI) != BeastsTankDuty::GormokSwap)
+        return false;
+
+    Unit* gormok = GetEngagedBeast(botAI, NorthrendBeast::Gormok);
+    return gormok && (AI_VALUE(Unit*, "current target") != gormok || ToCPetOffPick(botAI, gormok));
 }
 
 bool GormokTankSwapNeededTrigger::IsActive()
@@ -47,8 +52,11 @@ void AddToCGormokTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("gormok tank duty", {
         NextAction("gormok tank hold boss", ACTION_RAID + 1) }));
 
-    triggers.push_back(new TriggerNode("gormok snobold on raid", {
-        NextAction("gormok focus snobold", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("gormok swap tank duty", {
+        NextAction("gormok swap tank hold", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("gormok dps target", {
+        NextAction("gormok dps target", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode("gormok snobolled", {
         NextAction("gormok bring snobold to melee", ACTION_RAID + 3) }));

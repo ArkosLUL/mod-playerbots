@@ -1,6 +1,7 @@
 #include "ToCTriggers_Jaraxxus.h"
 #include "ToCData.h"
 #include "ToCHelpers_Jaraxxus.h"
+#include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
 #include "PlayerbotAIConfig.h"
 #include "Strategy.h"
@@ -33,25 +34,11 @@ bool JaraxxusIntroMainTankTrigger::IsActive()
     return jaraxxus && bot->GetExactDist2d(jaraxxus) > JARAXXUS_INTRO_STAND + 1.0f;
 }
 
-bool JaraxxusEngagedByMainTankTrigger::IsActive()
-{
-    if (!botAI->IsMainTank(bot))
-        return false;
+bool JaraxxusEngagedByMainTankTrigger::IsActive() { return JaraxxusMainTankHolds(botAI); }
 
-    // out of combat he's the respawn after a wipe, attackable: the retry pull is the leader's
-    Unit* jaraxxus = GetJaraxxus(botAI);
-    return jaraxxus && jaraxxus->IsInCombat();
-}
+bool JaraxxusAddNeedsAssistTankTrigger::IsActive() { return JaraxxusAssistTankHolds(botAI, 0); }
 
-bool JaraxxusAddNeedsAssistTankTrigger::IsActive()
-{
-    return botAI->IsAssistTankOfIndex(bot, 0, true) && GetJaraxxusAssistTankAdd(botAI, 0);
-}
-
-bool JaraxxusSecondAddNeedsAssistTankTrigger::IsActive()
-{
-    return botAI->IsAssistTankOfIndex(bot, 1, true) && GetJaraxxusAssistTankAdd(botAI, 1);
-}
+bool JaraxxusSecondAddNeedsAssistTankTrigger::IsActive() { return JaraxxusAssistTankHolds(botAI, 1); }
 
 bool JaraxxusNetherPowerActiveTrigger::IsActive()
 {
@@ -59,17 +46,10 @@ bool JaraxxusNetherPowerActiveTrigger::IsActive()
     return JaraxxusNetherPowerStacks(botAI) > 0 && JaraxxusIsNetherPowerRemover(bot);
 }
 
-bool JaraxxusAddShouldBeFocusedTrigger::IsActive()
+bool JaraxxusDpsTargetTrigger::IsActive()
 {
-    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsTank(bot, true) || botAI->IsHeal(bot))
-        return false;
-
-    return GetJaraxxusFocusAdd(botAI) != nullptr;
-}
-
-bool JaraxxusFocusStaleTrigger::IsActive()
-{
-    return JaraxxusOwnsRti(bot) && !JaraxxusAnyAddAlive(botAI);
+    Unit* target = GetJaraxxusDpsTarget(botAI);
+    return target && (AI_VALUE(Unit*, "current target") != target || ToCPetOffPick(botAI, target));
 }
 
 bool JaraxxusIncinerateFleshOnRaidTrigger::IsActive()
@@ -107,11 +87,8 @@ void AddToCJaraxxusTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("jaraxxus nether power active", {
         NextAction("jaraxxus remove nether power", ACTION_RAID + 2) }));
 
-    triggers.push_back(new TriggerNode("jaraxxus add should be focused", {
-        NextAction("jaraxxus focus add", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode("jaraxxus focus stale", {
-        NextAction("jaraxxus reset focus", ACTION_RAID) }));
+    triggers.push_back(new TriggerNode("jaraxxus dps target", {
+        NextAction("jaraxxus dps target", ACTION_RAID + 1) }));
 
     // health reads full under the absorb, so no generic heal picks the target. stays under critical heals
     triggers.push_back(new TriggerNode("jaraxxus incinerate flesh on raid", {

@@ -484,6 +484,35 @@ class ShieldReturns(unittest.TestCase):
         self.assertIn("+4.0s early", lines[1])
 
 
+class SkullSwitch(unittest.TestCase):
+    def test_a_players_skull_opens_its_own_hold_and_counts_in_order(self):
+        records = [
+            {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 1, "boss": "velanaa",
+             "roster": [{"g": ROGUE, "n": "Shiv", "r": "melee", "c": 4, "h": 0}]},
+            {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+            {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+            {"t": 1, "e": "unit", "g": WARLOCK_C, "en": 34474, "n": "Serissa Grimdabbler", "b": 1},
+            note(1000, ROGUE, "fc.switch", "first"),
+            note(1000, ROGUE, "fc.kill", PALADIN),
+            note(4000, ROGUE, "fc.switch", "skull"),
+            note(4000, ROGUE, "fc.kill", WARLOCK_C),
+            note(9000, ROGUE, "fc.switch", "reset"),
+            note(9000, ROGUE, "fc.kill", 0),
+            {"t": 9000, "e": "end", "out": "wipe"},
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            holds = fc.kill_holds(trace)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                fc.show_kill(trace)
+        self.assertEqual([(hold["guid"], hold["reason"]) for hold in holds],
+                         [(PALADIN, "first"), (WARLOCK_C, "skull")])
+        self.assertIn("fc.switch: first 1, skull 1, reset 1", out.getvalue())
+
+
 class KillEnding(unittest.TestCase):
     def test_the_hold_open_at_a_kill_died(self):
         # a kill writes no reset, and the priest is still in the last snapshot

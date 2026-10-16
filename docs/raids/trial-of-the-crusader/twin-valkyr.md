@@ -132,15 +132,18 @@ Once the gossip lands the essence the bot stops rather than finish the walk unde
 essence-swap multiplier: a blanket `MovementAction` veto also vetoes `AttackAction`
 ([pitfalls.md](../../engine/pitfalls.md)).
 
-**Targets.** DPS hit the twin of the other colour than their essence (Light → Eydis, Dark or none
-→ Fjola), the Pact twin overriding, each bot with its own RTI: skull on Fjola, cross on Eydis. A
-skull on Fjola for everyone halves every Light bot. Under a lone tank all DPS stay on Fjola outside
-a Pact: Light DPS would pull Eydis, and diminishing taunts can't bring her back.
+**Targets**, `GetTwinDpsTarget`: a player's skull on either twin, then the Pact twin, then the twin
+of the other colour than the bot's essence (Light → Eydis, Dark or none → Fjola). Under a lone tank
+all DPS stay on Fjola outside a Pact: Light DPS would pull Eydis, and diminishing taunts can't bring
+her back. A shared mark would halve every bot of one colour, so each DPS bot attacks its own pick
+directly ([README.md](README.md#targeting-is-direct-no-raid-icons)). `twin valkyr dps target guard`
+zeroes `dps assist` on the node's own test: `IsToCDpsBot`, fight live, a pick.
 
 **Tanks.** Alive tanks ranked main, then assists with assistants first, each passing `IsTank` or
 `IsTank(bySpec)` (the strategy read flickers): Fjola to the first, Eydis to the second, both to a
-lone one (the guide calls one tank possible). Each marks, holds, taunts back and drags its twin to
-`ARENA_CENTER`, which keeps melee target swaps short and every portal equidistant. Multipliers:
+lone one (the guide calls one tank possible). Each holds, taunts back and drags its twin to
+`ARENA_CENTER`, which keeps melee target swaps short and every portal equidistant.
+`twin valkyr tank target guard` zeroes `tank assist` while its twin is attackable. Multipliers:
 `TwinValkyrTauntGuardMultiplier` zeroes a taunt on a twin another living tank owns,
 `TwinValkyrControlTankMovementMultiplier` zeroes formation moves for a tank holding its twin.
 Hunters and rogues redirect to their target twin's tank, casting outside the queue, so
@@ -148,10 +151,11 @@ Hunters and rogues redirect to their target twin's tank, casting outside the que
 damage and Twin Spike get no defensive node: the guide calls tank damage light, Power of the Twins
 the peak.
 
-**Twin's Pact.** Every DPS goes to the Pact twin. `TwinValkyrInterruptHoldMultiplier` zeroes the
-seven working interrupts while any twin is shielded, and silencing shot, strangulate, silence,
-hammer of justice and bash on a twin always. Arcane torrent stays: only the racial nodes cast it,
-for its resource. Once the shield breaks, the duty falls to the lowest GUID among bots on the map
+**Twin's Pact.** Every DPS goes to the Pact twin unless a player's skull is on her sister.
+`TwinValkyrInterruptHoldMultiplier` zeroes the seven working interrupts while any twin is shielded,
+and silencing shot, strangulate, silence, hammer of justice and bash on a twin always. Arcane
+torrent stays: only the racial nodes cast it, for its resource. Once the shield breaks, the duty
+falls to the lowest GUID among bots on the map
 with a ready, in-range working interrupt that are not swapping for a Touch or Vortex, as on Vezax.
 Ready also means off cooldown and affordable: `CanCastSpell` skips power, and a pet spell's
 cooldown; the warlock casts Spell Lock itself, so its cooldown and range are the warlock's. The
@@ -207,7 +211,7 @@ Position, verdicts and movement come from the raid-agnostic streams. The Twins r
 | Key | Says |
 |---|---|
 | `essence` | `<reason>:<colour>` wanted: `touch`, `vortex`, `shield`, `base`, or `none` with neither twin alive |
-| `target` | `<fjola\|eydis>:<rule>`, the twin the DPS rule names and why: `pact`, `lone` (a lone tank), or the essence held (`light`, `dark`, `none`); `none` with no twin |
+| `target` | `<fjola\|eydis>:<rule>`, the twin the DPS rule names and why: `skull` (a player's), `pact`, `lone` (a lone tank), or the essence held (`light`, `dark`, `none`); `none` with no twin |
 | `tank` | `fjola`, `eydis`, `both` or `none`, tanks only |
 | `shield` | The shielded twin, `0` none, `1` Fjola, `2` Eydis. Per instance |
 | `interrupt` | `duty`, `standby` or `none` (no ready interrupt), written by every living bot while a twin casts an unshielded Pact; a dead bot's goes stale, so the reader cuts it at the death |
@@ -220,8 +224,8 @@ damage meanwhile (`--touch`); each Pact's shield up and down off `tv.shield`, ca
 kicks wasted on the shield and after the break, duty and lust (`--pact`); Unleashed hits taken or
 absorbed, peak Powering Up and Empowered per bot, and which bots dodged under each `tv.orb` rule
 (`--orbs`); each twin's time on her `tv.tank` tank, taunts, distance from `ARENA_CENTER` and between
-the twins (`--tanks`); each DPS bot's time on the twin the rule names, Fjola while a `tv.tank` reads
-`both` (`--targets`).
+the twins (`--tanks`); each DPS bot's time on the twin the rule names: its `tv.target` twin while
+that reads `skull`, Fjola while a `tv.tank` reads `both` (`--targets`).
 
 Still invisible, and what stands in:
 

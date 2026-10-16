@@ -1,7 +1,6 @@
 #include "ToCMultipliers_Anubarak.h"
 
 #include "AttackAction.h"
-#include "ChooseTargetActions.h"
 #include "Creature.h"
 #include "HunterActions.h"
 #include "MageActions.h"
@@ -60,39 +59,10 @@ float AnubarakProtectSpikeKiteMultiplier::GetValue(Action* action)
     return AnubarakEngaged(botAI) ? 0.0f : 1.0f;
 }
 
-float AnubarakTankTargetGuardMultiplier::GetValue(Action* action)
-{
-    bool const dpsAssist = dynamic_cast<DpsAssistAction*>(action);
-    if (!dpsAssist && !dynamic_cast<TankAssistAction*>(action))
-        return 1.0f;
-
-    if (!AnubarakEngaged(botAI))
-        return 1.0f;
-
-    if (IsAnubarakPickupTank(bot))
-    {
-        AnubarakPhase const phase = GetAnubarakPhase(botAI);
-        if (phase == AnubarakPhase::Surface || phase == AnubarakPhase::Swarm)
-            return 0.0f;
-    }
-
-    // Only while the hold node has one for it, so a side tank with nothing to take still gets a target
-    if (GetAnubarakBurrowerPick(botAI))
-        return 0.0f;
-
-    // A flying sphere is out of combat, so it's never the dps target and assist would yank the
-    // shooter off it every tick
-    if (dpsAssist && botAI->IsRangedDps(bot) && GetAnubarakSphereToShoot(bot))
-        return 0.0f;
-
-    return 1.0f;
-}
-
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new AnubarakControlTankMovementMultiplier(botAI));
     multipliers.push_back(new AnubarakProtectSpikeKiteMultiplier(botAI));
-    multipliers.push_back(new AnubarakTankTargetGuardMultiplier(botAI));
 }
 
 // Lust waits for phase 3, where Leeching Swarm turns the fight into a race

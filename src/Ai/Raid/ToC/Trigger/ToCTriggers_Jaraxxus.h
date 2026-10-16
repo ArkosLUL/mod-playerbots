@@ -71,19 +71,11 @@ public:
     bool IsActive() override;
 };
 
-class JaraxxusAddShouldBeFocusedTrigger : public Trigger
+class JaraxxusDpsTargetTrigger : public Trigger
 {
 public:
-    JaraxxusAddShouldBeFocusedTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus add should be focused") {}
-    bool IsActive() override;
-};
-
-class JaraxxusFocusStaleTrigger : public Trigger
-{
-public:
-    JaraxxusFocusStaleTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus focus stale") {}
+    JaraxxusDpsTargetTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus dps target") {}
     bool IsActive() override;
 };
 
@@ -116,10 +108,8 @@ public:
             &ToCJaraxxusTriggerContext::jaraxxus_second_add_needs_assist_tank;
         creators["jaraxxus nether power active"] =
             &ToCJaraxxusTriggerContext::jaraxxus_nether_power_active;
-        creators["jaraxxus add should be focused"] =
-            &ToCJaraxxusTriggerContext::jaraxxus_add_should_be_focused;
-        creators["jaraxxus focus stale"] =
-            &ToCJaraxxusTriggerContext::jaraxxus_focus_stale;
+        creators["jaraxxus dps target"] =
+            &ToCJaraxxusTriggerContext::jaraxxus_dps_target;
         creators["jaraxxus incinerate flesh on raid"] =
             &ToCJaraxxusTriggerContext::jaraxxus_incinerate_flesh_on_raid;
     }
@@ -157,12 +147,8 @@ private:
         return new JaraxxusNetherPowerActiveTrigger(botAI);
     }
 
-    static Trigger* jaraxxus_add_should_be_focused(PlayerbotAI* botAI) {
-        return new JaraxxusAddShouldBeFocusedTrigger(botAI);
-    }
-
-    static Trigger* jaraxxus_focus_stale(PlayerbotAI* botAI) {
-        return new JaraxxusFocusStaleTrigger(botAI);
+    static Trigger* jaraxxus_dps_target(PlayerbotAI* botAI) {
+        return new JaraxxusDpsTargetTrigger(botAI);
     }
 
     static Trigger* jaraxxus_incinerate_flesh_on_raid(PlayerbotAI* botAI) {

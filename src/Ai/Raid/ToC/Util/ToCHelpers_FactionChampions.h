@@ -57,7 +57,8 @@ bool IsFactionChampion(uint32 entry);
 bool IsFactionChampionHealer(uint32 entry);
 
 // The raid's one kill target, latched per instance. Switches only when it dies, leaves combat or turns
-// immune to all damage, or to go back to the one it left over immunity. Null unless the encounter is live.
+// immune to all damage, to go back to the one it left over immunity, or to a player's skull on a
+// champion that can be hurt. Null unless the encounter is live.
 Unit* FactionChampionsKillTarget(PlayerbotAI* botAI);
 
 // The champion the kill latch left over immunity and goes back to once it can be hurt again. Null
@@ -78,10 +79,10 @@ bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 // This bot's CC target and its raid icon (RtiTargetValue index). Null when it has none.
 Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint8& iconIndex);
 
-// Skull off the kill target, a CC icon on a champion no assignment gives it to, or once the pull is
-// over an icon this encounter placed still up. Apply does exactly what Pending tests.
-bool FactionChampionsMarksPending(PlayerbotAI* botAI);
-void FactionChampionsApplyMarks(PlayerbotAI* botAI);
+// A CC icon on a champion no assignment gives it to, or once the pull is over a CC icon this encounter
+// placed still up. Clear does exactly what Stale tests.
+bool FactionChampionsCcIconsStale(PlayerbotAI* botAI);
+void FactionChampionsClearStaleCcIcons(PlayerbotAI* botAI);
 
 // Assigned: "rti cc" or the group icon doesn't match the assignment yet. Released while live: a
 // saved "rti cc" is still waiting to be put back. Apply does exactly what Pending tests.

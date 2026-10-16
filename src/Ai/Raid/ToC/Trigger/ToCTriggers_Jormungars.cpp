@@ -40,6 +40,9 @@ void AddToCJormungarsTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("northrend worms redirect threat", {
         NextAction("northrend worms redirect threat", ACTION_RAID + 1) }));
 
+    triggers.push_back(new TriggerNode("northrend worms dps target", {
+        NextAction("northrend worms dps target", ACTION_RAID + 2) }));
+
     triggers.push_back(new TriggerNode("northrend worms misplaced", {
         NextAction("northrend worms reposition", ACTION_EMERGENCY + 6) }));
 }

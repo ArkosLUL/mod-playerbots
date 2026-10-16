@@ -369,6 +369,76 @@ class SyntheticPull(unittest.TestCase):
         self.assertIn(f"patch #{S3 & 0xFFFFFFFF} last seen 0:31.000", text)
 
 
+def focus_pull() -> list[dict]:
+    """B1 holds the focus from 1 to 5 s, nothing to 6 s, then B2 to the end at 10 s. Trueshot leaves B1
+    for the boss at 4 s, Drifter stays on the boss through B2 and is dead at 9 s, and the human and the
+    healer never count."""
+    def target(guid: int, when: int) -> int:
+        if guid in (MELEE, FLOAT) and 1000 <= when < 5000:
+            return B1
+        if guid == KITE:
+            return B2 if when >= 6000 else (BOSS if when == 4000 else B1)
+        return BOSS if guid == FLOAT else 0
+
+    def focus_snap(when: int) -> dict:
+        units = [[guid, X, Y, Z, 0.0, 0.0 if guid == FLOAT and when == 9000 else 100.0, 100.0,
+                  target(guid, when), 0, 0, 0, 0] for guid in (KITE, FLOAT, MELEE, HEAL)]
+        return {"t": when, "e": "snap", "u": units, "hz": []}
+
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 4, "diff": 1, "boss": "anub-arak",
+         "roster": [
+             {"g": KITE, "n": "Trueshot", "r": "ranged", "c": "hunter", "h": 0},
+             {"g": FLOAT, "n": "Drifter", "r": "melee", "c": "warrior", "h": 0},
+             {"g": MELEE, "n": "Arkos", "r": "melee", "c": "rogue", "h": 1},
+             {"g": HEAL, "n": "Mercy", "r": "heal", "c": "priest", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": 0, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 0, "e": "unit", "g": B1, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        {"t": 0, "e": "unit", "g": B2, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        # a cleared latch restated at the trace's open is no hold
+        note(-500, KITE, "anub.focus", 0),
+        note(1000, KITE, "anub.focus", B1),
+        note(5000, FLOAT, "anub.focus", 0),
+        note(6000, KITE, "anub.focus", B2),
+        note(1000, KITE, "anub.dps", "burrower"),
+        note(4000, KITE, "anub.dps", "boss"),
+        note(4500, KITE, "anub.dps", "burrower"),
+        note(1000, FLOAT, "anub.dps", "burrower"),
+        {"t": 10000, "e": "end", "out": "wipe"},
+    ]
+    records += [focus_snap(when) for when in range(0, 10000, 1000)]
+    return records
+
+
+class BurrowerFocus(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_4_anub-arak_1789500001.ndjson", focus_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_each_focus_holds_its_time_and_the_living_dps_bots_share(self):
+        # B1: Trueshot 3 of 4, Drifter 4 of 4. B2: Trueshot 4 of 4, Drifter 0 of 3 alive.
+        rows = {row["guid"]: row for row in ab.focus_rows(self.trace)}
+        self.assertEqual(set(rows), {B1, B2})
+        self.assertEqual((rows[B1]["held"], rows[B2]["held"]), (4000, 4000))
+        self.assertAlmostEqual(rows[B1]["share"], 7 / 8)
+        self.assertAlmostEqual(rows[B2]["share"], 4 / 7)
+
+    def test_the_section_prints_the_focus_and_the_dps_picks(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_burrowers(self.trace)
+        text = out.getvalue()
+        self.assertRegex(text, rf"#{B1 & 0xFFFFFFFF} +4\.0s +88%")
+        self.assertRegex(text, rf"#{B2 & 0xFFFFFFFF} +4\.0s +57%")
+        self.assertIn("anub.dps: Drifter burrower 1; Trueshot burrower 2, boss 1", text)
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

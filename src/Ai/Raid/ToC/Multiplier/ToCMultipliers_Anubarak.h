@@ -24,15 +24,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// The boss hold, burrower holds and sphere duty pick these bots' targets, generic assist would drag
-// them onto whatever the raid is hitting
-class AnubarakTankTargetGuardMultiplier : public Multiplier
-{
-public:
-    AnubarakTankTargetGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak tank target guard") {}
-    float GetValue(Action* action) override;
-};
-
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 ToCBurstWindow ToCAnubarakBurstWindow(PlayerbotAI* botAI);

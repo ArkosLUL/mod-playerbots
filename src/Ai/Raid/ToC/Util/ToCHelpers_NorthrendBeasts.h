@@ -33,6 +33,23 @@ enum class BeastsTankDuty : uint8
     WormStationary
 };
 
+// GetBeastsDpsTarget's branches, in the order it tries them
+enum class BeastsDpsBranch : uint8
+{
+    None,
+    Skull,
+    Snobold,
+    Gormok,
+    MobileWorm,
+    Icehowl
+};
+
+struct BeastsDpsPick
+{
+    Unit* unit = nullptr;
+    BeastsDpsBranch branch = BeastsDpsBranch::None;
+};
+
 // GetBeastsStageMask bits, also the nb.stage value
 constexpr uint32 BEASTS_STAGE_GORMOK = 1;
 constexpr uint32 BEASTS_STAGE_WORMS = 2;
@@ -60,6 +77,11 @@ Unit* GetBeastOfDuty(PlayerbotAI* botAI, BeastsTankDuty duty);
 // The main duty on that beast, so Gormok never answers GormokSwap. None for anything that isn't an
 // engaged beast, null included.
 BeastsTankDuty GetDutyOfBeast(PlayerbotAI* botAI, Unit* beast);
+
+// A DPS bot's target: a player's skull on a unit of the encounter, its snobold, Gormok, the mobile
+// worm while up, Icehowl. Each needs a unit in combat. The worm goes by form, never by its holder.
+// Empty without a note off map 649 or for a bot that isn't IsToCDpsBot. Notes nb.dps.
+BeastsDpsPick GetBeastsDpsTarget(PlayerbotAI* botAI);
 
 }
 

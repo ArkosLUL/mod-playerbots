@@ -7,10 +7,10 @@
 #include "RaidAntiFear.h"
 #include "Trigger.h"
 
-class FactionChampionsMarkTargetsTrigger : public Trigger
+class FactionChampionsClearCcIconsTrigger : public Trigger
 {
 public:
-    FactionChampionsMarkTargetsTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions mark targets") {}
+    FactionChampionsClearCcIconsTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions clear cc icons") {}
     bool IsActive() override;
 };
 
@@ -57,8 +57,8 @@ class ToCFactionChampionsTriggerContext : public NamedObjectContext<Trigger>
 public:
     ToCFactionChampionsTriggerContext() : NamedObjectContext<Trigger>()
     {
-        creators["faction champions mark targets"] =
-            &ToCFactionChampionsTriggerContext::faction_champions_mark_targets;
+        creators["faction champions clear cc icons"] =
+            &ToCFactionChampionsTriggerContext::faction_champions_clear_cc_icons;
         creators["faction champions anti fear"] =
             &ToCFactionChampionsTriggerContext::faction_champions_anti_fear;
         creators["faction champions should focus"] =
@@ -72,8 +72,8 @@ public:
     }
 
 private:
-    static Trigger* faction_champions_mark_targets(PlayerbotAI* botAI) {
-        return new FactionChampionsMarkTargetsTrigger(botAI);
+    static Trigger* faction_champions_clear_cc_icons(PlayerbotAI* botAI) {
+        return new FactionChampionsClearCcIconsTrigger(botAI);
     }
 
     static Trigger* faction_champions_anti_fear(PlayerbotAI* botAI) {

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "NamedObjectContext.h"
+#include "ToCTriggers_NorthrendBeasts.h"
 #include "Trigger.h"
 
 class IcehowlTankDutyTrigger : public Trigger
@@ -51,6 +52,8 @@ public:
             &ToCIcehowlTriggerContext::icehowl_frothing_rage;
         creators["icehowl breath spread"] =
             &ToCIcehowlTriggerContext::icehowl_breath_spread;
+        creators["icehowl dps target"] =
+            &ToCIcehowlTriggerContext::icehowl_dps_target;
     }
 
 private:
@@ -68,6 +71,10 @@ private:
 
     static Trigger* icehowl_breath_spread(PlayerbotAI* botAI) {
         return new IcehowlBreathSpreadTrigger(botAI);
+    }
+
+    static Trigger* icehowl_dps_target(PlayerbotAI* botAI) {
+        return new NorthrendBeastsDpsTargetTrigger(botAI, "icehowl dps target", NorthrendBeastsStem::Icehowl);
     }
 };
 

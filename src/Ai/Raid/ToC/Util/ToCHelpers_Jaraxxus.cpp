@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <list>
-#include <unordered_set>
 
 #include "Creature.h"
 #include "EncounterHelpers.h"
@@ -18,6 +17,8 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
+#include "ToCEncounterGate.h"
+#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 using namespace EncounterHelpers;
@@ -59,7 +60,6 @@ struct JaraxxusState
     RaidObs::ObsValue<uint32> netherPower{"jaraxxus.netherpower"};
     RaidObs::ObsValue<ObjectGuid> focus{"jaraxxus.focus"};
     RaidObs::ObsGuidMap<ObjectGuid> addTank{"jaraxxus.addtank"};
-    std::unordered_set<ObjectGuid> rtiOwners;
 };
 
 RaidInstanceState<JaraxxusState> jaraxxusStates;
@@ -535,17 +535,6 @@ bool IsJaraxxusAdd(Unit* unit)
     }
 }
 
-bool JaraxxusAnyAddAlive(PlayerbotAI* botAI)
-{
-    Player* bot = botAI ? botAI->GetBot() : nullptr;
-    JaraxxusScan const* scan = ScanFor(bot);
-    if (!scan)
-        return false;
-
-    return FirstAlive(bot, scan->mistresses) || FirstAlive(bot, scan->infernals) ||
-           FirstSelectable(bot, scan->portals) || FirstSelectable(bot, scan->volcanoes);
-}
-
 Unit* GetJaraxxusFocusAdd(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -608,6 +597,58 @@ Unit* GetJaraxxusAssistTankAdd(PlayerbotAI* botAI, uint8 index)
         state->addTank.erase(bot->GetGUID());
 
     return add;
+}
+
+bool JaraxxusMainTankHolds(PlayerbotAI* botAI)
+{
+    if (!botAI || !PlayerbotAI::IsMainTank(botAI->GetBot()))
+        return false;
+
+    // out of combat he's the respawn after a wipe, attackable: the retry pull is the leader's
+    Unit* jaraxxus = GetJaraxxus(botAI);
+    return jaraxxus && jaraxxus->IsInCombat();
+}
+
+bool JaraxxusAssistTankHolds(PlayerbotAI* botAI, uint8 index)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    return bot && PlayerbotAI::IsAssistTankOfIndex(bot, index, true) && GetJaraxxusAssistTankAdd(botAI, index);
+}
+
+Unit* GetJaraxxusDpsTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!StateFor(bot) || !IsToCDpsBot(bot))
+        return nullptr;
+
+    Unit* target = nullptr;
+    char const* branch = "none";
+    if (ToCEncounterGateOpen(botAI, ToCEncounter::Jaraxxus))
+    {
+        // read even under a skull, so jaraxxus.focus keeps following the adds
+        Unit* focus = GetJaraxxusFocusAdd(botAI);
+        Unit* boss = GetJaraxxus(botAI);
+
+        auto const belongs = [](Unit* unit)
+        { return IsJaraxxusAdd(unit) || unit->GetEntry() == static_cast<uint32>(ToCNpcs::NPC_JARAXXUS); };
+
+        target = GetToCHumanSkull(botAI, belongs);
+        if (target)
+            branch = "skull";
+        else if (focus)
+        {
+            target = focus;
+            branch = "add";
+        }
+        else if (boss && boss->IsInCombat())
+        {
+            target = boss;
+            branch = "boss";
+        }
+    }
+
+    RaidObs::NoteDerived(bot, "jaraxxus.dps", branch);
+    return target;
 }
 
 bool JaraxxusIsFelFireballCasting(Unit* boss)
@@ -784,24 +825,6 @@ bool JaraxxusAnyLegionFlame(PlayerbotAI* botAI)
 {
     JaraxxusScan const* scan = botAI ? ScanFor(botAI->GetBot()) : nullptr;
     return scan && !scan->flames.empty();
-}
-
-void JaraxxusClaimRti(Player* bot)
-{
-    if (JaraxxusState* state = StateFor(bot))
-        state->rtiOwners.insert(bot->GetGUID());
-}
-
-bool JaraxxusOwnsRti(Player* bot)
-{
-    JaraxxusState* state = StateFor(bot);
-    return state && state->rtiOwners.count(bot->GetGUID());
-}
-
-void JaraxxusReleaseRti(Player* bot)
-{
-    if (JaraxxusState* state = StateFor(bot))
-        state->rtiOwners.erase(bot->GetGUID());
 }
 
 }

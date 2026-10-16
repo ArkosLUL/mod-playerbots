@@ -30,7 +30,8 @@ What the generic views get wrong here, and what this reads instead:
   shielded champion before the shield's own end as the sign it came off early.
 - **`fc.kill` and `fc.physical` are raid-wide latches and `fc.switch` an event**, so the `g` on any
   of them is whichever bot's tick made the call. `fc.cc` is per bot, keyed on the bot, `0` on a
-  release.
+  release. A `skull` switch is a player's skull taking the latch: bots place no skull here, so the `g`
+  is still a bot, never the player who marked.
 - **Mass Dispel is cast at a point**, so its `cast` row names no target. `--hop` pairs it with a
   shield by time, and `--dispel` counts it apart from the dispels aimed at a raider, splitting off
   the casts inside a champion shield's duration, which are most likely the shield duty's.
@@ -90,7 +91,7 @@ CHAMPION_PETS = (35465, 35610)
 KILL = "fc.kill"
 SWITCH = "fc.switch"
 CC = "fc.cc"
-SWITCH_REASONS = ("first", "dead", "immune", "back", "reset")
+SWITCH_REASONS = ("first", "dead", "immune", "back", "skull", "reset")
 
 # Champion cast-time heals, every difficulty's id: (name, cast ms, ids). The cast row's own `ct` wins
 # when set, and a channel's reads 0.

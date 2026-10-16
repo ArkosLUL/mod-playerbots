@@ -10,8 +10,12 @@ public:
 
     std::string const getName() override { return "trialofthecrusader"; }
 
+    void OnTick() override;
     void InitTriggers(std::vector<TriggerNode*>& triggers) override;
     void InitMultipliers(std::vector<Multiplier*>& multipliers) override;
+
+private:
+    bool legacyRtiChecked = false;
 };
 
 #endif

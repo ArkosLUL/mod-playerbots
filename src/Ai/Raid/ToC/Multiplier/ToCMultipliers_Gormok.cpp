@@ -3,7 +3,6 @@
 #include <string>
 
 #include "AttackAction.h"
-#include "ChooseTargetActions.h"
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
@@ -25,17 +24,6 @@ bool IsBlinkOrDisengage(Action* action)
     return name == "blink" || name == "disengage";
 }
 }  // namespace
-
-float GormokSnoboldTargetGuardMultiplier::GetValue(Action* action)
-{
-    if (!dynamic_cast<DpsAssistAction*>(action))
-        return 1.0f;
-
-    if (!ToCEncounterIsLive(botAI, ToCEncounter::NorthrendBeasts))
-        return 1.0f;
-
-    return GetGormokSnoboldPick(botAI) ? 0.0f : 1.0f;
-}
 
 float GormokSnoboldCarrierMultiplier::GetValue(Action* action)
 {
@@ -65,6 +53,5 @@ float GormokSnoboldCarrierMultiplier::GetValue(Action* action)
 
 void AddToCGormokMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)
 {
-    multipliers.push_back(new GormokSnoboldTargetGuardMultiplier(botAI));
     multipliers.push_back(new GormokSnoboldCarrierMultiplier(botAI));
 }

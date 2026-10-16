@@ -7,6 +7,7 @@
 #include "NamedObjectContext.h"
 #include "Position.h"
 #include "RaidRedirectThreat.h"
+#include "ToCActions_NorthrendBeasts.h"
 #include "ToCHelpers_NorthrendBeasts.h"
 
 // Holds the worm of one duty through its submerges. Its walks are latched: every MoveTo clears the
@@ -93,6 +94,8 @@ public:
             &ToCJormungarsActionContext::northrend_worms_redirect_threat;
         creators["northrend worms reposition"] =
             &ToCJormungarsActionContext::northrend_worms_reposition;
+        creators["northrend worms dps target"] =
+            &ToCJormungarsActionContext::northrend_worms_dps_target;
     }
 
 private:
@@ -110,6 +113,10 @@ private:
 
     static Action* northrend_worms_reposition(PlayerbotAI* botAI) {
         return new NorthrendWormsRepositionAction(botAI);
+    }
+
+    static Action* northrend_worms_dps_target(PlayerbotAI* botAI) {
+        return new NorthrendBeastsDpsTargetAction(botAI, "northrend worms dps target");
     }
 };
 

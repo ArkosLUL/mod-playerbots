@@ -69,7 +69,6 @@ public:
     JaraxxusAssistTankHoldAction(PlayerbotAI* botAI, std::string const name) : AttackAction(botAI, name) {};
 
 protected:
-    // Index 0 marks square, 1 diamond, so each tank's rti resolves to its own add.
     bool HoldAdd(uint8 index);
 };
 
@@ -99,19 +98,11 @@ public:
     bool Execute(Event event) override;
 };
 
-class JaraxxusFocusAddAction : public AttackAction
+class JaraxxusDpsTargetAction : public ToCDirectAttackAction
 {
 public:
-    JaraxxusFocusAddAction(
-        PlayerbotAI* botAI, std::string const name = "jaraxxus focus add") : AttackAction(botAI, name) {};
-    bool Execute(Event event) override;
-};
-
-class JaraxxusResetFocusAction : public Action
-{
-public:
-    JaraxxusResetFocusAction(
-        PlayerbotAI* botAI, std::string const name = "jaraxxus reset focus") : Action(botAI, name) {};
+    JaraxxusDpsTargetAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus dps target") : ToCDirectAttackAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
@@ -144,10 +135,8 @@ public:
             &ToCJaraxxusActionContext::jaraxxus_assist_tank_hold_second_add;
         creators["jaraxxus remove nether power"] =
             &ToCJaraxxusActionContext::jaraxxus_remove_nether_power;
-        creators["jaraxxus focus add"] =
-            &ToCJaraxxusActionContext::jaraxxus_focus_add;
-        creators["jaraxxus reset focus"] =
-            &ToCJaraxxusActionContext::jaraxxus_reset_focus;
+        creators["jaraxxus dps target"] =
+            &ToCJaraxxusActionContext::jaraxxus_dps_target;
         creators["jaraxxus heal incinerate target"] =
             &ToCJaraxxusActionContext::jaraxxus_heal_incinerate_target;
     }
@@ -185,12 +174,8 @@ private:
         return new JaraxxusRemoveNetherPowerAction(botAI);
     }
 
-    static Action* jaraxxus_focus_add(PlayerbotAI* botAI) {
-        return new JaraxxusFocusAddAction(botAI);
-    }
-
-    static Action* jaraxxus_reset_focus(PlayerbotAI* botAI) {
-        return new JaraxxusResetFocusAction(botAI);
+    static Action* jaraxxus_dps_target(PlayerbotAI* botAI) {
+        return new JaraxxusDpsTargetAction(botAI);
     }
 
     static Action* jaraxxus_heal_incinerate_target(PlayerbotAI* botAI) {

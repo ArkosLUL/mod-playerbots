@@ -19,7 +19,9 @@
 #include "Timer.h"
 #include "ToCData.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Gormok.h"
 #include "ToCHelpers_Jormungars.h"
+#include "ToCHelpers_Shared.h"
 
 namespace TrialOfTheCrusaderHelpers
 {
@@ -302,6 +304,64 @@ BeastsState* ReadBeasts(PlayerbotAI* botAI, Map*& map)
     Deal(bot, state, dutyCreature);
     return &state;
 }
+
+bool IsBeastsSkullTarget(Unit* unit)
+{
+    switch (static_cast<ToCNpcs>(unit->GetEntry()))
+    {
+        case ToCNpcs::NPC_GORMOK:
+        case ToCNpcs::NPC_ACIDMAW:
+        case ToCNpcs::NPC_DREADSCALE:
+        case ToCNpcs::NPC_ICEHOWL:
+        case ToCNpcs::NPC_SNOBOLD_VASSAL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+char const* DpsBranchName(BeastsDpsBranch branch)
+{
+    switch (branch)
+    {
+        case BeastsDpsBranch::Skull:
+            return "skull";
+        case BeastsDpsBranch::Snobold:
+            return "snobold";
+        case BeastsDpsBranch::Gormok:
+            return "gormok";
+        case BeastsDpsBranch::MobileWorm:
+            return "mobile";
+        case BeastsDpsBranch::Icehowl:
+            return "icehowl";
+        default:
+            return "none";
+    }
+}
+
+BeastsDpsPick ResolveDpsPick(PlayerbotAI* botAI)
+{
+    // Read even under a skull, so nb.snobold stays current
+    Unit* snobold = GetGormokSnoboldPick(botAI);
+
+    if (Unit* skull = GetToCHumanSkull(botAI, &IsBeastsSkullTarget))
+        return {skull, BeastsDpsBranch::Skull};
+
+    if (snobold)
+        return {snobold, BeastsDpsBranch::Snobold};
+
+    if (Unit* gormok = GetEngagedBeast(botAI, NorthrendBeast::Gormok))
+        return {gormok, BeastsDpsBranch::Gormok};
+
+    Unit* worm = GetBeastOfDuty(botAI, BeastsTankDuty::WormMobile);
+    if (worm && !IsWormSubmerged(worm))
+        return {worm, BeastsDpsBranch::MobileWorm};
+
+    if (Unit* icehowl = GetEngagedBeast(botAI, NorthrendBeast::Icehowl))
+        return {icehowl, BeastsDpsBranch::Icehowl};
+
+    return {};
+}
 }
 
 Unit* GetEngagedBeast(PlayerbotAI* botAI, NorthrendBeast beast)
@@ -395,6 +455,25 @@ BeastsTankDuty GetDutyOfBeast(PlayerbotAI* botAI, Unit* beast)
     }
 
     return BeastsTankDuty::None;
+}
+
+BeastsDpsPick GetBeastsDpsTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->GetMapId() != TRIAL_OF_THE_CRUSADER_MAP_ID || !IsToCDpsBot(bot))
+        return {};
+
+    BeastsDpsPick const pick = ResolveDpsPick(botAI);
+    if (RaidObs::Active())
+    {
+        std::string note = "none";
+        if (pick.unit)
+            note = std::string(DpsBranchName(pick.branch)) + " " + RaidObs::DescribeAssignment(pick.unit->GetGUID());
+
+        RaidObs::NoteDerived(bot, "nb.dps", note);
+    }
+
+    return pick;
 }
 
 }

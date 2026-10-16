@@ -6,7 +6,7 @@
     anub_arak.py <file> --pull       who was locked out or never landed, and stage 9 to the pull
     anub_arak.py <file> --spike      every Pursued by Anub'arak window: kiter, kite branch, outcome
     anub_arak.py <file> --spheres    flying spheres and patches over time, patches the spike used
-    anub_arak.py <file> --burrowers  each burrower: life, submerges, time on Permafrost, Shadow Strike
+    anub_arak.py <file> --burrowers  each burrower: life, submerges, Permafrost, Shadow Strike, DPS focus
     anub_arak.py <file> --threat     who he hit in each surfaced window, time to a tank, taunts
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust, Penetrating Cold, deaths
 
@@ -23,6 +23,8 @@ What the generic views get wrong here, and what this reads instead:
 - **`anub.kite`, `anub.dodge`, `anub.sphere` and the other derived keys are per bot and change only**:
   a bot that takes the same branch twice writes one row. `anub.kite` goes back to `none` when the mark
   moves on, so a window never opens on the branch the last one ended with.
+- **`anub.focus` is one raid-wide latch**, so the `g` on its rows is whichever bot's read moved it, and
+  whether the DPS followed it is read off their snapshot targets, not off `anub.dps`.
 """
 from __future__ import annotations
 
@@ -64,6 +66,9 @@ LUST_SPELLS = (2825, 32182)
 TAUNT_SPELLS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command", 6795: "Growl"}
 
 PHASE_LABELS = {0: "none", 1: "P1", 2: "P2", 3: "P3"}
+
+FOCUS = "anub.focus"
+DPS_ROLES = ("melee", "ranged")
 
 # Read from the source so a retune shows up here without a second edit.
 ROOM_CENTER = anchor("ANUBARAK_ROOM_CENTER")
@@ -603,6 +608,41 @@ def burrower_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
+def as_guid(value) -> int:
+    text = str(value).strip()
+    return int(text) if text.isdigit() else 0
+
+
+def focus_rows(trace: Trace) -> list[dict]:
+    """Per burrower `anub.focus` held: the time it held it, and the share of living DPS bot samples
+    (melee and ranged roles, humans left out) whose target it was meanwhile."""
+    spans = [(as_guid(value), start, stop) for value, start, stop in latch_spans(trace, FOCUS, pull_end(trace))]
+    starts = [start for _, start, _ in spans]
+    dps = {guid for guid in roster_guids(trace) if trace.role(guid) in DPS_ROLES and guid not in trace.humans}
+
+    held: collections.Counter = collections.Counter()
+    for guid, start, stop in spans:
+        if guid:
+            held[guid] += stop - start
+
+    on: collections.Counter = collections.Counter()
+    total: collections.Counter = collections.Counter()
+    for snap in frames(trace):
+        index = bisect.bisect_right(starts, snap["t"]) - 1
+        if index < 0:
+            continue
+        focus, _, stop = spans[index]
+        if not focus or snap["t"] >= stop:
+            continue
+        for row in snap.get("u", []):
+            if row[0] in dps and len(row) > 7 and row[5] > 0:
+                total[focus] += 1
+                on[focus] += row[7] == focus
+
+    return [{"guid": guid, "held": held[guid], "share": on[guid] / total[guid] if total[guid] else None}
+            for guid in sorted(held)]
+
+
 def show_burrowers(trace: Trace) -> None:
     print("NERUBIAN BURROWERS")
     rows = burrower_rows(trace)
@@ -621,6 +661,17 @@ def show_burrowers(trace: Trace) -> None:
     held = sorted({trace.name(guid) for guid, counts in value_counts(trace, "anub.interrupter").items()
                    if counts.get("1")})
     print(f"  ever held Shadow Strike duty: {', '.join(held) if held else 'nobody'}")
+
+    focus = focus_rows(trace)
+    if not focus:
+        print("  anub.focus never held a burrower")
+    else:
+        print(f"\n  {'focus':10} {'held':>7} {'dps on it':>9}")
+        for row in focus:
+            share = "-" if row["share"] is None else f"{row['share'] * 100:.0f}%"
+            print(f"  {short(trace, row['guid']):10} {row['held'] / 1000:6.1f}s {share:>9}")
+        print("  dps on it is the share of living DPS bot samples whose target was the focus while it held")
+    show_counts(trace, "anub.dps")
 
 
 # --------------------------------------------------------------------------------------------- threat
@@ -821,7 +872,7 @@ SECTIONS = (
     ("pull", "locked out past the Web Door or never landed, stage 9 to the pull", show_pull),
     ("spike", "every Pursued by Anub'arak window, kite branches and outcome, Impale on others", show_spike),
     ("spheres", "flying spheres and patches over time, patches the spike used, shooters", show_spheres),
-    ("burrowers", "each burrower: life, submerges, time on Permafrost, Shadow Strike", show_burrowers),
+    ("burrowers", "each burrower: life, submerges, Permafrost, Shadow Strike, DPS focus", show_burrowers),
     ("threat", "his target by role per surfaced window, time to a tank, taunts", show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, Penetrating Cold heals, defensives, deaths", show_swarm),
 )
