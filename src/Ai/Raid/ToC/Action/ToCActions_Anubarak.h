@@ -10,6 +10,22 @@
 #include "ToCActions_Shared.h"
 #include "ToCHelpers_Anubarak.h"
 
+class AnubarakKiterImmunityAction : public Action
+{
+public:
+    AnubarakKiterImmunityAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak kiter immunity") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakProtectKiterAction : public Action
+{
+public:
+    AnubarakProtectKiterAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak protect kiter") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class AnubarakKiteSpikeToPermafrostAction : public MovementAction
 {
 public:
@@ -34,9 +50,7 @@ public:
     bool Execute(Event event) override;
 
 private:
-    Position spot;
-    uint32 spotMs = 0;
-    bool hasSpot = false;
+    bool WalkToDodge(Position const& spot);
 };
 
 class AnubarakInterruptShadowStrikeAction : public MovementAction
@@ -94,11 +108,6 @@ public:
     AnubarakMainTankHoldBossAction(PlayerbotAI* botAI, std::string const name = "anubarak main tank hold boss")
         : ToCMainTankHoldAction(botAI, name) {};
     bool Execute(Event event) override;
-
-private:
-    // Leads him onto point, within ANUBARAK_DRAG_ARRIVE measured on him. DragBossToAnchor stops the
-    // bot within 12 yd, so coming in from north or south he ends up on a tank patch.
-    bool DragBossOnto(Unit* boss, Position const& point);
 };
 
 class AnubarakHealPenetratingColdAction : public Action
@@ -114,6 +123,10 @@ class ToCAnubarakActionContext : public NamedObjectContext<Action>
 public:
     ToCAnubarakActionContext()
     {
+        creators["anubarak kiter immunity"] =
+            &ToCAnubarakActionContext::anubarak_kiter_immunity;
+        creators["anubarak protect kiter"] =
+            &ToCAnubarakActionContext::anubarak_protect_kiter;
         creators["anubarak kite spike to permafrost"] =
             &ToCAnubarakActionContext::anubarak_kite_spike_to_permafrost;
         creators["anubarak avoid spike"] =
@@ -137,6 +150,14 @@ public:
     }
 
 private:
+    static Action* anubarak_kiter_immunity(PlayerbotAI* botAI) {
+        return new AnubarakKiterImmunityAction(botAI);
+    }
+
+    static Action* anubarak_protect_kiter(PlayerbotAI* botAI) {
+        return new AnubarakProtectKiterAction(botAI);
+    }
+
     static Action* anubarak_kite_spike_to_permafrost(PlayerbotAI* botAI) {
         return new AnubarakKiteSpikeToPermafrostAction(botAI);
     }

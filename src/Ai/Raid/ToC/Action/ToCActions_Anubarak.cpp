@@ -1,6 +1,7 @@
 #include "ToCActions_Anubarak.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include "Creature.h"
@@ -23,13 +24,11 @@ using namespace EncounterHelpers;
 namespace
 {
 
-constexpr float ANUBARAK_DODGE_ARRIVE = 2.0f;
-// A dodge that hasn't run for this long was out of danger in between, so its old spot is stale
-constexpr uint32 ANUBARAK_DODGE_LATCH_GAP_MS = 1000;
 constexpr uint32 ANUBARAK_STALL_MS = 500;
 constexpr float ANUBARAK_RANGED_REACH_MARGIN = 2.0f;
-// Short legs keep him in tow
-constexpr float ANUBARAK_DRAG_STEP = 5.0f;
+constexpr float ANUBARAK_BOOKED_TOLERANCE = 0.5f;
+
+char const* const KITER_SELF_IMMUNITIES[] = {"divine shield", "hand of protection", "ice block"};
 
 char const* const PENETRATING_COLD_HEALS[] = {
     "greater heal", "flash heal", "penance",
@@ -46,6 +45,19 @@ void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
 {
     LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
     if (!bot->isMoving() && last.msTime && getMSTimeDiff(last.msTime, getMSTime()) > ANUBARAK_STALL_MS)
+        last.clear();
+}
+
+bool BookedOn(LastMovement const& last, Position const& spot)
+{
+    return last.msTime && std::fabs(last.lastMoveToX - spot.GetPositionX()) <= ANUBARAK_BOOKED_TOLERANCE &&
+           std::fabs(last.lastMoveToY - spot.GetPositionY()) <= ANUBARAK_BOOKED_TOLERANCE;
+}
+
+// A walk waits behind any booking of equal or higher priority until it runs out
+void DropForeignBooking(LastMovement& last, Position const& own, MovementPriority upTo)
+{
+    if (last.msTime && last.priority <= upTo && !BookedOn(last, own))
         last.clear();
 }
 
@@ -89,6 +101,23 @@ bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
     return false;
 }
 
+}
+
+bool AnubarakKiterImmunityAction::Execute(Event /*event*/)
+{
+    for (char const* immunity : KITER_SELF_IMMUNITIES)
+    {
+        if (botAI->CanCastSpell(immunity, bot))
+            return botAI->CastSpell(immunity, bot);
+    }
+
+    return false;
+}
+
+bool AnubarakProtectKiterAction::Execute(Event /*event*/)
+{
+    Player* kiter = GetAnubarakKiterToProtect(bot);
+    return kiter && botAI->CastSpell("hand of protection", kiter);
 }
 
 bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
@@ -137,28 +166,44 @@ bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
 
 bool AnubarakAvoidSpikeAction::Execute(Event /*event*/)
 {
-    uint32 const now = getMSTime();
-    if (hasSpot && (getMSTimeDiff(spotMs, now) > ANUBARAK_DODGE_LATCH_GAP_MS ||
-                    bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ANUBARAK_DODGE_ARRIVE))
+    Position spot;
+    if (GetAnubarakDodgeHold(bot, spot))
     {
-        hasSpot = false;
-    }
-
-    if (!hasSpot)
-    {
-        Position found;
-        if (!GetAnubarakSpikeDodgeSpot(bot, found))
+        if (bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ANUBARAK_DODGE_ARRIVE)
             return false;
 
-        spot = found;
-        hasSpot = true;
+        // Every MoveTo clears the spline, so a walk still carrying the bot there is left alone
+        if (bot->isMoving() && BookedOn(AI_VALUE(LastMovement&, "last movement"), spot))
+            return true;
+
+        return WalkToDodge(spot);
     }
 
-    spotMs = now;
+    if (!GetAnubarakSpikeDodgeSpot(bot, spot))
+        return false;
+
+    SetAnubarakDodgeHold(bot, spot);
+    return WalkToDodge(spot);
+}
+
+bool AnubarakAvoidSpikeAction::WalkToDodge(Position const& spot)
+{
     BreakChannelPinningTheFeet(bot);
     ReleaseStalledWalk(botAI, bot);
-    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
-                  false, false, MovementPriority::MOVEMENT_FORCED, true);
+
+    // A FORCED leg still in flight to some other spot refuses this one at the same priority
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    MovementPriority const held = last.priority;
+    bool const lowered = held == MovementPriority::MOVEMENT_FORCED && !BookedOn(last, spot);
+    if (lowered)
+        last.priority = MovementPriority::MOVEMENT_COMBAT;
+
+    bool const issued = MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false,
+                               false, false, false, MovementPriority::MOVEMENT_FORCED, true);
+    if (!issued && lowered)
+        last.priority = held;
+
+    return issued || bot->isMoving();
 }
 
 bool AnubarakInterruptShadowStrikeAction::Execute(Event /*event*/)
@@ -187,7 +232,26 @@ bool AnubarakTankDefensiveAction::Execute(Event /*event*/)
 bool AnubarakDestroyFrostSphereAction::Execute(Event /*event*/)
 {
     Creature* sphere = GetAnubarakSphereToShoot(bot);
-    return sphere && Attack(sphere);
+    if (!sphere)
+        return false;
+
+    if (Attack(sphere))
+        return true;
+
+    // On it already, and the rotation shoots it from here
+    if (AnubarakSphereInReach(bot, sphere))
+        return false;
+
+    // Also covers Attack() refusing a sphere out of sight. A walk issued under a cast never starts
+    // but still books its travel time. A bot parked on its dodge spot shoots only from there.
+    Position stand;
+    if (bot->IsMovementPreventedByCasting() || IsAnubarakDodgeHeld(botAI) ||
+        !GetAnubarakSphereStand(bot, sphere, stand))
+        return false;
+
+    ReleaseStalledWalk(botAI, bot);
+    return MoveTo(bot->GetMapId(), stand.GetPositionX(), stand.GetPositionY(), stand.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
 bool AnubarakDpsTargetAction::Execute(Event /*event*/) { return AttackDirect(GetAnubarakDpsTarget(botAI)); }
@@ -252,35 +316,37 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
         return true;
     }
 
-    Position spot;
-    bool const submerging = GetAnubarakSubmergeSpot(bot, spot);
-    RaidObs::NoteDerived(bot, "anub.pickup", submerging ? "submerge" : "hold");
-    return DragBossOnto(boss, submerging ? spot : GetAnubarakBossAnchor(bot));
-}
+    Position point;
+    bool const submerge = GetAnubarakSubmergeSpot(bot, point);
+    if (!submerge && !GetAnubarakDragAnchor(bot, point))
+    {
+        ClearAnubarakDrag(bot);
+        RaidObs::NoteDerived(bot, "anub.pickup", "hold");
+        return false;
+    }
 
-bool AnubarakMainTankHoldBossAction::DragBossOnto(Unit* boss, Position const& point)
-{
-    if (boss->GetVictim() != bot)
+    AnubarakDragLeg const leg = GetAnubarakDragLeg(bot, boss, point, submerge);
+    if (leg.step == AnubarakDragStep::None)
+    {
+        RaidObs::NoteDerived(bot, "anub.pickup", "hold");
+        return false;
+    }
+
+    RaidObs::NoteDerived(bot, "anub.pickup", submerge ? "submerge" : "drag");
+    if (leg.step != AnubarakDragStep::Walk)
         return false;
 
-    float const bossDist = boss->GetExactDist2d(point.GetPositionX(), point.GetPositionY());
-    if (bossDist <= ANUBARAK_DRAG_ARRIVE)
+    // True only on the issuing tick, so the tank's threat abilities get the ticks while he follows
+    ReleaseStalledWalk(botAI, bot);
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    Position const& spot = leg.tankSpot;
+    if (BookedOn(last, spot))
         return false;
 
-    // He follows at the bot's current gap, so the bot aims that far past the point
-    float const gap = bot->GetExactDist2d(boss);
-    float const goalX = point.GetPositionX() + (point.GetPositionX() - boss->GetPositionX()) / bossDist * gap;
-    float const goalY = point.GetPositionY() + (point.GetPositionY() - boss->GetPositionY()) / bossDist * gap;
-    float const toGoal = bot->GetExactDist2d(goalX, goalY);
-    // Bot already there, he's still catching up
-    if (toGoal < ANUBARAK_DRAG_ARRIVE)
-        return false;
-
-    float const step = std::min(ANUBARAK_DRAG_STEP, toGoal);
-    float const moveX = bot->GetPositionX() + (goalX - bot->GetPositionX()) / toGoal * step;
-    float const moveY = bot->GetPositionY() + (goalY - bot->GetPositionY()) / toGoal * step;
-    return MoveTo(bot->GetMapId(), moveX, moveY, point.GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT, true, true);
+    // Backwards keeps the tank's front to him, so his first swings on arrival can be parried and blocked
+    DropForeignBooking(last, spot, MovementPriority::MOVEMENT_COMBAT);
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT, true, true);
 }
 
 bool AnubarakHealPenetratingColdAction::Execute(Event /*event*/)

@@ -4,10 +4,10 @@
     anub_arak.py <file>              every section
     anub_arak.py <file> --phases     anub.phase spans, his health at each edge, deaths per phase
     anub_arak.py <file> --pull       who was locked out or never landed, and stage 9 to the pull
-    anub_arak.py <file> --spike      every Pursued by Anub'arak window: kiter, kite branch, outcome
-    anub_arak.py <file> --spheres    flying spheres and patches over time, patches the spike used
+    anub_arak.py <file> --spike      every Pursued by Anub'arak window: kiter, kite branch, outcome, protection
+    anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots
     anub_arak.py <file> --burrowers  each burrower: life, submerges, Permafrost, Shadow Strike, DPS focus
-    anub_arak.py <file> --threat     who he hit in each surfaced window, time to a tank, taunts
+    anub_arak.py <file> --threat     per surfaced window: his target, his drag legs, taunts, threat cap
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust, Penetrating Cold, deaths
 
 What the generic views get wrong here, and what this reads instead:
@@ -17,7 +17,8 @@ What the generic views get wrong here, and what this reads instead:
 - **The `anub-arak` slug is also Azjol-Nerub's boss**, so the banner checks map 649 as well.
 - **One entry, two states.** A flying Frost Sphere hovers at z 155.67 and a patch sits at 142.7, and
   neither carries Permafrost itself, so spheres are split by height and Permafrost is read off
-  `snap.hz`.
+  `snap.hz`. A low sphere with no Permafrost centre on it is still falling: it casts Permafrost
+  1.5 s after it drops.
 - **Creature auras are never recorded**, so a burrower's submerge only shows as its health going back
   to full, and its time on Permafrost as its distance from a Permafrost centre.
 - **`anub.kite`, `anub.dodge`, `anub.sphere` and the other derived keys are per bot and change only**:
@@ -30,6 +31,7 @@ from __future__ import annotations
 
 import bisect
 import collections
+import math
 import pathlib
 import statistics
 import sys
@@ -39,8 +41,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of, map_of  # noqa: E402
-from raidobs.geometry import anchor, dist2, frames, guids_of_entry  # noqa: E402
-from raidobs.probes import emitted_keys, latch_spans, silent_keys  # noqa: E402
+from raidobs.geometry import anchor, dist2, frames, guids_of_entry, radius  # noqa: E402
+from raidobs.probes import emitted_keys, holder_spans, latch_spans, silent_keys  # noqa: E402
 from raidobs.space import threat_share  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, notes, roster_guids  # noqa: E402
 
@@ -51,6 +53,7 @@ HEROIC = (2, 3)
 NPC_ANUBARAK = 34564
 NPC_FROST_SPHERE = 34606
 NPC_BURROWER = 34607
+NPC_SPIKE = 34660
 
 SPELL_MARK = 67574
 SPELL_SHADOW_STRIKE = 66134
@@ -62,8 +65,13 @@ PENETRATING_COLD = (66013, 67700, 68509, 68510)
 LEECHING_SWARM = (66118, 67630, 68646, 68647)
 # Bloodlust, Heroism
 LUST_SPELLS = (2825, 32182)
-# what CastClassTaunt casts
-TAUNT_SPELLS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command", 6795: "Growl"}
+SPELL_RIGHTEOUS_DEFENSE = 31789
+# what CastClassTaunt casts, plus Righteous Defense, which targets the friend he is hitting
+TAUNT_SPELLS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command", 6795: "Growl",
+                SPELL_RIGHTEOUS_DEFENSE: "Righteous Defense"}
+HAND_OF_PROTECTION = (1022, 5599, 10278)
+OWN_IMMUNITIES = {642: "Divine Shield", 45438: "Ice Block"}
+THREAT_CAP = "anubarak threat cap"
 
 PHASE_LABELS = {0: "none", 1: "P1", 2: "P2", 3: "P3"}
 
@@ -72,6 +80,7 @@ DPS_ROLES = ("melee", "ranged")
 
 # Read from the source so a retune shows up here without a second edit.
 ROOM_CENTER = anchor("ANUBARAK_ROOM_CENTER")
+KITE_PROTECT_RANGE = radius("ANUBARAK_KITE_PROTECT_RANGE")
 # Permafrost's target search adds only the target's size. A burrower's display has no combat reach, so
 # it gets the core's 0.389 default, not the 1.5 of ANUBARAK_PERMAFROST_SLOW_REACH's player.
 BURROWER_PERMAFROST_REACH = 6.0 + 0.389
@@ -82,6 +91,11 @@ WEB_DOOR_X = 661.6
 LANDED_Z = 200.0
 SPHERE_FLYING_Z = 150.0
 SPHERE_PATCH_Z = 146.0
+# a patch's Permafrost dynobject sits on the sphere itself
+PATCH_MATCH_YD = 1.0
+
+LEG_MIN_YD = 2.0
+REVERSAL_DEGREES = 120.0
 
 # the spike's fail despawns the patch 1.5 s after the mark comes off
 CONSUMED_MS = 3000
@@ -173,6 +187,7 @@ class Samples:
         self.stamps: list[int] = []
         self.frost: list[list[tuple[float, float]]] = []
         self.spheres: list[tuple[int, int, int]] = []
+        self.sphere_rows: list[list[list]] = []
         self.rows: dict[int, tuple[list[int], list[list]]] = {}
         for snap in frames(trace):
             when = snap["t"]
@@ -180,16 +195,19 @@ class Samples:
             frost = [(hz[1], hz[2]) for hz in snap.get("hz", []) if len(hz) >= 3 and hz[0] in PERMAFROST]
             self.frost.append(frost)
             flying = patches = 0
+            mine = []
             for row in snap.get("u", []):
                 stamps, rows = self.rows.setdefault(row[0], ([], []))
                 stamps.append(when)
                 rows.append(row)
                 if row[0] in spheres and len(row) > 3:
+                    mine.append(row)
                     if row[3] > SPHERE_FLYING_Z:
                         flying += 1
                     elif row[3] < SPHERE_PATCH_Z:
                         patches += 1
             self.spheres.append((flying, patches, len(frost)))
+            self.sphere_rows.append(mine)
 
     def track(self, guid) -> tuple[list[int], list[list]]:
         return self.rows.get(guid, ([], []))
@@ -222,6 +240,21 @@ class Samples:
     def frost_at(self, when: int) -> list[tuple[float, float]]:
         index = self.index_at(when)
         return self.frost[index] if index >= 0 else []
+
+    def sphere_kinds(self, when: int) -> dict[int, str]:
+        """Each sphere in the snapshot at or before `when`: `flying`, `falling` or `patch`."""
+        index = self.index_at(when)
+        if index < 0:
+            return {}
+        out = {}
+        for row in self.sphere_rows[index]:
+            if row[3] > SPHERE_FLYING_Z:
+                out[row[0]] = "flying"
+            elif any(dist2(row[1:3], centre) <= PATCH_MATCH_YD for centre in self.frost[index]):
+                out[row[0]] = "patch"
+            else:
+                out[row[0]] = "falling"
+        return out
 
 
 def health(samples: Samples, guid: int | None, when: int) -> float | None:
@@ -430,6 +463,17 @@ def branches_in(rows: list[tuple[int, str]], start: int, stop: int) -> list[str]
     return out
 
 
+def spike_near(samples: Samples, spikes, guid: int, start: int, stop: int) -> int | None:
+    """Milliseconds into the window the spike first came within KITE_PROTECT_RANGE of the kiter."""
+    stamps, rows = samples.track(guid)
+    for index in range(bisect.bisect_left(stamps, start), bisect.bisect_right(stamps, stop)):
+        for spike in spikes:
+            row = samples.recent(spike, stamps[index])
+            if row and dist2(row[1:3], rows[index][1:3]) <= KITE_PROTECT_RANGE:
+                return stamps[index] - start
+    return None
+
+
 def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     samples = samples or Samples(trace)
     impales = [rec for rec in trace.of("dmg") if rec.get("sp") in IMPALE]
@@ -437,6 +481,11 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     kite = per_bot(trace, "anub.kite")
     used = {stop for _, stop in consumed_patches(trace, samples).values()}
     emerges = [stop for _, stop, phase, _ in phase_spans(trace) if phase == 2]
+    casts = [rec for rec in trace.of("cast") if not rec.get("tr")]
+    hops = [rec for rec in casts if rec.get("sp") in HAND_OF_PROTECTION]
+    own = [rec for rec in casts if rec.get("sp") in OWN_IMMUNITIES]
+    protect = notes(trace, "anub.protect")
+    spikes = guids_of_entry(trace, NPC_SPIKE)
 
     out = []
     for guid, start, stop, closed in mark_spans(trace):
@@ -459,7 +508,11 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
         out.append({"guid": guid, "start": start, "stop": stop,
                     "branches": branches_in(kite.get(guid, []), start, stop),
                     "impales": len(hits), "damage": sum(rec.get("a", 0) for rec in hits),
-                    "outcome": outcome, "consumed": consumed, "died": died})
+                    "outcome": outcome, "consumed": consumed, "died": died,
+                    "near": spike_near(samples, spikes, guid, start, stop),
+                    "hop": [rec for rec in hops if rec.get("tgt") == guid and start <= rec["t"] <= stop],
+                    "own": [rec for rec in own if rec.get("s") == guid and start <= rec["t"] <= stop],
+                    "protect": [rec for rec in protect if start <= rec["t"] <= stop]})
     return out
 
 
@@ -479,16 +532,25 @@ def show_spike(trace: Trace) -> None:
         print("  nobody carried Pursued by Anub'arak")
     else:
         print(f"  {'at':>9} {'kiter':14} {'role':6} {'secs':>5} {'kite branches':24} {'outcome':7}"
-              f" {'impales':>7} {'damage':>8}")
+              f" {'impales':>7} {'damage':>8} {'near':>5}")
         for window in windows:
             branches = ">".join(window["branches"]) or "-"
+            near = "-" if window["near"] is None else f"{window['near'] / 1000:.1f}"
             print(f"  {clock(window['start']):>9} {trace.name(window['guid'])[:14]:14}"
                   f" {trace.role(window['guid']):6} {(window['stop'] - window['start']) / 1000:5.1f}"
                   f" {branches[:24]:24} {window['outcome']:7} {window['impales']:7} {window['damage']:8,}"
-                  + ("  patch seen going" if window["consumed"] else ""))
+                  f" {near:>5}" + ("  patch seen going" if window["consumed"] else ""))
+            cover = protection(trace, window)
+            if cover:
+                print(f"            {cover}")
         outcomes = collections.Counter(window["outcome"] for window in windows)
         print(f"\n  {len(windows)} window(s): "
               + ", ".join(f"{name} {n}" for name, n in outcomes.most_common()))
+        near = [window for window in windows if window["near"] is not None]
+        print(f"  near is the seconds in when the spike first came within {KITE_PROTECT_RANGE:.0f} yd of the"
+              f" kiter: {len(near)} window(s), Hand of Protection in"
+              f" {sum(1 for window in near if window['hop'])}, an own immunity in"
+              f" {sum(1 for window in near if window['own'])}")
 
     stray = stray_impales(trace, windows)
     if stray:
@@ -498,6 +560,19 @@ def show_spike(trace: Trace) -> None:
     else:
         print("  Impale hit nobody but a kiter")
     show_counts(trace, "anub.dodge")
+    show_counts(trace, "anub.protect")
+
+
+def protection(trace: Trace, window: dict) -> str:
+    """Hand of Protection on the kiter, its own immunities and the `anub.protect` duties in one window."""
+    def rel(rec) -> str:
+        return f"{(rec['t'] - window['start']) / 1000:+.1f} s"
+
+    parts = [f"Hand of Protection by {trace.name(rec.get('s'))} {rel(rec)}" for rec in window["hop"]]
+    parts += [f"{OWN_IMMUNITIES[rec['sp']]} {rel(rec)}" for rec in window["own"]]
+    parts += [f"anub.protect {trace.name(rec.get('g'))} {rec.get('txt')} {rel(rec)}"
+              for rec in window["protect"] if str(rec.get("txt")) != "none"]
+    return "; ".join(parts)
 
 
 # -------------------------------------------------------------------------------------------- spheres
@@ -532,6 +607,47 @@ def sphere_shots(trace: Trace) -> collections.Counter:
                                if rec.get("tgt") in spheres and not rec.get("tr"))
 
 
+def supply_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per mark window, the spheres at the mark: patches split by whether a side latched them,
+    flying and falling ones, and every bot that held a sphere duty during the window."""
+    samples = samples or Samples(trace)
+    end = pull_end(trace)
+    latches = [latch_spans(trace, key, end) for key in ("anub.patch0", "anub.patch1")]
+    duty = holder_spans(trace, "anub.sphere", end)
+    out = []
+    for window in mark_windows(trace, samples):
+        start, stop = window["start"], window["stop"]
+        kinds = samples.sphere_kinds(start)
+        tank = {as_guid(held_at(spans, start)) for spans in latches} - {0}
+        patches = [guid for guid, kind in kinds.items() if kind == "patch"]
+        holders = sorted({(guid, label) for guid, spans in duty.items() for label, low, high in spans
+                          if label != "none" and low < stop and high > start})
+        out.append({"guid": window["guid"], "start": start, "outcome": window["outcome"],
+                    "tank": sum(1 for guid in patches if guid in tank),
+                    "other": sum(1 for guid in patches if guid not in tank),
+                    "flying": sum(1 for kind in kinds.values() if kind == "flying"),
+                    "falling": sum(1 for kind in kinds.values() if kind == "falling"),
+                    "holders": holders})
+    return out
+
+
+def duty_spans(trace: Trace) -> list[dict]:
+    """Each stretch one bot held one `anub.sphere` duty, with its casts at a sphere and its `drop target`
+    rows meanwhile. The note names the duty, not the sphere, so a cast at any sphere counts."""
+    spheres = guids_of_entry(trace, NPC_FROST_SPHERE)
+    casts = [rec for rec in trace.of("cast") if rec.get("tgt") in spheres and not rec.get("tr")]
+    drops = [rec for rec in trace.of("act") if rec.get("a") == "drop target"]
+    out = []
+    for guid, spans in holder_spans(trace, "anub.sphere", pull_end(trace)).items():
+        for label, start, stop in spans:
+            if label == "none":
+                continue
+            out.append({"guid": guid, "label": label, "start": start, "stop": stop,
+                        "casts": sum(1 for rec in casts if rec.get("s") == guid and start <= rec["t"] < stop),
+                        "drops": sum(1 for rec in drops if rec.get("g") == guid and start <= rec["t"] < stop)})
+    return sorted(out, key=lambda row: (row["start"], row["guid"]))
+
+
 def show_spheres(trace: Trace) -> None:
     print("FROST SPHERES")
     samples = Samples(trace)
@@ -561,6 +677,34 @@ def show_spheres(trace: Trace) -> None:
     if shots:
         print("  cast at a sphere: "
               + ", ".join(f"{trace.name(guid)} {n}" for guid, n in shots.most_common()))
+
+    supply = supply_rows(trace, samples)
+    if supply:
+        print("\n  spheres at each mark, tank being the patches a side had latched and other the rest:")
+        print(f"  {'at':>9} {'kiter':14} {'tank':>4} {'other':>5} {'flying':>6} {'falling':>7}"
+              f" {'outcome':7} sphere duty in the window")
+        for row in supply:
+            holders = ", ".join(f"{trace.name(guid)} {label}" for guid, label in row["holders"]) or "-"
+            print(f"  {clock(row['start']):>9} {trace.name(row['guid'])[:14]:14} {row['tank']:4} {row['other']:5}"
+                  f" {row['flying']:6} {row['falling']:7} {row['outcome']:7} {holders}")
+
+    spans = duty_spans(trace)
+    if not spans:
+        print("  nobody held a sphere duty")
+        return
+    print(f"\n  {'duty from':>11} {'to':>9} {'holder':14} {'duty':5} {'casts':>5} {'drops':>5}")
+    for row in spans[:TIMELINE_SHOWN]:
+        print(f"  {clock(row['start']):>11} {clock(row['stop']):>9} {trace.name(row['guid'])[:14]:14}"
+              f" {row['label']:5} {row['casts']:5} {row['drops']:5}")
+    if len(spans) > TIMELINE_SHOWN:
+        print(f"  ... {len(spans) - TIMELINE_SHOWN} more span(s)")
+    by_label: dict[str, list[dict]] = collections.defaultdict(list)
+    for row in spans:
+        by_label[row["label"]].append(row)
+    print("  spans with a cast: " + ", ".join(
+        f"{'side ' + label if label.isdigit() else label} {sum(1 for row in rows if row['casts'])} of {len(rows)}"
+        for label, rows in sorted(by_label.items())))
+    print("  casts are the holder's at any sphere; drops are its drop target rows, one per verdict change")
 
 
 # ------------------------------------------------------------------------------------------ burrowers
@@ -692,8 +836,9 @@ def held_at(spans, when: int) -> str | None:
     return next((value for value, start, stop in spans if start <= when < stop), None)
 
 
-def drag_anchor(latches, samples: Samples, when: int) -> tuple[float, float]:
-    """Where the main tank drags him: between both latched tank patches, else the room centre."""
+def drag_anchor(latches, samples: Samples, when: int) -> tuple[float, float] | None:
+    """Where the main tank drags him: between both latched tank patches. None with one or none, since
+    then the tank holds him where it picked him up."""
     spots = []
     for spans in latches:
         value = held_at(spans, when)
@@ -702,7 +847,69 @@ def drag_anchor(latches, samples: Samples, when: int) -> tuple[float, float]:
             spots.append(row[1:3])
     if len(spots) == 2:
         return (spots[0][0] + spots[1][0]) / 2.0, (spots[0][1] + spots[1][1]) / 2.0
-    return ROOM_CENTER[0], ROOM_CENTER[1]
+    return None
+
+
+def turn(before, after) -> float:
+    """Degrees between two ground headings, 0 when either is no move at all."""
+    first, second = math.hypot(*before), math.hypot(*after)
+    if not first or not second:
+        return 0.0
+    cos = (before[0] * after[0] + before[1] * after[1]) / (first * second)
+    return math.degrees(math.acos(max(-1.0, min(1.0, cos))))
+
+
+def boss_legs(samples: Samples, boss: int, start: int, stop: int) -> list[dict]:
+    """His walks of LEG_MIN_YD or more, `{start, stop, frm, to, yards}`. A walk is a run of samples with
+    his moving flag set, from its first sample to the first still one after it, or to its last when the
+    window or a snapshot hole cuts it. Yards are the straight line, and a turn inside a run stays one
+    leg: the flag is his `isMoving()`, which the drag waits on."""
+    stamps, rows = samples.track(boss)
+    legs: list[dict] = []
+    leg = None
+    last = None
+    for when, row in zip(stamps, rows):
+        if not start <= when < stop:
+            continue
+        if leg is not None and when - last > MAX_STEP_MS:
+            leg = None
+        last = when
+        moving = len(row) > 8 and bool(row[8])
+        if leg is None:
+            if not moving:
+                continue
+            leg = {"start": when, "frm": row[1:3]}
+            legs.append(leg)
+        leg["stop"], leg["to"] = when, row[1:3]
+        if not moving:
+            leg = None
+    for leg in legs:
+        leg["yards"] = dist2(leg["frm"], leg["to"])
+    return [leg for leg in legs if leg["yards"] >= LEG_MIN_YD]
+
+
+def leg_reversals(legs: list[dict]) -> int:
+    """Legs heading more than REVERSAL_DEGREES off the one before."""
+    headings = [(leg["to"][0] - leg["frm"][0], leg["to"][1] - leg["frm"][1]) for leg in legs]
+    return sum(1 for before, after in zip(headings, headings[1:]) if turn(before, after) > REVERSAL_DEGREES)
+
+
+def boss_taunts(trace: Trace, samples: Samples, boss: int) -> list[dict]:
+    """Taunts cast on him, and Righteous Defense on the friend he was hitting at the time: it taunts that
+    friend's attackers, so cast on anyone else it never reached him."""
+    out = []
+    for rec in trace.of("cast"):
+        spell = rec.get("sp")
+        if rec.get("tr") or spell not in TAUNT_SPELLS:
+            continue
+        if spell == SPELL_RIGHTEOUS_DEFENSE:
+            row = samples.row(boss, rec["t"])
+            if not row or len(row) <= 7 or row[7] != rec.get("tgt"):
+                continue
+        elif rec.get("tgt") != boss:
+            continue
+        out.append(rec)
+    return out
 
 
 def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
@@ -710,10 +917,11 @@ def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     boss = boss_guid(trace)
     if boss is None:
         return []
-    taunts = [rec for rec in trace.of("cast")
-              if rec.get("sp") in TAUNT_SPELLS and rec.get("tgt") == boss and not rec.get("tr")]
+    taunts = boss_taunts(trace, samples, boss)
     end = pull_end(trace)
     latches = [latch_spans(trace, key, end) for key in ("anub.patch0", "anub.patch1")]
+    pickups = notes(trace, "anub.pickup")
+    capped = [rec for rec in trace.of("veto") if rec.get("m") == THREAT_CAP]
     stamps, rows = samples.track(boss)
 
     out = []
@@ -722,12 +930,27 @@ def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
         held, _ = threat_share(trace, {boss}, lambda when, low=start, high=stop: low <= when < high)
         inside = [(when, row) for when, row in zip(stamps, rows) if start <= when < stop]
         tank = next((when for when, row in inside if len(row) > 7 and trace.role(row[7]) == "tank"), None)
-        spread = [dist2(row[1:3], drag_anchor(latches, samples, when)) for when, row in inside]
+        # from the first submerge leg on he's led to the submerge spot and stays there, and the tank's
+        # rows read hold again once he arrives
+        cutoff = next((rec["t"] for rec in pickups
+                       if start <= rec["t"] < stop and str(rec.get("txt", "")) == "submerge"), stop)
+        spread = []
+        for when, row in inside:
+            point = drag_anchor(latches, samples, when) if when < cutoff else None
+            if point is not None:
+                spread.append(dist2(row[1:3], point))
+        legs = boss_legs(samples, boss, start, stop)
         out.append({**window,
                     "held": held,
                     "to_tank": None if tank is None else tank - start,
                     "taunts": [rec for rec in taunts if start <= rec["t"] < stop],
-                    "off_anchor": statistics.median(spread) if spread else None})
+                    "off_anchor": statistics.median(spread) if spread else None,
+                    "legs": len(legs),
+                    "yards": sum(leg["yards"] for leg in legs),
+                    "reversals": leg_reversals(legs),
+                    "pickup": collections.Counter((rec.get("g", 0), str(rec.get("txt", "")))
+                                                  for rec in pickups if start <= rec["t"] < stop),
+                    "capped": collections.Counter(rec.get("g", 0) for rec in capped if start <= rec["t"] < stop)})
     return out
 
 
@@ -748,18 +971,33 @@ def show_threat(trace: Trace) -> None:
         print(f"  {row['label']:5} {row['kind']:6} {clock(row['start']):>9}"
               f" {(row['stop'] - row['start']) / 1000:6.1f} s  to a tank {to_tank:>7}"
               f"  off anchor {anchor_gap:>8}  {share}")
+        print(f"          {row['legs']} leg(s), {row['yards']:.0f} yd, {row['reversals']} reversal(s)")
         for rec in row["taunts"]:
             print(f"          taunt {clock(rec['t'])} {trace.name(rec.get('s'))[:14]:14}"
-                  f" {TAUNT_SPELLS[rec['sp']]}")
+                  f" {'human' if rec.get('s') in trace.humans else 'bot':5} {TAUNT_SPELLS[rec['sp']]}")
+        if row["taunts"]:
+            humans = sum(1 for rec in row["taunts"] if rec.get("s") in trace.humans)
+            print(f"          {len(row['taunts'])} taunt(s): bot {len(row['taunts']) - humans}, human {humans}")
+        by_bot: dict[int, list[str]] = collections.defaultdict(list)
+        for (guid, value), n in row["pickup"].most_common():
+            by_bot[guid].append(f"{value} {n}")
+        if by_bot:
+            print("          anub.pickup: " + "; ".join(
+                f"{trace.name(guid)} " + ", ".join(values) for guid, values in by_bot.items()))
+        if row["capped"]:
+            print(f"          {THREAT_CAP} vetoes: " + ", ".join(
+                f"{trace.name(guid)} {n}" for guid, n in row["capped"].most_common()))
 
     emerges = [row["to_tank"] for row in rows if row["kind"] == "emerge"]
     if emerges:
         known = [ms for ms in emerges if ms is not None]
         print(f"\n  {len(emerges)} emerge(s), {len(emerges) - len(known)} never reached a tank"
               + (f", the rest in {min(known) / 1000:.1f}-{max(known) / 1000:.1f} s" if known else ""))
-    print("  off anchor is his median distance from the midpoint of the latched tank patches,"
-          " else the room centre")
-    show_counts(trace, "anub.pickup")
+    print("  off anchor is his median distance from the midpoint of both latched tank patches, over the"
+          " samples\n  that have both, before the window's first submerge leg; - when none does")
+    print(f"  a leg is a run of samples flagged moving, {LEG_MIN_YD:.0f} yd or more start to stop; a reversal is"
+          f" a leg\n  heading more than {REVERSAL_DEGREES:.0f} degrees off the one before;"
+          f" {THREAT_CAP} vetoes are rows, one per verdict change")
 
 
 # ---------------------------------------------------------------------------------------------- swarm
@@ -870,10 +1108,13 @@ def show_swarm(trace: Trace) -> None:
 SECTIONS = (
     ("phases", "anub.phase spans, his health at each edge, deaths per phase", show_phases),
     ("pull", "locked out past the Web Door or never landed, stage 9 to the pull", show_pull),
-    ("spike", "every Pursued by Anub'arak window, kite branches and outcome, Impale on others", show_spike),
-    ("spheres", "flying spheres and patches over time, patches the spike used, shooters", show_spheres),
+    ("spike", "every Pursued by Anub'arak window, kite branches, outcome, protection, Impale on others",
+     show_spike),
+    ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots",
+     show_spheres),
     ("burrowers", "each burrower: life, submerges, Permafrost, Shadow Strike, DPS focus", show_burrowers),
-    ("threat", "his target by role per surfaced window, time to a tank, taunts", show_threat),
+    ("threat", "per surfaced window: his target by role, time to a tank, drag legs, taunts, threat cap",
+     show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, Penetrating Cold heals, defensives, deaths", show_swarm),
 )
 
