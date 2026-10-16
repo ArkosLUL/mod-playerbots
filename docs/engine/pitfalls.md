@@ -417,7 +417,8 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
   to the generic chase, which walks the bot back to its target and re-fires the node next tick.
   Zeroing the chase does hold the formation, but a formation spaced wider than the bots' own reach
   cannot fight from its slots. Exempt the heal and resurrect reaches at minimum, or anyone standing
-  outside the formation — a tank on the boss — stops being reachable.
+  outside the formation — a tank on the boss — stops being reachable. The Reach family holds those
+  too, so block `reach melee` and `reach spell` by name.
 
 - **A claim that says "this one is mine to kill" needs a liveness test, or it shields the target.**
   `FlameLeviathanHeldByAnotherPost` keeps the fleet off an add a posted siege engine has aggro on, so
@@ -492,6 +493,9 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
   `DropTargetAction` calls `ChangeEngine(BOT_STATE_NON_COMBAT)`: the bot stops fighting and `follow`
   walks it to its master against the formation. Mimiron's alcove walls did it to two camp slots for
   20-35 s a pull. Test a fixed slot's sight of its focus, not only its floor.
+- **A targetless gap drops the bot to the non-combat engine too.** A submerge leaves nothing to
+  attack, and `follow` then walks bots off any encounter spread: zero it for the whole engagement,
+  not only while a target is up (the Jormungars' 1.5 s worm gap).
 - **`DisperseDistanceValue` defaults to `-1.0f`**, and `CombatFormationMoveAction::Execute` bails on
   `dis <= 0` — the generic de-clumper is inert unless a strategy sets it.
 - **`AttackersValue::Calculate` is threat-based, not range-based.** It builds from `AddAttackersOf`,

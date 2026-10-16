@@ -55,7 +55,7 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
 
 ## Movement that oscillates
 
-Bots jiggling on the spot is one symptom with six causes, plus a seventh that freezes them instead.
+Bots jiggling on the spot is one symptom with eight causes, plus a ninth that freezes them instead.
 
 - **Two owners** — see above.
 - **A destination that chases a moving boss.** A boss-relative spot flips to his far side while he is
@@ -81,6 +81,15 @@ Bots jiggling on the spot is one symptom with six causes, plus a seventh that fr
   hazard's whole life. Either keep the step smaller than the tolerance, or teach the hold to reject a
   destination the hazard covers. Obsidian Sanctum's fissure dodge steps 10 yd against a raid-line
   tolerance of 8 and needed the second fix.
+- **A hold that lets go on arrival.** Latching only the walk hands the next tick to the generic
+  movers (`reach`, `set behind`, `follow`), which re-plan from where the bot stands and walk it off:
+  A-B-A. Latch the spot itself, split by edge (park within 1 yd, walk back only past 2.5), and block
+  those movers while it holds. Release a spot that ignores reach (an escape) on arrival instead, or
+  the block strands the bot out of range. The
+  [Northrend Beasts](../raids/trial-of-the-crusader/northrend-beasts.md) worm stage needed both.
+- **A flickering input to a latched layout.** A distance deadband cannot help when the predicate
+  itself flips: Icehowl's victim stepped in and out of melee range every ~100 ms and re-dealt the
+  breath spread each time. Add time hysteresis, a grace before the change counts.
 - **A latch written inside a predicate more than one caller evaluates per tick.** The symptom inverts:
   the bot freezes, because the callers disagree. Thorim's ring hold cleared "arrived" and told the
   trigger to move, then re-armed it on the tighter arrive tolerance and told the action to hold, which
@@ -93,7 +102,10 @@ Bots jiggling on the spot is one symptom with six causes, plus a seventh that fr
   latch fires. An escape that overrides the deadband belongs outside the tolerance choice too, or the
   bot gets one order then re-latches before retrying — and 40-60% of orders are refused.
 
-Two rules that belong with the geometry rather than the action:
+Three rules that belong with the geometry rather than the action:
+
+- **A spot checked only at its endpoint lets the walk cross the hazard it dodges.** Test the path,
+  and a growing hazard (a spreading pool) at its size when the walk ends.
 
 - **Park tolerance belongs in the clearance maths.** If a bot may stop `t` yards off the point, a
   point cleared by exactly the hazard radius still leaves whoever stopped on the hazard side inside
