@@ -5,6 +5,7 @@
 
 #include "EncounterHelpers.h"
 #include "PlayerbotAI.h"
+#include "Position.h"
 #include "ToCData.h"
 
 namespace TrialOfTheCrusaderHelpers
@@ -86,6 +87,27 @@ bool FactionChampionsReachIntoAoe(PlayerbotAI* botAI);
 
 // The target carries Unstable Affliction, so a dispel that removes Magic may hit the dispeller
 bool FactionChampionsDispelBackfires(PlayerbotAI* botAI, Unit* target);
+
+// The kill target and the stand to Death Grip it from, when this bot is the DK on grip duty: the kill
+// target has 2+ other champions within 8 yd, and the stand pulls it clear of them inside heal range.
+// Latched raid-wide, written to fc.grip.
+Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand);
+
+// The melee champion this bot snares and the spell id, when its victim is a healer or under half
+// health and nothing slows it yet. One snarer per champion.
+Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
+
+// The group member this bot covers with an external defensive and the spell id, when two or more
+// physical champions are on that member and none of the four covers it yet. One caster per member.
+Unit* FactionChampionsProtectTarget(PlayerbotAI* botAI, uint32& spellId);
+
+// The corpse this druid bot battle-resurrects and the Rebirth rank: fewer than 2 champions within 8 yd
+// of it, healers first, one druid per corpse.
+Unit* FactionChampionsBattleResTarget(PlayerbotAI* botAI, uint32& spellId);
+
+// Where a bot dodging a Bladestorm or Hellfire goes: the nearest clear ring, the spot in it nearest the
+// healers' centre, within 30 yd of another living healer when one is that close.
+Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI);
 
 }
 

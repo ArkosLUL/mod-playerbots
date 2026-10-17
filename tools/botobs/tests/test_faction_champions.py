@@ -396,8 +396,8 @@ class SyntheticPull(unittest.TestCase):
             (11000, WARRIOR_C, "Bladestorm", {TANK: 2, ROGUE: 2}),
             (15000, WARLOCK_C, "Hellfire", {MAGE: 3})])
 
-    def test_vetoes_keep_the_ten_multipliers_only(self):
-        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 10)
+    def test_vetoes_keep_the_faction_champions_multipliers_and_rules_only(self):
+        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 13)
         self.assertEqual(fc.fc_vetoes(self.trace), collections.Counter({
             (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1,
             (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1,
@@ -691,6 +691,162 @@ class CcAndAdds(unittest.TestCase):
         self.assertIn(f"{fc.KILL_TOTEM_ACTION}: 1 OK row(s)", text)
 
 
+GRIPPER = 5010  # death knight
+HUNTER = 5011
+WARRIOR = 5012
+PALADIN_BOT = 5013
+DRUID_BOT = 5014
+HUMAN = 5015
+HUNTER_PET = (2 << 32) | 6
+FILLERS = tuple(range(6001, 6010))
+
+
+def placed(guid: int, x: float, y: float, hp: float, target: int) -> list:
+    return [guid, x, y, 0.0, 0.0, hp, 80.0, target, 0, 0, 0, 0]
+
+
+def pack_snap(when: int) -> dict:
+    # the grip lands him 10 yd off, clear of the pack and the priest
+    paladin = (6.0, 8.0) if when >= 11000 else (0.0, 0.0)
+    units = [placed(guid, 1.0, 0.0, 100.0, PALADIN) for guid in FILLERS + (GRIPPER,)]
+    units += [placed(ROGUE, 1.0, 0.0, 0.0 if when >= 20000 else 100.0, PALADIN),
+              placed(PRIEST, 20.0, 0.0, 100.0, 0), placed(TANK, 1.0, 1.0, 100.0, ROGUE_C),
+              placed(HUNTER, 25.0, 0.0, 100.0, ROGUE_C), placed(WARRIOR, 2.0, 1.0, 80.0, WARRIOR_C),
+              placed(ROGUE_C, 2.0, 0.0, 100.0, PRIEST if when < 15000 else ROGUE),
+              placed(WARRIOR_C, 0.0, 2.0, 100.0, WARRIOR), placed(MAGE_C, 30.0, 0.0, 100.0, PRIEST)]
+    # flat at half health from 4 s, gone after the 24 s sample
+    if when <= 24000:
+        units.append(placed(PALADIN, *paladin, 100.0 if when < 4000 else 50.0, ROGUE))
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def pack_pull() -> list[dict]:
+    roster = [{"g": guid, "n": f"Filler{guid}", "r": "melee", "c": 4, "h": 0} for guid in FILLERS]
+    roster += [
+        {"g": TANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+        {"g": ROGUE, "n": "Shiv", "r": "melee", "c": 4, "h": 0},
+        {"g": PRIEST, "n": "Mercy", "r": "heal", "c": 5, "h": 0},
+        {"g": GRIPPER, "n": "Obliteration", "r": "melee", "c": 6, "h": 0},
+        {"g": HUNTER, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0},
+        {"g": WARRIOR, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
+        {"g": PALADIN_BOT, "n": "Justice", "r": "melee", "c": 2, "h": 0},
+        {"g": DRUID_BOT, "n": "Tree", "r": "heal", "c": 11, "h": 0},
+        {"g": HUMAN, "n": "Dragon", "r": "tank", "c": 2, "h": 1}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
+        {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
+        {"t": 1, "e": "unit", "g": HUNTER_PET, "en": 1, "n": "Cat", "own": HUNTER},
+        note(1000, ROGUE, "fc.switch", "first"),
+        note(1000, ROGUE, "fc.kill", PALADIN),
+        note(25000, ROGUE, "fc.switch", "dead"),
+        note(25000, ROGUE, "fc.kill", MAGE_C),
+
+        # The grip: duty at 9 s, cast at 10 s, released once it's out.
+        note(9000, GRIPPER, fc.GRIP, PALADIN),
+        cast(10000, GRIPPER, fc.SPELL_DEATH_GRIP, PALADIN),
+        note(10050, GRIPPER, fc.GRIP, 0),
+
+        # Concussive Shot on the rogue champion while it's on the priest; Hamstring on the warrior champion
+        # on a warrior bot at 80%.
+        cast(12000, HUNTER, 5116, ROGUE_C),
+        cast(13000, WARRIOR, 1715, WARRIOR_C),
+
+        # Hand of Protection on the priest, Pain Suppression on Shiv, who dies at 20 s anyway.
+        cast(14000, PALADIN_BOT, 10278, PRIEST),
+        cast(15000, PRIEST, 33206, ROGUE),
+        {"t": 20000, "e": "death", "g": ROGUE, "killer": ROGUE_C, "x": 1.0, "y": 0.0, "z": 0.0},
+
+        # Rebirth on Shiv, two champions within 8 yd of where he fell.
+        cast(22000, DRUID_BOT, 48477, ROGUE, 2000),
+
+        # Taunts: a bot's Hand of Reckoning, the pet's Growl, the human's Taunt and Righteous Defense on
+        # a friend. A taunt on a raider doesn't count.
+        cast(16000, TANK, 62124, ROGUE_C),
+        cast(16500, HUNTER_PET, 61676, WARRIOR_C),
+        cast(17000, HUMAN, 355, ROGUE_C),
+        cast(17500, TANK, 31789, PRIEST),
+        cast(18000, TANK, 62124, PRIEST),
+        {"t": 30000, "e": "end", "out": "wipe"},
+    ]
+    records += [pack_snap(when) for when in range(0, 30001, 1000)]
+    return records
+
+
+class PackAndPeel(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in pack_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_champions_round_each_role_count_centre_to_centre(self):
+        by_role = fc.pack_by_role(self.trace)
+        # a melee bot has the paladin, the rogue and the warrior champion within 8 yd until the grip
+        self.assertEqual(by_role["heal"], (0.0, 31))
+        self.assertGreater(by_role["melee"][0], 2.0)
+        self.assertLess(by_role["melee"][0], 3.0)
+
+    def test_early_melee_deaths_and_the_healer_gap(self):
+        self.assertEqual([death["g"] for death in fc.early_melee_deaths(self.trace)], [ROGUE])
+        self.assertAlmostEqual(fc.melee_to_healer(self.trace), 19.0)
+
+    def test_the_first_kill_is_the_hold_that_died(self):
+        self.assertEqual(fc.first_kill(self.trace), 25000)
+
+    def test_a_flat_span_with_ten_bots_on_the_kill_target_is_the_stall(self):
+        stall = fc.longest_stall(self.trace)
+        self.assertEqual((stall["guid"], stall["start"], stall["stop"], stall["low"], stall["high"]),
+                         (PALADIN, 4000, 24000, 50.0, 50.0))
+
+    def test_a_grip_reads_the_pack_before_and_after_and_how_far_it_moved(self):
+        self.assertEqual(fc.grips(self.trace), [
+            {"t": 10000, "by": GRIPPER, "target": PALADIN, "kill": True, "before": 2, "after": 0, "moved": 10.0}])
+        self.assertEqual(fc.grip_holds(self.trace), [
+            {"bot": GRIPPER, "target": PALADIN, "start": 9000, "stop": 10050, "cast": True}])
+
+    def test_a_snare_is_needed_when_its_champion_is_on_a_healer_or_a_hurt_raider(self):
+        self.assertEqual([(row["spell"], row["needed"]) for row in fc.snare_casts(self.trace)],
+                         [("Concussive Shot", True), ("Hamstring", False)])
+
+    def test_externals_read_whether_the_target_lived(self):
+        self.assertEqual([(row["spell"], row["target"], row["died"]) for row in fc.external_casts(self.trace)],
+                         [("Hand of Protection", PRIEST, False), ("Pain Suppression", ROGUE, True)])
+
+    def test_a_rebirth_counts_champions_where_its_target_fell(self):
+        self.assertEqual(fc.battle_res_casts(self.trace),
+                         [{"t": 22000, "by": DRUID_BOT, "target": ROGUE, "near": 2}])
+
+    def test_taunts_split_bots_and_humans_and_skip_a_raider(self):
+        self.assertEqual(fc.taunt_casts(self.trace), collections.Counter({
+            ("Hand of Reckoning", "bot"): 1, ("Growl (pet)", "bot"): 1, ("Taunt", "human"): 1,
+            ("Righteous Defense", "bot"): 1}))
+
+    def test_both_sections_render(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_pack(self.trace)
+            fc.show_peel(self.trace)
+        text = out.getvalue()
+        self.assertIn("melee deaths in the first 60 s: 1 (Shiv)", text)
+        self.assertIn("first kill: 25.0 s from the pull", text)
+        self.assertRegex(text, r"longest flat span: Velanaa 0:04\.000 for 20\.0 s, 50-50% STALL")
+        self.assertIn(f"{fc.GRIP} holds: 1, 1 ending in the bot's grip", text)
+        self.assertRegex(text, r"Concussive Shot +hunter +1  1 / 0 / 0")
+        self.assertRegex(text, r"Pain Suppression +Mercy +Shiv +melee +yes")
+        self.assertIn("taunts on champions: Growl (pet) bot 1, Hand of Reckoning bot 1, Righteous Defense bot 1,"
+                      " Taunt human 1", text)
+
+
 class Source(unittest.TestCase):
     def test_the_kill_order_covers_the_champion_enum(self):
         text = CHAMPIONS_HEADER.read_text(encoding="utf-8")
@@ -735,6 +891,14 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.summon_casts(trace), [])
         self.assertEqual(fc.add_units(trace), [])
         self.assertEqual(fc.totem_holds(trace), [])
+        self.assertEqual(fc.first_kill(trace), None)
+        self.assertEqual(fc.longest_stall(trace), None)
+        self.assertEqual(fc.grips(trace), [])
+        self.assertEqual(fc.grip_holds(trace), [])
+        self.assertEqual(fc.snare_casts(trace), [])
+        self.assertEqual(fc.external_casts(trace), [])
+        self.assertEqual(fc.battle_res_casts(trace), [])
+        self.assertEqual(fc.taunt_casts(trace), collections.Counter())
 
 
 if __name__ == "__main__":

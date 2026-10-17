@@ -50,6 +50,34 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsDeathGripTrigger : public Trigger
+{
+public:
+    FactionChampionsDeathGripTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions death grip") {}
+    bool IsActive() override;
+};
+
+class FactionChampionsSnareTrigger : public Trigger
+{
+public:
+    FactionChampionsSnareTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions snare") {}
+    bool IsActive() override;
+};
+
+class FactionChampionsProtectTrigger : public Trigger
+{
+public:
+    FactionChampionsProtectTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions protect") {}
+    bool IsActive() override;
+};
+
+class FactionChampionsBattleResTrigger : public Trigger
+{
+public:
+    FactionChampionsBattleResTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions battle res") {}
+    bool IsActive() override;
+};
+
 class ToCFactionChampionsDefenceTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
@@ -67,6 +95,14 @@ public:
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_physical_switch;
         creators["faction champions purge kill target"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_purge_kill_target;
+        creators["faction champions death grip"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_death_grip;
+        creators["faction champions snare"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_snare;
+        creators["faction champions protect"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_protect;
+        creators["faction champions battle res"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_battle_res;
     }
 
 private:
@@ -92,6 +128,22 @@ private:
 
     static Trigger* faction_champions_purge_kill_target(PlayerbotAI* botAI) {
         return new FactionChampionsPurgeKillTargetTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_death_grip(PlayerbotAI* botAI) {
+        return new FactionChampionsDeathGripTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_snare(PlayerbotAI* botAI) {
+        return new FactionChampionsSnareTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_protect(PlayerbotAI* botAI) {
+        return new FactionChampionsProtectTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_battle_res(PlayerbotAI* botAI) {
+        return new FactionChampionsBattleResTrigger(botAI);
     }
 };
 

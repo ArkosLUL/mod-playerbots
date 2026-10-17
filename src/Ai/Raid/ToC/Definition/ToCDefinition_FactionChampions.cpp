@@ -1,5 +1,7 @@
 #include "ToCDefinitions.h"
 
+#include "Map.h"
+#include "Player.h"
 #include "PlayerbotAI.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_FactionChampions.h"
@@ -20,6 +22,20 @@ bool FactionChampionsFocusOwned(PlayerbotAI* botAI)
 
 bool FactionChampionsTotemHeld(PlayerbotAI* botAI) { return FactionChampionsTotemTarget(botAI) != nullptr; }
 
+bool FactionChampionsGripHeld(PlayerbotAI* botAI)
+{
+    Position stand;
+    return FactionChampionsGripTarget(botAI, stand) != nullptr;
+}
+
+bool FactionChampionsLive(PlayerbotAI* botAI) { return ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions); }
+
+bool FactionChampionsHeroicLive(PlayerbotAI* botAI)
+{
+    Map* map = botAI->GetBot()->FindMap();
+    return map && map->IsHeroic() && FactionChampionsLive(botAI);
+}
+
 void DefineFactionChampions(EncounterBuilder& e)
 {
     // Assist makes its own pick, so on any tick the settled focus node returns false it would take the
@@ -30,6 +46,19 @@ void DefineFactionChampions(EncounterBuilder& e)
     // once the bot is on its totem the kill totem node returns false, and either of these would pull it off
     e.Block("faction champions totem guard multiplier", Role::Any, FactionChampionsTotemHeld, 0,
             {"faction champions focus priority", "faction champions physical switch"});
+
+    // the DK walks out of melee to its grip stand, and these would walk it straight back
+    e.Block("faction champions grip hold", Role::Any, FactionChampionsGripHeld,
+            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Flee |
+                Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
+            {"reach melee", "reach spell"});
+
+    // the class Rebirth raises the master first and a corpse inside the pack too, faction champions battle
+    // res picks the corpse instead
+    e.Block("faction champions battle res guard", Role::Any, FactionChampionsLive, 0, {"rebirth"});
+
+    // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
+    e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);
 }
 }  // namespace
 

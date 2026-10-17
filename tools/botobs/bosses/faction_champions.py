@@ -12,7 +12,9 @@
     faction_champions.py <file> --hop      champion shields, fc.physical holds, Mass Dispel, the return
     faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast
     faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds
-    faction_champions.py <file> --vetoes   the ten Faction Champions multipliers, by action
+    faction_champions.py <file> --pack     champions round each role, early melee deaths, first kill, stalls, grips
+    faction_champions.py <file> --peel     snares on melee champions, externals, battle res, taunts
+    faction_champions.py <file> --vetoes   the Faction Champions multipliers and rules, by action
 
 What the generic views get wrong here, and what this reads instead:
 
@@ -54,6 +56,11 @@ What the generic views get wrong here, and what this reads instead:
   to that cast.
 - **Hellfire, Fan of Knives, Arcane Explosion and the Unstable Affliction backlash remap**, so every
   id of their spelldifficulty row counts.
+- **A champion's victim is its snapshot target.** `--peel` judges a snare by the champion's target in
+  the last sample at or before the cast, and `--pack` counts champions within 8 yd centre to centre
+  off the same samples, so both lag up to one sample.
+- **A corpse is where its death record put it.** `--peel` counts champions round a Rebirth's target
+  at that spot, in the last sample before the cast.
 """
 from __future__ import annotations
 
@@ -167,6 +174,9 @@ FC_MULTIPLIERS = (
     "faction champions purge guard multiplier",
     "faction champions cc guard multiplier",
     "faction champions totem guard multiplier",
+    "faction champions grip hold",
+    "faction champions battle res guard",
+    "faction champions heroic taunt guard",
 )
 COUNTERSPELL_ACTION = "faction champions counterspell kill target"
 ANTI_FEAR_ACTION = "faction champions anti fear"
@@ -255,6 +265,31 @@ NPC_TREANT = 36070
 # Grounding, Windfury and Tremor Totem, and the treant. The raid's own totems share these entries, so
 # a unit counts only with a champion owner.
 ADD_ENTRIES = frozenset((5925, 6112, 5913, NPC_TREANT))
+
+GRIP = "fc.grip"
+SPELL_DEATH_GRIP = 49576
+PACK_RADIUS = 8.0
+PACK_ROLES = ("tank", "melee", "ranged", "heal")
+FIRST_MINUTE_MS = 60000
+# a stall: health moving under this many points over the span, with this many bots on the kill target
+STALL_HP = 3.0
+STALL_ATTACKERS = 10
+STALL_MS = 20000
+# how long after a grip the landing is read
+GRIP_SETTLE_MS = 1000
+
+SNARES = {1715: "Hamstring", 12323: "Piercing Howl", 45524: "Chains of Ice", 2974: "Wing Clip",
+          5116: "Concussive Shot",
+          **dict.fromkeys((8056, 8058, 10472, 10473, 25464, 49235, 49236), "Frost Shock")}
+SNARE_HEALTH = 50.0
+EXTERNALS = {**dict.fromkeys((1022, 5599, 10278), "Hand of Protection"), 33206: "Pain Suppression",
+             47788: "Guardian Spirit", 6940: "Hand of Sacrifice"}
+EXTERNAL_WATCH_MS = 10000
+REBIRTH = frozenset((20484, 20739, 20742, 20747, 20748, 26994, 48477))
+# The class taunts, the druid's and the hunter pet's Growl, and the area ones
+TAUNTS = {355: "Taunt", 62124: "Hand of Reckoning", 31789: "Righteous Defense", 56222: "Dark Command",
+          6795: "Growl", 694: "Mocking Blow", 1161: "Challenging Shout", 5209: "Challenging Roar",
+          **dict.fromkeys((2649, 14916, 14917, 14918, 14919, 14920, 14921, 27047, 61676), "Growl (pet)")}
 
 BURST_SOURCE = SRC_ROOT / "Ai" / "Base" / "Combat" / "BurstCooldowns.cpp"
 
@@ -1205,6 +1240,308 @@ def show_adds(trace: Trace) -> None:
           " hold, killed or run out")
 
 
+def distance(a: list, b: list) -> float:
+    """2D, centre to centre, between two snapshot rows or `[_, x, y]` spots."""
+    return ((a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
+
+
+def live_rows(snap: dict, guids) -> list[list]:
+    return [row for row in snap.get("u", []) if row[0] in guids and row[5] > 0]
+
+
+def snap_at(trace: Trace, when: int) -> dict | None:
+    """The last snapshot at or before `when`."""
+    snaps = frames(trace)
+    stamps = getattr(trace, "_fc_snap_stamps", None)
+    if stamps is None or len(stamps) != len(snaps):
+        stamps = [snap["t"] for snap in snaps]
+        trace._fc_snap_stamps = stamps
+    index = bisect.bisect_right(stamps, when) - 1
+    return snaps[index] if index >= 0 else None
+
+
+def pack_by_role(trace: Trace) -> dict[str, tuple[float, int]]:
+    """Per role, `(mean champions within 8 yd, samples)` over the roster's live samples from the pull."""
+    targets = champions(trace)
+    roster = roster_guids(trace)
+    start = pull_start(trace)
+    counts: dict[str, list[int]] = collections.defaultdict(list)
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        near = live_rows(snap, targets)
+        for row in live_rows(snap, roster):
+            counts[trace.role(row[0])].append(sum(1 for champion in near if distance(row, champion) <= PACK_RADIUS))
+    return {role: (statistics.mean(values), len(values)) for role, values in counts.items()}
+
+
+def early_melee_deaths(trace: Trace) -> list[dict]:
+    start = pull_start(trace)
+    return [death for death in combat_deaths(trace)
+            if trace.role(death["g"]) == "melee" and 0 <= death["t"] - start < FIRST_MINUTE_MS]
+
+
+def melee_to_healer(trace: Trace) -> float | None:
+    """Median distance from each live melee sample to the nearest live healer, from the pull."""
+    roster = roster_guids(trace)
+    start = pull_start(trace)
+    gaps = []
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        rows = live_rows(snap, roster)
+        healers = [row for row in rows if trace.role(row[0]) == "heal"]
+        if not healers:
+            continue
+        gaps += [min(distance(row, healer) for healer in healers) for row in rows if trace.role(row[0]) == "melee"]
+    return statistics.median(gaps) if gaps else None
+
+
+def first_kill(trace: Trace) -> int | None:
+    """ms from the pull to the first kill target that died."""
+    died = [hold["stop"] for hold in kill_holds(trace) if hold["died"]]
+    return min(died) - pull_start(trace) if died else None
+
+
+def longest_stall(trace: Trace) -> dict | None:
+    """The longest span inside one `fc.kill` hold with 10+ bots on the kill target at every sample and its
+    health moving under 3 points: `guid`, `start`, `stop`, `low`, `high`, or None without one."""
+    bots = {guid for guid in roster_guids(trace) if guid not in trace.humans}
+    series: dict[tuple[int, int], list[tuple[int, float, int]]] = collections.defaultdict(list)
+    for guid, start, stop in kill_spans(trace):
+        if not guid:
+            continue
+        for snap in frames(trace):
+            if not start <= snap["t"] < stop:
+                continue
+            target = next((row for row in snap.get("u", []) if row[0] == guid and row[5] > 0), None)
+            if target is None:
+                continue
+            on = sum(1 for row in live_rows(snap, bots) if len(row) > 7 and row[7] == guid)
+            series[(guid, start)].append((snap["t"], target[5], on))
+
+    best = None
+    for (guid, _), samples in series.items():
+        for first in range(len(samples)):
+            if samples[first][2] < STALL_ATTACKERS:
+                continue
+            low = high = samples[first][1]
+            last = first
+            while last + 1 < len(samples) and samples[last + 1][2] >= STALL_ATTACKERS:
+                nlow, nhigh = min(low, samples[last + 1][1]), max(high, samples[last + 1][1])
+                if nhigh - nlow >= STALL_HP:
+                    break
+                low, high, last = nlow, nhigh, last + 1
+            length = samples[last][0] - samples[first][0]
+            if best is None or length > best["stop"] - best["start"]:
+                best = {"guid": guid, "start": samples[first][0], "stop": samples[last][0], "low": low, "high": high}
+    return best
+
+
+def grips(trace: Trace) -> list[dict]:
+    """Every raid Death Grip on a champion: `t`, `by`, `target`, `kill`, the other champions within 8 yd of
+    it in the last sample before (`before`) and a second after (`after`), and how far it moved (`moved`,
+    None without both samples)."""
+    targets = champions(trace)
+    roster = roster_guids(trace)
+    kill = kill_spans(trace)
+    out = []
+    for rec in trace.of("cast"):
+        target = rec.get("tgt")
+        if rec.get("sp") != SPELL_DEATH_GRIP or rec.get("s") not in roster or target not in targets:
+            continue
+        counts, spots = [], []
+        for snap in (snap_at(trace, rec["t"]), snap_at(trace, rec["t"] + GRIP_SETTLE_MS)):
+            rows = live_rows(snap, targets) if snap else []
+            row = next((row for row in rows if row[0] == target), None)
+            spots.append(row)
+            counts.append(None if row is None else
+                          sum(1 for other in rows if other[0] != target and distance(row, other) <= PACK_RADIUS))
+        out.append({"t": rec["t"], "by": rec["s"], "target": target, "kill": held_at(kill, rec["t"]) == target,
+                    "before": counts[0], "after": counts[1],
+                    "moved": distance(*spots) if all(spot is not None for spot in spots) else None})
+    return out
+
+
+def grip_holds(trace: Trace) -> list[dict]:
+    """Each `fc.grip` hold: `bot`, `target`, `start`, `stop`, and whether the bot's Death Grip went out
+    inside it (`cast`)."""
+    casts = [(rec["t"], rec.get("s")) for rec in trace.of("cast") if rec.get("sp") == SPELL_DEATH_GRIP]
+    out = []
+    for bot, spans in holder_spans(trace, GRIP, pull_end(trace)).items():
+        for value, start, stop in spans:
+            if as_guid(value):
+                out.append({"bot": bot, "target": as_guid(value), "start": start, "stop": stop,
+                            "cast": any(by == bot and start <= when <= stop for when, by in casts)})
+    return sorted(out, key=lambda row: (row["start"], row["bot"]))
+
+
+def show_pack(trace: Trace) -> None:
+    print("THE PACK")
+    by_role = pack_by_role(trace)
+    if by_role:
+        print("  champions within 8 yd, per live sample: " + ", ".join(
+            f"{role} {by_role[role][0]:.2f} ({by_role[role][1]})" for role in PACK_ROLES if role in by_role))
+    deaths = early_melee_deaths(trace)
+    print(f"  melee deaths in the first {FIRST_MINUTE_MS // 1000} s: {len(deaths)}"
+          + (f" ({', '.join(trace.name(death['g']) for death in deaths)})" if deaths else ""))
+    gap = melee_to_healer(trace)
+    print(f"  melee to the nearest healer, median: {'-' if gap is None else f'{gap:.1f} yd'}")
+    kill_ms = first_kill(trace)
+    print(f"  first kill: {'none' if kill_ms is None else f'{kill_ms / 1000:.1f} s from the pull'}")
+    stall = longest_stall(trace)
+    if stall:
+        length = (stall["stop"] - stall["start"]) / 1000
+        print(f"  longest flat span: {trace.name(stall['guid'])} {clock(stall['start'])} for {length:.1f} s,"
+              f" {stall['low']:.0f}-{stall['high']:.0f}%" + (" STALL" if length * 1000 >= STALL_MS else ""))
+    else:
+        print(f"  longest flat span: never {STALL_ATTACKERS}+ bots on the kill target")
+
+    rows = grips(trace)
+    if rows:
+        print(f"\n  {'grip at':>9} {'by':14} {'on':20} {'kill':>4} {'pack before':>11} {'after':>5} {'moved':>6}")
+        for row in rows:
+            moved = "-" if row["moved"] is None else f"{row['moved']:.1f}"
+            before = "-" if row["before"] is None else str(row["before"])
+            after = "-" if row["after"] is None else str(row["after"])
+            print(f"  {clock(row['t']):>9} {trace.name(row['by'])[:14]:14} {trace.name(row['target'])[:20]:20}"
+                  f" {'yes' if row['kill'] else '-':>4} {before:>11} {after:>5} {moved:>6}")
+    else:
+        print("  no raid Death Grip on a champion")
+    holds = grip_holds(trace)
+    if holds:
+        cast = sum(1 for hold in holds if hold["cast"])
+        print(f"  {GRIP} holds: {len(holds)}, {cast} ending in the bot's grip, median"
+              f" {statistics.median(hold['stop'] - hold['start'] for hold in holds) / 1000:.1f} s")
+    print(f"  the pack is the other champions within {PACK_RADIUS:.0f} yd centre to centre; a stall is"
+          f" {STALL_MS // 1000} s or more with {STALL_ATTACKERS}+ bots on the kill target and its health"
+          f" moving under {STALL_HP:.0f} points; moved is the target's travel from the sample before the grip"
+          f" to one {GRIP_SETTLE_MS / 1000:.0f} s after")
+
+
+def victim_at(trace: Trace, champion: int, when: int) -> list | None:
+    """The roster row of the champion's target in the last sample at or before `when`."""
+    snap = snap_at(trace, when)
+    if not snap:
+        return None
+    rows = {row[0]: row for row in snap.get("u", [])}
+    row = rows.get(champion)
+    if row is None or len(row) <= 7:
+        return None
+    victim = rows.get(row[7])
+    return victim if victim is not None and row[7] in roster_guids(trace) else None
+
+
+def snare_casts(trace: Trace) -> list[dict]:
+    """Every raid snare on a champion: `t`, `by`, `spell`, `target`, and whether its victim then was a
+    healer or under half health (`needed`, None when the sample can't say)."""
+    targets = champions(trace)
+    roster = roster_guids(trace)
+    out = []
+    for rec in trace.of("cast"):
+        if rec.get("sp") not in SNARES or rec.get("tgt") not in targets or rec.get("s") not in roster:
+            continue
+        victim = victim_at(trace, rec["tgt"], rec["t"])
+        needed = None if victim is None else trace.role(victim[0]) == "heal" or victim[5] < SNARE_HEALTH
+        out.append({"t": rec["t"], "by": rec["s"], "spell": SNARES[rec["sp"]], "target": rec["tgt"], "needed": needed})
+    return out
+
+
+def external_casts(trace: Trace) -> list[dict]:
+    """Every raid external on a raid member: `t`, `by`, `spell`, `target`, and whether the target died
+    within 10 s (`died`)."""
+    roster = roster_guids(trace)
+    deaths = [(death["t"], death["g"]) for death in combat_deaths(trace)]
+    out = []
+    for rec in trace.of("cast"):
+        target = rec.get("tgt") or rec.get("s")
+        if rec.get("sp") not in EXTERNALS or rec.get("s") not in roster or target not in roster:
+            continue
+        died = any(guid == target and rec["t"] <= when <= rec["t"] + EXTERNAL_WATCH_MS for when, guid in deaths)
+        out.append({"t": rec["t"], "by": rec["s"], "spell": EXTERNALS[rec["sp"]], "target": target, "died": died})
+    return out
+
+
+def battle_res_casts(trace: Trace) -> list[dict]:
+    """Every raid Rebirth: `t`, `by`, `target`, and the champions within 8 yd of where the target died, in
+    the last sample before the cast (`near`, None without a death record)."""
+    targets = champions(trace)
+    roster = roster_guids(trace)
+    deaths = sorted((death["t"], death["g"], death) for death in combat_deaths(trace))
+    out = []
+    for rec in trace.of("cast"):
+        if rec.get("sp") not in REBIRTH or rec.get("s") not in roster or rec.get("tr"):
+            continue
+        target = rec.get("tgt")
+        death = next((found for when, guid, found in reversed(deaths) if guid == target and when <= rec["t"]), None)
+        near = None
+        snap = snap_at(trace, rec["t"])
+        if death is not None and "x" in death and snap:
+            spot = [0, death["x"], death["y"]]
+            near = sum(1 for row in live_rows(snap, targets) if distance(row, spot) <= PACK_RADIUS)
+        out.append({"t": rec["t"], "by": rec["s"], "target": target, "near": near})
+    return out
+
+
+def taunt_casts(trace: Trace) -> collections.Counter:
+    """`(spell name, bot or human)` -> casts by the raid and its pets on champions. Righteous Defense
+    names a friend, so it counts whatever its target."""
+    targets = champions(trace)
+    out = collections.Counter()
+    for rec in trace.of("cast"):
+        name = TAUNTS.get(rec.get("sp"))
+        caster = raid_caster(trace, rec.get("s"))
+        if name is None or caster is None or rec.get("tr"):
+            continue
+        if name != "Righteous Defense" and rec.get("tgt") not in targets:
+            continue
+        out[(name, "human" if caster in trace.humans else "bot")] += 1
+    return out
+
+
+def show_peel(trace: Trace) -> None:
+    print("PEEL")
+    klass = classes(trace)
+    snares = snare_casts(trace)
+    if snares:
+        print(f"  {len(snares)} snare(s) on champions, by spell and class (victim a healer or under"
+              f" {SNARE_HEALTH:.0f}% / not / unknown):")
+        groups: dict[tuple[str, str], list[bool | None]] = collections.defaultdict(list)
+        for row in snares:
+            groups[(row["spell"], klass.get(row["by"], "?"))].append(row["needed"])
+        for (spell, name), needed in sorted(groups.items()):
+            print(f"    {spell:16} {name:12} {len(needed):3}  {needed.count(True)} / {needed.count(False)}"
+                  f" / {needed.count(None)}")
+    else:
+        print("  no snare on a champion")
+
+    externals = external_casts(trace)
+    if externals:
+        print(f"\n  {'external at':>11} {'spell':18} {'by':14} {'on':14} {'role':6} {'died in 10 s':>12}")
+        for row in externals:
+            died = "yes" if row["died"] else "-"
+            print(f"  {clock(row['t']):>11} {row['spell']:18} {trace.name(row['by'])[:14]:14}"
+                  f" {trace.name(row['target'])[:14]:14} {trace.role(row['target']):6} {died:>12}")
+    else:
+        print("  no Hand of Protection, Pain Suppression, Guardian Spirit or Hand of Sacrifice on the raid")
+
+    rezzes = battle_res_casts(trace)
+    if rezzes:
+        print(f"\n  {'rebirth at':>10} {'by':14} {'on':14} {'role':6} {'champions within 8 yd':>21}")
+        for row in rezzes:
+            near = "-" if row["near"] is None else str(row["near"])
+            print(f"  {clock(row['t']):>10} {trace.name(row['by'])[:14]:14} {trace.name(row['target'])[:14]:14}"
+                  f" {trace.role(row['target']):6} {near:>21}")
+    else:
+        print("  no Rebirth")
+
+    taunts = taunt_casts(trace)
+    print("  taunts on champions: " + (", ".join(f"{name} {who} {count}" for (name, who), count
+                                               in sorted(taunts.items())) or "none"))
+    print("  a snare's victim is the champion's target in the last sample before the cast; champions round a"
+          " Rebirth are counted at the target's death spot")
+
+
 def fc_vetoes(trace: Trace) -> collections.Counter:
     return collections.Counter((rec.get("m"), rec.get("a")) for rec in trace.of("veto")
                                if rec.get("m") in FC_MULTIPLIERS)
@@ -1214,7 +1551,7 @@ def show_vetoes(trace: Trace) -> None:
     print("FACTION CHAMPIONS VETOES")
     counts = fc_vetoes(trace)
     if not counts:
-        print(f"  none of the {len(FC_MULTIPLIERS)} multipliers vetoed anything")
+        print(f"  none of the {len(FC_MULTIPLIERS)} multipliers and rules vetoed anything")
         return
     for multiplier in FC_MULTIPLIERS:
         rows = sorted(((count, action) for (name, action), count in counts.items() if name == multiplier),
@@ -1237,7 +1574,9 @@ SECTIONS = (
     ("hop", "champion shields, fc.physical holds, Mass Dispel after a shield, the return", show_hop),
     ("aoe", "raid victims per champion crowd-AoE cast, hits per victim for the channels", show_aoe),
     ("adds", "champion totems and treants, treant damage, fc.totem holds", show_adds),
-    ("vetoes", "the ten Faction Champions multipliers, by action", show_vetoes),
+    ("pack", "champions round each role, early melee deaths, first kill, longest stall, grips", show_pack),
+    ("peel", "snares on melee champions, externals on the raid, battle res, taunts", show_peel),
+    ("vetoes", "the Faction Champions multipliers and rules, by action", show_vetoes),
 )
 
 

@@ -95,3 +95,111 @@ under 4.2, first kill before 54 s, no 20 s stall; 25N kill time no worse.
 - `faction_champions.py` and its test.
 
 Outside ToC only for scope 4 and only if the FC stem can't gate it, listed in the report.
+
+## Verified facts
+
+- **Death Grip lands on a heroic champion.** Heroic templates (`difficulty_entry_2/3`, e.g. 35706,
+  35707) carry `CreatureImmunitiesId` -13: charm, effect 114 (attack me), aura 11 (taunt). The
+  player's 49576 is one dummy; `spell_dk_death_grip` exempts the 28 champion entries from its boss
+  check and casts 49560 (dummy, taunt aura, attack me). `DoSpellHitOnUnit` drops the two immune
+  effects, so the dummy fires and the champion jumps (57604) in front of the DK; no aura is left,
+  so no diminishing return either. The hit also interrupts the champion's cast (Kick's test).
+  Normal templates (-12) take the taunt aura: `DIMINISHING_TAUNT`, shared with every class taunt,
+  `OBEYS_TAUNT_DIMINISHING_RETURNS` on every champion, so the fifth inside the window misses whole.
+  No rune cost (SpellRuneCost 683 is empty), 35 s cooldown, 30 yd.
+- **Melee champions focus one victim together.** Every `RecalculateThreat` seeds each player at 10M
+  x distance x health x armour mods, the same for every melee champion, so all four jump to one
+  bot and stay until it dies or turns suppressed (`ThreatReference::ShouldBeSuppressed`: immune to
+  their melee school, confused, or a breakable stun). B's first 70 s: 1-7 yd from the victim at
+  each switch, the next one picked by health from 19-21 yd. 1.05M of melee damage in 60 s, ~0.31M
+  of it crowd AoE (Arcane Explosion 114k, Bladestorm 90k, Fan of Knives 54k, Hellfire 37k). The
+  kill target had 2+ other champions within 8 yd in 459/459 samples (B) and 456/456 (A).
+- **Hand of Protection makes its holder suppressed** for melee champions, so they move on at once.
+- **`blessing of protection on party` is dead**: the action names a spell the 3.3.5 client calls
+  Hand of Protection, and `SpellIdValue` matches the DBC string exactly.
+- **Hunter pet Growl is effect 63 (threat) only**, no taunt; pets keep earned threat while players
+  get 10M x mod, so it never matters. It costs the pet 15 focus per cast.
+- **Rebirth**: 2 s cast, 30 yd, category 26 (10 min), 68% base mana. Its target value lists the
+  master first, then healers, tanks, the rest. 25H: every Rebirth fired within 1 s of a melee death.
+- **Snare spells**: Hamstring 1715 and Wing Clip 2974 melee, Piercing Howl 12323 10 yd round the
+  warrior, Chains of Ice 45524 20 yd (a frost rune), Concussive Shot 5116 35 yd, Frost Shock 25 yd.
+  Frost Trap 13809 and Earthbind Totem 2484 sit at the caster's feet (no Trap Launcher in 3.3.5).
+
+## Task list
+
+1. **Grip duty** (Defence stem): `faction champions death grip` at `ACTION_RAID + 4.5`. While the
+   kill target has 2+ other champions within 8 yd and Death Grip can hit it, the lowest-guid DK bot
+   within 30 yd, in control, grip off cooldown, latches a stand 20 yd from the kill target, walks
+   there and grips. Stand: 16 bearings, on the floor (44 yd of `ARENA_CENTER`), nearest living
+   healer within 30 yd, every healer 15+ yd off, 10+ yd from every other champion; best is the one
+   farthest from the nearest other champion, then nearest the healers' centre. Released on the
+   cooldown, a new kill target, the pack gone, 8 s, or the kill target past 28 yd of the stand.
+   `fc.grip` keyed on
+   the DK. Rule `faction champions grip hold` blocks the generic movers for the holder.
+2. **Snare duty**: `faction champions snare` at `ACTION_RAID + 3.2`. A melee champion whose victim
+   is a healer or under 50%, not slowed, not CC'd, gets one non-healer snarer: nearest bot with a
+   ready Hamstring, Piercing Howl, Chains of Ice, Concussive Shot, Wing Clip or Frost Shock in range.
+3. **External duty**: `faction champions protect` at `ACTION_EMERGENCY + 4`. A member that is the
+   victim of 2+ physical champions (melee and hunter, not CC'd) and holds no external gets one:
+   Hand of Protection (not a tank, no Forbearance), Pain Suppression, Guardian Spirit, Hand of
+   Sacrifice, in that order, healers first then lowest health, one caster each, non-healers first.
+4. **Dodge toward the healers**: the avoid AoE ring search prefers the spot nearest the healers'
+   centre and accepts only spots within 30 yd of the nearest other living healer whose path crosses
+   no other hazard; without one, the plain nearest clear spot.
+5. **Battle res duty**: `faction champions battle res` at `ACTION_RAID + 4.2`, rule `faction
+   champions battle res guard` blocks the generic `rebirth` while live. Corpses with fewer than 2
+   champions within 8 yd, healers first; one druid bot each, not a tank, Rebirth ready, within
+   30 yd and in sight; skips a corpse another res is already casting on.
+6. **Heroic taunt guard**: rule `faction champions heroic taunt guard` blocks the `Taunt` family on
+   heroic while live; `faction champions pet taunt` turns a pet's taunt or threat autocast off on
+   heroic, which the non-combat `toggle pet spell` turns back on.
+7. **Reader**: `--pack` (per role champions within 8 yd, melee deaths in 60 s, melee to nearest
+   healer, first kill, longest stall, grips) and `--peel` (snares, externals, battle res, taunts);
+   synthetic-pull tests.
+8. **Docs**: `faction-champions.md` decisions, Spread row's guide claim, the x1.3 heroic health,
+   Known gaps.
+
+All eight done, one implementer, no split: every task lands in the same Defence helper file.
+
+## Decisions for review
+
+| Choice | Source | Alternative |
+|---|---|---|
+| Grip stand on a 20 yd ring, nearest living healer 15-30 yd off, every other champion 10+ yd off, the clearest bearing then nearest the healers' centre, rather than straight at the healers | brief ("toward the healers"); guide ("as far away from the rest of the Champions as possible"); traces: the kill target sat 26-34 yd off the healers' centre, so a straight pull lands the pack, which follows the raid's melee, on the healers; a stand passed in 97% of 25H pack samples, 88% on 25N | straight toward the healers' centre |
+| The raid's melee follow the kill target wherever it lands | traces: the melee champions jump together to one victim picked by health and distance (1-7 yd off at each switch, a hurt bot from 19-21 yd) and follow it, so no melee stand keeps them off | hold melee short of the landing |
+| Grip on every difficulty | brief names none; the grip interrupts the kill target's cast either way. Cost on 25N: the DK about 3 s out of melee and the melee about 2.5 s walking each 35 s | heroic only |
+| Concussive Shot and Wing Clip for Frost Trap, Frost Shock for Earthbind Totem | DBC: Frost Trap and Earthbind sit at the caster's feet (no Trap Launcher in 3.3.5); Earthbind would take Tremor's earth slot from `RaidAntiFear` | Earthbind when the champion is within 10 yd of a shaman |
+| Snare victims include humans; snarers are non-healer bots, nearest first | brief ("a healer or a bot under 50%"); a healer's GCD is a heal | bot victims only |
+| Hand of Protection on any non-tank, not only melee and healers | HoP leaves its holder suppressed for melee champions, and on a caster it costs nothing | brief's melee and healers |
+| External order HoP > Pain Suppression > Guardian Spirit > Hand of Sacrifice, one per member, casters non-healers first | HoP ends the hits, Pain Suppression takes 40% for 8 s, Guardian Spirit one death, Hand of Sacrifice 30% | Guardian Spirit before Pain Suppression |
+| Physical champions: the ten melee entries and the two hunters; pets and CC'd champions don't count | brief ("2 or more physical champions") | count the cat and felhunter |
+| Battle res as an FC duty plus a `Block` on the class `rebirth`, no change outside ToC; a corpse is safe with at most one champion within 8 yd; healers first, then guid; no bear tank shifts | brief scope 4; the class target value can't be steered from a multiplier, so a veto alone would block a dead master's res for good | change `PartyMemberToResurrect` outside ToC |
+| Heroic taunt guard zeroes the whole `Taunt` family, Mocking Blow and the generic Death Grip included | brief; every heroic taunt target is a champion, pet, totem or treant, none tauntable to any purpose | aim-checked multiplier |
+| Pet taunt off on heroic only | brief; pet Growl is threat only (effect 63) and useless on every difficulty, but normal kills stay untouched | every difficulty |
+| A dodge with no spot within 30 yd of a healer takes the nearest clear spot | escaping the Bladestorm beats heal range; the brief's "never more than 30 yd" would leave a bot already far out standing in it | no dodge |
+| Grip stand not floor-checked, bound to 44 yd of `ARENA_CENTER` | the arena floor is a gameobject navprobe can't read; the Beasts spots are known to reach 44 yd | `ValidateFloorPoint` from the DK |
+| Only `fc.grip` probed | the other duties are instant casts already in `cast`, like the dispel and purge duties | per-bot snare, external and res keys |
+| The grip walk reuses `NorthrendBeastsWalkAction` from the Beasts seam header, included unchanged | it already holds a latched walk in flight | a second copy in the FC stem |
+
+## Carried over
+
+- w6: hoist `NorthrendBeastsWalkAction` (`Action/ToCActions_NorthrendBeasts.h`) into Shared, now
+  that FC's grip derives from it.
+- Outside ToC: `CastBlessingOfProtectionProtectAction` (`PaladinActions.h:382`) names "blessing of
+  protection", which `SpellIdValue` never resolves on 3.3.5, so the class Hand of Protection never
+  casts anywhere.
+- Outside ToC: the class Rebirth target (`PartyMemberToResurrect`) takes the master first and any
+  corpse, however many enemies stand on it.
+
+## Known gaps
+
+In `faction-champions.md` Known gaps: the grip holds the pack off only until it follows the melee,
+humans hold no grip duty, chained grips, kiting, the externals' cooldowns against a new focus
+victim every 1-2 s, a melee under HoP deals no physical damage, `grip` keeps its last value after a
+kill, `--pack` stalls need 10+ bots on the kill target. The 25H targets (melee deaths in 60 s under
+9, champions within 8 yd of a melee under 4.2, first kill before 54 s, no 20 s stall, 25N kill time
+no worse) wait on the next pulls; `--pack` and `--peel` read each.
+
+## Blocked
+
+None.

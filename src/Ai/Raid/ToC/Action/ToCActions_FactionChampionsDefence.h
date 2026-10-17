@@ -6,6 +6,7 @@
 #include "MovementActions.h"
 #include "NamedObjectContext.h"
 #include "Position.h"
+#include "ToCActions_NorthrendBeasts.h"
 #include "ToCActions_Shared.h"
 
 // Walks out of a Bladestorm or Hellfire, the two champion AoEs a bot can see coming
@@ -65,6 +66,40 @@ public:
     bool isUseful() override;
 };
 
+// Walks the DK to its latched stand, then grips the kill target to it
+class FactionChampionsDeathGripAction : public NorthrendBeastsWalkAction
+{
+public:
+    FactionChampionsDeathGripAction(
+        PlayerbotAI* botAI) : NorthrendBeastsWalkAction(botAI, "faction champions death grip") {}
+    bool Execute(Event event) override;
+};
+
+class FactionChampionsSnareAction : public Action
+{
+public:
+    FactionChampionsSnareAction(PlayerbotAI* botAI) : Action(botAI, "faction champions snare") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class FactionChampionsProtectAction : public Action
+{
+public:
+    FactionChampionsProtectAction(PlayerbotAI* botAI) : Action(botAI, "faction champions protect") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class FactionChampionsBattleResAction : public Action
+{
+public:
+    FactionChampionsBattleResAction(PlayerbotAI* botAI) : Action(botAI, "faction champions battle res") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+    std::vector<NextAction> getPrerequisites() override;
+};
+
 class ToCFactionChampionsDefenceActionContext : public NamedObjectContext<Action>
 {
 public:
@@ -82,6 +117,14 @@ public:
             &ToCFactionChampionsDefenceActionContext::faction_champions_physical_switch;
         creators["faction champions purge kill target"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_purge_kill_target;
+        creators["faction champions death grip"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_death_grip;
+        creators["faction champions snare"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_snare;
+        creators["faction champions protect"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_protect;
+        creators["faction champions battle res"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_battle_res;
     }
 
 private:
@@ -107,6 +150,22 @@ private:
 
     static Action* faction_champions_purge_kill_target(PlayerbotAI* botAI) {
         return new FactionChampionsPurgeKillTargetAction(botAI);
+    }
+
+    static Action* faction_champions_death_grip(PlayerbotAI* botAI) {
+        return new FactionChampionsDeathGripAction(botAI);
+    }
+
+    static Action* faction_champions_snare(PlayerbotAI* botAI) {
+        return new FactionChampionsSnareAction(botAI);
+    }
+
+    static Action* faction_champions_protect(PlayerbotAI* botAI) {
+        return new FactionChampionsProtectAction(botAI);
+    }
+
+    static Action* faction_champions_battle_res(PlayerbotAI* botAI) {
+        return new FactionChampionsBattleResAction(botAI);
     }
 };
 

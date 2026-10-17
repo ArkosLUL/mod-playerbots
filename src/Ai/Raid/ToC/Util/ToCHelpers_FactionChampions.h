@@ -2,6 +2,7 @@
 #define PLAYERBOTS_RAID_TOCHELPERS_FACTIONCHAMPIONS_H
 
 #include <functional>
+#include <vector>
 
 #include "PlayerbotAI.h"
 #include "ToCData.h"
@@ -70,6 +71,13 @@ Unit* FactionChampionsSuspendedTarget(PlayerbotAI* botAI);
 // First alive, in-combat champion in kill order that accept takes, skipping the kill target, the
 // suspended one and every CC assignment. Null unless the encounter is live.
 Unit* FactionChampionsNextTarget(PlayerbotAI* botAI, std::function<bool(Unit*)> const& accept);
+
+// Every alive, in-combat champion in kill order, pets left out. Empty unless the encounter is live.
+std::vector<Unit*> FactionChampionsInCombat(PlayerbotAI* botAI);
+
+// On heroic while live, the taunt or threat spell this bot's pet autocasts, else 0. Champions are
+// immune to taunt there, and a pet's threat never reaches the 10M the script seeds each player at.
+uint32 FactionChampionsPetTauntAutocast(PlayerbotAI* botAI);
 
 // Every non-healer burns the kill target, tanks too: threat is assigned by the script, so nobody
 // holds a champion anyway.
