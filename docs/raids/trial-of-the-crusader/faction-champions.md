@@ -30,8 +30,23 @@ lineup.
   past 35 yd), health (2.0 above 40,000, rising to 6.0 near 0) and, for melee and pets, armour. So
   melee champions go for close, low-health, low-armour players and casters for low-health ones; no
   tank holds a champion, a taunt lasts until the next reset, and a threat redirect does nothing.
+  Pets keep earned threat, which never nears a player's 10M x modifier.
+- **Melee champions focus one victim together**: the same modifiers give every one the same pick,
+  and they stay on it until it dies or turns suppressed (`ThreatReference::ShouldBeSuppressed`:
+  immune to their melee school, confused, or under a breakable stun), then all take the next.
+  25H (2026-10-17): each switch 1-7 yd off, a hurt bot taken from 19-21 yd; melee took 1.05M in
+  the first 60 s, ~0.31M of it crowd AoE; the kill target had 2+ other champions within 8 yd in
+  every sample.
 - **Taunt**: normal templates obey it with diminishing returns; heroic ones (`CreatureImmunitiesId`
   -13) are immune to taunt and Attack Me. Both are immune to charm.
+- **Death Grip** 49576 lands on both: `spell_dk_death_grip` exempts the 28 entries from its boss
+  check, the taunt and Attack Me effects of its 49560 bounce off a heroic champion while the dummy
+  still makes it jump in front of the DK, leaving no aura and so no diminishing return. On normal
+  the taunt aura shares `DIMINISHING_TAUNT` with every class taunt, so the fifth inside the window
+  misses outright. The hit interrupts a cast. No rune cost, 35 s cooldown, 30 yd.
+- **25H health**: the template's 3.57M (non-cloth) and 2.86M (cloth) times `mod-dungeon-scale`'s 1.3
+  (`AC_DUNGEON_SCALE_STAT_MODIFIER_RAID_HEROIC_BOSS_HEALTH`, every champion being boss-flagged):
+  4.64M and 3.71M.
 - **Champion's Aegis** 68595, on every champion via `creature_template_addon`: −75% AoE damage, all
   schools (aura 229), flat rather than stacking. The guide's advice follows: single-target only.
 - **Diminishing returns as on players** (`CREATURE_FLAG_EXTRA_ALL_DIMINISH`): every CC category
@@ -61,6 +76,10 @@ lineup.
 - **Helpful casts go to the most-injured friendly**: heals, Cleanse, Dispel Magic, Power Word: Shield
   and Hand of Protection all take `SelectTarget_MostHPLostFriendlyMissingBuff` (most health lost, in
   combat, within 40 yd, self included). In practice they land on the raid's kill target.
+- **Snares**: none diminishes. In reach of a champion: Hamstring and Wing Clip (melee), Piercing
+  Howl (10 yd round the warrior), Chains of Ice (20 yd, a frost rune), Frost Shock (25 yd),
+  Concussive Shot (35 yd). Frost Trap and Earthbind Totem sit at the caster's feet (no Trap
+  Launcher in 3.3.5). Hand of Freedom makes a champion immune.
 
 ## What the offence plays against
 
@@ -210,24 +229,36 @@ them.
 | Purge | One purger purges the kill target while it holds Hand of Protection or a champion buff above but Thorns and Nature's Grasp (`faction champions purge kill target`, `ACTION_RAID`): first by guid of the non-healer shaman (Purge) and priest (Dispel Magic) bots with the spell off cooldown and affordable, and, while a kill target exists, within 30 yd of it and not CC'd or silenced. Class Purge and Spellsteal are vetoed on champions (`faction champions purge guard multiplier`); Tranquilizing Shot and Devour Magic stay | Guide: "a Shaman or Priest … spamming Purge or Dispel Magic on your kill target"; healers heal. Class purges fire on any dispellable buff on the bot's target, so Thorns alone kept every mage on 20%-of-base-mana Spellsteals. With those vetoed, a purger without a shot must hand the duty on; the first with one keeps it |
 | Mass Dispel | A priest bot with it off cooldown, non-healers first, the first in range of the point (above) and in LOS, casts it on Hand of Protection or Divine Shield on the kill target, else Divine Shield on the suspended champion, 3 s or more left (`faction champions mass dispel`, `ACTION_RAID + 5`). Never on AoE fears or champion lust, the guide's other two uses | Guide: Divine Shield "can be Mass Dispelled". Ice Block lasts 5 s against a 1.5 s cast. Nothing else casts it here. Fears, 25N: Psychic Scream held 8 raiders 8.5 s in all, 4 of whom drew a dispel, and the costly Intimidating Shout (22 raiders, 87 s) can't be dispelled. Lust comes once a pull and the purge duty already takes it off the kill target; the hostile half draws one random magic buff per champion within 10 yd, where Thorns, HoTs and shields crowd the draw, and the Unstable Affliction guard blocks it in the ball |
 | Hand of Protection | While the kill target is immune to physical and not to magic, physical attackers (non-healer melee, hunters) attack `fc.physical` instead (`faction champions physical switch`, `ACTION_RAID + 2.5f`, focus vetoed for them): kept while still eligible, else the first champion in kill order that isn't the kill target, suspended, CC-assigned or physically immune. None left: they stay | Casters keep the kill target, so `fc.kill` stays put |
-| Champion AoE | Dodge Bladestorm and Hellfire only, to 12 and 13 yd clear (`faction champions avoid aoe`, `ACTION_EMERGENCY + 6`, `MOVEMENT_FORCED`). One kicker ignores a Hellfire under 2 s old: first by guid of the bots on the warlock, in melee range, with Kick, Pummel, Shield Bash or Mind Freeze off cooldown. Melee hold instead of reaching a target that is a source or within radius + 1 + the bot's melee range of one (`faction champions aoe guard multiplier`, on `reach melee` and `set behind target`) | The only two a bot can see, auras on the caster. Bladestorm slows him to 5.6 yd/s. Guide: Hellfire is "quickly interrupted", and class interrupts already fire on a channel of the bot's target. A ranged interrupt reaches from the clearance; power and the GCD stay out of the kicker's test, or it would flip every swing. A reach back in fights the dodge, and the bot stands up to its melee range on the target's near side |
-| Spread | None against the crowd AoE | 97% of it hits melee and tanks (above), who stack on a melee kill target anyway; on 25N ranged and healers lost one opening Shout and 14k of Bladestorm to it. Denying the 3+ check takes about 14 yd between every ranged and healer pair (11 yd centre to centre plus the caster's offset from his victim), which 14 bots can't hold within spell range of the ball. Guide: the fastest kills are the death ball |
+| Champion AoE | Dodge Bladestorm and Hellfire only, to 12 and 13 yd clear (`faction champions avoid aoe`, `ACTION_EMERGENCY + 6`, `MOVEMENT_FORCED`), to the first ring out with a clear spot within 30 yd of another living healer whose walk crosses no other source, the one nearest the healers' centre; none, the nearest clear spot. One kicker ignores a Hellfire under 2 s old: first by guid of the bots on the warlock, in melee range, with Kick, Pummel, Shield Bash or Mind Freeze off cooldown. Melee hold instead of reaching a target that is a source or within radius + 1 + the bot's melee range of one (`faction champions aoe guard multiplier`, on `reach melee` and `set behind target`) | The only two a bot can see, auras on the caster. Bladestorm slows him to 5.6 yd/s. Guide: Hellfire is "quickly interrupted", and class interrupts already fire on a channel of the bot's target. A ranged interrupt reaches from the clearance; power and the GCD stay out of the kicker's test, or it would flip every swing. A reach back in fights the dodge, and the bot stands up to its melee range on the target's near side. 25H: 4 of the first 7 deaths of a pull came mid-dodge 40-47 yd from the nearest healer, and the melee champions follow anyway, so the walk goes toward heals; standing in a Bladestorm costs more than leaving heal range |
+| Death Grip | While the kill target has 2+ other champions within 8 yd and Death Grip can hit it, one DK bot (lowest guid within 30 yd, in control, grip off cooldown) latches a stand 20 yd from it, walks there and grips it (`faction champions death grip`, `ACTION_RAID + 4.5`, latched in `fc.grip`). Stand: 16 bearings, within 44 yd of `ARENA_CENTER`, the nearest living healer 15-30 yd off, every other champion 10+ yd off; the farthest from the nearest other champion, within 2 yd of that the nearest the healers' centre. Released on the grip's cooldown, a new kill target, the pack gone, the kill target past 28 yd of the stand, or 8 s. The rule `faction champions grip hold` zeroes reach, set behind, flank, formation, follow, flee and the spell movers for the holder. Melee follow the kill target wherever it lands. All difficulties | Guide: grip the kill target "as far away from the rest of the Champions as possible". The grip also interrupts its cast. Healer floor: the pack follows the raid's melee onto the kill target, and Arcane Explosion and Fan of Knives reach 10 yd. The melee champions pick by health and distance together and follow their victim, so no melee stand keeps them off; holding melee back only drops their damage. 25H: a stand passed in 97% of pack samples (88% on 25N). The arena floor is a gameobject navprobe can't see; the Beasts spots are known to reach 44 yd |
+| Snares | A melee champion (DK, Warrior, Rogue, Enhancement, Retribution) whose victim is a group member that is a healer or under 50%, not slowed, CC'd or immune to snares, gets one snarer (`faction champions snare`, `ACTION_RAID + 3.2`): healer victims first, then lowest victim health; the nearest non-healer bot, not on grip duty, not casting, with a ready snare in range (Hamstring or Piercing Howl, Chains of Ice, Wing Clip or Concussive Shot, Frost Shock) and LOS | Guide: keep melee champions "slowed or CC'd" and kite. A slowed champion takes longer to its next victim. Frost Trap and Earthbind Totem need it at the caster's feet (above), and Earthbind would take Tremor's earth slot from the anti-fear |
+| External defensives | A group member that is the victim of 2+ physical champions (melee and hunter, not CC'd) and holds none of the four or a physical immunity gets one caster (`faction champions protect`, `ACTION_EMERGENCY + 4`): healers first, then lowest health; casters non-healers first, best spell first: Hand of Protection (not a tank, no Forbearance, 30 yd), Pain Suppression, Guardian Spirit (40 yd), Hand of Sacrifice (30 yd, not self, caster 50%+); one member per caster, in LOS | The melee champions focus together (above) and kill a bot in 1-2 s on 25H. Hand of Protection leaves its holder suppressed, so they move on at once; on a caster it costs nothing. The class `blessing of protection on party` names a spell the 3.3.5 client calls Hand of Protection and never casts, and `party member to protect` waits for 30% health |
+| Battle res | The rule `faction champions battle res guard` zeroes the class `rebirth` while live; `faction champions battle res` (`ACTION_RAID + 4.2`) takes corpses (Corpse state, no res pending, no Soulstone) with at most one champion within 8 yd, healers first; each gets the nearest non-tank druid bot, not casting, Rebirth ready and affordable, within 30 yd and in LOS, skipping a corpse a res is already being cast on. Caster form first | The class target lists the master first, then healers, and takes a corpse inside the pack. 25H: every Rebirth fired within 1 s of a melee death, mostly 4-8 champions round the corpse, and each died again in 3-25 s |
+| Heroic taunts | The rule `faction champions heroic taunt guard` zeroes the `Taunt` family on heroic; `faction champions pet taunt` turns a pet's taunt or threat autocast off (`faction champions pet taunt off`), which the non-combat `toggle pet spell` turns back on | Immune to taunt (above). The family holds the generic Death Grip, which would spend the duty's cooldown. Hunter pet Growl is threat only, which a pet never turns into a pick, and costs 15 focus a cast. 25H: 13 Righteous Defense and 44-46 pet Growls a pull |
+| Spread | None against the crowd AoE | 97% of it hits melee and tanks (above), who stack on a melee kill target anyway; on 25N ranged and healers lost one opening Shout and 14k of Bladestorm to it. Denying the 3+ check takes about 14 yd between every ranged and healer pair (11 yd centre to centre plus the caster's offset from his victim), which 14 bots can't hold within spell range of the ball. This goes against the guide, which says stay spread out, and whose death ball grips the kill target off the pack while ranged stay back rather than stacking melee |
 | Totems | Each champion totem (alive, `IsTotem`, owned by a champion, attackable) gets one killer, latched in `fc.totem`: the nearest eligible group bot holding no totem (`GetExactDist2d`, ties by guid), eligible meaning alive, on the map, in control, not a healer and within 30 yd. The hold ends once the totem stops counting or its bot turns ineligible. `faction champions kill totem` (`ACTION_RAID + 2.7f`) attacks it directly; the rule `faction champions totem guard multiplier` blocks focus and the physical switch for the holder | Guide: "a melee player dedicated to killing his totems". Grounding eats a Cyclone or Counterspell, Windfury hastes the champions' melee, Tremor undoes fears (above). The raid's own totems share the entries. The settled duty returns false, so without the rule focus drags the bot back to the kill target. No trace yet has an Enhancement Shaman |
 | Treants | No node; `--adds` measures them | No trace has a Balance Druid yet, the guide doesn't mention them, and they're three 30 s adds every 3 min |
 
 ## Known gaps
 
-- The guide's openers and positioning are beyond the bots: Death Grip pulls of the kill target, an
-  AoE fear to burn trinkets, the tank-led "death ball", and kiting melee champions.
+- The guide's openers and positioning are beyond the bots: chained grips, an AoE fear to burn
+  trinkets, the tank-led "death ball", and kiting melee champions (snares land, but no bot walks
+  off but the generic 5 yd flee).
+- The grip separates the kill target only until the pack, following the raid's melee onto it,
+  arrives. A human DK holds no grip duty, and without a DK bot nothing grips.
 - With no eligible champion left, physical attackers keep swinging at the Hand of Protection target.
 - Stage 6 closes the gate at the kill, before any cleanup runs: no latch is cleared (no `reset`
-  switch, no `kill` or `physical` `0`), and `ccaura` and `totem` keep their last values.
+  switch, no `kill` or `physical` `0`), and `ccaura`, `totem` and `grip` keep their last values.
 - No crowd-AoE spread: the melee stack takes the instant crowd AoE (Fan of Knives, Divine Storm,
   Arcane Explosion, Frost Nova, Psychic Scream, Intimidating Shout), and ranged and healers stand
   stacked, so an opening Shout or Bladestorm on them catches all of them.
 - The mage champion's Arcane Explosion, 17% of champion damage on 25N, sits under a C-tier kill
   order.
-- Melee deaths from the script's threat picks (all 5 on 25N) get no answer.
+- The externals run out against the focus: three paladins' Hands every 5 min and a Pain
+  Suppression every 3 min, against a new victim every 1-2 s once one dies. A melee under Hand of
+  Protection deals no physical damage for its 10 s.
+- `--pack` reads stalls only with 10+ bots on the kill target; on 25H the long flat spells came as
+  the attackers fell below that.
 - Treants are unanswered.
 - With no balance druid bot in the raid there is no CC; on heroic the trinket breaks the first
   Cyclone on each champion every 2 min.
@@ -253,10 +284,11 @@ The Faction Champions rows, under `--notes fc.`:
 | `physical` | The physical switch target, `0` when none. Per instance, restated each pull |
 | `ccaura` | Keyed on the champion: the spell of a player's fear, stun or confuse aura on it (Cyclone, Polymorph), `0` when none. The only record of CC on a champion; roots aren't in it |
 | `totem` | A totem killer's totem, keyed on the bot, `0` on release |
+| `grip` | The grip duty's kill target, keyed on the DK, `0` on release |
 
 Bladestorm and Hellfire write `haz` circles (aura id, source, radius, 1 s ttl), one per source a
-second at most. The duties (counterspell, dispel, purge, Mass Dispel) have no probe: their nodes are
-in `act`, their casts in `cast`. Why a CC bot waited reads off the CC guard's `veto` rows.
+second at most. The duties (counterspell, dispel, purge, Mass Dispel, snare, externals, battle res)
+have no probe: their nodes are in `act`, their casts in `cast`. Why a CC bot waited reads off the CC guard's `veto` rows.
 
 `tools/botobs/bosses/faction_champions.py` reads the rest:
 
@@ -294,7 +326,16 @@ in `act`, their casts in `cast`. Why a CC bot waited reads off the CC guard's `v
 - `--adds`: champion totem and Force of Nature casts; each champion totem and treant with its first
   and last snapshot, and treant damage to the raid with its victims; each `fc.totem` hold, its length
   and whether the totem left the snapshots inside it; the duty's `OK` rows;
-- `--vetoes`: the ten multipliers' vetoes by action.
+- `--pack`: per role, mean champions within 8 yd (centre to centre); melee deaths in the first
+  60 s; median melee to nearest healer; time to the first kill; the longest span with 10+ bots on
+  the kill target and its health moving under 3 points, a stall at 20 s; each raid Death Grip on a
+  champion with the other champions within 8 yd before and a second after and how far it moved;
+  `fc.grip` holds and how many ended in the bot's grip;
+- `--peel`: snares on champions by spell and class, split by whether the champion's victim was a
+  healer or under 50%; each external on the raid and whether its target died within 10 s; each
+  Rebirth with the champions within 8 yd of where its target died; taunts on champions by spell,
+  bot or human;
+- `--vetoes`: the multipliers' and rules' vetoes by action.
 
 Still invisible: creature deaths, heals and auras but `fc.ccaura`'s. A champion died when it left
 the snapshots mid-fight, or was the kill target when the trace closed on a kill; heals landed and

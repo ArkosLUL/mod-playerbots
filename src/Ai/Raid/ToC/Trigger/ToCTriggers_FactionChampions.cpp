@@ -32,6 +32,8 @@ bool FactionChampionsKillTargetHealingTrigger::IsActive() { return FactionChampi
 
 bool ToCRestoreRtiCcTrigger::IsActive() { return FactionChampionsRtiCcRestorePending(botAI); }
 
+bool FactionChampionsPetTauntTrigger::IsActive() { return FactionChampionsPetTauntAutocast(botAI) != 0; }
+
 void AddToCFactionChampionsTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(new TriggerNode("faction champions clear cc icons", {
@@ -51,4 +53,7 @@ void AddToCFactionChampionsTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("toc restore rti cc", {
         NextAction("toc restore rti cc", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("faction champions pet taunt", {
+        NextAction("faction champions pet taunt off", ACTION_RAID + 6) }));
 }

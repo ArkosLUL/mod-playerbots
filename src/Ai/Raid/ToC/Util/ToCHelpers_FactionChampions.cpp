@@ -12,6 +12,7 @@
 #include "EncounterHelpers.h"
 #include "Group.h"
 #include "Map.h"
+#include "Pet.h"
 #include "Player.h"
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
@@ -717,6 +718,45 @@ Unit* FactionChampionsNextTarget(PlayerbotAI* botAI, std::function<bool(Unit*)> 
     }
 
     return nullptr;
+}
+
+std::vector<Unit*> FactionChampionsInCombat(PlayerbotAI* botAI)
+{
+    std::vector<Unit*> out;
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return out;
+
+    FactionChampionsState* state = Refresh(botAI);
+    if (!state || !state->live)
+        return out;
+
+    for (Champion const& champion : state->champions)
+        if (champion.inCombat)
+            if (Creature* creature = AliveCreature(botAI->GetBot(), champion.guid))
+                out.push_back(creature);
+
+    return out;
+}
+
+uint32 FactionChampionsPetTauntAutocast(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Pet* pet = bot->GetPet();
+    Map* map = bot->FindMap();
+    if (!pet || !pet->IsAlive() || !map || !map->IsHeroic() ||
+        !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return 0;
+
+    for (uint8 pos = 0; pos < pet->GetPetAutoSpellSize(); ++pos)
+    {
+        uint32 const spellId = pet->GetPetAutoSpellOnPos(pos);
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+        if (info && (info->HasAura(SPELL_AURA_MOD_TAUNT) || info->HasEffect(SPELL_EFFECT_ATTACK_ME) ||
+                     info->HasEffect(SPELL_EFFECT_THREAT)))
+            return spellId;
+    }
+
+    return 0;
 }
 
 bool FactionChampionsFocusBot(PlayerbotAI* botAI) { return botAI && !PlayerbotAI::IsHeal(botAI->GetBot()); }

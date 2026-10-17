@@ -45,6 +45,13 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsPetTauntTrigger : public Trigger
+{
+public:
+    FactionChampionsPetTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions pet taunt") {}
+    bool IsActive() override;
+};
+
 class ToCRestoreRtiCcTrigger : public Trigger
 {
 public:
@@ -69,6 +76,8 @@ public:
             &ToCFactionChampionsTriggerContext::faction_champions_kill_target_healing;
         creators["toc restore rti cc"] =
             &ToCFactionChampionsTriggerContext::toc_restore_rti_cc;
+        creators["faction champions pet taunt"] =
+            &ToCFactionChampionsTriggerContext::faction_champions_pet_taunt;
     }
 
 private:
@@ -94,6 +103,10 @@ private:
 
     static Trigger* toc_restore_rti_cc(PlayerbotAI* botAI) {
         return new ToCRestoreRtiCcTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_pet_taunt(PlayerbotAI* botAI) {
+        return new FactionChampionsPetTauntTrigger(botAI);
     }
 };
 

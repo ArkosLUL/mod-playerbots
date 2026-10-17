@@ -13,8 +13,10 @@ using namespace EncounterHelpers;
 
 namespace
 {
-constexpr float AOE_SEARCH_RADIUS = 30.0f;
 constexpr float AOE_ARRIVE = 1.5f;
+constexpr float GRIP_ARRIVE = 2.0f;
+// a walk already headed here, so a reissue would only restart its spline
+constexpr float GRIP_SAME_STAND = 0.5f;
 // how long a latched spot is trusted while the walk to it is in flight
 constexpr uint32 AOE_LATCH_MS = 3000;
 // standing still this long past the issue means something stopped the walk short
@@ -112,12 +114,94 @@ bool FactionChampionsAvoidAoeAction::Execute(Event /*event*/)
             AI_VALUE(LastMovement&, "last movement").clear();
     }
 
-    Position const spot = FindNearestPositionClearOfHazards(bot, clearances, AOE_SEARCH_RADIUS);
+    Position const spot = FactionChampionsAoeDodgeSpot(botAI);
     if (IsNoSpot(spot))
         return false;
 
     return IssueLeg(spot, now);
 }
+
+bool FactionChampionsDeathGripAction::Execute(Event /*event*/)
+{
+    Position stand;
+    Unit* target = FactionChampionsGripTarget(botAI, stand);
+    if (!target)
+    {
+        DropWalk();
+        return false;
+    }
+
+    if (bot->GetExactDist2d(&stand) > GRIP_ARRIVE)
+    {
+        Position const* walking = WalkInFlight();
+        if (walking && walking->GetExactDist2d(&stand) < GRIP_SAME_STAND)
+            return true;
+
+        return WalkTo(stand);
+    }
+
+    DropWalk();
+    return botAI->CastSpell("death grip", target);
+}
+
+bool FactionChampionsSnareAction::Execute(Event /*event*/)
+{
+    uint32 spellId = 0;
+    Unit* champion = FactionChampionsSnareTarget(botAI, spellId);
+    return champion && botAI->CastSpell(spellId, champion);
+}
+
+// A queued basket can pop ticks after its trigger fired, once the champion is slowed or off its victim
+bool FactionChampionsSnareAction::isUseful()
+{
+    uint32 spellId = 0;
+    return FactionChampionsSnareTarget(botAI, spellId) != nullptr;
+}
+
+bool FactionChampionsProtectAction::Execute(Event /*event*/)
+{
+    uint32 spellId = 0;
+    Unit* member = FactionChampionsProtectTarget(botAI, spellId);
+    return member && botAI->CastSpell(spellId, member);
+}
+
+// A queued basket can pop ticks after its trigger fired, once the champions moved on or someone covered it
+bool FactionChampionsProtectAction::isUseful()
+{
+    uint32 spellId = 0;
+    return FactionChampionsProtectTarget(botAI, spellId) != nullptr;
+}
+
+bool FactionChampionsBattleResAction::Execute(Event /*event*/)
+{
+    uint32 spellId = 0;
+    Unit* corpse = FactionChampionsBattleResTarget(botAI, spellId);
+    if (!corpse)
+        return false;
+
+    // CastSpell refuses a cast-time spell while the bot walks. A FORCED leg is a dodge, let it finish
+    if (bot->isMoving())
+    {
+        LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+        if (ForcedLegHolds(last))
+            return false;
+
+        bot->StopMoving();
+        last.clear();
+    }
+
+    return botAI->CastSpell(spellId, corpse);
+}
+
+// A queued basket can pop ticks after its trigger fired, once someone else raised the corpse
+bool FactionChampionsBattleResAction::isUseful()
+{
+    uint32 spellId = 0;
+    return FactionChampionsBattleResTarget(botAI, spellId) != nullptr;
+}
+
+// Rebirth won't go out in cat or bear form
+std::vector<NextAction> FactionChampionsBattleResAction::getPrerequisites() { return {NextAction("caster form")}; }
 
 bool FactionChampionsMassDispelAction::Execute(Event /*event*/)
 {

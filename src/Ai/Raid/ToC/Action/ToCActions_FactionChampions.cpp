@@ -1,6 +1,8 @@
 #include "ToCActions_FactionChampions.h"
+#include "Pet.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "Playerbots.h"
+#include "SpellMgr.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 
@@ -38,5 +40,18 @@ bool FactionChampionsCounterspellKillTargetAction::isUseful() { return FactionCh
 bool ToCRestoreRtiCcAction::Execute(Event /*event*/)
 {
     FactionChampionsRestoreRtiCc(botAI);
+    return false;
+}
+
+// The non-combat toggle pet spell turns it back on after the fight. False, so the bot still gets its own
+// action this tick.
+bool FactionChampionsPetTauntOffAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = FactionChampionsPetTauntAutocast(botAI);
+    Pet* pet = bot->GetPet();
+    if (spellId && pet)
+        if (SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId))
+            pet->ToggleAutocast(info, false);
+
     return false;
 }

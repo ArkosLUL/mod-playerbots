@@ -45,6 +45,13 @@ public:
     bool isUseful() override;
 };
 
+class FactionChampionsPetTauntOffAction : public Action
+{
+public:
+    FactionChampionsPetTauntOffAction(PlayerbotAI* botAI) : Action(botAI, "faction champions pet taunt off") {}
+    bool Execute(Event event) override;
+};
+
 class ToCRestoreRtiCcAction : public Action
 {
 public:
@@ -69,6 +76,8 @@ public:
             &ToCFactionChampionsActionContext::faction_champions_counterspell_kill_target;
         creators["toc restore rti cc"] =
             &ToCFactionChampionsActionContext::toc_restore_rti_cc;
+        creators["faction champions pet taunt off"] =
+            &ToCFactionChampionsActionContext::faction_champions_pet_taunt_off;
     }
 
 private:
@@ -94,6 +103,10 @@ private:
 
     static Action* toc_restore_rti_cc(PlayerbotAI* botAI) {
         return new ToCRestoreRtiCcAction(botAI);
+    }
+
+    static Action* faction_champions_pet_taunt_off(PlayerbotAI* botAI) {
+        return new FactionChampionsPetTauntOffAction(botAI);
     }
 };
 
