@@ -97,24 +97,24 @@ enum FlameLeviathanTowerFlags
 };
 
 // Warning band past a hazard's own reach (FlameLeviathanHazardReach); 8 puts a chopper's Inferno scan at ~18 yd.
-constexpr float ULDUAR_FL_TOWER_HAZARD_MARGIN = 8.0f;
+inline constexpr float ULDUAR_FL_TOWER_HAZARD_MARGIN = 8.0f;
 
 // How far the clear step looks for other hazards. Wider than the band on purpose: it has to see the next
 // patches of an Inferno trail, or it steps out of one and into the next.
-constexpr float ULDUAR_FL_TOWER_HAZARD_CLEAR_SCAN = 45.0f;
+inline constexpr float ULDUAR_FL_TOWER_HAZARD_CLEAR_SCAN = 45.0f;
 
 // Fury and Hammer are creature casts at a destination, so their radius is flat from the hull's centre.
 // Inferno is a dynamic object aura, which adds both object sizes: a siege engine burns out to 17.1 yd.
-constexpr float ULDUAR_FL_FURY_RADIUS = 10.0f;
-constexpr float ULDUAR_FL_HAMMER_RADIUS = 7.0f;
-constexpr float ULDUAR_FL_INFERNO_RADIUS = 9.0f;
+inline constexpr float ULDUAR_FL_FURY_RADIUS = 10.0f;
+inline constexpr float ULDUAR_FL_HAMMER_RADIUS = 7.0f;
+inline constexpr float ULDUAR_FL_INFERNO_RADIUS = 9.0f;
 
 // A Fury reticle only hurts once stopped: the 5 s fuse in npc_hodirs_fury, then ~1.1 s to 62297. Before
 // that it chases at 12 yd/s, faster than any hull, and dodging only drags it along.
-constexpr uint32 ULDUAR_FL_FURY_ARMED_MS = 6500;
+inline constexpr uint32 ULDUAR_FL_FURY_ARMED_MS = 6500;
 // The fuse plus the 5 s it stays stunned after the strike. A reticle still stunned past this has
 // retargeted and stopped again between two scans.
-constexpr uint32 ULDUAR_FL_FURY_STUN_MS = 10000;
+inline constexpr uint32 ULDUAR_FL_FURY_STUN_MS = 10000;
 
 // The four NPC_FREYA_WARD_TARGET spawns from SummonTowerHelpers. The kite ring and every in-arena test
 // derive from these, so nothing else hardcodes arena geometry.
@@ -122,155 +122,170 @@ extern std::vector<Position> const ULDUAR_FL_ARENA_CORNERS;
 
 // Stand distances are added to his combat reach: he's huge, and a centre distance puts melee inside him.
 // Ram reaches 15 yd plus his 15 yd reach, so 8 is well inside it.
-constexpr float ULDUAR_FL_SIEGE_STAND_DIST = 8.0f;
+inline constexpr float ULDUAR_FL_SIEGE_STAND_DIST = 8.0f;
 
 // Sonic Horn reaches 35 yd plus his 15, so 20 keeps every shot and keeps the chopper out of Battering
 // Ram's sphere except on the tar lead.
-constexpr float ULDUAR_FL_CHOPPER_STAND_DIST = 20.0f;
+inline constexpr float ULDUAR_FL_CHOPPER_STAND_DIST = 20.0f;
 // Outward from his reach like the others. HoldStation clamps it: reach 15 + 50 + the arrival deadband
 // lands past the barrel's 70 yd, and a barrel that won't cast drops the stack.
-constexpr float ULDUAR_FL_DEMOLISHER_BAND = 50.0f;
+inline constexpr float ULDUAR_FL_DEMOLISHER_BAND = 50.0f;
 
 // Demolisher station lead in seconds of his travel, capped so the band stays ~44 yd from his centre,
 // clear of Battering Ram's 25. Demolishers only: a chopper at 20 would be led into the sphere.
-constexpr float ULDUAR_FL_STATION_LEAD_S = 1.5f;
-constexpr float ULDUAR_FL_STATION_LEAD_MAX = 10.0f;
+inline constexpr float ULDUAR_FL_STATION_LEAD_S = 1.5f;
+inline constexpr float ULDUAR_FL_STATION_LEAD_MAX = 10.0f;
 
 // The demolisher fan swings toward the arena centre, so a hull falling behind cuts inside his circle.
 // Inside this radius the bearing to the centre is noise.
-constexpr float ULDUAR_FL_CENTRE_TURN_DEADZONE = 15.0f;
-constexpr float ULDUAR_FL_TAR_LEAD_DIST = 30.0f;      // how far ahead of him the lead chopper parks
+inline constexpr float ULDUAR_FL_CENTRE_TURN_DEADZONE = 15.0f;
+inline constexpr float ULDUAR_FL_TAR_LEAD_DIST = 30.0f;      // how far ahead of him the lead chopper parks
 
 // Re-facing costs a spline, so only correct a facing that has really drifted. Roughly 6 degrees.
-constexpr float ULDUAR_FL_FACING_TOLERANCE = 0.1f;
+inline constexpr float ULDUAR_FL_FACING_TOLERANCE = 0.1f;
 
 // A loose arrival deadband on purpose: it is what stops a group of vehicles piling onto one
 // coordinate, and a tight one makes a bot slide in place instead of ever holding still.
-constexpr float ULDUAR_FL_ARRIVE_TOLERANCE = 8.0f;
+inline constexpr float ULDUAR_FL_ARRIVE_TOLERANCE = 8.0f;
 
 // Only re-issue a MoveTo once the goal has drifted this far. Re-stamping the same destination
 // restarts the spline every tick and the vehicle crawls instead of arriving.
-constexpr float ULDUAR_FL_REPOSITION_EPSILON = 6.0f;
+inline constexpr float ULDUAR_FL_REPOSITION_EPSILON = 6.0f;
 
 // Energy costs the strategy gates on. Only the ones used as thresholds are listed; the rest of the
 // spellbook is free. Siege engines, turrets and choppers regenerate 20 per 2s against a cap of 100.
-constexpr uint32 ULDUAR_FL_ELECTROSHOCK_COST = 20;
-constexpr uint32 ULDUAR_FL_RAM_COST = 40;
-constexpr uint32 ULDUAR_FL_STEAM_RUSH_COST = 40;
-constexpr uint32 ULDUAR_FL_SONIC_HORN_COST = 20;
-constexpr uint32 ULDUAR_FL_FIRE_CANNON_COST = 20;
-constexpr uint32 ULDUAR_FL_SPEED_BOOST_COST = 50;
-constexpr uint32 ULDUAR_FL_INCREASED_SPEED_COST = 25;
-constexpr uint32 ULDUAR_FL_PYRITE_BARREL_COST = 5;
+inline constexpr uint32 ULDUAR_FL_ELECTROSHOCK_COST = 20;
+inline constexpr uint32 ULDUAR_FL_RAM_COST = 40;
+inline constexpr uint32 ULDUAR_FL_STEAM_RUSH_COST = 40;
+inline constexpr uint32 ULDUAR_FL_SONIC_HORN_COST = 20;
+inline constexpr uint32 ULDUAR_FL_FIRE_CANNON_COST = 20;
+inline constexpr uint32 ULDUAR_FL_SPEED_BOOST_COST = 50;
+inline constexpr uint32 ULDUAR_FL_INCREASED_SPEED_COST = 25;
+inline constexpr uint32 ULDUAR_FL_PYRITE_BARREL_COST = 5;
 
 // Burst to 6 stacks, or to 10 when energy also covers the reserve (four refreshes). A burst barrel past
 // 6 gains little, while a refresh at 10 stacks buys ~90 stack-seconds.
-constexpr uint32 ULDUAR_FL_PYRITE_MAX_STACKS = 10;
-constexpr uint32 ULDUAR_FL_PYRITE_BURST_STACKS = 6;
-constexpr uint32 ULDUAR_FL_PYRITE_REFRESH_RESERVE = 20;
+inline constexpr uint32 ULDUAR_FL_PYRITE_MAX_STACKS = 10;
+inline constexpr uint32 ULDUAR_FL_PYRITE_BURST_STACKS = 6;
+inline constexpr uint32 ULDUAR_FL_PYRITE_REFRESH_RESERVE = 20;
 
 // Refresh lead on top of the measured flight: ~1.1 s between decisions plus a boulder's 1 s GCD. Late
 // loses the whole stack, early only a second of it.
-constexpr uint32 ULDUAR_FL_PYRITE_REFRESH_SLACK_MS = 2000;
+inline constexpr uint32 ULDUAR_FL_PYRITE_REFRESH_SLACK_MS = 2000;
 
 // A barrel lobs for 1-3 s. The first refresh leads by this until a landing has been timed, and a
 // barrel not seen landing within the timeout was lost.
-constexpr uint32 ULDUAR_FL_PYRITE_FLIGHT_MS = 3000;
-constexpr uint32 ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS = 5000;
+inline constexpr uint32 ULDUAR_FL_PYRITE_FLIGHT_MS = 3000;
+inline constexpr uint32 ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS = 5000;
+inline constexpr uint32 ULDUAR_FL_PYRITE_FLIGHT_MIN_MS = 500;
+// The aura's duration jumping back up by more than this means a barrel landed.
+inline constexpr int32 ULDUAR_FL_PYRITE_LANDING_JUMP_MS = 250;
 
 // Steam Rush charges this far along the hull's facing (62346, EffectRadiusIndex 21).
-constexpr float ULDUAR_FL_STEAM_RUSH_DIST = 35.0f;
+inline constexpr float ULDUAR_FL_STEAM_RUSH_DIST = 35.0f;
+// Rush only with the goal inside this arc ahead: the charge runs along the hull's facing.
+inline constexpr float ULDUAR_FL_STEAM_RUSH_AIM_ARC = float(M_PI) / 4.0f;
+inline constexpr uint32 ULDUAR_FL_STEAM_RUSH_COOLDOWN_MS = 15000;
 
 // Steam Rush starts 2 s of GCD category 133, which Electroshock shares (62346 StartRecoveryTime), so
 // the vent reserve dashes 2-5 s ahead of a channel when it can. EVENT_VENT repeats every 20 s.
-constexpr uint32 ULDUAR_FL_STEAM_RUSH_GCD_MS = 2000;
-constexpr uint32 ULDUAR_FL_VENT_RUSH_LEAD_MS = 5000;
-constexpr uint32 ULDUAR_FL_VENT_INTERVAL_MS = 20000;
+inline constexpr uint32 ULDUAR_FL_STEAM_RUSH_GCD_MS = 2000;
+inline constexpr uint32 ULDUAR_FL_VENT_RUSH_LEAD_MS = 5000;
+inline constexpr uint32 ULDUAR_FL_VENT_INTERVAL_MS = 20000;
 
 // Between channels the vent reserve waits outside Battering Ram's reach, a few yards from Electroshock's,
 // and leaves that hold this long before the next one.
-constexpr uint32 ULDUAR_FL_VENT_APPROACH_LEAD_MS = 2000;
+inline constexpr uint32 ULDUAR_FL_VENT_APPROACH_LEAD_MS = 2000;
 
 // Cone reach is the effect radius for Electroshock and Sonic Horn (RangeEntry 1 skips CheckRange). Ram's
 // RangeIndex 11 is a real 0-15 yd entry, so CheckRange caps it at 15, not its 18 yd effect radius.
-constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS = 25.0f;
-constexpr float ULDUAR_FL_RAM_CONE_RADIUS = 15.0f;
-constexpr float ULDUAR_FL_SONIC_HORN_CONE_RADIUS = 35.0f;
+inline constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS = 25.0f;
+inline constexpr float ULDUAR_FL_RAM_CONE_RADIUS = 15.0f;
+inline constexpr float ULDUAR_FL_SONIC_HORN_CONE_RADIUS = 35.0f;
 
 // Half the world.spell_cone widths (HasInArc halves what it's given), and isInFront adds no target radius.
 // CAST_ANGLE_IN_FRONT is 120 degrees, wider than all three, so CastVehicleSpell never turns for these.
-constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_HALF_ANGLE = 30.0f * float(M_PI) / 180.0f;
-constexpr float ULDUAR_FL_RAM_CONE_HALF_ANGLE = 50.0f * float(M_PI) / 180.0f;
-constexpr float ULDUAR_FL_SONIC_HORN_CONE_HALF_ANGLE = 25.0f * float(M_PI) / 180.0f;
+inline constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_HALF_ANGLE = 30.0f * float(M_PI) / 180.0f;
+inline constexpr float ULDUAR_FL_RAM_CONE_HALF_ANGLE = 50.0f * float(M_PI) / 180.0f;
+inline constexpr float ULDUAR_FL_SONIC_HORN_CONE_HALF_ANGLE = 25.0f * float(M_PI) / 180.0f;
 
 // Kept by the module: Spell::SendSpellCooldown returns early for a creature caster, so nothing enforces
 // Electroshock's 10 s. Retry is for a shot that didn't stop the channel, each try costs 20 energy.
-constexpr uint32 ULDUAR_FL_ELECTROSHOCK_COOLDOWN_MS = 10000;
-constexpr uint32 ULDUAR_FL_ELECTROSHOCK_RETRY_MS = 3000;
+inline constexpr uint32 ULDUAR_FL_ELECTROSHOCK_COOLDOWN_MS = 10000;
+inline constexpr uint32 ULDUAR_FL_ELECTROSHOCK_RETRY_MS = 3000;
+
+// Module-side cooldowns for the other vehicle spells, as the core sets none for a creature caster. The speed
+// buffs retry this soon: the cast reports success on a refusal, and only the aura says whether it landed.
+inline constexpr uint32 ULDUAR_FL_DEMOLISHER_RAM_COOLDOWN_MS = 4000;
+inline constexpr uint32 ULDUAR_FL_MORTAR_COOLDOWN_MS = 1000;
+inline constexpr uint32 ULDUAR_FL_SHIELD_GENERATOR_COOLDOWN_MS = 60000;
+inline constexpr uint32 ULDUAR_FL_TAR_COOLDOWN_MS = 15000;
+inline constexpr uint32 ULDUAR_FL_SPEED_RECAST_MS = 1000;
+inline constexpr uint32 ULDUAR_FL_ANTI_AIR_ROCKET_COOLDOWN_MS = 250;  // shot until one lands
 
 // A 25 yd sphere on whoever he's pursuing (TARGET_DEST_TARGET_ENEMY, radius index 20), not a cone off
 // his front, so measure from the Pursued vehicle and never from him.
-constexpr float ULDUAR_FL_BATTERING_RAM_RADIUS = 25.0f;
+inline constexpr float ULDUAR_FL_BATTERING_RAM_RADIUS = 25.0f;
 
 // He only casts it inside IsWithinCombatRange(victim, 15.0f), which adds both combat reaches on top.
-constexpr float ULDUAR_FL_BATTERING_RAM_CAST_RANGE = 15.0f;
+inline constexpr float ULDUAR_FL_BATTERING_RAM_CAST_RANGE = 15.0f;
 
 // Hurl Boulder's RangeIndex 164, shared by Hurl Pyrite Barrel: a demolisher on top of a frozen ally has
 // to back off to thaw it. Mortar (RangeIndex 37) has no minimum but stops at 50.
-constexpr float ULDUAR_FL_HURL_BOULDER_MIN_RANGE = 10.0f;
-constexpr float ULDUAR_FL_HURL_BOULDER_MAX_RANGE = 70.0f;
-constexpr float ULDUAR_FL_MORTAR_MAX_RANGE = 50.0f;
+inline constexpr float ULDUAR_FL_HURL_BOULDER_MIN_RANGE = 10.0f;
+inline constexpr float ULDUAR_FL_HURL_BOULDER_MAX_RANGE = 70.0f;
+inline constexpr float ULDUAR_FL_MORTAR_MAX_RANGE = 50.0f;
 
 // Fire Cannon shares Hurl Boulder's 10-70 yd band (RangeIndex 164) and is the heaviest gun the raid
 // has: its missile 62357 lands 76k in a 20 yd sphere, against 190k and 504k add health pools.
-constexpr float ULDUAR_FL_FIRE_CANNON_MIN_RANGE = 10.0f;
-constexpr float ULDUAR_FL_FIRE_CANNON_MAX_RANGE = 70.0f;
+inline constexpr float ULDUAR_FL_FIRE_CANNON_MIN_RANGE = 10.0f;
+inline constexpr float ULDUAR_FL_FIRE_CANNON_MAX_RANGE = 70.0f;
 
 // Splash of the aimed shot, only for ranking adds: Fire Cannon and Hurl Boulder land at radius index 9,
 // Mortar's 62635 at index 42.
-constexpr float ULDUAR_FL_CANNON_SPLASH = 20.0f;
-constexpr float ULDUAR_FL_MORTAR_SPLASH = 11.0f;
+inline constexpr float ULDUAR_FL_CANNON_SPLASH = 20.0f;
+inline constexpr float ULDUAR_FL_MORTAR_SPLASH = 11.0f;
 
 // Puts the spawn past Fire Cannon's 10 yd floor and inside Ram's 15. Parked on the arena side, so Ram's
 // knockback (Effect 98) throws adds deeper into the corner.
-constexpr float ULDUAR_FL_CORNER_STANDOFF = 12.0f;
+inline constexpr float ULDUAR_FL_CORNER_STANDOFF = 12.0f;
 
 // Ram's ~20 yd throw from a post 12 yd in, plus margin. The post's turret shoots adds in here first, and
 // nobody else shoots one held here: a 76k Fire Cannon hit passes the 130% ranged switch and drags it out.
-constexpr float ULDUAR_FL_CORNER_HOLD_RADIUS = 30.0f;
+inline constexpr float ULDUAR_FL_CORNER_HOLD_RADIUS = 30.0f;
 
 // Hodir's Fury's 10 yd blast plus room for a vehicle drifting inside its arrival deadband.
-constexpr float ULDUAR_FL_STATION_SPACING = 12.0f;
+inline constexpr float ULDUAR_FL_STATION_SPACING = 12.0f;
 
 // The widest the fan may open. Past this the outer slots stop being "behind him" at all.
-constexpr float ULDUAR_FL_STATION_MAX_ARC = 2.0f * float(M_PI) / 3.0f;
+inline constexpr float ULDUAR_FL_STATION_MAX_ARC = 2.0f * float(M_PI) / 3.0f;
 
 // A pyrite crate energizes for 25, so grabbing one above this wastes part of it.
-constexpr uint32 ULDUAR_FL_CRATE_GRAB_CEILING = 75;
+inline constexpr uint32 ULDUAR_FL_CRATE_GRAB_CEILING = 75;
 
 // A yard inside Grab Crate's 50 yd range (62479).
-constexpr float ULDUAR_FL_CRATE_GRAB_RANGE = 49.0f;
+inline constexpr float ULDUAR_FL_CRATE_GRAB_RANGE = 49.0f;
 
 // Demolishers never regenerate (no UNIT_FLAG2_REGENERATE_POWER), so crates are the only refill. Below
 // this a starved demolisher detours to one.
-constexpr uint32 ULDUAR_FL_CRATE_DETOUR_ENERGY = 30;
-constexpr float ULDUAR_FL_CRATE_DETOUR_RADIUS = 60.0f;  // how far a starved demolisher leaves its band
+inline constexpr uint32 ULDUAR_FL_CRATE_DETOUR_ENERGY = 30;
+inline constexpr float ULDUAR_FL_CRATE_DETOUR_RADIUS = 60.0f;  // how far a starved demolisher leaves its band
 
 // The crate falls straight down from the lift. This near the arena centre, holding a lift for its closest
 // pass gains nothing, so it's shot at once.
-constexpr float ULDUAR_FL_LIFT_DROP_RADIUS = 20.0f;
+inline constexpr float ULDUAR_FL_LIFT_DROP_RADIUS = 20.0f;
 
 // Kite ring corners, inset off the walls so MoveTo has mesh to land on and chamfered into two nodes so
 // a kiting hull rounds them instead of driving in while he cuts the diagonal.
-constexpr float ULDUAR_FL_KITE_WALL_INSET = 15.0f;
-constexpr float ULDUAR_FL_KITE_CORNER_CHAMFER = 35.0f;
-constexpr float ULDUAR_FL_KITE_ADVANCE_DIST = 30.0f;    // switch nodes on approach, never on arrival
-constexpr float ULDUAR_FL_KITE_BOSS_CLEARANCE = 50.0f;  // a node this close to him is not a destination
+inline constexpr float ULDUAR_FL_KITE_WALL_INSET = 15.0f;
+inline constexpr float ULDUAR_FL_KITE_CORNER_CHAMFER = 35.0f;
+inline constexpr float ULDUAR_FL_KITE_ADVANCE_DIST = 30.0f;    // switch nodes on approach, never on arrival
+inline constexpr float ULDUAR_FL_KITE_BOSS_CLEARANCE = 50.0f;  // a node this close to him is not a destination
 
 // The Inferno trail loops just inside the ring, so a leg across it burns. Each tick checks the next
 // stretch of the leg, and a blocked one steps round it this far at a time.
-constexpr float ULDUAR_FL_KITE_FIRE_LOOKAHEAD = 30.0f;
-constexpr float ULDUAR_FL_KITE_DETOUR_STEP = 25.0f;
+inline constexpr float ULDUAR_FL_KITE_FIRE_LOOKAHEAD = 30.0f;
+inline constexpr float ULDUAR_FL_KITE_DETOUR_STEP = 25.0f;
 
 // A trigger and its action must call the same helper here, or they disagree about who is doing what.
 

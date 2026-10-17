@@ -64,229 +64,243 @@ enum UlduarMimironIds
 
 // Mimiron P3Wx2 Laser Barrage. The damage is 63293, a TARGET_UNIT_CONE_ENEMY_104 cone: 104 degrees
 // wide with a 50000 yd radius, so distance from VX-001 buys nothing and only bearing matters.
-constexpr float ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE = 52.0f * static_cast<float>(M_PI) / 180.0f;
-// 15 rather than 12: the cone lands damage every 250 ms and turns 2.7 degrees in that time, so 12 was
-// about one bot reaction tick with nothing to spare. This still leaves a 120 degree safe wedge.
-constexpr float ULDUAR_MIMIRON_BARRAGE_MARGIN = 15.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE = 52.0f * static_cast<float>(M_PI) / 180.0f;
+// 15, not 12: the cone lands damage every 250 ms and turns 2.7 degrees in that time, so 12 is about one
+// bot reaction tick with nothing to spare. This still leaves a 120 degree safe wedge.
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_MARGIN = 15.0f * static_cast<float>(M_PI) / 180.0f;
 
 // Beams hit anything inside this whatever the bearing: IsWithinBoundaryRadius skips the bearing test
 // within max(bounding radius, MIN_MELEE_REACH 2.0) centre to centre. 2.0 plus a yard.
-constexpr float ULDUAR_MIMIRON_BARRAGE_BOUNDARY = 3.0f;
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_BOUNDARY = 3.0f;
 
 // Waypoint velocity on path 13395, clockwise. The 707 yd lap fits a circle 2.7 yd off the room centre,
 // so rotating 33576 about the centre stays within a couple of degrees over a barrage.
-constexpr float ULDUAR_MIMIRON_DB_TARGET_SPEED = 20.8988f;
+inline constexpr float ULDUAR_MIMIRON_DB_TARGET_SPEED = 20.8988f;
+
+// How far the barrage read looks for the DB Target, which laps the whole room.
+inline constexpr float ULDUAR_MIMIRON_DB_TARGET_SEARCH_RANGE = 250.0f;
 
 // 63274 runs 10 s once 63414's single tick starts it. Only used while Spinning Up, when the barrage
 // aura does not exist yet to be read; from ignition on the live duration is preferred.
-constexpr float ULDUAR_MIMIRON_BARRAGE_FIRE_SECONDS = 10.0f;
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_FIRE_SECONDS = 10.0f;
 
 // Bounded steps: creatures aren't in the navmesh, so a long chord walks through VX-001 and crosses
 // every bearing the cone covers. A 40 degree chord stays within 6% of the ring radius.
-constexpr float ULDUAR_MIMIRON_BARRAGE_STEP = 40.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_STEP = 40.0f * static_cast<float>(M_PI) / 180.0f;
 
 // Added to VX-001's combat reach (8) to get the smallest ring a bot may orbit on. Melee sit inside
 // that, and an orbit at their own radius runs through the model.
-constexpr float ULDUAR_MIMIRON_BARRAGE_RING_MARGIN = 6.0f;
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_RING_MARGIN = 6.0f;
 
 // Melee orbit at reach 8 + 1.0 = 9.0, a yard under GetMeleeRange's 10.83 (or the chassis chases and
 // drags the cone apex) and reach melee's 10.25 (or the charge guard vetoes it every tick).
-constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MARGIN = 1.0f;
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MARGIN = 1.0f;
 
 // How far in the fire shift may pull a melee bot off that ring. Inside 5 the orbit runs through
 // VX-001's model, and a 40 degree step on a 5 yd ring is 3.5 yd of travel, which is still a move.
-constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN = 5.0f;
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN = 5.0f;
 
 // Radius shifts off the orbit, nearest first, for stepping round fire at a given bearing.
-constexpr float ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS[] = {0.0f, 2.0f, -2.0f, 4.0f, -4.0f, 6.0f, -6.0f, 8.0f, -8.0f};
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS[] = {0.0f, 2.0f, -2.0f, 4.0f, -4.0f, 6.0f, -6.0f, 8.0f,
+                                                                 -8.0f};
 
 // Spare time a bot inside the ignition cone needs to leave by the trailing side before the beams
 // light: two beam ticks for the leg to start and land.
-constexpr float ULDUAR_MIMIRON_BARRAGE_IGNITION_BUFFER = 0.5f;
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_IGNITION_BUFFER = 0.5f;
 
 // Bearing step when looking inside the safe sector for ground that isn't burning. Under 2 yd at the
 // ranged ring, against a 5 yd flame radius.
-constexpr float ULDUAR_MIMIRON_BARRAGE_REFUGE_PROBE = 5.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_REFUGE_PROBE = 5.0f * static_cast<float>(M_PI) / 180.0f;
 
 // Inside this, a worst-case 52 degree turn at 7 yd/s fits the 4 s Spinning Up with 1.6x to spare. Past
 // 38 yd a bot can't out-turn the 10.6 deg/s sweep at all.
-constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS_MAX = 24.0f;
+inline constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS_MAX = 24.0f;
 
 // Ranged ring, kept inside ULDUAR_MIMIRON_SPREAD_RADIUS_MAX so a barrage rotation from it still
 // fits the Spinning Up window. The tolerance is what stops bots pacing over a yard of drift.
-constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS = 22.0f;
-constexpr float ULDUAR_MIMIRON_SPREAD_TOLERANCE = 5.0f;
+inline constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS = 22.0f;
+inline constexpr float ULDUAR_MIMIRON_SPREAD_TOLERANCE = 5.0f;
 
 // A re-aimed Firefighter wedge holds its centreline this long: one re-aim per barrage, or a second
 // look in the same Spinning Up walks the raid twice for one cast.
-constexpr uint32 ULDUAR_MIMIRON_WEDGE_REAIM_MS = 20000;
+inline constexpr uint32 ULDUAR_MIMIRON_WEDGE_REAIM_MS = 20000;
 
 // The phase 3 wedge's slide holds until a slot leaves range or the slide it needs moves this far.
 // Under the slot tolerance, so one step never walks a bot off its own slot.
-constexpr float ULDUAR_MIMIRON_SHIFT_SLACK = 4.0f;
+inline constexpr float ULDUAR_MIMIRON_SHIFT_SLACK = 4.0f;
 
 // The outermost wedge row sits this far inside SpellDistance, which caps the row count. A slot past
 // range never self-corrects: reach spell is ACTION_HIGH and the formation's ACTION_RAID wins every tick.
-constexpr float ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN = 4.0f;
+inline constexpr float ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN = 4.0f;
 
 // Everything inside this of the room centre is walkable and flat at Z 364.31. Past it a boss-anchored
 // formation hangs over the edge once the MK II has been dragged to the wall.
-constexpr float ULDUAR_MIMIRON_ROOM_RADIUS = 40.0f;
+inline constexpr float ULDUAR_MIMIRON_ROOM_RADIUS = 40.0f;
 
 // Shock Blast 63631 is 15 yd round the caster on a 4 s cast, so 18 clears it. Centre to centre:
 // GetDistance2d would take off both combat reaches, 8 and 1.5.
-constexpr float ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST = 18.0f;
+inline constexpr float ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST = 18.0f;
 // The escape aims this far past SAFE_DIST, which the screen still tests: a hop landing exactly on the
 // line fails it to float noise or a wall, and a fan that fails every bearing leaves the bot in the blast.
-constexpr float ULDUAR_MIMIRON_SHOCK_FLEE_MARGIN = 2.0f;
+inline constexpr float ULDUAR_MIMIRON_SHOCK_FLEE_MARGIN = 2.0f;
 
 // Ranged wedge spacing: Bomb Bots blast 5 yd, so 6 keeps one to a single victim. Must stay above the
 // phase 1 disperse distance, or the unstacker shoves every bot off its slot.
-constexpr float ULDUAR_MIMIRON_PHASE3_SPACING = 6.0f;
-constexpr float ULDUAR_MIMIRON_PHASE3_MIN_RADIUS = 18.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE3_SPACING = 6.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE3_MIN_RADIUS = 18.0f;
 
 // Unstacker spacing for ranged while the MK II is up: past Napalm Shell's 5 yd splash, and under
 // ULDUAR_MIMIRON_PHASE3_SPACING so it never fires on two bots both on their slots.
-constexpr float ULDUAR_MIMIRON_DISPERSE_DISTANCE = 5.5f;
+inline constexpr float ULDUAR_MIMIRON_DISPERSE_DISTANCE = 5.5f;
 
 // Firefighter phase 1 camp, rows 6 apart for Napalm's 5 yd. First row 21: the MK II stands ~5 yd off
 // the tank spot toward the camp. Outer rows sit past Napalm's 24.5 yd floor, so its pool never empties.
-constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_FIRST_ROW = 21.0f;
-constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_SPACING = 6.0f;
-constexpr uint32 ULDUAR_MIMIRON_PHASE1_CAMP_ROWS = 3;
+inline constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_FIRST_ROW = 21.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_SPACING = 6.0f;
+inline constexpr uint32 ULDUAR_MIMIRON_PHASE1_CAMP_ROWS = 3;
 
 // Sixteen slots in three rows, never closer than 5.5 yd even full. The floor is clean from 288 to 74
 // degrees off the tank spot, so a centreline from 326 to 36 keeps the whole wedge on it.
-constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_HALF_ANGLE = 38.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_HALF_ANGLE = 38.0f * static_cast<float>(M_PI) / 180.0f;
 
 // Camp sight turn: the alcove walls can hide the MK II from edge slots, and a bot that loses sight
 // drops its target and walks to its master. Fixed eye height so every bot builds the same camp.
-constexpr float ULDUAR_MIMIRON_CAMP_SIGHT_STEP = 4.0f * static_cast<float>(M_PI) / 180.0f;
-constexpr float ULDUAR_MIMIRON_CAMP_SIGHT_MAX = 16.0f * static_cast<float>(M_PI) / 180.0f;
-constexpr float ULDUAR_MIMIRON_CAMP_SIGHT_EYE = 2.0f;
+inline constexpr float ULDUAR_MIMIRON_CAMP_SIGHT_STEP = 4.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_CAMP_SIGHT_MAX = 16.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_CAMP_SIGHT_EYE = 2.0f;
 // Turning back waits this long after the last raise, or the camp swings with every MK II step.
-constexpr uint32 ULDUAR_MIMIRON_CAMP_SIGHT_HOLD_MS = 15000;
+inline constexpr uint32 ULDUAR_MIMIRON_CAMP_SIGHT_HOLD_MS = 15000;
 
 // Threat lead over the highest non-tank the main tank needs before walking the MK II west. With less
 // the boss switches to a melee dps mid-walk and stops following.
-constexpr float ULDUAR_MIMIRON_TANK_THREAT_LEAD = 1.3f;
+inline constexpr float ULDUAR_MIMIRON_TANK_THREAT_LEAD = 1.3f;
 
 // Escape hatch for that hold: a threat table that never resolves (a human on the boss, a dead tank)
 // must not pin the fight at the pull spot for the rest of the phase.
-constexpr uint32 ULDUAR_MIMIRON_TANK_HOLD_MAX_MS = 10000;
+inline constexpr uint32 ULDUAR_MIMIRON_TANK_HOLD_MAX_MS = 10000;
 
 // Fire nodes this close to a stack anchor count against it. Chains grow toward the nearest player, so
 // the camp's own anchor burns first.
-constexpr float ULDUAR_MIMIRON_STACK_FIRE_RADIUS = 10.0f;
+inline constexpr float ULDUAR_MIMIRON_STACK_FIRE_RADIUS = 10.0f;
 
 // Move past the limit, only somewhere cleaner by the margin, then hold. Chains grow 1.22 yd/s, so a
 // bare "stand on the cleanest" paces the raid across the arc all phase.
-constexpr uint32 ULDUAR_MIMIRON_STACK_FIRE_LIMIT = 2;
-constexpr uint32 ULDUAR_MIMIRON_STACK_FIRE_MARGIN = 2;
-constexpr uint32 ULDUAR_MIMIRON_STACK_HOLD_MS = 15000;
+inline constexpr uint32 ULDUAR_MIMIRON_STACK_FIRE_LIMIT = 2;
+inline constexpr uint32 ULDUAR_MIMIRON_STACK_FIRE_MARGIN = 2;
+inline constexpr uint32 ULDUAR_MIMIRON_STACK_HOLD_MS = 15000;
 
 // One Plasma Blast claim: ~9 s from cast start to the last tick, the next cast 22 s on. Shorter than
 // the 9 lets a second button in on the same window's tail.
-constexpr uint32 ULDUAR_MIMIRON_PLASMA_WINDOW_MS = 12000;
+inline constexpr uint32 ULDUAR_MIMIRON_PLASMA_WINDOW_MS = 12000;
 
 // The north-east and south-east add arms leave the centre at 59 degrees, so only a crowded outer row
 // reaches one. Any narrower and a 25-man ranged group won't fit inside casting range.
-constexpr float ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE = 60.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE = 60.0f * static_cast<float>(M_PI) / 180.0f;
 
 // Loot range for an Assault Bot corpse, and how close the Magnetic Core has to be used: 64444 places
 // its summon by nearest entry, so the bot has to be standing under the Aerial Command Unit.
-constexpr float ULDUAR_MIMIRON_CORE_LOOT_RANGE = 5.0f;
-constexpr float ULDUAR_MIMIRON_CORE_USE_RANGE = 12.0f;
+inline constexpr float ULDUAR_MIMIRON_CORE_LOOT_RANGE = 5.0f;
+inline constexpr float ULDUAR_MIMIRON_CORE_USE_RANGE = 12.0f;
 
 // Cores banked before spending, then chained for one unbroken 40 s on the floor. Not fewer add holes:
 // every landing is 45 s with no Assault Bot, chained or not. The hold ends once the next one is up.
-constexpr uint32 ULDUAR_MIMIRON_CORE_BANK = 2;
+inline constexpr uint32 ULDUAR_MIMIRON_CORE_BANK = 2;
 
 // Escapes from that hold: item 46029 has duration 60, so a banked core expires, and below the health
 // release the phase ends before another core could be spent.
-constexpr uint32 ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS = 10000;
-constexpr float ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT = 25.0f;
+inline constexpr uint32 ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS = 10000;
+inline constexpr float ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT = 25.0f;
 
 // Corpse search covers the whole room, 80 yd across and ~13 s at run speed. A corpse lasts 25 s, so
 // the carrier walks to it rather than wait to be standing on one.
-constexpr float ULDUAR_MIMIRON_CORE_SEARCH_RANGE = 90.0f;
+inline constexpr float ULDUAR_MIMIRON_CORE_SEARCH_RANGE = 90.0f;
 
 // Range for a core already down. A live 34068 spans the arming, the 20 s landing and the climb back,
 // and a second 64436 inside that replaces the first, so the unit climbs with the aura still on.
-constexpr float ULDUAR_MIMIRON_CORE_PENDING_RANGE = 100.0f;
+inline constexpr float ULDUAR_MIMIRON_CORE_PENDING_RANGE = 100.0f;
 
 // A core just used is invisible to that check while it arms: the summon isn't there next tick and its
 // 64436 reaches the unit 3.8 to 4.4 s later, so the carrier remembers its own use this long.
-constexpr uint32 ULDUAR_MIMIRON_CORE_ARM_MS = 6000;
+inline constexpr uint32 ULDUAR_MIMIRON_CORE_ARM_MS = 6000;
 
 // Phase 4 ends only with all three parts in their 15 s Self Repair at once, so they come down level.
 // Bots stop here and wait, since all three share one point and splash lands on every one.
-constexpr float ULDUAR_MIMIRON_PHASE4_HOLD_PCT = 10.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE4_HOLD_PCT = 10.0f;
 
 // Phase 4 focus ranks on percent (the ACU's HealthModifier is 200 against 300) in bands this wide,
 // ~2.4 s of raid damage: raw percent flips every bot's target each time two parts cross.
-constexpr float ULDUAR_MIMIRON_PHASE4_FOCUS_BAND_PCT = 2.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE4_FOCUS_BAND_PCT = 2.0f;
 
 // The others wait this far under the part furthest from death, usually the lagging ACU. Two focus
 // bands, so splash doesn't flip the hold. Melee at the floor hit the ACU until the pair is twice this under.
-constexpr float ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT = 4.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT = 4.0f;
 
 // Phase 4 tank spot under Firefighter: candidates on these rings round the room centre, and the
 // centre itself. 24 yd plus the melee ring round the chassis stays inside ULDUAR_MIMIRON_ROOM_RADIUS.
-constexpr float ULDUAR_MIMIRON_PHASE4_TANK_RINGS[] = {8.0f, 16.0f, 24.0f};
-constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_BEARINGS = 12;
+inline constexpr float ULDUAR_MIMIRON_PHASE4_TANK_RINGS[] = {8.0f, 16.0f, 24.0f};
+inline constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_BEARINGS = 12;
 
 // Fire nodes this close to a candidate count against it: the melee ring round the chassis is ~9 yd
 // out and a node burns 5 yd.
-constexpr float ULDUAR_MIMIRON_PHASE4_TANK_CLEAR_RADIUS = 14.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE4_TANK_CLEAR_RADIUS = 14.0f;
 
 // Drag past the limit, only somewhere cleaner by the margin, then hold. A drag walks the chassis, the
 // barrage apex and the wedge anchored on VX-001, so a few nodes at the circle's edge aren't worth one.
-constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_LIMIT = 3;
-constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_MARGIN = 2;
-constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_HOLD_MS = 30000;
+inline constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_LIMIT = 3;
+inline constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_MARGIN = 2;
+inline constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_HOLD_MS = 30000;
 
 // Lust waits this long into phase 4: past the opening Frost Bomb's fuse, so the raid is back in place,
 // and the first barrage still falls inside the 40 s.
-constexpr uint32 ULDUAR_MIMIRON_PHASE4_LUST_DELAY_MS = 15000;
+inline constexpr uint32 ULDUAR_MIMIRON_PHASE4_LUST_DELAY_MS = 15000;
 
 // How far a grid scan looks for a mech that is not attackable yet. The MK II parks 58 yd off centre
 // between phases and a ranged bot can be another 40 out on top of that.
-constexpr float ULDUAR_MIMIRON_STAGING_SEARCH_RANGE = 200.0f;
+inline constexpr float ULDUAR_MIMIRON_STAGING_SEARCH_RANGE = 200.0f;
 
 // Mines fire inside 1.9 yd and blast 3 (66351). Ten land within 15 yd per Shock Blast, so a wide avoid
 // radius leaves no clear ground and the raid paces: tight on purpose, the odd blast is cheaper.
-constexpr float ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS = 3.0f;
-constexpr float ULDUAR_MIMIRON_MINE_CLEARANCE = 3.5f;
-constexpr float ULDUAR_MIMIRON_MINE_MAX_STEP = 5.0f;
+inline constexpr float ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS = 3.0f;
+inline constexpr float ULDUAR_MIMIRON_MINE_CLEARANCE = 3.5f;
+inline constexpr float ULDUAR_MIMIRON_MINE_MIN_STEP = 2.0f;
+inline constexpr float ULDUAR_MIMIRON_MINE_MAX_STEP = 5.0f;
 // A formation walk passing closer than this to a mine sets it off: the 1.9 yd poll plus slop. Every
 // 500 ms at 7 yd/s, so a walk straight across one is inside it for a poll or two.
-constexpr float ULDUAR_MIMIRON_MINE_LEG_CLEARANCE = 2.5f;
+inline constexpr float ULDUAR_MIMIRON_MINE_LEG_CLEARANCE = 2.5f;
 
 // Stand-off from a live Rocket Strike marker (5 s fuse, 3 yd blast) for any destination, or a bot that
 // dodged walks straight back onto it.
-constexpr float ULDUAR_MIMIRON_ROCKET_CLEARANCE = 8.0f;
+inline constexpr float ULDUAR_MIMIRON_ROCKET_CLEARANCE = 8.0f;
 
 // Where the dodge fires: 63041 is a flat 3.0 yd and a creature caster adds no combat reach, so 5
 // covers it with slop. Run 5, stand 8, like the bomb and the siren.
-constexpr float ULDUAR_MIMIRON_ROCKET_RUN_RADIUS = 5.0f;
+inline constexpr float ULDUAR_MIMIRON_ROCKET_RUN_RADIUS = 5.0f;
+
+// The grid scan behind the rocket and bomb holds looks this far past the hold, which is centre to centre.
+inline constexpr float ULDUAR_MIMIRON_HOLD_SEARCH_PAD = 5.0f;
 
 // How far past the clearance reach and follow moves stay held while a marker lives. The dodge stops
 // at the clearance, so without a band past it "reach spell" walks the bot straight back on.
-constexpr float ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN = 4.0f;
+inline constexpr float ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN = 4.0f;
 
 // Napalm Shell splashes 5 yd around its target. Bomb Bots blast 5 yd on melee contact (63801) and
 // match player run speed, so the extra yard here only buys time for ranged to kill them.
-constexpr float ULDUAR_MIMIRON_NAPALM_RADIUS = 6.0f;
-constexpr float ULDUAR_MIMIRON_BOMB_BOT_RADIUS = 8.0f;
+inline constexpr float ULDUAR_MIMIRON_NAPALM_RADIUS = 6.0f;
+inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_RADIUS = 8.0f;
 
 // How much ground a Bomb Bot must still have to cover before a snare is worth a global. It runs
 // 8.0 yd/s and dies in about three casts, so snaring one already inside this costs more than it buys.
-constexpr float ULDUAR_MIMIRON_BOMB_BOT_SNARE_MIN_APPROACH = 15.0f;
+inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_SNARE_MIN_APPROACH = 15.0f;
+
+// Rocket Strike markers and the MK II's cannon, anywhere in the room.
+inline constexpr float ULDUAR_MIMIRON_ROOM_SEARCH_RANGE = 100.0f;
+
+// Hand Pulse re-aims every 1.75 s, so the phase 4 spread is only about not bunching behind its target.
+inline constexpr float ULDUAR_MIMIRON_PHASE4_DISPERSE_DISTANCE = 4.0f;
 
 // Raid-wide scan interval and the barrage hazard row's lifetime. Equals the barrage damage tick and the
 // default Obs.SnapshotIntervalMs, so every snapshot gets a cone row.
-constexpr uint32 ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS = 250;
+inline constexpr uint32 ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS = 250;
 
 // Proximity Mines are non-selectable, so they never reach "possible targets" and pathing knows
 // nothing about them. Movement actions check their intended destination through this first.
@@ -460,7 +474,7 @@ bool IsMimironPhase2(PlayerbotAI* botAI);
 
 // Members at or under LowHealth before the phase 2 raid cooldowns may go. Their shared trigger, 6 at 65%,
 // fires on the walk-in Rapid Burst and leaves them on cooldown for the storm after the first barrage.
-constexpr uint32 ULDUAR_MIMIRON_STORM_COOLDOWN_LOW_COUNT = 6;
+inline constexpr uint32 ULDUAR_MIMIRON_STORM_COOLDOWN_LOW_COUNT = 6;
 
 // Phase 3: the Aerial Command Unit up on its own. "possible targets no los" drops unselectable units,
 // so the idle MK II and VX-001 are not in it and the unit only is once it can be attacked.
@@ -543,104 +557,116 @@ bool IsMimironSpotInSector(Unit* vx001, MimironBurstSector const& sector, Positi
 
 // 64566 reaches 3 yd, plus the node footprint and pathing slop. Chains grow in 7 yd steps, so a
 // destination clears every known node, not just the nearest: a short hop lands on the next one.
-constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
+inline constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
+
+// Stand-in search for a spot that won't do: bearings alternate either side of the preferred one, and the
+// slot search widens in rings this far apart.
+inline constexpr uint32 ULDUAR_MIMIRON_STAND_IN_BEARINGS = 12;
+inline constexpr float ULDUAR_MIMIRON_STAND_IN_BEARING_STEP = static_cast<float>(M_PI) / 6.0f;
+inline constexpr float ULDUAR_MIMIRON_STAND_IN_RING_STEP = 2.0f;
 
 // A bot already on clear ground this close to an unclear slot stays put: a substitute moves every time
 // the fire grows.
-constexpr float ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS = 6.0f;
+inline constexpr float ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS = 6.0f;
 
 // The substitute search outside phase 1, where a 6 yd ring round a burning slot burns too. The wedge
 // sits 17 to 27 yd out against a 35 yd cast range, and candidates keep the disperse distance.
-constexpr float ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE = 12.0f;
+inline constexpr float ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE = 12.0f;
 
 // Detour waypoint turns off the direct bearing, degrees, tried in order. The waypoint sits over the
 // walk's midpoint, so 65 makes the walk 2.4 times as long. Past that it is walking away.
-constexpr float ULDUAR_MIMIRON_DETOUR_TURNS_DEG[] = {20.0f, 35.0f, 50.0f, 65.0f};
+inline constexpr float ULDUAR_MIMIRON_DETOUR_TURNS_DEG[] = {20.0f, 35.0f, 50.0f, 65.0f};
 
 // Fire clearance to eat or drink. Drinking pushes the next AI check back 12 to 18 s, and a chain grows
 // 1.22 yd/s toward the nearest player, usually the one sitting still.
-constexpr float ULDUAR_MIMIRON_DRINK_FIRE_CLEARANCE = 15.0f;
+inline constexpr float ULDUAR_MIMIRON_DRINK_FIRE_CLEARANCE = 15.0f;
 
 // Frost Bomb Explosion 65333: 30 yd, 47124 base and a knockback, about twice a bot's pool. Summons on a
 // burning flame node and detonates 10 s later, the whole warning.
-constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 30.0f;
+inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 30.0f;
 // Where a destination has to be: the flee trigger's FindNearestCreature adds both bounding radii and
 // lets go near 31, so a spot at 30.5 flees again next tick.
-constexpr float ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS = 32.0f;
+inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS = 32.0f;
 // Where to stand rather than what the blast reaches: the extra clears the knockback and the yard or
 // two a leg overshoots by.
-constexpr float ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE = 34.0f;
+inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE = 34.0f;
 // Reach moves stay held this far past the clearance while a bomb lives, or reach spell or a heal reach
 // walks the fled bot straight back in for the rest of the fuse.
-constexpr float ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN = 4.0f;
+inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN = 4.0f;
 
 // Fire bots are spared through phase 3 to put the fire out, then all go on the kill list at this ACU
 // health. None may reach phase 4, where they spray straight into the rendezvous.
-constexpr float ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT = 15.0f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT = 15.0f;
 // Junk Bots up before melee leave the Assault Bot for them: one arrives every 10 s and nothing else
 // kills them. Ranged keep the Assault Bot, the only Magnetic Core source.
-constexpr uint32 ULDUAR_MIMIRON_JUNK_BOT_PILE = 4;
+inline constexpr uint32 ULDUAR_MIMIRON_JUNK_BOT_PILE = 4;
 
 // Water Spray is SPELL_ATTR0_CU_CONE_LINE: 15 yd ahead, both object sizes wide, ~2.3 yd each side. The
 // extra covers a step's overshoot and the bot turning to its next flame.
-constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH = 16.0f;
-constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH = 3.5f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH = 16.0f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH = 3.5f;
 // Destinations stay this far off a lane; the sidestep lands at the run width plus 1.5. A lane jumps when
 // its flame goes out, so without the gap a slot just outside the run width flips with the dodge.
-constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH = 4.5f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH = 4.5f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_SIDESTEP = 1.5f;
 // Script reach: within this of its nearest flame a fire bot sprays at once, else it walks to this far
 // short and sprays on arrival, facing the way it walked. That makes the next lane predictable.
-constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH = 5.0f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH = 5.0f;
 // Deafening Siren 64616 is a 10 yd area silence, on the 25-man bot only (creature_template_addon), and
 // area auras add both object sizes to the radius.
-constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE = 13.0f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE = 13.0f;
 // Where a caster's destination has to be, and where the siren dodge aims. Kept fire bots walk to the
 // next flame, usually in the raid, so a spot just past 13 is back inside a moment later.
-constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_STAND = 17.0f;
-constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_FLEE = 19.0f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_STAND = 17.0f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_FLEE = 19.0f;
 // Damage AoE is held while a kept fire bot is this close to the bot or its target. The widest raid AoE
 // is about 10 yd (Death and Decay, Hurricane, Blizzard), so 12 covers the splash that reaches one.
-constexpr float ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE = 12.0f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE = 12.0f;
 
 // Above this, fire is cheaper than the trip: a node ticks ~3100 against a 22000 to 24000 pool, seven
 // ticks of margin, and the round trip is 24 yd of uptime or a cast.
-constexpr float ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT = 60.0f;
+inline constexpr float ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT = 60.0f;
 
 // How many nodes overrule the health gate. One node is about 8 s of margin from full; two is 4, and
 // four seconds is not enough to notice a health bar moving and then walk 12 yd.
-constexpr uint32 ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE = 2;
+inline constexpr uint32 ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE = 2;
 
 // Generic movers stay out this long after a fire dodge, since they don't know the floor burns. Long
 // enough to stop the walk back in, short enough to strand nobody while fire covers a third of the floor.
-constexpr uint32 ULDUAR_MIMIRON_FLAMES_HOLD_MS = 2500;
+inline constexpr uint32 ULDUAR_MIMIRON_FLAMES_HOLD_MS = 2500;
 
 // A bot closing on a target parks this far inside its stop distance: on the edge, one shuffle leaves
 // it a step short, and that step is another walk through the fire.
-constexpr float ULDUAR_MIMIRON_APPROACH_INSET = 2.0f;
+inline constexpr float ULDUAR_MIMIRON_APPROACH_INSET = 2.0f;
 
 // Hops tried past the burning cluster's edge. Rungs under the 7 yd chain step are safe only because
 // each is screened against the whole field, and a short one gives uptime back.
-constexpr float ULDUAR_MIMIRON_FLAMES_STEP_LADDER[] = {3.0f, 5.0f, 7.0f, 10.0f};
+inline constexpr float ULDUAR_MIMIRON_FLAMES_STEP_LADDER[] = {3.0f, 5.0f, 7.0f, 10.0f};
 
 // Longest fire dodge leg. It's FORCED and holds the lock against the other dodges, 12 yd being ~1.7 s;
 // a shortened hop that still lands in fire is refused by the fan like any other.
-constexpr float ULDUAR_MIMIRON_FLAMES_MAX_HOP = 12.0f;
+inline constexpr float ULDUAR_MIMIRON_FLAMES_MAX_HOP = 12.0f;
+
+// Flee fan bearings off straight away, out to 112.5 degrees: two stacked filters can empty the first
+// quadrant, and past ~120 the geometry turns back inward.
+inline constexpr float ULDUAR_MIMIRON_FLEE_FAN_STEP = static_cast<float>(M_PI) / 8.0f;
+inline constexpr float ULDUAR_MIMIRON_FLEE_FAN_MAX = 5.0f * ULDUAR_MIMIRON_FLEE_FAN_STEP;
 
 // Least share of the asked hop a bearing must cover: on PATHFIND_INCOMPLETE CheckCollisionAndGetValidCoords
 // still succeeds with the destination at the bot's feet, which the back-tracking test passes.
-constexpr float ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT = 0.5f;
+inline constexpr float ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT = 0.5f;
 
 // Rapid Burst 64531/64532 is a 60 degree cone, 100 yd deep. The spell_cone row says so and is read
 // before the DBC's 104 default, but that table is wrong for the barrage, so this one was measured too.
-constexpr float ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE = 30.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE = 30.0f * static_cast<float>(M_PI) / 180.0f;
 
 // Hard mode phase 2 melee sector, opposite the ranged wedge. ~32 degrees of slot slack puts a bot 77
 // off centre at worst, still clear of the wedge's 60 plus the Rapid Burst cone's 30.
-constexpr float ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE = 45.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE = 45.0f * static_cast<float>(M_PI) / 180.0f;
 
 // Added to VX-001's combat reach for the furthest a melee stand-in may sit: 10.0, inside the 10.25
 // where "reach melee" fires and walks the bot straight at the boss off its sector.
-constexpr float ULDUAR_MIMIRON_PHASE2_MELEE_REACH_MARGIN = 2.0f;
+inline constexpr float ULDUAR_MIMIRON_PHASE2_MELEE_REACH_MARGIN = 2.0f;
 
 // VX-001 fights here and the Aerial Command Unit is summoned overhead, so a ring anchored to this
 // point holds still while the mechs turn and charge about.
@@ -656,7 +682,7 @@ extern const Position ULDUAR_MIMIRON_PHASE1_TANK_SPOT;
 
 // Phase 1 camp anchors: middle-row centres 27 yd off the tank spot at 25 and 345 degrees, 0 the default.
 // 18.5 yd apart to clear a node cluster plus a chain step; wider puts edge slots in the alcove's shadow.
-constexpr uint8 ULDUAR_MIMIRON_PHASE1_STACK_COUNT = 2;
+inline constexpr uint8 ULDUAR_MIMIRON_PHASE1_STACK_COUNT = 2;
 extern const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COUNT];
 
 #endif

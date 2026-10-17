@@ -115,7 +115,7 @@ float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
 
     // The encounter's own hold action is what stops a cast already in flight; this only decides what
     // is allowed to start.
-    if (action->getName() == "freya ground tremor hold cast")
+    if (action->getName() == FreyaGroundTremorHoldCastAction::Name)
         return 1.0f;
 
     uint32 const now = getMSTime();
@@ -134,7 +134,7 @@ float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
         return 1.0f;
 
     // Anything that still lands before the tremor is worth starting, so the instants a locked-out bot
-    // would fall through to are never held - only the casts the interrupt would eat.
+    // would fall through to are never held, only the casts the interrupt would eat.
     uint32 const castTime = spellInfo->CalcCastTime();
     if (castTime == 0 && !spellInfo->IsChanneled())
         return 1.0f;

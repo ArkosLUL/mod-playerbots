@@ -96,7 +96,7 @@ bool MimironNearFrostBomb(PlayerbotAI* botAI)
         return false;
 
     float const hold = ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE + ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN;
-    Creature* bomb = bot->FindNearestCreature(NPC_FROST_BOMB, hold + 5.0f);
+    Creature* bomb = bot->FindNearestCreature(NPC_FROST_BOMB, hold + ULDUAR_MIMIRON_HOLD_SEARCH_PAD);
     return bomb && bot->GetExactDist2d(bomb) < hold;
 }
 
@@ -108,7 +108,7 @@ bool MimironNearRocket(PlayerbotAI* botAI)
         return false;
 
     float const hold = ULDUAR_MIMIRON_ROCKET_CLEARANCE + ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN;
-    Creature* rocket = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, hold + 5.0f);
+    Creature* rocket = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, hold + ULDUAR_MIMIRON_HOLD_SEARCH_PAD);
     return rocket && bot->GetExactDist2d(rocket) < hold;
 }
 
@@ -177,7 +177,7 @@ void DefineMimiron(EncounterBuilder& e)
     e.Node<MimironProximityMineTrigger, MimironProximityMineAction>(ACTION_RAID - 1);
     e.Node<MimironBombBotTrigger, MimironBombBotAction>(ACTION_RAID + 2);
     e.Node<MimironSlowBombBotTrigger, MimironSlowBombBotAction>(ACTION_RAID + 2);
-    // The action always returns false, so this only ever redirects the pet - the bot keeps its tick.
+    // The action always returns false, so this only ever redirects the pet and the bot keeps its tick.
     e.Node<MimironPetControlTrigger, MimironPetControlAction>(ACTION_RAID);
     // Hard mode only. Bomb above fire, never tied: a tie goes by push order, and the fire step would end the tick
     // first. Fire is 3000 a second and healable, the 30 yd blast one-shots.

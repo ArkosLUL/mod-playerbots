@@ -651,9 +651,8 @@ bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& s
     return standingInOne;
 }
 
-// Settled onto the mesh, since MoveTo fails silently off it. The range re-check below catches the floor hole
-// south of y -288. It is not a melee-range guard: GetDistance subtracts his 6.25 combat reach, so it only
-// rejects past 15.3 yd.
+// Settled onto the mesh, since MoveTo fails silently off it. The range check catches the floor hole south of
+// y -288 and is no melee-range guard: GetDistance subtracts his reach, so it only rejects past 15.3 yd.
 bool RingPoint(Player* bot, Unit* boss, float bearing, Position& out)
 {
     float x = boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
@@ -810,9 +809,8 @@ bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, P
     return true;
 }
 
-// Whether a candidate bearing keeps clear of the tank anchor and of every other slot. The anchor is compared
-// by bearing alone while the tank sits nearer the boss (r 5.5), so 60 degrees off him is only 7.1 yd of ground
-// and a chain can still bridge the pair.
+// Whether a candidate bearing keeps clear of the tank anchor and every other slot. Bearing alone: the tank sits at
+// r 5.5, so 60 degrees off the anchor is only 7.1 yd of ground and a chain can still bridge the pair.
 bool RingBearingSeparated(float candidate, uint8 slot,
                           std::array<float, ULDUAR_THORIM_MELEE_SLOTS> const& taken, float anchor)
 {
@@ -827,8 +825,7 @@ bool RingBearingSeparated(float candidate, uint8 slot,
 }
 
 // One answer for all three slots, so no slot's dodge walks it onto another. Relaxed cheapest first: separation
-// (one 40-90k hop), then Blizzard zones, never the cone (~20k at once). Zones outrank separation because a bot
-// holds its bearing while a zone sits on it: melee stood 6 to 14 ticks at 4.3-4.9k each, up to 73k.
+// (one 40-90k hop), then Blizzard zones (a bot holds its bearing while one sits on it), never the cone (~20k).
 void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -1170,11 +1167,6 @@ Unit* SelectThorimTierTarget(Unit* currentTarget, std::vector<Unit*> const& cand
     return selected;
 }
 
-}  // namespace
-
-namespace
-{
-
 Unit* NoteThorimDpsTarget(Player* bot, Unit* target)
 {
     if (bot)
@@ -1323,8 +1315,8 @@ void ThorimClearStaleMarks(PlayerbotAI* botAI, Player* bot)
 
     state.marksCleared = true;
 
-    // Skull, cross and moon are the three this encounter used to set. RtiTargetValue hands an icon
-    // back before the smart picker runs, so a leftover one silently outranks everything chosen here.
+    // RtiTargetValue hands an icon back before the smart picker runs, so a leftover skull, cross or moon
+    // silently outranks everything chosen here.
     for (int8 const icon : {RtiTargetValue::skullIndex, RtiTargetValue::crossIndex, RtiTargetValue::moonIndex})
         if (group->GetTargetIcon(icon))
             group->SetTargetIcon(icon, bot->GetGUID(), ObjectGuid::Empty);
@@ -2399,14 +2391,14 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     if (RingPoint(bot, boss, bearing, position))
         return true;
 
-    return StaticMeleeSpot(boss, slot, position);}
+    return StaticMeleeSpot(boss, slot, position);
+}
 
 namespace
 {
 
-// The slot this bot's pets belong on. A ring melee uses its own; everyone else gets one off its guid, stable
-// across ticks and an even spread over the three clusters. On a slot rather than away from one on purpose: a
-// chain held inside one cluster spends its late hops, the 5x to 17x ones, on pets, not the next slot's players.
+// The slot this bot's pets belong on: a ring melee's own, anyone else's off its guid. On a slot on purpose: a
+// chain held inside one cluster spends its late hops on pets, not the next slot's players.
 uint8 ThorimPetRingSlot(PlayerbotAI* botAI, Player* bot)
 {
     uint8 slot = 0;
@@ -2611,7 +2603,8 @@ bool ThorimCampBlizzardEscape(PlayerbotAI* botAI, Player* bot, Position& out)
     };
 
     Position const clear = FindNearestPositionClearOfHazards(bot, circles, ULDUAR_THORIM_CAMP_BLIZZARD_ESCAPE_RADIUS,
-                                                             2.0f, static_cast<float>(M_PI) / 8.0f, &spot, accept);
+                                                             ULDUAR_THORIM_SWEEP_STEP, ULDUAR_THORIM_SWEEP_ANGLE_STEP,
+                                                             &spot, accept);
     if (clear == Position())
         return false;
 
@@ -2670,8 +2663,8 @@ Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell)
         }
     }
 
-    // Written once. Clearing it before the sweep and putting it back after emitted a pair of notes
-    // every rescan even when the answer had not moved.
+    // Written once: clearing it before the sweep and putting it back after would emit a pair of notes
+    // every rescan even when the answer hasn't moved.
     cachedGuid = found ? found->GetGUID() : ObjectGuid::Empty;
     return found;
 }
@@ -2724,7 +2717,7 @@ bool ThorimBotHasEncounterState(Player* bot)
         return false;
 
     // Everything the reset below drops. Leave one out and a bot holding only that never trips the
-    // trigger, which is how balconyStep got to ride into the next pull unnoticed.
+    // trigger, so the latch rides into the next pull.
     return state->meleeSlots.count(bot->GetGUID()) || state->ringArrived.count(bot->GetGUID()) ||
            state->barrierBailing.count(bot->GetGUID()) || state->squads.count(bot->GetGUID()) ||
            state->followMasterStripped.count(bot->GetGUID()) ||

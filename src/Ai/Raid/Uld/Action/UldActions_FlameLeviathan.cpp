@@ -241,11 +241,12 @@ Aura* FlameLeviathanVehicleAction::TrackBarrels(Unit* target)
         barrelsInFlight_.clear();
     }
     else if (own && !barrelsInFlight_.empty() &&
-             (stacks > lastPyriteStacks_ || duration > lastPyriteDurationMs_ + 250))
+             (stacks > lastPyriteStacks_ || duration > lastPyriteDurationMs_ + ULDUAR_FL_PYRITE_LANDING_JUMP_MS))
     {
-        barrelLeadMs_ = std::clamp<uint32>(getMSTimeDiff(barrelsInFlight_.front(), now), 500,
+        barrelLeadMs_ = std::clamp<uint32>(getMSTimeDiff(barrelsInFlight_.front(), now), ULDUAR_FL_PYRITE_FLIGHT_MIN_MS,
                                            ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS);
-        size_t const landed = std::min<size_t>(std::max(int(stacks) - int(lastPyriteStacks_), 1), barrelsInFlight_.size());
+        size_t const landed =
+            std::min<size_t>(std::max(int(stacks) - int(lastPyriteStacks_), 1), barrelsInFlight_.size());
         barrelsInFlight_.erase(barrelsInFlight_.begin(), barrelsInFlight_.begin() + landed);
     }
 
@@ -340,7 +341,7 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
     if (Unit* add = FlameLeviathanBestAdd(botAI, vehicleBase_, 0.0f, ULDUAR_FL_RAM_CONE_RADIUS, 0.0f))
         if (FlameLeviathanFaceForCone(vehicleBase_, add, ULDUAR_FL_RAM_CONE_HALF_ANGLE,
                                       ULDUAR_FL_RAM_CONE_RADIUS))
-            if (CastVehicle(SPELL_FL_DEMOLISHER_RAM, add, 4000))
+            if (CastVehicle(SPELL_FL_DEMOLISHER_RAM, add, ULDUAR_FL_DEMOLISHER_RAM_COOLDOWN_MS))
                 return true;
 
     if (!wantBarrel)
@@ -360,7 +361,8 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
     if ((FlameLeviathanIsPursued(bot) || FlameLeviathanIsRamTarget(bot)) && demolisher &&
         !demolisher->HasAura(SPELL_FL_INCREASED_SPEED))
     {
-        if (CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_INCREASED_SPEED, ULDUAR_FL_INCREASED_SPEED_COST, 1000))
+        if (CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_INCREASED_SPEED, ULDUAR_FL_INCREASED_SPEED_COST,
+                                 ULDUAR_FL_SPEED_RECAST_MS))
         {
             // CastVehicleSpell says yes even on a refusal, and instants resolve inline, so check the aura.
             if (demolisher->HasAura(SPELL_FL_INCREASED_SPEED))
@@ -397,11 +399,11 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
     // Mortar thaws like the boulder, via Flames 65044, and has no minimum range, so the gunner covers the
     // close-in case under the boulder's 10 yd floor.
     if (Unit* frozen = FlameLeviathanFrozenVehicle(bot, vehicleBase_, 0.0f, ULDUAR_FL_MORTAR_MAX_RANGE))
-        if (CastVehicle(SPELL_FL_MORTAR, frozen, 1000))
+        if (CastVehicle(SPELL_FL_MORTAR, frozen, ULDUAR_FL_MORTAR_COOLDOWN_MS))
             return true;
 
     if (Unit* lift = FindMechanolift())
-        if (CastVehicle(SPELL_FL_ANTI_AIR_ROCKET, lift, 250))
+        if (CastVehicle(SPELL_FL_ANTI_AIR_ROCKET, lift, ULDUAR_FL_ANTI_AIR_ROCKET_COOLDOWN_MS))
         {
             NoteLiftShot(lift);
             return true;
@@ -411,10 +413,10 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
     // either, so it covers adds inside Fire Cannon's 10 yd floor.
     if (Unit* add = FlameLeviathanBestAdd(botAI, vehicleBase_, 0.0f, ULDUAR_FL_MORTAR_MAX_RANGE,
                                           ULDUAR_FL_MORTAR_SPLASH))
-        if (CastVehicle(SPELL_FL_MORTAR, add, 1000))
+        if (CastVehicle(SPELL_FL_MORTAR, add, ULDUAR_FL_MORTAR_COOLDOWN_MS))
             return true;
 
-    return CastVehicle(SPELL_FL_MORTAR, target, 1000);
+    return CastVehicle(SPELL_FL_MORTAR, target, ULDUAR_FL_MORTAR_COOLDOWN_MS);
 }
 
 bool FlameLeviathanVehicleAction::SiegeEngineAction(Unit* target)
@@ -462,13 +464,14 @@ bool FlameLeviathanVehicleAction::SiegeEngineTurretAction(Unit* target)
     {
         Unit* siege = FlameLeviathanRiddenVehicle(bot);
         if (siege && !siege->HasAura(SPELL_FL_SHIELD_GENERATOR))
-            if (CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_SHIELD_GENERATOR, 0, 60000))
+            if (CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_SHIELD_GENERATOR, 0,
+                                     ULDUAR_FL_SHIELD_GENERATOR_COOLDOWN_MS))
                 if (siege->HasAura(SPELL_FL_SHIELD_GENERATOR))
                     return true;
     }
 
     if (Unit* lift = FindMechanolift())
-        if (CastVehicle(SPELL_FL_ANTI_AIR_ROCKET_SIEGE, lift, 250))
+        if (CastVehicle(SPELL_FL_ANTI_AIR_ROCKET_SIEGE, lift, ULDUAR_FL_ANTI_AIR_ROCKET_COOLDOWN_MS))
         {
             NoteLiftShot(lift);
             return true;
@@ -511,7 +514,7 @@ bool FlameLeviathanVehicleAction::ChopperAction(Unit* target)
     // Tar's pool spawns 9 yd behind the chopper, so it only lands in his path while he's behind us: whenever
     // this chopper is pursued or runs the lead.
     if (target && !vehicleBase_->HasInArc(M_PI / 2.0f, target))
-        if (CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_TAR, 0, 15000))
+        if (CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_TAR, 0, ULDUAR_FL_TAR_COOLDOWN_MS))
             return true;
 
     if (vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_SONIC_HORN_COST)
@@ -677,8 +680,9 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
         // post dead ahead and over a charge away.
         Position const post = FlameLeviathanCornerPostPoint(slot);
         if (vehicleBase_->GetExactDist2d(post) > ULDUAR_FL_STEAM_RUSH_DIST + ULDUAR_FL_ARRIVE_TOLERANCE &&
-            vehicleBase_->HasInArc(float(M_PI) / 4.0f, &post))
-            CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_STEAM_RUSH, ULDUAR_FL_STEAM_RUSH_COST, 15000);
+            vehicleBase_->HasInArc(ULDUAR_FL_STEAM_RUSH_AIM_ARC, &post))
+            CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_STEAM_RUSH, ULDUAR_FL_STEAM_RUSH_COST,
+                                 ULDUAR_FL_STEAM_RUSH_COOLDOWN_MS);
 
         // Face the add the cast node will Ram, not the corner: it comes back from the arena side, often inside
         // Fire Cannon's floor. Same pick as SiegeEngineAction, so the two can't aim apart.
@@ -925,9 +929,8 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
         stationLead = FlameLeviathanStationLead(boss);
         centreSide = true;
 
-        // Pursued lands on a random siege engine or demolisher, never mid-channel, and a siege engine
-        // caught inside Battering Ram's reach can't drive clear. So wait outside it, deadband included,
-        // and close in only for the channel.
+        // A siege engine caught in Battering Ram's reach when Pursued lands can't drive clear, so wait outside
+        // it, deadband included, and close in only for the channel.
         if (FlameLeviathanMsToNextVent(bot, boss) > ULDUAR_FL_VENT_APPROACH_LEAD_MS)
             standDist = ULDUAR_FL_BATTERING_RAM_CAST_RANGE + vehicleBase_->GetCombatReach() +
                         ULDUAR_FL_ARRIVE_TOLERANCE;
@@ -1031,14 +1034,15 @@ bool FlameLeviathanDriveAction::RushToVents(Unit* boss)
     }
 
     // Stopped first: a moving hull's spline overrides the facing.
-    if (!vehicleBase_->HasInArc(float(M_PI) / 4.0f, boss))
+    if (!vehicleBase_->HasInArc(ULDUAR_FL_STEAM_RUSH_AIM_ARC, boss))
     {
         vehicleBase_->StopMoving();
         vehicleBase_->SetFacingToObject(boss);
         return true;
     }
 
-    if (!CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_STEAM_RUSH, ULDUAR_FL_STEAM_RUSH_COST, 15000))
+    if (!CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_STEAM_RUSH, ULDUAR_FL_STEAM_RUSH_COST,
+                              ULDUAR_FL_STEAM_RUSH_COOLDOWN_MS))
         return false;
 
     if (RaidObs::Active())
@@ -1106,7 +1110,8 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss, char const*& branch)
         // Direction picked per kite, away from him, then held: turning round mid-kite runs back into him.
         int32 const here = nearestNode();
         float const ahead = ring[(here + 1) % count].GetExactDist2d(boss->GetPositionX(), boss->GetPositionY());
-        float const behind = ring[(here - 1 + count) % count].GetExactDist2d(boss->GetPositionX(), boss->GetPositionY());
+        float const behind =
+            ring[(here - 1 + count) % count].GetExactDist2d(boss->GetPositionX(), boss->GetPositionY());
         kiteDir_ = ahead >= behind ? 1 : -1;
 
         kiteIdx_ = here;
@@ -1145,11 +1150,13 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss, char const*& branch)
         {
             case NPC_SALVAGED_SIEGE_ENGINE:
                 // Steam Rush charges along our own facing, so with him in front it would dash into him.
-                CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_STEAM_RUSH, ULDUAR_FL_STEAM_RUSH_COST, 15000);
+                CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_STEAM_RUSH, ULDUAR_FL_STEAM_RUSH_COST,
+                                     ULDUAR_FL_STEAM_RUSH_COOLDOWN_MS);
                 break;
             case NPC_VEHICLE_CHOPPER:
                 if (!vehicleBase_->HasAura(SPELL_FL_SPEED_BOOST))
-                    CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_SPEED_BOOST, ULDUAR_FL_SPEED_BOOST_COST, 1000);
+                    CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_SPEED_BOOST, ULDUAR_FL_SPEED_BOOST_COST,
+                                         ULDUAR_FL_SPEED_RECAST_MS);
                 break;
             default:
                 break;
@@ -1159,7 +1166,8 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss, char const*& branch)
     return true;
 }
 
-bool FlameLeviathanDriveAction::DriveTo(Position const& goal, Unit* faceTarget, bool faceAway, MovementPriority priority)
+bool FlameLeviathanDriveAction::DriveTo(Position const& goal, Unit* faceTarget, bool faceAway,
+                                        MovementPriority priority)
 {
     std::optional<float> facing;
     if (faceTarget)
@@ -1236,9 +1244,9 @@ bool FlameLeviathanEnterVehicleAction::Execute(Event /*event*/)
         return false;
     Unit* vehicleToEnter = nullptr;
     GuidVector npcs = AI_VALUE(GuidVector, "nearest vehicles far");
-    for (GuidVector::iterator i = npcs.begin(); i != npcs.end(); i++)
+    for (ObjectGuid const& guid : npcs)
     {
-        Unit* vehicleBase = botAI->GetUnit(*i);
+        Unit* vehicleBase = botAI->GetUnit(guid);
         if (!vehicleBase)
             continue;
 

@@ -652,6 +652,9 @@ Related traps:
   set `SetNextCheckDelay` to 12-18 s scaled by what is missing, so nothing runs, dodges included,
   until it expires. Wherever a hazard outlives combat, such as a phase handover, veto `drink`/`food`
   near it (Mimiron's `mimiron drink guard` rule).
+- **A same-map `Player::TeleportTo` calls `CombatStop()`** unless given `TELE_TO_NOT_LEAVE_COMBAT`, so a
+  floor-fall rescue built on it drops the bot out of the fight. Use `NearTeleportTo`, which passes it
+  (and returns `void`, so return `true` after).
 - **A direct `Attack()` has no out-of-combat guard** and reaches `SightDistance` (100 yd), so every
   branch of a resolver feeding it needs an in-combat unit, or the raid pulls itself
   ([kologarn.md](../raids/ulduar/kologarn.md)).

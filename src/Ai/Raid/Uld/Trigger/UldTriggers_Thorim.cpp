@@ -46,7 +46,7 @@ bool ThorimDpsPriorityTrigger::IsActive()
 
 bool ThorimGauntletPositioningTrigger::IsActive()
 {
-    if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > 110.0f)
+    if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_FLOOR_RANGE)
         return false;
 
     if (GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
@@ -56,10 +56,9 @@ bool ThorimGauntletPositioningTrigger::IsActive()
     if (!master)
         return false;
 
-    if (master->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < 10.0f && (bot->GetDistance2d(master) > 5.0f))
-    {
+    if (master->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
+        bot->GetDistance2d(master) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
         return true;
-    }
 
     uint8 masterIndex = 0;
     bool leftLane = false;
@@ -71,12 +70,7 @@ bool ThorimGauntletPositioningTrigger::IsActive()
 
         uint8 botIndex = 0;
         if (!ThorimGauntletLaneIndexInLane(bot, leftLane, botIndex))
-        {
-            if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-                return false;
-
-            return true;
-        }
+            return bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
     }
 
     return false;
@@ -113,7 +107,7 @@ bool ThorimArenaPositioningTrigger::IsActive()
 
 bool ThorimFallFromFloorTrigger::IsActive()
 {
-    if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > 110.0f)
+    if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_FLOOR_RANGE)
         return false;
 
     return bot->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT;
@@ -143,11 +137,11 @@ bool ThorimPhase2PositioningTrigger::IsActive()
     // Only whoever has him walks him to the anchor, a second tank would drag him back. The off-tank too: his ring
     // point is measured off the boss, so towing from it drifts the pair across the room.
     if (role == ThorimPhase2Role::MainTank || (role == ThorimPhase2Role::OffTank && holdsBoss))
-        return holdsBoss && bot->GetDistance(spot) > 1.0f;
+        return holdsBoss && bot->GetDistance(spot) > ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE;
 
     if (role == ThorimPhase2Role::Ranged)
     {
-        if (bot->GetDistance(spot) <= 1.0f)
+        if (bot->GetDistance(spot) <= ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE)
             return false;
 
         // Wait out a zone on the spot or on the straight walk there, rather than walk in and get flung off again.

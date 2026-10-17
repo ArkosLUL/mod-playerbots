@@ -64,151 +64,157 @@ enum UlduarFreyaIds
 };
 
 // Hard mode: how far out of an Unstable Sun Beam bots step. The pool itself (62865) is only 5 yd.
-constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f;
+inline constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f;
 
 // Aim 3 yd past the trigger radius as hysteresis: a one yard margin only gets a ~2 yd step from
 // FindNearestPositionClearOfHazards, and the next beam spawn re-triggers it.
-constexpr float ULDUAR_FREYA_SUN_BEAM_CLEARANCE = 15.0f;
+inline constexpr float ULDUAR_FREYA_SUN_BEAM_CLEARANCE = 15.0f;
 
 // Ceiling on the escape latch. Long enough to walk the clearance at 7 yd/s, short enough that a bot
 // rooted mid-dodge hands the tick back instead of holding it for the rest of the wave.
-constexpr uint32 ULDUAR_FREYA_SUN_BEAM_LATCH_MS = 3000;
+inline constexpr uint32 ULDUAR_FREYA_SUN_BEAM_LATCH_MS = 3000;
 
 // Sunbeam lands where its target is when the cast ends (SelectSpellTargets runs from Spell::cast), so only the bots
 // around the target can leave. Trigger at AVOID, aim at CLEAR, same split as the Nature Bomb.
-constexpr float ULDUAR_FREYA_SUNBEAM_AVOID_RADIUS = 11.0f;
-constexpr float ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS = 13.0f;
+inline constexpr float ULDUAR_FREYA_SUNBEAM_AVOID_RADIUS = 11.0f;
+inline constexpr float ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS = 13.0f;
 
 // The 1.5s cast. Any longer holds the bot still after the beam has already landed.
-constexpr uint32 ULDUAR_FREYA_SUNBEAM_LATCH_MS = 1500;
+inline constexpr uint32 ULDUAR_FREYA_SUNBEAM_LATCH_MS = 1500;
 
 // Each trio member revives 11s after its own death unless all three are down, so they have to die together.
 // Wide on purpose: the band only covers the last tenth of the wave, about 6s of raid damage.
-constexpr float ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT = 30.0f;    // below this the trio outranks other adds
-constexpr float ULDUAR_FREYA_TRIO_FLOOR_RELEASE_PCT = 15.0f;  // all members below: free burn to the finish
-constexpr float ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT = 10.0f;     // never cross while a sibling is still high
+inline constexpr float ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT = 30.0f;    // below this the trio outranks other adds
+inline constexpr float ULDUAR_FREYA_TRIO_FLOOR_RELEASE_PCT = 15.0f;  // all members below: free burn to the finish
+inline constexpr float ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT = 10.0f;     // never cross while a sibling is still high
 
 // Potent Pheromones (64321) radius around a Healthy Spore, the only counter to the raid-wide Conservator's Grip.
-constexpr float ULDUAR_FREYA_SPORE_RADIUS = 6.0f;
+inline constexpr float ULDUAR_FREYA_SPORE_RADIUS = 6.0f;
 
 // Raid members that make a spore full, so the back line spreads instead of piling onto the nearest. Six puts
 // the melee spore over the line from the start: both of this wave's big hits are 8 yd wide, a spore is 6.
-constexpr uint32 ULDUAR_FREYA_SPORE_CROWD = 6;
+inline constexpr uint32 ULDUAR_FREYA_SPORE_CROWD = 6;
 
 // One Nature's Fury tick around the carrier: EffectRadiusIndex 14 on the triggered 63570.
-constexpr float ULDUAR_FREYA_NATURES_FURY_RADIUS = 8.0f;
+inline constexpr float ULDUAR_FREYA_NATURES_FURY_RADIUS = 8.0f;
 
 // Where the carrier aims. Past the radius, since landing on the edge gets a 2 yd step that combat movement
 // undoes before the next tick.
-constexpr float ULDUAR_FREYA_NATURES_FURY_CLEAR = 11.0f;
+inline constexpr float ULDUAR_FREYA_NATURES_FURY_CLEAR = 11.0f;
 
 // Ceiling on the bail latch, about the walk to the next spore at 7 yd/s. The mark itself runs 10s.
-constexpr uint32 ULDUAR_FREYA_NATURES_FURY_LATCH_MS = 3000;
+inline constexpr uint32 ULDUAR_FREYA_NATURES_FURY_LATCH_MS = 3000;
 
 // Where a bot stops: inside the aura, clear of the spore's collision. The centre is unreachable and MoveTo would
 // retry it forever. The trigger stands down a yard further out as hysteresis.
-constexpr float ULDUAR_FREYA_SPORE_STAND_RANGE = 4.0f;
+inline constexpr float ULDUAR_FREYA_SPORE_STAND_RANGE = 4.0f;
 
 // Spores spawn 20 yd from the Conservator, plus room for the boss having been dragged part way to one.
-constexpr float ULDUAR_FREYA_SPORE_SEARCH_RADIUS = 40.0f;
+inline constexpr float ULDUAR_FREYA_SPORE_SEARCH_RADIUS = 40.0f;
 
 // Detonate fires on death, not on a timer. 62598 (10-man) and 62937 (25-man) both carry EffectRadiusIndex 18.
-constexpr float ULDUAR_FREYA_DETONATE_RADIUS = 15.0f;
+inline constexpr float ULDUAR_FREYA_DETONATE_RADIUS = 15.0f;
 
 // Melee never chase a lasher past this. Tight on purpose: "nearby" means the lasher came to the melee group.
-constexpr float ULDUAR_FREYA_MELEE_LASHER_RANGE = 12.0f;
+inline constexpr float ULDUAR_FREYA_MELEE_LASHER_RANGE = 12.0f;
 
 // Margin before the add tank moves between two near-equal trio members. Its own damage is what closes
 // the gap, so without this it would swap every few ticks and lose swing timers to nothing.
-constexpr float ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT = 5.0f;
+inline constexpr float ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT = 5.0f;
 
 // Nature Bomb (64587): 10 yd in both raid sizes, at the target's feet. No margin: the last-resort escape only
 // leaves the circles it's standing in, since a volley of seven to ten often leaves nowhere that clears them all.
-constexpr float ULDUAR_FREYA_NATURE_BOMB_BLAST_RADIUS = 10.0f;
+inline constexpr float ULDUAR_FREYA_NATURE_BOMB_BLAST_RADIUS = 10.0f;
 
 // The extra yard covers the bot's own reach, so it doesn't clip the blast's edge while holding still.
-constexpr float ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS = 11.0f;
+inline constexpr float ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS = 11.0f;
 
 // Where the escape aims, deliberately past the trigger radius: landing on the boundary would re-fire
 // the node every tick as combat movement pulls the bot back toward its target.
-constexpr float ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS = 13.0f;
+inline constexpr float ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS = 13.0f;
 
 // Has to outlast the fuse, which is 6s, not the 11s the timer reads: boss_freya_nature_bomb::UpdateAI fires at
 // _explodeTimer >= 11000 but the branch under it snaps the timer from 5000 straight to 10000.
-constexpr uint32 ULDUAR_FREYA_NATURE_BOMB_LATCH_MS = 7000;
+inline constexpr uint32 ULDUAR_FREYA_NATURE_BOMB_LATCH_MS = 7000;
 
 // Ceiling on the main tank's reposition. Long enough to walk the clearance at 7 yd/s, short enough
 // that a tank stopped on the way hands the tick back instead of holding Freya still for a whole volley.
-constexpr uint32 ULDUAR_FREYA_TANK_BOMB_LATCH_MS = 3000;
+inline constexpr uint32 ULDUAR_FREYA_TANK_BOMB_LATCH_MS = 3000;
 
 // Where the main tank holds Freya, navprobe-checked on the bot filter (--nav 0x09).
 extern const Position ULDUAR_FREYA_TANK_ANCHOR;
 
 // How far the tank may take her from the anchor. Every bomb escape aims away from the back line, so without a
 // leash the drift compounds across the room.
-constexpr float ULDUAR_FREYA_TANK_LEASH = 20.0f;
+inline constexpr float ULDUAR_FREYA_TANK_LEASH = 20.0f;
 
 // Ceiling on the walk home. A re-issued MoveTo clears the motion master out from under the walk it repeats.
-constexpr uint32 ULDUAR_FREYA_TANK_HOLD_LATCH_MS = 3000;
+inline constexpr uint32 ULDUAR_FREYA_TANK_HOLD_LATCH_MS = 3000;
 
 // How far the escapes look for hazards. Freya's come in clusters (a bomb per player, ten lashers, overlapping
 // beams), so the bot has to see the whole cluster or it walks out of one and into the next.
-constexpr float ULDUAR_FREYA_HAZARD_SEARCH_RADIUS = 30.0f;
+inline constexpr float ULDUAR_FREYA_HAZARD_SEARCH_RADIUS = 30.0f;
+
+// Ring and bearing steps of the main tank's bomb sweep.
+inline constexpr float ULDUAR_FREYA_SWEEP_STEP = 2.0f;
+inline constexpr float ULDUAR_FREYA_SWEEP_ANGLE_STEP = static_cast<float>(M_PI) / 8.0f;
+
+// The root creature is summoned on the bot it traps, so it's always this close.
+inline constexpr float ULDUAR_FREYA_IRON_ROOTS_SEARCH_RADIUS = 10.0f;
 
 // Lasher wave: one camp, the lashers come to it and get AoE'd. Under FINISH_PCT they're picked off one by one
 // so the blasts stagger. PACK_RADIUS / MIN_COUNT are MediumAoeTrigger's 8 yd / 3, PACK_CLEAR one past Detonate.
-constexpr float ULDUAR_FREYA_LASHER_PACK_RADIUS = 8.0f;
-constexpr float ULDUAR_FREYA_LASHER_PACK_CLEAR = 16.0f;
-constexpr uint32 ULDUAR_FREYA_LASHER_PACK_MIN_COUNT = 3;
-constexpr float ULDUAR_FREYA_LASHER_FINISH_PCT = 20.0f;
+inline constexpr float ULDUAR_FREYA_LASHER_PACK_RADIUS = 8.0f;
+inline constexpr float ULDUAR_FREYA_LASHER_PACK_CLEAR = 16.0f;
+inline constexpr uint32 ULDUAR_FREYA_LASHER_PACK_MIN_COUNT = 3;
+inline constexpr float ULDUAR_FREYA_LASHER_FINISH_PCT = 20.0f;
 
 // Frost Nova is a 10 yd sphere centred on the caster, so this is also how close the lashers have to
 // have closed on the mage for it to reach anything.
-constexpr float ULDUAR_FREYA_FROST_NOVA_RADIUS = 10.0f;
-constexpr uint32 ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS = 2;
+inline constexpr float ULDUAR_FREYA_FROST_NOVA_RADIUS = 10.0f;
+inline constexpr uint32 ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS = 2;
 
 // Frost Trap goes down at the hunter's feet once a lasher is this close, so it's armed when the lasher arrives.
 // Lashers have no creature_immunities row, so the -50% from 13810 lands: 8.0 yd/s down to 4.0, under a player's 7.0.
-constexpr float ULDUAR_FREYA_FROST_TRAP_ARM_RANGE = 20.0f;
+inline constexpr float ULDUAR_FREYA_FROST_TRAP_ARM_RANGE = 20.0f;
 
 // A lasher this low is about to blow, typically with just the walk out of its 15 yd blast left. Higher costs
 // more damage than it saves.
-constexpr float ULDUAR_FREYA_LASHER_BAIL_PCT = 15.0f;
+inline constexpr float ULDUAR_FREYA_LASHER_BAIL_PCT = 15.0f;
 
 // Holds the step-out's exit. Lashers die one at a time, so re-derived each tick the exit shifts a yard and every
 // MoveTo resets the walk instead of finishing it.
-constexpr uint32 ULDUAR_FREYA_LASHER_BAIL_LATCH_MS = 3000;
+inline constexpr uint32 ULDUAR_FREYA_LASHER_BAIL_LATCH_MS = 3000;
 
-// How far the back line steps from every lasher under LASHER_BAIL_PCT. Not the pack centre, they spread ~17 yd,
-// and not every lasher, which is a retreat from something faster than the bot. 18 clears the 15 yd blast with
-// room to spare, and still shoots.
-constexpr float ULDUAR_FREYA_LASHER_CAMP_STANDOFF = 18.0f;
+// How far the back line steps from each lasher under LASHER_BAIL_PCT, not from the pack centre (they spread
+// ~17 yd). 18 clears the 15 yd blast and still shoots.
+inline constexpr float ULDUAR_FREYA_LASHER_CAMP_STANDOFF = 18.0f;
 
 // Eonar's Gift heals Freya 30-60% if it lives 12s. Five ranged kill it well inside that and leave the rest on
 // the lasher pack.
-constexpr uint32 ULDUAR_FREYA_GIFT_SHARE = 5;
+inline constexpr uint32 ULDUAR_FREYA_GIFT_SHARE = 5;
 
 // If the share has not finished the Gift by now, every ranged bot joins it. Leaves about 3s of margin
 // on the 12s.
-constexpr uint32 ULDUAR_FREYA_GIFT_SHARE_MS = 5000;
+inline constexpr uint32 ULDUAR_FREYA_GIFT_SHARE_MS = 5000;
 
 // How tight the camp holds. Ranged are pulled in harder because the ball has to fit inside one AoE;
 // healers get the slack, since they also have to stay in range of the melee group and the tanks.
-constexpr float ULDUAR_FREYA_RANGED_CAMP_TOLERANCE = 10.0f;
-constexpr float ULDUAR_FREYA_HEALER_CAMP_TOLERANCE = 15.0f;
+inline constexpr float ULDUAR_FREYA_RANGED_CAMP_TOLERANCE = 10.0f;
+inline constexpr float ULDUAR_FREYA_HEALER_CAMP_TOLERANCE = 15.0f;
 
 // Bots stop this short of the camp spot on the bearing they came in on, so the back line forms a ring with no
 // shared state. Stops the pile, can't beat an 8 yd splash on its own.
-constexpr float ULDUAR_FREYA_RANGED_CAMP_SPACING = 6.0f;
+inline constexpr float ULDUAR_FREYA_RANGED_CAMP_SPACING = 6.0f;
 
 // Hardened Bark is at 99 stacks 15s into a trio wave, and one swing then kills anyone but a tank. Aggro flips at
 // 110% in melee, so a damage dealer this close to the tank's threat moves to a sibling until the tank is ahead.
-constexpr float ULDUAR_FREYA_SNAPLASHER_THREAT_SHED_PCT = 80.0f;
-constexpr float ULDUAR_FREYA_SNAPLASHER_THREAT_RETURN_PCT = 60.0f;
+inline constexpr float ULDUAR_FREYA_SNAPLASHER_THREAT_SHED_PCT = 80.0f;
+inline constexpr float ULDUAR_FREYA_SNAPLASHER_THREAT_RETURN_PCT = 60.0f;
 
 // The tank's head start on a fresh Snaplasher. A ratio can't cover the opener: the tank's first hit is a few
 // thousand threat and one global of raid damage is several times that.
-constexpr uint32 ULDUAR_FREYA_SNAPLASHER_TANK_LEAD_MS = 5000;
+inline constexpr uint32 ULDUAR_FREYA_SNAPLASHER_TANK_LEAD_MS = 5000;
 
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
 // and both multipliers cannot disagree about what is up.
@@ -303,7 +309,7 @@ Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state);
 Unit* GetFreyaConservatorSpore(PlayerbotAI* botAI, Unit* conservator);
 
 // Melee get the parked spore, ranged and healers the nearest one with room. Trigger and action must both use
-// this: deriving it twice woke a bot for one spore and walked it to another.
+// this, or a bot wakes for one spore and walks to another.
 Unit* GetFreyaTargetSpore(PlayerbotAI* botAI);
 
 // Every living Healthy Spore the bot can see.

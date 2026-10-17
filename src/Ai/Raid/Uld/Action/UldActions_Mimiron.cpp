@@ -124,10 +124,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     MimironBurstSector const sector =
         sectorScreen && vx001 ? GetMimironOtherGroupSector(botAI, bot, vx001) : MimironBurstSector();
 
-    // Up to 112.5 degrees off straight away: two stacked filters can empty the first quadrant, and past
-    // ~120 the geometry turns back inward.
-    for (float delta = 0.0f; delta <= 5.0f * static_cast<float>(M_PI) / 8.0f + 0.001f;
-         delta += static_cast<float>(M_PI) / 8.0f)
+    for (float delta = 0.0f; delta <= ULDUAR_MIMIRON_FLEE_FAN_MAX + 0.001f; delta += ULDUAR_MIMIRON_FLEE_FAN_STEP)
     {
         for (float sign : {1.0f, -1.0f})
         {
@@ -737,7 +734,7 @@ bool MimironRocketStrikeAction::isUseful()
 
 bool MimironRocketStrikeAction::Execute(Event /*event*/)
 {
-    Creature* rocketStrikeN = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, 100.0f);
+    Creature* rocketStrikeN = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, ULDUAR_MIMIRON_ROOM_SEARCH_RANGE);
     if (!rocketStrikeN)
         return false;
 
@@ -766,8 +763,8 @@ bool MimironPhase4FocusAction::Execute(Event /*event*/)
 
     // Hand Pulse re-aims every 1.75 s, so there's nothing to sidestep; only not bunching up behind its
     // target helps.
-    if (AI_VALUE(float, "disperse distance") != 4.0f)
-        SET_AI_VALUE(float, "disperse distance", 4.0f);
+    if (AI_VALUE(float, "disperse distance") != ULDUAR_MIMIRON_PHASE4_DISPERSE_DISTANCE)
+        SET_AI_VALUE(float, "disperse distance", ULDUAR_MIMIRON_PHASE4_DISPERSE_DISTANCE);
 
     // Never claims the tick: "combat formation move" is what reads the value, and it sits below
     // ACTION_RAID.
@@ -807,8 +804,8 @@ bool MimironProximityMineAction::Execute(Event /*event*/)
     // unfiltered fallback: one mine for another isn't worth the travel, and one blast is healable.
     float const step = std::min(ULDUAR_MIMIRON_MINE_CLEARANCE + 1.0f - nearestDist,
                                 ULDUAR_MIMIRON_MINE_MAX_STEP);
-    return MoveAwayClearOfMines(nearest, std::max(step, 2.0f), MovementPriority::MOVEMENT_COMBAT,
-                                false, false, "mine");
+    return MoveAwayClearOfMines(nearest, std::max(step, ULDUAR_MIMIRON_MINE_MIN_STEP),
+                                MovementPriority::MOVEMENT_COMBAT, false, false, "mine");
 }
 
 bool MimironPetControlAction::isUseful()
@@ -946,7 +943,7 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
         char what[16];
         snprintf(what, sizeof(what), "flames+%.0f", step);
 
-        // FORCED: at COMBAT it tied with the formation, and IsWaitingForLastMove wants strictly higher.
+        // FORCED: at COMBAT it ties with the formation, and IsWaitingForLastMove wants strictly higher.
         // Capped, since a FORCED leg blocks the Frost Bomb and Rocket Strike dodges while it runs.
         float const hop = std::min(ULDUAR_MIMIRON_FLAMES_RADIUS + spread + step,
                                    ULDUAR_MIMIRON_FLAMES_MAX_HOP);
@@ -984,7 +981,8 @@ bool MimironFireBotAction::Execute(Event /*event*/)
             std::fabs(side) >= ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH)
             continue;
 
-        float const step = ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH + 1.5f - std::fabs(side);
+        float const step =
+            ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH + ULDUAR_MIMIRON_FIREBOT_SPRAY_SIDESTEP - std::fabs(side);
         float const out = side >= 0.0f ? 1.0f : -1.0f;
         Position const dest(bot->GetPositionX() - out * step * std::sin(facing),
                             bot->GetPositionY() + out * step * std::cos(facing), bot->GetPositionZ());
@@ -1110,9 +1108,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     // on one they finish it, so a dip under the bar leaves no half-dead ones.
     if (PlayerbotAI::IsMelee(bot) && (junkBots.size() >= ULDUAR_MIMIRON_JUNK_BOT_PILE ||
                                 (currentTarget && currentTarget->GetEntry() == NPC_JUNK_BOT)))
-    {
         priority.emplace_back(NPC_JUNK_BOT, SelectByEntry(currentTarget, NPC_JUNK_BOT, junkBots));
-    }
 
     priority.emplace_back(NPC_ASSAULT_BOT, SelectByEntry(currentTarget, NPC_ASSAULT_BOT, assaultBots));
 
@@ -1153,7 +1149,7 @@ Unit* MimironSetDpsPriorityAction::SelectByEntry(Unit* currentTarget, uint32 ent
 
     // Adds walk in from pads all round the room, so nearest-to-the-bot beats measuring from an
     // anchor. The margin stops two similar adds trading the bot back and forth every tick.
-    float const switchMargin = 10.0f;
+    constexpr float switchMargin = 10.0f;
     for (Unit* candidate : candidates)
     {
         if (!candidate || candidate == selected)
@@ -1346,7 +1342,7 @@ Unit* MimironPlasmaBlastDefensiveAction::PlasmaVictim()
 {
     // The cannon, an MK II passenger, is the caster. Read the victim off the spell: it's fixed at cast
     // start, and the mech may have retargeted since.
-    Creature* cannon = bot->FindNearestCreature(NPC_LEVIATHAN_MKII_CANNON, 100.0f);
+    Creature* cannon = bot->FindNearestCreature(NPC_LEVIATHAN_MKII_CANNON, ULDUAR_MIMIRON_ROOM_SEARCH_RANGE);
     if (!cannon)
         return nullptr;
 
@@ -1412,9 +1408,7 @@ Player* MimironRedirectThreatAction::GetRedirectTank()
     if (!GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
         GetUldUnitByEntry(botAI, NPC_VX001) ||
         GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
-    {
         return nullptr;
-    }
 
     Unit* mainTank = AI_VALUE(Unit*, "main tank");
     return mainTank ? mainTank->ToPlayer() : nullptr;
@@ -1471,7 +1465,7 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
     // 46029 has item_template duration 60, so a banked core expires in the bags; no duration reads 0. With
     // the unit this low the phase ends before another core could be spent.
     uint32 const remaining = core ? core->GetUInt32Value(ITEM_FIELD_DURATION) : 0;
-    bool const expiring = remaining && remaining * 1000u <= ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS;
+    bool const expiring = remaining && remaining * IN_MILLISECONDS <= ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS;
     bool const acuLow = aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT;
 
     // One core per landing. A second one while the first is live makes the unit climb with the aura

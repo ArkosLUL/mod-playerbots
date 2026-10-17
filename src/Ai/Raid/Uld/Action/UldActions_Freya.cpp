@@ -46,7 +46,7 @@ bool FreyaBotCannotWalk(Player* bot)
     return bot->HasUnitState(UNIT_STATE_NOT_MOVE);
 }
 
-// Every other living raid member near the bot. Nature's Fury has no ground marker to route around - the
+// Every other living raid member near the bot. Nature's Fury has no ground marker to route around: the
 // raid itself is the hazard, and the carrier is the only one who can move away from it.
 std::vector<Position> GetFreyaAlliesNear(PlayerbotAI* botAI, float radius)
 {
@@ -295,8 +295,9 @@ bool FreyaTankNatureBombAction::Execute(Event /*event*/)
 
     HazardSweepCache sweep;
 
-    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, 2.0f,
-                                                     static_cast<float>(M_PI) / 8.0f, preferNear, {}, &sweep);
+    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                                      ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP,
+                                                      preferNear, {}, &sweep);
 
     if (safe == Position())
         safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS,
@@ -424,7 +425,7 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
     GatherFreyaWaveState(botAI, state);
 
     // Eonar's Gift heals Freya for 30-60% if it lives 12s. Ranged burn it from where they stand, so
-    // melee never eat the travel time both ways - unless there is no ranged DPS left to do it.
+    // melee never eat the travel time both ways, unless there is no ranged DPS left to do it.
     bool const takesGift =
         (PlayerbotAI::IsRangedDps(bot) || !FreyaHasLivingRangedDps(botAI)) && TakesEonarsGift(state);
 
@@ -504,9 +505,7 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 
     if (currentTarget && currentTarget != trioMember && target != trioMember &&
         priorityIndex(currentTarget) <= priorityIndex(target))
-    {
         target = currentTarget;
-    }
 
     return target ? target : AI_VALUE(Unit*, "dps target");
 }
@@ -676,9 +675,8 @@ bool FreyaRedirectThreatAction::Execute(Event /*event*/)
     if (botAI->CanCastSpell("misdirection", tank))
         return botAI->CastSpell("misdirection", tank);
 
-    // Misdirection only moves the threat of the next three shots. Spend them on what that tank is holding
-    // rather than leaving them to whatever the rotation picks: shot into Freya, they put the add tank on her
-    // table and nothing on the Snaplasher's.
+    // Misdirection only moves the next three shots' threat, so spend them on what that tank holds: shot
+    // into Freya, they put the add tank on her table and nothing on the Snaplasher's.
     if (!dumpTarget || !bot->HasAura(SPELL_MISDIRECTION))
         return false;
 
@@ -700,9 +698,9 @@ bool FreyaBreakIronRootsAction::isUseful()
 bool FreyaBreakIronRootsAction::Execute(Event /*event*/)
 {
     // The root creature is summoned on the trapped bot; killing it removes the root DoT.
-    Creature* root = bot->FindNearestCreature(NPC_FREYA_STRENGTHENED_IRON_ROOTS, 10.0f);
+    Creature* root = bot->FindNearestCreature(NPC_FREYA_STRENGTHENED_IRON_ROOTS, ULDUAR_FREYA_IRON_ROOTS_SEARCH_RADIUS);
     if (!root)
-        root = bot->FindNearestCreature(NPC_FREYA_IRON_ROOTS, 10.0f);
+        root = bot->FindNearestCreature(NPC_FREYA_IRON_ROOTS, ULDUAR_FREYA_IRON_ROOTS_SEARCH_RADIUS);
 
     if (!root || !root->IsAlive())
         return false;
