@@ -77,13 +77,13 @@ void DefineFreya(EncounterBuilder& e)
         [](PlayerbotAI* botAI) -> Action* { return new BossFireResistanceAction(botAI, "freya"); }, ACTION_RAID);
 
     // Hard mode (config-gated): break out of Iron Roots and dodge the Unstable Sun Beam. Breaking the
-    // root outranks the dodge - a rooted bot can't move, so it has to free itself before it can step out.
+    // root outranks the dodge: a rooted bot can't move, so it has to free itself before it can step out.
     e.Node<FreyaBreakIronRootsTrigger, FreyaBreakIronRootsAction>(ACTION_RAID + 5);
     e.Node<FreyaDodgeUnstableSunBeamTrigger, FreyaDodgeUnstableSunBeamAction>(ACTION_RAID + 4);
     e.Node<FreyaGroundTremorHoldCastTrigger, FreyaGroundTremorHoldCastAction>(ACTION_EMERGENCY + 2);
 
     // The generic picker would reclaim the trio split on alternating ticks. Tank assist is off for every
-    // tank all fight: gating it on the ladder let an off-tank drag a lasher wave into the raid stack.
+    // tank all fight: gating it on the ladder lets an off-tank drag a lasher wave into the raid stack.
     e.OwnTargeting("freya disable automatic targeting", Role::Dps, FreyaOwnsTargets, Family::DpsAssist);
     e.OwnTargeting("freya disable automatic targeting", Role::Tank, FreyaOwnsTargets, Family::TankAssist);
 

@@ -45,7 +45,7 @@ bool ThorimPickingFor(PlayerbotAI* botAI)
     return botAI->GetState() == BOT_STATE_COMBAT && !PlayerbotAI::IsHeal(botAI->GetBot());
 }
 
-// Phase 2 only: the pickup row owns the tank's target there, and a voting "tank assist" held a tank on an add.
+// Phase 2 only: the pickup row owns the tank's target there, and a voting "tank assist" would hold it on an add.
 // Before that, "tank assist" holding whatever swings at the raid beats steering a tank onto the ranged pick.
 bool ThorimTankPicked(PlayerbotAI* botAI) { return ThorimPickingFor(botAI) && ThorimPhase2Active(botAI); }
 
@@ -132,7 +132,7 @@ void DefineThorim(EncounterBuilder& e)
     e.Node<ThorimSifBlizzardTrigger, ThorimSifBlizzardAction>(ACTION_RAID + 3);
 
     // Charge Orb is phase 1's largest avoidable damage, so it beats the arena ring and the add chase. Lightning
-    // Charge has no node: the phase 2 spot answers the cone, and a second mover only fought it at the movement gate.
+    // Charge has no node: the phase 2 spot answers the cone, and a second mover would only fight it at the gate.
     e.Node<ThorimChargedOrbTrigger, ThorimChargedOrbAction>(ACTION_RAID + 4);
 
     e.Node<ThorimRunicSmashTrigger, ThorimRunicSmashAction>(ACTION_RAID + 3);
@@ -148,7 +148,8 @@ void DefineThorim(EncounterBuilder& e)
 
     // Without this the generic pickers alternate with the row instead of losing: the row goes quiet once the bot
     // holds its pick, the engine falls through to "dps assist" at 50, and that retargets.
-    e.OwnTargeting("thorim disable automatic targeting", Role::Tank, ThorimTankPicked, DPS_PICKERS | Family::TankAssist);
+    e.OwnTargeting("thorim disable automatic targeting", Role::Tank, ThorimTankPicked,
+                   DPS_PICKERS | Family::TankAssist);
     e.OwnTargeting("thorim disable automatic targeting", Role::NonTank, ThorimDpsPicked, DPS_PICKERS);
     e.OwnTargeting("thorim disable automatic targeting", Role::NonTank, ThorimPhase2DpsPicked, Family::TankAssist);
 
@@ -156,7 +157,8 @@ void DefineThorim(EncounterBuilder& e)
     // Exempts the balcony walk, the one mover a bot that hasn't made it down yet has left.
     e.OwnMovement("thorim movement guard", Role::Any, ThorimRingSettled,
                   Family::Attack | Family::Reach | Family::ReachHeal | Family::AvoidAoe,
-                  {ThorimPhase2PositioningAction::Name, ThorimBalconyAdvanceAction::Name, ThorimSifBlizzardAction::Name});
+                  {ThorimPhase2PositioningAction::Name, ThorimBalconyAdvanceAction::Name,
+                   ThorimSifBlizzardAction::Name});
 
     // No attack or reach exemption here: corridor mobs sit inside the sight cap from the arena, so the chase is
     // what walks a bot out. Open only while outside the leash, so it can't become a permanent freeze.

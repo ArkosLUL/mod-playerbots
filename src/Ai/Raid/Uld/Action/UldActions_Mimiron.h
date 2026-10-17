@@ -30,10 +30,8 @@ public:
     MimironFleeAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
-    // fallbackUnfiltered: plain MoveAway fan if every mine-clear bearing is refused. The mine dodge passes false.
-    // interrupt: a casting bot can't be moved at all, so set it for anything that kills outright.
-    // clearRadius: hop solved per bearing to land on that circle; one flat distance only clears it straight away.
-    // sectorScreen: keeps a hard-mode phase 2 bot off the other group's Rapid Burst line while its own side has room.
+    // fallbackUnfiltered: plain MoveAway once every bearing is refused. interrupt: stops a cast, for lethal hazards.
+    // clearRadius: hop solved per bearing onto that circle. sectorScreen: off the other group's Rapid Burst line.
     bool MoveAwayClearOfMines(Unit* from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                               bool fallbackUnfiltered = true, bool interrupt = false,

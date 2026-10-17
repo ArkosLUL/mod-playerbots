@@ -213,7 +213,7 @@ public:
     bool isUseful() override;
 };
 
-// Hard mode: kill the Iron Roots creature trapping the bot - its death removes the root DoT.
+// Hard mode: kill the Iron Roots creature trapping the bot, its death removes the root DoT.
 class FreyaBreakIronRootsAction : public AttackAction
 {
 public:

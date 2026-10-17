@@ -247,9 +247,7 @@ Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state)
         // GUID breaks the tie so a wave of untouched lashers does not resolve differently per bot.
         if (!best || lasher->GetHealth() < best->GetHealth() ||
             (lasher->GetHealth() == best->GetHealth() && lasher->GetGUID() < best->GetGUID()))
-        {
             best = lasher;
-        }
     }
 
     return best;
@@ -262,9 +260,7 @@ Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state,
     Unit* selected = nullptr;
     if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == NPC_DETONATING_LASHER &&
         bot->GetExactDist2d(currentTarget) <= range)
-    {
         selected = currentTarget;
-    }
 
     // The margin stops two lashers at similar range from trading the bot back and forth every tick.
     constexpr float switchMargin = 10.0f;

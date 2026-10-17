@@ -13,10 +13,12 @@
 #include "UldScripts.h"
 #include "Vehicle.h"
 
+namespace
+{
 // Every vehicle a bot can usefully occupy on this fight, driver seats and gunner seats alike.
-const std::vector<uint32> availableVehicles = {NPC_VEHICLE_CHOPPER, NPC_SALVAGED_DEMOLISHER,
-                                               NPC_SALVAGED_DEMOLISHER_TURRET, NPC_SALVAGED_SIEGE_ENGINE,
-                                               NPC_SALVAGED_SIEGE_ENGINE_TURRET};
+constexpr uint32 RIDEABLE_VEHICLES[] = {NPC_VEHICLE_CHOPPER, NPC_SALVAGED_DEMOLISHER, NPC_SALVAGED_DEMOLISHER_TURRET,
+                                        NPC_SALVAGED_SIEGE_ENGINE, NPC_SALVAGED_SIEGE_ENGINE_TURRET};
+}  // namespace
 
 bool FlameLeviathanOnVehicleTrigger::IsActive()
 {
@@ -26,11 +28,10 @@ bool FlameLeviathanOnVehicleTrigger::IsActive()
         return false;
 
     uint32 entry = vehicleBase->GetEntry();
-    for (uint32 comp : availableVehicles)
-    {
-        if (entry == comp)
+    for (uint32 rideable : RIDEABLE_VEHICLES)
+        if (entry == rideable)
             return true;
-    }
+
     return false;
 }
 

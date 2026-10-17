@@ -656,9 +656,10 @@ Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index
 where the smash is most dangerous.
 
 **Both 110 yd gates cut the left lane short.** `ThorimGauntletPositioningTrigger` and
-`ThorimFallFromFloorTrigger` (`UldTriggers_Thorim.cpp:54` and `:126`) bail past 110.0f from the arena
-centre, while the left lane's last three waypoints are **117.3 / 120.8 / 126.1 yd** out — so a left-lane
-squad loses its corridor node for the final stretch and finishes on `follow`.
+`ThorimFallFromFloorTrigger` bail past `ULDUAR_THORIM_FLOOR_RANGE` (110 yd) from the arena centre, while
+the left lane's last three waypoints are **117.3 / 120.8 / 126.1 yd** out — so a left-lane squad loses
+its corridor node for the final stretch and finishes on `follow`. The fall rescue `NearTeleportTo`s onto
+the master, same map only ([../../engine/pitfalls.md](../../engine/pitfalls.md)).
 
 **The ~28 s opening wait is deliberate.** The squad does not move until the master reaches
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It is left in

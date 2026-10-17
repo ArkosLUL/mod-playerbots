@@ -199,16 +199,15 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
     if (!master)
         return false;
 
-    if (master->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < 10.0f && (bot->GetDistance2d(master) > 5.0f))
+    if (master->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
+        bot->GetDistance2d(master) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
     {
         if (MoveTo(bot->GetMapId(), master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(), false,
                    false, false, true, MovementPriority::MOVEMENT_NORMAL, true))
         {
             if (!botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
-            {
                 botAI->ChangeStrategy(ADD_STRATEGY_CHAR + followMasterStrategy.getName(),
                                       BotState::BOT_STATE_NON_COMBAT);
-            }
 
             return true;
         }
@@ -267,11 +266,9 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
         bot->GetExactDist2d(&ULDUAR_THORIM_JUMP_START_POINT) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE;
 
     if (bossDown && atEdge)
-    {
         return JumpTo(bot->GetMapId(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionX(),
                       ULDUAR_THORIM_JUMP_END_POINT.GetPositionY(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionZ(),
                       MovementPriority::MOVEMENT_COMBAT);
-    }
 
     // Standing on the edge with him still up: done walking, and the tick belongs to whatever shoots him.
     if (step >= ULDUAR_THORIM_BALCONY_WAYPOINTS && atEdge)
@@ -335,10 +332,8 @@ bool ThorimResetEncounterStateAction::Execute(Event /*event*/)
     {
         FollowMasterStrategy followMasterStrategy(botAI);
         if (!botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
-        {
             botAI->ChangeStrategy(ADD_STRATEGY_CHAR + followMasterStrategy.getName(),
                                   BotState::BOT_STATE_NON_COMBAT);
-        }
     }
 
     ResetThorimEncounterState(bot, false);
@@ -351,12 +346,12 @@ bool ThorimResetEncounterStateAction::Execute(Event /*event*/)
 bool ThorimFallFromFloorAction::Execute(Event /*event*/)
 {
     Player* master = botAI->GetMaster();
-
-    if (!master)
+    if (!master || master->GetMap() != bot->GetMap())
         return false;
 
-    return bot->TeleportTo(bot->GetMapId(), master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(),
-                           master->GetOrientation());
+    bot->NearTeleportTo(master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(),
+                        master->GetOrientation());
+    return true;
 }
 
 bool ThorimFallFromFloorAction::isUseful()
@@ -397,7 +392,7 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
     if (ringSlot)
         return true;
 
-    return bot->GetDistance(targetPosition) <= 1.0f;
+    return bot->GetDistance(targetPosition) <= ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE;
 }
 
 bool ThorimPhase2PositioningAction::isUseful()

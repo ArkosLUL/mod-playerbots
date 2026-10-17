@@ -82,7 +82,7 @@ float GetMimironSpinningUpSeconds(Unit* vx001)
 
     // Clamped. The channel timer is decremented before the tick that ends the channel, so the last pass
     // can read a negative, and a negative here would predict the ignition backwards.
-    return std::max(0.0f, static_cast<float>(spinningUp->GetCastTimeRemaining()) / 1000.0f);
+    return std::max(0.0f, static_cast<float>(spinningUp->GetCastTimeRemaining()) / IN_MILLISECONDS);
 }
 
 namespace
@@ -102,13 +102,13 @@ MimironBarrageWindow ReadMimironBarrageWindow(Player* bot, Unit* vx001)
     if (spinning >= 0.0f)
         window.untilLive = spinning;
     else if (Aura* barrage = vx001->GetAura(SPELL_P3WX2_LASER_BARRAGE_AURA_1))
-        fire = static_cast<float>(barrage->GetDuration()) / 1000.0f;
+        fire = static_cast<float>(barrage->GetDuration()) / IN_MILLISECONDS;
     else
         return window;
 
     window.valid = true;
 
-    Creature* dbTarget = bot->FindNearestCreature(NPC_MIMIRON_DB_TARGET, 250.0f);
+    Creature* dbTarget = bot->FindNearestCreature(NPC_MIMIRON_DB_TARGET, ULDUAR_MIMIRON_DB_TARGET_SEARCH_RANGE);
     if (!dbTarget)
     {
         // Without 33576 FaceBarrageArc returns early and the cone stays frozen, so model a static wedge.
@@ -540,9 +540,9 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
     // Bearing toward the bot first, which is where the generic reach nodes would stop, then out
     // to either side. Step 0 clear means there is nothing here to fix.
     float const towardBot = target->GetAngle(bot->GetPositionX(), bot->GetPositionY());
-    for (uint32 step = 0; step < 12; ++step)
+    for (uint32 step = 0; step < ULDUAR_MIMIRON_STAND_IN_BEARINGS; ++step)
     {
-        float const turn = static_cast<float>((step + 1) / 2) * static_cast<float>(M_PI) / 6.0f;
+        float const turn = static_cast<float>((step + 1) / 2) * ULDUAR_MIMIRON_STAND_IN_BEARING_STEP;
         float const bearing = towardBot + (step % 2 ? turn : -turn);
         Position const candidate(target->GetPositionX() + radius * std::cos(bearing),
                                  target->GetPositionY() + radius * std::sin(bearing),
@@ -631,12 +631,13 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         float const towardBot = slot.GetAngle(bot->GetPositionX(), bot->GetPositionY());
         bool found = false;
         // Phase 1 has already returned above, so this is the wide ring.
-        for (float radius = 2.0f;
-             radius <= ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE + 0.01f && !found; radius += 2.0f)
+        for (float radius = ULDUAR_MIMIRON_STAND_IN_RING_STEP;
+             radius <= ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE + 0.01f && !found;
+             radius += ULDUAR_MIMIRON_STAND_IN_RING_STEP)
         {
-            for (uint32 step = 0; step < 12 && !found; ++step)
+            for (uint32 step = 0; step < ULDUAR_MIMIRON_STAND_IN_BEARINGS && !found; ++step)
             {
-                float const turn = static_cast<float>((step + 1) / 2) * static_cast<float>(M_PI) / 6.0f;
+                float const turn = static_cast<float>((step + 1) / 2) * ULDUAR_MIMIRON_STAND_IN_BEARING_STEP;
                 float const bearing = towardBot + (step % 2 ? turn : -turn);
                 Position const candidate(slot.GetPositionX() + radius * std::cos(bearing),
                                          slot.GetPositionY() + radius * std::sin(bearing),
@@ -1318,9 +1319,7 @@ bool ClaimMimironPlasmaWindow(Player* bot)
     MimironFightState& state = MimironFightStateFor(bot);
     if (state.plasmaWindowMs &&
         GetMSTimeDiffToNow(state.plasmaWindowMs) < ULDUAR_MIMIRON_PLASMA_WINDOW_MS)
-    {
         return state.plasmaClaimedBy == bot->GetGUID();
-    }
 
     state.plasmaWindowMs = getMSTime();
     state.plasmaClaimedBy = bot->GetGUID();
@@ -1392,9 +1391,7 @@ Position const& GetMimironPhase1StackAnchor(PlayerbotAI* botAI, Player* bot)
     // tick, so the answer is folded on the same interval the observability pass uses.
     if (state.stackScanMs &&
         GetMSTimeDiffToNow(state.stackScanMs) < ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS)
-    {
         return ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[state.stackAnchor];
-    }
 
     state.stackScanMs = getMSTime();
 
@@ -1411,9 +1408,7 @@ Position const& GetMimironPhase1StackAnchor(PlayerbotAI* botAI, Player* bot)
         {
             if (spot.GetExactDist2d(flame.GetPositionX(), flame.GetPositionY()) <=
                 ULDUAR_MIMIRON_STACK_FIRE_RADIUS)
-            {
                 ++counts[i];
-            }
         }
     }
 

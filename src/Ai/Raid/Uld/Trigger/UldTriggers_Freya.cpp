@@ -60,7 +60,7 @@ bool FreyaTankAddsTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // The ladder ends at Freya, so these two always have something - no need to gather the wave here.
+    // The ladder ends at Freya, so these two always have something, no need to gather the wave here.
     return PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true);
 }
 

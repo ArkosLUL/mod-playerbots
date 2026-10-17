@@ -42,7 +42,7 @@ std::vector<Position> const ULDUAR_FL_ARENA_CORNERS = {
 };
 
 // The instance script tracks him anywhere in Ulduar. The target scan stops at SightDistance (100 yd), and
-// one bot past it reading "no boss" wiped the shared state for the whole raid.
+// one bot past it reading "no boss" would wipe the shared state for the whole raid.
 Unit* FlameLeviathanBoss(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -89,8 +89,8 @@ struct FlameLeviathanState
     // engine in and back out for one Hodir's Fury.
     RaidObs::ObsValue<ObjectGuid> ventReserve{"fl.reserve"};
 
-    // Siege hulls in guid order, latched the first time anyone asks. Ranking the live ones instead
-    // renumbered every engine below a loss, so one hull dying swapped all four corners at once.
+    // Siege hulls in guid order, latched the first time anyone asks. Ranking only the live ones would
+    // renumber every engine below a loss, so one hull dying would swap all four corners at once.
     std::vector<ObjectGuid> siegeOrder;
 
     // Hodir's Fury reticles, when each was first seen stunned, and the ones whose strike is still to
@@ -940,7 +940,8 @@ Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32
                        [&](Unit* hazard)
                        {
                            float const gap = from->GetExactDist2d(hazard) - FlameLeviathanHazardReach(hazard, from);
-                           float const pad = (strictMask & FlameLeviathanHazardTower(hazard->GetEntry())) ? 0.0f : margin;
+                           float const pad =
+                               (strictMask & FlameLeviathanHazardTower(hazard->GetEntry())) ? 0.0f : margin;
                            if (gap < pad && (!nearest || gap < best))
                            {
                                best = gap;

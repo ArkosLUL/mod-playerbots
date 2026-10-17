@@ -49,19 +49,13 @@ bool MimironShockBlastTrigger::IsActive()
     Unit* boss = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
 
     if (!boss || !boss->IsAlive())
-    {
         return false;
-    }
 
     if (!boss->HasUnitState(UNIT_STATE_CASTING) || !boss->FindCurrentSpellBySpellId(SPELL_SHOCK_BLAST))
-    {
         return false;
-    }
 
     if (PlayerbotAI::IsMelee(bot))
-    {
         return true;
-    }
 
     // Centre to centre: GetDistance2d takes off the MK II's 8 yd reach and the bot's 1.5 first.
     return bot->GetExactDist2d(boss) < ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST;
@@ -70,17 +64,14 @@ bool MimironShockBlastTrigger::IsActive()
 bool MimironPhase1PositioningTrigger::IsActive()
 {
     if (!PlayerbotAI::IsRanged(bot))
-    {
         return false;
-    }
 
     Unit* leviathanMkII = nullptr;
 
     GuidVector targets = AI_VALUE(GuidVector, "possible targets");
-    Unit* target = nullptr;
-    for (auto i = targets.begin(); i != targets.end(); ++i)
+    for (ObjectGuid const& guid : targets)
     {
-        target = botAI->GetUnit(*i);
+        Unit* target = botAI->GetUnit(guid);
         if (!target || !target->IsAlive())
             continue;
 
@@ -197,7 +188,7 @@ bool MimironRocketStrikeTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    Creature* rocketStrikeN = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, 100.0f);
+    Creature* rocketStrikeN = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, ULDUAR_MIMIRON_ROOM_SEARCH_RANGE);
 
     if (!rocketStrikeN)
         return false;
@@ -220,7 +211,7 @@ bool MimironPhase4FocusTrigger::IsActive()
 
     // Non-tanks only come here to be spread for Hand Pulse; their target belongs to
     // "mimiron set dps priority".
-    return AI_VALUE(float, "disperse distance") != 4.0f;
+    return AI_VALUE(float, "disperse distance") != ULDUAR_MIMIRON_PHASE4_DISPERSE_DISTANCE;
 }
 
 bool MimironProximityMineTrigger::IsActive()
@@ -385,7 +376,7 @@ bool MimironPlasmaBlastDefensiveTrigger::IsActive()
 
     // While the cast is up, not between casts: the victim was resolved when it began, and the whole
     // point is having the button down before the first of the six ticks lands.
-    Creature* cannon = bot->FindNearestCreature(NPC_LEVIATHAN_MKII_CANNON, 100.0f);
+    Creature* cannon = bot->FindNearestCreature(NPC_LEVIATHAN_MKII_CANNON, ULDUAR_MIMIRON_ROOM_SEARCH_RANGE);
     if (!cannon)
         return false;
 
@@ -406,9 +397,7 @@ bool MimironRedirectThreatTrigger::IsActive()
     if (!GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
         GetUldUnitByEntry(botAI, NPC_VX001) ||
         GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
-    {
         return false;
-    }
 
     Unit* mainTank = AI_VALUE(Unit*, "main tank");
     return mainTank && mainTank != bot && mainTank->IsAlive();

@@ -29,7 +29,7 @@ public:
 };
 
 // Mimiron phase 1: the main tank's own cooldowns go out only through the Plasma Blast window claim.
-// The class nodes fire on health, so they doubled up on one window and left the next one bare.
+// The class nodes fire on health, so they'd double up on one window and leave the next one bare.
 class MimironPlasmaDefensiveHoldMultiplier : public Multiplier
 {
 public:
