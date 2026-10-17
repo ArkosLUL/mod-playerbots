@@ -1,5 +1,6 @@
 #include "ToCTriggers_Jaraxxus.h"
 #include "ToCData.h"
+#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_Jaraxxus.h"
 #include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
@@ -23,6 +24,24 @@ bool JaraxxusLegionFlameNearbyTrigger::IsActive()
 bool JaraxxusPinnedCastTrigger::IsActive()
 {
     return !GetJaraxxusPinnedCasters(bot).empty();
+}
+
+bool JaraxxusPortalSpawnTrigger::IsActive()
+{
+    Unit* portal = GetJaraxxusPortalToClear(botAI);
+    return portal && bot->GetExactDist2d(portal) < JARAXXUS_PORTAL_TRIGGER;
+}
+
+bool JaraxxusRaidCoverTrigger::IsActive()
+{
+    ToCPredictedHit hit;
+    return GetToCRaidCover(botAI, GetJaraxxusBurningInferno(botAI, hit) ? &hit : nullptr) != ToCRaidCover::None;
+}
+
+bool JaraxxusPersonalDefensiveTrigger::IsActive()
+{
+    ToCPredictedHit hit;
+    return static_cast<bool>(GetToCPersonalDefensive(botAI, GetJaraxxusPersonalHit(botAI, hit) ? &hit : nullptr));
 }
 
 bool JaraxxusEngagedByMainTankTrigger::IsActive() { return JaraxxusMainTankHolds(botAI); }
@@ -57,11 +76,21 @@ void AddToCJaraxxusTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("jaraxxus fel fireball interruptible", {
         NextAction("jaraxxus interrupt fel fireball", ACTION_EMERGENCY + 9) }));
 
+    // above the flame walk: an instant goes out on the move, and a carrier's walk holds every tick
+    triggers.push_back(new TriggerNode("jaraxxus raid cover", {
+        NextAction("jaraxxus cast raid cover", ACTION_EMERGENCY + 8.6f) }));
+
+    triggers.push_back(new TriggerNode("jaraxxus personal defensive", {
+        NextAction("jaraxxus cast personal defensive", ACTION_EMERGENCY + 8.4f) }));
+
     triggers.push_back(new TriggerNode("jaraxxus legion flame nearby", {
         NextAction("jaraxxus avoid legion flame", ACTION_EMERGENCY + 8) }));
 
     triggers.push_back(new TriggerNode("jaraxxus pinned cast", {
         NextAction("jaraxxus break pinned cast", ACTION_EMERGENCY + 7) }));
+
+    triggers.push_back(new TriggerNode("jaraxxus portal spawn", {
+        NextAction("jaraxxus leave portal", ACTION_EMERGENCY + 6) }));
 
     triggers.push_back(new TriggerNode("jaraxxus engaged by main tank", {
         NextAction("jaraxxus main tank hold boss", ACTION_RAID + 5) }));

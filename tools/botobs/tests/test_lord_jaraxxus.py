@@ -296,6 +296,89 @@ def flame_pull() -> list[dict]:
     return records
 
 
+PALADIN = 6008
+AURA_MASTERY = 31821
+DIVINE_HYMN = 64843
+ICE_BLOCK = 45438
+EVASION = 26669
+MISTRESS_ARRIVAL = 68406
+
+
+def cover_pull() -> list[dict]:
+    """25H. Incinerate Flesh runs out on the mage with 40k of its 85k absorb left and Burning Inferno
+    ticks 23-27 s; Aura Mastery goes 0.5 s before its first tick, Divine Hymn 0.8 s after, the mage
+    Ice Blocks and the rogue spends Evasion. The hunter dies to the Inferno and a 0-stack Fel
+    Lightning, the rogue later to a 0-stack Fel Lightning alone. A Mistress lands at 36 s next to
+    the rogue, who is holding."""
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789600000000, "map": 649, "inst": 9, "diff": 3,
+         "boss": "lord-jaraxxus", "roster": [
+             {"g": TANK, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0},
+             {"g": PALADIN, "n": "Light", "r": "heal", "c": "paladin", "h": 0},
+             {"g": PRIEST, "n": "Mend", "r": "heal", "c": "priest", "h": 0},
+             {"g": MAGE, "n": "Frost", "r": "ranged", "c": "mage", "h": 0},
+             {"g": ROGUE, "n": "Shiv", "r": "melee", "c": "rogue", "h": 0},
+             {"g": HUNTER, "n": "Volley", "r": "ranged", "c": "hunter", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "lord-jaraxxus", "src": "engage"},
+        {"t": 1, "e": "unit", "g": BOSS, "en": lj.NPC_JARAXXUS, "n": "Lord Jaraxxus", "b": 1},
+        {"t": 1, "e": "unit", "g": MISTRESS, "en": lj.NPC_MISTRESS_OF_PAIN, "n": "Mistress of Pain"},
+        {"t": 1, "e": "unit", "g": PORTAL, "en": lj.NPC_NETHER_PORTAL, "n": "Nether Portal"},
+        {"t": 1, "e": "spell", "sp": AURA_MASTERY, "n": "Aura Mastery"},
+        {"t": 1, "e": "spell", "sp": DIVINE_HYMN, "n": "Divine Hymn"},
+        {"t": 1, "e": "spell", "sp": ICE_BLOCK, "n": "Ice Block"},
+        {"t": 1, "e": "spell", "sp": EVASION, "n": "Evasion"},
+        {"t": -500, "e": "note", "g": TANK, "k": "jaraxxus.netherpower", "txt": "0"},
+
+        aura(10000, MAGE, BOSS, INCINERATE, False, 12000),
+        {"t": 10000, "e": "note", "g": PRIEST, "k": lj.ABSORB_KEY, "txt": "85000"},
+        {"t": 15000, "e": "note", "g": PRIEST, "k": lj.ABSORB_KEY, "txt": "40000"},
+        aura(22000, MAGE, BOSS, INCINERATE, True, 0),
+        {"t": 22100, "e": "note", "g": PRIEST, "k": lj.ABSORB_KEY, "txt": "0"},
+
+        {"t": 21000, "e": "note", "g": PALADIN, "k": lj.COVER_KEY, "txt": "1"},
+        {"t": 21000, "e": "note", "g": PRIEST, "k": lj.COVER_KEY, "txt": "4"},
+        {"t": 22500, "e": "cast", "s": PALADIN, "sp": AURA_MASTERY, "tgt": PALADIN, "ct": 0},
+        # written twice in one ms, as the core does for some casts
+        {"t": 22500, "e": "cast", "s": PALADIN, "sp": AURA_MASTERY, "tgt": PALADIN, "ct": 0},
+        {"t": 22790, "e": "note", "g": MAGE, "k": lj.PERSONAL_KEY, "txt": "Ice Block"},
+        {"t": 22800, "e": "cast", "s": MAGE, "sp": ICE_BLOCK, "tgt": MAGE, "ct": 0},
+        {"t": 22900, "e": "note", "g": MAGE, "k": lj.PERSONAL_KEY, "txt": "covered"},
+        {"t": 27500, "e": "note", "g": MAGE, "k": lj.PERSONAL_KEY, "txt": "none"},
+        {"t": 23500, "e": "cast", "s": ROGUE, "sp": EVASION, "tgt": ROGUE, "ct": 0},
+        {"t": 23800, "e": "cast", "s": PRIEST, "sp": DIVINE_HYMN, "tgt": PRIEST, "ct": 0},
+        {"t": 28000, "e": "note", "g": PALADIN, "k": lj.COVER_KEY, "txt": "0"},
+        {"t": 28000, "e": "note", "g": PRIEST, "k": lj.COVER_KEY, "txt": "0"},
+
+        {"t": 24000, "e": "dmg", "s": BOSS, "d": HUNTER, "sp": FEL_LIGHTNING, "a": 9000, "hp": 50.0, "ok": 0},
+        {"t": 24001, "e": "cast", "s": BOSS, "sp": FEL_LIGHTNING, "tgt": HUNTER, "ct": 0},
+        {"t": 25500, "e": "death", "g": HUNTER, "killer": BOSS,
+         "rewind": [[24000, BOSS, FEL_LIGHTNING, 9000], [25000, BOSS, BURNING_INFERNO, 7000]]},
+        {"t": 39000, "e": "dmg", "s": BOSS, "d": ROGUE, "sp": FEL_LIGHTNING, "a": 12000, "hp": 30.0, "ok": 800},
+        {"t": 39001, "e": "cast", "s": BOSS, "sp": FEL_LIGHTNING, "tgt": ROGUE, "ct": 0},
+        {"t": 40000, "e": "death", "g": ROGUE, "killer": BOSS, "rewind": [[39000, BOSS, FEL_LIGHTNING, 12000]]},
+
+        {"t": 35000, "e": "note", "g": ROGUE, "k": lj.PORTAL_KEY, "txt": "hold"},
+        {"t": 36000, "e": "dmg", "s": PORTAL, "d": ROGUE, "sp": MISTRESS_ARRIVAL, "a": 10700},
+        {"t": 36000, "e": "dmg", "s": PORTAL, "d": TANK, "sp": MISTRESS_ARRIVAL, "a": 10700},
+        {"t": 37000, "e": "note", "g": ROGUE, "k": lj.PORTAL_KEY, "txt": "none"},
+        {"t": 45000, "e": "end", "out": "kill"},
+    ]
+    for when in range(23000, 28000, 1000):
+        records += [{"t": when, "e": "dmg", "s": BOSS, "d": guid, "sp": BURNING_INFERNO, "a": 7000, "ab": 500}
+                    for guid in (TANK, PALADIN, PRIEST)]
+    for when in range(0, 46000, 1000):
+        units = [[BOSS, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, TANK, 0, 0, 0, 0],
+                 [TANK, 1.0, 0.0, 0.0, 0.0, 100.0, 0.0, BOSS, 0, 0, 0, 0],
+                 [ROGUE, 17.0, 0.0, 0.0, 0.0, 100.0, 0.0, PORTAL, 0, 0, 0, 0],
+                 [MAGE, 0.0, 20.0, 0.0, 0.0, 100.0, 80.0, BOSS, 0, 0, 0, 0]]
+        if when >= 30000:
+            units.append([PORTAL, 15.0, 0.0, 0.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        if when >= 36000:
+            units.append([MISTRESS, 15.5, 0.0, 0.0, 0.0, 100.0, 0.0, ROGUE, 0, 0, 0, 0])
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return records
+
+
 def write_trace(records: list[dict], name: str) -> tuple[tempfile.TemporaryDirectory, Trace]:
     folder = tempfile.TemporaryDirectory()
     path = pathlib.Path(folder.name) / name
@@ -471,6 +554,56 @@ class RepeatTankWindow(unittest.TestCase):
         self.assertEqual([(row["guid"], row["start"], row["tank"]) for row in rows],
                          [(TANK, 5000, True), (OT, 10000, True), (MAGE, 20000, False), (TANK, 40000, True)])
         self.assertEqual([row["branches"] for row in rows], [{}, {"tank": 1}, {"carrier": 1}, {}])
+
+
+class HeroicCover(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder, cls.trace = write_trace(cover_pull(), "649_9_lord-jaraxxus_1789600000.ndjson")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_absorb_probe_gives_what_the_window_started_with_and_kept(self):
+        rows = lj.incinerate_windows(self.trace)
+        self.assertEqual([(row["guid"], row["ended"], row["absorb"], row["left"]) for row in rows],
+                         [(MAGE, "expired", 85000, 40000)])
+
+    def test_inferno_ticks_make_one_burst_with_its_death(self):
+        rows = lj.inferno_bursts(self.trace)
+        self.assertEqual([(row["start"], row["stop"], row["hits"], row["taken"], row["deaths"]) for row in rows],
+                         [(23000, 27000, 15, 112500, [HUNTER])])
+
+    def test_covers_and_buttons_are_read_against_the_first_tick(self):
+        rows = lj.cover_rows(self.trace)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["raid"], [(-500, PALADIN, "Aura Mastery"), (800, PRIEST, "Divine Hymn")])
+        self.assertEqual(row["dealt"], [(PALADIN, "aura mastery"), (PRIEST, "divine hymn")])
+        self.assertEqual(row["personal"], [(-200, MAGE, "Ice Block")])
+        self.assertEqual(row["wasted"], [(500, ROGUE, "Evasion")])
+        self.assertEqual(row["picked"], {"Ice Block": 1, "covered": 1})
+        self.assertEqual((row["first"], row["in_time"]), (-500, True))
+
+    def test_only_a_death_with_no_inferno_reopens_the_spread_call(self):
+        rows, _ = lj.fel_lightning(self.trace)
+        cost = lj.lightning_cost(self.trace, rows)
+        self.assertEqual(cost["deaths"], [(HUNTER, 25500), (ROGUE, 40000)])
+        self.assertEqual(cost["reopen"], [(ROGUE, 40000)])
+
+    def test_a_mistress_arrival_names_her_portal_the_melee_on_it_and_the_holds(self):
+        rows = lj.arrival_rows(self.trace)
+        self.assertEqual([(row["portal"], row["melee"], row["hit"], row["damage"], row["victim"], row["held"])
+                          for row in rows], [(PORTAL, [ROGUE], 2, 21400, ROGUE, [ROGUE])])
+
+    def test_every_section_prints_on_the_pull(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for _, _, section in lj.SECTIONS:
+                section(self.trace)
+        self.assertIn("1 of 1 covered by 1 s past the first tick", out.getvalue())
+        self.assertIn("1 reopen the spread call", out.getvalue())
 
 
 class EveryView(unittest.TestCase):

@@ -8,6 +8,7 @@ Legion Flame, the adds.
     lord_jaraxxus.py <file> --incinerate  every Incinerate Flesh: heals on it, how it ended, Burning Inferno
     lord_jaraxxus.py <file> --flame       every Legion Flame carrier's walk and spacing, who stood in fire
     lord_jaraxxus.py <file> --adds        each add's life and victims, focus and add tank changes, the Kiss
+    lord_jaraxxus.py <file> --cover       raid cooldowns and personal buttons against each Burning Inferno
 
 What the generic views miss here, and what this reads instead:
 
@@ -22,6 +23,10 @@ What the generic views miss here, and what this reads instead:
   time. `--boss` gives each Fel Lightning hit the nearest cast on either side.
 - **`jaraxxus.interrupter` is `1` only inside a Fel Fireball cast**: every bot rewrites it each tick
   he lives, so it drops to `0` as the cast ends. `--boss` names who held `1` inside each.
+- **A heal on the Incinerate Flesh target reads `a = 0`** while the absorb eats it. `jaraxxus.absorb`
+  is the absorb left, so `--incinerate` reads how much healing a window took off it there.
+- **`toc.cover` is the deal, not the cast**: one holder per raid cooldown written before a Burning
+  Inferno. `--cover` sets it beside the casts, against the Inferno's first tick.
 - **`jaraxxus.flame` is change-only per bot**: a carrier taking `carrier` on every leg writes one
   row, so branch counts are switches, not legs. Legs are the avoid action's accepted moves. A
   carrier holding him writes `tank` and clears the flames only, so the raid and boss spacing of
@@ -75,6 +80,8 @@ LEGION_FLAME_TICK = (66877, 67070, 67071, 67072)
 MISTRESS_KISS = (66334, 67905, 67906, 67907)
 MISTRESS_KISS_PUNISH = (66359, 67073, 67074, 67075)
 MISTRESS_KISS_CAST = (66336, 67076, 67077, 67078)
+# a Mistress arriving: the hit on everyone within 10 yd of her portal
+MISTRESS_ARRIVAL = (66264, 68404, 68405, 68406)
 
 # Kick, Pummel, Shield Bash, Mind Freeze, Counterspell, Wind Shear, Spell Lock, every rank
 INTERRUPTS = frozenset({1766, 1767, 1768, 1769, 38768, 6552, 6554, 72, 1671, 1672, 29704, 47528, 2139, 57994,
@@ -95,6 +102,10 @@ FOCUS_KEY = "jaraxxus.focus"
 ADDTANK_KEY = "jaraxxus.addtank"
 INTERRUPTER_KEY = "jaraxxus.interrupter"
 FLAME_KEY = "jaraxxus.flame"
+ABSORB_KEY = "jaraxxus.absorb"
+PORTAL_KEY = "jaraxxus.portal"
+COVER_KEY = "toc.cover"
+PERSONAL_KEY = "toc.personal"
 AVOID = "jaraxxus avoid legion flame"
 KISS_HOLD = "jaraxxus kiss cast hold"
 
@@ -118,6 +129,34 @@ EXPIRE_SLACK_MS = 1000
 MERGE_MS = 1000
 # how long after a removal cast a lower stack count is still its doing
 DROP_MS = 1500
+# Burning Inferno ticks for 5 s, and the next one is an Incinerate Flesh 20 s or more later
+INFERNO_GAP_MS = 6000
+# Burning Inferno this close before a death puts it among the causes
+INFERNO_DEATH_MS = 5000
+# a death rewind's row and the dmg row of the same hit
+REWIND_MATCH_MS = 20
+# a cover cast this far either side of an Inferno's first tick belongs to it
+COVER_SPAN_MS = 5000
+# a cover up by this long after the first tick covered it in time
+COVER_IN_TIME_MS = 1000
+# a personal button from this long before the first tick
+PERSONAL_LEAD_MS = 3000
+# toc.cover values, ToCRaidCover's order
+COVER_KINDS = {1: "aura mastery", 2: "divine sacrifice", 3: "anti magic zone", 4: "divine hymn", 5: "tranquility"}
+# cast names, any rank; Divine Guardian is Divine Sacrifice's proc
+RAID_COVERS = frozenset({"Aura Mastery", "Divine Sacrifice", "Divine Guardian", "Anti-Magic Zone", "Divine Hymn",
+                         "Tranquility"})
+PERSONAL_BUTTONS = frozenset({"Last Stand", "Shield Wall", "Divine Protection", "Barkskin", "Frenzied Regeneration",
+                              "Survival Instincts", "Anti-Magic Shell", "Vampiric Blood", "Icebound Fortitude",
+                              "Shamanistic Rage", "Cloak of Shadows", "Dispersion", "Ice Block", "Divine Shield",
+                              "Healthstone"})
+# no use against a fire AoE
+WASTED_BUTTONS = frozenset({"Evasion", "Deterrence"})
+# a Mistress' arrival hits within this of her portal, centre to centre
+ARRIVAL_YD = 10.0
+# she lands next to her portal, and the hit rows sit this close to her first sample
+ARRIVAL_SEARCH_YD = 8.0
+ARRIVAL_SLACK_MS = 1500
 # a sample older than this no longer places the unit
 FRESH_MS = 1000
 SHOWN = 12
@@ -349,6 +388,23 @@ def lightning_cost(trace: Trace, rows: list[dict]) -> dict:
               if any(len(row) > 2 and row[2] in FEL_LIGHTNING
                      and death["t"] - LIGHTNING_DEATH_MS <= row[0] <= death["t"]
                      for row in death.get("rewind") or [])]
+    # the no-spread call reopens on a heroic death a 0-stack chain took part in, Burning Inferno aside
+    unstacked: dict[int, list[int]] = collections.defaultdict(list)
+    for row in rows:
+        if row["stacks"] == 0:
+            for hit in row["hits"]:
+                unstacked[hit["victim"]].append(hit["t"])
+    reopen = []
+    if difficulty(trace) >= 2:
+        for death in combat_deaths(trace):
+            recent = [row for row in death.get("rewind") or []
+                      if len(row) > 2 and death["t"] - LIGHTNING_DEATH_MS <= row[0] <= death["t"]]
+            if any(row[2] in BURNING_INFERNO for row in recent):
+                continue
+            mine = unstacked.get(death.get("g"), ())
+            if any(row[2] in FEL_LIGHTNING and any(abs(row[0] - when) <= REWIND_MATCH_MS for when in mine)
+                   for row in recent):
+                reopen.append((death.get("g"), death["t"]))
     return {
         "taken": taken,
         "absorbed": sum(row["absorbed"] for row in rows),
@@ -358,6 +414,7 @@ def lightning_cost(trace: Trace, rows: list[dict]) -> dict:
         "left": min(left, default=None),
         "lethal": sum(1 for hit in hits if hit["ok"] > 0),
         "deaths": deaths,
+        "reopen": reopen,
     }
 
 
@@ -374,6 +431,11 @@ def show_lightning_cost(trace: Trace, rows: list[dict]) -> None:
     deaths = cost["deaths"]
     print(f"  {len(deaths)} death(s) with it in their last {LIGHTNING_DEATH_MS / 1000:.0f} s"
           + (": " + ", ".join(f"{trace.name(guid)} {clock(when)}" for guid, when in deaths) if deaths else ""))
+    if difficulty(trace) >= 2:
+        reopen = cost["reopen"]
+        print(f"  {len(reopen)} reopen the spread call: heroic, a 0-stack cast's hit in the last"
+              f" {LIGHTNING_DEATH_MS / 1000:.0f} s and no Burning Inferno"
+              + (": " + ", ".join(f"{trace.name(guid)} {clock(when)}" for guid, when in reopen) if reopen else ""))
 
     print(f"\n  {'at':>9} {'first victim':14} {'role':6} {'hits':>4} {'taken':>8} {'max jump':>8} {'np':>3}")
     for row in rows:
@@ -538,19 +600,29 @@ def show_nether(trace: Trace) -> None:
                                                       for guid, count in steals.items()))
 
 
+def absorb_marks(trace: Trace) -> list[tuple[int, int]]:
+    """`(t, absorb left)` off `jaraxxus.absorb`, 0 with nobody carrying Incinerate Flesh."""
+    return [(rec["t"], as_guid(rec.get("txt"))) for rec in notes(trace, ABSORB_KEY)]
+
+
 def incinerate_windows(trace: Trace) -> list[dict]:
-    """Each Incinerate Flesh: its target, how it ended, the heals landed on the target inside it, and
-    the Burning Inferno damage right after it."""
+    """Each Incinerate Flesh: its target, how it ended, the heals landed on the target inside it, the
+    absorb it started with and had left (None without `jaraxxus.absorb` inside it), and the Burning
+    Inferno damage right after it. A heal row reads 0 under the absorb, so the absorb is what says
+    how much healing it ate."""
     full = INCINERATE_MS[difficulty(trace)]
     deaths = death_times(trace)
     heals = trace.of("heal")
     inferno = [rec for rec in trace.of("dmg") if rec.get("sp") in BURNING_INFERNO]
+    marks = absorb_marks(trace)
 
     out = []
     for window in aura_windows(trace, INCINERATE_FLESH):
         guid, start, stop = window["guid"], window["start"], window["stop"]
         landed = [rec for rec in heals if rec.get("d") == guid and start <= rec["t"] <= stop]
         after = [rec for rec in inferno if stop <= rec["t"] <= stop + BURNING_INFERNO_MS + LAND_SLACK_MS]
+        # the probe goes to 0 a tick after the aura comes off, so a 0 is never the window's own
+        left = [value for when, value in marks if start <= when <= stop and value > 0]
         ended = ending(window, full, deaths)
         out.append({
             "guid": guid,
@@ -560,6 +632,8 @@ def incinerate_windows(trace: Trace) -> list[dict]:
             "heals": len(landed),
             "healed": sum(rec.get("a", 0) for rec in landed),
             "healers": len({rec.get("s") for rec in landed}),
+            "absorb": max(left) if left else None,
+            "left": None if not left else 0 if ended == "removed" else min(left),
             "inferno": sum(rec.get("a", 0) for rec in after),
             "inferno_hits": len(after),
         })
@@ -573,17 +647,23 @@ def show_incinerate(trace: Trace) -> None:
         print("  nobody carried it")
         return
 
+    def amount(value):
+        return "-" if value is None else f"{value:,}"
+
     print(f"  {'at':>9} {'target':14} {'role':6} {'ended':8} {'len':>5} {'heals':>5} {'amount':>9}"
-          f" {'healers':>7} {'inferno':>9}")
+          f" {'healers':>7} {'absorb':>8} {'left':>8} {'inferno':>9}")
     for row in rows:
         print(f"  {clock(row['start']):>9} {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6}"
               f" {row['ended']:8} {(row['stop'] - row['start']) / 1000:5.1f} {row['heals']:5}"
-              f" {row['healed']:9,} {row['healers']:7} {row['inferno']:9,}")
+              f" {row['healed']:9,} {row['healers']:7} {amount(row['absorb']):>8} {amount(row['left']):>8}"
+              f" {row['inferno']:9,}")
     ended = collections.Counter(row["ended"] for row in rows)
     print(f"\n  {ended['healed']} healed through, {ended['expired']} ran out, {ended['died']} died with it;"
           f" Burning Inferno {sum(row['inferno'] for row in rows):,} over"
           f" {sum(row['inferno_hits'] for row in rows)} hit(s)")
-    print("  inferno is its damage in the 6 s after the window closed")
+    print(f"  absorb and left are {ABSORB_KEY} at its highest and lowest inside the window, - with none"
+          " written;")
+    print("  amount reads 0 for a heal the absorb ate; inferno is its damage in the 6 s after the window closed")
 
 
 def carrier_windows(trace: Trace, samples: Samples | None = None, raid_clear: float = RAID_CLEAR,
@@ -787,6 +867,49 @@ def kiss_punishes(trace: Trace) -> tuple[dict[int, tuple[int, int]], int]:
     return {guid: (hits, damage) for guid, (hits, damage) in out.items()}, stray
 
 
+def arrival_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Each Mistress at her first sample: the portal she came from (the nearest sampled within
+    ARRIVAL_SEARCH_YD), the melee inside ARRIVAL_YD of it then, her arrival hit's victims and damage,
+    her first victim, and the bots holding `jaraxxus.portal` at that moment."""
+    samples = samples or Samples(trace)
+    portals = guids_of_entry(trace, NPC_NETHER_PORTAL)
+    arrivals = [rec for rec in trace.of("dmg") if rec.get("sp") in MISTRESS_ARRIVAL]
+    holds = holder_spans(trace, PORTAL_KEY, pull_end(trace))
+    roster = roster_guids(trace)
+
+    out = []
+    for guid in sorted(guids_of_entry(trace, NPC_MISTRESS_OF_PAIN)):
+        found = samples.rows.get(guid)
+        if not found:
+            continue
+        when, row = found[0][0], found[1][0]
+        spots = [(dist2(row[1:3], spot[1:3]), portal) for portal in portals
+                 for spot in [samples.row(portal, when, FRESH_MS)] if spot]
+        near = min(spots, default=None)
+        portal = near[1] if near and near[0] <= ARRIVAL_SEARCH_YD else 0
+        melee = []
+        if portal:
+            at = samples.row(portal, when, FRESH_MS)
+            for member in roster:
+                spot = samples.row(member, when, FRESH_MS)
+                if spot and trace.role(member) == "melee" and dist2(at[1:3], spot[1:3]) <= ARRIVAL_YD:
+                    melee.append(member)
+        hit = [rec for rec in arrivals if when - ARRIVAL_SLACK_MS <= rec["t"] <= when + ARRIVAL_SLACK_MS]
+        held = sorted(bot for bot, spans in holds.items()
+                      if any(value == "hold" and low <= when < high for value, low, high in spans))
+        out.append({
+            "guid": guid,
+            "t": when,
+            "portal": portal,
+            "melee": melee,
+            "hit": len(hit),
+            "damage": sum(rec.get("a", 0) for rec in hit),
+            "victim": row[7] if len(row) > 7 else 0,
+            "held": held,
+        })
+    return out
+
+
 def show_adds(trace: Trace) -> None:
     print("ADDS")
     rows = add_rows(trace)
@@ -816,6 +939,18 @@ def show_adds(trace: Trace) -> None:
         print(f"  {ADDTANK_KEY} {trace.name(tank)}: " + " -> ".join(steps[:SHOWN])
               + (f" and {len(steps) - SHOWN} more" if len(steps) > SHOWN else ""))
 
+    arrivals = arrival_rows(trace)
+    if arrivals:
+        print(f"\n  {'mistress at':>11} {'portal':6} {'melee':>5} {'hit':>3} {'damage':>8} {'first victim':14}"
+              f" {'role':6} {'held':>4}")
+        for row in arrivals:
+            portal = "yes" if row["portal"] else "-"
+            print(f"  {clock(row['t']):>11} {portal:6} {len(row['melee']):5} {row['hit']:3} {row['damage']:8,}"
+                  f" {trace.name(row['victim'])[:14]:14} {trace.role(row['victim']):6}"
+                  f" {len(row['held']):4}")
+        print(f"  melee is roster melee inside {ARRIVAL_YD:.0f} yd of her portal at her first sample, hit her"
+              f" arrival's hits; held is bots on {PORTAL_KEY} hold then")
+
     casts = sum(1 for rec in trace.of("cast") if rec.get("sp") in MISTRESS_KISS_CAST)
     kisses = kiss_windows(trace)
     punished, stray = kiss_punishes(trace)
@@ -833,12 +968,97 @@ def show_adds(trace: Trace) -> None:
         print(f"  {stray} punish hit(s) outside every kiss window")
 
 
+def inferno_bursts(trace: Trace) -> list[dict]:
+    """Each Burning Inferno, from its first tick to its last: hits, damage taken, and the deaths with
+    it in their last INFERNO_DEATH_MS."""
+    out: list[dict] = []
+    for rec in trace.of("dmg"):
+        if rec.get("sp") not in BURNING_INFERNO:
+            continue
+        if not out or rec["t"] - out[-1]["start"] > INFERNO_GAP_MS:
+            out.append({"start": rec["t"], "stop": rec["t"], "hits": 0, "taken": 0, "deaths": []})
+        burst = out[-1]
+        burst["stop"] = rec["t"]
+        burst["hits"] += 1
+        burst["taken"] += (rec.get("a") or 0) + (rec.get("ab") or 0)
+
+    for death in combat_deaths(trace):
+        for burst in out:
+            if burst["start"] <= death["t"] <= burst["stop"] + INFERNO_DEATH_MS and any(
+                    len(row) > 2 and row[2] in BURNING_INFERNO and death["t"] - INFERNO_DEATH_MS <= row[0]
+                    for row in death.get("rewind") or []):
+                burst["deaths"].append(death.get("g"))
+                break
+    return out
+
+
+def cover_rows(trace: Trace) -> list[dict]:
+    """Per Burning Inferno, against its first tick: the raid cooldowns cast within COVER_SPAN_MS of it,
+    the toc.cover deal written up to its first second, the personal buttons from PERSONAL_LEAD_MS before
+    it to its end with the toc.personal picks written then, and the Evasion or Deterrence spent on it."""
+    roster = roster_guids(trace)
+    # a cast can be written twice in one ms
+    casts = sorted({(rec["t"], rec.get("s"), trace.spells.get(rec.get("sp"), "")) for rec in trace.of("cast")
+                    if rec.get("s") in roster})
+    deals = [rec for rec in notes(trace, COVER_KEY) if as_guid(rec.get("txt"))]
+    picks = [rec for rec in notes(trace, PERSONAL_KEY) if rec.get("txt") not in (None, "none")]
+
+    out = []
+    for burst in inferno_bursts(trace):
+        start, stop = burst["start"], burst["stop"]
+        raid = [(when - start, guid, name) for when, guid, name in casts
+                if name in RAID_COVERS and abs(when - start) <= COVER_SPAN_MS]
+        personal = [(when - start, guid, name) for when, guid, name in casts
+                    if name in PERSONAL_BUTTONS and start - PERSONAL_LEAD_MS <= when <= stop]
+        wasted = [(when - start, guid, name) for when, guid, name in casts
+                  if name in WASTED_BUTTONS and start - PERSONAL_LEAD_MS <= when <= stop]
+        dealt = [(rec.get("g"), COVER_KINDS.get(as_guid(rec.get("txt")), str(rec.get("txt"))))
+                 for rec in deals if start - COVER_SPAN_MS <= rec["t"] <= start + COVER_IN_TIME_MS]
+        picked = collections.Counter(str(rec.get("txt")) for rec in picks
+                                     if start - PERSONAL_LEAD_MS <= rec["t"] <= stop)
+        first = min((offset for offset, _, name in raid if name != "Divine Guardian"), default=None)
+        out.append({**burst, "raid": raid, "personal": personal, "wasted": wasted, "dealt": dealt,
+                    "picked": picked, "first": first, "in_time": first is not None and first <= COVER_IN_TIME_MS})
+    return out
+
+
+def show_cover(trace: Trace) -> None:
+    print("COVER")
+    rows = cover_rows(trace)
+    if not rows:
+        print("  no Burning Inferno")
+        return
+
+    def offsets(items):
+        return ", ".join(f"{name} {trace.name(guid)} {offset / 1000:+.1f}s" for offset, guid, name in items) or "-"
+
+    print(f"  {'inferno':>9} {'hits':>4} {'taken':>9} {'deaths':>6} {'first cover':>11}")
+    for row in rows:
+        first = "-" if row["first"] is None else f"{row['first'] / 1000:+.1f}s"
+        print(f"  {clock(row['start']):>9} {row['hits']:4} {row['taken']:9,} {len(row['deaths']):6} {first:>11}")
+        print(f"      raid      {offsets(row['raid'])}")
+        if row["dealt"]:
+            print("      dealt     " + ", ".join(f"{trace.name(guid)} {kind}" for guid, kind in row["dealt"]))
+        print(f"      personal  {offsets(row['personal'])}")
+        if row["picked"]:
+            print("      picked    " + ", ".join(f"{name} {count}" for name, count in row["picked"].most_common()))
+        if row["wasted"]:
+            print(f"      wasted    {offsets(row['wasted'])}")
+    covered = sum(1 for row in rows if row["in_time"])
+    print(f"\n  {covered} of {len(rows)} covered by {COVER_IN_TIME_MS / 1000:.0f} s past the first tick;"
+          f" offsets are from the first tick, raid within {COVER_SPAN_MS / 1000:.0f} s either side,")
+    print(f"  personal from {PERSONAL_LEAD_MS / 1000:.0f} s before it to the last; dealt is {COVER_KEY}"
+          f" from {COVER_SPAN_MS / 1000:.0f} s before it to 1 s after, picked {PERSONAL_KEY} switches in the"
+          " personal span")
+
+
 SECTIONS = (
     ("boss", "Fel Fireball landed or kicked and by whom, Fel Lightning chains and their cost", show_boss),
     ("nether", "Nether Power stacks and the casts that stripped them", show_nether),
     ("incinerate", "Incinerate Flesh windows, heals on the target, Burning Inferno after", show_incinerate),
     ("flame", "Legion Flame carriers' walk and spacing, who stood in fire", show_flame),
     ("adds", "add lifetimes and victims, focus and add tank changes, Mistress' Kiss", show_adds),
+    ("cover", "raid cooldowns and personal buttons against each Burning Inferno", show_cover),
 )
 
 

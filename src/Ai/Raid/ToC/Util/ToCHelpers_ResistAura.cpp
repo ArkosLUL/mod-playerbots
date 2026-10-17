@@ -148,6 +148,7 @@ struct Paladin
     Player* player = nullptr;
     AuraStrategy strategy = AuraStrategy::None;
     std::array<bool, PALADIN_SCHOOL_COUNT> knows{};
+    bool mastery = false;
 };
 
 struct ResistAuraState
@@ -155,10 +156,13 @@ struct ResistAuraState
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
     uint8 wanted = 0;
+    // Jaraxxus: Aura Mastery is spent on Burning Inferno, and doubles only its caster's own aura
+    bool fireWithMastery = false;
 
     bool elected = false;
     uint32 electMs = 0;
     uint8 electedFor = 0;
+    bool electedWithMastery = false;
     std::array<ObjectGuid, PALADIN_SCHOOL_COUNT> holder;
 };
 
@@ -197,6 +201,13 @@ uint8 SchoolsOfBeastsStage(uint32 mask)
         schools |= SchoolsOfArrival(ToCStagingBoss::Icehowl);
 
     return schools;
+}
+
+bool FireWantsMastery(PlayerbotAI* botAI)
+{
+    ToCEncounter const live = ToCLiveEncounter(botAI);
+    return live == ToCEncounter::Jaraxxus ||
+           (live == ToCEncounter::None && GetToCStagedArrival(botAI) == ToCStagingBoss::Jaraxxus);
 }
 
 uint8 WantedSchools(PlayerbotAI* botAI, uint8 previous)
@@ -252,6 +263,7 @@ std::vector<Paladin> GatherPaladins(Player* bot, uint8& humanHeld)
         for (ToCResistSchool school : PALADIN_SCHOOLS)
             paladin.knows[SchoolIndex(school)] =
                 memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", ToCResistAuraName(school))->Get() != 0;
+        paladin.mastery = memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", "aura mastery")->Get() != 0;
 
         paladins.push_back(paladin);
     };
@@ -288,6 +300,7 @@ void Elect(Player* bot, ResistAuraState& state, uint32 now)
     state.elected = true;
     state.electMs = now;
     state.electedFor = state.wanted;
+    state.electedWithMastery = state.fireWithMastery;
 
     std::array<ObjectGuid, PALADIN_SCHOOL_COUNT> next{};
     if (!(state.wanted & PALADIN_MASK))
@@ -305,6 +318,18 @@ void Elect(Player* bot, ResistAuraState& state, uint32 now)
         return (state.wanted & Bit(school)) && !(humanHeld & Bit(school));
     };
 
+    auto const wantsMastery = [&](ToCResistSchool school)
+    { return state.fireWithMastery && school == ToCResistSchool::Fire; };
+    // a kept fire holder without Aura Mastery gives way to a free paladin with it
+    auto const masteryFree = [&](size_t keeper)
+    {
+        for (size_t i = 0; i < paladins.size(); ++i)
+            if (i != keeper && paladins[i].mastery && paladins[i].knows[SchoolIndex(ToCResistSchool::Fire)])
+                return true;
+
+        return false;
+    };
+
     // Kept holders first, so a dead fire holder can't pull the frost holder over to fire
     for (ToCResistSchool school : PALADIN_SCHOOLS)
     {
@@ -314,7 +339,8 @@ void Elect(Player* bot, ResistAuraState& state, uint32 now)
 
         for (size_t i = 0; i < paladins.size(); ++i)
         {
-            if (!used[i] && paladins[i].knows[index] && paladins[i].player->GetGUID() == state.holder[index])
+            if (!used[i] && paladins[i].knows[index] && paladins[i].player->GetGUID() == state.holder[index] &&
+                (!wantsMastery(school) || paladins[i].mastery || !masteryFree(i)))
             {
                 next[index] = state.holder[index];
                 used[i] = true;
@@ -332,7 +358,8 @@ void Elect(Player* bot, ResistAuraState& state, uint32 now)
         auto const rank = [&](size_t i)
         {
             Paladin const& paladin = paladins[i];
-            return std::make_tuple(paladin.strategy == ResistStrategyOf(school) ? 0 : 1,
+            return std::make_tuple(wantsMastery(school) && !paladin.mastery ? 1 : 0,
+                                   paladin.strategy == ResistStrategyOf(school) ? 0 : 1,
                                    AuraDuplicated(paladins, used, i) ? 0 : 1, AuraCost(paladin.strategy),
                                    paladin.player->GetGUID());
         };
@@ -373,8 +400,9 @@ ResistAuraState const* ReadResist(PlayerbotAI* botAI)
     state.memoMs = now;
     state.memoValid = true;
     state.wanted = WantedSchools(botAI, state.wanted);
+    state.fireWithMastery = (state.wanted & FIRE) && FireWantsMastery(botAI);
 
-    if (!state.elected || state.wanted != state.electedFor ||
+    if (!state.elected || state.wanted != state.electedFor || state.fireWithMastery != state.electedWithMastery ||
         getMSTimeDiff(state.electMs, now) >= ELECT_INTERVAL_MS)
         Elect(bot, state, now);
 

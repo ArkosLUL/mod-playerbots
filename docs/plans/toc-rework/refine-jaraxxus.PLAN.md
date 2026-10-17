@@ -110,3 +110,81 @@ its first second, 2 deaths or fewer; 25N no worse.
 - `lord_jaraxxus.py` and its test.
 
 Outside ToC: `src/Bot/PlayerbotAI.cpp` for scope 1 only, listed in the report.
+
+## Investigation
+
+- The trace build (15:37 UTC) carries the 2026-10-17 core merge: upstream #28111 marks every melee
+  victim of him and his adds with Hittin' Ya 66326 (10 s), which Legion Flame, Incinerate Flesh, Fel
+  Lightning and Spinning Pain Spike skip, and schedules Berserk 64238 at 10 min; #28117 moves ToC to
+  boss states. Both are in the boss doc.
+- Incinerate: effect 0 absorb (`AuraEffect::GetAmount`), effect 2 one aura-23 tick at its end; the
+  heal that empties the absorb removes the aura (`Unit::CalcHealAbsorb`). Burning Inferno is cast by
+  the target on every ally on his behalf (Nether Power counts), first tick 1 s after.
+- Heroic portal aura 67104/67105 ticks every 6 s (normal 66263/67103 once at 8 s), each tick
+  summoning a Mistress and hitting 10 yd round the portal (66264/68404-68406).
+- `"spell id"` misses `Anti-Magic Zone` (the name compares the DBC string), so the DK class node and
+  any name lookup are dead; the helper goes by id 51052.
+- Guide read word for word: raid cooldowns are called for the Volcano (Divine Sacrifice, Aura Mastery
+  with Fire Resistance Aura) and the Kiss (Aura Mastery with Concentration Aura); the Incinerate
+  target may use a healthstone. No coordinate was proposed, so no navprobe.
+
+## Task list
+
+All done, one implementer (no split: the parts share the Jaraxxus stem and the helper).
+
+1. `PlayerbotAI::UpdateAI`: no full-health heal cancel on a target with
+   `SPELL_AURA_SCHOOL_HEAL_ABSORB`. `JaraxxusHealIncinerateTargetAction`: biggest heal a cast first,
+   HoTs last and skipped when the bot's own is on the target, kiss rule kept. Probe `jaraxxus.absorb`
+   in `IncinerateFleshTargetFor`.
+2. `Util/ToCHelpers_Defensive.{h,cpp}`: `ToCPredictedHit`, `GetToCRaidCover` (deal, latch, window),
+   `GetToCPersonalDefensive`, `FinishToCRaidCover`, `ToCRaidHitLeadIn`, `ToCRaidCoverClassNodes`;
+   probes `toc.cover`, `toc.personal`. Jaraxxus: `GetJaraxxusBurningInferno`,
+   `GetJaraxxusPersonalHit`, nodes `raid cover` / `personal defensive`, rules `jaraxxus raid cover
+   hold`, `jaraxxus magic button guard`; cover holders mid-cast join the pinned-cast break. ResistAura:
+   fire to a paladin with Aura Mastery on Jaraxxus.
+3. `GetJaraxxusPortalToClear`, node `portal spawn` → `leave portal`, rule `jaraxxus portal hold`,
+   probe `jaraxxus.portal`.
+4. `DeriveCarrierSpot`: healer reach in the sweep's accept, `far` branch when nothing clear has it.
+5. `JaraxxusThreatCapped`, `JaraxxusThreatCapMultiplier` (definition, Spell and Melee).
+6. Reader: `--incinerate` absorb columns, `--boss` reopen line, `--adds` Mistress arrivals, new
+   `--cover`; tests `HeroicCover`.
+7. Boss doc.
+
+## Decisions for review
+
+| Choice | Source | Alternative |
+|---|---|---|
+| Helper nodes live in the Jaraxxus stem, the logic in `ToCHelpers_Defensive` | Brief: Jaraxxus first user; no root registration edit while `refine-fc` runs | A raid-wide `Defensive` stem: edits `ToCStrategy.cpp`, both root contexts and `ToCDefinitions.h` |
+| Covers dealt only once the hit leaves 3+ members under 25%, after average resistance and damage taken modifiers | Algalon's `RaidUnderExplosionLine` minimum; spares 8 min cooldowns on a 12k normal Inferno | Deal on every predicted Inferno |
+| Every ready cover goes on one hit, one per bot | Brief: one holder per cooldown; a 25H Inferno is lethal to most casters | Stop dealing once the expected damage clears the floor: needs a model of each cover's cut |
+| Window 1.5 s before the first tick to 1 s after for every cover | Aura Mastery and Divine Guardian last 6 s, so a cast in the window covers the 5 s hit; channels' first heal lands after the first tick | AMZ cast at the prediction (it lasts 10 s): wasted when the absorb is healed through in the last 2 s |
+| Divine Sacrifice comes off once Divine Guardian is up | The class node's own continuer does the same; under a hit on everyone its 30% redirect drains the paladin | Keep it (Algalon's single hit) |
+| Raid cover +8.6 and personal +8.4, above the flame walk; channel covers never to a kissed bot or one on a flame | A carrier's walk holds every tick; an instant goes out on the move | Under the flame walk: a carrier never presses a button |
+| Personal floor 25% of max health; lethal fallbacks Dispersion, class immunity, healthstone | Brief; critical heal band is 25 | A flat damage threshold per difficulty |
+| Portal hold: melee DPS targeting the portal or inside 12 yd, out to 14 yd, from 1 s before the next tick until each of its Mistresses is on a tank or dead | Core: 10 yd centre-to-centre arrival, nearest-player opener; tick read from the aura's periodic timer; 2 yd park margin | Fixed 5 s from the portal's spawn: misses the heroic portal's later spawns |
+| Portal walk at `MOVEMENT_COMBAT` after dropping a booking of that priority | The hold blocks every other mover at that priority, and the flame dodge (`FORCED`) must still beat it | `FORCED`: two forced dodges deadlock (pitfalls) |
+| Carrier reach 30 yd to a living healer other than itself, dropped only when nothing clear has it (`far`) | Brief; trace 30-48 yd | Hard reject: a carrier with no reachable spot stops and drops flames under itself |
+| Threat cap copied, not hoisted | Anub'arak's latch sits in `AnubarakState` behind his phase gate; hoisting edits four Anub'arak files and Shared while `refine-fc` runs | Hoist now |
+| Fire aura on Jaraxxus prefers an Aura Mastery paladin, live or staged, and a kept holder without it gives way | Brief | Only re-rank empty slots: a kept ret holder would keep fire |
+| Reopen condition skips deaths with Burning Inferno in their last 5 s, heroic only | Brief; the 25H kill's 3 matches each took 57-70% from Inferno | Weigh Inferno's share instead |
+| No healthstone for the Incinerate target, no Volcano or Kiss cover | Out of the brief's scope; logged as gaps | Plug the Volcano into the helper |
+
+## Carried over
+
+None. For the merge stage: README's ResistAura paragraph should say fire goes to an Aura Mastery
+paladin on Jaraxxus first; README "Instance script" (no boss state, `IsEncounterInProgress` private)
+and `ToCEncounterGate.h`'s `TOC_DATA_ANUBARAK = 13` predate #28117, which removed `TYPE_JARAXXUS`,
+`TYPE_VALKYR` and `TYPE_NORTHREND_BEASTS_ALL`: Anub'arak's guid slot is now 11, so
+`GetGuidData(13)` answers empty (Anub'arak lane / `w6-closeout`). w6: hoist the Jaraxxus and
+Anub'arak threat caps and `IsAreaDamage` into Shared.
+
+## Known gaps
+
+In the boss doc: no Volcano or Kiss cover; class nodes can spend a cover before a predicted hit;
+holder late or lost at its window; no healthstone on the Incinerate target; assist tank 0 not at the
+portal, held melee idle; taunt diminishing returns between two tanks; adds on non-tanks under a human
+assist tank (by decision); capped melee white-swing; `toc.*` probes silent on the other four bosses.
+
+## Blocked
+
+None.

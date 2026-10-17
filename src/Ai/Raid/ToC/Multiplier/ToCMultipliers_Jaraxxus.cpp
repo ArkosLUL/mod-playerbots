@@ -7,9 +7,22 @@
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
+#include "RaidSplash.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 using namespace EncounterHelpers;
+
+namespace
+{
+// Area damage from this close counts as hitting him
+constexpr float JARAXXUS_AREA_THREAT_REACH = 30.0f;
+
+bool IsAreaDamage(PlayerbotAI* botAI, Action* action)
+{
+    return action->getThreatType() == Action::ActionThreatType::Aoe || MULTI_TARGET_ACTIONS.count(action->getName()) ||
+           SpellSplashes(botAI, action);
+}
+}  // namespace
 
 float JaraxxusControlTankMovementMultiplier::GetValue(Action* action)
 {
@@ -76,6 +89,25 @@ float JaraxxusAvoidAoeGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     return JaraxxusAnyLegionFlame(botAI) ? 0.0f : 1.0f;
+}
+
+float JaraxxusThreatCapMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !JaraxxusThreatCapped(bot))
+        return 1.0f;
+
+    Unit* boss = GetJaraxxus(botAI);
+    if (!boss)
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
+        return 0.0f;
+
+    if (IsAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= JARAXXUS_AREA_THREAT_REACH)
+        return 0.0f;
+
+    return 1.0f;
 }
 
 void AddToCJaraxxusMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)

@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <list>
+#include <unordered_map>
 
 #include "Creature.h"
 #include "EncounterHelpers.h"
@@ -13,9 +15,11 @@
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "Spell.h"
+#include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "TemporarySummon.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Shared.h"
@@ -54,12 +58,39 @@ struct JaraxxusScan
     std::vector<Position> flames;
 };
 
+struct ThreatCapLatch
+{
+    bool capped = false;
+    bool memoValid = false;
+    uint32 memoMs = 0;
+    bool value = false;
+};
+
+enum class InfernoPhase : uint8
+{
+    None,
+    Coming,
+    Running
+};
+
+// One read per instance per ms: every bot's cover and personal nodes ask each tick
+struct InfernoMemo
+{
+    bool valid = false;
+    uint32 ms = 0;
+    InfernoPhase phase = InfernoPhase::None;
+    ToCPredictedHit hit;
+};
+
 struct JaraxxusState
 {
     JaraxxusScan scan;
+    InfernoMemo inferno;
+    std::unordered_map<ObjectGuid, ThreatCapLatch> threatCaps;
     RaidObs::ObsValue<uint32> netherPower{"jaraxxus.netherpower"};
     RaidObs::ObsValue<ObjectGuid> focus{"jaraxxus.focus"};
     RaidObs::ObsGuidMap<ObjectGuid> addTank{"jaraxxus.addtank"};
+    RaidObs::ObsValue<uint32> absorb{"jaraxxus.absorb"};
 };
 
 RaidInstanceState<JaraxxusState> jaraxxusStates;
@@ -221,9 +252,21 @@ std::vector<Player*> AliveMembersOnMap(Player* bot)
     return members;
 }
 
+// Effect 0 of Incinerate Flesh is the heal absorb, worn down by every heal it eats
+uint32 IncinerateAbsorbLeft(Unit* unit)
+{
+    Aura* aura = unit ? unit->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_INCINERATE_FLESH, unit)) : nullptr;
+    AuraEffect* absorb = aura ? aura->GetEffect(EFFECT_0) : nullptr;
+    if (!absorb || absorb->GetAuraType() != SPELL_AURA_SCHOOL_HEAL_ABSORB)
+        return 0;
+
+    return static_cast<uint32>(std::max(absorb->GetAmount(), 0));
+}
+
 Unit* IncinerateFleshTargetFor(Player* bot)
 {
-    if (!StateFor(bot))
+    JaraxxusState* state = StateFor(bot);
+    if (!state)
         return nullptr;
 
     Player* target = nullptr;
@@ -231,7 +274,130 @@ Unit* IncinerateFleshTargetFor(Player* bot)
         if (HasIncinerateFlesh(member) && (!target || member->GetGUID() < target->GetGUID()))
             target = member;
 
+    state->absorb = IncinerateAbsorbLeft(target);
     return target;
+}
+
+// What its periodic damage effect still has to tick, at the amount it landed with
+uint32 PeriodicDamageLeft(Aura const* aura)
+{
+    for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+    {
+        AuraEffect const* effect = aura->GetEffect(i);
+        if (!effect || effect->GetAuraType() != SPELL_AURA_PERIODIC_DAMAGE)
+            continue;
+
+        int32 const ticks = std::max(effect->GetTotalTicks() - static_cast<int32>(effect->GetTickNumber()), 0);
+        return static_cast<uint32>(std::max(effect->GetAmount(), 0) * ticks);
+    }
+
+    return 0;
+}
+
+// The DBC's average roll for one tick of a periodic damage effect
+uint32 PeriodicTickOf(uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!info)
+        return 0;
+
+    for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+    {
+        SpellEffectInfo const& effect = info->Effects[i];
+        if (effect.ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE)
+            return static_cast<uint32>(std::max(effect.BasePoints + (effect.DieSides + 1) / 2, 0));
+    }
+
+    return 0;
+}
+
+// the kiss punishes a channel, and a bot walking off a flame breaks one
+bool CannotChannel(Player* player)
+{
+    return HasMistressKiss(player) || GetJaraxxusFlameRole(player) != JaraxxusFlameRole::None;
+}
+
+InfernoPhase InfernoFor(Player* bot, JaraxxusState& state, ToCPredictedHit& hit)
+{
+    InfernoMemo& memo = state.inferno;
+    uint32 const now = getMSTime();
+    if (memo.valid && memo.ms == now)
+    {
+        hit = memo.hit;
+        return memo.phase;
+    }
+
+    memo.valid = true;
+    memo.ms = now;
+    memo.phase = InfernoPhase::None;
+    memo.hit = ToCPredictedHit();
+
+    ToCPredictedHit next;
+    next.durationMs = (JARAXXUS_INFERNO_TICKS - 1) * IN_MILLISECONDS;
+    next.school = SPELL_SCHOOL_MASK_FIRE;
+    next.noChannel = &CannotChannel;
+
+    uint32 const infernoId = sSpellMgr->GetSpellIdForDifficulty(SPELL_BURNING_INFERNO, bot);
+    for (Player* member : AliveMembersOnMap(bot))
+    {
+        Aura const* running = member->GetAura(infernoId);
+        if (!running)
+            continue;
+
+        uint32 const elapsed = static_cast<uint32>(std::max(running->GetMaxDuration() - running->GetDuration(), 0));
+        next.startMs = now - elapsed + JARAXXUS_INFERNO_FIRST_TICK_MS;
+        next.damage = PeriodicDamageLeft(running);
+        memo.phase = InfernoPhase::Running;
+        memo.hit = next;
+        hit = next;
+        return memo.phase;
+    }
+
+    Unit* target = IncinerateFleshTargetFor(bot);
+    Aura const* incinerate =
+        target ? target->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_INCINERATE_FLESH, target)) : nullptr;
+    if (!incinerate || incinerate->GetDuration() > static_cast<int32>(JARAXXUS_INFERNO_LEAD_MS) ||
+        !IncinerateAbsorbLeft(target))
+        return memo.phase;
+
+    // his Nether Power counts: Burning Inferno is cast on his behalf
+    float const power = 1.0f + 0.2f * static_cast<float>(JaraxxusNetherPowerStacks(GET_PLAYERBOT_AI(bot)));
+    next.startMs = now + static_cast<uint32>(std::max(incinerate->GetDuration(), 0)) + JARAXXUS_INFERNO_FIRST_TICK_MS;
+    next.damage = static_cast<uint32>(PeriodicTickOf(infernoId) * JARAXXUS_INFERNO_TICKS * power);
+    memo.phase = InfernoPhase::Coming;
+    memo.hit = next;
+    hit = next;
+    return memo.phase;
+}
+
+// Melee DPS only. The trigger reads the distance, the hold also covers one walking in to hit it.
+bool ClearsPortal(PlayerbotAI* botAI, Creature* portal, JaraxxusScan const& scan)
+{
+    Player* bot = botAI->GetBot();
+    if (botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() != portal &&
+        bot->GetExactDist2d(portal) >= JARAXXUS_PORTAL_TRIGGER)
+        return false;
+
+    AuraEffect const* spawn =
+        portal->GetAuraEffect(sSpellMgr->GetSpellIdForDifficulty(SPELL_NETHER_PORTAL_SPAWN, portal), EFFECT_0);
+    if (spawn && spawn->GetPeriodicTimer() <= static_cast<int32>(JARAXXUS_PORTAL_SPAWN_LEAD_MS))
+        return true;
+
+    // she opens on whoever stands nearest, so the melee wait until a tank has her
+    for (ObjectGuid guid : scan.mistresses)
+    {
+        Creature* mistress = ResolveAlive(bot, guid);
+        TempSummon const* summon = mistress ? mistress->ToTempSummon() : nullptr;
+        if (!summon || summon->GetSummonerGUID() != portal->GetGUID())
+            continue;
+
+        Unit* victim = mistress->GetVictim();
+        Player* holder = victim ? victim->ToPlayer() : nullptr;
+        if (!holder || (!PlayerbotAI::IsTank(holder) && !PlayerbotAI::IsTank(holder, true)))
+            return true;
+    }
+
+    return false;
 }
 
 bool IsNonHealingRemover(Player* player)
@@ -342,14 +508,27 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
     Position const preferNear(bot->GetPositionX() + std::cos(heading) * 2.0f * JARAXXUS_FLAME_CARRIER_MIN_LEG,
                               bot->GetPositionY() + std::sin(heading) * 2.0f * JARAXXUS_FLAME_CARRIER_MIN_LEG,
                               bot->GetPositionZ());
-    auto const fullLeg = [bot](float x, float y)
-    { return bot->GetExactDist2d(x, y) >= JARAXXUS_FLAME_CARRIER_MIN_LEG; };
+
+    std::vector<Position> healers;
+    std::vector<Player*> const members = AliveMembersOnMap(bot);
+    for (Player* member : members)
+        if (member != bot && PlayerbotAI::IsHeal(member))
+            healers.push_back(member->GetPosition());
+
+    // the ring's first clear spot nearest the heading, so a leg bends round a healer's reach
+    auto const healable = [&healers](float x, float y)
+    {
+        return healers.empty() || std::any_of(healers.begin(), healers.end(), [x, y](Position const& healer)
+                                              { return healer.GetExactDist2d(x, y) <= JARAXXUS_CARRIER_HEALER_REACH; });
+    };
 
     HazardSweepCache cache;
-    auto const sweep = [&](std::vector<HazardCircle> const& hazards)
+    auto const sweep = [&](std::vector<HazardCircle> const& hazards, bool bound)
     {
+        auto const accept = [&](float x, float y)
+        { return bot->GetExactDist2d(x, y) >= JARAXXUS_FLAME_CARRIER_MIN_LEG && (!bound || healable(x, y)); };
         return FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_LEGION_FLAME_SEARCH, 2.0f,
-                                                 static_cast<float>(M_PI) / 8.0f, &preferNear, fullLeg, &cache);
+                                                 static_cast<float>(M_PI) / 8.0f, &preferNear, accept, &cache);
     };
 
     Unit* boss = FindJaraxxus(bot);
@@ -358,25 +537,32 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
     // a tank carrier drags him along, so it can't keep clear of him or of the melee on him
     if (boss && boss->GetVictim() == bot)
     {
-        spot = sweep(flames);
+        spot = sweep(flames, true);
         branch = "tank";
     }
     else
     {
         std::vector<HazardCircle> hazards = flames;
-        for (Player* member : AliveMembersOnMap(bot))
+        for (Player* member : members)
             if (member != bot && bot->GetExactDist2d(member) <= JARAXXUS_FLAME_CARRIER_RAID_SCAN)
                 hazards.emplace_back(member->GetPosition(), JARAXXUS_FLAME_CARRIER_RAID_CLEAR);
 
         if (boss)
             hazards.emplace_back(boss->GetPosition(), JARAXXUS_FLAME_CARRIER_BOSS_CLEAR);
 
-        spot = sweep(hazards);
+        spot = sweep(hazards, true);
         if (IsEmptyPosition(spot))
         {
-            spot = sweep(flames);
+            spot = sweep(flames, true);
             branch = "relaxed";
         }
+    }
+
+    if (IsEmptyPosition(spot) && !healers.empty())
+    {
+        spot = sweep(flames, false);
+        if (std::strcmp(branch, "tank"))
+            branch = "far";
     }
 
     bool const found = !IsEmptyPosition(spot);
@@ -715,7 +901,7 @@ std::vector<Player*> GetJaraxxusPinnedCasters(Player* bot)
         if (!member->HasUnitState(UNIT_STATE_CASTING) || !GET_PLAYERBOT_AI(member))
             continue;
 
-        if (HasMistressKiss(member) || IsLegionFlameCarrier(member))
+        if (HasMistressKiss(member) || IsLegionFlameCarrier(member) || JaraxxusRaidCoverPinned(member))
             pinned.push_back(member);
     }
 
@@ -808,6 +994,155 @@ bool JaraxxusAnyLegionFlame(PlayerbotAI* botAI)
 {
     JaraxxusScan const* scan = botAI ? ScanFor(botAI->GetBot()) : nullptr;
     return scan && !scan->flames.empty();
+}
+
+bool GetJaraxxusBurningInferno(PlayerbotAI* botAI, ToCPredictedHit& hit)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    JaraxxusState* state = StateFor(bot);
+    return state && InfernoFor(bot, *state, hit) != InfernoPhase::None;
+}
+
+bool GetJaraxxusPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    JaraxxusState* state = StateFor(bot);
+    if (!state || !bot->IsAlive())
+        return false;
+
+    uint32 const now = getMSTime();
+    if (Aura const* own = bot->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_BURNING_INFERNO, bot)))
+    {
+        InfernoFor(bot, *state, hit);
+        uint32 const elapsed = static_cast<uint32>(std::max(own->GetMaxDuration() - own->GetDuration(), 0));
+        hit.startMs = now - elapsed + JARAXXUS_INFERNO_FIRST_TICK_MS;
+        hit.damage = PeriodicDamageLeft(own);
+        return true;
+    }
+
+    // one running on the others and not on this bot passes it by
+    if (InfernoFor(bot, *state, hit) == InfernoPhase::Coming)
+        return true;
+
+    if (!IsLegionFlameCarrier(bot) || bot->GetHealthPct() >= JARAXXUS_CARRIER_DEFENSIVE_PCT)
+        return false;
+
+    uint32 const trailId = sSpellMgr->GetSpellIdForDifficulty(SPELL_LEGION_FLAME_TRAIL, bot);
+    hit = ToCPredictedHit();
+    hit.school = SPELL_SCHOOL_MASK_FIRE;
+    if (Aura const* trail = bot->GetAura(trailId))
+    {
+        hit.startMs = now;
+        hit.durationMs = static_cast<uint32>(std::max(trail->GetDuration(), 0));
+        hit.damage = PeriodicDamageLeft(trail);
+        return true;
+    }
+
+    // the 2 s warning ahead of a 6 s trail ticking once a second
+    Aura const* warning = bot->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_LEGION_FLAME, bot));
+    if (!warning)
+        return false;
+
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(trailId);
+    uint32 const ticks = info ? static_cast<uint32>(std::max(info->GetMaxDuration(), 0)) / IN_MILLISECONDS : 0;
+    hit.startMs = now + static_cast<uint32>(std::max(warning->GetDuration(), 0)) + IN_MILLISECONDS;
+    hit.durationMs = ticks > 1 ? (ticks - 1) * IN_MILLISECONDS : 0;
+    hit.damage = PeriodicTickOf(trailId) * ticks;
+    return true;
+}
+
+bool JaraxxusRaidCoverHeld(PlayerbotAI* botAI)
+{
+    ToCPredictedHit hit;
+    return GetJaraxxusBurningInferno(botAI, hit) && ToCRaidHitLeadIn(hit);
+}
+
+bool JaraxxusMagicHitOnBot(PlayerbotAI* botAI)
+{
+    ToCPredictedHit hit;
+    return botAI && (IsLegionFlameCarrier(botAI->GetBot()) || GetJaraxxusBurningInferno(botAI, hit));
+}
+
+bool JaraxxusRaidCoverPinned(Player* member)
+{
+    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+    ToCPredictedHit hit;
+    return memberAI && GetJaraxxusBurningInferno(memberAI, hit) &&
+           GetToCRaidCover(memberAI, &hit) != ToCRaidCover::None;
+}
+
+Unit* GetJaraxxusPortalToClear(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    JaraxxusState* state = StateFor(bot);
+    if (!state || !bot->IsAlive() || !IsToCDpsBot(bot) || PlayerbotAI::IsRanged(bot))
+        return nullptr;
+
+    JaraxxusScan const& scan = ScanOf(bot, *state);
+    Creature* clear = nullptr;
+    for (ObjectGuid guid : scan.portals)
+    {
+        Creature* portal = ResolveAlive(bot, guid);
+        if (portal && !portal->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) && ClearsPortal(botAI, portal, scan))
+        {
+            clear = portal;
+            break;
+        }
+    }
+
+    RaidObs::NoteDerived(bot, "jaraxxus.portal", clear ? "hold" : "none");
+    return clear;
+}
+
+bool DeriveJaraxxusPortalExit(Player* bot, Unit* portal, Position& spot)
+{
+    JaraxxusScan const* scan = ScanFor(bot);
+    if (!scan || !portal)
+        return false;
+
+    std::vector<HazardCircle> hazards;
+    AddFlameHazards(bot, *scan, hazards);
+    hazards.emplace_back(portal->GetPosition(), JARAXXUS_PORTAL_CLEAR);
+
+    // back toward him, where the melee go once she's on a tank
+    Unit* boss = FindJaraxxus(bot);
+    Position const toward = boss ? boss->GetPosition() : bot->GetPosition();
+    spot = FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_PORTAL_CLEAR + JARAXXUS_LEGION_FLAME_SEARCH, 2.0f,
+                                             static_cast<float>(M_PI) / 8.0f, &toward);
+    return !IsEmptyPosition(spot);
+}
+
+bool JaraxxusThreatCapped(Player* bot)
+{
+    JaraxxusState* state = StateFor(bot);
+    if (!state || !IsToCDpsBot(bot))
+        return false;
+
+    ThreatCapLatch& cap = state->threatCaps[bot->GetGUID()];
+    uint32 const now = getMSTime();
+    if (cap.memoValid && cap.memoMs == now)
+        return cap.value;
+
+    cap.memoValid = true;
+    cap.memoMs = now;
+    cap.value = false;
+
+    Unit* boss = FindJaraxxus(bot);
+    Unit* victim = boss ? boss->GetVictim() : nullptr;
+    Player* tank = victim ? victim->ToPlayer() : nullptr;
+    if (!tank || tank == bot || (!PlayerbotAI::IsTank(tank) && !PlayerbotAI::IsTank(tank, true)))
+        return false;
+
+    // the "threat" AI value is a share in a uint8 and wraps past 255%
+    float const own = boss->GetThreatMgr().GetThreat(bot);
+    float const held = boss->GetThreatMgr().GetThreat(tank);
+    if (!cap.capped && own > 0.0f && own >= JARAXXUS_THREAT_CAP * held)
+        cap.capped = true;
+    else if (cap.capped && own < JARAXXUS_THREAT_RELEASE * held)
+        cap.capped = false;
+
+    cap.value = cap.capped;
+    return cap.value;
 }
 
 }
