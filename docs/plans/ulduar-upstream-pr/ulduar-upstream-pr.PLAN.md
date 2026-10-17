@@ -222,8 +222,8 @@ parity check of the delta; record the new base.
    triggers); "How to Test" for contributors (10/25, `Playerbots.Ulduar<Boss>HardMode` options);
    no cheats left (old Ulduar had 21 `BotCheatMask::raid` sites); file-layout rationale; core drift
    (the fork core makes several Ulduar spells resistible — `56ee3ed2b`, `c1c9ff79b`, `3da20bce6`,
-   `887e46714` — and lacks ~20 upstream Ulduar script fixes, e.g. #27938 Hodir, #27854 FL seats,
-   #27853 Yogg guardians, #28079 boss ids); #2653 overlap.
+   `887e46714`; it took upstream's core in `62fb09c68`, so #27938, #27854, #27853 and #28079 are in);
+   #2653 overlap.
 4. PR titles via the `pr-title` skill. Nothing is marked ready in this effort.
 
 ## Verification

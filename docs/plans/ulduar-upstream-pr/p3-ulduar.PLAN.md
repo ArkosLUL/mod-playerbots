@@ -13,6 +13,15 @@ and trace-only code (e.g. `TickVezax` and Mimiron's tick except `ResetMimironFig
 remove the old Ulduar, (2) shared Ulduar files + registration, (3) one commit per boss, (4) config options, titled
 `feat(Raid/Ulduar): <summary>`; no push.
 
+From earlier lanes:
+- Before branching, commit `src/Util/RaidDifficulty.h` from the export base onto `raid-shared-helpers` as its own
+  commit (`IsRaid25Man`, called by Flame Leviathan, Thorim, XT-002 and Yogg-Saron); branch from that commit.
+- `raid-shared-helpers` dropped the trace-name argument of `NextTankDefensive`, `NextMagicDefensive`,
+  `NextPhysicalDefensive` and `CallHumanTankDefensive`: remove it at every Ulduar call. `UldActions_Mimiron.cpp`
+  `NextTankDefensive(botAI, bot, "mimiron.plasma")` still compiles with it (the string becomes `physicalOnly =
+  true`), so fix that one by hand.
+- Add the GPLv2 header to every Ulduar file that lacks one.
+
 ## Task list
 
 ## Decisions for review
