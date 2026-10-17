@@ -383,7 +383,7 @@ public:
     void OnSpellCast(
         Spell* spell, Unit* caster, SpellInfo const* spellInfo, bool /*skipCheck*/) override
     {
-        if (caster->GetEntry() != static_cast<uint32>(SwpNpcs::NPC_GRAND_WARLOCK_ALYTHESS) ||
+        if (!caster || caster->GetEntry() != static_cast<uint32>(SwpNpcs::NPC_GRAND_WARLOCK_ALYTHESS) ||
             spellInfo->Id != static_cast<uint32>(SwpSpells::SPELL_CONFLAGRATION))
         {
             return;
