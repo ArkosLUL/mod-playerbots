@@ -36,6 +36,7 @@ RAM_HIT_WINDOW_MS = 1000        # a blast's dmg rows land within this of its cas
 RAM_HIT_LEAD_MS = 50            # and can be written a few ms before the cast row itself
 ELECTROSHOCK_RADIUS = 25.0      # cone radius; the cone adds his reach, so 40 yd from his centre
 VENT_RUSH_LEAD_MS = 5000        # ULDUAR_FL_VENT_RUSH_LEAD_MS
+VENT_APPROACH_LEAD_MS = 2000    # ULDUAR_FL_VENT_APPROACH_LEAD_MS, when the reserve leaves its hold
 RAM_CONE_RADIUS = geometry.radius("ULDUAR_FL_RAM_CONE_RADIUS")
 RAM_CONE_HALF_DEG = 50.0        # ULDUAR_FL_RAM_CONE_HALF_ANGLE, in degrees
 FIRE_CANNON_MIN = geometry.radius("ULDUAR_FL_FIRE_CANNON_MIN_RANGE")
@@ -72,6 +73,8 @@ CRATE_CREDIT_SPELL = 62496      # cast once per Grab Crate hit, repeats on the s
 CRATE_DESPAWN_MS = 1300         # spell_vehicle_grab_pyrite's despawn delay
 CRATE_GRAB_CEILING = 75
 CRATE_CREDIT = 25
+CRATE_GRAB_RANGE = geometry.radius("ULDUAR_FL_CRATE_GRAB_RANGE")
+LIFT_NOTE = "fl.lift"           # "<lift guid counter> <x> <y>", each gunner's first rocket at that lift
 BARREL_RANGE = 70.0
 BARREL_COST = 5
 BARREL_STATES = ("burst", "refresh", "hold", "dry", "fail", "not boss")
@@ -83,6 +86,7 @@ RUSH_SPEED = 20.0               # yd/s: no hull drives this fast, so a faster st
 RUSH_COST = 40                  # ULDUAR_FL_STEAM_RUSH_COST
 RUSH_COOLDOWN_MS = 15000        # Steam Rush 62346's own cooldown
 PURSUED_FLAP_MS = 1500
+PURSUED_NOTE_LAG_MS = 5000      # fl.pursued lands up to ~4 s after the aura it names
 REVERSAL_WINDOW_MS = 1000       # a dodge leg turning back on the last one this soon is flipping sides
 REVERSAL_DEG = 120.0
 
@@ -624,10 +628,14 @@ def show_pursued(fl: Fight) -> None:
         if rec.get("k") == SPEED_NOTE and rec["g"] in crews:
             speeds[crews[rec["g"]]].append(rec["t"])
 
+    # The election drops a Pursued engine as the aura lands, and fl.pursued trails the aura by up to ~4 s.
+    reserve = latch_spans(trace, "fl.reserve", fl.end)
+
     print("\n  Pursued spans (hull health, first accepted kite move, when a Steam Rush was first ready and")
     print("  when one went out, when the gunner's Increased Speed landed, Electroshocks by its driver,")
-    print("  gap from the hull's edge to his at +0/+2/+4 s):")
+    print("  gap from the hull's edge to his at +0/+2/+4 s; 'reserve' held the vent duty at the switch):")
     close_losses = []
+    reserve_losses = []
     for hull, start, stop in fl.pursued:
         track = [(f.t, f.hulls[hull], f.boss) for f in fl.frames if start <= f.t <= stop and hull in f.hulls]
         if len(track) < 2 or stop - start < 1500:
@@ -652,15 +660,22 @@ def show_pursued(fl: Fight) -> None:
         first_gap = edge_gap(track[0][1], track[0][2])
         if first_gap <= 40:
             close_losses.append(hp_in - hp_out)
+        was_reserve = any(as_guid(held) == hull and begin < start and end > start - PURSUED_NOTE_LAG_MS
+                          for held, begin, end in reserve)
+        if was_reserve:
+            reserve_losses.append(hp_in - hp_out)
         take = lambda when: f"+{(when - start) / 1000:.1f}s" if when is not None else "none"  # noqa: E731
         print(f"     {VEHICLE_NAME[entry]:10s} {hull & 0xffffffff:6d} {clock(start):>9s} {(stop - start) / 1000:5.1f}s"
               f"  hp {hp_in:5.1f}->{hp_out:5.1f}  kite {take(accepted):>7s}  ready {take(ready):>7s}"
               f"  rush {take(rush):>7s}  speed {take(speed):>7s}  shocks {fired}"
-              f"  gap {' '.join(gaps)}  {trace.name(driver) if driver else '-'}")
+              f"  gap {' '.join(gaps)}  {trace.name(driver) if driver else '-'}{'  reserve' if was_reserve else ''}")
     if close_losses:
         close_losses.sort()
         print(f"     started within 40 yd of his edge: {len(close_losses)} spans, hull health lost median "
               f"{statistics.median(close_losses):.0f} pts, range {close_losses[0]:.0f}-{close_losses[-1]:.0f}")
+    if reserve_losses:
+        print(f"     Pursued while the vent reserve: {len(reserve_losses)} spans, hull health lost median "
+              f"{statistics.median(reserve_losses):.0f} pts")
 
 
 # ------------------------------------------------------------------------------------------- --pyrite
@@ -723,6 +738,23 @@ def span_shares(spans, start: int, stop: int) -> dict[str, float]:
         if overlap > 0:
             held[value] += overlap
     return {value: amount / (stop - start) for value, amount in held.items()} if stop > start else {}
+
+
+def lift_shots(notes: list[dict]) -> dict[str, tuple[int, float, float]]:
+    """lift id -> `(t, x, y)` of the earliest `fl.lift` note on it. Each gunner notes its own first
+    rocket, so one lift can arrive from several of them."""
+    shots: dict[str, tuple[int, float, float]] = {}
+    for rec in notes:
+        parts = str(rec.get("txt", "")).split()
+        if len(parts) != 3:
+            continue
+        try:
+            x, y = float(parts[1]), float(parts[2])
+        except ValueError:
+            continue
+        if parts[0] not in shots or rec["t"] < shots[parts[0]][0]:
+            shots[parts[0]] = (rec["t"], x, y)
+    return shots
 
 
 def show_pyrite(trace: Trace) -> int:
@@ -858,6 +890,24 @@ def show_pyrite(trace: Trace) -> int:
             if samples and len(health) > 1 and health[-1] <= health[0]:
                 print(f"     {begin // 1000:4d}s  stacks {sum(samples) / len(samples):5.1f}"
                       f"   boss {2 * (health[0] - health[-1]):5.2f} %/min")
+
+    # The container falls straight down from the lift, so where it was shot is where the crate lands.
+    shots = lift_shots([rec for rec in trace.of("note") if rec.get("k") == LIFT_NOTE])
+    print()
+    if not shots:
+        print("  no fl.lift notes, so where the lifts were shot is unknown")
+    else:
+        cx, cy = arena_centre()
+        from_centre = sorted(math.hypot(x - cx, y - cy) for _, x, y in shots.values())
+        covered = 0
+        for when, x, y in shots.values():
+            frame = fl.frame_at(when)
+            covered += bool(frame) and any(h[3] == DEMOLISHER and h[2] > 0 and
+                                           math.hypot(h[0] - x, h[1] - y) <= CRATE_GRAB_RANGE
+                                           for h in frame.hulls.values())
+        print(f"  Mechanolifts shot: {len(shots)}; drop point from the arena centre p25 {pick(from_centre, 0.25):.0f}"
+              f"  median {statistics.median(from_centre):.0f}  p75 {pick(from_centre, 0.75):.0f} yd;"
+              f" a live demolisher within {CRATE_GRAB_RANGE:.0f} yd of it at the shot: {covered} of {len(shots)}")
 
     casts = [rec for rec in trace.of("cast") if rec.get("sp") == GRAB_CRATE and rec.get("s") not in trace.humans]
     print()
@@ -1544,6 +1594,12 @@ def show_corners(trace: Trace) -> int:
 
 # -------------------------------------------------------------------------------------------- --vents
 
+def between_channels(points: list[tuple[int, float]], channels, lead_ms: int) -> list[float]:
+    """The distances of `[(t, distance)]` lying outside every `[start - lead_ms, stop]` channel window."""
+    return [distance for when, distance in points
+            if not any(start - lead_ms <= when <= stop for start, stop, _ in channels)]
+
+
 def show_vents(trace: Trace) -> int:
     fl = fight(trace)
     channels = vent_channels(trace)
@@ -1623,6 +1679,20 @@ def show_vents(trace: Trace) -> int:
                 if lost:
                     note = ", ".join(filter(None, [note, "a forced leg overrode the rush within 1 s"]))
                 print(f"     {'':>9s}  {'':8s}  {note}")
+
+        # Pursued never lands mid-channel, so between channels is where the reserve is exposed to a switch.
+        ram_reach = BOSS_REACH + VEHICLE_SIZE[SIEGE] + RAM_CAST_RANGE
+        points = []
+        for frame in fl.frames:
+            ride = frame.hulls.get(as_guid(value_at(reserve, frame.t)))
+            if ride and ride[2] > 0:
+                points.append((frame.t, math.hypot(ride[0] - frame.boss[0], ride[1] - frame.boss[1])))
+        between = between_channels(points, channels, VENT_APPROACH_LEAD_MS)
+        if between:
+            inside = sum(1 for distance in between if distance <= ram_reach)
+            print(f"\n  the reserve between channels (more than {VENT_APPROACH_LEAD_MS // 1000} s before one): inside"
+                  f" Battering Ram's {ram_reach:.1f} yd {100 * inside / len(between):.0f}% of {len(between)} frames,"
+                  f" median {statistics.median(between):.1f} yd from his centre")
 
     # Same window shape as the add attrition, so the two numbers can be read side by side.
     windows = collections.defaultdict(lambda: [None, None, 0, 0])

@@ -710,6 +710,19 @@ class FlameLeviathanReader(unittest.TestCase):
         self.assertEqual(flame_leviathan.crate_duplicates(casts),
                          {"casts": 5, "crates": 2, "same": 1, "cross": 1, "later": 1})
 
+    def test_lift_shots_keep_the_earliest_note_per_lift(self):
+        notes = [
+            {"t": 500, "txt": "7 210 -40"}, {"t": 300, "txt": "7 205 -38"}, {"t": 900, "txt": "8 300 10"},
+            {"t": 100, "txt": "9 x 10"}, {"t": 200, "txt": "9 10"}, {"t": 250},
+        ]
+        self.assertEqual(flame_leviathan.lift_shots(notes), {"7": (300, 205.0, -38.0), "8": (900, 300.0, 10.0)})
+
+    def test_between_channels_drops_the_approach_and_the_channel(self):
+        channels = [(10000, 12000, 3)]
+        points = [(7000, 50.0), (7999, 51.0), (8000, 40.0), (12000, 30.0), (12001, 45.0)]
+        self.assertEqual(flame_leviathan.between_channels(points, channels, 2000), [50.0, 51.0, 45.0])
+        self.assertEqual(flame_leviathan.between_channels(points, [], 2000), [50.0, 51.0, 40.0, 30.0, 45.0])
+
     def test_energy_steps_count_barrels_and_credits(self):
         # Two barrels between samples, a clipped credit at the cap, and float noise that is neither.
         track = [(0, 100.0), (250, 95.0), (500, 85.0), (750, 85.4), (1000, 100.0), (1250, 75.0), (1500, 100.0)]

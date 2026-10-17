@@ -119,24 +119,38 @@ bool FlameLeviathanVehicleAction::CastVehicle(uint32 spellId, Unit* target, uint
     return true;
 }
 
-// Only lifts near the arena are worth a rocket: the crate drops where the lift died, and one shot
-// down across the zone leaves pyrite nobody will ever drive to.
+// The crate falls straight down where the lift dies, and the demolishers ride round him near the middle,
+// so only a lift over the arena, at its closest pass to the centre. Lifts fly facing along their loop.
 Unit* FlameLeviathanVehicleAction::FindMechanolift()
 {
+    Position const centre = FlameLeviathanArenaCentre();
     GuidVector targets = AI_VALUE(GuidVector, "possible targets");
     for (auto const& guid : targets)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || unit->GetEntry() != NPC_FL_MECHANOLIFT)
+        if (!unit || unit->GetEntry() != NPC_FL_MECHANOLIFT || !FlameLeviathanInArena(unit->GetPosition()))
             continue;
 
-        if (!FlameLeviathanInArena(unit->GetPosition(), ULDUAR_FL_CRATE_DETOUR_RADIUS))
+        // Centre still ahead: the pass gets closer yet. Every lift that crosses the arena is still shot once.
+        if (unit->GetExactDist2d(&centre) > ULDUAR_FL_LIFT_DROP_RADIUS && unit->HasInArc(float(M_PI), &centre))
             continue;
 
         return unit;
     }
 
     return nullptr;
+}
+
+void FlameLeviathanVehicleAction::NoteLiftShot(Unit* lift)
+{
+    if (!RaidObs::Active() || lift->GetGUID() == lastLiftNoted_)
+        return;
+
+    lastLiftNoted_ = lift->GetGUID();
+    RaidObs::Note(bot, "fl.lift",
+                  std::to_string(lift->GetGUID().GetCounter()) + " " +
+                      std::to_string(static_cast<int32>(lift->GetPositionX())) + " " +
+                      std::to_string(static_cast<int32>(lift->GetPositionY())));
 }
 
 // Only what is already fighting, so a cannon with 70 yd of reach never opens on a pack nobody pulled.
@@ -388,7 +402,10 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
 
     if (Unit* lift = FindMechanolift())
         if (CastVehicle(SPELL_FL_ANTI_AIR_ROCKET, lift, 250))
+        {
+            NoteLiftShot(lift);
             return true;
+        }
 
     // Mortar is free and already cast every tick, so an add only costs the target swap. No minimum range
     // either, so it covers adds inside Fire Cannon's 10 yd floor.
@@ -452,7 +469,10 @@ bool FlameLeviathanVehicleAction::SiegeEngineTurretAction(Unit* target)
 
     if (Unit* lift = FindMechanolift())
         if (CastVehicle(SPELL_FL_ANTI_AIR_ROCKET_SIEGE, lift, 250))
+        {
+            NoteLiftShot(lift);
             return true;
+        }
 
     if (vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_FIRE_CANNON_COST)
         return false;
@@ -904,6 +924,13 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
         // He speeds up to 10 yd/s against a flat 7 hull, so the rear arc with no lead is a tail chase.
         stationLead = FlameLeviathanStationLead(boss);
         centreSide = true;
+
+        // Pursued lands on a random siege engine or demolisher, never mid-channel, and a siege engine
+        // caught inside Battering Ram's reach can't drive clear. So wait outside it, deadband included,
+        // and close in only for the channel.
+        if (FlameLeviathanMsToNextVent(bot, boss) > ULDUAR_FL_VENT_APPROACH_LEAD_MS)
+            standDist = ULDUAR_FL_BATTERING_RAM_CAST_RANGE + vehicleBase_->GetCombatReach() +
+                        ULDUAR_FL_ARRIVE_TOLERANCE;
     }
 
     if (RaidObs::Active())
@@ -958,15 +985,9 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
 bool FlameLeviathanDriveAction::RushToVents(Unit* boss)
 {
     // Electroshock shares Steam Rush's 2 s GCD, so dash 2-5 s ahead of a channel, or at once into one
-    // already running.
+    // already running. Never outside that: the rush is also the reserve's only escape once Pursued.
     uint32 const toVent = FlameLeviathanMsToNextVent(bot, boss);
-    if (toVent && toVent < ULDUAR_FL_STEAM_RUSH_GCD_MS)
-        return false;
-
-    // Out of reach the dash is the only way to close on him: a 7 yd/s hull loses to every Gathering Speed stack.
-    bool const closing = vehicleBase_->GetExactDist2d(boss) - boss->GetCombatReach() >
-                         ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS;
-    if (toVent > ULDUAR_FL_VENT_RUSH_LEAD_MS && !closing)
+    if (toVent && (toVent < ULDUAR_FL_STEAM_RUSH_GCD_MS || toVent > ULDUAR_FL_VENT_RUSH_LEAD_MS))
         return false;
 
     // A FORCED dodge leg cancels the charge and wastes the 40 energy. Same test as the drive's, so it matches

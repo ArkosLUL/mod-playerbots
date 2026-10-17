@@ -41,6 +41,8 @@ protected:
     bool CastVehicle(uint32 spellId, Unit* target, uint32 cooldownMs = 1000);
 
     Unit* FindMechanolift();
+    // fl.lift, once per lift: the rocket goes out every 250 ms until one lands.
+    void NoteLiftShot(Unit* lift);
 
     // The nearest hostile already in combat, him and his turrets aside: what to shoot on the approach.
     Unit* NearestFightingHostile();
@@ -53,6 +55,8 @@ protected:
     ObjectGuid barrelTarget_;
     uint8 lastPyriteStacks_ = 0;
     int32 lastPyriteDurationMs_ = 0;
+
+    ObjectGuid lastLiftNoted_;
 };
 
 class FlameLeviathanEnterVehicleAction : public MovementAction

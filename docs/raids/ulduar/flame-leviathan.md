@@ -39,8 +39,17 @@ So a full demolisher is **20 barrels**, then free Hurl Boulder forever unless cr
 80 `Mechanolift 304-A` (33214) spawns each carry a `33218 Pyrite Safety Container` in seat 1; shoot
 one down and the container falls, `MovementInform` summons `33189 Liquid Pyrite`, and the demolisher
 gunner's Grab Crate runs `62496 → 62473 Reload Ammo` = `SPELL_EFFECT_ENERGIZE` **+25 to the
-demolisher**. Anti-Air Rocket reaches 1000 yd and lifts spawn far outside the arena, so targets are
-restricted to the arena box — a crate that lands across the zone is a crate nobody drives to.
+demolisher**. Anti-Air Rocket reaches 1000 yd, so the gunners choose where crates land.
+
+**Shoot a lift over the arena, at its closest pass to the centre** (`FindMechanolift`). The container
+falls straight down and demolishers ride a median 30-35 yd from the centre: a crate within 20 yd of it
+has a live demolisher inside the 49 yd grab reach 86-96% of the time, one 80-100 yd out 14-37%. The
+old gate, any lift up to 60 yd outside the box, shot them a median 97-110 yd from the centre. Lifts fly
+facing their course (within 1° p90), so the centre falling behind one marks the pass; inside
+`ULDUAR_FL_LIFT_DROP_RADIUS` (20) it fires at once. Holding costs no crates: lifts respawn in 30 s and
+all 47 spawns on loops crossing the box are still shot once a pass. Only one loop (path `13682000`,
+10 spawns) crosses the middle; the other 37 bottom out 81-88 yd from the centre, so most drops gain
+little. `fl.lift` records each shot.
 
 **Every grab credits, repeats included.** `spell_vehicle_grab_pyrite` runs on each 62482 hit and only
 despawns the crate 1300 ms later. The gunner's 62496 goes to the nearest 33167 (`conditions`
@@ -133,7 +142,10 @@ despite the name**, and never ignites anything.
 - **Never measure a cone with `IsWithinCombatRange`** — it adds *both* combat reaches, and his is 15,
   so asking for 25 answers yes out to 47.7. The cone check adds only the target's
   (`GetObjectSize`); `FlameLeviathanInConeRange` mirrors that.
-- **Pursued 62374** picks a random vehicle every 31s and lasts 35s; he drives at it and casts
+- **Pursued 62374** picks a random crewed siege engine or demolisher, never a chopper
+  (`FlameLeviathanPursuedTargetSelector`), every 31s and lasts 35s. `EVENT_PURSUE` waits out his
+  casts, so it never lands mid-channel, and re-fires at once when he kills his victim.
+  He drives at it and casts
   `Battering Ram 62376` on `GetVictim()` inside `IsWithinCombatRange(victim, 15)`. Its target is
   `TARGET_DEST_TARGET_ENEMY` at radius index 20, so the blast is a **25 yd sphere centred on the
   pursued vehicle** and his facing is irrelevant. Measuring it off *him* caught only a third of real
@@ -266,8 +278,9 @@ for 20 s while he drove 90 yd away, and a 10-tick channel went through.
 
 ## Hard mode
 
-At pull, `ActivateTowers()` adds one empower aura per surviving tower and schedules that tower's
-periodic ground event:
+At pull, and only then (`ACTION_LEVIATHAN_REFRESH_TOWERS` is never sent), `ActivateTowers()` adds one
+empower aura per surviving tower and schedules that tower's periodic ground event, so a tower downed
+mid-fight changes nothing. The towers stand 360-560 yd from the arena anyway.
 
 | Tower | Boss aura | Ground NPC | Hazard |
 |---|---|---|---|
@@ -382,7 +395,13 @@ sits 16-21 yd from the spawn: the gunner opens the wave and Ram is for what reac
   2026-09-17 pull it started 42–129 yd from his centre (reach 40) and never got inside in any of the 10
   full channels it lived through. So it Steam Rushes when over a charge from his edge, 2–5 s before
   the next channel (`EVENT_VENT` every 20 s, so the rush's GCD is over when the shock is due) or at
-  once into a running one, never landing in the ram sphere. The interrupt stops the hull before
+  once into a running one, never landing in the ram sphere, and never outside that window: the rush is
+  its only escape once Pursued, and a dash to close spent it 3-6 s before two switches on 2026-10-17.
+  Between channels it waits outside Battering Ram's reach, `ULDUAR_FL_BATTERING_RAM_CAST_RANGE` + its
+  7.7 reach + the 8 yd deadband (45.7 yd from his centre against Ram's 37.7 and Electroshock's 40), and
+  closes `ULDUAR_FL_VENT_APPROACH_LEAD_MS` (2 s) before one. Parked at the 8 yd siege station instead,
+  it was the Pursued hull in 8 spans over three pulls and lost a median ~50 pts.
+  The interrupt stops the hull before
   turning: a moving spline overrides `SetFacingTo`, and a reserve that drove past him at 22 yd, 33–87°
   off, never fired.
 
@@ -489,6 +508,10 @@ checked for `UNIT_STATE_STUNNED` only; the hull keeps the full test. `fl.vent`, 
   credits +25. `fl.barrel` `dry` is no energy, `fail` the core refusing the cast. Pre-fix traces flap
   `fl.pursued`, so the checker merges one hull's spans within `PURSUED_FLAP_MS` (1.5 s) and falls back
   to the boss's target column without the notes.
+- **`fl.pursued` lands up to ~4 s after the aura**, while the reserve election drops a Pursued engine at
+  once, so `--hulls` tags a span `reserve` from the 5 s before it and its `kite`/`ready` columns read
+  late. `fl.lift` (`<guid> <x> <y>`, each gunner's first rocket at a lift) gives `--pyrite` its drop
+  distances, and `--vents` prints the reserve's frames inside Ram reach between channels.
 
 
 ## Baseline to beat — 2026-08-30, before the blast/freeze fixes
@@ -692,7 +715,32 @@ engines being 44.5-61.4 yd out on each. Every Electroshock that went out worked.
 | drive COMBAT moves refused `wait`: siege / demolisher / chopper | 11 / 5 / 6% | under 10% |
 | hulls lost / bot deaths on foot | 1 of 15 / 2 | 0 / 0 |
 
+## Baseline to beat - 2026-10-17, four towers up
+
+`603_3_flame-leviathan_1792261249`, a **wipe at 8:49** with him at 6.7%, and `_1792261849` on the same
+binary, a **kill at 3:33** with no hull lost. The opening Pursue rolls split them: in the wipe the first
+four Pursued and ram-target spans were demolishers, which kited past barrel range and re-burst their
+stacks, so mean demolisher energy fell 100 → 21 by 1:30 (60-85 in the kill). Then the reserve, parked at
+5-24 yd, was Pursued six times and rammed, Vents ran 11 ticks from 3:20 once sieges thinned, and the
+other 11 hulls went to it. 22 of 26 bot deaths were crews on foot, a median 17.7 s after their hull.
+
+| | wipe / kill | target |
+|---|---|---|
+| reserve frames in Ram reach between channels | 61 / 76% | under 10% |
+| Pursued spans on the reserve / hull lost median | 6 / 49 pts, 1 / 58 pts | 0 |
+| lift drop point from the centre | median ~100 (track ends) | under 85 |
+| demolisher `dry` share | 19-54 / 0-7% | under 10% |
+| Vents channels run full | 7 of 22 / 1 of 8 | 0 |
+| hulls lost / bot deaths on foot | 15 / 22, 0 / 0 | 0 / 0 |
+
 ## Known gaps
+
+- **Systems Shutdown is never used**, and it is the biggest lever left. Four `Overload Circuit 62399`
+  in 25-man (two in 10) cast `62475`: `spell_systems_shutdown_aura` stuns him 20 s, **removes Gathering
+  Speed** and adds +50% damage taken. A rider reaches his seats (33114) via demolisher seat 3 and
+  `Throw Passenger 62324`, kills the turret it wakes, and clicks the Overload Control Device; the seats
+  are immune to Vents, Missile Barrage, Ram, Fury and Inferno. Crewless bots or chopper crews could be
+  the passengers.
 
 - **Boarding depends on the raid leader.** `FlameLeviathanVehicleNearTrigger` returns false unless
   `master->GetVehicle()` — the Oculus `GroupFlyingTrigger` defect, where one human who has not
@@ -710,8 +758,8 @@ engines being 44.5-61.4 yd out on each. Every Electroshock that went out worked.
   (a chopper, 11 of 15 adds on 2026-09-17), and the post takes it back in 1-3.2 s, so it costs the add's
   walk out and back, not the hold.
 - **A siege engine at station starts every Pursued span inside Ram's cast range**
-  (`ULDUAR_FL_SIEGE_STAND_DIST` 8 against a 7.7 hull). If the first Ram still lands now that the kite
-  starts at once, back off before the 31 s switch.
+  (`ULDUAR_FL_SIEGE_STAND_DIST` 8 against a 7.7 hull). The reserve now holds outside it; every siege
+  span starting within 40 yd of his edge on 2026-10-17 lost 58-81 pts, so watch the others too.
 - **Vezax's `hold cast outside field` multiplier fires during this fight** and vetoed resurrections on
   2026-09-16: a Vezax gate leak.
 - **No chopper pyrite ferry**, so crates only reach a demolisher that drives to them itself.
@@ -764,12 +812,12 @@ engines being 44.5-61.4 yd out on each. Every Electroshock that went out worked.
 - **A crewless bot walks into the arena and dies.** Both bot deaths on 2026-09-27 were the crew of the
   one hull lost, a median 22.2 s after losing it, still running the last drive goal while Missile
   Barrage (every 4 s) and Flame Vents (500 yd) hit a player-sized pool. Seats have zero slack, so
-  there is nothing to re-board and nothing walks them out.
+  there is nothing to re-board and nothing walks them out. The 2026-10-17 wipe lost 22 of 26 this way.
 - **Crate income does not cover the barrels thrown.** 2026-09-27 delivered ~250 energy/min across the
   fleet against 63 barrels/min, so demolishers were `dry` for 20-42% of the pull and 5 of 9 stack
-  losses were `dry`. Whether the answer is `ULDUAR_FL_PYRITE_BURST_STACKS`, the refresh rate or
-  `ULDUAR_FL_CRATE_DETOUR_RADIUS` is untested.
-- **The reserve now dashes outside the vent window** whenever it is beyond Electroshock's reach, at
-  40 energy a time against a Ram's 40 and the shock's 20. Watch `--vents` for a channel it reaches and
-  does not fire, and `--ram` for the station splash as it sits nearer his front.
+  losses were `dry` (12 of 24 in the 2026-10-17 wipe). The centre drops are the first lever; after
+  them, `ULDUAR_FL_PYRITE_BURST_STACKS`, the refresh rate or `ULDUAR_FL_CRATE_DETOUR_RADIUS`.
+- **A Pursued demolisher kites past barrel range.** On Increased Speed it opens 88-112 yd and drops its
+  10 stacks, a 50-energy re-burst; in the 2026-10-17 wipe that drained the fleet before 1:30. Spending
+  the speed only to open the gap would keep it under 70 yd.
 

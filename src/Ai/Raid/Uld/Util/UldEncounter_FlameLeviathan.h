@@ -187,6 +187,10 @@ constexpr uint32 ULDUAR_FL_STEAM_RUSH_GCD_MS = 2000;
 constexpr uint32 ULDUAR_FL_VENT_RUSH_LEAD_MS = 5000;
 constexpr uint32 ULDUAR_FL_VENT_INTERVAL_MS = 20000;
 
+// Between channels the vent reserve waits outside Battering Ram's reach, a few yards from Electroshock's,
+// and leaves that hold this long before the next one.
+constexpr uint32 ULDUAR_FL_VENT_APPROACH_LEAD_MS = 2000;
+
 // Cone reach is the effect radius for Electroshock and Sonic Horn (RangeEntry 1 skips CheckRange). Ram's
 // RangeIndex 11 is a real 0-15 yd entry, so CheckRange caps it at 15, not its 18 yd effect radius.
 constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS = 25.0f;
@@ -251,6 +255,10 @@ constexpr float ULDUAR_FL_CRATE_GRAB_RANGE = 49.0f;
 // this a starved demolisher detours to one.
 constexpr uint32 ULDUAR_FL_CRATE_DETOUR_ENERGY = 30;
 constexpr float ULDUAR_FL_CRATE_DETOUR_RADIUS = 60.0f;  // how far a starved demolisher leaves its band
+
+// The crate falls straight down from the lift. This near the arena centre, holding a lift for its closest
+// pass gains nothing, so it's shot at once.
+constexpr float ULDUAR_FL_LIFT_DROP_RADIUS = 20.0f;
 
 // Kite ring corners, inset off the walls so MoveTo has mesh to land on and chamfered into two nodes so
 // a kiting hull rounds them instead of driving in while he cuts the diagonal.
