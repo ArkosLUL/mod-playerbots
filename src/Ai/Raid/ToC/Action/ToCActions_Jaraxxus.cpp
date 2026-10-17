@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <string>
 #include <vector>
 
 #include "EncounterHelpers.h"
@@ -10,6 +12,7 @@
 #include "Playerbots.h"
 #include "Timer.h"
 #include "ToCData.h"
+#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_Jaraxxus.h"
 #include "Unit.h"
 
@@ -27,6 +30,33 @@ constexpr uint32 FLAME_WINDOW_GAP_MS = 2000;
 // DragBossToAnchor's step, and how close to its anchor it stops
 constexpr float DRAG_STEP = 5.0f;
 constexpr float DRAG_DONE = 12.0f;
+constexpr uint32 PORTAL_LATCH_MS = 3000;
+constexpr uint32 PORTAL_STALL_MS = 500;
+constexpr float PORTAL_ARRIVE = 1.5f;
+
+// A walk waits behind any booking of equal or higher priority until it runs out
+void DropForeignBooking(LastMovement& last, Position const& own, MovementPriority upTo)
+{
+    if (last.msTime && last.priority <= upTo &&
+        last.lastMoveShort.GetExactDist2d(own.GetPositionX(), own.GetPositionY()) >= 1.0f)
+        last.clear();
+}
+
+// Highest throughput first: big instants, then cast-time heals, HoTs last
+char const* const INCINERATE_HEALS[] = {
+    "holy shock", "riptide", "swiftmend", "penance",
+    "holy light", "greater heal", "healing wave", "nourish", "healing touch",
+    "flash of light", "flash heal", "lesser healing wave", "regrowth",
+    "renew", "rejuvenation", "lifebloom", "wild growth", "prayer of mending",
+};
+
+char const* const INCINERATE_HOTS[] = {"renew", "rejuvenation", "lifebloom", "wild growth", "prayer of mending"};
+
+bool IsHot(std::string const& heal)
+{
+    return std::any_of(std::begin(INCINERATE_HOTS), std::end(INCINERATE_HOTS),
+                       [&heal](char const* hot) { return heal == hot; });
+}
 }  // namespace
 
 bool JaraxxusInterruptFelFireballAction::Execute(Event /*event*/)
@@ -155,6 +185,91 @@ bool JaraxxusBreakPinnedCastAction::Execute(Event /*event*/)
     return false;
 }
 
+bool JaraxxusLeavePortalAction::Execute(Event /*event*/)
+{
+    Unit* portal = GetJaraxxusPortalToClear(botAI);
+    if (!portal || bot->GetExactDist2d(portal) >= JARAXXUS_PORTAL_TRIGGER)
+    {
+        _hasSpot = false;
+        return false;
+    }
+
+    // every MoveTo restarts the walk, so one in flight to a spot still clear is left alone
+    uint32 const now = getMSTime();
+    if (_hasSpot)
+    {
+        uint32 const age = getMSTimeDiff(_issuedMs, now);
+        bool const arrived = bot->GetExactDist2d(&_spot) <= PORTAL_ARRIVE;
+        bool const stalled = !arrived && !bot->isMoving() && age > PORTAL_STALL_MS;
+        if (!arrived && !stalled && age < PORTAL_LATCH_MS &&
+            _spot.GetExactDist2d(portal) >= JARAXXUS_PORTAL_CLEAR - 0.5f && IsLegionFlameSpotClear(botAI, _spot))
+            return true;
+
+        _hasSpot = false;
+        // MoveTo refuses the same point for 5 s, moving or not
+        if (stalled)
+            AI_VALUE(LastMovement&, "last movement").clear();
+    }
+
+    Position spot;
+    if (!DeriveJaraxxusPortalExit(bot, portal, spot))
+        return false;
+
+    if (bot->IsMovementPreventedByCasting())
+        bot->InterruptNonMeleeSpells(true);
+
+    // the hold blocks every other mover of this priority, a reach melee walk already booked included
+    DropForeignBooking(AI_VALUE(LastMovement&, "last movement"), spot, MovementPriority::MOVEMENT_COMBAT);
+    MoveOutcome const outcome = TryMoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(),
+                                          spot.GetPositionZ(), false, false, false, false,
+                                          MovementPriority::MOVEMENT_COMBAT);
+    if (outcome != MoveOutcome::Issued && outcome != MoveOutcome::Duplicate)
+        return false;
+
+    _spot = spot;
+    _hasSpot = true;
+    _issuedMs = now;
+    return true;
+}
+
+bool JaraxxusCastRaidCoverAction::Execute(Event /*event*/)
+{
+    ToCPredictedHit hit;
+    ToCRaidCover const cover =
+        GetToCRaidCover(botAI, GetJaraxxusBurningInferno(botAI, hit) ? &hit : nullptr);
+    uint32 const spellId = ToCRaidCoverSpellId(botAI, cover);
+    if (!spellId)
+        return false;
+
+    // a channel fails any other cast's check, and a moving bot breaks its own channel
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    if (IsToCRaidCoverChannel(cover) && bot->isMoving())
+        bot->StopMoving();
+
+    if (!botAI->CastSpell(spellId, bot))
+        return false;
+
+    FinishToCRaidCover(botAI, cover);
+    return true;
+}
+
+bool JaraxxusCastPersonalDefensiveAction::Execute(Event /*event*/)
+{
+    ToCPredictedHit hit;
+    ToCPersonalPick const pick =
+        GetToCPersonalDefensive(botAI, GetJaraxxusPersonalHit(botAI, hit) ? &hit : nullptr);
+    if (!pick)
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    return pick.consumable ? botAI->DoSpecificAction(pick.consumable, Event(), true)
+                           : botAI->CastSpell(pick.spellId, bot);
+}
+
 bool JaraxxusMainTankHoldBossAction::Execute(Event /*event*/)
 {
     Unit* jaraxxus = GetJaraxxus(botAI);
@@ -231,24 +346,20 @@ bool JaraxxusHealIncinerateTargetAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    // instants, HoTs and a channel first
-    static std::vector<std::string> const heals = {
-        "riptide", "holy shock", "penance", "renew", "rejuvenation", "lifebloom", "wild growth",
-        "prayer of mending", "flash heal", "greater heal", "nourish", "healing touch", "regrowth",
-        "flash of light", "holy light", "healing wave",
-    };
-
-    // the kiss punishes anything still casting on its 0.5 s check, and the bot's own AI cancels a heal
-    // still casting on a full-health target, which is what the absorb keeps this one reading
+    // the kiss punishes anything still casting on its 0.5 s check
     bool const kissed = HasMistressKiss(bot);
-    bool const fullHealth = target->IsFullHealth();
-    for (std::string const& heal : heals)
+    for (char const* heal : INCINERATE_HEALS)
     {
         if (kissed && JaraxxusSpellHasCastTime(botAI, heal))
             continue;
 
-        if (fullHealth && JaraxxusSpellHasCastTime(botAI, heal, false))
-            continue;
+        // a HoT already ticking is a recast for nothing
+        if (IsHot(heal))
+        {
+            uint32 const spellId = AI_VALUE2(uint32, "spell id", heal);
+            if (spellId && target->HasAura(spellId, bot->GetGUID()))
+                continue;
+        }
 
         if (botAI->CanCastSpell(heal, target))
             return botAI->CastSpell(heal, target);

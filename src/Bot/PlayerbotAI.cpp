@@ -368,8 +368,10 @@ void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)
                     }
                 }
 
-                // Interrupt if target ally has full health (heal by other member)
-                if (isHeal && isSingleTarget && spellTarget && spellTarget->IsFullHealth())
+                // Interrupt if target ally has full health (heal by other member). A heal absorb keeps
+                // its target reading full, and the heal is what eats the absorb.
+                if (isHeal && isSingleTarget && spellTarget && spellTarget->IsFullHealth() &&
+                    !spellTarget->HasAuraType(SPELL_AURA_SCHOOL_HEAL_ABSORB))
                 {
                     bot->InterruptSpell(currentSpell->GetCurrentContainer());
                     YieldThread(bot, GetReactDelay());

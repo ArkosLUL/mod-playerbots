@@ -47,6 +47,35 @@ public:
     bool Execute(Event event) override;
 };
 
+class JaraxxusLeavePortalAction : public MovementAction
+{
+public:
+    JaraxxusLeavePortalAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus leave portal") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+
+private:
+    Position _spot;
+    bool _hasSpot = false;
+    uint32 _issuedMs = 0;
+};
+
+class JaraxxusCastRaidCoverAction : public Action
+{
+public:
+    JaraxxusCastRaidCoverAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus cast raid cover") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusCastPersonalDefensiveAction : public Action
+{
+public:
+    JaraxxusCastPersonalDefensiveAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus cast personal defensive") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class JaraxxusMainTankHoldBossAction : public ToCMainTankHoldAction
 {
 public:
@@ -117,6 +146,12 @@ public:
             &ToCJaraxxusActionContext::jaraxxus_avoid_legion_flame;
         creators["jaraxxus break pinned cast"] =
             &ToCJaraxxusActionContext::jaraxxus_break_pinned_cast;
+        creators["jaraxxus leave portal"] =
+            &ToCJaraxxusActionContext::jaraxxus_leave_portal;
+        creators["jaraxxus cast raid cover"] =
+            &ToCJaraxxusActionContext::jaraxxus_cast_raid_cover;
+        creators["jaraxxus cast personal defensive"] =
+            &ToCJaraxxusActionContext::jaraxxus_cast_personal_defensive;
         creators["jaraxxus main tank hold boss"] =
             &ToCJaraxxusActionContext::jaraxxus_main_tank_hold_boss;
         creators["jaraxxus assist tank hold add"] =
@@ -142,6 +177,18 @@ private:
 
     static Action* jaraxxus_break_pinned_cast(PlayerbotAI* botAI) {
         return new JaraxxusBreakPinnedCastAction(botAI);
+    }
+
+    static Action* jaraxxus_leave_portal(PlayerbotAI* botAI) {
+        return new JaraxxusLeavePortalAction(botAI);
+    }
+
+    static Action* jaraxxus_cast_raid_cover(PlayerbotAI* botAI) {
+        return new JaraxxusCastRaidCoverAction(botAI);
+    }
+
+    static Action* jaraxxus_cast_personal_defensive(PlayerbotAI* botAI) {
+        return new JaraxxusCastPersonalDefensiveAction(botAI);
     }
 
     static Action* jaraxxus_main_tank_hold_boss(PlayerbotAI* botAI) {

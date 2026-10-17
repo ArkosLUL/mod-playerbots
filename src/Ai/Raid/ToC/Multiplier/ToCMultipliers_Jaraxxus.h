@@ -40,6 +40,15 @@ public:
     float GetValue(Action* action) override;
 };
 
+// A DPS bot's damage on him, and its area damage within 30 yd of him, while its threat cap latch holds.
+// Heals and anything aimed elsewhere go through. Wired from the definition.
+class JaraxxusThreatCapMultiplier : public Multiplier
+{
+public:
+    JaraxxusThreatCapMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "jaraxxus threat cap") {}
+    float GetValue(Action* action) override;
+};
+
 void AddToCJaraxxusMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 ToCBurstWindow ToCJaraxxusBurstWindow(PlayerbotAI* botAI);

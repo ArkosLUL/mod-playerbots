@@ -31,6 +31,31 @@ public:
     bool IsActive() override;
 };
 
+class JaraxxusPortalSpawnTrigger : public Trigger
+{
+public:
+    JaraxxusPortalSpawnTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus portal spawn") {}
+    bool IsActive() override;
+};
+
+// Every bot's tick runs it, which also drops a finished deal
+class JaraxxusRaidCoverTrigger : public Trigger
+{
+public:
+    JaraxxusRaidCoverTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus raid cover") {}
+    bool IsActive() override;
+};
+
+class JaraxxusPersonalDefensiveTrigger : public Trigger
+{
+public:
+    JaraxxusPersonalDefensiveTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus personal defensive") {}
+    bool IsActive() override;
+};
+
 class JaraxxusEngagedByMainTankTrigger : public Trigger
 {
 public:
@@ -90,6 +115,12 @@ public:
             &ToCJaraxxusTriggerContext::jaraxxus_legion_flame_nearby;
         creators["jaraxxus pinned cast"] =
             &ToCJaraxxusTriggerContext::jaraxxus_pinned_cast;
+        creators["jaraxxus portal spawn"] =
+            &ToCJaraxxusTriggerContext::jaraxxus_portal_spawn;
+        creators["jaraxxus raid cover"] =
+            &ToCJaraxxusTriggerContext::jaraxxus_raid_cover;
+        creators["jaraxxus personal defensive"] =
+            &ToCJaraxxusTriggerContext::jaraxxus_personal_defensive;
         creators["jaraxxus engaged by main tank"] =
             &ToCJaraxxusTriggerContext::jaraxxus_engaged_by_main_tank;
         creators["jaraxxus add needs assist tank"] =
@@ -115,6 +146,18 @@ private:
 
     static Trigger* jaraxxus_pinned_cast(PlayerbotAI* botAI) {
         return new JaraxxusPinnedCastTrigger(botAI);
+    }
+
+    static Trigger* jaraxxus_portal_spawn(PlayerbotAI* botAI) {
+        return new JaraxxusPortalSpawnTrigger(botAI);
+    }
+
+    static Trigger* jaraxxus_raid_cover(PlayerbotAI* botAI) {
+        return new JaraxxusRaidCoverTrigger(botAI);
+    }
+
+    static Trigger* jaraxxus_personal_defensive(PlayerbotAI* botAI) {
+        return new JaraxxusPersonalDefensiveTrigger(botAI);
     }
 
     static Trigger* jaraxxus_engaged_by_main_tank(PlayerbotAI* botAI) {
