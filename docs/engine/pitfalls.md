@@ -356,6 +356,10 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
 
   Gate on the boss being **in combat**, screen any grid scan by room (`IsNearMimironRoom`), and prefer
   a proximity lookup (`FirstNpc`, `GetIgnisIf`) over a guid one.
+- **The gate's boss ids are a copy of AC's.** `UldEncounterGate.h` ports `ulduar.h`, which AC
+  renumbers: #28079 moved Freya from 7 to 9. A stale id keys the gate to another boss's state, so
+  that boss's whole strategy stays off (every node NEVER, banner `strategy-off`) while whichever
+  strategy holds the live id in the stale copy opens instead. Re-check ported ids after each core merge.
 - **A registered POINT generator does not mean the unit is moving.**
   `PointMovementGenerator::DoInitialize` returns **without launching a spline** while the unit has
   `UNIT_STATE_NOT_MOVE` (`ROOT|STUNNED|DIED|DISTRACTED`), and `MoveTo` reports success as soon as it

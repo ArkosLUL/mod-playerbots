@@ -11,7 +11,8 @@ import datetime
 import pathlib
 import subprocess
 
-from .encounter import boss_of, encounter_of
+from .coverage import collect
+from .encounter import boss_of, encounter_of, node_encounter
 from .paths import REPO
 from .trace import Trace, roster_guids
 
@@ -72,8 +73,9 @@ DECIDING_ROLES = ("tank", "heal")
 
 # A human holding tank or heal always disqualifies: the strategy was not asked to do the job, whatever
 # the pull was testing. So does a raid lying dead when the trace opened, which is nobody pulling at all,
-# and a raid that never entered combat, which is the same thing on its feet.
-ALWAYS_DECIDABLE = {"human-role", "raid-dead", "no-combat"}
+# and a raid that never entered combat, which is the same thing on its feet. Same for a fight whose own
+# nodes never fired: the strategy under test never ran.
+ALWAYS_DECIDABLE = {"human-role", "raid-dead", "no-combat", "strategy-off"}
 
 # The other two only disqualify once the reader says what is under test. Both are true of almost every
 # pull otherwise - the loop commits after each pull, so every trace predates HEAD, and every
@@ -120,6 +122,21 @@ def combat_engine_ran(trace: Trace) -> bool | None:
     if not trace.covnodes:
         return None
     return any(node["engine"] == "c" for node in trace.covnodes.values())
+
+
+def strategy_silent(trace: Trace) -> tuple[int, int] | None:
+    """(nodes, checks) when the pulled encounter's own nodes were asked and none fired on any bot.
+
+    None when one fired, or when the encounter has no nodes of its own in the coverage. A shut
+    encounter gate returns the same empty Event as a false condition, so a gate keyed to the wrong
+    boss id shows up here and nowhere else.
+    """
+    encounter = encounter_of(trace)
+    own = [entry for entry in collect(trace).values() if node_encounter(entry["def"]["node"]) == encounter]
+    checks = sum(entry["checks"] for entry in own)
+    if not checks or any(entry["fires"] for entry in own):
+        return None
+    return len(own), checks
 
 
 def alive_at_open(trace: Trace) -> tuple[int, int] | None:
@@ -207,6 +224,14 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
             "no-combat",
             "no bot entered combat: the combat engine never walked a node, so nothing here is a "
             "measurement of what the strategy does in a fight",
+        ))
+
+    silent = strategy_silent(trace)
+    if silent:
+        warnings.append((
+            "strategy-off",
+            f"no {facts['encounter']} node fired on any bot ({silent[0]} nodes, asked {silent[1]}x): its "
+            "gate never opened, so the pull ran without its strategy",
         ))
 
     return facts, warnings

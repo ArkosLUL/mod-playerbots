@@ -542,6 +542,31 @@ class Decidability(unittest.TestCase):
         # Pre-v12 has no covdef at all, and silence there is not the same answer as no combat engine.
         self.assertNotIn("no-combat", self.engines([]))
 
+    def freya_nodes(self, fires):
+        """A Freya pull whose two nodes were asked 40x on each of two bots, `fires` of them on one."""
+        trace = rich()
+        trace.header["boss"] = "elder-stonebark"
+        trace.covnodes = {
+            1: {"node": "freya set dps priority", "strategy": "ulduar", "engine": "c", "alias": ""},
+            2: {"node": "freya near nature bomb", "strategy": "ulduar", "engine": "c", "alias": ""},
+        }
+        trace.records = [r for r in trace.records if r.get("e") != "cov"] + [
+            {"t": 2600, "e": "cov", "g": 5001, "r": [[1, 40, fires], [2, 40, 0]]},
+            {"t": 2600, "e": "cov", "g": 5002, "r": [[1, 40, 0], [2, 40, 0]]},
+        ]
+        return [kind for kind, _ in validity.inspect(trace, None)[1]]
+
+    def test_a_fight_whose_own_nodes_never_fired_always_decides(self):
+        self.assertIn("strategy-off", validity.decidable_kinds())
+        self.assertIn("strategy-off", self.freya_nodes(0))
+
+    def test_one_fire_is_enough_to_show_the_gate_opened(self):
+        self.assertNotIn("strategy-off", self.freya_nodes(1))
+
+    def test_an_encounter_with_no_nodes_of_its_own_gets_no_verdict(self):
+        # The fixture boss maps to no encounter prefix, so its nodes say nothing about a gate.
+        self.assertNotIn("strategy-off", [kind for kind, _ in validity.inspect(rich(), None)[1]])
+
     def test_a_time_with_an_offset_keeps_it(self):
         _, when = validity.resolve_since(validity.REPO, "2026-09-10T00:00:00+00:00")
         self.assertEqual(when, datetime.datetime(2026, 9, 10, tzinfo=datetime.timezone.utc))

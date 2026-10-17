@@ -11,6 +11,8 @@
 
 // Boss ids ported from ulduar.h in AC, which lives in AC's /scripts directory and so cannot be
 // included from here. These are the indices InstanceScript::GetBossState is keyed by.
+// note: AC #28079 renumbered these to DungeonEncounter.dbc order. A stale copy keeps that boss's gate
+// shut all fight.
 enum UlduarEncounterId
 {
     ULD_BOSS_LEVIATHAN = 0,
@@ -20,10 +22,10 @@ enum UlduarEncounterId
     ULD_BOSS_ASSEMBLY = 4,
     ULD_BOSS_KOLOGARN = 5,
     ULD_BOSS_AURIAYA = 6,
-    ULD_BOSS_FREYA = 7,
-    ULD_BOSS_HODIR = 8,
-    ULD_BOSS_MIMIRON = 9,
-    ULD_BOSS_THORIM = 10,
+    ULD_BOSS_HODIR = 7,
+    ULD_BOSS_THORIM = 8,
+    ULD_BOSS_FREYA = 9,
+    ULD_BOSS_MIMIRON = 10,
     ULD_BOSS_VEZAX = 11,
     ULD_BOSS_YOGGSARON = 12,
     ULD_BOSS_ALGALON = 13
