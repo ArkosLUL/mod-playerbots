@@ -24,8 +24,8 @@ Export base (Custom commit `ulduar-rework` mirrors): — (set by `p3-ulduar`, mo
 | Wave | Lane | State | Commit / merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
 | 0 | step0-vezax-hold | committed | `52ff85161` | Block rule + spell multiplier + hold node (AttackStop, casts on him interrupted, pets passive with stances in a per-instance store); hold-target row takes him without a swing under the hold; probe `vezax.hold`, reader prints it with his health | Not tested in game. Gaps: totems already down keep shooting, DoTs already on him tick out |
-| 1 | c1-cleanup-a | pending | | | |
-| 1 | p1-framework | pending | | | |
+| 1 | c1-cleanup-a | merged | `41b6daec3`, merge `2809f111a` | `GetUldUnitByEntry` in `Util/UldTargets.{h,cpp}` (82 calls, c2/c3 files too); global `MoveOutcome` in `MovementActions.h`, RaidObs keeps a static_asserted copy; 4 ToC files renamed for it (may meet refine-fc); Auriaya pools resolved by value; Yogg conf says bots ignore it; Razorscale literals → `RazorscaleBossHelper` constants | 37 lane files lack GPLv2 header (PR branch adds); Razorscale grounded ranged isUseful 14 yd vs MoveInside 18 yd stalls bots 14–18 yd out; `FindNearestHarpoon` unused. Not tested in game. Rebuild needed |
+| 1 | p1-framework | committed | `raid-encounter-framework` `0f28ffd35` (upstream merge `d878102f6`) | Tick/OnTick, `CheckScope` + `EncounterTriggerPassId`, plain `BossStateGateLive`; Mocking Blow added to `Family::Taunt` (Custom has it); pet helpers copied verbatim from #2877; brief in the worktree's gitignored `.agents/plans/ulduar-upstream-pr/p1-framework.PLAN.md`; branch tracks `origin/raid-encounter-framework` | New pieces have no caller on #2876 alone, and `Engine::DoNextAction` now calls `OnTick` on every strategy each tick: both go in the #2876 body. No RaidObs (grep empty) |
 | 2 | c2-cleanup-b | pending | | | |
 | 2 | p2-helpers | pending | | | |
 | 2 | p1-eoe-sync | pending | | | |
