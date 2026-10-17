@@ -184,6 +184,18 @@ What lands on a raid add is not what PvP experience predicts.
   stale entry). Taunt diminishes only on a
   creature flagged `OBEYS_TAUNT_DIMINISHING_RETURNS` (0x80000), which turns immune at the fifth, so a
   plan built on repeated taunt-backs fails there (Twin Val'kyr).
+- **Death Grip (49576 → 49560) splits its effects.** A creature immune to taunt and attack-me
+  (`CreatureImmunitiesId` with aura 11 and effect 114) still takes the dummy pull, with no aura and
+  so no DR. Where the taunt aura lands, the grip shares `DIMINISHING_TAUNT` with every class taunt,
+  and at taunt-immune DR the whole spell misses (`SPELL_MISS_IMMUNE`), pull included.
+- **A creature drops a victim it can't hurt.** `ThreatReference::ShouldBeSuppressed` takes out of
+  contention a target immune to the attacker's melee school, confused, or under a breakable stun, so
+  Hand of Protection moves melee attackers off a focused bot at once, as Divine Shield or Ice Block
+  does.
+- **Hunter pet Growl is `SPELL_EFFECT_THREAT` only, not a taunt.** Against a script that seeds player
+  threat (Faction Champions' 10M × modifier) it does nothing but burn 15 focus. A multiplier can't
+  veto pet autocast: turn it off with `Pet::ToggleAutocast`; the non-combat `toggle pet spell` turns
+  it back on.
 - **An add that calls `DoResetThreatList` on a timer can be neither tanked, taunted nor redirected.**
   Read its `UpdateAI` before designing any of the three. Freya's Detonating Lasher re-rolls a uniformly
   random player every 10s, which leaves geometry plus a snare as the only handling.
@@ -363,7 +375,9 @@ scripted raid encounters.
   stores victims in its own guid slots, read those — they are filled at the *warning*, which is the
   entire reaction window.
 - **Mirror core enum values, do not include them.** Script headers are not on a module's include
-  path. Mirror with a comment naming the source enum and the entry's position in it.
+  path. Mirror with a comment naming the source enum and the entry's position in it, and re-check
+  the mirror whenever a core merge touches the script: core #28117 removed three ToC data types,
+  moving Anub'arak's guid slot from 13 to 11, and the stale mirror read an empty guid with no error.
 - **A phase heuristic must separate the pull intro from a mid-fight transition.** Both read as "in
   combat, boss non-attackable". Full health separates them whenever the real transitions are
   health-gated.
@@ -380,6 +394,12 @@ scripted raid encounters.
 - **A hardcoded aura handler can scale a trigger spell's radius every tick**, beyond both the DBC and
   the corrections: `SpellAuraEffects.cpp` casts Slime Pool 66881 and Grobbulus' Poison with a growing
   `SPELLVALUE_RADIUS_MOD`.
+- **`AuraEffect::GetPeriodicTimer()` is the ms left to an aura's next tick**: an exact, lag-free
+  clock for any summon or hit a periodic trigger aura drives (the heroic Nether Portal's Mistress
+  every 6 s).
+- **A spell a periodic trigger aura casts carries the aura's caster as original caster**, so its
+  damage takes that caster's damage-done modifiers: Burning Inferno, cast by the Incinerate Flesh
+  target, takes Jaraxxus's Nether Power.
 - **A re-applied non-stacking aura recalculates its amounts** (`Aura::SetStackAmount`), so a ramp
   built in a periodic dummy restarts on every refresh.
 - **A spell's Speed delays even a triggered instant**, so an aura sent with a telegraphed cast can
@@ -402,10 +422,10 @@ scripted raid encounters.
 - **A boss whose script re-seeds threat on a timer never satisfies `TankHasHeldBoss`.** Exempt its
   entries through `BossHasNoStableVictim`
   ([consumables-and-burst.md](../systems/consumables-and-burst.md)).
-- **A script may keep no boss state.** Without `SetBossNumber` (`GetEncounterCount()` 0: ToC, VoA)
-  boss state and its hooks say nothing; read the script's own progress `GetData` and
-  `IsEncounterInProgress`. That override can write: ToC's resets its encounter to `NOT_STARTED` when
-  no alive non-GM player is on the map, so never call it with nobody alive.
+- **A script may keep no boss state.** Without `SetBossNumber` (`GetEncounterCount()` 0: VoA, ToC
+  before core #28117) boss state and its hooks say nothing; read the script's own progress `GetData`
+  and `IsEncounterInProgress`. Such an override can write: ToC's old one reset its encounter to
+  `NOT_STARTED` when no alive non-GM player was on the map, so never call one with nobody alive.
 - **`OnAfterUpdateEncounterState` fires on every `Map::UpdateEncounterState` call**, matched row or
   not, synchronously inside `Unit::Kill` or `Spell::cast`: match credit type and entry in the handler
   and defer heavy work to the map update.

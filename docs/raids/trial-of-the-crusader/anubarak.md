@@ -13,8 +13,8 @@ tactics: Warcraft Tavern `anubarak-master-strategy-guide-toc-25/`.
   navprobe models no liquid and paths from there to the door come back `INCOMPLETE`, yet in the
   2026-10-16 25N kill every bot stood in the pit at the pull.
 - **Pre-pull**: he waits at (785.9, 133.4) submerged and `UNIT_FLAG_NON_ATTACKABLE` until a player
-  comes within 80 yd, then stands and turns attackable; `detection_range` 20. `IsEncounterInProgress()`
-  is already true from the Lich King scene, so only his combat marks the pull. Ten prey scarabs
+  comes within 80 yd, then stands and turns attackable; `detection_range` 20. His engage sets
+  `IsEncounterInProgress()`, and his combat marks the pull. Ten prey scarabs
   (non-attackable) roam round (722.65, 135.41) and die 2 s after the engage.
 
 ## Timeline
@@ -134,10 +134,10 @@ Named "Anub'arak", rank 3 and `CREATURE_TYPE_FLAG_BOSS_MOB` (so `isWorldBoss()`)
 ## How the bots play it
 
 **Every node waits for the pull** (`AnubarakEngaged`, the encounter live). The stage gate opens at
-the floor break, `IsEncounterInProgress()` is true from the Lich King scene, and he turns attackable
-within 80 yd before anyone engages, so a stage-gated node has the main tank pull on sight.
+the floor break and he turns attackable within 80 yd before anyone engages, so a stage-gated node
+has the main tank pull on sight.
 
-**Resolve him through guid slot 13 and the spike by a grid search.** `GetFirstAliveUnitByEntry`
+**Resolve him through guid slot 11 and the spike by a grid search.** `GetFirstAliveUnitByEntry`
 reads `possible targets`, which drop `UNIT_FLAG_NOT_SELECTABLE`, and both are unselectable in phase
 2: through it `AnubarakSubmerged` never read true and the sphere node was dead on every difficulty.
 NPC entries are the base entry on every difficulty. Spheres, spike, burrowers and scarabs come from

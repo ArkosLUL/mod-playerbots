@@ -20,8 +20,9 @@ essence system and Anub'arak spike-kiting.
 
 ## Instance script
 
-`instance_trial_of_the_crusader.cpp` registers no bosses (`GetEncounterCount()` 0, no
-`SetBossState`) and no object data. It exposes three things:
+`instance_trial_of_the_crusader.cpp` keeps boss state since core #28117 (`SetBossNumber(5)`: Beasts
+0, Jaraxxus 1, Faction Champions 2, Twins 3, Anub'arak 4) and no object data. The module reads three
+things:
 
 - **Stage**, `GetData(TYPE_INSTANCE_PROGRESS = 1)`. A wipe never lowers it.
 
@@ -37,13 +38,13 @@ essence system and Anub'arak spike-kiting.
   | 9 | floor broken, Anub'arak spawned | Anub'arak |
   | 10 | done | none |
 
-- **`IsEncounterInProgress()`**, a private `EncounterStatus`, true only while an alive non-GM player
-  is in the map. It goes true before most pulls: from the end of the Beasts intro (stage 1) through
-  every walk-in until the last beast dies, at the champions' release, 3.25 s before the twins turn
-  aggressive, and from the Lich King scene until Anub'arak engages and then dies or evades. Only
-  Jaraxxus sets it on engage. An evade (`TYPE_FAILED`) or an all-dead cleanup clears it.
+- **`IsEncounterInProgress()`**, `InstanceScript`'s own: true while any boss state is `IN_PROGRESS`.
+  It goes true before most pulls: from the end of the Beasts intro (stage 1) through every walk-in
+  until the last beast dies, at the champions' release, 3.25 s before the twins turn aggressive.
+  Jaraxxus and Anub'arak set it on engage. An evade (`TYPE_FAILED`) or an all-dead cleanup sets every
+  `IN_PROGRESS` boss back to `NOT_STARTED`.
 - **`GetGuidData`**: Gormok (4), Dreadscale (6), Acidmaw (7), the twins by NPC entry (34497 Fjola,
-  34496 Eydis), Anub'arak (13, also while submerged). Icehowl, Jaraxxus and the champions only by
+  34496 Eydis), Anub'arak (11, also while submerged). Icehowl, Jaraxxus and the champions only by
   entry. Resolve with `map->GetCreature(GetGuidData(type))`; `InstanceScript::GetCreature(type)`
   reads the unused object-data registry. A guid resolves map-wide, so an "encounter running" test
   also needs the unit in combat ([pitfalls.md](../../engine/pitfalls.md)).
@@ -350,7 +351,9 @@ The `ResistAura` stem picks:
   and at once when the set changes. A school a human paladin holds on himself is skipped. Holders
   that still qualify are kept first; each empty school then takes the lowest of: own aura strategy
   already that school, another unelected paladin on the same aura strategy (so the raid keeps
-  Devotion), cost (resistance or `bspeed` 0, `baoe` or none 1, `bcast` 2, `barmor` 3), guid.
+  Devotion), cost (resistance or `bspeed` 0, `baoe` or none 1, `bcast` 2, `barmor` 3), guid. On
+  Jaraxxus fire goes first to a paladin who knows Aura Mastery, and a kept fire holder without it
+  gives way.
 - **Hunter**: Aspect of the Wild for `GetNatureResistanceHunter` while nature is wanted; it hands the
   duty on by mana, through Viper.
 - `toc resistance aura` → `toc raise resistance aura` (`ACTION_RAID + 1`, above the staging walk)
@@ -366,7 +369,8 @@ The `ResistAura` stem picks:
 - A stand is floor-checked from wherever its bot stands when dealt: one landing more than 3 yd off
   falls back to the raw stand.
 - A heroic raid out of attempts keeps the window open: Barrett never shows his gossip again.
-- Shaman resistance totems don't count toward a school; no Aura Mastery calls; a lone hunter holding
+- Shaman resistance totems don't count toward a school; Aura Mastery is called only as a Jaraxxus
+  cover; a lone hunter holding
   Aspect of the Wild loses Viper (`GetNatureResistanceHunter`'s last fallback).
 - A holder already covered by another paladin's aura of its school fires its trigger every tick
   without casting (the class action reads that aura by name) and keeps its own aura meanwhile.

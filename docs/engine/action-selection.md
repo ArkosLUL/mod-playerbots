@@ -229,10 +229,10 @@ front replaces the whole chain for the common case. Encounter rules enforce this
   the whole raid. Every action bound to it competes for that one target, so anything that lowers
   damage taken without raising health % (a shield, an absorb) leaves the same unit winning the scan
   until the effect expires.
-- **A heal absorb makes every cast-time heal a no-op.** `PlayerbotAI::UpdateAI` cancels a preparing
-  single-target heal on a full-health target and refunds the GCD, and under an absorb health reads
-  full: the node recasts every tick and nothing lands. Heal such a target with instants, HoTs and
-  channels.
+- **A heal absorb keeps its target reading full health.** `PlayerbotAI::UpdateAI` cancels a
+  preparing single-target heal on a full-health target and refunds the GCD, except on a target
+  carrying `SPELL_AURA_SCHOOL_HEAL_ABSORB`; without that exception every cast-time heal on it recasts
+  each tick and nothing lands.
 - A group scan measures with `botAI->GetRange("heal")` — **30 yd** — not
   `sPlayerbotAIConfig.SpellDistance`, and not `healDistance` 38.5. Null-check `bot->GetGroup()` and
   LOS-test while you are in there.

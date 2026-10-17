@@ -57,7 +57,10 @@ Everything is wired by string. Nothing here is a compile error.
 - A `TriggerNode` whose name has no `creators[...]` entry is skipped by `Engine::ProcessTriggers`
   with `continue` and **no warning**.
 - An unregistered action logs `A:<name> - UNKNOWN`.
-- Spell names resolve by string through the `"spell id"` value.
+- Spell names resolve by string through the `"spell id"` value, matching the 3.3.5 DBC name
+  exactly, hyphens included. A wrong name resolves to 0 and the action never casts, unreported:
+  paladin `blessing of protection on party` (3.3.5 has Hand of Protection) and DK `anti magic zone`
+  are dead this way. Resolve a hyphenated spell by id.
 - `TwoTriggers`' creator key must exactly equal `getName()` = `"<name1> and <name2>"`.
 
 **`tools/pblint/pblint.py` is this sweep.** Point it at the paths a commit touches; it exits non-zero
