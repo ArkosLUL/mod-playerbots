@@ -10,5 +10,7 @@
 #include "ToCTriggers_FactionChampions.h"
 #include "ToCTriggers_FactionChampionsDefence.h"
 #include "ToCTriggers_TwinValkyr.h"
+#include "ToCTriggers_Staging.h"
+#include "ToCTriggers_ResistAura.h"
 
 #endif

@@ -31,14 +31,6 @@ public:
     bool IsActive() override;
 };
 
-class JaraxxusIntroMainTankTrigger : public Trigger
-{
-public:
-    JaraxxusIntroMainTankTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus intro main tank") {}
-    bool IsActive() override;
-};
-
 class JaraxxusEngagedByMainTankTrigger : public Trigger
 {
 public:
@@ -98,8 +90,6 @@ public:
             &ToCJaraxxusTriggerContext::jaraxxus_legion_flame_nearby;
         creators["jaraxxus pinned cast"] =
             &ToCJaraxxusTriggerContext::jaraxxus_pinned_cast;
-        creators["jaraxxus intro main tank"] =
-            &ToCJaraxxusTriggerContext::jaraxxus_intro_main_tank;
         creators["jaraxxus engaged by main tank"] =
             &ToCJaraxxusTriggerContext::jaraxxus_engaged_by_main_tank;
         creators["jaraxxus add needs assist tank"] =
@@ -125,10 +115,6 @@ private:
 
     static Trigger* jaraxxus_pinned_cast(PlayerbotAI* botAI) {
         return new JaraxxusPinnedCastTrigger(botAI);
-    }
-
-    static Trigger* jaraxxus_intro_main_tank(PlayerbotAI* botAI) {
-        return new JaraxxusIntroMainTankTrigger(botAI);
     }
 
     static Trigger* jaraxxus_engaged_by_main_tank(PlayerbotAI* botAI) {

@@ -619,6 +619,10 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 - The stomp and carrier walks (`MOVEMENT_COMBAT`) can't re-aim while their own walk is in flight
   until the booking runs out or the stall clear fires; a dodge spot `MoveTo` refuses (no path) while
   an earlier dodge walk is in flight notes `locked` until that booking expires.
+- Staging ([README.md](README.md#pre-pull-staging)): a retry gives 11 s from the gossip to Gormok's
+  release against a walk of up to about 85 yd from Barrett to his tank's stand; Gormok's closest
+  caster stands are 7.1 yd apart, under Fire Bomb's 8; a worm healer stand rarely reaches both tank
+  stands within 30 yd.
 
 ## What a trace answers
 

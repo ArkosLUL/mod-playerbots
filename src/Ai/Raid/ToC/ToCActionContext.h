@@ -20,6 +20,8 @@ public:
         Absorb(ToCFactionChampionsActionContext());
         Absorb(ToCFactionChampionsDefenceActionContext());
         Absorb(ToCTwinValkyrActionContext());
+        Absorb(ToCStagingActionContext());
+        Absorb(ToCResistAuraActionContext());
     }
 
 private:

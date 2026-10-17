@@ -11,5 +11,7 @@
 #include "ToCActions_FactionChampions.h"
 #include "ToCActions_FactionChampionsDefence.h"
 #include "ToCActions_TwinValkyr.h"
+#include "ToCActions_Staging.h"
+#include "ToCActions_ResistAura.h"
 
 #endif

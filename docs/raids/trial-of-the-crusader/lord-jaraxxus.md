@@ -94,8 +94,8 @@ pulsing 13-15 yd around it for 6 s. A taunt answers the reset by copying the top
 
 The Warcraft Tavern guide, reconciled with the script:
 
-- Boss held at `ARENA_CENTER`; the main tank stands on him through the intro, since the release
-  hits the nearest player.
+- Boss held at `ARENA_CENTER`. The release hits the nearest player, so the main tank waits 3 yd from
+  him on its staging stand ([README.md](README.md#pre-pull-staging)).
 - **Kill order**, everyone but tanks and healers, oldest (lowest guid) first: heroic Portal, Volcano,
   Mistress, Infernal; normal Mistress, then Infernal. Portal and Volcano stop the spawns.
 - **Tanks**: main tank on the boss; assist tank 0 on Mistresses, assist tank 1 on Infernals, taunting
@@ -145,8 +145,7 @@ is never an assist tank), so their order is arbitrary.
 | `fel fireball interruptible` → `interrupt fel fireball` | `ACTION_EMERGENCY + 9` | A 2.0-2.5 s window on one bot; the kick moves nobody, so the dodge follows next tick |
 | `legion flame nearby` → `avoid legion flame` | `+8` | Beats every hold, so a carrying tank walks and he follows; breaks the bot's own cast first. The only flame mover: `AvoidAoeAction` is vetoed ([Legion Flame](#boss-abilities)) |
 | `pinned cast` → `break pinned cast` | `+7` | Breaks a kissed or carrying bot's cast from another bot's tick ([Mistress of Pain](#adds)). Returns `false`: costs nothing, and no RAID node returning `true` can skip it |
-| `intro main tank` → `intro main tank stand` | `ACTION_RAID + 6` | Fires only while he is `NON_ATTACKABLE`, never beside the hold; `jaraxxus intro hold` zeroes every other movement on the main tank, `follow` included |
-| `engaged by main tank` → `main tank hold boss` | `+5` | Only while he is in combat ([Pull and wipe](#pull-and-wipe)). The drag to `ARENA_CENTER` tests only its next 5 yd step, since a tank-carried trail lies along the whole way back; a flame there sends the tank around the trail |
+| `engaged by main tank` → `main tank hold boss` | `ACTION_RAID + 5` | Only while he is in combat ([Pull and wipe](#pull-and-wipe)). The drag to `ARENA_CENTER` tests only its next 5 yd step, since a tank-carried trail lies along the whole way back; a flame there sends the tank around the trail |
 | `add needs assist tank` → `assist tank hold add` | `+4` | Assist tank 0 |
 | `second add needs assist tank` → `assist tank hold second add` | `+3` | Assist tank 1 |
 | `nether power active` → `remove nether power` | `+2` | A remover is usually a DPS bot too, and each stack is +20% spell damage for 30 s. Its own node, since class dispels sit under `ACTION_RAID` |
@@ -167,11 +166,13 @@ is never an assist tank), so their order is arbitrary.
   Fire Resistance Aura through a Volcano.
 - Melee take Fel Inferno and heroic Portal and Volcano pulses; the guide answers with defensive
   cooldowns only.
+- With a human main tank no bot stands on him through the intro, so the release takes whoever stands
+  nearest: an assist tank 8 yd off, unless a human is nearer.
 
 ## What a trace answers
 
 Position, verdicts and moves come from the raid-agnostic streams; `postmortem.py --vetoes` covers
-the five multipliers and both rules. The Jaraxxus rows, under `--notes jaraxxus.`:
+the four multipliers and both rules. The Jaraxxus rows, under `--notes jaraxxus.`:
 
 | Key | Shape | Says |
 |---|---|---|

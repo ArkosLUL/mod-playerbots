@@ -84,27 +84,6 @@ struct ToCGateState
 
 RaidInstanceState<ToCGateState> gateStates;
 
-ToCEncounter EncounterOfStage(uint32 stage)
-{
-    switch (stage)
-    {
-        case TOC_PROGRESS_INITIAL:
-        case TOC_PROGRESS_INTRO_DONE:
-            return ToCEncounter::NorthrendBeasts;
-        case TOC_PROGRESS_BEASTS_DEAD:
-        case TOC_PROGRESS_JARAXXUS_INTRO_DONE:
-            return ToCEncounter::Jaraxxus;
-        case TOC_PROGRESS_JARAXXUS_DEAD:
-            return ToCEncounter::FactionChampions;
-        case TOC_PROGRESS_FACTION_CHAMPIONS_DEAD:
-            return ToCEncounter::TwinValkyr;
-        case TOC_PROGRESS_ANUB_ARAK:
-            return ToCEncounter::Anubarak;
-        default:
-            return ToCEncounter::None;
-    }
-}
-
 // The kill moves the stage on before the adds are gone: snobolds riding a player outlive Gormok, who
 // can die last on heroic, and Jaraxxus's death leaves the Mistress and Infernals his portals and
 // volcanoes summoned.
@@ -194,7 +173,7 @@ ToCGateState const* ReadGate(PlayerbotAI* botAI)
     state.stage = instance->GetData(TOC_DATA_INSTANCE_PROGRESS);
     state.progress = state.stage;
 
-    ToCEncounter const encounter = EncounterOfStage(state.stage);
+    ToCEncounter const encounter = ToCEncounterOfStage(state.stage);
     bool const live = encounter != ToCEncounter::None && instance->IsEncounterInProgress() &&
                       EncounterEngaged(bot, map, instance, encounter);
     state.live = live ? encounter : ToCEncounter::None;
@@ -203,10 +182,31 @@ ToCGateState const* ReadGate(PlayerbotAI* botAI)
 }
 }
 
+ToCEncounter ToCEncounterOfStage(uint32 stage)
+{
+    switch (stage)
+    {
+        case TOC_PROGRESS_INITIAL:
+        case TOC_PROGRESS_INTRO_DONE:
+            return ToCEncounter::NorthrendBeasts;
+        case TOC_PROGRESS_BEASTS_DEAD:
+        case TOC_PROGRESS_JARAXXUS_INTRO_DONE:
+            return ToCEncounter::Jaraxxus;
+        case TOC_PROGRESS_JARAXXUS_DEAD:
+            return ToCEncounter::FactionChampions;
+        case TOC_PROGRESS_FACTION_CHAMPIONS_DEAD:
+            return ToCEncounter::TwinValkyr;
+        case TOC_PROGRESS_ANUB_ARAK:
+            return ToCEncounter::Anubarak;
+        default:
+            return ToCEncounter::None;
+    }
+}
+
 bool ToCEncounterGateOpen(PlayerbotAI* botAI, ToCEncounter encounter)
 {
     ToCGateState const* state = ReadGate(botAI);
-    if (!state || EncounterOfStage(state->stage) == encounter)
+    if (!state || ToCEncounterOfStage(state->stage) == encounter)
         return true;
 
     return state->live == ToCEncounter::None && EncounterBeforeStage(state->stage) == encounter;
@@ -232,6 +232,10 @@ bool ToCGateLive(PlayerbotAI* botAI, uint32 encounterId)
 {
     return ToCEncounterIsLive(botAI, static_cast<ToCEncounter>(encounterId));
 }
+
+bool ToCRaidWideGateOpen(PlayerbotAI* /*botAI*/, uint32 /*encounterId*/) { return true; }
+
+bool ToCRaidWideGateLive(PlayerbotAI* /*botAI*/, uint32 /*encounterId*/) { return false; }
 
 bool ToCEncounterOfTrigger(std::string const& triggerName, ToCEncounter& encounter)
 {

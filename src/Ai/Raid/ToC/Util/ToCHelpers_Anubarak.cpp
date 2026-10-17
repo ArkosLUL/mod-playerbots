@@ -441,8 +441,26 @@ ObjectGuid StableMainTankGuid(Group* group)
     return ObjectGuid::Empty;
 }
 
+// Living tanks on the map other than the main tank, in IsAssistTankOfIndex's order: assistants first
+std::vector<ObjectGuid> RankSideTanks(Player* bot, Group* group, ObjectGuid const& mainTank)
+{
+    std::vector<ObjectGuid> roster;
+    std::vector<ObjectGuid> others;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !member->IsInMap(bot) || member->GetGUID() == mainTank ||
+            !IsAnubarakTankPlayer(member))
+            continue;
+
+        (group->IsAssistant(member->GetGUID()) ? roster : others).push_back(member->GetGUID());
+    }
+    roster.insert(roster.end(), others.begin(), others.end());
+    return roster;
+}
+
 // Each side keeps its tank for the pull while it lives. Re-reading the assist tank index every tick
-// swaps sides whenever IsTank blinks. Fills a side in IsAssistTankOfIndex's order: assistants first.
+// swaps sides whenever IsTank blinks.
 void RefreshSideTanks(Player* bot, AnubarakState& state)
 {
     Group* group = bot->GetGroup();
@@ -455,19 +473,7 @@ void RefreshSideTanks(Player* bot, AnubarakState& state)
     }
 
     state.mainTank = StableMainTankGuid(group);
-
-    std::vector<ObjectGuid> roster;
-    std::vector<ObjectGuid> others;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || !member->IsInMap(bot) || member->GetGUID() == state.mainTank ||
-            !IsAnubarakTankPlayer(member))
-            continue;
-
-        (group->IsAssistant(member->GetGUID()) ? roster : others).push_back(member->GetGUID());
-    }
-    roster.insert(roster.end(), others.begin(), others.end());
+    std::vector<ObjectGuid> const roster = RankSideTanks(bot, group, state.mainTank);
 
     for (ObjectGuid& held : state.sideTanks)
         if (std::find(roster.begin(), roster.end(), held) == roster.end())
@@ -1777,6 +1783,23 @@ bool IsAnubarakPickupTank(Player* bot)
 bool IsAnubarakTankPlayer(Player* player)
 {
     return player && (PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true));
+}
+
+AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot)
+{
+    AnubarakPrepullTanks tanks;
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!group)
+        return tanks;
+
+    ObjectGuid const mainTank = StableMainTankGuid(group);
+    std::vector<ObjectGuid> const sides = RankSideTanks(bot, group, mainTank);
+    for (size_t side = 0; side < 2 && side < sides.size(); ++side)
+        tanks.side[side] = sides[side];
+
+    Player* main = mainTank.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, mainTank);
+    tanks.pickup = main && main->IsAlive() ? mainTank : tanks.side[0];
+    return tanks;
 }
 
 std::vector<Creature*> GetAnubarakBurrowers(Player* bot)

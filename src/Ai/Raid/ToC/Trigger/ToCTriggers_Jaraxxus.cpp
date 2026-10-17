@@ -25,15 +25,6 @@ bool JaraxxusPinnedCastTrigger::IsActive()
     return !GetJaraxxusPinnedCasters(bot).empty();
 }
 
-bool JaraxxusIntroMainTankTrigger::IsActive()
-{
-    if (!botAI->IsMainTank(bot))
-        return false;
-
-    Unit* jaraxxus = GetJaraxxusInIntro(botAI);
-    return jaraxxus && bot->GetExactDist2d(jaraxxus) > JARAXXUS_INTRO_STAND + 1.0f;
-}
-
 bool JaraxxusEngagedByMainTankTrigger::IsActive() { return JaraxxusMainTankHolds(botAI); }
 
 bool JaraxxusAddNeedsAssistTankTrigger::IsActive() { return JaraxxusAssistTankHolds(botAI, 0); }
@@ -71,9 +62,6 @@ void AddToCJaraxxusTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("jaraxxus pinned cast", {
         NextAction("jaraxxus break pinned cast", ACTION_EMERGENCY + 7) }));
-
-    triggers.push_back(new TriggerNode("jaraxxus intro main tank", {
-        NextAction("jaraxxus intro main tank stand", ACTION_RAID + 6) }));
 
     triggers.push_back(new TriggerNode("jaraxxus engaged by main tank", {
         NextAction("jaraxxus main tank hold boss", ACTION_RAID + 5) }));

@@ -47,14 +47,6 @@ public:
     bool Execute(Event event) override;
 };
 
-class JaraxxusIntroMainTankStandAction : public MovementAction
-{
-public:
-    JaraxxusIntroMainTankStandAction(
-        PlayerbotAI* botAI, std::string const name = "jaraxxus intro main tank stand") : MovementAction(botAI, name) {};
-    bool Execute(Event event) override;
-};
-
 class JaraxxusMainTankHoldBossAction : public ToCMainTankHoldAction
 {
 public:
@@ -125,8 +117,6 @@ public:
             &ToCJaraxxusActionContext::jaraxxus_avoid_legion_flame;
         creators["jaraxxus break pinned cast"] =
             &ToCJaraxxusActionContext::jaraxxus_break_pinned_cast;
-        creators["jaraxxus intro main tank stand"] =
-            &ToCJaraxxusActionContext::jaraxxus_intro_main_tank_stand;
         creators["jaraxxus main tank hold boss"] =
             &ToCJaraxxusActionContext::jaraxxus_main_tank_hold_boss;
         creators["jaraxxus assist tank hold add"] =
@@ -152,10 +142,6 @@ private:
 
     static Action* jaraxxus_break_pinned_cast(PlayerbotAI* botAI) {
         return new JaraxxusBreakPinnedCastAction(botAI);
-    }
-
-    static Action* jaraxxus_intro_main_tank_stand(PlayerbotAI* botAI) {
-        return new JaraxxusIntroMainTankStandAction(botAI);
     }
 
     static Action* jaraxxus_main_tank_hold_boss(PlayerbotAI* botAI) {

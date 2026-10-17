@@ -22,7 +22,6 @@ constexpr float JARAXXUS_FLAME_CARRIER_MIN_LEG = 6.0f;     // carrier travel flo
 constexpr float JARAXXUS_FLAME_CARRIER_RAID_CLEAR = 8.0f;  // carrier spot from other members
 constexpr float JARAXXUS_FLAME_CARRIER_BOSS_CLEAR = 15.0f; // carrier spot from the boss
 constexpr float JARAXXUS_FLAME_ARRIVE = 1.5f;
-constexpr float JARAXXUS_INTRO_STAND = 3.0f;               // main tank from him in the intro
 constexpr float JARAXXUS_SCAN_RADIUS = 200.0f;
 constexpr uint32 JARAXXUS_SCAN_MS = 200;
 
@@ -37,8 +36,6 @@ enum class JaraxxusFlameRole : uint8
 
 // Alive and attackable, so null through the intro
 Unit* GetJaraxxus(PlayerbotAI* botAI);
-// Alive, NON_ATTACKABLE and out of combat, i.e. standing through the Fizzlebang scene
-Unit* GetJaraxxusInIntro(PlayerbotAI* botAI);
 
 bool JaraxxusHasNetherPower(Unit* jaraxxus);
 // Stack count of whichever Nether Power id he carries, 0 without him. Writes jaraxxus.netherpower

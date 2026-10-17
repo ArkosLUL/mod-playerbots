@@ -55,6 +55,14 @@ struct TwinEssenceWant
     TwinEssenceReason reason = TwinEssenceReason::None;
 };
 
+enum class TwinTankRole : uint8
+{
+    None,
+    Fjola,
+    Eydis,
+    Both
+};
+
 // Alive, else nullptr
 Unit* GetFjola(PlayerbotAI* botAI);
 Unit* GetEydis(PlayerbotAI* botAI);
@@ -81,6 +89,8 @@ Unit* GetShieldedTwin(PlayerbotAI* botAI);
 // Main tank on Fjola, first living assist on Eydis. A lone tank gets both.
 Player* GetTwinTank(Player* bot, Unit* twin);
 bool IsTwinTank(Player* bot, Unit* twin);
+// The same split by role, twins up or not. No tv.tank note.
+TwinTankRole GetTwinTankRole(Player* bot);
 
 TwinEssenceWant GetWantedEssence(PlayerbotAI* botAI);
 // urgentOnly: only a Touch or a Vortex counts

@@ -155,19 +155,6 @@ bool JaraxxusBreakPinnedCastAction::Execute(Event /*event*/)
     return false;
 }
 
-bool JaraxxusIntroMainTankStandAction::Execute(Event /*event*/)
-{
-    Unit* jaraxxus = GetJaraxxusInIntro(botAI);
-    if (!jaraxxus || bot->GetExactDist2d(jaraxxus) <= JARAXXUS_INTRO_STAND + 1.0f)
-        return false;
-
-    float const angle = jaraxxus->GetAngle(bot);
-    float const x = jaraxxus->GetPositionX() + std::cos(angle) * JARAXXUS_INTRO_STAND;
-    float const y = jaraxxus->GetPositionY() + std::sin(angle) * JARAXXUS_INTRO_STAND;
-    return MoveTo(bot->GetMapId(), x, y, jaraxxus->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_NORMAL);
-}
-
 bool JaraxxusMainTankHoldBossAction::Execute(Event /*event*/)
 {
     Unit* jaraxxus = GetJaraxxus(botAI);

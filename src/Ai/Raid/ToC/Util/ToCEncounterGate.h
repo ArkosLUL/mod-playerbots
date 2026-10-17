@@ -47,6 +47,9 @@ enum class ToCEncounter : uint8
     Anubarak
 };
 
+// The encounter a GetData(TOC_DATA_INSTANCE_PROGRESS) stage belongs to, None for 8, 10 and the rest.
+ToCEncounter ToCEncounterOfStage(uint32 stage);
+
 // Open for the whole stage, pulled or not, so pre-pull prep like taking an essence before the twins
 // still runs. Beasts and Jaraxxus also stay open the stage after their kill until the next
 // encounter is live, for their leftover adds. True off a ToC instance: ungated beats silently dead.
@@ -65,6 +68,12 @@ ToCEncounter ToCLiveEncounter(PlayerbotAI* botAI);
 bool ToCGateOpen(PlayerbotAI* botAI, uint32 encounterId);
 bool ToCGateLive(PlayerbotAI* botAI, uint32 encounterId);
 inline constexpr EncounterGate ToCGate{&ToCGateOpen, &ToCGateLive};
+
+// Always open, never live: for a raid-wide stem whose rule predicates do their own gating. Its
+// definition takes static_cast<uint32>(ToCEncounter::None) and no trace name.
+bool ToCRaidWideGateOpen(PlayerbotAI* botAI, uint32 encounterId);
+bool ToCRaidWideGateLive(PlayerbotAI* botAI, uint32 encounterId);
+inline constexpr EncounterGate ToCRaidWideGate{&ToCRaidWideGateOpen, &ToCRaidWideGateLive};
 
 // False for a name with no encounter prefix, which then stays ungated.
 bool ToCEncounterOfTrigger(std::string const& triggerName, ToCEncounter& encounter);
