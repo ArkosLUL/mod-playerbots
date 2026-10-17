@@ -199,6 +199,9 @@ front replaces the whole chain for the common case. Encounter rules enforce this
 - `HasAura(..., maxStack = false, maxAuraAmount = -1)` is a **presence** check, not a stack check.
 - `CastBuffSpellAction` resolves the highest known rank by parsing the `Rank N` subtext, so spell ids
   never need hardcoding.
+- A paladin aura's class action (`CastBuffSpellAction`, `isOwner` false) checks the aura by name, so
+  it refuses while another paladin's aura of that name is on the bot, even without the bot's own: an
+  elected holder keeps its current aura instead of stacking a stripped duplicate.
 - `YieldThread` (`PlayerbotAIBase.cpp:53-61`) *raises* `nextAICheckDelay` to the react delay whenever
   it is lower, so `SetNextCheckDelay(0)` written inside an action is overwritten before the tick
   ends. To let an off-GCD ability share a tick, return `false` from `Execute` — `DoNextAction` only

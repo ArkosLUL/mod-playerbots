@@ -134,6 +134,14 @@ explicit `none` when the window opens, or have the reader cut spans at death. No
 change-only latch that coverage reads NEVER prove its node dead: a generic node may have taken the
 action first (generic interrupts kicked every Fel Fireball before Jaraxxus's duty node could).
 
+**A note written before the session opens is lost.** The pre-roll ring keeps only snapshots, so a
+per-bot `NoteDerived` written before the pull never reaches a trace that opens at the engage. Write
+it again after the open, from any bot's tick: a bot mid-cast or drinking runs no triggers. Opening
+early with `MarkPull` fails on a long pre-pull wait: `IdleCloseSeconds` (30 s) closes it first.
+
+**`snap` rows carry no combat state.** A drink or eat `act` OK row stands in: both actions'
+`isPossible` require the bot out of combat.
+
 Churn is only legible inside the phase you care about. Mimiron's phase-1 flip-flop counts 57 A-B-A
 within phase 1 and disappears into ~700 across the whole pull, so `postmortem.py --probes --during
 mimiron.phase=1` is what reproduces it and a whole-pull number is what hid it.
