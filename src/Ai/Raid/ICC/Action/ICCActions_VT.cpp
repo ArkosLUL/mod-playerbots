@@ -11,6 +11,7 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
 #include <unordered_map>
@@ -227,7 +228,7 @@ bool IccValithriaGroupAction::Execute(Event /*event*/)
         }
     }
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
     Group* group = bot->GetGroup();
 
     if (group && (diff == RAID_DIFFICULTY_25MAN_NORMAL || diff == RAID_DIFFICULTY_25MAN_HEROIC))

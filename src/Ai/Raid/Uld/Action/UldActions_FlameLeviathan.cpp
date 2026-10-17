@@ -18,6 +18,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "EncounterHelpers.h"
+#include "RaidDifficulty.h"
 #include "RaidObs.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
@@ -1347,7 +1348,6 @@ bool FlameLeviathanEnterVehicleAction::AllMainVehiclesOnUse()
         else if (vehicleBase->GetEntry() == NPC_SALVAGED_SIEGE_ENGINE)
             ++siege;
     }
-    Difficulty diff = bot->GetRaidDifficulty();
-    int maxC = (diff == RAID_DIFFICULTY_10MAN_NORMAL || diff == RAID_DIFFICULTY_10MAN_HEROIC) ? 2 : 5;
+    int maxC = IsRaid25Man(bot) ? 5 : 2;
     return demolisher >= maxC && siege >= maxC;
 }

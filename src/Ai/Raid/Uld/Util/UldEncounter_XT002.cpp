@@ -13,6 +13,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidObs.h"
+#include "SpellMgr.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"
@@ -79,20 +80,17 @@ bool IsXT002Submerged(Unit* xt002)
 
 uint32 GetXT002SearingLightSpellId(Player* bot)
 {
-    return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_SEARING_LIGHT_25
-                                                                   : SPELL_XT002_SEARING_LIGHT_10;
+    return sSpellMgr->GetSpellIdForDifficulty(SPELL_XT002_SEARING_LIGHT, bot);
 }
 
 uint32 GetXT002HeartbreakSpellId(Player* bot)
 {
-    return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_HEARTBREAK_25
-                                                                    : SPELL_XT002_HEARTBREAK_10;
+    return sSpellMgr->GetSpellIdForDifficulty(SPELL_XT002_HEARTBREAK, bot);
 }
 
 uint32 GetXT002GravityBombSpellId(Player* bot)
 {
-    return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_GRAVITY_BOMB_25
-                                                                   : SPELL_XT002_GRAVITY_BOMB_10;
+    return sSpellMgr->GetSpellIdForDifficulty(SPELL_XT002_GRAVITY_BOMB, bot);
 }
 
 bool IsXT002PummellerTank(PlayerbotAI* botAI, Player* bot)

@@ -25,15 +25,12 @@ enum UlduarXT002Ids
     PB_NPC_XT002_BOOMBOT = 33346,      // explodes on reaching XT or at 50% health; melee must not touch it
     PB_NPC_XT002_LIFE_SPARK = 34004,   // hard mode only, spawned by an expiring Searing Light
     PB_NPC_XT002_VOID_ZONE = 34001,    // hard mode only, dropped by an expiring Gravity Bomb
-    SPELL_XT002_SEARING_LIGHT_10 = 63018,
-    SPELL_XT002_SEARING_LIGHT_25 = 65121,
-    SPELL_XT002_GRAVITY_BOMB_10 = 63024,
-    SPELL_XT002_GRAVITY_BOMB_25 = 64234,
+    // 10-man ids. The core casts these and lets the difficulty table pick, so a 25-man raid carries
+    // 65121, 64234 and 64193 instead: read them through sSpellMgr->GetSpellIdForDifficulty.
+    SPELL_XT002_SEARING_LIGHT = 63018,
+    SPELL_XT002_GRAVITY_BOMB = 63024,
+    SPELL_XT002_HEARTBREAK = 65737,     // permanent hard-mode empower once the Heart dies
     SPELL_XT002_EXPOSED_HEART = 63849,  // channeled by the Heart while it is vulnerable
-    // Permanent hard-mode empower once the Heart dies. The core casts 65737 and lets the difficulty
-    // conversion pick, so 25-man raids carry 64193 and a check against 65737 alone never fires there.
-    SPELL_XT002_HEARTBREAK_10 = 65737,
-    SPELL_XT002_HEARTBREAK_25 = 64193,
     SPELL_XT002_SUBMERGE = 37751,
 };
 

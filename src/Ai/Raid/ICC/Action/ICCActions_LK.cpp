@@ -12,6 +12,7 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
 
@@ -170,7 +171,7 @@ bool IccLichKingShadowTrapAction::Execute(Event /*event*/)
     if (!boss || !PlayerbotAI::IsTank(bot))
         return false;
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
 
     if (sPlayerbotAIConfig.EnableICCBuffs && boss->IsInCombat() && IsHeroicLk(diff))
         IccApplyHeroicBuffToMember(bot, true, false);
@@ -367,7 +368,7 @@ bool IccLichKingWinterAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
 
     if (sPlayerbotAIConfig.EnableICCBuffs && boss->IsInCombat() && IsHeroicLk(diff))
         IccApplyHeroicBuffToMember(bot, true, true);
@@ -739,11 +740,7 @@ bool IccLichKingWinterAction::IsPositionSafeFromDefile(float x, float y, float /
             if (!grow)
                 continue;
 
-            float const growthMultiplier =
-                (bot->GetRaidDifficulty() == RAID_DIFFICULTY_10MAN_HEROIC ||
-                 bot->GetRaidDifficulty() == RAID_DIFFICULTY_10MAN_NORMAL)
-                    ? 1.4f
-                    : 0.95f;
+            float const growthMultiplier = IsRaid25Man(bot) ? 0.95f : 1.4f;
 
             currentRadius = BASE_RADIUS + grow->GetStackAmount() * growthMultiplier;
             break;
@@ -1804,7 +1801,7 @@ bool IccLichKingAddsAction::Execute(Event /*event*/)
         return false;
 
     Unit* boss = AI_VALUE2(Unit*, "find target", "the lich king");
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
     bool const hasPlague = botAI->HasAura("Necrotic Plague", bot);
     Unit* const terenas = bot->FindNearestCreature(NPC_TERENAS_MENETHIL_HC, 55.0f);
 
@@ -3832,7 +3829,7 @@ bool IccLichKingAddsAction::HandleValkyrAssignment(std::vector<Unit*> const& gra
 
     Attack(myValkyr);
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
     if (sPlayerbotAIConfig.EnableICCBuffs && IsHeroicLk(diff) &&
         !myValkyr->HasAura(SPELL_HAMMER_OF_JUSTICE))
         bot->AddAura(SPELL_HAMMER_OF_JUSTICE, myValkyr);
@@ -3942,7 +3939,7 @@ bool IccLichKingAddsAction::HandleVileSpiritMechanics()
         return false;
     }
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
     auto IsSlotSafeFromDefile = [&](Position const& slot) -> bool
     {
         static constexpr float SAFETY_MARGIN = 2.0f;

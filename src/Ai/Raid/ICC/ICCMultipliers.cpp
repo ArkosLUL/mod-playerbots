@@ -17,6 +17,7 @@
 #include "ICCScripts.h"
 #include "ICCTriggers.h"
 #include "MageActions.h"
+#include "RaidDifficulty.h"
 #include "MovementActions.h"
 #include "PaladinActions.h"
 #include "PetsAction.h"
@@ -815,7 +816,7 @@ float IccSindragosaMultiplier::GetValue(Action* action)
 
     Aura* aura = botAI->GetAura("Unchained Magic", bot, false, true);
 
-    Difficulty diff = bot->GetRaidDifficulty();
+    Difficulty diff = GetRaidMapDifficulty(bot);
 
     if (boss->HealthBelowPct(95))
     {

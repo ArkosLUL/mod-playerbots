@@ -8,6 +8,7 @@
 #include "CreatureAI.h"
 #include "EoEEncounter_Malygos.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "RaidInstanceState.h"
 #include "SpellAuraEffects.h"
 #include "Timer.h"
@@ -216,8 +217,7 @@ void GetDrakeHealerGuids(PlayerbotAI* botAI, std::vector<ObjectGuid>& out)
     cached.at = now;
     cached.guids.clear();
 
-    uint8 const wanted =
-        bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? DRAKE_HEALERS_25MAN : DRAKE_HEALERS_10MAN;
+    uint8 const wanted = IsRaid25Man(bot) ? DRAKE_HEALERS_25MAN : DRAKE_HEALERS_10MAN;
 
     std::vector<ObjectGuid> healers;
     std::vector<ObjectGuid> others;

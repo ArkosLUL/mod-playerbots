@@ -11,6 +11,7 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
 
@@ -124,7 +125,7 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    Difficulty diff = bot->GetRaidDifficulty();
+    Difficulty diff = GetRaidMapDifficulty(bot);
 
     if (sPlayerbotAIConfig.EnableICCBuffs && boss->IsInCombat() && diff &&
         (diff == RAID_DIFFICULTY_10MAN_HEROIC || diff == RAID_DIFFICULTY_25MAN_HEROIC))

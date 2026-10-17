@@ -16,6 +16,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
@@ -416,7 +417,7 @@ void AssignThorimSquads(Player* bot)
     if (PlayerbotAI::GetMainTankGuid(group).IsEmpty())
         return;
 
-    bool const twentyFive = bot->GetRaidDifficulty() == Difficulty::RAID_DIFFICULTY_25MAN_NORMAL;
+    bool const twentyFive = IsRaid25Man(bot);
     uint32 healerQuota = twentyFive ? 2 : 1;
 
     // Sized to beat the ~170 s hard mode clock. The arena floor cap below still wins over it.

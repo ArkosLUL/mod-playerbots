@@ -510,6 +510,36 @@ def check_assist_index(sources) -> list[Finding]:
     return out
 
 
+RAID_DIFFICULTY_OK = "pblint: raid-difficulty-ok"
+RE_PLAYER_DIFFICULTY = re.compile(r"\bGet(?:Raid|Dungeon)Difficulty\s*\(\s*\)")
+
+
+def check_raid_difficulty(sources) -> list[Finding]:
+    """A player's own raid difficulty is the group's setting, not the instance's. A group left on 25
+    Heroic entering a raid that has no heroic mode keeps reporting 25 Heroic while the map runs 25
+    Normal, so a check against RAID_DIFFICULTY_25MAN_NORMAL reads as 10-man for the whole pull and
+    nothing says so.
+
+    Encounter and dungeon code only: a comment carrying `pblint: raid-difficulty-ok` on the line or
+    the one above exempts it."""
+    out = []
+    for src in sources:
+        if not re.match(r"src/Ai/(?:Raid|Dungeon)/", src.rel):
+            continue
+
+        raw = src.raw.splitlines()
+        for number, line in enumerate(src.lines, 1):
+            if not RE_PLAYER_DIFFICULTY.search(line):
+                continue
+            if any(1 <= n <= len(raw) and RAID_DIFFICULTY_OK in raw[n - 1] for n in (number - 1, number)):
+                continue
+
+            out.append(Finding("raid-difficulty", src.rel, number,
+                               "GetRaidDifficulty is the group's setting, not the instance's: use "
+                               "IsRaid25Man or GetRaidMapDifficulty from RaidDifficulty.h"))
+    return out
+
+
 def check_shared_base_cast(sources) -> list[Finding]:
     """A veto must dynamic_cast to the concrete redirect action. BuffOnMainTankAction is also paladin
     Beacon, shaman Earth Shield and druid Thorns - casting to it vetoes all of them."""
@@ -765,6 +795,7 @@ CHECKS = {
     "arc-defaults": (check_arc_defaults, False),
     "move-inside-zero": (check_move_inside_zero, False),
     "assist-index": (check_assist_index, False),
+    "raid-difficulty": (check_raid_difficulty, False),
     "shared-base-cast": (check_shared_base_cast, False),
 }
 

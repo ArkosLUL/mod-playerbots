@@ -13,6 +13,7 @@
 #include "ObjectAccessor.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "Trigger.h"
 #include "Vehicle.h"
 
@@ -387,7 +388,7 @@ bool IccPutricideMalleableGooTrigger::IsActive()
     if (!boss)
         return false;
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
 
     // Heroic cheat buffs — apply to all group members (bots + real players)
     if (boss && boss->IsInCombat() && sPlayerbotAIConfig.EnableICCBuffs &&
@@ -769,7 +770,7 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
     if (!boss)
         return false;
 
-    Difficulty diff = bot->GetRaidDifficulty();
+    Difficulty diff = GetRaidMapDifficulty(bot);
 
     if (sPlayerbotAIConfig.EnableICCBuffs && boss->IsInCombat() && diff &&
         (diff == RAID_DIFFICULTY_10MAN_HEROIC || diff == RAID_DIFFICULTY_25MAN_HEROIC))

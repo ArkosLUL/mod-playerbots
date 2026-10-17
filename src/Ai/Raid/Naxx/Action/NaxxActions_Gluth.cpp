@@ -8,6 +8,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
+#include "RaidDifficulty.h"
 #include "SharedDefines.h"
 
 using namespace EncounterHelpers;
@@ -111,7 +112,7 @@ bool GluthPositionAction::Execute(Event event)
     {
         return false;
     }
-    bool raid25 = bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL;
+    bool raid25 = IsRaid25Man(bot);
     if (PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
     {
         if (AI_VALUE2(bool, "has aggro", "boss target"))
@@ -200,7 +201,7 @@ bool GluthSlowdownAction::Execute(Event event)
     {
         return false;
     }
-    bool raid25 = bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL;
+    bool raid25 = IsRaid25Man(bot);
     // if (!raid25)
     // {
     //     return false;

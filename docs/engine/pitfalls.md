@@ -595,6 +595,17 @@ Related traps:
     `spelldifficulty_dbc` on it by row id, so either alone reads a remap as "none": Plasma Blast
     62997 → 64529 and Valithria's Emerald Vigor 70873 → 71941 are DB-only, every ToC combat remap
     DBC-only.
+  - **The remap reads the map; the player's own difficulty does not.** `Player::GetRaidDifficulty` is
+    the group's setting, and a raid with no heroic mode (Ulduar, Naxxramas, Eye of Eternity)
+    downscales on entry, so a group on 25 Heroic runs a 25 Normal map while every member keeps
+    reporting 25 Heroic (`MapInstanced::CreateInstance` via `GetDownscaledMapDifficultyData`; the core
+    keeps the map's value apart in `m_raidMapDifficulty`). A test against
+    `RAID_DIFFICULTY_25MAN_NORMAL` then reads as 10-man for the whole pull, one against
+    `RAID_DIFFICULTY_10MAN_NORMAL` as 25-man under a 10 Heroic group, and it binds raid-size counts
+    and role splits as much as spell ids. Ask the map: `IsRaid25Man` / `GetRaidMapDifficulty` in
+    `src/Util/RaidDifficulty.h`. pblint's `raid-difficulty` errors on the player read under
+    `src/Ai/Raid` and `src/Ai/Dungeon`, exempt with `// pblint: raid-difficulty-ok`. Two 25-man
+    XT-002 pulls wiped on it, the carrier trigger never once true across 13,437 and 22,424 asks.
   - **Any member id resolves its row**, not only the 10-man base: Touch of Light 67297 is a 10H id,
     which `GetSpellIdForDifficulty` still remaps and a base-keyed lookup misses.
   - **`pblint.py --spell-difficulty --warnings`** reads both sources (exit 2 if one is missing). Per

@@ -21,6 +21,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
+#include "RaidDifficulty.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Spell.h"
@@ -2221,8 +2222,7 @@ public:
     bool JustStartCombat() const { return _combat_start_ms != 0 && getMSTime() - _combat_start_ms < PullWindowMs; }
     bool IsAttracter(Player* bot)
     {
-        Difficulty diff = bot->GetRaidDifficulty();
-        if (diff == RAID_DIFFICULTY_25MAN_NORMAL)
+        if (IsRaid25Man(bot))
         {
             return PlayerbotAI::IsAssistRangedDpsOfIndex(bot, 0) || PlayerbotAI::IsAssistHealOfIndex(bot, 0) ||
                    PlayerbotAI::IsAssistHealOfIndex(bot, 1) || PlayerbotAI::IsAssistHealOfIndex(bot, 2);
@@ -2231,7 +2231,7 @@ public:
     }
     void CalculatePosToGo(Player* bot)
     {
-        bool raid25 = bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL;
+        bool raid25 = IsRaid25Man(bot);
         Unit* lady = _lady;
         if (!lady)
         {
@@ -2250,7 +2250,7 @@ public:
     }
     std::pair<float, float> CurrentAttractPos()
     {
-        bool raid25 = bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL;
+        bool raid25 = IsRaid25Man(bot);
         float posX = attractPos[posToGo].first, posY = attractPos[posToGo].second;
         if (posToGo == 1)
         {

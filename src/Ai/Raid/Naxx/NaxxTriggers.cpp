@@ -8,6 +8,7 @@
 #include "AiFactory.h"
 #include "NaxxSpellIds.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "Timer.h"
 #include "Trigger.h"
 
@@ -142,8 +143,7 @@ bool HeiganDecrepitFeverTrigger::IsActive()
 
 bool RazuviousTankTrigger::IsActive()
 {
-    Difficulty diff = bot->GetRaidDifficulty();
-    if (diff == RAID_DIFFICULTY_10MAN_NORMAL)
+    if (!IsRaid25Man(bot))
     {
         return helper.UpdateBossAI() && PlayerbotAI::IsTank(bot);
     }
@@ -152,8 +152,7 @@ bool RazuviousTankTrigger::IsActive()
 
 bool RazuviousNontankTrigger::IsActive()
 {
-    Difficulty diff = bot->GetRaidDifficulty();
-    if (diff == RAID_DIFFICULTY_10MAN_NORMAL)
+    if (!IsRaid25Man(bot))
     {
         return helper.UpdateBossAI() && !(PlayerbotAI::IsTank(bot));
     }

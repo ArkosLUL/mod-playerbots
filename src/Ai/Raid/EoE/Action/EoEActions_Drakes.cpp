@@ -10,6 +10,7 @@
 #include "EoEEncounter_Malygos.h"
 #include "MotionMaster.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "Timer.h"
 #include "Vehicle.h"
 
@@ -99,8 +100,7 @@ bool EoEFlyDrakeAction::Execute(Event /*event*/)
 
     if (drake->GetExactDist(masterVehicle) > DRAKE_FORMUP_RADIUS)
     {
-        uint8 const numPlayers =
-            bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? EOE_RAID_SIZE_25MAN : EOE_RAID_SIZE_10MAN;
+        uint8 const numPlayers = IsRaid25Man(bot) ? EOE_RAID_SIZE_25MAN : EOE_RAID_SIZE_10MAN;
         // 3/4 of a circle, with a 90 deg frontal cone left clear
         float const quarter = static_cast<float>(M_PI_2);
         float const angle = static_cast<float>(botAI->GetGroupSlotIndex(bot)) * (EOE_TWO_PI - quarter) /

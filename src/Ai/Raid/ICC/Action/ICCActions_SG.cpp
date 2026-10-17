@@ -11,6 +11,7 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
 #include <limits>
@@ -404,7 +405,7 @@ bool IccSindragosaFrostBeaconAction::TryDropTombFlares(Unit const* boss)
     }
     else
     {
-        Difficulty const diff = bot->GetRaidDifficulty();
+        Difficulty const diff = GetRaidMapDifficulty(bot);
         bool const is25Man = (diff == RAID_DIFFICULTY_25MAN_NORMAL || diff == RAID_DIFFICULTY_25MAN_HEROIC);
         targets.emplace_back(0, &ICC_SINDRAGOSA_THOMB1_POSITION);
         if (is25Man)
@@ -693,7 +694,7 @@ bool IccSindragosaFrostBeaconAction::HandleNonBeaconedPlayer(Unit const* boss)
     {
         if (!bot->HasAura(SPELL_FROST_BEACON))
         {
-            const Difficulty diff = bot->GetRaidDifficulty();
+            const Difficulty diff = GetRaidMapDifficulty(bot);
             bool is25Man = false;
             if (diff && (diff == RAID_DIFFICULTY_25MAN_NORMAL || diff == RAID_DIFFICULTY_25MAN_HEROIC))
                 is25Man = true;
@@ -826,7 +827,7 @@ bool IccSindragosaUnchainedMagicAction::Execute(Event /*event*/)
 
     Aura* aura1 = botAI->GetAura("Instability", bot, false, true);
 
-    Difficulty diff = bot->GetRaidDifficulty();
+    Difficulty diff = GetRaidMapDifficulty(bot);
     if (aura && (diff == RAID_DIFFICULTY_10MAN_NORMAL || diff == RAID_DIFFICULTY_25MAN_NORMAL))
     {
         if (aura1 && aura1->GetStackAmount() >= 6)
@@ -1018,7 +1019,7 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
     if (groupIndex < 0)
         return false;
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
     int const groupCount = (diff == RAID_DIFFICULTY_25MAN_NORMAL || diff == RAID_DIFFICULTY_25MAN_HEROIC) ? 3 : 2;
 
     // Fixed tomb zone positions per group:
@@ -1303,7 +1304,7 @@ int IccSindragosaFrostBombAction::ResolveGroupIndex(Group* group) const
     }
     std::sort(currentGuids.begin(), currentGuids.end());
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
     int const groupCount = (diff == RAID_DIFFICULTY_25MAN_NORMAL || diff == RAID_DIFFICULTY_25MAN_HEROIC) ? 3 : 2;
 
     // Assign any GUIDs not yet seen, preserving all existing assignments.
@@ -1340,7 +1341,7 @@ void IccSindragosaFrostBombAction::PinGroupToCurrentZone()
         &ICC_SINDRAGOSA_THOMB3_POSITION
     };
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
     int const groupCount =
         (diff == RAID_DIFFICULTY_25MAN_NORMAL || diff == RAID_DIFFICULTY_25MAN_HEROIC) ? 3 : 2;
 
@@ -1507,7 +1508,7 @@ bool IccSindragosaFrostBombAction::HandleRtiMarking(Group* group, int groupIndex
     constexpr float TOMB_STOP_HP_PCT = 40.0f;
     constexpr float TOMB_STOP_HP_PCT_10_MAN = 60.0f;
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
     bool const is10Man = (diff == RAID_DIFFICULTY_10MAN_NORMAL || diff == RAID_DIFFICULTY_10MAN_HEROIC);
 
     uint8 iconIndex = 0;

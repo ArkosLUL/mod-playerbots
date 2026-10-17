@@ -12,6 +12,7 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "RtiValue.h"
 #include "Timer.h"
 #include "Vehicle.h"
@@ -552,7 +553,7 @@ bool IccRotfaceGroupPositionAction::PositionRangedAndHealers(Unit* boss, Unit* s
     if (smallOoze && smallOoze->GetVictim() == bot)
         return false;
 
-    Difficulty const diff = bot->GetRaidDifficulty();
+    Difficulty const diff = GetRaidMapDifficulty(bot);
     bool isBossCasting = false;
     if (boss && boss->HasUnitState(UNIT_STATE_CASTING) && boss->FindCurrentSpellBySpellId(SPELL_SLIME_SPRAY))
         isBossCasting = true;

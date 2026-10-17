@@ -8,6 +8,7 @@
 #include "ObjectGuid.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "SharedDefines.h"
 
 namespace
@@ -88,8 +89,7 @@ bool RazuviousUseObedienceCrystalAction::Execute(Event /*event*/)
     }
     else
     {
-        Difficulty diff = bot->GetRaidDifficulty();
-        if (diff == RAID_DIFFICULTY_10MAN_NORMAL)
+        if (!IsRaid25Man(bot))
         {
             GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
             for (auto i = npcs.begin(); i != npcs.end(); i++)

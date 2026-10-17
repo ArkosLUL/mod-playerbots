@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "AiObjectContext.h"
+#include "RaidDifficulty.h"
 #include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidTankDefensive.h"
@@ -1011,9 +1012,8 @@ std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI)
     if (!group)
         return {};
 
-    uint32 size = bot->GetRaidDifficulty() == Difficulty::RAID_DIFFICULTY_10MAN_NORMAL
-                      ? ULDUAR_YOGG_SARON_PORTAL_SPOTS_10MAN
-                      : ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN;
+    uint32 size = IsRaid25Man(bot) ? ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN
+                                  : ULDUAR_YOGG_SARON_PORTAL_SPOTS_10MAN;
 
     // A non-tank master takes a portal of its own, and it is not ours to move.
     Player* master = botAI->GetMaster();
@@ -1134,9 +1134,8 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
 
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
 
-    uint32 const spotCount = bot->GetRaidDifficulty() == Difficulty::RAID_DIFFICULTY_10MAN_NORMAL
-                                 ? ULDUAR_YOGG_SARON_PORTAL_SPOTS_10MAN
-                                 : ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN;
+    uint32 const spotCount = IsRaid25Man(bot) ? ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN
+                                             : ULDUAR_YOGG_SARON_PORTAL_SPOTS_10MAN;
 
     // The wave the spread is for: the one that is up, or the next one if none is.
     uint32 const assignmentWave = wave.ordinal + (wave.portalsUp ? 0 : 1);
