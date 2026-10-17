@@ -52,7 +52,7 @@ void PlayerbotRepository::Load(PlayerbotAI* botAI)
     // The saved combat strategy string can carry a stale instance strategy (e.g. a bot last saved
     // in Serpentshrine Cavern keeps "ssc" when logging into The Eye). Re-derive the instance
     // strategy from the bot's current map so it always matches where the bot actually is.
-    if (sPlayerbotAIConfig.applyInstanceStrategies)
+    if (sPlayerbotAIConfig.ApplyInstanceStrategies)
         botAI->ApplyInstanceStrategies(botAI->GetBot()->GetMapId());
 }
 

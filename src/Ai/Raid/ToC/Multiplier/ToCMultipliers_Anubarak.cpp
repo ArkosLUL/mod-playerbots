@@ -54,7 +54,7 @@ float AnubarakControlTankMovementMultiplier::GetValue(Action* action)
     if (!dynamic_cast<CombatFormationMoveAction*>(action))
         return 1.0f;
 
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return 1.0f;
 
     if (!AnubarakEngaged(botAI))

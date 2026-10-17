@@ -158,9 +158,9 @@ void DefineMimiron(EncounterBuilder& e)
     e.Node<MimironShockBlastTrigger, MimironShockBlastAction>(ACTION_RAID + 5.5f);
     e.Node(
         "mimiron fire resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossFireResistanceTrigger(ai, "mimiron"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossFireResistanceTrigger(botAI, "mimiron"); },
         "mimiron fire resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossFireResistanceAction(ai, "mimiron"); }, ACTION_RAID);
+        [](PlayerbotAI* botAI) -> Action* { return new BossFireResistanceAction(botAI, "mimiron"); }, ACTION_RAID);
     e.Node<MimironFrostResistanceTrigger, MimironFrostResistanceAction>(ACTION_RAID);
     e.Node<MimironPhase1PositioningTrigger, MimironPhase1PositioningAction>(ACTION_RAID);
     e.Node<MimironArcSpreadTrigger, MimironArcSpreadAction>(ACTION_RAID);

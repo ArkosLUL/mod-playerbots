@@ -507,7 +507,7 @@ float GetMimironApproachRange(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot)
         return 0.0f;
 
-    return botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : botAI->GetRange("spell");
+    return PlayerbotAI::IsMelee(bot) ? sPlayerbotAIConfig.MeleeDistance : botAI->GetRange("spell");
 }
 
 bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
@@ -1765,7 +1765,7 @@ void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, f
 // rather than the asking bot's own, so a gnome and a tauren build the same wedge.
 float MimironWedgeReach(Unit* focus)
 {
-    return std::max(sPlayerbotAIConfig.spellDistance + focus->GetCombatReach() + DEFAULT_COMBAT_REACH -
+    return std::max(sPlayerbotAIConfig.SpellDistance + focus->GetCombatReach() + DEFAULT_COMBAT_REACH -
                         ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN,
                     1.0f);
 }
@@ -1993,7 +1993,7 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
         return false;
 
     // Built to fit casting range: rows stop there and pack tighter past it.
-    float const rangedDepth = std::max(sPlayerbotAIConfig.spellDistance -
+    float const rangedDepth = std::max(sPlayerbotAIConfig.SpellDistance -
                                            ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN -
                                            ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
                                        0.0f);
@@ -2339,7 +2339,7 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     {
         branch = "hmwedge";
 
-        float const rangedDepth = std::max(sPlayerbotAIConfig.spellDistance -
+        float const rangedDepth = std::max(sPlayerbotAIConfig.SpellDistance -
                                                ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN -
                                                ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
                                            0.0f);

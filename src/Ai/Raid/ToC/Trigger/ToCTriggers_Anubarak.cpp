@@ -58,7 +58,7 @@ bool AnubarakLeechingSwarmOnTankTrigger::IsActive()
 
 bool AnubarakRangedShouldSeedPermafrostTrigger::IsActive()
 {
-    return AnubarakEngaged(botAI) && botAI->IsRangedDps(bot) && GetAnubarakSphereToShoot(bot);
+    return AnubarakEngaged(botAI) && PlayerbotAI::IsRangedDps(bot) && GetAnubarakSphereToShoot(bot);
 }
 
 bool AnubarakDpsTargetTrigger::IsActive()
@@ -100,7 +100,7 @@ bool AnubarakEngagedByMainTankTrigger::IsActive()
 
 bool AnubarakPenetratingColdOnRaidTrigger::IsActive()
 {
-    return AnubarakEngaged(botAI) && botAI->IsHeal(bot) && GetAnubarakPenetratingColdHealTarget(botAI);
+    return AnubarakEngaged(botAI) && PlayerbotAI::IsHeal(bot) && GetAnubarakPenetratingColdHealTarget(botAI);
 }
 
 void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)

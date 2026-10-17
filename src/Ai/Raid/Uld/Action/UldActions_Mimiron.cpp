@@ -349,7 +349,7 @@ bool MimironShockBlastAction::Execute(Event /*event*/)
                                   "shock fire", escape, false, true))
             FleeShockToAnchor();
 
-        if (botAI->IsMelee(bot))
+        if (PlayerbotAI::IsMelee(bot))
             botAI->SetNextCheckDelay(100);
 
         // Still inside the circle: hold the tick even when the lock refused every bearing, or Charge
@@ -359,7 +359,7 @@ bool MimironShockBlastAction::Execute(Event /*event*/)
 
     // Clear. Melee keep holding the tick: they carry the gap-closers and have nothing to hit at 18 yd anyway.
     // Ranged and healers go back to work rather than lose 4 s in every 30.
-    return botAI->IsMelee(bot);
+    return PlayerbotAI::IsMelee(bot);
 }
 
 bool MimironShockBlastAction::isUseful()
@@ -434,7 +434,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
 
     // The cone is 50000 yd long, so ranged keep their radius above a floor, and melee orbit inside their reach.
     // GetExactDist2d, not GetDistance2d: the latter subtracts both object sizes, but this point is centre-based.
-    bool const melee = botAI->IsMelee(bot);
+    bool const melee = PlayerbotAI::IsMelee(bot);
     float const minRing =
         boss->GetCombatReach() +
         (melee ? ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MARGIN : ULDUAR_MIMIRON_BARRAGE_RING_MARGIN);
@@ -713,7 +713,7 @@ bool MimironArcSpreadAction::Execute(Event /*event*/)
 
 bool MimironAerialCommandUnitAction::Execute(Event /*event*/)
 {
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0))
+    if (PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0))
     {
         Unit* assaultBot = GetFirstAliveUnitByEntry(botAI, NPC_ASSAULT_BOT);
         Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
@@ -752,7 +752,7 @@ bool MimironPhase4FocusAction::Execute(Event /*event*/)
     if (!IsMimironPhase4(bot))
         return false;
 
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         // Always the MK II and never a hold: healing and splash keep building threat on it at the floor, and
         // a tank that stops swinging loses it to a DPS.
@@ -1081,7 +1081,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     {
         std::vector<Unit*> reachable;
         for (Unit* bombBot : bombBots)
-            if (bot->GetExactDist2d(bombBot) <= sPlayerbotAIConfig.spellDistance)
+            if (bot->GetExactDist2d(bombBot) <= sPlayerbotAIConfig.SpellDistance)
                 reachable.push_back(bombBot);
 
         priority.emplace_back(NPC_BOMB_BOT, SelectByEntry(currentTarget, NPC_BOMB_BOT, reachable));
@@ -1101,13 +1101,13 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
 
     // A grounded ACU outranks the adds for melee and ranged DPS: +50% taken and nothing spawns for the
     // window. A Bomb Bot in casting range still comes first.
-    if (aerialCommandUnit && (botAI->IsMelee(bot) || PlayerbotAI::IsRangedDps(bot)) &&
+    if (aerialCommandUnit && (PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsRangedDps(bot)) &&
         IsMimironAcuGrounded(botAI))
         priority.emplace_back(NPC_AERIAL_COMMAND_UNIT, aerialCommandUnit);
 
     // Melee take the Junk Bot pile once it builds: they stand in it and their cleave covers several. Once
     // on one they finish it, so a dip under the bar leaves no half-dead ones.
-    if (botAI->IsMelee(bot) && (junkBots.size() >= ULDUAR_MIMIRON_JUNK_BOT_PILE ||
+    if (PlayerbotAI::IsMelee(bot) && (junkBots.size() >= ULDUAR_MIMIRON_JUNK_BOT_PILE ||
                                 (currentTarget && currentTarget->GetEntry() == NPC_JUNK_BOT)))
     {
         priority.emplace_back(NPC_JUNK_BOT, SelectByEntry(currentTarget, NPC_JUNK_BOT, junkBots));
@@ -1125,7 +1125,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     // answers for this, the tank node and the pets, so the three agree.
     if (phase4)
     {
-        if (Unit* focus = GetMimironPhase4Focus(botAI, bot, botAI->IsMelee(bot)))
+        if (Unit* focus = GetMimironPhase4Focus(botAI, bot, PlayerbotAI::IsMelee(bot)))
             priority.emplace_back(focus->GetEntry(), focus);
 
         return priority;
@@ -1181,7 +1181,7 @@ bool MimironSetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
         case NPC_BOMB_BOT:
             // Melee can't reach one without setting it off. Ranged shoot from outside the blast, or inside it
             // when it's chasing them: at 8.0 yd/s against 7.0 they can't leave.
-            if (botAI->IsMelee(bot))
+            if (PlayerbotAI::IsMelee(bot))
                 return false;
 
             return unit->GetExactDist2d(bot) >= ULDUAR_MIMIRON_BOMB_BOT_RADIUS ||
@@ -1189,7 +1189,7 @@ bool MimironSetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
 
         case NPC_AERIAL_COMMAND_UNIT:
         {
-            if (!botAI->IsMelee(bot))
+            if (!PlayerbotAI::IsMelee(bot))
                 return true;
 
             // Melee only while a core grounds it in phase 3, and in phase 4 when the focus hands it over or a
@@ -1298,8 +1298,8 @@ bool MimironSetDpsPriorityAction::Execute(Event /*event*/)
 
     // Phase 4 hold: all this bot may hit is at the floor. Holding the tick stops the class strategies
     // re-engaging; dodges above ACTION_RAID still run. Never a healer, it would stop healing.
-    if (IsMimironPhase4(bot) && !botAI->IsHeal(bot) &&
-        !GetMimironPhase4Focus(botAI, bot, botAI->IsMelee(bot)))
+    if (IsMimironPhase4(bot) && !PlayerbotAI::IsHeal(bot) &&
+        !GetMimironPhase4Focus(botAI, bot, PlayerbotAI::IsMelee(bot)))
     {
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "mimiron.dpsrule", "p4hold");
@@ -1311,7 +1311,7 @@ bool MimironSetDpsPriorityAction::Execute(Event /*event*/)
     // Phase 3 melee wait while the unit is airborne with no add up, or the generic picker hands them the
     // unit and "reach melee" walks them into the fire under it. Never a healer.
     bool const phase3Wait =
-        botAI->IsMelee(bot) && !botAI->IsHeal(bot) && IsMimironAcuAirborne(botAI, bot);
+        PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsHeal(bot) && IsMimironAcuAirborne(botAI, bot);
 
     Unit* target = ResolveTarget(currentTarget, !phase3Wait);
     if (!target)
@@ -1329,7 +1329,7 @@ bool MimironSetDpsPriorityAction::Execute(Event /*event*/)
     // Returning false once the bot is already on the right target is what lets the lower-priority
     // nodes run at all: the engine ends the tick at the first action that succeeds.
     bool needsAttack = currentTarget != target;
-    if (botAI->IsMelee(bot))
+    if (PlayerbotAI::IsMelee(bot))
         needsAttack = needsAttack || !bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
 
     return needsAttack ? Attack(target) : false;

@@ -506,14 +506,14 @@ bool IsChampionTotem(Player* bot, Creature* totem)
 
 // Cooldown only, no CanCastSpell or power test: the top ranks of Kick, Pummel and Shield Bash sit on
 // the GCD and energy dips under Kick's cost between swings, so either would flip the kicker every swing
-bool HasReadyMeleeInterrupt(Player* player, PlayerbotAI* ai, Unit* warlock)
+bool HasReadyMeleeInterrupt(Player* player, PlayerbotAI* botAI, Unit* warlock)
 {
     if (!player->IsWithinMeleeRange(warlock))
         return false;
 
     for (char const* name : MELEE_INTERRUPTS)
     {
-        uint32 const id = ai->GetAiObjectContext()->GetValue<uint32>("spell id", name)->Get();
+        uint32 const id = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", name)->Get();
         if (id && player->HasSpell(id) && !player->HasSpellCooldown(id))
             return true;
     }

@@ -250,7 +250,7 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 
 bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
 {
-    // FleePosition clamps to AiPlayerbot.FleeDistance (5 yd), inside the doubled damage band.
+    // FleePosition clamps to Playerbots.FleeDistance (5 yd), inside the doubled damage band.
     char const* branch = "clear";
     HazardSweepCache sweep;
     Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE, AlgalonPathRule::Clear, sweep);

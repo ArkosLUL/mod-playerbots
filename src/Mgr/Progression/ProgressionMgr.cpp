@@ -74,7 +74,7 @@ void ProgressionMgr::Init()
         LOG_INFO("playerbots", "Individual Progression detected, bot item gating is available");
 }
 
-bool ProgressionMgr::IsEnabled() const { return _ipActive && sPlayerbotAIConfig.limitProgressionTier; }
+bool ProgressionMgr::IsEnabled() const { return _ipActive && sPlayerbotAIConfig.LimitProgressionTier; }
 
 uint8 ProgressionMgr::GetPlayerProgressionTier(Player* player) const
 {
@@ -110,7 +110,7 @@ uint8 ProgressionMgr::GetBotProgressionTier(Player* bot) const
     if (uint8 own = GetPlayerProgressionTier(bot))
         return own;
 
-    return static_cast<uint8>(sPlayerbotAIConfig.progressionTierCap);
+    return static_cast<uint8>(sPlayerbotAIConfig.ProgressionTierCap);
 }
 
 uint8 ProgressionMgr::GetGemMinTier(ItemTemplate const* proto) const

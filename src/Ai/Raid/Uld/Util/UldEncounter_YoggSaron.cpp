@@ -1364,7 +1364,7 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
 
     // No radius in the test: the anchor is outside the clearance radius, so an arrived bot would read as not
     // needing the handover and hand itself back to the leash.
-    answer.clearing = botAI->IsTank(bot) || PlayerbotAI::IsMelee(bot);
+    answer.clearing = PlayerbotAI::IsTank(bot) || PlayerbotAI::IsMelee(bot);
 
     return answer;
 }
@@ -1521,7 +1521,7 @@ struct ImmortalGuardianInRangeCheck
 GuidVector GetYoggSaronGuardiansInSight(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    float const range = sPlayerbotAIConfig.sightDistance;
+    float const range = sPlayerbotAIConfig.SightDistance;
 
     std::vector<Unit*> found;
     ImmortalGuardianInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, range)};
@@ -2437,7 +2437,7 @@ bool YoggSaronPhase3LustReady(PlayerbotAI* botAI)
             continue;
 
         bool const inReach = PlayerbotAI::IsRanged(member)
-                                 ? member->GetDistance(target) <= sPlayerbotAIConfig.spellDistance
+                                 ? member->GetDistance(target) <= sPlayerbotAIConfig.SpellDistance
                                  : member->IsWithinMeleeRange(target);
         if (inReach)
             ++placed;
@@ -2964,7 +2964,7 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
     // walking out drags its Guardian along and its pool is the one that can eat the blast.
     bool const atRange = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
     // Both reads sit ahead of the phase gate, which is a boss state read and a creature search.
-    if (!fervor && !atRange && (botAI->IsTank(bot) || YoggSaronInPhase1(botAI)))
+    if (!fervor && !atRange && (PlayerbotAI::IsTank(bot) || YoggSaronInPhase1(botAI)))
         return {};
 
     std::list<Creature*> guardians;
@@ -3152,7 +3152,7 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI)
         if (!YoggSaronNovaCandidate(member) || member == bot)
             continue;
 
-        if (bot->GetExactDist2d(member) > sPlayerbotAIConfig.spellDistance)
+        if (bot->GetExactDist2d(member) > sPlayerbotAIConfig.SpellDistance)
             continue;
 
         // Chained only: one nova against these pools reads lethal on any bot under about 86% of its bar.
@@ -3307,7 +3307,7 @@ Unit* YoggSaronPhase1TauntTarget(PlayerbotAI* botAI)
     Player* bot = botAI->GetBot();
 
     std::list<Creature*> guardians;
-    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance);
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.SightDistance);
 
     Unit* focus = nullptr;
     for (Creature* guardian : guardians)
@@ -3318,7 +3318,7 @@ Unit* YoggSaronPhase1TauntTarget(PlayerbotAI* botAI)
         // Already walking at a tank, so the taunt would buy nothing. Its own victim rather than the
         // threat table: a taunt is a forced victim, and that is the state this is checking for.
         Player* victim = botAI->GetPlayer(guardian->GetTarget());
-        if (victim && botAI->IsTank(victim))
+        if (victim && PlayerbotAI::IsTank(victim))
             continue;
 
         if (guardian->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
@@ -3460,7 +3460,7 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
         return heldKillable ? held : nullptr;
 
     std::list<Creature*> guardians;
-    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance);
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.SightDistance);
 
     // The handover moved the pile to the anchor and no kill counts for Sara any more, so the stack test
     // means nothing there. Lowest first instead.
@@ -3526,7 +3526,7 @@ bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI)
         focus = nullptr;
 
     std::list<Creature*> guardians;
-    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance);
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.SightDistance);
 
     for (Creature* guardian : guardians)
     {
@@ -3567,7 +3567,7 @@ bool YoggSaronLeftoverAoeHold(PlayerbotAI* botAI)
         target = nullptr;
 
     std::list<Creature*> guardians;
-    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance);
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.SightDistance);
 
     for (Creature* guardian : guardians)
     {
@@ -4373,8 +4373,8 @@ void TickYoggSaronObs(PlayerbotAI* botAI)
 
     float const reach = bot->GetExactDist2d(tentacle);
     RaidObs::NoteDerived(bot, "yogg.tentacle",
-                         reach <= sPlayerbotAIConfig.meleeDistance   ? "melee"
-                         : reach <= sPlayerbotAIConfig.spellDistance ? "spell"
+                         reach <= sPlayerbotAIConfig.MeleeDistance   ? "melee"
+                         : reach <= sPlayerbotAIConfig.SpellDistance ? "spell"
                                                                      : "far");
 }
 }  // namespace

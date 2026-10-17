@@ -21,7 +21,7 @@ namespace
 bool CanWardTarget(PlayerbotAI* botAI, Player* bot, Player* target)
 {
     return target && target->IsAlive() && !target->HasAura(SPELL_FEAR_WARD) &&
-           bot->IsWithinDistInMap(target, sPlayerbotAIConfig.spellDistance) &&
+           bot->IsWithinDistInMap(target, sPlayerbotAIConfig.SpellDistance) &&
            botAI->CanCastSpell("fear ward", target);
 }
 }  // namespace
@@ -48,7 +48,7 @@ Player* GetAntiFearWardTarget(PlayerbotAI* botAI, Player* bot)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || member == mainTank || !botAI->IsHeal(member))
+        if (!member || member == mainTank || !PlayerbotAI::IsHeal(member))
             continue;
 
         if (CanWardTarget(botAI, bot, member))

@@ -29,12 +29,12 @@ bool ThorimDpsPriorityTrigger::IsActive()
 
     // A healer's target drives its wand and its offensive dispels rather than a rotation, so steering
     // it every tick would fight the healing. Pull it off something it must not be holding, no more.
-    if (botAI->IsHeal(bot))
+    if (PlayerbotAI::IsHeal(bot))
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
     // Same for a tank in phase 1, where "tank assist" steers it and two live pickers on one bot is the oscillation.
     // Phase 2 mutes tank assist, so this is the only picker an off-tank waiting to swap has.
-    if (botAI->IsTank(bot) && !ThorimPhase2Active(botAI))
+    if (PlayerbotAI::IsTank(bot) && !ThorimPhase2Active(botAI))
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
     if (currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget))
@@ -237,8 +237,8 @@ bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
     if (!boss->IsAlive() || !boss->IsHostileTo(bot))
         return false;
 
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isFirstAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    bool const isMainTank = PlayerbotAI::IsMainTank(bot);
+    bool const isFirstAssistTank = PlayerbotAI::IsAssistTankOfIndex(bot, 0);
     if (!isMainTank && !isFirstAssistTank)
         return false;
 

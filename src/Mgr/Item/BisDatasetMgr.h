@@ -100,7 +100,7 @@ public:
     }
 
     // World thread only. A failure keeps the previous snapshot; error says why. No tables, no dataset
-    // row or AiPlayerbot.BisDataset.Enable = 0 all succeed with no snapshot.
+    // row or Playerbots.BisDataset.Enable = 0 all succeed with no snapshot.
     bool Reload(std::string& error);
 
     // null when no dataset is loaded. Safe from map threads.

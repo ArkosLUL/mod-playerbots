@@ -81,17 +81,17 @@ bool AnubrekhanChooseTargetAction::Execute(Event event)
     }
 
     Unit* target = nullptr;
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         target = boss;
     }
-    else if (botAI->IsAssistTank(bot))
+    else if (PlayerbotAI::IsAssistTank(bot))
     {
         // Newest guard first: the one the Locust Swarm just dropped is the one nobody holds yet.
         for (auto it = cryptGuards.rbegin(); it != cryptGuards.rend(); ++it)
         {
             Player* victim = (*it)->GetVictim() ? (*it)->GetVictim()->ToPlayer() : nullptr;
-            if (!victim || !botAI->IsTank(victim))
+            if (!victim || !PlayerbotAI::IsTank(victim))
             {
                 target = *it;
                 break;
@@ -113,7 +113,7 @@ bool AnubrekhanChooseTargetAction::Execute(Event event)
         for (Unit* scarab : corpseScarabs)
         {
             Player* victim = scarab->GetVictim() ? scarab->GetVictim()->ToPlayer() : nullptr;
-            if (victim && botAI->IsHeal(victim))
+            if (victim && PlayerbotAI::IsHeal(victim))
             {
                 target = scarab;
                 break;
@@ -124,7 +124,7 @@ bool AnubrekhanChooseTargetAction::Execute(Event event)
             for (Unit* scarab : corpseScarabs)
             {
                 Player* victim = scarab->GetVictim() ? scarab->GetVictim()->ToPlayer() : nullptr;
-                if (victim && !botAI->IsTank(victim))
+                if (victim && !PlayerbotAI::IsTank(victim))
                 {
                     target = scarab;
                     break;
@@ -165,13 +165,13 @@ bool AnubrekhanPositionAction::Execute(Event event)
     }
 
     bool swarm = helper.IsSwarmFormation();
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         // Locust Swarm neither roots nor threat-wipes the boss, so he keeps chasing - outside the
         // swarm there is nothing to kite and normal tanking should own the position.
         return swarm ? KiteBoss() : false;
     }
-    if (botAI->IsAssistTank(bot))
+    if (PlayerbotAI::IsAssistTank(bot))
     {
         return HoldAdds(boss);
     }
@@ -180,7 +180,7 @@ bool AnubrekhanPositionAction::Execute(Event event)
         // The Impale spread is what puts people inside the swarm, so it goes away for the window.
         return TakeSwarmStack();
     }
-    if (botAI->IsHeal(bot) || botAI->IsRanged(bot))
+    if (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot))
     {
         return TakeRangedSlot(boss);
     }
@@ -192,7 +192,7 @@ bool AnubrekhanPositionAction::Execute(Event event)
     {
         // The swarm stack leaves a point-move behind, and nothing here re-issues the chase once the
         // window ends - without this melee just stand where the stack put them.
-        return ChaseTo(target, sPlayerbotAIConfig.meleeDistance);
+        return ChaseTo(target, sPlayerbotAIConfig.MeleeDistance);
     }
     return false;
 }
@@ -258,7 +258,7 @@ bool AnubrekhanPositionAction::TakeRangedSlot(Unit* boss)
                                   AnubrekhanBossHelper::RoomCenterX - boss->GetPositionX());
         state.spreadAngle = anchor - RangedRingArc / 2.0f +
                             RangedRingArc * (static_cast<float>(slot.first) + 0.5f) / static_cast<float>(slot.second);
-        state.spreadRadius = botAI->IsHeal(bot) ? AnubrekhanBossHelper::RangedBandMax
+        state.spreadRadius = PlayerbotAI::IsHeal(bot) ? AnubrekhanBossHelper::RangedBandMax
                                                 : AnubrekhanBossHelper::RangedBandMin + RangedDpsBandOffset;
         state.hasSpread = true;
     }

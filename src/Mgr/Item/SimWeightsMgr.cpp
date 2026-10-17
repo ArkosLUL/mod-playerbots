@@ -90,10 +90,10 @@ bool TableReady(std::string& missing)
 
 void SimWeightsMgr::LoadAll()
 {
-    if (!sPlayerbotAIConfig.simWeightsEnable)
+    if (!sPlayerbotAIConfig.SimWeightsEnable)
     {
         Swap(nullptr);
-        LOG_INFO("server.loading", "Sim stat weights disabled (AiPlayerbot.SimWeights.Enable = 0)");
+        LOG_INFO("server.loading", "Sim stat weights disabled (Playerbots.SimWeights.Enable = 0)");
         return;
     }
 

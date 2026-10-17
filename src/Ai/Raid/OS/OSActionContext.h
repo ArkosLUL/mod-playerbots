@@ -24,8 +24,8 @@ public:
     }
 
 private:
-    static Action* attack_priority(PlayerbotAI* ai) { return new SartharionAttackPriorityAction(ai); }
-    static Action* exit_twilight_portal(PlayerbotAI* ai) { return new ExitTwilightPortalAction(ai); }
+    static Action* attack_priority(PlayerbotAI* botAI) { return new SartharionAttackPriorityAction(botAI); }
+    static Action* exit_twilight_portal(PlayerbotAI* botAI) { return new ExitTwilightPortalAction(botAI); }
 };
 
 #endif

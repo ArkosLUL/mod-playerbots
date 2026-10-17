@@ -23,8 +23,8 @@ public:
     }
 
 private:
-    static Trigger* sartharion_dps(PlayerbotAI* ai) { return new SartharionDpsTrigger(ai); }
-    static Trigger* twilight_portal_exit(PlayerbotAI* ai) { return new TwilightPortalExitTrigger(ai); }
+    static Trigger* sartharion_dps(PlayerbotAI* botAI) { return new SartharionDpsTrigger(botAI); }
+    static Trigger* twilight_portal_exit(PlayerbotAI* botAI) { return new TwilightPortalExitTrigger(botAI); }
 };
 
 #endif

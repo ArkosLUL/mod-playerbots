@@ -323,7 +323,7 @@ bool ThorimRunicBarrierBailAction::Execute(Event /*event*/)
         return false;
 
     // No AttackStop: the target stays, so everything but a melee swing keeps landing from out here.
-    // Not FleePosition: it clamps travel to AiPlayerbot.FleeDistance and can leave the bot inside the shield's reach.
+    // Not FleePosition: it clamps travel to Playerbots.FleeDistance and can leave the bot inside the shield's reach.
     return MoveAway(colossus, ULDUAR_THORIM_BARRIER_BAIL_DISTANCE - currentDistance);
 }
 

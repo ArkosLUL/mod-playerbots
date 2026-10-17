@@ -15,9 +15,9 @@
 
 using namespace EncounterHelpers;
 
-bool IsVezaxHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarVezaxHardMode; }
+bool IsVezaxHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarVezaxHardMode; }
 
-bool IsIronAssemblyHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarIronAssemblyHardMode; }
+bool IsIronAssemblyHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarIronAssemblyHardMode; }
 
 bool IsSteelbreakerEmpowered(PlayerbotAI* /*botAI*/, Unit* steelbreaker, Unit* molgeim, Unit* brundir)
 {
@@ -64,23 +64,23 @@ Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI)
 
 uint32 FlameLeviathanActiveTowerMask(PlayerbotAI* /*botAI*/)
 {
-    return sPlayerbotAIConfig.ulduarFlameLeviathanHardMode ? FL_TOWER_ALL : 0;
+    return sPlayerbotAIConfig.UlduarFlameLeviathanHardMode ? FL_TOWER_ALL : 0;
 }
 
-bool IsThorimHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarThorimHardMode; }
+bool IsThorimHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarThorimHardMode; }
 
-bool IsFreyaHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarFreyaHardMode; }
+bool IsFreyaHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarFreyaHardMode; }
 
-bool IsMimironHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarMimironHardMode; }
+bool IsMimironHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarMimironHardMode; }
 
-bool IsXT002HardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarXT002HardMode; }
+bool IsXT002HardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarXT002HardMode; }
 
 bool IsXT002HeartbreakActive(Player* bot, Unit* xt002)
 {
     return bot != nullptr && xt002 != nullptr && xt002->HasAura(GetXT002HeartbreakSpellId(bot));
 }
 
-bool IsYoggSaronHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarYoggSaronHardMode; }
+bool IsYoggSaronHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarYoggSaronHardMode; }
 
 bool YoggThorimKeeperActive(PlayerbotAI* botAI)
 {

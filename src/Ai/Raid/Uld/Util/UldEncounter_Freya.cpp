@@ -574,7 +574,7 @@ std::vector<Position> GetFreyaEscapeLasherPositions(PlayerbotAI* botAI, float se
 
     // Melee and tanks stand on what they hit, a spot 15 yd off the pile is no firing position. Only low lashers
     // count: Detonate lands on death, and clearing all ten is running from something faster than a bot.
-    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
+    if (PlayerbotAI::IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || PlayerbotAI::IsHeal(bot)))
         return {};
 
     FreyaWaveState state;
@@ -690,7 +690,7 @@ bool FreyaShedsSnaplasherThreat(PlayerbotAI* botAI, Unit* snaplasher, uint32 see
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || member == bot || !member->IsAlive() || !botAI->IsTank(member))
+        if (!member || member == bot || !member->IsAlive() || !PlayerbotAI::IsTank(member))
             continue;
 
         tankThreat = std::max(tankThreat, snaplasher->GetThreatMgr().GetThreat(member));
@@ -793,7 +793,7 @@ GuidVector const& FreyaScan::Stalkers()
 
     // Same visit, range check and order as "nearest npcs" for these entries, but the entry is tested first so the
     // LOS ray only goes to spores and beams, not every pet, ghoul and bomb in sight.
-    float const range = sPlayerbotAIConfig.sightDistance;
+    float const range = sPlayerbotAIConfig.SightDistance;
 
     std::vector<Unit*> matches;
     FreyaStalkerInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, range)};
@@ -843,7 +843,7 @@ Unit* GetFreyaBossByEntry(PlayerbotAI* botAI)
 
     // Same order and check as "possible targets no los" without building the rest of the list. IsPossibleTarget
     // only runs on units already known to be her.
-    float const range = sPlayerbotAIConfig.sightDistance;
+    float const range = sPlayerbotAIConfig.SightDistance;
 
     std::vector<Unit*> matches;
     FreyaUnfriendlyOfEntryCheck check{Acore::AnyUnfriendlyUnitInObjectRangeCheck(bot, bot, range), NPC_FREYA};

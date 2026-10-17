@@ -17,28 +17,28 @@
 class EmalonMarkBossTrigger : public Trigger
 {
 public:
-    EmalonMarkBossTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon mark boss trigger") {}
+    EmalonMarkBossTrigger(PlayerbotAI* botAI) : Trigger(botAI, "emalon mark boss trigger") {}
     bool IsActive() override;
 };
 
 class EmalonLightingNovaTrigger : public Trigger
 {
 public:
-    EmalonLightingNovaTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon lighting nova trigger") {}
+    EmalonLightingNovaTrigger(PlayerbotAI* botAI) : Trigger(botAI, "emalon lighting nova trigger") {}
     bool IsActive() override;
 };
 
 class EmalonOverchargeTrigger : public Trigger
 {
 public:
-    EmalonOverchargeTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon overcharge trigger") {}
+    EmalonOverchargeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "emalon overcharge trigger") {}
     bool IsActive() override;
 };
 
 class EmalonFallFromFloorTrigger : public Trigger
 {
 public:
-    EmalonFallFromFloorTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon fall from floor trigger") {}
+    EmalonFallFromFloorTrigger(PlayerbotAI* botAI) : Trigger(botAI, "emalon fall from floor trigger") {}
     bool IsActive() override;
 };
 
@@ -48,35 +48,35 @@ public:
 class EmalonMainTankHoldTrigger : public Trigger
 {
 public:
-    EmalonMainTankHoldTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon main tank hold trigger") {}
+    EmalonMainTankHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "emalon main tank hold trigger") {}
     bool IsActive() override;
 };
 
 class EmalonRingHoldTrigger : public Trigger
 {
 public:
-    EmalonRingHoldTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon ring hold trigger") {}
+    EmalonRingHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "emalon ring hold trigger") {}
     bool IsActive() override;
 };
 
 class EmalonOffTankHoldTrigger : public Trigger
 {
 public:
-    EmalonOffTankHoldTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon offtank hold trigger") {}
+    EmalonOffTankHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "emalon offtank hold trigger") {}
     bool IsActive() override;
 };
 
 class EmalonAttackPriorityTrigger : public Trigger
 {
 public:
-    EmalonAttackPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon attack priority trigger") {}
+    EmalonAttackPriorityTrigger(PlayerbotAI* botAI) : Trigger(botAI, "emalon attack priority trigger") {}
     bool IsActive() override;
 };
 
 class EmalonRedirectThreatTrigger : public Trigger
 {
 public:
-    EmalonRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon redirect threat trigger") {}
+    EmalonRedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, "emalon redirect threat trigger") {}
     bool IsActive() override;
 };
 
@@ -86,7 +86,7 @@ public:
 class ArchavonRockShardsSpreadTrigger : public Trigger
 {
 public:
-    ArchavonRockShardsSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "archavon rock shards spread trigger") {}
+    ArchavonRockShardsSpreadTrigger(PlayerbotAI* botAI) : Trigger(botAI, "archavon rock shards spread trigger") {}
     bool IsActive() override;
 };
 
@@ -96,14 +96,14 @@ public:
 class KoralonBurningBreathTrigger : public Trigger
 {
 public:
-    KoralonBurningBreathTrigger(PlayerbotAI* ai) : Trigger(ai, "koralon burning breath trigger") {}
+    KoralonBurningBreathTrigger(PlayerbotAI* botAI) : Trigger(botAI, "koralon burning breath trigger") {}
     bool IsActive() override;
 };
 
 class KoralonFlamingCinderSpreadTrigger : public Trigger
 {
 public:
-    KoralonFlamingCinderSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "koralon flaming cinder spread trigger") {}
+    KoralonFlamingCinderSpreadTrigger(PlayerbotAI* botAI) : Trigger(botAI, "koralon flaming cinder spread trigger") {}
     bool IsActive() override;
 };
 
@@ -113,14 +113,14 @@ public:
 class ToravonFreezingGroundTrigger : public Trigger
 {
 public:
-    ToravonFreezingGroundTrigger(PlayerbotAI* ai) : Trigger(ai, "toravon freezing ground trigger") {}
+    ToravonFreezingGroundTrigger(PlayerbotAI* botAI) : Trigger(botAI, "toravon freezing ground trigger") {}
     bool IsActive() override;
 };
 
 class ToravonFrozenOrbAvoidTrigger : public Trigger
 {
 public:
-    ToravonFrozenOrbAvoidTrigger(PlayerbotAI* ai) : Trigger(ai, "toravon frozen orb avoid trigger") {}
+    ToravonFrozenOrbAvoidTrigger(PlayerbotAI* botAI) : Trigger(botAI, "toravon frozen orb avoid trigger") {}
     bool IsActive() override;
 };
 

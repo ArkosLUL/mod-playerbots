@@ -10,7 +10,7 @@ class ThorimUnbalancingStrikeSwapTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim unbalancing strike swap trigger";
 
-    ThorimUnbalancingStrikeSwapTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimUnbalancingStrikeSwapTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -21,7 +21,7 @@ class ThorimTankPickupTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim tank pickup trigger";
 
-    ThorimTankPickupTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimTankPickupTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -30,7 +30,7 @@ class ThorimDpsPriorityTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim dps priority trigger";
 
-    ThorimDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimDpsPriorityTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -39,7 +39,7 @@ class ThorimGauntletPositioningTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim gauntlet positioning trigger";
 
-    ThorimGauntletPositioningTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimGauntletPositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -50,7 +50,7 @@ class ThorimBalconyAdvanceTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim balcony advance trigger";
 
-    ThorimBalconyAdvanceTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimBalconyAdvanceTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -59,7 +59,7 @@ class ThorimArenaPositioningTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim arena positioning trigger";
 
-    ThorimArenaPositioningTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimArenaPositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -68,7 +68,7 @@ class ThorimFallFromFloorTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim fall from floor trigger";
 
-    ThorimFallFromFloorTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimFallFromFloorTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -77,7 +77,7 @@ class ThorimPhase2PositioningTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim phase 2 positioning trigger";
 
-    ThorimPhase2PositioningTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimPhase2PositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -87,7 +87,7 @@ class ThorimRunicSmashTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim runic smash trigger";
 
-    ThorimRunicSmashTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimRunicSmashTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -96,7 +96,7 @@ class ThorimRunicBarrierBailTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim runic barrier bail trigger";
 
-    ThorimRunicBarrierBailTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimRunicBarrierBailTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -106,7 +106,7 @@ class ThorimChargedOrbTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim charged orb trigger";
 
-    ThorimChargedOrbTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimChargedOrbTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -119,7 +119,7 @@ class ThorimFrostAuraTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim frost aura trigger";
 
-    ThorimFrostAuraTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimFrostAuraTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -128,7 +128,7 @@ class ThorimPetLeashTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim pet leash trigger";
 
-    ThorimPetLeashTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimPetLeashTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -138,7 +138,7 @@ class ThorimArenaLeashTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim arena leash trigger";
 
-    ThorimArenaLeashTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimArenaLeashTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -147,7 +147,7 @@ class ThorimResetEncounterStateTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim reset encounter state trigger";
 
-    ThorimResetEncounterStateTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimResetEncounterStateTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -157,7 +157,7 @@ class ThorimSifBlizzardTrigger : public Trigger
 public:
     static constexpr char const* Name = "thorim sif blizzard trigger";
 
-    ThorimSifBlizzardTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    ThorimSifBlizzardTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

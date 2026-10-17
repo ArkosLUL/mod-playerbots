@@ -15,7 +15,7 @@
 class MimironTankAnchorGuardMultiplier : public Multiplier
 {
 public:
-    MimironTankAnchorGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron tank anchor guard") {}
+    MimironTankAnchorGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "mimiron tank anchor guard") {}
     float GetValue(Action* action) override;
 };
 
@@ -24,7 +24,7 @@ public:
 class MimironFireBotAoeGuardMultiplier : public Multiplier
 {
 public:
-    MimironFireBotAoeGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron fire bot aoe guard") {}
+    MimironFireBotAoeGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "mimiron fire bot aoe guard") {}
     float GetValue(Action* action) override;
 };
 
@@ -33,8 +33,8 @@ public:
 class MimironPlasmaDefensiveHoldMultiplier : public Multiplier
 {
 public:
-    MimironPlasmaDefensiveHoldMultiplier(PlayerbotAI* ai)
-        : Multiplier(ai, "mimiron plasma defensive hold") {}
+    MimironPlasmaDefensiveHoldMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "mimiron plasma defensive hold") {}
     float GetValue(Action* action) override;
 };
 

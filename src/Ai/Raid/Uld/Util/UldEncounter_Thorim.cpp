@@ -1015,7 +1015,7 @@ Unit* GetThorim(PlayerbotAI* botAI)
     if (!bot)
         return nullptr;
 
-    // Cached by guid: the sight list stops at AiPlayerbot.SightDistance, well short of the balcony.
+    // Cached by guid: the sight list stops at Playerbots.SightDistance, well short of the balcony.
     // ObjectAccessor has no range, so NearThorimEncounter is what bounds the callers.
     ThorimEncounterState& state = ThorimStateFor(bot);
     if (state.bossGuid)
@@ -1842,7 +1842,7 @@ bool ThorimArenaLeashBreached(PlayerbotAI* botAI, Player* bot)
 
     // Melee are the only ones with a reason to leave the pile, so they get the tighter radius and
     // everyone else keeps the box backstop, since their anchor already holds them at 10-14 yd.
-    bool const melee = !botAI->IsTank(bot) && !botAI->IsRanged(bot);
+    bool const melee = !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
     float const leash = melee ? ULDUAR_THORIM_ARENA_MELEE_LEASH : ULDUAR_THORIM_ARENA_LEASH_RADIUS;
 
     return distance > leash || !ThorimInArenaBox(bot);
@@ -1872,7 +1872,7 @@ bool ThorimArenaRingOrder(PlayerbotAI* botAI, Player* bot, size_t& slot, size_t&
             continue;
 
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (!memberAI || !memberAI->IsRanged(member) || memberAI->IsTank(member))
+        if (!memberAI || !PlayerbotAI::IsRanged(member) || PlayerbotAI::IsTank(member))
             continue;
 
         ringMembers.push_back(member);
@@ -1885,8 +1885,8 @@ bool ThorimArenaRingOrder(PlayerbotAI* botAI, Player* bot, size_t& slot, size_t&
     // to be told which slot is theirs.
     std::sort(ringMembers.begin(), ringMembers.end(), [](Player* left, Player* right)
     {
-        bool const leftDps = GET_PLAYERBOT_AI(left)->IsRangedDps(left);
-        bool const rightDps = GET_PLAYERBOT_AI(right)->IsRangedDps(right);
+        bool const leftDps = PlayerbotAI::IsRangedDps(left);
+        bool const rightDps = PlayerbotAI::IsRangedDps(right);
         if (leftDps != rightDps)
             return leftDps;
         return left->GetGUID() < right->GetGUID();
@@ -2013,11 +2013,11 @@ bool GetThorimArenaAnchor(PlayerbotAI* botAI, Player* bot, Position& out)
     if (boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
         return false;
 
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
     {
         out = ULDUAR_THORIM_NEAR_ARENA_CENTER;
     }
-    else if (botAI->IsRanged(bot))
+    else if (PlayerbotAI::IsRanged(bot))
     {
         if (!GetThorimArenaRingSlot(botAI, bot, out))
             return false;

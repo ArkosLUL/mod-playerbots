@@ -525,7 +525,7 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
     if (!hasBomb)
     {
         // Tanks stay put for Searing Light: dragging XT or dropping the Pummeller costs more than the splash.
-        if (botAI->IsTank(bot))
+        if (PlayerbotAI::IsTank(bot))
             return false;
 
         return MoveToSearingLightSpot(heartbreak);
@@ -568,7 +568,7 @@ bool XT002AvoidHazardAction::Execute(Event /*event*/)
             continue;
 
         // Ranged already stand outside the blast, so pulling them out too would only break their casts.
-        if (unit->GetEntry() == PB_NPC_XT002_BOOMBOT && botAI->IsMelee(bot))
+        if (unit->GetEntry() == PB_NPC_XT002_BOOMBOT && PlayerbotAI::IsMelee(bot))
             hazards.emplace_back(unit, ULDUAR_XT002_BOOMBOT_AVOID_RADIUS);
         // Margin over the trigger's radius: FindNearestCreature subtracts both object sizes and MoveClearOf scores
         // centre to centre capped at zero, so in that gap the trigger fires while nothing beats standing still.
@@ -630,7 +630,7 @@ Player* XT002RedirectThreatAction::GetRedirectTank(Unit* xt002)
                 if (!member || !member->IsAlive() || member == bot)
                     continue;
 
-                if (botAI->IsTank(member) && member == victim)
+                if (PlayerbotAI::IsTank(member) && member == victim)
                     return member;
             }
         }
@@ -670,7 +670,7 @@ bool XT002RedirectThreatAction::Execute(Event /*event*/)
 
 bool XT002RaidPositionAction::Execute(Event /*event*/)
 {
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         if (bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) <= ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE)
             return false;
@@ -702,9 +702,9 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
 
     // How far this bot will travel for an add. Tanks are exempt because this runs over their list too,
     // and the off-tank is supposed to walk to the Pummeller.
-    float const reach = botAI->IsMelee(bot) ? ULDUAR_XT002_MELEE_ENGAGE_RANGE
+    float const reach = PlayerbotAI::IsMelee(bot) ? ULDUAR_XT002_MELEE_ENGAGE_RANGE
                                             : ULDUAR_XT002_RANGED_ENGAGE_RANGE;
-    bool const inReach = botAI->IsTank(bot) || unit->GetExactDist2d(bot) <= reach;
+    bool const inReach = PlayerbotAI::IsTank(bot) || unit->GetExactDist2d(bot) <= reach;
 
     switch (unit->GetEntry())
     {
@@ -720,7 +720,7 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
         case PB_NPC_XT002_BOOMBOT:
             // Melee must never pick one up, and ranged only from outside the blast: closer than that
             // the avoid action should be moving the bot, not this one holding it in place.
-            return !botAI->IsMelee(bot) && unit->GetExactDist2d(bot) >= ULDUAR_XT002_BOOMBOT_AVOID_RADIUS &&
+            return !PlayerbotAI::IsMelee(bot) && unit->GetExactDist2d(bot) >= ULDUAR_XT002_BOOMBOT_AVOID_RADIUS &&
                    inReach && IsXT002AddEngageable(xt002, unit);
 
         case NPC_HEART_OF_DECONSTRUCTOR:
@@ -825,13 +825,13 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
 
     // A tank is only ever handed the boss. The generic smart tank targeting ranks every add the tank
     // has no aggro on above XT, so a tank left on it walks into the add pile and the boss follows.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
     {
         std::vector<std::pair<uint32, Unit*>> tankPriority;
 
         // Taunt reaches 30 yd and the toy piles are 80 yd out, so the add comes to the tank on XT. Only a tank with
         // someone else on the boss chases it.
-        if (IsXT002PummellerTank(botAI, bot) && botAI->GetGroupTankNum(bot) > 1)
+        if (IsXT002PummellerTank(botAI, bot) && PlayerbotAI::GetGroupTankNum(bot) > 1)
             tankPriority.emplace_back(PB_NPC_XT002_PUMMELLER,
                                       SelectByEntry(currentTarget, PB_NPC_XT002_PUMMELLER, pummellers));
 
@@ -855,7 +855,7 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
     priority.emplace_back(PB_NPC_XT002_LIFE_SPARK,
                           SelectByEntry(currentTarget, PB_NPC_XT002_LIFE_SPARK, lifeSparks));
     priority.emplace_back(NPC_XS013_SCRAPBOT, SelectByEntry(currentTarget, NPC_XS013_SCRAPBOT, scrapbots));
-    if (!botAI->IsMelee(bot))
+    if (!PlayerbotAI::IsMelee(bot))
         priority.emplace_back(PB_NPC_XT002_BOOMBOT,
                               SelectByEntry(currentTarget, PB_NPC_XT002_BOOMBOT, boombots));
     priority.emplace_back(PB_NPC_XT002_PUMMELLER,
@@ -921,7 +921,7 @@ bool XT002SetDpsPriorityAction::Execute(Event /*event*/)
     // Returning false once the bot is already on the right target is what lets the lower-priority
     // nodes run at all: the engine ends the tick at the first action that succeeds.
     bool needsAttack = currentTarget != target;
-    if (botAI->IsMelee(bot))
+    if (PlayerbotAI::IsMelee(bot))
         needsAttack = needsAttack || !bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
 
     return needsAttack ? Attack(target) : false;

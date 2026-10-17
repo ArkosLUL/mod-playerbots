@@ -24,7 +24,7 @@ constexpr uint32 SPELL_MISDIRECTION_PROC = 35079;
 class RaidRedirectThreatAction : public AttackAction
 {
 public:
-    RaidRedirectThreatAction(PlayerbotAI* ai, std::string const name) : AttackAction(ai, name) {}
+    RaidRedirectThreatAction(PlayerbotAI* botAI, std::string const name) : AttackAction(botAI, name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

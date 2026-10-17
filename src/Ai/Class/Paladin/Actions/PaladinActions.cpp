@@ -21,7 +21,7 @@ static bool IsBlessingTargetCandidate(Player* bot, Player* player)
     if (player->IsGameMaster())
         return false;
 
-    return bot->GetDistance(player) < sPlayerbotAIConfig.spellDistance * 2 &&
+    return bot->GetDistance(player) < sPlayerbotAIConfig.SpellDistance * 2 &&
            bot->IsWithinLOS(player->GetPositionX(), player->GetPositionY(),
                             player->GetPositionZ());
 }
@@ -60,9 +60,9 @@ static Unit* FindBlessingTarget(
 
         if (player == master)
             masters.push_back(player);
-        else if (botAI->IsHeal(player))
+        else if (PlayerbotAI::IsHeal(player))
             healers.push_back(player);
-        else if (botAI->IsTank(player))
+        else if (PlayerbotAI::IsTank(player))
             tanks.push_back(player);
         else
             others.push_back(player);
@@ -102,7 +102,9 @@ static inline bool IsTankRole(Player* player)
 
     if (PlayerbotAI* otherAI = GET_PLAYERBOT_AI(player))
     {
-        if (otherAI->HasStrategy("tank", BOT_STATE_NON_COMBAT) ||
+        if (otherAI->HasStrategy("prot", BOT_STATE_NON_COMBAT) ||
+            otherAI->HasStrategy("prot", BOT_STATE_COMBAT)     ||
+            otherAI->HasStrategy("tank", BOT_STATE_NON_COMBAT) ||
             otherAI->HasStrategy("tank", BOT_STATE_COMBAT)     ||
             otherAI->HasStrategy("tank face", BOT_STATE_NON_COMBAT) ||
             otherAI->HasStrategy("tank face", BOT_STATE_COMBAT)     ||
@@ -603,11 +605,11 @@ bool CastDivinePleaAction::isUseful()
         return false;
 
     // Unglyphed Divine Plea costs 50% healing done for 15s, which is most of a raid damage window.
-    if (!botAI->IsHeal(bot) || bot->HasAura(ai::paladin::SPELL_GLYPH_DIVINE_PLEA))
+    if (!PlayerbotAI::IsHeal(bot) || bot->HasAura(ai::paladin::SPELL_GLYPH_DIVINE_PLEA))
         return true;
 
     // Nearly out of mana beats the penalty - a healer with an empty bar heals nothing at all.
-    if (AI_VALUE2(uint8, "mana", "self target") < sPlayerbotAIConfig.lowMana)
+    if (AI_VALUE2(uint8, "mana", "self target") < sPlayerbotAIConfig.LowMana)
         return true;
 
     return AI_VALUE2(uint8, "aoe heal", "medium") == 0;
@@ -618,14 +620,14 @@ bool CastDivineIlluminationAction::isUseful()
     if (!CastBuffSpellAction::isUseful())
         return false;
 
-    if (!botAI->IsHeal(bot))
+    if (!PlayerbotAI::IsHeal(bot))
         return true;
 
     // Both are 3 minute cooldowns, so they realign every use: spending the -50% cost window while
     // Avenging Wrath is up is where it returns the most healing per point of mana. On its own it
     // only comes out when the bar is nearly empty anyway.
     return botAI->HasAura("avenging wrath", bot) ||
-           AI_VALUE2(uint8, "mana", "self target") < sPlayerbotAIConfig.lowMana;
+           AI_VALUE2(uint8, "mana", "self target") < sPlayerbotAIConfig.LowMana;
 }
 
 bool CastHandOfSacrificeOnPartyAction::isUseful()

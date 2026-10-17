@@ -29,7 +29,7 @@ bool HodirTauntSuicide(PlayerbotAI* botAI)
     return IsHodirEngaged(botAI) && HodirTauntWouldBeSuicide(botAI, botAI->GetBot());
 }
 
-bool HodirOwnsTargets(PlayerbotAI* botAI) { return IsHodirEngaged(botAI) && !botAI->IsHeal(botAI->GetBot()); }
+bool HodirOwnsTargets(PlayerbotAI* botAI) { return IsHodirEngaged(botAI) && !PlayerbotAI::IsHeal(botAI->GetBot()); }
 
 bool HodirFreezeRun(PlayerbotAI* botAI) { return IsHodirEngaged(botAI) && IsHodirFlashFreezeIncoming(botAI); }
 
@@ -48,7 +48,7 @@ bool HodirFreezeRunOutsideShelter(PlayerbotAI* botAI)
 bool HodirIcicleInPath(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (!IsHodirEngaged(botAI) || botAI->IsTank(bot) || botAI->IsHeal(bot))
+    if (!IsHodirEngaged(botAI) || PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot))
         return false;
 
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
@@ -63,7 +63,7 @@ bool HodirAnchored(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     return IsHodirEngaged(botAI) &&
-           (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0, true) || botAI->IsRanged(bot));
+           (PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true) || PlayerbotAI::IsRanged(bot));
 }
 
 bool HodirResistancePaladin(PlayerbotAI* botAI)

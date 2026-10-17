@@ -235,7 +235,7 @@ struct FreyaWaveState
 void GatherFreyaWaveState(PlayerbotAI* botAI, FreyaWaveState& state);
 
 // Per-bot cache for lookups every Freya node repeats each tick. Keyed on getMSTime(), holds guids so a despawn
-// drops out. Never across ticks: a queued action can run up to AiPlayerbot.ExpireActionTime later.
+// drops out. Never across ticks: a queued action can run up to Playerbots.ExpireActionTime later.
 class FreyaScan
 {
 public:

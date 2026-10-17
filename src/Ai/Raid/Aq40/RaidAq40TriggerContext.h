@@ -32,24 +32,24 @@ public:
     }
 
 private:
-    static Trigger* viscidus_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "viscidus"); }
-    static Trigger* huhuran_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "princess huhuran"); }
-    // static Trigger* has_emperor_aggro(PlayerbotAI* ai) { return new Aq40HasEmperorAggroTrigger(ai); }
-    // static Trigger* warlock_tank_emperor(PlayerbotAI* ai) { return new Aq40WarlockTankEmperorTrigger(ai); }
-    static Trigger* mage_frostbolt_viscidus(PlayerbotAI* ai) { return new Aq40MageFrostboltViscidusTrigger(ai); }
-    static Trigger* melee_viscidus(PlayerbotAI* ai) { return new Aq40MeleeViscidusTrigger(ai); }
-    // static Trigger* target_emperor_veklor(PlayerbotAI* ai) { return new Aq40TargetEmperorVekLorTrigger(ai); }
-    // static Trigger* target_emperor_veknilash(PlayerbotAI* ai) { return new Aq40TargetEmperorVekNilashTrigger(ai); }
-    // static Trigger* target_emperor_pests(PlayerbotAI* ai) { return new Aq40TargetEmperorPestsTrigger(ai); }
-    // static Trigger* approach_emperor_veklor(PlayerbotAI* ai) { return new Aq40ApproachEmperorVekLorTrigger(ai); }
-    // static Trigger* approach_emperor_veknilash(PlayerbotAI* ai) { return new Aq40ApproachEmperorVekNilashTrigger(ai); }
-    // static Trigger* tank_anchor(PlayerbotAI* ai) { return new Aq40TankAnchorTrigger(ai); }
-    // static Trigger* center_position(PlayerbotAI* ai) { return new Aq40CenterPositionTrigger(ai); }
-    // static Trigger* emperor_pre_teleport(PlayerbotAI* ai) { return new Aq40EmperorPreTeleportTrigger(ai); }
-    // static Trigger* near_veklor(PlayerbotAI* ai) { return new Aq40NearVeklorTrigger(ai); }
-    static Trigger* ouro_burrowed(PlayerbotAI* ai) { return new Aq40OuroBurrowedTrigger(ai); }
-    static Trigger* cthun1_started(PlayerbotAI* ai) { return new Aq40Cthun1StartedTrigger(ai); }
-    static Trigger* cthun2_started(PlayerbotAI* ai) { return new Aq40Cthun2StartedTrigger(ai); }
+    static Trigger* viscidus_nature_resistance_trigger(PlayerbotAI* botAI) { return new BossNatureResistanceTrigger(botAI, "viscidus"); }
+    static Trigger* huhuran_nature_resistance_trigger(PlayerbotAI* botAI) { return new BossNatureResistanceTrigger(botAI, "princess huhuran"); }
+    // static Trigger* has_emperor_aggro(PlayerbotAI* botAI) { return new Aq40HasEmperorAggroTrigger(botAI); }
+    // static Trigger* warlock_tank_emperor(PlayerbotAI* botAI) { return new Aq40WarlockTankEmperorTrigger(botAI); }
+    static Trigger* mage_frostbolt_viscidus(PlayerbotAI* botAI) { return new Aq40MageFrostboltViscidusTrigger(botAI); }
+    static Trigger* melee_viscidus(PlayerbotAI* botAI) { return new Aq40MeleeViscidusTrigger(botAI); }
+    // static Trigger* target_emperor_veklor(PlayerbotAI* botAI) { return new Aq40TargetEmperorVekLorTrigger(botAI); }
+    // static Trigger* target_emperor_veknilash(PlayerbotAI* botAI) { return new Aq40TargetEmperorVekNilashTrigger(botAI); }
+    // static Trigger* target_emperor_pests(PlayerbotAI* botAI) { return new Aq40TargetEmperorPestsTrigger(botAI); }
+    // static Trigger* approach_emperor_veklor(PlayerbotAI* botAI) { return new Aq40ApproachEmperorVekLorTrigger(botAI); }
+    // static Trigger* approach_emperor_veknilash(PlayerbotAI* botAI) { return new Aq40ApproachEmperorVekNilashTrigger(botAI); }
+    // static Trigger* tank_anchor(PlayerbotAI* botAI) { return new Aq40TankAnchorTrigger(botAI); }
+    // static Trigger* center_position(PlayerbotAI* botAI) { return new Aq40CenterPositionTrigger(botAI); }
+    // static Trigger* emperor_pre_teleport(PlayerbotAI* botAI) { return new Aq40EmperorPreTeleportTrigger(botAI); }
+    // static Trigger* near_veklor(PlayerbotAI* botAI) { return new Aq40NearVeklorTrigger(botAI); }
+    static Trigger* ouro_burrowed(PlayerbotAI* botAI) { return new Aq40OuroBurrowedTrigger(botAI); }
+    static Trigger* cthun1_started(PlayerbotAI* botAI) { return new Aq40Cthun1StartedTrigger(botAI); }
+    static Trigger* cthun2_started(PlayerbotAI* botAI) { return new Aq40Cthun2StartedTrigger(botAI); }
 };
 
 #endif

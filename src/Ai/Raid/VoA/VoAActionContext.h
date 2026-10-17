@@ -42,27 +42,27 @@ public:
     }
 
 private:
-    static Action* emalon_mark_boss_action(PlayerbotAI* ai) { return new BossMarkSkullAction(ai, "emalon the storm watcher"); }
-    static Action* emalon_lighting_nova_action(PlayerbotAI* ai) { return new EmalonLightingNovaAction(ai); }
-    static Action* emalon_overcharge_action(PlayerbotAI* ai) { return new EmalonOverchargeAction(ai); }
-    static Action* emalon_fall_from_floor_action(PlayerbotAI* ai) { return new EmalonFallFromFloorAction(ai); }
-    static Action* emalon_main_tank_hold_action(PlayerbotAI* ai) { return new EmalonMainTankHoldAction(ai); }
-    static Action* emalon_ring_hold_action(PlayerbotAI* ai) { return new EmalonRingHoldAction(ai); }
-    static Action* emalon_offtank_hold_action(PlayerbotAI* ai) { return new EmalonOffTankHoldAction(ai); }
-    static Action* emalon_attack_priority_action(PlayerbotAI* ai) { return new EmalonAttackPriorityAction(ai); }
-    static Action* emalon_redirect_threat_action(PlayerbotAI* ai) { return new EmalonRedirectThreatAction(ai); }
-    static Action* emalon_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "emalon the storm watcher"); }
-    static Action* koralon_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "koralon the flame watcher"); }
-    static Action* archavon_mark_boss_action(PlayerbotAI* ai) { return new BossMarkSkullAction(ai, "archavon the stone watcher"); }
-    static Action* archavon_rock_shards_spread_action(PlayerbotAI* ai) { return new ArchavonRockShardsSpreadAction(ai); }
-    static Action* archavon_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "archavon the stone watcher"); }
-    static Action* koralon_mark_boss_action(PlayerbotAI* ai) { return new BossMarkSkullAction(ai, "koralon the flame watcher"); }
-    static Action* koralon_burning_breath_action(PlayerbotAI* ai) { return new KoralonBurningBreathAction(ai); }
-    static Action* koralon_flaming_cinder_spread_action(PlayerbotAI* ai) { return new KoralonFlamingCinderSpreadAction(ai); }
-    static Action* toravon_mark_boss_action(PlayerbotAI* ai) { return new BossMarkSkullAction(ai, "toravon the ice watcher"); }
-    static Action* toravon_frost_resistance_action(PlayerbotAI* ai) { return new BossFrostResistanceAction(ai, "toravon the ice watcher"); }
-    static Action* toravon_freezing_ground_action(PlayerbotAI* ai) { return new ToravonFreezingGroundAction(ai); }
-    static Action* toravon_frozen_orb_avoid_action(PlayerbotAI* ai) { return new ToravonFrozenOrbAvoidAction(ai); }
+    static Action* emalon_mark_boss_action(PlayerbotAI* botAI) { return new BossMarkSkullAction(botAI, "emalon the storm watcher"); }
+    static Action* emalon_lighting_nova_action(PlayerbotAI* botAI) { return new EmalonLightingNovaAction(botAI); }
+    static Action* emalon_overcharge_action(PlayerbotAI* botAI) { return new EmalonOverchargeAction(botAI); }
+    static Action* emalon_fall_from_floor_action(PlayerbotAI* botAI) { return new EmalonFallFromFloorAction(botAI); }
+    static Action* emalon_main_tank_hold_action(PlayerbotAI* botAI) { return new EmalonMainTankHoldAction(botAI); }
+    static Action* emalon_ring_hold_action(PlayerbotAI* botAI) { return new EmalonRingHoldAction(botAI); }
+    static Action* emalon_offtank_hold_action(PlayerbotAI* botAI) { return new EmalonOffTankHoldAction(botAI); }
+    static Action* emalon_attack_priority_action(PlayerbotAI* botAI) { return new EmalonAttackPriorityAction(botAI); }
+    static Action* emalon_redirect_threat_action(PlayerbotAI* botAI) { return new EmalonRedirectThreatAction(botAI); }
+    static Action* emalon_nature_resistance_action(PlayerbotAI* botAI) { return new BossNatureResistanceAction(botAI, "emalon the storm watcher"); }
+    static Action* koralon_fire_resistance_action(PlayerbotAI* botAI) { return new BossFireResistanceAction(botAI, "koralon the flame watcher"); }
+    static Action* archavon_mark_boss_action(PlayerbotAI* botAI) { return new BossMarkSkullAction(botAI, "archavon the stone watcher"); }
+    static Action* archavon_rock_shards_spread_action(PlayerbotAI* botAI) { return new ArchavonRockShardsSpreadAction(botAI); }
+    static Action* archavon_nature_resistance_action(PlayerbotAI* botAI) { return new BossNatureResistanceAction(botAI, "archavon the stone watcher"); }
+    static Action* koralon_mark_boss_action(PlayerbotAI* botAI) { return new BossMarkSkullAction(botAI, "koralon the flame watcher"); }
+    static Action* koralon_burning_breath_action(PlayerbotAI* botAI) { return new KoralonBurningBreathAction(botAI); }
+    static Action* koralon_flaming_cinder_spread_action(PlayerbotAI* botAI) { return new KoralonFlamingCinderSpreadAction(botAI); }
+    static Action* toravon_mark_boss_action(PlayerbotAI* botAI) { return new BossMarkSkullAction(botAI, "toravon the ice watcher"); }
+    static Action* toravon_frost_resistance_action(PlayerbotAI* botAI) { return new BossFrostResistanceAction(botAI, "toravon the ice watcher"); }
+    static Action* toravon_freezing_ground_action(PlayerbotAI* botAI) { return new ToravonFreezingGroundAction(botAI); }
+    static Action* toravon_frozen_orb_avoid_action(PlayerbotAI* botAI) { return new ToravonFrozenOrbAvoidAction(botAI); }
 };
 
 #endif

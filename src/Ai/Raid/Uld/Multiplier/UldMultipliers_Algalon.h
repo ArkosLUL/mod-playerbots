@@ -17,7 +17,7 @@
 class AlgalonTargetGuardMultiplier : public Multiplier
 {
 public:
-    AlgalonTargetGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon target guard") {}
+    AlgalonTargetGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "algalon target guard") {}
     float GetValue(Action* action) override;
 
 private:
@@ -32,7 +32,7 @@ private:
 class AlgalonCooldownReserveMultiplier : public Multiplier
 {
 public:
-    AlgalonCooldownReserveMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon cooldown reserve") {}
+    AlgalonCooldownReserveMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "algalon cooldown reserve") {}
     float GetValue(Action* action) override;
 
 private:
@@ -57,7 +57,7 @@ private:
 class AlgalonHideCastMultiplier : public Multiplier
 {
 public:
-    AlgalonHideCastMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon hide cast") {}
+    AlgalonHideCastMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "algalon hide cast") {}
     float GetValue(Action* action) override;
 
 private:
@@ -69,7 +69,7 @@ private:
 class AlgalonTankHealerMultiplier : public Multiplier
 {
 public:
-    AlgalonTankHealerMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon tank healer focus") {}
+    AlgalonTankHealerMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "algalon tank healer focus") {}
     float GetValue(Action* action) override;
 
 private:
@@ -88,7 +88,7 @@ private:
 class AlgalonSplashHoldMultiplier : public Multiplier
 {
 public:
-    AlgalonSplashHoldMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon splash hold") {}
+    AlgalonSplashHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "algalon splash hold") {}
     float GetValue(Action* action) override;
 
 private:
@@ -111,7 +111,7 @@ private:
 class AlgalonWalkGuardMultiplier : public Multiplier
 {
 public:
-    AlgalonWalkGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon walk guard") {}
+    AlgalonWalkGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "algalon walk guard") {}
     float GetValue(Action* action) override;
 };
 
@@ -120,7 +120,7 @@ public:
 class AlgalonLeaveFieldMultiplier : public Multiplier
 {
 public:
-    AlgalonLeaveFieldMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon leave field") {}
+    AlgalonLeaveFieldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "algalon leave field") {}
     float GetValue(Action* action) override;
 };
 

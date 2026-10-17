@@ -37,7 +37,7 @@ bool IronAssemblyOverloadTrigger::IsActive()
 {
     // Tanks hold through it: 20,000 nature is survivable in plate, and leaving costs uptime and lets
     // Brundir drift toward the raid.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
@@ -152,7 +152,7 @@ bool IronAssemblyRuneOfPowerSoakTrigger::IsActive()
 bool IronAssemblySetDpsPriorityTrigger::IsActive()
 {
     // Tanks have their own assignment node; this one owns every other target in the fight.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     if (!IronAssemblyFormationActive(botAI))

@@ -15,7 +15,7 @@ using namespace OsHelpers;
 float SartharionMainTankTargetMultiplier::GetValue(Action* action)
 {
     SartharionSnapshot const& state = SartharionSnapshotFor(botAI);
-    if (!state.encounterActive || !botAI->IsMainTank(bot))
+    if (!state.encounterActive || !PlayerbotAI::IsMainTank(bot))
         return 1.0f;
 
     Unit* target = action->GetTarget();
@@ -25,7 +25,7 @@ float SartharionMainTankTargetMultiplier::GetValue(Action* action)
 float SartharionOffTankBossMultiplier::GetValue(Action* action)
 {
     SartharionSnapshot const& state = SartharionSnapshotFor(botAI);
-    if (!state.encounterActive || !botAI->IsAssistTank(bot))
+    if (!state.encounterActive || !PlayerbotAI::IsAssistTank(bot))
         return 1.0f;
 
     Unit* target = action->GetTarget();
@@ -48,7 +48,7 @@ float SartharionBossReachMultiplier::GetValue(Action* action)
     if (!state.encounterActive || !state.boss)
         return 1.0f;
 
-    if (!botAI->IsRanged(bot) && !botAI->IsHeal(bot) && !IsOffTank(bot))
+    if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot) && !IsOffTank(bot))
         return 1.0f;
 
     return action->GetTarget() == state.boss ? 0.0f : 1.0f;

@@ -26,7 +26,7 @@ constexpr uint8 SKULL_ICON = 7;
 bool EmalonMarkBossTrigger::IsActive()
 {
     // Only tank bot can mark target
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     Unit* boss = GetEmalon(bot);
@@ -51,7 +51,7 @@ bool EmalonLightingNovaTrigger::IsActive()
         return false;
 
     // The main tank eats it by definition, and the off-tank is already 34yd out on his camp.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     // Deliberately not gated on standing inside the radius. This trigger also drives the movement
@@ -66,7 +66,7 @@ bool EmalonLightingNovaTrigger::IsActive()
 bool EmalonOverchargeTrigger::IsActive()
 {
     // Only tank bot can mark target
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     if (!GetEmalon(bot))
@@ -94,7 +94,7 @@ bool EmalonFallFromFloorTrigger::IsActive()
 
 bool EmalonMainTankHoldTrigger::IsActive()
 {
-    return botAI->IsMainTank(bot) && EmalonEncounterActive(bot);
+    return PlayerbotAI::IsMainTank(bot) && EmalonEncounterActive(bot);
 }
 
 bool EmalonRingHoldTrigger::IsActive()
@@ -102,10 +102,10 @@ bool EmalonRingHoldTrigger::IsActive()
     if (!EmalonEncounterActive(bot))
         return false;
 
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
-    return botAI->IsHeal(bot) || botAI->IsRanged(bot);
+    return PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot);
 }
 
 bool EmalonOffTankHoldTrigger::IsActive()
@@ -118,7 +118,7 @@ bool EmalonOffTankHoldTrigger::IsActive()
 
 bool EmalonAttackPriorityTrigger::IsActive()
 {
-    return botAI->IsDps(bot) && EmalonEncounterActive(bot);
+    return PlayerbotAI::IsDps(bot) && EmalonEncounterActive(bot);
 }
 
 bool EmalonRedirectThreatTrigger::IsActive()
@@ -139,7 +139,7 @@ bool EmalonRedirectThreatTrigger::IsActive()
 bool ArchavonRockShardsSpreadTrigger::IsActive()
 {
     // Only ranged bots spread; melee stay stacked on the boss
-    if (!botAI->IsRanged(bot))
+    if (!PlayerbotAI::IsRanged(bot))
     {
         return false;
     }
@@ -163,7 +163,7 @@ bool ArchavonRockShardsSpreadTrigger::IsActive()
 bool KoralonBurningBreathTrigger::IsActive()
 {
     // Tanks hold the boss and stay in the cone; only non-tanks need to clear it
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
     {
         return false;
     }
@@ -197,7 +197,7 @@ bool KoralonBurningBreathTrigger::IsActive()
 bool KoralonFlamingCinderSpreadTrigger::IsActive()
 {
     // Only ranged bots spread; melee stay stacked on the boss
-    if (!botAI->IsRanged(bot))
+    if (!PlayerbotAI::IsRanged(bot))
     {
         return false;
     }

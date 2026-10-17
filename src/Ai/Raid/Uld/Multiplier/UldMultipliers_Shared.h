@@ -15,7 +15,7 @@
 class UldThreatRedirectMultiplier : public Multiplier
 {
 public:
-    UldThreatRedirectMultiplier(PlayerbotAI* ai) : Multiplier(ai, "uld threat redirect") {}
+    UldThreatRedirectMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "uld threat redirect") {}
     float GetValue(Action* action) override;
 };
 
@@ -24,7 +24,7 @@ public:
 class UlduarBurstWindowMultiplier : public Multiplier
 {
 public:
-    UlduarBurstWindowMultiplier(PlayerbotAI* ai) : Multiplier(ai, "ulduar burst window") {}
+    UlduarBurstWindowMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "ulduar burst window") {}
     float GetValue(Action* action) override;
 
 private:

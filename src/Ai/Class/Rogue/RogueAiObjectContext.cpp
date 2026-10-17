@@ -9,6 +9,7 @@
 #include "AssassinationRogueStrategy.h"
 #include "CombatRogueStrategy.h"
 #include "GenericRogueNonCombatStrategy.h"
+#include "GenericRogueStrategy.h"
 #include "NamedObjectContext.h"
 #include "Playerbots.h"
 #include "PullStrategy.h"
@@ -127,11 +128,11 @@ private:
     {
         return new TricksOfTheTradeOnMainTankTrigger(botAI);
     }
-    static Trigger* tricks_of_the_trade_on_main_tank_and_light_aoe(PlayerbotAI* ai)
+    static Trigger* tricks_of_the_trade_on_main_tank_and_light_aoe(PlayerbotAI* botAI)
     {
-        return new TwoTriggers(ai, "tricks of the trade on main tank", "light aoe");
+        return new TwoTriggers(botAI, "tricks of the trade on main tank", "light aoe");
     }
-    static Trigger* tricks_of_the_trade(PlayerbotAI* ai) { return new TricksOfTheTradeTrigger(ai); }
+    static Trigger* tricks_of_the_trade(PlayerbotAI* botAI) { return new TricksOfTheTradeTrigger(botAI); }
 };
 
 class RogueAiObjectContextInternal : public NamedObjectContext<Action>
@@ -267,7 +268,7 @@ public:
     }
 
 private:
-    static UntypedValue* tricks_of_the_trade_target(PlayerbotAI* ai) { return new TricksOfTheTradeTargetValue(ai); }
+    static UntypedValue* tricks_of_the_trade_target(PlayerbotAI* botAI) { return new TricksOfTheTradeTargetValue(botAI); }
 };
 
 SharedNamedObjectContextList<Strategy> RogueAiObjectContext::sharedStrategyContexts;

@@ -47,7 +47,7 @@ Unit* SeedOfCorruptionTargetValue::Calculate()
 {
     GuidVector const attackers = AI_VALUE(GuidVector, "attackers");
     GuidSet const dynamicExclusions =
-        GatherStrategyTargetExclusions(botAI, TargetValueExclusionType::Attacker, attackers);
+        GatherStrategyTargetExclusions(botAI, TargetValueExclusionType::DebuffTarget, attackers);
     float const range = botAI->GetRange("spell");
 
     Unit* clean = nullptr;

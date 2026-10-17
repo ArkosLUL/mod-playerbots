@@ -44,7 +44,7 @@ bool HeiganDanceMeleeAction::Execute(Event event)
     }
 
     // A main tank who lost the boss has a bigger problem than the dance; let the threat actions run.
-    if (!helper.IsFastDance() && botAI->IsMainTank(bot) && !AI_VALUE2(bool, "has aggro", "boss target"))
+    if (!helper.IsFastDance() && PlayerbotAI::IsMainTank(bot) && !AI_VALUE2(bool, "has aggro", "boss target"))
     {
         return false;
     }
@@ -54,7 +54,7 @@ bool HeiganDanceMeleeAction::Execute(Event event)
         // No clock, so no safe zone to step to. Wait it out on the ledge rather than hand the bot
         // back to normal combat AI in a room that erupts every 10s. The main tank cannot leave -
         // dragging Heigan up the ramp would evade the encounter.
-        if (botAI->IsMainTank(bot) || !helper.ShouldHoldLedge())
+        if (PlayerbotAI::IsMainTank(bot) || !helper.ShouldHoldLedge())
         {
             return false;
         }
@@ -63,7 +63,7 @@ bool HeiganDanceMeleeAction::Execute(Event event)
 
     // Everyone but the tank settles a few yards off the waypoint centre, otherwise the whole melee
     // group stacks on one point and never gets close enough to swing.
-    return MoveToSafeZone(botAI->IsMainTank(bot) ? MainTankSafeZoneSpread : SafeZoneSpread);
+    return MoveToSafeZone(PlayerbotAI::IsMainTank(bot) ? MainTankSafeZoneSpread : SafeZoneSpread);
 }
 
 bool HeiganDanceRangedAction::Execute(Event event)
@@ -118,7 +118,7 @@ Unit* HeiganDispelDecrepitFeverAction::GetDecrepitFeverTarget() const
         if (!bot->IsWithinDistInMap(member, botAI->GetRange("heal")))
             continue;
 
-        if (botAI->IsMainTank(member))
+        if (PlayerbotAI::IsMainTank(member))
             return member;
 
         // Keep first match as fallback.

@@ -14,7 +14,7 @@
 class HeiganDanceMultiplier : public Multiplier
 {
 public:
-    HeiganDanceMultiplier(PlayerbotAI* ai) : Multiplier(ai, "heigan dance"), helper(ai) {}
+    HeiganDanceMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "heigan dance"), helper(botAI) {}
 
 public:
     float GetValue(Action* action) override;
@@ -29,7 +29,7 @@ private:
 class LoathebGenericMultiplier : public Multiplier
 {
 public:
-    LoathebGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "loatheb generic") {}
+    LoathebGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "loatheb generic") {}
 
 public:
     float GetValue(Action* action) override;
@@ -38,7 +38,7 @@ public:
 class ThaddiusPrepullMultiplier : public Multiplier
 {
 public:
-    ThaddiusPrepullMultiplier(PlayerbotAI* ai) : Multiplier(ai, "thaddius prepull"), helper(ai) {}
+    ThaddiusPrepullMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "thaddius prepull"), helper(botAI) {}
 
 public:
     float GetValue(Action* action) override;
@@ -50,7 +50,7 @@ private:
 class ThaddiusGenericMultiplier : public Multiplier
 {
 public:
-    ThaddiusGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "thaddius generic"), helper(ai) {}
+    ThaddiusGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "thaddius generic"), helper(botAI) {}
 
 public:
     float GetValue(Action* action) override;
@@ -62,7 +62,7 @@ private:
 class SapphironGenericMultiplier : public Multiplier
 {
 public:
-    SapphironGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sapphiron generic"), helper(ai) {}
+    SapphironGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "sapphiron generic"), helper(botAI) {}
 
     float GetValue(Action* action) override;
 
@@ -73,7 +73,7 @@ private:
 class InstructorRazuviousGenericMultiplier : public Multiplier
 {
 public:
-    InstructorRazuviousGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "instructor razuvious generic"), helper(ai) {}
+    InstructorRazuviousGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "instructor razuvious generic"), helper(botAI) {}
     float GetValue(Action* action) override;
 
 private:
@@ -83,7 +83,7 @@ private:
 class KelthuzadGenericMultiplier : public Multiplier
 {
 public:
-    KelthuzadGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "kelthuzad generic"), helper(ai) {}
+    KelthuzadGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "kelthuzad generic"), helper(botAI) {}
     float GetValue(Action* action) override;
 
 private:
@@ -93,7 +93,7 @@ private:
 class AnubrekhanGenericMultiplier : public Multiplier
 {
 public:
-    AnubrekhanGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "anubrekhan generic"), helper(ai) {}
+    AnubrekhanGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubrekhan generic"), helper(botAI) {}
 
 public:
     float GetValue(Action* action) override;
@@ -105,7 +105,7 @@ private:
 class FourhorsemanGenericMultiplier : public Multiplier
 {
 public:
-    FourhorsemanGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "fourhorseman generic") {}
+    FourhorsemanGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "fourhorseman generic") {}
 
 public:
     float GetValue(Action* action) override;
@@ -114,7 +114,7 @@ public:
 class GothikGenericMultiplier : public Multiplier
 {
 public:
-    GothikGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "gothik generic"), helper(ai) {}
+    GothikGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "gothik generic"), helper(botAI) {}
     float GetValue(Action* action) override;
 
 private:
@@ -124,7 +124,7 @@ private:
 class GluthGenericMultiplier : public Multiplier
 {
 public:
-    GluthGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "gluth generic"), helper(ai) {}
+    GluthGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "gluth generic"), helper(botAI) {}
     float GetValue(Action* action) override;
 
 private:
@@ -134,7 +134,7 @@ private:
 class NaxxThreatRedirectMultiplier : public Multiplier
 {
 public:
-    NaxxThreatRedirectMultiplier(PlayerbotAI* ai) : Multiplier(ai, "naxx threat redirect"), heigan(ai) {}
+    NaxxThreatRedirectMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "naxx threat redirect"), heigan(botAI) {}
     float GetValue(Action* action) override;
 
 private:
@@ -146,8 +146,8 @@ private:
 class NaxxBurstWindowMultiplier : public Multiplier
 {
 public:
-    NaxxBurstWindowMultiplier(PlayerbotAI* ai)
-        : Multiplier(ai, "naxx burst window"), kelthuzad(ai), sapphiron(ai), thaddius(ai), loatheb(ai), noth(ai)
+    NaxxBurstWindowMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "naxx burst window"), kelthuzad(botAI), sapphiron(botAI), thaddius(botAI), loatheb(botAI), noth(botAI)
     {
     }
     float GetValue(Action* action) override;
@@ -179,7 +179,7 @@ private:
 class NothGenericMultiplier : public Multiplier
 {
 public:
-    NothGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "noth generic"), helper(ai) {}
+    NothGenericMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "noth generic"), helper(botAI) {}
     float GetValue(Action* action) override;
 
 private:

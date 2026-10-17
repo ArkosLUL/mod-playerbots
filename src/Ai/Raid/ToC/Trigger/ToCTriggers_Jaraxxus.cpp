@@ -45,11 +45,11 @@ bool JaraxxusDpsTargetTrigger::IsActive()
 
 bool JaraxxusIncinerateFleshOnRaidTrigger::IsActive()
 {
-    if (!botAI->IsHeal(bot))
+    if (!PlayerbotAI::IsHeal(bot))
         return false;
 
     Unit* target = GetIncinerateFleshTarget(botAI);
-    return target && bot->GetDistance(target) <= sPlayerbotAIConfig.healDistance && bot->IsWithinLOSInMap(target);
+    return target && bot->GetDistance(target) <= sPlayerbotAIConfig.HealDistance && bot->IsWithinLOSInMap(target);
 }
 
 void AddToCJaraxxusTriggerNodes(std::vector<TriggerNode*>& triggers)

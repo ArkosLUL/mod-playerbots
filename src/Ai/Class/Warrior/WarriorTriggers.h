@@ -117,7 +117,7 @@ public:
 // class SlamTrigger : public HasAuraTrigger
 // {
 // public:
-//     SlamTrigger(PlayerbotAI* ai) : HasAuraTrigger(ai, "slam!") {}
+//     SlamTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "slam!") {}
 // };
 
 #endif

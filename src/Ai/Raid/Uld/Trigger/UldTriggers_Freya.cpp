@@ -25,7 +25,7 @@ bool FreyaNearNatureBombTrigger::IsActive()
 
     // Assist tank 0 eats the bomb: stepping out would lift the Conservator off the spore the melee are
     // sheltering on. The main tank has its own node, which moves Freya rather than just the bot.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     // Wider than the blast so the node still runs after the bot steps clear and can hold its spot.
@@ -82,7 +82,7 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
 
     // The Grip pacifies melee as much as ranged. Tanks are out: the add tank reaches the aura by parking
     // the Conservator, and the main tank would drag Freya off her anchor.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     // The aura is what counts, and it's exact. Checked first: it's cheaper than the sweep, and most of
@@ -146,7 +146,7 @@ bool FreyaLasherAboutToBlowTrigger::IsActive()
 
     // Tanks stay: one that walked would take Freya or the Conservator with it, and it survives the
     // blasts anyway. Ranged and healers leave through the camp node, under the nova and the trap.
-    if (botAI->IsTank(bot) || !PlayerbotAI::IsMelee(bot))
+    if (PlayerbotAI::IsTank(bot) || !PlayerbotAI::IsMelee(bot))
         return false;
 
     FreyaWaveState state;
@@ -164,7 +164,7 @@ bool FreyaRangedCampTrigger::IsActive()
 
     // Melee and tanks are already stacked on whatever they are hitting, and a tank that left the camp
     // would take the boss or the Conservator with it.
-    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
+    if (PlayerbotAI::IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || PlayerbotAI::IsHeal(bot)))
         return false;
 
     FreyaWaveState state;
@@ -192,7 +192,7 @@ bool FreyaRangedCampTrigger::IsActive()
     // Healers get the wider band: they also have to stay in range of the melee group and the tanks,
     // and pulling them all the way into the ball would leave the far half of the raid unhealed.
     float const tolerance =
-        botAI->IsHeal(bot) ? ULDUAR_FREYA_HEALER_CAMP_TOLERANCE : ULDUAR_FREYA_RANGED_CAMP_TOLERANCE;
+        PlayerbotAI::IsHeal(bot) ? ULDUAR_FREYA_HEALER_CAMP_TOLERANCE : ULDUAR_FREYA_RANGED_CAMP_TOLERANCE;
 
     return bot->GetExactDist2d(camp.GetPositionX(), camp.GetPositionY()) > tolerance;
 }
@@ -281,7 +281,7 @@ bool FreyaNaturesFuryBailTrigger::IsActive()
 
     // Tanks stay. Whatever they are holding walks after them, so a tank carrying the mark out of the
     // raid takes Freya or the Conservator into it instead.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     if (!bot->HasAura(SPELL_NATURES_FURY_10) && !bot->HasAura(SPELL_NATURES_FURY_25))
@@ -298,7 +298,7 @@ bool FreyaStepOutOfSunbeamTrigger::IsActive()
 
     // Melee and tanks can't give up a second and a half of damage, and lose little by staying: beams
     // mostly go for ranged bots and their pets, away from the melee ball.
-    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
+    if (PlayerbotAI::IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || PlayerbotAI::IsHeal(bot)))
         return false;
 
     Unit* target = GetFreyaSunbeamTarget(boss);

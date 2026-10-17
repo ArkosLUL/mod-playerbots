@@ -133,14 +133,14 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     // The encounter's priority action owns every target, so the generic pickers stand down. "attack rti target"
     // stays so a player's mark still wins; healers keep dps assist or they could be left targetless.
     bool const genericPicker =
-        (dynamic_cast<DpsAssistAction*>(action) && !botAI->IsTank(bot) && !botAI->IsHeal(bot)) ||
-        (dynamic_cast<TankAssistAction*>(action) && botAI->IsTank(bot));
+        (dynamic_cast<DpsAssistAction*>(action) && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot)) ||
+        (dynamic_cast<TankAssistAction*>(action) && PlayerbotAI::IsTank(bot));
 
     // Ranged, healers and carriers each own a destination, so generic movers stand down for them; melee keep
     // theirs unless carrying. AttackAction is a MovementAction that never moves, so it stays exempt.
     bool pinnedMover = false;
     if (movement && !dynamic_cast<AttackAction*>(action) &&
-        (botAI->IsRangedDps(bot) || botAI->IsHeal(bot) || carryingDebuff()))
+        (PlayerbotAI::IsRangedDps(bot) || PlayerbotAI::IsHeal(bot) || carryingDebuff()))
     {
         static std::set<std::string> const encounterMovers = {
             "xt002 raid position action", "xt002 debuff carrier action", "xt002 avoid hazard action"};

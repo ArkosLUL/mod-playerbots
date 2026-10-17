@@ -28,8 +28,8 @@ bool KelthuzadChooseTargetAction::Execute(Event event)
     Unit *target_soldier = nullptr, *target_weaver = nullptr, *target_abomination = nullptr, *target_kelthuzad = nullptr,
          *target_guardian = nullptr;
 
-    bool isOffTankForKT = botAI->IsTank(bot) && !botAI->IsMainTank(bot) &&
-                          (botAI->IsAssistTank(bot) || botAI->HasStrategy("tank assist", BOT_STATE_COMBAT));
+    bool isOffTankForKT = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsMainTank(bot) &&
+                          (PlayerbotAI::IsAssistTank(bot) || botAI->HasStrategy("tank assist", BOT_STATE_COMBAT));
 
     for (auto i = attackers.begin(); i != attackers.end(); ++i)
     {
@@ -58,7 +58,7 @@ bool KelthuzadChooseTargetAction::Execute(Event event)
                 continue;
             }
         }
-        if (bot->GetDistance2d(unit) > sPlayerbotAIConfig.spellDistance)
+        if (bot->GetDistance2d(unit) > sPlayerbotAIConfig.SpellDistance)
         {
             continue;
         }
@@ -101,11 +101,11 @@ bool KelthuzadChooseTargetAction::Execute(Event event)
         target_guardian = helper.GetGuardianToPickup(bot);
     }
     std::vector<Unit*> targets;
-    if (botAI->IsRanged(bot))
+    if (PlayerbotAI::IsRanged(bot))
     {
         bool hasRemainingP1Adds = (target_weaver || target_soldier || target_abomination);
 
-        if (helper.IsPhaseTwo() && hasRemainingP1Adds && !botAI->IsHeal(bot))
+        if (helper.IsPhaseTwo() && hasRemainingP1Adds && !PlayerbotAI::IsHeal(bot))
             targets = {target_weaver, target_soldier, target_abomination, target_kelthuzad};
         else if (helper.IsPhaseTwo())
             targets = {target_kelthuzad, target_weaver, target_soldier, target_abomination};
@@ -125,7 +125,7 @@ bool KelthuzadChooseTargetAction::Execute(Event event)
     }
     for (Unit* t : targets)
     {
-        if (!botAI->IsRanged(bot))
+        if (!PlayerbotAI::IsRanged(bot))
         {
             float maxCenterDist = 20.0f;
 
@@ -165,7 +165,7 @@ bool KelthuzadPositionAction::Execute(Event event)
 
     if (helper.IsPhaseOne())
     {
-        if (botAI->IsTank(bot))
+        if (PlayerbotAI::IsTank(bot))
         {
             float dx = helper.center.first;
             float dy = helper.center.second;
@@ -195,7 +195,7 @@ bool KelthuzadPositionAction::Execute(Event event)
             return MoveInside(NAXX_MAP_ID, helper.center.first, helper.center.second, bot->GetPositionZ(), 3.0f,
                               MovementPriority::MOVEMENT_COMBAT);
         }
-        if (!botAI->IsRanged(bot))
+        if (!PlayerbotAI::IsRanged(bot))
         {
             Unit* currentTarget = AI_VALUE(Unit*, "current target");
             if (currentTarget &&
@@ -289,10 +289,10 @@ bool KelthuzadPositionAction::Execute(Event event)
             return false;
         }
 
-        bool isOffTankForKT = botAI->IsTank(bot) && !botAI->IsMainTank(bot) &&
-                              (botAI->IsAssistTank(bot) || botAI->HasStrategy("tank assist", BOT_STATE_COMBAT));
+        bool isOffTankForKT = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsMainTank(bot) &&
+                              (PlayerbotAI::IsAssistTank(bot) || botAI->HasStrategy("tank assist", BOT_STATE_COMBAT));
 
-        if (botAI->IsMainTank(bot))
+        if (PlayerbotAI::IsMainTank(bot))
         {
             if (AI_VALUE2(bool, "has aggro", "current target"))
             {
@@ -309,7 +309,7 @@ bool KelthuzadPositionAction::Execute(Event event)
                 return false;
             }
         }
-        else if (botAI->IsRanged(bot))
+        else if (PlayerbotAI::IsRanged(bot))
         {
             float dx, dy;
             uint32 index = botAI->GetRangedIndex(bot);
@@ -326,7 +326,7 @@ bool KelthuzadPositionAction::Execute(Event event)
             return MoveTo(NAXX_MAP_ID, dx, dy, bot->GetPositionZ(), false, false, false, false,
                           MovementPriority::MOVEMENT_COMBAT);
         }
-        else if (botAI->IsTank(bot))
+        else if (PlayerbotAI::IsTank(bot))
         {
             if (isOffTankForKT)
             {
@@ -397,7 +397,7 @@ bool KelthuzadFleeShadowFissureAction::Execute(Event event)
 
     // Main tank keeps the boss anchored: fall back to the hold spot if it's already clear of
     // fissures, so clearing the void blast doesn't drag Kel'thuzad across the room.
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         auto hold = helper.GetMainTankHoldPosition();
         if (!helper.IsNearShadowFissure(hold.first, hold.second))

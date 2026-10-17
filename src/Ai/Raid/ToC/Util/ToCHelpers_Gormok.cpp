@@ -127,7 +127,7 @@ bool IsCarryingSnobold(Player* bot)
 
 bool IsRangedDpsOrHealer(PlayerbotAI* botAI, Player* bot)
 {
-    return !IsBeastsTank(bot) && (botAI->IsHeal(bot) || botAI->IsRanged(bot));
+    return !IsBeastsTank(bot) && (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot));
 }
 
 // Same reach as the snobold search: bombs land anywhere on the arena floor
@@ -344,11 +344,11 @@ bool GormokTankNeedsDefensive(PlayerbotAI* botAI)
 Unit* GetGormokSnoboldPick(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (IsBeastsTank(bot) || botAI->IsHeal(bot))
+    if (IsBeastsTank(bot) || PlayerbotAI::IsHeal(bot))
         return nullptr;
 
     // Melee and tank riders are already next to the melee, so ranged stay on Gormok while he's up
-    bool const melee = !botAI->IsRanged(bot);
+    bool const melee = !PlayerbotAI::IsRanged(bot);
     bool const gormokEngaged = GetEngagedBeast(botAI, NorthrendBeast::Gormok) != nullptr;
 
     Creature* pick = nullptr;
@@ -420,7 +420,7 @@ bool GetFireBombDodgeAnchor(PlayerbotAI* botAI, Position& anchor)
         return false;
 
     Player* bot = botAI->GetBot();
-    bool const meleeDps = !IsBeastsTank(bot) && !botAI->IsHeal(bot) && !botAI->IsRanged(bot);
+    bool const meleeDps = !IsBeastsTank(bot) && !PlayerbotAI::IsHeal(bot) && !PlayerbotAI::IsRanged(bot);
     if (meleeDps || IsCarryingSnobold(bot))
     {
         anchor = gormok->GetPosition();

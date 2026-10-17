@@ -1268,7 +1268,7 @@ bool FlameLeviathanEnterVehicleAction::ShouldEnter(Unit* target)
     if (!vehicleKit)
         return false;
 
-    bool isMelee = botAI->IsMelee(bot);
+    bool isMelee = PlayerbotAI::IsMelee(bot);
     bool allMain = AllMainVehiclesOnUse();
     bool inUse = vehicleKit->IsVehicleInUse();
     int32 entry = target->GetEntry();

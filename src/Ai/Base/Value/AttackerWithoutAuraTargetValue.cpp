@@ -13,7 +13,7 @@ Unit* AttackerWithoutAuraTargetValue::Calculate()
 {
     GuidVector attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
     GuidSet const dynamicExclusions =
-        GatherStrategyTargetExclusions(botAI, TargetValueExclusionType::Attacker, attackers);
+        GatherStrategyTargetExclusions(botAI, TargetValueExclusionType::DebuffTarget, attackers);
     // Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     uint32 max_health = 0;
     Unit* result = nullptr;
@@ -43,7 +43,7 @@ Unit* MeleeAttackerWithoutAuraTargetValue::Calculate()
 {
     GuidVector attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
     GuidSet const dynamicExclusions =
-        GatherStrategyTargetExclusions(botAI, TargetValueExclusionType::Attacker, attackers);
+        GatherStrategyTargetExclusions(botAI, TargetValueExclusionType::DebuffTarget, attackers);
     // Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     uint32 max_health = 0;
     Unit* result = nullptr;

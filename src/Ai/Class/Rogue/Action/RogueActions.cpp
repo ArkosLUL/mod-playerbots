@@ -21,7 +21,7 @@ constexpr uint32 BG_EY_NETHERSTORM_FLAG_SPELL = 34976;
 bool CastStealthAction::isUseful()
 {
     Unit* target = AI_VALUE(Unit*, "current target");
-    if (target && bot->GetDistance(target) >= sPlayerbotAIConfig.spellDistance)
+    if (target && bot->GetDistance(target) >= sPlayerbotAIConfig.SpellDistance)
         return false;
     return true;
 }

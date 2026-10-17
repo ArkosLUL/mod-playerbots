@@ -25,7 +25,7 @@ void RaidUlduarStrategy::AppendTargetExclusionsFor(GuidSet& exclusions, TargetVa
 
     // Dps and pets only, the tank still has to hold the shielded Guardian or it walks at the back line.
     // Stops the DoTs, cleaves and pets the focus rule misses from killing it beside its neighbour
-    if (type == TargetValueExclusionType::Dps || type == TargetValueExclusionType::Attacker)
+    if (type == TargetValueExclusionType::DpsTarget || type == TargetValueExclusionType::DebuffTarget)
         AppendYoggSaronTargetExclusions(botAI, exclusions, candidates);
 }
 

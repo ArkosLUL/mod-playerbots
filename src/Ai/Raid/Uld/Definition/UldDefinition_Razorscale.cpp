@@ -32,7 +32,7 @@ bool RazorscaleMoversBlocked(PlayerbotAI* botAI)
     // Standing clear, but the spot the movers would walk to is on fire. Ranged never has to close, and
     // holding them here would fight the grounded stack-up for no gain.
     Player* bot = botAI->GetBot();
-    if (!botAI->IsMelee(bot))
+    if (!PlayerbotAI::IsMelee(bot))
         return false;
 
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
@@ -84,9 +84,9 @@ void DefineRazorscale(EncounterBuilder& e)
     e.Node<RazorscaleFlameBreathTrigger, RazorscaleFlameBreathAction>(ACTION_RAID + 1);
     e.Node(
         "razorscale fire resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossFireResistanceTrigger(ai, "razorscale"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossFireResistanceTrigger(botAI, "razorscale"); },
         "razorscale fire resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossFireResistanceAction(ai, "razorscale"); }, ACTION_RAID);
+        [](PlayerbotAI* botAI) -> Action* { return new BossFireResistanceAction(botAI, "razorscale"); }, ACTION_RAID);
 
     // The dodge lets go once the bot stands clear, and these would walk it straight back onto the patch.
     // Avoid AoE too: it outranks every row here and picks its bearing blind to the other patches.

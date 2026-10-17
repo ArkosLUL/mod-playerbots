@@ -42,7 +42,7 @@ bool ThorimRingSettled(PlayerbotAI* botAI) { return ThorimMeleeRingSettled(botAI
 // A healer's target drives its wand and its offensive dispels, so it keeps the generic pickers.
 bool ThorimPickingFor(PlayerbotAI* botAI)
 {
-    return botAI->GetState() == BOT_STATE_COMBAT && !botAI->IsHeal(botAI->GetBot());
+    return botAI->GetState() == BOT_STATE_COMBAT && !PlayerbotAI::IsHeal(botAI->GetBot());
 }
 
 // Phase 2 only: the pickup row owns the tank's target there, and a voting "tank assist" held a tank on an add.
@@ -103,14 +103,14 @@ void DefineThorim(EncounterBuilder& e)
 {
     e.Node(
         "thorim nature resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossNatureResistanceTrigger(ai, "thorim"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossNatureResistanceTrigger(botAI, "thorim"); },
         "thorim nature resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossNatureResistanceAction(ai, "thorim"); }, ACTION_RAID);
+        [](PlayerbotAI* botAI) -> Action* { return new BossNatureResistanceAction(botAI, "thorim"); }, ACTION_RAID);
     e.Node(
         "thorim frost resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossFrostResistanceTrigger(ai, "thorim"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossFrostResistanceTrigger(botAI, "thorim"); },
         "thorim frost resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossFrostResistanceAction(ai, "thorim"); }, ACTION_RAID);
+        [](PlayerbotAI* botAI) -> Action* { return new BossFrostResistanceAction(botAI, "thorim"); }, ACTION_RAID);
     e.Node<ThorimUnbalancingStrikeSwapTrigger, ThorimUnbalancingStrikeSwapAction>(ACTION_RAID + 2);
     e.Node<ThorimTankPickupTrigger, ThorimTankPickupAction>(ACTION_RAID + 2);
     e.Node<ThorimDpsPriorityTrigger, ThorimDpsPriorityAction>(ACTION_RAID);

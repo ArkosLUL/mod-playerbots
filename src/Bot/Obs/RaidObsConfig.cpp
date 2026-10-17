@@ -57,7 +57,7 @@ std::string EnvFieldsJson()
     std::string out = ",\"bin\":" + std::to_string(g_binaryMs);
 
     std::string cheats;
-    for (std::string const& cheat : sPlayerbotAIConfig.botCheats)
+    for (std::string const& cheat : sPlayerbotAIConfig.BotCheats)
     {
         if (!cheats.empty())
             cheats += ",";
@@ -70,14 +70,14 @@ std::string EnvFieldsJson()
     out += ",\"cfg\":{\"cheats\":" + Quoted(cheats);
     out += ",\"mapthreads\":" + std::to_string(sConfigMgr->GetOption<uint32>("MapUpdate.Threads", 1, false));
     out += ",\"hardmode\":{";
-    out += "\"flame-leviathan\":" + std::to_string(sPlayerbotAIConfig.ulduarFlameLeviathanHardMode ? 1 : 0);
-    out += ",\"xt-002\":" + std::to_string(sPlayerbotAIConfig.ulduarXT002HardMode ? 1 : 0);
-    out += ",\"iron-assembly\":" + std::to_string(sPlayerbotAIConfig.ulduarIronAssemblyHardMode ? 1 : 0);
-    out += ",\"thorim\":" + std::to_string(sPlayerbotAIConfig.ulduarThorimHardMode ? 1 : 0);
-    out += ",\"freya\":" + std::to_string(sPlayerbotAIConfig.ulduarFreyaHardMode ? 1 : 0);
-    out += ",\"mimiron\":" + std::to_string(sPlayerbotAIConfig.ulduarMimironHardMode ? 1 : 0);
-    out += ",\"vezax\":" + std::to_string(sPlayerbotAIConfig.ulduarVezaxHardMode ? 1 : 0);
-    out += ",\"yogg-saron\":" + std::to_string(sPlayerbotAIConfig.ulduarYoggSaronHardMode ? 1 : 0);
+    out += "\"flame-leviathan\":" + std::to_string(sPlayerbotAIConfig.UlduarFlameLeviathanHardMode ? 1 : 0);
+    out += ",\"xt-002\":" + std::to_string(sPlayerbotAIConfig.UlduarXT002HardMode ? 1 : 0);
+    out += ",\"iron-assembly\":" + std::to_string(sPlayerbotAIConfig.UlduarIronAssemblyHardMode ? 1 : 0);
+    out += ",\"thorim\":" + std::to_string(sPlayerbotAIConfig.UlduarThorimHardMode ? 1 : 0);
+    out += ",\"freya\":" + std::to_string(sPlayerbotAIConfig.UlduarFreyaHardMode ? 1 : 0);
+    out += ",\"mimiron\":" + std::to_string(sPlayerbotAIConfig.UlduarMimironHardMode ? 1 : 0);
+    out += ",\"vezax\":" + std::to_string(sPlayerbotAIConfig.UlduarVezaxHardMode ? 1 : 0);
+    out += ",\"yogg-saron\":" + std::to_string(sPlayerbotAIConfig.UlduarYoggSaronHardMode ? 1 : 0);
     out += "}}";
 
     return out;
@@ -160,23 +160,23 @@ void LoadConfig()
 {
     ResolveBinaryStamp();
 
-    g_cfg.enabled = sPlayerbotAIConfig.obsEnabled;
-    g_cfg.dir = sPlayerbotAIConfig.obsDir;
-    g_cfg.snapshotIntervalMs = sPlayerbotAIConfig.obsSnapshotIntervalMs;
-    g_cfg.preRollMs = sPlayerbotAIConfig.obsPreRollSeconds * 1000;
-    g_cfg.logHeals = sPlayerbotAIConfig.obsLogHeals;
-    g_cfg.logAuras = sPlayerbotAIConfig.obsLogAuras;
-    g_cfg.logPets = sPlayerbotAIConfig.obsLogPets;
-    g_cfg.minDamage = sPlayerbotAIConfig.obsMinDamageToLog;
-    g_cfg.deathRewindMs = sPlayerbotAIConfig.obsDeathRewindMs;
-    g_cfg.deathVerdictMs = sPlayerbotAIConfig.obsDeathVerdictMs;
-    g_cfg.idleCloseMs = sPlayerbotAIConfig.obsIdleCloseSeconds * 1000;
-    g_cfg.retentionDays = sPlayerbotAIConfig.obsRetentionDays;
-    g_cfg.maxDirBytes = static_cast<uint64>(sPlayerbotAIConfig.obsMaxDirMB) * 1024 * 1024;
-    g_cfg.maxFileBytes = static_cast<uint64>(sPlayerbotAIConfig.obsMaxFileMB) * 1024 * 1024;
+    g_cfg.enabled = sPlayerbotAIConfig.ObsEnabled;
+    g_cfg.dir = sPlayerbotAIConfig.ObsDir;
+    g_cfg.snapshotIntervalMs = sPlayerbotAIConfig.ObsSnapshotIntervalMs;
+    g_cfg.preRollMs = sPlayerbotAIConfig.ObsPreRollSeconds * 1000;
+    g_cfg.logHeals = sPlayerbotAIConfig.ObsLogHeals;
+    g_cfg.logAuras = sPlayerbotAIConfig.ObsLogAuras;
+    g_cfg.logPets = sPlayerbotAIConfig.ObsLogPets;
+    g_cfg.minDamage = sPlayerbotAIConfig.ObsMinDamageToLog;
+    g_cfg.deathRewindMs = sPlayerbotAIConfig.ObsDeathRewindMs;
+    g_cfg.deathVerdictMs = sPlayerbotAIConfig.ObsDeathVerdictMs;
+    g_cfg.idleCloseMs = sPlayerbotAIConfig.ObsIdleCloseSeconds * 1000;
+    g_cfg.retentionDays = sPlayerbotAIConfig.ObsRetentionDays;
+    g_cfg.maxDirBytes = static_cast<uint64>(sPlayerbotAIConfig.ObsMaxDirMB) * 1024 * 1024;
+    g_cfg.maxFileBytes = static_cast<uint64>(sPlayerbotAIConfig.ObsMaxFileMB) * 1024 * 1024;
 
     g_cfg.maps.clear();
-    std::string const& raw = sPlayerbotAIConfig.obsMaps;
+    std::string const& raw = sPlayerbotAIConfig.ObsMaps;
     g_cfg.allMaps = raw.empty();
     std::size_t start = 0;
     while (!raw.empty() && start <= raw.size())

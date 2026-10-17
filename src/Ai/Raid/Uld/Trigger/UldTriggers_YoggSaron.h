@@ -11,8 +11,8 @@
 class YoggSaronTrigger : public Trigger
 {
 public:
-    YoggSaronTrigger(PlayerbotAI* ai, std::string const name = "yogg saron trigger", int32 checkInteval = 1)
-        : Trigger(ai, name, checkInteval) {}
+    YoggSaronTrigger(PlayerbotAI* botAI, std::string const name = "yogg saron trigger", int32 checkInteval = 1)
+        : Trigger(botAI, name, checkInteval) {}
 
     bool IsYoggSaronFight();
     bool IsPhase2();
@@ -39,7 +39,7 @@ class YoggSaronPhase1SpacingTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron phase 1 spacing trigger";
 
-    YoggSaronPhase1SpacingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronPhase1SpacingTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -50,7 +50,7 @@ class YoggSaronPhase1StationTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron phase 1 station trigger";
 
-    YoggSaronPhase1StationTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronPhase1StationTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 
 private:
@@ -66,7 +66,7 @@ class YoggSaronDarkVolleyTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron dark volley trigger";
 
-    YoggSaronDarkVolleyTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronDarkVolleyTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -76,8 +76,8 @@ class YoggSaronDiminishPowerJudgementTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron diminish power judgement trigger";
 
-    YoggSaronDiminishPowerJudgementTrigger(PlayerbotAI* ai)
-        : YoggSaronTrigger(ai, Name) {}
+    YoggSaronDiminishPowerJudgementTrigger(PlayerbotAI* botAI)
+        : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -88,7 +88,7 @@ class YoggSaronMortalStrikeTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron mortal strike trigger";
 
-    YoggSaronMortalStrikeTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronMortalStrikeTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -98,7 +98,7 @@ class YoggSaronWarlockPetTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron warlock pet trigger";
 
-    YoggSaronWarlockPetTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronWarlockPetTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -109,7 +109,7 @@ class YoggSaronGuardianPositioningTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron guardian positioning trigger";
 
-    YoggSaronGuardianPositioningTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronGuardianPositioningTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 
 private:
@@ -122,7 +122,7 @@ class YoggSaronSanityTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron sanity trigger";
 
-    YoggSaronSanityTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronSanityTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -131,7 +131,7 @@ class YoggSaronMaladyOfTheMindTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron malady of the mind trigger";
 
-    YoggSaronMaladyOfTheMindTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronMaladyOfTheMindTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -142,7 +142,7 @@ class YoggSaronPhase3ControlTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron phase 3 control trigger";
 
-    YoggSaronPhase3ControlTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronPhase3ControlTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -153,7 +153,7 @@ class YoggSaronSetDpsPriorityTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron set dps priority trigger";
 
-    YoggSaronSetDpsPriorityTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronSetDpsPriorityTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -164,7 +164,7 @@ class YoggSaronPhase2SpacingTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron phase 2 spacing trigger";
 
-    YoggSaronPhase2SpacingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronPhase2SpacingTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -173,7 +173,7 @@ class YoggSaronBrainLinkTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron brain link trigger";
 
-    YoggSaronBrainLinkTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronBrainLinkTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -182,7 +182,7 @@ class YoggSaronMoveToEnterPortalTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron move to enter portal trigger";
 
-    YoggSaronMoveToEnterPortalTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronMoveToEnterPortalTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -191,7 +191,7 @@ class YoggSaronFallFromFloorTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron fall from floor trigger";
 
-    YoggSaronFallFromFloorTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronFallFromFloorTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -200,7 +200,7 @@ class YoggSaronStopFollowingTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron stop following trigger";
 
-    YoggSaronStopFollowingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronStopFollowingTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -209,7 +209,7 @@ class YoggSaronUsePortalTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron use portal trigger";
 
-    YoggSaronUsePortalTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronUsePortalTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -218,7 +218,7 @@ class YoggSaronIllusionRoomTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron illusion room trigger";
 
-    YoggSaronIllusionRoomTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronIllusionRoomTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 
 private:
@@ -241,8 +241,8 @@ class YoggSaronIllusionHealerStationTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron illusion healer station trigger";
 
-    YoggSaronIllusionHealerStationTrigger(PlayerbotAI* ai)
-        : YoggSaronTrigger(ai, Name) {}
+    YoggSaronIllusionHealerStationTrigger(PlayerbotAI* botAI)
+        : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -253,8 +253,8 @@ class YoggSaronReprisalRegroupTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron reprisal regroup trigger";
 
-    YoggSaronReprisalRegroupTrigger(PlayerbotAI* ai)
-        : YoggSaronTrigger(ai, Name) {}
+    YoggSaronReprisalRegroupTrigger(PlayerbotAI* botAI)
+        : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -265,7 +265,7 @@ class YoggSaronBrainSpotTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron brain spot trigger";
 
-    YoggSaronBrainSpotTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronBrainSpotTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -276,7 +276,7 @@ class YoggSaronNitroBoostsTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron nitro boosts trigger";
 
-    YoggSaronNitroBoostsTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronNitroBoostsTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -287,7 +287,7 @@ class YoggSaronBrainDashTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron brain dash trigger";
 
-    YoggSaronBrainDashTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronBrainDashTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -298,7 +298,7 @@ class YoggSaronBrainChargeTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron brain charge trigger";
 
-    YoggSaronBrainChargeTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronBrainChargeTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -307,7 +307,7 @@ class YoggSaronMoveToExitPortalTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron move to exit portal trigger";
 
-    YoggSaronMoveToExitPortalTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronMoveToExitPortalTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -318,7 +318,7 @@ class YoggSaronLaughingSkullTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron laughing skull trigger";
 
-    YoggSaronLaughingSkullTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronLaughingSkullTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -329,7 +329,7 @@ class YoggSaronIllusionFacingTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron illusion facing trigger";
 
-    YoggSaronIllusionFacingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronIllusionFacingTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -338,7 +338,7 @@ class YoggSaronPetGuardTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron pet guard trigger";
 
-    YoggSaronPetGuardTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronPetGuardTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -349,7 +349,7 @@ class YoggSaronBodyDetourTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron body detour trigger";
 
-    YoggSaronBodyDetourTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronBodyDetourTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -358,7 +358,7 @@ class YoggSaronLunaticGazeTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron lunatic gaze trigger";
 
-    YoggSaronLunaticGazeTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronLunaticGazeTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -369,7 +369,7 @@ class YoggSaronBeaconDragTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron beacon drag trigger";
 
-    YoggSaronBeaconDragTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronBeaconDragTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -379,7 +379,7 @@ class YoggSaronBeaconStageTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron beacon stage trigger";
 
-    YoggSaronBeaconStageTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronBeaconStageTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -390,7 +390,7 @@ class YoggSaronPhase3LustTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron phase 3 lust trigger";
 
-    YoggSaronPhase3LustTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronPhase3LustTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -399,7 +399,7 @@ class YoggSaronPhase3PositioningTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron phase 3 positioning trigger";
 
-    YoggSaronPhase3PositioningTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronPhase3PositioningTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -410,7 +410,7 @@ class YoggSaronGuardianControlTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron guardian control trigger";
 
-    YoggSaronGuardianControlTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronGuardianControlTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -421,7 +421,7 @@ class YoggSaronSanityConservationTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron sanity conservation trigger";
 
-    YoggSaronSanityConservationTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronSanityConservationTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -432,7 +432,7 @@ class YoggSaronSqueezeEscapeTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron squeeze escape trigger";
 
-    YoggSaronSqueezeEscapeTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronSqueezeEscapeTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -443,7 +443,7 @@ class YoggSaronSqueezeRescueTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron squeeze rescue trigger";
 
-    YoggSaronSqueezeRescueTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronSqueezeRescueTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -454,7 +454,7 @@ class YoggSaronNovaDefensiveTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron nova defensive trigger";
 
-    YoggSaronNovaDefensiveTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronNovaDefensiveTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -465,7 +465,7 @@ class YoggSaronNovaExternalTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron nova external trigger";
 
-    YoggSaronNovaExternalTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronNovaExternalTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -476,7 +476,7 @@ class YoggSaronNovaRaidCooldownTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron nova raid cooldown trigger";
 
-    YoggSaronNovaRaidCooldownTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronNovaRaidCooldownTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -486,7 +486,7 @@ class YoggSaronRoarAuraTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron roar aura trigger";
 
-    YoggSaronRoarAuraTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronRoarAuraTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -497,7 +497,7 @@ class YoggSaronRoarAuraMasteryTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron roar aura mastery trigger";
 
-    YoggSaronRoarAuraMasteryTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronRoarAuraMasteryTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -508,7 +508,7 @@ class YoggSaronBeaconDefensiveTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron beacon defensive trigger";
 
-    YoggSaronBeaconDefensiveTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronBeaconDefensiveTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -519,7 +519,7 @@ class YoggSaronBeaconExternalTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron beacon external trigger";
 
-    YoggSaronBeaconExternalTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronBeaconExternalTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -529,7 +529,7 @@ class YoggSaronTankLayOnHandsTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron tank lay on hands trigger";
 
-    YoggSaronTankLayOnHandsTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronTankLayOnHandsTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -539,7 +539,7 @@ class YoggSaronHealerCombatEngineTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron healer combat engine trigger";
 
-    YoggSaronHealerCombatEngineTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronHealerCombatEngineTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -550,7 +550,7 @@ class YoggSaronShadowAuraTrigger : public YoggSaronTrigger
 public:
     static constexpr char const* Name = "yogg-saron shadow aura trigger";
 
-    YoggSaronShadowAuraTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    YoggSaronShadowAuraTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -561,7 +561,7 @@ class YoggSaronAntiFearTrigger : public RaidAntiFearTrigger
 public:
     static constexpr char const* Name = "yogg-saron anti fear trigger";
 
-    YoggSaronAntiFearTrigger(PlayerbotAI* ai) : RaidAntiFearTrigger(ai, Name) {}
+    YoggSaronAntiFearTrigger(PlayerbotAI* botAI) : RaidAntiFearTrigger(botAI, Name) {}
 
 protected:
     bool FearWindowActive() override { return YoggSaronFearWindowActive(botAI); }

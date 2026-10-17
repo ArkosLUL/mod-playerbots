@@ -12,7 +12,7 @@
 class RaidOsStrategy : public Strategy
 {
 public:
-    RaidOsStrategy(PlayerbotAI* ai) : Strategy(ai) {}
+    RaidOsStrategy(PlayerbotAI* botAI) : Strategy(botAI) {}
     virtual std::string const getName() override { return "wotlk-os"; }
     void OnTick() override;
     virtual void InitTriggers(std::vector<TriggerNode*> &triggers) override;

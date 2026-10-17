@@ -13,7 +13,7 @@ class XT002DebuffCarrierTrigger : public Trigger
 public:
     static constexpr char const* Name = "xt002 debuff carrier trigger";
 
-    XT002DebuffCarrierTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    XT002DebuffCarrierTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -24,7 +24,7 @@ class XT002AvoidHazardTrigger : public Trigger
 public:
     static constexpr char const* Name = "xt002 avoid hazard trigger";
 
-    XT002AvoidHazardTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    XT002AvoidHazardTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -35,7 +35,7 @@ class XT002RaidPositionTrigger : public Trigger
 public:
     static constexpr char const* Name = "xt002 raid position trigger";
 
-    XT002RaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    XT002RaidPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -46,7 +46,7 @@ class XT002SetDpsPriorityTrigger : public Trigger
 public:
     static constexpr char const* Name = "xt002 set dps priority trigger";
 
-    XT002SetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    XT002SetDpsPriorityTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -55,7 +55,7 @@ class XT002PummellerTauntTrigger : public Trigger
 public:
     static constexpr char const* Name = "xt002 pummeller taunt trigger";
 
-    XT002PummellerTauntTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    XT002PummellerTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -64,7 +64,7 @@ class XT002RedirectThreatTrigger : public Trigger
 public:
     static constexpr char const* Name = "xt002 redirect threat trigger";
 
-    XT002RedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    XT002RedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

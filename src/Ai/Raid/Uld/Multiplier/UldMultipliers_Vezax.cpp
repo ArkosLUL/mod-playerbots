@@ -60,7 +60,7 @@ float VezaxSuppressLifeTapMultiplier::GetValue(Action* action)
 
 float VezaxHoldCastOutsideFieldMultiplier::GetValue(Action* action)
 {
-    if (!action || botAI->IsHeal(bot) || !botAI->IsRanged(bot) || botAI->IsMainTank(bot))
+    if (!action || PlayerbotAI::IsHeal(bot) || !PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsMainTank(bot))
         return 1.0f;
 
     // Holds damage, DoTs and the wand, never buffs or movement. The Searing Flames kick goes through
@@ -77,7 +77,7 @@ float VezaxHoldCastOutsideFieldMultiplier::GetValue(Action* action)
 
 float VezaxAnimusThreatMultiplier::GetValue(Action* action)
 {
-    if (!action || botAI->IsTank(bot) || botAI->IsHeal(bot) || !IsVezaxDamageAction(action))
+    if (!action || PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot) || !IsVezaxDamageAction(action))
         return 1.0f;
 
     Unit* animus = AI_VALUE(Unit*, "current target");

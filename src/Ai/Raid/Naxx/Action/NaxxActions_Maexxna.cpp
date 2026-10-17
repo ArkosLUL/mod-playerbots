@@ -12,10 +12,10 @@
 bool MaexxnaAttackWebWrapAction::isUseful()
 {
     // Prefer ranged DPS/casters for cocoon breaking to minimize movement and boss downtime.
-    if (botAI->IsHeal(bot) || botAI->IsTank(bot))
+    if (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsTank(bot))
         return false;
 
-    return botAI->IsRanged(bot);
+    return PlayerbotAI::IsRanged(bot);
 }
 
 bool MaexxnaAttackWebWrapAction::Execute(Event /*event*/)
@@ -53,7 +53,7 @@ bool MaexxnaAttackWebWrapAction::Execute(Event /*event*/)
 bool MaexxnaTankSpiderlingsAction::isUseful()
 {
     // Keep main tank on Maexxna; use this only for an off-tank (25-man typical).
-    return botAI->IsTank(bot) && !botAI->IsMainTank(bot);
+    return PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsMainTank(bot);
 }
 
 bool MaexxnaTankSpiderlingsAction::Execute(Event /*event*/)

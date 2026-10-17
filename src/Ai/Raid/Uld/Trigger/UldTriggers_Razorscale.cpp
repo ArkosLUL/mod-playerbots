@@ -160,7 +160,7 @@ bool RazorscaleFuseArmorTrigger::IsActive()
         return false;
     }
 
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     Group* group = bot->GetGroup();
@@ -170,7 +170,7 @@ bool RazorscaleFuseArmorTrigger::IsActive()
     for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
     {
         Player* member = gref->GetSource();
-        if (!member || !botAI->IsMainTank(member))
+        if (!member || !PlayerbotAI::IsMainTank(member))
             continue;
 
         Aura* fuseArmor = member->GetAura(RazorscaleBossHelper::SPELL_FUSE_ARMOR);
@@ -218,7 +218,7 @@ bool RazorscaleFlameBreathTrigger::IsActive()
         return false;
 
     // The tank holds the boss and eats the breath; only reposition non-tanks caught in the cone
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0))
+    if (PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0))
         return false;
 
     return IsBotInFrontalCone(bot, boss, M_PI / 2.0f, 40.0f);

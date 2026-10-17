@@ -12,7 +12,7 @@
 class RaidUlduarStrategy : public Strategy
 {
 public:
-    RaidUlduarStrategy(PlayerbotAI* ai) : Strategy(ai) {}
+    RaidUlduarStrategy(PlayerbotAI* botAI) : Strategy(botAI) {}
     virtual std::string const getName() override { return "ulduar"; }
     bool HasTargetExclusions() const override { return true; }
     void AppendTargetExclusionsFor(GuidSet& exclusions, TargetValueExclusionType type,

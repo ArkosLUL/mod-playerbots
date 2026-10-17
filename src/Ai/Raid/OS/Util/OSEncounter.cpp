@@ -216,7 +216,7 @@ bool NeedsPlatformReturn(PlayerbotAI* botAI, Player* bot)
     // The pull drag corner is a hand-measured position 1.74yd south of PLATFORM_MIN_Y, so the one bot
     // meant to stand off the box is exempt until the drag latches.
     Unit* boss = GetSartharion(bot);
-    if (botAI->IsMainTank(bot) && boss && !MainTankDragDone(boss))
+    if (PlayerbotAI::IsMainTank(bot) && boss && !MainTankDragDone(boss))
         return false;
 
     // The room box is 18yd wider than the platform on X, so without this a bot standing in the lava

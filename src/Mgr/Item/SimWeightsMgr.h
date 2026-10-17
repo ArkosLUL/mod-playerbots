@@ -39,7 +39,7 @@ public:
     }
 
     // Runs from PlayerbotAIConfig::Initialize, so again on every config reload. A missing table or
-    // AiPlayerbot.SimWeights.Enable = 0 leaves no snapshot.
+    // Playerbots.SimWeights.Enable = 0 leaves no snapshot.
     void LoadAll();
 
     // null when nothing is loaded. Safe from map threads.

@@ -164,7 +164,7 @@ public:
 class TricksOfTheTradeTrigger : public BuffTrigger
 {
 public:
-    TricksOfTheTradeTrigger(PlayerbotAI* ai) : BuffTrigger(ai, "tricks of the trade", 1, true) {}
+    TricksOfTheTradeTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "tricks of the trade", 1, true) {}
 
     std::string const GetTargetName() override { return "tricks of the trade target"; }
 };

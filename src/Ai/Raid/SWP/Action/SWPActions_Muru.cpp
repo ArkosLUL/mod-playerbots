@@ -787,7 +787,7 @@ bool MuruEnslavedVoidSpawnCastShadowBoltVolleyAction::Execute(Event /*event*/)
 
     bool const commandedAttack = CommandControlledCreatureToAttack(voidSpawn, target);
 
-    if (voidSpawn->GetExactDist2d(target) > sPlayerbotAIConfig.spellDistance)
+    if (voidSpawn->GetExactDist2d(target) > sPlayerbotAIConfig.SpellDistance)
         return commandedAttack;
 
     constexpr uint32 volleySpellId = static_cast<uint32>(SwpSpells::SPELL_SHADOW_BOLT_VOLLEY);

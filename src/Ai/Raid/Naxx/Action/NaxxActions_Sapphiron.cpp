@@ -19,11 +19,11 @@ bool SapphironGroundPositionAction::Execute(Event event)
     {
         return false;
     }
-    if (botAI->IsHeal(bot) && helper.HasLifeDrainInGroup() && !botAI->HasStrategy("cure", BOT_STATE_COMBAT))
+    if (PlayerbotAI::IsHeal(bot) && helper.HasLifeDrainInGroup() && !botAI->HasStrategy("cure", BOT_STATE_COMBAT))
     {
         botAI->ChangeStrategy("cure", BOT_STATE_COMBAT);
     }
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         if (AI_VALUE2(bool, "has aggro", "current target"))
         {
@@ -47,7 +47,7 @@ bool SapphironGroundPositionAction::Execute(Event event)
         if (needsSideStack)
         {
             float distance;
-            if (botAI->IsRanged(bot) || botAI->IsHeal(bot) ||
+            if (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot) ||
                 NaxxSpellIds::HasAnyAura(bot, {NaxxSpellIds::LifeDrain}) || botAI->HasAura("life drain", bot))
             {
                 distance = 30.0f;
@@ -73,11 +73,11 @@ bool SapphironGroundPositionAction::Execute(Event event)
         float offset_angle = M_PI * 0.02 * index;
         float angle = start_angle + offset_angle;
         float distance;
-        if (botAI->IsRanged(bot))
+        if (PlayerbotAI::IsRanged(bot))
         {
             distance = 35.0f;
         }
-        else if (botAI->IsHeal(bot))
+        else if (PlayerbotAI::IsHeal(bot))
         {
             distance = 30.0f;
         }
@@ -110,7 +110,7 @@ bool SapphironFlightPositionAction::Execute(Event event)
     {
         return false;
     }
-    if (botAI->IsHeal(bot) && helper.HasLifeDrainInGroup() && !botAI->HasStrategy("cure", BOT_STATE_COMBAT))
+    if (PlayerbotAI::IsHeal(bot) && helper.HasLifeDrainInGroup() && !botAI->HasStrategy("cure", BOT_STATE_COMBAT))
     {
         botAI->ChangeStrategy("cure", BOT_STATE_COMBAT);
     }
@@ -130,7 +130,7 @@ bool SapphironFlightPositionAction::Execute(Event event)
                 return true;
             case ShelterResult::Sheltered:
                 // Stopped behind the block: let heals run; non-healers hold position.
-                return botAI->IsHeal(bot) ? false : true;
+                return PlayerbotAI::IsHeal(bot) ? false : true;
             case ShelterResult::None:
             default:
                 return false;

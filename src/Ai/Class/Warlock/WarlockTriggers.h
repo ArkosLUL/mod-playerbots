@@ -211,21 +211,21 @@ public:
 class ImmolateOnAttackerTrigger : public DebuffOnAttackerTrigger
 {
 public:
-    ImmolateOnAttackerTrigger(PlayerbotAI* ai) : DebuffOnAttackerTrigger(ai, "immolate", true) {}
+    ImmolateOnAttackerTrigger(PlayerbotAI* botAI) : DebuffOnAttackerTrigger(botAI, "immolate", true) {}
     bool IsActive() override { return BuffTrigger::IsActive(); }
 };
 
 class UnstableAfflictionTrigger : public DebuffTrigger
 {
 public:
-    UnstableAfflictionTrigger(PlayerbotAI* ai) : DebuffTrigger(ai, "unstable affliction", 1, true, 0.5f) {}
+    UnstableAfflictionTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "unstable affliction", 1, true, 0.5f) {}
     bool IsActive() override { return BuffTrigger::IsActive(); }
 };
 
 class UnstableAfflictionOnAttackerTrigger : public DebuffOnAttackerTrigger
 {
 public:
-    UnstableAfflictionOnAttackerTrigger(PlayerbotAI* ai) : DebuffOnAttackerTrigger(ai, "unstable affliction", true) {}
+    UnstableAfflictionOnAttackerTrigger(PlayerbotAI* botAI) : DebuffOnAttackerTrigger(botAI, "unstable affliction", true) {}
     bool IsActive() override { return BuffTrigger::IsActive(); }
 };
 
@@ -235,7 +235,7 @@ public:
 class HauntTrigger : public DebuffTrigger
 {
 public:
-    HauntTrigger(PlayerbotAI* ai) : DebuffTrigger(ai, "haunt", 1, true, 8.0f) {}
+    HauntTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "haunt", 1, true, 8.0f) {}
     bool IsActive() override;
 };
 
@@ -338,27 +338,27 @@ public:
 class LifeTapTrigger : public Trigger
 {
 public:
-    LifeTapTrigger(PlayerbotAI* ai) : Trigger(ai, "life tap") {}
+    LifeTapTrigger(PlayerbotAI* botAI) : Trigger(botAI, "life tap") {}
     bool IsActive() override;
 };
 
 class LifeTapGlyphBuffTrigger : public BuffTrigger
 {
 public:
-    LifeTapGlyphBuffTrigger(PlayerbotAI* ai) : BuffTrigger(ai, "life tap") {}
+    LifeTapGlyphBuffTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "life tap") {}
     bool IsActive() override;
 };
 
 class MetamorphosisTrigger : public BoostTrigger
 {
 public:
-    MetamorphosisTrigger(PlayerbotAI* ai) : BoostTrigger(ai, "metamorphosis") {}
+    MetamorphosisTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "metamorphosis") {}
 };
 
 class DemonicEmpowermentTrigger : public BuffTrigger
 {
 public:
-    DemonicEmpowermentTrigger(PlayerbotAI* ai) : BuffTrigger(ai, "demonic empowerment") {}
+    DemonicEmpowermentTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "demonic empowerment") {}
     bool IsActive() override;
 };
 
@@ -371,14 +371,14 @@ public:
 class DecimationTrigger : public HasAuraTrigger
 {
 public:
-    DecimationTrigger(PlayerbotAI* ai) : HasAuraTrigger(ai, "decimation") {}
+    DecimationTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "decimation") {}
     bool IsActive() override;
 };
 
 class MoltenCoreTrigger : public HasAuraTrigger
 {
 public:
-    MoltenCoreTrigger(PlayerbotAI* ai) : HasAuraTrigger(ai, "molten core") {}
+    MoltenCoreTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "molten core") {}
 };
 
 class RainOfFireChannelCheckTrigger : public Trigger

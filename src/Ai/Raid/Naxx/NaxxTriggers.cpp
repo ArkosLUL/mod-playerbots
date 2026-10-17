@@ -18,7 +18,7 @@ bool MutatingInjectionMeleeTrigger::IsActive()
     {
         return false;
     }
-    return MutatingInjectionTrigger::IsActive() && !botAI->IsRanged(bot);
+    return MutatingInjectionTrigger::IsActive() && !PlayerbotAI::IsRanged(bot);
 }
 
 bool MutatingInjectionRangedTrigger::IsActive()
@@ -28,7 +28,7 @@ bool MutatingInjectionRangedTrigger::IsActive()
     {
         return false;
     }
-    return MutatingInjectionTrigger::IsActive() && botAI->IsRanged(bot);
+    return MutatingInjectionTrigger::IsActive() && PlayerbotAI::IsRanged(bot);
 }
 
 bool AuraRemovedTrigger::IsActive()
@@ -50,7 +50,7 @@ bool MutatingInjectionRemovedTrigger::IsActive()
     {
         return false;
     }
-    return HasNoAuraTrigger::IsActive() && botAI->GetState() == BOT_STATE_COMBAT && botAI->IsRanged(bot);
+    return HasNoAuraTrigger::IsActive() && botAI->GetState() == BOT_STATE_COMBAT && PlayerbotAI::IsRanged(bot);
 }
 
 bool GrobbulusCloudTrigger::IsActive()
@@ -60,7 +60,7 @@ bool GrobbulusCloudTrigger::IsActive()
     {
         return false;
     }
-    if (!botAI->IsMainTank(bot))
+    if (!PlayerbotAI::IsMainTank(bot))
     {
         return false;
     }
@@ -92,9 +92,9 @@ bool GrobbulusCloudTrigger::IsActive()
     return true;
 }
 
-bool HeiganMeleeTrigger::IsActive() { return helper.UpdateBossAI() && !botAI->IsRanged(bot); }
+bool HeiganMeleeTrigger::IsActive() { return helper.UpdateBossAI() && !PlayerbotAI::IsRanged(bot); }
 
-bool HeiganRangedTrigger::IsActive() { return helper.UpdateBossAI() && botAI->IsRanged(bot); }
+bool HeiganRangedTrigger::IsActive() { return helper.UpdateBossAI() && PlayerbotAI::IsRanged(bot); }
 
 bool HeiganDecrepitFeverTrigger::IsActive()
 {
@@ -145,7 +145,7 @@ bool RazuviousTankTrigger::IsActive()
     Difficulty diff = bot->GetRaidDifficulty();
     if (diff == RAID_DIFFICULTY_10MAN_NORMAL)
     {
-        return helper.UpdateBossAI() && botAI->IsTank(bot);
+        return helper.UpdateBossAI() && PlayerbotAI::IsTank(bot);
     }
     return helper.UpdateBossAI() && bot->getClass() == CLASS_PRIEST;
 }
@@ -155,7 +155,7 @@ bool RazuviousNontankTrigger::IsActive()
     Difficulty diff = bot->GetRaidDifficulty();
     if (diff == RAID_DIFFICULTY_10MAN_NORMAL)
     {
-        return helper.UpdateBossAI() && !(botAI->IsTank(bot));
+        return helper.UpdateBossAI() && !(PlayerbotAI::IsTank(bot));
     }
     return helper.UpdateBossAI() && !(bot->getClass() == CLASS_PRIEST);
 }
@@ -265,7 +265,7 @@ bool GluthMainTankMortalWoundTrigger::IsActive()
     {
         return false;
     }
-    if (!botAI->IsAssistTankOfIndex(bot, 0, true))
+    if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
     {
         return false;
     }
@@ -406,7 +406,7 @@ bool MaexxnaTrigger::IsActive()
     {
         return false;
     }
-    return !botAI->IsTank(bot);
+    return !PlayerbotAI::IsTank(bot);
 }
 
 bool MaexxnaWebWrapTrigger::IsActive()
@@ -424,7 +424,7 @@ bool MaexxnaWebWrapTrigger::IsActive()
     }
 
     // Prefer ranged DPS/casters to break cocoons with minimal movement.
-    if (botAI->IsTank(bot) || botAI->IsHeal(bot) || !botAI->IsRanged(bot))
+    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot) || !PlayerbotAI::IsRanged(bot))
     {
         return false;
     }
@@ -465,7 +465,7 @@ bool MaexxnaSpiderlingsTrigger::IsActive()
     if (!bot->IsInCombat() && !boss->IsInCombat())
         return false;
 
-    if (!botAI->IsTank(bot) || botAI->IsMainTank(bot))
+    if (!PlayerbotAI::IsTank(bot) || PlayerbotAI::IsMainTank(bot))
         return false;
 
     GuidVector attackers = AI_VALUE(GuidVector, "attackers");
@@ -502,7 +502,7 @@ bool GothikWrongSideTrigger::IsActive()
 //     {
 //         return false;
 //     }
-//     return !botAI->IsTank(bot) && !botAI->IsRanged(bot);
+//     return !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsRanged(bot);
 // }
 
 // bool PatchwerkRangedTrigger::IsActive()
@@ -512,7 +512,7 @@ bool GothikWrongSideTrigger::IsActive()
 //     {
 //         return false;
 //     }
-//     return !botAI->IsTank(bot) && botAI->IsRanged(bot);
+//     return !PlayerbotAI::IsTank(bot) && PlayerbotAI::IsRanged(bot);
 // }
 
 // bool PatchwerkNonTankTrigger::IsActive()
@@ -522,7 +522,7 @@ bool GothikWrongSideTrigger::IsActive()
 //     {
 //         return false;
 //     }
-//     return !botAI->IsTank(bot);
+//     return !PlayerbotAI::IsTank(bot);
 // }
 
 bool LoathebTrigger::IsActive() { return helper.UpdateBossAI(); }
@@ -540,7 +540,7 @@ bool NothCurseTrigger::IsActive()
 
 bool NothBlinkTrigger::IsActive()
 {
-    if (!helper.UpdateBossAI() || !botAI->IsMainTank(bot))
+    if (!helper.UpdateBossAI() || !PlayerbotAI::IsMainTank(bot))
     {
         return false;
     }

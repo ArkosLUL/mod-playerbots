@@ -48,6 +48,7 @@ bool MarkTargetWithTriangle(Player* bot, Unit* target);
 bool MarkTargetWithCross(Player* bot, Unit* target);
 bool MarkTargetWithMoon(Player* bot, Unit* target);
 bool ClearTargetIcon(Player* bot, uint8 iconId);
+bool ClearStrategyTargetIcon(Player* bot, uint8 iconId, std::initializer_list<uint32> entries);
 void SetRtiTarget(PlayerbotAI* botAI, std::string const& rtiName);
 // Points "rti target" at an explicit unit as well as setting the mark, for an encounter that has to
 // keep the focus on one creature rather than on whatever the bot is hitting.
@@ -96,7 +97,7 @@ struct HazardSweepCache
 
 // Nearest spot at least clearRadius from every hazard. Use instead of MovementAction::FleePosition
 // for anything wider than a few yards: that one silently clamps its travel to
-// AiPlayerbot.FleeDistance and cannot clear a large blast. Returns Position() when nothing inside
+// Playerbots.FleeDistance and cannot clear a large blast. Returns Position() when nothing inside
 // maxRadius is clear.
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> const& hazards, float clearRadius,
                                            float maxRadius, float distanceStep = 2.0f,

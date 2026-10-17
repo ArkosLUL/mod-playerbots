@@ -20,7 +20,7 @@ class AlgalonBigBangSoakAction : public Action
 public:
     static constexpr char const* Name = "algalon big bang soak action";
 
-    AlgalonBigBangSoakAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonBigBangSoakAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -29,7 +29,7 @@ class AlgalonBigBangExternalAction : public Action
 public:
     static constexpr char const* Name = "algalon big bang external action";
 
-    AlgalonBigBangExternalAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonBigBangExternalAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -38,7 +38,7 @@ class AlgalonSoakerPrepAction : public Action
 public:
     static constexpr char const* Name = "algalon soaker prep action";
 
-    AlgalonSoakerPrepAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonSoakerPrepAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -47,7 +47,7 @@ class AlgalonSoakerRescueAction : public Action
 public:
     static constexpr char const* Name = "algalon soaker rescue action";
 
-    AlgalonSoakerRescueAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonSoakerRescueAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -56,7 +56,7 @@ class AlgalonTankHealAction : public Action
 public:
     static constexpr char const* Name = "algalon tank heal action";
 
-    AlgalonTankHealAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonTankHealAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -65,7 +65,7 @@ class AlgalonTankBeaconAction : public Action
 public:
     static constexpr char const* Name = "algalon tank beacon action";
 
-    AlgalonTankBeaconAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonTankBeaconAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -74,7 +74,7 @@ class AlgalonTankDefensiveAction : public Action
 public:
     static constexpr char const* Name = "algalon tank defensive action";
 
-    AlgalonTankDefensiveAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -83,7 +83,7 @@ class AlgalonExplosionCoverAction : public Action
 public:
     static constexpr char const* Name = "algalon explosion cover action";
 
-    AlgalonExplosionCoverAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonExplosionCoverAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -92,7 +92,7 @@ class AlgalonExplosionPersonalAction : public Action
 public:
     static constexpr char const* Name = "algalon explosion personal action";
 
-    AlgalonExplosionPersonalAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonExplosionPersonalAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -101,7 +101,7 @@ class AlgalonShadowAuraAction : public Action
 public:
     static constexpr char const* Name = "algalon shadow aura action";
 
-    AlgalonShadowAuraAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonShadowAuraAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -110,7 +110,7 @@ class AlgalonBigBangHideAction : public MovementAction
 public:
     static constexpr char const* Name = "algalon big bang hide action";
 
-    AlgalonBigBangHideAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    AlgalonBigBangHideAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
@@ -123,7 +123,7 @@ class AlgalonCosmicSmashAction : public MovementAction
 public:
     static constexpr char const* Name = "algalon cosmic smash action";
 
-    AlgalonCosmicSmashAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    AlgalonCosmicSmashAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -132,7 +132,7 @@ class AlgalonLeaveBlackHoleAction : public MovementAction
 public:
     static constexpr char const* Name = "algalon leave black hole action";
 
-    AlgalonLeaveBlackHoleAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    AlgalonLeaveBlackHoleAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
@@ -145,7 +145,7 @@ class AlgalonYieldBossAction : public Action
 public:
     static constexpr char const* Name = "algalon yield boss action";
 
-    AlgalonYieldBossAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonYieldBossAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -154,7 +154,7 @@ class AlgalonThreatRedirectAction : public RaidRedirectThreatAction
 public:
     static constexpr char const* Name = "algalon threat redirect action";
 
-    AlgalonThreatRedirectAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name) {}
+    AlgalonThreatRedirectAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, Name) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -165,7 +165,7 @@ protected:
 class AlgalonTakeBossAction : public AttackAction
 {
 public:
-    AlgalonTakeBossAction(PlayerbotAI* ai, char const* name) : AttackAction(ai, name) {}
+    AlgalonTakeBossAction(PlayerbotAI* botAI, char const* name) : AttackAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -174,7 +174,7 @@ class AlgalonTankPickupAction : public AlgalonTakeBossAction
 public:
     static constexpr char const* Name = "algalon tank pickup action";
 
-    AlgalonTankPickupAction(PlayerbotAI* ai) : AlgalonTakeBossAction(ai, Name) {}
+    AlgalonTankPickupAction(PlayerbotAI* botAI) : AlgalonTakeBossAction(botAI, Name) {}
 };
 
 class AlgalonPhasePunchSwapAction : public AlgalonTakeBossAction
@@ -182,7 +182,7 @@ class AlgalonPhasePunchSwapAction : public AlgalonTakeBossAction
 public:
     static constexpr char const* Name = "algalon phase punch swap action";
 
-    AlgalonPhasePunchSwapAction(PlayerbotAI* ai) : AlgalonTakeBossAction(ai, Name) {}
+    AlgalonPhasePunchSwapAction(PlayerbotAI* botAI) : AlgalonTakeBossAction(botAI, Name) {}
 };
 
 class AlgalonConstellationTauntAction : public AttackAction
@@ -190,7 +190,7 @@ class AlgalonConstellationTauntAction : public AttackAction
 public:
     static constexpr char const* Name = "algalon constellation taunt action";
 
-    AlgalonConstellationTauntAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    AlgalonConstellationTauntAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -199,7 +199,7 @@ class AlgalonDarkMatterTankAction : public AttackAction
 public:
     static constexpr char const* Name = "algalon dark matter tank action";
 
-    AlgalonDarkMatterTankAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    AlgalonDarkMatterTankAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -208,7 +208,7 @@ class AlgalonConstellationKiteAction : public MovementAction
 public:
     static constexpr char const* Name = "algalon constellation kite action";
 
-    AlgalonConstellationKiteAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    AlgalonConstellationKiteAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
@@ -220,7 +220,7 @@ class AlgalonStarTeamAction : public AttackAction
 public:
     static constexpr char const* Name = "algalon star team action";
 
-    AlgalonStarTeamAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    AlgalonStarTeamAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -229,7 +229,7 @@ class AlgalonStarMarkAction : public Action
 public:
     static constexpr char const* Name = "algalon star mark action";
 
-    AlgalonStarMarkAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonStarMarkAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -238,7 +238,7 @@ class AlgalonRaidPositionAction : public MovementAction
 public:
     static constexpr char const* Name = "algalon raid position action";
 
-    AlgalonRaidPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    AlgalonRaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:

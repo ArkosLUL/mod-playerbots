@@ -95,11 +95,11 @@ bool BossMarkSkullAction::Execute(Event /*event*/)
 
     if (mainTankIsRealPlayer)
     {
-        if (!botAI->IsAssistTankOfIndex(bot, 0) && !botAI->IsAssistTankOfIndex(bot, 1) &&
-            !botAI->IsAssistTankOfIndex(bot, 2))
+        if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0) && !PlayerbotAI::IsAssistTankOfIndex(bot, 1) &&
+            !PlayerbotAI::IsAssistTankOfIndex(bot, 2))
             return false;
     }
-    else if (!botAI->IsMainTank(bot))
+    else if (!PlayerbotAI::IsMainTank(bot))
     {
         return false;
     }

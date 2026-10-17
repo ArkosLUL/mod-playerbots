@@ -101,10 +101,10 @@ EmalonPositioningMultiplier::TickState const& EmalonPositioningMultiplier::Snaps
         return cached;
 
     cached.boss = GetEmalon(bot);
-    cached.mainTank = botAI->IsMainTank(bot);
+    cached.mainTank = PlayerbotAI::IsMainTank(bot);
     cached.offTank = IsOffTank(bot);
-    cached.dps = botAI->IsDps(bot);
-    cached.ringBot = !botAI->IsTank(bot) && (botAI->IsHeal(bot) || botAI->IsRanged(bot));
+    cached.dps = PlayerbotAI::IsDps(bot);
+    cached.ringBot = !PlayerbotAI::IsTank(bot) && (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot));
 
     return cached;
 }

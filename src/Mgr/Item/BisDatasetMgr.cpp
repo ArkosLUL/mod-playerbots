@@ -449,12 +449,12 @@ bool BisDatasetMgr::Reload(std::string& error)
     std::lock_guard<std::mutex> guard(_reloadMutex);
     error.clear();
 
-    if (!sPlayerbotAIConfig.bisDatasetEnable)
+    if (!sPlayerbotAIConfig.BisDatasetEnable)
     {
         Swap(nullptr);
         _seen.reset();
         _lastFailed = false;
-        _lastOutcome = "disabled by AiPlayerbot.BisDataset.Enable";
+        _lastOutcome = "disabled by Playerbots.BisDataset.Enable";
         return true;
     }
 
@@ -495,7 +495,7 @@ bool BisDatasetMgr::Reload(std::string& error)
 
 void BisDatasetMgr::Update(uint32 diff)
 {
-    uint64 const interval = uint64(sPlayerbotAIConfig.bisDatasetPollSeconds) * IN_MILLISECONDS;
+    uint64 const interval = uint64(sPlayerbotAIConfig.BisDatasetPollSeconds) * IN_MILLISECONDS;
     if (!interval)
         return;
 
@@ -506,7 +506,7 @@ void BisDatasetMgr::Update(uint32 diff)
     _pollTimer = 0;
 
     std::string error;
-    if (!sPlayerbotAIConfig.bisDatasetEnable)
+    if (!sPlayerbotAIConfig.BisDatasetEnable)
     {
         if (Get())
             Reload(error);
@@ -544,11 +544,11 @@ std::vector<std::string> BisDatasetMgr::Describe() const
             lines.push_back(Acore::StringFormat("Last reload {}: {}", _lastFailed ? "failed" : "ok", _lastOutcome));
     }
 
-    uint32 const pollSeconds = sPlayerbotAIConfig.bisDatasetPollSeconds;
+    uint32 const pollSeconds = sPlayerbotAIConfig.BisDatasetPollSeconds;
     lines.push_back(Acore::StringFormat("Enable {}, Enhancements {}, Reforges {}, {}",
-                                        sPlayerbotAIConfig.bisDatasetEnable,
-                                        sPlayerbotAIConfig.bisDatasetEnhancements,
-                                        sPlayerbotAIConfig.bisDatasetReforges,
+                                        sPlayerbotAIConfig.BisDatasetEnable,
+                                        sPlayerbotAIConfig.BisDatasetEnhancements,
+                                        sPlayerbotAIConfig.BisDatasetReforges,
                                         pollSeconds ? Acore::StringFormat("version poll every {}s", pollSeconds)
                                                     : std::string("version poll off")));
     return lines;

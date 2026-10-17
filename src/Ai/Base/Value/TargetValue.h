@@ -14,10 +14,12 @@
 class PlayerbotAI;
 class ThreatManager;
 class Unit;
+struct Position;
 enum class TargetValueExclusionType : uint8;
 
 // candidates is the list the caller will filter with the result.
 GuidSet GatherStrategyTargetExclusions(PlayerbotAI* botAI, TargetValueExclusionType type, GuidVector const& candidates);
+bool HasEnoughAoeTargets(PlayerbotAI* botAI, Position const& center, float range, uint32 minCount);
 
 class FindTargetStrategy
 {
@@ -25,7 +27,6 @@ public:
     FindTargetStrategy(PlayerbotAI* botAI) : result(nullptr), botAI(botAI) {}
 
     Unit* GetResult();
-    virtual TargetValueExclusionType GetExclusionType();
     virtual void CheckAttacker(Unit* attacker, ThreatManager* threatMgr) = 0;
     void GetPlayerCount(Unit* creature, uint32* tankCount, uint32* dpsCount);
     bool IsHighPriority(Unit* attacker);
@@ -56,7 +57,7 @@ public:
     }
 
 protected:
-    Unit* FindTarget(FindTargetStrategy* strategy);
+    Unit* FindTarget(FindTargetStrategy* strategy, GuidSet const& exclusions = {});
 };
 
 class RpgTargetValue : public ManualSetValue<GuidPosition>

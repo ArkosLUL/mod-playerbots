@@ -24,7 +24,7 @@ bool CombatPartyMemberDeadTrigger::IsActive()
         return false;
 
     // Conserve battle rez (Druid Rebirth) for boss fights unless the server opts out.
-    if (sPlayerbotAIConfig.battleRezBossOnly && !AttackersValue::IsInBossFight(botAI))
+    if (sPlayerbotAIConfig.BattleRezBossOnly && !AttackersValue::IsInBossFight(botAI))
         return false;
 
     return true;
@@ -40,7 +40,7 @@ bool HealerLowManaTrigger::IsActive()
     if (!target)
         return false;
 
-    return target->GetPowerPct(POWER_MANA) < sPlayerbotAIConfig.lowMana;
+    return target->GetPowerPct(POWER_MANA) < sPlayerbotAIConfig.LowMana;
 }
 
 bool AoeInGroupTrigger::IsActive()

@@ -15,7 +15,7 @@
 class XT002BurstWindowMultiplier : public Multiplier
 {
 public:
-    XT002BurstWindowMultiplier(PlayerbotAI* ai) : Multiplier(ai, "xt002 burst window") {}
+    XT002BurstWindowMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "xt002 burst window") {}
     float GetValue(Action* action) override;
 
 private:
@@ -37,7 +37,7 @@ private:
 class XT002TargetGuardMultiplier : public Multiplier
 {
 public:
-    XT002TargetGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "xt002 target guard") {}
+    XT002TargetGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "xt002 target guard") {}
     float GetValue(Action* action) override;
 };
 

@@ -41,7 +41,7 @@ using namespace EncounterHelpers;
 // Freya
 float FreyaTrioSyncMultiplier::GetValue(Action* action)
 {
-    if (botAI->IsTank(bot) || !PlayerbotAI::IsDps(bot))
+    if (PlayerbotAI::IsTank(bot) || !PlayerbotAI::IsDps(bot))
         return 1.0f;
 
     // Movement and heals are never held back: a bot waiting out the floor still has to dodge a

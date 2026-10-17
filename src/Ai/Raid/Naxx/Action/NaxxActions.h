@@ -19,7 +19,7 @@
 // class TryToGetBossAIAction : public Action
 // {
 // public:
-//     TryToGetBossAIAction(PlayerbotAI* ai) : Action(ai, "try to get boss ai") {}
+//     TryToGetBossAIAction(PlayerbotAI* botAI) : Action(botAI, "try to get boss botAI") {}
 
 // public:
 //     virtual bool Execute(Event event);
@@ -30,8 +30,8 @@ class GrobbulusGoBehindAction : public MovementAction
 public:
     static constexpr char const* Name = "grobbulus go behind the boss";
 
-    GrobbulusGoBehindAction(PlayerbotAI* ai, float distance = 24.0f, float delta_angle = M_PI / 8)
-        : MovementAction(ai, Name)
+    GrobbulusGoBehindAction(PlayerbotAI* botAI, float distance = 24.0f, float delta_angle = M_PI / 8)
+        : MovementAction(botAI, Name)
     {
         this->distance = distance;
         this->delta_angle = delta_angle;
@@ -53,7 +53,7 @@ public:
     }
     virtual bool isUseful() override
     {
-        return RotateAroundTheCenterPointAction::isUseful() && botAI->IsMainTank(bot) &&
+        return RotateAroundTheCenterPointAction::isUseful() && PlayerbotAI::IsMainTank(bot) &&
                AI_VALUE2(bool, "has aggro", "boss target");
     }
     uint32 GetCurrWaypoint() override;
@@ -65,7 +65,7 @@ class GrobblulusMoveCenterAction : public MoveInsideAction
 public:
     static constexpr char const* Name = "grobbulus move center";
 
-    GrobblulusMoveCenterAction(PlayerbotAI* ai) : MoveInsideAction(ai, 3281.23f, -3310.38f, 5.0f) {}
+    GrobblulusMoveCenterAction(PlayerbotAI* botAI) : MoveInsideAction(botAI, 3281.23f, -3310.38f, 5.0f) {}
 };
 
 class GrobbulusMoveAwayAction : public MovementAction
@@ -73,8 +73,8 @@ class GrobbulusMoveAwayAction : public MovementAction
 public:
     static constexpr char const* Name = "grobbulus move away";
 
-    GrobbulusMoveAwayAction(PlayerbotAI* ai, float distance = 18.0f)
-        : MovementAction(ai, Name), distance(distance)
+    GrobbulusMoveAwayAction(PlayerbotAI* botAI, float distance = 18.0f)
+        : MovementAction(botAI, Name), distance(distance)
     {
     }
     bool Execute(Event event) override;
@@ -88,7 +88,7 @@ class FaerlinaSacrificeWorshipperAction : public AttackAction
 public:
     static constexpr char const* Name = "faerlina sacrifice worshipper";
 
-    FaerlinaSacrificeWorshipperAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    FaerlinaSacrificeWorshipperAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -100,7 +100,7 @@ protected:
 class HeiganDanceAction : public MovementAction
 {
 public:
-    HeiganDanceAction(PlayerbotAI* ai, std::string const name) : MovementAction(ai, name), helper(ai) {}
+    HeiganDanceAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name), helper(botAI) {}
 
 protected:
     bool MoveToSafeZone(float tolerance);
@@ -114,7 +114,7 @@ class HeiganDanceMeleeAction : public HeiganDanceAction
 public:
     static constexpr char const* Name = "heigan dance melee";
 
-    HeiganDanceMeleeAction(PlayerbotAI* ai) : HeiganDanceAction(ai, Name) {}
+    HeiganDanceMeleeAction(PlayerbotAI* botAI) : HeiganDanceAction(botAI, Name) {}
     virtual bool Execute(Event event);
 };
 
@@ -123,7 +123,7 @@ class HeiganDispelDecrepitFeverAction : public Action
 public:
     static constexpr char const* Name = "heigan dispel decrepit fever";
 
-    HeiganDispelDecrepitFeverAction(PlayerbotAI* ai) : Action(ai, Name), helper(ai) {}
+    HeiganDispelDecrepitFeverAction(PlayerbotAI* botAI) : Action(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -139,7 +139,7 @@ class HeiganDanceRangedAction : public HeiganDanceAction
 public:
     static constexpr char const* Name = "heigan dance ranged";
 
-    HeiganDanceRangedAction(PlayerbotAI* ai) : HeiganDanceAction(ai, Name) {}
+    HeiganDanceRangedAction(PlayerbotAI* botAI) : HeiganDanceAction(botAI, Name) {}
     virtual bool Execute(Event event);
 };
 
@@ -148,7 +148,7 @@ class ThaddiusPrepullSplitAction : public MovementAction
 public:
     static constexpr char const* Name = "thaddius prepull split";
 
-    ThaddiusPrepullSplitAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    ThaddiusPrepullSplitAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
     virtual bool Execute(Event event);
     virtual bool isUseful();
 
@@ -161,7 +161,7 @@ class ThaddiusAttackNearestPetAction : public AttackAction
 public:
     static constexpr char const* Name = "thaddius attack nearest pet";
 
-    ThaddiusAttackNearestPetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    ThaddiusAttackNearestPetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     virtual bool Execute(Event event);
     virtual bool isUseful();
 
@@ -172,7 +172,7 @@ private:
 // class ThaddiusMeleeToPlaceAction : public MovementAction
 // {
 // public:
-//     ThaddiusMeleeToPlaceAction(PlayerbotAI* ai) : MovementAction(ai, "thaddius melee to place") {}
+//     ThaddiusMeleeToPlaceAction(PlayerbotAI* botAI) : MovementAction(botAI, "thaddius melee to place") {}
 //     virtual bool Execute(Event event);
 //     virtual bool isUseful();
 // };
@@ -180,7 +180,7 @@ private:
 // class ThaddiusRangedToPlaceAction : public MovementAction
 // {
 // public:
-//     ThaddiusRangedToPlaceAction(PlayerbotAI* ai) : MovementAction(ai, "thaddius ranged to place") {}
+//     ThaddiusRangedToPlaceAction(PlayerbotAI* botAI) : MovementAction(botAI, "thaddius ranged to place") {}
 //     virtual bool Execute(Event event);
 //     virtual bool isUseful();
 // };
@@ -190,7 +190,7 @@ class ThaddiusRedirectThreatAction : public RaidRedirectThreatAction
 public:
     static constexpr char const* Name = "thaddius redirect threat";
 
-    ThaddiusRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name), helper(ai) {}
+    ThaddiusRedirectThreatAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, Name), helper(botAI) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -205,7 +205,7 @@ class ThaddiusMoveToPlatformAction : public MovementAction
 public:
     static constexpr char const* Name = "thaddius move to platform";
 
-    ThaddiusMoveToPlatformAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    ThaddiusMoveToPlatformAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     virtual bool Execute(Event event);
     virtual bool isUseful();
 };
@@ -215,7 +215,7 @@ class ThaddiusMovePolarityAction : public MovementAction
 public:
     static constexpr char const* Name = "thaddius move polarity";
 
-    ThaddiusMovePolarityAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    ThaddiusMovePolarityAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     virtual bool Execute(Event event);
     virtual bool isUseful();
 };
@@ -225,7 +225,7 @@ class RazuviousUseObedienceCrystalAction : public MovementAction
 public:
     static constexpr char const* Name = "razuvious use obedience crystal";
 
-    RazuviousUseObedienceCrystalAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    RazuviousUseObedienceCrystalAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -237,7 +237,7 @@ class RazuviousTargetAction : public AttackAction
 public:
     static constexpr char const* Name = "razuvious target";
 
-    RazuviousTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    RazuviousTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -249,7 +249,7 @@ class HorsemanAttractAlternativelyAction : public AttackAction
 public:
     static constexpr char const* Name = "horseman attract alternatively";
 
-    HorsemanAttractAlternativelyAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    HorsemanAttractAlternativelyAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 protected:
@@ -261,7 +261,7 @@ class HorsemanAttactInOrderAction : public AttackAction
 public:
     static constexpr char const* Name = "horseman attack in order";
 
-    HorsemanAttactInOrderAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    HorsemanAttactInOrderAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 protected:
@@ -273,7 +273,7 @@ class FourhorsemanRedirectThreatAction : public RaidRedirectThreatAction
 public:
     static constexpr char const* Name = "four horsemen redirect threat";
 
-    FourhorsemanRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name), helper(ai) {}
+    FourhorsemanRedirectThreatAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, Name), helper(botAI) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -291,7 +291,7 @@ class SapphironGroundPositionAction : public MovementAction
 public:
     static constexpr char const* Name = "sapphiron ground position";
 
-    SapphironGroundPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    SapphironGroundPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 protected:
@@ -303,7 +303,7 @@ class SapphironFlightPositionAction : public MovementAction
 public:
     static constexpr char const* Name = "sapphiron flight position";
 
-    SapphironFlightPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    SapphironFlightPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 protected:
@@ -327,7 +327,7 @@ class KelthuzadChooseTargetAction : public AttackAction
 public:
     static constexpr char const* Name = "kel'thuzad choose target";
 
-    KelthuzadChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    KelthuzadChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     virtual bool Execute(Event event);
 
 private:
@@ -339,7 +339,7 @@ class KelthuzadPositionAction : public MovementAction
 public:
     static constexpr char const* Name = "kel'thuzad position";
 
-    KelthuzadPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    KelthuzadPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
     virtual bool Execute(Event event);
 
 private:
@@ -351,7 +351,7 @@ class KelthuzadFleeShadowFissureAction : public MovementAction
 public:
     static constexpr char const* Name = "kel'thuzad flee shadow fissure";
 
-    KelthuzadFleeShadowFissureAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    KelthuzadFleeShadowFissureAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -363,7 +363,7 @@ class KelthuzadMisdirectBossToMainTankAction : public AttackAction
 public:
     static constexpr char const* Name = "kel'thuzad misdirect boss to main tank";
 
-    KelthuzadMisdirectBossToMainTankAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    KelthuzadMisdirectBossToMainTankAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -375,7 +375,7 @@ class KelthuzadCycloneChainedAction : public MovementAction
 public:
     static constexpr char const* Name = "kel'thuzad cyclone chained";
 
-    KelthuzadCycloneChainedAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    KelthuzadCycloneChainedAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -387,7 +387,7 @@ class AnubrekhanChooseTargetAction : public AttackAction
 public:
     static constexpr char const* Name = "anub'rekhan choose target";
 
-    AnubrekhanChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    AnubrekhanChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -401,10 +401,10 @@ class AnubrekhanPositionAction : public RotateAroundTheCenterPointAction
 public:
     static constexpr char const* Name = "anub'rekhan position";
 
-    AnubrekhanPositionAction(PlayerbotAI* ai)
-        : RotateAroundTheCenterPointAction(ai, Name, AnubrekhanBossHelper::RoomCenterX,
+    AnubrekhanPositionAction(PlayerbotAI* botAI)
+        : RotateAroundTheCenterPointAction(botAI, Name, AnubrekhanBossHelper::RoomCenterX,
                                            AnubrekhanBossHelper::RoomCenterY, AnubrekhanBossHelper::KiteRadius, 32),
-          helper(ai)
+          helper(botAI)
     {
     }
     bool Execute(Event event) override;
@@ -425,7 +425,7 @@ class AnubrekhanRedirectThreatAction : public RaidRedirectThreatAction
 public:
     static constexpr char const* Name = "anub'rekhan redirect threat";
 
-    AnubrekhanRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name), helper(ai) {}
+    AnubrekhanRedirectThreatAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, Name), helper(botAI) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -440,7 +440,7 @@ class GluthChooseTargetAction : public AttackAction
 public:
     static constexpr char const* Name = "gluth choose target";
 
-    GluthChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    GluthChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -452,8 +452,8 @@ class GluthPositionAction : public RotateAroundTheCenterPointAction
 public:
     static constexpr char const* Name = "gluth position";
 
-    GluthPositionAction(PlayerbotAI* ai)
-        : RotateAroundTheCenterPointAction(ai, Name, 3293.61f, -3149.01f, 12.0f, 12), helper(ai)
+    GluthPositionAction(PlayerbotAI* botAI)
+        : RotateAroundTheCenterPointAction(botAI, Name, 3293.61f, -3149.01f, 12.0f, 12), helper(botAI)
     {
     }
     bool Execute(Event event) override;
@@ -467,7 +467,7 @@ class GluthSlowdownAction : public Action
 public:
     static constexpr char const* Name = "gluth slowdown";
 
-    GluthSlowdownAction(PlayerbotAI* ai) : Action(ai, Name), helper(ai) {}
+    GluthSlowdownAction(PlayerbotAI* botAI) : Action(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -479,7 +479,7 @@ class GluthTranquilizingShotAction : public Action
 public:
     static constexpr char const* Name = "gluth tranquilizing shot";
 
-    GluthTranquilizingShotAction(PlayerbotAI* ai) : Action(ai, Name), helper(ai) {}
+    GluthTranquilizingShotAction(PlayerbotAI* botAI) : Action(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -491,7 +491,7 @@ class GluthRedirectThreatAction : public RaidRedirectThreatAction
 public:
     static constexpr char const* Name = "gluth redirect threat";
 
-    GluthRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name), helper(ai) {}
+    GluthRedirectThreatAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, Name), helper(botAI) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -509,7 +509,7 @@ class LoathebPositionAction : public MovementAction
 public:
     static constexpr char const* Name = "loatheb position";
 
-    LoathebPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    LoathebPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
     virtual bool Execute(Event event);
 
 private:
@@ -521,7 +521,7 @@ class LoathebChooseTargetAction : public AttackAction
 public:
     static constexpr char const* Name = "loatheb choose target";
 
-    LoathebChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    LoathebChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     virtual bool Execute(Event event);
 
 private:
@@ -533,7 +533,7 @@ class NothChooseTargetAction : public AttackAction
 public:
     static constexpr char const* Name = "noth choose target";
 
-    NothChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    NothChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -545,7 +545,7 @@ class NothPositionAction : public MovementAction
 public:
     static constexpr char const* Name = "noth position";
 
-    NothPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    NothPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
 
 private:
@@ -570,7 +570,7 @@ class NothDispelCurseAction : public Action
 public:
     static constexpr char const* Name = "noth dispel curse";
 
-    NothDispelCurseAction(PlayerbotAI* ai) : Action(ai, Name), helper(ai) {}
+    NothDispelCurseAction(PlayerbotAI* botAI) : Action(botAI, Name), helper(botAI) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -586,7 +586,7 @@ private:
 // class PatchwerkRangedPositionAction : public MovementAction
 // {
 // public:
-//     PatchwerkRangedPositionAction(PlayerbotAI* ai) : MovementAction(ai, "patchwerk ranged position") {}
+//     PatchwerkRangedPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "patchwerk ranged position") {}
 //     bool Execute(Event event) override;
 // };
 
@@ -596,7 +596,7 @@ class MaexxnaAttackWebWrapAction : public AttackAction
 public:
     static constexpr char const* Name = "maexxna attack web wrap";
 
-    MaexxnaAttackWebWrapAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    MaexxnaAttackWebWrapAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -607,7 +607,7 @@ class MaexxnaTankSpiderlingsAction : public AttackAction
 public:
     static constexpr char const* Name = "maexxna tank spiderlings";
 
-    MaexxnaTankSpiderlingsAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    MaexxnaTankSpiderlingsAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -619,7 +619,7 @@ class GothikChooseTargetAction : public AttackAction
 public:
     static constexpr char const* Name = "gothik choose target";
 
-    GothikChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
+    GothikChooseTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name), helper(botAI) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -633,7 +633,7 @@ class GothikStayOnLivingSideAction : public MovementAction
 public:
     static constexpr char const* Name = "gothik stay on living side";
 
-    GothikStayOnLivingSideAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
+    GothikStayOnLivingSideAction(PlayerbotAI* botAI) : MovementAction(botAI, Name), helper(botAI) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

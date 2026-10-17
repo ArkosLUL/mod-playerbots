@@ -44,8 +44,8 @@ inline bool NaxxHasStrategyAnyState(Player* player, char const* name)
     if (!player || !name)
         return false;
 
-    if (PlayerbotAI* ai = GET_PLAYERBOT_AI(player))
-        return ai->HasStrategy(name, BOT_STATE_NON_COMBAT) || ai->HasStrategy(name, BOT_STATE_COMBAT);
+    if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(player))
+        return botAI->HasStrategy(name, BOT_STATE_NON_COMBAT) || botAI->HasStrategy(name, BOT_STATE_COMBAT);
 
     return false;
 }
@@ -72,15 +72,15 @@ inline NaxxRoleGroups NaxxGetRoleGroups(PlayerbotAI* botAI, Player* bot)
     {
         Player* member = ref->GetSource();
         // Dead members keep their slot: dropping them would renumber everyone else mid-fight.
-        if (!member || botAI->IsTank(member))
+        if (!member || PlayerbotAI::IsTank(member))
         {
             continue;
         }
-        if (botAI->IsHeal(member))
+        if (PlayerbotAI::IsHeal(member))
         {
             result.healers.push_back(member);
         }
-        else if (botAI->IsRanged(member))
+        else if (PlayerbotAI::IsRanged(member))
         {
             result.rangedDps.push_back(member);
         }
@@ -97,7 +97,7 @@ inline std::pair<size_t, size_t> NaxxGetSlotIndexAndCount(PlayerbotAI* botAI, Pl
                                                           NaxxRoleGroups const& groups)
 {
     std::vector<Player*> const& slots =
-        botAI->IsHeal(bot) ? groups.healers : (botAI->IsRanged(bot) ? groups.rangedDps : groups.meleeDps);
+        PlayerbotAI::IsHeal(bot) ? groups.healers : (PlayerbotAI::IsRanged(bot) ? groups.rangedDps : groups.meleeDps);
 
     auto it = std::find(slots.begin(), slots.end(), bot);
     if (it == slots.end())
@@ -286,7 +286,7 @@ public:
                 continue;
             }
 
-            if (botAI->IsRanged(member))
+            if (PlayerbotAI::IsRanged(member))
             {
                 ++count;
             }
@@ -312,7 +312,7 @@ public:
                 continue;
             }
 
-            if (botAI->IsRanged(member) || botAI->IsTank(member))
+            if (PlayerbotAI::IsRanged(member) || PlayerbotAI::IsTank(member))
             {
                 continue;
             }
@@ -343,7 +343,7 @@ public:
                 continue;
             }
 
-            if (!botAI->IsRanged(member) && !botAI->IsTank(member))
+            if (!PlayerbotAI::IsRanged(member) && !PlayerbotAI::IsTank(member))
             {
                 ++count;
             }
@@ -486,7 +486,7 @@ public:
             for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
             {
                 Player* member = ref->GetSource();
-                if (member && member->IsAlive() && botAI->IsMainTank(member))
+                if (member && member->IsAlive() && PlayerbotAI::IsMainTank(member))
                 {
                     mainTank = member;
                     break;
@@ -774,7 +774,7 @@ public:
             }
 
             Player* victimPlayer = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
-            bool victimIsAssistTank = victimPlayer && botAI->IsAssistTank(victimPlayer);
+            bool victimIsAssistTank = victimPlayer && PlayerbotAI::IsAssistTank(victimPlayer);
 
             float score = unit->GetDistance2d(assistTank);
             if (victimIsAssistTank)
@@ -990,7 +990,7 @@ public:
         uint32 index = botAI->GetGroupSlotIndex(bot);
         if (currentTarget)
         {
-            if (botAI->IsRanged(bot))
+            if (PlayerbotAI::IsRanged(bot))
             {
                 if (bot->GetExactDist2d(currentTarget) <= 45.0f)
                 {
@@ -1985,11 +1985,11 @@ public:
             {
                 continue;
             }
-            if (botAI->IsTank(member))
+            if (PlayerbotAI::IsTank(member))
             {
                 cursed.push_back(member);
             }
-            else if (botAI->IsHeal(member))
+            else if (PlayerbotAI::IsHeal(member))
             {
                 healers.push_back(member);
             }
@@ -2015,7 +2015,7 @@ public:
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
-            if (member && member->IsAlive() && botAI->IsAssistTank(member))
+            if (member && member->IsAlive() && PlayerbotAI::IsAssistTank(member))
             {
                 return member;
             }
@@ -2041,7 +2041,7 @@ public:
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
-            if (member && member->IsAlive() && botAI->IsMainTank(member))
+            if (member && member->IsAlive() && PlayerbotAI::IsMainTank(member))
             {
                 return member;
             }
@@ -2224,10 +2224,10 @@ public:
         Difficulty diff = bot->GetRaidDifficulty();
         if (diff == RAID_DIFFICULTY_25MAN_NORMAL)
         {
-            return botAI->IsAssistRangedDpsOfIndex(bot, 0) || botAI->IsAssistHealOfIndex(bot, 0) ||
-                   botAI->IsAssistHealOfIndex(bot, 1) || botAI->IsAssistHealOfIndex(bot, 2);
+            return PlayerbotAI::IsAssistRangedDpsOfIndex(bot, 0) || PlayerbotAI::IsAssistHealOfIndex(bot, 0) ||
+                   PlayerbotAI::IsAssistHealOfIndex(bot, 1) || PlayerbotAI::IsAssistHealOfIndex(bot, 2);
         }
-        return botAI->IsAssistRangedDpsOfIndex(bot, 0) || botAI->IsAssistHealOfIndex(bot, 0);
+        return PlayerbotAI::IsAssistRangedDpsOfIndex(bot, 0) || PlayerbotAI::IsAssistHealOfIndex(bot, 0);
     }
     void CalculatePosToGo(Player* bot)
     {
@@ -2242,7 +2242,7 @@ public:
             uint32 elapsed_ms = _combat_start_ms ? getMSTime() - _combat_start_ms : 0;
             // Interval: 24s - 15s - 15s - ...
             posToGo = !(elapsed_ms <= 9000 || ((elapsed_ms - 9000) / 67500) % 2 == 0);
-            if (botAI->IsAssistRangedDpsOfIndex(bot, 0) || (raid25 && botAI->IsAssistHealOfIndex(bot, 1)))
+            if (PlayerbotAI::IsAssistRangedDpsOfIndex(bot, 0) || (raid25 && PlayerbotAI::IsAssistHealOfIndex(bot, 1)))
             {
                 posToGo = 1 - posToGo;
             }
@@ -2674,7 +2674,7 @@ public:
             Player* member = ref->GetSource();
             if (!member || !member->IsAlive())
                 continue;
-            if (!botAI->IsTank(member) || !botAI->IsMainTank(member))
+            if (!PlayerbotAI::IsTank(member) || !PlayerbotAI::IsMainTank(member))
                 continue;
 
             Unit* victim = member->GetVictim();
@@ -2695,7 +2695,7 @@ public:
             Player* member = ref->GetSource();
             if (!member || !member->IsAlive())
                 continue;
-            if (!botAI->IsTank(member) || botAI->IsMainTank(member))
+            if (!PlayerbotAI::IsTank(member) || PlayerbotAI::IsMainTank(member))
                 continue;
 
             Unit* victim = member->GetVictim();
@@ -2728,7 +2728,7 @@ public:
     bool ResolveSideFor(Player* player)
     {
         bool computed = ComputeAssignedToPrimarySide(player);
-        if (!player || botAI->IsTank(player))
+        if (!player || PlayerbotAI::IsTank(player))
             return computed;
 
         return LatchedPrimarySide(player, computed);
@@ -2780,7 +2780,7 @@ public:
 
         Group* group = bot->GetGroup();
 
-        if (botAI->IsTank(player))
+        if (PlayerbotAI::IsTank(player))
         {
             if (NaxxHasStrategyAnyState(player, "tank face"))
                 return true;
@@ -2788,7 +2788,7 @@ public:
             if (NaxxHasStrategyAnyState(player, "tank assist") && !NaxxHasStrategyAnyState(player, "tank face"))
                 return false;
 
-            if (botAI->IsMainTank(player))
+            if (PlayerbotAI::IsMainTank(player))
                 return true;
 
             // Split remaining tanks evenly: first non-main tank -> secondary, then alternate.
@@ -2800,7 +2800,7 @@ public:
                     Player* member = ref->GetSource();
                     if (!member || !member->IsAlive())
                         continue;
-                    if (!botAI->IsTank(member) || botAI->IsMainTank(member))
+                    if (!PlayerbotAI::IsTank(member) || PlayerbotAI::IsMainTank(member))
                         continue;
                     if (member == player)
                         return (index % 2) == 1;
@@ -2821,7 +2821,7 @@ public:
         // Healers walk 0,1,2,3 -> primary,secondary,primary,secondary, so both adds are guaranteed
         // a healer as long as the raid brings two. One healer cannot cover both: the two staging
         // spots are ~82 yd apart.
-        if (botAI->IsHeal(player))
+        if (PlayerbotAI::IsHeal(player))
         {
             uint32 index = 0;
             if (group)
@@ -2832,7 +2832,7 @@ public:
                     if (!member || !member->IsAlive())
                         continue;
 
-                    if (botAI->IsTank(member) || !botAI->IsHeal(member))
+                    if (PlayerbotAI::IsTank(member) || !PlayerbotAI::IsHeal(member))
                         continue;
 
                     if (member == player)
@@ -2852,7 +2852,7 @@ public:
                 if (!member || !member->IsAlive())
                     continue;
 
-                if (botAI->IsTank(member) || botAI->IsHeal(member))
+                if (PlayerbotAI::IsTank(member) || PlayerbotAI::IsHeal(member))
                     continue;
 
                 if (member == player)
@@ -2940,7 +2940,7 @@ public:
     {
         bool hasPair = HasPetIconPair();
 
-        if (botAI->IsTank(bot))
+        if (PlayerbotAI::IsTank(bot))
         {
             if (hasPair && (!bot->IsInCombat() || (!IsMainTankEngagedOnPets() && !IsOffTankEngagedOnPets())))
             {

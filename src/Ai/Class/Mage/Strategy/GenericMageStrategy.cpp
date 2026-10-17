@@ -151,7 +151,7 @@ void GenericMageStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("enemy too close for spell and no firestarter strategy", { NextAction("blink back", 35.0f) }));
 
     // Mana Threshold Triggers
-    // "high mana" fires *below* AiPlayerbot.HighMana (65 %) despite the name - it is the gem
+    // "high mana" fires *below* Playerbots.HighMana (65 %) despite the name - it is the gem
     // threshold, not a full-mana check. Each node falls back down the gem ranks if the bag is empty.
     Player* bot = botAI->GetBot();
     if (bot->HasSpell(SPELL_CONJURE_MANA_SAPPHIRE))

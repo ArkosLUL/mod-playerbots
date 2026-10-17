@@ -47,9 +47,9 @@ void DefineKologarn(EncounterBuilder& e)
 
     e.Node(
         "kologarn nature resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossNatureResistanceTrigger(ai, "kologarn"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossNatureResistanceTrigger(botAI, "kologarn"); },
         "kologarn nature resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossNatureResistanceAction(ai, "kologarn"); }, ACTION_RAID);
+        [](PlayerbotAI* botAI) -> Action* { return new BossNatureResistanceAction(botAI, "kologarn"); }, ACTION_RAID);
     e.Node<KologarnFallFromFloorTrigger, KologarnFallFromFloorAction>(ACTION_RAID + 1);
 
     // An uncovered body means Petrifying Breath on the whole raid, so this outranks the dodges.

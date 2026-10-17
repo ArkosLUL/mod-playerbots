@@ -7,7 +7,9 @@
 #include "PriestTriggers.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "TargetValue.h"
 
 bool ShadowProtectionTrigger::IsActive()
 {
@@ -49,14 +51,14 @@ bool InnerFocusTrigger::IsActive()
 }
 
 BindingHealTrigger::BindingHealTrigger(PlayerbotAI* botAI)
-    : PartyMemberLowHealthTrigger(botAI, "binding heal", sPlayerbotAIConfig.lowHealth, 0)
+    : PartyMemberLowHealthTrigger(botAI, "binding heal", sPlayerbotAIConfig.LowHealth, 0)
 {
 }
 
 bool BindingHealTrigger::IsActive()
 {
     return PartyMemberLowHealthTrigger::IsActive() &&
-           AI_VALUE2(uint8, "health", "self target") < sPlayerbotAIConfig.mediumHealth;
+           AI_VALUE2(uint8, "health", "self target") < sPlayerbotAIConfig.MediumHealth;
 }
 
 const std::set<uint32> MindSearChannelCheckTrigger::MIND_SEAR_SPELL_IDS = {
@@ -73,10 +75,7 @@ bool MindSearChannelCheckTrigger::IsActive()
     {
         // Only trigger if the spell being channeled is Mind Sear
         if (MIND_SEAR_SPELL_IDS.count(spell->m_spellInfo->Id))
-        {
-            uint8 attackerCount = AI_VALUE(uint8, "attacker count");
-            return attackerCount < minEnemies;
-        }
+            return !HasEnoughAoeTargets(botAI, bot->GetPosition(), sPlayerbotAIConfig.SightDistance, minEnemies);
     }
 
     // Not channeling Mind Sear
@@ -117,7 +116,7 @@ bool WeakenedSoulOnPartyMemberTrigger::IsActive()
     if (!target)
         return false;
 
-    return target->GetHealthPct() < sPlayerbotAIConfig.almostFullHealth &&
+    return target->GetHealthPct() < sPlayerbotAIConfig.AlmostFullHealth &&
            botAI->HasAura("weakened soul", target);
 }
 
@@ -136,7 +135,7 @@ bool FlashHealOnPartyMemberTrigger::IsActive()
     if (!target)
         return false;
 
-    if (target->GetHealthPct() >= sPlayerbotAIConfig.lowHealth || !botAI->HasAura("weakened soul", target))
+    if (target->GetHealthPct() >= sPlayerbotAIConfig.LowHealth || !botAI->HasAura("weakened soul", target))
         return false;
 
     // A priest without the talent has no Penance id at all, which counts as "cannot Penance" here.
@@ -149,7 +148,7 @@ bool PriestHymnOfHopeTrigger::IsActive()
     if (!AI_VALUE2(bool, "has mana", "self target"))
         return false;
 
-    if (AI_VALUE2(uint8, "mana", "self target") >= sPlayerbotAIConfig.mediumMana)
+    if (AI_VALUE2(uint8, "mana", "self target") >= sPlayerbotAIConfig.MediumMana)
         return false;
 
     // An 8 second channel must not start while somebody is about to die.
@@ -163,7 +162,7 @@ bool PriestShadowWordDeathExecuteTrigger::IsActive()
         return false;
 
     // SW:D backlashes onto the caster whenever the target survives it.
-    if (AI_VALUE2(uint8, "health", "self target") <= sPlayerbotAIConfig.mediumHealth)
+    if (AI_VALUE2(uint8, "health", "self target") <= sPlayerbotAIConfig.MediumHealth)
         return false;
 
     return (target->GetHealth() / AI_VALUE(float, "estimated group dps")) <= lifeTime;

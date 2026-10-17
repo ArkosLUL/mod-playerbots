@@ -67,14 +67,14 @@ void DefineFreya(EncounterBuilder& e)
     e.Node<FreyaSetDpsPriorityTrigger, FreyaSetDpsPriorityAction>(ACTION_RAID);
     e.Node(
         "freya nature resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossNatureResistanceTrigger(ai, "freya"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossNatureResistanceTrigger(botAI, "freya"); },
         "freya nature resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossNatureResistanceAction(ai, "freya"); }, ACTION_RAID);
+        [](PlayerbotAI* botAI) -> Action* { return new BossNatureResistanceAction(botAI, "freya"); }, ACTION_RAID);
     e.Node(
         "freya fire resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossFireResistanceTrigger(ai, "freya"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossFireResistanceTrigger(botAI, "freya"); },
         "freya fire resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossFireResistanceAction(ai, "freya"); }, ACTION_RAID);
+        [](PlayerbotAI* botAI) -> Action* { return new BossFireResistanceAction(botAI, "freya"); }, ACTION_RAID);
 
     // Hard mode (config-gated): break out of Iron Roots and dodge the Unstable Sun Beam. Breaking the
     // root outranks the dodge - a rooted bot can't move, so it has to free itself before it can step out.

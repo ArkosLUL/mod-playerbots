@@ -284,7 +284,7 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !botAI->IsTank(member, true) || !member->IsAlive())
+        if (!member || !PlayerbotAI::IsTank(member, true) || !member->IsAlive())
             continue;
 
         Aura* fuseArmor = member->GetAura(SPELL_FUSE_ARMOR);
@@ -311,7 +311,7 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (member && botAI->IsMainTank(member))
+        if (member && PlayerbotAI::IsMainTank(member))
             group->SetGroupMemberFlag(member->GetGUID(), false, MEMBER_FLAG_MAINTANK);
     }
 
@@ -425,7 +425,7 @@ RazorscaleScan& GetRazorscaleScan(PlayerbotAI* botAI)
 
 bool IsRazorscaleHarpoonCrew(PlayerbotAI* botAI, Player* bot)
 {
-    return botAI->IsRanged(bot) && botAI->IsDps(bot) && !botAI->IsHeal(bot);
+    return PlayerbotAI::IsRanged(bot) && PlayerbotAI::IsDps(bot) && !PlayerbotAI::IsHeal(bot);
 }
 
 GameObject* GetRazorscaleClosestReadyHarpoon(PlayerbotAI* botAI)

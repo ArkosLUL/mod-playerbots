@@ -194,7 +194,7 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
     if (RaidObs::Active())
         RaidObs::BeginTick(botAI->GetBot());
 
-    if (sPlayerbotAIConfig.logValuesPerTick)
+    if (sPlayerbotAIConfig.LogValuesPerTick)
         LogValues();
 
     bool actionExecuted = false;
@@ -216,7 +216,7 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
     PushDefaultActions();
 
     uint32 iterations = 0;
-    uint32 iterationsPerTick = queue.Size() * (minimal ? 2 : sPlayerbotAIConfig.iterationsPerTick);
+    uint32 iterationsPerTick = queue.Size() * (minimal ? 2 : sPlayerbotAIConfig.IterationsPerTick);
 
     while (++iterations <= iterationsPerTick)
     {
@@ -286,7 +286,7 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                 // buffer, so asking for one costs a heap allocation. The early-out lives inside
                 // start(), which is a frame too late to help: guard the call instead.
                 PerfMonitorOperation* pmo =
-                    sPlayerbotAIConfig.perfMonEnabled
+                    sPlayerbotAIConfig.PerfMonEnabled
                         ? sPerfMonitor.start(PERF_MON_ACTION, action->getName(),
                                              &aiObjectContext->performanceStack)
                         : nullptr;
@@ -650,7 +650,7 @@ void Engine::ProcessTriggers(bool minimal)
                 ++coverage[i].checks;
 
             PerfMonitorOperation* pmo =
-                sPlayerbotAIConfig.perfMonEnabled
+                sPlayerbotAIConfig.PerfMonEnabled
                     ? sPerfMonitor.start(PERF_MON_TRIGGER, trigger->getName(),
                                          &aiObjectContext->performanceStack)
                     : nullptr;
@@ -772,6 +772,13 @@ Action* Engine::InitializeAction(ActionNode* actionNode)
         actionNode->setAction(action);
     }
 
+    if (action)
+    {
+        action->SetReaction(false);
+        // Clear duration leftovers so ListenAndExecute doesn't re-apply a stale delay
+        action->ResetDuration();
+    }
+
     return action;
 }
 
@@ -812,13 +819,17 @@ bool Engine::ListenAndExecute(Action* action, Event event)
 
     actionExecuted = actionExecutionListeners.OverrideResult(action, actionExecuted, event);
     actionExecutionListeners.After(action, actionExecuted, event);
+
+    if (actionExecuted && action->GetDuration() > 0)
+        botAI->SetActionDuration(action);
+
     return actionExecuted;
 }
 
 void Engine::LogAction(char const* format, ...)
 {
     Player* bot = botAI->GetBot();
-    if (sPlayerbotAIConfig.logInGroupOnly && (!bot->GetGroup() || !botAI->HasGameClientMaster()) && !testMode)
+    if (sPlayerbotAIConfig.LogInGroupOnly && (!bot->GetGroup() || !botAI->HasGameClientMaster()) && !testMode)
         return;
 
     char buf[1024];
@@ -872,6 +883,15 @@ void Engine::LogMeleeApproach(bool debugMove, Action* action, char const* verdic
               bot->GetExactDist(target), bot->GetMeleeRange(target), target->GetCombatReach());
 }
 
+std::string const Engine::ResolveStrategyName(std::string const name)
+{
+    if (HasStrategy(name))
+        return name;
+
+    Strategy* strategy = aiObjectContext->GetStrategy(name);
+    return strategy ? strategy->getName() : name;
+}
+
 void Engine::ChangeStrategy(std::string const names)
 {
     std::vector<std::string> splitted = split(names, ',');
@@ -884,10 +904,10 @@ void Engine::ChangeStrategy(std::string const names)
                 addStrategy(name + 1);
                 break;
             case '-':
-                removeStrategy(name + 1);
+                removeStrategy(ResolveStrategyName(name + 1));
                 break;
             case '~':
-                toggleStrategy(name + 1);
+                toggleStrategy(ResolveStrategyName(name + 1));
                 break;
             case '?':
                 botAI->TellMaster(ListStrategies());
@@ -902,7 +922,7 @@ void Engine::LogValues()
         return;
 
     Player* bot = botAI->GetBot();
-    if (sPlayerbotAIConfig.logInGroupOnly && (!bot->GetGroup() || !botAI->HasGameClientMaster()))
+    if (sPlayerbotAIConfig.LogInGroupOnly && (!bot->GetGroup() || !botAI->HasGameClientMaster()))
         return;
 
     std::string const text = botAI->GetAiObjectContext()->FormatValues();

@@ -33,10 +33,10 @@ using namespace EncounterHelpers;
 // both single-actor nodes. First living bot tank instead, so a human MT does not switch them off.
 bool YoggSaronTrigger::IsDesignatedBotTank()
 {
-    if (botAI->IsBotMainTank(bot))
+    if (PlayerbotAI::IsBotMainTank(bot))
         return true;
 
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     Group* group = bot->GetGroup();
@@ -73,7 +73,7 @@ bool YoggSaronTrigger::IsInBrainLevel() { return YoggSaronOnBrainLevel(bot); }
 bool YoggSaronTrigger::PhaseThreeStationReaches(Unit* target)
 {
     Position const& spot = YoggSaronPhaseThreeSpot(bot);
-    float const reach = botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
+    float const reach = PlayerbotAI::IsMelee(bot) ? sPlayerbotAIConfig.MeleeDistance : sPlayerbotAIConfig.SpellDistance;
 
     return spot.GetExactDist2d(target->GetPositionX(), target->GetPositionY()) -
                ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS <=
@@ -99,7 +99,7 @@ bool YoggSaronTrigger::IsInChamberOfTheAspectsIllusion() { return YoggSaronRoomO
 bool YoggSaronTrigger::IsMasterIsInIllusionGroup()
 {
     Player* master = botAI->GetMaster();
-    return master && !botAI->IsTank(master);
+    return master && !PlayerbotAI::IsTank(master);
 }
 
 bool YoggSaronTrigger::IsMasterIsInBrainRoom()
@@ -111,7 +111,7 @@ bool YoggSaronTrigger::IsBrainRoomApproachable() { return YoggSaronBrainRoomAppr
 
 bool YoggSaronGuardianPositioningTrigger::IsActive()
 {
-    if (!botAI->IsTank(bot) && !PlayerbotAI::IsMelee(bot))
+    if (!PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsMelee(bot))
         return false;
 
     // The handover wins over the leash: Sara is already down, so holding a bot on the leash only buys knockbacks. No
@@ -127,7 +127,7 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
 
     // A melee bot neither tanking nor healing is held tighter, inside the radius the inner orbit can't be woken from.
     // The wider pair stays the tank's: it is about where the Guardian dies, which follows threat.
-    bool const pile = !botAI->IsTank(bot) && !PlayerbotAI::IsHeal(bot);
+    bool const pile = !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot);
     float const leash = pile ? ULDUAR_YOGG_SARON_P1_PILE_LEASH : ULDUAR_YOGG_SARON_P1_LEASH;
     float const release = pile ? ULDUAR_YOGG_SARON_P1_PILE_RELEASE : ULDUAR_YOGG_SARON_P1_LEASH_RELEASE;
 
@@ -144,7 +144,7 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
     // Phase before the Guardian sweep: melee sit outside this leash for most of phases 2 and 3. The Guardian
     // test stays, it is why nothing walks back before the first spawn.
     bool const active = beyond && fromSara <= ULDUAR_YOGG_SARON_P1_ROOM_RADIUS && YoggSaronInPhase1(botAI) &&
-                        bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance, true);
+                        bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.SightDistance, true);
 
     if (active != returning && RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.p1leash", active ? "returning" : "held");
@@ -309,7 +309,7 @@ bool YoggSaronSetDpsPriorityTrigger::IsActive()
 {
     // Outside phase 2 a tank keeps the generic picker (the resolver would pull it off what it holds; phase 3 guardian
     // control owns it). In phase 2 it walks the tank into a Crusher: GetDistance drops its 8 yd combat reach.
-    if (botAI->IsTank(bot) && !IsPhase2())
+    if (PlayerbotAI::IsTank(bot) && !IsPhase2())
         return false;
 
     // Fight-wide, and must match the dps target guard rule in the definition, which zeroes the stock assist over this
@@ -747,8 +747,8 @@ bool YoggSaronBodyDetourTrigger::IsActive()
 
     // Nothing to route while the bot can already hit from where it stands, which is when reach stands down too. Combat
     // reach counts: a full-health Guardian is several yards across.
-    bool const inReach = botAI->IsMelee(bot) ? bot->IsWithinMeleeRange(target)
-                                             : bot->IsWithinCombatRange(target, sPlayerbotAIConfig.spellDistance);
+    bool const inReach = PlayerbotAI::IsMelee(bot) ? bot->IsWithinMeleeRange(target)
+                                             : bot->IsWithinCombatRange(target, sPlayerbotAIConfig.SpellDistance);
     if (inReach || YoggSaronRouteClearOfBody(bot, target->GetPositionX(), target->GetPositionY()))
         return false;
 
@@ -832,7 +832,7 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
 
     // Bringing a loose guardian back to the stack is guardian control's job, and that node outranks
     // this one. All the leash adds is a way home once nothing is loose and it returns false.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return bot->GetDistance(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) > ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH;
 
     Position const& spot = YoggSaronPhaseThreeSpot(bot);
@@ -877,7 +877,7 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
 bool YoggSaronGuardianControlTrigger::IsActive()
 {
     // Tank first: both branches below are tank-only.
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     uint32 const phase = YoggSaronPhase(botAI);
@@ -928,7 +928,7 @@ bool YoggSaronSanityConservationTrigger::IsActive()
         return false;
 
     // The main tank must stay on the adds; never pull it out.
-    if (botAI->IsBotMainTank(bot))
+    if (PlayerbotAI::IsBotMainTank(bot))
         return false;
 
     // A linked bot must stay near its Brain Link partner: retreating would drain more sanity, not less.

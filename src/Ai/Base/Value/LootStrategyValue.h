@@ -17,7 +17,7 @@ class LootStrategyValue : public ManualSetValue<LootStrategy*>
 {
 public:
     LootStrategyValue(PlayerbotAI* botAI, std::string const name = "loot strategy")
-        : ManualSetValue<LootStrategy*>(botAI, LootStrategyValue::instance(sPlayerbotAIConfig.lootStrategy), name)
+        : ManualSetValue<LootStrategy*>(botAI, LootStrategyValue::instance(sPlayerbotAIConfig.LootStrategy), name)
     {
     }
     virtual ~LootStrategyValue();

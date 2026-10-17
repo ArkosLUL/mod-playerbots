@@ -84,7 +84,7 @@ bool PaladinInfusionOfLightTrigger::IsActive()
         return false;
 
     // Only spend the proc when there is something worth the discounted Holy Light.
-    return AI_VALUE2(uint8, "health", "party member to heal") < sPlayerbotAIConfig.almostFullHealth;
+    return AI_VALUE2(uint8, "health", "party member to heal") < sPlayerbotAIConfig.AlmostFullHealth;
 }
 
 bool PaladinJudgementOfLightTrigger::IsActive()
@@ -101,11 +101,11 @@ bool PaladinDivinePleaTrigger::IsActive()
         return false;
 
     uint8 mana = AI_VALUE2(uint8, "mana", "self target");
-    if (mana >= sPlayerbotAIConfig.mediumMana)
+    if (mana >= sPlayerbotAIConfig.MediumMana)
         return false;
 
     // Below the low-mana floor take the healing penalty anyway; the alternative is casting nothing.
-    return mana < sPlayerbotAIConfig.lowMana || AI_VALUE2(uint8, "aoe heal", "medium") == 0;
+    return mana < sPlayerbotAIConfig.LowMana || AI_VALUE2(uint8, "aoe heal", "medium") == 0;
 }
 
 bool NotSensingUndeadTrigger::IsActive()

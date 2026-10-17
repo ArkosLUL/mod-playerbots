@@ -148,7 +148,7 @@ bool TellCalculateItemAction::Execute(Event event)
 
     // Match what QueryItemUsageForEquip scores with, or the printed number is not the one the loot
     // and equip decisions actually saw.
-    calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
+    calculator.SetItemSetBonus(sPlayerbotAIConfig.ItemSetUseForUpgrades);
     calculator.SetOverflowPenalty(false);
     calculator.SetBisBonus(true);
     // nothing to compare against here, so the rank bonus prints undecayed

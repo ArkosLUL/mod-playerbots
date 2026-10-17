@@ -71,14 +71,14 @@ void DefineYoggSaron(EncounterBuilder& e)
 {
     e.Node(
         "sara shadow resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossShadowResistanceTrigger(ai, "sara"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossShadowResistanceTrigger(botAI, "sara"); },
         "sara shadow resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossShadowResistanceAction(ai, "sara"); }, ACTION_RAID);
+        [](PlayerbotAI* botAI) -> Action* { return new BossShadowResistanceAction(botAI, "sara"); }, ACTION_RAID);
     e.Node(
         "yogg-saron shadow resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossShadowResistanceTrigger(ai, "yogg-saron"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossShadowResistanceTrigger(botAI, "yogg-saron"); },
         "yogg-saron shadow resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossShadowResistanceAction(ai, "yogg-saron"); }, ACTION_RAID);
+        [](PlayerbotAI* botAI) -> Action* { return new BossShadowResistanceAction(botAI, "yogg-saron"); }, ACTION_RAID);
     // These two take the first paladin that answers; this one picks the paladin that can double the aura.
     // Prayer of Shadow Protection already gives everyone the same 130.
     e.Node<YoggSaronShadowAuraTrigger, YoggSaronShadowAuraAction>(ACTION_RAID);

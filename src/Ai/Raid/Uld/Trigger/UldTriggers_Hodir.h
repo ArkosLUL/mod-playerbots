@@ -12,7 +12,7 @@ class HodirBitingColdTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir biting cold";
 
-    HodirBitingColdTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirBitingColdTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -23,7 +23,7 @@ class HodirNearSnowpackedIcicleTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir near snowpacked icicle";
 
-    HodirNearSnowpackedIcicleTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirNearSnowpackedIcicleTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -34,7 +34,7 @@ class HodirFrostResistanceTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir frost resistance trigger";
 
-    HodirFrostResistanceTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirFrostResistanceTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -45,7 +45,7 @@ class HodirIcicleDodgeTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir icicle dodge";
 
-    HodirIcicleDodgeTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirIcicleDodgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -55,7 +55,7 @@ class HodirRaidPositionTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir raid position";
 
-    HodirRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirRaidPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -65,7 +65,7 @@ class HodirSetDpsPriorityTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir set dps priority";
 
-    HodirSetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirSetDpsPriorityTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -75,7 +75,7 @@ class HodirFrozenBlowsSwapTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir frozen blows swap";
 
-    HodirFrozenBlowsSwapTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirFrozenBlowsSwapTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -85,7 +85,7 @@ class HodirSpreadStormCloudTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir spread storm cloud";
 
-    HodirSpreadStormCloudTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirSpreadStormCloudTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -95,7 +95,7 @@ class HodirCollectStormPowerTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir collect storm power";
 
-    HodirCollectStormPowerTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirCollectStormPowerTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -106,7 +106,7 @@ class HodirRedirectThreatTrigger : public Trigger
 public:
     static constexpr char const* Name = "hodir redirect threat";
 
-    HodirRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    HodirRedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

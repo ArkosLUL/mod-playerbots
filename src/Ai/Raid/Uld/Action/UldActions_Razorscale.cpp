@@ -50,7 +50,7 @@ RazorscaleAvoidDevouringFlameAction::FlameScan const& RazorscaleAvoidDevouringFl
     // Widened for the main tank while she is airborne so he can hold the Dark Rune adds away from the
     // patches; on the ground he only has to clear his own footprint.
     bool const airborne = boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
-    float const multiplier = (botAI->IsMainTank(bot) && airborne) ? 2.3f : 1.0f;
+    float const multiplier = (PlayerbotAI::IsMainTank(bot) && airborne) ? 2.3f : 1.0f;
     _scan.clearRadius = RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS * multiplier;
 
     if (Unit* flame = RazorscaleBossHelper::FindDevouringFlameNear(botAI, _scan.clearRadius))
@@ -128,7 +128,7 @@ bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)
 {
     // No marking here: "razorscale kill target action" owns the skull all fight, so it can hand it to
     // the boss the moment she lands.
-    if (!botAI->IsRanged(bot))
+    if (!PlayerbotAI::IsRanged(bot))
         return false;
 
     const float radius = 8.0f;
@@ -151,7 +151,7 @@ bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)
 
 bool RazorscaleAvoidSentinelAction::isUseful()
 {
-    if (!botAI->IsRanged(bot))
+    if (!PlayerbotAI::IsRanged(bot))
         return false;
 
     const float radius = 8.0f;
@@ -170,7 +170,7 @@ bool RazorscaleAvoidSentinelAction::isUseful()
 
 bool RazorscaleAvoidWhirlwindAction::Execute(Event /*event*/)
 {
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
     {
         return false;
     }
@@ -191,7 +191,7 @@ bool RazorscaleAvoidWhirlwindAction::Execute(Event /*event*/)
 
 bool RazorscaleAvoidWhirlwindAction::isUseful()
 {
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
     {
         return false;
     }
@@ -233,7 +233,7 @@ bool RazorscaleIgnoreBossAction::isUseful()
             return true;  // Movement to the center is the top priority for all bots
         }
 
-        if (!botAI->IsTank(bot))
+        if (!PlayerbotAI::IsTank(bot))
             return false;
 
         Group* group = bot->GetGroup();
@@ -255,7 +255,7 @@ bool RazorscaleIgnoreBossAction::isUseful()
         {
             for (int i = 0; i < 3; ++i)
             {
-                if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
+                if (PlayerbotAI::IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
                     return true;
             }
         }
@@ -286,7 +286,7 @@ bool RazorscaleIgnoreBossAction::Execute(Event /*event*/)
                           RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS - 10.0f, MovementPriority::MOVEMENT_NORMAL);
     }
 
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     int8 moonIndex = 4;
@@ -301,7 +301,7 @@ bool RazorscaleIgnoreBossAction::Execute(Event /*event*/)
     {
         for (int i = 0; i < 3; ++i)
         {
-            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
+            if (PlayerbotAI::IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
             {
                 group->SetTargetIcon(moonIndex, bot->GetGUID(), boss->GetGUID());
                 SetNextMovementDelay(1000);
@@ -326,7 +326,7 @@ bool RazorscaleGroundedAction::isUseful()
     if (!boss || !boss->IsAlive() || boss->GetPositionZ() > RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
         return false;
 
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         Group* group = bot->GetGroup();
         if (!group)
@@ -338,7 +338,7 @@ bool RazorscaleGroundedAction::isUseful()
         return currentMoonTarget == boss->GetGUID();
     }
 
-    if (botAI->IsTank(bot) && !botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsMainTank(bot))
     {
         Group* group = bot->GetGroup();
         if (!group)
@@ -348,7 +348,7 @@ bool RazorscaleGroundedAction::isUseful()
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
-            if (member && botAI->IsMainTank(member))
+            if (member && PlayerbotAI::IsMainTank(member))
             {
                 mainTank = member;
                 break;
@@ -363,10 +363,10 @@ bool RazorscaleGroundedAction::isUseful()
         }
     }
 
-    if (botAI->IsMelee(bot))
+    if (PlayerbotAI::IsMelee(bot))
         return false;
 
-    if (botAI->IsRanged(bot))
+    if (PlayerbotAI::IsRanged(bot))
     {
         constexpr float landingX = 588.0f;
         constexpr float landingY = -166.0f;
@@ -416,7 +416,7 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
     {
         for (int i = 0; i < 3; ++i)
         {
-            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
+            if (PlayerbotAI::IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
             {
                 int8 moonIndex = 4;
                 ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
@@ -430,7 +430,7 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
             }
         }
     }
-    else if (botAI->IsMainTank(bot))
+    else if (PlayerbotAI::IsMainTank(bot))
     {
         int8 moonIndex = 4;
         ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
@@ -443,13 +443,13 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
         }
     }
 
-    if (mainTank && (botAI->IsTank(bot) && !botAI->IsMainTank(bot)))
+    if (mainTank && (PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsMainTank(bot)))
     {
         constexpr float followDistance = 2.0f;
         return MoveNear(mainTank, followDistance, MovementPriority::MOVEMENT_COMBAT);
     }
 
-    if (botAI->IsRanged(bot))
+    if (PlayerbotAI::IsRanged(bot))
     {
         constexpr float landingX = 588.0f;
         constexpr float landingY = -166.0f;
@@ -502,7 +502,7 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
     for (auto& guid : groupBots)
     {
         Player* member = ObjectAccessor::FindPlayer(guid);
-        if (member && member->IsAlive() && botAI->IsRanged(member) && botAI->IsDps(member) && !botAI->IsHeal(member))
+        if (member && member->IsAlive() && PlayerbotAI::IsRanged(member) && PlayerbotAI::IsDps(member) && !PlayerbotAI::IsHeal(member))
         {
             float distance = member->GetDistance2d(closestHarpoon);
             if (distance < minDistance)
@@ -562,10 +562,10 @@ bool RazorscaleHarpoonAction::isUseful()
 
 bool RazorscaleFuseArmorAction::isUseful()
 {
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         Aura* fuseArmor = bot->GetAura(RazorscaleBossHelper::SPELL_FUSE_ARMOR);
         if (fuseArmor && fuseArmor->GetStackAmount() >= RazorscaleBossHelper::FUSEARMOR_THRESHOLD)
@@ -582,7 +582,7 @@ bool RazorscaleFuseArmorAction::isUseful()
         if (!member)
             continue;
 
-        if (botAI->IsMainTank(member) && member != bot)
+        if (PlayerbotAI::IsMainTank(member) && member != bot)
         {
             Aura* fuseArmor = member->GetAura(RazorscaleBossHelper::SPELL_FUSE_ARMOR);
             if (fuseArmor && fuseArmor->GetStackAmount() >= RazorscaleBossHelper::FUSEARMOR_THRESHOLD)

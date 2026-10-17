@@ -16,7 +16,7 @@
 class SartharionMainTankTargetMultiplier : public Multiplier
 {
 public:
-    SartharionMainTankTargetMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion") {}
+    SartharionMainTankTargetMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "sartharion") {}
     float GetValue(Action* action) override;
 };
 
@@ -28,7 +28,7 @@ public:
 class SartharionOffTankBossMultiplier : public Multiplier
 {
 public:
-    SartharionOffTankBossMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion") {}
+    SartharionOffTankBossMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "sartharion") {}
     float GetValue(Action* action) override;
 };
 
@@ -39,7 +39,7 @@ public:
 class SartharionRearFlankMultiplier : public Multiplier
 {
 public:
-    SartharionRearFlankMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion") {}
+    SartharionRearFlankMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "sartharion") {}
     float GetValue(Action* action) override;
 };
 
@@ -51,7 +51,7 @@ public:
 class SartharionBossReachMultiplier : public Multiplier
 {
 public:
-    SartharionBossReachMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion") {}
+    SartharionBossReachMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "sartharion") {}
     float GetValue(Action* action) override;
 };
 
@@ -66,7 +66,7 @@ public:
 class SartharionBurstWindowMultiplier : public Multiplier
 {
 public:
-    SartharionBurstWindowMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion burst window") {}
+    SartharionBurstWindowMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "sartharion burst window") {}
     float GetValue(Action* action) override;
 
 private:

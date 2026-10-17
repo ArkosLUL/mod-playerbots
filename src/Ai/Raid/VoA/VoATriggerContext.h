@@ -40,27 +40,27 @@ public:
     }
 
 private:
-    static Trigger* emalon_mark_boss_trigger(PlayerbotAI* ai) { return new EmalonMarkBossTrigger(ai); }
-    static Trigger* emalon_lighting_nova_trigger(PlayerbotAI* ai) { return new EmalonLightingNovaTrigger(ai); }
-    static Trigger* emalon_overcharge_trigger(PlayerbotAI* ai) { return new EmalonOverchargeTrigger(ai); }
-    static Trigger* emalon_fall_from_floor_trigger(PlayerbotAI* ai) { return new EmalonFallFromFloorTrigger(ai); }
-    static Trigger* emalon_main_tank_hold_trigger(PlayerbotAI* ai) { return new EmalonMainTankHoldTrigger(ai); }
-    static Trigger* emalon_ring_hold_trigger(PlayerbotAI* ai) { return new EmalonRingHoldTrigger(ai); }
-    static Trigger* emalon_offtank_hold_trigger(PlayerbotAI* ai) { return new EmalonOffTankHoldTrigger(ai); }
-    static Trigger* emalon_attack_priority_trigger(PlayerbotAI* ai) { return new EmalonAttackPriorityTrigger(ai); }
-    static Trigger* emalon_redirect_threat_trigger(PlayerbotAI* ai) { return new EmalonRedirectThreatTrigger(ai); }
-    static Trigger* emalon_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "emalon the storm watcher"); }
-    static Trigger* koralon_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "koralon the flame watcher"); }
-    static Trigger* archavon_mark_boss_trigger(PlayerbotAI* ai) { return new BossMarkSkullTrigger(ai, "archavon the stone watcher"); }
-    static Trigger* archavon_rock_shards_spread_trigger(PlayerbotAI* ai) { return new ArchavonRockShardsSpreadTrigger(ai); }
-    static Trigger* archavon_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "archavon the stone watcher"); }
-    static Trigger* koralon_mark_boss_trigger(PlayerbotAI* ai) { return new BossMarkSkullTrigger(ai, "koralon the flame watcher"); }
-    static Trigger* koralon_burning_breath_trigger(PlayerbotAI* ai) { return new KoralonBurningBreathTrigger(ai); }
-    static Trigger* koralon_flaming_cinder_spread_trigger(PlayerbotAI* ai) { return new KoralonFlamingCinderSpreadTrigger(ai); }
-    static Trigger* toravon_mark_boss_trigger(PlayerbotAI* ai) { return new BossMarkSkullTrigger(ai, "toravon the ice watcher"); }
-    static Trigger* toravon_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "toravon the ice watcher"); }
-    static Trigger* toravon_freezing_ground_trigger(PlayerbotAI* ai) { return new ToravonFreezingGroundTrigger(ai); }
-    static Trigger* toravon_frozen_orb_avoid_trigger(PlayerbotAI* ai) { return new ToravonFrozenOrbAvoidTrigger(ai); }
+    static Trigger* emalon_mark_boss_trigger(PlayerbotAI* botAI) { return new EmalonMarkBossTrigger(botAI); }
+    static Trigger* emalon_lighting_nova_trigger(PlayerbotAI* botAI) { return new EmalonLightingNovaTrigger(botAI); }
+    static Trigger* emalon_overcharge_trigger(PlayerbotAI* botAI) { return new EmalonOverchargeTrigger(botAI); }
+    static Trigger* emalon_fall_from_floor_trigger(PlayerbotAI* botAI) { return new EmalonFallFromFloorTrigger(botAI); }
+    static Trigger* emalon_main_tank_hold_trigger(PlayerbotAI* botAI) { return new EmalonMainTankHoldTrigger(botAI); }
+    static Trigger* emalon_ring_hold_trigger(PlayerbotAI* botAI) { return new EmalonRingHoldTrigger(botAI); }
+    static Trigger* emalon_offtank_hold_trigger(PlayerbotAI* botAI) { return new EmalonOffTankHoldTrigger(botAI); }
+    static Trigger* emalon_attack_priority_trigger(PlayerbotAI* botAI) { return new EmalonAttackPriorityTrigger(botAI); }
+    static Trigger* emalon_redirect_threat_trigger(PlayerbotAI* botAI) { return new EmalonRedirectThreatTrigger(botAI); }
+    static Trigger* emalon_nature_resistance_trigger(PlayerbotAI* botAI) { return new BossNatureResistanceTrigger(botAI, "emalon the storm watcher"); }
+    static Trigger* koralon_fire_resistance_trigger(PlayerbotAI* botAI) { return new BossFireResistanceTrigger(botAI, "koralon the flame watcher"); }
+    static Trigger* archavon_mark_boss_trigger(PlayerbotAI* botAI) { return new BossMarkSkullTrigger(botAI, "archavon the stone watcher"); }
+    static Trigger* archavon_rock_shards_spread_trigger(PlayerbotAI* botAI) { return new ArchavonRockShardsSpreadTrigger(botAI); }
+    static Trigger* archavon_nature_resistance_trigger(PlayerbotAI* botAI) { return new BossNatureResistanceTrigger(botAI, "archavon the stone watcher"); }
+    static Trigger* koralon_mark_boss_trigger(PlayerbotAI* botAI) { return new BossMarkSkullTrigger(botAI, "koralon the flame watcher"); }
+    static Trigger* koralon_burning_breath_trigger(PlayerbotAI* botAI) { return new KoralonBurningBreathTrigger(botAI); }
+    static Trigger* koralon_flaming_cinder_spread_trigger(PlayerbotAI* botAI) { return new KoralonFlamingCinderSpreadTrigger(botAI); }
+    static Trigger* toravon_mark_boss_trigger(PlayerbotAI* botAI) { return new BossMarkSkullTrigger(botAI, "toravon the ice watcher"); }
+    static Trigger* toravon_frost_resistance_trigger(PlayerbotAI* botAI) { return new BossFrostResistanceTrigger(botAI, "toravon the ice watcher"); }
+    static Trigger* toravon_freezing_ground_trigger(PlayerbotAI* botAI) { return new ToravonFreezingGroundTrigger(botAI); }
+    static Trigger* toravon_frozen_orb_avoid_trigger(PlayerbotAI* botAI) { return new ToravonFrozenOrbAvoidTrigger(botAI); }
 };
 
 #endif

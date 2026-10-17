@@ -70,7 +70,7 @@ bool ThaddiusAttackNearestPetAction::Execute(Event event)
     if (!bot->IsInCombat() && !helper.IsMainTankEngagedOnPets())
         return false;
 
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
     {
         bool primarySide = helper.IsAssignedToPrimarySide(bot);
         if (!primarySide && !helper.IsOffTankEngagedOnPets())
@@ -80,13 +80,13 @@ bool ThaddiusAttackNearestPetAction::Execute(Event event)
         }
     }
 
-    if (botAI->IsHeal(bot))
+    if (PlayerbotAI::IsHeal(bot))
     {
         std::pair<float, float> pos = helper.PetPhaseGetPosForRanged(target);
         return MoveTo(533, pos.first, pos.second, helper.tankPosZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
     }
 
-    if (!botAI->IsTank(bot) && !bot->IsWithinLOSInMap(target))
+    if (!PlayerbotAI::IsTank(bot) && !bot->IsWithinLOSInMap(target))
     {
         std::pair<float, float> pos = helper.PetPhaseGetPosForRanged(target);
         return MoveTo(533, pos.first, pos.second, helper.tankPosZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
@@ -95,17 +95,17 @@ bool ThaddiusAttackNearestPetAction::Execute(Event event)
     if (!bot->IsWithinLOSInMap(target))
         return MoveTo(target, 0, MovementPriority::MOVEMENT_COMBAT);
 
-    if (AI_VALUE(Unit*, "current target") != target && !botAI->IsHeal(bot))
+    if (AI_VALUE(Unit*, "current target") != target && !PlayerbotAI::IsHeal(bot))
         return Attack(target);
 
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
     {
         // Pin the add at its coil the moment we engage, not only after aggro,
         // so it is never dragged far enough to overload the tesla coil.
         std::pair<float, float> posForTank = helper.PetPhaseGetPosForTank(target);
         return MoveTo(533, posForTank.first, posForTank.second, helper.tankPosZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
     }
-    if (botAI->IsRanged(bot) || botAI->IsHeal(bot))
+    if (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot))
     {
         std::pair<float, float> posForRanged = helper.PetPhaseGetPosForRanged(target);
         return MoveTo(533, posForRanged.first, posForRanged.second, helper.tankPosZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
@@ -179,7 +179,7 @@ bool ThaddiusMoveToPlatformAction::Execute(Event event)
             if (!MoveTo(bot->GetMapId(), position[0].first, position[0].second, high_z, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
             {
                 float distance = bot->GetExactDist2d(position[0].first, position[0].second);
-                if (distance < sPlayerbotAIConfig.contactDistance)
+                if (distance < sPlayerbotAIConfig.ContactDistance)
                     JumpTo(bot->GetMapId(), position[2].first, position[2].second, low_z, MovementPriority::MOVEMENT_COMBAT);
             }
         }
@@ -188,7 +188,7 @@ bool ThaddiusMoveToPlatformAction::Execute(Event event)
             if (!MoveTo(bot->GetMapId(), position[1].first, position[1].second, high_z, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
             {
                 float distance = bot->GetExactDist2d(position[1].first, position[1].second);
-                if (distance < sPlayerbotAIConfig.contactDistance)
+                if (distance < sPlayerbotAIConfig.ContactDistance)
                     JumpTo(bot->GetMapId(), position[3].first, position[3].second, low_z, MovementPriority::MOVEMENT_COMBAT);
             }
         }
@@ -202,7 +202,7 @@ bool ThaddiusMoveToPlatformAction::Execute(Event event)
 
 bool ThaddiusMovePolarityAction::isUseful()
 {
-    return !botAI->IsMainTank(bot) || AI_VALUE2(bool, "has aggro", "current target");
+    return !PlayerbotAI::IsMainTank(bot) || AI_VALUE2(bool, "has aggro", "current target");
 }
 
 bool ThaddiusMovePolarityAction::Execute(Event event)
@@ -238,6 +238,6 @@ bool ThaddiusMovePolarityAction::Execute(Event event)
     {
         idx = 2;
     }
-    idx = idx * 2 + botAI->IsRanged(bot);
+    idx = idx * 2 + PlayerbotAI::IsRanged(bot);
     return MoveTo(bot->GetMapId(), position[idx].first, position[idx].second, bot->GetPositionZ(), false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
 }

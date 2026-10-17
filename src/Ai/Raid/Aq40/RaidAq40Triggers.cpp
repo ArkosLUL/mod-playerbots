@@ -51,7 +51,7 @@
 //                 // Check if Vek'lor already has a valid spell-damage tank
 //                 bool hasSpellTank = bosstarget
 //                     && (bosstarget->getClass() == CLASS_WARLOCK
-//                         || (bosstarget->getClass() == CLASS_PALADIN && botAI->IsTank(bosstarget, true)));
+//                         || (bosstarget->getClass() == CLASS_PALADIN && PlayerbotAI::IsTank(bosstarget, true)));
 
 //                 if (!hasSpellTank)
 //                 {
@@ -145,16 +145,16 @@ bool Aq40MeleeViscidusTrigger::IsActive()
 //                         // Warlock: spell-damage tank for Vek'lor
 //                         assignedtype = 0;
 //                     }
-//                     else if (member->getClass() == CLASS_PALADIN && memberAI->IsTank(member))
+//                     else if (member->getClass() == CLASS_PALADIN && PlayerbotAI::IsTank(member))
 //                     {
 //                         // Paladin tank: Holy damage works on both emperors
 //                         assignedtype = 0;
 //                     }
-//                     else if (memberAI->IsTank(member))
+//                     else if (PlayerbotAI::IsTank(member))
 //                     {
 //                         assignedtype = 1;
 //                     }
-//                     else if (memberAI->IsHeal(member))
+//                     else if (PlayerbotAI::IsHeal(member))
 //                     {
 //                         assignedtype = 2;
 //                     }
@@ -405,9 +405,9 @@ bool Aq40MeleeViscidusTrigger::IsActive()
 //     // Only for tanks (type 0 and type 1)
 //     if (bot->getClass() == CLASS_WARLOCK)
 //         return true;
-//     if (bot->getClass() == CLASS_PALADIN && botAI->IsTank(bot))
+//     if (bot->getClass() == CLASS_PALADIN && PlayerbotAI::IsTank(bot))
 //         return true;
-//     if (botAI->IsTank(bot))
+//     if (PlayerbotAI::IsTank(bot))
 //         return true;
 
 //     return false;
@@ -424,11 +424,11 @@ bool Aq40MeleeViscidusTrigger::IsActive()
 //     // Only for healers and caster DPS — not tanks, not melee DPS
 //     if (bot->getClass() == CLASS_WARLOCK)
 //         return false;
-//     if (botAI->IsTank(bot))
+//     if (PlayerbotAI::IsTank(bot))
 //         return false;
 
 //     // Melee DPS follows Vek'nilash (pain train), not center
-//     if (botAI->IsMelee(bot) && !botAI->IsHeal(bot))
+//     if (PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsHeal(bot))
 //         return false;
 
 //     // Fire if healer or caster DPS is too far from center
@@ -469,9 +469,9 @@ bool Aq40MeleeViscidusTrigger::IsActive()
 //     // Don't fire for tanks — they must keep emperors separated until the swap
 //     if (bot->getClass() == CLASS_WARLOCK)
 //         return false;
-//     if (bot->getClass() == CLASS_PALADIN && botAI->IsTank(bot))
+//     if (bot->getClass() == CLASS_PALADIN && PlayerbotAI::IsTank(bot))
 //         return false;
-//     if (botAI->IsTank(bot))
+//     if (PlayerbotAI::IsTank(bot))
 //         return false;
 
 //     // Fire when >25s since last teleport (teleport happens every 30-40s)
@@ -484,7 +484,7 @@ bool Aq40MeleeViscidusTrigger::IsActive()
 //     // Don't fire for spell tanks (they need to be near Vek'lor)
 //     if (bot->getClass() == CLASS_WARLOCK)
 //         return false;
-//     if (bot->getClass() == CLASS_PALADIN && botAI->IsTank(bot))
+//     if (bot->getClass() == CLASS_PALADIN && PlayerbotAI::IsTank(bot))
 //         return false;
 
 //     if (Unit* veklor = AI_VALUE2(Unit*, "find target", "emperor vek'lor"))

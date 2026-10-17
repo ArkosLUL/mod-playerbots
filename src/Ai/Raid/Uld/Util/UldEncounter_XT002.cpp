@@ -98,7 +98,7 @@ uint32 GetXT002GravityBombSpellId(Player* bot)
 
 bool IsXT002PummellerTank(PlayerbotAI* botAI, Player* bot)
 {
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     // Whoever holds XT keeps holding him, so the add belongs to the first assist tank and only falls
@@ -176,11 +176,11 @@ static bool BuildXT002RingMembers(Player* bot, std::vector<Player*>& out)
             continue;
 
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (!memberAI || memberAI->IsTank(member))
+        if (!memberAI || PlayerbotAI::IsTank(member))
             continue;
 
-        bool const heal = memberAI->IsHeal(member);
-        if (!heal && !memberAI->IsRangedDps(member))
+        bool const heal = PlayerbotAI::IsHeal(member);
+        if (!heal && !PlayerbotAI::IsRangedDps(member))
             continue;
 
         ranked.emplace_back(heal, member);
@@ -320,7 +320,7 @@ std::vector<Position> GetXT002OtherFormationSlots(Player* bot)
 // the route that does path is longer than a carrier can run in 9 s. Their lot grows east instead.
 std::vector<XT002BombLot> GetXT002BombLots(PlayerbotAI* botAI, Player* bot)
 {
-    if (botAI->IsMelee(bot))
+    if (PlayerbotAI::IsMelee(bot))
         return {{ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE, -1.0f, ULDUAR_XT002_BOMB_GRID_X_CELLS_MELEE}};
 
     return {{ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_SOUTH, -1.0f},

@@ -43,7 +43,7 @@ bool ShouldCastRend(PlayerbotAI* botAI, Unit* target)
 
 bool BloodrageBuffTrigger::IsActive()
 {
-    return AI_VALUE2(uint8, "health", "self target") >= sPlayerbotAIConfig.mediumHealth &&
+    return AI_VALUE2(uint8, "health", "self target") >= sPlayerbotAIConfig.MediumHealth &&
            AI_VALUE2(uint8, "rage", "self target") < 20;
 }
 
@@ -57,7 +57,7 @@ bool SunderArmorStackTrigger::IsActive()
     if (!group)
         return false;
 
-    if (!botAI->IsTank(bot, false))
+    if (!PlayerbotAI::IsTank(bot, false))
     {
         // Expose Armor and a worm pet's Acid Spit occupy the same 20% slot at full value, and a DPS
         // warrior has no threat reason to overwrite either. Tanks still sunder - for them it is a
@@ -74,7 +74,7 @@ bool SunderArmorStackTrigger::IsActive()
                 continue;
             }
 
-            if (member->getClass() == CLASS_WARRIOR && botAI->IsTank(member, false))
+            if (member->getClass() == CLASS_WARRIOR && PlayerbotAI::IsTank(member, false))
                 return false;
         }
     }

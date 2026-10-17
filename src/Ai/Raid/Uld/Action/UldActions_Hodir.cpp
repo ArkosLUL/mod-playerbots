@@ -121,7 +121,7 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
     Position const* preferNear = GetHodirDodgePreference(botAI, bot, preference) ? &preference : nullptr;
 
     // First hit is the shortest walk MoveTo will accept. Not FleePosition: it clamps travel to
-    // AiPlayerbot.FleeDistance and reads one hazard, so a second icicle leaves the bot in the blast.
+    // Playerbots.FleeDistance and reads one hazard, so a second icicle leaves the bot in the blast.
     Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_DODGE_LEASH, 2.0f,
                                                       static_cast<float>(M_PI) / 8.0f, preferNear);
 
@@ -284,7 +284,7 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget()
 
     // Tanks never break ice. He follows whoever holds him, so a tank that walks 20 yd to a block puts
     // him on the ranged formation, and a freed helper is worth a lot less than that costs.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return hodir;
 
     Unit* trappedAlly = nullptr;

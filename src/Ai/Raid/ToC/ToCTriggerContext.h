@@ -36,8 +36,8 @@ private:
             if (ToCEncounterOfTrigger(name, encounter))
             {
                 ObjectCreator inner = creator;
-                built = [inner, encounter](PlayerbotAI* ai) -> Trigger*
-                { return new ToCGatedTrigger(ai, inner(ai), encounter); };
+                built = [inner, encounter](PlayerbotAI* botAI) -> Trigger*
+                { return new ToCGatedTrigger(botAI, inner(botAI), encounter); };
             }
 
             if (!creators.emplace(name, built).second)

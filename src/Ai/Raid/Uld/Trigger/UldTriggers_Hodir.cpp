@@ -76,7 +76,7 @@ bool HodirIcicleDodgeTrigger::IsActive()
 
     // Tanks eat the icicle: Hodir follows, so a dodging tank drags him into the ranged. The Biting Cold
     // shuttle already moves them without leaving the spot.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     // Leaving is decided on the radius that kills; the clear is margin for where the bot lands, and
@@ -137,7 +137,7 @@ bool HodirRaidPositionTrigger::IsActive()
 
     // Ranged and healers only: a tank stepping back drags him off the fire, and melee doing their job sit
     // inside the gap rule every tick. Same predicate the anchor uses, so the two can't drift apart.
-    if (!botAI->IsRanged(bot))
+    if (!PlayerbotAI::IsRanged(bot))
         return false;
 
     // Reactive, not restoring: fire only on a broken constraint. A home spot makes the anchor a spring,
@@ -183,7 +183,7 @@ bool HodirSetDpsPriorityTrigger::IsActive()
 
     // Tanks are on this node too, but the action hands them the boss and nothing else.
     // Healers keep the generic picker so nothing pulls them off healing.
-    return !botAI->IsHeal(bot);
+    return !PlayerbotAI::IsHeal(bot);
 }
 
 bool HodirFrozenBlowsSwapTrigger::IsActive()
@@ -197,10 +197,10 @@ bool HodirFrozenBlowsSwapTrigger::IsActive()
 
     // Off-tank holds him for the 20s window, main tank takes him back after. Under the floor the taunt is a
     // death, not a swap: two 63511 hits land 2.4s apart and either is most of a tank's pool.
-    if (botAI->IsAssistTankOfIndex(bot, 0, true))
+    if (PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
         return frozenBlows && !holding && bot->GetHealthPct() >= ULDUAR_HODIR_TAUNT_HEALTH_FLOOR;
 
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
         return !frozenBlows && !holding;
 
     return false;
@@ -220,7 +220,7 @@ bool HodirSpreadStormCloudTrigger::IsActive()
         return false;
 
     // A tank leaving its spot mid-Frozen-Blows costs more than the buff is worth.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     return bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, bot));
@@ -232,7 +232,7 @@ bool HodirCollectStormPowerTrigger::IsActive()
         return false;
 
     // Tanks never leave the boss for a damage buff, and a charge spent on a healer is wasted.
-    if (botAI->IsTank(bot) || botAI->IsHeal(bot))
+    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot))
         return false;
 
     // Already holding it: the pulse would be spent on a bot that can't use it, and the walk is

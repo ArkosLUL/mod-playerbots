@@ -131,7 +131,7 @@ bool IsKologarnOffTank(PlayerbotAI* botAI, Player* bot)
     if (!bot || !bot->IsAlive())
         return false;
 
-    if (!botAI->IsMainTank(bot) && !botAI->IsAssistTankOfIndex(bot, 0))
+    if (!PlayerbotAI::IsMainTank(bot) && !PlayerbotAI::IsAssistTankOfIndex(bot, 0))
         return false;
 
     return !IsKologarnBodyTank(botAI, bot);

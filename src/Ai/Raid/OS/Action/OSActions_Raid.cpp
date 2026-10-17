@@ -27,7 +27,7 @@ bool OsTsunamiCorridorAction::Execute(Event /*event*/)
     // a drake stay where they are instead of drifting downrange every time a wave goes out.
     // The tank is the exception: his two holds are measured positions 1.3yd apart on X, and keeping his
     // own X would leave him beside the coordinate rather than on it.
-    float const x = botAI->IsMainTank(bot) ? TankHoldX(bot) : bot->GetPositionX();
+    float const x = PlayerbotAI::IsMainTank(bot) ? TankHoldX(bot) : bot->GetPositionX();
     return MoveToClamped(x, SafeCorridorY(bot), CORRIDOR_ARRIVAL_TOLERANCE, MovementPriority::MOVEMENT_FORCED);
 }
 
@@ -64,7 +64,7 @@ bool OsAvoidTwilightFissureAction::Execute(Event /*event*/)
         { bot->GetPositionX(), fy - step },
     } };
 
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         // He is the one bot whose dodge turns the boss, and X is the axis that turns him into the raid:
         // a 10yd step east off his left hold swings the 60yd frontal cone from 138 degrees round to 66,
@@ -244,7 +244,7 @@ bool OsReturnToPlatformAction::Execute(Event /*event*/)
         return MoveToClamped(anchor.GetPositionX(), anchor.GetPositionY(), 0.0f, MovementPriority::MOVEMENT_FORCED);
     }
 
-    float const x = botAI->IsMainTank(bot) ? TankHoldX(bot) : RaidLineX(bot);
+    float const x = PlayerbotAI::IsMainTank(bot) ? TankHoldX(bot) : RaidLineX(bot);
     return MoveToClamped(x, SafeCorridorY(bot), 0.0f, MovementPriority::MOVEMENT_FORCED);
 }
 

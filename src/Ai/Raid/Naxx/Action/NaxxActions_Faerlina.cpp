@@ -29,7 +29,7 @@ bool FaerlinaSacrificeWorshipperAction::isUseful()
         return false;
     }
 
-    if (!botAI->IsAssistTankOfIndex(bot, 0))
+    if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0))
     {
         return false;
     }

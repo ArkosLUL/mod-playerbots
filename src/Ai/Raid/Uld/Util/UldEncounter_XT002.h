@@ -110,7 +110,7 @@ constexpr float ULDUAR_XT002_TAUNT_RANGE = 30.0f;
 constexpr float ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS = 110.0f;
 
 // XT-002: ranked destinations a mover offers per tick. findSmoothPath refuses some walkable points here, the
-// same ones every tick, so a lone winner never moves. Each try costs AiPlayerbot.MaxMovementSearchTime builds.
+// same ones every tick, so a lone winner never moves. Each try costs Playerbots.MaxMovementSearchTime builds.
 constexpr size_t ULDUAR_XT002_MOVE_CANDIDATE_ATTEMPTS = 5;
 
 // XT-002: radius of the Searing Light spot's alternates. Clears the Void Zone radius, so one puddle can't cover

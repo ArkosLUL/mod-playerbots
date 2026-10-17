@@ -15,7 +15,7 @@ using namespace OsHelpers;
 
 bool SartharionDpsTrigger::IsActive()
 {
-    if (!botAI->IsDps(bot))
+    if (!PlayerbotAI::IsDps(bot))
         return false;
 
     // Shifted bots keep their own kill order inside the realm, where Sartharion is not resolvable.
@@ -24,7 +24,7 @@ bool SartharionDpsTrigger::IsActive()
 
 bool SartharionMeleePositioningTrigger::IsActive()
 {
-    if (!botAI->IsMelee(bot) || botAI->IsMainTank(bot) || IsOffTank(bot))
+    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsMainTank(bot) || IsOffTank(bot))
         return false;
 
     return SartharionEncounterActive(bot) && bot->IsInCombat();
@@ -42,7 +42,7 @@ bool OsTwilightFissureTrigger::IsActive()
 
 bool OsMainTankHoldTrigger::IsActive()
 {
-    return botAI->IsMainTank(bot) && OnThePlatform(bot) && SartharionEncounterActive(bot);
+    return PlayerbotAI::IsMainTank(bot) && OnThePlatform(bot) && SartharionEncounterActive(bot);
 }
 
 bool OsDrakeLandingTrigger::IsActive()
@@ -50,7 +50,7 @@ bool OsDrakeLandingTrigger::IsActive()
     if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))
         return false;
 
-    if (!IsOffTank(bot) && !(botAI->IsMelee(bot) && botAI->IsDps(bot)))
+    if (!IsOffTank(bot) && !(PlayerbotAI::IsMelee(bot) && PlayerbotAI::IsDps(bot)))
         return false;
 
     Unit* drake = FindInboundDrake(bot);
@@ -88,7 +88,7 @@ bool OsRedirectThreatTrigger::IsActive()
 
 bool OsMainTankCooldownTrigger::IsActive()
 {
-    if (!botAI->IsMainTank(bot) || !OnThePlatform(bot) || !SartharionEncounterActive(bot))
+    if (!PlayerbotAI::IsMainTank(bot) || !OnThePlatform(bot) || !SartharionEncounterActive(bot))
         return false;
 
     return MainTankCooldownWindowOpen(bot) && NextTankDefensive(botAI, bot, nullptr) != 0;
@@ -106,7 +106,7 @@ bool OsTranquilizeTrigger::IsActive()
 
 bool OsRaidHoldTrigger::IsActive()
 {
-    if (!botAI->IsRanged(bot) && !botAI->IsHeal(bot))
+    if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
         return false;
 
     if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))
@@ -120,7 +120,7 @@ bool OsRaidHoldTrigger::IsActive()
 
 bool OsSartharionFlankTrigger::IsActive()
 {
-    if (!botAI->IsMelee(bot) || botAI->IsMainTank(bot) || IsOffTank(bot))
+    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsMainTank(bot) || IsOffTank(bot))
         return false;
 
     if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))
@@ -143,7 +143,7 @@ bool OsSartharionFlankTrigger::IsActive()
 
 bool OsDrakeRearTrigger::IsActive()
 {
-    if (!botAI->IsMelee(bot) || botAI->IsMainTank(bot) || IsOffTank(bot))
+    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsMainTank(bot) || IsOffTank(bot))
         return false;
 
     if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))
@@ -160,7 +160,7 @@ bool OsDrakeRearTrigger::IsActive()
 
 bool OsTankShapeshiftTrigger::IsActive()
 {
-    if (bot->getClass() != CLASS_DRUID || !botAI->IsTank(bot))
+    if (bot->getClass() != CLASS_DRUID || !PlayerbotAI::IsTank(bot))
         return false;
 
     if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))

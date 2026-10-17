@@ -245,11 +245,11 @@ bool RingSlotFor(PlayerbotAI* botAI, Player* bot, Unit* boss, float& x, float& y
     if (!botAI || !bot || !boss)
         return false;
 
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
-    bool const healer = botAI->IsHeal(bot);
-    if (!healer && !botAI->IsRanged(bot))
+    bool const healer = PlayerbotAI::IsHeal(bot);
+    if (!healer && !PlayerbotAI::IsRanged(bot))
         return false;
 
     NaxxRoleGroups groups = NaxxGetRoleGroups(botAI, bot);

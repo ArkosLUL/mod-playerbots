@@ -44,7 +44,7 @@ struct UnfriendlyOfEntryInRangeCheck
 // rebuilds and copies the whole list on every call, with IsPossibleTarget on every hostile in sight.
 std::vector<Unit*> CollectPossibleTargetsByEntry(Player* bot, uint32 entry)
 {
-    float const range = sPlayerbotAIConfig.sightDistance;
+    float const range = sPlayerbotAIConfig.SightDistance;
 
     std::vector<Unit*> matches;
     UnfriendlyOfEntryInRangeCheck check{Acore::AnyUnfriendlyUnitInObjectRangeCheck(bot, bot, range), entry};
@@ -203,7 +203,7 @@ bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<U
     if (!boss)
         return false;
 
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         int const station =
             GetAuriayaStationIndex(roomPools ? *roomPools : GetAuriayaRoomPools(botAI));
@@ -213,7 +213,7 @@ bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<U
         return true;
     }
 
-    if (!botAI->IsRanged(bot))
+    if (!PlayerbotAI::IsRanged(bot))
         return false;
 
     // Her victim, not a fixed bearing: the cone points at whoever she chases, human tank included.
@@ -227,7 +227,7 @@ bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<U
     out = Position(boss->GetPositionX() + std::cos(bearing) * ULDUAR_AURIAYA_RAID_STANDOFF,
                    boss->GetPositionY() + std::sin(bearing) * ULDUAR_AURIAYA_RAID_STANDOFF,
                    boss->GetPositionZ());
-    tolerance = botAI->IsRangedDps(bot) ? ULDUAR_AURIAYA_RANGED_SPOT_TOLERANCE
+    tolerance = PlayerbotAI::IsRangedDps(bot) ? ULDUAR_AURIAYA_RANGED_SPOT_TOLERANCE
                                         : ULDUAR_AURIAYA_HEALER_SPOT_TOLERANCE;
     return true;
 }

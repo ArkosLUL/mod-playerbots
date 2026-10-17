@@ -31,23 +31,23 @@ public:
     }
 
 private:
-    static Action* viscidus_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "viscidus"); }
-    static Action* huhuran_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "princess huhuran"); }
-    // static Action* move_from_other_emperor(PlayerbotAI* ai) { return new Aq40MoveFromOtherEmperorAction(ai); }
-    // static Action* attack_emperor_veklor(PlayerbotAI* ai) { return new Aq40AttackEmperorVekLorAction(ai); }
-    // static Action* attack_emperor_veknilash(PlayerbotAI* ai) { return new Aq40AttackEmperorVekNilashAction(ai); }
-    // static Action* attack_emperor_pests(PlayerbotAI* ai) { return new Aq40AttackEmperorPestsAction(ai); }
-    // static Action* move_towards_emperor_veklor(PlayerbotAI* ai) { return (Action *)(new Aq40MoveTowardsEmperorVekLorAction(ai)); }
-    // static Action* move_towards_emperor_veknilash(PlayerbotAI* ai) { return (Action *)(new Aq40MoveTowardsEmperorVekNilashAction(ai)); }
-    // static Action* warlock_searing_pain(PlayerbotAI* ai) { return new Aq40WarlockCastSearingPainAction(ai); }
-    static Action* mage_cast_frostbolt(PlayerbotAI* ai) { return new Aq40MageCastFrostboltAction(ai); }
-    static Action* melee_viscidus(PlayerbotAI* ai) { return new Aq40MeleeViscidusAction(ai); }
-    // static Action* tank_anchor_position(PlayerbotAI* ai) { return new Aq40TankAnchorPositionAction(ai); }
-    // static Action* move_to_room_center(PlayerbotAI* ai) { return new Aq40MoveToRoomCenterAction(ai); }
-    // static Action* move_from_veklor(PlayerbotAI* ai) { return new Aq40MoveFromVeklorAction(ai); }
-    static Action* ouro_burrowed_flee(PlayerbotAI* ai) { return new Aq40OuroBurrowedFleeAction(ai); }
-    static Action* cthun1_get_positioned(PlayerbotAI* ai) { return new Aq40Cthun1PositionAction(ai); }
-    static Action* cthun2_get_positioned(PlayerbotAI* ai) { return new Aq40Cthun2PositionAction(ai); }
+    static Action* viscidus_nature_resistance_action(PlayerbotAI* botAI) { return new BossNatureResistanceAction(botAI, "viscidus"); }
+    static Action* huhuran_nature_resistance_action(PlayerbotAI* botAI) { return new BossNatureResistanceAction(botAI, "princess huhuran"); }
+    // static Action* move_from_other_emperor(PlayerbotAI* botAI) { return new Aq40MoveFromOtherEmperorAction(botAI); }
+    // static Action* attack_emperor_veklor(PlayerbotAI* botAI) { return new Aq40AttackEmperorVekLorAction(botAI); }
+    // static Action* attack_emperor_veknilash(PlayerbotAI* botAI) { return new Aq40AttackEmperorVekNilashAction(botAI); }
+    // static Action* attack_emperor_pests(PlayerbotAI* botAI) { return new Aq40AttackEmperorPestsAction(botAI); }
+    // static Action* move_towards_emperor_veklor(PlayerbotAI* botAI) { return (Action *)(new Aq40MoveTowardsEmperorVekLorAction(botAI)); }
+    // static Action* move_towards_emperor_veknilash(PlayerbotAI* botAI) { return (Action *)(new Aq40MoveTowardsEmperorVekNilashAction(botAI)); }
+    // static Action* warlock_searing_pain(PlayerbotAI* botAI) { return new Aq40WarlockCastSearingPainAction(botAI); }
+    static Action* mage_cast_frostbolt(PlayerbotAI* botAI) { return new Aq40MageCastFrostboltAction(botAI); }
+    static Action* melee_viscidus(PlayerbotAI* botAI) { return new Aq40MeleeViscidusAction(botAI); }
+    // static Action* tank_anchor_position(PlayerbotAI* botAI) { return new Aq40TankAnchorPositionAction(botAI); }
+    // static Action* move_to_room_center(PlayerbotAI* botAI) { return new Aq40MoveToRoomCenterAction(botAI); }
+    // static Action* move_from_veklor(PlayerbotAI* botAI) { return new Aq40MoveFromVeklorAction(botAI); }
+    static Action* ouro_burrowed_flee(PlayerbotAI* botAI) { return new Aq40OuroBurrowedFleeAction(botAI); }
+    static Action* cthun1_get_positioned(PlayerbotAI* botAI) { return new Aq40Cthun1PositionAction(botAI); }
+    static Action* cthun2_get_positioned(PlayerbotAI* botAI) { return new Aq40Cthun2PositionAction(botAI); }
 };
 
 #endif

@@ -247,7 +247,7 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
 
     // "nearest npcs" cut down to these entries before its LOS test instead of after. Same units in the
     // same order, without a raycast for every pet and totem in the raid.
-    float const range = sPlayerbotAIConfig.sightDistance;
+    float const range = sPlayerbotAIConfig.SightDistance;
     std::vector<Unit*> candidates;
     AnyUnitOfEntriesInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, range), priorityOrder, priorityCount};
     Acore::UnitListSearcher<AnyUnitOfEntriesInRangeCheck> searcher(bot, candidates, check);

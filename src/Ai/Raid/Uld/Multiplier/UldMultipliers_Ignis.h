@@ -15,7 +15,7 @@
 class IgnisFlameJetsHoldCastMultiplier : public Multiplier
 {
 public:
-    IgnisFlameJetsHoldCastMultiplier(PlayerbotAI* ai) : Multiplier(ai, "ignis flame jets hold cast") {}
+    IgnisFlameJetsHoldCastMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "ignis flame jets hold cast") {}
     float GetValue(Action* action) override;
 
 private:

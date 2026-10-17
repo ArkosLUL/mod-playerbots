@@ -15,7 +15,6 @@ public:
         creators["mutilate"] = &mutilate;
         creators["envenom"] = &envenom;
         creators["backstab"] = &backstab;
-        creators["rupture"] = &rupture;
     }
 
 private:
@@ -46,15 +45,6 @@ private:
             /*C*/ {}
         );
     }
-    static ActionNode* rupture([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "rupture",
-            /*P*/ {},
-            /*A*/ { NextAction("eviscerate") },
-            /*C*/ {}
-        );
-    }
 };
 
 AssassinationRogueStrategy::AssassinationRogueStrategy(PlayerbotAI* botAI)
@@ -74,24 +64,6 @@ void AssassinationRogueStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
 {
     GenericRogueStrategy::InitTriggers(triggers);
 
-    triggers.push_back(
-        new TriggerNode(
-            "kick",
-            {
-                NextAction("kick", ACTION_INTERRUPT + 2),
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "kick on enemy healer",
-            {
-                NextAction("kick on enemy healer", ACTION_INTERRUPT + 1),
-            }
-        )
-    );
-
     // Both openers need stealth, so they sit above the survival band - nothing is hitting us yet.
     triggers.push_back(
         new TriggerNode(
@@ -99,34 +71,6 @@ void AssassinationRogueStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
             {
                 NextAction("garrote", ACTION_HIGH + 9.5f),
                 NextAction("ambush", ACTION_HIGH + 9.4f)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "low health",
-            {
-                NextAction("evasion", ACTION_HIGH + 9),
-                NextAction("feint", ACTION_HIGH + 8)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "critical health",
-            {
-                NextAction("cloak of shadows", ACTION_HIGH + 7)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "tricks of the trade",
-            {
-                NextAction("tricks of the trade", ACTION_HIGH + 6.5f),
             }
         )
     );
@@ -183,17 +127,6 @@ void AssassinationRogueStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
             "target with combo points almost dead",
             {
                 NextAction("envenom", ACTION_HIGH)
-            }
-        )
-    );
-
-    // Has to outrank the inherited "reach melee" on the same trigger, or that always wins the tick
-    // and we never sprint to close the gap.
-    triggers.push_back(
-        new TriggerNode(
-            "enemy out of melee",
-            {
-                NextAction("sprint", ACTION_HIGH + 2),
             }
         )
     );

@@ -76,7 +76,7 @@ bool KologarnRubbleTankAction::Execute(Event event)
 
     // Held, not kited: rubble run 8.0 yd/s against a player's 7.0.
     Position const hold = GetKologarnRubbleHoldSpot(botAI, rubble);
-    if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) < sPlayerbotAIConfig.followDistance)
+    if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) < sPlayerbotAIConfig.FollowDistance)
         return false;
 
     return MoveTo(bot->GetMapId(), hold.GetPositionX(), hold.GetPositionY(), hold.GetPositionZ(), false, false, false,

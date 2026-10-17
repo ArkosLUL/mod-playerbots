@@ -13,7 +13,7 @@ class AlgalonBigBangSoakTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon big bang soak";
 
-    AlgalonBigBangSoakTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonBigBangSoakTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -22,7 +22,7 @@ class AlgalonBigBangExternalTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon big bang external";
 
-    AlgalonBigBangExternalTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonBigBangExternalTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -31,7 +31,7 @@ class AlgalonSoakerPrepTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon soaker prep";
 
-    AlgalonSoakerPrepTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonSoakerPrepTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -40,7 +40,7 @@ class AlgalonSoakerRescueTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon soaker rescue";
 
-    AlgalonSoakerRescueTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonSoakerRescueTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -49,7 +49,7 @@ class AlgalonTankHealCriticalTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon tank heal critical";
 
-    AlgalonTankHealCriticalTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonTankHealCriticalTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -58,7 +58,7 @@ class AlgalonTankHealTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon tank heal";
 
-    AlgalonTankHealTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonTankHealTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -67,7 +67,7 @@ class AlgalonTankBeaconTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon tank beacon";
 
-    AlgalonTankBeaconTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 1000) {}
+    AlgalonTankBeaconTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 1000) {}
     bool IsActive() override;
 };
 
@@ -76,7 +76,7 @@ class AlgalonTankDefensiveTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon tank defensive";
 
-    AlgalonTankDefensiveTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -85,7 +85,7 @@ class AlgalonExplosionCoverTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon explosion cover";
 
-    AlgalonExplosionCoverTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonExplosionCoverTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -94,7 +94,7 @@ class AlgalonExplosionPersonalTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon explosion personal";
 
-    AlgalonExplosionPersonalTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonExplosionPersonalTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -103,7 +103,7 @@ class AlgalonShadowAuraTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon shadow aura";
 
-    AlgalonShadowAuraTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 1000) {}
+    AlgalonShadowAuraTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 1000) {}
     bool IsActive() override;
 };
 
@@ -112,7 +112,7 @@ class AlgalonBigBangHideTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon big bang hide";
 
-    AlgalonBigBangHideTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonBigBangHideTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -121,7 +121,7 @@ class AlgalonCosmicSmashTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon cosmic smash";
 
-    AlgalonCosmicSmashTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonCosmicSmashTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -130,7 +130,7 @@ class AlgalonLeaveBlackHoleTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon leave black hole";
 
-    AlgalonLeaveBlackHoleTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 250) {}
+    AlgalonLeaveBlackHoleTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 250) {}
     bool IsActive() override;
 };
 
@@ -139,7 +139,7 @@ class AlgalonThreatRedirectTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon threat redirect";
 
-    AlgalonThreatRedirectTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 500) {}
+    AlgalonThreatRedirectTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 500) {}
     bool IsActive() override;
 };
 
@@ -148,7 +148,7 @@ class AlgalonTankPickupTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon tank pickup";
 
-    AlgalonTankPickupTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AlgalonTankPickupTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -157,7 +157,7 @@ class AlgalonYieldBossTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon yield boss";
 
-    AlgalonYieldBossTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 500) {}
+    AlgalonYieldBossTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 500) {}
     bool IsActive() override;
 };
 
@@ -166,7 +166,7 @@ class AlgalonPhasePunchSwapTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon phase punch swap";
 
-    AlgalonPhasePunchSwapTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2000) {}
+    AlgalonPhasePunchSwapTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 2000) {}
     bool IsActive() override;
 };
 
@@ -175,7 +175,7 @@ class AlgalonConstellationTauntTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon constellation taunt";
 
-    AlgalonConstellationTauntTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 1000) {}
+    AlgalonConstellationTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 1000) {}
     bool IsActive() override;
 };
 
@@ -184,7 +184,7 @@ class AlgalonDarkMatterTankTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon dark matter tank";
 
-    AlgalonDarkMatterTankTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2000) {}
+    AlgalonDarkMatterTankTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 2000) {}
     bool IsActive() override;
 };
 
@@ -193,7 +193,7 @@ class AlgalonConstellationKiteTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon constellation kite";
 
-    AlgalonConstellationKiteTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 500) {}
+    AlgalonConstellationKiteTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 500) {}
     bool IsActive() override;
 };
 
@@ -202,7 +202,7 @@ class AlgalonStarTeamTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon star team";
 
-    AlgalonStarTeamTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 1000) {}
+    AlgalonStarTeamTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 1000) {}
     bool IsActive() override;
 };
 
@@ -211,7 +211,7 @@ class AlgalonStarMarkTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon star mark";
 
-    AlgalonStarMarkTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2000) {}
+    AlgalonStarMarkTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 2000) {}
     bool IsActive() override;
 };
 
@@ -220,7 +220,7 @@ class AlgalonRaidPositionTrigger : public Trigger
 public:
     static constexpr char const* Name = "algalon raid position";
 
-    AlgalonRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 1000) {}
+    AlgalonRaidPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 1000) {}
     bool IsActive() override;
 };
 

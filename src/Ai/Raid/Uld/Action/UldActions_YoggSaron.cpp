@@ -300,7 +300,7 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
         if (target && YoggSaronGuardianOnTheStack(target))
         {
             Position const at = target->GetPosition();
-            float const reach = sPlayerbotAIConfig.meleeDistance;
+            float const reach = sPlayerbotAIConfig.MeleeDistance;
 
             set.clear = [at, reach](float x, float y) { return at.GetExactDist2d(x, y) <= reach; };
             set.fallback = set.hazards;
@@ -409,7 +409,7 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
     if (target && target->IsAlive())
     {
         float const reach =
-            botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
+            PlayerbotAI::IsMelee(bot) ? sPlayerbotAIConfig.MeleeDistance : sPlayerbotAIConfig.SpellDistance;
         float const targetX = target->GetPositionX();
         float const targetY = target->GetPositionY();
 
@@ -452,7 +452,7 @@ bool YoggSaronIllusionFacingAction::Collect(HazardSet& set)
     float const targetX = target->GetPositionX();
     float const targetY = target->GetPositionY();
     float const reach =
-        botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
+        PlayerbotAI::IsMelee(bot) ? sPlayerbotAIConfig.MeleeDistance : sPlayerbotAIConfig.SpellDistance;
 
     // Staying in reach is required, not a preference: out of reach, reach melee walks the bot back and undoes this.
     // No fallback: every rejected candidate gets the bot gazed anyway, so fighting through it beats a useless walk.
@@ -484,7 +484,7 @@ bool YoggSaronBodyDetourAction::Execute(Event /*event*/)
         RaidObs::NoteDerived(bot, "yogg.detour", "around");
 
     return MoveNear(bot->GetMapId(), waypoint.GetPositionX(), waypoint.GetPositionY(), waypoint.GetPositionZ(),
-                    sPlayerbotAIConfig.contactDistance, MovementPriority::MOVEMENT_FORCED);
+                    sPlayerbotAIConfig.ContactDistance, MovementPriority::MOVEMENT_FORCED);
 }
 
 bool YoggSaronPetGuardAction::Execute(Event /*event*/)
@@ -811,7 +811,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     // The brain level needs the reach: a portal drops the bot 60-72 yd out, past sight distance. Attack() caps at
     // line of sight only. The boss room is ~50 yd across and keeps the cheaper sweep.
-    float const range = brainLevel ? 200.0f : sPlayerbotAIConfig.sightDistance;
+    float const range = brainLevel ? 200.0f : sPlayerbotAIConfig.SightDistance;
 
     // The door as well as the tentacles: the Brain opens it in the branch that fires when the last Influence Tentacle
     // dies, so reading tentacles alone can hit the Brain through a wall not yet opened.
@@ -1303,7 +1303,7 @@ bool YoggSaronBrainLinkAction::Execute(Event /*event*/)
         y = crusher->GetPositionY() + std::sin(heading) * ULDUAR_YOGG_SARON_CRUSH_RANGE;
     }
 
-    return MoveNear(bot->GetMapId(), x, y, bot->GetPositionZ(), sPlayerbotAIConfig.contactDistance,
+    return MoveNear(bot->GetMapId(), x, y, bot->GetPositionZ(), sPlayerbotAIConfig.ContactDistance,
                     MovementPriority::MOVEMENT_FORCED);
 }
 
@@ -1326,7 +1326,7 @@ bool YoggSaronMoveToEnterPortalAction::Execute(Event /*event*/)
     Position const destination = YoggSaronBodyRoute(bot, spot);
 
     return MoveNear(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
-                    destination.GetPositionZ(), sPlayerbotAIConfig.contactDistance,
+                    destination.GetPositionZ(), sPlayerbotAIConfig.ContactDistance,
                     MovementPriority::MOVEMENT_FORCED);
 }
 
@@ -1724,7 +1724,7 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
 
     // No taunt needs facing, so the tank turns away and still leaves guardian control its tick. Claiming
     // it left a Guardian peeled by heal threat on the healers for the whole 4 s: all four deaths in a kill.
-    if (botAI->IsTank(bot) && YoggSaronGuardianLoose(botAI))
+    if (PlayerbotAI::IsTank(bot) && YoggSaronGuardianLoose(botAI))
     {
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "yogg.gaze", "tankfree");
@@ -1924,7 +1924,7 @@ bool YoggSaronPhase3LustAction::Execute(Event /*event*/)
 bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
 {
     // A tank is only ever walked back on the leash: wherever it drifted to, a guardian took it there.
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
     {
         YoggSaronTrigger yoggSaronTrigger(botAI);
         Unit* target = AI_VALUE(Unit*, "current target");
@@ -1950,7 +1950,7 @@ bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
 bool YoggSaronGuardianControlAction::Execute(Event /*event*/)
 {
     // Tank only: melee/ranged already focus the skull guardian and the phase-3 positioning stacks them.
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     if (YoggSaronInPhase1(botAI))
@@ -2263,7 +2263,7 @@ char const* YoggSaronNovaExternalAction::PickExternal(PlayerbotAI* botAI, Player
 
         // CanCastSpell counts out of range as castable, so range is checked here or a healer on the far
         // side of the room claims the victim and then casts nothing.
-        if (!bot->IsWithinDistInMap(victim, sPlayerbotAIConfig.spellDistance))
+        if (!bot->IsWithinDistInMap(victim, sPlayerbotAIConfig.SpellDistance))
             continue;
 
         return external;

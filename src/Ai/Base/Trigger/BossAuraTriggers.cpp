@@ -117,7 +117,7 @@ bool BossFrostResistanceTrigger::IsActive()
 bool BossMarkSkullTrigger::IsActive()
 {
     // Only a tank bot assigns the raid target marker
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     // Check boss and it is alive

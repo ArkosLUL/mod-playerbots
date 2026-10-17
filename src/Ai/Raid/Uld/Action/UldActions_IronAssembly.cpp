@@ -51,7 +51,7 @@ bool TryGetIronAssemblyStation(PlayerbotAI* botAI, Player* bot, Position& statio
     return false;
 }
 
-// Not FleePosition: it clamps travel to AiPlayerbot.FleeDistance, short of a 20 yd blast, and reads
+// Not FleePosition: it clamps travel to Playerbots.FleeDistance, short of a 20 yd blast, and reads
 // one hazard. Ties break toward the bot's station, which holds still, so the answer doesn't slide.
 bool TryGetIronAssemblyEscapeSpot(PlayerbotAI* botAI, Player* bot, std::vector<HazardCircle> const& hazards,
                                   Position& spot)
@@ -263,7 +263,7 @@ Player* IronAssemblyRedirectThreatAction::GetRedirectTank()
                 if (!member || !member->IsAlive() || member == bot)
                     continue;
 
-                if (botAI->IsTank(member) && member == victim)
+                if (PlayerbotAI::IsTank(member) && member == victim)
                     return member;
             }
         }

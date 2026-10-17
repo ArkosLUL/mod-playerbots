@@ -63,7 +63,7 @@ bool NothChooseTargetAction::Execute(Event event)
 
     Unit* boss = helper.GetBoss();
     bool balcony = helper.IsBalconyPhase();
-    bool ownsAdds = botAI->IsAssistTank(bot) || (botAI->IsMainTank(bot) && !helper.GetAliveAssistTank());
+    bool ownsAdds = PlayerbotAI::IsAssistTank(bot) || (PlayerbotAI::IsMainTank(bot) && !helper.GetAliveAssistTank());
 
     // Noth drops out of "attackers" for the whole balcony phase, so the main tank correctly picks up
     // an add - and then keeps it, because an explicit main tank in a group with two tanks sticks to
@@ -71,7 +71,7 @@ bool NothChooseTargetAction::Execute(Event event)
     // on the boss the moment the balcony flag clears - unless there is nobody else to hold the adds.
     // A tank doing both jobs still comes back for Blink: the taunt that undoes the threat reset only
     // fires while the boss is the current target, and an add can wait those few seconds.
-    if (!balcony && boss && botAI->IsMainTank(bot) && (!ownsAdds || helper.IsBlinkWindow()))
+    if (!balcony && boss && PlayerbotAI::IsMainTank(bot) && (!ownsAdds || helper.IsBlinkWindow()))
     {
         return AI_VALUE(Unit*, "current target") != boss && Attack(boss);
     }
@@ -111,7 +111,7 @@ bool NothChooseTargetAction::Execute(Event event)
         KeepLowestGuid(unit, pick->any);
 
         Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
-        if (victim && botAI->IsTank(victim))
+        if (victim && PlayerbotAI::IsTank(victim))
         {
             KeepLowestGuid(unit, pick->tanked);
         }
@@ -129,7 +129,7 @@ bool NothChooseTargetAction::Execute(Event event)
         targets = {guardians.loose, champions.loose, warriors.loose};
         // A main tank covering both jobs holds the boss too, so he only leaves it for an add that
         // nobody has picked up yet.
-        if (!balcony && botAI->IsMainTank(bot))
+        if (!balcony && PlayerbotAI::IsMainTank(bot))
         {
             targets.push_back(boss);
         }
@@ -146,7 +146,7 @@ bool NothChooseTargetAction::Execute(Event event)
         targets = {guardians.tanked, champions.tanked, warriors.tanked,
                    guardians.any,    champions.any,    warriors.any};
     }
-    else if (botAI->IsRanged(bot))
+    else if (PlayerbotAI::IsRanged(bot))
     {
         // Ranged clear the adds. They spawn every 30s from alcoves 25-50 yd out and nobody but the
         // add tank ever touched them. Ordered by type rather than by distance so the whole back line
@@ -195,7 +195,7 @@ bool NothPositionAction::PositionAssistTank(Unit* currentTarget)
         }
 
         Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
-        if (victim && !botAI->IsTank(victim) && bot->GetDistance2d(unit) > CleaveSpread)
+        if (victim && !PlayerbotAI::IsTank(victim) && bot->GetDistance2d(unit) > CleaveSpread)
         {
             return MoveToClamped(unit->GetPositionX(), unit->GetPositionY());
         }
@@ -216,7 +216,7 @@ bool NothPositionAction::PositionAssistTank(Unit* currentTarget)
         {
             Unit* member = botAI->GetUnit(guid);
             Player* memberPlayer = member ? member->ToPlayer() : nullptr;
-            if (!memberPlayer || memberPlayer == bot || !memberPlayer->IsAlive() || !botAI->IsHeal(memberPlayer))
+            if (!memberPlayer || memberPlayer == bot || !memberPlayer->IsAlive() || !PlayerbotAI::IsHeal(memberPlayer))
             {
                 continue;
             }
@@ -310,12 +310,12 @@ bool NothPositionAction::Execute(Event event)
 
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-    if (botAI->IsAssistTank(bot))
+    if (PlayerbotAI::IsAssistTank(bot))
     {
         return PositionAssistTank(currentTarget);
     }
 
-    if (botAI->IsRanged(bot))
+    if (PlayerbotAI::IsRanged(bot))
     {
         return DragChampionToAddTank();
     }

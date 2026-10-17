@@ -55,7 +55,7 @@ bool VezaxMarkOfTheFacelessBreakTrigger::IsActive()
 {
     // Melee and the off-tank only. No mark in the ball reaches the camp at 27+ yd, and moving the camp
     // every 40s costs more cast time than it saves.
-    if (botAI->IsRanged(bot) || botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsMainTank(bot))
         return false;
 
     // Whoever holds the mark is the one person its leech skips, and it has its own node.
@@ -101,7 +101,7 @@ bool VezaxSearingFlamesInterruptTrigger::IsActive()
 
 bool VezaxSurgeOfDarknessTrigger::IsActive()
 {
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     Unit* boss = GetVezax(botAI);
@@ -134,7 +134,7 @@ bool VezaxSaroniteAnimusTrigger::IsActive()
 
     // Tanks build the threat, and a hunter's or rogue's first hits go to the tank through the redirect.
     // On Vezax those hits would use the redirect up, so they can't wait with the rest.
-    if (botAI->IsTank(bot) || VezaxAnimusRedirectSpell(bot))
+    if (PlayerbotAI::IsTank(bot) || VezaxAnimusRedirectSpell(bot))
         return true;
 
     // No summon time means the hook never saw it, so nobody gets held on a guess.
@@ -171,7 +171,7 @@ bool VezaxAnimusRedirectTrigger::IsActive()
 
 bool VezaxAnimusBringBackTrigger::IsActive()
 {
-    if (botAI->IsTank(bot) || !IsVezaxAnimusOnBot(bot))
+    if (PlayerbotAI::IsTank(bot) || !IsVezaxAnimusOnBot(bot))
         return false;
 
     Player* mainTank = GetGroupMainTank(bot);
@@ -181,7 +181,7 @@ bool VezaxAnimusBringBackTrigger::IsActive()
 
 bool VezaxAnimusMeleeSpotTrigger::IsActive()
 {
-    if (botAI->IsRanged(bot) || botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsMainTank(bot))
         return false;
 
     Unit* target = AI_VALUE(Unit*, "current target");
@@ -235,7 +235,7 @@ bool VezaxRaidPositionTrigger::IsActive()
 {
     // Whoever the Animus is hitting stays with the main tank until he has it back, or the slot would
     // walk it straight back out of his reach.
-    if (!botAI->IsTank(bot) && IsVezaxAnimusOnBot(bot))
+    if (!PlayerbotAI::IsTank(bot) && IsVezaxAnimusOnBot(bot))
         return false;
 
     return VezaxFormationActive(botAI);

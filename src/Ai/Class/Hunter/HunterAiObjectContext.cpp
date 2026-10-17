@@ -85,8 +85,6 @@ public:
         creators["low ammo"] = &HunterTriggerFactoryInternal::low_ammo;
         creators["no ammo"] = &HunterTriggerFactoryInternal::no_ammo;
         creators["has ammo"] = &HunterTriggerFactoryInternal::has_ammo;
-        creators["switch to melee"] = &HunterTriggerFactoryInternal::switch_to_melee;
-        creators["switch to ranged"] = &HunterTriggerFactoryInternal::switch_to_ranged;
         creators["misdirection on main tank"] = &HunterTriggerFactoryInternal::misdirection_on_main_tank;
         creators["misdirection on main tank and light aoe"] =
             &HunterTriggerFactoryInternal::misdirection_on_main_tank_and_light_aoe;
@@ -130,8 +128,6 @@ private:
     static Trigger* low_ammo(PlayerbotAI* botAI) { return new HunterLowAmmoTrigger(botAI); }
     static Trigger* no_ammo(PlayerbotAI* botAI) { return new HunterNoAmmoTrigger(botAI); }
     static Trigger* has_ammo(PlayerbotAI* botAI) { return new HunterHasAmmoTrigger(botAI); }
-    static Trigger* switch_to_melee(PlayerbotAI* botAI) { return new SwitchToMeleeTrigger(botAI); }
-    static Trigger* switch_to_ranged(PlayerbotAI* botAI) { return new SwitchToRangedTrigger(botAI); }
     static Trigger* misdirection_on_main_tank(PlayerbotAI* botAI) { return new MisdirectionOnMainTankTrigger(botAI); }
     static Trigger* misdirection_on_main_tank_and_light_aoe(PlayerbotAI* botAI)
     {

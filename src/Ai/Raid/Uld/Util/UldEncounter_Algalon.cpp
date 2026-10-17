@@ -752,7 +752,7 @@ void EnsureTankHealers(Player* bot, Creature* boss, AlgalonEncounterState& state
 // CanCastSpell lets an out of range cast through.
 bool TankHealReachable(Player* bot, Player* target)
 {
-    return CanStayOut(target) && bot->GetDistance2d(target) <= sPlayerbotAIConfig.healDistance &&
+    return CanStayOut(target) && bot->GetDistance2d(target) <= sPlayerbotAIConfig.HealDistance &&
            bot->IsWithinLOSInMap(target);
 }
 

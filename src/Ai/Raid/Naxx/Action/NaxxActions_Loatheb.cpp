@@ -54,7 +54,7 @@ ObjectGuid SelectRangedDpsLeaderForSide(Player* bot, PlayerbotAI* botAI, uint8 s
         if (bot->GetGUID() != member->GetGUID() && bot->GetMapId() != member->GetMapId())
             continue;
 
-        if (!botAI->IsRanged(member) || botAI->IsHeal(member))
+        if (!PlayerbotAI::IsRanged(member) || PlayerbotAI::IsHeal(member))
             continue;
 
         if (selected.IsEmpty() || member->GetGUID() < selected)
@@ -144,7 +144,7 @@ uint8 GetCasterCountForSide(Player* bot, PlayerbotAI* botAI, uint8 sideIndex)
         {
             continue;
         }
-        if (!botAI->IsRanged(member) || botAI->IsHeal(member))
+        if (!PlayerbotAI::IsRanged(member) || PlayerbotAI::IsHeal(member))
         {
             continue;
         }
@@ -186,7 +186,7 @@ bool IsSporeInHealerPack(Player* bot, PlayerbotAI* botAI, Unit* spore)
         if (bot->GetGUID() != member->GetGUID() && bot->GetMapId() != member->GetMapId())
             continue;
 
-        if (!botAI->IsHeal(member))
+        if (!PlayerbotAI::IsHeal(member))
             continue;
 
         if (member->GetDistance(spore) <= kSporeOnHealerRadius)
@@ -276,7 +276,7 @@ ObjectGuid SelectSporeCleanupCaster(Player* bot, PlayerbotAI* botAI, Unit* spore
             continue;
 
         // We want a true caster cleanup (no healers, no hunters), and no movement commitment.
-        if (!botAI->IsCaster(member) || botAI->IsHeal(member) || member->getClass() == CLASS_HUNTER)
+        if (!PlayerbotAI::IsCaster(member) || PlayerbotAI::IsHeal(member) || member->getClass() == CLASS_HUNTER)
             continue;
 
         float const dist = member->GetDistance(spore);
@@ -342,7 +342,7 @@ bool LoathebPositionAction::Execute(Event event)
     {
         return false;
     }
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
     {
         if (AI_VALUE2(bool, "has aggro", "boss target"))
         {
@@ -356,11 +356,11 @@ bool LoathebPositionAction::Execute(Event event)
         float targetY = 0.0f;
         float targetZ = boss->GetPositionZ();
 
-        if (botAI->IsHeal(bot))
+        if (PlayerbotAI::IsHeal(bot))
         {
             GetHealerPosition(boss, targetX, targetY, targetZ);
         }
-        else if (botAI->IsMelee(bot))
+        else if (PlayerbotAI::IsMelee(bot))
         {
             GetBossBehindPosition(boss, kMeleeBehindDistance, targetX, targetY, targetZ);
         }
@@ -450,7 +450,7 @@ bool LoathebChooseTargetAction::Execute(Event event)
     uint8 sideIndex = GetCasterSideIndex(bot);
     uint8 otherSideIndex = sideIndex == 0 ? 1 : 0;
     bool hasOtherSideCasters = false;
-    if (botAI->IsRanged(bot) && !botAI->IsHeal(bot))
+    if (PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
     {
         hasOtherSideCasters = GetCasterCountForSide(bot, botAI, otherSideIndex) > 0;
         isSporeRunner = IsSporeRunner(bot, botAI, sideIndex);
@@ -491,7 +491,7 @@ bool LoathebChooseTargetAction::Execute(Event event)
     }
 
     // Hard priority: if a spore is close to the tank, force ranged DPS to pick that spore first.
-    if (tankDangerSpore && botAI->IsRanged(bot) && !botAI->IsHeal(bot))
+    if (tankDangerSpore && PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
         target_spore = tankDangerSpore;
 
     // --- Spore cleanup: if a spore sticks on the healer pack OR tank pack and the spore-runner isn't close,
@@ -557,7 +557,7 @@ bool LoathebChooseTargetAction::Execute(Event event)
     {
         if (bot->getClass() == CLASS_HUNTER)
             botAI->DoSpecificAction("auto shot", Event(), true);
-        else if (botAI->IsCaster(bot) && HasWandEquipped(bot))
+        else if (PlayerbotAI::IsCaster(bot) && HasWandEquipped(bot))
             botAI->DoSpecificAction("shoot", Event(), true);
     }
 
@@ -571,7 +571,7 @@ bool LoathebChooseTargetAction::Execute(Event event)
     {
         if (bot->getClass() == CLASS_HUNTER)
             botAI->DoSpecificAction("auto shot", Event(), true);
-        else if (botAI->IsCaster(bot) && HasWandEquipped(bot))
+        else if (PlayerbotAI::IsCaster(bot) && HasWandEquipped(bot))
             botAI->DoSpecificAction("shoot", Event(), true);
     }
 

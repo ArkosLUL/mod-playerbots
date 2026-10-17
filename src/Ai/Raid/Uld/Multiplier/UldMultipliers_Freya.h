@@ -15,7 +15,7 @@
 class FreyaTrioSyncMultiplier : public Multiplier
 {
 public:
-    FreyaTrioSyncMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya trio sync") {}
+    FreyaTrioSyncMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "freya trio sync") {}
     float GetValue(Action* action) override;
 };
 
@@ -24,7 +24,7 @@ public:
 class FreyaLasherFinishAoeMultiplier : public Multiplier
 {
 public:
-    FreyaLasherFinishAoeMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya lasher finish aoe") {}
+    FreyaLasherFinishAoeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "freya lasher finish aoe") {}
     float GetValue(Action* action) override;
 };
 
@@ -33,7 +33,7 @@ public:
 class FreyaLasherTrapReserveMultiplier : public Multiplier
 {
 public:
-    FreyaLasherTrapReserveMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya lasher trap reserve") {}
+    FreyaLasherTrapReserveMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "freya lasher trap reserve") {}
     float GetValue(Action* action) override;
 };
 
@@ -42,7 +42,7 @@ public:
 class FreyaGroundTremorCastGateMultiplier : public Multiplier
 {
 public:
-    FreyaGroundTremorCastGateMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya ground tremor cast gate") {}
+    FreyaGroundTremorCastGateMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "freya ground tremor cast gate") {}
     float GetValue(Action* action) override;
 
 private:

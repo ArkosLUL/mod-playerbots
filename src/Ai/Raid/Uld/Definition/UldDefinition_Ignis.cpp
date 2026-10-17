@@ -29,7 +29,7 @@ bool InUlduar(PlayerbotAI* botAI) { return botAI->GetBot()->GetMapId() == ULDUAR
 bool IgnisPlacedTank(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    return botAI->IsMainTank(bot) || GetIgnisHeldConstruct(botAI, bot);
+    return PlayerbotAI::IsMainTank(bot) || GetIgnisHeldConstruct(botAI, bot);
 }
 
 // GetIgnis walks the grid, so it goes last.
@@ -48,9 +48,9 @@ void DefineIgnis(EncounterBuilder& e)
 {
     e.Node(
         "ignis fire resistance trigger",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossFireResistanceTrigger(ai, "ignis the furnace master"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossFireResistanceTrigger(botAI, "ignis the furnace master"); },
         "ignis fire resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossFireResistanceAction(ai, "ignis the furnace master"); },
+        [](PlayerbotAI* botAI) -> Action* { return new BossFireResistanceAction(botAI, "ignis the furnace master"); },
         ACTION_RAID);
     e.Node<IgnisScorchedGroundTrigger, IgnisScorchedGroundAction>(ACTION_RAID + 2);
 

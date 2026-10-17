@@ -70,7 +70,7 @@ Player* RaidRedirectThreatAction::GetTankHolding(Unit* target)
         {
             continue;
         }
-        if (botAI->IsTank(member) && member == victim)
+        if (PlayerbotAI::IsTank(member) && member == victim)
         {
             return member;
         }

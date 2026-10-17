@@ -39,7 +39,7 @@ bool IcehowlBreathSpreadTrigger::IsActive()
         {
             float const x = stand.spot.GetPositionX();
             float const y = stand.spot.GetPositionY();
-            float const reach = botAI->GetRange("heal") + 1.0f + sPlayerbotAIConfig.contactDistance;
+            float const reach = botAI->GetRange("heal") + 1.0f + sPlayerbotAIConfig.ContactDistance;
             if (target->GetDistance2d(x, y) - bot->GetCombatReach() > reach ||
                 !target->IsWithinLOS(x, y, stand.spot.GetPositionZ()))
                 return false;

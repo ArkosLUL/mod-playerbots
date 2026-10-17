@@ -37,11 +37,11 @@ Unit* PaladinTankToBeaconValue::Calculate()
             if (!player || !player->IsInWorld() || !player->IsAlive() || !player->IsInCombat())
                 continue;
 
-            if (!botAI->IsTank(player))
+            if (!PlayerbotAI::IsTank(player))
                 continue;
 
             if (player->GetMapId() != bot->GetMapId() ||
-                bot->GetDistance(player) >= sPlayerbotAIConfig.healDistance ||
+                bot->GetDistance(player) >= sPlayerbotAIConfig.HealDistance ||
                 !bot->IsWithinLOSInMap(player))
                 continue;
 

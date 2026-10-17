@@ -46,9 +46,9 @@ void DefineVezax(EncounterBuilder& e)
     e.Node<VezaxShadowCrashSoakTrigger, VezaxShadowCrashSoakAction>(ACTION_RAID + 2, EncounterRow::Mover);
     e.Node(
         "vezax shadow resistance",
-        [](PlayerbotAI* ai) -> Trigger* { return new BossShadowResistanceTrigger(ai, "general vezax"); },
+        [](PlayerbotAI* botAI) -> Trigger* { return new BossShadowResistanceTrigger(botAI, "general vezax"); },
         "vezax shadow resistance action",
-        [](PlayerbotAI* ai) -> Action* { return new BossShadowResistanceAction(ai, "general vezax"); },
+        [](PlayerbotAI* botAI) -> Action* { return new BossShadowResistanceAction(botAI, "general vezax"); },
         ACTION_RAID + 1);
     // Last, and yields once parked so the class interrupts at ACTION_INTERRUPT (40) still get a tick.
     e.Node<VezaxRaidPositionTrigger, VezaxRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);

@@ -265,7 +265,7 @@ BisSource BisListMgr::ResolveSource(Player* bot, BisProgress max, std::shared_pt
     src.progress = max;
 
     // the sim only covers WotLK content phases
-    if (!sPlayerbotAIConfig.bisDatasetEnable || !dataset || max.expansion != BIS_EXP_WOTLK)
+    if (!sPlayerbotAIConfig.BisDatasetEnable || !dataset || max.expansion != BIS_EXP_WOTLK)
         return src;
 
     auto const usable = [&](BisDatasetSubject const* subject)

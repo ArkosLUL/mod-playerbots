@@ -15,7 +15,7 @@
 class ThorimTakeBossAction : public AttackAction
 {
 public:
-    ThorimTakeBossAction(PlayerbotAI* ai, std::string const name) : AttackAction(ai, name) {}
+    ThorimTakeBossAction(PlayerbotAI* botAI, std::string const name) : AttackAction(botAI, name) {}
 
     bool Execute(Event event) override;
 };
@@ -25,8 +25,8 @@ class ThorimUnbalancingStrikeSwapAction : public ThorimTakeBossAction
 public:
     static constexpr char const* Name = "thorim unbalancing strike swap action";
 
-    ThorimUnbalancingStrikeSwapAction(PlayerbotAI* ai)
-        : ThorimTakeBossAction(ai, Name)
+    ThorimUnbalancingStrikeSwapAction(PlayerbotAI* botAI)
+        : ThorimTakeBossAction(botAI, Name)
     {
     }
 
@@ -40,7 +40,7 @@ class ThorimTankPickupAction : public ThorimTakeBossAction
 public:
     static constexpr char const* Name = "thorim tank pickup action";
 
-    ThorimTankPickupAction(PlayerbotAI* ai) : ThorimTakeBossAction(ai, Name) {}
+    ThorimTankPickupAction(PlayerbotAI* botAI) : ThorimTakeBossAction(botAI, Name) {}
 
     bool isUseful() override;
 };
@@ -52,7 +52,7 @@ class ThorimDpsPriorityAction : public AttackAction
 public:
     static constexpr char const* Name = "thorim dps priority action";
 
-    ThorimDpsPriorityAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    ThorimDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -63,7 +63,7 @@ class ThorimArenaPositioningAction : public MovementAction
 public:
     static constexpr char const* Name = "thorim arena positioning action";
 
-    ThorimArenaPositioningAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    ThorimArenaPositioningAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -73,7 +73,7 @@ public:
 class ThorimLaneMovementAction : public MovementAction
 {
 public:
-    ThorimLaneMovementAction(PlayerbotAI* ai, std::string const name) : MovementAction(ai, name) {}
+    ThorimLaneMovementAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
     bool MoveToGauntletWaypoint(bool leftLane, uint8 index, bool forceCombatPriority);
@@ -84,8 +84,8 @@ class ThorimGauntletPositioningAction : public ThorimLaneMovementAction
 public:
     static constexpr char const* Name = "thorim gauntlet positioning action";
 
-    ThorimGauntletPositioningAction(PlayerbotAI* ai)
-        : ThorimLaneMovementAction(ai, Name)
+    ThorimGauntletPositioningAction(PlayerbotAI* botAI)
+        : ThorimLaneMovementAction(botAI, Name)
     {
     }
 
@@ -99,7 +99,7 @@ class ThorimBalconyAdvanceAction : public MovementAction
 public:
     static constexpr char const* Name = "thorim balcony advance action";
 
-    ThorimBalconyAdvanceAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    ThorimBalconyAdvanceAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -111,7 +111,7 @@ class ThorimRunicSmashAction : public ThorimLaneMovementAction
 public:
     static constexpr char const* Name = "thorim runic smash action";
 
-    ThorimRunicSmashAction(PlayerbotAI* ai) : ThorimLaneMovementAction(ai, Name) {}
+    ThorimRunicSmashAction(PlayerbotAI* botAI) : ThorimLaneMovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -124,7 +124,7 @@ class ThorimRunicBarrierBailAction : public MovementAction
 public:
     static constexpr char const* Name = "thorim runic barrier bail action";
 
-    ThorimRunicBarrierBailAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    ThorimRunicBarrierBailAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -137,7 +137,7 @@ class ThorimFrostAuraAction : public Action
 public:
     static constexpr char const* Name = "thorim frost aura action";
 
-    ThorimFrostAuraAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    ThorimFrostAuraAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -149,7 +149,7 @@ class ThorimPetLeashAction : public Action
 public:
     static constexpr char const* Name = "thorim pet leash action";
 
-    ThorimPetLeashAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    ThorimPetLeashAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -160,7 +160,7 @@ class ThorimChargedOrbAction : public MovementAction
 public:
     static constexpr char const* Name = "thorim charged orb action";
 
-    ThorimChargedOrbAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    ThorimChargedOrbAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -172,7 +172,7 @@ class ThorimArenaLeashAction : public MovementAction
 public:
     static constexpr char const* Name = "thorim arena leash action";
 
-    ThorimArenaLeashAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    ThorimArenaLeashAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -183,7 +183,7 @@ class ThorimResetEncounterStateAction : public Action
 public:
     static constexpr char const* Name = "thorim reset encounter state action";
 
-    ThorimResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    ThorimResetEncounterStateAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -203,7 +203,7 @@ class ThorimPhase2PositioningAction : public MovementAction
 public:
     static constexpr char const* Name = "thorim phase 2 positioning action";
 
-    ThorimPhase2PositioningAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    ThorimPhase2PositioningAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -216,8 +216,8 @@ class ThorimSifBlizzardAction : public MoveAwayFromCreatureAction
 public:
     static constexpr char const* Name = "thorim sif blizzard action";
 
-    ThorimSifBlizzardAction(PlayerbotAI* ai)
-        : MoveAwayFromCreatureAction(ai, Name, NPC_SIF_BLIZZARD,
+    ThorimSifBlizzardAction(PlayerbotAI* botAI)
+        : MoveAwayFromCreatureAction(botAI, Name, NPC_SIF_BLIZZARD,
                                      ULDUAR_THORIM_SIF_BLIZZARD_RADIUS)
     {
     }

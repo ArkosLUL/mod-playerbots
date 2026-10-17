@@ -753,8 +753,8 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
     if (!bot)
         return false;
 
-    bool const mainTank = botAI->IsMainTank(bot);
-    if (mainTank || botAI->IsAssistTankOfIndex(bot, 0, true))
+    bool const mainTank = PlayerbotAI::IsMainTank(bot);
+    if (mainTank || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
     {
         // Two fixed ends square to the hold line, since he follows: neither drags him off the fire, and
         // 6 yd apart spans two aura ticks.
@@ -918,8 +918,8 @@ static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, fl
     if (!GetHodir(botAI))
         return false;
 
-    bool const mainTank = botAI->IsMainTank(bot);
-    if (mainTank || botAI->IsAssistTankOfIndex(bot, 0, true))
+    bool const mainTank = PlayerbotAI::IsMainTank(bot);
+    if (mainTank || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
     {
         HodirHoldLatch const* hold = DeriveHodirHold(botAI, bot);
         if (!hold)
@@ -932,7 +932,7 @@ static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, fl
 
     // Melee ride the boss. Pinning them would cost uptime, and he is on a fire whenever one is near
     // enough to drag him to.
-    if (!botAI->IsRanged(bot))
+    if (!PlayerbotAI::IsRanged(bot))
         return false;
 
     // Ranged and healers get a buff stand or nothing: a home spot only walks them back out of a zone.
@@ -1060,7 +1060,7 @@ bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block)
                 continue;
 
             PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-            if (!memberAI || memberAI->IsHeal(member) || memberAI->IsTank(member))
+            if (!memberAI || PlayerbotAI::IsHeal(member) || PlayerbotAI::IsTank(member))
                 continue;
 
             if (member->GetExactDist2d(block) > ULDUAR_HODIR_TRAPPED_ALLY_RANGE)
@@ -1179,7 +1179,7 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
             continue;
 
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (!memberAI || memberAI->IsHeal(member) || memberAI->IsTank(member))
+        if (!memberAI || PlayerbotAI::IsHeal(member) || PlayerbotAI::IsTank(member))
             continue;
 
         if (PlayerbotAI::IsRanged(member))

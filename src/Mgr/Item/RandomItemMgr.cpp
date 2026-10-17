@@ -985,7 +985,7 @@ uint32 RandomItemMgr::GetAmmo(uint32 level, uint32 subClass, uint8 progressionTi
 
 bool RandomItemMgr::IsAllowedForLevelExpansion(uint32 itemId, uint32 level)
 {
-    if (!sPlayerbotAIConfig.limitGearExpansion)
+    if (!sPlayerbotAIConfig.LimitGearExpansion)
         return true;
 
     // Item ids run roughly chronologically, so the first id of an expansion's content doubles as a
@@ -1484,7 +1484,7 @@ bool RandomItemMgr::IsValidItem(ItemTemplate const* proto)
         return false;
 
     // skip items flagged as unobtainable
-    if (sPlayerbotAIConfig.unobtainableItems.contains(proto->ItemId))
+    if (sPlayerbotAIConfig.UnobtainableItems.contains(proto->ItemId))
         return false;
 
     return true;
@@ -2722,6 +2722,10 @@ void RandomItemMgr::BuildCachePotion()
             spellInfo->Effects[EFFECT_0].Effect != SPELL_EFFECT_ENERGIZE)
             continue;
 
+        if (spellInfo->Effects[EFFECT_0].Effect == SPELL_EFFECT_ENERGIZE &&
+            spellInfo->Effects[EFFECT_0].MiscValue != POWER_MANA)
+            continue;
+
         // do not accept potions/flasks with more than one spell effects, only
         // first one effect (EFFECT_0) should be set and eq. heal/energize
         bool hasOtherEffects = false;
@@ -3089,7 +3093,7 @@ std::vector<EquipmentSlots> const* RandomItemMgr::GetViableSlots(InventoryType i
 
 uint32 RandomItemMgr::NormalizeLevel(uint32 level) const
 {
-    uint32 const levelCap = std::min(sPlayerbotAIConfig.randomBotMaxLevel,
+    uint32 const levelCap = std::min(sPlayerbotAIConfig.RandomBotMaxLevel,
                                      static_cast<uint32>(DEFAULT_MAX_LEVEL));
     return std::min(level, levelCap);
 }

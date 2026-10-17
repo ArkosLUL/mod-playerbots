@@ -66,13 +66,13 @@ float HoldBurstUntilTankEngagedMultiplier::GetValue(Action* action)
         // With the config off, when soloing, or for shadowfiend (a mana return that just happens to
         // be a burst cooldown), keep firing on whatever is being fought. Otherwise a grouped bot
         // saves the cooldown for the boss instead of blowing it on trash.
-        if (!sPlayerbotAIConfig.burstOnBossOnly || !group || name == "shadowfiend")
+        if (!sPlayerbotAIConfig.BurstOnBossOnly || !group || name == "shadowfiend")
             return 1.0f;
 
         return 0.0f;
     }
 
-    if (!group || botAI->IsMainTank(bot))
+    if (!group || PlayerbotAI::IsMainTank(bot))
     {
         holdState.Reset();
         return 1.0f;

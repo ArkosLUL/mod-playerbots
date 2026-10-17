@@ -57,7 +57,7 @@ bool MimironShockBlastTrigger::IsActive()
         return false;
     }
 
-    if (botAI->IsMelee(bot))
+    if (PlayerbotAI::IsMelee(bot))
     {
         return true;
     }
@@ -68,7 +68,7 @@ bool MimironShockBlastTrigger::IsActive()
 
 bool MimironPhase1PositioningTrigger::IsActive()
 {
-    if (!botAI->IsRanged(bot))
+    if (!PlayerbotAI::IsRanged(bot))
     {
         return false;
     }
@@ -171,7 +171,7 @@ bool MimironAerialCommandUnitTrigger::IsActive()
         GetFirstAliveUnitByEntry(botAI, NPC_VX001))
         return false;
 
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0))
+    if (PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0))
     {
         Group* group = bot->GetGroup();
         if (!group)
@@ -210,7 +210,7 @@ bool MimironPhase4FocusTrigger::IsActive()
     if (!IsMimironPhase4(bot))
         return false;
 
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         // Only to switch. Claiming the tick while already on it would starve the taunt.
         Unit* const focus = GetMimironPhase4TankFocus(botAI, bot);
@@ -226,7 +226,7 @@ bool MimironProximityMineTrigger::IsActive()
 {
     // Melee stand in the mine field, so they take the hits while a mech is up. Between phases they dodge:
     // the mines outlive the MK II, and following the master walks melee across them.
-    if (botAI->IsMelee(bot) && GetMimironRingFocus(botAI))
+    if (PlayerbotAI::IsMelee(bot) && GetMimironRingFocus(botAI))
         return false;
 
     // Off during a barrage: the barrage dodge hands a clear bot's tick down, and this node can't see the cone.
@@ -475,7 +475,7 @@ bool MimironSlowBombBotTrigger::IsActive()
 bool MimironSetDpsPriorityTrigger::IsActive()
 {
     // Tanks hold what the tank nodes give them; this one owns "current target" for everybody else.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     // Engaged, not present: the action calls Attack() directly, and MK II sits in the room from the

@@ -157,7 +157,7 @@ bool EmalonAttackPriorityAction::Execute(Event /*event*/)
     // to: ~52k (10-man) and ~191k (25-man) of minion health falls to the ranged half of the raid well
     // inside the timer.
     Unit* target = boss;
-    if (botAI->IsRanged(bot))
+    if (PlayerbotAI::IsRanged(bot))
     {
         if (Unit* overcharged = OverchargedMinion(bot))
             target = overcharged;

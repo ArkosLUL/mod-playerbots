@@ -91,7 +91,7 @@ bool IronAssemblyHasEitherAura(Unit const* unit, uint32 first, uint32 second)
 // whatever the raid is killing.
 bool IronAssemblyTakesRaidSpot(PlayerbotAI* botAI, Player* member)
 {
-    return member && botAI && PlayerbotAI::IsRanged(member) && !botAI->IsTank(member);
+    return member && botAI && PlayerbotAI::IsRanged(member) && !PlayerbotAI::IsTank(member);
 }
 
 bool IronAssemblyMemberCounts(Player* member, uint32 instanceId)
@@ -565,7 +565,7 @@ static Unit* DeriveIronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot, cha
 
 Unit* IronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot)
 {
-    if (!botAI || !bot || !botAI->IsTank(bot))
+    if (!botAI || !bot || !PlayerbotAI::IsTank(bot))
         return nullptr;
 
     char const* how = "none:nobosses";
@@ -1157,7 +1157,7 @@ bool IronAssemblyMemberMustMove(PlayerbotAI* botAI, Player* member)
             return true;
 
         // Tanks hold through Overload on purpose, so they never count as committed to a walk.
-        if (IronAssemblyOverloadActive(brundir) && !botAI->IsTank(member) &&
+        if (IronAssemblyOverloadActive(brundir) && !PlayerbotAI::IsTank(member) &&
             distance < ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE)
         {
             return true;

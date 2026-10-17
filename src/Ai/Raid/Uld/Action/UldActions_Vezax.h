@@ -16,7 +16,7 @@ class VezaxResetEncounterStateAction : public Action
 public:
     static constexpr char const* Name = "vezax reset encounter state action";
 
-    VezaxResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    VezaxResetEncounterStateAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -28,7 +28,7 @@ class VezaxMarkOfTheFacelessAction : public MovementAction
 public:
     static constexpr char const* Name = "vezax mark of the faceless action";
 
-    VezaxMarkOfTheFacelessAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    VezaxMarkOfTheFacelessAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -39,8 +39,8 @@ class VezaxMarkOfTheFacelessBreakAction : public MovementAction
 public:
     static constexpr char const* Name = "vezax mark of the faceless break action";
 
-    VezaxMarkOfTheFacelessBreakAction(PlayerbotAI* ai)
-        : MovementAction(ai, Name)
+    VezaxMarkOfTheFacelessBreakAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, Name)
     {
     }
 
@@ -54,7 +54,7 @@ class VezaxShadowCrashDodgeAction : public MovementAction
 public:
     static constexpr char const* Name = "vezax shadow crash dodge action";
 
-    VezaxShadowCrashDodgeAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    VezaxShadowCrashDodgeAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -64,8 +64,8 @@ class VezaxSearingFlamesInterruptAction : public Action
 public:
     static constexpr char const* Name = "vezax searing flames interrupt action";
 
-    VezaxSearingFlamesInterruptAction(PlayerbotAI* ai)
-        : Action(ai, Name)
+    VezaxSearingFlamesInterruptAction(PlayerbotAI* botAI)
+        : Action(botAI, Name)
     {
     }
 
@@ -77,7 +77,7 @@ class VezaxSurgeOfDarknessAction : public Action
 public:
     static constexpr char const* Name = "vezax surge of darkness action";
 
-    VezaxSurgeOfDarknessAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    VezaxSurgeOfDarknessAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -88,7 +88,7 @@ class VezaxSaroniteAnimusAction : public AttackAction
 public:
     static constexpr char const* Name = "vezax saronite animus action";
 
-    VezaxSaroniteAnimusAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    VezaxSaroniteAnimusAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -99,7 +99,7 @@ class VezaxAnimusRedirectAction : public Action
 public:
     static constexpr char const* Name = "vezax animus redirect action";
 
-    VezaxAnimusRedirectAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    VezaxAnimusRedirectAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -110,7 +110,7 @@ class VezaxAnimusBringBackAction : public MovementAction
 public:
     static constexpr char const* Name = "vezax animus bring back action";
 
-    VezaxAnimusBringBackAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    VezaxAnimusBringBackAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -121,7 +121,7 @@ class VezaxAnimusMeleeSpotAction : public MovementAction
 public:
     static constexpr char const* Name = "vezax animus melee spot action";
 
-    VezaxAnimusMeleeSpotAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    VezaxAnimusMeleeSpotAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -132,7 +132,7 @@ class VezaxShadowCrashSoakAction : public MovementAction
 public:
     static constexpr char const* Name = "vezax shadow crash soak action";
 
-    VezaxShadowCrashSoakAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    VezaxShadowCrashSoakAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -143,7 +143,7 @@ class VezaxHoldTargetAction : public AttackAction
 public:
     static constexpr char const* Name = "vezax hold target action";
 
-    VezaxHoldTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    VezaxHoldTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -153,7 +153,7 @@ class VezaxRaidPositionAction : public MovementAction
 public:
     static constexpr char const* Name = "vezax raid position action";
 
-    VezaxRaidPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    VezaxRaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 

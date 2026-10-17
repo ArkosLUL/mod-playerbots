@@ -464,7 +464,7 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 
         // A focus out of reach would walk the bot into the 15 yd blast, so shoot what's already in reach.
         // The two converge as lashers close on players.
-        float const reach = isRanged ? sPlayerbotAIConfig.spellDistance : ULDUAR_FREYA_MELEE_LASHER_RANGE;
+        float const reach = isRanged ? sPlayerbotAIConfig.SpellDistance : ULDUAR_FREYA_MELEE_LASHER_RANGE;
         if (lasher && bot->GetExactDist2d(lasher) > reach)
             lasher = nullptr;
 
@@ -651,7 +651,7 @@ Player* FreyaRedirectThreatAction::GetRedirectTank(Unit*& dumpTarget)
                 if (!member || !member->IsAlive() || member == bot)
                     continue;
 
-                if (botAI->IsTank(member) && member == victim)
+                if (PlayerbotAI::IsTank(member) && member == victim)
                     return member;
             }
         }

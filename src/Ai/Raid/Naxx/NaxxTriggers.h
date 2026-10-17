@@ -22,7 +22,7 @@ static constexpr float NAXX_PULL_HEALTH_PCT = 95.0f;
 class MutatingInjectionTrigger : public HasAuraTrigger
 {
 public:
-    MutatingInjectionTrigger(PlayerbotAI* ai) : HasAuraTrigger(ai, "mutating injection", 1) {}
+    MutatingInjectionTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "mutating injection", 1) {}
 };
 
 class MutatingInjectionMeleeTrigger : public MutatingInjectionTrigger
@@ -30,7 +30,7 @@ class MutatingInjectionMeleeTrigger : public MutatingInjectionTrigger
 public:
     static constexpr char const* Name = "mutating injection melee";
 
-    MutatingInjectionMeleeTrigger(PlayerbotAI* ai) : MutatingInjectionTrigger(ai) {}
+    MutatingInjectionMeleeTrigger(PlayerbotAI* botAI) : MutatingInjectionTrigger(botAI) {}
     bool IsActive() override;
 };
 
@@ -39,7 +39,7 @@ class MutatingInjectionRangedTrigger : public MutatingInjectionTrigger
 public:
     static constexpr char const* Name = "mutating injection ranged";
 
-    MutatingInjectionRangedTrigger(PlayerbotAI* ai) : MutatingInjectionTrigger(ai) {}
+    MutatingInjectionRangedTrigger(PlayerbotAI* botAI) : MutatingInjectionTrigger(botAI) {}
     bool IsActive() override;
 };
 
@@ -59,7 +59,7 @@ class MutatingInjectionRemovedTrigger : public HasNoAuraTrigger
 public:
     static constexpr char const* Name = "mutating injection removed";
 
-    MutatingInjectionRemovedTrigger(PlayerbotAI* ai) : HasNoAuraTrigger(ai, "mutating injection") {}
+    MutatingInjectionRemovedTrigger(PlayerbotAI* botAI) : HasNoAuraTrigger(botAI, "mutating injection") {}
     virtual bool IsActive();
 };
 
@@ -68,7 +68,7 @@ class GrobbulusCloudTrigger : public Trigger
 public:
     static constexpr char const* Name = "grobbulus cloud";
 
-    GrobbulusCloudTrigger(PlayerbotAI* ai) : Trigger(ai, Name), last_cloud_ms(0) {}
+    GrobbulusCloudTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), last_cloud_ms(0) {}
     bool IsActive() override;
 
 private:
@@ -81,7 +81,7 @@ class HeiganMeleeTrigger : public Trigger
 public:
     static constexpr char const* Name = "heigan melee";
 
-    HeiganMeleeTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    HeiganMeleeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     virtual bool IsActive();
 
 private:
@@ -93,7 +93,7 @@ class HeiganRangedTrigger : public Trigger
 public:
     static constexpr char const* Name = "heigan ranged";
 
-    HeiganRangedTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    HeiganRangedTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -105,7 +105,7 @@ class HeiganDecrepitFeverTrigger : public Trigger
 public:
     static constexpr char const* Name = "heigan decrepit fever";
 
-    HeiganDecrepitFeverTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    HeiganDecrepitFeverTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -117,7 +117,7 @@ class RazuviousTankTrigger : public Trigger
 public:
     static constexpr char const* Name = "razuvious tank";
 
-    RazuviousTankTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    RazuviousTankTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -129,7 +129,7 @@ class RazuviousNontankTrigger : public Trigger
 public:
     static constexpr char const* Name = "razuvious nontank";
 
-    RazuviousNontankTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    RazuviousNontankTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -141,7 +141,7 @@ class KelthuzadTrigger : public Trigger
 public:
     static constexpr char const* Name = "kel'thuzad";
 
-    KelthuzadTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    KelthuzadTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -153,7 +153,7 @@ class KelthuzadShadowFissureTrigger : public Trigger
 public:
     static constexpr char const* Name = "kel'thuzad shadow fissure";
 
-    KelthuzadShadowFissureTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    KelthuzadShadowFissureTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -166,7 +166,7 @@ class KelthuzadChainsTrigger : public Trigger
 public:
     static constexpr char const* Name = "kel'thuzad chains";
 
-    KelthuzadChainsTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    KelthuzadChainsTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -178,7 +178,7 @@ class AnubrekhanTrigger : public Trigger
 public:
     static constexpr char const* Name = "anub'rekhan";
 
-    AnubrekhanTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    AnubrekhanTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -187,7 +187,7 @@ class AnubrekhanLocustSwarmTrigger : public Trigger
 public:
     static constexpr char const* Name = "anub'rekhan locust swarm";
 
-    AnubrekhanLocustSwarmTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    AnubrekhanLocustSwarmTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -199,7 +199,7 @@ class FaerlinaTrigger : public Trigger
 public:
     static constexpr char const* Name = "faerlina";
 
-    FaerlinaTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    FaerlinaTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -208,7 +208,7 @@ class FaerlinaFrenzyTrigger : public Trigger
 public:
     static constexpr char const* Name = "faerlina frenzy";
 
-    FaerlinaFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    FaerlinaFrenzyTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -217,7 +217,7 @@ class MaexxnaTrigger : public Trigger
 public:
     static constexpr char const* Name = "maexxna";
 
-    MaexxnaTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    MaexxnaTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -226,7 +226,7 @@ class MaexxnaWebWrapTrigger : public Trigger
 public:
     static constexpr char const* Name = "maexxna web wrap";
 
-    MaexxnaWebWrapTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    MaexxnaWebWrapTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -235,7 +235,7 @@ class MaexxnaSpiderlingsTrigger : public Trigger
 public:
     static constexpr char const* Name = "maexxna spiderlings";
 
-    MaexxnaSpiderlingsTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    MaexxnaSpiderlingsTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -244,7 +244,7 @@ class GothikTrigger : public Trigger
 public:
     static constexpr char const* Name = "gothik";
 
-    GothikTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    GothikTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -258,7 +258,7 @@ class GothikWrongSideTrigger : public Trigger
 public:
     static constexpr char const* Name = "gothik wrong side";
 
-    GothikWrongSideTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    GothikWrongSideTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -268,21 +268,21 @@ private:
 // class PatchwerkTankTrigger : public Trigger
 // {
 // public:
-//     PatchwerkTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk tank") {}
+//     PatchwerkTankTrigger(PlayerbotAI* botAI) : Trigger(botAI, "patchwerk tank") {}
 //     bool IsActive() override;
 // };
 
 // class PatchwerkNonTankTrigger : public Trigger
 // {
 // public:
-//     PatchwerkNonTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk non-tank") {}
+//     PatchwerkNonTankTrigger(PlayerbotAI* botAI) : Trigger(botAI, "patchwerk non-tank") {}
 //     bool IsActive() override;
 // };
 
 // class PatchwerkRangedTrigger : public Trigger
 // {
 // public:
-//     PatchwerkRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk ranged") {}
+//     PatchwerkRangedTrigger(PlayerbotAI* botAI) : Trigger(botAI, "patchwerk ranged") {}
 //     bool IsActive() override;
 // };
 
@@ -292,7 +292,7 @@ public:
     static constexpr char const* Name = "thaddius prepull split";
 
     // Resolving the adds out of combat costs a grid search, so do not run it every tick.
-    ThaddiusPrepullSplitTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2), helper(ai) {}
+    ThaddiusPrepullSplitTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 2), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -304,11 +304,11 @@ class ThaddiusPhasePetTrigger : public Trigger
 public:
     static constexpr char const* Name = "thaddius phase pet";
 
-    ThaddiusPhasePetTrigger(PlayerbotAI* ai) : ThaddiusPhasePetTrigger(ai, Name) {}
+    ThaddiusPhasePetTrigger(PlayerbotAI* botAI) : ThaddiusPhasePetTrigger(botAI, Name) {}
     bool IsActive() override;
 
 protected:
-    ThaddiusPhasePetTrigger(PlayerbotAI* ai, char const* name) : Trigger(ai, name), helper(ai) {}
+    ThaddiusPhasePetTrigger(PlayerbotAI* botAI, char const* name) : Trigger(botAI, name), helper(botAI) {}
 
 private:
     ThaddiusBossHelper helper;
@@ -319,11 +319,11 @@ class ThaddiusPhasePetLoseAggroTrigger : public ThaddiusPhasePetTrigger
 public:
     static constexpr char const* Name = "thaddius phase pet lose aggro";
 
-    ThaddiusPhasePetLoseAggroTrigger(PlayerbotAI* ai) : ThaddiusPhasePetTrigger(ai, Name) {}
+    ThaddiusPhasePetLoseAggroTrigger(PlayerbotAI* botAI) : ThaddiusPhasePetTrigger(botAI, Name) {}
     virtual bool IsActive()
     {
         Unit* target = AI_VALUE(Unit*, "current target");
-        return ThaddiusPhasePetTrigger::IsActive() && botAI->IsTank(bot) && target && target->GetVictim() != bot;
+        return ThaddiusPhasePetTrigger::IsActive() && PlayerbotAI::IsTank(bot) && target && target->GetVictim() != bot;
     }
 };
 
@@ -332,7 +332,7 @@ class ThaddiusPhaseTransitionTrigger : public Trigger
 public:
     static constexpr char const* Name = "thaddius phase transition";
 
-    ThaddiusPhaseTransitionTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    ThaddiusPhaseTransitionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -344,7 +344,7 @@ class ThaddiusPhaseThaddiusTrigger : public Trigger
 public:
     static constexpr char const* Name = "thaddius phase thaddius";
 
-    ThaddiusPhaseThaddiusTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    ThaddiusPhaseThaddiusTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -356,7 +356,7 @@ class ThaddiusRedirectThreatTrigger : public Trigger
 public:
     static constexpr char const* Name = "thaddius redirect threat";
 
-    ThaddiusRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    ThaddiusRedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -368,7 +368,7 @@ class FourhorsemanRedirectThreatTrigger : public Trigger
 public:
     static constexpr char const* Name = "four horsemen redirect threat";
 
-    FourhorsemanRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    FourhorsemanRedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -380,7 +380,7 @@ class HorsemanAttractorsTrigger : public Trigger
 public:
     static constexpr char const* Name = "horseman attractors";
 
-    HorsemanAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    HorsemanAttractorsTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -392,7 +392,7 @@ class HorsemanExceptAttractorsTrigger : public Trigger
 public:
     static constexpr char const* Name = "horseman except attractors";
 
-    HorsemanExceptAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    HorsemanExceptAttractorsTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -404,7 +404,7 @@ class SapphironGroundTrigger : public Trigger
 public:
     static constexpr char const* Name = "sapphiron ground";
 
-    SapphironGroundTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    SapphironGroundTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -416,7 +416,7 @@ class SapphironFlightTrigger : public Trigger
 public:
     static constexpr char const* Name = "sapphiron flight";
 
-    SapphironFlightTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    SapphironFlightTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -428,7 +428,7 @@ class GluthTrigger : public Trigger
 public:
     static constexpr char const* Name = "gluth";
 
-    GluthTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    GluthTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -440,7 +440,7 @@ class GluthLowHealthZombieAoeTrigger : public Trigger
 public:
     static constexpr char const* Name = "gluth low health zombie aoe";
 
-    GluthLowHealthZombieAoeTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    GluthLowHealthZombieAoeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -452,7 +452,7 @@ class GluthMainTankMortalWoundTrigger : public Trigger
 public:
     static constexpr char const* Name = "gluth main tank mortal wound";
 
-    GluthMainTankMortalWoundTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    GluthMainTankMortalWoundTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -464,7 +464,7 @@ class GluthFrenzyTrigger : public Trigger
 public:
     static constexpr char const* Name = "gluth frenzy";
 
-    GluthFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    GluthFrenzyTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -476,7 +476,7 @@ class GluthRedirectThreatTrigger : public Trigger
 public:
     static constexpr char const* Name = "gluth redirect threat";
 
-    GluthRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    GluthRedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -488,7 +488,7 @@ class LoathebTrigger : public Trigger
 public:
     static constexpr char const* Name = "loatheb";
 
-    LoathebTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    LoathebTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -500,7 +500,7 @@ class NothTrigger : public Trigger
 public:
     static constexpr char const* Name = "noth";
 
-    NothTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    NothTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -512,7 +512,7 @@ class NothCurseTrigger : public Trigger
 public:
     static constexpr char const* Name = "noth curse";
 
-    NothCurseTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    NothCurseTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:
@@ -524,7 +524,7 @@ class NothBlinkTrigger : public Trigger
 public:
     static constexpr char const* Name = "noth blink";
 
-    NothBlinkTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
+    NothBlinkTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name), helper(botAI) {}
     bool IsActive() override;
 
 private:

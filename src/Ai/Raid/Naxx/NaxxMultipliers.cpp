@@ -159,7 +159,7 @@ float ThaddiusGenericMultiplier::GetValue(Action* action)
         if (dynamic_cast<ThaddiusAttackNearestPetAction*>(action))
             return 2.0f;
 
-        if (!botAI->IsTank(bot))
+        if (!PlayerbotAI::IsTank(bot))
         {
             if (dynamic_cast<ReachSpellAction*>(action))
                 return 0.0f;
@@ -174,7 +174,7 @@ float ThaddiusGenericMultiplier::GetValue(Action* action)
     }
 
     Unit* target = AI_VALUE(Unit*, "current target");
-    if (helper.IsPhasePet() && !botAI->IsTank(bot) && helper.PetSyncSuppress(target))
+    if (helper.IsPhasePet() && !PlayerbotAI::IsTank(bot) && helper.PetSyncSuppress(target))
     {
         if (dynamic_cast<MeleeAction*>(action))
             return 0.0f;
@@ -207,7 +207,7 @@ float SapphironGenericMultiplier::GetValue(Action* action)
     {
         return 1.0f;
     }
-    if (botAI->IsHeal(bot))
+    if (PlayerbotAI::IsHeal(bot))
     {
         if (helper.IsBreathWindow())
         {
@@ -278,8 +278,8 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
     }
 
     bool guardiansPresent = !helper.GetGuardians().empty();
-    bool isOffTankForKT = botAI->IsTank(bot) && !botAI->IsMainTank(bot) &&
-                          (botAI->IsAssistTank(bot) || botAI->HasStrategy("tank assist", BOT_STATE_COMBAT));
+    bool isOffTankForKT = PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsMainTank(bot) &&
+                          (PlayerbotAI::IsAssistTank(bot) || botAI->HasStrategy("tank assist", BOT_STATE_COMBAT));
 
     if (dynamic_cast<PetAttackAction*>(action))
     {
@@ -322,7 +322,7 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
         }
         return 0.0f;
     }
-    if (botAI->IsHeal(bot))
+    if (PlayerbotAI::IsHeal(bot))
     {
         if (helper.HasAuraInGroup(NaxxSpellIds::FrostBlast))
         {
@@ -427,7 +427,7 @@ float NothGenericMultiplier::GetValue(Action* action)
     // Blink's threat wipe only empties Noth's own table, so only the bots hitting him have to hold -
     // anyone on an add keeps going.
     Unit* boss = helper.GetBoss();
-    if (!helper.IsBlinkWindow() || botAI->IsTank(bot) || (boss && AI_VALUE(Unit*, "current target") != boss))
+    if (!helper.IsBlinkWindow() || PlayerbotAI::IsTank(bot) || (boss && AI_VALUE(Unit*, "current target") != boss))
     {
         return 1.0f;
     }
@@ -467,7 +467,7 @@ float AnubrekhanGenericMultiplier::GetValue(Action* action)
     // The position action hands out slots the generic formation mover would pull everyone back out
     // of, into the one pile Impale punishes. Melee are the exception outside the swarm: they are not
     // positioned at all, so they keep the generic behaviour.
-    bool meleeDps = !botAI->IsTank(bot) && !botAI->IsHeal(bot) && !botAI->IsRanged(bot);
+    bool meleeDps = !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot) && !PlayerbotAI::IsRanged(bot);
     if (dynamic_cast<CombatFormationMoveAction*>(action) && !(meleeDps && !helper.IsSwarmFormation()))
     {
         return 0.0f;
@@ -482,7 +482,7 @@ float AnubrekhanGenericMultiplier::GetValue(Action* action)
             return 0.0f;
         }
 
-        if (!botAI->IsTank(bot))
+        if (!PlayerbotAI::IsTank(bot))
         {
             // Autoattack: there is nothing in reach from the pile anyway, and swinging means facing
             // whatever the bot last targeted.
@@ -564,7 +564,7 @@ float GluthGenericMultiplier::GetValue(Action* action)
         return 0.0f;
     }
 
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         Aura* aura = NaxxSpellIds::GetAnyAura(bot, {NaxxSpellIds::MortalWound10, NaxxSpellIds::MortalWound25});
         if (!aura)

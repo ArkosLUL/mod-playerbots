@@ -140,11 +140,11 @@ struct TickCache
     uint32 atMs = 0;
     T value{};
 
-    bool Fresh(PlayerbotAI* ai, uint32 now) const { return atMs && botAI == ai && atMs == now; }
+    bool Fresh(PlayerbotAI* botAI, uint32 now) const { return atMs && botAI == botAI && atMs == now; }
 
-    T const& Store(PlayerbotAI* ai, uint32 now, T result)
+    T const& Store(PlayerbotAI* botAI, uint32 now, T result)
     {
-        botAI = ai;
+        botAI = botAI;
         atMs = now;
         value = result;
         return value;

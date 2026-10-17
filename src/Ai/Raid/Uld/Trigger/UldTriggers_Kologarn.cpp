@@ -56,7 +56,7 @@ bool KologarnDpsTargetTrigger::IsActive()
     if (!KologarnEncounterActive(botAI))
         return false;
 
-    if (botAI->IsTank(bot) || botAI->IsHeal(bot))
+    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot))
         return false;
 
     Unit* target = GetKologarnDpsTarget(botAI, bot);
@@ -73,8 +73,8 @@ bool KologarnSmashSwapTrigger::IsActive()
         return false;
 
     // Only the main tank and first assist tank trade the body.
-    bool const isMainTank = botAI->IsMainTank(bot);
-    if (!isMainTank && !botAI->IsAssistTankOfIndex(bot, 0))
+    bool const isMainTank = PlayerbotAI::IsMainTank(bot);
+    if (!isMainTank && !PlayerbotAI::IsAssistTankOfIndex(bot, 0))
         return false;
 
     // bot must be the one not currently holding it.
@@ -112,7 +112,7 @@ bool KologarnBodyUncoveredTrigger::IsActive()
     if (victim && victim->IsAlive() && victim->IsWithinMeleeRange(kologarn))
         return false;
 
-    if (!botAI->IsTank(bot) && !botAI->IsMelee(bot))
+    if (!PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsMelee(bot))
         return false;
 
     // Breath needs the victim out of melee *and* SelectNearbyTarget finding nobody else close, so any
@@ -122,7 +122,7 @@ bool KologarnBodyUncoveredTrigger::IsActive()
 
     // Nearest tank covers it, and only if no tank is left does the nearest melee step in. Without
     // this every melee in the raid would pile onto the body at once.
-    bool const botIsTank = botAI->IsTank(bot);
+    bool const botIsTank = PlayerbotAI::IsTank(bot);
     Group* group = bot->GetGroup();
     if (!group)
         return false;

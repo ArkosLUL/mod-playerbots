@@ -311,7 +311,7 @@ int8 GetIgnisConstructTankIndex(PlayerbotAI* botAI, Player* bot)
 {
     // GetGroupAssistTank only ever hands back a member that passes IsTank, so a non-tank can skip its
     // group walk, and with it an IsTank talent scan of every human in the raid.
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return -1;
 
     if (GetGroupAssistTank(bot, 0) == bot)
@@ -363,7 +363,7 @@ Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot, Unit* boss)
 
     // Rising edge, so one step per Scorch, at the start of the root. Only the main tank consumes it: anyone else
     // asking would eat the transition.
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         bool const scorchUp = IsIgnisScorchWindow(boss);
         if (scorchUp && !state.scorchUp)

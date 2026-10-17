@@ -30,7 +30,7 @@ bool InsideXT002Hazard(PlayerbotAI* botAI, Player* bot)
             return true;
         }
 
-        if (unit->GetEntry() == PB_NPC_XT002_BOOMBOT && botAI->IsMelee(bot) &&
+        if (unit->GetEntry() == PB_NPC_XT002_BOOMBOT && PlayerbotAI::IsMelee(bot) &&
             unit->GetExactDist2d(bot) < ULDUAR_XT002_BOOMBOT_AVOID_RADIUS)
         {
             return true;
@@ -56,7 +56,7 @@ bool XT002AvoidHazardTrigger::IsActive()
     bool hazardNear = false;
 
     // Ranged already stand outside the blast; pulling them out too would only break their casts.
-    if (botAI->IsMelee(bot) && bot->FindNearestCreature(PB_NPC_XT002_BOOMBOT, ULDUAR_XT002_BOOMBOT_AVOID_RADIUS))
+    if (PlayerbotAI::IsMelee(bot) && bot->FindNearestCreature(PB_NPC_XT002_BOOMBOT, ULDUAR_XT002_BOOMBOT_AVOID_RADIUS))
         hazardNear = true;
     // Must match the action's gate or the tick is wasted: a carrier's puddles belong to the carrier action.
     else if (!bot->HasAura(GetXT002SearingLightSpellId(bot)) && !bot->HasAura(GetXT002GravityBombSpellId(bot)) &&
@@ -70,7 +70,7 @@ bool XT002RaidPositionTrigger::IsActive()
 {
     // Melee dps and off-tanks never get a spot, so this is always false for them. Same role calls
     // BuildXT002RingMembers makes, answered before XT's lookup.
-    if (!botAI->IsMainTank(bot) && (botAI->IsTank(bot) || (!botAI->IsRangedDps(bot) && !botAI->IsHeal(bot))))
+    if (!PlayerbotAI::IsMainTank(bot) && (PlayerbotAI::IsTank(bot) || (!PlayerbotAI::IsRangedDps(bot) && !PlayerbotAI::IsHeal(bot))))
         return false;
 
     Unit* xt002 = GetXT002(botAI);
@@ -91,7 +91,7 @@ bool XT002RaidPositionTrigger::IsActive()
     if (avoidHazard.IsActive() && InsideXT002Hazard(botAI, bot))
         return false;
 
-    if (botAI->IsMainTank(bot))
+    if (PlayerbotAI::IsMainTank(bot))
     {
         // Only while holding XT: the anchor outranks "reach melee", and XT is a vehicle, taunt-immune through
         // Vehicle::ApplyAllImmunities. No victim means the Heart window, where the spot is right.
@@ -102,7 +102,7 @@ bool XT002RaidPositionTrigger::IsActive()
         return bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) > ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE;
     }
 
-    if (botAI->IsHeal(bot))
+    if (PlayerbotAI::IsHeal(bot))
     {
         // Stands down while anyone is out of heal range: this outranks "reach party member to heal", and the far
         // cells are 55 yd from the anchor.
@@ -131,7 +131,7 @@ bool XT002SetDpsPriorityTrigger::IsActive()
 bool XT002PummellerTauntTrigger::IsActive()
 {
     // Only a tank can own the Pummeller. Own role first, it is a flag test and XT's lookup is a scan.
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     if (!GetXT002(botAI))

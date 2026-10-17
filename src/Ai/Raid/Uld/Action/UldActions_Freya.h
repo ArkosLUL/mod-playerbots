@@ -103,7 +103,7 @@ class FreyaMoveToHealingSporeAction : public MovementAction
 public:
     static constexpr char const* Name = "freya move to healing spore action";
 
-    FreyaMoveToHealingSporeAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    FreyaMoveToHealingSporeAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

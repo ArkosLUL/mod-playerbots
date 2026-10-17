@@ -45,7 +45,7 @@ bool IgnisScorchedGroundTrigger::IsActive()
 
 bool IgnisMainTankPositionTrigger::IsActive()
 {
-    if (!botAI->IsMainTank(bot))
+    if (!PlayerbotAI::IsMainTank(bot))
         return false;
 
     // Only once he actually holds the boss. Ignis follows his victim, so a tank without aggro walking
@@ -63,7 +63,7 @@ bool IgnisConstructTankTrigger::IsActive()
 {
     // Same answer GetIgnisConstructTankIndex gives a non-tank, for the price of a strategy bit. The
     // full index walks the group, so it waits until the fight is actually on.
-    if (!botAI->IsTank(bot))
+    if (!PlayerbotAI::IsTank(bot))
         return false;
 
     if (!IsIgnisEngaged(botAI))
@@ -81,7 +81,7 @@ bool IgnisAttackBrittleConstructTrigger::IsActive()
 {
     // Tanks stay on what they are holding: pulling the main tank off Ignis or a construct tank off a
     // construct whose threat table Molten already wiped costs far more than the one hit it takes.
-    if (botAI->IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
         return false;
 
     if (!IsIgnisEngaged(botAI))
@@ -93,7 +93,7 @@ bool IgnisAttackBrittleConstructTrigger::IsActive()
 
     // Shatter deals 18850 in 13 yd, which is inside melee range of the thing they would be swinging
     // at. Melee are only let in at the end of the window, when nobody ranged has closed it.
-    if (!botAI->IsRanged(bot) &&
+    if (!PlayerbotAI::IsRanged(bot) &&
         GetIgnisBrittleTimeLeft(construct) > static_cast<int32>(ULDUAR_IGNIS_BRITTLE_MELEE_FALLBACK_MS))
     {
         return false;
@@ -157,7 +157,7 @@ bool IgnisFlameJetsTrigger::IsActive()
 
 bool IgnisSlagPotHealTrigger::IsActive()
 {
-    if (!botAI->IsHeal(bot))
+    if (!PlayerbotAI::IsHeal(bot))
         return false;
 
     if (!IsIgnisEngaged(botAI))

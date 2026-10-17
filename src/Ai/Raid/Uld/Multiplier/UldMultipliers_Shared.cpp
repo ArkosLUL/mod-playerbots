@@ -143,12 +143,12 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
     // The sweep lags the pull and skips unselectable units, which every mech is through a handover.
     // Missing all three falls through to the open default below and lusts, hence the grid search
     if (!leviathanMkII)
-        leviathanMkII = bot->FindNearestCreature(NPC_LEVIATHAN_MKII, sPlayerbotAIConfig.sightDistance, true);
+        leviathanMkII = bot->FindNearestCreature(NPC_LEVIATHAN_MKII, sPlayerbotAIConfig.SightDistance, true);
     if (!vx001)
-        vx001 = bot->FindNearestCreature(NPC_VX001, sPlayerbotAIConfig.sightDistance, true);
+        vx001 = bot->FindNearestCreature(NPC_VX001, sPlayerbotAIConfig.SightDistance, true);
     if (!aerialCommandUnit)
         aerialCommandUnit =
-            bot->FindNearestCreature(NPC_AERIAL_COMMAND_UNIT, sPlayerbotAIConfig.sightDistance, true);
+            bot->FindNearestCreature(NPC_AERIAL_COMMAND_UNIT, sPlayerbotAIConfig.SightDistance, true);
 
     // The sweep stops at SightDistance, and her second flight point is past that for most of the raid.
     // DoZoneInCombat puts the whole raid on her threat list, and "find target" never calls UpdateBossAI

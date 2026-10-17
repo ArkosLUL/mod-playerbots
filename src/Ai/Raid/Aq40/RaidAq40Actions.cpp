@@ -524,7 +524,7 @@ bool Aq40Cthun2PositionAction::Execute(Event event)
                 ObjectGuid guid = attackTarget->GetGUID();
 
                 botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({guid});
-                bot->Attack(attackTarget, botAI->IsMelee(bot));
+                bot->Attack(attackTarget, PlayerbotAI::IsMelee(bot));
 
                 return false;
             }
@@ -570,14 +570,14 @@ bool Aq40Cthun2PositionAction::Execute(Event event)
                     doGetOut = true;
                     //printf("%s: bugged state, get out\n",bot->GetName().c_str());
                 }
-                else if (botAI->IsTank(bot, true))
+                else if (PlayerbotAI::IsTank(bot, true))
                 {
                     // immediately leave
                     point = getOut;
                     doGetOut = true;
                     //printf("%s: tank, get out\n",bot->GetName().c_str());
                 }
-                else if (botAI->IsHeal(bot, true))
+                else if (PlayerbotAI::IsHeal(bot, true))
                 {
                     // stack to 5 and leave, lower tolerance for healers
                     if (bot->GetAuraCount(SPELL_DIGESTIVE_ACID) >= 5 || bot->GetHealthPct() <= 50.0)
@@ -612,7 +612,7 @@ bool Aq40Cthun2PositionAction::Execute(Event event)
 
                             //printf("%s: attack flesh tentacle\n",bot->GetName().c_str());
 
-                            if (botAI->IsMelee(bot))
+                            if (PlayerbotAI::IsMelee(bot))
                             {
                                 // bots not picking up on these tentacles very effectively
                                 return MoveTo(tboss, -1.0);

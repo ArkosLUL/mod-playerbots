@@ -202,7 +202,7 @@ StatsWeightCalculator::StatsWeightCalculator(Player* player) : player_(player)
     cls = player->getClass();
     lvl = player->GetLevel();
     tab = AiFactory::GetPlayerSpecTab(player);
-    collector_ = std::make_unique<StatsCollector>(type_, cls, SpecPrimarySpellSchoolMask(cls, tab));
+    collector_ = std::make_unique<StatsCollector>(type_, cls, lvl, SpecPrimarySpellSchoolMask(cls, tab));
 
     if (cls == CLASS_DEATH_KNIGHT && tab == DEATH_KNIGHT_TAB_UNHOLY)
         hitOverflowType_ = CollectorType::SPELL;
@@ -262,7 +262,7 @@ float StatsWeightCalculator::CalculateItem(uint32 itemId, int32 randomPropertyId
     CalculateSocketBonus(proto, statSumWeight);
 
     // Apply weapon speed governance if slot is provided and this is a weapon
-    if (sPlayerbotAIConfig.preferredSpecWeapons && slot >= 0 && proto->Class == ITEM_CLASS_WEAPON)
+    if (sPlayerbotAIConfig.PreferredSpecWeapons && slot >= 0 && proto->Class == ITEM_CLASS_WEAPON)
         weight_ *= ApplyPreferredSpecWeapons(proto, slot);
 
     if (enable_bis_bonus_)
@@ -284,7 +284,7 @@ int8 StatsWeightCalculator::CompareBisRank(ItemTemplate const* a, ItemTemplate c
 {
     // The sim ranks each slot with the rest of its own set worn, so a part-geared tank following it
     // slot by slot can lose the defense cap.
-    if (!sPlayerbotAIConfig.bisDatasetRankOrder || is_tank_)
+    if (!sPlayerbotAIConfig.BisDatasetRankOrder || is_tank_)
         return 0;
 
     // dual wield is scored as a whole layout, and the sim ranks a main hand with its off hand
@@ -304,7 +304,7 @@ int8 StatsWeightCalculator::CompareBisRank(ItemTemplate const* a, ItemTemplate c
 
 float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
 {
-    if (sPlayerbotAIConfig.bisScoreBonus <= 0.0f)
+    if (sPlayerbotAIConfig.BisScoreBonus <= 0.0f)
         return 1.0f;
 
     ResolveBisSource();
@@ -326,16 +326,16 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
     // upgrade threshold alone.
     float phaseScale = 1.0f;
     uint8 const reference = BisReferencePhase(entryPhase);
-    if (sPlayerbotAIConfig.bisPhaseDecay > 0.0f && entryPhase < reference)
+    if (sPlayerbotAIConfig.BisPhaseDecay > 0.0f && entryPhase < reference)
     {
         uint8 const behind = reference - entryPhase;
-        phaseScale = std::max(0.0f, 1.0f - sPlayerbotAIConfig.bisPhaseDecay * behind);
+        phaseScale = std::max(0.0f, 1.0f - sPlayerbotAIConfig.BisPhaseDecay * behind);
     }
 
     // Flat-ish, because ranks 1-3 of a slot's list are near-equivalent picks - the old 1/3 for rank 3
     // left it below the upgrade threshold's own noise.
     static constexpr float kRankScale[3] = {1.0f, 0.8f, 0.6f};
-    return 1.0f + sPlayerbotAIConfig.bisScoreBonus * kRankScale[rank - 1] * phaseScale;
+    return 1.0f + sPlayerbotAIConfig.BisScoreBonus * kRankScale[rank - 1] * phaseScale;
 }
 
 // A slot comparison decays from the later-listed of its two items, not from the bot's progression,
@@ -396,7 +396,7 @@ void StatsWeightCalculator::SetReplacedItem(Item const* item)
 
     // Gems and enchants count too, since they're all in the bot's current ratings. CollectItemStats
     // already has the socket bonus, and the random property slots come from CollectRandomProperty.
-    StatsCollector collector(type_, cls, SpecPrimarySpellSchoolMask(cls, tab));
+    StatsCollector collector(type_, cls, lvl, SpecPrimarySpellSchoolMask(cls, tab));
     collector.CollectItemStats(proto);
     if (int32 const randomPropertyId = item->GetItemRandomPropertyId())
         CollectRandomProperty(collector, randomPropertyId, proto->ItemId);
@@ -489,7 +489,7 @@ void StatsWeightCalculator::ResolveSimWeights()
     SimWeights::Spec const* spec = nullptr;
 
     // cheapest first: the snapshot takes a lock and IsSpecPvp can hit the DB
-    if (!sPlayerbotAIConfig.simWeightsEnable)
+    if (!sPlayerbotAIConfig.SimWeightsEnable)
         sim_state_ = SimWeightsState::Disabled;
     // rating per point changes with level, and the sim only measured level 80
     else if (lvl != 80)
@@ -535,7 +535,7 @@ std::string StatsWeightCalculator::DescribeWeights()
             return Acore::StringFormat("weights: sim {}/{}, ilvl {:.1f} ({})", cls, sim_tab_, sim_ilvl_, blend);
         }
         case SimWeightsState::Disabled:
-            return "weights: hand-written (AiPlayerbot.SimWeights.Enable = 0)";
+            return "weights: hand-written (Playerbots.SimWeights.Enable = 0)";
         case SimWeightsState::Level:
             return Acore::StringFormat("weights: hand-written (level {}, sim rows are level 80)", lvl);
         case SimWeightsState::Pvp:
@@ -952,9 +952,9 @@ void StatsWeightCalculator::CalculateItemSetMod(Player* player, ItemTemplate con
 
     uint32 gained = ActiveSetBonuses(setEntry, base + 1) - ActiveSetBonuses(setEntry, base);
 
-    float multiplier = 1.0f + sPlayerbotAIConfig.itemSetBonusWeight * gained;
+    float multiplier = 1.0f + sPlayerbotAIConfig.ItemSetBonusWeight * gained;
     if (!gained && NextSetThreshold(setEntry, base))
-        multiplier += sPlayerbotAIConfig.itemSetProgressWeight * (base + 1);
+        multiplier += sPlayerbotAIConfig.ItemSetProgressWeight * (base + 1);
 
     weight_ *= multiplier;
 }
@@ -972,7 +972,7 @@ void StatsWeightCalculator::CalculateSocketBonus(ItemTemplate const* proto, floa
             continue;
 
         socketNum++;
-        if (sPlayerbotAIConfig.socketValueFactor > 0.0f)
+        if (sPlayerbotAIConfig.SocketValueFactor > 0.0f)
             socketValue += BestGemScore(socketColor);
     }
 
@@ -984,12 +984,12 @@ void StatsWeightCalculator::CalculateSocketBonus(ItemTemplate const* proto, floa
     // the multiplier unit-consistent and free of magic constants.
     float multiplier;
     if (socketValue > 0.0f && statSumWeight > 0.001f)
-        multiplier = 1.0f + sPlayerbotAIConfig.socketValueFactor * (socketValue / statSumWeight);
+        multiplier = 1.0f + sPlayerbotAIConfig.SocketValueFactor * (socketValue / statSumWeight);
     else
-        multiplier = 1.0f + socketNum * sPlayerbotAIConfig.socketWeightPerSocket;
+        multiplier = 1.0f + socketNum * sPlayerbotAIConfig.SocketWeightPerSocket;
 
     // A cap below 1.0 would turn the bonus into a penalty on every socketed item, so floor it.
-    multiplier = std::min(multiplier, std::max(1.0f, sPlayerbotAIConfig.socketMaxMultiplier));
+    multiplier = std::min(multiplier, std::max(1.0f, sPlayerbotAIConfig.SocketMaxMultiplier));
 
     weight_ *= multiplier;
 }
@@ -1036,7 +1036,7 @@ float StatsWeightCalculator::BestGemScore(uint8 socketColor)
         if (!gemTemplate)
             continue;
 
-        if (sPlayerbotAIConfig.limitEnchantExpansion && lvl <= 70 && enchantGem >= 39900)
+        if (sPlayerbotAIConfig.LimitEnchantExpansion && lvl <= 70 && enchantGem >= 39900)
             continue;
 
         // Has to match ApplyEnchantAndGemsNew exactly, or a socketed item gets scored on gems the

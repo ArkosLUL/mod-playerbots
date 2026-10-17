@@ -15,7 +15,7 @@
 class ThorimRunicBarrierMultiplier : public Multiplier
 {
 public:
-    ThorimRunicBarrierMultiplier(PlayerbotAI* ai) : Multiplier(ai, "thorim runic barrier") {}
+    ThorimRunicBarrierMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "thorim runic barrier") {}
     float GetValue(Action* action) override;
 };
 
@@ -24,7 +24,7 @@ public:
 class ThorimArenaTargetGuardMultiplier : public Multiplier
 {
 public:
-    ThorimArenaTargetGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "thorim arena target guard") {}
+    ThorimArenaTargetGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "thorim arena target guard") {}
     float GetValue(Action* action) override;
 };
 
@@ -33,7 +33,7 @@ public:
 class ThorimBalconyGuardMultiplier : public Multiplier
 {
 public:
-    ThorimBalconyGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "thorim balcony guard") {}
+    ThorimBalconyGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "thorim balcony guard") {}
     float GetValue(Action* action) override;
 };
 

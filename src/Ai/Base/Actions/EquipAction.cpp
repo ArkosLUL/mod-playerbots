@@ -178,7 +178,7 @@ void EquipAction::EquipItem(Item* item)
             Item* offHandItem  = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND);
 
             StatsWeightCalculator calculator(bot);
-            calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
+            calculator.SetItemSetBonus(sPlayerbotAIConfig.ItemSetUseForUpgrades);
             calculator.SetOverflowPenalty(false);
             // same bonus ItemUsageValue scored with, or an item it wanted on the bonus gets refused here
             calculator.SetBisBonus(true);
@@ -317,7 +317,7 @@ void EquipAction::EquipItem(Item* item)
                 {
                     // Both slots are full - pick the worst item to replace, but only if new item is better
                     StatsWeightCalculator calc(bot);
-                    calc.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
+                    calc.SetItemSetBonus(sPlayerbotAIConfig.ItemSetUseForUpgrades);
                     calc.SetOverflowPenalty(false);
                     calc.SetBisBonus(true);
 
@@ -435,7 +435,7 @@ ItemIds EquipAction::SelectInventoryItemsToEquip()
 
 bool EquipUpgradesPacketAction::Execute(Event event)
 {
-    if (!sPlayerbotAIConfig.autoEquipUpgradeLoot && !sRandomPlayerbotMgr.IsRandomBot(bot))
+    if (!sPlayerbotAIConfig.AutoEquipUpgradeLoot && !sRandomPlayerbotMgr.IsRandomBot(bot))
         return false;
     std::string const source = event.GetSource();
     if (source == "trade status")
