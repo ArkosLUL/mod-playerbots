@@ -662,12 +662,21 @@ def vapor_hits(trace: Trace) -> dict[tuple[int, int], list[int]]:
     return dict(out)
 
 
-def hard_mode_changes(trace: Trace) -> dict[str, int]:
-    """The first time any bot's `vezax.hardmode` read each value."""
+def first_values(trace: Trace, key: str) -> dict[str, int]:
+    """The first time any bot's `key` read each value."""
     out: dict[str, int] = {}
-    for rec in notes(trace, "vezax.hardmode"):
+    for rec in notes(trace, key):
         out.setdefault(str(rec.get("txt", "")), rec["t"])
     return out
+
+
+def hard_mode_changes(trace: Trace) -> dict[str, int]:
+    return first_values(trace, "vezax.hardmode")
+
+
+def hold_changes(trace: Trace) -> dict[str, int]:
+    """`on` is the non-tank stop line, `tank` the tanks' one, `off` the release."""
+    return first_values(trace, "vezax.hold")
 
 
 def show_vapors(trace: Trace) -> None:
@@ -707,10 +716,22 @@ def show_vapors(trace: Trace) -> None:
         print("  vezax.hardmode: " + ", ".join(f"{value} at {clock(when)}" for value, when
                                              in sorted(changes.items(), key=lambda item: item[1])))
 
+    samples = Samples(trace)
+
+    def health_at(when: int) -> str:
+        row = samples.row(boss, when)
+        return f" ({row[5]:.1f}%)" if row else ""
+
+    holds = hold_changes(trace)
+    if holds:
+        print("  vezax.hold: " + ", ".join(f"{value} at {clock(when)}{health_at(when)}" for value, when
+                                         in sorted(holds.items(), key=lambda item: item[1])))
+
     animus = guids_of_entry(trace, NPC_SARONITE_ANIMUS)
     if animus:
         seen = first_seen(trace, animus)
-        print(f"  Saronite Animus spawned{' at ' + clock(seen) if seen is not None else ''}: hard mode held")
+        where = f" at {clock(seen)}{health_at(seen)}" if seen is not None else ""
+        print(f"  Saronite Animus spawned{where}: hard mode held")
     else:
         print(f"  no Saronite Animus after {len(summons)} summon(s)"
               + (": a vapor died, or the sixth summon never came" if len(summons) >= 6 else ""))

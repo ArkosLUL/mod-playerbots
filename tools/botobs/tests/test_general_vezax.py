@@ -106,6 +106,10 @@ def vezax_pull() -> list[dict]:
         {"t": 10, "e": "note", "g": AGONY, "k": "vezax.hardmode", "txt": "pending"},
         {"t": 9600, "e": "note", "g": AGONY, "k": "vezax.hardmode", "txt": "lost"},
         {"t": 9700, "e": "note", "g": TREE, "k": "vezax.hardmode", "txt": "lost"},
+        # Agony and Tree hit the stop line, and the lost hard mode lets them go.
+        {"t": 9000, "e": "note", "g": AGONY, "k": "vezax.hold", "txt": "on"},
+        {"t": 9100, "e": "note", "g": TREE, "k": "vezax.hold", "txt": "on"},
+        {"t": 9600, "e": "note", "g": AGONY, "k": "vezax.hold", "txt": "off"},
 
         # Tricks goes out half a second before the Animus, at a dps. Bulwark switches onto it at once,
         # Agony a second and a half later, and Heroism waits until 14.5 s.
@@ -157,6 +161,9 @@ class SyntheticPull(unittest.TestCase):
 
     def test_hard_mode_reads_the_first_bot_to_see_each_value(self):
         self.assertEqual(gv.hard_mode_changes(self.trace), {"pending": 10, "lost": 9600})
+
+    def test_the_hold_reads_the_first_bot_at_each_line(self):
+        self.assertEqual(gv.hold_changes(self.trace), {"on": 9000, "off": 9600})
 
     def test_the_animus_victims_are_its_changes_not_its_samples(self):
         self.assertEqual(gv.animus_victims(self.trace), [(12000, AGONY), (14000, BULWARK)])

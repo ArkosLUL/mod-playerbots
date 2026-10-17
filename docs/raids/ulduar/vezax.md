@@ -288,7 +288,7 @@ the boss.
 `vezax.slot` is the stored assignment; `vezax.block`
 (`L`/`R`/`tank`/`unslotted`), `vezax.dodge` (`strafe`/`search`/`none`), `vezax.mark`
 (`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`), `vezax.meleespot`
-(`spot`/`none`) and `vezax.interrupter`
+(`spot`/`none`), `vezax.hold` (`off`/`on`/`tank`) and `vezax.interrupter`
 are derived, each probed inside the helper that derives it so two call sites cannot disagree.
 `vezax.formation` (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode` (`off`/`pending`/`lost`/
 `animus`) are the exception: the encounter's tick writes them, since the formation gate is a rule
@@ -388,8 +388,23 @@ vapor death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), 
   guard sees, and killed a vapor that day. Held for the whole window, not only with one in range:
   a star hit a vapor 0.13s after it spawned.
 
-The rest of the vapor guard is the target guard and hold-target node above: no AoE suppression and
-no explicit pet control. **A stray cleave or an off-passive pet can still kill one**, and that
+**Damage stops at the stop line** (`vezax damage hold`), since a strong raid kills him before the
+sixth summon. While hard mode is pending, non-tanks stop at 15% and tanks at 2% (threat doesn't
+decay, so they keep him), until the summon, the Barrier or a vapor death:
+
+- the Block rule zeroes melee, pet attack, the pickers, and the damaging summons by name (the
+  multiplier sees them as buffs);
+- `VezaxDamageHoldMultiplier` zeroes spells on him and every area spell;
+- the node stops what already runs: `AttackStop` (the current target stays, so the hold-target
+  node doesn't swing again), harmful casts on him interrupted, pets set passive. Their stances sit
+  in a per-instance store apart from the encounter state, so any engine gives them back after the
+  Animus, a wipe or a resummon.
+
+Personal cooldowns still fire. `--vapors` prints `vezax.hold` with his health at each change and at
+the Animus spawn.
+
+Before the stop line the vapor guard is only the target guard and hold-target node: no AoE
+suppression and no pet control. **A stray cleave or an off-passive pet can still kill one**, and that
 silently ends hard mode; `--vapors` reads `vezax.target = vapor`, every cast that landed on a vapor,
 and when `vezax.hardmode` went `lost`.
 

@@ -26,6 +26,7 @@
 #include <limits>
 #include <array>
 #include <list>
+#include <unordered_map>
 
 using namespace EncounterHelpers;
 
@@ -33,6 +34,14 @@ using namespace EncounterHelpers;
 const Position ULDUAR_VEZAX_ANCHOR = Position(1852.78f, 81.3856f, 342.461f);
 
 static RaidInstanceState<VezaxEncounterState> vezaxEncounterStates;
+
+// Apart from the encounter state: a wipe resets that before every owner has had its pets back.
+struct VezaxHushedPets
+{
+    std::unordered_map<ObjectGuid, ReactStates> stances;
+};
+
+static RaidInstanceState<VezaxHushedPets> vezaxHushedPets;
 
 namespace
 {
@@ -541,6 +550,57 @@ bool VezaxHardModePending(PlayerbotAI* botAI)
     // No state yet just means nothing has happened in this pull.
     VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
     return !state || (!state->vaporKilled && !state->animusSummoned);
+}
+
+bool VezaxDamageHeld(PlayerbotAI* botAI)
+{
+    if (!IsVezaxHardModeActive(botAI))
+        return false;
+
+    Player* bot = botAI->GetBot();
+    bool const tank = PlayerbotAI::IsTank(bot);
+    float const line = tank ? ULDUAR_VEZAX_TANK_HOLD_HEALTH_PCT : ULDUAR_VEZAX_HOLD_HEALTH_PCT;
+    Unit* vezax = GetVezax(botAI);
+    bool const held = vezax && VezaxHardModePending(botAI) && !vezax->HasAura(SPELL_VEZAX_SARONITE_BARRIER) &&
+                      vezax->GetHealthPct() <= line;
+
+    // His health is in the snapshots already, so the note only says which line is holding.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "vezax.hold", !held ? "off" : (tank ? "tank" : "on"));
+
+    return held;
+}
+
+void VezaxHushPet(Creature* pet)
+{
+    // First stance only, or a second hush would save passive as the one to give back.
+    vezaxHushedPets.For(pet->GetInstanceId()).stances.emplace(pet->GetGUID(), pet->GetReactState());
+    pet->SetReactState(REACT_PASSIVE);
+}
+
+void VezaxUnhushPet(Creature* pet)
+{
+    VezaxHushedPets* hushed = vezaxHushedPets.Find(pet->GetInstanceId());
+    if (!hushed)
+        return;
+
+    auto const it = hushed->stances.find(pet->GetGUID());
+    if (it == hushed->stances.end())
+        return;
+
+    pet->SetReactState(it->second);
+    hushed->stances.erase(it);
+}
+
+bool VezaxIsHushedPet(Creature* pet)
+{
+    VezaxHushedPets const* hushed = vezaxHushedPets.Find(pet->GetInstanceId());
+    return hushed && hushed->stances.count(pet->GetGUID());
+}
+
+bool VezaxHarmfulCastOn(Spell const* spell, Unit* vezax)
+{
+    return spell && spell->m_targets.GetUnitTargetGUID() == vezax->GetGUID() && !spell->GetSpellInfo()->IsPositive();
 }
 
 void VezaxNoteVaporKilled(Unit* vapor)

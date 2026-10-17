@@ -34,8 +34,9 @@ void DefineVezax(EncounterBuilder& e)
                                                                                  EncounterRow::Mover);
     e.Node<VezaxMarkOfTheFacelessTrigger, VezaxMarkOfTheFacelessAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
     e.Node<VezaxSurgeOfDarknessTrigger, VezaxSurgeOfDarknessAction>(ACTION_EMERGENCY + 5);
-    // The RAID band is the reward half. The redirect needs the bot on the Animus already, so it never
-    // competes with the switch.
+    // The RAID band is the reward half. The hold never claims the tick, it only has to run before the hold
+    // target row. The redirect needs the bot on the Animus already, so it never competes with the switch.
+    e.Node<VezaxDamageHoldTrigger, VezaxDamageHoldAction>(ACTION_RAID + 8);
     e.Node<VezaxAnimusRedirectTrigger, VezaxAnimusRedirectAction>(ACTION_RAID + 7);
     e.Node<VezaxSaroniteAnimusTrigger, VezaxSaroniteAnimusAction>(ACTION_RAID + 6);
     e.Node<VezaxHoldTargetTrigger, VezaxHoldTargetAction>(ACTION_RAID + 5);
@@ -72,6 +73,15 @@ void DefineVezax(EncounterBuilder& e)
     // Lust waits for the Animus summon or a vapor death. So does Starfall: its stars pick random enemies the
     // target guard never sees, and a vapor can spawn under one already falling.
     e.Block("vezax hard mode hold", Role::Any, VezaxHardModePending, 0, {"heroism", "bloodlust", "starfall"});
+
+    // Past the stop line nothing hits him until the Animus is up. Spells are the multiplier below, which
+    // sees the summons as buffs, so they go by name here.
+    e.Block("vezax damage hold", Role::Any, VezaxDamageHeld,
+            Family::Melee | Family::PetAttack | Family::Charge | Family::DpsAoe | Family::AggressiveTarget |
+                Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti,
+            {"army of the dead", "dancing rune weapon", "feral spirit", "fire elemental totem", "force of nature",
+             "magma totem", "mirror image", "searing totem", "summon gargoyle"});
+    e.Multiplier<VezaxDamageHoldMultiplier>(Family::Spell);
 
     // Kept off cooldown for the Animus, which only a tank's threat holds. Left alone, the generic
     // triggers spend them on Vezax, where the tank has had minutes to build threat, or on a dps.

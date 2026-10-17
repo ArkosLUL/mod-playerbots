@@ -94,3 +94,35 @@ float VezaxAnimusThreatMultiplier::GetValue(Action* action)
     float const own = threat.GetThreat(bot);
     return own > 0.0f && own >= ULDUAR_VEZAX_ANIMUS_THREAT_SHARE * threat.GetThreat(mainTank) ? 0.0f : 1.0f;
 }
+
+float VezaxDamageHoldMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    auto cached = reaches.find(action);
+    if (cached == reaches.end())
+    {
+        Reach reach = Reach::None;
+        CastSpellAction* spell = dynamic_cast<CastSpellAction*>(action);
+        if (spell && !dynamic_cast<CastHealingSpellAction*>(action) && !dynamic_cast<CastBuffSpellAction*>(action))
+        {
+            if (spell->getThreatType() == Action::ActionThreatType::Aoe)
+                reach = Reach::Area;
+            else if (spell->GetTargetName() == "current target")
+                reach = Reach::CurrentTarget;
+        }
+
+        cached = reaches.emplace(action, reach).first;
+    }
+
+    if (cached->second == Reach::None || !VezaxDamageHeld(botAI))
+        return 1.0f;
+
+    // Any area spell, wherever it's aimed: it would hit him or a vapor, and a vapor kill ends hard mode.
+    if (cached->second == Reach::Area)
+        return 0.0f;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    return target && target->GetEntry() == NPC_VEZAX ? 0.0f : 1.0f;
+}

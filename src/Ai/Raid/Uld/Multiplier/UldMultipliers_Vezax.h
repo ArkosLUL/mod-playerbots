@@ -10,6 +10,8 @@
 #include "Define.h"
 #include "Multiplier.h"
 
+#include <unordered_map>
+
 // Life Tap returns nothing here: its mana half, 31818, is a bare SPELL_EFFECT_ENERGIZE that Aura of
 // Despair is immune to, and the glyph proc (63320) rides that same energize.
 class VezaxSuppressLifeTapMultiplier : public Multiplier
@@ -44,6 +46,26 @@ public:
     VezaxAnimusThreatMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "vezax animus threat multiplier") {}
 
     float GetValue(Action* action) override;
+};
+
+// The spell half of the hard mode hold: nothing aimed at him and no area damage. Melee, pets and the
+// damaging summons are a Block rule.
+class VezaxDamageHoldMultiplier : public Multiplier
+{
+public:
+    VezaxDamageHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "vezax damage hold multiplier") {}
+
+    float GetValue(Action* action) override;
+
+private:
+    enum class Reach : uint8
+    {
+        None,
+        CurrentTarget,
+        Area
+    };
+
+    std::unordered_map<Action*, Reach> reaches;
 };
 
 #endif

@@ -370,9 +370,10 @@ Playerbots.BattleRezBossOnly = 1
 # option left on for a boss run in normal mode mostly costs nothing - the exceptions are called out
 # per option.
 
-# Enable Vezax hard-mode behaviour (fight the Saronite Animus). When on, bots switch to the Animus
-# as soon as one exists and ranged/healers keep clear of its Profound Darkness. With it off they
-# play Vezax as normal mode even if the Animus spawns.
+# Enable Vezax hard-mode behaviour (fight the Saronite Animus). When on, bots leave the Saronite
+# Vapors alive, hold Heroism/Bloodlust for the Animus, and stop damaging Vezax at 15% health (tanks
+# at 2%) until the Animus spawns, so the raid can't kill him first. Then they switch to the Animus.
+# With it off they play Vezax as normal mode even if the Animus spawns.
 # Default: 0 (disabled)
 Playerbots.UlduarVezaxHardMode = 0
 

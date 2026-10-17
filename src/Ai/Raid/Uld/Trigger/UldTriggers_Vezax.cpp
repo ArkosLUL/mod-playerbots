@@ -231,6 +231,44 @@ bool VezaxHoldTargetTrigger::IsActive()
     return target->GetEntry() != NPC_VEZAX && target->GetEntry() != NPC_VEZAX_SARONITE_ANIMUS;
 }
 
+bool VezaxDamageHoldTrigger::IsActive()
+{
+    if (!IsVezaxHardModeActive(botAI))
+        return false;
+
+    if (!VezaxDamageHeld(botAI))
+    {
+        for (Unit* controlled : bot->m_Controlled)
+        {
+            Creature* pet = controlled->ToCreature();
+            if (pet && pet->HasReactState(REACT_PASSIVE) && VezaxIsHushedPet(pet))
+                return true;
+        }
+
+        return false;
+    }
+
+    Unit* vezax = GetVezax(botAI);
+    if (!vezax)
+        return false;
+
+    if (bot->GetVictim() == vezax)
+        return true;
+
+    for (CurrentSpellTypes const type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL, CURRENT_AUTOREPEAT_SPELL})
+        if (VezaxHarmfulCastOn(bot->GetCurrentSpell(type), vezax))
+            return true;
+
+    for (Unit* controlled : bot->m_Controlled)
+    {
+        Creature* pet = controlled->ToCreature();
+        if (pet && !pet->IsTotem() && (!pet->HasReactState(REACT_PASSIVE) || pet->GetVictim() == vezax))
+            return true;
+    }
+
+    return false;
+}
+
 bool VezaxRaidPositionTrigger::IsActive()
 {
     // Whoever the Animus is hitting stays with the main tank until he has it back, or the slot would

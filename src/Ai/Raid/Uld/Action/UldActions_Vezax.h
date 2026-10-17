@@ -148,6 +148,18 @@ public:
     bool Execute(Event event) override;
 };
 
+// Stops what the hold's rules can't reach: a swing already going, a cast or channel on him, and pets.
+// Gives the pets their stance back once the hold lifts.
+class VezaxDamageHoldAction : public Action
+{
+public:
+    static constexpr char const* Name = "vezax damage hold action";
+
+    VezaxDamageHoldAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class VezaxRaidPositionAction : public MovementAction
 {
 public:

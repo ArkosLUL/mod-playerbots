@@ -143,6 +143,17 @@ public:
     bool IsActive() override;
 };
 
+// Hard mode hold: a swing, cast or pet still on him past this bot's stop line, or a pet the hold
+// parked waiting for its stance back.
+class VezaxDamageHoldTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "vezax damage hold";
+
+    VezaxDamageHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class VezaxRaidPositionTrigger : public Trigger
 {
 public:

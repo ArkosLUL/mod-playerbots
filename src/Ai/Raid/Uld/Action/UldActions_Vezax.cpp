@@ -233,7 +233,59 @@ bool VezaxHoldTargetAction::Execute(Event /*event*/)
         had = "vapor";
 
     RaidObs::NoteDerived(bot, "vezax.target", had);
-    return Attack(vezax);
+
+    bool const held = VezaxDamageHeld(botAI);
+    if (!Attack(vezax, !held))
+        return false;
+
+    // Takes him as the target without the swing Attack starts.
+    if (held)
+        bot->AttackStop();
+
+    return true;
+}
+
+bool VezaxDamageHoldAction::Execute(Event /*event*/)
+{
+    Unit* vezax = VezaxDamageHeld(botAI) ? GetVezax(botAI) : nullptr;
+
+    for (Unit* controlled : bot->m_Controlled)
+    {
+        Creature* pet = controlled->ToCreature();
+        if (!pet || pet->IsTotem())
+            continue;
+
+        if (!vezax)
+        {
+            VezaxUnhushPet(pet);
+            continue;
+        }
+
+        // Passive alone isn't enough: a pet sent in by command keeps attacking until told otherwise.
+        VezaxHushPet(pet);
+        if (CharmInfo* charm = pet->GetCharmInfo())
+            charm->SetIsCommandAttack(false);
+
+        if (pet->GetVictim() == vezax)
+        {
+            pet->AttackStop();
+            pet->GetMotionMaster()->MoveFollow(bot, PET_FOLLOW_DIST, pet->GetFollowAngle());
+        }
+    }
+
+    if (!vezax)
+        return false;
+
+    // Keeps "current target" on him, so the hold target row doesn't fire and swing again.
+    if (bot->GetVictim() == vezax)
+        bot->AttackStop();
+
+    for (CurrentSpellTypes const type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL, CURRENT_AUTOREPEAT_SPELL})
+        if (VezaxHarmfulCastOn(bot->GetCurrentSpell(type), vezax))
+            bot->InterruptSpell(type);
+
+    // Never claims the tick, the bot still heals, buffs and moves.
+    return false;
 }
 
 bool VezaxRaidPositionAction::Execute(Event /*event*/)

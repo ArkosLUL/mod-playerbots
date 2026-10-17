@@ -15,8 +15,10 @@
 
 #include <vector>
 
+class Creature;
 class Player;
 class PlayerbotAI;
+class Spell;
 class Unit;
 
 // General Vezax. The Shadow Crash field (63277) is a persistent area aura, so a DynamicObject that
@@ -68,6 +70,10 @@ constexpr float ULDUAR_VEZAX_TRICKS_RANGE = 20.0f;
 // The Animus swaps victim at 110% threat in melee range, 130% outside. 90% of the main tank leaves room
 // for a cast in flight and lets him take it back at 110%.
 constexpr float ULDUAR_VEZAX_ANIMUS_THREAT_SHARE = 0.9f;
+// Hard mode only: a strong raid kills him before the sixth vapor merges into the Animus. Tanks get the
+// lower line so they keep threat while everyone else waits.
+constexpr float ULDUAR_VEZAX_HOLD_HEALTH_PCT = 15.0f;
+constexpr float ULDUAR_VEZAX_TANK_HOLD_HEALTH_PCT = 2.0f;
 // Close enough that the Animus, following its victim, ends up in the main tank's melee range.
 constexpr float ULDUAR_VEZAX_ANIMUS_BRING_BACK_RADIUS = 3.0f;
 // Shadow Crash skips anyone within this plus both combat reaches (SelectTarget -3, 3D), so 12.5 yd for
@@ -214,6 +220,15 @@ void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs);
 // Hard mode is still on the table: the switch is on, he's in combat, no vapor has died and the
 // Animus isn't up yet.
 bool VezaxHardModePending(PlayerbotAI* botAI);
+// Hard mode still pending and he's at or under this bot's stop line. The Barrier check backs up the
+// summon hook, in case it ever misses.
+bool VezaxDamageHeld(PlayerbotAI* botAI);
+// The hold parks pets passive. Stances are kept per instance so any engine can give them back, wipes
+// included.
+void VezaxHushPet(Creature* pet);
+void VezaxUnhushPet(Creature* pet);
+bool VezaxIsHushedPet(Creature* pet);
+bool VezaxHarmfulCastOn(Spell const* spell, Unit* vezax);
 void VezaxNoteVaporKilled(Unit* vapor);
 void VezaxNoteAnimusSummoned(Unit* vapor);
 void VezaxNoteVaporSummon(Unit* vezax);
