@@ -21,6 +21,8 @@ public:
         Absorb(ToCFactionChampionsTriggerContext());
         Absorb(ToCFactionChampionsDefenceTriggerContext());
         Absorb(ToCTwinValkyrTriggerContext());
+        Absorb(ToCStagingTriggerContext());
+        Absorb(ToCResistAuraTriggerContext());
     }
 
 private:

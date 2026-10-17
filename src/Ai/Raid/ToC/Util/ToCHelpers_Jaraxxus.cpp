@@ -423,23 +423,6 @@ bool DeriveDodgeSpot(Player* bot, JaraxxusScan const& scan, Position& spot)
 
 Unit* GetJaraxxus(PlayerbotAI* botAI) { return botAI ? FindJaraxxus(botAI->GetBot()) : nullptr; }
 
-Unit* GetJaraxxusInIntro(PlayerbotAI* botAI)
-{
-    Player* bot = botAI ? botAI->GetBot() : nullptr;
-    JaraxxusScan const* scan = ScanFor(bot);
-    if (!scan)
-        return nullptr;
-
-    for (ObjectGuid guid : scan->bosses)
-    {
-        Creature* boss = ResolveAlive(bot, guid);
-        if (boss && boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE) && !boss->IsInCombat())
-            return boss;
-    }
-
-    return nullptr;
-}
-
 bool JaraxxusHasNetherPower(Unit* jaraxxus)
 {
     if (!jaraxxus)

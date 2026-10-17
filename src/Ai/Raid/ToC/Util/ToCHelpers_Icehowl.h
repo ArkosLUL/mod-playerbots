@@ -96,6 +96,10 @@ struct IcehowlBreathStand
     float bandMax = 0.0f;  // capped by the room along the bearing
 };
 
+// Degrees between two neighbouring breath bearings on this map's difficulty: half the remapped
+// Arctic Breath cone plus the margin, so 36 on 10N and 18 elsewhere.
+float IcehowlBreathStepDeg(Unit* anyUnitOnMap);
+
 // The charge line, from where the jump back lands to where the charge stops. Latched from the gaze
 // to the end of the charge, read once per instance per ms. False off map 649 and outside the charge.
 bool IcehowlChargeLatched(PlayerbotAI* botAI, Position& start, Position& end);

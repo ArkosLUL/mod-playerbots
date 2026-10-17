@@ -9,5 +9,7 @@ EncounterDefinition const& ToCJaraxxusDefinition();
 EncounterDefinition const& ToCFactionChampionsDefinition();
 EncounterDefinition const& ToCTwinValkyrDefinition();
 EncounterDefinition const& ToCAnubarakDefinition();
+EncounterDefinition const& ToCStagingDefinition();
+EncounterDefinition const& ToCResistAuraDefinition();
 
 #endif

@@ -201,6 +201,15 @@ bool IsAnubarakPickupTank(Player* bot);
 // IsTank can read false for a tank for a tick, so the spec is asked too
 bool IsAnubarakTankPlayer(Player* player);
 
+// Who the pull's latches would pick if it started now, read fresh with nothing latched. pickup is
+// the main tank while alive, else side[0], which then holds both.
+struct AnubarakPrepullTanks
+{
+    ObjectGuid pickup;
+    ObjectGuid side[2];
+};
+AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot);
+
 // Alive burrowers in the room, submerged ones too: they come back up where they went down
 std::vector<Creature*> GetAnubarakBurrowers(Player* bot);
 // What a side tank takes. Empty for a bot with no side, and with nothing selectable to take.

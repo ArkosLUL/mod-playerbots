@@ -67,18 +67,6 @@ float JaraxxusKissCastHoldMultiplier::GetValue(Action* action)
     return JaraxxusSpellHasCastTime(botAI, cast->getSpell()) ? 0.0f : 1.0f;
 }
 
-float JaraxxusIntroHoldMultiplier::GetValue(Action* action)
-{
-    if (!dynamic_cast<MovementAction*>(action) || dynamic_cast<JaraxxusIntroMainTankStandAction*>(action))
-        return 1.0f;
-
-    // no live gate: he isn't engaged until the release. The scan is cheaper than walking the group
-    if (!GetJaraxxusInIntro(botAI))
-        return 1.0f;
-
-    return botAI->IsMainTank(bot) ? 0.0f : 1.0f;
-}
-
 float JaraxxusAvoidAoeGuardMultiplier::GetValue(Action* action)
 {
     if (!dynamic_cast<AvoidAoeAction*>(action))
@@ -95,7 +83,6 @@ void AddToCJaraxxusMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& mul
     multipliers.push_back(new JaraxxusControlTankMovementMultiplier(botAI));
     multipliers.push_back(new JaraxxusTauntGuardMultiplier(botAI));
     multipliers.push_back(new JaraxxusKissCastHoldMultiplier(botAI));
-    multipliers.push_back(new JaraxxusIntroHoldMultiplier(botAI));
     multipliers.push_back(new JaraxxusAvoidAoeGuardMultiplier(botAI));
 }
 

@@ -1,6 +1,8 @@
 #ifndef PLAYERBOTS_RAID_TOCHELPERS_NORTHRENDBEASTS_H
 #define PLAYERBOTS_RAID_TOCHELPERS_NORTHRENDBEASTS_H
 
+#include <vector>
+
 #include "Define.h"
 
 class Player;
@@ -62,6 +64,11 @@ uint32 GetBeastsStageMask(PlayerbotAI* botAI);
 
 // Bot or human, by strategy or by spec
 bool IsBeastsTank(Player* player);
+
+// The bot tanks the duty deal hands out from: alive on the instance, flagged main tank first, then
+// by guid. With nothing engaged it gives roster[0] every main duty and roster[1] the swap and the
+// stationary worm.
+std::vector<Player*> GetBeastsTankRoster(Player* bot);
 
 // None for a tank the deal left out and for every non-tank
 BeastsTankDuty GetBeastsTankDuty(PlayerbotAI* botAI);

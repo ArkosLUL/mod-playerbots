@@ -786,6 +786,8 @@ float DistanceToIcehowlLane(Position const& start, Position const& end, float x,
     return std::hypot(x - (sx + t * dx), y - (sy + t * dy));
 }
 
+float IcehowlBreathStepDeg(Unit* anyUnitOnMap) { return BreathStepDeg(anyUnitOnMap); }
+
 bool IsIcehowlStaggered(Unit* icehowl) { return icehowl && icehowl->HasAura(SPELL_STAGGERED_DAZE); }
 
 bool HasIcehowlFrothingRage(Unit* icehowl)

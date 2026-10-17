@@ -52,7 +52,9 @@ CHAMPIONS = (
 )
 
 # ToC triggers that belong to no encounter, so they lead with no TOC_PREFIXES key.
-RAID_WIDE_TRIGGERS: frozenset[str] = frozenset({"toc restore rti cc"})
+RAID_WIDE_TRIGGERS: frozenset[str] = frozenset({
+    "toc restore rti cc", "toc staging stand", "toc resistance aura",
+})
 
 NODE_PER_PREFIX = {
     "gormok engaged by main tank": "northrend-beasts",

@@ -383,6 +383,8 @@ bool IsBeastsTank(Player* player)
     return player && (PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true));
 }
 
+std::vector<Player*> GetBeastsTankRoster(Player* bot) { return bot ? GatherRoster(bot) : std::vector<Player*>(); }
+
 BeastsTankDuty GetBeastsTankDuty(PlayerbotAI* botAI)
 {
     Map* map = nullptr;

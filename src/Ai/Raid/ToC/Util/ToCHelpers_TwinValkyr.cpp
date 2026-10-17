@@ -85,14 +85,6 @@ struct TwinValkyrState
 
 RaidInstanceState<TwinValkyrState> twinStates;
 
-enum class TwinTankRole : uint8
-{
-    None,
-    Fjola,
-    Eydis,
-    Both
-};
-
 enum class OrbRule : uint8
 {
     Wrong,
@@ -618,6 +610,8 @@ bool IsTwinTank(Player* bot, Unit* twin)
     return role == TwinTankRole::Both ||
            role == (colour == TwinColour::Light ? TwinTankRole::Fjola : TwinTankRole::Eydis);
 }
+
+TwinTankRole GetTwinTankRole(Player* bot) { return bot ? TankRoleOf(bot) : TwinTankRole::None; }
 
 TwinEssenceWant GetWantedEssence(PlayerbotAI* botAI)
 {

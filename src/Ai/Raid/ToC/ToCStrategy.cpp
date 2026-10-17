@@ -26,6 +26,8 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
     AddToCFactionChampionsTriggerNodes(triggers);
     AddToCFactionChampionsDefenceTriggerNodes(triggers);
     AddToCTwinValkyrTriggerNodes(triggers);
+    AddToCStagingTriggerNodes(triggers);
+    AddToCResistAuraTriggerNodes(triggers);
 }
 
 // A trace credits the first rule or multiplier that zeroes an action, so each encounter's rules
@@ -46,5 +48,7 @@ void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& m
     AddToCFactionChampionsDefenceMultipliers(botAI, multipliers);
     AddToCTwinValkyrMultipliers(botAI, multipliers);
     ToCTwinValkyrDefinition().AddMultipliers(botAI, multipliers);
+    ToCStagingDefinition().AddMultipliers(botAI, multipliers);
+    ToCResistAuraDefinition().AddMultipliers(botAI, multipliers);
     multipliers.push_back(new ToCBurstWindowMultiplier(botAI));
 }

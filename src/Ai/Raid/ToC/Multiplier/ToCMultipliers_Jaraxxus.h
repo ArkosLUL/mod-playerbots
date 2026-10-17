@@ -31,14 +31,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// The release attacks whoever stands nearest, so nothing may walk the main tank off him during the intro
-class JaraxxusIntroHoldMultiplier : public Multiplier
-{
-public:
-    JaraxxusIntroHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "jaraxxus intro hold") {}
-    float GetValue(Action* action) override;
-};
-
 // AvoidAoeAction flees a flame by FleePosition out to 5.5 yd (GetDistance takes off both combat
 // reaches), past where our own dodge starts, so the flames stay ours alone
 class JaraxxusAvoidAoeGuardMultiplier : public Multiplier
