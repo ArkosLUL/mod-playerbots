@@ -186,7 +186,7 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
   skull and `ToCPetOffPick` is the resolver triggers' pet clause
   ([below](#targeting-is-direct-no-raid-icons)).
 - `AvoidCreatureClusterAction` is the legacy `FleePosition` dodge, capped at
-  `AiPlayerbot.FleeDistance` (5 yd), with no caller left. A new hazard uses `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
+  `Playerbots.FleeDistance` (5 yd), with no caller left. A new hazard uses `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
   [pitfalls.md](../../engine/pitfalls.md).
 - `IsBotInFrontalCone` and `CastClassTaunt` live in `src/Util/EncounterHelpers.{h,cpp}`; ToC keeps no
   copies.

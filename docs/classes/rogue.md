@@ -12,7 +12,9 @@ upstream's parent and **every rogue stands still whenever Sprint is on cooldown*
 nothing failing to compile. It is a local divergence to re-apply on each merge — see
 [../engine/pitfalls.md](../engine/pitfalls.md). `tricks of the trade` likewise sits at
 `ACTION_HIGH + 6.5f` rather than upstream's 26.0, to break an exact relevance tie with the
-main-hand poison (26.0).
+main-hand poison (26.0). Every trigger the specs share (poisons, kicks, survival, Tricks, Sprint)
+lives in `GenericRogueStrategy` in this tuned form; the spec strategies carry only their rotation
+and Combat's Vanish.
 
 ## Design decisions
 
@@ -77,7 +79,7 @@ Combat (`CombatRogueStrategy`):
 | 42 / 41 | kick, kick on enemy healer | kick |
 | 29 / 28 | low health | evasion, feint |
 | 27 | critical health | cloak of shadows |
-| 26 | low tank threat | tricks of the trade |
+| 26.5 | tricks of the trade | tricks of the trade |
 | 25 / 24 | slice and dice / rupture | slice and dice / rupture |
 | 23 / 22 | killing spree / blade flurry | killing spree / blade flurry |
 | 21 | expose armor | expose armor |
@@ -92,7 +94,7 @@ Assassination:
 | 42 / 41 | kick, kick on enemy healer | kick |
 | 29 / 28 | low health | evasion, feint |
 | 27 | critical health | cloak of shadows |
-| 26 | low tank threat | tricks of the trade |
+| 26.5 | tricks of the trade | tricks of the trade |
 | 25 / 24 / 23 | slice and dice / rupture / hunger for blood | same |
 | 22 | expose armor | expose armor |
 | 21.5 / 21 | envenom | cold blood, envenom |

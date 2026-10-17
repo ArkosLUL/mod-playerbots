@@ -286,7 +286,7 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
   `BestPositionForRangedToFlee`, which is why it never fails this way. Prefer it where 5 yd of travel
   is enough (next bullet), or pass the platform/boss floor Z rather than `bot->GetPositionZ()` and
   shrink the radius until the path succeeds.
-- **`FleePosition` caps travel at `AiPlayerbot.FleeDistance`** — `min(radius + 1, fleeDistance)`,
+- **`FleePosition` caps travel at `Playerbots.FleeDistance`** — `min(radius + 1, FleeDistance)`,
   default **5.0** (`MovementActions.cpp:2152`, `:2215`) — so `radius` is a request, not a distance,
   and a bot centred on a 10 yd blast steps 5 yd and eats it while the action returns `true`. It reads
   one hazard, and for non-tank melee the candidate angles are perpendicular to the current target or
@@ -304,7 +304,7 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
 - **A movement lock refuses anything not *strictly* above it.** `IsWaitingForLastMove`
   (`MovementActions.cpp:951-963`) compares priorities with `>`, so a move already in flight refuses
   the next move of the *same* priority until its lock expires — `distance / speed`, capped at
-  `AiPlayerbot.MaxWaitForMove` (5000 ms). `ACTION_*` relevance decides which action runs and has no
+  `Playerbots.MaxWaitForMove` (5000 ms). `ACTION_*` relevance decides which action runs and has no
   bearing on whether its `MoveTo` is accepted, so an emergency dodge issued at the same priority as
   the routine hold that just fired is silently dropped while the bot walks on to the old destination.
   Obsidian Sanctum lost most of a Flame Tsunami's 3.6 s budget to a 2.9 s hold lock exactly this way.
@@ -342,7 +342,7 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
 - **Nothing scopes a multiplier but itself.** `UldEncounterGate` wraps triggers only, and one
   `RaidUlduarStrategy::InitMultipliers` registers every boss's, so each runs against every action of
   every bot for the whole instance. Neither of these is the encounter gate it reads as:
-  - a **config read**: `IsMimironHardModeActive` returns `sPlayerbotAIConfig.ulduarMimironHardMode`
+  - a **config read**: `IsMimironHardModeActive` returns `sPlayerbotAIConfig.UlduarMimironHardMode`
     and nothing else, so Mimiron's `avoid aoe` veto landed 15 times in Thorim's gauntlet and its
     formation guard swept 200 yd twice a tick there.
   - a **live-boss test over a guid lookup**: `InstanceScript::GetCreature` answers from anywhere on
@@ -683,6 +683,17 @@ Related traps:
   still did: see the next entry). After a core merge: `docker compose build ac-db-import && docker
   compose up ac-db-import`, restart the worldserver, and check `acore_world.updates` holds the newest
   file.
+- **PR #2854 renamed every config key from `AiPlayerbot.X` to `Playerbots.X` with no fallback.** An
+  old `playerbots.conf` key or `AC_AI_PLAYERBOT_*` env var is ignored without an error and the option
+  falls to its default; overrides are now `AC_PLAYERBOTS_*`. The part after the prefix kept its
+  spelling (`Playerbots.botActiveAloneSmartScale`), so a key string must not be recased with its
+  member. Members went UpperCamelCase too, and fork-only code breaks with no textual conflict.
+- **PR #2836 renamed class strategies** (warrior and paladin `tank` -> `prot`, paladin `dps` -> `ret`
+  and `heal` -> `holy`, priest `heal` -> `disc` and `dps` -> `shadow`). `+`/`-`/`~` still accept the
+  old names, but `HasStrategy` compares `getName()`, so a check on an old name is silently false.
+- **Both sides appending a parameter to one signature compiles wrong, not broken.** Upstream gave
+  `StatsCollector` a level, the fork a spell-school mask; a caller still passing the mask third
+  reads it as a level. Check every caller, not just the conflicted ones.
 - **`IsSummonedBy` cannot set a summon's despawn type.** `Map::SummonCreature` runs `InitSummon` →
   `IsSummonedBy` before it returns, then `WorldObject::SummonCreature` (`Object.cpp:2454`) and
   `Spell::EffectSummonType`'s `default:` branch (`SpellEffects.cpp:2497`) re-apply the duration's type.
@@ -709,6 +720,11 @@ None of these fail to compile when reverted, so a merge that takes upstream's si
   `.github/actions/linux-build/action.yml:145-150`), and Custom-only code carries roughly 60 warnings
   — mostly `-Wunused-parameter` on `Execute(Event event)` overrides and on free helpers taking an
   unused `PlayerbotAI* botAI`. Five CI jobs go red on the first upstream PR until they are cleared.
+- **`GatherStrategyTargetExclusions` keeps the fork's `candidates` argument**, and every caller
+  passes the list it will filter. Upstream calls it without one; an empty list makes Ulduar's
+  Yogg-Saron sweep return early and its Guardian exclusion drops.
+- **`GetFirstAliveUnitByEntry` is kept** in `EncounterHelpers` for the Ulduar and Naxx callers;
+  upstream deleted it.
 - `AttackersValue::IsPossibleTarget` gained an `IsInCombatWith(bot)` gate upstream, so
   `GetFirstAliveUnitByEntry` resolves mobs slightly earlier than it used to — relevant anywhere a
   `nullptr` return was being read as "not engaged yet".
@@ -909,7 +925,7 @@ isolates.
 
 ## Configuration
 
-- **Raid cheats are on by default**: `AiPlayerbot.BotCheats = "food,taxi,raid"`. A mechanic that is
+- **Raid cheats are on by default**: `Playerbots.BotCheats = "food,taxi,raid"`. A mechanic that is
   only survivable because of the raid cheat is (a) not real play and (b) a silent wipe on any server
   that turns the cheat off. See the CHEAT-ONLY list in [../raids/README.md](../raids/README.md).
 - **The raid cheat strips auras, which silently breaks any node keyed on one.** Thorim's tank-swap
@@ -918,7 +934,7 @@ isolates.
   strikes that kept their aura the full 15 s **all** swapped within 37-199 ms. Nothing errors; the
   node just rarely fires. Before keying a node on a debuff, check the cheat is not removing it. Raid
   cheat is live for Yogg-Saron, ICC, SSC, BT, BWL and RS.
-- `errorDelay` defaults to 100 ms and is compared as `(now - lastErrorTell) < errorDelay / 1000`
+- `ErrorDelay` defaults to 100 ms and is compared as `(now - lastErrorTell) < ErrorDelay / 1000`
   (`PlayerbotMgr.cpp:1709`) — integer division makes that 0 seconds, so errors flush every tick.
   **Still unfixed.**
 - **Boss health is not `creature_template`.** `mod-dungeon-scale` is loaded and

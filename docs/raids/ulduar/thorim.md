@@ -83,7 +83,7 @@ once a bot is settled, exempting the chase — an add at 24 yd is up to 38 yd fr
 ranged bot that cannot step into range is silent.
 
 **`GetThorim` must not be sight-limited.** `GetFirstAliveUnitByEntry` walks `"possible targets no los"`,
-capped at `AiPlayerbot.SightDistance` 100 (~110 effective with the boss's bounding radius). Measured on
+capped at `Playerbots.SightDistance` 100 (~110 effective with the boss's bounding radius). Measured on
 the balcony trigger: active at **102.2-106.8 yd**, useless at **110.9-113.1**. The upper hallway is
 100-145 yd from Thorim's platform, so all 20 Thorim entry points went blind the moment the squad
 climbed the ramp. The companion trap is that a range-free boss handle re-opens
@@ -152,7 +152,7 @@ a straight index map: same waypoint number, other lane. Each lane sits 2-9 yd fr
 and 15.5-22.9 yd from the other's. The bot side latches the hand it sees casting and holds the opposite
 lane until the other hand goes up — the gauntlet formation follows that preference rather than the
 master's own lane, or it would walk everyone straight back into the blast. The Colossus is 131 yd from the
-top pair of waypoints, past the 100 yd `AiPlayerbot.SightDistance` cap, so the telegraph is read through a
+top pair of waypoints, past the 100 yd `Playerbots.SightDistance` cap, so the telegraph is read through a
 targeted 150 yd creature lookup rather than the usual target values.
 
 Runic Barrier is effectively permanent, so "stop attacking while it is up" would mean never attacking.
@@ -274,7 +274,7 @@ spot, and always by 25 s — **which is Sif's clock**: she teleports at +8.3 s, 
 north rim at about +33 s. No trace yet shows whether Lightning Charge reaches players above z 430.
 Sif's bunny path runs 2.6-7.7 yd from the four arena wait spots, so they serve the opening only.
 
-Effective `AiPlayerbot.SpellDistance` **28.5** and `HealDistance` **38.5** mean `"reach spell"` fires
+Effective `Playerbots.SpellDistance` **28.5** and `HealDistance` **38.5** mean `"reach spell"` fires
 past about **36.75 yd** from Thorim, which is why the balcony hold needs a `ReachTargetAction` guard.
 
 ### Shelters and Chain Lightning

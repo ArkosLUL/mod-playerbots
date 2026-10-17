@@ -413,7 +413,7 @@ Four things had to be true for it to hold, all found in live testing:
 
 Pet resolution caches each add's `ObjectGuid` (revalidated through `botAI->GetUnit`) because
 `sightDistance` is 100 yd while the coils are ~120 yd apart — a bot on its own staging spot loses the
-grid search on the far add. Residual risk: a heavily lowered `AiPlayerbot.SightDistance` leaves a
+grid search on the far add. Residual risk: a heavily lowered `Playerbots.SightDistance` leaves a
 non-tank idle rather than falling back.
 
 ## Sapphiron

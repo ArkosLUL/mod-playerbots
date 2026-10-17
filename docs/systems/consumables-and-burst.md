@@ -142,7 +142,7 @@ level <= 70 -> itemId < 35570    // first WotLK content item
 else        -> no cap
 ```
 
-Gated on `AiPlayerbot.LimitGearExpansion`, **not** the server's `CONFIG_EXPANSION`, by decision. In
+Gated on `Playerbots.LimitGearExpansion`, **not** the server's `CONFIG_EXPANSION`, by decision. In
 the ladder loop this must be a `continue`, not a `break` — that is what makes it fall through to the
 previous expansion's entry.
 
@@ -319,7 +319,7 @@ unfiltered target, so it could walk the druid to a soulstoned corpse.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `AiPlayerbot.BurstOnBossOnly` | 1 | Grouped bots hold burst for dungeon/world bosses instead of trash |
-| `AiPlayerbot.OffensivePotions` | 1 | Stock and use DPS offensive potions |
-| `AiPlayerbot.LimitGearExpansion` | 1 | Also gates the potion ladder by expansion |
-| `AiPlayerbot.BattleRezBossOnly` | 1 | Rebirth and Reincarnation self-res wait for a boss fight |
+| `Playerbots.BurstOnBossOnly` | 1 | Grouped bots hold burst for dungeon/world bosses instead of trash |
+| `Playerbots.OffensivePotions` | 1 | Stock and use DPS offensive potions |
+| `Playerbots.LimitGearExpansion` | 1 | Also gates the potion ladder by expansion |
+| `Playerbots.BattleRezBossOnly` | 1 | Rebirth and Reincarnation self-res wait for a boss fight |

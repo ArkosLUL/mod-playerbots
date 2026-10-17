@@ -234,7 +234,7 @@ front replaces the whole chain for the common case. Encounter rules enforce this
   full: the node recasts every tick and nothing lands. Heal such a target with instants, HoTs and
   channels.
 - A group scan measures with `botAI->GetRange("heal")` — **30 yd** — not
-  `sPlayerbotAIConfig.spellDistance`, and not `healDistance` 38.5. Null-check `bot->GetGroup()` and
+  `sPlayerbotAIConfig.SpellDistance`, and not `healDistance` 38.5. Null-check `bot->GetGroup()` and
   LOS-test while you are in there.
 - `AoeInGroupTrigger` (`HealthTriggers.cpp:47-63`) needs ≥ 3 healable members: threshold 3 (≤5),
   `min(half,4)` (≤10), `min(half,6)` (≤25), `min(half,8)` above. The threshold and the counting value

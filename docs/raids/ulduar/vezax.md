@@ -63,7 +63,7 @@ of 8.0**, which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both 
   this rework started at 22, which put the front rank in the melee ball's pool: the outside count ran
   8-12 against a threshold of 9 and three of nine marks in one pull landed on the tank.
 - **Ceiling 38 yd.** `ReachTargetAction` tests `IsWithinCombatRange(target, spellDistance)`, which
-  adds the same two reaches to `AiPlayerbot.SpellDistance` (28.5). Past it "reach spell" fires at
+  adds the same two reaches to `Playerbots.SpellDistance` (28.5). Past it "reach spell" fires at
   `ACTION_HIGH` against this formation at `ACTION_RAID` and the two deadlock.
 
 Slot tolerance is 1.2, and 3.0 for the tank, whose slot is the anchor
@@ -330,7 +330,7 @@ last cycle helped: `batch.py --boss general-vezax --split-at 867fd6529`, once pu
 
 ## Hard mode — the reference implementation
 
-Everything here is armed only by `AiPlayerbot.UlduarVezaxHardMode`. With it off the Animus switch
+Everything here is armed only by `Playerbots.UlduarVezaxHardMode`. With it off the Animus switch
 never fires, and a raid that keeps the vapors alive anyway is held on an invulnerable Vezax.
 
 Hard mode = leave Saronite Vapors alive until the **Saronite Animus (33524)** spawns; Vezax gains an

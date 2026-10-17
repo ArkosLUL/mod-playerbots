@@ -65,7 +65,7 @@ carries the strategy only loses it to a DB update.
   an unslotted pet too: the bot revives or calls it, as `pet dead` is true whenever no pet is out but
   a `character_pet` row exists.
 - **Pets above 20 talent points got none.** Premade links
-  (`AiPlayerbot.PremadeHunterPetLink.<spec>.<points>`) stop at 20 (`parsedHunterPetLinkOrder[3][21]`).
+  (`Playerbots.PremadeHunterPetLink.<spec>.<points>`) stop at 20 (`parsedHunterPetLinkOrder[3][21]`).
   mod-spell-tweaks here raises Beast Mastery (53270) from +4 to +6 pet points, a 22-point cap at 80,
   where `InitPetTalents` learned nothing. It now applies the 20-point link and spends the rest on
   random picks, which only reach the last row once 20 are spent.

@@ -180,7 +180,7 @@ exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, 
 
 **Hard mode is gone as a config.** The "Rare Cache of Winter" kill needs no different
 behaviour: the helpers *are* the raid's damage, the fire is the Biting Cold answer, and Storm Power
-is the biggest buff in the fight, so all three run on every pull. `AiPlayerbot.UlduarHodirHardMode`
+is the biggest buff in the fight, so all three run on every pull. `Playerbots.UlduarHodirHardMode`
 and `IsHodirHardModeActive` were deleted rather than left gating nothing.
 
 **The deadline is 3:00, not the 2:00 the guides give.** `SPELL_SHATTER_CHEST_TIMER` is **65272**, an

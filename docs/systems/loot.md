@@ -32,7 +32,7 @@ Defined in `src/Ai/Base/Value/LootStrategyValue.cpp`; base class `LootStrategy` 
 `lootGuid.IsItem()` short-circuit — so opening a looted container under `equip` skips non-gear
 contents. Quest items from containers are still caught by step 4 above.
 
-Set the default with `AiPlayerbot.LootStrategy` (shipped default `normal`). At runtime the master
+Set the default with `Playerbots.LootStrategy` (shipped default `normal`). At runtime the master
 uses `ll <strategy>`, queries with `ll ?`, and previews a specific item with `ll ?<item>`.
 
 ## Roll voting
@@ -45,7 +45,7 @@ Two independent stat systems drive a roll, and **the bugs live in their disagree
   plus the `smartNeedBySpec` off-spec safety net, which runs only in the loot path via
   `AdjustUsageForOffspec`.
 
-`FinalizeRollVote` (`ItemUsageValue.cpp:2526`) under `AiPlayerbot.Roll.UpgradesOnly = 1` forces
+`FinalizeRollVote` (`ItemUsageValue.cpp:2526`) under `Playerbots.Roll.UpgradesOnly = 1` forces
 PASS on everything except a computed NEED whose usage is `ITEM_USAGE_EQUIP`/`REPLACE` (downgraded to
 GREED). **So every wrong GREED means the item was misclassified as a genuine equip-upgrade** — the
 bug is in the classifier, never in the greed fallback. Shipped default is `Roll.UpgradesOnly = 0`.
@@ -94,10 +94,10 @@ is never penalised. A bot resolving to the sim BiS dataset instead
 ([itemization.md](itemization.md#sim-bis-dataset)) gets this whole signal from its own dataset
 subject in place of the lists, never mixed per item. It reaches a roll two ways:
 
-- **Gate bypass** (`AiPlayerbot.Bis.GateBypass`) — `IsBisForBot` short-circuits
+- **Gate bypass** (`Playerbots.Bis.GateBypass`) — `IsBisForBot` short-circuits
   `IsFallbackNeedReasonableForSpec` (`:612`), `IsPrimaryForSpec` (`:984`) and `AdjustUsageForCrossArmor`
   (`:1159`). `IsRoleItemizationMismatch` is deliberately **not** bypassed.
-- **Score bonus** (`AiPlayerbot.Bis.ScoreBonus`, `Bis.PhaseDecay`) — applied in
+- **Score bonus** (`Playerbots.Bis.ScoreBonus`, `Bis.PhaseDecay`) — applied in
   `StatsWeightCalculator::BisRankMultiplier`, gated on `SetBisBonus(true)`. That is set in
   `QueryItemUsageForEquip`, so it moves the `usage` that voting consumes; it is not equip-only.
   The decay is measured between the dropped and the equipped item, not from the bot's progression

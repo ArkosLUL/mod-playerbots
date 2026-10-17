@@ -164,7 +164,7 @@ grow with every option and bury the few that decide whether a pull counts.
 ## Config
 
 Knobs and their defaults are documented in `conf/playerbots.conf.dist` under RAID OBSERVABILITY; env
-overrides are `AC_AI_PLAYERBOT_OBS_*`. Read effective values with
+overrides are `AC_PLAYERBOTS_OBS_*`. Read effective values with
 `docker exec ac-worldserver env | grep ^AC_` — never trust the `.conf`.
 
 Three that decide file size: `SnapshotIntervalMs` (250 — two samples per oscillation cycle, the
@@ -372,7 +372,7 @@ units hostile to the anchor and the watched set is seeded from attackers, so bef
 say a pet cast something but never where it went — and half of all pet casts carry no target at all,
 which is exactly the window a pet spends running somewhere. Guardians count, because a death knight's
 ghoul and a shaman's wolves are guardians rather than pets. Totems are skipped: a shaman drops four,
-none of them move, and none of them can pull anything. `AiPlayerbot.Obs.LogPets` turns it off.
+none of them move, and none of them can pull anything. `Playerbots.Obs.LogPets` turns it off.
 
 Same instance is not the same pull: gating `cast` on the session alone picked up 253 casts from a mob
 two rooms away and none at all from the raid.
@@ -546,7 +546,7 @@ are left bare on purpose.
 - **A friendly creature is not swept either**, so Yogg-Saron's one-use portals (34072) leave no row
   anywhere but `yogg.wave`. Where a mechanic's unit is not hostile, the probe is the only record.
 - **`cfg.cheats` is the conf string, not a record of cheats exercised.** `EnvFieldsJson` copies
-  `AiPlayerbot.BotCheats` verbatim, so a header reading `food,taxi,raid` says nothing about whether
+  `Playerbots.BotCheats` verbatim, so a header reading `food,taxi,raid` says nothing about whether
   any node took a cheat branch. An encounter that stopped cheating reads identically before and
   after; only the body can show it.
 
@@ -584,7 +584,7 @@ them.
 ## Timing a bot: `.playerbots pmon`
 
 `PlayerbotCommandScript.cpp:63`, `SEC_GAMEMASTER`. `pmon toggle` to arm, `pmon reset` at the pull,
-`pmon` afterwards. `AC_AI_PLAYERBOT_PERF_MON_ENABLED` is **0** by default, so it is off unless asked
+`pmon` afterwards. `AC_PLAYERBOTS_PERF_MON_ENABLED` is **0** by default, so it is off unless asked
 for.
 
 Two traps make its absolute numbers meaningless. **It does not time `isUseful` or `isPossible`** —

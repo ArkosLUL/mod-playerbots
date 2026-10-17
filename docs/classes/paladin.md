@@ -159,7 +159,7 @@ combat. The self-target `flash of light` node and the in-bubble Flash @89 are un
 
 ## Glyphs — verified, do not re-audit
 
-`AiPlayerbot.PremadeSpecGlyph.2.0` (holy pve) is `41106,43367,45741,43368,43365,41109`, read as
+`Playerbots.PremadeSpecGlyph.2.0` (holy pve) is `41106,43367,45741,43368,43365,41109`, read as
 major/minor/major/minor/minor/major: **Glyph of Holy Light**, Lay on Hands, **Glyph of Beacon of
 Light**, Sense Undead, Blessing of Kings, **Glyph of Seal of Wisdom**. `InitGlyphs` indexes
 `parsedSpecGlyph[cls][tab]` with `AiFactory::GetPlayerSpecTab`, which is 0 for Holy, so this is what
@@ -199,7 +199,7 @@ player-driven paladin in the same pull ran **75%** uptime and 39.8% block.
 Two defects stacked:
 
 1. `TankPaladinStrategy` hung `holy shield` off the **`medium health`** trigger
-   (`AiPlayerbot.MediumHealth` = 65), so a healthy tank never cast it. `HolyShieldTrigger` was
+   (`Playerbots.MediumHealth` = 65), so a healthy tank never cast it. `HolyShieldTrigger` was
    registered in the factory and referenced by zero `TriggerNode`s — the same dead registration as
    Divine Favor above.
 2. **`beforeDuration` 0 means "only once the buff has already dropped".** `BuffTrigger::IsActive`

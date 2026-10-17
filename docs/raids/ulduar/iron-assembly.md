@@ -13,7 +13,7 @@ right member is the common case. **Known-open:** `IronAssemblySetDpsPriorityTrig
 for tanks, so a *tank's* ghoul is never redirected. Closing it means six wiring sites and no trace
 has shown it costing anything, so it is left open on purpose.
 
-Kill order is the only thing `AiPlayerbot.UlduarIronAssemblyHardMode` changes: normally
+Kill order is the only thing `Playerbots.UlduarIronAssemblyHardMode` changes: normally
 **Steelbreaker → Molgeim → Brundir**, which takes Fusion Punch off the tank earliest and never lets his
 phase 3 kit come up, hard mode **Brundir → Molgeim → Steelbreaker**. Molgeim is
 second either way, so Rune of Summoning is unreachable — deliberately, because

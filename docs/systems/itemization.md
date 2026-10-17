@@ -538,7 +538,7 @@ WotLK-progression bot whose `ResolveSpecKey` class and tab it matches (role incl
 sentinel tabs), and only with a block at or below the bot's phase cap. So a respec or role change
 drops a roster bot to its spec subject or the lists, never onto a stale-role block.
 
-`AiPlayerbot.BisDataset.Enable` gates the whole path, and a placeholder export (one payload shared
+`Playerbots.BisDataset.Enable` gates the whole path, and a placeholder export (one payload shared
 across ≥2 classes' subjects) is refused at load, so `Enable = 1` ships safe with no real data. A
 refused or failed load keeps the snapshot already loaded; the version poll retries only a new
 version.
@@ -577,7 +577,7 @@ strictly per hand (Titan's Grip is two independent matches; a 2H with no sim off
 it to the ordinary picker). Rings try the same finger first, then cross; finger fallback picks the
 sim's ring whose slot no exact match has claimed. Trinkets take nothing from the block.
 
-**Rank order** (`AiPlayerbot.BisDataset.RankOrder`). When the subject lists both the worn and the
+**Rank order** (`Playerbots.BisDataset.RankOrder`). When the subject lists both the worn and the
 new item, the better-ranked one wins in both directions, whatever the scores say
 (`StatsWeightCalculator::CompareBisRank`, called by `QueryItemUsageForEquip` and `EquipAction`'s
 ring/trinket block, which must agree). The latest phase at or below the source's that lists
@@ -617,7 +617,7 @@ the server can actually hand out. It still has to pass `spellGatesPass` (`LimitE
 `requiredSkill`/`requiredLevel`. Precedence per slot: the dataset enchant, then
 `GetRuneforgeEnchantId` (frost DK runeforges), then the cache scan.
 
-**Reforges** run only on an exact rank-1 item with `AiPlayerbot.BisDataset.Reforges` on, and an
+**Reforges** run only on an exact rank-1 item with `Playerbots.BisDataset.Reforges` on, and an
 exact item the sim left unreforged loses any reforge it has, caps permitting (below). Every map
 thread reads mod-reforging's `reforgingDataMap` when it applies item mods, so a write from a bot's
 map thread would race the others: the map thread only queues `{bot, item, entry, from, to}`
@@ -662,26 +662,26 @@ Defaults below are the shipped values in `conf/playerbots.conf.dist`.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `AiPlayerbot.AutoEquipUpgradeLoot` | 1 | Auto-equip looted upgrades |
-| `AiPlayerbot.EquipUpgradeThreshold` | 1.07 | Score ratio needed to swap |
-| `AiPlayerbot.ItemSet.UseForUpgrades` | 1 | Master switch for set-bonus scoring on runtime paths |
-| `AiPlayerbot.ItemSet.BonusWeight` | 0.15 | Boost per set bonus kept or gained |
-| `AiPlayerbot.ItemSet.ProgressWeight` | 0.03 | Per-piece nudge toward the next threshold |
-| `AiPlayerbot.Socket.ValueFactor` | 1.0 | Scales the gem-derived socket multiplier; 0 ⇒ fallback only |
-| `AiPlayerbot.Socket.MaxMultiplier` | 1.3 | Clamp on the socket multiplier |
-| `AiPlayerbot.Socket.WeightPerSocket` | 0.03 | Flat fallback when gem value is unusable |
-| `AiPlayerbot.LimitEnchantExpansion` | 1 | Level-based expansion gate on enchants/gems |
-| `AiPlayerbot.LimitGearExpansion` | 1 | Level-based expansion gate on items |
-| `AiPlayerbot.ProfessionGearEnhancements` | 1 | Gates added sockets and profession-gated gems |
-| `AiPlayerbot.FulfillMetaGemRequirements` | 1 | Steer colour gems to activate the meta |
-| `AiPlayerbot.LimitProgressionTier` | 1 | IP tier gating; inert when IP is absent |
-| `AiPlayerbot.ProgressionTierCap` | 18 | Fallback tier for ungrouped bots with no own tier |
-| `AiPlayerbot.BisDataset.Enable` | 1 | Read `bistooltip_*` and prefer it per bot; no-op without the tables or with a placeholder export |
-| `AiPlayerbot.BisDataset.Enhancements` | 1 | Dataset enchants, pinned gems, palette; 0 leaves gems and enchants to the normal picker |
-| `AiPlayerbot.BisDataset.Reforges` | 1 | Sim reforge on exact rank-1 items; no-op without mod-reforging or `Reforging.Enable = 0` |
-| `AiPlayerbot.BisDataset.RankOrder` | 1 | Sim rank decides between two items the subject lists; see "Rank order" for what stays on scores |
-| `AiPlayerbot.BisDataset.PollSeconds` | 300 | World-thread version check; 0 = startup and the command only |
-| `AiPlayerbot.SimWeights.Enable` | 1 | Level-80 DPS weights from `playerbots_sim_weights`; no-op without the table |
+| `Playerbots.AutoEquipUpgradeLoot` | 1 | Auto-equip looted upgrades |
+| `Playerbots.EquipUpgradeThreshold` | 1.07 | Score ratio needed to swap |
+| `Playerbots.ItemSet.UseForUpgrades` | 1 | Master switch for set-bonus scoring on runtime paths |
+| `Playerbots.ItemSet.BonusWeight` | 0.15 | Boost per set bonus kept or gained |
+| `Playerbots.ItemSet.ProgressWeight` | 0.03 | Per-piece nudge toward the next threshold |
+| `Playerbots.Socket.ValueFactor` | 1.0 | Scales the gem-derived socket multiplier; 0 ⇒ fallback only |
+| `Playerbots.Socket.MaxMultiplier` | 1.3 | Clamp on the socket multiplier |
+| `Playerbots.Socket.WeightPerSocket` | 0.03 | Flat fallback when gem value is unusable |
+| `Playerbots.LimitEnchantExpansion` | 1 | Level-based expansion gate on enchants/gems |
+| `Playerbots.LimitGearExpansion` | 1 | Level-based expansion gate on items |
+| `Playerbots.ProfessionGearEnhancements` | 1 | Gates added sockets and profession-gated gems |
+| `Playerbots.FulfillMetaGemRequirements` | 1 | Steer colour gems to activate the meta |
+| `Playerbots.LimitProgressionTier` | 1 | IP tier gating; inert when IP is absent |
+| `Playerbots.ProgressionTierCap` | 18 | Fallback tier for ungrouped bots with no own tier |
+| `Playerbots.BisDataset.Enable` | 1 | Read `bistooltip_*` and prefer it per bot; no-op without the tables or with a placeholder export |
+| `Playerbots.BisDataset.Enhancements` | 1 | Dataset enchants, pinned gems, palette; 0 leaves gems and enchants to the normal picker |
+| `Playerbots.BisDataset.Reforges` | 1 | Sim reforge on exact rank-1 items; no-op without mod-reforging or `Reforging.Enable = 0` |
+| `Playerbots.BisDataset.RankOrder` | 1 | Sim rank decides between two items the subject lists; see "Rank order" for what stays on scores |
+| `Playerbots.BisDataset.PollSeconds` | 300 | World-thread version check; 0 = startup and the command only |
+| `Playerbots.SimWeights.Enable` | 1 | Level-80 DPS weights from `playerbots_sim_weights`; no-op without the table |
 
 Debug: `<bot> calc [item]` prints a raw score (`TellCalculateItemAction`, registered as `calc`) plus
 a BiS line naming the source (lists or dataset), subject, effective phase and rank, and a weights

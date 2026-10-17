@@ -2,7 +2,7 @@
 ## Firefighter
 
 A player presses the Big Red Button before the pull; `_hardmode` is set at activation and never
-cleared. Bots do not detect it: `IsMimironHardModeActive` reads `AiPlayerbot.UlduarMimironHardMode`
+cleared. Bots do not detect it: `IsMimironHardModeActive` reads `Playerbots.UlduarMimironHardMode`
 and nothing else, so the config is a declaration and has to match what the raid actually does.
 `SPELL_EMERGENCY_MODE (64582)` is the empower aura on whichever mech is active, if a live signal is
 ever wanted — those mechs *are* valid attack targets, unlike Mimiron himself.
@@ -773,7 +773,7 @@ Hard-mode phase 4 hands out the same sector as `p4melee`, around VX-001 on the c
 main tank, who holds the MK II; melee sent to the ACU (reach 5, so 7.83 yd) close the last yards
 inside the slot tolerance.
 
-**The ring centres on the mech, not the room.** Bots cast out to `AiPlayerbot.SpellDistance` — 28.5
+**The ring centres on the mech, not the room.** Bots cast out to `Playerbots.SpellDistance` — 28.5
 here, with no `AC_` override — so a ring pinned to the room centre puts the far half of the raid out
 of range after about six yards of boss drift. It does not recover on its own either: `reach spell` is
 `ACTION_HIGH` (20) and the ring is `ACTION_RAID` (60), so the ring wins every tick and walks the bot

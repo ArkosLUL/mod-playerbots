@@ -382,7 +382,7 @@ back line 25 yd off a ghoul-held pile took **0 of 70**.
 Bots stop `ULDUAR_FREYA_RANGED_CAMP_SPACING` (6 yd) short of the spot on the bearing they arrived on,
 so the back line lands as a ring rather than on one square — aiming every bot at the point itself put
 them a median **0.6 yd** apart in `1788717562` against 1.3 in the kill. That alone cannot beat an 8 yd
-splash: twelve bots would need a 15.5 yd ring, a 31 yd ball, past `AiPlayerbot.SpellDistance` and wide
+splash: twelve bots would need a 15.5 yd ring, a 31 yd ball, past `Playerbots.SpellDistance` and wide
 enough to spread the pack the camp exists to gather. It stops the pile; the sunbeam step-out is what
 answers the beam.
 
@@ -448,7 +448,7 @@ outranks the escapes but wins only one tick, because `Attack` reports false once
 swinging at the root — so falling through is what leaves the pinned bot its rotation and its root.
 
 The `freya avoid aoe hold` rule zeroes the generic `avoid aoe`, which sits at `ACTION_EMERGENCY` (90),
-outranks every Freya node, and replaces a 15 yd escape with a flat `AiPlayerbot.FleeDistance` (5 yd) hop
+outranks every Freya node, and replaces a 15 yd escape with a flat `Playerbots.FleeDistance` (5 yd) hop
 on a bearing of its own — it took the tick back from Nightwarrior's dodge 1.9s before it died. Freya
 answers all three of its hazards with nodes that read every hazard at once, so the generic one has
 nothing to add. XT-002 and Razorscale suppress it the same way. **Movement only**: nothing here zeroes
@@ -580,5 +580,5 @@ direction flips, fighting the spore node at ~3 Hz while the raid stood still.
 freya`, a threat-list walk with a wide-string name per unit; `PossibleTargets()` a 100 yd grid sweep;
 `Stalkers()` that sweep plus a LOS ray, tested on the entry first so only Healthy Spores and the two
 Sun Beam stalkers pay it; `LasherCamp()` the camp spot. It is tick-scoped on purpose: a queued action
-can be `AiPlayerbot.ExpireActionTime` old when popped. `GetFreyaBossByEntry` finds her without the
+can be `Playerbots.ExpireActionTime` old when popped. `GetFreyaBossByEntry` finds her without the
 target list, because the Ground Tremor nodes run wherever the gate is open, trash included.

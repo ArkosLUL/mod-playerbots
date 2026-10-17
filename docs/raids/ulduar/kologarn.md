@@ -19,7 +19,7 @@ Rubble duty is **derived, never stored** — the off-tank is whoever is not hold
 follows the taunt swap on its own.
 
 **Nothing engages before the boss does.** Every Kologarn trigger resolves him through
-`GetFirstAliveUnitByEntry`, a pure `AiPlayerbot.SightDistance` proximity scan — 100 yd, no line of
+`GetFirstAliveUnitByEntry`, a pure `Playerbots.SightDistance` proximity scan — 100 yd, no line of
 sight — that answers "is he nearby", never "is he engaged", and `AttackAction::Attack()` has no
 out-of-combat guard, so the raid used to pull itself from up to 100 yd out. `KologarnEncounterActive`
 is `kologarn && kologarn->IsInCombat()`, the VoA `EmalonEncounterActive` shape, and gates the triggers

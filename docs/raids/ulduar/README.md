@@ -40,7 +40,7 @@ accepted.
 Detection started as "config **and** a live server signal", and that second half turned out to be the
 problem: it depended on this core's scripting details, it **silently disabled a whole boss's
 hard-mode handling** when a signal was missing, and it was invisible to the operator who had
-explicitly turned the option on. The eight `AiPlayerbot.Ulduar*HardMode` options (all default 0) are
+explicitly turned the option on. The eight `Playerbots.Ulduar*HardMode` options (all default 0) are
 now the **single source of truth** — each `Is*HardModeActive` is a plain config read. The per-boss
 triggers keep their own mechanic checks (hazard nearby, debuff on the bot, add alive), and **those
 mechanic checks are the real gate**; the detectors were a redundant second one.
@@ -91,7 +91,7 @@ raid. Two tiers are gated separately: `allowAll` covers every burst cooldown, `a
 cooldowns that come back within a phase.
 
 Burst only ever fires while the bot's current target is boss-flagged — `IsDungeonBoss() ||
-isWorldBoss()` in `HoldBurstUntilTankEngagedMultiplier`, under `AiPlayerbot.BurstOnBossOnly` (default
+isWorldBoss()` in `HoldBurstUntilTankEngagedMultiplier`, under `Playerbots.BurstOnBossOnly` (default
 on). So **adds-only phases need no gate of their own**, and conversely **no `allowAll` rule can open
 burst on an add**: that veto is final. Freya's wave adds are all `flags_extra = 0`, `rank = 1`. There
 is no Sated/Exhaustion check anywhere, and no Drums or Time Warp — lust is shaman-only.
@@ -121,7 +121,7 @@ damaged only by Guardian Shadow Nova, so no bot ever holds threat on her, and th
 lookup gating every Yogg trigger left all 21 of them dead through two wipes. See
 [yogg-saron.md](yogg-saron.md).
 
-**The `"possible targets no los"` sweep is capped at `AiPlayerbot.SightDistance` (100 yd)**, and
+**The `"possible targets no los"` sweep is capped at `Playerbots.SightDistance` (100 yd)**, and
 Razorscale's second flight point `RazorFlightPos2` (619.1, -238.1, 475.2) sits past that from most of
 the raid. `EvaluateWindow` therefore falls back to `"find target"` for her — `DoZoneInCombat()` on her
 first flight point puts the whole raid on her threat list, so that read works at any range. Without

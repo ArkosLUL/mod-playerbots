@@ -921,8 +921,8 @@ at 1:57.37, and two melee held in the middle went 100% → 62-75% → 15-36% →
   every other paired window across four pulls lasted 0.0-0.9 s. So `AppendYoggSaronTargetExclusions`
   hands the higher-health half of such a pair to `RaidUlduarStrategy::AppendTargetExclusionsFor` (which
   sweeps only when a Guardian is among the candidates) for
-  `TargetValueExclusionType::Dps` and `::Attacker` — every dps, dps-aoe and attacker picker at once,
-  pets included. `::Tank` is left out so the tank keeps holding it rather than letting it walk at the
+  `TargetValueExclusionType::DpsTarget` and `::DebuffTarget` — every dps, dps-aoe and attacker picker at once,
+  pets included. `::TankTarget` is left out so the tank keeps holding it rather than letting it walk at the
   back line, and the guid breaks an exact health tie so one of the pair is always free to die.
 
 `--phases` tags each phase 1 Guardian death `focus`, `split` or `splash` by how many bot non-tanks
@@ -1151,7 +1151,7 @@ melee and the tank alone, and it goes to **one anchor**.
 **A fan of bearings is the wrong shape, twice over.** Sending each bot out along the bearing it
 already held spread the front line over **37.0** and **40.4 yd** at the ring (57.7 five seconds later),
 centred on bearing 34° and 75° against the station's 180°, which left **10 of 11** past every healer's
-38.5 yd `AiPlayerbot.HealDistance` at some point in the next 15 s — median gap 32.5 and 37.5 yd, worst
+38.5 yd `Playerbots.HealDistance` at some point in the next 15 s — median gap 32.5 and 37.5 yd, worst
 50.7 and 55.0. The bearing also had to be bent off the back line, because at 15 yd a westward one ends
 *between* ring and station: the tank once walked to **6.6 yd** of the stack with three live Guardians
 taunted onto it, two detonated **2.9 yd** away, and eleven raiders died in three seconds, three of the
@@ -1815,7 +1815,7 @@ stands down below the floor.
 ## The encounter plays its own mechanics
 
 No node in this fight cheats: `HasCheat(BotCheatMask::raid)` appears nowhere under
-`src/Ai/Raid/Uld/`. Config is untouched — `raid` stays in `AiPlayerbot.BotCheats` — so a trace header
+`src/Ai/Raid/Uld/`. Config is untouched — `raid` stays in `Playerbots.BotCheats` — so a trace header
 still reads `food,taxi,raid` and proves nothing either way
 ([../../systems/observability.md](../../systems/observability.md)); only the body can show it.
 

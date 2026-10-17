@@ -64,7 +64,7 @@ high-iLvl unusable piece survives.
 
 `PlayerbotFactory::InitBags` is the only source of a bot's four bag-slot containers and hardcodes
 **51809 "Portable Hole" (24 slots)**. It runs from `MaintenanceAction` (alt bots gated on
-`AiPlayerbot.AltMaintenanceBags`) and from `PlayerbotFactory::Randomize`.
+`Playerbots.AltMaintenanceBags`) and from `PlayerbotFactory::Randomize`.
 
 It used to take a `destroyOld` flag and was wrong either way. With `destroyOld = false` the only skip
 test was item-id equality, so any other occupied slot hit `if (old_bag) continue;` and never upgraded
@@ -90,9 +90,9 @@ genuinely empty slot and returns `uint32` max when every slot is occupied and no
 
 ## `maintenance` keeps glyphs
 
-`maintenance` (alt bots gated on `AiPlayerbot.AltMaintenanceGlyphs`) calls `InitGlyphs(true)`: every
+`maintenance` (alt bots gated on `Playerbots.AltMaintenanceGlyphs`) calls `InitGlyphs(true)`: every
 slotted glyph stays, hand-placed ones included, and only empty slots fill from
-`AiPlayerbot.PremadeSpecGlyph.<class>.<spec>`, skipping a premade glyph already held in another slot.
+`Playerbots.PremadeSpecGlyph.<class>.<spec>`, skipping a premade glyph already held in another slot.
 `InitGlyphs(false)`, from the `talents` spec change and `Randomize`, wipes all six and refills.
 
 `glyph equip <ids>` sets the `custom_glyphs` value, which makes `InitGlyphs` leave glyphs alone in

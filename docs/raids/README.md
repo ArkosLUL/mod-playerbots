@@ -246,7 +246,7 @@ WotLK content — Naxxramas, Obsidian Sanctum, Eye of Eternity, Vault of Archavo
 mechanics; all 15 Naxx boss spell enums were checked, and Gluth's vanilla Terrifying Roar (29685)
 does not exist in this build.
 
-`SPELL_FEAR_WARD = 6346` is defined here, but still duplicated in `KaraHelpers.h` and `SSCHelpers.h`
+`SPELL_FEAR_WARD = 6346` is defined here, but still duplicated in `KaraHelpers.h` and SSC's `Util/SSCHelpers.h`
 — deliberately left alone to keep the change contained.
 
 ## Calls to human tanks
@@ -295,7 +295,7 @@ once. Move them here when touched.
 
 ## Raid cheats are on by default
 
-Stock config is `AiPlayerbot.BotCheats = "food,taxi,raid"`. A number of mechanics are "handled" only
+Stock config is `Playerbots.BotCheats = "food,taxi,raid"`. A number of mechanics are "handled" only
 because the raid cheat papers over them — which makes them (a) not real play and (b) a silent wipe on
 any server that turns the cheat off. Treat every cheat-dependent mechanic as an open gap, not as
 working behaviour.
