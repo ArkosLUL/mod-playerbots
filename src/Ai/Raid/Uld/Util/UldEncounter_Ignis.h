@@ -40,48 +40,48 @@ enum UlduarIgnisIds
 
 // Ignis: a Molten construct turns Brittle once it is this close to one of the room's two water
 // triggers (boss_ignis.cpp polls FindNearestCreature(NPC_WATER_TRIGGER, 18.0f) once a second).
-constexpr float ULDUAR_IGNIS_WATER_BRITTLE_RADIUS = 18.0f;
+inline constexpr float ULDUAR_IGNIS_WATER_BRITTLE_RADIUS = 18.0f;
 
 // Room floor is back at full height 12 yd out from the sunken trigger. The construct trails ~5 yd behind and
 // still trips the 18 yd poll, which is 3D and counts both bounding radii.
-constexpr float ULDUAR_IGNIS_WATER_STANDOFF = 12.0f;
+inline constexpr float ULDUAR_IGNIS_WATER_STANDOFF = 12.0f;
 
 // Dodge for everyone else, sized over 62548's 13 yd burn. The construct tank parks inside on purpose, so the
 // construct following him into melee stacks Heat.
-constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_AVOID_RADIUS = 15.0f;
-constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_PARK_DISTANCE = 3.0f;
+inline constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_AVOID_RADIUS = 15.0f;
+inline constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_PARK_DISTANCE = 3.0f;
 
 // boss_ignis.cpp never lights a patch within 25 yd of a water trigger, so one there stacks no Heat.
-constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_INERT_WATER_RADIUS = 25.0f;
+inline constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_INERT_WATER_RADIUS = 25.0f;
 
 // Sized against Shatter (62383, 18850 in 13 yd), not the Molten pulse, which only reaches ~7 yd.
-constexpr float ULDUAR_IGNIS_MOLTEN_AVOID_RADIUS = 15.0f;
+inline constexpr float ULDUAR_IGNIS_MOLTEN_AVOID_RADIUS = 15.0f;
 
 // Whole room: a tank at a pool is ~120 yd from Ignis' spawn, past the 100 yd SightDistance cap and the LOS
 // filter on "nearest npcs".
-constexpr float ULDUAR_IGNIS_ROOM_SEARCH_RADIUS = 200.0f;
+inline constexpr float ULDUAR_IGNIS_ROOM_SEARCH_RADIUS = 200.0f;
 
 // Scorch summons its patch 20 yd along the boss's facing, and he faces the main tank.
-constexpr float ULDUAR_IGNIS_SCORCH_SPAWN_RANGE = 20.0f;
+inline constexpr float ULDUAR_IGNIS_SCORCH_SPAWN_RANGE = 20.0f;
 
 // Melee range is ~10.8 yd off Ignis' 8.0 combat reach. 9.5 leaves slack so a step off the spot keeps him in range.
-constexpr float ULDUAR_IGNIS_TANK_RADIUS = 9.5f;
-constexpr float ULDUAR_IGNIS_TANK_SPOT_TOLERANCE = 2.0f;
+inline constexpr float ULDUAR_IGNIS_TANK_RADIUS = 9.5f;
+inline constexpr float ULDUAR_IGNIS_TANK_SPOT_TOLERANCE = 2.0f;
 
 // Three slots 60 degrees apart, one step per Scorch, so the patches fan out instead of stacking.
-constexpr uint8 ULDUAR_IGNIS_TANK_ARC_SLOTS = 3;
-constexpr float ULDUAR_IGNIS_TANK_ARC_STEP = static_cast<float>(M_PI) / 3.0f;
+inline constexpr uint8 ULDUAR_IGNIS_TANK_ARC_SLOTS = 3;
+inline constexpr float ULDUAR_IGNIS_TANK_ARC_STEP = static_cast<float>(M_PI) / 3.0f;
 
 // South: patches south, pools east and west, raid north, so the three never overlap.
-constexpr float ULDUAR_IGNIS_TANK_BEARING = -static_cast<float>(M_PI) / 2.0f;
+inline constexpr float ULDUAR_IGNIS_TANK_BEARING = -static_cast<float>(M_PI) / 2.0f;
 
 // Melee are admitted to a Brittle construct only once its aura has less than this left, as a
 // fallback for a raid with nobody ranged in position. Brittle itself runs 15 s.
-constexpr uint32 ULDUAR_IGNIS_BRITTLE_MELEE_FALLBACK_MS = 7000;
+inline constexpr uint32 ULDUAR_IGNIS_BRITTLE_MELEE_FALLBACK_MS = 7000;
 
 // Slag Pot ticks for ten seconds and cannot be dispelled or moved out of, but it does not kill from
 // full, so healers only pile onto the victim once the ticks have actually opened a gap.
-constexpr float ULDUAR_IGNIS_SLAG_POT_HEAL_HP_PCT = 85.0f;
+inline constexpr float ULDUAR_IGNIS_SLAG_POT_HEAL_HP_PCT = 85.0f;
 
 extern const Position ULDUAR_IGNIS_BOSS_ANCHOR;
 extern const Position ULDUAR_IGNIS_WATER_POOL_WEST;

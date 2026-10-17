@@ -38,33 +38,33 @@ enum UlduarKologarnIds
     SPELL_FOCUSED_EYEBEAM_25 = 63977,
 };
 
-constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
-constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
+inline constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
+inline constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
 
-constexpr float ULDUAR_KOLOGARN_ROOM_SEARCH_RADIUS = 100.0f;
+inline constexpr float ULDUAR_KOLOGARN_ROOM_SEARCH_RADIUS = 100.0f;
 
 // Every destination is clamped to this walkway box: past x 1782 the pit bunny instakills. Entrance is -X.
-constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MIN = 1745.0f;
-constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MAX = 1780.0f;
-constexpr float ULDUAR_KOLOGARN_WALKWAY_Y_MIN = -48.0f;
-constexpr float ULDUAR_KOLOGARN_WALKWAY_Y_MAX = -2.0f;
-constexpr float ULDUAR_KOLOGARN_WALKWAY_Z = 448.0f;
+inline constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MIN = 1745.0f;
+inline constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MAX = 1780.0f;
+inline constexpr float ULDUAR_KOLOGARN_WALKWAY_Y_MIN = -48.0f;
+inline constexpr float ULDUAR_KOLOGARN_WALKWAY_Y_MAX = -2.0f;
+inline constexpr float ULDUAR_KOLOGARN_WALKWAY_Z = 448.0f;
 
 // Beam 63346 is a 3 yd AoE and the eye chases at 5.5 yd/s against a player's 7.0, so a bot that
 // starts well before it lands outruns it.
-constexpr float ULDUAR_KOLOGARN_EYEBEAM_REACT_RADIUS = 8.0f;
-constexpr float ULDUAR_KOLOGARN_EYEBEAM_SAFE_DISTANCE = 12.0f;
-constexpr float ULDUAR_KOLOGARN_EYEBEAM_RUN_STEP = 10.0f;
+inline constexpr float ULDUAR_KOLOGARN_EYEBEAM_REACT_RADIUS = 8.0f;
+inline constexpr float ULDUAR_KOLOGARN_EYEBEAM_SAFE_DISTANCE = 12.0f;
+inline constexpr float ULDUAR_KOLOGARN_EYEBEAM_RUN_STEP = 10.0f;
 
 // Rubble outrun players (8.0 vs 7.0 yd/s), so the off-tank holds them rather than kiting. The offset
 // is lateral, toward the dead arm's side: -X is the eyebeam escape lane and has to stay clear.
-constexpr float ULDUAR_KOLOGARN_RUBBLE_HOLD_OFFSET = 18.0f;
+inline constexpr float ULDUAR_KOLOGARN_RUBBLE_HOLD_OFFSET = 18.0f;
 
 // Crunch Armor is -20% armour per stack, 4 stacks, 45s, on a 14s Smash timer.
-constexpr uint8 ULDUAR_KOLOGARN_CRUNCH_ARMOR_SWAP_STACKS = 2;
+inline constexpr uint8 ULDUAR_KOLOGARN_CRUNCH_ARMOR_SWAP_STACKS = 2;
 
 // Taunt range, so the off-tank only wanders off to DPS the arm while it can still take the body back.
-constexpr float ULDUAR_KOLOGARN_TAUNT_RANGE = 30.0f;
+inline constexpr float ULDUAR_KOLOGARN_TAUNT_RANGE = 30.0f;
 
 // By entry, not "find target": that only walks the bot's threatened-by-me list, so a tank parked on
 // the body never sees the arms.

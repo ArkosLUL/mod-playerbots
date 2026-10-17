@@ -37,6 +37,7 @@
 #include "UldEncounterGate.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "UldTriggers.h"
 #include "VehicleActions.h"
 
@@ -49,9 +50,7 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
 {
     if (!dynamic_cast<CastMisdirectionOnMainTankAction*>(action) &&
         !dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action))
-    {
         return 1.0f;
-    }
 
     static uint32 const noRedirectBosses[] = {
         // "freya redirect threat" aims at the add tank while it holds the Snaplasher or the Conservator
@@ -66,16 +65,14 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
 
     for (uint32 entry : noRedirectBosses)
     {
-        if (GetFirstAliveUnitByEntry(botAI, entry))
+        if (GetUldUnitByEntry(botAI, entry))
             return 0.0f;
     }
 
     // The MT holds nothing until the permanent ground phase: the Dark Rune adds go to the assist tanks,
     // and a harpoon knockdown above 50% puts her on the floor with nobody tanking her
-    if (Unit* razorscale = GetFirstAliveUnitByEntry(botAI, NPC_RAZORSCALE))
-    {
+    if (Unit* razorscale = GetUldUnitByEntry(botAI, NPC_RAZORSCALE))
         return RazorscaleBossHelper::IsFlyingPhaseFor(razorscale) ? 0.0f : 1.0f;
-    }
 
     return 1.0f;
 }
@@ -119,7 +116,7 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
     Unit* thorim = nullptr;
 
     GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-    for (auto const& guid : targets)
+    for (ObjectGuid const& guid : targets)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive())

@@ -173,9 +173,9 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
     float const travel = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
     switch (IssueDodge(spot, replacing))
     {
-        case RaidObs::MoveOutcome::Issued:
+        case MoveOutcome::Issued:
             break;
-        case RaidObs::MoveOutcome::AlreadyThere:
+        case MoveOutcome::AlreadyThere:
             NoteDodge(bot, "clear");
             return false;
         default:
@@ -196,7 +196,7 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
     return true;
 }
 
-RaidObs::MoveOutcome IcehowlClearChargePathAction::IssueDodge(Position const& spot, bool replacing)
+MoveOutcome IcehowlClearChargePathAction::IssueDodge(Position const& spot, bool replacing)
 {
     // Our own stale walk holds the booking at this priority and would refuse its replacement.
     if (replacing)
@@ -208,12 +208,12 @@ RaidObs::MoveOutcome IcehowlClearChargePathAction::IssueDodge(Position const& sp
                          false, false, true, MovementPriority::MOVEMENT_FORCED, true);
     };
 
-    RaidObs::MoveOutcome const outcome = issue();
-    if (outcome != RaidObs::MoveOutcome::Duplicate && outcome != RaidObs::MoveOutcome::Waiting)
+    MoveOutcome const outcome = issue();
+    if (outcome != MoveOutcome::Duplicate && outcome != MoveOutcome::Waiting)
         return outcome;
 
     if (bot->isMoving())
-        return outcome == RaidObs::MoveOutcome::Duplicate ? RaidObs::MoveOutcome::Issued : outcome;
+        return outcome == MoveOutcome::Duplicate ? MoveOutcome::Issued : outcome;
 
     // The knockback or stun ended the walk that still holds the booking, and the booking would refuse
     // this one until it expires.

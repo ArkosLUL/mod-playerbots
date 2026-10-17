@@ -52,96 +52,96 @@ enum UlduarVezaxIds
 
 // 62660 is instant with missile Speed 10, so the destination freezes at cast time and the flight is
 // the whole dodge window. The impact knocks back, so standing still never holds a spot.
-constexpr float ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS = 10.0f;
-constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE = 12.0f;
-constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS = 25.0f;
+inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS = 10.0f;
+inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE = 12.0f;
+inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS = 25.0f;
 // How long a stored impact outlives distance over speed. Landings trail that by up to 0.2s, the rest
 // is room for a slow tick.
-constexpr uint32 ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS = 500;
+inline constexpr uint32 ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS = 500;
 
 // The Animus is taunt-immune, so only threat holds it. Everyone but tanks and redirectors waits until a
 // tank has been its victim this long, and the cap stops a dead tank parking the raid on the Barrier.
-constexpr uint32 ULDUAR_VEZAX_ANIMUS_TANK_LEAD_MS = 2000;
-constexpr uint32 ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS = 6000;
+inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_TANK_LEAD_MS = 2000;
+inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS = 6000;
 // From this summon on the Animus is at least 38s out, past the 30s cooldown on Misdirection and
 // Tricks, so saving them from here has both ready when it lands.
-constexpr uint8 ULDUAR_VEZAX_REDIRECT_SAVE_SUMMON = 5;
-constexpr float ULDUAR_VEZAX_TRICKS_RANGE = 20.0f;
+inline constexpr uint8 ULDUAR_VEZAX_REDIRECT_SAVE_SUMMON = 5;
+inline constexpr float ULDUAR_VEZAX_TRICKS_RANGE = 20.0f;
 // The Animus swaps victim at 110% threat in melee range, 130% outside. 90% of the main tank leaves room
 // for a cast in flight and lets him take it back at 110%.
-constexpr float ULDUAR_VEZAX_ANIMUS_THREAT_SHARE = 0.9f;
+inline constexpr float ULDUAR_VEZAX_ANIMUS_THREAT_SHARE = 0.9f;
 // Hard mode only: a strong raid kills him before the sixth vapor merges into the Animus. Tanks get the
 // lower line so they keep threat while everyone else waits.
-constexpr float ULDUAR_VEZAX_HOLD_HEALTH_PCT = 15.0f;
-constexpr float ULDUAR_VEZAX_TANK_HOLD_HEALTH_PCT = 2.0f;
+inline constexpr float ULDUAR_VEZAX_HOLD_HEALTH_PCT = 15.0f;
+inline constexpr float ULDUAR_VEZAX_TANK_HOLD_HEALTH_PCT = 2.0f;
 // Close enough that the Animus, following its victim, ends up in the main tank's melee range.
-constexpr float ULDUAR_VEZAX_ANIMUS_BRING_BACK_RADIUS = 3.0f;
+inline constexpr float ULDUAR_VEZAX_ANIMUS_BRING_BACK_RADIUS = 3.0f;
 // Shadow Crash skips anyone within this plus both combat reaches (SelectTarget -3, 3D), so 12.5 yd for
 // most players. The margin covers the two bosses shuffling.
-constexpr float ULDUAR_VEZAX_SHADOW_CRASH_MIN_RANGE = 3.0f;
-constexpr float ULDUAR_VEZAX_ANIMUS_MELEE_MARGIN = 2.0f;
+inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_MIN_RANGE = 3.0f;
+inline constexpr float ULDUAR_VEZAX_ANIMUS_MELEE_MARGIN = 2.0f;
 // Sideways spacing between melee spots on the line between the two bosses, and how many spots.
-constexpr float ULDUAR_VEZAX_ANIMUS_MELEE_SPREAD = 2.0f;
-constexpr uint8 ULDUAR_VEZAX_ANIMUS_MELEE_LANES = 5;
+inline constexpr float ULDUAR_VEZAX_ANIMUS_MELEE_SPREAD = 2.0f;
+inline constexpr uint8 ULDUAR_VEZAX_ANIMUS_MELEE_LANES = 5;
 
 // The Shadow Crash field (63277) is 8 yd, plus a yard of slack since a bot that stops exactly on the
 // boundary is still inside it.
-constexpr float ULDUAR_VEZAX_HAZARD_RADIUS = 8.0f;
-constexpr float ULDUAR_VEZAX_HAZARD_CLEARANCE = 9.0f;
+inline constexpr float ULDUAR_VEZAX_HAZARD_RADIUS = 8.0f;
+inline constexpr float ULDUAR_VEZAX_HAZARD_CLEARANCE = 9.0f;
 // Wide enough for the whole camp. Callers that only need what's under their feet pass the local one:
 // the sweep is two grid searches and the raid runs it often.
-constexpr float ULDUAR_VEZAX_HAZARD_SEARCH_RADIUS = 60.0f;
-constexpr float ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS = 25.0f;
+inline constexpr float ULDUAR_VEZAX_HAZARD_SEARCH_RADIUS = 60.0f;
+inline constexpr float ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS = 25.0f;
 
 // How far a caster walks to soak a field, the whole mana economy here. Past 25 it outgrows the local
 // hazard sweep.
-constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 20.0f;
+inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 20.0f;
 
 // Camp bearing: north, the side the raid comes in from. The southern half is left for the Mark spots.
-constexpr float ULDUAR_VEZAX_ARC_ORIENTATION = 1.5708f;
+inline constexpr float ULDUAR_VEZAX_ARC_ORIENTATION = 1.5708f;
 
 // Two groups of two files by five rows, boss-relative. Rows 27 to 36 sit between the Mark floor (15)
 // and reach spell's stop (28.5), each plus both combat reaches, with ~2 yd slack at each end.
-constexpr float ULDUAR_VEZAX_CAMP_RADIUS = 31.5f;
-constexpr float ULDUAR_VEZAX_CAMP_ROW_SPACING = 2.25f;
-constexpr float ULDUAR_VEZAX_CAMP_FILE_SPACING = 3.0f;
+inline constexpr float ULDUAR_VEZAX_CAMP_RADIUS = 31.5f;
+inline constexpr float ULDUAR_VEZAX_CAMP_ROW_SPACING = 2.25f;
+inline constexpr float ULDUAR_VEZAX_CAMP_FILE_SPACING = 3.0f;
 // Each group's centre off the camp line. 4.0 puts the inner files 5 yd apart: one set of heals and one
 // lust cover both, but they're not one clump.
-constexpr float ULDUAR_VEZAX_CAMP_GROUP_OFFSET = 4.0f;
+inline constexpr float ULDUAR_VEZAX_CAMP_GROUP_OFFSET = 4.0f;
 // The far-side member crosses the impact, so this minus the group's 3 yd width has to clear 10 yd.
-constexpr float ULDUAR_VEZAX_CAMP_STRAFE = 15.0f;
-constexpr uint8 ULDUAR_VEZAX_CAMP_ROWS = 5;
-constexpr uint8 ULDUAR_VEZAX_CAMP_FILES = 2;
+inline constexpr float ULDUAR_VEZAX_CAMP_STRAFE = 15.0f;
+inline constexpr uint8 ULDUAR_VEZAX_CAMP_ROWS = 5;
+inline constexpr uint8 ULDUAR_VEZAX_CAMP_FILES = 2;
 
 // Slot index space, which a RaidObs trace writes as a bare number: [0,10) group L, [10,20) group R.
 // The main tank isn't in here: it has exactly one holder and comes straight off IsMainTank.
-constexpr uint8 ULDUAR_VEZAX_GROUP_SLOTS = ULDUAR_VEZAX_CAMP_ROWS * ULDUAR_VEZAX_CAMP_FILES;
-constexpr uint8 ULDUAR_VEZAX_TOTAL_SLOTS = 2 * ULDUAR_VEZAX_GROUP_SLOTS;
+inline constexpr uint8 ULDUAR_VEZAX_GROUP_SLOTS = ULDUAR_VEZAX_CAMP_ROWS * ULDUAR_VEZAX_CAMP_FILES;
+inline constexpr uint8 ULDUAR_VEZAX_TOTAL_SLOTS = 2 * ULDUAR_VEZAX_GROUP_SLOTS;
 
 // The arrival deadband is twice the tolerance, so anything at or above 1.5 would be wider than the
 // 3 yd gap between neighbours and let a bot settle on someone else's slot.
-constexpr float ULDUAR_VEZAX_SLOT_TOLERANCE = 1.2f;
-constexpr float ULDUAR_VEZAX_TANK_SLOT_TOLERANCE = 3.0f;
+inline constexpr float ULDUAR_VEZAX_SLOT_TOLERANCE = 1.2f;
+inline constexpr float ULDUAR_VEZAX_TANK_SLOT_TOLERANCE = 3.0f;
 
 // Off him, and wide enough for reach spell's 38 yd stop and the widest strafed slot (41.4) so the gate
 // opens on arrival. Any wider puts bots on paths through walls.
-constexpr float ULDUAR_VEZAX_ARENA_RADIUS = 45.0f;
-constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;
+inline constexpr float ULDUAR_VEZAX_ARENA_RADIUS = 45.0f;
+inline constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;
 
 // DBC 15, but IsWithinDist3d adds the victim's combat reach, so the leech reaches ~16.5. The marked bot
 // is the one person it skips.
-constexpr float ULDUAR_VEZAX_MARK_LEECH_RADIUS = 15.0f;
-constexpr float ULDUAR_VEZAX_MARK_BREAK_DISTANCE = 18.0f;
+inline constexpr float ULDUAR_VEZAX_MARK_LEECH_RADIUS = 15.0f;
+inline constexpr float ULDUAR_VEZAX_MARK_BREAK_DISTANCE = 18.0f;
 
 // Arc length at CAMP_RADIUS on the bot's own group's side, never across him through the melee. Keeps
 // its distance from him and clears the widest strafed slot by 20.
-constexpr float ULDUAR_VEZAX_MARK_SIDE_OFFSET = 40.0f;
+inline constexpr float ULDUAR_VEZAX_MARK_SIDE_OFFSET = 40.0f;
 
 // A marked melee has no camp side, so it takes the nearest of three spots south of him, opposite the camp.
-constexpr float ULDUAR_VEZAX_MARK_SPOT_RADIUS = 26.0f;
-constexpr float ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET = 2.3208f;  // pi/2 + 0.75, clear of the camp
-constexpr float ULDUAR_VEZAX_MARK_SPOT_TOLERANCE = 3.0f;
-constexpr uint8 ULDUAR_VEZAX_MARK_SPOT_COUNT = 3;
+inline constexpr float ULDUAR_VEZAX_MARK_SPOT_RADIUS = 26.0f;
+inline constexpr float ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET = 2.3208f;  // pi/2 + 0.75, clear of the camp
+inline constexpr float ULDUAR_VEZAX_MARK_SPOT_TOLERANCE = 3.0f;
+inline constexpr uint8 ULDUAR_VEZAX_MARK_SPOT_COUNT = 3;
 
 // Vezax' own spawn point, and the point the Saronite Vapors charge to when they merge.
 extern const Position ULDUAR_VEZAX_ANCHOR;
@@ -175,7 +175,7 @@ Unit* GetVezax(PlayerbotAI* botAI);
 bool VezaxEncounterActive(PlayerbotAI* botAI);
 
 // Gate for the formation and the movement rule. Not presence: he's visible from outside his hall, and
-// that walked bots into walls with their generic movers zeroed.
+// a presence gate walks bots into walls with their generic movers zeroed.
 bool VezaxFormationActive(PlayerbotAI* botAI);
 
 // The encounter's per-tick housekeeping: traces the formation gate's answer as `vezax.formation`.

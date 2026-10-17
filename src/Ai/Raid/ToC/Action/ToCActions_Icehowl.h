@@ -24,7 +24,7 @@ public:
     bool Execute(Event event) override;
 
 private:
-    RaidObs::MoveOutcome IssueDodge(Position const& spot, bool replacing);
+    MoveOutcome IssueDodge(Position const& spot, bool replacing);
 
     Position dodgeSpot;
     uint32 dodgeSpotMs = 0;

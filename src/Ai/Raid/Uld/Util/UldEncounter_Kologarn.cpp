@@ -14,6 +14,7 @@
 #include "Playerbots.h"
 #include "SpellAuras.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "Unit.h"
 
 #include <algorithm>
@@ -22,9 +23,9 @@
 
 using namespace EncounterHelpers;
 
-Unit* GetKologarn(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_KOLOGARN); }
+Unit* GetKologarn(PlayerbotAI* botAI) { return GetUldUnitByEntry(botAI, NPC_KOLOGARN); }
 
-Unit* GetKologarnRightArm(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_RIGHT_ARM); }
+Unit* GetKologarnRightArm(PlayerbotAI* botAI) { return GetUldUnitByEntry(botAI, NPC_RIGHT_ARM); }
 
 bool KologarnEncounterActive(PlayerbotAI* botAI)
 {
@@ -61,7 +62,7 @@ Unit* GetKologarnNearestRubble(PlayerbotAI* botAI, WorldObject const* from)
 
 bool KologarnHasRubble(PlayerbotAI* botAI)
 {
-    return GetFirstAliveUnitByEntry(botAI, NPC_RUBBLE) != nullptr;
+    return GetUldUnitByEntry(botAI, NPC_RUBBLE) != nullptr;
 }
 
 Unit* GetKologarnLooseRubble(PlayerbotAI* botAI, Player* bot)

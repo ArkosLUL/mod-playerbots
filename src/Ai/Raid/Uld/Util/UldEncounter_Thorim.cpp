@@ -24,6 +24,7 @@
 #include "Timer.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "Unit.h"
 #include "WorldSession.h"
 
@@ -1029,7 +1030,7 @@ Unit* GetThorim(PlayerbotAI* botAI)
 
     // Only until it is struck: the raid pulls from inside the arena, so this runs for the first tick
     // and then never again.
-    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_THORIM);
+    Unit* boss = GetUldUnitByEntry(botAI, NPC_THORIM);
     if (boss)
         state.bossGuid = boss->GetGUID();
 

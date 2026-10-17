@@ -56,17 +56,17 @@ bool AuriayaFallFromFloorAction::Execute(Event /*event*/)
     float tolerance = 0.0f;
     if (GetAuriayaAnchor(botAI, bot, anchor, tolerance))
     {
-        return bot->TeleportTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(),
-                               anchor.GetPositionZ(), bot->GetOrientation());
+        bot->NearTeleportTo(anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(), bot->GetOrientation());
+        return true;
     }
 
     Player* master = botAI->GetMaster();
-
-    if (!master)
+    if (!master || master->GetMap() != bot->GetMap())
         return false;
 
-    return bot->TeleportTo(bot->GetMapId(), master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(),
-                           master->GetOrientation());
+    bot->NearTeleportTo(master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(),
+                        master->GetOrientation());
+    return true;
 }
 
 bool AuriayaFallFromFloorAction::isUseful()
@@ -88,7 +88,7 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
         return false;
 
     // Room-wide off the boss, so every pool near a candidate counts however far the bot has drifted.
-    std::vector<Unit*> const& pools = GetAuriayaRoomPools(botAI);
+    std::vector<Unit*> const pools = GetAuriayaRoomPools(botAI);
     if (pools.empty())
         return false;
 
@@ -155,10 +155,8 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
     {
         float const angle = (i * 2.0f * static_cast<float>(M_PI)) / directions;
         for (float distance = increment; distance <= ULDUAR_AURIAYA_ESSENCE_LEASH; distance += increment)
-        {
             consider(bot->GetPositionX() + distance * std::cos(angle),
                      bot->GetPositionY() + distance * std::sin(angle), false);
-        }
     }
 
     // Already on the best ground it can reach, so hand the tick back to the rotation.
@@ -221,9 +219,7 @@ bool AuriayaSetDpsPriorityAction::IsAllowedPriorityTarget(Unit* boss, Unit* cand
         // It re-rolls aggro and roams, so melee only take it near the boss or they chase it all fight.
         if (PlayerbotAI::IsMelee(bot) &&
             candidate->GetExactDist2d(boss) > ULDUAR_AURIAYA_MELEE_DEFENDER_RANGE)
-        {
             return false;
-        }
     }
 
     return true;
@@ -304,9 +300,7 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
             target = currentTarget;
         else if (currentPriority == desiredPriority && target &&
                  target->GetExactDist2d(bot) + targetSwitchDistance >= currentTarget->GetExactDist2d(bot))
-        {
             target = currentTarget;
-        }
     }
 
     if (!target)

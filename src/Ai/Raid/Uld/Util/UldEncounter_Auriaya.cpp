@@ -20,6 +20,7 @@
 #include "Playerbots.h"
 #include "Timer.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "Unit.h"
 
 #include <cmath>
@@ -60,13 +61,13 @@ std::vector<Unit*> CollectPossibleTargetsByEntry(Player* bot, uint32 entry)
 }
 
 // Boss and pools once per bot per tick: a bot never ticks twice in one ms and runs a whole tick on
-// one thread. Boss kept as a guid so a mid-tick death reads null. Pools stay pointers, only used for distance.
+// one thread. Guids, resolved on read, so a mid-tick death or despawn reads null.
 struct AuriayaRoomScan
 {
     PlayerbotAI* botAI = nullptr;
     uint32 atMs = 0;
     ObjectGuid boss;
-    std::vector<Unit*> pools;
+    GuidVector pools;
 };
 
 thread_local AuriayaRoomScan auriayaRoomScan;
@@ -86,7 +87,8 @@ AuriayaRoomScan const& RefreshedAuriayaRoomScan(PlayerbotAI* botAI)
         return auriayaRoomScan;
 
     auriayaRoomScan.boss = found.front()->GetGUID();
-    auriayaRoomScan.pools = CollectAuriayaEssencePools(found.front(), ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS);
+    for (Unit* pool : CollectAuriayaEssencePools(found.front(), ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS))
+        auriayaRoomScan.pools.push_back(pool->GetGUID());
 
     return auriayaRoomScan;
 }
@@ -114,9 +116,14 @@ Unit* GetAuriaya(PlayerbotAI* botAI)
     return boss && boss->IsAlive() ? boss : nullptr;
 }
 
-std::vector<Unit*> const& GetAuriayaRoomPools(PlayerbotAI* botAI)
+std::vector<Unit*> GetAuriayaRoomPools(PlayerbotAI* botAI)
 {
-    return RefreshedAuriayaRoomScan(botAI).pools;
+    std::vector<Unit*> pools;
+    for (ObjectGuid const& guid : RefreshedAuriayaRoomScan(botAI).pools)
+        if (Unit* pool = botAI->GetUnit(guid))
+            pools.push_back(pool);
+
+    return pools;
 }
 
 bool AuriayaEncounterActive(PlayerbotAI* botAI) { return GetAuriaya(botAI) != nullptr; }
@@ -129,11 +136,11 @@ bool IsAuriayaEngaged(PlayerbotAI* botAI)
 
 Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI)
 {
-    if (Unit* sentry = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_SANCTUM_SENTRY))
+    if (Unit* sentry = GetUldUnitByEntry(botAI, NPC_AURIAYA_SANCTUM_SENTRY))
         return sentry;
 
     // Feigned at 1 HP and unselectable between lives, so IsAlive() alone isn't enough.
-    Unit* defender = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_FERAL_DEFENDER);
+    Unit* defender = GetUldUnitByEntry(botAI, NPC_AURIAYA_FERAL_DEFENDER);
 
     return IsDownOrFeigning(defender) ? nullptr : defender;
 }
@@ -176,9 +183,7 @@ int GetAuriayaStationIndex(std::vector<Unit*> const& roomPools)
         {
             if (pool->GetExactDist2d(&ULDUAR_AURIAYA_MAINTANK_SPOTS[i]) < ULDUAR_AURIAYA_STATION_FOUL_RADIUS ||
                 pool->GetExactDist2d(&ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[i]) < ULDUAR_AURIAYA_STATION_FOUL_RADIUS)
-            {
                 ++fouling;
-            }
         }
 
         if (fouling < bestFouling)
@@ -194,7 +199,7 @@ int GetAuriayaStationIndex(std::vector<Unit*> const& roomPools)
 bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
 {
     Unit* boss = GetAuriaya(botAI);
-    return boss && GetAuriayaAnchor(botAI, bot, boss, &GetAuriayaRoomPools(botAI), out, tolerance);
+    return boss && GetAuriayaAnchor(botAI, bot, boss, nullptr, out, tolerance);
 }
 
 bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<Unit*> const* roomPools,

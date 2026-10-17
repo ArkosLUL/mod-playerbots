@@ -24,6 +24,7 @@
 #include "Unit.h"
 
 #include <algorithm>
+#include <cmath>
 #include <ctime>
 #include <limits>
 #include <list>
@@ -48,8 +49,6 @@ RaidInstanceState<RazorscaleInstanceState> razorscaleStates;
 
 }  // namespace
 
-const std::time_t RazorscaleBossHelper::_roleSwapCooldown;
-
 bool RazorscaleBossHelper::UpdateBossAI()
 {
     _boss = GetRazorscaleScan(botAI).Boss();
@@ -57,9 +56,7 @@ bool RazorscaleBossHelper::UpdateBossAI()
     {
         Group* group = bot->GetGroup();
         if (group && !AreRolesAssigned())
-        {
             AssignRolesBasedOnHealth();
-        }
         return true;
     }
     return false;
@@ -74,7 +71,7 @@ bool RazorscaleBossHelper::IsGroundPhaseFor(Unit* boss)
 {
     return boss && boss->IsAlive() &&
            (boss->GetPositionZ() <= RAZORSCALE_FLYING_Z_THRESHOLD) &&
-           (boss->GetHealthPct() < 50.0f) &&
+           (boss->GetHealthPct() < RAZORSCALE_PERMANENT_GROUND_HEALTH_PCT) &&
            !boss->HasAura(SPELL_STUN_AURA);
 }
 
@@ -201,7 +198,7 @@ GameObject* RazorscaleBossHelper::FindNearestHarpoon(float x, float y, float z) 
 
     for (auto const& harpoon : GetHarpoonData())
     {
-        if (GameObject* harpoonGO = bot->FindNearestGameObject(harpoon.gameObjectEntry, 200.0f))
+        if (GameObject* harpoonGO = bot->FindNearestGameObject(harpoon.gameObjectEntry, HARPOON_SEARCH_RANGE))
         {
             float dx = harpoonGO->GetPositionX() - x;
             float dy = harpoonGO->GetPositionY() - y;
@@ -242,9 +239,7 @@ bool RazorscaleBossHelper::AreRolesAssigned() const
     for (auto const& slot : slots)
     {
         if (slot.flags & MEMBER_FLAG_MAINTANK)
-        {
             return true;
-        }
     }
 
     return false;
@@ -492,6 +487,16 @@ Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI)
         return sentinel;
 
     return watcher ? watcher : guardian;
+}
+
+bool IsRazorscaleAtFirstLanding(Unit* boss)
+{
+    return std::fabs(boss->GetPositionX() - RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_X) <
+               RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_TOLERANCE &&
+           std::fabs(boss->GetPositionY() - RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_Y) <
+               RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_TOLERANCE &&
+           std::fabs(boss->GetPositionZ() - RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_Z) <
+               RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_Z_TOLERANCE;
 }
 
 Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI)

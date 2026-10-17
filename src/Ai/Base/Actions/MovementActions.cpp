@@ -77,6 +77,23 @@ RaidObs::MovePriority ObsPriority(MovementPriority priority)
     return static_cast<RaidObs::MovePriority>(static_cast<uint8>(priority) + 1);
 }
 
+// RaidObs mirrors MoveOutcome the same way, with no offset.
+static_assert(static_cast<uint8>(RaidObs::MoveOutcome::Issued) == static_cast<uint8>(MoveOutcome::Issued),
+              "RaidObs::MoveOutcome is out of step with MoveOutcome");
+static_assert(static_cast<uint8>(RaidObs::MoveOutcome::Duplicate) == static_cast<uint8>(MoveOutcome::Duplicate),
+              "RaidObs::MoveOutcome is out of step with MoveOutcome");
+static_assert(static_cast<uint8>(RaidObs::MoveOutcome::Waiting) == static_cast<uint8>(MoveOutcome::Waiting),
+              "RaidObs::MoveOutcome is out of step with MoveOutcome");
+static_assert(static_cast<uint8>(RaidObs::MoveOutcome::NotAllowed) == static_cast<uint8>(MoveOutcome::NotAllowed),
+              "RaidObs::MoveOutcome is out of step with MoveOutcome");
+static_assert(static_cast<uint8>(RaidObs::MoveOutcome::NoPath) == static_cast<uint8>(MoveOutcome::NoPath),
+              "RaidObs::MoveOutcome is out of step with MoveOutcome");
+static_assert(static_cast<uint8>(RaidObs::MoveOutcome::AlreadyThere) ==
+                  static_cast<uint8>(MoveOutcome::AlreadyThere),
+              "RaidObs::MoveOutcome is out of step with MoveOutcome");
+
+RaidObs::MoveOutcome ObsOutcome(MoveOutcome outcome) { return static_cast<RaidObs::MoveOutcome>(outcome); }
+
 // What the in-flight walk is, for a command the gate turned down. Safe to read after the fact: a
 // refused move never reaches LastMovement::Set, so nothing has touched it since the gate looked.
 void NoteRefusedByGate(Player* bot, RaidObs::MoveKind kind, float x, float y, float z,
@@ -234,20 +251,20 @@ bool MovementAction::MoveToLOS(WorldObject* target, bool ranged)
 
 // Records every destination a bot is handed, attributed to the action that issued it. "Two actions
 // steering the same MotionMaster" is invisible without that attribution.
-RaidObs::MoveOutcome MovementAction::TryMoveTo(uint32 mapId, float x, float y, float z, bool idle, bool react,
-                                               bool normal_only, bool exact_waypoint, MovementPriority priority,
-                                               bool lessDelay, bool backwards)
+MoveOutcome MovementAction::TryMoveTo(uint32 mapId, float x, float y, float z, bool idle, bool react,
+                                      bool normal_only, bool exact_waypoint, MovementPriority priority, bool lessDelay,
+                                      bool backwards)
 {
-    RaidObs::MoveOutcome const outcome =
+    MoveOutcome const outcome =
         MoveToImpl(mapId, x, y, z, idle, react, normal_only, exact_waypoint, priority, lessDelay, backwards);
 
     if (RaidObs::Active())
     {
-        if (outcome == RaidObs::MoveOutcome::Waiting)
+        if (outcome == MoveOutcome::Waiting)
             NoteRefusedByGate(bot, RaidObs::MoveKind::Point, x, y, z, priority,
                               AI_VALUE(LastMovement&, "last movement"));
         else
-            RaidObs::NoteMove(bot, RaidObs::MoveKind::Point, x, y, z, ObjectGuid::Empty, outcome,
+            RaidObs::NoteMove(bot, RaidObs::MoveKind::Point, x, y, z, ObjectGuid::Empty, ObsOutcome(outcome),
                               ObsPriority(priority));
     }
 
@@ -258,25 +275,25 @@ bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool idle, 
                             bool exact_waypoint, MovementPriority priority, bool lessDelay, bool backwards)
 {
     return TryMoveTo(mapId, x, y, z, idle, react, normal_only, exact_waypoint, priority, lessDelay, backwards) ==
-           RaidObs::MoveOutcome::Issued;
+           MoveOutcome::Issued;
 }
 
-RaidObs::MoveOutcome MovementAction::MoveToImpl(uint32 mapId, float x, float y, float z, bool /*idle*/,
-                                                bool /*react*/, bool normal_only, bool exact_waypoint,
-                                                MovementPriority priority, bool lessDelay, bool backwards)
+MoveOutcome MovementAction::MoveToImpl(uint32 mapId, float x, float y, float z, bool /*idle*/, bool /*react*/,
+                                       bool normal_only, bool exact_waypoint, MovementPriority priority,
+                                       bool lessDelay, bool backwards)
 {
     UpdateMovementState();
     if (!IsMovingAllowed())
     {
-        return RaidObs::MoveOutcome::NotAllowed;
+        return MoveOutcome::NotAllowed;
     }
     if (IsDuplicateMove(x, y, z))
     {
-        return RaidObs::MoveOutcome::Duplicate;
+        return MoveOutcome::Duplicate;
     }
     if (IsWaitingForLastMove(priority))
     {
-        return RaidObs::MoveOutcome::Waiting;
+        return MoveOutcome::Waiting;
     }
 
     bool generatePath = !bot->IsFlying() && !bot->isSwimming();
@@ -289,7 +306,7 @@ RaidObs::MoveOutcome MovementAction::MoveToImpl(uint32 mapId, float x, float y, 
         Unit* vehicleBase = vehicle->GetBase();
         generatePath = !vehicleBase || !vehicleBase->CanFly();
         if (!vehicleBase || !seat || !seat->CanControl())  // is passenger and cant move anyway
-            return RaidObs::MoveOutcome::NotAllowed;
+            return MoveOutcome::NotAllowed;
 
         float distance = vehicleBase->GetExactDist(x, y, z);  // use vehicle distance, not bot
         if (distance > 0.01f)
@@ -304,7 +321,7 @@ RaidObs::MoveOutcome MovementAction::MoveToImpl(uint32 mapId, float x, float y, 
             delay = std::max(.0f, delay);
             delay = std::min((float)sPlayerbotAIConfig.MaxWaitForMove, delay);
             AI_VALUE(LastMovement&, "last movement").Set(mapId, x, y, z, bot->GetOrientation(), delay, priority);
-            return RaidObs::MoveOutcome::Issued;
+            return MoveOutcome::Issued;
         }
     }
     else if (exact_waypoint || disableMoveSplinePath || !generatePath)
@@ -326,7 +343,7 @@ RaidObs::MoveOutcome MovementAction::MoveToImpl(uint32 mapId, float x, float y, 
             delay = std::max(.0f, delay);
             delay = std::min((float)sPlayerbotAIConfig.MaxWaitForMove, delay);
             AI_VALUE(LastMovement&, "last movement").Set(mapId, x, y, z, bot->GetOrientation(), delay, priority);
-            return RaidObs::MoveOutcome::Issued;
+            return MoveOutcome::Issued;
         }
     }
     else
@@ -335,7 +352,7 @@ RaidObs::MoveOutcome MovementAction::MoveToImpl(uint32 mapId, float x, float y, 
         Movement::PointsArray path =
             SearchForBestPath(x, y, z, modifiedZ, sPlayerbotAIConfig.MaxMovementSearchTime, normal_only);
         if (modifiedZ == INVALID_HEIGHT)
-            return RaidObs::MoveOutcome::NoPath;
+            return MoveOutcome::NoPath;
         float distance = bot->GetExactDist(x, y, modifiedZ);
         if (distance > 0.01f)
         {
@@ -354,12 +371,12 @@ RaidObs::MoveOutcome MovementAction::MoveToImpl(uint32 mapId, float x, float y, 
             delay = std::min((float)sPlayerbotAIConfig.MaxWaitForMove, delay);
             AI_VALUE(LastMovement&, "last movement")
                 .Set(mapId, x, y, modifiedZ, bot->GetOrientation(), delay, priority);
-            return RaidObs::MoveOutcome::Issued;
+            return MoveOutcome::Issued;
         }
     }
 
     // Every branch above reaches here only when the bot already stands on the destination.
-    return RaidObs::MoveOutcome::AlreadyThere;
+    return MoveOutcome::AlreadyThere;
     //
     // // LOG_DEBUG("playerbots", "IsMovingAllowed {}", IsMovingAllowed());
     // bot->AddUnitMovementFlag()

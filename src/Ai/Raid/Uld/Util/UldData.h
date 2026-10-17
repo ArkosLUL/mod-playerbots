@@ -11,11 +11,11 @@
 
 // Ulduar values no single encounter owns, and no behaviour. Boss ids, tuning and positions go in that
 // boss's UldEncounter_<Boss>.h, never here
-constexpr uint32 ULDUAR_MAP_ID = 603;
+inline constexpr uint32 ULDUAR_MAP_ID = 603;
 
 // Class spells the encounters name by id rather than by the bot's own spellbook.
-constexpr uint32 SPELL_FROST_TRAP = 13809;
+inline constexpr uint32 SPELL_FROST_TRAP = 13809;
 // Hunter buff; its charges are what the redirect action spends.
-constexpr uint32 SPELL_MISDIRECTION = 35079;
+inline constexpr uint32 SPELL_MISDIRECTION = 35079;
 
 #endif

@@ -47,7 +47,7 @@ bool AuriayaRaidPositionTrigger::IsActive()
         return false;
 
     // Off the boss, not the bot: the bot is off its anchor here, so the pool fouling it can be out of reach.
-    std::vector<Unit*> const& roomPools = GetAuriayaRoomPools(botAI);
+    std::vector<Unit*> const roomPools = GetAuriayaRoomPools(botAI);
 
     Position anchor;
     float tolerance = 0.0f;

@@ -57,86 +57,90 @@ enum UlduarIronAssemblyIds
 
 // Overload 61878 is 20,000 nature and a knockdown in 20 yd, Tendrils 61886/63485 3000/5000 a second in
 // 18 (61884's 10 is a dummy). Clearance adds arrival slack: a bot stopping on the edge is still in.
-constexpr float ULDUAR_IRON_ASSEMBLY_OVERLOAD_RADIUS = 20.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE = 25.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_TENDRILS_RADIUS = 18.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE = 28.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_OVERLOAD_RADIUS = 20.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE = 25.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_TENDRILS_RADIUS = 18.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE = 28.0f;
 
 // Rune of Death 62269/63490: a 13 yd persistent area aura ticking 2750 shadow every half second for
 // 30s. Search wide enough to see one dropped anywhere in the formation.
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_RADIUS = 13.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_RADIUS = 13.0f;
 
 // DBC 13 yd, but the aura searcher adds object size at both ends (15.4 measured). Run inside DANGER,
 // stand at CLEARANCE: with one radius the escape parks on the edge and the rune comes straight back.
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS = 16.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE = 21.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS = 40.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS = 16.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE = 21.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS = 40.0f;
+
+// Ring and bearing steps of the escape's hazard sweep.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_ESCAPE_SWEEP_STEP = 2.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_ESCAPE_SWEEP_ANGLE_STEP = static_cast<float>(M_PI) / 8.0f;
 
 // Walks and goals inside ROUTE detour round the rune via fixed points on its CLEARANCE circle. Halfway,
 // as a walk just clearing DANGER grazes it. Goals share it, or one between the radii never clears.
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_ROUTE_RADIUS = 18.5f;
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_DETOUR_STEP = 0.7854f;  // pi/4, chords stay 19.4 yd out
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_ROUTE_RADIUS = 18.5f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_DETOUR_STEP = 0.7854f;  // pi/4, chords stay 19.4 yd out
 
 // Where the raid stands when a Rune of Death or Overload covers the stack point. A fixed set of anchor
 // headings, since every bot picks on its own and they must agree.
-constexpr uint8 ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_HEADINGS = 8;
-constexpr float ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_RADIUS = 25.0f;
+inline constexpr uint8 ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_HEADINGS = 8;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_RADIUS = 25.0f;
 
 // Meltdown 61889: 29,250 nature in 15 yd round whoever Overwhelming Power expires on. Not dodged, the
 // carrier dies anyway and melee stand in it. The ranged ring is sized off it.
-constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS = 15.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS = 15.0f;
 
 // Rune of Power: 64320 within 5 yd, +50% damage, lives 60s. Lands on a council member, so ranged walk in
 // and the tank spot shifts clear. The travel cap keeps a rune on Brundir from towing ranged into Overload.
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_RADIUS = 5.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SOAK_MAX_TRAVEL = 25.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_RADIUS = 5.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SOAK_MAX_TRAVEL = 25.0f;
 
 // Tank spot clearance from a rune under his own boss: the 5 yd rune, the 5 the boss stops short of him,
 // plus margin. A shifted spot, not a second mover: two at MOVEMENT_COMBAT cancel each other.
-constexpr float ULDUAR_IRON_ASSEMBLY_TANK_RUNE_CLEARANCE = 12.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_TANK_RUNE_CLEARANCE = 12.0f;
 
 // Bearing offsets tried in order at the boss's radius. Two steps already clear 12 yd on the 16 yd ring, and a fourth
 // would put Steelbreaker's furthest candidate on Molgeim's spot, 90 degrees round.
-constexpr float ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEP = 0.3927f;  // pi/8, 22.5 degrees
-constexpr uint8 ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEPS = 3;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEP = 0.3927f;  // pi/8, 22.5 degrees
+inline constexpr uint8 ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEPS = 3;
 
 // Brundir parks at 28, not the 25 his Overload needs, so the stack 38 yd off never reacts to it and
 // stays parked, free to kick Lightning Whirl.
-constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_BEARING = 0.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_RADIUS = 28.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_STEELBREAKER_BEARING = 2.3562f;  // 3*pi/4
-constexpr float ULDUAR_IRON_ASSEMBLY_MOLGEIM_BEARING = 3.9270f;       // 5*pi/4
-constexpr float ULDUAR_IRON_ASSEMBLY_MELEE_BOSS_RADIUS = 16.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_STACK_BEARING = 3.1416f;         // pi
-constexpr float ULDUAR_IRON_ASSEMBLY_STACK_RADIUS = 10.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_BEARING = 0.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_RADIUS = 28.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_STEELBREAKER_BEARING = 2.3562f;  // 3*pi/4
+inline constexpr float ULDUAR_IRON_ASSEMBLY_MOLGEIM_BEARING = 3.9270f;       // 5*pi/4
+inline constexpr float ULDUAR_IRON_ASSEMBLY_MELEE_BOSS_RADIUS = 16.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_STACK_BEARING = 3.1416f;         // pi
+inline constexpr float ULDUAR_IRON_ASSEMBLY_STACK_RADIUS = 10.0f;
 // Once Brundir is the last one up his isolation protects nothing, so the raid closes to a second
 // point 25 yd short of him: outside Overload, inside caster range of him.
-constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_LAST_STACK_RADIUS = 3.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_SLOT_TOLERANCE = 3.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_LAST_STACK_RADIUS = 3.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_SLOT_TOLERANCE = 3.0f;
 
 // Stops short of the hall doors, 84 and 86 yd from the anchor. Sight range is 100 yd with no LOS check,
 // so without it the council drives bots from out in the corridor.
-constexpr float ULDUAR_IRON_ASSEMBLY_ARENA_RADIUS = 78.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_ARENA_HEIGHT = 10.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_ARENA_RADIUS = 78.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_ARENA_HEIGHT = 10.0f;
 // A tank that has drifted this far off its spot is walking, not parked.
-constexpr float ULDUAR_IRON_ASSEMBLY_TANK_SPOT_TOLERANCE = 4.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_TANK_SPOT_TOLERANCE = 4.0f;
 
 // Static Disruption targets someone beyond 10 yd and only exists from Steelbreaker's phase 2, hence a
 // ranged, hard-mode-only spread. Fallback radius, for when he has no tank spot.
-constexpr float ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS = 18.0f;
-constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS = 16;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS = 18.0f;
+inline constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS = 16;
 
 // Centred on Steelbreaker's tank spot, so every slot clears Meltdown by 7 yd. Don't go past 23: at 24
 // navprobe drops the 135 degree slot into a hole.
-constexpr float ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS = 22.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS = 22.0f;
 
 // Molgeim's last rune outlives him on the stack point, inside this ring, and blocks about 140 degrees
 // of it at CLEARANCE. The clear arc is found by sampling this many bearings.
-constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES = 64;
+inline constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES = 64;
 
 // Paces haz rows per instance, since NoteHazard writes on every call, and doubles as their ttl. Fine
 // for a 6s Overload and tracks Brundir well enough through a 16s Tendrils.
-constexpr uint32 ULDUAR_IRON_ASSEMBLY_HAZARD_NOTE_INTERVAL_MS = 1000;
+inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_HAZARD_NOTE_INTERVAL_MS = 1000;
 
 // Room centre, read off Brundir's out-of-combat wander in boss_assembly_of_iron.cpp. On mesh, floor 427.267.
 extern const Position ULDUAR_IRON_ASSEMBLY_ANCHOR;
@@ -163,7 +167,7 @@ class IronAssemblyScan
 public:
     explicit IronAssemblyScan(PlayerbotAI* botAI) : botAI(botAI) {}
 
-    // The three members, alive, exactly as three GetFirstAliveUnitByEntry calls return them.
+    // The three members, alive, exactly as three GetUldUnitByEntry calls return them.
     void Members(IronAssemblyTargets& targets);
     Unit* Member(uint32 entry);
 

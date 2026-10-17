@@ -12,6 +12,7 @@
 #include "UldEncounter_XT002.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "Unit.h"
 
 using namespace EncounterHelpers;
@@ -22,9 +23,9 @@ XT002MoveClearAction::MoveIssue XT002MoveClearAction::IssueMove(float x, float y
 {
     switch (TryMoveTo(bot->GetMapId(), x, y, z, false, false, false, false, MovementPriority::MOVEMENT_COMBAT, true))
     {
-        case RaidObs::MoveOutcome::NoPath:
+        case MoveOutcome::NoPath:
             return MoveIssue::NoPath;
-        case RaidObs::MoveOutcome::NotAllowed:
+        case MoveOutcome::NotAllowed:
             return MoveIssue::Refused;
         default:
             // Issued, or already headed there: Duplicate (same destination) or Waiting (an equal or higher
@@ -53,7 +54,8 @@ bool XT002MoveClearAction::MoveClearOf(std::vector<std::pair<Unit*, float>> cons
     for (auto const& entry : avoid)
         searchRadius = std::max(searchRadius, entry.second);
 
-    searchRadius += 5.0f;
+    constexpr float searchMargin = 5.0f;
+    searchRadius += searchMargin;
 
     int const directions = 8;
     float const increment = 3.0f;
@@ -168,9 +170,7 @@ bool XT002DebuffCarrierAction::InsideParkingLot() const
 
         if (bot->GetPositionX() >= minX && bot->GetPositionX() <= maxX && bot->GetPositionY() >= minY &&
             bot->GetPositionY() <= maxY)
-        {
             return true;
-        }
     }
 
     return false;
@@ -181,7 +181,7 @@ float XT002DebuffCarrierAction::TravelReach(uint32 remainingMs) const
     if (remainingMs <= ULDUAR_XT002_BOMB_TRAVEL_MARGIN_MS)
         return 0.0f;
 
-    return bot->GetSpeed(MOVE_RUN) * (remainingMs - ULDUAR_XT002_BOMB_TRAVEL_MARGIN_MS) / 1000.0f;
+    return bot->GetSpeed(MOVE_RUN) * (remainingMs - ULDUAR_XT002_BOMB_TRAVEL_MARGIN_MS) / IN_MILLISECONDS;
 }
 
 bool XT002DebuffCarrierAction::StopShortOf(float cellX, float cellY, float reach,
@@ -477,10 +477,8 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
     // need the same puddles, and each of them standing in Consumption is what kills a carrier.
     std::list<Creature*> voidZones;
     if (heartbreak && xt002)
-    {
         xt002->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE,
                                               ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
-    }
 
     if (heartbreak && (hasBomb || steppingOffOwnBomb))
     {
@@ -661,9 +659,7 @@ bool XT002RedirectThreatAction::Execute(Event /*event*/)
     // rotation picks or an add the tank doesn't want.
     if (xt002 && !IsXT002Submerged(xt002) && bot->HasAura(SPELL_MISDIRECTION) &&
         botAI->CanCastSpell("steady shot", xt002))
-    {
         return botAI->CastSpell("steady shot", xt002);
-    }
 
     return false;
 }
@@ -730,7 +726,7 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
 
             // Only a Life Spark is worth breaking off for: Static Charged is a raid-wide aura that
             // runs until the spark dies, and no amount of distance reduces it.
-            if (GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_LIFE_SPARK))
+            if (GetUldUnitByEntry(botAI, PB_NPC_XT002_LIFE_SPARK))
                 return false;
 
             // Config flag, not the Heartbreak aura: this states intent and has to hold before the Heart breaks.

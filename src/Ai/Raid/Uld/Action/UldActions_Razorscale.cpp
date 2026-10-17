@@ -50,7 +50,8 @@ RazorscaleAvoidDevouringFlameAction::FlameScan const& RazorscaleAvoidDevouringFl
     // Widened for the main tank while she is airborne so he can hold the Dark Rune adds away from the
     // patches; on the ground he only has to clear his own footprint.
     bool const airborne = boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
-    float const multiplier = (PlayerbotAI::IsMainTank(bot) && airborne) ? 2.3f : 1.0f;
+    float const multiplier =
+        (PlayerbotAI::IsMainTank(bot) && airborne) ? RazorscaleBossHelper::DEVOURING_FLAME_AIRBORNE_TANK_SCALE : 1.0f;
     _scan.clearRadius = RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS * multiplier;
 
     if (Unit* flame = RazorscaleBossHelper::FindDevouringFlameNear(botAI, _scan.clearRadius))
@@ -74,9 +75,10 @@ bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float c
     // Counted in whole steps: a float delta accumulating M_PI/8 overshoots the M_PI/2 bound on the
     // last iteration, which silently drops the two widest escape bearings.
     constexpr int SWEEP_STEPS = 4;
+    constexpr double SWEEP_STEP_ANGLE = M_PI / 8.0;
     for (int i = 0; i <= SWEEP_STEPS; ++i)
     {
-        float const delta = static_cast<float>(i) * static_cast<float>(M_PI / 8.0);
+        float const delta = static_cast<float>(i) * static_cast<float>(SWEEP_STEP_ANGLE);
 
         for (float sign : {1.0f, -1.0f})
         {
@@ -131,7 +133,7 @@ bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)
     if (!PlayerbotAI::IsRanged(bot))
         return false;
 
-    const float radius = 8.0f;
+    float const radius = RazorscaleBossHelper::SENTINEL_AVOID_RADIUS;
     // Copied: the walk continues after MoveAway, so a refill mid-loop can't pull the list out from under it.
     GuidVector const npcs = GetRazorscaleScan(botAI).Hostiles();
 
@@ -139,11 +141,9 @@ bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)
     for (ObjectGuid const& npc : npcs)
     {
         Unit* unit = botAI->GetUnit(npc);
-        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
-        {
-            if (bot->GetDistance2d(unit) < radius)
-                movedAway = MoveAway(unit, radius) || movedAway;
-        }
+        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL &&
+            bot->GetDistance2d(unit) < radius)
+            movedAway = MoveAway(unit, radius) || movedAway;
     }
 
     return movedAway;
@@ -154,15 +154,12 @@ bool RazorscaleAvoidSentinelAction::isUseful()
     if (!PlayerbotAI::IsRanged(bot))
         return false;
 
-    const float radius = 8.0f;
     for (ObjectGuid const& npc : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(npc);
-        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
-        {
-            if (bot->GetDistance2d(unit) < radius)
-                return true;
-        }
+        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL &&
+            bot->GetDistance2d(unit) < RazorscaleBossHelper::SENTINEL_AVOID_RADIUS)
+            return true;
     }
 
     return false;
@@ -171,46 +168,33 @@ bool RazorscaleAvoidSentinelAction::isUseful()
 bool RazorscaleAvoidWhirlwindAction::Execute(Event /*event*/)
 {
     if (PlayerbotAI::IsTank(bot))
-    {
         return false;
-    }
 
-    const float radius = 8.0f;
+    float const radius = RazorscaleBossHelper::SENTINEL_AVOID_RADIUS;
     for (ObjectGuid const& npc : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(npc);
-        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
-        {
-            float currentDistance = bot->GetDistance2d(unit);
-            if (currentDistance < radius)
-                return MoveAway(unit, radius);
-        }
+        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL &&
+            bot->GetDistance2d(unit) < radius)
+            return MoveAway(unit, radius);
     }
+
     return false;
 }
 
 bool RazorscaleAvoidWhirlwindAction::isUseful()
 {
     if (PlayerbotAI::IsTank(bot))
-    {
         return false;
-    }
 
-    const float radius = 8.0f;
     for (ObjectGuid const& npc : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(npc);
-        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
-        {
-            if (unit->HasAura(RazorscaleBossHelper::SPELL_SENTINEL_WHIRLWIND) ||
-                unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
-            {
-                if (bot->GetDistance2d(unit) < radius)
-                {
-                    return true;
-                }
-            }
-        }
+        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL &&
+            (unit->HasAura(RazorscaleBossHelper::SPELL_SENTINEL_WHIRLWIND) ||
+             unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL)) &&
+            bot->GetDistance2d(unit) < RazorscaleBossHelper::SENTINEL_AVOID_RADIUS)
+            return true;
     }
 
     return false;
@@ -220,18 +204,14 @@ bool RazorscaleIgnoreBossAction::isUseful()
 {
     Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
-    {
         return false;
-    }
 
     if (boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
     {
         if (bot->GetDistance2d(RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
                                RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y) >
-            RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS + 25.0f)
-        {
-            return true;  // Movement to the center is the top priority for all bots
-        }
+            RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS + RazorscaleBossHelper::RAZORSCALE_ARENA_LEASH_MARGIN)
+            return true;
 
         if (!PlayerbotAI::IsTank(bot))
             return false;
@@ -240,8 +220,7 @@ bool RazorscaleIgnoreBossAction::isUseful()
         if (!group)
             return false;
 
-        int8 moonIndex = 4;
-        ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
+        ObjectGuid currentMoonTarget = group->GetTargetIcon(RtiTargetValue::moonIndex);
         if (currentMoonTarget == boss->GetGUID())
             return false;
 
@@ -253,11 +232,9 @@ bool RazorscaleIgnoreBossAction::isUseful()
 
         if (mainTank && !GET_PLAYERBOT_AI(mainTank))
         {
-            for (int i = 0; i < 3; ++i)
-            {
+            for (int i = 0; i < RazorscaleBossHelper::RAZORSCALE_ASSIST_TANK_SLOTS; ++i)
                 if (PlayerbotAI::IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
                     return true;
-            }
         }
     }
 
@@ -277,20 +254,20 @@ bool RazorscaleIgnoreBossAction::Execute(Event /*event*/)
     if (!group)
         return false;
 
+    float const returnRadius =
+        RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS - RazorscaleBossHelper::RAZORSCALE_ARENA_RETURN_INSET;
+
     if (bot->GetDistance2d(RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
                            RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y) >
-        RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS + 25.0f)
-    {
+        RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS + RazorscaleBossHelper::RAZORSCALE_ARENA_LEASH_MARGIN)
         return MoveInside(ULDUAR_MAP_ID, RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
-                          RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y, bot->GetPositionZ(),
-                          RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS - 10.0f, MovementPriority::MOVEMENT_NORMAL);
-    }
+                          RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y, bot->GetPositionZ(), returnRadius,
+                          MovementPriority::MOVEMENT_NORMAL);
 
     if (!PlayerbotAI::IsTank(bot))
         return false;
 
-    int8 moonIndex = 4;
-    ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
+    ObjectGuid currentMoonTarget = group->GetTargetIcon(RtiTargetValue::moonIndex);
     if (currentMoonTarget == boss->GetGUID())
         return false;
 
@@ -299,11 +276,11 @@ bool RazorscaleIgnoreBossAction::Execute(Event /*event*/)
 
     if (mainTank && !GET_PLAYERBOT_AI(mainTank))
     {
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < RazorscaleBossHelper::RAZORSCALE_ASSIST_TANK_SLOTS; ++i)
         {
             if (PlayerbotAI::IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
             {
-                group->SetTargetIcon(moonIndex, bot->GetGUID(), boss->GetGUID());
+                group->SetTargetIcon(RtiTargetValue::moonIndex, bot->GetGUID(), boss->GetGUID());
                 SetNextMovementDelay(1000);
                 break;
             }
@@ -311,13 +288,13 @@ bool RazorscaleIgnoreBossAction::Execute(Event /*event*/)
     }
     else if (mainTankUnit == bot)
     {
-        group->SetTargetIcon(moonIndex, bot->GetGUID(), boss->GetGUID());
+        group->SetTargetIcon(RtiTargetValue::moonIndex, bot->GetGUID(), boss->GetGUID());
         SetNextMovementDelay(1000);
     }
 
     return MoveInside(ULDUAR_MAP_ID, RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
-                      RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y, bot->GetPositionZ(),
-                      RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS - 10.0f, MovementPriority::MOVEMENT_NORMAL);
+                      RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y, bot->GetPositionZ(), returnRadius,
+                      MovementPriority::MOVEMENT_NORMAL);
 }
 
 bool RazorscaleGroundedAction::isUseful()
@@ -332,8 +309,7 @@ bool RazorscaleGroundedAction::isUseful()
         if (!group)
             return false;
 
-        int8 moonIndex = 4;
-        ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
+        ObjectGuid currentMoonTarget = group->GetTargetIcon(RtiTargetValue::moonIndex);
 
         return currentMoonTarget == boss->GetGUID();
     }
@@ -368,24 +344,13 @@ bool RazorscaleGroundedAction::isUseful()
 
     if (PlayerbotAI::IsRanged(bot))
     {
-        constexpr float landingX = 588.0f;
-        constexpr float landingY = -166.0f;
-        constexpr float landingZ = 391.1f;
-
-        float bossX = boss->GetPositionX();
-        float bossY = boss->GetPositionY();
-        float bossZ = boss->GetPositionZ();
-
-        bool atInitialLandingPosition =
-            (fabs(bossX - landingX) < 2.0f) && (fabs(bossY - landingY) < 2.0f) && (fabs(bossZ - landingZ) < 1.0f);
-
         constexpr float initialLandingRadius = 14.0f;
-        constexpr float normalRadius = 12.0f;
 
-        if (atInitialLandingPosition)
+        if (IsRazorscaleAtFirstLanding(boss))
         {
             float adjustedCenterX = RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X;
-            float adjustedCenterY = RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y - 20.0f;
+            float adjustedCenterY = RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y -
+                                    RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_STACK_OFFSET_Y;
 
             float distanceToAdjustedCenter = bot->GetDistance2d(adjustedCenterX, adjustedCenterY);
             return distanceToAdjustedCenter > initialLandingRadius;
@@ -393,7 +358,7 @@ bool RazorscaleGroundedAction::isUseful()
 
         float distanceToCenter = bot->GetDistance2d(RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
                                                     RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y);
-        return distanceToCenter > normalRadius;
+        return distanceToCenter > RazorscaleBossHelper::RAZORSCALE_RANGED_STACK_RADIUS;
     }
 
     return false;
@@ -414,16 +379,15 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
 
     if (mainTank && !GET_PLAYERBOT_AI(mainTank))
     {
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < RazorscaleBossHelper::RAZORSCALE_ASSIST_TANK_SLOTS; ++i)
         {
             if (PlayerbotAI::IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))
             {
-                int8 moonIndex = 4;
-                ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
+                ObjectGuid currentMoonTarget = group->GetTargetIcon(RtiTargetValue::moonIndex);
 
                 if (currentMoonTarget == boss->GetGUID())
                 {
-                    group->SetTargetIcon(moonIndex, bot->GetGUID(), ObjectGuid::Empty);
+                    group->SetTargetIcon(RtiTargetValue::moonIndex, bot->GetGUID(), ObjectGuid::Empty);
                     SetNextMovementDelay(1000);
                     return true;
                 }
@@ -432,12 +396,11 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
     }
     else if (PlayerbotAI::IsMainTank(bot))
     {
-        int8 moonIndex = 4;
-        ObjectGuid currentMoonTarget = group->GetTargetIcon(moonIndex);
+        ObjectGuid currentMoonTarget = group->GetTargetIcon(RtiTargetValue::moonIndex);
 
         if (currentMoonTarget == boss->GetGUID())
         {
-            group->SetTargetIcon(moonIndex, bot->GetGUID(), ObjectGuid::Empty);
+            group->SetTargetIcon(RtiTargetValue::moonIndex, bot->GetGUID(), ObjectGuid::Empty);
             SetNextMovementDelay(1000);
             return true;
         }
@@ -451,29 +414,18 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
 
     if (PlayerbotAI::IsRanged(bot))
     {
-        constexpr float landingX = 588.0f;
-        constexpr float landingY = -166.0f;
-        constexpr float landingZ = 391.1f;
-
-        float bossX = boss->GetPositionX();
-        float bossY = boss->GetPositionY();
-        float bossZ = boss->GetPositionZ();
-
-        bool atInitialLandingPosition =
-            (fabs(bossX - landingX) < 2.0f) && (fabs(bossY - landingY) < 2.0f) && (fabs(bossZ - landingZ) < 1.0f);
-
-        if (atInitialLandingPosition)
-        {
-            // 20 yd off centre on Y on her first landing, so everyone stands behind her.
+        if (IsRazorscaleAtFirstLanding(boss))
             return MoveInside(ULDUAR_MAP_ID, RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
-                              RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y - 20.0f, bot->GetPositionZ(),
-                              RazorscaleBossHelper::RAZORSCALE_ARENA_RADIUS - 12.0f, MovementPriority::MOVEMENT_COMBAT);
-        }
+                              RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y -
+                                  RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_STACK_OFFSET_Y,
+                              bot->GetPositionZ(), RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_STACK_RADIUS,
+                              MovementPriority::MOVEMENT_COMBAT);
 
         return MoveInside(ULDUAR_MAP_ID, RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
-                          RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y, bot->GetPositionZ(), 12.0f,
-                          MovementPriority::MOVEMENT_COMBAT);
+                          RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y, bot->GetPositionZ(),
+                          RazorscaleBossHelper::RAZORSCALE_RANGED_STACK_RADIUS, MovementPriority::MOVEMENT_COMBAT);
     }
+
     return false;
 }
 
@@ -499,10 +451,10 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
     float minDistance = std::numeric_limits<float>::max();
     GuidVector groupBots = AI_VALUE(GuidVector, "group members");
 
-    for (auto& guid : groupBots)
+    for (ObjectGuid const& guid : groupBots)
     {
         Player* member = ObjectAccessor::FindPlayer(guid);
-        if (member && member->IsAlive() && PlayerbotAI::IsRanged(member) && PlayerbotAI::IsDps(member) && !PlayerbotAI::IsHeal(member))
+        if (member && member->IsAlive() && IsRazorscaleHarpoonCrew(botAI, member))
         {
             float distance = member->GetDistance2d(closestHarpoon);
             if (distance < minDistance)
@@ -518,10 +470,8 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
 
     float botDist = bot->GetDistance(closestHarpoon);
     if (botDist > INTERACTION_DISTANCE - 1.0f)
-    {
         return MoveTo(bot->GetMapId(), closestHarpoon->GetPositionX(), closestHarpoon->GetPositionY(),
                       closestHarpoon->GetPositionZ());
-    }
 
     SetNextMovementDelay(1000);
 
@@ -586,9 +536,7 @@ bool RazorscaleFuseArmorAction::isUseful()
         {
             Aura* fuseArmor = member->GetAura(RazorscaleBossHelper::SPELL_FUSE_ARMOR);
             if (fuseArmor && fuseArmor->GetStackAmount() >= RazorscaleBossHelper::FUSEARMOR_THRESHOLD)
-            {
                 return true;
-            }
         }
     }
 
@@ -662,7 +610,7 @@ bool RazorscaleFlameBreathAction::Execute(Event /*event*/)
         return false;
 
     // Sidestep the shortest way out of the frontal cone while keeping current range
-    Position const dest = GetPositionOutsideFrontalCone(bot, boss, M_PI / 2.0f);
+    Position const dest = GetPositionOutsideFrontalCone(bot, boss, RazorscaleBossHelper::FLAME_BREATH_CONE);
     return MoveTo(boss->GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false, false, false,
                   true, MovementPriority::MOVEMENT_COMBAT);
 }

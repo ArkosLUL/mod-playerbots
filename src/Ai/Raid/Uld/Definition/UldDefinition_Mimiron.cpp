@@ -19,6 +19,7 @@
 #include "UldHardMode.h"
 #include "UldMultipliers_Mimiron.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "UldTriggers_Mimiron.h"
 
 using namespace EncounterHelpers;
@@ -32,8 +33,8 @@ namespace
 // row ranks last, so letting it veto a charge would contradict that ranking.
 bool MimironLethalWindowActive(PlayerbotAI* botAI)
 {
-    if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) && !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
-        !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+    if (!GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) && !GetUldUnitByEntry(botAI, NPC_VX001) &&
+        !GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return false;
 
     MimironShockBlastTrigger shockBlast(botAI);

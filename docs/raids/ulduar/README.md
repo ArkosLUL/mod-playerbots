@@ -170,7 +170,7 @@ stun aura), harpoon knockdowns included.
 
 **No pull-window helper exists outside Naxx, RS and SWP.** If dedicated actions follow, use BT's
 stateless `boss->GetHealthPct() > 95.0f` idiom rather than building a combat clock — it needs no new
-state and doubles as the fresh-spawn / fresh-phase test. And use `GetFirstAliveUnitByEntry`, not
+state and doubles as the fresh-spawn / fresh-phase test. And use `GetUldUnitByEntry`, not
 `"find target"`, for multi-tank detection: a bot parked on boss A never resolves boss B.
 
 `RaidRedirectThreatAction` lives in `Raid/RaidRedirectThreat.{h,cpp}`; Hodir subclasses it as

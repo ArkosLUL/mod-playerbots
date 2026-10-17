@@ -147,10 +147,11 @@ bool KologarnFallFromFloorAction::isUseful()
 // dies within a second, so there is no walk-back to attempt.
 bool KologarnFallFromFloorAction::Execute(Event /*event*/)
 {
-    return bot->TeleportTo(bot->GetMapId(), ULDUAR_KOLOGARN_RESTORE_POSITION.GetPositionX(),
-                           ULDUAR_KOLOGARN_RESTORE_POSITION.GetPositionY(),
-                           ULDUAR_KOLOGARN_RESTORE_POSITION.GetPositionZ(),
-                           ULDUAR_KOLOGARN_RESTORE_POSITION.GetOrientation());
+    bot->NearTeleportTo(ULDUAR_KOLOGARN_RESTORE_POSITION.GetPositionX(),
+                        ULDUAR_KOLOGARN_RESTORE_POSITION.GetPositionY(),
+                        ULDUAR_KOLOGARN_RESTORE_POSITION.GetPositionZ(),
+                        ULDUAR_KOLOGARN_RESTORE_POSITION.GetOrientation());
+    return true;
 }
 
 bool KologarnRubbleSlowdownAction::Execute(Event /*event*/)

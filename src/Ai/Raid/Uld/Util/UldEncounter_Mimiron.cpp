@@ -26,6 +26,7 @@
 #include "UldEncounterGate.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "Unit.h"
 #include "Vehicle.h"
 
@@ -275,7 +276,7 @@ bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& haza
 
 bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest)
 {
-    Unit* leviathanMkII = botAI ? GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) : nullptr;
+    Unit* leviathanMkII = botAI ? GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) : nullptr;
     if (!leviathanMkII || !leviathanMkII->FindCurrentSpellBySpellId(SPELL_SHOCK_BLAST))
         return true;
 
@@ -310,7 +311,7 @@ MimironMarkers ReadMimironMarkers(PlayerbotAI* botAI)
             markers.rockets.push_back(unit->GetPosition());
     }
 
-    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
     if (leviathanMkII && leviathanMkII->FindCurrentSpellBySpellId(SPELL_SHOCK_BLAST))
     {
         markers.shock = true;
@@ -524,7 +525,7 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
         return false;
 
     MimironMarkers const markers = GetMimironMarkers(botAI);
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001);
     MimironRapidBurstWindow const burst =
         vx001 ? GetMimironRapidBurstWindow(botAI, bot, vx001) : MimironRapidBurstWindow();
     auto const standable = [&](Position const& spot)
@@ -567,7 +568,7 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         return approaches;
 
     MimironMarkers const markers = GetMimironMarkers(botAI);
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001);
     MimironRapidBurstWindow const burst =
         vx001 ? GetMimironRapidBurstWindow(botAI, bot, vx001) : MimironRapidBurstWindow();
     MimironBarrageWindow const barrage =
@@ -602,8 +603,8 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
 
         // Phase 1 keeps its slots. Its camp moves off its own fire by switching anchors, and a stand-in
         // squeezed between 6 yd rows is how two bots end up under one Napalm Shell.
-        if (!vx001 && GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
-            !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+        if (!vx001 && GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+            !GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
             return approaches;
 
         // Hard-mode phase 2 melee: a stand-in must reach VX-001 without going under it or into the wedge's
@@ -792,7 +793,7 @@ bool IsMimironAcuGrounded(PlayerbotAI* botAI)
     if (!botAI)
         return false;
 
-    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
     return aerialCommandUnit && aerialCommandUnit->HasAura(SPELL_MIMIRON_MAGNETIC_CORE_AURA);
 }
 
@@ -802,7 +803,7 @@ bool IsMimironAcuAirborne(PlayerbotAI* botAI, Player* bot)
         return false;
 
     // Phase 4 has it attackable too, sitting on the chassis.
-    return GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT) && !IsMimironPhase4(bot) &&
+    return GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT) && !IsMimironPhase4(bot) &&
            !IsMimironAcuGrounded(botAI);
 }
 
@@ -811,13 +812,13 @@ Unit* GetMimironRingFocus(PlayerbotAI* botAI)
     if (!botAI)
         return nullptr;
 
-    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
         return vx001;
 
-    if (Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
+    if (Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
         return leviathanMkII;
 
-    return GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    return GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 }
 
 bool IsNearMimironRoom(Player* bot)
@@ -952,9 +953,9 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
 
     state.scanMs = getMSTime();
 
-    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
-    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001);
+    Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 
     // Off the constructs, never off the calling bot's combat state: one bot dropping combat is not a
     // wipe, and a latch left set would leave the re-pull with nothing to emit.
@@ -1015,9 +1016,9 @@ bool IsMimironEngaged(PlayerbotAI* botAI)
 {
     // Any construct in combat. Mid-handover the outgoing one is passive and unselectable before the next
     // calls SetInCombatWithZone, so there's nothing to target then anyway.
-    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
-    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001);
+    Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 
     for (Unit* construct : {leviathanMkII, vx001, aerialCommandUnit})
         if (construct && construct->IsInCombat())
@@ -1037,15 +1038,15 @@ bool IsMimironPhase4(Player* bot)
 
     // VX-001 and the Aerial Command Unit both ride something from phase 4 on, and neither does before
     // it, so either one answers on its own while it is still attackable.
-    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
         return vx001->GetVehicleBase() != nullptr;
 
-    if (Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+    if (Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return aerialCommandUnit->GetVehicleBase() != nullptr;
 
     // Both under 15000 and NON_ATTACKABLE, so only the chassis is left. Its seat 3 holds the cannon in
     // phase 1 and VX-001 from phase 4 on, readable whatever flags the passengers carry.
-    if (Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
+    if (Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
         if (Vehicle* kit = leviathanMkII->GetVehicleKit())
             if (Unit* seated = kit->GetPassenger(3))
                 return seated->GetEntry() == NPC_VX001;
@@ -1055,23 +1056,23 @@ bool IsMimironPhase4(Player* bot)
 
 bool MimironPhase1Active(PlayerbotAI* botAI)
 {
-    return !IsMimironPhase4(botAI->GetBot()) && GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
-           !GetFirstAliveUnitByEntry(botAI, NPC_VX001) && !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    return !IsMimironPhase4(botAI->GetBot()) && GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+           !GetUldUnitByEntry(botAI, NPC_VX001) && !GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 }
 
 bool IsMimironPhase2(PlayerbotAI* botAI)
 {
-    if (!botAI || GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
+    if (!botAI || GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
         return false;
 
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001);
     return vx001 && !vx001->GetVehicleBase();
 }
 
 bool IsMimironPhase3(PlayerbotAI* botAI)
 {
-    return botAI && GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT) &&
-           !GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) && !GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    return botAI && GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT) &&
+           !GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) && !GetUldUnitByEntry(botAI, NPC_VX001);
 }
 
 Player* GetMimironFrostResistancePaladin(PlayerbotAI* botAI, Player* bot)
@@ -1158,7 +1159,7 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
 
     std::vector<Unit*> parts;
     for (uint32 entry : {NPC_LEVIATHAN_MKII, NPC_VX001, NPC_AERIAL_COMMAND_UNIT})
-        if (Unit* part = GetFirstAliveUnitByEntry(botAI, entry))
+        if (Unit* part = GetUldUnitByEntry(botAI, entry))
             parts.push_back(part);
 
     if (parts.empty())
@@ -1251,7 +1252,7 @@ Unit* GetMimironPhase4TankFocus(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot || !IsMimironPhase4(bot))
         return nullptr;
 
-    if (Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
+    if (Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
         return leviathanMkII;
 
     return GetMimironPhase4Focus(botAI, bot, true);
@@ -1272,7 +1273,7 @@ bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot)
 {
     // Phases 1 and 4 both park the MK II, and both are the phases it lays mines in.
     return botAI && bot && PlayerbotAI::IsMainTank(bot) &&
-           GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) != nullptr;
+           GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) != nullptr;
 }
 
 float GetMimironPhase1DisperseDistance(PlayerbotAI* /*botAI*/)
@@ -1335,7 +1336,7 @@ bool IsMimironTankDragReady(PlayerbotAI* botAI, Player* bot)
     if (state.tankDragReady)
         return true;
 
-    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
     if (!leviathanMkII)
         return false;
 
@@ -1633,7 +1634,7 @@ bool IsMimironCoreUseReady(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot)
         return false;
 
-    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
     if (!aerialCommandUnit || IsMimironAcuGrounded(botAI) ||
         !aerialCommandUnit->HasUnitMovementFlag(MOVEMENTFLAG_HOVER))
         return false;
@@ -1658,7 +1659,7 @@ std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot || !IsMimironHardModeActive(botAI))
         return {};
 
-    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
     if (!aerialCommandUnit || IsMimironPhase4(bot) ||
         aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT)
         return {};
@@ -2045,7 +2046,7 @@ float GetMimironWedgeCentreline(PlayerbotAI* botAI, Player* bot)
     MimironFightState& state = MimironFightStateFor(bot);
     float const current = state.wedgeAimedMs ? state.wedgeBearing : east;
 
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001);
     if (!vx001)
         return current;
 
@@ -2110,7 +2111,7 @@ Position GetMimironPhase4TankSpot(PlayerbotAI* botAI, Player* bot)
         return live;
 
     // Never mid-barrage: VX-001 rides the chassis and the cone radiates from wherever it stands.
-    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
     {
         if (GetMimironSpinningUpSeconds(vx001) >= 0.0f ||
             vx001->HasAura(SPELL_P3WX2_LASER_BARRAGE_AURA_1) ||
@@ -2215,7 +2216,7 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         // keep him away from it; with none, reach melee and his taunt take him back.
         if (!staging)
         {
-            Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+            Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
             if (leviathanMkII && leviathanMkII->GetVictim() && leviathanMkII->GetVictim() != bot)
                 return false;
         }

@@ -87,7 +87,7 @@ public:
             // fills in during the same cast this hook runs inside. Both are milliseconds.
             float const speed = spellInfo->Speed;
             uint32 const flightMs =
-                speed > 0.0f ? static_cast<uint32>(caster->GetExactDist(&impact) / speed * 1000.0f) : 0;
+                speed > 0.0f ? static_cast<uint32>(caster->GetExactDist(&impact) / speed * IN_MILLISECONDS) : 0;
 
             VezaxNoteShadowCrash(caster, impact, flightMs);
             InterruptVezaxCastersNear(caster, impact, ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS,

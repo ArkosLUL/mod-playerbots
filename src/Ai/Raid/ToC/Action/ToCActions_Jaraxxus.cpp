@@ -56,11 +56,11 @@ bool JaraxxusAvoidLegionFlameAction::IssueLeg(Position const& spot, uint32 now)
     if (replacing)
         last.priority = MovementPriority::MOVEMENT_COMBAT;
 
-    RaidObs::MoveOutcome const outcome =
+    MoveOutcome const outcome =
         TryMoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                   false, false, MovementPriority::MOVEMENT_FORCED);
 
-    if (outcome == RaidObs::MoveOutcome::Issued)
+    if (outcome == MoveOutcome::Issued)
     {
         _legStart = bot->GetPosition();
         _lastIssued = spot;
@@ -74,7 +74,7 @@ bool JaraxxusAvoidLegionFlameAction::IssueLeg(Position const& spot, uint32 now)
         last.priority = MovementPriority::MOVEMENT_FORCED;
 
     // already walking there
-    if (outcome == RaidObs::MoveOutcome::Duplicate)
+    if (outcome == MoveOutcome::Duplicate)
     {
         _spot = spot;
         _hasSpot = true;

@@ -95,9 +95,7 @@ bool IgnisAttackBrittleConstructTrigger::IsActive()
     // at. Melee are only let in at the end of the window, when nobody ranged has closed it.
     if (!PlayerbotAI::IsRanged(bot) &&
         GetIgnisBrittleTimeLeft(construct) > static_cast<int32>(ULDUAR_IGNIS_BRITTLE_MELEE_FALLBACK_MS))
-    {
         return false;
-    }
 
     // Stays hot once the target is already current: the action still has the designated burst spell
     // to fire, which is what actually reaches the 5000 / 3000 the shatter needs.

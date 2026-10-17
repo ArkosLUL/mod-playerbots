@@ -21,6 +21,7 @@
 #include "TemporarySummon.h"
 #include "Timer.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "Unit.h"
 
 #include <algorithm>
@@ -41,7 +42,7 @@ const Position ULDUAR_HODIR_CENTRE = Position(1998.0f, -235.5f, 432.687f);
 // North-east into open floor, away from the chamfered south-west corner.
 constexpr float ULDUAR_HODIR_HOLD_FALLBACK_BEARING = 1.0845f;
 
-Unit* GetHodir(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_HODIR); }
+Unit* GetHodir(PlayerbotAI* botAI) { return GetUldUnitByEntry(botAI, NPC_HODIR); }
 
 bool IsHodirEngaged(PlayerbotAI* botAI)
 {
@@ -826,7 +827,8 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
     {
         std::vector<HazardCircle> hazards;
 
-        for (auto const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest friendly players")->Get())
+        for (ObjectGuid const& guid :
+             botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest friendly players")->Get())
         {
             Unit* ally = botAI->GetUnit(guid);
             if (ally && ally->IsAlive() && ally != bot && bot->GetExactDist2d(ally) <= ULDUAR_HODIR_DODGE_LEASH)
@@ -858,18 +860,18 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
 
     Position leg = FindNearestPositionClearOfHazards(
         bot, sweepFor(ULDUAR_HODIR_DECLUMP_RADIUS, ULDUAR_HODIR_ICE_SHARDS_CLEAR, ULDUAR_HODIR_BIG_SHARDS_CLEAR),
-        ULDUAR_HODIR_DODGE_LEASH, 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG, static_cast<float>(M_PI) / 8.0f,
-        preferNear, goesSomewhere);
+        ULDUAR_HODIR_DODGE_LEASH, 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG, ULDUAR_HODIR_SWEEP_ANGLE_STEP, preferNear,
+        goesSomewhere);
 
     // Nothing clear with margin: give up the clears' 2 yd and the declump before standing still, since
     // a bot that can't move sheds nothing.
     if (!leg.GetPositionX() && !leg.GetPositionY())
         leg = FindNearestPositionClearOfHazards(
             bot,
-            sweepFor(ULDUAR_HODIR_SHUTTLE_HALF_LEG, ULDUAR_HODIR_ICE_SHARDS_RADIUS + 0.5f,
-                     ULDUAR_HODIR_BIG_SHARDS_RADIUS + 0.5f),
-            2.0f * ULDUAR_HODIR_DODGE_LEASH, 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG,
-            static_cast<float>(M_PI) / 8.0f, preferNear, goesSomewhere);
+            sweepFor(ULDUAR_HODIR_SHUTTLE_HALF_LEG, ULDUAR_HODIR_ICE_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN,
+                     ULDUAR_HODIR_BIG_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN),
+            2.0f * ULDUAR_HODIR_DODGE_LEASH, 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG, ULDUAR_HODIR_SWEEP_ANGLE_STEP,
+            preferNear, goesSomewhere);
 
     if (!leg.GetPositionX() && !leg.GetPositionY())
         return false;
@@ -885,7 +887,7 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
     bool const found = DeriveHodirShuttleLeg(botAI, bot, out, how);
 
     // The rule, not the leg. The leg is already a move record with this action's name on it, and a
-    // crowd-derived one moves every tick, so latching the coordinate emitted on every tick too.
+    // crowd-derived one moves every tick, so latching the coordinate would emit on every tick too.
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "hodir.shuttle", how);
 

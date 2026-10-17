@@ -22,8 +22,8 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-// Scoped to a live dodge only: held permanently this is the freeze bug, where a silently failing
-// MoveTo strands the bot for the rest of the fight.
+// Scoped to a live dodge only: held permanently, a silently failing MoveTo would strand the bot for the
+// rest of the fight.
 bool RazorscaleMoversBlocked(PlayerbotAI* botAI)
 {
     if (RazorscaleBossHelper::FindDevouringFlameNear(botAI, RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS))

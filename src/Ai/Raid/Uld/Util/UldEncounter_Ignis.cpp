@@ -89,7 +89,8 @@ bool IsIgnisEngaged(PlayerbotAI* botAI) { return GetEngagedIgnis(botAI) != nullp
 // scan rather than one per match, and the same visit order, so ties still break the same way.
 static void CollectIgnisRoomCreatures(WorldObject const* from, uint32 entry, std::vector<Creature*>& out)
 {
-    out.reserve(32);
+    constexpr size_t expectedMatches = 32;
+    out.reserve(expectedMatches);
 
     Acore::AllCreaturesOfEntryInRange check(from, entry, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS);
     Acore::CreatureListSearcher<Acore::AllCreaturesOfEntryInRange> searcher(from, out, check);

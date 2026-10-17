@@ -64,7 +64,7 @@ Kill order is **Sentries → Feral Defender → boss**: sentries stay dead and d
 each Defender kill costs a pool and buys 35s. Targets are picked in code — bots set no icons, but a
 mark a player sets still wins. Melee take the Defender only within 15 yd of the boss, or they chase it
 across the room as it re-rolls aggro. It feigns at 1 HP wearing `UNIT_FLAG_NOT_SELECTABLE`, so every
-candidate is checked with `IsDownOrFeigning` after `GetFirstAliveUnitByEntry`. Savage Pounce (64666)
+candidate is checked with `IsDownOrFeigning` after `GetUldUnitByEntry`. Savage Pounce (64666)
 fires only at 8–25 yd from the sentry's own victim, so a tank holding it in melee is the whole
 counter — the taunt needs no positioning code behind it.
 
@@ -73,7 +73,8 @@ bot's own threat list: any bot fighting a sentry or the Defender silently lost i
 anti-fear. All of them go through `GetAuriaya`, by entry, now. `GetAuriaya` and `GetAuriayaRoomPools`
 share one scan per bot per tick (`RefreshedAuriayaRoomScan`, `thread_local`, keyed on `botAI` and
 `getMSTime()`), since each node otherwise ran both grid sweeps twice on the tick it fired, trigger then
-action. It is a cache, not a latch, so `thread_local` is safe.
+action. It is a cache, not a latch, so `thread_local` is safe. It holds guids, pools included, so a
+despawn between reads drops out instead of dangling.
 
 **Nothing pulls before a player does.** Every node that pulls waits for `IsAuriayaEngaged` (her
 `IsInCombat()`): targeting, the sentry taunt, the anchor and both rules. Ungated, the targeting
