@@ -24,32 +24,32 @@ enum UlduarAuriayaIds
     NPC_AURIAYA_SEEPING_FERAL_ESSENCE = 34098,
 };
 
-constexpr float ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
+inline constexpr float ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 
 // 64459's 5 yd radius (index 8, both sizes) plus 2 yd for the 1s tick and position lag.
-constexpr float ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS = 7.0f;
+inline constexpr float ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS = 7.0f;
 
 // Sonic Screech splits its damage across a 120 degree cone, so the raid soaks it instead of dodging.
 // The stack sits this far out on her bearing to the tank, since she faces her victim.
-constexpr float ULDUAR_AURIAYA_RAID_STANDOFF = 20.0f;
+inline constexpr float ULDUAR_AURIAYA_RAID_STANDOFF = 20.0f;
 // Snapped so tank drift can't shuffle the stack. One step is 3.9 yd of arc at the standoff,
 // within the ranged and healer tolerances.
-constexpr float ULDUAR_AURIAYA_BEARING_QUANTUM = static_cast<float>(M_PI) / 16.0f;
-constexpr float ULDUAR_AURIAYA_MAINTANK_SPOT_TOLERANCE = 3.0f;
-constexpr float ULDUAR_AURIAYA_RANGED_SPOT_TOLERANCE = 5.0f;
-constexpr float ULDUAR_AURIAYA_HEALER_SPOT_TOLERANCE = 8.0f;
+inline constexpr float ULDUAR_AURIAYA_BEARING_QUANTUM = static_cast<float>(M_PI) / 16.0f;
+inline constexpr float ULDUAR_AURIAYA_MAINTANK_SPOT_TOLERANCE = 3.0f;
+inline constexpr float ULDUAR_AURIAYA_RANGED_SPOT_TOLERANCE = 5.0f;
+inline constexpr float ULDUAR_AURIAYA_HEALER_SPOT_TOLERANCE = 8.0f;
 
 // Pools never despawn before she dies, so the fight steps west through fixed stations as they
 // pile up. A fourth station would put the stack past x 1908, off the floor.
-constexpr int ULDUAR_AURIAYA_STATION_COUNT = 3;
+inline constexpr int ULDUAR_AURIAYA_STATION_COUNT = 3;
 // Raid footprint around a station point: 8 yd healer tolerance plus the 7 yd pool radius.
-constexpr float ULDUAR_AURIAYA_STATION_FOUL_RADIUS = 15.0f;
-constexpr float ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS = 100.0f;
+inline constexpr float ULDUAR_AURIAYA_STATION_FOUL_RADIUS = 15.0f;
+inline constexpr float ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS = 100.0f;
 
 // How far a pool dodge may take a bot from its anchor, or from the boss for melee.
-constexpr float ULDUAR_AURIAYA_ESSENCE_LEASH = 12.0f;
+inline constexpr float ULDUAR_AURIAYA_ESSENCE_LEASH = 12.0f;
 // Melee only take the Defender this close to her. It re-rolls aggro, so they'd chase it all fight.
-constexpr float ULDUAR_AURIAYA_MELEE_DEFENDER_RANGE = 15.0f;
+inline constexpr float ULDUAR_AURIAYA_MELEE_DEFENDER_RANGE = 15.0f;
 
 // One per station. Raid points only score a station, the stack's real anchor comes off the live boss.
 extern const Position ULDUAR_AURIAYA_MAINTANK_SPOTS[];
@@ -77,8 +77,8 @@ Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank);
 std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius);
 
 // Every pool in the room, scanned off the boss once per bot per tick. Empty while she's out of
-// sight. The reference only holds for the current tick, so copy it to keep it.
-std::vector<Unit*> const& GetAuriayaRoomPools(PlayerbotAI* botAI);
+// sight. Only good for the current tick.
+std::vector<Unit*> GetAuriayaRoomPools(PlayerbotAI* botAI);
 
 // Fewest pools near either spot wins, ties to the lowest index. Only the main tank reads this, the
 // rest follow her. Never score off her live position: she follows the tank, so it'd oscillate.

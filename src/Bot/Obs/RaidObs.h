@@ -161,9 +161,8 @@ enum class MoveKind : uint8
     Chase,
 };
 
-// Why a command did or did not reach the MotionMaster. Duplicate and Waiting are the ordinary state
-// while a bot walks to a destination its action re-offers every tick - reading either as a refusal
-// blames the movement layer for rejecting what it accepted a moment earlier.
+// Mirrors MoveOutcome in Ai/Base/Actions/MovementActions.h, since Bot/Obs must not depend on Ai.
+// MovementActions.cpp static_asserts that the two agree.
 enum class MoveOutcome : uint8
 {
     Issued,
@@ -171,8 +170,6 @@ enum class MoveOutcome : uint8
     Waiting,
     NotAllowed,
     NoPath,
-    // Nothing wrong with the destination - the bot is already standing on it. Kept apart from Issued
-    // because MoveTo has always returned false here and its callers branch on that.
     AlreadyThere,
 };
 

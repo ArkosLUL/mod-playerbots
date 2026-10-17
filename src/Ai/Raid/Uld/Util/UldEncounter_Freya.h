@@ -271,7 +271,7 @@ private:
 FreyaScan& GetFreyaScan(PlayerbotAI* botAI);
 
 // First living unit with this entry in the scan's target list: the same list and the same test as
-// EncounterHelpers::GetFirstAliveUnitByEntry, off one sweep a tick instead of one per call.
+// GetUldUnitByEntry, off one sweep a tick instead of one per call.
 Unit* GetFreyaScanUnitByEntry(PlayerbotAI* botAI, uint32 entry);
 
 // Freya via a visit that tests her entry first. The Ground Tremor nodes also run on trash and in other fights,

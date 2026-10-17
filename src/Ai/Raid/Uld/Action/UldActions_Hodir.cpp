@@ -122,17 +122,18 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
 
     // First hit is the shortest walk MoveTo will accept. Not FleePosition: it clamps travel to
     // Playerbots.FleeDistance and reads one hazard, so a second icicle leaves the bot in the blast.
-    Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_DODGE_LEASH, 2.0f,
-                                                      static_cast<float>(M_PI) / 8.0f, preferNear);
+    Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_DODGE_LEASH, ULDUAR_HODIR_SWEEP_STEP,
+                                                      ULDUAR_HODIR_SWEEP_ANGLE_STEP, preferNear);
 
     // Nothing fully clear: the clears above were margin, these are the radii that actually kill, and
     // moving to the least bad spot beats holding still because the sweep found no perfect one.
     if (IsEmptyPosition(dest))
         dest = FindNearestPositionClearOfHazards(
             bot,
-            CollectHodirIcicleHazards(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, ULDUAR_HODIR_ICE_SHARDS_RADIUS + 0.5f,
-                                      ULDUAR_HODIR_BIG_SHARDS_RADIUS + 0.5f),
-            ULDUAR_HODIR_DODGE_LEASH * 2.0f, 2.0f, static_cast<float>(M_PI) / 8.0f, preferNear);
+            CollectHodirIcicleHazards(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS,
+                                      ULDUAR_HODIR_ICE_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN,
+                                      ULDUAR_HODIR_BIG_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN),
+            ULDUAR_HODIR_DODGE_LEASH * 2.0f, ULDUAR_HODIR_SWEEP_STEP, ULDUAR_HODIR_SWEEP_ANGLE_STEP, preferNear);
 
     if (IsEmptyPosition(dest))
     {
@@ -239,7 +240,7 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
 
     // Only the neighbours the trigger's declump rule counts. Melee are stacked on him by design, so
     // making them hazards walks the bot out over a clump nothing ever complained about.
-    for (auto const& guid : AI_VALUE(GuidVector, "nearest friendly players"))
+    for (ObjectGuid const& guid : AI_VALUE(GuidVector, "nearest friendly players"))
     {
         Unit* ally = botAI->GetUnit(guid);
         if (!ally || ally == bot || !ally->IsAlive() || !ally->IsPlayer())
@@ -267,7 +268,8 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
     { return !hodir || hodir->GetExactDist2d(x, y) <= ULDUAR_HODIR_CASTER_MAX_BOSS_GAP; };
 
     Position const dest = FindNearestPositionClearOfHazards(
-        bot, hazards, ULDUAR_HODIR_CASTER_MAX_BOSS_GAP, 2.0f, static_cast<float>(M_PI) / 8.0f, nullptr, inBand);
+        bot, hazards, ULDUAR_HODIR_CASTER_MAX_BOSS_GAP, ULDUAR_HODIR_SWEEP_STEP, ULDUAR_HODIR_SWEEP_ANGLE_STEP, nullptr,
+        inBand);
     if (IsEmptyPosition(dest))
         return false;
 
@@ -289,7 +291,7 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget()
 
     Unit* trappedAlly = nullptr;
 
-    for (auto const& guid : AI_VALUE(GuidVector, "nearest npcs"))
+    for (ObjectGuid const& guid : AI_VALUE(GuidVector, "nearest npcs"))
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive())
@@ -306,7 +308,8 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget()
 
         // Sticky: switch only when another is clearly closer, or two bots standing either side of a
         // pair ping-pong between them.
-        if (!trappedAlly || bot->GetExactDist2d(unit) + 10.0f < bot->GetExactDist2d(trappedAlly))
+        if (!trappedAlly ||
+            bot->GetExactDist2d(unit) + ULDUAR_HODIR_TRAPPED_ALLY_SWITCH_MARGIN < bot->GetExactDist2d(trappedAlly))
             trappedAlly = unit;
     }
 

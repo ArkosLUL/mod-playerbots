@@ -26,15 +26,11 @@ bool InsideXT002Hazard(PlayerbotAI* botAI, Player* bot)
 
         if (unit->GetEntry() == PB_NPC_XT002_VOID_ZONE &&
             unit->GetExactDist2d(bot) < ULDUAR_XT002_VOID_ZONE_RADIUS)
-        {
             return true;
-        }
 
         if (unit->GetEntry() == PB_NPC_XT002_BOOMBOT && PlayerbotAI::IsMelee(bot) &&
             unit->GetExactDist2d(bot) < ULDUAR_XT002_BOOMBOT_AVOID_RADIUS)
-        {
             return true;
-        }
     }
 
     return false;

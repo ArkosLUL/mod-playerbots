@@ -7,6 +7,7 @@
 #include "UldEncounter_Mimiron.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
@@ -45,7 +46,7 @@ bool MimironShockBlastTrigger::IsActive()
 {
     // By entry, not through "find target": that value walks the bot's own threat list, so it only ever
     // resolves a boss this bot is already on. A bot that has not damaged the mech has to dodge it too.
-    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    Unit* boss = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
 
     if (!boss || !boss->IsAlive())
     {
@@ -103,7 +104,7 @@ bool MimironP3Wx2LaserBarrageTrigger::IsActive()
 {
     // By entry. VX-001 never calls DoZoneInCombat in phase 4, so "find target" leaves any bot that has
     // not damaged it blind to a cone that kills in a single tick.
-    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* boss = GetUldUnitByEntry(botAI, NPC_VX001);
 
     if (!boss || !boss->IsAlive())
         return false;
@@ -130,7 +131,7 @@ bool MimironArcSpreadTrigger::IsActive()
 
     // Walks during a barrage only inside the safe sector: it's under half a turn wide, so two clear
     // endpoints mean a clear leg. The leg stays at MOVEMENT_COMBAT so a FORCED dodge can still cut it.
-    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
     {
         MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
         if (window.valid)
@@ -153,7 +154,7 @@ bool MimironArcSpreadTrigger::IsActive()
         return false;
 
     // Never walk a bot into a live Rapid Burst: wait the 3 s out wherever it stands.
-    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
     {
         MimironRapidBurstWindow const burst = GetMimironRapidBurstWindow(botAI, bot, vx001);
         if (!IsMimironSpotRapidBurstSafe(vx001, burst, slot))
@@ -166,9 +167,9 @@ bool MimironArcSpreadTrigger::IsActive()
 bool MimironAerialCommandUnitTrigger::IsActive()
 {
     // Phase 3 only: the Aerial Command Unit is up on its own.
-    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
-    if (!aerialCommandUnit || GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
-        GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    if (!aerialCommandUnit || GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
+        GetUldUnitByEntry(botAI, NPC_VX001))
         return false;
 
     if (PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0))
@@ -177,7 +178,7 @@ bool MimironAerialCommandUnitTrigger::IsActive()
         if (!group)
             return false;
 
-        Unit* assaultBot = GetFirstAliveUnitByEntry(botAI, NPC_ASSAULT_BOT);
+        Unit* assaultBot = GetUldUnitByEntry(botAI, NPC_ASSAULT_BOT);
         Unit* focus = assaultBot ? assaultBot : aerialCommandUnit;
 
         // Purely so the icon tracks what the raid is actually killing; no bot reads it back.
@@ -191,7 +192,7 @@ bool MimironAerialCommandUnitTrigger::IsActive()
 
 bool MimironRocketStrikeTrigger::IsActive()
 {
-    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* boss = GetUldUnitByEntry(botAI, NPC_VX001);
 
     if (!boss || !boss->IsAlive())
         return false;
@@ -297,7 +298,7 @@ bool MimironDodgeFlamesTrigger::IsActive()
 
     // Only for bots inside the swept band: the barrage dodge takes those and screens every hop. Everyone
     // else keeps dodging fire through the window.
-    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
     {
         MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
         if (window.valid && !IsMimironSpotBarrageSafe(vx001, window, bot->GetPosition(), 0.0f))
@@ -377,9 +378,9 @@ bool MimironPlasmaBlastDefensiveTrigger::IsActive()
         return false;
 
     // Phase 1 only. Nothing later casts it: the cannon is part of the MK II.
-    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
-    if (!leviathanMkII || GetFirstAliveUnitByEntry(botAI, NPC_VX001) ||
-        GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+    Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    if (!leviathanMkII || GetUldUnitByEntry(botAI, NPC_VX001) ||
+        GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return false;
 
     // While the cast is up, not between casts: the victim was resolved when it began, and the whole
@@ -402,9 +403,9 @@ bool MimironRedirectThreatTrigger::IsActive()
         return false;
 
     // Phase 1 only, and only while somebody else is the main tank.
-    if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
-        GetFirstAliveUnitByEntry(botAI, NPC_VX001) ||
-        GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+    if (!GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
+        GetUldUnitByEntry(botAI, NPC_VX001) ||
+        GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
     {
         return false;
     }
@@ -419,7 +420,7 @@ bool MimironMagneticCoreTrigger::IsActive()
     if (GetMimironCoreCarrier(botAI) != bot)
         return false;
 
-    if (!GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+    if (!GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return false;
 
     // Holding one, the action decides whether to bank a second, hold, walk or spend it, and says so

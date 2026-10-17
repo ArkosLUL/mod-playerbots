@@ -56,10 +56,38 @@ public:
     static constexpr float DEVOURING_FLAME_RADIUS = 5.0f;
     static constexpr float DEVOURING_FLAME_CLEAR_RADIUS = DEVOURING_FLAME_RADIUS + 2.0f;
 
+    // The main tank's clear while she is airborne, so he can hold the Dark Rune adds away from the patches.
+    static constexpr float DEVOURING_FLAME_AIRBORNE_TANK_SCALE = 2.3f;
+
+    static constexpr float SENTINEL_AVOID_RADIUS = 8.0f;
+
     static constexpr float RAZORSCALE_FLYING_Z_THRESHOLD = 440.0f;
     static constexpr float RAZORSCALE_ARENA_CENTER_X = 587.54f;
     static constexpr float RAZORSCALE_ARENA_CENTER_Y = -175.04f;
     static constexpr float RAZORSCALE_ARENA_RADIUS = 30.0f;
+    // A bot this far past the arena edge walks back in before anything else, to this far inside it.
+    static constexpr float RAZORSCALE_ARENA_LEASH_MARGIN = 25.0f;
+    static constexpr float RAZORSCALE_ARENA_RETURN_INSET = 10.0f;
+
+    // Under this she stays on the ground for good. Above it a landing is only a harpoon knockdown.
+    static constexpr float RAZORSCALE_PERMANENT_GROUND_HEALTH_PCT = 50.0f;
+
+    // Her first landing spot. Ranged stack 20 yd off centre on Y for that one, so everyone stands behind her.
+    static constexpr float RAZORSCALE_FIRST_LANDING_X = 588.0f;
+    static constexpr float RAZORSCALE_FIRST_LANDING_Y = -166.0f;
+    static constexpr float RAZORSCALE_FIRST_LANDING_Z = 391.1f;
+    static constexpr float RAZORSCALE_FIRST_LANDING_TOLERANCE = 2.0f;
+    static constexpr float RAZORSCALE_FIRST_LANDING_Z_TOLERANCE = 1.0f;
+    static constexpr float RAZORSCALE_FIRST_LANDING_STACK_OFFSET_Y = 20.0f;
+    static constexpr float RAZORSCALE_FIRST_LANDING_STACK_RADIUS = 18.0f;
+    static constexpr float RAZORSCALE_RANGED_STACK_RADIUS = 12.0f;
+
+    // Assist tank indexes that cover for a human main tank.
+    static constexpr int RAZORSCALE_ASSIST_TANK_SLOTS = 3;
+
+    // Flame Breath's frontal cone, and how far out a bot still counts as in it.
+    static constexpr float FLAME_BREATH_CONE = static_cast<float>(M_PI) / 2.0f;
+    static constexpr float FLAME_BREATH_RANGE = 40.0f;
 
     // Harpoon cooldown (seconds)
     static constexpr time_t HARPOON_COOLDOWN_DURATION = 5;
@@ -114,7 +142,7 @@ private:
     Unit* _boss;
 
     // Seconds between role reassignments, tracked per bot.
-    static const std::time_t _roleSwapCooldown = 10;
+    static constexpr std::time_t _roleSwapCooldown = 10;
 };
 
 // Per-bot cache of the lookups every Razorscale node repeats each tick, keyed on getMSTime() since a bot
@@ -161,6 +189,9 @@ GameObject* GetRazorscaleClosestReadyHarpoon(PlayerbotAI* botAI);
 // Most urgent add first: Sentinel (whirlwinds the raid) > Watcher (ranged caster) > Guardian. Lowest
 // health Sentinel of two, so the raid finishes one instead of splitting across both.
 Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI);
+
+// She sits on her first landing spot, where the ranged stack shifts off centre.
+bool IsRazorscaleAtFirstLanding(Unit* boss);
 
 // Skull target: the boss whenever she's on the floor, harpoon knockdowns included since she takes
 // damage then. Otherwise the add above.

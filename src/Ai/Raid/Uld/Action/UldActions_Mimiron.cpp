@@ -28,6 +28,7 @@
 #include "UldEncounter_Mimiron.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "EncounterHelpers.h"
 #include "RtiValue.h"
 #include "ScriptedCreature.h"
@@ -114,7 +115,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
 
     // Resolved once for the whole fan: reading the window costs a grid scan for the DB Target, and
     // gathering the Firefighter hazards walks a fire field that runs to 50 or 60 nodes.
-    Unit* const vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* const vx001 = GetUldUnitByEntry(botAI, NPC_VX001);
     MimironBarrageWindow const barrage =
         vx001 ? GetMimironBarrageWindow(bot, vx001) : MimironBarrageWindow();
     MimironRapidBurstWindow const burst =
@@ -241,7 +242,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
             }
 
             if (TryMoveTo(bot->GetMapId(), dx, dy, dz, false, false, true, exact, priority) ==
-                RaidObs::MoveOutcome::Issued)
+                MoveOutcome::Issued)
             {
                 float const taken = sign * delta;
                 NoteFleeOutcome(what, "ok", &taken, refusedBack, refusedMine, refusedCone, refusedFire,
@@ -331,7 +332,7 @@ bool MimironShockBlastAction::FleeShockToAnchor()
 
 bool MimironShockBlastAction::Execute(Event /*event*/)
 {
-    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
     if (!leviathanMkII)
         return false;
 
@@ -417,7 +418,7 @@ bool MimironP3Wx2LaserBarrageAction::isUseful()
 
 bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
 {
-    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* boss = GetUldUnitByEntry(botAI, NPC_VX001);
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -684,14 +685,14 @@ bool MimironArcSpreadAction::Execute(Event /*event*/)
     {
         // Only a candidate with no path hands over to the next. Already walking a leg, or held by
         // the movement lock, has to stay put, or the bot swaps waypoints mid leg.
-        RaidObs::MoveOutcome const outcome =
+        MoveOutcome const outcome =
             TryMoveTo(bot->GetMapId(), approach.dest.GetPositionX(), approach.dest.GetPositionY(),
                       approach.dest.GetPositionZ(), false, false, false, true,
                       MovementPriority::MOVEMENT_COMBAT, true);
-        if (outcome == RaidObs::MoveOutcome::NoPath)
+        if (outcome == MoveOutcome::NoPath)
             continue;
 
-        if (outcome != RaidObs::MoveOutcome::Issued)
+        if (outcome != MoveOutcome::Issued)
             return false;
 
         if (std::strcmp(approach.how, "direct") != 0 && RaidObs::Active())
@@ -715,8 +716,8 @@ bool MimironAerialCommandUnitAction::Execute(Event /*event*/)
 {
     if (PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0))
     {
-        Unit* assaultBot = GetFirstAliveUnitByEntry(botAI, NPC_ASSAULT_BOT);
-        Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+        Unit* assaultBot = GetUldUnitByEntry(botAI, NPC_ASSAULT_BOT);
+        Unit* boss = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 
         // For the human raid leader only, nothing reads it back: bots pick their own target through
         // "mimiron set dps priority".
@@ -836,7 +837,7 @@ bool MimironPetControlAction::Execute(Event /*event*/)
     // 25, the one window the phase can be shortened in.
     if (IsMimironAcuGrounded(botAI))
     {
-        if (Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+        if (Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         {
             CommandPetAttack(botAI, aerialCommandUnit);
             return false;
@@ -892,7 +893,7 @@ bool MimironApproachTargetAction::Execute(Event /*event*/)
     // take the tick off this one mid-walk.
     if (TryMoveTo(bot->GetMapId(), approach.GetPositionX(), approach.GetPositionY(),
                   approach.GetPositionZ(), false, false, false, true,
-                  MovementPriority::MOVEMENT_COMBAT, true) != RaidObs::MoveOutcome::Issued)
+                  MovementPriority::MOVEMENT_COMBAT, true) != MoveOutcome::Issued)
         return false;
 
     if (RaidObs::Active())
@@ -1197,8 +1198,8 @@ bool MimironSetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
             if (!IsMimironPhase4(bot))
                 return IsMimironAcuGrounded(botAI);
 
-            return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) == nullptr ||
-                   GetFirstAliveUnitByEntry(botAI, NPC_VX001) == nullptr ||
+            return GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) == nullptr ||
+                   GetUldUnitByEntry(botAI, NPC_VX001) == nullptr ||
                    GetMimironPhase4Focus(botAI, bot, true) == unit;
         }
 
@@ -1408,9 +1409,9 @@ Player* MimironRedirectThreatAction::GetRedirectTank()
 {
     // Phase 1 only. Later phases split two mechs across two tanks, and a redirect that names the
     // group main tank by definition feeds the wrong one.
-    if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
-        GetFirstAliveUnitByEntry(botAI, NPC_VX001) ||
-        GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+    if (!GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
+        GetUldUnitByEntry(botAI, NPC_VX001) ||
+        GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
     {
         return nullptr;
     }
@@ -1421,7 +1422,7 @@ Player* MimironRedirectThreatAction::GetRedirectTank()
 
 Unit* MimironRedirectThreatAction::GetThreatDumpTarget()
 {
-    return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    return GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
 }
 
 bool MimironSlowBombBotAction::isUseful()
@@ -1457,7 +1458,7 @@ void MimironMagneticCoreAction::NoteCoreStep(char const* step)
 
 bool MimironMagneticCoreAction::Execute(Event /*event*/)
 {
-    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
     if (!aerialCommandUnit)
     {
         NoteCoreStep("no-acu");

@@ -431,16 +431,10 @@ Playerbots.UlduarFreyaHardMode = 0
 # Default: 0 (disabled)
 Playerbots.UlduarMimironHardMode = 0
 
-# Enable Yogg-Saron reduced-Keeper hard-mode behaviour (the raid frees fewer than 4 Keepers before the
-# pull). This is tuned for the hardest single-Keeper case, Thorim only, and turning it on assumes that
-# is the Keeper your raid keeps: with Freya absent there are no Sanity Wells, so sanity is a one-way
-# drain, and the Immortal Guardian handling needs Thorim's Titanic Storm to finish them. When on, bots stop cheat-instakilling the Crusher Tentacles
-# and Immortal Guardians and play them for real - ranged nuke the stationary Crusher Tentacles in place
-# while melee stay on the other tentacles, and in phase 3 the tank brings the Immortal Guardians to the
-# melee stack to cleave them down so Thorim's Titanic Storm executes each one once Weakened. Bots low on
-# sanity, with no Well to run to, pull behind Yogg and face away, healing/DPSing only targets already in
-# front so they never turn back into a Lunatic Gaze. With it off the fight plays as normal mode, with the
-# tentacles and guardians cheat-killed as before.
+# Yogg-Saron reduced-Keeper hard mode (the raid frees fewer than 4 Keepers before the pull). Bots do
+# not read this option: they take the freed Keepers from the instance and adapt on their own. Without
+# Thorim nothing can finish an Immortal Guardian, so in phase 3 they keep the Guardians low in one pile
+# instead. The option only labels the encounter in a raid trace (RaidObs).
 # Default: 0 (disabled)
 Playerbots.UlduarYoggSaronHardMode = 0
 

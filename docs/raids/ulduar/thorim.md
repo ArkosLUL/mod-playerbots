@@ -82,7 +82,7 @@ the centre, so the formation opens away from the corridor. The `thorim arena anc
 once a bot is settled, exempting the chase — an add at 24 yd is up to 38 yd from an outer slot, and a
 ranged bot that cannot step into range is silent.
 
-**`GetThorim` must not be sight-limited.** `GetFirstAliveUnitByEntry` walks `"possible targets no los"`,
+**`GetThorim` must not be sight-limited.** `GetUldUnitByEntry` walks `"possible targets no los"`,
 capped at `Playerbots.SightDistance` 100 (~110 effective with the boss's bounding radius). Measured on
 the balcony trigger: active at **102.2-106.8 yd**, useless at **110.9-113.1**. The upper hallway is
 100-145 yd from Thorim's platform, so all 20 Thorim entry points went blind the moment the squad

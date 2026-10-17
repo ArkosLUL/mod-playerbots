@@ -21,6 +21,7 @@
 #include "Timer.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "Unit.h"
 
 #include <algorithm>
@@ -132,9 +133,7 @@ void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
 
     if (state.hazardNoteMs &&
         GetMSTimeDiffToNow(state.hazardNoteMs) < ULDUAR_IRON_ASSEMBLY_HAZARD_NOTE_INTERVAL_MS)
-    {
         return;
-    }
 
     state.hazardNoteMs = getMSTime();
 
@@ -205,9 +204,7 @@ void GatherIronAssemblyTanks(PlayerbotAI* /*botAI*/, Player* bot, std::vector<Pl
         Player* member = ref->GetSource();
         if (IronAssemblyMemberCounts(member, instanceId) && GET_PLAYERBOT_AI(member) &&
             PlayerbotAI::IsTank(member))
-        {
             tanks.push_back(member);
-        }
     }
 
     std::sort(tanks.begin(), tanks.end(),
@@ -377,7 +374,7 @@ Unit* IronAssemblyScan::Member(uint32 entry)
         case NPC_BRUNDIR:
             return targets.brundir;
         default:
-            return GetFirstAliveUnitByEntry(botAI, entry);
+            return GetUldUnitByEntry(botAI, entry);
     }
 }
 
@@ -473,10 +470,8 @@ Unit* IronAssemblyFocusTarget(PlayerbotAI* botAI)
     // Which member and on whose authority. The act stream says the dps-priority node ran; only this
     // says what it picked, and whether a person overrode the configured order to get it.
     if (RaidObs::Active())
-    {
         RaidObs::NoteDerived(bot, "ironassembly.focus",
                              focus ? RaidObs::DescribeAssignment(focus->GetGUID()) + " " + how : "none");
-    }
 
     return focus;
 }
@@ -574,10 +569,8 @@ Unit* IronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot)
     // Probed here, not at the trigger: an unassigned tank just drops out of the act stream, and only
     // this row tells the four nullptr branches apart.
     if (RaidObs::Active())
-    {
         RaidObs::NoteDerived(bot, "ironassembly.tank",
                              boss ? RaidObs::DescribeAssignment(boss->GetGUID()) + " " + how : how);
-    }
 
     return boss;
 }
@@ -1136,10 +1129,8 @@ bool TryGetIronAssemblyRuneOfPowerSoakSpot(PlayerbotAI* botAI, Player* bot, Posi
     // Which member's feet the bot is walking to, or which of the two caps stopped it. Both refusals
     // look the same from outside: the node's trigger comes back false and nothing is written.
     if (RaidObs::Active())
-    {
         RaidObs::NoteDerived(bot, "ironassembly.soak",
                              carrier ? RaidObs::DescribeAssignment(carrier->GetGUID()) : how);
-    }
 
     return carrier != nullptr;
 }
@@ -1159,9 +1150,7 @@ bool IronAssemblyMemberMustMove(PlayerbotAI* botAI, Player* member)
         // Tanks hold through Overload on purpose, so they never count as committed to a walk.
         if (IronAssemblyOverloadActive(brundir) && !PlayerbotAI::IsTank(member) &&
             distance < ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE)
-        {
             return true;
-        }
     }
 
     // The cache belongs to the bot whose tick this is; anyone else is swept fresh, because their scan

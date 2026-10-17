@@ -22,20 +22,14 @@ bool RazorscaleFlyingAloneTrigger::IsActive()
 {
     Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
-    {
         return false;
-    }
 
     if (boss->GetPositionZ() < RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
-    {
         return false;
-    }
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
     if (attackers.empty())
-    {
         return true;
-    }
 
     std::vector<Unit*> dark_rune_adds;
 
@@ -50,9 +44,7 @@ bool RazorscaleFlyingAloneTrigger::IsActive()
         if (entry == RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER ||
             entry == RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN ||
             entry == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
-        {
             dark_rune_adds.push_back(unit);
-        }
     }
 
     return dark_rune_adds.empty();
@@ -68,9 +60,7 @@ bool RazorscaleDevouringFlamesTrigger::IsActive()
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DEVOURING_FLAME)
-        {
             return true;
-        }
     }
 
     return false;
@@ -86,9 +76,7 @@ bool RazorscaleAvoidSentinelTrigger::IsActive()
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
-        {
             return true;
-        }
     }
 
     return false;
@@ -106,9 +94,7 @@ bool RazorscaleAvoidWhirlwindTrigger::IsActive()
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL &&
             (unit->HasAura(RazorscaleBossHelper::SPELL_SENTINEL_WHIRLWIND) ||
              unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL)))
-        {
             return true;
-        }
     }
 
     return false;
@@ -118,31 +104,21 @@ bool RazorscaleGroundedTrigger::IsActive()
 {
     Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
-    {
         return false;
-    }
 
-    if (boss->GetPositionZ() < RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
-    {
-        return true;
-    }
-    return false;
+    return boss->GetPositionZ() < RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
 }
 
 bool RazorscaleHarpoonAvailableTrigger::IsActive()
 {
     Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
-    {
         return false;
-    }
 
     RazorscaleBossHelper razorscaleHelper(botAI);
 
     if (!razorscaleHelper.UpdateBossAI())
-    {
         return false;
-    }
 
     // After UpdateBossAI(), which assigns the tank roles as a side effect. Nobody else fires one, so
     // nobody else needs the harpoon search.
@@ -156,9 +132,7 @@ bool RazorscaleFuseArmorTrigger::IsActive()
 {
     Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
-    {
         return false;
-    }
 
     if (!PlayerbotAI::IsTank(bot))
         return false;
@@ -221,5 +195,6 @@ bool RazorscaleFlameBreathTrigger::IsActive()
     if (PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0))
         return false;
 
-    return IsBotInFrontalCone(bot, boss, M_PI / 2.0f, 40.0f);
+    return IsBotInFrontalCone(bot, boss, RazorscaleBossHelper::FLAME_BREATH_CONE,
+                              RazorscaleBossHelper::FLAME_BREATH_RANGE);
 }

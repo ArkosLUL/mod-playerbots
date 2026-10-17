@@ -313,7 +313,7 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
   multiplier layer instead. The same rule refuses a walk re-aiming its own `MOVEMENT_FORCED` walk:
   lower the booking first.
 
-  It also hides from the caller's own log. `MoveTo` collapses every `RaidObs::MoveOutcome` into one
+  It also hides from the caller's own log. `MoveTo` collapses every `MoveOutcome` into one
   `bool`, so code that records *why* it gave up — a dodge fan noting which hazard vetoed each bearing
   — reports a locked bot as "every bearing was hazardous". Count what `TryMoveTo` hands back too.
   Mimiron's fire dodge read as a saturated arena for two days on **1,249 locked moves against 387
@@ -477,9 +477,9 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
   trigger lost the boss the same way to a Sanctum Sentry. A pacified or CC'd bot has attacked
   nothing, so it fails for exactly the bot a rescue node exists to serve. For multi-boss encounters,
   non-attacking objects, or anything not yet on threat, use `GetFirstAliveUnitByEntry` — **which
-  upstream has now marked `// DO NOT USE, WILL BE REMOVED`** (`src/Util/EncounterHelpers.h`) against
-  **163 call sites** here. It is still the right answer today and no replacement has landed; the
-  mitigation when it goes is a Custom-owned copy under a different name, so the deletion is a no-op.
+  upstream has now marked `// DO NOT USE, WILL BE REMOVED`** (`src/Util/EncounterHelpers.h`). It is
+  still the right answer; Ulduar already calls its own copy, `GetUldUnitByEntry`
+  (`Raid/Uld/Util/UldTargets.h`), and other raids take the same route when it goes.
   Every recommendation of it in `raids/` inherits this caveat. It also stops at `SightDistance`
   (100 yd): a far bot gets null, and shared encounter state reset on "no boss" is wiped for the whole
   raid — Flame Leviathan's posted engines flapped `fl.pursued` 26 times in one pull. A boss the
@@ -496,8 +496,8 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
   *are* selectable, so a bot will happily kill its own root.
 - `AttackersValue::IsPossibleTarget` drops `UNIT_FLAG_NOT_SELECTABLE` units
   (`Value/AttackersValue.cpp:156`), so a phased-out boss leaves `"attackers"` entirely, and
-  `GetFirstAliveUnitByEntry`, which reads `"possible targets"`, loses a submerged boss or a spike
-  the same way. Resolve those through the instance guid slot or a grid search.
+  `GetFirstAliveUnitByEntry` and `GetUldUnitByEntry`, reading `"possible targets"`, lose a submerged boss
+  or a spike the same way. Resolve those through the instance guid slot or a grid search.
 - **A `NullCreatureAI` unit stays out of combat, so out of `"attackers"`, until something hits it.**
   `dps assist` swaps a bot off it every tick unless the encounter vetoes `DpsAssist` for that bot. An
   out-of-combat critter also fails `IsPossibleTarget`, so `invalid target` → `drop target` clears an
@@ -723,11 +723,11 @@ None of these fail to compile when reverted, so a merge that takes upstream's si
 - **`GatherStrategyTargetExclusions` keeps the fork's `candidates` argument**, and every caller
   passes the list it will filter. Upstream calls it without one; an empty list makes Ulduar's
   Yogg-Saron sweep return early and its Guardian exclusion drops.
-- **`GetFirstAliveUnitByEntry` is kept** in `EncounterHelpers` for the Ulduar and Naxx callers;
-  upstream deleted it.
+- **`GetFirstAliveUnitByEntry` is kept** in `EncounterHelpers` for the Naxx callers; upstream deleted
+  it. Ulduar calls its own copy, `GetUldUnitByEntry`.
 - `AttackersValue::IsPossibleTarget` gained an `IsInCombatWith(bot)` gate upstream, so
-  `GetFirstAliveUnitByEntry` resolves mobs slightly earlier than it used to — relevant anywhere a
-  `nullptr` return was being read as "not engaged yet".
+  `GetFirstAliveUnitByEntry` and `GetUldUnitByEntry` resolve mobs slightly earlier than they used to —
+  relevant anywhere a `nullptr` return was being read as "not engaged yet".
 
 ## State does not cross objects
 

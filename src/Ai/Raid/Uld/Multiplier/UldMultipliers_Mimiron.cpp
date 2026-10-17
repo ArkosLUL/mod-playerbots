@@ -31,6 +31,7 @@
 #include "UldEncounter_Mimiron.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "UldTriggers.h"
 #include "VehicleActions.h"
 
@@ -58,7 +59,7 @@ float MimironTankAnchorGuardMultiplier::GetValue(Action* action)
     if (!IsMimironHardModeActive(botAI) || !MimironPhase1Active(botAI))
         return 1.0f;
 
-    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
     return leviathanMkII && leviathanMkII->GetVictim() == bot &&
                    IsMimironTankDragReady(botAI, bot)
                ? 0.0f

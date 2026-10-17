@@ -118,7 +118,7 @@ uint32 YoggKeepersFreedCount(PlayerbotAI* botAI)
     // Bits 0-3, as Sara's DATA_GET_KEEPERS_COUNT counts them.
     uint32 const mask = instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK);
     uint32 count = 0;
-    for (uint32 keeper = 0; keeper < 4; ++keeper)
+    for (uint32 keeper = KEEPER_FREYA; keeper <= KEEPER_THORIM; ++keeper)
         count += (mask >> keeper) & 1u;
 
     return count;

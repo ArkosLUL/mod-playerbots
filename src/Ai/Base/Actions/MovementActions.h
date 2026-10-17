@@ -24,6 +24,20 @@ struct Position;
 #define ANGLE_90_DEG M_PI_2
 #define ANGLE_120_DEG (2.f * static_cast<float>(M_PI) / 3.f)
 
+// Why a move command did or did not reach the MotionMaster. Duplicate and Waiting are the ordinary state
+// while a bot walks to a destination its action re-offers every tick, so neither is a refusal.
+enum class MoveOutcome : uint8
+{
+    Issued,
+    Duplicate,
+    Waiting,
+    NotAllowed,
+    NoPath,
+    // Already standing on the destination. Kept apart from Issued because MoveTo returns false here and
+    // its callers branch on that.
+    AlreadyThere,
+};
+
 class MovementAction : public Action
 {
 public:
@@ -42,19 +56,19 @@ protected:
     // MoveTo, but reporting why the command did or did not take. Code holding more than one candidate
     // destination needs "there is no path to there" apart from "already walking to it": only the first
     // is worth spending the tick on a different candidate for, and the bool hides which one happened.
-    RaidObs::MoveOutcome TryMoveTo(uint32 mapId, float x, float y, float z, bool idle = false, bool react = false,
-                                   bool normal_only = false, bool exact_waypoint = false,
-                                   MovementPriority priority = MovementPriority::MOVEMENT_NORMAL,
-                                   bool lessDelay = false, bool backwards = false);
+    MoveOutcome TryMoveTo(uint32 mapId, float x, float y, float z, bool idle = false, bool react = false,
+                          bool normal_only = false, bool exact_waypoint = false,
+                          MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, bool lessDelay = false,
+                          bool backwards = false);
 
     // The real mover. Call MoveTo or TryMoveTo instead: they wrap this so the destination reaches the
     // raid trace.
     // Returns why the command did or did not reach the MotionMaster - the trace has to tell a refusal
     // apart from the ordinary "still walking to the last destination".
-    RaidObs::MoveOutcome MoveToImpl(uint32 mapId, float x, float y, float z, bool idle = false,
-                                    bool react = false, bool normal_only = false, bool exact_waypoint = false,
-                                    MovementPriority priority = MovementPriority::MOVEMENT_NORMAL,
-                                    bool lessDelay = false, bool backwards = false);
+    MoveOutcome MoveToImpl(uint32 mapId, float x, float y, float z, bool idle = false, bool react = false,
+                           bool normal_only = false, bool exact_waypoint = false,
+                           MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, bool lessDelay = false,
+                           bool backwards = false);
     bool MoveTo(WorldObject* target, float distance = 0.0f,
                 MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
     bool MoveNear(WorldObject* target, float distance = sPlayerbotAIConfig.ContactDistance,

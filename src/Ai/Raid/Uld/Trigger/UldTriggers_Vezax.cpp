@@ -9,6 +9,7 @@
 #include "UldEncounter_Vezax.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "EncounterHelpers.h"
 #include "RangeTriggers.h"
 #include "ScriptedCreature.h"
@@ -26,7 +27,7 @@ bool VezaxResetEncounterStateTrigger::IsActive()
     if (bot->GetMapId() != ULDUAR_MAP_ID)
         return false;
 
-    // Out of combat, not just dead: he's back at full after a wipe, and a dead-boss test carried every
+    // Out of combat, not just dead: he's back at full after a wipe, and a dead-boss test would carry every
     // slot into the next pull. Safe mid-fight, slots only get handed out while he's in combat.
     Unit* vezax = GetVezax(botAI);
     if (vezax && vezax->IsInCombat())
@@ -116,7 +117,7 @@ bool VezaxSaroniteAnimusTrigger::IsActive()
 {
     Unit* animus = nullptr;
     if (IsVezaxHardModeActive(botAI) && VezaxEncounterActive(botAI))
-        animus = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS);
+        animus = GetUldUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS);
 
     if (!animus)
     {

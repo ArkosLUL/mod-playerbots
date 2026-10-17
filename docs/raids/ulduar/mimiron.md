@@ -641,7 +641,7 @@ VX-001's phase 4 `SetData` calls neither `DoZoneInCombat()` nor `AttackStart()`,
 is a no-op override. So a bot that never damaged VX-001 — a healer, a melee locked on the chassis —
 got `nullptr` and **the Laser Barrage dodge never ran for it at all** — the threat-list limits of
 `"find target"` are in [../../engine/pitfalls.md](../../engine/pitfalls.md). Every Mimiron node now
-resolves through `GetFirstAliveUnitByEntry` instead. **The same defect is still live across a dozen
+resolves through `GetUldUnitByEntry` instead. **The same defect is still live across a dozen
 other instance strategies**, so it is worth checking first on any boss whose script skips
 `DoZoneInCombat`.
 
@@ -1751,7 +1751,7 @@ then, so that is when `p4tank` goes out: still over twice the walk in from a pha
 
 A defeated mech sets `UNIT_FLAG_NOT_SELECTABLE` and stays in the world — the MK II parks 58 yd off
 centre for phases 2 and 3 — and the next mech carries the same flag until its phase starts.
-`AttackersValue::IsPossibleTarget` rejects that flag, so `GetFirstAliveUnitByEntry` is blind for the
+`AttackersValue::IsPossibleTarget` rejects that flag, so `GetUldUnitByEntry` is blind for the
 whole handover and every Mimiron node stands down. With no trigger-driven action succeeding, the
 engine falls through to `follow` at relevance **1.0**.
 

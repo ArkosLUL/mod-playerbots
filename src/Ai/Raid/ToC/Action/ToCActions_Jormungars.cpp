@@ -433,14 +433,14 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
     switch (TryMoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                       false, true, priority, true))
     {
-        case RaidObs::MoveOutcome::Issued:
+        case MoveOutcome::Issued:
             SetWormHold(botAI, spot, reason, tier, false);
             issuedSpot = spot;
             hasIssuedSpot = true;
             NoteWormMove(bot, "move " + Yards(travel) + " " + WormMoveReasonName(reason) + " " +
                                   WormSpotTierName(tier));
             return true;
-        case RaidObs::MoveOutcome::AlreadyThere:
+        case MoveOutcome::AlreadyThere:
             if (WormHoldParks(reason, tier))
                 SetWormHold(botAI, spot, reason, tier, true);
 

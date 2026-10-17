@@ -80,7 +80,7 @@ bool HodirIcicleDodgeTrigger::IsActive()
         return false;
 
     // Leaving is decided on the radius that kills; the clear is margin for where the bot lands, and
-    // testing it at both ends had bots stepping out of pools they were never standing in.
+    // testing it at both ends has bots stepping out of pools they were never standing in.
     if (NearestHodirIcicle(bot, NPC_HODIR_ICICLE_SMALL,
                            ULDUAR_HODIR_ICE_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN))
         return true;
@@ -158,7 +158,7 @@ bool HodirRaidPositionTrigger::IsActive()
 
     // Clumped. One icicle splashes 4 yd, so neighbours inside the declump radius mean one landing
     // catches both.
-    for (auto const& guid : AI_VALUE(GuidVector, "nearest friendly players"))
+    for (ObjectGuid const& guid : AI_VALUE(GuidVector, "nearest friendly players"))
     {
         Unit* ally = botAI->GetUnit(guid);
         if (!ally || ally == bot || !ally->IsAlive() || !ally->IsPlayer())

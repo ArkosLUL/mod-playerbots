@@ -21,6 +21,7 @@
 #include "UldEncounterGate.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "Unit.h"
 #include "Vehicle.h"
 
@@ -47,7 +48,7 @@ Unit* FlameLeviathanBoss(PlayerbotAI* botAI)
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     InstanceScript* instance = bot ? bot->GetInstanceScript() : nullptr;
     if (!instance)
-        return botAI ? GetFirstAliveUnitByEntry(botAI, NPC_FLAME_LEVIATHAN) : nullptr;
+        return botAI ? GetUldUnitByEntry(botAI, NPC_FLAME_LEVIATHAN) : nullptr;
 
     // The entry as well: index 0 names some other boss in any instance that is not Ulduar.
     Creature* boss = instance->GetCreature(ULD_BOSS_LEVIATHAN);

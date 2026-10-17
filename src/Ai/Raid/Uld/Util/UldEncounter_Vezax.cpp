@@ -341,9 +341,7 @@ void EnsureVezaxSlotAssignments(Player* bot)
     }
 
     for (ObjectGuid const& guid : stale)
-    {
         state.slotAssignments.erase(guid);
-    }
 
     std::array<bool, ULDUAR_VEZAX_TOTAL_SLOTS> used = {};
     for (auto const& assignment : state.slotAssignments)
@@ -523,9 +521,7 @@ bool TryGetVezaxShadowCrashImpact(PlayerbotAI* botAI, Position& impact)
     VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
     if (!state || !state->crashWindowMs ||
         getMSTimeDiff(state->crashCastMs, getMSTime()) >= state->crashWindowMs)
-    {
         return false;
-    }
 
     impact = state->crashImpact;
     return true;

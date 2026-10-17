@@ -59,13 +59,13 @@ enum UlduarHodirIds
 };
 
 // Starlight's DBC row says 8, but the aura stops holding past 3 yd.
-constexpr float ULDUAR_HODIR_STARLIGHT_RADIUS = 3.0f;
-constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 11.0f;
-constexpr float ULDUAR_HODIR_SAFE_AREA_RADIUS = 9.0f;  // 62464, radius index 40
+inline constexpr float ULDUAR_HODIR_STARLIGHT_RADIUS = 3.0f;
+inline constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 11.0f;
+inline constexpr float ULDUAR_HODIR_SAFE_AREA_RADIUS = 9.0f;  // 62464, radius index 40
 // Park and release differ on purpose: MoveInside lands exactly at TOLERANCE, so one number at both
 // ends would release the bot the tick it arrives.
-constexpr float ULDUAR_HODIR_SAFE_AREA_TOLERANCE = 6.0f;
-constexpr float ULDUAR_HODIR_SAFE_AREA_RELEASE = 8.0f;
+inline constexpr float ULDUAR_HODIR_SAFE_AREA_TOLERANCE = 6.0f;
+inline constexpr float ULDUAR_HODIR_SAFE_AREA_RELEASE = 8.0f;
 static_assert(ULDUAR_HODIR_SAFE_AREA_RELEASE < ULDUAR_HODIR_SAFE_AREA_RADIUS,
               "the release ring has to stay inside what Safe Area actually covers");
 static_assert(ULDUAR_HODIR_SAFE_AREA_TOLERANCE < ULDUAR_HODIR_SAFE_AREA_RELEASE,
@@ -73,177 +73,183 @@ static_assert(ULDUAR_HODIR_SAFE_AREA_TOLERANCE < ULDUAR_HODIR_SAFE_AREA_RELEASE,
 
 // Storm Power is a 3 yd pulse at the carrier's own feet (cast on a null target), so the raid gathers
 // on a carrier that holds still.
-constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 3.0f;
+inline constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 3.0f;
 
 // Receiver park and release, 2 yd apart like the shelter run so arriving doesn't release the bot.
 // Park sits a yard inside the pulse, about what a bot covers between two snapshots.
-constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK = 2.0f;
-constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE = 4.0f;
+inline constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK = 2.0f;
+inline constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE = 4.0f;
 static_assert(ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK < ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS,
               "a parked receiver has to be inside the pulse, not on its edge");
 
 // Short on purpose: a melee carrier gathers the melee and a ranged one the casters, rather than
 // walking half the raid across the room for six seconds of buff.
-constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH = 15.0f;
+inline constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH = 15.0f;
 
 // Each clear is its pool's radius plus 2 yd, since a dodging bot steps past the edge, not onto it.
-constexpr float ULDUAR_HODIR_ICE_SHARDS_RADIUS = 4.0f;  // 62457, from the small icicle 33169
-constexpr float ULDUAR_HODIR_ICE_SHARDS_CLEAR = 6.0f;
-constexpr float ULDUAR_HODIR_BIG_SHARDS_RADIUS = 7.0f;  // 65370, from the drift 33173
-constexpr float ULDUAR_HODIR_BIG_SHARDS_CLEAR = 9.0f;
+inline constexpr float ULDUAR_HODIR_ICE_SHARDS_RADIUS = 4.0f;  // 62457, from the small icicle 33169
+inline constexpr float ULDUAR_HODIR_ICE_SHARDS_CLEAR = 6.0f;
+inline constexpr float ULDUAR_HODIR_BIG_SHARDS_RADIUS = 7.0f;  // 65370, from the drift 33173
+inline constexpr float ULDUAR_HODIR_BIG_SHARDS_CLEAR = 9.0f;
 
 // Icicles live 7000 ms but blow at 3700 (fall cast at 2000, then one 1700 ms tick), so the last 3300
 // are inert.
-constexpr uint32 ULDUAR_HODIR_ICICLE_SPENT_MS = 3300;
+inline constexpr uint32 ULDUAR_HODIR_ICICLE_SPENT_MS = 3300;
 
 // Arrival tolerance for the tank hold spot, which doubles as the re-anchor threshold.
-constexpr float ULDUAR_HODIR_TANK_HOLD_TOLERANCE = 3.0f;
+inline constexpr float ULDUAR_HODIR_TANK_HOLD_TOLERANCE = 3.0f;
 
 // Book range is 30, but it's measured to his bounding radius and caster dps holds to 35. Starlight
 // stands are tested against this too: one that can't reach him is worth nothing.
-constexpr float ULDUAR_HODIR_CASTER_MAX_BOSS_GAP = 35.0f;
+inline constexpr float ULDUAR_HODIR_CASTER_MAX_BOSS_GAP = 35.0f;
 
-constexpr float ULDUAR_HODIR_DODGE_LEASH = 12.0f;
-constexpr float ULDUAR_HODIR_DECLUMP_RADIUS = 4.5f;
+inline constexpr float ULDUAR_HODIR_DODGE_LEASH = 12.0f;
+inline constexpr float ULDUAR_HODIR_DECLUMP_RADIUS = 4.5f;
+
+// Ring and bearing steps of the hazard sweep behind the dodge and the caster stand.
+inline constexpr float ULDUAR_HODIR_SWEEP_STEP = 2.0f;
+inline constexpr float ULDUAR_HODIR_SWEEP_ANGLE_STEP = static_cast<float>(M_PI) / 8.0f;
 
 // The dodge leaves on the lethal radius plus this and lands on the clear. Triggering on the clear too
-// had bots fleeing pools they were never in.
-constexpr float ULDUAR_HODIR_DODGE_TRIGGER_MARGIN = 0.5f;
+// has bots fleeing pools they were never in.
+inline constexpr float ULDUAR_HODIR_DODGE_TRIGGER_MARGIN = 0.5f;
 
 // ARRIVE stays well under the dodge sweep's 2 yd step so a bot can't "arrive" still inside the trigger
 // radius. Slipping SLIP back from its closest approach means something else is steering, so it re-issues.
-constexpr float ULDUAR_HODIR_DODGE_ARRIVE = 0.8f;
-constexpr float ULDUAR_HODIR_DODGE_SLIP = 1.0f;
+inline constexpr float ULDUAR_HODIR_DODGE_ARRIVE = 0.8f;
+inline constexpr float ULDUAR_HODIR_DODGE_SLIP = 1.0f;
 
 // Short of the room on purpose: the sweep runs per bot per tick over every world object in range.
-constexpr float ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS = 30.0f;
+inline constexpr float ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS = 30.0f;
 
 // Stand this far from the zone centre, on the bearing the bot came in on, so bots sharing a zone
 // spread out. Trim this, never the tolerance: tolerance also stands the position trigger down.
-constexpr float ULDUAR_HODIR_STARLIGHT_STAND_RADIUS = 1.5f;
-constexpr float ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE = 1.0f;
+inline constexpr float ULDUAR_HODIR_STARLIGHT_STAND_RADIUS = 1.5f;
+inline constexpr float ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE = 1.0f;
 
 // How close two sweeps have to agree before the second is the same zone as the first. Starlight zones
 // are static dynamic objects, so this only has to absorb float noise, not movement.
-constexpr float ULDUAR_HODIR_STARLIGHT_ZONE_MATCH = 1.0f;
+inline constexpr float ULDUAR_HODIR_STARLIGHT_ZONE_MATCH = 1.0f;
 static_assert(ULDUAR_HODIR_STARLIGHT_STAND_RADIUS + ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE <=
                   ULDUAR_HODIR_STARLIGHT_RADIUS,
               "a bot at the edge of its tolerance has to still be inside Starlight");
 
 // How long a latched Starlight stand may sit outside the band before it's dropped. Covers a yard of
 // wobble at the edge, not Hodir moving between the centre and a fire.
-constexpr uint32 ULDUAR_HODIR_STARLIGHT_REJECT_DROP_MS = 3000;
+inline constexpr uint32 ULDUAR_HODIR_STARLIGHT_REJECT_DROP_MS = 3000;
 
 // Shed shuttle ends in Starlight, a yard inside the edge so the shuttle keeps the buff. One 4 yd leg
 // can't span two ticks, but the legs chain until the aura's gone.
-constexpr float ULDUAR_HODIR_STARLIGHT_SHED_RADIUS = 2.0f;
+inline constexpr float ULDUAR_HODIR_STARLIGHT_SHED_RADIUS = 2.0f;
 static_assert(ULDUAR_HODIR_STARLIGHT_SHED_RADIUS < ULDUAR_HODIR_STARLIGHT_RADIUS,
               "both ends of the shed shuttle have to stay inside Starlight");
 
 // Park 8, release 10, inside the fire's 11 yd with the same 2 yd hysteresis as the other runs.
-constexpr float ULDUAR_HODIR_FIRE_STAND_RADIUS = 8.0f;
-constexpr float ULDUAR_HODIR_FIRE_STAND_TOLERANCE = 2.0f;
+inline constexpr float ULDUAR_HODIR_FIRE_STAND_RADIUS = 8.0f;
+inline constexpr float ULDUAR_HODIR_FIRE_STAND_TOLERANCE = 2.0f;
 static_assert(ULDUAR_HODIR_FIRE_STAND_RADIUS + ULDUAR_HODIR_FIRE_STAND_TOLERANCE <
                   ULDUAR_HODIR_TOASTY_FIRE_RADIUS,
               "a bot at the edge of its tolerance has to still be inside the fire");
 
 // A bot already in Starlight or a fire gets the short walk, since it'd give one up to chase another.
 // One with neither only loses the walk, and with Hodir on a fire most legal zones sit out on the helper arc.
-constexpr float ULDUAR_HODIR_BUFF_WALK = 15.0f;
-constexpr float ULDUAR_HODIR_BUFF_WALK_UNBUFFED = 30.0f;
+inline constexpr float ULDUAR_HODIR_BUFF_WALK = 15.0f;
+inline constexpr float ULDUAR_HODIR_BUFF_WALK_UNBUFFED = 30.0f;
 static_assert(ULDUAR_HODIR_BUFF_WALK_UNBUFFED <= ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS,
               "walking further than the zone sweep looks would find nothing to walk to");
 
 // Keeps casters off the melee pack, so an icicle or a Freeze on one misses the other, and out of his
 // melee range, where aggro pulls at 110% of the tank's threat instead of 130%.
-constexpr float ULDUAR_HODIR_RANGED_MIN_BOSS_GAP = 15.0f;
+inline constexpr float ULDUAR_HODIR_RANGED_MIN_BOSS_GAP = 15.0f;
 static_assert(ULDUAR_HODIR_RANGED_MIN_BOSS_GAP < ULDUAR_HODIR_CASTER_MAX_BOSS_GAP,
               "the caster band has to have room between its ends");
 
 // +50% haste is worth standing near the melee for, but still outside his 7.8 yd melee range (combat
 // reach 5, a raider's 1.5, plus 4/3).
-constexpr float ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP = 10.0f;
+inline constexpr float ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP = 10.0f;
 static_assert(ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP <= ULDUAR_HODIR_RANGED_MIN_BOSS_GAP,
               "Starlight is the one stand allowed inside the caster gap, never one kept further out");
 
 // He stops about 4 yd short of whoever holds him, so the tank stands this far past the point.
-constexpr float ULDUAR_HODIR_HOLD_TANK_OFFSET = 4.5f;
+inline constexpr float ULDUAR_HODIR_HOLD_TANK_OFFSET = 4.5f;
 
 // Measured from ULDUAR_HODIR_CENTRE, not from him, so he never ends up further out than this and every
 // tank spot stays 40+ yd inside the y band he evades outside.
-constexpr float ULDUAR_HODIR_HOLD_FIRE_LEASH = 25.0f;
+inline constexpr float ULDUAR_HODIR_HOLD_FIRE_LEASH = 25.0f;
 
 // Closer than this and a bearing from Hodir to the point means nothing, so the tank takes the fixed
 // outward one instead.
-constexpr float ULDUAR_HODIR_HOLD_BEARING_MIN_GAP = 3.0f;
+inline constexpr float ULDUAR_HODIR_HOLD_BEARING_MIN_GAP = 3.0f;
 
 // He only walks toward his holder, so once shoved past the spot he parks with it in reach. He normally
 // stops within 1-2 yd of the point, so 5 only catches that parked case.
-constexpr float ULDUAR_HODIR_HOLD_REAIM_GAP = 5.0f;
-constexpr uint32 ULDUAR_HODIR_HOLD_REAIM_MS = 2000;
+inline constexpr float ULDUAR_HODIR_HOLD_REAIM_GAP = 5.0f;
+inline constexpr uint32 ULDUAR_HODIR_HOLD_REAIM_MS = 2000;
 
 // A Biting Cold stack only comes off on the second moving tick in a row, so shedding needs over a second
 // of unbroken travel: 6 yd legs, chained. A jump in place can't fake it, MoveJump is airborne ~1.4 ms.
-constexpr float ULDUAR_HODIR_SHUTTLE_HALF_LEG = 3.0f;
-constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 4;
+inline constexpr float ULDUAR_HODIR_SHUTTLE_HALF_LEG = 3.0f;
+inline constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 4;
 
 // Standing in Starlight is worth a stack: +50% to every cast and swing against what the tick costs.
-constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT = 5;
+inline constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT = 5;
 static_assert(ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT <= 6,
               "62039 caps at 8 stacks and 200*2^7 is 25600 a tick, so past 6 the shed arms too late to matter");
 
 // Where a shed stops. The last stack ticks 400 and takes 2s of walking to drop, and standing 4s puts
 // it straight back on.
-constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_FLOOR = 1;
+inline constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_FLOOR = 1;
 static_assert(ULDUAR_HODIR_BITING_COLD_SHED_FLOOR < ULDUAR_HODIR_BITING_COLD_SHED_STACKS,
               "a shed has to have somewhere to go");
 
 // Legs for a bot shedding inside a landed shelter while Flash Freeze is being cast. Both ends stay
 // inside the park ring, so the shelter run never fires on them.
-constexpr float ULDUAR_HODIR_SHELTER_SHED_RADIUS = 3.0f;
+inline constexpr float ULDUAR_HODIR_SHELTER_SHED_RADIUS = 3.0f;
 static_assert(ULDUAR_HODIR_SHELTER_SHED_RADIUS < ULDUAR_HODIR_SAFE_AREA_TOLERANCE,
               "the shelter shuttle has to stay inside the park ring");
 
 // MoveTo refuses the same point for MaxWaitForMove (5 s) even after the bot stops, so a walk cut short
 // by an item use or a Disengage is re-issued once the bot has stood still this long.
-constexpr uint32 ULDUAR_HODIR_STALL_MS = 500;
+inline constexpr uint32 ULDUAR_HODIR_STALL_MS = 500;
 
 // A trapped raider dies to the next Flash Freeze 48s later, so freeing them outranks the boss, but the
 // block has little health, so only a few bots in range leave what they were doing.
-constexpr float ULDUAR_HODIR_TRAPPED_ALLY_RANGE = 45.0f;
-constexpr uint32 ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS = 5;
+inline constexpr float ULDUAR_HODIR_TRAPPED_ALLY_RANGE = 45.0f;
+inline constexpr uint32 ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS = 5;
+// How much closer another trapped raider has to be before a breaker switches to it.
+inline constexpr float ULDUAR_HODIR_TRAPPED_ALLY_SWITCH_MARGIN = 10.0f;
 
 // Breaker ceiling across every helper block that's up. One Flash Freeze ices all eight helpers at
 // once, so a per-block cap would multiply.
-constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_BREAKERS = 8;
+inline constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_BREAKERS = 8;
 
 // Breakers per mage block, one on every other kind. The block has no mechanic, so how fast it breaks
 // scales with how many shoot it, and the next fire has to land before Singed's 25 s runs out.
-constexpr uint32 ULDUAR_HODIR_MAGE_BLOCK_BREAKERS = 5;
+inline constexpr uint32 ULDUAR_HODIR_MAGE_BLOCK_BREAKERS = 5;
 
 // The ceiling once every mage is free: the fire is what the wave was for, and the other helpers aren't
 // worth the whole ranged group.
-constexpr uint32 ULDUAR_HODIR_LATE_BLOCK_BREAKERS = 3;
+inline constexpr uint32 ULDUAR_HODIR_LATE_BLOCK_BREAKERS = 3;
 static_assert(ULDUAR_HODIR_LATE_BLOCK_BREAKERS <= ULDUAR_HODIR_HELPER_BLOCK_BREAKERS,
               "the wave standing down cannot pull in more bots than it had while a mage was iced");
 
 // Never empty the ranged group for ice. Sized off who is actually there rather than off raid size,
 // so eight blocks against a 10-man's three ranged still leaves someone on the boss.
-constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE = 2;
+inline constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE = 2;
 
 // Below this he dies before freeing a helper pays: a freed mage's fire is ~15 s out at best, the last
 // Singed runs 25 s anyway, and 12% is ~21.6 s at the cache's 216.5k dps pace.
-constexpr float ULDUAR_HODIR_LAST_WAVE_HEALTH_PCT = 12.0f;
+inline constexpr float ULDUAR_HODIR_LAST_WAVE_HEALTH_PCT = 12.0f;
 
 // A max Frozen Blows swing takes about two thirds of a tank's health and two land close together, so
 // below this a taunt into an open window is a death.
-constexpr float ULDUAR_HODIR_TAUNT_HEALTH_FLOOR = 50.0f;
+inline constexpr float ULDUAR_HODIR_TAUNT_HEALTH_FLOOR = 50.0f;
 
 // Lust waits for the first Toasty Fire, but no longer than this into the pull, past where first fires
 // normally land. A 10 minute cooldown shouldn't sit idle.
-constexpr uint32 ULDUAR_HODIR_LUST_FALLBACK_MS = 30000;
+inline constexpr uint32 ULDUAR_HODIR_LUST_FALLBACK_MS = 30000;
 
-constexpr float ULDUAR_HODIR_ROOM_SEARCH_RADIUS = 100.0f;
+inline constexpr float ULDUAR_HODIR_ROOM_SEARCH_RADIUS = 100.0f;
 
 extern const Position ULDUAR_HODIR_CENTRE;
 

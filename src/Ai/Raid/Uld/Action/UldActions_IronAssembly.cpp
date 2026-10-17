@@ -60,8 +60,8 @@ bool TryGetIronAssemblyEscapeSpot(PlayerbotAI* botAI, Player* bot, std::vector<H
     bool const hasStation = TryGetIronAssemblyStation(botAI, bot, station);
 
     Position const clear = FindNearestPositionClearOfHazards(
-        bot, hazards, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS, 2.0f,
-        static_cast<float>(M_PI) / 8.0f, hasStation ? &station : nullptr);
+        bot, hazards, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS, ULDUAR_IRON_ASSEMBLY_ESCAPE_SWEEP_STEP,
+        ULDUAR_IRON_ASSEMBLY_ESCAPE_SWEEP_ANGLE_STEP, hasStation ? &station : nullptr);
     if (clear == Position())
         return false;
 

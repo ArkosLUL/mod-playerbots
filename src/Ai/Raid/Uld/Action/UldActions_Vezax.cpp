@@ -20,6 +20,7 @@
 #include "UldData.h"
 #include "UldEncounter_Vezax.h"
 #include "UldScripts.h"
+#include "UldTargets.h"
 #include "EncounterHelpers.h"
 #include "RtiValue.h"
 #include "ScriptedCreature.h"
@@ -40,9 +41,7 @@ void ReleaseOtherWalk(PlayerbotAI* botAI, Position const& spot)
     LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
     if (last.lastMoveShort.GetExactDist(spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ()) >
         ULDUAR_VEZAX_MARK_SPOT_TOLERANCE)
-    {
         last.clear();
-    }
 }
 }  // namespace
 
@@ -66,9 +65,7 @@ bool VezaxMarkOfTheFacelessAction::Execute(Event /*event*/)
     if (!TryGetVezaxShadowCrashImpact(botAI, impact) ||
         bot->GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >
             ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
-    {
         ReleaseOtherWalk(botAI, spot);
-    }
 
     // FORCED, not COMBAT: IsWaitingForLastMove only yields to a strictly higher priority, so at COMBAT
     // a dodge move still in flight swallows this one.
@@ -104,9 +101,7 @@ bool VezaxShadowCrashDodgeAction::Execute(Event /*event*/)
     // leaves, and lets a class interrupt through on the ticks in between.
     if (bot->GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >
         ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
-    {
         return false;
-    }
 
     ReleaseOtherWalk(botAI, spot);
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
@@ -144,7 +139,7 @@ bool VezaxSurgeOfDarknessAction::Execute(Event /*event*/)
 
 bool VezaxSaroniteAnimusAction::Execute(Event /*event*/)
 {
-    Unit* animus = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS);
+    Unit* animus = GetUldUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS);
     if (!animus)
         return false;
 
@@ -198,17 +193,13 @@ bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
     if (TryGetVezaxShadowCrashImpact(botAI, impact) &&
         field.position.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
             ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
-    {
         return false;
-    }
 
     // Stop short of the centre. Arriving anywhere inside the 8 yard radius is the whole point, and
     // walking to the exact middle costs cast time for nothing.
     if (bot->GetExactDist2d(field.position.GetPositionX(), field.position.GetPositionY()) <=
         field.radius - 1.0f)
-    {
         return false;
-    }
 
     // FORCED, not COMBAT: a finished dodge's destination stays latched in IsWaitingForLastMove for seconds.
     // The dodge and the mark release this walk before they move.

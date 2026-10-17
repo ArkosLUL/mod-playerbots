@@ -25,8 +25,7 @@
 
 using namespace EncounterHelpers;
 
-// XT-002 anchors. The tank spot sits just behind XT's spawn; the ranged spot is pulled in from where it was
-// measured, which left a 30 yd caster out of range.
+// XT-002 anchors. The tank spot sits just behind XT's spawn; the ranged spot keeps a 30 yd caster in range.
 const Position ULDUAR_XT002_MAINTANK_SPOT = Position(895.82f, -12.53954f, 409.68756f);
 const Position ULDUAR_XT002_RANGED_SPOT = Position(866.0f, -12.5f, 409.8f);
 // South-west so the 8 yd splash reaches neither the formation nor a bomb cell, and 38 yd from the melee stack,
@@ -42,7 +41,7 @@ const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_NORTH = Position(837.0746
 // rejects the flag, so scan the raw nearby-npc list to keep them visible through the Heart phases.
 static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, GuidVector const& npcs, uint32 entry)
 {
-    for (auto const& guid : npcs)
+    for (ObjectGuid const& guid : npcs)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (unit && unit->IsAlive() && unit->GetEntry() == entry)
