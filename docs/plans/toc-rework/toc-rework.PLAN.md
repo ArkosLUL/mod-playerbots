@@ -31,6 +31,7 @@ The merge stage alone edits this table.
 | 4d | refine-beasts-2 | merged | `4a7212d05` | Spray dodge at the cast (within 12 yd walk 13 off, target off members within 24), forced; spread only between clean casters, highest guid of a close set moves; `pair` tier, no `nospread` on heroic while Dreadscale is stationary; spot floor 44 yd, drag 35; melee stands wait for a worm still 500 ms; Spew cones armed from 11 s; breath spread off in the daze and held while Icehowl moves; probe `nb.breath`; full table in brief | Open: ranged on the stationary worm out of the mobile one's reach (kill-order call). w8 reads worm and breath stands through the named helpers. Gaps: post-daze breath on a compressed raid, heroic casters with no `full`/`pair` spot stay put, Spray target walk can end near a far member, pinned stacked melee still splashed, ranged reach bound to the mobile worm |
 | 4e | w8-prepull-staging | merged | `c32f15fb1` | Raid-wide stems `Staging`, `ResistAura`; Jaraxxus intro node retired; food/drink blocked only on forced-arrival duty stands and while walking; ` human` suffix checked on duty stands only; Twins lattice melee nearest centre, healers/ranged farthest; Jaraxxus duties bots only (human MT stand stays empty); stand Z fixed (Anub'arak 142.2, arena 394.5); paladin election keeps qualifying holders, then fills fire > frost > shadow; raise keeps `DoSpecificAction` (no stripped duplicate); `toc.stage` relabelled by any bot for 2 s after an arrival closes (not `MarkPull`: idle close inside the 70.8 s intro); full list in brief | CMake re-run (eight new `.cpp`). w6: decide whether four reader banners drop `toc.stage`/`toc.aura` as FC's does; re-check FC "opening Shout or Bladestorm" gap with staging; `test_toc_naming.py` stale samples. Gaps: Beasts retry 11 s for an 85 yd walk, Gormok caster stands 7.1 yd (Fire Bomb 8), worm healer reach, totems/pets at release points, humans hold no stand, floor check from the bot's spot, heroic out of attempts never closes the window, no shaman totems or Aura Mastery, lone hunter loses Viper, covered holder fires every tick |
 | 4f | refine-fc | pending | | | From the 2026-10-17 25H pulls |
+| 4f | refine-jaraxxus | pending | | | From the 2026-10-17 25H pull |
 | 5 | w6-closeout | pending | | | |
 
 States: `pending`, `merged`, `blocked` (branch and worktree kept, reason in the lane brief),
@@ -189,7 +190,7 @@ approval). Each boss doc ends with "What a trace answers": probe keys and reader
 | 4c | `refine-beasts` |
 | 4d | `w5-anubarak-rest`, `w3b-fc-defence-rest`, `w2-jaraxxus-rest`, `refine-beasts-2` (chains into 4e) |
 | 4e | `w8-prepull-staging` |
-| 4f | `refine-fc` |
+| 4f | `refine-fc`, `refine-jaraxxus` |
 | 5 | `w6-closeout` |
 
 A lead agent runs each lane: investigate → implement → check → review the change (mechanics,
