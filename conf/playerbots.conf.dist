@@ -501,9 +501,9 @@ Playerbots.BisDataset.RankOrder = 1
 Playerbots.BisDataset.PollSeconds = 300
 
 # Stat weights measured by wowsim (playerbots table playerbots_sim_weights) for level-80 DPS bots,
-# blended by the bot's average item level. Tanks, healers, Beast Mastery hunters, PvP specs and lower
-# levels keep the hand-written weights, and so does everyone when the table is missing. Loads at
-# startup and on .playerbots rndbot reload.
+# blended by the bot's average item level. Tanks, healers, PvP specs and lower levels keep the
+# hand-written weights, and so does everyone when the table is missing. Loads at startup and on
+# .playerbots rndbot reload.
 # Default: 1 (enabled)
 Playerbots.SimWeights.Enable = 1
 

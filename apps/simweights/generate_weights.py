@@ -41,6 +41,7 @@ BUILDS = {
     "warrior_arms": (1, 0, "STRENGTH"),
     "warrior_fury": (1, 1, "STRENGTH"),
     "retribution_paladin": (2, 2, "STRENGTH"),
+    "hunter_bm": (3, 0, "AGILITY"),
     "hunter_mm": (3, 1, "AGILITY"),
     "hunter_sv": (3, 2, "AGILITY"),
     "rogue_assassination": (4, 0, "AGILITY"),
@@ -62,8 +63,10 @@ BUILDS = {
     "balance_druid": (11, 0, "SPELL_POWER"),
     "feral_druid": (11, 1, "AGILITY"),
 }
-# the sim's survival and threat depend on its healing model, so tanks keep the hand-written weights
-SKIPPED = {"tank_dk_blood", "tank_dk_frost", "feral_tank_druid", "protection_paladin", "protection_warrior"}
+# the sim's survival and threat depend on its healing model, so tanks keep the hand-written weights.
+# dk_unholy_2h has dk_unholy's class and tab, and the table holds one build per tab
+SKIPPED = {"tank_dk_blood", "tank_dk_frost", "feral_tank_druid", "protection_paladin", "protection_warrior",
+           "dk_unholy_2h"}
 
 # bot stat (StatsType without STATS_TYPE_) -> the sim stats it sums. A rating item gives both the
 # melee and the spell half, and a hunter's attack power counts for both of its attack powers.

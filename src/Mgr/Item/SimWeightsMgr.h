@@ -45,8 +45,8 @@ public:
     // null when nothing is loaded. Safe from map threads.
     std::shared_ptr<SimWeightsSnapshot const> Get() const;
 
-    // The table's (class, tab) for a bot, false when the sim has no row for its role: tanks, healers,
-    // Beast Mastery. Non-Shadow priests that don't heal get TAB_PRIEST_SMITE.
+    // The table's (class, tab) for a bot, false when the sim has no row for its role: tanks, healers.
+    // Non-Shadow priests that don't heal get TAB_PRIEST_SMITE.
     static bool ResolveKey(uint8 cls, uint8 specTab, bool isTank, bool isHeal, uint8& simTab);
 
 private:

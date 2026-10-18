@@ -230,10 +230,6 @@ bool SimWeightsMgr::ResolveKey(uint8 cls, uint8 specTab, bool isTank, bool isHea
             if (specTab != PALADIN_TAB_RETRIBUTION)
                 return false;
             break;
-        case CLASS_HUNTER:
-            if (specTab == HUNTER_TAB_BEAST_MASTERY)
-                return false;
-            break;
         case CLASS_PRIEST:
             if (specTab != PRIEST_TAB_SHADOW)
             {
@@ -249,6 +245,7 @@ bool SimWeightsMgr::ResolveKey(uint8 cls, uint8 specTab, bool isTank, bool isHea
             if (specTab == DRUID_TAB_RESTORATION)
                 return false;
             break;
+        case CLASS_HUNTER:
         case CLASS_ROGUE:
         case CLASS_DEATH_KNIGHT:
         case CLASS_MAGE:

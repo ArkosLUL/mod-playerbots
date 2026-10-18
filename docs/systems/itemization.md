@@ -91,9 +91,9 @@ that phase's sim BiS gear and relative to an anchor stat (Strength for warriors,
 retribution; Agility for rogues, hunters, feral and enhancement; spell power for casters).
 
 - **Scope** (`SimWeightsMgr::ResolveKey`): no rows for tanks and healers (`IsTank`/`IsHeal`, i.e.
-  the bot's strategies), Beast Mastery, or the protection/holy/restoration tabs. PvP specs and
-  bots below 80 (rating per point changes with level) stay hand-written too. A non-Shadow priest
-  that isn't healing reads the Smite rows (tab 13).
+  the bot's strategies), or the protection/holy/restoration tabs. PvP specs and bots below 80
+  (rating per point changes with level) stay hand-written too. A non-Shadow priest that isn't
+  healing reads the Smite rows (tab 13).
 - **By gear level, not content phase.** The calculator interpolates linearly between the two
   phase rows around the bot's `GetAverageItemLevelForDF`, clamped to P1 and P5. `ProgressForBot`
   doesn't fit: it follows the group leader or IP's login default (phase 1 for an ungrouped
