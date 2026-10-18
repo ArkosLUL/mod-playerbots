@@ -14,8 +14,8 @@ remove the old Ulduar, (2) shared Ulduar files + registration, (3) one commit pe
 `feat(Raid/Ulduar): <summary>`; no push.
 
 From earlier lanes:
-- Before branching, commit `src/Util/RaidDifficulty.h` from the export base onto `raid-shared-helpers` as its own
-  commit (`IsRaid25Man`, called by Flame Leviathan, Thorim, XT-002 and Yogg-Saron); branch from that commit.
+- `raid-shared-helpers` carries `src/Util/RaidDifficulty.h` (`e82ec26c8`; `IsRaid25Man`, called by Flame
+  Leviathan, Thorim, XT-002 and Yogg-Saron), so branch from its tip.
 - `raid-shared-helpers` dropped the trace-name argument of `NextTankDefensive`, `NextMagicDefensive`,
   `NextPhysicalDefensive` and `CallHumanTankDefensive`: remove it at every Ulduar call. `UldActions_Mimiron.cpp`
   `NextTankDefensive(botAI, bot, "mimiron.plasma")` still compiles with it (the string becomes `physicalOnly =
