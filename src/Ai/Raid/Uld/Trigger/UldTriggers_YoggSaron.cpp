@@ -29,8 +29,8 @@
 
 using namespace EncounterHelpers;
 
-// IsBotMainTank goes false for every bot the moment a human holds main tank, which silently disabled
-// both single-actor nodes. First living bot tank instead, so a human MT does not switch them off.
+// IsBotMainTank goes false for every bot the moment a human holds main tank, which would switch both
+// single-actor nodes off. First living bot tank instead.
 bool YoggSaronTrigger::IsDesignatedBotTank()
 {
     if (PlayerbotAI::IsBotMainTank(bot))
@@ -182,7 +182,7 @@ bool YoggSaronSanityTrigger::IsActive()
     char const* reason = nullptr;
     if (bot->GetDistance(sanityWell) < 1.0f && !YoggSaronPortalWalkPending(botAI))
         reason = "topping";
-    else if (sanityAuraStacks < 40)
+    else if (sanityAuraStacks < static_cast<int>(ULDUAR_YOGG_SARON_SANITY_LOW))
         reason = "low";
     else if (IsPhase2() && sanityAuraStacks < static_cast<int>(ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY) &&
              !YoggSaronPortalWalkPending(botAI))
@@ -218,7 +218,7 @@ bool YoggSaronPhase1SpacingTrigger::IsActive()
     char const* reason = hazardNear ? "cloud" : nullptr;
 
     // Shadow Nova is the other half, and only a Guardian about to detonate counts: running from every
-    // one of them scattered the raid to the rim to be picked off one at a time.
+    // one of them scatters the raid to the rim to be picked off one at a time.
     if (!hazardNear && !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS).empty())
         reason = bot->HasAura(SPELL_SARAS_FERVOR) ? "fervor" : "nova";
 
@@ -250,7 +250,8 @@ bool YoggSaronPhase1StationTrigger::IsActive()
                                               ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionY());
 
     // The band keeps the first and third orbits off the back line, so the parked latch widens only the stack radius.
-    float const stack = ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS * (parked ? 1.5f : 1.0f);
+    float const stack =
+        ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS * (parked ? ULDUAR_YOGG_SARON_P1_PARKED_STACK_SCALE : 1.0f);
 
     bool const offBand = std::abs(fromSara - ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS) >
                          ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE;
@@ -391,7 +392,8 @@ bool YoggSaronMaladyOfTheMindTrigger::IsActive()
         return false;
 
     TooCloseToPlayerWithDebuffTrigger tooCloseToPlayerWithDebuffTrigger(botAI);
-    return tooCloseToPlayerWithDebuffTrigger.TooCloseToPlayerWithDebuff(SPELL_MALADY_OF_THE_MIND, 15.0f) &&
+    return tooCloseToPlayerWithDebuffTrigger.TooCloseToPlayerWithDebuff(SPELL_MALADY_OF_THE_MIND,
+                                                                        ULDUAR_YOGG_SARON_MALADY_SPREAD_RADIUS) &&
            botAI->CanMove();
 }
 
@@ -444,7 +446,8 @@ bool YoggSaronFallFromFloorTrigger::IsActive()
     if (rtiMark == "skull" && bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return true;
 
-    if ((rtiMark == "cross" || rtiMark == "circle" || rtiMark == "star") && bot->GetPositionZ() < ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+    if ((rtiMark == "cross" || rtiMark == "circle" || rtiMark == "star") &&
+        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return true;
 
     return false;
@@ -558,7 +561,7 @@ bool YoggSaronBrainSpotTrigger::IsActive()
         return false;
 
     // The way out wins once Induce Madness is close enough to walk for: both walks are forced and the exit node can't
-    // hold every tick of a 20 yd walk, so this one took the gaps and turned bots round short of a portal.
+    // hold every tick of a 20 yd walk, so this one would take the gaps and turn bots round short of a portal.
     if (YoggSaronShouldLeaveBrainLevel(botAI))
         return false;
 
@@ -579,7 +582,8 @@ bool YoggSaronNitroBoostsTrigger::IsActive()
         YoggSaronLeavingBrainLevel(bot))
         return false;
 
-    if (YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_CHAMBER || YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_TO_BRAIN)
+    if (YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_CHAMBER ||
+        YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_TO_BRAIN)
         return false;
 
     Position const spot = YoggSaronBrainSpot(bot);
@@ -706,8 +710,8 @@ bool YoggSaronPetGuardTrigger::IsActive()
     if (target && target->IsAlive() && target->GetEntry() == NPC_CRUSHER_TENTACLE)
         return true;
 
-    // From the pet, not the owner: with owners 38 yd out this never fired for pets on a stunned Crusher. A passive pet
-    // may be one the action hushed and has to give back.
+    // From the pet, not the owner: a ranged owner stands well outside the reach of the Crusher its pet is on. A
+    // passive pet may be one the action hushed and has to give back.
     for (Unit* controlled : bot->m_Controlled)
     {
         Unit* victim = controlled->GetVictim();
@@ -760,7 +764,7 @@ bool YoggSaronBodyDetourTrigger::IsActive()
 bool YoggSaronLunaticGazeTrigger::IsActive()
 {
     // 64163 is a 4 s self aura on Yogg, ticking 64164 each second at 130 yd on everyone with him in their front 180
-    // degrees. Not a channel (GetCurrentSpell never saw it), and Yogg isn't reliably on the bot's threat list.
+    // degrees. Not a channel (GetCurrentSpell doesn't return it), and Yogg isn't reliably on the bot's threat list.
     Creature* yoggsaron = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
     if (!yoggsaron || !yoggsaron->IsAlive())
         return false;
@@ -980,7 +984,7 @@ bool YoggSaronSqueezeEscapeTrigger::IsActive()
 bool YoggSaronNovaDefensiveTrigger::IsActive()
 {
     // Cheapest read first: a plain distance, then a 17 yd sweep. A bot spends its own button at the 10% gate only,
-    // where the nova lands within 3.7 s; at 20% the raid emptied its cooldowns on the first nova.
+    // where the nova lands within 3.7 s; at 20% the raid would empty its cooldowns on the first nova.
     if (!YoggSaronInPhase1Room(bot))
         return false;
 

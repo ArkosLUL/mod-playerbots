@@ -41,6 +41,12 @@
 
 using namespace EncounterHelpers;
 
+namespace
+{
+// SetBehindTargetAction's two spots, either side of the target's facing.
+constexpr float SET_BEHIND_SPOT_ANGLE = 3.0f * static_cast<float>(M_PI) / 5.0f;
+}  // namespace
+
 float YoggSaronMovementGuardMultiplier::FleeGuard()
 {
     // Ranged and healers only: the station owns their feet; stepping off it hands the second orbit a stacked back line.
@@ -103,8 +109,7 @@ float YoggSaronMovementGuardMultiplier::SetBehindGuard()
     bool intoRing = false;
     for (float const side : {1.0f, -1.0f})
     {
-        float const angle = Position::NormalizeOrientation(target->GetOrientation() +
-                                                           side * 3.0f * static_cast<float>(M_PI) / 5.0f);
+        float const angle = Position::NormalizeOrientation(target->GetOrientation() + side * SET_BEHIND_SPOT_ANGLE);
         float const x = target->GetPositionX() + std::cos(angle) * distance;
         float const y = target->GetPositionY() + std::sin(angle) * distance;
 
@@ -366,10 +371,8 @@ float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
     // After phase 1 no station or leash keeps a step-out and the body detour hauls it back: hold on Fervor's radius.
     // Phase 3 too. The sweep misses Immortal Guardians (36064), so a low one that cannot die pins nobody.
     if (!YoggSaronInPhase1(botAI))
-    {
         return GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS).empty() ? 1.0f
                                                                                             : 0.0f;
-    }
 
     bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR) &&
                         !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS).empty();
@@ -390,8 +393,8 @@ bool YoggSaronPhase1WalkGuardMultiplier::WalkCrossesCloud(bool station, bool rea
         // The second orbit passing over the stack is the station's own cost, and one more bot joining
         // it summons nothing extra.
         Position const& spot = ULDUAR_YOGG_SARON_P1_RANGED_SPOT;
-        return YoggSaronWalkCrossesCloud(bot, spot, &spot,
-                                         ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS + ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS);
+        return YoggSaronWalkCrossesCloud(
+            bot, spot, &spot, ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS + ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS);
     }
 
     // Never inside the leash: the inner orbit reaches most of it, so a step on the stack would be held

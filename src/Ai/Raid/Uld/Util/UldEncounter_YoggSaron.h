@@ -100,6 +100,10 @@ enum UlduarYoggSaronIds
     // 25-man with fewer than 4 Keepers: 2.3 s cast, then 4 s of silence within 50 yd.
     SPELL_DEAFENING_ROAR = 64189,
     SPELL_DISTRACTING_SHOT = 20736,  // 6 s taunt on an 8 s cooldown, 35 yd
+    SPELL_WARRIOR_TAUNT = 355,
+    SPELL_PALADIN_HAND_OF_RECKONING = 62124,
+    SPELL_DEATH_KNIGHT_DARK_COMMAND = 56222,
+    SPELL_DRUID_GROWL = 6795,
     SPELL_HEROISM_SHAMAN = 32182,
     SPELL_BLOODLUST_SHAMAN = 2825,
     SPELL_SATED = 57724,
@@ -113,458 +117,474 @@ enum UlduarYoggSaronIds
     GO_STORMWIND_ILLUSION_DOORS = 194637,
 };
 
-constexpr float ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 300.0f;
-constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 200.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 300.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 200.0f;
+// Searches over the whole encounter: the platform and the brain level under it.
+inline constexpr float ULDUAR_YOGG_SARON_SEARCH_RANGE = 200.0f;
 // The illusion rooms and the brain room share one floor 108-124 yd apart, so overlapping radii make the first test win.
 // 60 covers every landing spot (55.9 yd at most) and Laughing Skull spawn (52.8); the nearest rival middle is 190 yd.
-constexpr float ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS = 60.0f;
-constexpr float ULDUAR_YOGG_SARON_ICECROWN_CITADEL_RADIUS = 60.0f;
-constexpr float ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_RADIUS = 60.0f;
-constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS = 50.0f;
+inline constexpr float ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS = 60.0f;
+inline constexpr float ULDUAR_YOGG_SARON_ICECROWN_CITADEL_RADIUS = 60.0f;
+inline constexpr float ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_RADIUS = 60.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS = 50.0f;
 
 // Floor of the brain level. The three illusion rooms and the brain room all sit on it; the boss
 // platform is 85 yd above.
-constexpr float ULDUAR_YOGG_SARON_BRAIN_LEVEL_MIN_Z = 230.0f;
-constexpr float ULDUAR_YOGG_SARON_BRAIN_LEVEL_MAX_Z = 250.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_LEVEL_MIN_Z = 230.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_LEVEL_MAX_Z = 250.0f;
 
 // Reduced-Keeper hard mode: a bot at or below this Sanity (63050) pulls behind Yogg and faces away. No Freya means no
 // Sanity Wells, so the drain is one-way; kept low so only near-Insane bots pull out.
-constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
+inline constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
 
 // Below this a bot sits the next wave out and refills at a well: portals open ~22 s after the team is back. There is no
 // time to top up between waves.
-constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY = 60;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_TEAM_MIN_SANITY = 60;
+
+// Below this a bot heads for a Sanity Well even with something to kill.
+inline constexpr uint32 ULDUAR_YOGG_SARON_SANITY_LOW = 40;
 
 // Nitro Boosts on the walk from a cleared illusion room to the Brain; shorter walks end before 5 s of +150% pays.
 // Chamber only: 3 min cooldown against a Chamber every 240 s, so it is ready for the longest walk.
-constexpr float ULDUAR_YOGG_SARON_NITRO_MIN_WALK = 40.0f;
+inline constexpr float ULDUAR_YOGG_SARON_NITRO_MIN_WALK = 40.0f;
 
 // A warrior's charge at the Brain lands on the floor ring at both combat reaches from it (31.5 yd), so
 // only worth breaking the walk for when that ring is at least this much nearer the bot's brain spot.
-constexpr float ULDUAR_YOGG_SARON_BRAIN_CHARGE_MIN_GAIN = 8.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_CHARGE_MIN_GAIN = 8.0f;
 
 // A cloud summons a Guardian on any player within 8.5 yd: _IsWithinDist adds both combat reaches (1.0 cloud, 1.5
 // player). Not dodgeable (fixed orbits, 10 s re-arm), so this only keeps bots moving for other reasons out of it.
-constexpr float ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS = 9.5f;
+inline constexpr float ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS = 9.5f;
 
 // Candidates are tested against where a cloud will be as well as where it is. The lead must outlast a crossing: a cloud
 // sweeps a stationary bot for about 5.7 s.
-constexpr uint32 ULDUAR_YOGG_SARON_CLOUD_LEAD_MS = 6000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_CLOUD_LEAD_MS = 6000;
 
 // How many points along a walk are checked against where the clouds will be at that point. Eight puts
 // the longest walk in the room, the run in from the door at about 17 s, inside one lead per step.
-constexpr uint32 ULDUAR_YOGG_SARON_WALK_CLOUD_STEPS = 8;
+inline constexpr uint32 ULDUAR_YOGG_SARON_WALK_CLOUD_STEPS = 8;
 
 // Shadow Nova: DBC radius 15 plus both object sizes at apply time, 16.2 at the furthest. Melee and tanks eat it. The
 // trigger sits inside the clear radius; that band is margin, not exposure.
-constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS = 17.0f;
-constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS = 20.0f;
+inline constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS = 17.0f;
+inline constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS = 20.0f;
 
 // Hold radius for a Sara's Fervor holder near a live nova: the clear radius plus 2 yd of slack. The dodge, station and
 // leash would otherwise walk it back inside the blast.
-constexpr float ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS = 22.0f;
+inline constexpr float ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS = 22.0f;
 
 // A Guardian at or under this is about to detonate. Running from every Guardian instead scatters the
 // raid to the rim and leaves bots to be picked off one at a time.
-constexpr float ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT = 20.0f;
+inline constexpr float ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT = 20.0f;
 
 // A Fervor holder leaves earlier since the nova hits it twice as hard. Widest gate whose worst case still covers the
 // ~2.5 s walk out of 15 yd.
-constexpr float ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT = 50.0f;
+inline constexpr float ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT = 50.0f;
 
-// NOVA_EXPECTED is the unresisted hit, the only safe planning figure: resistance rolls per hit and the killers roll
-// none.
-
-// RESISTED applies at AT = 130 resistance. The gate reads resistance: exclusive aura 143 keeps only the highest.
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE = 28600;
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RESISTED_DAMAGE = 25740;
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RESISTED_AT = 130;
+// EXPECTED is the unresisted hit, the only safe planning figure since resistance rolls per hit. RESISTED applies at
+// AT = 130 resistance, read off exclusive aura 143, which keeps only the highest.
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE = 28600;
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RESISTED_DAMAGE = 25740;
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RESISTED_AT = 130;
 
 // Two gates: at 10% a bot spends its own button and a healer its external, and a 5 s window always covers the hit.
 // Divine Sacrifice goes at 20%: one cast covers 25 raiders for 10 s. Everything in the ladder is instant.
-constexpr float ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT = 20.0f;
-constexpr float ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT = 10.0f;
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_SOON_WINDOW_MS = 12000;
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_NOW_WINDOW_MS = 5000;
+inline constexpr float ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT = 20.0f;
+inline constexpr float ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT = 10.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_SOON_WINDOW_MS = 12000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_NOW_WINDOW_MS = 5000;
 
 // Counting past two low Guardians buys nothing: a pair already covers every case.
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN = 2;
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN = 2;
 
 // Divine Sacrifice is the only raid-wide reduction on this core; one cast covers 25 raiders, so wait for this many. Its
 // 20% is the Divine Guardian talent's 70940 raid aura (value -20), visible only in the DBC.
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RAID_COUNT = 3;
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RAID_COUNT = 3;
 
 // Claim on a Guardian, for cover and external alike: it must outlive the Guardian that took it, which detonates within
-// 3.7 s. Pairs die 1.8-4.5 s apart, so a wall-clock window left the second Guardian uncovered.
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_WINDOW_MS = 10000;
+// 3.7 s. Pairs die 1.8-4.5 s apart, so a wall-clock window would leave the second Guardian uncovered.
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_WINDOW_MS = 10000;
 
 // The two cloud-proof spots, fixed by the orbits (reach 8.5 yd): inside 2.89 yd of Sara nothing reaches, and 21.5 is
 // the middle of the band only orbit two reaches. No radius clears every orbit: gaps are 9.4-9.9 yd against 17 swept.
-constexpr float ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS = 2.8f;
-constexpr float ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS = 21.5f;
-constexpr float ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE = 1.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS = 2.8f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS = 21.5f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE = 1.0f;
 
 // Orbit radii, midpoints of the measured spread. Not used to steer, only to say which orbits can reach a bot that ended
 // up somewhere else.
-constexpr float ULDUAR_YOGG_SARON_CLOUD_ORBITS[] = {11.6f, 21.4f, 31.2f, 41.0f, 50.9f, 60.8f};
-constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH = 8.5f;
+inline constexpr float ULDUAR_YOGG_SARON_CLOUD_ORBITS[] = {11.6f, 21.4f, 31.2f, 41.0f, 50.9f, 60.8f};
+inline constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH = 8.5f;
 
 // Past the outer orbit's reach no cloud can touch a bot, so phase 1 positioning waits until the bot is inside it.
 // Combat is no gate: every Guardian's Reset puts the whole instance in combat.
-constexpr float ULDUAR_YOGG_SARON_P1_ROOM_RADIUS =
+inline constexpr float ULDUAR_YOGG_SARON_P1_ROOM_RADIUS =
     ULDUAR_YOGG_SARON_CLOUD_ORBITS[5] + ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH;
 
 // Melee/tanks stay within 6.5 yd of Sara (21.5 less 15): a nova beyond it hits the 21.5 yd back line, a kill beyond 15
 // does nothing. Release is the cloud-free radius: anything between lets go of the bot where the innermost orbit sweeps.
-constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 6.5f;
-constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS;
+inline constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 6.5f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS;
 
 // Tighter for a non-tanking melee bot: the inner orbit is 11.6 yd out and a cloud wakes within 8.5 yd of anyone. The
 // release clears it by more than a step, or reach melee drags the bot back out and the two trade the tick.
-constexpr float ULDUAR_YOGG_SARON_P1_PILE_LEASH =
+inline constexpr float ULDUAR_YOGG_SARON_P1_PILE_LEASH =
     ULDUAR_YOGG_SARON_CLOUD_ORBITS[0] - ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH;
-constexpr float ULDUAR_YOGG_SARON_P1_PILE_RELEASE = 2.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_PILE_RELEASE = 2.0f;
 
 // Fetch range: Taunt, Hand of Reckoning, Dark Command and Growl all use spell range index 4, 30 yd. Unbounded, the pick
 // is the lowest-health Guardian in sight, e.g. one a pet grinds down at the wall.
-constexpr float ULDUAR_YOGG_SARON_P1_TAUNT_RANGE = 30.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_TAUNT_RANGE = 30.0f;
 
 // How far 65719 reaches Sara, so how far out a kill still counts. Wider than the leash on purpose, so the focus does
 // not flip on a yard of drift.
-constexpr float ULDUAR_YOGG_SARON_P1_SARA_NOVA_RADIUS = 15.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_SARA_NOVA_RADIUS = 15.0f;
 
 // A Guardian outside the leash is worn down only to here, then left for the tank to fetch (~12 s). An untargeted
 // Guardian near the station still loses up to ~3%/s to splash.
-constexpr float ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT = 35.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT = 35.0f;
 
 // Minimum time between two Guardian novas: melee stand in every one on the stack.
-constexpr uint32 ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS = 6000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS = 6000;
 
 // Below this a Guardian is close enough to dying that the gap has to protect it. Damage from the tank, humans, DoTs and
 // cleaves means it buys ~3 s in practice, not 6.
-constexpr float ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT = 30.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT = 30.0f;
 
 // A Guardian's nova also hits every Guardian within 15 yd for 25,000-27,501 (65209 effect 1), ~2.7% of one. 18 covers
 // the 16.2 yd measured on players.
-constexpr float ULDUAR_YOGG_SARON_P1_NOVA_CHAIN_RADIUS = 18.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_NOVA_CHAIN_RADIUS = 18.0f;
 
 // Death and Decay and Explosive Trap reach 10, Blizzard and Consecration 8.
-constexpr float ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS = 10.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS = 10.0f;
 
 // Ranged and healers stack rather than spread, which holds only because the nova cannot reach the station. A cloud is
 // in contact (8.5 + blob + 8.5) / 3 s and re-arms 10 s after a summon: a blob under 13 yd costs one Guardian per pass.
-constexpr float ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS = 5.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS = 5.0f;
+// A parked back line may spread this much wider before it is walked back to the spot.
+inline constexpr float ULDUAR_YOGG_SARON_P1_PARKED_STACK_SCALE = 1.5f;
 
 // The second cap is the load-bearing one: a bot dodging outward otherwise walks out of spell range
 // and stops contributing for the rest of the phase.
-constexpr float ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS = 25.0f;
-constexpr float ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE = 35.0f;
+inline constexpr float ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS = 25.0f;
+inline constexpr float ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE = 35.0f;
+// Ring sweeps for a dodge spot: rings this far apart, bearings this far round.
+inline constexpr float ULDUAR_YOGG_SARON_SWEEP_STEP = 2.0f;
+inline constexpr float ULDUAR_YOGG_SARON_SWEEP_ANGLE_STEP = static_cast<float>(M_PI) / 8.0f;
 
 // Backstop only: "is the held spot still clear" normally invalidates first.
-constexpr uint32 ULDUAR_YOGG_SARON_SPACING_HOLD_MS = 3000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_SPACING_HOLD_MS = 3000;
 
 // How far a pet pulled off a Crusher looks for something else to hit. It must find something: an idle pet re-acquires
 // the Crusher it was pulled from.
-constexpr float ULDUAR_YOGG_SARON_PET_TARGET_RADIUS = 40.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PET_TARGET_RADIUS = 40.0f;
 
 // How far from Yogg's middle the phase 3 pets look for leftover tentacles. Wave tentacles spawn up to
 // ~50 yd out.
-constexpr float ULDUAR_YOGG_SARON_PET_LEFTOVER_SEARCH_RADIUS = 70.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PET_LEFTOVER_SEARCH_RADIUS = 70.0f;
 
 // Crush: the Crusher's 100% proc on its white swings, a 23 yd physical cone +-5 degrees off its facing, which tracks
 // its victim. Danger is standing collinear with tentacle and victim, not closeness; melee range is no exemption.
-constexpr float ULDUAR_YOGG_SARON_CRUSH_RANGE = 25.0f;       // DBC radius 23 plus both object sizes
-constexpr float ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC = 8.0f;  // degrees either side of the facing
-constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;   // ~4 yd of lateral room at 20 yd
+inline constexpr float ULDUAR_YOGG_SARON_CRUSH_RANGE = 25.0f;       // DBC radius 23 plus both object sizes
+inline constexpr float ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC = 8.0f;  // degrees either side of the facing
+inline constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;   // ~4 yd of lateral room at 20 yd
 
 // The Crusher's melee reach on a player, centre to centre: CombatReach 8 (display 28814) + 1.5 + 4/3 = 10.83. Inside it
 // any melee hit, even a caster's weapon swing, makes the bot the victim of the next Crush.
-constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS = 11.0f;
-constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS = 13.0f;
+inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS = 11.0f;
+inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS = 13.0f;
 
 // Shattered Illusion lifts at Induce Madness end or when the Brain drops under 30%; a freed Crusher swings at whoever
 // hit it last. 13 yd is under 2 s at run speed, doubled for the tick and the path.
-constexpr uint32 ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS = 4000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS = 4000;
 // The lead above can cost ~4.3% of Brain health, so stay above this floor. Not while the brain team holds it.
-constexpr float ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT = 35.0f;
+inline constexpr float ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT = 35.0f;
 
 // The brain team stops short of 30% while the platform has targets, so the stun runs on instead of ending with phase 3.
 // DoTs stop earlier as they keep ticking; the finish starts RESUME_MS before the cast ends.
-constexpr float ULDUAR_YOGG_SARON_BRAIN_HOLD_PCT = 32.0f;
-constexpr float ULDUAR_YOGG_SARON_BRAIN_DOT_STOP_PCT = 36.0f;
-constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_RESUME_MS = 8000;
-constexpr float ULDUAR_YOGG_SARON_BRAIN_HOLD_GUARD_PCT = 31.0f;  // stun reads as unheld below this
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_HOLD_PCT = 32.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_DOT_STOP_PCT = 36.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_RESUME_MS = 8000;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_HOLD_GUARD_PCT = 31.0f;  // stun reads as unheld below this
+// A brain team bot's hold counts this long after it was last seen, so a team that died below lets go.
+inline constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_HOLD_SEEN_MS = 2000;
+// The Brain's health share where phase 3 starts.
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_PHASE_3_SHARE = 0.3f;
 
 // Death Rays walk 9 yd legs every 1625 ms along a re-rolled cardinal axis, so trigger to clear is ~1 s of travel. The
 // Death Orb that drops them is a marker 27 yd overhead and never reaches anybody.
-constexpr float ULDUAR_YOGG_SARON_DEATH_RAY_TRIGGER_RADIUS = 9.0f;  // DBC 3 yd plus room to react
-constexpr float ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS = 14.0f;
+inline constexpr float ULDUAR_YOGG_SARON_DEATH_RAY_TRIGGER_RADIUS = 9.0f;  // DBC 3 yd plus room to react
+inline constexpr float ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS = 14.0f;
 
 // Wider than phase 1's: a Crush wedge can only be left sideways, and at 25 yd out that is a long walk.
-constexpr float ULDUAR_YOGG_SARON_P2_SPACING_SEARCH_RADIUS = 35.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P2_SPACING_SEARCH_RADIUS = 35.0f;
 
 // Phase 2 needs its own cap: phase 1's 35 yd puts the box inside where the raid stands, rejecting every outward
 // candidate. The tentacle ring sits 41-48 yd out and the room ends at the outermost cloud orbit, 60.8 yd.
-constexpr float ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE = 55.0f;
+inline constexpr float ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE = 55.0f;
 
 // Yogg's body knocks players away every second: 64022 is a permanent self aura triggering 64020, 14 yd, no conditions
 // row. His model sits 4.5 yd up, so the floor ring is 13.26 yd (sqrt of 14^2 minus 4.5^2). Nothing to sweep.
-constexpr float ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS = 13.3f;
-constexpr float ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS = 15.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS = 13.3f;
+inline constexpr float ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS = 15.0f;
 
-// The ring lights ~18 s after Sara dies (4 + 5 + 4.5 + 4 s of dialogue + 500 ms). Only melee and the tank are inside it
-// by then. So they alone walk out, the moment Sara dies. The window is read off the Brain being absent.
-
-// This hold keeps claiming the bot after the ring lit, or reach melee walks straight back under the knock back.
-constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS = 6000;
+// The ring lights ~18 s after Sara dies, so melee and the tank walk out the moment she dies. The hold keeps claiming
+// the bot after the ring lit, or reach melee walks straight back under the knock back.
+inline constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS = 6000;
 
 // Where a bot crossing the room detours around the body: wide enough that both legs keep their distance. The worst case
 // is a half-turn, whose chord passes 24 * cos(45 deg) = 17.0 yd from the middle.
-constexpr float ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS = 24.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS = 24.0f;
 
 // Brain Link: past 20 yd apart both take 63803 and lose 2 Sanity a second. The bot closes to a margin under that. The
 // aura hides the partner, but casts 63803 (apart) or 63804 (together) on it every second; TTL is three missed ticks.
-constexpr float ULDUAR_YOGG_SARON_BRAIN_LINK_RANGE = 20.0f;
-constexpr float ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE = 15.0f;
-constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_LINK_PAIR_TTL_MS = 3000;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_LINK_RANGE = 20.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE = 15.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_LINK_PAIR_TTL_MS = 3000;
+
+// How far a bot keeps from a player carrying Malady of the Mind.
+inline constexpr float ULDUAR_YOGG_SARON_MALADY_SPREAD_RADIUS = 15.0f;
 
 // Hand of Protection (physical immunity, IMMUNITY_PURGES_EFFECT) removes Squeeze, and its aura script kills the
 // tentacle on removal. The claim is per victim, not per window, since grabs overlap. 30 yd is the spell's own range.
-constexpr float ULDUAR_YOGG_SARON_HAND_OF_PROTECTION_RANGE = 30.0f;
-constexpr uint32 ULDUAR_YOGG_SARON_SQUEEZE_CLAIM_MS = 3000;
+inline constexpr float ULDUAR_YOGG_SARON_HAND_OF_PROTECTION_RANGE = 30.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_SQUEEZE_CLAIM_MS = 3000;
 
 // EVENT_SARA_P2_OPEN_PORTALS fires 60 s after phase 2 starts, then every 80 s; clearing a room does not move it. A
 // portal is one use and despawns after 25 s, so the spread must finish before it opens. Debounce sits above that.
-constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_FIRST_WAVE_MS = 60000;
-constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_WAVE_PERIOD_MS = 80000;
-constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_WAVE_DEBOUNCE_MS = 30000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_FIRST_WAVE_MS = 60000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_WAVE_PERIOD_MS = 80000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_WAVE_DEBOUNCE_MS = 30000;
 
 // Adaptive like the exit lead below: time spent waiting on a portal spot is time not spent killing tentacles.
-constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPREAD_LEAD_FLOOR_MS = 8000;
-constexpr float ULDUAR_YOGG_SARON_PORTAL_SPREAD_LEAD_SAFETY = 2.0f;
-constexpr float ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS = 100.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPREAD_LEAD_FLOOR_MS = 8000;
+inline constexpr float ULDUAR_YOGG_SARON_PORTAL_SPREAD_LEAD_SAFETY = 2.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS = 100.0f;
 
 // One radius for both "arrived" and "can click": split values let a bot read as holding yet never find the portal.
-constexpr float ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS = 2.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS = 2.0f;
 
 // AddPortals spawns RAID_MODE(4, 10), which is the first four table entries in 10-man and all ten in
 // 25-man, so the brain team is capped by how many portals actually exist.
-constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPOTS_10MAN = 4;
-constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN = 10;
+inline constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPOTS_10MAN = 4;
+inline constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN = 10;
 
 // Lunatic Gaze: 64167 on the skull triggers 64168 every 1000 ms, 1750 shadow and -2 Sanity at 30 yd. The skull is
 // unselectable and unkillable and picks targets by HasInArc(M_PI, caster), so facing away is the only defence.
-constexpr float ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS = 30.0f;
+inline constexpr float ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS = 30.0f;
 
 // How far a heading may drift before it is corrected, about 6 degrees. A node that re-faces every tick fights the
 // engine's own target facing.
-constexpr float ULDUAR_YOGG_SARON_FACING_TOLERANCE = 0.1f;
+inline constexpr float ULDUAR_YOGG_SARON_FACING_TOLERANCE = 0.1f;
 
 // Headings tried when turning a bot with no target off the skulls, 22.5 degrees apart.
-constexpr uint32 ULDUAR_YOGG_SARON_SKULL_HEADINGS = 16;
+inline constexpr uint32 ULDUAR_YOGG_SARON_SKULL_HEADINGS = 16;
 
 // How far a bot with a target may turn off it to get a skull out of its front half: 40 degrees, under
 // set facing's 45, so nothing turns it back. AttackAction and CastSpell allow 60.
-constexpr float ULDUAR_YOGG_SARON_SKULL_TARGET_TURN = 0.6981f;
-constexpr float ULDUAR_YOGG_SARON_SKULL_TARGET_STEP = 0.0873f;
+inline constexpr float ULDUAR_YOGG_SARON_SKULL_TARGET_TURN = 0.6981f;
+inline constexpr float ULDUAR_YOGG_SARON_SKULL_TARGET_STEP = 0.0873f;
 
 // A skull straight behind the target cannot be turned from, only walked round; 15 yd is enough of a sidestep.
-constexpr float ULDUAR_YOGG_SARON_ILLUSION_FACING_SEARCH_RADIUS = 15.0f;
+inline constexpr float ULDUAR_YOGG_SARON_ILLUSION_FACING_SEARCH_RADIUS = 15.0f;
 
 // The sweep needs a circle to ring outward from, and a bot has no business standing under a skull
 // anyway. Small on purpose: the constraint that matters is angular, not radial.
-constexpr float ULDUAR_YOGG_SARON_SKULL_CLEAR_RADIUS = 5.0f;
+inline constexpr float ULDUAR_YOGG_SARON_SKULL_CLEAR_RADIUS = 5.0f;
 
 // How far the brain team's healer may stray from its room's middle. Every tentacle is within 43 yd of it, and a heal
 // reach step toward a mate across the Chamber stays inside this.
-constexpr float ULDUAR_YOGG_SARON_ILLUSION_HEALER_STATION_RADIUS = 10.0f;
+inline constexpr float ULDUAR_YOGG_SARON_ILLUSION_HEALER_STATION_RADIUS = 10.0f;
 
 // Close enough to the spot the Brain is hit from to stop walking. The melee spot has 2.7 yd of melee
 // range in hand, so a bot parked this far off it still reaches.
-constexpr float ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS = 3.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS = 3.0f;
 
 // Lead before Induce Madness (strips all Sanity below z 300, so a mind control is always a death), measured, not flat:
 // a bot on a portal needs the floor, one in from the Chamber door ~44 yd. Timed at base run speed: bots make 4-6 yd/s.
-constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS = 3000;
-constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 1.5f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS = 3000;
+inline constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 1.5f;
 
 // Phase 3 station. The radius is how far a bot may drift; the tank leash is wider since chasing a Guardian to the edge
 // is its job.
-constexpr float ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS = 15.0f;
-constexpr float ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH = 30.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS = 15.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH = 30.0f;
+// The tank holding the pile walks back once it is further than this from the melee spot.
+inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_STACK_RADIUS = 5.0f;
 
 // Ranged keep this far from a live Crusher: inside its 10.83 yd reach a first hit makes the bot its victim. 15.8 is a
 // hunter's Auto Shot dead zone, plus 2 for where bots actually stop.
-constexpr float ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE = 18.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE = 18.0f;
 
 // Guardian distance from the melee spot for phase 3 melee to take it, during a gaze or once beacon-healed. Guardian
 // control keeps the tank within 5 yd of the spot and a full-health Guardian swings from up to 14 yd.
-constexpr float ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE = 20.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE = 20.0f;
 
 // Without Thorim a Guardian cannot die, so melee bring it only down to the floor, where it hits about a third as hard
 // as at full. The rest of the damage goes on Yogg. Under the Weakened line it hits for ~2k.
-constexpr float ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT = 30.0f;
-constexpr float ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT = 10.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT = 30.0f;
+inline constexpr float ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT = 10.0f;
 
 // Phase 3 area spells need this many units worth hitting within the trigger's 8 yd of the target (Yogg, a leftover
 // tentacle, a held Guardian). The trigger counts anything, and Yogg's 30 yd reach is in every count at the pile.
-constexpr float ULDUAR_YOGG_SARON_PHASE_3_AREA_RADIUS = 8.0f;
-constexpr uint32 ULDUAR_YOGG_SARON_PHASE_3_AREA_MIN_WORTH = 3;
-constexpr float ULDUAR_YOGG_SARON_COMBAT_REACH = 30.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_AREA_RADIUS = 8.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_PHASE_3_AREA_MIN_WORTH = 3;
+inline constexpr float ULDUAR_YOGG_SARON_COMBAT_REACH = 30.0f;
 
 // A non-tank starts on an Immortal Guardian only under the start share of the holder's threat, and lets go past the
 // keep share. Taking one over needs 110% in melee and 130% at range.
-constexpr float ULDUAR_YOGG_SARON_GUARDIAN_THREAT_START_SHARE = 0.8f;
-constexpr float ULDUAR_YOGG_SARON_GUARDIAN_THREAT_KEEP_SHARE = 0.95f;
+inline constexpr float ULDUAR_YOGG_SARON_GUARDIAN_THREAT_START_SHARE = 0.8f;
+inline constexpr float ULDUAR_YOGG_SARON_GUARDIAN_THREAT_KEEP_SHARE = 0.95f;
 
 // The tank leaves its Guardian only once its lead over the top non-tank is past this, and only for one with a thinner
 // lead. 1.3 is what pulls one at range. Without switching, the raid waits on the newest Guardian.
-constexpr float ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD = 1.5f;
+inline constexpr float ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD = 1.5f;
 
 // Smallest angle between target and Yogg, seen from the bot, that leaves a heading with the target inside set facing's
 // 45 degrees and Yogg outside the gaze's 90: 65 degrees, 10 spare each side.
-constexpr float ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION = 1.1345f;
+inline constexpr float ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION = 1.1345f;
 
 // Forced walk: time allowed without closing distance, and the arrival radius. The radius is generous because MoveTo
 // stops where its own tolerance leaves the bot, not on the point.
-constexpr uint32 ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS = 6000;
-constexpr float ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS = 5.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS = 6000;
+inline constexpr float ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS = 5.0f;
 
 // How long a given-up walk stays given up. A permanent give-up strands bots, and standing still below the platform is a
 // death. The escape below it needs a gap in the asking, and these nodes ask every tick.
-constexpr uint32 ULDUAR_YOGG_SARON_WALK_RETRY_MS = 4000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_WALK_RETRY_MS = 4000;
 
 // How long a bot must have stood still before its unfinished MoveTo booking is dropped. A spline that
 // is still running keeps isMoving() true, so this only ever fires on a walk that has already died.
-constexpr uint32 ULDUAR_YOGG_SARON_WALK_STALL_MS = 500;
+inline constexpr uint32 ULDUAR_YOGG_SARON_WALK_STALL_MS = 500;
 
 // Grim Reprisal returns 60% of every direct hit on a tentacle to the attacker (DoTs excepted), so a damage dealer below
 // the stop line stays off until healed past the resume line. Worst single burst is 35% of max health in 0.2 s.
-constexpr float ULDUAR_YOGG_SARON_REPRISAL_STOP_PCT = 40.0f;
-constexpr float ULDUAR_YOGG_SARON_REPRISAL_RESUME_PCT = 70.0f;
+inline constexpr float ULDUAR_YOGG_SARON_REPRISAL_STOP_PCT = 40.0f;
+inline constexpr float ULDUAR_YOGG_SARON_REPRISAL_RESUME_PCT = 70.0f;
 
 // Induce Madness time left under which nobody holds back: an uncleared room has no way out and charms everyone in it,
 // held or not.
-constexpr uint32 ULDUAR_YOGG_SARON_REPRISAL_ALL_IN_MS = 15000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_REPRISAL_ALL_IN_MS = 15000;
 
 // A held bot further than this from its room's healer walks toward it and stops about this short of it, inside the 38.5
 // yd heal range with room for both to move.
-constexpr float ULDUAR_YOGG_SARON_REPRISAL_REGROUP_RANGE = 25.0f;
-constexpr float ULDUAR_YOGG_SARON_REPRISAL_REGROUP_STOP = 15.0f;
+inline constexpr float ULDUAR_YOGG_SARON_REPRISAL_REGROUP_RANGE = 25.0f;
+inline constexpr float ULDUAR_YOGG_SARON_REPRISAL_REGROUP_STOP = 15.0f;
 
 // Stormwind bots whose first tentacle is inside this of the stage spot keep clearing once it dies, the rest wait at the
 // door. It takes the two at 31 yd; the next are 53 out.
-constexpr float ULDUAR_YOGG_SARON_STORMWIND_HELPER_RADIUS = 40.0f;
+inline constexpr float ULDUAR_YOGG_SARON_STORMWIND_HELPER_RADIUS = 40.0f;
 
 // Induce Madness time left under which the Icecrown and Stormwind shares lift and everyone clears
 // whatever's alive. An uncleared room charms everyone in it.
-constexpr uint32 ULDUAR_YOGG_SARON_SHARE_LIFT_MS = 25000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_SHARE_LIFT_MS = 25000;
 
 // Close enough to the stage spot. Small because the spot is only ~3 yd inside either room circle.
-constexpr float ULDUAR_YOGG_SARON_STAGE_ARRIVED_RADIUS = 1.5f;
+inline constexpr float ULDUAR_YOGG_SARON_STAGE_ARRIVED_RADIUS = 1.5f;
 
 // How often the per-bot exposure probes resample. They answer "where was this bot standing when the
 // thing that killed it went off", so a second is fine and a tick is 25 bots of noise.
-constexpr uint32 ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS = 1000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS = 1000;
 
 // How far out to look for a Guardian worth kicking. Wider than any interrupt's range on purpose:
 // the action drops the ones it cannot reach, and a short list would hide a cast from a bot who could.
-constexpr float ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS = 40.0f;
+inline constexpr float ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS = 40.0f;
 
 // How long one bot's kick holds a cast for itself, so the next bot spends its cooldown elsewhere.
-constexpr uint32 ULDUAR_YOGG_SARON_INTERRUPT_CLAIM_MS = 1500;
+inline constexpr uint32 ULDUAR_YOGG_SARON_INTERRUPT_CLAIM_MS = 1500;
 
 // Phase 3 without Thorim: search radius for Shadow Beacon marked Guardians, and how long a dragger holds one without a
 // heal. Yogg's missile goes out when the mark ends and flies at 30 yd/s, 0.3-1.1 s from the drag spots.
-constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_SEARCH_RADIUS = 70.0f;
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_HEAL_WAIT_MS = 3000;
-constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_ARRIVED_RADIUS = 3.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_SEARCH_RADIUS = 70.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_HEAL_WAIT_MS = 3000;
+inline constexpr float ULDUAR_YOGG_SARON_BEACON_DRAG_ARRIVED_RADIUS = 3.0f;
 
 // A drag whose taunt has not turned its Guardian this long after the cast goes to the next bot. Every taunt has landed
 // by the second line: Distracting Shot flies at 40 yd/s, 0.85 s at its 34 yd.
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_TAUNT_CHECK_MS = 1500;
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_TAUNT_LAND_MS = 1000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_TAUNT_CHECK_MS = 1500;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_TAUNT_LAND_MS = 1000;
 
 // Shadow Beacon comes 45 s into phase 3, then 45 s after each one that lands, retried every 5 s. Draggers walk to a
 // staging spot this long before it is due and give up this long after.
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_PERIOD_MS = 45000;
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_STAGE_LEAD_MS = 5000;
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_STAGE_TIMEOUT_MS = 8000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_PERIOD_MS = 45000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_STAGE_LEAD_MS = 5000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_STAGE_TIMEOUT_MS = 8000;
+// Draggers staged for each beacon.
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_STAGERS_10 = 1;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_STAGERS_25 = 3;
 
 // Kickers held back for the marks' Drain Life while a beacon lasts, ready within this long. A channelling Guardian does
 // not move, so one channel during a drag keeps its mark in the pile.
-constexpr uint32 ULDUAR_YOGG_SARON_MARK_KICKERS = 2;
-constexpr uint32 ULDUAR_YOGG_SARON_MARK_KICKER_READY_MS = 2000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_MARK_KICKERS = 2;
+inline constexpr uint32 ULDUAR_YOGG_SARON_MARK_KICKER_READY_MS = 2000;
 
 // A beacon-healed Guardian climbs ~9% a second, and past this health it hits a non-tank for ~17k and up.
-constexpr float ULDUAR_YOGG_SARON_BEACON_DANGER_HEALTH_PCT = 40.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BEACON_DANGER_HEALTH_PCT = 40.0f;
 // How long a released dragger walks its healed Guardian back toward the tank, and how long one external
 // holds its victim for itself.
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_RETURN_MS = 8000;
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_EXTERNAL_CLAIM_MS = 8000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_RETURN_MS = 8000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_EXTERNAL_CLAIM_MS = 8000;
 // A tank holding the pile presses its own button once this many Guardians on it carry another Guardian's beacon heal,
-// at any health, and gets an external under the line. A 60% line was one full-power swing.
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_PILE_RESET_GUARDIANS = 2;
-constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_EXTERNAL_PCT = 50.0f;
+// at any health, and gets an external under the line. A plain health line fires on one full-power swing.
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_PILE_RESET_GUARDIANS = 2;
+inline constexpr float ULDUAR_YOGG_SARON_BEACON_TANK_EXTERNAL_PCT = 50.0f;
 
 // Empowering Shadows heals everything on Yogg's side within 20 yd of the mark, tentacles too, 750k over 20 s. The mark
 // stands in its dragger's reach, a few yards off the spot.
-constexpr float ULDUAR_YOGG_SARON_BEACON_HEAL_RADIUS = 20.0f;
-constexpr float ULDUAR_YOGG_SARON_BEACON_HEAL_SLACK = 5.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BEACON_HEAL_RADIUS = 20.0f;
+inline constexpr float ULDUAR_YOGG_SARON_BEACON_HEAL_SLACK = 5.0f;
 
 // Mortal Strike's -50% healing. A weaker cut on the Guardian still leaves the strike worth it.
-constexpr int32 ULDUAR_YOGG_SARON_HEALING_CUT_PCT = -50;
+inline constexpr int32 ULDUAR_YOGG_SARON_HEALING_CUT_PCT = -50;
 
 // An Immortal Guardian under this casts Drain Life, again 9.5 s after each channel ends, kicked or not.
-constexpr float ULDUAR_YOGG_SARON_DRAIN_LIFE_HEALTH_PCT = 85.0f;
+inline constexpr float ULDUAR_YOGG_SARON_DRAIN_LIFE_HEALTH_PCT = 85.0f;
 
 // Both tanks stand on the melee spot, so Consecration keeps the whole pile on whoever has the most threat. The other
 // tank takes it once the holder is under the swap line with this many on it; the holder sheds for a while.
-constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_PCT = 50.0f;
-constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_TAKER_PCT = 70.0f;
-constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MIN_GUARDIANS = 3;
-constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MS = 8000;
+inline constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_PCT = 50.0f;
+inline constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_TAKER_PCT = 70.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MIN_GUARDIANS = 3;
+inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MS = 8000;
 
 // Lay on Hands is kept for a tank under this in phase 3, one paladin per tank per claim.
-constexpr float ULDUAR_YOGG_SARON_TANK_LOH_PCT = 20.0f;
-constexpr uint32 ULDUAR_YOGG_SARON_TANK_LOH_CLAIM_MS = 3000;
-constexpr float ULDUAR_YOGG_SARON_TANK_LOH_RANGE = 40.0f;
+inline constexpr float ULDUAR_YOGG_SARON_TANK_LOH_PCT = 20.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_LOH_CLAIM_MS = 3000;
+inline constexpr float ULDUAR_YOGG_SARON_TANK_LOH_RANGE = 40.0f;
 
 // Avenging Wrath locks Divine Protection for 30 s, so a phase 3 tank only presses it with Divine
 // Protection that far from ready anyway.
-constexpr uint32 ULDUAR_YOGG_SARON_TANK_WRATH_LOCK_MS = 30000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_WRATH_LOCK_MS = 30000;
 
 // A Drain Life nobody has kicked by this point gets a mid-cast bot's own cast stopped so it can kick, only when no free
 // bot can and no ready one finishes within the wait. One nudge per channel.
-constexpr uint32 ULDUAR_YOGG_SARON_KICK_LAST_RESORT_MS = 1500;
-constexpr uint32 ULDUAR_YOGG_SARON_KICK_WAIT_MS = 1000;
-constexpr uint32 ULDUAR_YOGG_SARON_KICK_NUDGE_MS = 2000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_KICK_LAST_RESORT_MS = 1500;
+inline constexpr uint32 ULDUAR_YOGG_SARON_KICK_WAIT_MS = 1000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_KICK_NUDGE_MS = 2000;
 // Drain Life ticks once a second, so under this left it has one tick to go. Late in phase 3 a fresh channel starts
 // about every second and a kick there saves all five.
-constexpr int32 ULDUAR_YOGG_SARON_KICK_MIN_LEFT_MS = 1000;
+inline constexpr int32 ULDUAR_YOGG_SARON_KICK_MIN_LEFT_MS = 1000;
 // Hunter drags. Distracting Shot is a 6 s taunt against a 10 s mark, so it goes out with this much left and covers the
 // heal 0.3-1.1 s after. Feign Death if the Guardian is still on the hunter this long after the release.
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_SHOT_LEFT_MS = 5000;
-constexpr uint32 ULDUAR_YOGG_SARON_BEACON_FEIGN_DELAY_MS = 1000;
-constexpr float ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE = 34.0f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_SHOT_LEFT_MS = 5000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_FEIGN_DELAY_MS = 1000;
+inline constexpr float ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE = 34.0f;
 
 // Deafening Roar comes 30 s into phase 3, then every 60 s. The paladin on turn raises Concentration Aura this early, as
 // its immunity only reaches raiders with its own copy. Another paladin may take the roar after the handoff delay.
-constexpr uint32 ULDUAR_YOGG_SARON_KEEPER_COUNT = 4;
-constexpr uint32 ULDUAR_YOGG_SARON_ROAR_FIRST_MS = 30000;
-constexpr uint32 ULDUAR_YOGG_SARON_ROAR_PERIOD_MS = 60000;
-constexpr uint32 ULDUAR_YOGG_SARON_ROAR_PRESWITCH_MS = 10000;
-constexpr uint32 ULDUAR_YOGG_SARON_ROAR_HANDOFF_MS = 500;
+inline constexpr uint32 ULDUAR_YOGG_SARON_KEEPER_COUNT = 4;
+inline constexpr uint32 ULDUAR_YOGG_SARON_ROAR_FIRST_MS = 30000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_ROAR_PERIOD_MS = 60000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_ROAR_PRESWITCH_MS = 10000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_ROAR_HANDOFF_MS = 500;
 
 // Heroism waits until this share of the living group is at its station or in reach of its target, or the fallback after
 // phase 3 starts.
-constexpr float ULDUAR_YOGG_SARON_LUST_POSITION_SHARE = 0.8f;
-constexpr uint32 ULDUAR_YOGG_SARON_LUST_FALLBACK_MS = 30000;
+inline constexpr float ULDUAR_YOGG_SARON_LUST_POSITION_SHARE = 0.8f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_LUST_FALLBACK_MS = 30000;
 
 // What the raid clears out of an illusion room before the Brain: the Influence Tentacle and the six entries it is
 // disguised as. The other mobs are not targets (faction 35, or the Lich King); listing one blocks the Brain.
-
-// A disguise shows its entry's health percentage on the real 8,000 (10) / 40,000 (25) health.
 extern const std::vector<uint32> ULDUAR_YOGG_SARON_ILLUSION_MOBS;
 
 // The ten portal spots, straight from the core's yoggPortalLoc. A table because the brain team must stand on its spot
@@ -579,7 +599,7 @@ extern const Position ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE;
 
 // Icecrown's nine tentacles stand in three groups of three, 33-58 yd apart: west, south, east. A tentacle belongs to
 // the nearest centroid. creature_summon_groups summonerId 33890 group 2.
-constexpr uint8 ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT = 3;
+inline constexpr uint8 ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT = 3;
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_CLUSTERS[ULDUAR_YOGG_SARON_ICECROWN_CLUSTER_COUNT];
 
 // Where a bot done with its share waits for the door, as close as the room test allows: both doors sit inside the brain
@@ -797,10 +817,8 @@ bool YoggSaronReprisalHold(PlayerbotAI* botAI);
 // Nearest living group healer in the bot's own illusion room, or null.
 Player* YoggSaronRoomHealer(PlayerbotAI* botAI);
 
-// What the interrupt node kicks: phase 1 Guardians casting Dark Volley, phase 3 Immortal Guardians channelling Drain
-// Life, marks first. Drain Life only once the channel has begun, most time left first, none with less than
-// ULDUAR_YOGG_SARON_KICK_MIN_LEFT_MS left. A kicker held back for the marks gets only those. Shared so trigger and
-// action cannot disagree.
+// What the interrupt trigger and action kick: Guardians casting Dark Volley, Immortal Guardians channelling Drain
+// Life, marks first, most time left first, none under KICK_MIN_LEFT_MS. A held-back kicker gets only marks.
 std::vector<Unit*> GetYoggSaronInterruptCasters(PlayerbotAI* botAI);
 
 // A Guardian a beacon marks or a bot is dragging. A read of the drag claims, no sweep.
@@ -892,9 +910,8 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI);
 bool ClaimYoggSaronNovaExternal(PlayerbotAI* botAI);
 bool ClaimYoggSaronNovaWindow(Player* bot);
 
-// The Guardian no dps should touch: the higher-health half of a low pair close enough for one nova to finish the other.
-// The guid breaks an exact tie, so one of a pair is always free to die and the two never wait on each other.
-// candidates is the list the exclusions will filter.
+// The Guardian no dps should touch: the higher-health half of a low pair close enough for one nova to finish the other,
+// guid on a tie, so one of a pair is always free to die. `candidates` is the list the exclusions will filter.
 void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions, GuidVector const& candidates);
 
 // Which of two phase 1 Guardians the raid should be on: one inside the leash beats one outside whatever the health (a
@@ -1039,9 +1056,8 @@ uint32 YoggSaronGuardiansOn(Player* tank);
 // carries only its own, so it takes a heal that reached the pile.
 uint32 YoggSaronPileHealedOn(Player* tank);
 
-// Phase 3 without Thorim: the Guardian this warrior's Mortal Strike goes on, or nullptr: one with the beacon heal
-// first, then one channelling Drain Life, then one low enough to cast it, lowest health first. Needs melee reach, no
-// healing cut yet, threat to spare. reason is "hot", "drain" or "low".
+// Phase 3 without Thorim: the Guardian for this warrior's Mortal Strike, beacon heal ("hot"), Drain Life ("drain"),
+// then low enough to cast it ("low"), lowest first. Needs melee reach, no healing cut yet, threat to spare.
 Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, char const*& reason);
 
 // The summon a warlock's non-combat pet strategy names ("summon felhunter" for nc +felhunter), or nullptr.

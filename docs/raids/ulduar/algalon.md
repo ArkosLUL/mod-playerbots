@@ -163,7 +163,8 @@ it. It can't open sooner: the tanks hold him until the cast starts or he resets,
 - Pacing and `urgent` ignore under-stars (`urgent` takes one only when nothing else is left).
 - **Bulk** (`algalon.starwindow` `under`): with no paced kill, the team takes an under-star to half a tick under
   its band's top and stays on it until done (re-picked each tick, it moved every ~3 s and only matched the drain),
-  the one with most left next; a bulk starts once the work left plus 35 s reaches the cast. A spell landing after
+  the one with most left next; a bulk starts once the work left plus 35 s reaches the cast and then stays latched
+  (gated each tick, a fast team flipped on and off it). A spell landing after
   the line is 1-2% of a 4-5 tick band; one overshooting below it is released `early`. No wands: they took
   0.2-0.3 %/s each, a damage dealer off him against the enrage, and a far star nobody could wand died after the
   strip and killed 5. At the line the tick interrupts any cast, channel or wand on the star, a paced kill's focus

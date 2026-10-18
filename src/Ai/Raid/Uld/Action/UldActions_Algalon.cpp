@@ -53,9 +53,7 @@ void DropForeignBooking(PlayerbotAI* botAI, Position const& own, MovementPriorit
     LastMovement& last = Booking(botAI);
     if (last.msTime && last.priority <= upTo &&
         std::hypot(last.lastMoveToX - own.GetPositionX(), last.lastMoveToY - own.GetPositionY()) > 0.5f)
-    {
         last.clear();
-    }
 }
 
 // How close a walk may pass another hole: with margin, then just outside its 6 yd field, then anywhere.
@@ -89,8 +87,8 @@ Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRul
         }
     };
     return FindNearestPositionClearOfHazards(bot, GetAlgalonDodgeHazards(bot, markerClearance),
-                                             ULDUAR_ALGALON_DODGE_SEARCH_RADIUS, 2.0f, static_cast<float>(M_PI) / 8.0f,
-                                             prefer, reachable, &sweep);
+                                             ULDUAR_ALGALON_DODGE_SEARCH_RADIUS, ULDUAR_ALGALON_SWEEP_STEP,
+                                             ULDUAR_ALGALON_SWEEP_ANGLE_STEP, prefer, reachable, &sweep);
 }
 
 // The class's second taunt, for when the first missed or is cooling down while he is off a swap tank.
@@ -104,11 +102,11 @@ bool CastBackupTaunt(PlayerbotAI* botAI, Player* bot, Unit* boss)
             return victim && victim != bot && victim->IsPlayer() &&
                    botAI->CanCastSpell("righteous defense", victim) && botAI->CastSpell("righteous defense", victim);
         case CLASS_WARRIOR:
-            return bot->IsWithinDistInMap(boss, 10.0f) && botAI->CanCastSpell("challenging shout", bot) &&
-                   botAI->CastSpell("challenging shout", bot);
+            return bot->IsWithinDistInMap(boss, ULDUAR_ALGALON_AREA_TAUNT_RANGE) &&
+                   botAI->CanCastSpell("challenging shout", bot) && botAI->CastSpell("challenging shout", bot);
         case CLASS_DRUID:
-            return bot->IsWithinDistInMap(boss, 10.0f) && botAI->CanCastSpell("challenging roar", bot) &&
-                   botAI->CastSpell("challenging roar", bot);
+            return bot->IsWithinDistInMap(boss, ULDUAR_ALGALON_AREA_TAUNT_RANGE) &&
+                   botAI->CanCastSpell("challenging roar", bot) && botAI->CastSpell("challenging roar", bot);
         default:
             return false;
     }
@@ -219,7 +217,7 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
         return false;
 
     // Anywhere inside the field phases the bot on its next pulse.
-    if (bot->GetExactDist2d(shelter) <= ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f)
+    if (bot->GetExactDist2d(shelter) <= ULDUAR_ALGALON_SHELTER_IN_RADIUS)
         return false;
 
     // Big Bang goes through all four. Magic immunity keeps the field's phase off, and Ice Block also holds the mage
@@ -231,7 +229,7 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 
     BreakCastPinningTheFeet(botAI, bot);
     ReleaseStalledWalk(botAI, bot);
-    AlgalonBoostHideRun(bot, bot->GetExactDist2d(shelter) - (ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f));
+    AlgalonBoostHideRun(bot, bot->GetExactDist2d(shelter) - ULDUAR_ALGALON_SHELTER_IN_RADIUS);
     // Not a dodge still under way: the hole isn't checked against the meteor.
     if (!AlgalonCosmicSmashThreatens(bot))
         DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_FORCED);
@@ -239,9 +237,7 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 
     if (MoveTo(bot->GetMapId(), shelter.GetPositionX(), shelter.GetPositionY(), shelter.GetPositionZ(), false,
                false, false, false, MovementPriority::MOVEMENT_FORCED, true))
-    {
         return true;
-    }
 
     // MoveTo answers Duplicate for the rest of the run. Returning false there hands the tick to a heal
     // whose cast then pins the feet.
@@ -463,9 +459,7 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
     DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_COMBAT);
     if (!MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false, false,
                 false, MovementPriority::MOVEMENT_COMBAT, true))
-    {
         return false;
-    }
 
     _walk = next;
     return true;

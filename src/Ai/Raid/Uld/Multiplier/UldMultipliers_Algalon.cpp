@@ -30,6 +30,9 @@ namespace Family = RaidEncounterRules::Family;
 
 namespace
 {
+// SetBehindTargetAction's two spots, either side of the target's facing.
+constexpr float SET_BEHIND_SPOT_ANGLE = 3.0f * static_cast<float>(M_PI) / 5.0f;
+
 // A buff or other friendly spell, which may well be an area one but lands on no star.
 bool CastsPositiveSpell(PlayerbotAI* botAI, Action* action)
 {
@@ -346,9 +349,7 @@ float AlgalonWalkGuardMultiplier::GetValue(Action* action)
     // Holes first: most of the fight there is none, and this weighs every reach in the room.
     if (!action || !AlgalonHoleNear(bot, ULDUAR_ALGALON_SCAN_RADIUS) || !AlgalonEngaged(botAI) ||
         AlgalonShouldRunForShelter(bot))
-    {
         return 1.0f;
-    }
 
     // A phased bot back inside a field at the strip is phased again.
     float const stand =
@@ -367,13 +368,11 @@ float AlgalonWalkGuardMultiplier::GetValue(Action* action)
             std::max(bot->GetExactDist(target), bot->GetMeleeRange(target) / 2.0f) - bot->GetCombatReach();
         for (float const side : {1.0f, -1.0f})
         {
-            float const angle = Position::NormalizeOrientation(target->GetOrientation() +
-                                                               side * 3.0f * static_cast<float>(M_PI) / 5.0f);
+            float const angle =
+                Position::NormalizeOrientation(target->GetOrientation() + side * SET_BEHIND_SPOT_ANGLE);
             if (AlgalonWalkEntersField(bot, target->GetPositionX() + std::cos(angle) * distance,
                                        target->GetPositionY() + std::sin(angle) * distance, stand))
-            {
                 return 0.0f;
-            }
         }
 
         return 1.0f;

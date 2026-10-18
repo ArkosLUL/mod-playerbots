@@ -44,7 +44,11 @@ class YoggSaronMaladyOfTheMindAction : public MoveAwayFromPlayerWithDebuffAction
 public:
     static constexpr char const* Name = "yogg-saron malady of the mind action";
 
-    YoggSaronMaladyOfTheMindAction(PlayerbotAI* botAI) : MoveAwayFromPlayerWithDebuffAction(botAI, Name, SPELL_MALADY_OF_THE_MIND, 15.0f) {}
+    YoggSaronMaladyOfTheMindAction(PlayerbotAI* botAI)
+        : MoveAwayFromPlayerWithDebuffAction(botAI, Name, SPELL_MALADY_OF_THE_MIND,
+                                             ULDUAR_YOGG_SARON_MALADY_SPREAD_RADIUS)
+    {
+    }
 };
 
 // Latch and sweep shared by the two spacing nodes. One node per phase: two at the same relevance cannot share
@@ -216,8 +220,7 @@ private:
     std::unordered_map<ObjectGuid, ReactStates> hushed;
 };
 
-// One owner of every non-tank's target for the whole encounter, in place of the raid icons this fight
-// used to target through.
+// One owner of every non-tank's target for the whole encounter, so no raid icon is needed.
 class YoggSaronSetDpsPriorityAction : public AttackAction
 {
 public:
@@ -348,8 +351,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// Following a master is wrong in every part of this fight, and the bots that go down to the brain
-// level are exactly the ones that used to idle behind a human there.
+// Following a master is wrong in every part of this fight, and a bot that follows a human down to the brain
+// level idles behind them there.
 class YoggSaronStopFollowingAction : public Action
 {
 public:
