@@ -9,8 +9,8 @@ class Player;
 class PlayerbotAI;
 class Unit;
 
-// Ulduar hard modes are a raid choice, not the 10/25 heroic flag. Each is its boss's config switch alone,
-// and the per-boss triggers still check their own mechanic, so the option must match what the raid does
+// Ulduar hard modes are a raid choice, not the 10/25 heroic flag. Only a hard mode that changes the plan
+// before it shows up gets a config switch; elsewhere the triggers' own hazard checks are the gate
 
 // General Vezax: the raid keeps six Saronite Vapors alive, which spawns the Saronite Animus (33524)
 // and gives Vezax the invulnerable Saronite Barrier until the Animus dies.
@@ -31,18 +31,6 @@ bool IsSteelbreakerEmpowered(PlayerbotAI* botAI, Unit* steelbreaker, Unit* molge
 // order kills him first. Returns nullptr if none are alive.
 Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI);
 
-// Flame Leviathan: FL_TOWER_ALL when the option is on, else 0. Claiming all four is free, hazards are
-// found by NPC entry so a destroyed tower adds none
-uint32 FlameLeviathanActiveTowerMask(PlayerbotAI* botAI);
-
-// Thorim: hard mode = the arena gauntlet is cleared fast enough that Sif (33196) interrupts her
-// channel and joins the fight instead of despawning.
-bool IsThorimHardModeActive(PlayerbotAI* botAI);
-
-// Freya: an Elder left alive at the pull empowers her for the whole fight, even after it dies. The
-// triggers check the hazard itself (rooted bot, Unstable Sun Beam), which only exists in hard mode
-bool IsFreyaHardModeActive(PlayerbotAI* botAI);
-
 // Mimiron "Firefighter": the Big Red Button pressed before the pull adds the spreading fire and Frost
 // Bomb. GetMimironKeptFireBots picks the P3 Emergency Fire Bots kept alive to put the fire out
 bool IsMimironHardModeActive(PlayerbotAI* botAI);
@@ -54,9 +42,6 @@ bool IsXT002HardModeActive(PlayerbotAI* botAI);
 // XT already has Heartbreak, so no more Heart phases. Config-independent on purpose, so a Heartbreak
 // the humans triggered counts too
 bool IsXT002HeartbreakActive(Player* bot, Unit* xt002);
-
-// Yogg-Saron: fewer than 4 Keepers freed. Only tags the trace, the Keeper checks read the instance
-bool IsYoggSaronHardModeActive(PlayerbotAI* botAI);
 
 // Thorim freed, off the watchers mask since Keepers are picked in-instance. Without his Titanic Storm,
 // Weakened Immortal Guardians can't die, so P3 keeps them low in a pile

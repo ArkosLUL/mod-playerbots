@@ -139,9 +139,10 @@ strategy was not asked to do the job, whatever else was being tested.
   from, and AzerothCore's revision names the core. Read once at load from `/proc/self/exe`, so 0 off
   Linux. Compared against HEAD's commit time; `--since` takes a commit-ish or ISO time instead
   (local without an offset, as for `--split-at`).
-- **`cfg.hardmode`** — the eight `Ulduar*HardMode` toggles, keyed by the conf's boss names so the
-  banner joins them against the boss the trace names. A kill with the toggle off is not a hard-mode
-  kill — that disqualified the only kill in five Thorim pulls on 2026-09-12.
+- **`cfg.hardmode`** — the four `Ulduar*HardMode` toggles (Vezax, Iron Assembly, XT-002, Mimiron),
+  keyed by the conf's boss names so the banner joins them against the boss the trace names. Flame
+  Leviathan, Freya, Thorim and Yogg-Saron have no toggle, so their pulls never get `hardmode-off`. A
+  kill with the toggle off is not a hard-mode kill — that disqualified the only kill in five Thorim pulls on 2026-09-12.
 - **humans** — read through `trace.humans`, not `roster[].h` alone: anyone who zoned in after the
   header appears only in a `unit` record. A human holding a role means the strategy did not play it,
   which is what left a Plasma Blast fix untested. `roster[].r` carries their real role; it used to read

@@ -7,7 +7,6 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
-#include "UldEncounter_FlameLeviathan.h"
 #include "UldEncounter_IronAssembly.h"
 #include "UldEncounter_XT002.h"
 #include "UldScripts.h"
@@ -62,15 +61,6 @@ Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI)
     return brundir;
 }
 
-uint32 FlameLeviathanActiveTowerMask(PlayerbotAI* /*botAI*/)
-{
-    return sPlayerbotAIConfig.UlduarFlameLeviathanHardMode ? FL_TOWER_ALL : 0;
-}
-
-bool IsThorimHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarThorimHardMode; }
-
-bool IsFreyaHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarFreyaHardMode; }
-
 bool IsMimironHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarMimironHardMode; }
 
 bool IsXT002HardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarXT002HardMode; }
@@ -79,8 +69,6 @@ bool IsXT002HeartbreakActive(Player* bot, Unit* xt002)
 {
     return bot != nullptr && xt002 != nullptr && xt002->HasAura(GetXT002HeartbreakSpellId(bot));
 }
-
-bool IsYoggSaronHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.UlduarYoggSaronHardMode; }
 
 bool YoggThorimKeeperActive(PlayerbotAI* botAI)
 {

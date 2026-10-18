@@ -363,6 +363,9 @@ struct ThorimEncounterState
     RaidObs::ObsValue<ObjectGuid> frostAuraPaladin{"thorim.frostaura"};
     uint32 frostAuraScanMs = 0;
 
+    // Latched on the first Sif Blizzard of the pull. She only fights in hard mode.
+    RaidObs::ObsValue<bool> sifJoined{"thorim.sifjoined"};
+
     // Which half of the raid each member belongs to, struck once and then left alone. Recomputing it
     // per tick would let a role predicate flipping mid-fight walk the arena squad into the corridor.
     RaidObs::ObsGuidMap<uint8> squads{"thorim.squad"};

@@ -2072,7 +2072,7 @@ The raid frees fewer than 4 Keepers, losing that Keeper's support: each passive 
 plus Freya +20% healing, Mimiron +20% speed, Thorim +20% health and Titanic Storm. Freya-only rooms ran
 4-9 s slower than a three-Keeper kill. Handled cases: **Thorim only** and **Freya only**. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK` — preferred over Sara's
 `GetData(DATA_GET_KEEPERS_COUNT)`, which gives a count only, because reading the mask confirms
-**which** Keeper. It is a **raid choice, unrelated to the `ulduarYoggSaronHardMode` config flag**.
+**which** Keeper. It is a **raid choice**, with no config option.
 
 What Thorim-only removes: no Freya means **no Sanity Wells, so Sanity (63050, 100 stacks) is a
 one-way drain** — nothing restores it; no Hodir means no Protective Gaze absorb; no Mimiron means no

@@ -594,7 +594,8 @@ on it and no bot paladin can qualify. And Thorim pinned the hunter's aspect but 
 so the exclusive slot was traded back on the next GCD. `ThorimTickFrostAuraPaladin` latches
 `frostAuraPaladin` from **bot paladins only** (lowest guid, must know the spell), the
 `thorim frost aura` node casts it, and the `thorim frost aura hold` Block pins the slot against the
-competing auras. Nobody is elected in normal mode, where Sif never leaves her balcony.
+competing auras. Nobody is elected until `sifJoined` latches on Sif's first Blizzard: in normal mode she
+never leaves her balcony.
 
 Nature needs nothing: Aspect of the Wild was up in all three 11 Oct pulls.
 
@@ -706,8 +707,8 @@ Berserk 10. Recorded so it is not rediscovered.
 **500 yd of walking per ranged bot over a 191 s phase 2** — 342 yd even at the spell's own 37.5°
 half-width — and buys **647k** of damage taken that the healers' 3.5× margin already covered for free,
 against roughly **4.5 M** of ranged output lost. **Worth revisiting only for hard mode**, where that
-margin is gone (17.9k incoming against 20.7k hps); `IsThorimHardModeActive` already exists so the gate
-is cheap, but it needs its own measurement.
+margin is gone (17.9k incoming against 20.7k hps); `sifJoined` already latches Sif's first Blizzard, so
+the gate is cheap, but it needs its own measurement.
 
 **Moving the tank anchor east.** `(2135.0, −263.0, 419.846)` is a far better spot on every axis that
 matters:

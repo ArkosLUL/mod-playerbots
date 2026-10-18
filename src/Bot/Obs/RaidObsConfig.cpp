@@ -70,14 +70,10 @@ std::string EnvFieldsJson()
     out += ",\"cfg\":{\"cheats\":" + Quoted(cheats);
     out += ",\"mapthreads\":" + std::to_string(sConfigMgr->GetOption<uint32>("MapUpdate.Threads", 1, false));
     out += ",\"hardmode\":{";
-    out += "\"flame-leviathan\":" + std::to_string(sPlayerbotAIConfig.UlduarFlameLeviathanHardMode ? 1 : 0);
-    out += ",\"xt-002\":" + std::to_string(sPlayerbotAIConfig.UlduarXT002HardMode ? 1 : 0);
+    out += "\"xt-002\":" + std::to_string(sPlayerbotAIConfig.UlduarXT002HardMode ? 1 : 0);
     out += ",\"iron-assembly\":" + std::to_string(sPlayerbotAIConfig.UlduarIronAssemblyHardMode ? 1 : 0);
-    out += ",\"thorim\":" + std::to_string(sPlayerbotAIConfig.UlduarThorimHardMode ? 1 : 0);
-    out += ",\"freya\":" + std::to_string(sPlayerbotAIConfig.UlduarFreyaHardMode ? 1 : 0);
     out += ",\"mimiron\":" + std::to_string(sPlayerbotAIConfig.UlduarMimironHardMode ? 1 : 0);
     out += ",\"vezax\":" + std::to_string(sPlayerbotAIConfig.UlduarVezaxHardMode ? 1 : 0);
-    out += ",\"yogg-saron\":" + std::to_string(sPlayerbotAIConfig.UlduarYoggSaronHardMode ? 1 : 0);
     out += "}}";
 
     return out;

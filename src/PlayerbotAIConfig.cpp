@@ -756,11 +756,7 @@ bool PlayerbotAIConfig::Initialize()
     BattleRezBossOnly = sConfigMgr->GetOption<bool>("Playerbots.BattleRezBossOnly", true);
     UlduarVezaxHardMode = sConfigMgr->GetOption<bool>("Playerbots.UlduarVezaxHardMode", false);
     UlduarIronAssemblyHardMode = sConfigMgr->GetOption<bool>("Playerbots.UlduarIronAssemblyHardMode", false);
-    UlduarFlameLeviathanHardMode = sConfigMgr->GetOption<bool>("Playerbots.UlduarFlameLeviathanHardMode", false);
-    UlduarThorimHardMode = sConfigMgr->GetOption<bool>("Playerbots.UlduarThorimHardMode", false);
-    UlduarFreyaHardMode = sConfigMgr->GetOption<bool>("Playerbots.UlduarFreyaHardMode", false);
     UlduarMimironHardMode = sConfigMgr->GetOption<bool>("Playerbots.UlduarMimironHardMode", false);
-    UlduarYoggSaronHardMode = sConfigMgr->GetOption<bool>("Playerbots.UlduarYoggSaronHardMode", false);
     UlduarXT002HardMode = sConfigMgr->GetOption<bool>("Playerbots.UlduarXT002HardMode", false);
     AutoPickReward = sConfigMgr->GetOption<std::string>("Playerbots.AutoPickReward", "yes");
     AutoEquipUpgradeLoot = sConfigMgr->GetOption<bool>("Playerbots.AutoEquipUpgradeLoot", true);

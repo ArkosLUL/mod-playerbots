@@ -299,11 +299,7 @@ public:
     bool BattleRezBossOnly;
     bool UlduarVezaxHardMode;
     bool UlduarIronAssemblyHardMode;
-    bool UlduarFlameLeviathanHardMode;
-    bool UlduarThorimHardMode;
-    bool UlduarFreyaHardMode;
     bool UlduarMimironHardMode;
-    bool UlduarYoggSaronHardMode;
     bool UlduarXT002HardMode;
     std::string RandomBotCombatStrategies, RandomBotNonCombatStrategies;
     std::string ReactStrategies, RandomBotReactStrategies;

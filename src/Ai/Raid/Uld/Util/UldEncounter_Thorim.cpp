@@ -23,7 +23,6 @@
 #include "RaidTankDefensive.h"
 #include "RtiTargetValue.h"
 #include "Timer.h"
-#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "UldTargets.h"
 #include "Unit.h"
@@ -1594,9 +1593,12 @@ void ThorimTickFrostAuraPaladin(PlayerbotAI* botAI)
 
     state.frostAuraScanMs = now;
 
-    // Nobody in normal mode: Sif stays on her balcony casting nothing, so the aura would cost the raid Devotion
-    // for no return.
-    Player* paladin = IsThorimHardModeActive(botAI) ? ElectThorimFrostAuraPaladin(group) : nullptr;
+    // Nobody until Sif fights: in normal mode she stays on her balcony casting nothing, so the aura would cost
+    // the raid Devotion for no return.
+    if (!state.sifJoined.Get() && !ThorimBlizzardSpots(bot).empty())
+        state.sifJoined = true;
+
+    Player* paladin = state.sifJoined.Get() ? ElectThorimFrostAuraPaladin(group) : nullptr;
     state.frostAuraPaladin = paladin ? paladin->GetGUID() : ObjectGuid::Empty;
 }
 
@@ -2798,6 +2800,7 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->runeGiantScanMs = 0;
     state->squads.clear();
     state->squadsAssigned = false;
+    state->sifJoined = false;
     state->squadsNoted = false;
     state->humanSquadScanMs = 0;
     state->marksCleared = false;

@@ -40,10 +40,13 @@ accepted.
 Detection started as "config **and** a live server signal", and that second half turned out to be the
 problem: it depended on this core's scripting details, it **silently disabled a whole boss's
 hard-mode handling** when a signal was missing, and it was invisible to the operator who had
-explicitly turned the option on. The eight `Playerbots.Ulduar*HardMode` options (all default 0) are
-now the **single source of truth** — each `Is*HardModeActive` is a plain config read. The per-boss
-triggers keep their own mechanic checks (hazard nearby, debuff on the bot, add alive), and **those
-mechanic checks are the real gate**; the detectors were a redundant second one.
+explicitly turned the option on. The four `Playerbots.Ulduar*HardMode` options (Vezax, Iron Assembly,
+XT-002, Mimiron; all default 0) are the **single source of truth** — each `Is*HardModeActive` is a
+plain config read. **A boss gets an option only when its hard mode changes the plan before the mechanic
+shows** (vapors left alive, kill order, Heart burn, Firefighter camp). Flame Leviathan, Freya, Thorim
+and Yogg-Saron have none, so bots react whenever the raid triggers those. The per-boss triggers keep
+their own mechanic checks (hazard nearby, debuff on the bot, add alive), and **those mechanic checks are
+the real gate**; the detectors were a redundant second one.
 
 **The config check lives in the detector, not scattered across triggers** — detectors are the only
 coupling to server internals, and triggers stay thin. A Vezax trigger that bypassed the detector by
@@ -55,8 +58,9 @@ Still dynamic, because they are *phase* or target selection rather than hard-mod
 `GetBotInstanceScript` were deleted; **`YoggThorimKeeperActive` survives** and still reads
 `PERSISTENT_DATA_WATCHERS_MASK` through `InstanceScript`, so that dependency is not fully gone.
 
-Behaviour worth knowing: Flame Leviathan's mask claims all four towers, but hazards are found by NPC
-entry, so destroyed towers contribute nothing.
+Behaviour worth knowing: Flame Leviathan's hazard callers pass `FL_TOWER_ALL`, and hazards are found by
+NPC entry, so destroyed towers contribute nothing. Thorim's Frost Resistance paladin waits for
+`sifJoined`, latched on Sif's first Blizzard.
 
 ### Why `GetData` is avoided
 
