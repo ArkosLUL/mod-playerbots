@@ -6,6 +6,21 @@
 #include "NamedObjectContext.h"
 #include "Trigger.h"
 
+class FactionChampionsCrowdControlTrigger : public Trigger
+{
+public:
+    FactionChampionsCrowdControlTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "faction champions crowd control") {}
+    bool IsActive() override;
+};
+
+class FactionChampionsPeelTrigger : public Trigger
+{
+public:
+    FactionChampionsPeelTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions peel") {}
+    bool IsActive() override;
+};
+
 class FactionChampionsAvoidAoeTrigger : public Trigger
 {
 public:
@@ -99,6 +114,10 @@ public:
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_death_grip;
         creators["faction champions snare"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_snare;
+        creators["faction champions crowd control"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_crowd_control;
+        creators["faction champions peel"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_peel;
         creators["faction champions protect"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_protect;
         creators["faction champions battle res"] =
@@ -136,6 +155,14 @@ private:
 
     static Trigger* faction_champions_snare(PlayerbotAI* botAI) {
         return new FactionChampionsSnareTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_crowd_control(PlayerbotAI* botAI) {
+        return new FactionChampionsCrowdControlTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_peel(PlayerbotAI* botAI) {
+        return new FactionChampionsPeelTrigger(botAI);
     }
 
     static Trigger* faction_champions_protect(PlayerbotAI* botAI) {

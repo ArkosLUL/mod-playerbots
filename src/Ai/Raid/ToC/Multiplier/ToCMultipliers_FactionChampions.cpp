@@ -45,18 +45,17 @@ bool FactionChampionsAntiFearTotemGuardMultiplier::FearWindowActive()
 
 float FactionChampionsCcGuardMultiplier::GetValue(Action* action)
 {
-    CastCrowdControlSpellAction* cc = dynamic_cast<CastCrowdControlSpellAction*>(action);
-    if (!cc || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+    bool const classCc = dynamic_cast<CastCrowdControlSpellAction*>(action);
+    bool const spreadDot = dynamic_cast<CastDebuffSpellOnAttackerAction*>(action) ||
+                           dynamic_cast<CastDebuffSpellOnMeleeAttackerAction*>(action);
+    if ((!classCc && !spreadDot) || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
         return 1.0f;
 
-    uint8 icon = 0;
-    Unit* assigned = FactionChampionsCcTarget(botAI, icon);
-    // GetTarget only after the assignment test, Polymorph's cc target scans every attacker
-    if (!assigned || action->GetTarget() != assigned)
+    if (classCc)
         return 0.0f;
 
-    uint32 const spellId = AI_VALUE2(uint32, "spell id", cc->getSpell());
-    return FactionChampionsCcCastPays(botAI, assigned, spellId) ? 1.0f : 0.0f;
+    // GetTarget last, it scans every attacker
+    return FactionChampionsCcProtected(botAI, action->GetTarget()) ? 0.0f : 1.0f;
 }
 
 void AddToCFactionChampionsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)

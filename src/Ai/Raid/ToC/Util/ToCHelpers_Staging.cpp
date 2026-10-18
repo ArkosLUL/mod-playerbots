@@ -123,9 +123,20 @@ constexpr float JARAXXUS_STACK_AHEAD = 20.0f;
 constexpr float JARAXXUS_STACK_RADIUS = 6.0f;
 constexpr float JARAXXUS_STACK_STEP = 3.0f;
 
-// Champions: detection_range 20 plus the level gap
+// Champions: detection_range 20 plus the level gap, centre to centre with no combat reach
 constexpr float CHAMPION_AGGRO = 23.0f;
 constexpr float CHAMPION_CLEARANCE = CHAMPION_AGGRO + STAGING_RELEASE_MARGIN;
+// a parked tank drifts up to STAGING_UNPARK before it walks back
+constexpr float CHAMPION_TANK_CLEARANCE = CHAMPION_AGGRO + STAGING_UNPARK;
+constexpr float CHAMPION_TANK_SEARCH_STEP = 0.5f;
+constexpr float CHAMPION_TANK_SEARCH_MAX = 60.0f;
+constexpr float CHAMPION_SIDE_STEP = 3.0f;
+// the first engage sends every idle champion at its nearest player, so everyone else stands this much
+// farther from each slot than a tank
+constexpr float CHAMPION_TANK_LEAD = 3.0f;
+// about 25 yd past where a grip from the raid side drops a healer, so the next grip goes without a walk
+constexpr float CHAMPION_GRIP_POST = 50.0f;
+constexpr uint32 SPELL_DEATH_GRIP = 49576;
 constexpr float CHAMPION_LATTICE_STEP = 10.0f;
 
 // Twins: tanks on the line from the south portal of their colour to their twin, the raid by Dark 1.
@@ -484,8 +495,31 @@ Point2 ChampionLandingCentroid(std::vector<Point2> const& landing)
     return centroid;
 }
 
-// Bot tanks wait in the middle of the landing slots, so at the release they are the nearest player to
-// every champion and their AoE seeds threat before the script's first recount
+// 0, +3, -3, +6, -6 yd across the ray
+float ChampionSideOffset(size_t index)
+{
+    float const steps = static_cast<float>((index + 1) / 2);
+    return (index % 2 ? steps : -steps) * CHAMPION_SIDE_STEP;
+}
+
+// First step out along the ray that clears every slot past the tank clearance
+Point2 ChampionTankStand(std::vector<Point2> const& landing, Point2 centroid, Vec2 inward, float side)
+{
+    Point2 const base = Along(centroid, Rotate(inward, 90.0f), side);
+    int32 const steps = static_cast<int32>(CHAMPION_TANK_SEARCH_MAX / CHAMPION_TANK_SEARCH_STEP);
+    for (int32 step = 0; step < steps; ++step)
+    {
+        Point2 const stand = Along(base, inward, static_cast<float>(step) * CHAMPION_TANK_SEARCH_STEP);
+        if (std::all_of(landing.begin(), landing.end(),
+                        [&](Point2 slot) { return Dist(stand, slot) >= CHAMPION_TANK_CLEARANCE; }))
+            return stand;
+    }
+
+    return Along(base, inward, CHAMPION_TANK_SEARCH_MAX);
+}
+
+// Nobody stands in aggro range, so the champions idle until a player engages one. The bot tanks wait
+// nearest them on the way to the arena centre and the grip DKs past them.
 void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<DutyStand>& duties, Layout& layout)
 {
     std::vector<Point2> const landing = ChampionLanding(bot);
@@ -493,20 +527,40 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
 
     Point2 const centre = PointOf(ARENA_CENTER);
     Vec2 const inward = Direction(centroid, centre);
-    float offset = 0.0f;
+    std::vector<Point2> tankStands;
+    size_t gripPosts = 0;
     for (Player* member : bots)
     {
-        if (!PlayerbotAI::IsTank(member))
-            continue;
-
-        AddForcedDuty(duties, member, "tank", Along(centroid, inward, offset), centroid);
-        offset += STAGING_DUTY_STAND;
+        if (PlayerbotAI::IsTank(member))
+        {
+            Point2 const stand = ChampionTankStand(landing, centroid, inward, ChampionSideOffset(tankStands.size()));
+            AddForcedDuty(duties, member, "tank", stand, centroid);
+            tankStands.push_back(stand);
+        }
+        else if (member->getClass() == CLASS_DEATH_KNIGHT && member->HasSpell(SPELL_DEATH_GRIP))
+        {
+            Point2 const post = Along(Along(centroid, inward, CHAMPION_GRIP_POST), Rotate(inward, 90.0f),
+                                      ChampionSideOffset(gripPosts++));
+            duties.push_back({member->GetGUID(), "grip", At(post, ARENA_STAND_Z), false, Position()});
+        }
     }
+
+    auto const behindTanks = [&](Point2 point, Point2 slot)
+    {
+        if (tankStands.empty())
+            return true;
+
+        float nearestTank = Dist(tankStands.front(), slot);
+        for (Point2 const& stand : tankStands)
+            nearestTank = std::min(nearestTank, Dist(stand, slot));
+
+        return Dist(point, slot) >= nearestTank + CHAMPION_TANK_LEAD;
+    };
 
     for (Point2 const& point : HexLattice(centre, CHAMPION_LATTICE_STEP, centre, WORM_SPOT_FLOOR_RADIUS))
     {
-        bool const clear = std::all_of(landing.begin(), landing.end(),
-                                       [&](Point2 slot) { return Dist(point, slot) >= CHAMPION_CLEARANCE; });
+        bool const clear = std::all_of(landing.begin(), landing.end(), [&](Point2 slot)
+                                       { return Dist(point, slot) >= CHAMPION_CLEARANCE && behindTanks(point, slot); });
         if (clear)
             AddArenaSlot(layout, point, {StandRole::Healer, StandRole::Ranged, StandRole::Melee});
     }

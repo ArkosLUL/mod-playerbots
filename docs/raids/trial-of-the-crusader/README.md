@@ -216,9 +216,9 @@ Bots mark no kill target.
   the encounter that is alive, in combat, selectable and attackable by the bot. Bots here place no
   skull, so it's a player's, unless a bot runs `mark rti`. `attack rti target` is wired into no
   generic strategy, so without this read a player's mark does nothing.
-- **CC icons.** Faction Champions' CC icons and `rti cc` are the only icons bots still place or
-  follow: `rti cc` is the generic class CC pipeline's only input (`RtiCcTrigger`,
-  `RtiTriggers.cpp:25-36`; `CcTargetValue.cpp:29`) and never drives DPS target choice.
+- **CC.** Bots here place no icon. `rti cc` is the generic class CC pipeline's only input
+  (`RtiCcTrigger`, `RtiTriggers.cpp:25-36`; `CcTargetValue.cpp:29`) and never drives DPS target
+  choice; Faction Champions zeroes that pipeline while live and casts its own CC duty.
 - **Legacy `rti`.** `rti` is saved per bot, so the strategy's first `OnTick` on map 649 resets the
   tags older builds set (`cross`, `square`, `triangle`, `diamond`) to `skull`
   (`ToCRestoreLegacyRti`). Once per strategy object, so a player's later `rti` order sticks until
@@ -298,8 +298,12 @@ park within 1 yd, walk back past 2.5.
     no stand, and no bot takes it.
 - **Proximity arrivals**: nobody inside 28 yd (23 + 5) of a boss or landing slot, so the pull stays
   with the player.
-  - Champions: a 10 yd lattice 28+ yd from all ten landing slots, 49 slots; healers and ranged take
-    those farthest from the slots first, melee and tanks the nearest.
+  - Champions: bot tanks (`tank`, forced) on the line from the landing centroid to `ARENA_CENTER`,
+    at the first 0.5 yd step 25.5+ yd (23 + the 2.5 yd unpark) from every slot, extras 3 yd to
+    alternate sides; non-tank DK bots knowing Death Grip (`grip`) 50 yd out on it; the rest on a
+    10 yd lattice 28+ yd from all ten slots and 3+ yd farther from each than the nearest tank stand,
+    44 slots, healers and ranged farthest from the slots first, melee nearest. So the first engage's
+    nearest pick is a tank.
   - Twins: the Fjola tank 22.5 yd from Dark 1 toward her, the Eydis tank 22.5 yd from Light 1 toward
     Eydis, a lone tank (`both`) 22.5 yd from Dark 1 toward the centre; the raid on a 4 yd lattice
     16 yd from Dark 1, since it starts Dark. Every stand is 30+ yd from both twins and nearer the

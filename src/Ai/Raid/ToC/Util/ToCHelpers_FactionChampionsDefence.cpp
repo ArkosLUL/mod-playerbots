@@ -14,6 +14,7 @@
 #include "Group.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
+#include "Pet.h"
 #include "Player.h"
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
@@ -69,17 +70,26 @@ constexpr float ARENA_FLOOR_RADIUS = 44.0f;
 // The player spell, one rank. Its taunt and attack-me effects bounce off a heroic champion, the pull
 // still lands.
 constexpr uint32 SPELL_DEATH_GRIP = 49576;
+// Plus both combat reaches, about 34 yd centre to centre
+constexpr float GRIP_RANGE = 30.0f;
 // A DK this far off still gets the duty and walks to the stand
 constexpr float GRIP_ELECT_REACH = 50.0f;
-// The champion lands in front of the DK, so this is about how far it travels. Grip reaches 30.
+// The champion lands in front of the DK, so this is about how far it travels
 constexpr float GRIP_STAND_DIST = 27.0f;
 constexpr uint32 GRIP_BEARINGS = 16;
 constexpr float GRIP_KEEP_RANGE = 29.0f;
 constexpr uint32 GRIP_DUTY_MS = 8000;
+// A DK this much farther from the pack than its target grips from where it stands
+constexpr float GRIP_MIN_GAIN = 12.0f;
+// Room for the human's opening grip to land and the kill latch to move to the healer it pulled
+constexpr uint32 GRIP_SETTLE_MS = 1500;
+// A grip ready this soon still takes the duty, the cast just waits for it
+constexpr uint32 GRIP_READY_SLACK_MS = 1000;
 // Past the champion healers' 40 yd heal range, plus the pack's own spread
 constexpr float GRIP_GOAL = 45.0f;
 constexpr float CHAMPION_HEAL_REACH = 40.0f;
-// The guide grips the next healer out once the current one is about this low
+// The guide grips the next healer out once the current one is about this low. The DK walks to its
+// stand from the first.
 constexpr float NEXT_GRIP_PCT = 20.0f;
 
 constexpr float SNARE_HEALTH_PCT = 50.0f;
@@ -93,6 +103,20 @@ constexpr uint32 SPELL_CHAINS_OF_ICE = 45524;
 constexpr uint32 SPELL_WING_CLIP = 2974;
 constexpr uint32 SPELL_CONCUSSIVE_SHOT = 5116;
 constexpr std::array<uint32, 7> FROST_SHOCK_RANKS = {49236, 49235, 25464, 10473, 10472, 8058, 8056};
+
+// A melee champion this close to a victim off the tanks is on it. A Warrior champion gets disarmed
+// before Bladestorm once this many of ours stand in its radius.
+constexpr float PEEL_VICTIM_REACH = 10.0f;
+constexpr uint32 PEEL_BLADESTORM_UNITS = 2;
+// Frost Nova's 10 yd, less a yard so the champion is surely inside
+constexpr float FROST_NOVA_REACH = 9.0f;
+// Consecration and Death and Decay round a pack tank break a root at once
+constexpr float ROOT_AOE_CLEAR = 12.0f;
+constexpr uint32 SPELL_DISARM = 676;
+constexpr uint32 SPELL_DISMANTLE = 51722;
+constexpr uint32 SPELL_PSYCHIC_HORROR = 64044;
+constexpr std::array<uint32, 6> FROST_NOVA_RANKS = {42917, 27088, 10230, 6131, 865, 122};
+constexpr std::array<uint32, 8> ENTANGLING_ROOTS_RANKS = {53308, 26989, 9853, 9852, 5196, 5195, 1062, 339};
 
 constexpr uint32 PROTECT_MIN_ATTACKERS = 2;
 constexpr uint32 SPELL_FORBEARANCE = 25771;
@@ -173,6 +197,16 @@ struct GripDuty
     ObjectGuid target;
     Position stand;
     uint32 sinceMs = 0;
+    // the stand is wherever the DK is, so the grip goes out at once
+    bool fromHere = false;
+    // walk to the stand, no cast yet
+    bool walkOnly = false;
+};
+
+struct GripPick
+{
+    Unit* target = nullptr;
+    bool walkOnly = false;
 };
 
 // A champion, a group member or a corpse, and the spell the bot holding the duty casts on it
@@ -187,8 +221,10 @@ struct FactionChampionsDefenceState
     RaidObs::ObsValue<ObjectGuid> physical{"fc.physical"};
     RaidObs::ObsGuidMap<ObjectGuid> totemKillers{"fc.totem"};
     RaidObs::ObsGuidMap<ObjectGuid> grips{"fc.grip"};
+    RaidObs::ObsGuidMap<ObjectGuid> peelNotes{"fc.peel"};
     GripDuty grip;
     std::unordered_map<ObjectGuid, SpellDuty> snares;     // snarer -> melee champion
+    std::unordered_map<ObjectGuid, SpellDuty> peels;      // peeler -> melee champion
     std::unordered_map<ObjectGuid, SpellDuty> protects;   // caster -> group member
     std::unordered_map<ObjectGuid, SpellDuty> battleRes;  // druid -> corpse
 
@@ -778,29 +814,9 @@ std::vector<Member>::const_iterator FindMember(std::vector<Member> const& member
                         [guid](Member const& member) { return member.player->GetGUID() == guid; });
 }
 
-bool IsMeleeChampion(uint32 entry)
-{
-    switch (static_cast<ToCFactionChampions>(entry))
-    {
-        case ToCFactionChampions::NPC_ALLIANCE_DEATH_KNIGHT:
-        case ToCFactionChampions::NPC_HORDE_DEATH_KNIGHT:
-        case ToCFactionChampions::NPC_ALLIANCE_WARRIOR:
-        case ToCFactionChampions::NPC_HORDE_WARRIOR:
-        case ToCFactionChampions::NPC_ALLIANCE_ROGUE:
-        case ToCFactionChampions::NPC_HORDE_ROGUE:
-        case ToCFactionChampions::NPC_ALLIANCE_SHAMAN_ENHANCEMENT:
-        case ToCFactionChampions::NPC_HORDE_SHAMAN_ENHANCEMENT:
-        case ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION:
-        case ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION:
-            return true;
-        default:
-            return false;
-    }
-}
-
 bool IsPhysicalChampion(uint32 entry)
 {
-    return IsMeleeChampion(entry) || entry == static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_HUNTER) ||
+    return IsFactionChampionMelee(entry) || entry == static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_HUNTER) ||
            entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_HUNTER);
 }
 
@@ -824,25 +840,47 @@ bool WantsPull(Unit* target, std::vector<Unit*> const& champions, Position const
                        });
 }
 
-// The kill target until it is clear of the pack, then the next healer once the kill target is low
-Unit* GripCandidate(PlayerbotAI* botAI, std::vector<Unit*> const& champions, Unit* killTarget)
+// The kill target until it is clear of the pack, then the next healer once the kill target is low. A
+// pulled kill target under 40% sends the DK ahead to the next one's stand.
+GripPick GripCandidate(PlayerbotAI* botAI, std::vector<Unit*> const& champions, Unit* killTarget,
+                       Position const& packCentre)
 {
-    Position anchor;
-    Position centre;
-    if (!killTarget || !FactionChampionsPack(botAI, anchor, centre))
-        return nullptr;
+    if (GripLands(killTarget) && WantsPull(killTarget, champions, packCentre))
+        return {killTarget, false};
 
-    if (GripLands(killTarget) && WantsPull(killTarget, champions, centre))
-        return killTarget;
-
-    if (killTarget->GetHealthPct() > NEXT_GRIP_PCT)
-        return nullptr;
+    float const health = killTarget->GetHealthPct();
+    bool const walkAhead = health <= NEXT_GRIP_WALK_PCT && FactionChampionsIsPulled(botAI, killTarget);
+    if (health > NEXT_GRIP_PCT && !walkAhead)
+        return {};
 
     Unit* next = FactionChampionsNextHealerInPack(botAI);
-    return next && GripLands(next) && WantsPull(next, champions, centre) ? next : nullptr;
+    if (!next || !GripLands(next) || !WantsPull(next, champions, packCentre))
+        return {};
+
+    return {next, health > NEXT_GRIP_PCT};
 }
 
-Player* ElectGripper(std::vector<Member> const& members, Unit* target)
+uint32 WalkMs(Player* player, Position const& spot)
+{
+    float const speed = player->GetSpeed(MOVE_RUN);
+    return speed > 0.0f ? static_cast<uint32>(player->GetExactDist2d(&spot) / speed * IN_MILLISECONDS) : 0;
+}
+
+// Ready by the cast, or for a walk-only duty by the time the DK reaches its stand
+bool GripReadyInTime(Player* dk, Position const& stand, bool walkOnly)
+{
+    uint32 const window = GRIP_READY_SLACK_MS + (walkOnly ? WalkMs(dk, stand) : 0);
+    return dk->GetSpellCooldownDelay(SPELL_DEATH_GRIP) <= window;
+}
+
+// In reach now, and the pull still carries the target away from the pack
+bool GripsFromHere(Player* dk, Unit* target, Position const& packCentre)
+{
+    return dk->GetExactDist2d(&packCentre) >= target->GetExactDist2d(&packCentre) + GRIP_MIN_GAIN &&
+           dk->IsWithinCombatRange(target, GRIP_RANGE) && dk->IsWithinLOSInMap(target);
+}
+
+Player* ElectGripper(std::vector<Member> const& members, Unit* target, Position const& stand, bool walkOnly)
 {
     Player* chosen = nullptr;
     for (Member const& member : members)
@@ -850,7 +888,7 @@ Player* ElectGripper(std::vector<Member> const& members, Unit* target)
         Player* player = member.player;
         if (player->getClass() != CLASS_DEATH_KNIGHT || !GET_PLAYERBOT_AI(player) ||
             FactionChampionsIsPackTank(player) || !InControl(player) || !player->HasSpell(SPELL_DEATH_GRIP) ||
-            player->HasSpellCooldown(SPELL_DEATH_GRIP) || player->GetExactDist2d(target) > GRIP_ELECT_REACH)
+            !GripReadyInTime(player, stand, walkOnly) || player->GetExactDist2d(target) > GRIP_ELECT_REACH)
             continue;
 
         if (!chosen || player->GetGUID() < chosen->GetGUID())
@@ -891,35 +929,53 @@ void UpdateGrip(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
                 std::vector<Unit*> const& champions, Unit* killTarget, uint32 now)
 {
     GripDuty& duty = state.grip;
-    Unit* target = GripCandidate(botAI, champions, killTarget);
+    Position anchor;
+    Position centre;
+    GripPick pick;
+    if (killTarget && FactionChampionsPack(botAI, anchor, centre))
+        pick = GripCandidate(botAI, champions, killTarget, centre);
+
+    if (pick.target && FactionChampionsLiveMs(botAI) < GRIP_SETTLE_MS &&
+        !FactionChampionsIsPulled(botAI, pick.target))
+        pick = GripPick();
+
     if (!duty.dk.IsEmpty())
     {
         auto const holder = FindMember(members, duty.dk);
         Player* dk = holder != members.end() ? holder->player : nullptr;
-        bool const holds = dk && InControl(dk) && !dk->HasSpellCooldown(SPELL_DEATH_GRIP) && target &&
-                           target->GetGUID() == duty.target && target->GetExactDist2d(&duty.stand) <= GRIP_KEEP_RANGE &&
-                           getMSTimeDiff(duty.sinceMs, now) < GRIP_DUTY_MS;
+        Unit* target = pick.target;
+        bool const holds = dk && InControl(dk) && target && target->GetGUID() == duty.target &&
+                           GripReadyInTime(dk, duty.stand, pick.walkOnly) &&
+                           getMSTimeDiff(duty.sinceMs, now) < GRIP_DUTY_MS &&
+                           (duty.fromHere ? GripsFromHere(dk, target, centre)
+                                          : target->GetExactDist2d(&duty.stand) <= GRIP_KEEP_RANGE);
         if (holds)
+        {
+            duty.walkOnly = pick.walkOnly;
+            if (duty.fromHere)
+                duty.stand = dk->GetPosition();
+
             return;
+        }
 
         state.grips.erase(duty.dk);
         duty = GripDuty();
     }
 
-    Position anchor;
-    Position centre;
-    if (!target || !FactionChampionsPack(botAI, anchor, centre))
-        return;
-
-    Player* dk = ElectGripper(members, target);
     Position stand;
-    if (!dk || !DeriveGripStand(target, centre, stand))
+    if (!pick.target || !DeriveGripStand(pick.target, centre, stand))
         return;
 
+    Player* dk = ElectGripper(members, pick.target, stand, pick.walkOnly);
+    if (!dk)
+        return;
+
+    duty.fromHere = GripsFromHere(dk, pick.target, centre);
     duty.dk = dk->GetGUID();
-    duty.target = target->GetGUID();
-    duty.stand = stand;
+    duty.target = pick.target->GetGUID();
+    duty.stand = duty.fromHere ? dk->GetPosition() : stand;
     duty.sinceMs = now;
+    duty.walkOnly = pick.walkOnly;
     state.grips.Set(duty.dk, duty.target);
 }
 
@@ -996,7 +1052,7 @@ void UpdateSnares(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::
     std::vector<Needy> needy;
     for (Unit* champion : champions)
     {
-        if (!IsMeleeChampion(champion->GetEntry()) || champion->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
+        if (!IsFactionChampionMelee(champion->GetEntry()) || champion->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
             champion->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED) || SnareImmune(champion))
             continue;
 
@@ -1058,6 +1114,204 @@ void UpdateSnares(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::
             break;
         }
     }
+}
+
+// Disarm wants Battle or Defensive Stance
+bool StanceAllows(Player* player, uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    return info && info->CheckShapeshift(player->GetShapeshiftForm()) == SPELL_CAST_OK;
+}
+
+bool InSpellRange(Player* caster, Unit* target, uint32 spellId)
+{
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    return info && caster->IsWithinCombatRange(target, info->GetMaxRange(false, caster));
+}
+
+// The lowest guid among the non-tank DK bots knowing Death Grip, kept for the grip chain
+ObjectGuid ChainDk(std::vector<Member> const& members)
+{
+    ObjectGuid chosen;
+    for (Member const& member : members)
+    {
+        Player* player = member.player;
+        if (player->getClass() == CLASS_DEATH_KNIGHT && GET_PLAYERBOT_AI(player) &&
+            !FactionChampionsIsPackTank(player) && player->HasSpell(SPELL_DEATH_GRIP) &&
+            (chosen.IsEmpty() || player->GetGUID() < chosen))
+            chosen = player->GetGUID();
+    }
+
+    return chosen;
+}
+
+// The peel this bot can put on champion from where it stands, 0 when none. Roots and Frost Nova stay off
+// a champion near a pack tank, and Death Grip only goes where it lands the champion back toward the pack,
+// never on the kill target.
+uint32 ReadyPeel(Player* peeler, Unit* champion, Position const& packCentre, bool nearPackTank, ObjectGuid chainDk,
+                 Unit* killTarget)
+{
+    bool const inMelee = peeler->IsWithinMeleeRange(champion);
+    bool const disarmed = champion->HasUnitFlag(UNIT_FLAG_DISARMED);
+    switch (peeler->getClass())
+    {
+        case CLASS_WARRIOR:
+            return inMelee && !disarmed && StanceAllows(peeler, SPELL_DISARM) && SpellReady(peeler, SPELL_DISARM)
+                       ? SPELL_DISARM
+                       : 0;
+        case CLASS_ROGUE:
+            return inMelee && !disarmed && SpellReady(peeler, SPELL_DISMANTLE) ? SPELL_DISMANTLE : 0;
+        case CLASS_MAGE:
+        {
+            uint32 const rank = FirstKnownRank(peeler, FROST_NOVA_RANKS);
+            return !nearPackTank && peeler->GetExactDist2d(champion) <= FROST_NOVA_REACH && SpellReady(peeler, rank)
+                       ? rank
+                       : 0;
+        }
+        case CLASS_DRUID:
+        {
+            // a cat would leave its form for it
+            if (nearPackTank || PlayerbotAI::IsHeal(peeler) || PlayerbotAI::IsMelee(peeler))
+                return 0;
+
+            uint32 const rank = FirstKnownRank(peeler, ENTANGLING_ROOTS_RANKS);
+            return SpellReady(peeler, rank) && InSpellRange(peeler, champion, rank) ? rank : 0;
+        }
+        case CLASS_PRIEST:
+            return SpellReady(peeler, SPELL_PSYCHIC_HORROR) && InSpellRange(peeler, champion, SPELL_PSYCHIC_HORROR)
+                       ? SPELL_PSYCHIC_HORROR
+                       : 0;
+        case CLASS_DEATH_KNIGHT:
+        {
+            bool const spare =
+                champion != killTarget && (FactionChampionsIsPackTank(peeler) || peeler->GetGUID() != chainDk);
+            bool const towardPack =
+                peeler->GetExactDist2d(&packCentre) + GRIP_MIN_GAIN <= champion->GetExactDist2d(&packCentre);
+            return spare && towardPack && GripLands(champion) && peeler->IsWithinCombatRange(champion, GRIP_RANGE) &&
+                           SpellReady(peeler, SPELL_DEATH_GRIP)
+                       ? SPELL_DEATH_GRIP
+                       : 0;
+        }
+        default:
+            return 0;
+    }
+}
+
+uint32 GroupUnitsWithin(std::vector<Member> const& members, Unit* centre, float radius)
+{
+    uint32 count = 0;
+    for (Member const& member : members)
+    {
+        if (member.player->GetExactDist2d(centre) <= radius)
+            ++count;
+
+        Pet* pet = member.player->GetPet();
+        if (pet && pet->IsAlive() && pet->GetExactDist2d(centre) <= radius)
+            ++count;
+    }
+
+    return count;
+}
+
+void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::vector<Member> const& members,
+                std::vector<Unit*> const& champions, Unit* killTarget)
+{
+    state.peels.clear();
+
+    struct Needy
+    {
+        Unit* champion;
+        bool warrior;
+        bool healerVictim;
+        float victimHealth;
+    };
+
+    std::vector<Needy> needy;
+    for (Unit* champion : champions)
+    {
+        if (!IsFactionChampionMelee(champion->GetEntry()) || champion->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
+            champion->HasAuraType(SPELL_AURA_MOD_ROOT))
+            continue;
+
+        Unit* victim = champion->GetVictim();
+        auto const member = victim ? FindMember(members, victim->GetGUID()) : members.end();
+        bool const onRaid = member != members.end() && !IsTankMember(member->player) &&
+                            champion->GetExactDist2d(victim) <= PEEL_VICTIM_REACH;
+        bool const warrior = IsWarrior(champion->GetEntry());
+        bool const crowded = warrior && GroupUnitsWithin(members, champion, BLADESTORM_RADIUS) >= PEEL_BLADESTORM_UNITS;
+        if (!onRaid && !crowded)
+            continue;
+
+        needy.push_back({champion, warrior, onRaid && member->healer, onRaid ? victim->GetHealthPct() : 100.0f});
+    }
+
+    std::sort(needy.begin(), needy.end(),
+              [](Needy const& a, Needy const& b)
+              {
+                  if (a.warrior != b.warrior)
+                      return a.warrior;
+
+                  if (a.healerVictim != b.healerVictim)
+                      return a.healerVictim;
+
+                  if (a.victimHealth != b.victimHealth)
+                      return a.victimHealth < b.victimHealth;
+
+                  return a.champion->GetGUID() < b.champion->GetGUID();
+              });
+
+    Position anchor;
+    Position centre;
+    std::vector<Player*> peelers;
+    if (!needy.empty() && FactionChampionsPack(botAI, anchor, centre))
+        for (Member const& member : members)
+            if (member.player->GetGUID() != state.grip.dk && GET_PLAYERBOT_AI(member.player) &&
+                FreeToAct(member.player) && !FactionChampionsHasCcDuty(botAI, member.player->GetGUID()))
+                peelers.push_back(member.player);
+
+    ObjectGuid const chainDk = ChainDk(members);
+    std::vector<bool> taken(peelers.size(), false);
+    for (Needy const& entry : needy)
+    {
+        Unit* champion = entry.champion;
+        bool const nearPackTank = std::any_of(members.begin(), members.end(),
+                                              [champion](Member const& member)
+                                              {
+                                                  return FactionChampionsIsPackTank(member.player) &&
+                                                         member.player->GetExactDist2d(champion) < ROOT_AOE_CLEAR;
+                                              });
+
+        std::vector<std::pair<float, size_t>> byDistance;
+        for (size_t i = 0; i < peelers.size(); ++i)
+            if (!taken[i])
+                byDistance.push_back({peelers[i]->GetExactDist2d(champion), i});
+
+        std::sort(byDistance.begin(), byDistance.end());
+        for (auto const& nearest : byDistance)
+        {
+            size_t const i = nearest.second;
+            Player* peeler = peelers[i];
+            uint32 const spellId = ReadyPeel(peeler, champion, centre, nearPackTank, chainDk, killTarget);
+            SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+            if (!info || champion->IsImmunedToSpell(info) || !peeler->IsWithinLOSInMap(champion))
+                continue;
+
+            state.peels[peeler->GetGUID()] = {champion->GetGUID(), spellId};
+            taken[i] = true;
+            break;
+        }
+    }
+
+    std::vector<ObjectGuid> ended;
+    for (auto const& held : state.peelNotes.Raw())
+        if (!state.peels.count(held.first))
+            ended.push_back(held.first);
+
+    for (ObjectGuid const& peeler : ended)
+        state.peelNotes.erase(peeler);
+
+    for (auto const& held : state.peels)
+        state.peelNotes.Set(held.first, held.second.target);
 }
 
 bool HasAnyAura(Unit* unit, std::initializer_list<uint32> spells)
@@ -1335,6 +1589,7 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     UpdatePurge(state, members, killTarget);
     UpdateGrip(state, botAI, members, champions, killTarget, now);
     UpdateSnares(state, botAI, members, champions);
+    UpdatePeel(state, botAI, members, champions, killTarget);
     UpdateProtect(state, members, champions);
     UpdateBattleRes(state, bot, members, champions);
     return &state;
@@ -1499,7 +1754,7 @@ bool FactionChampionsGripPending(PlayerbotAI* botAI)
            !FactionChampionsIsPulled(botAI, killTarget);
 }
 
-Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand)
+Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand, bool* walkOnly)
 {
     if (!botAI || botAI->GetBot()->getClass() != CLASS_DEATH_KNIGHT)
         return nullptr;
@@ -1510,7 +1765,11 @@ Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand)
 
     Creature* target = AliveCreature(botAI->GetBot(), state->grip.target);
     if (target)
+    {
         stand = state->grip.stand;
+        if (walkOnly)
+            *walkOnly = state->grip.walkOnly;
+    }
 
     return target;
 }
@@ -1519,6 +1778,13 @@ Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId)
 {
     FactionChampionsDefenceState* state = Refresh(botAI);
     Unit* champion = state ? DutyTarget(state->snares, botAI->GetBot(), spellId) : nullptr;
+    return champion && champion->IsAlive() ? champion : nullptr;
+}
+
+Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId)
+{
+    FactionChampionsDefenceState* state = Refresh(botAI);
+    Unit* champion = state ? DutyTarget(state->peels, botAI->GetBot(), spellId) : nullptr;
     return champion && champion->IsAlive() ? champion : nullptr;
 }
 

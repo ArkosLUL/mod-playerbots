@@ -52,12 +52,17 @@ enum class ToCFactionChampions : uint32
 constexpr uint32 SPELL_COUNTERSPELL = 2139;
 // One rank, and damage doesn't break it
 constexpr uint32 SPELL_CYCLONE = 33786;
+// A pulled kill target this low sends the grip DK ahead to the next healer, which CC then leaves alone
+constexpr float NEXT_GRIP_WALK_PCT = 40.0f;
 
 // True if the entry is any Faction Champion (either faction roster). Pets are not champions.
 bool IsFactionChampion(uint32 entry);
 
 // True if the entry is a Faction Champion healer spec (Resto Druid/Shaman, Holy Paladin, Disc Priest)
 bool IsFactionChampionHealer(uint32 entry);
+
+// DK, Warrior, Rogue, Enhancement Shaman or Retribution Paladin
+bool IsFactionChampionMelee(uint32 entry);
 
 // The raid's one kill target, latched per instance. Switches only when it dies, leaves combat or turns
 // immune to all damage, to go back to the one it left over immunity, to a player's skull on a
@@ -70,7 +75,7 @@ Unit* FactionChampionsKillTarget(PlayerbotAI* botAI);
 Unit* FactionChampionsSuspendedTarget(PlayerbotAI* botAI);
 
 // First alive, in-combat champion in kill order that accept takes, skipping the kill target, the
-// suspended one and every CC assignment. Null unless the encounter is live.
+// suspended one and any FactionChampionsCcProtected. Null unless the encounter is live.
 Unit* FactionChampionsNextTarget(PlayerbotAI* botAI, std::function<bool(Unit*)> const& accept);
 
 // Every alive, in-combat champion in kill order, pets left out. Empty unless the encounter is live.
@@ -105,29 +110,25 @@ Unit* FactionChampionsNextHealerInPack(PlayerbotAI* botAI);
 // Live, and a champion that fears is still up: warlock, disc or shadow priest, warrior.
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 
-// This bot's CC target and its raid icon (RtiTargetValue index). Null when it has none. Only ranged dps
-// druids knowing Cyclone get one.
-Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint8& iconIndex);
+// This bot's CC cast, the champion and spell id, when it holds a CC duty. CC bots are dps mages
+// (Polymorph), warlocks (Fear, Banish on an elemental or demon) and ranged druids (Cyclone). None for
+// 1.5 s after the pull, while a human's opening grip lands. Candidates skip the kill target, the
+// suspended, the skulled and a pulled one, and the next healer in the pack once the kill target is
+// pulled and at 40% or under: healers off the tanks nearest the kill target, other healers, champions
+// off the tanks casters first, the rest in kill order. A cast at a champion that stops being a
+// candidate is interrupted, so it never makes a new kill target immune. One duty per
+// candidate, none while it is CC'd for over 2 s more or a CC cast at it is under way. The caster is in
+// range and sight with a spell that lands and, by DR, holds over 2.5 s: never-breaking first, then the
+// longest, then the nearest. Polymorph and Fear only on a champion 12+ yd off every pack tank, with no
+// group member or pet on it and no group DoT. Latched until the cast lands or 3 s pass with none going,
+// written to fc.cc. Null unless the encounter is live.
+Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint32& spellId);
 
-// Live, target is this bot's CC assignment, and spellId would land and hold on it: its aura doesn't
-// break on damage, the target isn't immune, and diminishing returns leave it over 2.5 s. So Cyclone
-// goes at 6 s and 3 s, never at 1.5 s.
-bool FactionChampionsCcCastPays(PlayerbotAI* botAI, Unit* target, uint32 spellId);
+// The member holds a CC duty
+bool FactionChampionsHasCcDuty(PlayerbotAI* botAI, ObjectGuid member);
 
-// A CC icon on a champion no assignment gives it to, or once the pull is over a CC icon this encounter
-// placed still up. Clear does exactly what Stale tests.
-bool FactionChampionsCcIconsStale(PlayerbotAI* botAI);
-void FactionChampionsClearStaleCcIcons(PlayerbotAI* botAI);
-
-// Assigned: "rti cc" or the group icon doesn't match the assignment yet. Released while live: a
-// saved "rti cc" is still waiting to be put back. Apply does exactly what Pending tests.
-bool FactionChampionsCcIconPending(PlayerbotAI* botAI);
-void FactionChampionsApplyCcIcon(PlayerbotAI* botAI);
-
-// Not live and a saved "rti cc" still waiting. Its node carries no encounter prefix, so it still runs
-// after the kill closes the gate, for a CC bot that was dead then.
-bool FactionChampionsRtiCcRestorePending(PlayerbotAI* botAI);
-void FactionChampionsRestoreRtiCc(PlayerbotAI* botAI);
+// A player's CC on it, or a CC duty's cast at it, breaks on damage
+bool FactionChampionsCcProtected(PlayerbotAI* botAI, Unit* unit);
 
 // This bot is the mage on duty and the kill target is casting a heal Counterspell would stop.
 bool FactionChampionsCounterspellDuty(PlayerbotAI* botAI);

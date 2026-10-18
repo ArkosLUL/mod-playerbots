@@ -37,7 +37,8 @@ protected:
     bool FearWindowActive() override;
 };
 
-// Class CC only on this bot's own assignment, and only a cast that lands and holds
+// Class CC nodes would pick their own targets, so CC goes out only through the CC duty. A DoT spread
+// skips a champion under Polymorph or Fear, or about to be.
 class FactionChampionsCcGuardMultiplier : public Multiplier
 {
 public:

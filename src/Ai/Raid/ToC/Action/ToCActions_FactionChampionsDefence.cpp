@@ -5,7 +5,10 @@
 #include "EncounterHelpers.h"
 #include "LastMovementValue.h"
 #include "Playerbots.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "Timer.h"
+#include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -38,6 +41,21 @@ bool IsNoSpot(Position const& spot) { return !spot.GetPositionX() && !spot.GetPo
 bool ForcedLegHolds(LastMovement const& last)
 {
     return last.priority == MovementPriority::MOVEMENT_FORCED && last.lastdelayTime + last.msTime > getMSTime();
+}
+
+// CastSpell refuses any cast-time spell while the bot walks. A FORCED leg is a dodge, let it finish.
+bool StandForCast(Player* bot, LastMovement& last, uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!bot->isMoving() || !info || !info->CalcCastTime(bot))
+        return true;
+
+    if (ForcedLegHolds(last))
+        return false;
+
+    bot->StopMoving();
+    last.clear();
+    return true;
 }
 }  // namespace
 
@@ -124,7 +142,8 @@ bool FactionChampionsAvoidAoeAction::Execute(Event /*event*/)
 bool FactionChampionsDeathGripAction::Execute(Event /*event*/)
 {
     Position stand;
-    Unit* target = FactionChampionsGripTarget(botAI, stand);
+    bool walkOnly = false;
+    Unit* target = FactionChampionsGripTarget(botAI, stand, &walkOnly);
     if (!target)
     {
         DropWalk();
@@ -137,11 +156,17 @@ bool FactionChampionsDeathGripAction::Execute(Event /*event*/)
         if (walking && walking->GetExactDist2d(&stand) < GRIP_SAME_STAND)
             return true;
 
+        // a booking left by a walk elsewhere refuses this one at the same priority for its whole walk time
+        LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+        if (last.priority != MovementPriority::MOVEMENT_FORCED &&
+            stand.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) >= GRIP_SAME_STAND)
+            last.clear();
+
         return WalkTo(stand);
     }
 
     DropWalk();
-    return botAI->CastSpell("death grip", target);
+    return !walkOnly && botAI->CastSpell("death grip", target);
 }
 
 bool FactionChampionsSnareAction::Execute(Event /*event*/)
@@ -156,6 +181,40 @@ bool FactionChampionsSnareAction::isUseful()
 {
     uint32 spellId = 0;
     return FactionChampionsSnareTarget(botAI, spellId) != nullptr;
+}
+
+bool FactionChampionsCrowdControlAction::Execute(Event /*event*/)
+{
+    uint32 spellId = 0;
+    Unit* champion = FactionChampionsCcTarget(botAI, spellId);
+    if (!champion || !StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId))
+        return false;
+
+    return botAI->CastSpell(spellId, champion);
+}
+
+// A queued basket can pop ticks after its trigger fired, once the cast landed or another bot took it
+bool FactionChampionsCrowdControlAction::isUseful()
+{
+    uint32 spellId = 0;
+    return FactionChampionsCcTarget(botAI, spellId) != nullptr;
+}
+
+bool FactionChampionsPeelAction::Execute(Event /*event*/)
+{
+    uint32 spellId = 0;
+    Unit* champion = FactionChampionsPeelTarget(botAI, spellId);
+    if (!champion || !StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId))
+        return false;
+
+    return botAI->CastSpell(spellId, champion);
+}
+
+// A queued basket can pop ticks after its trigger fired, once the champion left its victim or is held
+bool FactionChampionsPeelAction::isUseful()
+{
+    uint32 spellId = 0;
+    return FactionChampionsPeelTarget(botAI, spellId) != nullptr;
 }
 
 bool FactionChampionsProtectAction::Execute(Event /*event*/)
@@ -179,16 +238,8 @@ bool FactionChampionsBattleResAction::Execute(Event /*event*/)
     if (!corpse)
         return false;
 
-    // CastSpell refuses a cast-time spell while the bot walks. A FORCED leg is a dodge, let it finish
-    if (bot->isMoving())
-    {
-        LastMovement& last = AI_VALUE(LastMovement&, "last movement");
-        if (ForcedLegHolds(last))
-            return false;
-
-        bot->StopMoving();
-        last.clear();
-    }
+    if (!StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId))
+        return false;
 
     return botAI->CastSpell(spellId, corpse);
 }

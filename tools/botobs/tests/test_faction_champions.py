@@ -322,6 +322,11 @@ class SyntheticPull(unittest.TestCase):
     def test_cc_holds_end_on_a_release(self):
         self.assertEqual(fc.cc_holds(self.trace), {MAGE: [(DRUID, 1000, 15000)], LOCK: [(MAGE_C, 1000, 21000)]})
 
+    def test_a_cc_duty_counts_the_holders_own_cast_on_its_champion(self):
+        self.assertEqual(fc.cc_duties(self.trace), {
+            MAGE: {"duties": 1, "cast": 1, "spells": collections.Counter({"Polymorph": 1}), "median": 14000},
+            LOCK: {"duties": 1, "cast": 1, "spells": collections.Counter({"Fear": 1}), "median": 20000}})
+
     def test_cc_casts_split_assigned_and_kill_target(self):
         rows = fc.cc_casts(self.trace)
         self.assertEqual({bot: (row["casts"], row["assigned"], row["kill"]) for bot, row in rows.items()},
@@ -651,6 +656,9 @@ class CcAndAdds(unittest.TestCase):
         self.assertEqual({bot: (row["casts"], row["landed"]) for bot, row in rows.items()},
                          {BOOMKIN: (4, {"Cyclone": 1, "Entangling Roots": None}), LOCK: (2, {"Fear": 1})})
 
+    def test_the_pace_counts_the_landings_it_can_read(self):
+        self.assertEqual(fc.cc_pace(self.trace), (2, 20.0))
+
     def test_exhaustion_carried_in_is_a_first_row_removal(self):
         self.assertEqual([(row["member"], row["spell"], row["t"], row["left"]) for row in fc.lust_carriers(self.trace)],
                          [(ROGUE, 57723, 8000, 92000), (TANK, 57723, 15000, 0)])
@@ -683,6 +691,7 @@ class CcAndAdds(unittest.TestCase):
         self.assertRegex(text, r"Shocuul +Warrior +0\.0% of 20 +Cyclone 33786 6\.0s")
         self.assertIn("Cyclone 3 (1 landed), Entangling Roots 1 (landed n/a)", text)
         self.assertIn("Fear 2 (1 landed)", text)
+        self.assertIn("landed per 10 s: 1.00 (2 in 20 s)", text)
         self.assertIn("Exhaustion or Sated carried into the pull: 2 of 5, the last expired at 0:15.000", text)
         self.assertRegex(text, r"Shiv +Exhaustion +0:08\.000  cleared, 92 s left")
         self.assertIn("Force of Nature 0:02.000 (Kavina Grovesong)", text)
@@ -697,6 +706,7 @@ WARRIOR = 5012
 PALADIN_BOT = 5013
 DRUID_BOT = 5014
 HUMAN = 5015
+HUMAN_DK = 5016
 HUNTER_PET = (2 << 32) | 6
 FILLERS = tuple(range(6001, 6010))
 
@@ -731,7 +741,8 @@ def pack_pull() -> list[dict]:
         {"g": WARRIOR, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
         {"g": PALADIN_BOT, "n": "Justice", "r": "melee", "c": 2, "h": 0},
         {"g": DRUID_BOT, "n": "Tree", "r": "heal", "c": 11, "h": 0},
-        {"g": HUMAN, "n": "Dragon", "r": "tank", "c": 2, "h": 1}]
+        {"g": HUMAN, "n": "Dragon", "r": "tank", "c": 2, "h": 1},
+        {"g": HUMAN_DK, "n": "Deathsong", "r": "melee", "c": 6, "h": 1}]
     records = [
         {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
          "roster": roster},
@@ -746,7 +757,8 @@ def pack_pull() -> list[dict]:
         note(25000, ROGUE, "fc.switch", "dead"),
         note(25000, ROGUE, "fc.kill", MAGE_C),
 
-        # The grip: duty at 9 s, cast at 10 s, released once it's out.
+        # The human's grip at 8 s goes nowhere; the bot's duty at 9 s, cast at 10 s, released once it's out.
+        cast(8000, HUMAN_DK, fc.SPELL_DEATH_GRIP, PALADIN),
         note(9000, GRIPPER, fc.GRIP, PALADIN),
         cast(10000, GRIPPER, fc.SPELL_DEATH_GRIP, PALADIN),
         note(10050, GRIPPER, fc.GRIP, 0),
@@ -755,6 +767,15 @@ def pack_pull() -> list[dict]:
         # on a warrior bot at 80%.
         cast(12000, HUNTER, 5116, ROGUE_C),
         cast(13000, WARRIOR, 1715, WARRIOR_C),
+
+        # Peels: Mighty's Disarm on duty before the warrior champion's Bladestorm, a Dismantle off duty, and
+        # a Frost Nova outside any hold that doesn't count.
+        note(11500, WARRIOR, fc.PEEL, WARRIOR_C),
+        cast(11600, WARRIOR, 676, WARRIOR_C),
+        note(11700, WARRIOR, fc.PEEL, 0),
+        cast(12500, WARRIOR_C, fc.SPELL_BLADESTORM, 0),
+        cast(14500, FILLERS[0], 51722, ROGUE_C),
+        cast(15500, FILLERS[1], 42917, 0),
 
         # Hand of Protection on the priest, Pain Suppression on Shiv, who dies at 20 s anyway.
         cast(14000, PALADIN_BOT, 10278, PRIEST),
@@ -808,15 +829,28 @@ class PackAndPeel(unittest.TestCase):
         self.assertEqual((stall["guid"], stall["start"], stall["stop"], stall["low"], stall["high"]),
                          (PALADIN, 4000, 24000, 50.0, 50.0))
 
-    def test_a_grip_reads_the_pack_before_and_after_and_how_far_it_moved(self):
+    def test_a_grip_reads_the_pack_before_and_after_how_far_it_moved_and_the_gap(self):
         self.assertEqual(fc.grips(self.trace), [
-            {"t": 10000, "by": GRIPPER, "target": PALADIN, "kill": True, "before": 2, "after": 0, "moved": 10.0}])
+            {"t": 8000, "by": HUMAN_DK, "target": PALADIN, "kill": True, "before": 2, "after": 2, "moved": 0.0,
+             "since": None},
+            {"t": 10000, "by": GRIPPER, "target": PALADIN, "kill": True, "before": 2, "after": 0, "moved": 10.0,
+             "since": 2000}])
         self.assertEqual(fc.grip_holds(self.trace), [
             {"bot": GRIPPER, "target": PALADIN, "start": 9000, "stop": 10050, "cast": True}])
 
     def test_a_snare_is_needed_when_its_champion_is_on_a_healer_or_a_hurt_raider(self):
         self.assertEqual([(row["spell"], row["needed"]) for row in fc.snare_casts(self.trace)],
                          [("Concussive Shot", True), ("Hamstring", False)])
+
+    def test_a_peel_counts_its_duty_and_a_nova_needs_a_hold(self):
+        self.assertEqual([(row["t"], row["by"], row["spell"], row["target"], row["duty"])
+                          for row in fc.peel_casts(self.trace)],
+                         [(11600, WARRIOR, "Disarm", WARRIOR_C, True),
+                          (14500, FILLERS[0], "Dismantle", ROGUE_C, False)])
+
+    def test_the_warrior_champion_reads_disarms_against_bladestorms(self):
+        self.assertEqual(fc.warrior_disarms(self.trace),
+                         [{"guid": WARRIOR_C, "bladestorms": [12500], "disarms": [11600]}])
 
     def test_externals_read_whether_the_target_lived(self):
         self.assertEqual([(row["spell"], row["target"], row["died"]) for row in fc.external_casts(self.trace)],
@@ -841,6 +875,11 @@ class PackAndPeel(unittest.TestCase):
         self.assertIn("first kill: 25.0 s from the pull", text)
         self.assertRegex(text, r"longest flat span: Velanaa 0:04\.000 for 20\.0 s, 50-50% STALL")
         self.assertIn(f"{fc.GRIP} holds: 1, 1 ending in the bot's grip", text)
+        self.assertRegex(text, r"Deathsong\* +Velanaa .* +-\n")
+        self.assertRegex(text, r"Obliteration +Velanaa .* 10\.0 +2\.0s\n")
+        self.assertRegex(text, r"Disarm +warrior +1  1 / 0")
+        self.assertIn("Shocuul (Warrior): Bladestorm 1 (first 0:12.500), disarms 1 (first 0:11.600); disarmed before"
+                      " the first Bladestorm: yes", text)
         self.assertRegex(text, r"Concussive Shot +hunter +1  1 / 0 / 0")
         self.assertRegex(text, r"Pain Suppression +Mercy +Shiv +melee +yes")
         self.assertIn("taunts on champions: Growl (pet) bot 1, Hand of Reckoning bot 1, Righteous Defense bot 1,"
@@ -876,6 +915,10 @@ def ball_pull() -> list[dict]:
         note(2500, HUNTER, fc.OPENER, 42917),
         note(3000, HUNTER, fc.OPENER, 0),
         cast(3000, ROGUE_C, fc.SPELL_PVP_TRINKET, ROGUE_C),
+        # Trueshot opens; a champion's own cast on the raid and a later raid cast don't count
+        cast(40, PALADIN, 66113, PALADIN),
+        cast(50, HUNTER, 3044, PALADIN),
+        cast(900, TANK, 62124, ROGUE_C),
         {"t": 20000, "e": "end", "out": "wipe"},
     ]
     records += [ball_snap(when) for when in range(0, 20001, 1000)]
@@ -914,6 +957,11 @@ class DeathBall(unittest.TestCase):
     def test_escapees_count_seconds_off_the_landing_spot_not_on_a_tank(self):
         self.assertEqual(fc.escapee_seconds(self.trace), {MAGE_C: 20.0, PALADIN: 16.0})
 
+    def test_the_start_is_the_first_raid_cast_and_each_champions_first_pick(self):
+        self.assertEqual(fc.first_engage(self.trace), {"t": 50, "by": HUNTER, "spell": 3044, "target": PALADIN})
+        self.assertEqual(fc.first_picks(self.trace), [
+            (0, PALADIN, HUNTER), (0, DISC, TANK), (0, ROGUE_C, TANK), (0, MAGE_C, PRIEST), (0, WARRIOR_C, TANK)])
+
     def test_duties_and_trinkets(self):
         self.assertEqual([hold["bot"] for hold in fc.duty_holds(self.trace, fc.PACK_TANK)], [TANK])
         self.assertEqual([(hold["bot"], hold["start"], hold["stop"]) for hold in fc.duty_holds(self.trace, fc.OPENER)],
@@ -928,6 +976,8 @@ class DeathBall(unittest.TestCase):
         self.assertRegex(text, r"0:00\.000 +60/  0/ 20/ 20/  0")
         self.assertRegex(text, r"Velanaa +0:00\.000 +20\.0s +49\.\d +75%")
         self.assertIn("fc.packtank: Bulwark", text)
+        self.assertIn("first raid cast on a champion: 0:00.050 Trueshot (bot)", text)
+        self.assertIn("first picks: tank 3 of 5 (60%), melee 0, ranged 1, heal 1", text)
         self.assertIn("champion PvP trinkets: Irieth Shadowstep 0:03.000", text)
 
 
@@ -955,6 +1005,7 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.kill_holds(trace), [])
         self.assertEqual(fc.cc_holds(trace), {})
         self.assertEqual(fc.cc_casts(trace), {})
+        self.assertEqual(fc.cc_duties(trace), {})
         self.assertEqual(fc.heal_rows(trace), [])
         lust, first, vetoes = fc.burst_rows(trace)
         self.assertEqual((lust, first, vetoes), (None, {}, collections.Counter()))
@@ -980,6 +1031,8 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.grips(trace), [])
         self.assertEqual(fc.grip_holds(trace), [])
         self.assertEqual(fc.snare_casts(trace), [])
+        self.assertEqual(fc.peel_casts(trace), [])
+        self.assertEqual(fc.warrior_disarms(trace), [])
         self.assertEqual(fc.external_casts(trace), [])
         self.assertEqual(fc.battle_res_casts(trace), [])
         self.assertEqual(fc.taunt_casts(trace), collections.Counter())
@@ -988,6 +1041,8 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.escapee_seconds(trace), {})
         self.assertEqual(fc.champion_trinkets(trace), [])
         self.assertEqual(fc.duty_holds(trace, fc.PACK_TANK), [])
+        self.assertEqual(fc.first_engage(trace), None)
+        self.assertEqual(fc.first_picks(trace), [])
 
 
 if __name__ == "__main__":

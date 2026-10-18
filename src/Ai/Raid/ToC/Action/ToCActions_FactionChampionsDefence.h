@@ -83,6 +83,23 @@ public:
     bool isUseful() override;
 };
 
+class FactionChampionsCrowdControlAction : public Action
+{
+public:
+    FactionChampionsCrowdControlAction(
+        PlayerbotAI* botAI) : Action(botAI, "faction champions crowd control") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class FactionChampionsPeelAction : public Action
+{
+public:
+    FactionChampionsPeelAction(PlayerbotAI* botAI) : Action(botAI, "faction champions peel") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class FactionChampionsProtectAction : public Action
 {
 public:
@@ -121,6 +138,10 @@ public:
             &ToCFactionChampionsDefenceActionContext::faction_champions_death_grip;
         creators["faction champions snare"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_snare;
+        creators["faction champions crowd control"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_crowd_control;
+        creators["faction champions peel"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_peel;
         creators["faction champions protect"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_protect;
         creators["faction champions battle res"] =
@@ -158,6 +179,14 @@ private:
 
     static Action* faction_champions_snare(PlayerbotAI* botAI) {
         return new FactionChampionsSnareAction(botAI);
+    }
+
+    static Action* faction_champions_crowd_control(PlayerbotAI* botAI) {
+        return new FactionChampionsCrowdControlAction(botAI);
+    }
+
+    static Action* faction_champions_peel(PlayerbotAI* botAI) {
+        return new FactionChampionsPeelAction(botAI);
     }
 
     static Action* faction_champions_protect(PlayerbotAI* botAI) {

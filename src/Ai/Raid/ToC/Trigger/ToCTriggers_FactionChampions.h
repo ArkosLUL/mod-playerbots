@@ -7,13 +7,6 @@
 #include "RaidAntiFear.h"
 #include "Trigger.h"
 
-class FactionChampionsClearCcIconsTrigger : public Trigger
-{
-public:
-    FactionChampionsClearCcIconsTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions clear cc icons") {}
-    bool IsActive() override;
-};
-
 class FactionChampionsAntiFearTrigger : public RaidAntiFearTrigger
 {
 public:
@@ -27,13 +20,6 @@ class FactionChampionsShouldFocusTrigger : public Trigger
 {
 public:
     FactionChampionsShouldFocusTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions should focus") {}
-    bool IsActive() override;
-};
-
-class FactionChampionsCcIconTrigger : public Trigger
-{
-public:
-    FactionChampionsCcIconTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions cc icon") {}
     bool IsActive() override;
 };
 
@@ -52,39 +38,22 @@ public:
     bool IsActive() override;
 };
 
-class ToCRestoreRtiCcTrigger : public Trigger
-{
-public:
-    ToCRestoreRtiCcTrigger(PlayerbotAI* botAI) : Trigger(botAI, "toc restore rti cc") {}
-    bool IsActive() override;
-};
-
 class ToCFactionChampionsTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
     ToCFactionChampionsTriggerContext() : NamedObjectContext<Trigger>()
     {
-        creators["faction champions clear cc icons"] =
-            &ToCFactionChampionsTriggerContext::faction_champions_clear_cc_icons;
         creators["faction champions anti fear"] =
             &ToCFactionChampionsTriggerContext::faction_champions_anti_fear;
         creators["faction champions should focus"] =
             &ToCFactionChampionsTriggerContext::faction_champions_should_focus;
-        creators["faction champions cc icon"] =
-            &ToCFactionChampionsTriggerContext::faction_champions_cc_icon;
         creators["faction champions kill target healing"] =
             &ToCFactionChampionsTriggerContext::faction_champions_kill_target_healing;
-        creators["toc restore rti cc"] =
-            &ToCFactionChampionsTriggerContext::toc_restore_rti_cc;
         creators["faction champions pet taunt"] =
             &ToCFactionChampionsTriggerContext::faction_champions_pet_taunt;
     }
 
 private:
-    static Trigger* faction_champions_clear_cc_icons(PlayerbotAI* botAI) {
-        return new FactionChampionsClearCcIconsTrigger(botAI);
-    }
-
     static Trigger* faction_champions_anti_fear(PlayerbotAI* botAI) {
         return new FactionChampionsAntiFearTrigger(botAI);
     }
@@ -93,16 +62,8 @@ private:
         return new FactionChampionsShouldFocusTrigger(botAI);
     }
 
-    static Trigger* faction_champions_cc_icon(PlayerbotAI* botAI) {
-        return new FactionChampionsCcIconTrigger(botAI);
-    }
-
     static Trigger* faction_champions_kill_target_healing(PlayerbotAI* botAI) {
         return new FactionChampionsKillTargetHealingTrigger(botAI);
-    }
-
-    static Trigger* toc_restore_rti_cc(PlayerbotAI* botAI) {
-        return new ToCRestoreRtiCcTrigger(botAI);
     }
 
     static Trigger* faction_champions_pet_taunt(PlayerbotAI* botAI) {

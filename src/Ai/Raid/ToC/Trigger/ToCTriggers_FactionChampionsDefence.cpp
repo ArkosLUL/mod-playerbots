@@ -1,10 +1,23 @@
 #include "ToCTriggers_FactionChampionsDefence.h"
+#include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
 #include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
 #include "Strategy.h"
 
 using namespace TrialOfTheCrusaderHelpers;
+
+bool FactionChampionsCrowdControlTrigger::IsActive()
+{
+    uint32 spellId = 0;
+    return FactionChampionsCcTarget(botAI, spellId) != nullptr;
+}
+
+bool FactionChampionsPeelTrigger::IsActive()
+{
+    uint32 spellId = 0;
+    return FactionChampionsPeelTarget(botAI, spellId) != nullptr;
+}
 
 bool FactionChampionsAvoidAoeTrigger::IsActive() { return FactionChampionsInAoe(botAI); }
 
@@ -77,6 +90,12 @@ void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& trigge
 
     triggers.push_back(new TriggerNode("faction champions dispel cc", {
         NextAction("faction champions dispel cc", ACTION_RAID + 3.5f) }));
+
+    triggers.push_back(new TriggerNode("faction champions crowd control", {
+        NextAction("faction champions crowd control", ACTION_RAID + 3.4f) }));
+
+    triggers.push_back(new TriggerNode("faction champions peel", {
+        NextAction("faction champions peel", ACTION_RAID + 3.3f) }));
 
     triggers.push_back(new TriggerNode("faction champions snare", {
         NextAction("faction champions snare", ACTION_RAID + 3.2f) }));

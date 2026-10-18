@@ -90,9 +90,11 @@ bool FactionChampionsDispelBackfires(PlayerbotAI* botAI, Unit* target);
 
 // The champion and the stand to Death Grip it from, when this bot is the DK on grip duty: the kill
 // target while it is under 45 yd off the pack centre or in 40 yd of another champion healer, else at
-// 20% or under the next healer still in the pack. The stand is 27 yd off it, the floor bearing
-// farthest from the pack. Latched raid-wide, written to fc.grip.
-Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand);
+// 20% or under the next healer still in the pack. From 40% on a pulled kill target the DK already walks
+// to that healer's stand, walkOnly set. The stand is the DK's own spot when the champion is in reach
+// there and 12+ yd nearer the pack, else 27 yd off the champion on the floor bearing farthest from the
+// pack. For 1.5 s after the pull only a pulled champion counts. Latched raid-wide, written to fc.grip.
+Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand, bool* walkOnly = nullptr);
 
 // A DK is on its way to grip the kill target out of the pack, which it hasn't left yet
 bool FactionChampionsGripPending(PlayerbotAI* botAI);
@@ -100,6 +102,15 @@ bool FactionChampionsGripPending(PlayerbotAI* botAI);
 // The melee champion this bot snares and the spell id, when its victim is a healer or under half
 // health, or it is loose off the tank, and nothing slows it yet. One snarer per champion.
 Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
+
+// The melee champion this bot peels and the spell id: one off the tanks within 10 yd of its victim, or
+// the Warrior champion with 2 or more of ours (pets too) in Bladestorm reach, Warrior first, then healer
+// victims, then the lowest victim. Not one CC'd, rooted or immune to the spell. The nearest free bot
+// with a ready peel takes it, not the grip DK or one on a CC duty: Disarm or Dismantle (not on one
+// already disarmed), Frost Nova, Entangling Roots, Psychic Horror, or Death Grip from 12+ yd nearer the
+// pack by a pack tank or a DK other than the one kept for the grip chain, never on the kill target. No
+// root within 12 yd of a pack tank. Written to fc.peel.
+Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The group member this bot covers with an external defensive and the spell id, when two or more
 // physical champions are on that member and none of the four covers it yet. One caster per member.
