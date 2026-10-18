@@ -326,11 +326,23 @@ there. It is chronic, not new: the 6:31 "kill" everyone compares against had a 2
 `ThorimTankPickupTrigger` / `ThorimTankPickupAction` close it. The main tank picks up whenever free and
 the first assist tank only when the main tank is dead or absent, so **only one bot ever taunts**.
 
-**`ResolveThorimPhase2Role` gives `MainTank` to whichever tank Thorim is swinging at**, ahead of group
-order. `GetMainTankGuid` reads the raid frame's flag with no tank check, so a human wearing it took the
-slot and assist index 1 fell into the melee ring, orbiting him at 8 yd instead of walking him: Thorim sat
-**26 yd** off the anchor for a whole pull. Every tank past the off-tank now waits on the off-tank
-bearing. `ThorimTankPicked` takes `tank assist` away from tanks in phase 2 only: left voting, it held a
+**A tank's phase 2 role must not follow `boss->GetVictim()`, because the role picks the destination.**
+`ResolveThorimPhase2Role` used to give `MainTank` to whichever tank Thorim was swinging at, so every
+taunt trade — and the swap row runs **9 a pull** — moved the bot tank between a fixed spot and a
+boss-relative one. Which tank counts as "main" is decided outside this encounter anyway:
+`GetMainTankGuid` falls back to the **first alive tank in group order** when nobody wears the raid flag,
+and `IsTank` takes a human by **spec** when there is no `PlayerbotAI`, so a human protection paladin
+wins it on group order alone. Bulwark held `maintank` for entire pulls on 11 Oct and on 18 Oct's first
+two, then **flipped 15 times** in the third once the flag sat on the human.
+
+**`thorim.anchortank` latches one bot tank for the phase instead.** Elected bots-only — a human cannot
+be steered onto a spot, which is what the victim test was working around — preferring whoever already
+holds him, then lowest guid; held while it is still alive, still a tank and still on the floor, so a
+trade moves nobody. That tank alone takes the main tank spot and **every other tank takes the off-tank
+one**, never the ring: a ring point is measured off the boss, so a tank on one orbits him at 8 yd
+instead of walking him, which once left Thorim **26 yd** off the anchor for a whole pull. An off-tank no
+longer runs the ring's arrive/reposition path in the positioning trigger and action either.
+`ThorimTankPicked` takes `tank assist` away from tanks in phase 2 only: left voting, it held a
 tank on a Warbringer for the first 30 s while Thorim ate the camp, and in phase 1 holding whatever swings
 at the raid beats steering a tank onto the ranged pick.
 
@@ -353,8 +365,12 @@ it is half the taunts in the trace.
 a ring point off the boss's **live** position, so when he held the boss he walked to a point measured
 from the boss, the boss followed, the point moved, and the pair drifted with nothing pulling them back:
 Thorim walked **256 and 92 yd** in phase 2 (137 and 76 yd/min) against **39 yd** (12.5 yd/min) in the
-kill run, sitting a median 21.3 and 29.9 yd off the tank spot. Whoever holds him now gets the absolute
-anchor. Two related traps: **a victim change re-seats him at the chase near point and he never moves
+kill run, sitting a median 21.3 and 29.9 yd off the tank spot. **Both tank spots are absolute now**, and
+the off-tank's moved from 7.07 yd off the tank spot to **(2114.25, -252.65, 419.508), 3.5 yd** off it —
+inside the ring's 5.0 yd reposition tolerance, so a taunt trade no longer unlatches the ring. Navprobe
+settles that Z and reads **16/16 on mesh** on a 3.5 yd sweep. It costs nothing against the chain, since
+7.07 and 3.5 both sit inside the 8 yd jump: **the tank pair bridges either way**, still unfixed. Two
+related traps: **a victim change re-seats him at the chase near point and he never moves
 again** (`TargetedMovementGenerator.cpp:362`) — in one pull he rested 7.4 yd off the tank spot against
 4.1-5.9 in the others, putting the outermost ranged slot 6.9 yd outside the melee ring — and whoever
 holds him eats the Blizzard, which is why the dodge was towing him across the arena for **36,283 and
@@ -364,6 +380,23 @@ holds him eats the Blizzard, which is why the dodge was towing him across the ar
 damage running 4,695 → 47,024, out of the melee ring and into the ranged camp, **four bots dead in
 0.1 s**. Boss on the anchor, fifteen minutes later: 8 targets, **141,198**, all melee and tanks,
 **zero deaths**. What decides survival is where the chain *ends*.
+
+**The generic movers fight the positioning row over a tank, and nothing used to stop them.**
+`ThorimMeleeRingSettled` is false for every role but `MeleeRing`, so the `thorim movement guard` never
+gated a tank, and `AvoidAoe` sits in its pass mask regardless: `avoid aoe` aimed **70-74** orders a pull
+at the bot tank and `tank face` **15-30**, alternating with the positioning row **153-176** times over a
+median **7.6-7.9 yd** gap between their destinations. `thorim tank anchor guard` closes it, holding a
+tank that is within 3 yd of its own spot and keeping `AvoidAoe` **out** of the pass mask. That only
+enforces what `ThorimSifBlizzardTrigger` already decides, since it refuses both tank roles in phase 2 on
+the grounds that a tank's 30 yd flee tows the boss into the ranged camp.
+
+**What one oscillating tank cost, pull 3 of 18 Oct against the 11 Oct kill.** The bot tank's positioning
+destinations went from **1 distinct point to 10**, its movement legs and reversals from **103/26 to
+210/52** (7.6 to 16.6 reversals a minute), and `thorim.ringarrived` flips from **165 to 294**. The ring
+is measured off the boss and he was being towed, so the slots merged: the minimum pairwise gap's p10 fell
+from **60 to 10 degrees**, with **35%** of samples under 59 against **3%**. Chain Lightning then went
+from a worst cast of 6 victims for **119,057** to **8 for 190,060**, whose **69,788** top hit killed two
+melee in a single cast at 3:35.
 
 ## The Charge Orb field is a 32.3 yd circle, not a 35 yd sphere
 
@@ -411,22 +444,31 @@ a single 15 yd circle; the same clustering feeds Dark Rune Champion Whirlwind (1
 ## Hard mode
 
 Sif is summoned every pull and normally channels, then despawns after the 150s dominion timer. If the
-raid clears the gauntlet fast enough she joins instead and casts Frostbolt Volley (**62580**), Blizzard
-and Frost Nova (**62597**, teleport then point-blank). Her single-target **Frostbolt is 62583**.
+raid clears the gauntlet fast enough she joins instead and casts Frostbolt Volley, Blizzard and Frost
+Nova (teleport then point-blank), plus a single-target Frostbolt.
 
 **Frostbolt Volley is the fight's floor.** `EffectRadiusIndex` 22 is a **200 yd** radius, it is instant,
-and `InterruptFlags` is 0, so nothing dodges, kicks or outranges it. It is **25-26% of all incoming
-damage in every pull**, only resistance and healing touch it, and it is why this fight has a survival
-ceiling at all.
+and `InterruptFlags` is 0 in **both** difficulty rows, so nothing dodges, kicks or outranges it. It is
+**21-30% of all incoming damage in every pull**, only resistance and healing touch it, and it is why
+this fight has a survival ceiling at all.
 
-**Her ids do not split by difficulty.** `boss_thorim.cpp:56-59` casts 62580 / 62583 / 62597 flat in both
-sizes. The twin rows 62604 / 62601 / 62605 are what this doc carried before and **none of them is ever
-cast**; everything below was re-measured against the three that are.
+**Her ids do split by difficulty, and the server does it, not the script.** `boss_thorim.cpp:56-59`
+casts 62580 / 62583 / 62597 flat, so reading the script alone says they never split. `spelldifficulty_dbc`
+maps each to **62604 / 62601 / 62605** at index 1 and the cast resolves through that, keyed on the
+**map's** difficulty, not the group's. The 11 Oct instance resolved index 0 and the 18 Oct one index 1,
+so **both sets get cast**. Index 1 is **1.6-2x** the damage: Sif's output went **1,283k to 2,566k,
+exactly double**, and she is **34-44% of all incoming** on 18 Oct. Every figure here measured before
+18 Oct came off the weaker row.
 
-**Only Frost Nova can be kicked, and it is not worth a node.** Frostbolt Volley 62580 and Frostbolt
-62583 are both `InterruptFlags 0` — the 62601 twin's `15` is what made Frostbolt look kickable, and it
-never lands. Frost Nova 62597 is `15`, but she casts it straight out of a teleport and it is 2-4% of
-incoming. Chain Lightning **64390** carries `InterruptFlags 1`, so only Thorim's own movement breaks it.
+**Read `thorim.sifjoined`, not the postmortem banner, to tell whether hard mode happened.** Since the
+hard mode switches were dropped the banner no longer prints "thorim hard mode ON" and `--hardmode`
+disqualifies the pull, while the latch still shows Sif joining.
+
+**What can be kicked depends on which difficulty row is cast.** Volley is `InterruptFlags 0` in both.
+Frostbolt is **0 at 62583 but 15 at 62601**, so in a 25-man instance her single-target bolt *is*
+kickable and worth **7.7-8.4% of all incoming** — no node tries, and that is open. Frost Nova is `15` in
+both rows, but she casts it straight out of a teleport and it is 5-6%. Chain Lightning **64390** carries
+`InterruptFlags 1`, so only Thorim's own movement breaks it.
 
 **Blizzard is a trail, not a circle.** Every 36-41s a `NPC_SIF_BLIZZARD` 32879 spawns at
 (2108.7, -280.04) and walks a fixed eight-waypoint loop for 30s. Its aura (62577/62603) drops a 10s, 8 yd
@@ -467,7 +509,7 @@ slow, so nobody she lands on escapes either radius.
 **Anything that resolves Sif through a targets value cannot see her; use `FindNearestCreature`, which
 the Blizzard trigger already does.** Repairing it was rejected on its own merits too: ranged sit inside
 16 yd of her **20-34%** of the arena phase, so it would have fired constantly against a spell worth 2-4%
-of incoming whose damage never reaches past 11.6 yd.
+of incoming (5-6% on the index-1 row) whose damage never reaches past 11.6 yd.
 
 **The generic 30 yd flee was producing the damage it dodged.** `MoveAwayFromCreatureAction` scores 8
 compass rays out to 30 yd and takes the **furthest**, so every accepted melee flee asked for the full

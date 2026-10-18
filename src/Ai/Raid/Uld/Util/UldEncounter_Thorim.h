@@ -149,10 +149,6 @@ inline constexpr float ULDUAR_THORIM_OPENING_SETTLED_RADIUS = 8.0f;
 // Arrival on a tank or camp spot.
 inline constexpr float ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE = 1.0f;
 
-// Off-tank sits near the main tank's bearing, in taunt range for the Unbalancing Strike swap. Doesn't split
-// the pair for Chain Lightning: 20 degrees at the 4-6 yd they hold off the boss is under 2 yd.
-inline constexpr float ULDUAR_THORIM_OFFTANK_BEARING_OFFSET = 0.3491f;  // 20 degrees
-
 // Reach then hold: a tight deadband on a ring that moves with the boss keeps a bot sliding in place, and a
 // moving bot casts nothing.
 inline constexpr float ULDUAR_THORIM_RING_ARRIVE_TOLERANCE = 3.0f;
@@ -363,6 +359,11 @@ struct ThorimEncounterState
     RaidObs::ObsValue<ObjectGuid> frostAuraPaladin{"thorim.frostaura"};
     uint32 frostAuraScanMs = 0;
 
+    // The one bot tank on the phase 2 anchor, latched for the phase. Never read off the boss's victim: the role
+    // picks the destination, and the two tanks trade him often enough that following it walks them both.
+    RaidObs::ObsValue<ObjectGuid> anchorTank{"thorim.anchortank"};
+    uint32 anchorTankScanMs = 0;
+
     // Latched on the first Sif Blizzard of the pull. She only fights in hard mode.
     RaidObs::ObsValue<bool> sifJoined{"thorim.sifjoined"};
 
@@ -558,6 +559,12 @@ bool NearThorimEncounter(Player const* bot);
 // only ones who have to walk out to an add at all.
 bool ThorimArenaLeashBreached(PlayerbotAI* botAI, Player* bot);
 
+// Re-elects the bot tank on the phase 2 anchor, holding the pick while it can still stand there.
+void ThorimTickAnchorTank(PlayerbotAI* botAI);
+
+// Whether this bot is that tank. It alone takes the main tank spot, every other tank the off-tank one.
+bool IsThorimAnchorTank(Player const* bot);
+
 // Re-elects the paladin holding Frost Resistance Aura. Nobody in normal mode, where Sif never leaves her
 // balcony.
 void ThorimTickFrostAuraPaladin(PlayerbotAI* botAI);
@@ -622,6 +629,10 @@ void ThorimRingClearArrived(Player* bot);
 
 // The only window the movement guard covers: outside it the generic movers are what bring a bot back.
 bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot);
+
+// The window the tank guard covers: a tank standing on its own phase 2 spot. Wider than the tolerance the
+// positioning row arrives on, so a shove of a yard or two does not hand the generic movers the tank back.
+bool ThorimTankOnAnchor(PlayerbotAI* botAI, Player* bot);
 
 // Whether a spot is inside the reach of a live Blizzard zone or the bunny about to drop the next one.
 bool ThorimSpotUnderBlizzard(Player* bot, Position const& spot);
