@@ -8,6 +8,11 @@ RaidObs removal or an adaptation the overview lists; report anything else with f
 the branch (commit, no push). Also review against upstream's rules (`git show upstream/test-staging:AGENTS.md`,
 `.agents/docs/code-review.md`, `.agents/docs/cpp-playerbots.md`). Report findings grouped bugs, minor, cleanup.
 
+Fix on the branch only porting errors, where the branch differs from Custom beyond the listed adaptations.
+A finding Custom shares (an upstream-rule breach, or a bug present on Custom too) is reported, never fixed
+on the branch: such fixes land on Custom first and travel by `sync`, so the branch stays a mirror. Each
+reported finding says whether Custom shares it.
+
 ## Task list
 
 ## Decisions for review
