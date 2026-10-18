@@ -10,10 +10,8 @@
 #include "Map.h"
 #include "Player.h"
 
-// A player's own raid difficulty is the group's setting, never the instance's. A group left on 25
-// Heroic walks into Ulduar, Naxxramas or Eye of Eternity, which have no heroic mode, the map is
-// downscaled to 25 Normal, and every member still reports 25 Heroic for the whole pull - so a check
-// against RAID_DIFFICULTY_25MAN_NORMAL reads as 10-man. Encounter code asks the map instead.
+// Ask the map, not the player: a group left on 25 Heroic in a raid with no heroic mode (Ulduar,
+// Naxxramas, Eye of Eternity) plays 25 Normal but still reports 25 Heroic, so a 25 Normal check reads it as 10-man.
 inline Difficulty GetRaidMapDifficulty(Player* bot)
 {
     Map* map = bot ? bot->GetMap() : nullptr;
