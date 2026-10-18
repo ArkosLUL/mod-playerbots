@@ -235,7 +235,7 @@ private:
 };
 
 // The brain team's healer, back to its illusion room's middle while tentacles live. Chasing its own
-// target put it 39 yd off the middle with 57% of its mates out of heal range.
+// target takes it out of heal range of most of its mates.
 class YoggSaronIllusionHealerStationTrigger : public YoggSaronTrigger
 {
 public:

@@ -27,8 +27,8 @@ bool AlgalonCooldownsHeld(PlayerbotAI* botAI)
             IsAlgalonPhased(botAI->GetBot()));
 }
 
-// The explosion node presses these by id against the star that would kill the bot. The class nodes spent Barkskin
-// on a meteor and at a cast, and two druids died to stars with it cooling. Phased, no explosion reaches the bot.
+// The explosion node presses these by id against the star that would kill the bot. The class nodes would spend
+// Barkskin on a meteor or at a cast and have it cooling for the star. Phased, no explosion reaches the bot.
 bool AlgalonExplosionButtonsHeld(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -149,7 +149,7 @@ void DefineAlgalon(EncounterBuilder& e)
             {"barkskin", "shadow ward", "icebound fortitude", "shamanistic rage", "divine protection"});
     // The cover node spends these on the star about to die. The class nodes fire on a hurt raid, after it.
     e.Block("algalon explosion cover hold", Role::Any, AlgalonInPhaseOne, 0, {"divine sacrifice"});
-    // Eating stops the bot thinking: a shaman back from Reincarnation at 22% sat down and ate through Big Bang.
+    // Eating stops the bot thinking: one back from Reincarnation would sit down and eat through Big Bang.
     e.Block("algalon food guard", Role::Any, AlgalonEngaged, 0, {"food", "drink"});
     e.Block("algalon aura mastery hold", Role::Any, AlgalonEngaged, 0, {"aura mastery"});
     // The aura slot is exclusive, so the paladin's own buff strategy would trade it back on the next GCD.
@@ -172,7 +172,7 @@ void DefineAlgalon(EncounterBuilder& e)
     // snare chain ends in Mocking Blow. The encounter's own taunt nodes go through CastClassTaunt instead.
     e.Block("algalon taunt guard", Role::Any, AlgalonEngaged, Family::Taunt);
     // Tricks goes to the holder from the redirect node or nowhere: the class value hands it to the strongest
-    // melee dps when the tank is out of 20 yd or the rogue is low on threat, and that dps pulled him.
+    // melee dps when the tank is out of 20 yd or the rogue is low on threat, and that dps pulls him.
     e.Block("algalon class tricks", Role::Any, AlgalonEngaged, 0,
             {"tricks of the trade", "tricks of the trade on main tank"});
     // The target exclusions keep every picker off him for the yielding tank except "attack rti target",

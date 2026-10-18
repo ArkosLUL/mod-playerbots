@@ -253,11 +253,12 @@ bool IsKiteHole(AlgalonEncounterState const& state, AlgalonScanUnit const& hole)
 // Nearest, but not a hole a constellation is being walked into unless it is the only one.
 AlgalonScanUnit const* NearestShelter(AlgalonEncounterState const& state, Position const& from)
 {
+    constexpr float kiteHolePenalty = 1000.0f;
     AlgalonScanUnit const* nearest = nullptr;
     float bestDistance = std::numeric_limits<float>::max();
     for (AlgalonScanUnit const& hole : state.holes)
     {
-        float const distance = from.GetExactDist2d(hole.position) + (IsKiteHole(state, hole) ? 1000.0f : 0.0f);
+        float const distance = from.GetExactDist2d(hole.position) + (IsKiteHole(state, hole) ? kiteHolePenalty : 0.0f);
         if (distance < bestDistance)
         {
             nearest = &hole;
@@ -366,8 +367,9 @@ void LogStarHealth(AlgalonEncounterState const& state, AlgalonScanUnit& star, ui
     uint32 const span = getMSTimeDiff(log.front().first, now);
     star.lossMeasured = span >= ULDUAR_ALGALON_STAR_LOG_MIN_MS;
     if (star.lossMeasured)
-        star.lossPctPerSec = std::max(ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC,
-                                      (log.front().second - star.healthPct) * IN_MILLISECONDS / static_cast<float>(span));
+        star.lossPctPerSec =
+            std::max(ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC,
+                     (log.front().second - star.healthPct) * IN_MILLISECONDS / static_cast<float>(span));
 
     logs[star.guid] = std::move(log);
 }
@@ -837,9 +839,7 @@ void CallHumanTank(Group* group, PlayerbotAI* botAI, Creature* boss, AlgalonEnco
 {
     if (state.bigBangCasting ||
         (state.lastTankCallMs && getMSTimeDiff(state.lastTankCallMs, now) < ULDUAR_ALGALON_TANK_CALL_MS))
-    {
         return;
-    }
 
     Player* holder = BossHolder(boss);
     if (!holder || !state.swapPair.count(holder->GetGUID()))
@@ -949,9 +949,7 @@ void NotePull(Group* group, Creature* boss, AlgalonEncounterState const& state)
         Player* member = ref->GetSource();
         if (CanStayOut(member) && !state.swapPair.count(member->GetGUID()) &&
             boss->GetExactDist2d(member) <= ULDUAR_ALGALON_MELEE_REACH)
-        {
             ++inReach;
-        }
     }
 
     Unit* victim = boss->GetVictim();
@@ -1020,9 +1018,7 @@ Player* ElectDisperser(Group* group, int32 castByMs, Player* except)
         Player* member = ref->GetSource();
         if (member == except || !CanStayOut(member) || !IsBot(member) || !member->HasSpell(SPELL_ALGALON_DISPERSION) ||
             static_cast<int64>(member->GetSpellCooldownDelay(SPELL_ALGALON_DISPERSION)) > castByMs)
-        {
             continue;
-        }
 
         if (!best || member->GetGUID() < best->GetGUID())
             best = member;
@@ -1087,9 +1083,7 @@ Player* SoakingPartner(Group* group, AlgalonEncounterState const& state, Player*
         Player* partner = FindGroupMember(group, guid);
         if (partner && partner != tank && IsBot(partner) && CanStayOut(partner) &&
             GetAlgalonPhasePunchStacks(partner) <= maxStacks)
-        {
             return partner;
-        }
     }
 
     return nullptr;
@@ -1234,9 +1228,7 @@ void ElectStarTeam(Player* bot, AlgalonEncounterState& state)
         Player* member = ref->GetSource();
         if (InFight(member) && IsDamageDealer(member) && GET_PLAYERBOT_AI(member) &&
             !state.starTeam.count(member->GetGUID()))
-        {
             candidates.push_back(member);
-        }
     }
 
     // Ranged first, since a star wanders; melee only fill a raid short on ranged, or no star ever dies.
@@ -1400,7 +1392,8 @@ StarPlan PlanStars(AlgalonEncounterState const& state, uint32 now)
     // its end.
     if (state.lastBigBangEndMs)
     {
-        int32 const tail = MsUntil(state.lastBigBangEndMs, now) + static_cast<int32>(ULDUAR_ALGALON_STAR_BIG_BANG_TAIL_MS);
+        int32 const tail =
+            MsUntil(state.lastBigBangEndMs, now) + static_cast<int32>(ULDUAR_ALGALON_STAR_BIG_BANG_TAIL_MS);
         if (tail > 0)
             plan.blackouts.push_back({{0, tail}, "prebang"});
     }
@@ -1796,9 +1789,7 @@ void EnsureAlgalonSlotAssignments(Player* bot, AlgalonEncounterState& state)
         Player* member = ref->GetSource();
         if (!member || member->GetMapId() != ULDUAR_MAP_ID || !AlgalonTakesRingSlot(member) ||
             state.slotAssignments.count(member->GetGUID()))
-        {
             continue;
-        }
 
         // Healers prefer the inner ring (heal range is 30 yd to the tank), but a raid with more healers
         // than inner slots still places everyone.
@@ -1855,9 +1846,7 @@ bool MeleeStageSpot(Player* bot, AlgalonEncounterState const& state, Position& s
         Player* member = ref->GetSource();
         if (IsBot(member) && member->GetMapId() == ULDUAR_MAP_ID && !PlayerbotAI::IsRanged(member) &&
             !state.swapPair.count(member->GetGUID()))
-        {
             staged.push_back(member->GetGUID());
-        }
     }
 
     std::sort(staged.begin(), staged.end());
@@ -1929,17 +1918,15 @@ bool FarHoleSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, Po
     // Straight towards the spot is in his reach, as for the healers ringing him: the nearest point round the
     // hole that isn't.
     float closest = std::numeric_limits<float>::max();
-    for (uint8 step = 0; step < 16; ++step)
+    for (uint8 step = 0; step < ULDUAR_ALGALON_SWEEP_BEARINGS; ++step)
     {
-        float const angle = static_cast<float>(step) * static_cast<float>(M_PI) / 8.0f;
+        float const angle = static_cast<float>(step) * ULDUAR_ALGALON_SWEEP_ANGLE_STEP;
         float const x = nearest->position.GetPositionX() + std::cos(angle) * standoff;
         float const y = nearest->position.GetPositionY() + std::sin(angle) * standoff;
         float const distance = anchor.GetExactDist2d(x, y);
         if (distance >= closest || !AlgalonSpotInRoom(x, y) ||
             (boss && boss->GetExactDist2d(x, y) < ULDUAR_ALGALON_FORMATION_CLEARANCE))
-        {
             continue;
-        }
 
         closest = distance;
         spot = Position(x, y, ULDUAR_ALGALON_ROOM_CENTER.GetPositionZ());
@@ -2123,17 +2110,15 @@ bool FindHoleDetour(Player* bot, AlgalonEncounterState const& state, AlgalonScan
     float const remaining = bot->GetExactDist2d(to);
     float best = std::numeric_limits<float>::max();
     bool bestThrough = false;
-    for (uint8 step = 0; step < 16; ++step)
+    for (uint8 step = 0; step < ULDUAR_ALGALON_SWEEP_BEARINGS; ++step)
     {
-        float const angle = static_cast<float>(step) * static_cast<float>(M_PI) / 8.0f;
+        float const angle = static_cast<float>(step) * ULDUAR_ALGALON_SWEEP_ANGLE_STEP;
         float const x = hole.position.GetPositionX() + std::cos(angle) * ULDUAR_ALGALON_HOLE_DETOUR_RADIUS;
         float const y = hole.position.GetPositionY() + std::sin(angle) * ULDUAR_ALGALON_HOLE_DETOUR_RADIUS;
         float const onward = to.GetExactDist2d(x, y);
         if (onward >= remaining - 1.0f || !AlgalonSpotInRoom(x, y) || !ClearOfHoles(state, x, y) ||
             !ClearOfMarkers(state, x, y) || HoleAcrossPath(state, bot->GetPosition(), x, y, phased))
-        {
             continue;
-        }
 
         Position const point(x, y, to.GetPositionZ());
         bool const through = !HoleAcrossPath(state, point, to.GetPositionX(), to.GetPositionY(), false);
@@ -2157,11 +2142,12 @@ bool FindHoleDetour(Player* bot, AlgalonEncounterState const& state, AlgalonScan
 // ring first, rather than abandon the formation.
 bool DisplaceFromHoles(Player* bot, AlgalonEncounterState const& state, Position const& slot, Position& position)
 {
-    for (float radius = 2.0f; radius <= ULDUAR_ALGALON_SLOT_DISPLACE_RADIUS; radius += 2.0f)
+    for (float radius = ULDUAR_ALGALON_SWEEP_STEP; radius <= ULDUAR_ALGALON_SLOT_DISPLACE_RADIUS;
+         radius += ULDUAR_ALGALON_SWEEP_STEP)
     {
-        for (uint8 step = 0; step < 16; ++step)
+        for (uint8 step = 0; step < ULDUAR_ALGALON_SWEEP_BEARINGS; ++step)
         {
-            float const angle = static_cast<float>(step) * static_cast<float>(M_PI) / 8.0f;
+            float const angle = static_cast<float>(step) * ULDUAR_ALGALON_SWEEP_ANGLE_STEP;
             float const x = slot.GetPositionX() + std::cos(angle) * radius;
             float const y = slot.GetPositionY() + std::sin(angle) * radius;
             if (!ClearOfHoles(state, x, y) || !ClearOfMarkers(state, x, y) || !AlgalonSpotInRoom(x, y))
@@ -2447,9 +2433,8 @@ bool ExplosionCovered(Group* group, AlgalonEncounterState const& state)
     return auraPaladin && auraPaladin->HasAura(SPELL_ALGALON_AURA_MASTERY);
 }
 
-// Prayer of Shadow Protection already gives Shadow Resistance Aura's 130 (both aura 143, highest only), so the
-// aura only pays from a paladin whose Aura Mastery doubles it. Once that one is spent the aura moves to a
-// paladin whose Aura Mastery is back, or a second paladin's never goes up.
+// Prayer of Shadow Protection already gives the aura's 130 (both aura 143, highest only), so it only pays doubled
+// by Aura Mastery. With that one spent it moves to one whose Aura Mastery is back, else a second never goes up.
 Player* ElectShadowAuraPaladin(Group* group, ObjectGuid const& current)
 {
     Player* kept = nullptr;
@@ -2839,7 +2824,7 @@ void PlanUnderStars(Group* group, AlgalonEncounterState& state, uint32 now)
 }
 
 // The under-star the team works down, kept until done, then the one with most left. A bulk starts once the work
-// left plus the slack reaches the cast, then stays latched: gated each tick, a fast team flipped on and off it.
+// left plus the slack reaches the cast, then stays latched: gated each tick, a fast team would flip on and off it.
 AlgalonScanUnit const* UnderBulkStar(AlgalonEncounterState& state, uint32 now)
 {
     AlgalonScanUnit const* latched = FindScanned(state.stars, state.bulkStar);
@@ -3210,9 +3195,7 @@ Player* GetAlgalonRescueTarget(PlayerbotAI* botAI)
     AlgalonEncounterState const* state = FindState(bot);
     if (!state || !state->engaged || !state->lastBigBangEndMs ||
         getMSTimeDiff(state->lastBigBangEndMs, getMSTime()) > ULDUAR_ALGALON_RESCUE_WINDOW_MS)
-    {
         return nullptr;
-    }
 
     Player* soaker = FindGroupMember(bot->GetGroup(), state->lastSoaker);
     return CanStayOut(soaker) && soaker->GetHealthPct() < ULDUAR_ALGALON_RESCUE_HP_PCT ? soaker : nullptr;
@@ -3795,9 +3778,8 @@ struct PersonalButton
     uint32 absorb;
 };
 
-// Cheapest cooldown first, so a bubble or a block only goes when nothing shorter will do. Cloak is a 90% chance
-// to resist, not a cut, so it sits behind the sure ones on the same cooldown. The immunities go up to the cast:
-// the hide run strips them.
+// Cheapest cooldown first, so a bubble or a block only goes when nothing shorter will do. Cloak (90% to resist,
+// not a cut) sits behind sure ones of the same cooldown. Immunities only up to the cast: the hide run strips them.
 PersonalButton const PERSONAL_BUTTONS[] = {
     {"shadow ward", 0, 1.0f, 3300},
     {"anti magic shell", SPELL_ALGALON_ANTI_MAGIC_SHELL, 0.25f, 0},
@@ -4062,8 +4044,7 @@ int32 AlgalonHideSlackMs(Player* bot)
     if (!shelter)
         return std::numeric_limits<int32>::max();
 
-    float const walk =
-        std::max(0.0f, bot->GetExactDist2d(shelter->position) - (ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f));
+    float const walk = std::max(0.0f, bot->GetExactDist2d(shelter->position) - ULDUAR_ALGALON_SHELTER_IN_RADIUS);
     int32 const walkMs = HideWalkMs(*state, bot, walk);
 
     int32 const remaining = AlgalonBigBangRemainingMs(botAI);
@@ -4117,8 +4098,8 @@ void AlgalonBoostHideRun(Player* bot, float walk)
         state->nitroRunners.erase(bot->GetGUID());
     }
 
-    // Only a run already late: a hole closed in the cast sent two hunters 50 yd to the last one, and they got there
-    // 0.2 s before the hit, after the field's last pulse.
+    // Only a run already late, like one to a far hole after the near one closed in the cast: walking, it lands
+    // after the field's last pulse.
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     if (!botAI ||
         AlgalonBigBangRemainingMs(botAI) >= HideWalkMs(*state, bot, walk) + ULDUAR_ALGALON_LAST_IN_MARGIN_MS)
@@ -4940,9 +4921,7 @@ bool AlgalonHeadsForFarHole(Player* bot)
     AlgalonEncounterState const* state = FindState(bot);
     if (!state || !state->engaged || state->holes.empty() ||
         (!state->bigBangCasting && !BigBangDueWithin(*state, ULDUAR_ALGALON_FAR_HOLE_SECONDS, getMSTime())))
-    {
         return false;
-    }
 
     Position spot;
     char const* kind = RawSlot(bot, spot);

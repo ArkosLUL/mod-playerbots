@@ -280,7 +280,7 @@ void DefineYoggSaron(EncounterBuilder& e)
             {"feign death", "deterrence"});
 
     // Its hop answers a ray at combat priority, which a forced walk refuses, and it outranks the Yogg dodge,
-    // so near a ray nothing moved the bot. Its spots also sat beside the ray.
+    // so near a ray nothing would move the bot. Its spots can also sit beside the ray.
     e.Block("yogg-saron death ray avoid aoe hold", Role::Any, YoggSaronDeathRayNear, Family::AvoidAoe);
 
     // The holder of a tank swap keeps its threat off the pile so the Guardians stay with the taker. Holy

@@ -39,9 +39,7 @@ bool AlgalonBigBangExternalTrigger::IsActive()
     uint8 const playerClass = bot->getClass();
     if ((playerClass != CLASS_PRIEST && playerClass != CLASS_PALADIN) || IsAlgalonPhased(bot) ||
         !AlgalonBigBangLatched(bot))
-    {
         return false;
-    }
 
     if (AlgalonBigBangRemainingMs(botAI) < ULDUAR_ALGALON_EXTERNAL_MIN_REMAINING_MS)
         return false;
@@ -60,9 +58,7 @@ bool AlgalonSoakerPrepTrigger::IsActive()
 {
     if (!AlgalonBigBangLatched(bot) || IsAlgalonPhased(bot) || !PlayerbotAI::IsHeal(bot) ||
         AlgalonHideSlackMs(bot) <= ULDUAR_ALGALON_PREP_GCD_MS)
-    {
         return false;
-    }
 
     Player* soaker = GetAlgalonBigBangSoaker(botAI);
     if (!soaker || soaker == bot || IsAlgalonPhased(soaker) || soaker->HasSpell(SPELL_ALGALON_DISPERSION))
@@ -77,9 +73,7 @@ bool AlgalonSoakerRescueTrigger::IsActive()
     Player* soaker = GetAlgalonRescueTarget(botAI);
     if (!soaker || soaker == bot || IsAlgalonPhased(bot) || AlgalonHoleNear(bot, ULDUAR_ALGALON_SHELTER_RADIUS) ||
         !PlayerbotAI::IsHeal(bot))
-    {
         return false;
-    }
 
     return GetAlgalonRescueSpell(botAI, soaker) != nullptr;
 }
@@ -109,9 +103,7 @@ bool AlgalonTankBeaconTrigger::IsActive()
 {
     if (bot->getClass() != CLASS_PALADIN || !IsAlgalonTankHealer(bot) || IsAlgalonPhased(bot) ||
         GetAlgalonTankHealPick(botAI).critical)
-    {
         return false;
-    }
 
     Player* target = GetAlgalonBeaconTarget(botAI);
     return target && botAI->CanCastSpell("beacon of light", target);
@@ -142,8 +134,7 @@ bool AlgalonCosmicSmashTrigger::IsActive()
     if (RaidObs::Active())
     {
         RaidObs::NoteDerived(bot, "algalon.hazard", smash ? "smash" : (star ? "star" : "none"));
-        // The dodge writes its branch change-only, so without a reset two waves dodged the same way read as
-        // one.
+        // The dodge writes its branch change-only, so without a reset two waves dodged the same way read as one.
         if (!smash && !star)
             RaidObs::NoteDerived(bot, "algalon.dodge", "idle");
     }

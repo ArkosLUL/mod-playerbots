@@ -1822,7 +1822,8 @@ still reads `food,taxi,raid` and proves nothing either way
 **One teleport survives, `yogg-saron fall from floor`, and it is deliberately ungated.** Its trigger
 fires only when a bot is below z 300 in the boss room or below z 200 on the brain level: it has fallen
 out of the world and cannot walk back. That is an unstuck for a pathing failure of ours, not a
-shortcut past a mechanic, so a cheat-free raid keeps the rescue.
+shortcut past a mechanic, so a cheat-free raid keeps the rescue. It `NearTeleportTo`s, so the bot stays in
+combat ([../../engine/pitfalls.md](../../engine/pitfalls.md)).
 
 Everything else walks, which inherits a blindness: **`MoveTo` returning `ok` says a command was
 issued, never that a route exists** ([../../engine/pitfalls.md](../../engine/pitfalls.md)).
