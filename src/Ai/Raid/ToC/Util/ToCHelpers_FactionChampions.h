@@ -60,8 +60,9 @@ bool IsFactionChampion(uint32 entry);
 bool IsFactionChampionHealer(uint32 entry);
 
 // The raid's one kill target, latched per instance. Switches only when it dies, leaves combat or turns
-// immune to all damage, to go back to the one it left over immunity, or to a player's skull on a
-// champion that can be hurt. Null unless the encounter is live.
+// immune to all damage, to go back to the one it left over immunity, to a player's skull on a
+// champion that can be hurt, or off one still in the pack to a healer pulled out of it, a human
+// DK's grip included. Null unless the encounter is live.
 Unit* FactionChampionsKillTarget(PlayerbotAI* botAI);
 
 // The champion the kill latch left over immunity and goes back to once it can be hurt again. Null
@@ -79,9 +80,27 @@ std::vector<Unit*> FactionChampionsInCombat(PlayerbotAI* botAI);
 // immune to taunt there, and a pet's threat never reaches the 10M the script seeds each player at.
 uint32 FactionChampionsPetTauntAutocast(PlayerbotAI* botAI);
 
-// Every non-healer burns the kill target, tanks too: threat is assigned by the script, so nobody
-// holds a champion anyway.
+// Every non-healer bot but the pack tanks burns the kill target
 bool FactionChampionsFocusBot(PlayerbotAI* botAI);
+
+// Bot tanks hold the pack where it landed, away from the kill target
+bool FactionChampionsIsPackTank(Player* player);
+
+// While live: where the champions landed, and the middle of those still within 25 yd of it, the kill
+// target left out
+bool FactionChampionsPack(PlayerbotAI* botAI, Position& anchor, Position& centre);
+
+// A healer champion 20+ yd off the pack centre with no champion within 12 yd
+bool FactionChampionsIsPulled(PlayerbotAI* botAI, Unit* champion);
+
+// A champion 20+ yd off where the pack landed whose victim isn't a tank
+bool FactionChampionsIsEscapee(PlayerbotAI* botAI, Unit* champion);
+
+// How long the encounter has been live, 0 when it isn't
+uint32 FactionChampionsLiveMs(PlayerbotAI* botAI);
+
+// First healer in kill order still in the pack, not the kill target or the suspended one
+Unit* FactionChampionsNextHealerInPack(PlayerbotAI* botAI);
 
 // Live, and a champion that fears is still up: warlock, disc or shadow priest, warrior.
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);

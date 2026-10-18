@@ -10,7 +10,7 @@ are in [../README.md](../README.md). Mechanics source:
 |---|---|---|---|---|
 | Northrend Beasts | [northrend-beasts.md](northrend-beasts.md) | `Gormok`, `Jormungars`, `Icehowl`, `NorthrendBeasts` | `northrend-beasts` | `nb.` |
 | Lord Jaraxxus | [lord-jaraxxus.md](lord-jaraxxus.md) | `Jaraxxus` | `lord-jaraxxus` | `jaraxxus.` |
-| Faction Champions | [faction-champions.md](faction-champions.md) | `FactionChampions`, `FactionChampionsDefence` | `faction-champions` | `fc.` |
+| Faction Champions | [faction-champions.md](faction-champions.md) | `FactionChampions`, `FactionChampionsDefence`, `FactionChampionsBall` | `faction-champions` | `fc.` |
 | Twin Val'kyr | [twin-valkyr.md](twin-valkyr.md) | `TwinValkyr` | `val-kyr-twins` | `tv.` |
 | Anub'arak | [anubarak.md](anubarak.md) | `Anubarak` | `anub-arak` | `anub.` |
 

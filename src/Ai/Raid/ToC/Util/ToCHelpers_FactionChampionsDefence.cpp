@@ -69,20 +69,18 @@ constexpr float ARENA_FLOOR_RADIUS = 44.0f;
 // The player spell, one rank. Its taunt and attack-me effects bounce off a heroic champion, the pull
 // still lands.
 constexpr uint32 SPELL_DEATH_GRIP = 49576;
-constexpr float GRIP_PACK_RADIUS = 8.0f;
-constexpr uint32 GRIP_PACK_MIN = 2;
-constexpr float GRIP_DK_REACH = 30.0f;
-// The champion lands in front of the DK, so this is about how far it travels
-constexpr float GRIP_STAND_DIST = 20.0f;
+// A DK this far off still gets the duty and walks to the stand
+constexpr float GRIP_ELECT_REACH = 50.0f;
+// The champion lands in front of the DK, so this is about how far it travels. Grip reaches 30.
+constexpr float GRIP_STAND_DIST = 27.0f;
 constexpr uint32 GRIP_BEARINGS = 16;
-// Arcane Explosion and Fan of Knives reach 10 yd from their caster
-constexpr float GRIP_LANDING_CLEAR = 10.0f;
-// The pack follows the raid's melee onto the kill target, so it stays this far off every healer
-constexpr float GRIP_HEALER_CLEAR = 15.0f;
-// Bearings this close to the clearest count as equal, then the one nearest the healers wins
-constexpr float GRIP_CLEAR_SLACK = 2.0f;
-constexpr float GRIP_KEEP_RANGE = 28.0f;
+constexpr float GRIP_KEEP_RANGE = 29.0f;
 constexpr uint32 GRIP_DUTY_MS = 8000;
+// Past the champion healers' 40 yd heal range, plus the pack's own spread
+constexpr float GRIP_GOAL = 45.0f;
+constexpr float CHAMPION_HEAL_REACH = 40.0f;
+// The guide grips the next healer out once the current one is about this low
+constexpr float NEXT_GRIP_PCT = 20.0f;
 
 constexpr float SNARE_HEALTH_PCT = 50.0f;
 constexpr float PIERCING_HOWL_RADIUS = 10.0f;
@@ -532,13 +530,21 @@ void UpdatePhysicalLatch(FactionChampionsDefenceState& state, PlayerbotAI* botAI
     {
         ObjectGuid const latched = state.physical.Get();
         Unit* pick = nullptr;
-        auto const isLatched = [latched](Unit* champion)
-        { return champion->GetGUID() == latched && !PhysicallyImmune(champion); };
+        // never one in the pack, the melee would follow it in
+        auto const isLatched = [botAI, latched](Unit* champion)
+        {
+            return champion->GetGUID() == latched && !PhysicallyImmune(champion) &&
+                   FactionChampionsIsPulled(botAI, champion);
+        };
         if (!latched.IsEmpty())
             pick = FactionChampionsNextTarget(botAI, isLatched);
 
         if (!pick)
-            pick = FactionChampionsNextTarget(botAI, [](Unit* champion) { return !PhysicallyImmune(champion); });
+        {
+            auto const isOut = [botAI](Unit* champion)
+            { return !PhysicallyImmune(champion) && FactionChampionsIsPulled(botAI, champion); };
+            pick = FactionChampionsNextTarget(botAI, isOut);
+        }
 
         if (pick)
             next = pick->GetGUID();
@@ -804,14 +810,36 @@ bool GripLands(Unit* target)
     return info && target->IsInCombat() && !target->IsImmunedToSpell(info);
 }
 
-uint32 PackAround(Unit* target, std::vector<Unit*> const& champions)
+// Still inside the pack or in heal reach of another champion healer
+bool WantsPull(Unit* target, std::vector<Unit*> const& champions, Position const& packCentre)
 {
-    return static_cast<uint32>(std::count_if(champions.begin(), champions.end(),
-                                             [target](Unit* champion)
-                                             {
-                                                 return champion != target &&
-                                                        champion->GetExactDist2d(target) <= GRIP_PACK_RADIUS;
-                                             }));
+    if (target->GetExactDist2d(&packCentre) < GRIP_GOAL)
+        return true;
+
+    return std::any_of(champions.begin(), champions.end(),
+                       [target](Unit* champion)
+                       {
+                           return champion != target && IsFactionChampionHealer(champion->GetEntry()) &&
+                                  champion->GetExactDist2d(target) <= CHAMPION_HEAL_REACH;
+                       });
+}
+
+// The kill target until it is clear of the pack, then the next healer once the kill target is low
+Unit* GripCandidate(PlayerbotAI* botAI, std::vector<Unit*> const& champions, Unit* killTarget)
+{
+    Position anchor;
+    Position centre;
+    if (!killTarget || !FactionChampionsPack(botAI, anchor, centre))
+        return nullptr;
+
+    if (GripLands(killTarget) && WantsPull(killTarget, champions, centre))
+        return killTarget;
+
+    if (killTarget->GetHealthPct() > NEXT_GRIP_PCT)
+        return nullptr;
+
+    Unit* next = FactionChampionsNextHealerInPack(botAI);
+    return next && GripLands(next) && WantsPull(next, champions, centre) ? next : nullptr;
 }
 
 Player* ElectGripper(std::vector<Member> const& members, Unit* target)
@@ -820,9 +848,9 @@ Player* ElectGripper(std::vector<Member> const& members, Unit* target)
     for (Member const& member : members)
     {
         Player* player = member.player;
-        if (player->getClass() != CLASS_DEATH_KNIGHT || !GET_PLAYERBOT_AI(player) || !InControl(player) ||
-            !player->HasSpell(SPELL_DEATH_GRIP) || player->HasSpellCooldown(SPELL_DEATH_GRIP) ||
-            player->GetExactDist2d(target) > GRIP_DK_REACH)
+        if (player->getClass() != CLASS_DEATH_KNIGHT || !GET_PLAYERBOT_AI(player) ||
+            FactionChampionsIsPackTank(player) || !InControl(player) || !player->HasSpell(SPELL_DEATH_GRIP) ||
+            player->HasSpellCooldown(SPELL_DEATH_GRIP) || player->GetExactDist2d(target) > GRIP_ELECT_REACH)
             continue;
 
         if (!chosen || player->GetGUID() < chosen->GetGUID())
@@ -832,38 +860,12 @@ Player* ElectGripper(std::vector<Member> const& members, Unit* target)
     return chosen;
 }
 
-// The champion lands where the DK stands. A stand on the floor, inside heal range of a healer and off all
-// of them, then the one farthest from every other champion.
-bool DeriveGripStand(Unit* target, std::vector<Unit*> const& champions, std::vector<Member> const& members,
-                     Position& stand)
+// The champion lands where the DK stands, so the stand on the floor farthest from the pack. Chained
+// grips, a human's included, each carry it another 27 yd.
+bool DeriveGripStand(Unit* target, Position const& packCentre, Position& stand)
 {
-    std::vector<Position> healers;
-    for (Member const& member : members)
-        if (member.healer)
-            healers.push_back(member.player->GetPosition());
-
-    Position centre;
-    if (!healers.empty())
-    {
-        float x = 0.0f;
-        float y = 0.0f;
-        for (Position const& healer : healers)
-        {
-            x += healer.GetPositionX();
-            y += healer.GetPositionY();
-        }
-
-        float const count = static_cast<float>(healers.size());
-        centre.Relocate(x / count, y / count, target->GetPositionZ());
-    }
-
-    struct Candidate
-    {
-        Position spot;
-        float clear;
-    };
-
-    std::vector<Candidate> candidates;
+    bool found = false;
+    float best = 0.0f;
     for (uint32 bearing = 0; bearing < GRIP_BEARINGS; ++bearing)
     {
         float const angle = 2.0f * static_cast<float>(M_PI) * bearing / GRIP_BEARINGS;
@@ -872,59 +874,30 @@ bool DeriveGripStand(Unit* target, std::vector<Unit*> const& champions, std::vec
         if (ARENA_CENTER.GetExactDist2d(spot) > ARENA_FLOOR_RADIUS)
             continue;
 
-        if (!healers.empty())
+        float const away = packCentre.GetExactDist2d(spot);
+        if (!found || away > best)
         {
-            float nearest = healers.front().GetExactDist2d(spot);
-            for (Position const& healer : healers)
-                nearest = std::min(nearest, healer.GetExactDist2d(spot));
-
-            if (nearest > HEAL_REACH || nearest < GRIP_HEALER_CLEAR)
-                continue;
+            stand = spot;
+            best = away;
+            found = true;
         }
-
-        float clear = GRIP_STAND_DIST * 2.0f;
-        for (Unit* champion : champions)
-            if (champion != target)
-                clear = std::min(clear, champion->GetExactDist2d(spot));
-
-        if (clear >= GRIP_LANDING_CLEAR)
-            candidates.push_back({spot, clear});
     }
 
-    if (candidates.empty())
-        return false;
-
-    float bestClear = 0.0f;
-    for (Candidate const& candidate : candidates)
-        bestClear = std::max(bestClear, candidate.clear);
-
-    Candidate const* best = nullptr;
-    for (Candidate const& candidate : candidates)
-    {
-        if (candidate.clear < bestClear - GRIP_CLEAR_SLACK)
-            continue;
-
-        if (!best || (!healers.empty() && centre.GetExactDist2d(candidate.spot) < centre.GetExactDist2d(best->spot)))
-            best = &candidate;
-    }
-
-    stand = best->spot;
-    return true;
+    return found;
 }
 
-// Latched until the grip goes out, the kill target changes or 8 s pass, so the DK walks to one spot
-void UpdateGrip(FactionChampionsDefenceState& state, std::vector<Member> const& members,
+// Latched until the grip goes out, the target changes or 8 s pass, so the DK walks to one spot
+void UpdateGrip(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::vector<Member> const& members,
                 std::vector<Unit*> const& champions, Unit* killTarget, uint32 now)
 {
     GripDuty& duty = state.grip;
+    Unit* target = GripCandidate(botAI, champions, killTarget);
     if (!duty.dk.IsEmpty())
     {
         auto const holder = FindMember(members, duty.dk);
         Player* dk = holder != members.end() ? holder->player : nullptr;
-        bool const holds = dk && InControl(dk) && !dk->HasSpellCooldown(SPELL_DEATH_GRIP) && killTarget &&
-                           killTarget->GetGUID() == duty.target && GripLands(killTarget) &&
-                           PackAround(killTarget, champions) >= GRIP_PACK_MIN &&
-                           killTarget->GetExactDist2d(&duty.stand) <= GRIP_KEEP_RANGE &&
+        bool const holds = dk && InControl(dk) && !dk->HasSpellCooldown(SPELL_DEATH_GRIP) && target &&
+                           target->GetGUID() == duty.target && target->GetExactDist2d(&duty.stand) <= GRIP_KEEP_RANGE &&
                            getMSTimeDiff(duty.sinceMs, now) < GRIP_DUTY_MS;
         if (holds)
             return;
@@ -933,16 +906,18 @@ void UpdateGrip(FactionChampionsDefenceState& state, std::vector<Member> const& 
         duty = GripDuty();
     }
 
-    if (!killTarget || !GripLands(killTarget) || PackAround(killTarget, champions) < GRIP_PACK_MIN)
+    Position anchor;
+    Position centre;
+    if (!target || !FactionChampionsPack(botAI, anchor, centre))
         return;
 
-    Player* dk = ElectGripper(members, killTarget);
+    Player* dk = ElectGripper(members, target);
     Position stand;
-    if (!dk || !DeriveGripStand(killTarget, champions, members, stand))
+    if (!dk || !DeriveGripStand(target, centre, stand))
         return;
 
     duty.dk = dk->GetGUID();
-    duty.target = killTarget->GetGUID();
+    duty.target = target->GetGUID();
     duty.stand = stand;
     duty.sinceMs = now;
     state.grips.Set(duty.dk, duty.target);
@@ -1006,7 +981,7 @@ bool SnareImmune(Unit* champion)
            champion->IsImmunedToDamage(SPELL_SCHOOL_MASK_MAGIC);
 }
 
-void UpdateSnares(FactionChampionsDefenceState& state, std::vector<Member> const& members,
+void UpdateSnares(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::vector<Member> const& members,
                   std::vector<Unit*> const& champions)
 {
     state.snares.clear();
@@ -1027,10 +1002,14 @@ void UpdateSnares(FactionChampionsDefenceState& state, std::vector<Member> const
 
         Unit* victim = champion->GetVictim();
         auto const member = victim ? FindMember(members, victim->GetGUID()) : members.end();
-        if (member == members.end() || (!member->healer && victim->GetHealthPct() >= SNARE_HEALTH_PCT))
+        bool const healerVictim = member != members.end() && member->healer;
+        float const victimHealth = member != members.end() ? victim->GetHealthPct() : 100.0f;
+        // one off the tank and out of the pack is on its way to the raid
+        bool const loose = FactionChampionsIsEscapee(botAI, champion);
+        if (!loose && (member == members.end() || (!healerVictim && victimHealth >= SNARE_HEALTH_PCT)))
             continue;
 
-        needy.push_back({champion, member->healer, victim->GetHealthPct()});
+        needy.push_back({champion, healerVictim, victimHealth});
     }
 
     if (needy.empty())
@@ -1354,8 +1333,8 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     UpdateCcDispels(state, members);
     UpdateMassDispel(state, botAI, members, killTarget);
     UpdatePurge(state, members, killTarget);
-    UpdateGrip(state, members, champions, killTarget, now);
-    UpdateSnares(state, members, champions);
+    UpdateGrip(state, botAI, members, champions, killTarget, now);
+    UpdateSnares(state, botAI, members, champions);
     UpdateProtect(state, members, champions);
     UpdateBattleRes(state, bot, members, champions);
     return &state;
@@ -1512,6 +1491,14 @@ bool FactionChampionsDispelBackfires(PlayerbotAI* botAI, Unit* target)
     return botAI && ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions) && CarriesUnstableAffliction(target);
 }
 
+bool FactionChampionsGripPending(PlayerbotAI* botAI)
+{
+    FactionChampionsDefenceState* state = Refresh(botAI);
+    Unit* killTarget = state ? FactionChampionsKillTarget(botAI) : nullptr;
+    return killTarget && !state->grip.dk.IsEmpty() && state->grip.target == killTarget->GetGUID() &&
+           !FactionChampionsIsPulled(botAI, killTarget);
+}
+
 Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand)
 {
     if (!botAI || botAI->GetBot()->getClass() != CLASS_DEATH_KNIGHT)
@@ -1577,8 +1564,9 @@ Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI)
         if (member.healer && member.player != bot)
             healers.push_back(member.player->GetPosition());
 
+    // the pack follows its tank, so he never walks it toward the healers
     EncounterHelpers::HazardSweepCache cache;
-    if (healers.empty())
+    if (healers.empty() || FactionChampionsIsPackTank(bot))
         return EncounterHelpers::FindNearestPositionClearOfHazards(bot, clearances, AOE_SEARCH_RADIUS, &cache);
 
     float x = 0.0f;

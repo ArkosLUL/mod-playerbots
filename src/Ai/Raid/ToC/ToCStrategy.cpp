@@ -25,6 +25,7 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
     AddToCAnubarakTriggerNodes(triggers);
     AddToCFactionChampionsTriggerNodes(triggers);
     AddToCFactionChampionsDefenceTriggerNodes(triggers);
+    AddToCFactionChampionsBallTriggerNodes(triggers);
     AddToCTwinValkyrTriggerNodes(triggers);
     AddToCStagingTriggerNodes(triggers);
     AddToCResistAuraTriggerNodes(triggers);

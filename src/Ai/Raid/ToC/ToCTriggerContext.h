@@ -20,6 +20,7 @@ public:
         Absorb(ToCAnubarakTriggerContext());
         Absorb(ToCFactionChampionsTriggerContext());
         Absorb(ToCFactionChampionsDefenceTriggerContext());
+        Absorb(ToCFactionChampionsBallTriggerContext());
         Absorb(ToCTwinValkyrTriggerContext());
         Absorb(ToCStagingTriggerContext());
         Absorb(ToCResistAuraTriggerContext());

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <iterator>
 #include <list>
 #include <string>
@@ -25,6 +26,7 @@
 #include "Timer.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Shared.h"
+#include "ToCHelpers_Staging.h"
 
 namespace TrialOfTheCrusaderHelpers
 {
@@ -63,6 +65,16 @@ constexpr float COUNTERSPELL_RANGE = 30.0f;
 // Cyclone's third application, 1.5 s, holds no longer than its own cast
 constexpr int32 CC_MIN_HOLD_MS = 2500;
 
+// The pack: champions this close to where they landed, the kill target left out
+constexpr float PACK_ANCHOR_RADIUS = 25.0f;
+// A healer this far off the pack, with nobody next to it, has been pulled out
+constexpr float PULLED_FROM_PACK = 20.0f;
+constexpr float PULLED_CLEAR = 12.0f;
+// Below this the current kill target is nearly dead, so a pulled healer waits its turn
+constexpr float PULLED_SWITCH_MIN_PCT = 30.0f;
+// Off the landing spot by this much and not on a tank: chasing the raid
+constexpr float ESCAPE_DIST = 20.0f;
+
 constexpr uint8 ICON_COUNT = 8;
 constexpr uint8 NO_ICON = ICON_COUNT;
 
@@ -87,6 +99,12 @@ struct Champion
     bool touchable = false;
     float healthPct = 0.0f;
     uint32 ccAura = 0;  // a player's fear, stun or confuse on it
+    float x = 0.0f;
+    float y = 0.0f;
+    bool healer = false;
+    bool pulled = false;
+    bool escapee = false;
+    float packDist = 0.0f;
 };
 
 struct FactionChampionsState
@@ -98,6 +116,9 @@ struct FactionChampionsState
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
     bool live = false;
+    uint32 liveSinceMs = 0;
+    Position packAnchor;
+    Position packCentre;
     std::vector<Champion> champions;  // alive, in kill order
     ObjectGuid suspended;
     // A player's skull on a champion. Group::SetTargetIcon strips every other icon off a target, so a
@@ -258,12 +279,66 @@ void ScanChampions(FactionChampionsState& state, Player* bot)
                                creature->IsImmunedToDamage(SPELL_SCHOOL_MASK_MAGIC));
         champion.healthPct = creature->GetHealthPct();
         champion.ccAura = PlayerCcAura(creature);
+        champion.x = creature->GetPositionX();
+        champion.y = creature->GetPositionY();
+        champion.healer = IsFactionChampionHealer(champion.entry);
+        Unit* victim = creature->GetVictim();
+        Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
+        champion.escapee = creature->GetExactDist2d(&state.packAnchor) > ESCAPE_DIST &&
+                           !(victimPlayer && PlayerbotAI::IsTank(victimPlayer));
         state.champions.push_back(champion);
     }
 
     std::sort(state.champions.begin(), state.champions.end(),
               [](Champion const& a, Champion const& b)
               { return a.rank != b.rank ? a.rank < b.rank : a.guid < b.guid; });
+}
+
+float Dist2d(float ax, float ay, float bx, float by) { return std::hypot(ax - bx, ay - by); }
+
+// Off the kill target as latched last tick, since the latch reads what this writes
+void UpdatePack(FactionChampionsState& state)
+{
+    ObjectGuid const killTarget = state.killTarget.Get();
+    float x = 0.0f;
+    float y = 0.0f;
+    uint32 count = 0;
+    for (bool nearOnly : {true, false})
+    {
+        for (Champion const& champion : state.champions)
+        {
+            if (!champion.inCombat || champion.guid == killTarget ||
+                (nearOnly && state.packAnchor.GetExactDist2d(champion.x, champion.y) > PACK_ANCHOR_RADIUS))
+                continue;
+
+            x += champion.x;
+            y += champion.y;
+            ++count;
+        }
+
+        if (count)
+            break;
+    }
+
+    if (count)
+        state.packCentre.Relocate(x / count, y / count, state.packAnchor.GetPositionZ());
+    else
+        state.packCentre = state.packAnchor;
+
+    for (Champion& champion : state.champions)
+    {
+        champion.packDist = state.packCentre.GetExactDist2d(champion.x, champion.y);
+        champion.pulled = false;
+        if (!champion.healer || !champion.inCombat || champion.packDist < PULLED_FROM_PACK)
+            continue;
+
+        champion.pulled = std::none_of(state.champions.begin(), state.champions.end(),
+                                       [&champion](Champion const& other)
+                                       {
+                                           return other.guid != champion.guid &&
+                                                  Dist2d(other.x, other.y, champion.x, champion.y) < PULLED_CLEAR;
+                                       });
+    }
 }
 
 // A creature's auras reach no other trace stream
@@ -300,6 +375,18 @@ Champion const* FindCandidate(FactionChampionsState const& state, ObjectGuid gui
             return champion.inCombat ? &champion : nullptr;
 
     return nullptr;
+}
+
+// Farthest off the pack, kill order breaking ties
+Champion const* BestPulled(FactionChampionsState const& state, ObjectGuid exclude)
+{
+    Champion const* best = nullptr;
+    for (Champion const& champion : state.champions)
+        if (champion.inCombat && champion.touchable && champion.pulled && champion.guid != exclude &&
+            (!best || champion.packDist > best->packDist))
+            best = &champion;
+
+    return best;
 }
 
 Champion const* BestCandidate(FactionChampionsState const& state, bool touchable, ObjectGuid exclude)
@@ -346,11 +433,25 @@ void UpdateKillLatch(FactionChampionsState& state, Player* bot)
             reason = "back";
             state.suspended.Clear();
         }
+        // a healer dragged out of the pack gets no heals from the others, so it goes first. Once the
+        // latch sits on a pulled one it stays there.
+        else if (!current->pulled && current->healthPct > PULLED_SWITCH_MIN_PCT)
+        {
+            if (Champion const* pulled = BestPulled(state, current->guid))
+            {
+                next = pulled->guid;
+                reason = "pulled";
+            }
+        }
     }
     else if (current)
     {
+        Champion const* other = BestPulled(state, current->guid);
+        if (!other)
+            other = BestCandidate(state, true, current->guid);
+
         // With nobody else touchable there's nothing better to hit, so it stays
-        if (Champion const* other = BestCandidate(state, true, current->guid))
+        if (other)
         {
             state.suspended = current->guid;
             next = other->guid;
@@ -359,7 +460,9 @@ void UpdateKillLatch(FactionChampionsState& state, Player* bot)
     }
     else
     {
-        Champion const* best = BestCandidate(state, true, ObjectGuid::Empty);
+        Champion const* best = BestPulled(state, ObjectGuid::Empty);
+        if (!best)
+            best = BestCandidate(state, true, ObjectGuid::Empty);
         if (!best)
             best = BestCandidate(state, false, ObjectGuid::Empty);
 
@@ -418,9 +521,12 @@ void UpdateCcAssignments(FactionChampionsState& state, Player* bot)
     std::vector<ObjectGuid> candidates;
     // Not the suspended one either: the latch goes back to it, and CC on it would break or block that.
     // Nor the skulled one, even while it's immune and so not the latch.
-    for (Champion const& champion : state.champions)
-        if (champion.guid != killTarget && champion.guid != state.suspended && champion.guid != state.skulled)
-            candidates.push_back(champion.guid);
+    // escapees first, one loose on the raid hurts more than one sitting on the tank
+    for (bool escapees : {true, false})
+        for (Champion const& champion : state.champions)
+            if (champion.escapee == escapees && champion.guid != killTarget && champion.guid != state.suspended &&
+                champion.guid != state.skulled)
+                candidates.push_back(champion.guid);
 
     std::vector<ObjectGuid> released;
     for (auto const& [ccBot, target] : state.ccTargets.Raw())
@@ -470,6 +576,7 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
 
     state->memoMs = now;
     state->memoValid = true;
+    bool const wasLive = state->live;
     state->live = ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions);
     if (!state->live)
     {
@@ -477,7 +584,14 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
         return state;
     }
 
+    if (!wasLive)
+    {
+        state->liveSinceMs = now;
+        state->packAnchor = GetFactionChampionsLandingCentre(bot);
+    }
+
     ScanChampions(*state, bot);
+    UpdatePack(*state);
     UpdateCcAuras(*state);
     Unit* skull = GetToCHumanSkull(botAI, &IsChampionUnit);
     state->skulled = skull ? skull->GetGUID() : ObjectGuid::Empty;
@@ -759,7 +873,80 @@ uint32 FactionChampionsPetTauntAutocast(PlayerbotAI* botAI)
     return 0;
 }
 
-bool FactionChampionsFocusBot(PlayerbotAI* botAI) { return botAI && !PlayerbotAI::IsHeal(botAI->GetBot()); }
+bool FactionChampionsIsPackTank(Player* player)
+{
+    return player && GET_PLAYERBOT_AI(player) && PlayerbotAI::IsTank(player);
+}
+
+bool FactionChampionsFocusBot(PlayerbotAI* botAI)
+{
+    return botAI && !PlayerbotAI::IsHeal(botAI->GetBot()) && !FactionChampionsIsPackTank(botAI->GetBot());
+}
+
+bool FactionChampionsPack(PlayerbotAI* botAI, Position& anchor, Position& centre)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return false;
+
+    FactionChampionsState* state = Refresh(botAI);
+    if (!state || !state->live)
+        return false;
+
+    anchor = state->packAnchor;
+    centre = state->packCentre;
+    return true;
+}
+
+namespace
+{
+Champion const* LiveChampion(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!unit || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return nullptr;
+
+    FactionChampionsState* state = Refresh(botAI);
+    return state && state->live ? FindCandidate(*state, unit->GetGUID()) : nullptr;
+}
+}  // namespace
+
+bool FactionChampionsIsPulled(PlayerbotAI* botAI, Unit* champion)
+{
+    Champion const* found = LiveChampion(botAI, champion);
+    return found && found->pulled;
+}
+
+bool FactionChampionsIsEscapee(PlayerbotAI* botAI, Unit* champion)
+{
+    Champion const* found = LiveChampion(botAI, champion);
+    return found && found->escapee;
+}
+
+uint32 FactionChampionsLiveMs(PlayerbotAI* botAI)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return 0;
+
+    FactionChampionsState* state = Refresh(botAI);
+    return state && state->live ? getMSTimeDiff(state->liveSinceMs, getMSTime()) : 0;
+}
+
+Unit* FactionChampionsNextHealerInPack(PlayerbotAI* botAI)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return nullptr;
+
+    FactionChampionsState* state = Refresh(botAI);
+    if (!state || !state->live)
+        return nullptr;
+
+    ObjectGuid const killTarget = state->killTarget.Get();
+    for (Champion const& champion : state->champions)
+        if (champion.healer && champion.inCombat && champion.touchable && !champion.pulled &&
+            champion.guid != killTarget && champion.guid != state->suspended)
+            return AliveCreature(botAI->GetBot(), champion.guid);
+
+    return nullptr;
+}
 
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI)
 {

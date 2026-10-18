@@ -88,13 +88,17 @@ bool FactionChampionsReachIntoAoe(PlayerbotAI* botAI);
 // The target carries Unstable Affliction, so a dispel that removes Magic may hit the dispeller
 bool FactionChampionsDispelBackfires(PlayerbotAI* botAI, Unit* target);
 
-// The kill target and the stand to Death Grip it from, when this bot is the DK on grip duty: the kill
-// target has 2+ other champions within 8 yd, and the stand pulls it clear of them inside heal range.
-// Latched raid-wide, written to fc.grip.
+// The champion and the stand to Death Grip it from, when this bot is the DK on grip duty: the kill
+// target while it is under 45 yd off the pack centre or in 40 yd of another champion healer, else at
+// 20% or under the next healer still in the pack. The stand is 27 yd off it, the floor bearing
+// farthest from the pack. Latched raid-wide, written to fc.grip.
 Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand);
 
+// A DK is on its way to grip the kill target out of the pack, which it hasn't left yet
+bool FactionChampionsGripPending(PlayerbotAI* botAI);
+
 // The melee champion this bot snares and the spell id, when its victim is a healer or under half
-// health and nothing slows it yet. One snarer per champion.
+// health, or it is loose off the tank, and nothing slows it yet. One snarer per champion.
 Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The group member this bot covers with an external defensive and the spell id, when two or more

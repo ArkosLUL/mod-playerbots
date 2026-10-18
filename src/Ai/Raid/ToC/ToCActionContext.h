@@ -19,6 +19,7 @@ public:
         Absorb(ToCAnubarakActionContext());
         Absorb(ToCFactionChampionsActionContext());
         Absorb(ToCFactionChampionsDefenceActionContext());
+        Absorb(ToCFactionChampionsBallActionContext());
         Absorb(ToCTwinValkyrActionContext());
         Absorb(ToCStagingActionContext());
         Absorb(ToCResistAuraActionContext());

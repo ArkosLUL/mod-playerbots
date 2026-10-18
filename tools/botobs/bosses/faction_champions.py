@@ -14,6 +14,8 @@
     faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds
     faction_champions.py <file> --pack     champions round each role, early melee deaths, first kill, stalls, grips
     faction_champions.py <file> --peel     snares on melee champions, externals, battle res, taunts
+    faction_champions.py <file> --ball     the death ball: who the champions chase, how far the kill target
+                                           and the raid stand off the pack, escapees, opener and trinkets
     faction_champions.py <file> --vetoes   the Faction Champions multipliers and rules, by action
 
 What the generic views get wrong here, and what this reads instead:
@@ -113,7 +115,7 @@ SWITCH = "fc.switch"
 CC = "fc.cc"
 CC_AURA = "fc.ccaura"
 TOTEM = "fc.totem"
-SWITCH_REASONS = ("first", "dead", "immune", "back", "skull", "reset")
+SWITCH_REASONS = ("first", "dead", "immune", "back", "skull", "pulled", "reset")
 
 # Champion cast-time heals, every difficulty's id: (name, cast ms, ids). The cast row's own `ct` wins
 # when set, and a channel's reads 0.
@@ -277,6 +279,17 @@ STALL_ATTACKERS = 10
 STALL_MS = 20000
 # how long after a grip the landing is read
 GRIP_SETTLE_MS = 1000
+
+PACK_TANK = "fc.packtank"
+OPENER = "fc.opener"
+# the pack: champions this close to where they landed, the kill target left out
+BALL_ANCHOR_RADIUS = 25.0
+# a champion healer's heal reach
+BALL_HEAL_REACH = 40.0
+# off the landing spot by this much and not on a tank: loose on the raid
+BALL_ESCAPE = 20.0
+BALL_WINDOW_MS = 10000
+SPELL_PVP_TRINKET = 65547
 
 SNARES = {1715: "Hamstring", 12323: "Piercing Howl", 45524: "Chains of Ice", 2974: "Wing Clip",
           5116: "Concussive Shot",
@@ -1563,6 +1576,178 @@ def show_vetoes(trace: Trace) -> None:
     print("  veto rows, not ticks: one is written when the verdict changes and again every 10 s it holds")
 
 
+def pack_anchor(trace: Trace) -> tuple[float, float] | None:
+    """Where the champions landed: their centroid in the first snapshot from the pull."""
+    targets = champions(trace)
+    start = pull_start(trace)
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        rows = live_rows(snap, targets)
+        if rows:
+            return (statistics.mean(row[1] for row in rows), statistics.mean(row[2] for row in rows))
+    return None
+
+
+def pack_centre(rows: list[list], anchor: tuple[float, float], kill: int) -> tuple[float, float] | None:
+    """The middle of the champions within 25 yd of the landing spot, the kill target left out; of all the
+    others when none is that close."""
+    others = [row for row in rows if row[0] != kill]
+    near = [row for row in others if distance(row, [0, *anchor]) <= BALL_ANCHOR_RADIUS]
+    pick = near or others
+    if not pick:
+        return None
+    return (statistics.mean(row[1] for row in pick), statistics.mean(row[2] for row in pick))
+
+
+def ball_windows(trace: Trace) -> list[dict]:
+    """Per 10 s from the pull: `start`, champion targets by role (`targets`, a Counter, `other` for
+    anything not on the roster), and the median distance of live `ranged` and `heal` to the pack centre."""
+    anchor = pack_anchor(trace)
+    if anchor is None:
+        return []
+    targets = champions(trace)
+    roster = roster_guids(trace)
+    kill = kill_spans(trace)
+    start = pull_start(trace)
+    windows: dict[int, dict] = {}
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        index = (snap["t"] - start) // BALL_WINDOW_MS
+        window = windows.setdefault(index, {"start": start + index * BALL_WINDOW_MS,
+                                            "targets": collections.Counter(), "ranged": [], "heal": []})
+        rows = live_rows(snap, targets)
+        for row in rows:
+            victim = row[7] if len(row) > 7 else 0
+            window["targets"][trace.role(victim) if victim in roster else "other"] += 1
+        centre = pack_centre(rows, anchor, held_at(kill, snap["t"]))
+        if centre is None:
+            continue
+        for row in live_rows(snap, roster):
+            role = trace.role(row[0])
+            if role in ("ranged", "heal"):
+                window[role].append(distance(row, [0, *centre]))
+    return [{**window, "ranged": statistics.median(window["ranged"]) if window["ranged"] else None,
+             "heal": statistics.median(window["heal"]) if window["heal"] else None}
+            for _, window in sorted(windows.items())]
+
+
+def kill_isolation(trace: Trace) -> list[dict]:
+    """Per kill target hold: `guid`, `start`, `stop`, the median distance to the pack centre (`pack`) and the
+    share of its samples with no other champion healer within 40 yd (`clear`), None without samples."""
+    anchor = pack_anchor(trace)
+    if anchor is None:
+        return []
+    targets = champions(trace)
+    healers = {guid for guid, _, healer in lineup(trace) if healer}
+    out = []
+    for guid, start, stop in kill_spans(trace):
+        if not guid:
+            continue
+        gaps, clear = [], []
+        for snap in frames(trace):
+            if not start <= snap["t"] < stop:
+                continue
+            rows = live_rows(snap, targets)
+            row = next((row for row in rows if row[0] == guid), None)
+            centre = pack_centre(rows, anchor, guid)
+            if row is None or centre is None:
+                continue
+            gaps.append(distance(row, [0, *centre]))
+            clear.append(all(distance(row, other) > BALL_HEAL_REACH
+                             for other in rows if other[0] in healers and other[0] != guid))
+        out.append({"guid": guid, "start": start, "stop": stop,
+                    "pack": statistics.median(gaps) if gaps else None,
+                    "clear": sum(clear) / len(clear) if clear else None})
+    return out
+
+
+def escapee_seconds(trace: Trace) -> dict[int, float]:
+    """Per champion, seconds spent past 20 yd of where the pack landed with a victim that isn't a tank."""
+    anchor = pack_anchor(trace)
+    if anchor is None:
+        return {}
+    targets = champions(trace)
+    start = pull_start(trace)
+    out: dict[int, float] = collections.defaultdict(float)
+    previous = None
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        if previous is not None:
+            step = (snap["t"] - previous) / 1000
+            for row in live_rows(snap, targets):
+                victim = row[7] if len(row) > 7 else 0
+                if distance(row, [0, *anchor]) > BALL_ESCAPE and trace.role(victim) != "tank":
+                    out[row[0]] += step
+        previous = snap["t"]
+    return dict(out)
+
+
+def champion_trinkets(trace: Trace) -> list[tuple[int, int]]:
+    """`(t, champion)` for each champion PvP trinket cast."""
+    targets = champions(trace)
+    return [(rec["t"], rec.get("s")) for rec in trace.of("cast")
+            if rec.get("sp") == SPELL_PVP_TRINKET and rec.get("s") in targets]
+
+
+def duty_holds(trace: Trace, key: str) -> list[dict]:
+    """Each hold of a per-bot probe: `bot`, `value`, `start`, `stop`."""
+    out = []
+    for bot, spans in holder_spans(trace, key, pull_end(trace)).items():
+        for value, start, stop in spans:
+            if str(value) not in ("", "0"):
+                out.append({"bot": bot, "value": value, "start": start, "stop": stop})
+    return sorted(out, key=lambda row: (row["start"], row["bot"]))
+
+
+def show_ball(trace: Trace) -> None:
+    print("THE DEATH BALL")
+    windows = ball_windows(trace)
+    if not windows:
+        print("  no champion in the snapshots")
+        return
+    print(f"  {'from':>8} {'champion targets tank/melee/ranged/heal/other %':47} {'ranged':>7} {'heal':>6}")
+    for window in windows:
+        total = sum(window["targets"].values()) or 1
+        shares = "/".join(f"{100 * window['targets'][role] // total:3d}"
+                          for role in ("tank", "melee", "ranged", "heal", "other"))
+        ranged = "-" if window["ranged"] is None else f"{window['ranged']:.1f}"
+        heal = "-" if window["heal"] is None else f"{window['heal']:.1f}"
+        print(f"  {clock(window['start']):>8} {shares:47} {ranged:>7} {heal:>6}")
+
+    rows = kill_isolation(trace)
+    if rows:
+        print(f"\n  {'kill target':20} {'from':>9} {'length':>7} {'off pack':>8} {'clear of healers':>16}")
+        for row in rows:
+            pack = "-" if row["pack"] is None else f"{row['pack']:.1f}"
+            clear = "-" if row["clear"] is None else f"{100 * row['clear']:.0f}%"
+            print(f"  {trace.name(row['guid'])[:20]:20} {clock(row['start']):>9}"
+                  f" {(row['stop'] - row['start']) / 1000:6.1f}s {pack:>8} {clear:>16}")
+
+    loose = escapee_seconds(trace)
+    if loose:
+        print("\n  escapees, s off the landing spot not on a tank: " + ", ".join(
+            f"{trace.name(guid)} {seconds:.0f}" for guid, seconds in sorted(loose.items(), key=lambda kv: -kv[1])
+            if seconds >= 1))
+    tanks = duty_holds(trace, PACK_TANK)
+    print(f"  {PACK_TANK}: " + (", ".join(sorted({trace.name(hold['bot']) for hold in tanks})) if tanks else "none"))
+    openers = duty_holds(trace, OPENER)
+    for hold in openers:
+        spell = as_guid(hold["value"])
+        print(f"  {OPENER}: {trace.name(hold['bot'])} {trace.spell(spell) if spell else hold['value']}"
+              f" {clock(hold['start'])}-{clock(hold['stop'])}")
+    if not openers:
+        print(f"  {OPENER}: none")
+    trinkets = champion_trinkets(trace)
+    print("  champion PvP trinkets: " + (", ".join(f"{trace.name(guid)} {clock(when)}" for when, guid in trinkets)
+                                         if trinkets else "none"))
+    print(f"  the pack centre is the champions within {BALL_ANCHOR_RADIUS:.0f} yd of where they landed (their"
+          f" centroid in the first snapshot), the kill target left out; clear means no other champion healer"
+          f" within {BALL_HEAL_REACH:.0f} yd; ranged and heal are medians to the pack centre in yd")
+
+
 SECTIONS = (
     ("kill", "each kill target hold: why, how long, health, who was on it", show_kill),
     ("cc", "CC assignments, CC held and fear uptime per champion, casts started and landed", show_cc),
@@ -1576,6 +1761,7 @@ SECTIONS = (
     ("adds", "champion totems and treants, treant damage, fc.totem holds", show_adds),
     ("pack", "champions round each role, early melee deaths, first kill, longest stall, grips", show_pack),
     ("peel", "snares on melee champions, externals on the raid, battle res, taunts", show_peel),
+    ("ball", "the death ball: champion targets by role, kill target off the pack, escapees, opener", show_ball),
     ("vetoes", "the Faction Champions multipliers and rules, by action", show_vetoes),
 )
 

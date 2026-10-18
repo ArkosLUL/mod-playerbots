@@ -5,6 +5,7 @@
 #include "Position.h"
 #include "ToCEncounterGate.h"
 
+class Player;
 class PlayerbotAI;
 
 // Pre-pull stands: every boss turns hostile on the same script point each pull, so bots wait on a
@@ -67,6 +68,9 @@ void SetToCStagingParked(PlayerbotAI* botAI, bool parked);
 bool IsToCStagingHeld(PlayerbotAI* botAI);
 // Held, and walking or on a duty stand
 bool IsToCStagingRestHeld(PlayerbotAI* botAI);
+
+// The middle of the Faction Champions' landing slots for the bot's faction, where the pack lands
+Position GetFactionChampionsLandingCentre(Player* bot);
 
 }
 

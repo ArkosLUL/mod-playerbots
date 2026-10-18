@@ -847,6 +847,90 @@ class PackAndPeel(unittest.TestCase):
                       " Taunt human 1", text)
 
 
+def ball_snap(when: int) -> dict:
+    # pulled 50 yd off the pack at 5 s; the mage champion is loose on the priest all along
+    paladin = (50.0, 0.0) if when >= 5000 else (2.0, 0.0)
+    units = [placed(TANK, 0.0, 0.0, 100.0, ROGUE_C), placed(PRIEST, 60.0, 0.0, 100.0, 0),
+             placed(HUNTER, 55.0, 0.0, 100.0, PALADIN),
+             placed(PALADIN, *paladin, 80.0, HUNTER), placed(DISC, 0.0, 2.0, 100.0, TANK),
+             placed(ROGUE_C, 1.0, 0.0, 100.0, TANK), placed(WARRIOR_C, 0.0, -1.0, 100.0, TANK),
+             placed(MAGE_C, 40.0, 0.0, 100.0, PRIEST)]
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def ball_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": PRIEST, "n": "Mercy", "r": "heal", "c": 5, "h": 0},
+                    {"g": HUNTER, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": DISC, "en": 34466, "n": "Anthar Forgemender", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
+        {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
+        note(0, TANK, "fc.switch", "first"),
+        note(0, TANK, "fc.kill", PALADIN),
+        note(0, TANK, fc.PACK_TANK, 1),
+        note(2500, HUNTER, fc.OPENER, 42917),
+        note(3000, HUNTER, fc.OPENER, 0),
+        cast(3000, ROGUE_C, fc.SPELL_PVP_TRINKET, ROGUE_C),
+        {"t": 20000, "e": "end", "out": "wipe"},
+    ]
+    records += [ball_snap(when) for when in range(0, 20001, 1000)]
+    return records
+
+
+class DeathBall(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in ball_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_anchor_is_where_the_champions_landed(self):
+        x, y = fc.pack_anchor(self.trace)
+        self.assertAlmostEqual(x, 8.6)
+        self.assertAlmostEqual(y, 0.2)
+
+    def test_windows_split_champion_targets_by_role_and_measure_the_raid_off_the_pack(self):
+        first = fc.ball_windows(self.trace)[0]
+        self.assertEqual(first["targets"], collections.Counter({"tank": 30, "ranged": 10, "heal": 10}))
+        # the pack centre is the three champions on the tank, the loose mage left out
+        self.assertAlmostEqual(first["ranged"], ((55 - 1 / 3) ** 2 + (1 / 3) ** 2) ** 0.5)
+
+    def test_the_pulled_kill_target_reads_off_the_pack_and_clear_of_the_healers(self):
+        (row,) = fc.kill_isolation(self.trace)
+        self.assertEqual(row["guid"], PALADIN)
+        self.assertAlmostEqual(row["clear"], 0.75)
+        self.assertGreater(row["pack"], 49.0)
+
+    def test_escapees_count_seconds_off_the_landing_spot_not_on_a_tank(self):
+        self.assertEqual(fc.escapee_seconds(self.trace), {MAGE_C: 20.0, PALADIN: 16.0})
+
+    def test_duties_and_trinkets(self):
+        self.assertEqual([hold["bot"] for hold in fc.duty_holds(self.trace, fc.PACK_TANK)], [TANK])
+        self.assertEqual([(hold["bot"], hold["start"], hold["stop"]) for hold in fc.duty_holds(self.trace, fc.OPENER)],
+                         [(HUNTER, 2500, 3000)])
+        self.assertEqual(fc.champion_trinkets(self.trace), [(3000, ROGUE_C)])
+
+    def test_the_section_renders(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_ball(self.trace)
+        text = out.getvalue()
+        self.assertRegex(text, r"0:00\.000 +60/  0/ 20/ 20/  0")
+        self.assertRegex(text, r"Velanaa +0:00\.000 +20\.0s +49\.\d +75%")
+        self.assertIn("fc.packtank: Bulwark", text)
+        self.assertIn("champion PvP trinkets: Irieth Shadowstep 0:03.000", text)
+
+
 class Source(unittest.TestCase):
     def test_the_kill_order_covers_the_champion_enum(self):
         text = CHAMPIONS_HEADER.read_text(encoding="utf-8")
@@ -899,6 +983,11 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.external_casts(trace), [])
         self.assertEqual(fc.battle_res_casts(trace), [])
         self.assertEqual(fc.taunt_casts(trace), collections.Counter())
+        self.assertEqual(fc.ball_windows(trace), [])
+        self.assertEqual(fc.kill_isolation(trace), [])
+        self.assertEqual(fc.escapee_seconds(trace), {})
+        self.assertEqual(fc.champion_trinkets(trace), [])
+        self.assertEqual(fc.duty_holds(trace, fc.PACK_TANK), [])
 
 
 if __name__ == "__main__":

@@ -459,24 +459,50 @@ void LayoutJaraxxus(PlayerbotAI* botAI, uint32 stage, std::vector<Player*> const
     SortOrder(layout, StandRole::Ranged, inner);
 }
 
-void LayoutChampions(Player* bot, Layout& layout)
+std::vector<Point2> ChampionLanding(Player* bot)
 {
     InstanceScript* instance = bot->GetInstanceScript();
     bool const alliance = instance && instance->GetTeamIdInInstance() == TEAM_ALLIANCE;
 
     std::vector<Point2> landing;
-    Point2 centroid{0.0f, 0.0f};
     for (Point2 const& slot : FACTION_CHAMPION_LANDING)
+        landing.push_back({alliance ? slot.x : 2.0f * LOC_CENTER.x - slot.x, slot.y});
+
+    return landing;
+}
+
+Point2 ChampionLandingCentroid(std::vector<Point2> const& landing)
+{
+    Point2 centroid{0.0f, 0.0f};
+    for (Point2 const& point : landing)
     {
-        Point2 const point{alliance ? slot.x : 2.0f * LOC_CENTER.x - slot.x, slot.y};
-        landing.push_back(point);
         centroid.x += point.x;
         centroid.y += point.y;
     }
     centroid.x /= static_cast<float>(landing.size());
     centroid.y /= static_cast<float>(landing.size());
+    return centroid;
+}
+
+// Bot tanks wait in the middle of the landing slots, so at the release they are the nearest player to
+// every champion and their AoE seeds threat before the script's first recount
+void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<DutyStand>& duties, Layout& layout)
+{
+    std::vector<Point2> const landing = ChampionLanding(bot);
+    Point2 const centroid = ChampionLandingCentroid(landing);
 
     Point2 const centre = PointOf(ARENA_CENTER);
+    Vec2 const inward = Direction(centroid, centre);
+    float offset = 0.0f;
+    for (Player* member : bots)
+    {
+        if (!PlayerbotAI::IsTank(member))
+            continue;
+
+        AddForcedDuty(duties, member, "tank", Along(centroid, inward, offset), centroid);
+        offset += STAGING_DUTY_STAND;
+    }
+
     for (Point2 const& point : HexLattice(centre, CHAMPION_LATTICE_STEP, centre, WORM_SPOT_FLOOR_RADIUS))
     {
         bool const clear = std::all_of(landing.begin(), landing.end(),
@@ -666,7 +692,7 @@ void Deal(PlayerbotAI* botAI, StagingState& state, ToCStagingBoss arrival, uint3
             LayoutJaraxxus(botAI, stage, bots, duties, layout);
             break;
         case ToCStagingBoss::Champions:
-            LayoutChampions(bot, layout);
+            LayoutChampions(bot, bots, duties, layout);
             break;
         case ToCStagingBoss::Twins:
             LayoutTwins(bots, duties, layout);
@@ -975,6 +1001,12 @@ ToCStagingRead ReadStand(PlayerbotAI* botAI, bool note)
     return read;
 }
 }  // namespace
+
+Position GetFactionChampionsLandingCentre(Player* bot)
+{
+    Point2 const centroid = ChampionLandingCentroid(ChampionLanding(bot));
+    return At(centroid, ARENA_STAND_Z);
+}
 
 ToCStagingBoss GetToCStagedArrival(PlayerbotAI* botAI)
 {
