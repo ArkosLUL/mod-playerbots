@@ -2026,6 +2026,9 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
     float shiftY = 0.0f;
     MimironStickyShiftIntoRange(bot, slots, focus, shiftX, shiftY);
 
+    if (slots.empty())
+        return false;
+
     Position const& mine = slots[std::min(index, count - 1)];
     out = Position(mine.GetPositionX() + shiftX, mine.GetPositionY() + shiftY, mine.GetPositionZ());
     return true;
