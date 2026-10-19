@@ -1545,8 +1545,9 @@ bool SerialDue(StarPlan const& plan, AlgalonEncounterState const& state, Group* 
     return death <= budget;
 }
 
-// Raid wide and unavoidable: everyone unphased must survive its top roll, or be at full when their max is below it.
-uint32 RaidUnderExplosionLine(Player* bot, Group* group)
+// Raid wide and unavoidable: everyone it hits must survive its top roll, or be at full when their max is below it.
+template <typename Hit>
+uint32 RaidUnderExplosionLine(Player* bot, Group* group, Hit hit)
 {
     if (!group)
         return 0;
@@ -1557,12 +1558,14 @@ uint32 RaidUnderExplosionLine(Player* bot, Group* group)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (CanStayOut(member) && member->GetHealth() < std::min(blast, member->GetMaxHealth()))
+        if (hit(member) && member->GetHealth() < std::min(blast, member->GetMaxHealth()))
             ++under;
     }
 
     return under;
 }
+
+uint32 RaidUnderExplosionLine(Player* bot, Group* group) { return RaidUnderExplosionLine(bot, group, CanStayOut); }
 
 bool RaidAffordsExplosion(Player* bot, Group* group) { return !RaidUnderExplosionLine(bot, group); }
 
@@ -2220,16 +2223,18 @@ bool DiesUnder(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
 }
 
 // The star forecast to die soonest within `leadMs`. With `bot`, only one still alive: the scan lags a death by up
-// to a tick, and the explosion leaves the bot under its line, pressing for a star already gone.
+// to a tick, and the explosion leaves the bot under its line, pressing for a star already gone. `underToo` keeps
+// the stars planned under the cast, for whoever they catch outside a field.
 AlgalonScanUnit const* ExplodingStar(AlgalonEncounterState const& state, uint32 leadMs,
-                                     float lowPct = ULDUAR_ALGALON_EXPLOSION_LOW_PCT, Player* bot = nullptr)
+                                     float lowPct = ULDUAR_ALGALON_EXPLOSION_LOW_PCT, Player* bot = nullptr,
+                                     bool underToo = false)
 {
     AlgalonScanUnit const* soonest = nullptr;
     int32 best = std::numeric_limits<int32>::max();
     for (AlgalonScanUnit const& star : state.stars)
     {
         int32 const death = ExplosionDueMs(star, lowPct);
-        if (death <= static_cast<int32>(leadMs) && death < best && !DiesUnder(state, star) &&
+        if (death <= static_cast<int32>(leadMs) && death < best && (underToo || !DiesUnder(state, star)) &&
             (!bot || Resolve(bot, star.guid)))
         {
             soonest = &star;
@@ -2243,15 +2248,15 @@ AlgalonScanUnit const* ExplodingStar(AlgalonEncounterState const& state, uint32 
 // The hit to survive from `first` and the live stars dying within the stack window of it, the soonest few,
 // each covered only if it dies before the cover running on the bot ends.
 float StackedHit(AlgalonEncounterState const& state, Player* bot, AlgalonScanUnit const& first, float topRoll,
-                 int32 coverMs)
+                 int32 coverMs, bool underToo = false)
 {
     int32 const from = ExplosionDueMs(first, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
     std::vector<int32> deaths;
     for (AlgalonScanUnit const& star : state.stars)
     {
         int32 const death = ExplosionDueMs(star, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
-        if (death <= from + static_cast<int32>(ULDUAR_ALGALON_EXPLOSION_STACK_MS) && !DiesUnder(state, star) &&
-            Resolve(bot, star.guid))
+        if (death <= from + static_cast<int32>(ULDUAR_ALGALON_EXPLOSION_STACK_MS) &&
+            (underToo || !DiesUnder(state, star)) && Resolve(bot, star.guid))
             deaths.push_back(death);
     }
 
@@ -3691,20 +3696,35 @@ void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut)
 
 namespace
 {
-// Who covers the star about to explode, and with what: one per star, none while one is up.
+bool CaughtOutside(AlgalonEncounterState const& state, Player* member, int32 deathMs);
+
+// An under-star dies on its drain, any other on its slope.
+int32 StarDeathMs(AlgalonScanUnit const& star)
+{
+    return star.under && star.tickHp ? DrainDeathMs(star) : ExplosionDueMs(star, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
+}
+
+// Who covers the star about to explode, and with what: one per star, none while one is up. In the cast only
+// those still outside a field when it dies count.
 Player* ExplosionCoverProvider(PlayerbotAI* botAI, char const*& cover)
 {
     cover = nullptr;
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     AlgalonEncounterState const* state = FindState(bot);
     Group* group = bot ? bot->GetGroup() : nullptr;
-    if (!state || !group || state->phase.Get() != AlgalonPhase::One || state->bigBangCasting)
+    if (!state || !group || state->phase.Get() != AlgalonPhase::One)
         return nullptr;
 
+    bool const casting = state->bigBangCasting;
     AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS,
-                                                ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT, bot);
-    if (!star || star->guid == state->coverStar || ExplosionCovered(group, *state) ||
-        RaidUnderExplosionLine(bot, group) < ULDUAR_ALGALON_EXPLOSION_COVER_MIN_UNDER)
+                                                ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT, bot, casting);
+    if (!star || star->guid == state->coverStar || ExplosionCovered(group, *state))
+        return nullptr;
+
+    int32 const death = StarDeathMs(*star);
+    auto const hit = [state, casting, death](Player* member)
+    { return casting ? CaughtOutside(*state, member, death) : CanStayOut(member); };
+    if (RaidUnderExplosionLine(bot, group, hit) < ULDUAR_ALGALON_EXPLOSION_COVER_MIN_UNDER)
         return nullptr;
 
     // Its own aura is the one it doubles, so only with that aura up.
@@ -3756,7 +3776,8 @@ void ClaimAlgalonExplosionCover(Player* bot, char const* cover)
 {
     AlgalonEncounterState* state = FindState(bot);
     AlgalonScanUnit const* star = state ? ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS,
-                                                        ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT, bot)
+                                                        ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT, bot,
+                                                        state->bigBangCasting)
                                         : nullptr;
     if (!star)
         return;
@@ -3776,21 +3797,23 @@ struct PersonalButton
     // What is left of the hit, by factor and by flat absorb.
     float factor;
     uint32 absorb;
+    // Keeps the field's phase off, so never in the cast: the hide run strips it.
+    bool immunity = false;
 };
 
 // Cheapest cooldown first, so a bubble or a block only goes when nothing shorter will do. Cloak (90% to resist,
-// not a cut) sits behind sure ones of the same cooldown. Immunities only up to the cast: the hide run strips them.
+// not a cut) sits behind sure ones of the same cooldown.
 PersonalButton const PERSONAL_BUTTONS[] = {
     {"shadow ward", 0, 1.0f, 3300},
-    {"anti magic shell", SPELL_ALGALON_ANTI_MAGIC_SHELL, 0.25f, 0},
+    {"anti magic shell", SPELL_ALGALON_ANTI_MAGIC_SHELL, 0.25f, 0, true},
     {"barkskin", 0, 0.8f, 0},
     {"shamanistic rage", 0, 0.7f, 0},
-    {"cloak of shadows", 0, 0.1f, 0},
+    {"cloak of shadows", 0, 0.1f, 0, true},
     {"icebound fortitude", 0, 0.7f, 0},
     {"dispersion", 0, 0.1f, 0},
     {"divine protection", 0, 0.5f, 0},
-    {"ice block", 0, 0.0f, 0},
-    {"divine shield", 0, 0.0f, 0},
+    {"ice block", 0, 0.0f, 0, true},
+    {"divine shield", 0, 0.0f, 0, true},
 };
 
 uint32 PersonalButtonId(Player* bot, PersonalButton const& button)
@@ -3859,13 +3882,15 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     AlgalonEncounterState const* state = FindState(bot);
     Group* group = bot ? bot->GetGroup() : nullptr;
-    if (!state || !group || state->phase.Get() != AlgalonPhase::One || state->bigBangCasting ||
-        IsAlgalonPhased(bot) || state->swapPair.count(bot->GetGUID()))
+    if (!state || !group || state->phase.Get() != AlgalonPhase::One || IsAlgalonPhased(bot) ||
+        state->swapPair.count(bot->GetGUID()))
         return pick;
 
-    AlgalonScanUnit const* star =
-        ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS, ULDUAR_ALGALON_EXPLOSION_LOW_PCT, bot);
-    if (!star)
+    // In the cast, only a star going off before the bot is in a field: the rest hit the void.
+    bool const casting = state->bigBangCasting;
+    AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS,
+                                                ULDUAR_ALGALON_EXPLOSION_LOW_PCT, bot, casting);
+    if (!star || (casting && !CaughtOutside(*state, bot, StarDeathMs(*star))))
         return pick;
 
     auto const pressed = state->personalStars.find(bot->GetGUID());
@@ -3874,7 +3899,7 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
 
     float const topRoll = static_cast<float>(
         bot->GetMap()->Is25ManRaid() ? ULDUAR_ALGALON_STAR_EXPLOSION_MAX_25 : ULDUAR_ALGALON_STAR_EXPLOSION_MAX_10);
-    float const hit = StackedHit(*state, bot, *star, topRoll, ExplosionCoverMs(bot, group, *state));
+    float const hit = StackedHit(*state, bot, *star, topRoll, ExplosionCoverMs(bot, group, *state), casting);
     float const health = static_cast<float>(bot->GetHealth());
     if (health > hit)
         return pick;
@@ -3896,7 +3921,7 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
     {
         PersonalButton const& button = PERSONAL_BUTTONS[i];
         float const left = hit * button.factor - button.absorb;
-        if (left >= health && left >= strongestLeft)
+        if ((left >= health && left >= strongestLeft) || (casting && button.immunity))
             continue;
 
         uint32 const spellId = spellIds[i];
@@ -3936,7 +3961,7 @@ void ClaimAlgalonExplosionPersonal(Player* bot, AlgalonPersonalPick const& pick)
 {
     AlgalonEncounterState* state = FindState(bot);
     AlgalonScanUnit const* star = state ? ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS,
-                                                        ULDUAR_ALGALON_EXPLOSION_LOW_PCT, bot)
+                                                        ULDUAR_ALGALON_EXPLOSION_LOW_PCT, bot, state->bigBangCasting)
                                         : nullptr;
     if (!star)
         return;
@@ -4027,6 +4052,125 @@ int32 HideWalkMs(AlgalonEncounterState const& state, Player* bot, float walk)
 
     return walkMs;
 }
+
+// A meteor a straight walk passes inside the doubled damage ring of, landing before the walker would be phased.
+AlgalonScanUnit const* SmashAcrossPath(AlgalonEncounterState const& state, Position const& from, Position const& to,
+                                       int32 phasedByMs, uint32 now)
+{
+    for (AlgalonScanUnit const& marker : state.markers)
+    {
+        auto const seen = state.markerSeenMs.find(marker.guid);
+        if (seen == state.markerSeenMs.end())
+            continue;
+
+        int32 const impact = MsUntil(seen->second + ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_MS, now);
+        if (impact > 0 && impact < phasedByMs &&
+            SegmentDistance(from, to.GetPositionX(), to.GetPositionY(), marker.position) <
+                ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE)
+            return &marker;
+    }
+
+    return nullptr;
+}
+
+// A leg passing a field other than the one at `to`, which would phase the walker early, away from its own hole.
+bool ClipsOtherHole(AlgalonEncounterState const& state, Position const& from, Position const& via, Position const& to)
+{
+    for (AlgalonScanUnit const& hole : state.holes)
+        if (hole.position.GetExactDist2d(to) > 0.5f &&
+            SegmentDistance(from, via.GetPositionX(), via.GetPositionY(), hole.position) <
+                ULDUAR_ALGALON_HOLE_PATH_CLEARANCE)
+            return true;
+
+    return false;
+}
+
+// The shortest walk round the meteor through a point on a ring about its impact, both legs clear of every meteor
+// and of every field but the hole it heads for.
+bool FindSmashDetour(Player* bot, AlgalonEncounterState const& state, AlgalonScanUnit const& smash, Position const& to,
+                     int32 phasedByMs, uint32 now, Position& waypoint, float& length)
+{
+    Position const from = bot->GetPosition();
+    float best = std::numeric_limits<float>::max();
+    for (uint8 step = 0; step < ULDUAR_ALGALON_SWEEP_BEARINGS; ++step)
+    {
+        float const angle = static_cast<float>(step) * ULDUAR_ALGALON_SWEEP_ANGLE_STEP;
+        float const x = smash.position.GetPositionX() + std::cos(angle) * ULDUAR_ALGALON_SMASH_DETOUR_RADIUS;
+        float const y = smash.position.GetPositionY() + std::sin(angle) * ULDUAR_ALGALON_SMASH_DETOUR_RADIUS;
+        if (!AlgalonSpotInRoom(x, y) || !ClearOfHoles(state, x, y))
+            continue;
+
+        Position const point(x, y, to.GetPositionZ());
+        if (ClipsOtherHole(state, from, point, to) || ClipsOtherHole(state, point, to, to) ||
+            SmashAcrossPath(state, from, point, phasedByMs, now) || SmashAcrossPath(state, point, to, phasedByMs, now))
+            continue;
+
+        float const legs = from.GetExactDist2d(x, y) + to.GetExactDist2d(x, y);
+        if (legs < best)
+        {
+            best = legs;
+            waypoint = point;
+        }
+    }
+
+    if (best == std::numeric_limits<float>::max())
+        return false;
+
+    length = best;
+    return true;
+}
+
+// Straight to the hole, or round the first meteor landing on the way before the bot is phased. Returns the
+// walk's length; with no way round, the straight one.
+float HideRoute(AlgalonEncounterState const& state, Player* bot, Position const& shelter, Position& next)
+{
+    next = shelter;
+    float const straight = bot->GetExactDist2d(shelter);
+    if (state.markers.empty())
+        return straight;
+
+    uint32 const now = getMSTime();
+    int32 const phasedBy = HideWalkMs(state, bot, std::max(0.0f, straight - ULDUAR_ALGALON_SHELTER_IN_RADIUS)) +
+                           ULDUAR_ALGALON_LAST_IN_MARGIN_MS;
+    AlgalonScanUnit const* smash = SmashAcrossPath(state, bot->GetPosition(), shelter, phasedBy, now);
+    float length = straight;
+    if (!smash || !FindSmashDetour(bot, state, *smash, shelter, phasedBy, now, next, length))
+    {
+        next = shelter;
+        return straight;
+    }
+
+    return length;
+}
+
+// Unphased and not yet in a field when a star dying in `deathMs` goes off: no hole, staying out, or its walk (a
+// bot's after the wait it still plans) and a pulse and a half run past it. Not the soaker, in Dispersion for it.
+bool CaughtOutside(AlgalonEncounterState const& state, Player* member, int32 deathMs)
+{
+    if (!CanStayOut(member) || member->GetGUID() == state.bigBangSoaker.Get())
+        return false;
+
+    if (!IsBot(member))
+    {
+        AlgalonScanUnit const* hole = NearestShelter(state, member->GetPosition());
+        if (!hole)
+            return true;
+
+        float const walk = std::max(0.0f, member->GetExactDist2d(hole->position) - ULDUAR_ALGALON_SHELTER_IN_RADIUS);
+        float const speed = std::max(1.0f, member->GetSpeed(MOVE_RUN));
+        return static_cast<int32>(walk / speed * IN_MILLISECONDS) + ULDUAR_ALGALON_LAST_IN_MARGIN_MS > deathMs;
+    }
+
+    AlgalonScanUnit const* hole = ShelterHole(member, state);
+    int32 const slack = AlgalonHideSlackMs(member);
+    if (!hole || slack == std::numeric_limits<int32>::max())
+        return true;
+
+    Position next;
+    float const route = HideRoute(state, member, hole->position, next);
+    int32 const walkMs = HideWalkMs(state, member, std::max(0.0f, route - ULDUAR_ALGALON_SHELTER_IN_RADIUS));
+    return std::max(0, slack) + walkMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS > deathMs;
+}
 }  // namespace
 
 int32 AlgalonHideSlackMs(Player* bot)
@@ -4044,7 +4188,10 @@ int32 AlgalonHideSlackMs(Player* bot)
     if (!shelter)
         return std::numeric_limits<int32>::max();
 
-    float const walk = std::max(0.0f, bot->GetExactDist2d(shelter->position) - ULDUAR_ALGALON_SHELTER_IN_RADIUS);
+    Position next;
+    float const route = HideRoute(*state, bot, shelter->position, next);
+    bool const detour = next != shelter->position;
+    float const walk = std::max(0.0f, route - ULDUAR_ALGALON_SHELTER_IN_RADIUS);
     int32 const walkMs = HideWalkMs(*state, bot, walk);
 
     int32 const remaining = AlgalonBigBangRemainingMs(botAI);
@@ -4065,10 +4212,12 @@ int32 AlgalonHideSlackMs(Player* bot)
             margin = ULDUAR_ALGALON_LAST_IN_MARGIN_MS + ULDUAR_ALGALON_HOLD_LEAVE_LEAD_MS;
     }
 
-    // A meteor landing on the way or by the hole before the bot is phased: it stays where it dodged until the
-    // impact, unless that leaves it out at the hit.
+    // A meteor landing on the way or by the hole before the bot is phased, with no way round it: it stays where it
+    // dodged until the impact, unless that leaves it out at the hit. Never with a star under: Big Bang 2's cast
+    // always has one 4.2 s before the hit, where the under window opens, and melee waiting on it were caught.
     int32 const slack = remaining - walkMs - margin;
-    int32 const impact = SmashOnTheWayMs(*state, bot->GetPosition(), shelter->position, getMSTime());
+    int32 const impact =
+        detour || underExtra ? 0 : SmashOnTheWayMs(*state, bot->GetPosition(), shelter->position, getMSTime());
     if (impact > slack && impact < walkMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS &&
         remaining - impact >= walkMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS)
         return impact;
@@ -4169,6 +4318,18 @@ bool GetAlgalonShelter(Player* bot, Position& shelter)
 
     shelter = hole->position;
     return true;
+}
+
+void AlgalonHideRoute(Player* bot, Position const& shelter, Position& next)
+{
+    next = shelter;
+    AlgalonEncounterState const* state = FindState(bot);
+    if (!state)
+        return;
+
+    HideRoute(*state, bot, shelter, next);
+    if (next != shelter)
+        next = ValidateFloorPoint(bot, next);
 }
 
 bool AlgalonHoleNear(Player* bot, float radius, Position* hole)

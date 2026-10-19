@@ -103,9 +103,13 @@ every other mover off the hider and a `Block` stops Charge, Blink and Disengage.
 out of the `Exclusive` because phase-16 Dark Matter (33089, 8 static spawns on the star points) attacks
 them in the void. Until 8 yd out only the exit runs (`AlgalonLeaveFieldMultiplier`; an `Exclusive` holds
 movement alone): a Chain Heal started on phasing and a mana gem stopping the walk left 11 bots phased again.
-A hider whose walk or hole lies within 15 yd of a meteor landing before it would be phased waits where it
-dodged until the impact, unless that leaves less than its walk plus 1.5 s (the hide walked two back into one,
-44 k and 50 k). The exit, the hide run (not over a meteor dodge under way) and a taunt drop a movement booking another
+A hide walk passing within 10 yd of a meteor landing before the bot is phased goes round it, via a point 12 yd
+off the impact: run straight, four bots died in one. With no way round, a hider whose walk or hole lies within
+15 yd of it waits where it dodged until the impact (the hide walked two back into one, 44 k and 50 k), unless
+that leaves less than its walk plus 1.5 s. Never with a star under: Big Bang 2's cast always has a meteor ~4.2 s
+before the hit (25.5 s clock, 90.5 s cast cycle), as the under window opens, and melee waiting on it were still
+running when two under-stars went off (10 dead).
+The exit, the hide run (not over a meteor dodge under way) and a taunt drop a movement booking another
 action made, since an equal priority waits it out.
 
 A bot only thinks again when its cast ends, so during the cast a cast or channel longer than its slack is held
@@ -498,7 +502,11 @@ full when their maximum is lower), one per star. One alone has its own button or
 none or one left a star that caught 17 with nothing (6 dead). Both covers and the personal buttons act only on
 a star still alive: the scan lags a death by up to 250 ms, the explosion drops a bot under its line, and 11 of 21
 presses and an Aura Mastery went on stars already dead, two bots then dying at the next with theirs cooling.
-Neither acts on a star dying inside its Big Bang window (it hits the soaker alone). The paladin due to cover takes
+In the cast both act only for those a star catches outside a field (no hole, or the walk, after a bot's
+planned wait, plus 1.5 s ends past its death; not the soaker, in Dispersion), the cover counting only them for
+its 2-under gate, the personal node never pressing an immunity (it keeps the phase off; the run strips it): a
+hole lost in the cast left 14 with neither (7 dead). The hide run outranks both nodes, so it presses them
+itself; an instant doesn't stop the walk. The paladin due to cover takes
 no `window` Hand of Sacrifice (both fired in one tick, the Hand first, and the star died uncovered):
 
 - Aura Mastery from the **shadow aura paladin**, a bot with Aura Mastery that runs Shadow Resistance Aura
@@ -616,8 +624,10 @@ counted by cause and role with humans starred. Then:
   release within 8 s of the cast, one above its band at the cast, over one switch per star and 3 Shoot starts in
   2 s; `--constellations` the kite runs (stages, retries, eaten) and
   branch time, both from the elected handler alone, parked stretches with none eaten, a constellation stuck in the air, and
-  seconds the kite was blocked (verdict from 5 s); `--bigbang` Nitro Boosts per hider and class speed on late
-  runs; `--verdict` a bot sitting down to eat or drink while he is engaged;
+  seconds the kite was blocked (verdict from 5 s); `--bigbang` Nitro Boosts per hider, class speed on late
+  runs and each star going off in the cast with the bots it hit and their hide state; `--verdict` a bot sitting
+  down to eat or drink while he is engaged, and per star going off in the cast the bots it hit by hide state (a
+  swap tank out on `noshelter` aside);
 - `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
 - `--tankheal`: the tank healers, each healer's share on the pair, itself and others, Beacon time on holder
   and partner, and per tank death the 6 s / 2 s damage against healing, shields and healing elsewhere, with

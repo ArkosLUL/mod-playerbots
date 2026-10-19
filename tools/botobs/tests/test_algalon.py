@@ -1985,6 +1985,14 @@ class StarsUnder(unittest.TestCase):
     def tearDownClass(cls):
         cls.folder.cleanup()
 
+    def test_a_star_in_the_cast_names_the_bots_it_caught_outside(self):
+        self.assertEqual(al.cast_explosions(self.trace),
+                         [{"n": 1, "t": 34000, "hit": [(UN_MAGE, "run"), (UN_WARL, "-")]}])
+        self.assertIn("Big Bang 1: a star went off @ 34.0s in the cast on 2 bot(s) outside a field (run 1, - 1)",
+                      self.lines)
+        self.assertIn("star went off 0:34.000 in the cast, bots hit: Mage (run), Warl (-)",
+                      render(self.trace, "bigbang"))
+
     def test_a_star_plan_reads_the_marks_and_the_under_window(self):
         self.assertEqual(al.parse_starplan("2136 28% 3s u, 2133 85% 83s s, 2134 50% 9s | smash 2..11 | under -1..9"), {
             "stars": {2136: {"hp": 28, "secs": 3, "mark": "u"}, 2133: {"hp": 85, "secs": 83, "mark": "s"},

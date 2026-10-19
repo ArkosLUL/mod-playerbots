@@ -93,6 +93,31 @@ Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRul
 
 // The class's second taunt, for when the first missed or is cooling down while he is off a swap tank.
 // Righteous Defense goes on the friend he is hitting; the shout and the roar taunt everything near the tank.
+bool UseExplosionCover(PlayerbotAI* botAI, Player* bot)
+{
+    char const* cover = GetAlgalonExplosionCover(botAI);
+    if (!cover || !botAI->CastSpell(cover, bot))
+        return false;
+
+    ClaimAlgalonExplosionCover(bot, cover);
+    return true;
+}
+
+bool UseExplosionPersonal(PlayerbotAI* botAI, Player* bot)
+{
+    AlgalonPersonalPick const pick = GetAlgalonExplosionPersonal(botAI);
+    if (!pick)
+        return false;
+
+    bool const used =
+        pick.consumable ? botAI->DoSpecificAction(pick.consumable, Event(), true) : botAI->CastSpell(pick.spellId, bot);
+    if (!used)
+        return false;
+
+    ClaimAlgalonExplosionPersonal(bot, pick);
+    return true;
+}
+
 bool CastBackupTaunt(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {
     Unit* victim = boss->GetVictim();
@@ -179,15 +204,7 @@ bool AlgalonTankDefensiveAction::Execute(Event /*event*/)
     return true;
 }
 
-bool AlgalonExplosionCoverAction::Execute(Event /*event*/)
-{
-    char const* cover = GetAlgalonExplosionCover(botAI);
-    if (!cover || !botAI->CastSpell(cover, bot))
-        return false;
-
-    ClaimAlgalonExplosionCover(bot, cover);
-    return true;
-}
+bool AlgalonExplosionCoverAction::Execute(Event /*event*/) { return UseExplosionCover(botAI, bot); }
 
 bool AlgalonExplosionPersonalAction::Execute(Event /*event*/)
 {
@@ -195,17 +212,7 @@ bool AlgalonExplosionPersonalAction::Execute(Event /*event*/)
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
-    AlgalonPersonalPick const pick = GetAlgalonExplosionPersonal(botAI);
-    if (!pick)
-        return false;
-
-    bool const used =
-        pick.consumable ? botAI->DoSpecificAction(pick.consumable, Event(), true) : botAI->CastSpell(pick.spellId, bot);
-    if (!used)
-        return false;
-
-    ClaimAlgalonExplosionPersonal(bot, pick);
-    return true;
+    return UseExplosionPersonal(botAI, bot);
 }
 
 bool AlgalonShadowAuraAction::Execute(Event /*event*/) { return botAI->CastSpell("shadow resistance aura", bot); }
@@ -229,14 +236,22 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 
     BreakCastPinningTheFeet(botAI, bot);
     ReleaseStalledWalk(botAI, bot);
-    AlgalonBoostHideRun(bot, bot->GetExactDist2d(shelter) - ULDUAR_ALGALON_SHELTER_IN_RADIUS);
-    // Not a dodge still under way: the hole isn't checked against the meteor.
+    // The run outranks both nodes, so a star going off before the bot is in gets its cover or button here. An
+    // instant doesn't stop the walk.
+    if (!UseExplosionCover(botAI, bot))
+        UseExplosionPersonal(botAI, bot);
+
+    Position next;
+    AlgalonHideRoute(bot, shelter, next);
+    AlgalonBoostHideRun(bot, bot->GetExactDist2d(next) + next.GetExactDist2d(shelter) -
+                                 ULDUAR_ALGALON_SHELTER_IN_RADIUS);
+    // Not a dodge still under way: it clears 15 yd of a meteor, the run 10 at most.
     if (!AlgalonCosmicSmashThreatens(bot))
         DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_FORCED);
-    _walk = shelter;
+    _walk = next;
 
-    if (MoveTo(bot->GetMapId(), shelter.GetPositionX(), shelter.GetPositionY(), shelter.GetPositionZ(), false,
-               false, false, false, MovementPriority::MOVEMENT_FORCED, true))
+    if (MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false, false,
+               false, MovementPriority::MOVEMENT_FORCED, true))
         return true;
 
     // MoveTo answers Duplicate for the rest of the run. Returning false there hands the tick to a heal

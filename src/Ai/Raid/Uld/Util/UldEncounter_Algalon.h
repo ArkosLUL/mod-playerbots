@@ -323,6 +323,9 @@ inline constexpr uint32 ULDUAR_ALGALON_STAR_DYING_MS = 4000;
 inline constexpr float ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS = 15.0f;
 inline constexpr float ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE = 15.0f;
 inline constexpr float ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE = 10.0f;
+// A hide walk passing inside the minimum clearance of a meteor that lands before the bot is phased goes round
+// the impact through a point this far off it.
+inline constexpr float ULDUAR_ALGALON_SMASH_DETOUR_RADIUS = 12.0f;
 // Inside this the generic movers are held until the marker expires.
 inline constexpr float ULDUAR_ALGALON_COSMIC_SMASH_HOLD_RADIUS = 19.0f;
 inline constexpr float ULDUAR_ALGALON_DODGE_SEARCH_RADIUS = 24.0f;
@@ -630,13 +633,15 @@ struct AlgalonTankCut
 AlgalonTankCut GetAlgalonTankCut(PlayerbotAI* botAI);
 void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut);
 
-// "aura mastery" or "divine sacrifice" when this paladin covers the star about to explode, else nullptr.
+// "aura mastery" or "divine sacrifice" when this paladin covers the star about to explode, else nullptr. In the
+// cast, only for a star dying before those under its line are in a field.
 char const* GetAlgalonExplosionCover(PlayerbotAI* botAI);
 void ClaimAlgalonExplosionCover(Player* bot, char const* cover);
 // A star dying under the running cast within `radius`: where a phased bot would come back inside a new hole.
 bool AlgalonUnderStarNear(Player* bot, float radius);
 // This bot's own button against the star about to die, when the hit would kill it, else a healthstone or a
-// healing potion ("healthstone"/"healing potion" actions); empty otherwise.
+// healing potion ("healthstone"/"healing potion" actions); empty otherwise. In the cast, only against a star dying
+// before the bot is in a field, and never an immunity: those keep the field's phase off.
 struct AlgalonPersonalPick
 {
     uint32 spellId = 0;
@@ -682,6 +687,8 @@ Player* GetAlgalonBigBangSoaker(PlayerbotAI* botAI);
 Player* GetAlgalonBigBangBackup(PlayerbotAI* botAI);
 // The hole this bot runs to for the current cast, latched.
 bool GetAlgalonShelter(Player* bot, Position& shelter);
+// Where the hide run walks next: the hole, or round a meteor on the way that lands before the bot is phased.
+void AlgalonHideRoute(Player* bot, Position const& shelter, Position& next);
 // Nearest cached hole within radius, readable while phased.
 bool AlgalonHoleNear(Player* bot, float radius, Position* hole = nullptr);
 

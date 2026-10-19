@@ -2044,6 +2044,9 @@ def show_bigbang(trace: Trace) -> None:
         for run in row["runners"]:
             print(f"        {trace.name(run['guid'])} ran to {hole_label(*run['ran'])},"
                   f" nearest hole {hole_label(*run['nearest'])}")
+        for blast in (blast for blast in cast_explosions(trace) if blast["n"] == row["n"]):
+            print(f"      star went off {clock(blast['t'])} in the cast, bots hit: "
+                  + (", ".join(f"{trace.name(guid)} ({state})" for guid, state in blast["hit"]) or "nobody"))
         if row["waited"]:
             left = sorted((ms, trace.name(g)) for g, ms in row["waited"].items() if ms is not None)
             still = sorted(trace.name(g) for g, ms in row["waited"].items() if ms is None)
@@ -2081,6 +2084,40 @@ def bang_faults(trace: Trace) -> list[tuple[int, str]]:
     return [(row["start"], f"Big Bang {row['n']} @ {secs(row['start'])}: nearest hole beyond {HOLE_REACH_YD:.0f} yd"
                            f" for " + ", ".join(f"{trace.name(guid)} {gap:.1f}" for gap, guid in row["unreachable"]))
             for row in big_bang_rows(trace) if row["unreachable"]]
+
+
+def cast_explosions(trace: Trace) -> list[dict]:
+    """`{n, t, hit}` per star going off inside a Big Bang cast: `hit` is `(bot, algalon.hide state then)` per bot
+    outside a field it hit, the soaker and backup aside."""
+    def build(trace: Trace) -> list[dict]:
+        hide = holder_spans(trace, "algalon.hide", pull_end(trace))
+        out = []
+        for row in big_bang_rows(trace):
+            for death in star_deaths(trace):
+                if death["how"] != "explosion" or not row["start"] <= death["t"] < row["impact"]:
+                    continue
+                hit = sorted({rec["d"] for rec in death["rows"]
+                              if rec.get("d") in trace.roles and rec["d"] not in trace.humans
+                              and rec["d"] not in (row["soaker"], row["backup"])}, key=trace.name)
+                out.append({"n": row["n"], "t": death["t"],
+                            "hit": [(guid, value_at(hide.get(guid, []), death["t"]) or "-") for guid in hit]})
+        return out
+    return cached(trace, "_algalon_cast_explosions", build)
+
+
+def cast_explosion_faults(trace: Trace) -> list[tuple[int, str]]:
+    """A star going off in a Big Bang cast on bots outside a field, counted by their hide state. A swap tank out on
+    `noshelter` stays out by design."""
+    pair, _ = swap_pair(trace)
+    out = []
+    for row in cast_explosions(trace):
+        states = collections.Counter(state for guid, state in row["hit"]
+                                     if not (guid in pair and state == "noshelter"))
+        if states:
+            out.append((row["t"], f"Big Bang {row['n']}: a star went off @ {secs(row['t'])} in the cast on"
+                                  f" {sum(states.values())} bot(s) outside a field ("
+                                  + ", ".join(f"{state} {n}" for state, n in states.most_common()) + ")"))
+    return out
 
 
 def immunity_uses(trace: Trace) -> list[tuple[int, int, str]]:
@@ -5406,6 +5443,7 @@ def failures(trace: Trace) -> list[tuple[int | None, str]]:
     out += under_faults(trace)
     out += soak_faults(trace)
     out += bang_faults(trace)
+    out += cast_explosion_faults(trace)
     out += meal_faults(trace)
     out += taunt_faults(trace)
     out += redirect_faults(trace)
