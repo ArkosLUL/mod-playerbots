@@ -189,7 +189,14 @@ BUFF_ACTION(CastShadowformAction, "shadowform");
 SPELL_ACTION(CastSilenceAction, "silence");
 ENEMY_HEALER_ACTION(CastSilenceOnEnemyHealerAction, "silence");
 // shadow talents 2.4.3
-DEBUFF_CHECKISOWNER_ACTION(CastVampiricTouchAction, "vampiric touch");
+class CastVampiricTouchAction : public CastDebuffSpellAction
+{
+public:
+    CastVampiricTouchAction(PlayerbotAI* botAI) : CastDebuffSpellAction(botAI, "vampiric touch", true) {}
+
+    bool isUseful() override;
+};
+
 DEBUFF_ENEMY_ACTION(CastVampiricTouchOnAttackerAction, "vampiric touch");
 // racials
 DEBUFF_CHECKISOWNER_ACTION(CastDevouringPlagueAction, "devouring plague");

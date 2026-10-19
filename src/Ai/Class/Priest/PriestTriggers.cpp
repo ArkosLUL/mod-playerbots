@@ -11,6 +11,15 @@
 #include "Playerbots.h"
 #include "TargetValue.h"
 
+namespace
+{
+constexpr uint32 SPELL_SHADOW_WEAVING_R1 = 15257;
+constexpr uint32 SPELL_SHADOW_WEAVING_R2 = 15331;
+constexpr uint32 SPELL_SHADOW_WEAVING_R3 = 15332;
+constexpr uint32 SPELL_SHADOW_WEAVING_BUFF = 15258;
+constexpr uint32 VAMPIRIC_TOUCH_CAST_MS = 1500;
+}  // namespace
+
 bool ShadowProtectionTrigger::IsActive()
 {
     return BuffTrigger::IsActive() && !botAI->HasAura("prayer of shadow protection", GetTarget());
@@ -44,6 +53,34 @@ bool FearWardOnMainTankTrigger::IsActive()
 }
 
 bool ShadowformTrigger::IsActive() { return !botAI->HasAura("shadowform", bot); }
+
+bool ShadowWordPainTrigger::IsActive()
+{
+    if (!DebuffTrigger::IsActive())
+        return false;
+
+    if (Aura const* weaving = bot->GetAura(SPELL_SHADOW_WEAVING_BUFF))
+        if (weaving->GetStackAmount() >= weaving->GetSpellInfo()->StackAmount)
+            return true;
+
+    // passive talents only sit in the talent map, HasSpell never finds them
+    uint8 const spec = bot->GetActiveSpec();
+    return !bot->HasTalent(SPELL_SHADOW_WEAVING_R1, spec) && !bot->HasTalent(SPELL_SHADOW_WEAVING_R2, spec) &&
+           !bot->HasTalent(SPELL_SHADOW_WEAVING_R3, spec);
+}
+
+// a recast resets VT's tick timer and drops the tick in progress, so start it one hasted cast
+// before VT runs out
+uint32 VampiricTouchTrigger::RefreshWindow(Player* bot)
+{
+    return uint32(VAMPIRIC_TOUCH_CAST_MS * bot->GetFloatValue(UNIT_MOD_CAST_SPEED));
+}
+
+bool VampiricTouchTrigger::IsActive()
+{
+    beforeDuration = RefreshWindow(bot);
+    return DebuffTrigger::IsActive();
+}
 
 bool InnerFocusTrigger::IsActive()
 {
@@ -80,34 +117,6 @@ bool MindSearChannelCheckTrigger::IsActive()
 
     // Not channeling Mind Sear
     return false;
-}
-
-bool MindFlayChannelCheckTrigger::IsActive()
-{
-    Spell* channeled = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-    if (!channeled)
-        return false;
-
-    uint32 mindFlayId = AI_VALUE2(uint32, "spell id", "mind flay");
-    if (!mindFlayId || channeled->m_spellInfo->Id != mindFlayId)
-        return false;
-
-    Unit* target = GetTarget();
-    if (!target)
-        return false;
-
-    // Only clip once two of the three ticks have landed, otherwise we throw away more than we gain.
-    Aura* aura = botAI->GetAura("mind flay", target, true);
-    if (!aura || aura->GetDuration() > aura->GetMaxDuration() / 3)
-        return false;
-
-    uint32 mindBlastId = AI_VALUE2(uint32, "spell id", "mind blast");
-    if (mindBlastId && !bot->HasSpellCooldown(mindBlastId))
-        return true;
-
-    return !botAI->HasAura("vampiric touch", target, false, true) ||
-           !botAI->HasAura("devouring plague", target, false, true) ||
-           !botAI->HasAura("shadow word: pain", target, false, true);
 }
 
 bool WeakenedSoulOnPartyMemberTrigger::IsActive()

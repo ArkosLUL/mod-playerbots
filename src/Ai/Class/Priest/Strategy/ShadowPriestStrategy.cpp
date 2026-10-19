@@ -26,11 +26,13 @@ void ShadowPriestStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     GenericPriestStrategy::InitTriggers(triggers);
 
+    // Above the DoTs and Mind Sear: a DoT keeps the bonus and crit chance it was cast with, and
+    // Shadowform is what lets it crit.
     triggers.push_back(
         new TriggerNode(
             "shadowform",
             {
-                NextAction("shadowform", ACTION_HIGH + 0.5f)
+                NextAction("shadowform", ACTION_HIGH + 4.2f)
             }
         )
     );
@@ -123,14 +125,6 @@ void ShadowPriestAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             "mind sear channel check",
             {
                 NextAction("cancel channel", ACTION_HIGH + 4.5f)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "mind flay channel check",
-            {
-                NextAction("cancel channel", ACTION_HIGH + 4.4f)
             }
         )
     );

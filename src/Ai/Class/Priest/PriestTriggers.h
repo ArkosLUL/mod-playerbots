@@ -15,10 +15,29 @@
 class PlayerbotAI;
 
 DEBUFF_CHECKISOWNER_TRIGGER(HolyFireTrigger, "holy fire");
-DEBUFF_CHECKISOWNER_TRIGGER(ShadowWordPainTrigger, "shadow word: pain");
 DEBUFF_ENEMY_TRIGGER(ShadowWordPainOnAttackerTrigger, "shadow word: pain");
-DEBUFF_CHECKISOWNER_TRIGGER(VampiricTouchTrigger, "vampiric touch");
 DEBUFF_ENEMY_TRIGGER(VampiricTouchOnAttackerTrigger, "vampiric touch on attacker");
+
+// Mind Flay keeps SW:P rolling with the damage bonus and crit chance it was cast with,
+// so the first cast waits for a full Shadow Weaving stack.
+class ShadowWordPainTrigger : public DebuffTrigger
+{
+public:
+    ShadowWordPainTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "shadow word: pain", 1, true) {}
+
+    bool IsActive() override;
+};
+
+class VampiricTouchTrigger : public DebuffTrigger
+{
+public:
+    VampiricTouchTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "vampiric touch", 1, true) {}
+
+    bool IsActive() override;
+    // ms left on VT when the recast starts, shared with the cast action
+    static uint32 RefreshWindow(Player* bot);
+};
+
 BUFF_TRIGGER(VampiricEmbraceTrigger, "vampiric embrace");
 CURE_TRIGGER(DispelMagicTrigger, "dispel magic", DISPEL_MAGIC);
 CURE_PARTY_TRIGGER(DispelMagicPartyMemberTrigger, "dispel magic", DISPEL_MAGIC);
@@ -126,16 +145,6 @@ public:
 protected:
     uint32 minEnemies;
     static const std::set<uint32> MIND_SEAR_SPELL_IDS;
-};
-
-class MindFlayChannelCheckTrigger : public Trigger
-{
-public:
-    MindFlayChannelCheckTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, "mind flay channel check") {}
-
-    std::string const GetTargetName() override { return "current target"; }
-    bool IsActive() override;
 };
 
 class WeakenedSoulOnPartyMemberTrigger : public Trigger

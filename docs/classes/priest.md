@@ -203,17 +203,27 @@ Flay finishes** → Mind Flay, clipped after the second tick.
   `TargetWithComboPointsLowerHealTrigger::IsActive`.
 - **S2. Vampiric Embrace, the guide's #1, exists only out of combat** — if it falls off mid-fight it
   is never reapplied. Trigger and action are both already registered; pure wiring.
-- **S3. Do NOT add DoT refresh windows.** VT, DP and SW:P are declared through
-  `DEBUFF_CHECKISOWNER_TRIGGER`, which leaves `beforeDuration` at 0. The guide is explicit — "let it
-  expire before you re-apply it". **This is correct as written.** Guardrail: rogue sets 2000 on Slice
-  and Dice / Hunger for Blood / Rupture *on purpose*, which is right for rogue. Do not "make priest
-  consistent" — the two specs want opposite behaviour from the same parameter, and copying the rogue
-  value here introduces a Shadow DPS regression that does not exist today.
+- **S3. DoT refresh: only VT gets a window.** DP and SW:P keep `beforeDuration` 0 (the wowsims APL
+  also lets DP expire; Mind Flay keeps SW:P up). VT recasts at `1500 ms × UNIT_MOD_CAST_SPEED`
+  left, the sim's rule: a recast resets the tick timer (`Spell.cpp` `refreshPeriodic`), so landing early
+  drops the tick in progress. P2: VT up 88% (sim 95%) when it waited for expiry. Do not copy this
+  window, or rogue's 2000, onto DP or SW:P.
+- **SW:P waits for 5 Shadow Weaving stacks** (buff 15258; skipped without the talent). A DoT
+  snapshots pct mods and crit chance at apply (`CalculatePeriodicData`), and Pain and Suffering's
+  refresh recalculates only the base amount, so the first SW:P's snapshot lasts the fight. The P2 bot
+  cast it before Shadowform: 97 ticks, no crit.
 - **S5. Dispersion has two nodes at identical relevance 25**, tying with `desperate prayer` @25 and
   `cancel channel` @25 — a four-way resolved by insertion order.
-- **S6. `shadowform` @20** collides with `hymn of hope`, self `power word: shield` and `reach spell`.
-- **S7. No Mind Flay clipping.** The precedent exists for Mind Sear (`MindSearChannelCheckTrigger` +
-  `cancel channel`); nothing equivalent exists for Mind Flay.
+- **S6. `shadowform` @24.2**, above the DoTs and Mind Sear, for the same snapshot: at @20.5 the bot
+  pulled with DP, VT and SW:P before Shadowform. **Open gap:** nothing casts it out of combat, and the
+  out-of-combat heals and resurrection drop it (`remove shadowform`), so such a pull starts with a
+  Shadowform GCD. An out-of-combat node would ping-pong with `party member dead` → `remove shadowform`
+  @41 whenever the resurrection can't be cast.
+- **S7. Mind Flay is not clipped — do not re-add a clip.** Cancel and recast take two AI updates (P2:
+  next cast ~0.45 s after the 2nd tick, ~0.2 s before the 3rd), so clipping traded a tick for ~0.4 s.
+  Only a same-update cancel-and-cast could pay.
+- **Mind Blast above the sim's count is the sim's choice**: its APL skips Mind Blast when the hasted
+  cast is under 1 s; the bot casts it on cooldown.
 - **S8. Shadow drops Shadowform for inherited Holy-school spells.** `ShadowPriestStrategy` derives
   from `GenericPriestStrategy`, so the bot carries both factories. Four inherited nodes are
   Holy-school and unusable in Shadowform:
@@ -249,7 +259,7 @@ Nothing else is needed and nothing else is wanted:
 
 ## Confirmed correct — do not re-audit
 
-- Shadow DoT expiry behaviour (S3) — `beforeDuration = 0` is deliberate.
+- DP and SW:P expiry (S3) — `beforeDuration = 0` is deliberate.
 - `power word: shield on party`'s action-node creator is defined but never added to `creators[]`, so
   it has no `remove shadowform` prerequisite. Harmless: no spec reaching the node is ever in
   Shadowform. Recorded so the dead-looking code is not re-investigated.
@@ -274,6 +284,4 @@ Nothing else is needed and nothing else is wanted:
 ## Needs in-game confirmation
 
 Spell school and Shadowform castability live in DBC, not this repo. Desperate Prayer and Hymn of Hope
-were settled by the user (both blocked in Shadowform). Open: whether the Mind Flay channel exposes
-remaining duration through an aura on the target, which the proposed clip trigger reads. If not, the
-trigger must fall back to the hardcoded-spell-id shape `MindSearChannelCheckTrigger` uses.
+were settled by the user (both blocked in Shadowform).

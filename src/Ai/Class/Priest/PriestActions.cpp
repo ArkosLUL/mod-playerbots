@@ -7,6 +7,7 @@
 #include "PriestActions.h"
 #include "Event.h"
 #include "Playerbots.h"
+#include "PriestTriggers.h"
 
 namespace
 {
@@ -80,6 +81,12 @@ bool CastPowerWordShieldOnPartyAction::isUseful()
 bool CastPowerWordShieldOnMainTankAction::isUseful()
 {
     return BuffOnMainTankAction::isUseful() && !botAI->HasAura("weakened soul", GetTarget());
+}
+
+bool CastVampiricTouchAction::isUseful()
+{
+    beforeDuration = VampiricTouchTrigger::RefreshWindow(bot);
+    return CastDebuffSpellAction::isUseful();
 }
 
 Unit* CastShadowfiendAction::GetTarget()
