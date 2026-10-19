@@ -1783,6 +1783,11 @@ void PlayerbotFactory::InitPet()
     {
         pet->InitStatsForLevel(bot->GetLevel());
         pet->SetLevel(bot->GetLevel());
+        // a new pet casts its passives before SetMinion gives it an owner, so they miss the hunter's
+        // talents on them (Ferocity, Unleashed Fury, Serpent's Swiftness) until it's summoned again
+        for (auto const& [spellId, aura] : pet->GetOwnedAuras())
+            if (aura->IsPassive() && aura->GetCasterGUID() == pet->GetGUID())
+                aura->RecalculateAmountOfEffects();
         pet->SetPower(POWER_HAPPINESS, pet->GetMaxPower(Powers(POWER_HAPPINESS)));
         pet->SetHealth(pet->GetMaxHealth());
     }
