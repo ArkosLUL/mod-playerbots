@@ -1,9 +1,26 @@
-# Druid — Feral cat
+# Druid
 
-The only druid work recorded so far. Engine semantics are in
+Feral cat and Balance. Engine semantics are in
 [../engine/action-selection.md](../engine/action-selection.md).
 
-## Faerie Fire (Feral) in the cat rotation
+## Balance: Moonfire and eclipse order
+
+Ladder (`BalanceDruidStrategy`): Moonfire when missing `ACTION_HIGH + 0.5` → eclipse Starfire/Wrath 20.0 →
+Insect Swarm 18.0 → filler Wrath 5.4 over Starfire 5.3. `CastWrathAction`/`CastStarfireAction::isUseful` keep
+the eclipse windows: after a Lunar proc Wrath is blocked until Solar procs or 30 s pass, and the reverse.
+
+- **Moonfire sits above the eclipse casts**, as in the sim's APL. The eclipses run back to back, so at 17.5
+  Moonfire only landed in the gaps between them: 43-52% uptime against the sim's 97% (TestBotDps, 2026-10-19).
+- **Wrath is the filler, so the bot fishes for Lunar first**, matching the sim (Wrath while Lunar's cooldown is
+  ready). With Starfire first, Solar came first and the opener's lust, potion, Hyperspeed and Berserking all
+  landed on Wrath, which sits at the 1 s GCD cap and gains nothing from them.
+- Insect Swarm is not limited to the post-Lunar Starfire window as the sim's APL does: its hasted ticks
+  outdamage the Wrath it replaces.
+
+Open: the potion and Hyperspeed fire when the burst gate opens, not inside Lunar as the sim times them (shared
+burst code).
+
+## Feral cat: Faerie Fire (Feral)
 
 `mod-spell-tweaks` ships `SpellTweaks.OmenClarityFaerieFire.Enable` (default on), which hooks
 `AfterHit` on both ranks of Faerie Fire (Feral) — 16857 and 60089 — and **guarantees** a Clearcasting
@@ -22,7 +39,7 @@ Now at **20.5**: below `cower` (21.0) and all maintenance, well above the filler
 Resulting cat ladder: mangle 22.0 → rake 21.5 → cower 21.0 → **faerie fire (feral) 20.5** → fillers
 5.6-5.2 → melee 5.0.
 
-## Decisions
+### Decisions
 
 - **No new config option.** The trigger keeps gating on the Omen of Clarity aura alone. On servers
   without `mod-spell-tweaks` the branch degrades to chance-based proc fishing costing at most one GCD

@@ -178,9 +178,10 @@ BalanceDruidStrategy::BalanceDruidStrategy(PlayerbotAI* botAI) : GenericDruidStr
 
 std::vector<NextAction> BalanceDruidStrategy::getDefaultActions()
 {
+    // fish for Lunar first, Starfire uses the haste a GCD-capped Wrath wastes
     return {
-        NextAction("starfire", 5.4f),
-        NextAction("wrath", 5.3f),
+        NextAction("wrath", 5.4f),
+        NextAction("starfire", 5.3f),
     };
 }
 
@@ -191,7 +192,8 @@ void BalanceDruidStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Debuffs and DoTs
     triggers.push_back(new TriggerNode("faerie fire", { NextAction("faerie fire", 29.5f) }));
     triggers.push_back(new TriggerNode("insect swarm", { NextAction("insect swarm", 18.0f) }));
-    triggers.push_back(new TriggerNode("moonfire", { NextAction("moonfire", 17.5f) }));
+    // above the eclipse casts: eclipses run back to back, below them Moonfire only gets the gaps
+    triggers.push_back(new TriggerNode("moonfire", { NextAction("moonfire", ACTION_HIGH + 0.5f) }));
 
     // Eclipse procs
     triggers.push_back(new TriggerNode("eclipse (solar)", { NextAction("wrath", 20.0f) }));
