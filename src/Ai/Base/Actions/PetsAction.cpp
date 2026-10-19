@@ -362,6 +362,9 @@ bool TogglePetSpellAutoCastAction::Execute(Event /*event*/)
             pet->m_autospells.erase(autospellItr);
     }
     bool toggled = false;
+    // pet taunts (Growl, Torment, Suffering) pull the boss off the group's tank and burn focus
+    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    bool const groupHasTank = mainTank && mainTank != bot;
     for (PetSpellMap::const_iterator itr = pet->m_spells.begin(); itr != pet->m_spells.end(); ++itr)
     {
         if (itr->second.state == PETSPELL_REMOVED)
@@ -372,7 +375,9 @@ bool TogglePetSpellAutoCastAction::Execute(Event /*event*/)
         if (!spellInfo || !spellInfo->IsAutocastable())
             continue;
 
-        bool shouldApply = true;
+        bool shouldApply = !(groupHasTank && (spellInfo->HasAura(SPELL_AURA_MOD_TAUNT) ||
+                                              spellInfo->HasEffect(SPELL_EFFECT_ATTACK_ME) ||
+                                              spellInfo->HasEffect(SPELL_EFFECT_THREAT)));
         for (uint32 disabledSpell : disabledPetSpells)
         {
             if (spellId == disabledSpell)
