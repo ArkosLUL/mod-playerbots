@@ -118,6 +118,14 @@ plumbing.
 | 61-70 | Insane Strength Potion 22828 | Destruction Potion 22839 |
 | 71-80 | Potion of Speed 40211 | Potion of Wild Magic 40212 |
 
+Three caster specs use Potion of Speed, then Haste Potion, instead of the caster column: shadow
+priest, balance druid and affliction warlock (`AiFactory::GetPlayerSpecTab` tab 2, 0 and 0). Every
+other caster spec keeps the caster column. `GetOffensivePotionLadder(bot)` (`PlayerbotAI.cpp`) is
+the one place that picks the ladder. Stocking walks it, and the `"offensive potion"` item lookup
+(`InventoryAction::parseItems`) sorts the bags by it, so `UseOffensivePotion` drinks the spec's
+potion first even when the bags still hold another one. A potion outside the ladder ranks last;
+ties go by item level.
+
 Nothing offensive exists below required level 45, so a DPS bot under 45 stocks none — expected, not
 a bug. The caster/physical split reuses the same predicate `InitConsumables` uses to choose wizard
 oil vs sharpening stone, so the two stay consistent.

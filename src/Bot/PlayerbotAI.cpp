@@ -5635,6 +5635,32 @@ Item* PlayerbotAI::FindPoison() const
 
 bool RangedWeaponNeedsAmmo(Player* bot) { return !bot->HasAura(SPELL_REQUIRES_NO_AMMO); }
 
+std::vector<uint32> const& GetOffensivePotionLadder(Player* bot)
+{
+    static std::vector<uint32> const casterLadder = {POTION_OF_WILD_MAGIC, DESTRUCTION_POTION, HASTE_POTION};
+    static std::vector<uint32> const hasteCasterLadder = {POTION_OF_SPEED, HASTE_POTION};
+    // Insane Strength only converts to attack power for Strength classes; agility melee get next
+    // to nothing from it, so they fall straight through to the class-neutral Haste Potion.
+    static std::vector<uint32> const strengthLadder = {POTION_OF_SPEED, INSANE_STRENGTH_POTION, HASTE_POTION};
+    static std::vector<uint32> const agilityLadder = {POTION_OF_SPEED, HASTE_POTION};
+
+    if (PlayerbotAI::IsCaster(bot, true))
+    {
+        // These specs do better on Potion of Speed: shadow priest (tab 2), balance druid and
+        // affliction warlock (tab 0).
+        uint8 const tab = AiFactory::GetPlayerSpecTab(bot);
+        uint8 const cls = bot->getClass();
+        if ((cls == CLASS_PRIEST && tab == 2) || ((cls == CLASS_DRUID || cls == CLASS_WARLOCK) && tab == 0))
+            return hasteCasterLadder;
+
+        return casterLadder;
+    }
+
+    bool const strengthClass = bot->getClass() == CLASS_WARRIOR || bot->getClass() == CLASS_PALADIN ||
+                               bot->getClass() == CLASS_DEATH_KNIGHT;
+    return strengthClass ? strengthLadder : agilityLadder;
+}
+
 bool SkipsManaPotions(Player* bot)
 {
     if (!bot)

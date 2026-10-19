@@ -265,6 +265,10 @@ bool RangedWeaponNeedsAmmo(Player* bot);
 // instead. Governs drinking, stocking and re-buying alike, so all three stay consistent.
 bool SkipsManaPotions(Player* bot);
 
+// Offensive potions in the order this bot prefers them, best first. Stocking walks it and the drink
+// lookup sorts the bags by it, so both agree on which potion a spec uses.
+std::vector<uint32> const& GetOffensivePotionLadder(Player* bot);
+
 enum class BotTypeNumber : uint8
 {
     ACTIVITY_TYPE_NUMBER = 1,

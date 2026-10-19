@@ -277,7 +277,28 @@ std::vector<Item*> InventoryAction::parseItems(std::string const text, IterateIt
     {
         FindOffensivePotionVisitor visitor(bot);
         IterateItems(&visitor, ITERATE_ITEMS_IN_BAGS);
-        found.insert(visitor.GetResult().begin(), visitor.GetResult().end());
+
+        std::vector<Item*> result = visitor.GetResult();
+        if (result.size() > 1)
+        {
+            // The caller drinks the first entry: spec ladder order, then item level. A potion
+            // outside the ladder (left over from an old spec) ranks last.
+            std::vector<uint32> const& ladder = GetOffensivePotionLadder(bot);
+            auto rank = [&ladder](Item const* item)
+            {
+                return std::find(ladder.begin(), ladder.end(), item->GetEntry()) - ladder.begin();
+            };
+
+            std::sort(result.begin(), result.end(),
+                      [&rank](Item const* a, Item const* b)
+                      {
+                          auto const rankA = rank(a);
+                          auto const rankB = rank(b);
+                          return rankA != rankB ? rankA < rankB : compare_items_by_level(a, b);
+                      });
+        }
+
+        return result;
     }
 
     if (text == "mount")
