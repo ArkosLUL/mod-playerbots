@@ -523,7 +523,8 @@ bool UseTrinketAction::Execute(Event /*event*/)
 
 bool UseTrinketAction::UseTrinket(Item* item)
 {
-    if (bot->CanUseItem(item) != EQUIP_ERR_OK || bot->IsNonMeleeSpellCast(true))
+    // skip the autorepeat slot: a hunter's Auto Shot sits there all fight
+    if (bot->CanUseItem(item) != EQUIP_ERR_OK || bot->IsNonMeleeSpellCast(true, false, true))
         return false;
 
     uint8 bagIndex = item->GetBagSlot();
@@ -687,7 +688,8 @@ bool UseTinkerAction::Execute(Event /*event*/)
 
 bool UseTinkerAction::UseTinker(Item* item)
 {
-    if (bot->CanUseItem(item) != EQUIP_ERR_OK || bot->IsNonMeleeSpellCast(true))
+    // skip the autorepeat slot: a hunter's Auto Shot sits there all fight
+    if (bot->CanUseItem(item) != EQUIP_ERR_OK || bot->IsNonMeleeSpellCast(true, false, true))
         return false;
 
     uint32 const spellId = ai::tinker::GetUsableTinkerSpell(item);

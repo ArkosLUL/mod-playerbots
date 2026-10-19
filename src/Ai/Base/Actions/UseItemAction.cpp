@@ -181,7 +181,8 @@ bool UseItemAction::UseItem(Item* item, ObjectGuid goGuid, Item* itemTarget, Uni
     if (bot->CanUseItem(item) != EQUIP_ERR_OK)
         return false;
 
-    if (bot->IsNonMeleeSpellCast(false))
+    // skip the autorepeat slot: a hunter's Auto Shot sits there all fight
+    if (bot->IsNonMeleeSpellCast(false, false, true))
         return false;
 
     uint8 bagIndex = item->GetBagSlot();
