@@ -127,7 +127,8 @@ bool FactionChampionsGripPending(PlayerbotAI* botAI);
 // health, or it is loose off the tank, and nothing slows it yet. One snarer per champion.
 Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
 
-// The melee champion this bot peels and the spell id: one off the tanks within 10 yd of its victim, or
+// The melee champion this bot peels and the spell id: one off the tanks and frontline within 10 yd of
+// its victim, or
 // the Warrior champion with 2 or more of ours (pets too) in Bladestorm reach, Warrior first, then healer
 // victims, then the lowest victim. Not one CC'd, rooted or immune to the spell. The nearest free bot
 // with a ready peel takes it, not the grip DK or one on a CC duty: Disarm or Dismantle (not on one

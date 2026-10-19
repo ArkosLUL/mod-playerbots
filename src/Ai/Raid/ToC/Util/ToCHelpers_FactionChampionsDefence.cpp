@@ -992,7 +992,7 @@ Player* ElectGripper(std::vector<Member> const& members, Unit* target, Position 
     {
         Player* player = member.player;
         if (player->getClass() != CLASS_DEATH_KNIGHT || !GET_PLAYERBOT_AI(player) ||
-            FactionChampionsIsPackTank(player) || !InControl(player) || !player->HasSpell(SPELL_DEATH_GRIP) ||
+            FactionChampionsIsFrontline(player) || !InControl(player) || !player->HasSpell(SPELL_DEATH_GRIP) ||
             !GripReadyInTime(player, fromHere ? player->GetPosition() : stand, walkOnly))
             continue;
 
@@ -1258,22 +1258,6 @@ bool InSpellRange(Player* caster, Unit* target, uint32 spellId)
     return info && caster->IsWithinCombatRange(target, info->GetMaxRange(false, caster));
 }
 
-// The lowest guid among the non-tank DK bots knowing Death Grip, kept for the grip chain
-ObjectGuid ChainDk(std::vector<Member> const& members)
-{
-    ObjectGuid chosen;
-    for (Member const& member : members)
-    {
-        Player* player = member.player;
-        if (player->getClass() == CLASS_DEATH_KNIGHT && GET_PLAYERBOT_AI(player) &&
-            !FactionChampionsIsPackTank(player) && player->HasSpell(SPELL_DEATH_GRIP) &&
-            (chosen.IsEmpty() || player->GetGUID() < chosen))
-            chosen = player->GetGUID();
-    }
-
-    return chosen;
-}
-
 // The peel this bot can put on champion from where it stands, 0 when none. Roots and Frost Nova stay off
 // a champion near a pack tank, and Death Grip only goes where it lands the champion back toward the pack,
 // never on the kill target.
@@ -1365,6 +1349,7 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
         Unit* victim = champion->GetVictim();
         auto const member = victim ? FindMember(members, victim->GetGUID()) : members.end();
         bool const onRaid = member != members.end() && !IsTankMember(member->player) &&
+                            !FactionChampionsIsFrontline(member->player) &&
                             champion->GetExactDist2d(victim) <= PEEL_VICTIM_REACH;
         bool const warrior = IsWarrior(champion->GetEntry());
         bool const crowded = warrior && GroupUnitsWithin(members, champion, BLADESTORM_RADIUS) >= PEEL_BLADESTORM_UNITS;
@@ -1398,7 +1383,7 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
                 FreeToAct(member.player) && !FactionChampionsHasCcDuty(botAI, member.player->GetGUID()))
                 peelers.push_back(member.player);
 
-    ObjectGuid const chainDk = ChainDk(members);
+    ObjectGuid const chainDk = FactionChampionsChainDk(botAI->GetBot());
     Player* const openerDk = ChainOpener(botAI->GetBot());
     ObjectGuid const opener = openerDk ? openerDk->GetGUID() : ObjectGuid::Empty;
     std::vector<bool> taken(peelers.size(), false);
@@ -1804,7 +1789,8 @@ Unit* FactionChampionsPurgeTarget(PlayerbotAI* botAI, char const*& spell)
 
 Unit* FactionChampionsPhysicalSwitchTarget(PlayerbotAI* botAI)
 {
-    if (!botAI || !IsPhysicalAttacker(botAI->GetBot()))
+    // the frontline keeps its own champions
+    if (!botAI || !IsPhysicalAttacker(botAI->GetBot()) || FactionChampionsIsFrontline(botAI->GetBot()))
         return nullptr;
 
     FactionChampionsDefenceState* state = Refresh(botAI);
@@ -2069,9 +2055,9 @@ Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI)
         if (member.healer && member.player != bot)
             healers.push_back(member.player->GetPosition());
 
-    // the pack follows its tank, so he never walks it toward the healers
+    // the pack follows the frontline, so it never walks the pack toward the healers
     EncounterHelpers::HazardSweepCache cache;
-    if (healers.empty() || FactionChampionsIsPackTank(bot))
+    if (healers.empty() || FactionChampionsIsFrontline(bot))
         return EncounterHelpers::FindNearestPositionClearOfHazards(bot, clearances, AOE_SEARCH_RADIUS, &cache);
 
     float x = 0.0f;

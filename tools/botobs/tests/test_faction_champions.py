@@ -402,7 +402,7 @@ class SyntheticPull(unittest.TestCase):
             (15000, WARLOCK_C, "Hellfire", {MAGE: 3})])
 
     def test_vetoes_keep_the_faction_champions_multipliers_and_rules_only(self):
-        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 13)
+        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 15)
         self.assertEqual(fc.fc_vetoes(self.trace), collections.Counter({
             (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1,
             (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1,
@@ -911,7 +911,7 @@ def ball_pull() -> list[dict]:
         {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
         note(0, TANK, "fc.switch", "first"),
         note(0, TANK, "fc.kill", PALADIN),
-        note(0, TANK, fc.PACK_TANK, 1),
+        note(0, TANK, fc.FRONT, ROGUE_C),
         note(2500, HUNTER, fc.OPENER, 42917),
         note(3000, HUNTER, fc.OPENER, 0),
         cast(3000, ROGUE_C, fc.SPELL_PVP_TRINKET, ROGUE_C),
@@ -963,7 +963,7 @@ class DeathBall(unittest.TestCase):
             (0, PALADIN, HUNTER), (0, DISC, TANK), (0, ROGUE_C, TANK), (0, MAGE_C, PRIEST), (0, WARRIOR_C, TANK)])
 
     def test_duties_and_trinkets(self):
-        self.assertEqual([hold["bot"] for hold in fc.duty_holds(self.trace, fc.PACK_TANK)], [TANK])
+        self.assertEqual([hold["bot"] for hold in fc.duty_holds(self.trace, fc.FRONT)], [TANK])
         self.assertEqual([(hold["bot"], hold["start"], hold["stop"]) for hold in fc.duty_holds(self.trace, fc.OPENER)],
                          [(HUNTER, 2500, 3000)])
         self.assertEqual(fc.champion_trinkets(self.trace), [(3000, ROGUE_C)])
@@ -975,7 +975,7 @@ class DeathBall(unittest.TestCase):
         text = out.getvalue()
         self.assertRegex(text, r"0:00\.000 +60/  0/ 20/ 20/  0")
         self.assertRegex(text, r"Velanaa +0:00\.000 +20\.0s +49\.\d +75%")
-        self.assertIn("fc.packtank: Bulwark", text)
+        self.assertIn("fc.front: Bulwark", text)
         self.assertIn("first raid cast on a champion: 0:00.050 Trueshot (bot)", text)
         self.assertIn("first picks: tank 3 of 5 (60%), melee 0, ranged 1, heal 1", text)
         self.assertIn("champion PvP trinkets: Irieth Shadowstep 0:03.000", text)
@@ -1055,6 +1055,95 @@ class GripChain(unittest.TestCase):
         self.assertIn("bot grips outside a pull: 1 (Obliteration 0:30.000 on Irieth Shadowstep)", out.getvalue())
 
 
+MIGHTY = 5020  # a warrior bot on the frontline
+
+
+def front_snap(when: int) -> dict:
+    # Velanaa pulled 70 yd out at 5 s; Anthar walks to 30 yd of her at 10 s; the warrior and mage wander
+    # 30 yd off at 15 s
+    paladin = (70.0, 0.0) if when >= 5000 else (0.0, 1.0)
+    disc = (40.0, 0.0) if when >= 10000 else (2.0, 2.0)
+    away = when >= 15000
+    return {"t": when, "e": "snap", "hz": [], "u": [
+        placed(PALADIN, *paladin, 100.0, ROGUE),
+        placed(DISC, *disc, 100.0, MIGHTY),
+        placed(ROGUE_C, 1.0, 0.0, 100.0, MIGHTY),
+        placed(WARRIOR_C, -30.0 if away else 0.0, 0.0 if away else -1.0, 100.0, ROGUE),
+        placed(MAGE_C, -30.0 if away else 2.0, 1.0 if away else 0.0, 100.0, PRIEST),
+        placed(TANK, 1.0, 0.0, 100.0, DISC),
+        placed(MIGHTY, 1.0, 0.5, 100.0, ROGUE_C),
+    ]}
+
+
+def front_pull() -> list[dict]:
+    roster = [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+              {"g": MIGHTY, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
+              {"g": ROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
+              {"g": PRIEST, "n": "Prayer", "r": "heal", "c": 5, "h": 0}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": DISC, "en": 34466, "n": "Anthar Forgemender", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
+        {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
+        note(0, TANK, "fc.switch", "first"),
+        note(0, TANK, "fc.kill", PALADIN),
+        note(0, TANK, fc.FRONT, DISC),
+        note(0, MIGHTY, fc.FRONT, ROGUE_C),
+        {"t": 20000, "e": "end", "out": "wipe"},
+    ]
+    return records + [front_snap(when) for when in range(0, 20000, 1000)]
+
+
+class Frontline(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in front_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_members_are_the_fc_front_holders(self):
+        self.assertEqual(fc.front_members(self.trace), {TANK, MIGHTY})
+
+    def test_samples_split_the_packs_picks_and_leave_the_pulled_healers_out(self):
+        samples = fc.front_samples(self.trace)
+        self.assertEqual(len(samples), 20)
+        first, late = samples[0], samples[12]
+        self.assertEqual(sorted(first["picks"]), [(False, "front"), (False, "heal"), (True, "front"), (True, "melee")])
+        # Anthar is pulled out too by then, so only the three left in the pack pick
+        self.assertEqual(sorted(late["picks"]), [(False, "heal"), (True, "front"), (True, "melee")])
+        self.assertIsNone(first["kill"])
+        self.assertAlmostEqual(late["near"], 30.0)
+        self.assertEqual(late["armed"], [True, True])
+
+    def test_the_summary_reads_the_hold_the_melee_picks_and_the_clear_share(self):
+        summary = fc.front_summary(fc.front_samples(self.trace))
+        self.assertAlmostEqual(summary["held"], 0.75)
+        self.assertAlmostEqual(summary["melee"], 0.5)
+        self.assertAlmostEqual(summary["clear"], 5 / 15)
+
+    def test_the_section_renders(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_front(self.trace)
+        text = out.getvalue()
+        self.assertIn("fc.front: Bulwark (paladin), Mighty (warrior)", text)
+        self.assertIn("pack within 15 yd of the landing spot: 75%; melee champion picks on the frontline: 50%;"
+                      " pulled kill target clear of other healers: 33%", text)
+
+    def test_a_champion_on_the_frontline_is_no_escapee(self):
+        # Anthar stands 40 yd off from 10 s but stays on Mighty
+        self.assertEqual(fc.escapee_seconds(self.trace), {PALADIN: 15.0, WARRIOR_C: 5.0, MAGE_C: 5.0})
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
@@ -1103,7 +1192,8 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.kill_isolation(trace), [])
         self.assertEqual(fc.escapee_seconds(trace), {})
         self.assertEqual(fc.champion_trinkets(trace), [])
-        self.assertEqual(fc.duty_holds(trace, fc.PACK_TANK), [])
+        self.assertEqual(fc.duty_holds(trace, fc.FRONT), [])
+        self.assertEqual(fc.front_samples(trace), [])
         self.assertEqual(fc.first_engage(trace), None)
         self.assertEqual(fc.first_picks(trace), [])
 

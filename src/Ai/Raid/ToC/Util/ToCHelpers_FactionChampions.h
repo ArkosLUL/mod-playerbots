@@ -86,11 +86,21 @@ std::vector<Unit*> FactionChampionsInCombat(PlayerbotAI* botAI);
 // immune to taunt there, and a pet's threat never reaches the 10M the script seeds each player at.
 uint32 FactionChampionsPetTauntAutocast(PlayerbotAI* botAI);
 
-// Every non-healer bot but the pack tanks burns the kill target
+// Every non-healer bot off the frontline burns the kill target
 bool FactionChampionsFocusBot(PlayerbotAI* botAI);
 
-// Bot tanks hold the pack where it landed, away from the kill target
+// Bot tanks. Their Consecration and Death and Decay break CC and roots round them
 bool FactionChampionsIsPackTank(Player* player);
+
+// The bot DK that grips second in every chain: lowest guid, not a tank, knows Death Grip. Empty when none
+ObjectGuid FactionChampionsChainDk(Player* bot);
+
+// Holds the pack where it landed: bot tanks plus warrior, paladin and DK melee bots but the chain DK.
+// Plate in melee range outscores cloth 23+ yd off in the melee champions' pick, a tank never does
+bool FactionChampionsIsFrontline(Player* player);
+
+// Live, and a champion healer is still up
+bool FactionChampionsHealerLeft(PlayerbotAI* botAI);
 
 // While live: where the champions landed, and the middle of those still within 25 yd of it, the kill
 // target left out
@@ -99,7 +109,7 @@ bool FactionChampionsPack(PlayerbotAI* botAI, Position& anchor, Position& centre
 // A healer champion 20+ yd off the pack centre with no champion within 12 yd
 bool FactionChampionsIsPulled(PlayerbotAI* botAI, Unit* champion);
 
-// A champion 20+ yd off where the pack landed whose victim isn't a tank
+// A champion 20+ yd off where the pack landed whose victim isn't a tank or on the frontline
 bool FactionChampionsIsEscapee(PlayerbotAI* botAI, Unit* champion);
 
 // How long the encounter has been live, 0 when it isn't
@@ -112,8 +122,8 @@ bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 // (Polymorph), warlocks (Fear, Banish on an elemental or demon) and ranged druids (Cyclone). None for
 // 1.5 s after the pull, while the opening grips land. Candidates skip the kill target, the suspended,
 // the skulled and a pulled one, the player's pull in flight, and the next healer in the pack once the
-// kill target is pulled and at 40% or under: healers off the tanks nearest the kill target, other healers, champions
-// off the tanks casters first, the rest in kill order. A cast at a champion that stops being a
+// kill target is pulled and at 40% or under: healers off the frontline nearest the kill target, other
+// healers, champions off the frontline casters first, the rest in kill order. A cast at a champion that stops being a
 // candidate is interrupted, so it never makes a new kill target immune. One duty per
 // candidate, none while it is CC'd for over 2 s more or a CC cast at it is under way. The caster is in
 // range and sight with a spell that lands and, by DR, holds over 2.5 s: never-breaking first, then the

@@ -6,20 +6,20 @@
 #include "ToCActions_NorthrendBeasts.h"
 #include "ToCActions_Shared.h"
 
-// Walks the pack tank back to where the champions landed
-class FactionChampionsPackTankReturnAction : public NorthrendBeastsWalkAction
+// Walks the frontline bot back to where the champions landed
+class FactionChampionsFrontlineReturnAction : public NorthrendBeastsWalkAction
 {
 public:
-    FactionChampionsPackTankReturnAction(PlayerbotAI* botAI)
-        : NorthrendBeastsWalkAction(botAI, "faction champions pack tank return") {}
+    FactionChampionsFrontlineReturnAction(PlayerbotAI* botAI)
+        : NorthrendBeastsWalkAction(botAI, "faction champions frontline return") {}
     bool Execute(Event event) override;
 };
 
-class FactionChampionsPackTankAttackAction : public ToCDirectAttackAction
+class FactionChampionsFrontlineAttackAction : public ToCDirectAttackAction
 {
 public:
-    FactionChampionsPackTankAttackAction(PlayerbotAI* botAI)
-        : ToCDirectAttackAction(botAI, "faction champions pack tank attack") {}
+    FactionChampionsFrontlineAttackAction(PlayerbotAI* botAI)
+        : ToCDirectAttackAction(botAI, "faction champions frontline attack") {}
     bool Execute(Event event) override;
 };
 
@@ -44,9 +44,9 @@ class ToCFactionChampionsBallActionContext : public NamedObjectContext<Action>
 public:
     ToCFactionChampionsBallActionContext()
     {
-        creators["faction champions pack tank return"] =
+        creators["faction champions frontline return"] =
             &ToCFactionChampionsBallActionContext::faction_champions_pack_tank_return;
-        creators["faction champions pack tank attack"] =
+        creators["faction champions frontline attack"] =
             &ToCFactionChampionsBallActionContext::faction_champions_pack_tank_attack;
         creators["faction champions ball stand"] = &ToCFactionChampionsBallActionContext::faction_champions_ball_stand;
         creators["faction champions opener"] = &ToCFactionChampionsBallActionContext::faction_champions_opener;
@@ -54,11 +54,11 @@ public:
 
 private:
     static Action* faction_champions_pack_tank_return(PlayerbotAI* botAI) {
-        return new FactionChampionsPackTankReturnAction(botAI);
+        return new FactionChampionsFrontlineReturnAction(botAI);
     }
 
     static Action* faction_champions_pack_tank_attack(PlayerbotAI* botAI) {
-        return new FactionChampionsPackTankAttackAction(botAI);
+        return new FactionChampionsFrontlineAttackAction(botAI);
     }
 
     static Action* faction_champions_ball_stand(PlayerbotAI* botAI) {

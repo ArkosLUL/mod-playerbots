@@ -15,18 +15,18 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-bool FactionChampionsPackTankOwned(PlayerbotAI* botAI)
+bool FactionChampionsFrontlineOwned(PlayerbotAI* botAI)
 {
     Position anchor;
-    return FactionChampionsPackTankHeld(botAI, anchor);
+    return FactionChampionsFrontlineHeld(botAI, anchor);
 }
 
-// The focus trigger's test, so the rule and the node cover the same window. The pack tank picks his
+// The focus trigger's test, so the rule and the node cover the same window. The frontline picks its
 // own.
 bool FactionChampionsTargetOwned(PlayerbotAI* botAI)
 {
     return (FactionChampionsFocusBot(botAI) && FactionChampionsKillTarget(botAI)) ||
-           FactionChampionsPackTankOwned(botAI);
+           FactionChampionsFrontlineOwned(botAI);
 }
 
 bool FactionChampionsStandHeld(PlayerbotAI* botAI)
@@ -35,11 +35,19 @@ bool FactionChampionsStandHeld(PlayerbotAI* botAI)
     return FactionChampionsBallStand(botAI, spot);
 }
 
-// Melee wait outside the pack until the grip has the kill target out of it
-bool FactionChampionsGripWait(PlayerbotAI* botAI)
+// Kill squad melee wait outside the pack until a grip has the kill target out of it. Once no champion
+// healer is left nothing heals it in there
+bool FactionChampionsKillSquadWait(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    return PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot) && FactionChampionsGripPending(botAI);
+    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot) || FactionChampionsIsFrontline(bot))
+        return false;
+
+    if (FactionChampionsGripPending(botAI))
+        return true;
+
+    Unit* killTarget = FactionChampionsKillTarget(botAI);
+    return killTarget && !FactionChampionsIsPulled(botAI, killTarget) && FactionChampionsHealerLeft(botAI);
 }
 
 bool FactionChampionsTotemHeld(PlayerbotAI* botAI) { return FactionChampionsTotemTarget(botAI) != nullptr; }
@@ -75,19 +83,20 @@ void DefineFactionChampions(EncounterBuilder& e)
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
             {"reach melee", "reach spell"});
 
-    // the pack follows its tank, so he stays where it landed
-    e.Block("faction champions pack hold", Role::Any, FactionChampionsPackTankOwned,
+    // the pack follows whoever it picks, so the frontline stays where it landed
+    e.Block("faction champions frontline hold", Role::Any, FactionChampionsFrontlineOwned,
             Family::CombatFormationMove | Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom |
                 Family::Charge);
 
-    // ranged and healers keep the kill target between them and the pack, and the reaches would walk
-    // them back in toward the pack tank or a target past the slot
+    // ranged and healers hold their slots, and the reaches would walk them in toward the frontline or a
+    // target past the slot
     e.Block("faction champions stand hold", Role::Any, FactionChampionsStandHeld,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Flee |
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
             {"reach spell", "reach party member to heal"});
 
-    e.Block("faction champions grip wait", Role::Any, FactionChampionsGripWait, Family::Charge, {"reach melee"});
+    e.Block("faction champions kill squad wait", Role::Any, FactionChampionsKillSquadWait, Family::Charge,
+            {"reach melee"});
 
     // the class Rebirth raises the master first and a corpse inside the pack too, faction champions battle
     // res picks the corpse instead

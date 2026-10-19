@@ -17,6 +17,8 @@
                                            their gaps and carry, the order; bot grips outside a pull
     faction_champions.py <file> --peel     snares and peels on melee champions, Disarm against Bladestorm,
                                            externals, battle res, taunts
+    faction_champions.py <file> --front    the frontline: where the pack stays, whom it picks, the pulled
+                                           kill target clear of champion healers
     faction_champions.py <file> --ball     the death ball: who started it and whom the champions picked first,
                                            who they chase, how far the kill target and the raid stand off the
                                            pack, escapees, opener and trinkets
@@ -72,6 +74,8 @@ What the generic views get wrong here, and what this reads instead:
   and the release never show: `--ball` reads the start off the raid's first cast on a champion.
 - **A pull made before the engage shows from the engage.** The trace opens there, and `fc.chain`
   is restated on the next read, so `--chain` times the first pull from the trace's opening.
+- **The frontline is whoever ever held an `fc.front` champion.** A member that never had one in
+  reach doesn't show, and `--front` and the escapee count read that set for the whole pull.
 - **A disarm on a champion never shows.** `--peel` reads Disarm, Dismantle and Psychic Horror casts on
   the Warrior champion against its own Bladestorm casts, and a Frost Nova, which names no target, by
   its caster's `fc.peel` hold.
@@ -121,6 +125,8 @@ SPEC_OF = {entry: (rank, spec, healer)
            for rank, (spec, healer, *entries) in enumerate(CHAMPIONS) for entry in entries}
 # Felhunter, Cat
 CHAMPION_PETS = (35465, 35610)
+# The melee formula's champions (`IsFactionChampionMelee`)
+MELEE_SPECS = frozenset(("Rogue", "Warrior", "Enhancement Shaman", "Death Knight", "Retribution Paladin"))
 
 KILL = "fc.kill"
 SWITCH = "fc.switch"
@@ -192,6 +198,8 @@ FC_MULTIPLIERS = (
     "faction champions cc guard multiplier",
     "faction champions totem guard multiplier",
     "faction champions grip hold",
+    "faction champions frontline hold",
+    "faction champions kill squad wait",
     "faction champions battle res guard",
     "faction champions heroic taunt guard",
 )
@@ -295,7 +303,11 @@ STALL_MS = 20000
 # how long after a grip the landing is read
 GRIP_SETTLE_MS = 1000
 
-PACK_TANK = "fc.packtank"
+FRONT = "fc.front"
+# the pack holds while its median champion stays this close to where it landed
+FRONT_HOLD = 15.0
+FRONT_WINDOW_MS = 5000
+PULLED_CLEAR = 12.0
 OPENER = "fc.opener"
 # the pack: champions this close to where they landed, the kill target left out
 BALL_ANCHOR_RADIUS = 25.0
@@ -1854,12 +1866,14 @@ def kill_isolation(trace: Trace) -> list[dict]:
 
 
 def escapee_seconds(trace: Trace) -> dict[int, float]:
-    """Per champion, seconds spent past 20 yd of where the pack landed with a victim that isn't a tank."""
+    """Per champion, seconds spent past 20 yd of where the pack landed with a victim that isn't a tank or
+    on the frontline."""
     anchor = pack_anchor(trace)
     if anchor is None:
         return {}
     targets = champions(trace)
     start = pull_start(trace)
+    front = front_members(trace)
     out: dict[int, float] = collections.defaultdict(float)
     previous = None
     for snap in frames(trace):
@@ -1869,7 +1883,8 @@ def escapee_seconds(trace: Trace) -> dict[int, float]:
             step = (snap["t"] - previous) / 1000
             for row in live_rows(snap, targets):
                 victim = row[7] if len(row) > 7 else 0
-                if distance(row, [0, *anchor]) > BALL_ESCAPE and trace.role(victim) != "tank":
+                held = trace.role(victim) == "tank" or victim in front
+                if distance(row, [0, *anchor]) > BALL_ESCAPE and not held:
                     out[row[0]] += step
         previous = snap["t"]
     return dict(out)
@@ -1918,6 +1933,124 @@ def first_picks(trace: Trace) -> list[tuple[int, int, int]]:
     return sorted((when, guid, victim) for guid, (when, victim) in seen.items())
 
 
+def front_members(trace: Trace) -> set[int]:
+    """Every bot that held a frontline champion at some point."""
+    return {hold["bot"] for hold in duty_holds(trace, FRONT)}
+
+
+def pulled_out(row: list, rows: list[list], centre: tuple[float, float], healers: set[int]) -> bool:
+    """A healer champion 20+ yd off the pack centre with no other champion within 12 yd."""
+    return (row[0] in healers and distance(row, [0, *centre]) >= BALL_ESCAPE
+            and all(distance(row, other) > PULLED_CLEAR for other in rows if other[0] != row[0]))
+
+
+def front_samples(trace: Trace) -> list[dict]:
+    """Per snapshot from the pull: `t`; `blob`, the median distance off the landing spot of the champions
+    still in the pack (kill target and pulled healers left out); `front` and `armed`, the frontline's
+    distances off it and whether each held a champion; `picks`, the pack champions' victims as
+    (melee champion, group); `kill` and `near`, a pulled kill target's distance off the pack centre and
+    its nearest other champion healer, None when the kill target isn't pulled."""
+    anchor = pack_anchor(trace)
+    if anchor is None:
+        return []
+    targets = champions(trace)
+    roster = roster_guids(trace)
+    healers = {guid for guid, _, healer in lineup(trace) if healer}
+    front = front_members(trace)
+    kill = kill_spans(trace)
+    start = pull_start(trace)
+    out = []
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        rows = live_rows(snap, targets)
+        held = held_at(kill, snap["t"])
+        centre = pack_centre(rows, anchor, held)
+        if not rows or centre is None:
+            continue
+        pack = [row for row in rows if row[0] != held and not pulled_out(row, rows, centre, healers)]
+        killed = next((row for row in rows if row[0] == held), None)
+        pulled = killed is not None and pulled_out(killed, rows, centre, healers)
+        picks = []
+        for row in pack:
+            victim = row[7] if len(row) > 7 else 0
+            if victim in roster:
+                group = "front" if victim in front else trace.role(victim)
+                picks.append((spec(trace, row[0]) in MELEE_SPECS, group))
+        mine = live_rows(snap, front)
+        out.append({
+            "t": snap["t"],
+            "blob": statistics.median(distance(row, [0, *anchor]) for row in pack) if pack else None,
+            "front": [distance(row, [0, *anchor]) for row in mine],
+            "armed": [len(row) > 7 and row[7] in targets for row in mine],
+            "picks": picks,
+            "kill": distance(killed, [0, *centre]) if pulled else None,
+            "near": min((distance(killed, other) for other in rows if other[0] in healers and other[0] != held),
+                        default=None) if pulled else None,
+        })
+    return out
+
+
+def front_summary(samples: list[dict]) -> dict:
+    """`held`, the share of fighting samples (the pack picking someone) with the pack within 15 yd of the
+    landing spot; `melee`, the share of melee champion picks on the frontline; `clear`, the share of pulled
+    kill target samples with no other champion healer within 40 yd. None without samples."""
+    blobs = [sample["blob"] for sample in samples if sample["blob"] is not None and sample["picks"]]
+    melee = [group for sample in samples for is_melee, group in sample["picks"] if is_melee]
+    pulled = [sample["near"] for sample in samples if sample["kill"] is not None]
+    return {
+        "held": sum(blob <= FRONT_HOLD for blob in blobs) / len(blobs) if blobs else None,
+        "melee": sum(group == "front" for group in melee) / len(melee) if melee else None,
+        "clear": sum(near is None or near > BALL_HEAL_REACH for near in pulled) / len(pulled) if pulled else None,
+    }
+
+
+def share(value: float | None) -> str:
+    return "-" if value is None else f"{100 * value:.0f}%"
+
+
+def show_front(trace: Trace) -> None:
+    print("THE FRONTLINE")
+    front = front_members(trace)
+    names = classes(trace)
+    print(f"  {FRONT}: " + (", ".join(f"{trace.name(guid)} ({names.get(guid, '?')})" for guid in sorted(front))
+                             if front else "none"))
+    samples = front_samples(trace)
+    if not samples:
+        print("  no champion in the snapshots")
+        return
+    start = pull_start(trace)
+    windows: dict[int, list[dict]] = collections.defaultdict(list)
+    for sample in samples:
+        windows[(sample["t"] - start) // FRONT_WINDOW_MS].append(sample)
+    print(f"  {'from':>8} {'pack off':>8} {'front off':>9} {'armed':>6}  {'picks front/melee/ranged/heal':30}"
+          f" {'kill off':>8} {'healer':>6}")
+    for index, group in sorted(windows.items()):
+        blobs = [sample["blob"] for sample in group if sample["blob"] is not None]
+        spots = [spot for sample in group for spot in sample["front"]]
+        armed = [flag for sample in group for flag in sample["armed"]]
+        picks = collections.Counter(who for sample in group for _, who in sample["picks"])
+        total = sum(picks.values()) or 1
+        kills = [sample["kill"] for sample in group if sample["kill"] is not None]
+        nears = [sample["near"] for sample in group if sample["near"] is not None]
+
+        def cell(values: list[float]) -> str:
+            return f"{statistics.median(values):.1f}" if values else "-"
+
+        print(f"  {clock(start + index * FRONT_WINDOW_MS):>8} {cell(blobs):>8} {cell(spots):>9}"
+              f" {share(sum(armed) / len(armed) if armed else None):>6}  "
+              + f"{'/'.join(f'{100 * picks[who] // total:3d}' for who in ('front', 'melee', 'ranged', 'heal')):30}"
+              + f" {cell(kills):>8} {cell(nears):>6}")
+    summary = front_summary(samples)
+    print(f"\n  pack within {FRONT_HOLD:.0f} yd of the landing spot: {share(summary['held'])};"
+          f" melee champion picks on the frontline: {share(summary['melee'])};"
+          f" pulled kill target clear of other healers: {share(summary['clear'])}")
+    print(f"  the pack is the champions but the kill target and pulled healers (20+ yd off the pack centre,"
+          f" none within {PULLED_CLEAR:.0f} yd); off is the median distance from where they landed; armed is the"
+          f" share of frontline samples on a champion; picks are the pack's victims, the frontline apart; healer"
+          f" is the nearest other champion healer to a pulled kill target; {FRONT_WINDOW_MS // 1000} s windows")
+
+
 def show_ball(trace: Trace) -> None:
     print("THE DEATH BALL")
     engage = first_engage(trace)
@@ -1954,11 +2087,11 @@ def show_ball(trace: Trace) -> None:
 
     loose = escapee_seconds(trace)
     if loose:
-        print("\n  escapees, s off the landing spot not on a tank: " + ", ".join(
+        print("\n  escapees, s off the landing spot not on a tank or the frontline: " + ", ".join(
             f"{trace.name(guid)} {seconds:.0f}" for guid, seconds in sorted(loose.items(), key=lambda kv: -kv[1])
             if seconds >= 1))
-    tanks = duty_holds(trace, PACK_TANK)
-    print(f"  {PACK_TANK}: " + (", ".join(sorted({trace.name(hold['bot']) for hold in tanks})) if tanks else "none"))
+    front = front_members(trace)
+    print(f"  {FRONT}: " + (", ".join(sorted(trace.name(guid) for guid in front)) if front else "none"))
     openers = duty_holds(trace, OPENER)
     for hold in openers:
         spell = as_guid(hold["value"])
@@ -1990,6 +2123,8 @@ SECTIONS = (
      " bot grips outside a pull", show_chain),
     ("peel", "snares and peels on melee champions, Disarm against Bladestorm, externals, battle res, taunts",
      show_peel),
+    ("front", "the frontline: where the pack stays, whom it picks, the pulled kill target clear of champion"
+     " healers", show_front),
     ("ball", "the death ball: the start and first picks, champion targets by role, kill target off the pack,"
      " escapees, opener", show_ball),
     ("vetoes", "the Faction Champions multipliers and rules, by action", show_vetoes),

@@ -47,10 +47,10 @@ Unit* NearestPackChampion(PlayerbotAI* botAI, Player* bot)
 }
 }  // namespace
 
-bool FactionChampionsPackTankReturnAction::Execute(Event /*event*/)
+bool FactionChampionsFrontlineReturnAction::Execute(Event /*event*/)
 {
     Position anchor;
-    if (!FactionChampionsPackTankHeld(botAI, anchor) || bot->GetExactDist2d(&anchor) <= PACK_TANK_ARRIVE)
+    if (!FactionChampionsFrontlineHeld(botAI, anchor) || bot->GetExactDist2d(&anchor) <= PACK_TANK_ARRIVE)
     {
         DropWalk();
         return false;
@@ -62,9 +62,9 @@ bool FactionChampionsPackTankReturnAction::Execute(Event /*event*/)
     return WalkTo(anchor);
 }
 
-bool FactionChampionsPackTankAttackAction::Execute(Event /*event*/)
+bool FactionChampionsFrontlineAttackAction::Execute(Event /*event*/)
 {
-    return AttackDirect(FactionChampionsPackTankTarget(botAI));
+    return AttackDirect(FactionChampionsFrontlineTarget(botAI));
 }
 
 bool FactionChampionsBallStandAction::Execute(Event /*event*/)

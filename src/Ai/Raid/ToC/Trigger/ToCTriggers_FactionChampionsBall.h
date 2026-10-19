@@ -6,17 +6,17 @@
 #include "NamedObjectContext.h"
 #include "Trigger.h"
 
-class FactionChampionsPackTankReturnTrigger : public Trigger
+class FactionChampionsFrontlineReturnTrigger : public Trigger
 {
 public:
-    FactionChampionsPackTankReturnTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions pack tank return") {}
+    FactionChampionsFrontlineReturnTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions frontline return") {}
     bool IsActive() override;
 };
 
-class FactionChampionsPackTankAttackTrigger : public Trigger
+class FactionChampionsFrontlineAttackTrigger : public Trigger
 {
 public:
-    FactionChampionsPackTankAttackTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions pack tank attack") {}
+    FactionChampionsFrontlineAttackTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions frontline attack") {}
     bool IsActive() override;
 };
 
@@ -39,9 +39,9 @@ class ToCFactionChampionsBallTriggerContext : public NamedObjectContext<Trigger>
 public:
     ToCFactionChampionsBallTriggerContext() : NamedObjectContext<Trigger>()
     {
-        creators["faction champions pack tank return"] =
+        creators["faction champions frontline return"] =
             &ToCFactionChampionsBallTriggerContext::faction_champions_pack_tank_return;
-        creators["faction champions pack tank attack"] =
+        creators["faction champions frontline attack"] =
             &ToCFactionChampionsBallTriggerContext::faction_champions_pack_tank_attack;
         creators["faction champions ball stand"] = &ToCFactionChampionsBallTriggerContext::faction_champions_ball_stand;
         creators["faction champions opener"] = &ToCFactionChampionsBallTriggerContext::faction_champions_opener;
@@ -49,11 +49,11 @@ public:
 
 private:
     static Trigger* faction_champions_pack_tank_return(PlayerbotAI* botAI) {
-        return new FactionChampionsPackTankReturnTrigger(botAI);
+        return new FactionChampionsFrontlineReturnTrigger(botAI);
     }
 
     static Trigger* faction_champions_pack_tank_attack(PlayerbotAI* botAI) {
-        return new FactionChampionsPackTankAttackTrigger(botAI);
+        return new FactionChampionsFrontlineAttackTrigger(botAI);
     }
 
     static Trigger* faction_champions_ball_stand(PlayerbotAI* botAI) {

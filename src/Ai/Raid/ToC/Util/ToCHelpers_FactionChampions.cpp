@@ -87,6 +87,7 @@ constexpr float PULLED_CLEAR = 12.0f;
 constexpr float PULLED_SWITCH_MIN_PCT = 30.0f;
 // Off the landing spot by this much and not on a tank: chasing the raid
 constexpr float ESCAPE_DIST = 20.0f;
+constexpr uint32 SPELL_DEATH_GRIP_RANK = 49576;
 
 struct Champion
 {
@@ -102,7 +103,7 @@ struct Champion
     bool healer = false;
     bool pulled = false;
     bool escapee = false;
-    bool onTank = false;
+    bool onFront = false;
     float packDist = 0.0f;
 };
 
@@ -437,8 +438,9 @@ void ScanChampions(FactionChampionsState& state, Player* bot)
         champion.healer = IsFactionChampionHealer(champion.entry);
         Unit* victim = creature->GetVictim();
         Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
-        champion.onTank = victimPlayer && PlayerbotAI::IsTank(victimPlayer);
-        champion.escapee = creature->GetExactDist2d(&state.packAnchor) > ESCAPE_DIST && !champion.onTank;
+        champion.onFront =
+            victimPlayer && (PlayerbotAI::IsTank(victimPlayer) || FactionChampionsIsFrontline(victimPlayer));
+        champion.escapee = creature->GetExactDist2d(&state.packAnchor) > ESCAPE_DIST && !champion.onFront;
         state.champions.push_back(champion);
     }
 
@@ -693,9 +695,9 @@ std::vector<Champion const*> CcCandidates(FactionChampionsState const& state, Ob
     auto const group = [](Champion const* champion)
     {
         if (champion->healer)
-            return champion->onTank ? 1 : 0;
+            return champion->onFront ? 1 : 0;
 
-        if (champion->onTank)
+        if (champion->onFront)
             return 4;
 
         return IsFactionChampionMelee(champion->entry) ? 3 : 2;
@@ -1103,9 +1105,64 @@ bool FactionChampionsIsPackTank(Player* player)
     return player && GET_PLAYERBOT_AI(player) && PlayerbotAI::IsTank(player);
 }
 
+ObjectGuid FactionChampionsChainDk(Player* bot)
+{
+    ObjectGuid chosen;
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!group)
+        return chosen;
+
+    Map* map = bot->FindMap();
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* player = ref->GetSource();
+        if (player && player->IsInWorld() && player->IsAlive() && player->FindMap() == map &&
+            player->getClass() == CLASS_DEATH_KNIGHT && GET_PLAYERBOT_AI(player) &&
+            !FactionChampionsIsPackTank(player) && player->HasSpell(SPELL_DEATH_GRIP_RANK) &&
+            (chosen.IsEmpty() || player->GetGUID() < chosen))
+            chosen = player->GetGUID();
+    }
+
+    return chosen;
+}
+
+bool FactionChampionsIsFrontline(Player* player)
+{
+    if (!player || !GET_PLAYERBOT_AI(player))
+        return false;
+
+    if (FactionChampionsIsPackTank(player))
+        return true;
+
+    if (!PlayerbotAI::IsMelee(player) || PlayerbotAI::IsHeal(player))
+        return false;
+
+    switch (player->getClass())
+    {
+        case CLASS_WARRIOR:
+        case CLASS_PALADIN:
+            return true;
+        case CLASS_DEATH_KNIGHT:
+            return player->GetGUID() != FactionChampionsChainDk(player);
+        default:
+            return false;
+    }
+}
+
 bool FactionChampionsFocusBot(PlayerbotAI* botAI)
 {
-    return botAI && !PlayerbotAI::IsHeal(botAI->GetBot()) && !FactionChampionsIsPackTank(botAI->GetBot());
+    return botAI && !PlayerbotAI::IsHeal(botAI->GetBot()) && !FactionChampionsIsFrontline(botAI->GetBot());
+}
+
+bool FactionChampionsHealerLeft(PlayerbotAI* botAI)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return false;
+
+    FactionChampionsState* state = Refresh(botAI);
+    return state && state->live &&
+           std::any_of(state->champions.begin(), state->champions.end(),
+                       [](Champion const& champion) { return champion.healer; });
 }
 
 bool FactionChampionsPack(PlayerbotAI* botAI, Position& anchor, Position& centre)

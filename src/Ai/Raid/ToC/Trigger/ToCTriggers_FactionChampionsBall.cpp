@@ -12,19 +12,24 @@ namespace
 {
 // The champions on him move with him, so a few steps of slack before he walks back
 constexpr float PACK_TANK_LEASH = 8.0f;
+// Past the 20 yd the frontline's champions sit within, with room for his own melee step
+constexpr float FRONT_LEASH = 24.0f;
 constexpr float STAND_TRIGGER = 3.0f;
 }  // namespace
 
-bool FactionChampionsPackTankReturnTrigger::IsActive()
+bool FactionChampionsFrontlineReturnTrigger::IsActive()
 {
     Position anchor;
-    return FactionChampionsPackTankHeld(botAI, anchor) && botAI->CanMove() &&
-           bot->GetExactDist2d(&anchor) > PACK_TANK_LEASH;
+    if (!FactionChampionsFrontlineHeld(botAI, anchor) || !botAI->CanMove())
+        return false;
+
+    float const off = bot->GetExactDist2d(&anchor);
+    return off > FRONT_LEASH || (off > PACK_TANK_LEASH && !FactionChampionsFrontlineTarget(botAI));
 }
 
-bool FactionChampionsPackTankAttackTrigger::IsActive()
+bool FactionChampionsFrontlineAttackTrigger::IsActive()
 {
-    Unit* target = FactionChampionsPackTankTarget(botAI);
+    Unit* target = FactionChampionsFrontlineTarget(botAI);
     return target && (AI_VALUE(Unit*, "current target") != target || ToCPetOffPick(botAI, target));
 }
 
@@ -48,11 +53,11 @@ void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("faction champions opener", {
         NextAction("faction champions opener", ACTION_RAID + 4.4f) }));
 
-    triggers.push_back(new TriggerNode("faction champions pack tank return", {
-        NextAction("faction champions pack tank return", ACTION_RAID + 2.1f) }));
+    triggers.push_back(new TriggerNode("faction champions frontline return", {
+        NextAction("faction champions frontline return", ACTION_RAID + 2.1f) }));
 
-    triggers.push_back(new TriggerNode("faction champions pack tank attack", {
-        NextAction("faction champions pack tank attack", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("faction champions frontline attack", {
+        NextAction("faction champions frontline attack", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode("faction champions ball stand", {
         NextAction("faction champions ball stand", ACTION_RAID + 1.9f) }));
