@@ -33,8 +33,9 @@ bool CastSlamAction::isUseful()
     if (botAI->HasAura("slam!", bot))
         return true;
 
+    // passive talents only sit in the talent map, HasSpell never finds them
     for (uint32 spellId : SPELL_IMPROVED_SLAM_RANKS)
-        if (bot->HasSpell(spellId))
+        if (bot->HasTalent(spellId, bot->GetActiveSpec()))
             return true;
 
     return false;

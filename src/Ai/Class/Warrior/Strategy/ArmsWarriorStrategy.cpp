@@ -202,9 +202,11 @@ void ArmsWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         )
     );
 
+    // Slam fills whatever GCDs are left, so it doesn't pool rage first. Heroic Strike keeps the 60 rage
+    // overflow, it does far less per rage.
     triggers.push_back(
         new TriggerNode(
-            "medium rage available",
+            "light rage available",
             {
                 NextAction("slam", ACTION_HIGH - 2)
             }
