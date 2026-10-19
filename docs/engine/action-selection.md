@@ -254,7 +254,8 @@ front replaces the whole chain for the common case. Encounter rules enforce this
 for battlegrounds. Spec sets follow at `:302-309, 411-416, 420-433`; healers add `save mana` and
 `healer dps`.
 
-Every strategy is switchable per bot with `strategy -<name>`.
+Every strategy is switchable per bot with `strategy -<name>`. Strategies from a sibling context (e.g.
+warlock curses) evict each other, even within one `addStrategiesNoInit` list: the last one wins.
 
 **Instance strategies are location-derived and must never be restored from persisted per-bot data.**
 `PlayerbotRepository::Load` runs after `ResetStrategies()` and `ClearStrategies` wipes the
@@ -265,4 +266,5 @@ the combat, non-combat and dead lists to `playerbots_db_store` on logout and `Lo
 `ChangeStrategy` on a class strategy outlives the fight, the session and the binary, and the sibling it
 evicted never returns from the factory defaults. One AQ40 visit left a hunter carrying `rnature`
 instead of `bdps` across a rebuild and a restart. Suppress with a multiplier instead; only a DB update
-undoes one.
+or `reset botAI` undoes one. Rows outlive a deleted character, and a restart can hand its guid to a new
+character, which then loads them.

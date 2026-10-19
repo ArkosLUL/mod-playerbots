@@ -150,7 +150,7 @@ void WarlockCcStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 }
 
 // Combat strategy for using Curse of Agony
-// Enabled by default for the Affliction and Demonology specs
+// Enabled by default for the Affliction spec
 // To enable, type "co +curse of agony"
 // To disable, type "co -curse of agony"
 void WarlockCurseOfAgonyStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
@@ -200,6 +200,15 @@ void WarlockCurseOfDoomStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
             "curse of doom",
             {
                 NextAction("curse of doom", 29.0f)
+            }
+        )
+    );
+    // the curse strategies replace each other, so Doom brings its own Agony for targets that won't live 60 s
+    triggers.push_back(
+        new TriggerNode(
+            "curse of agony",
+            {
+                NextAction("curse of agony", 17.0f)
             }
         )
     );
