@@ -80,10 +80,11 @@ Combat (`CombatRogueStrategy`):
 | 29 / 28 | low health | evasion, feint |
 | 27 | critical health | cloak of shadows |
 | 26.5 | tricks of the trade | tricks of the trade |
-| 25 / 24 | slice and dice / rupture | slice and dice / rupture |
+| 25 / 24 | slice and dice / combat rupture | slice and dice / rupture |
+| 23.5 | slice and dice before rupture | slice and dice |
 | 23 / 22 | killing spree / blade flurry | killing spree / blade flurry |
 | 21 | expose armor | expose armor |
-| 20.5 / 20 | target with combo points almost dead, combo points 5 available | eviscerate |
+| 20.5 / 20 | target with combo points almost dead, combat eviscerate | eviscerate |
 | 19 / 17 | enemy out of melee / medium threat | sprint / vanish |
 | 13 | combo points not full and medium energy | sinister strike |
 
@@ -108,6 +109,18 @@ is a 50% AoE damage reduction, so it belongs in the survival band, not with the 
 `killing spree` moved off the default list, where at 5.1 it only ever fired when nothing else could;
 `getDefaultActions` keeps only `melee` at 5.0.
 
+**Combat's finishers follow the sim's APL** (`combat.apl.json`). TestBotDps 2026-10-19 had Rupture up 77%
+against 87%, every Rupture at 4 CP, and 4 of 5 drops right after an Eviscerate left it 3-5.5 s:
+
+- `combat rupture`: Rupture at 5 CP only (20 s with the glyph, stronger ticks).
+- `combat eviscerate`: 5 CP, held while our Rupture has under 10 s (6 s under Adrenaline Rush), unless
+  the target dies before Rupture's 12 s life check. Held at 5 CP, the bot pools to 90 energy, then Sinister Strikes and
+  wastes the point, as the sim does.
+- `slice and dice before rupture` (23.5, under Rupture): at 3+ CP, once SnD would expire before
+  Rupture + 2 s and the refreshed SnD would outlast that, so SnD never takes Rupture's 5 CP. The
+  second check stops an untalented short SnD from eating every 3 CP.
+- Killing Spree and Adrenaline Rush (shared `boost`) wait for energy ≤ 50: regen past the cap is lost.
+
 `TricksOfTheTradeTargetValue` returns the main tank while `low tank threat` holds or in the first
 ~10s of combat, otherwise the highest-attack-power melee DPS group member within 20 yd excluding self.
 
@@ -122,8 +135,8 @@ is a 50% AoE damage reduction, so it belongs in the survival band, not with the 
 
 ## Open against the guide
 
-- Eviscerate fires only on `combo points 5 available` while Rupture fires from 4; the guide wants
-  Eviscerate at 4-5 CP and Rupture at 5.
+- Eviscerate fires only at 5 CP, and Assassination's Rupture from 4; the guide wants Eviscerate at 4-5 CP
+  and Rupture at 5.
 - Killing Spree (23) outranks Blade Flurry (22) and Adrenaline Rush (22); the guide orders them
   Adrenaline Rush → Blade Flurry → Killing Spree.
 - **Rupture always maintained above Hunger for Blood** is a deliberate divergence: it guarantees the

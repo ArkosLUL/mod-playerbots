@@ -67,9 +67,11 @@ public:
     {
         creators["kick"] = &RogueTriggerFactoryInternal::kick;
         creators["riposte"] = &RogueTriggerFactoryInternal::riposte;
-        creators["rupture"] = &RogueTriggerFactoryInternal::rupture;
         creators["assassination rupture"] = &RogueTriggerFactoryInternal::assassination_rupture;
+        creators["combat rupture"] = &RogueTriggerFactoryInternal::combat_rupture;
+        creators["combat eviscerate"] = &RogueTriggerFactoryInternal::combat_eviscerate;
         creators["slice and dice"] = &RogueTriggerFactoryInternal::slice_and_dice;
+        creators["slice and dice before rupture"] = &RogueTriggerFactoryInternal::slice_and_dice_before_rupture;
         creators["hunger for blood"] = &RogueTriggerFactoryInternal::hunger_for_blood;
         creators["expose armor"] = &RogueTriggerFactoryInternal::expose_armor;
         creators["kick on enemy healer"] = &RogueTriggerFactoryInternal::kick_on_enemy_healer;
@@ -101,9 +103,14 @@ private:
     static Trigger* envenom(PlayerbotAI* botAI) { return new EnvenomTrigger(botAI); }
     static Trigger* kick(PlayerbotAI* botAI) { return new KickInterruptSpellTrigger(botAI); }
     static Trigger* riposte(PlayerbotAI* botAI) { return new RiposteAvailableTrigger(botAI); }
-    static Trigger* rupture(PlayerbotAI* botAI) { return new RuptureTrigger(botAI); }
     static Trigger* assassination_rupture(PlayerbotAI* botAI) { return new AssassinationRuptureTrigger(botAI); }
+    static Trigger* combat_rupture(PlayerbotAI* botAI) { return new CombatRuptureTrigger(botAI); }
+    static Trigger* combat_eviscerate(PlayerbotAI* botAI) { return new CombatEviscerateTrigger(botAI); }
     static Trigger* slice_and_dice(PlayerbotAI* botAI) { return new SliceAndDiceTrigger(botAI); }
+    static Trigger* slice_and_dice_before_rupture(PlayerbotAI* botAI)
+    {
+        return new SliceAndDiceBeforeRuptureTrigger(botAI);
+    }
     static Trigger* hunger_for_blood(PlayerbotAI* botAI) { return new HungerForBloodTrigger(botAI); }
     static Trigger* expose_armor(PlayerbotAI* botAI) { return new ExposeArmorTrigger(botAI); }
     static Trigger* kick_on_enemy_healer(PlayerbotAI* botAI)

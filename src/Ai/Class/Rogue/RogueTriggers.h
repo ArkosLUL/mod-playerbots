@@ -38,6 +38,7 @@ class AdrenalineRushTrigger : public BoostTrigger
 public:
     AdrenalineRushTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "adrenaline rush") {}
 
+    bool IsActive() override;
     // bool isPossible();
 };
 
@@ -57,12 +58,45 @@ class KillingSpreeTrigger : public BoostTrigger
 {
 public:
     KillingSpreeTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "killing spree") {}
+
+    bool IsActive() override;
 };
 
 class RuptureTrigger : public DebuffTrigger
 {
 public:
-    RuptureTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "rupture", 1, true, 12.0f, 2000) {}
+    static constexpr float NEED_LIFE_TIME = 12.0f;
+
+    RuptureTrigger(PlayerbotAI* botAI, uint8 minComboPoints = 4)
+        : DebuffTrigger(botAI, "rupture", 1, true, NEED_LIFE_TIME, 2000), _minComboPoints(minComboPoints)
+    {
+    }
+
+    bool IsActive() override;
+
+private:
+    uint8 _minComboPoints;
+};
+
+// 5 points: the full Rupture runs longer and ticks harder.
+class CombatRuptureTrigger : public RuptureTrigger
+{
+public:
+    CombatRuptureTrigger(PlayerbotAI* botAI) : RuptureTrigger(botAI, 5) {}
+};
+
+class CombatEviscerateTrigger : public ComboPointsAvailableTrigger
+{
+public:
+    CombatEviscerateTrigger(PlayerbotAI* botAI) : ComboPointsAvailableTrigger(botAI, 5) {}
+
+    bool IsActive() override;
+};
+
+class SliceAndDiceBeforeRuptureTrigger : public Trigger
+{
+public:
+    SliceAndDiceBeforeRuptureTrigger(PlayerbotAI* botAI) : Trigger(botAI, "slice and dice before rupture") {}
 
     bool IsActive() override;
 };

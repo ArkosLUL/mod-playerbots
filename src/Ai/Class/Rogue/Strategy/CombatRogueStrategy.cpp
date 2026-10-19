@@ -84,9 +84,19 @@ void CombatRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(
         new TriggerNode(
-            "rupture",
+            "combat rupture",
             {
                 NextAction("rupture", ACTION_HIGH + 4)
+            }
+        )
+    );
+
+    // under Rupture, so a due Rupture keeps its 5 points and this takes the next 3
+    triggers.push_back(
+        new TriggerNode(
+            "slice and dice before rupture",
+            {
+                NextAction("slice and dice", ACTION_HIGH + 3.5f)
             }
         )
     );
@@ -129,7 +139,7 @@ void CombatRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(
         new TriggerNode(
-            "combo points 5 available",
+            "combat eviscerate",
             {
                 NextAction("eviscerate", ACTION_HIGH)
             }
@@ -152,6 +162,16 @@ void CombatRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             "combo points not full and medium energy",
             {
                 NextAction("sinister strike", ACTION_NORMAL + 3)
+            }
+        )
+    );
+
+    // at 5 points with Eviscerate held for the Rupture refresh, spend before energy caps, as the sim does
+    triggers.push_back(
+        new TriggerNode(
+            "almost full energy available",
+            {
+                NextAction("sinister strike", ACTION_NORMAL + 2)
             }
         )
     );

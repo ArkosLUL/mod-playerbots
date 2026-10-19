@@ -10,11 +10,20 @@
 #include "GenericTriggers.h"
 #include "Playerbots.h"
 #include "ServerFacade.h"
+#include "SpellAuras.h"
 
 namespace
 {
 constexpr uint32 SPELL_STEALTH = 1784;
 constexpr uint32 SPELL_SPRINT_RANK_1 = 2983;
+constexpr uint32 SPELL_ADRENALINE_RUSH = 13750;
+
+// regen past the energy cap is lost, and a 2 s Killing Spree or Adrenaline Rush's doubled regen hits it fast
+constexpr uint8 BOOST_MAX_ENERGY = 50;
+// time to build 5 points again before the Rupture refresh, about 4 Sinister Strikes
+constexpr int32 EVISCERATE_MIN_RUPTURE_MS = 10000;
+constexpr int32 EVISCERATE_MIN_RUPTURE_RUSHING_MS = 6000;
+constexpr int32 SLICE_AND_DICE_PAST_RUPTURE_MS = 2000;
 }
 
 // bool AdrenalineRushTrigger::isPossible()
@@ -132,9 +141,69 @@ bool HungerForBloodTrigger::IsActive()
     return TargetHasBleed(target);
 }
 
+bool AdrenalineRushTrigger::IsActive()
+{
+    return AI_VALUE2(uint8, "energy", "self target") <= BOOST_MAX_ENERGY && BoostTrigger::IsActive();
+}
+
+bool KillingSpreeTrigger::IsActive()
+{
+    return AI_VALUE2(uint8, "energy", "self target") <= BOOST_MAX_ENERGY && BoostTrigger::IsActive();
+}
+
 bool RuptureTrigger::IsActive()
 {
-    return AI_VALUE2(uint8, "combo", "current target") >= 4 && DebuffTrigger::IsActive();
+    return AI_VALUE2(uint8, "combo", "current target") >= _minComboPoints && DebuffTrigger::IsActive();
+}
+
+// keeps the 5 points for the Rupture refresh when there's no time left to build 5 more
+bool CombatEviscerateTrigger::IsActive()
+{
+    if (!ComboPointsAvailableTrigger::IsActive())
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
+        return false;
+
+    Aura const* rupture = target->GetAura(AI_VALUE2(uint32, "spell id", "rupture"), bot->GetGUID());
+    int32 const minRuptureMs =
+        bot->HasAura(SPELL_ADRENALINE_RUSH) ? EVISCERATE_MIN_RUPTURE_RUSHING_MS : EVISCERATE_MIN_RUPTURE_MS;
+    if (!rupture || rupture->GetDuration() >= minRuptureMs)
+        return true;
+
+    // no refresh coming on a target that dies first, same check as RuptureTrigger
+    return target->GetHealth() / AI_VALUE(float, "estimated group dps") < RuptureTrigger::NEED_LIFE_TIME;
+}
+
+// refresh at 3+ points when it'd run out before Rupture, so it never takes the 5 points saved for Rupture
+bool SliceAndDiceBeforeRuptureTrigger::IsActive()
+{
+    if (AI_VALUE2(uint8, "combo", "current target") < 3)
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
+        return false;
+
+    uint32 const sliceAndDiceId = AI_VALUE2(uint32, "spell id", "slice and dice");
+    Aura const* sliceAndDice = bot->GetAura(sliceAndDiceId);
+    Aura const* rupture = target->GetAura(AI_VALUE2(uint32, "spell id", "rupture"), bot->GetGUID());
+    if (!sliceAndDice || !rupture)
+        return false;
+
+    int32 const due = rupture->GetDuration() + SLICE_AND_DICE_PAST_RUPTURE_MS;
+    if (sliceAndDice->GetDuration() > due)
+        return false;
+
+    // pointless if the new one runs out first too (no Improved Slice and Dice), it'd eat every 3 points
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(sliceAndDiceId);
+    if (!spellInfo)
+        return false;
+
+    int32 duration = bot->CalcSpellDuration(spellInfo);
+    bot->ApplySpellMod(sliceAndDiceId, SPELLMOD_DURATION, duration);
+    return duration > due;
 }
 
 bool AssassinationRuptureTrigger::IsActive()
