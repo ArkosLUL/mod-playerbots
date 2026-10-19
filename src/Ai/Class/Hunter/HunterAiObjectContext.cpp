@@ -98,7 +98,10 @@ public:
         creators["aimed shot no cd"] = &HunterTriggerFactoryInternal::aimed_shot_no_cd;
         creators["explosive shot"] = &HunterTriggerFactoryInternal::explosive_shot;
         creators["lock and load"] = &HunterTriggerFactoryInternal::lock_and_load;
+        creators["lock and load proc"] = &HunterTriggerFactoryInternal::lock_and_load_proc;
         creators["silencing shot"] = &HunterTriggerFactoryInternal::silencing_shot;
+        creators["silencing shot on immune target"] = &HunterTriggerFactoryInternal::silencing_shot_on_immune_target;
+        creators["readiness"] = &HunterTriggerFactoryInternal::readiness;
         creators["intimidation"] = &HunterTriggerFactoryInternal::intimidation;
         creators["volley channel check"] = &HunterTriggerFactoryInternal::volley_channel_check;
     }
@@ -143,7 +146,13 @@ private:
     static Trigger* aimed_shot_no_cd(PlayerbotAI* botAI) { return new AimedShotNoCdTrigger(botAI); }
     static Trigger* explosive_shot(PlayerbotAI* botAI) { return new ExplosiveShotTrigger(botAI); }
     static Trigger* lock_and_load(PlayerbotAI* botAI) { return new LockAndLoadTrigger(botAI); }
+    static Trigger* lock_and_load_proc(PlayerbotAI* botAI) { return new LockAndLoadProcTrigger(botAI); }
     static Trigger* silencing_shot(PlayerbotAI* botAI) { return new SilencingShotTrigger(botAI); }
+    static Trigger* silencing_shot_on_immune_target(PlayerbotAI* botAI)
+    {
+        return new SilencingShotOnImmuneTargetTrigger(botAI);
+    }
+    static Trigger* readiness(PlayerbotAI* botAI) { return new ReadinessTrigger(botAI); }
     static Trigger* intimidation(PlayerbotAI* botAI) { return new IntimidationTrigger(botAI); }
     static Trigger* volley_channel_check(PlayerbotAI* botAI) { return new VolleyChannelCheckTrigger(botAI); }
 };
@@ -204,7 +213,7 @@ public:
         creators["immolation trap"] = &HunterAiObjectContextInternal::immolation_trap;
         creators["explosive trap"] = &HunterAiObjectContextInternal::explosive_trap;
         creators["trap launcher: explosive trap"] = &HunterAiObjectContextInternal::trap_launcher_explosive;
-        creators["explosive shot base"] = &HunterAiObjectContextInternal::explosive_shot_base;
+        creators["explosive shot"] = &HunterAiObjectContextInternal::explosive_shot_base;
         creators["explosive shot rank 4"] = &HunterAiObjectContextInternal::explosive_shot_rank_4;
         creators["explosive shot rank 3"] = &HunterAiObjectContextInternal::explosive_shot_rank_3;
         creators["explosive shot rank 2"] = &HunterAiObjectContextInternal::explosive_shot_rank_2;

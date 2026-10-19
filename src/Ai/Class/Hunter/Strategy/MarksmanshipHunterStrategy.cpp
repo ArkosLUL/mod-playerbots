@@ -42,9 +42,25 @@ void MarksmanshipHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
     );
     triggers.push_back(
         new TriggerNode(
+            "readiness",
+            {
+                NextAction("readiness", ACTION_HIGH + 8.9f)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
             "kill command",
             {
                 NextAction("kill command", ACTION_NORMAL + 8.5f)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
+            "silencing shot on immune target",
+            {
+                NextAction("silencing shot", ACTION_NORMAL + 8.4f)
             }
         )
     );
@@ -64,21 +80,21 @@ void MarksmanshipHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
             }
         )
     );
-    // Above the sting refresh: Chimera Shot rolls Serpent Sting forward, so hard-recasting the sting
-    // while it is off cooldown throws the refresh away.
+    // Sting first when none is up: Chimera Shot on an unstung target has nothing to refresh and loses
+    // its serpent damage. With a sting up this never fires, so Chimera still does the refreshing.
     triggers.push_back(
         new TriggerNode(
-            "chimera shot no cd",
+            "no stings",
             {
-                NextAction("chimera shot", ACTION_NORMAL + 7)
+                NextAction("serpent sting", ACTION_NORMAL + 7.1f)
             }
         )
     );
     triggers.push_back(
         new TriggerNode(
-            "no stings",
+            "chimera shot no cd",
             {
-                NextAction("serpent sting", ACTION_NORMAL + 6.5f)
+                NextAction("chimera shot", ACTION_NORMAL + 6.9f)
             }
         )
     );

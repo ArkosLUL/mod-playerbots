@@ -77,6 +77,16 @@ void SurvivalHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+    // The second free shot comes while rank 4's dot still ticks. Rank 4 is then useless rather than
+    // impossible, so its rank 3 alternative never runs and rank 3 needs its own entry.
+    triggers.push_back(
+        new TriggerNode(
+            "lock and load proc",
+            {
+                NextAction("explosive shot rank 3", ACTION_HIGH + 7.9f)
+            }
+        )
+    );
     triggers.push_back(
         new TriggerNode(
             "kill command",

@@ -103,10 +103,21 @@ public:
     BestialWrathTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "bestial wrath") {}
 };
 
+// Intimidation is all about the pet's stun, so on a stun-immune target (most raid bosses) it just
+// burns a GCD and piles threat on the pet.
 class IntimidationTrigger : public BuffTrigger
 {
 public:
     IntimidationTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "intimidation") {}
+    bool IsActive() override;
+};
+
+// Readiness resets Rapid Fire, so hold it until Rapid Fire is spent and its haste has worn off.
+class ReadinessTrigger : public SpellNoCooldownTrigger
+{
+public:
+    ReadinessTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "readiness") {}
+    bool IsActive() override;
 };
 
 // Kill Command puts its aura on the hunter, not on the pet the action targets, so an aura check
@@ -129,6 +140,8 @@ public:
     AimedShotNoCdTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "aimed shot") {}
 };
 
+// Note: the talent's passive is also named Lock and Load, so this is true all fight for a Survival
+// hunter and is what keeps Explosive Shot rank 4 going. LockAndLoadProcTrigger is the real proc.
 class LockAndLoadTrigger : public BuffTrigger
 {
 public:
@@ -138,6 +151,13 @@ public:
     {
         return botAI->HasAura("lock and load", botAI->GetBot());
     }
+};
+
+class LockAndLoadProcTrigger : public Trigger
+{
+public:
+    LockAndLoadProcTrigger(PlayerbotAI* botAI) : Trigger(botAI, "lock and load proc") {}
+    bool IsActive() override;
 };
 
 // CC Triggers
@@ -164,6 +184,15 @@ class SilencingShotTrigger : public InterruptSpellTrigger
 {
 public:
     SilencingShotTrigger(PlayerbotAI* botAI) : InterruptSpellTrigger(botAI, "silencing shot") {}
+};
+
+// Silencing Shot only interrupts through its silence, so on a silence-immune target (most raid
+// bosses) it's free off-GCD damage and nothing is lost by firing it on cooldown.
+class SilencingShotOnImmuneTargetTrigger : public SpellNoCooldownTrigger
+{
+public:
+    SilencingShotOnImmuneTargetTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "silencing shot") {}
+    bool IsActive() override;
 };
 
 // DoT/Debuff Triggers

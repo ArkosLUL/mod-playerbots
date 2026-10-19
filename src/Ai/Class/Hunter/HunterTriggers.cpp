@@ -16,6 +16,46 @@
 #include "SharedDefines.h"
 #include "TargetValue.h"
 
+namespace
+{
+// Rapid Fire this close to ready isn't worth a reset, save Readiness for one that's far off.
+constexpr uint32 READINESS_RAPID_FIRE_WAIT_MS = 10000;
+constexpr uint32 SPELL_LOCK_AND_LOAD_PROC = 56453;
+
+bool HasTemplateMechanicImmunity(Unit* target, Mechanics mechanic)
+{
+    Creature* creature = target ? target->ToCreature() : nullptr;
+    return creature && creature->HasMechanicTemplateImmunity(1ULL << mechanic);
+}
+}  // namespace
+
+bool IntimidationTrigger::IsActive()
+{
+    if (HasTemplateMechanicImmunity(AI_VALUE(Unit*, "current target"), MECHANIC_STUN))
+        return false;
+
+    return BuffTrigger::IsActive();
+}
+
+bool ReadinessTrigger::IsActive()
+{
+    if (!SpellNoCooldownTrigger::IsActive())
+        return false;
+
+    uint32 const rapidFire = AI_VALUE2(uint32, "spell id", "rapid fire");
+    if (!rapidFire || bot->GetSpellCooldownDelay(rapidFire) < READINESS_RAPID_FIRE_WAIT_MS)
+        return false;
+
+    return !botAI->HasAura("rapid fire", bot);
+}
+
+bool SilencingShotOnImmuneTargetTrigger::IsActive()
+{
+    return SpellNoCooldownTrigger::IsActive() && HasTemplateMechanicImmunity(GetTarget(), MECHANIC_SILENCE);
+}
+
+bool LockAndLoadProcTrigger::IsActive() { return bot->HasAura(SPELL_LOCK_AND_LOAD_PROC); }
+
 bool BlackArrowTrigger::IsActive()
 {
     if (botAI->HasStrategy("trap weave", BOT_STATE_COMBAT))

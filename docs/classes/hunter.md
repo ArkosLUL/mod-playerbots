@@ -75,7 +75,27 @@ carries the strategy only loses it to a DB update.
   plain `SpellNoCooldownTrigger`.
 - **Chimera Shot and Aimed Shot had no triggers**, only `5.5` / `5.4` defaults. With `no stings` at
   17.0 the bot hard-recast Serpent Sting instead of rolling it forward with Chimera Shot, which is the
-  entire point of the spell.
+  entire point of the spell. The sting itself still goes first when none is up: Chimera Shot on an
+  unstung target refreshes nothing and loses its Serpent hit (3 of 16 in the P2 bot test).
+
+## Bot/sim gaps closed in spec-balance P3 (2026-10-19)
+
+The bot test (180 s, boss dummy, sim BiS) put BM at 68% of the sim, MM and SV at 84%.
+
+- **Intimidation burned a GCD on bosses.** Its value is the pet's stun (24394, mechanic stun); every
+  raid boss's `creature_immunities` row carries stun and silence, so BM spent 5 GCDs and added pet
+  threat. `IntimidationTrigger` now skips targets with template stun immunity.
+- **Silencing Shot never fired outside interrupts** (sim: 10 per 180 s). It interrupts only through
+  its silence, so on a silence-immune target it is free off-GCD damage: `silencing shot on immune
+  target` fires it on cooldown there and leaves the interrupt node alone elsewhere.
+- **Readiness never fired.** It was only `rapid fire`'s alternative, and that trigger needs Rapid
+  Fire ready. `readiness` now fires with Rapid Fire's buff down and over 10 s of its cooldown left
+  (the sim's rule): a second Rapid Fire plus Kill Command, Chimera and Aimed resets.
+- **Lock and Load's second shot never used rank 3** (sim: 5.5). With rank 4's dot still ticking the
+  rank 4 action is USELESS, not IMPOSSIBLE, so its rank 3 alternative never runs. `lock and load
+  proc` (buff 56453) now pushes rank 3 itself. Trap: `lock and load` matches the talent passive's
+  name (56344), so it is true all fight and is what actually drives rank 4 Explosive Shot at 28.
+  The `explosive shot` action had no creator; it is now registered.
 
 ## Current ladders
 
@@ -100,19 +120,20 @@ Per spec, on top:
 
 | Rel | Beast Mastery | Marksmanship | Survival |
 |---|---|---|---|
-| 40 | intimidation | silencing shot | — |
+| 40 | intimidation *(not on stun-immune)* | silencing shot *(interrupt)* | — |
+| 28.9 | — | readiness *(burst-gated)* | — |
 | 28.5 | bestial wrath *(burst-gated)* | — | — |
-| 28 | — | — | lock and load → explosive shot rank 4 |
-| 18.5 / 18 | kill command / kill shot | kill command / kill shot | kill command / kill shot |
+| 28 / 27.9 | — | — | lock and load → explosive shot rank 4 / proc → rank 3 |
+| 18.5 / 18 | kill command / kill shot | kill command / kill shot (18.4: silencing shot on immune target) | kill command / kill shot |
 | 17.5 | low mana → viper sting | low mana → viper sting | explosive shot |
-| 17 | no stings → serpent sting | chimera shot | — |
-| 16.5 | serpent sting on attacker | no stings → serpent sting | black arrow |
+| 17.1 / 17 / 16.9 | no stings → serpent sting (17) | no stings → serpent sting / chimera shot | — |
+| 16.5 | serpent sting on attacker | — | black arrow |
 | 16 | — | serpent sting on attacker | low mana → viper sting |
 | 15.5 / 15 | — | aimed shot | no stings → serpent sting, serpent sting on attacker |
 | 5.7 → 5.1 | *defaults* | *defaults* | *defaults* |
 
-Survival's Explosive Shot handling and the Trap Launcher node were correct and untouched; the only
-Survival change was dropping the now-unreachable `arcane shot` default.
+Survival's default list dropped the unreachable `arcane shot`. MM and Survival match the sim's order
+for Explosive Trap (shares Black Arrow's 30 s category, so Black Arrow is never cast in either).
 
 ## Open gaps — documented, not implemented
 
@@ -122,8 +143,11 @@ Survival change was dropping the now-unreachable `arcane shot` default.
 | D2 | **Melee weave outranks the whole shot list.** `enemy within melee` pushes explosive trap @37, mongoose bite @22, wing clip @21. At 37 the trap beats everything except dispels, and melee weaving is a straight DPS loss for a ranged spec in WotLK. |
 | D4 | **Disengage is raid-hostile.** Fixed-vector backwards leap at @35; on Thorim / Mimiron / Gunship-style encounters it lands bots in fire, off platforms, or out of healer range. Should be suppressed in raid instances in favour of the existing `flee` alternative. |
 | D5 | `trap launcher: explosive trap` @17 sits mid-rotation, between Survival's explosive shot (17.5) and black arrow (16.5). Left alone because Survival's trap usage is what the user wanted preserved. |
-| D6 | `ExplosiveShotTrigger` overrides `DebuffTrigger` to `BuffTrigger::IsActive()`, so it re-pushes on debuff-absence while the 6s cooldown still has the spell unavailable. Harmless — the action just fails — but it costs a queue iteration. |
+| D6 | `ExplosiveShotTrigger` overrides `DebuffTrigger` to `BuffTrigger::IsActive()`, so it re-pushes on debuff-absence while the 6s cooldown still has the spell unavailable. Harmless — the action is IMPOSSIBLE — but it costs a queue iteration. |
 | D7 | **OPEN — `"freezing trap on cc"` has no action creator.** `GenericHunterStrategy.cpp:118` pushes `NextAction("freezing trap on cc", …)`, but no creator registers that name. The node logs `A:freezing trap on cc - UNKNOWN` and hunter bots never trap a CC target. |
+| D8 | *Fixed* — **hunters never used items in combat.** Auto Shot holds `CURRENT_AUTOREPEAT_SPELL` all fight, and `UseItemAction::UseItem`, `UseTrinketAction::UseTrinket` and `UseTinkerAction::UseTinker` refused on `IsNonMeleeSpellCast(...)`: no Potion of Speed, Hyperspeed Accelerators, on-use trinket or healthstone (P2: 0 against the sim's 3 Hyperspeed). They now pass `skipAutorepeat = true`, as `EncounterHelpers.cpp`'s Nitro Boosts check does. |
+| D9 | *Fixed* — **pet taunts autocast in groups.** `TogglePetSpellAutoCastAction` turned on every autocastable pet spell, so the pet Growled (15 focus, threat) on the boss: 36-48 per 180 s, and BM's Bite fell to 94 against the sim's 116. It now leaves taunt and threat spells (Growl, Torment, Suffering) off while the group has a main tank other than the bot. |
+| D10 | Viper band 30/60 against the sim's 10/30 costs short fights: ~1 extra Viper stint per 180 s (SV 21 s in Viper), roughly 1-3% DPS, shrinking with fight length. Kept for mana-starved encounters. |
 
 Against the wowtbc.gg guides, also open: BM and Survival default lists both carry `aimed shot`, a
 Marksmanship talent neither spec has (dead entries); neither BM nor Survival has Multi-Shot in its
@@ -134,6 +158,6 @@ stationary) is not modelled.
 
 `medium threat` → feign death @35 and `low health` → deterrence @35 keep their current relevance and
 triggers by explicit decision. Aspect of the Dragonhawk via `bdps`, Hunter's Mark, Kill Shot at 20%,
-Chimera Shot ranked above the hard Serpent Sting recast, the Lock and Load rank 4→3→2 chain,
-trap-launcher Explosive Trap, Misdirection on the main tank, and Volley/Multi-Shot on AoE are all
-correct as written.
+Chimera Shot refreshing a live Serpent Sting instead of a hard recast, trap-launcher Explosive Trap,
+Misdirection on the main tank, and Volley/Multi-Shot on AoE are all correct as written. Misdirection
+fires on cooldown in the bot test only because the test's tank deals no threat (`low tank threat`).
