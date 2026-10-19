@@ -15,6 +15,12 @@
 #include "Unit.h"
 #include <ctime>
 
+namespace
+{
+constexpr uint32 SPELL_EXHAUSTION = 57723;
+constexpr uint32 SPELL_SATED = 57724;
+}  // namespace
+
 bool MainHandWeaponNoImbueTrigger::IsActive()
 {
     Item* const itemForSpell = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
@@ -88,14 +94,6 @@ bool WaterWalkingOnPartyTrigger::IsActive()
 bool WaterBreathingOnPartyTrigger::IsActive()
 {
     return BuffOnPartyTrigger::IsActive() && AI_VALUE2(bool, "swimming", "self target");
-}
-
-// Checks if Chain Lightning is on Cooldown, and prevents activation if it is.
-// This is to ensure that Elemental Mastery is used on Lava Burst (2.0 second cast),
-// and not on Chain Lightning (1.5 second cast with talents).
-bool ElementalMasteryTrigger::IsActive()
-{
-    return bot->HasSpellCooldown(421);
 }
 
 // Checks if Sprit Wolves are out/if Spirit Walk buff is not on the bot/if the cooldown for Spirit Walk is ready.
@@ -474,6 +472,10 @@ bool SetTotemTrigger::IsActive()
 
 bool ShamanBoostTrigger::IsActive()
 {
+    // Sated or Exhausted means someone already lusted, ours would only burn a GCD
+    if (bot->HasAura(SPELL_SATED) || bot->HasAura(SPELL_EXHAUSTION))
+        return false;
+
     if (!BuffTrigger::IsActive())
         return false;
 

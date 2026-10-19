@@ -168,6 +168,10 @@ public:
         creators["earth shock execute"] = &ShamanATriggerFactoryInternal::earth_shock_execute;
         creators["spirit walk ready"] = &ShamanATriggerFactoryInternal::spirit_walk_ready;
         creators["chain lightning no cd"] = &ShamanATriggerFactoryInternal::chain_lightning_no_cd;
+        creators["chain lightning no cd and light aoe"] =
+            &ShamanATriggerFactoryInternal::chain_lightning_no_cd_and_light_aoe;
+        creators["enemy is close and being attacked"] =
+            &ShamanATriggerFactoryInternal::enemy_is_close_and_being_attacked;
         creators["call of the elements and enemy within melee"] = &ShamanATriggerFactoryInternal::call_of_the_elements_and_enemy_within_melee;
         creators["maelstrom weapon 5 and medium aoe"] = &ShamanATriggerFactoryInternal::maelstrom_weapon_5_and_medium_aoe;
         creators["maelstrom weapon 4 and medium aoe"] = &ShamanATriggerFactoryInternal::maelstrom_weapon_4_and_medium_aoe;
@@ -229,6 +233,14 @@ private:
     static Trigger* earth_shock_execute(PlayerbotAI* botAI) { return new EarthShockExecuteTrigger(botAI); }
     static Trigger* spirit_walk_ready(PlayerbotAI* botAI) { return new SpiritWalkTrigger(botAI); }
     static Trigger* chain_lightning_no_cd(PlayerbotAI* botAI) { return new ChainLightningNoCdTrigger(botAI); }
+    static Trigger* chain_lightning_no_cd_and_light_aoe(PlayerbotAI* botAI)
+    {
+        return new ChainLightningNoCdAndLightAoeTrigger(botAI);
+    }
+    static Trigger* enemy_is_close_and_being_attacked(PlayerbotAI* botAI)
+    {
+        return new EnemyIsCloseAndBeingAttackedTrigger(botAI);
+    }
     static Trigger* call_of_the_elements_and_enemy_within_melee(PlayerbotAI* botAI) { return new CallOfTheElementsAndEnemyWithinMeleeTrigger(botAI); }
     static Trigger* maelstrom_weapon_5_and_medium_aoe(PlayerbotAI* botAI) { return new MaelstromWeapon5AndMediumAoeTrigger(botAI); }
     static Trigger* maelstrom_weapon_4_and_medium_aoe(PlayerbotAI* botAI) { return new MaelstromWeapon4AndMediumAoeTrigger(botAI); }

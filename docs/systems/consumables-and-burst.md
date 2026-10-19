@@ -60,7 +60,7 @@ Shadowfiend still waits out its dwell there.
 "Tank has hold" means the boss's victim has been **any tank in the bot's group** — not only the main
 tank — **continuously** for the dwell; `TankHasHeldBoss` zeroes the timer whenever it is not, so a
 tank swap or tank death re-arms the gate. The boss predicate is `IsDungeonBoss() || isWorldBoss()`,
-the de-facto is-boss check used everywhere (also `ShamanTriggers.cpp:488`).
+the de-facto is-boss check used everywhere (also `ShamanTriggers.cpp:490`).
 
 **Bosses no tank can hold skip the dwell**, in the multiplier and `OffensivePotionTrigger` alike: one
 on a vehicle (the XT-002 Heart, no threat table), `BossTakesNoVictim` (VX-001, Yogg-Saron and his Brain, whose scripts never set

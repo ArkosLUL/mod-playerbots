@@ -158,7 +158,9 @@ void ShamanAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     if (tab == SHAMAN_TAB_ELEMENTAL)
     {
         triggers.push_back(new TriggerNode("medium aoe",{ NextAction("fire nova", 23.0f), }));
-        triggers.push_back(new TriggerNode("chain lightning no cd", { NextAction("chain lightning", 5.6f), }));
+        // one target: no more damage a second than Lightning Bolt for 2.6x the mana
+        triggers.push_back(
+            new TriggerNode("chain lightning no cd and light aoe", { NextAction("chain lightning", 5.6f), }));
     }
     else if (tab == SHAMAN_TAB_ENHANCEMENT)
     {

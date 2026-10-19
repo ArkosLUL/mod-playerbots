@@ -494,6 +494,8 @@ class CastTotemOfWrathAction : public CastTotemAction
 public:
     CastTotemOfWrathAction(PlayerbotAI* botAI) :
         CastTotemAction(botAI, "totem of wrath", "totem of wrath") {}
+
+    bool isUseful() override;
 };
 
 class CastFrostResistanceTotemAction : public CastTotemAction

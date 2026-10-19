@@ -51,7 +51,8 @@ bool CastStoneclawTotemAction::isUseful()
     return !bot->GetGroup();
 }
 
-// Will only cast Lava Burst if Flame Shock is on the target
+// Lava Burst's sure crit needs our Flame Shock up when the cast finishes, so with the shock about to drop
+// Lightning Bolt goes first and Lava Burst waits for the refresh
 bool CastLavaBurstAction::isUseful()
 {
     Unit* target = GetTarget();
@@ -60,15 +61,34 @@ bool CastLavaBurstAction::isUseful()
 
     static const uint32 FLAME_SHOCK_SPELL_IDS[] =
         {8050, 8052, 8053, 10447, 10448, 29228, 25457, 49232, 49233};
+    constexpr int32 MIN_FLAME_SHOCK_LEFT_MS = 2000;
 
     ObjectGuid botGuid = bot->GetGUID();
     for (uint32 spellId : FLAME_SHOCK_SPELL_IDS)
     {
-        if (target->HasAura(spellId, botGuid))
-            return true;
+        if (Aura const* flameShock = target->GetAura(spellId, botGuid))
+            return flameShock->GetDuration() > MIN_FLAME_SHOCK_LEFT_MS;
     }
 
     return false;
+}
+
+bool CastTotemOfWrathAction::isUseful()
+{
+    // the glyph's 5 min self buff is also named Totem of Wrath, so check the totem's own auras by id or
+    // the totem stays down after Fire Elemental until the glyph buff runs out
+    static uint32 const TOTEM_OF_WRATH_AURA_IDS[] = {57658, 57660, 57662, 57663};
+
+    if (!GetTarget() || !CastSpellAction::isUseful() || AI_VALUE2(bool, "has totem", name))
+        return false;
+
+    for (uint32 auraId : TOTEM_OF_WRATH_AURA_IDS)
+    {
+        if (bot->HasAura(auraId))
+            return false;
+    }
+
+    return true;
 }
 
 // Logic for making a guardian (spirit wolf) use a spell (spirit walk)

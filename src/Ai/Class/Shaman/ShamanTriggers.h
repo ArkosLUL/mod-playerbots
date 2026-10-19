@@ -132,8 +132,6 @@ class ElementalMasteryTrigger : public BuffTrigger
 {
 public:
     ElementalMasteryTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "elemental mastery") {}
-
-    bool IsActive() override;
 };
 
 class SpiritWalkTrigger : public Trigger
@@ -265,6 +263,20 @@ class ChainLightningNoCdTrigger : public SpellNoCooldownTrigger
 {
 public:
     ChainLightningNoCdTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "chain lightning") {}
+};
+
+class ChainLightningNoCdAndLightAoeTrigger : public TwoTriggers
+{
+public:
+    ChainLightningNoCdAndLightAoeTrigger(PlayerbotAI* botAI) : TwoTriggers(botAI, "chain lightning no cd", "light aoe")
+    {
+    }
+};
+
+class EnemyIsCloseAndBeingAttackedTrigger : public TwoTriggers
+{
+public:
+    EnemyIsCloseAndBeingAttackedTrigger(PlayerbotAI* botAI) : TwoTriggers(botAI, "enemy is close", "being attacked") {}
 };
 
 // Healing Triggers

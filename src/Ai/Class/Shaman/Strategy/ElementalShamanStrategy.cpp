@@ -27,11 +27,12 @@ void ElementalShamanStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     GenericShamanStrategy::InitTriggers(triggers);
 
     // Totem Triggers
+    // below the "set <totem>" nodes (60): on an empty totem bar the cast summons nothing and still costs a GCD
     triggers.push_back(
         new TriggerNode(
             "call of the elements",
             {
-                NextAction("call of the elements", 60.0f)
+                NextAction("call of the elements", 59.5f)
             }
         )
     );
@@ -91,9 +92,10 @@ void ElementalShamanStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
 
     // Range Triggers
+    // knockback only for an enemy hitting us: bosses are immune and trash knocked off the tank scatters
     triggers.push_back(
         new TriggerNode(
-            "enemy is close",
+            "enemy is close and being attacked",
             {
                 NextAction("thunderstorm", 19.0f)
             }

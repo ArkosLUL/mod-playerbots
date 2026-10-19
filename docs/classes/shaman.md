@@ -1,4 +1,4 @@
-# Shaman — Restoration
+# Shaman: Restoration and [Elemental](#elemental)
 
 Engine and healer semantics are in [../engine/action-selection.md](../engine/action-selection.md).
 
@@ -148,6 +148,34 @@ the first thing to re-check if an elemental bot runs dry in a long fight.
 Watch out: `WaterShieldTrigger` derives from `BuffTrigger`, which tests aura presence only. Water
 Shield is **charge**-based, so a shield down to its last orb still reads as up and is not refreshed
 until the charges are gone.
+
+## Elemental
+
+Single target follows the wowsims APL: flame shock when missing 5.3 > lava burst 5.2 > lightning bolt 5.0.
+Chain lightning (5.6) needs `light aoe`, 2+ enemies within 8 yd of the target.
+
+- **No single-target Chain Lightning.** It deals no more per second than Lightning Bolt for 2.6x the
+  mana (26% against 10% base). Ungated, it outranked Lava Burst and Flame Shock every cycle (16 Lava
+  Bursts against the sim's 19, Flame Shock up 90% against 95%) and ran the bot dry by 155 s of a
+  180 s fight.
+- **Elemental Mastery fires whenever its aura is missing.** It used to wait for Chain Lightning's
+  cooldown, to save the instant for Lava Burst; without single-target Chain Lightning it would never
+  fire. Lava Burst and Lightning Bolt both cast 2.0 s, so either can take the instant.
+- **Lava Burst needs our Flame Shock with more than 2 s left** (the sim's rule): its sure crit is
+  rolled when the cast finishes, so a shock dropping mid-cast leaves a plain hit.
+- **Thunderstorm's knockback node is `enemy is close and being attacked`.** Plain `enemy is close`
+  fired on every cooldown beside a tanked boss, which is immune, and would knock trash off the tank.
+  The `high mana` node below is unchanged.
+- **Heroism and Bloodlust skip while the bot is Sated (57724) or Exhausted (57723)**: another lust
+  already landed, so the cast only burned a GCD. Shared `ShamanBoostTrigger`, so every spec.
+- **Trap: Glyph of Totem of Wrath's 5 min self-buff (63283) is also named "Totem of Wrath".** A
+  name check held the totem back after Fire Elemental's 2 min until the glyph buff ran out, so
+  `CastTotemOfWrathAction` reads the totem's spell power auras by id (57658, 57660, 57662, 57663).
+- **Call of the Elements sits at 59.5, below the `set <totem>` nodes (60).** Tied, it could win on a
+  fresh character's empty totem bar, summon nothing and cost a GCD.
+
+Not the bot's: the sim swaps in Searing Totem outside Fire Elemental while still granting Totem of
+Wrath and its glyph's spell power (`Shaman.Reset`).
 
 ## Known follow-ups, deliberately out of scope
 
