@@ -1567,7 +1567,9 @@ uint32 RaidUnderExplosionLine(Player* bot, Group* group, Hit hit)
 
 uint32 RaidUnderExplosionLine(Player* bot, Group* group) { return RaidUnderExplosionLine(bot, group, CanStayOut); }
 
-bool RaidAffordsExplosion(Player* bot, Group* group) { return !RaidUnderExplosionLine(bot, group); }
+// Phased members too: they are back long before a kill lands, and left out, the gate opened 1.6 s after a Big Bang
+// hit with the raid still drained by the void.
+bool RaidAffordsExplosion(Player* bot, Group* group) { return !RaidUnderExplosionLine(bot, group, InFight); }
 
 // Each star by guid counter with its health and forecast death, soonest first, then the blackouts, in
 // seconds from now.
@@ -3704,8 +3706,8 @@ int32 StarDeathMs(AlgalonScanUnit const& star)
     return star.under && star.tickHp ? DrainDeathMs(star) : ExplosionDueMs(star, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
 }
 
-// Who covers the star about to explode, and with what: one per star, none while one is up. In the cast only
-// those still outside a field when it dies count.
+// Who covers the star about to explode, and with what: one per star while it lasts, none while one is up. In the
+// cast only those still outside a field when it dies count.
 Player* ExplosionCoverProvider(PlayerbotAI* botAI, char const*& cover)
 {
     cover = nullptr;
@@ -3718,7 +3720,9 @@ Player* ExplosionCoverProvider(PlayerbotAI* botAI, char const*& cover)
     bool const casting = state->bigBangCasting;
     AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS,
                                                 ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT, bot, casting);
-    if (!star || star->guid == state->coverStar || ExplosionCovered(group, *state))
+    if (!star || ExplosionCovered(group, *state) ||
+        (star->guid == state->coverStar &&
+         getMSTimeDiff(state->coverClaimMs, getMSTime()) < ULDUAR_ALGALON_EXPLOSION_COVER_MS))
         return nullptr;
 
     int32 const death = StarDeathMs(*star);
@@ -3783,6 +3787,7 @@ void ClaimAlgalonExplosionCover(Player* bot, char const* cover)
         return;
 
     state->coverStar = star->guid;
+    state->coverClaimMs = getMSTime();
     if (RaidObs::Active())
         RaidObs::Note(bot, "algalon.cover", cover);
 }

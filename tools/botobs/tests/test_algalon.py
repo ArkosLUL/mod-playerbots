@@ -2438,6 +2438,8 @@ def presses_pull(drop: tuple[str, ...] = ()) -> list[dict]:
         *(rec for guid in (PX_HOLY, PX_MAGE, PX_TREE) for rec in worn(guid, al.SPELL_DIVINE_GUARDIAN, PX_HOLY, 20640,
                                                                       26640)),
         note(20700, PX_ROGUE, "algalon.personal", "Cloak of Shadows"), cast(20700, PX_ROGUE, 31224),
+        # A swing takes the ret to 30% between two scans, and it presses Divine Protection on it.
+        dmg(24050, ALGALON, PX_RET, 0, 14000), cast(24100, PX_RET, 498),
         {"t": 30000, "e": "act", "g": PX_HOLY, "a": al.COVER_NODE, "rel": 91.0, "vd": "FAILED"},
         {"t": PX_END, "e": "end", "out": "wipe"},
     ]

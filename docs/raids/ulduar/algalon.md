@@ -179,6 +179,7 @@ it. It can't open sooner: the tanks hold him until the cast starts or he resets,
   Embrace, Earth and Moon or crits): 6 of 7 under-stars in a kill and all 5 in a wipe went `early` (3 of 7 died
   under with DoTs held), and a paced star's Insect Swarm and Moonfire killed it 3.6 s after its neighbour (6
   dead). The bulk ran +1.6 %/s beyond the drain with them, +1.9 without. `pendingHp` still counts humans' DoTs.
+  An "on attacker" spell is judged on its own target: Corruption and Unstable Affliction reached stars that way.
 - **Hide**: with a star under, every margin (handler and tanks included) gains 3 s, stretched so all are in
   1.5 s before the earliest drain death, capped at 4 s; the handler no longer waits on stragglers.
 - Phased bots keep 8 yd off an under-star in its last 3 s (exit and leave trigger): its hole lands under them at
@@ -222,7 +223,8 @@ two marker creatures each) and turned far stars due. In order, `urgent` overridi
   within 16 yd of him, and only with a clear finish. When the soonest can't be touched, nothing lands near
   its death: killing another instead put two explosions 0.2 and 1.3 s apart and killed 30. With no due star
   clear, the one landing furthest from the rest is still taken if that beats their own deaths;
-- not while any living, unphased raid member is below the explosion's top roll (16.9 k / 21.5 k), or
+- not while any living raid member, phased ones too (back long before a kill lands; left out, the gate opened
+  1.6 s after a hit with the raid drained, 7 dead), is below the explosion's top roll (16.9 k / 21.5 k), or
   below full health if their maximum is lower. A percentage gate can't work: 80 % of a 26 k clothie is
   below one 25-man explosion;
 - the star soonest to die at least 7 yd from every raid member, since its hole lands where it dies and
@@ -498,7 +500,9 @@ cast, never Divine Shield. The encounter's own actions cast directly and pass.
 **Explosion cover** (`ACTION_EMERGENCY + 1`): with a star forecast to die within 3.5 s (the slope runs ~1 s late
 on a paced kill, and a 2 s lead opened 1 s before one; both covers last 6 s), or at ≤ 5% (a chewed one went from
 4.8% to dead between scans), none up, and 2 or more living unphased raid members under the top roll (or below
-full when their maximum is lower), one per star. One alone has its own button or a healthstone: covers spent on
+full when their maximum is lower), one per star for its 6 s: a star alive past it gets another (a meteor
+blackout stalled a kill 10 s, and it caught 11 under, 2 dead). One alone has its own button or a healthstone:
+covers spent on
 none or one left a star that caught 17 with nothing (6 dead). Both covers and the personal buttons act only on
 a star still alive: the scan lags a death by up to 250 ms, the explosion drops a bot under its line, and 11 of 21
 presses and an Aura Mastery went on stars already dead, two bots then dying at the next with theirs cooling.
@@ -614,7 +618,8 @@ counted by cause and role with humans starred. Then:
   lived 10 s; per tank death its last 6 s of hits, cutters up and `algalon.tankdef`; per explosion the cover
   up and damage covered against uncovered; per explosion death the personal buttons pressed or ready; per
   explosion each bot under its line with its buttons and consumables, each press and cover beside its star's
-  death, with verdicts for one after the death, a held button a class node spent (phased, or in phase 1), a
+  death, with verdicts for one after the death, a held button a class node spent (phased, or in phase 1;
+  health after the last hit, not the snapshot), a
   cover cast with fewer than 2 under the line and a failed cover with another ready;
   `window` cutters on a holder at 80% or more;
 - `--stars` also: per star its plan, window, forecast against actual death, offset from the hit, who its

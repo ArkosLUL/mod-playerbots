@@ -88,24 +88,25 @@ float AlgalonTargetGuardMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    auto cached = damagesCurrentTarget.find(action);
-    if (cached == damagesCurrentTarget.end())
+    auto cached = aims.find(action);
+    if (cached == aims.end())
     {
-        bool damages = dynamic_cast<MeleeAction*>(action) || (ClassifyAction(action) & Family::PetAttack);
-        if (!damages)
-        {
-            CastSpellAction* spell = dynamic_cast<CastSpellAction*>(action);
-            damages = spell && !dynamic_cast<CastHealingSpellAction*>(action) &&
-                      spell->GetTargetName() == "current target";
-        }
+        Aim aim = Aim::None;
+        CastSpellAction* spell = dynamic_cast<CastSpellAction*>(action);
+        if (dynamic_cast<MeleeAction*>(action) || (ClassifyAction(action) & Family::PetAttack))
+            aim = Aim::Current;
+        else if (spell && !dynamic_cast<CastHealingSpellAction*>(action))
+            aim = spell->GetTargetName() == "current target" ? Aim::Current
+                  : CastsPositiveSpell(botAI, action)          ? Aim::None
+                                                                : Aim::Own;
 
-        cached = damagesCurrentTarget.emplace(action, damages).first;
+        cached = aims.emplace(action, aim).first;
     }
 
-    if (!cached->second)
+    if (cached->second == Aim::None)
         return 1.0f;
 
-    Unit* target = AI_VALUE(Unit*, "current target");
+    Unit* target = cached->second == Aim::Current ? AI_VALUE(Unit*, "current target") : action->GetTarget();
     if (!target)
         return 1.0f;
 

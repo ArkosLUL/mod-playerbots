@@ -4782,6 +4782,16 @@ def failed_covers(trace: Trace) -> list[dict]:
     return cached(trace, "_algalon_failed_covers", build)
 
 
+def landed_pct(trace: Trace, hits, heals, guid: int, at: int, pct: float) -> float:
+    """`pct` lowered to what the last hit within a second before `at` left, unless a heal landed after it: a snapshot
+    can predate an explosion that landed 0.1 s before a press."""
+    top = trace.maxhp.get(guid)
+    last = next((rec for rec in reversed(hits) if at - 1000 <= rec["t"] <= at), None)
+    if not top or last is None or any(last["t"] < rec["t"] <= at for rec in heals):
+        return pct
+    return min(pct, last.get("hp", 100.0) - last["a"] * 100.0 / top)
+
+
 def spent_buttons(trace: Trace) -> list[dict]:
     """`{t, guid, label, pct, where}` per BUTTONS_HELD button a class node cast above BUTTON_HOLD_PCT, which the
     explosion node should have had: inside a hole's phase (`phased`, where no explosion reaches), or in P1 for a bot
@@ -4792,11 +4802,19 @@ def spent_buttons(trace: Trace) -> list[dict]:
         phased = hole_phases(trace)
         spans = phases(trace)[0]
         pressed = personal_notes(trace)
+        hits: dict[int, list[dict]] = collections.defaultdict(list)
+        heals: dict[int, list[dict]] = collections.defaultdict(list)
+        for rec in trace.of("dmg", "heal"):
+            if rec.get("a"):
+                (hits if rec["e"] == "dmg" else heals)[rec.get("d")].append(rec)
         out = []
         for guid, casts in personal_casts(trace).items():
             for at, name, label in casts:
                 row = samples.row(guid, at)
-                if (name not in BUTTONS_HELD or not alive(row) or row[5] <= BUTTON_HOLD_PCT
+                if not alive(row):
+                    continue
+                pct = landed_pct(trace, hits.get(guid, ()), heals.get(guid, ()), guid, at, row[5])
+                if (name not in BUTTONS_HELD or pct <= BUTTON_HOLD_PCT
                         or any(abs(rec["t"] - at) <= ECHO_MS for rec in pressed.get(guid, ()))):
                     continue
                 if phased_at(phased, guid, at):
@@ -4805,7 +4823,7 @@ def spent_buttons(trace: Trace) -> list[dict]:
                     where = "P1"
                 else:
                     continue
-                out.append({"t": at, "guid": guid, "label": label, "pct": row[5], "where": where})
+                out.append({"t": at, "guid": guid, "label": label, "pct": pct, "where": where})
         return sorted(out, key=lambda row: row["t"])
     return cached(trace, "_algalon_spent_buttons", build)
 

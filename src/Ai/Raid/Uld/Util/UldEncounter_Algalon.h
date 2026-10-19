@@ -184,6 +184,8 @@ inline constexpr float ULDUAR_ALGALON_EXPLOSION_LOW_PCT = 3.0f;
 // this low. The lead allows for the slope running about a second late on a paced kill.
 inline constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_LEAD_MS = 3500;
 inline constexpr float ULDUAR_ALGALON_EXPLOSION_COVER_HP_PCT = 5.0f;
+// A star still alive once its cover ran out gets another: a meteor blackout stalled one kill 10 s.
+inline constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_MS = 6000;
 // A cover only with this many under the explosion's line: a single one has its own button or a healthstone, and
 // a cover spent on one or none is missing for the star that catches most of the raid.
 inline constexpr uint32 ULDUAR_ALGALON_EXPLOSION_COVER_MIN_UNDER = 2;
@@ -502,8 +504,9 @@ struct AlgalonEncounterState
     std::unordered_map<ObjectGuid, uint8> hidersOut;
     uint32 tankCutClaimMs = 0;
     uint32 layOnHandsClaimMs = 0;
-    // The star the last explosion cover went up for.
+    // The star the last explosion cover went up for, and when.
     ObjectGuid coverStar;
+    uint32 coverClaimMs = 0;
     // Per bot, the star it last pressed a personal button for.
     std::unordered_map<ObjectGuid, ObjectGuid> personalStars;
     // Bots whose Nitro Boosts were ready at the cast start: their hide walk is timed boosted.
