@@ -84,6 +84,13 @@ bool CastDrainSoulAction::isUseful() { return AI_VALUE2(uint32, "item count", "s
 // Checks if the bot's health is above a certain threshold, and if so, allows casting Life Tap
 bool CastLifeTapAction::isUseful() { return AI_VALUE2(uint8, "health", "self target") > sPlayerbotAIConfig.LowHealth; }
 
+// Only for warlocks without Fel Armor. A seated bot's first cast just stands it up and fails, which
+// would otherwise hand the tick to this alternative of "fel armor".
+bool CastDemonArmorAction::isUseful()
+{
+    return !AI_VALUE2(uint32, "spell id", "fel armor") && CastBuffSpellAction::isUseful();
+}
+
 Value<Unit*>* CastBanishOnCcAction::GetTargetValue() { return context->GetValue<Unit*>("rti cc target"); }
 Value<Unit*>* CastFearOnCcAction::GetTargetValue() { return context->GetValue<Unit*>("rti cc target"); }
 

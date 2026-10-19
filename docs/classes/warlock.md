@@ -110,6 +110,12 @@ except `tank` (SH2):
 damage — Iron Assembly's High Voltage pulses every 3 s — a warlock that waits for 15% mana is likely
 too hurt to tap at all. The emergency node exists for when that happens anyway.
 
+**Fel Armor pays for the taps**: 2% health per 5 s (2.6% with Demonic Aegis) covers about one tap
+per 15 s. Demon Armor is only for warlocks without Fel Armor. A seated bot's first cast stands it up
+and fails, and the engine ran the `fel armor` node's alternative in the same tick: Demonology, eating
+after Soul Link took the post-summon tick, wore Demon Armor on every pull, fell under `lowHealth` at
+107 s of the 2026-10-19 dummy test and wanded the last 25 s.
+
 ## Affliction
 
 Code order: corruption on attacker 19.5, UA on attacker 19.0, corruption 18.0, haunt 17.75, UA 17.5,
@@ -123,7 +129,7 @@ UA 5.4, haunt 5.3, shadow bolt 5.2, shoot 5.0. Curse of Agony comes from the sep
 | AF1 | Corruption applied as the opener and never recast — see the snapshot section. **Largest single Affliction DPS loss in the audit.** |
 | AF2 | `HauntTrigger` is presence-only at 16.5, so Haunt is cast every ~12s (when the debuff drops) instead of every ~8s (its cooldown), and it sits below Corruption and UA. Also loses the free Corruption refresh Everlasting Affliction hangs off it. Wants a `SpellNoCooldownTrigger`. |
 | AF3 | Drain Soul is gated on `"target critical health"` = **20%**, while the guide says 25% — 5% of the execute window spent on Shadow Bolt instead of a Death's-Embrace-boosted Drain Soul. |
-| AF4 | All DoT triggers are presence-only (`beforeDuration` omitted), so the DoT must fully drop before a recast is queued — a guaranteed GCD (Corruption, CoA) or full cast (UA, 1.5s) of downtime every cycle. |
+| AF4 | All DoT triggers but Immolate (DM7) are presence-only (`beforeDuration` omitted), so the DoT must fully drop before a recast is queued — a guaranteed GCD (Corruption, CoA) or full cast (UA, 1.5s) of downtime every cycle. |
 | AF5 | No Shadow Bolt trigger; the filler comes only from `getDefaultActions` at 5.2. Works, but cannot be reasoned about or reordered from the ladder. |
 | AF6 | No Seed of Corruption or Shadowflame in the Affliction ladder — AoE comes solely from the shared `aoe` strategy on `"medium aoe"` (3+). Two-target cleave never gets the second DoT set. |
 
@@ -137,9 +143,10 @@ core → incinerate 16.5, life tap 5.1, flee 39.0.
 |---|---|
 | DM1 | **Decimation → Soul Fire at 17.0 sits below corruption 18.0 and immolate 17.5.** Decimation procs (10s window) get spent on a DoT refresh, so the strongest execute button is the one that gets dropped. |
 | DM2 | *Wont fix.* Immolation Aura is reachable only through the shared `aoe` strategy, and only when something else already put the bot inside 5 yd. Running Demonology into melee for it fights the ranged spots raid strategies assign, so the `meta melee` strategy and its Demon Charge opener were dropped along with the single-target node. |
-| DM3 | `AiFactory` gives Demonology `curse of agony`. **User decision: switch Demonology to Curse of Doom** (higher throughput on any fight over 60s) and leave Destruction on Curse of the Elements so the raid debuff still comes from somewhere. |
-| DM4 | `CorruptionTrigger` / `ImmolateTrigger` carry `needLifeTime = 0.5f` — refresh whenever the target survives another half second — so DoTs land on targets about to die. |
+| DM3 | *Fixed* (user decision): `AiFactory` gives Demonology `curse of doom` beside `curse of agony` (higher throughput on any fight over 60s); Destruction keeps Curse of the Elements so the raid debuff still comes from somewhere. Curse of Doom waits for a target expected to live 60 s (it hits on expiry), and Curse of Agony never replaces our own Doom, so Agony covers short-lived targets. |
+| DM4 | `CorruptionTrigger` carries `needLifeTime = 0.5f` (refresh whenever the target survives another half second) and `ImmolateTrigger` checks no life time at all (`ImmolateNeedsRefresh`), so DoTs land on targets about to die. |
 | DM6 | Metamorphosis fires on a plain `BoostTrigger` at 28.5. It is burst-gated, so the tank-hold applies, but **nothing aligns it with Bloodlust.** |
+| DM7 | *Fixed* (Destruction too): Immolate recasts once it would run out before a new cast lands (`ImmolateNeedsRefresh`). A spell recast resets the tick timer on this core, so landing earlier loses the tick in progress; waiting for the drop cost 1-4 s per cycle. |
 
 ## Destruction
 

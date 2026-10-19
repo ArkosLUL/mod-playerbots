@@ -28,6 +28,7 @@ class CastDemonArmorAction : public CastBuffSpellAction
 {
 public:
     CastDemonArmorAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "demon armor") {}
+    bool isUseful() override;
 };
 
 class CastFelArmorAction : public CastBuffSpellAction
@@ -295,8 +296,8 @@ public:
     CastImmolateAction(PlayerbotAI* botAI) : CastDebuffSpellAction(botAI, "immolate", true) {}
     bool isUseful() override
     {
-        // Bypass TTL check
-        return CastAuraSpellAction::isUseful();
+        // Bypass TTL check, same refresh window as the "immolate" trigger
+        return CastSpellAction::isUseful() && ImmolateNeedsRefresh(botAI, GetTarget());
     }
 };
 
@@ -343,7 +344,7 @@ public:
     bool isUseful() override
     {
         // Bypass TTL check
-        return CastAuraSpellAction::isUseful();
+        return CastAuraSpellAction::isUseful() && !HasOwnCurseOfDoom(botAI, GetTarget());
     }
 };
 
@@ -357,7 +358,7 @@ public:
     bool isUseful() override
     {
         // Bypass TTL check
-        return CastAuraSpellAction::isUseful();
+        return CastAuraSpellAction::isUseful() && !HasOwnCurseOfDoom(botAI, GetTarget());
     }
 };
 

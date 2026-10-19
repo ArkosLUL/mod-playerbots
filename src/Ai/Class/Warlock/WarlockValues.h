@@ -29,4 +29,10 @@ bool IsSeedOfCorruptionTarget(PlayerbotAI* botAI, Unit* target);
 // Our own Seed is on the target, or was cast at it recently and may still be flying.
 bool SeedOfCorruptionPending(PlayerbotAI* botAI, Unit* target);
 
+// Missing, or runs out before a new cast lands. An earlier recast resets the tick timer and loses a tick.
+bool ImmolateNeedsRefresh(PlayerbotAI* botAI, Unit* target);
+
+// One curse per caster per target, so any other curse of ours would replace it.
+bool HasOwnCurseOfDoom(PlayerbotAI* botAI, Unit* target);
+
 #endif

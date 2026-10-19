@@ -10,6 +10,8 @@
 
 #include "LastSpellCastValue.h"
 #include "Playerbots.h"
+#include "SpellAuras.h"
+#include "SpellInfo.h"
 #include "Strategy.h"
 #include "TargetValue.h"
 
@@ -41,6 +43,23 @@ bool SeedOfCorruptionPending(PlayerbotAI* botAI, Unit* target)
 
     return seedId && lastSpell.id == seedId && lastSpell.target == target->GetGUID() &&
            time(nullptr) - lastSpell.timer <= SEED_IN_FLIGHT_SECONDS;
+}
+
+bool ImmolateNeedsRefresh(PlayerbotAI* botAI, Unit* target)
+{
+    if (!target)
+        return false;
+
+    Aura* aura = botAI->GetAura("immolate", target, true);
+    if (!aura)
+        return true;
+
+    return aura->GetDuration() < static_cast<int32>(aura->GetSpellInfo()->CalcCastTime(botAI->GetBot()));
+}
+
+bool HasOwnCurseOfDoom(PlayerbotAI* botAI, Unit* target)
+{
+    return target && botAI->HasAura("curse of doom", target, false, true);
 }
 
 Unit* SeedOfCorruptionTargetValue::Calculate()

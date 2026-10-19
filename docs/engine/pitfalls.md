@@ -168,6 +168,13 @@ The fix shape is **reach-then-hold with hysteresis**: accept a generous arrival 
 once stopped. Do **not** lower the action's priority or widen the multiplier whitelist — the mechanic
 must still outrank heals while the bot is unsheltered.
 
+## A seated bot's first cast hands the tick to the alternative
+
+`PlayerbotAI::CastSpell` stands a seated bot up and returns false, so the engine runs the node's
+alternative in the same tick, now standing. Gate a fallback alternative on its own precondition:
+eating after Soul Link, Demonology cast `demon armor` instead of `fel armor` on every pull until
+`CastDemonArmorAction::isUseful` refused while Fel Armor is known.
+
 ## A bot mid-cast cannot be moved at all
 
 The mirror of the rule above, and it silently defeats every dodge in the module.

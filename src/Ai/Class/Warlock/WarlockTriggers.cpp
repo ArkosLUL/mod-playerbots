@@ -18,6 +18,7 @@
 #include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "TargetValue.h"
+#include "WarlockValues.h"
 
 static const uint32 SOUL_SHARD_ITEM_ID = 6265;
 
@@ -143,6 +144,15 @@ bool CorruptionSnapshotTrigger::IsActive()
     live = target->SpellTakenCritChance(bot, spellInfo, SPELL_SCHOOL_MASK_SHADOW, live, BASE_ATTACK, true);
 
     return live - snapshot >= CRIT_DELTA_PCT;
+}
+
+bool ImmolateTrigger::IsActive() { return ImmolateNeedsRefresh(botAI, GetTarget()); }
+
+bool CurseOfAgonyTrigger::IsActive() { return BuffTrigger::IsActive() && !HasOwnCurseOfDoom(botAI, GetTarget()); }
+
+bool CurseOfAgonyOnAttackerTrigger::IsActive()
+{
+    return BuffTrigger::IsActive() && !HasOwnCurseOfDoom(botAI, GetTarget());
 }
 
 bool ConflagrateTrigger::IsActive()

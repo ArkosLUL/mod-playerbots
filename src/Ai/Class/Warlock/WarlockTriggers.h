@@ -205,7 +205,7 @@ class ImmolateTrigger : public DebuffTrigger
 {
 public:
     ImmolateTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "immolate", 1, true, 0.5f) {}
-    bool IsActive() override { return BuffTrigger::IsActive(); }
+    bool IsActive() override;
 };
 
 class ImmolateOnAttackerTrigger : public DebuffOnAttackerTrigger
@@ -259,14 +259,14 @@ class CurseOfAgonyTrigger : public DebuffTrigger
 {
 public:
     CurseOfAgonyTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "curse of agony", 1, true, 0.5f) {}
-    bool IsActive() override { return BuffTrigger::IsActive(); }
+    bool IsActive() override;
 };
 
 class CurseOfAgonyOnAttackerTrigger : public DebuffOnAttackerTrigger
 {
 public:
     CurseOfAgonyOnAttackerTrigger(PlayerbotAI* botAI) : DebuffOnAttackerTrigger(botAI, "curse of agony", true) {}
-    bool IsActive() override { return BuffTrigger::IsActive(); }
+    bool IsActive() override;
 };
 
 class CurseOfTheElementsTrigger : public DebuffTrigger
@@ -276,11 +276,14 @@ public:
     bool IsActive() override;
 };
 
+// Doom only hits when it runs out, so it waits for a target expected to live that long.
 class CurseOfDoomTrigger : public DebuffTrigger
 {
 public:
-    CurseOfDoomTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "curse of doom", 1, true, 0.5f) {}
-    bool IsActive() override { return BuffTrigger::IsActive(); }
+    CurseOfDoomTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "curse of doom", 1, true, DOOM_DURATION_SECONDS) {}
+
+private:
+    static constexpr float DOOM_DURATION_SECONDS = 60.0f;
 };
 
 class CurseOfExhaustionTrigger : public DebuffTrigger
