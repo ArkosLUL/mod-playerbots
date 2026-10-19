@@ -52,7 +52,8 @@ enum class ToCFactionChampions : uint32
 constexpr uint32 SPELL_COUNTERSPELL = 2139;
 // One rank, and damage doesn't break it
 constexpr uint32 SPELL_CYCLONE = 33786;
-// A pulled kill target this low sends the grip DK ahead to the next healer, which CC then leaves alone
+// Once a pulled kill target is this low the next healer in the pack is likely the player's next pull, so CC
+// leaves it alone
 constexpr float NEXT_GRIP_WALK_PCT = 40.0f;
 
 // True if the entry is any Faction Champion (either faction roster). Pets are not champions.
@@ -104,17 +105,14 @@ bool FactionChampionsIsEscapee(PlayerbotAI* botAI, Unit* champion);
 // How long the encounter has been live, 0 when it isn't
 uint32 FactionChampionsLiveMs(PlayerbotAI* botAI);
 
-// First healer in kill order still in the pack, not the kill target or the suspended one
-Unit* FactionChampionsNextHealerInPack(PlayerbotAI* botAI);
-
 // Live, and a champion that fears is still up: warlock, disc or shadow priest, warrior.
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 
 // This bot's CC cast, the champion and spell id, when it holds a CC duty. CC bots are dps mages
 // (Polymorph), warlocks (Fear, Banish on an elemental or demon) and ranged druids (Cyclone). None for
-// 1.5 s after the pull, while a human's opening grip lands. Candidates skip the kill target, the
-// suspended, the skulled and a pulled one, and the next healer in the pack once the kill target is
-// pulled and at 40% or under: healers off the tanks nearest the kill target, other healers, champions
+// 1.5 s after the pull, while the opening grips land. Candidates skip the kill target, the suspended,
+// the skulled and a pulled one, the player's pull in flight, and the next healer in the pack once the
+// kill target is pulled and at 40% or under: healers off the tanks nearest the kill target, other healers, champions
 // off the tanks casters first, the rest in kill order. A cast at a champion that stops being a
 // candidate is interrupted, so it never makes a new kill target immune. One duty per
 // candidate, none while it is CC'd for over 2 s more or a CC cast at it is under way. The caster is in

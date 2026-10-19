@@ -88,13 +88,37 @@ bool FactionChampionsReachIntoAoe(PlayerbotAI* botAI);
 // The target carries Unstable Affliction, so a dispel that removes Magic may hit the dispeller
 bool FactionChampionsDispelBackfires(PlayerbotAI* botAI, Unit* target);
 
-// The champion and the stand to Death Grip it from, when this bot is the DK on grip duty: the kill
-// target while it is under 45 yd off the pack centre or in 40 yd of another champion healer, else at
-// 20% or under the next healer still in the pack. From 40% on a pulled kill target the DK already walks
-// to that healer's stand, walkOnly set. The stand is the DK's own spot when the champion is in reach
-// there and 12+ yd nearer the pack, else 27 yd off the champion on the floor bearing farthest from the
-// pack. For 1.5 s after the pull only a pulled champion counts. Latched raid-wide, written to fc.grip.
+// The champion and the stand to Death Grip it from, when this bot is the non-tank DK on grip duty. On a
+// player's pull: a walk to the grip post (walkOnly) until the DK tank's grip has landed the champion,
+// then the grip. Without one, only a pulled kill target still under 45 yd off the pack centre or in 40 yd
+// of another champion healer. Never on a champion in the air. The stand is the DK's own spot when the
+// champion is in reach there and 12+ yd nearer the pack, else 27 yd off the champion on the floor
+// bearing farthest from the pack. Latched raid-wide, written to fc.grip.
 Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand, bool* walkOnly = nullptr);
+
+// The grip chain, which reads the Faction Champions stage, not the fight, so it works before the pull.
+// A tank's generic pull at a champion (the player targets it and types pull) becomes the chain's
+// request, written to fc.chain, and the generic pull is ended. The DK tank grips first, the bot DK
+// once the champion lands, the player last. The request drops after 15 s with no tank grip, or 10 s
+// after it with no bot DK grip.
+void FactionChampionsTakePullRequest(PlayerbotAI* botAI);
+
+// This bot is the chain's DK tank: a bot tank DK knowing Death Grip, lowest guid
+bool FactionChampionsIsChainOpener(PlayerbotAI* botAI);
+
+// The DK tank owes the open request its grip
+bool FactionChampionsOpenerGripDue(PlayerbotAI* botAI);
+
+// The champion this DK tank grips and the stand: its own spot when in reach and the grip lands the
+// champion 12+ yd farther from the pack (any grip before the pull), else 27 yd off the champion toward
+// the grip post. Death Grip more than 3 s off its cooldown: tells the master and drops the request.
+Unit* FactionChampionsChainGripTarget(PlayerbotAI* botAI, Position& stand);
+
+// A Death Grip went out on target: the DK tank's marks the first link, the bot DK's ends the request
+void FactionChampionsNoteChainGrip(PlayerbotAI* botAI, Unit* target);
+
+// The open request's champion, empty without one
+ObjectGuid FactionChampionsChainTarget(Player* bot);
 
 // A DK is on its way to grip the kill target out of the pack, which it hasn't left yet
 bool FactionChampionsGripPending(PlayerbotAI* botAI);

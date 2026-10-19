@@ -1,12 +1,16 @@
 #include "ToCStrategy.h"
 #include "ToCDefinitions.h"
+#include "ToCHelpers_FactionChampionsDefence.h"
 #include "ToCHelpers_Shared.h"
 #include "ToCRaidMultipliers.h"
 #include "ToCRaidTriggers.h"
 
-// Once per strategy object, so a player's later rti order sticks until the strategy is rebuilt.
 void RaidTrialOfTheCrusaderStrategy::OnTick()
 {
+    // before triggers, so the generic pull's multiplier never sees it armed
+    TrialOfTheCrusaderHelpers::FactionChampionsTakePullRequest(botAI);
+
+    // once per strategy object, so a player's later rti order sticks until the strategy is rebuilt
     if (legacyRtiChecked)
         return;
 

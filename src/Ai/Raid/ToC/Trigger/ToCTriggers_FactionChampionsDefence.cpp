@@ -53,6 +53,8 @@ bool FactionChampionsDeathGripTrigger::IsActive()
     return FactionChampionsGripTarget(botAI, stand) != nullptr;
 }
 
+bool FactionChampionsChainGripTrigger::IsActive() { return FactionChampionsOpenerGripDue(botAI); }
+
 bool FactionChampionsSnareTrigger::IsActive()
 {
     uint32 spellId = 0;
@@ -78,6 +80,10 @@ void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& trigge
 
     triggers.push_back(new TriggerNode("faction champions protect", {
         NextAction("faction champions protect", ACTION_EMERGENCY + 4) }));
+
+    // over the pack tank nodes, so the DK tank leaves the pack for it
+    triggers.push_back(new TriggerNode("faction champions chain grip", {
+        NextAction("faction champions chain grip", ACTION_RAID + 4.6f) }));
 
     triggers.push_back(new TriggerNode("faction champions death grip", {
         NextAction("faction champions death grip", ACTION_RAID + 4.5f) }));

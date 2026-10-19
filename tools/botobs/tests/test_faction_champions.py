@@ -993,6 +993,68 @@ class Source(unittest.TestCase):
         self.assertTrue({"bloodlust", "heroism", "offensive potion"} <= fc.burst_actions())
 
 
+CHAIN_TANK = 5017  # a DK tank
+
+
+def chain_snap(when: int) -> dict:
+    # Felesta's grip at 2 s lands her 25 yd out, Obliteration's at 3.5 s 50, Deathsong's at 6 s 75
+    x = 0.0 if when < 3000 else 25.0 if when < 4000 else 50.0 if when < 7000 else 75.0
+    return {"t": when, "e": "snap", "hz": [],
+            "u": [placed(PALADIN, x, 0.0, 100.0, CHAIN_TANK), placed(ROGUE_C, 0.0, 0.0, 100.0, CHAIN_TANK)]}
+
+
+def chain_pull() -> list[dict]:
+    roster = [{"g": CHAIN_TANK, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+              {"g": GRIPPER, "n": "Obliteration", "r": "melee", "c": 6, "h": 0},
+              {"g": HUMAN_DK, "n": "Deathsong", "r": "melee", "c": 6, "h": 1}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        note(1000, CHAIN_TANK, "fc.chain", PALADIN),
+        cast(2000, CHAIN_TANK, fc.SPELL_DEATH_GRIP, PALADIN),
+        cast(3500, GRIPPER, fc.SPELL_DEATH_GRIP, PALADIN),
+        note(3600, GRIPPER, "fc.chain", 0),
+        cast(6000, HUMAN_DK, fc.SPELL_DEATH_GRIP, PALADIN),
+        # past the pull's tail, so a bot grip outside it
+        cast(30000, GRIPPER, fc.SPELL_DEATH_GRIP, ROGUE_C),
+        {"t": 32000, "e": "end", "out": "wipe"},
+    ]
+    return records + [chain_snap(when) for when in range(0, 32001, 1000)]
+
+
+class GripChain(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in chain_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_pull_reads_its_links_with_carry_and_distance_off_the_pack(self):
+        chains, outside = fc.chain_links(self.trace)
+        self.assertEqual(len(chains), 1)
+        self.assertEqual((chains[0]["target"], chains[0]["start"], chains[0]["stop"]), (PALADIN, 1000, 3600))
+        self.assertEqual([(link["t"], link["by"], link["moved"], link["off"]) for link in chains[0]["links"]],
+                         [(2000, CHAIN_TANK, 25.0, 25.0), (3500, GRIPPER, 25.0, 50.0), (6000, HUMAN_DK, 25.0, 75.0)])
+        self.assertEqual([(row["t"], row["by"]) for row in outside], [(30000, GRIPPER)])
+
+    def test_the_order_is_tank_bot_dk_then_the_player(self):
+        self.assertEqual([fc.link_role(self.trace, guid) for guid in (CHAIN_TANK, GRIPPER, HUMAN_DK)],
+                         fc.CHAIN_ORDER)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_chain(self.trace)
+        self.assertIn("pull on Velanaa at 0:01.000, open 2.6 s: in order", out.getvalue())
+        self.assertIn("bot grips outside a pull: 1 (Obliteration 0:30.000 on Irieth Shadowstep)", out.getvalue())
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
@@ -1030,6 +1092,7 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.longest_stall(trace), None)
         self.assertEqual(fc.grips(trace), [])
         self.assertEqual(fc.grip_holds(trace), [])
+        self.assertEqual(fc.chain_links(trace), ([], []))
         self.assertEqual(fc.snare_casts(trace), [])
         self.assertEqual(fc.peel_casts(trace), [])
         self.assertEqual(fc.warrior_disarms(trace), [])

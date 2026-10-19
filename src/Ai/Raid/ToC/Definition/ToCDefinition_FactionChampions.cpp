@@ -95,6 +95,9 @@ void DefineFactionChampions(EncounterBuilder& e)
 
     // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
     e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);
+
+    // the DK tank's grip opens every chain the player calls
+    e.Block("faction champions chain grip reserve", Role::Tank, FactionChampionsIsChainOpener, 0, {"death grip"});
 }
 }  // namespace
 

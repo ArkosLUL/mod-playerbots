@@ -300,7 +300,7 @@ park within 1 yd, walk back past 2.5.
   with the player.
   - Champions: bot tanks (`tank`, forced) on the line from the landing centroid to `ARENA_CENTER`,
     at the first 0.5 yd step 25.5+ yd (23 + the 2.5 yd unpark) from every slot, extras 3 yd to
-    alternate sides; non-tank DK bots knowing Death Grip (`grip`) 50 yd out on it; the rest on a
+    alternate sides; non-tank DK bots knowing Death Grip (`grip`) 54 yd out on it, the grip chain's post; the rest on a
     10 yd lattice 28+ yd from all ten slots and 3+ yd farther from each than the nearest tank stand,
     44 slots, healers and ranged farthest from the slots first, melee nearest. So the first engage's
     nearest pick is a tank.
@@ -336,7 +336,7 @@ a level 83 caster averages 20%.
 | Worms | Dreadscale all fire (Fire Spit, Molten Spew, Burning Bite, Spray, Bile); Acidmaw all nature |
 | Icehowl | frost: Arctic Breath |
 | Jaraxxus | fire: Fel Fireball, Legion Flame, Incinerate Flesh, Burning Inferno, Fel Inferno; fire + nature: Fel Lightning; shadow: Mistress' Kiss |
-| Faction Champions | mostly physical; magic spread over shadow, frost, arcane, nature and fire |
+| Faction Champions | mostly physical; magic spread over arcane, frost, shadow, fire (Hunter, Warlock, Enhancement) and nature |
 | Twins | Light fire, Dark shadow |
 | Anub'arak | frost: Penetrating Cold, Freezing Slash (physical + frost); nature: Leeching Swarm, scarab Acid-Drenched Mandibles; heroic shadow: Shadow Strike |
 
@@ -347,7 +347,7 @@ their own.
 The `ResistAura` stem picks:
 
 - **Schools**: Gormok fire; worms fire + nature; Icehowl frost; Jaraxxus fire + nature; champions
-  none (mostly physical); Twins fire, then shadow (the raid starts Dark and takes Light's fire);
+  fire; Twins fire, then shadow (the raid starts Dark and takes Light's fire);
   Anub'arak frost + nature. The live encounter's set (Beasts by stage mask, unioned in a heroic
   overlap; an empty mask keeps the last set), else the staged arrival's, else none, so paladins go
   back to their own aura between pulls.

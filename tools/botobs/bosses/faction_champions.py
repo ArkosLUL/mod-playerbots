@@ -13,6 +13,8 @@
     faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast
     faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds
     faction_champions.py <file> --pack     champions round each role, early melee deaths, first kill, stalls, grips
+    faction_champions.py <file> --chain    each player's pull: the DK tank's, the bot DK's and the player's grips,
+                                           their gaps and carry, the order; bot grips outside a pull
     faction_champions.py <file> --peel     snares and peels on melee champions, Disarm against Bladestorm,
                                            externals, battle res, taunts
     faction_champions.py <file> --ball     the death ball: who started it and whom the champions picked first,
@@ -40,7 +42,7 @@ What the generic views get wrong here, and what this reads instead:
   shows as snapshot moveGen 9, fleeing. Roots aren't in it. `--cc` reads a Fear's landing off
   moveGen and a Cyclone's or Polymorph's off this key, `n/a` without it and always for Roots. A CC
   broken between two samples shows in neither: on 25N 52 of 67 Fears showed.
-- **`fc.kill` and `fc.physical` are raid-wide latches and `fc.switch` an event**, so the `g` on any
+- **`fc.kill`, `fc.physical` and `fc.chain` are raid-wide latches and `fc.switch` an event**, so the `g` on any
   of them is whichever bot's tick made the call. `fc.cc`, `fc.peel` and `fc.totem` are per bot, keyed
   on the bot, `0` on a release; `fc.ccaura` is keyed on the champion. An `fc.cc` hold is one cast: it
   ends when the cast lands or 3 s pass with none going. A `skull` switch is a player's skull
@@ -68,6 +70,8 @@ What the generic views get wrong here, and what this reads instead:
   at that spot, in the last sample before the cast.
 - **No champion row before the engage.** The snapshots before it carry raiders only, so the landing
   and the release never show: `--ball` reads the start off the raid's first cast on a champion.
+- **A pull made before the engage shows from the engage.** The trace opens there, and `fc.chain`
+  is restated on the next read, so `--chain` times the first pull from the trace's opening.
 - **A disarm on a champion never shows.** `--peel` reads Disarm, Dismantle and Psychic Horror casts on
   the Warrior champion against its own Bladestorm casts, and a Frost Nova, which names no target, by
   its caster's `fc.peel` hold.
@@ -307,6 +311,10 @@ SNARES = {1715: "Hamstring", 12323: "Piercing Howl", 45524: "Chains of Ice", 297
           **dict.fromkeys((8056, 8058, 10472, 10473, 25464, 49235, 49236), "Frost Shock")}
 SNARE_HEALTH = 50.0
 PEEL = "fc.peel"
+CHAIN = "fc.chain"
+# a pull's grips run on past its stop: the bot DK's grip ends it, the player's comes after
+CHAIN_TAIL_MS = 20000
+CHAIN_ORDER = ["tank", "bot DK", "human"]
 PEEL_SPELLS = {676: "Disarm", 51722: "Dismantle", 64044: "Psychic Horror", 49576: "Death Grip",
                **dict.fromkeys((122, 865, 6131, 10230, 27088, 42917), "Frost Nova"),
                **dict.fromkeys((339, 1062, 5195, 5196, 9852, 9853, 26989, 53308), "Entangling Roots")}
@@ -1442,6 +1450,68 @@ def grip_holds(trace: Trace) -> list[dict]:
     return sorted(out, key=lambda row: (row["start"], row["bot"]))
 
 
+def chain_links(trace: Trace) -> tuple[list[dict], list[dict]]:
+    """`(chains, outside)`. A chain is one `fc.chain` span: `target`, `start`, `stop`, and `links`, the
+    raid's Death Grips on that target from the span's start until the next span or 20 s past its stop,
+    each a `grips` row plus `off`, the target's distance off the pack anchor a second after (None without
+    a sample). `outside` is every bot grip on a champion in no chain's window."""
+    end = pull_end(trace)
+    spans = [(as_guid(value), start, stop) for value, start, stop in latch_spans(trace, CHAIN, end)
+             if as_guid(value)]
+    rows = grips(trace)
+    anchor = pack_anchor(trace)
+    chains, windows = [], []
+    for index, (target, start, stop) in enumerate(spans):
+        until = min(stop + CHAIN_TAIL_MS, spans[index + 1][1] if index + 1 < len(spans) else end)
+        windows.append((start, until))
+        links = []
+        for row in rows:
+            if row["target"] != target or not start <= row["t"] <= until:
+                continue
+            snap = snap_at(trace, row["t"] + GRIP_SETTLE_MS)
+            spot = next(iter(live_rows(snap, {target})), None) if snap else None
+            links.append({**row, "off": distance(spot, [0, *anchor]) if spot and anchor else None})
+        chains.append({"target": target, "start": start, "stop": stop, "links": links})
+    outside = [row for row in rows if row["by"] not in trace.humans
+               and not any(start <= row["t"] <= until for start, until in windows)]
+    return chains, outside
+
+
+def link_role(trace: Trace, guid: int) -> str:
+    if guid in trace.humans:
+        return "human"
+    return "tank" if trace.role(guid) == "tank" else "bot DK"
+
+
+def show_chain(trace: Trace) -> None:
+    print("THE GRIP CHAIN")
+    chains, outside = chain_links(trace)
+    if not chains:
+        print(f"  no player's pull ({CHAIN} never set)")
+    for chain in chains:
+        roles = [link_role(trace, link["by"]) for link in chain["links"]]
+        verdict = "in order" if roles[:len(CHAIN_ORDER)] == CHAIN_ORDER else \
+            ("order " + ", ".join(roles) if roles else "no grip")
+        print(f"\n  pull on {trace.name(chain['target'])} at {clock(chain['start'])},"
+              f" open {(chain['stop'] - chain['start']) / 1000:.1f} s: {verdict}")
+        previous = chain["start"]
+        for link, role in zip(chain["links"], roles):
+            carry = "-" if link["moved"] is None else f"{link['moved']:.1f}"
+            off = "-" if link["off"] is None else f"{link['off']:.1f}"
+            print(f"    {clock(link['t']):>9} {trace.name(link['by'])[:14]:14} {role:7}"
+                  f" +{(link['t'] - previous) / 1000:.1f}s carry {carry:>5} off pack {off:>5}")
+            previous = link["t"]
+    if outside:
+        print(f"\n  bot grips outside a pull: {len(outside)} (" + ", ".join(
+            f"{trace.name(row['by'])} {clock(row['t'])} on {trace.name(row['target'])}" for row in outside) + ")")
+    else:
+        print("\n  no bot grip outside a pull")
+    print(f"  a pull's grips run from its {CHAIN} until the next one or {CHAIN_TAIL_MS // 1000} s past its"
+          f" end; the order wanted is the DK tank, the bot DK, then the player; + counts from the pull or"
+          f" the link before; carry is the target's travel, off pack its distance from where the champions"
+          f" landed, both {GRIP_SETTLE_MS / 1000:.0f} s after the grip")
+
+
 def show_pack(trace: Trace) -> None:
     print("THE PACK")
     by_role = pack_by_role(trace)
@@ -1916,6 +1986,8 @@ SECTIONS = (
     ("aoe", "raid victims per champion crowd-AoE cast, hits per victim for the channels", show_aoe),
     ("adds", "champion totems and treants, treant damage, fc.totem holds", show_adds),
     ("pack", "champions round each role, early melee deaths, first kill, longest stall, grips", show_pack),
+    ("chain", "each player's pull: the DK tank's, the bot DK's and the player's grips, gaps, carry, order;"
+     " bot grips outside a pull", show_chain),
     ("peel", "snares and peels on melee champions, Disarm against Bladestorm, externals, battle res, taunts",
      show_peel),
     ("ball", "the death ball: the start and first picks, champion targets by role, kill target off the pack,"

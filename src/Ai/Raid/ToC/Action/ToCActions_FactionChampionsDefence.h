@@ -70,8 +70,21 @@ public:
 class FactionChampionsDeathGripAction : public NorthrendBeastsWalkAction
 {
 public:
-    FactionChampionsDeathGripAction(
-        PlayerbotAI* botAI) : NorthrendBeastsWalkAction(botAI, "faction champions death grip") {}
+    FactionChampionsDeathGripAction(PlayerbotAI* botAI, std::string const name = "faction champions death grip")
+        : NorthrendBeastsWalkAction(botAI, name) {}
+    bool Execute(Event event) override;
+
+protected:
+    // false once at the stand, with the walk dropped
+    bool StillWalking(Position const& stand, bool& walked);
+};
+
+// The DK tank's grip on the champion the player called, the chain's first link
+class FactionChampionsChainGripAction : public FactionChampionsDeathGripAction
+{
+public:
+    FactionChampionsChainGripAction(PlayerbotAI* botAI)
+        : FactionChampionsDeathGripAction(botAI, "faction champions chain grip") {}
     bool Execute(Event event) override;
 };
 
@@ -136,6 +149,8 @@ public:
             &ToCFactionChampionsDefenceActionContext::faction_champions_purge_kill_target;
         creators["faction champions death grip"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_death_grip;
+        creators["faction champions chain grip"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_chain_grip;
         creators["faction champions snare"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_snare;
         creators["faction champions crowd control"] =
@@ -175,6 +190,10 @@ private:
 
     static Action* faction_champions_death_grip(PlayerbotAI* botAI) {
         return new FactionChampionsDeathGripAction(botAI);
+    }
+
+    static Action* faction_champions_chain_grip(PlayerbotAI* botAI) {
+        return new FactionChampionsChainGripAction(botAI);
     }
 
     static Action* faction_champions_snare(PlayerbotAI* botAI) {

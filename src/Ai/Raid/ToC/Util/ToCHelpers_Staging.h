@@ -72,6 +72,10 @@ bool IsToCStagingRestHeld(PlayerbotAI* botAI);
 // The middle of the Faction Champions' landing slots for the bot's faction, where the pack lands
 Position GetFactionChampionsLandingCentre(Player* bot);
 
+// Where the bot DK waits for the grip chain: on the line from the landing centre to the arena centre,
+// past the tank stands
+Position GetFactionChampionsGripPost(Player* bot);
+
 }
 
 #endif

@@ -72,6 +72,13 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsChainGripTrigger : public Trigger
+{
+public:
+    FactionChampionsChainGripTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions chain grip") {}
+    bool IsActive() override;
+};
+
 class FactionChampionsSnareTrigger : public Trigger
 {
 public:
@@ -112,6 +119,8 @@ public:
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_purge_kill_target;
         creators["faction champions death grip"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_death_grip;
+        creators["faction champions chain grip"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_chain_grip;
         creators["faction champions snare"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_snare;
         creators["faction champions crowd control"] =
@@ -151,6 +160,10 @@ private:
 
     static Trigger* faction_champions_death_grip(PlayerbotAI* botAI) {
         return new FactionChampionsDeathGripTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_chain_grip(PlayerbotAI* botAI) {
+        return new FactionChampionsChainGripTrigger(botAI);
     }
 
     static Trigger* faction_champions_snare(PlayerbotAI* botAI) {

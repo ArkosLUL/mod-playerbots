@@ -24,6 +24,7 @@
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_FactionChampionsDefence.h"
 #include "ToCHelpers_Shared.h"
 #include "ToCHelpers_Staging.h"
 
@@ -670,9 +671,9 @@ ObjectGuid NextGripHealer(FactionChampionsState const& state)
 // Healers off the tanks nearest the kill target first, then the other healers, then champions off the
 // tanks casters first, then the rest in kill order. Not the kill target, nor the suspended one: the latch
 // goes back to it and CC would break or block that. Nor the skulled one, even while it's immune and so
-// not the latch. Nor a pulled healer, the latch's next pick, nor the next grip's healer once the DK walks
-// to it: CC would make either immune when its turn comes.
-std::vector<Champion const*> CcCandidates(FactionChampionsState const& state)
+// not the latch. Nor a pulled healer, the latch's next pick, nor the player's pull or the likely next one:
+// CC would make each immune to the grip when its turn comes.
+std::vector<Champion const*> CcCandidates(FactionChampionsState const& state, ObjectGuid chainTarget)
 {
     ObjectGuid const killGuid = state.killTarget.Get();
     Champion const* kill = nullptr;
@@ -686,7 +687,7 @@ std::vector<Champion const*> CcCandidates(FactionChampionsState const& state)
     std::vector<Champion const*> candidates;
     for (Champion const& champion : state.champions)
         if (champion.inCombat && !champion.pulled && champion.guid != killGuid && champion.guid != state.suspended &&
-            champion.guid != state.skulled && champion.guid != nextGrip)
+            champion.guid != state.skulled && champion.guid != nextGrip && champion.guid != chainTarget)
             candidates.push_back(&champion);
 
     auto const group = [](Champion const* champion)
@@ -766,7 +767,7 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
     std::sort(casters.begin(), casters.end(),
               [](auto const& a, auto const& b) { return a.first->GetGUID() < b.first->GetGUID(); });
 
-    std::vector<Champion const*> const candidates = CcCandidates(state);
+    std::vector<Champion const*> const candidates = CcCandidates(state, FactionChampionsChainTarget(bot));
     auto const isCandidate = [&candidates](ObjectGuid guid)
     {
         return std::any_of(candidates.begin(), candidates.end(),
@@ -1152,18 +1153,6 @@ uint32 FactionChampionsLiveMs(PlayerbotAI* botAI)
 
     FactionChampionsState* state = Refresh(botAI);
     return state && state->live ? getMSTimeDiff(state->liveSinceMs, getMSTime()) : 0;
-}
-
-Unit* FactionChampionsNextHealerInPack(PlayerbotAI* botAI)
-{
-    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
-        return nullptr;
-
-    FactionChampionsState* state = Refresh(botAI);
-    if (!state || !state->live)
-        return nullptr;
-
-    return AliveCreature(botAI->GetBot(), NextGripHealer(*state));
 }
 
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI)

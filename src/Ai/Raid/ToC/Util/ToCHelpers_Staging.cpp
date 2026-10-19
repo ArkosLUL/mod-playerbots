@@ -25,6 +25,7 @@
 #include "Timer.h"
 #include "ToCData.h"
 #include "ToCHelpers_Anubarak.h"
+#include "ToCHelpers_FactionChampionsDefence.h"
 #include "ToCHelpers_Icehowl.h"
 #include "ToCHelpers_Jaraxxus.h"
 #include "ToCHelpers_Jormungars.h"
@@ -134,8 +135,9 @@ constexpr float CHAMPION_SIDE_STEP = 3.0f;
 // the first engage sends every idle champion at its nearest player, so everyone else stands this much
 // farther from each slot than a tank
 constexpr float CHAMPION_TANK_LEAD = 3.0f;
-// about 25 yd past where a grip from the raid side drops a healer, so the next grip goes without a walk
-constexpr float CHAMPION_GRIP_POST = 50.0f;
+// about 24 yd past the tank line, where the DK tank's grip drops a healer, so the bot DK grips without a walk.
+// The player stands 24 yd further out, still on the floor.
+constexpr float CHAMPION_GRIP_POST = 54.0f;
 constexpr uint32 SPELL_DEATH_GRIP = 49576;
 constexpr float CHAMPION_LATTICE_STEP = 10.0f;
 
@@ -1022,7 +1024,9 @@ ToCStagingRead ReadStand(PlayerbotAI* botAI, bool note)
     }
 
     DealtStand const* dealt = DealtFor(botAI, *state, arrival);
-    if (!dealt || TwinsEssenceFirst(botAI, arrival))
+    // the DK tank walks into Death Grip reach of the champion the player called
+    bool const chainGrip = arrival == ToCStagingBoss::Champions && FactionChampionsOpenerGripDue(botAI);
+    if (!dealt || TwinsEssenceFirst(botAI, arrival) || chainGrip)
     {
         state->holds.erase(bot->GetGUID());
         if (note)
@@ -1060,6 +1064,12 @@ Position GetFactionChampionsLandingCentre(Player* bot)
 {
     Point2 const centroid = ChampionLandingCentroid(ChampionLanding(bot));
     return At(centroid, ARENA_STAND_Z);
+}
+
+Position GetFactionChampionsGripPost(Player* bot)
+{
+    Point2 const centroid = ChampionLandingCentroid(ChampionLanding(bot));
+    return At(Along(centroid, Direction(centroid, PointOf(ARENA_CENTER)), CHAMPION_GRIP_POST), ARENA_STAND_Z);
 }
 
 ToCStagingBoss GetToCStagedArrival(PlayerbotAI* botAI)

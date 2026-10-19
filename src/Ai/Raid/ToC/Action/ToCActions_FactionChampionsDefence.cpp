@@ -139,6 +139,31 @@ bool FactionChampionsAvoidAoeAction::Execute(Event /*event*/)
     return IssueLeg(spot, now);
 }
 
+bool FactionChampionsDeathGripAction::StillWalking(Position const& stand, bool& walked)
+{
+    if (bot->GetExactDist2d(&stand) <= GRIP_ARRIVE)
+    {
+        DropWalk();
+        return false;
+    }
+
+    Position const* walking = WalkInFlight();
+    if (walking && walking->GetExactDist2d(&stand) < GRIP_SAME_STAND)
+    {
+        walked = true;
+        return true;
+    }
+
+    // a booking left by a walk elsewhere refuses this one at the same priority for its whole walk time
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    if (last.priority != MovementPriority::MOVEMENT_FORCED &&
+        stand.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) >= GRIP_SAME_STAND)
+        last.clear();
+
+    walked = WalkTo(stand);
+    return true;
+}
+
 bool FactionChampionsDeathGripAction::Execute(Event /*event*/)
 {
     Position stand;
@@ -150,23 +175,36 @@ bool FactionChampionsDeathGripAction::Execute(Event /*event*/)
         return false;
     }
 
-    if (bot->GetExactDist2d(&stand) > GRIP_ARRIVE)
+    bool walked = false;
+    if (StillWalking(stand, walked))
+        return walked;
+
+    if (walkOnly || !botAI->CastSpell("death grip", target))
+        return false;
+
+    FactionChampionsNoteChainGrip(botAI, target);
+    return true;
+}
+
+bool FactionChampionsChainGripAction::Execute(Event /*event*/)
+{
+    Position stand;
+    Unit* target = FactionChampionsChainGripTarget(botAI, stand);
+    if (!target)
     {
-        Position const* walking = WalkInFlight();
-        if (walking && walking->GetExactDist2d(&stand) < GRIP_SAME_STAND)
-            return true;
-
-        // a booking left by a walk elsewhere refuses this one at the same priority for its whole walk time
-        LastMovement& last = AI_VALUE(LastMovement&, "last movement");
-        if (last.priority != MovementPriority::MOVEMENT_FORCED &&
-            stand.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) >= GRIP_SAME_STAND)
-            last.clear();
-
-        return WalkTo(stand);
+        DropWalk();
+        return false;
     }
 
-    DropWalk();
-    return !walkOnly && botAI->CastSpell("death grip", target);
+    bool walked = false;
+    if (StillWalking(stand, walked))
+        return walked;
+
+    if (!botAI->CastSpell("death grip", target))
+        return false;
+
+    FactionChampionsNoteChainGrip(botAI, target);
+    return true;
 }
 
 bool FactionChampionsSnareAction::Execute(Event /*event*/)

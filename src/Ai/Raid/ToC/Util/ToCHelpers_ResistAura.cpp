@@ -184,8 +184,10 @@ uint8 SchoolsOfArrival(ToCStagingBoss arrival)
             return FIRE | SHADOW;
         case ToCStagingBoss::Anubarak:
             return FROST | NATURE;
+        case ToCStagingBoss::Champions:
+            return FIRE;  // mostly physical, but the hunter, warlock and enhancement shaman burn
         default:
-            return 0;  // champions hit mostly physical, their magic spread over five schools
+            return 0;
     }
 }
 
