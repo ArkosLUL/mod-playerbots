@@ -19,11 +19,11 @@ constexpr float STAND_TRIGGER = 3.0f;
 
 bool FactionChampionsFrontlineReturnTrigger::IsActive()
 {
-    Position anchor;
-    if (!FactionChampionsFrontlineHeld(botAI, anchor) || !botAI->CanMove())
+    Position centre;
+    if (!FactionChampionsFrontlineHeld(botAI, centre) || !botAI->CanMove())
         return false;
 
-    float const off = bot->GetExactDist2d(&anchor);
+    float const off = bot->GetExactDist2d(&centre);
     return off > FRONT_LEASH || (off > PACK_TANK_LEASH && !FactionChampionsFrontlineTarget(botAI));
 }
 
@@ -41,6 +41,12 @@ bool FactionChampionsBallStandTrigger::IsActive()
            bot->GetExactDist2d(&spot) > STAND_TRIGGER;
 }
 
+bool FactionChampionsChasedTrigger::IsActive()
+{
+    Position spot;
+    return botAI->CanMove() && FactionChampionsChased(botAI, spot);
+}
+
 bool FactionChampionsOpenerTrigger::IsActive()
 {
     uint32 spellId = 0;
@@ -52,6 +58,9 @@ void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(new TriggerNode("faction champions opener", {
         NextAction("faction champions opener", ACTION_RAID + 4.4f) }));
+
+    triggers.push_back(new TriggerNode("faction champions chased", {
+        NextAction("faction champions chased", ACTION_RAID + 2.5f) }));
 
     triggers.push_back(new TriggerNode("faction champions frontline return", {
         NextAction("faction champions frontline return", ACTION_RAID + 2.1f) }));

@@ -67,6 +67,11 @@ constexpr float IN_AOE_MARGIN = 1.0f;
 
 // Only these need the kicker inside the fire, a ranged interrupt reaches him from the clearance
 constexpr char const* MELEE_INTERRUPTS[] = {"kick", "pummel", "shield bash", "mind freeze"};
+constexpr char const* RANGED_INTERRUPTS[] = {"counterspell", "wind shear", "silence", "strangulate",
+                                             "silencing shot"};
+// The felhunter's, cast through the warlock
+constexpr std::array<uint32, 2> SPELL_LOCK_RANKS = {19647, 19244};
+constexpr float SPELL_LOCK_RANGE = 30.0f;
 
 constexpr float AOE_SEARCH_RADIUS = 30.0f;
 constexpr float HEAL_REACH = 30.0f;
@@ -100,6 +105,8 @@ constexpr uint32 CHAIN_LINK2_MS = 10000;
 constexpr uint32 CHAIN_WAIT_MS = 3000;
 // the pull starts on the hit, so the jump only shows a moment after the cast
 constexpr uint32 CHAIN_LAND_MS = 300;
+// the player's own grip, the chain's last link, came 3-4 s after the bot DK's
+constexpr uint32 GRIP_GUARD_TAIL_MS = 6000;
 
 constexpr float SNARE_HEALTH_PCT = 50.0f;
 constexpr float PIERCING_HOWL_RADIUS = 10.0f;
@@ -127,7 +134,12 @@ constexpr uint32 SPELL_PSYCHIC_HORROR = 64044;
 constexpr std::array<uint32, 6> FROST_NOVA_RANKS = {42917, 27088, 10230, 6131, 865, 122};
 constexpr std::array<uint32, 8> ENTANGLING_ROOTS_RANKS = {53308, 26989, 9853, 9852, 5196, 5195, 1062, 339};
 
+// Hand of Protection goes on one physical champion, the rest wait for two and this much health, so they're
+// still up when the focused frontline member drops
 constexpr uint32 PROTECT_MIN_ATTACKERS = 2;
+constexpr float PROTECT_HEALTH_PCT = 60.0f;
+// a melee champion farther off its victim isn't hitting it yet
+constexpr float PROTECT_MELEE_REACH = 8.0f;
 constexpr uint32 SPELL_FORBEARANCE = 25771;
 constexpr std::array<uint32, 3> HAND_OF_PROTECTION_RANKS = {10278, 5599, 1022};
 constexpr uint32 SPELL_PAIN_SUPPRESSION = 33206;
@@ -194,6 +206,14 @@ struct HazardSource
     ObjectGuid kicker;  // the one bot a fresh Hellfire leaves in place
 };
 
+// The bot that interrupts a warlock's Hellfire, and its spell
+struct KickDuty
+{
+    ObjectGuid bot;
+    char const* spell = nullptr;
+    bool melee = false;
+};
+
 struct CcDispel
 {
     ObjectGuid member;
@@ -231,6 +251,8 @@ struct FactionChampionsDefenceState
     RaidObs::ObsGuidMap<ObjectGuid> totemKillers{"fc.totem"};
     RaidObs::ObsGuidMap<ObjectGuid> grips{"fc.grip"};
     RaidObs::ObsGuidMap<ObjectGuid> peelNotes{"fc.peel"};
+    RaidObs::ObsGuidMap<ObjectGuid> kickNotes{"fc.kick"};  // interrupter -> warlock
+    std::unordered_map<ObjectGuid, KickDuty> kicks;        // warlock -> interrupter
     GripDuty grip;
     std::unordered_map<ObjectGuid, SpellDuty> snares;     // snarer -> melee champion
     std::unordered_map<ObjectGuid, SpellDuty> peels;      // peeler -> melee champion
@@ -248,6 +270,12 @@ struct FactionChampionsDefenceState
     ObjectGuid purger;
     ObjectGuid purgeTarget;
     char const* purgeSpell = nullptr;
+    ObjectGuid packPurger;
+    ObjectGuid packPurgeTarget;
+    char const* packPurgeSpell = nullptr;
+    std::vector<ObjectGuid> guarded;  // champions nothing may root, stun, fear or knock
+    // owner -> the pet autocasts a guard switched off, switched back on once it ends
+    std::unordered_map<ObjectGuid, std::vector<uint32>> petHolds;
 };
 
 RaidInstanceState<FactionChampionsDefenceState> defenceStates;
@@ -259,6 +287,9 @@ struct GripChainState
     RaidObs::ObsValue<ObjectGuid> target{"fc.chain"};
     uint32 openMs = 0;
     uint32 link1Ms = 0;  // the DK tank's grip, 0 until it goes out
+    // the last bot grip of a pull, kept past its close so the player's link is guarded too
+    ObjectGuid lastTarget;
+    uint32 lastLinkMs = 0;
 };
 
 RaidInstanceState<GripChainState> chainStates;
@@ -534,26 +565,48 @@ bool WorthPurging(Unit* target)
     return std::any_of(std::begin(buffs), std::end(buffs), [target](uint32 buff) { return target->HasAura(buff); });
 }
 
-// Class purges on champions are vetoed, so a purger with no shot at the kill target hands the duty on
-void UpdatePurge(FactionChampionsDefenceState& state, std::vector<Member> const& members, Unit* killTarget)
+// Bloodlust and Avenging Wrath feed the champions' damage on the frontline, Hand of Freedom shrugs off
+// the peel's snares
+bool CarriesPackBuff(Unit* champion)
+{
+    return champion->HasAura(SPELL_HEROISM) || champion->HasAura(SPELL_BLOODLUST) ||
+           champion->HasAura(SPELL_AVENGING_WRATH) ||
+           champion->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HAND_OF_FREEDOM, champion));
+}
+
+// Purge or Dispel Magic ready, by a dps shaman or priest bot
+DispelSpell const* ReadyPurge(Member const& member)
+{
+    Player* player = member.player;
+    if (member.healer || !GET_PLAYERBOT_AI(player))
+        return nullptr;
+
+    DispelSpell const* option = player->getClass() == CLASS_SHAMAN   ? &SHAMAN_PURGE
+                                : player->getClass() == CLASS_PRIEST ? &PRIEST_DISPEL_MAGIC
+                                                                     : nullptr;
+    uint32 const rank = option ? KnownRank(player, *option) : 0;
+    return rank && !player->HasSpellCooldown(rank) && CanPayFor(player, rank) ? option : nullptr;
+}
+
+// Class purges on champions are vetoed, so a purger with no shot at the kill target hands the duty on.
+// The next purger takes the pack's offensive buffs, melee champions on the frontline first.
+void UpdatePurge(FactionChampionsDefenceState& state, std::vector<Member> const& members,
+                 std::vector<Unit*> const& champions, Unit* killTarget)
 {
     state.purger.Clear();
     state.purgeTarget.Clear();
     state.purgeSpell = nullptr;
+    state.packPurger.Clear();
+    state.packPurgeTarget.Clear();
+    state.packPurgeSpell = nullptr;
 
     Player* purger = nullptr;
     DispelSpell const* spell = nullptr;
     for (Member const& member : members)
     {
         Player* player = member.player;
-        if (member.healer || !GET_PLAYERBOT_AI(player))
-            continue;
-
-        DispelSpell const* option = player->getClass() == CLASS_SHAMAN   ? &SHAMAN_PURGE
-                                    : player->getClass() == CLASS_PRIEST ? &PRIEST_DISPEL_MAGIC
-                                                                         : nullptr;
-        uint32 const rank = option ? KnownRank(player, *option) : 0;
-        if (!rank || player->HasSpellCooldown(rank) || !CanPayFor(player, rank))
+        DispelSpell const* option = ReadyPurge(member);
+        if (!option)
             continue;
 
         if (killTarget && (!InControl(player) || !player->IsWithinDistInMap(killTarget, PURGE_RANGE)))
@@ -566,13 +619,55 @@ void UpdatePurge(FactionChampionsDefenceState& state, std::vector<Member> const&
         }
     }
 
-    if (!purger)
-        return;
+    if (purger)
+    {
+        state.purger = purger->GetGUID();
+        state.purgeSpell = spell->name;
+        if (killTarget && WorthPurging(killTarget))
+            state.purgeTarget = killTarget->GetGUID();
+    }
 
-    state.purger = purger->GetGUID();
-    state.purgeSpell = spell->name;
-    if (killTarget && WorthPurging(killTarget))
-        state.purgeTarget = killTarget->GetGUID();
+    std::vector<Unit*> buffed;
+    for (Unit* champion : champions)
+        if (champion != killTarget && CarriesPackBuff(champion))
+            buffed.push_back(champion);
+
+    std::stable_sort(buffed.begin(), buffed.end(),
+                     [](Unit* a, Unit* b)
+                     {
+                         auto const onFront = [](Unit* champion)
+                         {
+                             Unit* victim = champion->GetVictim();
+                             return IsFactionChampionMelee(champion->GetEntry()) && victim && victim->ToPlayer() &&
+                                    FactionChampionsIsFrontline(victim->ToPlayer());
+                         };
+                         return onFront(a) && !onFront(b);
+                     });
+
+    for (Unit* champion : buffed)
+    {
+        Player* chosen = nullptr;
+        DispelSpell const* chosenSpell = nullptr;
+        for (Member const& member : members)
+        {
+            Player* player = member.player;
+            DispelSpell const* option = player != purger ? ReadyPurge(member) : nullptr;
+            if (!option || !InControl(player) || !player->IsWithinDistInMap(champion, PURGE_RANGE) ||
+                (chosen && chosen->GetGUID() < player->GetGUID()))
+                continue;
+
+            chosen = player;
+            chosenSpell = option;
+        }
+
+        if (chosen)
+        {
+            state.packPurger = chosen->GetGUID();
+            state.packPurgeTarget = champion->GetGUID();
+            state.packPurgeSpell = chosenSpell->name;
+            return;
+        }
+    }
 }
 
 bool PhysicallyImmune(Unit* unit) { return unit->IsImmunedToDamage(SPELL_SCHOOL_MASK_NORMAL); }
@@ -641,37 +736,97 @@ bool IsChampionTotem(Player* bot, Creature* totem)
 
 // Cooldown only, no CanCastSpell or power test: the top ranks of Kick, Pummel and Shield Bash sit on
 // the GCD and energy dips under Kick's cost between swings, so either would flip the kicker every swing
-bool HasReadyMeleeInterrupt(Player* player, PlayerbotAI* botAI, Unit* warlock)
+char const* ReadyMeleeInterrupt(Player* player, PlayerbotAI* botAI, Unit* warlock)
 {
     if (!player->IsWithinMeleeRange(warlock))
-        return false;
+        return nullptr;
 
     for (char const* name : MELEE_INTERRUPTS)
     {
         uint32 const id = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", name)->Get();
         if (id && player->HasSpell(id) && !player->HasSpellCooldown(id))
-            return true;
+            return name;
     }
 
-    return false;
+    return nullptr;
 }
 
-// First by guid of the bots on the warlock with a melee kick ready
-ObjectGuid ElectHellfireKicker(std::vector<Member> const& members, Unit* warlock)
+// Off the GCD, but a caster mid-cast can't send one
+char const* ReadyRangedInterrupt(Player* player, PlayerbotAI* botAI, Unit* warlock)
 {
-    std::vector<Member> byGuid = members;
-    std::sort(byGuid.begin(), byGuid.end(),
-              [](Member const& a, Member const& b) { return a.player->GetGUID() < b.player->GetGUID(); });
+    if (player->IsNonMeleeSpellCast(false))
+        return nullptr;
 
-    for (Member const& member : byGuid)
+    for (char const* name : RANGED_INTERRUPTS)
     {
-        Player* player = member.player;
-        PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
-        if (ai && InControl(player) && CurrentTarget(ai) == warlock && HasReadyMeleeInterrupt(player, ai, warlock))
-            return player->GetGUID();
+        uint32 const id = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", name)->Get();
+        SpellInfo const* info = id ? sSpellMgr->GetSpellInfo(id) : nullptr;
+        if (info && player->HasSpell(id) && !player->HasSpellCooldown(id) &&
+            player->IsWithinCombatRange(warlock, info->GetMaxRange(false, player)) &&
+            player->IsWithinLOSInMap(warlock))
+            return name;
     }
 
-    return ObjectGuid::Empty;
+    Pet* pet = player->GetPet();
+    if (pet && pet->IsAlive() && !pet->HasUnitState(UNIT_STATE_LOST_CONTROL))
+        for (uint32 rank : SPELL_LOCK_RANKS)
+            if (pet->HasSpell(rank) && !pet->HasSpellCooldown(rank) && pet->IsWithinCombatRange(warlock, SPELL_LOCK_RANGE))
+                return "spell lock";
+
+    return nullptr;
+}
+
+// Nearest bot with an interrupt that reaches the warlock, a ranged one first: it needn't stand in the fire
+KickDuty ElectChannelKicker(std::vector<Member> const& members, Unit* warlock)
+{
+    KickDuty best;
+    float bestDistance = 0.0f;
+    for (bool melee : {false, true})
+    {
+        for (Member const& member : members)
+        {
+            Player* player = member.player;
+            PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
+            if (!ai || !InControl(player))
+                continue;
+
+            char const* spell = melee ? ReadyMeleeInterrupt(player, ai, warlock) : ReadyRangedInterrupt(player, ai, warlock);
+            float const distance = player->GetExactDist2d(warlock);
+            if (spell && (best.bot.IsEmpty() || distance < bestDistance))
+            {
+                best = {player->GetGUID(), spell, melee};
+                bestDistance = distance;
+            }
+        }
+
+        if (!best.bot.IsEmpty())
+            break;
+    }
+
+    return best;
+}
+
+// The holder keeps it while its interrupt is still ready, a second tick may find the channel already ended
+KickDuty KeepOrElectKicker(FactionChampionsDefenceState& state, std::vector<Member> const& members, Unit* warlock)
+{
+    auto const held = state.kicks.find(warlock->GetGUID());
+    if (held != state.kicks.end())
+    {
+        ObjectGuid const bot = held->second.bot;
+        auto const holder = std::find_if(members.begin(), members.end(),
+                                         [bot](Member const& member) { return member.player->GetGUID() == bot; });
+        PlayerbotAI* ai = holder != members.end() ? GET_PLAYERBOT_AI(holder->player) : nullptr;
+        if (ai && InControl(holder->player))
+        {
+            Player* player = holder->player;
+            char const* spell = held->second.melee ? ReadyMeleeInterrupt(player, ai, warlock)
+                                                   : ReadyRangedInterrupt(player, ai, warlock);
+            if (spell)
+                return {player->GetGUID(), spell, held->second.melee};
+        }
+    }
+
+    return ElectChannelKicker(members, warlock);
 }
 
 void UpdateHazards(FactionChampionsDefenceState& state, Player* bot, std::vector<Member> const& members, uint32 now)
@@ -681,6 +836,7 @@ void UpdateHazards(FactionChampionsDefenceState& state, Player* bot, std::vector
 
     state.hazards.clear();
     state.totems.clear();
+    std::unordered_map<ObjectGuid, KickDuty> kicks;
     for (Creature* creature : creatures)
     {
         if (!creature || !creature->IsAlive())
@@ -716,12 +872,31 @@ void UpdateHazards(FactionChampionsDefenceState& state, Player* bot, std::vector
             source.spellId = hellfire;
             source.radius = HELLFIRE_RADIUS;
             source.clearance = HELLFIRE_CLEARANCE;
-            if (aura->GetMaxDuration() >= 0 && aura->GetMaxDuration() - aura->GetDuration() < HELLFIRE_KICK_WINDOW_MS)
-                source.kicker = ElectHellfireKicker(members, creature);
+            KickDuty const kick = KeepOrElectKicker(state, members, creature);
+            if (!kick.bot.IsEmpty())
+                kicks[creature->GetGUID()] = kick;
+
+            // only a melee interrupt needs its kicker left inside the fire
+            if (kick.melee && aura->GetMaxDuration() >= 0 &&
+                aura->GetMaxDuration() - aura->GetDuration() < HELLFIRE_KICK_WINDOW_MS)
+                source.kicker = kick.bot;
         }
 
         state.hazards.push_back(source);
     }
+
+    state.kicks = std::move(kicks);
+    std::vector<ObjectGuid> ended;
+    for (auto const& held : state.kickNotes.Raw())
+        if (std::none_of(state.kicks.begin(), state.kicks.end(),
+                         [&held](auto const& kick) { return kick.second.bot == held.first; }))
+            ended.push_back(held.first);
+
+    for (ObjectGuid const& kicker : ended)
+        state.kickNotes.erase(kicker);
+
+    for (auto const& kick : state.kicks)
+        state.kickNotes.Set(kick.second.bot, kick.first);
 
     std::sort(state.totems.begin(), state.totems.end());
 
@@ -1343,7 +1518,8 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
     for (Unit* champion : champions)
     {
         if (!IsFactionChampionMelee(champion->GetEntry()) || champion->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
-            champion->HasAuraType(SPELL_AURA_MOD_ROOT))
+            champion->HasAuraType(SPELL_AURA_MOD_ROOT) ||
+            std::find(state.guarded.begin(), state.guarded.end(), champion->GetGUID()) != state.guarded.end())
             continue;
 
         Unit* victim = champion->GetVictim();
@@ -1412,6 +1588,10 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
             if (!info || champion->IsImmunedToSpell(info) || !peeler->IsWithinLOSInMap(champion))
                 continue;
 
+            // Frost Nova would freeze a gripped healer flying past too
+            if (!state.guarded.empty() && info->IsAffectingArea())
+                continue;
+
             state.peels[peeler->GetGUID()] = {champion->GetGUID(), spellId};
             taken[i] = true;
             break;
@@ -1443,8 +1623,18 @@ bool ProtectCovered(Player* member)
                                SPELL_PAIN_SUPPRESSION, SPELL_GUARDIAN_SPIRIT, SPELL_HAND_OF_SACRIFICE});
 }
 
-// The spell id of the external this caster can put on member now, in the order they're worth spending
-uint32 ReadyExternal(Player* caster, Player* member, bool handOfProtection)
+// Healers and ranged only: a melee bot under it can't swing, and melee champions leave it at once, which
+// would empty the frontline
+bool HandOfProtectionFits(Member const& member)
+{
+    Player* player = member.player;
+    return (member.healer || PlayerbotAI::IsRanged(player)) && !IsTankMember(player) &&
+           !FactionChampionsIsFrontline(player) && !player->HasAura(SPELL_FORBEARANCE);
+}
+
+// The spell id of the external this caster can put on member now, in the order they're worth spending.
+// others: Hand of Sacrifice, Pain Suppression and Guardian Spirit may go too.
+uint32 ReadyExternal(Player* caster, Player* member, bool handOfProtection, bool others)
 {
     bool const self = caster == member;
     float const distance = self ? 0.0f : caster->GetExactDist(member);
@@ -1456,12 +1646,12 @@ uint32 ReadyExternal(Player* caster, Player* member, bool handOfProtection)
             if (handOfProtection && distance <= HAND_RANGE && SpellReady(caster, rank))
                 return rank;
 
-            bool const canSacrifice = !self && distance <= HAND_RANGE &&
+            bool const canSacrifice = others && !self && distance <= HAND_RANGE &&
                                       caster->GetHealthPct() >= SACRIFICE_MIN_HEALTH_PCT;
             return canSacrifice && SpellReady(caster, SPELL_HAND_OF_SACRIFICE) ? SPELL_HAND_OF_SACRIFICE : 0;
         }
         case CLASS_PRIEST:
-            if (distance > PRIEST_EXTERNAL_RANGE)
+            if (!others || distance > PRIEST_EXTERNAL_RANGE)
                 return 0;
 
             if (SpellReady(caster, SPELL_PAIN_SUPPRESSION))
@@ -1498,17 +1688,33 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
 
     std::unordered_map<ObjectGuid, uint32> attackers;
     for (Unit* champion : champions)
-        if (IsPhysicalChampion(champion->GetEntry()) && !champion->HasUnitState(UNIT_STATE_LOST_CONTROL))
-            if (Unit* victim = champion->GetVictim())
-                if (victim->IsPlayer())
-                    ++attackers[victim->GetGUID()];
+    {
+        if (!IsPhysicalChampion(champion->GetEntry()) || champion->HasUnitState(UNIT_STATE_LOST_CONTROL))
+            continue;
+
+        Unit* victim = champion->GetVictim();
+        if (!victim || !victim->IsPlayer() ||
+            (IsFactionChampionMelee(champion->GetEntry()) && champion->GetExactDist2d(victim) > PROTECT_MELEE_REACH))
+            continue;
+
+        ++attackers[victim->GetGUID()];
+    }
 
     std::vector<Member> focused;
+    std::unordered_map<ObjectGuid, bool> othersFor;
     for (Member const& member : members)
     {
         auto const hits = attackers.find(member.player->GetGUID());
-        if (hits != attackers.end() && hits->second >= PROTECT_MIN_ATTACKERS && !ProtectCovered(member.player))
+        if (hits == attackers.end() || ProtectCovered(member.player))
+            continue;
+
+        bool const others = hits->second >= PROTECT_MIN_ATTACKERS &&
+                            member.player->GetHealthPct() <= PROTECT_HEALTH_PCT;
+        if (others || HandOfProtectionFits(member))
+        {
             focused.push_back(member);
+            othersFor[member.player->GetGUID()] = others;
+        }
     }
 
     if (focused.empty())
@@ -1541,7 +1747,8 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
 
     for (Member const& member : focused)
     {
-        bool const handOfProtection = !IsTankMember(member.player) && !member.player->HasAura(SPELL_FORBEARANCE);
+        bool const handOfProtection = HandOfProtectionFits(member);
+        bool const others = othersFor[member.player->GetGUID()];
         size_t chosen = casters.size();
         uint32 chosenSpell = 0;
         for (size_t i = 0; i < casters.size(); ++i)
@@ -1550,7 +1757,7 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
                 continue;
 
             Player* caster = casters[i].player;
-            uint32 const spellId = ReadyExternal(caster, member.player, handOfProtection);
+            uint32 const spellId = ReadyExternal(caster, member.player, handOfProtection, others);
             if (!spellId || (chosenSpell && ExternalRank(spellId) >= ExternalRank(chosenSpell)))
                 continue;
 
@@ -1676,6 +1883,47 @@ void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vect
     }
 }
 
+// After UpdateGrip, which reads the duty this tick
+void UpdateGuard(FactionChampionsDefenceState& state, Player* bot, std::vector<Unit*> const& champions, uint32 now)
+{
+    state.guarded.clear();
+    GripChainState* chain = nullptr;
+    if (Creature* chained = OpenChain(bot, chain))
+        state.guarded.push_back(chained->GetGUID());
+
+    if (chain && !chain->lastTarget.IsEmpty() && getMSTimeDiff(chain->lastLinkMs, now) < GRIP_GUARD_TAIL_MS)
+        state.guarded.push_back(chain->lastTarget);
+
+    if (!state.grip.dk.IsEmpty())
+        state.guarded.push_back(state.grip.target);
+
+    for (Unit* champion : champions)
+        if (MidJump(champion))
+            state.guarded.push_back(champion->GetGUID());
+}
+
+bool HoldsDirectly(SpellInfo const* info)
+{
+    return info->HasAura(SPELL_AURA_MOD_ROOT) || info->HasAura(SPELL_AURA_MOD_STUN) ||
+           info->HasAura(SPELL_AURA_MOD_FEAR) || info->HasAura(SPELL_AURA_MOD_CONFUSE) ||
+           info->HasEffect(SPELL_EFFECT_CHARGE) || info->HasEffect(SPELL_EFFECT_KNOCK_BACK);
+}
+
+bool TauntsOrThreatens(SpellInfo const* info)
+{
+    return info->HasAura(SPELL_AURA_MOD_TAUNT) || info->HasEffect(SPELL_EFFECT_ATTACK_ME) ||
+           info->HasEffect(SPELL_EFFECT_THREAT);
+}
+
+bool IsAutocast(Pet* pet, uint32 spellId)
+{
+    for (uint8 pos = 0; pos < pet->GetPetAutoSpellSize(); ++pos)
+        if (pet->GetPetAutoSpellOnPos(pos) == spellId)
+            return true;
+
+    return false;
+}
+
 // Null unless live: a refresh after the kill would write into the next encounter's trace
 FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
 {
@@ -1702,8 +1950,9 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     UpdateTotemKillers(state, bot, members);
     UpdateCcDispels(state, members);
     UpdateMassDispel(state, botAI, members, killTarget);
-    UpdatePurge(state, members, killTarget);
+    UpdatePurge(state, members, champions, killTarget);
     UpdateGrip(state, botAI, members, champions, killTarget, now);
+    UpdateGuard(state, bot, champions, now);
     UpdateSnares(state, botAI, members, champions);
     UpdatePeel(state, botAI, members, champions, killTarget);
     UpdateProtect(state, members, champions);
@@ -1776,14 +2025,19 @@ Unit* FactionChampionsMassDispelTarget(PlayerbotAI* botAI)
 Unit* FactionChampionsPurgeTarget(PlayerbotAI* botAI, char const*& spell)
 {
     FactionChampionsDefenceState* state = Refresh(botAI);
-    if (!state || state->purger != botAI->GetBot()->GetGUID())
+    if (!state)
         return nullptr;
 
-    Creature* target = AliveCreature(botAI->GetBot(), state->purgeTarget);
+    ObjectGuid const bot = botAI->GetBot()->GetGUID();
+    bool const kill = state->purger == bot;
+    if (!kill && state->packPurger != bot)
+        return nullptr;
+
+    Creature* target = AliveCreature(botAI->GetBot(), kill ? state->purgeTarget : state->packPurgeTarget);
     if (!target)
         return nullptr;
 
-    spell = state->purgeSpell;
+    spell = kill ? state->purgeSpell : state->packPurgeSpell;
     return target;
 }
 
@@ -1861,6 +2115,127 @@ bool FactionChampionsReachIntoAoe(PlayerbotAI* botAI)
 bool FactionChampionsDispelBackfires(PlayerbotAI* botAI, Unit* target)
 {
     return botAI && ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions) && CarriesUnstableAffliction(target);
+}
+
+Unit* FactionChampionsChannelInterruptTarget(PlayerbotAI* botAI, char const*& spell)
+{
+    FactionChampionsDefenceState* state = Refresh(botAI);
+    if (!state)
+        return nullptr;
+
+    Player* bot = botAI->GetBot();
+    for (auto const& kick : state->kicks)
+    {
+        if (kick.second.bot != bot->GetGUID())
+            continue;
+
+        spell = kick.second.spell;
+        return AliveCreature(bot, kick.first);
+    }
+
+    return nullptr;
+}
+
+bool FactionChampionsSpellHoldsTarget(uint32 spellId)
+{
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info)
+        return false;
+
+    if (HoldsDirectly(info))
+        return true;
+
+    // Intimidation's stun and a pet Charge's root sit one trigger down
+    for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+        if (SpellInfo const* triggered = sSpellMgr->GetSpellInfo(info->Effects[i].TriggerSpell))
+            if (HoldsDirectly(triggered))
+                return true;
+
+    for (int32 key : {static_cast<int32>(spellId), static_cast<int32>(spellId) + SPELL_LINK_HIT})
+        if (std::vector<int32> const* linked = sSpellMgr->GetSpellLinked(key))
+            for (int32 next : *linked)
+                if (SpellInfo const* triggered = next > 0 ? sSpellMgr->GetSpellInfo(next) : nullptr)
+                    if (HoldsDirectly(triggered))
+                        return true;
+
+    return false;
+}
+
+bool FactionChampionsChainGuarded(Player* bot, Unit* champion)
+{
+    if (!bot || !champion)
+        return false;
+
+    if (MidJump(champion))
+        return true;
+
+    GripChainState* chain = nullptr;
+    Creature* chained = OpenChain(bot, chain);
+    if (chained && chained->GetGUID() == champion->GetGUID())
+        return true;
+
+    return chain && chain->lastTarget == champion->GetGUID() &&
+           getMSTimeDiff(chain->lastLinkMs, getMSTime()) < GRIP_GUARD_TAIL_MS;
+}
+
+bool FactionChampionsGripGuarded(PlayerbotAI* botAI, Unit* champion)
+{
+    FactionChampionsDefenceState* state = champion ? Refresh(botAI) : nullptr;
+    return state && std::find(state->guarded.begin(), state->guarded.end(), champion->GetGUID()) != state->guarded.end();
+}
+
+bool FactionChampionsGripGuardActive(PlayerbotAI* botAI)
+{
+    FactionChampionsDefenceState* state = Refresh(botAI);
+    return state && !state->guarded.empty();
+}
+
+// Safe to call twice a tick, the trigger and the action both ask
+uint32 FactionChampionsPetAutocastToggle(PlayerbotAI* botAI, bool& enable)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    Pet* pet = bot ? bot->GetPet() : nullptr;
+    FactionChampionsDefenceState* state = pet && pet->IsAlive() ? Refresh(botAI) : nullptr;
+    if (!state)
+        return 0;
+
+    std::vector<uint32>& held = state->petHolds[bot->GetGUID()];
+    held.erase(std::remove_if(held.begin(), held.end(), [pet](uint32 spellId)
+                              { return !pet->HasSpell(spellId) || IsAutocast(pet, spellId); }),
+               held.end());
+
+    // champions are immune to taunt on heroic, and a pet's threat never reaches the 10M the script seeds
+    Map* map = bot->FindMap();
+    bool const heroic = map && map->IsHeroic();
+    bool const guard = !state->guarded.empty();
+    for (uint8 pos = 0; pos < pet->GetPetAutoSpellSize(); ++pos)
+    {
+        uint32 const spellId = pet->GetPetAutoSpellOnPos(pos);
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+        if (!info)
+            continue;
+
+        if (heroic && TauntsOrThreatens(info))
+        {
+            enable = false;
+            return spellId;
+        }
+
+        if (guard && FactionChampionsSpellHoldsTarget(spellId))
+        {
+            if (std::find(held.begin(), held.end(), spellId) == held.end())
+                held.push_back(spellId);
+
+            enable = false;
+            return spellId;
+        }
+    }
+
+    if (guard || held.empty())
+        return 0;
+
+    enable = true;
+    return held.front();
 }
 
 bool FactionChampionsGripPending(PlayerbotAI* botAI)
@@ -1986,6 +2361,8 @@ void FactionChampionsNoteChainGrip(PlayerbotAI* botAI, Unit* target)
     if (!bot || !target || !OpenChain(bot, chain) || chain->target.Get() != target->GetGUID())
         return;
 
+    chain->lastTarget = target->GetGUID();
+    chain->lastLinkMs = getMSTime();
     if (!chain->link1Ms && ChainOpener(bot) == bot)
         chain->link1Ms = getMSTime();
     else

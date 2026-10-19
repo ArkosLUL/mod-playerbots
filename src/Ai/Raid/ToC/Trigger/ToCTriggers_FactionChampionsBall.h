@@ -27,6 +27,13 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsChasedTrigger : public Trigger
+{
+public:
+    FactionChampionsChasedTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions chased") {}
+    bool IsActive() override;
+};
+
 class FactionChampionsOpenerTrigger : public Trigger
 {
 public:
@@ -45,6 +52,7 @@ public:
             &ToCFactionChampionsBallTriggerContext::faction_champions_pack_tank_attack;
         creators["faction champions ball stand"] = &ToCFactionChampionsBallTriggerContext::faction_champions_ball_stand;
         creators["faction champions opener"] = &ToCFactionChampionsBallTriggerContext::faction_champions_opener;
+        creators["faction champions chased"] = &ToCFactionChampionsBallTriggerContext::faction_champions_chased;
     }
 
 private:
@@ -61,6 +69,8 @@ private:
     }
 
     static Trigger* faction_champions_opener(PlayerbotAI* botAI) { return new FactionChampionsOpenerTrigger(botAI); }
+
+    static Trigger* faction_champions_chased(PlayerbotAI* botAI) { return new FactionChampionsChasedTrigger(botAI); }
 };
 
 void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers);

@@ -1,6 +1,7 @@
 #include "ToCActions_FactionChampions.h"
 #include "Pet.h"
 #include "ToCHelpers_FactionChampions.h"
+#include "ToCHelpers_FactionChampionsDefence.h"
 #include "Playerbots.h"
 #include "SpellMgr.h"
 
@@ -22,15 +23,16 @@ bool FactionChampionsCounterspellKillTargetAction::Execute(Event /*event*/)
 // A queued basket can pop ticks after its trigger fired, once the heal is over
 bool FactionChampionsCounterspellKillTargetAction::isUseful() { return FactionChampionsCounterspellDuty(botAI); }
 
-// The non-combat toggle pet spell turns it back on after the fight. False, so the bot still gets its own
-// action this tick.
-bool FactionChampionsPetTauntOffAction::Execute(Event /*event*/)
+// The non-combat toggle pet spell turns a taunt back on after the fight. False, so the bot still gets its
+// own action this tick.
+bool FactionChampionsPetAutocastAction::Execute(Event /*event*/)
 {
-    uint32 const spellId = FactionChampionsPetTauntAutocast(botAI);
+    bool enable = false;
+    uint32 const spellId = FactionChampionsPetAutocastToggle(botAI, enable);
     Pet* pet = bot->GetPet();
     if (spellId && pet)
         if (SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId))
-            pet->ToggleAutocast(info, false);
+            pet->ToggleAutocast(info, enable);
 
     return false;
 }

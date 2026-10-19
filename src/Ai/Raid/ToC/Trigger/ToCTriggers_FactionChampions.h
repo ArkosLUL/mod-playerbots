@@ -31,10 +31,10 @@ public:
     bool IsActive() override;
 };
 
-class FactionChampionsPetTauntTrigger : public Trigger
+class FactionChampionsPetAutocastTrigger : public Trigger
 {
 public:
-    FactionChampionsPetTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions pet taunt") {}
+    FactionChampionsPetAutocastTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions pet autocast") {}
     bool IsActive() override;
 };
 
@@ -49,8 +49,8 @@ public:
             &ToCFactionChampionsTriggerContext::faction_champions_should_focus;
         creators["faction champions kill target healing"] =
             &ToCFactionChampionsTriggerContext::faction_champions_kill_target_healing;
-        creators["faction champions pet taunt"] =
-            &ToCFactionChampionsTriggerContext::faction_champions_pet_taunt;
+        creators["faction champions pet autocast"] =
+            &ToCFactionChampionsTriggerContext::faction_champions_pet_autocast;
     }
 
 private:
@@ -66,8 +66,8 @@ private:
         return new FactionChampionsKillTargetHealingTrigger(botAI);
     }
 
-    static Trigger* faction_champions_pet_taunt(PlayerbotAI* botAI) {
-        return new FactionChampionsPetTauntTrigger(botAI);
+    static Trigger* faction_champions_pet_autocast(PlayerbotAI* botAI) {
+        return new FactionChampionsPetAutocastTrigger(botAI);
     }
 };
 

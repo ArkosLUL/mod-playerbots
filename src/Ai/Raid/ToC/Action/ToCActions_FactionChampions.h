@@ -31,10 +31,10 @@ public:
     bool isUseful() override;
 };
 
-class FactionChampionsPetTauntOffAction : public Action
+class FactionChampionsPetAutocastAction : public Action
 {
 public:
-    FactionChampionsPetTauntOffAction(PlayerbotAI* botAI) : Action(botAI, "faction champions pet taunt off") {}
+    FactionChampionsPetAutocastAction(PlayerbotAI* botAI) : Action(botAI, "faction champions pet autocast") {}
     bool Execute(Event event) override;
 };
 
@@ -49,8 +49,8 @@ public:
             &ToCFactionChampionsActionContext::faction_champions_focus_priority;
         creators["faction champions counterspell kill target"] =
             &ToCFactionChampionsActionContext::faction_champions_counterspell_kill_target;
-        creators["faction champions pet taunt off"] =
-            &ToCFactionChampionsActionContext::faction_champions_pet_taunt_off;
+        creators["faction champions pet autocast"] =
+            &ToCFactionChampionsActionContext::faction_champions_pet_autocast;
     }
 
 private:
@@ -66,8 +66,8 @@ private:
         return new FactionChampionsCounterspellKillTargetAction(botAI);
     }
 
-    static Action* faction_champions_pet_taunt_off(PlayerbotAI* botAI) {
-        return new FactionChampionsPetTauntOffAction(botAI);
+    static Action* faction_champions_pet_autocast(PlayerbotAI* botAI) {
+        return new FactionChampionsPetAutocastAction(botAI);
     }
 };
 

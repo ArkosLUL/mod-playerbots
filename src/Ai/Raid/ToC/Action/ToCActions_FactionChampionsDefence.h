@@ -88,6 +88,15 @@ public:
     bool Execute(Event event) override;
 };
 
+class FactionChampionsChannelInterruptAction : public Action
+{
+public:
+    FactionChampionsChannelInterruptAction(
+        PlayerbotAI* botAI) : Action(botAI, "faction champions channel interrupt") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class FactionChampionsSnareAction : public Action
 {
 public:
@@ -96,11 +105,12 @@ public:
     bool isUseful() override;
 };
 
-class FactionChampionsCrowdControlAction : public Action
+// Walks into spell range first when the duty was dealt from out of it
+class FactionChampionsCrowdControlAction : public NorthrendBeastsWalkAction
 {
 public:
     FactionChampionsCrowdControlAction(
-        PlayerbotAI* botAI) : Action(botAI, "faction champions crowd control") {}
+        PlayerbotAI* botAI) : NorthrendBeastsWalkAction(botAI, "faction champions crowd control") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -151,6 +161,8 @@ public:
             &ToCFactionChampionsDefenceActionContext::faction_champions_death_grip;
         creators["faction champions chain grip"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_chain_grip;
+        creators["faction champions channel interrupt"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_channel_interrupt;
         creators["faction champions snare"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_snare;
         creators["faction champions crowd control"] =
@@ -194,6 +206,10 @@ private:
 
     static Action* faction_champions_chain_grip(PlayerbotAI* botAI) {
         return new FactionChampionsChainGripAction(botAI);
+    }
+
+    static Action* faction_champions_channel_interrupt(PlayerbotAI* botAI) {
+        return new FactionChampionsChannelInterruptAction(botAI);
     }
 
     static Action* faction_champions_snare(PlayerbotAI* botAI) {

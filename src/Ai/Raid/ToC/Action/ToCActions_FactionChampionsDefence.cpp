@@ -1,5 +1,6 @@
 #include "ToCActions_FactionChampionsDefence.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "EncounterHelpers.h"
@@ -9,6 +10,7 @@
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "ToCHelpers_FactionChampions.h"
+#include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -24,6 +26,10 @@ constexpr float GRIP_SAME_STAND = 0.5f;
 constexpr uint32 AOE_LATCH_MS = 3000;
 // standing still this long past the issue means something stopped the walk short
 constexpr uint32 AOE_STALL_MS = 500;
+// a CC walk stops this far inside the spell's range, the champion keeps moving
+constexpr float CC_WALK_INSIDE = 3.0f;
+// the champion moved less than this since the walk went out, so it still heads the right way
+constexpr float CC_SAME_SPOT = 3.0f;
 
 bool IsClearOf(Position const& spot, std::vector<HazardCircle> const& hazards)
 {
@@ -160,6 +166,7 @@ bool FactionChampionsDeathGripAction::StillWalking(Position const& stand, bool& 
         stand.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) >= GRIP_SAME_STAND)
         last.clear();
 
+    FactionChampionsBoostWalk(bot, bot->GetExactDist2d(&stand));
     walked = WalkTo(stand);
     return true;
 }
@@ -207,6 +214,20 @@ bool FactionChampionsChainGripAction::Execute(Event /*event*/)
     return true;
 }
 
+bool FactionChampionsChannelInterruptAction::Execute(Event /*event*/)
+{
+    char const* spell = nullptr;
+    Unit* warlock = FactionChampionsChannelInterruptTarget(botAI, spell);
+    return warlock && spell && botAI->CastSpell(spell, warlock);
+}
+
+// A queued basket can pop ticks after its trigger fired, once the channel ended
+bool FactionChampionsChannelInterruptAction::isUseful()
+{
+    char const* spell = nullptr;
+    return FactionChampionsChannelInterruptTarget(botAI, spell) != nullptr;
+}
+
 bool FactionChampionsSnareAction::Execute(Event /*event*/)
 {
     uint32 spellId = 0;
@@ -225,7 +246,33 @@ bool FactionChampionsCrowdControlAction::Execute(Event /*event*/)
 {
     uint32 spellId = 0;
     Unit* champion = FactionChampionsCcTarget(botAI, spellId);
-    if (!champion || !StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId))
+    SpellInfo const* info = champion ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info)
+    {
+        DropWalk();
+        return false;
+    }
+
+    float const range = info->GetMaxRange(false, bot);
+    if (!bot->IsWithinCombatRange(champion, range) || !bot->IsWithinLOSInMap(champion))
+    {
+        // straight in, stopping a little inside the range
+        float const away = bot->GetExactDist2d(champion);
+        float const keep = std::max(0.0f, range - CC_WALK_INSIDE);
+        float const share = away > 0.0f ? keep / away : 0.0f;
+        Position const spot(champion->GetPositionX() + (bot->GetPositionX() - champion->GetPositionX()) * share,
+                            champion->GetPositionY() + (bot->GetPositionY() - champion->GetPositionY()) * share,
+                            bot->GetPositionZ());
+        Position const* walking = WalkInFlight();
+        if (walking && walking->GetExactDist2d(&spot) < CC_SAME_SPOT)
+            return true;
+
+        FactionChampionsBoostWalk(bot, bot->GetExactDist2d(&spot));
+        return WalkTo(spot);
+    }
+
+    DropWalk();
+    if (!StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId))
         return false;
 
     return botAI->CastSpell(spellId, champion);

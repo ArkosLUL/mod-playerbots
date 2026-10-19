@@ -47,6 +47,12 @@ bool FactionChampionsPurgeKillTargetTrigger::IsActive()
     return FactionChampionsPurgeTarget(botAI, spell) != nullptr;
 }
 
+bool FactionChampionsChannelInterruptTrigger::IsActive()
+{
+    char const* spell = nullptr;
+    return FactionChampionsChannelInterruptTarget(botAI, spell) != nullptr;
+}
+
 bool FactionChampionsDeathGripTrigger::IsActive()
 {
     Position stand;
@@ -77,6 +83,9 @@ void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& trigge
 {
     triggers.push_back(new TriggerNode("faction champions avoid aoe", {
         NextAction("faction champions avoid aoe", ACTION_EMERGENCY + 6) }));
+
+    triggers.push_back(new TriggerNode("faction champions channel interrupt", {
+        NextAction("faction champions channel interrupt", ACTION_INTERRUPT + 4) }));
 
     triggers.push_back(new TriggerNode("faction champions protect", {
         NextAction("faction champions protect", ACTION_EMERGENCY + 4) }));

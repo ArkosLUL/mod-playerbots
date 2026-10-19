@@ -4,21 +4,25 @@
     faction_champions.py <file>            every section
     faction_champions.py <file> --kill     each kill target hold: why, how long, health, who was on it
     faction_champions.py <file> --cc       CC duties, CC held on each champion, casts started and landed
-    faction_champions.py <file> --heals    champion cast-time heals, and the interrupts that followed
+    faction_champions.py <file> --heals    champion cast-time heals and channels, the interrupts that followed
+                                           and how far into the cast they came
     faction_champions.py <file> --burst    lust, Exhaustion carried in, first burst cooldowns, burst vetoes
     faction_champions.py <file> --fear     fears on the raid, Fear Ward and Tremor Totem
     faction_champions.py <file> --dispel   champion CC on the raid, the dispels on it, UA backlash
-    faction_champions.py <file> --purge    raid offensive dispels on champions, kill target or not
+    faction_champions.py <file> --purge    raid offensive dispels on champions, kill target or not, and the
+                                           champions' Bloodlust, Avenging Wrath and Hand of Freedom
     faction_champions.py <file> --hop      champion shields, fc.physical holds, Mass Dispel, the return
-    faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast
+    faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast, the raid's own splash
     faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds
     faction_champions.py <file> --pack     champions round each role, early melee deaths, first kill, stalls, grips
     faction_champions.py <file> --chain    each player's pull: the DK tank's, the bot DK's and the player's grips,
-                                           their gaps and carry, the order; bot grips outside a pull
+                                           their gaps and carry, the order, what cut each; bot grips outside a pull
     faction_champions.py <file> --peel     snares and peels on melee champions, Disarm against Bladestorm,
                                            externals, battle res, taunts
     faction_champions.py <file> --front    the frontline: where the pack stays, whom it picks, the pulled
-                                           kill target clear of champion healers
+                                           kill target clear of champion healers, frontline deaths
+    faction_champions.py <file> --stands   stand moves, slot jumps and path against net per stand holder,
+                                           Nitro Boosts uses
     faction_champions.py <file> --ball     the death ball: who started it and whom the champions picked first,
                                            who they chase, how far the kill target and the raid stand off the
                                            pack, escapees, opener and trinkets
@@ -76,6 +80,10 @@ What the generic views get wrong here, and what this reads instead:
   is restated on the next read, so `--chain` times the first pull from the trace's opening.
 - **The frontline is whoever ever held an `fc.front` champion.** A member that never had one in
   reach doesn't show, and `--front` and the escapee count read that set for the whole pull.
+- **A grip's cut is the cast, not the landing.** A root, stun, fear or knock-back cast on the gripped
+  champion within 1.2 s of the grip, or a raider's Frost Nova within 12 yd of it, is what cut its pull;
+  the trace has no aura on a creature, so a cast that missed reads the same. `no pull` means the
+  champion cast no 57604 with the grip, which a root already on it refuses.
 - **A disarm on a champion never shows.** `--peel` reads Disarm, Dismantle and Psychic Horror casts on
   the Warrior champion against its own Bladestorm casts, and a Frost Nova, which names no target, by
   its caster's `fc.peel` hold.
@@ -86,6 +94,7 @@ import bisect
 import collections
 import functools
 import json
+import math
 import pathlib
 import re
 import statistics
@@ -202,6 +211,8 @@ FC_MULTIPLIERS = (
     "faction champions kill squad wait",
     "faction champions battle res guard",
     "faction champions heroic taunt guard",
+    "faction champions grip guard multiplier",
+    "faction champions late interrupt multiplier",
 )
 COUNTERSPELL_ACTION = "faction champions counterspell kill target"
 ANTI_FEAR_ACTION = "faction champions anti fear"
@@ -302,8 +313,48 @@ STALL_ATTACKERS = 10
 STALL_MS = 20000
 # how long after a grip the landing is read
 GRIP_SETTLE_MS = 1000
+# The champion's own pull after Death Grip, cast with the grip; a root already on refuses it
+SPELL_GRIP_PULL = 57604
+GRIP_PULL_SLACK_MS = 50
+# A raid or pet cast that roots, stuns, fears or knocks its target: id -> name
+HOLDS = {
+    **CC_SPELLS,
+    53148: "pet Charge", 24394: "Intimidation", 47481: "Gnaw", 7922: "Charge Stun", 20253: "Intercept",
+    **dict.fromkeys((853, 5588, 5589, 10308), "Hammer of Justice"), 8643: "Kidney Shot", 1833: "Cheap Shot",
+    8983: "Bash", 49802: "Maim", 44572: "Deep Freeze", 47847: "Shadowfury", 46968: "Shockwave",
+    12809: "Concussion Blow", 45334: "Feral Charge", 20066: "Repentance", 51514: "Hex",
+}
+FROST_NOVA = frozenset((122, 865, 6131, 10230, 27088, 42917))
+NOVA_REACH = 12.0
+# a hold this soon after a grip cut its flight
+GRIP_WATCH_MS = 1200
 
 FRONT = "fc.front"
+STAND_ACTION = "faction champions ball stand"
+# a stand target this far off the one before is a new slot, not the same one restated
+SLOT_JUMP = 5.0
+SPELL_NITRO = 55004
+# the walk a boost served is the bot's move row nearest it within this
+NITRO_MOVE_MS = 1000
+KICK = "fc.kick"
+# champion channels: id -> name, every difficulty
+CHANNEL_SPELLS = {**dict.fromkeys((65816, 68145, 68146, 68147), "Hellfire"),
+                  **dict.fromkeys((66086, 67974, 67975, 67976), "Tranquility")}
+CHANNEL_WATCH_MS = 10000
+# the reader's copy of LATE_INTERRUPT_MS: a cast-time spell is kicked this close to its end
+LATE_INTERRUPT_MS = 600
+# champion buffs the pack purger takes: id -> name
+PACK_BUFFS = {65980: "Bloodlust", 65983: "Heroism", 66011: "Avenging Wrath",
+              **dict.fromkeys((66115, 68756, 68757, 68758), "Hand of Freedom")}
+LUSTS = ("Bloodlust", "Heroism")
+PURGE_WATCH_MS = 8000
+# The raid's own area and bounce casts, top ranks: id -> name. All vetoed on champions.
+OWN_SPLASH = {49938: "Death and Decay", 50842: "Pestilence", 49941: "Blood Boil", 51411: "Howling Blast",
+              48819: "Consecration", 53595: "Hammer of the Righteous", 48827: "Avenger's Shield",
+              53385: "Divine Storm", 1680: "Whirlwind", 47520: "Cleave", 46924: "Bladestorm",
+              47502: "Thunder Clap", 48562: "Swipe (Bear)", 49048: "Multi-Shot", 58434: "Volley",
+              51723: "Fan of Knives", 49271: "Chain Lightning", 42921: "Arcane Explosion", 42940: "Blizzard",
+              47820: "Rain of Fire", 47836: "Seed of Corruption", 48467: "Hurricane"}
 # the pack holds while its median champion stays this close to where it landed
 FRONT_HOLD = 15.0
 FRONT_WINDOW_MS = 5000
@@ -803,10 +854,28 @@ def heal_rows(trace: Trace) -> list[dict]:
         start = rec["t"]
         name, ms = HEALS[rec["sp"]]
         window = rec.get("ct") or ms
-        by = next((who for when, tgt, who in interrupts if tgt == caster and start <= when <= start + window),
-                  None)
+        hit = next(((when, who) for when, tgt, who in interrupts if tgt == caster and start <= when <= start + window),
+                   (None, None))
         out.append({"t": start, "caster": caster, "spell": rec["sp"], "name": name, "window": window,
-                    "kill": held_at(kill, start) == caster, "by": by})
+                    "kill": held_at(kill, start) == caster, "by": hit[1], "at": hit[0]})
+    return out
+
+
+def channel_rows(trace: Trace) -> list[dict]:
+    """Every champion Hellfire and Tranquility: `t`, `caster`, `name`, and the first raid or pet interrupt
+    aimed at the caster within 10 s (`by`, `after` ms), None without one."""
+    targets = champions(trace)
+    interrupts = [(rec["t"], rec.get("tgt"), raid_caster(trace, rec.get("s")))
+                  for rec in trace.of("cast") if rec.get("sp") in INTERRUPTS]
+    out = []
+    for rec in trace.of("cast"):
+        if rec.get("tr") or rec.get("sp") not in CHANNEL_SPELLS or rec.get("s") not in targets:
+            continue
+        start = rec["t"]
+        hit = next(((when, who) for when, tgt, who in interrupts
+                    if who is not None and tgt == rec["s"] and start <= when <= start + CHANNEL_WATCH_MS), None)
+        out.append({"t": start, "caster": rec["s"], "name": CHANNEL_SPELLS[rec["sp"]],
+                    "by": hit[1] if hit else None, "after": hit[0] - start if hit else None})
     return out
 
 
@@ -836,7 +905,21 @@ def show_heals(trace: Trace) -> None:
     print("  " + ", ".join(f"{name} {started} ({stopped} followed)"
                            for name, (started, stopped) in sorted(per_spell.items())))
 
-    print(f"  {COUNTERSPELL_ACTION}: {ok_rows(trace, COUNTERSPELL_ACTION)} OK row(s)")
+    timed = [row for row in rows if row["by"] is not None and row["name"] not in CHANNEL_SPELLS.values()]
+    if timed:
+        gone = [(row["at"] - row["t"]) / row["window"] for row in timed]
+        late = sum(1 for row in timed if row["t"] + row["window"] - row["at"] <= LATE_INTERRUPT_MS)
+        print(f"  cast-time heals kicked {statistics.median(gone) * 100:.0f}% into the cast (median),"
+              f" {late} of {len(timed)} in the last {LATE_INTERRUPT_MS} ms")
+
+    channels = channel_rows(trace)
+    if channels:
+        print("  channels: " + ", ".join(
+            f"{row['name']} {clock(row['t'])} {trace.name(row['caster'])} "
+            + ("no interrupt" if row["by"] is None else f"+{row['after'] / 1000:.1f}s by {trace.name(row['by'])}")
+            for row in channels))
+    print(f"  {COUNTERSPELL_ACTION}: {ok_rows(trace, COUNTERSPELL_ACTION)} OK row(s); {KICK} holds:"
+          f" {len(duty_holds(trace, KICK))}")
     print("  a cast row is a start and nothing records a kick landing, so started bounds heals landed"
           " and followed bounds heals stopped")
 
@@ -1085,8 +1168,35 @@ def show_purge(trace: Trace) -> None:
         for spell, name in sorted({(spell, name) for spell, name, _ in counts}):
             print(f"    {OFFENSIVE_DISPELS[spell] + ' ' + str(spell):26} {name:8}"
                   f" {counts[(spell, name, True)]:5} {counts[(spell, name, False)]:6}")
+    buffs = pack_buff_rows(trace)
+    if buffs:
+        print("  champion buffs: " + ", ".join(
+            f"{row['name']} {clock(row['t'])} {trace.name(row['target'])} "
+            + ("not purged" if row["purged"] is None else f"purged +{(row['purged'] - row['t']) / 1000:.1f}s")
+            for row in buffs))
     print(f"  {PURGE_ACTION}: {ok_rows(trace, PURGE_ACTION)} OK row(s)")
-    print("  class is the caster's, the owner's for a pet")
+    print("  class is the caster's, the owner's for a pet; a champion buff counts purged by a raid offensive"
+          f" dispel on it within {PURGE_WATCH_MS // 1000} s, on any champion for a lust")
+
+
+def pack_buff_rows(trace: Trace) -> list[dict]:
+    """Every champion Bloodlust, Heroism, Avenging Wrath and Hand of Freedom: `t`, `caster`, `target` (the
+    caster for a self cast), `name`, and `purged`, the first raid offensive dispel after it within 8 s on
+    the target, on any champion for a lust, None without one."""
+    targets = champions(trace)
+    dispels = [(rec["t"], rec.get("tgt")) for rec in trace.of("cast")
+               if rec.get("sp") in OFFENSIVE_DISPELS and rec.get("tgt") in targets
+               and raid_caster(trace, rec.get("s")) is not None]
+    out = []
+    for rec in trace.of("cast"):
+        if rec.get("sp") not in PACK_BUFFS or rec.get("s") not in targets:
+            continue
+        name = PACK_BUFFS[rec["sp"]]
+        target = rec.get("tgt") or rec["s"]
+        purged = next((when for when, on in dispels
+                       if rec["t"] <= when <= rec["t"] + PURGE_WATCH_MS and (name in LUSTS or on == target)), None)
+        out.append({"t": rec["t"], "caster": rec["s"], "target": target, "name": name, "purged": purged})
+    return out
 
 
 def shield_rows(trace: Trace) -> list[dict]:
@@ -1236,10 +1346,24 @@ def show_aoe(trace: Trace) -> None:
                 per_victim = f"{statistics.mean(hits):.1f}, max {max(hits)}"
             print(f"  {name:18} {len(part):5} {per_cast:>17}  {per_victim:>15}  "
                   + ", ".join(f"{count} x{casts}" for count, casts in sorted(spread.items())))
+    splash = own_splash(trace)
+    print("  raid splash: " + (", ".join(f"{name} {count}" for name, count in splash.most_common())
+                               if splash else "none"))
     print(f"  {AVOID_AOE_ACTION}: {ok_rows(trace, AVOID_AOE_ACTION)} OK row(s)")
     print("  a victim is a raid player hit by that cast (a `dmg` row), or feared by it for the two fears,"
           f" from {AOE_LEAD_MS} ms before its cast row; hits per victim is for the two channels, which tick"
           " once a second")
+
+
+def own_splash(trace: Trace) -> collections.Counter:
+    """The raid's own area and bounce casts from the pull, by name. Bots' only: a player's are their own."""
+    if encounter_of(trace) != ENCOUNTER:
+        return collections.Counter()
+    start = pull_start(trace)
+    roster = roster_guids(trace)
+    return collections.Counter(OWN_SPLASH[rec["sp"]] for rec in trace.of("cast")
+                               if rec.get("sp") in OWN_SPLASH and not rec.get("tr") and rec["t"] >= start
+                               and rec.get("s") in roster and rec.get("s") not in trace.humans)
 
 
 def summon_casts(trace: Trace) -> list[dict]:
@@ -1472,6 +1596,10 @@ def chain_links(trace: Trace) -> tuple[list[dict], list[dict]]:
              if as_guid(value)]
     rows = grips(trace)
     anchor = pack_anchor(trace)
+    pulls: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("sp") == SPELL_GRIP_PULL:
+            pulls[rec.get("s")].append(rec["t"])
     chains, windows = [], []
     for index, (target, start, stop) in enumerate(spans):
         until = min(stop + CHAIN_TAIL_MS, spans[index + 1][1] if index + 1 < len(spans) else end)
@@ -1482,11 +1610,34 @@ def chain_links(trace: Trace) -> tuple[list[dict], list[dict]]:
                 continue
             snap = snap_at(trace, row["t"] + GRIP_SETTLE_MS)
             spot = next(iter(live_rows(snap, {target})), None) if snap else None
-            links.append({**row, "off": distance(spot, [0, *anchor]) if spot and anchor else None})
+            links.append({**row, "off": distance(spot, [0, *anchor]) if spot and anchor else None,
+                          "pulled": any(abs(when - row["t"]) <= GRIP_PULL_SLACK_MS for when in pulls.get(target, ())),
+                          "cut": grip_cuts(trace, target, row["t"])})
         chains.append({"target": target, "start": start, "stop": stop, "links": links})
     outside = [row for row in rows if row["by"] not in trace.humans
                and not any(start <= row["t"] <= until for start, until in windows)]
     return chains, outside
+
+
+def grip_cuts(trace: Trace, target: int, when: int) -> list[tuple[int, int, str]]:
+    """Raid and pet casts that hold `target` from a grip at `when` to 1.2 s after: (ms after, caster, name). A
+    Frost Nova names no target, so it counts when its caster stood within 12 yd of the target."""
+    out = []
+    for rec in trace.of("cast"):
+        after = rec["t"] - when
+        spell = rec.get("sp")
+        if not 0 <= after <= GRIP_WATCH_MS or (spell not in HOLDS and spell not in FROST_NOVA):
+            continue
+        if raid_caster(trace, rec.get("s")) is None:
+            continue
+        if spell in HOLDS and rec.get("tgt") == target:
+            out.append((after, rec["s"], HOLDS[spell]))
+        elif spell in FROST_NOVA:
+            snap = snap_at(trace, rec["t"])
+            rows = {row[0]: row for row in snap.get("u", [])} if snap else {}
+            if target in rows and rec["s"] in rows and distance(rows[target], rows[rec["s"]]) <= NOVA_REACH:
+                out.append((after, rec["s"], "Frost Nova"))
+    return out
 
 
 def link_role(trace: Trace, guid: int) -> str:
@@ -1510,8 +1661,10 @@ def show_chain(trace: Trace) -> None:
         for link, role in zip(chain["links"], roles):
             carry = "-" if link["moved"] is None else f"{link['moved']:.1f}"
             off = "-" if link["off"] is None else f"{link['off']:.1f}"
+            cuts = ", ".join(f"{trace.name(who)} {name} +{after}ms" for after, who, name in link["cut"])
+            note_text = ("  no pull" if not link["pulled"] else "") + (f"  cut by {cuts}" if cuts else "")
             print(f"    {clock(link['t']):>9} {trace.name(link['by'])[:14]:14} {role:7}"
-                  f" +{(link['t'] - previous) / 1000:.1f}s carry {carry:>5} off pack {off:>5}")
+                  f" +{(link['t'] - previous) / 1000:.1f}s carry {carry:>5} off pack {off:>5}{note_text}")
             previous = link["t"]
     if outside:
         print(f"\n  bot grips outside a pull: {len(outside)} (" + ", ".join(
@@ -1521,7 +1674,8 @@ def show_chain(trace: Trace) -> None:
     print(f"  a pull's grips run from its {CHAIN} until the next one or {CHAIN_TAIL_MS // 1000} s past its"
           f" end; the order wanted is the DK tank, the bot DK, then the player; + counts from the pull or"
           f" the link before; carry is the target's travel, off pack its distance from where the champions"
-          f" landed, both {GRIP_SETTLE_MS / 1000:.0f} s after the grip")
+          f" landed, both {GRIP_SETTLE_MS / 1000:.0f} s after the grip; cut by is a raid or pet hold on the"
+          f" champion within {GRIP_WATCH_MS / 1000:.1f} s of the grip, no pull is no {SPELL_GRIP_PULL} cast with it")
 
 
 def show_pack(trace: Trace) -> None:
@@ -2005,6 +2159,13 @@ def front_summary(samples: list[dict]) -> dict:
     }
 
 
+def front_deaths(trace: Trace) -> list[tuple[int, int]]:
+    """Each frontline bot's deaths from the pull: (when, guid)."""
+    front = front_members(trace)
+    start = pull_start(trace)
+    return [(rec["t"], rec["g"]) for rec in trace.of("death") if rec.get("g") in front and rec["t"] >= start]
+
+
 def share(value: float | None) -> str:
     return "-" if value is None else f"{100 * value:.0f}%"
 
@@ -2042,13 +2203,82 @@ def show_front(trace: Trace) -> None:
               + f"{'/'.join(f'{100 * picks[who] // total:3d}' for who in ('front', 'melee', 'ranged', 'heal')):30}"
               + f" {cell(kills):>8} {cell(nears):>6}")
     summary = front_summary(samples)
-    print(f"\n  pack within {FRONT_HOLD:.0f} yd of the landing spot: {share(summary['held'])};"
+    deaths = front_deaths(trace)
+    print("\n  frontline deaths: " + (", ".join(f"{trace.name(guid)} {clock(when)}" for when, guid in deaths)
+                                     if deaths else "none"))
+    print(f"  pack within {FRONT_HOLD:.0f} yd of the landing spot: {share(summary['held'])};"
           f" melee champion picks on the frontline: {share(summary['melee'])};"
           f" pulled kill target clear of other healers: {share(summary['clear'])}")
     print(f"  the pack is the champions but the kill target and pulled healers (20+ yd off the pack centre,"
           f" none within {PULLED_CLEAR:.0f} yd); off is the median distance from where they landed; armed is the"
           f" share of frontline samples on a champion; picks are the pack's victims, the frontline apart; healer"
           f" is the nearest other champion healer to a pulled kill target; {FRONT_WINDOW_MS // 1000} s windows")
+
+
+def stand_rows(trace: Trace) -> list[dict]:
+    """Per bot that took a stand slot: `bot`, `moves` (its stand move rows), `jumps` (stand targets 5+ yd off
+    the one before), and `path` and `net`, its snapshot path and end-to-end distance from its first stand
+    move to the pull's end."""
+    end = pull_end(trace)
+    targets: dict[int, list[tuple[int, float, float]]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("by") == STAND_ACTION and rec["t"] <= end:
+            targets[rec["g"]].append((rec["t"], rec["x"], rec["y"]))
+    if not targets:
+        return []
+    snaps = frames(trace)
+    out = []
+    for bot, moves in sorted(targets.items()):
+        jumps = sum(1 for a, b in zip(moves, moves[1:]) if math.hypot(a[1] - b[1], a[2] - b[2]) >= SLOT_JUMP)
+        spots = [(row[1], row[2]) for snap in snaps if moves[0][0] <= snap["t"] <= end
+                 for row in live_rows(snap, {bot})]
+        path = sum(math.dist(a, b) for a, b in zip(spots, spots[1:]))
+        net = math.dist(spots[0], spots[-1]) if len(spots) > 1 else 0.0
+        out.append({"bot": bot, "moves": len(moves), "jumps": jumps, "path": path, "net": net})
+    return out
+
+
+def nitro_rows(trace: Trace) -> list[dict]:
+    """Every raid Nitro Boosts use: `t`, `bot`, and the bot's move row nearest it within 1 s (`by` its action,
+    `walk` the distance to its target from the bot's sample at the use), None without one."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    roster = roster_guids(trace)
+    moves = list(trace.of("move"))
+    out = []
+    for rec in trace.of("cast"):
+        if rec.get("sp") != SPELL_NITRO or rec.get("s") not in roster:
+            continue
+        bot = rec["s"]
+        near = [move for move in moves if move.get("g") == bot and abs(move["t"] - rec["t"]) <= NITRO_MOVE_MS]
+        move = min(near, key=lambda move: abs(move["t"] - rec["t"])) if near else None
+        walk = None
+        if move:
+            snap = snap_at(trace, rec["t"])
+            me = next(iter(live_rows(snap, {bot})), None) if snap else None
+            if me:
+                walk = math.hypot(me[1] - move["x"], me[2] - move["y"])
+        out.append({"t": rec["t"], "bot": bot, "by": move.get("by") if move else None, "walk": walk})
+    return out
+
+
+def show_stands(trace: Trace) -> None:
+    print("STANDS")
+    rows = stand_rows(trace)
+    if rows:
+        print(f"  {'bot':14} {'role':7} {'moves':>5} {'jumps':>5} {'path':>6} {'net':>5}")
+        for row in rows:
+            print(f"  {trace.name(row['bot'])[:14]:14} {trace.role(row['bot']):7} {row['moves']:5} {row['jumps']:5}"
+                  f" {row['path']:6.0f} {row['net']:5.0f}")
+    else:
+        print(f"  no {STAND_ACTION} move")
+    boosts = nitro_rows(trace)
+    print(f"  Nitro Boosts: {len(boosts)} use(s)")
+    for row in boosts:
+        walk = "-" if row["walk"] is None else f"{row['walk']:.0f} yd"
+        print(f"    {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {row['by'] or '-'} {walk}")
+    print(f"  jumps are stand targets {SLOT_JUMP:.0f}+ yd off the one before; path and net are the bot's snapshot"
+          " path and end-to-end distance from its first stand move; a boost's walk is its nearest move row")
 
 
 def show_ball(trace: Trace) -> None:
@@ -2125,6 +2355,7 @@ SECTIONS = (
      show_peel),
     ("front", "the frontline: where the pack stays, whom it picks, the pulled kill target clear of champion"
      " healers", show_front),
+    ("stands", "stand moves, slot jumps and path against net per stand holder, Nitro Boosts uses", show_stands),
     ("ball", "the death ball: the start and first picks, champion targets by role, kill target off the pack,"
      " escapees, opener", show_ball),
     ("vetoes", "the Faction Champions multipliers and rules, by action", show_vetoes),

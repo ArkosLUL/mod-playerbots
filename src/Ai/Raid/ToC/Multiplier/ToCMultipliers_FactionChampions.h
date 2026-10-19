@@ -47,6 +47,17 @@ public:
     float GetValue(Action* action) override;
 };
 
+// As in PvP: a champion's cast-time spell gets kicked in its last LATE_INTERRUPT_MS so the cast is wasted,
+// a channel at once. Interrupts, silences and every stun on an enemy healer wait for it, and the mage due
+// to Counterspell starts no cast meanwhile.
+class FactionChampionsLateInterruptMultiplier : public Multiplier
+{
+public:
+    FactionChampionsLateInterruptMultiplier(
+        PlayerbotAI* botAI) : Multiplier(botAI, "faction champions late interrupt multiplier") {}
+    float GetValue(Action* action) override;
+};
+
 void AddToCFactionChampionsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 ToCBurstWindow ToCFactionChampionsBurstWindow(PlayerbotAI* botAI);

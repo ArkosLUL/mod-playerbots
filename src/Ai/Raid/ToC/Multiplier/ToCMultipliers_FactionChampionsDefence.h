@@ -43,6 +43,17 @@ public:
     float GetValue(Action* action) override;
 };
 
+// A root or stun before Death Grip's pull refuses it, one mid-flight drops the champion where it is. Area
+// ones and self-cast ones like Intimidation wait while any guard is up. The class pet toggle would turn a
+// held autocast straight back on.
+class FactionChampionsGripGuardMultiplier : public Multiplier
+{
+public:
+    FactionChampionsGripGuardMultiplier(
+        PlayerbotAI* botAI) : Multiplier(botAI, "faction champions grip guard multiplier") {}
+    float GetValue(Action* action) override;
+};
+
 void AddToCFactionChampionsDefenceMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 #endif

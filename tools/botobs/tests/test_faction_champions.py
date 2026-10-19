@@ -211,6 +211,12 @@ def champions_pull() -> list[dict]:
         {"t": 3000, "e": "act", "g": PRIEST, "a": fc.DISPEL_CC_ACTION, "rel": 100.0, "vd": "OK"},
         {"t": 3100, "e": "act", "g": PRIEST, "a": fc.DISPEL_CC_ACTION, "rel": 100.0, "vd": "FAILED"},
 
+        # Pack buffs: Velanaa's Avenging Wrath taken by the felhunter's Devour Magic below, the druid's
+        # Bloodlust left. And a raid Cleave on the pack.
+        cast(9000, PALADIN, 66011, 0),
+        cast(15500, DRUID, 65980, 0),
+        cast(5000, TANK, 47520, ROGUE_C),
+
         # Purges: on the kill target, a Spellsteal off it, the felhunter's Devour Magic for Agony.
         cast(4000, SHAMAN, 8012, PALADIN),
         cast(4000, SHAMAN, 8012, PALADIN, triggered=True),
@@ -341,9 +347,22 @@ class SyntheticPull(unittest.TestCase):
 
     def test_a_heal_is_followed_only_inside_its_cast(self):
         rows = fc.heal_rows(self.trace)
-        self.assertEqual([(row["spell"], row["window"], row["kill"], row["by"]) for row in rows], [
-            (66113, 1300, True, ROGUE), (67965, 1500, False, None),
-            (66104, 1500, True, LOCK), (66086, 10000, False, MAGE)])
+        self.assertEqual([(row["spell"], row["window"], row["kill"], row["by"], row["at"]) for row in rows], [
+            (66113, 1300, True, ROGUE, 3500), (67965, 1500, False, None, None),
+            (66104, 1500, True, LOCK, 13400), (66086, 10000, False, MAGE, 20000)])
+
+    def test_channels_read_the_first_interrupt_inside_ten_seconds(self):
+        self.assertEqual([(row["t"], row["caster"], row["name"], row["by"], row["after"])
+                          for row in fc.channel_rows(self.trace)], [
+            (14000, DRUID, "Tranquility", MAGE, 6000), (15000, WARLOCK_C, "Hellfire", None, None)])
+
+    def test_pack_buffs_read_the_purge_after_them(self):
+        self.assertEqual([(row["t"], row["target"], row["name"], row["purged"])
+                          for row in fc.pack_buff_rows(self.trace)], [
+            (9000, PALADIN, "Avenging Wrath", 10000), (15500, DRUID, "Bloodlust", None)])
+
+    def test_own_splash_counts_the_raids_area_casts(self):
+        self.assertEqual(fc.own_splash(self.trace), collections.Counter({"Cleave": 1}))
 
     def test_lust_and_first_burst_count_from_the_pull(self):
         lust, first, vetoes = fc.burst_rows(self.trace)
@@ -402,7 +421,7 @@ class SyntheticPull(unittest.TestCase):
             (15000, WARLOCK_C, "Hellfire", {MAGE: 3})])
 
     def test_vetoes_keep_the_faction_champions_multipliers_and_rules_only(self):
-        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 15)
+        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 17)
         self.assertEqual(fc.fc_vetoes(self.trace), collections.Counter({
             (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1,
             (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1,
@@ -430,6 +449,12 @@ class SyntheticPull(unittest.TestCase):
         self.assertRegex(text, r"Divine Shield .* yes +\+2\.0s x1 +\+4\.0s early")
         self.assertRegex(text, r"Bladestorm +1 +2\.0, max 2 +2\.0, max 2 +2 x1")
         self.assertIn(f"{fc.AVOID_AOE_ACTION}: 1 OK row(s)", text)
+        self.assertIn("cast-time heals kicked 33% into the cast (median), 0 of 2 in the last 600 ms", text)
+        self.assertIn("channels: Tranquility 0:14.000 Melador Valestrider +6.0s by Frost,"
+                      " Hellfire 0:15.000 Serissa Grimdabbler no interrupt", text)
+        self.assertIn("champion buffs: Avenging Wrath 0:09.000 Velanaa purged +1.0s,"
+                      " Bloodlust 0:15.500 Melador Valestrider not purged", text)
+        self.assertIn("raid splash: Cleave 1", text)
 
 
 RET_C = CREATURE | 19
@@ -1013,11 +1038,15 @@ def chain_pull() -> list[dict]:
         {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
         {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
         {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        {"t": 1, "e": "unit", "g": HUNTER_PET, "en": 3825, "n": "Wolf", "own": GRIPPER},
         note(1000, CHAIN_TANK, "fc.chain", PALADIN),
         cast(2000, CHAIN_TANK, fc.SPELL_DEATH_GRIP, PALADIN),
+        cast(2000, PALADIN, fc.SPELL_GRIP_PULL, 0, triggered=True),
         cast(3500, GRIPPER, fc.SPELL_DEATH_GRIP, PALADIN),
         note(3600, GRIPPER, "fc.chain", 0),
         cast(6000, HUMAN_DK, fc.SPELL_DEATH_GRIP, PALADIN),
+        cast(6000, PALADIN, fc.SPELL_GRIP_PULL, 0, triggered=True),
+        cast(6011, HUNTER_PET, 53148, PALADIN, triggered=True),
         # past the pull's tail, so a bot grip outside it
         cast(30000, GRIPPER, fc.SPELL_DEATH_GRIP, ROGUE_C),
         {"t": 32000, "e": "end", "out": "wipe"},
@@ -1044,6 +1073,16 @@ class GripChain(unittest.TestCase):
         self.assertEqual([(link["t"], link["by"], link["moved"], link["off"]) for link in chains[0]["links"]],
                          [(2000, CHAIN_TANK, 25.0, 25.0), (3500, GRIPPER, 25.0, 50.0), (6000, HUMAN_DK, 25.0, 75.0)])
         self.assertEqual([(row["t"], row["by"]) for row in outside], [(30000, GRIPPER)])
+
+    def test_each_link_reads_its_pull_and_what_cut_it(self):
+        chains, _ = fc.chain_links(self.trace)
+        self.assertEqual([(link["pulled"], link["cut"]) for link in chains[0]["links"]],
+                         [(True, []), (False, []), (True, [(11, HUNTER_PET, "pet Charge")])])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_chain(self.trace)
+        self.assertRegex(out.getvalue(), r"Obliteration +bot DK .* no pull\n")
+        self.assertRegex(out.getvalue(), r"Deathsong .* cut by Wolf \(Obliteration\) pet Charge \+11ms")
 
     def test_the_order_is_tank_bot_dk_then_the_player(self):
         self.assertEqual([fc.link_role(self.trace, guid) for guid in (CHAIN_TANK, GRIPPER, HUMAN_DK)],
@@ -1093,6 +1132,7 @@ def front_pull() -> list[dict]:
         note(0, TANK, "fc.kill", PALADIN),
         note(0, TANK, fc.FRONT, DISC),
         note(0, MIGHTY, fc.FRONT, ROGUE_C),
+        {"t": 12000, "e": "death", "g": MIGHTY},
         {"t": 20000, "e": "end", "out": "wipe"},
     ]
     return records + [front_snap(when) for when in range(0, 20000, 1000)]
@@ -1136,12 +1176,69 @@ class Frontline(unittest.TestCase):
             fc.show_front(self.trace)
         text = out.getvalue()
         self.assertIn("fc.front: Bulwark (paladin), Mighty (warrior)", text)
+        self.assertIn("frontline deaths: Mighty 0:12.000", text)
         self.assertIn("pack within 15 yd of the landing spot: 75%; melee champion picks on the frontline: 50%;"
                       " pulled kill target clear of other healers: 33%", text)
 
     def test_a_champion_on_the_frontline_is_no_escapee(self):
         # Anthar stands 40 yd off from 10 s but stays on Mighty
         self.assertEqual(fc.escapee_seconds(self.trace), {PALADIN: 15.0, WARRIOR_C: 5.0, MAGE_C: 5.0})
+
+
+def stands_pull() -> list[dict]:
+    roster = [{"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0},
+              {"g": PRIEST, "n": "Prayer", "r": "heal", "c": 5, "h": 0}]
+    stand = fc.STAND_ACTION
+
+    def move(when: int, guid: int, x: float, by: str = stand) -> dict:
+        return {"t": when, "e": "move", "g": guid, "k": "point", "x": x, "y": 0.0, "z": 0.0, "by": by}
+
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        # Frost's slot jumps 10 yd at 2 s, its 3 s target is the same slot restated
+        move(1000, MAGE, 0.0), move(2000, MAGE, 10.0), move(3000, MAGE, 10.2),
+        # Prayer boosts away from a melee champion
+        cast(4000, PRIEST, fc.SPELL_NITRO, 0),
+        move(4010, PRIEST, 25.0, "faction champions chased"),
+        {"t": 10000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, 10000, 1000):
+        frost = 0.0 if when < 2000 else 5.0 if when < 3000 else 10.0
+        records.append({"t": when, "e": "snap", "hz": [], "u": [placed(MAGE, frost, 0.0, 100.0, 0),
+                                                                 placed(PRIEST, 0.0, 0.0, 100.0, 0),
+                                                                 placed(PALADIN, 40.0, 0.0, 100.0, PRIEST)]})
+    return records
+
+
+class StandsAndBoosts(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in stands_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_stand_counts_its_moves_its_slot_jumps_and_path_against_net(self):
+        self.assertEqual(fc.stand_rows(self.trace),
+                         [{"bot": MAGE, "moves": 3, "jumps": 1, "path": 10.0, "net": 10.0}])
+
+    def test_a_boost_reads_the_walk_it_served(self):
+        self.assertEqual(fc.nitro_rows(self.trace),
+                         [{"t": 4000, "bot": PRIEST, "by": "faction champions chased", "walk": 25.0}])
+
+    def test_the_section_renders(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_stands(self.trace)
+        self.assertRegex(out.getvalue(), r"Frost +ranged +3 +1 +10 +10")
+        self.assertIn("Nitro Boosts: 1 use(s)", out.getvalue())
 
 
 class EveryView(unittest.TestCase):
@@ -1196,6 +1293,12 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.front_samples(trace), [])
         self.assertEqual(fc.first_engage(trace), None)
         self.assertEqual(fc.first_picks(trace), [])
+        self.assertEqual(fc.channel_rows(trace), [])
+        self.assertEqual(fc.pack_buff_rows(trace), [])
+        self.assertEqual(fc.own_splash(trace), collections.Counter())
+        self.assertEqual(fc.front_deaths(trace), [])
+        self.assertEqual(fc.stand_rows(trace), [])
+        self.assertEqual(fc.nitro_rows(trace), [])
 
 
 if __name__ == "__main__":

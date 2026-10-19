@@ -17,8 +17,8 @@ namespace
 {
 bool FactionChampionsFrontlineOwned(PlayerbotAI* botAI)
 {
-    Position anchor;
-    return FactionChampionsFrontlineHeld(botAI, anchor);
+    Position centre;
+    return FactionChampionsFrontlineHeld(botAI, centre);
 }
 
 // The focus trigger's test, so the rule and the node cover the same window. The frontline picks its
@@ -35,8 +35,8 @@ bool FactionChampionsStandHeld(PlayerbotAI* botAI)
     return FactionChampionsBallStand(botAI, spot);
 }
 
-// Kill squad melee wait outside the pack until a grip has the kill target out of it. Once no champion
-// healer is left nothing heals it in there
+// Kill squad melee wait outside the pack until a grip has the kill target out of it. Once it's been out
+// they stay on it even if the pack walks over, and with no champion healer left nothing heals it in there
 bool FactionChampionsKillSquadWait(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -46,8 +46,8 @@ bool FactionChampionsKillSquadWait(PlayerbotAI* botAI)
     if (FactionChampionsGripPending(botAI))
         return true;
 
-    Unit* killTarget = FactionChampionsKillTarget(botAI);
-    return killTarget && !FactionChampionsIsPulled(botAI, killTarget) && FactionChampionsHealerLeft(botAI);
+    return FactionChampionsKillTarget(botAI) && !FactionChampionsKillTargetOut(botAI) &&
+           FactionChampionsHealerLeft(botAI);
 }
 
 bool FactionChampionsTotemHeld(PlayerbotAI* botAI) { return FactionChampionsTotemTarget(botAI) != nullptr; }
@@ -83,7 +83,7 @@ void DefineFactionChampions(EncounterBuilder& e)
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
             {"reach melee", "reach spell"});
 
-    // the pack follows whoever it picks, so the frontline stays where it landed
+    // the pack follows whoever it picks, so the frontline stays with the pack
     e.Block("faction champions frontline hold", Role::Any, FactionChampionsFrontlineOwned,
             Family::CombatFormationMove | Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom |
                 Family::Charge);

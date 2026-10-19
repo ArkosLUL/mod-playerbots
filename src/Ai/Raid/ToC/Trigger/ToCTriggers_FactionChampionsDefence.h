@@ -65,6 +65,14 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsChannelInterruptTrigger : public Trigger
+{
+public:
+    FactionChampionsChannelInterruptTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "faction champions channel interrupt") {}
+    bool IsActive() override;
+};
+
 class FactionChampionsDeathGripTrigger : public Trigger
 {
 public:
@@ -117,6 +125,8 @@ public:
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_physical_switch;
         creators["faction champions purge kill target"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_purge_kill_target;
+        creators["faction champions channel interrupt"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_channel_interrupt;
         creators["faction champions death grip"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_death_grip;
         creators["faction champions chain grip"] =
@@ -156,6 +166,10 @@ private:
 
     static Trigger* faction_champions_purge_kill_target(PlayerbotAI* botAI) {
         return new FactionChampionsPurgeKillTargetTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_channel_interrupt(PlayerbotAI* botAI) {
+        return new FactionChampionsChannelInterruptTrigger(botAI);
     }
 
     static Trigger* faction_champions_death_grip(PlayerbotAI* botAI) {

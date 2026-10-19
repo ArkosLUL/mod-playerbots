@@ -50,6 +50,9 @@ enum class ToCFactionChampions : uint32
 
 // The mage's only interrupt, one rank
 constexpr uint32 SPELL_COUNTERSPELL = 2139;
+// Cast-time spells get kicked this close to their end, so the champion wastes the cast. A few 100 ms bot
+// ticks of slack. Channels go at once.
+constexpr int32 LATE_INTERRUPT_MS = 600;
 // One rank, and damage doesn't break it
 constexpr uint32 SPELL_CYCLONE = 33786;
 // Once a pulled kill target is this low the next healer in the pack is likely the player's next pull, so CC
@@ -82,10 +85,6 @@ Unit* FactionChampionsNextTarget(PlayerbotAI* botAI, std::function<bool(Unit*)> 
 // Every alive, in-combat champion in kill order, pets left out. Empty unless the encounter is live.
 std::vector<Unit*> FactionChampionsInCombat(PlayerbotAI* botAI);
 
-// On heroic while live, the taunt or threat spell this bot's pet autocasts, else 0. Champions are
-// immune to taunt there, and a pet's threat never reaches the 10M the script seeds each player at.
-uint32 FactionChampionsPetTauntAutocast(PlayerbotAI* botAI);
-
 // Every non-healer bot off the frontline burns the kill target
 bool FactionChampionsFocusBot(PlayerbotAI* botAI);
 
@@ -95,21 +94,24 @@ bool FactionChampionsIsPackTank(Player* player);
 // The bot DK that grips second in every chain: lowest guid, not a tank, knows Death Grip. Empty when none
 ObjectGuid FactionChampionsChainDk(Player* bot);
 
-// Holds the pack where it landed: bot tanks plus warrior, paladin and DK melee bots but the chain DK.
+// Holds the pack: bot tanks plus plate and mail melee bots (warrior, paladin, shaman, DK but the chain DK).
 // Plate in melee range outscores cloth 23+ yd off in the melee champions' pick, a tank never does
 bool FactionChampionsIsFrontline(Player* player);
 
 // Live, and a champion healer is still up
 bool FactionChampionsHealerLeft(PlayerbotAI* botAI);
 
-// While live: where the champions landed, and the middle of those still within 25 yd of it, the kill
-// target left out
+// While live: where the champions landed, and the middle of the pack, which follows it wherever it walks:
+// those within 20 yd of the last centre, the kill target left out
 bool FactionChampionsPack(PlayerbotAI* botAI, Position& anchor, Position& centre);
 
 // A healer champion 20+ yd off the pack centre with no champion within 12 yd
 bool FactionChampionsIsPulled(PlayerbotAI* botAI, Unit* champion);
 
-// A champion 20+ yd off where the pack landed whose victim isn't a tank or on the frontline
+// The kill target has been pulled out at least once, even if the pack has walked onto it since
+bool FactionChampionsKillTargetOut(PlayerbotAI* botAI);
+
+// A champion 20+ yd off the pack centre whose victim isn't a tank or on the frontline
 bool FactionChampionsIsEscapee(PlayerbotAI* botAI, Unit* champion);
 
 // How long the encounter has been live, 0 when it isn't
@@ -119,17 +121,18 @@ uint32 FactionChampionsLiveMs(PlayerbotAI* botAI);
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 
 // This bot's CC cast, the champion and spell id, when it holds a CC duty. CC bots are dps mages
-// (Polymorph), warlocks (Fear, Banish on an elemental or demon) and ranged druids (Cyclone). None for
-// 1.5 s after the pull, while the opening grips land. Candidates skip the kill target, the suspended,
-// the skulled and a pulled one, the player's pull in flight, and the next healer in the pack once the
-// kill target is pulled and at 40% or under: healers off the frontline nearest the kill target, other
-// healers, champions off the frontline casters first, the rest in kill order. A cast at a champion that stops being a
-// candidate is interrupted, so it never makes a new kill target immune. One duty per
-// candidate, none while it is CC'd for over 2 s more or a CC cast at it is under way. The caster is in
-// range and sight with a spell that lands and, by DR, holds over 2.5 s: never-breaking first, then the
-// longest, then the nearest. Polymorph and Fear only on a champion 12+ yd off every pack tank, with no
-// group member or pet on it and no group DoT. Latched until the cast lands or 3 s pass with none going,
-// written to fc.cc. Null unless the encounter is live.
+// (Polymorph), warlocks (Fear, Banish on an elemental or demon), ranged druids (Cyclone) and shamans off
+// the frontline (Hex). None for 1.5 s after the pull, while the opening grips land. Candidates skip the
+// kill target, the suspended, the skulled and a pulled one, a champion the grip guard holds, and the
+// next healer in the pack once the kill target is pulled and at 40% or under: healers off the frontline
+// nearest the kill target, other healers, champions off the frontline casters first, the rest in kill
+// order. A cast at a champion that stops being a candidate is interrupted, so it never makes a new kill
+// target immune. One duty per candidate, none while it is CC'd for over 2 s more or a CC cast at it is
+// under way. The caster has a spell that lands and, by DR, holds over 2.5 s, and is in range and sight or
+// up to 15 yd past the range, which it walks: in range first, then never-breaking, then the longest, then
+// the nearest. Polymorph, Fear and Hex only on a champion with no group member or pet on it and no group
+// DoT. Latched until the cast lands or 3 s pass with none going (6 s for a walk), written to fc.cc. Null
+// unless the encounter is live.
 Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The member holds a CC duty
@@ -138,8 +141,13 @@ bool FactionChampionsHasCcDuty(PlayerbotAI* botAI, ObjectGuid member);
 // A player's CC on it, or a CC duty's cast at it, breaks on damage
 bool FactionChampionsCcProtected(PlayerbotAI* botAI, Unit* unit);
 
-// This bot is the mage on duty and the kill target is casting a heal Counterspell would stop.
+// This bot is the mage on duty and the kill target is casting a heal Counterspell would stop: a channel
+// at once, a cast in its last LATE_INTERRUPT_MS
 bool FactionChampionsCounterspellDuty(PlayerbotAI* botAI);
+
+// This mage gets the Counterspell once the kill target's heal reaches its last LATE_INTERRUPT_MS, so it
+// starts no cast meanwhile
+bool FactionChampionsCounterspellHold(PlayerbotAI* botAI);
 
 }
 

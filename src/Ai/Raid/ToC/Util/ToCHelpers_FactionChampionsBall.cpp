@@ -31,7 +31,7 @@ namespace
 // Same floor the grip stands and the Beasts spots keep to
 constexpr float ARENA_FLOOR_RADIUS = 44.0f;
 
-// Champions this close to where they landed are the frontline's
+// Champions this close to the pack centre are the frontline's
 constexpr float FRONT_REACH = 20.0f;
 
 // Off to the side of the pack, not toward the pulled healer: a caster champion stops 18.5 yd short of the
@@ -47,10 +47,17 @@ constexpr std::array<float, 2> SIDE_RINGS = {26.0f, 20.0f};
 constexpr std::array<float, 2> PACK_RINGS = {32.0f, 30.0f};
 constexpr float SIDE_STEP_DEG = 15.0f;
 constexpr uint32 SIDE_STEPS = 5;
-// Slots move with the kill target only past this, so stands don't creep every tick
+// Layouts move only past this, so stands don't creep every tick
 constexpr float SIDE_REANCHOR = 6.0f;
-// With the kill target still in the pack the pack's own direction means nothing
+// a held stand this close to a slot of the current layout keeps it
+constexpr float SAME_SLOT = 0.5f;
 constexpr float SIDE_MIN_SPREAD = 5.0f;
+
+// a shorter walk isn't worth Nitro Boosts' 3 min cooldown
+constexpr float NITRO_MIN_WALK = 15.0f;
+constexpr float CHASED_REACH = 8.0f;
+constexpr float RUN_DIST = 25.0f;
+constexpr float RUN_ARRIVE = 2.0f;
 
 constexpr uint32 OPENER_FROM_MS = 2500;
 constexpr uint32 OPENER_UNTIL_MS = 8000;
@@ -70,6 +77,27 @@ constexpr std::array<OpenerSpell, 5> OPENER_SPELLS = {{
     {{17928, 5484, 0, 0, 0, 0}},              // Howl of Terror, only once talented instant
 }};
 
+struct Vec
+{
+    float x;
+    float y;
+};
+
+struct Layout
+{
+    bool valid = false;
+    ObjectGuid key;
+    bool mode = false;
+    Position at;
+    Vec dir{1.0f, 0.0f};
+};
+
+struct Run
+{
+    uint32 sinceMs = 0;
+    Position spot;
+};
+
 struct BallState
 {
     RaidObs::ObsGuidMap<ObjectGuid> front{"fc.front"};
@@ -79,18 +107,15 @@ struct BallState
     bool memoValid = false;
     uint32 pullStartMs = 0;
     bool openerDone = false;
-    ObjectGuid sideAnchorTarget;
-    Position sideAnchor;
+    // Each layout moves only when its reference does by SIDE_REANCHOR or its key changes, and a stand
+    // stays with its bot while its slot is still in the layout, so nobody walks for a small shift
+    Layout side;
+    Layout heal;
     std::unordered_map<ObjectGuid, Position> stands;
+    std::unordered_map<ObjectGuid, Run> runs;  // chased bot -> its boosted run
 };
 
 RaidInstanceState<BallState> ballStates;
-
-struct Vec
-{
-    float x;
-    float y;
-};
 
 Vec Rotate(Vec v, float degrees)
 {
@@ -209,7 +234,7 @@ struct FrontCandidate
     Unit* champion;
     uint32 tier;
     bool melee;
-    float fromAnchor;
+    float fromCentre;
 };
 
 // 0: no frontline DPS has threat on it yet, so the next recount can't pick one; 1: it is on a raider off
@@ -247,16 +272,16 @@ void UpdateFrontline(BallState& state, PlayerbotAI* botAI, std::vector<Player*> 
     {
         for (Unit* champion : FactionChampionsInCombat(botAI))
         {
-            float const fromAnchor = champion->GetExactDist2d(&anchor);
+            float const fromCentre = champion->GetExactDist2d(&centre);
             bool const untouchable = champion->IsImmunedToDamage(SPELL_SCHOOL_MASK_NORMAL) &&
                                      champion->IsImmunedToDamage(SPELL_SCHOOL_MASK_MAGIC);
-            if (fromAnchor > FRONT_REACH || untouchable || FactionChampionsIsPulled(botAI, champion) ||
+            if (fromCentre > FRONT_REACH || untouchable || FactionChampionsIsPulled(botAI, champion) ||
                 FactionChampionsCcProtected(botAI, champion))
                 continue;
 
             candidates.push_back(
                 {champion, FrontTier(champion, front, members), IsFactionChampionMelee(champion->GetEntry()),
-                 fromAnchor});
+                 fromCentre});
         }
     }
 
@@ -269,7 +294,7 @@ void UpdateFrontline(BallState& state, PlayerbotAI* botAI, std::vector<Player*> 
                          if (a.melee != b.melee)
                              return a.melee;
 
-                         return a.fromAnchor < b.fromAnchor;
+                         return a.fromCentre < b.fromCentre;
                      });
 
     constexpr int NONE = -1;
@@ -364,44 +389,52 @@ void UpdateFrontline(BallState& state, PlayerbotAI* botAI, std::vector<Player*> 
     }
 }
 
+// Moves the layout only when its key or mode changes or its reference walked past SIDE_REANCHOR. True when
+// it moved, so the stands dealt on it go too.
+bool Reanchor(Layout& layout, ObjectGuid key, bool mode, Position const& at, Vec dir)
+{
+    if (layout.valid && layout.key == key && layout.mode == mode && layout.at.GetExactDist2d(&at) <= SIDE_REANCHOR)
+        return false;
+
+    layout.valid = true;
+    layout.key = key;
+    layout.mode = mode;
+    layout.at = at;
+    layout.dir = dir;
+    return true;
+}
+
+bool Clear(Position const& spot, std::vector<EncounterHelpers::HazardCircle> const& hazards)
+{
+    return OnFloor(spot) && std::none_of(hazards.begin(), hazards.end(),
+                                         [&spot](EncounterHelpers::HazardCircle const& hazard)
+                                         { return spot.GetExactDist2d(hazard.first) < hazard.second; });
+}
+
 void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> const& members)
 {
-    state.stands.clear();
-
     Position anchor;
     Position centre;
     Unit* killTarget = FactionChampionsKillTarget(botAI);
     if (!killTarget || !FactionChampionsPack(botAI, anchor, centre))
-        return;
-
-    bool const pulled = FactionChampionsIsPulled(botAI, killTarget);
-    bool const waitOut = !pulled && FactionChampionsHealerLeft(botAI);
-    Vec const toCentre = Unit2(ARENA_CENTER.GetPositionX() - anchor.GetPositionX(),
-                               ARENA_CENTER.GetPositionY() - anchor.GetPositionY());
-
-    Position side;
-    Vec dir = toCentre;
-    if (waitOut)
-        side = centre;
-    else
     {
-        if (state.sideAnchorTarget != killTarget->GetGUID() ||
-            state.sideAnchor.GetExactDist2d(killTarget) > SIDE_REANCHOR)
-        {
-            state.sideAnchorTarget = killTarget->GetGUID();
-            state.sideAnchor = killTarget->GetPosition();
-        }
-
-        side = state.sideAnchor;
-        if (side.GetExactDist2d(&centre) >= SIDE_MIN_SPREAD)
-            dir = Unit2(side.GetPositionX() - centre.GetPositionX(), side.GetPositionY() - centre.GetPositionY());
+        state.stands.clear();
+        state.side.valid = false;
+        state.heal.valid = false;
+        return;
     }
+
+    // latched rather than IsPulled, which flips each time a champion steps near the kill target
+    bool const out = FactionChampionsKillTargetOut(botAI);
+    bool const waitOut = !out && FactionChampionsHealerLeft(botAI);
+    Vec const toArena = Unit2(ARENA_CENTER.GetPositionX() - centre.GetPositionX(),
+                              ARENA_CENTER.GetPositionY() - centre.GetPositionY());
 
     std::vector<Player*> healers;
     std::vector<Player*> ranged;
     for (Player* member : members)
     {
-        if (!GET_PLAYERBOT_AI(member) || PlayerbotAI::IsTank(member))
+        if (!GET_PLAYERBOT_AI(member) || PlayerbotAI::IsTank(member) || state.opener.count(member->GetGUID()))
             continue;
 
         if (PlayerbotAI::IsHeal(member))
@@ -410,28 +443,56 @@ void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
             ranged.push_back(member);
     }
 
+    std::vector<ObjectGuid> gone;
+    for (auto const& held : state.stands)
+    {
+        auto const is = [&held](Player* member) { return member->GetGUID() == held.first; };
+        if (std::none_of(healers.begin(), healers.end(), is) && std::none_of(ranged.begin(), ranged.end(), is))
+            gone.push_back(held.first);
+    }
+
+    for (ObjectGuid const& guid : gone)
+        state.stands.erase(guid);
+
     // The melee champions weigh armour, so plate heals the frontline and the least armour goes with the
     // kill squad
     std::vector<Player*> byArmour = healers;
     std::stable_sort(byArmour.begin(), byArmour.end(),
                      [](Player* a, Player* b) { return a->GetArmor() > b->GetArmor(); });
-    Vec const toPulled = pulled ? Unit2(killTarget->GetPositionX() - anchor.GetPositionX(),
-                                        killTarget->GetPositionY() - anchor.GetPositionY())
-                                : toCentre;
     size_t const frontHealers = byArmour.size() > 1 ? byArmour.size() - 1 : byArmour.size();
+
+    Vec const toPulled =
+        out ? Unit2(killTarget->GetPositionX() - centre.GetPositionX(), killTarget->GetPositionY() - centre.GetPositionY())
+            : toArena;
+    Reanchor(state.heal, killTarget->GetGUID(), out, centre, toPulled);
     for (size_t i = 0; i < frontHealers; ++i)
     {
-        Vec const spoke = Rotate(toPulled, FRONT_HEALER_SPOKES_DEG[i % FRONT_HEALER_SPOKES_DEG.size()]);
+        Vec const spoke = Rotate(state.heal.dir, FRONT_HEALER_SPOKES_DEG[i % FRONT_HEALER_SPOKES_DEG.size()]);
         float distance = FRONT_HEALER_DIST;
-        Position spot = Along(anchor, spoke, distance);
+        Position spot = Along(state.heal.at, spoke, distance);
         while (!OnFloor(spot) && distance > FRONT_HEALER_MIN)
         {
             distance -= 2.0f;
-            spot = Along(anchor, spoke, distance);
+            spot = Along(state.heal.at, spoke, distance);
         }
 
         state.stands[byArmour[i]->GetGUID()] = spot;
     }
+
+    // With the kill target still in the pack the pack's own direction means nothing
+    Position const sideAt = waitOut ? centre : killTarget->GetPosition();
+    Vec sideDir = toArena;
+    if (!waitOut && sideAt.GetExactDist2d(&centre) >= SIDE_MIN_SPREAD)
+        sideDir = Unit2(sideAt.GetPositionX() - centre.GetPositionX(), sideAt.GetPositionY() - centre.GetPositionY());
+
+    std::vector<Player*> squad;
+    for (size_t i = frontHealers; i < byArmour.size(); ++i)
+        squad.push_back(byArmour[i]);
+
+    squad.insert(squad.end(), ranged.begin(), ranged.end());
+    if (Reanchor(state.side, killTarget->GetGUID(), waitOut, sideAt, sideDir))
+        for (Player* member : squad)
+            state.stands.erase(member->GetGUID());
 
     std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
     std::vector<Position> slots;
@@ -444,32 +505,51 @@ void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
                 if (!step && sign < 0.0f)
                     continue;
 
-                Position const spot = Along(side, Rotate(dir, sign * SIDE_STEP_DEG * step), ring);
-                bool const inHazard =
-                    std::any_of(hazards.begin(), hazards.end(), [&spot](EncounterHelpers::HazardCircle const& hazard)
-                                { return spot.GetExactDist2d(hazard.first) < hazard.second; });
-                if (OnFloor(spot) && !inHazard)
+                Position const spot = Along(state.side.at, Rotate(state.side.dir, sign * SIDE_STEP_DEG * step), ring);
+                if (Clear(spot, hazards))
                     slots.push_back(spot);
             }
         }
     }
 
-    std::stable_sort(slots.begin(), slots.end(), [&centre](Position const& a, Position const& b)
-                     { return centre.GetExactDist2d(a) > centre.GetExactDist2d(b); });
-
-    size_t next = 0;
-    for (std::vector<Player*> const* group : {&healers, &ranged})
+    std::vector<bool> taken(slots.size(), false);
+    auto const slotOf = [&slots](Position const& spot)
     {
-        for (Player* member : *group)
+        for (size_t s = 0; s < slots.size(); ++s)
+            if (slots[s].GetExactDist2d(&spot) < SAME_SLOT)
+                return s;
+
+        return slots.size();
+    };
+
+    // a bot keeps its slot while the layout still has it, free ones take the nearest left
+    std::vector<Player*> unplaced;
+    for (Player* member : squad)
+    {
+        auto const held = state.stands.find(member->GetGUID());
+        size_t const s = held != state.stands.end() ? slotOf(held->second) : slots.size();
+        if (s < slots.size() && !taken[s])
+            taken[s] = true;
+        else
         {
-            if (state.stands.count(member->GetGUID()) || state.opener.count(member->GetGUID()))
-                continue;
-
-            if (next >= slots.size())
-                return;
-
-            state.stands[member->GetGUID()] = slots[next++];
+            state.stands.erase(member->GetGUID());
+            unplaced.push_back(member);
         }
+    }
+
+    for (Player* member : unplaced)
+    {
+        size_t best = slots.size();
+        for (size_t s = 0; s < slots.size(); ++s)
+            if (!taken[s] && (best == slots.size() ||
+                              member->GetExactDist2d(&slots[s]) < member->GetExactDist2d(&slots[best])))
+                best = s;
+
+        if (best == slots.size())
+            continue;
+
+        taken[best] = true;
+        state.stands[member->GetGUID()] = slots[best];
     }
 }
 
@@ -507,17 +587,17 @@ BallState* Refresh(PlayerbotAI* botAI)
 }
 }  // namespace
 
-bool FactionChampionsFrontlineHeld(PlayerbotAI* botAI, Position& anchor)
+bool FactionChampionsFrontlineHeld(PlayerbotAI* botAI, Position& centre)
 {
-    Position centre;
+    Position anchor;
     return botAI && FactionChampionsIsFrontline(botAI->GetBot()) && botAI->GetBot()->IsAlive() &&
            FactionChampionsPack(botAI, anchor, centre);
 }
 
 Unit* FactionChampionsFrontlineTarget(PlayerbotAI* botAI)
 {
-    Position anchor;
-    BallState* state = FactionChampionsFrontlineHeld(botAI, anchor) ? Refresh(botAI) : nullptr;
+    Position centre;
+    BallState* state = FactionChampionsFrontlineHeld(botAI, centre) ? Refresh(botAI) : nullptr;
     if (!state)
         return nullptr;
 
@@ -536,8 +616,10 @@ bool FactionChampionsBallStand(PlayerbotAI* botAI, Position& spot)
     if (!state)
         return false;
 
-    auto const stand = state->stands.find(botAI->GetBot()->GetGUID());
-    if (stand == state->stands.end())
+    // a CC duty may walk it into spell range, its slot waits for it
+    ObjectGuid const guid = botAI->GetBot()->GetGUID();
+    auto const stand = state->stands.find(guid);
+    if (stand == state->stands.end() || FactionChampionsHasCcDuty(botAI, guid))
         return false;
 
     spot = stand->second;
@@ -557,6 +639,63 @@ bool FactionChampionsOpener(PlayerbotAI* botAI, uint32& spellId, Position& spot)
 
     spellId = held->second;
     return true;
+}
+
+void FactionChampionsBoostWalk(Player* bot, float distance)
+{
+    if (distance >= NITRO_MIN_WALK && !bot->HasAura(EncounterHelpers::NITRO_BOOSTS_SPEED_SPELL))
+        EncounterHelpers::UseNitroBoosts(bot);
+}
+
+bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
+{
+    BallState* state = Refresh(botAI);
+    if (!state)
+        return false;
+
+    Player* bot = botAI->GetBot();
+    uint32 const now = getMSTime();
+    auto const run = state->runs.find(bot->GetGUID());
+    if (run != state->runs.end())
+    {
+        if (getMSTimeDiff(run->second.sinceMs, now) < EncounterHelpers::NITRO_BOOSTS_DURATION_MS &&
+            bot->GetExactDist2d(&run->second.spot) > RUN_ARRIVE)
+        {
+            spot = run->second.spot;
+            return true;
+        }
+
+        state->runs.erase(run);
+    }
+
+    if (PlayerbotAI::IsTank(bot) || FactionChampionsIsFrontline(bot) ||
+        (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot)) || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
+        bot->HasAuraType(SPELL_AURA_MOD_ROOT) || FactionChampionsHasCcDuty(botAI, bot->GetGUID()) ||
+        !EncounterHelpers::NitroBoostsReady(bot))
+        return false;
+
+    Unit* chaser = nullptr;
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+        if (IsFactionChampionMelee(champion->GetEntry()) && champion->GetVictim() == bot &&
+            champion->GetExactDist2d(bot) <= CHASED_REACH)
+            chaser = champion;
+
+    if (!chaser)
+        return false;
+
+    Vec const away = Unit2(bot->GetPositionX() - chaser->GetPositionX(), bot->GetPositionY() - chaser->GetPositionY());
+    for (float turn : {0.0f, 45.0f, -45.0f, 90.0f, -90.0f})
+    {
+        Position const target = Along(bot->GetPosition(), Rotate(away, turn), RUN_DIST);
+        if (!OnFloor(target))
+            continue;
+
+        state->runs[bot->GetGUID()] = {now, target};
+        spot = target;
+        return true;
+    }
+
+    return false;
 }
 
 uint32 FactionChampionsPackAround(PlayerbotAI* botAI, float radius)

@@ -69,23 +69,28 @@ constexpr int32 CC_RECAST_LEAD_MS = 2000;
 constexpr uint32 CC_DUTY_MS = 3000;
 // a human's opening grip lands and moves the kill latch in this window
 constexpr uint32 CC_SETTLE_MS = 1500;
-// Consecration and Death and Decay round a pack tank break Polymorph and Fear
-constexpr float CC_AOE_CLEAR = 12.0f;
 
 // Highest rank first
 constexpr std::array<uint32, 4> POLYMORPH_RANKS = {12826, 12825, 12824, 118};
 constexpr std::array<uint32, 3> FEAR_RANKS = {6215, 6213, 5782};
 // Elementals and demons only, the Resto Druid champion is an elemental
 constexpr std::array<uint32, 2> BANISH_RANKS = {18647, 710};
+// Humanoids and beasts only, one rank
+constexpr uint32 SPELL_HEX_RANK = 51514;
+// A CC bot this far past its spell's range still gets a duty and walks in to cast
+constexpr float CC_WALK_REACH = 15.0f;
+// a walk-in duty's walk on top of CC_DUTY_MS
+constexpr uint32 CC_WALK_MS = 3000;
 
-// The pack: champions this close to where they landed, the kill target left out
-constexpr float PACK_ANCHOR_RADIUS = 25.0f;
+// The pack: champions this close to its last centre, the kill target left out
+constexpr float PACK_RADIUS = 20.0f;
+constexpr float PACK_SEED_RADIUS = 15.0f;
 // A healer this far off the pack, with nobody next to it, has been pulled out
 constexpr float PULLED_FROM_PACK = 20.0f;
 constexpr float PULLED_CLEAR = 12.0f;
 // Below this the current kill target is nearly dead, so a pulled healer waits its turn
 constexpr float PULLED_SWITCH_MIN_PCT = 30.0f;
-// Off the landing spot by this much and not on a tank: chasing the raid
+// Off the pack centre by this much and not on the frontline: chasing the raid
 constexpr float ESCAPE_DIST = 20.0f;
 constexpr uint32 SPELL_DEATH_GRIP_RANK = 49576;
 
@@ -112,6 +117,7 @@ struct CcDuty
     ObjectGuid target;
     uint32 spellId = 0;
     uint32 sinceMs = 0;
+    bool walk = false;  // dealt out of range, the bot walks in first
 };
 
 struct FactionChampionsState
@@ -130,6 +136,8 @@ struct FactionChampionsState
     ObjectGuid suspended;
     // A player's skull on a champion
     ObjectGuid skulled;
+    // The kill target once it's been pulled out, kept if the pack later walks onto it
+    ObjectGuid outOnce;
     // CC bot -> its cast, mirrored into fc.cc
     std::unordered_map<ObjectGuid, CcDuty> ccDuties;
 };
@@ -222,6 +230,7 @@ void EndPull(FactionChampionsState& state, Player* bot)
     state.champions.clear();
     state.suspended.Clear();
     state.skulled.Clear();
+    state.outOnce.Clear();
 
     if (!state.killTarget.Get().IsEmpty())
     {
@@ -344,7 +353,8 @@ bool InControl(Player* player)
     return !player->HasUnitState(UNIT_STATE_LOST_CONTROL) && !player->HasUnitFlag(UNIT_FLAG_SILENCED);
 }
 
-// The CC spells this bot knows, or none when it isn't a CC bot: a dps mage, warlock or ranged druid
+// The CC spells this bot knows, or none when it isn't a CC bot: a dps mage, warlock, ranged druid or
+// shaman off the frontline
 std::vector<uint32> CcSpells(Player* member, Map* map)
 {
     std::vector<uint32> spells;
@@ -371,6 +381,10 @@ std::vector<uint32> CcSpells(Player* member, Map* map)
             // a melee druid would leave cat form for it
             if (!PlayerbotAI::IsMelee(member) && member->HasSpell(SPELL_CYCLONE))
                 add(SPELL_CYCLONE);
+            break;
+        case CLASS_SHAMAN:
+            if (!FactionChampionsIsFrontline(member) && member->HasSpell(SPELL_HEX_RANK))
+                add(SPELL_HEX_RANK);
             break;
         default:
             break;
@@ -440,7 +454,7 @@ void ScanChampions(FactionChampionsState& state, Player* bot)
         Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
         champion.onFront =
             victimPlayer && (PlayerbotAI::IsTank(victimPlayer) || FactionChampionsIsFrontline(victimPlayer));
-        champion.escapee = creature->GetExactDist2d(&state.packAnchor) > ESCAPE_DIST && !champion.onFront;
+        champion.escapee = creature->GetExactDist2d(&state.packCentre) > ESCAPE_DIST && !champion.onFront;
         state.champions.push_back(champion);
     }
 
@@ -451,34 +465,66 @@ void ScanChampions(FactionChampionsState& state, Player* bot)
 
 float Dist2d(float ax, float ay, float bx, float by) { return std::hypot(ax - bx, ay - by); }
 
-// Off the kill target as latched last tick, since the latch reads what this writes
+// Mean of the champions within PACK_RADIUS of around, the kill target left out
+bool PackMean(FactionChampionsState const& state, ObjectGuid killTarget, float aroundX, float aroundY, float& x,
+              float& y)
+{
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    uint32 count = 0;
+    for (Champion const& champion : state.champions)
+    {
+        if (!champion.inCombat || champion.guid == killTarget ||
+            Dist2d(aroundX, aroundY, champion.x, champion.y) > PACK_RADIUS)
+            continue;
+
+        sumX += champion.x;
+        sumY += champion.y;
+        ++count;
+    }
+
+    if (!count)
+        return false;
+
+    x = sumX / count;
+    y = sumY / count;
+    return true;
+}
+
+// Follows the pack wherever its picks walk it: a step toward the mean round last tick's centre, so a
+// healer pulled 20+ yd off drops out. Off the kill target as latched last tick, since the latch reads
+// what this writes.
 void UpdatePack(FactionChampionsState& state)
 {
     ObjectGuid const killTarget = state.killTarget.Get();
     float x = 0.0f;
     float y = 0.0f;
-    uint32 count = 0;
-    for (bool nearOnly : {true, false})
+    bool found = PackMean(state, killTarget, state.packCentre.GetPositionX(), state.packCentre.GetPositionY(), x, y);
+    if (!found)
     {
+        // the pack moved off it in one go: start again round the champion with the most others near it
+        Champion const* densest = nullptr;
+        uint32 most = 0;
         for (Champion const& champion : state.champions)
         {
-            if (!champion.inCombat || champion.guid == killTarget ||
-                (nearOnly && state.packAnchor.GetExactDist2d(champion.x, champion.y) > PACK_ANCHOR_RADIUS))
+            if (!champion.inCombat || champion.guid == killTarget)
                 continue;
 
-            x += champion.x;
-            y += champion.y;
-            ++count;
+            uint32 const near = static_cast<uint32>(std::count_if(
+                state.champions.begin(), state.champions.end(), [&champion](Champion const& other)
+                { return other.inCombat && Dist2d(other.x, other.y, champion.x, champion.y) <= PACK_SEED_RADIUS; }));
+            if (!densest || near > most)
+            {
+                densest = &champion;
+                most = near;
+            }
         }
 
-        if (count)
-            break;
+        found = densest && PackMean(state, killTarget, densest->x, densest->y, x, y);
     }
 
-    if (count)
-        state.packCentre.Relocate(x / count, y / count, state.packAnchor.GetPositionZ());
-    else
-        state.packCentre = state.packAnchor;
+    if (found)
+        state.packCentre.Relocate(x, y, state.packAnchor.GetPositionZ());
 
     for (Champion& champion : state.champions)
     {
@@ -634,17 +680,21 @@ void UpdateKillLatch(FactionChampionsState& state, Player* bot)
         RaidObs::Note(bot, "fc.switch", reason);
 
     state.killTarget = next;
+
+    if (state.outOnce != next)
+        state.outOnce.Clear();
+
+    Champion const* held = FindCandidate(state, next);
+    if (held && held->pulled)
+        state.outOnce = next;
 }
 
-// Nothing of ours would break a Polymorph or Fear on it: no pack tank's AoE, nobody but a CC bot on it,
-// no DoT
+// Nothing of ours would break a Polymorph or Fear on it: nobody but a CC bot on it, no DoT. Our splash is
+// vetoed all fight, tank AoE included.
 bool ClearForBreakable(Unit* target, std::vector<Player*> const& members, std::vector<ObjectGuid> const& ccBots)
 {
     for (Player* member : members)
     {
-        if (FactionChampionsIsPackTank(member) && member->GetExactDist2d(target) < CC_AOE_CLEAR)
-            return false;
-
         if (std::find(ccBots.begin(), ccBots.end(), member->GetGUID()) != ccBots.end())
             continue;
 
@@ -725,11 +775,16 @@ struct CcOption
     bool breaks;
     int32 holdMs;
     float distance;
+    bool walk;
 };
 
-// Never-breaking first, then the longest hold, then the nearest caster
+// One in range first, then never-breaking, then the longest hold, which by DR prefers another group's
+// spell on a champion coming out of one, then the nearest caster
 bool BetterCcOption(CcOption const& a, CcOption const& b)
 {
+    if (a.walk != b.walk)
+        return !a.walk;
+
     if (a.breaks != b.breaks)
         return !a.breaks;
 
@@ -784,6 +839,9 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
         auto const caster = std::find_if(casters.begin(), casters.end(),
                                          [ccBot](auto const& entry) { return entry.first->GetGUID() == ccBot; });
         Creature* target = isCandidate(duty.target) ? AliveCreature(bot, duty.target) : nullptr;
+        if (target && FactionChampionsChainGuarded(bot, target))
+            target = nullptr;
+
         bool const casting = caster != casters.end() && CastingCcAt(caster->first, duty.target, duty.spellId);
         if (casting && !target)
             caster->first->InterruptNonMeleeSpells(false);
@@ -792,7 +850,7 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
         if (keep && !casting)
         {
             Aura const* landed = target->GetAura(duty.spellId, ccBot);
-            keep = !landed && getMSTimeDiff(duty.sinceMs, now) < CC_DUTY_MS;
+            keep = !landed && getMSTimeDiff(duty.sinceMs, now) < CC_DUTY_MS + (duty.walk ? CC_WALK_MS : 0);
         }
 
         if (!keep)
@@ -820,7 +878,7 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
         bool const covered = std::any_of(state.ccDuties.begin(), state.ccDuties.end(),
                                          [champion](auto const& held) { return held.second.target == champion->guid; });
         Creature* target = covered ? nullptr : AliveCreature(bot, champion->guid);
-        if (!target)
+        if (!target || FactionChampionsChainGuarded(bot, target))
             continue;
 
         int32 ccLeftMs = 0;
@@ -844,8 +902,12 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
             {
                 SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
                 if (!info || !CanCast(caster, spellId) || !info->CheckTargetCreatureType(target) ||
-                    target->IsImmunedToSpell(info) ||
-                    !caster->IsWithinCombatRange(target, info->GetMaxRange(false, caster)))
+                    target->IsImmunedToSpell(info))
+                    continue;
+
+                float const range = info->GetMaxRange(false, caster);
+                bool const walk = !caster->IsWithinCombatRange(target, range);
+                if (walk && !caster->IsWithinCombatRange(target, range + CC_WALK_REACH))
                     continue;
 
                 int32 const holdMs = NextCcDurationMs(target, info);
@@ -862,7 +924,7 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
                 if (breaks && !clear)
                     continue;
 
-                options.push_back({i, spellId, breaks, holdMs, caster->GetExactDist(target)});
+                options.push_back({i, spellId, breaks, holdMs, caster->GetExactDist(target), walk});
             }
         }
 
@@ -870,10 +932,10 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
         for (CcOption const& option : options)
         {
             Player* caster = casters[option.caster].first;
-            if (busy[option.caster] || !caster->IsWithinLOSInMap(target))
+            if (busy[option.caster] || (!option.walk && !caster->IsWithinLOSInMap(target)))
                 continue;
 
-            state.ccDuties[caster->GetGUID()] = {champion->guid, option.spellId, now};
+            state.ccDuties[caster->GetGUID()] = {champion->guid, option.spellId, now, option.walk};
             state.ccTargets.Set(caster->GetGUID(), champion->guid);
             busy[option.caster] = true;
             break;
@@ -907,6 +969,7 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
     {
         state->liveSinceMs = now;
         state->packAnchor = GetFactionChampionsLandingCentre(bot);
+        state->packCentre = state->packAnchor;
     }
 
     ScanChampions(*state, bot);
@@ -920,12 +983,12 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
 }
 
 // Counterspell only interrupts a spell passing these checks (Spell::EffectInterruptCast), so the
-// cooldown only goes on a heal it stops
-bool CounterspellStopsHeal(Unit* champion)
+// cooldown only goes on a heal it stops. leftMs: what's left of a cast, 0 for a channel.
+bool CounterspellStopsHeal(Unit* champion, int32& leftMs)
 {
     for (CurrentSpellTypes type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL})
     {
-        Spell const* spell = champion->GetCurrentSpell(type);
+        Spell* spell = champion->GetCurrentSpell(type);
         if (!spell)
             continue;
 
@@ -937,7 +1000,10 @@ bool CounterspellStopsHeal(Unit* champion)
                                        : (info->InterruptFlags & SPELL_INTERRUPT_FLAG_INTERRUPT);
 
         if (info->IsPositive() && casting && interruptible && info->PreventionType == SPELL_PREVENTION_TYPE_SILENCE)
+        {
+            leftMs = type == CURRENT_GENERIC_SPELL ? spell->GetCastTimeRemaining() : 0;
             return true;
+        }
     }
 
     return false;
@@ -1079,27 +1145,6 @@ std::vector<Unit*> FactionChampionsInCombat(PlayerbotAI* botAI)
     return out;
 }
 
-uint32 FactionChampionsPetTauntAutocast(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    Pet* pet = bot->GetPet();
-    Map* map = bot->FindMap();
-    if (!pet || !pet->IsAlive() || !map || !map->IsHeroic() ||
-        !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
-        return 0;
-
-    for (uint8 pos = 0; pos < pet->GetPetAutoSpellSize(); ++pos)
-    {
-        uint32 const spellId = pet->GetPetAutoSpellOnPos(pos);
-        SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
-        if (info && (info->HasAura(SPELL_AURA_MOD_TAUNT) || info->HasEffect(SPELL_EFFECT_ATTACK_ME) ||
-                     info->HasEffect(SPELL_EFFECT_THREAT)))
-            return spellId;
-    }
-
-    return 0;
-}
-
 bool FactionChampionsIsPackTank(Player* player)
 {
     return player && GET_PLAYERBOT_AI(player) && PlayerbotAI::IsTank(player);
@@ -1141,6 +1186,7 @@ bool FactionChampionsIsFrontline(Player* player)
     {
         case CLASS_WARRIOR:
         case CLASS_PALADIN:
+        case CLASS_SHAMAN:
             return true;
         case CLASS_DEATH_KNIGHT:
             return player->GetGUID() != FactionChampionsChainDk(player);
@@ -1190,6 +1236,15 @@ Champion const* LiveChampion(PlayerbotAI* botAI, Unit* unit)
     return state && state->live ? FindCandidate(*state, unit->GetGUID()) : nullptr;
 }
 }  // namespace
+
+bool FactionChampionsKillTargetOut(PlayerbotAI* botAI)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return false;
+
+    FactionChampionsState* state = Refresh(botAI);
+    return state && state->live && !state->outOnce.IsEmpty() && state->outOnce == state->killTarget.Get();
+}
 
 bool FactionChampionsIsPulled(PlayerbotAI* botAI, Unit* champion)
 {
@@ -1280,7 +1335,21 @@ bool FactionChampionsCounterspellDuty(PlayerbotAI* botAI)
         return false;
 
     Unit* killTarget = FactionChampionsKillTarget(botAI);
-    return killTarget && CounterspellStopsHeal(killTarget) && CounterspellMage(bot, killTarget) == bot;
+    int32 leftMs = 0;
+    return killTarget && CounterspellStopsHeal(killTarget, leftMs) && leftMs <= LATE_INTERRUPT_MS &&
+           CounterspellMage(bot, killTarget) == bot;
+}
+
+bool FactionChampionsCounterspellHold(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_MAGE)
+        return false;
+
+    Unit* killTarget = FactionChampionsKillTarget(botAI);
+    int32 leftMs = 0;
+    return killTarget && CounterspellStopsHeal(killTarget, leftMs) && leftMs > LATE_INTERRUPT_MS &&
+           CounterspellMage(bot, killTarget) == bot;
 }
 
 }

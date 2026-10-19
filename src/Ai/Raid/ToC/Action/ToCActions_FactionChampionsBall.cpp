@@ -19,6 +19,8 @@ constexpr float SAME_SPOT = 0.5f;
 // inside the AoE by this much, so a step by the champions doesn't leave them out
 constexpr float OPENER_MARGIN = 1.0f;
 constexpr uint32 OPENER_MIN_CHAMPIONS = 3;
+// past the boost's own threshold, the run always boosts
+constexpr float RUN_BOOST_DIST = 100.0f;
 
 bool WalkingTo(Position const* walking, Position const& spot)
 {
@@ -49,22 +51,27 @@ Unit* NearestPackChampion(PlayerbotAI* botAI, Player* bot)
 
 bool FactionChampionsFrontlineReturnAction::Execute(Event /*event*/)
 {
-    Position anchor;
-    if (!FactionChampionsFrontlineHeld(botAI, anchor) || bot->GetExactDist2d(&anchor) <= PACK_TANK_ARRIVE)
+    Position centre;
+    if (!FactionChampionsFrontlineHeld(botAI, centre) || bot->GetExactDist2d(&centre) <= PACK_TANK_ARRIVE)
     {
         DropWalk();
         return false;
     }
 
-    if (WalkingTo(WalkInFlight(), anchor))
+    if (WalkingTo(WalkInFlight(), centre))
         return true;
 
-    return WalkTo(anchor);
+    FactionChampionsBoostWalk(bot, bot->GetExactDist2d(&centre));
+    return WalkTo(centre);
 }
 
 bool FactionChampionsFrontlineAttackAction::Execute(Event /*event*/)
 {
-    return AttackDirect(FactionChampionsFrontlineTarget(botAI));
+    Unit* champion = FactionChampionsFrontlineTarget(botAI);
+    if (champion)
+        FactionChampionsBoostWalk(bot, bot->GetExactDist2d(champion));
+
+    return AttackDirect(champion);
 }
 
 bool FactionChampionsBallStandAction::Execute(Event /*event*/)
@@ -79,7 +86,28 @@ bool FactionChampionsBallStandAction::Execute(Event /*event*/)
     if (WalkingTo(WalkInFlight(), spot))
         return true;
 
+    FactionChampionsBoostWalk(bot, bot->GetExactDist2d(&spot));
     return WalkTo(spot);
+}
+
+bool FactionChampionsChasedAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!FactionChampionsChased(botAI, spot))
+    {
+        DropWalk();
+        return false;
+    }
+
+    if (WalkingTo(WalkInFlight(), spot))
+        return true;
+
+    // a cast in progress pins the feet
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    FactionChampionsBoostWalk(bot, RUN_BOOST_DIST);
+    return WalkTo(spot, MovementPriority::MOVEMENT_FORCED);
 }
 
 bool FactionChampionsOpenerAction::Execute(Event /*event*/)

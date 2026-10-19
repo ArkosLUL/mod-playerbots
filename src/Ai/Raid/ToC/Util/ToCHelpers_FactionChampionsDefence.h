@@ -63,8 +63,9 @@ Unit* FactionChampionsDispelCcTarget(PlayerbotAI* botAI, char const*& spell);
 // within 15 yd of it carries Unstable Affliction.
 Unit* FactionChampionsMassDispelTarget(PlayerbotAI* botAI);
 
-// The kill target and the spell to purge it with, when this bot is the raid's one purger and the kill
-// target holds a buff worth taking.
+// The champion and the spell to purge it with: the kill target holding a buff worth taking for the raid's
+// purger, a pack champion holding Bloodlust, Heroism, Avenging Wrath or Hand of Freedom for the next one,
+// melee champions on the frontline first.
 Unit* FactionChampionsPurgeTarget(PlayerbotAI* botAI, char const*& spell);
 
 // Where a physical attacker goes while the kill target is immune to physical damage only (Hand of
@@ -75,8 +76,13 @@ Unit* FactionChampionsPhysicalSwitchTarget(PlayerbotAI* botAI);
 // 30 yd holding none, and stays with it until the totem dies or the bot dies, loses control or is past 30 yd.
 Unit* FactionChampionsTotemTarget(PlayerbotAI* botAI);
 
-// The three below skip a Hellfire for its first 2 s for one bot, left in place to kick it: the first
-// by guid on the warlock, in melee range with a melee interrupt ready.
+// The warlock whose Hellfire this bot interrupts at once, and the spell. One bot per channel: the nearest
+// with an interrupt ready that reaches him, ranged first (Counterspell, Wind Shear, Silence, Strangulate,
+// Silencing Shot, a felhunter's Spell Lock), else a melee kick. Written to fc.kick.
+Unit* FactionChampionsChannelInterruptTarget(PlayerbotAI* botAI, char const*& spell);
+
+// The three below skip a Hellfire for its first 2 s for its interrupter when that's a melee kick, so it
+// stays in place to land it.
 
 // Inside an active Bladestorm or Hellfire, plus a yard
 bool FactionChampionsInAoe(PlayerbotAI* botAI);
@@ -122,6 +128,25 @@ ObjectGuid FactionChampionsChainTarget(Player* bot);
 
 // A DK is on its way to grip the kill target out of the pack, which it hasn't left yet
 bool FactionChampionsGripPending(PlayerbotAI* botAI);
+
+// Roots, stuns, fears, confuses, charges or knocks back, itself or one trigger or linked spell down.
+// A rooted champion can't take Death Grip's pull, and a root or stun landing mid-flight ends the jump.
+bool FactionChampionsSpellHoldsTarget(uint32 spellId);
+
+// Nothing may hold it: the player's pull until 6 s after the bot DK's grip, a grip duty's target, and any
+// champion in the air
+bool FactionChampionsGripGuarded(PlayerbotAI* botAI, Unit* champion);
+
+// Some champion is guarded
+bool FactionChampionsGripGuardActive(PlayerbotAI* botAI);
+
+// The guard's chain half, no fight refresh: the player's pull, its 6 s tail, or in the air. Safe inside
+// the champion refresh.
+bool FactionChampionsChainGuarded(Player* bot, Unit* champion);
+
+// A pet autocast to flip, and which way: taunts off on heroic for the fight, holds off while a guard is
+// active and back on after it. 0 when nothing needs flipping.
+uint32 FactionChampionsPetAutocastToggle(PlayerbotAI* botAI, bool& enable);
 
 // The melee champion this bot snares and the spell id, when its victim is a healer or under half
 // health, or it is loose off the tank, and nothing slows it yet. One snarer per champion.
