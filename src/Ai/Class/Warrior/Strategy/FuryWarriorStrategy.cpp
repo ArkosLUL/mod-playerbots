@@ -177,6 +177,25 @@ void FuryWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+    // Stance dance for Rend and Overpower. Once in Battle Stance they have to beat Bloodsurge's Slam,
+    // "berserker stance" takes the bot back as soon as the 1s stance cooldown is up.
+    triggers.push_back(
+        new TriggerNode(
+            "battle stance dance",
+            {
+                NextAction("battle stance", ACTION_HIGH + 3)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
+            "in battle stance",
+            {
+                NextAction("rend", ACTION_HIGH + 8.5f),
+                NextAction("overpower", ACTION_HIGH + 8.4f)
+            }
+        )
+    );
     triggers.push_back(
         new TriggerNode(
             "sunder armor stack",

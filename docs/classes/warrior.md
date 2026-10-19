@@ -11,11 +11,14 @@ Fury (`fury` + `aoe`):
 | 90 | critical health | enraged regeneration |
 | 40 | pummel / pummel on enemy healer / victory rush | interrupts |
 | 39 | enemy out of melee | charge |
-| 29 / 28 | berserker stance / battle shout | berserker stance / battle shout |
-| 27 / 26 | bloodthirst / whirlwind *(both always active)* | bloodthirst / whirlwind |
-| 26 | medium aoe | sweeping strikes, bladestorm |
-| 25 | instant slam (Bloodsurge) | slam |
+| 29 | berserker stance | berserker stance |
+| 28.5 / 28.4 | in battle stance | rend / overpower |
+| 28 | battle shout | battle shout |
+| 27 | instant slam (Bloodsurge) / medium aoe | slam / sweeping strikes |
+| 26.5 / 26 | medium aoe | whirlwind / bladestorm |
+| 26 / 25 | bloodthirst / whirlwind *(both always active)* | bloodthirst / whirlwind |
 | 24 | target critical health | execute |
+| 23 | battle stance dance | battle stance |
 | 22 / 21 | bloodrage / death wish, recklessness | *(off-GCD)* |
 | 20 | medium aoe | cleave *(off-GCD)* |
 | 19 | sunder armor stack | sunder armor |
@@ -38,7 +41,7 @@ Arms (`arms` + `aoe`):
 | 21 | bladestorm available | bladestorm |
 | 20 | hamstring, medium aoe | piercing howl, cleave *(off-GCD)* |
 | 19 | sunder armor stack | sunder armor |
-| 18 | medium rage available | slam |
+| 18 | light rage available | slam |
 | 5.1 → 5.0 | *defaults* + high rage available | mortal strike, sunder armor, melee, heroic strike *(off-GCD)* |
 
 ## What was wrong and why the fixes look like they do
@@ -76,6 +79,19 @@ Arms (`arms` + `aoe`):
   the bot's own Rend is missing or all its ticks have landed, i.e. in the dead tail hasted Rend leaves
   (unhasted 15s / 21s divides evenly by 3s). `CastRendAction::isUseful` mirrors it, since the base
   rejects a present aura. Tanks keep the plain `"rend"` trigger.
+- **Arms never Slammed.** `CastSlamAction` checked Improved Slam with `HasSpell`, but a passive talent
+  lives only in the talent map (`HasTalent`), so Slam went out only on a Bloodsurge proc and the spare
+  GCDs idled while rage went to Heroic Strike. Slam now fires from 20 rage, as the sim's filler does
+  from 15; Heroic Strike keeps the 60 overflow.
+- **Fury stance dance.** Rend and Overpower need Battle Stance, so Improved Rend, Improved Overpower
+  and Taste for Blood were dead talents. `battle stance dance` swaps from Berserker Stance only with a
+  free GCD, Bloodthirst ≥1s and Whirlwind ≥1.5s from ready, no Bloodsurge proc, ≥10 rage, in melee,
+  and either the bot's own Rend due (`ShouldCastRend`) or a Taste for Blood proc with Overpower off
+  cooldown. In Battle Stance, Rend and Overpower outrank Bloodsurge Slam; the 1s stance cooldown holds
+  `berserker stance` off for that one strike. No rage ceiling: the swap keeps 10 rage with Stance Mastery
+  (Rend's cost; Tactical Mastery adds 5 per rank), and the excess lost is worth less than the strike.
+  Bleed-immune targets get no Rend (`ShouldCastRend`), or the dance would repeat all fight. No AoE gate either. Cost:
+  Pummel and Intercept are unavailable for that ~1s.
 
 ### Off-GCD abilities and `SetNextCheckDelay(0)`
 
@@ -126,9 +142,6 @@ there, not against an equipped piece. Server config was never involved.
   are raw item ids in conf and unfilled slots get a **random** eligible glyph; the PvP remap at
   `PlayerbotFactory.cpp:4404-4416` also reclassifies an Arms bot purely on the presence of Second
   Wind (29838) and needs a guard.
-- Against the wowtbc.gg guides, still open: Bloodsurge Slam should rank *above* Bloodthirst and
-  Whirlwind (a 5s proc window against a 6s BT and 8s WW cooldown means procs get eaten); AoE should
-  reprioritise Whirlwind over Bloodthirst.
 - **Rend haste re-snapshot** (Bloodlust, Berserking, haste procs) is deferred: ~1 extra tick per lust,
   and it would copy mod-spell-tweaks' Trauma + attack-speed formula into playerbots.
 - Arms registers a `death wish` trigger, but Death Wish is Fury tier 5 — unreachable in a PvE Arms

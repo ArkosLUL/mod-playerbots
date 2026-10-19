@@ -19,12 +19,22 @@ constexpr uint32 SPELL_DIVINE_SHIELD = 642;
 constexpr uint32 SPELL_ICE_BLOCK = 45438;
 constexpr uint32 SPELL_BLESSING_OF_PROTECTION = 41450;
 constexpr uint32 SPELL_COMMANDING_PRESENCE_RANKS[] = { 12318, 12857, 12858, 12860, 12861 };
+constexpr uint32 SPELL_SLAM_PROC = 46916;
+constexpr uint32 SPELL_TASTE_FOR_BLOOD_PROC = 60503;
 constexpr float REND_MIN_TIME_TO_DIE = 8.0f;
+constexpr uint8 REND_RAGE_COST = 10;
+constexpr uint32 DANCE_MIN_BLOODTHIRST_COOLDOWN_MS = 1000;
+constexpr uint32 DANCE_MIN_WHIRLWIND_COOLDOWN_MS = 1500;
 }
 
 bool ShouldCastRend(PlayerbotAI* botAI, Unit* target)
 {
     if (!target || !target->IsAlive() || !target->IsInWorld())
+        return false;
+
+    // no Rend aura ever lands here, so Fury would stance dance for it all fight
+    Creature* creature = target->ToCreature();
+    if (creature && creature->HasMechanicTemplateImmunity(1ULL << MECHANIC_BLEED))
         return false;
 
     float groupDps = botAI->GetAiObjectContext()->GetValue<float>("estimated group dps")->Get();
@@ -39,6 +49,42 @@ bool ShouldCastRend(PlayerbotAI* botAI, Unit* target)
     // core caps ticks at max duration / interval. Recasting there costs nothing
     AuraEffect const* dot = rend->GetEffect(EFFECT_0);
     return dot && dot->GetTotalTicks() > 0 && dot->GetTickNumber() >= uint32(dot->GetTotalTicks());
+}
+
+bool BattleStanceDanceTrigger::IsActive()
+{
+    if (bot->GetShapeshiftForm() != FORM_BERSERKERSTANCE)
+        return false;
+
+    if (AI_VALUE2(uint8, "rage", "self target") < REND_RAGE_COST)
+        return false;
+
+    // Bloodsurge's Slam would take the GCD the swap is for
+    if (bot->HasAura(SPELL_SLAM_PROC))
+        return false;
+
+    uint32 const bloodthirst = AI_VALUE2(uint32, "spell id", "bloodthirst");
+    uint32 const whirlwind = AI_VALUE2(uint32, "spell id", "whirlwind");
+    if (!bloodthirst || !whirlwind || bot->GetSpellCooldownDelay(bloodthirst) < DANCE_MIN_BLOODTHIRST_COOLDOWN_MS ||
+        bot->GetSpellCooldownDelay(whirlwind) < DANCE_MIN_WHIRLWIND_COOLDOWN_MS)
+    {
+        return false;
+    }
+
+    uint32 const rend = AI_VALUE2(uint32, "spell id", "rend");
+    SpellInfo const* rendInfo = rend ? sSpellMgr->GetSpellInfo(rend) : nullptr;
+    if (!rendInfo || bot->GetGlobalCooldownMgr().HasGlobalCooldown(rendInfo))
+        return false;
+
+    Unit* target = GetTarget();
+    if (!target || !target->IsAlive() || !bot->IsWithinMeleeRange(target))
+        return false;
+
+    uint32 const overpower = AI_VALUE2(uint32, "spell id", "overpower");
+    if (overpower && bot->HasAura(SPELL_TASTE_FOR_BLOOD_PROC) && !bot->HasSpellCooldown(overpower))
+        return true;
+
+    return ShouldCastRend(botAI, target);
 }
 
 bool BloodrageBuffTrigger::IsActive()

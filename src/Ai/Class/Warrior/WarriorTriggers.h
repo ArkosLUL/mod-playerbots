@@ -86,6 +86,25 @@ public:
     bool IsActive() override { return ShouldCastRend(botAI, GetTarget()); }
 };
 
+// Fury goes to Battle Stance for Rend or Overpower only on a free GCD with Bloodthirst and Whirlwind
+// still cooling down, so the swap never delays either by more than a GCD
+class BattleStanceDanceTrigger : public Trigger
+{
+public:
+    BattleStanceDanceTrigger(PlayerbotAI* botAI) : Trigger(botAI, "battle stance dance") {}
+
+    std::string const GetTargetName() override { return "current target"; }
+    bool IsActive() override;
+};
+
+class InBattleStanceTrigger : public Trigger
+{
+public:
+    InBattleStanceTrigger(PlayerbotAI* botAI) : Trigger(botAI, "in battle stance") {}
+
+    bool IsActive() override { return bot->GetShapeshiftForm() == FORM_BATTLESTANCE; }
+};
+
 // DPS warriors are the raid's Sunder providers when no protection warrior is around, and a
 // DEBUFF_TRIGGER only fires while the debuff is entirely absent, so it cannot drive the 1->5 stack
 // ramp. Mirrors the conditions in CastSunderArmorAction::isUseful.
