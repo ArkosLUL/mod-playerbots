@@ -52,6 +52,8 @@ constexpr float SIDE_REANCHOR = 6.0f;
 // a held stand this close to a slot of the current layout keeps it
 constexpr float SAME_SLOT = 0.5f;
 constexpr float SIDE_MIN_SPREAD = 5.0f;
+// Slack inside Cyclone's reach for the healer's drift
+constexpr float CYCLONE_STAND_MARGIN = 2.0f;
 
 // a shorter walk isn't worth Nitro Boosts' 3 min cooldown
 constexpr float NITRO_MIN_WALK = 15.0f;
@@ -98,10 +100,21 @@ struct Run
     Position spot;
 };
 
+// Kept until either unit moves SIDE_REANCHOR or the spot stops being clear
+struct CycloneStand
+{
+    ObjectGuid kill;
+    ObjectGuid healer;
+    Position killAt;
+    Position healerAt;
+    Position spot;
+};
+
 struct BallState
 {
     RaidObs::ObsGuidMap<ObjectGuid> front{"fc.front"};
     RaidObs::ObsGuidMap<uint32> opener{"fc.opener"};
+    RaidObs::ObsGuidMap<ObjectGuid> cyclone{"fc.cyclone"};  // druid -> the pack healer it covers
 
     uint32 memoMs = 0;
     bool memoValid = false;
@@ -113,6 +126,8 @@ struct BallState
     Layout heal;
     std::unordered_map<ObjectGuid, Position> stands;
     std::unordered_map<ObjectGuid, Run> runs;  // chased bot -> its boosted run
+    std::unordered_map<ObjectGuid, size_t> healSpokes;
+    std::unordered_map<ObjectGuid, CycloneStand> cycloneStands;
 };
 
 RaidInstanceState<BallState> ballStates;
@@ -411,6 +426,68 @@ bool Clear(Position const& spot, std::vector<EncounterHelpers::HazardCircle> con
                                          { return spot.GetExactDist2d(hazard.first) < hazard.second; });
 }
 
+// On the side rings round the kill target, so the druid still hits it: within Cyclone reach of the pack
+// healer, farthest from the pack, then nearest the druid; with none in reach, nearest the healer. False
+// when no ring spot is clear.
+bool CycloneSpot(BallState& state, Player* druid, Unit* kill, Unit* healer, Position const& centre,
+                 std::vector<EncounterHelpers::HazardCircle> const& hazards, Position& spot)
+{
+    auto const held = state.cycloneStands.find(druid->GetGUID());
+    if (held != state.cycloneStands.end() && held->second.kill == kill->GetGUID() &&
+        held->second.healer == healer->GetGUID() && kill->GetExactDist2d(&held->second.killAt) <= SIDE_REANCHOR &&
+        healer->GetExactDist2d(&held->second.healerAt) <= SIDE_REANCHOR && Clear(held->second.spot, hazards))
+    {
+        spot = held->second.spot;
+        return true;
+    }
+
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(SPELL_CYCLONE);
+    float const reach = (info ? info->GetMaxRange(false, druid) : 0.0f) + druid->GetCombatReach() +
+                        healer->GetCombatReach() - CYCLONE_STAND_MARGIN;
+    Vec const out = Unit2(kill->GetPositionX() - centre.GetPositionX(), kill->GetPositionY() - centre.GetPositionY());
+    uint32 const steps = static_cast<uint32>(360.0f / SIDE_STEP_DEG);
+
+    bool found = false;
+    bool bestReaches = false;
+    Position best;
+    for (float ring : SIDE_RINGS)
+    {
+        for (uint32 step = 0; step < steps; ++step)
+        {
+            Position const candidate = Along(kill->GetPosition(), Rotate(out, SIDE_STEP_DEG * step), ring);
+            if (!Clear(candidate, hazards))
+                continue;
+
+            bool const reaches = healer->GetExactDist2d(&candidate) <= reach;
+            bool better = !found || (reaches && !bestReaches);
+            if (found && reaches == bestReaches)
+            {
+                if (!reaches)
+                    better = healer->GetExactDist2d(&candidate) < healer->GetExactDist2d(&best);
+                else if (centre.GetExactDist2d(&candidate) != centre.GetExactDist2d(&best))
+                    better = centre.GetExactDist2d(&candidate) > centre.GetExactDist2d(&best);
+                else
+                    better = druid->GetExactDist2d(&candidate) < druid->GetExactDist2d(&best);
+            }
+
+            if (better)
+            {
+                found = true;
+                bestReaches = reaches;
+                best = candidate;
+            }
+        }
+    }
+
+    if (!found)
+        return false;
+
+    state.cycloneStands[druid->GetGUID()] = {kill->GetGUID(), healer->GetGUID(), kill->GetPosition(),
+                                             healer->GetPosition(), best};
+    spot = best;
+    return true;
+}
+
 void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> const& members)
 {
     Position anchor;
@@ -421,6 +498,14 @@ void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
         state.stands.clear();
         state.side.valid = false;
         state.heal.valid = false;
+        std::vector<ObjectGuid> druids;
+        for (auto const& held : state.cyclone.Raw())
+            druids.push_back(held.first);
+
+        for (ObjectGuid const& guid : druids)
+            state.cyclone.erase(guid);
+
+        state.cycloneStands.clear();
         return;
     }
 
@@ -454,20 +539,25 @@ void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
     for (ObjectGuid const& guid : gone)
         state.stands.erase(guid);
 
-    // The melee champions weigh armour, so plate heals the frontline and the least armour goes with the
-    // kill squad
-    std::vector<Player*> byArmour = healers;
-    std::stable_sort(byArmour.begin(), byArmour.end(),
-                     [](Player* a, Player* b) { return a->GetArmor() > b->GetArmor(); });
-    size_t const frontHealers = byArmour.size() > 1 ? byArmour.size() - 1 : byArmour.size();
+    // The gripped champion healer can't kill anyone in the kill squad, so every healer heals the frontline.
+    // Each keeps its spoke while it lives, so a death moves nobody else.
+    std::vector<ObjectGuid> lost;
+    for (auto const& held : state.healSpokes)
+        if (std::none_of(healers.begin(), healers.end(),
+                         [&held](Player* member) { return member->GetGUID() == held.first; }))
+            lost.push_back(held.first);
+
+    for (ObjectGuid const& guid : lost)
+        state.healSpokes.erase(guid);
 
     Vec const toPulled =
         out ? Unit2(killTarget->GetPositionX() - centre.GetPositionX(), killTarget->GetPositionY() - centre.GetPositionY())
             : toArena;
     Reanchor(state.heal, killTarget->GetGUID(), out, centre, toPulled);
-    for (size_t i = 0; i < frontHealers; ++i)
+    std::vector<Position> spokes;
+    for (float degrees : FRONT_HEALER_SPOKES_DEG)
     {
-        Vec const spoke = Rotate(state.heal.dir, FRONT_HEALER_SPOKES_DEG[i % FRONT_HEALER_SPOKES_DEG.size()]);
+        Vec const spoke = Rotate(state.heal.dir, degrees);
         float distance = FRONT_HEALER_DIST;
         Position spot = Along(state.heal.at, spoke, distance);
         while (!OnFloor(spot) && distance > FRONT_HEALER_MIN)
@@ -476,7 +566,35 @@ void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
             spot = Along(state.heal.at, spoke, distance);
         }
 
-        state.stands[byArmour[i]->GetGUID()] = spot;
+        spokes.push_back(spot);
+    }
+
+    std::vector<bool> spokeTaken(spokes.size(), false);
+    for (auto const& held : state.healSpokes)
+        spokeTaken[held.second] = true;
+
+    for (Player* healer : healers)
+    {
+        auto held = state.healSpokes.find(healer->GetGUID());
+        if (held == state.healSpokes.end())
+        {
+            size_t best = spokes.size();
+            for (size_t s = 0; s < spokes.size(); ++s)
+                if (!spokeTaken[s] &&
+                    (best == spokes.size() || healer->GetExactDist2d(&spokes[s]) < healer->GetExactDist2d(&spokes[best])))
+                    best = s;
+
+            if (best == spokes.size())
+            {
+                state.stands.erase(healer->GetGUID());
+                continue;
+            }
+
+            spokeTaken[best] = true;
+            held = state.healSpokes.emplace(healer->GetGUID(), best).first;
+        }
+
+        state.stands[healer->GetGUID()] = spokes[held->second];
     }
 
     // With the kill target still in the pack the pack's own direction means nothing
@@ -485,16 +603,38 @@ void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
     if (!waitOut && sideAt.GetExactDist2d(&centre) >= SIDE_MIN_SPREAD)
         sideDir = Unit2(sideAt.GetPositionX() - centre.GetPositionX(), sideAt.GetPositionY() - centre.GetPositionY());
 
+    std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
+    Unit* packHealer = out ? FactionChampionsBlobHealer(botAI) : nullptr;
     std::vector<Player*> squad;
-    for (size_t i = frontHealers; i < byArmour.size(); ++i)
-        squad.push_back(byArmour[i]);
+    std::vector<ObjectGuid> covering;
+    for (Player* member : ranged)
+    {
+        Position spot;
+        if (packHealer && FactionChampionsCycloneBot(member) &&
+            CycloneSpot(state, member, killTarget, packHealer, centre, hazards, spot))
+        {
+            state.stands[member->GetGUID()] = spot;
+            state.cyclone.Set(member->GetGUID(), packHealer->GetGUID());
+            covering.push_back(member->GetGUID());
+        }
+        else
+            squad.push_back(member);
+    }
 
-    squad.insert(squad.end(), ranged.begin(), ranged.end());
+    std::vector<ObjectGuid> released;
+    for (auto const& held : state.cyclone.Raw())
+        if (std::find(covering.begin(), covering.end(), held.first) == covering.end())
+            released.push_back(held.first);
+
+    for (ObjectGuid const& guid : released)
+    {
+        state.cyclone.erase(guid);
+        state.cycloneStands.erase(guid);
+    }
+
     if (Reanchor(state.side, killTarget->GetGUID(), waitOut, sideAt, sideDir))
         for (Player* member : squad)
             state.stands.erase(member->GetGUID());
-
-    std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
     std::vector<Position> slots;
     for (float ring : waitOut ? PACK_RINGS : SIDE_RINGS)
     {

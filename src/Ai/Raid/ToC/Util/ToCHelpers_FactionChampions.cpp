@@ -59,6 +59,15 @@ constexpr KillOrderRow KILL_ORDER[] = {
 
 constexpr uint8 NOT_A_CHAMPION = static_cast<uint8>(std::size(KILL_ORDER));
 
+// Melee by what they took off the raid in the 25H traces, the rogue steadiest at the top. The first one up
+// is kept stunned, CC'd or disarmed.
+constexpr KillOrderRow DANGER_ORDER[] = {
+    {ToCFactionChampions::NPC_ALLIANCE_ROGUE, ToCFactionChampions::NPC_HORDE_ROGUE},
+    {ToCFactionChampions::NPC_ALLIANCE_DEATH_KNIGHT, ToCFactionChampions::NPC_HORDE_DEATH_KNIGHT},
+    {ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION, ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION},
+    {ToCFactionChampions::NPC_ALLIANCE_WARRIOR, ToCFactionChampions::NPC_HORDE_WARRIOR},
+};
+
 // Same radius as the encounter gate, which sees the whole arena from anywhere on its floor
 constexpr float CHAMPION_SEARCH_RADIUS = 200.0f;
 constexpr float COUNTERSPELL_RANGE = 30.0f;
@@ -125,6 +134,7 @@ struct FactionChampionsState
     RaidObs::ObsValue<ObjectGuid> killTarget{"fc.kill"};
     RaidObs::ObsGuidMap<ObjectGuid> ccTargets{"fc.cc"};
     RaidObs::ObsGuidMap<uint32> ccAuras{"fc.ccaura"};
+    RaidObs::ObsValue<ObjectGuid> danger{"fc.danger"};
 
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
@@ -152,6 +162,16 @@ uint8 KillRank(uint32 entry)
             return rank;
 
     return NOT_A_CHAMPION;
+}
+
+size_t DangerRank(uint32 entry)
+{
+    for (size_t rank = 0; rank < std::size(DANGER_ORDER); ++rank)
+        if (entry == static_cast<uint32>(DANGER_ORDER[rank].alliance) ||
+            entry == static_cast<uint32>(DANGER_ORDER[rank].horde))
+            return rank;
+
+    return std::size(DANGER_ORDER);
 }
 
 std::vector<uint32> const& ChampionEntries()
@@ -237,6 +257,9 @@ void EndPull(FactionChampionsState& state, Player* bot)
         RaidObs::Note(bot, "fc.switch", "reset");
         state.killTarget = ObjectGuid::Empty;
     }
+
+    if (!state.danger.Get().IsEmpty())
+        state.danger = ObjectGuid::Empty;
 
     EraseAll(state.ccTargets);
     EraseAll(state.ccAuras);
@@ -353,6 +376,13 @@ bool InControl(Player* player)
     return !player->HasUnitState(UNIT_STATE_LOST_CONTROL) && !player->HasUnitFlag(UNIT_FLAG_SILENCED);
 }
 
+// a melee druid would leave cat form for it
+bool CycloneBot(Player* member)
+{
+    return member && member->getClass() == CLASS_DRUID && GET_PLAYERBOT_AI(member) && IsToCDpsBot(member) &&
+           !PlayerbotAI::IsMelee(member) && member->HasSpell(SPELL_CYCLONE);
+}
+
 // The CC spells this bot knows, or none when it isn't a CC bot: a dps mage, warlock, ranged druid or
 // shaman off the frontline
 std::vector<uint32> CcSpells(Player* member, Map* map)
@@ -378,8 +408,7 @@ std::vector<uint32> CcSpells(Player* member, Map* map)
             add(FirstKnownRank(member, FEAR_RANKS));
             break;
         case CLASS_DRUID:
-            // a melee druid would leave cat form for it
-            if (!PlayerbotAI::IsMelee(member) && member->HasSpell(SPELL_CYCLONE))
+            if (CycloneBot(member))
                 add(SPELL_CYCLONE);
             break;
         case CLASS_SHAMAN:
@@ -578,6 +607,55 @@ Champion const* FindCandidate(FactionChampionsState const& state, ObjectGuid gui
     return nullptr;
 }
 
+// The champion healer in the pack nearest the kill target, the one that can reach it with heals first
+Champion const* BlobHealer(FactionChampionsState const& state)
+{
+    Champion const* kill = FindCandidate(state, state.killTarget.Get());
+    if (!kill)
+        return nullptr;
+
+    Champion const* best = nullptr;
+    float bestDist = 0.0f;
+    for (Champion const& champion : state.champions)
+    {
+        if (!champion.healer || !champion.inCombat || champion.pulled || champion.guid == kill->guid ||
+            champion.guid == state.suspended)
+            continue;
+
+        float const dist = std::hypot(champion.x - kill->x, champion.y - kill->y);
+        if (!best || dist < bestDist)
+        {
+            best = &champion;
+            bestDist = dist;
+        }
+    }
+
+    return best;
+}
+
+bool CycloneStandUp(FactionChampionsState const& state, Player* member)
+{
+    return CycloneBot(member) && !state.outOnce.IsEmpty() && state.outOnce == state.killTarget.Get() &&
+           BlobHealer(state);
+}
+
+void UpdateDanger(FactionChampionsState& state)
+{
+    ObjectGuid const kill = state.killTarget.Get();
+    Champion const* best = nullptr;
+    for (Champion const& champion : state.champions)
+    {
+        if (!champion.inCombat || champion.pulled || champion.guid == kill || champion.guid == state.suspended ||
+            DangerRank(champion.entry) == std::size(DANGER_ORDER))
+            continue;
+
+        if (!best || DangerRank(champion.entry) < DangerRank(best->entry))
+            best = &champion;
+    }
+
+    state.danger = best ? best->guid : ObjectGuid::Empty;
+}
+
 // Farthest off the pack, kill order breaking ties
 Champion const* BestPulled(FactionChampionsState const& state, ObjectGuid exclude)
 {
@@ -720,8 +798,8 @@ ObjectGuid NextGripHealer(FactionChampionsState const& state)
     return ObjectGuid::Empty;
 }
 
-// Healers off the tanks nearest the kill target first, then the other healers, then champions off the
-// tanks casters first, then the rest in kill order. Not the kill target, nor the suspended one: the latch
+// Healers off the tanks nearest the kill target first, then the other healers, then the danger champion,
+// then champions off the tanks casters first, then the rest in kill order. Not the kill target, nor the suspended one: the latch
 // goes back to it and CC would break or block that. Nor the skulled one, even while it's immune and so
 // not the latch. Nor a pulled healer, the latch's next pick, nor the player's pull or the likely next one:
 // CC would make each immune to the grip when its turn comes.
@@ -742,15 +820,19 @@ std::vector<Champion const*> CcCandidates(FactionChampionsState const& state, Ob
             champion.guid != state.skulled && champion.guid != nextGrip && champion.guid != chainTarget)
             candidates.push_back(&champion);
 
-    auto const group = [](Champion const* champion)
+    ObjectGuid const danger = state.danger.Get();
+    auto const group = [danger](Champion const* champion)
     {
         if (champion->healer)
             return champion->onFront ? 1 : 0;
 
-        if (champion->onFront)
-            return 4;
+        if (champion->guid == danger)
+            return 2;
 
-        return IsFactionChampionMelee(champion->entry) ? 3 : 2;
+        if (champion->onFront)
+            return 5;
+
+        return IsFactionChampionMelee(champion->entry) ? 4 : 3;
     };
 
     auto const fromKill = [kill](Champion const* champion)
@@ -849,7 +931,9 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
         bool keep = caster != casters.end() && target && InControl(caster->first);
         if (keep && !casting)
         {
-            Aura const* landed = target->GetAura(duty.spellId, ccBot);
+            // the caster's old one in its last seconds isn't the recast landing
+            Aura const* aura = target->GetAura(duty.spellId, ccBot);
+            bool const landed = aura && (aura->GetDuration() < 0 || aura->GetDuration() > CC_RECAST_LEAD_MS);
             keep = !landed && getMSTimeDiff(duty.sinceMs, now) < CC_DUTY_MS + (duty.walk ? CC_WALK_MS : 0);
         }
 
@@ -869,6 +953,28 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
     std::vector<bool> busy(casters.size(), false);
     for (size_t i = 0; i < casters.size(); ++i)
         busy[i] = state.ccDuties.count(casters[i].first->GetGUID()) > 0;
+
+    // One target per caster per spell (SPELL_ATTR5_LIMIT_N): the next cast elsewhere ends the one holding
+    std::vector<std::vector<Champion const*>> tied(casters.size());
+    for (size_t i = 0; i < casters.size(); ++i)
+    {
+        for (uint32 spellId : casters[i].second)
+        {
+            Champion const* holder = nullptr;
+            for (Champion const& champion : state.champions)
+            {
+                Creature* creature = AliveCreature(bot, champion.guid);
+                Aura const* aura = creature ? creature->GetAura(spellId, casters[i].first->GetGUID()) : nullptr;
+                if (aura && (aura->GetDuration() < 0 || aura->GetDuration() > CC_RECAST_LEAD_MS))
+                {
+                    holder = &champion;
+                    break;
+                }
+            }
+
+            tied[i].push_back(holder);
+        }
+    }
 
     for (Champion const* champion : candidates)
     {
@@ -898,8 +1004,15 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
                 continue;
 
             Player* caster = casters[i].first;
-            for (uint32 spellId : casters[i].second)
+            bool const standsForCyclone = CycloneStandUp(state, caster);
+            for (size_t k = 0; k < casters[i].second.size(); ++k)
             {
+                uint32 const spellId = casters[i].second[k];
+                // moving one off a non-healer onto a healer is worth the break
+                Champion const* holder = tied[i][k];
+                if (holder && holder->guid != champion->guid && !(champion->healer && !holder->healer))
+                    continue;
+
                 SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
                 if (!info || !CanCast(caster, spellId) || !info->CheckTargetCreatureType(target) ||
                     target->IsImmunedToSpell(info))
@@ -907,7 +1020,8 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
 
                 float const range = info->GetMaxRange(false, caster);
                 bool const walk = !caster->IsWithinCombatRange(target, range);
-                if (walk && !caster->IsWithinCombatRange(target, range + CC_WALK_REACH))
+                // its stand already reaches the healer it covers, a walk-in would pull it off
+                if (walk && (standsForCyclone || !caster->IsWithinCombatRange(target, range + CC_WALK_REACH)))
                     continue;
 
                 int32 const holdMs = NextCcDurationMs(target, info);
@@ -978,6 +1092,7 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
     Unit* skull = GetToCHumanSkull(botAI, &IsChampionUnit);
     state->skulled = skull ? skull->GetGUID() : ObjectGuid::Empty;
     UpdateKillLatch(*state, bot);
+    UpdateDanger(*state);
     UpdateCcDuties(*state, bot, now);
     return state;
 }
@@ -1350,6 +1465,27 @@ bool FactionChampionsCounterspellHold(PlayerbotAI* botAI)
     int32 leftMs = 0;
     return killTarget && CounterspellStopsHeal(killTarget, leftMs) && leftMs > LATE_INTERRUPT_MS &&
            CounterspellMage(bot, killTarget) == bot;
+}
+
+bool FactionChampionsCycloneBot(Player* player) { return CycloneBot(player); }
+
+Unit* FactionChampionsBlobHealer(PlayerbotAI* botAI)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return nullptr;
+
+    FactionChampionsState* state = Refresh(botAI);
+    Champion const* healer = state && state->live ? BlobHealer(*state) : nullptr;
+    return healer ? AliveCreature(botAI->GetBot(), healer->guid) : nullptr;
+}
+
+Unit* FactionChampionsDangerTarget(PlayerbotAI* botAI)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return nullptr;
+
+    FactionChampionsState* state = Refresh(botAI);
+    return state && state->live ? AliveCreature(botAI->GetBot(), state->danger.Get()) : nullptr;
 }
 
 }

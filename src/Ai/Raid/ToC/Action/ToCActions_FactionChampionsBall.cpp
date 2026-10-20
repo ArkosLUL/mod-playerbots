@@ -86,7 +86,7 @@ bool FactionChampionsBallStandAction::Execute(Event /*event*/)
     if (WalkingTo(WalkInFlight(), spot))
         return true;
 
-    FactionChampionsBoostWalk(bot, bot->GetExactDist2d(&spot));
+    // no Nitro Boosts here: ranged and healers keep them to run from a melee champion
     return WalkTo(spot);
 }
 

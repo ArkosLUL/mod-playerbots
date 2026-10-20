@@ -131,6 +131,9 @@ float ExpectedDamage(Player* member, ToCPredictedHit const& hit)
     if (member->IsImmunedToDamage(hit.school))
         return 0.0f;
 
+    if (hit.measured)
+        return static_cast<float>(hit.damage);
+
     float const resist = Unit::GetEffectiveResistChance(nullptr, hit.school, member, nullptr, hit.casterLevel);
     float const taken = member->GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN, hit.school);
     return static_cast<float>(hit.damage) * std::max(0.0f, 1.0f - resist) * taken;
@@ -374,7 +377,8 @@ ToCPersonalPick PickPersonal(PlayerbotAI* botAI, ToCPredictedHit const& hit, cha
         return pick;
 
     uint32 const needMs = static_cast<uint32>(std::max<int32>(static_cast<int32>(hit.durationMs) - fromStart, 0));
-    pick.spellId = NextMagicDefensive(botAI, bot, nullptr, needMs);
+    pick.spellId = hit.school == SPELL_SCHOOL_MASK_NORMAL ? NextPhysicalDefensive(botAI, bot, nullptr, needMs)
+                                                          : NextMagicDefensive(botAI, bot, nullptr, needMs);
     if (pick || expected < static_cast<float>(bot->GetHealth()))
         return pick;
 

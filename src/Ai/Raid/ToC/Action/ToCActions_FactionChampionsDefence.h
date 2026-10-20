@@ -140,11 +140,21 @@ public:
     std::vector<NextAction> getPrerequisites() override;
 };
 
+class FactionChampionsPersonalDefensiveAction : public Action
+{
+public:
+    FactionChampionsPersonalDefensiveAction(PlayerbotAI* botAI)
+        : Action(botAI, "faction champions personal defensive") {}
+    bool Execute(Event event) override;
+};
+
 class ToCFactionChampionsDefenceActionContext : public NamedObjectContext<Action>
 {
 public:
     ToCFactionChampionsDefenceActionContext()
     {
+        creators["faction champions personal defensive"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_personal_defensive;
         creators["faction champions avoid aoe"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_avoid_aoe;
         creators["faction champions mass dispel"] =
@@ -230,6 +240,10 @@ private:
 
     static Action* faction_champions_battle_res(PlayerbotAI* botAI) {
         return new FactionChampionsBattleResAction(botAI);
+    }
+
+    static Action* faction_champions_personal_defensive(PlayerbotAI* botAI) {
+        return new FactionChampionsPersonalDefensiveAction(botAI);
     }
 };
 

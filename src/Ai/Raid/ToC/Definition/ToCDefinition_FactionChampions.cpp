@@ -102,6 +102,9 @@ void DefineFactionChampions(EncounterBuilder& e)
     // res picks the corpse instead
     e.Block("faction champions battle res guard", Role::Any, FactionChampionsLive, 0, {"rebirth"});
 
+    // every paladin's class node fires at one dying bot at once; faction champions protect deals one
+    e.Block("faction champions lay on hands guard", Role::Any, FactionChampionsLive, 0, {"lay on hands on party"});
+
     // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
     e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);
 

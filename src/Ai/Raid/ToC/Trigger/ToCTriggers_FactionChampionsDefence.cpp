@@ -1,4 +1,5 @@
 #include "ToCTriggers_FactionChampionsDefence.h"
+#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
 #include "ToCHelpers_Shared.h"
@@ -79,8 +80,17 @@ bool FactionChampionsBattleResTrigger::IsActive()
     return FactionChampionsBattleResTarget(botAI, spellId) != nullptr;
 }
 
+bool FactionChampionsPersonalDefensiveTrigger::IsActive()
+{
+    ToCPredictedHit hit;
+    return static_cast<bool>(GetToCPersonalDefensive(botAI, FactionChampionsPersonalHit(botAI, hit) ? &hit : nullptr));
+}
+
 void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
+    triggers.push_back(new TriggerNode("faction champions personal defensive", {
+        NextAction("faction champions personal defensive", ACTION_EMERGENCY + 8.4f) }));
+
     triggers.push_back(new TriggerNode("faction champions avoid aoe", {
         NextAction("faction champions avoid aoe", ACTION_EMERGENCY + 6) }));
 

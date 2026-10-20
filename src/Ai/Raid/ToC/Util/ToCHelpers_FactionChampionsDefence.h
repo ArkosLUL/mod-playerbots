@@ -11,6 +11,8 @@
 namespace TrialOfTheCrusaderHelpers
 {
 
+struct ToCPredictedHit;
+
 // Faction Champion spells (boss_faction_champions.cpp). These sit in a spell difficulty row, so read
 // them through sSpellMgr->GetSpellIdForDifficulty.
 constexpr uint32 SPELL_UNSTABLE_AFFLICTION = 65812;  // dispelling it silences and hits the dispeller
@@ -152,23 +154,31 @@ uint32 FactionChampionsPetAutocastToggle(PlayerbotAI* botAI, bool& enable);
 // health, or it is loose off the tank, and nothing slows it yet. One snarer per champion.
 Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
 
-// The melee champion this bot peels and the spell id: one off the tanks and frontline within 10 yd of
-// its victim, or
-// the Warrior champion with 2 or more of ours (pets too) in Bladestorm reach, Warrior first, then healer
-// victims, then the lowest victim. Not one CC'd, rooted or immune to the spell. The nearest free bot
-// with a ready peel takes it, not the grip DK or one on a CC duty: Disarm or Dismantle (not on one
-// already disarmed), Frost Nova, Entangling Roots, Psychic Horror, or Death Grip from 12+ yd nearer the
-// pack by a pack tank or a DK other than the one kept for the grip chain, never on the kill target. No
-// root within 12 yd of a pack tank. Written to fc.peel.
+// The melee champion this bot peels and the spell id: the danger champion wherever it is while it isn't
+// disarmed, one off the tanks and frontline within 10 yd of its victim, or the Warrior champion with 2 or
+// more of ours (pets too) in Bladestorm reach; danger first, then Warrior, then healer victims, then the
+// lowest victim. Not one CC'd, rooted or immune to the spell. The nearest free bot with a ready peel takes
+// it, not the grip DK or one on a CC duty: Disarm or Dismantle (not on one already disarmed), Hammer of
+// Justice on the danger champion short of its third stun step, Frost Nova, Entangling Roots, Psychic
+// Horror, or Death Grip from 12+ yd nearer the pack by a pack tank or a DK other than the one kept for the
+// grip chain, never on the kill target. No root within 12 yd of a pack tank. Written to fc.peel.
 Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The group member this bot covers with an external defensive and the spell id, when two or more
-// physical champions are on that member and none of the four covers it yet. One caster per member.
+// physical champions are on that member and none of the four covers it yet. One caster per member. Lay on
+// Hands goes this way too: a member at 20% or under with a champion on it, one per member in 15 s, from a
+// paladin bot other than the member within 40 yd, healers first, held until the cast goes out or 2 s.
 Unit* FactionChampionsProtectTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The corpse this druid bot battle-resurrects and the Rebirth rank: fewer than 2 champions within 8 yd
-// of it, healers first, one druid per corpse.
+// of it, healers, then tanks, then the rest, one druid per corpse. A corpse that's neither healer nor tank
+// only while 2 or more Rebirths are still free.
 Unit* FactionChampionsBattleResTarget(PlayerbotAI* botAI, uint32& spellId);
+
+// The bot is focused: 2 or more champions have it as victim and its health loss over the last 2 s, run
+// on for 4 s, would leave it under TOC_DEFENSIVE_FLOOR_PCT. Fills a measured hit for
+// GetToCPersonalDefensive, physical when a physical champion is among them.
+bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
 
 // Where a bot dodging a Bladestorm or Hellfire goes: the nearest clear ring, the spot in it nearest the
 // healers' centre, within 30 yd of another living healer when one is that close.

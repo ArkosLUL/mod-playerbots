@@ -9,6 +9,7 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
+#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
@@ -267,7 +268,6 @@ bool FactionChampionsCrowdControlAction::Execute(Event /*event*/)
         if (walking && walking->GetExactDist2d(&spot) < CC_SAME_SPOT)
             return true;
 
-        FactionChampionsBoostWalk(bot, bot->GetExactDist2d(&spot));
         return WalkTo(spot);
     }
 
@@ -314,6 +314,21 @@ bool FactionChampionsProtectAction::isUseful()
 {
     uint32 spellId = 0;
     return FactionChampionsProtectTarget(botAI, spellId) != nullptr;
+}
+
+bool FactionChampionsPersonalDefensiveAction::Execute(Event /*event*/)
+{
+    ToCPredictedHit hit;
+    ToCPersonalPick const pick =
+        GetToCPersonalDefensive(botAI, FactionChampionsPersonalHit(botAI, hit) ? &hit : nullptr);
+    if (!pick)
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    return pick.consumable ? botAI->DoSpecificAction(pick.consumable, Event(), true)
+                           : botAI->CastSpell(pick.spellId, bot);
 }
 
 bool FactionChampionsBattleResAction::Execute(Event /*event*/)

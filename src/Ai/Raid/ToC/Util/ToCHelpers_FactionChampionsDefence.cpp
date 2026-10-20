@@ -31,6 +31,7 @@
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_Staging.h"
 
@@ -133,6 +134,7 @@ constexpr uint32 SPELL_DISMANTLE = 51722;
 constexpr uint32 SPELL_PSYCHIC_HORROR = 64044;
 constexpr std::array<uint32, 6> FROST_NOVA_RANKS = {42917, 27088, 10230, 6131, 865, 122};
 constexpr std::array<uint32, 8> ENTANGLING_ROOTS_RANKS = {53308, 26989, 9853, 9852, 5196, 5195, 1062, 339};
+constexpr std::array<uint32, 4> HAMMER_OF_JUSTICE_RANKS = {10308, 5589, 5588, 853};
 
 // Hand of Protection goes on one physical champion, the rest wait for two and this much health, so they're
 // still up when the focused frontline member drops
@@ -149,6 +151,19 @@ constexpr float HAND_RANGE = 30.0f;
 constexpr float PRIEST_EXTERNAL_RANGE = 40.0f;
 // Hand of Sacrifice moves 30% of the damage onto the paladin
 constexpr float SACRIFICE_MIN_HEALTH_PCT = 50.0f;
+constexpr std::array<uint32, 5> LAY_ON_HANDS_RANKS = {48788, 27154, 10310, 2800, 633};
+constexpr float LAY_ON_HANDS_PCT = 20.0f;
+constexpr uint32 LAY_ON_HANDS_GAP_MS = 15000;
+constexpr uint32 LAY_ON_HANDS_HOLD_MS = 2000;
+constexpr float LAY_ON_HANDS_RANGE = 40.0f;
+
+// A member's health is sampled this often and kept this long; a bot with this many champions on it whose
+// loss over the window, run on for the lookahead, ends under the floor gets its personal defensive now
+constexpr uint32 HEALTH_SAMPLE_MS = 250;
+constexpr uint32 HEALTH_LOG_MS = 2500;
+constexpr uint32 FOCUS_WINDOW_MS = 2000;
+constexpr uint32 FOCUS_LOOKAHEAD_MS = 4000;
+constexpr uint32 FOCUS_MIN_CHAMPIONS = 2;
 
 constexpr std::array<uint32, 7> REBIRTH_RANKS = {48477, 26994, 20748, 20747, 20742, 20739, 20484};
 constexpr float REBIRTH_RANGE = 30.0f;
@@ -245,6 +260,19 @@ struct SpellDuty
     uint32 spellId = 0;
 };
 
+struct LayOnHandsDuty
+{
+    ObjectGuid member;
+    uint32 spellId = 0;
+    uint32 sinceMs = 0;
+};
+
+struct HealthSample
+{
+    uint32 ms = 0;
+    uint32 health = 0;
+};
+
 struct FactionChampionsDefenceState
 {
     RaidObs::ObsValue<ObjectGuid> physical{"fc.physical"};
@@ -258,6 +286,10 @@ struct FactionChampionsDefenceState
     std::unordered_map<ObjectGuid, SpellDuty> peels;      // peeler -> melee champion
     std::unordered_map<ObjectGuid, SpellDuty> protects;   // caster -> group member
     std::unordered_map<ObjectGuid, SpellDuty> battleRes;  // druid -> corpse
+    std::unordered_map<ObjectGuid, uint32> layOnHands;    // member -> when its Lay on Hands was dealt
+    std::unordered_map<ObjectGuid, LayOnHandsDuty> layOnHandsDuties;  // paladin -> its cast
+    std::unordered_map<ObjectGuid, std::vector<HealthSample>> healthLog;
+    uint32 healthSampleMs = 0;
 
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
@@ -1437,12 +1469,23 @@ bool InSpellRange(Player* caster, Unit* target, uint32 spellId)
 // a champion near a pack tank, and Death Grip only goes where it lands the champion back toward the pack,
 // never on the kill target.
 uint32 ReadyPeel(Player* peeler, Unit* champion, Position const& packCentre, bool nearPackTank, ObjectGuid chainDk,
-                 ObjectGuid opener, Unit* killTarget)
+                 ObjectGuid opener, Unit* killTarget, bool danger)
 {
     bool const inMelee = peeler->IsWithinMeleeRange(champion);
     bool const disarmed = champion->HasUnitFlag(UNIT_FLAG_DISARMED);
     switch (peeler->getClass())
     {
+        case CLASS_PALADIN:
+        {
+            // the danger champion only, and not at the third stun step, which holds 1.5 s
+            uint32 const rank = danger ? FirstKnownRank(peeler, HAMMER_OF_JUSTICE_RANKS) : 0;
+            SpellInfo const* info = rank ? sSpellMgr->GetSpellInfo(rank) : nullptr;
+            if (!info || !SpellReady(peeler, rank) || !InSpellRange(peeler, champion, rank))
+                return 0;
+
+            DiminishingLevels const level = champion->GetDiminishing(GetDiminishingReturnsGroupForSpell(info, false));
+            return level < DIMINISHING_LEVEL_3 ? rank : 0;
+        }
         case CLASS_WARRIOR:
             return inMelee && !disarmed && StanceAllows(peeler, SPELL_DISARM) && SpellReady(peeler, SPELL_DISARM)
                        ? SPELL_DISARM
@@ -1509,11 +1552,13 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
     struct Needy
     {
         Unit* champion;
+        bool danger;
         bool warrior;
         bool healerVictim;
         float victimHealth;
     };
 
+    Unit* const danger = FactionChampionsDangerTarget(botAI);
     std::vector<Needy> needy;
     for (Unit* champion : champions)
     {
@@ -1529,15 +1574,21 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
                             champion->GetExactDist2d(victim) <= PEEL_VICTIM_REACH;
         bool const warrior = IsWarrior(champion->GetEntry());
         bool const crowded = warrior && GroupUnitsWithin(members, champion, BLADESTORM_RADIUS) >= PEEL_BLADESTORM_UNITS;
-        if (!onRaid && !crowded)
+        // kept stunned or disarmed wherever it is, the frontline included
+        bool const isDanger = champion == danger && !champion->HasUnitFlag(UNIT_FLAG_DISARMED);
+        if (!onRaid && !crowded && !isDanger)
             continue;
 
-        needy.push_back({champion, warrior, onRaid && member->healer, onRaid ? victim->GetHealthPct() : 100.0f});
+        needy.push_back(
+            {champion, isDanger, warrior, onRaid && member->healer, onRaid ? victim->GetHealthPct() : 100.0f});
     }
 
     std::sort(needy.begin(), needy.end(),
               [](Needy const& a, Needy const& b)
               {
+                  if (a.danger != b.danger)
+                      return a.danger;
+
                   if (a.warrior != b.warrior)
                       return a.warrior;
 
@@ -1583,7 +1634,8 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
         {
             size_t const i = nearest.second;
             Player* peeler = peelers[i];
-            uint32 const spellId = ReadyPeel(peeler, champion, centre, nearPackTank, chainDk, opener, killTarget);
+            uint32 const spellId =
+                ReadyPeel(peeler, champion, centre, nearPackTank, chainDk, opener, killTarget, entry.danger);
             SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
             if (!info || champion->IsImmunedToSpell(info) || !peeler->IsWithinLOSInMap(champion))
                 continue;
@@ -1717,9 +1769,6 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
         }
     }
 
-    if (focused.empty())
-        return;
-
     std::sort(focused.begin(), focused.end(),
               [](Member const& a, Member const& b)
               {
@@ -1744,6 +1793,36 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
     // Healers heal, so the others go first
     SortByRole(casters, false);
     std::vector<bool> taken(casters.size(), false);
+    auto const casterIndex = [&casters](ObjectGuid guid)
+    {
+        for (size_t i = 0; i < casters.size(); ++i)
+            if (casters[i].player->GetGUID() == guid)
+                return i;
+
+        return casters.size();
+    };
+
+    // Held until the cast goes out: the gap below would drop a fresh deal on the next refresh
+    uint32 const now = getMSTime();
+    for (auto it = state.layOnHandsDuties.begin(); it != state.layOnHandsDuties.end();)
+    {
+        auto const caster = FindMember(members, it->first);
+        auto const member = FindMember(members, it->second.member);
+        if (caster == members.end() || member == members.end() ||
+            caster->player->HasSpellCooldown(it->second.spellId) ||
+            getMSTimeDiff(it->second.sinceMs, now) >= LAY_ON_HANDS_HOLD_MS)
+        {
+            it = state.layOnHandsDuties.erase(it);
+            continue;
+        }
+
+        state.protects[it->first] = {it->second.member, it->second.spellId};
+        size_t const i = casterIndex(it->first);
+        if (i < casters.size())
+            taken[i] = true;
+
+        ++it;
+    }
 
     for (Member const& member : focused)
     {
@@ -1774,6 +1853,74 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
         state.protects[casters[chosen].player->GetGUID()] = {member.player->GetGUID(), chosenSpell};
         taken[chosen] = true;
     }
+
+    // Lay on Hands once per member in LAY_ON_HANDS_GAP_MS: each paladin's own node would land all of
+    // theirs on one bot at once
+    std::vector<Member> dying;
+    for (Member const& member : members)
+    {
+        Player* player = member.player;
+        auto const last = state.layOnHands.find(player->GetGUID());
+        if (player->GetHealthPct() > LAY_ON_HANDS_PCT || ProtectCovered(player) ||
+            (last != state.layOnHands.end() && getMSTimeDiff(last->second, now) < LAY_ON_HANDS_GAP_MS) ||
+            std::none_of(champions.begin(), champions.end(),
+                         [player](Unit* champion) { return champion->GetVictim() == player; }))
+            continue;
+
+        dying.push_back(member);
+    }
+
+    std::sort(dying.begin(), dying.end(),
+              [](Member const& a, Member const& b)
+              {
+                  if (a.healer != b.healer)
+                      return a.healer;
+
+                  return a.player->GetHealthPct() < b.player->GetHealthPct();
+              });
+
+    for (Member const& member : dying)
+    {
+        for (size_t i = 0; i < casters.size(); ++i)
+        {
+            Player* caster = casters[i].player;
+            if (taken[i] || caster == member.player || caster->getClass() != CLASS_PALADIN)
+                continue;
+
+            uint32 const rank = FirstKnownRank(caster, LAY_ON_HANDS_RANKS);
+            if (!SpellReady(caster, rank) || caster->GetExactDist(member.player) > LAY_ON_HANDS_RANGE ||
+                !caster->IsWithinLOSInMap(member.player))
+                continue;
+
+            state.protects[caster->GetGUID()] = {member.player->GetGUID(), rank};
+            state.layOnHandsDuties[caster->GetGUID()] = {member.player->GetGUID(), rank, now};
+            state.layOnHands[member.player->GetGUID()] = now;
+            taken[i] = true;
+            break;
+        }
+    }
+}
+
+void UpdateHealthLog(FactionChampionsDefenceState& state, std::vector<Member> const& members, uint32 now)
+{
+    if (getMSTimeDiff(state.healthSampleMs, now) < HEALTH_SAMPLE_MS)
+        return;
+
+    state.healthSampleMs = now;
+    std::unordered_map<ObjectGuid, std::vector<HealthSample>> kept;
+    for (Member const& member : members)
+    {
+        std::vector<HealthSample>& log = kept[member.player->GetGUID()];
+        auto const held = state.healthLog.find(member.player->GetGUID());
+        if (held != state.healthLog.end())
+            for (HealthSample const& sample : held->second)
+                if (getMSTimeDiff(sample.ms, now) <= HEALTH_LOG_MS)
+                    log.push_back(sample);
+
+        log.push_back({now, member.player->GetHealth()});
+    }
+
+    state.healthLog = std::move(kept);
 }
 
 std::vector<Player*> CorpsesOnMap(Player* bot)
@@ -1834,13 +1981,12 @@ void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vect
     if (corpses.empty())
         return;
 
+    auto const keeper = [](Player* corpse) { return PlayerbotAI::IsHeal(corpse) ? 0 : IsTankMember(corpse) ? 1 : 2; };
     std::sort(corpses.begin(), corpses.end(),
-              [](Player* a, Player* b)
+              [&keeper](Player* a, Player* b)
               {
-                  bool const healerA = PlayerbotAI::IsHeal(a);
-                  bool const healerB = PlayerbotAI::IsHeal(b);
-                  if (healerA != healerB)
-                      return healerA;
+                  if (keeper(a) != keeper(b))
+                      return keeper(a) < keeper(b);
 
                   return a->GetGUID() < b->GetGUID();
               });
@@ -1861,6 +2007,12 @@ void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vect
     std::vector<bool> taken(druids.size(), false);
     for (Player* corpse : corpses)
     {
+        // a frontline dps raised mid-focus died again inside 30 s, so the last Rebirth waits for a healer
+        // or a tank
+        size_t const free = static_cast<size_t>(std::count(taken.begin(), taken.end(), false));
+        if (keeper(corpse) == 2 && free < 2)
+            continue;
+
         size_t chosen = druids.size();
         float chosenDistance = 0.0f;
         for (size_t i = 0; i < druids.size(); ++i)
@@ -1957,6 +2109,7 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     UpdatePeel(state, botAI, members, champions, killTarget);
     UpdateProtect(state, members, champions);
     UpdateBattleRes(state, bot, members, champions);
+    UpdateHealthLog(state, members, now);
     return &state;
 }
 
@@ -2405,6 +2558,52 @@ Unit* FactionChampionsBattleResTarget(PlayerbotAI* botAI, uint32& spellId)
     FactionChampionsDefenceState* state = Refresh(botAI);
     Unit* corpse = state ? DutyTarget(state->battleRes, botAI->GetBot(), spellId) : nullptr;
     return corpse && !corpse->IsAlive() ? corpse : nullptr;
+}
+
+bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
+{
+    FactionChampionsDefenceState* state = Refresh(botAI);
+    if (!state)
+        return false;
+
+    Player* bot = botAI->GetBot();
+    uint32 on = 0;
+    bool physical = false;
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+    {
+        if (champion->GetVictim() != bot)
+            continue;
+
+        ++on;
+        physical = physical || IsPhysicalChampion(champion->GetEntry());
+    }
+
+    auto const log = state->healthLog.find(bot->GetGUID());
+    if (on < FOCUS_MIN_CHAMPIONS || log == state->healthLog.end())
+        return false;
+
+    uint32 const now = getMSTime();
+    auto const from = std::find_if(log->second.begin(), log->second.end(), [now](HealthSample const& sample)
+                                   { return getMSTimeDiff(sample.ms, now) <= FOCUS_WINDOW_MS; });
+    if (from == log->second.end())
+        return false;
+
+    uint32 const elapsed = getMSTimeDiff(from->ms, now);
+    uint32 const health = bot->GetHealth();
+    if (elapsed < HEALTH_SAMPLE_MS || from->health <= health)
+        return false;
+
+    float const projected =
+        static_cast<float>(from->health - health) * FOCUS_LOOKAHEAD_MS / static_cast<float>(elapsed);
+    if (static_cast<float>(health) - projected >= bot->GetMaxHealth() * TOC_DEFENSIVE_FLOOR_PCT / 100.0f)
+        return false;
+
+    hit.startMs = now;
+    hit.durationMs = FOCUS_LOOKAHEAD_MS;
+    hit.damage = static_cast<uint32>(projected);
+    hit.school = physical ? SPELL_SCHOOL_MASK_NORMAL : SPELL_SCHOOL_MASK_MAGIC;
+    hit.measured = true;
+    return true;
 }
 
 Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI)

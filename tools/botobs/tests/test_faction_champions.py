@@ -421,7 +421,7 @@ class SyntheticPull(unittest.TestCase):
             (15000, WARLOCK_C, "Hellfire", {MAGE: 3})])
 
     def test_vetoes_keep_the_faction_champions_multipliers_and_rules_only(self):
-        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 17)
+        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 18)
         self.assertEqual(fc.fc_vetoes(self.trace), collections.Counter({
             (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1,
             (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1,
@@ -883,7 +883,7 @@ class PackAndPeel(unittest.TestCase):
 
     def test_a_rebirth_counts_champions_where_its_target_fell(self):
         self.assertEqual(fc.battle_res_casts(self.trace),
-                         [{"t": 22000, "by": DRUID_BOT, "target": ROGUE, "near": 2}])
+                         [{"t": 22000, "by": DRUID_BOT, "target": ROGUE, "near": 2, "again": None}])
 
     def test_taunts_split_bots_and_humans_and_skip_a_raider(self):
         self.assertEqual(fc.taunt_casts(self.trace), collections.Counter({
@@ -1238,7 +1238,111 @@ class StandsAndBoosts(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             fc.show_stands(self.trace)
         self.assertRegex(out.getvalue(), r"Frost +ranged +3 +1 +10 +10")
-        self.assertIn("Nitro Boosts: 1 use(s)", out.getvalue())
+        self.assertIn("Nitro Boosts: 1 use(s), 1 chased run(s)", out.getvalue())
+
+
+MOON = 5021  # a balance druid bot
+
+
+def control_pull() -> list[dict]:
+    roster = [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+              {"g": ROGUE, "n": "Shiv", "r": "melee", "c": 4, "h": 0},
+              {"g": MOON, "n": "Moon", "r": "ranged", "c": 11, "h": 0},
+              {"g": PALADIN_BOT, "n": "Holylight", "r": "heal", "c": 2, "h": 0}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": DISC, "en": 34466, "n": "Caiphus", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth", "b": 1},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Narrhok", "b": 1},
+        {"t": 1, "e": "unit", "g": PET_C, "en": 35610, "n": "Cat", "own": WARRIOR_C},
+        {"t": 1, "e": "spell", "sp": 498, "n": "Divine Protection"},
+        note(0, MOON, fc.KILL, PALADIN),
+        note(0, MOON, fc.DANGER, ROGUE_C),
+        # Moon's Cyclone on the rogue ends as its next one lands on the warrior
+        cast(1000, MOON, fc.SPELL_CYCLONE, ROGUE_C, ct=500),
+        note(1500, ROGUE_C, fc.CC_AURA, fc.SPELL_CYCLONE),
+        note(1000, MOON, fc.CYCLONE, DISC),
+        cast(2000, MOON, fc.SPELL_CYCLONE, WARRIOR_C, ct=500),
+        note(2500, ROGUE_C, fc.CC_AURA, 0),
+        note(2500, WARRIOR_C, fc.CC_AURA, fc.SPELL_CYCLONE),
+        note(8500, WARRIOR_C, fc.CC_AURA, 0),
+        note(9000, MOON, fc.CYCLONE, 0),
+        cast(3000, MOON, 48461, PALADIN, ct=1500),
+        cast(4500, MOON, 48461, PALADIN, ct=1500),
+        # the rogue disarmed and stunned
+        cast(2000, ROGUE, 51722, ROGUE_C),
+        cast(3000, PALADIN_BOT, 10308, ROGUE_C),
+        # the tank's defensive, Lay on Hands, death, Rebirth and second death
+        dmg(1000, ROGUE_C, TANK, 0), dmg(2000, ROGUE_C, TANK, 0), dmg(3000, ROGUE_C, TANK, 0),
+        dmg(3500, PET_C, TANK, 0),
+        cast(5000, TANK, 498, 0),
+        cast(5500, PALADIN_BOT, 48788, TANK),
+        {"t": 6000, "e": "death", "g": TANK, "killer": ROGUE_C, "x": 0.0, "y": 0.0, "z": 0.0},
+        cast(7000, MOON, 48477, TANK, ct=2000),
+        {"t": 9500, "e": "death", "g": TANK, "killer": ROGUE_C, "x": 0.0, "y": 0.0, "z": 0.0},
+        {"t": 10000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, 10000, 1000):
+        records.append({"t": when, "e": "snap", "hz": [], "u": [
+            placed(MOON, 20.0, 0.0, 100.0, PALADIN), placed(TANK, -5.0, 0.0, 40.0, ROGUE_C),
+            placed(PALADIN, 0.0, 0.0, 100.0, MOON), placed(DISC, 40.0, 0.0, 100.0, TANK),
+            placed(ROGUE_C, -5.0, 1.0, 100.0, TANK), placed(WARRIOR_C, -5.0, -1.0, 100.0, TANK)]})
+    return records
+
+
+class ControlAndDefence(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in control_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def render(self, section) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            section(self.trace)
+        return out.getvalue()
+
+    def test_a_cyclone_ended_by_its_casters_next_one_is_broken(self):
+        self.assertEqual(fc.own_breaks(self.trace), {MOON: collections.Counter({"holds": 2, "broken": 1})})
+        self.assertIn("ended by its caster's next one elsewhere: Moon 1 of 2", self.render(fc.show_cc))
+
+    def test_the_cyclone_stand_reads_both_reaches(self):
+        self.assertEqual(fc.cyclone_rows(self.trace), [
+            {"bot": MOON, "cyclones": 2, "damage": 2, "secs": 8.0, "kill": 20.0, "healer": 20.0, "both": 1.0}])
+        self.assertIn("Moon: Cyclone 2, casts on the kill target 2; fc.cyclone 8 s", self.render(fc.show_stands))
+
+    def test_lay_on_hands_is_an_external_and_a_rebirth_reads_the_next_death(self):
+        self.assertIn({"t": 5500, "by": PALADIN_BOT, "spell": "Lay on Hands", "target": TANK, "died": True},
+                      fc.external_casts(self.trace))
+        self.assertEqual([(row["target"], row["again"]) for row in fc.battle_res_casts(self.trace)], [(TANK, 2500)])
+        self.assertRegex(self.render(fc.show_peel), r"Bulwark +tank +3 +\+2s")
+
+    def test_damage_counts_a_pet_for_its_owner_and_the_danger_champions_control(self):
+        rows = fc.champion_damage(self.trace)
+        self.assertEqual([(row["guid"], row["damage"], row["kills"]) for row in rows],
+                         [(ROGUE_C, 3000, 2), (WARRIOR_C, 1000, 0)])
+        self.assertEqual(fc.melee_control(self.trace), [
+            {"guid": ROGUE_C, "held": 1000, "disarms": 1, "stuns": 1, "cc": 1, "danger": True},
+            {"guid": WARRIOR_C, "held": 6000, "disarms": 0, "stuns": 0, "cc": 1, "danger": False}])
+        text = self.render(fc.show_damage)
+        self.assertIn("*Irieth", text)
+        self.assertRegex(text, r"Irieth +Rogue +3000 +75% +2")
+
+    def test_a_personal_reads_its_health_and_the_deaths_after_it(self):
+        self.assertEqual(fc.personal_rows(self.trace),
+                         [{"t": 5000, "bot": TANK, "spell": "Divine Protection", "hp": 40.0}])
+        self.assertEqual([(row["t"], row["first"]["t"]) for row in fc.personal_deaths(self.trace)],
+                         [(6000, 5000), (9500, 5000)])
+        self.assertIn("Bulwark        tank   0:05.000 Divine Protection at 40%", self.render(fc.show_personal))
 
 
 class EveryView(unittest.TestCase):
@@ -1299,6 +1403,12 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.front_deaths(trace), [])
         self.assertEqual(fc.stand_rows(trace), [])
         self.assertEqual(fc.nitro_rows(trace), [])
+        self.assertEqual(fc.own_breaks(trace), {})
+        self.assertEqual(fc.cyclone_rows(trace), [])
+        self.assertEqual(fc.champion_damage(trace), [])
+        self.assertEqual(fc.melee_control(trace), [])
+        self.assertEqual(fc.personal_rows(trace), [])
+        self.assertEqual(fc.personal_deaths(trace), [])
 
 
 if __name__ == "__main__":

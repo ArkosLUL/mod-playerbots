@@ -125,14 +125,16 @@ bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 // the frontline (Hex). None for 1.5 s after the pull, while the opening grips land. Candidates skip the
 // kill target, the suspended, the skulled and a pulled one, a champion the grip guard holds, and the
 // next healer in the pack once the kill target is pulled and at 40% or under: healers off the frontline
-// nearest the kill target, other healers, champions off the frontline casters first, the rest in kill
-// order. A cast at a champion that stops being a candidate is interrupted, so it never makes a new kill
-// target immune. One duty per candidate, none while it is CC'd for over 2 s more or a CC cast at it is
-// under way. The caster has a spell that lands and, by DR, holds over 2.5 s, and is in range and sight or
-// up to 15 yd past the range, which it walks: in range first, then never-breaking, then the longest, then
-// the nearest. Polymorph, Fear and Hex only on a champion with no group member or pet on it and no group
-// DoT. Latched until the cast lands or 3 s pass with none going (6 s for a walk), written to fc.cc. Null
-// unless the encounter is live.
+// nearest the kill target, other healers, the danger champion, champions off the frontline casters
+// first, the rest in kill order. A cast at a champion that stops being a candidate is interrupted, so it
+// never makes a new kill target immune. One duty per candidate, none while it is CC'd for over 2 s more
+// or a CC cast at it is under way. Each of these spells holds one target per caster, so a caster whose
+// spell holds a champion for over 2 s more casts it nowhere else, unless it moves off a non-healer onto
+// a healer. The caster has a spell that lands and, by DR, holds over 2.5 s, and is in range and sight or
+// up to 15 yd past the range, which it walks, never from a Cyclone stand: in range first, then
+// never-breaking, then the longest, then the nearest. Polymorph, Fear and Hex only on a champion with no
+// group member or pet on it and no group DoT. Latched until a fresh one lands or 3 s pass with none going
+// (6 s for a walk), written to fc.cc. Null unless the encounter is live.
 Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The member holds a CC duty
@@ -148,6 +150,17 @@ bool FactionChampionsCounterspellDuty(PlayerbotAI* botAI);
 // This mage gets the Counterspell once the kill target's heal reaches its last LATE_INTERRUPT_MS, so it
 // starts no cast meanwhile
 bool FactionChampionsCounterspellHold(PlayerbotAI* botAI);
+
+// A ranged dps druid bot that knows Cyclone
+bool FactionChampionsCycloneBot(Player* player);
+
+// The champion healer in the pack nearest the kill target: not the kill target, pulled or suspended. Null
+// unless live
+Unit* FactionChampionsBlobHealer(PlayerbotAI* botAI);
+
+// The melee champion kept stunned, CC'd or disarmed: first alive of rogue, DK, Ret, warrior that isn't the
+// kill target, pulled or suspended, written to fc.danger. Null unless live
+Unit* FactionChampionsDangerTarget(PlayerbotAI* botAI);
 
 }
 

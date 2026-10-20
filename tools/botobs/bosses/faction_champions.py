@@ -3,7 +3,8 @@
 
     faction_champions.py <file>            every section
     faction_champions.py <file> --kill     each kill target hold: why, how long, health, who was on it
-    faction_champions.py <file> --cc       CC duties, CC held on each champion, casts started and landed
+    faction_champions.py <file> --cc       CC duties, CC held on each champion, casts started and landed, CC
+                                           ended by its own caster's next cast elsewhere
     faction_champions.py <file> --heals    champion cast-time heals and channels, the interrupts that followed
                                            and how far into the cast they came
     faction_champions.py <file> --burst    lust, Exhaustion carried in, first burst cooldowns, burst vetoes
@@ -18,11 +19,13 @@
     faction_champions.py <file> --chain    each player's pull: the DK tank's, the bot DK's and the player's grips,
                                            their gaps and carry, the order, what cut each; bot grips outside a pull
     faction_champions.py <file> --peel     snares and peels on melee champions, Disarm against Bladestorm,
-                                           externals, battle res, taunts
+                                           externals (Lay on Hands too), battle res and repeat deaths, taunts
+    faction_champions.py <file> --damage   damage to the raid per champion, and how the melee were controlled
+    faction_champions.py <file> --personal personal defensives and the health they went up at, per death
     faction_champions.py <file> --front    the frontline: where the pack stays, whom it picks, the pulled
                                            kill target clear of champion healers, frontline deaths
     faction_champions.py <file> --stands   stand moves, slot jumps and path against net per stand holder,
-                                           Nitro Boosts uses
+                                           the Cyclone stand, Nitro Boosts uses and chased runs
     faction_champions.py <file> --ball     the death ball: who started it and whom the champions picked first,
                                            who they chase, how far the kill target and the raid stand off the
                                            pack, escapees, opener and trinkets
@@ -48,9 +51,9 @@ What the generic views get wrong here, and what this reads instead:
   shows as snapshot moveGen 9, fleeing. Roots aren't in it. `--cc` reads a Fear's landing off
   moveGen and a Cyclone's or Polymorph's off this key, `n/a` without it and always for Roots. A CC
   broken between two samples shows in neither: on 25N 52 of 67 Fears showed.
-- **`fc.kill`, `fc.physical` and `fc.chain` are raid-wide latches and `fc.switch` an event**, so the `g` on any
-  of them is whichever bot's tick made the call. `fc.cc`, `fc.peel` and `fc.totem` are per bot, keyed
-  on the bot, `0` on a release; `fc.ccaura` is keyed on the champion. An `fc.cc` hold is one cast: it
+- **`fc.kill`, `fc.physical`, `fc.chain` and `fc.danger` are raid-wide latches and `fc.switch` an event**, so
+  the `g` on any of them is whichever bot's tick made the call. `fc.cc`, `fc.peel`, `fc.totem` and
+  `fc.cyclone` are per bot, keyed on the bot, `0` on a release; `fc.ccaura` is keyed on the champion. An `fc.cc` hold is one cast: it
   ends when the cast lands or 3 s pass with none going. A `skull` switch is a player's skull
   taking the latch: bots place no skull here, so the `g` is still a bot, never the player who marked.
 - **Exhaustion or Sated applied before the trace shows only as its removal.** `--burst` reads a
@@ -84,6 +87,9 @@ What the generic views get wrong here, and what this reads instead:
   champion within 1.2 s of the grip, or a raider's Frost Nova within 12 yd of it, is what cut its pull;
   the trace has no aura on a creature, so a cast that missed reads the same. `no pull` means the
   champion cast no 57604 with the grip, which a root already on it refuses.
+- **A CC ended by its own caster is read off timing.** Cyclone, Polymorph, Fear, Banish and Hex hold one
+  target per caster, so `--cc` counts an `fc.ccaura` span as broken by its caster when it ends within
+  400 ms of that caster's next cast of the spell landing on another champion.
 - **A disarm on a champion never shows.** `--peel` reads Disarm, Dismantle and Psychic Horror casts on
   the Warrior champion against its own Bladestorm casts, and a Frost Nova, which names no target, by
   its caster's `fc.peel` hold.
@@ -169,7 +175,12 @@ CC_SPELLS = {
     33786: "Cyclone",
     **dict.fromkeys((339, 1062, 5195, 5196, 9852, 9853, 26989, 53308), "Entangling Roots"),
     **dict.fromkeys((710, 18647), "Banish"),
+    51514: "Hex",
 }
+# a CC ending this close to its caster's next one landing elsewhere was broken by it
+OWN_BREAK_MS = 400
+# the start of an fc.ccaura span this long after a cast's landing still belongs to that cast
+OWN_LAND_MS = 300
 FEAR = "Fear"
 # fc.ccaura records fear, stun and confuse auras only, so a root never shows on it
 ON_CC_AURA = ("Polymorph", "Cyclone", "Banish")
@@ -210,6 +221,7 @@ FC_MULTIPLIERS = (
     "faction champions frontline hold",
     "faction champions kill squad wait",
     "faction champions battle res guard",
+    "faction champions lay on hands guard",
     "faction champions heroic taunt guard",
     "faction champions grip guard multiplier",
     "faction champions late interrupt multiplier",
@@ -387,9 +399,25 @@ DISARMS = frozenset((676, 51722, 64044))
 SPELL_BLADESTORM = 65947
 WARRIOR_CHAMPIONS = (34475, 34453)
 EXTERNALS = {**dict.fromkeys((1022, 5599, 10278), "Hand of Protection"), 33206: "Pain Suppression",
-             47788: "Guardian Spirit", 6940: "Hand of Sacrifice"}
+             47788: "Guardian Spirit", 6940: "Hand of Sacrifice",
+             **dict.fromkeys((633, 2800, 10310, 27154, 48788), "Lay on Hands")}
 EXTERNAL_WATCH_MS = 10000
 REBIRTH = frozenset((20484, 20739, 20742, 20747, 20748, 26994, 48477))
+CYCLONE = "fc.cyclone"
+SPELL_CYCLONE = 33786
+# centre to centre: Cyclone's 20 yd and a nuke's 25 yd mid reach, plus both combat reaches
+CYCLONE_REACH = 23.0
+SPELL_REACH = 28.5
+DANGER = "fc.danger"
+# what counts as controlling a melee champion: its CC, stuns and the three disarms
+STUNS = {spell: name for spell, name in HOLDS.items() if spell not in CC_SPELLS}
+# by spell name, since the healthstone's id goes with its rank
+PERSONALS = frozenset(("Divine Protection", "Divine Shield", "Shamanistic Rage", "Barkskin", "Survival Instincts",
+                       "Icebound Fortitude", "Anti-Magic Shell", "Vampiric Blood", "Cloak of Shadows", "Evasion",
+                       "Ice Block", "Dispersion", "Enraged Regeneration", "Shield Wall", "Last Stand", "Deterrence",
+                       "Healthstone", "Master Healthstone", "Fel Healthstone"))
+PERSONAL_WATCH_MS = 15000
+CHASED_ACTION = "faction champions chased"
 # The class taunts, the druid's and the hunter pet's Growl, and the area ones
 TAUNTS = {355: "Taunt", 62124: "Hand of Reckoning", 31789: "Righteous Defense", 56222: "Dark Command",
           6795: "Growl", 694: "Mocking Blow", 1161: "Challenging Shout", 5209: "Challenging Roar",
@@ -782,6 +810,29 @@ def cc_pace(trace: Trace, rows: dict[int, dict] | None = None) -> tuple[int, flo
     return landed, (pull_end(trace) - pull_start(trace)) / 1000
 
 
+def own_breaks(trace: Trace) -> dict[int, collections.Counter]:
+    """Per roster caster, `holds`, the `fc.ccaura` spans of a CC it put on a champion, and `broken`, those
+    that ended within 400 ms of its next cast of that spell landing on another champion."""
+    targets = champions(trace)
+    roster = roster_guids(trace)
+    lands = [(rec["t"] + (rec.get("ct") or 0), rec["s"], rec["sp"], rec["tgt"]) for rec in trace.of("cast")
+             if not rec.get("tr") and rec.get("sp") in CC_SPELLS and rec.get("tgt") in targets
+             and rec.get("s") in roster]
+    out: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for guid, spans in holder_spans(trace, CC_AURA, pull_end(trace)).items():
+        for value, start, stop in spans:
+            spell = as_guid(value)
+            put = [land for land in lands if land[3] == guid and land[2] == spell
+                   and start - LAND_SLACK_MS <= land[0] <= start + OWN_LAND_MS]
+            if not put:
+                continue
+            caster = put[-1][1]
+            out[caster]["holds"] += 1
+            out[caster]["broken"] += any(land[1] == caster and land[2] == spell and land[3] != guid
+                                         and abs(land[0] - stop) <= OWN_BREAK_MS for land in lands)
+    return dict(out)
+
+
 def cc_spell_name(trace: Trace, spell: int) -> str:
     return f"{CC_SPELLS[spell]} {spell}" if spell in CC_SPELLS else trace.spell(spell)
 
@@ -831,6 +882,11 @@ def show_cc(trace: Trace) -> None:
     landed, seconds = cc_pace(trace, rows)
     rate = landed * CC_PACE_MS / 1000 / seconds if seconds > 0 else 0.0
     print(f"  landed per 10 s: {rate:.2f} ({landed} in {seconds:.0f} s)")
+    breaks = own_breaks(trace)
+    print("  ended by its caster's next one elsewhere: "
+          + (", ".join(f"{trace.name(bot)} {count['broken']} of {count['holds']}"
+                       for bot, count in sorted(breaks.items(), key=lambda item: trace.name(item[0])))
+             or "no CC held to read"))
     print(f"  feared is the share of the champion's live samples from the pull at moveGen {FLEEING}, fleeing;"
           f" a cast landed when, inside its cast time + {LAND_SLACK_MS / 1000:.0f} s, its target turned to"
           f" fleeing (Fear) or {CC_AURA} on it to that spell (Cyclone, Polymorph, Banish), n/a without"
@@ -1769,8 +1825,9 @@ def external_casts(trace: Trace) -> list[dict]:
 
 
 def battle_res_casts(trace: Trace) -> list[dict]:
-    """Every raid Rebirth: `t`, `by`, `target`, and the champions within 8 yd of where the target died, in
-    the last sample before the cast (`near`, None without a death record)."""
+    """Every raid Rebirth: `t`, `by`, `target`, the champions within 8 yd of where the target died, in
+    the last sample before the cast (`near`, None without a death record), and `again`, ms from the cast
+    to the target's next death, None when it lived."""
     targets = champions(trace)
     roster = roster_guids(trace)
     deaths = sorted((death["t"], death["g"], death) for death in combat_deaths(trace))
@@ -1785,7 +1842,8 @@ def battle_res_casts(trace: Trace) -> list[dict]:
         if death is not None and "x" in death and snap:
             spot = [0, death["x"], death["y"]]
             near = sum(1 for row in live_rows(snap, targets) if distance(row, spot) <= PACK_RADIUS)
-        out.append({"t": rec["t"], "by": rec["s"], "target": target, "near": near})
+        again = next((when - rec["t"] for when, guid, _ in deaths if guid == target and when > rec["t"]), None)
+        out.append({"t": rec["t"], "by": rec["s"], "target": target, "near": near, "again": again})
     return out
 
 
@@ -1891,15 +1949,18 @@ def show_peel(trace: Trace) -> None:
             print(f"  {clock(row['t']):>11} {row['spell']:18} {trace.name(row['by'])[:14]:14}"
                   f" {trace.name(row['target'])[:14]:14} {trace.role(row['target']):6} {died:>12}")
     else:
-        print("  no Hand of Protection, Pain Suppression, Guardian Spirit or Hand of Sacrifice on the raid")
+        print("  no Hand of Protection, Pain Suppression, Guardian Spirit, Hand of Sacrifice or Lay on Hands"
+              " on the raid")
 
     rezzes = battle_res_casts(trace)
     if rezzes:
-        print(f"\n  {'rebirth at':>10} {'by':14} {'on':14} {'role':6} {'champions within 8 yd':>21}")
+        print(f"\n  {'rebirth at':>10} {'by':14} {'on':14} {'role':6} {'champions within 8 yd':>21}"
+              f" {'died again':>10}")
         for row in rezzes:
             near = "-" if row["near"] is None else str(row["near"])
+            again = "-" if row["again"] is None else f"+{row['again'] / 1000:.0f}s"
             print(f"  {clock(row['t']):>10} {trace.name(row['by'])[:14]:14} {trace.name(row['target'])[:14]:14}"
-                  f" {trace.role(row['target']):6} {near:>21}")
+                  f" {trace.role(row['target']):6} {near:>21} {again:>10}")
     else:
         print("  no Rebirth")
 
@@ -2262,6 +2323,53 @@ def nitro_rows(trace: Trace) -> list[dict]:
     return out
 
 
+def cyclone_rows(trace: Trace) -> list[dict]:
+    """Per roster bot that cast Cyclone: `bot`, `cyclones` and `damage` (its casts on the kill target of the
+    moment) over the pull, and while it held an `fc.cyclone`: `secs`, the median `kill` and `healer`
+    distances and `both`, the share of its samples with the kill target within SPELL_REACH and the covered
+    healer within CYCLONE_REACH; those four are None without a hold."""
+    roster = roster_guids(trace)
+    kills = kill_spans(trace)
+    end = pull_end(trace)
+    casts: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("s") in roster and not rec.get("tr"):
+            casts[rec["s"]].append(rec)
+    holds = {bot: [(as_guid(value), start, stop) for value, start, stop in spans if as_guid(value)]
+             for bot, spans in holder_spans(trace, CYCLONE, end).items()}
+    snaps = frames(trace)
+    out = []
+    for bot in sorted(casts):
+        mine = casts[bot]
+        if not any(rec["sp"] == SPELL_CYCLONE for rec in mine):
+            continue
+        row = {"bot": bot, "cyclones": sum(1 for rec in mine if rec["sp"] == SPELL_CYCLONE),
+               "damage": sum(1 for rec in mine if rec["sp"] != SPELL_CYCLONE and rec.get("tgt")
+                             and rec.get("tgt") == held_at(kills, rec["t"])),
+               "secs": None, "kill": None, "healer": None, "both": None}
+        held = holds.get(bot, [])
+        if held:
+            to_kill, to_healer, both = [], [], 0
+            for snap in snaps:
+                healer = held_at(held, snap["t"])
+                if not healer:
+                    continue
+                rows = {unit[0]: unit for unit in snap.get("u", [])}
+                me, kill, cover = rows.get(bot), rows.get(held_at(kills, snap["t"])), rows.get(healer)
+                if not me or not kill or not cover:
+                    continue
+                to_kill.append(distance(me, kill))
+                to_healer.append(distance(me, cover))
+                both += to_kill[-1] <= SPELL_REACH and to_healer[-1] <= CYCLONE_REACH
+            row["secs"] = sum(stop - start for _, start, stop in held) / 1000
+            if to_kill:
+                row["kill"] = statistics.median(to_kill)
+                row["healer"] = statistics.median(to_healer)
+                row["both"] = both / len(to_kill)
+        out.append(row)
+    return out
+
+
 def show_stands(trace: Trace) -> None:
     print("STANDS")
     rows = stand_rows(trace)
@@ -2272,13 +2380,154 @@ def show_stands(trace: Trace) -> None:
                   f" {row['path']:6.0f} {row['net']:5.0f}")
     else:
         print(f"  no {STAND_ACTION} move")
+    for row in cyclone_rows(trace):
+        stand = (f"{CYCLONE} {row['secs']:.0f} s, kill target {row['kill']:.0f} yd, healer {row['healer']:.0f} yd,"
+                 f" both in reach {row['both'] * 100:.0f}%" if row["both"] is not None
+                 else f"no {CYCLONE} stand")
+        print(f"  {trace.name(row['bot'])}: Cyclone {row['cyclones']}, casts on the kill target {row['damage']};"
+              f" {stand}")
     boosts = nitro_rows(trace)
-    print(f"  Nitro Boosts: {len(boosts)} use(s)")
+    chased = sum(1 for row in boosts if row["by"] == CHASED_ACTION)
+    print(f"  Nitro Boosts: {len(boosts)} use(s), {chased} chased run(s)")
     for row in boosts:
         walk = "-" if row["walk"] is None else f"{row['walk']:.0f} yd"
         print(f"    {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {row['by'] or '-'} {walk}")
     print(f"  jumps are stand targets {SLOT_JUMP:.0f}+ yd off the one before; path and net are the bot's snapshot"
-          " path and end-to-end distance from its first stand move; a boost's walk is its nearest move row")
+          " path and end-to-end distance from its first stand move; a boost's walk is its nearest move row;"
+          f" in reach is the kill target within {SPELL_REACH} yd and the covered healer within {CYCLONE_REACH:.0f}"
+          " yd, centre to centre")
+
+
+def champion_damage(trace: Trace) -> list[dict]:
+    """Per champion, its pets counted in, most first: `guid`, `damage` to the raid, `kills`, `spells` and
+    `roles` (Counters of damage by spell name and by victim role)."""
+    targets = champions(trace)
+    roster = roster_guids(trace)
+
+    def owner(guid):
+        return guid if guid in targets else trace.owners.get(guid)
+
+    rows: dict[int, dict] = {}
+    for rec in trace.of("dmg"):
+        source = owner(rec.get("s"))
+        if source not in targets or rec.get("d") not in roster:
+            continue
+        row = rows.setdefault(source, {"guid": source, "damage": 0, "kills": 0, "spells": collections.Counter(),
+                                       "roles": collections.Counter()})
+        row["damage"] += rec.get("a", 0)
+        row["spells"][trace.spells.get(rec["sp"], f"spell {rec['sp']}") if rec.get("sp") else "melee"] += rec.get("a", 0)
+        row["roles"][trace.role(rec["d"])] += rec.get("a", 0)
+    for death in combat_deaths(trace):
+        source = owner(death.get("killer"))
+        if source in rows:
+            rows[source]["kills"] += 1
+    return sorted(rows.values(), key=lambda row: -row["damage"])
+
+
+def melee_control(trace: Trace) -> list[dict]:
+    """Per melee champion: `guid`, `held` ms under a player's CC (`fc.ccaura`), and the raid's `disarms`,
+    `stuns` and `cc` casts on it, `danger` when `fc.danger` ever named it."""
+    held = cc_aura_held(trace)
+    roster = roster_guids(trace)
+    danger = {as_guid(value) for value, _, _ in latch_spans(trace, DANGER, pull_end(trace))}
+    out = []
+    for guid, name, _ in lineup(trace):
+        if name not in MELEE_SPECS:
+            continue
+        row = {"guid": guid, "held": sum(held.get(guid, {}).values()), "disarms": 0, "stuns": 0, "cc": 0,
+               "danger": guid in danger}
+        for rec in trace.of("cast"):
+            if rec.get("tgt") != guid or rec.get("tr") or raid_caster(trace, rec.get("s")) is None:
+                continue
+            spell = rec.get("sp")
+            row["disarms"] += spell in DISARMS
+            row["stuns"] += spell in STUNS
+            row["cc"] += spell in CC_SPELLS
+        out.append(row)
+    return out
+
+
+def show_damage(trace: Trace) -> None:
+    print("DAMAGE TO THE RAID")
+    rows = champion_damage(trace)
+    if not rows:
+        print("  no champion damage on the raid")
+        return
+    total = sum(row["damage"] for row in rows)
+    print(f"  {'champion':20} {'spec':20} {'damage':>8} {'share':>6} {'kills':>5}  top spells | on roles")
+    for row in rows:
+        top = ", ".join(f"{name} {amount // 1000}k" for name, amount in row["spells"].most_common(3))
+        roles = " ".join(f"{role} {amount * 100 // row['damage']}%" for role, amount in row["roles"].most_common())
+        print(f"  {trace.name(row['guid'])[:20]:20} {spec(trace, row['guid'])[:20]:20} {row['damage']:8}"
+              f" {row['damage'] * 100 / total:5.0f}% {row['kills']:5}  {top} | {roles}")
+    print("\n  melee control (* fc.danger named it):")
+    for row in melee_control(trace):
+        mark = "*" if row["danger"] else " "
+        print(f"   {mark}{trace.name(row['guid'])[:20]:20} held {row['held'] / 1000:5.1f}s, disarms {row['disarms']},"
+              f" stuns {row['stuns']}, CC casts {row['cc']}")
+    print("  pets count for their owner; held is fc.ccaura time, disarms and stuns are casts, since a disarm"
+          " never shows on a champion")
+
+
+def personal_rows(trace: Trace) -> list[dict]:
+    """Every raid personal defensive: `t`, `bot`, `spell`, and `hp`, the bot's health in the last sample
+    at or before the cast, None without one."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    roster = roster_guids(trace)
+    out = []
+    for rec in trace.of("cast"):
+        bot = rec.get("s")
+        name = trace.spells.get(rec.get("sp"))
+        if bot not in roster or rec.get("tr") or name not in PERSONALS:
+            continue
+        snap = snap_at(trace, rec["t"])
+        me = next(iter(live_rows(snap, {bot})), None) if snap else None
+        out.append({"t": rec["t"], "bot": bot, "spell": name, "hp": me[5] if me else None})
+    return out
+
+
+def personal_deaths(trace: Trace, rows: list[dict] | None = None) -> list[dict]:
+    """Per raid death: `t`, `bot`, and `first`, the earliest personal in the 15 s before it, None for none."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    rows = personal_rows(trace) if rows is None else rows
+    roster = roster_guids(trace)
+    out = []
+    for death in combat_deaths(trace):
+        if death["g"] not in roster:
+            continue
+        before = [row for row in rows if row["bot"] == death["g"]
+                  and death["t"] - PERSONAL_WATCH_MS <= row["t"] <= death["t"]]
+        out.append({"t": death["t"], "bot": death["g"], "first": before[0] if before else None})
+    return out
+
+
+def show_personal(trace: Trace) -> None:
+    print("PERSONAL DEFENSIVES")
+    rows = personal_rows(trace)
+    by_bot: dict[int, list[dict]] = collections.defaultdict(list)
+    for row in rows:
+        by_bot[row["bot"]].append(row)
+    if not by_bot:
+        print("  no personal defensive cast")
+    for bot in sorted(by_bot, key=trace.name):
+        casts = "; ".join(f"{clock(row['t'])} {row['spell']}" + ("" if row["hp"] is None else f" at {row['hp']:.0f}%")
+                          for row in by_bot[bot])
+        print(f"  {trace.name(bot)[:14]:14} {trace.role(bot):6} {casts}")
+    picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "toc.personal"))
+    shown = {name: count for name, count in picks.items() if name not in ("none", "covered", "channel", "")}
+    print("  toc.personal picks: " + (", ".join(f"{name} {count}" for name, count in sorted(shown.items()))
+                                      or "none"))
+    deaths = personal_deaths(trace, rows)
+    if deaths:
+        print(f"\n  {'death at':>9} {'bot':14} {'role':6}  first personal in the 15 s before")
+        for row in deaths:
+            first = row["first"]
+            text = ("none" if first is None else f"{first['spell']} {clock(first['t'])}"
+                    + ("" if first["hp"] is None else f" at {first['hp']:.0f}%"))
+            print(f"  {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {trace.role(row['bot']):6}  {text}")
+    print("  hp is the bot's health in the last sample at or before the cast")
 
 
 def show_ball(trace: Trace) -> None:
@@ -2355,7 +2604,10 @@ SECTIONS = (
      show_peel),
     ("front", "the frontline: where the pack stays, whom it picks, the pulled kill target clear of champion"
      " healers", show_front),
-    ("stands", "stand moves, slot jumps and path against net per stand holder, Nitro Boosts uses", show_stands),
+    ("stands", "stand moves, slot jumps and path against net per stand holder, the Cyclone stand, Nitro Boosts"
+     " uses and chased runs", show_stands),
+    ("damage", "damage to the raid per champion, and how the melee were controlled", show_damage),
+    ("personal", "personal defensives and the health they went up at, per death", show_personal),
     ("ball", "the death ball: the start and first picks, champion targets by role, kill target off the pack,"
      " escapees, opener", show_ball),
     ("vetoes", "the Faction Champions multipliers and rules, by action", show_vetoes),

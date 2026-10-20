@@ -108,11 +108,21 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsPersonalDefensiveTrigger : public Trigger
+{
+public:
+    FactionChampionsPersonalDefensiveTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "faction champions personal defensive") {}
+    bool IsActive() override;
+};
+
 class ToCFactionChampionsDefenceTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
     ToCFactionChampionsDefenceTriggerContext() : NamedObjectContext<Trigger>()
     {
+        creators["faction champions personal defensive"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_personal_defensive;
         creators["faction champions avoid aoe"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_avoid_aoe;
         creators["faction champions mass dispel"] =
@@ -198,6 +208,10 @@ private:
 
     static Trigger* faction_champions_battle_res(PlayerbotAI* botAI) {
         return new FactionChampionsBattleResTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_personal_defensive(PlayerbotAI* botAI) {
+        return new FactionChampionsPersonalDefensiveTrigger(botAI);
     }
 };
 

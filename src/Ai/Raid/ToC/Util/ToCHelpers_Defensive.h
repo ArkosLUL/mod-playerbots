@@ -24,6 +24,8 @@ struct ToCPredictedHit
     uint32 durationMs = 0;
     // per player, what is still to come of it, before resistance and damage taken modifiers
     uint32 damage = 0;
+    // damage read off the member's own health loss, so resistance and running cuts are already in it
+    bool measured = false;
     SpellSchoolMask school = SPELL_SCHOOL_MASK_NONE;
     uint8 casterLevel = 83;
     // members who mustn't channel, null for nobody
@@ -79,7 +81,8 @@ struct ToCPersonalPick
 };
 
 // The bot's own answer to a hit that would leave it under the floor, from TOC_PERSONAL_LEAD_MS before
-// the first damage: NextMagicDefensive's row for what is left of the hit, and on a lethal one with no row
+// the first damage: NextMagicDefensive's row for what is left of the hit (NextPhysicalDefensive's for a
+// physical one), and on a lethal one with no row
 // Dispersion, the class immunity, then a healthstone. Nothing while one runs or while it channels a raid
 // cover. Writes toc.personal.
 ToCPersonalPick GetToCPersonalDefensive(PlayerbotAI* botAI, ToCPredictedHit const* hit);
