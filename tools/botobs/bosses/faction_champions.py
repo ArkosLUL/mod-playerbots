@@ -405,9 +405,11 @@ EXTERNAL_WATCH_MS = 10000
 REBIRTH = frozenset((20484, 20739, 20742, 20747, 20748, 26994, 48477))
 CYCLONE = "fc.cyclone"
 SPELL_CYCLONE = 33786
-# centre to centre: Cyclone's 20 yd and a nuke's 25 yd mid reach, plus both combat reaches
+# centre to centre, both combat reaches on top: Cyclone's 20 yd, and Wrath's 30 yd with Nature's Reach
 CYCLONE_REACH = 23.0
-SPELL_REACH = 28.5
+SPELL_REACH = 33.0
+# a pulled hold looks this far back for the raid Death Grip that pulled it
+PULLED_GRIP_MS = 3000
 DANGER = "fc.danger"
 # what counts as controlling a melee champion: its CC, stuns and the three disarms
 STUNS = {spell: name for spell, name in HOLDS.items() if spell not in CC_SPELLS}
@@ -415,6 +417,7 @@ STUNS = {spell: name for spell, name in HOLDS.items() if spell not in CC_SPELLS}
 PERSONALS = frozenset(("Divine Protection", "Divine Shield", "Shamanistic Rage", "Barkskin", "Survival Instincts",
                        "Icebound Fortitude", "Anti-Magic Shell", "Vampiric Blood", "Cloak of Shadows", "Evasion",
                        "Ice Block", "Dispersion", "Enraged Regeneration", "Shield Wall", "Last Stand", "Deterrence",
+                       "Pain Suppression",
                        "Healthstone", "Master Healthstone", "Fel Healthstone"))
 PERSONAL_WATCH_MS = 15000
 CHASED_ACTION = "faction champions chased"
@@ -637,8 +640,10 @@ def show_banner(trace: Trace) -> None:
 
 
 def kill_holds(trace: Trace) -> list[dict]:
-    """Each span `fc.kill` held a champion, with the switch that opened it and what the raid did."""
+    """Each span `fc.kill` held a champion, with the switch that opened it and what the raid did. `grip` is
+    the raid Death Grip on it in the PULLED_GRIP_MS before the hold, `(by, t)`, or None."""
     samples = Samples(trace)
+    raid_grips = grips(trace)
     last = samples.stamps[-1] if samples.stamps else pull_end(trace)
     switches = sorted((rec["t"], str(rec.get("txt", ""))) for rec in notes(trace, SWITCH))
     roster = roster_guids(trace)
@@ -667,7 +672,10 @@ def kill_holds(trace: Trace) -> list[dict]:
                     total += 1
                     on += row[7] == guid
 
+        pulls = [(grip["by"], grip["t"]) for grip in raid_grips
+                 if grip["target"] == guid and start - PULLED_GRIP_MS <= grip["t"] <= start + SWITCH_SLACK_MS]
         out.append({
+            "grip": pulls[-1] if pulls else None,
             "guid": guid,
             "start": start,
             "stop": stop,
@@ -679,6 +687,13 @@ def kill_holds(trace: Trace) -> list[dict]:
             "share": on / total if total else None,
         })
     return out
+
+
+def pulled_grip(trace: Trace, hold: dict) -> str:
+    if not hold["grip"]:
+        return "  no grip"
+    by, when = hold["grip"]
+    return f"  grip by {trace.name(by)} at {clock(when)}"
 
 
 def show_kill(trace: Trace) -> None:
@@ -696,7 +711,8 @@ def show_kill(trace: Trace) -> None:
         share = "-" if hold["share"] is None else f"{hold['share'] * 100:.0f}%"
         print(f"  {clock(hold['start']):>9} {(hold['stop'] - hold['start']) / 1000:6.1f}s"
               f" {trace.name(hold['guid'])[:20]:20} {spec(trace, hold['guid'])[:20]:20}"
-              f" {hold['reason'] or 'carried':7} {hp:>13} {'yes' if hold['died'] else '-':>5} {share:>6}")
+              f" {hold['reason'] or 'carried':7} {hp:>13} {'yes' if hold['died'] else '-':>5} {share:>6}"
+              + (pulled_grip(trace, hold) if hold["reason"] == "pulled" else ""))
 
     reasons = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, SWITCH))
     ordered = ([reason for reason in SWITCH_REASONS if reasons[reason]]
@@ -704,7 +720,8 @@ def show_kill(trace: Trace) -> None:
     print("\n  fc.switch: " + (", ".join(f"{reason} {reasons[reason]}" for reason in ordered) or "none"))
     print("  on it is the share of non-healer bot samples whose target was the kill target; why dead"
           " includes the target leaving combat; died is the champion leaving the snapshots mid-fight,"
-          " or the hold still open at a kill")
+          " or the hold still open at a kill; a pulled hold names the raid Death Grip on it in the"
+          f" {PULLED_GRIP_MS // 1000} s before")
 
 
 def cc_aura_onsets(trace: Trace) -> dict[int, list[tuple[int, int]]]:
@@ -2299,6 +2316,26 @@ def stand_rows(trace: Trace) -> list[dict]:
     return out
 
 
+def healer_activity(trace: Trace) -> list[dict]:
+    """Per roster healer: `bot`, `samples` (its live snapshot rows over the pull) and the share of them
+    `moving` and `casting`."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    start, end = pull_start(trace), pull_end(trace)
+    healers = {guid for guid in roster_guids(trace) if trace.role(guid) == "heal"}
+    counts = {guid: [0, 0, 0] for guid in healers}
+    for snap in frames(trace):
+        if not start <= snap["t"] <= end:
+            continue
+        for row in live_rows(snap, healers):
+            count = counts[row[0]]
+            count[0] += 1
+            count[1] += len(row) > 8 and bool(row[8])
+            count[2] += len(row) > 10 and bool(row[10])
+    return [{"bot": guid, "samples": n, "moving": moving / n, "casting": casting / n}
+            for guid, (n, moving, casting) in sorted(counts.items()) if n]
+
+
 def nitro_rows(trace: Trace) -> list[dict]:
     """Every raid Nitro Boosts use: `t`, `bot`, and the bot's move row nearest it within 1 s (`by` its action,
     `walk` the distance to its target from the bot's sample at the use), None without one."""
@@ -2380,6 +2417,9 @@ def show_stands(trace: Trace) -> None:
                   f" {row['path']:6.0f} {row['net']:5.0f}")
     else:
         print(f"  no {STAND_ACTION} move")
+    for row in healer_activity(trace):
+        print(f"  healer {trace.name(row['bot'])[:14]:14} moving {row['moving'] * 100:3.0f}%"
+              f"  casting {row['casting'] * 100:3.0f}%")
     for row in cyclone_rows(trace):
         stand = (f"{CYCLONE} {row['secs']:.0f} s, kill target {row['kill']:.0f} yd, healer {row['healer']:.0f} yd,"
                  f" both in reach {row['both'] * 100:.0f}%" if row["both"] is not None
@@ -2395,7 +2435,7 @@ def show_stands(trace: Trace) -> None:
     print(f"  jumps are stand targets {SLOT_JUMP:.0f}+ yd off the one before; path and net are the bot's snapshot"
           " path and end-to-end distance from its first stand move; a boost's walk is its nearest move row;"
           f" in reach is the kill target within {SPELL_REACH} yd and the covered healer within {CYCLONE_REACH:.0f}"
-          " yd, centre to centre")
+          " yd, centre to centre; a healer's moving and casting are shares of its live samples")
 
 
 def champion_damage(trace: Trace) -> list[dict]:

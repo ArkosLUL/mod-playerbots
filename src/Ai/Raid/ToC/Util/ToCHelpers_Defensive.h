@@ -81,10 +81,10 @@ struct ToCPersonalPick
 };
 
 // The bot's own answer to a hit that would leave it under the floor, from TOC_PERSONAL_LEAD_MS before
-// the first damage: NextMagicDefensive's row for what is left of the hit (NextPhysicalDefensive's for a
-// physical one), and on a lethal one with no row
-// Dispersion, the class immunity, then a healthstone. Nothing while one runs or while it channels a raid
-// cover. Writes toc.personal.
+// the first damage: NextMagicDefensive's row for what is left of the hit (NextPhysicalDefensive's, then
+// Evasion, Deterrence or Pain Suppression, for a physical one), and on a lethal one with no row
+// Dispersion, the class immunity, then a healthstone. A non-tank paladin on a measured hit tries Divine
+// Shield first. Nothing while one runs or while it channels a raid cover. Writes toc.personal.
 ToCPersonalPick GetToCPersonalDefensive(PlayerbotAI* botAI, ToCPredictedHit const* hit);
 
 }

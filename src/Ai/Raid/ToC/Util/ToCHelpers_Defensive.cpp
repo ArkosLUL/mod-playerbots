@@ -40,6 +40,9 @@ constexpr uint32 SPELL_CLOAK_OF_SHADOWS = 31224;
 constexpr uint32 SPELL_DISPERSION = 47585;
 constexpr uint32 SPELL_ICE_BLOCK = 45438;
 constexpr uint32 SPELL_DIVINE_SHIELD = 642;
+// Physical cooldowns of dps classes, which the tank rows leave out: Evasion (both ranks), Deterrence,
+// Pain Suppression on itself
+constexpr std::array<uint32, 4> DPS_PHYSICAL_DEFENSIVES = {26669, 5277, 19263, 33206};
 
 // Divine Sacrifice drops under 20% of the paladin's health, so it starts well above that
 constexpr float SACRIFICE_MIN_PCT = 50.0f;
@@ -376,9 +379,20 @@ ToCPersonalPick PickPersonal(PlayerbotAI* botAI, ToCPredictedHit const& hit, cha
     if (!EndsUnderFloor(bot, expected))
         return pick;
 
+    // Divine Protection's Forbearance would lock the shield out for the rest of the fight
+    if (hit.measured && bot->getClass() == CLASS_PALADIN && !PlayerbotAI::IsTank(bot))
+        pick.spellId = Castable(botAI, SPELL_DIVINE_SHIELD);
+
     uint32 const needMs = static_cast<uint32>(std::max<int32>(static_cast<int32>(hit.durationMs) - fromStart, 0));
-    pick.spellId = hit.school == SPELL_SCHOOL_MASK_NORMAL ? NextPhysicalDefensive(botAI, bot, nullptr, needMs)
-                                                          : NextMagicDefensive(botAI, bot, nullptr, needMs);
+    if (!pick)
+        pick.spellId = hit.school == SPELL_SCHOOL_MASK_NORMAL ? NextPhysicalDefensive(botAI, bot, nullptr, needMs)
+                                                              : NextMagicDefensive(botAI, bot, nullptr, needMs);
+
+    if (!pick && hit.school == SPELL_SCHOOL_MASK_NORMAL)
+        for (uint32 const spellId : DPS_PHYSICAL_DEFENSIVES)
+            if ((pick.spellId = Castable(botAI, spellId)))
+                break;
+
     if (pick || expected < static_cast<float>(bot->GetHealth()))
         return pick;
 

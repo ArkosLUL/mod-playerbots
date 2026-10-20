@@ -171,13 +171,13 @@ Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId);
 Unit* FactionChampionsProtectTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The corpse this druid bot battle-resurrects and the Rebirth rank: fewer than 2 champions within 8 yd
-// of it, healers, then tanks, then the rest, one druid per corpse. A corpse that's neither healer nor tank
-// only while 2 or more Rebirths are still free.
+// of it, healers then tanks, one druid per corpse. Never a dps.
 Unit* FactionChampionsBattleResTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The bot is focused: 2 or more champions have it as victim and its health loss over the last 2 s, run
-// on for 4 s, would leave it under TOC_DEFENSIVE_FLOOR_PCT. Fills a measured hit for
-// GetToCPersonalDefensive, physical when a physical champion is among them.
+// on for 4 s, would leave it under TOC_DEFENSIVE_FLOOR_PCT; or 4 or more on a non-tank, a hit just past
+// that floor. Fills a measured hit for GetToCPersonalDefensive, physical when a physical champion is among
+// them.
 bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
 
 // Where a bot dodging a Bladestorm or Hellfire goes: the nearest clear ring, the spot in it nearest the

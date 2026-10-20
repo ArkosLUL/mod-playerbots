@@ -164,6 +164,7 @@ constexpr uint32 HEALTH_LOG_MS = 2500;
 constexpr uint32 FOCUS_WINDOW_MS = 2000;
 constexpr uint32 FOCUS_LOOKAHEAD_MS = 4000;
 constexpr uint32 FOCUS_MIN_CHAMPIONS = 2;
+constexpr uint32 FOCUS_PREEMPT_CHAMPIONS = 4;
 
 constexpr std::array<uint32, 7> REBIRTH_RANKS = {48477, 26994, 20748, 20747, 20742, 20739, 20484};
 constexpr float REBIRTH_RANGE = 30.0f;
@@ -1968,9 +1969,13 @@ void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vect
 {
     state.battleRes.clear();
 
+    // A dps raised mid-focus dies again inside 30 s, so Rebirth is kept for healers and tanks
     std::vector<Player*> corpses;
     for (Player* corpse : CorpsesOnMap(bot))
     {
+        if (!PlayerbotAI::IsHeal(corpse) && !IsTankMember(corpse))
+            continue;
+
         uint32 const near = static_cast<uint32>(
             std::count_if(champions.begin(), champions.end(), [corpse](Unit* champion)
                           { return champion->GetExactDist2d(corpse) <= CORPSE_PACK_RADIUS; }));
@@ -1981,12 +1986,11 @@ void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vect
     if (corpses.empty())
         return;
 
-    auto const keeper = [](Player* corpse) { return PlayerbotAI::IsHeal(corpse) ? 0 : IsTankMember(corpse) ? 1 : 2; };
     std::sort(corpses.begin(), corpses.end(),
-              [&keeper](Player* a, Player* b)
+              [](Player* a, Player* b)
               {
-                  if (keeper(a) != keeper(b))
-                      return keeper(a) < keeper(b);
+                  if (PlayerbotAI::IsHeal(a) != PlayerbotAI::IsHeal(b))
+                      return PlayerbotAI::IsHeal(a);
 
                   return a->GetGUID() < b->GetGUID();
               });
@@ -2007,12 +2011,6 @@ void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vect
     std::vector<bool> taken(druids.size(), false);
     for (Player* corpse : corpses)
     {
-        // a frontline dps raised mid-focus died again inside 30 s, so the last Rebirth waits for a healer
-        // or a tank
-        size_t const free = static_cast<size_t>(std::count(taken.begin(), taken.end(), false));
-        if (keeper(corpse) == 2 && free < 2)
-            continue;
-
         size_t chosen = druids.size();
         float chosenDistance = 0.0f;
         for (size_t i = 0; i < druids.size(); ++i)
@@ -2578,24 +2576,29 @@ bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
         physical = physical || IsPhysicalChampion(champion->GetEntry());
     }
 
-    auto const log = state->healthLog.find(bot->GetGUID());
-    if (on < FOCUS_MIN_CHAMPIONS || log == state->healthLog.end())
+    if (on < FOCUS_MIN_CHAMPIONS)
         return false;
 
     uint32 const now = getMSTime();
-    auto const from = std::find_if(log->second.begin(), log->second.end(), [now](HealthSample const& sample)
-                                   { return getMSTimeDiff(sample.ms, now) <= FOCUS_WINDOW_MS; });
-    if (from == log->second.end())
-        return false;
-
-    uint32 const elapsed = getMSTimeDiff(from->ms, now);
     uint32 const health = bot->GetHealth();
-    if (elapsed < HEALTH_SAMPLE_MS || from->health <= health)
-        return false;
+    float const floor = bot->GetMaxHealth() * TOC_DEFENSIVE_FLOOR_PCT / 100.0f;
+    float projected = 0.0f;
+    auto const log = state->healthLog.find(bot->GetGUID());
+    if (log != state->healthLog.end())
+    {
+        auto const from = std::find_if(log->second.begin(), log->second.end(), [now](HealthSample const& sample)
+                                       { return getMSTimeDiff(sample.ms, now) <= FOCUS_WINDOW_MS; });
+        uint32 const elapsed = from != log->second.end() ? getMSTimeDiff(from->ms, now) : 0;
+        if (elapsed >= HEALTH_SAMPLE_MS && from->health > health)
+            projected = static_cast<float>(from->health - health) * FOCUS_LOOKAHEAD_MS / static_cast<float>(elapsed);
+    }
 
-    float const projected =
-        static_cast<float>(from->health - health) * FOCUS_LOOKAHEAD_MS / static_cast<float>(elapsed);
-    if (static_cast<float>(health) - projected >= bot->GetMaxHealth() * TOC_DEFENSIVE_FLOOR_PCT / 100.0f)
+    // this many take a non-tank from full in 1-2 s, before the log shows the loss. Just past the floor, so
+    // a class cooldown goes now and the immunities and the healthstone still wait for a projected kill.
+    if (on >= FOCUS_PREEMPT_CHAMPIONS && !IsTankMember(bot))
+        projected = std::max({projected, static_cast<float>(health) - floor + 1.0f, 1.0f});
+
+    if (projected <= 0.0f || static_cast<float>(health) - projected >= floor)
         return false;
 
     hit.startMs = now;

@@ -555,6 +555,38 @@ class SkullSwitch(unittest.TestCase):
         self.assertIn("fc.switch: first 1, skull 1, reset 1", out.getvalue())
 
 
+class PulledGrip(unittest.TestCase):
+    def test_a_pulled_hold_names_the_grip_before_it_or_none(self):
+        records = [
+            {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+             "roster": [{"g": GRIPPER, "n": "Obliteration", "r": "melee", "c": 6, "h": 0}]},
+            {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+            {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+            {"t": 1, "e": "unit", "g": DISC, "en": 34466, "n": "Caiphus", "b": 1},
+            note(1000, GRIPPER, "fc.switch", "first"),
+            note(1000, GRIPPER, "fc.kill", PALADIN),
+            cast(2000, GRIPPER, fc.SPELL_DEATH_GRIP, DISC),
+            note(4000, GRIPPER, "fc.switch", "pulled"),
+            note(4000, GRIPPER, "fc.kill", DISC),
+            # a grip on the paladin long before its pulled switch doesn't count
+            cast(4500, GRIPPER, fc.SPELL_DEATH_GRIP, PALADIN),
+            note(9000, GRIPPER, "fc.switch", "pulled"),
+            note(9000, GRIPPER, "fc.kill", PALADIN),
+            {"t": 12000, "e": "end", "out": "wipe"},
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_2_velanaa_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            holds = fc.kill_holds(trace)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                fc.show_kill(trace)
+        self.assertEqual([hold["grip"] for hold in holds], [None, (GRIPPER, 2000), None])
+        self.assertIn("grip by Obliteration at 0:02.000", out.getvalue())
+        self.assertEqual(out.getvalue().count("no grip"), 1)
+
+
 class KillEnding(unittest.TestCase):
     def test_the_hold_open_at_a_kill_died(self):
         # a kill writes no reset, and the priest is still in the last snapshot
@@ -1207,8 +1239,11 @@ def stands_pull() -> list[dict]:
     ]
     for when in range(0, 10000, 1000):
         frost = 0.0 if when < 2000 else 5.0 if when < 3000 else 10.0
-        records.append({"t": when, "e": "snap", "hz": [], "u": [placed(MAGE, frost, 0.0, 100.0, 0),
-                                                                 placed(PRIEST, 0.0, 0.0, 100.0, 0),
+        # Prayer moves the first 3 s and casts from 6 s
+        prayer = placed(PRIEST, 0.0, 0.0, 100.0, 0)
+        prayer[8] = int(when < 3000)
+        prayer[10] = 48071 if when >= 6000 else 0
+        records.append({"t": when, "e": "snap", "hz": [], "u": [placed(MAGE, frost, 0.0, 100.0, 0), prayer,
                                                                  placed(PALADIN, 40.0, 0.0, 100.0, PRIEST)]})
     return records
 
@@ -1233,11 +1268,16 @@ class StandsAndBoosts(unittest.TestCase):
         self.assertEqual(fc.nitro_rows(self.trace),
                          [{"t": 4000, "bot": PRIEST, "by": "faction champions chased", "walk": 25.0}])
 
+    def test_a_healer_reads_its_moving_and_casting_share(self):
+        self.assertEqual(fc.healer_activity(self.trace),
+                         [{"bot": PRIEST, "samples": 10, "moving": 0.3, "casting": 0.4}])
+
     def test_the_section_renders(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             fc.show_stands(self.trace)
         self.assertRegex(out.getvalue(), r"Frost +ranged +3 +1 +10 +10")
+        self.assertRegex(out.getvalue(), r"healer Prayer +moving +30% +casting +40%")
         self.assertIn("Nitro Boosts: 1 use(s), 1 chased run(s)", out.getvalue())
 
 
@@ -1403,6 +1443,7 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.front_deaths(trace), [])
         self.assertEqual(fc.stand_rows(trace), [])
         self.assertEqual(fc.nitro_rows(trace), [])
+        self.assertEqual(fc.healer_activity(trace), [])
         self.assertEqual(fc.own_breaks(trace), {})
         self.assertEqual(fc.cyclone_rows(trace), [])
         self.assertEqual(fc.champion_damage(trace), [])

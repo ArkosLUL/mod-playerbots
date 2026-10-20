@@ -24,9 +24,10 @@ bool FactionChampionsFrontlineHeld(PlayerbotAI* botAI, Position& centre);
 Unit* FactionChampionsFrontlineTarget(PlayerbotAI* botAI);
 
 // This bot's stand. Every healer heals the frontline from 28 yd off the pack centre, 45-75° off the line
-// to the kill target once it's been out, each keeping its spoke while it lives. Once the kill target has
-// been out, a Cyclone druid stands 20 or 26 yd from it where it also reaches the pack healer nearest it
-// (fc.cyclone), and ranged take slots 20 and 26 yd beyond it; before that, with a champion healer up, 30
+// to the kill target once it's been out, each keeping its spoke while it lives and, off the same kill
+// target, its stand while that stays 20-34 yd off the pack centre and clear. Once the kill target has
+// been out, a Cyclone druid stands 20, 26 or 30 yd from it where it still reaches the pack healer nearest
+// it after a 6 yd drift, else where it reaches it now (fc.cyclone), and ranged take slots 20 and 26 yd beyond it; before that, with a champion healer up, 30
 // and 32 yd off the pack. A stand holds while its layout hasn't moved 6 yd and the slot is still clear;
 // free bots take the nearest free slot. None for the opener bot, nor while it holds a CC duty.
 bool FactionChampionsBallStand(PlayerbotAI* botAI, Position& spot);

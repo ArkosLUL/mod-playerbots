@@ -39,6 +39,8 @@ constexpr float FRONT_REACH = 20.0f;
 // At 28 yd cloth still scores under plate in melee for the melee champions.
 constexpr float FRONT_HEALER_DIST = 28.0f;
 constexpr float FRONT_HEALER_MIN = 20.0f;
+// a held heal stand stays while this close to the pack centre, inside heal reach of the far side
+constexpr float FRONT_HEALER_KEEP = 34.0f;
 constexpr std::array<float, 6> FRONT_HEALER_SPOKES_DEG = {60.0f, -60.0f, 45.0f, -45.0f, 75.0f, -75.0f};
 
 // Inside spell reach 28.5, which counts both combat reaches on top
@@ -54,6 +56,8 @@ constexpr float SAME_SLOT = 0.5f;
 constexpr float SIDE_MIN_SPREAD = 5.0f;
 // Slack inside Cyclone's reach for the healer's drift
 constexpr float CYCLONE_STAND_MARGIN = 2.0f;
+// The Cyclone stand's rings round the kill target. 30 yd still sits inside Wrath's 33 with Nature's Reach.
+constexpr std::array<float, 3> CYCLONE_RINGS = {20.0f, 26.0f, 30.0f};
 
 // a shorter walk isn't worth Nitro Boosts' 3 min cooldown
 constexpr float NITRO_MIN_WALK = 15.0f;
@@ -426,9 +430,9 @@ bool Clear(Position const& spot, std::vector<EncounterHelpers::HazardCircle> con
                                          { return spot.GetExactDist2d(hazard.first) < hazard.second; });
 }
 
-// On the side rings round the kill target, so the druid still hits it: within Cyclone reach of the pack
-// healer, farthest from the pack, then nearest the druid; with none in reach, nearest the healer. False
-// when no ring spot is clear.
+// On the rings round the kill target, so the druid still hits it. First a spot that stays in Cyclone reach
+// of the pack healer while it drifts up to SIDE_REANCHOR, then one in reach, each farthest from the pack
+// then nearest the druid; with none in reach, nearest the healer. False when no ring spot is clear.
 bool CycloneSpot(BallState& state, Player* druid, Unit* kill, Unit* healer, Position const& centre,
                  std::vector<EncounterHelpers::HazardCircle> const& hazards, Position& spot)
 {
@@ -447,10 +451,17 @@ bool CycloneSpot(BallState& state, Player* druid, Unit* kill, Unit* healer, Posi
     Vec const out = Unit2(kill->GetPositionX() - centre.GetPositionX(), kill->GetPositionY() - centre.GetPositionY());
     uint32 const steps = static_cast<uint32>(360.0f / SIDE_STEP_DEG);
 
+    // 0 holds through the healer's drift, 1 reaches it now, 2 doesn't
+    auto const tier = [&](Position const& candidate)
+    {
+        float const toHealer = healer->GetExactDist2d(&candidate);
+        return toHealer <= reach - SIDE_REANCHOR ? 0 : (toHealer <= reach ? 1 : 2);
+    };
+
     bool found = false;
-    bool bestReaches = false;
+    int bestTier = 2;
     Position best;
-    for (float ring : SIDE_RINGS)
+    for (float ring : CYCLONE_RINGS)
     {
         for (uint32 step = 0; step < steps; ++step)
         {
@@ -458,11 +469,11 @@ bool CycloneSpot(BallState& state, Player* druid, Unit* kill, Unit* healer, Posi
             if (!Clear(candidate, hazards))
                 continue;
 
-            bool const reaches = healer->GetExactDist2d(&candidate) <= reach;
-            bool better = !found || (reaches && !bestReaches);
-            if (found && reaches == bestReaches)
+            int const candidateTier = tier(candidate);
+            bool better = !found || candidateTier < bestTier;
+            if (found && candidateTier == bestTier)
             {
-                if (!reaches)
+                if (candidateTier == 2)
                     better = healer->GetExactDist2d(&candidate) < healer->GetExactDist2d(&best);
                 else if (centre.GetExactDist2d(&candidate) != centre.GetExactDist2d(&best))
                     better = centre.GetExactDist2d(&candidate) > centre.GetExactDist2d(&best);
@@ -473,7 +484,7 @@ bool CycloneSpot(BallState& state, Player* druid, Unit* kill, Unit* healer, Posi
             if (better)
             {
                 found = true;
-                bestReaches = reaches;
+                bestTier = candidateTier;
                 best = candidate;
             }
         }
@@ -553,6 +564,8 @@ void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
     Vec const toPulled =
         out ? Unit2(killTarget->GetPositionX() - centre.GetPositionX(), killTarget->GetPositionY() - centre.GetPositionY())
             : toArena;
+    std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
+    bool const sameHealLayout = state.heal.valid && state.heal.key == killTarget->GetGUID() && state.heal.mode == out;
     Reanchor(state.heal, killTarget->GetGUID(), out, centre, toPulled);
     std::vector<Position> spokes;
     for (float degrees : FRONT_HEALER_SPOKES_DEG)
@@ -575,6 +588,16 @@ void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
 
     for (Player* healer : healers)
     {
+        // the pack drifts 25-50 yd a pull, a fresh spoke every 6 yd of it keeps healers walking. Same kill
+        // target and still in heal reach of the pack: the stand stays.
+        auto const stand = state.stands.find(healer->GetGUID());
+        if (sameHealLayout && stand != state.stands.end() && state.healSpokes.count(healer->GetGUID()))
+        {
+            float const fromCentre = centre.GetExactDist2d(&stand->second);
+            if (fromCentre >= FRONT_HEALER_MIN && fromCentre <= FRONT_HEALER_KEEP && Clear(stand->second, hazards))
+                continue;
+        }
+
         auto held = state.healSpokes.find(healer->GetGUID());
         if (held == state.healSpokes.end())
         {
@@ -603,7 +626,6 @@ void UpdateStands(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
     if (!waitOut && sideAt.GetExactDist2d(&centre) >= SIDE_MIN_SPREAD)
         sideDir = Unit2(sideAt.GetPositionX() - centre.GetPositionX(), sideAt.GetPositionY() - centre.GetPositionY());
 
-    std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
     Unit* packHealer = out ? FactionChampionsBlobHealer(botAI) : nullptr;
     std::vector<Player*> squad;
     std::vector<ObjectGuid> covering;

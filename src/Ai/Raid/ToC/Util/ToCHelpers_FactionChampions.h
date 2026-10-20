@@ -70,7 +70,7 @@ bool IsFactionChampionMelee(uint32 entry);
 
 // The raid's one kill target, latched per instance. Switches only when it dies, leaves combat or turns
 // immune to all damage, to go back to the one it left over immunity, to a player's skull on a
-// champion that can be hurt, or off one still in the pack to a healer pulled out of it, a human
+// champion that can be hurt, or off one never pulled out to a healer pulled out of the pack, a human
 // DK's grip included. Null unless the encounter is live.
 Unit* FactionChampionsKillTarget(PlayerbotAI* botAI);
 
@@ -105,7 +105,8 @@ bool FactionChampionsHealerLeft(PlayerbotAI* botAI);
 // those within 20 yd of the last centre, the kill target left out
 bool FactionChampionsPack(PlayerbotAI* botAI, Position& anchor, Position& centre);
 
-// A healer champion 20+ yd off the pack centre with no champion within 12 yd
+// A healer champion gripped off the pack (10+ yd inside 1 s), still 20+ yd off its centre with no champion
+// within 12 yd
 bool FactionChampionsIsPulled(PlayerbotAI* botAI, Unit* champion);
 
 // The kill target has been pulled out at least once, even if the pack has walked onto it since
@@ -127,13 +128,14 @@ bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 // next healer in the pack once the kill target is pulled and at 40% or under: healers off the frontline
 // nearest the kill target, other healers, the danger champion, champions off the frontline casters
 // first, the rest in kill order. A cast at a champion that stops being a candidate is interrupted, so it
-// never makes a new kill target immune. One duty per candidate, none while it is CC'd for over 2 s more
-// or a CC cast at it is under way. Each of these spells holds one target per caster, so a caster whose
-// spell holds a champion for over 2 s more casts it nowhere else, unless it moves off a non-healer onto
-// a healer. The caster has a spell that lands and, by DR, holds over 2.5 s, and is in range and sight or
+// never makes a new kill target immune. One duty per candidate, none while it is CC'd for over 2 s more,
+// a CC cast at it is under way or it is in Bladestorm. Each of these spells holds one target per caster,
+// so a caster whose spell holds a champion for longer than its cast time plus 0.4 s casts it nowhere
+// else, unless it moves off a non-healer onto a healer. The caster has a spell that lands and, by DR, holds over 2.5 s, and is in range and sight or
 // up to 15 yd past the range, which it walks, never from a Cyclone stand: in range first, then
 // never-breaking, then the longest, then the nearest. Polymorph, Fear and Hex only on a champion with no
-// group member or pet on it and no group DoT. Latched until a fresh one lands or 3 s pass with none going
+// group member or pet on it and no group DoT. Latched until a fresh one lands (over its cast time plus
+// 0.4 s left) or 3 s pass with none going
 // (6 s for a walk), written to fc.cc. Null unless the encounter is live.
 Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint32& spellId);
 

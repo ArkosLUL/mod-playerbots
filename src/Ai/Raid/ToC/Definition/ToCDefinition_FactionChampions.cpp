@@ -60,6 +60,16 @@ bool FactionChampionsGripHeld(PlayerbotAI* botAI)
 
 bool FactionChampionsLive(PlayerbotAI* botAI) { return ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions); }
 
+// Its 30 s marker blocks Divine Shield, Divine Protection and Hand of Protection, and these paladins are
+// the ones the champions focus
+bool FactionChampionsWrathHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return bot->getClass() == CLASS_PALADIN &&
+           (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot) || FactionChampionsIsFrontline(bot)) &&
+           FactionChampionsLive(botAI);
+}
+
 bool FactionChampionsHeroicLive(PlayerbotAI* botAI)
 {
     Map* map = botAI->GetBot()->FindMap();
@@ -104,6 +114,7 @@ void DefineFactionChampions(EncounterBuilder& e)
 
     // every paladin's class node fires at one dying bot at once; faction champions protect deals one
     e.Block("faction champions lay on hands guard", Role::Any, FactionChampionsLive, 0, {"lay on hands on party"});
+    e.Block("faction champions avenging wrath hold", Role::Any, FactionChampionsWrathHeld, 0, {"avenging wrath"});
 
     // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
     e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);

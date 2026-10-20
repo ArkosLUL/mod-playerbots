@@ -6,6 +6,7 @@
 #include <iterator>
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -75,6 +76,8 @@ constexpr float COUNTERSPELL_RANGE = 30.0f;
 constexpr int32 CC_MIN_HOLD_MS = 2500;
 // A CC this close to running out gets the next one: a 1.5 s cast plus slack
 constexpr int32 CC_RECAST_LEAD_MS = 2000;
+// on top of the caster's own cast time before its CC counts as running out
+constexpr int32 CC_RECAST_SLACK_MS = 400;
 constexpr uint32 CC_DUTY_MS = 3000;
 // a human's opening grip lands and moves the kill latch in this window
 constexpr uint32 CC_SETTLE_MS = 1500;
@@ -99,6 +102,11 @@ constexpr float PULLED_FROM_PACK = 20.0f;
 constexpr float PULLED_CLEAR = 12.0f;
 // Below this the current kill target is nearly dead, so a pulled healer waits its turn
 constexpr float PULLED_SWITCH_MIN_PCT = 30.0f;
+// Champion healers have no blink or charge, so this much ground this fast is a Death Grip. A run covers
+// ~7 yd/s.
+constexpr float GRIP_JUMP_YD = 10.0f;
+constexpr uint32 GRIP_JUMP_MS = 1000;
+constexpr uint32 TRACK_STEP_MS = 200;
 // Off the pack centre by this much and not on the frontline: chasing the raid
 constexpr float ESCAPE_DIST = 20.0f;
 constexpr uint32 SPELL_DEATH_GRIP_RANK = 49576;
@@ -119,6 +127,13 @@ struct Champion
     bool escapee = false;
     bool onFront = false;
     float packDist = 0.0f;
+};
+
+struct TrackPoint
+{
+    uint32 ms = 0;
+    float x = 0.0f;
+    float y = 0.0f;
 };
 
 struct CcDuty
@@ -148,6 +163,11 @@ struct FactionChampionsState
     ObjectGuid skulled;
     // The kill target once it's been pulled out, kept if the pack later walks onto it
     ObjectGuid outOnce;
+    // Champion healer -> where it stood over the last second
+    std::unordered_map<ObjectGuid, std::vector<TrackPoint>> tracks;
+    // Healers gripped off the pack and not back on it yet. Only these count as pulled, a healer that
+    // wandered off on its own still heals the pack.
+    std::unordered_set<ObjectGuid> gripped;
     // CC bot -> its cast, mirrored into fc.cc
     std::unordered_map<ObjectGuid, CcDuty> ccDuties;
 };
@@ -251,6 +271,8 @@ void EndPull(FactionChampionsState& state, Player* bot)
     state.suspended.Clear();
     state.skulled.Clear();
     state.outOnce.Clear();
+    state.tracks.clear();
+    state.gripped.clear();
 
     if (!state.killTarget.Get().IsEmpty())
     {
@@ -520,10 +542,25 @@ bool PackMean(FactionChampionsState const& state, ObjectGuid killTarget, float a
     return true;
 }
 
+void TrackHealer(FactionChampionsState& state, Champion const& champion, uint32 now)
+{
+    std::vector<TrackPoint>& track = state.tracks[champion.guid];
+    track.erase(std::remove_if(track.begin(), track.end(),
+                               [now](TrackPoint const& point) { return getMSTimeDiff(point.ms, now) > GRIP_JUMP_MS; }),
+                track.end());
+
+    if (std::any_of(track.begin(), track.end(), [&champion](TrackPoint const& point)
+                    { return Dist2d(point.x, point.y, champion.x, champion.y) >= GRIP_JUMP_YD; }))
+        state.gripped.insert(champion.guid);
+
+    if (track.empty() || getMSTimeDiff(track.back().ms, now) >= TRACK_STEP_MS)
+        track.push_back({now, champion.x, champion.y});
+}
+
 // Follows the pack wherever its picks walk it: a step toward the mean round last tick's centre, so a
 // healer pulled 20+ yd off drops out. Off the kill target as latched last tick, since the latch reads
 // what this writes.
-void UpdatePack(FactionChampionsState& state)
+void UpdatePack(FactionChampionsState& state, uint32 now)
 {
     ObjectGuid const killTarget = state.killTarget.Get();
     float x = 0.0f;
@@ -559,7 +596,15 @@ void UpdatePack(FactionChampionsState& state)
     {
         champion.packDist = state.packCentre.GetExactDist2d(champion.x, champion.y);
         champion.pulled = false;
-        if (!champion.healer || !champion.inCombat || champion.packDist < PULLED_FROM_PACK)
+        if (!champion.healer)
+            continue;
+
+        TrackHealer(state, champion, now);
+        // also drops the landing jump every champion makes at the start
+        if (champion.packDist < PULLED_FROM_PACK)
+            state.gripped.erase(champion.guid);
+
+        if (!champion.inCombat || champion.packDist < PULLED_FROM_PACK || !state.gripped.count(champion.guid))
             continue;
 
         champion.pulled = std::none_of(state.champions.begin(), state.champions.end(),
@@ -713,8 +758,8 @@ void UpdateKillLatch(FactionChampionsState& state, Player* bot)
             state.suspended.Clear();
         }
         // a healer dragged out of the pack gets no heals from the others, so it goes first. Once the
-        // latch sits on a pulled one it stays there.
-        else if (!current->pulled && current->healthPct > PULLED_SWITCH_MIN_PCT)
+        // latch has sat on a pulled one it stays there, even after the pack walks onto it.
+        else if (!current->pulled && state.outOnce != current->guid && current->healthPct > PULLED_SWITCH_MIN_PCT)
         {
             if (Champion const* pulled = BestPulled(state, current->guid))
             {
@@ -876,6 +921,21 @@ bool BetterCcOption(CcOption const& a, CcOption const& b)
     return a.distance < b.distance;
 }
 
+// One target per caster per spell (SPELL_ATTR5_LIMIT_N): its next cast elsewhere ends this one, so the
+// caster only goes free once what's left would run out while that cast is still going
+bool HoldsPastRecast(Aura const* aura, Player* caster, uint32 spellId)
+{
+    if (!aura)
+        return false;
+
+    if (aura->GetDuration() < 0)
+        return true;
+
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    int32 const castMs = info ? static_cast<int32>(info->CalcCastTime(caster)) : 0;
+    return aura->GetDuration() > castMs + CC_RECAST_SLACK_MS;
+}
+
 // Latched until the cast lands or 3 s pass with none going, so each bot finishes the cast it started
 void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
 {
@@ -932,8 +992,7 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
         if (keep && !casting)
         {
             // the caster's old one in its last seconds isn't the recast landing
-            Aura const* aura = target->GetAura(duty.spellId, ccBot);
-            bool const landed = aura && (aura->GetDuration() < 0 || aura->GetDuration() > CC_RECAST_LEAD_MS);
+            bool const landed = HoldsPastRecast(target->GetAura(duty.spellId, ccBot), caster->first, duty.spellId);
             keep = !landed && getMSTimeDiff(duty.sinceMs, now) < CC_DUTY_MS + (duty.walk ? CC_WALK_MS : 0);
         }
 
@@ -954,7 +1013,6 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
     for (size_t i = 0; i < casters.size(); ++i)
         busy[i] = state.ccDuties.count(casters[i].first->GetGUID()) > 0;
 
-    // One target per caster per spell (SPELL_ATTR5_LIMIT_N): the next cast elsewhere ends the one holding
     std::vector<std::vector<Champion const*>> tied(casters.size());
     for (size_t i = 0; i < casters.size(); ++i)
     {
@@ -965,7 +1023,7 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
             {
                 Creature* creature = AliveCreature(bot, champion.guid);
                 Aura const* aura = creature ? creature->GetAura(spellId, casters[i].first->GetGUID()) : nullptr;
-                if (aura && (aura->GetDuration() < 0 || aura->GetDuration() > CC_RECAST_LEAD_MS))
+                if (HoldsPastRecast(aura, casters[i].first, spellId))
                 {
                     holder = &champion;
                     break;
@@ -984,8 +1042,8 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
         bool const covered = std::any_of(state.ccDuties.begin(), state.ccDuties.end(),
                                          [champion](auto const& held) { return held.second.target == champion->guid; });
         Creature* target = covered ? nullptr : AliveCreature(bot, champion->guid);
-        if (!target || FactionChampionsChainGuarded(bot, target))
-            continue;
+        if (!target || FactionChampionsChainGuarded(bot, target) || target->HasAura(SPELL_BLADESTORM))
+            continue;  // immune to CC while it spins
 
         int32 ccLeftMs = 0;
         if (PlayerCcAura(target, &ccLeftMs) && (ccLeftMs < 0 || ccLeftMs > CC_RECAST_LEAD_MS))
@@ -1087,7 +1145,7 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
     }
 
     ScanChampions(*state, bot);
-    UpdatePack(*state);
+    UpdatePack(*state, now);
     UpdateCcAuras(*state);
     Unit* skull = GetToCHumanSkull(botAI, &IsChampionUnit);
     state->skulled = skull ? skull->GetGUID() : ObjectGuid::Empty;
