@@ -106,6 +106,8 @@ constexpr uint32 CHAIN_LINK2_MS = 10000;
 constexpr uint32 CHAIN_WAIT_MS = 3000;
 // the pull starts on the hit, so the jump only shows a moment after the cast
 constexpr uint32 CHAIN_LAND_MS = 300;
+// after a kill the next chain waits this long at most for a grip to come off cooldown
+constexpr uint32 NEXT_CHAIN_WAIT_MS = 20000;
 // the player's own grip, the chain's last link, came 3-4 s after the bot DK's
 constexpr uint32 GRIP_GUARD_TAIL_MS = 6000;
 
@@ -137,7 +139,7 @@ constexpr std::array<uint32, 8> ENTANGLING_ROOTS_RANKS = {53308, 26989, 9853, 98
 constexpr std::array<uint32, 4> HAMMER_OF_JUSTICE_RANKS = {10308, 5589, 5588, 853};
 
 // Hand of Protection goes on one physical champion, the rest wait for two and this much health, so they're
-// still up when the focused frontline member drops
+// still up when the focused frontline member drops. Four on a non-tank don't wait.
 constexpr uint32 PROTECT_MIN_ATTACKERS = 2;
 constexpr float PROTECT_HEALTH_PCT = 60.0f;
 // a melee champion farther off its victim isn't hitting it yet
@@ -147,6 +149,9 @@ constexpr std::array<uint32, 3> HAND_OF_PROTECTION_RANKS = {10278, 5599, 1022};
 constexpr uint32 SPELL_PAIN_SUPPRESSION = 33206;
 constexpr uint32 SPELL_GUARDIAN_SPIRIT = 47788;
 constexpr uint32 SPELL_HAND_OF_SACRIFICE = 6940;
+constexpr uint32 SPELL_DIVINE_SACRIFICE = 64205;
+// what Divine Sacrifice puts up with the talent: 20% less damage taken, raid wide, 6 s
+constexpr uint32 SPELL_DIVINE_GUARDIAN = 70940;
 constexpr float HAND_RANGE = 30.0f;
 constexpr float PRIEST_EXTERNAL_RANGE = 40.0f;
 // Hand of Sacrifice moves 30% of the damage onto the paladin
@@ -291,6 +296,9 @@ struct FactionChampionsDefenceState
     std::unordered_map<ObjectGuid, LayOnHandsDuty> layOnHandsDuties;  // paladin -> its cast
     std::unordered_map<ObjectGuid, std::vector<HealthSample>> healthLog;
     uint32 healthSampleMs = 0;
+    ObjectGuid lastKill;
+    bool nextChainPending = false;  // a kill is waiting for its next chain
+    uint32 nextChainSinceMs = 0;
 
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
@@ -1149,6 +1157,59 @@ bool ChainLanded(Player* bot, Unit* target, GripChainState const& chain)
     return getMSTimeDiff(chain.link1Ms, getMSTime()) >= CHAIN_LAND_MS && !MidJump(target);
 }
 
+// The DK whose grip opens the next chain, the DK tank or with none the chain DK, once its grip is close
+Player* NextChainGripper(Player* bot)
+{
+    Player* dk = ChainOpener(bot);
+    if (!dk)
+    {
+        ObjectGuid const chainDk = FactionChampionsChainDk(bot);
+        dk = chainDk.IsEmpty() ? nullptr : ObjectAccessor::FindPlayer(chainDk);
+    }
+
+    return dk && InControl(dk) && dk->GetSpellCooldownDelay(SPELL_DEATH_GRIP) <= CHAIN_WAIT_MS ? dk : nullptr;
+}
+
+// The kill target died: the next healer gets a chain as if the player had pulled it, once a grip is ready.
+// A player's pull meanwhile wins.
+void UpdateNextChain(FactionChampionsDefenceState& state, PlayerbotAI* botAI, Unit* killTarget, uint32 now)
+{
+    Player* bot = botAI->GetBot();
+    if (!state.lastKill.IsEmpty() && (!killTarget || killTarget->GetGUID() != state.lastKill))
+    {
+        Map* map = bot->FindMap();
+        Creature* last = map ? map->GetCreature(state.lastKill) : nullptr;
+        if (last && !last->IsAlive())
+        {
+            state.nextChainPending = true;
+            state.nextChainSinceMs = now;
+        }
+    }
+
+    state.lastKill = killTarget ? killTarget->GetGUID() : ObjectGuid::Empty;
+    if (!state.nextChainPending)
+        return;
+
+    GripChainState* chain = nullptr;
+    Unit* healer = FactionChampionsChainHealer(botAI);
+    if (getMSTimeDiff(state.nextChainSinceMs, now) > NEXT_CHAIN_WAIT_MS || OpenChain(bot, chain) || !healer)
+    {
+        state.nextChainPending = false;
+        return;
+    }
+
+    Player* dk = chain && GripCanLand(healer) ? NextChainGripper(bot) : nullptr;
+    if (!dk)
+        return;
+
+    CloseChain(*chain);
+    chain->target = healer->GetGUID();
+    chain->openMs = now;
+    state.nextChainPending = false;
+    if (PlayerbotAI* dkAI = GET_PLAYERBOT_AI(dk))
+        dkAI->TellMaster("Pulling " + healer->GetName());
+}
+
 // An open pull's champion once the DK tank's grip has landed it, before that a walk to the post. With
 // no pull, only a kill target already pulled out that still wants a pull: a grip someone made goes on.
 GripPick GripCandidate(PlayerbotAI* botAI, std::vector<Unit*> const& champions, Unit* killTarget,
@@ -1734,15 +1795,52 @@ uint32 ExternalRank(uint32 spellId)
     }
 }
 
+// A non-tank with four or more on it that no external went to gets Divine Sacrifice from a paladin with
+// Divine Guardian in reach. One at a time: a second one while it runs adds nothing.
+void DealDivineSacrifice(FactionChampionsDefenceState& state, std::vector<Member> const& members,
+                         std::vector<Member> const& focused, std::unordered_map<ObjectGuid, uint32> const& attackers,
+                         std::vector<Member> const& casters, std::vector<bool>& taken)
+{
+    SpellInfo const* guardian = sSpellMgr->GetSpellInfo(SPELL_DIVINE_GUARDIAN);
+    float const reach = guardian ? guardian->Effects[EFFECT_0].CalcRadius() : 0.0f;
+    if (reach <= 0.0f || std::any_of(members.begin(), members.end(), [](Member const& member)
+                                     { return member.player->HasAura(SPELL_DIVINE_GUARDIAN); }))
+        return;
+
+    for (Member const& member : focused)
+    {
+        auto const hits = attackers.find(member.player->GetGUID());
+        if (hits == attackers.end() || hits->second < FOCUS_PREEMPT_CHAMPIONS || IsTankMember(member.player) ||
+            std::any_of(state.protects.begin(), state.protects.end(),
+                        [&member](auto const& duty) { return duty.second.target == member.player->GetGUID(); }))
+            continue;
+
+        for (size_t i = 0; i < casters.size(); ++i)
+        {
+            Player* caster = casters[i].player;
+            if (taken[i] || caster->getClass() != CLASS_PALADIN || !ToCHasDivineGuardian(caster) ||
+                caster->GetHealthPct() < SACRIFICE_MIN_HEALTH_PCT || !SpellReady(caster, SPELL_DIVINE_SACRIFICE) ||
+                caster->GetExactDist(member.player) > reach)
+                continue;
+
+            state.protects[caster->GetGUID()] = {member.player->GetGUID(), SPELL_DIVINE_SACRIFICE};
+            taken[i] = true;
+            return;
+        }
+    }
+}
+
 void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> const& members,
                    std::vector<Unit*> const& champions)
 {
     state.protects.clear();
 
+    // casters count too: four of them kill a healer from full in a second or two
     std::unordered_map<ObjectGuid, uint32> attackers;
+    std::unordered_map<ObjectGuid, uint32> physical;
     for (Unit* champion : champions)
     {
-        if (!IsPhysicalChampion(champion->GetEntry()) || champion->HasUnitState(UNIT_STATE_LOST_CONTROL))
+        if (champion->HasUnitState(UNIT_STATE_LOST_CONTROL))
             continue;
 
         Unit* victim = champion->GetVictim();
@@ -1751,22 +1849,28 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
             continue;
 
         ++attackers[victim->GetGUID()];
+        if (IsPhysicalChampion(champion->GetEntry()))
+            ++physical[victim->GetGUID()];
     }
 
     std::vector<Member> focused;
     std::unordered_map<ObjectGuid, bool> othersFor;
+    std::unordered_map<ObjectGuid, bool> handFor;
     for (Member const& member : members)
     {
         auto const hits = attackers.find(member.player->GetGUID());
         if (hits == attackers.end() || ProtectCovered(member.player))
             continue;
 
-        bool const others = hits->second >= PROTECT_MIN_ATTACKERS &&
-                            member.player->GetHealthPct() <= PROTECT_HEALTH_PCT;
-        if (others || HandOfProtectionFits(member))
+        bool const others = (hits->second >= FOCUS_PREEMPT_CHAMPIONS && !IsTankMember(member.player)) ||
+                            (hits->second >= PROTECT_MIN_ATTACKERS &&
+                             member.player->GetHealthPct() <= PROTECT_HEALTH_PCT);
+        bool const hand = physical.count(member.player->GetGUID()) && HandOfProtectionFits(member);
+        if (others || hand)
         {
             focused.push_back(member);
             othersFor[member.player->GetGUID()] = others;
+            handFor[member.player->GetGUID()] = hand;
         }
     }
 
@@ -1827,7 +1931,7 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
 
     for (Member const& member : focused)
     {
-        bool const handOfProtection = HandOfProtectionFits(member);
+        bool const handOfProtection = handFor[member.player->GetGUID()];
         bool const others = othersFor[member.player->GetGUID()];
         size_t chosen = casters.size();
         uint32 chosenSpell = 0;
@@ -1854,6 +1958,8 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
         state.protects[casters[chosen].player->GetGUID()] = {member.player->GetGUID(), chosenSpell};
         taken[chosen] = true;
     }
+
+    DealDivineSacrifice(state, members, focused, attackers, casters, taken);
 
     // Lay on Hands once per member in LAY_ON_HANDS_GAP_MS: each paladin's own node would land all of
     // theirs on one bot at once
@@ -2101,6 +2207,7 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     UpdateCcDispels(state, members);
     UpdateMassDispel(state, botAI, members, killTarget);
     UpdatePurge(state, members, champions, killTarget);
+    UpdateNextChain(state, botAI, killTarget, now);
     UpdateGrip(state, botAI, members, champions, killTarget, now);
     UpdateGuard(state, bot, champions, now);
     UpdateSnares(state, botAI, members, champions);

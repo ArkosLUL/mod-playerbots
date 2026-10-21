@@ -390,6 +390,8 @@ CHAIN = "fc.chain"
 # a pull's grips run on past its stop: the bot DK's grip ends it, the player's comes after
 CHAIN_TAIL_MS = 20000
 CHAIN_ORDER = ["tank", "bot DK", "human"]
+# the bots open the next chain within this long of the kill target's death, once a grip is ready
+AFTER_KILL_MS = 20000
 PEEL_SPELLS = {676: "Disarm", 51722: "Dismantle", 64044: "Psychic Horror", 49576: "Death Grip",
                **dict.fromkeys((122, 865, 6131, 10230, 27088, 42917), "Frost Nova"),
                **dict.fromkeys((339, 1062, 5195, 5196, 9852, 9853, 26989, 53308), "Entangling Roots")}
@@ -400,8 +402,14 @@ SPELL_BLADESTORM = 65947
 WARRIOR_CHAMPIONS = (34475, 34453)
 EXTERNALS = {**dict.fromkeys((1022, 5599, 10278), "Hand of Protection"), 33206: "Pain Suppression",
              47788: "Guardian Spirit", 6940: "Hand of Sacrifice",
-             **dict.fromkeys((633, 2800, 10310, 27154, 48788), "Lay on Hands")}
+             **dict.fromkeys((633, 2800, 10310, 27154, 48788), "Lay on Hands"), 64205: "Divine Sacrifice"}
 EXTERNAL_WATCH_MS = 10000
+SPELL_DIVINE_SACRIFICE = 64205
+SPELL_DIVINE_GUARDIAN = 70940
+# Divine Guardian lands on the raid with the cast, give or take a server tick
+GUARDIAN_LAND_MS = 500
+RAID_WIDE = {31821: "Aura Mastery", 64843: "Divine Hymn", 51052: "Anti-Magic Zone",
+             **dict.fromkeys((740, 8918, 9862, 9863, 26983, 48446, 48447), "Tranquility")}
 REBIRTH = frozenset((20484, 20739, 20742, 20747, 20748, 26994, 48477))
 CYCLONE = "fc.cyclone"
 SPELL_CYCLONE = 33786
@@ -759,6 +767,33 @@ def fear_uptime(trace: Trace) -> dict[int, tuple[int, int]]:
     return {guid: (feared, total) for guid, (feared, total) in out.items()}
 
 
+def targeted_share(trace: Trace) -> dict[int, tuple[int, int]]:
+    """Per champion, `(targeted, samples)` over its live samples from the pull: targeted is a sample where a
+    living raid member or raid pet had it as target, which rules out Polymorph, Fear and Hex."""
+    targets = champions(trace)
+    start = pull_start(trace)
+    raid: dict[int, bool] = {}
+    out: dict[int, list[int]] = {}
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        rows = snap.get("u", [])
+        aimed = set()
+        for row in rows:
+            if row[0] in targets or len(row) <= 7 or row[5] <= 0:
+                continue
+            if row[0] not in raid:
+                raid[row[0]] = raid_caster(trace, row[0]) is not None
+            if raid[row[0]]:
+                aimed.add(row[7])
+        for row in rows:
+            if row[0] in targets and row[5] > 0:
+                counts = out.setdefault(row[0], [0, 0])
+                counts[0] += row[0] in aimed
+                counts[1] += 1
+    return {guid: (on, total) for guid, (on, total) in out.items()}
+
+
 def cc_casts(trace: Trace) -> dict[int, dict]:
     """Per roster caster, its CC casts on champions, where they went against the assignment, and
     `landed`, spell name to casts landed, None where the trace can't say. A cast lands when, within
@@ -870,17 +905,20 @@ def show_cc(trace: Trace) -> None:
 
     held = cc_aura_held(trace)
     uptime = fear_uptime(trace)
+    aimed = targeted_share(trace)
     has_aura = bool(notes(trace, CC_AURA))
     shown = [(guid, name) for guid, name, _ in lineup(trace) if guid in held or guid in uptime]
     if shown:
-        print(f"\n  {'on the champion':20} {'spec':20} {'feared':>15}  fc.ccaura held")
+        print(f"\n  {'on the champion':20} {'spec':20} {'feared':>15} {'targeted':>8}  fc.ccaura held")
         for guid, name in shown:
             feared, total = uptime.get(guid, (0, 0))
             share = f"{feared * 100.0 / total:.1f}% of {total}" if total else "-"
+            on, seen = aimed.get(guid, (0, 0))
+            targeted = f"{on * 100.0 / seen:.0f}%" if seen else "-"
             spells = (", ".join(f"{cc_spell_name(trace, spell)} {ms / 1000:.1f}s"
                                 for spell, ms in held[guid].most_common()) if guid in held
                       else "-" if has_aura else "n/a")
-            print(f"  {trace.name(guid)[:20]:20} {name[:20]:20} {share:>15}  {spells}")
+            print(f"  {trace.name(guid)[:20]:20} {name[:20]:20} {share:>15} {targeted:>8}  {spells}")
 
     rows = cc_casts(trace)
     if not rows:
@@ -905,6 +943,8 @@ def show_cc(trace: Trace) -> None:
                        for bot, count in sorted(breaks.items(), key=lambda item: trace.name(item[0])))
              or "no CC held to read"))
     print(f"  feared is the share of the champion's live samples from the pull at moveGen {FLEEING}, fleeing;"
+          f" targeted the share with a living raid member or pet targeting it, where Polymorph, Fear and Hex"
+          f" wait;"
           f" a cast landed when, inside its cast time + {LAND_SLACK_MS / 1000:.0f} s, its target turned to"
           f" fleeing (Fear) or {CC_AURA} on it to that spell (Cyclone, Polymorph, Banish), n/a without"
           f" {CC_AURA} and for Roots; a CC broken between two samples never shows, so landed is a lower bound")
@@ -1660,13 +1700,15 @@ def grip_holds(trace: Trace) -> list[dict]:
 
 
 def chain_links(trace: Trace) -> tuple[list[dict], list[dict]]:
-    """`(chains, outside)`. A chain is one `fc.chain` span: `target`, `start`, `stop`, and `links`, the
-    raid's Death Grips on that target from the span's start until the next span or 20 s past its stop,
-    each a `grips` row plus `off`, the target's distance off the pack anchor a second after (None without
-    a sample). `outside` is every bot grip on a champion in no chain's window."""
+    """`(chains, outside)`. A chain is one `fc.chain` span: `target`, `start`, `stop`, `after_kill` (ms
+    from the last `dead` switch up to AFTER_KILL_MS before it, else None), and `links`, the raid's Death
+    Grips on that target from the span's start until the next span or 20 s past its stop, each a `grips` row
+    plus `off`, the target's distance off the pack anchor a second after (None without a sample). `outside`
+    is every bot grip on a champion in no chain's window."""
     end = pull_end(trace)
     spans = [(as_guid(value), start, stop) for value, start, stop in latch_spans(trace, CHAIN, end)
              if as_guid(value)]
+    deaths = [rec["t"] for rec in notes(trace, SWITCH) if str(rec.get("txt", "")) == "dead"]
     rows = grips(trace)
     anchor = pack_anchor(trace)
     pulls: dict[int, list[int]] = collections.defaultdict(list)
@@ -1686,7 +1728,9 @@ def chain_links(trace: Trace) -> tuple[list[dict], list[dict]]:
             links.append({**row, "off": distance(spot, [0, *anchor]) if spot and anchor else None,
                           "pulled": any(abs(when - row["t"]) <= GRIP_PULL_SLACK_MS for when in pulls.get(target, ())),
                           "cut": grip_cuts(trace, target, row["t"])})
-        chains.append({"target": target, "start": start, "stop": stop, "links": links})
+        chains.append({"target": target, "start": start, "stop": stop, "links": links,
+                       "after_kill": min((start - when for when in deaths if 0 <= start - when <= AFTER_KILL_MS),
+                                         default=None)})
     outside = [row for row in rows if row["by"] not in trace.humans
                and not any(start <= row["t"] <= until for start, until in windows)]
     return chains, outside
@@ -1723,12 +1767,14 @@ def show_chain(trace: Trace) -> None:
     print("THE GRIP CHAIN")
     chains, outside = chain_links(trace)
     if not chains:
-        print(f"  no player's pull ({CHAIN} never set)")
+        print(f"  no chain ({CHAIN} never set)")
     for chain in chains:
         roles = [link_role(trace, link["by"]) for link in chain["links"]]
         verdict = "in order" if roles[:len(CHAIN_ORDER)] == CHAIN_ORDER else \
             ("order " + ", ".join(roles) if roles else "no grip")
-        print(f"\n  pull on {trace.name(chain['target'])} at {clock(chain['start'])},"
+        kind = "pull" if chain["after_kill"] is None else \
+            f"chain {chain['after_kill'] / 1000:.1f} s after a kill"
+        print(f"\n  {kind} on {trace.name(chain['target'])} at {clock(chain['start'])},"
               f" open {(chain['stop'] - chain['start']) / 1000:.1f} s: {verdict}")
         previous = chain["start"]
         for link, role in zip(chain["links"], roles):
@@ -1744,7 +1790,8 @@ def show_chain(trace: Trace) -> None:
             f"{trace.name(row['by'])} {clock(row['t'])} on {trace.name(row['target'])}" for row in outside) + ")")
     else:
         print("\n  no bot grip outside a pull")
-    print(f"  a pull's grips run from its {CHAIN} until the next one or {CHAIN_TAIL_MS // 1000} s past its"
+    print(f"  a chain opened within {AFTER_KILL_MS // 1000} s of a dead switch counts as after a kill;"
+          f" a pull's grips run from its {CHAIN} until the next one or {CHAIN_TAIL_MS // 1000} s past its"
           f" end; the order wanted is the DK tank, the bot DK, then the player; + counts from the pull or"
           f" the link before; carry is the target's travel, off pack its distance from where the champions"
           f" landed, both {GRIP_SETTLE_MS / 1000:.0f} s after the grip; cut by is a raid or pet hold on the"
@@ -1826,19 +1873,49 @@ def snare_casts(trace: Trace) -> list[dict]:
     return out
 
 
+def champions_on(trace: Trace, target: int, when: int) -> tuple[int, int]:
+    """`(physical, caster)` living champions with `target` as their target in the last sample at or
+    before `when`."""
+    snap = snap_at(trace, when)
+    targets = champions(trace)
+    physical = caster = 0
+    for row in (snap.get("u", []) if snap else []):
+        if row[0] in targets and row[5] > 0 and len(row) > 7 and row[7] == target:
+            if spec(trace, row[0]) in MELEE_SPECS or spec(trace, row[0]) == "Hunter":
+                physical += 1
+            else:
+                caster += 1
+    return physical, caster
+
+
 def external_casts(trace: Trace) -> list[dict]:
-    """Every raid external on a raid member: `t`, `by`, `spell`, `target`, and whether the target died
-    within 10 s (`died`)."""
+    """Every raid external on a raid member: `t`, `by`, `spell`, `target`, whether the target died within
+    10 s (`died`), `on`, `champions_on` the target at the cast, and for Divine Sacrifice (cast on the
+    paladin itself) `reach`, the members Divine Guardian landed on with it, else None."""
     roster = roster_guids(trace)
     deaths = [(death["t"], death["g"]) for death in combat_deaths(trace)]
+    guardian = [(rec["t"], rec.get("d")) for rec in trace.of("aura")
+                if rec.get("sp") == SPELL_DIVINE_GUARDIAN and not rec.get("r")]
     out = []
     for rec in trace.of("cast"):
         target = rec.get("tgt") or rec.get("s")
         if rec.get("sp") not in EXTERNALS or rec.get("s") not in roster or target not in roster:
             continue
         died = any(guid == target and rec["t"] <= when <= rec["t"] + EXTERNAL_WATCH_MS for when, guid in deaths)
-        out.append({"t": rec["t"], "by": rec["s"], "spell": EXTERNALS[rec["sp"]], "target": target, "died": died})
+        reach = (len({guid for when, guid in guardian if rec["t"] <= when <= rec["t"] + GUARDIAN_LAND_MS})
+                 if rec["sp"] == SPELL_DIVINE_SACRIFICE else None)
+        out.append({"t": rec["t"], "by": rec["s"], "spell": EXTERNALS[rec["sp"]], "target": target, "died": died,
+                    "on": champions_on(trace, target, rec["t"]), "reach": reach})
     return out
+
+
+def raid_wide_casts(trace: Trace) -> list[tuple[int, int, str]]:
+    """Raid Aura Mastery, Divine Hymn, Tranquility and Anti-Magic Zone casts: `(t, by, name)`."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    roster = roster_guids(trace)
+    return [(rec["t"], rec["s"], RAID_WIDE[rec["sp"]]) for rec in trace.of("cast")
+            if rec.get("sp") in RAID_WIDE and rec.get("s") in roster and not rec.get("tr")]
 
 
 def battle_res_casts(trace: Trace) -> list[dict]:
@@ -1960,14 +2037,21 @@ def show_peel(trace: Trace) -> None:
 
     externals = external_casts(trace)
     if externals:
-        print(f"\n  {'external at':>11} {'spell':18} {'by':14} {'on':14} {'role':6} {'died in 10 s':>12}")
+        print(f"\n  {'external at':>11} {'spell':18} {'by':14} {'on':14} {'role':6} {'champions':>9}"
+              f" {'died in 10 s':>12}")
         for row in externals:
             died = "yes" if row["died"] else "-"
+            physical_on, caster_on = row["on"]
+            reach = f"  Divine Guardian on {row['reach']}" if row["reach"] is not None else ""
             print(f"  {clock(row['t']):>11} {row['spell']:18} {trace.name(row['by'])[:14]:14}"
-                  f" {trace.name(row['target'])[:14]:14} {trace.role(row['target']):6} {died:>12}")
+                  f" {trace.name(row['target'])[:14]:14} {trace.role(row['target']):6}"
+                  f" {f'{physical_on}+{caster_on}':>9} {died:>12}{reach}")
     else:
-        print("  no Hand of Protection, Pain Suppression, Guardian Spirit, Hand of Sacrifice or Lay on Hands"
-              " on the raid")
+        print("  no Hand of Protection, Pain Suppression, Guardian Spirit, Hand of Sacrifice, Lay on Hands or"
+              " Divine Sacrifice on the raid")
+    wide = raid_wide_casts(trace)
+    print("  raid-wide: " + (", ".join(f"{name} {trace.name(by)} {clock(when)}" for when, by, name in wide)
+                             or "none"))
 
     rezzes = battle_res_casts(trace)
     if rezzes:
@@ -1985,7 +2069,8 @@ def show_peel(trace: Trace) -> None:
     print("  taunts on champions: " + (", ".join(f"{name} {who} {count}" for (name, who), count
                                                in sorted(taunts.items())) or "none"))
     print("  a snare's victim is the champion's target in the last sample before the cast; disarms are casts,"
-          " the disarm itself never shows on a champion; champions round a Rebirth are counted at the target's"
+          " the disarm itself never shows on a champion; an external's champions are those targeting its"
+          " target at the cast, physical + caster; champions round a Rebirth are counted at the target's"
           " death spot")
 
 
@@ -2466,16 +2551,17 @@ def champion_damage(trace: Trace) -> list[dict]:
 
 def melee_control(trace: Trace) -> list[dict]:
     """Per melee champion: `guid`, `held` ms under a player's CC (`fc.ccaura`), and the raid's `disarms`,
-    `stuns` and `cc` casts on it, `danger` when `fc.danger` ever named it."""
+    `stuns` and `cc` casts on it, `danger` when `fc.danger` ever named it, and `danger_ms` for how long."""
     held = cc_aura_held(trace)
-    roster = roster_guids(trace)
-    danger = {as_guid(value) for value, _, _ in latch_spans(trace, DANGER, pull_end(trace))}
+    danger: collections.Counter = collections.Counter()
+    for value, start, stop in latch_spans(trace, DANGER, pull_end(trace)):
+        danger[as_guid(value)] += stop - start
     out = []
     for guid, name, _ in lineup(trace):
         if name not in MELEE_SPECS:
             continue
         row = {"guid": guid, "held": sum(held.get(guid, {}).values()), "disarms": 0, "stuns": 0, "cc": 0,
-               "danger": guid in danger}
+               "danger": guid in danger, "danger_ms": danger[guid]}
         for rec in trace.of("cast"):
             if rec.get("tgt") != guid or rec.get("tr") or raid_caster(trace, rec.get("s")) is None:
                 continue
@@ -2504,9 +2590,9 @@ def show_damage(trace: Trace) -> None:
     for row in melee_control(trace):
         mark = "*" if row["danger"] else " "
         print(f"   {mark}{trace.name(row['guid'])[:20]:20} held {row['held'] / 1000:5.1f}s, disarms {row['disarms']},"
-              f" stuns {row['stuns']}, CC casts {row['cc']}")
+              f" stuns {row['stuns']}, CC casts {row['cc']}, danger {row['danger_ms'] / 1000:.1f}s")
     print("  pets count for their owner; held is fc.ccaura time, disarms and stuns are casts, since a disarm"
-          " never shows on a champion")
+          " never shows on a champion; danger is how long fc.danger named it")
 
 
 def personal_rows(trace: Trace) -> list[dict]:

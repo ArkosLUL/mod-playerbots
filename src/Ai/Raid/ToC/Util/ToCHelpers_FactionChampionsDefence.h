@@ -108,7 +108,9 @@ Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand, bool* walk
 // A tank's generic pull at a champion (the player targets it and types pull) becomes the chain's
 // request, written to fc.chain, and the generic pull is ended. The DK tank grips first, the bot DK
 // once the champion lands, the player last. The request drops after 15 s with no tank grip, or 10 s
-// after it with no bot DK grip.
+// after it with no bot DK grip. While live, the kill target's death opens one the same way on the first
+// champion healer in kill order not pulled, within 20 s once the DK tank's grip (with none, the chain
+// DK's) is 3 s off ready, and the DK tells the master.
 void FactionChampionsTakePullRequest(PlayerbotAI* botAI);
 
 // This bot is the chain's DK tank: a bot tank DK knowing Death Grip, lowest guid
@@ -164,9 +166,11 @@ Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
 // grip chain, never on the kill target. No root within 12 yd of a pack tank. Written to fc.peel.
 Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId);
 
-// The group member this bot covers with an external defensive and the spell id, when two or more
-// physical champions are on that member and none of the four covers it yet. One caster per member. Lay on
-// Hands goes this way too: a member at 20% or under with a champion on it, one per member in 15 s, from a
+// The group member this bot covers with an external defensive and the spell id, when none of the four
+// covers it yet: Hand of Protection with a physical champion on it, the others with four or more champions
+// on a non-tank, or two at 60% health or under, casters counted. One caster per member. A non-tank with
+// four on it that got none gets Divine Sacrifice from a paladin with Divine Guardian, while none runs. Lay
+// on Hands goes this way too: a member at 20% or under with a champion on it, one per member in 15 s, from a
 // paladin bot other than the member within 40 yd, healers first, held until the cast goes out or 2 s.
 Unit* FactionChampionsProtectTarget(PlayerbotAI* botAI, uint32& spellId);
 

@@ -171,14 +171,6 @@ uint32 ResistAuraOf(SpellSchoolMask school)
     return 0;
 }
 
-// A passive talent is only in the talent map, never the spell map HasSpell reads
-bool HasDivineGuardian(Player* paladin)
-{
-    uint8 const spec = paladin->GetActiveSpec();
-    return paladin->HasTalent(SPELL_DIVINE_GUARDIAN_RANK_1, spec) ||
-           paladin->HasTalent(SPELL_DIVINE_GUARDIAN_RANK_2, spec);
-}
-
 uint32 CoverSpellId(Player* member, CoverSpec const& spec)
 {
     if (spec.spellId)
@@ -213,7 +205,7 @@ bool CoverReady(Player* member, CoverSpec const& spec, ToCPredictedHit const& hi
             return aura && member->GetAuraOfRankedSpell(aura, member->GetGUID());
         }
         case ToCRaidCover::DivineSacrifice:
-            return HasDivineGuardian(member) && member->GetHealthPct() >= SACRIFICE_MIN_PCT;
+            return ToCHasDivineGuardian(member) && member->GetHealthPct() >= SACRIFICE_MIN_PCT;
         case ToCRaidCover::AntiMagicZone:
         {
             SpellInfo const* zone = sSpellMgr->GetSpellInfo(SPELL_ANTI_MAGIC_ZONE_AURA);
@@ -408,6 +400,14 @@ ToCPersonalPick PickPersonal(PlayerbotAI* botAI, ToCPredictedHit const& hit, cha
     return pick;
 }
 }  // namespace
+
+// A passive talent is only in the talent map, never the spell map HasSpell reads
+bool ToCHasDivineGuardian(Player* paladin)
+{
+    uint8 const spec = paladin->GetActiveSpec();
+    return paladin->HasTalent(SPELL_DIVINE_GUARDIAN_RANK_1, spec) ||
+           paladin->HasTalent(SPELL_DIVINE_GUARDIAN_RANK_2, spec);
+}
 
 ToCRaidCover GetToCRaidCover(PlayerbotAI* botAI, ToCPredictedHit const* hit)
 {

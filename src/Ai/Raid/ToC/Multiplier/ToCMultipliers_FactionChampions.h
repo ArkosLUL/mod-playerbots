@@ -38,7 +38,7 @@ protected:
 };
 
 // Class CC nodes would pick their own targets, so CC goes out only through the CC duty. A DoT spread
-// skips a champion under Polymorph or Fear, or about to be.
+// goes on no champion but the kill target.
 class FactionChampionsCcGuardMultiplier : public Multiplier
 {
 public:

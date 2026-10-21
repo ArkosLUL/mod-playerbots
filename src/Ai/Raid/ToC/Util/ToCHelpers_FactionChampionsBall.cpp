@@ -252,7 +252,6 @@ struct FrontCandidate
 {
     Unit* champion;
     uint32 tier;
-    bool melee;
     float fromCentre;
 };
 
@@ -291,6 +290,10 @@ void UpdateFrontline(BallState& state, PlayerbotAI* botAI, std::vector<Player*> 
     {
         for (Unit* champion : FactionChampionsInCombat(botAI))
         {
+            // casters and healers stay free of attackers, so Polymorph, Fear and Hex can take them
+            if (!IsFactionChampionMelee(champion->GetEntry()))
+                continue;
+
             float const fromCentre = champion->GetExactDist2d(&centre);
             bool const untouchable = champion->IsImmunedToDamage(SPELL_SCHOOL_MASK_NORMAL) &&
                                      champion->IsImmunedToDamage(SPELL_SCHOOL_MASK_MAGIC);
@@ -298,9 +301,7 @@ void UpdateFrontline(BallState& state, PlayerbotAI* botAI, std::vector<Player*> 
                 FactionChampionsCcProtected(botAI, champion))
                 continue;
 
-            candidates.push_back(
-                {champion, FrontTier(champion, front, members), IsFactionChampionMelee(champion->GetEntry()),
-                 fromCentre});
+            candidates.push_back({champion, FrontTier(champion, front, members), fromCentre});
         }
     }
 
@@ -309,9 +310,6 @@ void UpdateFrontline(BallState& state, PlayerbotAI* botAI, std::vector<Player*> 
                      {
                          if (a.tier != b.tier)
                              return a.tier < b.tier;
-
-                         if (a.melee != b.melee)
-                             return a.melee;
 
                          return a.fromCentre < b.fromCentre;
                      });

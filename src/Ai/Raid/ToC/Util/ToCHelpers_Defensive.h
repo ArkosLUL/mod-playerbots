@@ -67,6 +67,9 @@ bool IsToCRaidCoverChannel(ToCRaidCover cover);
 // on everyone its 30% redirect drains the paladin.
 void FinishToCRaidCover(PlayerbotAI* botAI, ToCRaidCover cover);
 
+// The paladin is talented into Divine Guardian, so its Divine Sacrifice cuts damage to the whole raid
+bool ToCHasDivineGuardian(Player* paladin);
+
 // Before the first damage: the class nodes for the raid cooldowns are held over this, so none goes out
 // early or twice.
 bool ToCRaidHitLeadIn(ToCPredictedHit const& hit);

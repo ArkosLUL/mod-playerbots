@@ -17,9 +17,10 @@ namespace TrialOfTheCrusaderHelpers
 // This bot is on the frontline. Its spot is the pack centre.
 bool FactionChampionsFrontlineHeld(PlayerbotAI* botAI, Position& centre);
 
-// The champion this frontline bot hits, dealt per instance from those within 20 yd of the pack centre,
-// not pulled, hittable and not under a CC a hit breaks: first one no frontline DPS has threat on, then
-// one on a raider off the frontline, then the rest; melee before casters, nearest the centre first. Each gets the nearest free member, spares go round again. Kept while it qualifies and nothing
+// The melee champion this frontline bot hits, dealt per instance from those within 20 yd of the pack
+// centre, not pulled, hittable and not under a CC a hit breaks: first one no frontline DPS has threat on,
+// then one on a raider off the frontline, then the rest, nearest the centre first. Casters and healers are
+// left free for CC. Each gets the nearest free member, spares go round again. Kept while it qualifies and nothing
 // of a higher tier is left uncovered. Written to fc.front. Null when it holds none.
 Unit* FactionChampionsFrontlineTarget(PlayerbotAI* botAI);
 

@@ -120,6 +120,7 @@ struct Champion
     bool touchable = false;
     float healthPct = 0.0f;
     uint32 ccAura = 0;  // a player's fear, stun or confuse on it
+    bool disarmed = false;
     float x = 0.0f;
     float y = 0.0f;
     bool healer = false;
@@ -498,6 +499,7 @@ void ScanChampions(FactionChampionsState& state, Player* bot)
                                creature->IsImmunedToDamage(SPELL_SCHOOL_MASK_MAGIC));
         champion.healthPct = creature->GetHealthPct();
         champion.ccAura = PlayerCcAura(creature);
+        champion.disarmed = creature->HasAuraType(SPELL_AURA_MOD_DISARM);
         champion.x = creature->GetPositionX();
         champion.y = creature->GetPositionY();
         champion.healer = IsFactionChampionHealer(champion.entry);
@@ -684,17 +686,20 @@ bool CycloneStandUp(FactionChampionsState const& state, Player* member)
            BlobHealer(state);
 }
 
+// A held one passes danger on to the next free one, so the peels reach the DK while the rogue is stunned
 void UpdateDanger(FactionChampionsState& state)
 {
     ObjectGuid const kill = state.killTarget.Get();
     Champion const* best = nullptr;
+    auto const held = [](Champion const& champion) { return champion.ccAura || champion.disarmed; };
     for (Champion const& champion : state.champions)
     {
         if (!champion.inCombat || champion.pulled || champion.guid == kill || champion.guid == state.suspended ||
             DangerRank(champion.entry) == std::size(DANGER_ORDER))
             continue;
 
-        if (!best || DangerRank(champion.entry) < DangerRank(best->entry))
+        if (!best || std::make_pair(held(champion), DangerRank(champion.entry)) <
+                         std::make_pair(held(*best), DangerRank(best->entry)))
             best = &champion;
     }
 
@@ -1535,6 +1540,23 @@ Unit* FactionChampionsBlobHealer(PlayerbotAI* botAI)
     FactionChampionsState* state = Refresh(botAI);
     Champion const* healer = state && state->live ? BlobHealer(*state) : nullptr;
     return healer ? AliveCreature(botAI->GetBot(), healer->guid) : nullptr;
+}
+
+Unit* FactionChampionsChainHealer(PlayerbotAI* botAI)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return nullptr;
+
+    FactionChampionsState* state = Refresh(botAI);
+    if (!state || !state->live)
+        return nullptr;
+
+    // sorted by kill order
+    for (Champion const& champion : state->champions)
+        if (champion.healer && champion.inCombat && champion.touchable && !champion.pulled)
+            return AliveCreature(botAI->GetBot(), champion.guid);
+
+    return nullptr;
 }
 
 Unit* FactionChampionsDangerTarget(PlayerbotAI* botAI)

@@ -89,8 +89,13 @@ float FactionChampionsCcGuardMultiplier::GetValue(Action* action)
     if (classCc)
         return 0.0f;
 
-    // GetTarget last, it scans every attacker
-    return FactionChampionsCcProtected(botAI, action->GetTarget()) ? 0.0f : 1.0f;
+    // a spread DoT on a champion off the kill target blocks Polymorph, Fear and Hex on it for its whole run.
+    // GetTarget last, it scans every attacker.
+    Unit* target = action->GetTarget();
+    return target && target->IsCreature() && IsFactionChampion(target->GetEntry()) &&
+                   target != FactionChampionsKillTarget(botAI)
+               ? 0.0f
+               : 1.0f;
 }
 
 namespace

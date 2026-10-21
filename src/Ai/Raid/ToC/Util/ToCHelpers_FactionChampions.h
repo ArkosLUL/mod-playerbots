@@ -160,8 +160,13 @@ bool FactionChampionsCycloneBot(Player* player);
 // unless live
 Unit* FactionChampionsBlobHealer(PlayerbotAI* botAI);
 
+// The champion healer the next grip chain goes for: first in kill order, in combat, hittable and not pulled,
+// the kill target included. Null unless live
+Unit* FactionChampionsChainHealer(PlayerbotAI* botAI);
+
 // The melee champion kept stunned, CC'd or disarmed: first alive of rogue, DK, Ret, warrior that isn't the
-// kill target, pulled or suspended, written to fc.danger. Null unless live
+// kill target, pulled or suspended, and not held while another one isn't. Written to fc.danger. Null unless
+// live
 Unit* FactionChampionsDangerTarget(PlayerbotAI* botAI);
 
 }

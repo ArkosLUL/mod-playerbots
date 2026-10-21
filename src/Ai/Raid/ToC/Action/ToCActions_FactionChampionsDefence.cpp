@@ -304,9 +304,21 @@ bool FactionChampionsPeelAction::isUseful()
 
 bool FactionChampionsProtectAction::Execute(Event /*event*/)
 {
+    constexpr uint32 SPELL_DIVINE_SACRIFICE = 64205;
     uint32 spellId = 0;
     Unit* member = FactionChampionsProtectTarget(botAI, spellId);
-    return member && botAI->CastSpell(spellId, member);
+    if (!member)
+        return false;
+
+    if (spellId != SPELL_DIVINE_SACRIFICE)
+        return botAI->CastSpell(spellId, member);
+
+    // self cast; only Divine Guardian's raid wide cut is wanted, the redirect would drain the paladin
+    if (!botAI->CastSpell(spellId, bot))
+        return false;
+
+    FinishToCRaidCover(botAI, ToCRaidCover::DivineSacrifice);
+    return true;
 }
 
 // A queued basket can pop ticks after its trigger fired, once the champions moved on or someone covered it

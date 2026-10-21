@@ -115,11 +115,13 @@ void DefineFactionChampions(EncounterBuilder& e)
     // every paladin's class node fires at one dying bot at once; faction champions protect deals one
     e.Block("faction champions lay on hands guard", Role::Any, FactionChampionsLive, 0, {"lay on hands on party"});
     e.Block("faction champions avenging wrath hold", Role::Any, FactionChampionsWrathHeld, 0, {"avenging wrath"});
+    // faction champions protect spends it on a focused bot
+    e.Block("faction champions divine sacrifice hold", Role::Any, FactionChampionsLive, 0, {"divine sacrifice"});
 
     // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
     e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);
 
-    // the DK tank's grip opens every chain the player calls
+    // the DK tank's grip opens every chain, the player's and the one after each kill
     e.Block("faction champions chain grip reserve", Role::Tank, FactionChampionsIsChainOpener, 0, {"death grip"});
 }
 }  // namespace

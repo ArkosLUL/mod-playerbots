@@ -744,8 +744,8 @@ class CcAndAdds(unittest.TestCase):
             fc.show_aoe(self.trace)
             fc.show_adds(self.trace)
         text = out.getvalue()
-        self.assertRegex(text, r"Noozle Whizzlestick +Mage +10\.0% of 20 +-")
-        self.assertRegex(text, r"Shocuul +Warrior +0\.0% of 20 +Cyclone 33786 6\.0s")
+        self.assertRegex(text, r"Noozle Whizzlestick +Mage +10\.0% of 20 +0% +-")
+        self.assertRegex(text, r"Shocuul +Warrior +0\.0% of 20 +0% +Cyclone 33786 6\.0s")
         self.assertIn("Cyclone 3 (1 landed), Entangling Roots 1 (landed n/a)", text)
         self.assertIn("Fear 2 (1 landed)", text)
         self.assertIn("landed per 10 s: 1.00 (2 in 20 s)", text)
@@ -938,7 +938,7 @@ class PackAndPeel(unittest.TestCase):
         self.assertIn("Shocuul (Warrior): Bladestorm 1 (first 0:12.500), disarms 1 (first 0:11.600); disarmed before"
                       " the first Bladestorm: yes", text)
         self.assertRegex(text, r"Concussive Shot +hunter +1  1 / 0 / 0")
-        self.assertRegex(text, r"Pain Suppression +Mercy +Shiv +melee +yes")
+        self.assertRegex(text, r"Pain Suppression +Mercy +Shiv +melee +1\+1 +yes")
         self.assertIn("taunts on champions: Growl (pet) bot 1, Hand of Reckoning bot 1, Righteous Defense bot 1,"
                       " Taunt human 1", text)
 
@@ -1323,6 +1323,17 @@ def control_pull() -> list[dict]:
         {"t": 6000, "e": "death", "g": TANK, "killer": ROGUE_C, "x": 0.0, "y": 0.0, "z": 0.0},
         cast(7000, MOON, 48477, TANK, ct=2000),
         {"t": 9500, "e": "death", "g": TANK, "killer": ROGUE_C, "x": 0.0, "y": 0.0, "z": 0.0},
+        # Divine Sacrifice: Divine Guardian lands on three with it, a later one doesn't count
+        cast(4000, PALADIN_BOT, fc.SPELL_DIVINE_SACRIFICE, 0),
+        aura(4005, TANK, PALADIN_BOT, fc.SPELL_DIVINE_GUARDIAN, False, 6000),
+        aura(4005, MOON, PALADIN_BOT, fc.SPELL_DIVINE_GUARDIAN, False, 6000),
+        aura(4006, PALADIN_BOT, PALADIN_BOT, fc.SPELL_DIVINE_GUARDIAN, False, 6000),
+        aura(5000, ROGUE, PALADIN_BOT, fc.SPELL_DIVINE_GUARDIAN, False, 5000),
+        cast(4200, PALADIN_BOT, 31821, 0),
+        # the kill target died and the bots chained the priest a second later
+        note(6000, MOON, fc.SWITCH, "dead"),
+        note(7000, TANK, fc.CHAIN, DISC),
+        note(8000, TANK, fc.CHAIN, 0),
         {"t": 10000, "e": "end", "out": "wipe"},
     ]
     for when in range(0, 10000, 1000):
@@ -1361,7 +1372,8 @@ class ControlAndDefence(unittest.TestCase):
         self.assertIn("Moon: Cyclone 2, casts on the kill target 2; fc.cyclone 8 s", self.render(fc.show_stands))
 
     def test_lay_on_hands_is_an_external_and_a_rebirth_reads_the_next_death(self):
-        self.assertIn({"t": 5500, "by": PALADIN_BOT, "spell": "Lay on Hands", "target": TANK, "died": True},
+        self.assertIn({"t": 5500, "by": PALADIN_BOT, "spell": "Lay on Hands", "target": TANK, "died": True,
+                       "on": (2, 1), "reach": None},
                       fc.external_casts(self.trace))
         self.assertEqual([(row["target"], row["again"]) for row in fc.battle_res_casts(self.trace)], [(TANK, 2500)])
         self.assertRegex(self.render(fc.show_peel), r"Bulwark +tank +3 +\+2s")
@@ -1371,11 +1383,31 @@ class ControlAndDefence(unittest.TestCase):
         self.assertEqual([(row["guid"], row["damage"], row["kills"]) for row in rows],
                          [(ROGUE_C, 3000, 2), (WARRIOR_C, 1000, 0)])
         self.assertEqual(fc.melee_control(self.trace), [
-            {"guid": ROGUE_C, "held": 1000, "disarms": 1, "stuns": 1, "cc": 1, "danger": True},
-            {"guid": WARRIOR_C, "held": 6000, "disarms": 0, "stuns": 0, "cc": 1, "danger": False}])
+            {"guid": ROGUE_C, "held": 1000, "disarms": 1, "stuns": 1, "cc": 1, "danger": True, "danger_ms": 10000},
+            {"guid": WARRIOR_C, "held": 6000, "disarms": 0, "stuns": 0, "cc": 1, "danger": False,
+             "danger_ms": 0}])
         text = self.render(fc.show_damage)
         self.assertIn("*Irieth", text)
+        self.assertIn("danger 10.0s", text)
         self.assertRegex(text, r"Irieth +Rogue +3000 +75% +2")
+
+    def test_divine_sacrifice_reads_who_divine_guardian_reached_and_raid_wide_casts_list(self):
+        rows = [row for row in fc.external_casts(self.trace) if row["spell"] == "Divine Sacrifice"]
+        self.assertEqual([(row["t"], row["target"], row["reach"]) for row in rows], [(4000, PALADIN_BOT, 3)])
+        self.assertEqual(fc.raid_wide_casts(self.trace), [(4200, PALADIN_BOT, "Aura Mastery")])
+        text = self.render(fc.show_peel)
+        self.assertIn("Divine Guardian on 3", text)
+        self.assertIn("raid-wide: Aura Mastery Holylight 0:04.200", text)
+
+    def test_targeted_counts_samples_with_a_raider_on_the_champion(self):
+        self.assertEqual(fc.targeted_share(self.trace),
+                         {PALADIN: (10, 10), DISC: (0, 10), ROGUE_C: (10, 10), WARRIOR_C: (0, 10)})
+        self.assertRegex(self.render(fc.show_cc), r"Irieth +Rogue +\S+% of 10 +100%")
+
+    def test_a_chain_opened_after_a_dead_switch_reads_as_after_a_kill(self):
+        chains, _ = fc.chain_links(self.trace)
+        self.assertEqual([(chain["target"], chain["after_kill"]) for chain in chains], [(DISC, 1000)])
+        self.assertIn("chain 1.0 s after a kill on Caiphus", self.render(fc.show_chain))
 
     def test_a_personal_reads_its_health_and_the_deaths_after_it(self):
         self.assertEqual(fc.personal_rows(self.trace),
@@ -1444,6 +1476,8 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.stand_rows(trace), [])
         self.assertEqual(fc.nitro_rows(trace), [])
         self.assertEqual(fc.healer_activity(trace), [])
+        self.assertEqual(fc.targeted_share(trace), {})
+        self.assertEqual(fc.raid_wide_casts(trace), [])
         self.assertEqual(fc.own_breaks(trace), {})
         self.assertEqual(fc.cyclone_rows(trace), [])
         self.assertEqual(fc.champion_damage(trace), [])
