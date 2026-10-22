@@ -167,6 +167,7 @@ public:
         creators["fire elemental totem"] = &ShamanATriggerFactoryInternal::fire_elemental_totem;
         creators["earth shock execute"] = &ShamanATriggerFactoryInternal::earth_shock_execute;
         creators["spirit walk ready"] = &ShamanATriggerFactoryInternal::spirit_walk_ready;
+        creators["shamanistic rage t10 2p"] = &ShamanATriggerFactoryInternal::shamanistic_rage_t10_2p;
         creators["chain lightning no cd"] = &ShamanATriggerFactoryInternal::chain_lightning_no_cd;
         creators["chain lightning no cd and light aoe"] =
             &ShamanATriggerFactoryInternal::chain_lightning_no_cd_and_light_aoe;
@@ -232,6 +233,7 @@ private:
     static Trigger* fire_elemental_totem(PlayerbotAI* botAI) { return new FireElementalTotemTrigger(botAI); }
     static Trigger* earth_shock_execute(PlayerbotAI* botAI) { return new EarthShockExecuteTrigger(botAI); }
     static Trigger* spirit_walk_ready(PlayerbotAI* botAI) { return new SpiritWalkTrigger(botAI); }
+    static Trigger* shamanistic_rage_t10_2p(PlayerbotAI* botAI) { return new ShamanisticRageT10TwoPieceTrigger(botAI); }
     static Trigger* chain_lightning_no_cd(PlayerbotAI* botAI) { return new ChainLightningNoCdTrigger(botAI); }
     static Trigger* chain_lightning_no_cd_and_light_aoe(PlayerbotAI* botAI)
     {

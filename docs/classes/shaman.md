@@ -135,7 +135,7 @@ their one potion on damage.
 | Spec | In combat | Shield |
 |---|---|---|
 | Elemental | `high mana` (< 65%) → thunderstorm @19.0 | water shield @19.5 |
-| Enhancement | `medium mana` (< 40%) → shamanistic rage @23.0, also on `low health` | lightning shield @18.5 — **no** water shield |
+| Enhancement | `medium mana` (< 40%) → shamanistic rage @23.0, also on `low health`, and on cooldown with the T10 2-piece (aura 70830, +12% damage) | lightning shield @18.5 — **no** water shield |
 | Restoration | `medium mana` → mana tide totem @26.5, plus potions | water shield @10.5 |
 
 Removing the potion is what lets enhancement's node work at all: it sat at the same 40% threshold

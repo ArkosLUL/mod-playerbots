@@ -151,6 +151,21 @@ public:
     FireElementalTotemTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "fire elemental totem") {}
 };
 
+constexpr uint32 SPELL_SHAMAN_T10_ENHANCEMENT_2P_BONUS = 70830;
+
+// with the T10 2-piece, Shamanistic Rage also gives +12% damage, so it's worth using on cooldown
+class ShamanisticRageT10TwoPieceTrigger : public SpellNoCooldownTrigger
+{
+public:
+    ShamanisticRageT10TwoPieceTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "shamanistic rage") {}
+
+    std::string const getName() override { return "shamanistic rage t10 2p"; }
+    bool IsActive() override
+    {
+        return bot->HasAura(SPELL_SHAMAN_T10_ENHANCEMENT_2P_BONUS) && SpellNoCooldownTrigger::IsActive();
+    }
+};
+
     // CC, Interrupt, and Dispel Triggers
 
 class WindShearInterruptSpellTrigger : public InterruptSpellTrigger

@@ -130,4 +130,12 @@ void EnhancementShamanStrategy::InitTriggers(std::vector<TriggerNode*>& triggers
             }
         )
     );
+    triggers.push_back(
+        new TriggerNode(
+            "shamanistic rage t10 2p",
+            {
+                NextAction("shamanistic rage", 23.0f)
+            }
+        )
+    );
 }
