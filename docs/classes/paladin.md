@@ -219,3 +219,9 @@ directly.
 **Skada cannot measure block.** Only a *full* block (`amount=0`) is a distinct event; a partial block
 is a normal hit carrying a `blocked` amount — `MELEE_HIT_BLOCK` keeps `VICTIMSTATE_HIT` in
 `Unit::CalculateMeleeDamage`. Count Chronicle rows where `blocked > 0`.
+
+## Retribution: Consecration leads the default ladder
+
+`consecration` sits at `ACTION_DEFAULT + 0.7`, above Hammer of Wrath. The server's Swift Retribution tweak
+(mod-spell-tweaks) gives Consecration ticks base damage, and the sim measures it best first. Not a
+mana or priority mistake, do not re-audit.
