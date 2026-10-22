@@ -21,7 +21,10 @@
     faction_champions.py <file> --peel     snares and peels on melee champions, Disarm against Bladestorm,
                                            externals (Lay on Hands too), battle res and repeat deaths, taunts
     faction_champions.py <file> --damage   damage to the raid per champion, and how the melee were controlled
-    faction_champions.py <file> --personal personal defensives and the health they went up at, per death
+    faction_champions.py <file> --personal personal defensives and the health they went up at, per death,
+                                           healthstones over 70%
+    faction_champions.py <file> --focus    4+ champions on one raid member: episodes, the externals and
+                                           immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --front    the frontline: where the pack stays, whom it picks, the pulled
                                            kill target clear of champion healers, frontline deaths
     faction_champions.py <file> --stands   stand moves, slot jumps and path against net per stand holder,
@@ -89,7 +92,11 @@ What the generic views get wrong here, and what this reads instead:
   champion cast no 57604 with the grip, which a root already on it refuses.
 - **A CC ended by its own caster is read off timing.** Cyclone, Polymorph, Fear, Banish and Hex hold one
   target per caster, so `--cc` counts an `fc.ccaura` span as broken by its caster when it ends within
-  400 ms of that caster's next cast of the spell landing on another champion.
+  400 ms of that caster's next cast of the spell landing on another champion, over 1 s short of that
+  caster's longest hold of the spell: one that ran out as the next landed isn't broken.
+- **A re-pick is the bots' reading of the champions' threat.** `fc.repick` is 3+ champions rewriting
+  their threat lists within 500 ms; `fc.nextfocus` is the member the bots expect 4+ to pick next, held
+  only in the second before. `--focus` scores it against the member with the most champions 1.5 s on.
 - **A disarm on a champion never shows.** `--peel` reads Disarm, Dismantle and Psychic Horror casts on
   the Warrior champion against its own Bladestorm casts, and a Frost Nova, which names no target, by
   its caster's `fc.peel` hold.
@@ -177,8 +184,10 @@ CC_SPELLS = {
     **dict.fromkeys((710, 18647), "Banish"),
     51514: "Hex",
 }
-# a CC ending this close to its caster's next one landing elsewhere was broken by it
+# a CC ending this close to its caster's next one landing elsewhere was broken by it, unless it ran about
+# as long as that caster's longest hold of the spell: then it ran out as the next one landed
 OWN_BREAK_MS = 400
+OWN_BREAK_SHORT_MS = 1000
 # the start of an fc.ccaura span this long after a cast's landing still belongs to that cast
 OWN_LAND_MS = 300
 FEAR = "Fear"
@@ -428,6 +437,20 @@ PERSONALS = frozenset(("Divine Protection", "Divine Shield", "Shamanistic Rage",
                        "Pain Suppression",
                        "Healthstone", "Master Healthstone", "Fel Healthstone"))
 PERSONAL_WATCH_MS = 15000
+# a stone heals about this much of a bot's health, so over it most of the heal is lost
+HEALTHSTONE_MAX_PCT = 70.0
+HEALTHSTONES = frozenset(("Healthstone", "Master Healthstone", "Fel Healthstone"))
+# a focus is this many living champions with one raid member as target
+FOCUS_MIN = 4
+FOCUS_COVER_LEAD_MS = 1000
+# the externals, and the two immunities that drop a player from every champion's pick
+FOCUS_COVER = {**EXTERNALS, 642: "Divine Shield", 45438: "Ice Block"}
+FOCUS_SELF = frozenset((642, 45438))
+REPICK = "fc.repick"
+NEXT_FOCUS = "fc.nextfocus"
+# a re-pick's new focus shows in the snapshots this long after the note
+REPICK_SETTLE_MS = 1500
+REPICK_PREDICT_MS = 1500
 CHASED_ACTION = "faction champions chased"
 # The class taunts, the druid's and the hunter pet's Growl, and the area ones
 TAUNTS = {355: "Taunt", 62124: "Hand of Reckoning", 31789: "Righteous Defense", 56222: "Dark Command",
@@ -864,13 +887,14 @@ def cc_pace(trace: Trace, rows: dict[int, dict] | None = None) -> tuple[int, flo
 
 def own_breaks(trace: Trace) -> dict[int, collections.Counter]:
     """Per roster caster, `holds`, the `fc.ccaura` spans of a CC it put on a champion, and `broken`, those
-    that ended within 400 ms of its next cast of that spell landing on another champion."""
+    that ended within 400 ms of its next cast of that spell landing on another champion and over 1 s short
+    of its longest hold of that spell, which is the spell's run with the diminishing returns it met."""
     targets = champions(trace)
     roster = roster_guids(trace)
     lands = [(rec["t"] + (rec.get("ct") or 0), rec["s"], rec["sp"], rec["tgt"]) for rec in trace.of("cast")
              if not rec.get("tr") and rec.get("sp") in CC_SPELLS and rec.get("tgt") in targets
              and rec.get("s") in roster]
-    out: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    holds = []
     for guid, spans in holder_spans(trace, CC_AURA, pull_end(trace)).items():
         for value, start, stop in spans:
             spell = as_guid(value)
@@ -879,9 +903,16 @@ def own_breaks(trace: Trace) -> dict[int, collections.Counter]:
             if not put:
                 continue
             caster = put[-1][1]
-            out[caster]["holds"] += 1
-            out[caster]["broken"] += any(land[1] == caster and land[2] == spell and land[3] != guid
-                                         and abs(land[0] - stop) <= OWN_BREAK_MS for land in lands)
+            near = any(land[1] == caster and land[2] == spell and land[3] != guid
+                       and abs(land[0] - stop) <= OWN_BREAK_MS for land in lands)
+            holds.append((caster, spell, stop - start, near))
+    longest: dict[tuple[int, int], int] = {}
+    for caster, spell, length, _ in holds:
+        longest[(caster, spell)] = max(longest.get((caster, spell), 0), length)
+    out: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for caster, spell, length, near in holds:
+        out[caster]["holds"] += 1
+        out[caster]["broken"] += near and length < longest[(caster, spell)] - OWN_BREAK_SHORT_MS
     return dict(out)
 
 
@@ -2645,6 +2676,10 @@ def show_personal(trace: Trace) -> None:
     shown = {name: count for name, count in picks.items() if name not in ("none", "covered", "channel", "")}
     print("  toc.personal picks: " + (", ".join(f"{name} {count}" for name, count in sorted(shown.items()))
                                       or "none"))
+    stones = [row for row in rows if row["spell"] in HEALTHSTONES]
+    high = [row for row in stones if row["hp"] is not None and row["hp"] > HEALTHSTONE_MAX_PCT]
+    print(f"  healthstones over {HEALTHSTONE_MAX_PCT:.0f}%: {len(high)} of {len(stones)}"
+          + ("".join(f", {trace.name(row['bot'])} {row['hp']:.0f}%" for row in high)))
     deaths = personal_deaths(trace, rows)
     if deaths:
         print(f"\n  {'death at':>9} {'bot':14} {'role':6}  first personal in the 15 s before")
@@ -2654,6 +2689,116 @@ def show_personal(trace: Trace) -> None:
                     + ("" if first["hp"] is None else f" at {first['hp']:.0f}%"))
             print(f"  {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {trace.role(row['bot']):6}  {text}")
     print("  hp is the bot's health in the last sample at or before the cast")
+
+
+def focus_counts(snap: dict, targets, roster) -> collections.Counter:
+    """Living champions per living raid member that is their target, in one snapshot."""
+    rows = snap.get("u", [])
+    alive = {row[0] for row in rows if row[0] in roster and row[5] > 0}
+    return collections.Counter(row[7] for row in rows if row[0] in targets and len(row) > 7 and row[5] > 0
+                               and row[7] in alive)
+
+
+def focus_peaks(trace: Trace) -> collections.Counter:
+    """Most champions on one raid member -> how many samples from the pull had that."""
+    if encounter_of(trace) != ENCOUNTER:
+        return collections.Counter()
+    targets, roster, start = champions(trace), roster_guids(trace), pull_start(trace)
+    return collections.Counter(max(focus_counts(snap, targets, roster).values(), default=0)
+                               for snap in frames(trace) if snap["t"] >= start)
+
+
+def focus_episodes(trace: Trace) -> list[dict]:
+    """Spans with FOCUS_MIN+ living champions on one raid member: `g`, `start`, `stop`, `peak`, `hp` at the
+    start, `low`, `died` (a death by 3 s past the end, else None) and `cover`, `(offset, name, by)` per
+    external on it or immunity of its own from 1 s before the start to the end."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    targets, roster, start = champions(trace), roster_guids(trace), pull_start(trace)
+    open_spans: dict[int, dict] = {}
+    done = []
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        counts = focus_counts(snap, targets, roster)
+        health = {row[0]: row[5] for row in snap.get("u", []) if row[0] in roster}
+        for guid in list(open_spans):
+            span = open_spans[guid]
+            if counts.get(guid, 0) >= FOCUS_MIN:
+                span["stop"] = snap["t"]
+                span["peak"] = max(span["peak"], counts[guid])
+                span["low"] = min(span["low"], health.get(guid, span["low"]))
+            else:
+                done.append(open_spans.pop(guid))
+        for guid, count in counts.items():
+            if count >= FOCUS_MIN and guid not in open_spans:
+                open_spans[guid] = {"g": guid, "start": snap["t"], "stop": snap["t"], "peak": count,
+                                    "hp": health[guid], "low": health[guid]}
+    done.extend(open_spans.values())
+    deaths = [(rec["t"], rec["g"]) for rec in combat_deaths(trace)]
+    casts = [rec for rec in trace.of("cast") if rec.get("sp") in FOCUS_COVER and not rec.get("tr")]
+    for span in done:
+        span["died"] = next((when for when, guid in deaths
+                             if guid == span["g"] and span["start"] <= when <= span["stop"] + 3000), None)
+        span["cover"] = [(rec["t"] - span["start"], FOCUS_COVER[rec["sp"]], rec.get("s")) for rec in casts
+                         if span["start"] - FOCUS_COVER_LEAD_MS <= rec["t"] <= span["stop"]
+                         and (rec.get("tgt") == span["g"] if rec["sp"] not in FOCUS_SELF
+                              else rec.get("s") == span["g"])]
+    return sorted(done, key=lambda span: (span["start"], span["g"]))
+
+
+def repick_checks(trace: Trace) -> list[dict]:
+    """Per `fc.repick`: `t`, `predicted`, the last `fc.nextfocus` member held in the 1.5 s up to it (0 for
+    none), and `actual` with `count`, the member with the most champions on it 1.5 s later."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    targets, roster = champions(trace), roster_guids(trace)
+    spans = [(as_guid(value), begin, stop) for value, begin, stop in latch_spans(trace, NEXT_FOCUS, pull_end(trace))
+             if as_guid(value)]
+    snaps = list(frames(trace))
+    out = []
+    for rec in notes(trace, REPICK):
+        when = rec["t"]
+        held = [guid for guid, begin, stop in spans if begin <= when and stop >= when - REPICK_PREDICT_MS]
+        later = next((snap for snap in snaps if snap["t"] >= when + REPICK_SETTLE_MS), None)
+        counts = focus_counts(later, targets, roster) if later else collections.Counter()
+        actual, count = counts.most_common(1)[0] if counts else (0, 0)
+        out.append({"t": when, "predicted": held[-1] if held else 0, "actual": actual, "count": count})
+    return out
+
+
+def show_focus(trace: Trace) -> None:
+    print("FOCUS")
+    peaks = focus_peaks(trace)
+    total = sum(peaks.values())
+    if not total:
+        print("  no champion in the snapshots")
+        return
+    print(f"  most champions on one raid member, share of {total} samples: "
+          + ", ".join(f"{count}: {100 * samples / total:.0f}%" for count, samples in sorted(peaks.items())))
+    episodes = focus_episodes(trace)
+    if episodes:
+        print(f"\n  {'start':>9} {'length':>6} {'member':14} {'role':6} {'peak':>4} {'hp>low':>9} {'died':>9}  cover")
+    for span in episodes:
+        cover = ", ".join(f"{name} {offset / 1000:+.1f}s" for offset, name, _ in span["cover"]) or "-"
+        died = clock(span["died"]) if span["died"] is not None else "-"
+        print(f"  {clock(span['start']):>9} {(span['stop'] - span['start']) / 1000:5.1f}s"
+              f" {trace.name(span['g'])[:14]:14} {trace.role(span['g']):6} {span['peak']:4}"
+              f" {span['hp']:4.0f}>{span['low']:<4.0f} {died:>9}  {cover}")
+    checks = repick_checks(trace)
+    if checks:
+        right = sum(1 for row in checks if row["predicted"] and row["predicted"] == row["actual"])
+        print(f"\n  {REPICK}: {len(checks)}, {NEXT_FOCUS} named the member with the most champions"
+              f" {REPICK_SETTLE_MS / 1000:.1f} s later after {right} of them")
+        for row in checks:
+            predicted = trace.name(row["predicted"]) if row["predicted"] else "-"
+            actual = f"{trace.name(row['actual'])} {row['count']}" if row["actual"] else "-"
+            print(f"    {clock(row['t']):>9} predicted {predicted[:14]:14} then {actual}")
+    else:
+        print(f"\n  no {REPICK}")
+    print(f"  a focus is {FOCUS_MIN}+ living champions with one raid member as target; cover is an external"
+          f" on it or its own Divine Shield or Ice Block from {FOCUS_COVER_LEAD_MS / 1000:.0f} s before the"
+          f" start, timed from the start; died is a death by 3 s past the end")
 
 
 def show_ball(trace: Trace) -> None:
@@ -2734,6 +2879,8 @@ SECTIONS = (
      " uses and chased runs", show_stands),
     ("damage", "damage to the raid per champion, and how the melee were controlled", show_damage),
     ("personal", "personal defensives and the health they went up at, per death", show_personal),
+    ("focus", "champions piled on one raid member: the episodes, the cover in them, the re-pick predictions",
+     show_focus),
     ("ball", "the death ball: the start and first picks, champion targets by role, kill target off the pack,"
      " escapees, opener", show_ball),
     ("vetoes", "the Faction Champions multipliers and rules, by action", show_vetoes),

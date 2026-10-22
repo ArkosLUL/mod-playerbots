@@ -35,12 +35,14 @@ bool FactionChampionsStandHeld(PlayerbotAI* botAI)
     return FactionChampionsBallStand(botAI, spot);
 }
 
-// Kill squad melee wait outside the pack until a grip has the kill target out of it. Once it's been out
+// Kill squad melee wait outside the pack until a grip has the kill target out of it, or a chain's grips
+// landed on it, which a champion walking past it can't undo. Once it's been out
 // they stay on it even if the pack walks over, and with no champion healer left nothing heals it in there
 bool FactionChampionsKillSquadWait(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot) || FactionChampionsIsFrontline(bot))
+    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot) || FactionChampionsIsFrontline(bot) ||
+        FactionChampionsChainLanded(botAI))
         return false;
 
     if (FactionChampionsGripPending(botAI))

@@ -29,6 +29,7 @@
 #include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "ThreatManager.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Defensive.h"
@@ -106,6 +107,8 @@ constexpr uint32 CHAIN_LINK2_MS = 10000;
 constexpr uint32 CHAIN_WAIT_MS = 3000;
 // the pull starts on the hit, so the jump only shows a moment after the cast
 constexpr uint32 CHAIN_LAND_MS = 300;
+// a bot link's champion is off the ground at the cast and down this long after
+constexpr uint32 CHAIN_LINK_FLIGHT_MS = 1000;
 // after a kill the next chain waits this long at most for a grip to come off cooldown
 constexpr uint32 NEXT_CHAIN_WAIT_MS = 20000;
 // the player's own grip, the chain's last link, came 3-4 s after the bot DK's
@@ -170,6 +173,24 @@ constexpr uint32 FOCUS_WINDOW_MS = 2000;
 constexpr uint32 FOCUS_LOOKAHEAD_MS = 4000;
 constexpr uint32 FOCUS_MIN_CHAMPIONS = 2;
 constexpr uint32 FOCUS_PREEMPT_CHAMPIONS = 4;
+
+// Every champion's script resets each player's threat to 10M x its score every 8.75-9.25 s
+// (boss_faction_champions.cpp, RecalculateThreat). A tick where two entries move this much is one: damage
+// and heal threat add a few thousand, and Feint or Fade touch one entry.
+constexpr float REPICK_SHIFT_PCT = 0.01f;
+constexpr float REPICK_SHIFT_MIN = 100000.0f;
+constexpr uint32 REPICK_MIN_MS = 8750;
+constexpr uint32 REPICK_MAX_MS = 9250;
+// how early the cover goes out, and how late a re-pick may still come
+constexpr uint32 REPICK_LEAD_MS = 1000;
+constexpr uint32 REPICK_LATE_MS = 250;
+// the core's switch rule (ThreatManager::ReselectVictim): 110% for a target in melee range, else 130%
+constexpr float SWITCH_MELEE = 1.1f;
+constexpr float SWITCH_RANGED = 1.3f;
+// a pick this close to the runner-up isn't counted
+constexpr float PICK_MARGIN = 1.1f;
+constexpr uint32 REPICK_NOTE_MIN = 3;
+constexpr uint32 REPICK_NOTE_SPREAD_MS = 500;
 
 constexpr std::array<uint32, 7> REBIRTH_RANKS = {48477, 26994, 20748, 20747, 20742, 20739, 20484};
 constexpr float REBIRTH_RANGE = 30.0f;
@@ -279,9 +300,23 @@ struct HealthSample
     uint32 health = 0;
 };
 
+struct RepickClock
+{
+    uint32 repickMs = 0;
+    bool seen = false;
+    std::unordered_map<ObjectGuid, float> threat;  // player -> its threat on the champion last tick
+};
+
 struct FactionChampionsDefenceState
 {
     RaidObs::ObsValue<ObjectGuid> physical{"fc.physical"};
+    RaidObs::ObsValue<ObjectGuid> nextFocus{"fc.nextfocus"};
+    std::unordered_map<ObjectGuid, RepickClock> clocks;  // champion -> its re-pick clock
+    // player -> champions about to pick it, all and physical, inside their lead window only
+    std::unordered_map<ObjectGuid, uint32> predicted;
+    std::unordered_map<ObjectGuid, uint32> predictedPhysical;
+    uint32 repickNoteMs = 0;
+    bool repickNoted = false;
     RaidObs::ObsGuidMap<ObjectGuid> totemKillers{"fc.totem"};
     RaidObs::ObsGuidMap<ObjectGuid> grips{"fc.grip"};
     RaidObs::ObsGuidMap<ObjectGuid> peelNotes{"fc.peel"};
@@ -1724,6 +1759,155 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
         state.peelNotes.Set(held.first, held.second.target);
 }
 
+// Same maths as the champion script's GetThreatMod: lowest current health first, ranged blind to distance
+// up to 35 yd, melee to 5 yd and also weighing armor
+float ChampionScore(Creature* champion, Player* player, bool melee)
+{
+    float const free = melee ? 5.0f : 35.0f;
+    float const factor = melee ? 15.0f : 25.0f;
+    float const dist = std::max(champion->GetDistance2d(player) - free, 0.0f);
+    uint32 const health = player->GetHealth();
+    float const healthMod = health > 40000 ? 2.0f : (60000.0f - static_cast<float>(health)) / 10000.0f;
+    float const armorMod =
+        melee ? static_cast<float>(Unit::CalcArmorReducedDamage(champion, player, 10000, nullptr)) / 10000.0f : 1.0f;
+    return factor / (factor + dist) * healthMod * armorMod;
+}
+
+bool InLeadWindow(RepickClock const& clock, uint32 now)
+{
+    if (!clock.seen)
+        return false;
+
+    uint32 const since = getMSTimeDiff(clock.repickMs, now);
+    return since + REPICK_LEAD_MS >= REPICK_MIN_MS && since <= REPICK_MAX_MS + REPICK_LATE_MS;
+}
+
+// The player the champion goes to at its next re-pick, or null when it's too close to call. Players only,
+// with threat on it, as the script; an immune one is suppressed and never picked.
+Player* PredictPick(Creature* champion, bool melee)
+{
+    Player* best = nullptr;
+    float bestScore = 0.0f;
+    float secondScore = 0.0f;
+    float currentScore = 0.0f;
+    Unit* const current = champion->GetVictim();
+    for (ThreatReference const* ref : champion->GetThreatMgr().GetUnsortedThreatList())
+    {
+        Unit* victim = ref->GetVictim();
+        Player* player = victim ? victim->ToPlayer() : nullptr;
+        if (!player || !player->IsAlive() || ref->GetThreat() <= 0.0f || !ref->IsOnline() ||
+            player->IsImmunedToDamage(SPELL_SCHOOL_MASK_NORMAL))
+            continue;
+
+        float const score = ChampionScore(champion, player, melee);
+        if (player == current)
+            currentScore = score;
+
+        if (score > bestScore)
+        {
+            secondScore = bestScore;
+            bestScore = score;
+            best = player;
+        }
+        else if (score > secondScore)
+            secondScore = score;
+    }
+
+    if (!best)
+        return nullptr;
+
+    if (currentScore > 0.0f && best != current)
+    {
+        float const needed = champion->IsWithinMeleeRange(best) ? SWITCH_MELEE : SWITCH_RANGED;
+        if (bestScore <= currentScore * needed)
+            return current->ToPlayer();
+    }
+
+    return bestScore >= secondScore * PICK_MARGIN ? best : nullptr;
+}
+
+// Spots each champion's re-pick off its threat list, and inside the second before the next one predicts
+// whom it goes to
+void UpdateFocusClock(FactionChampionsDefenceState& state, Player* bot, std::vector<Unit*> const& champions,
+                      uint32 now)
+{
+    state.predicted.clear();
+    state.predictedPhysical.clear();
+    bool repicked = false;
+    for (Unit* unit : champions)
+    {
+        Creature* champion = unit->ToCreature();
+        if (!champion)
+            continue;
+
+        RepickClock& clock = state.clocks[champion->GetGUID()];
+        std::unordered_map<ObjectGuid, float> threat;
+        uint32 moved = 0;
+        for (ThreatReference const* ref : champion->GetThreatMgr().GetUnsortedThreatList())
+        {
+            Unit* victim = ref->GetVictim();
+            if (!victim || !victim->IsPlayer())
+                continue;
+
+            float const value = ref->GetThreat();
+            threat[victim->GetGUID()] = value;
+            auto const was = clock.threat.find(victim->GetGUID());
+            if (was != clock.threat.end() &&
+                std::fabs(value - was->second) > std::max(was->second * REPICK_SHIFT_PCT, REPICK_SHIFT_MIN))
+                ++moved;
+        }
+
+        clock.threat = std::move(threat);
+        if (moved >= 2)
+        {
+            clock.repickMs = now;
+            clock.seen = true;
+            repicked = true;
+        }
+
+        if (!InLeadWindow(clock, now) || champion->HasUnitState(UNIT_STATE_LOST_CONTROL))
+            continue;
+
+        if (Player* pick = PredictPick(champion, IsFactionChampionMelee(champion->GetEntry())))
+        {
+            ++state.predicted[pick->GetGUID()];
+            if (IsPhysicalChampion(champion->GetEntry()))
+                ++state.predictedPhysical[pick->GetGUID()];
+        }
+    }
+
+    if (repicked)
+    {
+        uint32 const together = static_cast<uint32>(std::count_if(
+            state.clocks.begin(), state.clocks.end(), [now](auto const& entry)
+            { return entry.second.seen && getMSTimeDiff(entry.second.repickMs, now) <= REPICK_NOTE_SPREAD_MS; }));
+        if (together >= REPICK_NOTE_MIN &&
+            (!state.repickNoted || getMSTimeDiff(state.repickNoteMs, now) > REPICK_MIN_MS / 2))
+        {
+            state.repickNoteMs = now;
+            state.repickNoted = true;
+            RaidObs::Note(bot, "fc.repick", std::to_string(together));
+        }
+    }
+
+    ObjectGuid next;
+    uint32 most = 0;
+    for (auto const& entry : state.predicted)
+        if (entry.second > most || (entry.second == most && entry.first < next))
+        {
+            next = entry.first;
+            most = entry.second;
+        }
+
+    state.nextFocus = most >= FOCUS_PREEMPT_CHAMPIONS ? next : ObjectGuid::Empty;
+}
+
+uint32 CountFor(std::unordered_map<ObjectGuid, uint32> const& counts, ObjectGuid guid)
+{
+    auto const found = counts.find(guid);
+    return found != counts.end() ? found->second : 0;
+}
+
 bool HasAnyAura(Unit* unit, std::initializer_list<uint32> spells)
 {
     return std::any_of(spells.begin(), spells.end(), [unit](uint32 spellId) { return unit->HasAura(spellId); });
@@ -1737,7 +1921,7 @@ bool ProtectCovered(Player* member)
                                SPELL_PAIN_SUPPRESSION, SPELL_GUARDIAN_SPIRIT, SPELL_HAND_OF_SACRIFICE});
 }
 
-// Healers and ranged only: a melee bot under it can't swing, and melee champions leave it at once, which
+// Healers and ranged only: a melee bot under it can't swing, and every champion leaves it at once, which
 // would empty the frontline
 bool HandOfProtectionFits(Member const& member)
 {
@@ -1777,7 +1961,8 @@ uint32 ReadyExternal(Player* caster, Player* member, bool handOfProtection, bool
     }
 }
 
-// Hand of Protection first: it leaves the holder suppressed for melee champions, who move on at once
+// Hand of Protection first: immune to physical, the holder is suppressed for every champion, casters too,
+// and they all move on at once
 uint32 ExternalRank(uint32 spellId)
 {
     if (std::find(HAND_OF_PROTECTION_RANKS.begin(), HAND_OF_PROTECTION_RANKS.end(), spellId) !=
@@ -1853,6 +2038,19 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
             ++physical[victim->GetGUID()];
     }
 
+    // cover goes out on the champions' next pick, not a second or two after their hits land
+    for (auto const& entry : state.predicted)
+    {
+        uint32& count = attackers[entry.first];
+        count = std::max(count, entry.second);
+    }
+
+    for (auto const& entry : state.predictedPhysical)
+    {
+        uint32& count = physical[entry.first];
+        count = std::max(count, entry.second);
+    }
+
     std::vector<Member> focused;
     std::unordered_map<ObjectGuid, bool> othersFor;
     std::unordered_map<ObjectGuid, bool> handFor;
@@ -1865,7 +2063,9 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
         bool const others = (hits->second >= FOCUS_PREEMPT_CHAMPIONS && !IsTankMember(member.player)) ||
                             (hits->second >= PROTECT_MIN_ATTACKERS &&
                              member.player->GetHealthPct() <= PROTECT_HEALTH_PCT);
-        bool const hand = physical.count(member.player->GetGUID()) && HandOfProtectionFits(member);
+        // every champion drops an immune holder, casters too, so four on it need no physical one
+        bool const hand = (physical.count(member.player->GetGUID()) || hits->second >= FOCUS_PREEMPT_CHAMPIONS) &&
+                          HandOfProtectionFits(member);
         if (others || hand)
         {
             focused.push_back(member);
@@ -2212,6 +2412,7 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     UpdateGuard(state, bot, champions, now);
     UpdateSnares(state, botAI, members, champions);
     UpdatePeel(state, botAI, members, champions, killTarget);
+    UpdateFocusClock(state, bot, champions, now);
     UpdateProtect(state, members, champions);
     UpdateBattleRes(state, bot, members, champions);
     UpdateHealthLog(state, members, now);
@@ -2627,6 +2828,18 @@ void FactionChampionsNoteChainGrip(PlayerbotAI* botAI, Unit* target)
         CloseChain(*chain);
 }
 
+bool FactionChampionsChainLanded(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    Unit* killTarget = bot ? FactionChampionsKillTarget(botAI) : nullptr;
+    GripChainState* chain = nullptr;
+    if (!killTarget || OpenChain(bot, chain) || !chain)
+        return false;
+
+    return chain->lastTarget == killTarget->GetGUID() &&
+           getMSTimeDiff(chain->lastLinkMs, getMSTime()) >= CHAIN_LINK_FLIGHT_MS;
+}
+
 ObjectGuid FactionChampionsChainTarget(Player* bot)
 {
     GripChainState* chain = nullptr;
@@ -2683,6 +2896,14 @@ bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
         physical = physical || IsPhysicalChampion(champion->GetEntry());
     }
 
+    uint32 const predicted = CountFor(state->predicted, bot->GetGUID());
+    if (predicted > on)
+    {
+        on = predicted;
+        physical = physical || CountFor(state->predictedPhysical, bot->GetGUID()) > 0;
+    }
+
+    hit.focus = on >= FOCUS_PREEMPT_CHAMPIONS;
     if (on < FOCUS_MIN_CHAMPIONS)
         return false;
 

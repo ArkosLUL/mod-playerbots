@@ -130,6 +130,10 @@ void FactionChampionsNoteChainGrip(PlayerbotAI* botAI, Unit* target);
 // The open request's champion, empty without one
 ObjectGuid FactionChampionsChainTarget(Player* bot);
 
+// No chain is open and its last bot link landed on the latched kill target a second ago or more, so the
+// kill squad has nothing left to wait for, even with a champion walking past it
+bool FactionChampionsChainLanded(PlayerbotAI* botAI);
+
 // A DK is on its way to grip the kill target out of the pack, which it hasn't left yet
 bool FactionChampionsGripPending(PlayerbotAI* botAI);
 
@@ -167,11 +171,13 @@ Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
 Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The group member this bot covers with an external defensive and the spell id, when none of the four
-// covers it yet: Hand of Protection with a physical champion on it, the others with four or more champions
-// on a non-tank, or two at 60% health or under, casters counted. One caster per member. A non-tank with
-// four on it that got none gets Divine Sacrifice from a paladin with Divine Guardian, while none runs. Lay
-// on Hands goes this way too: a member at 20% or under with a champion on it, one per member in 15 s, from a
-// paladin bot other than the member within 40 yd, healers first, held until the cast goes out or 2 s.
+// covers it yet: Hand of Protection on a healer or ranged with a physical champion or four of any on it,
+// the others with four or more champions on a non-tank, or two at 60% health or under, casters counted.
+// Champions about to pick it at their next re-pick (fc.nextfocus) count as on it. One caster per member.
+// A non-tank with four on it that got none gets Divine Sacrifice from a paladin with Divine Guardian, while
+// none runs. Lay on Hands goes this way too: a member at 20% or under with a champion on it, one per member
+// in 15 s, from a paladin bot other than the member within 40 yd, healers first, held until the cast goes
+// out or 2 s.
 Unit* FactionChampionsProtectTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The corpse this druid bot battle-resurrects and the Rebirth rank: fewer than 2 champions within 8 yd
@@ -180,8 +186,8 @@ Unit* FactionChampionsBattleResTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The bot is focused: 2 or more champions have it as victim and its health loss over the last 2 s, run
 // on for 4 s, would leave it under TOC_DEFENSIVE_FLOOR_PCT; or 4 or more on a non-tank, a hit just past
-// that floor. Fills a measured hit for GetToCPersonalDefensive, physical when a physical champion is among
-// them.
+// that floor. Champions about to pick it at their next re-pick count as on it. Fills a measured hit for
+// GetToCPersonalDefensive, physical when a physical champion is among them, focus at four or more.
 bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
 
 // Where a bot dodging a Bladestorm or Hellfire goes: the nearest clear ring, the spot in it nearest the

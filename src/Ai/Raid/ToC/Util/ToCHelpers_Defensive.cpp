@@ -44,6 +44,9 @@ constexpr uint32 SPELL_DIVINE_SHIELD = 642;
 // Pain Suppression on itself
 constexpr std::array<uint32, 4> DPS_PHYSICAL_DEFENSIVES = {26669, 5277, 19263, 33206};
 
+// a stone heals about this much of a bot's health, so over it most of the heal is lost
+constexpr float HEALTHSTONE_MAX_PCT = 70.0f;
+
 // Divine Sacrifice drops under 20% of the paladin's health, so it starts well above that
 constexpr float SACRIFICE_MIN_PCT = 50.0f;
 // Two reads of one hit, a bot's tick apart, put its start this close
@@ -346,6 +349,23 @@ uint32 Castable(PlayerbotAI* botAI, uint32 spellId)
     return spellId && bot->HasSpell(spellId) && botAI->CanCastSpell(spellId, bot) ? spellId : 0;
 }
 
+// Not Castable: that fails on the GCD, and Divine Protection is off it, so it would take the pick and
+// its Forbearance would lock the shield out. The action stops a cast, and on the GCD the trigger retries.
+uint32 ImmunityReady(Player* bot, uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!info || !bot->HasSpell(spellId) || bot->HasSpellCooldown(spellId) ||
+        (info->ExcludeCasterAuraSpell && bot->HasAura(info->ExcludeCasterAuraSpell)))
+        return 0;
+
+    if (info->PreventionType == SPELL_PREVENTION_TYPE_SILENCE && bot->HasUnitFlag(UNIT_FLAG_SILENCED))
+        return 0;
+
+    bool const held =
+        bot->HasUnitState(UNIT_STATE_LOST_CONTROL) && !info->HasAttribute(SPELL_ATTR5_ALLOW_WHILE_STUNNED);
+    return held ? 0 : spellId;
+}
+
 ToCPersonalPick PickPersonal(PlayerbotAI* botAI, ToCPredictedHit const& hit, char const*& why)
 {
     ToCPersonalPick pick;
@@ -371,9 +391,12 @@ ToCPersonalPick PickPersonal(PlayerbotAI* botAI, ToCPredictedHit const& hit, cha
     if (!EndsUnderFloor(bot, expected))
         return pick;
 
-    // Divine Protection's Forbearance would lock the shield out for the rest of the fight
+    // Divine Protection's Forbearance would lock the shield out for the rest of the fight. Either immunity
+    // also drops the bot from every FC champion's pick.
     if (hit.measured && bot->getClass() == CLASS_PALADIN && !PlayerbotAI::IsTank(bot))
-        pick.spellId = Castable(botAI, SPELL_DIVINE_SHIELD);
+        pick.spellId = ImmunityReady(bot, SPELL_DIVINE_SHIELD);
+    else if (hit.focus && bot->getClass() == CLASS_MAGE)
+        pick.spellId = ImmunityReady(bot, SPELL_ICE_BLOCK);
 
     uint32 const needMs = static_cast<uint32>(std::max<int32>(static_cast<int32>(hit.durationMs) - fromStart, 0));
     if (!pick)
@@ -394,7 +417,7 @@ ToCPersonalPick PickPersonal(PlayerbotAI* botAI, ToCPredictedHit const& hit, cha
     if (!pick)
         pick.spellId = Castable(botAI, EncounterHelpers::GetSelfImmunitySpell(bot));
 
-    if (!pick && HealthstoneReady(botAI))
+    if (!pick && bot->GetHealthPct() <= HEALTHSTONE_MAX_PCT && HealthstoneReady(botAI))
         pick.consumable = "healthstone";
 
     return pick;

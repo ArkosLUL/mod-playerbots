@@ -1417,6 +1417,105 @@ class ControlAndDefence(unittest.TestCase):
         self.assertIn("Bulwark        tank   0:05.000 Divine Protection at 40%", self.render(fc.show_personal))
 
 
+def focus_snap(when: int) -> dict:
+    # all four on the mage to 1.5 s, on the priest from 2 s until he dies, then three on the tank
+    if when < 2000:
+        victim = MAGE
+    elif when < 5000:
+        victim = PRIEST
+    else:
+        victim = TANK
+    picks = [victim] * 4 if victim != TANK else [TANK, TANK, TANK, 0]
+    priest = 0.0 if when >= 5000 else (100.0 if when < 2000 else 100.0 - (when - 2000) / 50.0)
+    mage = max(100.0 - when / 30.0, 50.0) if when < 2000 else 60.0
+    units = [placed(TANK, 0.0, 0.0, 90.0, ROGUE_C), placed(MAGE, 20.0, 0.0, mage, PALADIN),
+             placed(PRIEST, 25.0, 0.0, priest, 0), placed(MOON, 30.0, 0.0, 100.0, 0)]
+    units += [placed(guid, 0.0, 1.0, 100.0, pick) for guid, pick in zip((PALADIN, DISC, ROGUE_C, WARRIOR_C), picks)]
+    return {"t": when, "e": "snap", "hz": [], "u": units}
+
+
+def focus_pull() -> list[dict]:
+    roster = [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 1, "h": 0},
+              {"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0},
+              {"g": PRIEST, "n": "Mercy", "r": "heal", "c": 5, "h": 0},
+              {"g": MOON, "n": "Moon", "r": "ranged", "c": 11, "h": 0}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": DISC, "en": 34466, "n": "Caiphus", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth", "b": 1},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Narrhok", "b": 1},
+        {"t": 1, "e": "spell", "sp": 47877, "n": "Master Healthstone"},
+        # the mage's Ice Block inside its focus, the priest's Pain Suppression half a second before his
+        cast(1200, MAGE, 45438, 0),
+        cast(1500, PRIEST, 33206, PRIEST),
+        {"t": 4800, "e": "death", "g": PRIEST, "killer": ROGUE_C, "x": 0.0, "y": 0.0, "z": 0.0},
+        cast(3000, TANK, 47877, 0),
+        # the bots named the priest before the re-pick at 1.9 s, and nobody before the one at 5.2 s
+        note(1000, TANK, fc.NEXT_FOCUS, PRIEST),
+        note(1900, TANK, fc.NEXT_FOCUS, 0),
+        note(1900, TANK, fc.REPICK, 4),
+        note(5200, TANK, fc.REPICK, 3),
+        # a Cyclone that runs its whole 6 s out as the next one lands isn't broken
+        cast(0, MOON, fc.SPELL_CYCLONE, ROGUE_C),
+        note(0, ROGUE_C, fc.CC_AURA, fc.SPELL_CYCLONE),
+        cast(5900, MOON, fc.SPELL_CYCLONE, WARRIOR_C),
+        note(6000, ROGUE_C, fc.CC_AURA, 0),
+        note(6000, WARRIOR_C, fc.CC_AURA, fc.SPELL_CYCLONE),
+        note(6500, WARRIOR_C, fc.CC_AURA, 0),
+        {"t": 7000, "e": "end", "out": "wipe"},
+    ]
+    return records + [focus_snap(when) for when in range(0, 7001, 500)]
+
+
+class FocusAndRepick(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in focus_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def render(self, section) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            section(self.trace)
+        return out.getvalue()
+
+    def test_peaks_count_the_most_champions_on_one_member(self):
+        self.assertEqual(fc.focus_peaks(self.trace), collections.Counter({4: 10, 3: 5}))
+
+    def test_episodes_carry_their_cover_and_death(self):
+        self.assertEqual(fc.focus_episodes(self.trace), [
+            {"g": MAGE, "start": 0, "stop": 1500, "peak": 4, "hp": 100.0, "low": 50.0, "died": None,
+             "cover": [(1200, "Ice Block", MAGE)]},
+            {"g": PRIEST, "start": 2000, "stop": 4500, "peak": 4, "hp": 100.0, "low": 50.0, "died": 4800,
+             "cover": [(-500, "Pain Suppression", PRIEST)]}])
+
+    def test_a_repick_scores_the_last_prediction(self):
+        self.assertEqual(fc.repick_checks(self.trace), [
+            {"t": 1900, "predicted": PRIEST, "actual": PRIEST, "count": 4},
+            {"t": 5200, "predicted": 0, "actual": TANK, "count": 3}])
+
+    def test_the_section_renders(self):
+        text = self.render(fc.show_focus)
+        self.assertIn("share of 15 samples: 3: 33%, 4: 67%", text)
+        self.assertRegex(text, r"0:02\.000 +2\.5s Mercy +heal +4 +100>50 +0:04\.800  Pain Suppression -0\.5s")
+        self.assertIn("named the member with the most champions 1.5 s later after 1 of them", text)
+
+    def test_a_cyclone_that_ran_out_is_not_broken(self):
+        self.assertEqual(fc.own_breaks(self.trace), {MOON: collections.Counter({"holds": 2, "broken": 0})})
+
+    def test_a_healthstone_over_70_is_flagged(self):
+        self.assertIn("healthstones over 70%: 1 of 1, Bulwark 90%", self.render(fc.show_personal))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
@@ -1484,6 +1583,9 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.melee_control(trace), [])
         self.assertEqual(fc.personal_rows(trace), [])
         self.assertEqual(fc.personal_deaths(trace), [])
+        self.assertEqual(fc.focus_peaks(trace), collections.Counter())
+        self.assertEqual(fc.focus_episodes(trace), [])
+        self.assertEqual(fc.repick_checks(trace), [])
 
 
 if __name__ == "__main__":
