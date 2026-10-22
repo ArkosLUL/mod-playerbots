@@ -11,7 +11,6 @@
 #include "Timer.h"
 #include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_FactionChampions.h"
-#include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -167,7 +166,6 @@ bool FactionChampionsDeathGripAction::StillWalking(Position const& stand, bool& 
         stand.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) >= GRIP_SAME_STAND)
         last.clear();
 
-    FactionChampionsBoostWalk(bot, bot->GetExactDist2d(&stand));
     walked = WalkTo(stand);
     return true;
 }

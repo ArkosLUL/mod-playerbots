@@ -15,18 +15,12 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-bool FactionChampionsFrontlineOwned(PlayerbotAI* botAI)
-{
-    Position centre;
-    return FactionChampionsFrontlineHeld(botAI, centre);
-}
+bool FactionChampionsHolding(PlayerbotAI* botAI) { return FactionChampionsHoldOf(botAI).champion != nullptr; }
 
-// The focus trigger's test, so the rule and the node cover the same window. The frontline picks its
-// own.
+// The focus trigger's test, so the rule and the node cover the same window. A holder hits its own champion.
 bool FactionChampionsTargetOwned(PlayerbotAI* botAI)
 {
-    return (FactionChampionsFocusBot(botAI) && FactionChampionsKillTarget(botAI)) ||
-           FactionChampionsFrontlineOwned(botAI);
+    return (FactionChampionsFocusBot(botAI) && FactionChampionsKillTarget(botAI)) || FactionChampionsHolding(botAI);
 }
 
 bool FactionChampionsStandHeld(PlayerbotAI* botAI)
@@ -35,21 +29,15 @@ bool FactionChampionsStandHeld(PlayerbotAI* botAI)
     return FactionChampionsBallStand(botAI, spot);
 }
 
-// Kill squad melee wait outside the pack until a grip has the kill target out of it, or a chain's grips
-// landed on it, which a champion walking past it can't undo. Once it's been out
-// they stay on it even if the pack walks over, and with no champion healer left nothing heals it in there
+// Kill squad melee, tanks included, wait outside the pack while the player's pull is still flying, its healer
+// takes the kill latch once it lands, or while a DK is on its way to grip the kill target out of the pack
 bool FactionChampionsKillSquadWait(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot) || FactionChampionsIsFrontline(bot) ||
-        FactionChampionsChainLanded(botAI))
+    if (!PlayerbotAI::IsMelee(bot) || FactionChampionsIsHolder(bot))
         return false;
 
-    if (FactionChampionsGripPending(botAI))
-        return true;
-
-    return FactionChampionsKillTarget(botAI) && !FactionChampionsKillTargetOut(botAI) &&
-           FactionChampionsHealerLeft(botAI);
+    return !FactionChampionsChainTarget(bot).IsEmpty() || FactionChampionsGripPending(botAI);
 }
 
 bool FactionChampionsTotemHeld(PlayerbotAI* botAI) { return FactionChampionsTotemTarget(botAI) != nullptr; }
@@ -68,7 +56,7 @@ bool FactionChampionsWrathHeld(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     return bot->getClass() == CLASS_PALADIN &&
-           (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot) || FactionChampionsIsFrontline(bot)) &&
+           (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot) || FactionChampionsIsHolder(bot)) &&
            FactionChampionsLive(botAI);
 }
 
@@ -95,13 +83,11 @@ void DefineFactionChampions(EncounterBuilder& e)
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
             {"reach melee", "reach spell"});
 
-    // the pack follows whoever it picks, so the frontline stays with the pack
-    e.Block("faction champions frontline hold", Role::Any, FactionChampionsFrontlineOwned,
-            Family::CombatFormationMove | Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom |
-                Family::Charge);
+    // its champion follows wherever it goes, and these would walk it toward the raid
+    e.Block("faction champions holder hold", Role::Any, FactionChampionsHolding,
+            Family::CombatFormationMove | Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom);
 
-    // ranged and healers hold their slots, and the reaches would walk them in toward the frontline or a
-    // target past the slot
+    // ranged and healers hold their slots, and the reaches would walk them in toward a target past the slot
     e.Block("faction champions stand hold", Role::Any, FactionChampionsStandHeld,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Flee |
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
@@ -123,7 +109,7 @@ void DefineFactionChampions(EncounterBuilder& e)
     // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
     e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);
 
-    // the DK tank's grip opens every chain, the player's and the one after each kill
+    // the DK tank's grip opens every chain the player pulls
     e.Block("faction champions chain grip reserve", Role::Tank, FactionChampionsIsChainOpener, 0, {"death grip"});
 }
 }  // namespace

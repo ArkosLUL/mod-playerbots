@@ -6,17 +6,24 @@
 #include "NamedObjectContext.h"
 #include "Trigger.h"
 
-class FactionChampionsFrontlineReturnTrigger : public Trigger
+class FactionChampionsHoldTrigger : public Trigger
 {
 public:
-    FactionChampionsFrontlineReturnTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions frontline return") {}
+    FactionChampionsHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions hold") {}
     bool IsActive() override;
 };
 
-class FactionChampionsFrontlineAttackTrigger : public Trigger
+class FactionChampionsHoldWalkTrigger : public Trigger
 {
 public:
-    FactionChampionsFrontlineAttackTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions frontline attack") {}
+    FactionChampionsHoldWalkTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions hold walk") {}
+    bool IsActive() override;
+};
+
+class FactionChampionsHoldControlTrigger : public Trigger
+{
+public:
+    FactionChampionsHoldControlTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions hold control") {}
     bool IsActive() override;
 };
 
@@ -46,22 +53,26 @@ class ToCFactionChampionsBallTriggerContext : public NamedObjectContext<Trigger>
 public:
     ToCFactionChampionsBallTriggerContext() : NamedObjectContext<Trigger>()
     {
-        creators["faction champions frontline return"] =
-            &ToCFactionChampionsBallTriggerContext::faction_champions_pack_tank_return;
-        creators["faction champions frontline attack"] =
-            &ToCFactionChampionsBallTriggerContext::faction_champions_pack_tank_attack;
+        creators["faction champions hold"] = &ToCFactionChampionsBallTriggerContext::faction_champions_hold;
+        creators["faction champions hold walk"] = &ToCFactionChampionsBallTriggerContext::faction_champions_hold_walk;
+        creators["faction champions hold control"] =
+            &ToCFactionChampionsBallTriggerContext::faction_champions_hold_control;
         creators["faction champions ball stand"] = &ToCFactionChampionsBallTriggerContext::faction_champions_ball_stand;
         creators["faction champions opener"] = &ToCFactionChampionsBallTriggerContext::faction_champions_opener;
         creators["faction champions chased"] = &ToCFactionChampionsBallTriggerContext::faction_champions_chased;
     }
 
 private:
-    static Trigger* faction_champions_pack_tank_return(PlayerbotAI* botAI) {
-        return new FactionChampionsFrontlineReturnTrigger(botAI);
+    static Trigger* faction_champions_hold(PlayerbotAI* botAI) { return new FactionChampionsHoldTrigger(botAI); }
+
+    static Trigger* faction_champions_hold_walk(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsHoldWalkTrigger(botAI);
     }
 
-    static Trigger* faction_champions_pack_tank_attack(PlayerbotAI* botAI) {
-        return new FactionChampionsFrontlineAttackTrigger(botAI);
+    static Trigger* faction_champions_hold_control(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsHoldControlTrigger(botAI);
     }
 
     static Trigger* faction_champions_ball_stand(PlayerbotAI* botAI) {

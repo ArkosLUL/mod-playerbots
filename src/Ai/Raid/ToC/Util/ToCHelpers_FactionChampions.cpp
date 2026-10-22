@@ -6,6 +6,7 @@
 #include <iterator>
 #include <list>
 #include <unordered_map>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -40,22 +41,22 @@ struct KillOrderRow
     ToCFactionChampions horde;
 };
 
-// Healers first, then the Warcraft Tavern Faction Champions guide's DPS danger table. CC goes the same way.
+// Healers, then the casters, then the melee, which the holders keep apart till last. CC goes the same way.
 constexpr KillOrderRow KILL_ORDER[] = {
     {ToCFactionChampions::NPC_ALLIANCE_PALADIN_HOLY, ToCFactionChampions::NPC_HORDE_PALADIN_HOLY},
     {ToCFactionChampions::NPC_ALLIANCE_PRIEST_DISCIPLINE, ToCFactionChampions::NPC_HORDE_PRIEST_DISCIPLINE},
     {ToCFactionChampions::NPC_ALLIANCE_SHAMAN_RESTORATION, ToCFactionChampions::NPC_HORDE_SHAMAN_RESTORATION},
     {ToCFactionChampions::NPC_ALLIANCE_DRUID_RESTORATION, ToCFactionChampions::NPC_HORDE_DRUID_RESTORATION},
-    {ToCFactionChampions::NPC_ALLIANCE_ROGUE, ToCFactionChampions::NPC_HORDE_ROGUE},
-    {ToCFactionChampions::NPC_ALLIANCE_WARRIOR, ToCFactionChampions::NPC_HORDE_WARRIOR},
     {ToCFactionChampions::NPC_ALLIANCE_HUNTER, ToCFactionChampions::NPC_HORDE_HUNTER},
-    {ToCFactionChampions::NPC_ALLIANCE_SHAMAN_ENHANCEMENT, ToCFactionChampions::NPC_HORDE_SHAMAN_ENHANCEMENT},
-    {ToCFactionChampions::NPC_ALLIANCE_DEATH_KNIGHT, ToCFactionChampions::NPC_HORDE_DEATH_KNIGHT},
-    {ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION, ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION},
+    {ToCFactionChampions::NPC_ALLIANCE_MAGE, ToCFactionChampions::NPC_HORDE_MAGE},
     {ToCFactionChampions::NPC_ALLIANCE_WARLOCK, ToCFactionChampions::NPC_HORDE_WARLOCK},
     {ToCFactionChampions::NPC_ALLIANCE_PRIEST_SHADOW, ToCFactionChampions::NPC_HORDE_PRIEST_SHADOW},
-    {ToCFactionChampions::NPC_ALLIANCE_MAGE, ToCFactionChampions::NPC_HORDE_MAGE},
     {ToCFactionChampions::NPC_ALLIANCE_DRUID_BALANCE, ToCFactionChampions::NPC_HORDE_DRUID_BALANCE},
+    {ToCFactionChampions::NPC_ALLIANCE_ROGUE, ToCFactionChampions::NPC_HORDE_ROGUE},
+    {ToCFactionChampions::NPC_ALLIANCE_DEATH_KNIGHT, ToCFactionChampions::NPC_HORDE_DEATH_KNIGHT},
+    {ToCFactionChampions::NPC_ALLIANCE_WARRIOR, ToCFactionChampions::NPC_HORDE_WARRIOR},
+    {ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION, ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION},
+    {ToCFactionChampions::NPC_ALLIANCE_SHAMAN_ENHANCEMENT, ToCFactionChampions::NPC_HORDE_SHAMAN_ENHANCEMENT},
 };
 
 constexpr uint8 NOT_A_CHAMPION = static_cast<uint8>(std::size(KILL_ORDER));
@@ -107,9 +108,33 @@ constexpr float PULLED_SWITCH_MIN_PCT = 30.0f;
 constexpr float GRIP_JUMP_YD = 10.0f;
 constexpr uint32 GRIP_JUMP_MS = 1000;
 constexpr uint32 TRACK_STEP_MS = 200;
-// Off the pack centre by this much and not on the frontline: chasing the raid
+// Off the pack centre by this much and not on a tank or holder: chasing the raid
 constexpr float ESCAPE_DIST = 20.0f;
 constexpr uint32 SPELL_DEATH_GRIP_RANK = 49576;
+
+// The order melee champions get their holder in
+constexpr KillOrderRow HOLD_ORDER[] = {
+    {ToCFactionChampions::NPC_ALLIANCE_DEATH_KNIGHT, ToCFactionChampions::NPC_HORDE_DEATH_KNIGHT},
+    {ToCFactionChampions::NPC_ALLIANCE_WARRIOR, ToCFactionChampions::NPC_HORDE_WARRIOR},
+    {ToCFactionChampions::NPC_ALLIANCE_ROGUE, ToCFactionChampions::NPC_HORDE_ROGUE},
+    {ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION, ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION},
+    {ToCFactionChampions::NPC_ALLIANCE_SHAMAN_ENHANCEMENT, ToCFactionChampions::NPC_HORDE_SHAMAN_ENHANCEMENT},
+};
+
+// 0 plate DPS, 1 a cat, 2 a bot tank: by the melee pick's armour and health terms a tank scores ~0.64 and loses
+// its champion to almost anyone
+constexpr uint8 NO_HOLD = 3;
+// A plate DPS holder in melee range (~1.3) keeps its champion against a hurt cloth healer ~25 yd off, so spots
+// keep every healer past that
+constexpr float HOLD_FROM_HEALER = 30.0f;
+// heal range 40, less a margin
+constexpr float HOLD_HEAL_REACH = 38.0f;
+// past Bladestorm's 8 yd and a walk-by
+constexpr float HOLD_SPACING = 22.0f;
+constexpr float HOLD_FROM_PACK = 25.0f;
+constexpr float HOLD_FLOOR_RADIUS = 44.0f;
+constexpr float HOLD_LATTICE_STEP = 4.0f;
+constexpr std::array<uint32, 8> MORTAL_STRIKE_RANKS = {47486, 47485, 30330, 25248, 21553, 21552, 21551, 12294};
 
 struct Champion
 {
@@ -126,8 +151,18 @@ struct Champion
     bool healer = false;
     bool pulled = false;
     bool escapee = false;
-    bool onFront = false;
+    // its victim is a tank or a holder
+    bool covered = false;
+    bool held = false;
     float packDist = 0.0f;
+};
+
+struct Hold
+{
+    ObjectGuid champion;
+    // chosen once the champion is on its holder
+    bool placed = false;
+    Position spot;
 };
 
 struct TrackPoint
@@ -171,6 +206,9 @@ struct FactionChampionsState
     std::unordered_set<ObjectGuid> gripped;
     // CC bot -> its cast, mirrored into fc.cc
     std::unordered_map<ObjectGuid, CcDuty> ccDuties;
+    // holder -> its melee champion, mirrored into fc.hold
+    std::unordered_map<ObjectGuid, Hold> holds;
+    RaidObs::ObsGuidMap<ObjectGuid> holdNotes{"fc.hold"};
 };
 
 RaidInstanceState<FactionChampionsState> championStates;
@@ -287,6 +325,8 @@ void EndPull(FactionChampionsState& state, Player* bot)
     EraseAll(state.ccTargets);
     EraseAll(state.ccAuras);
     state.ccDuties.clear();
+    EraseAll(state.holdNotes);
+    state.holds.clear();
 }
 
 // The spell id of a player's fear, stun or confuse on it, and the longest time one has left. Negative is
@@ -406,8 +446,7 @@ bool CycloneBot(Player* member)
            !PlayerbotAI::IsMelee(member) && member->HasSpell(SPELL_CYCLONE);
 }
 
-// The CC spells this bot knows, or none when it isn't a CC bot: a dps mage, warlock, ranged druid or
-// shaman off the frontline
+// The CC spells this bot knows, or none when it isn't a CC bot: a dps mage, warlock, ranged druid or shaman
 std::vector<uint32> CcSpells(Player* member, Map* map)
 {
     std::vector<uint32> spells;
@@ -435,7 +474,7 @@ std::vector<uint32> CcSpells(Player* member, Map* map)
                 add(SPELL_CYCLONE);
             break;
         case CLASS_SHAMAN:
-            if (!FactionChampionsIsFrontline(member) && member->HasSpell(SPELL_HEX_RANK))
+            if (member->HasSpell(SPELL_HEX_RANK))
                 add(SPELL_HEX_RANK);
             break;
         default:
@@ -505,9 +544,10 @@ void ScanChampions(FactionChampionsState& state, Player* bot)
         champion.healer = IsFactionChampionHealer(champion.entry);
         Unit* victim = creature->GetVictim();
         Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
-        champion.onFront =
-            victimPlayer && (PlayerbotAI::IsTank(victimPlayer) || FactionChampionsIsFrontline(victimPlayer));
-        champion.escapee = creature->GetExactDist2d(&state.packCentre) > ESCAPE_DIST && !champion.onFront;
+        // last refresh's holders, the deal runs later in this one
+        champion.covered =
+            victimPlayer && (PlayerbotAI::IsTank(victimPlayer) || state.holds.count(victimPlayer->GetGUID()));
+        champion.escapee = creature->GetExactDist2d(&state.packCentre) > ESCAPE_DIST && !champion.covered;
         state.champions.push_back(champion);
     }
 
@@ -686,7 +726,8 @@ bool CycloneStandUp(FactionChampionsState const& state, Player* member)
            BlobHealer(state);
 }
 
-// A held one passes danger on to the next free one, so the peels reach the DK while the rogue is stunned
+// A held one passes danger on to the next free one, so the peels reach the DK while the rogue is stunned.
+// One with a holder is the holder's.
 void UpdateDanger(FactionChampionsState& state)
 {
     ObjectGuid const kill = state.killTarget.Get();
@@ -694,8 +735,8 @@ void UpdateDanger(FactionChampionsState& state)
     auto const held = [](Champion const& champion) { return champion.ccAura || champion.disarmed; };
     for (Champion const& champion : state.champions)
     {
-        if (!champion.inCombat || champion.pulled || champion.guid == kill || champion.guid == state.suspended ||
-            DangerRank(champion.entry) == std::size(DANGER_ORDER))
+        if (!champion.inCombat || champion.pulled || champion.held || champion.guid == kill ||
+            champion.guid == state.suspended || DangerRank(champion.entry) == std::size(DANGER_ORDER))
             continue;
 
         if (!best || std::make_pair(held(champion), DangerRank(champion.entry)) <
@@ -837,22 +878,11 @@ bool ClearForBreakable(Unit* target, std::vector<Player*> const& members, std::v
     return !CarriesGroupDot(target);
 }
 
-// The healer the grip DK pulls next: first in kill order still in the pack and open to a grip
-ObjectGuid NextGripHealer(FactionChampionsState const& state)
-{
-    for (Champion const& champion : state.champions)
-        if (champion.healer && champion.inCombat && champion.touchable && !champion.pulled &&
-            champion.guid != state.killTarget.Get() && champion.guid != state.suspended)
-            return champion.guid;
-
-    return ObjectGuid::Empty;
-}
-
 // Healers off the tanks nearest the kill target first, then the other healers, then the danger champion,
 // then champions off the tanks casters first, then the rest in kill order. Not the kill target, nor the suspended one: the latch
 // goes back to it and CC would break or block that. Nor the skulled one, even while it's immune and so
-// not the latch. Nor a pulled healer, the latch's next pick, nor the player's pull or the likely next one:
-// CC would make each immune to the grip when its turn comes.
+// not the latch. Nor a pulled healer, the latch's next pick, nor the player's pull: CC would make it immune
+// to the grip. Nor a held one: its holder's hits break most CC on it.
 std::vector<Champion const*> CcCandidates(FactionChampionsState const& state, ObjectGuid chainTarget)
 {
     ObjectGuid const killGuid = state.killTarget.Get();
@@ -861,25 +891,22 @@ std::vector<Champion const*> CcCandidates(FactionChampionsState const& state, Ob
         if (champion.guid == killGuid)
             kill = &champion;
 
-    ObjectGuid const nextGrip = kill && kill->pulled && kill->healthPct <= NEXT_GRIP_WALK_PCT
-                                    ? NextGripHealer(state)
-                                    : ObjectGuid::Empty;
     std::vector<Champion const*> candidates;
     for (Champion const& champion : state.champions)
-        if (champion.inCombat && !champion.pulled && champion.guid != killGuid && champion.guid != state.suspended &&
-            champion.guid != state.skulled && champion.guid != nextGrip && champion.guid != chainTarget)
+        if (champion.inCombat && !champion.pulled && !champion.held && champion.guid != killGuid &&
+            champion.guid != state.suspended && champion.guid != state.skulled && champion.guid != chainTarget)
             candidates.push_back(&champion);
 
     ObjectGuid const danger = state.danger.Get();
     auto const group = [danger](Champion const* champion)
     {
         if (champion->healer)
-            return champion->onFront ? 1 : 0;
+            return champion->covered ? 1 : 0;
 
         if (champion->guid == danger)
             return 2;
 
-        if (champion->onFront)
+        if (champion->covered)
             return 5;
 
         return IsFactionChampionMelee(champion->entry) ? 4 : 3;
@@ -942,20 +969,9 @@ bool HoldsPastRecast(Aura const* aura, Player* caster, uint32 spellId)
 }
 
 // Latched until the cast lands or 3 s pass with none going, so each bot finishes the cast it started
-void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
+void UpdateCcDuties(FactionChampionsState& state, Player* bot, std::vector<Player*> const& members, uint32 now)
 {
     Map* map = bot->FindMap();
-    std::vector<Player*> members;
-    if (Group* group = bot->GetGroup())
-    {
-        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-        {
-            Player* member = ref->GetSource();
-            if (member && member->IsInWorld() && member->IsAlive() && member->FindMap() == map)
-                members.push_back(member);
-        }
-    }
-
     std::vector<std::pair<Player*, std::vector<uint32>>> casters;
     std::vector<ObjectGuid> ccBots;
     for (Player* member : members)
@@ -1120,6 +1136,250 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, uint32 now)
     }
 }
 
+std::vector<Player*> GroupMembers(Player* bot)
+{
+    Map* map = bot->FindMap();
+    std::vector<Player*> members;
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsInWorld() && member->IsAlive() && member->FindMap() == map)
+                members.push_back(member);
+        }
+    }
+
+    return members;
+}
+
+uint8 HoldTier(Player* member)
+{
+    if (!GET_PLAYERBOT_AI(member) || PlayerbotAI::IsHeal(member))
+        return NO_HOLD;
+
+    if (PlayerbotAI::IsTank(member))
+        return 2;
+
+    if (!PlayerbotAI::IsMelee(member))
+        return NO_HOLD;
+
+    switch (member->getClass())
+    {
+        case CLASS_WARRIOR:
+        case CLASS_PALADIN:
+        case CLASS_DEATH_KNIGHT:
+            return 0;
+        case CLASS_DRUID:
+            return 1;
+        default:
+            return NO_HOLD;
+    }
+}
+
+// Lower goes first within a tier: the chain DK on the DK once its grip is out; on the Warrior a warrior, one
+// without Mortal Strike first, so the Arms one keeps its healing debuff on the kill target
+int32 HoldPreference(Player* member, uint32 entry, ObjectGuid chainDk)
+{
+    bool const warrior = member->getClass() == CLASS_WARRIOR;
+    switch (static_cast<ToCFactionChampions>(entry))
+    {
+        case ToCFactionChampions::NPC_ALLIANCE_DEATH_KNIGHT:
+        case ToCFactionChampions::NPC_HORDE_DEATH_KNIGHT:
+            if (member->GetGUID() == chainDk)
+                return -1;
+
+            return member->getClass() == CLASS_DEATH_KNIGHT ? 0 : 1;
+        case ToCFactionChampions::NPC_ALLIANCE_WARRIOR:
+        case ToCFactionChampions::NPC_HORDE_WARRIOR:
+            if (!warrior)
+                return 2;
+
+            return FirstKnownRank(member, MORTAL_STRIKE_RANKS) ? 1 : 0;
+        default:
+            // the DK and the Warrior pick first, so these only keep away from their holders
+            return member->GetGUID() == chainDk || warrior ? 1 : 0;
+    }
+}
+
+// On the floor 30+ yd from every healer, 22+ from the other holders' spots and 25+ from the pack and the kill
+// target, then within heal reach of the healers' middle, then the shortest walk for the champion. With no
+// spot clear of all three, the one short of them by the fewest yards.
+Position PickHoldSpot(FactionChampionsState const& state, ObjectGuid holder, Creature* champion,
+                      std::vector<Player*> const& members)
+{
+    std::vector<Position> healers;
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    for (Player* member : members)
+    {
+        if (!PlayerbotAI::IsHeal(member))
+            continue;
+
+        healers.push_back(member->GetPosition());
+        sumX += member->GetPositionX();
+        sumY += member->GetPositionY();
+    }
+
+    std::vector<Position> taken;
+    for (auto const& held : state.holds)
+        if (held.first != holder && held.second.placed)
+            taken.push_back(held.second.spot);
+
+    std::vector<Position> clearOf = {state.packCentre};
+    if (Champion const* kill = FindCandidate(state, state.killTarget.Get()))
+        clearOf.emplace_back(kill->x, kill->y, 0.0f);
+
+    auto const shortBy = [](std::vector<Position> const& from, Position const& at, float need)
+    {
+        float worst = 0.0f;
+        for (Position const& point : from)
+            worst = std::max(worst, need - point.GetExactDist2d(&at));
+
+        return worst;
+    };
+
+    Position const middle(healers.empty() ? 0.0f : sumX / healers.size(),
+                          healers.empty() ? 0.0f : sumY / healers.size(), 0.0f);
+    Position best = champion->GetPosition();
+    float bestShort = 0.0f;
+    float bestReach = 0.0f;
+    float bestWalk = 0.0f;
+    bool found = false;
+    int32 const steps = static_cast<int32>(HOLD_FLOOR_RADIUS / HOLD_LATTICE_STEP);
+    for (int32 i = -steps; i <= steps; ++i)
+    {
+        for (int32 j = -steps; j <= steps; ++j)
+        {
+            float const dx = i * HOLD_LATTICE_STEP;
+            float const dy = j * HOLD_LATTICE_STEP;
+            if (std::hypot(dx, dy) > HOLD_FLOOR_RADIUS)
+                continue;
+
+            Position const spot(ARENA_CENTER.GetPositionX() + dx, ARENA_CENTER.GetPositionY() + dy,
+                                champion->GetPositionZ());
+            float const missing = shortBy(healers, spot, HOLD_FROM_HEALER) + shortBy(taken, spot, HOLD_SPACING) +
+                                  shortBy(clearOf, spot, HOLD_FROM_PACK);
+            float const reach = healers.empty() ? 0.0f : std::max(0.0f, middle.GetExactDist2d(&spot) - HOLD_HEAL_REACH);
+            float const walk = champion->GetExactDist2d(&spot);
+            if (!found || std::make_tuple(missing, reach, walk) < std::make_tuple(bestShort, bestReach, bestWalk))
+            {
+                found = true;
+                best = spot;
+                bestShort = missing;
+                bestReach = reach;
+                bestWalk = walk;
+            }
+        }
+    }
+
+    return best;
+}
+
+// Each melee champion gets one holder, who keeps it at its own spot away from the healers and the pack:
+// plate DPS first, then cats, then bot tanks. The chain's DKs wait for their grips, and the DK champion
+// waits for the chain DK. A hold ends with its holder or champion, or when the champion turns kill target.
+void UpdateHolds(FactionChampionsState& state, Player* bot, std::vector<Player*> const& members)
+{
+    ObjectGuid const kill = state.killTarget.Get();
+    ObjectGuid const chainDk = FactionChampionsChainDk(bot);
+    bool const chainOpen = !FactionChampionsChainTarget(bot).IsEmpty();
+    auto const memberOf = [&members](ObjectGuid guid) -> Player*
+    {
+        auto const found = std::find_if(members.begin(), members.end(),
+                                        [guid](Player* member) { return member->GetGUID() == guid; });
+        return found != members.end() ? *found : nullptr;
+    };
+
+    std::vector<ObjectGuid> ended;
+    for (auto const& held : state.holds)
+    {
+        Player* holder = memberOf(held.first);
+        Champion const* champion = FindCandidate(state, held.second.champion);
+        if (!holder || HoldTier(holder) == NO_HOLD || !champion || champion->guid == kill)
+            ended.push_back(held.first);
+    }
+
+    for (ObjectGuid const& guid : ended)
+    {
+        state.holds.erase(guid);
+        state.holdNotes.erase(guid);
+    }
+
+    auto const available = [&](Player* member)
+    {
+        if (HoldTier(member) == NO_HOLD || member->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
+            state.holds.count(member->GetGUID()))
+            return false;
+
+        if (!chainOpen)
+            return true;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        return member->GetGUID() != chainDk && !(memberAI && FactionChampionsIsChainOpener(memberAI));
+    };
+
+    auto const isHeld = [&state](ObjectGuid guid)
+    {
+        return std::any_of(state.holds.begin(), state.holds.end(),
+                           [guid](auto const& held) { return held.second.champion == guid; });
+    };
+
+    for (KillOrderRow const& row : HOLD_ORDER)
+    {
+        for (Champion const& champion : state.champions)
+        {
+            if ((champion.entry != static_cast<uint32>(row.alliance) &&
+                 champion.entry != static_cast<uint32>(row.horde)) ||
+                !champion.inCombat || champion.guid == kill || isHeld(champion.guid))
+                continue;
+
+            bool const dk = champion.entry == static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_DEATH_KNIGHT) ||
+                            champion.entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_DEATH_KNIGHT);
+            if (dk && chainOpen && memberOf(chainDk))
+                continue;
+
+            Player* best = nullptr;
+            int32 bestRank = 0;
+            float bestDist = 0.0f;
+            for (Player* member : members)
+            {
+                if (!available(member))
+                    continue;
+
+                int32 const rank = HoldTier(member) * 4 + HoldPreference(member, champion.entry, chainDk);
+                float const dist = Dist2d(member->GetPositionX(), member->GetPositionY(), champion.x, champion.y);
+                if (!best || rank < bestRank || (rank == bestRank && dist < bestDist))
+                {
+                    best = member;
+                    bestRank = rank;
+                    bestDist = dist;
+                }
+            }
+
+            if (!best)
+                continue;
+
+            state.holds[best->GetGUID()].champion = champion.guid;
+            state.holdNotes.Set(best->GetGUID(), champion.guid);
+        }
+    }
+
+    for (auto& held : state.holds)
+    {
+        for (Champion& champion : state.champions)
+            if (champion.guid == held.second.champion)
+                champion.held = true;
+
+        Creature* champion = held.second.placed ? nullptr : AliveCreature(bot, held.second.champion);
+        if (champion && champion->GetVictim() && champion->GetVictim()->GetGUID() == held.first)
+        {
+            held.second.spot = PickHoldSpot(state, held.first, champion, members);
+            held.second.placed = true;
+        }
+    }
+}
+
 FactionChampionsState* Refresh(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -1155,8 +1415,10 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
     Unit* skull = GetToCHumanSkull(botAI, &IsChampionUnit);
     state->skulled = skull ? skull->GetGUID() : ObjectGuid::Empty;
     UpdateKillLatch(*state, bot);
+    std::vector<Player*> const members = GroupMembers(bot);
+    UpdateHolds(*state, bot, members);
     UpdateDanger(*state);
-    UpdateCcDuties(*state, bot, now);
+    UpdateCcDuties(*state, bot, members, now);
     return state;
 }
 
@@ -1349,33 +1611,96 @@ ObjectGuid FactionChampionsChainDk(Player* bot)
     return chosen;
 }
 
-bool FactionChampionsIsFrontline(Player* player)
+ObjectGuid FactionChampionsHeldBy(Player* member)
 {
-    if (!player || !GET_PLAYERBOT_AI(player))
+    FactionChampionsState* state = member ? StateFor(member) : nullptr;
+    if (!state || !state->live)
+        return ObjectGuid::Empty;
+
+    auto const held = state->holds.find(member->GetGUID());
+    return held != state->holds.end() ? held->second.champion : ObjectGuid::Empty;
+}
+
+bool FactionChampionsIsHolder(Player* member) { return !FactionChampionsHeldBy(member).IsEmpty(); }
+
+FactionChampionsHold FactionChampionsHoldOf(PlayerbotAI* botAI)
+{
+    FactionChampionsHold hold;
+    if (!botAI || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return hold;
+
+    FactionChampionsState* state = Refresh(botAI);
+    if (!state || !state->live)
+        return hold;
+
+    Player* bot = botAI->GetBot();
+    auto const held = state->holds.find(bot->GetGUID());
+    if (held == state->holds.end())
+        return hold;
+
+    hold.champion = AliveCreature(bot, held->second.champion);
+    hold.placed = hold.champion && held->second.placed;
+    hold.spot = held->second.spot;
+    return hold;
+}
+
+std::vector<Position> FactionChampionsHeldPoints(PlayerbotAI* botAI)
+{
+    std::vector<Position> points;
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return points;
+
+    FactionChampionsState* state = Refresh(botAI);
+    if (!state || !state->live)
+        return points;
+
+    for (auto const& held : state->holds)
+    {
+        if (held.second.placed)
+            points.push_back(held.second.spot);
+
+        if (Creature* champion = AliveCreature(botAI->GetBot(), held.second.champion))
+            points.push_back(champion->GetPosition());
+    }
+
+    return points;
+}
+
+bool FactionChampionsTrinketReady(Unit* champion)
+{
+    Creature* creature = champion ? champion->ToCreature() : nullptr;
+    Map* map = creature ? creature->GetMap() : nullptr;
+    return map && map->IsHeroic() && !creature->HasSpellCooldown(SPELL_PVP_TRINKET);
+}
+
+bool FactionChampionsSpellPopsTrinket(uint32 spellId)
+{
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info)
         return false;
 
-    if (FactionChampionsIsPackTank(player))
+    auto const pops = [](SpellInfo const* spell)
+    {
+        bool const frost = spell->GetSchoolMask() & SPELL_SCHOOL_MASK_FROST;
+        return spell->HasAura(SPELL_AURA_MOD_FEAR) || spell->HasAura(SPELL_AURA_MOD_STUN) ||
+               spell->HasAura(SPELL_AURA_MOD_CONFUSE) || (frost && spell->HasAura(SPELL_AURA_MOD_ROOT));
+    };
+
+    if (pops(info))
         return true;
 
-    if (!PlayerbotAI::IsMelee(player) || PlayerbotAI::IsHeal(player))
-        return false;
+    // Intimidation's stun sits one trigger down
+    for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+        if (SpellInfo const* triggered = sSpellMgr->GetSpellInfo(info->Effects[i].TriggerSpell))
+            if (pops(triggered))
+                return true;
 
-    switch (player->getClass())
-    {
-        case CLASS_WARRIOR:
-        case CLASS_PALADIN:
-        case CLASS_SHAMAN:
-            return true;
-        case CLASS_DEATH_KNIGHT:
-            return player->GetGUID() != FactionChampionsChainDk(player);
-        default:
-            return false;
-    }
+    return false;
 }
 
 bool FactionChampionsFocusBot(PlayerbotAI* botAI)
 {
-    return botAI && !PlayerbotAI::IsHeal(botAI->GetBot()) && !FactionChampionsIsFrontline(botAI->GetBot());
+    return botAI && !PlayerbotAI::IsHeal(botAI->GetBot()) && !FactionChampionsIsHolder(botAI->GetBot());
 }
 
 bool FactionChampionsHealerLeft(PlayerbotAI* botAI)
@@ -1428,6 +1753,12 @@ bool FactionChampionsIsPulled(PlayerbotAI* botAI, Unit* champion)
 {
     Champion const* found = LiveChampion(botAI, champion);
     return found && found->pulled;
+}
+
+bool FactionChampionsIsHeld(PlayerbotAI* botAI, Unit* champion)
+{
+    Champion const* found = LiveChampion(botAI, champion);
+    return found && found->held;
 }
 
 bool FactionChampionsIsEscapee(PlayerbotAI* botAI, Unit* champion)
@@ -1540,23 +1871,6 @@ Unit* FactionChampionsBlobHealer(PlayerbotAI* botAI)
     FactionChampionsState* state = Refresh(botAI);
     Champion const* healer = state && state->live ? BlobHealer(*state) : nullptr;
     return healer ? AliveCreature(botAI->GetBot(), healer->guid) : nullptr;
-}
-
-Unit* FactionChampionsChainHealer(PlayerbotAI* botAI)
-{
-    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
-        return nullptr;
-
-    FactionChampionsState* state = Refresh(botAI);
-    if (!state || !state->live)
-        return nullptr;
-
-    // sorted by kill order
-    for (Champion const& champion : state->champions)
-        if (champion.healer && champion.inCombat && champion.touchable && !champion.pulled)
-            return AliveCreature(botAI->GetBot(), champion.guid);
-
-    return nullptr;
 }
 
 Unit* FactionChampionsDangerTarget(PlayerbotAI* botAI)

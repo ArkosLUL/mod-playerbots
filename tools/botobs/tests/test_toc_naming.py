@@ -53,7 +53,7 @@ CHAMPIONS = (
 
 # ToC triggers that belong to no encounter, so they lead with no TOC_PREFIXES key.
 RAID_WIDE_TRIGGERS: frozenset[str] = frozenset({
-    "toc staging stand", "toc resistance aura",
+    "toc staging stand", "toc resistance aura", "toc opener swing", "toc opener redirect",
 })
 
 NODE_PER_PREFIX = {

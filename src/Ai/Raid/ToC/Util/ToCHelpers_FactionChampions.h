@@ -55,9 +55,9 @@ constexpr uint32 SPELL_COUNTERSPELL = 2139;
 constexpr int32 LATE_INTERRUPT_MS = 600;
 // One rank, and damage doesn't break it
 constexpr uint32 SPELL_CYCLONE = 33786;
-// Once a pulled kill target is this low the next healer in the pack is likely the player's next pull, so CC
-// leaves it alone
-constexpr float NEXT_GRIP_WALK_PCT = 40.0f;
+// Heroic champions cast it on their first fear, stun, confuse or freeze, then 2 min cooldown
+// (boss_faction_champions.cpp IsCCed). It also clears every snare and root.
+constexpr uint32 SPELL_PVP_TRINKET = 65547;
 
 // True if the entry is any Faction Champion (either faction roster). Pets are not champions.
 bool IsFactionChampion(uint32 entry);
@@ -85,7 +85,7 @@ Unit* FactionChampionsNextTarget(PlayerbotAI* botAI, std::function<bool(Unit*)> 
 // Every alive, in-combat champion in kill order, pets left out. Empty unless the encounter is live.
 std::vector<Unit*> FactionChampionsInCombat(PlayerbotAI* botAI);
 
-// Every non-healer bot off the frontline burns the kill target
+// Every non-healer bot holding no champion burns the kill target
 bool FactionChampionsFocusBot(PlayerbotAI* botAI);
 
 // Bot tanks. Their Consecration and Death and Decay break CC and roots round them
@@ -94,9 +94,40 @@ bool FactionChampionsIsPackTank(Player* player);
 // The bot DK that grips second in every chain: lowest guid, not a tank, knows Death Grip. Empty when none
 ObjectGuid FactionChampionsChainDk(Player* bot);
 
-// Holds the pack: bot tanks plus plate and mail melee bots (warrior, paladin, shaman, DK but the chain DK).
-// Plate in melee range outscores cloth 23+ yd off in the melee champions' pick, a tank never does
-bool FactionChampionsIsFrontline(Player* player);
+struct FactionChampionsHold
+{
+    Unit* champion = nullptr;
+    // the spot is chosen once the champion is on its holder
+    bool placed = false;
+    Position spot;
+};
+
+// The melee champion this bot holds and where. Each melee champion gets one holder, in the order DK,
+// Warrior, Rogue, Retribution, Enhancement: plate DPS first, then cats, then bot tanks, the nearest within a
+// tier. The chain DK takes the DK once its grip is out, and on the Warrior a warrior without Mortal Strike
+// goes first. The spot, on the floor, keeps 30+ yd from every healer, 22+ from the other spots and 25+ from
+// the pack and the kill target, then stays in heal reach of the healers' middle. Written to fc.hold. Empty
+// unless live.
+FactionChampionsHold FactionChampionsHoldOf(PlayerbotAI* botAI);
+
+// The champion this member holds, as of the last refresh. Empty for none
+ObjectGuid FactionChampionsHeldBy(Player* member);
+
+// The member holds a melee champion, as of the last refresh
+bool FactionChampionsIsHolder(Player* member);
+
+// The champion has a holder
+bool FactionChampionsIsHeld(PlayerbotAI* botAI, Unit* champion);
+
+// Every placed holder spot and every held champion's position, so stands keep off them. Empty unless live
+std::vector<Position> FactionChampionsHeldPoints(PlayerbotAI* botAI);
+
+// Heroic, and the champion's PvP trinket is off cooldown
+bool FactionChampionsTrinketReady(Unit* champion);
+
+// Fears, stuns, confuses or freezes (a frost root or stun), itself or one trigger down: the champion
+// trinkets out of it
+bool FactionChampionsSpellPopsTrinket(uint32 spellId);
 
 // Live, and a champion healer is still up
 bool FactionChampionsHealerLeft(PlayerbotAI* botAI);
@@ -112,7 +143,7 @@ bool FactionChampionsIsPulled(PlayerbotAI* botAI, Unit* champion);
 // The kill target has been pulled out at least once, even if the pack has walked onto it since
 bool FactionChampionsKillTargetOut(PlayerbotAI* botAI);
 
-// A champion 20+ yd off the pack centre whose victim isn't a tank or on the frontline
+// A champion 20+ yd off the pack centre whose victim isn't a tank or a holder
 bool FactionChampionsIsEscapee(PlayerbotAI* botAI, Unit* champion);
 
 // How long the encounter has been live, 0 when it isn't
@@ -122,12 +153,11 @@ uint32 FactionChampionsLiveMs(PlayerbotAI* botAI);
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 
 // This bot's CC cast, the champion and spell id, when it holds a CC duty. CC bots are dps mages
-// (Polymorph), warlocks (Fear, Banish on an elemental or demon), ranged druids (Cyclone) and shamans off
-// the frontline (Hex). None for 1.5 s after the pull, while the opening grips land. Candidates skip the
-// kill target, the suspended, the skulled and a pulled one, a champion the grip guard holds, and the
-// next healer in the pack once the kill target is pulled and at 40% or under: healers off the frontline
-// nearest the kill target, other healers, the danger champion, champions off the frontline casters
-// first, the rest in kill order. A cast at a champion that stops being a candidate is interrupted, so it
+// (Polymorph), warlocks (Fear, Banish on an elemental or demon), ranged druids (Cyclone) and dps shamans
+// (Hex). None for 1.5 s after the pull, while the opening grips land. Candidates skip the kill target, the
+// suspended, the skulled, a pulled and a held one, and a champion the grip guard holds: healers off the
+// tanks and holders nearest the kill target, other healers, the danger champion, champions off the tanks
+// and holders casters first, the rest in kill order. A cast at a champion that stops being a candidate is interrupted, so it
 // never makes a new kill target immune. One duty per candidate, none while it is CC'd for over 2 s more,
 // a CC cast at it is under way or it is in Bladestorm. Each of these spells holds one target per caster,
 // so a caster whose spell holds a champion for longer than its cast time plus 0.4 s casts it nowhere
@@ -160,13 +190,9 @@ bool FactionChampionsCycloneBot(Player* player);
 // unless live
 Unit* FactionChampionsBlobHealer(PlayerbotAI* botAI);
 
-// The champion healer the next grip chain goes for: first in kill order, in combat, hittable and not pulled,
-// the kill target included. Null unless live
-Unit* FactionChampionsChainHealer(PlayerbotAI* botAI);
-
-// The melee champion kept stunned, CC'd or disarmed: first alive of rogue, DK, Ret, warrior that isn't the
-// kill target, pulled or suspended, and not held while another one isn't. Written to fc.danger. Null unless
-// live
+// The melee champion kept stunned, CC'd or disarmed: first alive of rogue, DK, Ret, warrior that has no
+// holder and isn't the kill target, pulled or suspended, and not CC'd or disarmed while another one isn't.
+// Written to fc.danger. Null unless live
 Unit* FactionChampionsDangerTarget(PlayerbotAI* botAI);
 
 }

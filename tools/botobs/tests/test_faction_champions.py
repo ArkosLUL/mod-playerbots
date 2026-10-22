@@ -306,6 +306,11 @@ class SyntheticPull(unittest.TestCase):
         with mock.patch.object(probes, "declared_keys", return_value=DECLARED):
             self.assertEqual(fc.missing_probes(self.trace), ["fc.interrupter"])
 
+    def test_the_banner_wants_fc_hold_but_not_fc_nitro(self):
+        declared = {**DECLARED, "fc.hold": (HOLDER, "fixture"), "fc.nitro": (EVENT, "fixture")}
+        with mock.patch.object(probes, "declared_keys", return_value=declared):
+            self.assertEqual(fc.missing_probes(self.trace), ["fc.hold", "fc.interrupter"])
+
     def test_each_hold_carries_the_switch_that_opened_it(self):
         holds = fc.kill_holds(self.trace)
         self.assertEqual([(hold["guid"], hold["start"], hold["stop"], hold["reason"]) for hold in holds], [
@@ -968,10 +973,6 @@ def ball_pull() -> list[dict]:
         {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
         note(0, TANK, "fc.switch", "first"),
         note(0, TANK, "fc.kill", PALADIN),
-        note(0, TANK, fc.FRONT, ROGUE_C),
-        note(2500, HUNTER, fc.OPENER, 42917),
-        note(3000, HUNTER, fc.OPENER, 0),
-        cast(3000, ROGUE_C, fc.SPELL_PVP_TRINKET, ROGUE_C),
         # Trueshot opens; a champion's own cast on the raid and a later raid cast don't count
         cast(40, PALADIN, 66113, PALADIN),
         cast(50, HUNTER, 3044, PALADIN),
@@ -1019,12 +1020,6 @@ class DeathBall(unittest.TestCase):
         self.assertEqual(fc.first_picks(self.trace), [
             (0, PALADIN, HUNTER), (0, DISC, TANK), (0, ROGUE_C, TANK), (0, MAGE_C, PRIEST), (0, WARRIOR_C, TANK)])
 
-    def test_duties_and_trinkets(self):
-        self.assertEqual([hold["bot"] for hold in fc.duty_holds(self.trace, fc.FRONT)], [TANK])
-        self.assertEqual([(hold["bot"], hold["start"], hold["stop"]) for hold in fc.duty_holds(self.trace, fc.OPENER)],
-                         [(HUNTER, 2500, 3000)])
-        self.assertEqual(fc.champion_trinkets(self.trace), [(3000, ROGUE_C)])
-
     def test_the_section_renders(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -1032,10 +1027,93 @@ class DeathBall(unittest.TestCase):
         text = out.getvalue()
         self.assertRegex(text, r"0:00\.000 +60/  0/ 20/ 20/  0")
         self.assertRegex(text, r"Velanaa +0:00\.000 +20\.0s +49\.\d +75%")
-        self.assertIn("fc.front: Bulwark", text)
         self.assertIn("first raid cast on a champion: 0:00.050 Trueshot (bot)", text)
         self.assertIn("first picks: tank 3 of 5 (60%), melee 0, ranged 1, heal 1", text)
-        self.assertIn("champion PvP trinkets: Irieth Shadowstep 0:03.000", text)
+        self.assertIn("escapees, s off the landing spot not on a tank or a holder: Noozle Whizzlestick 20,"
+                      " Velanaa 16", text)
+
+
+def trinket_pull() -> list[dict]:
+    roster = [{"g": HUNTER, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0},
+              {"g": PRIEST, "n": "Mercy", "r": "heal", "c": 5, "h": 0},
+              {"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": HUNTER_PET, "en": 1, "n": "Cat", "own": HUNTER},
+        {"t": 1, "e": "unit", "g": DISC, "en": 34466, "n": "Anthar Forgemender", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
+        {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
+        {"t": 1, "e": "spell", "sp": 24394, "n": "Intimidation"},
+        # Mercy's Psychic Scream under fc.opener; she steps in to 3 yd of the rogue as she casts, which only
+        # the snapshot after the cast shows. The Arcane Shot is too early to count.
+        cast(1000, HUNTER, 3044, ROGUE_C),
+        note(2500, PRIEST, fc.OPENER, 10890),
+        cast(2900, PRIEST, 10890, 0),
+        note(3000, PRIEST, fc.OPENER, 0),
+        cast(3000, ROGUE_C, fc.SPELL_PVP_TRINKET, ROGUE_C),
+        # the pet's Intimidation on the warrior pops it; Frost's later Frostbolt on it pops nothing
+        cast(5800, HUNTER_PET, 24394, WARRIOR_C),
+        cast(5900, MAGE, 116, WARRIOR_C),
+        cast(6000, WARRIOR_C, fc.SPELL_PVP_TRINKET, WARRIOR_C),
+        # Frost held the opener without casting it; the later Nova is out of the mage champion's reach, an
+        # Arcane Shot pops nothing, and a champion's heal on it is no raid cast
+        note(7000, MAGE, fc.OPENER, 42917),
+        note(7500, MAGE, fc.OPENER, 0),
+        cast(8500, MAGE, 42917, 0),
+        cast(8700, HUNTER, 3044, MAGE_C),
+        cast(8800, DISC, 66104, MAGE_C, 1500),
+        cast(9000, MAGE_C, fc.SPELL_PVP_TRINKET, MAGE_C),
+        {"t": 10000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, 10001, 1000):
+        records.append({"t": when, "e": "snap", "hz": [], "u": [
+            placed(PRIEST, 30.0 if when < 3000 else 2.0, 0.0, 100.0, 0), placed(MAGE, 20.0, 0.0, 100.0, 0),
+            placed(HUNTER, 50.0, 50.0, 100.0, 0), placed(ROGUE_C, 5.0, 0.0, 100.0, PRIEST),
+            placed(WARRIOR_C, 25.0, 0.0, 100.0, MAGE), placed(MAGE_C, 60.0, 0.0, 100.0, HUNTER),
+            placed(DISC, 60.0, 5.0, 100.0, HUNTER)]})
+    return records
+
+
+class Trinkets(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in trinket_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_trinket_names_an_opener_aoe_in_reach_else_a_cc_cast_on_it_else_none(self):
+        self.assertEqual(fc.trinket_triggers(self.trace), [
+            {"t": 3000, "champion": ROGUE_C, "spell": 10890, "by": PRIEST, "at": 2900, "aoe": True, "opener": True},
+            {"t": 6000, "champion": WARRIOR_C, "spell": 24394, "by": HUNTER_PET, "at": 5800, "aoe": False,
+             "opener": False},
+            {"t": 9000, "champion": MAGE_C, "spell": None, "by": None, "at": None, "aoe": False, "opener": False}])
+
+    def test_an_opener_hold_reads_whether_its_holder_cast(self):
+        self.assertEqual([(hold["bot"], hold["spell"], hold["start"], hold["stop"], hold["cast"])
+                          for hold in fc.opener_holds(self.trace)],
+                         [(PRIEST, 10890, 2500, 3000, True), (MAGE, 42917, 7000, 7500, False)])
+
+    def test_the_section_renders(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_trinket(self.trace)
+        text = out.getvalue()
+        self.assertIn("fc.opener holds: 2, 1 with the holder's cast", text)
+        self.assertRegex(text, r"0:02\.500-0:03\.000 +Mercy +Psychic Scream +cast")
+        self.assertRegex(text, r"0:07\.000-0:07\.500 +Frost +Frost Nova +-")
+        self.assertRegex(text, r"0:03\.000 Irieth Shadowstep +Rogue +Psychic Scream +Mercy +0\.1s +yes +yes")
+        self.assertRegex(text, r"0:06\.000 Shocuul +Warrior +Intimidation +Cat \(Trueshot\) +0\.2s +- +-")
+        self.assertRegex(text, r"0:09\.000 Noozle Whizzlestick +Mage +none seen +- +- +- +-")
+        self.assertIn("by trigger: Intimidation 1, Psychic Scream 1, none seen 1", text)
+        self.assertIn("burned by opener AoE: 1 of 3 (33%), 1 by an fc.opener holder", text)
 
 
 class Source(unittest.TestCase):
@@ -1126,27 +1204,30 @@ class GripChain(unittest.TestCase):
         self.assertIn("bot grips outside a pull: 1 (Obliteration 0:30.000 on Irieth Shadowstep)", out.getvalue())
 
 
-MIGHTY = 5020  # a warrior bot on the frontline
+MIGHTY = 5020  # a warrior bot holding a champion
+DK_C = CREATURE | 19
 
 
-def front_snap(when: int) -> dict:
-    # Velanaa pulled 70 yd out at 5 s; Anthar walks to 30 yd of her at 10 s; the warrior and mage wander
-    # 30 yd off at 15 s
-    paladin = (70.0, 0.0) if when >= 5000 else (0.0, 1.0)
-    disc = (40.0, 0.0) if when >= 10000 else (2.0, 2.0)
-    away = when >= 15000
-    return {"t": when, "e": "snap", "hz": [], "u": [
-        placed(PALADIN, *paladin, 100.0, ROGUE),
-        placed(DISC, *disc, 100.0, MIGHTY),
-        placed(ROGUE_C, 1.0, 0.0, 100.0, MIGHTY),
-        placed(WARRIOR_C, -30.0 if away else 0.0, 0.0 if away else -1.0, 100.0, ROGUE),
-        placed(MAGE_C, -30.0 if away else 2.0, 1.0 if away else 0.0, 100.0, PRIEST),
-        placed(TANK, 1.0, 0.0, 100.0, DISC),
-        placed(MIGHTY, 1.0, 0.5, 100.0, ROGUE_C),
-    ]}
+def hold_snap(when: int) -> dict:
+    # the rogue champion turns to the priest at 8 s; the warrior champion is gone after the 14 s sample
+    rogue_on = MIGHTY if when < 8000 or when >= 10000 else PRIEST
+    units = [
+        placed(PRIEST, 0.0, 0.0, 100.0, 0),
+        placed(MIGHTY, 41.0, 0.0, 100.0, ROGUE_C),
+        placed(ROGUE, 0.0, 36.0, 0.0 if when >= 8000 else 100.0, WARRIOR_C),
+        placed(TANK, 0.0, 36.0, 100.0, WARRIOR_C),
+        placed(ROGUE_C, 40.0, 0.0, 100.0, rogue_on),
+        placed(PALADIN, -30.0, 0.0, 100.0, TANK),
+        placed(DISC, -30.0, 0.0, 100.0, TANK),
+        placed(MAGE_C, -30.0, 0.0, 100.0, TANK),
+        placed(DK_C, -30.0, 0.0, 100.0, TANK),
+    ]
+    if when <= 14000:
+        units.append(placed(WARRIOR_C, 0.0, 35.0, 100.0, ROGUE if when < 8000 else TANK))
+    return {"t": when, "e": "snap", "hz": [], "u": units}
 
 
-def front_pull() -> list[dict]:
+def hold_pull() -> list[dict]:
     roster = [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
               {"g": MIGHTY, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
               {"g": ROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
@@ -1160,61 +1241,61 @@ def front_pull() -> list[dict]:
         {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
         {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
         {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
-        note(0, TANK, "fc.switch", "first"),
+        {"t": 1, "e": "unit", "g": DK_C, "en": 34461, "n": "Gorgrim Shadowcleave", "b": 1},
+        note(-500, TANK, fc.HOLD, 0),
         note(0, TANK, "fc.kill", PALADIN),
-        note(0, TANK, fc.FRONT, DISC),
-        note(0, MIGHTY, fc.FRONT, ROGUE_C),
-        {"t": 12000, "e": "death", "g": MIGHTY},
+        # Mighty holds the rogue until it turns kill target
+        note(0, MIGHTY, fc.HOLD, ROGUE_C),
+        note(10000, TANK, "fc.kill", ROGUE_C),
+        note(10000, MIGHTY, fc.HOLD, 0),
+        # Shadow holds the warrior and dies on it, the tank takes it over until it dies
+        note(2000, ROGUE, fc.HOLD, WARRIOR_C),
+        {"t": 7500, "e": "death", "g": ROGUE, "killer": WARRIOR_C, "x": 0.0, "y": 36.0, "z": 0.0},
+        note(8000, ROGUE, fc.HOLD, 0),
+        note(8000, TANK, fc.HOLD, WARRIOR_C),
+        note(15000, TANK, fc.HOLD, 0),
         {"t": 20000, "e": "end", "out": "wipe"},
     ]
-    return records + [front_snap(when) for when in range(0, 20000, 1000)]
+    return records + [hold_snap(when) for when in range(0, 20000, 1000)]
 
 
-class Frontline(unittest.TestCase):
+class Holds(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.folder = tempfile.TemporaryDirectory()
         path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
-        path.write_text("\n".join(json.dumps(rec) for rec in front_pull()) + "\n", encoding="utf-8")
+        path.write_text("\n".join(json.dumps(rec) for rec in hold_pull()) + "\n", encoding="utf-8")
         cls.trace = Trace(path)
 
     @classmethod
     def tearDownClass(cls):
         cls.folder.cleanup()
 
-    def test_members_are_the_fc_front_holders(self):
-        self.assertEqual(fc.front_members(self.trace), {TANK, MIGHTY})
-
-    def test_samples_split_the_packs_picks_and_leave_the_pulled_healers_out(self):
-        samples = fc.front_samples(self.trace)
-        self.assertEqual(len(samples), 20)
-        first, late = samples[0], samples[12]
-        self.assertEqual(sorted(first["picks"]), [(False, "front"), (False, "heal"), (True, "front"), (True, "melee")])
-        # Anthar is pulled out too by then, so only the three left in the pack pick
-        self.assertEqual(sorted(late["picks"]), [(False, "heal"), (True, "front"), (True, "melee")])
-        self.assertIsNone(first["kill"])
-        self.assertAlmostEqual(late["near"], 30.0)
-        self.assertEqual(late["armed"], [True, True])
-
-    def test_the_summary_reads_the_hold_the_melee_picks_and_the_clear_share(self):
-        summary = fc.front_summary(fc.front_samples(self.trace))
-        self.assertAlmostEqual(summary["held"], 0.75)
-        self.assertAlmostEqual(summary["melee"], 0.5)
-        self.assertAlmostEqual(summary["clear"], 5 / 15)
+    def test_each_hold_reads_the_share_on_its_holder_the_healer_gap_and_the_deaths(self):
+        self.assertEqual(fc.hold_rows(self.trace), [
+            {"bot": MIGHTY, "champion": ROGUE_C, "start": 0, "stop": 10000, "samples": 10, "on": 0.8,
+             "healer": 40.0, "others": collections.Counter({PRIEST: 2.0}), "holder_died": False, "died": False},
+            {"bot": ROGUE, "champion": WARRIOR_C, "start": 2000, "stop": 8000, "samples": 6, "on": 1.0,
+             "healer": 35.0, "others": collections.Counter(), "holder_died": True, "died": False},
+            {"bot": TANK, "champion": WARRIOR_C, "start": 8000, "stop": 15000, "samples": 7, "on": 1.0,
+             "healer": 35.0, "others": collections.Counter(), "holder_died": False, "died": True}])
 
     def test_the_section_renders(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            fc.show_front(self.trace)
+            fc.show_hold(self.trace)
         text = out.getvalue()
-        self.assertIn("fc.front: Bulwark (paladin), Mighty (warrior)", text)
-        self.assertIn("frontline deaths: Mighty 0:12.000", text)
-        self.assertIn("pack within 15 yd of the landing spot: 75%; melee champion picks on the frontline: 50%;"
-                      " pulled kill target clear of other healers: 33%", text)
+        self.assertIn("fc.hold: Bulwark (paladin), Mighty (warrior), Shadow (rogue)", text)
+        self.assertRegex(text, r"Mighty +Irieth Shadowstep +Rogue +0:00\.000 +10\.0s +80% +40\.0 +- +-  Prayer 2\.0s")
+        self.assertRegex(text, r"Shadow +Shocuul +Warrior +0:02\.000 +6\.0s +100% +35\.0 +yes +-  -")
+        self.assertRegex(text, r"Bulwark +Shocuul +Warrior +0:08\.000 +7\.0s +100% +35\.0 +- +yes  -")
+        self.assertIn("melee champions never held: Gorgrim Shadowcleave", text)
+        self.assertIn("on holder, median over the holds: 100%", text)
 
-    def test_a_champion_on_the_frontline_is_no_escapee(self):
-        # Anthar stands 40 yd off from 10 s but stays on Mighty
-        self.assertEqual(fc.escapee_seconds(self.trace), {PALADIN: 15.0, WARRIOR_C: 5.0, MAGE_C: 5.0})
+    def test_a_champion_on_a_holder_is_no_escapee_only_while_the_hold_lasts(self):
+        # the rogue is loose on the priest at 8-9 s and on Mighty once the hold is over; the warrior is
+        # on Shadow a second before his hold opens
+        self.assertEqual(fc.escapee_seconds(self.trace), {ROGUE_C: 12.0, WARRIOR_C: 1.0})
 
 
 def stands_pull() -> list[dict]:
@@ -1232,15 +1313,21 @@ def stands_pull() -> list[dict]:
         {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
         # Frost's slot jumps 10 yd at 2 s, its 3 s target is the same slot restated
         move(1000, MAGE, 0.0), move(2000, MAGE, 10.0), move(3000, MAGE, 10.2),
-        # Prayer boosts away from a melee champion
+        # Prayer runs from three champions, Frost from the focus the bots expect next, then Prayer boosts a
+        # walk at 60% with no note
+        note(3990, PRIEST, fc.NITRO, "focus 3"),
         cast(4000, PRIEST, fc.SPELL_NITRO, 0),
         move(4010, PRIEST, 25.0, "faction champions chased"),
+        note(6000, MAGE, fc.NITRO, "next"),
+        cast(6000, MAGE, fc.SPELL_NITRO, 0),
+        cast(8000, PRIEST, fc.SPELL_NITRO, 0),
+        move(8010, PRIEST, 10.0, "reach spell"),
         {"t": 10000, "e": "end", "out": "wipe"},
     ]
     for when in range(0, 10000, 1000):
         frost = 0.0 if when < 2000 else 5.0 if when < 3000 else 10.0
         # Prayer moves the first 3 s and casts from 6 s
-        prayer = placed(PRIEST, 0.0, 0.0, 100.0, 0)
+        prayer = placed(PRIEST, 0.0, 0.0, 60.0 if when >= 7000 else 100.0, 0)
         prayer[8] = int(when < 3000)
         prayer[10] = 48071 if when >= 6000 else 0
         records.append({"t": when, "e": "snap", "hz": [], "u": [placed(MAGE, frost, 0.0, 100.0, 0), prayer,
@@ -1264,9 +1351,14 @@ class StandsAndBoosts(unittest.TestCase):
         self.assertEqual(fc.stand_rows(self.trace),
                          [{"bot": MAGE, "moves": 3, "jumps": 1, "path": 10.0, "net": 10.0}])
 
-    def test_a_boost_reads_the_walk_it_served(self):
-        self.assertEqual(fc.nitro_rows(self.trace),
-                         [{"t": 4000, "bot": PRIEST, "by": "faction champions chased", "walk": 25.0}])
+    def test_a_boost_reads_its_reason_health_and_the_move_it_served(self):
+        rows = fc.nitro_rows(self.trace)
+        self.assertEqual(rows, [
+            {"t": 4000, "bot": PRIEST, "reason": "focus 3", "hp": 100.0, "by": "faction champions chased",
+             "dist": 25.0},
+            {"t": 6000, "bot": MAGE, "reason": "next", "hp": 100.0, "by": None, "dist": None},
+            {"t": 8000, "bot": PRIEST, "reason": "walk", "hp": 60.0, "by": "reach spell", "dist": 10.0}])
+        self.assertEqual(fc.nitro_tally(rows), [("focus", 1), ("next", 1), ("walk", 1)])
 
     def test_a_healer_reads_its_moving_and_casting_share(self):
         self.assertEqual(fc.healer_activity(self.trace),
@@ -1278,7 +1370,10 @@ class StandsAndBoosts(unittest.TestCase):
             fc.show_stands(self.trace)
         self.assertRegex(out.getvalue(), r"Frost +ranged +3 +1 +10 +10")
         self.assertRegex(out.getvalue(), r"healer Prayer +moving +30% +casting +40%")
-        self.assertIn("Nitro Boosts: 1 use(s), 1 chased run(s)", out.getvalue())
+        self.assertIn("Nitro Boosts: 3 use(s): focus 1, next 1, walk 1", out.getvalue())
+        self.assertRegex(out.getvalue(), r"0:04\.000 Prayer +focus 3 +100%  faction champions chased 25 yd")
+        self.assertRegex(out.getvalue(), r"0:06\.000 Frost +next +100%  - -")
+        self.assertRegex(out.getvalue(), r"0:08\.000 Prayer +walk +60%  reach spell 10 yd")
 
 
 MOON = 5021  # a balance druid bot
@@ -1564,14 +1659,14 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.kill_isolation(trace), [])
         self.assertEqual(fc.escapee_seconds(trace), {})
         self.assertEqual(fc.champion_trinkets(trace), [])
-        self.assertEqual(fc.duty_holds(trace, fc.FRONT), [])
-        self.assertEqual(fc.front_samples(trace), [])
+        self.assertEqual(fc.trinket_triggers(trace), [])
+        self.assertEqual(fc.opener_holds(trace), [])
+        self.assertEqual(fc.hold_rows(trace), [])
         self.assertEqual(fc.first_engage(trace), None)
         self.assertEqual(fc.first_picks(trace), [])
         self.assertEqual(fc.channel_rows(trace), [])
         self.assertEqual(fc.pack_buff_rows(trace), [])
         self.assertEqual(fc.own_splash(trace), collections.Counter())
-        self.assertEqual(fc.front_deaths(trace), [])
         self.assertEqual(fc.stand_rows(trace), [])
         self.assertEqual(fc.nitro_rows(trace), [])
         self.assertEqual(fc.healer_activity(trace), [])

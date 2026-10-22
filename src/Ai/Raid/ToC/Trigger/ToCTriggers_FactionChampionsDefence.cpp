@@ -100,7 +100,7 @@ void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& trigge
     triggers.push_back(new TriggerNode("faction champions protect", {
         NextAction("faction champions protect", ACTION_EMERGENCY + 4) }));
 
-    // over the frontline nodes, so the DK tank leaves the pack for it
+    // over the hold nodes, so the DK tank leaves its champion for it
     triggers.push_back(new TriggerNode("faction champions chain grip", {
         NextAction("faction champions chain grip", ACTION_RAID + 4.6f) }));
 

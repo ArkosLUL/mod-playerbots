@@ -28,6 +28,8 @@ struct ToCPredictedHit
     bool measured = false;
     // four or more FC champions on the bot, now or at their next pick
     bool focus = false;
+    // an FC holder: an immunity drops it from its champion's pick, so only a lethal hit gets one
+    bool keepVictim = false;
     SpellSchoolMask school = SPELL_SCHOOL_MASK_NONE;
     uint8 casterLevel = 83;
     // members who mustn't channel, null for nobody

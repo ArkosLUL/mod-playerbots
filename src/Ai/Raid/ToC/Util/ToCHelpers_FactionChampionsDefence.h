@@ -67,7 +67,7 @@ Unit* FactionChampionsMassDispelTarget(PlayerbotAI* botAI);
 
 // The champion and the spell to purge it with: the kill target holding a buff worth taking for the raid's
 // purger, a pack champion holding Bloodlust, Heroism, Avenging Wrath or Hand of Freedom for the next one,
-// melee champions on the frontline first.
+// melee champions on their holders first.
 Unit* FactionChampionsPurgeTarget(PlayerbotAI* botAI, char const*& spell);
 
 // Where a physical attacker goes while the kill target is immune to physical damage only (Hand of
@@ -108,9 +108,7 @@ Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand, bool* walk
 // A tank's generic pull at a champion (the player targets it and types pull) becomes the chain's
 // request, written to fc.chain, and the generic pull is ended. The DK tank grips first, the bot DK
 // once the champion lands, the player last. The request drops after 15 s with no tank grip, or 10 s
-// after it with no bot DK grip. While live, the kill target's death opens one the same way on the first
-// champion healer in kill order not pulled, within 20 s once the DK tank's grip (with none, the chain
-// DK's) is 3 s off ready, and the DK tells the master.
+// after it with no bot DK grip.
 void FactionChampionsTakePullRequest(PlayerbotAI* botAI);
 
 // This bot is the chain's DK tank: a bot tank DK knowing Death Grip, lowest guid
@@ -129,10 +127,6 @@ void FactionChampionsNoteChainGrip(PlayerbotAI* botAI, Unit* target);
 
 // The open request's champion, empty without one
 ObjectGuid FactionChampionsChainTarget(Player* bot);
-
-// No chain is open and its last bot link landed on the latched kill target a second ago or more, so the
-// kill squad has nothing left to wait for, even with a champion walking past it
-bool FactionChampionsChainLanded(PlayerbotAI* botAI);
 
 // A DK is on its way to grip the kill target out of the pack, which it hasn't left yet
 bool FactionChampionsGripPending(PlayerbotAI* botAI);
@@ -157,17 +151,19 @@ bool FactionChampionsChainGuarded(Player* bot, Unit* champion);
 uint32 FactionChampionsPetAutocastToggle(PlayerbotAI* botAI, bool& enable);
 
 // The melee champion this bot snares and the spell id, when its victim is a healer or under half
-// health, or it is loose off the tank, and nothing slows it yet. One snarer per champion.
+// health, or it is loose off the tank, and nothing slows it yet. Not one on its holder. One snarer per
+// champion.
 Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The melee champion this bot peels and the spell id: the danger champion wherever it is while it isn't
-// disarmed, one off the tanks and frontline within 10 yd of its victim, or the Warrior champion with 2 or
-// more of ours (pets too) in Bladestorm reach; danger first, then Warrior, then healer victims, then the
-// lowest victim. Not one CC'd, rooted or immune to the spell. The nearest free bot with a ready peel takes
-// it, not the grip DK or one on a CC duty: Disarm or Dismantle (not on one already disarmed), Hammer of
-// Justice on the danger champion short of its third stun step, Frost Nova, Entangling Roots, Psychic
-// Horror, or Death Grip from 12+ yd nearer the pack by a pack tank or a DK other than the one kept for the
-// grip chain, never on the kill target. No root within 12 yd of a pack tank. Written to fc.peel.
+// disarmed, one within 10 yd of its victim when that's neither a tank nor its holder, or the Warrior
+// champion with 2 or more of ours (pets too) in Bladestorm reach; danger first, then Warrior, then healer
+// victims, then the lowest victim. Not one CC'd, rooted or immune to the spell. The nearest free bot with a
+// ready peel takes it, not the grip DK or one on a CC duty: Disarm or Dismantle (not on one already
+// disarmed), Hammer of Justice on the danger champion short of its third stun step, Frost Nova, Entangling
+// Roots, Psychic Horror, or Death Grip from 12+ yd nearer the pack by a pack tank or a DK other than the
+// one kept for the grip chain, never on the kill target. Nothing that pops the trinket on a held champion
+// with it up. No root within 12 yd of a pack tank. Written to fc.peel.
 Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The group member this bot covers with an external defensive and the spell id, when none of the four
@@ -193,6 +189,14 @@ bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
 // Where a bot dodging a Bladestorm or Hellfire goes: the nearest clear ring, the spot in it nearest the
 // healers' centre, within 30 yd of another living healer when one is that close.
 Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI);
+
+// The member 4+ champions are about to pick at their next re-pick (fc.nextfocus). Empty for none
+ObjectGuid FactionChampionsNextFocus(PlayerbotAI* botAI);
+
+// A holder's spell on its own champion, none of which pops its trinket: a warrior Disarms it, and Hamstrings
+// it while it's on someone else; a DK, while it's on someone else, Death Grips it in from 8-30 yd, else
+// slows it with Chains of Ice.
+Unit* FactionChampionsHoldControl(PlayerbotAI* botAI, uint32& spellId);
 
 }
 

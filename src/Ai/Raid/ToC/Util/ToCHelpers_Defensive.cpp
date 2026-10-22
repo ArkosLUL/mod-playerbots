@@ -393,9 +393,9 @@ ToCPersonalPick PickPersonal(PlayerbotAI* botAI, ToCPredictedHit const& hit, cha
 
     // Divine Protection's Forbearance would lock the shield out for the rest of the fight. Either immunity
     // also drops the bot from every FC champion's pick.
-    if (hit.measured && bot->getClass() == CLASS_PALADIN && !PlayerbotAI::IsTank(bot))
+    if (!hit.keepVictim && hit.measured && bot->getClass() == CLASS_PALADIN && !PlayerbotAI::IsTank(bot))
         pick.spellId = ImmunityReady(bot, SPELL_DIVINE_SHIELD);
-    else if (hit.focus && bot->getClass() == CLASS_MAGE)
+    else if (!hit.keepVictim && hit.focus && bot->getClass() == CLASS_MAGE)
         pick.spellId = ImmunityReady(bot, SPELL_ICE_BLOCK);
 
     uint32 const needMs = static_cast<uint32>(std::max<int32>(static_cast<int32>(hit.durationMs) - fromStart, 0));

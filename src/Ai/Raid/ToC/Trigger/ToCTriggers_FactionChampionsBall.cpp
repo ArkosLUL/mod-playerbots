@@ -2,6 +2,7 @@
 
 #include "Playerbots.h"
 #include "Strategy.h"
+#include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
 #include "ToCHelpers_Shared.h"
@@ -10,27 +11,27 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-// The champions on him move with him, so a few steps of slack before he walks back
-constexpr float PACK_TANK_LEASH = 8.0f;
-// Past the 20 yd the frontline's champions sit within, with room for his own melee step
-constexpr float FRONT_LEASH = 24.0f;
+// Past the walk's own arrival, so a holder at its spot doesn't flip between walking and swinging
+constexpr float HOLD_WALK_TRIGGER = 5.0f;
 constexpr float STAND_TRIGGER = 3.0f;
 }  // namespace
 
-bool FactionChampionsFrontlineReturnTrigger::IsActive()
+bool FactionChampionsHoldTrigger::IsActive()
 {
-    Position centre;
-    if (!FactionChampionsFrontlineHeld(botAI, centre) || !botAI->CanMove())
-        return false;
-
-    float const off = bot->GetExactDist2d(&centre);
-    return off > FRONT_LEASH || (off > PACK_TANK_LEASH && !FactionChampionsFrontlineTarget(botAI));
+    Unit* champion = FactionChampionsHoldOf(botAI).champion;
+    return champion && (AI_VALUE(Unit*, "current target") != champion || ToCPetOffPick(botAI, champion));
 }
 
-bool FactionChampionsFrontlineAttackTrigger::IsActive()
+bool FactionChampionsHoldWalkTrigger::IsActive()
 {
-    Unit* target = FactionChampionsFrontlineTarget(botAI);
-    return target && (AI_VALUE(Unit*, "current target") != target || ToCPetOffPick(botAI, target));
+    Position spot;
+    return FactionChampionsHoldWalk(botAI, spot) && botAI->CanMove() && bot->GetExactDist2d(&spot) > HOLD_WALK_TRIGGER;
+}
+
+bool FactionChampionsHoldControlTrigger::IsActive()
+{
+    uint32 spellId = 0;
+    return FactionChampionsHoldControl(botAI, spellId) != nullptr;
 }
 
 // Not inside a Bladestorm or Hellfire, the dodge walks out first
@@ -50,8 +51,7 @@ bool FactionChampionsChasedTrigger::IsActive()
 bool FactionChampionsOpenerTrigger::IsActive()
 {
     uint32 spellId = 0;
-    Position spot;
-    return FactionChampionsOpener(botAI, spellId, spot);
+    return FactionChampionsOpener(botAI, spellId) != nullptr;
 }
 
 void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
@@ -62,11 +62,14 @@ void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("faction champions chased", {
         NextAction("faction champions chased", ACTION_RAID + 2.5f) }));
 
-    triggers.push_back(new TriggerNode("faction champions frontline return", {
-        NextAction("faction champions frontline return", ACTION_RAID + 2.1f) }));
+    triggers.push_back(new TriggerNode("faction champions hold control", {
+        NextAction("faction champions hold control", ACTION_RAID + 2.2f) }));
 
-    triggers.push_back(new TriggerNode("faction champions frontline attack", {
-        NextAction("faction champions frontline attack", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("faction champions hold walk", {
+        NextAction("faction champions hold walk", ACTION_RAID + 2.1f) }));
+
+    triggers.push_back(new TriggerNode("faction champions hold", {
+        NextAction("faction champions hold", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode("faction champions ball stand", {
         NextAction("faction champions ball stand", ACTION_RAID + 1.9f) }));
