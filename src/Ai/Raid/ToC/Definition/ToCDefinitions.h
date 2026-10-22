@@ -11,5 +11,6 @@ EncounterDefinition const& ToCTwinValkyrDefinition();
 EncounterDefinition const& ToCAnubarakDefinition();
 EncounterDefinition const& ToCStagingDefinition();
 EncounterDefinition const& ToCResistAuraDefinition();
+EncounterDefinition const& ToCOpenerDefinition();
 
 #endif

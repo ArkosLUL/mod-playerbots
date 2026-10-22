@@ -62,7 +62,8 @@ Unit* FindBossByName(PlayerbotAI* botAI, std::string const& bossName);
 // APPLY_AREA_AURA_RAID + MOD_RESISTANCE_EXCLUSIVE, so a second holder adds nothing while costing that
 // hunter Aspect of the Viper. nullptr means "nobody should be holding it right now" and covers three
 // cases: not in a raid group, no hunter knows the spell, or the raid already has the aura from a
-// hunter too low on mana to keep the role. Callers compare against their own bot, so nullptr is
+// hunter too low on mana to keep the role while another one could take it. With nobody else able,
+// that hunter stays the holder. Callers compare against their own bot, so nullptr is
 // already "not me" - no extra handling needed.
 Player* GetNatureResistanceHunter(PlayerbotAI* botAI, Player* bot);
 

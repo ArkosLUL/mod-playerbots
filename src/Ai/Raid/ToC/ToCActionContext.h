@@ -23,6 +23,7 @@ public:
         Absorb(ToCTwinValkyrActionContext());
         Absorb(ToCStagingActionContext());
         Absorb(ToCResistAuraActionContext());
+        Absorb(ToCOpenerActionContext());
     }
 
 private:

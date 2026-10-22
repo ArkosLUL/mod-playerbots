@@ -605,11 +605,14 @@ one — whoever already holds the aura, else the first hunter at or above the Vi
 stays free to Viper.
 
 **A drained holder still covers the raid**, so when the only hunter wearing the aura is below the Viper
-threshold the helper returns `nullptr` — nobody drafted, nobody pinned. Holding costs nothing, and the
-outgoing holder drops the aura itself on its next Viper cast because aspects are exclusive. Drafting a
-replacement before that is what put two holders on `603_4_elder-stonebark_1789241915`, the second one's
-Dragonhawk vetoed for nothing. Locality is only "same map", so a stale holder outside the aura radius
-still suppresses the draft.
+threshold and another hunter is eligible, the helper returns `nullptr` — nobody drafted, nobody pinned.
+Holding costs nothing, and the outgoing holder drops the aura itself on its next Viper cast because
+aspects are exclusive. Drafting a replacement before that is what put two holders on
+`603_4_elder-stonebark_1789241915`, the second one's Dragonhawk vetoed for nothing. With **nobody
+eligible**, the drained holder stays pinned: freed, it went to Viper, the last fallback drafted it back,
+and the role bounced Wild ↔ Viper every 1-2 s with nobody refilling (ToC
+`649_5_lord-jaraxxus_1792698380` 185-195 s, `649_5_anub-arak_1792611355` 119-132 s). Locality is only
+"same map", so a stale holder outside the aura radius still suppresses the draft.
 
 Eligibility reuses the Viper band, so the role moves on mana swings rather than per tick: a hunter that
 hands off at 30% is not eligible again until Viper carries it back to 60%. Two healthy hunters trade the

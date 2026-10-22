@@ -24,6 +24,7 @@ public:
         Absorb(ToCTwinValkyrTriggerContext());
         Absorb(ToCStagingTriggerContext());
         Absorb(ToCResistAuraTriggerContext());
+        Absorb(ToCOpenerTriggerContext());
     }
 
 private:

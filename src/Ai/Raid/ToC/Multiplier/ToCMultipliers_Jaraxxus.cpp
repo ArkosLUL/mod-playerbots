@@ -3,6 +3,7 @@
 #include "ToCData.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Jaraxxus.h"
+#include "ToCHelpers_Shared.h"
 #include "EncounterHelpers.h"
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
@@ -16,12 +17,6 @@ namespace
 {
 // Area damage from this close counts as hitting him
 constexpr float JARAXXUS_AREA_THREAT_REACH = 30.0f;
-
-bool IsAreaDamage(PlayerbotAI* botAI, Action* action)
-{
-    return action->getThreatType() == Action::ActionThreatType::Aoe || MULTI_TARGET_ACTIONS.count(action->getName()) ||
-           SpellSplashes(botAI, action);
-}
 }  // namespace
 
 float JaraxxusControlTankMovementMultiplier::GetValue(Action* action)
@@ -104,7 +99,7 @@ float JaraxxusThreatCapMultiplier::GetValue(Action* action)
     if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
         return 0.0f;
 
-    if (IsAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= JARAXXUS_AREA_THREAT_REACH)
+    if (IsToCAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= JARAXXUS_AREA_THREAT_REACH)
         return 0.0f;
 
     return 1.0f;

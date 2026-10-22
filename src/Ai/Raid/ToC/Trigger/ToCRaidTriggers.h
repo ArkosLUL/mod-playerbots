@@ -13,5 +13,6 @@
 #include "ToCTriggers_TwinValkyr.h"
 #include "ToCTriggers_Staging.h"
 #include "ToCTriggers_ResistAura.h"
+#include "ToCTriggers_Opener.h"
 
 #endif

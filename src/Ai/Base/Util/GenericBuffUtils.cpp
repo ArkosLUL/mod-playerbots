@@ -351,8 +351,9 @@ namespace ai::buff
         // bugs but are not:
         //   - a raid with exactly one hunter pins that hunter into Wild for the whole encounter, and it
         //     will run low;
-        //   - during a raid-wide mana trough the first hunter is held in Wild while the others refill on
-        //     Viper. The first one back over 60% takes the role, which frees the pinned one.
+        //   - during a raid-wide mana trough the hunter wearing the aura (else the first one) is held in
+        //     Wild while the others refill on Viper. The first one back over 60% takes the role, which
+        //     frees the pinned one.
         Player* auraHolder = nullptr;
         Player* staleHolder = nullptr;
         Player* firstEligible = nullptr;
@@ -400,17 +401,22 @@ namespace ai::buff
         if (auraHolder)
             return auraHolder;
 
-        // Somebody too low to keep the role is still wearing the aura. Nobody is drafted and nobody is
-        // pinned: Aspect of the Wild costs nothing to hold, so the raid keeps its resistance, and the
-        // outgoing holder drops it by itself as soon as it swaps to Viper - aspects are exclusive.
-        // Drafting a replacement before that happens stacks a second copy of an exclusive area aura,
-        // which buys the raid nothing and costs that hunter its own aspect for as long as it holds.
+        // Somebody too low to keep the role is still wearing the aura. While another hunter is eligible,
+        // nobody is drafted and nobody is pinned: Aspect of the Wild costs nothing to hold, so the raid
+        // keeps its resistance, and the outgoing holder drops it by itself as soon as it swaps to Viper -
+        // aspects are exclusive. Drafting a replacement before that happens stacks a second copy of an
+        // exclusive area aura, which buys the raid nothing and costs that hunter its own aspect for as
+        // long as it holds.
+        //
+        // With nobody eligible the stale holder stays pinned. Freeing it sends it to Viper, the last
+        // fallback then drafts the first hunter (often the same one) back into Wild, and the role
+        // bounces between the two aspects every GCD while nobody refills.
         //
         // Locality here is only "same map", so a stale holder that wanders out of the aura radius keeps
         // the draft suppressed while the raid has no buff. Tighten with a distance check if a trace
         // ever shows that.
         if (staleHolder)
-            return nullptr;
+            return firstEligible ? nullptr : staleHolder;
 
         return firstEligible ? firstEligible : firstCandidate;
     }

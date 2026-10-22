@@ -4,6 +4,8 @@
 #include "PlayerbotAI.h"
 #include "ToCData.h"
 
+class Action;
+
 namespace TrialOfTheCrusaderHelpers
 {
 
@@ -18,6 +20,10 @@ bool GetCreatureClusterCenter(Player* bot, uint32 entry, float radius, Position&
 // Not a tank by role or spec, not a healer. Every DPS resolver and its targeting rule test this one,
 // so the two can't drift apart.
 bool IsToCDpsBot(Player* bot);
+
+// An action whose damage lands on everything around its target or the bot, so it threatens a boss
+// it isn't aimed at
+bool IsToCAreaDamage(PlayerbotAI* botAI, Action* action);
 
 // The group skull when it sits on a unit belongs() accepts that is alive, in combat, selectable and
 // attackable by this bot. Bots here place no skull, so it's a player's. Null without a group.

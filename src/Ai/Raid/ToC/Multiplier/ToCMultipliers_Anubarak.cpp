@@ -14,6 +14,7 @@
 #include "ToCActions_Anubarak.h"
 #include "ToCData.h"
 #include "ToCHelpers_Anubarak.h"
+#include "ToCHelpers_Shared.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 
@@ -22,12 +23,6 @@ namespace
 
 // Area damage from this close counts as hitting him
 constexpr float ANUBARAK_AREA_THREAT_REACH = 30.0f;
-
-bool IsAreaDamage(PlayerbotAI* botAI, Action* action)
-{
-    return action->getThreatType() == Action::ActionThreatType::Aoe || MULTI_TARGET_ACTIONS.count(action->getName()) ||
-           SpellSplashes(botAI, action);
-}
 
 // Matched as a leading word too, so "cyclone on cc" or "repentance on enemy healer" count
 char const* const SPHERE_CROWD_CONTROL[] = {
@@ -108,7 +103,7 @@ float AnubarakThreatCapMultiplier::GetValue(Action* action)
     if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
         return 0.0f;
 
-    if (IsAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= ANUBARAK_AREA_THREAT_REACH)
+    if (IsToCAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= ANUBARAK_AREA_THREAT_REACH)
         return 0.0f;
 
     return 1.0f;

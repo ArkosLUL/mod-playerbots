@@ -359,7 +359,8 @@ The `ResistAura` stem picks:
   Jaraxxus fire goes first to a paladin who knows Aura Mastery, and a kept fire holder without it
   gives way.
 - **Hunter**: Aspect of the Wild for `GetNatureResistanceHunter` while nature is wanted; it hands the
-  duty on by mana, through Viper.
+  duty on by mana, through Viper. In 2026-10-22 traces it held the aura on the worms, Jaraxxus and
+  Anub'arak only (nature 7%, 45% with Fel Lightning, 58% of damage taken).
 - `toc resistance aura` → `toc raise resistance aura` (`ACTION_RAID + 1`, above the staging walk)
   casts through `DoSpecificAction`, outside the queue, never `ChangeStrategy`: `toc resistance aura
   hold` zeroes all eight paladin aura nodes on the holder, `toc nature aspect hold` the hunter's other
@@ -374,10 +375,24 @@ The `ResistAura` stem picks:
   falls back to the raw stand.
 - A heroic raid out of attempts keeps the window open: Barrett never shows his gossip again.
 - Shaman resistance totems don't count toward a school; Aura Mastery is called only as a Jaraxxus
-  cover; a lone hunter holding
-  Aspect of the Wild loses Viper (`GetNatureResistanceHunter`'s last fallback).
+  cover; with no hunter at or above 30% mana the one wearing Aspect of the Wild stays pinned in it
+  and loses Viper (`GetNatureResistanceHunter`'s last fallback).
 - A holder already covered by another paladin's aura of its school fires its trigger every tick
   without casting (the class action reads that aura by name) and keeps its own aura meanwhile.
+
+## Opener hold
+
+Every encounter but the champions: a DPS bot holds its damage on a boss (Gormok, Acidmaw,
+Dreadscale, Icehowl, Jaraxxus, Fjola, Eydis, Anub'arak) until a group tank has been its victim for
+2 s straight, or 5 s after it came into combat (`ToCHelpers_Opener`). Once a boss is free it stays
+free until it leaves combat.
+
+- `toc opener hold` zeroes spells and attacks on a held boss and area damage within 30 yd of one.
+  The first pick of the boss goes through, so melee walk in; `toc opener stop swing` ends the swing
+  that pick started, and a repeat pick stays zeroed.
+- A hunter or rogue whose Misdirection (34477, 35079) or Tricks of the Trade (57934, 59628) is
+  running is free. `toc opener redirect` casts it on the tank holding the boss.
+- Pets aren't held. Probe `toc.opener` per DPS bot (`hold`, `free`); vetoes show as `toc opener hold`.
 
 ## What a trace answers
 

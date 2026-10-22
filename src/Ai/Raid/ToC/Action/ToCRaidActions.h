@@ -14,5 +14,6 @@
 #include "ToCActions_TwinValkyr.h"
 #include "ToCActions_Staging.h"
 #include "ToCActions_ResistAura.h"
+#include "ToCActions_Opener.h"
 
 #endif

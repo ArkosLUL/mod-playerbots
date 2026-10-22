@@ -3,6 +3,7 @@
 #include "Creature.h"
 #include "Group.h"
 #include "Pet.h"
+#include "RaidSplash.h"
 #include "RtiTargetValue.h"
 #include "Unit.h"
 
@@ -68,6 +69,12 @@ bool GetCreatureClusterCenter(Player* bot, uint32 entry, float radius, Position&
 bool IsToCDpsBot(Player* bot)
 {
     return bot && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsTank(bot, true) && !PlayerbotAI::IsHeal(bot);
+}
+
+bool IsToCAreaDamage(PlayerbotAI* botAI, Action* action)
+{
+    return action->getThreatType() == Action::ActionThreatType::Aoe || MULTI_TARGET_ACTIONS.count(action->getName()) ||
+           SpellSplashes(botAI, action);
 }
 
 Unit* GetToCHumanSkull(PlayerbotAI* botAI, bool (*belongs)(Unit*))
