@@ -1311,6 +1311,32 @@ class Opener(unittest.TestCase):
         self.assertIn(f"Smartface ran to -, nearest hole ({near[0]:.0f},{near[1]:.0f}) 45.0 yd", text)
         self.assertNotIn("algalon.shelter", text)
 
+    def test_a_gap_closer_a_hider_uses_in_the_cast_is_listed_and_fails(self):
+        def leap(rec: dict) -> dict:
+            if rec.get("e") != "snap":
+                return rec
+            moved = {ROGUE: 32500, WARRIOR: 34000}
+            return {**rec, "u": [edge_row(unit[0], edge_boss_offset(rec["t"])[0], unit[5])
+                                 if moved.get(unit[0], 1 << 62) <= rec["t"] < 36500 else unit for unit in rec["u"]]}
+
+        records = [leap(rec) for rec in opener_pull()] + [
+            cast(32000, ROGUE, 51690), cast(33500, WARRIOR, 11578, E_BOSS),
+            # before the cast, the soaker's, a human's, a phased bot's and a pet's
+            cast(29000, WARRIOR, 11578, E_BOSS), cast(31000, HOLDER, 11578, E_BOSS),
+            cast(32500, PARTNER, 11578, E_BOSS), cast(34000, PRIEST, 781), cast(33000, WOLF, 61685, E_BOSS),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, records)
+            used = al.cast_gap_closers(trace)
+            self.assertEqual([(use["t"], use["guid"], use["spell"]) for use in used],
+                             [(32000, ROGUE, "Killing Spree"), (33500, WARRIOR, "Charge")])
+            self.assertAlmostEqual(used[0]["gap"], 23.25, places=2)
+            self.assertAlmostEqual(used[1]["gap"], 15.60, places=2)
+            self.assertIn("gap closers in the cast: Assasin Killing Spree 0:32.000 (+23.2 yd from its hole),"
+                          " Mighty Charge 0:33.500 (+15.6 yd from its hole)", render(trace, "bigbang"))
+            self.assertIn("Big Bang 1: 2 hider(s) used a gap closer in the cast (Assasin Killing Spree, Mighty Charge)",
+                          [line for _, line in al.failures(trace)])
+
     def test_the_star_plan_reads_beside_the_window_it_was_written_under(self):
         text = render(self.trace, "stars")
         self.assertRegex(text, r"0:12\.000 +open +s1 98% 8s \| s2 98% 60s \| bang 18\.\.26")

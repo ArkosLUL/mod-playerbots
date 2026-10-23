@@ -76,6 +76,8 @@ inline constexpr float ULDUAR_ALGALON_SCAN_RADIUS = 70.0f;
 inline constexpr float ULDUAR_ALGALON_SHELTER_RADIUS = 6.0f;
 // A hider's run ends this far in, clear of the field's edge.
 inline constexpr float ULDUAR_ALGALON_SHELTER_IN_RADIUS = ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f;
+// The field phases whoever is inside on its next pulse, one a second.
+inline constexpr int32 ULDUAR_ALGALON_FIELD_PULSE_MS = 1000;
 // Big Bang's 64445 strips every phase a second after the hit and the field pulses every second, so a
 // bot still inside it then is phased again for 10s. Exits clear it with room to spare.
 inline constexpr float ULDUAR_ALGALON_HOLE_EXIT_RADIUS = 8.0f;
@@ -325,9 +327,13 @@ inline constexpr uint32 ULDUAR_ALGALON_STAR_DYING_MS = 4000;
 inline constexpr float ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS = 15.0f;
 inline constexpr float ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE = 15.0f;
 inline constexpr float ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE = 10.0f;
-// A hide walk passing inside the minimum clearance of a meteor that lands before the bot is phased goes round
-// the impact through a point this far off it.
+// It lands up to this much after the 4.8 s.
+inline constexpr int32 ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_SPREAD_MS = 300;
+// A hide walk that has the bot inside the minimum clearance of a meteor as it lands, before the bot is phased, goes
+// round the impact through a point this far off it.
 inline constexpr float ULDUAR_ALGALON_SMASH_DETOUR_RADIUS = 12.0f;
+// A hider that can be phased this much before a meteor lands sets off then, so a tick or two late still makes it.
+inline constexpr int32 ULDUAR_ALGALON_SMASH_IN_LEAD_MS = 500;
 // Inside this the generic movers are held until the marker expires.
 inline constexpr float ULDUAR_ALGALON_COSMIC_SMASH_HOLD_RADIUS = 19.0f;
 inline constexpr float ULDUAR_ALGALON_DODGE_SEARCH_RADIUS = 24.0f;
@@ -678,10 +684,11 @@ int32 AlgalonHideSlackMs(Player* bot);
 // Uses the bot's Nitro Boosts on its hide run when they were ready at the cast start and the walk is long enough.
 // Without them, a hunter's Aspect of the Cheetah or a rogue's Sprint on a run that would come in late.
 void AlgalonBoostHideRun(Player* bot, float walk);
-// The soaker and the backup. A handler holding constellations hides last: they follow it in and close its hole.
+// The soaker and the backup.
 bool AlgalonStaysOut(Player* bot);
 // A tank still out with no hole it can reach before the hit, which takes it on its own button.
 bool AlgalonTankCaughtOut(Player* bot);
+// A constellation is chasing this bot, so it hides last: they follow it in and close its hole.
 bool AlgalonHoldsConstellation(Player* bot);
 // By spell id: CanCastSpell refuses during a channel, and a shadow priest is nearly always in Mind Flay.
 bool AlgalonCanDisperse(Player* bot);
@@ -690,8 +697,9 @@ Player* GetAlgalonBigBangSoaker(PlayerbotAI* botAI);
 Player* GetAlgalonBigBangBackup(PlayerbotAI* botAI);
 // The hole this bot runs to for the current cast, latched.
 bool GetAlgalonShelter(Player* bot, Position& shelter);
-// Where the hide run walks next: the hole, or round a meteor on the way that lands before the bot is phased.
-void AlgalonHideRoute(Player* bot, Position const& shelter, Position& next);
+// Where the hide run walks next: the hole, or round a meteor that would land by the bot on the way, before it is
+// phased. False when one does and nothing goes round.
+bool AlgalonHideRoute(Player* bot, Position const& shelter, Position& next);
 // Nearest cached hole within radius, readable while phased.
 bool AlgalonHoleNear(Player* bot, float radius, Position* hole = nullptr);
 
@@ -778,6 +786,10 @@ bool TryGetAlgalonSlotPosition(uint8 slotIndex, Position& position);
 bool TryGetAlgalonSlot(Player* bot, Position& position, bool* waypoint = nullptr);
 // The undisplaced slot, untraced, for dodges that prefer to land near it.
 bool GetAlgalonSlotAnchor(Player* bot, Position& slot);
+// Where a meteor dodge prefers to land: a hider's hole when a meteor lands in a Big Bang cast, else its slot.
+bool GetAlgalonDodgeAnchor(Player* bot, Position& anchor);
+// Big Bang latched and the bot will hide: no gap closer may carry it off.
+bool AlgalonHiderInCast(Player* bot);
 
 // Stars, constellations and Dark Matter the bot's own job doesn't cover, and Algalon himself for the
 // swap tank yielding him.

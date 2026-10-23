@@ -97,20 +97,26 @@ approach all read that same hole: timed off a nearer kite hole, 13 bots left 2.4
 35-52 yd away and died on the way: the phase only has to cover the hit, so hiding early buys nothing, bar a star
 dying under it (Stars). The run breaks a cast
 pinning the feet, re-issues a stalled walk and holds its tick while walking; an `Exclusive` rule keeps
-every other mover off the hider and a `Block` stops Charge, Blink and Disengage. **Once phased, step
+every other mover off the hider. From the cast start until it is phased, a `Block` stops Charge, Blink, Disengage
+and Killing Spree: on `wait` 8 yd from their hole, two bots charged to him and died short of it. **Once phased, step
 8 yd off the hole**: still inside when 64445 strips the phase means phased again within a second for
 10 s, and the hole is invisible from inside, so the exit reads the cached position. Phased bots are left
 out of the `Exclusive` because phase-16 Dark Matter (33089, 8 static spawns on the star points) attacks
 them in the void. Until 8 yd out only the exit runs (`AlgalonLeaveFieldMultiplier`; an `Exclusive` holds
 movement alone): a Chain Heal started on phasing and a mana gem stopping the walk left 11 bots phased again.
-A hide walk passing within 10 yd of a meteor landing before the bot is phased goes round it, via a point 12 yd
-off the impact: run straight, four bots died in one. With no way round, a hider whose walk or hole lies within
-15 yd of it waits where it dodged until the impact (the hide walked two back into one, 44 k and 50 k), unless
-that leaves less than its walk plus 1.5 s. Never with a star under: Big Bang 2's cast always has a meteor ~4.2 s
-before the hit (25.5 s clock, 90.5 s cast cycle), as the under window opens, and melee waiting on it were still
-running when two under-stars went off (10 dead).
-The exit, the hide run (not over a meteor dodge under way) and a taunt drop a movement booking another
-action made, since an equal priority waits it out.
+**Meteors in the cast.** 25-man drops three at once, and Big Bang 2's markers show ~1 s before the cast and land
+~4 s before the hit (25.5 s clock, 90.5 s cast cycle). A meteor only hits the unphased within ~10 yd as it lands,
+so a hide walk is judged by where the bot is at each impact (at run speed, phased a pulse after reaching its
+hole, the impact up to 0.3 s late), not by its whole line. When one would land within 10 yd of it, the hider in turn:
+- sets off in time to be phased 0.5 s before the impact, if it still can (not one going last);
+- else waits where it dodged until the impact, then runs, while that leaves its walk plus 1.5 s, star under or
+  not: out under a star it still gets the cover or its button, and a meteor within 6 yd always killed. Not once
+  on its way round: the spot it would stop on was never checked;
+- else goes round via a point 12 yd off the impact;
+- else walks straight. Straight through Big Bang 2's three, 9 died.
+
+The exit, the hide run (over a meteor dodge under way only when none lands within 10 yd of it) and a taunt drop a
+movement booking another action made, since an equal priority waits it out.
 
 A bot only thinks again when its cast ends, so during the cast a cast or channel longer than its slack is held
 (`AlgalonHideCastMultiplier`): a 1.9 s Shadow Bolt started just before the slack ran out made a warlock late.
@@ -306,6 +312,8 @@ hole, nobody else's, else its shelter, and (with no star under) waits there (`ho
 is caught out under its walk plus 1.5 s, and with the same threshold a 250 ms tick read that first. From 10 s
 before the cast it only taunts (`gather`), keeping its kite hole unless that became the raid's: a constellation
 keeps its victim 9.5 s from the cast start, and one chasing a healer closed a hole a ranged was walking to.
+Any bot a constellation chases waits the same way at its shelter, and the count leaves chased bots out: one
+chasing a healer took the nearest hole of 12 bots in the cast, and 8 died running to the last.
 
 **A spare hole eats one, only if it comes across the hole at the handler.** It chases at 7 yd/s (run speed),
 rests 3-3.5 yd off its victim, and is eaten within about 6.5 yd of the centre, never at 7.4-9.8 yd even after
@@ -345,7 +353,9 @@ is free with no stars left. With no bot handler, Dark Matter is left to whoever 
 ## Cosmic Smash
 
 The dodge clears **15 yd** from every marker (10 yd if nothing clears), 8 yd from every hole, stays
-44 yd inside the room and prefers ground near the bot's slot. It fires anywhere inside 15 yd, and an
+44 yd inside the room and prefers ground near the bot's slot, or a hider's hole when the impact falls in a Big
+Bang cast, running or starting first: a dodge 1 s before the cast took the melee 15 yd from theirs. It fires
+anywhere inside 15 yd, and an
 `OwnMovement` rule holds every generic mover for bots within 19 yd of a live marker: melee started the
 dodge within 0.3 s, then `reach melee` walked them back to 6-12 yd before the impact. Melee charges
 (Charge, Intercept, Feral Charge) are blocked there too, and wherever the bot stands while its target is
@@ -555,7 +565,7 @@ Raid-wide values, all written by the instance tick: `algalon.phase` (0 idle, 1 i
 `algalon.focusstar`, `algalon.handler`, `algalon.tankhealslots`. Per guid: `algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam`
 (urgent recruits aren't recorded), `algalon.swappair`, `algalon.tankhealer`. Derived per bot, each inside the
 helper that derives it: `algalon.tankheal` (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
-(`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is the handler waiting to go
+(`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is a chased bot waiting to go
 last), `algalon.kite`
 (`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`nohole`/`none`; older traces `hole`), `algalon.spot`
 (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`), `algalon.hazard`
@@ -630,9 +640,10 @@ counted by cause and role with humans starred. Then:
   2 s; `--constellations` the kite runs (stages, retries, eaten) and
   branch time, both from the elected handler alone, parked stretches with none eaten, a constellation stuck in the air, and
   seconds the kite was blocked (verdict from 5 s); `--bigbang` Nitro Boosts per hider, class speed on late
-  runs and each star going off in the cast with the bots it hit and their hide state; `--verdict` a bot sitting
-  down to eat or drink while he is engaged, and per star going off in the cast the bots it hit by hide state (a
-  swap tank out on `noshelter` aside);
+  runs, each star going off in the cast with the bots it hit and their hide state, and each gap closer a hider
+  used in the cast with the yards it added to its hole; `--verdict` a bot sitting down to eat or drink while he
+  is engaged, per star going off in the cast the bots it hit by hide state (a swap tank out on `noshelter`
+  aside), and per cast the hiders that used a gap closer;
 - `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
 - `--tankheal`: the tank healers, each healer's share on the pair, itself and others, Beacon time on holder
   and partner, and per tank death the 6 s / 2 s damage against healing, shields and healing elsewhere, with

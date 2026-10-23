@@ -65,12 +65,11 @@ enum class AlgalonPathRule
     Any,
 };
 
-// Nearest ground clear of every marker, hole and dying star, near the bot's own slot when it has one. Searches
-// chained in one Execute share `sweep`: they walk the same grid, so each point's collision check is paid once.
-Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRule rule, HazardSweepCache& sweep)
+// Nearest ground clear of every marker, hole and dying star, near `prefer` when given. Searches chained in one
+// Execute share `sweep`: they walk the same grid, so each point's collision check is paid once.
+Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRule rule, Position const* prefer,
+                              HazardSweepCache& sweep)
 {
-    Position anchor;
-    Position const* prefer = GetAlgalonSlotAnchor(bot, anchor) ? &anchor : nullptr;
     auto const reachable = [bot, rule](float x, float y)
     {
         if (!AlgalonSpotInRoom(x, y))
@@ -242,11 +241,11 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
         UseExplosionPersonal(botAI, bot);
 
     Position next;
-    AlgalonHideRoute(bot, shelter, next);
+    bool const clear = AlgalonHideRoute(bot, shelter, next);
     AlgalonBoostHideRun(bot, bot->GetExactDist2d(next) + next.GetExactDist2d(shelter) -
                                  ULDUAR_ALGALON_SHELTER_IN_RADIUS);
-    // Not a dodge still under way: it clears 15 yd of a meteor, the run 10 at most.
-    if (!AlgalonCosmicSmashThreatens(bot))
+    // A dodge still under way only gives way to a run no meteor lands within 10 yd of.
+    if (clear || !AlgalonCosmicSmashThreatens(bot))
         DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_FORCED);
     _walk = next;
 
@@ -264,23 +263,30 @@ bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
     // FleePosition clamps to Playerbots.FleeDistance (5 yd), inside the doubled damage band.
     char const* branch = "clear";
     HazardSweepCache sweep;
-    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE, AlgalonPathRule::Clear, sweep);
+    // A hider whose meteors land in the cast dodges towards its hole: away from it, the run was too long.
+    Position anchor;
+    Position const* prefer = GetAlgalonDodgeAnchor(bot, anchor) ? &anchor : nullptr;
+    Position clear =
+        FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE, AlgalonPathRule::Clear, prefer, sweep);
     if (clear == Position())
     {
         branch = "min";
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Clear, sweep);
+        clear =
+            FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Clear, prefer, sweep);
     }
 
     if (clear == Position())
     {
         branch = "field";
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Field, sweep);
+        clear =
+            FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Field, prefer, sweep);
     }
 
     if (clear == Position())
     {
         branch = "cross";
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Any, sweep);
+        clear =
+            FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Any, prefer, sweep);
     }
 
     if (clear == Position())
@@ -302,9 +308,11 @@ bool AlgalonLeaveBlackHoleAction::Execute(Event /*event*/)
 {
     Position clear;
     HazardSweepCache sweep;
+    Position anchor;
+    Position const* prefer = GetAlgalonSlotAnchor(bot, anchor) ? &anchor : nullptr;
     for (AlgalonPathRule rule : {AlgalonPathRule::Clear, AlgalonPathRule::Field, AlgalonPathRule::Any})
     {
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS, rule, sweep);
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS, rule, prefer, sweep);
         if (clear != Position())
             break;
     }

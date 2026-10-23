@@ -81,6 +81,9 @@ PRIEST_CLASS = (5, "priest")
 SMASH_MOVER = "algalon cosmic smash action"
 # A charge writes a cast row, never a move row. Feral Charge (cat) lands behind its target.
 SPELL_CHARGES = {11578: "charge", 20252: "intercept", 49376: "feral charge - cat", 16979: "feral charge - bear"}
+# What carries a hider off in a Big Bang cast; the names only cover a trace that names no spells.
+GAP_CLOSER_IDS = {11578: "Charge", 20252: "Intercept", 49376: "Feral Charge - Cat", 16979: "Feral Charge - Bear",
+                  51690: "Killing Spree", 36554: "Shadowstep", 1953: "Blink", 781: "Disengage"}
 
 
 def _anchor_or(name: str, fallback):
@@ -170,6 +173,8 @@ SMASH_INSIDE_YD = 10.0
 SMASH_CLEAR_YD = 15.0
 # a charge has landed by then
 CHARGE_LAND_MS = 1000
+# Killing Spree's 2.5 s and the step back after it
+GAP_CLOSER_MS = 3000
 METEOR_LIVE_MS = 5500
 STALL_MS = 3000
 PICKUP_MS = 1000
@@ -2047,6 +2052,11 @@ def show_bigbang(trace: Trace) -> None:
         for blast in (blast for blast in cast_explosions(trace) if blast["n"] == row["n"]):
             print(f"      star went off {clock(blast['t'])} in the cast, bots hit: "
                   + (", ".join(f"{trace.name(guid)} ({state})" for guid, state in blast["hit"]) or "nobody"))
+        closers = [use for use in cast_gap_closers(trace) if use["n"] == row["n"]]
+        if closers:
+            print("      gap closers in the cast: " + ", ".join(
+                f"{trace.name(use['guid'])} {use['spell']} {clock(use['t'])}"
+                + (f" ({use['gap']:+.1f} yd from its hole)" if use["gap"] is not None else "") for use in closers))
         if row["waited"]:
             left = sorted((ms, trace.name(g)) for g, ms in row["waited"].items() if ms is not None)
             still = sorted(trace.name(g) for g, ms in row["waited"].items() if ms is None)
@@ -2117,6 +2127,52 @@ def cast_explosion_faults(trace: Trace) -> list[tuple[int, str]]:
             out.append((row["t"], f"Big Bang {row['n']}: a star went off @ {secs(row['t'])} in the cast on"
                                   f" {sum(states.values())} bot(s) outside a field ("
                                   + ", ".join(f"{state} {n}" for state, n in states.most_common()) + ")"))
+    return out
+
+
+def cast_gap_closers(trace: Trace) -> list[dict]:
+    """`{n, t, guid, spell, gap}` per gap closer a hiding bot (not the soaker or backup, unphased) used in a Big Bang
+    cast before the impact. `gap` is how much farther from its hole it got within GAP_CLOSER_MS, None without
+    positions; its hole is the last `algalon.shelter` it named in the cast, else the nearest at the cast start."""
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        phased = phased_spans(trace)
+        shelters = notes(trace, "algalon.shelter")
+        used = [rec for rec in trace.of("cast") if rec.get("sp") in GAP_CLOSER_IDS and not rec.get("tr")
+                and rec.get("s") in trace.roles and rec.get("s") not in trace.humans]
+        out = []
+        for row in big_bang_rows(trace):
+            start = row["start"]
+            spots = {hole: tuple(found[1:3]) for hole in row["holes"] if (found := samples.row(hole, start))}
+            for rec in used:
+                guid = rec["s"]
+                if (not start <= rec["t"] < row["impact"] or guid in (row["soaker"], row["backup"])
+                        or phased_at(phased, guid, rec["t"])):
+                    continue
+                here = position_at(samples, guid, rec["t"])
+                named = [as_guid(note["txt"]) for note in shelters
+                         if note.get("g") == guid and start <= note["t"] <= rec["t"] and as_guid(note.get("txt"))]
+                found = samples.row(named[-1], start) or samples.after(named[-1], start) if named else None
+                hole = tuple(found[1:3]) if found else (
+                    min(spots.values(), key=lambda spot: dist2(spot, here)) if spots and here else None)
+                gap = None
+                if hole and here:
+                    reach = [dist2(hole, rest[1:3]) for _, rest in samples.timed(guid, rec["t"], rec["t"] + GAP_CLOSER_MS)]
+                    gap = max(reach, default=dist2(hole, here)) - dist2(hole, here)
+                out.append({"n": row["n"], "t": rec["t"], "guid": guid,
+                            "spell": spell_name(trace, rec["sp"], GAP_CLOSER_IDS), "gap": gap})
+        return out
+    return cached(trace, "_algalon_cast_gap_closers", build)
+
+
+def gap_closer_faults(trace: Trace) -> list[tuple[int, str]]:
+    out = []
+    for row in big_bang_rows(trace):
+        used = [use for use in cast_gap_closers(trace) if use["n"] == row["n"]]
+        if used:
+            out.append((used[0]["t"], f"Big Bang {row['n']}: {len({use['guid'] for use in used})} hider(s) used a gap"
+                                      f" closer in the cast ("
+                                      + ", ".join(f"{trace.name(use['guid'])} {use['spell']}" for use in used) + ")"))
     return out
 
 
@@ -5462,6 +5518,7 @@ def failures(trace: Trace) -> list[tuple[int | None, str]]:
     out += soak_faults(trace)
     out += bang_faults(trace)
     out += cast_explosion_faults(trace)
+    out += gap_closer_faults(trace)
     out += meal_faults(trace)
     out += taunt_faults(trace)
     out += redirect_faults(trace)
