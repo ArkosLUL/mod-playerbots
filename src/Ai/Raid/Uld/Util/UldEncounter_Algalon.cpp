@@ -2192,10 +2192,27 @@ char const* DeriveSlot(Player* bot, Position& position, bool& found)
     return branch;
 }
 
-// When a star dies, from its own slope, or now once at `lowPct` or less.
-int32 ExplosionDueMs(AlgalonScanUnit const& star, float lowPct)
+// When a star dies, from its own slope, or now once at `lowPct` or less. One the team just left dies at what it
+// lost since, never under the drain, capped like a dropped star until that's measured: the slope still has the
+// team's burst, and a cover went up on one at 23% that lived 11 more seconds.
+int32 ExplosionDueMs(AlgalonEncounterState const& state, AlgalonScanUnit const& star, float lowPct)
 {
-    return star.healthPct <= lowPct ? 0 : StarDeathAt(star, star.lossPctPerSec);
+    if (star.healthPct <= lowPct)
+        return 0;
+
+    float loss = star.lossPctPerSec;
+    auto const left = state.starLeft.find(star.guid);
+    if (left != state.starLeft.end())
+    {
+        uint32 const since = getMSTimeDiff(left->second.first, state.lastTickMs);
+        if (since >= ULDUAR_ALGALON_STAR_LOG_STEP_MS)
+            loss = std::max(ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC,
+                            (left->second.second - star.healthPct) * IN_MILLISECONDS / static_cast<float>(since));
+        else
+            loss = std::min(loss, ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC);
+    }
+
+    return StarDeathAt(star, loss);
 }
 
 // Planned under the coming cast and its drain still ends inside the window: it hits the soaker alone, in
@@ -2217,7 +2234,7 @@ AlgalonScanUnit const* ExplodingStar(AlgalonEncounterState const& state, uint32 
     int32 best = std::numeric_limits<int32>::max();
     for (AlgalonScanUnit const& star : state.stars)
     {
-        int32 const death = ExplosionDueMs(star, lowPct);
+        int32 const death = ExplosionDueMs(state, star, lowPct);
         if (death <= static_cast<int32>(leadMs) && death < best && (underToo || !DiesUnder(state, star)) &&
             (!bot || Resolve(bot, star.guid)))
         {
@@ -2229,18 +2246,23 @@ AlgalonScanUnit const* ExplodingStar(AlgalonEncounterState const& state, uint32 
     return soonest;
 }
 
+bool CaughtOutside(AlgalonEncounterState const& state, Player* member, int32 deathMs);
+
 // The hit to survive from `first` and the live stars dying within the stack window of it, the soonest few,
-// each covered only if it dies before the cover running on the bot ends.
+// each covered only if it dies before the cover running on the bot ends. In the cast (`underToo`) a later one
+// counts only if the bot is still outside a field then: 8 bots pressed at full health for a second star that
+// went off once most were phased.
 float StackedHit(AlgalonEncounterState const& state, Player* bot, AlgalonScanUnit const& first, float topRoll,
                  int32 coverMs, bool underToo = false)
 {
-    int32 const from = ExplosionDueMs(first, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
+    int32 const from = ExplosionDueMs(state, first, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
     std::vector<int32> deaths;
     for (AlgalonScanUnit const& star : state.stars)
     {
-        int32 const death = ExplosionDueMs(star, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
+        int32 const death = ExplosionDueMs(state, star, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
         if (death <= from + static_cast<int32>(ULDUAR_ALGALON_EXPLOSION_STACK_MS) &&
-            (underToo || !DiesUnder(state, star)) && Resolve(bot, star.guid))
+            (underToo || !DiesUnder(state, star)) && Resolve(bot, star.guid) &&
+            (!underToo || star.guid == first.guid || CaughtOutside(state, bot, death)))
             deaths.push_back(death);
     }
 
@@ -3109,11 +3131,19 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     }
     ObjectGuid const previous = state->focusStar.Get();
     ObjectGuid const next = star ? star->guid : ObjectGuid::Empty;
+    for (auto left = state->starLeft.begin(); left != state->starLeft.end();)
+        left = getMSTimeDiff(left->second.first, now) > ULDUAR_ALGALON_STAR_LOG_MS ? state->starLeft.erase(left)
+                                                                                    : std::next(left);
+
     if (next != previous)
     {
         state->focusByDeadline = false;
         state->focusSinceMs = now;
         CommitBulkSpeed(*state, now);
+        if (AlgalonScanUnit const* left = FindScanned(state->stars, previous))
+            state->starLeft[previous] = {now, left->healthPct};
+
+        state->starLeft.erase(next);
     }
 
     // One way: a kill taken again at a deadline keeps the deadline's looser position test from then on.
@@ -3682,12 +3712,11 @@ void ClaimAlgalonTankCut(Player* bot, AlgalonTankCut const& cut)
 
 namespace
 {
-bool CaughtOutside(AlgalonEncounterState const& state, Player* member, int32 deathMs);
-
 // An under-star dies on its drain, any other on its slope.
-int32 StarDeathMs(AlgalonScanUnit const& star)
+int32 StarDeathMs(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
 {
-    return star.under && star.tickHp ? DrainDeathMs(star) : ExplosionDueMs(star, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
+    return star.under && star.tickHp ? DrainDeathMs(star)
+                                     : ExplosionDueMs(state, star, ULDUAR_ALGALON_EXPLOSION_LOW_PCT);
 }
 
 // Who covers the star about to explode, and with what: one per star while it lasts, none while one is up. In the
@@ -3709,7 +3738,7 @@ Player* ExplosionCoverProvider(PlayerbotAI* botAI, char const*& cover)
          getMSTimeDiff(state->coverClaimMs, getMSTime()) < ULDUAR_ALGALON_EXPLOSION_COVER_MS))
         return nullptr;
 
-    int32 const death = StarDeathMs(*star);
+    int32 const death = StarDeathMs(*state, *star);
     auto const hit = [state, casting, death](Player* member)
     { return casting ? CaughtOutside(*state, member, death) : CanStayOut(member); };
     if (RaidUnderExplosionLine(bot, group, hit) < ULDUAR_ALGALON_EXPLOSION_COVER_MIN_UNDER)
@@ -3879,7 +3908,7 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI)
     bool const casting = state->bigBangCasting;
     AlgalonScanUnit const* star = ExplodingStar(*state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS,
                                                 ULDUAR_ALGALON_EXPLOSION_LOW_PCT, bot, casting);
-    if (!star || (casting && !CaughtOutside(*state, bot, StarDeathMs(*star))))
+    if (!star || (casting && !CaughtOutside(*state, bot, StarDeathMs(*state, *star))))
         return pick;
 
     auto const pressed = state->personalStars.find(bot->GetGUID());

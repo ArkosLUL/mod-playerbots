@@ -2373,6 +2373,27 @@ class UnderBulk(unittest.TestCase):
         self.assertIn(" 0:12.000 ..  0:16.000  under     star 1 (501)     u   88.0% >  76.0% in  4.0 s, +2.0 %/s",
                       text)
 
+    def test_the_splash_that_took_an_early_released_star_under_its_band_is_listed_and_fails(self):
+        records = underdrop_pull() + [
+            {"t": 1, "e": "unit", "g": UD_STAR_A, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star", "mhp": 200000},
+            {"t": 1, "e": "spell", "sp": 49065, "n": "Explosive Trap Effect"},
+            {"t": 1, "e": "spell", "sp": 55360, "n": "Living Bomb"},
+            dmg(9000, UD_MAGE, UD_STAR_A, 55360, 4000), dmg(17000, UD_TRACKER, UD_STAR_A, 49065, 6000),
+            dmg(25000, UD_TRACKER, UD_STAR_A, 49065, 2000),
+            # the team's while it is the focus, its own drain, and one before the 20 s
+            dmg(13000, UD_LOCK, UD_STAR_A, 686, 9000), dmg(21000, UD_STAR_A, UD_STAR_A, 62018, 2000),
+            dmg(5000, UD_MAGE, UD_STAR_A, 55360, 3000),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, records)
+            (row,) = al.under_splash(trace)
+            self.assertEqual((row["n"], row["counter"], row["t"], row["pct"]), (1, 501, 26000, 6.0))
+            self.assertEqual(row["by"], [(UD_TRACKER, 49065, 4.0), (UD_MAGE, 55360, 2.0)])
+            splash = "6.0% splash in 20 s (Tracker (tank) Explosive Trap Effect 4.0%, Mage (ranged) Living Bomb 2.0%)"
+            self.assertIn(f"        before the release: {splash}\n", render(trace, "stars"))
+            self.assertIn(f"under-star star 1 (501) fell below its band: {splash} @ 26.0s",
+                          [line for _, line in al.failures(trace)])
+
     def test_an_older_trace_reads_without_the_new_rows(self):
         with tempfile.TemporaryDirectory() as folder:
             trace = load(folder, underdrop_pull(drop=("algalon.underdrop",), shots=False))

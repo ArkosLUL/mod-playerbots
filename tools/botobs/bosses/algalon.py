@@ -314,6 +314,11 @@ STAR_PLAN_SLACK_MS = 1000
 # the planner keeps a cast's under-stars until the strip is past
 PLAN_KEEP_MS = 1200
 UNDER_DROP_LATE_MS = 8000
+# an under-star released early this close to its cast is read for the splash that took it under its band
+UNDER_SPLASH_MS = 20000
+UNDER_SPLASH_TOP = 3
+# less is the team's own pace, not splash
+UNDER_SPLASH_MIN_PCT = 1.0
 TRIM_RESTART_MS = 2000
 TRIM_RESTARTS = 3
 STAR_BANG_MS = 60000
@@ -3136,6 +3141,43 @@ def release_label(drop: dict) -> str:
     return f"released {drop['why']} {clock(drop['t'])} at {health}{before}"
 
 
+def under_splash(trace: Trace) -> list[dict]:
+    """`{n, counter, t, pct, by}` per under-star released `early` within UNDER_SPLASH_MS of its cast: `pct` the
+    damage on it in the UNDER_SPLASH_MS before the release while it wasn't the focus, its drain aside, as % of its
+    health (None without it), `by` `(source, spell, pct)` largest first, a pet's under its own name. No row for a
+    star nothing else hit."""
+    def build(trace: Trace) -> list[dict]:
+        focus = latch_spans(trace, "algalon.focusstar", pull_end(trace))
+        out = []
+        for cycle in under_cycles(trace):
+            for counter, drop in sorted(cycle["releases"].items()):
+                if drop["why"] != "early" or drop["to_cast"] is None or drop["to_cast"] > UNDER_SPLASH_MS:
+                    continue
+                guid = star_by_counter(trace).get(counter)
+                taken: collections.Counter = collections.Counter()
+                for rec in victim_hits(trace).get(guid, []) if guid else []:
+                    if (drop["t"] - UNDER_SPLASH_MS <= rec["t"] <= drop["t"] and rec.get("s") != guid
+                            and as_guid(value_at(focus, rec["t"])) != guid):
+                        taken[(rec.get("s"), rec.get("sp"))] += rec.get("a", 0)
+                if not taken:
+                    continue
+                full = trace.maxhp.get(guid)
+                share = (lambda amount: 100.0 * amount / full) if full else (lambda amount: None)
+                out.append({"n": cycle["n"], "counter": counter, "t": drop["t"],
+                            "pct": share(sum(taken.values())),
+                            "by": [(source, spell, share(amount)) for (source, spell), amount in taken.most_common()]})
+        return out
+    return cached(trace, "_algalon_under_splash", build)
+
+
+def splash_label(trace: Trace, row: dict) -> str:
+    def amount(pct):
+        return "-" if pct is None else f"{pct:.1f}%"
+    top = ", ".join(f"{label_of(trace, source)} {trace.spells.get(spell) or ('melee' if not spell else spell)}"
+                    f" {amount(pct)}" for source, spell, pct in row["by"][:UNDER_SPLASH_TOP])
+    return f"{amount(row['pct'])} splash in {UNDER_SPLASH_MS // 1000} s" + (f" ({top})" if top else "")
+
+
 def show_under_cycles(trace: Trace) -> None:
     cycles = under_cycles(trace)
     if not cycles:
@@ -3151,6 +3193,9 @@ def show_under_cycles(trace: Trace) -> None:
             where = (f"; at the cast {health:.1f}%, band {band[0]:.1f}..{band[1]:.1f}%"
                      if health is not None and band else "")
             print(f"      {counter_label(trace, counter)}: {release_label(drop) if drop else 'not released'}{where}")
+            for row in under_splash(trace):
+                if row["n"] == cycle["n"] and row["counter"] == counter:
+                    print(f"        before the release: {splash_label(trace, row)}")
     if "algalon.underdrop" not in emitted(trace):
         print("    no algalon.underdrop row: nothing released, or a trace from before the probe")
 
@@ -3298,6 +3343,10 @@ def under_faults(trace: Trace) -> list[tuple[int, str]]:
                 out.append((cycle["cast"], f"under-star {counter_label(trace, counter)} at {health:.1f}% when Big Bang"
                                            f" {cycle['n']}'s cast began, above its band {band[0]:.1f}..{band[1]:.1f}%"
                                            f" @ {secs(cycle['cast'])}"))
+        for row in under_splash(trace):
+            if row["n"] == cycle["n"] and row["pct"] is not None and row["pct"] >= UNDER_SPLASH_MIN_PCT:
+                out.append((row["t"], f"under-star {counter_label(trace, row['counter'])} fell below its band:"
+                                      f" {splash_label(trace, row)} @ {secs(row['t'])}"))
         if cycle["visited"] and cycle["switches"] >= cycle["visited"]:
             out.append((cycle["first_switch"], f"Big Bang {cycle['n']}: the focus switched {cycle['switches']} times"
                                                f" between {cycle['visited']} under-stars, from"

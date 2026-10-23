@@ -244,13 +244,16 @@ off in the same second. `urgent` takes the lowest star anywhere.
 **Splash breaks the pacing.** Stars died chewed, 75% gone in 11 s with nobody sent, two 1.4 s apart, from
 Starfall, Blade Flurry, Death and Decay, Pestilence diseases, warrior cleaves, Divine Storm and Avenger's
 Shield; the Aoe threat type covers almost none of them. `AlgalonSplashHoldMultiplier` holds Starfall, Blade
-Flurry, Sweeping Strikes and Bladestorm all of phase 1 (self auras that hit whatever comes near; one started
-before a wave spawns still runs when it lands). While a star lives, other splash (`SpellSplashes`,
-`MULTI_TARGET_ACTIONS`, HotR, Avenger's Shield, Seed of Corruption, Mind Sear, Living Bomb, Corpse Explosion,
-the Aoe threat type) is held while a star is within 15 yd of the bot or its target (glyphed Pestilence; diseases
-landed on one 12.5 yd out), and ground AoE that sits 8-10 s while stars wander in within 25 yd of where it
-lands: Consecration, Magma Totem and Explosive Trap round the bot; Death and Decay, Blizzard, Flamestrike,
-Hurricane, Rain of Fire and Volley round its target. The star the bot is hitting doesn't count; friendly spells
+Flurry, Sweeping Strikes, Bladestorm, Explosive Trap and Fire Elemental Totem all of phase 1 (they hit whatever
+comes near, the trap for 30 s; one started before a wave spawns still runs when it lands; the trap and the
+elemental's Fire Nova and Fire Shield took 8.6% off an under-star in the 20 s before Big Bang). While a star
+lives, other splash (`SpellSplashes`, `MULTI_TARGET_ACTIONS`, HotR, Avenger's Shield, Seed of Corruption, Mind
+Sear, Corpse Explosion, the Aoe threat type) is held while a star is within 15 yd of the bot (glyphed
+Pestilence; diseases landed on one 12.5 yd out) or within its target's combat reach plus 11, at least 15, of
+its target (20 yd round him: Pestilence and HotR landed 19.5 yd from his centre), and ground AoE that sits
+8-10 s while stars wander in within 25 yd of where it lands: Consecration and Magma Totem round the bot; Death
+and Decay, Blizzard, Flamestrike, Hurricane, Rain of Fire, Volley and Living Bomb (12 s fuse) round its target.
+The star the bot is hitting doesn't count; friendly spells
 are never held. Humans' Consecration, HotR and Death and Decay still chew them.
 
 **The team works a far star from a spot of its own**: from its ring slot, `reach spell` walks half the gap and
@@ -513,7 +516,10 @@ on a paced kill, and a 2 s lead opened 1 s before one; both covers last 6 s), or
 full when their maximum is lower), one per star for its 6 s: a star alive past it gets another (a meteor
 blackout stalled a kill 10 s, and it caught 11 under, 2 dead). One alone has its own button or a healthstone:
 covers spent on
-none or one left a star that caught 17 with nothing (6 dead). Both covers and the personal buttons act only on
+none or one left a star that caught 17 with nothing (6 dead). For the 4 s after the team leaves a star, its
+forecast is its loss since then, never under the drain and at most 5 %/s until 0.5 s have passed: the slope
+still has the burst, and an Aura Mastery went up on one left at 23% that lived 11 s more (2 dead to the next two
+without cover). Both covers and the personal buttons act only on
 a star still alive: the scan lags a death by up to 250 ms, the explosion drops a bot under its line, and 11 of 21
 presses and an Aura Mastery went on stars already dead, two bots then dying at the next with theirs cooling.
 In the cast both act only for those a star catches outside a field (no hole, or the walk, after a bot's
@@ -540,7 +546,9 @@ The class Divine Sacrifice node is blocked while stars live and Aura Mastery all
 press them only once already low. With a star dying within 1.5 s, an unphased bot outside the swap pair under the
 top roll (× 0.8 with Divine Guardian on it or within 40 yd of the Aura Mastery paladin; the largest of 87 hits
 under Aura Mastery was 79% of it), times the stars dying within 3 s of it up to 3 (three inside a second killed
-18 who were each above one hit), each covered only if it dies before the cover ends, casts the cheapest that
+18 who were each above one hit; in the cast only those still catching it outside a field, or 8 pressed at full
+health for a second star that went off once most were phased), each covered only if it dies before the cover
+ends, casts the cheapest that
 leaves it alive (a channel is broken first: it fails every cast check), once per star and none while one
 runs: Shadow Ward, Anti-Magic Shell (by id 48707: the name lookup misses "Anti-Magic Shell"), Barkskin,
 Shamanistic Rage, Cloak of Shadows (a 90% resist, not a cut), Icebound Fortitude, Dispersion (never the
@@ -635,9 +643,10 @@ counted by cause and role with humans starred. Then:
 - `--stars` also: per star its plan, window, forecast against actual death, offset from the hit, who its
   explosion hit unphased and its trims; per focus span the loss beyond the drain and the switches between
   under-stars, each release, each under-star's health at the cast against its band (h% then dies h−1 to h s
-  later), the median bulk speed and, on older traces, each trimmer's starts and shots fired, with verdicts for a
-  release within 8 s of the cast, one above its band at the cast, over one switch per star and 3 Shoot starts in
-  2 s; `--constellations` the kite runs (stages, retries, eaten) and
+  later), the splash on one released early within 20 s of its cast in the 20 s before (off the focus, by source
+  and spell), the median bulk speed and, on older traces, each trimmer's starts and shots fired, with verdicts
+  for a release within 8 s of the cast, 1% or more of that splash, one above its band at the cast, over one
+  switch per star and 3 Shoot starts in 2 s; `--constellations` the kite runs (stages, retries, eaten) and
   branch time, both from the elected handler alone, parked stretches with none eaten, a constellation stuck in the air, and
   seconds the kite was blocked (verdict from 5 s); `--bigbang` Nitro Boosts per hider, class speed on late
   runs, each star going off in the cast with the bots it hit and their hide state, and each gap closer a hider

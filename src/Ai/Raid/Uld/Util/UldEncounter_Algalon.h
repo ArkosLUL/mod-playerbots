@@ -281,6 +281,8 @@ inline constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_10 = 2;
 inline constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_25 = 3;
 // Splash that would also land on a star this close to the bot or its target is held; 15 is glyphed Pestilence.
 inline constexpr float ULDUAR_ALGALON_SPLASH_RADIUS = 15.0f;
+// Round a target, splash reaches this far past its combat reach: Pestilence landed on stars 19.5 yd from his centre.
+inline constexpr float ULDUAR_ALGALON_SPLASH_PAST_REACH = 11.0f;
 // Ground AoE sits there 8-10 s and stars wander ~1.7 yd/s, so it's held while one is this close to where it lands.
 inline constexpr float ULDUAR_ALGALON_GROUND_SPLASH_RADIUS = 25.0f;
 
@@ -554,6 +556,8 @@ struct AlgalonEncounterState
     // (ms, health %) per star, one sample per ULDUAR_ALGALON_STAR_LOG_STEP_MS. Kept across a drop: its slope
     // is how fast the star still dies, from DoTs and casts in flight or the drain alone.
     std::unordered_map<ObjectGuid, std::vector<std::pair<uint32, float>>> starHealthLog;
+    // (ms, health %) when the team left a star, kept for the log's span: that long its slope still has the burst.
+    std::unordered_map<ObjectGuid, std::pair<uint32, float>> starLeft;
     // The speed the team last showed on its focus, capped at the peak.
     float teamKillPctPerSec = 0.0f;
     // The next meteor not yet marked.
