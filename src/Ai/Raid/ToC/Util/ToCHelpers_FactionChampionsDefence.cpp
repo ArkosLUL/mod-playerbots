@@ -141,7 +141,6 @@ constexpr uint32 SPELL_BLIND = 2094;
 // the arrow drops a trap whose freeze (the effect) is what lands and breaks
 constexpr uint32 SPELL_FREEZING_ARROW = 60192;
 constexpr uint32 SPELL_FREEZING_ARROW_EFFECT = 60210;
-constexpr std::array<uint32, 6> DEATH_COIL_RANKS = {47860, 47859, 27223, 17926, 17925, 6789};
 // closer, the holder DK's own walk and swings already reach it
 constexpr float HOLD_GRIP_MIN = 8.0f;
 

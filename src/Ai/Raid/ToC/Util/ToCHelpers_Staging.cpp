@@ -138,6 +138,11 @@ constexpr float CHAMPION_TANK_LEAD = 3.0f;
 // about 24 yd past the tank line, where the DK tank's grip drops a healer, so the bot DK grips without a walk.
 // The player stands 24 yd further out, still on the floor.
 constexpr float CHAMPION_GRIP_POST = 54.0f;
+constexpr float CHAMPION_PLAYER_POST = CHAMPION_GRIP_POST + 24.0f;
+// the gripped healer is carried down this lane to the player, so healers and ranged wait off it
+constexpr float CHAMPION_GRIP_LANE = 10.0f;
+// healers wait just behind the melee, so the tanks and melee are in heal range from the first second
+constexpr float CHAMPION_HEAL_BEHIND = 12.0f;
 constexpr uint32 SPELL_DEATH_GRIP = 49576;
 constexpr float CHAMPION_LATTICE_STEP = 10.0f;
 
@@ -567,9 +572,26 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
             AddArenaSlot(layout, point, {StandRole::Healer, StandRole::Ranged, StandRole::Melee});
     }
 
-    auto const farthest = [&](Point2 slot) { return -Dist(slot, centroid); };
-    SortOrder(layout, StandRole::Healer, farthest);
-    SortOrder(layout, StandRole::Ranged, farthest);
+    Point2 const front = tankStands.empty() ? ChampionTankStand(landing, centroid, inward, 0.0f) : tankStands.front();
+    Point2 const healAnchor = Along(front, inward, CHAMPION_HEAL_BEHIND);
+    Point2 const playerPost = Along(centroid, inward, CHAMPION_PLAYER_POST);
+    auto const inLane = [&](Point2 slot)
+    {
+        float const along = (slot.x - centroid.x) * inward.x + (slot.y - centroid.y) * inward.y;
+        if (along < 0.0f)
+            return Dist(slot, centroid) < CHAMPION_GRIP_LANE;
+        if (along > CHAMPION_PLAYER_POST)
+            return Dist(slot, playerPost) < CHAMPION_GRIP_LANE;
+
+        return std::fabs((slot.x - centroid.x) * inward.y - (slot.y - centroid.y) * inward.x) < CHAMPION_GRIP_LANE;
+    };
+
+    // lane slots last
+    constexpr float LANE_PENALTY = 1000.0f;
+    SortOrder(layout, StandRole::Healer,
+              [&](Point2 slot) { return Dist(slot, healAnchor) + (inLane(slot) ? LANE_PENALTY : 0.0f); });
+    SortOrder(layout, StandRole::Ranged,
+              [&](Point2 slot) { return -Dist(slot, centroid) + (inLane(slot) ? LANE_PENALTY : 0.0f); });
     SortOrder(layout, StandRole::Melee, [&](Point2 slot) { return Dist(slot, centroid); });
 }
 

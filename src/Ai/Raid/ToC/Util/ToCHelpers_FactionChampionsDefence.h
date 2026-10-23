@@ -1,6 +1,7 @@
 #ifndef PLAYERBOTS_RAID_TOCHELPERS_FACTIONCHAMPIONSDEFENCE_H
 #define PLAYERBOTS_RAID_TOCHELPERS_FACTIONCHAMPIONSDEFENCE_H
 
+#include <array>
 #include <vector>
 
 #include "EncounterHelpers.h"
@@ -24,6 +25,9 @@ constexpr uint32 SPELL_RIPTIDE = 66053;
 constexpr uint32 SPELL_REJUVENATION = 66065;
 constexpr uint32 SPELL_LIFEBLOOM = 66093;
 constexpr uint32 SPELL_REGROWTH = 66067;
+
+// Warlock Death Coil, highest rank first: the peel and the escape both cast it
+constexpr std::array<uint32, 6> DEATH_COIL_RANKS = {47860, 47859, 27223, 17926, 17925, 6789};
 
 // One id on every difficulty
 constexpr uint32 SPELL_POLYMORPH = 65801;

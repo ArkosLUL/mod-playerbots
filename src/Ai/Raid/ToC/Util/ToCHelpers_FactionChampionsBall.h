@@ -9,8 +9,8 @@ class PlayerbotAI;
 class Unit;
 
 // Faction Champions positioning: healers and ranged stay put, the Cyclone stand, the healers' step off the
-// melee, the trinket opener and the Nitro Boosts escape. Every reader answers null or false unless the
-// encounter is live.
+// melee, the trinket opener, the Nitro Boosts run and the casters' escapes. Every reader answers null or
+// false unless the encounter is live, but the pre-pull Demonic Circle.
 namespace TrialOfTheCrusaderHelpers
 {
 
@@ -33,10 +33,31 @@ bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot);
 // unit to cast it at. Written to fc.opener.
 Unit* FactionChampionsOpener(PlayerbotAI* botAI, uint32& spellId);
 
-// Where a bot runs on Nitro Boosts: three or more champions have it as victim, or it is fc.nextfocus, at 30%
-// health or more. 25 yd away from them (±45°, ±90° to stay on the floor), latched for the boost. Not for a
-// tank, a holder, a CC duty holder or a bot rooted or stunned. Each run notes fc.nitro.
+// Where a bot runs on Nitro Boosts: three or more champions, or two melee champions, have it as victim, or it
+// is fc.nextfocus, at 30% health or more. 25 yd away from them (±45°, ±90° to stay on the floor), latched for
+// the boost. Not for a tank, a holder, a CC duty holder or a bot rooted or stunned. Each run notes fc.nitro.
 bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot);
+
+constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
+
+struct FactionChampionsEscapeCast
+{
+    uint32 spellId = 0;
+    Unit* target = nullptr;
+    bool face = false;  // turn to facing first: Blink leaps forward, Dragon's Breath is a cone
+    float facing = 0.0f;
+};
+
+// A healer or ranged bot with a melee champion on it within 8 yd, in control and not silenced: the first
+// ready instant, CC before movement. Mage Frost Nova, Blink 20 yd away (on the floor, clear of Bladestorm and
+// Hellfire), Dragon's Breath; warlock Shadowfury on the nearest, Demonic Circle: Teleport when the circle is
+// 12+ yd farther from them, instant Howl of Terror, Death Coil on the nearest; priest Psychic Scream. An AoE
+// only with no champion inside under our breakable CC or grip-guarded, a fear or Dragon's Breath not on the
+// kill target.
+bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast);
+
+// A warlock parked on its Champions staging stand without its Demonic Circle, or with under a minute left
+bool FactionChampionsCircleDue(PlayerbotAI* botAI);
 
 }
 

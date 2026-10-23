@@ -1324,6 +1324,9 @@ def stands_pull() -> list[dict]:
         move(1000, MAGE, 0.0), move(2000, MAGE, 10.0), move(3000, MAGE, 10.2),
         # Prayer's moving samples at 1 and 2 s are its step off, the one at 0 s comes before any move row
         move(500, PRIEST, 0.0, "faction champions step off"),
+        # the engage at 2 s, Prayer's first cast on the raid 1.5 s later
+        note(2000, MAGE, fc.KILL, PALADIN),
+        cast(3500, PRIEST, 48071, MAGE),
         # the raid takes 2k and Prayer heals 2k of a 3k heal
         dmg(5000, PALADIN, MAGE, 0), dmg(5500, PALADIN, MAGE, 0),
         {"t": 5600, "e": "heal", "s": PRIEST, "d": MAGE, "sp": 48071, "a": 3000, "oh": 1000, "hp": 100.0},
@@ -1386,15 +1389,22 @@ class StandsAndBoosts(unittest.TestCase):
         self.assertEqual(fc.nitro_tally(rows), [("focus", 1), ("next", 1), ("walk", 1)])
 
     def test_a_healer_reads_its_moving_and_casting_share(self):
+        # from the engage at 2 s: eight samples, moving only at 2 s
         self.assertEqual(fc.healer_activity(self.trace),
-                         [{"bot": PRIEST, "samples": 10, "moving": 0.3, "casting": 0.4}])
+                         [{"bot": PRIEST, "samples": 10, "moving": 0.3, "casting": 0.4, "first": 1500,
+                           "opening": 0.125}])
+
+    def test_nitro_counts_a_melee_run_as_melee(self):
+        self.assertEqual(fc.nitro_tally([{"reason": "melee 2"}, {"reason": "focus 3"}, {"reason": "melee 3"}]),
+                         [("focus", 1), ("melee", 2)])
 
     def test_the_section_renders(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             fc.show_stands(self.trace)
         self.assertRegex(out.getvalue(), r"Frost +ranged +3 +1 +10 +10")
-        self.assertRegex(out.getvalue(), r"healer Prayer +moving +30% +casting +40%")
+        self.assertRegex(out.getvalue(), r"healer Prayer +moving +30% +casting +40%  first cast on the raid +\+1\.5s,"
+                                         r" moving 12% of the first 10 s")
         self.assertRegex(out.getvalue(), r"Prayer +heal +30%: faction champions step off 20%, none 10%")
         self.assertIn("raid healed 0.2k/s effective, took 0.2k/s; per healer: Prayer 2k", out.getvalue())
         self.assertIn("Nitro Boosts: 3 use(s): focus 1, next 1, walk 1", out.getvalue())
@@ -1587,6 +1597,9 @@ def focus_pull() -> list[dict]:
         note(6000, ROGUE_C, fc.CC_AURA, 0),
         note(6000, WARRIOR_C, fc.CC_AURA, fc.SPELL_CYCLONE),
         note(6500, WARRIOR_C, fc.CC_AURA, 0),
+        # the mage blinks off its four and lives, the priest screams and dies 1.8 s later
+        note(1000, MAGE, fc.ESCAPE, "Blink"),
+        note(3000, PRIEST, fc.ESCAPE, "Psychic Scream"),
         {"t": 7000, "e": "end", "out": "wipe"},
     ]
     return records + [focus_snap(when) for when in range(0, 7001, 500)]
@@ -1636,6 +1649,60 @@ class FocusAndRepick(unittest.TestCase):
 
     def test_a_healthstone_over_70_is_flagged(self):
         self.assertIn("healthstones over 70%: 1 of 1, Bulwark 90%", self.render(fc.show_personal))
+
+    def test_an_escape_reads_the_champions_on_its_bot_and_whether_it_lived(self):
+        # rogue and warrior are the melee of the four on each
+        rows = fc.escape_rows(self.trace)
+        self.assertEqual([(row["t"], row["bot"], row["spell"], row["melee"], row["others"], row["lived"])
+                          for row in rows],
+                         [(1000, MAGE, "Blink", 2, 2, True), (3000, PRIEST, "Psychic Scream", 2, 2, False)])
+        self.assertEqual(round(rows[1]["hp"]), 80)
+        text = self.render(fc.show_personal)
+        self.assertRegex(text, r"0:03\.000 Mercy +Psychic Scream +2\+2 +80%  no")
+        self.assertIn("fc.escape: Blink 1, Psychic Scream 1", text)
+
+
+def latch_pull() -> list[dict]:
+    # the latch sits on the rogue 1-4 s while the druid lives, then on the druid until it dies at 6 s
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 1, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": DRUID, "en": 34469, "n": "Melador Valestrider", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        note(1000, TANK, fc.KILL, ROGUE_C),
+        note(1000, TANK, fc.SWITCH, "dead"),
+        note(4000, TANK, fc.KILL, DRUID),
+        note(4000, TANK, fc.SWITCH, "healer"),
+        {"t": 8000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, 8001, 1000):
+        units = [row(TANK, 100.0, ROGUE_C), row(ROGUE_C, 90.0, TANK)]
+        if when < 6000:
+            units.append(row(DRUID, 100.0, TANK))
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return records
+
+
+class HealerLatch(unittest.TestCase):
+    def test_a_living_healer_off_the_latch_reads_as_a_span(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in latch_pull()) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            self.assertEqual(fc.healer_off_latch(trace), [(1000, 4000)])
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                fc.show_kill(trace)
+        self.assertIn("fc.switch: dead 1, healer 1", out.getvalue())
+        self.assertIn("a champion healer alive with a non-healer on fc.kill: 3.0s in 1 span(s), longest 3.0s"
+                      " from 0:01.000", out.getvalue())
+
+    def test_a_latch_always_on_a_healer_reads_never(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in champions_pull()) + "\n", encoding="utf-8")
+            self.assertEqual(fc.healer_off_latch(Trace(path)), [])
 
 
 class EveryView(unittest.TestCase):
@@ -1707,6 +1774,8 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.melee_control(trace), [])
         self.assertEqual(fc.personal_rows(trace), [])
         self.assertEqual(fc.personal_deaths(trace), [])
+        self.assertEqual(fc.escape_rows(trace), [])
+        self.assertEqual(fc.healer_off_latch(trace), [])
         self.assertEqual(fc.focus_peaks(trace), collections.Counter())
         self.assertEqual(fc.focus_episodes(trace), [])
         self.assertEqual(fc.repick_checks(trace), [])

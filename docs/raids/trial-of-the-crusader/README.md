@@ -302,8 +302,14 @@ park within 1 yd, walk back past 2.5.
     at the first 0.5 yd step 25.5+ yd (23 + the 2.5 yd unpark) from every slot, extras 3 yd to
     alternate sides; non-tank DK bots knowing Death Grip (`grip`) 54 yd out on it, the grip chain's post; the rest on a
     10 yd lattice 28+ yd from all ten slots and 3+ yd farther from each than the nearest tank stand,
-    44 slots, healers and ranged farthest from the slots first, melee nearest. So the first engage's
-    nearest pick is a tank.
+    44 slots. Healers and ranged take slots off the grip lane (10 yd either side of the line from the
+    landing centroid out to the player's post, 78 yd) first: healers nearest a point 12 yd past the
+    first tank stand (any human's absent, the stand a bot tank would take), so tanks and melee are in
+    heal reach at the pull (23-28 yd); ranged farthest from the slots; melee nearest. So the first
+    engage's nearest pick is a tank. A warlock parked here casts Demonic Circle: Summon
+    ([faction-champions.md](faction-champions.md), Escapes). 25H 2026-10-23 evening, farthest-first:
+    healers 40-53 yd behind the tanks walked 25-31 yd at the pull, and the gripped healer landed
+    among them.
   - Twins: the Fjola tank 22.5 yd from Dark 1 toward her, the Eydis tank 22.5 yd from Light 1 toward
     Eydis, a lone tank (`both`) 22.5 yd from Dark 1 toward the centre; the raid on a 4 yd lattice
     16 yd from Dark 1, since it starts Dark. Every stand is 30+ yd from both twins and nearer the

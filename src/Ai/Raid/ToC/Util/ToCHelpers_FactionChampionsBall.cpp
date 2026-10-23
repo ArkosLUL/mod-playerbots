@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "EncounterHelpers.h"
+#include "GameObject.h"
 #include "Group.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
@@ -16,6 +17,7 @@
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
@@ -23,6 +25,7 @@
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
+#include "ToCHelpers_Staging.h"
 
 namespace TrialOfTheCrusaderHelpers
 {
@@ -65,14 +68,34 @@ struct OpenerSpell
     std::array<uint32, 6> ranks;  // highest first, 0 pads
 };
 
+constexpr OpenerSpell INTIMIDATING_SHOUT{{5246, 0, 0, 0, 0, 0}};
+constexpr OpenerSpell PSYCHIC_SCREAM{{10890, 10888, 8124, 8122, 0, 0}};
+constexpr OpenerSpell HUNGERING_COLD{{49203, 0, 0, 0, 0, 0}};
+// only once talented instant
+constexpr OpenerSpell HOWL_OF_TERROR{{17928, 5484, 0, 0, 0, 0}};
+constexpr OpenerSpell FROST_NOVA{{42917, 27088, 10230, 6131, 865, 122}};
+constexpr OpenerSpell DRAGONS_BREATH{{42950, 42949, 33043, 33042, 33041, 31661}};
+constexpr OpenerSpell SHADOWFURY{{47847, 47846, 30414, 30413, 30283, 0}};
+
 // Feared and frozen both pass the champions' CC test, which pops the trinket
-constexpr std::array<OpenerSpell, 5> OPENER_SPELLS = {{
-    {{5246, 0, 0, 0, 0, 0}},                  // Intimidating Shout
-    {{10890, 10888, 8124, 8122, 0, 0}},       // Psychic Scream
-    {{49203, 0, 0, 0, 0, 0}},                 // Hungering Cold
-    {{17928, 5484, 0, 0, 0, 0}},              // Howl of Terror, only once talented instant
-    {{42917, 27088, 10230, 6131, 865, 122}},  // Frost Nova
-}};
+constexpr std::array<OpenerSpell, 5> OPENER_SPELLS = {INTIMIDATING_SHOUT, PSYCHIC_SCREAM, HUNGERING_COLD,
+                                                      HOWL_OF_TERROR, FROST_NOVA};
+
+// A healer or ranged bot runs or CCs its way out once a melee champion on it is this close
+constexpr float ESCAPE_MELEE_REACH = 8.0f;
+// the circle has to put this much more ground between the bot and the melee on it
+constexpr float ESCAPE_MIN_GAIN = 12.0f;
+constexpr float BLINK_DIST = 20.0f;
+// an AoE's search counts both ends' size on top of its radius
+constexpr float ESCAPE_AOE_SLACK = 2.0f;
+constexpr uint32 SPELL_BLINK = 1953;
+constexpr uint32 SPELL_DEMONIC_CIRCLE_TELEPORT = 48020;
+// on the warlock while its circle is within the teleport's 40 yd
+constexpr uint32 SPELL_DEMONIC_CIRCLE_IN_RANGE = 62388;
+// the circle lasts 6 min, a long wait between pulls gets a fresh one before it runs out
+constexpr int32 CIRCLE_REFRESH_MS = 60000;
+// two melee champions on a cloth caster kill it in 3-8 s, well before a third arrives
+constexpr uint32 NITRO_MELEE_FOCUS = 2;
 
 struct Vec
 {
@@ -543,6 +566,7 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
         return false;
 
     uint32 on = 0;
+    uint32 meleeOn = 0;
     float sumX = 0.0f;
     float sumY = 0.0f;
     float nearX = 0.0f;
@@ -556,6 +580,7 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
         if (champion->GetVictim() == bot)
         {
             ++on;
+            meleeOn += IsFactionChampionMelee(champion->GetEntry()) ? 1 : 0;
             sumX += champion->GetPositionX();
             sumY += champion->GetPositionY();
         }
@@ -569,7 +594,8 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
     }
 
     bool const next = FactionChampionsNextFocus(botAI) == bot->GetGUID();
-    if (on < NITRO_FOCUS && !next)
+    bool const melee = meleeOn >= NITRO_MELEE_FOCUS;
+    if (on < NITRO_FOCUS && !melee && !next)
         return false;
 
     // about to be picked with nobody on it yet: away from the champions round it
@@ -587,12 +613,170 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
             continue;
 
         state->runs[bot->GetGUID()] = {now, target};
-        RaidObs::Note(bot, "fc.nitro", on >= NITRO_FOCUS ? "focus " + std::to_string(on) : "next");
+        RaidObs::Note(bot, "fc.nitro", on >= NITRO_FOCUS ? "focus " + std::to_string(on)
+                                       : melee         ? "melee " + std::to_string(meleeOn)
+                                                       : "next");
         spot = target;
         return true;
     }
 
     return false;
+}
+
+namespace
+{
+SpellInfo const* KnownReady(Player* bot, uint32 spellId)
+{
+    return spellId && bot->HasSpell(spellId) ? ReadyInstant(bot, spellId) : nullptr;
+}
+
+// Nothing a hit of ours would free, nothing a pull needs, and no fear on the kill target, which would run the
+// kill squad around the arena
+bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bool fear)
+{
+    Unit* kill = fear ? FactionChampionsKillTarget(botAI) : nullptr;
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+    {
+        if (champion->GetExactDist2d(&centre) > radius + ESCAPE_AOE_SLACK)
+            continue;
+
+        if (champion == kill || FactionChampionsCcProtected(botAI, champion) ||
+            FactionChampionsGripGuarded(botAI, champion))
+            return false;
+    }
+
+    return true;
+}
+
+bool AoeEscape(PlayerbotAI* botAI, OpenerSpell const& spell, Unit* at, bool fear, FactionChampionsEscapeCast& cast)
+{
+    Player* bot = botAI->GetBot();
+    uint32 const rank = KnownOpenerRank(bot, spell);
+    SpellInfo const* info = KnownReady(bot, rank);
+    if (!info || !AoeEscapeClear(botAI, at->GetPosition(), SpellRadius(info, bot), fear))
+        return false;
+
+    cast.spellId = rank;
+    cast.target = at;
+    return true;
+}
+}  // namespace
+
+bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast)
+{
+    if (!FactionChampionsStaysPut(botAI))
+        return false;
+
+    Player* bot = botAI->GetBot();
+    if (bot->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->HasUnitFlag(UNIT_FLAG_SILENCED))
+        return false;
+
+    std::vector<Unit*> melee;
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    Unit* nearest = nullptr;
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+    {
+        if (!IsFactionChampionMelee(champion->GetEntry()) || champion->GetVictim() != bot ||
+            champion->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->GetExactDist2d(champion) > ESCAPE_MELEE_REACH)
+            continue;
+
+        melee.push_back(champion);
+        sumX += champion->GetPositionX();
+        sumY += champion->GetPositionY();
+        if (!nearest || bot->GetExactDist2d(champion) < bot->GetExactDist2d(nearest))
+            nearest = champion;
+    }
+
+    if (!nearest)
+        return false;
+
+    Position const mean(sumX / melee.size(), sumY / melee.size(), bot->GetPositionZ());
+    Vec const away = Unit2(bot->GetPositionX() - mean.GetPositionX(), bot->GetPositionY() - mean.GetPositionY());
+    cast = FactionChampionsEscapeCast();
+    switch (bot->getClass())
+    {
+        case CLASS_MAGE:
+        {
+            // rooted first, so the blink after it leaves them behind
+            if (AoeEscape(botAI, FROST_NOVA, bot, false, cast))
+                return true;
+
+            if (KnownReady(bot, SPELL_BLINK))
+            {
+                std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
+                for (float turn : {0.0f, 30.0f, -30.0f, 60.0f, -60.0f})
+                {
+                    Vec const dir = Rotate(away, turn);
+                    if (!Clear(Along(bot->GetPosition(), dir, BLINK_DIST), hazards))
+                        continue;
+
+                    cast.spellId = SPELL_BLINK;
+                    cast.target = bot;
+                    cast.face = true;
+                    cast.facing = Position::NormalizeOrientation(std::atan2(dir.y, dir.x));
+                    return true;
+                }
+            }
+
+            if (AoeEscape(botAI, DRAGONS_BREATH, bot, true, cast))
+            {
+                cast.face = true;
+                cast.facing = bot->GetAngle(nearest);
+                return true;
+            }
+
+            return false;
+        }
+        case CLASS_WARLOCK:
+        {
+            if (AoeEscape(botAI, SHADOWFURY, nearest, false, cast))
+                return true;
+
+            GameObject* circle = bot->GetGameObject(SPELL_DEMONIC_CIRCLE_SUMMON);
+            if (circle && bot->HasAura(SPELL_DEMONIC_CIRCLE_IN_RANGE) &&
+                KnownReady(bot, SPELL_DEMONIC_CIRCLE_TELEPORT) &&
+                circle->GetExactDist2d(&mean) >= bot->GetExactDist2d(&mean) + ESCAPE_MIN_GAIN &&
+                Clear(circle->GetPosition(), FactionChampionsAoeClearances(botAI)))
+            {
+                cast.spellId = SPELL_DEMONIC_CIRCLE_TELEPORT;
+                cast.target = bot;
+                return true;
+            }
+
+            if (AoeEscape(botAI, HOWL_OF_TERROR, bot, true, cast))
+                return true;
+
+            auto const known = std::find_if(DEATH_COIL_RANKS.begin(), DEATH_COIL_RANKS.end(),
+                                            [bot](uint32 rank) { return bot->HasSpell(rank); });
+            uint32 const coil = known != DEATH_COIL_RANKS.end() ? *known : 0;
+            if (KnownReady(bot, coil) && nearest != FactionChampionsKillTarget(botAI) &&
+                !FactionChampionsGripGuarded(botAI, nearest))
+            {
+                cast.spellId = coil;
+                cast.target = nearest;
+                return true;
+            }
+
+            return false;
+        }
+        case CLASS_PRIEST:
+            return AoeEscape(botAI, PSYCHIC_SCREAM, bot, true, cast);
+        default:
+            return false;
+    }
+}
+
+bool FactionChampionsCircleDue(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->getClass() != CLASS_WARLOCK || !bot->IsAlive() || bot->IsInCombat() ||
+        !bot->HasSpell(SPELL_DEMONIC_CIRCLE_SUMMON) || GetToCStagingBoss(botAI) != ToCStagingBoss::Champions ||
+        !IsToCStagingHeld(botAI) || IsToCStagingRestHeld(botAI))
+        return false;
+
+    Aura const* circle = bot->GetAura(SPELL_DEMONIC_CIRCLE_SUMMON, bot->GetGUID());
+    return !circle || (circle->GetDuration() >= 0 && circle->GetDuration() < CIRCLE_REFRESH_MS);
 }
 
 }

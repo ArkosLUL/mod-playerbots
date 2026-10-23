@@ -1,7 +1,12 @@
 #include "ToCActions_FactionChampionsBall.h"
 
+#include <string>
+
 #include "EncounterHelpers.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
@@ -105,4 +110,29 @@ bool FactionChampionsOpenerAction::Execute(Event /*event*/)
     uint32 spellId = 0;
     Unit* target = FactionChampionsOpener(botAI, spellId);
     return target && botAI->CastSpell(spellId, target);
+}
+
+bool FactionChampionsEscapeAction::Execute(Event /*event*/)
+{
+    FactionChampionsEscapeCast cast;
+    if (!FactionChampionsEscape(botAI, cast))
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    if (cast.face)
+        bot->SetOrientation(cast.facing);
+
+    if (!botAI->CastSpell(cast.spellId, cast.target))
+        return false;
+
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(cast.spellId);
+    RaidObs::Note(bot, "fc.escape", info ? std::string(info->SpellName[0]) : std::to_string(cast.spellId));
+    return true;
+}
+
+bool FactionChampionsDemonicCircleAction::Execute(Event /*event*/)
+{
+    return FactionChampionsCircleDue(botAI) && botAI->CastSpell(SPELL_DEMONIC_CIRCLE_SUMMON, bot);
 }

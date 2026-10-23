@@ -48,11 +48,28 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsEscapeTrigger : public Trigger
+{
+public:
+    FactionChampionsEscapeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions escape") {}
+    bool IsActive() override;
+};
+
+class FactionChampionsDemonicCircleTrigger : public Trigger
+{
+public:
+    FactionChampionsDemonicCircleTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions demonic circle") {}
+    bool IsActive() override;
+};
+
 class ToCFactionChampionsBallTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
     ToCFactionChampionsBallTriggerContext() : NamedObjectContext<Trigger>()
     {
+        creators["faction champions escape"] = &ToCFactionChampionsBallTriggerContext::faction_champions_escape;
+        creators["faction champions demonic circle"] =
+            &ToCFactionChampionsBallTriggerContext::faction_champions_demonic_circle;
         creators["faction champions hold"] = &ToCFactionChampionsBallTriggerContext::faction_champions_hold;
         creators["faction champions hold control"] =
             &ToCFactionChampionsBallTriggerContext::faction_champions_hold_control;
@@ -81,6 +98,13 @@ private:
     static Trigger* faction_champions_opener(PlayerbotAI* botAI) { return new FactionChampionsOpenerTrigger(botAI); }
 
     static Trigger* faction_champions_chased(PlayerbotAI* botAI) { return new FactionChampionsChasedTrigger(botAI); }
+
+    static Trigger* faction_champions_escape(PlayerbotAI* botAI) { return new FactionChampionsEscapeTrigger(botAI); }
+
+    static Trigger* faction_champions_demonic_circle(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsDemonicCircleTrigger(botAI);
+    }
 };
 
 void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers);

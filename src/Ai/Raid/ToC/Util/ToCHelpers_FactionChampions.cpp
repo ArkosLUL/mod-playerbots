@@ -784,11 +784,19 @@ void UpdateKillLatch(FactionChampionsState& state, Player* bot)
 
     if (current && current->touchable)
     {
-        if (suspended && suspended->touchable && suspended->healthPct <= current->healthPct)
+        Champion const* best = BestCandidate(state, true, ObjectGuid::Empty);
+        // healers before anyone, whatever the health
+        bool const healerBack = suspended && suspended->healer && !current->healer;
+        if (suspended && suspended->touchable && (healerBack || suspended->healthPct <= current->healthPct))
         {
             next = suspended->guid;
             reason = "back";
             state.suspended.Clear();
+        }
+        else if (!current->healer && best && best->healer)
+        {
+            next = best->guid;
+            reason = "healer";
         }
         // a healer dragged out of the pack gets no heals from the others, so it goes first. Once the
         // latch has sat on a pulled one it stays there, even after the pack walks onto it.
@@ -829,6 +837,15 @@ void UpdateKillLatch(FactionChampionsState& state, Player* bot)
             reason = latched.IsEmpty() ? "first" : "dead";
             if (best->guid == state.suspended)
                 state.suspended.Clear();
+
+            // a healer under our Banish or Cyclone is skipped only till it ends, back takes it then
+            if (!best->healer)
+                for (Champion const& champion : state.champions)
+                    if (champion.healer && champion.inCombat && !champion.touchable)
+                    {
+                        state.suspended = champion.guid;
+                        break;
+                    }
         }
     }
 

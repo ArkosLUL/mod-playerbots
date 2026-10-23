@@ -53,11 +53,30 @@ public:
     bool Execute(Event event) override;
 };
 
+// A caster's Nova, Blink, circle teleport or fear off the melee champions on it
+class FactionChampionsEscapeAction : public Action
+{
+public:
+    FactionChampionsEscapeAction(PlayerbotAI* botAI) : Action(botAI, "faction champions escape") {}
+    bool Execute(Event event) override;
+};
+
+// The warlock's circle on its staging stand, for the teleport back once a melee champion reaches it
+class FactionChampionsDemonicCircleAction : public Action
+{
+public:
+    FactionChampionsDemonicCircleAction(PlayerbotAI* botAI) : Action(botAI, "faction champions demonic circle") {}
+    bool Execute(Event event) override;
+};
+
 class ToCFactionChampionsBallActionContext : public NamedObjectContext<Action>
 {
 public:
     ToCFactionChampionsBallActionContext()
     {
+        creators["faction champions escape"] = &ToCFactionChampionsBallActionContext::faction_champions_escape;
+        creators["faction champions demonic circle"] =
+            &ToCFactionChampionsBallActionContext::faction_champions_demonic_circle;
         creators["faction champions hold"] = &ToCFactionChampionsBallActionContext::faction_champions_hold;
         creators["faction champions hold control"] =
             &ToCFactionChampionsBallActionContext::faction_champions_hold_control;
@@ -86,6 +105,13 @@ private:
     static Action* faction_champions_opener(PlayerbotAI* botAI) { return new FactionChampionsOpenerAction(botAI); }
 
     static Action* faction_champions_chased(PlayerbotAI* botAI) { return new FactionChampionsChasedAction(botAI); }
+
+    static Action* faction_champions_escape(PlayerbotAI* botAI) { return new FactionChampionsEscapeAction(botAI); }
+
+    static Action* faction_champions_demonic_circle(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsDemonicCircleAction(botAI);
+    }
 };
 
 #endif

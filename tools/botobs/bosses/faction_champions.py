@@ -2,7 +2,8 @@
 """Score a Faction Champions pull from a RaidObs trace: focus, CC, kicks, burst, fears, dispels, AoE, adds.
 
     faction_champions.py <file>            every section
-    faction_champions.py <file> --kill     each kill target hold: why, how long, health, who was on it
+    faction_champions.py <file> --kill     each kill target hold: why, how long, health, who was on it; time a
+                                           champion healer lived with a non-healer on the latch
     faction_champions.py <file> --cc       CC duties, CC held on each champion, casts started and landed, CC
                                            ended by its own caster's next cast elsewhere
     faction_champions.py <file> --heals    champion cast-time heals and channels, the interrupts that followed
@@ -22,7 +23,7 @@
                                            externals (Lay on Hands too), battle res and repeat deaths, taunts
     faction_champions.py <file> --damage   damage to the raid per champion, and how the melee were controlled
     faction_champions.py <file> --personal personal defensives and the health they went up at, per death,
-                                           healthstones over 70%
+                                           healthstones over 70%, the casters' escapes and whether they lived
     faction_champions.py <file> --focus    4+ champions on one raid member: episodes, the externals and
                                            immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --hold     each melee champion's holder: the champion on it, how far off the
@@ -166,7 +167,7 @@ SWITCH = "fc.switch"
 CC = "fc.cc"
 CC_AURA = "fc.ccaura"
 TOTEM = "fc.totem"
-SWITCH_REASONS = ("first", "dead", "immune", "back", "skull", "pulled", "reset")
+SWITCH_REASONS = ("first", "dead", "immune", "back", "healer", "skull", "pulled", "reset")
 
 # Champion cast-time heals, every difficulty's id: (name, cast ms, ids). The cast row's own `ct` wins
 # when set, and a channel's reads 0.
@@ -374,10 +375,15 @@ SPELL_NITRO = 55004
 # a boost's fc.nitro note and the walk it served are the bot's nearest within this
 NITRO_MOVE_MS = 1000
 NITRO = "fc.nitro"
-# the chase notes `focus N` or `next`; a use without a note is a walk boost
-NITRO_REASONS = ("focus", "next", "walk")
-# a pull with no chased run writes none
-OPTIONAL_PROBES = frozenset((NITRO,))
+# the chase notes `focus N`, `melee N` or `next`; a use without a note is a walk boost
+NITRO_REASONS = ("focus", "melee", "next", "walk")
+# a caster's Nova, Blink, circle teleport or fear off the melee champions on it, the spell's name
+ESCAPE = "fc.escape"
+ESCAPE_WATCH_MS = 10000
+# a healer's opening, from the first kill target, the engage
+OPENING_MS = 10000
+# a pull with no chased run or escape writes none
+OPTIONAL_PROBES = frozenset((NITRO, ESCAPE))
 KICK = "fc.kick"
 # champion channels: id -> name, every difficulty
 CHANNEL_SPELLS = {**dict.fromkeys((65816, 68145, 68146, 68147), "Hellfire"),
@@ -752,6 +758,26 @@ def kill_holds(trace: Trace) -> list[dict]:
     return out
 
 
+def healer_off_latch(trace: Trace) -> list[tuple[int, int]]:
+    """`(start, stop)` spans, by snapshot, where a champion healer lived while `fc.kill` held a non-healer."""
+    healers = {guid for guid, _, healer in lineup(trace) if healer}
+    if not healers:
+        return []
+    spans = kill_spans(trace)
+    snaps = [snap for snap in frames(trace) if snap["t"] >= 0]
+    out: list[tuple[int, int]] = []
+    for snap, after in zip(snaps, snaps[1:]):
+        alive = any(row[0] in healers and row[5] > 0 for row in snap.get("u", []))
+        kill = held_at(spans, snap["t"])
+        if not alive or not kill or kill in healers:
+            continue
+        if out and out[-1][1] == snap["t"]:
+            out[-1] = (out[-1][0], after["t"])
+        else:
+            out.append((snap["t"], after["t"]))
+    return out
+
+
 def pulled_grip(trace: Trace, hold: dict) -> str:
     if not hold["grip"]:
         return "  no grip"
@@ -781,6 +807,13 @@ def show_kill(trace: Trace) -> None:
     ordered = ([reason for reason in SWITCH_REASONS if reasons[reason]]
                + sorted(reason for reason in reasons if reason not in SWITCH_REASONS))
     print("\n  fc.switch: " + (", ".join(f"{reason} {reasons[reason]}" for reason in ordered) or "none"))
+    off = healer_off_latch(trace)
+    if off:
+        longest = max(off, key=lambda span: span[1] - span[0])
+        print(f"  a champion healer alive with a non-healer on fc.kill: {sum(b - a for a, b in off) / 1000:.1f}s"
+              f" in {len(off)} span(s), longest {(longest[1] - longest[0]) / 1000:.1f}s from {clock(longest[0])}")
+    else:
+        print("  a champion healer alive with a non-healer on fc.kill: never")
     print("  on it is the share of non-healer bot samples whose target was the kill target; why dead"
           " includes the target leaving combat; died is the champion leaving the snapshots mid-fight,"
           " or the hold still open at a kill; a pulled hold names the raid Death Grip on it in the"
@@ -2443,22 +2476,38 @@ def stand_rows(trace: Trace) -> list[dict]:
 
 def healer_activity(trace: Trace) -> list[dict]:
     """Per roster healer: `bot`, `samples` (its live snapshot rows over the pull) and the share of them
-    `moving` and `casting`."""
+    `moving` and `casting`; from the first `fc.kill` hold, the engage, `first` (ms to its first untriggered cast
+    on a raid member, None for none) and `opening`, its moving share in the OPENING_MS after (None without a
+    hold or a sample)."""
     if encounter_of(trace) != ENCOUNTER:
         return []
     start, end = pull_start(trace), pull_end(trace)
-    healers = {guid for guid in roster_guids(trace) if trace.role(guid) == "heal"}
-    counts = {guid: [0, 0, 0] for guid in healers}
+    roster = roster_guids(trace)
+    healers = {guid for guid in roster if trace.role(guid) == "heal"}
+    engage = next((begin for guid, begin, _ in kill_spans(trace) if guid), None)
+    counts = {guid: [0, 0, 0, 0, 0] for guid in healers}
     for snap in frames(trace):
         if not start <= snap["t"] <= end:
             continue
+        opening = engage is not None and engage <= snap["t"] < engage + OPENING_MS
         for row in live_rows(snap, healers):
             count = counts[row[0]]
+            moving = len(row) > 8 and bool(row[8])
             count[0] += 1
-            count[1] += len(row) > 8 and bool(row[8])
+            count[1] += moving
             count[2] += len(row) > 10 and bool(row[10])
-    return [{"bot": guid, "samples": n, "moving": moving / n, "casting": casting / n}
-            for guid, (n, moving, casting) in sorted(counts.items()) if n]
+            count[3] += opening
+            count[4] += opening and moving
+    first: dict[int, int] = {}
+    if engage is not None:
+        for rec in trace.of("cast"):
+            bot = rec.get("s")
+            if bot in healers and bot not in first and not rec.get("tr") and rec.get("tgt") in roster \
+                    and rec["t"] >= engage:
+                first[bot] = rec["t"] - engage
+    return [{"bot": guid, "samples": n, "moving": moving / n, "casting": casting / n, "first": first.get(guid),
+             "opening": early_moving / early if early else None}
+            for guid, (n, moving, casting, early, early_moving) in sorted(counts.items()) if n]
 
 
 def mover_rows(trace: Trace) -> list[dict]:
@@ -2601,8 +2650,11 @@ def show_stands(trace: Trace) -> None:
     else:
         print("  no stand move")
     for row in healer_activity(trace):
+        first = "-" if row["first"] is None else f"+{row['first'] / 1000:.1f}s"
+        opening = "-" if row["opening"] is None else f"{row['opening'] * 100:.0f}%"
         print(f"  healer {trace.name(row['bot'])[:14]:14} moving {row['moving'] * 100:3.0f}%"
-              f"  casting {row['casting'] * 100:3.0f}%")
+              f"  casting {row['casting'] * 100:3.0f}%  first cast on the raid {first:>6},"
+              f" moving {opening} of the first {OPENING_MS // 1000} s")
     movers = mover_rows(trace)
     if movers:
         print("  moving, by mover:")
@@ -2634,7 +2686,8 @@ def show_stands(trace: Trace) -> None:
           f" within {NITRO_MOVE_MS / 1000:.0f} s, walk without one, its hp the bot's health at the use and its"
           f" move the nearest move row and the distance to its target; in reach is the kill target within"
           f" {SPELL_REACH} yd and the covered healer within {CYCLONE_REACH:.0f} yd, centre to centre; a healer's"
-          " moving and casting are shares of its live samples; a moving sample's mover is the bot's last accepted"
+          " moving and casting are shares of its live samples, its first cast on the raid and opening moving share"
+          f" count from the first {KILL} hold; a moving sample's mover is the bot's last accepted"
           f" move row within {MOVER_WINDOW_MS / 1000:.0f} s, none without one; healed is heal rows less overheal")
 
 
@@ -2744,6 +2797,28 @@ def personal_deaths(trace: Trace, rows: list[dict] | None = None) -> list[dict]:
     return out
 
 
+def escape_rows(trace: Trace) -> list[dict]:
+    """Every `fc.escape` cast: `t`, `bot`, `spell`, `melee` and `others`, living melee and other champions with
+    the bot as target in the last sample at or before it, `hp`, and `lived`, no death of the bot in the 10 s
+    after."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    targets = champions(trace)
+    deaths = [(rec["t"], rec["g"]) for rec in combat_deaths(trace)]
+    out = []
+    for rec in notes(trace, ESCAPE):
+        bot, when = rec.get("g"), rec["t"]
+        snap = snap_at(trace, when)
+        rows = snap.get("u", []) if snap else []
+        on = [row[0] for row in rows if row[0] in targets and row[5] > 0 and len(row) > 7 and row[7] == bot]
+        melee = sum(1 for guid in on if spec(trace, guid) in MELEE_SPECS)
+        me = next((row for row in rows if row[0] == bot), None)
+        out.append({"t": when, "bot": bot, "spell": str(rec.get("txt", "")), "melee": melee,
+                    "others": len(on) - melee, "hp": me[5] if me else None,
+                    "lived": not any(guid == bot and when < t <= when + ESCAPE_WATCH_MS for t, guid in deaths)})
+    return out
+
+
 def show_personal(trace: Trace) -> None:
     print("PERSONAL DEFENSIVES")
     rows = personal_rows(trace)
@@ -2772,7 +2847,19 @@ def show_personal(trace: Trace) -> None:
             text = ("none" if first is None else f"{first['spell']} {clock(first['t'])}"
                     + ("" if first["hp"] is None else f" at {first['hp']:.0f}%"))
             print(f"  {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {trace.role(row['bot']):6}  {text}")
-    print("  hp is the bot's health in the last sample at or before the cast")
+    escapes = escape_rows(trace)
+    if escapes:
+        print(f"\n  {'escape at':>9} {'bot':14} {'spell':24} {'melee+other':>11} {'hp':>4}  lived 10 s")
+        for row in escapes:
+            hp = "-" if row["hp"] is None else f"{row['hp']:.0f}%"
+            print(f"  {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {row['spell'][:24]:24}"
+                  f" {row['melee']:>5}+{row['others']:<5} {hp:>4}  {'yes' if row['lived'] else 'no'}")
+        tally = collections.Counter(row["spell"] for row in escapes)
+        print("  fc.escape: " + ", ".join(f"{name} {count}" for name, count in tally.most_common()))
+    else:
+        print("\n  fc.escape: none")
+    print("  hp is the bot's health in the last sample at or before the cast; an escape's melee and other are the"
+          " champions with the bot as target then")
 
 
 def focus_counts(snap: dict, targets, roster) -> collections.Counter:
@@ -3014,7 +3101,8 @@ def show_trinket(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("kill", "each kill target hold: why, how long, health, who was on it", show_kill),
+    ("kill", "each kill target hold: why, how long, health, who was on it, a healer alive off the latch",
+     show_kill),
     ("cc", "CC duties, CC held and fear uptime per champion, casts started and landed, the pace", show_cc),
     ("heals", "champion cast-time heals and the interrupts that followed", show_heals),
     ("burst", "lust, Exhaustion or Sated carried in, first burst cooldown per bot, burst vetoes", show_burst),
@@ -3035,7 +3123,7 @@ SECTIONS = (
               " stand, Nitro Boosts"
      " uses by reason", show_stands),
     ("damage", "damage to the raid per champion, and how the melee were controlled", show_damage),
-    ("personal", "personal defensives and the health they went up at, per death", show_personal),
+    ("personal", "personal defensives and the health they went up at, per death, escapes", show_personal),
     ("focus", "champions piled on one raid member: the episodes, the cover in them, the re-pick predictions",
      show_focus),
     ("ball", "the death ball: the start and first picks, champion targets by role, kill target off the pack,"

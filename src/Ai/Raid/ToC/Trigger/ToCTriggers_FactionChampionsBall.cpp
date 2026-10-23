@@ -63,10 +63,22 @@ bool FactionChampionsOpenerTrigger::IsActive()
     return FactionChampionsOpener(botAI, spellId) != nullptr;
 }
 
+bool FactionChampionsEscapeTrigger::IsActive()
+{
+    FactionChampionsEscapeCast cast;
+    return FactionChampionsEscape(botAI, cast);
+}
+
+bool FactionChampionsDemonicCircleTrigger::IsActive() { return FactionChampionsCircleDue(botAI); }
+
 void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(new TriggerNode("faction champions opener", {
         NextAction("faction champions opener", ACTION_RAID + 4.4f) }));
+
+    // instants, cast before the Nitro run they free up
+    triggers.push_back(new TriggerNode("faction champions escape", {
+        NextAction("faction champions escape", ACTION_RAID + 2.6f) }));
 
     triggers.push_back(new TriggerNode("faction champions chased", {
         NextAction("faction champions chased", ACTION_RAID + 2.5f) }));
@@ -82,4 +94,8 @@ void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("faction champions cyclone stand", {
         NextAction("faction champions cyclone stand", ACTION_RAID + 1.9f) }));
+
+    // pre-pull, above the staging walk, which returns false once parked
+    triggers.push_back(new TriggerNode("faction champions demonic circle", {
+        NextAction("faction champions demonic circle", ACTION_RAID + 1) }));
 }
