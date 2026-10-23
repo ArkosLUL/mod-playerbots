@@ -17,13 +17,18 @@ std::set<std::string> const MULTI_TARGET_ACTIONS = {
     "shockwave",     "divine storm",     "howling blast", "blood boil", "fan of knives",
     "blade flurry",  "swipe (cat)",      "multi-shot",    "fire nova",  "chain lightning"};
 
-bool SpellSplashes(PlayerbotAI* botAI, Action* action)
+bool SummonSplashes(Action* action)
 {
     // Totem and trap summons stay invisible to the spell test - the summon is single-target and the
     // area lives on what it summons - so they are named.
     static std::set<std::string> const summoners = {"magma totem", "fire nova", "explosive trap",
                                                     "trap launcher: explosive trap"};
-    if (summoners.count(action->getName()))
+    return action && summoners.count(action->getName());
+}
+
+bool SpellSplashes(PlayerbotAI* botAI, Action* action)
+{
+    if (SummonSplashes(action))
         return true;
 
     CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);

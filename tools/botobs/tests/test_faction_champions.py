@@ -838,6 +838,13 @@ def pack_pull() -> list[dict]:
         cast(12500, WARRIOR_C, fc.SPELL_BLADESTORM, 0),
         cast(14500, FILLERS[0], 51722, ROGUE_C),
         cast(15500, FILLERS[1], 42917, 0),
+        # Trueshot's Freezing Arrow names no target, so it counts inside its hold only; Justice's Repentance
+        # off duty
+        note(18500, HUNTER, fc.PEEL, ROGUE_C),
+        cast(18600, HUNTER, 60192, 0),
+        note(18700, HUNTER, fc.PEEL, 0),
+        cast(19000, PALADIN_BOT, 20066, ROGUE_C),
+        cast(26000, HUNTER, 60192, 0),
 
         # Hand of Protection on the priest, Pain Suppression on Shiv, who dies at 20 s anyway.
         cast(14000, PALADIN_BOT, 10278, PRIEST),
@@ -908,7 +915,9 @@ class PackAndPeel(unittest.TestCase):
         self.assertEqual([(row["t"], row["by"], row["spell"], row["target"], row["duty"])
                           for row in fc.peel_casts(self.trace)],
                          [(11600, WARRIOR, "Disarm", WARRIOR_C, True),
-                          (14500, FILLERS[0], "Dismantle", ROGUE_C, False)])
+                          (14500, FILLERS[0], "Dismantle", ROGUE_C, False),
+                          (18600, HUNTER, "Freezing Arrow", ROGUE_C, True),
+                          (19000, PALADIN_BOT, "Repentance", ROGUE_C, False)])
 
     def test_the_warrior_champion_reads_disarms_against_bladestorms(self):
         self.assertEqual(fc.warrior_disarms(self.trace),
@@ -1301,10 +1310,10 @@ class Holds(unittest.TestCase):
 def stands_pull() -> list[dict]:
     roster = [{"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0},
               {"g": PRIEST, "n": "Prayer", "r": "heal", "c": 5, "h": 0}]
-    stand = fc.STAND_ACTION
+    stand = fc.STAND_ACTIONS[0]
 
     def move(when: int, guid: int, x: float, by: str = stand) -> dict:
-        return {"t": when, "e": "move", "g": guid, "k": "point", "x": x, "y": 0.0, "z": 0.0, "by": by}
+        return {"t": when, "e": "move", "g": guid, "k": "point", "x": x, "y": 0.0, "z": 0.0, "by": by, "ok": 1}
 
     records = [
         {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
@@ -1313,6 +1322,11 @@ def stands_pull() -> list[dict]:
         {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
         # Frost's slot jumps 10 yd at 2 s, its 3 s target is the same slot restated
         move(1000, MAGE, 0.0), move(2000, MAGE, 10.0), move(3000, MAGE, 10.2),
+        # Prayer's moving samples at 1 and 2 s are its step off, the one at 0 s comes before any move row
+        move(500, PRIEST, 0.0, "faction champions step off"),
+        # the raid takes 2k and Prayer heals 2k of a 3k heal
+        dmg(5000, PALADIN, MAGE, 0), dmg(5500, PALADIN, MAGE, 0),
+        {"t": 5600, "e": "heal", "s": PRIEST, "d": MAGE, "sp": 48071, "a": 3000, "oh": 1000, "hp": 100.0},
         # Prayer runs from three champions, Frost from the focus the bots expect next, then Prayer boosts a
         # walk at 60% with no note
         note(3990, PRIEST, fc.NITRO, "focus 3"),
@@ -1349,7 +1363,18 @@ class StandsAndBoosts(unittest.TestCase):
 
     def test_a_stand_counts_its_moves_its_slot_jumps_and_path_against_net(self):
         self.assertEqual(fc.stand_rows(self.trace),
-                         [{"bot": MAGE, "moves": 3, "jumps": 1, "path": 10.0, "net": 10.0}])
+                         [{"bot": MAGE, "moves": 3, "jumps": 1, "path": 10.0, "net": 10.0},
+                          {"bot": PRIEST, "moves": 1, "jumps": 0, "path": 0.0, "net": 0.0}])
+
+    def test_a_moving_sample_goes_to_the_last_mover(self):
+        self.assertEqual(fc.mover_rows(self.trace), [
+            {"bot": MAGE, "samples": 10, "moving": 0.0, "by": collections.Counter()},
+            {"bot": PRIEST, "samples": 10, "moving": 0.3,
+             "by": collections.Counter({"faction champions step off": 2, "none": 1})}])
+
+    def test_healing_reads_effective_against_damage_taken(self):
+        self.assertEqual(fc.heal_output(self.trace),
+                         {"secs": 10.0, "taken": 2000, "healed": 2000, "healers": [(PRIEST, 2000)]})
 
     def test_a_boost_reads_its_reason_health_and_the_move_it_served(self):
         rows = fc.nitro_rows(self.trace)
@@ -1370,6 +1395,8 @@ class StandsAndBoosts(unittest.TestCase):
             fc.show_stands(self.trace)
         self.assertRegex(out.getvalue(), r"Frost +ranged +3 +1 +10 +10")
         self.assertRegex(out.getvalue(), r"healer Prayer +moving +30% +casting +40%")
+        self.assertRegex(out.getvalue(), r"Prayer +heal +30%: faction champions step off 20%, none 10%")
+        self.assertIn("raid healed 0.2k/s effective, took 0.2k/s; per healer: Prayer 2k", out.getvalue())
         self.assertIn("Nitro Boosts: 3 use(s): focus 1, next 1, walk 1", out.getvalue())
         self.assertRegex(out.getvalue(), r"0:04\.000 Prayer +focus 3 +100%  faction champions chased 25 yd")
         self.assertRegex(out.getvalue(), r"0:06\.000 Frost +next +100%  - -")
@@ -1670,6 +1697,8 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.stand_rows(trace), [])
         self.assertEqual(fc.nitro_rows(trace), [])
         self.assertEqual(fc.healer_activity(trace), [])
+        self.assertEqual(fc.mover_rows(trace), [])
+        self.assertEqual(fc.heal_output(trace), {})
         self.assertEqual(fc.targeted_share(trace), {})
         self.assertEqual(fc.raid_wide_casts(trace), [])
         self.assertEqual(fc.own_breaks(trace), {})

@@ -3,6 +3,8 @@
 #include "Map.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsBall.h"
@@ -15,6 +17,9 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
+constexpr uint32 PLAYER_DIVINE_SHIELD = 642;
+constexpr uint32 FORBEARANCE = 25771;
+
 bool FactionChampionsHolding(PlayerbotAI* botAI) { return FactionChampionsHoldOf(botAI).champion != nullptr; }
 
 // The focus trigger's test, so the rule and the node cover the same window. A holder hits its own champion.
@@ -23,11 +28,7 @@ bool FactionChampionsTargetOwned(PlayerbotAI* botAI)
     return (FactionChampionsFocusBot(botAI) && FactionChampionsKillTarget(botAI)) || FactionChampionsHolding(botAI);
 }
 
-bool FactionChampionsStandHeld(PlayerbotAI* botAI)
-{
-    Position spot;
-    return FactionChampionsBallStand(botAI, spot);
-}
+bool FactionChampionsStayPut(PlayerbotAI* botAI) { return FactionChampionsStaysPut(botAI); }
 
 // Kill squad melee, tanks included, wait outside the pack while the player's pull is still flying, its healer
 // takes the kill latch once it lands, or while a DK is on its way to grip the kill target out of the pack
@@ -60,6 +61,18 @@ bool FactionChampionsWrathHeld(PlayerbotAI* botAI)
            FactionChampionsLive(botAI);
 }
 
+// The bot's own Divine Shield is ready but for the GCD, and Lay on Hands' Forbearance would lock it out 2 min
+bool FactionChampionsBubbleReady(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_PALADIN || !FactionChampionsLive(botAI) || !bot->HasSpell(PLAYER_DIVINE_SHIELD) ||
+        bot->HasSpellCooldown(PLAYER_DIVINE_SHIELD) || bot->HasAura(FORBEARANCE))
+        return false;
+
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(PLAYER_DIVINE_SHIELD);
+    return info && !(info->ExcludeCasterAuraSpell && bot->HasAura(info->ExcludeCasterAuraSpell));
+}
+
 bool FactionChampionsHeroicLive(PlayerbotAI* botAI)
 {
     Map* map = botAI->GetBot()->FindMap();
@@ -87,11 +100,11 @@ void DefineFactionChampions(EncounterBuilder& e)
     e.Block("faction champions holder hold", Role::Any, FactionChampionsHolding,
             Family::CombatFormationMove | Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom);
 
-    // ranged and healers hold their slots, and the reaches would walk them in toward a target past the slot
-    e.Block("faction champions stand hold", Role::Any, FactionChampionsStandHeld,
+    // a healer or ranged bot on the move neither heals nor casts, so only the reaches walk it, to get its target in
+    // range
+    e.Block("faction champions stay put", Role::Any, FactionChampionsStayPut,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Flee |
-                Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
-            {"reach spell", "reach party member to heal"});
+                Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage);
 
     e.Block("faction champions kill squad wait", Role::Any, FactionChampionsKillSquadWait, Family::Charge,
             {"reach melee"});
@@ -102,6 +115,7 @@ void DefineFactionChampions(EncounterBuilder& e)
 
     // every paladin's class node fires at one dying bot at once; faction champions protect deals one
     e.Block("faction champions lay on hands guard", Role::Any, FactionChampionsLive, 0, {"lay on hands on party"});
+    e.Block("faction champions self lay on hands hold", Role::Any, FactionChampionsBubbleReady, 0, {"lay on hands"});
     e.Block("faction champions avenging wrath hold", Role::Any, FactionChampionsWrathHeld, 0, {"avenging wrath"});
     // faction champions protect spends it on a focused bot
     e.Block("faction champions divine sacrifice hold", Role::Any, FactionChampionsLive, 0, {"divine sacrifice"});

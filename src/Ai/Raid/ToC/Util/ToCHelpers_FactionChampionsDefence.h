@@ -160,11 +160,16 @@ Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
 // champion with 2 or more of ours (pets too) in Bladestorm reach; danger first, then Warrior, then healer
 // victims, then the lowest victim. Not one CC'd, rooted or immune to the spell. The nearest free bot with a
 // ready peel takes it, not the grip DK or one on a CC duty: Disarm or Dismantle (not on one already
-// disarmed), Hammer of Justice on the danger champion short of its third stun step, Frost Nova, Entangling
-// Roots, Psychic Horror, or Death Grip from 12+ yd nearer the pack by a pack tank or a DK other than the
-// one kept for the grip chain, never on the kill target. Nothing that pops the trinket on a held champion
-// with it up. No root within 12 yd of a pack tank. Written to fc.peel.
+// disarmed), Hammer of Justice on the danger champion short of its third stun step, else Repentance, Blind,
+// Freezing Arrow, Death Coil, Frost Nova, Entangling Roots, Psychic Horror, or Death Grip from 12+ yd nearer
+// the pack by a pack tank or a DK other than the one kept for the grip chain, never on the kill target. A CC a
+// hit breaks, roots aside, only on a champion nobody of ours hits but its holder, which stops for it, and
+// with no group DoT. None its DR would make immune. Nothing that pops the trinket on a held champion with
+// it up. No root within 12 yd of a pack tank. Written to fc.peel.
 Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId);
+
+// A peel duty's spell that a hit breaks is aimed at the champion
+bool FactionChampionsBreakablePeelAt(PlayerbotAI* botAI, Unit* champion);
 
 // The group member this bot covers with an external defensive and the spell id, when none of the four
 // covers it yet: Hand of Protection on a healer or ranged with a physical champion or four of any on it,

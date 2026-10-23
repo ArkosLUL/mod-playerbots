@@ -13,13 +13,6 @@ public:
     bool IsActive() override;
 };
 
-class FactionChampionsHoldWalkTrigger : public Trigger
-{
-public:
-    FactionChampionsHoldWalkTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions hold walk") {}
-    bool IsActive() override;
-};
-
 class FactionChampionsHoldControlTrigger : public Trigger
 {
 public:
@@ -27,10 +20,17 @@ public:
     bool IsActive() override;
 };
 
-class FactionChampionsBallStandTrigger : public Trigger
+class FactionChampionsCycloneStandTrigger : public Trigger
 {
 public:
-    FactionChampionsBallStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions ball stand") {}
+    FactionChampionsCycloneStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions cyclone stand") {}
+    bool IsActive() override;
+};
+
+class FactionChampionsStepOffTrigger : public Trigger
+{
+public:
+    FactionChampionsStepOffTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions step off") {}
     bool IsActive() override;
 };
 
@@ -54,10 +54,11 @@ public:
     ToCFactionChampionsBallTriggerContext() : NamedObjectContext<Trigger>()
     {
         creators["faction champions hold"] = &ToCFactionChampionsBallTriggerContext::faction_champions_hold;
-        creators["faction champions hold walk"] = &ToCFactionChampionsBallTriggerContext::faction_champions_hold_walk;
         creators["faction champions hold control"] =
             &ToCFactionChampionsBallTriggerContext::faction_champions_hold_control;
-        creators["faction champions ball stand"] = &ToCFactionChampionsBallTriggerContext::faction_champions_ball_stand;
+        creators["faction champions cyclone stand"] =
+            &ToCFactionChampionsBallTriggerContext::faction_champions_cyclone_stand;
+        creators["faction champions step off"] = &ToCFactionChampionsBallTriggerContext::faction_champions_step_off;
         creators["faction champions opener"] = &ToCFactionChampionsBallTriggerContext::faction_champions_opener;
         creators["faction champions chased"] = &ToCFactionChampionsBallTriggerContext::faction_champions_chased;
     }
@@ -65,19 +66,17 @@ public:
 private:
     static Trigger* faction_champions_hold(PlayerbotAI* botAI) { return new FactionChampionsHoldTrigger(botAI); }
 
-    static Trigger* faction_champions_hold_walk(PlayerbotAI* botAI)
-    {
-        return new FactionChampionsHoldWalkTrigger(botAI);
-    }
-
     static Trigger* faction_champions_hold_control(PlayerbotAI* botAI)
     {
         return new FactionChampionsHoldControlTrigger(botAI);
     }
 
-    static Trigger* faction_champions_ball_stand(PlayerbotAI* botAI) {
-        return new FactionChampionsBallStandTrigger(botAI);
+    static Trigger* faction_champions_cyclone_stand(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsCycloneStandTrigger(botAI);
     }
+
+    static Trigger* faction_champions_step_off(PlayerbotAI* botAI) { return new FactionChampionsStepOffTrigger(botAI); }
 
     static Trigger* faction_champions_opener(PlayerbotAI* botAI) { return new FactionChampionsOpenerTrigger(botAI); }
 

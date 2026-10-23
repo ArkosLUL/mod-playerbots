@@ -27,7 +27,8 @@
                                            immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --hold     each melee champion's holder: the champion on it, how far off the
                                            healers, its other victims, deaths; melee champions never held
-    faction_champions.py <file> --stands   stand moves, slot jumps and path against net per stand holder,
+    faction_champions.py <file> --stands   stand moves, jumps and path against net, who moved healers and
+                                           ranged and how much, healing against damage taken,
                                            the Cyclone stand, Nitro Boosts uses by reason
     faction_champions.py <file> --ball     the death ball: who started it and whom the champions picked first,
                                            who they chase, how far the kill target and the raid stand off the
@@ -348,12 +349,14 @@ GRIP_SETTLE_MS = 1000
 SPELL_GRIP_PULL = 57604
 GRIP_PULL_SLACK_MS = 50
 # A raid or pet cast that roots, stuns, fears or knocks its target: id -> name
+DEATH_COIL = (6789, 17925, 17926, 27223, 47859, 47860)
 HOLDS = {
     **CC_SPELLS,
     53148: "pet Charge", 24394: "Intimidation", 47481: "Gnaw", 7922: "Charge Stun", 20253: "Intercept",
     **dict.fromkeys((853, 5588, 5589, 10308), "Hammer of Justice"), 8643: "Kidney Shot", 1833: "Cheap Shot",
     8983: "Bash", 49802: "Maim", 44572: "Deep Freeze", 47847: "Shadowfury", 46968: "Shockwave",
     12809: "Concussion Blow", 45334: "Feral Charge", 20066: "Repentance", 51514: "Hex",
+    2094: "Blind", 60210: "Freezing Arrow", **dict.fromkeys(DEATH_COIL, "Death Coil"),
 }
 FROST_NOVA = frozenset((122, 865, 6131, 10230, 27088, 42917))
 NOVA_REACH = 12.0
@@ -361,7 +364,10 @@ NOVA_REACH = 12.0
 GRIP_WATCH_MS = 1200
 
 HOLD = "fc.hold"
-STAND_ACTION = "faction champions ball stand"
+# the old stand layout, then the Cyclone stand and the healers' step off the melee
+STAND_ACTIONS = ("faction champions ball stand", "faction champions cyclone stand", "faction champions step off")
+# a moving sample is the doing of the bot's last accepted move row this recent
+MOVER_WINDOW_MS = 4000
 # a stand target this far off the one before is a new slot, not the same one restated
 SLOT_JUMP = 5.0
 SPELL_NITRO = 55004
@@ -426,10 +432,12 @@ CHAIN_ORDER = ["tank", "bot DK", "human"]
 # the bots open the next chain within this long of the kill target's death, once a grip is ready
 AFTER_KILL_MS = 20000
 PEEL_SPELLS = {676: "Disarm", 51722: "Dismantle", 64044: "Psychic Horror", 49576: "Death Grip",
+               20066: "Repentance", 2094: "Blind", 60192: "Freezing Arrow", **dict.fromkeys(DEATH_COIL, "Death Coil"),
                **dict.fromkeys((122, 865, 6131, 10230, 27088, 42917), "Frost Nova"),
                **dict.fromkeys((339, 1062, 5195, 5196, 9852, 9853, 26989, 53308), "Entangling Roots")}
-# the grip chain's Death Grip and a Frost Nova, which names no target, count only inside a peel hold
-HOLD_ONLY_PEELS = ("Death Grip", "Frost Nova")
+# the grip chain's Death Grip, and a Frost Nova or Freezing Arrow, which name no target, count only inside a
+# peel hold
+HOLD_ONLY_PEELS = ("Death Grip", "Frost Nova", "Freezing Arrow")
 DISARMS = frozenset((676, 51722, 64044))
 SPELL_BLADESTORM = 65947
 WARRIOR_CHAMPIONS = (34475, 34453)
@@ -2411,13 +2419,13 @@ def show_hold(trace: Trace) -> None:
 
 
 def stand_rows(trace: Trace) -> list[dict]:
-    """Per bot that took a stand slot: `bot`, `moves` (its stand move rows), `jumps` (stand targets 5+ yd off
-    the one before), and `path` and `net`, its snapshot path and end-to-end distance from its first stand
-    move to the pull's end."""
+    """Per bot with a stand move (the old layout, the Cyclone stand or a step off): `bot`, `moves` (those move
+    rows), `jumps` (targets 5+ yd off the one before), and `path` and `net`, its snapshot path and end-to-end
+    distance from its first such move to the pull's end."""
     end = pull_end(trace)
     targets: dict[int, list[tuple[int, float, float]]] = collections.defaultdict(list)
     for rec in trace.of("move"):
-        if rec.get("by") == STAND_ACTION and rec["t"] <= end:
+        if rec.get("by") in STAND_ACTIONS and rec["t"] <= end:
             targets[rec["g"]].append((rec["t"], rec["x"], rec["y"]))
     if not targets:
         return []
@@ -2451,6 +2459,54 @@ def healer_activity(trace: Trace) -> list[dict]:
             count[2] += len(row) > 10 and bool(row[10])
     return [{"bot": guid, "samples": n, "moving": moving / n, "casting": casting / n}
             for guid, (n, moving, casting) in sorted(counts.items()) if n]
+
+
+def mover_rows(trace: Trace) -> list[dict]:
+    """Per roster healer and ranged bot: `bot`, `samples` (its live snapshot rows over the pull), `moving` (the
+    share of them moving) and `by`, a Counter of moving samples by the mover of its last accepted move row
+    within MOVER_WINDOW_MS, `none` without one."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    start, end = pull_start(trace), pull_end(trace)
+    bots = {guid for guid in roster_guids(trace) if trace.role(guid) in ("heal", "ranged")}
+    timeline = sorted([("move", rec["t"], rec) for rec in trace.of("move")
+                       if rec.get("g") in bots and rec.get("ok") and start <= rec["t"] <= end]
+                      + [("snap", snap["t"], snap) for snap in frames(trace) if start <= snap["t"] <= end],
+                      key=lambda item: (item[1], item[0] == "snap"))
+    last: dict[int, tuple[int, str]] = {}
+    rows = {guid: {"bot": guid, "samples": 0, "moving": 0, "by": collections.Counter()} for guid in bots}
+    for kind, when, rec in timeline:
+        if kind == "move":
+            last[rec["g"]] = (when, rec.get("by") or rec.get("k") or "?")
+            continue
+        for row in live_rows(rec, bots):
+            out = rows[row[0]]
+            out["samples"] += 1
+            if len(row) > 8 and row[8]:
+                out["moving"] += 1
+                move = last.get(row[0])
+                out["by"][move[1] if move and when - move[0] <= MOVER_WINDOW_MS else "none"] += 1
+    return [{**row, "moving": row["moving"] / row["samples"]}
+            for _, row in sorted(rows.items()) if row["samples"]]
+
+
+def heal_output(trace: Trace) -> dict:
+    """Over the pull: `secs`, the raid's `taken` (damage rows on roster members) and `healed` (effective, amount
+    less overheal, by roster members), and `healers`, effective healing per roster healer, most first."""
+    if encounter_of(trace) != ENCOUNTER:
+        return {}
+    start, end = pull_start(trace), pull_end(trace)
+    roster = roster_guids(trace)
+    taken = 0
+    healed: collections.Counter = collections.Counter()
+    for rec in trace.of("dmg"):
+        if rec.get("d") in roster and start <= rec["t"] <= end:
+            taken += rec.get("a", 0)
+    for rec in trace.of("heal"):
+        if rec.get("s") in roster and start <= rec["t"] <= end:
+            healed[rec["s"]] += rec.get("a", 0) - rec.get("oh", 0)
+    return {"secs": max(end - start, 1) / 1000, "taken": taken, "healed": sum(healed.values()),
+            "healers": [(guid, amount) for guid, amount in healed.most_common() if trace.role(guid) == "heal"]}
 
 
 def nitro_rows(trace: Trace) -> list[dict]:
@@ -2543,10 +2599,22 @@ def show_stands(trace: Trace) -> None:
             print(f"  {trace.name(row['bot'])[:14]:14} {trace.role(row['bot']):7} {row['moves']:5} {row['jumps']:5}"
                   f" {row['path']:6.0f} {row['net']:5.0f}")
     else:
-        print(f"  no {STAND_ACTION} move")
+        print("  no stand move")
     for row in healer_activity(trace):
         print(f"  healer {trace.name(row['bot'])[:14]:14} moving {row['moving'] * 100:3.0f}%"
               f"  casting {row['casting'] * 100:3.0f}%")
+    movers = mover_rows(trace)
+    if movers:
+        print("  moving, by mover:")
+    for row in movers:
+        top = ", ".join(f"{by} {count / row['samples'] * 100:.0f}%" for by, count in row["by"].most_common(3))
+        print(f"    {trace.name(row['bot'])[:14]:14} {trace.role(row['bot']):6} {row['moving'] * 100:3.0f}%"
+              + (f": {top}" if top else ""))
+    output = heal_output(trace)
+    if output:
+        print(f"  raid healed {output['healed'] / output['secs'] / 1000:.1f}k/s effective, took"
+              f" {output['taken'] / output['secs'] / 1000:.1f}k/s; per healer: "
+              + ", ".join(f"{trace.name(guid)} {amount / 1000:.0f}k" for guid, amount in output["healers"]))
     for row in cyclone_rows(trace):
         stand = (f"{CYCLONE} {row['secs']:.0f} s, kill target {row['kill']:.0f} yd, healer {row['healer']:.0f} yd,"
                  f" both in reach {row['both'] * 100:.0f}%" if row["both"] is not None
@@ -2566,7 +2634,8 @@ def show_stands(trace: Trace) -> None:
           f" within {NITRO_MOVE_MS / 1000:.0f} s, walk without one, its hp the bot's health at the use and its"
           f" move the nearest move row and the distance to its target; in reach is the kill target within"
           f" {SPELL_REACH} yd and the covered healer within {CYCLONE_REACH:.0f} yd, centre to centre; a healer's"
-          " moving and casting are shares of its live samples")
+          " moving and casting are shares of its live samples; a moving sample's mover is the bot's last accepted"
+          f" move row within {MOVER_WINDOW_MS / 1000:.0f} s, none without one; healed is heal rows less overheal")
 
 
 def champion_damage(trace: Trace) -> list[dict]:
@@ -2962,7 +3031,8 @@ SECTIONS = (
      show_peel),
     ("hold", "each melee champion's holder: the champion on it, how far off the healers, its other victims,"
      " deaths; melee champions never held", show_hold),
-    ("stands", "stand moves, slot jumps and path against net per stand holder, the Cyclone stand, Nitro Boosts"
+    ("stands", "stand moves, jumps and path against net, healers moving and casting, movers, healing, the Cyclone"
+              " stand, Nitro Boosts"
      " uses by reason", show_stands),
     ("damage", "damage to the raid per champion, and how the melee were controlled", show_damage),
     ("personal", "personal defensives and the health they went up at, per death", show_personal),

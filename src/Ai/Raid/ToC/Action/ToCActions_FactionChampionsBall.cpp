@@ -10,7 +10,6 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-constexpr float HOLD_ARRIVE = 2.0f;
 constexpr float STAND_ARRIVE = 1.5f;
 // a walk already headed here, so a reissue would only restart its spline
 constexpr float SAME_SPOT = 0.5f;
@@ -23,13 +22,36 @@ bool WalkingTo(Position const* walking, Position const& spot)
 
 bool FactionChampionsHoldAction::Execute(Event /*event*/)
 {
-    return AttackDirect(FactionChampionsHoldOf(botAI).champion);
+    Unit* champion = FactionChampionsHoldOf(botAI).champion;
+    if (!champion)
+        return false;
+
+    // our breakable CC is on it or on its way, so no swings, the pet's included, till it ends
+    if (FactionChampionsCcProtected(botAI, champion))
+    {
+        bot->AttackStop();
+        bot->SetSelection(ObjectGuid::Empty);
+        if (Pet* pet = bot->GetPet())
+            pet->AttackStop();
+
+        context->GetValue<Unit*>("current target")->Set(nullptr);
+        return true;
+    }
+
+    return AttackDirect(champion);
 }
 
-bool FactionChampionsHoldWalkAction::Execute(Event /*event*/)
+bool FactionChampionsHoldControlAction::Execute(Event /*event*/)
+{
+    uint32 spellId = 0;
+    Unit* champion = FactionChampionsHoldControl(botAI, spellId);
+    return champion && botAI->CastSpell(spellId, champion);
+}
+
+bool FactionChampionsCycloneStandAction::Execute(Event /*event*/)
 {
     Position spot;
-    if (!FactionChampionsHoldWalk(botAI, spot) || bot->GetExactDist2d(&spot) <= HOLD_ARRIVE)
+    if (!FactionChampionsCycloneStand(botAI, spot) || bot->GetExactDist2d(&spot) <= STAND_ARRIVE)
     {
         DropWalk();
         return false;
@@ -41,17 +63,10 @@ bool FactionChampionsHoldWalkAction::Execute(Event /*event*/)
     return WalkTo(spot);
 }
 
-bool FactionChampionsHoldControlAction::Execute(Event /*event*/)
-{
-    uint32 spellId = 0;
-    Unit* champion = FactionChampionsHoldControl(botAI, spellId);
-    return champion && botAI->CastSpell(spellId, champion);
-}
-
-bool FactionChampionsBallStandAction::Execute(Event /*event*/)
+bool FactionChampionsStepOffAction::Execute(Event /*event*/)
 {
     Position spot;
-    if (!FactionChampionsBallStand(botAI, spot) || bot->GetExactDist2d(&spot) <= STAND_ARRIVE)
+    if (!FactionChampionsStepOff(botAI, spot))
     {
         DropWalk();
         return false;

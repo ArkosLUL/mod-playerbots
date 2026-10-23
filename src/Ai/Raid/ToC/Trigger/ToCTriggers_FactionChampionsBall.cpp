@@ -11,21 +11,24 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-// Past the walk's own arrival, so a holder at its spot doesn't flip between walking and swinging
-constexpr float HOLD_WALK_TRIGGER = 5.0f;
 constexpr float STAND_TRIGGER = 3.0f;
 }  // namespace
 
+// While our breakable CC holds its champion, until the holder has stopped swinging at it
 bool FactionChampionsHoldTrigger::IsActive()
 {
     Unit* champion = FactionChampionsHoldOf(botAI).champion;
-    return champion && (AI_VALUE(Unit*, "current target") != champion || ToCPetOffPick(botAI, champion));
-}
+    if (!champion)
+        return false;
 
-bool FactionChampionsHoldWalkTrigger::IsActive()
-{
-    Position spot;
-    return FactionChampionsHoldWalk(botAI, spot) && botAI->CanMove() && bot->GetExactDist2d(&spot) > HOLD_WALK_TRIGGER;
+    if (FactionChampionsCcProtected(botAI, champion))
+    {
+        Pet* pet = bot->GetPet();
+        return bot->GetVictim() || !bot->GetTarget().IsEmpty() || AI_VALUE(Unit*, "current target") ||
+               (pet && pet->GetVictim());
+    }
+
+    return AI_VALUE(Unit*, "current target") != champion || ToCPetOffPick(botAI, champion);
 }
 
 bool FactionChampionsHoldControlTrigger::IsActive()
@@ -35,11 +38,17 @@ bool FactionChampionsHoldControlTrigger::IsActive()
 }
 
 // Not inside a Bladestorm or Hellfire, the dodge walks out first
-bool FactionChampionsBallStandTrigger::IsActive()
+bool FactionChampionsCycloneStandTrigger::IsActive()
 {
     Position spot;
-    return FactionChampionsBallStand(botAI, spot) && botAI->CanMove() && !FactionChampionsInAoe(botAI) &&
+    return FactionChampionsCycloneStand(botAI, spot) && botAI->CanMove() && !FactionChampionsInAoe(botAI) &&
            bot->GetExactDist2d(&spot) > STAND_TRIGGER;
+}
+
+bool FactionChampionsStepOffTrigger::IsActive()
+{
+    Position spot;
+    return botAI->CanMove() && !FactionChampionsInAoe(botAI) && FactionChampionsStepOff(botAI, spot);
 }
 
 bool FactionChampionsChasedTrigger::IsActive()
@@ -62,15 +71,15 @@ void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("faction champions chased", {
         NextAction("faction champions chased", ACTION_RAID + 2.5f) }));
 
+    triggers.push_back(new TriggerNode("faction champions step off", {
+        NextAction("faction champions step off", ACTION_RAID + 2.4f) }));
+
     triggers.push_back(new TriggerNode("faction champions hold control", {
         NextAction("faction champions hold control", ACTION_RAID + 2.2f) }));
-
-    triggers.push_back(new TriggerNode("faction champions hold walk", {
-        NextAction("faction champions hold walk", ACTION_RAID + 2.1f) }));
 
     triggers.push_back(new TriggerNode("faction champions hold", {
         NextAction("faction champions hold", ACTION_RAID + 2) }));
 
-    triggers.push_back(new TriggerNode("faction champions ball stand", {
-        NextAction("faction champions ball stand", ACTION_RAID + 1.9f) }));
+    triggers.push_back(new TriggerNode("faction champions cyclone stand", {
+        NextAction("faction champions cyclone stand", ACTION_RAID + 1.9f) }));
 }

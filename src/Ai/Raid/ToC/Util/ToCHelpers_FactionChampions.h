@@ -97,17 +97,12 @@ ObjectGuid FactionChampionsChainDk(Player* bot);
 struct FactionChampionsHold
 {
     Unit* champion = nullptr;
-    // the spot is chosen once the champion is on its holder
-    bool placed = false;
-    Position spot;
 };
 
-// The melee champion this bot holds and where. Each melee champion gets one holder, in the order DK,
-// Warrior, Rogue, Retribution, Enhancement: plate DPS first, then cats, then bot tanks, the nearest within a
-// tier. The chain DK takes the DK once its grip is out, and on the Warrior a warrior without Mortal Strike
-// goes first. The spot, on the floor, keeps 30+ yd from every healer, 22+ from the other spots and 25+ from
-// the pack and the kill target, then stays in heal reach of the healers' middle. Written to fc.hold. Empty
-// unless live.
+// The melee champion this bot holds, fought wherever it is. Each melee champion gets one holder, in the
+// order DK, Warrior, Rogue, Retribution, Enhancement: plate DPS first, then cats, then bot tanks, the nearest
+// within a tier. The chain DK takes the DK once its grip is out, and on the Warrior a warrior without Mortal
+// Strike goes first. Written to fc.hold. Empty unless live.
 FactionChampionsHold FactionChampionsHoldOf(PlayerbotAI* botAI);
 
 // The champion this member holds, as of the last refresh. Empty for none
@@ -118,9 +113,6 @@ bool FactionChampionsIsHolder(Player* member);
 
 // The champion has a holder
 bool FactionChampionsIsHeld(PlayerbotAI* botAI, Unit* champion);
-
-// Every placed holder spot and every held champion's position, so stands keep off them. Empty unless live
-std::vector<Position> FactionChampionsHeldPoints(PlayerbotAI* botAI);
 
 // Heroic, and the champion's PvP trinket is off cooldown
 bool FactionChampionsTrinketReady(Unit* champion);
@@ -172,8 +164,14 @@ Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint32& spellId);
 // The member holds a CC duty
 bool FactionChampionsHasCcDuty(PlayerbotAI* botAI, ObjectGuid member);
 
-// A player's CC on it, or a CC duty's cast at it, breaks on damage
+// A player's CC on it, or a CC or peel duty's spell at it, breaks on damage
 bool FactionChampionsCcProtected(PlayerbotAI* botAI, Unit* unit);
+
+// The spell's own aura ends on a hit, or past its damage cap
+bool FactionChampionsBreaksOnDamage(uint32 spellId);
+
+// A player's, pet's, totem's or guardian's periodic damage is on it
+bool FactionChampionsCarriesGroupDot(Unit* unit);
 
 // This bot is the mage on duty and the kill target is casting a heal Counterspell would stop: a channel
 // at once, a cast in its last LATE_INTERRUPT_MS

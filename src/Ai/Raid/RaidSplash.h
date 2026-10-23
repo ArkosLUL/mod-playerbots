@@ -19,6 +19,10 @@ class PlayerbotAI;
 // selection categories, IsAffectingArea adds the persistent area auras. Heals are never counted.
 bool SpellSplashes(PlayerbotAI* botAI, Action* action);
 
+// The totem and trap summons whose area lives on what they summon: Magma Totem, Fire Nova, Explosive Trap
+// and its Trap Launcher. Their own spell reads as positive.
+bool SummonSplashes(Action* action);
+
 // Cleaves, chains and melee area abilities, by action name. Sweeping strikes, cleave, blade flurry,
 // bladestorm, multi-shot and chain lightning carry no area in their own spell, so the spell test misses
 // them.

@@ -25,7 +25,8 @@ std::set<std::string> const OWN_SPLASH = {"death and decay", "pestilence", "hamm
 // Harmful splash only: area buffs like Battle Shout land on the raid
 bool Splashes(PlayerbotAI* botAI, Action* action)
 {
-    if (OWN_SPLASH.count(action->getName()))
+    // the summon spell reads as positive, but what it drops burns every champion round it
+    if (OWN_SPLASH.count(action->getName()) || SummonSplashes(action))
         return true;
 
     if (!SpellSplashes(botAI, action))

@@ -13,16 +13,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Walks the holder to its spot with its champion chasing it
-class FactionChampionsHoldWalkAction : public NorthrendBeastsWalkAction
-{
-public:
-    FactionChampionsHoldWalkAction(PlayerbotAI* botAI) : NorthrendBeastsWalkAction(botAI, "faction champions hold walk")
-    {
-    }
-    bool Execute(Event event) override;
-};
-
 class FactionChampionsHoldControlAction : public Action
 {
 public:
@@ -30,11 +20,20 @@ public:
     bool Execute(Event event) override;
 };
 
-class FactionChampionsBallStandAction : public NorthrendBeastsWalkAction
+class FactionChampionsCycloneStandAction : public NorthrendBeastsWalkAction
 {
 public:
-    FactionChampionsBallStandAction(PlayerbotAI* botAI)
-        : NorthrendBeastsWalkAction(botAI, "faction champions ball stand") {}
+    FactionChampionsCycloneStandAction(PlayerbotAI* botAI)
+        : NorthrendBeastsWalkAction(botAI, "faction champions cyclone stand") {}
+    bool Execute(Event event) override;
+};
+
+// A healer's walk off the melee champions next to it
+class FactionChampionsStepOffAction : public NorthrendBeastsWalkAction
+{
+public:
+    FactionChampionsStepOffAction(PlayerbotAI* botAI)
+        : NorthrendBeastsWalkAction(botAI, "faction champions step off") {}
     bool Execute(Event event) override;
 };
 
@@ -60,10 +59,11 @@ public:
     ToCFactionChampionsBallActionContext()
     {
         creators["faction champions hold"] = &ToCFactionChampionsBallActionContext::faction_champions_hold;
-        creators["faction champions hold walk"] = &ToCFactionChampionsBallActionContext::faction_champions_hold_walk;
         creators["faction champions hold control"] =
             &ToCFactionChampionsBallActionContext::faction_champions_hold_control;
-        creators["faction champions ball stand"] = &ToCFactionChampionsBallActionContext::faction_champions_ball_stand;
+        creators["faction champions cyclone stand"] =
+            &ToCFactionChampionsBallActionContext::faction_champions_cyclone_stand;
+        creators["faction champions step off"] = &ToCFactionChampionsBallActionContext::faction_champions_step_off;
         creators["faction champions opener"] = &ToCFactionChampionsBallActionContext::faction_champions_opener;
         creators["faction champions chased"] = &ToCFactionChampionsBallActionContext::faction_champions_chased;
     }
@@ -71,16 +71,17 @@ public:
 private:
     static Action* faction_champions_hold(PlayerbotAI* botAI) { return new FactionChampionsHoldAction(botAI); }
 
-    static Action* faction_champions_hold_walk(PlayerbotAI* botAI) { return new FactionChampionsHoldWalkAction(botAI); }
-
     static Action* faction_champions_hold_control(PlayerbotAI* botAI)
     {
         return new FactionChampionsHoldControlAction(botAI);
     }
 
-    static Action* faction_champions_ball_stand(PlayerbotAI* botAI) {
-        return new FactionChampionsBallStandAction(botAI);
+    static Action* faction_champions_cyclone_stand(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsCycloneStandAction(botAI);
     }
+
+    static Action* faction_champions_step_off(PlayerbotAI* botAI) { return new FactionChampionsStepOffAction(botAI); }
 
     static Action* faction_champions_opener(PlayerbotAI* botAI) { return new FactionChampionsOpenerAction(botAI); }
 

@@ -136,11 +136,17 @@ constexpr uint32 SPELL_PSYCHIC_HORROR = 64044;
 constexpr std::array<uint32, 6> FROST_NOVA_RANKS = {42917, 27088, 10230, 6131, 865, 122};
 constexpr std::array<uint32, 8> ENTANGLING_ROOTS_RANKS = {53308, 26989, 9853, 9852, 5196, 5195, 1062, 339};
 constexpr std::array<uint32, 4> HAMMER_OF_JUSTICE_RANKS = {10308, 5589, 5588, 853};
+constexpr uint32 SPELL_REPENTANCE = 20066;
+constexpr uint32 SPELL_BLIND = 2094;
+// the arrow drops a trap whose freeze (the effect) is what lands and breaks
+constexpr uint32 SPELL_FREEZING_ARROW = 60192;
+constexpr uint32 SPELL_FREEZING_ARROW_EFFECT = 60210;
+constexpr std::array<uint32, 6> DEATH_COIL_RANKS = {47860, 47859, 27223, 17926, 17925, 6789};
 // closer, the holder DK's own walk and swings already reach it
 constexpr float HOLD_GRIP_MIN = 8.0f;
 
-// Hand of Protection goes on one physical champion, the rest wait for two and this much health, so they're
-// still up when the focused member drops. Four on a non-tank don't wait.
+// Hand of Protection waits for four champions, actual or about to pick, the rest for two and this much
+// health, so they're still up when the focused member drops. Four on a non-tank don't wait.
 constexpr uint32 PROTECT_MIN_ATTACKERS = 2;
 constexpr float PROTECT_HEALTH_PCT = 60.0f;
 // A holder has one champion on it by design, and losing it lets that champion loose
@@ -1510,6 +1516,41 @@ bool InSpellRange(Player* caster, Unit* target, uint32 spellId)
     return info && caster->IsWithinCombatRange(target, info->GetMaxRange(false, caster));
 }
 
+uint32 ReadyInRange(Player* caster, Unit* target, uint32 spellId)
+{
+    return SpellReady(caster, spellId) && InSpellRange(caster, target, spellId) ? spellId : 0;
+}
+
+// What lands on the champion: the Freezing Arrow trap's freeze, else the spell itself
+uint32 PeelLanding(uint32 spellId) { return spellId == SPELL_FREEZING_ARROW ? SPELL_FREEZING_ARROW_EFFECT : spellId; }
+
+// A hit ends it. Roots aside: they go on a champion that is still being hit, as before.
+bool PeelBreaks(uint32 spellId)
+{
+    SpellInfo const* landing = spellId ? sSpellMgr->GetSpellInfo(PeelLanding(spellId)) : nullptr;
+    return landing && !landing->HasAura(SPELL_AURA_MOD_ROOT) && FactionChampionsBreaksOnDamage(landing->Id);
+}
+
+// Nobody of ours swings at it, selects it or ticks a DoT on it, its holder aside, who stops while our CC holds
+bool ClearOfOurHits(std::vector<Member> const& members, Unit* champion)
+{
+    for (Member const& member : members)
+    {
+        Player* player = member.player;
+        if (FactionChampionsHeldBy(player) == champion->GetGUID())
+            continue;
+
+        if (player->GetVictim() == champion || player->GetTarget() == champion->GetGUID())
+            return false;
+
+        Pet* pet = player->GetPet();
+        if (pet && pet->IsAlive() && pet->GetVictim() == champion)
+            return false;
+    }
+
+    return !FactionChampionsCarriesGroupDot(champion);
+}
+
 // The peel this bot can put on champion from where it stands, 0 when none. Roots and Frost Nova stay off
 // a champion near a pack tank, and Death Grip only goes where it lands the champion back toward the pack,
 // never on the kill target.
@@ -1525,18 +1566,25 @@ uint32 ReadyPeel(Player* peeler, Unit* champion, Position const& packCentre, boo
             // the danger champion only, and not at the third stun step, which holds 1.5 s
             uint32 const rank = danger ? FirstKnownRank(peeler, HAMMER_OF_JUSTICE_RANKS) : 0;
             SpellInfo const* info = rank ? sSpellMgr->GetSpellInfo(rank) : nullptr;
-            if (!info || !SpellReady(peeler, rank) || !InSpellRange(peeler, champion, rank))
-                return 0;
+            if (info && SpellReady(peeler, rank) && InSpellRange(peeler, champion, rank) &&
+                champion->GetDiminishing(GetDiminishingReturnsGroupForSpell(info, false)) < DIMINISHING_LEVEL_3)
+                return rank;
 
-            DiminishingLevels const level = champion->GetDiminishing(GetDiminishingReturnsGroupForSpell(info, false));
-            return level < DIMINISHING_LEVEL_3 ? rank : 0;
+            return ReadyInRange(peeler, champion, SPELL_REPENTANCE);
         }
         case CLASS_WARRIOR:
             return inMelee && !disarmed && StanceAllows(peeler, SPELL_DISARM) && SpellReady(peeler, SPELL_DISARM)
                        ? SPELL_DISARM
                        : 0;
         case CLASS_ROGUE:
-            return inMelee && !disarmed && SpellReady(peeler, SPELL_DISMANTLE) ? SPELL_DISMANTLE : 0;
+            if (inMelee && !disarmed && SpellReady(peeler, SPELL_DISMANTLE))
+                return SPELL_DISMANTLE;
+
+            return ReadyInRange(peeler, champion, SPELL_BLIND);
+        case CLASS_HUNTER:
+            return ReadyInRange(peeler, champion, SPELL_FREEZING_ARROW);
+        case CLASS_WARLOCK:
+            return ReadyInRange(peeler, champion, FirstKnownRank(peeler, DEATH_COIL_RANKS));
         case CLASS_MAGE:
         {
             uint32 const rank = FirstKnownRank(peeler, FROST_NOVA_RANKS);
@@ -1686,8 +1734,16 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
             uint32 const spellId =
                 ReadyPeel(peeler, champion, centre, nearPackTank, chainDk, opener, killTarget, entry.danger);
             SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-            if (!info || champion->IsImmunedToSpell(info) || !peeler->IsWithinLOSInMap(champion) ||
-                (keepTrinket && FactionChampionsSpellPopsTrinket(spellId)))
+            SpellInfo const* landing = spellId ? sSpellMgr->GetSpellInfo(PeelLanding(spellId)) : nullptr;
+            if (!info || !landing || champion->IsImmunedToSpell(landing) || !peeler->IsWithinLOSInMap(champion) ||
+                (keepTrinket && FactionChampionsSpellPopsTrinket(landing->Id)))
+                continue;
+
+            if (PeelBreaks(spellId) && !ClearOfOurHits(members, champion))
+                continue;
+
+            DiminishingGroup const drGroup = GetDiminishingReturnsGroupForSpell(landing, false);
+            if (drGroup != DIMINISHING_NONE && champion->GetDiminishing(drGroup) >= DIMINISHING_LEVEL_IMMUNE)
                 continue;
 
             // Frost Nova would freeze a gripped healer flying past too
@@ -1975,7 +2031,6 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
 
     // casters count too: four of them kill a healer from full in a second or two
     std::unordered_map<ObjectGuid, uint32> attackers;
-    std::unordered_map<ObjectGuid, uint32> physical;
     for (Unit* champion : champions)
     {
         if (champion->HasUnitState(UNIT_STATE_LOST_CONTROL))
@@ -1987,20 +2042,12 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
             continue;
 
         ++attackers[victim->GetGUID()];
-        if (IsPhysicalChampion(champion->GetEntry()))
-            ++physical[victim->GetGUID()];
     }
 
     // cover goes out on the champions' next pick, not a second or two after their hits land
     for (auto const& entry : state.predicted)
     {
         uint32& count = attackers[entry.first];
-        count = std::max(count, entry.second);
-    }
-
-    for (auto const& entry : state.predictedPhysical)
-    {
-        uint32& count = physical[entry.first];
         count = std::max(count, entry.second);
     }
 
@@ -2017,9 +2064,9 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
         bool const others = (hits->second >= FOCUS_PREEMPT_CHAMPIONS && !IsTankMember(member.player)) ||
                             (hits->second >= PROTECT_MIN_ATTACKERS && health <= PROTECT_HEALTH_PCT) ||
                             (FactionChampionsIsHolder(member.player) && health <= HOLDER_PROTECT_HEALTH_PCT);
-        // every champion drops an immune holder, casters too, so four on it need no physical one
-        bool const hand = (physical.count(member.player->GetGUID()) || hits->second >= FOCUS_PREEMPT_CHAMPIONS) &&
-                          HandOfProtectionFits(member);
+        // every champion drops the immune member, casters too, so it's kept for a real focus: one each per
+        // fight
+        bool const hand = hits->second >= FOCUS_PREEMPT_CHAMPIONS && HandOfProtectionFits(member);
         if (others || hand)
         {
             focused.push_back(member);
@@ -2804,6 +2851,17 @@ Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId)
     FactionChampionsDefenceState* state = Refresh(botAI);
     Unit* champion = state ? DutyTarget(state->peels, botAI->GetBot(), spellId) : nullptr;
     return champion && champion->IsAlive() ? champion : nullptr;
+}
+
+bool FactionChampionsBreakablePeelAt(PlayerbotAI* botAI, Unit* champion)
+{
+    FactionChampionsDefenceState* state = champion ? Refresh(botAI) : nullptr;
+    if (!state)
+        return false;
+
+    return std::any_of(state->peels.begin(), state->peels.end(),
+                       [champion](auto const& peel)
+                       { return peel.second.target == champion->GetGUID() && PeelBreaks(peel.second.spellId); });
 }
 
 Unit* FactionChampionsProtectTarget(PlayerbotAI* botAI, uint32& spellId)
