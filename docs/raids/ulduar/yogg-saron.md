@@ -1489,7 +1489,12 @@ back of the Chamber room (141-150 yd) the lead read 40-43 s, so eight of nine la
 36 s left, walked out in 14-15 s, and left the Brain at 30.7%, a whole extra wave. Brain under 30%
 still sends a bot out from anywhere.
 `yogg-saron exit hold cast multiplier` zeroes cast-time spells and channels while latched below;
-a mage channelled Evocation for 5 s 51 yd from a portal. A flat worst-case lead threw away a third of every window for a
+a mage channelled Evocation for 5 s 51 yd from a portal. **Bladestorm and Killing Spree are cancelled at
+the portal** (`YoggSaronCancelAbilityLock`, `yogg.exitcancel`; at the Descend Into Madness click
+`yogg.portalcancel`) and held by the multiplier while latched: their `SPELL_AURA_ALLOW_ONLY_ABILITY` fails
+the portal's untriggered cast ([pitfalls](../../engine/pitfalls.md)). Mighty left under Bladestorm in
+three pulls running; in the kill one cast 1 s before the latch outlasted the walk, `Use` did nothing
+for 2.4 s, Induce Madness took him, and phase 3 had no Mortal Strike. A flat worst-case lead threw away a third of every window for a
 bot standing next to a portal. From the Brain the walk out takes 1.5-2.8 s for melee and 2.9-4.2 s for
 the healer; a 10 s floor surfaced every bot with 7-8 s unused, ~2.5% of the Brain a wave at the ~41k
 DPS the team puts into it. Induce Madness is cast in the tick `AddPortals` spawns the portals, so
@@ -1884,7 +1889,8 @@ beacon's stacked heals, each tank's 20 s under a heal (taken / healed / buttons 
 damage on the healed ones, and area casts by worth-hitting count with `yogg.p3area` (by centre
 distance, so a lower bound: the module takes off each unit's size, several yards on an Empowered
 Guardian, which is why 100 of 440 casts read under 3 though every one followed `allowed`). Also: full
-Drain Lifes with a bot kick ready and in range and `yogg.kicknudge`; bot kicks cast before their channel began and
+Drain Lifes with a bot kick ready and in range all through and `yogg.kicknudge`; time back on a tank per
+healed Guardian by holder kind (`back on a tank`); `yogg.beaconbear`; bot kicks cast before their channel began and
 how far into a cut channel the kick came; per marked Guardian its taunts
 (`took` / `didn't take` / `channelling`, read like the module) and its Drain Life seconds and cuts; per
 beacon the stagers' gap to their spot at the mark, the kick reserve with its kicks (`yogg.markkick`) and
@@ -1966,7 +1972,8 @@ Madness leaves no damage or aura row, so the Insane aura is its only record and 
 out. The trace has no DmgClass, so a ranged bot's melee hits on a Crusher are matched by name
 (`MELEE_CLASS_NAMES`). And the exit walk uses its portal at `INTERACTION_DISTANCE`, the 5 yd that also
 counts as arrived, so a clean exit often leaves no `yogg.walk` row; `--brain`'s `caught by it` measures
-that walk instead.
+that walk instead, with the seconds under Bladestorm / Killing Spree since the decision. `exit under a
+lock` counts exits that carried one, with the cancel probes.
 
 ## The Death Orb is not the hazard
 
@@ -2147,7 +2154,8 @@ tanks for the 20 s heal and killed a tank 17-32 s after it in both of two pulls.
   them 0 → 79% and 54 → 80% in 6 s, the south spot 34-38 yd off. Five Guardians at full plus a fresh
   one: the bot tank carried four, took 102k in 8 hits and died, then 20 deaths in 20 s. Claims
   (`beaconDrags`): bot
-  tanks while another tank lives, then non-heal paladins and Death Knights, then hunters, by GUID, taunt
+  tanks while another tank lives, then non-heal paladins and Death Knights, then hunters, then feral
+  druids, by GUID, taunt
 off cooldown,
   **never a bot an unmarked Guardian is hitting** — that one would follow it out. It attacks only once
   standing, since `Attack`'s facing turn ends a walk; releases on the heal aura or 3 s after the mark
@@ -2184,8 +2192,8 @@ off cooldown,
   humans included, one per victim per 8 s (`ACTION_EMERGENCY + 5`, `yogg.dragext`). Divine Shield and
   Ice Block are blocked on such a victim: an immune victim sheds aggro (`ThreatManager.cpp:123-134`).
   After the release the dragger walks back to the melee spot until a tank has it or 8 s pass
-  (`return`), since the tank is ~39 yd away and a taunt reaches 30, and guardian control taunts loose
-  Guardians highest health first. **A tank holding the pile is covered too**: its own button the moment
+  (`return`), since the tank is ~39 yd away and a taunt reaches 30, and guardian control takes it back
+  first (below). **A tank holding the pile is covered too**: its own button the moment
   2+ Guardians on it carry a 64486 / 64468 application another Guardian cast (`YoggSaronPileHealedOn`,
   `BEACON_PILE_RESET_GUARDIANS`, at any health, by the user's choice), an external under 50%
   (`BEACON_TANK_EXTERNAL_PCT`), draggers still first. A human tank is called on the same pile, and also at
@@ -2207,7 +2215,25 @@ off cooldown,
   a fixed threat for 6 s, where Taunt, Hand of Reckoning and Dark Command are effect 114, which
   `Spell::EffectTaunt` matches to the top threat for good. No damage on it before then (the
   multiplier; Feign Death and Deterrence blocked), and Feign Death if it is still on the hunter 1 s
-  into the heal with the taunt gone (`shot` / `feign`).
+  into the heal with the taunt gone (`shot` / `feign`). The human tank taunted marks off hunters 1-3 s
+  before the heal twice in one pull; the second left a mark in the pile.
+- **The tank takes a healed Guardian off a paladin, DK or druid dragger first**
+  (`YoggSaronLooseGuardianTier`): tier 0 one still on its dragger within 8 s of the release, 1 the rest,
+  2 one under its hunter's Distracting Shot, which goes back by itself; then highest health, then
+  nearest (`yogg.tankhold return taunt` / `return defense`). Only a tank's taunt frees an effect 114
+  dragger. Sorted by health alone, the hunter's Guardian and fresh spawns near the pile won, and the
+  far-lane dragger waited out an 8 s cooldown. Mean time to a tank, paladin/DK vs hunter draggers:
+  8.7 / 2.7 s, 8.8 / 3.0, 6.9 / 1.1 over three pulls; draggers died 9-20 s after a heal six times, and
+  all three wipes ended on a beacon whose mark stayed in the pile after a dragger died. Rebirth has no
+  encounter hook in phase 3: one pull's went to a dragger, one to a hunter, one had none left.
+- **A feral druid drags last, in a bear form, by the user's choice**: after the hunters, a bot druid
+  neither heal nor ranged, in a bear form or with the mana for one (`YoggSaronBearReady`: the bot's
+  spell check skips cost). Staged, dragging or returning (`YoggSaronBeaconBearHeld`), it drops its form
+  and casts Dire Bear Form, else Bear Form (`yogg-saron beacon bear form`, `ACTION_RAID + 4.5`,
+  `yogg.beaconbear`): neither casts while shapeshifted. `cat form` / `caster form` are blocked
+  meanwhile; the cat strategy shifts it back after. Growl (6795) needs the form and has no GCD; until the
+  shift is in it fails and holds the drag. `IsTank` reads the strategy, so its Guardian stays loose,
+  tier 0.
 - **Deafening Roar is covered by an Aura Mastery chain** (25-man, fewer than 4 Keepers: 30 s in, then
   every 60 s, 2.3 s cast, 4 s silence within 50 yd). Two pulls: 21 / 23 / 18 silenced, healing 40k →
   17k/s. 64364 reaches only raiders carrying the presser's own Concentration Aura
@@ -2232,7 +2258,8 @@ off cooldown,
   ranged 38 yd west of Yogg (Crusher first, station `released` 11 s), on the Guardian spawn ring (a
   random angle, 38-48 yd out). The first one left its 4 s root, took Corruption and Immolate, and
   one-shot both warlocks (51k) at +7.3 / +9.4 s with both tanks 56+ yd away.
-- **The bot tank skips a Guardian already carrying another tank's taunt** (`SPELL_AURA_MOD_TAUNT`):
+- **The bot tank skips a Guardian already carrying another tank's taunt, or its own** not yet turned, as
+  under Drain Life (`SPELL_AURA_MOD_TAUNT`):
   both tanks taunted the same fresh one together three times a pull. Every Guardian still left its
   first tank, 26 of 26 at a median +5 s.
 - **Area spells need three units worth hitting, by the user's choice** (`YoggSaronPhase3AreaMultiplier`).
@@ -2275,7 +2302,10 @@ off cooldown,
   (`YoggSaronDrainLifeKickable`): a channel has no cast time and `Spell::EffectInterruptCast` skips a
   zero-cast-time spell still PREPARING, so a kick in its first update, 9.5 s after the last kick when the
   Guardian recasts, did nothing: 29 of 174 / 34 of 168 kicks a pull. Replaying one pull's kicks youngest
-  first: Drain Life 12.15M → 11.27M.
+  first: Drain Life 12.15M → 11.27M. With it, 2-5 kicks a pull were wasted and 96-106 of ~145 cut
+  channels were kicked before the first tick. **Kicks are at capacity**: a kicker ready, alive and in
+  range all through a full channel with no kick inside it, 1 / 9 / 3 a pull; read only at the channel's
+  start, 35-47.
 - **A warlock gets its demon back in phase 3** (`yogg-saron warlock pet`, `ACTION_RAID - 0.5`): pets are
   summoned only out of combat, and one pull's warlock came back from a phase 2 death with no felhunter, no
   Spell Lock all phase 3 (9 kicks the pull before). With no live pet it casts Fel Domination if it has it,

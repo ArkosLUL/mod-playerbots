@@ -207,6 +207,15 @@ mechanic that punishes an ongoing cast (Mistress' Kiss) can only be answered fro
 tick, by `RequestSpellInterrupt` on the caster. A channel runs triggers but fails `CanCastSpell`, so a
 caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge).
 
+## An ability lock makes a portal or spell click a silent no-op
+
+`GameObject::Use` on a goober and `Creature::HandleSpellClick` make the **user** cast the spell,
+untriggered (`GameObject.cpp:1734, 2111-2113`, `Unit.cpp:15260`). Bladestorm and Killing Spree carry
+`SPELL_AURA_ALLOW_ONLY_ABILITY`, which sets `PLAYER_ALLOW_ONLY_ABILITY`, and `Spell::CheckCast` then
+fails every untriggered cast with `SPELL_FAILED_SPELL_IN_PROGRESS` (`Spell.cpp:5878`): the call
+returns, nothing happens. Cancel the aura first, under the client's cancel rules
+(`YoggSaronCancelAbilityLock`); a warrior went insane at Yogg-Saron's exit portal this way.
+
 ## Movement that silently no-ops
 
 - **`MoveTo` does not validate the destination against the navmesh.** With `exact_waypoint = false,

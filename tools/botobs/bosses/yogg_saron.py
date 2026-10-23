@@ -304,6 +304,8 @@ BRAIN_PHASE_3_PCT = 30.0
 # Induce Madness is cast in the tick AddPortals spawns the wave's portals, so the wave note plus the
 # cast time is when anyone still underground loses all 100 Sanity.
 INDUCE_MADNESS_CAST_MS = 60000
+# SPELL_AURA_ALLOW_ONLY_ABILITY: the exit portal casts its spell from the bot untriggered, and these fail it.
+ABILITY_LOCKS = {46924: "Bladestorm", 51690: "Killing Spree"}
 
 # Holy Light's range, for "could the healer reach this raider from where it stood".
 HEAL_RANGE = 40.0
@@ -391,6 +393,11 @@ ROAR_CAST_MS = 2300
 SPELL_DISTRACTING_SHOT = 20736
 SPELL_FEIGN_DEATH = 5384
 DRAG_WATCH_MS = 20000
+# Roster class ids. A paladin's, DK's or druid's taunt matches top threat for good, so only a tank's taunt
+# takes a healed Guardian off them. A hunter's shot wears off by itself.
+CLASS_HUNTER = 3
+TAUNT_DRAGGER_CLASSES = {2, 6, 11}
+HANDBACK_KINDS = ("taunt dragger", "hunter", "tank", "other")
 # When the module reads a drag taunt as taken or not, by when any taunt has landed, and how stale the
 # Guardian's row may be at the check.
 BEACON_TAUNT_CHECK_MS = 1500
@@ -1806,17 +1813,30 @@ def show_brain(trace: Trace) -> None:
         # A safe after a leaving inside the same cast is the bot talking itself back to the Brain.
         brain_rows = snapshot_rows(trace, guids_of_entry(trace, NPC_BRAIN))
         casts = cast_windows([row for rows in brain_rows.values() for row in rows], SPELL_INDUCE_MADNESS)
-        flips, left_in = 0, {}
+        flips, left_in, decided = 0, {}, {}
         for rec in notes(trace, "yogg.exit"):
             guid = rec.get("g", 0)
             window = next((i for i, (start, stop) in enumerate(casts) if start <= rec["t"] <= stop), None)
             if window is None:
                 continue
+            if rec.get("txt") in ("leaving", "late"):
+                decided.setdefault((guid, window), rec["t"])
             if rec.get("txt") != "safe":
                 left_in[guid] = window
             elif left_in.get(guid) == window:
                 flips += 1
         print(f"  exit decisions   : {dict(exits)}, {flips} back to safe after leaving")
+        # The portal does nothing under Bladestorm, so the exit has to cancel it first.
+        locks = defensive_spans(trace, max((stop for _, stop in casts), default=0), ABILITY_LOCKS)
+        under = exits_under_lock([(guid, when, casts[window][1]) for (guid, window), when in decided.items()], locks)
+        cancels = {key: collections.Counter(ABILITY_LOCKS.get(int(text), text) if text.isdigit() else text
+                                            for text in (str(rec.get("txt", "")) for rec in notes(trace, key)))
+                   for key in ("yogg.exitcancel", "yogg.portalcancel")}
+        if under or any(cancels.values()):
+            under.sort(key=lambda hit: hit[1])
+            names = ", ".join(f"{trace.name(guid)} {name} {clock(when)}" for guid, when, name in under)
+            print(f"  exit under a lock: {len(under)}{' - ' + names if names else ''}; cancelled at the exit"
+                  f" {dict(cancels['yogg.exitcancel'])}, at the way down {dict(cancels['yogg.portalcancel'])}")
 
     nitro = [rec for rec in trace.of("cast") if rec.get("sp") == SPELL_NITRO_BOOSTS_USE]
     nitro_notes = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.nitro"))
@@ -1963,6 +1983,7 @@ def show_madness_caught(trace: Trace) -> None:
     names = ", ".join(f"{trace.name(guid)}({trace.role(guid)})"
                       for guid in sorted(charmed, key=lambda guid: trace.name(guid)))
     print(f"  caught by it     : {len(caught)} of {len(charmed)} Insane - {names}")
+    locks = defensive_spans(trace, max((when for when, *_ in caught), default=0), ABILITY_LOCKS)
     for when, guid, x, y, z in caught:
         gap = min((math.dist((x, y), spot) for spot in ways_out), default=0.0)
         height = f"{z - BRAIN_FLOOR_Z:.1f} yd in the air" if z > BRAIN_FLOOR_Z else "on the floor"
@@ -1975,8 +1996,10 @@ def show_madness_caught(trace: Trace) -> None:
         if left is None:
             print(f"{'':16}never decided to leave")
         else:
+            locked, lock_names = lock_overlap(locks.get(guid, []), when - int(left * 1000), when)
+            lock = f", under {'/'.join(lock_names)} {locked:4.1f} s" if lock_names else ""
             print(f"{'':16}decided with {left:4.1f} s left, back to safe {flips}x,"
-                  f" exit walk refused {refused:4.1f} s, casting {cast:4.1f} s")
+                  f" exit walk refused {refused:4.1f} s, casting {cast:4.1f} s{lock}")
 
     teleported = {guid for _, guid, *_ in caught}
     for guid in sorted(set(charmed) - teleported, key=lambda guid: charmed[guid]):
@@ -2743,6 +2766,30 @@ def exit_losses(verdicts: list[tuple[int, str]], walks: list[tuple[int, str]], c
     return (end - first) / 1000.0, flips, refused, cast
 
 
+def lock_overlap(spans: list[tuple[int, int, str]], start: int, end: int) -> tuple[float, list[str]]:
+    """Seconds of [start, end] under any of `spans` as (start, end, name), and their names in first-seen order."""
+    seconds, names = 0.0, []
+    for began, ended, name in sorted(spans):
+        overlap = min(ended, end) - max(began, start)
+        if overlap > 0:
+            seconds += overlap / 1000.0
+            if name not in names:
+                names.append(name)
+    return seconds, names
+
+
+def exits_under_lock(decisions: list[tuple[int, int, int]],
+                     spans: dict[int, list[tuple[int, int, str]]]) -> list[tuple[int, int, str]]:
+    """(guid, decided, name) for each exit decision as (guid, decided, cast end) whose bot carried an ability lock at
+    any point from the decision to the end of that Induce Madness cast."""
+    hits = []
+    for guid, decided, stop in decisions:
+        lock = next((name for began, ended, name in spans.get(guid, []) if began <= stop and ended >= decided), None)
+        if lock:
+            hits.append((guid, decided, lock))
+    return hits
+
+
 def sanity_trips(heights: list[tuple[int, float]], sanity: list[tuple[int, int]],
                  level_z: float) -> list[tuple[int, int, int | None, int | None, int | None]]:
     """Each trip below `level_z` as (down, up, Sanity going down, lowest below, Sanity coming up), inputs in time order.
@@ -2921,13 +2968,35 @@ def kick_ages(kicks: list[tuple[int, int]], channels: list[tuple[int, int, int]]
     return ages
 
 
-def ready_kickers(kicks: dict[int, tuple[list[int], int, float]], spots: dict[int, tuple[float, float]],
-                  channel: tuple[float, float], when: int, slack: float = KICK_RANGE_SLACK) -> int:
-    """How many bots had their kick off cooldown and the channelling Guardian in range at `when`. Kicks
-    are per bot (sorted cast times, cooldown ms, range yd), spots where each bot stood then."""
-    return sum(1 for guid, (casts, cooldown, reach) in kicks.items()
-               if guid in spots and not on_cooldown(casts, when, cooldown)
-               and math.dist(spots[guid], channel) <= reach + slack)
+def holder_kind(guid: int, tanks: set, classes: dict[int, int]) -> str:
+    """Which of HANDBACK_KINDS a healed Guardian's holder is, by its roster class id."""
+    if guid in tanks:
+        return "tank"
+    if classes.get(guid) == CLASS_HUNTER:
+        return "hunter"
+    return "taunt dragger" if classes.get(guid) in TAUNT_DRAGGER_CLASSES else "other"
+
+
+def handback_summary(handbacks: list[tuple[str, float | None]]) -> list[tuple[str, int, float | None, int]]:
+    """Per holder kind in HANDBACK_KINDS order, from (kind, seconds until a tank had it or None): healed Guardians,
+    the median over those a tank got back, and how many it never did."""
+    summary = []
+    for kind in HANDBACK_KINDS:
+        times = [seconds for each, seconds in handbacks if each == kind]
+        back = [seconds for seconds in times if seconds is not None]
+        if times:
+            summary.append((kind, len(times), statistics.median(back) if back else None, len(times) - len(back)))
+    return summary
+
+
+def idle_kicker(casts: list[int], cooldown: int, reach: float, began: int, end: int,
+                gaps: list[float | None], slack: float = KICK_RANGE_SLACK) -> bool:
+    """Whether one bot's kick sat unused through a whole channel from `began` to `end`: none cast inside it or close
+    enough before it to still be cooling down, and alive within reach + slack at every probe (gaps: yd to the caster
+    each second from 1 s in, None while dead or unseen)."""
+    if any(began - cooldown < when <= end for when in casts):
+        return False
+    return bool(gaps) and all(gap is not None and gap <= reach + slack for gap in gaps)
 
 
 def guardians_on(victims: dict[int, list[list]], tank: int, when: int, floor: float = 0.0,
@@ -4244,20 +4313,35 @@ def show_phase3(trace: Trace) -> None:
     channels = drain_life_channels(drains)
     if channels:
         cut = sum(1 for _, _, ms in channels if ms <= DRAIN_CUT_MS)
-        full = [(began, caster) for began, caster, ms in channels if ms >= DRAIN_FULL_MS]
-        # A kick that was ready and in reach while the channel ran out sat on a bot busy casting.
+        full = [(began, caster, ms) for began, caster, ms in channels if ms >= DRAIN_FULL_MS]
+        # A kick ready and in reach for the whole channel sat on a bot busy casting. Only at the start says little:
+        # the kicker may just be walking in.
         kicks: dict[int, tuple[list[int], int, float]] = {}
         for rec in trace.of("cast"):
             kick = KICK_SPELLS.get(rec.get("sp"))
             if kick and rec.get("s") in roster and rec.get("s") not in trace.humans:
                 kicks.setdefault(rec.get("s"), ([], kick[1], kick[2]))[0].append(rec["t"])
+        watched = set(kicks) | {caster for _, caster, _ in full}
+        stamps = {guid: [row[0] for row in rows.get(guid, [])] for guid in watched}
+
+        def row_at(guid: int, when: int) -> list | None:
+            index = bisect.bisect_right(stamps[guid], when)
+            return rows[guid][index - 1] if index else None
+
+        def gap(guid: int, caster: int, when: int) -> float | None:
+            me, them = row_at(guid, when), row_at(caster, when)
+            if not me or not them or me[6] <= 0:
+                return None
+            return math.dist(me[2:4], them[2:4])
+
         missed = 0
-        for began, caster in full:
-            spot = at(trace, caster, began)
-            spots = {guid: where[:2] for guid in kicks if (where := at(trace, guid, began))}
-            missed += bool(spot) and ready_kickers(kicks, spots, spot[:2], began) > 0
+        for began, caster, ms in full:
+            probes = range(began + 1000, began + ms, 1000)
+            missed += any(idle_kicker(casts, cooldown, reach, began, began + ms,
+                                      [gap(guid, caster, when) for when in probes])
+                          for guid, (casts, cooldown, reach) in kicks.items())
         print(f"    Drain Life       : {len(channels)} channels, {cut} cut inside {DRAIN_CUT_MS / 1000:.1f} s,"
-              f" {len(full)} ran the full 5 s, {missed} of those with a bot kick ready and in range")
+              f" {len(full)} ran the full 5 s, {missed} of those with a bot kick ready and in range all through")
         # Each kick saves only the ticks its channel has left, and kicks run on cooldown.
         kick_casts = [(rec["t"], rec.get("tgt", 0)) for rec in trace.of("cast")
                       if rec.get("sp") in KICK_SPELLS and rec.get("s") in roster and rec.get("s") not in trace.humans
@@ -4333,6 +4417,8 @@ def show_phase3(trace: Trace) -> None:
     # How much of the Guardians' healing ran under Mortal Strike's -50%.
     cut_samples = [(rec["t"], str(rec.get("txt", ""))) for rec in notes(trace, "yogg.healcut")]
     print(f"\n  Shadow Beacons     : {len(beacons)}")
+    classes = {row["g"]: row.get("c") for row in trace.header.get("roster", [])}
+    handbacks: list[tuple[str, float | None]] = []
     yogg_spot = at(trace, yogg, start) if yogg else None
     for group in group_runs([rec["t"] for rec in heals], 1000, 0):
         casters = [rec for rec in heals if group[0] <= rec["t"] <= group[1]]
@@ -4418,6 +4504,9 @@ def show_phase3(trace: Trace) -> None:
                          and group[0] <= when <= group[0] + DRAG_WATCH_MS and holder and caster == holder[8])
             hunter = f", {shots} Distracting Shot, {feigns} Feign Death" if shots or feigns else ""
             tank = f"+{(tank_at - group[0]) / 1000:.1f} s" if tank_at else "never"
+            if holder and holder[8]:
+                handbacks.append((holder_kind(holder[8], tanks, classes),
+                                  (tank_at - group[0]) / 1000 if tank_at else None))
             print(f"      held by {trace.name(holder[8]) if holder and holder[8] else '-'} at the heal{hunter};"
                   f" a tank had it {tank}; non-tanks hit: {'; '.join(parts) or 'none'}")
             # A missed taunt and a mark's own Drain Life are what kept marks in the pile.
@@ -4428,13 +4517,20 @@ def show_phase3(trace: Trace) -> None:
             seconds, count, cut = mark_drains(channels, guardian, mark_at, group[0])
             print(f"        taunts: {'; '.join(tried) or 'none'}; Drain Life {seconds:.1f} s in {count}"
                   f" channel(s), {cut} cut")
+    # A dragger still under a healed Guardian dies there: the time until a tank took it, by who held it.
+    back = []
+    for kind, count, median, never in handback_summary(handbacks):
+        back.append(f"{kind} {count}, " + (f"median +{median:.1f} s" if median is not None else "none back")
+                    + (f", {never} never" if never else ""))
+    if back:
+        print(f"    back on a tank   : {'; '.join(back)}")
     drags = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beacondrag"))
     if drags:
         print(f"    yogg.beacondrag  : {dict(drags)}")
     sides = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beaconspot"))
     if sides:
         print(f"    yogg.beaconspot  : {dict(sides)}")
-    for key in ("yogg.dragdef", "yogg.dragext", "yogg.mortalstrike", "yogg.warlockpet"):
+    for key in ("yogg.dragdef", "yogg.dragext", "yogg.mortalstrike", "yogg.warlockpet", "yogg.beaconbear"):
         picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, key) if start <= rec["t"] <= stop)
         if picks:
             print(f"    {key:16} : {dict(picks)}")

@@ -1679,14 +1679,42 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.drain_life_spans(rows), [400, 5000])
         self.assertEqual(yogg_saron.drain_life_channels(rows), [(1000, 7, 400), (1300, 8, 5000)])
 
-    def test_ready_kickers_need_the_kick_off_cooldown_and_the_channel_in_range(self):
-        kicks = {1: ([1000], 6000, 25.0), 2: ([5000], 10000, 5.0), 3: ([], 24000, 30.0)}
-        spots = {1: (0.0, 0.0), 2: (0.0, 0.0), 3: (50.0, 0.0)}
-        # 1 is back at 7 s and in reach, 2 is still on cooldown, 3 is ready but 40 yd out against 30 + slack
-        self.assertEqual(yogg_saron.ready_kickers(kicks, spots, (10.0, 0.0), 7000), 1)
-        self.assertEqual(yogg_saron.ready_kickers(kicks, spots, (10.0, 0.0), 6000), 0)
-        self.assertEqual(yogg_saron.ready_kickers(kicks, spots, (4.0, 0.0), 16000), 2)
-        self.assertEqual(yogg_saron.ready_kickers(kicks, {}, (4.0, 0.0), 16000), 0)
+    def test_idle_kicker_needs_the_kick_ready_and_the_channel_in_reach_all_through(self):
+        # a 10-15 s channel against a 6 s, 25 yd kick, 6 yd slack
+        self.assertTrue(yogg_saron.idle_kicker([1000], 6000, 25.0, 10000, 15000, [10.0, 20.0, 31.0, 12.0]))
+        # still cooling down from 5 s, or kicked inside it
+        self.assertFalse(yogg_saron.idle_kicker([5000], 6000, 25.0, 10000, 15000, [10.0] * 4))
+        self.assertFalse(yogg_saron.idle_kicker([12000], 6000, 25.0, 10000, 15000, [10.0] * 4))
+        # out of reach once, dead or unseen once, or never probed
+        self.assertFalse(yogg_saron.idle_kicker([], 6000, 25.0, 10000, 15000, [10.0, 32.0, 10.0, 10.0]))
+        self.assertFalse(yogg_saron.idle_kicker([], 6000, 25.0, 10000, 15000, [10.0, None, 10.0, 10.0]))
+        self.assertFalse(yogg_saron.idle_kicker([], 6000, 25.0, 10000, 15000, []))
+
+    def test_lock_overlap_counts_only_the_part_inside_the_window(self):
+        spans = [(50000, 52000, "Bladestorm"), (38060, 44090, "Bladestorm"), (1000, 2000, "Killing Spree")]
+        seconds, names = yogg_saron.lock_overlap(spans, 39102, 43988)
+        self.assertAlmostEqual(seconds, 4.886)
+        self.assertEqual(names, ["Bladestorm"])
+        self.assertEqual(yogg_saron.lock_overlap(spans, 3000, 30000), (0.0, []))
+
+    def test_exits_under_lock_flag_a_lock_up_between_the_decision_and_the_cast_end(self):
+        spans = {1: [(38060, 44090, "Bladestorm")], 2: [(10000, 16000, "Killing Spree")],
+                 4: [(25000, 31000, "Bladestorm")]}
+        decisions = [(1, 39102, 45000), (2, 20000, 30000), (3, 20000, 30000), (4, 20000, 30000), (1, 60000, 70000)]
+        # 1 spun from before it decided, 2's spree was over first, 3 had none, 4 spun after deciding,
+        # 1's next exit was clean
+        self.assertEqual(yogg_saron.exits_under_lock(decisions, spans),
+                         [(1, 39102, "Bladestorm"), (4, 20000, "Bladestorm")])
+
+    def test_handback_summary_groups_by_holder_kind_and_keeps_never_apart(self):
+        classes = {1: 2, 2: 6, 3: 3, 4: 11, 5: 1, 9: 2}
+        kinds = [yogg_saron.holder_kind(guid, {9}, classes) for guid in (1, 2, 3, 4, 5, 9)]
+        self.assertEqual(kinds, ["taunt dragger", "taunt dragger", "hunter", "taunt dragger", "other", "tank"])
+        handbacks = [("taunt dragger", 8.0), ("hunter", 1.0), ("taunt dragger", 2.0), ("taunt dragger", None),
+                     ("tank", 0.0), ("hunter", 3.0), ("other", None)]
+        self.assertEqual(yogg_saron.handback_summary(handbacks),
+                         [("taunt dragger", 3, 5.0, 1), ("hunter", 2, 2.0, 0), ("tank", 1, 0.0, 0),
+                          ("other", 1, None, 1)])
 
     def test_kicks_before_channel_count_only_kicks_just_ahead_of_that_guardians_drain(self):
         opens = [(10000, 7), (20000, 8)]
