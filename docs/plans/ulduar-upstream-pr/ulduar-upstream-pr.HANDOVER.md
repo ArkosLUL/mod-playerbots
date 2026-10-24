@@ -77,13 +77,13 @@ Was any code in this PR copied or adapted from a sister / upstream project (e.g.
 - - [x] Any new bot dialogue lines are translated.
 - - [x] New source files use the GPLv2 header.
 - - [x] Documentation updated if needed (Code comments, Conf comments, WiKi commands).
-- - [ ] New and modified files do not introduce new compiler warnings.
+- - [x] New and modified files do not introduce new compiler warnings.
 
 ## Notes for Reviewers
 
-- It's a draft so people can test it on their servers. I tested it over more than 10 Ulduar lockouts on my fork, not on test-staging's core. The build matrix on this PR will be the first full build against test-staging.
+- It's a draft so people can test it on their servers. I tested it over more than 10 Ulduar lockouts on my fork, not on test-staging's core. It builds against test-staging with gcc and clang and the CI flags, no warnings.
 - Commits go: remove the old strategy, add the shared files, one commit per boss, then the config options. Only the tip builds, since the shared headers name every boss.
-- My fork's core makes a few Ulduar spells resistible that test-staging's core doesn't: Algalon's Cosmic Smash (fire), Mimiron's Water Spray and Sif's spells (frost), and Yogg-Saron's shadow damage. The resistance aura picks for those don't help against them on test-staging's core.
+- My fork's core lets a few Ulduar spells partially resist where test-staging's core doesn't yet: Algalon's Cosmic Smash (fire), Mimiron's Water Spray (frost), and Yogg-Saron's Dark Volley and Malady of the Mind (shadow). The resistance aura picks for those won't help on test-staging until azerothcore/azerothcore-wotlk#<ISSUE> is fixed. Sif's spells already resist there since azerothcore/azerothcore-wotlk#27927.
 - Not cheats, but worth knowing: Mimiron hands the Magnetic Core to a bot with `StoreNewItem`, and bots that fall through the floor on Auriaya, Kologarn, Thorim and Yogg-Saron get put back with `NearTeleportTo`.
 - The only new chat line is Razorscale's "set as main tank" yell, which comes over from the old strategy.
 - This also replaces the XT-002 strategy, so it overlaps #2653.
