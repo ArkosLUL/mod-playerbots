@@ -568,7 +568,7 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
         else if (!touching && victim && victim->IsAlive() && victim->GetEntry() != NPC_CRUSHER_TENTACLE)
             elsewhere = victim;
         else
-            elsewhere = target ? target : YoggSaronPetFallbackTarget(botAI, pet);
+            elsewhere = target ? target : YoggSaronPetFallbackTarget(pet);
 
         // Passive pets only attack while this is set (PetAI::CanAttack).
         if (CharmInfo* charm = pet->GetCharmInfo())

@@ -761,7 +761,7 @@ bool ClaimYoggSaronSqueezeRescue(PlayerbotAI* botAI, Player* victim);
 
 // Somewhere other than a Crusher Tentacle for a pet to be, nearest first. nullptr when the pet has
 // nothing else within reach, which is the only case worth silencing it for.
-Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet);
+Unit* YoggSaronPetFallbackTarget(Creature* pet);
 
 // Phase 3: the leftover Corruptor or Constrictor every pet goes for, or nullptr: a holding Constrictor, then (no
 // Thorim) one a beacon heal reaches, then lowest health, then GUID. Skips any with a swinging Crusher in Crush range.

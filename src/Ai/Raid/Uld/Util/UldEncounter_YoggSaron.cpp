@@ -3876,7 +3876,7 @@ bool YoggSaronIllusionHealerStation(PlayerbotAI* botAI, Position& station)
     return found;
 }
 
-Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet)
+Unit* YoggSaronPetFallbackTarget(Creature* pet)
 {
     if (!pet)
         return nullptr;
