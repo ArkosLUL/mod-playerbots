@@ -1,6 +1,6 @@
 ## Pull Request Description
 
-[[ DISCLAIMER: Arkos ]]
+**Disclaimer:** Ulduar's hard modes have a big RNG factor, and a lot of them are gear checks for the tanks, healers or DPS. The better the gear, the less bullshit-per-minute can happen. I wouldn't try them below an average raid item level of 226.
 
 Stacked on #2876 (the raid encounter framework) and #HELPERS (shared raid helpers). Until those are merged this diff shows them too. This PR's part is `src/Ai/Raid/Uld/`, the four hard mode options in `PlayerbotAIConfig` and `playerbots.conf.dist`, and its registration in `Playerbots.cpp` and `BuildSharedValueContexts.cpp`.
 
@@ -17,7 +17,13 @@ Bots never start a hard mode, they play the one the raid starts. Four bosses hav
 
 Flame Leviathan's towers, Freya's Elders, Thorim's Sif and Yogg-Saron's Keepers need no option. Bots react to those mechanics whenever they show up.
 
-[[ PER-BOSS NOTES: Arkos ]]
+A few bosses need a certain raid setup:
+
+- **Flame Leviathan**: at least 2 real players in Demolishers to deal with the turrets and stun Leviathan.
+- **Thorim**: two well geared tanks, and paladins should be the best fit. The main tank should be a bot, and it'll stay with the arena squad.
+- **Freya**: I built and tested it with a human off-tank in mind. Off-tank is the most important role in this fight, so it's best if you take it yourself.
+- **Hodir**: a bot with good enough gear can solo tank him.
+- **Mimiron**: a bot with good enough gear can solo tank him too. Bring extra healers, I tested with 5. Between phases it's on you to position the bots so they handle the flames, use the `summon` command if needed.
 
 ## Feature Evaluation
 
@@ -32,7 +38,7 @@ Flame Leviathan's towers, Freya's Elders, Thorim's Sif and Yogg-Saron's Keepers 
 ## How to Test the Changes
 
 1. Take a raid of bots into Ulduar, 10 or 25 man. `ulduar` is applied automatically on map 603 with `Playerbots.ApplyInstanceStrategies = 1`, which is the default.
-2. Pull the bosses. The per boss notes above say what each fight should look like.
+2. Pull the bosses. The notes above say what setup a few of them need.
 3. For a hard mode, start it the usual way (leave the towers up, keep the vapors alive, press Mimiron's button, ...). For Vezax, Iron Assembly, XT-002 and Mimiron, turn that boss's option on first.
 
 ## Impact Assessment

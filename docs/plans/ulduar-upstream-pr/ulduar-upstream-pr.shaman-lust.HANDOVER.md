@@ -51,7 +51,7 @@ Was any code in this PR copied or adapted from a sister / upstream project (e.g.
 
 ## Final Checklist
 
-- - [ ] Changes are understood and tested for server stability and performance impact.
+- - [x] Changes are understood and tested for server stability and performance impact.
 - - [x] Any new bot dialogue lines are translated.
 - - [x] New source files use the GPLv2 header.
 - - [x] Documentation updated if needed (Code comments, Conf comments, WiKi commands).

@@ -47,7 +47,7 @@ Was AI assistance used while working on this change?
 - - [ ] No
 - - [x] Yes (**explain below**)
 
-Yes. I used Claude Code to move these helpers out of my fork's raid strategies and clean them up for this repo's guidelines. I reviewed all of it.
+Yes. I used Claude Code to move these helpers out of my fork's raid strategies and clean them up for this repo's guidelines. I haven't reviewed the code line by line. I tested it in game on my fork instead, through the Ulduar strategy over more than 10 lockouts.
 
 ## Code Provenance / Attribution
 
