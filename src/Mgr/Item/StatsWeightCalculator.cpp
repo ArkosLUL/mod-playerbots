@@ -9,6 +9,7 @@
 #include "BisDatasetMgr.h"
 #include "BisListMgr.h"
 #include "DBCStores.h"
+#include "Item.h"
 #include "ItemEnchantmentMgr.h"
 #include "ItemTemplate.h"
 #include "ObjectMgr.h"
@@ -26,6 +27,8 @@
 #include "Unit.h"
 
 #include <algorithm>
+#include <array>
+#include <iterator>
 #include <memory>
 
 namespace
@@ -251,12 +254,17 @@ float StatsWeightCalculator::CalculateItem(uint32 itemId, int32 randomPropertyId
     }
 
     // Socket value is expressed relative to the item's own stats, so it needs the plain stat sum,
-    // before the type penalty and set multiplier scale weight_ away from that space.
+    // before the set bonus, type penalty and set multiplier scale weight_ away from that space.
     float statSumWeight = weight_;
+
+    // Most raid tier bonuses only change class spells and leave no stats to score, so those get the
+    // set multiplier instead.
+    float const setBonusValue = enable_item_set_bonus_ ? ItemSetBonusValue(player_, proto) : 0.0f;
+    weight_ += setBonusValue;
 
     CalculateItemTypePenalty(proto);
 
-    if (enable_item_set_bonus_)
+    if (enable_item_set_bonus_ && setBonusValue == 0.0f)
         CalculateItemSetMod(player_, proto);
 
     CalculateSocketBonus(proto, statSumWeight);
@@ -369,7 +377,7 @@ uint8 StatsWeightCalculator::BisReferencePhase(uint8 entryPhase) const
     return reference;
 }
 
-float StatsWeightCalculator::CalculateEnchant(uint32 enchantId)
+float StatsWeightCalculator::CalculateEnchant(uint32 enchantId, uint32 weaponDelay, bool isRanged)
 {
     SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchantId);
 
@@ -378,7 +386,7 @@ float StatsWeightCalculator::CalculateEnchant(uint32 enchantId)
 
     Reset();
 
-    collector_->CollectEnchantStats(enchant);
+    collector_->CollectEnchantStats(enchant, 0, weaponDelay, isRanged);
 
     if (enable_overflow_penalty_)
         ApplyOverflowPenalty(player_);
@@ -943,6 +951,56 @@ uint32 StatsWeightCalculator::BuildSmartStatMask(Player* player)
     calculator.GenerateWeights(player);
 
     return BuildSmartMaskFromWeights(calculator.stats_weights_);
+}
+
+float StatsWeightCalculator::ItemSetBonusValue(Player* player, ItemTemplate const* proto)
+{
+    uint32 itemSet = proto->ItemSet;
+    if (!itemSet)
+        return 0.0f;
+
+    ItemSetEntry const* setEntry = sItemSetStore.LookupEntry(itemSet);
+    if (!setEntry)
+        return 0.0f;
+
+    uint32 base = EquippedSetPieces(player, itemSet);
+    if (replaced_item_set_ == itemSet && base > 0)
+        base--;
+
+    std::array<float, STATS_TYPE_MAX> itemStats;
+    std::copy(std::begin(collector_->stats), std::end(collector_->stats), itemStats.begin());
+
+    // Only the bonus this piece switches on. The ones already active stay credited to the pieces
+    // giving them, so a candidate and the item it replaces compare on the same baseline.
+    for (uint32 j = 0; j < MAX_ITEM_SET_SPELLS; ++j)
+    {
+        if (setEntry->items_to_triggerspell[j] == base + 1 && setEntry->spells[j])
+            collector_->CollectSpellStats(setEntry->spells[j], 1.0f, Milliseconds(0));
+    }
+
+    // the item's own stats are clamped already, so the bonus only gets the cap room they left
+    if (enable_overflow_penalty_ || replaced_slot_)
+        ApplyOverflowPenalty(player);
+
+    float value = 0.0f;
+    bool givesStats = false;
+    for (uint32 i = 0; i < STATS_TYPE_MAX; ++i)
+    {
+        float const gained = stats_weights_[i] * (collector_->stats[i] - itemStats[i]);
+        value += gained;
+        // STATS_TYPE_BONUS (procs the collector can't read) adds to the value but isn't a stat
+        if (i != STATS_TYPE_BONUS && gained > 0.0001f)
+            givesStats = true;
+    }
+
+    if (!givesStats)
+    {
+        // keeps calc's per-stat breakdown equal to what was scored
+        std::copy(itemStats.begin(), itemStats.end(), std::begin(collector_->stats));
+        return 0.0f;
+    }
+
+    return value;
 }
 
 void StatsWeightCalculator::CalculateItemSetMod(Player* player, ItemTemplate const* proto)

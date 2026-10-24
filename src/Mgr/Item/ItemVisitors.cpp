@@ -20,6 +20,14 @@ bool FindOffensivePotionVisitor::Accept(ItemTemplate const* proto)
     return IsOffensivePotionId(proto->ItemId);
 }
 
+bool FindStartQuestItemVisitor::Visit(Item* item)
+{
+    if (!item->GetTemplate()->StartQuest)
+        return true;
+
+    return FindUsableItemVisitor::Visit(item);
+}
+
 bool FindPotionVisitor::Accept(ItemTemplate const* proto)
 {
     if (proto->Class == ITEM_CLASS_CONSUMABLE &&

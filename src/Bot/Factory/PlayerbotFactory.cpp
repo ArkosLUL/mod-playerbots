@@ -5995,7 +5995,8 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                         continue;
                     }
 
-                    float score = calculator.CalculateEnchant(enchant_id);
+                    float score = calculator.CalculateEnchant(enchant_id, item->GetTemplate()->Delay,
+                                                              item->GetTemplate()->IsRangedWeapon());
                     // Strict compare: bestScore starts at 0, so >= would let the last worthless
                     // enchant of the scan win the slot purely on iteration order.
                     if (score > bestScore)

@@ -60,7 +60,7 @@ public:
     StatsWeightCalculator(Player* player);
     void Reset();
     float CalculateItem(uint32 itemId, int32 randomPropertyId = 0, int32 slot = -1);
-    float CalculateEnchant(uint32 enchantId);
+    float CalculateEnchant(uint32 enchantId, uint32 weaponDelay = 0, bool isRanged = false);
     int32 PickBestRandomPropertyId(uint32 itemId);
     static uint32 BuildSmartStatMask(Player* player);
 
@@ -96,12 +96,20 @@ public:
     // Where the weights come from, for calc: the sim row and item level, or why they're hand-written.
     std::string DescribeWeights();
 
+    // Read access for diagnostics (e.g. the `calc` chat command)
+    StatsCollector const* GetCollector() const { return collector_.get(); }
+    float const* GetStatWeights() const { return stats_weights_; }
+
     private:
     void GenerateWeights(Player* player);
     void GenerateBasicWeights(Player* player);
     void GenerateAdditionalWeights(Player* player);
 
     void CalculateItemSetMod(Player* player, ItemTemplate const* proto);
+    // Weighted stats of the set bonus this piece switches on, pieces counted as in
+    // CalculateItemSetMod. Needs the weights generated. Adds them to the collector, unless they come
+    // to 0: a bonus with no plain stats is left to the set multiplier.
+    float ItemSetBonusValue(Player* player, ItemTemplate const* proto);
     // statSumWeight is the item's plain weighted stat sum, before the type penalty and set
     // multiplier; socket value is scored as a fraction of it.
     void CalculateSocketBonus(ItemTemplate const* proto, float statSumWeight);
