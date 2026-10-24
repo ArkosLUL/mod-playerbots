@@ -32,7 +32,6 @@ constexpr uint32 SPELL_MOLTEN_SPEW = 66821;       // no row
 constexpr uint32 SPELL_ACIDIC_SPEW_TICK = 66819;  // row 602
 constexpr uint32 SPELL_MOLTEN_SPEW_TICK = 66820;  // row 611
 constexpr uint32 SPELL_SLIME_POOL_AURA = 66882;   // no row, one tick a second grows the pool
-constexpr uint32 SPELL_WORM_ENRAGE = 68335;       // no row, the survivor's once the other worm dies
 constexpr uint32 SPELL_PARALYTIC_SPRAY = 66901;   // row 604
 constexpr uint32 SPELL_BURNING_SPRAY = 66902;     // row 608
 
@@ -87,8 +86,9 @@ constexpr uint32 WORM_SETTLE_MS = 500;
 constexpr float WORM_SETTLE_MOVE = 0.5f;
 constexpr float WORM_SETTLE_TURN_DEG = 5.0f;
 
-// The script schedules Spew 15-30 s after the engage, each emerge and each cast start
-constexpr uint32 WORM_SPEW_EARLIEST_MS = 15000;
+// The script's Spew: 11 s after the engage, at once on a mobile emerge, then 22 s after each cast start
+constexpr uint32 WORM_SPEW_FIRST_MS = 11000;
+constexpr uint32 WORM_SPEW_REPEAT_MS = 22000;
 constexpr uint32 WORM_SPEW_LEAD_MS = 4000;
 
 // Path test
@@ -107,11 +107,19 @@ constexpr float WORM_SPEW_CLEAR_PAD = 12.0f * static_cast<float>(M_PI) / 180.0f;
 // TARGET_UNIT_CONE_ENEMY_24, for the ids spell_cone has no row for
 constexpr float WORM_SPEW_DEFAULT_HALF_ARC = 12.0f * static_cast<float>(M_PI) / 180.0f;
 
-// Slime Pool radius is 2 + 0.3 x tick, 11 at the end, centre to centre
+// Slime Pool radius is 2 + 0.3 x tick, centre to centre, till the pool despawns: 30 s on normal (11 yd),
+// 45 s on 10H, 60 s on 25H (20 yd)
 constexpr float WORM_POOL_BASE_RADIUS = 2.0f;
 constexpr float WORM_POOL_GROWTH_PER_TICK = 0.3f;
-constexpr float WORM_POOL_MAX_RADIUS = 11.0f;
 constexpr uint32 WORM_POOL_SOON_TICKS = 5;
+
+// Heroic pools outlive the 12 s between them, so the mobile holder walks its worm round the edge and
+// they line the wall: its drag looks on this band first, 2 yd inside the spot floor
+constexpr float WORM_EDGE_MIN = 36.0f;
+constexpr float WORM_EDGE_MAX = WORM_SPOT_FLOOR_RADIUS - 2.0f;
+// Further in, a heroic worm gets walked out before its next pool. It stops 8.5 yd short of its tank, so
+// one walked out from the middle settles past this.
+constexpr float WORM_EDGE_WORM_MIN = WORM_EDGE_MIN - WORM_TANK_OFFSET - 2.0f;
 constexpr float WORM_POOL_TRIGGER_PAD = 1.0f;    // on the radius now
 constexpr float WORM_POOL_CLEARANCE_PAD = 2.0f;  // on the radius 5 s on
 
@@ -122,7 +130,8 @@ static_assert(WORM_SWEEP_RADIUS < WORM_SWEEP_TRIGGER && WORM_SWEEP_TRIGGER < WOR
 static_assert(WORM_SPLASH_RADIUS < WORM_BILE_TRIGGER && WORM_BILE_TRIGGER < WORM_BILE_CLEARANCE, "bile band");
 static_assert(WORM_SPREAD_TRIGGER < WORM_SPREAD_CLEARANCE, "spread band");
 static_assert(WORM_SPRAY_TRIGGER < WORM_SPRAY_CLEARANCE, "spray band");
-static_assert(WORM_SPEW_LEAD_MS < WORM_SPEW_EARLIEST_MS, "spew lead");
+static_assert(WORM_SPEW_LEAD_MS < WORM_SPEW_FIRST_MS, "spew lead");
+static_assert(WORM_EDGE_MIN < WORM_EDGE_MAX, "edge band");
 static_assert(WORM_MELEE_STACK_TRIGGER < WORM_MELEE_STACK_CLEARANCE, "melee stack band");
 static_assert(WORM_POOL_TRIGGER_PAD < WORM_POOL_CLEARANCE_PAD, "pool band");
 static_assert(WORM_SPEW_TRIGGER_PAD < WORM_SPEW_CLEAR_PAD, "spew band");
@@ -134,7 +143,7 @@ static_assert(180.0f - WORM_MELEE_GROUP_DEG >= WORM_MELEE_REAR_ARC_DEG, "the dea
 
 bool IsWormSubmerged(Unit* worm);                 // UNIT_FLAG_NOT_SELECTABLE, submerge start to emerge
 // Display form. Under ground, the form it comes up in once the other worm is under too; while the
-// other is still up, the opposite of that one's. An enraged survivor comes up mobile.
+// other is still up, the opposite of that one's. A survivor flips at every emerge too.
 bool IsWormMobile(Unit* worm);
 float WormSpewHalfArc(PlayerbotAI* botAI);        // radians, half the cone the remapped tick uses
 
@@ -143,6 +152,7 @@ struct WormDragPlan
     std::vector<EncounterHelpers::HazardCircle> hazards;    // pools and the stationary worm
     std::vector<EncounterHelpers::HazardCircle> poolsOnly;  // fallback sweep
     Position preferNear;                                     // 10 yd on from the tank, away from the worm
+    bool edge = false;                                       // heroic: the WORM_EDGE band first
 };
 // The mobile worm this bot holds must be walked out: true fills the plan for the tank's own spot
 bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan);

@@ -682,7 +682,8 @@ class WormPull(unittest.TestCase):
         self.assertEqual(pools[0]["inside"], collections.Counter({SOOTHE: 20000}))
         self.assertEqual(pools[0]["hits"], collections.Counter({SOOTHE: 2}))
         self.assertEqual(nb.pool_radius(0), 2.0)
-        self.assertEqual(nb.pool_radius(45000), 11.0)
+        self.assertEqual(nb.pool_radius(45000), 15.5)
+        self.assertEqual(nb.pool_radius(70000), 20.0)
 
     def test_sweep_victims_by_role(self):
         self.assertEqual(nb.sweep_victims(self.trace), {"melee": collections.Counter({EDGE: 1}),

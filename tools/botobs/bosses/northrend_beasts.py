@@ -49,8 +49,9 @@ What the generic views get wrong here, and what this reads instead:
   only at the later worm's emerge, up to 1.5 s after the first. `nb.cure`, `nb.wormmove` and
   `nb.wormhold` are per-bot change-only notes too.
 - **Neither worm hazard reaches `snap.hz`.** The Spew cone is a `haz` `wedge` row, `arc` degrees either
-  side of `facing`; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 to 11, so
-  `--worms` rebuilds its radius from its first snapshot.
+  side of `facing`; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 till it
+  despawns (11 yd at 30 s on normal, 20 at 60 s on 25H), so `--worms` rebuilds its radius from its
+  first snapshot.
 - **A Spray's `cast` row is its start.** The splash lands on its target when the cast ends, `ct`
   later, so `--worms` reads who stood in it from the snapshot nearest that end. Its debuff arrives as
   one burst of applies 1-3 s after the row, so the first burst 0.8-4 s after it is who took it.
@@ -810,11 +811,12 @@ WORM_STATES = {"0": "none", "1": "dreadscale mobile", "2": "acidmaw mobile", "3"
                "4": "lone dreadscale", "5": "lone acidmaw"}
 WORM_UNDER = "3"
 
-# The script's numbers, not the bots': the pool aura casts each 1 s tick at 2 + 0.3 * tick yd, and
-# Toxin lasts 60 s with a snare that reaches a full stop at 18 s, 13.5 s on heroic.
+# The script's numbers, not the bots': the pool aura casts each 1 s tick at 2 + 0.3 * tick yd up to its
+# 60th, and Toxin lasts 60 s with a snare that reaches a full stop at 18 s, 13.5 s on heroic. A pool
+# despawns at 30 s on normal, 45 s on 10H and 60 s on 25H, which ends its snapshots.
 POOL_BASE_RADIUS = 2.0
 POOL_GROWTH = 0.3
-POOL_MAX_RADIUS = 11.0
+POOL_MAX_RADIUS = 20.0
 TOXIN_EXPIRED_MS = 59000
 TOXIN_STUCK_MS = 18000
 TOXIN_STUCK_HEROIC_MS = 13500

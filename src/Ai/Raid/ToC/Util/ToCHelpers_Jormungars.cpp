@@ -29,6 +29,7 @@
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellMgr.h"
+#include "TemporarySummon.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Gormok.h"
@@ -81,12 +82,12 @@ constexpr uint32 SPEW_NOTE_TTL_MS = 3500;
 constexpr float MELEE_BEHIND = 6.0f;
 // The drag aims this far on from the tank, so the worm keeps facing the same way
 constexpr float DRAG_LEAD = 10.0f;
-// Pool at full size, the melee round the worm and the worm's offset from its tank. The pad keeps the
-// settled worm past the drag trigger, or the drag fires again as it stops.
-constexpr float DRAG_POOL_CLEARANCE =
-    WORM_POOL_MAX_RADIUS + WORM_MELEE_RANGE + WORM_TANK_OFFSET + WORM_POOL_CLEARANCE_PAD;
-constexpr float DRAG_STATIONARY_CLEARANCE =
-    WORM_SWEEP_CLEARANCE + WORM_MELEE_RANGE + WORM_TANK_OFFSET + WORM_POOL_CLEARANCE_PAD;
+// A pool counts at its size this far on: the next one drops 12 s on and starts the next drag anyway
+constexpr uint32 DRAG_POOL_HORIZON_TICKS = 15;
+// Off a pool or the stationary worm, the melee round the worm and the worm's offset from its tank. The
+// pad keeps the settled worm past the drag trigger, or the drag fires again as it stops.
+constexpr float DRAG_OFFSETS = WORM_MELEE_RANGE + WORM_TANK_OFFSET + WORM_POOL_CLEARANCE_PAD;
+constexpr float DRAG_STATIONARY_CLEARANCE = WORM_SWEEP_CLEARANCE + DRAG_OFFSETS;
 // The sweep finds nothing for an empty list, and a Spew or cure plan can have no circle of its own.
 // Also turns down a spot the collision check pulled back onto the bot.
 constexpr float FEET_CLEARANCE = 1.0f;
@@ -123,7 +124,9 @@ struct WormSlotClock
     ObjectGuid guid;
     uint32 motionMs = 0;
     Position motionPos;  // carries the facing
-    uint32 spewScheduleMs = 0;
+    // The next Spew comes spewDelayMs after spewMarkMs at the earliest
+    uint32 spewMarkMs = 0;
+    uint32 spewDelayMs = 0;
     bool submerged = false;
     bool spewing = false;
 };
@@ -141,6 +144,7 @@ struct WormPool
 {
     Position pos;
     uint32 tick = 0;
+    uint32 lastTick = 0;      // it despawns, or its aura ends, after this one
     float radius = 0.0f;
     float radiusSoon = 0.0f;  // 5 s on
 };
@@ -208,12 +212,19 @@ RaidInstanceState<JormungarsState> jormungarsStates;
 
 float PoolRadius(uint32 tick)
 {
-    return std::min(WORM_POOL_BASE_RADIUS + WORM_POOL_GROWTH_PER_TICK * static_cast<float>(tick),
-                    WORM_POOL_MAX_RADIUS);
+    return WORM_POOL_BASE_RADIUS + WORM_POOL_GROWTH_PER_TICK * static_cast<float>(tick);
 }
 
 // The pool ticks once a second
 uint32 PoolTicksIn(uint32 ms) { return (ms + 999) / 1000; }
+
+// Its size that many ticks on, which stops growing at its last tick
+float PoolRadiusIn(WormPool const& pool, uint32 ticks)
+{
+    return PoolRadius(std::min(pool.tick + ticks, pool.lastTick));
+}
+
+float DragPoolClearance(WormPool const& pool) { return PoolRadiusIn(pool, DRAG_POOL_HORIZON_TICKS) + DRAG_OFFSETS; }
 
 float HalfArcOf(uint32 tickSpellId)
 {
@@ -366,8 +377,18 @@ void ClockWorm(Unit* worm, WormRead& read, WormSlotClock& clock, uint32 now)
         clock.guid = read.guid;
     }
 
-    if (fresh || (clock.submerged && !read.submerged) || (read.spewing && !clock.spewing))
-        clock.spewScheduleMs = now;
+    auto const markSpew = [&clock, now](uint32 delayMs)
+    {
+        clock.spewMarkMs = now;
+        clock.spewDelayMs = delayMs;
+    };
+
+    if (fresh)
+        markSpew(WORM_SPEW_FIRST_MS);
+    else if (clock.submerged && !read.submerged)
+        markSpew(0);
+    if (read.spewing && !clock.spewing)
+        markSpew(WORM_SPEW_REPEAT_MS);
 
     clock.submerged = read.submerged;
     clock.spewing = read.spewing;
@@ -381,7 +402,7 @@ void ClockWorm(Unit* worm, WormRead& read, WormSlotClock& clock, uint32 now)
 
     read.settled = getMSTimeDiff(clock.motionMs, now) >= WORM_SETTLE_MS;
     read.spewArmed =
-        read.spewing || getMSTimeDiff(clock.spewScheduleMs, now) >= WORM_SPEW_EARLIEST_MS - WORM_SPEW_LEAD_MS;
+        read.spewing || getMSTimeDiff(clock.spewMarkMs, now) + WORM_SPEW_LEAD_MS >= clock.spewDelayMs;
 }
 
 void ReadSpray(Unit* worm, WormRead const& read, uint32 sprayId, bool burning, WormSpray& spray)
@@ -433,11 +454,17 @@ void RefreshPools(Player* bot, Map* map, JormungarsState& state, uint32 now)
         if (!grow)
             continue;
 
+        // The summon spell's duration by difficulty sets when it despawns, 30 to 60 s
+        int32 left = aura->GetDuration();
+        if (TempSummon* summon = pool->ToTempSummon())
+            left = std::min(left, static_cast<int32>(summon->GetTimer()));
+
         WormPool read;
         read.pos = pool->GetPosition();
         read.tick = grow->GetTickNumber();
+        read.lastTick = read.tick + PoolTicksIn(static_cast<uint32>(std::max(left, 0)));
         read.radius = PoolRadius(read.tick);
-        read.radiusSoon = PoolRadius(read.tick + WORM_POOL_SOON_TICKS);
+        read.radiusSoon = PoolRadiusIn(read, WORM_POOL_SOON_TICKS);
         state.pools.push_back(read);
     }
 }
@@ -583,7 +610,7 @@ bool UrgentAt(JormungarsState const& state, ObjectGuid const& self, float x, flo
 {
     uint32 const castTicks = PoolTicksIn(castRemainingMs);
     for (WormPool const& pool : state.pools)
-        if (pool.pos.GetExactDist2d(x, y) < std::max(pool.radius, PoolRadius(pool.tick + castTicks)))
+        if (pool.pos.GetExactDist2d(x, y) < PoolRadiusIn(pool, castTicks))
             return true;
 
     if (sprayDodge && SprayLandsNear(state, self, x, y))
@@ -1162,7 +1189,7 @@ bool PathBlocked(WormPath const& path, float x, float y, bool poolsOnly)
     Position const to(x, y, path.from.GetPositionZ());
     uint32 const ticks = static_cast<uint32>(std::ceil(path.from.GetExactDist2d(x, y) / path.speed));
     for (WormPool const& pool : path.pools)
-        if (CircleBlocksWalk(path.from, to, pool.pos, PoolRadius(pool.tick + ticks) + WORM_POOL_PATH_PAD))
+        if (CircleBlocksWalk(path.from, to, pool.pos, PoolRadiusIn(pool, ticks) + WORM_POOL_PATH_PAD))
             return true;
 
     if (poolsOnly)
@@ -1387,8 +1414,8 @@ bool IsWormMobile(Unit* worm)
         if (!IsWormSubmerged(other))
             return !ShowsMobile(other);
 
-    // Every emerge flips the form, except the survivor's, which always comes up mobile
-    return worm->HasAura(SPELL_WORM_ENRAGE) || !ShowsMobile(worm);
+    // Every emerge flips the form, the survivor's too
+    return !ShowsMobile(worm);
 }
 
 float WormSpewHalfArc(PlayerbotAI* botAI)
@@ -1412,7 +1439,8 @@ bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan)
         GetBeastOfDuty(botAI, BeastsTankDuty::WormMobile) != worm)
         return false;
 
-    if (IsWormSubmerged(worm) || worm->GetVictim() != bot)
+    // A lone survivor keeps this duty in its stationary form too, rooted
+    if (IsWormSubmerged(worm) || worm->GetVictim() != bot || !IsWormMobile(worm))
         return false;
 
     Position chargeStart;
@@ -1430,13 +1458,22 @@ bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan)
         if (worm->GetExactDist2d(pool.pos) < pool.radiusSoon + WORM_MELEE_RANGE)
             needed = true;
 
+    Map* map = bot->FindMap();
+    plan.edge = map && map->IsHeroic();
+    // Not while it spews: its cone would sweep after the tank
+    WormRead const* read = FindWorm(*state, worm->GetGUID());
+    if (plan.edge && read && !read->spewing &&
+        ARENA_CENTER.GetExactDist2d(worm->GetPositionX(), worm->GetPositionY()) < WORM_EDGE_WORM_MIN)
+        needed = true;
+
     if (!needed)
         return false;
 
     for (WormPool const& pool : state->pools)
     {
-        plan.hazards.emplace_back(pool.pos, DRAG_POOL_CLEARANCE);
-        plan.poolsOnly.emplace_back(pool.pos, DRAG_POOL_CLEARANCE);
+        float const clearance = DragPoolClearance(pool);
+        plan.hazards.emplace_back(pool.pos, clearance);
+        plan.poolsOnly.emplace_back(pool.pos, clearance);
     }
 
     if (stationary)
@@ -1714,8 +1751,11 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
         }
     }
 
-    // `reach melee` walks a melee on Gormok straight back into Sweep range, so it only dodges the cast
-    bool const sweepOnlyWhileCast = role == WormRole::Melee && target && target->IsAlive() && !IsWormEntry(target);
+    bool const bothWorms = !state->worms[SLOT_ACIDMAW].guid.IsEmpty() && !state->worms[SLOT_DREADSCALE].guid.IsEmpty();
+    // `reach melee` walks a melee on Gormok straight back into Sweep range, so it only dodges the cast.
+    // Same on a lone stationary survivor: it stays up 45-50 s and melee have nothing else to hit.
+    bool const sweepOnlyWhileCast = role == WormRole::Melee && target && target->IsAlive() &&
+                                    (!IsWormEntry(target) || (!bothWorms && !IsWormMobile(target)));
     std::vector<Position> sweeps;
     if (duty != BeastsTankDuty::WormStationary)
     {
@@ -1741,7 +1781,6 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
     // Spray's splash is 10 yd round where it lands, so casters keep that far off each other and off the
     // melee round the mobile worm. Nothing sprays while the stationary worm is under ground. Carriers
     // keep to their Bile and cure rules instead.
-    bool const bothWorms = !state->worms[SLOT_ACIDMAW].guid.IsEmpty() && !state->worms[SLOT_DREADSCALE].guid.IsEmpty();
     if (!cureWalk && caster && !toxin && !bile && bothWorms && stationaryUp)
     {
         rules.self = self;

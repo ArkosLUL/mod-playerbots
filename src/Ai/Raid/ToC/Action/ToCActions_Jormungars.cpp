@@ -36,6 +36,7 @@ constexpr uint32 WALK_STALL_MS = 500;
 // The partner keeps moving, so a straight cure walk stops short of the full reach
 constexpr float CURE_DIRECT_INSET = 1.0f;
 constexpr float CURE_PARTIAL_TURN = static_cast<float>(M_PI) / 8.0f;
+constexpr float FEET_CLEARANCE = 1.0f;
 
 char const* const CLASS_TAUNTS[] = {"taunt", "hand of reckoning", "dark command", "growl"};
 
@@ -82,6 +83,12 @@ bool ClearOfCircles(std::vector<HazardCircle> const& circles, Position const& sp
 }
 
 bool OnWormFloor(float x, float y) { return ARENA_CENTER.GetExactDist2d(x, y) <= WORM_FLOOR_RADIUS; }
+
+bool OnWormEdge(float x, float y)
+{
+    float const dist = ARENA_CENTER.GetExactDist2d(x, y);
+    return dist >= WORM_EDGE_MIN && dist <= WORM_EDGE_MAX;
+}
 
 // A walk waits behind a booking of equal or higher priority until it runs out
 void DropForeignBooking(LastMovement& last, Position const& own, MovementPriority upTo)
@@ -302,12 +309,26 @@ bool NorthrendWormsTankHoldAction::DragOffHazards(Unit* worm)
             return true;
 
     HazardSweepCache sweep;
-    Position spot = FindNearestPositionClearOfHazards(bot, plan.hazards, SWEEP_RADIUS, SWEEP_DISTANCE_STEP,
-                                                      SWEEP_ANGLE_STEP, &plan.preferNear, OnWormFloor, &sweep);
-    if (spot == Position())
-        spot = FindNearestPositionClearOfHazards(bot, plan.poolsOnly, SWEEP_RADIUS, SWEEP_DISTANCE_STEP,
-                                                 SWEEP_ANGLE_STEP, &plan.preferNear, OnWormFloor, &sweep);
+    Position spot;
+    bool edge = false;
+    auto const search = [&](std::vector<HazardCircle> hazards, bool onEdge)
+    {
+        if (spot != Position() || (onEdge && !plan.edge))
+            return;
 
+        // The sweep finds nothing for an empty list, as on a heroic walk out before the first pool
+        hazards.emplace_back(bot->GetPosition(), FEET_CLEARANCE);
+        spot = FindNearestPositionClearOfHazards(bot, hazards, SWEEP_RADIUS, SWEEP_DISTANCE_STEP, SWEEP_ANGLE_STEP,
+                                                 &plan.preferNear, onEdge ? OnWormEdge : OnWormFloor, &sweep);
+        edge = onEdge && spot != Position();
+    };
+
+    // Heroic tries the edge first. Beside the stationary worm its melee would stand in Sweep, so keeping
+    // off that one beats the edge.
+    search(plan.hazards, true);
+    search(plan.hazards, false);
+    search(plan.poolsOnly, true);
+    search(plan.poolsOnly, false);
     if (spot == Position())
         return false;
 
@@ -315,7 +336,7 @@ bool NorthrendWormsTankHoldAction::DragOffHazards(Unit* worm)
     if (!WalkTo(WalkKind::Drag, spot))
         return false;
 
-    NoteWormMove(bot, "drag " + Yards(travel));
+    NoteWormMove(bot, std::string(edge ? "drag edge " : "drag ") + Yards(travel));
     return true;
 }
 

@@ -123,7 +123,7 @@ void RefreshIcehowl(Player* bot, Map* map, BeastsState& state, uint32 now)
 }
 
 // Neither in mobile form leaves Acidmaw on WormMobile. A lone survivor is WormMobile whatever its
-// form: the script sends it under at once and brings it back up mobile.
+// form, so one holder keeps it through every form change.
 void SplitWorms(Creature* acidmaw, Creature* dreadscale, Creature*& mobile, Creature*& stationary)
 {
     if (acidmaw && dreadscale)
