@@ -2,101 +2,6 @@
 
 Engine semantics are in [../engine/action-selection.md](../engine/action-selection.md).
 
-## Arcane Shot was cast zero times, by two independent regressions
-
-Both lived in `CastArcaneShotAction::isUseful()` (`HunterActions.cpp:26`) and between them covered
-every spec, which is why the meter showed no casts at all:
-
-- **Inverted spec gate (killed BM and MM).** `if (!target || !botAI->HasSpell("explosive shot"))
-  return false;` — Explosive Shot is the Survival 51-point talent, so every BM and MM bot bailed on
-  every tick. The original commit's intent was the opposite: use Arcane Shot *until* Explosive Shot
-  is learned. A `HasSpell`/`HasAura` refactor flipped the polarity while converting to the string
-  overload; the two sibling conversions in the same hunk came out correct.
-- **Armor-penetration read the wrong update field (killed Survival).**
-  `GetUInt32Value(CR_ARMOR_PENETRATION)` — `CR_ARMOR_PENETRATION` is `24`, an index *into the rating
-  block*, not an update-field index, and field 24 is `UNIT_FIELD_HEALTH`. So it read the bot's current
-  hit points, orders of magnitude above the 435 threshold. Correct form is
-  `GetUInt32Value(PLAYER_FIELD_COMBAT_RATING_1 + CR_ARMOR_PENETRATION)`.
-
-## Aspect of the Viper never fired, and the threshold was not why
-
-Hunters sat at 0-2% mana at full health for ~110s on Thorim (`603_1_thorim_1789155415`) without one
-Viper cast. Three faults, in the order they bite:
-
-- **`rnature` disabled the trigger outright.** `BossNatureResistanceAction` did
-  `ChangeStrategy("+rnature")`, and `HunterAspectOfTheViperTrigger` hard-returns false whenever
-  `rnature` is set, so the mana check was never reached. Nothing removed it — `ApplyInstanceStrategies`
-  strips only *instance* strategies — so it leaked from Thorim into Mimiron and every later boss. The
-  trigger picked "first alive hunter", so with the strategy stuck every hunter accumulated it within a
-  few pulls. `rnature` is a sibling of `bdps`, so it also evicted the combat Dragonhawk node.
-  The action now casts Aspect of the Wild directly and `BossNatureAspectHoldMultiplier` suppresses the
-  competing aspects for the one designated hunter — the Hodir paladin-aura shape, self-reverting. See
-  [../raids/ulduar/thorim.md](../raids/ulduar/thorim.md).
-- **The band could not sustain.** Entry was `lowMana / 2`, integer division of 15, so **7%**. Now
-  `HUNTER_VIPER_ENTER_MANA_PCT` 30 / `HUNTER_VIPER_LEAVE_MANA_PCT` 60, kept together in
-  `HunterTriggers.h` because entry and exit sit in different triggers.
-- **The mana potion took the slot first.** `medium mana` (40%) pushes `mana potion` at
-  `ACTION_EMERGENCY` 90 against the offensive potion's 20, and WotLK allows one potion per fight, so
-  hunters spent theirs on mana and never got Potion of Speed. Hunters now skip mana potions entirely —
-  see [../systems/consumables-and-burst.md](../systems/consumables-and-burst.md).
-
-Verified on `603_4_xt002_1789239467`: mean 53.6% mana, 72.5% of the fight inside the band, never below
-15%, five clean swaps, Potion of Speed taken. A hunter that arrived already carrying `rnature` was still
-fully starved — same fight, 59.7% under 5% mana and zero Viper casts — from AQ40's own `+rnature`
-writer, since converted, see [../raids/README.md](../raids/README.md). The damage scales with fight
-length: harmless over Kologarn's 157 s, at zero mana from +178 s over XT-002's 514 s. One that already
-carries the strategy only loses it to a DB update.
-
-## Other fixes
-
-- **Rapid Fire barely fired in raids.** `RapidFireTrigger : BoostTrigger` needs `balance <= 50`, so a
-  3-minute 40%-haste cooldown went unspent for whole encounters. Re-keyed to
-  `SpellNoCooldownTrigger`; `BurstWindowStrategy` now places the cast. Same treatment for
-  **Bestial Wrath**, whose trigger was defined but never registered and only competed as a `19.0`
-  default entry.
-- **Pet death was unrecoverable mid-fight.** `HunterPetStrategy` (call/revive pet) is only added to
-  the *non-combat* engine; the combat set carried only `mend pet`. BM lost ~35-40% of its throughput
-  for the rest of the fight, and both Kill Command and Bestial Wrath went dead with the pet since
-  both resolve `"pet target"`. `no pet` → `call pet` and `hunters pet dead` → `revive pet` now sit
-  under every shot priority, so they only spend a GCD the rotation had nothing else for.
-- **`maintenance` replaced the pet with a random tame.** `InitPet` stood down only on `CurrentPet`,
-  but a pet whose corpse despawned, or that fell out of range, sits in `UnslottedPets`; it then tamed
-  a random creature and `SavePetToDB(PET_SAVE_AS_CURRENT)` deleted the old one for good. It now keeps
-  an unslotted pet too: the bot revives or calls it, as `pet dead` is true whenever no pet is out but
-  a `character_pet` row exists.
-- **Pets above 20 talent points got none.** Premade links
-  (`Playerbots.PremadeHunterPetLink.<spec>.<points>`) stop at 20 (`parsedHunterPetLinkOrder[3][21]`).
-  mod-spell-tweaks here raises Beast Mastery (53270) from +4 to +6 pet points, a 22-point cap at 80,
-  where `InitPetTalents` learned nothing. It now applies the 20-point link and spends the rest on
-  random picks, which only reach the last row once 20 are spent.
-- **Kill Command checked an aura that never lands** — `IsActive` tested the KC aura on the *hunter*
-  while the action resolves `"pet target"` and `CastBuffSpellAction::isUseful` then checks the aura on
-  the *pet*, where Kill Command never puts one. It worked only because the cooldown paced it. Now a
-  plain `SpellNoCooldownTrigger`.
-- **Chimera Shot and Aimed Shot had no triggers**, only `5.5` / `5.4` defaults. With `no stings` at
-  17.0 the bot hard-recast Serpent Sting instead of rolling it forward with Chimera Shot, which is the
-  entire point of the spell. The sting itself still goes first when none is up: Chimera Shot on an
-  unstung target refreshes nothing and loses its Serpent hit (3 of 16 in the P2 bot test).
-
-## Bot/sim gaps closed in spec-balance P3 (2026-10-19)
-
-The bot test (180 s, boss dummy, sim BiS) put BM at 68% of the sim, MM and SV at 84%.
-
-- **Intimidation burned a GCD on bosses.** Its value is the pet's stun (24394, mechanic stun); every
-  raid boss's `creature_immunities` row carries stun and silence, so BM spent 5 GCDs and added pet
-  threat. `IntimidationTrigger` now skips targets with template stun immunity.
-- **Silencing Shot never fired outside interrupts** (sim: 10 per 180 s). It interrupts only through
-  its silence, so on a silence-immune target it is free off-GCD damage: `silencing shot on immune
-  target` fires it on cooldown there and leaves the interrupt node alone elsewhere.
-- **Readiness never fired.** It was only `rapid fire`'s alternative, and that trigger needs Rapid
-  Fire ready. `readiness` now fires with Rapid Fire's buff down and over 10 s of its cooldown left
-  (the sim's rule): a second Rapid Fire plus Kill Command, Chimera and Aimed resets.
-- **Lock and Load's second shot never used rank 3** (sim: 5.5). With rank 4's dot still ticking the
-  rank 4 action is USELESS, not IMPOSSIBLE, so its rank 3 alternative never runs. `lock and load
-  proc` (buff 56453) now pushes rank 3 itself. Trap: `lock and load` matches the talent passive's
-  name (56344), so it is true all fight and is what actually drives rank 4 Explosive Shot at 28.
-  The `explosive shot` action had no creator; it is now registered.
-
 ## Current ladders
 
 Shared (`GenericHunterStrategy`):
@@ -114,7 +19,8 @@ Shared (`GenericHunterStrategy`):
 | 22 / 21 | pet medium / low health, enemy within melee | mend pet, mongoose bite / wing clip |
 | 20 | has aggro / concussive shot on snare target | concussive shot *(D1)* |
 | 17 | trap launcher: explosive trap no cd | trap launcher: explosive trap |
-| 14.5 / 14 | no pet / pet dead | call pet / revive pet |
+| 16.5 | pet acid spit | pet acid spit |
+| 5.25 / 5.24 | no pet / hunters pet dead | call pet / revive pet |
 
 Per spec, on top:
 
@@ -130,12 +36,74 @@ Per spec, on top:
 | 16.5 | serpent sting on attacker | — | black arrow |
 | 16 | — | serpent sting on attacker | low mana → viper sting |
 | 15.5 / 15 | — | aimed shot | no stings → serpent sting, serpent sting on attacker |
-| 5.7 → 5.1 | *defaults* | *defaults* | *defaults* |
+| 5.9 → 5.1 | *defaults* | *defaults* | *defaults* |
 
-Survival's default list dropped the unreachable `arcane shot`. MM and Survival match the sim's order
-for Explosive Trap (shares Black Arrow's 30 s category, so Black Arrow is never cast in either).
+Survival's default list has no `arcane shot` (unreachable there). MM and Survival match the sim's
+order for Explosive Trap (shares Black Arrow's 30 s category, so Black Arrow is never cast in either).
 
-## Open gaps — documented, not implemented
+## Decisions and traps
+
+- **Arcane Shot** (`CastArcaneShotAction::isUseful`) is skipped once Explosive Shot is known
+  (Survival's slot) and above 435 armor-penetration rating, where the physical fillers out-damage it.
+  Read the rating as `PLAYER_FIELD_COMBAT_RATING_1 + CR_ARMOR_PENETRATION`: `CR_ARMOR_PENETRATION`
+  (24) is an index into the rating block, and update field 24 is `UNIT_FIELD_HEALTH`.
+- **Aspect of the Viper** enters below `HUNTER_VIPER_ENTER_MANA_PCT` 30 and leaves at
+  `HUNTER_VIPER_LEAVE_MANA_PCT` 60, kept together in `HunterTriggers.h` because entry and exit sit in
+  different triggers. The old `lowMana / 2` entry (integer 7%) could not sustain; with the band, an
+  XT-002 pull held mean 53.6% mana, 72.5% of the fight inside it, never below 15%. Hunters skip mana
+  potions so the one potion stays free for Potion of Speed
+  ([consumables](../systems/consumables-and-burst.md)).
+- **`HunterAspectOfTheViperTrigger` hard-returns false while `rnature` is set**, so never set
+  `rnature` loosely ([../raids/README.md](../raids/README.md)). Thorim's nature resistance casts
+  Aspect of the Wild directly under `BossNatureAspectHoldMultiplier` for one designated hunter,
+  self-reverting ([../raids/ulduar/thorim.md](../raids/ulduar/thorim.md)).
+- **Rapid Fire and Bestial Wrath** are `SpellNoCooldownTrigger`s placed by `BurstWindowStrategy`. As a
+  `BoostTrigger` (`balance <= 50`) Rapid Fire went unspent for whole encounters; Bestial Wrath's
+  trigger was never registered.
+- **Call and revive pet sit in the combat set**: `HunterPetStrategy` is non-combat only, and a pet lost
+  mid-fight takes Kill Command and Bestial Wrath with it (both resolve `"pet target"`), ~35-40% of BM's
+  throughput. At 5.25/5.24 they sit under every triggered shot and above the Steady/Auto Shot filler.
+- **`maintenance` keeps an unslotted pet.** A pet whose corpse despawned or fell out of range sits in
+  `UnslottedPets`, not `CurrentPet`; `InitPet` once tamed a random creature over it, and
+  `SavePetToDB(PET_SAVE_AS_CURRENT)` deleted the old one. `pet dead` is true whenever no pet is out
+  but a `character_pet` row exists, so the bot revives or calls it.
+- **Pets above 20 talent points**: premade links (`Playerbots.PremadeHunterPetLink.<spec>.<points>`)
+  stop at 20 (`ParsedHunterPetLinkOrder[3][21]`), and mod-spell-tweaks here raises Beast Mastery
+  (53270) from +4 to +6 pet points, a 22-point cap at 80. `InitPetTalents` applies the 20-point link
+  and spends the rest on random picks, which only reach the last row once 20 are spent.
+- **A new pet's passives get the owner's pet talents.** `CreateTamedPetFrom` casts them before
+  `SetMinion` gives the pet an owner, so Ferocity, Unleashed Fury, Serpent's Swiftness, Bestial
+  Discipline, Endurance Training and Thick Hide stay off until the next DB load (test Wolf: crit 18%
+  against the sim's 29%). `PlayerbotFactory::InitPet`, which `tame` also runs, recalculates them; core
+  Tame Beast still has it for players.
+- **Kill Command is a plain `SpellNoCooldownTrigger`**: its aura lands on the hunter, while the action
+  targets the pet, so an aura check never worked; the cooldown paces it.
+- **Chimera Shot and Aimed Shot have triggers**: as `5.5` / `5.4` defaults, `no stings` at 17.0
+  hard-recast Serpent Sting instead of Chimera rolling it forward. The sting still goes first when
+  none is up: Chimera on an unstung target refreshes nothing and loses its Serpent hit.
+- **Intimidation skips template stun immunity**: its value is the pet's stun (24394), and every raid
+  boss's `creature_immunities` row carries stun and silence.
+- **Silencing Shot on a silence-immune target** is free off-GCD damage, so `silencing shot on immune
+  target` fires it on cooldown there; the interrupt node is untouched elsewhere.
+- **Readiness** fires with Rapid Fire's buff down and over 10 s of its cooldown left (the sim's rule):
+  as only `rapid fire`'s alternative it never fired, since that trigger needs Rapid Fire ready.
+- **Lock and Load**: with rank 4's dot still ticking, the rank 4 action is USELESS, not IMPOSSIBLE, so a
+  rank 3 alternative never runs; `lock and load proc` (buff 56453) pushes rank 3 itself. Trap:
+  `lock and load` matches the talent passive's name (56344), so it is true all fight and is what drives
+  rank 4 Explosive Shot at 28.
+- **Pet Acid Spit**: the pet pays the focus. A direct `pet->CastSpell` registers no creature cooldown
+  ([why](../engine/raid-mechanics-lessons.md#vehicles-and-flight)), so the action stamps the spell's own
+  cooldown on the pet, or the trigger refires every tick.
+- **Items in combat pass `skipAutorepeat`**: Auto Shot holds `CURRENT_AUTOREPEAT_SPELL` all fight, so
+  item, trinket and tinker use refusing on `IsNonMeleeSpellCast(...)` meant no Potion of Speed,
+  Hyperspeed, on-use trinket or healthstone.
+- **Pet taunts stay off in groups**: `TogglePetSpellAutoCastAction` leaves Growl, Torment and Suffering
+  off while the group has a main tank other than the bot. Autocast Growl pulled the boss and burned
+  focus (36-48 per 180 s; Bite fell to 94 against the sim's 116).
+- **Viper band 30/60 against the sim's 10/30** costs short fights ~1 extra Viper stint per 180 s,
+  roughly 1-3% DPS, shrinking with fight length. Kept for mana-starved encounters.
+
+## Open gaps
 
 | # | Gap |
 |---|---|
@@ -144,11 +112,7 @@ for Explosive Trap (shares Black Arrow's 30 s category, so Black Arrow is never 
 | D4 | **Disengage is raid-hostile.** Fixed-vector backwards leap at @35; on Thorim / Mimiron / Gunship-style encounters it lands bots in fire, off platforms, or out of healer range. Should be suppressed in raid instances in favour of the existing `flee` alternative. |
 | D5 | `trap launcher: explosive trap` @17 sits mid-rotation, between Survival's explosive shot (17.5) and black arrow (16.5). Left alone because Survival's trap usage is what the user wanted preserved. |
 | D6 | `ExplosiveShotTrigger` overrides `DebuffTrigger` to `BuffTrigger::IsActive()`, so it re-pushes on debuff-absence while the 6s cooldown still has the spell unavailable. Harmless — the action is IMPOSSIBLE — but it costs a queue iteration. |
-| D7 | **OPEN — `"freezing trap on cc"` has no action creator.** `GenericHunterStrategy.cpp:118` pushes `NextAction("freezing trap on cc", …)`, but no creator registers that name. The node logs `A:freezing trap on cc - UNKNOWN` and hunter bots never trap a CC target. |
-| D8 | *Fixed* — **hunters never used items in combat.** Auto Shot holds `CURRENT_AUTOREPEAT_SPELL` all fight, and `UseItemAction::UseItem`, `UseTrinketAction::UseTrinket` and `UseTinkerAction::UseTinker` refused on `IsNonMeleeSpellCast(...)`: no Potion of Speed, Hyperspeed Accelerators, on-use trinket or healthstone (P2: 0 against the sim's 3 Hyperspeed). They now pass `skipAutorepeat = true`, as `EncounterHelpers.cpp`'s Nitro Boosts check does. |
-| D9 | *Fixed* — **pet taunts autocast in groups.** `TogglePetSpellAutoCastAction` turned on every autocastable pet spell, so the pet Growled (15 focus, threat) on the boss: 36-48 per 180 s, and BM's Bite fell to 94 against the sim's 116. It now leaves taunt and threat spells (Growl, Torment, Suffering) off while the group has a main tank other than the bot. |
-| D10 | Viper band 30/60 against the sim's 10/30 costs short fights: ~1 extra Viper stint per 180 s (SV 21 s in Viper), roughly 1-3% DPS, shrinking with fight length. Kept for mana-starved encounters. |
-| D11 | *Fixed* — **a new pet missed the hunter's pet talents.** `CreateTamedPetFrom` casts the pet's passives before `SetMinion` gives it an owner, so the owner's spell mods on them (Ferocity, Unleashed Fury, Serpent's Swiftness, Bestial Discipline, Endurance Training, Thick Hide) stay off until the pet is next loaded from the DB. The BM test Wolf: crit 18% against the sim's 29%, 344 swings against 412. `PlayerbotFactory::InitPet`, which `tame` also runs, now recalculates the pet's own passive auras. Core Tame Beast still has it for players. |
+| D7 | `freezing trap on cc` has no action creator ([pitfalls](../engine/pitfalls.md#names-fail-silently-at-runtime)): hunter bots never trap a CC target. |
 
 Against the wowtbc.gg guides, also open: BM and Survival default lists both carry `aimed shot`, a
 Marksmanship talent neither spec has (dead entries); neither BM nor Survival has Multi-Shot in its

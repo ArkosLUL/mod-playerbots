@@ -44,45 +44,43 @@ Arms (`arms` + `aoe`):
 | 18 | light rage available | slam |
 | 5.1 → 5.0 | *defaults* + high rage available | mortal strike, sunder armor, melee, heroic strike *(off-GCD)* |
 
-## What was wrong and why the fixes look like they do
+Both specs also run `GenericWarriorStrategy` (`fear sleep sap` → berserker rage 91, `enemy out of
+melee` → reach melee 21) and `WarriorAoeStrategy` (the `medium aoe` rows above).
 
-- **No Execute phase** — no `target critical health` trigger existed, so Execute only competed from
-  `getDefaultActions()` at 5.2, behind every trigger-driven action.
-- **Mortal Strike was gated on its own debuff.** `MortalStrikeDebuffTrigger` was a `DEBUFF_TRIGGER`;
-  Mortal Wound lasts 10s against a 6s cooldown, so it fired roughly once per 10s and MS otherwise
-  competed from the default list. Now keyed off a `CAN_CAST_TRIGGER`. This is the general lesson:
-  **`DebuffTrigger` cannot pace a cooldown-driven ability.**
-- **Heroic Strike dumped rage too early** — `medium rage available` is rage ≥ 40, and HS costs 15,
-  leaving 25, below Bloodthirst's 30. Moved to `high rage available`.
-- **`intimidating shout` @90 on `critical health`** fears everything in 8 yd. Bosses are immune, so
-  `CastDebuffSpellAction` never saw the aura land and retried every tick; on trash it broke CC.
-  Removed. `retaliation` @91 needs ≥2 melee attackers, so it is inert on a boss and wastes a GCD when
-  adds latch on — also removed. `enraged regeneration` moved from `medium health` to `critical
-  health` (it was donating a GCD plus 15 rage to a healer's job).
-- **The AoE strategy hijacked both DPS specs.** `"aoe"` is added unconditionally, and
-  `WarrirorAoeStrategy` fired on `light aoe` (2+ attackers within 8 yd) — true on most boss fights
-  with adds — pushing Thunder Clap and Shockwave, which DPS specs cannot cast. Now fires on
-  `medium aoe` (3+) and carries only sweeping strikes / bladestorm / cleave; the tank-only entries
-  moved into `TankWarriorStrategy`.
-- **Sunder Armor survived only by accident.** `CastSunderArmorAction::isUseful` yields only to a
-  *warrior* tank, so with no prot warrior in the roster the DPS warriors are the raid's Sunder
-  providers — and Sunder had no trigger at all, sitting in `getDefaultActions()`. The new
-  `SunderArmorStackTrigger` mirrors that `isUseful` (in a group, no warrior tank, debuff below 5
-  stacks or under 6s left), so it goes quiet at 5 stacks and costs one refresh per ~24s. The old
-  `"sunder armor"` `DEBUFF_TRIGGER` still exists so `TankWarriorStrategy` is untouched.
-- **Rend lapsed for several GCDs** — the `"rend"` `DEBUFF_TRIGGER` fired only once Rend was gone, at
-  23 under Mortal Strike, Execute and both Overpowers. mod-spell-tweaks' `SpellTweaks.RendTrauma.Enable`
-  (default 1) gives Trauma (46854 / 46855) holders Rend ticks that crit and come faster with melee
-  haste at fixed duration, and Taste for Blood procs off them. Arms now runs `"rend refresh"` at 28,
-  top of the GCD band. No `beforeDuration` window, it costs tick time (see
-  [../engine/action-selection.md](../engine/action-selection.md)): `ShouldCastRend` fires only when
-  the bot's own Rend is missing or all its ticks have landed, i.e. in the dead tail hasted Rend leaves
-  (unhasted 15s / 21s divides evenly by 3s). `CastRendAction::isUseful` mirrors it, since the base
-  rejects a present aura. Tanks keep the plain `"rend"` trigger.
-- **Arms never Slammed.** `CastSlamAction` checked Improved Slam with `HasSpell`, but a passive talent
-  lives only in the talent map (`HasTalent`), so Slam went out only on a Bloodsurge proc and the spare
-  GCDs idled while rage went to Heroic Strike. Slam now fires from 20 rage, as the sim's filler does
-  from 15; Heroic Strike keeps the 60 overflow.
+## Decisions
+
+- **Execute has a `target critical health` node** (Fury 24, Arms 25); from `getDefaultActions()` alone
+  it sat behind every trigger-driven action.
+- **Mortal Strike is keyed off a `CAN_CAST_TRIGGER`** (`mortal strike available`): on its own
+  debuff, Mortal Wound (10 s) against a 6 s cooldown fired it about once per 10 s. **`DebuffTrigger`
+  cannot pace a cooldown-driven ability** ([why](../engine/action-selection.md#trigger-semantics)).
+- **Heroic Strike is on `high rage available`**: `medium rage available` is rage ≥ 40, and HS costs 15,
+  leaving 25, below Bloodthirst's 30.
+- **No `intimidating shout` or `retaliation` on `critical health`.** Intimidating Shout fears
+  everything in 8 yd; bosses are immune, so `CastDebuffSpellAction` never saw the aura land and retried
+  every tick, and on trash it broke CC. Retaliation needs ≥2 melee attackers, so it is inert on a boss
+  and wastes a GCD when adds latch on. `enraged regeneration` is on `critical health`, not `medium
+  health`, where it donated a GCD plus 15 rage to a healer's job.
+- **`WarriorAoeStrategy` fires on `medium aoe` (3+), not `light aoe`.** `"aoe"` is added
+  unconditionally, and 2+ attackers within 8 yd is true on most boss fights with adds. Thunder Clap
+  and Demoralizing Shout live in `TankWarriorStrategy`: a DPS spec either cannot cast them or donates a
+  GCD to a debuff the tank already carries.
+- **DPS warriors are the raid's Sunder providers** when no warrior tank is in the group:
+  `CastSunderArmorAction::isUseful` yields only to a *warrior* tank. `SunderArmorStackTrigger`
+  mirrors that (in a group, no warrior tank, debuff below 5 stacks or under 6s left), so it goes quiet
+  at 5 stacks and costs one refresh per ~24s; a non-tank also stands down while Expose Armor or a worm's
+  Acid Spit holds the slot. The plain `"sunder armor"` `DEBUFF_TRIGGER` stays for `TankWarriorStrategy`.
+- **Arms Rend runs on `"rend refresh"` at 28, top of the GCD band.** mod-spell-tweaks'
+  `SpellTweaks.RendTrauma.Enable` (default 1) gives Trauma (46854 / 46855) holders Rend ticks that crit
+  and come faster with melee haste at fixed duration, and Taste for Blood procs off them; the plain
+  `"rend"` trigger at 23 let it lapse for several GCDs. No `beforeDuration` window, it costs tick time
+  ([why](../engine/action-selection.md#trigger-semantics)): `ShouldCastRend` fires only when the bot's
+  own Rend is missing or all its ticks have landed, i.e. in the dead tail hasted Rend leaves (unhasted
+  15s / 21s divides evenly by 3s). `CastRendAction::isUseful` mirrors it, since the base rejects a
+  present aura. Tanks keep the plain `"rend"` trigger.
+- **Arms Slams from 20 rage** (`light rage available` @18), as the sim's filler does from 15; Heroic
+  Strike keeps the 60 overflow. Trap: Improved Slam is a passive talent, which lives only in the talent
+  map (`HasTalent`), so a `HasSpell` check left Slam to Bloodsurge procs only.
 - **Fury stance dance.** Rend and Overpower need Battle Stance, so Improved Rend, Improved Overpower
   and Taste for Blood were dead talents. `battle stance dance` swaps from Berserker Stance only with a
   free GCD, Bloodthirst ≥1s and Whirlwind ≥1.5s from ready, no Bloodsurge proc, ≥10 rage, in melee,
@@ -93,19 +91,22 @@ Arms (`arms` + `aoe`):
   Bleed-immune targets get no Rend (`ShouldCastRend`), or the dance would repeat all fight. No AoE gate either. Cost:
   Pummel and Intercept are unavailable for that ~1s.
 
-### Off-GCD abilities and `SetNextCheckDelay(0)`
+### Off-GCD abilities
 
 Heroic Strike, Cleave, Bloodrage, Death Wish, Recklessness and Berserker Rage do not trigger the
 in-game GCD, but each cost a whole AI tick — 100-300 ms with a real master, 500-700 ms for a
-masterless bot.
+masterless bot. `OffGlobalCooldownAction<Base>` casts and returns `false`, so the tick goes on
+([why not `SetNextCheckDelay(0)`](../engine/action-selection.md#casting)). For these six, read ability
+order from the engine, not the OK/FAILED tag; the alternatives it pushes are harmless (`heroic strike`
+→ `melee`, `death wish` → `bloodrage`, itself off-GCD).
 
-**The plan's `SetNextCheckDelay(0)` cannot work**: `YieldThread` raises `nextAICheckDelay` to the
-react delay whenever it is lower, so a 0 written inside an action is overwritten before the tick
-ends. `OffGlobalCooldownAction<Base>` instead casts and returns `false`, so `DoNextAction` keeps
-walking the queue. Two consequences: the debug log reads `A:heroic strike - FAILED` for a cast that
-actually went out (read ability order from the engine, not the OK/FAILED tag, for these six), and the
-node's alternatives get pushed — harmless here (`heroic strike` → `melee`, `death wish` →
-`bloodrage`, itself off-GCD).
+### Protect party member
+
+`intervene` (Protection, 90) aims at `party member to protect no tank` and also requires `my attacker
+count == 0`: without it a tank warrior charges off the boss to any raider below 30%.
+`ProtectPartyMemberTrigger` stays generic, so the paladin and warrior nodes fire on the shared trigger
+and report `isUseful() == false` when the candidate is not for them
+([value semantics](../engine/action-selection.md#healing)).
 
 ### Gear
 
@@ -127,7 +128,6 @@ there, not against an equipped piece. Server config was never involved.
 - `InitConsumables` skipping the weapon-stone ladder above level 75 is intentional.
 - Flasks, elixirs and stat food are handled server-side as world buffs.
 - Battle Shout vs Blessing of Might AP comparison.
-- `WarriorStanceRequirementActionNodeFactory` was ~200 lines never instantiated anywhere — deleted.
 
 ## Open
 
@@ -136,12 +136,14 @@ there, not against an equipped piece. Server config was never involved.
   push back one Mortal Strike or Execute, and Rend can lapse mid-spin (accepted over refreshing Rend
   early, user decision). This matches the WotLK Arms priority, but it is the first thing to try
   lowering if Arms still trails.
-- **Talents (G2) and glyphs (G4) need the DB checked first.** `PremadeSpecLink.1.0.80` decodes to
-  55 Arms / 8 Fury / 8 Prot, and the Prot points land in Improved Bloodrage / Improved Thunder Clap /
-  Incite — no raid-DPS value. Decode against a live character before moving them. Warrior glyph sets
-  are raw item ids in conf and unfilled slots get a **random** eligible glyph; the PvP remap at
-  `PlayerbotFactory.cpp:4404-4416` also reclassifies an Arms bot purely on the presence of Second
-  Wind (29838) and needs a guard.
+- **Talents (G2) and glyphs (G4) need the DB checked first.** `Playerbots.PremadeSpecLink.1.0.80`
+  decodes to 55 Arms / 8 Fury / 8 Prot, and the Prot points land in Improved Bloodrage / Improved
+  Thunder Clap / Incite — no raid-DPS value. Decode against a live character before moving them.
+  Warrior glyph sets are raw item ids in conf and unfilled slots get a **random** eligible glyph; the
+  PvP remap in `PlayerbotFactory::InitGlyphs` also reclassifies an Arms bot purely on the presence of
+  Second Wind (29838) and needs a guard.
+- `shockwave on snare target` (25) still sits in `WarriorAoeStrategy`, which every warrior gets,
+  though a DPS spec cannot cast Shockwave.
 - **Rend haste re-snapshot** (Bloodlust, Berserking, haste procs) is deferred: ~1 extra tick per lust,
   and it would copy mod-spell-tweaks' Trauma + attack-speed formula into playerbots.
 - Arms registers a `death wish` trigger, but Death Wish is Fury tier 5 — unreachable in a PvE Arms

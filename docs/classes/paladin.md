@@ -3,70 +3,9 @@
 Engine and healer semantics (health bands, `HealerAutoSaveManaMultiplier`) are in
 [../engine/action-selection.md](../engine/action-selection.md).
 
-## What was wrong
-
-1. **Divine Plea halved the paladin's healing for most of every fight.** It was bound to the
-   `high mana` trigger, which despite its name is `mana < 65`. At relevance 20 it outranked the medium
-   band (19/18) and almost-full band (13). In 3.3.5 Divine Plea reduces healing done by 50% for 15s
-   unless glyphed — so roughly 30 seconds into any raid fight, the paladin repeatedly crippled its own
-   throughput. No glyph check, no raid-damage suppression.
-2. **Holy Shock, the spec's rotational spell, fired almost nowhere.** Its only healing node was
-   `party member critical health` @36, i.e. below 25% HP. The WotLK rotation is Holy Shock on cooldown
-   to proc Infusion of Light, then spend the proc on a discounted Flash of Light — and there was no
-   Infusion of Light awareness anywhere. Worse, `PaladinHealerDpsStrategy` put **offensive** Holy Shock
-   at 5.5, so the cooldown was spent on damage during lulls and down when damage started.
-3. **`estAmount = 50` disabled Holy Light exactly when it was needed.** The *ordering* was correct —
-   Holy Light leading the low and medium bands is the WotLK rotation, not a mistake to be "fixed" into
-   Flash spam. The bug was purely the mana-efficiency metadata: at `50.0f, MEDIUM`, below 60% bot mana
-   Holy Light was vetoed at target HP ≥ 65 always and at HP ≥ 45 unless the target had lost ≥50% of
-   its health. A Holy Light heals nowhere near 50% of a raider's pool. `holy shock on party` had the
-   same problem at `25.0f, LOW`.
-4. **The fallback chain pointed the wrong way.** `flash of light on party` → `holy light on party`
-   escalates from a cheap fast heal to a slower more expensive one. The direction that matters — Holy
-   Light vetoed, fall back to Flash — did not exist, so a vetoed Holy Light dead-ended. The second
-   pass added the reverse edge; **the third pass removed it again**, deliberately — see below.
-5. **Beacon of Light and Sacred Shield were main-tank-only and never re-evaluated.** In a two-tank
-   raid the off-tank got neither, and Beacon never followed a tank swap. Beacon multiplies everything
-   the paladin casts, so this was the largest single output item.
-6. **`reach party member to heal` @93 outranked every emergency heal** — an out-of-range selected
-   target made the paladin run instead of using Lay on Hands (92) on a different dying player. Settled
-   at 39.5. (Priest uses 40 for the same node; the shaman rebase settled on 40.)
-7. **The default action was an ungated melee-range mana spend.** `getDefaultActions()` returned
-   `judgement of light` @5.0, pushed every tick, bypassing the `HealerShouldAttackTrigger` mana floor
-   that gates the *identical* node inside `healer dps` @5.3. It did **not** drag the healer toward the
-   boss, as an earlier draft claimed — `CastSpellAction::getPrerequisites()` returns `{}`, so an
-   out-of-range Judgement simply fails that tick.
-8. **`healer dps` carried two entries wrong for Holy** — `shield of righteousness` requires a shield
-   (Protection only) and `consecration` is a ~660-mana self-centred ground AoE at melee range.
-
-## Deviations from the plan, as built
-
-- The Divine Plea fallback value key is `"main tank"`, not `"main tank member"` — the latter is the
-  value's own name, the former its registration key.
-- Divine Plea is allowed through the raid-damage suppression **below** `lowMana` (15), and a second
-  `low mana` → `divine plea` node sits at 23. An unglyphed healer with an empty bar heals nothing, so
-  the 50% penalty is the cheaper price there.
-- The `tank to beacon` hysteresis margin is 75 percentage points (`SWAP_MARGIN_PCT`, raised from 30 in
-  `c4ead0074`), not 20. **Without hysteresis Beacon thrashes every GCD.** At 75 the swap condition is
-  true in nearly every realistic case, so in practice Beacon sticks to the first tank it picks until
-  that tank leaves combat, range or LOS.
-- **Judgement of Light is maintained on a debuff trigger at 27, which the plan did not have at all.**
-  Dropping the ungated default (item 7) left `healer dps` @5.3 as the only path, and that node is
-  gated by `HealerShouldAttackTrigger` — false whenever anyone is below 85% HP, i.e. most of a fight.
-  Judgements of the Pure (15% haste, 60s) plus the melee-swing raid heal are worth one global per 20s.
-  `PaladinJudgementOfLightTrigger` is a `DebuffTrigger` with `checkIsOwner = true` (a second paladin's
-  Judgement of Light must not stop this one refreshing its own Judgements of the Pure) and calls
-  `CanCastSpell`, so the node goes quiet at range instead of failing every tick. Judgement is 10 yards
-  and the node never queues movement — it waits.
-- **Divine Illumination is pinned to Avenging Wrath** rather than standing on a mana node.
-  `CastDivineIlluminationAction::isUseful` requires the `avenging wrath` aura for a healer, so the
-  `medium group heal setting` pair (Avenging Wrath 31, Divine Illumination 30.5) always lands in that
-  order on consecutive ticks and the −50% cost window covers the +20% healing window. Both are
-  3-minute cooldowns, so they stay aligned.
-
 ## Current Holy ladder
 
-`HealPaladinStrategy.cpp`, on top of `GenericPaladinStrategy`:
+`HealPaladinStrategy` (key `holy`), on top of `GenericPaladinStrategy`:
 
 | Rel | Trigger | Action |
 |---|---|---|
@@ -84,85 +23,106 @@ Engine and healer semantics (health bands, `HealerAutoSaveManaMultiplier`) are i
 | 14 | party member almost full health | holy light on party |
 | 12 | paladin divine plea | divine plea |
 
-`infusion of light` @26.5 is the **only** node in the Holy ladder that casts Flash of Light — see
-below.
-
 Inherited from `GenericPaladinStrategy`: `hand of sacrifice on party` 93,
-`blessing of protection on party` 92.8, `lay on hands on party` 92, `lay on hands` 91,
-`divine shield` 90, `flash of light` 89 / `holy light` 88 (inside the bubble),
+`blessing of protection on party` 92.8 (never casts, see [Traps](#traps)), `lay on hands on party` 92,
+`lay on hands` 91, `divine shield` 90, `flash of light` 89 / `holy light` 88 (inside the bubble),
 `hand of freedom on party` 24, three Hammer of Justice interrupts at 40.
 
-## Cooldown gaps still open
+## Holy decisions
+
+- **Holy Light is the primary heal and leads every band**, including the 65-85% band at 14 where raid
+  targets sit most of the time — the WotLK rotation, not a mistake to be "fixed" into Flash spam.
+  `CastHolyLightOnPartyAction` is `25.0f, HIGH`: Illumination refunds 30% of the mana on a heal crit
+  and Beacon mirrors the heal for free, so it is the cheaper spell per point healed. At `50.0f,
+  MEDIUM`, `HealerAutoSaveManaMultiplier` vetoed it below 60% bot mana on most of the raid. The
+  `lossAmount < estAmount` arm still keeps it off targets above ~75% HP when the paladin is low on
+  mana.
+- **Holy Shock leads every band** (36 / 26 / 19.5) to proc Infusion of Light, and `healer dps` carries
+  no offensive Holy Shock: spent on damage during lulls, the cooldown was down when damage started.
+- **`infusion of light` @26.5 is the only Holy node that casts Flash of Light.** Verified 3.3.5
+  behaviour (talent 53569/53576, proc aura 53672/54149): a Holy Shock crit **cuts the next Flash of
+  Light's cast time by 0.75/1.5 s** and raises the next **Holy Light**'s crit chance by 10/20%. Holy
+  Light gets the crit whatever the ladder does; the cast-time cut is the half that needs a node. At
+  2/2 the Flash is instant, so:
+  - it is castable while moving: `CanCastSpell` reads `SpellInfo::CalcCastTime(bot)`, which applies
+    `SPELLMOD_CASTING_TIME`, so the proc already zeroes the cast it tests. Besides Holy Shock it is the
+    only heal a moving Holy paladin lands;
+  - on a Sacred Shielded target it also drops a 12 s HoT (66922, `spell_pal_infusion_of_light::HandleProc`).
+
+  It fires only while the heal target is below `almostFull` (85%). 26.5 sits under the critical band on
+  purpose: Holy Shock, Divine Favor and Holy Light lead on a dying target, and the instant Flash takes
+  the global only when they are vetoed — exactly the moving case.
+- **No Flash of Light in the health bands, and no `holy_light_on_party` ActionNode.** Its only content
+  was a `flash of light on party` alternative, which would put Flash back into every band (mana veto,
+  out of range, moving); Holy Light simply fails when it cannot cast, and Holy Shock keeps an instant up.
+  The two other users of `GenericPaladinStrategyActionNodeFactory` lose that fallback harmlessly:
+  `OffhealRetPaladinStrategy` lists `flash of light on party` at 18 and 13 itself, and
+  `GenericPaladinNonCombatStrategy` has its own Flash nodes. The self-target `flash of light` node and
+  the in-bubble Flash @89 keep theirs.
+- **Divine Plea is not on `high mana`** (`mana < 65`): unglyphed it halves healing done for 15 s, and
+  at 20 it outranked the medium and almost-full bands. Holy casts it on `paladin divine plea` @12 below
+  `mediumMana` (40) while no one is in the medium AoE-heal band, or on `low mana` @23; below `lowMana`
+  (15) the raid-damage suppression lets it through, since an unglyphed healer with an empty bar heals
+  nothing. `CastDivinePleaAction::isUseful` passes a glyphed or non-healer paladin unconditionally. The
+  node moved out of the base strategy by [relocation](../engine/action-selection.md#healing).
+- **Beacon of Light and Sacred Shield follow `tank to beacon`**, the lowest-health tank in combat,
+  range and LOS, not only the main tank: in a two-tank raid the off-tank got neither, and Beacon
+  multiplies everything the paladin casts. **Without hysteresis Beacon thrashes every GCD**:
+  `SWAP_MARGIN_PCT` is 75 percentage points, so in practice Beacon sticks to the first tank it picks
+  until that tank leaves combat, range or LOS.
+- **`reach party member to heal` sits at 39.5**: at 93 an out-of-range target made the paladin run
+  instead of using Lay on Hands (92) on a different dying player. Holy priest and Resto shaman use 40.
+- **Holy has no default actions**: they are pushed every tick ungated, bypassing the
+  `HealerShouldAttackTrigger` mana floor that gates `healer dps`. `healer dps` is hammer of wrath 5.6 /
+  judgement of light 5.3 / exorcism 5.1: Shield of Righteousness needs a shield (Protection only) and
+  Consecration is a ~660-mana self-centred AoE at melee range.
+- **Judgement of Light is maintained at 27** (`paladin judgement of light`), because `healer dps` is
+  gated off whenever anyone is below 85% HP, i.e. most of a fight. Judgements of the Pure (15% haste,
+  60 s) plus the melee-swing raid heal are worth one global per 20 s. The trigger is a `DebuffTrigger`
+  with `checkIsOwner = true` (a second paladin's Judgement of Light must not stop this one refreshing
+  its own Judgements of the Pure) and calls `CanCastSpell`, so at range the node goes quiet instead of
+  failing every tick. Judgement is 10 yards and the node never queues movement — it waits.
+- **Divine Illumination is pinned to Avenging Wrath.** `CastDivineIlluminationAction::isUseful`
+  requires the `avenging wrath` aura for a healer, so the `medium group heal setting` pair (31, 30.5)
+  lands in that order on consecutive ticks and the −50% cost window covers the +20% healing window.
+  Both are 3-minute cooldowns, so they stay aligned.
+
+## Cooldowns
 
 | Cooldown | State |
 |---|---|
-| **Aura Mastery** | Was absent entirely — no action, no trigger, no spell id 31821 anywhere |
-| **Hand of Sacrifice** (6940), **Hand of Salvation** (1038) | Exist only as exclusion constants in `PaladinHelper.h` |
-| **Divine Sacrifice** | Two nodes at identical relevance 35. Single-target critical health is the wrong trigger for a raid damage-redirect, and `isUseful` had no self-health floor, so a low-HP paladin redirected raid damage onto itself |
-| **Lay on Hands** | Forbearance guards now exist on both variants (`PaladinActions.cpp:590,595`) — this row records the original finding, not the current state |
-| **Divine Favor** | Was on `low mana` (15) — a guaranteed-crit-next-heal cooldown gated on being nearly OOM. Its purpose-built trigger was registered but dead, since its only consumer `PaladinBoostStrategy::InitTriggers` was entirely commented out |
-| **Divine Protection** | No direct trigger; reachable only as the `/*A*/` fallback of `divine shield`. `divine protection on party` is registered and referenced by zero nodes |
-| **Avenging Wrath** | Also on the burst registry, so `HoldBurstUntilTankEngagedMultiplier` can suppress it for a healer — a healer exemption is required |
+| **Aura Mastery** | `medium group heal setting` @30 |
+| **Hand of Sacrifice** | `protect party member` @93, on the tank list since it redirects damage onto the paladin; ahead of BoP, which wipes threat and applies Forbearance. Refused below 50% own health |
+| **Hand of Salvation** (1038) | **Open**: exists only as an exclusion constant in `PaladinHelper.h` |
+| **Divine Sacrifice** | `medium group heal setting` (Holy 35, Protection 25); refused below 50% own health, since it redirects raid damage onto the paladin |
+| **Lay on Hands** | Forbearance guards on both variants |
+| **Divine Favor** | `party member critical health` @35.5. `PaladinBoostStrategy::InitTriggers` is empty |
+| **Divine Protection** | **Open**: no direct trigger; reachable only as the `/*A*/` fallback of `divine shield` |
+| **Avenging Wrath** | On the burst registry, with a healer exemption ([consumables](../systems/consumables-and-burst.md#the-burst-gate)) |
 
-Hand of Protection depends on `PartyMemberToProtect` being live — see the revival note in
-[shaman.md](shaman.md).
+## Traps
 
-## Holy Light over Flash of Light (second pass)
-
-The first pass fixed `estAmount` but left two things that still made Flash of Light the spell the bot
-actually cast in a raid:
-
-- **The 65–85% band held only `flash of light on party` @13.** Raid targets sit in that band most of
-  the time, so almost every global went to Flash regardless of what the lower bands said. Holy Light
-  now leads it at 14. (Flash sat at 13 as the fallback until the third pass removed it.)
-- **`CastHolyLightOnPartyAction` was still tagged `MEDIUM`** while Flash was `HIGH`, so
-  `HealerAutoSaveManaMultiplier` returned `0.0f` for Holy Light whenever bot mana ≤ 60 and target
-  HP ≥ 65 — the exact band above. Retagged `HIGH`. Illumination refunds 30% of the mana on a heal crit
-  and Beacon mirrors the heal for free, which makes Holy Light the cheaper spell per point healed;
-  `MEDIUM` had the WotLK economics backwards. `estAmount` stays 25, so the `lossAmount < estAmount`
-  arm still keeps Holy Light off targets above ~75% HP when the paladin is low on mana.
-
-## Infusion of Light was spent backwards (third pass)
-
-The second pass wired `infusion of light` @26.5 to `holy light on party`. That is the wrong half of
-the talent. Verified 3.3.5 behaviour (talent 53569/53576, proc aura 53672/54149): a Holy Shock crit
-**reduces the cast time of the next Flash of Light by 0.75/1.5s** and increases the crit chance of
-the next **Holy Light** by 10/20%. Holy Light gets the crit for free whatever the ladder does; the
-cast-time cut is the half that needs a node, and it belongs to Flash.
-
-At 2/2 the reduction is the whole 1.5s base cast, which has two consequences:
-
-- **The instant Flash is castable while moving.** `PlayerbotAI::CanCastSpell` vetoes any spell with a
-  cast time while `bot->isMoving()`, reading `SpellInfo::CalcCastTime(bot)` — which runs
-  `ApplySpellMod(SPELLMOD_CASTING_TIME)`, so the proc is already accounted for. With the proc up the
-  bot sees 0 and the veto does not fire. Besides Holy Shock this is the only heal a moving Holy
-  paladin can land.
-- **On a Sacred Shielded target it also drops a 12s HoT** (66922), via
-  `spell_pal_infusion_of_light::HandleProc` in the core. The ladder already keeps Sacred Shield on the
-  tank at 32, so this costs nothing extra.
-
-The node keeps its 26.5 relevance on purpose. It sits under the critical band, so Holy Shock (36),
-Divine Favor (35.5) and Holy Light (34) still lead on a dying target; the instant Flash picks up the
-global only when those are vetoed — which is exactly the moving case.
-
-Flash of Light is now removed from all four health bands (was 33 / 23.5 / 18 / 13), and the
-`holy_light_on_party` ActionNode is deleted outright — its only content was the
-`flash of light on party` alternative, which would have put Flash straight back into every band it
-was just removed from (mana veto, out of range, moving). Holy Light now simply fails when it cannot
-cast, and Holy Shock still leads every band, so the bot keeps an instant available whenever that
-cooldown is up.
-
-Two other strategies share `GenericPaladinStrategyActionNodeFactory` and lose the same fallback,
-both harmlessly: `OffhealRetPaladinStrategy` already lists `flash of light on party` explicitly at 18
-and 13, and `GenericPaladinNonCombatStrategy` has its own Flash nodes and no time pressure out of
-combat. The self-target `flash of light` node and the in-bubble Flash @89 are untouched.
+- **`blessing of protection` never casts.** The spell was renamed Hand of Protection in 3.0 (player
+  ranks 1022 / 5599 / 10278; the only "Blessing of Protection" row is 41450, not in a player's
+  spellbook), and `SpellIdValue` matches the bot's spellbook by full name, so
+  `CastBlessingOfProtectionProtectAction` (`blessing of protection on party` @92.8) resolves spell id 0
+  ([why](../engine/pitfalls.md#names-fail-silently-at-runtime)). It aims at `party member to protect
+  no tank`, since BoP wipes a tank's melee threat and applies Forbearance. Left alone: reviving it changes
+  paladin behaviour in every instance. Raid code that needs the spell casts `hand of protection`
+  directly (Yogg-Saron, Anub'arak).
+- Hand of Protection's target, `PartyMemberToProtect`, only sees a current melee victim
+  ([pitfalls](../engine/pitfalls.md#role-and-index-traps)).
+- **Read the main tank by its registration key `"main tank"`**: `"main tank member"` is the value's
+  own name (`PartyMemberMainTankValue`) and resolves nothing.
+- **`OffhealRetPaladinStrategy` still pushes `reach party member to heal` at 93**, above Lay on Hands
+  on party (92) — the shape Holy fixed at 39.5.
 
 ## Glyphs — verified, do not re-audit
 
 `Playerbots.PremadeSpecGlyph.2.0` (holy pve) is `41106,43367,45741,43368,43365,41109`, read as
 major/minor/major/minor/minor/major: **Glyph of Holy Light**, Lay on Hands, **Glyph of Beacon of
 Light**, Sense Undead, Blessing of Kings, **Glyph of Seal of Wisdom**. `InitGlyphs` indexes
-`parsedSpecGlyph[cls][tab]` with `AiFactory::GetPlayerSpecTab`, which is 0 for Holy, so this is what
+`ParsedSpecGlyph[cls][tab]` with `AiFactory::GetPlayerSpecTab`, which is 0 for Holy, so this is what
 Holy bots get. Glyph of Holy Light (10% splash to five allies within 8 yards) is a third reason Holy
 Light has to be the primary heal.
 
@@ -180,37 +140,21 @@ ordered correctly. Hand of Freedom's self-preference and "already has a Hand" gu
 
 **Beacon of Light is single-rank 53563.** The ids **53652 / 53653 / 53654** that show up in Skada are
 the server-side beacon *copy heals* for Holy Light, Flash of Light and Holy Shock respectively
-(`spell_paladin.cpp:131-135`, dispatched in `spell_pal_light_s_beacon::HandleProc`). Three entries in
-the meter means the beacon is working, not that something is casting three spells.
+(`spell_pal_light_s_beacon::HandleProc` in the core's `spell_paladin.cpp`). Three entries in the meter
+means the beacon is working, not that something is casting three spells.
 
-## Reusable pattern established here
+## Protection — Holy Shield
 
-**A derived `InitTriggers` cannot remove a base-class node.** The Divine Plea fix is *relocation*:
-strip the node from the base strategy and re-add it verbatim in each sibling spec that wants it. The
-priest Holy-school relocation reuses this.
+`holy shield` sits on its own `HolyShieldTrigger` at `ACTION_HIGH + 10` (30): above the threat/AoE/mana
+cluster (seal of wisdom 29 … avenger's shield 25), below interrupts (40). The warrior's `shield block`
+sits at 41, but that is a 60 s cooldown — Holy Shield returns every 8 s and would cost interrupts at that
+priority. On `medium health` (65%) a healthy tank never cast it: one Freya kill had it up on 8% of
+swings (18.7% block against an 18.5% no-Holy-Shield baseline) against a player paladin's 75%.
 
-## Protection — Holy Shield was never up
-
-Measured on the 2026-09-12 Ulduar Freya kill: the bot tank blocked **18.7%** of 155 swings against an
-**18.5%** no-Holy-Shield baseline (5.0 base + 5.60 from 540 defense skill + 8.48 from 139 block
-rating, −0.60 for the level-83 attacker). Holy Shield was up on 12 of 158 swings (**8%**); a
-player-driven paladin in the same pull ran **75%** uptime and 39.8% block.
-
-Two defects stacked:
-
-1. `TankPaladinStrategy` hung `holy shield` off the **`medium health`** trigger
-   (`Playerbots.MediumHealth` = 65), so a healthy tank never cast it. `HolyShieldTrigger` was
-   registered in the factory and referenced by zero `TriggerNode`s — the same dead registration as
-   Divine Favor above.
-2. **`beforeDuration` 0 means "only once the buff has already dropped".** `BuffTrigger::IsActive`
-   and `CastBuffSpellAction::isUseful` both route through `ai::buff::BuffBelowRefreshTarget`, whose
-   in-combat path is `baseBeforeDuration && remaining < baseBeforeDuration` (`ForceRebuff.cpp:64`).
-   **Set it on both** — the action vetoes any early refresh the trigger proposes.
-
-Fixed with `beforeDuration` 2000 on trigger and action, and the node at `ACTION_HIGH + 10` (30):
-above the threat/AoE/mana cluster that was taking the global (seal of wisdom 29 … avenger's shield
-25), below interrupts (40). The warrior's `shield block` sits at 41, but that is a 60 s cooldown —
-Holy Shield returns every 8 s and would cost interrupts at that priority.
+**`beforeDuration` 0 means "only once the buff has already dropped".** `BuffTrigger::IsActive` and
+`CastBuffSpellAction::isUseful` both route through `ai::buff::BuffBelowRefreshTarget`, whose in-combat
+path is `baseBeforeDuration && remaining < baseBeforeDuration`. **Set it on both** — the action vetoes
+any early refresh the trigger proposes. Holy Shield uses 2000 on trigger and action.
 
 **Holy Shield 48952**: +30% block, 10 s, 8 charges, 8 s cooldown (category 931), 274 holy damage per
 block. The damage is one event per block, so `SPELL_DAMAGE` 48952 in a Chronicle log counts blocks

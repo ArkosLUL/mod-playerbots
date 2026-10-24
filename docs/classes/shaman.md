@@ -2,31 +2,9 @@
 
 Engine and healer semantics are in [../engine/action-selection.md](../engine/action-selection.md).
 
-## Root causes
-
-1. **The whole heal chain was priced below emergency.** Hand-written literals put the critical band at
-   23–25, where every other healer opens at 34–36 (`ACTION_CRITICAL_HEAL` is 30). So
-   `earth shield on main tank` (27), group-heal riptide/chain heal (27/26), `stoneclaw totem` (40) and
-   `call of the elements` (60) all outranked an emergency heal on a dying player, and `water shield`
-   (19.5) even outranked the low-health riptide (19.0).
-2. **Chain Heal was effectively disabled.** It appeared on exactly one node, `group heal setting`,
-   whose `AoeInGroupTrigger` bailed below 5 nearby members and then wanted 3/5/10/15 injured by group
-   size — ten players below 85% HP in a 25-man before a single Chain Heal. Resto was the only healer
-   spec with no `medium group heal setting` node at all.
-3. **No spell differentiation between bands** — all four used the same riptide → healing wave →
-   lesser healing wave chain, differing only by relevance.
-4. **A mana dead zone where the bot cast nothing.** The non-tank branch of
-   `HealerAutoSaveManaMultiplier` had no health check on its second veto, so **any MEDIUM-or-lower
-   efficiency heal was vetoed at any target health, including 5%**. Below 60% bot mana on a non-tank
-   between 50% and 65% HP with riptide already up, lesser healing wave, healing wave and riptide were
-   all vetoed and the bot fell through to Lightning Bolt.
-5. **No healing cooldowns existed.** Nature's Swiftness (16188) and Tidal Force (55198) are both
-   Restoration talents and appeared nowhere in the Shaman tree. Everything else in the WotLK resto
-   toolkit was already present at the action layer.
-
 Greater Healing Wave does **not** exist for Shaman in WotLK 3.3.5.
 
-## Current ladder
+## Restoration ladder
 
 | Trigger | Actions |
 |---|---|
@@ -47,90 +25,54 @@ Greater Healing Wave does **not** exist for Shaman in WotLK 3.3.5.
 
 Ordering rationale:
 
+- **The heal chain opens at 34-36 like every other healer.** At 23-25, `earth shield on main tank`,
+  the group heals, `stoneclaw totem` and `call of the elements` all outranked an emergency heal on a
+  dying player.
 - **Riptide leads every band** — instant, and it grants Tidal Waves, which speeds the Healing Wave or
-  crits the Lesser Healing Wave that follows. The pre-existing riptide-first ordering was
-  accidentally correct.
-- **Chain Heal is now in all four bands**, the change that matters most. It is also the only heal that
-  survives the save-mana veto in every situation (HIGH efficiency, low `estAmount`), so it doubles as
-  the low-mana backstop — which is why the **critical band ends with chain heal, not lesser healing
-  wave**.
+  crits the Lesser Healing Wave that follows.
+- **Chain Heal is in all four bands and `medium group heal setting`**; on `group heal setting` alone it
+  waited for ten injured raiders in a 25-man. It is also the only heal that survives the save-mana veto
+  in every situation (HIGH efficiency, low `estAmount`), so it doubles as the low-mana backstop — which
+  is why the **critical band ends with chain heal, not lesser healing wave**.
 - **Medium band puts lesser healing wave above healing wave** — a 2.5s Healing Wave is the wrong tool
   for topping off a 60% target.
-- **`call of the elements` drops 60 → 21.** Its trigger fires whenever ≥2 totem slots are empty or out
-  of range, so at 60 it re-dropped the whole totem set mid-fight while a raider sat at 10% HP.
+- **`call of the elements` sits at 21, not 60.** Its trigger fires whenever ≥2 totem slots are empty
+  or out of range, so at 60 it re-dropped the whole totem set mid-fight while a raider sat at 10% HP.
+- **Nature's Swiftness (16188) and Tidal Force (55198)** resolve by spell **name** against the bot's
+  own known spells, so no id constants are needed and untalented bots simply fail `CanCastSpell`.
+  Registration must be in the **Shaman** context — the Druid registration is not visible to Shaman
+  bots, and a missing registration is a silent runtime no-op.
+- The out-of-combat strategy carries `chain heal on party` in all four bands too, one step below
+  riptide.
 
-**Half-step values are collision breakers, not design choices.** A resto shaman's engine also runs
+**Half-step values are collision breakers**: a resto shaman's engine also runs
 `GenericShamanStrategy` (wind shear 23), `ShamanCureStrategy` (cleanse spirit 24, cleanse on party
-23) and the four totem strategies (`no X totem` re-drops at 55, `set X totem` at 60), so the values
-that would have collided were nudged. Band ordering is unchanged.
+23) and the four totem strategies (`no X totem` re-drops at 55, `set X totem` at 60).
 
-## `estAmount` / `manaEfficiency` tuning
+## `estAmount` / `manaEfficiency`
 
-These two fields are read **only** by `HealerAutoSaveManaMultiplier`; `estAmount` is compared against
-`lossAmount = 100 - targetHealthPct`.
+Read **only** by `HealerAutoSaveManaMultiplier`
+([semantics](../engine/action-selection.md#healing)):
 
-| Action | Before | After | Why |
-|---|---|---|---|
-| Lesser Healing Wave (party) | `25.0f, LOW` | `25.0f, MEDIUM` | LOW is vetoed at any health below 60% bot mana on non-tanks |
-| Healing Wave (party) | `50.0f, MEDIUM` | `40.0f, MEDIUM` | 50 vetoed the cast unless the target was under 50% HP; 40 lets it fire from 60% down |
-| Chain Heal | `15.0f, HIGH` | `20.0f, HIGH` | Keeps HIGH (the low-mana backstop) while reflecting that a bounce is worth more than a Riptide tick |
-| Riptide (party) | `15.0f, VERY_HIGH` | unchanged | Correct as-is |
+| Action | Value | Why |
+|---|---|---|
+| Lesser Healing Wave (party) | `25.0f, MEDIUM` | LOW was vetoed at any health below 60% bot mana on non-tanks |
+| Healing Wave (party) | `40.0f, MEDIUM` | 50 vetoed the cast unless the target was under 50% HP; 40 lets it fire from 60% down |
+| Chain Heal | `20.0f, HIGH` | HIGH keeps it the low-mana backstop; a bounce is worth more than a Riptide tick |
+| Riptide (party) | `15.0f, VERY_HIGH` | |
 
-Nature's Swiftness and Tidal Force resolve by spell **name** against the bot's own known spells, so no
-id constants are needed and untalented bots simply fail `CanCastSpell`. Registration must be in the
-**Shaman** context — the Druid registration is not visible to Shaman bots, and a missing registration
-is a silent runtime no-op.
-
-The out-of-combat strategy had the same Chain-Heal problem in miniature and got `chain heal on party`
-added to all four bands, one step below riptide.
-
-## Shared infrastructure changed here — read before touching healers
-
-These three moved **all four healer specs**.
-
-- **`AoeInGroupTrigger` thresholds.** Old: hard bail at `member < 5`, thresholds 3/5/10/15. New: bail
-  at `< 3`, thresholds `≤5 → 3`, `≤10 → 4`, `≤25 → 6`, else 8. Critically, the size the thresholds
-  scale from comes from `CountHealableGroupMembers` (alive, inside `healDistance`), not
-  `GetNearGroupMemberCount` (`sightDistance`, counts the dead) — **both sides of the comparison must
-  measure the same population** or the threshold is unreachable in a spread 25-man. Blast radius:
-  Chain Heal, Circle of Healing, Prayer of Healing, Wild Growth and Tranquility now fire at realistic
-  raid damage levels instead of only during a near-wipe.
-- **`AoeHealValue` counting radius.** The counter swept `sightDistance` (100 yd) with no LOS check,
-  counting players the bot cannot heal. Now `healDistance` plus `IsWithinLOSInMap`, matching
-  `PartyMemberToHeal::Check`. The raycast runs last, after the alive/range/health-band filters, so
-  only members actually hurt and in range cost a VMap query. **This must land together with the
-  threshold change** — the two offset each other, and together make the trigger mean "N people I can
-  actually heal are hurt".
-- **Save-mana health guard** — added `health >= lowHealth &&` to the non-tank branch's second
-  condition, mirroring the tank branch. Below 45% target HP, mana conservation stops vetoing heals
-  entirely. Equally benefits priest Flash Heal, paladin Holy Shock and druid Nourish.
-
-## `PartyMemberToProtect` revival
-
-A pre-existing bug unrelated to Resto: `PartyMemberToProtect::Calculate` had `return nullptr;` as its
-**first statement**, making the rest of the body unreachable and `ProtectPartyMemberTrigger`
-permanently false. Three emergency actions had therefore never fired: Disc Priest
-`pain suppression on party` @90, Paladin `blessing of protection on party` @93, Tank Warrior
-`intervene` @90.
-
-Reviving it as written would hand a tank below 10% HP to Blessing of Protection — BoP wipes the
-tank's melee threat and applies Forbearance, which is **worse than the bug**. So the revival needed a
-per-spell target filter.
-
-**`PartyMemberValue` derives from `UnitCalculatedValue`, not `Qualified`**, so the filter is exposed
-as a **second registered value name**, `"party member to protect no tank"`, rather than a qualifier.
-Paladin's BoP and warrior's Intervene point at that name; Intervene additionally requires
-`AI_VALUE(uint8, "my attacker count") == 0`, without which a tank warrior charges off the boss to any
-raider below 30%. **Priest deliberately stays on the generic value** — Pain Suppression on a dying
-tank is the intended use — and `ProtectPartyMemberTrigger` also stays generic, so the paladin and
-warrior nodes still fire on the shared trigger and simply report `isUseful() == false` when the
-candidate is not for them.
+**`AoeHealValue` counts only members a bot can heal**: inside `HealDistance` and `IsWithinLOSInMap`,
+matching `PartyMemberToHeal::Check`, with the raycast last so only members actually hurt and in range
+cost a VMap query. It and the `AoeInGroupTrigger` thresholds
+([population rule](../engine/action-selection.md#healing)) move every healer's group heal (Chain Heal,
+Circle of Healing, Prayer of Healing, Wild Growth, Tranquility) and must change together: the two
+offset each other.
 
 ## Mana kit per spec
 
 Only restoration carries mana potions
-([../systems/consumables-and-burst.md](../systems/consumables-and-burst.md)); the other two spend
-their one potion on damage.
+([../systems/consumables-and-burst.md](../systems/consumables-and-burst.md), which also covers
+Elemental's thin kit); the other two spend their one potion on damage.
 
 | Spec | In combat | Shield |
 |---|---|---|
@@ -141,31 +83,28 @@ their one potion on damage.
 Removing the potion is what lets enhancement's node work at all: it sat at the same 40% threshold
 but was outranked 90 vs 23, so the potion always won the tick.
 
-**Elemental is the thinnest kit of any class carved out of mana potions** — Mana Tide is resto-only
-and Shamanistic Rage enhancement-only, leaving Water Shield and Thunderstorm's 8% per 45 s. It is
-the first thing to re-check if an elemental bot runs dry in a long fight.
-
 Watch out: `WaterShieldTrigger` derives from `BuffTrigger`, which tests aura presence only. Water
 Shield is **charge**-based, so a shield down to its last orb still reads as up and is not refreshed
 until the charges are gone.
 
 ## Elemental
 
-Single target follows the wowsims APL: flame shock when missing 5.3 > lava burst 5.2 > lightning bolt 5.0.
-Chain lightning (5.6) needs `light aoe`, 2+ enemies within 8 yd of the target.
+Single target follows the wowsims APL: earth shock execute 5.5, flame shock when missing 5.3 > lava
+burst 5.2 > lightning bolt 5.0. Chain lightning (5.6) needs `light aoe`, 2+ enemies within 8 yd of the
+target.
 
 - **No single-target Chain Lightning.** It deals no more per second than Lightning Bolt for 2.6x the
   mana (26% against 10% base). Ungated, it outranked Lava Burst and Flame Shock every cycle (16 Lava
   Bursts against the sim's 19, Flame Shock up 90% against 95%) and ran the bot dry by 155 s of a
   180 s fight.
-- **Elemental Mastery fires whenever its aura is missing.** It used to wait for Chain Lightning's
-  cooldown, to save the instant for Lava Burst; without single-target Chain Lightning it would never
-  fire. Lava Burst and Lightning Bolt both cast 2.0 s, so either can take the instant.
+- **Elemental Mastery (29) fires whenever its aura is missing.** Waiting for Chain Lightning's
+  cooldown to save the instant for Lava Burst would never fire without single-target Chain Lightning.
+  Lava Burst and Lightning Bolt both cast 2.0 s, so either can take the instant.
 - **Lava Burst needs our Flame Shock with more than 2 s left** (the sim's rule): its sure crit is
   rolled when the cast finishes, so a shock dropping mid-cast leaves a plain hit.
 - **Thunderstorm's knockback node is `enemy is close and being attacked`.** Plain `enemy is close`
   fired on every cooldown beside a tanked boss, which is immune, and would knock trash off the tank.
-  The `high mana` node below is unchanged.
+  The `high mana` node is separate.
 - **Heroism and Bloodlust skip while the bot is Sated (57724) or Exhausted (57723)**: another lust
   already landed, so the cast only burned a GCD. Shared `ShamanBoostTrigger`, so every spec.
 - **Trap: Glyph of Totem of Wrath's 5 min self-buff (63283) is also named "Totem of Wrath".** A

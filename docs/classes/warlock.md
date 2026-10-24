@@ -1,9 +1,7 @@
 # Warlock — Affliction, Demonology, Destruction
 
-Audit against the wowtbc.gg WotLK guides, implemented in commit `db4179d56` ("Warlock rotation
-changes based on audit") — including `CorruptionSnapshotTrigger` and registrations for the
-previously dead Destruction triggers. The findings below are the audit record; **items marked OPEN
-were re-verified against `src/` and are still live**. Engine semantics are in
+Audit against the wowtbc.gg WotLK guides. Numbered findings marked *Fixed* or *Removed* record a
+decision; the rest are still live. Engine semantics are in
 [../engine/action-selection.md](../engine/action-selection.md).
 
 Warlock strategy files use bare floats, not `ACTION_*` constants.
@@ -35,43 +33,39 @@ Two consequences:
 
 1. **The guide's "manually re-apply Corruption at 35% for Death's Embrace" rule buys nothing here** —
    Death's Embrace is picked up by every Everlasting Affliction refresh. Do not implement it.
-2. **The real gap is crit and % damage mods.** `AfflictionWarlockStrategy` casts Corruption at 18.0,
-   the highest DoT relevance, making it the opener — applied cold, before any trinket proc, potion or
-   raid cooldown. With Everlasting Affliction rolling it forward the debuff never drops,
-   `CorruptionTrigger` (presence-only) never fires again, and **that cold crit snapshot is frozen for
-   the whole encounter.**
+2. **The real gap was crit and % damage mods.** Corruption at 18.0 is Affliction's opener — applied
+   cold, before any trinket proc, potion or raid cooldown — and with Everlasting Affliction rolling it
+   forward the debuff never drops, so `CorruptionTrigger` (presence-only) never fires again and the
+   cold snapshot would last the whole encounter.
 
-The agreed design is a `CorruptionSnapshotTrigger` that reads the stored snapshot off the aura and
-compares it against live crit — `AuraEffect::GetCritChance()` against
-`Unit::SpellDoneCritChance` / `SpellTakenCritChance`, recasting once the delta exceeds ~5%. Properties
-worth keeping in mind:
+`corruption snapshot` → `corruption resnapshot` @16.5, under the DoT maintenance block so it never
+delays Haunt or an actually-missing DoT. `CorruptionSnapshotTrigger` (checked every 2 s) compares the
+stored `AuraEffect::GetCritChance()` against live `Unit::SpellDoneCritChance` /
+`SpellTakenCritChance` and fires once live leads by `CRIT_DELTA_PCT` (5). Properties:
 
 - **It self-gates on Pandemic.** `CalcPeriodicCritChance` returns `0.0f` unless a
   `SPELL_AURA_ABILITY_PERIODIC_CRIT` aura affects the spell, so an untalented bot never trips it.
 - **It self-clears.** The recast runs `RefreshTimers()` → `CalculatePeriodicData()`, the snapshot
   becomes live, the trigger goes quiet. No cooldown or one-shot latch needed.
-- **It needs a companion action.** `CastCorruptionAction::isUseful()` delegates to
-  `CastAuraSpellAction::isUseful()`, which returns false while Corruption is up — it would veto every
-  re-snapshot. A separate action that skips the aura-presence veto and relies on `isPossible()` is
-  required. Suggested slot ~16.0, under the DoT maintenance block, so it never delays Haunt or an
-  actually-missing DoT.
+- **It needs its own action.** `CastCorruptionAction::isUseful()` refuses while Corruption is up, so
+  `CastCorruptionResnapshotAction` is a plain `CastSpellAction` that skips the aura-presence veto (and
+  waits out a pending Seed).
 - `m_pctMods` staleness has the same cause and is fixed by the same recast — no separate trigger.
 
-**Verified on the 2026-09-27 Ulduar traces.** The trigger fires once per pull, 0-6 s after the
-crit-taken debuffs the opener missed reach the boss (Shadow Mastery, Improved Scorch, Heart of the
-Crusader, Totem of Wrath, Master Poisoner), then stays quiet; Everlasting Affliction carries that
-snapshot for the rest of the uptime, 114 s on one Thorim pull. Tick crit rate cannot show the gain:
-5 points needs far more ticks than a pull yields.
+On Ulduar traces the trigger fires once per pull, 0-6 s after the crit-taken debuffs the opener
+missed reach the boss (Shadow Mastery, Improved Scorch, Heart of the Crusader, Totem of Wrath, Master
+Poisoner), then stays quiet; Everlasting Affliction carries that snapshot for the rest of the uptime,
+114 s on one Thorim pull. Tick crit rate cannot show the gain: 5 points needs far more ticks than a
+pull yields.
 
 ## Seed of Corruption stays off bosses
 
 The bot's own Seed landing removes its own Corruption on that target; another warlock's Seed does
-not. The `aoe` ladder's `seed of corruption on attacker` (22.0) used `attacker without aura`, which
-picks the boss, and `seed of corruption` (21.5) the current target, also the boss. Across the
-2026-09-27 Ulduar run: 38 Corruption drops, 219 s of lost boss uptime, 70-86 s per Freya pull, and
-on XT-002 a loop of Corruption cast into Seeds still in flight.
+not. With the `aoe` ladder's Seeds aimed at the boss (`attacker without aura` and the current target),
+one Ulduar run lost 38 Corruptions, 219 s of boss uptime, 70-86 s per Freya pull, and on XT-002 looped
+Corruption casts into Seeds still in flight.
 
-Both Seed actions now go through `seed of corruption target`: never a boss, preferring an add
+Both Seed actions go through `seed of corruption target`: never a boss, preferring an add
 without own Corruption, falling back to Corrupted trash, else no Seed. Never a boss even when it
 lacks Corruption, or after an expiry Seed (22.0) outranks the Corruption recast (19.5) and blocks it
 until the Seed pops. Consequence: no Seed on Iron Assembly, all three being bosses. A Seed cast at a
@@ -111,10 +105,9 @@ damage — Iron Assembly's High Voltage pulses every 3 s — a warlock that wait
 too hurt to tap at all. The emergency node exists for when that happens anyway.
 
 **Fel Armor pays for the taps**: 2% health per 5 s (2.6% with Demonic Aegis) covers about one tap
-per 15 s. Demon Armor is only for warlocks without Fel Armor. A seated bot's first cast stands it up
-and fails, and the engine ran the `fel armor` node's alternative in the same tick: Demonology, eating
-after Soul Link took the post-summon tick, wore Demon Armor on every pull, fell under `lowHealth` at
-107 s of the 2026-10-19 dummy test and wanded the last 25 s.
+per 15 s. Demon Armor is only for warlocks without Fel Armor (`CastDemonArmorAction::isUseful`), or
+the seated-bot alternative put it on every pull
+([pitfalls](../engine/pitfalls.md#a-seated-bots-first-cast-hands-the-tick-to-the-alternative)).
 
 ## Affliction
 
@@ -126,40 +119,40 @@ UA 5.4, haunt 5.3, shadow bolt 5.2, shoot 5.0. Curse of Agony comes from the sep
 
 | # | Finding |
 |---|---|
-| AF1 | Corruption applied as the opener and never recast — see the snapshot section. **Largest single Affliction DPS loss in the audit.** |
-| AF2 | `HauntTrigger` is presence-only at 16.5, so Haunt is cast every ~12s (when the debuff drops) instead of every ~8s (its cooldown), and it sits below Corruption and UA. Also loses the free Corruption refresh Everlasting Affliction hangs off it. Wants a `SpellNoCooldownTrigger`. |
-| AF3 | Drain Soul is gated on `"target critical health"` = **20%**, while the guide says 25% — 5% of the execute window spent on Shadow Bolt instead of a Death's-Embrace-boosted Drain Soul. |
-| AF4 | All DoT triggers but Immolate (DM7) are presence-only (`beforeDuration` omitted), so the DoT must fully drop before a recast is queued — a guaranteed GCD (Corruption, CoA) or full cast (UA, 1.5s) of downtime every cycle. |
-| AF5 | No Shadow Bolt trigger; the filler comes only from `getDefaultActions` at 5.2. Works, but cannot be reasoned about or reordered from the ladder. |
+| AF2 | *Fixed.* `HauntTrigger` fires on cooldown (~8 s), not when the debuff drops (~12 s), keeping the free Corruption refresh Everlasting Affliction hangs off it; it keeps `DebuffTrigger`'s target guards and an 8.0 s time-to-die test. |
+| AF3 | *Fixed.* `drain soul execute` fires at 25% target health, where Drain Soul's execute bonus starts, not the generic 20% `target critical health`. |
+| AF4 | Corruption, UA and CoA triggers are presence-only (`beforeDuration` omitted), so the DoT must fully drop before a recast is queued — a guaranteed GCD (Corruption, CoA) or full cast (UA, 1.5s) of downtime every cycle. |
+| AF5 | No Shadow Bolt filler trigger (only the `shadow trance` proc node); the filler comes from `getDefaultActions` at 5.2. Works, but cannot be reasoned about or reordered from the ladder. |
 | AF6 | No Seed of Corruption or Shadowflame in the Affliction ladder — AoE comes solely from the shared `aoe` strategy on `"medium aoe"` (3+). Two-target cleave never gets the second DoT set. |
 
 ## Demonology
 
 Code order: life tap glyph 29.5, metamorphosis 28.5, demonic empowerment 28.0, corruption on attacker
-19.5, immolate on attacker 19.0, corruption 18.0, immolate 17.5, decimation → soul fire 17.0, molten
-core → incinerate 16.5, life tap 5.1, flee 39.0.
+19.5, immolate on attacker 19.0, decimation → soul fire 18.5, corruption 18.0, immolate 17.5, molten
+core → incinerate 16.5, life tap 5.1, flee 39.0. Defaults: corruption 5.5, immolate 5.4, shadow bolt
+5.3, incinerate 5.2, shoot 5.0.
 
 | # | Finding |
 |---|---|
-| DM1 | **Decimation → Soul Fire at 17.0 sits below corruption 18.0 and immolate 17.5.** Decimation procs (10s window) get spent on a DoT refresh, so the strongest execute button is the one that gets dropped. |
+| DM1 | *Fixed.* Decimation → Soul Fire sits at 18.5, above the DoT refreshes: its 10 s window spent on Corruption or Immolate dropped the strongest execute button. The trigger needs more than 3 s of Decimation left. |
 | DM2 | *Wont fix.* Immolation Aura is reachable only through the shared `aoe` strategy, and only when something else already put the bot inside 5 yd. Running Demonology into melee for it fights the ranged spots raid strategies assign, so the `meta melee` strategy and its Demon Charge opener were dropped along with the single-target node. |
 | DM3 | *Fixed* (user decision): `AiFactory` gives Demonology `curse of doom` (higher throughput on any fight over 60s); Destruction keeps Curse of the Elements so the raid debuff still comes from somewhere. Curse of Doom waits for a target expected to live 60 s (it hits on expiry); the strategy carries its own Curse of Agony node for shorter-lived targets, and Agony never replaces our own Doom. Curse strategies are siblings: a second one listed after `curse of doom` evicts it. |
-| DM4 | `CorruptionTrigger` carries `needLifeTime = 0.5f` (refresh whenever the target survives another half second) and `ImmolateTrigger` checks no life time at all (`ImmolateNeedsRefresh`), so DoTs land on targets about to die. |
+| DM4 | DoTs land on targets about to die: Corruption, UA and CoA triggers call `BuffTrigger::IsActive()`, which throws away `DebuffTrigger`'s `needLifeTime` ([why](../engine/action-selection.md#trigger-semantics)), and `ImmolateNeedsRefresh` checks no life time at all. |
 | DM6 | Metamorphosis fires on a plain `BoostTrigger` at 28.5. It is burst-gated, so the tank-hold applies, but **nothing aligns it with Bloodlust.** |
 | DM7 | *Fixed* (Destruction too): Immolate recasts once it would run out before a new cast lands (`ImmolateNeedsRefresh`). A spell recast resets the tick timer on this core, so landing earlier loses the tick in progress; waiting for the drop cost 1-4 s per cycle. |
 
 ## Destruction
 
 Code order: flee 39.0, life tap glyph 29.5, immolate 20.0, conflagrate 19.5, chaos bolt 19.0, target
-critical health → shadowburn 18.0, corruption on attacker 5.5, corruption 5.4, life tap 5.1.
-Defaults: immolate 5.9, conflagrate 5.8, chaos bolt 5.7, incinerate 5.6, corruption 5.3, shadow bolt
-5.2, shoot 5.0.
+critical health → shadowburn 18.0, incinerate 17.5, corruption on attacker 5.5, corruption 5.4, life
+tap 5.1. Defaults: immolate 5.9, conflagrate 5.8, chaos bolt 5.7, incinerate 5.6, corruption 5.3,
+shadow bolt 5.2, shoot 5.0.
 
 | # | Finding |
 |---|---|
-| DS1 | *Fixed.* `"conflagrate"` and `"chaos bolt"` had **no registered trigger creator**, so both nodes were dead and the spells only ever fired from `getDefaultActions` at 5.8/5.7 — unprioritisable, and **nothing checked that Immolate was on the target before Conflagrate**. Both are now registered in `WarlockAiObjectContext.cpp`. |
-| DS2 | *Fixed.* Incinerate had no trigger at all (default 5.6 only); `"incinerate"` is now registered. |
-| DS3 | Shadowburn at 18.0 sits above the (dead) Conflagrate/Chaos Bolt nodes and is not in the guide's priority at all. It costs a soul shard, and `"no soul shard"` sits at 60.0 in the shared block, so heavy execute usage can put the bot into a shard-recreation loop mid-fight. |
+| DS1 | *Fixed.* `"conflagrate"` and `"chaos bolt"` have registered trigger creators; unregistered, both spells only fired from `getDefaultActions` at 5.8/5.7, unprioritisable. `ConflagrateTrigger` requires our own Immolate on the target (WotLK Conflagrate no longer consumes it). |
+| DS2 | *Fixed.* `"incinerate"` has a registered trigger (17.5), not only the 5.6 default. |
+| DS3 | Shadowburn (18.0, `target critical health`) is not in the guide's priority at all. It costs a soul shard, and `"no soul shard"` sits at 60.0 in the shared block, so heavy execute usage can put the bot into a shard-recreation loop mid-fight. |
 | DS4 | No Curse of Doom option; `AiFactory` hard-assigns `curse of elements`. **User decision: leave Destruction on CoE**, since it is the only warlock spec supplying the raid debuff. |
 
 ## Shared
@@ -168,9 +161,9 @@ Defaults: immolate 5.9, conflagrate 5.8, chaos bolt 5.7, incinerate 5.6, corrupt
 |---|---|
 | SH1 | `WarlockBoostStrategy` (`"boost"`) and `WarlockPetStrategy` (`"pet"`) are registered with **empty `InitTriggers`**. Dead strategies — fill or drop. |
 | SH2 | `TankWarlockStrategy::InitTriggers` is empty and does not chain to `GenericWarlockStrategy::InitTriggers`, so a tank-spec warlock loses life tap, soulshatter and all soul-shard management. |
-| SH3 | All five curses sit at 29.0, so enabling two curse strategies gives order-dependent, non-deterministic behaviour. |
-| SH4 | The `backlash` trigger and the `hellfire`, `shadow cleave`, `drain mana`, `drain life` actions are registered but referenced by no strategy. |
-| SH5 | *Fixed.* Life Tap on `"low mana"` at 95.0 outranked `spell lock` (40.0) and everything else, so a low-mana warlock tapped through an interrupt window. Now 39.5 — see the ladder below. |
+| SH3 | Five curses (Doom, Elements, Exhaustion, Tongues, Weakness) sit at 29.0, so enabling two curse strategies gives order-dependent, non-deterministic behaviour. |
+| SH4 | *Removed* — the unreferenced `backlash` trigger and `hellfire`, `shadow cleave`, `drain mana`, `drain life` actions. |
+| SH5 | *Fixed.* Life Tap on `"low mana"` at 95.0 outranked `spell lock` (40.0) and everything else, so a low-mana warlock tapped through an interrupt window. Now 39.5 — see the table above. |
 | SH6 | No `CLASS_WARLOCK` case in `AiFactory::GetPlayerRoles`; falls through to the default DPS role. Fine today. |
 
 ## Divergences to decide
@@ -189,7 +182,7 @@ scope — bots have no pre-pull phase.
 
 Pet assignment per spec (Felhunter / Felguard / Imp) matches all three guides. Glyph of Life Tap
 upkeep at 29.5 in every spec. Demonic Empowerment on cooldown at 28.0 (Demonology). **Molten Core →
-Incinerate at 16.5 is correct by accident** — Soul Fire at 17.0 outranks it, which is what the guide
+Incinerate at 16.5 is correct by accident** — Soul Fire at 18.5 outranks it, which is what the guide
 wants. Destruction's Corruption-below-Incinerate ordering (the `// won't be used after level 64`
 comments already say so). The shared AoE ladder — immolation aura 26.0, shadowfury 23.0, shadowflame
 22.5, seed of corruption 22.0/21.5, rain of fire 21.0 — matches the guides' "large pulls: Shadowflame

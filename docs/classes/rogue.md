@@ -1,42 +1,36 @@
 # Rogue — Combat and Assassination
 
-Strategy keys: `combat` (`CombatRogueStrategy`), `assassin` (`AssassinationRogueStrategy`). Subtlety
-gets `assassin` (`AiFactory::AddDefaultCombatStrategies`) and inherits whatever improves there;
-`SubtletyRogueStrategy` is written but unregistered. Engine semantics are in
-[../engine/action-selection.md](../engine/action-selection.md).
+Strategy keys: `combat` (`CombatRogueStrategy`), `assassin` (`AssassinationRogueStrategy`). Engine
+semantics are in [../engine/action-selection.md](../engine/action-selection.md).
 
-**`GenericRogueStrategy` must stay parented to `MeleeCombatStrategy`.** Upstream parents it to
-`CombatStrategy`, and `MeleeCombatStrategy` is the only source of the `"enemy out of melee"` trigger
-that produces `reach melee`; `AiFactory.cpp` never hands rogues the `"close"` strategy either. Take
-upstream's parent and **every rogue stands still whenever Sprint is on cooldown**, in every raid, with
-nothing failing to compile. It is a local divergence to re-apply on each merge — see
-[../engine/pitfalls.md](../engine/pitfalls.md). `tricks of the trade` likewise sits at
-`ACTION_HIGH + 6.5f` rather than upstream's 26.0, to break an exact relevance tie with the
-main-hand poison (26.0). Every trigger the specs share (poisons, kicks, survival, Tricks, Sprint)
-lives in `GenericRogueStrategy` in this tuned form; the spec strategies carry only their rotation
-and Combat's Vanish.
+**Subtlety has no strategy of its own.** `SubtletyRogueStrategy.cpp` is a commented-out stub and its
+`subtlety` creator is commented out, so `AiFactory::AddDefaultCombatStrategies` gives Subtlety
+`assassin`, and it inherits whatever improves there.
+
+`GenericRogueStrategy`'s `MeleeCombatStrategy` parent and Tricks of the Trade's 26.5 are local
+divergences a merge must re-apply
+([pitfalls](../engine/pitfalls.md#local-divergences-a-merge-must-re-apply)). Every trigger the specs
+share (poisons, kicks, survival, Tricks, Sprint) lives in `GenericRogueStrategy` in this tuned form;
+the spec strategies carry only their rotation, stealth openers and Combat's Vanish.
 
 ## Design decisions
 
 - **Armor-debuff ownership.** A rogue applies Expose Armor only when **nobody else in the group can**,
-  not merely when the debuff currently happens to be missing. The original trigger used
-  `HasAura("sunder armor", target, false, false, -1, true)`, and with `maxStack = false,
-  maxAuraAmount = -1` that is a **pure presence check** — one stack blocks Expose Armor exactly as
-  hard as five. Presence-only is conservative-correct mid-fight (Sunder and Expose share the same 20%
-  armor slot), but wrong at the pull: for the second before the warrior lands stack 1 the rogue sees a
-  clean target, burns a finisher, and the warrior overwrites it — and the warrior's trigger has no
-  reciprocal check, so both keep fighting for the slot.
+  not merely when the debuff currently happens to be missing. A `HasAura("sunder armor", target, false,
+  false, -1, true)` probe is a pure presence check
+  ([why](../engine/action-selection.md#casting)): conservative-correct mid-fight (Sunder and Expose
+  share the same 20% armor slot), but wrong at the pull, where for the second before the warrior lands
+  stack 1 the rogue sees a clean target, burns a finisher, and the warrior overwrites it — and the
+  warrior's trigger has no reciprocal check, so both keep fighting for the slot.
 
-  `GroupSuppliesMajorArmorDebuff` (`src/Ai/Base/Combat/ArmorDebuff.h`, sitting beside
-  `BurstCooldowns.cpp`) walks the group with a **class check only** — alive warrior on the same map,
-  or a hunter with a worm pet — no spellbook scan, amortised by a `checkInterval`. Stated trade-off:
-  a warrior present but not actually sundering (levelling, wrong stance) suppresses the rogue. That
-  costs 20% armor on the boss rather than a wasted finisher every pull, and the direct aura probe
-  covers the case where someone else did land it.
+  `GroupSuppliesMajorArmorDebuff` (`src/Ai/Base/Combat/ArmorDebuff.h`) walks the group with a **class
+  check only** — alive warrior on the same map, or a hunter with a worm pet — no spellbook scan,
+  amortised by a `checkInterval`. Stated trade-off: a warrior present but not actually sundering
+  (levelling, wrong stance) suppresses the rogue. That costs 20% armor on the boss rather than a wasted
+  finisher every pull, and the direct aura probe covers the case where someone else did land it.
 - **Refresh windows, not expiry.** Every maintained aura (Slice and Dice, Rupture, Hunger for Blood)
-  is refreshed before it drops via `beforeDuration = 2000`. Rogue passing 0 everywhere guaranteed
-  downtime each cycle. **This is the opposite of the correct priest setting** — see
-  [priest.md](priest.md).
+  is refreshed before it drops via `beforeDuration = 2000`; 0 guaranteed downtime each cycle. **This is
+  the opposite of the correct priest setting** — see [priest.md](priest.md).
 - **Poisons per spec.** Assassination: Deadly main hand (falls back to Instant below level 30),
   Instant off hand. Combat and Subtlety: Instant main hand, Deadly off hand. Deadly procs on a flat
   per-hit chance (30%, up to 50% with Improved Poisons), Instant at 8.53 PPM. Core
@@ -47,82 +41,71 @@ and Combat's Vanish.
 - **Weapon speed** (`ApplyPreferredSpecWeapons`, daggers only for Assassination/Subtlety) follows the
   poisons: Assassination fast main hand (strong), slow off hand (weak); Subtlety slow main, fast off
   (weak); Combat slow main (weak), fast off hand for Combat Potency (strong).
-- **Reuse over new plumbing.** `MediumEnergyAvailableTrigger`, `ComboPointsNotFullTrigger`,
-  `CastComboAction`, `RuptureTrigger`, `BoostTrigger` and the `burstCooldownNames` registry all
-  already existed and were either unused or unreachable from rogue.
-
-## Bugs the rebuild fixed
-
-- **`blade fury` was a doubly dead name.** The strategy asked for `"blade flurry"` while the registry
-  had `"blade fury"` — and no spell by that name exists either. Renamed throughout.
-- **Envenom was gated on a talent rank.** `isPossible` checked `HasAura(58410)` (Master Poisoner rank
-  3), so any Assassination rogue without 3/3 silently never envenomed and fell through the action node
-  to Eviscerate. Now `HasSpell("envenom")`, with the Deadly Poison requirement moved to the trigger.
-- **Builders had no combo-point guard.** Sinister Strike, Mutilate and Backstab derived from
-  `CastSpellAction`; they now derive from `CastComboAction`, which implements `combo < 5` plus the
-  melee range check and was previously dead code with nothing inheriting from it.
-- **`CastDebuffSpellAction` swallowed `beforeDuration`** — it forwarded only `isOwner` to
-  `CastAuraSpellAction`. An optional trailing parameter was added (non-breaking for the existing call
-  sites) so Rupture can pass 2000.
-- **Sinister Strike idled through the 40-59 energy band** every cycle, because the only gate was
-  `high energy available` (60) while SS costs 40.
-- **Assassination never cast Rupture at all** — the action node existed but nothing emitted it. That
-  also blocked Hunger for Blood, which needs a bleed on the target and could otherwise only get one
-  from a stealth-opener Garrote.
+- **Envenom needs only `HasSpell("envenom")`**, with the Deadly Poison requirement in the trigger: a
+  `HasAura(58410)` (Master Poisoner rank 3) gate made any rogue without 3/3 fall through to Eviscerate.
+- **Builders derive from `CastComboAction`** (`combo < 5` plus the melee range check), and
+  `CastDebuffSpellAction` takes a trailing `beforeDuration` so Rupture can pass 2000.
+- **Assassination's Rupture stands down when a group mate's bleed is on the target**
+  (`GroupSuppliesBleedOn`): it is kept up mostly to feed Hunger for Blood, so with another bleed those
+  combo points are worth more as an Envenom.
 
 ## Current ladders
+
+Shared (`GenericRogueStrategy`): kick 42, kick on enemy healer 41, `low health` → evasion 29 / feint
+28, `critical health` → cloak of shadows 27, tricks of the trade 26.5, main-hand poison 26 / off-hand
+poison 25.5, `enemy out of melee` → sprint 22. Defaults: `melee` 5.0 only.
 
 Combat (`CombatRogueStrategy`):
 
 | Rel | Trigger | Action |
 |---|---|---|
-| 42 / 41 | kick, kick on enemy healer | kick |
-| 29 / 28 | low health | evasion, feint |
-| 27 | critical health | cloak of shadows |
-| 26.5 | tricks of the trade | tricks of the trade |
-| 25 / 24 | slice and dice / combat rupture | slice and dice / rupture |
+| 29.5 / 29.4 | in stealth | garrote / ambush |
+| 25 | slice and dice | slice and dice |
+| 24.5 | riposte | riposte |
+| 24 | combat rupture | rupture |
 | 23.5 | slice and dice before rupture | slice and dice |
 | 23 / 22 | killing spree / blade flurry | killing spree / blade flurry |
 | 21 | expose armor | expose armor |
 | 20.5 / 20 | target with combo points almost dead, combat eviscerate | eviscerate |
-| 19 / 17 | enemy out of melee / medium threat | sprint / vanish |
-| 13 | combo points not full and medium energy | sinister strike |
+| 17 | medium threat | vanish |
+| 13 / 12 | combo points not full and medium energy / almost full energy available | sinister strike |
 
 Assassination:
 
 | Rel | Trigger | Action |
 |---|---|---|
-| 42 / 41 | kick, kick on enemy healer | kick |
-| 29 / 28 | low health | evasion, feint |
-| 27 | critical health | cloak of shadows |
-| 26.5 | tricks of the trade | tricks of the trade |
-| 25 / 24 / 23 | slice and dice / rupture / hunger for blood | same |
+| 29.5 / 29.4 | in stealth | garrote / ambush |
+| 25 / 24 / 23 | slice and dice / assassination rupture / hunger for blood | slice and dice / rupture / hunger for blood |
 | 22 | expose armor | expose armor |
 | 21.5 / 21 | envenom | cold blood, envenom |
 | 20 | target with combo points almost dead | envenom |
-| 19 / 15 | enemy out of melee / medium aoe | sprint / fan of knives |
+| 15 | medium aoe | fan of knives |
 | 13 | combo points not full and high energy | mutilate |
+
+`boost` adds adrenaline rush 22 and blade flurry 24; `aoe` adds blade flurry 24 on `light aoe` and
+fan of knives 15 on `medium aoe`.
 
 Rupture sits below Slice and Dice because SnD comes first in the opener; Hunger for Blood sits below
 Rupture because it depends on it. Feint stays on `low health` beside Evasion — with Glyph of Feint it
 is a 50% AoE damage reduction, so it belongs in the survival band, not with the threat tools.
-`killing spree` moved off the default list, where at 5.1 it only ever fired when nothing else could;
-`getDefaultActions` keeps only `melee` at 5.0.
+`killing spree` is off the default list, where at 5.1 it only ever fired when nothing else could.
 
-**Combat's finishers follow the sim's APL** (`combat.apl.json`). TestBotDps 2026-10-19 had Rupture up 77%
-against 87%, every Rupture at 4 CP, and 4 of 5 drops right after an Eviscerate left it 3-5.5 s:
+**Combat's finishers follow the sim's APL** (`combat.apl.json`). Before, Rupture was up 77% against
+the sim's 87%, every Rupture at 4 CP, and 4 of 5 drops came right after an Eviscerate left it 3-5.5 s:
 
 - `combat rupture`: Rupture at 5 CP only (20 s with the glyph, stronger ticks).
 - `combat eviscerate`: 5 CP, held while our Rupture has under 10 s (6 s under Adrenaline Rush), unless
-  the target dies before Rupture's 12 s life check. Held at 5 CP, the bot pools to 90 energy, then Sinister Strikes and
-  wastes the point, as the sim does.
+  the target dies before Rupture's 12 s life check. Held at 5 CP, the bot pools to 90 energy, then
+  Sinister Strikes (`almost full energy available` @12) and wastes the point, as the sim does.
 - `slice and dice before rupture` (23.5, under Rupture): at 3+ CP, once SnD would expire before
   Rupture + 2 s and the refreshed SnD would outlast that, so SnD never takes Rupture's 5 CP. The
   second check stops an untalented short SnD from eating every 3 CP.
-- Killing Spree and Adrenaline Rush (shared `boost`) wait for energy ≤ 50: regen past the cap is lost.
+- Killing Spree and Adrenaline Rush wait for energy ≤ 50: regen past the cap is lost.
 
-`TricksOfTheTradeTargetValue` returns the main tank while `low tank threat` holds or in the first
-~10s of combat, otherwise the highest-attack-power melee DPS group member within 20 yd excluding self.
+**Tricks of the Trade's target is still open** (`TricksOfTheTradeTargetValue`,
+[pitfalls](../engine/pitfalls.md#detection-that-never-fires)): its opener branch runs only under
+`wait for attack`, so in a raid it falls through to the highest-attack-power melee DPS, which then
+pulls the boss.
 
 ## Deferred, with reasons
 
@@ -135,15 +118,12 @@ against 87%, every Rupture at 4 CP, and 4 of 5 drops right after an Eviscerate l
 
 ## Open against the guide
 
-- Eviscerate fires only at 5 CP, and Assassination's Rupture from 4; the guide wants Eviscerate at 4-5 CP
-  and Rupture at 5.
-- Killing Spree (23) outranks Blade Flurry (22) and Adrenaline Rush (22); the guide orders them
-  Adrenaline Rush → Blade Flurry → Killing Spree.
-- **Rupture always maintained above Hunger for Blood** is a deliberate divergence: it guarantees the
-  bleed HfB needs, but spends 5 CP that would otherwise be Envenom. The guide-accurate version would
-  be a group-bleed check shaped like `GroupSuppliesMajorArmorDebuff`.
+- Combat's Eviscerate fires only at 5 CP, and Assassination's Rupture from 4; the guide wants
+  Eviscerate at 4-5 CP and Rupture at 5.
+- Blade Flurry (24 via `boost`) outranks Killing Spree (23) and Adrenaline Rush (22); the guide orders
+  them Adrenaline Rush → Blade Flurry → Killing Spree.
 
 ## Confirmed correct — do not re-audit
 
 Cold Blood before Envenom, Envenom's Deadly Poison aura-state check, Expose Armor suppressed when the
-group already supplies a major armor debuff, Slice and Dice, Tricks of the Trade.
+group already supplies a major armor debuff, Slice and Dice.
