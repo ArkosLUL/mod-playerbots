@@ -2,7 +2,7 @@
 
 **Disclaimer:** Ulduar's hard modes have a big RNG factor, and a lot of them are gear checks for the tanks, healers or DPS. The better the gear, the less bullshit-per-minute can happen. I wouldn't try them below an average raid item level of 226.
 
-Stacked on #2876 (the raid encounter framework) and #HELPERS (shared raid helpers). Until those are merged this diff shows them too. This PR's part is `src/Ai/Raid/Uld/`, the four hard mode options in `PlayerbotAIConfig` and `playerbots.conf.dist`, and its registration in `Playerbots.cpp` and `BuildSharedValueContexts.cpp`.
+Stacked on #2876 (the raid encounter framework) and #2985 (shared raid helpers). Until those are merged this diff shows them too. This PR's part is `src/Ai/Raid/Uld/`, the four hard mode options in `PlayerbotAIConfig` and `playerbots.conf.dist`, and its registration in `Playerbots.cpp` and `BuildSharedValueContexts.cpp`.
 
 This replaces the Ulduar strategy. The old one is 11 files and about 7.5k lines and uses `BotCheatMask::raid` in 21 places. The new one covers all 14 bosses in 10 and 25 man, hard modes included, and doesn't use `BotCheatMask` at all.
 

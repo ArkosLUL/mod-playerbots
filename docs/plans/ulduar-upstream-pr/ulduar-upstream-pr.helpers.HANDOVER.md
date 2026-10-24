@@ -2,7 +2,7 @@
 
 Stacked on #2876 (the raid encounter framework). Until that one's merged this diff shows its changes too. This PR is the commits from "Tell encounter code why a move was not issued" on.
 
-These are the shared pieces the Ulduar rework (#ULDUAR) calls from several bosses:
+These are the shared pieces the Ulduar rework (#2986) calls from several bosses:
 
 - `MovementAction::TryMoveTo` returns a `MoveOutcome`, so encounter code with several spots to pick from can tell "no path there" apart from "still walking to the last one". `MoveTo` keeps its bool and now wraps it.
 - `EncounterHelpers`: the nearest spot clear of several hazards, derived points snapped onto the floor, class taunts, frontal cone dodges and Nitro Boosts.
@@ -20,7 +20,7 @@ Nothing calls the new pieces yet, so on its own this changes no behaviour.
 
 ## How to Test the Changes
 
-Nothing to see in game on its own. Bots should behave exactly as before, movement included, since `MoveTo` now goes through `TryMoveTo`. To see it working, test #ULDUAR, which is stacked on this branch.
+Nothing to see in game on its own. Bots should behave exactly as before, movement included, since `MoveTo` now goes through `TryMoveTo`. To see it working, test #2986, which is stacked on this branch.
 
 ## Impact Assessment
 

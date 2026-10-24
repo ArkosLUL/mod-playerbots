@@ -15,7 +15,7 @@ This adds a small framework for that:
 - `EncounterHelpers::CommandPetAttack` and `StopPet`, moved here from #2877.
 - Mocking Blow counts as a taunt now, since the Arms snare chain falls back to it.
 
-Nothing uses it yet, so on its own this changes no behaviour. #2877 moves the Malygos strategy onto it, and the Ulduar rework (#HELPERS, #ULDUAR) is built on it too.
+Nothing uses it yet, so on its own this changes no behaviour. #2877 moves the Malygos strategy onto it, and the Ulduar rework (#2985, #2986) is built on it too.
 
 ## Feature Evaluation
 
@@ -70,5 +70,5 @@ Was any code in this PR copied or adapted from a sister / upstream project (e.g.
 
 ## Notes for Reviewers
 
-This is the base of a stack: #2877 (Malygos) is built on it, and so are #HELPERS and #ULDUAR (Ulduar). #2877 is the smallest user, so that's the place to see how a definition reads. I also run it on my fork for Naxxramas, Obsidian Sanctum and Ulduar.
+This is the base of a stack: #2877 (Malygos) is built on it, and so are #2985 and #2986 (Ulduar). #2877 is the smallest user, so that's the place to see how a definition reads. I also run it on my fork for Naxxramas, Obsidian Sanctum and Ulduar.
 
