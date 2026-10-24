@@ -15,16 +15,11 @@ count.
 - **Archavon has no Choking Cloud in this core.** `EVENT_CHOKING_CLOUD` actually casts
   `SPELL_CRUSHING_LEAP` (58960), a random-target leap, not a persistent ground DoT. There is nothing
   to dodge.
-- **The boss-name string mismatch was a false alarm** — token compression dropped the word "the" in
-  an earlier read. All strings are consistently `"<boss> the <x> watcher"`.
+- **Boss-name strings are consistent** — all `"<boss> the <x> watcher"`; a reported mismatch was a
+  misread.
 - **The resistance-trigger naming omission is cosmetic.** `BossNatureResistanceTrigger` /
   `BossShadowResistanceTrigger` omit the `bossName +` prefix, but **the engine resolves triggers by
   their registration name**; the internal name only feeds log and perf labels.
-
-## Archavon
-
-Skull-marking genuinely drives kills — `DpsTargetValue::Calculate` → `RtiTargetValue` with `rti`
-defaulting to `"skull"` — so Emalon's overcharged-minion marking correctly forces a burn.
 
 ## Emalon the Storm Watcher
 
@@ -80,12 +75,13 @@ The `ROOM_*` bounds exclude Toravon's room at X −43 and the corridor Tempest W
 **`boss_emalon` never calls `SetInCombatWithZone()` for himself** — only `summons.DoZoneInCombat()`
 for the minions. So bots that never attack him (the off-tank, the whole ranged ring) are not on his
 threat list and `"find target"` returns null for them. Every trigger here resolves him by entry
-instead; the general rule is in [README.md](README.md).
+instead ([README.md](README.md#boss-helpers)).
 
 **The nova trigger is deliberately not distance-gated.** It drives the movement suppression as well as
 the run-out, so gating it on standing inside 22yd made the suppression drop the instant a bot got
 clear — and `ReachMeleeAction` then walked it straight back in, mid-cast. The action returns false
-once clear instead. The cast is 5s, ample for a 22yd step.
+once clear instead. The cast is 5s, ample for a 22yd step. `EmalonLightningNovaMultiplier` covers the
+run-out, matching Koralon and Toravon.
 
 **Chain Lightning is not a design driver — do not re-audit.** The band above leaves ~8yd between
 neighbours at 25-man, under the 10yd jump radius. Widening the rings would break heal range or nova
@@ -102,9 +98,9 @@ for them would only create something else to fight.
 empty threat list and takes whoever is nearest, so it is on a healer within seconds; the overcharged
 minion is already held, and its stacks only hurt the tank holding it.
 
-Emalon's Lightning Nova run-out is covered by `EmalonLightningNovaMultiplier`, matching Koralon and
-Toravon. Skull-marking goes through `MarkTargetWithSkull` (`RaidBossHelpers.h:8`), which null-checks
-the group and only re-sets when the icon differs.
+**Skull-marking genuinely drives the overcharged-minion burn**: `DpsTargetValue::Calculate` →
+`RtiTargetValue` with `rti` defaulting to `"skull"`. The mark goes through `MarkTargetWithSkull`
+(`EncounterHelpers`), which null-checks the group and only re-sets when the icon differs.
 
 ## Koralon (entry 35013)
 
@@ -116,11 +112,9 @@ the group and only re-sets when the icon differs.
 | Meteor Fists | 66725 | Melee proc landing only on the boss's melee victim — **out of scope by decision** |
 
 **The generic `avoid aoe` already handles lingering ground fire** (CombatStrategy → `AreaDebuffValue`),
-so no custom "stand out of fire" action was needed.
-
-`IsBotInFrontalCone(bot, source, coneAngle, range)` was promoted out of
-`TrialOfTheCrusaderHelpers` into the shared `EncounterHelpers` (`src/Util/EncounterHelpers.{h,cpp}`)
-for this.
+so no custom "stand out of fire" action was needed. The frontal-cone test is the shared
+`IsBotInFrontalCone(bot, source, coneAngle, range)` in `EncounterHelpers`, whose `coneAngle` is the
+full arc ([../engine/pitfalls.md](../engine/pitfalls.md#arc-and-geometry-defaults)).
 
 ## Toravon (entry 38433)
 
@@ -132,17 +126,17 @@ for this.
 | Frozen Orb — pulses frost damage, switches target ~10s | NPC 38456, damage 72081 | Flee the orbs |
 
 The Freezing Ground dodge is the reusable **area-debuff flee idiom**: read
-`AI_VALUE(Aura*, "area debuff")`, confirm the spell id, and flee `GetDynobjOwner()->GetPosition()` —
-mirroring the engine's own `AvoidAuraWithDynamicObj`.
+`AI_VALUE(Aura*, "area debuff")`, confirm the spell id, and flee `GetDynobjOwner()->GetPosition()`,
+as the engine's own `AvoidAuraWithDynamicObj` does.
 
 `ToravonAvoidMultiplier` zeroes `CastReachTargetSpellAction`, `ReachTargetAction`,
 `CombatFormationMoveAction` and `FollowAction` while either avoid trigger is active.
 
-## Known tuning issue
+## Spread triggers
 
-The Archavon rock-shards and Koralon flaming-cinder spread triggers fire whenever a ranged bot is
-within `8.0f` of **any** groupmate, for the whole fight — so ranged reposition continuously
-(throttled to 1/s), bleeding DPS uptime against Archavon's 5-minute and Emalon's 6-minute berserk.
-`FleePosition` also only flees the single *nearest* player, so a 3-stack can oscillate. The fix shape
-is establish-and-hold: tighten the radius so bots settle, raise the action `minInterval`, and
-consider fleeing the group centroid rather than the nearest player.
+The Archavon Rock Shards and Koralon Flaming Cinder spreads move ranged bots within 6 yd of a
+groupmate, for the whole fight, and flee to 8 yd (`FleePosition`, `minInterval` 3000), so the gap
+between the two radii lets bots settle; repositioning bleeds DPS against Archavon's 5-minute and
+Emalon's 6-minute berserk. **Open:** `FleePosition` flees only the single *nearest* player, so a
+3-stack can still oscillate; fleeing the group centroid is the untried fix
+([../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md#movement-that-oscillates)).

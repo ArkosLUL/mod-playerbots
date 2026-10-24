@@ -1,10 +1,24 @@
 # Raid strategies — shared conventions
 
-Per-raid encounter knowledge lives in the sibling files. This holds what applies across all of them.
-Engine mechanics are in [../engine/action-selection.md](../engine/action-selection.md); the trap
+Per-raid encounter knowledge lives in the files below; this one holds what applies across all of
+them. Engine mechanics are in [../engine/action-selection.md](../engine/action-selection.md); the trap
 catalogue every boss strategy keeps rediscovering is [../engine/pitfalls.md](../engine/pitfalls.md);
 vehicles, movement stability, reach and per-raid cost are in
 [../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md).
+
+## Raid docs
+
+| Doc | Raid |
+|---|---|
+| [eye-of-eternity.md](eye-of-eternity.md) | Eye of Eternity — Malygos |
+| [naxxramas.md](naxxramas.md) | Naxxramas |
+| [obsidian-sanctum.md](obsidian-sanctum.md) | Obsidian Sanctum — Sartharion |
+| [onyxias-lair.md](onyxias-lair.md) | Onyxia's Lair |
+| [sunwell.md](sunwell.md) | Sunwell Plateau |
+| [tempest-keep.md](tempest-keep.md) | Tempest Keep — The Eye |
+| [vault-of-archavon.md](vault-of-archavon.md) | Vault of Archavon |
+| [ulduar/](ulduar/README.md) | Ulduar, a file per boss |
+| [trial-of-the-crusader/](trial-of-the-crusader/README.md) | Trial of the Crusader, a file per boss |
 
 ## File layout and wiring
 
@@ -12,41 +26,93 @@ A raid is a folder under `src/Ai/Raid/<Raid>/` mirroring `src/Ai/Raid/Gruul/`, t
 implementation: `<X>Strategy`, `<X>Triggers` + `<X>TriggerContext.h`, `<X>Actions` +
 `<X>ActionContext.h`, `<X>Multipliers`, `<X>Helpers`, and `<X>ValueContext.h` for cached lookups.
 Large raids split per boss under `Action/` and `Trigger/` and keep a thin umbrella header
-(`UldActions.h`) that includes the parts, so contexts and registration maps need no edits.
+(`UldActions.h`) that includes the parts, so contexts and registration maps need no edits. There is
+no `CMakeLists.txt`: the core globs `src/**` and puts every source subdirectory on the include path,
+so a new directory needs no build file and includes stay flat (`#include "EoEData.h"`).
 
 Four registration sites: `RaidStrategyContext.h` (key → strategy), `BuildSharedTriggerContexts.cpp`,
 `BuildSharedActionContexts.cpp`, and `PlayerbotAI::ApplyInstanceStrategies` — both the
-`allInstanceStrategies` list *and* the `case <mapId>:` arm. A value context adds a fifth,
-`BuildSharedValueContexts.cpp`; pblint does not check value names. There is no `CMakeLists.txt`;
-new `.cpp` files are globbed automatically.
+`GetInstanceStrategies()` list *and* the `case <mapId>:` arm. A key the arm applies but the list
+lacks is never removed on a zone change (`rs` once was). The strategy goes onto both the combat and
+non-combat engines, so a raid's nodes run out of combat too. A value context adds a fifth,
+`BuildSharedValueContexts.cpp`; pblint does not check value names.
 
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.
 
-**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Ulduar, EoE, OS, Onyxia and Naxx so far, ToC
-per [../plans/raid-encounter/raid-encounter.PLAN.md](../plans/raid-encounter/raid-encounter.PLAN.md))
-replace that wiring. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
+**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`) replace that wiring for Ulduar, EoE, OS,
+Onyxia and Naxx. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
 
 - **rows**: trigger class, action class, priority, `EncounterRow::Mover`. Each name is typed once, as
-  the class's `Name` constant. Back-to-back rows on one trigger share its node, and a row on an
-  action a shared context registers (`Node<T>("rear flank", …)`) registers only its trigger;
+  the class's `Name` constant; a class built under several names (`BossNatureAspectHoldMultiplier`)
+  takes them from the row. Back-to-back rows on one trigger share its node, and a row on an action a
+  shared context registers (`Node<T>("rear flank", …)`) registers only its trigger;
 - its [encounter rules](#encounter-rules) and hand-written multipliers;
-- a **tick**, run by `Strategy::OnTick` once per engine tick before the triggers. Housekeeping (trace
-  notes, latch writes, wipe resets) goes there, never into a predicate a cheaper check may skip. Not
-  `neglect threat`: `ThreatMultiplier` clears it on every read, once per action, so a multiplier
-  seeing every action (`AnyAction`) sets it.
+- a **tick**, run by `Strategy::OnTick` once per engine tick, inside the `RaidObs::BotContext` and
+  before the triggers, while the gate is open. Housekeeping (trace notes, latch writes, wipe resets)
+  goes there, never into a predicate a cheaper check may skip, and tests cheap instance state before
+  any sweep: between pulls every encounter not yet killed is open. Not `neglect threat`:
+  `ThreatMultiplier` clears it on every read, once per action, so a multiplier seeing every action
+  (`AnyAction`) sets it;
+- its encounter id and the trace name `RaidObs::NamePull` files the pull under.
 
 The raid lists its definitions once (`<Raid>Definitions.h`); its contexts and strategy build from
 the list. All of it sits behind the boss's **encounter gate**: `BossStateGate` opens while the boss
-is `IN_PROGRESS`, closes once `DONE`, otherwise closes only while another encounter is `IN_PROGRESS`, so
-between pulls everything is open and predicates still check the boss. Gate on the fight, not the
-unit: a drake Sartharion calls in never starts its own encounter. A node that also serves another
-encounter stays in the strategy, outside every gate (OS's realm kill order serves a solo drake too).
+is `IN_PROGRESS`, closes once `DONE`, otherwise closes only while another encounter is
+`IN_PROGRESS`, and is open outside an instance — so between pulls everything is open and predicates
+still check the boss. "Live" means `IN_PROGRESS`. The gated trigger (`EncounterGatedTrigger`) copies
+the inner trigger's name and check interval, hands out `EncounterTriggerPassId`, and calls
+`RaidObs::NamePull` when it fires while live.
 
-Nothing enforces that the four agree, so run `tools/pblint/pblint.py` over what a commit touches: it
-cross-checks all four, and every trigger and action name besides, definition rows included. It only
-proves the name resolves — `postmortem.py --coverage` says whether the node then did anything.
-(The `"rs"` bug recorded here is fixed — it is in `GetInstanceStrategies()` and at `case 724:`.)
+Gate on the fight, not the unit: a drake Sartharion calls in never starts its own encounter, so OS
+mechanics sit in his definition, while a drake pulled alone starts one and closes his gate. A node
+that also serves another encounter stays in the strategy, outside every gate, after the
+definition's nodes (OS's realm kill order serves a solo drake too); check equal-priority order.
+Multipliers not tied to one encounter (`UldThreatRedirectMultiplier`, `UlduarBurstWindowMultiplier`,
+Naxx's redirect and burst multipliers) stay raid-wide and ungated.
+
+`Engine::addStrategy` / `removeStrategy` rebuild every node and multiplier, so swapping per-boss
+strategies at runtime is not an option; that is why one raid strategy registers every boss behind
+gates.
+
+**ToC** has `Definition/` files too, rules and hand-written multipliers only: its nodes stay in the
+strategy, gated by name prefix through `ToCGatedTrigger`, and its gate (`ToCGate`) reads the
+`GetData(TOC_DATA_INSTANCE_PROGRESS)` stage. **Open gap:** moving ToC onto rows and a stage gate
+waits on the ToC rework's closeout; core #28117 since gave ToC boss states, so `BossStateGate` may
+make the stage gate moot.
+
+Nothing enforces that the registration sites agree, so run `tools/pblint/pblint.py` over what a
+commit touches: it cross-checks all four, and every trigger and action name besides, definition rows
+included. It only proves the name resolves — `postmortem.py --coverage` says whether the node then
+did anything.
+
+### Moving a boss onto a definition
+
+Give its classes `Name` constants, write its definition, list it, and call its `AddTriggerNodes` /
+`AddMultipliers` at its old spot in the strategy, which keeps node and veto order; then delete its
+creators and the hand gating the definition replaces. Syntax-check with a raised `PB_MAX_FANOUT`: the
+contexts reach every `BuildShared*` TU.
+
+- A multiplier becomes rules only where they are exactly equivalent; otherwise it stays hand-written,
+  keeps its name and declares its families. `Multiplier<M>(families, args...)` passes constructor
+  arguments (the nature aspect hold). A guard whose boss helper keeps state across ticks, or that
+  sets `neglect threat`, is never equivalent (Naxx: all but Grobbulus).
+- A branchy multiplier splits into several rules under its one name, in its old order; check that no
+  early `return 1` in the original shields an action a later rule would zero (Hodir's Flash Freeze).
+- A role no `Role` bit expresses goes in the predicate. `Role::NonTank` and `Role::Dps` (`IsDps`, the
+  bot's dps strategy) exist for Auriaya and Freya.
+- Housekeeping found in a read moves to the tick behind the same per-instance throttle, with any
+  lookup after the throttle check (Flame Leviathan, Mimiron, Algalon, Yogg-Saron, Thorim).
+- An old multiplier's cache becomes a per-bot, per-tick `thread_local` cache in the predicate
+  (Razorscale, `GetMalygosAggro`), or in the boss's `Util` when hand-written guards share it
+  (`SartharionSnapshotFor`).
+- An old name list matches `getName()`, not the registered name: `taunt on snare target` is named
+  `taunt`, so every list caught it and the Taunt family missed it until it was added.
+- A class named otherwise than its registration takes the registered name, unless its base reads the
+  name (`HasAuraTrigger`'s aura, `MoveInsideAction`): then `Name` only registers.
+
+Not migrated, by choice: deeper Mimiron and Thorim modules, Naxx's per-node helper copies, the threat
+redirect trio, and the Four Horsemen lookup ([naxxramas.md](naxxramas.md#four-horsemen)).
 
 ## Priority conventions
 
@@ -83,19 +149,19 @@ the Trade and stops there (it redirects everything for 6s); a hunter casts Misdi
 `GetThreatDumpTarget()`; Naxx, OS, VoA and Hodir do.
 
 Vetoes must `dynamic_cast` to the **concrete** actions (`CastMisdirectionOnMainTankAction`,
-`CastTricksOfTheTradeOnMainTankAction`) — never the shared `BuffOnMainTankAction` base, which also
-carries paladin Beacon, shaman Earth Shield and druid Thorns/Lifebloom. The Naxx work had to undo
-exactly that bug.
-
-Any new boss-scoped redirect action needs its matching veto entry removed or narrowed, or the two
-fight each other.
+`CastTricksOfTheTradeOnMainTankAction`), never the shared `BuffOnMainTankAction` base, which also
+carries Beacon, Earth Shield, Thorns and Lifebloom
+([../engine/action-selection.md](../engine/action-selection.md#multiplier-semantics)). Any new
+boss-scoped redirect action needs its matching veto entry removed or narrowed, or the two fight each
+other.
 
 Both presume threat sticks: **a mob that wipes its own threat table has no redirect and no
-taunt answer.** Look for `DoResetThreatList` / `SelectTargetFromPlayerList` in the script first —
-Freya's Detonating Lashers re-roll every 10s, so ten of them face one 30s cooldown and the answer is
-geometry (a range leash), not threat. The same test bounds a taunt: allowlist the adds the encounter
-**owns**, never the whole target ladder — taunting a rung borrowed for damage off another tank means
-owning its positioning too.
+taunt answer** ([../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)).
+Look for `DoResetThreatList` / `SelectTargetFromPlayerList` in the script first — Freya's Detonating
+Lashers re-roll every 10s, so ten of them face one 30s cooldown and the answer is geometry (a range
+leash), not threat. The same test bounds a taunt: allowlist the adds the encounter **owns**, never
+the whole target ladder — taunting a rung borrowed for damage off another tank means owning its
+positioning too.
 
 ## Encounter rules
 
@@ -112,14 +178,16 @@ credit a veto by its name), and its checks run action, gate, role, then the boss
 | `Block` | named families and/or action names | everything else |
 | `Exclusive` | every `MovementAction`, attacks included | only what it names |
 
-Families come from `ClassifyAction`, the only `dynamic_cast` site; `RaidEncounterRules.h` lists them
-and `tools/nativetest/raid_encounter_rules_test.cpp` covers the kinds. Two gaps in `OwnMovement`'s
-defaults: `ReachHeal` is blocked, so add it to `keep` where a healer must walk to its target (Vezax),
-and the spell movers (`Charge`, `Blink`, `Disengage`) are not `MovementAction`s, so they need a
-`Block`. A hand-written multiplier declares the families it looks at and sees only those, while the
-gate is open; `AnyAction` covers one that can zero an item or a plain `Action` (XT-002's). A
-predicate keeps no state, so a guard caching its boss across ticks (Naxx's helpers) stays
-hand-written.
+Families come from `ClassifyAction`, the only `dynamic_cast` site, cached per `Action*`;
+`RaidEncounterRules.h` lists them, std-only so `tools/nativetest/raid_encounter_rules_test.cpp` covers
+the kinds without the server. `Taunt` holds every class taunt action plus `taunt on snare target`,
+whatever the role; rarer actions (`killing spree`, `sprint`, a lone `death grip`) and the boss's own
+go by name. Two gaps in `OwnMovement`'s defaults: `ReachHeal` is blocked, so add it to `keep` where a
+healer must walk to its target (Vezax), and the spell movers (`Charge`, `Blink`, `Disengage`) are
+not `MovementAction`s, so they need a `Block`. A hand-written multiplier declares the families it
+looks at and sees only those, while the gate is open; `AnyAction` covers one that can zero an item, a
+plain `Action` or a threat type (XT-002's, burst lists, AoE holds). A predicate keeps no state, so a
+guard caching its boss across ticks (Naxx's helpers) stays hand-written.
 
 ### Movement: the only mover left
 
@@ -169,27 +237,24 @@ It is **unusable** for Anub'rekhan, Gothik and Heigan (AI class file-local to it
 
 For a clock every bot in the instance must agree on, keep it in a
 [`RaidInstanceState`](#per-instance-state), re-anchored on phase edges with a staleness guard as
-`HeiganBossHelper::PhaseStateFor` does.
-Remember that trigger, action and multiplier each hold **separate** helper instances — anything they
-must agree on needs a file-static, GUID-keyed map defined in exactly one `.cpp`.
+`HeiganBossHelper::PhaseStateFor` does. Trigger, action and multiplier each hold **separate** helper
+instances ([../engine/pitfalls.md](../engine/pitfalls.md#state-does-not-cross-objects)).
 
 Resolve bosses with `AI_VALUE2(Unit*, "find target", "<lowercase name>")` **only** when the bot is
 reliably on that creature's threat list; otherwise use `GetFirstAliveUnitByEntry`
-(`src/Util/EncounterHelpers.h`), noting it is **deprecated upstream** — see
-[../engine/pitfalls.md](../engine/pitfalls.md). A melee bot parked on Thane never resolves Zeliek.
-`SetInCombatWithZone()` in a script's `JustEngagedWith` is what makes `"find target"` work from the
-pull on some bosses.
+(`src/Util/EncounterHelpers.h`), deprecated upstream
+([../engine/pitfalls.md](../engine/pitfalls.md#things-the-bot-cannot-see)). `SetInCombatWithZone()`
+in a script's `JustEngagedWith` is what makes `"find target"` work from the pull on some bosses.
 
 ## Heroic and 10/25
 
 There is no separate heroic strategy anywhere — difficulty is an instance property and one code path
 serves both. What actually differs per mode:
 
-- **Spell ids**, and the mapping is not uniform. Check `spelldifficulty_dbc` per spell: Heigan's
-  25-man Decrepit Fever is 55011 while Eruption, Spell Disruption and Plague Cloud have no
-  difficulty rows at all; on Kel'Thuzad only Frost Bolt has variants. Use
-  `NaxxSpellIds::HasAnyAura(unit, {…})` rather than a raw id.
-- **Add counts and target counts** — gate on `bot->GetRaidDifficulty()`.
+- **Spell ids**, and the mapping is not uniform
+  ([../engine/pitfalls.md](../engine/pitfalls.md#detection-that-never-fires)). On Kel'Thuzad only
+  Frost Bolt has variants. Use `NaxxSpellIds::HasAnyAura(unit, {…})` rather than a raw id.
+- **Add counts and target counts** — ask the map, not the player (same section).
 - **Some mechanics exist only in 25-man** (Noth's Blink/Cripple).
 
 Ulduar hard modes are the exception to all of this: they are a **raid choice, not the 10/25 flag**,
@@ -205,9 +270,9 @@ concrete subclasses supply only `FearWindowActive()`.
 
 Behaviour: a **priest** casts Fear Ward (6346) on the group main tank, or the main healer if the tank
 already has it; a **shaman** drops Tremor Totem, gated on it not already being out. Consumers are
-Onyxia from her phase 3 descent on (Bellowing Roar 18431), Auriaya (Terrifying Screech 64386, fixed 35s cycle so the
-totem stays up all fight), and Yogg-Saron P2/P3 (Malady of the Mind 63830/63881, Deafening Roar
-64189).
+Onyxia from her phase 3 descent on (Bellowing Roar 18431), Auriaya (Terrifying Screech 64386, fixed
+35s cycle so the totem stays up all fight), and Yogg-Saron P2/P3 (Malady of the Mind 63830/63881,
+Deafening Roar 64189).
 
 **Two defects this design exists to avoid:**
 
@@ -224,30 +289,37 @@ totem stays up all fight), and Yogg-Saron P2/P3 (Malady of the Mind 63830/63881,
 Cast directly and suppress the competition; no `ChangeStrategy`, no persistent state, self-reverting
 when the window closes.
 
-Both `+rnature` writers are converted to this shape: `BossNatureResistanceAction` (hunter Aspect of the
-Wild) after it leaked across a whole session, and AQ40's `Aq40UseResistanceBuffsAction`, now per-boss
-`BossNatureResistanceTrigger`/`Action` plus `BossNatureAspectHoldMultiplier` nodes for Viscidus and
-Princess Huhuran. **Never set `rnature` loosely:** it is a sibling of `bdps` so it evicts the combat
-Dragonhawk node, and `HunterAspectOfTheViperTrigger` bails out whenever it is set, so the hunter cannot
-use Aspect of the Viper at all and runs dry in every later raid — 59.7% of a 514 s fight under 5% mana
-in `603_4_xt002_1789239467`, 70.3% of a 363 s one in `603_4_general-vezax_1789302545`. It also outlives
-the session, see [../engine/action-selection.md](../engine/action-selection.md).
+**Hunter Aspect of the Wild follows the same shape**: per-boss `BossNatureResistanceTrigger` /
+`BossNatureResistanceAction` plus `BossNatureAspectHoldMultiplier` nodes (AQ40's Viscidus and
+Princess Huhuran, Kologarn, Freya, Thorim, Emalon, Archavon). The gate is `FindBossByName` + alive +
+hostile, so hunters take the aspect when the boss comes into range, not at engage. **Never set
+`rnature`:** it is a sibling of `bdps`, so it evicts the combat Dragonhawk node, and
+`HunterAspectOfTheViperTrigger` bails out whenever it is set, so the hunter cannot use Aspect of the
+Viper and runs dry in every later raid — 59.7% of a 514 s fight and 70.3% of a 363 s one under 5%
+mana. Why a stray `ChangeStrategy` outlives the session, and how to migrate the stored rows, is in
+[../engine/action-selection.md](../engine/action-selection.md#strategy-assignment). Not yet seen on a
+live AQ40 pull.
+
+AQ40's old resistance action also had a priest `+rshadow` branch that never fired: every priest
+already gets `rshadow` in the non-combat engine (`AiFactory::AddDefaultNonCombatStrategies`) and the
+branch guarded on not having it. Had it fired, it would have loaded a non-combat strategy into the
+combat engine for good.
 
 **The paladin resistance auras still have the old defect:** `BossFireResistanceAction`,
 `BossFrostResistanceAction` and `BossShadowResistanceAction` add `+rfire`/`+rfrost`/`+rshadow` and never
 remove them, evicting the sibling blessing strategy for good. Live at Razorscale, Ignis, Freya, Thorim,
-Mimiron, Sara, Yogg-Saron, Koralon and Toravon.
+Mimiron, Sara, Yogg-Saron, Koralon and Toravon; the fix is a per-boss hold multiplier for the paladin
+aura slot.
 
 **Explicitly not counterable — do not target:** Insane (63120/64464, AoE charm), Psychosis, Lunatic
 Gaze and Induce Madness (sanity drains), and Chains of Kel'Thuzad (28410, mind control — no *fear*
 counter applies, but a druid does Cyclone the charmed raider, see [naxxramas.md](naxxramas.md)).
-Phase 1
-WotLK content — Naxxramas, Obsidian Sanctum, Eye of Eternity, Vault of Archavon — has **zero** fear
-mechanics; all 15 Naxx boss spell enums were checked, and Gluth's vanilla Terrifying Roar (29685)
-does not exist in this build.
+Phase 1 WotLK content — Naxxramas, Obsidian Sanctum, Eye of Eternity, Vault of Archavon — has
+**zero** fear mechanics; all 15 Naxx boss spell enums were checked, and Gluth's vanilla Terrifying
+Roar (29685) does not exist in this build.
 
-`SPELL_FEAR_WARD = 6346` is defined here, but still duplicated in `KaraHelpers.h` and SSC's `Util/SSCHelpers.h`
-— deliberately left alone to keep the change contained.
+`SPELL_FEAR_WARD = 6346` is defined here, but still duplicated in `KaraHelpers.h` and SSC's
+`Util/SSCHelpers.h` — deliberately left alone to keep the change contained.
 
 ## Calls to human tanks
 

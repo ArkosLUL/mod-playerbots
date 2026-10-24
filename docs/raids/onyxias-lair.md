@@ -26,8 +26,9 @@ fissures live in `Util/OnyData.h`.
   the tunnel on the pull (x < -130) idles unless attacked: never target it.
 - **Eggs**: GO 176511, 119 in the two side caves (z -96..-90). A player within ~6.9 yd 3D hatches one;
   they respawn. Read live from the grid, never hard-coded.
-- **Taunts**: `flags_extra` 0x80000 `OBEYS_TAUNT_DIMINISHING_RETURNS` (see engine pitfalls). In the
-  2026-10-16 kill none of 22 taunts on her landed, not even the first of the pull: no 67485 on her, no
+- **Taunts**: `flags_extra` 0x80000 `OBEYS_TAUNT_DIMINISHING_RETURNS`
+  ([../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)).
+  In one kill none of 22 taunts on her landed, not even the first of the pull: no 67485 on her, no
   victim turn. Cause not found; nothing here relies on taunting her.
 - **Phase 3 whelps**: two at +10 s, then two every 30 s. **Eruption** 17731/69294 bursts 5 yd round
   every fissure on each Roar.
@@ -80,7 +81,8 @@ per-bot angle of 100-120° on the side they stand on (kept within 20° past her 
 her turning never sends them across her nose), at 0.6 of melee range, nudged off fissures in Final;
 the generic `rear flank` and formation movers are blocked for them. A flank walk whose point moved more
 than 3 yd steps its booking down to `MOVEMENT_NORMAL` to re-aim: an equal-priority walk otherwise holds
-the stale point up to 5 s (two Cleave and Wing Buffet kills, 2026-10-16).
+the stale point up to 5 s, which cost two Cleave and Wing Buffet deaths
+([movement lock](../engine/pitfalls.md#movement-that-silently-no-ops)).
 
 **Phase 2 cells** (`onyxia.p2spot`): built once at lift-off per waypoint — every 9 yd along its lane,
 ±13.5/22.5/31.5 yd across — kept if on the floor (z -90.5..-82.5), 9.5 yd from every egg, 20 yd from
