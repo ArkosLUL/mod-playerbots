@@ -9,7 +9,7 @@ changelog — git history covers that.
 | Directory | Holds |
 |---|---|
 | [engine/](engine/) | How the bot picks an ability, the trap catalogue, and cross-encounter lessons |
-| [systems/](systems/) | Cross-cutting subsystems: itemization, loot, gear maintenance, consumables and burst |
+| [systems/](systems/) | Cross-cutting subsystems: itemization, loot, gear maintenance, consumables and burst, RaidObs traces |
 | [classes/](classes/) | Per-class rotation state: current ladders, decisions, open gaps |
 | [raids/](raids/) | Per-raid encounter knowledge, plus shared raid conventions. A raid too big for one file becomes a directory with a file per boss — see [raids/ulduar/](raids/ulduar/) |
 | [plans/](plans/) | In-flight work only — see below |
@@ -26,7 +26,8 @@ moves into the matching `engine/` / `systems/` / `classes/` / `raids/` doc and t
 A finished plan left behind is how this tree accumulated 72 files describing work that had already
 merged.
 
-Use `plans/<slug>/<slug>.PLAN.md`; prefix the ticket id if there is one.
+Use `plans/<slug>/<slug>.PLAN.md`; prefix the ticket id if there is one. This tree, not upstream
+`AGENTS.md`'s gitignored `.agents/plans/` or `.agents/docs/`, holds this fork's plans and knowledge.
 
 When you write into a permanent doc, keep:
 

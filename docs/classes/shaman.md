@@ -61,12 +61,9 @@ Read **only** by `HealerAutoSaveManaMultiplier`
 | Chain Heal | `20.0f, HIGH` | HIGH keeps it the low-mana backstop; a bounce is worth more than a Riptide tick |
 | Riptide (party) | `15.0f, VERY_HIGH` | |
 
-**`AoeHealValue` counts only members a bot can heal**: inside `HealDistance` and `IsWithinLOSInMap`,
-matching `PartyMemberToHeal::Check`, with the raycast last so only members actually hurt and in range
-cost a VMap query. It and the `AoeInGroupTrigger` thresholds
-([population rule](../engine/action-selection.md#healing)) move every healer's group heal (Chain Heal,
-Circle of Healing, Prayer of Healing, Wild Growth, Tranquility) and must change together: the two
-offset each other.
+**Chain Heal rides the shared group-heal count** ([`AoeHealValue`](../engine/action-selection.md#healing)),
+which matches `PartyMemberToHeal::Check` and raycasts last, so only members actually hurt and in range
+cost a VMap query.
 
 ## Mana kit per spec
 

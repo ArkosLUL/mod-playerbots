@@ -151,10 +151,8 @@ sits at 41, but that is a 60 s cooldown — Holy Shield returns every 8 s and wo
 priority. On `medium health` (65%) a healthy tank never cast it: one Freya kill had it up on 8% of
 swings (18.7% block against an 18.5% no-Holy-Shield baseline) against a player paladin's 75%.
 
-**`beforeDuration` 0 means "only once the buff has already dropped".** `BuffTrigger::IsActive` and
-`CastBuffSpellAction::isUseful` both route through `ai::buff::BuffBelowRefreshTarget`, whose in-combat
-path is `baseBeforeDuration && remaining < baseBeforeDuration`. **Set it on both** — the action vetoes
-any early refresh the trigger proposes. Holy Shield uses 2000 on trigger and action.
+**Holy Shield sets `beforeDuration` 2000 on trigger and action**
+([both](../engine/action-selection.md#trigger-semantics)); 0 waits for the buff to drop.
 
 **Holy Shield 48952**: +30% block, 10 s, 8 charges, 8 s cooldown (category 931), 274 holy damage per
 block. The damage is one event per block, so `SPELL_DAMAGE` 48952 in a Chronicle log counts blocks

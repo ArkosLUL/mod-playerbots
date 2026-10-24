@@ -209,9 +209,9 @@ run stages on it and uses the whole cast.
   silence the bot's casting for six seconds, seven times a pull. The movers below are what has to be
   off.
 - **The window is gated on the cast, not a timer.** `IsHodirFlashFreezeIncoming` tests
-  `UNIT_STATE_CASTING` plus `FindCurrentSpellBySpellId` over **every** cast slot rather than
-  `CURRENT_GENERIC_SPELL`: which slot a scripted boss cast lands in is the script's business, and
-  guessing wrong opens the window on nothing. `MimironShockBlastTrigger::IsActive` is the same shape.
+  `UNIT_STATE_CASTING` plus `FindCurrentSpellBySpellId`
+  ([every slot](../../engine/pitfalls.md#detection-that-never-fires)).
+  `MimironShockBlastTrigger::IsActive` is the same shape.
 - **The shelter run is gated on the cast too.** A 33174 outlives the freeze by ~7 s, and keyed on
   targets alone the run fired after the landing for 96-134 of 278-358 shelter moves, buying nothing and
   flipping the tank 8 times in 7 s between a shelter and his spot, which dragged Hodir 8 yd off the

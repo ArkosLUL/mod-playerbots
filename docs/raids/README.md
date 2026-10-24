@@ -33,8 +33,8 @@ so a new directory needs no build file and includes stay flat (`#include "EoEDat
 Four registration sites: `RaidStrategyContext.h` (key → strategy), `BuildSharedTriggerContexts.cpp`,
 `BuildSharedActionContexts.cpp`, and `PlayerbotAI::ApplyInstanceStrategies` — both the
 `GetInstanceStrategies()` list *and* the `case <mapId>:` arm. A key the arm applies but the list
-lacks is never removed on a zone change (`rs` once was). The strategy goes onto both the combat and
-non-combat engines, so a raid's nodes run out of combat too. A value context adds a fifth,
+lacks is never removed on a zone change (`rs` once was). Its nodes run out of combat too
+([registration](../engine/action-selection.md#registration)). A value context adds a fifth,
 `BuildSharedValueContexts.cpp`; pblint does not check value names.
 
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,

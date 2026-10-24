@@ -338,9 +338,9 @@ positioning trigger and action either. `ThorimTankPicked` takes `tank assist` aw
 2 only: left voting, it held a tank on a Warbringer for the first 30 s while Thorim ate the camp, and in
 phase 1 holding whatever swings at the raid beats steering a tank onto the ranged pick.
 
-**A taunt forces the target for 3 s and then hands the boss to the highest *real* threat — and Thorim's
-threat table is empty at the phase change**, because he sits at 100% untouched through phase 1. So the
-pickup taunt hands him straight back: exactly 3 s after a tank's Hand of Reckoning, Unbalancing Strike
+**Thorim's threat table is empty at the phase change**, because he sits at 100% untouched through
+phase 1, so the pickup taunt hands him straight back
+([taunts](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)): exactly 3 s after a tank's Hand of Reckoning, Unbalancing Strike
 went to a hunter **44 yd out**. That is why the pickup fires 6-7 times a pull against 13-31 victim
 changes, why the answer is "keep the tank parked and swinging" rather than re-taunting, and why
 re-taunt cadence is still open.
@@ -536,10 +536,10 @@ Dark Rune Commoners stack **Low Blow 62326**, whose second effect is
 i.e. −75% damage done. Only late and only on a few bots, so it is a reason not to ignore Commoners
 forever rather than an explanation for a whole fight.
 
-**A target guard has to exempt the encounter's own picker by name.** `ThorimIsTargetSelectionAction`
-listed only the generic pickers, so `ThorimDpsPriorityAction` — the one node that *clears* a forbidden
-target — was vetoed by `ThorimArenaTargetGuardMultiplier` **42 times** in a pull. The guard fired
-because the target was wrong, and killed the action that would have changed it.
+**`ThorimIsTargetSelectionAction` exempts the encounter's own picker**
+([why](../../engine/action-selection.md#multiplier-semantics)): listing only the generic pickers,
+`ThorimArenaTargetGuardMultiplier` vetoed `ThorimDpsPriorityAction`, the one node that *clears* a
+forbidden target, **42 times** in a pull.
 
 ## Pets
 
@@ -653,9 +653,9 @@ nothing else** under `TARGET_CHECK_ENEMY`, so pets and guardians take hops and c
 pet bodies** sit inside 10 yd of him at once, **100% of them within 8 yd of a melee body**, and PetAI
 parks a pet anywhere in a 90° arc behind him — straight into the gaps the slot separation opens. They
 are chased onto a slot bearing instead (`ThorimPetsOffRingSlot`, on the pet leash node), which costs no
-uptime: at ring radius a pet is still inside the 9.1 yd melee reach on any bearing. **A guardian with no
-`CharmInfo` still takes a move order**, so Army and Feral Spirits steer here even though a player
-cannot command them.
+uptime: at ring radius a pet is still inside the 9.1 yd melee reach on any bearing. Army and Feral
+Spirits steer here too, though a player cannot command them
+([pitfalls](../../engine/pitfalls.md#things-the-bot-cannot-see)).
 
 **Every bot's pets get a slot, not just a ring melee's** — ranged owners hold 42-48% of the bodies. A
 ring melee uses its own slot, everyone else one off its guid counter modulo 3 — stable per tick and an

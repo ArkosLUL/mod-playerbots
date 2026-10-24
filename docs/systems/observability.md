@@ -582,6 +582,9 @@ statics. Timestamps, thresholds and caches are left bare on purpose.
   does. The mod-chronicle log does carry creature auras. Its `SPELL_AURA_APPLIED` fires on every aura
   client update, so a refresh with no cast behind it (Everlasting Affliction rolling Corruption) reads
   as a repeat `APPLIED` with no `REMOVED` between.
+- **A `unit` row's `mhp` is the pool at first sight**, written once per guid, so `trace.maxhp` keeps
+  a bot's pre-death pool: after a resurrection its percentages are wrong, and the killing blow is the
+  only witness to its real bar.
 - **A friendly creature is not swept either**, so Yogg-Saron's one-use portals (34072) leave no row
   anywhere but `yogg.wave`. Where a mechanic's unit is not hostile, the probe is the only record.
 - **`cfg.cheats` is the conf string, not a record of cheats exercised.** `EnvFieldsJson` copies

@@ -79,8 +79,8 @@ melee` → reach melee 21) and `WarriorAoeStrategy` (the `medium aoe` rows above
   15s / 21s divides evenly by 3s). `CastRendAction::isUseful` mirrors it, since the base rejects a
   present aura. Tanks keep the plain `"rend"` trigger.
 - **Arms Slams from 20 rage** (`light rage available` @18), as the sim's filler does from 15; Heroic
-  Strike keeps the 60 overflow. Trap: Improved Slam is a passive talent, which lives only in the talent
-  map (`HasTalent`), so a `HasSpell` check left Slam to Bloodsurge procs only.
+  Strike keeps the 60 overflow. Improved Slam is a passive talent, so a `HasSpell` check
+  ([misses it](../engine/action-selection.md#casting)) left Slam to Bloodsurge procs only.
 - **Fury stance dance.** Rend and Overpower need Battle Stance, so Improved Rend, Improved Overpower
   and Taste for Blood were dead talents. `battle stance dance` swaps from Berserker Stance only with a
   free GCD, Bloodthirst ≥1s and Whirlwind ≥1.5s from ready, no Bloodsurge proc, ≥10 rage, in melee,

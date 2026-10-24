@@ -129,9 +129,9 @@ despite the name**, and never ignites anything.
   Electroshock 60°, Sonic Horn 50°, and the demolisher's Ram 62308 also 100° — check the **live**
   table, because `data/sql/base/db_world/spell_cone.sql` has no row for any of them and reads as
   "engine default" (`Spell::SelectImplicitConeTargets` falls back to 60°). `isInFront` passes no
-  target radius, so his 15 yd reach widens the arc by nothing, and `CAST_ANGLE_IN_FRONT` is 120° —
-  wider than all three, so `CastVehicleSpell` never turns the vehicle for them. Gate on both limits
-  and turn the vehicle yourself: ungated, five wipes fired 71 Electroshocks, landed **one**, and
+  target radius, so his 15 yd reach widens the arc by nothing, and all three are narrower than
+  `CastVehicleSpell`'s turn arc ([facing](../../engine/pitfalls.md#arc-and-geometry-defaults)). Gate
+  on both limits and turn the vehicle yourself: ungated, five wipes fired 71 Electroshocks, landed **one**, and
   interrupted **0 of 40** channels.
 - **Measure the cone the way the core does** (`FlameLeviathanInConeRange`): it adds only the target's
   `GetObjectSize`, while `IsWithinCombatRange` adds both reaches
@@ -294,9 +294,9 @@ lands in the next as often as it escapes. A dodge re-planned off the nearest pat
 trail ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)), so `ClearHazard` latches
 its goal while it stays clear, and the leg may enter no reach the hull is not already in.
 
-**It reaches further than 9 yd.** 62910 is a dynamic-object aura, and `DynObjAura::FillTargetMap`
-tests `IsWithinDistInMap`, which adds both object sizes: 9 + 0.39 + the hull's, so a siege engine
-(7.7) burns out to **17.1 yd** and a chopper to 10.4. A flat 18 yd scan gave a siege engine under a
+**It reaches further than 9 yd**, by the hull's size
+([persistent area auras](../../engine/raid-mechanics-lessons.md#range-and-reach)): a siege engine
+(7.7) burns out to **16.7 yd** and a chopper to 10.0. The hazard check adds the dynobject's 0.39 as margin. A flat 18 yd scan gave a siege engine under a
 yard of warning: siege hulls lost 20–37%/5 s at 13–17.5 yd from a patch.
 
 **The wards fire all pull, and the adds stay until killed.** `ActivateTowers` schedules `EVENT_FREYA`
@@ -373,7 +373,7 @@ sits 16-21 yd from the spawn: the gunner opens the wave and Ram is for what reac
   deadband (45.7 yd from his centre against Ram's 37.7 and Electroshock's 40), and closes
   `ULDUAR_FL_VENT_APPROACH_LEAD_MS` (2 s) before one. Parked at the 8 yd siege station instead, it was
   the Pursued hull in 8 spans over three pulls and lost a median ~50 pts. The interrupt stops the hull
-  before turning: a moving spline overrides `SetFacingTo`, and a reserve that drove past him at 22 yd,
+  before turning ([facing](../../engine/pitfalls.md#arc-and-geometry-defaults)): a reserve that drove past him at 22 yd,
   33–87° off, never fired.
 
   **It is also the only interrupter.** With four corners manned the other engines sat 51-211 yd out

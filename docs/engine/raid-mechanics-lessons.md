@@ -52,8 +52,10 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
   `PowerType >= MAX_POWERS` first — `POWER_HEALTH` is `-2` and would index the power array out of
   bounds, and `Powers` has a signed underlying type, so cast `MAX_POWERS`.
 - **Creature casters get no server-side cooldown.** `Spell::SendSpellCooldown` returns early for
-  non-players with its `AddSpellCooldown` commented out. Never invent a manual cooldown to
-  compensate: an invented one silently throws casts away for the rest of the fight.
+  non-players with its `AddSpellCooldown` commented out. Stamp one only as the spell's own
+  `RecoveryTime`/`CategoryRecoveryTime` on a cast that returned `SPELL_CAST_OK`
+  (`CastPetAcidSpitAction`): an invented duration, or one stamped on an unconfirmed cast, silently
+  throws casts away for the rest of the fight.
 - **Vehicle power is creature regen.** `unit_class 4` plus `UNIT_FLAG2_REGENERATE_POWER` gives
   `Creature::Regenerate` a flat +20 per `CREATURE_REGEN_INTERVAL` (2 s) — 10/s against a cap of 100.
   Cost per GCD against that rate decides whether the bar ever climbs at all.
@@ -153,7 +155,10 @@ Every distance helper measures differently, and a large-model boss inflates all 
   both reaches, 9.5 yd against the MK II, which parked Mimiron's camp on Napalm's floor. An area
   spell's radius goes the other way: `WorldObjectSpellAreaTargetCheck` adds the target's reach only
   for a player-controlled caster, so a creature's AoE is centre to centre and spacing just over its
-  radius isolates.
+  radius isolates. A persistent area aura is the exception: `DynObjAura::FillTargetMap` adds the
+  target's size whoever cast it, plus the dynobject's own 0.39 for an ally or `TARGET_DEST_DYNOBJ_NONE`
+  effect, so a 9 yd Inferno reaches a siege engine (7.7) at 16.7 yd
+  ([Flame Leviathan](../raids/ulduar/flame-leviathan.md#hard-mode)).
 - **`Spell::CheckRange` adds `GetMeleeRange` to a spell's *minimum*** for `SPELL_RANGE_RANGED`, so a
   20-reach boss turns a hunter's 5 yd minimum into ~28 yd centre-to-centre and every shot returns
   `SPELL_FAILED_TOO_CLOSE`. **Hunters are the only class with a minimum range** — do not relocate the
@@ -187,7 +192,8 @@ Every distance helper measures differently, and a large-model boss inflates all 
   Harmless while he holds still on his tank, one hit each the moment he doesn't.
 - **A boss that opens on a random player** (`AttackStart(SelectTargetFromPlayerList(...))` when an
   intro ends) is answered by staging, not by taunt speed: the pickup tank waits inside his reach and
-  taunts on the first selectable tick, and everyone else waits outside it until a tank holds him.
+  taunts on the first selectable tick, and everyone else waits outside it until a tank holds him
+  ([Algalon](../raids/ulduar/algalon.md#he-is-held-at-the-edge)).
 
 ## Crowd control and threat on adds
 
@@ -213,6 +219,11 @@ What lands on a raid add is not what PvP experience predicts.
   after the last one fades (`Unit::GetDiminishing`, `Spell.cpp` DR block). A taunt every 8 s plus a
   Righteous Defense in between keeps such a boss immune, so a plan built on repeated taunt-backs
   fails there. Onyxia and the Twin Val'kyr carry it.
+- **A taunt lends the boss for 3 s, then real threat decides.** `Spell::EffectTaunt` only matches the
+  taunter to the highest threat on the table, and the 3 s aura forces the target meanwhile. A boss
+  whose table is empty at a phase change (one untouched until then) gives the taunter nothing to
+  match, so it goes back to the highest real threat as the aura fades
+  ([Thorim](../raids/ulduar/thorim.md#somebody-has-to-hold-the-boss-and-a-taunt-will-not-do-it)).
 - **Death Grip (49576 → 49560) splits its effects.** A creature immune to taunt and attack-me
   (`CreatureImmunitiesId` with aura 11 and effect 114) still takes the dummy pull, with no aura and
   so no DR. Where the taunt aura lands, the grip shares `DIMINISHING_TAUNT` with every class taunt,
@@ -225,27 +236,38 @@ What lands on a raid add is not what PvP experience predicts.
   threat (Faction Champions' 10M × modifier) it does nothing but burn 15 focus. A multiplier can't
   veto pet autocast: turn it off with `Pet::ToggleAutocast`; the non-combat `toggle pet spell` turns
   it back on.
+- **Pulling a pet off a target never sticks.** PetAI re-targets it through `OwnerAttacked` (every
+  harmful spell the owner casts), `KilledUnit` → `SelectNextTarget` and `AttackedBy`. All three skip a
+  passive pet, which still attacks while `IsCommandAttack` is set (`PetAI::CanAttack`)
+  ([Yogg-Saron's Crushers](../raids/ulduar/yogg-saron.md#crush-is-a-5-cone-that-tracks-its-victim)).
 - **An add that calls `DoResetThreatList` on a timer can be neither tanked, taunted nor redirected.**
   Read its `UpdateAI` before designing any of the three. Freya's Detonating Lasher re-rolls a uniformly
   random player every 10s, which leaves geometry plus a snare as the only handling.
 - **The swap tank not holding the boss must not damage him.** After a taunt both tanks build threat at
   the same rate, so the one carrying the debuff stacks takes him straight back, white swings included
   (no action carries those, so a damage-action veto misses them). A swap fired by the tank *not*
-  holding him also never fires when that tank is a human: the bot holding him has to call it.
+  holding him also never fires when that tank is a human: the bot holding him has to call it
+  ([Algalon](../raids/ulduar/algalon.md#tanks-the-swap-pair)).
 - **A pacing gate with a bypass recreates the stacking it exists to prevent.** Override it only for
   what is worse than the hit it delays (Algalon's star bypass put two raid-wide explosions 3.2 s
-  apart, [algalon.md](../raids/ulduar/algalon.md)).
+  apart, [algalon.md](../raids/ulduar/algalon.md#stars-under-big-bang-else-paced)).
 - **Reserve a cooldown against the next event by its own cooldown, not a window.** Hold whenever
   casting now leaves it cooling down at the event; a button whose lockout (Forbearance) blocks another
-  counts as spending that one too (Algalon's Big Bang soakers).
-- **The Aoe threat type misses most splash.** Starfall, Blade Flurry, Sweeping Strikes, Cleave, Bladestorm,
-  HotR, Avenger's Shield, Multi-Shot, Chain Lightning, Seed of Corruption and Mind Sear fail even the spell
-  area test. A hold on "don't hit the add next to the boss" needs `SpellSplashes` plus the named list in
-  `RaidSplash.h`, and self auras held outright: they hit whatever comes near for their whole duration.
+  counts as spending that one too
+  ([Algalon's Big Bang soakers](../raids/ulduar/algalon.md#cooldowns-the-tanks-first)).
+- **The Aoe threat type is no splash marker.** `CastHealingSpellAction` declares it, while whirlwind,
+  divine storm, consecration, death and decay, starfall, swipe, pestilence, howling blast and explosive
+  trap declare something else. Read the spell: `SpellSplashes` (`RaidSplash.h`) tests
+  `IsTargetingArea() || IsAffectingArea()` on its id, and names the totem and trap summons, whose area
+  lives on the summoned unit. Starfall, Blade Flurry, Sweeping Strikes, Cleave, Bladestorm, HotR,
+  Avenger's Shield, Multi-Shot, Chain Lightning, Seed of Corruption and Mind Sear fail even that test.
+  A hold on "don't hit the add next to the boss" adds the named list in `RaidSplash.h`, and holds self
+  auras outright: they hit whatever comes near for their whole duration.
 - **A draining add's lifetime is its health over its measured loss**, splash included, so trace drain
   and splash deaths apart before tuning, and plan each death against the others: killing a substitute
   when the soonest-dying one can't be touched stacks two explosions anyway, and dropping one a few %
-  from dead moves nothing, its DoTs finish it inside the window (Algalon's stars).
+  from dead moves nothing, its DoTs finish it inside the window
+  ([Algalon's stars](../raids/ulduar/algalon.md#stars-under-big-bang-else-paced)).
 - **A slot leash fights `reach spell`.** It walks half the gap to an out-of-range target, the slot node
   walks the bot back, and the target is never reached. Give the mover its own spot in range instead.
 - **A taunt moves the boss, not the bot's own target.** A tank that taunts off an add keeps the add targeted, so
@@ -253,8 +275,9 @@ What lands on a raid add is not what PvP experience predicts.
   taunt, and retarget a holder that got the boss by threat.
 - **A redirect's fallback target can be what pulls aggro**: Tricks of the Trade falls back to the
   strongest melee DPS ([pitfalls.md](pitfalls.md#detection-that-never-fires)).
-- **Mocking Blow is a taunt.** It is a `MELEE_ACTION`, and an Arms warrior's snare chain falls back to it;
-  `ClassifyAction` counts it in `Family::Taunt`, so a taunt guard has to cover every role, not tanks.
+- **Mocking Blow is a taunt**, though a `MELEE_ACTION`: `ClassifyAction` counts it in `Family::Taunt`,
+  so a taunt guard has to cover every role, not tanks. No strategy wires it; Arms' `piercing howl` falls back
+  to `hamstring` instead, since a damage dealer that taunts a raid add dies to it.
 - **Read `speed_run` before designing any relocation.** An add faster than a player can be neither
   kited nor ferried: the bot walks the whole distance taking uninterrupted melee, out of healer range,
   dealing nothing, and still arrives with the add on top of it. Freya's lasher is 8.0 yd/s against 7.0,
@@ -316,7 +339,9 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   (`CalculatedValue::Get`), so each `GetFirstAliveUnitByEntry` or `"nearest npcs"` read is a fresh
   sight-range sweep, and Ulduar code took 20-60 of them per bot per tick. One **per-bot scan stamped
   with `getMSTime()`** collapses them (`RazorscaleScan`, `IronAssemblyScan`): a bot never ticks twice
-  in one ms. `FindTargetValue` (`"find target"`) is built with interval 1 too.
+  in one ms. `FindTargetValue` (`"find target"`) is built with interval 1 too, and every read runs
+  `Utf8toWStr` + `wstrToLower` + `Utf8FitTo` on each entry of the bot's threat list
+  ([Eye of Eternity](../raids/eye-of-eternity.md)).
 - **World state holds still only through the trigger checks.** `ProcessTriggers` checks every trigger
   before any action runs, and no trigger changes the world; an action returning `false` still can —
   drop a target, command a pet, turn the bot, push Yogg-Saron's Brain to 30% and strip Shadow Barrier —
@@ -390,8 +415,8 @@ read ratios, never absolute times.
 - Do not run `isPossible` before the multipliers — Mimiron's and Algalon's multipliers have side
   effects, and vetoes are logged.
 - `GetCreatureListWithEntryInGrid` is **not** a substitute for a LOS sweep: it is a grid container
-  only, and `AllCreaturesOfEntryInRange` measures **2D** where `AnyUnitInObjectRangeCheck` measures
-  **3D** (`GridNotifiers.h`).
+  only, and `AllCreaturesOfEntryInRange` measures **2D** with both objects' sizes added where
+  `AnyUnitInObjectRangeCheck` measures **3D** (`GridNotifiers.h`).
 - Leave the shared `GetFirstAliveUnitByEntry` alone: upstream marks it for removal and every raid
   calls it, so its replacement is a Custom-owned copy under another name, not an edit in place.
 - Replicating `Cell::CalculateCellArea` + `VisitCircle` to skip the octagon walk is provably
@@ -490,7 +515,13 @@ encounters.
 - **A script's own periodic damage can skip every mitigation.** `spell_valkyr_touch_aura` hits every
   player on the map (`ExcludeTargetAuraSpell` 0) with damage computed before absorbs.
 - **`EventMap::ExecuteEvent` always erases the event**, so one not re-scheduled with `Repeat` runs
-  once, whatever its comment says.
+  once, whatever its comment says. It pops one event per call, so an `UpdateAI` that returns early
+  while `UNIT_STATE_CASTING` banks every event through a long cast or channel, then fires the overdue
+  ones one per tick: the seconds after it are a schedule
+  ([VX-001](../raids/ulduar/mimiron.md#phase-2-is-a-healing-race-and-heat-wave-is-why)).
+- **A kick in a channel's first update does nothing.** `Spell::EffectInterruptCast` takes a spell
+  that is `CASTING`, or `PREPARING` with a cast time; a channel has none
+  ([Yogg-Saron's Drain Life](../raids/ulduar/yogg-saron.md#phase-3-cooldowns-and-casts)).
 - **A boss whose script re-seeds threat on a timer never satisfies `TankHasHeldBoss`.** Exempt its
   entries through `BossHasNoStableVictim`
   ([consumables-and-burst.md](../systems/consumables-and-burst.md)).

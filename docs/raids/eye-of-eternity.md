@@ -480,9 +480,9 @@ twenty-five bots on one small platform asking the same questions every tick is i
   transition only affects which overrides are on.
 - `GetMalygos` asks the instance script (`GetCreature(DATA_MALYGOS)`, mirrored as `EOE_DATA_MALYGOS`)
   before any search and caches the guid per instance. **Nothing uses `"find target" malygos`**: it
-  walks the threat list with `Utf8toWStr` + `wstrToLower` + `Utf8FitTo` per entry, per bot, per
-  tick, and answers only for units the bot already threatens
-  ([things the bot cannot see](../engine/pitfalls.md#things-the-bot-cannot-see)).
+  costs a name conversion per threat entry, per bot, per tick
+  ([cost](../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)), and answers only for
+  units the bot already threatens ([things the bot cannot see](../engine/pitfalls.md#things-the-bot-cannot-see)).
 - **Who holds Malygos is read once per bot per tick** (`GetMalygosAggro`, a per-thread cache of live
   state) by the P1 rules and the position, target and kill-spark actions; uncached `IsMainTank` was
   tens of thousands of strategy-list scans a tick across the raid.

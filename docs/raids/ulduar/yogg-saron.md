@@ -263,15 +263,14 @@ melee hits, 68 of them bare, so leaving is free, and what kills there is two nov
 60-67%, not one from full, so `…_NOVA_STEP_OUT_POOL` and the own-button test are gone. The tank is the exception in every phase: it holds
 the thing detonating, walking out only drags it along, and its pool can eat the blast.
 
-**A battle rez waits for the handover.** It strips every raid buff and nothing re-buffs in combat, so
+**A battle rez waits for the handover.** A rezzed bot comes back unbuffed
+([dead engine](../../engine/action-selection.md#strategy-assignment)) and nothing re-buffs in combat, so
 rezzed bots came back on bars at most 83-87% of the buffed pool and died from full to a single nova.
 `yogg-saron battle rez hold` holds `rebirth` until the handover, the first stretch with no nova.
-Reincarnation runs from the **dead engine** (`dead`, `stay`, `chat`, `default`, `follow`), which no
-encounter rule reaches: one shaman with a 23,757 pool, under one nova's 25,740, made 4 of 9 deaths over
-ten pulls. Left alone by the user's choice.
-
-`trace.maxhp` keeps the pool from before the first death, so a resurrected bot's percentages are wrong and
-the killing blow is the only witness to its real bar.
+Reincarnation runs from the dead engine, out of every encounter rule's reach: one shaman with a 23,757
+pool, under one nova's 25,740, made 4 of 9 deaths over ten pulls. Left alone by the user's choice.
+Read those deaths off the killing blow, not `trace.maxhp`
+([observability](../../systems/observability.md#what-a-trace-cannot-tell-you)).
 
 **The station band is the Fervor holder's destination**, which is who `HazardSet::preferred` is for. It
 is the only-orbit-2 band, so it costs no summon of its own (orbit 2 runs through the station and wakes
@@ -437,7 +436,8 @@ exempt:
 - Nothing under z 300, which is load-bearing: the brain room middle is **2.3 yd** from the platform middle
   in 2D, so the ring test would veto the reach of every bot on the Brain, 93 yd below.
 
-**A veto is only as good as the node that moves the bot in its place.** Zeroing reach while a Laughing
+**A reach veto needs a mover in its place**
+([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)). Zeroing reach while a Laughing
 Skull was in arc left five bots in the Chamber on a tentacle for fifty seconds, every melee ability
 `USELESS` for range, while the facing node meant to walk them returned false. Make the moving node unable
 to leave the bot where reach would undo it, and skip the veto, as the illusion facing node does.
@@ -607,9 +607,8 @@ Guardian already inside the leash or walking at a tank, and **nothing it cannot 
 of Reckoning 62124, Dark Command 56222 and Growl 6795 share range index 4, so
 `ULDUAR_YOGG_SARON_P1_TAUNT_RANGE` is **30 yd**, still the whole 21.5 yd back line.
 
-**An unreachable aim sticks, so the range has to be in the pick.** `PlayerbotAI::CastSpell` selects before
-it validates range, so a taunt that cannot land still leaves the tank holding what it aimed at, and
-nothing takes that back: `YoggSaronSetDpsPriorityTrigger` stands down for a tank outside phase 2 and the
+**An unreachable aim sticks, so the range has to be in the pick**
+([casting](../../engine/action-selection.md#casting)), and nothing takes it back: `YoggSaronSetDpsPriorityTrigger` stands down for a tank outside phase 2 and the
 generic picker keeps any live target. Lowest health anywhere meant whatever a hunter pet was grinding at
 the wall: one pull aimed 12 of 15 taunts at 45-57 yd, dealt nothing for 93 s and never finished phase 1,
 while a candidate inside 30 yd existed on 79% of ticks. The trigger, a pet holding a Guardian far out, is
@@ -753,10 +752,8 @@ tentacle's threat list, so a pet that never attacked can be its victim.
 
 - **Pulling a pet off is too late, and it never sticks.** All 5 bot Crush deaths in one pull were cones
   aimed at a pet in the reach, and a pulled pet stays the victim while it walks out, the cone following
-  it. PetAI puts a pet back three ways — `OwnerAttacked` on every harmful spell the owner casts,
-  `KilledUnit` → `SelectNextTarget` (attacker, then `owner->GetVictim()`, both the Crusher), and
-  `AttackedBy` — and all three skip a passive pet, which still attacks while `IsCommandAttack` is set
-  (`PetAI::CanAttack`).
+  it, and PetAI puts it back ([pets](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)):
+  `SelectNextTarget` takes the attacker, then `owner->GetVictim()`, both the Crusher.
 - So the guard **hushes** a pet, remembering its stance, whenever it touches, targets, or its owner targets
   a Crusher whose stun does not hold, and drives it by `SetIsCommandAttack` + `AttackStart`: its own add if
   outside the reach, else the owner's target, else `YoggSaronPetFallbackTarget`'s nearest live phase 2 add
@@ -847,8 +844,9 @@ already inside is exempt, since every short step out passes close to the middle.
 one waypoint at `ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS` (24 yd) on the bisector of the shorter arc: each leg
 halves the next turn, so one is enough, and a half-turn passes 24 × cos 45° = 17.0 yd from the middle.
 
-**The walk at a target across Yogg ends on top of him.** `ReachCombatTo` shortens its path to
-`disToGo / 2 + distance`, so half the way across the room is the body, and the reach nodes are the one walk
+**The walk at a target across Yogg ends on top of him.** A reach leg stops half way
+([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)); half the way across the room is
+the body, and the reach nodes are the one walk
 the route filter does not cover: eight ranged sent at a Crusher 56 yd away landed at 7.6-9.4 yd and the
 next pulse threw thirteen. Every other read asks where the bot stands, a tick too late against a 1 s pulse.
 `yogg-saron body detour` (`ACTION_RAID − 1`) asks where the walk goes: while the bot is out of its own reach
@@ -1204,7 +1202,7 @@ front 180° are hit. Four per room, despawned when the last Influence Tentacle d
 skull` turns a bot off the skulls, at `ACTION_EMERGENCY` beside the Yogg gaze node — the two cannot share
 a bot and never need to, Yogg's gaze being a P3 platform aura and the skulls only existing below.
 
-- **Never while moving**: `Unit::SetFacingTo` lays a spline on the spot and ends a point walk.
+- **Never while moving** ([facing](../../engine/pitfalls.md#arc-and-geometry-defaults)).
 - **The heading is judged on every skull in range**: the one of 16 with fewest ahead, nearest the current
   on a tie, turning only for a strict gain. Off the centroid of those in arc, the in-arc set changed with
   the heading and bots spun every snapshot.
@@ -1215,8 +1213,9 @@ a bot and never need to, Yogg's gaze being a P3 platform aura and the skulls onl
   strict gain, `yogg.skullturn` `angled`), inside set facing's 45°, so nothing turns it back: a skull off to
   the side clears that way, one behind the target is the facing walk's. Yielding outright left a ranged bot
   under a skull for 15 s. It corrects a heading only past `ULDUAR_YOGG_SARON_FACING_TOLERANCE` (0.1 rad).
-- **The 30 yd read is measured plainly**: `GetCreatureListWithEntryInGrid` is bounding-radius inclusive,
-  and most probe flips once had no skull inside 30 yd.
+- **The 30 yd read is measured plainly**: `GetCreatureListWithEntryInGrid` adds both sizes
+  ([2D](../../engine/raid-mechanics-lessons.md#measuring-a-cost)), and most probe flips once had no
+  skull inside 30 yd.
 
 **Where the bot stands holds a facing the turn can't.** `yogg-saron illusion facing` is a spacing node
 whose `clear` predicate asks whether the heading a candidate spot *would force* leaves every skull within
@@ -1371,20 +1370,18 @@ turn it back into the gaze. It is the #2 damage source of a pull.
 **Only a bot with no safe heading stops for a gaze**: a node claiming every tick for all 4 s cost a
 quarter of one phase 3, cast starts falling from ~34 per 4 s to under 2. `yogg.gaze` records the branch:
 
-- **`healer`**: keeps its back to Yogg all of phase 3 and never claims the tick. Every heal has
-  `FacingCasterFlags` 0, the core checks nothing else, and `PlayerbotAI::CastSpell` only turns a bot for
-  `SPELL_FACING_FLAG_INFRONT`, so a healer facing away heals anyone in range and sight.
+- **`healer`**: keeps its back to Yogg all of phase 3 and never claims the tick: a healer facing away
+  heals anyone in range and sight ([facing](../../engine/pitfalls.md#arc-and-geometry-defaults)).
 - **`angled`**: a still bot whose target is at least 65° from Yogg as seen from the bot
   (`ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION`) turns `(135° − separation) / 2` off its target, away from
-  Yogg, and keeps attacking. `set facing` leaves it alone inside ±45° (`IsFacingValue`,
-  `HasInArc(M_PI_2)`), `AttackAction` and `CastSpell` inside ±60° (`CAST_ANGLE_IN_FRONT`), and the gaze
-  needs Yogg inside ±90°, so both margins are `(separation − 45°) / 2`. Facing the target outright needs
+  Yogg, and keeps attacking. Inside `set facing`'s ±45° nothing turns it back, and the gaze needs Yogg
+  inside ±90°, so both margins are `(separation − 45°) / 2`. Facing the target outright needs
   100°, which few ranged samples have.
 - **`away`**: everyone else, including any moving bot since a walk faces its path, faces away and claims
   the tick.
 - **`tankfree`**: a tank with a Guardian loose (`YoggSaronGuardianLoose`: holdable, victim not a tank)
-  faces away but leaves the tick to guardian control. Taunt, Growl, Dark Command, Hand of Reckoning and
-  Righteous Defense all have `FacingCasterFlags` 0, so it taunts with its back to Yogg. Claiming the tick
+  faces away but leaves the tick to guardian control, taunting with its back to Yogg (Taunt, Growl, Dark
+  Command, Hand of Reckoning and Righteous Defense all have `FacingCasterFlags` 0). Claiming the tick
   let a fresh Guardian peeled by heal threat one-shot healers and ranged with Hand of Reckoning ready.
 - **`drag`**: a beacon dragger, whose tick is left free (below).
 
@@ -1625,8 +1622,8 @@ first.
   and Arcane Torrent are dropped for them, and Avenger's Shield is off the list because it picks its own
   target. `interruptClaims` holds a cast for one kicker for 1.5 s, which took cuts inside 1.5 s from half to
   all. Spell Lock is on the list (the felhunter's spell, cast by the bot, so cooldown and range are the
-  bot's), and trigger and action ask `YoggSaronInterruptReady` (cooldown, power, stance, range):
-  `CanCastSpell` passes a pet spell on cooldown and counts out of range as castable.
+  bot's), and trigger and action ask `YoggSaronInterruptReady` (cooldown, power, stance, range), which
+  `CanCastSpell` doesn't ([casting](../../engine/action-selection.md#casting)).
   - **A bot mid-cast runs no kick node**
     ([pitfalls](../../engine/pitfalls.md#a-bot-mid-cast-cannot-be-moved-at-all)), so **as the last resort
     only, by the user's choice**, `YoggSaronNudgeDrainLifeKicker` (the tick, one scan per 200 ms per
@@ -1643,14 +1640,14 @@ first.
   - **Kicks run on cooldown, not reaction**: a ready bot kicks a median 140 ms in, so each saves only the
     ticks its channel has left (1/s, the first at 1 s), and the casters list Drain Life **most time left
     first, none under 1 s left** (`…_KICK_MIN_LEFT_MS`; the slot offset stays for Dark Volley). **Only once
-    the channel is CASTING** (`YoggSaronDrainLifeKickable`): a channel has no cast time and
-    `Spell::EffectInterruptCast` skips a zero-cast-time spell still PREPARING, so a kick in its first update
-    does nothing (a sixth of all kicks were).
+    the channel is CASTING** (`YoggSaronDrainLifeKickable`): a kick in its first update does nothing
+    ([why](../../engine/raid-mechanics-lessons.md#reading-a-boss-script)), and a sixth of all kicks were.
   - **Kicks are at capacity**: a kicker ready, alive and in range all through a full channel with no kick
     inside it is rare (1-9 a pull).
 - **Mortal Strike halves both heals** (aura 118, −50%; only the strongest cut counts in
   `SpellHealingBonusTaken`). **So `yogg-saron mortal strike`** (`ACTION_RAID − 0.5`, by the user's choice,
-  Wound Poison declined): a warrior with it ready and the rage (`CanCastSpell` ignores rage) strikes a
+  Wound Poison declined): a warrior with it ready and the rage
+  ([`CanCastSpell` ignores rage](../../engine/action-selection.md#casting)) strikes a
   Guardian in melee reach with no cut, threat allowed, outside a gaze — one carrying the heal first, then one
   channelling, lowest health first, then any under 85% (`low`: it drains every 10.5-14.5 s, mostly inside the
   10 s cut). Never Yogg, which otherwise takes every strike. `yogg.mortalstrike` (`hot` / `drain` / `low`)

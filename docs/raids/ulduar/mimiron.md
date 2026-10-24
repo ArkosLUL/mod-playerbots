@@ -207,9 +207,8 @@ cone, fire, the bomb, the other group's sector, Shock Blast and spray lanes, not
 - **Solve the hop per bearing.** At bearing θ off straight-away the destination sits
   `sqrt(d² + r² + 2dr·cosθ)` from the hazard, so a radial gap `SAFE - d` reaches the circle at θ=0 and
   nowhere else. `r(θ) = -d·cosθ + sqrt(SAFE² - d²·sin²θ)` (`clearRadius`) lands every bearing on it.
-- **"Further than I started" is not an escape.** `CheckCollisionAndGetValidCoords` overwrites the
-  destination with the raycast's last point and still returns true on `PATHFIND_INCOMPLETE`, so a
-  bearing leaving the mesh comes back as the bot's own feet: three melee logged `shock ok`, moved
+- **"Further than I started" is not an escape.** A bearing leaving the mesh comes back as the bot's
+  own feet ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)): three melee logged `shock ok`, moved
   0.3 yd, and died together to one Shock Blast. A candidate must cover
   `ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT` (0.5) of the hop it asked for, counted as `move`.
 - **Count the mover's refusals apart from the hazards'.** The lock is tested once before the fan
@@ -286,11 +285,8 @@ in. Two answers, because the hazard has two shapes:
   and the Rapid Burst cone, noted `mimiron.close`. Bots the formation places are left out: their slot is
   in range of its boss, and closing on another target only had the formation walk them back.
 
-**It has to be a node, not a screen inside `reach melee`.** The three reach actions share
-`MovementAction::ReachCombatTo`, but `SharedNamedObjectContextList::Add` flattens every context's
-creators into one global static map, last writer wins, so re-registering `reach melee` for Ulduar
-replaces it for every bot in every fight. There is no context override in the tree and every
-destination-computing member of `MovementAction` is non-virtual.
+**It has to be a node, not a screen inside `reach melee`**: re-registering `reach melee` for Ulduar
+would replace it for every bot in every fight ([registration](../../engine/action-selection.md#registration)).
 
 ## Shock Blast
 
@@ -311,11 +307,10 @@ lose 4 s in every 30.
 `mimiron charge guard` is the backstop: inside the five windows a hit actually kills through, it zeroes
 every `CastReachTargetSpellAction` (Charge, Intercept, both Feral Charges, the class's only subclasses),
 Killing Spree by name (it teleports onto the target, onto VX-001 inside the barrage boundary, and killed
-the same rogue in every barrage it fired in, 4 of 4 pulls), and `reach melee` by name. `ReachMeleeAction`
-derives from `ReachTargetAction`, not `CastReachTargetSpellAction`, so the cast missed it, and melee have
-no mid-phase slot to hold them: the tick fell to `reach melee` at 21 and it closed back onto ground the
-chains were crawling toward. **Not** the `ReachTargetAction` base, which drags in `reach spell`, heal
-reach and `reach pull` and strands ranged and healers out of range when they most need to close. Mines
+the same rogue in every barrage it fired in, 4 of 4 pulls), and `reach melee` by name
+([why by name](../../engine/pitfalls.md#movement-that-silently-no-ops)): melee have no mid-phase slot
+to hold them, and the tick fell to `reach melee` at 21, which closed back onto ground the chains were
+crawling toward. Mines
 and Bomb Bots are deliberately not windows: the mine node ranks below the whole ladder because eating
 one is healable, and a veto would contradict that.
 
@@ -437,10 +432,9 @@ draws a chord through VX-001, and a chord across the apex crosses every bearing 
 is at most 40° (within 6% of the ring), and a ranged radius stays in `[reach + 6, 24]`, VX-001's reach
 being **8**, so 14-24. `MOVEMENT_FORCED` sequences the legs.
 
-**The boundary is a place a bot can stop.** `IsWithinBoundaryRadius`, max(bounding radius,
-`MIN_MELEE_REACH` 2.0) centre to centre (`Unit::IsWithinBoundaryRadius`), is tested before bearing
-(`WorldObjectSpellConeTargetCheck`), so a bot parked **1.72 yd** from VX-001's centre at 180° off the
-cone died in two ticks. `IsMimironSpotBarrageSafe` refuses `ULDUAR_MIMIRON_BARRAGE_BOUNDARY` (3.0) at any
+**The boundary is a place a bot can stop.** A cone hits anything inside it at any bearing
+([pitfalls](../../engine/pitfalls.md#arc-and-geometry-defaults)), so a bot parked **1.72 yd** from
+VX-001's centre at 180° off the cone died in two ticks. `IsMimironSpotBarrageSafe` refuses `ULDUAR_MIMIRON_BARRAGE_BOUNDARY` (3.0) at any
 bearing, and a clear bot inside it steps straight out on its own bearing to its ring (`boundary`),
 unscreened: the beams are certain, a marker on the ring is not.
 
@@ -479,9 +473,7 @@ between beams and fire die with every flee bearing refused (`cone9 fire2`); in t
 ([pitfalls](../../engine/pitfalls.md#things-the-bot-cannot-see)), and VX-001's phase 4 `SetData` calls
 neither `DoZoneInCombat()` nor `AttackStart()` (its `AttackStart` is a no-op override), so a bot that
 never damaged it, a healer or a melee on the chassis, got `nullptr` and **the Laser Barrage dodge never
-ran for it**. Every Mimiron node resolves through `GetUldUnitByEntry`. **The same defect is still live
-across a dozen other instance strategies**: check it first on any boss whose script skips
-`DoZoneInCombat`.
+ran for it**. Every Mimiron node resolves through `GetUldUnitByEntry`.
 
 **Targets are set directly, never through a raid icon.** `mimiron set dps priority` owns every non-tank's
 `"current target"` while a mech is up; the old icon round-trip failed whenever a bot's `rti` string
@@ -614,9 +606,9 @@ Rapid Burst are the only avoidable slices, and every decision on this boss is dr
 walking, so a window with half of them walking is a ~15k/s hole. Healers spent 38-39% of phase 2 moving:
 formation walk-back after dodges, then the bomb, rockets and fire.
 
-**The 15 s after each barrage is a schedule, not luck.** `UpdateAI` returns early while VX-001 has
-`UNIT_STATE_CASTING`, so during the 14.5 s of Spinning Up plus barrage only the fire lands, then every
-overdue event fires one per tick. Heat Wave every 10 s, Rocket Strike 16 then 20, Frost Bomb 1 then 45,
+**The 15 s after each barrage is a schedule, not luck.** VX-001 banks its events while casting
+([reading a boss script](../../engine/raid-mechanics-lessons.md#reading-a-boss-script)), so during
+the 14.5 s of Spinning Up plus barrage only the fire lands, then every overdue event fires one per tick. Heat Wave every 10 s, Rocket Strike 16 then 20, Frost Bomb 1 then 45,
 Spinning Up 30 then 60: both phase 2 barrages are followed **within 0.5-4 s** by all three. Those 15 s
 take ~600-690k against 430-490k healed (raid health ~30 points down) with 30-59% of healers moving against
 22-36% the rest of the phase, mostly the formation walking back to the slots the dodge took them off.
@@ -738,8 +730,8 @@ reading a slot follows the wedge: `mimiron approach target action` skips bots th
 `rangedDepth` is `SpellDistance(28.5) − margin(4) − 18 = 6.5`, so `MimironWedgeRows` gets two rows: 14
 ranged in rows of seven, 6.0 yd apart radially and 6.3 along the inner one. `MimironPhase1PositioningAction`
 once set `disperse distance` to exactly 6.0, which judged every bot on its slot too close: `CombatFormationMoveAction` shoved it 5 yd off and the
-arc spread walked it back; `CombatFormationMoveAction::Execute` **always returns false**, so it moves the
-bot underneath whatever else runs and never shows in the verdict stream. Ranged lost 13-17% of output.
+arc spread walked it back, unseen in the verdict stream
+([pitfalls](../../engine/pitfalls.md#things-the-bot-cannot-see)). Ranged lost 13-17% of output.
 
 - `ULDUAR_MIMIRON_DISPERSE_DISTANCE` is **5.5**, between Napalm Shell's 5 yd splash and the wedge's 6.0.
 - `mimiron formation guard` zeroes `combat formation move` while the bot is within
@@ -898,13 +890,8 @@ splash, for the guard below.
 **`mimiron fire bot aoe guard` reads the spell, not the threat type.** `MimironFireBotAoeGuardMultiplier`
 holds splash while a kept bot is within `ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE` (**12**) of the bot or its
 target: the widest raid AoE in play is about 10 yd, and 30 switched the raid's AoE off for all of phase 3
-around a dozen bots, the phase a Junk Bot arrives every 10 s. `getThreatType() == Aoe` is not an
-area-damage marker ([the Aoe threat type misses most splash](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)):
-`CastHealingSpellAction` declares it, while whirlwind, divine storm, consecration, death and decay,
-starfall, swipe, pestilence, howling blast and explosive trap all declare something else. The guard does
-`dynamic_cast<CastSpellAction*>` → `AI_VALUE2(uint32, "spell id", ...)` → `IsTargetingArea() ||
-IsAffectingArea()`, covering the area and cone categories and persistent area auras. Totem and trap
-summons are single-target with the area on the summoned unit, so they keep a short name list.
+around a dozen bots, the phase a Junk Bot arrives every 10 s. It tests `SpellSplashes`
+([the Aoe threat type is no splash marker](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)).
 
 **Water Spray one-shots, so it outranks the fire.** Cast time index 1, 0 ms: no cast to see, only the hit,
 **23-26k against a 22-24k pool**, a single tick on a standing victim. Three fixes keep bots out of the

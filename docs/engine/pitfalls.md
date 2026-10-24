@@ -199,6 +199,9 @@ portal this way.
   four tank anchors meant 4.5 yd past it **1.2-1.7 yd** from its centre. Nothing on the server
   collides a walking bot with a gameobject, so for a spot on or past a prop use
   `ValidateStaticFloorPoint`: the same navmesh raycast and path-type filter without the dynamic pass.
+  It also returns true on `PATHFIND_INCOMPLETE` after overwriting the destination with the raycast's
+  last point, which can be the bot's own feet, so a flee that must escape needs a minimum-progress
+  check ([Mimiron's flee fan](../raids/ulduar/mimiron.md#the-bearing-fan)).
 
 - **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`), so a destination the
   navmesh flags as magma is **reachable, not rejected**. Do not discard a hand-measured point for
@@ -357,6 +360,11 @@ portal this way.
   formation, but one spaced wider than the bots' own reach cannot fight from its slots. Exempt the
   heal and resurrect reaches at minimum, or anyone outside the formation — a tank on the boss — stops
   being reachable; the Reach family holds those too, so block `reach melee` and `reach spell` by name.
+  A gap-closer veto by `dynamic_cast<CastReachTargetSpellAction*>` (Charge, Intercept, both Feral
+  Charges) misses `ReachMeleeAction`, which derives from `ReachTargetAction`
+  ([Mimiron's charge guard](../raids/ulduar/mimiron.md#shock-blast)). And a veto is only as good as
+  the node that moves the bot in its place: one that returns false leaves the bot standing
+  ([yogg-saron.md](../raids/ulduar/yogg-saron.md#movement-guards)).
 
 - **A claim that says "this one is mine to kill" needs a liveness test, or it shields the target.**
   `FlameLeviathanHeldByAnotherPost` keeps the fleet off an add a posted siege engine has aggro on. But
@@ -384,6 +392,9 @@ portal this way.
 - Its stand point is `reachSum + 0.75` against a core swing limit of `reachSum + 1.33` — a 0.58 yd
   margin, and `PathGenerator::ShortenPathUntilDist` "settles for a guesstimate", so the real stop
   distance is never below the intended one.
+- **A `ReachCombatTo` leg of 6 yd or more stops half way**: it shortens the path to
+  `disToGo / 2 + distance`. A walk at a far target ends wherever the midpoint is, on top of whatever
+  stands there ([yogg-saron.md](../raids/ulduar/yogg-saron.md#phase-2-the-body-is-a-wall-and-the-portals-run-on-a-clock)).
 
 ## Things the bot cannot see
 
@@ -391,7 +402,10 @@ portal this way.
   `GetThreatenedByMeList()`) and requires an **exact-length, case-insensitive match** against
   `creature_template.name`. A melee bot parked on Thane never resolves Zeliek, and every Auriaya
   trigger lost the boss the same way to a Sanctum Sentry. A pacified or CC'd bot has attacked
-  nothing, so it fails for exactly the bot a rescue node exists to serve. For multi-boss encounters,
+  nothing, so it fails for exactly the bot a rescue node exists to serve. **Still open** in most raid
+  and dungeon strategies, which resolve bosses this way: check any boss whose script skips
+  `DoZoneInCombat` first
+  ([VX-001](../raids/ulduar/mimiron.md#raid-nodes-resolve-bosses-by-entry-not-by-threat)). For multi-boss encounters,
   non-attacking objects, or anything not yet on threat, use `GetFirstAliveUnitByEntry` — **which
   upstream has marked `// DO NOT USE, WILL BE REMOVED`** (`src/Util/EncounterHelpers.h`). It is still
   the right answer; Ulduar already calls its own copy, `GetUldUnitByEntry`
@@ -445,14 +459,17 @@ portal this way.
   attack, and `follow` then walks bots off any encounter spread: zero it for the whole engagement,
   not only while a target is up (the Jormungars' 1.5 s worm gap).
 - **`DisperseDistanceValue` defaults to `-1.0f`**, and `CombatFormationMoveAction::Execute` bails on
-  `dis <= 0` — the generic de-clumper is inert unless a strategy sets it.
+  `dis <= 0` — the generic de-clumper is inert unless a strategy sets it. Set, it **always returns
+  false**, so it moves the bot underneath whatever else runs that tick and never shows in the verdict
+  stream ([Mimiron's disperse distance](../raids/ulduar/mimiron.md#disperse-distance)).
 - **`AttackersValue::Calculate` is threat-based, not range-based.** It builds from `AddAttackersOf`,
   so an untouchable boss 138 yd away stays in every bot's attacker list and `dps assist` takes him at
   `rel=50.0`. **Distance never removes a target** — only threat does.
 - **`CommandPetAttack` reaches at most one guardian.** It drives `bot->GetGuardianPet()`, which reads
   the single `SUMMON_SLOT_PET` slot, so a shaman's two Feral Spirits are invisible to it — the exact
   pets most likely to run off — and it dereferences `GetCharmInfo()` unchecked. Redirecting every
-  guardian means walking `m_Controlled`.
+  guardian means walking `m_Controlled`; one with no `CharmInfo` (Army of the Dead, Feral Spirits)
+  still takes a direct `MotionMaster` order ([Thorim](../raids/ulduar/thorim.md#known-gaps)).
 
 ## Detection that never fires
 
@@ -498,6 +515,10 @@ Related traps:
 - **A debuff can sit below the cast.** It may be an `EffectTriggerSpell` or a `spell_linked_spell`
   row, so keying on the cast id's aura leaves the node dead: ToC's Burning Bite/Spray carry no aura,
   the debuff is Burning Bile 66869.
+- **A boss cast's slot is not always `CURRENT_GENERIC_SPELL`**: a channel sits in
+  `CURRENT_CHANNELED_SPELL`. Read a scripted cast with `FindCurrentSpellBySpellId`, which walks every
+  slot
+  ([Hodir's Flash Freeze](../raids/ulduar/hodir.md#the-flash-freeze-window-is-the-nine-second-cast-and-the-shelter-exists-for-five)).
 - **`Unit::IsImmunedToDamage(mask)` wants one aura covering the whole mask.** Ice Block is a
   physical aura plus a magic one, so a mask test reads it as not immune: test each school.
 - **Scheduled events outlive their cause.** Freya's empower events are scheduled once at pull and
@@ -805,6 +826,21 @@ id without a row falls back to its implicit target type (`TARGET_UNIT_CONE_ENEMY
 neighbour is hit only within half the width of the target's bearing at any distance: space bearings
 by half-width plus stand error, not full width or radius.
 
+**A cone hits anything inside the caster's boundary at any bearing.** `WorldObjectSpellConeTargetCheck`
+passes a target within `Unit::IsWithinBoundaryRadius` — max(target's boundary radius,
+`MIN_MELEE_REACH` 2.0), centre to centre — before it tests the arc
+([VX-001's Laser Barrage](../raids/ulduar/mimiron.md#the-dodge)).
+
+**Facing has three margins.** `set facing` turns a bot only outside ±45°
+(`IsFacingValue`, `HasInArc(M_PI_2)`); `AttackAction` and `PlayerbotAI::CastSpell` outside ±60°
+(`CAST_ANGLE_IN_FRONT`, a 120° full arc), and `CastSpell` only for a spell with
+`SPELL_FACING_FLAG_INFRONT`. Heals and taunts carry `FacingCasterFlags` 0, so a healer or a taunting
+tank acts facing away ([Lunatic Gaze](../raids/ulduar/yogg-saron.md#64163-lunatic-gaze-is-an-aura-not-a-channel)).
+`CastVehicleSpell` uses the same 120°, so it never turns a vehicle for a narrower cone: turn it
+yourself ([Flame Leviathan](../raids/ulduar/flame-leviathan.md#boss-mechanics)). Never turn a moving
+bot: a moving spline overrides `SetFacingTo`, and `Unit::SetFacingTo` lays a spline of its own that
+ends a point walk ([Yogg-Saron's skulls](../raids/ulduar/yogg-saron.md#the-brain-room)).
+
 **An aura's removal conditions are not all in the DBC.** `spell_linked_spell` can strip one on hit: a
 negative `spell_effect` at `type 1` (`SPELL_LINK_HIT`) becomes `RemoveAurasDueToSpell` in
 `Spell::DoAllEffectOnTarget`. Flame Leviathan's Hodir's Fury stun reads as permanent from `Mechanic`,
@@ -834,9 +870,9 @@ are in [raid-mechanics-lessons.md](raid-mechanics-lessons.md#range-and-reach).
 
 ## Configuration
 
-- **Raid cheats are on by default**: `Playerbots.BotCheats = "food,taxi,raid"`. A mechanic that is
-  only survivable because of the raid cheat is (a) not real play and (b) a silent wipe on any server
-  that turns the cheat off. See the CHEAT-ONLY list in [../raids/README.md](../raids/README.md).
+- **Raid cheats are on by default** (`Playerbots.BotCheats = "food,taxi,raid"`): a mechanic only the
+  raid cheat makes survivable is an open gap
+  ([../raids/README.md](../raids/README.md#raid-cheats-are-on-by-default)).
 - **The raid cheat strips auras, which silently breaks any node keyed on one.** Thorim's tank-swap
   trigger fires only while the active tank still carries Unbalancing Strike; the cheat stripped it
   **2-230 ms** after it landed, so only 2-3 of every 5-8 strikes produced a swap, while the strikes

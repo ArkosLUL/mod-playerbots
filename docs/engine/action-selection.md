@@ -52,9 +52,12 @@ Two rules follow from 3; breaking either silently disables every node below:
   permanently active. Mimiron's phase 1 disperse latch shipped the action on `5.5` against the
   trigger on `6.0` and ran a whole Firefighter phase 1 with no ranged damage and no healing.
 
-A zeroed multiplier breaks the multiplier loop, fails `isPossible() && relevance > 0`, and lands on
-the **IMPOSSIBLE** branch — which still pushes the node's `/*A*/` alternatives. Fallback chains
-survive a veto. Never build an A→B→A cycle in `getAlternatives`. In the act stream a vetoed action is
+**`isUseful()` false drops the node's `/*A*/` alternatives; `isPossible()` false (IMPOSSIBLE) or
+`Execute` false (FAILED) pushes them.** So a test whose fallback must run belongs in `isPossible`
+([mage](../classes/mage.md)'s gem chain), and one in `isUseful` silences the fallback too
+([hunter](../classes/hunter.md)'s Lock and Load). A zeroed
+multiplier breaks the multiplier loop, fails `isPossible() && relevance > 0`, and lands on
+IMPOSSIBLE: fallback chains survive a veto. Never build an A→B→A cycle in `getAlternatives`. In the act stream a vetoed action is
 therefore indistinguishable from one whose spell is unknown, out of range or on cooldown; the trace's
 `veto` rows name the multiplier that did it, so read those before concluding an ability is broken.
 
@@ -74,8 +77,12 @@ Half-step values (`19.5`, `39.5`) are collision breakers, not design statements.
 ## Registration
 
 Objects are created by name through `NamedObjectContext<T>` (`src/Bot/Engine/NamedObjectContext.h`).
-Class contexts resolve **before** shared ones, so registering the same name in both gives a
-per-class override for free (Ritual of Souls uses this).
+`SharedNamedObjectContextList::Add` flattens every context's `creators` into one static map per class,
+**last writer wins**. The class context is added last, so registering a name there is a per-class
+override (Ritual of Souls uses this); a raid context re-registering a generic name (`reach melee`)
+replaces it for every bot in every fight. There is no per-instance override, and `MovementAction`'s
+destination members are non-virtual, so encounter movement is its own node
+([Mimiron](../raids/ulduar/mimiron.md#two-dodges-fought-over-the-fire)).
 
 **Names are resolved at runtime and fail silently** — see
 [pitfalls.md](pitfalls.md#names-fail-silently-at-runtime).
@@ -90,7 +97,8 @@ Per-raid wiring is four edits: `src/Ai/Raid/RaidStrategyContext.h` (key → stra
 `src/Bot/Engine/BuildSharedTriggerContexts.cpp`, `BuildSharedActionContexts.cpp`, and
 `PlayerbotAI::ApplyInstanceStrategies` for the `allInstanceStrategies` list plus the `case <mapId>:`
 arm. `ApplyInstanceStrategies` strips every instance strategy, then adds the one matching the current
-map; it runs on login (the `PlayerbotAI` constructor, `PlayerbotRepository::Load`), every teleport
+map to both the combat and non-combat engines, so its nodes run out of combat too; the dead engine
+gets none. It runs on login (the `PlayerbotAI` constructor, `PlayerbotRepository::Load`), every teleport
 (`HandleTeleportAck`) and every strategy reset (`ResetStrategies`, `SelectiveResetStrategies`).
 
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
@@ -118,7 +126,10 @@ key two parts both register when copying; pblint cannot see that collision.
   a stack ramp or pace a cooldown, because it goes quiet the moment the aura lands.
 - `beforeDuration` (ms, default 0) is the refresh window on both. **0 is a real choice, not an
   oversight**: priest DoTs must expire before re-applying, rogue sets 2000 on Slice and Dice / Hunger
-  for Blood / Rupture on purpose. Do not "make them consistent".
+  for Blood / Rupture on purpose. Do not "make them consistent". **Set it on trigger and action
+  alike**: `BuffTrigger::IsActive` and `CastAuraSpellAction`/`CastBuffSpellAction::isUseful` both go
+  through `BuffBelowRefreshTarget`, so the action vetoes an early refresh its trigger proposes
+  ([paladin](../classes/paladin.md)'s Holy Shield).
 - **A recast restarts a non-stacking DoT's tick timer** (`Spell::DoSpellHitOnUnit`, `StackAmount < 2`),
   so a refresh window throws away the elapsed part of the current tick. Ticks stop at
   `AuraEffect::GetTotalTicks()` (max duration / interval, floored); once `GetTickNumber()` reaches it,
@@ -127,9 +138,11 @@ key two parts both register when copying; pblint cannot see that collision.
   `target->GetHealth() / AI_VALUE(float, "estimated group dps")` — not a DoT-remaining test.
   Overriding `IsActive()` to call `BuffTrigger::IsActive()` throws that guard away.
 - `BoostTrigger::IsActive` needs the buff missing **and** either a Player target or `balance <= 50`.
-  In raid PvE the target is a Creature and the raid is normally winning, so **every `BoostTrigger`
-  subclass is effectively dead**. Re-key to `SpellNoCooldownTrigger` and let `BurstWindowStrategy`
-  place the cast.
+  `BalancePercentValue` is the living group's average level × min(members, 10) over the attackers'
+  levels, elites ×3 and world bosses (rank 3) ×20, capped at 200: a lone level-83 boss against a
+  level-80 raid is 800 / 1660 ≈ 48, so it fires on a raid boss from the pull, and on trash only
+  against seven or more level-80 elites. To place such a cast in a burst window instead, re-key to `SpellNoCooldownTrigger` and let
+  `BurstWindowStrategy` place it.
 
 ## Multiplier semantics
 
@@ -141,7 +154,11 @@ zeroed it, in declaration order, so wiring order decides attribution.
 
 `dynamic_cast` is the identification mechanism, and **must be narrow**: cast to the concrete action
 (`CastMisdirectionOnMainTankAction`), never a shared base like `BuffOnMainTankAction` — that base
-also carries paladin Beacon, shaman Earth Shield and druid Thorns, a bug the Naxx work had to undo.
+also carries Beacon of Light, Sacred Shield, Earth Shield, Thorns, Lifebloom, Renew, Power Word:
+Shield, Fear Ward and Tricks of the Trade, a bug the Naxx work had to undo. A guard that zeroes
+targeting while the target is wrong must exempt the encounter's own picker, or it vetoes the one
+node that would fix the target
+([Thorim](../raids/ulduar/thorim.md#the-arena-adds-and-what-to-kill-first)).
 Unlike creator-name strings, a `dynamic_cast` mistake fails at **compile** time.
 
 At scale, match on `getName()` instead: `CastSpellAction`'s constructor passes the spell name to
@@ -188,8 +205,13 @@ off the pick.
   (who interrupts this cast) tests the cost itself. A known pet spell (Spell Lock) answers true
   before any cooldown or range check, and `CastSpell` casts it as the bot, so test the bot's own
   cooldown and range.
-- `CastSpell` selects and faces the target before it fails, so a taunt or other cooldown cast not
-  gated on `CanCastSpell` plus the DBC range re-faces the bot every tick.
+- `CastSpell` selects and faces the target before it fails, and restores the old selection only on
+  success, so a taunt or other cooldown cast not gated on `CanCastSpell` plus the DBC range re-faces
+  the bot every tick and leaves it holding an aim it cannot reach
+  ([Yogg-Saron](../raids/ulduar/yogg-saron.md#threat-the-redirects-are-fine-the-taunt-budget-does-not-stretch)).
+- `PlayerbotAI::HasSpell` reads the spell map, where a passive talent never lands
+  (`Player::_addTalentAurasAndSpells` only casts its aura): test those with `HasTalent`
+  ([warrior](../classes/warrior.md)'s Improved Slam).
 - There is no cast-while-moving model and no spell queue: any cast-time spell is refused outright
   while moving (see [pitfalls.md](pitfalls.md#a-moving-bot-cannot-cast)), and casts are never clipped
   — the AI yields while `SPELL_STATE_PREPARING`. Deliberate clipping needs an explicit
@@ -241,14 +263,17 @@ off the pick.
   preparing single-target heal on a full-health target and refunds the GCD, except on a target
   carrying `SPELL_AURA_SCHOOL_HEAL_ABSORB`; without that exception every cast-time heal on it recasts
   each tick and nothing lands.
-- A group scan measures with `botAI->GetRange("heal")` — **30 yd** — not
-  `sPlayerbotAIConfig.SpellDistance`, and not `HealDistance` 38.5. Null-check `bot->GetGroup()` and
-  LOS-test while you are in there.
+- A group scan's range is `HealDistance` 38.5, not `SpellDistance`: `botAI->GetRange("heal")` returns
+  it unless a `range heal` command stored a per-bot value. Null-check `bot->GetGroup()` and LOS-test
+  while you are in there.
 - `AoeInGroupTrigger::IsActive` (`HealthTriggers.cpp`) needs ≥ 3 healable members: threshold 3 (≤5),
-  `min(half,4)` (≤10), `min(half,6)` (≤25), `min(half,8)` above. The threshold and the counting value
-  must measure the **same population** — `CountHealableGroupMembers` counts alive members inside
-  `HealDistance`, `GetNearGroupMemberCount` uses `SightDistance` and counts the dead. Mixing them
-  makes the threshold unreachable in a spread 25-man.
+  `min(half,4)` (≤10), `min(half,6)` (≤25), `min(half,8)` above, against the `"aoe heal"` count
+  (`AoeHealValue`: hurt members inside `HealDistance` and in LOS). The two move every healer's group
+  heal (Chain Heal, Circle of Healing, Prayer of Healing, Wild Growth, Tranquility) and must change
+  together ([shaman](../classes/shaman.md)). The threshold and the
+  counting value must measure the **same population** — `CountHealableGroupMembers` counts alive
+  members inside `HealDistance`, `GetNearGroupMemberCount` uses `SightDistance` and counts the dead.
+  Mixing them makes the threshold unreachable in a spread 25-man.
 - `PartyMemberValue` derives from `UnitCalculatedValue`, not `Qualified`, so per-spell target
   filtering must be a **second registered value name** (`"party member to protect no tank"`), not a
   qualifier.
@@ -261,6 +286,12 @@ off the pick.
 strategy set. The always-on list is `racials`, `chat`, `default`, `cast time`, `potions`, `duel`,
 `boost`, `burst` — skipped for battlegrounds. Spec sets follow per class; healers add `save mana` and
 `healer dps`.
+
+A dead bot runs only `dead`, `stay`, `chat`, `default` and `follow` (`AddDefaultDeadStrategies`), so
+Reincarnation and a Soulstone (`self resurrect`) fire where no encounter rule reaches. Death strips
+every aura not passive or death-persistent (`Unit::RemoveAllAurasOnDeath`), so a resurrected bot
+comes back without its raid buffs
+([Yogg-Saron](../raids/ulduar/yogg-saron.md#melee-mitigate-in-phase-1-and-leave-after-it)).
 
 Every strategy is switchable per bot with `strategy -<name>`. Strategies from a sibling context (e.g.
 warlock curses) evict each other, even within one `addStrategiesNoInit` list: the last one wins.
