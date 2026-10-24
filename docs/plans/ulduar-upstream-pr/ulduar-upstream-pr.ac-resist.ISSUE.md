@@ -53,8 +53,70 @@ INSERT INTO `spell_custom_attr` (`spell_id`, `attributes`) VALUES
 ## AC rev. hash/commit
 
 ```
-AzerothCore rev. e2829262b39c+ 2026-10-24 12:31:35 +0300 (Custom branch) (Unix, RelWithDebInfo, Static) (worldserver-daemon)
-OpenSSL 3.0.13, Boost 1.83.0, MySQL 8.4.8, ACDB 335.17-dev
+AzerothCore rev. ea83cc94b3d4+ 2026-10-24 16:07:43 +0300 (Custom branch) (Unix, RelWithDebInfo, Static)
+Connected players: 0 (peak: 0).
+Characters in world: 0 (peak: 3, lifetime: 1228).
+Minimum account security level to log in: 0.
+Server uptime: 56 second(s)
+Update time diff: 11ms. Last 500 diffs summary:
+|- Mean: 10ms
+|- Median: 10ms
+|- Percentiles (95, 99, max): 12ms, 16ms, 19ms
+Previous session ended unexpectedly after 30 minute(s) 9 second(s). Last online 2026-10-24 13:22:35.
+Using SSL version: OpenSSL 3.0.13 30 Jan 2024 (library: OpenSSL 3.0.13 30 Jan 2024)
+Using Boost version: 1.83.0
+Using CMake version: 3.28.3
+Using MySQL version: 80046
+Found MySQL Executable: /usr/bin/mysql
+Compiled on: Linux 6.6.87.2-microsoft-standard-WSL2
+Worldserver listening connections on port 8085
+Realmlist (Realm Id: 1) configured in port 8085
+VMAPs status: Enabled. LineOfSight: true, getHeight: true, indoorCheck: true
+MMAPs status: Enabled
+maps directory located in /azerothcore/env/dist/data/maps. Total size: 291014951 bytes
+vmaps directory located in /azerothcore/env/dist/data/vmaps. Total size: 657797442 bytes
+mmaps directory located in /azerothcore/env/dist/data/mmaps. Total size: 2191781904 bytes
+Default DBC locale: enUS.
+All available DBC locales: enUS
+Using World DB: ACDB 335.17-dev
+Using Playerbots DB Revision: Unknown Playerbots Database Revision
+Latest LoginDatabase update: rev_1789065671843512900.sql
+Latest CharacterDatabase update: trasmorg.sql
+Latest WorldDatabase update: zone_zangarmarsh.sql
+LoginDatabase queue size: 0
+CharacterDatabase queue size: 0
+WorldDatabase queue size: 0
+List of enabled modules:
+|- mod-ah-bot-plus
+|- mod-bis-tooltip
+|- mod-chronicle
+|- mod-craftspeed
+|- mod-dead-means-dead
+|- mod-dungeon-master
+|- mod-dungeon-scale
+|- mod-ghost-speed
+|- mod-individual-progression
+|- mod-junk-to-gold
+|- mod-levelsync
+|- mod-mount-scaling
+|- mod-mounts-on-account
+|- mod-multibot-bridge
+|- mod-no-hearthstone-cooldown
+|- mod-npc-enchanter
+|- mod-npc-services
+|- mod-pet-loot
+|- mod-playerbots
+|- mod-quest-loot-party
+|- mod-racial-trait-swap
+|- mod-rdf-expansion
+|- mod-reagent-bank-account
+|- mod-reforging
+|- mod-shared-professions
+|- mod-sim-validation
+|- mod-spell-tweaks
+|- mod-token-turnin
+|- mod-transmog
+|- mod-weapon-visual
 ```
 
 ## Operating system
