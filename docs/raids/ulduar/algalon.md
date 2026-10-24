@@ -52,8 +52,8 @@ Every guide keeps one player out. The **soaker** is a bot whose Dispersion (4758
 cooldown, 75 s glyphed against the 90.5 s cycle) is back by the time it casts it, ≤ 5 s before the hit; a
 second one is the **backup** and stays out too. Inside it a priest took ~6 k of the hit, so **both swap tanks
 hide** with the raid and keep their buttons for his swings. For the cast and 3 s after it he skips
-`UpdateVictim`, can't move, and holds Quantum Strike and Phase Punch (`boss_algalon_the_observer.cpp:649`,
-`:754-764`): a hiding holder stays his victim and nobody is swung at. Outside the cast the tick latches the
+`UpdateVictim`, can't move, and holds Quantum Strike and Phase Punch (`boss_algalon_the_observer`'s
+`UpdateAI` under `PHASE_MASK_NO_UPDATE`; `EVENT_BIG_BANG` delays `GROUP_COMBAT` 11 s): a hiding holder stays his victim and nobody is swung at. Outside the cast the tick latches the
 next hit's **disperser**; that latch picks between this and the tank soak below. The soak is latched per cast
 too, and every role reads that latch, never the live cast: in the tick's first 250 ms of a cast nobody is the
 soaker yet, and every bot would run for a hole.
@@ -135,7 +135,7 @@ cast sent two hunters 50 yd to the last one, in 0.2 s before the hit, after the 
 Food and drink are blocked while he is engaged: eating stops the bot thinking, and a shaman back from
 Reincarnation at 22% ate through Big Bang.
 
-**Threat survives the hide, and this is not a bug to re-audit.** `CombatManager.cpp:53` gates only
+**Threat survives the hide, and this is not a bug to re-audit.** `CombatManager::CanBeginCombat` gates only
 *entering* combat on `InSamePhase`, and `ThreatManager` only marks phased entries offline: he re-picks
 the top unphased entry when the phase drops.
 
@@ -417,7 +417,7 @@ swing can land on a damage dealer until the pickup taunt lands.
 
 The pickup prefers a bot, then fewer stacks, but never a bot already at 4 stacks over a human with
 fewer. The class taunt nodes are blocked for everyone while he is engaged: an Arms warrior's snare chain ends
-in Mocking Blow, which `ClassifyAction` now counts as a taunt, and one killed its caster. The swap, pickup,
+in Mocking Blow, which `ClassifyAction` counts as a taunt, and one killed its caster. The swap, pickup,
 handler and Dark Matter nodes taunt through `CastClassTaunt`; when the pickup's taunt missed or is cooling down
 while he is off a swap tank, the class's second one follows (Righteous Defense on his victim, Challenging Shout
 or Roar), since a missed Hand of Reckoning left him loose for 1.5 s. **A taunt moves him, not the taker's own
@@ -536,7 +536,7 @@ no `window` Hand of Sacrifice (both fired in one tick, the Hand first, and the s
   else it moves to the lowest-guid one whose is ready: on the lowest guid always, a holy paladin's Aura Mastery
   never went up in two pulls.
 - Else Divine Sacrifice from a paladin bot with Divine Guardian (53527/53530, by `HasTalent`: a passive talent
-  is never in the spell map `HasSpell` reads, so it never fired before), ≥ 50%, the holder last (one global). The
+  is never in the spell map `HasSpell` reads), ≥ 50%, the holder last (one global). The
   tick removes 64205 from bots at once: left up it splits 30% of the party's damage onto the paladin, and the
   procced 70940 (raid within 30 yd −10/20%, 6 s) stays.
 
@@ -550,7 +550,7 @@ under Aura Mastery was 79% of it), times the stars dying within 3 s of it up to 
 health for a second star that went off once most were phased), each covered only if it dies before the cover
 ends, casts the cheapest that
 leaves it alive (a channel is broken first: it fails every cast check), once per star and none while one
-runs: Shadow Ward, Anti-Magic Shell (by id 48707: the name lookup misses "Anti-Magic Shell"), Barkskin,
+runs: Shadow Ward, Anti-Magic Shell (by id 48707: [the name misses](../../engine/pitfalls.md#names-fail-silently-at-runtime)), Barkskin,
 Shamanistic Rage, Cloak of Shadows (a 90% resist, not a cut), Icebound Fortitude, Dispersion (never the
 disperser's, nor one not back for the next soak), Divine Protection, Ice Block, Divine Shield. The immunities
 held 20 s before the cast left four dying 0.4-0.9 s before it with one ready. With none that saves it, a healthstone (not on the move: it stops the bot),
@@ -567,102 +567,70 @@ shaman its mana.
 
 Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
 
-Raid-wide values, all written by the instance tick: `algalon.phase` (0 idle, 1 intro, 2 phase 1,
-3 phase 2, 4 won), `algalon.bigbang` (the cast's ordinal while latched, else 0), `algalon.soaker`,
-`algalon.backup`, `algalon.disperser`, `algalon.shadowaura`, `algalon.urgent`, `algalon.holes`,
-`algalon.focusstar`, `algalon.handler`, `algalon.tankhealslots`. Per guid: `algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam`
-(urgent recruits aren't recorded), `algalon.swappair`, `algalon.tankhealer`. Derived per bot, each inside the
-helper that derives it: `algalon.tankheal` (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
-(`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is a chased bot waiting to go
-last), `algalon.kite`
-(`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`nohole`/`none`; older traces `hole`), `algalon.spot`
-(`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`), `algalon.hazard`
-(`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`, where `cross` means only a
-path over a hole was clear),
-`algalon.defensive` (the pick, on change only). `algalon.tankrole`
-(`hold`/`yield`/`take`/`call`/`out`/`none`) per pair bot and `algalon.starwindow`
-(`urgent`/`under`/`bigbang`/`smash`/`prebang`/`spacing`/`gap`/`deadline`/`raidhp`/`near`/`open`/`none`; `smash`, `prebang` and
-`spacing` name what a kill's finish would land on: an impact, the Big Bang window, another star's death) are
-computed in the tick; the window is
-written on the tracker bot, since the tick runs on whichever bot comes first, with `algalon.starplan` on each
-change: every star's guid counter, health and forecast death, soonest first, then the merged blackouts, in
-seconds from now (`2136 28% 3s, 2133 85% 83s u | smash 2..11 | prebang 59..71 | under 66..69`; `u` an
-under-star at its drain death, `s` the shelter star).
+- **Raid-wide, written by the instance tick:** `algalon.phase` (0 idle, 1 intro, 2 phase 1, 3 phase 2,
+  4 won), `algalon.bigbang` (the cast's ordinal while latched, else 0), `algalon.soaker`,
+  `algalon.backup`, `algalon.disperser`, `algalon.shadowaura`, `algalon.urgent`, `algalon.holes`,
+  `algalon.focusstar`, `algalon.handler`, `algalon.tankhealslots`.
+- **Per guid:** `algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam` (urgent
+  recruits aren't recorded), `algalon.swappair`, `algalon.tankhealer`.
+- **Derived per bot, each inside the helper that derives it:** `algalon.tankheal`
+  (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
+  (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is a chased bot waiting
+  to go last), `algalon.kite` (`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`nohole`/`none`;
+  older traces `hole`), `algalon.spot`
+  (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`),
+  `algalon.hazard` (`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`,
+  `cross` meaning only a path over a hole was clear), `algalon.defensive` (the pick, on change only).
+- **Computed in the tick:** `algalon.tankrole` (`hold`/`yield`/`take`/`call`/`out`/`none`) per pair bot,
+  and `algalon.starwindow`
+  (`urgent`/`under`/`bigbang`/`smash`/`prebang`/`spacing`/`gap`/`deadline`/`raidhp`/`near`/`open`/`none`;
+  `smash`, `prebang` and `spacing` name what a kill's finish would land on: an impact, the Big Bang
+  window, another star's death), written on the tracker bot since the tick runs on whichever bot comes
+  first, with `algalon.starplan` on each change: every star's guid counter, health and forecast death,
+  soonest first, then the merged blackouts, in seconds from now
+  (`2136 28% 3s, 2133 85% 83s u | smash 2..11 | prebang 59..71 | under 66..69`; `u` an under-star at
+  its drain death, `s` the shelter star).
 
-Events: `algalon.holelost` (`kite`/`stray`/`phase2`/`bigbang`, the last a hole lost during the cast), one per hole, skipped when every summon goes at
-once on a kill or Ascend; `algalon.stardeath` (`under`/`early`/`late` for an under-star inside, before or after
-its window, else `killed` as the focus star, `drained` within 3% of its
-drain-only health, else `chewed`, and the nearest raid member's distance; older traces say `collapsed`);
-the roster's hits on stars (pets under their owner) as `dmg` rows, from `RaidObs::LogHitsOn` at the intro end;
-`algalon.soakkit`
+Events: `algalon.holelost` (`kite`/`stray`/`phase2`/`bigbang`, the last a hole lost during the cast), one
+per hole, skipped when every summon goes at once on a kill or Ascend; `algalon.stardeath`
+(`under`/`early`/`late` for an under-star inside, before or after its window, else `killed` as the focus
+star, `drained` within 3% of its drain-only health, else `chewed`, and the nearest raid member's distance;
+older traces say `collapsed`); the roster's hits on stars (pets under their owner) as `dmg` rows, from
+`RaidObs::LogHitsOn` at the intro end; `algalon.soakkit`
 (`def=<button|dispersion|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.tankdef`
 (`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
-(`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (older traces: `start|stop <star counter> <hp%>` on the
-wand); `algalon.underdrop` (`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.personal` (the button's spell name, or `healthstone`/`healing potion`);
-`algalon.nitro` (`hide` on a bot using its boots on the
-run); `algalon.speed` (the class speed spell on a late run); `algalon.handover` (`nodef` on a
-holder handing him over for want of a defensive); `algalon.pull`
-(`inreach=N victim=GUID`) at the tick the intro ends; `algalon.call` (`swap`/`loose`/`bigbang`/`hide`)
-per raid warning, sent only when a human is in the raid. Each meteor is written as a `haz` circle (62311 / 64596, the impact point, 6 yd): the sweep
-keeps the 40 units nearest its anchor and on 25-man drops some markers.
+(`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (older traces:
+`start|stop <star counter> <hp%>` on the wand); `algalon.underdrop`
+(`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.personal` (the button's
+spell name, or `healthstone`/`healing potion`); `algalon.nitro` (`hide` on a bot using its boots on the
+run); `algalon.speed` (the class speed spell on a late run); `algalon.handover` (`nodef` on a holder
+handing him over for want of a defensive); `algalon.pull` (`inreach=N victim=GUID`) at the tick the
+intro ends; `algalon.call` (`swap`/`loose`/`bigbang`/`hide`) per raid warning, sent only when a human
+is in the raid. Each meteor is a `haz` circle (62311 / 64596, the impact point, 6 yd): the sweep keeps
+the 40 units nearest its anchor and on 25-man drops some markers.
 
 Slots and the swap pair are latched before any trace opens, so the tick restates them into each new
-trace.
-`algalon.hide` stays silent until he has been seen, or every earlier Ulduar trace carries a row of it
-per bot.
+trace. `algalon.hide` stays silent until he has been seen, or every earlier Ulduar trace carries a row
+of it per bot.
 
 No probe duplicates the generic streams: his casts (watched once engaged; unsampled while neutral
 before the pull), Phase Punch stacks and the 62168 / 65250 / 64417 / 62169 auras on players, holes,
 markers, stars and constellations as swept `snap.u` rows, and the damage rows. The sweep anchors on an
 unphased roster player; on older traces a phased anchor drops the room's units from the rows.
 
-**`tools/botobs/bosses/algalon.py` reads all of it**; `--verdict` is the entry point, one line per
-detected failure, and `--deaths` the second, every death classified by the mechanic that killed it,
-counted by cause and role with humans starred. Then:
+**`tools/botobs/bosses/algalon.py` reads all of it.** `--verdict` is the entry point, `--deaths` the
+second (humans starred); `--help` lists the views. Its verdicts, beyond `--verdict`'s own (a bot
+eating or drinking while he is engaged, per star going off in the cast the bots it hit by hide state
+with a swap tank out on `noshelter` aside, per cast the hiders that used a gap closer):
 
-- `--pull`: who stood inside his 11.83 yd when the intro ended, his first victim, how soon a pair tank
-  had him;
-- `--loose`: every window his victim was no swap tank, with its cause (intro end, 5th stack, holder
-  died or phased, threat), the deaths in it and how it ended;
-- `--swaps`: the pair, stack timelines, swaps due and their latency, missed swaps, calls, threat steals,
-  hand-overs;
-- `--hold`: his distance from the hold spot and the centre, the holder and its distance from the tank slot, the
-  drag after each pickup and who was in his reach on it;
-- `--soak`: per Big Bang the soaker's health across the hit, the kit, the prep casts, the first heal after it
-  and every reserved button spent earlier;
-- `--collateral`: per star the health lost beyond drain while nobody was sent, the damage on stars per star and
-  by source and spell, every cast on a star by caster and spell, and a verdict per bot DoT on a star;
-- `--defensives`: every cutter, Lay on Hands and Guardian Spirit on a swap tank with its health and whether it
-  lived 10 s; per tank death its last 6 s of hits, cutters up and `algalon.tankdef`; per explosion the cover
-  up and damage covered against uncovered; per explosion death the personal buttons pressed or ready; per
-  explosion each bot under its line with its buttons and consumables, each press and cover beside its star's
-  death, with verdicts for one after the death, a held button a class node spent (phased, or in phase 1;
-  health after the last hit, not the snapshot), a
-  cover cast with fewer than 2 under the line and a failed cover with another ready;
-  `window` cutters on a holder at 80% or more;
-- `--stars` also: per star its plan, window, forecast against actual death, offset from the hit, who its
-  explosion hit unphased and its trims; per focus span the loss beyond the drain and the switches between
-  under-stars, each release, each under-star's health at the cast against its band (h% then dies h−1 to h s
-  later), the splash on one released early within 20 s of its cast in the 20 s before (off the focus, by source
-  and spell), the median bulk speed and, on older traces, each trimmer's starts and shots fired, with verdicts
-  for a release within 8 s of the cast, 1% or more of that splash, one above its band at the cast, over one
-  switch per star and 3 Shoot starts in 2 s; `--constellations` the kite runs (stages, retries, eaten) and
-  branch time, both from the elected handler alone, parked stretches with none eaten, a constellation stuck in the air, and
-  seconds the kite was blocked (verdict from 5 s); `--bigbang` Nitro Boosts per hider, class speed on late
-  runs, each star going off in the cast with the bots it hit and their hide state, and each gap closer a hider
-  used in the cast with the yards it added to its hole; `--verdict` a bot sitting down to eat or drink while he
-  is engaged, per star going off in the cast the bots it hit by hide state (a swap tank out on `noshelter`
-  aside), and per cast the hiders that used a gap closer;
-- `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
-- `--tankheal`: the tank healers, each healer's share on the pair, itself and others, Beacon time on holder
-  and partner, and per tank death the 6 s / 2 s damage against healing, shields and healing elsewhere, with
-  each tank healer's state; on older traces the deaths and shares alone;
-- `--bigbang` (holes at the cast, soaker and backup health, who was hit unphased, tank-alone seconds,
-  re-phase loops, void Dark Matter damage, evade after), `--stars` (how each died, the window, a live
-  meteor, raid health against the top roll), `--smash` (per wave and bot: distance, dodge latency and
-  branch, distance at impact, what brought it back: a walk or a charge), `--phasing` (each phase application, Big Bang or
-  stray, and the stray cause), `--reach`, `--phases`, `--holes`, `--constellations`, `--tanks`,
-  `--formation`, `--darkmatter`.
+- `--defensives`: a press or cover after its star's death; a held button a class node spent (phased,
+  or in phase 1; judged on health after the last hit, not the snapshot); a cover cast with fewer than
+  2 under the line; a failed cover with another ready; `window` cutters on a holder at 80% or more.
+- `--stars`: a release within 8 s of the cast; 1% or more of splash, off the focus, on an
+  under-star released early within 20 s of its cast, in the 20 s before; an under-star above its band
+  at the cast (h% dies h−1 to h s later); over one switch per star; 3 Shoot starts in 2 s.
+- `--collateral`: each bot DoT on a star. `--constellations`: a kite blocked 5 s or more, kite stats
+  from the elected handler alone.
 
 Traces from before these probes fall back to what the records alone say: intro end from his first
 swing, the pair from the roster tanks, meteors from the 33105 markers. Its banner names declared keys
@@ -709,14 +677,23 @@ raycasts, `CanCastSpell` and the dodge's collision checks, so their order is del
 - **Tank-cut election** (`GetAlgalonTankCut`): the holder and every paladin and priest each walk the
   whole provider list every tick the holder is hurt. Cooldown (`ExternalSpell`) and the Big Bang
   reserve (`usable`) are tested **before** range, sight and the cast check (`ExternalReaches`); a
-  reserved or cooling spell is refused again every tick otherwise, after paying for all three.
+  reserved or cooling spell is refused again every tick otherwise, after paying for all three. Class
+  is tested before role lookups in its two group loops.
 - **Tank-heal pick**: health before sight, and one sight test per tank per call (it was up to 7).
 - **Dodge and hole exit**: the fallback searches of one `Execute` share one `HazardSweepCache`.
+- The cheap test first in `AlgalonSoakerPrepTrigger`, `AlgalonYieldsBoss` and `AlgalonHandlerKiting`;
+  the ten button ids resolved once per `GetAlgalonExplosionPersonal`; `OrderedTanks` built once per
+  tick.
 - `IsAlgalonHandler` compares guids; `GetAlgalonHandler` walks the group, so keep it out of rule
   predicates.
 
-Each reorder was run against the old body over the states it can tell apart (3.5 M for the pick, 21 M
-for the election): same answer every time, never more raycasts.
+The pick and election reorders were proven against the old bodies with the
+[equivalence harness](../../engine/raid-mechanics-lessons.md#measuring-a-cost): 3,456,000 pick states and
+21,000,000 random raid states for the election, 0 mismatches, never more raycasts or cast checks (58%
+fewer of each for the election in that mix). Red checks: a memo merging the two tanks gave 6,840
+mismatches, a `CanCastSpell` stub ignoring the cooldown 72,020. Nothing was timed; the 22-pull baseline
+spread a refactor must keep: `algalon.dodge` `clear` 1,799 / `min` 14 / `cross` 2 / `none` 1,
+`algalon.tankheal` `holder` 693 / `full` 637 / `self` 82 / `offtank` 39 / `range` 24.
 
 **Would change behaviour, do not re-propose:**
 - `state->engaged` / `state->phase` for the live `AlgalonEngaged`: 250 ms stale at the pull and a wipe.
@@ -729,8 +706,41 @@ for the election): same answer every time, never more raycasts.
 - Id-based aura tests for the name-based `PlayerbotAI::HasAura`: the name covers every rank and
   same-named procs.
 
-Open: helpers re-fetch the encounter state per call, see
-[the plan](../../plans/algalon-perf/algalon-perf.PLAN.md).
+**Identical but not worth the code:** a trigger-pass memo (`EncounterTriggerPassId`) of the tank-heal
+pick or of `GetAlgalonHandlerConstellation`; the allocation churn in `ScanRoom` / `LogStarHealth`
+(4 Hz per instance); per-action name caches in `AlgalonLeaveFieldMultiplier` /
+`AlgalonWalkGuardMultiplier`.
+
+**Open: one state lookup per entry point.** Worth it only if a `pmon` read (the ratio of `algalon tank
+defensive`, `algalon tank heal`, `algalon tank heal critical` and `algalon explosion cover` to the rest)
+says so: largest diff, smallest gain per line. `FindState` (`UldEncounter_Algalon.cpp`) is a
+process-wide mutex plus a hash lookup, and almost every helper opens with one. The paced triggers keep
+it low on the trigger side; what repeats is per popped action:
+- `AlgalonHideSlackMs`: five `FindState`, and `AlgalonHoldsConstellation` twice. During the 8 s cast it
+  runs twice per trigger pass, once per popped spell action (`AlgalonHideCastMultiplier`) and once per
+  popped movement action (rule `algalon big bang hide`).
+- `AlgalonSmashHoldsGround`: two `FindState` and a `GET_PLAYERBOT_AI` on every movement action of every
+  bot (rule `algalon smash hold`).
+- `AlgalonMayDamage` → `AlgalonYieldsBoss` → `AlgalonShouldPickUp` / `AlgalonShouldSwap`: about eight
+  lookups per damaging action for the swap tanks and the handler.
+- `DeriveSlot` / `RawSlot`: about ten, once a second per bot.
+
+The change is internal overloads in the anonymous namespace taking the `AlgalonEncounterState` already
+fetched, the public functions becoming thin wrappers — **only where the player passed down is the
+calling bot**. `IsAlgalonSwapTank(other)` looks up the *other* player's instance, so it answers false
+for a pair member who left the map: every call about the boss's holder keeps its own lookup, and so do
+`NoteTankRoles`' calls for another player.
+
+**Paid on every pull, outside Algalon's files**, and probably more than everything above for the bots
+they hit (each sweep a 100 yd grid visit; open in
+[what a strategy costs](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)):
+`UldThreatRedirectMultiplier` has `PB_NPC_ALGALON` last of six entries, so each `misdirection on main
+tank` candidate costs five sweeps that miss and one that hits; the action is then vetoed (386 vetoes in
+22 pulls), so Misdirection stays ready and the hunter asks again each pass its trigger fires. Tricks is
+zeroed earlier, by `algalon class tricks`. `UlduarBurstWindowMultiplier` costs one sweep, three grid
+searches and a threat-list name walk per burst-cooldown action to answer "allow" every time here, with
+trinket, tinker and racial actions popped constantly, and copies the action name for every popped
+action.
 
 ## Not supported
 

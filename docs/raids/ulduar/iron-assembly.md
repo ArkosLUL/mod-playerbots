@@ -5,11 +5,11 @@ spread across three health bars is thrown away and **focus fire is the encounter
 `SpellHit` calls `UpdatePhase()`, so the last one alive reaches `_phase == 3` — and `SetLootMode(0)`
 is only undone there, so **all loot comes from whoever dies last**.
 
-**Pets follow the focus too.** `PetAttackAction`'s node is commented out globally, so a pet keeps
-whatever it first latched onto — two sat on Steelbreaker through the whole Molgeim phase, 124 of 958
-pet casts on the wrong member, and Supercharge hands that damage straight back. `CommandPetAttack`
-runs from the focus action every tick and **above its early return**, since already being on the
-right member is the common case. **Known-open:** `IronAssemblySetDpsPriorityTrigger::IsActive` bails
+**Pets follow the focus too** ([pet sender](../../engine/action-selection.md#multiplier-semantics)).
+Uncommanded, two pets sat on Steelbreaker through the whole Molgeim phase, 124 of 958 pet casts on the
+wrong member, and Supercharge hands that damage straight back. `CommandPetAttack` runs from the focus
+action every tick and **above its early return**, since already being on the right member is the
+common case. **Known-open:** `IronAssemblySetDpsPriorityTrigger::IsActive` bails
 for tanks, so a *tank's* ghoul is never redirected. Closing it means six wiring sites and no trace
 has shown it costing anything, so it is left open on purpose.
 
@@ -66,7 +66,7 @@ thin.
 
 **One encounter state per instance, in a `RaidInstanceState` — never `thread_local`**
 ([../README.md](../README.md#per-instance-state); the signature is in
-[../../engine/raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md)). Spread slots, the
+[coordinating a raid](../../engine/raid-mechanics-lessons.md#coordinating-a-raid-with-no-shared-state)). Spread slots, the
 shift heading and the alive mask must agree across the raid, and per-thread copies handed one pull
 six independent states: two bots held slot 0 at once, 11 bots took 71 slot assignments in 4.5s, 10
 of 16 slots were ever used, and each ranged bot chased 4–6 destinations for 285–334 yd in a 50s
@@ -254,9 +254,9 @@ Lightning Tendrils and Meltdown have no world object, so they also write `haz` c
 spell radius and the clearance bots keep — equal for Meltdown, which nobody dodges. Rune of Death
 and Rune of Power do, and are swept instead — only a swept hazard is tested against a death.
 
-`IronAssemblyScan` caches the three members and the Rune of Death sweep per bot per tick: the
-`possible targets no los` value behind them is a 100 yd sweep and a vector copy on every read, and a
-ranged bot asks for a member about a hundred times a tick.
+`IronAssemblyScan` ([per-bot scan](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid))
+caches the three members and the Rune of Death sweep per bot per tick: a ranged bot asks for a member
+about a hundred times a tick, each `possible targets no los` read a 100 yd sweep plus a vector copy.
 
 Core-version assumption: the strategy relies on recent upstream fixes — `#26470` (Rune of Death
 restricted to players), `#26449` (Brundir surviving Tendrils), `#26200` (Static Disruption preferring

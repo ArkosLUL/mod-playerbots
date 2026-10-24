@@ -68,9 +68,9 @@ candidate is checked with `IsDownOrFeigning` after `GetUldUnitByEntry`. Savage P
 fires only at 8–25 yd from the sentry's own victim, so a tank holding it in melee is the whole
 counter — the taunt needs no positioning code behind it.
 
-**Every Auriaya trigger used to resolve the boss through `"find target"`**, which walks only the
-bot's own threat list: any bot fighting a sentry or the Defender silently lost its dodges and its
-anti-fear. All of them go through `GetAuriaya`, by entry, now. `GetAuriaya` and `GetAuriayaRoomPools`
+**Every Auriaya trigger resolves her through `GetAuriaya`, by entry**: through
+[`"find target"`](../../engine/pitfalls.md#things-the-bot-cannot-see) any bot fighting a sentry or the
+Defender silently lost its dodges and its anti-fear. `GetAuriaya` and `GetAuriayaRoomPools`
 share one scan per bot per tick (`RefreshedAuriayaRoomScan`, `thread_local`, keyed on `botAI` and
 `getMSTime()`), since each node otherwise ran both grid sweeps twice on the tick it fired, trigger then
 action. It is a cache, not a latch, so `thread_local` is safe. It holds guids, pools included, so a
@@ -89,8 +89,8 @@ anchor, and to the master only without one, since the master may be out in the c
 Yogg-Saron phase-1 NPC, is a static spawn 114 yd away, and `Map::OnCreateMap` loads every grid of an
 instance map, so she is alive and findable from the moment it is created. `UlduarBurstWindowMultiplier`'s
 Yogg branch matched her on **presence** within 200 yd and returned "not phase 3", zeroing lust, potions
-and trinkets for the whole fight. It reads `IsInCombat()` now and searches SightDistance. When burst
-goes missing on a boss with no burst logic of its own, suspect a neighbouring encounter first.
+and trinkets for the whole fight. It keys on Yogg-Saron's boss state (`BossStateGateLive`) instead. When
+burst goes missing on a boss with no burst logic of its own, suspect a neighbouring encounter first.
 
 Even open, the framework dwell keys on the **bot's own** target, and Sentry and Defender both carry
 `type_flags 108` (boss mob), so they pass `IsBossCreature` and never redirect to the main tank. Expect

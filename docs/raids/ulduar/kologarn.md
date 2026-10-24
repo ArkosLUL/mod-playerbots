@@ -21,12 +21,11 @@ follows the taunt swap on its own.
 **Nothing engages before the boss does.** Every Kologarn trigger resolves him through
 `GetUldUnitByEntry`, a pure `Playerbots.SightDistance` proximity scan — 100 yd, no line of
 sight — that answers "is he nearby", never "is he engaged", and `AttackAction::Attack()` has no
-out-of-combat guard, so the raid used to pull itself from up to 100 yd out. `KologarnEncounterActive`
+out-of-combat guard, so ungated the raid pulled itself from up to 100 yd out. `KologarnEncounterActive`
 is `kologarn && kologarn->IsInCombat()`, the VoA `EmalonEncounterActive` shape, and gates the triggers
-and the targeting multiplier alike. Resolving by entry rather than through `find target` — which walks
-only the bot's own threatened-by-me list and therefore cannot fire before engagement — is deliberate:
-a tank parked on the body never has the arms on its threat list, so the per-role focus split
-collapses without it.
+and the targeting multiplier alike. Resolving by entry rather than through
+[`find target`](../../engine/pitfalls.md#things-the-bot-cannot-see) is deliberate: a tank parked on the
+body never has the arms on its threat list, so the per-role focus split collapses without it.
 
 ## Facts that contradict the retail guides
 

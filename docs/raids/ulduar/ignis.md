@@ -38,10 +38,11 @@ He works **three arc slots 60° apart**, because a patch lives 30 s (`TEMPSUMMON
 `spell_ignis_scorch_aura`) against Scorch's 20 s repeat, so two are alive for 10 s of every 20. He
 advances one on the rising edge of Scorch (62546). Ignis is
 rooted and rotation-locked for those 3 s and the patch spawns from the orientation frozen at cast
-start, 20 yd along it (`boss_ignis.cpp:405`). With Ignis on the anchor the step is free and leaves
-him 17.3 yd from the patch — 26.1 on the 120° wrap from the third slot to the first — outside its
-13 yd burn, where standing still would have left him 10.5 yd from its centre. The slot is latched per instance id. A reactive
-"step out once it lands" was rejected as the documented oscillation pair.
+start, 20 yd along it (`spell_ignis_scorch_aura`'s last tick). With Ignis on the anchor the step is
+free and leaves him 17.3 yd from the patch — 26.1 on the 120° wrap from the third slot to the first —
+outside its 13 yd burn, where standing still would have left him 10.5 yd from its centre. The slot is
+latched per instance id. A reactive "step out once it lands" was rejected: it is the
+[dodge-and-hold oscillation](../../engine/raid-mechanics-lessons.md#movement-that-oscillates).
 
 **Nothing pre-positions**: the tank walks the boss to the anchor in combat, from wherever the pull
 happened. Ignis runs at 10 yd/s against a player's 7, so he stays glued to a tank at full speed: a
@@ -69,7 +70,7 @@ reaches ~3 yd past the bare 18.
 **A construct that is not on the tank gets chased, not waited on.** Molten wipes threat and the
 construct fixates on whoever is nearest, so the tank taunts and walks it down when the taunt cannot
 land — every taunt in the game is 30 yd. Returning on the failed taunt instead froze a tank 15.7 s
-from a construct 81 yd away on 2026-09-27, a pull that converted **zero** constructs.
+from a construct 81 yd away, in a pull that converted **zero** constructs.
 
 **Between constructs a construct tank is an ordinary tank again.** `IgnisPlacedTank` counts one only
 while it holds a construct, so the movement block lifts and `ignis attack boss trigger` puts it on
@@ -117,11 +118,9 @@ The `ignis tank movement` rule takes the generic movers off the main tank and a 
 holding a construct, and nobody else. Non-tanks keep everything, which is what spreads the ranged
 half without an anchor of their own.
 
-Scorch's 25-man id is **`SPELL_IGNIS_SCORCH_25` = 63474** (`UldEncounter_Ignis.h:42`), the
-difficulty remap of 62546 — a whole-module sweep for missing remaps of this shape found it here and a
-matching hole on Mimiron's Plasma Blast.
-
-Ignis has no hard mode. Heroic is free: the paired spell ids above are both checked.
+Ignis has no hard mode. Heroic is free: the paired spell ids above are both checked, Scorch's 25-man
+remap of 62546 included (**`SPELL_IGNIS_SCORCH_25` = 63474**,
+[difficulty ids](../../engine/pitfalls.md#detection-that-never-fires)).
 
 Every node is gated on `IsIgnisEngaged` — alive **and** in combat, since the boss is visible from
 the whole 200 yd room. Lookups go through `GetIgnis`, not `"find target"`: a bot parked on a
@@ -131,9 +130,10 @@ than SightDistance too, so the cached `"nearest npcs"` list goes blind at the po
 at x 543..631 / y 217..338 and Ignis starts at (586.5, 378.8), so a tank at a pool is ~120 yd from him,
 hence `ULDUAR_IGNIS_ROOM_SEARCH_RADIUS` 200.
 
-**`GetIgnisIf` never searches the grid.** It reads `instance->GetCreature(ULD_BOSS_IGNIS)`, puts it
-through the same acceptance test `FindNearestCreature` would have — entry, alive, `IsWithinDist`,
-and `InSamePhase` from both sides, which is not symmetric — and returns it or null. The
-preconditions are what make that sound: exactly one DB spawn of 33118, nothing summons it, and
-`instance_ulduar` registers it through the base `OnCreatureCreate` / `OnCreatureRemove`. Where a
-trigger depends on threat, keep `"find target"` — the instance handle knows nothing about threat.
+**`GetIgnisIf` never searches the grid.** It reads `instance->GetCreature(ULD_BOSS_IGNIS)` through the
+acceptance test `FindNearestCreature` would apply
+([instance lookups](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)), with
+`InSamePhase` from both sides since it is not symmetric. That is sound because 33118 has exactly one DB
+spawn, nothing summons it, and `instance_ulduar` registers it through the base `OnCreatureCreate` /
+`OnCreatureRemove`. Where a trigger depends on threat, keep `"find target"`: the instance handle knows
+nothing about threat.

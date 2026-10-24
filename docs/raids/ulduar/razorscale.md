@@ -1,12 +1,13 @@
 # Razorscale
+
 ## Harpoons are GameObject state, not auras
 
 `SPELL_CHAIN_1..4` (49679, 49682, 49683, 49684) **no longer exist anywhere in the core**. Harpoons
 fire `SPELL_HARPOON_SHOT_1..4` cast by `NPC_RAZORSCALE_CONTROLLER` out of
 `go_razorscale_harpoon::OnGossipHello`; the GameObjects are summoned per ground phase by the
 controller (two in 10-man, four in 25-man) and a spent one carries `GO_FLAG_NOT_SELECTABLE` until it
-is rebuilt. Readiness is that flag — `IsHarpoonFired()` and `HarpoonData::chainSpellId` are gone,
-they had been testing an aura that could never be present.
+is rebuilt. Readiness is that flag (`IsHarpoonReady`); `IsHarpoonFired()` and
+`HarpoonData::chainSpellId` were removed for testing an aura that could never be present.
 
 The tank debuff also moved: **Fuse Armor is 64821**, not 64771 (64774 is still the 5-stack `Fused
 Armor`). 64771 is gone from the core, so the tank-swap check never fired. Threshold stays at 2 stacks.
@@ -36,14 +37,13 @@ collected once round the bot (`CollectDevouringFlames`), not a sweep per candida
 Both release the moment the tank drags her clear, so nobody stands out the patch's full life. A permanent veto here
 is the freeze bug.
 
-**The per-tick lookups go through one scan.** `RazorscaleScan` is a per-bot snapshot stamped with
-`getMSTime()`, held as a `ManualSetValue<RazorscaleScan*>` in `RaidUlduarValueContext`
-(`src/Ai/Raid/Uld/UldValueContext.h`) and registered in `src/Bot/Engine/BuildSharedValueContexts.cpp`
-— a value because that is the one per-bot store triggers, actions and multipliers can all reach. A
-bot never ticks twice in one millisecond and world state holds still for the length of a tick, so one
-sweep serves every reader. Before it, the harpoons alone cost **12 GameObject sweeps of 200 yd
-(37 cells) per bot per tick**, and `"nearest hostile npcs"` is a 100 yd sweep plus a LOS ray per NPC on
-every read.
+**The per-tick lookups go through one scan.** `RazorscaleScan` is the
+[per-bot `getMSTime()`-stamped scan](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid),
+held as a `ManualSetValue<RazorscaleScan*>` in `RaidUlduarValueContext` (`UldValueContext.h`) and
+registered in `AiObjectContext::BuildSharedValueContexts`: a value because that is the one per-bot store
+triggers, actions and multipliers can all reach. Without it the harpoons alone cost **12 GameObject
+sweeps of 200 yd (37 cells) per bot per tick**, and `"nearest hostile npcs"` is a 100 yd sweep plus a LOS
+ray per NPC on every read.
 
 **The patch is safe to gate on the encounter.** 63236 is a trigger-missile (effect 32) into 63308,
 which summons NPC 34188 for **22 s**; she is the summoner, so every patch sits in `BossAI::summons`
@@ -55,7 +55,7 @@ on the floor, otherwise Sentinel → Watcher → Guardian. `DpsTargetValue` pref
 skull left on an add is the whole raid left on an add. Moon stays on the boss while she is airborne —
 it is excluded from every DPS target scan — and is cleared on landing.
 
-The generic pet-attack node is commented out engine-wide (`CombatStrategy.cpp`), so pets keep whatever
-they last hit unless a script re-orders them: `razorscale pet control action` puts them on the adds
+No generic strategy commands pets ([action-selection](../../engine/action-selection.md#multiplier-semantics)),
+so they keep whatever they last hit: `razorscale pet control action` puts them on the adds
 while she flies and on her when she lands, and always reports failure so the tick falls through.
 

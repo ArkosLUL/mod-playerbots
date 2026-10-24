@@ -5,9 +5,9 @@ where they disagree, and they do disagree.**
 
 | Spell | Id | Effect |
 |---|---|---|
-| Aura of Despair | 62692 → 64848 | On aggro. No mana regen, −20% melee attack speed, **and immunity to every mana return there is**: 62692 carries `EFFECT_IMMUNITY` to `SPELL_EFFECT_ENERGIZE`, 64848 adds `STATE_IMMUNITY` to aura types `OBS_MOD_POWER` and `PERIODIC_ENERGIZE`. Life Tap, mana gems, Evocation, Innervate, Judgement of Wisdom and Replenishment all return **nothing** |
-| Shadow Crash (cast) | 62660 | Every 10s from 13s. **Instant, missile `Speed` 10, `TARGET_DEST_TARGET_ENEMY`** — the destination freezes at cast time, so it is dodgeable. Random player **beyond 12.5 yd** (`3` plus both combat reaches), falling back to *any* target |
-| Shadow Crash (impact) | 62659 | 11,310 **plus `KNOCK_BACK_DEST`**, **10 yd**. The 2.7-3.6s of missile flight is the whole reaction window |
+| Aura of Despair | 62692 → 64848 | On aggro. No mana regen, −20% melee attack speed, **and immunity to every mana return there is**: 62692 carries `EFFECT_IMMUNITY` to `SPELL_EFFECT_ENERGIZE`, 64848 adds `STATE_IMMUNITY` to aura types `OBS_MOD_POWER` and `PERIODIC_ENERGIZE`. Life Tap, mana gems, Evocation, Innervate, Judgement of Wisdom, Replenishment and Divine Plea all return **nothing** |
+| Shadow Crash (cast) | 62660 | Every 10s from 13s. **Instant, missile `Speed` 10, `TARGET_DEST_TARGET_ENEMY`** — the destination freezes at cast time, so it is dodgeable. Random player **beyond 12.5 yd** (`3` plus both combat reaches, measured 3D), falling back to *any* target |
+| Shadow Crash (impact) | 62659 | 11,310 **plus `KNOCK_BACK_DEST`**, **10 yd**. The 2.7-3.6s of missile flight (4.8s at ~48 yd, the longest traced) is the whole reaction window |
 | Shadow Crash (field) | 63277 + 65269 | **8 yd, 20s.** +100% magic and +75% shadow damage done, +100% cast speed, −70% mana cost, **−75% healing done**. `SPELL_EFFECT_PERSISTENT_AREA_AURA`, so it exists as a `DynamicObject`. 63277 pulls 65269 in via `spell_linked_spell` type 2, so a bot inside carries **both** — **63277's own DBC row is only the damage and healing halves**, and reading it alone says the field does nothing for mana |
 | Searing Flames | 62661 | On the tank, **radius 100 yd** = the whole raid. 13,875-16,125 fire, −75% armour 10s, every **8s (25m) / 15s (10m)**. **2000 ms cast, `PreventionType = 1`** — genuinely interruptible |
 | Surge of Darkness | 62662 | 63s from pull, repeats 63s. Self-cast: +100% physical damage, −55% move speed, 10s — the slow is **on Vezax**, not the raid. Delays the Searing Flames group 10s |
@@ -19,31 +19,29 @@ where they disagree, and they do disagree.**
 | Berserk | 26662 | 10 min, and instantly if the boss leaves `x ∈ [1720,1940]`, `y ∈ [20,210]` |
 
 Two guide instructions that are wrong on this core: keep interrupting Searing Flames during the
-Animus — **you do not**, `boss_general_vezax.cpp:228` skips the cast entirely while the Barrier is up;
+Animus — **you do not**, `EVENT_SPELL_SEARING_FLAMES` skips the cast entirely while the Barrier is up;
 and kill a vapor if mana is fine — **any single vapor kill calls `DoAction(1)` and disables hard mode
 permanently** for that pull.
 
-**Nothing deliberately touches the vapors**, and killing one is the only way a puddle ever exists, so
-a raid that ignores them never makes one. But deleting the kill-vapor and puddle nodes was not enough:
-a vapor is an ordinary hostile that pulses damage on anyone near it, so the **generic** pickers took
-one anyway — an off-tank held a vapor as its target for **60-78% of every traced pull** — and the
-Animus never spawned after eight summons, which only happens once `DoAction(1)` has fired. Hence the
-target guard below.
+**Nothing deliberately touches the vapors**, and killing one is the only way a puddle ever exists. But a
+vapor is an ordinary hostile that pulses damage on anyone near it, so the **generic** pickers took one
+anyway: an off-tank held a vapor as its target for **60-78% of every traced pull**, and the Animus never
+spawned after eight summons, which only happens once `DoAction(1)` has fired. Hence the target guard
+below.
 
-**The field's −70% cost is the entire mana economy**, because Aura of Despair blocks every other
-source (table above). Measured: **289 Life Taps across three warlocks returned 0 mana and 0 Glyph of
-Life Tap buffs**, against +15 to +22 points and one buff per tap for the same bots on Hodir.
-Replenishment is cast 99 times a pull for **zero** aura applications. Healers still run dry; that is a
-known cost of the one-camp stand, not an oversight.
+**The field's −70% cost is the entire mana economy**, because Aura of Despair blocks every other source:
+**289 Life Taps across three warlocks returned 0 mana and 0 Glyph of Life Tap buffs**, against +15 to +22
+points and one buff per tap for the same bots on Hodir, and Replenishment was cast 99 times a pull for
+**zero** aura applications. Healers still run dry; that is a known cost of the one-camp stand. The mana
+cheat was removed (as on Mimiron) and is not coming back.
 
-**The mana cheat is gone and is not coming back**, following the Mimiron rebuild.
-
-**Sara closes the burst gate here too**, at 167 yd — same static spawn, same fix; see Auriaya.
+Sara, the idle Yogg-Saron NPC 167 yd away, closed the burst gate here as on Auriaya
+([auriaya.md](auriaya.md)).
 
 **The raid enters from the north** — trash at y 109-137, and the only door (194750, y 31.5) is
 `DOOR_TYPE_PASSAGE`, opening when he **dies**, on the way to Yogg. `ULDUAR_VEZAX_ARC_ORIENTATION` is
-**+1.5708**, roughly his own spawn facing (o 1.658, north); the −1.5291 it replaced faced that exit
-and put every ranged and healer slot behind him.
+**+1.5708**, roughly his own spawn facing (o 1.658, north); −1.5291 faces that exit and puts every
+ranged and healer slot behind him.
 
 ## The camp sits in a 13.5 yd band, and both edges are invisible from the code
 
@@ -53,96 +51,89 @@ The two groups' inner files sit **5 yd** apart, near enough that one set of heal
 far enough that they are not one clump. Boss-relative because every distance the camp is built on is
 his, and a ranged pull can settle him yards off his spawn.
 
-The radii are pinned between two limits, neither of which is a round number and neither of which is
-readable without the arithmetic behind it. **Both come from Vezax's `creature_model_info.CombatReach`
-of 8.0**, which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in:
+**Both limits come from Vezax's `creature_model_info.CombatReach` of 8.0**, which `WorldObject::GetDistance`
+and `Unit::IsWithinCombatRange` both fold in ([reach](../../engine/raid-mechanics-lessons.md#range-and-reach)):
 
 - **Floor 24.5 yd.** Mark of the Faceless picks at random from everyone the boss measures beyond
-  15 yd, falling back to everyone inside when fewer than 9 qualify (4 in 10-man). `GetDistance`
-  subtracts both combat reaches, so his "15 yd" is `15 + 8.0 + 1.5` of real distance. The rows before
-  this rework started at 22, which put the front rank in the melee ball's pool: the outside count ran
-  8-12 against a threshold of 9 and three of nine marks in one pull landed on the tank.
-- **Ceiling 38 yd.** `ReachTargetAction` tests `IsWithinCombatRange(target, spellDistance)`, which
-  adds the same two reaches to `Playerbots.SpellDistance` (28.5). Past it "reach spell" fires at
-  `ACTION_HIGH` against this formation at `ACTION_RAID` and the two deadlock.
+  15 yd, falling back to everyone inside when fewer than 9 qualify (4 in 10-man); his "15 yd" is
+  `15 + 8.0 + 1.5` of real distance. Rows from 22 put the front rank in the melee ball's pool: the
+  outside count ran 8-12 against a threshold of 9, and three of nine marks in one pull landed on the
+  tank.
+- **Ceiling 38 yd.** `ReachTargetAction` tests `IsWithinCombatRange(target, spellDistance)`, adding the
+  same two reaches to `Playerbots.SpellDistance` (28.5). Past it "reach spell" fires at `ACTION_HIGH`
+  against this formation at `ACTION_RAID` and the two deadlock.
 
-Slot tolerance is 1.2, and 3.0 for the tank, whose slot is the anchor
-`(1852.78, 81.3856, 342.461)` itself — a tank standing on the spawn point is what keeps Vezax there
-for every other radius here. 20 slots against a 25-man's 18 healers and ranged, so it does not
-overflow; a bot that finds none holds no position, which is what `vezax.block = unslotted` exists to
-catch.
+Slot tolerance is 1.2, and 3.0 for the tank, whose slot is the anchor `(1852.78, 81.3856, 342.461)`
+itself: a tank on the spawn point is what keeps Vezax there for every other radius here. 20 slots
+against a 25-man's 18 healers and ranged, so it does not overflow; a bot that finds none holds no
+position, which `vezax.block = unslotted` catches. Slots persist per instance and fill in an
+alternating order (`L row 0`, `R row 0`, …) so neither group fills first and healers spread across
+both; Ulduar's other bosses re-derive from a GUID rank every tick, which reshuffles the whole formation
+on a death.
 
 **Nothing here is out of Shadow Crash range, melee included.** `SelectTarget` skips only what is inside
-`3` plus both combat reaches — `3 + 8 + 1.5` = **12.5 yd** — and a melee bot at boss combat reach sits
-right on that line: one traced pull crashed a rogue at 16.1 yd and caught three more melee with it.
-Everyone but the main tank dodges (`VezaxDodgesShadowCrash`); moving him drags the boss.
+`3 + 8 + 1.5` = **12.5 yd**, and a melee bot at boss combat reach sits right on that line: one pull
+crashed a rogue at 16.1 yd and caught three more melee with it. Everyone but the main tank dodges
+(`VezaxDodgesShadowCrash`); moving him drags the boss.
 
-**Melee are not spread.** `set behind` sends a melee bot in his front half to one of two points
-±108° off his facing, so a 4 yd nudge apart fought it: melee bots moved in 26-40% of samples on
-Vezax against 0-1% for a human melee, and two thirds of their `set behind` moves followed a nudge.
-What remains is his 750 ms turn to each crash target.
+**Melee are not spread.** `set behind` sends a melee bot in his front half to one of two points ±108°
+off his facing, so a 4 yd nudge apart fought it: melee bots moved in 26-40% of samples against 0-1% for
+a human melee, two thirds of their `set behind` moves following a nudge. What remains is his 750 ms
+turn to each crash target.
 
 All 20 slots, the tank spot, both arc spots and the southern spots are navprobe-verified on the bot
 filter (`--nav 0x09`), `distance to poly` ≤ 0.39. The WMO floor is flat at Z 342.378 out to ~24 yd
-north, then settles up to a yard lower on rubble, which `UpdateAllowedPositionZ` absorbs; the camp
-spans that seam and none of it is off mesh. Raw terrain reads −27.707 in this room, so terrain height
-is meaningless here. Slots persist per instance and fill in an alternating order (`L row 0`,
-`R row 0`, …) so neither group fills first and healers spread across both; Ulduar's other bosses
-re-derive from a GUID rank every tick, which reshuffles the whole formation on a death.
+north, then settles up to a yard lower on rubble, which `UpdateAllowedPositionZ` absorbs; none of the
+camp is off mesh. Raw terrain reads −27.707 in this room, so terrain height is meaningless here.
 
 ## Mark of the Faceless is the fight
 
 Every tick the boss casts 63278 at the marked bot. `spell_mark_of_the_faceless_drainhealth` removes
 `GetExplTargetUnit()` from the target list, so **the marked bot is the one person its own leech
-skips** — nobody has to outrun their own mark, they have to leave everyone else. The radius reads 15
-in the DBC, but the area test is `IsWithinDist3d`, which adds the victim's own combat reach: **16.5 yd
-in practice**. Effect 2 is `SPELL_EFFECT_HEALTH_LEECH` with `EffectMultipleValue` 20, which
-`Spell.cpp:2864` feeds into `HealBySpell` on the caster. **The landed figure is ~10×, not 20** — 9.4,
-9.7 and 10.3 across three pulls, reconstructed from `snap.dealt` against the boss HP trajectory. The
-gap is unexplained; use the measurement.
+skips**: nobody has to outrun their own mark, they have to leave everyone else. The radius reads 15 in
+the DBC, but the area test is `IsWithinDist3d`, which adds the victim's own combat reach: **16.5 yd in
+practice**. Effect 2 is `SPELL_EFFECT_HEALTH_LEECH` with `EffectMultipleValue` 20, which
+`Spell::DoAllEffectOnTarget` feeds into `HealBySpell` on the caster. **The landed figure is ~10×, not
+20** (9.4, 9.7 and 10.3 across three pulls, from `snap.dealt` against the boss HP trajectory). The gap
+is unexplained; use the measurement.
 
-Measured, not inferred: across one pull's nine windows the boss **gained** health at **+0.225 %/s**
-against −0.267 %/s outside them, netting **+20.25 % of 27,611,102 HP**. One untreated tank mark put
-**+8.10 % back in 10 s**, about 25 s of the whole raid's output, and the boss stalled at 47 %. The
-spread is 17 leech ticks in a window where the marked bot got clear against **76** where it did not.
-
-Baselines, both 25-man. `..._1789302545.ndjson` before the camp moved out (wipe 6:03, 23 deaths,
-boss stalled at 47%): **1,462,825 leech over 345 ticks, 64% of it on the nine melee**, boss **+12.9M
-healed**.
-`..._1789322679.ndjson`, the first kill (4:14, 4 deaths): **694,885 over 173 ticks, 0% on melee**,
-boss +6.4M — 23% of its bar, and all four deaths fell inside one 10s window.
+Across one pull's nine windows the boss **gained** health at **+0.225 %/s** against −0.267 %/s outside
+them, netting **+20.25 % of 27,611,102 HP**; one untreated tank mark put **+8.10 % back in 10 s**, about
+25 s of the whole raid's output, and he stalled at 47 %. The spread is 17 leech ticks in a window where
+the marked bot got clear against **76** where it did not. Before the camp moved out a wipe took
+**1,462,825 leech over 345 ticks, 64% of it on the nine melee**, the boss healing **+12.9M**; the first
+kill took **694,885 over 173 ticks, 0% on melee**, +6.4M (23% of his bar), with all four deaths inside
+one 10s window.
 
 **RaidObs cannot see that healing**: `ObsSession::Tracks` requires `IsPlayer()`, so a heal landing on a
 creature is never logged. Read it off the boss HP trajectory in `snap.u`, never off `heal` rows.
 
 **Who gets marked is not a free choice.** Melee read ~0 on `GetDistance` and can never be in the far
-pool, so the rule structurally prefers the camp — the only thing that is far. Forcing it the other way
+pool, so the rule structurally prefers the camp, the only thing that is far. Forcing it the other way
 means pulling ~7 camp members inside 24.5 yd, making the pick a random draw over the near pool (~61%
-melee, not 100%) **and** putting those 7 inside a marked melee's leech: ~60 ticks a window against
-~30. The camp stands far enough that a melee mark cannot reach it; the ball breaks out of its own.
+melee, not 100%) **and** putting those 7 inside a marked melee's leech: ~60 ticks a window against ~30.
+The camp stands far enough that a melee mark cannot reach it; the ball breaks out of its own.
 
-**A marked camp member arcs 40 yd around the boss on its own group's side** — arc length at the camp
+**A marked camp member arcs 40 yd around the boss on its own group's side**: arc length at the camp
 radius, so 72.8° off the camp bearing at a constant 31.5 yd from him. Crossing to the southern spots
-is what the layout before that did, and it dragged the leech through the boss and the melee ball: one
-marked healer's path took it within 14 yd of Vezax and drained eight melee on the way. A marked melee
-has no camp side and still takes the nearest of three spots south at 26 yd, ≥46 yd from every camp
-slot.
+dragged the leech through the boss and the melee ball: one marked healer's path passed within 14 yd of
+Vezax and drained eight melee on the way. A marked melee has no camp side and takes the nearest of three
+spots south at 26 yd, ≥46 yd from every camp slot.
 
-**An arc, not a sideways step, and the strafe is why.** A 24 yd side-step looks like enough — the
-nearest same-side slot sits at tangential 5.5 — until the dodge moves that whole group 15 yd the same
-way. Every 10s crash lands inside every 10s mark window, so it happens every time: measured, the
-marked bot sat at tangential ±24 with its own neighbours at ±20.5, **3.5 yd apart** inside a 16.5 yd
-leech, and at 39.6 yd from the boss it was over the reach ceiling and fighting "reach spell" as well.
-An arc costs nothing in distance from him, so the band holds at both ends and 40 yd of arc clears the
-widest strafed slot by 20.
+**An arc, not a sideways step, because of the strafe.** A 24 yd side-step looks like enough (the nearest
+same-side slot sits at tangential 5.5) until the dodge moves that whole group 15 yd the same way, and
+every 10s crash lands inside every 10s mark window: the marked bot sat at tangential ±24 with its own
+neighbours at ±20.5, **3.5 yd apart** inside a 16.5 yd leech, and at 39.6 yd from the boss it was over
+the reach ceiling too. An arc costs nothing in distance from him, so the band holds at both ends and
+40 yd of arc clears the widest strafed slot by 20.
 
-**Both mark spots are measured from the boss, not the anchor.** The camp they are spaced against is
-boss-relative, and `IsDuplicateMove` suppresses any re-issue of a destination matching the last within
-0.01 yd for `maxWaitForMove` (5s) — anchor spots are bit-identical every tick, so one aborted move
-stranded a marked bot for the whole debuff: six issued moves against **33 `dup` and 11 `wait`**. A
-residual `dup` count is benign, the boss barely moving inside one window. The move also runs at
-`MOVEMENT_FORCED`, since `IsWaitingForLastMove` only yields to a strictly higher priority and at
-`MOVEMENT_COMBAT` a dodge move still in flight swallowed it.
+**Both mark spots are measured from the boss, not the anchor.** The camp is boss-relative, and
+`IsDuplicateMove` suppresses a re-issue within 0.01 yd of the last for `maxWaitForMove` (5s): anchor
+spots are bit-identical every tick, so one aborted move stranded a marked bot for the whole debuff (six
+issued moves against **33 `dup` and 11 `wait`**). A residual `dup` count is benign, the boss barely
+moving inside one window. The move runs at `MOVEMENT_FORCED`
+([movement lock](../../engine/pitfalls.md#movement-that-silently-no-ops)): at `MOVEMENT_COMBAT` a dodge
+move still in flight swallowed it.
 
 **Melee break out; the camp does not.** `VezaxMarkOfTheFacelessBreakTrigger` fires for anything not
 ranged and not the main tank, not itself marked, with a marked ally inside
@@ -153,260 +144,227 @@ back.
 
 ## Shadow Crash
 
-**Dodged as a group, one fixed vector each way.** L strafes 15 yd one way and R the other, both
-holding their radius, so each group keeps its shape and the field lands on the vacated footprint for
-them to walk back into. The distance is set by the inner-file bot of the group that was hit, which has
-to cross the impact: 15 yd of strafe minus the group's own 3 yd width leaves **12 against a 10 yd
-blast**, so widening the files widens the strafe. Flight time is no longer tight — the front rank's
-27 yd is 2.7s against a 1.9s walk — because the camp moved out, not because the strafe changed.
-`FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no slot. Position and soak
-both decline while an impact covers their destination, mirroring Algalon — without that the bot
-clears, walks straight back with the missile still inbound, and never casts.
+**Dodged as a group, one fixed vector each way.** L strafes 15 yd one way and R the other, both holding
+their radius, so each group keeps its shape and the field lands on the vacated footprint for them to
+walk back into. The distance is set by the inner-file bot of the group that was hit, which has to cross
+the impact: 15 yd of strafe minus the group's own 3 yd width leaves **12 against a 10 yd blast**, so
+widening the files widens the strafe. Flight time is not tight: the front rank's 27 yd is 2.7s against
+a 1.9s walk. `FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no slot.
+Position and soak both decline while an impact covers their destination, as on Algalon; without that the
+bot clears, walks straight back with the missile still inbound, and never casts.
 
-**Key the dodge off the cast, never the field.** The event picks a random target **beyond 12.5 yd**
-and falls back to any target. 62660 is instant with `Speed` 10 and `TARGET_DEST_TARGET_ENEMY`: the
-destination freezes at cast time and the missile takes 2.7-3.6s to arrive (4.8s at the longest traced,
-~48 yd out), and that flight is the entire reaction window; crashes come every 10s, so one stored
-impact is enough. The boss is **never** in `UNIT_STATE_CASTING` for this one, so a trigger must
-not gate on that. The impact carries `KNOCK_BACK_DEST`, so standing still does not hold a formation
-together either. An earlier node keyed off the *field* (63277) and so moved only once the damage had
-already landed.
+**Key the dodge off the cast, never the field.** The boss is **never** in `UNIT_STATE_CASTING` for this
+one, so a trigger must not gate on that; crashes come every 10s, so one stored impact is enough. The
+impact's `KNOCK_BACK_DEST` means standing still does not hold a formation together either. A node keyed
+off the *field* (63277) moved only once the damage had landed.
 
-**Store the impact at the cast; his current spell loses it.** The missile sits in
-`CURRENT_GENERIC_SPELL` only until his next generic cast replaces it, and `InterruptSpell` spares a
-delayed spell, so it still lands. Searing Flames, Mark and Summon Vapors all do it: on 2026-09-24
-**7 of 17 crashes had one in flight and hit 30 bots, the other 10 none**. Searing Flames 0.1s after
-the crash left most of the camp never dodging; a later one let the slot and soak guards, blind too,
-walk dodgers back under it. `VezaxHazardListenerScript` stores the impact for distance over `Speed`
-plus 500 ms, since landings trail that figure by 92-203 ms.
+**Store the impact at the cast; his current spell loses it.** The missile sits in `CURRENT_GENERIC_SPELL`
+only until his next generic cast replaces it, and `InterruptSpell` spares a delayed spell, so it still
+lands. Searing Flames, Mark and Summon Vapors all do it: **7 of 17 crashes in one pull had one in flight
+and hit 30 bots, the other 10 none**: Searing Flames 0.1s after a crash left most of the camp never
+dodging, and a later cast blinded the slot and soak guards too, which walked dodgers back under it.
+`VezaxHazardListenerScript` stores the impact for distance over
+`Speed` plus 500 ms, since landings trail that figure by 92-203 ms.
 
-**The dodge is what costs the field, not the camp's shape.** A field is alive for 93% of a pull and
-the median out-of-field cast is made 4-7 yd from one's edge, so availability is never the problem —
-but of the moves issued while a bot was standing in a field, **246 of 246 dodge moves left every
-field**, against 86 of 101 position moves that stayed in one. The slot is where the crash landed, so
-position brings bots back and the dodge throws them out. It stays blind to fields anyway: the per-bot
-search that would fix it is the one that scattered the camp before, and the group vector is what keeps
-the formation intact.
+**The dodge is what costs the field, not the camp's shape.** A field is alive for 93% of a pull and the
+median out-of-field cast is made 4-7 yd from one's edge, so availability is never the problem; but of
+moves issued while a bot stood in a field, **246 of 246 dodge moves left every field**, against 86 of
+101 position moves that stayed in one. The slot is where the crash landed, so position brings bots back
+and the dodge throws them out. The dodge stays blind to fields anyway: the per-bot search that would fix
+it is the one that scattered the camp before, and the group vector keeps the formation intact.
 
-**So the fix is the walk back.** Soak travel is **20 yd** — a clear field sits within 15 for 33% of
+**So the fix is the walk back.** Soak travel is **20 yd**: a clear field sits within 15 for 33% of
 out-of-field time, within 20 for 49% and within 25 for 57% (`--field`). Past 25 it outgrows the local
 hazard sweep, and a wider cap lets one group cross to the other's field. The move runs at
 `MOVEMENT_FORCED`: at `MOVEMENT_COMBAT` a quarter of soak moves were swallowed by the dodge's own
 destination, still latched in `IsWaitingForLastMove` long after the dodge stopped wanting it.
 
-**The ladder does not keep that walk off the dodge.** Forced does not outrank forced, so a soak walk
-in flight held **15 dodge moves** in one pull, two of those bots hit, and a mark move for 1.7s in
-the next. The dodge and the mark therefore drop any walk not heading within 3 yd of their own spot
-before moving, keeping their own so `IsDuplicateMove` still stops the re-issue. The mark does so
-only while no crash is landing on it, or it would take over the dodge's walk on the ticks the dodge
-declines as a duplicate. The soak still refuses any field under a pending missile.
+**Forced does not outrank forced**, so a soak walk in flight held **15 dodge moves** in one pull (two of
+those bots hit) and a mark move for 1.7s in the next. The dodge and the mark therefore drop any walk not
+heading within 3 yd of their own spot before moving, keeping their own so `IsDuplicateMove` still stops
+the re-issue. The mark does so only while no crash is landing on it, or it would take over the dodge's
+walk on the ticks the dodge declines as a duplicate. The soak still refuses any field under a pending
+missile.
 
 **Everyone with a mana bar soaks, healers included**, on the same test that hands out camp slots. The
-−75% healing done is real — a field is 0.25x per cast and 0.83x per point of mana — but nothing else
-on this boss restores a point, and every healer is below 5% mana before three minutes without it.
-Hunters are in too: the −70% is `MOD_POWER_COST_SCHOOL_PCT` with mask 127, so it covers physical and
-only the damage half is magic-only.
+−75% healing done is real (a field is 0.25x per cast and 0.83x per point of mana), but nothing else on
+this boss restores a point, and every healer is below 5% mana before three minutes without it. Hunters
+are in too: the −70% is `MOD_POWER_COST_SCHOOL_PCT` with mask 127, so it covers physical; only the damage
+half is magic-only.
 
 **Ranged dps do not cast at all outside a field**, by multiplier: a cast at full price buys mana that
 cannot be made back. Damage, DoTs and the wand are held; buffs, defensives, heals and every movement
-action are not, or a held bot would stop dodging. Healers are the one exception — a held heal lands
-inside the leech spikes that kill people. Gated on 63277, not the linked 65269, so the link's own
-shortfall cannot silence a bot for something it has no way to fix.
+action are not, or a held bot would stop dodging. Healers are exempt: a held heal lands inside the leech
+spikes that kill people. Gated on 63277, not the linked 65269, so the link's own shortfall cannot silence
+a bot for something it cannot fix.
 
-**Nobody treats a field as a hazard**: the camp is where crashes land and one 8 yd circle covers most
-of it, so avoiding them would walk every healer out of the camp on a 10s cadence. With the vapors gone
+**Nobody treats a field as a hazard**: the camp is where crashes land and one 8 yd circle covers most of
+it, so avoiding them would walk every healer out of the camp on a 10s cadence. With the vapor nodes gone
 the avoid list is empty and the hazard sweep returns fields only.
 
 ## Node ladder and guards
 
-**No ties**, because a tie falls to vector insertion order. The dodge leads at `EMERGENCY + 9`, the
-only hazard here with a deadline. The interrupt is `+8`: losing a kick costs the raid 13,875-16,125
-fire at once. Then the two halves of Mark of the Faceless — **break at `+7`, carry at `+6`** — in that
-order, because the bot holding the mark is the one person its leech skips and so is never the one
-taking damage. Surge of darkness closes the EMERGENCY band at `+5`. The RAID band is the reward half
-and numbers separately: animus redirect `+7`, animus `+6`, hold-target `+5`, animus bring-back `+4`,
-animus melee spot `+3`, field soak `+2`, resistance `+1`, position last. Hold-target sits under the
-animus on purpose — in hard mode both fire on a bot that is off the animus, and the animus is the
-correct answer. Bring-back sits above the soak, or the Animus's victim leads it into the camp, and
-above the melee spot, since it already ends inside his crash limit.
+**No ties**, because a tie falls to vector insertion order. The dodge leads at `EMERGENCY + 9`, the only
+hazard here with a deadline. The interrupt is `+8`: losing a kick costs the raid 13,875-16,125 fire at
+once. Then the two halves of Mark of the Faceless, **break at `+7`, carry at `+6`**, in that order,
+because the bot holding the mark is never the one taking damage. Surge of Darkness closes the EMERGENCY
+band at `+5`. The RAID band is the reward half and numbers separately: animus redirect `+7`, animus `+6`,
+hold-target `+5`, animus bring-back `+4`, animus melee spot `+3`, field soak `+2`, resistance `+1`,
+position last. Hold-target sits under the animus on purpose: in hard mode both fire on a bot off the
+animus, and the animus is the correct answer. Bring-back sits above the soak, or the Animus's victim
+leads it into the camp, and above the melee spot, since it already ends inside his crash limit.
 
-**Returning `false` once parked is load-bearing.** Class interrupts sit at `ACTION_INTERRUPT` (40),
-below `ACTION_RAID` (60), so a positioning action that returns `true` while moving starves every
-interrupt that tick — and Searing Flames is the one cast in Ulduar that genuinely rewards
-interrupting. Duty is GUID-ranked among bots that are both *capable and ready*, recomputed per cast so
-cooldowns rotate it naturally.
+**Returning `false` once parked is load-bearing.** Class interrupts sit at `ACTION_INTERRUPT` (40), below
+`ACTION_RAID` (60), so a positioning action that returns `true` while moving starves every interrupt
+that tick, and Searing Flames is the one cast in Ulduar that genuinely rewards interrupting. Duty is
+GUID-ranked among bots that are both *capable and ready*, recomputed per cast so cooldowns rotate it.
 
-**Life Tap is suppressed outright**, by a Vezax-local multiplier rather than a change to the warlock
-rotation. Not above a mana threshold — there is no amount of missing mana a tap here could fix, its
-mana half being 31818, a bare `SPELL_EFFECT_ENERGIZE`. The glyph refresh goes with it: 63320 procs on
-`PROC_FLAG_DONE_SPELL_NONE_DMG_CLASS_POS`, which is that same energize. Left alone the generic
-rotation taps on cooldown: one pull had both locks casting it **every 1.25s, flat on the GCD, for the
-whole fight**, 110 taps and ~220,000 health each, both dead by 3:10 having dealt a tenth of what the
-comparable caster did. Even gated at 60% mana they still spent 61-65% of their casts on it.
+**Life Tap is suppressed outright**, by a Vezax-local multiplier rather than the warlock rotation, and not
+above a mana threshold: its mana half is 31818, a bare `SPELL_EFFECT_ENERGIZE`, so no amount of missing
+mana makes a tap worth it. The glyph refresh goes with it: 63320 procs on
+`PROC_FLAG_DONE_SPELL_NONE_DMG_CLASS_POS`, that same energize. Left alone both locks tapped **every
+1.25s, flat on the GCD, for the whole fight**, 110 taps and ~220,000 health each, both dead by 3:10 having
+dealt a tenth of a comparable caster; gated at 60% mana they still spent 61-65% of their casts on it.
 
-**The raid is kept off Saronite Vapors by two pieces**, because a suppressor alone leaves whatever a
-bot already holds. The target guard rule zeroes the `DpsAssist`, `TankAssist` and `DebuffOnAttacker`
-families (the debuff one matters, it is what lands DoTs on whatever a caster drifted onto), and the
-hold-target node attacks the boss for anyone not already on him or on the Animus.
+**The raid is kept off Saronite Vapors by two pieces**, because a suppressor alone leaves whatever a bot
+already holds. The target guard rule zeroes the `DpsAssist`, `TankAssist` and `DebuffOnAttacker`
+families (the last is what lands DoTs on whatever a caster drifted onto), and the hold-target node
+attacks the boss for anyone not already on him or on the Animus. **That node is also the raid's only
+target source** ([action-selection](../../engine/action-selection.md#multiplier-semantics)): while it
+waited for a vapor already held it never fired, and two pulls ended at 99% boss health.
 
-**That node is also the raid's only target source**, since the guard takes the generic ones away.
-While it waited for a vapor already held it never fired: on 2026-09-23 no bot ever had a target, so
-none called `Attack`, none reached the combat engine, and two pulls ended at 99% boss health with the
-raid healing itself. The tell is a `covdef` carrying no `c` engine.
+Each multiplier and rule writes a `veto` row naming the action it zeroed, so a trace says outright
+whether it fired. That caught the guard running raid-wide: `VezaxEncounterActive` asked only whether he
+was alive, `InstanceScript::GetCreature` answers from anywhere on the map, and all 116 `dps assist`
+ticks of a Razorscale pull were vetoed. The encounter gate closes them during other pulls and after the
+kill but is open between pulls, so `VezaxEncounterActive` requires him in combat, and everything else
+here keys on that too.
 
-Each writes a `veto` row naming the action it zeroed, so a trace says outright whether it fired —
-which is how 2026-09-17 caught the guard running raid-wide. `VezaxEncounterActive` asked only whether
-he was alive, `InstanceScript::GetCreature` answers from anywhere on the map, and all 116 `dps assist`
-ticks of a Razorscale pull were vetoed: the bots followed the master and dealt nothing. The encounter
-gate closes them during other pulls and after the kill, but it is open between pulls, so every one here
-still keys on `IsInCombat` on the boss.
-
-**Positioning is gated on the room, not just on presence.** Vezax is visible from outside his hall, and
-a presence gate had bots prepositioning through walls while their generic movers were already zeroed.
-`VezaxFormationActive` wants the bot within 45 yd of **him**, plus a 10 yd height band. Outside it
-the movement rule is inert, generic movement carries a bot in, and the gate opens on arrival, which
-holds only while the gate contains reach spell's 38 yd stop and the widest strafed slot (41.4), both
-measured from him. Widening it is what puts a bot back on a path through a wall; navprobe reads hall
-floor at 45 yd all round both spots he has settled on. Resistance stays presence-gated, the state
-reset fires once he is dead or out of combat, and everything else is combat-gated.
-
-**Measured from the anchor, the gate broke the camp and the dodge with it.** On 2026-09-24 he
-settled 12.5 yd north of it, which put rows 3-4 and every reach-spell stop outside. 6 of 14
-casters and healers never got inside, and the three holding slots left at 0:20, when the soak
-walked them into a field 45.8 yd out. From then on 13 bots stood on one point, and a crash on any
-of them hit up to 14.
+**Positioning is gated on the room, not just on presence.** Vezax is visible from outside his hall, and a
+presence gate had bots prepositioning through walls while their generic movers were already zeroed.
+`VezaxFormationActive` wants the bot within 45 yd of **him**, plus a 10 yd height band. Outside it the
+movement rule is inert, generic movement carries a bot in, and the gate opens on arrival, which holds only
+while the gate contains reach spell's 38 yd stop and the widest strafed slot (41.4), both measured from
+him. Widening it puts a bot back on a path through a wall; navprobe reads hall floor at 45 yd all round
+both spots he has settled on. Measured from the anchor instead, the gate broke the camp when he settled
+12.5 yd north of it: 6 of 14 casters and healers never got inside, and 13 bots ended on one point, where a
+crash hit up to 14. Resistance stays presence-gated, the state reset fires once he is dead or out of
+combat, and everything else is combat-gated.
 
 `GetVezax` reads the instance object map (`ULD_DATA_VEZAX`) rather than sweeping for the entry:
-`PossibleTargetsValue` recalculates a 100 yd `ignoreLos` search on **every** call, and the movement
-rule asks once per candidate that reaches its predicate. It has neither a liveness filter nor a range
-of its own, so a dead boss is rejected explicitly and presence alone gates nothing. Not `"find
-target"` either: that walks the bot's own threat list, so a bot switched to the Animus or a vapor lost
-the boss.
+`PossibleTargetsValue` recalculates a 100 yd `ignoreLos` search on **every** call, and the movement rule
+asks once per candidate that reaches its predicate. It has neither a liveness filter nor a range of its
+own, so a dead boss is rejected explicitly and presence alone gates nothing. Not `"find target"` either:
+that walks the bot's own threat list, so a bot switched to the Animus or a vapor lost the boss.
 
 ## The trace
 
-`vezax.slot` is the stored assignment; `vezax.block`
-(`L`/`R`/`tank`/`unslotted`), `vezax.dodge` (`strafe`/`search`/`none`), `vezax.mark`
-(`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`), `vezax.meleespot`
-(`spot`/`none`), `vezax.hold` (`off`/`on`/`tank`) and `vezax.interrupter`
-are derived, each probed inside the helper that derives it so two call sites cannot disagree.
-`vezax.formation` (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode` (`off`/`pending`/`lost`/
-`animus`) are the exception: the encounter's tick writes them, since the formation gate is a rule
-predicate that runs only when the cheaper checks pass, and the hard-mode flags come from spell
-hooks nothing else traces. `outside` before the raid walks in is expected; `noboss` means the instance
-lookup came back empty and every formation gate is shut, which nothing else in the trace says.
-`vezax.mark` is a per-bot change-only latch, so `--mark` takes its windows from the 63276 aura. A
-kicked Searing Flames leaves no damage row, so `--boss` counts casts that landed, never hits per cast:
-on 2026-09-23 7 of 8 were kicked and "19 hits across 8 casts" read as if all had landed.
+`vezax.slot` is the stored assignment; `vezax.block` (`L`/`R`/`tank`/`unslotted`), `vezax.dodge`
+(`strafe`/`search`/`none`), `vezax.mark` (`side`/`south`/`break`/`none`), `vezax.target`
+(`vapor`/`none`/`other`), `vezax.meleespot` (`spot`/`none`), `vezax.hold` (`off`/`on`/`tank`) and
+`vezax.interrupter` are derived, each probed inside the helper that derives it so two call sites cannot
+disagree. `vezax.formation` (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode`
+(`off`/`pending`/`lost`/`animus`) are the exception: the encounter's tick writes them, since the
+formation gate is a rule predicate that runs only when the cheaper checks pass, and the hard-mode flags
+come from spell hooks nothing else traces. `outside` before the raid walks in is expected; `noboss` means
+the instance lookup came back empty and every formation gate is shut, which nothing else in the trace
+says. `vezax.mark` is a per-bot change-only latch, so `--mark` takes its windows from the 63276 aura. A
+kicked Searing Flames leaves no damage row, so `--boss` counts casts that landed, never hits per cast.
 
-**The in-flight missile is a `haz` circle** from `VezaxHazardListenerScript`, since it has no world
-object until it lands and the ~3s a bot can act in would otherwise be invisible. Take the destination
-from `spell->m_targets`, never `GetUniqueTargetInfo()`: 62660's effects are both `TRIGGER_MISSILE` at
-`TARGET_DEST_TARGET_ENEMY`, so the spell carries a destination and **no unit target at all** and the
-unit list is empty. Reading it logged zero missile hazards across 21 crashes in one pull, and took the
-mid-cast interrupt down with it unnoticed.
+**The in-flight missile is a `haz` circle** from `VezaxHazardListenerScript`, since it has no world object
+until it lands. Take the destination from `spell->m_targets`, never `GetUniqueTargetInfo()`: 62660's
+effects are both `TRIGGER_MISSILE` at `TARGET_DEST_TARGET_ENEMY`, so the spell carries a destination and
+**no unit target at all**. Reading the unit list logged zero missile hazards across 21 crashes in one
+pull, and took the mid-cast interrupt down with it unnoticed.
 
-**The reset fires on a wipe, not only a kill.** Waiting for him to be gone carried slots across
-wipes — he is alive at full after one — and left `vezax.slot` silent on every following pull. Slots
-are only handed out in combat, so nothing live is cleared.
+**The reset fires on a wipe, not only a kill.** Waiting for him to be gone carried slots across wipes (he
+is alive at full after one) and left `vezax.slot` silent on every following pull. Slots are only handed
+out in combat, so nothing live is cleared.
 
 **`tools/botobs/bosses/general_vezax.py` reads all of it** and reproduces this doc's per-pull figures, the
-heal-back aside (it shows only as boss health rate): `--boss`, `--mark` (leech, escape branch, nearest
-ally, boss health per window), `--crash` (target, dodgers per block, his casts in flight), `--field`
-(both halves' uptime, casts inside 65269, soak reach and moves, cast-hold vetoes), `--mana` (Life Tap
-returns), `--vapors`, `--animus` (victim changes and share by role, redirects from 45s before the
-spawn, switch delay by role, lust, deaths after it), `--band`. Its banner names declared probes
-the pull never wrote. No probe was
-added for it: fields are `snap.hz`, crashes `haz`, the mark an aura, the leech `dmg`, vapor targeting
-`snap.u[7]`, what hit a vapor the `cast` rows aimed at its guid; the vapors themselves are never
-sampled. The camp is read from `vezax.slot` as well as `vezax.block`, which is
-only written inside the gate, and `--band`'s `on` column is the share of the pull the gate was open.
+heal-back aside (it shows only as boss health rate); `--help` lists its views. Its banner names declared
+probes the pull never wrote. No probe was added for it: fields are `snap.hz`, crashes `haz`, the mark an
+aura, the leech `dmg`, vapor targeting `snap.u[7]`, what hit a vapor the `cast` rows aimed at its guid;
+the vapors themselves are never sampled. The camp is read from `vezax.slot` as well as `vezax.block`,
+which is only written inside the gate, and `--band`'s `on` column is the share of the pull the gate was
+open.
 
-**Of the generic views, `--vetoes` covers the four multipliers and `--idle` counts the cast hold as
-idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp
-is boss-relative: radius from the anchor is off by a median 7.8-15.6 yd, wider than the band, so use
-the reader's `--band`. `--during` pools every bot's rows and cannot scope a `vezax.` key. Whether the
-last cycle helped: `batch.py --boss general-vezax --split-at 867fd6529`, once pulls on it exist.
+**Of the generic views, `--vetoes` covers the four multipliers and `--idle` counts the cast hold as idle
+by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
+boss-relative: radius from the anchor is off by a median 7.8-15.6 yd, wider than the band, so use the
+reader's `--band`. `--during` pools every bot's rows and cannot scope a `vezax.` key.
 
 ## Hard mode — the reference implementation
 
-Everything here is armed only by `Playerbots.UlduarVezaxHardMode`. With it off the Animus switch
-never fires, and a raid that keeps the vapors alive anyway is held on an invulnerable Vezax.
+Everything here is armed only by `Playerbots.UlduarVezaxHardMode`. With it off the Animus switch never
+fires, and a raid that keeps the vapors alive anyway is held on an invulnerable Vezax.
 
 Hard mode = leave Saronite Vapors alive until the **Saronite Animus (33524)** spawns; Vezax gains an
-invulnerable Saronite Barrier until it dies. Everyone switches target and kills it (no RTI mark —
-each bot `Attack()`s directly). Nobody moves out of its Profound Darkness (63420): radius index 28 is
-**50,000 yd**, so the stacking shadow-damage debuff is room-wide and the only answer is killing the
-Animus faster.
+invulnerable Saronite Barrier until it dies. Everyone switches target and kills it (no RTI mark — each
+bot `Attack()`s directly). Nobody moves out of its Profound Darkness (63420): it is room-wide, so the only
+answer is killing the Animus faster.
 
-**Only threat holds the Animus**, and it spawns on the main tank's anchor. From outside its melee
-range a new victim needs 130% of the current one's threat, 110% inside
-(`ThreatManager.cpp:657-663`). Two pulls on 2026-09-24:
-
-- **Whole raid at once:** 14% of its life on a tank, the first at +58.6s.
-- **Tanks first:** a tank at +1.0s and 27.9% share, but a moonkin 33 yd out took it at +14.5s and
-  kept it 51s. Nothing held her under the tank's threat, her Starfall at Vezax hit the Animus for
-  10s before her switch, and Eclipse and Heroism ran from +0.
-
-What holds it now:
+**Only threat holds the Animus**, and it spawns on the main tank's anchor. From outside its melee range a
+new victim needs 130% of the current one's threat, 110% inside (`ThreatManager::ReselectVictim`). The
+whole raid switching at once left it 14% of its life on a tank, the first at +58.6s; tanks first put a
+tank on it at +1.0s for a 27.9% share, until a moonkin 33 yd out took it at +14.5s and kept it 51s (her
+Starfall at Vezax hit the Animus for 10s before her switch, with Eclipse and Heroism from +0). What holds
+it:
 
 - **Tanks, hunters and rogues switch at once; the rest wait** until a tank has been its victim 2s
-  (`TankHasHeldBoss`), capped at 6s after the summon so a dead tank never parks the raid on the
-  Barrier. The redirecting classes can't wait on Vezax: their hits there would spend the redirect.
+  (`TankHasHeldBoss`), capped at 6s after the summon so a dead tank never parks the raid on the Barrier.
+  The redirecting classes can't wait on Vezax: their hits there would spend the redirect.
 - **Redirects are saved, then aimed.** `vezax save redirects for the animus` blocks Misdirection and
-  Tricks from the fifth summon, 38s+ before the spawn against a 30s cooldown, and
-  `vezax animus redirect` casts both on the main tank in its first 6s, once the caster is on the
-  Animus, because the window opens on the next hit: a Tricks cast on Vezax lost 2.7 of its 6s
-  there. The generic ones follow the caster's current target: that day Tricks went to a dps 0.6s
-  before the spawn, and that dps had it 1s in.
-- **Dps hold at 90% of the main tank's threat** (`vezax animus threat multiplier`): damage from
-  non-tank, non-healer bots on the Animus, read off its threat list. It leaves room for a cast in
-  flight and lets him retake it at 110%.
-- **Its victim brings it back** (`vezax animus bring back`): the main tank stays on the anchor,
-  since chasing drags Vezax off it, so whoever the Animus is hitting walks to him, and the
-  position node stands down for that bot. In the second pull the position node walked him back 5
-  times from the chase.
-- **Melee stay inside his crash limit** (`vezax animus melee spot`), the 12.5 yd skip above, measured
-  3D (`boss_general_vezax.cpp:209-212`). On 2026-10-01 no crash in 34 before the spawn went to
-  melee or a tank, 6 of 16 after. The Animus (reach 8) takes
-  his spot by the tank, he steps 8-9 yd round it, and `set behind` walked melee to the Animus's far
-  side, 13-20 yd from him. At 24 Profound Darkness stacks a crash did 26-40k, at ~40 57-60k: one
-  pull lost 7 melee to two crashes; in the other a crash on the off-tank, 7.6 yd from the main tank,
-  threw her 36 yd, both bosses followed, and she died. Melee bots now take a lane on the Animus-Vezax
-  line within that limit minus 2, by guid rank, and the movement rule blocks `set behind` for
-  melee while the Barrier is up.
+  Tricks from the fifth summon, 38s+ before the spawn against a 30s cooldown, and `vezax animus redirect`
+  casts both on the main tank in its first 6s, once the caster is on the Animus, because the window
+  opens on the next hit: a Tricks cast on Vezax lost 2.7 of its 6s there. The generic ones follow the
+  caster's current target: Tricks went to a dps 0.6s before the spawn, and that dps had it 1s in.
+- **Dps hold at 90% of the main tank's threat** (`vezax animus threat multiplier`): damage from non-tank,
+  non-healer bots on the Animus, read off its threat list. It leaves room for a cast in flight and lets him
+  retake it at 110%.
+- **Its victim brings it back** (`vezax animus bring back`): the main tank stays on the anchor, since
+  chasing drags Vezax off it, so whoever the Animus is hitting walks to him, and the position node stands
+  down for that bot; it had walked him back 5 times from the chase.
+- **Melee stay inside his crash limit** (`vezax animus melee spot`), the 12.5 yd skip, measured 3D
+  (`EVENT_SPELL_VEZAX_SHADOW_CRASH`'s `SelectTarget`): no crash in 34 before the spawn went to melee or a
+  tank, 6 of 16 after. The Animus (reach 8) takes his spot by the tank, he steps 8-9 yd round it, and `set
+  behind` walked melee to the Animus's far side, 13-20 yd from him. At 24 Profound Darkness stacks a crash
+  did 26-40k, at ~40 57-60k: one pull lost 7 melee to two crashes; in another a crash on the off-tank,
+  7.6 yd from the main tank, threw her 36 yd, both bosses followed, and she died. Melee bots take a lane
+  on the Animus-Vezax line within that limit minus 2, by guid rank, and the movement rule blocks `set
+  behind` for melee while the Barrier is up.
 
-**Lust and Starfall wait for the Animus** (`vezax hard mode hold`), until its summon or the first
-vapor death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), caught by
+**Lust and Starfall wait for the Animus** (`vezax hard mode hold`), until its summon or the first vapor
+death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), caught by
 `VezaxVaporListenerScript` because the script keeps its own flag private.
 
-- **Lust.** On 2026-09-24 Heroism at 0:03 went on getting into position, 0.48 %/s during it against
-  0.49 after, and he was at 11.1% at the sixth summon with the Animus 8s off. At the Animus it races
-  the switch: this hold lifts on the summon cast, and the burst gate wants a tank on the caster's
-  own target for 3s. Still on Vezax it went at +0; already on an untanked Animus it waited 62s.
-- **Starfall.** Its stars pick two random enemies in line of sight within 30 yd, which no target
-  guard sees, and killed a vapor that day. Held for the whole window, not only with one in range:
-  a star hit a vapor 0.13s after it spawned.
+- **Lust.** Heroism at 0:03 went on getting into position, 0.48 %/s during it against 0.49 after, and he
+  was at 11.1% at the sixth summon with the Animus 8s off. At the Animus it races the switch: this hold
+  lifts on the summon cast, and the burst gate wants a tank on the caster's own target for 3s. Still on
+  Vezax it went at +0; already on an untanked Animus it waited 62s.
+- **Starfall.** Its stars pick two random enemies in line of sight within 30 yd, which no target guard
+  sees, and killed a vapor. Held for the whole window, not only with one in range: a star hit a vapor
+  0.13s after it spawned.
 
-**Damage stops at the stop line** (`vezax damage hold`), since a strong raid kills him before the
-sixth summon. While hard mode is pending, non-tanks stop at 15% and tanks at 2% (threat doesn't
-decay, so they keep him), until the summon, the Barrier or a vapor death:
+**Damage stops at the stop line** (`vezax damage hold`), since a strong raid kills him before the sixth
+summon. While hard mode is pending, non-tanks stop at 15% and tanks at 2% (threat doesn't decay, so they
+keep him), until the summon, the Barrier or a vapor death:
 
-- the Block rule zeroes melee, pet attack, the pickers, and the damaging summons by name (the
-  multiplier sees them as buffs);
+- the Block rule zeroes melee, pet attack, the pickers, and the damaging summons by name (the multiplier
+  sees them as buffs);
 - `VezaxDamageHoldMultiplier` zeroes spells on him and every area spell;
-- the node stops what already runs: `AttackStop` (the current target stays, so the hold-target
-  node doesn't swing again), harmful casts on him interrupted, pets set passive. Their stances sit
-  in a per-instance store apart from the encounter state, so any engine gives them back after the
-  Animus, a wipe or a resummon.
+- the node stops what already runs: `AttackStop` (the current target stays, so the hold-target node
+  doesn't swing again), harmful casts on him interrupted, pets set passive. Their stances sit in a
+  per-instance store apart from the encounter state, so any engine gives them back after the Animus, a
+  wipe or a resummon.
 
-Personal cooldowns still fire. `--vapors` prints `vezax.hold` with his health at each change and at
-the Animus spawn.
+Personal cooldowns still fire. `--vapors` prints `vezax.hold` with his health at each change and at the
+Animus spawn.
 
-Before the stop line the vapor guard is only the target guard and hold-target node: no AoE
-suppression and no pet control. **A stray cleave or an off-passive pet can still kill one**, and that
-silently ends hard mode; `--vapors` reads `vezax.target = vapor`, every cast that landed on a vapor,
-and when `vezax.hardmode` went `lost`.
+Before the stop line the vapor guard is only the target guard and hold-target node: no AoE suppression
+and no pet control. **A stray cleave or an off-passive pet can still kill one**, and that silently ends
+hard mode; `--vapors` reads `vezax.target = vapor`, every cast that landed on a vapor, and when
+`vezax.hardmode` went `lost`.
 
 ## Known gaps
 
@@ -415,15 +373,15 @@ and when `vezax.hardmode` went `lost`.
 shortfall falls on the one mana source that works. Cause not yet found.
 
 **A fire mage has no mana plan here.** Same field uptime as the arcane one and 2.8× the cost per cast,
-so it hits 0% mana at 1:06 and wands for the rest — and it still casts Mana Shield, which spends the
-one resource that cannot be replaced. Class-side, not Vezax-side.
+so it hits 0% mana at 1:06 and wands for the rest, and it still casts Mana Shield, which spends the one
+resource that cannot be replaced. Class-side, not Vezax-side.
 
-**A mana-using main tank runs dry.** Aura of Despair blocks Divine Plea like every other return: a
-protection paladin hit 0% at 1:12 on 2026-09-24, lost threat, and a warlock pulled Vezax into the
-camp at 1:26. The bear in the next pull held him 83.5% of the time. As off-tank it adds nothing to
-the Animus either: 0.6% mana from 2:30 and a first hit at +19s. Nothing here treats it.
+**A mana-using main tank runs dry.** Aura of Despair blocks Divine Plea too: a protection paladin hit 0%
+at 1:12, lost threat, and a warlock pulled Vezax into the camp at 1:26, where a bear held him 83.5% of the
+next pull. As off-tank it adds nothing to the Animus either: 0.6% mana from 2:30 and a first hit at
++19s. Nothing here treats it.
 
 **Backstab and Shred go unused on the Animus**, since the melee spot blocks `set behind`.
 
-**A human main tank steps out alone.** A crash aimed at a human melee past the limit still lands
-on whoever stands with him; bots dodge it, the main tank does not.
+**A human main tank steps out alone.** A crash aimed at a human melee past the limit still lands on
+whoever stands with him; bots dodge it, the main tank does not.
