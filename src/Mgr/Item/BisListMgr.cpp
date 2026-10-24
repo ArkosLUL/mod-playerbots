@@ -65,7 +65,7 @@ void BisListMgr::LoadRanked()
     _ranked.clear();
 
     QueryResult result = PlayerbotsDatabase.Query(
-        "SELECT item_id, expansion, class, tab, phase, bis_rank FROM playerbots_bis_ranked");
+        "SELECT item_id, expansion, class, tab, phase, bis_rank, slot_name FROM playerbots_bis_ranked");
     if (!result)
     {
         LOG_INFO("server.loading", "playerbots_bis_ranked table missing or empty");
@@ -84,6 +84,11 @@ void BisListMgr::LoadRanked()
         entry.tab = fields[3].Get<uint8>();
         entry.phase = fields[4].Get<uint8>();
         entry.rank = fields[5].Get<uint8>();
+        // "Weapon" is the main hand or a 2H
+        std::string const slotName = fields[6].Get<std::string>();
+        entry.hand = slotName == "Weapon"     ? BisRankOrder::Hand::Main
+                     : slotName == "Off hand" ? BisRankOrder::Hand::Off
+                                              : BisRankOrder::Hand::Any;
 
         _ranked[itemId].push_back(entry);
         ++count;
@@ -208,7 +213,8 @@ BisProgress BisListMgr::ProgressForBot(Player* bot)
     return kTierToProgress[tier];
 }
 
-uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, BisProgress max, uint8* outPhase) const
+uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, BisProgress max, uint8* outPhase,
+                                BisRankOrder::Hand hand) const
 {
     if (outPhase)
         *outPhase = 0;
@@ -231,6 +237,9 @@ uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, BisProgress
             continue;
 
         if (entry.cls != cls || entry.tab != tab || entry.phase > max.phase)
+            continue;
+
+        if (hand != BisRankOrder::Hand::Any && entry.hand != hand)
             continue;
 
         // Latest phase that still lists the item at its best rank: an item re-listed every tier is
@@ -295,32 +304,19 @@ BisSource BisListMgr::ResolveSource(Player* bot, BisProgress max, std::shared_pt
     return src;
 }
 
-uint8 BisListMgr::GetBisRankFor(uint32 itemId, BisSource const& src, uint8* outPhase) const
+uint8 BisListMgr::GetBisRankFor(uint32 itemId, BisSource const& src, uint8* outPhase, BisRankOrder::Hand hand) const
 {
     switch (src.kind)
     {
         case BisSource::Kind::Lists:
-            return GetBisRankFor(itemId, src.cls, src.tab, src.progress, outPhase);
+            return GetBisRankFor(itemId, src.cls, src.tab, src.progress, outPhase, hand);
         case BisSource::Kind::Dataset:
-            return src.subject->RankFor(itemId, src.progress.phase, outPhase);
+            return src.subject->RankFor(itemId, src.progress.phase, outPhase, hand);
         default:
             if (outPhase)
                 *outPhase = 0;
             return 0;
     }
-}
-
-uint8 BisListMgr::GetBisRank(Player* bot, ItemTemplate const* proto, BisProgress max) const
-{
-    if (!bot || !proto)
-        return 0;
-
-    // Cheap reject before the talent walk in ResolveSpecKey: most items are on nobody's list.
-    std::shared_ptr<BisDatasetSnapshot const> dataset = sBisDatasetMgr.Get();
-    if (!_ranked.count(proto->ItemId) && (!dataset || !dataset->items.count(proto->ItemId)))
-        return 0;
-
-    return GetBisRankFor(proto->ItemId, ResolveSource(bot, max, std::move(dataset)));
 }
 
 std::map<uint8, uint32> BisListMgr::GetBisFor(uint16 autoGearScoreLimit, uint8 cls, uint8 tab, uint8 faction) const

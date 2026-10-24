@@ -21,13 +21,14 @@ public:
     EquipAction(PlayerbotAI* botAI, std::string const name = "equip") : InventoryAction(botAI, name) {}
 
     bool Execute(Event event) override;
-    void EquipItems(ItemIds ids);
+    // force: put each item on even when the bot wouldn't pick it (the equip command, outfits, quest
+    // gear); auto-equip passes false and only takes what EvaluateGear wants.
+    void EquipItems(ItemIds ids, bool force);
     ItemIds SelectInventoryItemsToEquip();
 
 private:
-    void EquipItem(FindItemVisitor* visitor);
-    uint8 GetSmallestBagSlot();
-    void EquipItem(Item* item);
+    void EquipItem(FindItemVisitor* visitor, bool force);
+    void EquipItem(Item* item, bool force);
 };
 
 class EquipUpgradesPacketAction : public EquipAction

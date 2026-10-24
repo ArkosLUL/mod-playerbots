@@ -77,7 +77,7 @@ public:
     void SetExcludeResilience(bool exclude) { exclude_resilience_ = exclude; }
     // Off by default on purpose. CalculateItem is the single scoring entry point, so leaving this on
     // would also steer bot generation (InitEquipment, autogear) and not just the loot/equip decision
-    // it was calibrated for. QueryItemUsageForEquip and EquipAction turn it on.
+    // it was calibrated for. EvaluateGear and calc turn it on.
     void SetBisBonus(bool apply) { enable_bis_bonus_ = apply; }
     // The two items one slot comparison is between, 0 and 0 for none: the BiS phase decay is then
     // measured between them. Has to be the same for both scores, or they aren't comparable.
@@ -89,6 +89,9 @@ public:
     // Which of two items the bot's sim BiS subject ranks higher for a slot: > 0 a, < 0 b. On 0 it
     // has no say and the scores decide: either item unlisted, a set piece, a weapon hand, or a tank.
     int8 CompareBisRank(ItemTemplate const* a, ItemTemplate const* b, int32 slot);
+    // The item's rank from the bot's BiS source, 0 when unlisted; resolves the source once per
+    // calculator.
+    uint8 BisRank(uint32 itemId, BisRankOrder::Hand hand = BisRankOrder::Hand::Any, uint8* outPhase = nullptr);
 
     // Where the weights come from, for calc: the sim row and item level, or why they're hand-written.
     std::string DescribeWeights();
@@ -112,7 +115,7 @@ public:
     void CalculateItemTypePenalty(ItemTemplate const* proto);
     float ApplyPreferredSpecWeapons(ItemTemplate const* proto, int32 slot);
     void ResolveBisSource();
-    float BisRankMultiplier(ItemTemplate const* proto);
+    float BisRankMultiplier(ItemTemplate const* proto, int32 slot);
     uint8 BisReferencePhase(uint8 entryPhase) const;
 
     bool NotBestArmorType(uint32 item_subclass_armor);
@@ -142,7 +145,7 @@ private:
     bool enable_cap_priority_ = false;
     bool enable_bis_bonus_ = false;
     // Resolved on first use and fixed for this calculator's lifetime, like progression_tier_: it costs a
-    // talent walk plus the dataset lock, and QueryItemUsageForEquip scores several items per evaluation.
+    // talent walk plus the dataset lock, and EvaluateGear scores several items per evaluation.
     // Also pins the dataset snapshot, so a reload can't free the subject under us.
     bool bis_source_resolved_ = false;
     BisSource bis_source_;

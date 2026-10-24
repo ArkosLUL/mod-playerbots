@@ -1024,6 +1024,6 @@ bool IccGunshipRocketPackSetupAction::EquipRocketPack()
 
     ItemIds ids;
     ids.insert(ITEM_GOBLIN_ROCKET_PACK);
-    equipAction->EquipItems(ids);
+    equipAction->EquipItems(ids, true);
     return true;
 }

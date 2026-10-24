@@ -771,8 +771,6 @@ bool PlayerbotAIConfig::Initialize()
     AllowBoENeedIfUpgrade = sConfigMgr->GetOption<bool>("Playerbots.Roll.AllowBoENeedIfUpgrade", true);
     AllowBoUNeedIfUpgrade = sConfigMgr->GetOption<bool>("Playerbots.Roll.AllowBoUNeedIfUpgrade", true);
     CrossArmorExtraMargin = sConfigMgr->GetOption<float>("Playerbots.Roll.CrossArmorExtraMargin", 1.20f);
-    CrossArmorGreedIsPass = sConfigMgr->GetOption<bool>("Playerbots.Roll.CrossArmorGreedIsPass", false);
-    StrictCrossArmorAtEndgame = sConfigMgr->GetOption<bool>("Playerbots.Roll.StrictCrossArmorAtEndgame", true);
     uint32 deMode = sConfigMgr->GetOption<uint32>("Playerbots.Roll.UseDEButton", 1u);
     if (deMode > 2u)
         deMode = 2u;
@@ -786,7 +784,6 @@ bool PlayerbotAIConfig::Initialize()
     RecipesIgnoreSkillRank = sConfigMgr->GetOption<bool>("Playerbots.Roll.Recipes.IgnoreSkillRank", false);
     RollUpgradesOnly = sConfigMgr->GetOption<bool>("Playerbots.Roll.UpgradesOnly", false);
     SmartNeedBySpec = sConfigMgr->GetOption<bool>("Playerbots.Roll.SmartNeedBySpec", true);
-    RollUseGroupUsageChecks = sConfigMgr->GetOption<bool>("Playerbots.Roll.UseGroupUsageChecks", false);
     BisGateBypass = sConfigMgr->GetOption<bool>("Playerbots.Bis.GateBypass", true);
     BisScoreBonus = sConfigMgr->GetOption<float>("Playerbots.Bis.ScoreBonus", 0.25f);
     BisPhaseDecay = sConfigMgr->GetOption<float>("Playerbots.Bis.PhaseDecay", 1.0f);

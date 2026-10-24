@@ -43,8 +43,8 @@ struct BisDatasetSubject
     uint8 variant = 0;
     // indexed by content phase 1..BIS_PHASE_MAX, [0] always empty
     std::array<std::optional<BisWire::Block>, BIS_PHASE_MAX + 1> blocks;
-    // item -> (phase, best rank over every sim slot listing it in that phase)
-    std::unordered_map<uint32, std::vector<std::pair<uint8, uint8>>> ranks;
+    // item -> its (phase, rank) listings over every sim slot and per weapon hand
+    std::unordered_map<uint32, BisRankOrder::ItemRanks> ranks;
 
     BisWire::Block const* BlockFor(uint8 phase) const
     {
@@ -55,7 +55,8 @@ struct BisDatasetSubject
     uint8 PhaseAtOrBelow(uint8 cap) const;
 
     // Best rank at or below cap and the latest phase holding it, like BisListMgr::GetBisRankFor.
-    uint8 RankFor(uint32 itemId, uint8 cap, uint8* outPhase = nullptr) const;
+    uint8 RankFor(uint32 itemId, uint8 cap, uint8* outPhase = nullptr,
+                  BisRankOrder::Hand hand = BisRankOrder::Hand::Any) const;
 
     // BisRankOrder::Compare on the two items' listings, 0 when either is unlisted.
     int8 RankOrder(uint32 itemA, uint32 itemB, uint8 cap) const;

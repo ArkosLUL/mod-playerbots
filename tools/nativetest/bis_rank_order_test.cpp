@@ -23,7 +23,11 @@
 
 namespace
 {
+using BisRankOrder::AddBlock;
+using BisRankOrder::Best;
 using BisRankOrder::Compare;
+using BisRankOrder::Hand;
+using BisRankOrder::ItemRanks;
 using BisRankOrder::Listings;
 
 // listings of a Beast Mastery hunter's roster subject, phases 2 and 3
@@ -82,6 +86,66 @@ void ListingOrderDoesNotMatter()
     CHECK(Compare(mantleReversed, WINDRUNNERS_SPAULDERS, 3) < 0);
     CHECK(Compare(BRASS_LINED_BOOTS, greavesReversed, 3) > 0);
 }
+
+BisWire::Slot SimSlot(uint8_t simSlot, std::vector<uint32_t> items)
+{
+    BisWire::Slot slot;
+    slot.simSlot = simSlot;
+    slot.items = std::move(items);
+    return slot;
+}
+
+// sim slots 14 and 15 are the main and off hand, 10 a finger
+void HandsKeepTheirOwnRanks()
+{
+    constexpr uint32_t MAIN_ONLY = 1;
+    constexpr uint32_t BOTH = 2;
+    constexpr uint32_t RING = 3;
+
+    BisWire::Block block;
+    block.slots = {SimSlot(10, {RING}), SimSlot(14, {MAIN_ONLY, BOTH}), SimSlot(15, {BOTH})};
+
+    std::unordered_map<uint32_t, ItemRanks> ranks;
+    AddBlock(ranks, block, 2);
+
+    ItemRanks const& mainOnly = ranks[MAIN_ONLY];
+    CHECK(Best(mainOnly.For(Hand::Main), 5) == 1);
+    CHECK(Best(mainOnly.For(Hand::Off), 5) == 0);
+    CHECK(Best(mainOnly.For(Hand::Any), 5) == 1);
+
+    ItemRanks const& both = ranks[BOTH];
+    CHECK(Best(both.For(Hand::Main), 5) == 2);
+    CHECK(Best(both.For(Hand::Off), 5) == 1);
+    CHECK(Best(both.For(Hand::Any), 5) == 1);
+
+    ItemRanks const& ring = ranks[RING];
+    CHECK(Best(ring.For(Hand::Any), 5) == 1);
+    CHECK(ring.main.empty() && ring.off.empty());
+}
+
+// one entry per phase with the best rank of that phase; Best takes the latest phase at that rank
+void PhasesMergeAndCap()
+{
+    constexpr uint32_t ITEM = 7;
+
+    BisWire::Block early;
+    early.slots = {SimSlot(14, {9, ITEM})};
+    BisWire::Block late;
+    late.slots = {SimSlot(14, {ITEM}), SimSlot(15, {9, 8, ITEM})};
+
+    std::unordered_map<uint32_t, ItemRanks> ranks;
+    AddBlock(ranks, early, 1);
+    AddBlock(ranks, late, 3);
+
+    ItemRanks const& item = ranks[ITEM];
+    CHECK(item.any.size() == 2);
+
+    uint8_t phase = 0;
+    CHECK(Best(item.any, 5, &phase) == 1 && phase == 3);
+    CHECK(Best(item.any, 2, &phase) == 2 && phase == 1);
+    CHECK(Best(item.off, 5, &phase) == 3 && phase == 3);
+    CHECK(Best(item.off, 2) == 0);
+}
 }  // namespace
 
 int main()
@@ -92,6 +156,8 @@ int main()
     TieInTheLatestPhaseIsNoVerdict();
     UnlistedIsNoVerdict();
     ListingOrderDoesNotMatter();
+    HandsKeepTheirOwnRanks();
+    PhasesMergeAndCap();
     std::puts("bis_rank_order_test: ok");
     return 0;
 }

@@ -109,13 +109,8 @@ bool BuyAction::Execute(Event event)
 
                     uint32 invType = proto->InventoryType;
 
-                    // Check the bot's currently equipped item for this slot
-                    uint8 dstSlot = botAI->FindEquipSlot(proto, NULL_SLOT, true);
-                    Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, dstSlot);
-                    int32 const scoringSlot = dstSlot == NULL_SLOT ? -1 : static_cast<int32>(dstSlot);
-
-                    // Calculate item score
-                    float newScore = calculator.CalculateItem(proto->ItemId, 0, scoringSlot);
+                    // the usage above already compared it with what's worn
+                    float newScore = calculator.CalculateItem(proto->ItemId);
 
                     // Skip if we already bought a better item for this slot
                     if (bestPurchasedItemScore.find(invType) != bestPurchasedItemScore.end() &&
@@ -123,18 +118,6 @@ bool BuyAction::Execute(Event event)
                     {
                         break;  // Skip lower-scoring items
                     }
-
-                    float oldScore = 0.0f;
-                    if (oldItem)
-                    {
-                        ItemTemplate const* oldItemProto = oldItem->GetTemplate();
-                        if (oldItemProto)
-                            oldScore = calculator.CalculateItem(oldItemProto->ItemId, 0, scoringSlot);
-                    }
-
-                    // Skip if the bot already has a better or equal item equipped
-                    if (oldScore > newScore)
-                        break;
 
                     uint32 price = proto->BuyPrice;
                     price = uint32(floor(price * bot->GetReputationPriceDiscount(pCreature)));

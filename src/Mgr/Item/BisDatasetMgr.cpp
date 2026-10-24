@@ -148,7 +148,7 @@ uint8 BisDatasetSubject::PhaseAtOrBelow(uint8 cap) const
     return 0;
 }
 
-uint8 BisDatasetSubject::RankFor(uint32 itemId, uint8 cap, uint8* outPhase) const
+uint8 BisDatasetSubject::RankFor(uint32 itemId, uint8 cap, uint8* outPhase, BisRankOrder::Hand hand) const
 {
     if (outPhase)
         *outPhase = 0;
@@ -157,26 +157,7 @@ uint8 BisDatasetSubject::RankFor(uint32 itemId, uint8 cap, uint8* outPhase) cons
     if (it == ranks.end())
         return 0;
 
-    uint8 best = 0;
-    uint8 bestPhase = 0;
-    for (auto const& [phase, rank] : it->second)
-    {
-        if (phase > cap)
-            continue;
-
-        if (!best || rank < best)
-        {
-            best = rank;
-            bestPhase = phase;
-        }
-        else if (rank == best && phase > bestPhase)
-            bestPhase = phase;
-    }
-
-    if (outPhase)
-        *outPhase = bestPhase;
-
-    return best;
+    return BisRankOrder::Best(it->second.For(hand), cap, outPhase);
 }
 
 int8 BisDatasetSubject::RankOrder(uint32 itemA, uint32 itemB, uint8 cap) const
@@ -186,7 +167,7 @@ int8 BisDatasetSubject::RankOrder(uint32 itemA, uint32 itemB, uint8 cap) const
     if (a == ranks.end() || b == ranks.end())
         return 0;
 
-    return BisRankOrder::Compare(a->second, b->second, cap);
+    return BisRankOrder::Compare(a->second.any, b->second.any, cap);
 }
 
 std::shared_ptr<BisDatasetSnapshot const> BisDatasetMgr::Get() const
@@ -386,22 +367,9 @@ bool BisDatasetMgr::Load(std::unique_ptr<BisDatasetSnapshot>& out, Observed& see
             if (!block)
                 continue;
 
+            BisRankOrder::AddBlock(subject.ranks, *block, phase);
             for (BisWire::Slot const& slot : block->slots)
-            {
-                for (std::size_t i = 0; i < slot.items.size(); ++i)
-                {
-                    uint8 const rank = uint8(i + 1);
-                    std::vector<std::pair<uint8, uint8>>& entries = subject.ranks[slot.items[i]];
-                    auto const entry = std::find_if(entries.begin(), entries.end(),
-                                                    [phase](auto const& e) { return e.first == phase; });
-                    if (entry == entries.end())
-                        entries.emplace_back(phase, rank);
-                    else
-                        entry->second = std::min(entry->second, rank);
-
-                    snapshot->items.insert(slot.items[i]);
-                }
-            }
+                snapshot->items.insert(slot.items.begin(), slot.items.end());
         }
     }
 

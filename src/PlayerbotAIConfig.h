@@ -420,18 +420,15 @@ public:
     int32 LootRollLevel;           // 0 = pass, 1 = greed only, 2 = full smart loot
     bool AllowBoENeedIfUpgrade;    // Loot roll fine-tuning
     bool AllowBoUNeedIfUpgrade;    // Allow NEED on BoU if upgrade
-    float CrossArmorExtraMargin;
-    bool CrossArmorGreedIsPass;    // If true, off-armor (Lower tier) GREED becomes PASS
-    bool StrictCrossArmorAtEndgame;  // If true, cross-armor NEED is blocked outright at max level and in raids
+    float CrossArmorExtraMargin;   // Score ratio a lower armor class needs over the bot's own
     uint8 DeButtonMode;            // 0 = no DE, 1 = enchanters only, 2 = all bots can DE
     float TokenILevelMargin;       // ilvl threshold to consider the token an upgrade
     uint8 SanctificationTokenRollMode;  // 0 = always GREED, 1 = NEED if under quota
-    bool SmartNeedBySpec;          // Intelligent NEED (based on stats/spec)
-    bool RollUseGroupUsageChecks;  // Enable group-wide upgrade checks for loot decisions
+    bool SmartNeedBySpec;          // Spec checks on gear, for rolls and equipping
     bool NeedOnProfessionRecipes;  // NEED profession recipes/patterns/books the bot can learn
     bool RecipesIgnoreSkillRank;   // Ignore skill rank requirement when rolling on recipes
     bool RollUpgradesOnly;         // Bots GREED (not NEED) only on gear upgrades, PASS on everything else
-    bool BisGateBypass;            // A BiS-listed item skips the stat-based spec/role gates
+    bool BisGateBypass;            // A BiS-listed item skips the spec and role checks and the cross-armor margin
     float BisScoreBonus;           // Rank-1 score multiplier bonus from the BiS list; 0 disables
     float BisPhaseDecay;           // Bonus lost per content phase the listing is behind the bot; 0 disables
     bool BisDatasetEnable;         // Prefer the sim BiS dataset (bistooltip_* tables) over the lists per bot

@@ -266,7 +266,7 @@ float StatsWeightCalculator::CalculateItem(uint32 itemId, int32 randomPropertyId
         weight_ *= ApplyPreferredSpecWeapons(proto, slot);
 
     if (enable_bis_bonus_)
-        weight_ *= BisRankMultiplier(proto);
+        weight_ *= BisRankMultiplier(proto, slot);
 
     return weight_;
 }
@@ -302,7 +302,13 @@ int8 StatsWeightCalculator::CompareBisRank(ItemTemplate const* a, ItemTemplate c
     return bis_source_.subject->RankOrder(a->ItemId, b->ItemId, bis_source_.progress.phase);
 }
 
-float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
+uint8 StatsWeightCalculator::BisRank(uint32 itemId, BisRankOrder::Hand hand, uint8* outPhase)
+{
+    ResolveBisSource();
+    return sBisListMgr->GetBisRankFor(itemId, bis_source_, outPhase, hand);
+}
+
+float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto, int32 slot)
 {
     if (sPlayerbotAIConfig.BisScoreBonus <= 0.0f)
         return 1.0f;
@@ -312,9 +318,14 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
     if (bis_source_.kind == BisSource::Kind::None)
         return 1.0f;
 
+    // a weapon ranked only as a main hand gets nothing scored for the off hand
+    BisRankOrder::Hand const hand = slot == EQUIPMENT_SLOT_MAINHAND  ? BisRankOrder::Hand::Main
+                                    : slot == EQUIPMENT_SLOT_OFFHAND ? BisRankOrder::Hand::Off
+                                                                     : BisRankOrder::Hand::Any;
+
     // Only this bot's own expansion is consulted.
     uint8 entryPhase = 0;
-    uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_source_, &entryPhase);
+    uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_source_, &entryPhase, hand);
 
     // Ranks 4-6 are filler alternates, and against EquipUpgradeThreshold (1.07) a ~2.5% nudge is
     // invisible anyway. They still get the spec-gate pass, just no score change.

@@ -8,6 +8,8 @@
 #include "AiFactory.h"
 #include "BisListMgr.h"
 #include "ChatHelper.h"
+#include "DBCStores.h"
+#include "GearPlacement.h"
 #include "Group.h"
 #include "GuildTaskMgr.h"
 #include "Item.h"
@@ -30,7 +32,7 @@
 #include <array>
 #include <cctype>
 #include <initializer_list>
-#include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -278,23 +280,46 @@ std::string ItemUsageValue::BuildItemUsageParam(uint32 itemId, int32 randomPrope
 
 namespace
 {
-static bool EnableGroupUsageChecks()
+// What one gear evaluation knows about the bot, each part worked out on first use: the traits walk
+// the talents and the stat mask builds a whole calculator.
+class FitContext
 {
-    return sPlayerbotAIConfig.RollUseGroupUsageChecks;
-}
+public:
+    FitContext(Player* bot, StatsWeightCalculator& calculator) : _bot(bot), _calculator(calculator) {}
 
-// Appearing on this spec's BiS list is direct evidence the item is itemized for the spec, which the
-// stat heuristics below can only guess at. Capped at the bot's own progression phase, same as the
-// score nudge - the two must not disagree about what this bot's BiS is.
-static bool IsBisForBot(Player* bot, ItemTemplate const* proto)
-{
-    if (!sPlayerbotAIConfig.BisGateBypass)
-        return false;
+    Player* Bot() const { return _bot; }
 
-    return sBisListMgr->IsBisListed(bot, proto);
-}
+    SpecTraits const& Traits()
+    {
+        if (!_traits)
+            _traits = GetSpecTraits(_bot);
+        return *_traits;
+    }
 
-static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto);
+    uint32 SmartStatMask()
+    {
+        if (!_mask)
+            _mask = StatsWeightCalculator::BuildSmartStatMask(_bot);
+        return *_mask;
+    }
+
+    // Listed for this bot at rank 1-6, any slot, at or below its phase cap. A listing is direct
+    // evidence the item is itemized for the spec, which the stat checks below can only guess at.
+    bool Listed(uint32 itemId)
+    {
+        if (!sPlayerbotAIConfig.BisGateBypass)
+            return false;
+
+        uint8 const rank = _calculator.BisRank(itemId);
+        return rank && rank <= BisWire::MAX_RANKS;
+    }
+
+private:
+    Player* _bot;
+    StatsWeightCalculator& _calculator;
+    std::optional<SpecTraits> _traits;
+    std::optional<uint32> _mask;
+};
 
 static bool HasAnyStat(ItemTemplate const* proto, std::initializer_list<ItemModType> mods)
 {
@@ -417,113 +442,9 @@ static bool IsLowerTierArmorForBot(Player* bot, ItemTemplate const* proto)
     return proto->SubClass < preferred;
 }
 
-static bool IsStrictCrossArmorContext(Player* bot)
+// An off-spec ring, neck, trinket or cloak is only worth taking over grey or white gear, or nothing.
+static bool IsDesperateJewelryUpgradeForBot(Player* bot, ItemTemplate const* proto)
 {
-    if (!bot)
-        return true;
-
-    if (!sPlayerbotAIConfig.StrictCrossArmorAtEndgame)
-        return false;
-
-    // Keep cross-armor strictly disabled at level cap and in raids to avoid
-    // plate/mail healers rolling NEED on cloth/leather endgame loot.
-    if (bot->GetLevel() >= static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)))
-        return true;
-
-    if (Group* group = bot->GetGroup())
-        if (group->isRaidGroup())
-            return true;
-
-    return false;
-}
-
-namespace
-{
-    static bool GroupMemberWouldEquipArmor(Player* member, PlayerbotAI* memberAI, ItemTemplate const* proto, std::string const& param)
-    {
-        if (!member || !memberAI || !proto)
-            return false;
-
-        if (IsLowerTierArmorForBot(member, proto))
-            return false;
-
-        AiObjectContext* ctx = memberAI->GetAiObjectContext();
-        if (!ctx)
-            return false;
-
-        ItemUsage const otherUsage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
-        return otherUsage == ITEM_USAGE_EQUIP || otherUsage == ITEM_USAGE_REPLACE;
-    }
-} // namespace
-
-static bool GroupHasPrimaryArmorUserLikelyToNeed(Player* self, ItemTemplate const* proto, int32 randomProperty)
-{
-    if (!self || !proto)
-        return false;
-
-    if (proto->Class != ITEM_CLASS_ARMOR || !IsBodyArmorInvType(proto->InventoryType))
-        return false;
-
-    std::string const param = ItemUsageValue::BuildItemUsageParam(proto->ItemId, randomProperty);
-
-    return ForEachBotGroupMember(self, [&](Player* member, PlayerbotAI* memberAI) -> bool
-    {
-        return GroupMemberWouldEquipArmor(member, memberAI, proto, param);
-    });
-}
-
-static bool GroupHasDesperateUpgradeUser(Player* self, ItemTemplate const* proto, int32 randomProperty)
-{
-    if (!self || !proto)
-        return false;
-
-    if (proto->Class != ITEM_CLASS_ARMOR || !IsBodyArmorInvType(proto->InventoryType))
-        return false;
-
-    std::string const param = ItemUsageValue::BuildItemUsageParam(proto->ItemId, randomProperty);
-
-    return ForEachBotGroupMember(self,
-        [&](Player* member, PlayerbotAI* memberAI) -> bool
-        {
-            AiObjectContext* ctx = memberAI->GetAiObjectContext();
-            if (!ctx)
-                return false;
-
-            ItemUsage usage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
-            if (usage != ITEM_USAGE_EQUIP && usage != ITEM_USAGE_REPLACE)
-                return false;
-
-            ItemTemplate const* bestProto = nullptr;
-            for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
-            {
-                Item* oldItem = member->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
-                if (!oldItem)
-                    continue;
-
-                ItemTemplate const* oldProto = oldItem->GetTemplate();
-                if (!oldProto)
-                    continue;
-
-                if (oldProto->Class != ITEM_CLASS_ARMOR)
-                    continue;
-
-                if (oldProto->InventoryType != proto->InventoryType)
-                    continue;
-
-                if (!bestProto || oldProto->ItemLevel > bestProto->ItemLevel)
-                    bestProto = oldProto;
-            }
-
-            bool hasVeryBadItem = !bestProto || bestProto->Quality <= ITEM_QUALITY_NORMAL;
-            return hasVeryBadItem;
-        });
-}
-
-static bool IsDesperateJewelryUpgradeForBot(Player* bot, ItemTemplate const* proto, int32 randomProperty)
-{
-    if (!bot || !proto)
-        return false;
-
     uint8 jewelrySlots[2];
     uint8 slotsCount = 0;
 
@@ -551,76 +472,28 @@ static bool IsDesperateJewelryUpgradeForBot(Player* bot, ItemTemplate const* pro
             return false;
     }
 
-    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
-    if (!ai)
-        return false;
-
-    AiObjectContext* ctx = ai->GetAiObjectContext();
-    if (!ctx)
-        return false;
-
-    std::string const param = ItemUsageValue::BuildItemUsageParam(proto->ItemId, randomProperty);
-    ItemUsage const usage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
-    if (usage != ITEM_USAGE_EQUIP && usage != ITEM_USAGE_REPLACE)
-        return false;
-
     ItemTemplate const* bestProto = nullptr;
     for (uint8 i = 0; i < slotsCount; ++i)
     {
-        uint8 const slot = jewelrySlots[i];
-        Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, jewelrySlots[i]);
         if (!oldItem)
             continue;
 
         ItemTemplate const* oldProto = oldItem->GetTemplate();
-        if (!oldProto)
-            continue;
-
-        if (!bestProto || oldProto->ItemLevel > bestProto->ItemLevel)
+        if (oldProto && (!bestProto || oldProto->ItemLevel > bestProto->ItemLevel))
             bestProto = oldProto;
     }
 
-    if (!bestProto)
-        return true;
-
-    return bestProto->Quality <= ITEM_QUALITY_NORMAL;
+    return !bestProto || bestProto->Quality <= ITEM_QUALITY_NORMAL;
 }
 
-static bool GroupHasPrimarySpecUpgradeCandidate(Player* self, ItemTemplate const* proto, int32 randomProperty)
+static bool IsFallbackNeedReasonableForSpec(FitContext& ctx, ItemTemplate const* proto, bool listed)
 {
-    if (!self || !proto)
-        return false;
-
-    std::string const param = ItemUsageValue::BuildItemUsageParam(proto->ItemId, randomProperty);
-
-    return ForEachBotGroupMember(self,
-        [&](Player* member, PlayerbotAI* memberAI) -> bool
-        {
-            AiObjectContext* ctx = memberAI->GetAiObjectContext();
-            if (!ctx)
-                return false;
-
-            ItemUsage otherUsage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
-            if (otherUsage != ITEM_USAGE_EQUIP && otherUsage != ITEM_USAGE_REPLACE)
-                return false;
-
-            if (!IsPrimaryForSpec(member, proto))
-                return false;
-
-            return true;
-        });
-}
-
-static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* proto)
-{
-    if (!bot || !proto)
-        return false;
-
-    if (IsBisForBot(bot, proto))
+    if (listed)
         return true;
 
-    SpecTraits const traits = GetSpecTraits(bot);
-    uint32 const profile = StatsWeightCalculator::BuildSmartStatMask(bot);
+    SpecTraits const& traits = ctx.Traits();
+    uint32 const profile = ctx.SmartStatMask();
     if (profile == SMARTSTAT_NONE)
         return true;
 
@@ -980,18 +853,16 @@ ItemStatProfile BuildItemStatProfile(ItemTemplate const* proto)
 
 namespace
 {
-static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
+static bool IsPrimaryForSpec(FitContext& ctx, ItemTemplate const* proto, bool listed)
 {
-    if (!bot || !proto)
-        return false;
+    Player* bot = ctx.Bot();
 
-    // Being on the list says the item is itemized for the spec; it says nothing about whether the bot
-    // is allowed to take an armour class it is not the primary user of. That call belongs to
-    // AdjustUsageForCrossArmor, and it needs the BAD_EQUIP from here to make it.
-    if (IsBisForBot(bot, proto) && !IsLowerTierArmorForBot(bot, proto))
+    // A lower armor class is never primary, listed or not: it falls to the fallback check and pays
+    // the cross-armor margin unless listed.
+    if (listed && !IsLowerTierArmorForBot(bot, proto))
         return true;
 
-    const SpecTraits traits = GetSpecTraits(bot);
+    SpecTraits const& traits = ctx.Traits();
     ItemStatProfile const stats = BuildItemStatProfile(proto);
     bool const hasPhysical =
         stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP || stats.hasPhysicalRating;
@@ -1007,7 +878,7 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
         if (!IsRelicForClass(proto, traits.cls))
             return false;
 
-        return IsFallbackNeedReasonableForSpec(bot, proto);
+        return IsFallbackNeedReasonableForSpec(ctx, proto, listed);
     }
 
     if (proto->Class == ITEM_CLASS_WEAPON)
@@ -1052,7 +923,7 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
     {
         if (traits.isCaster != hasCaster)
             return false;
-        return IsFallbackNeedReasonableForSpec(bot, proto);
+        return IsFallbackNeedReasonableForSpec(ctx, proto, listed);
     }
 
     if (IsLowerTierArmorForBot(bot, proto))
@@ -1077,438 +948,558 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
 }
 
 // Rejects items whose itemization belongs to a role the bot doesn't fill, even when the score engine
-// values them off a shared stat. Covers both loot rolls and auto-equip via QueryItemUsageForEquip.
-static bool IsRoleItemizationMismatch(Player* bot, ItemTemplate const* proto)
+// values them off a shared stat.
+static bool IsRoleItemizationMismatch(SpecTraits const& traits, ItemTemplate const* proto)
 {
-    if (!bot || !proto)
-        return false;
-
     ItemStatProfile const stats = BuildItemStatProfile(proto);
 
     // Spell penetration only itemizes caster-DPS / PvP gear; a healer never wants it.
-    if (PlayerbotAI::IsHeal(bot) && stats.hasSpellPen)
+    if (traits.isHealer && stats.hasSpellPen)
         return true;
 
     // A pure physical role shouldn't take a weapon itemized for casters, even if it also carries a
     // physical stat the score engine credits (mixed weapons slip past IsPrimaryForSpec's !hasPhysical gate).
-    bool const isCaster = PlayerbotAI::IsCaster(bot);
-    bool const isHealer = PlayerbotAI::IsHeal(bot);
-    if (!isCaster && !isHealer && proto->Class == ITEM_CLASS_WEAPON)
-    {
-        if (stats.hasINT || stats.hasSP || stats.hasMP5)
-            return true;
-    }
+    if (!traits.isCaster && !traits.isHealer && proto->Class == ITEM_CLASS_WEAPON)
+        return stats.hasINT || stats.hasSP || stats.hasMP5;
 
     return false;
 }
 
-static ItemUsage AdjustUsageForOffspec(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage)
+static bool IsBroken(Item const* item)
 {
-    if (!bot || !proto)
-        return usage;
-
-    if (!sPlayerbotAIConfig.SmartNeedBySpec)
-        return usage;
-
-    if (usage != ITEM_USAGE_EQUIP && usage != ITEM_USAGE_REPLACE)
-        return usage;
-
-    if (IsPrimaryForSpec(bot, proto))
-        return usage;
-
-    if (!IsFallbackNeedReasonableForSpec(bot, proto))
-        return ITEM_USAGE_BAD_EQUIP;
-
-    if (IsJewelryOrCloak(proto) && !IsDesperateJewelryUpgradeForBot(bot, proto, randomProperty))
-        return ITEM_USAGE_BAD_EQUIP;
-
-    // Lower-tier ("cross-armor") pieces are gated separately by AdjustUsageForCrossArmor via its
-    // ilvl-margin/context check, so leave them BAD_EQUIP here and let that decide the NEED.
-    if (proto->Class == ITEM_CLASS_ARMOR && IsLowerTierArmorForBot(bot, proto))
-        return ITEM_USAGE_BAD_EQUIP;
-
-    // Off-spec but a reasonable fallback need (and, for jewelry, a desperate upgrade): keep the NEED.
-    return usage;
+    return item && item->GetUInt32Value(ITEM_FIELD_DURABILITY) == 0 &&
+           item->GetUInt32Value(ITEM_FIELD_MAXDURABILITY) > 0;
 }
 
-static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage)
+// A worn item that fails the checks a new one needs to be worn at all is replaced on any gain.
+// The spec and jewelry checks don't count here, or every off-spec piece would lose its margin.
+static bool IsWornMisfit(FitContext& ctx, ItemTemplate const* proto, float score)
 {
-    if (!bot || !proto)
-        return usage;
+    if (score <= 0.0f)
+        return true;
 
-    if (usage != ITEM_USAGE_BAD_EQUIP)
-        return usage;
+    if (proto->Class == ITEM_CLASS_WEAPON && !sRandomItemMgr.CanEquipWeapon(proto, ctx.Bot()->getClass()))
+        return true;
 
-    if (proto->Class != ITEM_CLASS_ARMOR || !IsLowerTierArmorForBot(bot, proto))
-        return usage;
+    return !ctx.Listed(proto->ItemId) && IsRoleItemizationMismatch(ctx.Traits(), proto);
+}
 
-    // Endgame etiquette: do not allow cross-armor upgrades to turn into NEED
-    // at level cap or in raids.
-    if (IsStrictCrossArmorContext(bot))
-        return usage;
+static bool IsTitanGripType(ItemTemplate const* proto)
+{
+    return proto->SubClass == ITEM_SUBCLASS_WEAPON_AXE2 || proto->SubClass == ITEM_SUBCLASS_WEAPON_MACE2 ||
+           proto->SubClass == ITEM_SUBCLASS_WEAPON_SWORD2;
+}
 
-    if (sPlayerbotAIConfig.CrossArmorGreedIsPass)
-        return ITEM_USAGE_NONE;
-
-    if (EnableGroupUsageChecks() && GroupHasPrimaryArmorUserLikelyToNeed(bot, proto, randomProperty))
-        return usage;
-
-    if (EnableGroupUsageChecks() && GroupHasDesperateUpgradeUser(bot, proto, randomProperty))
-        return usage;
-
-    if (!IsFallbackNeedReasonableForSpec(bot, proto))
-        return usage;
-
-    // Reachable for a listed item: QueryItemUsageForEquip hands out BAD_EQUIP on its own when the
-    // score is low, without ever consulting IsPrimaryForSpec. If the list picked a lower armor class
-    // for this spec that is the intended pick, so the ilvl margin below has nothing left to decide -
-    // but the etiquette and group gates above still get their say first.
-    if (IsBisForBot(bot, proto) && sRandomItemMgr.CanEquipArmor(proto, bot->getClass(), bot->GetLevel()))
-        return ITEM_USAGE_EQUIP;
-
-    // One calculator for the candidate and every equipped slot below; sRandomItemMgr.CalculateItemWeight
-    // would build a fresh StatsWeightCalculator per call. Same settings it uses.
-    StatsWeightCalculator weightCalc(bot);
-    weightCalc.SetItemSetBonus(sPlayerbotAIConfig.ItemSetUseForUpgrades);
-    weightCalc.SetOverflowPenalty(false);
-
-    float newScore = weightCalc.CalculateItem(proto->ItemId, randomProperty);
-    if (newScore <= 0.0f)
-        return usage;
-    float bestOld = 0.0f;
-    // Candidate score measured in the same slot context as bestOld, so set bonuses and cap room do
-    // not count for the incumbent only.
-    float bestOldNewScore = newScore;
-
-    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+static bool IsWeaponHandItem(ItemTemplate const* proto)
+{
+    switch (proto->InventoryType)
     {
-        Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
-        if (!oldItem)
-            continue;
-
-        ItemTemplate const* oldProto = oldItem->GetTemplate();
-        if (!oldProto)
-            continue;
-
-        if (oldProto->Class != ITEM_CLASS_ARMOR)
-            continue;
-
-        if (oldProto->InventoryType != proto->InventoryType)
-            continue;
-
-        if (oldProto->Quality <= ITEM_QUALITY_NORMAL)
-            continue;
-
-        weightCalc.SetReplacedItem(oldItem);
-        float oldScore = weightCalc.CalculateItem(
-            oldProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
-        float slotNewScore = weightCalc.CalculateItem(proto->ItemId, randomProperty);
-
-        if (oldScore > bestOld)
-        {
-            bestOld = oldScore;
-            bestOldNewScore = slotNewScore;
-        }
+        case INVTYPE_WEAPON:
+        case INVTYPE_2HWEAPON:
+        case INVTYPE_WEAPONMAINHAND:
+        case INVTYPE_WEAPONOFFHAND:
+            return true;
+        default:
+            return false;
     }
-    weightCalc.SetReplacedItem(nullptr);
-
-    if (bestOld <= 0.0f)
-        return ITEM_USAGE_EQUIP;
-
-    uint32 const maxLevel = static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
-    bool const isLeveling = bot->GetLevel() < maxLevel;
-    SpecTraits const traits = GetSpecTraits(bot);
-    float const margin = (traits.isHealer && isLeveling) ? sPlayerbotAIConfig.EquipUpgradeThreshold
-                                                         : sPlayerbotAIConfig.CrossArmorExtraMargin;
-
-    if (bestOld > 0.0f && bestOldNewScore >= bestOld * margin)
-        return ITEM_USAGE_EQUIP;
-
-    return usage;
 }
 
-static bool IsUniqueItemAlreadyEquipped(Player* bot, ItemTemplate const* proto, InventoryResult equipResult)
+static GearPlacement::Hand HandOf(ItemTemplate const* proto)
 {
-    if (!bot || !proto)
-        return false;
+    GearPlacement::Hand hand;
+    if (!proto)
+        return hand;
 
-    // CanEquipItem may return EQUIP_ERR_CANT_CARRY_MORE_OF_THIS for unique-equip items,
-    // but it can also succeed while the item is flagged UNIQUE_EQUIPPABLE.
-    bool const needToCheckUnique =
-        (equipResult == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS) || proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE);
+    switch (proto->InventoryType)
+    {
+        case INVTYPE_SHIELD:
+        case INVTYPE_HOLDABLE:
+            hand.kind = GearPlacement::Kind::OffHandItem;
+            return hand;
+        case INVTYPE_WEAPON:
+            hand.kind = GearPlacement::Kind::OneHand;
+            break;
+        case INVTYPE_WEAPONMAINHAND:
+            hand.kind = GearPlacement::Kind::MainHandOnly;
+            break;
+        case INVTYPE_WEAPONOFFHAND:
+            hand.kind = GearPlacement::Kind::OffHandOnly;
+            break;
+        case INVTYPE_2HWEAPON:
+            hand.kind = GearPlacement::Kind::TwoHand;
+            break;
+        default:
+            return hand;
+    }
 
-    if (!needToCheckUnique)
-        return false;
+    hand.titanGripType = IsTitanGripType(proto);
+    hand.mainHandOnly = proto->InventoryType == INVTYPE_WEAPON && (proto->SubClass == ITEM_SUBCLASS_WEAPON_POLEARM ||
+                                                                   proto->SubClass == ITEM_SUBCLASS_WEAPON_FISHING_POLE);
+    return hand;
+}
 
-    // Count the total number of the item (equipped + in bags)
-    uint32 const totalItemCount = bot->GetItemCount(proto->ItemId, true);
-    // Count the number of the item in bags only
-    uint32 const bagItemCount = bot->GetItemCount(proto->ItemId, false);
+static GearPlacement::Hand HandOf(Item const* item)
+{
+    return HandOf(item ? item->GetTemplate() : nullptr);
+}
 
-    // If total > bag-only, at least one copy is equipped.
-    return totalItemCount > bagItemCount;
+// Equipment slots a non-weapon can go to, whatever is worn there.
+static uint8 SlotsFor(Player* bot, ItemTemplate const* proto, std::array<uint8, 2>& slots)
+{
+    auto one = [&slots](uint8 slot)
+    {
+        slots[0] = slot;
+        return uint8(1);
+    };
+    auto relic = [&](Classes cls)
+    { return bot->IsClass(cls, CLASS_CONTEXT_EQUIP_RELIC) ? one(EQUIPMENT_SLOT_RANGED) : uint8(0); };
+
+    switch (proto->InventoryType)
+    {
+        case INVTYPE_HEAD:
+            return one(EQUIPMENT_SLOT_HEAD);
+        case INVTYPE_NECK:
+            return one(EQUIPMENT_SLOT_NECK);
+        case INVTYPE_SHOULDERS:
+            return one(EQUIPMENT_SLOT_SHOULDERS);
+        case INVTYPE_BODY:
+            return one(EQUIPMENT_SLOT_BODY);
+        case INVTYPE_CHEST:
+        case INVTYPE_ROBE:
+            return one(EQUIPMENT_SLOT_CHEST);
+        case INVTYPE_WAIST:
+            return one(EQUIPMENT_SLOT_WAIST);
+        case INVTYPE_LEGS:
+            return one(EQUIPMENT_SLOT_LEGS);
+        case INVTYPE_FEET:
+            return one(EQUIPMENT_SLOT_FEET);
+        case INVTYPE_WRISTS:
+            return one(EQUIPMENT_SLOT_WRISTS);
+        case INVTYPE_HANDS:
+            return one(EQUIPMENT_SLOT_HANDS);
+        case INVTYPE_CLOAK:
+            return one(EQUIPMENT_SLOT_BACK);
+        case INVTYPE_TABARD:
+            return one(EQUIPMENT_SLOT_TABARD);
+        case INVTYPE_SHIELD:
+        case INVTYPE_HOLDABLE:
+            return one(EQUIPMENT_SLOT_OFFHAND);
+        case INVTYPE_RANGED:
+        case INVTYPE_RANGEDRIGHT:
+        case INVTYPE_THROWN:
+            return one(EQUIPMENT_SLOT_RANGED);
+        case INVTYPE_FINGER:
+            slots = {EQUIPMENT_SLOT_FINGER1, EQUIPMENT_SLOT_FINGER2};
+            return 2;
+        case INVTYPE_TRINKET:
+            slots = {EQUIPMENT_SLOT_TRINKET1, EQUIPMENT_SLOT_TRINKET2};
+            return 2;
+        case INVTYPE_RELIC:
+            switch (proto->SubClass)
+            {
+                case ITEM_SUBCLASS_ARMOR_LIBRAM:
+                    return relic(CLASS_PALADIN);
+                case ITEM_SUBCLASS_ARMOR_IDOL:
+                    return relic(CLASS_DRUID);
+                case ITEM_SUBCLASS_ARMOR_TOTEM:
+                    return relic(CLASS_SHAMAN);
+                case ITEM_SUBCLASS_ARMOR_MISC:
+                    return relic(CLASS_WARLOCK);
+                case ITEM_SUBCLASS_ARMOR_SIGIL:
+                    return relic(CLASS_DEATH_KNIGHT);
+                default:
+                    return 0;
+            }
+        default:
+            return 0;
+    }
+}
+
+struct BagSlot
+{
+    uint8 slot = NULL_SLOT;
+    uint32 size = 0;
+};
+
+// Where a new bag goes: an empty bag slot, else the smallest plain bag. Quivers, ammo pouches and
+// profession bags are never swapped out.
+static BagSlot SmallestBagSlot(Player* bot)
+{
+    BagSlot best;
+    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+    {
+        Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag);
+        if (!item)
+            return {bag, 0};
+
+        ItemTemplate const* proto = item->GetTemplate();
+        if (proto->Class != ITEM_CLASS_CONTAINER || proto->SubClass != ITEM_SUBCLASS_CONTAINER)
+            continue;
+
+        uint32 const size = static_cast<Bag const*>(item)->GetBagSize();
+        if (best.slot == NULL_SLOT || size < best.size)
+            best = {bag, size};
+    }
+
+    return best;
+}
+
+// Template-level refusals: anything here means no slot ever takes the item.
+static char const* EquipRefusal(Player* bot, ItemTemplate const* proto, Item const* candidate)
+{
+    if (proto->InventoryType == INVTYPE_NON_EQUIP)
+        return "not equipment";
+
+    if (bot->CanUseItem(proto) != EQUIP_ERR_OK)
+        return "can't use";
+
+    if (proto->Class == ITEM_CLASS_WEAPON && proto->SubClass == ITEM_SUBCLASS_WEAPON_MISC)
+        return "misc weapon";
+
+    // FindEquipSlot has no slot for them, so they were never equipped
+    if (proto->Class == ITEM_CLASS_QUIVER)
+        return "quiver";
+
+    // Titan's Grip takes no staff or polearm in either hand
+    if (bot->CanTitanGrip() && proto->InventoryType == INVTYPE_2HWEAPON && !IsTitanGripType(proto))
+        return "not a Titan's Grip weapon";
+
+    if (proto->ScalingStatDistribution)
+    {
+        ScalingStatDistributionEntry const* ssd = sScalingStatDistributionStore.LookupEntry(proto->ScalingStatDistribution);
+        if (ssd && ssd->MaxLevel < DEFAULT_MAX_LEVEL && ssd->MaxLevel < bot->GetLevel())
+            return "level too high";
+    }
+
+    if (candidate && (candidate->m_lootGenerated || candidate->IsBindedNotWith(bot)))
+        return "not ours";
+
+    return nullptr;
+}
+
+// Worn items counted by slot: GetItemCount counts them whatever inBankAlso says.
+static uint32 WornCopies(Player* bot, uint32 itemId)
+{
+    uint32 count = 0;
+    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+        if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+            if (item->GetEntry() == itemId)
+                ++count;
+
+    return count;
 }
 } // namespace
 
-ItemUsage LootUsageValue::Calculate()
+GearChoice EvaluateGear(PlayerbotAI* botAI, ItemTemplate const* proto, int32 randomPropertyId, Item const* candidate,
+                        bool force)
 {
-    ParsedItemUsage parsed = ParseItemUsageQualifier(qualifier);
-    if (!parsed.itemId)
-        return ITEM_USAGE_NONE;
+    GearChoice choice;
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !proto)
+        return choice;
 
-    ItemUsage usage = ItemUsageValue::Calculate();
-    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(parsed.itemId);
-    if (!proto)
-        return usage;
-
-    usage = AdjustUsageForOffspec(bot, proto, parsed.randomPropertyId, usage);
-    usage = AdjustUsageForCrossArmor(bot, proto, parsed.randomPropertyId, usage);
-
-    return usage;
-}
-
-ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, int32 randomPropertyId)
-{
-    if (bot->CanUseItem(itemProto) != EQUIP_ERR_OK)
-        return ITEM_USAGE_NONE;
-
-    if (itemProto->InventoryType == INVTYPE_NON_EQUIP)
-        return ITEM_USAGE_NONE;
-
-    Item* pItem = Item::CreateItem(itemProto->ItemId, 1, bot);
-    if (!pItem)
-        return ITEM_USAGE_NONE;
-
-    uint16 dest;
-    InventoryResult result = botAI->CanEquipItem(NULL_SLOT, dest, pItem, true, true);
-    pItem->RemoveFromUpdateQueueOf(bot);
-    delete pItem;
-
-    if (result != EQUIP_ERR_OK && result != EQUIP_ERR_CANT_CARRY_MORE_OF_THIS)
-        return ITEM_USAGE_NONE;
-
-    // Check if unique items are equipped or not
-    bool needToCheckUnique = result == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS ||
-         itemProto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE);
-
-    if (needToCheckUnique)
+    if (char const* refusal = EquipRefusal(bot, proto, candidate))
     {
-        // Count the total number of the item (equipped + in bags)
-        uint32 totalItemCount = bot->GetItemCount(itemProto->ItemId, true);
-
-        // Count the number of the item in bags only
-        uint32 bagItemCount = bot->GetItemCount(itemProto->ItemId, false);
-
-        // Determine if the unique item is already equipped
-        bool isEquipped = (totalItemCount > bagItemCount);
-
-        if (isEquipped)
-            return ITEM_USAGE_NONE;  // Item is already equipped
-        // If not equipped, continue processing
+        choice.reason = refusal;
+        return choice;
     }
 
-    if (itemProto->Class == ITEM_CLASS_QUIVER && bot->getClass() != CLASS_HUNTER)
-        return ITEM_USAGE_NONE;
-
-    if (itemProto->Class == ITEM_CLASS_CONTAINER)
+    if (proto->Class == ITEM_CLASS_CONTAINER)
     {
-        if (itemProto->SubClass != ITEM_SUBCLASS_CONTAINER)
-            return ITEM_USAGE_NONE;  // Todo add logic for non-bag containers. We want to look at professions/class and
-                                     // only replace if non-bag is larger than bag.
-        if (GetSmallestBagSize() >= itemProto->ContainerSlots)
-            return ITEM_USAGE_NONE;
+        if (proto->SubClass != ITEM_SUBCLASS_CONTAINER)
+        {
+            choice.reason = "not a plain bag";
+            return choice;
+        }
 
-        return ITEM_USAGE_EQUIP;
+        BagSlot const bag = SmallestBagSlot(bot);
+        choice.slot = bag.slot;
+        choice.newScore = float(proto->ContainerSlots);
+        choice.oldScore = float(bag.size);
+        if (bag.slot == NULL_SLOT)
+            choice.reason = "no bag slot";
+        else if (force || bag.size < proto->ContainerSlots)
+        {
+            choice.usage = ITEM_USAGE_EQUIP;
+            choice.reason = force ? "forced" : "bigger bag";
+        }
+        else
+            choice.reason = "no bigger";
+
+        return choice;
     }
 
-    if (itemProto->Class == ITEM_CLASS_WEAPON && itemProto->SubClass == ITEM_SUBCLASS_WEAPON_MISC)
-        return ITEM_USAGE_NONE;
-
-    bool shouldEquip = false;
-    // uint32 statWeight = sRandomItemMgr.GetLiveStatWeight(bot, itemProto->ItemId);
     StatsWeightCalculator calculator(bot);
     calculator.SetItemSetBonus(sPlayerbotAIConfig.ItemSetUseForUpgrades);
     calculator.SetOverflowPenalty(false);
     calculator.SetBisBonus(true);
-
-    // Apply PvP weights if the bot is specced for PvP
-    bool isPvp = sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass());
-    if (isPvp)
+    if (sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass()))
         calculator.SetPvpSpec(true);
 
-    float itemScore = calculator.CalculateItem(itemProto->ItemId, randomPropertyId);
+    FitContext ctx(bot, calculator);
+    bool const listed = ctx.Listed(proto->ItemId);
+    bool const newBroken = IsBroken(candidate);
+    bool const newLower = IsLowerTierArmorForBot(bot, proto);
 
-    if (itemScore)
-        shouldEquip = true;
-
-    // Single choke for role/itemization mismatches: BAD_EQUIP here → GREED→PASS under UpgradesOnly and
-    // never auto-equipped. IsPrimaryForSpec isn't reached for these (BAD_EQUIP short-circuits offspec).
-    if (IsRoleItemizationMismatch(bot, itemProto))
-        shouldEquip = false;
-
-    if (itemProto->Class == ITEM_CLASS_WEAPON && !sRandomItemMgr.CanEquipWeapon(itemProto, bot->getClass()))
-        shouldEquip = false;
-    if (itemProto->Class == ITEM_CLASS_ARMOR &&
-        !sRandomItemMgr.CanEquipArmor(itemProto, bot->getClass(), bot->GetLevel()))
-        shouldEquip = false;
-
-    uint8 possibleSlots = 1;
-    uint8 dstSlot = botAI->FindEquipSlot(itemProto, NULL_SLOT, true);
-    // Check if dest wasn't set correctly by CanEquipItem and use FindEquipSlot instead
-    // This occurs with unique items that are already in the bots bags when CanEquipItem is called
-    if (dest == 0 && dstSlot != NULL_SLOT)
+    char const* unfit = nullptr;
+    if (!force)
     {
-        // Construct dest from dstSlot
-        dest = (INVENTORY_SLOT_BAG_0 << 8) | dstSlot;
-    }
-
-    if (dstSlot == EQUIPMENT_SLOT_FINGER1 || dstSlot == EQUIPMENT_SLOT_TRINKET1)
-        possibleSlots = 2;
-
-    // Check weapon case separately to keep things a bit cleaner
-    bool have2HWeapon = false;
-    bool isValidTGWeapon = false;
-
-    if (dstSlot == EQUIPMENT_SLOT_MAINHAND)
-    {
-        Item* currentWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
-        have2HWeapon = currentWeapon && currentWeapon->GetTemplate()->InventoryType == INVTYPE_2HWEAPON;
-
-        // Determine if the new weapon is a valid Titan Grip weapon
-        isValidTGWeapon = (itemProto->SubClass == ITEM_SUBCLASS_WEAPON_AXE2 ||
-                           itemProto->SubClass == ITEM_SUBCLASS_WEAPON_MACE2 ||
-                           itemProto->SubClass == ITEM_SUBCLASS_WEAPON_SWORD2);
-
-        // If the bot can Titan Grip, ignore any 2H weapon that isn't a 2H sword, mace, or axe.
-        // If this weapon is 2H but not one of the valid TG weapon types, do not equip it at all.
-        if (bot->CanTitanGrip() && itemProto->InventoryType == INVTYPE_2HWEAPON && !isValidTGWeapon)
-            return ITEM_USAGE_NONE;
-
-        // Now handle the logic for equipping and possible offhand slots
-        // If the bot can Dual Wield and:
-        // - The weapon is not 2H and we currently don't have a 2H weapon equipped
-        // OR
-        // - The bot can Titan Grip and it is a valid TG weapon
-        // Then we can consider the offhand slot as well.
-        if (bot->CanDualWield() &&
-            ((itemProto->InventoryType != INVTYPE_2HWEAPON && !have2HWeapon) ||
-             (bot->CanTitanGrip() && isValidTGWeapon)))
+        if (calculator.CalculateItem(proto->ItemId, randomPropertyId) <= 0.0f)
+            unfit = "no score";
+        else if (!listed && IsRoleItemizationMismatch(ctx.Traits(), proto))
+            unfit = "role mismatch";
+        else if (proto->Class == ITEM_CLASS_WEAPON && !sRandomItemMgr.CanEquipWeapon(proto, bot->getClass()))
+            unfit = "weapon skill";
+        else if (sPlayerbotAIConfig.SmartNeedBySpec && !IsPrimaryForSpec(ctx, proto, listed))
         {
-            possibleSlots = 2;
+            if (!IsFallbackNeedReasonableForSpec(ctx, proto, listed))
+                unfit = "off spec";
+            else if (IsJewelryOrCloak(proto) && !IsDesperateJewelryUpgradeForBot(bot, proto))
+                unfit = "off-spec jewelry";
         }
     }
 
-    for (uint8 i = 0; i < possibleSlots; i++)
+    float const upgradeBar = sPlayerbotAIConfig.EquipUpgradeThreshold;
+    float lowerArmorBar = upgradeBar;
+    if (newLower && !listed)
     {
-        bool shouldEquipInSlot = shouldEquip;
-        Item* oldItem = bot->GetItemByPos(dest + i);
+        bool const leveling = bot->GetLevel() < static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
+        if (!(ctx.Traits().isHealer && leveling))
+            lowerArmorBar = sPlayerbotAIConfig.CrossArmorExtraMargin;
+    }
 
-        // No item equipped
-        if (!oldItem)
+    // "item usage" is recalculated on every read, so no score is taken twice per call
+    struct Scored
+    {
+        uint32 item;
+        int32 randomPropertyId;
+        uint8 slot;
+        Item const* leaving;
+        float score;
+    };
+    std::vector<Scored> scored;
+    auto score = [&](ItemTemplate const* item, int32 randomProperty, uint8 slot, Item const* leaving)
+    {
+        for (Scored const& s : scored)
+            if (s.item == item->ItemId && s.randomPropertyId == randomProperty && s.slot == slot && s.leaving == leaving)
+                return s.score;
+
+        // both sides of one comparison are scored with the leaving item treated as removed
+        calculator.SetReplacedItem(leaving);
+        calculator.SetBisContest(proto->ItemId, leaving ? leaving->GetEntry() : 0);
+        float const value = calculator.CalculateItem(item->ItemId, randomProperty, slot);
+        scored.push_back({item->ItemId, randomProperty, slot, leaving, value});
+        return value;
+    };
+    auto newScore = [&](uint8 slot, Item const* leaving) { return score(proto, randomPropertyId, slot, leaving); };
+    auto wornScore = [&](Item const* worn, uint8 slot, Item const* leaving)
+    { return score(worn->GetTemplate(), worn->GetItemRandomPropertyId(), slot, leaving); };
+    // the bar for replacing what's worn in a slot
+    auto barFor = [&](Item const* worn, float scoreThere)
+    {
+        ItemTemplate const* wornProto = worn->GetTemplate();
+        if (IsWornMisfit(ctx, wornProto, scoreThere))
+            return 1.0f;
+        if (newLower && !IsLowerTierArmorForBot(bot, wornProto))
+            return lowerArmorBar;
+        return upgradeBar;
+    };
+    auto change = [&](float newValue, Item const* worn, uint8 slot, Item const* leaving)
+    {
+        GearPlacement::Change c;
+        c.newScore = newValue;
+        if (worn)
         {
-            if (shouldEquipInSlot)
-                return ITEM_USAGE_EQUIP;
-            else
-                return ITEM_USAGE_BAD_EQUIP;
+            c.oldScore = wornScore(worn, slot, leaving);
+            c.threshold = barFor(worn, c.oldScore);
         }
+        return c;
+    };
+    auto sameItem = [proto](Item const* worn) { return worn && worn->GetEntry() == proto->ItemId; };
+    auto uniqueAllows = [&](uint8 slot) { return bot->CanEquipUniqueItem(proto, slot) == EQUIP_ERR_OK; };
 
-        ItemTemplate const* oldItemProto = oldItem->GetTemplate();
+    struct Target
+    {
+        uint8 slot;
+        uint8 incumbentTo;
+        Item const* displaced;
+    };
+    std::vector<GearPlacement::Option> options;
+    std::vector<Target> targets;
 
-        // Both scores have to be taken with the contested slot treated as empty, otherwise the
-        // incumbent's own set bonus and capped ratings count for it. The slot also drives the
-        // spec weapon-speed preference, which is a no-op without it.
-        int32 const contestedSlot = static_cast<int32>((dest & 0xFF) + i);
-        calculator.SetReplacedItem(oldItem);
-        calculator.SetBisContest(itemProto->ItemId, oldItemProto->ItemId);
-        float slotItemScore = calculator.CalculateItem(itemProto->ItemId, randomPropertyId, contestedSlot);
-        float oldScore = calculator.CalculateItem(oldItemProto->ItemId,
-                                                  oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID),
-                                                  contestedSlot);
-        calculator.SetReplacedItem(nullptr);
-        calculator.SetBisContest(0, 0);
-        // the sim ranked both for this bot: its order stands, whatever the stat scores say
-        int8 const rankOrder = calculator.CompareBisRank(itemProto, oldItemProto, contestedSlot);
+    if (IsWeaponHandItem(proto))
+    {
+        Item const* main = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
+        Item const* off = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND);
+        GearPlacement::Hand const item = HandOf(proto);
+        GearPlacement::Hand const mainHand = HandOf(main);
+        GearPlacement::Hand const offHand = HandOf(off);
 
-        if (oldItem)
+        GearPlacement::Bot hands;
+        hands.canDualWield = bot->CanDualWield();
+        hands.canTitanGrip = bot->CanTitanGrip();
+        hands.keepsShield = off && off->GetTemplate()->Class == ITEM_CLASS_ARMOR &&
+                            off->GetTemplate()->SubClass == ITEM_SUBCLASS_ARMOR_SHIELD && ctx.Traits().isTank;
+
+        using GearPlacement::Layout;
+        for (uint8 i = 0; i < uint8(Layout::Count); ++i)
         {
-            // uint32 oldStatWeight = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
-            if (rankOrder)
-                shouldEquipInSlot = rankOrder > 0;
-            else if (slotItemScore || oldScore)
-                shouldEquipInSlot = slotItemScore > oldScore * sPlayerbotAIConfig.EquipUpgradeThreshold;
-        }
+            Layout const layout = Layout(i);
+            GearPlacement::Option option;
+            Target target{NULL_SLOT, NULL_SLOT, nullptr};
+            option.legal = GearPlacement::LayoutLegal(layout, item, mainHand, offHand, hands);
 
-        // Bigger quiver
-        if (itemProto->Class == ITEM_CLASS_QUIVER)
-        {
-            if (!oldItem || oldItemProto->ContainerSlots < itemProto->ContainerSlots)
-                return ITEM_USAGE_EQUIP;
-            else
-                return ITEM_USAGE_NONE;
-        }
-
-        bool existingShouldEquip = true;
-        if (oldItemProto->Class == ITEM_CLASS_WEAPON && !sRandomItemMgr.CanEquipWeapon(oldItemProto, bot->getClass()))
-            existingShouldEquip = false;
-
-        if (oldItemProto->Class == ITEM_CLASS_ARMOR &&
-            !sRandomItemMgr.CanEquipArmor(oldItemProto, bot->getClass(), bot->GetLevel()))
-            existingShouldEquip = false;
-
-        // uint32 oldItemPower = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
-        // uint32 newItemPower = sRandomItemMgr.GetLiveStatWeight(bot, itemProto->ItemId);
-
-        // Compare items based on item level, quality or itemId.
-        bool isBetter = false;
-        if (rankOrder ? rankOrder > 0 : slotItemScore > oldScore)
-            isBetter = true;
-        // else if (newItemPower == oldScore && itemProto->Quality > oldItemProto->Quality)
-        //     isBetter = true;
-        // else if (newItemPower == oldScore && itemProto->Quality == oldItemProto->Quality && itemProto->ItemId >
-        // oldItemProto->ItemId)
-        //     isBetter = true;
-
-        Item* item = CurrentItem(itemProto);
-        bool itemIsBroken =
-            item && item->GetUInt32Value(ITEM_FIELD_DURABILITY) == 0 && item->GetUInt32Value(ITEM_FIELD_MAXDURABILITY) > 0;
-        bool oldItemIsBroken =
-            oldItem->GetUInt32Value(ITEM_FIELD_DURABILITY) == 0 && oldItem->GetUInt32Value(ITEM_FIELD_MAXDURABILITY) > 0;
-
-        if (itemProto->ItemId != oldItemProto->ItemId && (shouldEquipInSlot || !existingShouldEquip) && isBetter)
-        {
-            switch (itemProto->Class)
+            switch (layout)
             {
-                case ITEM_CLASS_ARMOR:
-                    if (oldItemProto->SubClass <= itemProto->SubClass)
+                // a lone 2H counts against the main hand only: its type penalty stands in for the off hand
+                case Layout::NewToMain:
+                    target = {EQUIPMENT_SLOT_MAINHAND, NULL_SLOT, main};
+                    option.legal = option.legal && !sameItem(main) && uniqueAllows(EQUIPMENT_SLOT_MAINHAND);
+                    if (option.legal)
+                        option.Add(change(newScore(EQUIPMENT_SLOT_MAINHAND, main), main, EQUIPMENT_SLOT_MAINHAND, main));
+                    option.replacesBroken = IsBroken(main) && !newBroken;
+                    break;
+                case Layout::NewToMainOldToOff:
+                    target = {EQUIPMENT_SLOT_MAINHAND, EQUIPMENT_SLOT_OFFHAND, off};
+                    option.legal = option.legal && !sameItem(main) && uniqueAllows(EQUIPMENT_SLOT_MAINHAND);
+                    if (option.legal)
                     {
-                        // Need to add some logic to check second slot before returning, but as it happens, all three of these
-                        // return vals will result in an attempted equip action so it wouldn't have much effect currently
-                        if (itemIsBroken && !oldItemIsBroken)
-                            return ITEM_USAGE_BROKEN_EQUIP;
-                        else if (shouldEquipInSlot)
-                            return ITEM_USAGE_REPLACE;
-                        else
-                            return ITEM_USAGE_BAD_EQUIP;
+                        option.Add(change(newScore(EQUIPMENT_SLOT_MAINHAND, off), main, EQUIPMENT_SLOT_MAINHAND, off));
+                        option.Add(change(wornScore(main, EQUIPMENT_SLOT_OFFHAND, off), off, EQUIPMENT_SLOT_OFFHAND, off));
                     }
-                    // A lower-subclass armor piece is handled by the default case below.
-                    [[fallthrough]];
+                    break;
+                case Layout::NewToOff:
+                    target = {EQUIPMENT_SLOT_OFFHAND, NULL_SLOT, off};
+                    option.legal = option.legal && !sameItem(off) && uniqueAllows(EQUIPMENT_SLOT_OFFHAND);
+                    if (option.legal)
+                        option.Add(change(newScore(EQUIPMENT_SLOT_OFFHAND, off), off, EQUIPMENT_SLOT_OFFHAND, off));
+                    option.replacesBroken = IsBroken(off) && !newBroken;
+                    break;
+                case Layout::NewToOffOldToMain:
+                    target = {EQUIPMENT_SLOT_OFFHAND, EQUIPMENT_SLOT_MAINHAND, main};
+                    option.legal = option.legal && !sameItem(off) && uniqueAllows(EQUIPMENT_SLOT_OFFHAND);
+                    if (option.legal)
+                    {
+                        option.Add(change(newScore(EQUIPMENT_SLOT_OFFHAND, main), off, EQUIPMENT_SLOT_OFFHAND, main));
+                        option.Add(change(wornScore(off, EQUIPMENT_SLOT_MAINHAND, main), main, EQUIPMENT_SLOT_MAINHAND, main));
+                    }
+                    break;
                 default:
-                {
-                    if (itemIsBroken && !oldItemIsBroken)
-                        return ITEM_USAGE_BROKEN_EQUIP;
-                    else if (shouldEquipInSlot)
-                        return ITEM_USAGE_EQUIP;
-                    else
-                        return ITEM_USAGE_BAD_EQUIP;
-                }
+                    break;
             }
-        }
 
-        // Item is not better but current item is broken and new one is not.
-        if (oldItemIsBroken && !itemIsBroken)
-            return ITEM_USAGE_EQUIP;
+            options.push_back(option);
+            targets.push_back(target);
+        }
     }
-    return ITEM_USAGE_NONE;
+    else
+    {
+        std::array<uint8, 2> slots{};
+        uint8 const count = SlotsFor(bot, proto, slots);
+        Item const* worn[2] = {nullptr, nullptr};
+        for (uint8 i = 0; i < count; ++i)
+            worn[i] = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slots[i]);
+
+        // with both rings or trinkets in place, the one the sim ranks lower goes first
+        int8 wornOrder = 0;
+        if (count == 2 && worn[0] && worn[1])
+            wornOrder = calculator.CompareBisRank(worn[0]->GetTemplate(), worn[1]->GetTemplate(), slots[0]);
+
+        for (uint8 i = 0; i < count; ++i)
+        {
+            uint8 const slot = slots[i];
+            Item const* displaced = worn[i];
+            GearPlacement::Option option;
+            option.legal = !sameItem(displaced) && uniqueAllows(slot);
+            // the off hand is closed while a 2H the bot can't Titan's Grip is worn
+            if (slot == EQUIPMENT_SLOT_OFFHAND && bot->IsTwoHandUsed())
+                option.legal = false;
+
+            if (option.legal)
+                option.Add(change(newScore(slot, displaced), displaced, slot, displaced));
+            option.replacesBroken = IsBroken(displaced) && !newBroken;
+            if (displaced)
+                option.rankOrder = calculator.CompareBisRank(proto, displaced->GetTemplate(), slot);
+
+            if (!displaced)
+                option.preference = 2;
+            else if ((i == 0 && wornOrder < 0) || (i == 1 && wornOrder > 0))
+                option.preference = 1;
+
+            options.push_back(option);
+            targets.push_back({slot, NULL_SLOT, displaced});
+        }
+    }
+
+    calculator.SetReplacedItem(nullptr);
+    calculator.SetBisContest(0, 0);
+
+    auto fill = [&](std::size_t index, ItemUsage usage, char const* reason)
+    {
+        choice.usage = usage;
+        choice.slot = targets[index].slot;
+        choice.incumbentTo = targets[index].incumbentTo;
+        choice.newScore = options[index].NewSum();
+        choice.oldScore = options[index].Bar();
+        choice.reason = reason;
+        return choice;
+    };
+
+    bool const anyLegal = std::any_of(options.begin(), options.end(), [](auto const& o) { return o.legal; });
+    if (!anyLegal)
+    {
+        choice.reason = "no free slot";
+        return choice;
+    }
+
+    // An unfit item only fills an empty slot, which displaces nothing, or replaces a broken item.
+    if (unfit)
+    {
+        for (std::size_t i = 0; i < options.size(); ++i)
+            if (options[i].legal && !targets[i].displaced && targets[i].incumbentTo == NULL_SLOT)
+                return fill(i, ITEM_USAGE_BAD_EQUIP, unfit);
+
+        for (std::size_t i = 0; i < options.size(); ++i)
+            if (options[i].legal && options[i].replacesBroken)
+                return fill(i, ITEM_USAGE_EQUIP, "replaces broken");
+
+        choice.reason = unfit;
+        return choice;
+    }
+
+    int const pick = GearPlacement::Choose(options, force);
+    if (pick < 0)
+    {
+        choice.reason = "no gain";
+        return choice;
+    }
+
+    GearPlacement::Option const& option = options[pick];
+    Item const* displaced = targets[pick].displaced;
+    if (!force && displaced && newBroken && !IsBroken(displaced))
+        return fill(pick, ITEM_USAGE_BROKEN_EQUIP, "broken");
+
+    char const* reason = force                    ? "forced"
+                         : option.replacesBroken ? "replaces broken"
+                         : option.rankOrder > 0  ? "sim rank"
+                         : !displaced            ? "empty slot"
+                                                 : "upgrade";
+
+    bool const replace = proto->Class == ITEM_CLASS_ARMOR && displaced &&
+                         displaced->GetTemplate()->SubClass <= proto->SubClass;
+    return fill(pick, replace ? ITEM_USAGE_REPLACE : ITEM_USAGE_EQUIP, reason);
+}
+
+uint32 CountUnwornCopies(Player* bot, uint32 itemId)
+{
+    uint32 const owned = bot->GetItemCount(itemId, true);
+    uint32 const worn = WornCopies(bot, itemId);
+    return owned > worn ? owned - worn : 0;
+}
+
+ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, int32 randomPropertyId)
+{
+    return EvaluateGear(botAI, itemProto, randomPropertyId).usage;
 }
 
 ItemUsage ItemUsageValue::QueryItemUsageForAmmo(ItemTemplate const* proto)
@@ -1571,35 +1562,6 @@ ItemUsage ItemUsageValue::QueryItemUsageForAmmo(ItemTemplate const* proto)
         }
     }
     return ITEM_USAGE_NONE;
-}
-
-uint32 ItemUsageValue::GetSmallestBagSize()
-{
-    bool found = false;
-    uint32 curSlots = 0;
-    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
-    {
-        Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag);
-        if (!item)
-            return 0;
-
-        ItemTemplate const* proto = item->GetTemplate();
-        // Quivers, ammo pouches and profession bags are off limits, so they count neither as a
-        // bag we have nor as one we could replace. Must stay in step with
-        // EquipAction::GetSmallestBagSlot, which picks the slot this size comes from.
-        if (proto->Class != ITEM_CLASS_CONTAINER || proto->SubClass != ITEM_SUBCLASS_CONTAINER)
-            continue;
-
-        uint32 size = ((Bag const*)item)->GetBagSize();
-        if (!found || size < curSlots)
-        {
-            found = true;
-            curSlots = size;
-        }
-    }
-
-    // Every slot is taken and none of them may be replaced.
-    return found ? curSlots : std::numeric_limits<uint32>::max();
 }
 
 bool ItemUsageValue::IsItemUsefulForQuest(Player* player, ItemTemplate const* proto)
@@ -1889,24 +1851,6 @@ bool ItemUsageValue::HasItemsNeededForSpell(uint32 spellId, ItemTemplate const* 
         }
 
     return true;
-}
-
-Item* ItemUsageValue::CurrentItem(ItemTemplate const* proto)
-{
-    Item* bestItem = nullptr;
-    std::vector<Item*> found = AI_VALUE2(std::vector<Item*>, "inventory items", chat->FormatItem(proto));
-    for (auto item : found)
-    {
-        if (bestItem && item->GetUInt32Value(ITEM_FIELD_DURABILITY) < bestItem->GetUInt32Value(ITEM_FIELD_DURABILITY))
-            continue;
-
-        if (bestItem && item->GetCount() < bestItem->GetCount())
-            continue;
-
-        bestItem = item;
-    }
-
-    return bestItem;
 }
 
 float ItemUsageValue::CurrentStacks(ItemTemplate const* proto)
@@ -2637,9 +2581,6 @@ static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, in
         }
     }
 
-    if (vote == NEED && IsJewelryOrCloak(proto) && !IsFallbackNeedReasonableForSpec(bot, proto))
-        vote = GREED;
-
     // Lockboxes: if the item is a lockbox and the bot is a Rogue with Lockpicking, prefer NEED (ignored by BoE/BoU).
     const SpecTraits traits = GetSpecTraits(bot);
     const bool isLockbox = ItemUsageValue::IsLockboxItem(proto);
@@ -2663,16 +2604,10 @@ static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, in
 
         vote = GREED;
 
-    // Non-unique soft rule: NEED -> GREED on duplicates, except Book of Glyph Mastery.
-    if (vote == NEED)
-    {
-        if (!IsGlyphMasteryBook(proto))
-        {
-            // includeBank=true to catch banked duplicates as well.
-            if (bot->GetItemCount(proto->ItemId, true) > 0)
-                vote = GREED;
-        }
-    }
+    // Non-unique soft rule: NEED -> GREED on a spare copy in bags or bank, except Book of Glyph
+    // Mastery. A worn copy doesn't count, or a second weapon for the off hand never gets NEED.
+    if (vote == NEED && !IsGlyphMasteryBook(proto) && CountUnwornCopies(bot, proto->ItemId) > 0)
+        vote = GREED;
 
     // Unique-equip: never NEED a duplicate (already equipped/owned)
     if (vote == NEED && RollUniqueCheck(proto, bot))
@@ -2697,17 +2632,8 @@ static bool RollUniqueCheck(ItemTemplate const* proto, Player* bot)
     if (!proto || !bot)
         return false;
 
-    uint32 totalItemCount = bot->GetItemCount(proto->ItemId, true);
-    uint32 bagItemCount = bot->GetItemCount(proto->ItemId, false);
-
-    bool isEquipped = (totalItemCount > bagItemCount);
-    if (isEquipped && proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
-        return true;
-
-    if (proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) && bagItemCount > 0)
-        return true;
-
-    return false;
+    // owned anywhere, worn included
+    return proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) && bot->GetItemCount(proto->ItemId, true) > 0;
 }
 } // namespace
 
@@ -2733,9 +2659,6 @@ RollVote CalculateLootRollVote(Player* bot, ItemTemplate const* proto, int32 ran
 {
     if (!bot || !proto)
         return PASS;
-
-    // usage is already off-spec- and cross-armor-adjusted by LootUsageValue ("loot usage"); re-adjusting
-    // here would revert a cross-armor EQUIP back to BAD_EQUIP.
 
     RollVote vote = PASS;
     if (!TryTokenRollVote(proto, bot, vote))

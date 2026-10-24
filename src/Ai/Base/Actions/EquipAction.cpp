@@ -11,20 +11,10 @@
 #include "ItemUsageValue.h"
 #include "ItemVisitors.h"
 #include "Playerbots.h"
-#include "StatsWeightCalculator.h"
 #include <utility>
 
 namespace
 {
-enum class WeaponLayout
-{
-    Keep,
-    NewInMainHand,
-    NewInMainHandOldToOffHand,
-    NewInOffHand,
-    NewInOffHandOldToMainHand
-};
-
 void AutoEquipToSlot(Player* bot, Item* item, uint8 slot)
 {
     WorldPacket packet(CMSG_AUTOEQUIP_ITEM_SLOT, 2);
@@ -40,356 +30,81 @@ bool EquipAction::Execute(Event event)
 {
     std::string const text = event.getParam();
     ItemIds ids = chat->parseItems(text);
-    EquipItems(ids);
+    EquipItems(ids, true);
     return true;
 }
 
-void EquipAction::EquipItems(ItemIds ids)
+void EquipAction::EquipItems(ItemIds ids, bool force)
 {
     for (ItemIds::iterator i = ids.begin(); i != ids.end(); i++)
     {
         FindItemByIdVisitor visitor(*i);
-        EquipItem(&visitor);
+        EquipItem(&visitor, force);
     }
 }
 
-// Return bagslot with smalest bag, or 0 when there is nowhere we may put one.
-uint8 EquipAction::GetSmallestBagSlot()
-{
-    uint8 curBag = 0;
-    uint32 curSlots = 0;
-    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
-    {
-        Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag);
-        if (!item)
-            return bag;
-
-        ItemTemplate const* proto = item->GetTemplate();
-        // Never swap a plain bag over a quiver, ammo pouch or profession bag. Must stay in step
-        // with ItemUsageValue::GetSmallestBagSize, which decides whether we want the bag at all.
-        if (proto->Class != ITEM_CLASS_CONTAINER || proto->SubClass != ITEM_SUBCLASS_CONTAINER)
-            continue;
-
-        uint32 size = ((Bag const*)item)->GetBagSize();
-        if (!curBag || size < curSlots)
-        {
-            curBag = bag;
-            curSlots = size;
-        }
-    }
-
-    return curBag;
-}
-
-void EquipAction::EquipItem(FindItemVisitor* visitor)
+void EquipAction::EquipItem(FindItemVisitor* visitor, bool force)
 {
     IterateItems(visitor);
     std::vector<Item*> items = visitor->GetResult();
     if (!items.empty())
-        EquipItem(*items.begin());
+        EquipItem(*items.begin(), force);
 }
 
-void EquipAction::EquipItem(Item* item)
+void EquipAction::EquipItem(Item* item, bool force)
 {
-    uint8 bagIndex = item->GetBagSlot();
-    uint8 slot = item->GetSlot();
     ItemTemplate const* itemProto = item->GetTemplate();
-    uint32 itemId = itemProto->ItemId;
-    uint8 invType = itemProto->InventoryType;
 
-    // Handle ammunition separately
-    if (invType == INVTYPE_AMMO)
+    if (itemProto->InventoryType == INVTYPE_AMMO)
     {
         if (!RangedWeaponNeedsAmmo(bot))
             return;
 
-        bot->SetAmmo(itemId);
+        bot->SetAmmo(itemProto->ItemId);
         std::ostringstream out;
         out << "equipping " << chat->FormatItem(itemProto);
         botAI->TellMaster(out);
         return;
     }
 
-    // Handle bags first
-    bool equippedBag = false;
+    GearChoice const choice = EvaluateGear(botAI, itemProto, item->GetItemRandomPropertyId(), item, force);
+    if (choice.usage != ITEM_USAGE_EQUIP && choice.usage != ITEM_USAGE_REPLACE && choice.usage != ITEM_USAGE_BAD_EQUIP)
+        return;
+
     if (itemProto->Class == ITEM_CLASS_CONTAINER)
     {
-        // Attempt to equip as a bag
-        uint8 newBagSlot = GetSmallestBagSlot();
-
-        if (newBagSlot > 0)
-        {
-            uint16 src = ((bagIndex << 8) | slot);
-            uint16 dst = ((INVENTORY_SLOT_BAG_0 << 8) | newBagSlot);
-            bot->SwapItem(src, dst);
-            equippedBag = true;
-        }
+        bot->SwapItem((item->GetBagSlot() << 8) | item->GetSlot(), (INVENTORY_SLOT_BAG_0 << 8) | choice.slot);
+        std::ostringstream out;
+        out << "Equipping " << chat->FormatItem(itemProto);
+        botAI->TellMaster(out);
+        return;
     }
 
-    // If we didn't equip as a bag, try to equip as gear
-    if (!equippedBag)
+    // taken before the first move, which drops it into the new item's bag slot
+    Item* moving = choice.incumbentTo != NULL_SLOT ? bot->GetItemByPos(INVENTORY_SLOT_BAG_0, choice.slot) : nullptr;
+
+    AutoEquipToSlot(bot, item, choice.slot);
+
+    if (moving && bot->GetItemByPos(INVENTORY_SLOT_BAG_0, choice.slot) == item)
     {
-        // Ranged weapons aren't handled by the rest of the weapon equip logic
-        // Handle them early here to avoid issues.
-        if (invType == INVTYPE_RANGED || invType == INVTYPE_THROWN || invType == INVTYPE_RANGEDRIGHT)
-        {
-            WorldPacket packet(CMSG_AUTOEQUIP_ITEM_SLOT, 2);
-            ObjectGuid itemguid = item->GetGUID();
-            packet << itemguid << uint8(EQUIPMENT_SLOT_RANGED);
+        AutoEquipToSlot(bot, moving, choice.incumbentTo);
 
-            WorldPackets::Item::AutoEquipItemSlot nicePacket(std::move(packet));
-            nicePacket.Read();
-            bot->GetSession()->HandleAutoEquipItemSlotOpcode(nicePacket);
-
-            std::ostringstream out;
-            out << "Equipping " << chat->FormatItem(itemProto) << " in ranged slot";
-            botAI->TellMaster(out);
-            return;
-        }
-
-        uint8 dstSlot = botAI->FindEquipSlot(itemProto, NULL_SLOT, true);
-
-        // Check if the item is a weapon and whether the bot can dual wield or use Titan Grip
-        bool isWeapon = (itemProto->Class == ITEM_CLASS_WEAPON);
-        bool canTitanGrip = bot->CanTitanGrip();
-        bool canDualWield = bot->CanDualWield();
-
-        bool isTwoHander = (invType == INVTYPE_2HWEAPON);
-        bool isValidTGWeapon = false;
-        if (canTitanGrip && isTwoHander)
-        {
-            // Titan Grip-valid 2H weapon subclasses: Axe2, Mace2, Sword2
-            isValidTGWeapon = (itemProto->SubClass == ITEM_SUBCLASS_WEAPON_AXE2 ||
-                               itemProto->SubClass == ITEM_SUBCLASS_WEAPON_MACE2 ||
-                               itemProto->SubClass == ITEM_SUBCLASS_WEAPON_SWORD2);
-        }
-
-        // Check if the main hand currently has a 2H weapon equipped
-        Item* currentMHItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
-        bool have2HWeaponEquipped = (currentMHItem && currentMHItem->GetTemplate()->InventoryType == INVTYPE_2HWEAPON);
-
-        // bool canDualWieldOrTG = (canDualWield || (canTitanGrip && isTwoHander));
-        bool canDualWieldOrTG = (canDualWield || isTwoHander);
-
-        // If this is a weapon and we can dual wield or Titan Grip, check if we can improve main/off-hand setup
-        if (isWeapon && canDualWieldOrTG)
-        {
-            Item* mainHandItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
-            Item* offHandItem  = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND);
-
-            StatsWeightCalculator calculator(bot);
-            calculator.SetItemSetBonus(sPlayerbotAIConfig.ItemSetUseForUpgrades);
-            calculator.SetOverflowPenalty(false);
-            // same bonus ItemUsageValue scored with, or an item it wanted on the bonus gets refused here
-            calculator.SetBisBonus(true);
-
-            auto isValidTG = [canTitanGrip](ItemTemplate const* proto)
-            {
-                return canTitanGrip && proto->InventoryType == INVTYPE_2HWEAPON &&
-                       (proto->SubClass == ITEM_SUBCLASS_WEAPON_AXE2 ||
-                        proto->SubClass == ITEM_SUBCLASS_WEAPON_MACE2 ||
-                        proto->SubClass == ITEM_SUBCLASS_WEAPON_SWORD2);
-            };
-            // a 2H that leaves no room for anything in the off hand
-            auto isLoneTwoHander = [&](ItemTemplate const* proto)
-            {
-                return proto->InventoryType == INVTYPE_2HWEAPON && !isValidTG(proto);
-            };
-            auto canGoMainHand = [&](ItemTemplate const* proto)
-            {
-                if (proto->InventoryType == INVTYPE_2HWEAPON)
-                    return !canTitanGrip || isValidTG(proto);
-                return proto->InventoryType == INVTYPE_WEAPON || proto->InventoryType == INVTYPE_WEAPONMAINHAND;
-            };
-            auto canGoOffHand = [&](ItemTemplate const* proto)
-            {
-                return proto->InventoryType == INVTYPE_WEAPON || proto->InventoryType == INVTYPE_WEAPONOFFHAND ||
-                       isValidTG(proto);
-            };
-
-            auto score = [&calculator](Item* weapon, uint8 slot)
-            {
-                return weapon ? calculator.CalculateItem(weapon->GetTemplate()->ItemId,
-                                                         weapon->GetItemRandomPropertyId(), slot)
-                              : 0.0f;
-            };
-            // both setups scored with the leaving weapon treated as removed, so its set bonus and
-            // capped ratings count for neither side
-            auto gainOver = [&](Item* main, Item* off, Item* leaving)
-            {
-                calculator.SetReplacedItem(leaving);
-                calculator.SetBisContest(itemId, leaving ? leaving->GetTemplate()->ItemId : 0);
-                float const current =
-                    score(mainHandItem, EQUIPMENT_SLOT_MAINHAND) + score(offHandItem, EQUIPMENT_SLOT_OFFHAND);
-                return score(main, EQUIPMENT_SLOT_MAINHAND) + score(off, EQUIPMENT_SLOT_OFFHAND) - current;
-            };
-
-            WeaponLayout best = WeaponLayout::Keep;
-            float bestGain = 0.0f;
-            auto consider = [&](WeaponLayout layout, Item* main, Item* off, Item* leaving)
-            {
-                float const gain = gainOver(main, off, leaving);
-                if (gain > bestGain)
-                {
-                    bestGain = gain;
-                    best = layout;
-                }
-            };
-
-            // A lone 2H pushes the off hand out, but the off hand stays on both sides here and cancels.
-            // Keeps this in line with ItemUsageValue, which only weighs a 2H against the main hand.
-            if (canGoMainHand(itemProto))
-                consider(WeaponLayout::NewInMainHand, item, offHandItem, mainHandItem);
-
-            if (canGoMainHand(itemProto) && !isLoneTwoHander(itemProto) && mainHandItem &&
-                canGoOffHand(mainHandItem->GetTemplate()))
-                consider(WeaponLayout::NewInMainHandOldToOffHand, item, mainHandItem, offHandItem);
-
-            // with the main hand empty, a weapon that fits there goes there
-            if (canGoOffHand(itemProto) &&
-                (mainHandItem ? !isLoneTwoHander(mainHandItem->GetTemplate()) : !canGoMainHand(itemProto)))
-                consider(WeaponLayout::NewInOffHand, mainHandItem, item, offHandItem);
-
-            if (canGoOffHand(itemProto) && offHandItem && canGoMainHand(offHandItem->GetTemplate()))
-                consider(WeaponLayout::NewInOffHandOldToMainHand, offHandItem, item, mainHandItem);
-
-            switch (best)
-            {
-                case WeaponLayout::Keep:
-                    return;
-                case WeaponLayout::NewInMainHand:
-                    AutoEquipToSlot(bot, item, EQUIPMENT_SLOT_MAINHAND);
-                    break;
-                case WeaponLayout::NewInMainHandOldToOffHand:
-                    // the old main hand drops into the new weapon's bag slot first
-                    AutoEquipToSlot(bot, item, EQUIPMENT_SLOT_MAINHAND);
-                    if (bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND) == item)
-                    {
-                        AutoEquipToSlot(bot, mainHandItem, EQUIPMENT_SLOT_OFFHAND);
-
-                        std::ostringstream moveMsg;
-                        moveMsg << "Main hand upgrade found. Moving " << chat->FormatItem(mainHandItem->GetTemplate())
-                                << " to offhand";
-                        botAI->TellMaster(moveMsg);
-                    }
-                    break;
-                case WeaponLayout::NewInOffHand:
-                    AutoEquipToSlot(bot, item, EQUIPMENT_SLOT_OFFHAND);
-                    break;
-                case WeaponLayout::NewInOffHandOldToMainHand:
-                    // the old off hand drops into the new weapon's bag slot first
-                    AutoEquipToSlot(bot, item, EQUIPMENT_SLOT_OFFHAND);
-                    if (bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND) == item)
-                    {
-                        AutoEquipToSlot(bot, offHandItem, EQUIPMENT_SLOT_MAINHAND);
-
-                        std::ostringstream moveMsg;
-                        moveMsg << "Offhand upgrade found. Moving " << chat->FormatItem(offHandItem->GetTemplate())
-                                << " to main hand";
-                        botAI->TellMaster(moveMsg);
-                    }
-                    break;
-            }
-
-            bool const inMainHand =
-                best == WeaponLayout::NewInMainHand || best == WeaponLayout::NewInMainHandOldToOffHand;
-            std::ostringstream out;
-            out << "Equipping " << chat->FormatItem(itemProto) << (inMainHand ? " in main hand" : " in offhand");
-            botAI->TellMaster(out);
-            return;
-        }
-
-        // If not a special dual-wield/TG scenario or no improvement found, fall back to original logic
-        if (dstSlot == EQUIPMENT_SLOT_FINGER1 ||
-            dstSlot == EQUIPMENT_SLOT_TRINKET1 ||
-            (dstSlot == EQUIPMENT_SLOT_MAINHAND && canDualWield &&
-                ((invType != INVTYPE_2HWEAPON && !have2HWeaponEquipped) || (canTitanGrip && isValidTGWeapon))))
-        {
-            // Handle ring/trinket dual-slot logic
-            Item* const equippedItems[2] = {
-                bot->GetItemByPos(INVENTORY_SLOT_BAG_0, dstSlot),
-                bot->GetItemByPos(INVENTORY_SLOT_BAG_0, dstSlot + 1)
-            };
-
-            if (equippedItems[0])
-            {
-                if (equippedItems[1])
-                {
-                    // Both slots are full - pick the worst item to replace, but only if new item is better
-                    StatsWeightCalculator calc(bot);
-                    calc.SetItemSetBonus(sPlayerbotAIConfig.ItemSetUseForUpgrades);
-                    calc.SetOverflowPenalty(false);
-                    calc.SetBisBonus(true);
-
-                    int32 newItemRandomProp = item->GetItemRandomPropertyId();
-                    int32 firstRandomProp = equippedItems[0]->GetItemRandomPropertyId();
-                    int32 secondRandomProp = equippedItems[1]->GetItemRandomPropertyId();
-
-                    // Score the candidate once per slot, each time with the piece it would displace
-                    // treated as removed, so the incumbent's set bonus and capped ratings count for it only.
-                    calc.SetReplacedItem(equippedItems[0]);
-                    calc.SetBisContest(itemId, equippedItems[0]->GetTemplate()->ItemId);
-                    float newItemScoreVsFirst = calc.CalculateItem(itemId, newItemRandomProp, dstSlot);
-                    float firstItemScore = calc.CalculateItem(equippedItems[0]->GetTemplate()->ItemId, firstRandomProp,
-                                                              dstSlot);
-
-                    calc.SetReplacedItem(equippedItems[1]);
-                    calc.SetBisContest(itemId, equippedItems[1]->GetTemplate()->ItemId);
-                    float newItemScoreVsSecond = calc.CalculateItem(itemId, newItemRandomProp, dstSlot + 1);
-                    float secondItemScore = calc.CalculateItem(equippedItems[1]->GetTemplate()->ItemId, secondRandomProp,
-                                                               dstSlot + 1);
-                    calc.SetReplacedItem(nullptr);
-
-                    // has to agree with ItemUsageValue: the sim rank when it has a say, scores otherwise
-                    auto beats = [&calc](ItemTemplate const* a, ItemTemplate const* b, int32 slot, float scoreA,
-                                         float scoreB)
-                    {
-                        int8 const rankOrder = calc.CompareBisRank(a, b, slot);
-                        return rankOrder ? rankOrder > 0 : scoreA > scoreB;
-                    };
-                    ItemTemplate const* firstProto = equippedItems[0]->GetTemplate();
-                    ItemTemplate const* secondProto = equippedItems[1]->GetTemplate();
-
-                    // Determine which slot (if any) should be replaced
-                    bool betterThanFirst = beats(itemProto, firstProto, dstSlot, newItemScoreVsFirst, firstItemScore);
-                    bool betterThanSecond =
-                        beats(itemProto, secondProto, dstSlot + 1, newItemScoreVsSecond, secondItemScore);
-
-                    // Early return if new item is not better than either equipped item
-                    if (!betterThanFirst && !betterThanSecond)
-                        return;
-
-                    if (betterThanFirst && betterThanSecond)
-                    {
-                        // New item is better than both - replace the worse of the two equipped items
-                        if (beats(firstProto, secondProto, dstSlot, firstItemScore, secondItemScore))
-                            dstSlot++; // Replace second slot (worse)
-                        // else: keep dstSlot as-is (replace first slot)
-                    }
-                    else if (betterThanSecond)
-                        dstSlot++; // Only better than second slot - replace it
-                }
-                else
-                {
-                    // Second slot empty, use it
-                    dstSlot++;
-                }
-            }
-        }
-
-        // Equip the item in the chosen slot
-        {
-            WorldPacket packet(CMSG_AUTOEQUIP_ITEM_SLOT, 2);
-            ObjectGuid itemguid = item->GetGUID();
-            packet << itemguid << dstSlot;
-            WorldPackets::Item::AutoEquipItemSlot nicePacket(std::move(packet));
-            nicePacket.Read();
-            bot->GetSession()->HandleAutoEquipItemSlotOpcode(nicePacket);
-        }
+        std::ostringstream moveMsg;
+        if (choice.slot == EQUIPMENT_SLOT_MAINHAND)
+            moveMsg << "Main hand upgrade found. Moving " << chat->FormatItem(moving->GetTemplate()) << " to offhand";
+        else
+            moveMsg << "Offhand upgrade found. Moving " << chat->FormatItem(moving->GetTemplate()) << " to main hand";
+        botAI->TellMaster(moveMsg);
     }
 
     std::ostringstream out;
     out << "Equipping " << chat->FormatItem(itemProto);
+    if (choice.slot == EQUIPMENT_SLOT_MAINHAND && itemProto->Class == ITEM_CLASS_WEAPON)
+        out << " in main hand";
+    else if (choice.slot == EQUIPMENT_SLOT_OFFHAND && itemProto->Class == ITEM_CLASS_WEAPON)
+        out << " in offhand";
+    else if (choice.slot == EQUIPMENT_SLOT_RANGED && itemProto->InventoryType != INVTYPE_RELIC)
+        out << " in ranged slot";
     botAI->TellMaster(out);
 }
 
@@ -471,13 +186,13 @@ bool EquipUpgradesPacketAction::Execute(Event event)
     }
 
     ItemIds items = SelectInventoryItemsToEquip();
-    EquipItems(items);
+    EquipItems(items, false);
     return true;
 }
 
 bool EquipUpgradeAction::Execute(Event /*event*/)
 {
     ItemIds items = SelectInventoryItemsToEquip();
-    EquipItems(items);
+    EquipItems(items, false);
     return true;
 }

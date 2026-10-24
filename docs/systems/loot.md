@@ -37,13 +37,38 @@ uses `ll <strategy>`, queries with `ll ?`, and previews a specific item with `ll
 
 ## Roll voting
 
-Two independent stat systems drive a roll, and **the bugs live in their disagreement**:
+**One decision, `EvaluateGear` (`ItemUsageValue.cpp`), answers "would this bot wear it, and
+where"** for the roll vote (`"item usage"`), auto-equip (trade, item push, won rolls), vendor buys
+and `calc`, so a vote and a trade can't disagree. Never add a gear check on one path only. Order:
 
-- **Score engine** — `StatsCollector::CollectItemStats` → `StatsWeightCalculator::CalculateItem` →
-  `itemScore`, which is what makes `QueryItemUsageForEquip` return EQUIP/REPLACE.
-- **Spec gate** — `BuildItemStatProfile` → `IsPrimaryForSpec` / `IsFallbackNeedReasonableForSpec`,
-  plus the `SmartNeedBySpec` off-spec safety net, which runs only in the loot path via
-  `AdjustUsageForOffspec`.
+1. **Eligibility** from the template (usable, slot, Titan's Grip type, unique-equipped per target
+   slot), plus binding for a bag item.
+2. **Fitness**, never overwritten by the comparison: unslotted score > 0, `IsRoleItemizationMismatch`,
+   `CanEquipWeapon`, and under `Roll.SmartNeedBySpec` the spec checks (`IsPrimaryForSpec`, else
+   `IsFallbackNeedReasonableForSpec`, and an off-spec ring/neck/trinket/cloak only over grey or
+   white gear). `RandomItemMgr::CanEquipArmor` is not used: it rejects relics and int-heavy plate.
+3. **Placement** (`GearPlacement.h`): wanted when `Σ new > Σ old × threshold` over the slots whose
+   occupant changes. The threshold is `EquipUpgradeThreshold`, `Roll.CrossArmorExtraMargin` for a
+   lower armor class over the bot's own (`EquipUpgradeThreshold` when BiS-listed or for a leveling
+   healer), and 1.0 over a worn item failing the hard checks (score, role, weapon skill). Rings and
+   trinkets fill an empty slot first, else replace the weaker worn one.
+4. **Result**: EQUIP/REPLACE; an unfit item is BAD_EQUIP into an empty slot only (shirts, tabards,
+   a leveling bot's bare slot; never voted on), else NONE, falling to disenchant / AH / vendor.
+   A broken worn item is replaced whatever the scores.
+
+`equip <item>`, outfits and the ICC rocket pack pass `force`: no fitness or threshold, best legal
+slot even without a gain. "item usage" is recalculated on every read, so `EvaluateGear` must never
+read it back for the same item (it would recurse without end).
+
+The cross-armor courtesy (passing on every lower armor class at level cap or in a raid) and its
+keys `Roll.StrictCrossArmorAtEndgame`, `Roll.CrossArmorGreedIsPass` and `Roll.UseGroupUsageChecks`
+are gone: in WotLK about half of many specs' BiS body armor is a lower class, which the vote passed
+on while a trade equipped it.
+
+**`Player::GetItemCount` counts worn items whatever `inBankAlso` says**, so `total > bagOnly` detects
+a bank copy, not a worn one. Count worn copies by slot (`CountUnwornCopies`). The roll's
+"already owns a copy → GREED" counts only copies not worn, or a second copy for the off hand never
+gets a vote; a unique-equipped item owned anywhere never gets NEED.
 
 `FinalizeRollVote` (`ItemUsageValue.cpp`) under `Playerbots.Roll.UpgradesOnly = 1` forces PASS on
 everything except a computed NEED whose usage is `ITEM_USAGE_EQUIP`/`REPLACE` (downgraded to GREED).
@@ -51,10 +76,8 @@ everything except a computed NEED whose usage is `ITEM_USAGE_EQUIP`/`REPLACE` (d
 the classifier, never in the greed fallback. In practice bots therefore cap at GREED, and the BiS
 lists below decide **GREED vs PASS**, not NEED vs GREED. Shipped default is `Roll.UpgradesOnly = 0`.
 
-`IsRoleItemizationMismatch(bot, proto)` is the single choke point for role-mismatched itemisation,
-called in `QueryItemUsageForEquip` right after `itemScore`; returning true forces
-`shouldEquip = false`, which covers both loot rolls and auto-equip. `IsPrimaryForSpec` is never
-reached for these, because BAD_EQUIP short-circuits `AdjustUsageForOffspec`. It rejects three shapes:
+`IsRoleItemizationMismatch` is the fitness check for role-mismatched itemisation; with the
+neighbouring checks it rejects three shapes:
 
 - **Melee on a statless ranged weapon.** A rogue uses the MELEE collector, so a ranged weapon would
   score nonzero twice: base ranged DPS (`STATS_TYPE_RANGED_DPS`, weight 0.01) and its
@@ -90,16 +113,19 @@ is never penalised. A bot resolving to the sim BiS dataset instead
 ([itemization.md](itemization.md#sim-bis-dataset)) gets this whole signal from its own dataset
 subject in place of the lists, never mixed per item. It reaches a roll two ways:
 
-- **Gate bypass** (`Playerbots.Bis.GateBypass`) — `IsBisForBot` short-circuits
-  `IsFallbackNeedReasonableForSpec`; `IsPrimaryForSpec` unless the item is body armour of a lower
-  class than the bot's preferred one (`IsLowerTierArmorForBot`), a call that belongs to
-  `AdjustUsageForCrossArmor`; and `AdjustUsageForCrossArmor` itself, which returns EQUIP when the bot
-  can wear the class, after its etiquette and group gates. `IsRoleItemizationMismatch` is
-  deliberately **not** bypassed.
+- **BiS-listed** (`Playerbots.Bis.GateBypass`; rank 1-6, any slot, at or below the phase cap, from
+  the calculator's resolved source, so hand-blind) — one test per evaluation that skips the spec
+  checks (`IsPrimaryForSpec` only for the bot's own armor class), skips `IsRoleItemizationMismatch`
+  (27 of 57 weapons on the WotLK Enhancement lists carry spell power or intellect), and lowers a
+  lower armor class's bar to `EquipUpgradeThreshold`. 0 switches all three off.
 - **Score bonus** (`Playerbots.Bis.ScoreBonus`, `Bis.PhaseDecay`) —
-  `StatsWeightCalculator::BisRankMultiplier` ([itemization.md](itemization.md#ranked-bis-lists)).
-  `QueryItemUsageForEquip` sets it, so it moves the `usage` that voting consumes; it is not
-  equip-only.
+  `StatsWeightCalculator::BisRankMultiplier` ([itemization.md](itemization.md#ranked-bis-lists)),
+  hand-aware for weapons. `EvaluateGear` sets it, so it moves the vote too; it is not equip-only.
+
+**Known gaps:** tier tokens use neither BiS nor scores (the token vote is item level against the
+slot, `TokenILevelMargin`), since nothing maps a token to its pieces. An ungrouped level-80 bot is
+capped at its own IP tier (T7 after an IP reset), so Ulduar-and-later listings give it no bonus or
+bypass until it groups with a real player; vote and trade both happen grouped, so they agree.
 
 ### Expansion matching
 

@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_BISLISTMGR_H
 #define PLAYERBOTS_BISLISTMGR_H
 
+#include "BisRankOrder.h"
 #include "Define.h"
 #include <map>
 #include <memory>
@@ -112,30 +113,21 @@ public:
     // tier falls back to ProgressionTierCap, which clamps here to WotLK RS, i.e. every phase counts.
     static BisProgress ProgressForBot(Player* bot);
 
-    // Best (lowest) rank at or below max from the bot's ResolveSource, 0 when that source doesn't
-    // list the item.
-    uint8 GetBisRank(Player* bot, ItemTemplate const* proto, BisProgress max) const;
-
     // Same lookup against an already-resolved spec key, for callers that score many items for one bot
     // and should not repeat the talent walk in ResolveSpecKey each time. outPhase receives the latest
     // phase that still lists the item at the returned rank, so callers can tell current BiS from stale;
-    // it is only meaningful when the return is non-zero.
-    uint8 GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, BisProgress max, uint8* outPhase = nullptr) const;
+    // it is only meaningful when the return is non-zero. A hand only counts listings for that weapon
+    // hand; Any counts every slot.
+    uint8 GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, BisProgress max, uint8* outPhase = nullptr,
+                        BisRankOrder::Hand hand = BisRankOrder::Hand::Any) const;
 
     // The bot's roster subject in the sim dataset, else its spec's, else the lists. A subject only
     // counts when its class and tab match the bot's spec key and it has a block at or below max.
     BisSource ResolveSource(Player* bot, BisProgress max) const;
 
-    // GetBisRankFor against a resolved source; outPhase as above.
-    uint8 GetBisRankFor(uint32 itemId, BisSource const& src, uint8* outPhase = nullptr) const;
-
-    // Listed at or below the bot's own progression phase. The spec gates use this, and they have to
-    // agree with the score nudge about what counts as this bot's BiS - answering "any phase" here lets
-    // a Naxx-progression bot bypass the gates for gear several tiers past anything it can reach.
-    bool IsBisListed(Player* bot, ItemTemplate const* proto) const
-    {
-        return GetBisRank(bot, proto, ProgressForBot(bot)) != 0;
-    }
+    // GetBisRankFor against a resolved source; outPhase and hand as above.
+    uint8 GetBisRankFor(uint32 itemId, BisSource const& src, uint8* outPhase = nullptr,
+                        BisRankOrder::Hand hand = BisRankOrder::Hand::Any) const;
 
 private:
     BisListMgr() = default;
@@ -154,6 +146,7 @@ private:
         uint8 tab;
         uint8 phase;
         uint8 rank;
+        BisRankOrder::Hand hand;
     };
 
     // autoGearScoreLimit -> (cls<<8|tab) -> faction (0/1/2) -> slot -> itemId

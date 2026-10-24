@@ -101,6 +101,32 @@ enum ItemUsage : uint32
     ITEM_USAGE_AMMO = 13
 };
 
+// Whether a bot would wear an item and where. Loot votes, auto-equip, vendor buys and calc all read
+// this one decision.
+struct GearChoice
+{
+    // EQUIP, REPLACE, BAD_EQUIP (unfit, fills an empty slot), BROKEN_EQUIP or NONE
+    ItemUsage usage = ITEM_USAGE_NONE;
+    // equipment or bag slot the item goes to, NULL_SLOT for none
+    uint8 slot = 255;
+    // weapon swap: where the weapon worn in slot moves to
+    uint8 incumbentTo = 255;
+    // over the slots whose occupant changes; old has each slot's threshold applied
+    float newScore = 0.0f;
+    float oldScore = 0.0f;
+    // the check that refused it, or why it was taken
+    char const* reason = "";
+};
+
+// candidate is the bag item when there is one, for the broken and binding checks; null for a drop
+// or a link. force (the equip command) skips the fitness checks and thresholds and takes the best
+// legal slot even without a gain.
+GearChoice EvaluateGear(PlayerbotAI* botAI, ItemTemplate const* proto, int32 randomPropertyId,
+                        Item const* candidate = nullptr, bool force = false);
+
+// Copies in bags and bank. Player::GetItemCount counts worn ones whatever inBankAlso says.
+uint32 CountUnwornCopies(Player* bot, uint32 itemId);
+
 class ItemUsageValue : public CalculatedValue<ItemUsage>, public Qualified
 {
 public:
@@ -118,13 +144,11 @@ protected:
     ItemUsage QueryItemUsageForAmmo(ItemTemplate const* proto);
 
 private:
-    uint32 GetSmallestBagSize();
     bool IsItemUsefulForQuest(Player* player, ItemTemplate const* proto);
     bool IsItemNeededForSkill(ItemTemplate const* proto);
     bool IsItemUsefulForSkill(ItemTemplate const* proto);
     bool IsItemNeededForUsefullSpell(ItemTemplate const* proto, bool checkAllReagents = false);
     bool HasItemsNeededForSpell(uint32 spellId, ItemTemplate const* proto);
-    Item* CurrentItem(ItemTemplate const* proto);
     float CurrentStacks(ItemTemplate const* proto);
     float BetterStacks(ItemTemplate const* proto, std::string const usageType = "");
 
@@ -132,14 +156,6 @@ public:
     static std::vector<uint32> SpellsUsingItem(uint32 itemId, Player* bot);
     static bool SpellGivesSkillUp(uint32 spellId, Player* bot);
     static std::string const GetConsumableType(ItemTemplate const* proto, bool hasMana);
-};
-
-// Smart-loot usage value (separate from "item upgrade" refactor)
-class LootUsageValue : public ItemUsageValue
-{
-public:
-    LootUsageValue(PlayerbotAI* botAI, std::string const name = "loot usage") : ItemUsageValue(botAI, name) {}
-    ItemUsage Calculate() override;
 };
 
 // Refactor EquipActions: dedicated value used for equip-upgrade triggers

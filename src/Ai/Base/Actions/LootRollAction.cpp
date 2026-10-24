@@ -57,7 +57,7 @@ bool LootRollAction::Execute(Event /*event*/)
             continue;
 
         std::string const itemUsageParam = ItemUsageValue::BuildItemUsageParam(itemId, randomProperty);
-        ItemUsage usage = AI_VALUE2(ItemUsage, "loot usage", itemUsageParam);
+        ItemUsage usage = AI_VALUE2(ItemUsage, "item usage", itemUsageParam);
 
         // Central smart-loot decision
         RollVote const vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group);
@@ -112,7 +112,7 @@ bool MasterLootRollAction::Execute(Event event)
     int32 randomProperty = EncodeRandomEnchantParam(randomPropertyId, randomSuffix);
 
     std::string const itemUsageParam = ItemUsageValue::BuildItemUsageParam(itemId, randomProperty);
-    ItemUsage usage = AI_VALUE2(ItemUsage, "loot usage", itemUsageParam);
+    ItemUsage usage = AI_VALUE2(ItemUsage, "item usage", itemUsageParam);
 
     RollVote vote = CalculateLootRollVote(bot, proto, randomProperty, usage, group);
 

@@ -72,12 +72,11 @@ four 12-slot Deathweave Bags from `CharStartOutfit`, so every slot is occupied a
 characters were still on them against 120 on Portable Holes). Every other class starts bagless.
 
 **Quivers, ammo pouches and profession bags are never touched**, by `InitBags` or by the loot path:
-`ItemUsageValue::GetSmallestBagSize` and `EquipAction::GetSmallestBagSlot` skip any slot whose item
-is not `ITEM_CLASS_CONTAINER` + `ITEM_SUBCLASS_CONTAINER`, over every bag slot (a hunter's quiver in
-slot 19 would otherwise report as the smallest bag and get swapped out). The two must agree: a
-protected container has to be invisible to both, or one will offer a slot the other refuses. `GetSmallestBagSize` keeps `0` for a
-genuinely empty slot and returns `uint32` max when every slot is occupied and none is replaceable, so
-`Calculate` yields `ITEM_USAGE_NONE`.
+`SmallestBagSlot` (`ItemUsageValue.cpp`, used by `EvaluateGear` for both the decision and the swap)
+skips any slot whose item is not `ITEM_CLASS_CONTAINER` + `ITEM_SUBCLASS_CONTAINER`, over every bag
+slot (a hunter's quiver in slot 19 would otherwise report as the smallest bag and get swapped out).
+An empty bag slot comes first; with every slot occupied and none replaceable there is no slot, so
+the bag's usage is `ITEM_USAGE_NONE`.
 
 ## `maintenance` keeps glyphs
 

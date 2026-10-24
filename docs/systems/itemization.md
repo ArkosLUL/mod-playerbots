@@ -46,13 +46,14 @@ fork replaced and is deliberately not ported: it would block the sim's epic gems
 
 ### Dual-wield weapon placement
 
-`EquipAction::EquipItem` scores whole setups, not hands: for new weapon N, main M and off hand O it
-tries N/O, N/M, M/N and O/N, scores each as `S(main, MAINHAND) + S(off, OFFHAND)` with the leaving
-weapon as `SetReplacedItem`, and takes the best gain over the current pair (none → no change). The
-slot matters because it drives the spec weapon-speed preference. A lone 2H (not Titan's Grip) is
-weighed against the main hand only, the off hand cancelling on both sides, because `ItemUsageValue`
-does the same; counting the off-hand loss only here would leave a 2H flagged as an upgrade that
-EquipAction keeps refusing. Weapons already worn are never re-sorted without a new one.
+`EvaluateGear` (`ItemUsageValue.cpp`) scores whole setups, not hands: for new weapon N, main M and
+off hand O it tries N/O, N/M, M/N and O/N (legality in `GearPlacement.h`), summing only the slots
+whose occupant changes, each scored in its new hand with the leaving weapon as `SetReplacedItem`.
+A layout is wanted when `Σ new > Σ old × threshold` per slot; the best wanted gain wins. The slot
+matters because it drives the spec weapon-speed preference and the hand-aware BiS bonus. A lone 2H
+(not Titan's Grip) is weighed against the main hand only: its ×0.5 type penalty stands in for the
+off hand it pushes out. A tank never puts a weapon over its shield. Weapons already worn are never
+re-sorted without a new one.
 
 ### Talent-driven stat weights
 
@@ -122,7 +123,7 @@ DPS exists only when a user removes it.
 so without more, a hit-capped bot would take hit gear over better items now that hit weighs ~2x.
 `SetReplacedItem(item)` clips hit, expertise, armor pen and defense for both incumbent and
 challenger to what the bot would still need with that item removed (template, random property,
-enchants, gems). An unslotted score (the first `CalculateItem` in `QueryItemUsageForEquip`, `calc`,
+enchants, gems). An unslotted score (the fitness score in `EvaluateGear`, `calc`,
 gear generation) has no item to take out, so clipping it would count the bot's own hit against
 it; those stay unclipped. `PLAYER_EXPERTISE` already includes the rating part
 (`Player::UpdateExpertise`), so the expertise cap reads it alone.
@@ -161,11 +162,8 @@ stickiness exactly when the bonuses are live.
 Consequences: T7 chest → T7.5 chest is neutral (same set, same vacated baseline); a non-set
 challenger must beat the set piece by the bonus weight **on top of** `EquipUpgradeThreshold`.
 
-Every runtime path that scores a slot must supply the replaced item — `QueryItemUsageForEquip`
-(the primary path; `LootUsageValue`, `ItemUpgradeValue` and `ItemUsageValue` all funnel through it),
-`AdjustUsageForCrossArmor`, and both `EquipAction` sites. `EquipAction` uses raw `>` comparisons with
-no threshold, so leaving it out would silently undo what `QueryItemUsageForEquip` just protected.
-`RandomItemMgr::CalculateItemWeight` deliberately keeps `SetItemSetBonus(false)` — it feeds a cached,
+Every runtime slot score goes through `EvaluateGear`, which supplies the replaced item; votes,
+auto-equip, vendor buys and `calc` all read it. `RandomItemMgr::CalculateItemWeight` deliberately keeps `SetItemSetBonus(false)` — it feeds a cached,
 player-independent table.
 
 Known limitation: **tier tokens carry no `ItemSet`**, so `IsTokenLikelyUpgrade` /
@@ -452,8 +450,8 @@ half-measure: correct-for-era enchants on wrong-for-era items is expected, not a
 
 The lists ([loot.md](loot.md#ranked-bis-lists) for the import and the roll gates) move scores through
 `StatsWeightCalculator::BisRankMultiplier`, the last multiplier in `CalculateItem` and the only one
-off by default — it needs `SetBisBonus(true)`, which only `QueryItemUsageForEquip`, `EquipAction` and
-the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
+off by default — it needs `SetBisBonus(true)`, which only `EvaluateGear` and the `calc` debug
+command set. `PlayerbotFactory::InitEquipment`, autogear and
 `RandomItemMgr::CalculateItemWeight` all score without it. It is
 `1 + Bis.ScoreBonus × kRankScale[rank - 1] × phaseScale`:
 
@@ -464,7 +462,11 @@ the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
   pre-raid rank-1 piece is worth exactly as much as the current tier's rank-1, the two bonuses
   cancel, and the equipped lower-ilvl piece keeps the slot on `ItemSet.BonusWeight` (x1.15) times
   `EquipUpgradeThreshold` (x1.07) alone — a 23% raw-stat wall.
-- `reference` in a slot comparison (`SetBisContest`, set by `QueryItemUsageForEquip`) is the later
+- **Hand-aware for weapons**: scored for the main or off hand, the rank comes only from listings
+  for that hand (lists `slot_name` `Weapon` / `Off hand`; dataset sim slots 14 / 15, built in
+  `BisRankOrder::AddBlock`), so a weapon ranked only as a main hand gets no bonus in the off hand.
+  Every other score takes the best rank over all slots.
+- `reference` in a slot comparison (`SetBisContest`, set by `EvaluateGear`) is the later
   phase of the dropped and the equipped item's best listing; ranks 4-6 count, unlisted is 0. Not the
   bot's progression phase: that zeroed 91% of rank 1-3 Ulduar-level list entries for a tier-15 group
   still gearing in Ulduar. Without a contest it is the source's phase; `calc` contests the item with
@@ -472,9 +474,6 @@ the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
 - The reference depends on the pair, so scores are not one total order per bot. A three-item cycle
   needs an unlisted item 23-25% above a later-phase rank-3 in raw score with an earlier-phase rank-1
   within 7.5% of that rank-3; not guarded.
-- `EquipAction`'s own slot comparisons (rings and trinkets with both slots full, dual-wield weapon
-  layouts) set the bonus and contest the new item against the one leaving, matching
-  `QueryItemUsageForEquip` slot for slot. Without it they refuse an item wanted on the bonus alone.
 
 **`EquipUpgradeThreshold` is 1.07, not upstream's 1.1.** Upstream's removal of the ilvl × quality
 multiplier (#2790) acted like a ~5% stiffer threshold per item-level step. Measured on the WotLK lists
@@ -551,8 +550,9 @@ sim's ring whose slot no exact match has claimed. Trinkets take nothing from the
 
 **Rank order** (`Playerbots.BisDataset.RankOrder`). When the subject lists both the worn and the
 new item, the better-ranked one wins in both directions, whatever the scores say
-(`StatsWeightCalculator::CompareBisRank`, called by `QueryItemUsageForEquip` and `EquipAction`'s
-ring/trinket block, which must agree). The latest phase at or below the source's that lists
+(`StatsWeightCalculator::CompareBisRank`, called by `EvaluateGear`), above every threshold, the
+cross-armor margin included. With both rings or trinkets worn, the one the sim ranks lower is the
+one replaced. The latest phase at or below the source's that lists
 **both** decides; a tie there or no common phase leaves it to the scores. Not the latest phase per
 item: a bot capped at P3 in P2 gear would drop a P2 rank 1 for anything on the P3 list.
 
@@ -639,8 +639,10 @@ Defaults below are the shipped values in `conf/playerbots.conf.dist`.
 | `Playerbots.SimWeights.Enable` | 1 | Level-80 DPS weights from `playerbots_sim_weights`; no-op without the table |
 
 Debug: `<bot> calc [item]` prints a raw score (`TellCalculateItemAction`, registered as `calc`) plus
-a BiS line naming the source (lists or dataset), subject, effective phase and rank, and a weights
-line: `weights: sim <class>/<tab>, ilvl <x> (P<a> -> P<b> at <pct>%)` or `hand-written (<reason>)`. `.ip set <n>`
+a BiS line naming the source (lists or dataset), subject, effective phase and rank (per hand for a
+weapon), a weights line: `weights: sim <class>/<tab>, ilvl <x> (P<a> -> P<b> at <pct>%)` or
+`hand-written (<reason>)`, and `decision: <usage> slot <n>, <new> vs <old × threshold> (<reason>) |
+roll: <vote>` — how to check a disputed item in game. `.ip set <n>`
 sets a test character's IP tier. `.playerbots bis reload` (admin) forces a dataset reload; `.playerbots
 bis status` (gamemaster) reports what's loaded, plus dataset enchants without
 `SPELL_EFFECT_ENCHANT_ITEM` and gems without `GemProperties`.

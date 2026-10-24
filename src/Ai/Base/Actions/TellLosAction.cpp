@@ -10,6 +10,7 @@
 #include "ChatHelper.h"
 #include "Event.h"
 #include "ItemTemplate.h"
+#include "ItemUsageValue.h"
 #include "ObjectMgr.h"
 #include "Playerbots.h"
 #include "StatsWeightCalculator.h"
@@ -136,6 +137,26 @@ bool TellEstimatedDpsAction::Execute(Event /*event*/)
     return true;
 }
 
+namespace
+{
+char const* UsageText(ItemUsage usage)
+{
+    switch (usage)
+    {
+        case ITEM_USAGE_EQUIP:
+            return "EQUIP";
+        case ITEM_USAGE_REPLACE:
+            return "REPLACE";
+        case ITEM_USAGE_BAD_EQUIP:
+            return "BAD_EQUIP";
+        case ITEM_USAGE_BROKEN_EQUIP:
+            return "BROKEN_EQUIP";
+        default:
+            return "NONE";
+    }
+}
+}  // namespace
+
 bool TellCalculateItemAction::Execute(Event event)
 {
     std::string const text = event.getParam();
@@ -146,8 +167,8 @@ bool TellCalculateItemAction::Execute(Event event)
     if (!proto)
         return false;
 
-    // Match what QueryItemUsageForEquip scores with, or the printed number is not the one the loot
-    // and equip decisions actually saw.
+    // Match what EvaluateGear scores with, or the printed number is not the one the loot and equip
+    // decisions actually saw.
     calculator.SetItemSetBonus(sPlayerbotAIConfig.ItemSetUseForUpgrades);
     calculator.SetOverflowPenalty(false);
     calculator.SetBisBonus(true);
@@ -200,9 +221,30 @@ bool TellCalculateItemAction::Execute(Event event)
         if (rank)
             out << " listed at phase " << uint32(listedPhase);
         out << " (any phase " << uint32(sBisListMgr->GetBisRankFor(proto->ItemId, anyPhase)) << ")";
+        if (proto->Class == ITEM_CLASS_WEAPON)
+            out << ", main hand " << uint32(calculator.BisRank(proto->ItemId, BisRankOrder::Hand::Main))
+                << ", off hand " << uint32(calculator.BisRank(proto->ItemId, BisRankOrder::Hand::Off));
     }
 
     botAI->TellMasterNoFacing(out.str());
     botAI->TellMasterNoFacing(calculator.DescribeWeights());
+
+    GearChoice const choice = EvaluateGear(botAI, proto, item.randomPropertyId);
+    std::ostringstream decision;
+    decision << "decision: " << UsageText(choice.usage);
+    if (choice.slot != NULL_SLOT)
+    {
+        decision << " slot " << uint32(choice.slot);
+        if (choice.incumbentTo != NULL_SLOT)
+            decision << " (worn one to slot " << uint32(choice.incumbentTo) << ")";
+        decision << ", " << choice.newScore << " vs " << choice.oldScore;
+    }
+    decision << " (" << choice.reason << ")";
+
+    std::string const param = ItemUsageValue::BuildItemUsageParam(item.itemId, item.randomPropertyId);
+    ItemUsage const usage = AI_VALUE2(ItemUsage, "item usage", param);
+    decision << " | roll: "
+             << RollVoteText(CalculateLootRollVote(bot, proto, item.randomPropertyId, usage, bot->GetGroup()));
+    botAI->TellMasterNoFacing(decision.str());
     return true;
 }
