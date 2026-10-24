@@ -57,6 +57,12 @@ bool FactionChampionsChasedTrigger::IsActive()
     return botAI->CanMove() && FactionChampionsChased(botAI, spot);
 }
 
+bool FactionChampionsKiteTrigger::IsActive()
+{
+    Position spot;
+    return botAI->CanMove() && FactionChampionsKite(botAI, spot);
+}
+
 bool FactionChampionsOpenerTrigger::IsActive()
 {
     uint32 spellId = 0;
@@ -82,6 +88,9 @@ void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("faction champions chased", {
         NextAction("faction champions chased", ACTION_RAID + 2.5f) }));
+
+    triggers.push_back(new TriggerNode("faction champions kite", {
+        NextAction("faction champions kite", ACTION_RAID + 2.45f) }));
 
     triggers.push_back(new TriggerNode("faction champions step off", {
         NextAction("faction champions step off", ACTION_RAID + 2.4f) }));

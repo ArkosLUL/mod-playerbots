@@ -45,6 +45,14 @@ public:
     bool Execute(Event event) override;
 };
 
+// A ranged dps bot's hop away from the melee champion on it, till that one re-picks someone else
+class FactionChampionsKiteAction : public NorthrendBeastsWalkAction
+{
+public:
+    FactionChampionsKiteAction(PlayerbotAI* botAI) : NorthrendBeastsWalkAction(botAI, "faction champions kite") {}
+    bool Execute(Event event) override;
+};
+
 // The AoE fear or Frost Nova that makes the champions burn their trinket
 class FactionChampionsOpenerAction : public Action
 {
@@ -85,6 +93,7 @@ public:
         creators["faction champions step off"] = &ToCFactionChampionsBallActionContext::faction_champions_step_off;
         creators["faction champions opener"] = &ToCFactionChampionsBallActionContext::faction_champions_opener;
         creators["faction champions chased"] = &ToCFactionChampionsBallActionContext::faction_champions_chased;
+        creators["faction champions kite"] = &ToCFactionChampionsBallActionContext::faction_champions_kite;
     }
 
 private:
@@ -105,6 +114,8 @@ private:
     static Action* faction_champions_opener(PlayerbotAI* botAI) { return new FactionChampionsOpenerAction(botAI); }
 
     static Action* faction_champions_chased(PlayerbotAI* botAI) { return new FactionChampionsChasedAction(botAI); }
+
+    static Action* faction_champions_kite(PlayerbotAI* botAI) { return new FactionChampionsKiteAction(botAI); }
 
     static Action* faction_champions_escape(PlayerbotAI* botAI) { return new FactionChampionsEscapeAction(botAI); }
 

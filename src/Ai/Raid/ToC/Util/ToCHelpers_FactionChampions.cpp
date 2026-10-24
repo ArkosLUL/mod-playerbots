@@ -1730,8 +1730,13 @@ bool FactionChampionsCcProtected(PlayerbotAI* botAI, Unit* unit)
             return true;
     }
 
-    SpellInfo const* aura = sSpellMgr->GetSpellInfo(PlayerCcAura(unit));
-    return (aura && BreaksOnDamage(aura)) || FactionChampionsBreakablePeelAt(botAI, unit);
+    return FactionChampionsHeldByBreakableCc(unit) || FactionChampionsBreakablePeelAt(botAI, unit);
+}
+
+bool FactionChampionsHeldByBreakableCc(Unit* unit)
+{
+    SpellInfo const* aura = unit ? sSpellMgr->GetSpellInfo(PlayerCcAura(unit)) : nullptr;
+    return aura && BreaksOnDamage(aura);
 }
 
 bool FactionChampionsBreaksOnDamage(uint32 spellId)

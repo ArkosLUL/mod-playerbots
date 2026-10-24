@@ -105,6 +105,24 @@ bool FactionChampionsChasedAction::Execute(Event /*event*/)
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED);
 }
 
+bool FactionChampionsKiteAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!FactionChampionsKite(botAI, spot))
+    {
+        DropWalk();
+        return false;
+    }
+
+    if (WalkingTo(WalkInFlight(), spot))
+        return true;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    return WalkTo(spot, MovementPriority::MOVEMENT_FORCED);
+}
+
 bool FactionChampionsOpenerAction::Execute(Event /*event*/)
 {
     uint32 spellId = 0;

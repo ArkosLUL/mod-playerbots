@@ -96,6 +96,22 @@ constexpr uint32 SPELL_DEMONIC_CIRCLE_IN_RANGE = 62388;
 constexpr int32 CIRCLE_REFRESH_MS = 60000;
 // two melee champions on a cloth caster kill it in 3-8 s, well before a third arrives
 constexpr uint32 NITRO_MELEE_FOCUS = 2;
+// Blink flees every melee champion this close, and a landing nearer one than this isn't worth the cooldown
+constexpr float BLINK_FLEE_RADIUS = 15.0f;
+constexpr float BLINK_MIN_CLEAR = 12.0f;
+constexpr uint32 SPELL_DISENGAGE = 781;
+constexpr float DISENGAGE_REACH = 5.0f;
+constexpr float DISENGAGE_DIST = 15.0f;
+
+// cloth beats a plate DPS in melee for the re-pick up to ~27 yd, plus the 110% switch margin
+constexpr float KITE_CLEAR = 30.0f;
+// closer than this a free chaser keeps hitting while it follows, so running gains nothing
+constexpr float KITE_CONTACT = 6.0f;
+constexpr float KITE_STEP = 15.0f;
+constexpr uint32 KITE_STEP_MS = 2500;
+// a chaser dragged onto a healer would just re-pick the healer
+constexpr float KITE_HEALER_GAP = 10.0f;
+constexpr float KITE_HOLD = 45.0f;
 
 struct Vec
 {
@@ -126,6 +142,7 @@ struct BallState
     bool memoValid = false;
     std::unordered_map<ObjectGuid, Run> runs;   // chased bot -> its boosted run
     std::unordered_map<ObjectGuid, Run> steps;  // healer -> its step off the melee
+    std::unordered_map<ObjectGuid, Run> kites;  // ranged dps -> its current hop
     std::unordered_map<ObjectGuid, uint32> stepEndMs;
     std::unordered_map<ObjectGuid, CycloneStand> cycloneStands;
 };
@@ -640,12 +657,41 @@ bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bo
         if (champion->GetExactDist2d(&centre) > radius + ESCAPE_AOE_SLACK)
             continue;
 
-        if (champion == kill || FactionChampionsCcProtected(botAI, champion) ||
+        // a duty still casting or a root peel loses nothing to it, a landed Polymorph or Fear would
+        if (champion == kill || FactionChampionsHeldByBreakableCc(champion) ||
             FactionChampionsGripGuarded(botAI, champion))
             return false;
     }
 
     return true;
+}
+
+// Distance from the spot to the nearest melee champion, max with none
+float MeleeClearance(PlayerbotAI* botAI, Position const& spot)
+{
+    float nearest = std::numeric_limits<float>::max();
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+        if (IsFactionChampionMelee(champion->GetEntry()))
+            nearest = std::min(nearest, champion->GetExactDist2d(&spot));
+
+    return nearest;
+}
+
+std::vector<Unit*> MeleeOn(PlayerbotAI* botAI, Player* bot, float radius)
+{
+    std::vector<Unit*> on;
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+        if (IsFactionChampionMelee(champion->GetEntry()) && champion->GetVictim() == bot &&
+            bot->GetExactDist2d(champion) <= radius)
+            on.push_back(champion);
+
+    return on;
+}
+
+// Healers keep their step-off, only ranged dps kites
+bool KiteBot(PlayerbotAI* botAI)
+{
+    return FactionChampionsStaysPut(botAI) && !PlayerbotAI::IsHeal(botAI->GetBot()) && botAI->GetBot()->IsAlive();
 }
 
 bool AoeEscape(PlayerbotAI* botAI, OpenerSpell const& spell, Unit* at, bool fear, FactionChampionsEscapeCast& cast)
@@ -704,17 +750,49 @@ bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast
 
             if (KnownReady(bot, SPELL_BLINK))
             {
-                std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
-                for (float turn : {0.0f, 30.0f, -30.0f, 60.0f, -60.0f})
+                // off the whole pack, not just the ones on it, or it lands on the far side of the others
+                float fleeX = 0.0f;
+                float fleeY = 0.0f;
+                uint32 flee = 0;
+                for (Unit* champion : FactionChampionsInCombat(botAI))
                 {
-                    Vec const dir = Rotate(away, turn);
-                    if (!Clear(Along(bot->GetPosition(), dir, BLINK_DIST), hazards))
+                    if (!IsFactionChampionMelee(champion->GetEntry()) ||
+                        bot->GetExactDist2d(champion) > BLINK_FLEE_RADIUS)
                         continue;
 
+                    ++flee;
+                    fleeX += champion->GetPositionX();
+                    fleeY += champion->GetPositionY();
+                }
+
+                Vec const from =
+                    flee ? Unit2(bot->GetPositionX() - fleeX / flee, bot->GetPositionY() - fleeY / flee) : away;
+                std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
+                float bestClear = BLINK_MIN_CLEAR;
+                bool found = false;
+                Vec best = from;
+                for (float turn : {0.0f, 30.0f, -30.0f, 60.0f, -60.0f, 90.0f, -90.0f})
+                {
+                    Vec const dir = Rotate(from, turn);
+                    Position const landing = Along(bot->GetPosition(), dir, BLINK_DIST);
+                    if (!Clear(landing, hazards))
+                        continue;
+
+                    float const clear = MeleeClearance(botAI, landing);
+                    if (clear >= bestClear)
+                    {
+                        bestClear = clear;
+                        best = dir;
+                        found = true;
+                    }
+                }
+
+                if (found)
+                {
                     cast.spellId = SPELL_BLINK;
                     cast.target = bot;
                     cast.face = true;
-                    cast.facing = Position::NormalizeOrientation(std::atan2(dir.y, dir.x));
+                    cast.facing = Position::NormalizeOrientation(std::atan2(best.y, best.x));
                     return true;
                 }
             }
@@ -762,9 +840,117 @@ bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast
         }
         case CLASS_PRIEST:
             return AoeEscape(botAI, PSYCHIC_SCREAM, bot, true, cast);
+        case CLASS_HUNTER:
+        {
+            if (bot->GetExactDist2d(nearest) > DISENGAGE_REACH || !KnownReady(bot, SPELL_DISENGAGE))
+                return false;
+
+            // leaps backwards off its facing, so face the nearest first
+            float const facing = bot->GetAngle(nearest);
+            Position const landing(bot->GetPositionX() - std::cos(facing) * DISENGAGE_DIST,
+                                   bot->GetPositionY() - std::sin(facing) * DISENGAGE_DIST, bot->GetPositionZ());
+            if (!Clear(landing, FactionChampionsAoeClearances(botAI)))
+                return false;
+
+            cast.spellId = SPELL_DISENGAGE;
+            cast.target = bot;
+            cast.face = true;
+            cast.facing = facing;
+            return true;
+        }
         default:
             return false;
     }
+}
+
+bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
+{
+    BallState* state = botAI && KiteBot(botAI) ? Refresh(botAI) : nullptr;
+    if (!state)
+        return false;
+
+    Player* bot = botAI->GetBot();
+    ObjectGuid const guid = bot->GetGUID();
+    std::vector<Unit*> const chasers = MeleeOn(botAI, bot, KITE_CLEAR);
+    auto const kite = state->kites.find(guid);
+    if (chasers.empty() || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->HasAuraType(SPELL_AURA_MOD_ROOT) ||
+        state->runs.count(guid) || FactionChampionsHasCcDuty(botAI, guid))
+    {
+        if (kite != state->kites.end())
+            state->kites.erase(kite);
+
+        return false;
+    }
+
+    uint32 const now = getMSTime();
+    if (kite != state->kites.end())
+    {
+        if (getMSTimeDiff(kite->second.sinceMs, now) < KITE_STEP_MS &&
+            bot->GetExactDist2d(&kite->second.spot) > RUN_ARRIVE)
+        {
+            spot = kite->second.spot;
+            return true;
+        }
+
+        state->kites.erase(kite);
+    }
+
+    bool gains = false;
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    float nearest = std::numeric_limits<float>::max();
+    for (Unit* chaser : chasers)
+    {
+        float const dist = bot->GetExactDist2d(chaser);
+        nearest = std::min(nearest, dist);
+        sumX += chaser->GetPositionX();
+        sumY += chaser->GetPositionY();
+        if (dist > KITE_CONTACT || chaser->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
+            chaser->HasAuraType(SPELL_AURA_MOD_ROOT) || chaser->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED))
+            gains = true;
+    }
+
+    if (!gains)
+        return false;
+
+    std::vector<Player*> healers;
+    for (Player* member : GroupOnMap(bot))
+        if (member != bot && member->IsAlive() && PlayerbotAI::IsHeal(member))
+            healers.push_back(member);
+
+    std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
+    Vec const away = Unit2(bot->GetPositionX() - sumX / chasers.size(), bot->GetPositionY() - sumY / chasers.size());
+    float bestClear = -1.0f;
+    Position best;
+    for (float turn : {0.0f, 30.0f, -30.0f, 60.0f, -60.0f, 90.0f, -90.0f, 120.0f, -120.0f})
+    {
+        Position const target = Along(bot->GetPosition(), Rotate(away, turn), KITE_STEP);
+        if (!Clear(target, hazards) ||
+            std::any_of(healers.begin(), healers.end(),
+                        [&target](Player* healer) { return healer->GetExactDist2d(&target) < KITE_HEALER_GAP; }))
+            continue;
+
+        float const clear = MeleeClearance(botAI, target);
+        if (clear > bestClear)
+        {
+            bestClear = clear;
+            best = target;
+        }
+    }
+
+    if (bestClear < 0.0f)
+        return false;
+
+    state->kites[guid] = {now, best};
+    RaidObs::Note(bot, "fc.kite",
+                  std::to_string(chasers.size()) + " melee, " + std::to_string(static_cast<int>(nearest)) + " yd");
+    spot = best;
+    return true;
+}
+
+bool FactionChampionsKiteHold(PlayerbotAI* botAI)
+{
+    return botAI && KiteBot(botAI) && !MeleeOn(botAI, botAI->GetBot(), KITE_HOLD).empty();
 }
 
 bool FactionChampionsCircleDue(PlayerbotAI* botAI)

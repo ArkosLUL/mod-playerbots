@@ -1600,6 +1600,9 @@ def focus_pull() -> list[dict]:
         # the mage blinks off its four and lives, the priest screams and dies 1.8 s later
         note(1000, MAGE, fc.ESCAPE, "Blink"),
         note(3000, PRIEST, fc.ESCAPE, "Psychic Scream"),
+        # two mage hops 1.4 s apart make one kite
+        note(1100, MAGE, fc.KITE, "2 melee, 20 yd"),
+        note(2500, MAGE, fc.KITE, "0 melee, 20 yd"),
         {"t": 7000, "e": "end", "out": "wipe"},
     ]
     return records + [focus_snap(when) for when in range(0, 7001, 500)]
@@ -1658,8 +1661,32 @@ class FocusAndRepick(unittest.TestCase):
                          [(1000, MAGE, "Blink", 2, 2, True), (3000, PRIEST, "Psychic Scream", 2, 2, False)])
         self.assertEqual(round(rows[1]["hp"]), 80)
         text = self.render(fc.show_personal)
-        self.assertRegex(text, r"0:03\.000 Mercy +Psychic Scream +2\+2 +80%  no")
+        self.assertRegex(text, r"0:03\.000 Mercy +Psychic Scream +2\+2 +80% +- +- +-  no")
         self.assertIn("fc.escape: Blink 1, Psychic Scream 1", text)
+
+    def test_an_escape_reads_how_far_its_chasers_are_after_and_whether_they_dropped_it(self):
+        # the four leave the mage for the priest at 2 s, 20 yd off it; the priest is dead at 5 s
+        mage, priest = fc.escape_rows(self.trace)
+        self.assertEqual([round(dist) for dist in mage["near"]], [20, 20])
+        self.assertTrue(mage["dropped"])
+        self.assertEqual((priest["near"], priest["dropped"]), ([None, None], None))
+        self.assertRegex(self.render(fc.show_personal), r"0:01\.000 Frost +Blink +2\+2 +\d+% +20 +20 +yes  yes")
+
+    def test_hops_close_together_are_one_kite(self):
+        rows = fc.kite_rows(self.trace)
+        self.assertEqual([(row["t"], row["bot"], row["hops"], row["secs"], row["melee"], row["dropped"])
+                          for row in rows], [(1100, MAGE, 2, 1.4, 2, True)])
+        text = self.render(fc.show_personal)
+        self.assertRegex(text, r"0:01\.100 Frost +2 +1\.4 +2\+2")
+        self.assertIn("fc.kite: 1 kite(s), the chasers dropped the bot in 1", text)
+
+    def test_ranged_spacing_reads_the_nearest_melee_champion(self):
+        # the mage 20 yd and the moonkin 30 yd off the rogue and warrior, never reached
+        spacing = fc.ranged_spacing(self.trace)
+        self.assertEqual((spacing["samples"], round(spacing["median"]), spacing["contact"], spacing["chased"],
+                          spacing["moving"]), (30, 25, 0.0, 0, None))
+        self.assertIn("ranged dps to the nearest melee champion: median 25.0 yd, within 8 yd 0%",
+                      self.render(fc.show_stands))
 
 
 def latch_pull() -> list[dict]:
@@ -1775,6 +1802,8 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.personal_rows(trace), [])
         self.assertEqual(fc.personal_deaths(trace), [])
         self.assertEqual(fc.escape_rows(trace), [])
+        self.assertEqual(fc.kite_rows(trace), [])
+        self.assertIsNone(fc.ranged_spacing(trace))
         self.assertEqual(fc.healer_off_latch(trace), [])
         self.assertEqual(fc.focus_peaks(trace), collections.Counter())
         self.assertEqual(fc.focus_episodes(trace), [])

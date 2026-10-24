@@ -106,6 +106,9 @@ void DefineFactionChampions(EncounterBuilder& e)
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Flee |
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage);
 
+    // a kiting bot walking back into reach of its target hands the chaser its gap again
+    e.Block("faction champions kite hold", Role::Any, FactionChampionsKiteHold, 0, {"reach spell"});
+
     e.Block("faction champions kill squad wait", Role::Any, FactionChampionsKillSquadWait, Family::Charge,
             {"reach melee"});
 

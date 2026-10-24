@@ -167,6 +167,9 @@ bool FactionChampionsHasCcDuty(PlayerbotAI* botAI, ObjectGuid member);
 // A player's CC on it, or a CC or peel duty's spell at it, breaks on damage
 bool FactionChampionsCcProtected(PlayerbotAI* botAI, Unit* unit);
 
+// A player's fear, stun or confuse that breaks on damage is on it now, duties and peels aside
+bool FactionChampionsHeldByBreakableCc(Unit* unit);
+
 // The spell's own aura ends on a hit, or past its damage cap
 bool FactionChampionsBreaksOnDamage(uint32 spellId);
 

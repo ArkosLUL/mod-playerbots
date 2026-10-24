@@ -9,7 +9,7 @@ class PlayerbotAI;
 class Unit;
 
 // Faction Champions positioning: healers and ranged stay put, the Cyclone stand, the healers' step off the
-// melee, the trinket opener, the Nitro Boosts run and the casters' escapes. Every reader answers null or
+// melee, the trinket opener, the Nitro Boosts run, the ranged kite and the casters' escapes. Every reader answers null or
 // false unless the encounter is live, but the pre-pull Demonic Circle.
 namespace TrialOfTheCrusaderHelpers
 {
@@ -38,22 +38,32 @@ Unit* FactionChampionsOpener(PlayerbotAI* botAI, uint32& spellId);
 // the boost. Not for a tank, a holder, a CC duty holder or a bot rooted or stunned. Each run notes fc.nitro.
 bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot);
 
+// Where a ranged DPS bot kites: a melee champion has it as victim within 30 yd and is past 6 yd, CC'd, rooted
+// or snared, so running gains ground before its next re-pick. 15 yd hops away from them, on the floor, clear
+// of AoE and off our healers, farthest from every melee champion; latched to arrival or 2.5 s, dropped once
+// none on it is within 30 yd. Not while rooted, stunned, on a Nitro run or a CC duty. Each hop notes fc.kite.
+bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot);
+
+// A ranged DPS bot some melee champion within 45 yd has as victim: reaching its target would walk it back in
+bool FactionChampionsKiteHold(PlayerbotAI* botAI);
+
 constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
 
 struct FactionChampionsEscapeCast
 {
     uint32 spellId = 0;
     Unit* target = nullptr;
-    bool face = false;  // turn to facing first: Blink leaps forward, Dragon's Breath is a cone
+    bool face = false;  // turn to facing first: Blink leaps forward, Disengage back, Dragon's Breath is a cone
     float facing = 0.0f;
 };
 
 // A healer or ranged bot with a melee champion on it within 8 yd, in control and not silenced: the first
-// ready instant, CC before movement. Mage Frost Nova, Blink 20 yd away (on the floor, clear of Bladestorm and
-// Hellfire), Dragon's Breath; warlock Shadowfury on the nearest, Demonic Circle: Teleport when the circle is
-// 12+ yd farther from them, instant Howl of Terror, Death Coil on the nearest; priest Psychic Scream. An AoE
-// only with no champion inside under our breakable CC or grip-guarded, a fear or Dragon's Breath not on the
-// kill target.
+// ready instant, CC before movement. Mage Frost Nova, Blink 20 yd away from every melee champion within 15 yd
+// (on the floor, clear of Bladestorm and Hellfire, landing 12+ yd off all of them), Dragon's Breath; warlock
+// Shadowfury on the nearest, Demonic Circle: Teleport when the circle is 12+ yd farther from them, instant
+// Howl of Terror, Death Coil on the nearest; priest Psychic Scream; hunter Disengage with one within 5 yd. An
+// AoE only with no champion inside held by our breakable fear, stun or confuse or grip-guarded, a fear or
+// Dragon's Breath not on the kill target.
 bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast);
 
 // A warlock parked on its Champions staging stand without its Demonic Circle, or with under a minute left
