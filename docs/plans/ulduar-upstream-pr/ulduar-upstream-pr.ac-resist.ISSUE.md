@@ -23,13 +23,12 @@ They take partial resists in 10% steps like other magic damage, same as the Thor
 
 ## Source
 
-Retail Ulduar combat logs from 2009 show partial resists on all of them.
+WoW Web Stats parses of retail pulls from 2009. The partial resists show when you hover a target's Avoid column.
 
-- Malady of the Mind is the clearest since its damage is a flat 5000: the log has hits of 4500, 4000 and 3500, and no full resists on any target.
-- Water Spray, 25 man hard mode, August 2009: every resisted amount is exactly 10, 20 or 30% of a roll between 18850 and 21150, and nobody fully resisted it.
-- Cosmic Smash takes partial fire resists in both raid sizes.
-
-<LOG LINKS>
+- Malady of the Mind, Aug 2009: http://files.shefki.org/sws/sws-yoggsaron-1249958799/spell_63830.html. Its damage is a flat 5000, and the log has hits of 4500, 4000 and 3500 with nothing fully resisted.
+- Dark Volley, same pull: http://files.shefki.org/sws/sws-yoggsaron-1249958799/spell_63038.html
+- Water Spray, 25 man hard mode, Aug 2009: http://wws.piechart-guild.com/col25/sws-mimiron-1251329839/spell_64619.html. Every resisted amount is exactly 10, 20 or 30% of a roll between 18850 and 21150, and nobody fully resisted it.
+- Cosmic Smash, 10 man, May 2009: http://wws.piechart-guild.com/uld10/sws-algalon-1243304605/spell_62311.html. Every hit on every target was partly resisted. 64596 is the 25 man version with the same effects. The 25 man logs I found have no full resists either, those raids just didn't run fire resistance.
 
 ## Steps to reproduce the problem
 
@@ -53,12 +52,15 @@ INSERT INTO `spell_custom_attr` (`spell_id`, `attributes`) VALUES
 
 ## AC rev. hash/commit
 
-<OUTPUT OF .server debug>
+```
+AzerothCore rev. 62fb09c68d5e+ 2026-10-17 14:29:37 +0300 (Custom branch) (Unix, RelWithDebInfo, Static) (worldserver-daemon)
+OpenSSL 3.0.13, Boost 1.83.0, MySQL 8.4.8, ACDB 335.17-dev
+```
 
 ## Operating system
 
-Windows 11 x64, server in Docker
+Ubuntu 24.04 in Docker, on Windows 11 x64
 
 ## Custom changes or Modules
 
-mod-playerbots on its azerothcore-wotlk fork, plus my own changes. The binary spell code is the same as on master.
+mod-playerbots on its azerothcore-wotlk fork, plus my own changes. That includes the SQL above, so my server doesn't show the bug anymore. The binary spell code in `SpellMgr.cpp` is the same as on master.
