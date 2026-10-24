@@ -792,7 +792,6 @@ bool PlayerbotAIConfig::Initialize()
     BisPhaseDecay = sConfigMgr->GetOption<float>("Playerbots.Bis.PhaseDecay", 1.0f);
     BisDatasetEnable = sConfigMgr->GetOption<bool>("Playerbots.BisDataset.Enable", true);
     BisDatasetEnhancements = sConfigMgr->GetOption<bool>("Playerbots.BisDataset.Enhancements", true);
-    BisDatasetReforges = sConfigMgr->GetOption<bool>("Playerbots.BisDataset.Reforges", true);
     BisDatasetRankOrder = sConfigMgr->GetOption<bool>("Playerbots.BisDataset.RankOrder", true);
     BisDatasetPollSeconds = sConfigMgr->GetOption<uint32>("Playerbots.BisDataset.PollSeconds", 300);
     SimWeightsEnable = sConfigMgr->GetOption<bool>("Playerbots.SimWeights.Enable", true);

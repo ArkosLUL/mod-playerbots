@@ -1237,18 +1237,6 @@ float StatsWeightCalculator::ExpertiseRoom(Player* player) const
     return (EXPERTISE_OVERFLOW - expertise_current) / player->GetRatingMultiplier(CR_EXPERTISE);
 }
 
-std::optional<float> StatsWeightCalculator::CapRoom(Player* player, CombatRating rating) const
-{
-    if (rating == CR_EXPERTISE)
-        return (type_ & CollectorType::MELEE) ? std::optional<float>(ExpertiseRoom(player)) : std::nullopt;
-
-    // healing can't miss, so no hit cap for healers here (the overflow penalty still clips it)
-    if (!is_heal_ && rating == HitCapRating())
-        return HitRoom(player);
-
-    return std::nullopt;
-}
-
 void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
 {
     {

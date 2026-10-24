@@ -524,11 +524,11 @@ phase instead would flatten every item on a subject lagging the bot's own progre
 text: mod-bis-tooltip's README, "Block payload"), so a format change there lands in `BisWire.h` in
 the same go. One undecodable block refuses the whole dataset and every bot silently drops to the
 ranked lists while the addon keeps showing the dataset; the log line `Sim BiS dataset not loaded`
-and `.playerbots bis status` show it. Per-rank deltas and off-hand pairings are decoded but unused.
+and `.playerbots bis status` show it. Per-rank deltas, off-hand pairings and reforges are decoded but unused.
 
 **Exact, mirror, palette.** An item is "exact" when it is the rank-1 pick for its slot in the
-effective-phase block or, failing that, in the latest earlier phase's block; that block's gems,
-enchant and reforge then apply to it, so gear kept from an earlier tier stays gemmed as the sim
+effective-phase block or, failing that, in the latest earlier phase's block; that block's gems
+and enchant then apply to it, so gear kept from an earlier tier stays gemmed as the sim
 gemmed it there. Any other item in the slot gets the effective-phase block's sim enchant when it
 fits (`IsFitToSpellRequirements` etc.).
 
@@ -589,27 +589,13 @@ the server can actually hand out. It still has to pass `spellGatesPass` (`LimitE
 `requiredSkill`/`requiredLevel`. Precedence per slot: the dataset enchant, then
 `GetRuneforgeEnchantId` (frost DK runeforges), then the cache scan.
 
-**Reforges** run only on an exact rank-1 item with `Playerbots.BisDataset.Reforges` on, and an
-exact item the sim left unreforged loses any reforge it has, caps permitting (below). Every map
-thread reads mod-reforging's `reforgingDataMap` when it applies item mods, so a write from a bot's
-map thread would race the others: the map thread only queues `{bot, item, entry, from, to}`
-(`src/Bot/Factory/BisReforge.cpp`; `from == to == 0` requests removal), and the world thread
-applies it after `sMapMgr->Update` has waited out every map thread. Switching to a different
-reforge takes two `ApplyEnchantAndGemsNew` runs: the first only removes the old one. At most one
-write per item per 10s, since `RemoveReforge`'s DELETE and `Reforge`'s INSERT share the
-`character_reforging` row and can race once `CharacterDatabase.WorkerThreads > 1`.
+**Bots never reforge.** Their reforges come from wowsim's `.reforge apply` over SOAP, and the
+factory leaves them alone.
 
-**Caps overrule the sim's reforge.** The sim reforges for its full set, so on a partly geared bot
-its `hit -> haste` can drop hit below the cap. The world thread takes whichever of the sim's
-reforge, the item's current one and none leaves the bot least rating short of its caps, ties in
-that order (`src/Bot/Factory/ReforgeCaps.h`): a bot capped either way follows the sim, one below
-cap keeps an old reforge into hit. The caps are `StatsWeightCalculator::CapRoom`, the ones its
-overflow penalty clips scores at: hit except for healers, expertise for melee only.
-
-**This depends on mod-reforging's local, uncommitted lock patch** (`modules/mod-reforging`). Once
-bots carry reforges, mod-reforging itself erases their entries on map threads whenever a bot
-destroys, trades, mails or auctions a reforged item or auto-unequips its off-hand, while other map
-threads read the map; the `shared_mutex` the patch adds around it makes that safe.
+**Reforged bots depend on mod-reforging's local, uncommitted lock patch** (`modules/mod-reforging`).
+mod-reforging erases a bot's entries on map threads whenever it destroys, trades, mails or auctions
+a reforged item or auto-unequips its off-hand, while other map threads read the map; the
+`shared_mutex` the patch adds around it makes that safe.
 
 **Keep `Reforging.Enable` fixed at runtime.** mod-reforging's own reload
 (`ItemReforge::HandleReload`) walks only `sWorldSessionMgr`'s sessions, which hold no bots —
@@ -624,8 +610,7 @@ labels a raider "Blood tank" or "Feral tank" only when the raid's main-tank flag
 unflagged tanking DK or bear misses its roster subject and falls to a tank spec subject or the
 lists. Pinned gems follow the sim whatever the bot's caps; only unpinned sockets are scored
 against them. A hand-written weight of 0 on a mirrored gem's stats reads as "past the caps" and
-silently drops that gem to the palette. A reforge on an item that is exact in no phase is never
-touched, so one set while it was exact stays.
+silently drops that gem to the palette.
 
 ## Config
 
@@ -649,7 +634,6 @@ Defaults below are the shipped values in `conf/playerbots.conf.dist`.
 | `Playerbots.ProgressionTierCap` | 18 | Fallback tier for ungrouped bots with no own tier |
 | `Playerbots.BisDataset.Enable` | 1 | Read `bistooltip_*` and prefer it per bot; no-op without the tables or with a placeholder export |
 | `Playerbots.BisDataset.Enhancements` | 1 | Dataset enchants, pinned gems, palette; 0 leaves gems and enchants to the normal picker |
-| `Playerbots.BisDataset.Reforges` | 1 | Sim reforge on exact rank-1 items; no-op without mod-reforging or `Reforging.Enable = 0` |
 | `Playerbots.BisDataset.RankOrder` | 1 | Sim rank decides between two items the subject lists; see "Rank order" for what stays on scores |
 | `Playerbots.BisDataset.PollSeconds` | 300 | World-thread version check; 0 = startup and the command only |
 | `Playerbots.SimWeights.Enable` | 1 | Level-80 DPS weights from `playerbots_sim_weights`; no-op without the table |

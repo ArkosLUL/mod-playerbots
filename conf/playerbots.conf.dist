@@ -483,11 +483,6 @@ Playerbots.BisDataset.Enable = 1
 # Default: 1 (enabled)
 Playerbots.BisDataset.Enhancements = 1
 
-# Apply the sim's reforge on exact rank-1 items, and remove the reforge from an exact item the sim
-# left unreforged. No-op without mod-reforging or with Reforging.Enable = 0.
-# Default: 1 (enabled)
-Playerbots.BisDataset.Reforges = 1
-
 # Let the sim's rank decide between an equipped item and a new one when the bot's subject lists
 # both: the better-ranked one is kept or taken, whatever the stat scores say. Set pieces, the two
 # weapon hands and tanks stay on the scores, because a rank there only holds with the rest of the

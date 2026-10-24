@@ -8,7 +8,6 @@
 #define PLAYERBOTS_STATSWEIGHTCALCULATOR_H
 
 #include <array>
-#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -93,10 +92,6 @@ public:
 
     // Where the weights come from, for calc: the sim row and item level, or why they're hand-written.
     std::string DescribeWeights();
-
-    // Rating the bot can still add before the cap it plays to on this rating, negative past it.
-    // nullopt without one: expertise outside melee, any hit for a healer.
-    std::optional<float> CapRoom(Player* player, CombatRating rating) const;
 
     private:
     void GenerateWeights(Player* player);

@@ -436,7 +436,6 @@ public:
     float BisPhaseDecay;           // Bonus lost per content phase the listing is behind the bot; 0 disables
     bool BisDatasetEnable;         // Prefer the sim BiS dataset (bistooltip_* tables) over the lists per bot
     bool BisDatasetEnhancements;   // Dataset enchants, pinned gems and gem palette; off uses the normal picker
-    bool BisDatasetReforges;       // Sim reforge on exact rank-1 items, needs mod-reforging
     bool BisDatasetRankOrder;      // Sim rank decides between two items the bot's subject both lists
     uint32 BisDatasetPollSeconds;  // World-thread dataset version check interval; 0 = startup and command only
     bool SimWeightsEnable;         // Level-80 DPS stat weights from playerbots_sim_weights instead of the hand-written ones

@@ -14,7 +14,6 @@
 #include "BisDatasetMgr.h"
 #include "BisGemMirror.h"
 #include "BisListMgr.h"
-#include "BisReforge.h"
 #include "BisWire.h"
 #include "DBCStores.h"
 #include "DBCStructure.h"
@@ -161,7 +160,7 @@ uint32 GetRuneforgeEnchantId(Player* bot, uint8 slot, Item* item)
     return 0;
 }
 
-// exact: the equipped item is rank 1 in the block sim belongs to, so its gems and reforge apply too
+// exact: the equipped item is rank 1 in the block sim belongs to, so its gems apply too
 struct BisSlotPlan
 {
     BisWire::Slot const* sim = nullptr;
@@ -180,8 +179,7 @@ struct BisGearPlan
 BisGearPlan PlanBisGear(Player* bot)
 {
     BisGearPlan plan;
-    if (!sPlayerbotAIConfig.BisDatasetEnable ||
-        (!sPlayerbotAIConfig.BisDatasetEnhancements && !sPlayerbotAIConfig.BisDatasetReforges))
+    if (!sPlayerbotAIConfig.BisDatasetEnable || !sPlayerbotAIConfig.BisDatasetEnhancements)
         return plan;
 
     // skips the talent walk in ResolveSource while nothing is loaded
@@ -6015,10 +6013,6 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             item->SetEnchantment(PERM_ENCHANTMENT_SLOT, bestEnchantId, 0, 0, bot->GetGUID());
             bot->ApplyEnchantment(item, PERM_ENCHANTMENT_SLOT, true);
         }
-
-        // rank 1 without a reforge in the export asks for 0 -> 0, which strips the item's reforge
-        if (plan.block && sPlayerbotAIConfig.BisDatasetReforges && simPlan.exact)
-            RequestBisReforge(bot, item, simPlan.sim->reforgeFrom, simPlan.sim->reforgeTo);
 
         ApplyPrismaticSocket(item);
 

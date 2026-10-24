@@ -545,10 +545,9 @@ std::vector<std::string> BisDatasetMgr::Describe() const
     }
 
     uint32 const pollSeconds = sPlayerbotAIConfig.BisDatasetPollSeconds;
-    lines.push_back(Acore::StringFormat("Enable {}, Enhancements {}, Reforges {}, {}",
+    lines.push_back(Acore::StringFormat("Enable {}, Enhancements {}, {}",
                                         sPlayerbotAIConfig.BisDatasetEnable,
                                         sPlayerbotAIConfig.BisDatasetEnhancements,
-                                        sPlayerbotAIConfig.BisDatasetReforges,
                                         pollSeconds ? Acore::StringFormat("version poll every {}s", pollSeconds)
                                                     : std::string("version poll off")));
     return lines;
