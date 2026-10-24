@@ -83,7 +83,7 @@ Was any code in this PR copied or adapted from a sister / upstream project (e.g.
 
 - It's a draft so people can test it on their servers. I tested it over more than 10 Ulduar lockouts on my fork, not on test-staging's core. It builds against test-staging with gcc and clang and the CI flags, no warnings.
 - Commits go: remove the old strategy, add the shared files, one commit per boss, then the config options. Only the tip builds, since the shared headers name every boss.
-- My fork's core lets a few Ulduar spells partially resist where test-staging's core doesn't yet: Algalon's Cosmic Smash (fire), Mimiron's Water Spray (frost), and Yogg-Saron's Dark Volley and Malady of the Mind (shadow). The resistance aura picks for those won't help on test-staging until azerothcore/azerothcore-wotlk#<ISSUE> is fixed. Sif's spells already resist there since azerothcore/azerothcore-wotlk#27927.
+- My fork's core lets a few Ulduar spells partially resist where test-staging's core doesn't yet: Algalon's Cosmic Smash (fire), Mimiron's Water Spray (frost), and Yogg-Saron's Dark Volley and Malady of the Mind (shadow). The resistance aura picks for those won't help on test-staging until azerothcore/azerothcore-wotlk#28233 is fixed. Sif's spells already resist there since azerothcore/azerothcore-wotlk#27927.
 - Not cheats, but worth knowing: Mimiron hands the Magnetic Core to a bot with `StoreNewItem`, and bots that fall through the floor on Auriaya, Kologarn, Thorim and Yogg-Saron get put back with `NearTeleportTo`.
 - The only new chat line is Razorscale's "set as main tank" yell, which comes over from the old strategy.
 - This also replaces the XT-002 strategy, so it overlaps #2653.
