@@ -287,9 +287,9 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
     {
         // The trap sits 30 s and the elemental's Fire Nova and Fire Shield go wherever it does: on one star they took
         // 8.6% in the 20 s before Big Bang.
-        static std::set<std::string> const always = {"starfall",           "blade flurry",         "sweeping strikes",
-                                                     "bladestorm",         "explosive trap",       "fire elemental totem",
-                                                     "fire elemental totem melee"};
+        static std::set<std::string> const always = {
+            "starfall",       "blade flurry",         "sweeping strikes",          "bladestorm",
+            "explosive trap", "fire elemental totem", "fire elemental totem melee"};
         static std::set<std::string> const groundAtBot = {"consecration", "magma totem"};
         // Living Bomb goes off 12 s after the cast, by when a star may have wandered next to its target.
         static std::set<std::string> const groundAtTarget = {

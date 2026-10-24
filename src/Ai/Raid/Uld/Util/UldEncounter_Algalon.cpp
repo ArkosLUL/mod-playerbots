@@ -4290,8 +4290,8 @@ int32 AlgalonHideSlackMs(Player* bot)
     int32 const start = std::max(0, slack);
     auto const crossed = [&](int32 from)
     {
-        return SmashAcrossPath(*state, bot->GetPosition(), to, straight, from, straightMs, ULDUAR_ALGALON_FIELD_PULSE_MS,
-                               now);
+        return SmashAcrossPath(*state, bot->GetPosition(), to, straight, from, straightMs,
+                               ULDUAR_ALGALON_FIELD_PULSE_MS, now);
     };
     AlgalonScanUnit const* const smash = crossed(start);
     if (!smash)
