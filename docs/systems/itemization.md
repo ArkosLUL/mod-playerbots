@@ -148,7 +148,7 @@ it; those stay unclipped. `PLAYER_EXPERTISE` already includes the rating part
 
 ## Set bonuses
 
-Set scoring lives only in `StatsWeightCalculator::CalculateItemSetMod`, a delta model keyed on
+The set multiplier lives in `StatsWeightCalculator::CalculateItemSetMod`, a delta model keyed on
 `SetReplacedItem(item)` — the piece occupying the contested slot, treated as removed so incumbent and
 challenger measure against the same baseline. `base` is the equipped pieces of the item's set, less
 one when the replaced item is in it; `gained` is the active bonuses (the real 2/4/6 thresholds in
@@ -161,6 +161,12 @@ stickiness exactly when the bonuses are live.
 
 Consequences: T7 chest → T7.5 chest is neutral (same set, same vacated baseline); a non-set
 challenger must beat the set piece by the bonus weight **on top of** `EquipUpgradeThreshold`.
+
+Before the multiplier, `ItemSetBonusValue` (upstream #2947, on the same `base`) collects the spells of
+the bonus at `base + 1`, clamps them to the cap room the item's own stats left, and adds their
+weighted stats to the score. Only when they come to 0 does the multiplier run: most raid tier bonuses
+modify class spells and give no stats, so they keep the multiplier; PvP and leveling sets with
+plain-stat bonuses get scored on those stats instead.
 
 Every runtime slot score goes through `EvaluateGear`, which supplies the replaced item; votes,
 auto-equip, vendor buys and `calc` all read it. `RandomItemMgr::CalculateItemWeight` deliberately keeps `SetItemSetBonus(false)` — it feeds a cached,
@@ -621,7 +627,7 @@ Defaults below are the shipped values in `conf/playerbots.conf.dist`.
 | `Playerbots.AutoEquipUpgradeLoot` | 1 | Auto-equip looted upgrades |
 | `Playerbots.EquipUpgradeThreshold` | 1.07 | Score ratio needed to swap |
 | `Playerbots.ItemSet.UseForUpgrades` | 1 | Master switch for set-bonus scoring on runtime paths |
-| `Playerbots.ItemSet.BonusWeight` | 0.15 | Boost per set bonus kept or gained |
+| `Playerbots.ItemSet.BonusWeight` | 0.15 | Boost per set bonus kept or gained, when it gives no plain stats |
 | `Playerbots.ItemSet.ProgressWeight` | 0.03 | Per-piece nudge toward the next threshold |
 | `Playerbots.Socket.ValueFactor` | 1.0 | Scales the gem-derived socket multiplier; 0 ⇒ fallback only |
 | `Playerbots.Socket.MaxMultiplier` | 1.3 | Clamp on the socket multiplier |
@@ -642,7 +648,8 @@ Debug: `<bot> calc [item]` prints a raw score (`TellCalculateItemAction`, regist
 a BiS line naming the source (lists or dataset), subject, effective phase and rank (per hand for a
 weapon), a weights line: `weights: sim <class>/<tab>, ilvl <x> (P<a> -> P<b> at <pct>%)` or
 `hand-written (<reason>)`, and `decision: <usage> slot <n>, <new> vs <old × threshold> (<reason>) |
-roll: <vote>` — how to check a disputed item in game. `.ip set <n>`
+roll: <vote>` — how to check a disputed item in game — then upstream's per-stat breakdown
+(`stat value * weight = contribution`, multipliers as score / sum). `.ip set <n>`
 sets a test character's IP tier. `.playerbots bis reload` (admin) forces a dataset reload; `.playerbots
 bis status` (gamemaster) reports what's loaded, plus dataset enchants without
 `SPELL_EFFECT_ENCHANT_ITEM` and gems without `GemProperties`.

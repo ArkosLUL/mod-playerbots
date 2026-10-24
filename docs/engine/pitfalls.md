@@ -671,6 +671,9 @@ None of these fail to compile when reverted, so a merge that takes upstream's si
   Yogg-Saron sweep return early and its Guardian exclusion drops.
 - **`GetFirstAliveUnitByEntry` is kept** in `EncounterHelpers` for the Naxx callers; upstream deleted
   it. Ulduar calls its own copy, `GetUldUnitByEntry`.
+- **Set pieces count via `SetReplacedItem`**, not upstream's look at the slot's current item, and a
+  bonus with no plain stats falls back to the fork's `ItemSet.BonusWeight` multiplier, not
+  upstream's flat 10% per piece. See [itemization.md](../systems/itemization.md#set-bonuses).
 - `AttackersValue::IsPossibleTarget` gained an `IsInCombatWith(bot)` gate upstream, so
   `GetFirstAliveUnitByEntry` and `GetUldUnitByEntry` resolve mobs slightly earlier than they used to —
   relevant anywhere a `nullptr` return was being read as "not engaged yet".
