@@ -237,7 +237,7 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
 | Gormok | `Locs[1]` (563.9, 178.4), the gate front | forced: `AttackStart(SelectNearestTarget(200))` 10 s after his summon, 46 s from the first gossip, 11 s on a retry |
 | Dreadscale (mobile), Acidmaw (stationary) | `Locs[2]` (575.7, 171.5), `Locs[3]` (549.9, 171.5) | forced, 17.5 s after Gormok dies; heroic on the 150 s timer |
 | Icehowl | `Locs[1]` | forced, 15.5 s after the second worm dies |
-| Jaraxxus | (563.7, 129.6), 10 yd south of `Locs[4]` | forced, 70.8 s from the gossip. A wipe respawns him on `Locs[4]`, attackable, with no forced attack and an empty `MoveInLineOfSight`: the retry is whoever attacks |
+| Jaraxxus | (563.7, 129.6), 10 yd south of `Locs[4]` | forced, 70.8 s from the gossip. A wipe respawns him on `Locs[4]` chained and unattackable; the retry gossip frees him with a forced attack at once |
 | Faction Champions | `FactionChampionLoc[10..19]`, x 520-536 for an Alliance raid, mirrored about `Locs[4]` x for Horde | proximity, from 4 s after the jump; the first engaged pulls all (`TYPE_FACTION_CHAMPIONS_START`) |
 | Twins | Fjola `Locs[9]` (585.5, 170), Eydis `Locs[10]` (545.5, 170), 6 yd up | proximity, from 25.5 s after the gossip |
 | Anub'arak | `Locs[17]` (785.9, 133.4) | attackable once a player is inside 80 yd, then proximity |
@@ -247,10 +247,12 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
   and Icehowl opened on non-tanks, Icehowl twice on a Stoneskin Totem.
 - **Proximity** is `Creature::GetAggroRange`: `detection_range` 20 plus the level gap, so 23 yd from
   83 against 80, 3D centre to centre.
-- **Barrett** (34816, at (559.2, 90.6)) drops `UNIT_NPC_FLAG_GOSSIP` at "We are ready!". It comes back
-  at the encounter's done scene (2.5 s after the Beasts, the champions; 34.5 s after Jaraxxus) and on
-  a wipe's `InstanceCleanup`, except a Jaraxxus wipe, which removes it. He is invisible from stage
-  9. So a missing flag spans the encounter, walk-ins included, and the gap after a kill.
+- **Barrett** is summoned per stage (core #28136) at (559.2, 90.6): 34816 Beasts, 35909 heroic
+  Beasts, 35035 Jaraxxus, 35766 champions, 35770 twins, 35771 Anub'arak. "We are ready!" drops
+  `UNIT_NPC_FLAG_GOSSIP`, walks him out and despawns him. The next comes at the done scene (7.7 s
+  after the Beasts, 50.5 s after Jaraxxus, 2.5 s after the champions and twins) and on a wipe's
+  `InstanceCleanup`. So no Barrett gossip spans the encounter, walk-ins included, and the gap after
+  a kill.
 - **Floor**: players stood up to y 187.6 by the main gate (GO 195647, y 198.7) and 49-60 yd out on
   every other bearing. Anub'arak's room is navprobe-clean with `--nav 0x09` at 22 and 30 yd round
   `ANUBARAK_ROOM_CENTER` and at its tank side points.
@@ -259,11 +261,11 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
 
 **Window** (`Util/ToCHelpers_Staging`, read once per instance per ms), with nothing live:
 
-- Opens at the gossip, not before, so bots stay with the player while they buff, eat or talk: Barrett
-  present without his flag after it was seen at this stage. The latch keeps closed the gap after a
-  kill, when the flag is still gone from the last gossip.
-- Stage 3 also opens on Jaraxxus attackable and out of combat: a wipe's cleanup re-summons him with no
-  gossip. Stage 9 opens with no Barrett test, who is invisible by then.
+- Opens at the gossip, not before, so bots stay with the player while they buff, eat or talk: no
+  Barrett gossip after one was seen at this stage. The latch keeps the gap after a kill closed until
+  the next stage's Barrett shows.
+- Stage 3 (a Jaraxxus retry) opens during the gossip too, since it frees him at once. Stage 9 opens
+  with no Barrett test.
 - The next beast by guid slot: Gormok while slot 4 is empty or alive, else the worms while slot 6 or 7
   is, else Icehowl. A dead beast keeps its slot until a wipe's cleanup clears it.
 - Per bot: alive, out of combat, and in the arrival's room (the arena: within 80 yd 2D of
@@ -379,7 +381,7 @@ The `ResistAura` stem picks:
 - Humans hold no stand. One nearer a release point than its duty stand takes the forced attack.
 - A stand is floor-checked from wherever its bot stands when dealt: one landing more than 3 yd off
   falls back to the raw stand.
-- A heroic raid out of attempts keeps the window open: Barrett never shows his gossip again.
+- A heroic raid out of attempts keeps the window open: no Barrett comes back.
 - Shaman resistance totems don't count toward a school; Aura Mastery is called only as a Jaraxxus
   cover; with no hunter at or above 30% mana the one wearing Aspect of the Wild stays pinned in it
   and loses Viper (`GetNatureResistanceHunter`'s last fallback).

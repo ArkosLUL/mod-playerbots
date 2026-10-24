@@ -40,8 +40,8 @@ constexpr uint32 STAGING_DEAL_MS = 1000;
 
 static_assert(STAGING_PARK < STAGING_UNPARK, "a walk has to end inside its own trigger");
 
-// The raid-wide half of the window, per instance per ms: Barrett out of gossip after it was seen at
-// this stage (or a Jaraxxus retry), nothing live, and the next arrival by the script's guid slots.
+// The raid-wide half of the window, per instance per ms: Barrett's gossip gone after it was seen at
+// this stage (or Jaraxxus chained for a retry), nothing live, and the next arrival by the script's guid slots.
 // Stage 9 is Anub'arak while he isn't live.
 ToCStagingBoss GetToCStagedArrival(PlayerbotAI* botAI);
 // That, while the bot is alive, out of combat and in the arrival's room together with its master,

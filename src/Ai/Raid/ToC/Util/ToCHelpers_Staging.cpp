@@ -36,7 +36,8 @@ namespace TrialOfTheCrusaderHelpers
 {
 namespace
 {
-constexpr uint32 NPC_BARRETT_RAMSEY = 34816;  // NPC_BARRENT
+// one Barrett per stage: Beasts, Beasts heroic, Jaraxxus, champions, twins, Anub'arak
+std::vector<uint32> const BARRETT_ENTRIES = {34816, 35909, 35035, 35766, 35770, 35771};
 // He stands about 50 yd from ARENA_CENTER, so this reaches him from anywhere in the arena
 constexpr float BARRETT_SEARCH_RADIUS = 250.0f;
 constexpr uint32 BARRETT_SEARCH_MS = 2000;
@@ -843,7 +844,7 @@ Creature* FindBarrett(Player* bot, StagingState& state, uint32 now)
     state.barrett.Clear();
 
     std::list<Creature*> found;
-    bot->GetCreatureListWithEntryInGrid(found, NPC_BARRETT_RAMSEY, BARRETT_SEARCH_RADIUS);
+    bot->GetCreatureListWithEntryInGrid(found, BARRETT_ENTRIES, BARRETT_SEARCH_RADIUS);
     for (Creature* creature : found)
     {
         if (creature->IsAlive())
@@ -887,25 +888,25 @@ ToCStagingBoss ReadArrival(PlayerbotAI* botAI, Player* bot, StagingState& state,
 
     uint32 const stage = instance->GetData(TOC_DATA_INSTANCE_PROGRESS);
     bool const nothingLive = ToCLiveEncounter(botAI) == ToCEncounter::None;
-    // Barrett is invisible from here on
+    // no Barrett from here on
     if (stage == TOC_PROGRESS_ANUB_ARAK)
         return nothingLive ? ToCStagingBoss::Anubarak : ToCStagingBoss::None;
 
     ToCEncounter const encounter = ToCEncounterOfStage(stage);
     Creature* barrett = FindBarrett(bot, state, now);
-    bool const present = barrett && barrett->IsAlive() && barrett->IsVisible();
-    bool const gossip = present && barrett->HasNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+    bool const gossip = barrett && barrett->IsAlive() && barrett->HasNpcFlag(UNIT_NPC_FLAG_GOSSIP);
     if (gossip)
         state.gossipSeenFor = encounter;
 
-    if (encounter == ToCEncounter::None || !nothingLive || !present || gossip)
+    if (encounter == ToCEncounter::None || !nothingLive)
         return ToCStagingBoss::None;
 
-    // A Jaraxxus wipe's cleanup re-summons him attackable with no gossip
-    Unit* jaraxxus = stage == TOC_PROGRESS_JARAXXUS_INTRO_DONE ? GetJaraxxus(botAI) : nullptr;
-    bool const retry = jaraxxus && !jaraxxus->IsInCombat();
-    // The flag stays gone for a while after a kill, still from the last encounter's gossip
-    if (state.gossipSeenFor != encounter && !retry)
+    // stage 3 with nothing live is a Jaraxxus retry: he waits chained for Barrett's gossip, which frees
+    // him at once, so stand during it
+    bool const retry = stage == TOC_PROGRESS_JARAXXUS_INTRO_DONE;
+    // the gossip walks Barrett out and despawns him. After a kill the latch still holds the last
+    // encounter till the next stage's Barrett shows up
+    if (!retry && (gossip || state.gossipSeenFor != encounter))
         return ToCStagingBoss::None;
 
     switch (encounter)
