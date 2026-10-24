@@ -9,7 +9,6 @@ These are the shared pieces the Ulduar rework (#ULDUAR) calls from several bosse
 - `RaidTankDefensive`, `RaidHumanTankCall` and `BurstCooldowns` pick the defensive cooldown a bot should press ahead of a big hit, tell a human tank when to press theirs, and let an encounter hold burst cooldowns until a tank has held the boss for a while.
 - `RaidAntiFear`, `RaidRedirectThreat` and `RaidSplash` are base classes an encounter subclasses for Fear Ward and Tremor Totem, or Misdirection and Tricks of the Trade, plus a check for actions that hit an area.
 - `BossNatureAspectHoldMultiplier` keeps the nature resistance hunter in Aspect of the Wild. Without it the hunter's own aspect nodes recast Dragonhawk on the next GCD. `FindBossByName` scans all possible targets, since a bot on an add never has the boss on its threat list.
-- `CastTrapLauncherExplosiveAction`, so a multiplier that holds Explosive Trap matches the trap launcher cast too.
 - `RaidDifficulty.h` reads 10 or 25 man from the map instead of the group. A group left on 25 Heroic in Ulduar, Naxxramas or Eye of Eternity plays 25 Normal but still reports 25 Heroic, so a check on the group's setting treats it as 10 man.
 
 Nothing calls the new pieces yet, so on its own this changes no behaviour.
@@ -70,4 +69,3 @@ Was any code in this PR copied or adapted from a sister / upstream project (e.g.
 - The nature resistance hunter only counts as eligible above the mana where Aspect of the Viper takes over (`LowMana / 2`), so the role only moves on a real mana drop.
 - test-staging's `BossNatureResistanceTrigger` picks the first living hunter, while the hold uses that mana based pick, so the two can name different hunters.
 - `RaidAntiFear`'s trigger walks the group in `IsActive`. Happy to put a cached value behind it.
-- Nothing on test-staging creates `CastTrapLauncherExplosiveAction` yet, so the Explosive Trap hold only matches it once something does.
