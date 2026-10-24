@@ -1,43 +1,40 @@
 # Burst windows and consumables
 
 One gate times every offensive cooldown, potion and tinker a bot owns. Per-boss windows layered on
-top of it live in the raid docs.
+top of it live in the raid docs. Also here: engineering tinkers, ammo, Ritual of Souls and battle
+rez.
 
 ## The burst gate
 
 `BurstWindowStrategy` (`src/Ai/Base/Strategy/BurstWindowStrategy.cpp`) registers `getName() == "burst"`,
 has **no triggers**, and installs one `HoldBurstUntilTankEngagedMultiplier`. It is in the default
-combat list at `AiFactory.cpp:289`, so every non-battleground bot has it, and `strategy -burst`
-switches it off per bot.
+combat list (`AiFactory::AddDefaultCombatStrategies`), so every non-battleground bot has it, and
+`strategy -burst` switches it off per bot.
 
-**`IsBurstCooldownAction(name)` (`src/Ai/Base/Combat/BurstCooldowns.cpp:22-46`) is the single
+**`IsBurstCooldownAction(name)` (`src/Ai/Base/Combat/BurstCooldowns.cpp`) is the single
 registry.** A new cooldown only ever needs adding there — the per-boss multipliers all early-out on
-the same predicate, so they pick it up for free.
-
-Identification is by **action name, not `dynamic_cast`**. `CastSpellAction` passes the spell name to
-`Action(botAI, spell)`, so `getName()` is a reliable identifier, and racials and trinkets follow the
-same convention. `dynamic_cast` does not scale to ~25 cooldowns across 10 classes without including
-every class header.
+the same predicate, so they pick it up for free. It matches by action name
+([action-selection.md](../engine/action-selection.md#multiplier-semantics)).
 
 | Source | Names |
 |---|---|
 | raid-wide / racial / item | `bloodlust`, `heroism`, `berserking`, `blood fury`, `use trinket`, `use tinker`, `offensive potion` |
 | Warrior | `recklessness`, `death wish` |
-| Rogue | `adrenaline rush`, `blade flurry` |
+| Rogue | `adrenaline rush`, `blade flurry`, `killing spree` |
 | Mage | `arcane power`, `icy veins`, `combustion`, `mirror image`, `presence of mind` |
 | Warlock | `metamorphosis` |
 | Hunter | `rapid fire`, `bestial wrath`, `readiness` |
-| Priest | `shadowfiend` |
+| Priest | `shadowfiend`, `power infusion` |
 | Druid | `berserk`, `force of nature` |
 | Paladin | `avenging wrath` |
 | Death Knight | `killing machine`, `army of the dead`, `summon gargoyle` |
 | Shaman | `fire elemental totem`, `elemental mastery` |
 
 Deliberately **excluded**: `unbreakable armor` and `dancing rune weapon` (tank mitigation) and
-`inner focus` (healer mana). Two names carry explicit exemptions inside the multiplier:
-`use trinket` is the *generic* trinket action, so for a healer or off-tank it also covers survival
-and mana trinkets and is left alone for non-DPS; `shadowfiend` doubles as a mana return, so it stays
-available on trash.
+`inner focus` (healer mana). Exemptions inside the multiplier: `use trinket` is the *generic* trinket
+action, so for a healer or off-tank it also covers survival and mana trinkets and is left alone for
+non-DPS; `avenging wrath` and `power infusion` pass untouched for a healer (`IsHeal`), whose window is
+the raid damage, not the pull; `shadowfiend` doubles as a mana return, so it stays available on trash.
 
 **`IsManaReturnCooldown(bot, name)` (`BurstCooldowns.cpp`) exempts a priest's `shadowfiend` from the
 per-boss phase holds** — Iron Assembly, XT-002, the shared Ulduar gate, Naxx and Sartharion. Those
@@ -60,7 +57,7 @@ Shadowfiend still waits out its dwell there.
 "Tank has hold" means the boss's victim has been **any tank in the bot's group** — not only the main
 tank — **continuously** for the dwell; `TankHasHeldBoss` zeroes the timer whenever it is not, so a
 tank swap or tank death re-arms the gate. The boss predicate is `IsDungeonBoss() || isWorldBoss()`,
-the de-facto is-boss check used everywhere (also `ShamanTriggers.cpp:490`).
+the de-facto is-boss check used everywhere (also `ShamanBoostTrigger::IsActive`).
 
 **Bosses no tank can hold skip the dwell**, in the multiplier and `OffensivePotionTrigger` alike: one
 on a vehicle (the XT-002 Heart, no threat table), `BossTakesNoVictim` (VX-001, Yogg-Saron and his Brain, whose scripts never set
@@ -100,17 +97,15 @@ The stagger exists to get lust out **first**, so personal cooldowns land inside 
 It has to be 2s, not 1s, because of a subtlety that priority alone cannot fix: **the potion is an
 item (off-GCD, instant the moment its gate opens) while heroism is a GCD spell**, so a shaman
 mid-cast when a 1s-apart gate opened lost the race every time. Heroism/Bloodlust also sit at
-relevance 50 (raised from 30) — clearly above the rotation, below the emergency band.
+relevance 50 — clearly above the rotation, below the emergency band.
 
 `POTION_HOLD_MS` is the potion's gate when the `burst` strategy is *not* loaded, which is why it is
 tuned alongside `BURST_DWELL_MS` rather than left to the multiplier.
 
 ## Offensive potions
 
-Before this, bots only ever used defensive consumables. Stocking lives inside
-`PlayerbotFactory::InitPotions()`, so it inherits every existing call site — `MaintenanceAction`
-(including the `altMaintenancePotions` path) and `AutoMaintenanceOnLevelupAction` — with no new
-plumbing.
+Stocking lives inside `PlayerbotFactory::InitPotions()`, so it inherits every existing call site —
+`MaintenanceAction` (including the `AltMaintenancePotions` path) and `AutoMaintenanceOnLevelupAction`.
 
 | Level band | Melee / physical | Caster |
 |---|---|---|
@@ -135,20 +130,15 @@ per-boss window for free. The `OffensivePotionTrigger` expresses "want to" (DPS,
 boss target) behind its own `POTION_HOLD_MS` dwell (above); the multiplier decides "not yet".
 
 **An instant potion doesn't stop a moving bot.** `UseItemAction::UseItem` stops a moving bot and
-fails; on any walk that yields its tick the action re-fired every tick and stopped it every time,
-never drinking. Yogg-Saron ranged crossed the brain level at ~3 yd/s that way. Items whose on-use
-spells all lack cast time and channel and that are potions (`IsPotion`) now skip the stop; food,
-drink, bandages and cast-time items keep it.
+fails, so on any walk that yields its tick the action re-fired every tick and stopped it every time,
+never drinking (Yogg-Saron ranged crossed the brain level at ~3 yd/s that way). Items whose on-use
+spells all lack cast time and channel and that are potions (`IsPotion`) skip the stop; food, drink,
+bandages and cast-time items keep it ([pitfalls.md](../engine/pitfalls.md#movement-that-silently-no-ops)).
 
-**Expansion gating.** The ladder originally gated only on `RequiredLevel`, so a level-68-70 bot drank
-WotLK potions. `RandomItemMgr::IsAllowedForLevelExpansion(itemId, level)` is the shared rule,
-extracted from three inlined copies:
-
-```
-level <= 60 -> itemId < 23728    // first TBC content item
-level <= 70 -> itemId < 35570    // first WotLK content item
-else        -> no cap
-```
+**Expansion gating.** `RequiredLevel` alone would let a level-68-70 bot drink WotLK potions.
+`RandomItemMgr::IsAllowedForLevelExpansion(itemId, level)` is the shared rule: up to level 60 an item
+id below 23728 (the first TBC content item), up to 70 below 35570 (the first WotLK one), above that
+no cap.
 
 Gated on `Playerbots.LimitGearExpansion`, **not** the server's `CONFIG_EXPANSION`, by decision. In
 the ladder loop this must be a `continue`, not a `break` — that is what makes it fall through to the
@@ -204,20 +194,18 @@ IMPOSSIBLE rather than USELESS, so the healthstone → healing potion chain stil
 
 ## Engineering tinkers
 
-Two gaps had to close together, and the ordering matters — this is why USE_SPELL scoring was
-implemented, reverted, then reinstated.
+Scoring a tinker and pressing it are one feature: valuing `USE_SPELL` enchants is only right while
+bots actually use them, so the two ship together or not at all.
 
 `UseTinkerAction` walks the equipped gear slots, reads `ITEM_ENCHANTMENT_TYPE_USE_SPELL` off each
 enchantment, and fires it with the same `CMSG_USE_ITEM` packet `UseTrinketAction` uses. The reason
 that works at all:
 
 - **`WorldSession::HandleUseItemOpcode` does not validate the packet's `spellId` against
-  `proto->Spells[]`** (`SpellHandler.cpp:58-202`). It only requires the spell to exist and the item
-  to be equipped and usable.
-- `Player::CastItemUseSpell` (`Player.cpp:7671-7719`) then iterates `MAX_ENCHANTMENT_SLOT`, finds the
-  `USE_SPELL` entry, checks `HasSpellCooldown` itself, and casts with `m_CastItem = item`. It is
-  **not** unreachable for bots, contrary to an earlier write-up — `UseTrinketAction` already reaches
-  it.
+  `proto->Spells[]`.** It only requires the spell to exist and the item to be equipped and usable.
+- `Player::CastItemUseSpell` then iterates `MAX_ENCHANTMENT_SLOT`, finds the `USE_SPELL` entry,
+  checks `HasSpellCooldown` itself, and casts with `m_CastItem = item`. It is reachable for bots —
+  `UseTrinketAction` already reaches it.
 
 Both the action and `StatsCollector` share one predicate, `IsUsableTinkerSpell`, so **only tinkers
 granting a combat-stat aura count**: positive spell, at least one `SPELL_EFFECT_APPLY_AURA` whose
@@ -288,10 +276,10 @@ Reusable patterns this established:
 
 - **Move-to-GO then click**: `FindNearestGameObject(entry, range)` → `MoveTo` if not at interact
   distance, else `WorldPacket(CMSG_GAMEOBJ_USE) << go->GetGUID()` →
-  `HandleGameObjectUseOpcode`. Copied from `EnterTwilightPortalAction` (`OSActions.cpp:182-199`).
+  `HandleGameObjectUseOpcode`, as `EnterTwilightPortalAction` (`OSActions.cpp`) does.
 - **Cross-bot reservation** to stop a stampede: static map + mutex + expiry cleanup, keyed on the GO
-  GUID for helper slots and on the group GUID so only one warlock casts. Shape taken from
-  `soulstoneReservations` (`WarlockActions.cpp:250-266`).
+  GUID for helper slots and on the group GUID so only one warlock casts, the shape of
+  `soulstoneReservations` (`WarlockActions.cpp`).
 
 **UX gotchas:** the chat command invokes the cast action directly, bypassing the caster pick, but
 helpers only respond with *their* strategy on. Bots with a saved `nc` string (logged out while

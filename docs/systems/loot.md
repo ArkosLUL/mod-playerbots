@@ -4,7 +4,7 @@ Scoring itself lives in [itemization.md](itemization.md); this is the decision l
 
 ## Per-item loot decision
 
-`StoreLootAction::IsLootAllowed` (`src/Ai/Base/Actions/LootAction.cpp:512`) checks in this order:
+`StoreLootAction::IsLootAllowed` (`src/Ai/Base/Actions/LootAction.cpp`) checks in this order:
 
 1. always-loot whitelist
 2. `MaxCount` cap
@@ -18,7 +18,7 @@ quest handling of its own.
 ## Strategies
 
 Defined in `src/Ai/Base/Value/LootStrategyValue.cpp`; base class `LootStrategy` in
-`src/Mgr/Item/LootObjectStack.h:17`. Name → strategy mapping is `LootStrategyValue::instance(name)`.
+`src/Mgr/Item/LootObjectStack.h`. Name → strategy mapping is `LootStrategyValue::instance(name)`.
 
 | Token | Behaviour |
 |---|---|
@@ -42,44 +42,40 @@ Two independent stat systems drive a roll, and **the bugs live in their disagree
 - **Score engine** — `StatsCollector::CollectItemStats` → `StatsWeightCalculator::CalculateItem` →
   `itemScore`, which is what makes `QueryItemUsageForEquip` return EQUIP/REPLACE.
 - **Spec gate** — `BuildItemStatProfile` → `IsPrimaryForSpec` / `IsFallbackNeedReasonableForSpec`,
-  plus the `smartNeedBySpec` off-spec safety net, which runs only in the loot path via
+  plus the `SmartNeedBySpec` off-spec safety net, which runs only in the loot path via
   `AdjustUsageForOffspec`.
 
-`FinalizeRollVote` (`ItemUsageValue.cpp:2526`) under `Playerbots.Roll.UpgradesOnly = 1` forces
-PASS on everything except a computed NEED whose usage is `ITEM_USAGE_EQUIP`/`REPLACE` (downgraded to
-GREED). **So every wrong GREED means the item was misclassified as a genuine equip-upgrade** — the
-bug is in the classifier, never in the greed fallback. Shipped default is `Roll.UpgradesOnly = 0`.
+`FinalizeRollVote` (`ItemUsageValue.cpp`) under `Playerbots.Roll.UpgradesOnly = 1` forces PASS on
+everything except a computed NEED whose usage is `ITEM_USAGE_EQUIP`/`REPLACE` (downgraded to GREED).
+**So every wrong GREED means the item was misclassified as a genuine equip-upgrade** — the bug is in
+the classifier, never in the greed fallback. In practice bots therefore cap at GREED, and the BiS
+lists below decide **GREED vs PASS**, not NEED vs GREED. Shipped default is `Roll.UpgradesOnly = 0`.
 
-Three misclassification shapes were traced and fixed at the root, so bots also stop auto-*equipping*
-these items rather than only rolling on them:
+`IsRoleItemizationMismatch(bot, proto)` is the single choke point for role-mismatched itemisation,
+called in `QueryItemUsageForEquip` right after `itemScore`; returning true forces
+`shouldEquip = false`, which covers both loot rolls and auto-equip. `IsPrimaryForSpec` is never
+reached for these, because BAD_EQUIP short-circuits `AdjustUsageForOffspec`. It rejects three shapes:
 
-- **Melee on a statless ranged weapon.** A rogue uses the MELEE collector, so a ranged weapon scored
-  nonzero twice: base ranged DPS added unconditionally (`STATS_TYPE_RANGED_DPS`, weight 0.01) and its
+- **Melee on a statless ranged weapon.** A rogue uses the MELEE collector, so a ranged weapon would
+  score nonzero twice: base ranged DPS (`STATS_TYPE_RANGED_DPS`, weight 0.01) and its
   `ITEM_SPELLTRIGGER_CHANCE_ON_HIT` proc scored as melee AP. A melee never makes ranged attacks, so
-  both are worthless. The spec net missed it too, because `IsFallbackNeedReasonableForSpec` has a
-  "no stats → reasonable" shortcut. Fix: for `IsRangedWeapon() && (type_ & MELEE)`, skip both.
-  Hunters use the RANGED collector and are untouched.
+  for `IsRangedWeapon() && (type_ & MELEE)` both are skipped. The spec net would miss it too, because
+  `IsFallbackNeedReasonableForSpec` has a "no stats → reasonable" shortcut. Hunters use the RANGED
+  collector and are untouched.
 - **Healer on spell-penetration armour.** Real INT/SP score positive → EQUIP.
   `ITEM_MOD_SPELL_PENETRATION` is collected but carries **zero weight** and is not read by
-  `BuildItemStatProfile`, so nothing flags the piece as caster-DPS/PvP itemisation.
-- **Physical class on a caster weapon.** Pure-caster weapons are already rejected, but the reject is
-  `… && !hasPhysical`, so a weapon also carrying agi/crit/sta slips through into an empty slot.
+  `BuildItemStatProfile`, so nothing else flags the piece as caster-DPS/PvP itemisation.
+- **Physical class on a caster weapon.** Pure-caster weapons are rejected elsewhere, but that reject
+  is `… && !hasPhysical`, so a weapon also carrying agi/crit/sta would slip through into an empty
+  slot.
 
-`IsRoleItemizationMismatch(bot, proto)` is the single choke point, called in
-`QueryItemUsageForEquip` right after `itemScore`; returning true forces `shouldEquip = false`, which
-covers both loot rolls and auto-equip. `IsPrimaryForSpec` is never reached for these, because
-BAD_EQUIP short-circuits `AdjustUsageForOffspec`.
-
-**As built, the feral case was dropped.** `ITEM_MOD_FERAL_ATTACK_POWER` (=40) does not exist in
-3.3.5 — it is commented out at `ItemTemplate.h:62`. Feral AP is a computed green stat, not an
-`ItemStat` row, so there is no proto signal to test. A feral staff carrying only physical stats
-(agi/str/sta) is therefore indistinguishable from a valid physical weapon and is left alone.
+**No feral case.** `ITEM_MOD_FERAL_ATTACK_POWER` (=40) does not exist in 3.3.5 — it is commented out
+in the core's `ItemModType` (`ItemTemplate.h`). Feral AP is a computed green stat, not an `ItemStat`
+row, so there is no proto signal to test, and a feral staff carrying only physical stats is
+indistinguishable from a valid physical weapon.
 
 These rejects are heuristics. The known false-positive risk is a physical class legitimately wanting
 a weapon that happens to carry a caster stat — rare in WotLK itemisation.
-
-**Skull-marking drives DPS target choice**: `DpsTargetValue::Calculate` → `RtiTargetValue`, with
-`rti` defaulting to `"skull"`.
 
 ## Ranked BiS lists
 
@@ -95,16 +91,15 @@ is never penalised. A bot resolving to the sim BiS dataset instead
 subject in place of the lists, never mixed per item. It reaches a roll two ways:
 
 - **Gate bypass** (`Playerbots.Bis.GateBypass`) — `IsBisForBot` short-circuits
-  `IsFallbackNeedReasonableForSpec` (`:612`), `IsPrimaryForSpec` (`:984`) and `AdjustUsageForCrossArmor`
-  (`:1159`). `IsRoleItemizationMismatch` is deliberately **not** bypassed.
-- **Score bonus** (`Playerbots.Bis.ScoreBonus`, `Bis.PhaseDecay`) — applied in
-  `StatsWeightCalculator::BisRankMultiplier`, gated on `SetBisBonus(true)`. That is set in
-  `QueryItemUsageForEquip`, so it moves the `usage` that voting consumes; it is not equip-only.
-  The decay is measured between the dropped and the equipped item, not from the bot's progression
-  ([itemization.md](itemization.md#ranked-bis-lists)).
-
-Under `Roll.UpgradesOnly = 1` bots cap at GREED, so in practice the lists decide **GREED vs PASS**,
-not NEED vs GREED.
+  `IsFallbackNeedReasonableForSpec`; `IsPrimaryForSpec` unless the item is body armour of a lower
+  class than the bot's preferred one (`IsLowerTierArmorForBot`), a call that belongs to
+  `AdjustUsageForCrossArmor`; and `AdjustUsageForCrossArmor` itself, which returns EQUIP when the bot
+  can wear the class, after its etiquette and group gates. `IsRoleItemizationMismatch` is
+  deliberately **not** bypassed.
+- **Score bonus** (`Playerbots.Bis.ScoreBonus`, `Bis.PhaseDecay`) —
+  `StatsWeightCalculator::BisRankMultiplier` ([itemization.md](itemization.md#ranked-bis-lists)).
+  `QueryItemUsageForEquip` sets it, so it moves the `usage` that voting consumes; it is not
+  equip-only.
 
 ### Expansion matching
 

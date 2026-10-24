@@ -6,22 +6,23 @@ see [loot.md](loot.md).
 ## One function does all of it
 
 **All bot enchanting and gemming happens in `PlayerbotFactory::ApplyEnchantAndGemsNew`**
-(`src/Bot/Factory/PlayerbotFactory.cpp:5365`). It runs after `InitSkills` (`:715`) and
-`InitEquipment` (`:779`), so professions and the full gear set are both known by then.
+(`src/Bot/Factory/PlayerbotFactory.cpp`). `Randomize` runs it after `InitSkills` and `InitEquipment`,
+so professions and the full gear set are both known by then; level-up maintenance
+(`AutoMaintenanceOnLevelupAction`) runs it after `InitEquipment(true)` from
+`MinEnchantingBotLevel`, so gear swapped in there is not left bare.
 
 Two startup caches feed it, built in `PlayerbotFactory::Init()`:
 
-- `enchantSpellIdCache` — scans `SPELL_EFFECT_ENCHANT_ITEM` (`:490`), with a list of `continue`
-  guards for junk (test enchants, grandfathered TBC, the Naxx40 shoulder enchants at `:480`).
-- `enchantGemIdCache` (`:548-588`) — walks `SpellItemEnchantment.GemID`, keeping items with a
-  `GemProperties` entry, `ItemLevel >= 60`, not unique-equipped-without-a-limit-category.
+- `enchantSpellIdCache` — scans `SPELL_EFFECT_ENCHANT_ITEM`, with a list of `continue` guards for
+  junk (test enchants, grandfathered TBC, the Naxx40 Sapphiron shoulder enchants).
+- `enchantGemIdCache` — walks `SpellItemEnchantment.GemID`, keeping items with a `GemProperties`
+  entry, `ItemLevel >= 60`, not unique-equipped-without-a-limit-category.
 
 **The invariant that keeps breaking:** `StatsWeightCalculator::BestGemScore` estimates what a socket
 is worth and **must mirror `ApplyEnchantAndGemsNew`'s eligibility filters exactly** — level gates,
 expansion gates, progression gates, item-side skill gates. Otherwise item *scoring* values sockets by
-gems the bot cannot actually slot. There is one deliberate exception, documented at
-`StatsWeightCalculator.cpp:978`: the tank cap-priority flag stays **off** in `BestGemScore` (see
-below).
+gems the bot cannot actually slot. The deliberate exceptions are the tank cap-priority flag (below)
+and the sim dataset's mirror and palette ([Sim BiS dataset](#sim-bis-dataset)).
 
 Upstream's gem quality cap (a gem no better than the item's quality, #2795) lives in the gem loop this
 fork replaced and is deliberately not ported: it would block the sim's epic gems in blue pre-raid items.
@@ -34,14 +35,14 @@ fork replaced and is deliberately not ported: it would block the sim's epic gems
   dropped the `ilvl * 1.1^quality` multiplier (#2790), so ilvl and quality count only through stats.
 - `CalculateEnchant` calls `Reset()`, which wipes `weight_` and the collector. Scoring an enchant
   mid-`CalculateItem` therefore needs a **separate calculator instance**.
-- `StatsCollector::CollectEnchantStats` (`StatsCollector.cpp:236-264`) handles only
-  `COMBAT_SPELL` (0.25×), `EQUIP_SPELL` (1.0×) and `STAT`; everything else hits `default: break;` and
-  is worth 0. `EQUIP_SPELL` procs are followed through `SPELL_AURA_PROC_TRIGGER_SPELL` and averaged
-  over the internal cooldown (`:737-742`), which is why embroidery and fur lining compete on real
-  value. `USE_SPELL` scores only because bots now actually press those buttons — see
-  [consumables-and-burst.md](consumables-and-burst.md).
-- The enchant tie-break in `ApplyEnchantAndGemsNew` is `score > bestScore` (strict). It used to be
-  `>=`, which let the *last* zero-scoring candidate win a slot by iteration order.
+- `StatsCollector::CollectEnchantStats` handles only `COMBAT_SPELL` (0.25×), `EQUIP_SPELL` (1.0×) and
+  `STAT`; everything else hits `default: break;` and is worth 0. `EQUIP_SPELL` procs are followed
+  through `SPELL_AURA_PROC_TRIGGER_SPELL` and averaged over the internal cooldown
+  (`StatsCollector::HandleApplyAura`), which is why embroidery and fur lining compete on real value.
+  `USE_SPELL` scores only because bots actually press those buttons — see
+  [consumables-and-burst.md](consumables-and-burst.md#engineering-tinkers).
+- The enchant tie-break in `ApplyEnchantAndGemsNew` is `score > bestScore` (strict), so a
+  zero-scoring candidate cannot win a slot by iteration order.
 
 ### Dual-wield weapon placement
 
@@ -56,22 +57,21 @@ EquipAction keeps refusing. Weapons already worn are never re-sorted without a n
 ### Talent-driven stat weights
 
 `GenerateBasicWeights` is flat per spec; **stat-conversion talents belong in
-`GenerateAdditionalWeights`** (`StatsWeightCalculator.cpp:782-830`), gated on `HasAura` — safe there
-because `Randomize` runs `InitTalentsTree` (`PlayerbotFactory.cpp:959`) before `InitEquipment` and
-`ApplyEnchantAndGemsNew`. Convention: **added weight = conversion ratio × the target stat's weight**.
-Careful Aim and Mental Dexterity each convert 100% of Intellect to attack power and each add 1.1
-against an attack power weight of 1.0.
+`GenerateAdditionalWeights`**, gated on `HasAura` — safe there because `Randomize` runs
+`InitTalentsTree` before `InitEquipment` and `ApplyEnchantAndGemsNew`. Convention: **added weight =
+conversion ratio × the target stat's weight**. Careful Aim and Mental Dexterity each convert 100% of
+Intellect to attack power and each add 1.1 against an attack power weight of 1.0.
 
 **`ITEM_MOD_SPELL_POWER` fills both `STATS_TYPE_SPELL_POWER` and `STATS_TYPE_HEAL_POWER`**
-(`StatsCollector.cpp:562-565`). Healer branches weight only `HEAL_POWER`, so spell power still
-collects that full weight and outscores anything below it — which is why holy paladins gemmed Runed
-(pure spell power) in every socket while Intellect sat at 0.9.
+(`StatsCollector::CollectByItemStatType`). Healer branches weight only `HEAL_POWER`, so spell power
+still collects that full weight and outscores anything below it — which is why holy paladins gemmed
+Runed (pure spell power) in every socket while Intellect sat at 0.9.
 
-**Holy paladin Intellect is 1.3** (0.9 + 0.4, `:829`). Holy Guidance rank 5 (`31841`) converts 20% of
-total Intellect to healing power, and Divine Intellect and Blessing of Kings each add 10% on top, so
-a point on gear is worth 0.24 healing — plus roughly 0.2 for the spell crit it carries
-(`1.21 / 166.6 %` × `45.9` rating per % × crit weight `0.6`), value a flat weight cannot scale. Gated
-on `PALADIN_TAB_HOLY` as well as the aura, because protection and retribution sit on a
+**Holy paladin Intellect is 1.3** (0.9 + 0.4, in `GenerateAdditionalWeights`). Holy Guidance rank 5
+(`31841`) converts 20% of total Intellect to healing power, and Divine Intellect and Blessing of Kings
+each add 10% on top, so a point on gear is worth 0.24 healing — plus roughly 0.2 for the spell crit it
+carries (`1.21 / 166.6 %` × `45.9` rating per % × crit weight `0.6`), value a flat weight cannot
+scale. Gated on `PALADIN_TAB_HOLY` as well as the aura, because protection and retribution sit on a
 `SPELL_POWER -2.0` branch that does not want Intellect. Measured at ilvl 80: yellow and blue sockets
 move to Brilliant King's Amber and red to Luminous Ametrine, and 4 of 12 gear slots reorder toward
 Intellect.
@@ -88,7 +88,9 @@ branch with specs that lack the talent, so each needs its own branch, never a ba
 Level-80 DPS bots take their weights from wowsim, not `GenerateBasicWeights`: `SimWeightsMgr` loads
 `playerbots_sim_weights` (playerbots DB), one row set per spec and WotLK content phase, measured at
 that phase's sim BiS gear and relative to an anchor stat (Strength for warriors, DKs and
-retribution; Agility for rogues, hunters, feral and enhancement; spell power for casters).
+retribution; Agility for rogues, hunters, feral and enhancement; spell power for casters). The rows
+come from wowsim's `tools/statweights` through `apps/simweights/generate_weights.py`, which writes a
+dated `data/sql/playerbots/updates/*_playerbots_sim_weights.sql` for the module's DB updater.
 
 - **Scope** (`SimWeightsMgr::ResolveKey`): no rows for tanks and healers (`IsTank`/`IsHeal`, i.e.
   the bot's strategies), or the protection/holy/restoration tabs. PvP specs and bots below 80
@@ -125,10 +127,6 @@ gear generation) has no item to take out, so clipping it would count the bot's o
 it; those stay unclipped. `PLAYER_EXPERTISE` already includes the rating part
 (`Player::UpdateExpertise`), so the expertise cap reads it alone.
 
-**Regenerating:** run wowsim's `tools/statweights` (its README), then
-`python apps/simweights/generate_weights.py --weights <weights.json>`, which writes a dated
-`data/sql/playerbots/updates/*_playerbots_sim_weights.sql` for the module's DB updater.
-
 **Feral weapon DPS:** `StatsCollector` turns a feral weapon's DPS into attack power
 (`getFeralBonus`), and the sim's weapon DPS slope for a cat already holds that attack power (wowsim
 `weaponFeralAP` reads the bonus main-hand DPS the slope adds). So when sim weights apply to a feral,
@@ -138,8 +136,8 @@ it; those stay unclipped. `PLAYER_EXPERTISE` already includes the rating part
 - `MELEE_DPS` takes the sim's main-hand slope, and `StatsCollector` counts an off-hand weapon's DPS
   under the same stat, so dual wielders overvalue off-hand weapon DPS (the off-hand slope is ~40%
   of the main hand's).
-- Bear weapons (hand-written weights) get feral attack power now, but were not re-checked against
-  the sim's ~51 threat per weapon DPS; before that they scored at the bots' 3.
+- Bear weapons (hand-written weights) get feral attack power but are not checked against the sim's
+  ~51 threat per weapon DPS.
 - `InitEquipment` clears the gear first and uses one calculator for the whole gear-up, so a
   generated bot is weighted at P1 whatever tier it is geared from.
 - Haste still steps between some phases, from real haste breakpoints the ±300 rating step doesn't
@@ -149,27 +147,16 @@ it; those stay unclipped. `PLAYER_EXPERTISE` already includes the rating part
 
 ## Set bonuses
 
-Set scoring lives only in `StatsWeightCalculator::CalculateItemSetMod` (`:890-913`). It was
-effectively dead until the delta model landed, for three separate reasons worth remembering:
-
-- `multiplier += 0.1f * itemCount` applied only while `itemCount < max_items`, so a **complete** set
-  reset to `1.0f` — stickiness was zero exactly when the bonuses were live.
-- It read `player->ItemSetEff`, i.e. currently-equipped state, so when comparing a candidate against
-  the incumbent set piece **the incumbent's own contribution counted toward both scores and
-  cancelled out**. Breaking a bonus was never penalised.
-- Piece count was linear; the real 2/4/6 thresholds in `ItemSetEntry::items_to_triggerspell[]` were
-  ignored.
-
-The fix is a delta model keyed on `SetReplacedItem(item)` — the piece occupying the contested slot,
-treated as removed so incumbent and challenger measure against the same baseline:
-
-```
-base   = EquippedSetPieces(player, proto->ItemSet) - (replaced_item_set_ == proto->ItemSet ? 1 : 0)
-gained = ActiveSetBonuses(set, base + 1) - ActiveSetBonuses(set, base)
-multiplier = 1 + ItemSet.BonusWeight * gained
-if (gained == 0 && NextSetThreshold(set, base))
-    multiplier += ItemSet.ProgressWeight * (base + 1)
-```
+Set scoring lives only in `StatsWeightCalculator::CalculateItemSetMod`, a delta model keyed on
+`SetReplacedItem(item)` — the piece occupying the contested slot, treated as removed so incumbent and
+challenger measure against the same baseline. `base` is the equipped pieces of the item's set, less
+one when the replaced item is in it; `gained` is the active bonuses (the real 2/4/6 thresholds in
+`ItemSetEntry::items_to_triggerspell[]`) at `base + 1` minus those at `base`; the multiplier is
+`1 + ItemSet.BonusWeight × gained`, plus `ItemSet.ProgressWeight × (base + 1)` when nothing is gained
+but a next threshold exists. Both halves are there because the obvious shapes fail: reading
+`player->ItemSetEff` makes the incumbent's own contribution count toward both scores and cancel out,
+so breaking a bonus is never penalised, and a per-piece bonus that stops at `max_items` zeroes
+stickiness exactly when the bonuses are live.
 
 Consequences: T7 chest → T7.5 chest is neutral (same set, same vacated baseline); a non-set
 challenger must beat the set piece by the bonus weight **on top of** `EquipUpgradeThreshold`.
@@ -178,26 +165,20 @@ Every runtime path that scores a slot must supply the replaced item — `QueryIt
 (the primary path; `LootUsageValue`, `ItemUpgradeValue` and `ItemUsageValue` all funnel through it),
 `AdjustUsageForCrossArmor`, and both `EquipAction` sites. `EquipAction` uses raw `>` comparisons with
 no threshold, so leaving it out would silently undo what `QueryItemUsageForEquip` just protected.
-`RandomItemMgr::CalculateItemWeight` (`RandomItemMgr.cpp:1055`) deliberately keeps
-`SetItemSetBonus(false)` — it feeds a cached, player-independent table.
+`RandomItemMgr::CalculateItemWeight` deliberately keeps `SetItemSetBonus(false)` — it feeds a cached,
+player-independent table.
 
 Known limitation: **tier tokens carry no `ItemSet`**, so `IsTokenLikelyUpgrade` /
-`IsAnyTierSlotLikelyUpgrade` stay pure-ilvl and bots roll on tokens the old way.
+`IsAnyTierSlotLikelyUpgrade` stay pure-ilvl.
 
 ## Sockets
 
-`CalculateSocketBonus` used to be a flat `1.0 + socketNum * 0.03`, ignoring colour and meta sockets
-entirely. It is now derived from what the bot would actually slot:
-
-```
-socketValue = Σ BestGemScore(cls, tab, lvl, pvp, socketColor) over sockets
-multiplier  = 1 + Socket.ValueFactor * (socketValue / baseWeight)      // baseWeight = the item's stat-sum weight_
-            = 1 + Socket.WeightPerSocket * socketNum                   // fallback when baseWeight ≈ 0
-multiplier  = min(multiplier, Socket.MaxMultiplier)
-```
-
-Using a ratio keeps it unit-consistent and gives sockets a larger relative share on stat-light items.
-Meta sockets need no special case — the cache returns the best *meta* gem for `SOCKET_COLOR_META`.
+`CalculateSocketBonus` derives a socket's worth from what the bot would actually slot: the sum of
+`BestGemScore` over the item's sockets (by colour) as a ratio of the item's stat-sum `weight_`, so
+`1 + Socket.ValueFactor × socketValue / weight_`, falling back to `1 + Socket.WeightPerSocket ×
+sockets` when `weight_` is about 0, and clamped at `Socket.MaxMultiplier`. The ratio keeps it
+unit-consistent and gives sockets a larger relative share on stat-light items. Meta sockets need no
+special case — the cache returns the best *meta* gem for `SOCKET_COLOR_META`.
 
 The `best_gem_score_` cache is keyed on class, tab, level, pvp spec and socket colour, guarded by a
 shared mutex (bots tick on parallel map threads). **The progression tier must be part of that key**,
@@ -208,10 +189,9 @@ socket is worth) and no jeweller cap (scoring a hypothetical socket, not allocat
 ### Socket bonuses
 
 `BONUS_ENCHANTMENT_SLOT` is written in exactly one place server-wide:
-`WorldSession::HandleSocketOpcode` (`ItemHandler.cpp:1387-1393`), which calls `Item::GemsFitSockets()`
-and stores `proto->socketBonus`. Bots never send that opcode, so **every socket bonus on every bot was
-dead**, even on items whose gems already colour-matched. `ApplyEnchantAndGemsNew` now mirrors it in a
-final pass — which must run after the meta apply, because `GemsFitSockets` counts the meta socket too.
+`WorldSession::HandleSocketOpcode`, which calls `Item::GemsFitSockets()` and stores
+`proto->socketBonus`. Bots never send that opcode, so `ApplyEnchantAndGemsNew` mirrors it in a final
+pass — which must run after the meta apply, because `GemsFitSockets` counts the meta socket too.
 
 `GemsFitSockets` is all-or-nothing over *coloured template* sockets: an empty one fails, a colourless
 (prismatic) one is skipped. A partial colour match is worth exactly zero.
@@ -223,14 +203,12 @@ bolt onto this function: the gem multiset never changes, so total stats, the uni
 budget and the global colour counts `Player::EnchantmentFitsRequirements` reads are all invariant — it
 can only add bonuses, never cost one. Meta sockets live in their own vector and never take part.
 
-Measured on an Ulduar-geared prot paladin: 54 stamina of socket bonuses on the gear, none applied; +18
-after both fixes. The other five need gems the bot does not own — five yellow sockets against one
-yellow-capable gem.
-
-**Still out of scope:** changing which gems are *chosen*. A per-item "colour-matched candidates plus
-the bonus" alternative must mirror `BestGemScore`'s eligibility filters exactly and interacts with the
-cap escalation. `StatsCollector.cpp:81-85` still credits full `socketBonus` stats without checking
-colour-match feasibility — much closer to true now that matched bonuses apply.
+**Still out of scope:** changing which gems are *chosen*, so a bonus whose colours need gems the bot
+does not own stays off (an Ulduar-geared prot paladin applies 18 of its gear's 54 bonus stamina: five
+yellow sockets against one yellow-capable gem). A per-item "colour-matched candidates plus the bonus"
+alternative must mirror `BestGemScore`'s eligibility filters exactly and interacts with the cap
+escalation. `StatsCollector::CollectItemStats` still credits full `socketBonus` stats without checking
+colour-match feasibility.
 
 ## Gems
 
@@ -242,10 +220,9 @@ between families — `36766` in this DB is *Bright Dragon's Eye*, not raw Scarle
 Noble Topaz `24058`–`35316`). `(ItemLevel, Quality)` tracks the content tier reliably, because those
 fields follow what the gem was designed for. See the progression section for the exact rule.
 
-**Jewelcrafting Dragon's Eyes** carry `ITEM_FLAG_UNIQUE_EQUIPPABLE`, which the cache filter dropped
-outright — making the old `ItemLimitCategory == 2` cap dead code. Two things matter when re-admitting
-them: the profession lock lives on the gem **item** (`proto->RequiredSkill == SKILL_JEWELCRAFTING`),
-not on the enchant (whose `requiredSkill` is 0), and the real cap is what
+**Jewelcrafting Dragon's Eyes** carry `ITEM_FLAG_UNIQUE_EQUIPPABLE`, so a cache filter on that flag
+drops them outright. The profession lock lives on the gem **item** (`proto->RequiredSkill ==
+SKILL_JEWELCRAFTING`), not on the enchant (whose `requiredSkill` is 0), and the real cap is what
 `Player::CanEquipUniqueItem` enforces — one copy per item id for `ITEM_FLAG_UNIQUE_EQUIPPABLE`, plus
 the DBC `maxCount` for any `ItemLimitCategory` (a category with no DBC row is unequippable).
 `ApplyEnchantAndGemsNew` tracks both in `gemsUsedById` / `gemsUsedByCategory`; the meta gem counts as
@@ -253,28 +230,28 @@ soon as it is chosen even though its apply is deferred.
 
 **Prismatic sockets.** How the core stores this is easy to get wrong: `PRISMATIC_ENCHANTMENT_SLOT`
 holds the socket-*adding* enchant, while the **gem** goes into the first template socket with no
-colour, i.e. `SOCK_ENCHANTMENT_SLOT + firstPrismatic` (`ItemHandler.cpp:1244-1263`,
-`PlayerStorage.cpp:4435-4442`). The core rejects meta gems there (`ItemHandler.cpp:1270`), so it is
-always a coloured socket. The cached prismatic enchant must carry
-`ITEM_ENCHANTMENT_TYPE_PRISMATIC_SOCKET` — `Spell::EffectEnchantItemPrismatic` refuses anything else
-and setting it anyway leaves a phantom socket.
+colour, i.e. `SOCK_ENCHANTMENT_SLOT + firstPrismatic` (`WorldSession::HandleSocketOpcode`,
+`Player::ApplyEnchantment`). The core rejects meta gems there (`HandleSocketOpcode`), so it is always
+a coloured socket. The cached prismatic enchant must carry `ITEM_ENCHANTMENT_TYPE_PRISMATIC_SOCKET` —
+`Spell::EffectEnchantItemPrismatic` refuses anything else and setting it anyway leaves a phantom
+socket.
 
 **Trap:** the prismatic level gate is 70, or 71 while `LimitEnchantExpansion` is on. **Do not also
 filter by spell id inside the loop — the two checks cancel out and the feature goes dead at exactly
 level 70.**
 
 **Meta gem lifecycle.** `Player::ApplyEnchantment` gates on the meta condition for **both** apply and
-remove (`PlayerStorage.cpp:4421`). A bot whose meta was socketed but *inactive*, on a run where
-colour-steering now satisfies the condition, would have the leading `ApplyEnchantment(false)` remove
-stats that were never applied — a phantom −stats wash that nets to zero and leaves the meta inactive
-forever. The core avoids this with `wasactive` tracking (`Player.cpp:11256-11262`); the module does
-not. The fix is a pre-deactivate pass before colour gems are rearranged, then a single
-`ApplyEnchantment(true)` at the end. `CorrectMetaGemEnchants` is *not* a drop-in replacement — it
-compares before/after a single changed socket, not a from-scratch recompute.
+remove. A bot whose meta was socketed but *inactive*, on a run where colour-steering now satisfies the
+condition, would have the leading `ApplyEnchantment(false)` remove stats that were never applied — a
+phantom −stats wash that nets to zero and leaves the meta inactive forever. The core avoids this with
+`wasactive` tracking in `Player::CorrectMetaGemEnchants`; the module does not. Hence a pre-deactivate
+pass before colour gems are rearranged, then a single `ApplyEnchantment(true)` at the end.
+`CorrectMetaGemEnchants` is *not* a drop-in replacement — it compares before/after a single changed
+socket, not a from-scratch recompute.
 
-**Known filter hole:** `RandomItemMgr::IsInternalItem` (`RandomItemMgr.cpp:1412-1433`) matches
-`"Unused "` **with a trailing space**, so `37430 "Solid Sky Sapphire (Unused)"` slips through as a
-live gem candidate. The `TCHILTON TEST` and `zzOLD…` entries are caught correctly.
+**Known filter hole:** `RandomItemMgr::IsInternalItem` matches `"Unused "` **with a trailing space**,
+so `37430 "Solid Sky Sapphire (Unused)"` slips through as a live gem candidate. The `TCHILTON TEST`
+and `zzOLD…` entries are caught correctly.
 
 ## Enchants
 
@@ -299,9 +276,9 @@ armors for a leatherworking bot anyway.
 
 **Confirmed correct — do not re-audit:**
 
-- **`enchant->slot` compared with `!=`** against `PERM_`/`TEMP_ENCHANTMENT_SLOT`
-  (`PlayerbotFactory.cpp:5607-5610`), though the field is a bitmask (`EnchantmentSlotMask`,
-  `ENCHANTMENT_CAN_SOULBOUND = 0x01`, `Item.h:199`). It rejects 131 entries with flags 3/6/7/9 — all
+- **`enchant->slot` compared with `!=`** against `PERM_`/`TEMP_ENCHANTMENT_SLOT` (the cache build and
+  `ApplyEnchantAndGemsNew`), though the field is a bitmask (`EnchantmentSlotMask`,
+  `ENCHANTMENT_CAN_SOULBOUND = 0x01`, `Item.h`). It rejects 131 entries with flags 3/6/7/9 — all
   shaman imbues, rogue poisons and warlock firestones, which `ImbueAction` owns separately.
 - **A capped tank skipping Arcanum of the Stalwart Protector is right.** `ApplyOverflowPenalty` zeroes
   `STATS_TYPE_DEFENSE` once `GetRatingBonusValue(CR_DEFENSE_SKILL) >= DEFENSE_OVERFLOW`, so Arcanum
@@ -310,30 +287,25 @@ armors for a leatherworking bot anyway.
 
 ## Profession enhancements
 
-Per-profession status, and what blocked each one:
-
 | Profession | Enhancement | Status |
 |---|---|---|
-| Enchanting | Ring enchants | Works — was the only one that ever reached bot gear |
+| Enchanting | Ring enchants | Applied |
 | Engineering | Hyperspeed Accelerators | Applied and used (see the tinker section in consumables-and-burst.md) |
 | Engineering | Hand-Mounted Pyro Rocket | Never applied — damage-only, scores 0 |
 | Engineering | Nitro Boosts | Scored on its stat half (+24 crit) only |
 | Engineering | Flexweave Underlay, Springy Arachnoweave | Never applied — the cloak slot is reserved for tailoring embroidery |
 | Tailoring / Leatherworking | Embroidery, Fur Lining | Scored generically from DBC |
-| Blacksmithing | Socket Bracer / Gloves | Needed prismatic support |
-| Jewelcrafting | Dragon's Eye | Needed the unique-equippable filter narrowed |
-| Inscription | Master's Inscription | Needed the skill cap raised — `maxValue = level * 5` capped at 400, and Inscription needs 430 |
+| Blacksmithing | Socket Bracer / Gloves | Applied through the prismatic socket |
+| Jewelcrafting | Dragon's Eye | Applied under the unique-equipped budget above |
+| Inscription | Master's Inscription | Applied: it needs 430 skill, past the `level * 5` cap of 400 |
 
-Skill caps now derive from `sWorld->getIntConfig(CONFIG_EXPANSION)` (300/375/450) for primary trade
+Skill caps derive from `sWorld->getIntConfig(CONFIG_EXPANSION)` (300/375/450) for primary trade
 skills; `level * 5` stays for weapon and secondary skills. Accepted side effect: bots can also
 learn 401-450 recipes, which touches `GuildTaskMgr` and item-usage logic.
 
 The Eternal Belt Buckle has no skill requirement, so it goes to every bot clearing the level gate,
 not only Blacksmiths. Upstream's `TryApplyBeltBuckle` duplicates `ApplyPrismaticSocket` and is
 deliberately not kept.
-
-`AutoMaintenanceOnLevelupAction` calls `InitEquipment(true)` but historically never
-`ApplyEnchantAndGemsNew`, so gear swapped in on level-up stayed bare until a full maintenance run.
 
 ## Tank gemming and the defense cap
 
@@ -359,19 +331,20 @@ would never switch off and every socket would go into a dead stat permanently.
 re-rank whole gear pieces and churn equips as it crosses the cap. The cost is a slightly conservative
 socket estimate for under-cap tanks.
 
-**Block value is weighted 0.7** (`StatsWeightCalculator.cpp:738`), raised from 0.5 so `3849 'Titanium
-Plating'` (+81 block value, 56.7) takes a tank shield over `1071 '+18 Stamina'` (55.8) — a 0.9 margin,
-so the shield enchant is not stable across gear changes. Gemming cannot move: no gem in the DBC carries
-`ITEM_MOD_BLOCK_VALUE` or `ITEM_MOD_BLOCK_RATING`. Shield *selection* does move — `StatsCollector.cpp:57`
-feeds `proto->Block` into the stat sum, and raid shields carry 0–259 of it (mean 223).
+**Block value is weighted 0.7** (`GenerateBasicWeights`), above 0.5 so `3849 'Titanium Plating'` (+81
+block value, 56.7) takes a tank shield over `1071 '+18 Stamina'` (55.8) — a 0.9 margin, so the shield
+enchant is not stable across gear changes. Gemming cannot move: no gem in the DBC carries
+`ITEM_MOD_BLOCK_VALUE` or `ITEM_MOD_BLOCK_RATING`. Shield *selection* does move —
+`StatsCollector::CollectItemStats` feeds `proto->Block` into the stat sum, and raid shields carry
+0–259 of it (mean 223).
 
 ## Enhancement shaman gemming
 
 Target: haste in yellow and blue sockets, Stark Ametrine (+20 AP +10 haste) as the red-socket bonus
-filler, Relentless Earthsiege meta with one Tear. Each weight in the branch
-(`StatsWeightCalculator.cpp:652-669`) holds a boundary, so **re-check gem picks before moving any**.
-At level 80 the [sim weights](#sim-stat-weights) replace them and cross two of these: crit beats
-Agility in P1-P3 (2.1 vs 1.8, so Chaotic Skyflare can take the meta) and haste passes 2.7 from P4.
+filler, Relentless Earthsiege meta with one Tear. Each weight in the branch (`GenerateBasicWeights`)
+holds a boundary, so **re-check gem picks before moving any**. At level 80 the
+[sim weights](#sim-stat-weights) replace them and cross two of these: crit beats Agility in P1-P3
+(2.1 vs 1.8, so Chaotic Skyflare can take the meta) and haste passes 2.7 from P4.
 
 - **HASTE 2.5, above 2.0:** below 2 AP per point, Bright Cardinal Ruby (+40 AP) beats Quick King's
   Amber (+20 haste). Under the ×1.2 colour nudge 2.5 gives Quick in yellow/blue and Stark in red. At
@@ -437,24 +410,23 @@ Tier 11's enumerator is commented out in IP but the value is live in data.
 
 ### Gem classification rule
 
-Property fallback plus three overrides, checked first:
+Three overrides, checked first, then a property fallback:
 
-```
-RequiredSkill == 755 (Dragon's Eye)     -> 13
-30546..30607  (TBC raid epics, 2.1)     -> 9
-45862..45987  (Stormjewels, 3.1)        -> 14
-ItemLevel <= 70, Quality <  epic        -> 8
-ItemLevel <= 70, Quality == epic        -> 12
-ItemLevel >= 75, Quality <  epic        -> 13
-ItemLevel >= 75, Quality == epic        -> 15
-```
+| Gem | Tier |
+|---|---|
+| `RequiredSkill == 755` (Dragon's Eye) | 13 |
+| `30546..30607` (TBC raid epics, 2.1) | 9 |
+| `45862..45987` (Stormjewels, 3.1) | 14 |
+| `ItemLevel <= 70`, quality below epic | 8 |
+| `ItemLevel <= 70`, epic | 12 |
+| `ItemLevel >= 75`, quality below epic | 13 |
+| `ItemLevel >= 75`, epic | 15 |
 
-Eight lines of data that classify every straggler correctly. The highest-impact case it fixes: the
-epic cut block `40111`–`40182` (Bold Cardinal Ruby … Shattered Eye of Zul) and Nightmare Tear `49110`
-shipped with **patch 3.2**, not 3.0 — they are in the DBC from 3.0, so bots socket-filled with them
-the moment a realm reached tier 13, roughly +40% gem stats over the rare cuts that should be
-best-in-slot at tiers 13–14. The `39900` cutoff never helped: it separates TBC from WotLK and
-nothing else.
+That classifies every straggler correctly. The highest-impact case: the epic cut block
+`40111`–`40182` (Bold Cardinal Ruby … Shattered Eye of Zul) and Nightmare Tear `49110` shipped with
+**patch 3.2**, not 3.0 — they are in the DBC from 3.0, so an id cutoff socket-fills bots with them the
+moment a realm reaches tier 13, roughly +40% gem stats over the rare cuts that should be best-in-slot
+at tiers 13–14. The `39900` cutoff cannot help: it separates TBC from WotLK and nothing else.
 
 ### Enchant and item classification
 
@@ -472,31 +444,31 @@ Cache the resolved tier on `PlayerbotAI` and invalidate on group change.
 
 ### Deliberately not gated
 
-Glyphs (the existing `limitTalentsExpansion && level <= 70` bail approximates it) and **the equipped
+Glyphs (the existing `LimitTalentsExpansion && level <= 70` bail approximates it) and **the equipped
 gear itself**. Gating gems and enchants while a tier-8 bot still wears ICC gear is a known
 half-measure: correct-for-era enchants on wrong-for-era items is expected, not a bug.
 
 ## Ranked BiS lists
 
-`StatsWeightCalculator::BisRankMultiplier` is the last multiplier in `CalculateItem`, and the only
-one that is off by default — it needs `SetBisBonus(true)`, which only `QueryItemUsageForEquip`, `EquipAction`
-and the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
-`RandomItemMgr::CalculateItemWeight` all score without it.
-
-    1 + Bis.ScoreBonus * kRankScale[rank - 1] * phaseScale
+The lists ([loot.md](loot.md#ranked-bis-lists) for the import and the roll gates) move scores through
+`StatsWeightCalculator::BisRankMultiplier`, the last multiplier in `CalculateItem` and the only one
+off by default — it needs `SetBisBonus(true)`, which only `QueryItemUsageForEquip`, `EquipAction` and
+the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
+`RandomItemMgr::CalculateItemWeight` all score without it. It is
+`1 + Bis.ScoreBonus × kRankScale[rank - 1] × phaseScale`:
 
 - `kRankScale = {1.0, 0.8, 0.6}` for ranks 1-3. Ranks 4-6 are filler alternates and get no score
   change (they still get the gate bypass). Flat-ish on purpose: ranks 1-3 of a slot are
   near-equivalent picks, and against `EquipUpgradeThreshold` (1.07) a 2.5% nudge is invisible.
-- `phaseScale = 1 - Bis.PhaseDecay * (reference - entryPhase)`, floored at 0. Without it a leftover
+- `phaseScale = 1 - Bis.PhaseDecay × (reference - entryPhase)`, floored at 0. Without it a leftover
   pre-raid rank-1 piece is worth exactly as much as the current tier's rank-1, the two bonuses
   cancel, and the equipped lower-ilvl piece keeps the slot on `ItemSet.BonusWeight` (x1.15) times
   `EquipUpgradeThreshold` (x1.07) alone — a 23% raw-stat wall.
 - `reference` in a slot comparison (`SetBisContest`, set by `QueryItemUsageForEquip`) is the later
-  phase of the dropped and the equipped item's best listing; ranks 4-6 count, unlisted is 0. It
-  used to be the bot's progression phase, which zeroed 91% of rank 1-3 Ulduar-level list entries
-  for a tier-15 group still gearing in Ulduar. Without a contest it is the source's phase; `calc`
-  contests the item with itself, so it prints the undecayed bonus.
+  phase of the dropped and the equipped item's best listing; ranks 4-6 count, unlisted is 0. Not the
+  bot's progression phase: that zeroed 91% of rank 1-3 Ulduar-level list entries for a tier-15 group
+  still gearing in Ulduar. Without a contest it is the source's phase; `calc` contests the item with
+  itself, so it prints the undecayed bonus.
 - The reference depends on the pair, so scores are not one total order per bot. A three-item cycle
   needs an unlisted item 23-25% above a later-phase rank-3 in raw score with an earlier-phase rank-1
   within 7.5% of that rank-3; not guarded.
@@ -643,10 +615,9 @@ threads read the map; the `shared_mutex` the patch adds around it makes that saf
 (`ItemReforge::HandleReload`) walks only `sWorldSessionMgr`'s sessions, which hold no bots —
 toggling it leaves already-reforged bots' stats drifted from their DB row until they relog.
 
-**Deliberate `BestGemScore` exception, the second one** (the tank cap-priority flag above is the
-first): the mirror and the palette narrow *placement* — which gem a socket gets — never *valuation*.
-`BestGemScore` never sees it, so socket scoring stays independent of which subject a bot resolved
-to.
+**The mirror and the palette are a `BestGemScore` exception too**: they narrow *placement* — which
+gem a socket gets — never *valuation*. `BestGemScore` never sees them, so socket scoring stays
+independent of which subject a bot resolved to.
 
 **Known gaps:** acbis's roster exports carry no healer blocks, so healers stay on the lists. acbis
 labels a raider "Blood tank" or "Feral tank" only when the raid's main-tank flag is set, so an

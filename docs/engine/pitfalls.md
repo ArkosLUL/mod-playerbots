@@ -4,51 +4,32 @@ Failure modes this codebase has already hit, grouped by shape. Most produce **no
 just quietly does nothing. Check this list before debugging "the trigger doesn't fire".
 
 Vehicle riders, oscillating movement, reach maths, coordination and per-raid cost have their own
-doc: [raid-mechanics-lessons.md](raid-mechanics-lessons.md).
-
-## A trace only proves what the build behind it did
-
-A pull recorded before a fix landed looks exactly like a pull where the fix did nothing. Three Freya
-pulls on 2026-09-05 were read as evidence against code the running worldserver had never been built
-with; the binary predated the commit by two hours.
-
-**From schema v11 the trace answers this itself**: `hdr.bin` is the binary's mtime, and
-`postmortem.py` opens every report comparing it against HEAD, alongside hard mode, humans and
-difficulty ([../systems/observability.md](../systems/observability.md)). Read the banner first.
-
-A timestamp is not proof the code ran, so where the effect must be *shown*, confirm it from the
-records: a node the change added has to appear at least once, and an action a new multiplier zeroes
-has to carry that multiplier's label in a `veto` row instead of its own relevance. `AzerothCore rev.`
-in `Server.log` is the *core* hash and says nothing about a module. Pre-v11, fetch the mtime by hand
-(`docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver`) — UTC, so convert
-before comparing against a local commit time.
+doc: [raid-mechanics-lessons.md](raid-mechanics-lessons.md). Traps in reading a trace — a stale
+build, a probe that never reaches the file, what a trace cannot see — are in
+[../systems/observability.md](../systems/observability.md).
 
 ## A solved table outlives the traces it was solved from
 
-Coordinates fitted offline stay fitted to the pulls available that day. Thorim's twelve Lightning Charge
-shelters were solved against three pulls' boss positions; two later pulls widened that set enough to
-push four rows out of their own cone margin, one to 38.1° against a 37.5° arc — a bot sheltered into the
-cone it was dodging.
+Coordinates fitted offline stay fitted to the pulls available that day. Thorim's twelve Lightning
+Charge shelters were solved against three pulls' boss positions; two later pulls pushed four rows
+out of their own cone margin, one to 38.1° against a 37.5° arc. Re-verify every row against every
+trace you have before shipping, and treat a measured limit as pass/fail: three of those shelters sat
+7.6-8.2 yd off Sif's Blizzard track against a measured 9.8 yd reach, because clearance was a solver
+preference it was free to trade away. Parse the shipped table back out of the source to check it —
+the solver's own output only proves the solver agrees with itself.
 
-Re-verify every row against every trace you have before shipping, and treat a measured limit as
-pass/fail: three of those shelters sat 7.6-8.2 yd off Sif's Blizzard track against a measured 9.8 yd
-reach, because clearance was a solver preference it was free to trade away. Parse the shipped table back
-out of the source to check it — the solver's own output only proves the solver agrees with itself.
+**A tuned constant carries its trace's layout as an unwritten premise.** Hodir's `ULDUAR_HODIR_BUFF_WALK` 15 was
+fitted to pulls where a usable buff stand sat inside 15 yd on 53.7% of ranged samples. Parking the
+boss on the Toasty Fire moved every legal stand out to the helper arc, and the same 15 then reached
+**6.6%**: the rule quietly became "never walk". When a change moves what a fitted constant measures
+against, re-derive it in the same cycle, and print the availability it is fitted to beside the share
+it lets through — the share alone cannot tell a tight budget from a dead one.
 
-**A tuned constant carries its trace's layout as an unwritten premise.** Hodir's `_BUFF_WALK` 15 was
-fitted to pulls where a usable buff stand sat inside 15 yd on 53.7% of ranged samples. A later change
-parked the boss on the Toasty Fire, moving every stand a caster may legally use out to the helper arc:
-the same 15 then reached **6.6%**, so the rule quietly became "never walk" while 57-60% of legal stands
-sat on the floor. Nothing asserts a distance against what is inside it, so it kept looking right. When
-a change moves what a fitted constant measures against, re-derive it in the same cycle, and print the
-availability it is fitted to beside the share it lets through — a reader showing only the second cannot
-tell a tight budget from a dead one.
-
-**A navprobe-clean point can still be a wrong point.** Navprobe answers "is this on the mesh", which is
-one constraint out of several. A nine-spot Thorim camp solve ignored Sif's Blizzard lane and put two
-points 5.6 and 6.8 yd from the bunny's path; both probed clean. So the hazard check is its own step,
-and re-solving a failed point means **re-solving the whole set against every constraint** rather than
-nudging the one that failed — a nudge just moves the violation to a neighbour.
+**A navprobe-clean point can still be a wrong point.** Navprobe answers "is this on the mesh", one
+constraint of several: a Thorim camp solve that ignored Sif's Blizzard lane put two points 5.6 and
+6.8 yd from the bunny's path, both probing clean. The hazard check is its own step, and a failed
+point means **re-solving the whole set against every constraint** — nudging one moves the violation
+to a neighbour.
 
 ## Names fail silently at runtime
 
@@ -57,110 +38,56 @@ Everything is wired by string. Nothing here is a compile error.
 - A `TriggerNode` whose name has no `creators[...]` entry is skipped by `Engine::ProcessTriggers`
   with `continue` and **no warning**.
 - An unregistered action logs `A:<name> - UNKNOWN`.
-- Spell names resolve by string through the `"spell id"` value, matching the 3.3.5 DBC name
-  exactly, hyphens included. A wrong name resolves to 0 and the action never casts, unreported:
-  paladin `blessing of protection on party` (3.3.5 has Hand of Protection) and DK `anti magic zone`
-  are dead this way. Resolve a hyphenated spell by id.
+- Spell names resolve through the `"spell id"` value (`SpellIdValue`), a case-insensitive match of
+  the whole 3.3.5 DBC name, hyphens included. A wrong name resolves to 0 and the action never casts,
+  unreported — and so does every `PlayerbotAI::CanCastSpell(name)` / `CastSpell(name)` test, so a
+  guard asking by name is dead too. DK `anti magic shell` and `anti magic zone` ("Anti-Magic …") and
+  paladin `blessing of protection on party` (spell `blessing of protection`; 3.3.5 has Hand of
+  Protection) are dead this way: no bot cast
+  Anti-Magic Shell in twelve Yogg-Saron pulls until the tank-defensive ladder tested its id
+  (`RaidTankDefensive.cpp`). Resolve a hyphenated or renamed spell by id.
 - `TwoTriggers`' creator key must exactly equal `getName()` = `"<name1> and <name2>"`.
 
 **`tools/pblint/pblint.py` is this sweep.** Point it at the paths a commit touches; it exits non-zero
-on a name no context can build. It checks both directions, and needs to: the Yogg-Saron typo below sat
-in a string array no node scan could see, visible only as a creator nothing referenced.
-
-It reads [encounter definition](../raids/README.md#file-layout-and-wiring) rows through their `Name`
+on a name no context can build. It checks both directions, and needs to: a creator nothing
+references is the only trace of a typo hidden in a string array no node scan sees. It reads
+[encounter definition](../raids/README.md#file-layout-and-wiring) rows through their `Name`
 constants. Also errors: a rule listing an unregistered action, and a `creators[]` entry duplicating a
 row, where registration order decides whether the bot gets the gated trigger. The constructor checks
 (`ctor-name`, `trigger-interval`) only match a parameter spelled `AI` or `botAI`, missing the `ai`
 that about half of Ulduar's and Naxx's constructors take.
 
-Casualties found so far: `blade fury` (should be `blade flurry`), `conflagrate`, `chaos bolt`,
-`cure party member` (a base class — subclasses register under spell names).
-
-**Still open**, all found by the sweep on 2026-09-12 and none of them reported anywhere at runtime:
+**Still open**, all base and class, none reported anywhere at runtime:
 
 | Node | Registered as |
 |---|---|
-| Hunter `explosive shot`, DK `rune strike`, paladin `blessing of might`, mage `high threat` | registered on the other side - an action referenced as a trigger, or the reverse |
-| `grounding totem`, `reset`, `tank aoe`, `location stuck`, `stay line`, chat `naxx`/`bwl`, `master loot roll`, `team flagcarrier near`, `mind freeze on enemy healer`, `freezing trap on cc` | nothing at all: either delete the reference or write the creator |
+| DK `rune strike`, paladin `blessing of might`, `master loot roll`, DK `mind freeze on enemy healer` | on the other side — an action referenced as a trigger, or the reverse |
+| `grounding totem`, `reset`, `tank aoe`, `location stuck`, `stay line`, chat `naxx`/`bwl`, `team flagcarrier near`, `freezing trap on cc` | nothing at all: either delete the reference or write the creator |
 
-All raid-side names are fixed as of 2026-09-12; the 17 left are base and class. Zul'Aman's three were
-the worst of them — `akil'zon`, `jan'alai` and `zul'jin` asked for `main tank position boss` against a
-registration, factory and class that all said `Tanks`, so three of five bosses had no main-tank
-positioning from the day they were written. Halazzi spells `main tank` on both sides and Nalorakk
-`tanks` on both; that inconsistency produced the other three. Felmyst's pair were simply swapped, the
-trigger name in the action slot.
+**The runtime half is `postmortem.py --coverage`**, and neither tool subsumes the other. pblint
+proves a name has a creator somewhere in the tree, statically. Coverage proves the node carried
+current on the pull you ran, and catches a name registered in a context this bot's own stack does
+not include. A creator nothing references has no runtime counterpart, and a correctly wired node
+whose condition is never true is invisible to pblint. The shapes, both dead from the day they were
+written: `UldTriggerContext.h` registered `"yogg-saron shadow resistance trigger**r**"`, so the node
+never resolved; `"thorim fall from floor action"` had a class and a trigger but no `creators[...]`
+entry, so the node fired and found nothing to run.
 
-**The runtime half is `postmortem.py --coverage`** (schema v12), and neither tool subsumes the other.
-pblint proves a name has a creator somewhere in the tree, statically, over every node. Coverage proves
-the node carried current on the pull you ran, and catches what no source sweep can: a name registered
-in a context this bot's own stack does not include. A creator nothing references has no runtime
-counterpart at all, and a correctly wired node whose condition is never true is invisible to pblint.
-
-The two Ulduar cases are the shape to recognise, both dead from the day they were written:
-`UldTriggerContext.h` registered `"yogg-saron shadow resistance trigger**r**"`, so the node asking for
-`"yogg-saron shadow resistance trigger"` never resolved; and `"thorim fall from floor action"` had a
-class and a trigger but no `creators[...]` entry, so the node resolved its trigger and found nothing
-to run.
-
-Multiplier `dynamic_cast` mistakes, by contrast, do fail at compile time.
-
-Registration is not activation, and that fails just as quietly. `DpsAoeStrategy` is defined
-(`src/Ai/Base/Strategy/DpsAssistStrategy.h:23`) and has a creator (`StrategyContext.h:245`), but no
-`addStrategies*` call anywhere adds `"dps aoe"` — only the unrelated `"aoe"` — so it can never run.
-Check for both the `creators[...]` entry **and** an `addStrategies*` mention.
-
-## A probe can go missing, and churn hides outside its phase
-
-`RaidObs::NoteAssignment` resolves the guid a traced container is keyed on to find the session to
-write into, so keying one on a vehicle, creature or object used to drop the record outright:
-`fl.frozen` is written every pass and gates three Flame Leviathan decisions, and was absent from all
-129 traces on disk while its six sibling keys carried 1,556 rows. It now falls back to the bot whose
-tick set it. `batch.py --probes` is the sweep — a key the source declares that never reaches a trace
-of its own boss.
-
-That sweep needs the source parse to be right twice over, and it was wrong both ways. The scan read
-one line at a time, so a call wrapped after its opening paren declared nothing as far as the check
-could tell (`yogg.deathray`). And a key prefix is written three ways — the slug with punctuation
-dropped, its initials, or **its first word** — and only the first two were derived, so every one of
-the 25 `yogg.*` keys was invisible. A hand-kept list is not the fix: the one in `yogg_saron.py` was
-already wrong in both directions, missing three keys the same file read and inventing one nothing
-declares.
-
-**A creature's death reaches no record at all.** The `death` stream is roster-only, and so is `dmg`,
-so nothing says an add died or who killed it — a count over `death` for a creature is not low, it is
-structurally zero. What a trace does carry is the last health the snapshot sampled before the unit
-stopped appearing, and whatever it cast on the way out: Yogg's Guardians are counted through their
-Shadow Nova for exactly this reason.
-
-**A change-only key keeps a stale value across windows**, a dead bot's duty for one. Write an
-explicit `none` when the window opens, or have the reader cut spans at death. Nor does a per-bot
-change-only latch that coverage reads NEVER prove its node dead: a generic node may have taken the
-action first (generic interrupts kicked every Fel Fireball before Jaraxxus's duty node could).
-
-**A note written before the session opens is lost.** The pre-roll ring keeps only snapshots, so a
-per-bot `NoteDerived` written before the pull never reaches a trace that opens at the engage. Write
-it again after the open, from any bot's tick: a bot mid-cast or drinking runs no triggers. Opening
-early with `MarkPull` fails on a long pre-pull wait: `IdleCloseSeconds` (30 s) closes it first.
-
-**`snap` rows carry no combat state.** A drink or eat `act` OK row stands in: both actions'
-`isPossible` require the bot out of combat.
-
-Churn is only legible inside the phase you care about. Mimiron's phase-1 flip-flop counts 57 A-B-A
-within phase 1 and disappears into ~700 across the whole pull, so `postmortem.py --probes --during
-mimiron.phase=1` is what reproduces it and a whole-pull number is what hid it.
+Registration is not activation, and that fails just as quietly. `DpsAoeStrategy`
+(`DpsAssistStrategy.h`) has a creator (`StrategyContext.h`), but no `addStrategies*` call adds
+`"dps aoe"` — only the unrelated `"aoe"` — so it never runs. Check for both the `creators[...]`
+entry **and** an `addStrategies*` mention.
 
 ## A moving bot cannot cast
 
 `PlayerbotAI::CanCastSpell` / `CastSpell` refuse **any** spell with a non-zero cast time while
-`bot->isMoving()` (`src/Bot/PlayerbotAI.cpp:3369-3379`, `:3746-3753`). The `StopMoving()` calls that
-would let a bot stop and cast are commented out, so movement versus casting is resolved purely by
-action priority.
+`bot->isMoving()`. The `StopMoving()` calls that would let a bot stop and cast are commented out, so
+movement versus casting is resolved purely by action priority.
 
-This is the root of a whole class of "healers stop healing" bugs. The Sapphiron air phase was the
-worst case: a position action at `ACTION_RAID + 1` recomputed an exact shelter point every tick
-against a moving boss and a moving player, accepted arrival only within `0.35f`, and returned `true`
-right after issuing a `MOVEMENT_FORCED` move — so healers slid in place for the whole phase and never
-landed a cast.
+This is the root of a whole class of "healers stop healing" bugs: Sapphiron's air-phase shelter
+action at `ACTION_RAID + 1` recomputed an exact point every tick against a moving boss and player,
+accepted arrival only within `0.35f`, and returned `true` right after a `MOVEMENT_FORCED` move, so
+healers slid in place all phase and never landed a cast.
 
 The fix shape is **reach-then-hold with hysteresis**: accept a generous arrival deadband, latch
 "arrived", `StopMoving()`, and issue no further move until the bot genuinely drifts out. Return
@@ -183,24 +110,21 @@ The mirror of the rule above, and it silently defeats every dodge in the module.
 same test. `Unit::IsMovementPreventedByCasting` is true for any `UNIT_STATE_CASTING` except a channel
 carrying `IsActionAllowedChannel` — so instants are fine and everything else is not.
 
-Two things make it worse than "the move does nothing". `MovementAction::MoveTo` has its `CastStop` /
-`InterruptSpell` block **commented out** (`MovementActions.cpp:318`, `:345`), so it returns `true` and
-stamps `LastMovement` with the full travel delay for a leg that never started — which then blocks the
-bot's own retries through `IsWaitingForLastMove` for the length of a walk it never took. And the
-calling action reads that `true` as success and holds the tick. Nothing upstream can see this: the
-node's verdict, the accepted-move record and the registered POINT generator all say it worked. Judge a
-positioning node by measured displacement instead — Freya's Sun Beam dodge logged 158 accepted moves in
-one pull while bots channelling Volley or Mind Sear went nowhere on 57-67% of them and died standing in
-the beam.
+It is worse than "the move does nothing". `MovementAction::MoveTo` has its `CastStop` /
+`InterruptSpell` block **commented out**, so it returns `true` and stamps `LastMovement` with the full
+travel delay for a leg that never started, which then blocks the bot's own retries through
+`IsWaitingForLastMove`; and the calling action reads that `true` as success and holds the tick. The
+node's verdict, the accepted-move record and the registered POINT generator all say it worked. Judge
+a positioning node by measured displacement instead — Freya's Sun Beam dodge logged 158 accepted
+moves in one pull while bots channelling Volley or Mind Sear went nowhere on 57-67% of them.
 
 A dodge that must not be missed interrupts **before** it moves, and the two calls are not
-interchangeable. `bot->InterruptNonMeleeSpells(true)` is immediate: the cast ends inside the call, so
-the `MovePoint` on the same tick launches its spline. `botAI->RequestSpellInterrupt()` only sets a flag
-for a later `UpdateAIInternal`, so the move issued this tick is still pinned — it is for scripts
-reacting to a boss event, not for an action that has to travel now. Gate the interrupt on
-`IsMovementPreventedByCasting()` so it only fires when the bot is genuinely stuck, and decide it per
-mechanic: clipping a cast every time a *survivable* hazard lands costs more than the hazard does.
-Kara, Gruul, Magtheridon and Naxxramas already do this.
+interchangeable. `bot->InterruptNonMeleeSpells(true)` ends the cast inside the call, so a `MovePoint`
+on the same tick launches. `botAI->RequestSpellInterrupt()` only sets a flag for a later
+`UpdateAIInternal`, so the move issued this tick is still pinned — it is for scripts reacting to a
+boss event. Gate the interrupt on `IsMovementPreventedByCasting()`, and decide it per mechanic:
+clipping a cast every time a *survivable* hazard lands costs more than the hazard does. Kara, Gruul,
+Magtheridon and Naxxramas already do this.
 
 A bot mid-cast also runs **no triggers**: `UpdateAIInternal` yields while its spell prepares. So a
 mechanic that punishes an ongoing cast (Mistress' Kiss) can only be answered from another bot's
@@ -209,59 +133,58 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
 
 ## An ability lock makes a portal or spell click a silent no-op
 
-`GameObject::Use` on a goober and `Creature::HandleSpellClick` make the **user** cast the spell,
-untriggered (`GameObject.cpp:1734, 2111-2113`, `Unit.cpp:15260`). Bladestorm and Killing Spree carry
-`SPELL_AURA_ALLOW_ONLY_ABILITY`, which sets `PLAYER_ALLOW_ONLY_ABILITY`, and `Spell::CheckCast` then
-fails every untriggered cast with `SPELL_FAILED_SPELL_IN_PROGRESS` (`Spell.cpp:5878`): the call
-returns, nothing happens. Cancel the aura first, under the client's cancel rules
-(`YoggSaronCancelAbilityLock`); a warrior went insane at Yogg-Saron's exit portal this way.
+`GameObject::Use` on a goober and `Unit::HandleSpellClick` make the **user** cast the spell,
+untriggered. Bladestorm and Killing Spree carry `SPELL_AURA_ALLOW_ONLY_ABILITY`, which sets
+`PLAYER_ALLOW_ONLY_ABILITY`, and `Spell::CheckCast` then fails every untriggered cast with
+`SPELL_FAILED_SPELL_IN_PROGRESS`: the call returns, nothing happens. Cancel the aura first, under the
+client's cancel rules (`YoggSaronCancelAbilityLock`); a warrior went insane at Yogg-Saron's exit
+portal this way.
 
 ## Movement that silently no-ops
 
 - **`MoveTo` does not validate the destination against the navmesh.** With `exact_waypoint = false,
-  generatePath = true` it goes through `SearchForBestPath` (`MovementActions.cpp:240`, height check
-  at `:1733`); an off-mesh point or a Z outside the height band returns `INVALID_HEIGHT` and `MoveTo`
-  returns `false`. Raw ring geometry (`center + r·cos θ`) is exactly the shape that produces off-mesh
-  points. Void Reaver's old ring spread froze its ranged this way: `VoidReaverMaintainPositionsMultiplier`
-  disables `CombatFormationMoveAction`, so the failed spread was the *only* thing that could position
-  them. `FleePosition` picks reachable ground and avoids this.
+  generatePath = true` it goes through `MovementAction::SearchForBestPath`; an off-mesh point or a Z
+  outside the height band returns `INVALID_HEIGHT` and `MoveTo` returns `false`. Raw ring geometry
+  (`center + r·cos θ`) is exactly the shape that produces off-mesh points: Void Reaver's ring spread
+  froze its ranged this way, since `VoidReaverMaintainPositionsMultiplier` disables
+  `CombatFormationMoveAction` and the failed spread was the *only* thing positioning them.
+  `FleePosition` picks reachable ground and never fails this way: prefer it where 5 yd of travel is
+  enough (below), or pass the platform or boss floor Z rather than `bot->GetPositionZ()` and shrink
+  the radius until the path succeeds.
 
   **`exact_waypoint = true` skips `SearchForBestPath` entirely, so such a node structurally cannot log
-  `nopath`** — an absence of `nopath` from it is not evidence the destination was reachable, and
-  reading it that way sends the investigation somewhere else. What happens instead is worse than
-  silence: `MoveTo` returns `ok` and the core lays a **straight-line spline**. One bot travelled
-  **91.3 yd vertically over 12.5 yd horizontally in 8.5 s at a constant 10.9 y/s**, `ok=1` throughout.
-  So `ok` says a command was issued, never that a route exists, and **closing distance is the only
-  evidence of a real path** — a forced walk that matters wants a progress latch, not a return value
-  (`YoggSaronWalkMakingProgress`).
+  `nopath`** — its absence is not evidence the destination was reachable. Instead `MoveTo` returns
+  `ok` and the core lays a **straight-line spline**: one bot travelled **91.3 yd vertically over
+  12.5 yd horizontally in 8.5 s**, `ok=1` throughout. `ok` says a command was issued, never that a
+  route exists; **closing distance is the only evidence of a real path**, so a forced walk that matters
+  wants a progress latch, not a return value (`YoggSaronWalkMakingProgress`).
 
-  Two qualifiers. The navmesh half cannot fire on a map with no `.mmtile` files — `CalculatePath`
-  short-circuits to a shortcut and every destination "paths". The height band survives only where
-  there is height data: `GetMapHeight` reads vmaps *and* the raw `.map` surface, and a map shipping
-  neither (Eye of Eternity) answers a flat 0.0 everywhere, pinning any non-flying Z to 0. And the
-  resulting `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH` (`0x11`) equals neither `PATHFIND_NORMAL` nor
-  `PATHFIND_INCOMPLETE`, so any path-type test written with `==` rather than a mask rejects
-  everything there; `MoveToLOS` is written that way and has no callers.
+  The navmesh half cannot fire on a map with no `.mmtile` files — `CalculatePath` short-circuits to a
+  shortcut and every destination "paths". The height band survives only where there is height data:
+  `GetMapHeight` reads vmaps *and* the raw `.map` surface, and a map shipping neither (Eye of
+  Eternity) answers a flat 0.0 everywhere, pinning any non-flying Z to 0. And the resulting
+  `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH` (`0x11`) equals neither `PATHFIND_NORMAL` nor
+  `PATHFIND_INCOMPLETE`, so a path-type test written with `==` rather than a mask rejects every path
+  there, and on anything flying or swimming. Always mask; `MoveToLOS` is written with `==` and has no
+  callers.
 
   `navprobe` answers both halves offline, per map and per point, without a pull. It lives in the
-  **core fork** at `src/tools/navprobe`, not in this module, so it never shows up in module history.
-  It is **prebuilt** in `acore/ac-wotlk-build:master`, and the tiles are in the `ac-client-data`
-  Docker volume — **not** in the host's `env/dist/data`:
-  `MSYS_NO_PATHCONV=1 docker run --rm -v azerothcore-wotlk-pb_ac-client-data:/azerothcore/env/dist/data:ro --entrypoint /azerothcore/env/dist/bin/navprobe acore/ac-wotlk-build:master --map <id> coverage`
-  (without `MSYS_NO_PATHCONV=1`, Git Bash mangles the entrypoint into a Windows path). Read the
-  **settled Z**, never the trailing "N/N on mesh" line — a point can report a nearest poly within
-  2 yd and still settle to terrain, which is off the floor. The same value carries two labels: for a
-  single point it prints as **`UpdateAllowedPositionZ`** (plus a `** Z would be rewritten by N yards
-  **` line once the drop exceeds 1 yd); in the ring sweep and the JSON it is the **`settledZ`**
-  column.
+  **core fork** at `src/tools/navprobe`, not in this module, so it never shows up in module history;
+  it is prebuilt in the `acore/ac-wotlk-build:master` image, and the tiles are in the
+  `ac-client-data` Docker volume — **not** in the host's `env/dist/data`. Run it from Git Bash with
+  `MSYS_NO_PATHCONV=1`, or the entrypoint is mangled into a Windows path. Read the **settled Z**,
+  never the trailing "N/N on mesh" line — a point can report a nearest poly within 2 yd and still
+  settle to terrain, off the floor. The value carries two labels: **`UpdateAllowedPositionZ`** for a
+  single point (plus a `** Z would be rewritten by N yards **` line past a 1 yd drop), and the
+  **`settledZ`** column in the ring sweep and the JSON.
 
-  **Floor is not sight, and navprobe now answers both.** `los X1 Y1 Z1 X2 Y2 Z2` casts the static
-  half of `Map::isInLineOfSight`; `ring ... --los-from X Y Z` adds a sight column to a slot sweep,
-  which is the real question - not "can A see B" but "which of these slots can see the boss". With no
-  coordinates `los` reads 6-tuples from stdin, one verdict a line: loading the vmap tree dominates, so
-  a thousand rays in one invocation is the difference between usable and not. The eye is `--collision`
-  above both endpoints, matching `IsWithinLOSInMap`. **GameObject collision needs a live server**, and
-  a map with no vmap tree reads every ray as clear - `coverage` warns.
+  **Floor is not sight, and navprobe answers both.** `los X1 Y1 Z1 X2 Y2 Z2` casts the static half
+  of `Map::isInLineOfSight`; `ring ... --los-from X Y Z` adds a sight column to a slot sweep — the
+  real question is "which of these slots can see the boss". With no coordinates `los` reads 6-tuples
+  from stdin, one verdict a line: loading the vmap tree dominates, so batch the rays in one
+  invocation. The eye is `--collision` above both endpoints, matching `IsWithinLOSInMap`.
+  **GameObject collision needs a live server**, and a map with no vmap tree reads every ray as clear
+  (`coverage` warns).
 
   **A gameobject floor is invisible to navprobe.** The static mesh and vmaps have nothing under it,
   so every point reads off mesh with no height: there the offline check is impossible, not failed.
@@ -270,14 +193,12 @@ returns, nothing happens. Cancel the aura first, under the client's cancel rules
 
 - **A floor check clips a derived point back to a gameobject's edge.**
   `EncounterHelpers::ValidateFloorPoint` runs `Map::CheckCollisionAndGetValidCoords` **from the bot**,
-  and that raycasts the **dynamic** tree as well as the navmesh (`Map.cpp:3477`), so any point behind
-  a solid gameobject comes back pulled to that object's near edge — silently, with no verdict to read.
-  Hodir's Toasty Fire is the case: `62819` summons GO **194300**, display 7748
-  `Bonfirenorthrend_01.m2`, bounds ±2.4 yd at scale 0.5, and it is in `vmaps/GameObjectModels.dtree`,
-  so four tank anchors meant to sit 4.5 yd past a fire landed **1.2-1.7 yd** from its centre instead.
-  Nothing on the server collides a walking bot with a gameobject, so the pass buys nothing for a spot
-  meant to sit on or past a prop: use `ValidateStaticFloorPoint`, the same navmesh raycast and
-  path-type filter without the dynamic-tree pass.
+  which raycasts the **dynamic** tree as well as the navmesh, so a point behind a solid gameobject
+  comes back pulled to its near edge, with no verdict to read. Hodir's Toasty Fire (`62819` summons
+  GO **194300**, display 7748 `Bonfirenorthrend_01.m2`, bounds ±2.4 yd at scale 0.5, in `vmaps/GameObjectModels.dtree`) put
+  four tank anchors meant 4.5 yd past it **1.2-1.7 yd** from its centre. Nothing on the server
+  collides a walking bot with a gameobject, so for a spot on or past a prop use
+  `ValidateStaticFloorPoint`: the same navmesh raycast and path-type filter without the dynamic pass.
 
 - **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`), so a destination the
   navmesh flags as magma is **reachable, not rejected**. Do not discard a hand-measured point for
@@ -288,90 +209,85 @@ returns, nothing happens. Cancel the aura first, under the client's cancel rules
   and creatures keep the wider filter at no cost. Poly flags hold a single `NavTerrain` value and
   Recast merges overlapping spans by **max** area, so a shallow stream over a sloped bed collapses to
   `NAV_GROUND_STEEP` (0x10, the highest value) and walls off bots alone. `navprobe` ports the **human**
-  branch and models no liquid at all, so every "navprobe-verified" coordinate in `docs/raids/**` was
-  checked against the wrong filter. `--nav 0x09` approximates the bot one (a `NAV_GROUND_STEEP` poly
-  then fails the include test); the 20x cost cannot be reproduced. To settle it live, `.mmap path`
-  with **the bot selected** builds the path on that unit's own filter.
+  branch and models no liquid, so every "navprobe-verified" coordinate in `docs/raids/**` was checked
+  against the wrong filter. `--nav 0x09` approximates the bot one (a `NAV_GROUND_STEEP` poly then
+  fails the include test); the 20x cost cannot be reproduced. To settle it live, `.mmap path` with
+  **the bot selected** builds the path on that unit's own filter.
 
 - **This fork names mmap files with a 3-digit map id**, not upstream's `%04i`:
-  `"{}/mmaps/{:03}.mmap"` and `"{}/mmaps/{:03}{:02}{:02}.mmtile"` (`MMapMgr.h:48-49`). Any external
-  script or tool written against upstream naming silently finds nothing at all.
+  `"{}/mmaps/{:03}.mmap"` and `"{}/mmaps/{:03}{:02}{:02}.mmtile"` (`MMapMgr.h`, `MAP_FILE_NAME_FORMAT` /
+  `TILE_FILE_NAME_FORMAT`). A tool written against upstream naming silently finds nothing. Latent,
+  and worth knowing before trusting a tile name: the generator (`MapBuilder.cpp`) writes it as
+  `(mapID, tileY, tileX)` while `MMapMgr.cpp` parses it as `(mapId, x, y)`.
 
-  Latent, and worth knowing before trusting a tile name: the generator writes it as
-  `(mapID, tileY, tileX)` (`MapBuilder.cpp:866`) while the loader parses it as `(mapId, x, y)`
-  (`MMapMgr.cpp:71`).
-
-  `FleePosition` (`MovementActions.cpp:2214`) picks a navmesh-validated destination via
-  `BestPositionForRangedToFlee`, which is why it never fails this way. Prefer it where 5 yd of travel
-  is enough (next bullet), or pass the platform/boss floor Z rather than `bot->GetPositionZ()` and
-  shrink the radius until the path succeeds.
 - **`FleePosition` caps travel at `Playerbots.FleeDistance`** — `min(radius + 1, FleeDistance)`,
-  default **5.0** (`MovementActions.cpp:2152`, `:2215`) — so `radius` is a request, not a distance,
-  and a bot centred on a 10 yd blast steps 5 yd and eats it while the action returns `true`. It reads
-  one hazard, and for non-tank melee the candidate angles are perpendicular to the current target or
-  straight at it; away-from-the-hazard is a candidate only while `isTanking` (`:2119-2135`).
-  `CheckLastFlee` then blacklists any angle within 45° of a recent flee's reverse for 5s, so the
-  second hazard of a volley usually yields `Position()` → `false` → the bot resumes attacking inside
-  the blast. Anything wider than ~5 yd, or arriving in numbers, wants
-  `FindNearestPositionClearOfHazards` (`RaidBossHelpers.cpp`), which rings outward to the nearest spot
-  clear of *every* hazard. Freya's Nature Bombs, Detonating Lashers and Unstable Sun Beams were all
-  silently undodgeable until they moved onto it.
-- **Some bosses obey taunt diminishing returns.** `flags_extra` 0x80000
-  (`OBEYS_TAUNT_DIMINISHING_RETURNS`) runs taunts at 100/65/42/27% duration, then immune until 15 s
-  after the last one fades (`Unit::GetDiminishing`, `Spell.cpp` DR block). A taunt every 8 s plus a
-  Righteous Defense in between keeps such a boss immune. Onyxia carries it.
-- **A movement lock refuses anything not *strictly* above it.** `IsWaitingForLastMove`
-  (`MovementActions.cpp:951-963`) compares priorities with `>`, so a move already in flight refuses
-  the next move of the *same* priority until its lock expires — `distance / speed`, capped at
-  `Playerbots.MaxWaitForMove` (5000 ms). `ACTION_*` relevance decides which action runs and has no
-  bearing on whether its `MoveTo` is accepted, so an emergency dodge issued at the same priority as
-  the routine hold that just fired is silently dropped while the bot walks on to the old destination.
-  Obsidian Sanctum lost most of a Flame Tsunami's 3.6 s budget to a 2.9 s hold lock exactly this way.
-  Emergency dodges want `MOVEMENT_FORCED` — and two of those in one encounter then deadlock each
-  other, with no band above to escape into, so precedence between them has to be settled at the
-  multiplier layer instead. The same rule refuses a walk re-aiming its own `MOVEMENT_FORCED` walk:
-  lower the booking first.
+  default **5.0**, in `BestPositionForMeleeToFlee` / `BestPositionForRangedToFlee` — so `radius` is a
+  request, not a distance, and a bot centred on a 10 yd blast steps 5 yd and eats it while the action
+  returns `true`. It reads one hazard; for a non-tank melee with a target the candidate angles are
+  perpendicular to that target or straight at it, and away-from-the-hazard is a candidate only while
+  `isTanking`. `CheckLastFlee` then blacklists any angle within 45° of a recent flee's reverse for 5 s,
+  so the second hazard of a volley usually yields `Position()` → `false` and the bot resumes attacking
+  inside the blast. It also refuses outright while the shared `"recently flee info"` list holds a flee
+  younger than `minInterval` (default 1000 ms), whichever action made it. Anything wider than ~5 yd, or
+  arriving in numbers, wants `EncounterHelpers::FindNearestPositionClearOfHazards`
+  (`src/Util/EncounterHelpers`), which rings outward to the nearest spot clear of *every* hazard.
+  Freya's Nature Bombs, Detonating Lashers and Unstable Sun Beams were silently undodgeable until they
+  moved onto it.
 
-  It also hides from the caller's own log. `MoveTo` collapses every `MoveOutcome` into one
-  `bool`, so code that records *why* it gave up — a dodge fan noting which hazard vetoed each bearing
-  — reports a locked bot as "every bearing was hazardous". Count what `TryMoveTo` hands back too.
-  Mimiron's fire dodge read as a saturated arena for two days on **1,249 locked moves against 387
-  issued**.
+- **A movement lock refuses anything not *strictly* above it.** `MovementAction::IsWaitingForLastMove`
+  compares priorities with `>`, so a move in flight refuses the next move of the *same* priority until
+  its lock expires — `distance / speed`, capped at `Playerbots.MaxWaitForMove` (5000 ms). `ACTION_*`
+  relevance decides which action runs and has no bearing on whether its `MoveTo` is accepted, so an
+  emergency dodge at the same priority as the routine hold that just fired is silently dropped while
+  the bot walks on to the old destination: Obsidian Sanctum lost most of a Flame Tsunami's 3.6 s
+  budget to a 2.9 s hold lock. Emergency dodges want `MOVEMENT_FORCED` — and two of those in one
+  encounter deadlock each other, with no band above to escape into, so precedence between them is
+  settled at the multiplier layer. The same rule refuses a walk re-aiming its own `MOVEMENT_FORCED`
+  walk: lower the booking first.
 
-  And frequency, not danger, decides who wins the tie. A hazard firing thousands of times a pull and
-  one firing five times are not symmetric at equal `MOVEMENT_FORCED`: the frequent one holds the lock
-  most of the time, and it re-issues *over* an escape already in flight, so the bot turns round
-  mid-run. Promoting Mimiron's fire dodge to `MOVEMENT_FORCED` cancelled seven Shock Blast escapes
-  1.5 s after they issued, and all seven died inside a blast they had already left. Reordering
-  relevance does not fix it on its own — stand the frequent one down, in its trigger or a
-  multiplier, for as long as any lethal one is live.
+  **The booking outlives the action that made it**: a forced kite walk kept a tank walking into a
+  hole 1.7 s after it took the boss, and refused its exit too. Drop the booking on a role change, and
+  let a walk that must land within a second drop one it didn't make. An encounter rule's `Exclusive`
+  holds movement only; holding a cast or an item use needs a multiplier.
 
-  A single mover is refused its own re-target. An action that issues every leg itself, chasing a goal
-  that moves, re-issues at the priority already in flight and waits out its own stale leg: Flame
-  Leviathan's drive had 57–59% of COMBAT re-targets refused, and its hulls drove up to 5 s toward
-  where the boss had been. Such an owner lowers `last movement`'s priority one step before
-  re-issuing, and restores it when nothing issued. That also takes away the hold a re-planned dodge
-  was getting for free: its legs now replace each other, and Flame Leviathan's siege engines, inside
-  several Inferno patches at once, flipped sides of the trail every 200-400 ms and burned in place.
-  Latch such a goal and re-validate it, as below.
-- **A multiplier that zeroes relevance is reported as `IMPOSSIBLE`.** `Engine::DoNextAction` takes
-  the `else` of `if (action->isPossible() && relevance > 0)`, so a vetoed action is indistinguishable
-  in the act stream from one whose spell is unknown, out of range or on cooldown. The `veto` rows
-  name the multiplier that did it; read those before concluding an ability is broken.
-- **Nothing scopes a multiplier but itself.** `UldEncounterGate` wraps triggers only, and one
-  `RaidUlduarStrategy::InitMultipliers` registers every boss's, so each runs against every action of
-  every bot for the whole instance. Neither of these is the encounter gate it reads as:
+  It also hides from the caller's own log. `MoveTo` collapses every `MoveOutcome` into one `bool`, so
+  code recording *why* it gave up — a dodge fan noting which hazard vetoed each bearing — reports a
+  locked bot as "every bearing was hazardous". Count what `TryMoveTo` hands back too: Mimiron's fire
+  dodge read as a saturated arena on **1,249 locked moves against 387 issued**.
+
+  Frequency, not danger, decides who wins the tie. A hazard firing thousands of times a pull holds
+  the lock most of the time against one firing five times at equal `MOVEMENT_FORCED`, and re-issues
+  *over* an escape in flight, so the bot turns round mid-run: promoting Mimiron's fire dodge to
+  `MOVEMENT_FORCED` cancelled seven Shock Blast escapes 1.5 s after they issued, and all seven died in
+  a blast they had already left. Reordering relevance does not fix it alone — stand the frequent one
+  down, in its trigger or a multiplier, while any lethal one is live.
+
+  A single mover is refused its own re-target. An action re-issuing every leg toward a goal that
+  moves waits out its own stale leg at the priority already in flight: Flame Leviathan's drive had
+  57–59% of COMBAT re-targets refused, its hulls driving up to 5 s toward where the boss had been.
+  Such an owner lowers `last movement`'s priority one step before re-issuing, and restores it when
+  nothing issued. That also removes the hold a re-planned dodge got for free: its legs now replace
+  each other, and Flame Leviathan's siege engines inside several Inferno patches flipped sides of the
+  trail every 200-400 ms and burned in place. Latch such a goal and re-validate it
+  ([raid-mechanics-lessons.md](raid-mechanics-lessons.md#movement-that-oscillates)).
+
+- **An open encounter gate is not a scope, and a hand-pushed multiplier has none.** The encounter gate
+  ([raid-mechanics-lessons.md](raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)) wraps
+  triggers (`EncounterGatedTrigger`) and definition multipliers and rules (`EncounterGatedMultiplier`,
+  `EncounterRuleMultiplier`), and `RaidEncounterRules::GateOpen` holds open every encounter not yet
+  killed while no other is in progress. A multiplier pushed straight into `InitMultipliers` has no gate
+  at all, and runs against every action of every bot on the map. Neither of these is the gate it reads
+  as:
   - a **config read**: `IsMimironHardModeActive` returns `sPlayerbotAIConfig.UlduarMimironHardMode`
     and nothing else, so Mimiron's `avoid aoe` veto landed 15 times in Thorim's gauntlet and its
     formation guard swept 200 yd twice a tick there.
   - a **live-boss test over a guid lookup**: `InstanceScript::GetCreature` answers from anywhere on
     the map, so `VezaxEncounterActive`'s "he is alive" went true the moment his grid loaded and zeroed
-    `dps assist`, `tank assist` and caster damage instance-wide. On 2026-09-17 all 116 `dps assist`
-    ticks of a Razorscale pull were vetoed and the bots did nothing but follow the master. Flame
-    Leviathan's weapon target took him the same way and stopped shooting approach trash.
+    `dps assist`, `tank assist` and caster damage instance-wide — all 116 `dps assist` ticks of a
+    Razorscale pull vetoed.
 
-  Gate on the boss being **in combat**, screen any grid scan by room (`IsNearMimironRoom`), and prefer
-  a proximity lookup (`FirstNpc`, `GetIgnisIf`) over a guid one.
+  Gate on the boss being **in combat**, and pair a guid lookup with a room screen
+  (`IsNearMimironRoom`) or a combat test.
 - **The gate's boss ids are a copy of AC's.** `UldEncounterGate.h` ports `ulduar.h`, which AC
   renumbers: #28079 moved Freya from 7 to 9. A stale id keys the gate to another boss's state, so
   that boss's whole strategy stays off (every node NEVER, banner `strategy-off`) while whichever
@@ -379,111 +295,88 @@ returns, nothing happens. Cancel the aura first, under the client's cancel rules
 - **A registered POINT generator does not mean the unit is moving.**
   `PointMovementGenerator::DoInitialize` returns **without launching a spline** while the unit has
   `UNIT_STATE_NOT_MOVE` (`ROOT|STUNNED|DIED|DISTRACTED`), and `MoveTo` reports success as soon as it
-  calls `MovePoint`. A stunned unit therefore accepts move orders forever and never travels — in a
-  trace, a bot holding one coordinate while its action keeps issuing accepted moves.
-  `postmortem.py --stalls` is that query; it found a Flame Leviathan siege engine frozen for exactly
-  60s with goals 122 yd away.
+  calls `MovePoint`. A stunned unit accepts move orders forever and never travels: in a trace, a bot
+  holding one coordinate while its action keeps issuing accepted moves. `postmortem.py --stalls` is
+  that query; it found a Flame Leviathan siege engine frozen for exactly 60 s with goals 122 yd away.
 - **`IsDuplicateMove` is not the anti-oscillation guard it looks like.** It needs the request within
-  **0.01 yd** of `lastMoveShort` (`MovementActions.cpp:939-949`), so any caller passing
-  `bot->GetPositionZ()` re-issues a different point as soon as the bot moves on a sloped floor, and
-  the pathfinding branch stores the navmesh-resolved Z rather than the requested one. What actually
-  throttles a re-issuing action is the arrival tolerance plus the movement lock above.
+  **0.01 yd** of `lastMoveShort`, so any caller passing `bot->GetPositionZ()` re-issues a different
+  point as soon as the bot moves on a sloped floor, and the pathfinding branch stores the
+  navmesh-resolved Z rather than the requested one. What actually throttles a re-issuing action is the
+  arrival tolerance plus the movement lock above.
 - **A walk stopped short is never re-issued.** The same check refuses an *exact* repeat for
   `MaxWaitForMove` (5000 ms) whether or not the bot is still moving, so an action that holds its
   destination gets `Duplicate` while the bot stands wherever something stopped it:
-  `UseItemAction::Execute` calls `StopMoving()` on a moving bot (`UseItemAction.cpp:253-258`) and a mana
-  gem runs at relevance 90, and Disengage throws a hunter back. Hodir lost a mage 6.5 yd short of its
-  dodge and a hunter out of its shelter that way. Clear `last movement` once the bot has stood still a
-  beat past the issue (`ReleaseStalledWalk`, 500 ms). `MOVEMENT_FORCED` does not lift this: forced
-  does not outrank forced. The flip side: `Duplicate` on a bot still moving means it is already
-  walking there, not that the move was refused.
-
-- **Every `MoveTo` calls `mm->Clear()`.** So a high-priority node that re-derives its destination each
-  tick cancels whatever walk a lower node had in flight, even when its own answer moved the bot a yard.
-  Two such nodes alternate at tick rate and neither ever arrives: the bot logs tens of yards of travel
-  inside a 5 yd strip, which reads in-game as "it refuses to cross". Freya's Sun Beam dodge and spore
-  node did exactly this, 584 flips in one pull. Latch the destination and, while the walk is still in
-  flight and still valid, **return true without calling `MoveTo`** — the engine ends the tick at the
-  first action returning true, so claiming it is what protects the spline. Give the latch a ceiling, or
-  a bot rooted mid-move holds the tick indefinitely.
+  `UseItemAction::UseItem` stops a moving bot for anything but an instant potion (a mana gem runs at
+  relevance 90), and Disengage throws a hunter back. Hodir lost a mage 6.5 yd short of its dodge and a
+  hunter out of its shelter that way. Clear `last movement` once the bot has stood still a beat past
+  the issue (`ReleaseStalledWalk`, 500 ms). `MOVEMENT_FORCED` does not lift this: forced does not
+  outrank forced. The flip side: `Duplicate` on a bot still moving means it is already walking
+  there, not that the move was refused.
 
 - **A dodge must clear more than its own trigger radius.** `FindNearestPositionClearOfHazards` rings
   outward and returns the *first* clear spot, so a bot on the rim of a hazard it clears by one yard
-  gets a ~2 yd step: it leaves by a hair, the next spawn puts it back inside the trigger, and the node
-  re-fires forever at `MOVEMENT_FORCED`, starving everything under it. Size the clearance a few yards
-  past the trigger radius, and fall back to the tight value only where overlap leaves nothing wider.
+  gets a ~2 yd step: the next spawn puts it back inside the trigger, and the node re-fires forever at
+  `MOVEMENT_FORCED`, starving everything under it. Size the clearance a few yards past the trigger
+  radius, and fall back to the tight value only where overlap leaves nothing wider.
 
 - **A sweep that moves for the sake of moving needs a travel floor.** `FindNearestPositionClearOfHazards`
   re-checks each spot against the hazards after the collision check pulls it back, which protects a
-  dodge: the bot's own spot is inside what it flees. A bot that only has to keep moving already stands
-  clear, so at a wall the pulled-back probe *is* its own spot, it wins the ring, and `MoveTo` refuses it
-  as `there`/`dup`. Hodir's Biting Cold shed stood two casters still for ~12 s this way until their
-  stacks killed them. Pass an `accept` that rejects spots under the travel the mechanic needs. With an
-  **empty hazard list** it returns `Position()`, so a caller that must always move passes at least one
-  circle (its own feet).
+  dodge, whose own spot is inside what it flees. A bot that only has to keep moving already stands
+  clear, so at a wall the pulled-back probe *is* its own spot, it wins the ring, and `MoveTo` refuses
+  it as `there`/`dup`: Hodir's Biting Cold shed stood two casters still for ~12 s until their stacks
+  killed them. Pass an `accept` that rejects spots under the travel the mechanic needs. With an
+  **empty hazard list** it returns `Position()`, so a caller that must always move passes at least
+  one circle (its own feet).
 
-- **Spell movers are not `MovementAction`s.** Blink and Disengage are `CastSpellAction`s, so a
-  movement veto that doesn't name them lets `EnemyTooCloseForSpell` fire them straight through it.
-
-- **A warning band is a permanent dodge once the field carries enough marks.** Padding a hazard's reach
-  buys reaction time per mark and costs coverage per volley: Thorim's Hammer drops 8 marks at once
-  across a 200x200 box for 24 s, so at `ULDUAR_FL_TOWER_HAZARD_MARGIN` (8 yd) Flame Leviathan's vent
-  reserve dodged through a whole 10 s channel while inside the real 7 yd circle for one second of it,
-  and lost the channel by drifting out of Electroshock range. A hull that owes the raid a firing
-  position dodges on the strict circle and steps somewhere it can still fire from; nearest-clear is the
-  wrong ranking for it. Against a short-lived mark only: the same rules against Mimiron's Inferno, a
-  patch that burns 30 s and costs a siege engine 10% a tick, let three reserves wait until inside one
-  and then drive across the trail toward him.
+- **A warning band is a permanent dodge once the field carries enough marks.** Padding a hazard's
+  reach buys reaction time per mark and costs coverage per volley: Thorim's Hammer drops 8 marks at
+  once across a 200x200 box for 24 s, so at `ULDUAR_FL_TOWER_HAZARD_MARGIN` (8 yd) Flame Leviathan's
+  vent reserve dodged through a whole 10 s channel while inside the real 7 yd circle for one second
+  of it, and lost the channel by drifting out of Electroshock range. A hull that owes the raid a
+  firing position dodges on the strict circle and steps somewhere it can still fire from;
+  nearest-clear is the wrong ranking for it. This holds against a short-lived mark only: the same
+  rules against Mimiron's Inferno, a patch that burns 30 s and costs a siege engine 10% a tick, let
+  three reserves wait until inside one and then drive across the trail toward him.
 
 - **A gather node is a damage amplifier whenever the AoE it faces is wider than the camp — and the
   spread that fixes it usually costs more.** Freya's ranged camp pulls the raid into a 10 yd ball for
   the Detonating Lasher wave and Detonate reaches 15.5 yd: each of the ten deaths in a wave hits ~10
   bots, and six pulls lost 120 of 161 that way. Compare the two radii before writing a gather at all.
-  Victims per blast is a **step function** of spacing, not a slope, so a spread is sized past the AoE
-  radius or it buys nothing — which at Freya meant 16 yd slots, and the raid then stopped killing the
-  wave: melee DPS halved, two of ten adds died, and the wipe came earlier than any camp pull. Weigh
-  the AoE against everything else that kills, not against zero: Detonate was only 4.6-16.3% of the
-  damage taken.
+  Victims per blast is a **step function** of spacing, so a spread is sized past the AoE radius or it
+  buys nothing — 16 yd slots at Freya, and the raid then stopped killing the wave: melee DPS halved,
+  two of ten adds died, and the wipe came earlier than any camp pull. Weigh the AoE against everything
+  else that kills, not against zero: Detonate was only 4.6-16.3% of the damage taken.
 
 - **`ReachTargetAction` is the only generic way a bot closes on a hostile target, so a multiplier that
-  zeroes it strands everyone out of range.** It is the base class of both `reach melee` and
-  `reach spell`; every other generic mover retreats (`flee`, `runaway`), backs out of a hitbox, or
-  follows the leader, and `CastSpellAction` out of range passes `isUseful`/`isPossible` and then fails
-  silently inside `Spell::prepare` without asking for movement. The tempting reason to zero it: a
-  positioning node returning false inside its tolerance — the right anti-churn shape — hands the tick
-  to the generic chase, which walks the bot back to its target and re-fires the node next tick.
-  Zeroing the chase does hold the formation, but a formation spaced wider than the bots' own reach
-  cannot fight from its slots. Exempt the heal and resurrect reaches at minimum, or anyone standing
-  outside the formation — a tank on the boss — stops being reachable. The Reach family holds those
-  too, so block `reach melee` and `reach spell` by name.
+  zeroes it strands everyone out of range.** It is the base of both `reach melee` and `reach spell`;
+  every other generic mover retreats (`flee`, `runaway`), backs out of a hitbox, or follows the leader,
+  and `CastSpellAction` out of range passes `isUseful`/`isPossible` and then fails silently inside
+  `Spell::prepare` without asking for movement. The tempting reason to zero it: a positioning node
+  returning false inside its tolerance — the right anti-churn shape — hands the tick to the generic
+  chase, which walks the bot back to its target and re-fires the node. Zeroing the chase holds the
+  formation, but one spaced wider than the bots' own reach cannot fight from its slots. Exempt the
+  heal and resurrect reaches at minimum, or anyone outside the formation — a tank on the boss — stops
+  being reachable; the Reach family holds those too, so block `reach melee` and `reach spell` by name.
 
 - **A claim that says "this one is mine to kill" needs a liveness test, or it shields the target.**
-  `FlameLeviathanHeldByAnotherPost` keeps the fleet off an add a posted siege engine has aggro on, so
-  the post kills it in its corner instead of a stray splash dragging it out. But the post's guns leave
-  a dead band - Fire Cannon will not fire under 10 yd, Ram is a cone - and an add sitting in it was
-  safe from the post and from everyone else: 71.7% of held frames on 2026-09-17, dying at 1.8 %/s
-  against 12.1 where a gun bore. Gate the claim on the holder still having a shot, not on it holding.
+  `FlameLeviathanHeldByAnotherPost` keeps the fleet off an add a posted siege engine has aggro on. But
+  the post's guns leave a dead band — Fire Cannon will not fire under 10 yd, Ram is a cone — and an add
+  sitting in it was safe from everyone: 71.7% of held frames, dying at 1.8 %/s against 12.1 where a gun
+  bore. Gate the claim on the holder still having a shot, not on it holding.
 
 - **A conjunctive gate can be dead code for a dozen pulls.** Freya's step-out, frost nova and trap all
   hung off "3+ lashers within 8 yd *and* none above 20% health", which held **once in six pulls**: the
-  adds scatter by design and die one at a time. Conditions that each look reasonable can still
-  describe a state the encounter never reaches, and only firing counts reveal it — `postmortem.py`
-  verdict counts against the number of chances the node had.
+  adds scatter by design and die one at a time. Only firing counts reveal it — `postmortem.py` verdict
+  counts against the number of chances the node had.
 
-- **A vehicle rider never counts as flying.** `Player::CanFly` reads only the bot's own
-  `MOVEMENTFLAG_CAN_FLY`, which `UpdateMovementState` strips without a flight aura. So a Z clamp
-  (`UpdateAllowedPositionZ`) or `CheckCollisionAndGetValidCoords` run on the bot pins a drake's
-  destination to the ground, and the bot's own `MoveFollow` moves nothing. A strategy that keeps a
-  bot on a flying vehicle has to keep generic movement off it and steer the vehicle base itself.
-- **`MoveInside(..., distance = 0)` effectively never returns false** — `MovementActions.cpp:1692`
-  returns false only when `GetDistance2d <= distance`. The action then succeeds every tick,
-  out-prioritises combat, and pins every melee on one exact point at zero DPS. `MoveNear` offsets by
-  `cos(angle) * distance`, so at 0 the whole raid stacks on a single coordinate.
-- **`ReachCombatTo` paths to the boss's origin** (`MovementActions.cpp:802-857`) and returns false on
-  any path type outside `NORMAL|INCOMPLETE|SHORTCUT`. On a large-model boss the origin sits 10+ yd
-  inside the model, possibly off-mesh. `ReachMeleeAction` is the *only* NextAction behind
-  `enemy out of melee`, so when this fails the bot simply stands there — manually summoning it into
-  melee range is the tell.
+- **`MoveInside(..., distance = 0)` effectively never returns false** — it returns false only when
+  `GetDistance2d <= distance`. The action then succeeds every tick, out-prioritises combat, and pins
+  every melee on one exact point at zero DPS. `MoveNear` offsets by `cos(angle) * distance`, so at 0
+  the whole raid stacks on a single coordinate.
+- **`ReachCombatTo` paths to the boss's origin** and returns false on any path type outside
+  `NORMAL|INCOMPLETE|SHORTCUT`. On a large-model boss the origin sits 10+ yd inside the model,
+  possibly off-mesh. `ReachMeleeAction` is the *only* NextAction behind `enemy out of melee`, so when
+  this fails the bot simply stands there — manually summoning it into melee range is the tell.
 - **`ReachCombatTo`'s prediction offset is measured against a different point than the trigger.** It
   advances the target up to 3 yd along the boss's facing, then early-outs against that predicted
   point, while the trigger and `isUseful()` measure the actual position. While a boss moves and the
@@ -500,27 +393,38 @@ returns, nothing happens. Cancel the aura first, under the client's cancel rules
   trigger lost the boss the same way to a Sanctum Sentry. A pacified or CC'd bot has attacked
   nothing, so it fails for exactly the bot a rescue node exists to serve. For multi-boss encounters,
   non-attacking objects, or anything not yet on threat, use `GetFirstAliveUnitByEntry` — **which
-  upstream has now marked `// DO NOT USE, WILL BE REMOVED`** (`src/Util/EncounterHelpers.h`). It is
-  still the right answer; Ulduar already calls its own copy, `GetUldUnitByEntry`
-  (`Raid/Uld/Util/UldTargets.h`), and other raids take the same route when it goes.
-  Every recommendation of it in `raids/` inherits this caveat. It also stops at `SightDistance`
-  (100 yd): a far bot gets null, and shared encounter state reset on "no boss" is wiped for the whole
-  raid — Flame Leviathan's posted engines flapped `fl.pursued` 26 times in one pull. A boss the
-  instance script tracks resolves at any range through `InstanceScript::GetCreature`.
+  upstream has marked `// DO NOT USE, WILL BE REMOVED`** (`src/Util/EncounterHelpers.h`). It is still
+  the right answer; Ulduar already calls its own copy, `GetUldUnitByEntry`
+  (`Raid/Uld/Util/UldTargets.h`), and other raids take the same route when it goes. Every
+  recommendation of it in `raids/` inherits this caveat. It also stops at `SightDistance` (100 yd): a
+  far bot gets null, and shared encounter state reset on "no boss" is wiped for the whole raid — Flame
+  Leviathan's posted engines flapped `fl.pursued` 26 times in one pull. A boss the instance script
+  tracks resolves at any range through `InstanceScript::GetCreature`.
 - **`AvoidAoeAction` only sees three things**: a dynobject aura, a damaging trap GameObject, or a
-  `UNIT_FLAG_NOT_SELECTABLE` trigger NPC. Mechanics outside those — Anub'rekhan's Impale and Locust
-  Swarm, the Four Horsemen's Void Zone NPC 16697 (SmartAI, casts on update) — are invisible to it.
-  **The answer is pre-emptive spread, not reactive avoidance.** Where it does see a unit, it fires at
-  `GetDistance <= 3`, which subtracts both combat reaches (about 5.5 yd centre to centre), and moves
-  by `FleePosition`: an encounter with its own mover for that hazard vetoes it, or the two fight.
+  `UNIT_FLAG_NOT_SELECTABLE` trigger NPC whose periodic-trigger aura casts school damage. Mechanics
+  outside those — Anub'rekhan's Impale and Locust Swarm, the Four Horsemen's Void Zone NPC 16697
+  (SmartAI, casts on update) — are invisible to it. **The answer is pre-emptive spread, not reactive
+  avoidance.** On a trigger unit it fires once `GetDistance` (both combat reaches subtracted) is
+  inside the damage spell's radius, and moves by `FleePosition`, so an encounter with its own mover
+  for that hazard vetoes it, or the two fight. Two defects of its own, left alone because it runs in
+  every encounter in the game:
+  - `AvoidUnitWithDamageAura` **ignores the flee's result and returns false**, so at
+    `ACTION_EMERGENCY` (90) it takes the movement and still hands the tick on, every tick a trigger is
+    in range: on Mimiron's flame nodes, 642 evaluations, zero wins, 619 accepted moves.
+  - Its rate limiter is dead: `isUseful` reads `lastMoveTimer`, which is set only inside the
+    `TellWhenAvoidAoe` branch.
+
+  Its flees also fill the shared `"recently flee info"` list, so every other `FleePosition` caller on
+  that bot is refused for the next second (above): 71% of Mimiron's old flame dodge's FAILEDs had a
+  flee by the same bot in the previous second.
 - **Non-selectable stalkers never enter attack-target lists at all** (Freya's beam stalkers
   33170/33050, Mimiron's flame nodes), so they cannot be found through `"possible targets"`. Scan the
   `"nearest npcs"` GuidVector instead. Watch the inverse too: Freya's root creatures 33088/33168
   *are* selectable, so a bot will happily kill its own root.
-- `AttackersValue::IsPossibleTarget` drops `UNIT_FLAG_NOT_SELECTABLE` units
-  (`Value/AttackersValue.cpp:156`), so a phased-out boss leaves `"attackers"` entirely, and
-  `GetFirstAliveUnitByEntry` and `GetUldUnitByEntry`, reading `"possible targets"`, lose a submerged boss
-  or a spike the same way. Resolve those through the instance guid slot or a grid search.
+- `AttackersValue::IsPossibleTarget` drops `UNIT_FLAG_NOT_SELECTABLE` units, so a phased-out boss
+  leaves `"attackers"` entirely, and `GetFirstAliveUnitByEntry` and `GetUldUnitByEntry`, reading
+  `"possible targets"`, lose a submerged boss or a spike the same way. Resolve those through the
+  instance guid slot or a grid search.
 - **A `NullCreatureAI` unit stays out of combat, so out of `"attackers"`, until something hits it.**
   `dps assist` swaps a bot off it every tick unless the encounter vetoes `DpsAssist` for that bot. An
   out-of-combat critter also fails `IsPossibleTarget`, so `invalid target` → `drop target` clears an
@@ -536,7 +440,8 @@ returns, nothing happens. Cancel the aura first, under the client's cancel rules
   `DropTargetAction` calls `ChangeEngine(BOT_STATE_NON_COMBAT)`: the bot stops fighting and `follow`
   walks it to its master against the formation. Mimiron's alcove walls did it to two camp slots for
   20-35 s a pull. Test a fixed slot's sight of its focus, not only its floor.
-- **A targetless gap drops the bot to the non-combat engine too.** A submerge leaves nothing to
+- **A targetless gap drops the bot to the non-combat engine too**
+  ([action-selection.md](action-selection.md#multiplier-semantics)). A submerge leaves nothing to
   attack, and `follow` then walks bots off any encounter spread: zero it for the whole engagement,
   not only while a target is up (the Jormungars' 1.5 s worm gap).
 - **`DisperseDistanceValue` defaults to `-1.0f`**, and `CombatFormationMoveAction::Execute` bails on
@@ -551,26 +456,25 @@ returns, nothing happens. Cancel the aura first, under the client's cancel rules
 
 ## Detection that never fires
 
-The recurring fatal shape is **a mechanic wired to a cast the bots cannot observe**. Two encounters
-shipped broken this way:
+The recurring fatal shape is **a mechanic wired to a cast the bots cannot observe**:
 
-- **Heigan**: the dance advanced by watching the boss cast Eruption (29371). The boss never casts it —
-  `instance_naxxramas.cpp:254-267` erupts via floor GameObjects. `NextSafe()` was never called, so
-  every bot parked on one waypoint for the whole 90 s phase.
+- **Heigan**: the dance once advanced on the boss casting Eruption (29371). He never casts it — the
+  instance script erupts floor GameObjects (`HeiganEruptSections`), so every bot parked on one
+  waypoint for the whole 90 s phase.
 - **Noth**: the threat-reset protection keyed on catching `UNIT_STATE_CASTING` with Blink. The core
   casts it as `CastSpell(me, SPELL_BLINK, true)` — **a triggered instant never sets
   `UNIT_STATE_CASTING`** and is gone before the next bot tick.
 
-Both fixes are the same: find the adjacent *non-triggered* cast (Noth's Cripple 29212) or the
-resulting aura, or build a timer model anchored on a phase edge.
+Find the adjacent *non-triggered* cast (Noth's Cripple 29212) or the resulting aura, or build a timer
+model anchored on a phase edge.
 
 Related traps:
 
 - **Positional phase checks false-positive at the pull.** Heigan's DB spawn is on the platform, 0.8 yd
-  from the platform check point, so bots believed they were in the fast dance from the moment of the
-  pull. Prefer a state read — `boss->ToCreature()->GetReactState() == REACT_PASSIVE` is exact and has
-  no lag. Unit flags work the same way (`UNIT_FLAG_NOT_SELECTABLE` for Noth's balcony,
-  `UNIT_FLAG_DISABLE_MOVE` for Gothik's).
+  from the platform check point, so bots believed they were in the fast dance from the pull. Prefer a
+  state read — `boss->ToCreature()->GetReactState() == REACT_PASSIVE` is exact and has no lag. Unit
+  flags work the same way (`UNIT_FLAG_NOT_SELECTABLE` for Noth's balcony, `UNIT_FLAG_DISABLE_MOVE` for
+  Gothik's).
 - **`GetData` is a completion flag as often as a live signal.** Vezax's `GetData(1)` returns
   `lootMode == 3`, set only *after* the Animus dies. Mimiron's `GetData(1)` is authoritative but sits
   on a unit that never becomes a bot target. Thorim's `SPELL_SIF_CHANNEL_HOLOGRAM` (64324) is defined
@@ -579,40 +483,34 @@ Related traps:
 - **A call site is not proof of its effect.** `InitFight` calls `me->SetInCombatWithZone()` on Sara,
   which reads as the pull, but `CombatManager::CanBeginCombat` refuses a combat reference while either
   side is friendly and neither hostile — she is `FACTION_FRIENDLY` for all of phase 1, so the call puts
-  her summons in combat and never touches her. A phase gate on `sara->IsInCombat()` therefore opened
-  **24 s late on every pull**, and she only ever picked combat up as a side effect of her own casting.
-  Finding the call says it runs, never that it reached the unit you are reading: follow it down to the
-  guard that can turn it into a no-op.
+  her summons in combat and never touches her. A phase gate on `sara->IsInCombat()` opened **24 s late
+  on every pull**. Finding the call says it runs, never that it reached the unit you are reading:
+  follow it down to the guard that can turn it into a no-op.
 - **An area aura never lands on its source.** An enemy area aura (effect 129,
   `SPELL_EFFECT_APPLY_AREA_AURA_ENEMY`) skips its owner (`UnitAura::FillTargetMap`), a persistent one
   its caster (`DynObjAura::FillTargetMap`; `Unit::_IsValidAttackTarget` refuses self), so `HasAura`
   there never fires: read it on a target. No Frost Sphere ever carries its own Permafrost.
 - **A paladin aura can be on with no effects.** This core keeps a second paladin's copy of the same
-  aura applied but strips its effects while a stronger or equal one is up (`SpellAuras.cpp:724-744`, a
-  local patch), and `PlayerbotAI::HasAura(name, …)` walks effects, so it misses that copy. Read it by
-  the application, `unit->HasAura(spellId, casterGuid)`: Yogg-Saron's roar paladin recast
-  Concentration Aura five times and never pressed Aura Mastery.
+  aura applied but strips its effects while a stronger or equal one is up (a local patch in
+  `Aura::UpdateTargetMap`, `IsPaladinAuraDominant`), and `PlayerbotAI::HasAura(name, …)` walks
+  effects, so it misses that copy. Read it by the application, `unit->HasAura(spellId, casterGuid)`:
+  Yogg-Saron's roar paladin recast Concentration Aura five times and never pressed Aura Mastery.
 - **A debuff can sit below the cast.** It may be an `EffectTriggerSpell` or a `spell_linked_spell`
   row, so keying on the cast id's aura leaves the node dead: ToC's Burning Bite/Spray carry no aura,
   the debuff is Burning Bile 66869.
 - **`Unit::IsImmunedToDamage(mask)` wants one aura covering the whole mask.** Ice Block is a
   physical aura plus a magic one, so a mask test reads it as not immune: test each school.
-- **A cast call's `true` is not a cast.** `PlayerbotAI::CastVehicleSpell` returns true when `CheckCast`
-  refused, so anything stamped on that answer records a cast that never happened. Flame Leviathan's
-  `CastVehicleSelfSpell` stamped Steam Rush's 15 s cooldown on a refusal from the Ram GCD, and a
-  Pursued siege engine went 15.2 s without its escape. Confirm with a receipt: energy spent, the aura
-  landed, the channel stopped.
 - **Scheduled events outlive their cause.** Freya's empower events are scheduled once at pull and
   repeat unconditionally, even after the Elder dies — so a hard-mode reaction must key off the hazard
   world object, never off an Elder still being alive.
 - **Spell ids differ by difficulty and the mapping is not uniform.** Heigan's 25-man Decrepit Fever is
   **55011**, not 29998, so a raw `HasAura(29998)` dispelled nothing in 25-man; Eruption, Spell
-  Disruption and Plague Cloud have no difficulty rows at all. Check each spell in both sources below;
-  match every id (`NaxxSpellIds::HasAnyAura(unit, {…})`) or remap one through
-  `sSpellMgr->GetSpellIdForDifficulty`, right on every difficulty. It binds boss casts, not just
-  player auras: `FindCurrentSpellBySpellId` or `m_spellInfo->Id ==` on the 10-man id silently never
-  matches. Mimiron's Plasma Blast defensive was dead for two pulls that way, tank dying to it twice
-  in each.
+  Disruption and Plague Cloud have no difficulty rows at all; Freya's Detonate is 62598 / 62937 and
+  Ground Tremor 62437 / 62859, so a clean lookup on one twin proves nothing about the other. Check each
+  spell in both sources below; match every id (`NaxxSpellIds::HasAnyAura(unit, {…})`) or remap one
+  through `sSpellMgr->GetSpellIdForDifficulty`. It binds boss casts, not just player auras:
+  `FindCurrentSpellBySpellId` or `m_spellInfo->Id ==` on the 10-man id silently never matches —
+  Mimiron's Plasma Blast defensive was dead for two pulls that way, tank dying to it twice in each.
   - **Two sources sharing no row.** The core loads the client `SpellDifficulty.dbc` (mirrored in
     mod-spell-tweaks' `spelldifficulty.reference.csv`) and overlays the world DB's
     `spelldifficulty_dbc` on it by row id, so either alone reads a remap as "none": Plasma Blast
@@ -636,14 +534,15 @@ Related traps:
     appears nowhere and no referenced member is handled: in the first argument of a
     `GetSpellIdForDifficulty` call, declared and never used, named as a non-spell (`npc`, `entry`, …;
     a brace list's name counts), or marked `// pblint: spell-difficulty-ok` on its line or the one
-    above. Ulduar has 53 of its 155 spell constants in a row and none reported.
+    above.
 - **`TricksOfTheTradeTargetValue::TankNeedsRedirect` never takes its opener branch, and the fallback
   is wrong for the class that casts it.** The opener branch keys on `"combat start time"`, which
   `PlayerbotAI::ChangeEngineOnCombat` sets **only** under the `wait for attack` strategy — so it is 0
-  in every raid. It then falls through to `myThreat > tankThreat * 0.5`, false for a rogue who has not
-  swung yet, and Tricks goes to the top DPS instead of the tank. Measured on Mimiron: the buff landed
-  on the hardest-hitting melee at 13.5-15.5 s and that bot pulled the boss 2-3 s later, in all three
-  pulls. **Still open** — encounters work around it by suppressing the smart-target node.
+  in every raid. The tank then gets Tricks only while it is within 20 yd and holds no threat yet or
+  the rogue's threat exceeds half of it; otherwise the value takes the highest-attack-power melee DPS
+  within 20 yd. Measured on Mimiron: the buff landed on the hardest-hitting melee at 13.5-15.5 s and
+  that bot pulled the boss 2-3 s later, in all three pulls. **Still open** — encounters work around
+  it by suppressing the smart-target node.
 - **No bot has a threat brake.** `ThreatStrategy` stops damage at 80% of the top tank's threat, but
   `AiFactory` only ever removes `threat` and no config adds it, so dps hit at full rate however
   close they get. An encounter that needs one writes its own multiplier (Vezax's Animus) and reads
@@ -652,22 +551,15 @@ Related traps:
 
 ## Before the pull, and out of combat
 
-- **A bot with no target runs the non-combat engine, in combat too.** Only `AttackAction` or a pull
-  enters the combat engine; `invalid target` is true for a null target and `drop target` (99) always
-  switches to non-combat. A fight that owns targeting and hands a healer none strands it there, without
-  the combat-only mana cooldowns and potions: Yogg-Saron's phase 3 healers ran dry. In raid boss fights
-  `raid healer engine` (`RaidHealerEngine.h`) switches it back and blocks `drop target` while
-  targetless; see [../raids/README.md](../raids/README.md).
-
 - **`AttackStop()` drops the victim and nothing else.** The `"current target"` AI value survives it —
   and that value is what the class rotation casts at and what `ReachTargetAction` walks to. Clear it
-  explicitly: `context->GetValue<Unit*>("current target")->Set(nullptr)` (precedent
-  `ICCActions_LK.cpp:690`, `SWPActions_Felmyst.cpp:386`). Blocking re-acquisition in a multiplier
-  cannot undo a target the bot has already picked up.
-- **Eating and drinking blind the bot.** `DrinkAction`/`EatAction` (`NonCombatActions.cpp:65`, `:125`)
-  set `SetNextCheckDelay` to 12-18 s scaled by what is missing, so nothing runs, dodges included,
-  until it expires. Wherever a hazard outlives combat, such as a phase handover, veto `drink`/`food`
-  near it (Mimiron's `mimiron drink guard` rule).
+  explicitly: `context->GetValue<Unit*>("current target")->Set(nullptr)` (precedents
+  `IccLichKingWinterAction::ClearInvalidTarget`, `FelmystMeleeClearTargetAction`). Blocking
+  re-acquisition in a multiplier cannot undo a target the bot has already picked up.
+- **Eating and drinking blind the bot.** `DrinkAction`/`EatAction::Execute` set `SetNextCheckDelay`
+  to 12-18 s scaled by what is missing, so nothing runs, dodges included, until it expires. Wherever a
+  hazard outlives combat, such as a phase handover, veto `drink`/`food` near it (Mimiron's
+  `mimiron drink guard` rule).
 - **A same-map `Player::TeleportTo` calls `CombatStop()`** unless given `TELE_TO_NOT_LEAVE_COMBAT`, so a
   floor-fall rescue built on it drops the bot out of the fight. Use `NearTeleportTo`, which passes it
   (and returns `void`, so return `true` after).
@@ -705,8 +597,8 @@ Related traps:
 - **The four raid registration sites are pure include/name lists** (`RaidStrategyContext.h`,
   `BuildSharedActionContexts.cpp`, `BuildSharedTriggerContexts.cpp`, `GetInstanceStrategies()`), so a
   merge that drops either side **silently unregisters raid strategies** and nothing fails to compile.
-- **`rerere` holds 123 cached resolutions and must not be trusted** on a merge that spans a refactor —
-  it will replay a resolution written against code that has since moved.
+- **`rerere` must not be trusted** on a merge that spans a refactor — it will replay a resolution
+  written against code that has since moved.
 - **Fork-only `ai_playerbot_texts` rows take ids from 30001 up** (`id` is a signed smallint). Upstream
   numbers its texts straight up from its last id, so a fork text inside that range fails the next
   upstream insert on a duplicate key, and a failed playerbots update stops the worldserver. Texts
@@ -714,12 +606,8 @@ Related traps:
 - **A core merge's SQL half does not apply itself.** The worldserver image sets
   `AC_UPDATES_ENABLE_DATABASES=0` by design (`apps/docker/Dockerfile`), so new
   `data/sql/updates/db_world` files run only when `ac-db-import` is rebuilt from the merged checkout
-  and run. Until then a script moved to a new `ScriptName` has no binding and the creature silently
-  keeps its old AI: after the 2026-09-16 merge brought 42 world updates, `acore_world.updates` still
-  ended at `2026_09_04_02` and Flame Leviathan's ward adds despawned at 3 s and 10 s (applied, they
-  still did: see the next entry). After a core merge: `docker compose build ac-db-import && docker
-  compose up ac-db-import`, restart the worldserver, and check `acore_world.updates` holds the newest
-  file.
+  and run, then the worldserver restarted; `acore_world.updates` must then hold the newest file. Until
+  then a script moved to a new `ScriptName` has no binding and the creature silently keeps its old AI.
 - **PR #2854 renamed every config key from `AiPlayerbot.X` to `Playerbots.X` with no fallback.** An
   old `playerbots.conf` key or `AC_AI_PLAYERBOT_*` env var is ignored without an error and the option
   falls to its default; overrides are now `AC_PLAYERBOTS_*`. The part after the prefix kept its
@@ -732,11 +620,11 @@ Related traps:
   `StatsCollector` a level, the fork a spell-school mask; a caller still passing the mask third
   reads it as a level. Check every caller, not just the conflicted ones.
 - **`IsSummonedBy` cannot set a summon's despawn type.** `Map::SummonCreature` runs `InitSummon` →
-  `IsSummonedBy` before it returns, then `WorldObject::SummonCreature` (`Object.cpp:2454`) and
-  `Spell::EffectSummonType`'s `default:` branch (`SpellEffects.cpp:2497`) re-apply the duration's type.
-  Upstream `f4763cc9e` set `TEMPSUMMON_MANUAL_DESPAWN` there for Flame Leviathan's ward adds, and
-  `4d4ae4f95` defers it a tick through `m_Events` (`UpdateAI` is skipped while evading). A tree with the
-  first and not the second loses those adds at 3 s and 10 s with the DB fully applied.
+  `IsSummonedBy` before it returns, then `WorldObject::SummonCreature` and
+  `Spell::EffectSummonType`'s `default:` branch re-apply the duration's type. Upstream `f4763cc9e` set
+  `TEMPSUMMON_MANUAL_DESPAWN` there for Flame Leviathan's ward adds, and `4d4ae4f95` defers it a tick
+  through `m_Events` (`UpdateAI` is skipped while evading). A tree with the first and not the second
+  loses those adds at 3 s and 10 s with the DB fully applied.
 
 ### Local divergences a merge must re-apply
 
@@ -753,10 +641,10 @@ None of these fail to compile when reverted, so a merge that takes upstream's si
   rupture 24.0.
 - **`fear ward on main tank` is registered at `ACTION_HIGH + 0.7f` (20.7)**, not upstream's 23.0, which
   puts it below the whole Discipline ladder deliberately.
-- **CI builds with `-Werror`** (`-DWITH_WARNINGS=ON` plus `-Werror` in
-  `.github/actions/linux-build/action.yml:145-150`), and Custom-only code carries roughly 60 warnings
-  — mostly `-Wunused-parameter` on `Execute(Event event)` overrides and on free helpers taking an
-  unused `PlayerbotAI* botAI`. Five CI jobs go red on the first upstream PR until they are cleared.
+- **CI builds with `-Werror`** (the module's `.github/workflows` CXXFLAGS), and Custom-only code
+  carries warnings — mostly `-Wunused-parameter` on `Execute(Event event)` overrides and on free
+  helpers taking an unused `PlayerbotAI* botAI`. CI jobs go red on the first upstream PR until they
+  are cleared.
 - **`GatherStrategyTargetExclusions` keeps the fork's `candidates` argument**, and every caller
   passes the list it will filter. Upstream calls it without one; an empty list makes Ulduar's
   Yogg-Saron sweep return early and its Guardian exclusion drops.
@@ -789,48 +677,44 @@ nothing marks spent hands out a fresh item every time the last is used: Mimiron'
 Fall back to the plain-`AiObject` + timer-model pattern (`GluthBossHelper`, `HeiganBossHelper`).
 
 **An AI value set by one encounter is still set in the next one.** `disperse distance` is written by
-Mimiron (`UldActions_Mimiron.cpp:336`), is the module's only writer, and was never cleared — so three
-Mimiron pulls before a Thorim pull left `combat formation move` armed on every bot: 586/414/439 moves
-in Thorim phase 1, ranged travel **277 yd/min against 27** in a clean pull, and arena add damage up
-from 3,077/s to 5,105-6,310/s. This is the whole reason `MimironResetEncounterStateTrigger/Action`
-exists. **The proof technique generalises**: the first `combat formation move` fired 39 ms, 307 ms and
-686 ms into the pull, and a value armed before the pull began cannot have been set by that pull. Any
-encounter that writes a shared value owes the next one a reset.
+Mimiron (`MimironPhase1PositioningAction`), the only encounter that writes it, and was once never
+cleared — so three Mimiron pulls before a Thorim pull left `combat formation move` armed on every
+bot: ranged travel **277 yd/min against 27** in a clean pull, and arena add damage up from 3,077/s to
+5,105-6,310/s. That is why `MimironResetEncounterStateTrigger/Action` exists. **The proof technique
+generalises**: the first `combat formation move` fired 39-686 ms into the pull, and a value armed
+before the pull began cannot have been set by that pull. Any encounter that writes a shared value
+owes the next one a reset.
 
 `rti` and `rti cc` outlive the session too: `AiObjectContext::Save` persists them to the bot's DB
 store. Group target icons don't: `Group::SetTargetIcon` keeps them in memory only, so a restart
 clears them and a migration resets `rti`, never icons. It also strips every other icon from that
-target, so a CC icon placed on a skulled unit erases the skull. An encounter that writes one restores it, through an ungated node where the encounter gate
-can close before cleanup.
+target, so a CC icon placed on a skulled unit erases the skull. An encounter that writes one restores
+it, through an ungated node where the encounter gate can close before cleanup.
 
 **A shared staleness flag cleared by the first actor starves every other actor.** Thorim's
 `ThorimEncounterStateIsStale` returned one instance-wide `engagedSeen` and the reset set it false, so
-**the first bot to reset closed the gate for the other 24** — exactly one bot per wipe cycle was
-cleared and the rest carried their latched slots, ring state and waypoint steps into the next pull.
-Split it: a per-bot `resetDone` guid set for the work, a raid-wide flag for the detection. The
-signature is a reporting artefact worth knowing — `ObsGuidMap::Set` emits **only on change**, so
-**"no note" means "carried in"**: 3 of 13 gauntlet bots emitted `thorim.balcony`, and the ten silent
-ones were the leaked ones. It accumulates, too — applications went 1 → 10 → 9 → 18 over four attempts
-in one session.
+**the first bot to reset closed the gate for the other 24**, which carried their latched slots, ring
+state and waypoint steps into the next pull, accumulating over attempts. Split it: a per-bot
+`resetDone` guid set for the work, a raid-wide flag for the detection. How a traced container shows
+carried-in state is in [../systems/observability.md](../systems/observability.md#adding-a-probe).
 
 ## A targeting mark never clears inside a pull
 
-`prioritized targets` is written by `AttackMyTargetAction` (`src/Ai/Base/Actions/AttackAction.cpp:47`)
-and `AttackRtiTargetAction` (`src/Ai/Base/Actions/ChooseTargetActions.cpp:168`). It is cleared by
-`PlayerbotAI::Reset` (far teleport, the `reset` command, chat shortcuts, group changes), `follow`, a
-summon that revives, and death — **never by leaving combat**, which `DropTargetAction` handles
-without touching it. A living bot never lets go of the mark inside one pull, and a
-wrong mark is unrecoverable: `FindTargetStrategy::IsHighPriority`
-(`src/Ai/Base/Value/TargetValue.cpp:124`) returns true for the skull icon *and* for anything in
-`prioritized targets`, which trips `foundHighPriority` and short-circuits every smart strategy.
-`DpsTargetValue` (`src/Ai/Base/Value/DpsTargetValue.cpp:281`) compounds it by calling
-`RtiTargetValue::Calculate()` first and returning it unconditionally on a hit — alive, LOS and sight
-distance are the only checks.
+`prioritized targets` is written by `AttackMyTargetAction` (`src/Ai/Base/Actions/AttackAction.cpp`)
+and `AttackRtiTargetAction` (`ChooseTargetActions.cpp`). It is cleared by `PlayerbotAI::Reset` (far
+teleport, the `reset` command, chat shortcuts, group changes), `follow`, a summon that revives, and
+death — **never by leaving combat**, which `DropTargetAction` handles without touching it. A living
+bot never lets go of the mark inside one pull, and a wrong mark is unrecoverable:
+`FindTargetStrategy::IsHighPriority` (`TargetValue.cpp`) returns true for the skull icon *and* for
+anything in `prioritized targets`, which trips `foundHighPriority` and short-circuits every smart
+strategy. `DpsTargetValue::Calculate` compounds it by calling `RtiTargetValue::Calculate()` first and
+returning it unconditionally on a hit — alive, LOS and sight distance are the only checks, and `rti`
+defaults to `"skull"`.
 
-This is a base-engine trap, not a boss-specific one. **Any encounter with an untargetable phase hits
-it**: the bot is held on a dead or wrong target for the rest of the fight. An encounter that retargets
-mid-pull must clear the mark itself — Thorim sets both the group icon and its own `prioritized
-targets` back to empty once per pull (`UldEncounter_Thorim.cpp:740`).
+This is a base-engine trap. **Any encounter with an untargetable phase hits it**: the bot is held on
+a dead or wrong target for the rest of the fight. An encounter that retargets mid-pull must clear the
+mark itself — Thorim sets both the group icon and its own `prioritized targets` back to empty once per
+pull (`ThorimClearStaleMarks`).
 
 **A skull is not proof of a player, and alone it does nothing.** `mark rti` (`MarkRtiStrategy`, off by
 default) makes a bot put its own `rti` icon on the lowest-health unmarked attacker. `attack rti
@@ -840,33 +724,33 @@ reads it.
 **It outlives the pull as well.** `AttackersValue::Calculate` adds `prioritized targets` and the
 skull with only a line-of-sight check, and protection paladins, bears and protection warriors run
 `tank assist` out of combat too, which fires on any `attacker count`. A tank still carrying the
-order walks onto the idle boss and pulls it: on 2026-09-24 a paladin back up by Soulstone after a
-`wipe` pulled Vezax although summoned back twice. A Soulstone skips the reviving summon, which is why
-the just-died block in `PlayerbotAI::DoNextAction` now clears it.
+order walks onto the idle boss and pulls it: a paladin back up by Soulstone after a `wipe` pulled
+Vezax although summoned back twice. A Soulstone skips the reviving summon, which is why the just-died
+block in `PlayerbotAI::DoNextAction` clears it.
 
 ## Role and index traps
 
 - `IsAssist{Tank,Heal,RangedDps}OfIndex(..., ignoreDeadPlayers)` **defaults to `false`**, which
   silently deletes a role when its holder dies. Passing `true` shifts indices past dead members and
-  gives free auto-promotion (`PlayerbotAI.h:437-439`).
+  gives free auto-promotion.
 - `botAI->GetMeleeIndex()` counts tanks too.
 - **`IsMechanicTrackerBot` elects the first alive bot of any role**, so a marker gated behind a role
   predicate goes silent whenever a healer is first in the group.
 - **`IsRanged()` includes healers.** With the default `bySpec = false` it is just
-  `ContainsStrategy(STRATEGY_TYPE_RANGED)` (`PlayerbotAI.cpp:1905`), so a holy priest answers it. Any
-  fixed ranged position gated on `IsRanged` therefore drags healers off heal range; use `IsRangedDps`
-  when the intent is "the ones that only need to be in cast range of the boss".
-- `FindTankTargetSmartStrategy::IsBetter` (`Value/TankTargetValue.cpp:76-84`) short-circuits: an
-  explicit main tank in a group with more than one tank **sticks to `current target`** and rejects
-  every alternative. A main tank that picked up an add during a phase where the boss was untargetable
-  never goes back to the boss on its own.
+  `ContainsStrategy(STRATEGY_TYPE_RANGED)`, so a holy priest answers it. Any fixed ranged position
+  gated on `IsRanged` therefore drags healers off heal range; use `IsRangedDps` when the intent is
+  "the ones that only need to be in cast range of the boss".
+- `FindTankTargetSmartStrategy::IsBetter` (`TankTargetValue.cpp`) short-circuits: an explicit main
+  tank in a group with more than one tank **sticks to `current target`** and rejects every
+  alternative. A main tank that picked up an add during a phase where the boss was untargetable never
+  goes back to the boss on its own.
 - `PartyMemberToProtect` keys on `attacker->GetVictim()`, so anyone dying to raid-wide AoE, a DoT or a
   ground effect is nobody's current victim and **can never be selected**. Pain Suppression, Blessing
   of Protection and Intervene cannot answer that damage pattern.
 - `PartyMemberToDispel::Calculate` returns **one** target per tick, the first member holding any
   aura of the type, DoTs included, so N decursers all chase the same member and nothing prefers CC
   unless duty is split by index. `HasAuraToDispel` also skips auras with less than
-  `dispelAuraDuration` (default 700 ms) remaining.
+  `DispelAuraDuration` (default 700 ms) remaining.
 - **A dispel takes a random aura.** `Spell::EffectDispel` draws weighted by stacks, so a dispel aimed
   at CC may take a DoT. Class dispel nodes ignore dispel backlash (Unstable Affliction's silence and
   damage).
@@ -881,10 +765,10 @@ the just-died block in `PlayerbotAI::DoNextAction` now clears it.
   at the first action that returns true, so a reactive rule keyed on "too close to the boss" must
   exclude melee: their correct position breaks it every tick, the node walks them out, `reach melee`
   walks them back, and the two trade the bot all fight with nothing logged as an error. On Hodir that
-  cost **45% of the raid's damage** in one pull — melee median gap to him 6 → 14.4 yd, 1,044 accepted
-  moves from a node that had issued none to melee before. Put the gate on the trigger beside the role
-  predicate the node's anchor already uses, so the two cannot drift apart, and split accepted moves by
-  role in the reader; nothing else names a gate that stopped gating.
+  cost **45% of the raid's damage** in one pull — melee median gap to him 6 → 14.4 yd. Put the gate on
+  the trigger beside the role predicate the node's anchor already uses, so the two cannot drift
+  apart, and split accepted moves by role in the reader; nothing else names a gate that stopped
+  gating.
 - **`IsTank` flickers, and a role test that reads false once has lasting consequences.** It is
   `ContainsStrategy(STRATEGY_TYPE_TANK)`, so a bot the roster records as a tank can answer false — on
   one Thorim pull that dropped him past `IsMainTank` and `IsAssistTankOfIndex` into the melee ring,
@@ -895,21 +779,21 @@ the just-died block in `PlayerbotAI::DoNextAction` now clears it.
   resolver and whatever assigns slots.
 - **Boarding changes what a rider is, in two ways that break tests written for a bot on foot.**
   `Vehicle::AddPassenger` roots every passenger, driver included — `SetControlled(true,
-  UNIT_STATE_ROOT)` (`Vehicle.cpp:437`), cleared only on exit — so `UNIT_STATE_NOT_MOVE` on a rider
-  means "seated", not "disabled", and a role gated on it elects nobody. That switched off Flame
-  Leviathan's tar lead, vent interrupt and corner posting at once, silently, for six pulls. Test
-  `UNIT_STATE_STUNNED` on the rider and `UNIT_STATE_NOT_MOVE` on the hull. A seat carrying
-  `VEHICLE_SEAT_FLAG_PASSENGER_NOT_SELECTABLE` also sets `UNIT_FLAG_NOT_SELECTABLE`
-  (`Vehicle.cpp:395`), which every AoE searcher skips (`GridNotifiers.h:1154`): a crewed bot is
-  invisible to boss AoE and a dismounted one absorbs all of it, so on a vehicle fight hull loss is
-  the death, not the damage that follows it.
+  UNIT_STATE_ROOT)`, cleared only on exit — so `UNIT_STATE_NOT_MOVE` on a rider means "seated", not
+  "disabled", and a role gated on it elects nobody: that switched off Flame Leviathan's tar lead, vent
+  interrupt and corner posting at once, silently, for six pulls. Test `UNIT_STATE_STUNNED` on the
+  rider and `UNIT_STATE_NOT_MOVE` on the hull. A seat carrying
+  `VEHICLE_SEAT_FLAG_PASSENGER_NOT_SELECTABLE` also sets `UNIT_FLAG_NOT_SELECTABLE` (same function),
+  which every AoE searcher skips (`AnyAttackableUnitExceptForOriginalCasterInObjectRangeCheck` in
+  `GridNotifiers.h`): a crewed bot is invisible to boss AoE and a dismounted one absorbs all of it, so
+  on a vehicle fight hull loss is the death, not the damage that follows it.
 
 ## Arc and geometry defaults
 
-`WorldObject::isInFront` / `isInBack` default to `arc = M_PI` (`Object.h:558-559`) — front half plus
-back half is the entire circle, so a check like `boss->isInFront(bot) || boss->isInBack(bot)` is
-**always true**. On Sapphiron this made a priority-61 repositioning action permanently active and
-starved the melee rotation for the whole ground phase.
+`WorldObject::isInFront` / `isInBack` default to `arc = M_PI` (`Object.h`) — front half plus back half
+is the entire circle, so a check like `boss->isInFront(bot) || boss->isInBack(bot)` is **always
+true**. On Sapphiron this made a priority-61 repositioning action permanently active and starved the
+melee rotation for the whole ground phase.
 
 `IsBotInFrontalCone` forwards to `HasInArc`, which takes the **full** arc, not the half-angle — an
 `M_PI / 2` argument leaves everyone between 45° and 60° off-centre inside a cone they believe they
@@ -940,25 +824,13 @@ nothing.
 **And a cone's facing is a runtime fact, not a call-chain conclusion.** A static walk of Yogg-Saron's
 Crusher Tentacle read its orientation as frozen at spawn — `SetCombatMovement(false)` routes through
 `MoveIdle`, and the proc casts carry `TRIGGERED_IGNORE_SET_FACING` — so a dodge built on it would have
-aimed at a fixed compass direction and done nothing. The trace showed ten distinct orientations in
-28 s, every Crush victim within 0.7° of the recorded facing and every survivor inside the radius at
-5.1° or more. Orientation is `snap.u` column 4
-([../systems/observability.md](../systems/observability.md)); measure it there.
+aimed at a fixed compass direction. The trace showed ten distinct orientations in 28 s, every Crush
+victim within 0.7° of the recorded facing and every survivor inside the radius at 5.1° or more.
+Orientation is `snap.u` column 4 ([../systems/observability.md](../systems/observability.md)); measure
+it there.
 
-Core distance helpers are surface-to-surface on combat reach: `GetObjectSize()` returns
-`UNIT_FIELD_COMBATREACH` (`Object.cpp:2888`), `IsWithinCombatRange` is `dist3d < d + reachSum`, and
-`GetMeleeRange = reachSum + 4/3`. Hard-coded stand distances that ignore reach break on large models.
-`GetDistance2d(WorldObject const*)` subtracts both reaches too, so a **boss script's** own filter is
-never the number written in it: Mimiron's Napalm picks among players at `GetDistance2d(mkII) > 15.0f`,
-which the MK II's CombatReach of 8 makes raw > ~24.5 yd. Convert before believing a range literal —
-it decides who a mechanic may pick, and an empty pool can fall through to something quite different
-(Napalm's fallback is a threat-list pick with no distance floor at all). Our own code needs the same
-conversion: `reach spell` fires through `IsWithinCombatRange` (`RangeTriggers.cpp:155`), so a
-formation clamped to raw `spellDistance - margin` gives away both reaches, 9.5 yd against the MK II,
-which parked Mimiron's camp on Napalm's floor. An area spell's radius goes the other way:
-`WorldObjectSpellAreaTargetCheck` (`Spell.cpp:9203`) adds the target's reach only for a
-player-controlled caster, so a creature's AoE is centre to centre and spacing just over its radius
-isolates.
+Distance helpers and reach — what each one adds, and how to read a range literal in a boss script —
+are in [raid-mechanics-lessons.md](raid-mechanics-lessons.md#range-and-reach).
 
 ## Configuration
 
@@ -967,39 +839,35 @@ isolates.
   that turns the cheat off. See the CHEAT-ONLY list in [../raids/README.md](../raids/README.md).
 - **The raid cheat strips auras, which silently breaks any node keyed on one.** Thorim's tank-swap
   trigger fires only while the active tank still carries Unbalancing Strike; the cheat stripped it
-  **2-230 ms** after it landed, so only 2-3 of every 5-8 strikes ever produced a swap — while the
-  strikes that kept their aura the full 15 s **all** swapped within 37-199 ms. Nothing errors; the
-  node just rarely fires. Before keying a node on a debuff, check the cheat is not removing it. Raid
-  cheat is live for Yogg-Saron, ICC, SSC, BT, BWL and RS.
+  **2-230 ms** after it landed, so only 2-3 of every 5-8 strikes produced a swap, while the strikes
+  that kept their aura the full 15 s **all** swapped within 37-199 ms. Before keying a node on a
+  debuff, check the cheat is not removing it. Raid cheat is live for Yogg-Saron, ICC, SSC, BT, BWL
+  and RS.
 - `ErrorDelay` defaults to 100 ms and is compared as `(now - lastErrorTell) < ErrorDelay / 1000`
-  (`PlayerbotMgr.cpp:1709`) — integer division makes that 0 seconds, so errors flush every tick.
-  **Still unfixed.**
+  (`PlayerbotMgr::CheckTellErrors`) — integer division makes that 0 seconds, so errors flush every
+  tick. **Still unfixed.**
 - **Boss health is not `creature_template`.** `mod-dungeon-scale` is loaded and
   `AC_DUNGEON_SCALE_STAT_MODIFIER_RAID_BOSS_HEALTH=1.2` scales every raid boss, with the result moving
   with raid size: Sara measured **240,000 at 25 raiders and 237,500 at 24** against the 199,999 her
-  `HealthModifier` gives, and the Guardians scaled with her. That is the difference between an eight-
-  and a ten-kill phase. Anything that turns a boss's health into a count — adds to kill, casts to
-  survive, a burn window — takes it from the trace's `unit` row (`mhp`), never from the DB, and never
-  from a figure another doc quotes without saying which it came from.
-- **It rescales mid-fight, and that used to cost a boss its aura health.** Any map-data change — the
-  player count, or the rounded average creature level as summons spawn — re-runs
-  `ModifyCreatureAttributes` on every creature in the map: it sets the max to the aura-free base,
-  scales current health against the old aura-inflated max, then `UpdateAllStats` puts the auras back
-  on the max alone. A creature holding `MOD_INCREASE_HEALTH_PERCENT` lost that whole multiplier in one
-  frame — Flame Leviathan 92.6% -> 24.0% with four +40% towers up, in 4 of 10 traces. The module
-  clone restores the percentage since 2026-09-20; the signature in a trace is a one-frame drop with no
-  damage row whose ratio equals the creature's aura multiplier.
+  `HealthModifier` gives, and the Guardians scaled with her — the difference between an eight- and a
+  ten-kill phase. Anything that turns a boss's health into a count — adds to kill, casts to survive, a
+  burn window — takes it from the trace's `unit` row (`mhp`), never from the DB, and never from a
+  figure another doc quotes without saying which it came from.
+- **It rescales mid-fight.** Any map-data change — the player count, or the rounded average creature
+  level as summons spawn — re-runs mod-dungeon-scale's `ModifyCreatureAttributes` on every creature in
+  the map: it sets the max to the aura-free base, scales current health against the old aura-inflated
+  max, then `UpdateAllStats` puts the auras back on the max alone. Upstream, a creature holding
+  `MOD_INCREASE_HEALTH_PERCENT` loses that whole multiplier in one frame — Flame Leviathan 92.6% ->
+  24.0% with four +40% towers up, in 4 of 10 traces. The local module clone restores the percentage;
+  the signature in a trace is a one-frame drop with no damage row whose ratio equals the creature's
+  aura multiplier.
 
 ## A missing table or column kills the worldserver, not just the query
 
 `MySQLConnection` aborts the whole process on a query naming a table or column that doesn't exist —
 not an empty result, not a catchable error. Any code reading a table it doesn't own itself (another
-module's, or one an import pipeline creates later) must check `information_schema.COLUMNS` first and
-skip the query whenever a name is missing:
-
-    SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (...)
-
-`BisDatasetMgr` (`src/Mgr/Item/BisDatasetMgr.cpp`) does this before every load and version poll of
-`bistooltip_dataset`/`_subject`/`_block` — tables mod-bis-tooltip owns and playerbots only reads,
-absent on any server that hasn't loaded that module or run its import yet.
+module's, or one an import pipeline creates later) must check `information_schema.COLUMNS` for every
+name first and skip the query whenever one is missing. `BisDatasetMgr` (`src/Mgr/Item/BisDatasetMgr.cpp`)
+does this before every load and version poll of `bistooltip_dataset`/`_subject`/`_block` — tables
+mod-bis-tooltip owns and playerbots only reads, absent on any server that hasn't loaded that module or
+run its import yet.

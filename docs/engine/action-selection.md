@@ -15,8 +15,7 @@ Under `src/Bot/Engine/`:
 | `Multiplier` | `Multiplier.h` | `GetValue(Action*)` scales relevance; `0.0f` suppresses. |
 | `Value<T>` | `Value/Value.h` | Cached state calculators, read via `AI_VALUE` / `AI_VALUE2`. |
 
-Hierarchy, verified — **`AttackAction : MovementAction`**, not siblings
-(`Ai/Base/Actions/AttackAction.h:16`):
+Hierarchy — **`AttackAction : MovementAction`**, not siblings (`Ai/Base/Actions/AttackAction.h`):
 
 - `MovementAction : Action` → `AttackAction` (→ `DpsAssistAction`, `TankAssistAction`),
   `FollowAction`, `FleeAction`, `RunAwayAction`, `ReachTargetAction`, `EnterVehicleAction`,
@@ -31,18 +30,15 @@ the wrong base silently limits the action. They are `protected`, so a movement s
 share must be a member of an intermediate base class, not a free helper.
 
 **A blanket `MovementAction` veto therefore also kills targeting and vehicle boarding** — EoE's disk
-riders boarded and then sat still for a phase. Name the boss's own actions as exemptions. The two
-families are **disjoint**, which is what lets a multiplier suppressing only those two split on one
-`dynamic_cast` each way instead of a chain — see
-[raid-mechanics-lessons.md](raid-mechanics-lessons.md).
+riders boarded and then sat still for a phase. Name the boss's own actions as exemptions.
 
 ## The selection loop
 
-`Engine::DoNextAction` (`src/Bot/Engine/Engine.cpp:144`, detail at `:166-245`):
+`Engine::DoNextAction`:
 
 1. Push every fired trigger's `NextAction`s.
-2. `PushDefaultActions` (`Engine.cpp:508-516`) pushes every active strategy's `getDefaultActions()`
-   **ungated by any trigger**, with `forceRelevance = 0.0f` so the listed value is kept verbatim.
+2. `Engine::PushDefaultActions` pushes every active strategy's `getDefaultActions()` **ungated by any
+   trigger**, with `forceRelevance = 0.0f` so the listed value is kept verbatim.
 3. Pop in descending relevance; **break on the first action returning `true`**.
 4. Ties break by insertion order, which reads as nondeterministic in-game.
 
@@ -58,14 +54,16 @@ Two rules follow from 3; breaking either silently disables every node below:
 
 A zeroed multiplier breaks the multiplier loop, fails `isPossible() && relevance > 0`, and lands on
 the **IMPOSSIBLE** branch — which still pushes the node's `/*A*/` alternatives. Fallback chains
-survive a veto. Never build an A→B→A cycle in `getAlternatives`.
+survive a veto. Never build an A→B→A cycle in `getAlternatives`. In the act stream a vetoed action is
+therefore indistinguishable from one whose spell is unknown, out of range or on cooldown; the trace's
+`veto` rows name the multiplier that did it, so read those before concluding an ability is broken.
 
-**`Queue::Push` de-dupes baskets by action *name*** (`src/Script/WorldThr/Queue.cpp:11-27` walks
+**`Queue::Push` de-dupes baskets by action *name*** (`src/Script/WorldThr/Queue.cpp`: it walks
 `actions` and calls `updateExistingBasket` on a name match). So one action name listed at four
 different relevances is **one basket**, not four independent entries — which means retargeting or
 fixing that action once repairs every band it appears in.
 
-Relevance constants (`src/Bot/Engine/Strategy/Strategy.h:53-65`):
+Relevance constants (`src/Bot/Engine/Strategy/Strategy.h`):
 
 `ACTION_DEFAULT 5` · `ACTION_NORMAL` / `ACTION_LIGHT_HEAL 10` · `ACTION_HIGH` / `ACTION_MEDIUM_HEAL 20`
 · `ACTION_MOVE` / `ACTION_CRITICAL_HEAL 30` · `ACTION_INTERRUPT 40` · `ACTION_DISPEL 50` ·
@@ -79,7 +77,8 @@ Objects are created by name through `NamedObjectContext<T>` (`src/Bot/Engine/Nam
 Class contexts resolve **before** shared ones, so registering the same name in both gives a
 per-class override for free (Ritual of Souls uses this).
 
-**Names are resolved at runtime and fail silently** — see [pitfalls.md](pitfalls.md).
+**Names are resolved at runtime and fail silently** — see
+[pitfalls.md](pitfalls.md#names-fail-silently-at-runtime).
 
 **A node's prerequisites come from whichever action-node factory `Engine::Init` merges last**:
 strategies merge in name order, and within one a factory added later (a subclass's after its base's)
@@ -89,10 +88,10 @@ building on a generic node's prerequisite.
 
 Per-raid wiring is four edits: `src/Ai/Raid/RaidStrategyContext.h` (key → strategy),
 `src/Bot/Engine/BuildSharedTriggerContexts.cpp`, `BuildSharedActionContexts.cpp`, and
-`PlayerbotAI::ApplyInstanceStrategies` (`src/Bot/PlayerbotAI.cpp:1623`) for the `allInstanceStrategies`
-list plus the `case <mapId>:` arm. `ApplyInstanceStrategies` strips every instance strategy, then
-adds the one matching the current map; it runs on login and every map change
-(`PlayerbotAI.cpp:156, 797, 1609, 1873`).
+`PlayerbotAI::ApplyInstanceStrategies` for the `allInstanceStrategies` list plus the `case <mapId>:`
+arm. `ApplyInstanceStrategies` strips every instance strategy, then adds the one matching the current
+map; it runs on login (the `PlayerbotAI` constructor, `PlayerbotRepository::Load`), every teleport
+(`HandleTeleportAck`) and every strategy reset (`ResetStrategies`, `SelectiveResetStrategies`).
 
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated, boss-prefixed; multiplier classes are `{BossName}{Purpose}Multiplier`.
@@ -113,26 +112,24 @@ key two parts both register when copying; pblint cannot see that collision.
 
 ## Trigger semantics
 
-- `BuffTrigger` fires when the named aura is **missing** (`GenericTriggers.cpp:193-204`). With no such
-  self-aura (`"bloodthirst"`, `"whirlwind"`) it is permanently active — read it as "always try this".
-- `DebuffTrigger` fires when the debuff is missing from the current target (`GenericTriggers.cpp:311`).
-  It cannot drive a stack ramp or pace a cooldown, because it goes quiet the moment the aura lands.
+- `BuffTrigger::IsActive` fires when the named aura is **missing**. With no such self-aura
+  (`"bloodthirst"`, `"whirlwind"`) it is permanently active — read it as "always try this".
+- `DebuffTrigger::IsActive` fires when the debuff is missing from the current target. It cannot drive
+  a stack ramp or pace a cooldown, because it goes quiet the moment the aura lands.
 - `beforeDuration` (ms, default 0) is the refresh window on both. **0 is a real choice, not an
   oversight**: priest DoTs must expire before re-applying, rogue sets 2000 on Slice and Dice / Hunger
   for Blood / Rupture on purpose. Do not "make them consistent".
-- **A recast restarts a non-stacking DoT's tick timer** (`Spell.cpp:3146`, `StackAmount < 2`), so a
-  refresh window throws away the elapsed part of the current tick. Ticks stop at
+- **A recast restarts a non-stacking DoT's tick timer** (`Spell::DoSpellHitOnUnit`, `StackAmount < 2`),
+  so a refresh window throws away the elapsed part of the current tick. Ticks stop at
   `AuraEffect::GetTotalTicks()` (max duration / interval, floored); once `GetTickNumber()` reaches it,
   the rest of the aura is dead time and a recast is free.
 - `DebuffTrigger`'s `needLifeTime` is a **time-to-die** test —
-  `target->GetHealth() / AI_VALUE(float, "estimated group dps")` (`GenericTriggers.cpp:311-319`) — not
-  a DoT-remaining test. Overriding `IsActive()` to call `BuffTrigger::IsActive()` throws that guard
-  away.
-- `BoostTrigger::IsActive` (`GenericTriggers.cpp:422-432`) needs the buff missing **and** either a
-  Player target or `balance <= 50`. In raid PvE the target is a Creature and the raid is normally
-  winning, so **every `BoostTrigger` subclass is effectively dead**. Re-key to
-  `SpellNoCooldownTrigger` and let `BurstWindowStrategy` place the cast.
-- `TwoTriggers`' creator key must equal `getName()` = `"<name1> and <name2>"`.
+  `target->GetHealth() / AI_VALUE(float, "estimated group dps")` — not a DoT-remaining test.
+  Overriding `IsActive()` to call `BuffTrigger::IsActive()` throws that guard away.
+- `BoostTrigger::IsActive` needs the buff missing **and** either a Player target or `balance <= 50`.
+  In raid PvE the target is a Creature and the raid is normally winning, so **every `BoostTrigger`
+  subclass is effectively dead**. Re-key to `SpellNoCooldownTrigger` and let `BurstWindowStrategy`
+  place the cast.
 
 ## Multiplier semantics
 
@@ -145,39 +142,43 @@ zeroed it, in declaration order, so wiring order decides attribution.
 `dynamic_cast` is the identification mechanism, and **must be narrow**: cast to the concrete action
 (`CastMisdirectionOnMainTankAction`), never a shared base like `BuffOnMainTankAction` — that base
 also carries paladin Beacon, shaman Earth Shield and druid Thorns, a bug the Naxx work had to undo.
-
-At scale, match on `getName()` instead: `CastSpellAction` passes the spell name to
-`Action(botAI, spell)` (`GenericSpellActions.cpp:138`), so the name is a reliable identifier and does
-not require including 25 class headers. Racials and trinkets follow the same convention
-(`"berserking"`, `"blood fury"`, `"use trinket"`).
-
 Unlike creator-name strings, a `dynamic_cast` mistake fails at **compile** time.
 
-**Multipliers only apply on the queue path.** `PlayerbotAI::DoSpecificAction` goes through
-`Engine::ExecuteAction` (`Engine.cpp:361`), which runs `isUseful()` and `isPossible()` and then
-executes — no multiplier chain. So a guard can only ever silence nodes that arrive through the queue,
-typically the class ones; anything an encounter fires directly is immune to it by construction. Build
-the encounter's own suppression into the action, not into a multiplier that will never see it.
-
-**A veto that covers targeting must be paired with a node that assigns one.** `DpsAssistAction` and
-`TankAssistAction` are how a bot gets a target at all, and `AttackAction::Attack` is what calls
-`ChangeEngine(BOT_STATE_COMBAT)`, so zeroing them with nothing behind them strands every bot
-targetless in the non-combat engine: it buffs and heals and never fights. Vezax did this for two pulls
-that ended at 99% boss health. The trace tell is a `covdef` with no `c` engine. A rule wider than its
-assigning node strands the bot the same way in the gap, so key an `OwnTargeting` predicate on
-`resolver != nullptr`.
-
-**A direct-attack action is the pet's only sender**: no generic strategy wires `pet attack`. Command
-the pet before the "already on the pick" early return, and let the trigger also fire while the pet is
-off the pick.
+At scale, match on `getName()` instead: `CastSpellAction`'s constructor passes the spell name to
+`Action(botAI, spell)`, so the name is a reliable identifier and does not require including 25 class
+headers. Racials and trinkets follow the same convention (`"berserking"`, `"blood fury"`,
+`"use trinket"`).
 
 **Test the action before resolving anything.** `Multiplier::GetValue` runs on every popped action that
 passed `isUseful()`, so a multiplier that looks up a boss first pays that lookup for every rotation
 spell that falls through — one Ulduar chain pass reached roughly 150 line-of-sight raycasts before
-anything returned a verdict, and every verdict was 1.0. Where everything a multiplier suppresses is
-either a `MovementAction` or a `CastSpellAction` — disjoint families — one `dynamic_cast` each way up
-front replaces the whole chain for the common case. Encounter rules enforce this order (see
-[../raids/README.md](../raids/README.md#encounter-rules)); a hand-written multiplier still has to.
+anything returned a verdict, and every verdict was 1.0. `MovementAction` and `CastSpellAction` are
+**disjoint** families, so where everything a multiplier suppresses is one or the other, one
+`dynamic_cast` each way up front replaces the whole chain for the common case. Encounter rules
+enforce this order (see [../raids/README.md](../raids/README.md#encounter-rules)); a hand-written
+multiplier still has to.
+
+**Multipliers only apply on the queue path.** `PlayerbotAI::DoSpecificAction` goes through
+`Engine::ExecuteAction`, which runs `isUseful()` and `isPossible()` and then executes — no multiplier
+chain. So a guard can only ever silence nodes that arrive through the queue, typically the class
+ones; anything an encounter fires directly is immune to it by construction. Build the encounter's own
+suppression into the action, not into a multiplier that will never see it.
+
+**A bot with no target runs the non-combat engine, in combat too.** Only `AttackAction::Attack`
+(which calls `ChangeEngine(BOT_STATE_COMBAT)`) or a pull enters the combat engine; `invalid target` is
+true for a null target, and `drop target` (99) always switches to non-combat. There the bot buffs and
+heals and never fights, without the combat-only mana cooldowns and potions. So **a veto that covers
+targeting must be paired with a node that assigns one**: `DpsAssistAction` and `TankAssistAction` are
+how a bot gets a target at all, and zeroing them with nothing behind them strands every bot — Vezax
+did this for two pulls that ended at 99% boss health. The trace tell is a `covdef` with no `c`
+engine. A rule wider than its assigning node strands the bot the same way in the gap, so key an
+`OwnTargeting` predicate on `resolver != nullptr`. A fight that owns targeting and hands a healer none
+strands it the same way (Yogg-Saron's phase 3 healers ran dry); in raid boss fights
+`raid healer engine` covers that ([../raids/README.md](../raids/README.md#targeting-the-whole-fight)).
+
+**A direct-attack action is the pet's only sender**: no generic strategy wires `pet attack`. Command
+the pet before the "already on the pick" early return, and let the trigger also fire while the pet is
+off the pick.
 
 ## Casting
 
@@ -190,10 +191,11 @@ front replaces the whole chain for the common case. Encounter rules enforce this
 - `CastSpell` selects and faces the target before it fails, so a taunt or other cooldown cast not
   gated on `CanCastSpell` plus the DBC range re-faces the bot every tick.
 - There is no cast-while-moving model and no spell queue: any cast-time spell is refused outright
-  while moving (see [pitfalls.md](pitfalls.md)), and casts are never clipped — the AI yields while
-  `SPELL_STATE_PREPARING`. Deliberate clipping needs an explicit `cancel channel` node.
+  while moving (see [pitfalls.md](pitfalls.md#a-moving-bot-cannot-cast)), and casts are never clipped
+  — the AI yields while `SPELL_STATE_PREPARING`. Deliberate clipping needs an explicit
+  `cancel channel` node.
 - `CastTimeStrategy` multiplies relevance by 0.1 when the cast would outlast the target, but
-  multipliers run **after** the pop (`Engine.cpp:245-269`): the popped action still executes at any
+  multipliers run **after** the pop (`Engine::DoNextAction`): the popped action still executes at any
   relevance above 0, so this reorders nothing and there is **no execute-swap to an instant**. Only
   `0.0f` changes what is cast.
 - `HasAura(..., maxStack = false, maxAuraAmount = -1)` is a **presence** check, not a stack check.
@@ -207,25 +209,26 @@ front replaces the whole chain for the common case. Encounter rules enforce this
 - A paladin aura's class action (`CastBuffSpellAction`, `isOwner` false) checks the aura by name, so
   it refuses while another paladin's aura of that name is on the bot, even without the bot's own: an
   elected holder keeps its current aura instead of stacking a stripped duplicate.
-- `YieldThread` (`PlayerbotAIBase.cpp:53-61`) *raises* `nextAICheckDelay` to the react delay whenever
-  it is lower, so `SetNextCheckDelay(0)` written inside an action is overwritten before the tick
-  ends. To let an off-GCD ability share a tick, return `false` from `Execute` — `DoNextAction` only
-  breaks on `true`. Two consequences: the debug log reads `A:<name> - FAILED` for a cast that went
-  out, and the node's alternatives get pushed.
+- `PlayerbotAIBase::YieldThread` *raises* `nextAICheckDelay` to the react delay whenever it is lower,
+  so `SetNextCheckDelay(0)` written inside an action is overwritten before the tick ends. To let an
+  off-GCD ability share a tick, return `false` from `Execute` — `DoNextAction` only breaks on `true`.
+  Two consequences: the debug log reads `A:<name> - FAILED` for a cast that went out, and the node's
+  alternatives get pushed.
 
 ## Healing
 
 - The four party health bands are **nested, not exclusive** — all pass `minValue = 0`
-  (`src/Ai/Base/Trigger/HealthTriggers.h:88-128`). A target at 20% fires critical, low, medium *and*
-  almost-full at once; only relevance separates them.
-- Config defaults (`src/PlayerbotAIConfig.cpp:95-117`): critical 25, low 45, medium 65, almostFull 85,
+  (`PartyMemberLowHealthTrigger` and its subclasses, `src/Ai/Base/Trigger/HealthTriggers.h`). A target
+  at 20% fires critical, low, medium *and* almost-full at once; only relevance separates them.
+- Config defaults (`PlayerbotAIConfig::Initialize`): critical 25, low 45, medium 65, almostFull 85,
   lowMana 15, mediumMana 40, highMana 65, saveManaThreshold 60, healDistance 38.5. Note `"high mana"`
   tests mana **< 65%** despite the name; `"target critical health"` is 20%, not 25%.
-- `HealerAutoSaveManaMultiplier` (`src/Ai/Base/Strategy/ConserveManaStrategy.cpp:93-131`): above 60%
-  bot mana always returns 1. Below, it vetoes a `CastHealingSpellAction` when target HP ≥ 65 and
+- `HealerAutoSaveManaMultiplier::GetValue` (`src/Ai/Base/Strategy/ConserveManaStrategy.cpp`): above
+  60% bot mana always returns 1. Below, it vetoes a `CastHealingSpellAction` when target HP ≥ 65 and
   (`lossAmount < estAmount` or efficiency ≤ MEDIUM), and when target HP ≥ 45 and (same, or efficiency
   ≤ LOW), where `lossAmount = 100 - targetHealthPct`. Tanks get `estAmount / 1.5`. Efficiency ranks
-  (`PlayerbotAIConfig.h:34-42`): VERY_LOW 1, LOW 2, MEDIUM 4, HIGH 8, VERY_HIGH 16, SUPERIOR 32.
+  (`HealingManaEfficiency`, `PlayerbotAIConfig.h`): VERY_LOW 1, LOW 2, MEDIUM 4, HIGH 8, VERY_HIGH
+  16, SUPERIOR 32.
 
   **This metadata is a functional gate, not documentation.** A wrong `estAmount` or efficiency takes
   a spec's main heal offline exactly under mana pressure — it did so for paladin Holy Light,
@@ -239,12 +242,12 @@ front replaces the whole chain for the common case. Encounter rules enforce this
   carrying `SPELL_AURA_SCHOOL_HEAL_ABSORB`; without that exception every cast-time heal on it recasts
   each tick and nothing lands.
 - A group scan measures with `botAI->GetRange("heal")` — **30 yd** — not
-  `sPlayerbotAIConfig.SpellDistance`, and not `healDistance` 38.5. Null-check `bot->GetGroup()` and
+  `sPlayerbotAIConfig.SpellDistance`, and not `HealDistance` 38.5. Null-check `bot->GetGroup()` and
   LOS-test while you are in there.
-- `AoeInGroupTrigger` (`HealthTriggers.cpp:47-63`) needs ≥ 3 healable members: threshold 3 (≤5),
+- `AoeInGroupTrigger::IsActive` (`HealthTriggers.cpp`) needs ≥ 3 healable members: threshold 3 (≤5),
   `min(half,4)` (≤10), `min(half,6)` (≤25), `min(half,8)` above. The threshold and the counting value
   must measure the **same population** — `CountHealableGroupMembers` counts alive members inside
-  `healDistance`, `GetNearGroupMemberCount` uses `sightDistance` and counts the dead. Mixing them
+  `HealDistance`, `GetNearGroupMemberCount` uses `SightDistance` and counts the dead. Mixing them
   makes the threshold unreachable in a spread 25-man.
 - `PartyMemberValue` derives from `UnitCalculatedValue`, not `Qualified`, so per-spell target
   filtering must be a **second registered value name** (`"party member to protect no tank"`), not a
@@ -254,9 +257,9 @@ front replaces the whole chain for the common case. Encounter rules enforce this
 
 ## Strategy assignment
 
-`src/Bot/Factory/AiFactory.cpp` builds each bot's strategy set. The always-on combat list is at
-`:289`: `racials`, `chat`, `default`, `cast time`, `potions`, `duel`, `boost`, `burst` — skipped
-for battlegrounds. Spec sets follow at `:302-309, 411-416, 420-433`; healers add `save mana` and
+`AiFactory::AddDefaultCombatStrategies` (`src/Bot/Factory/AiFactory.cpp`) builds each bot's combat
+strategy set. The always-on list is `racials`, `chat`, `default`, `cast time`, `potions`, `duel`,
+`boost`, `burst` — skipped for battlegrounds. Spec sets follow per class; healers add `save mana` and
 `healer dps`.
 
 Every strategy is switchable per bot with `strategy -<name>`. Strategies from a sibling context (e.g.
@@ -271,5 +274,6 @@ the combat, non-combat and dead lists to `playerbots_db_store` on logout and `Lo
 `ChangeStrategy` on a class strategy outlives the fight, the session and the binary, and the sibling it
 evicted never returns from the factory defaults. One AQ40 visit left a hunter carrying `rnature`
 instead of `bdps` across a rebuild and a restart. Suppress with a multiplier instead; only a DB update
-or `reset botAI` undoes one. Rows outlive a deleted character, and a restart can hand its guid to a new
-character, which then loads them.
+or `reset botAI` undoes one. **Run a SQL migration of those rows with the worldserver down**: a bot
+online when the row changes writes its in-memory list back over it on logout. Rows outlive a deleted
+character, and a restart can hand its guid to a new character, which then loads them.

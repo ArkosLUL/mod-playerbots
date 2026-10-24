@@ -12,8 +12,12 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
 - **A vehicle has exactly one owner of its position.** Two actions steering the same `MotionMaster`
   produce a visible bounce, not a compromise: each undoes the other every tick. The fix is deleting
   one, never lowering its priority.
-- **`MoveTo` / `ReachCombatTo` clamp Z to terrain** via `bot->UpdateAllowedPositionZ`. On an airborne
-  rider that is a dive to the floor and a climb back, on repeat.
+- **A vehicle rider never counts as flying.** `Player::CanFly` reads only the bot's own
+  `MOVEMENTFLAG_CAN_FLY`, which `UpdateMovementState` strips without a flight aura. So `MoveTo` /
+  `ReachCombatTo` (via `bot->UpdateAllowedPositionZ`) or `CheckCollisionAndGetValidCoords` run on
+  the bot clamp a drake's destination to terrain — on an airborne rider a dive to the floor and a
+  climb back, on repeat — and the bot's own `MoveFollow` moves nothing. A strategy that keeps a bot
+  on a flying vehicle keeps generic movement off it and steers the vehicle base itself.
 - **Anything airborne needs `MovePoint(..., generatePath = false)`.** The mmap is 2d, so a generated
   path drops the destination onto the ground underneath. `false` gives a straight 3d spline. On a map
   with no `.mmtile` files the setting is inert — `CalculatePath` returns a two-point shortcut and
@@ -36,17 +40,20 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
   `CastingTime && vehicleBase->isMoving()`; `CastVehicleSpell` cancels when
   `seat->CanControl() && isMoving() && GetCastTime()`. A rider left on `MoveFollow` fires nothing all
   phase.
-- **`PlayerbotAI::CastVehicleSpell` returns `true` even when `prepare()`'s `CheckCast` failed**
-  (`src/Bot/PlayerbotAI.cpp:4055`). No power, no combo points (`SPELL_FAILED_NO_COMBO_POINTS`) and
-  GCD collisions all look like success. **Verify by aura**: `Spell::prepare` calls `cast(true)`
-  inline for instants (`Spell.cpp:3691`), so `HasAura` on the same tick is real.
+- **`PlayerbotAI::CastVehicleSpell` returns `true` even when `prepare()`'s `CheckCast` failed.** No
+  power, no combo points (`SPELL_FAILED_NO_COMBO_POINTS`) and GCD collisions all look like success,
+  so anything stamped on that answer records a cast that never happened: Flame Leviathan's
+  `CastVehicleSelfSpell` stamped Steam Rush's 15 s cooldown on a refusal from the Ram GCD, and a Pursued siege engine went 15.2 s
+  without its escape. **Confirm with a receipt** — energy spent, the aura landed, the channel
+  stopped. `Spell::prepare` calls `cast(true)` inline for instants, so `HasAura` on the same tick is
+  real.
 - **`CanCastVehicleSpell` reports `BAD_TARGETS` for a self-cast**, so the honest check is unavailable
   exactly where it is needed. Substitute `SpellInfo::CalcPowerCost` against live power, guarding
   `PowerType >= MAX_POWERS` first — `POWER_HEALTH` is `-2` and would index the power array out of
   bounds, and `Powers` has a signed underlying type, so cast `MAX_POWERS`.
-- **Creature casters get no server-side cooldown.** `Spell::SendSpellCooldown` (`Spell.cpp:4346`)
-  returns early for non-players with its `AddSpellCooldown` commented out. Never invent a manual
-  cooldown to compensate: an invented one silently throws casts away for the rest of the fight.
+- **Creature casters get no server-side cooldown.** `Spell::SendSpellCooldown` returns early for
+  non-players with its `AddSpellCooldown` commented out. Never invent a manual cooldown to
+  compensate: an invented one silently throws casts away for the rest of the fight.
 - **Vehicle power is creature regen.** `unit_class 4` plus `UNIT_FLAG2_REGENERATE_POWER` gives
   `Creature::Regenerate` a flat +20 per `CREATURE_REGEN_INTERVAL` (2 s) — 10/s against a cap of 100.
   Cost per GCD against that rate decides whether the bar ever climbs at all.
@@ -55,9 +62,19 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
 
 ## Movement that oscillates
 
-Bots jiggling on the spot is one symptom with ten causes, plus an eleventh that freezes them instead.
+Bots jiggling on the spot is one symptom with many causes, plus one that freezes them instead. The
+movement lock that decides which of two movers' orders is accepted is in
+[pitfalls.md](pitfalls.md#movement-that-silently-no-ops).
 
 - **Two owners** — see above.
+- **Two nodes re-deriving their destination every tick.** Every `MoveTo` calls `mm->Clear()`, so a
+  high-priority node cancels whatever walk a lower node had in flight, even when its own answer moved
+  the bot a yard. Two such nodes alternate at tick rate and neither arrives: tens of yards of travel
+  inside a 5 yd strip, which reads in-game as "it refuses to cross" (Freya's Sun Beam dodge and spore
+  node, 584 flips in one pull). Latch the destination and, while the walk is in flight and still
+  valid, **return true without calling `MoveTo`** — the engine ends the tick at the first action
+  returning true, so claiming it is what protects the spline. Give the latch a ceiling, or a bot
+  rooted mid-move holds the tick indefinitely.
 - **A destination that chases a moving boss.** A boss-relative spot flips to his far side while he is
   still walking. Prefer a spot **latched for the pull**. If it must track him, **clamp, don't
   chase**: keep the bearing the spot already holds, slide only along the segment `[boss, spot]`, and
@@ -78,10 +95,6 @@ Bots jiggling on the spot is one symptom with ten causes, plus an eleventh that 
   Latch the heading and sweep **forward only** from where it already is; an expiring hazard behind
   then cannot be selected. Hazards that outlive their own cadence guarantee this — 20 s fields on a
   12 s timer reversed the EoE flight on roughly every third one.
-- **A path-type test written with `==`.** A path carries flags, not a value:
-  `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH` is `0x11` and equals neither constant, so an equality
-  test rejects every path on a map without mmaps (Eye of Eternity is the only such map here) and on
-  anything flying or swimming. Always mask.
 - **A generic mover fighting a boss action.** The suppression multiplier in
   [../raids/README.md](../raids/README.md) is the right shape, but `AttackAction` **is** a
   `MovementAction` ([action-selection.md](action-selection.md)), so the exemption list must name the
@@ -116,7 +129,6 @@ Three rules that belong with the geometry rather than the action:
 
 - **A spot checked only at its endpoint lets the walk cross the hazard it dodges.** Test the path,
   and a growing hazard (a spreading pool) at its size when the walk ends.
-
 - **Park tolerance belongs in the clearance maths.** If a bot may stop `t` yards off the point, a
   point cleared by exactly the hazard radius still leaves whoever stopped on the hazard side inside
   it. Required clearance is `hazardRadius + tolerance`.
@@ -127,8 +139,21 @@ Three rules that belong with the geometry rather than the action:
 
 Every distance helper measures differently, and a large-model boss inflates all of them.
 
-- `GetMeleeRange = max(casterReach + targetReach + 4/3, NOMINAL_MELEE_RANGE)` — against a 20-reach
-  boss, ~22.8 yd. Hard-coded stand distances break on large models.
+- Core distance helpers are surface-to-surface on combat reach: `GetObjectSize()` returns
+  `UNIT_FIELD_COMBATREACH`, `IsWithinCombatRange` is `dist3d < d + reachSum`, and
+  `GetMeleeRange = max(casterReach + targetReach + 4/3, NOMINAL_MELEE_RANGE)` — against a 20-reach
+  boss, ~22.8 yd. Hard-coded stand distances that ignore reach break on large models.
+- **A range literal in a boss script is not the distance it says.** `GetDistance2d(WorldObject
+  const*)` subtracts both reaches too: Mimiron's Napalm picks among players at
+  `GetDistance2d(mkII) > 15.0f`, which the MK II's CombatReach of 8 makes raw > ~24.5 yd. Convert
+  before believing one — it decides who a mechanic may pick, and an empty pool can fall through to
+  something quite different (Napalm's fallback is a threat-list pick with no distance floor). Our own
+  code needs the same conversion: `reach spell` fires through `IsWithinCombatRange`
+  (`OutOfRangeTrigger::IsActive`), so a formation clamped to raw `spellDistance - margin` gives away
+  both reaches, 9.5 yd against the MK II, which parked Mimiron's camp on Napalm's floor. An area
+  spell's radius goes the other way: `WorldObjectSpellAreaTargetCheck` adds the target's reach only
+  for a player-controlled caster, so a creature's AoE is centre to centre and spacing just over its
+  radius isolates.
 - **`Spell::CheckRange` adds `GetMeleeRange` to a spell's *minimum*** for `SPELL_RANGE_RANGED`, so a
   20-reach boss turns a hunter's 5 yd minimum into ~28 yd centre-to-centre and every shot returns
   `SPELL_FAILED_TOO_CLOSE`. **Hunters are the only class with a minimum range** — do not relocate the
@@ -137,14 +162,15 @@ Every distance helper measures differently, and a large-model boss inflates all 
   and every class wires it to an escape at **34–50 relevance, above `ACTION_MOVE` (30)**. A
   positioning action in that band loses to the bot's own escapes: suppress `FleeAction`,
   `RunAwayAction`, `CastBlinkBackAction` and `CastDisengageAction`, or it steps out and is dragged
-  back forever.
+  back forever. The last two are `CastSpellAction`s, so a veto naming only `MovementAction` lets them
+  through.
 - Pick the helper deliberately: `IsWithinCombatRange` adds **both** combat reaches,
   `WorldObject::IsWithinDist3d(Position const*, float)` adds **neither**, and `GetExactDist2d`
   ignores altitude — the last claims reach that is not there against anything hovering. A point-cast
   (dest) spell's range follows `Spell::CheckRange`'s dest branch: `IsWithinDist3d` with the caster's
   own size only, not `IsWithinDistInMap`, which adds the target's reach.
 - **A healer stand must keep every heal target in heal range, or yield.** `PartyMemberToHeal` picks
-  targets up to `healDistance` 38.5 and `reach party member to heal` walks past heal range + 1, so a
+  targets up to `HealDistance` 38.5 and `reach party member to heal` walks past heal range + 1, so a
   stand that doesn't cover them fights it and the healer stops healing. Test reach from the stand,
   not the bot.
 - **`Unit::IsWithinMeleeRange(obj, dist)`: `dist` is extra slack**, not an absolute
@@ -168,11 +194,11 @@ Every distance helper measures differently, and a large-model boss inflates all 
 What lands on a raid add is not what PvP experience predicts.
 
 - **CC breaks on damage two ways.** `Unit::DealDamage` removes auras carrying
-  `AURA_INTERRUPT_FLAG_TAKE_DAMAGE` (`Unit.cpp:1032`) on any hit: Polymorph, Freezing Trap. An aura
-  with proc flags and no `PROC_TRIGGER_SPELL` gets a damage cap in `AuraEffect::CalculateAmount`
-  (level-80 warrior base health / 4.75 = 2,652), and `HandleBreakableCCAuraProc` removes it past
-  that, DoT ticks included: Fear, Frost Nova, Entangling Roots (66 of 67 Fears on Faction Champions
-  broke within 30 ms of a hit). Cyclone has neither. Read both, not the reputation.
+  `AURA_INTERRUPT_FLAG_TAKE_DAMAGE` on any hit: Polymorph, Freezing Trap. An aura with proc flags and
+  no `PROC_TRIGGER_SPELL` gets a damage cap in `AuraEffect::CalculateAmount` (level-80 warrior base
+  health / 4.75 = 2,652), and `HandleBreakableCCAuraProc` removes it past that, DoT ticks included:
+  Fear, Frost Nova, Entangling Roots (66 of 67 Fears on Faction Champions broke within 30 ms of a
+  hit). Cyclone has neither. Read both, not the reputation.
 - **A stunned creature takes no heal assist threat**: `ThreatManager::ForwardThreatForAssistingMe`
   skips `UNIT_STATE_CONTROLLED` units.
 - **Diminishing returns skip creatures.** `ApplyDiminishingToDuration` diminishes a creature only for a
@@ -181,9 +207,12 @@ What lands on a raid add is not what PvP experience predicts.
   duration every time. The 10s PvP duration cap is gated the same way, and also needs a player
   caster. Both tests read the owner first, so a player's pet counts as a player. To predict the next
   duration, `Unit::GetDiminishing` returns the level the next hit lands at (non-const: it resets a
-  stale entry). Taunt diminishes only on a
-  creature flagged `OBEYS_TAUNT_DIMINISHING_RETURNS` (0x80000), which turns immune at the fifth, so a
-  plan built on repeated taunt-backs fails there (Twin Val'kyr).
+  stale entry).
+- **Taunt diminishes only on a creature flagged for it.** `flags_extra` 0x80000
+  (`OBEYS_TAUNT_DIMINISHING_RETURNS`) runs taunts at 100/65/42/27% duration, then immune until 15 s
+  after the last one fades (`Unit::GetDiminishing`, `Spell.cpp` DR block). A taunt every 8 s plus a
+  Righteous Defense in between keeps such a boss immune, so a plan built on repeated taunt-backs
+  fails there. Onyxia and the Twin Val'kyr carry it.
 - **Death Grip (49576 → 49560) splits its effects.** A creature immune to taunt and attack-me
   (`CreatureImmunitiesId` with aura 11 and effect 114) still takes the dummy pull, with no aura and
   so no DR. Where the taunt aura lands, the grip shares `DIMINISHING_TAUNT` with every class taunt,
@@ -203,35 +232,27 @@ What lands on a raid add is not what PvP experience predicts.
   the same rate, so the one carrying the debuff stacks takes him straight back, white swings included
   (no action carries those, so a damage-action veto misses them). A swap fired by the tank *not*
   holding him also never fires when that tank is a human: the bot holding him has to call it.
-- **A pacing gate with a bypass recreates the stacking it exists to prevent.** Algalon's "finish any
-  star under 15 %" skipped the gap and the health check, and put two raid-wide explosions 3.2 s apart.
-  Override only for what is worse than the hit it delays: no shelter before Big Bang, or stars whose own
-  collapse is about to stack them anyway.
-- **Reserve a cooldown against the next event by its own cooldown, not a window.** Algalon held the soak
-  buttons 20 s before Big Bang, and every 2-3 min button had been spent on the way, so the soaker had
-  nothing at the hit. Hold whenever casting now leaves it cooling down at the event; bubbles and self heals
-  that put up a lockout (Forbearance) count as spending the button they lock.
+- **A pacing gate with a bypass recreates the stacking it exists to prevent.** Override it only for
+  what is worse than the hit it delays (Algalon's star bypass put two raid-wide explosions 3.2 s
+  apart, [algalon.md](../raids/ulduar/algalon.md)).
+- **Reserve a cooldown against the next event by its own cooldown, not a window.** Hold whenever
+  casting now leaves it cooling down at the event; a button whose lockout (Forbearance) blocks another
+  counts as spending that one too (Algalon's Big Bang soakers).
 - **The Aoe threat type misses most splash.** Starfall, Blade Flurry, Sweeping Strikes, Cleave, Bladestorm,
   HotR, Avenger's Shield, Multi-Shot, Chain Lightning, Seed of Corruption and Mind Sear fail even the spell
   area test. A hold on "don't hit the add next to the boss" needs `SpellSplashes` plus the named list in
   `RaidSplash.h`, and self auras held outright: they hit whatever comes near for their whole duration.
-- **A draining add's lifetime is its health over its measured loss.** Splash near the boss took Algalon's
-  stars 1-2.4 %/s past the drain, so timed by health they died early and next to whoever chewed them; trace
-  drain and splash deaths apart before tuning. Plan each death against the others: killing a substitute when
-  the soonest-dying one can't be touched put two explosions 0.2 and 1.3 s apart. Dropping one a few % from
-  dead moves nothing, its DoTs finish it inside the window the drop was meant to avoid.
+- **A draining add's lifetime is its health over its measured loss**, splash included, so trace drain
+  and splash deaths apart before tuning, and plan each death against the others: killing a substitute
+  when the soonest-dying one can't be touched stacks two explosions anyway, and dropping one a few %
+  from dead moves nothing, its DoTs finish it inside the window (Algalon's stars).
 - **A slot leash fights `reach spell`.** It walks half the gap to an out-of-range target, the slot node
   walks the bot back, and the target is never reached. Give the mover its own spot in range instead.
 - **A taunt moves the boss, not the bot's own target.** A tank that taunts off an add keeps the add targeted, so
   reach walks it to the add, the slot walk back, and a damage guard zeroes every swing: set the target with the
   taunt, and retarget a holder that got the boss by threat.
-- **A redirect's fallback target can be what pulls aggro.** Out of the tank's range Tricks of the Trade went to
-  the strongest melee dps, which then pulled the boss at the pull; on an opener it goes to the tank or waits.
-- **A movement booking outlives the action that made it.** `MoveTo` refuses an equal priority until the
-  booked walk time runs out, so a forced kite walk kept a tank walking into a hole 1.7 s after it took the
-  boss, and refused its exit too. Drop the booking on a role change, and let a walk that must land within a
-  second drop one it didn't make. An `Exclusive` rule holds movement only; holding a cast or an item use
-  needs a multiplier.
+- **A redirect's fallback target can be what pulls aggro**: Tricks of the Trade falls back to the
+  strongest melee DPS ([pitfalls.md](pitfalls.md#detection-that-never-fires)).
 - **Mocking Blow is a taunt.** It is a `MELEE_ACTION`, and an Arms warrior's snare chain falls back to it;
   `ClassifyAction` counts it in `Family::Taunt`, so a taunt guard has to cover every role, not tanks.
 - **Read `speed_run` before designing any relocation.** An add faster than a player can be neither
@@ -251,14 +272,13 @@ twenty-five of them agree anyway:
   drops the actor to the back of its own queue.
 - **Latch per instance, not per bot**: a `RaidInstanceState<T>`
   ([../raids/README.md](../raids/README.md#per-instance-state)). Use it for phase, creature lookups,
-  layout choices and any held heading. **Never
-  `thread_local`** — `MapUpdater::schedule_update` pushes maps onto a shared queue with no thread
-  affinity, so above `MapUpdate.Threads` 1 (**6 here**, set by `AC_MAP_UPDATE_THREADS` over the
-  conf's 1) the pool hands the same instance to a different worker and each worker gets its own
-  empty latch. The signature is one note per bot **per thread that ever ticked the pull** — six
-  identical rows, which reads as a bot re-deciding several times a second. A time-bounded
-  **cache** of live world state is exempt: a rebuild on another thread recomputes the same answer.
-  Only a **latch** is corrupted by being duplicated.
+  layout choices and any held heading. **Never `thread_local`** — `MapUpdater::schedule_update`
+  pushes maps onto a shared queue with no thread affinity, so above `MapUpdate.Threads` 1 the pool
+  hands the same instance to a different worker and each worker gets its own empty latch. The
+  signature is one note per bot **per thread that ever ticked the pull** — identical rows that read as
+  a bot re-deciding several times a second. A time-bounded **cache** of live world state is exempt: a
+  rebuild on another thread recomputes the same answer. Only a **latch** is corrupted by being
+  duplicated.
 - **Read the world, not your bookkeeping.** "Has someone already done this?" is answered by the aura
   their action left behind, with its remaining duration as the timestamp. That survives a cast that
   silently failed and it counts real players in the group; a flag set on our own success does
@@ -275,29 +295,28 @@ twenty-five of them agree anyway:
 
 Cheap per bot, ruinous per raid — and invisible in single-bot testing.
 
-- **`Multiplier::GetValue` runs on every popped action that passed `isUseful()`**
-  (`Engine.cpp:216-234`), dozens per bot per tick, so anything it derives is derived that many
-  times. The chain breaks on the first `relevance <= 0` and the outer loop on the first successful
-  `Execute` — which is why a multiplier must test the **action** before it resolves a boss. Encounter
-  rules do it by construction.
+- **A multiplier runs on every popped action that passed `isUseful()`**, dozens per bot per tick, so
+  anything it derives is derived that many times: test the action first
+  ([action-selection.md](action-selection.md#multiplier-semantics)). Encounter rules do it by
+  construction.
 - **Role lookups are not free.** `IsMainTank` → `GetMainTankGuid` walks every group member;
   `IsTank`/`IsDps`/`IsRanged`/`IsHeal` cost a `GET_PLAYERBOT_AI` hash lookup plus a bitmask test
-  (`Engine::HasStrategyType`, `Engine.h:88`). Precompute them for a 25-man loop or a sort comparator,
-  which otherwise calls them on both sides of every compare — `Strategy::InitMultipliers` builds one
-  multiplier per bot, so there is no sharing to worry about. On a **human** the same predicates used
-  to walk the whole talent map and build a `std::map` per call; `specTabCache`
-  (`AiFactory.cpp:49-195`) fixed that, and its shape is worth copying: entries are **invalidated,
-  never erased** — an erase lets an in-flight read on another thread recreate the entry and store a
-  stale answer into a fresh one — results computed across a `generation` bump are discarded, and
-  nothing is cached until `IsInWorld()`, because talents are still loading mid-login.
+  (`Engine::HasStrategyType`). Precompute them for a 25-man loop or a sort comparator, which otherwise
+  calls them on both sides of every compare — `Strategy::InitMultipliers` builds one multiplier per
+  bot, so there is no sharing to worry about. On a **human** the same predicates once walked the whole
+  talent map per call; `specTabCache` (`AiFactory.cpp`) fixed that, and its shape is worth copying:
+  entries are **invalidated, never erased** — an erase lets an in-flight read on another thread
+  recreate the entry and store a stale answer into a fresh one — results computed across a
+  `generation` bump are discarded, and nothing is cached until `IsInWorld()`, because talents are
+  still loading mid-login.
 - **Do not stack cache windows.** Caching an already-cached value again leaves the second layer
   enforcing the previous answer for up to a full window after the first moved on. Cache the expensive
   leaves; read the cheap composite live.
 - **A value built with the default `checkInterval` recomputes on every `Get()`**
-  (`Value.h:71-85`), so each `GetFirstAliveUnitByEntry` or `"nearest npcs"` read is a fresh
+  (`CalculatedValue::Get`), so each `GetFirstAliveUnitByEntry` or `"nearest npcs"` read is a fresh
   sight-range sweep, and Ulduar code took 20-60 of them per bot per tick. One **per-bot scan stamped
   with `getMSTime()`** collapses them (`RazorscaleScan`, `IronAssemblyScan`): a bot never ticks twice
-  in one ms.
+  in one ms. `FindTargetValue` (`"find target"`) is built with interval 1 too.
 - **World state holds still only through the trigger checks.** `ProcessTriggers` checks every trigger
   before any action runs, and no trigger changes the world; an action returning `false` still can —
   drop a target, command a pet, turn the bot, push Yogg-Saron's Brain to 30% and strip Shadow Barrier —
@@ -323,16 +342,21 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   gets the candidate list; a raid whose exclusions need a sweep returns first unless a candidate has
   the entry it would exclude (`ObjectGuid::GetEntry`). Don't re-read `"attackers"` for it: the 1 s
   refresh can hand back a different list than the caller holds.
-- **An open gate is not a live fight, and `z >= 300` is not Yogg's platform.** Triggers run for every
-  bot in the instance between pulls, so a sweep ahead of the live-phase test is paid raid-wide all
-  evening.
+- **An open gate is not a live fight, and `z >= 300` is not Yogg's platform.** A raid strategy
+  registers every boss at once; the encounter gate (`EncounterGatedTrigger`, `EncounterGatedMultiplier`,
+  `RaidEncounterRules::GateOpen`) holds open every encounter not yet killed while none is in progress,
+  so triggers run for every bot in the instance between pulls, and a sweep ahead of the live-phase
+  test is paid raid-wide all evening. A raid not built on encounter definitions has no gate: every
+  boss's triggers run every tick, and its multipliers typically open on `"find target"`.
 - **"Am I the first able provider" costs askers × candidates a tick.** Each bot evaluates everyone
   ahead of it, so reject on what stays false for many ticks first — cooldown, a reserve — and only
   then pay range, sight and `CanCastSpell`, which tests the cooldown itself but after the caller's
   raycast. Likewise health before sight ([algalon.md](../raids/ulduar/algalon.md#what-it-costs)).
-- **Split on action family before testing anything.** Where everything a multiplier suppresses is
-  either a `MovementAction` or a `CastSpellAction` — disjoint families — one `dynamic_cast` each way
-  up front replaces a chain of a dozen for every rotation spell that falls through.
+- **A rule predicate that constructs trigger objects pays their construction on every action it is
+  asked about.** Read the helpers those triggers wrap instead, keeping each trigger's full condition.
+- **A progress latch keyed on a point that moves with the bot grows without bound**: each new key is
+  a fresh latch that lives for the server run and never reaches its give-up. Evicting or re-keying
+  changes which latch matches — a behaviour change, not only a saving.
 - **`Trigger` supports throttling and almost nothing uses it.** The ctor is
   `Trigger(botAI, name, checkInterval = 1)`, normalised as
   `checkInterval == 1 ? 1 : (checkInterval < 100 ? checkInterval * 1000 : checkInterval)` — pass
@@ -342,6 +366,55 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   must copy the inner one's interval: its own default of 1 promotes a throttled trigger to every tick.
 - `Engine::ProcessTriggers` `Check()`s an inactive trigger **once per node** referencing it, so a
   trigger wired to three nodes is evaluated three times while it is quiet.
+
+### Measuring a cost
+
+**Cost symbols**: **S** = one `"possible targets no los"` read (a `Cell::VisitObjects` at
+`SightDistance` 100 plus `IsPossibleTarget` per hostile, no LOS ray); **N** = one `"nearest npcs"`
+read (the same visit **plus a VMAP and dynamic-tree LOS raycast per non-player unit** — 49-67 units
+per Auriaya snapshot, so ~50 raycasts a read); **G100** / **G7** = grid sweeps at those radii.
+
+**Proving a refactor behaviour-neutral.** The equivalence harness is the only validated technique:
+take the old function bodies verbatim from `git show HEAD:<file>` and the new ones from the working
+tree, compile both together with counting stubs, and enumerate the input space — 18.5 M
+combinations, 0 mismatches on XT-002. Include a red-capability check so a pass means something:
+dropping `purgingImmunity` produced 1,392 mismatches and dropping the main-tank exemption 11,520.
+
+**Timing** is `.playerbots pmon` ([../systems/observability.md](../systems/observability.md#timing-a-bot-playerbots-pmon)):
+read ratios, never absolute times.
+
+**Settled — do not re-audit:**
+
+- No `checkInterval` or framework memo on `"possible targets no los"` / `"nearest npcs"`: both are
+  global values, so a memo goes stale across ticks for every other reader.
+- Do not run `isPossible` before the multipliers — Mimiron's and Algalon's multipliers have side
+  effects, and vetoes are logged.
+- `GetCreatureListWithEntryInGrid` is **not** a substitute for a LOS sweep: it is a grid container
+  only, and `AllCreaturesOfEntryInRange` measures **2D** where `AnyUnitInObjectRangeCheck` measures
+  **3D** (`GridNotifiers.h`).
+- Leave the shared `GetFirstAliveUnitByEntry` alone: upstream marks it for removal and every raid
+  calls it, so its replacement is a Custom-owned copy under another name, not an edit in place.
+- Replicating `Cell::CalculateCellArea` + `VisitCircle` to skip the octagon walk is provably
+  identical but copies ~40 lines of core internals that go silently wrong the day AC changes cell
+  visiting. Rejected.
+
+**Open:**
+
+- `BossFireResistanceTrigger` / `BossFrostResistanceTrigger::IsActive` (`BossAuraTriggers.cpp`) run
+  `FindBossByName` — a sight-range sweep plus a UTF-16 lowercase of every unit name — **before**
+  `HasAura`, the spell-known check and the raid-group check, for 7 paladin and 3 hunter triggers in
+  every raid. Reordering changes no behaviour.
+- `Engine::LogAction` formats every engine event for any bot with a real player master
+  (`LogInGroupOnly` defaults to 1), whether or not debug logging is on.
+- Ulduar's two directly pushed multipliers (`UldMultipliers_Shared.cpp`): `UldThreatRedirectMultiplier`
+  makes seven `GetUldUnitByEntry` lookups per Misdirection/Tricks candidate where one scan would
+  serve, and `UlduarBurstWindowMultiplier::EvaluateWindow` ends on an ungated
+  `"find target" razorscale` in every other Ulduar fight. Do **not** split `EvaluateWindow` itself:
+  its per-boss switch lets the `IsBurstCooldownAction` early-out run once per action, not once per
+  boss, and resolves nine boss entries out of **one** `"possible targets no los"` sweep.
+- `MimironLethalWindowActive` (five triggers) and `ThorimBalconyWalk` (one) construct triggers per
+  call, and `YoggSaronBodyDetourAction` keys `YoggSaronWalkMakingProgress` on its moving arc waypoint
+  (both shapes above).
 
 ## Combo points, finishers and stacking auras
 
@@ -367,8 +440,9 @@ Vehicle spellbooks are built on these, and so are several boss auras.
 
 ## Reading a boss script
 
-Detection failures are catalogued in [pitfalls.md](pitfalls.md); these are the ones specific to
-scripted raid encounters.
+Detection failures, spell ids by difficulty included, are catalogued in
+[pitfalls.md](pitfalls.md#detection-that-never-fires); these are the ones specific to scripted raid
+encounters.
 
 - **A triggered instant publishes nothing.** `DoCastAOE` leaves `m_targets.GetUnitTargetGUID()`
   empty, and `m_Events.AddEventAtOffset(…, 3s)` has no cast to observe at all. Where the boss AI
@@ -381,9 +455,6 @@ scripted raid encounters.
 - **A phase heuristic must separate the pull intro from a mid-fight transition.** Both read as "in
   combat, boss non-attackable". Full health separates them whenever the real transitions are
   health-gated.
-- **Confirm which spell id the difficulty in play actually uses.** A rule built on the wrong twin is
-  built on the wrong numbers, and a clean lookup on one id proves nothing about the other. Freya's
-  Detonate is 62598 in 10-man and 62937 in 25-man; Ground Tremor 62437 and 62859.
 - **Read a boss spell's full effect list, not its damage.** "Damage" spells carry riders that decide
   the whole reaction: Freya's Ground Tremor is `Effect_1` damage plus `Effect_2 = 68`
   `SPELL_EFFECT_INTERRUPT_CAST`, which silences the raid's school for 10s — the damage number says
@@ -408,8 +479,9 @@ scripted raid encounters.
 - **A `TARGET_DEST_TARGET_ENEMY` area spell picks its victims in `Spell::_cast`**, at the cast's end,
   so the cast bar is the whole dodge window and a Speed only delays the damage.
 - **A chain spell jumps by `IsWithinDist`**, both combat reaches added (10 yd magic default + 1.5 +
-  1.5 = 13 yd centre to centre, 3D, in LOS, nearest first). `EffectChainAmplitude` multiplies each
-  jump (`Spell.cpp:8684`), so a chain can grow per jump, not only shrink.
+  1.5 = 13 yd centre to centre, 3D, in LOS, nearest first). `EffectChainAmplitude`
+  (`SpellEffectInfo::CalcDamageMultiplier`) multiplies each jump in `Spell::DoAllEffectOnLaunchTarget`,
+  so a chain can grow per jump, not only shrink.
 - **A hazard the script reschedules on a phase edge** (engage, emerge, each cast start) can't fire
   before its earliest timer: arm the dodge only from that timer minus a lead, or facing swings in the
   dead window cause dodges.

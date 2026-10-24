@@ -35,10 +35,9 @@ fully looted, so it stays forever: every Large Sack of Ulduar Spoils keeps 2 Run
 Locked lockboxes and never-opened sacks go too, by choice; their contents are lost. `DestroyItem`
 already drops the container's `item_loot_storage` rows.
 
-`GetViableSlots` had to move into the public section of `RandomItemMgr.h`; it is a const lookup into
-a table built once at init, so there is nothing to protect. It is reused rather than replaced because
-the module already carries four other `InventoryType` → slot mappings, and this is the only
-data-driven one that covers cloak and tabard.
+`GetViableSlots` is public in `RandomItemMgr.h` because it is a const lookup into a table built once
+at init, so there is nothing to protect. Of the module's five `InventoryType` → slot mappings it is
+the only data-driven one that covers cloak and tabard.
 
 | Protected | Why |
 |---|---|
@@ -66,25 +65,17 @@ high-iLvl unusable piece survives.
 **51809 "Portable Hole" (24 slots)**. It runs from `MaintenanceAction` (alt bots gated on
 `Playerbots.AltMaintenanceBags`) and from `PlayerbotFactory::Randomize`.
 
-It used to take a `destroyOld` flag and was wrong either way. With `destroyOld = false` the only skip
-test was item-id equality, so any other occupied slot hit `if (old_bag) continue;` and never upgraded
-however small the bag was. With `destroyOld = true` the `DestroyItem` ran and *then* the same
-`continue` fired — `old_bag` was still a non-null, now stale, pointer — so `EquipNewItem` never ran
-and `Randomize()` destroyed the bag **and its contents**, leaving the slot empty. The flag is gone;
-`InitBags()` now upgrades any plain bag smaller than 51809 and moves the old bag's contents across.
+`InitBags()` upgrades any plain bag smaller than 51809 and moves the old bag's contents across. A
+skip on "slot occupied" never upgrades anything, and destroying the old bag before equipping loses
+its contents: both shapes shipped once. **Death Knights are the case that matters**: they start with
+four 12-slot Deathweave Bags from `CharStartOutfit`, so every slot is occupied at creation (53,489
+characters were still on them against 120 on Portable Holes). Every other class starts bagless.
 
-**Death Knights were the whole motivation.** They start with four 12-slot Deathweave Bags from
-`CharStartOutfit`, so every slot is occupied at creation and maintenance never upgraded any of them —
-measured at 53,489 characters still on the 12-slot bags against 120 on Portable Holes. Every other
-class starts bagless.
-
-**Quivers, ammo pouches and profession bags are never touched**, by `InitBags` or by the loot path.
-The loot path needed fixing to keep that true: `ItemUsageValue::GetSmallestBagSize` started its loop
-at `INVENTORY_SLOT_BAG_START + 1`, and that off-by-one was the *only* reason a hunter's quiver in slot
-19 survived — correcting the bound alone would have made the quiver report as the smallest bag and get
-swapped out. Both it and `EquipAction::GetSmallestBagSlot` now skip any slot whose item is not
-`ITEM_CLASS_CONTAINER` + `ITEM_SUBCLASS_CONTAINER`. The two must agree: a protected container has to
-be invisible to both, or one will offer a slot the other refuses. `GetSmallestBagSize` keeps `0` for a
+**Quivers, ammo pouches and profession bags are never touched**, by `InitBags` or by the loot path:
+`ItemUsageValue::GetSmallestBagSize` and `EquipAction::GetSmallestBagSlot` skip any slot whose item
+is not `ITEM_CLASS_CONTAINER` + `ITEM_SUBCLASS_CONTAINER`, over every bag slot (a hunter's quiver in
+slot 19 would otherwise report as the smallest bag and get swapped out). The two must agree: a
+protected container has to be invisible to both, or one will offer a slot the other refuses. `GetSmallestBagSize` keeps `0` for a
 genuinely empty slot and returns `uint32` max when every slot is occupied and none is replaceable, so
 `Calculate` yields `ITEM_USAGE_NONE`.
 

@@ -16,18 +16,26 @@ watched set), `Lifecycle` (open/close, map and script events), `Config` (config,
 
 Readers in [tools/botobs/](../../tools/botobs/): `postmortem.py` for one pull, `batch.py` for the
 corpus, `bosses/<boss>.py` per encounter. All import the `raidobs/` package, a module per question,
-which imports none of them.
+which imports none of them. Their `--help` lists every view and flag; what it does not say is below.
+A boss reader consumes the probes its encounter publishes rather than re-deriving them: a re-derived
+model rots while its constants still match the source.
+The suite is `python -m unittest discover -s tools/botobs/tests`. There is deliberately no C++ unit
+test target: the core's socket exists (`src/test/CMakeLists.txt` reads `ACORE_MODULE_TEST_SOURCES`,
+which nothing sets), but `BUILD_TESTING=ON` forces gcov flags on the whole build and `unit_tests`
+links `game` plus `modules`, so a module unit test links the entire server — a slower loop than the
+one it would shorten.
 
 ## Reading a trace
 
 Traces land in `<LogsDir>/botobs/<map>_<instance>_<boss>_<epoch>.ndjson`, named from the creature that
-engaged. `.playerbots debug obs` lists what is open.
+engaged. `.playerbots debug obs` lists what is open. NDJSON is one record per line with no enclosing
+array, so `grep '"e":"death"'` beats parsing the file.
 
 A fight with several bosses lands under whichever one engaged, so `BOSS_ALIASES` in
-`raidobs/encounter.py` maps every such slug to one encounter: the Iron Assembly's 30 pulls read as 16
-Brundir and 14 Molgeim, and Freya's 11 three-elder pulls as Stonebark. Selection and grouping both go
-through it, and so does `cfg.hardmode`, whose keys are these names - an unmapped slug means the
-hard-mode check silently never applies.
+`raidobs/encounter.py` maps every such slug to one encounter: Iron Assembly pulls file as Brundir or
+Molgeim, Freya's three-elder pulls as Stonebark. Selection and grouping both go through it, and so
+does `cfg.hardmode`, whose keys are these names — an unmapped slug means the hard-mode check silently
+never applies.
 
 Trial of the Crusader: `gormok-the-impaler`, `acidmaw`, `dreadscale`, `icehowl` and `fire-bomb` →
 `northrend-beasts`; the 28 champions of `ToCHelpers_FactionChampions.h`, both factions →
@@ -36,12 +44,12 @@ engage under their encounter's slug. Never alias `the-lich-king`: ICC's boss, an
 boss-flagged unit here. `anub-arak` is also Azjol-Nerub's boss, so a slug cannot tell the two apart.
 
 `--coverage` and `--probes` join on that name too, and the map-name fallback (`ulduar`) matches no
-encounter, folding every node into the "gate shut this pull" line - 342 on the 2026-09-13 Yogg wipes,
-reading as a closed gate when only the join failed. So a slug still equal to its map's `Map.dbc` name
-(`encounter.MAP_SLUGS`) resolves to the boss-flagged unit that traded damage; the flag alone is not
-enough, as Yogg's room holds the four Keepers. **Any other slug stands**: Mimiron files under his
-encounter name, yet the first boss-flagged unit to trade damage is Leviathan Mk II. `--boss` opens
-only map-named files beyond those its name selects.
+encounter, which would fold every node into the "gate shut this pull" line and read as a closed gate
+when only the join failed. So a slug still equal to its map's `Map.dbc` name (`encounter.MAP_SLUGS`)
+resolves to the boss-flagged unit that traded damage; the flag alone is not enough, as Yogg's room
+holds the four Keepers. **Any other slug stands**: Mimiron files under his encounter name, yet the
+first boss-flagged unit to trade damage is Leviathan Mk II. `--boss` opens only map-named files beyond
+those its name selects.
 
 A shut encounter gate reads like a false condition, so `--coverage` folds a node owned by another
 encounter of the raid into that gated line rather than list it NEVER. The owner is the trigger-name
@@ -49,115 +57,107 @@ prefix the node leads with: `ULD_PREFIXES` holds the Ulduar ones, and `TOC_PREFI
 `gormok`, `northrend worms`, `icehowl`, `jaraxxus`, `faction champions`, `twin valkyr`, `anubarak`.
 Every per-encounter ToC trigger name leads with one, so a new ToC encounter prefix needs a row.
 
-```
-postmortem.py <file>                 summary + a block per death
-postmortem.py <file> --death N       full rewind for one death
-postmortem.py <file> --bot NAME      one bot's timeline
-postmortem.py <file> --track NAME    position track + distance to each boss
-postmortem.py <file> --notes [KEY]   pull/note/hazard/end only; KEY narrows to one note-key prefix
-postmortem.py <file> --probes [KEY]  every probe key ranked by churn; name one exactly for its timeline
-postmortem.py <file> --during K=V    scope --probes/--where/--moves/--threat/--clump to a latch value
-postmortem.py <file> --stalls [MS]   held station but still issuing accepted moves - i.e. stuck
-postmortem.py <file> --idle [MS]     held a target and cast nothing - the same failure, cast side
-postmortem.py <file> --vetoes        which multiplier zeroed which action, most often first
-postmortem.py <file> --moves [ACT]   what each mover did to the raid's radius from --from
-postmortem.py <file> --where SPEC    radius of each death / cast:<spell> / note:<key> from --from
-postmortem.py <file> --threat [ENT]  who the hostiles held as target, by role, weighted by time
-postmortem.py <file> --from ANCHOR   the point those three measure from; --band scores against it
-postmortem.py <file> --clump [YARDS] largest group inside one circle, per snapshot
-postmortem.py <file> --verify        check the schema's invariants; non-zero exit if any fail
-postmortem.py <file> --coverage [P]  what each strategy node did, and why the rest did nothing
-postmortem.py <file> --validity      only the banner below; non-zero exit if anything disqualifies
-postmortem.py <file> --since REF     compare the build against REF rather than HEAD
-```
-
 **The fight supplies the point, `geometry.py` the rest.** `--from` names a `const Position`, in any
-initialiser form, declared anywhere under `src/Ai/Raid/` - 320 of them, plus 716 `constexpr float`
-radii for `--band` - parsed out of the source the way probe keys are, so nothing is kept by hand and
-every trace on disk can be measured against any of them. A unique suffix is enough
-(`YOGG_SARON_MIDDLE`), an ambiguous one lists the candidates, and a name two files declare with
-different values (12 radii, `LEASH_RADIUS` among them) is refused with both listed. `--band` also
-takes a bare number. `--from entry:<N>` measures from a creature's spot at the pull, refusing an entry
-that more than one sampled creature shares. That spot stays put while the creature walks, so a
-boss-relative formation needs its own reader: Vezax's camp reads a median 8-16 yd off against one.
-This turns "`move.by` churned 2,396 times" into "957 `flee` moves, median 21.5 yd out to 24.9, 96%
-ending further from the band than they started" - the Yogg-Saron phase 1 defect.
+initialiser form, declared anywhere under `src/Ai/Raid/`, and `--band` a `constexpr float` radius
+there, parsed out of the source the way probe keys are, so nothing is kept by hand and every trace on
+disk can be measured against any of them. A unique suffix is enough (`YOGG_SARON_MIDDLE`), an
+ambiguous one lists the candidates, and a name two files declare with different values
+(`LEASH_RADIUS`) is refused with both listed. `--band` also takes a bare number. `--from entry:<N>`
+measures from a creature's spot at the pull, refusing an entry that more than one sampled creature
+shares. That spot stays put while the creature walks, so a boss-relative formation needs its own
+reader: Vezax's camp reads a median 8-16 yd off against one. This turns "`move.by` churned 2,396
+times" into "957 `flee` moves, median 21.5 yd out to 24.9, 96% ending further from the band than
+they started".
 
 A `move` carries its destination only, so `--moves` joins the snapshot before it for the origin.
 `--where` also takes `cast:<spell>`, because a creature's death reaches no record at all and what it
-cast on the way out stands in - see [engine/pitfalls.md](../engine/pitfalls.md). `--threat` with no
-entry reads every sampled hostile except the raid's own pets. These three and `--clump` take
-`--during KEY=VALUE`; any other view exits 2 rather than read the whole pull under the scope.
+cast on the way out stands in (below). `--threat` with no entry reads every sampled hostile except
+the raid's own pets. These three and `--clump` take `--during KEY=VALUE`; any other view exits 2
+rather than read the whole pull under the scope.
 
-`--verify` is 18 checks. `batch.py` runs the corpus rather than one pull - `--boss SLUG`,
-`--since REF`, `--valid`, `--census`, `--verify`, `--probes`, `--split-at REF`, `--baseline DIR` -
-streaming one trace at a time, because 130 of them are 1.4 GB. Extra positionals are more roots, which
-is how a baseline survives the 7-day retention.
+`batch.py` streams one trace at a time, because the corpus runs to gigabytes; it is its own tool
+because `postmortem.py` dispatches a first-match ladder over one positional. Extra positionals are
+more roots, which is how a baseline survives retention.
 
 **`--split-at REF` answers "did the change help".** It compares pulls before a commit against pulls
-after it on every metric either side carries - deaths less the wipe command's, stalls, clumping,
-coverage buckets, and churn per probe key and per action pair - reporting median and range per side,
+after it on every metric either side carries — deaths less the wipe command's, stalls, clumping,
+coverage buckets, and churn per probe key and per action pair — reporting median and range per side,
 and calling a metric *moved* only when the two ranges are disjoint **and** the gap is at least a tenth
-of the larger side and visible at the printed precision - without those, 0.14 against 0.13 ranks as a
+of the larger side and visible at the printed precision — without those, 0.14 against 0.13 ranks as a
 finding. A stream has to appear in most of each side's pulls, and a one-sided one be non-zero there.
 The sides are rarely the same size, so with twelve pulls before and three after, anything occasional
-shows up on the bigger side and nowhere else - `apply oil <-> clean quest log` beside the raid streams.
-Two-sided is no safer: a phase one of two pulls reached leaves that pull's value alone, which no
-range overlaps - 25 rows of `--split-at 64802c8ec` moved that way. Splits on `hdr.bin` where there is
-one, else on the pull's own timestamp, which assumes you rebuilt before pulling. Unprompted, it
-reproduced Mimiron's documented phase-1 flip-flop:
-`flip.act.won:follow <-> mimiron arc spread action` at 10.3/min before `eb9db6855`, absent after.
+shows up on the bigger side and nowhere else (`apply oil <-> clean quest log` beside the raid
+streams). Two-sided is no safer: a phase only one of two pulls reached leaves that pull's value alone,
+which no range overlaps. Splits on `hdr.bin` where there is one, else on the pull's own timestamp,
+which assumes you rebuilt before pulling.
 
 **`--probes` names keys the source declares that never reached a trace of their own boss.** One silent
 pull usually means the thing did not happen; silence across every pull of a boss means the recorder is
-dropping it.
-
+dropping it. Only encounters the selection pulled count, so an unfought boss's keys are not reported.
+In one trace, `--probes` reads each key by the shape of its emitter — a latch (`ObsValue`) as a state
+timeline, an assignment (`ObsGuidMap`/`ObsGuidSet`) per holder, an event (`Note`) as a count — and
+ranks keys by churn: changes per minute and A-B-A flips back to the value just left.
 A key's boss comes from its prefix. `NOTE_PREFIXES` decides alone where it has a row: `nb`,
 `jaraxxus`, `fc`, `tv`, `anub` name ToC's five encounters, and `toc` is raid-wide, matching all five;
 the table is also what keeps `anub` off Naxx's `anub-rekhan`. Any other prefix matches as the slug
-spelled out (`thorim`), its initials (`fl`) or its first word (`yogg`).
+spelled out (`thorim`), its initials (`fl`) or its first word (`yogg`). The declared set is parsed
+from `src/`, call sites wrapped across lines included; a hand-kept key list goes wrong in both
+directions within a week, so never keep one beside the parse.
 
-NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` beats parsing 15 MB.
+### Reading traps
+
+- **Churn is only legible inside the phase you care about.** Mimiron's phase-1 flip-flop counts 57
+  A-B-A within phase 1 and disappears into ~700 across the whole pull, so `--probes --during
+  mimiron.phase=1` reproduces it and a whole-pull number hides it.
+- **A change-only key keeps a stale value across windows**, a dead bot's duty for one. Write an
+  explicit `none` when the window opens, or have the reader cut spans at death. Nor does a per-bot
+  change-only latch that coverage reads NEVER prove its node dead: a generic node may have taken the
+  action first (generic interrupts kicked every Fel Fireball before Jaraxxus's duty node could).
+- **A note written before the session opens is lost.** The pre-roll ring keeps only snapshots, so a
+  per-bot `NoteDerived` written before the pull never reaches a trace that opens at the engage. Write
+  it again after the open, from any bot's tick: a bot mid-cast or drinking runs no triggers. Opening
+  early with `MarkPull` fails on a long pre-pull wait: `IdleCloseSeconds` (30 s) closes it first.
+- **`snap` rows carry no combat state.** A drink or eat `act` OK row stands in: both actions'
+  `isPossible` require the bot out of combat.
 
 ## Is this trace evidence?
 
-Every report opens with a validity banner. Establishing these by hand cost more than reading the
-trace, and getting one wrong cost a session — three Freya pulls on 2026-09-05 were read against a
-binary predating the fix by two hours. Six things can disqualify a pull; the header carries four.
+Every report opens with a validity banner, and getting one of these wrong by hand has cost whole
+sessions. A pull recorded before a fix landed looks exactly like a pull where the fix did nothing.
+Six things can disqualify a pull; the header carries four.
 
 **A disqualifier that fires on the whole sample rejects the whole sample and says nothing**, so two of
 them only decide once you say what is under test. The loop commits after every pull, so every trace
-predates HEAD; every normal-mode pull of a hard-mode-capable boss has hard mode off. Left decisive
-they returned 0 of 15 Yogg pulls and 0 of 55 Gluth ones. `--since REF` names the change being tested
-and makes the build decide, so a REF that does not resolve disqualifies too (`batch.py` exits 1);
-`--hardmode` says the pull was meant to be one. A human holding tank or heal always decides — the
-strategy was not asked to do the job, whatever else was being tested.
+predates HEAD; every normal-mode pull of a hard-mode-capable boss has hard mode off. `--since REF`
+names the change being tested and makes the build decide, so a REF that does not resolve disqualifies
+too (`batch.py` exits 1); `--hardmode` says the pull was meant to be one. A human holding tank or heal
+always decides — the strategy was not asked to do the job, whatever else was being tested.
 
-- **`bin`** — the worldserver binary's mtime, epoch ms: what
-  `docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver` reports. It stands in
-  for a build hash because nothing better exists — this module has no `CMakeLists.txt` to stamp one
-  from, and AzerothCore's revision names the core. Read once at load from `/proc/self/exe`, so 0 off
-  Linux. Compared against HEAD's commit time; `--since` takes a commit-ish or ISO time instead
-  (local without an offset, as for `--split-at`).
+- **`bin`** — the worldserver binary's mtime, epoch ms (UTC; convert before comparing against a local
+  commit time). It stands in for a build hash because nothing better exists — this module has no
+  `CMakeLists.txt` to stamp one from, and `AzerothCore rev.` in `Server.log` names the core. Read once
+  at load from `/proc/self/exe`, so 0 off Linux. Compared against HEAD's commit time; `--since` takes a
+  commit-ish or ISO time instead (local without an offset, as for `--split-at`).
 - **`cfg.hardmode`** — the four `Ulduar*HardMode` toggles (Vezax, Iron Assembly, XT-002, Mimiron),
   keyed by the conf's boss names so the banner joins them against the boss the trace names. Flame
   Leviathan, Freya, Thorim and Yogg-Saron have no toggle, so their pulls never get `hardmode-off`. A
-  kill with the toggle off is not a hard-mode kill — that disqualified the only kill in five Thorim pulls on 2026-09-12.
+  kill with the toggle off is not a hard-mode kill.
 - **humans** — read through `trace.humans`, not `roster[].h` alone: anyone who zoned in after the
-  header appears only in a `unit` record. A human holding a role means the strategy did not play it,
-  which is what left a Plasma Blast fix untested. `roster[].r` carries their real role; it used to read
-  the literal `"human"`, duplicating `h` and destroying the half that decides anything. Tank or heal
-  disqualifies the pull, damage among 24 bots is recorded and not counted, and traces written before
-  the fix can only say a human was present.
+  header appears only in a `unit` record. `roster[].r` carries a human's real role (the static
+  `PlayerbotAI::IsTank`/`IsHeal`/`IsRanged` forms fall through to the talent tab when there is no bot
+  AI); older traces carry the literal `"human"` there and can only say a human was present. Tank or
+  heal disqualifies the pull; damage among 24 bots is recorded and not counted.
 - **`diff`** — rendered 10/25 normal or heroic, not a bare id.
 - **raid dead at the open** — over half the roster at 0 hp in the first in-pull snapshot: nobody
-  pulled, so it always decides (`batch.py` flag `D`). A Yogg trace opened 45 s after a wipe with only
-  the human alive, who used `.die`, and read as a one-death wipe. The recorder now drops these.
+  pulled, so it always decides (`batch.py` flag `D`). The recorder now drops these.
 - **no combat engine** — no `covdef` row tagged `c`: no bot ever entered combat, so nothing in the
   trace measures a fight. `Attack()` is what enters that engine, so an encounter zeroing the target
-  pickers without assigning one of its own reads exactly like this — two Vezax pulls on 2026-09-23
-  sat at 99% boss health buffing themselves. Always decides; pre-v12 traces have no `covdef` and
-  cannot answer.
+  pickers without assigning one of its own reads exactly like this. Always decides; pre-v12 traces
+  have no `covdef` and cannot answer.
+
+The build's timestamp is not proof the code ran. Where a change's effect must be *shown*, confirm it
+from the records: a node the change added appears at least once, and an action a new multiplier
+zeroes carries that multiplier's label in a `veto` row instead of its own relevance.
 
 `cfg` also carries `cheats` and `mapthreads`, and is a fixed short list on purpose: a full dump would
 grow with every option and bury the few that decide whether a pull counts.
@@ -180,7 +180,7 @@ long as anyone stands on it, which no 5-man is worth.
 A session opens on the first of: boss state → `IN_PROGRESS`, `RaidObs::MarkPull` from encounter code,
 or a boss-flagged creature engaging a raid member. It closes on kill, wipe, reset, map destruction, or
 `IdleCloseSeconds` out of combat, and deletes its file if nobody fought: no roster member ever in
-combat (55 Gluth walk-throughs, 3 s apart), or combat only while over half the raid was dead.
+combat, or combat only while over half the raid was dead.
 
 **Boss state is observed, not requested.** `SetBossState` fires its hook *before* deciding: it drops
 every change while a boss loads from the DB, and refuses `DONE` while a world-boss minion lives. The
@@ -216,18 +216,17 @@ leaves anyone alive closes on idle (a full wipe still reads false), and a war en
 as `reset`.
 
 **A trace can rename itself.** Opened by `bossstate` or `MarkPull` with nothing engaged yet, it has
-only the map name to use — three traces were filed `ulduar`: an Iron Assembly and a Thorim wipe on
-2026-08-31, a Yogg-Saron wipe on 2026-09-04. Whatever names it first renames the file and emits a
-second `pull`, `src` `rename`, carrying `was`. `hdr.boss` stays stale, line one being long written, so
-**prefer the rename record**. Only the map-name fallback is ever upgraded.
+only the map name to use. Whatever names it first renames the file and emits a second `pull`, `src`
+`rename`, carrying `was`. `hdr.boss` stays stale, line one being long written, so **prefer the rename
+record**. Only the map-name fallback is ever upgraded.
 
 Three callers reach it, because the boss cannot always say: `OnCreatureEngage`, the first boss to
 swing at a player; `MarkPull` on an already-open session; and `NamePull(map, name)`, which takes the
 name outright. Yogg-Saron is why the last two exist — phase one is fought against Sara, the Voice and
 the Guardians, none flagged a boss, so nothing engages and the only boss the file named was General
 Vezax, swept in from the next room. `EncounterGatedTrigger` calls `NamePull` when a trigger fires
-while its own encounter is `IN_PROGRESS`; the gate's own test leaves every trigger open between
-pulls, far too loose to name by.
+while its own encounter is `IN_PROGRESS` (the gate's own test leaves every trigger open between pulls,
+far too loose to name by), and ToC's gate names its pull from the encounter slug (`ToCEncounterSlug`).
 
 While a raid sits on a tracked map with no session, snapshots go to a `PreRollSeconds` ring that is
 flushed into the file when a pull starts — so the trace opens *before* the engage, and pre-pull
@@ -264,7 +263,7 @@ else `7`. `0` still means no unit.
 | `act` | `g`,`a`,`rel`,`vd`: OK, FAILED, IMPOSSIBLE, USELESS, PREREQ, UNKNOWN |
 | `veto` | `g`,`m` multiplier,`a` action it zeroed. Only the first multiplier to zero an action writes, again only when the verdict changes, so counts are rows, not ticks, and miss a guard behind another zero |
 | `covdef` | `d[]` rows `[id,node,strategy,engine,trigger?]`; `engine` c/n/d, `trigger` only when it differs from the node's name; chunked, so a `cov` may cite a chunk several records back |
-| `cov` | `g`,`r[]` rows `[id,checks,fires,pushes,won,shared,throttled,minimal,dead]`, trailing zeros trimmed - pad short rows back out |
+| `cov` | `g`,`r[]` rows `[id,checks,fires,pushes,won,shared,throttled,minimal,dead]`, trailing zeros trimmed - pad short rows back out ([node coverage](#node-coverage)) |
 | `move` | `g`,`k` generator,`x`,`y`,`z`,`tgt`,`ok`,`r` reason,`by` owning action,`pr` priority; on `wait` also `hpr`,`hms` — the walk that beat it |
 | `note` | `g`,`k` kind,`txt` — assignments, latches, phases, derived state |
 | `haz` | `sp`,`shape`,`x`,`y`,`z`,`ttl`, plus shape fields — hazards with no world object; timeline only, never tested against a death |
@@ -286,9 +285,8 @@ so the hook feeding `blow` never fires and `killer` is the victim itself: `reset
 `wipe` command (`WipeAction`), `self` any other script's kill - Yogg's Insane running out, the Brain
 killing whoever hits it before its tentacles die. Falling, lava and `.die` on yourself do pass
 `DealDamage`, reading as a `blow` from the victim with no `dmg` row, since none reaches the combat log;
-`--verify` allows that. Absent whenever there is a `blow`. 32 of 201 deaths on 2026-08-31 — 16 of one
-Freya attempt's 29 — read as unexplained combat deaths without it.
-`postmortem.py` numbers `--death N` over the others and counts resets separately.
+`--verify` allows that. Absent whenever there is a `blow`. `postmortem.py` numbers `--death N` over the
+others and counts resets separately.
 
 **An aura that kills its owner when it comes off writes one death twice.** Yogg's Insane calls
 `Unit::Kill` from `OnRemove` and dying strips it, so the kill re-enters and `OnUnitDeath` fires nested
@@ -299,16 +297,15 @@ that tick's lethal blow, since the nested call names the victim. Readers fold ol
 
 **Name every id in the file.** `unit` and `spell` are written once each, so later records carry a bare
 number and the trace still reads standalone: `spell 63511` needs a DBC open beside it, `Frozen Blows
-63511` does not. Call `EnsureUnit`/`EnsureSpell` from *every* field that emits an id, not just the
-obvious one — `aura.s` and `cast.tgt` stayed unnamed for a release because only the caster was covered,
-and a death block read `Flash Freeze from #1:1925`. A new *emitter* needs the sweep as much as a new
-field: `NoteHazard` went unswept until Thorim became its first caller, then wrote 121 rows of bare
-`62057`, and `snap.u`'s casting spell wrote 99 bare ids across the 2026-09-04/05 traces because
-`UnitRow` is a free function holding no session — it hands the ids to its caller now, and the pre-roll
-ring carries them until there is a session to name them with. Its pet and vehicle rows ride it too,
-unnamed in 33 traces, built at sample time because an expiring guardian is gone by the drain. A guid
-inside `note.txt` is the
-exception: that is free text the recorder cannot inspect, so `postmortem.py` joins it on read.
+63511` does not. Call `EnsureUnit`/`EnsureSpell` from *every* field and every *emitter* that writes an
+id — `aura.s`, `cast.tgt` and `NoteHazard` each shipped unswept once. Where no session exists yet
+(`UnitRow` is a free function, the pre-roll has none) the ids travel with the sample — `castSpells`
+and `unitRecords` on the pre-roll ring, emitted at the drain through `EnsureSpell` /
+`EnsureUnitRecord` — and a unit record is built at sample time, because an expiring guardian (Army of
+the Dead ghouls, Mirror Images) is gone by the drain. A guid inside `note.txt` is the exception: free
+text the recorder cannot inspect, so `postmortem.py` joins it on read. **Open:** `NoteAuraApplied`
+sets the caster without `EnsureUnit`, so a same-tick aura from a caster that left the map can reach
+`death.auras` unnamed.
 
 **Emit per engine pass, not per verdict.** A pass walks several action nodes and reports a verdict for
 each, so no single verdict is news on its own. `act` and `veto` buffer until `BeginTick` closes the
@@ -387,8 +384,8 @@ raid's own Death and Decay. What is lethal there is a creature, so hazard units 
 object that never enter combat are swept into `snap.u` instead, capped at the **nearest**
 `OBS_MAX_WATCHED` (40) so a trash-heavy pull cannot blow the row count up. Nearest, because the cap
 decides who makes the row set and grid order is not a ranking: at Hodir it binds in 94-96% of
-snapshots, and in grid order every slot went to Thorim arena trash parked 74+ yd out, so across three
-traces not one ice block, Toasty Fire or icicle was ever sampled — the units the sweep exists for.
+snapshots, and in grid order every slot went to Thorim arena trash parked 74+ yd out, so not one ice
+block, Toasty Fire or icicle was ever sampled — the units the sweep exists for.
 
 The sweep sees only its anchor's phase, so the anchor is the first roster player in the normal phase:
 one bot inside an Algalon hole would otherwise drop every hole, star and constellation from the rows.
@@ -421,7 +418,7 @@ position no MotionMaster saw. `follow` and `chase` are left out of that latch fo
 neither has a destination to arrive at.
 
 **A `wait` is a contest, so record both sides.** `IsWaitingForLastMove` yields only to a *strictly*
-higher priority, so an equal-priority command waits out the whole walk already in flight. `pr` is what
+higher priority ([pitfalls.md](../engine/pitfalls.md#movement-that-silently-no-ops)). `pr` is what
 this command was issued at, `hpr`/`hms` what beat it and for how long. Without them a trace reports two
 thirds of moves refused and cannot say what won: Hodir's shelter move lands 12.7% of the time purely
 because it sits at `combat` alongside `reach melee`. `follow` and `chase` never reach the gate and carry
@@ -434,40 +431,83 @@ change; an additive one keeps the old version in `READABLE_SCHEMAS` so traces al
 read. A new sentinel in an existing column is not additive — a reader that does not know it computes a
 wrong number.
 
+**Audited and correct — do not re-audit** (cross-checked against `creature_template`, `Spell.dbc` and
+the snapshots): an aura `dur` longer than the DBC base is a talent or glyph extension, the real
+modified duration; implied-speed outliers are real events (a Blink cast ~100 ms before a jump of
+Blink's distance, Thorim's bunnies repositioned exactly 128 yd, Sif's blinks, the raid zoning in
+during pre-roll); `moving` disagreeing with displacement sits on a 250 ms sampling boundary, or is a
+bot asking to move and not moving, which `--stalls` exists to surface; deaths without
+`acts`/`lastmove` are human players, who have no engine; `--bot`'s heal arrow (`-> hp`) is right as
+written, since `heal.hp` is the health after.
+
+## Node coverage
+
+`cov` is the runtime twin of pblint ([pitfalls.md](../engine/pitfalls.md#names-fail-silently-at-runtime)):
+what each strategy node did, per bot. `--coverage` buckets each node, worst first:
+
+| Bucket | Test | Means |
+|---|---|---|
+| `DEAD` | `dead > 0` | the name resolved to no creator this bot's own context stack carries |
+| `NEVER` | checked, nothing pushed or won | asked every pass, never true |
+| `LOST` | `pushes > 0`, `won == 0` | fired and was queued, never ran — otherwise indistinguishable from a node never wired in |
+| `THIN` | won, but fired on under 20% of the bots carrying it | role-shaped |
+| `THROT` / `MIN` | only `throttled` / only `minimal` | its `checkInterval`, or minimal mode under relevance 100, never let it be asked |
+| `ok` | `won > 0` | ran |
+
+The columns: `checks` (`Trigger::Check()` ran), `fires` (it returned an event), `pushes` (that turned
+into a queue entry), `shared` (pushed on a `Trigger*` a sibling node fired this pass), `throttled`,
+`minimal`, `dead`, and `won`. Decisions behind the shape:
+
+- **`won` is keyed by trigger name**, from `event.GetSource()` at the OK verdict, so **`won <= pushes`
+  is not an invariant**: an action can win in a pass where nothing was pushed, having survived in the
+  queue. The ratio is the signal, not the difference. `checks + throttled + minimal + shared + dead` is
+  the pass count and is deliberately not recorded: a redundant column is a `--verify` failure the
+  moment the two disagree.
+- **No `act.src`.** `Queue::Push` de-dupes by action name and `updateExistingBasket` keeps the
+  existing basket's `Event`, so in the case `src` would exist for — two triggers pushing one action in
+  a pass — it names the first pusher and is silently wrong about the second. It would also have to
+  join the `act` latch key, multiplying the stream.
+- **Counters live in a vector parallel to `Engine::triggers`**, never keyed by `TriggerNode*`:
+  `Engine::Reset` deletes every node and `PlayerbotAI::ChangeEngine` re-inits on every engine change,
+  so recycled addresses would merge counters across differently-named nodes. Names are resolved once,
+  at drain. Strategy attribution is the index span each strategy's `InitTriggers` appended at
+  `Engine::Init`, so all of a raid's nodes read as that raid's one strategy; per-encounter separation
+  is the trigger-name prefix (above).
+- **Accumulated in the engine, flushed once**: streaming would be tens of thousands of records a
+  second for a 25-man. One drain runs at the top of `Engine::Init`, before `Reset`, catching the
+  rebuild when a bot enters combat or dies (so a bot that died mid-pull has `d` engine rows); the other
+  in `CloseSession` through `PlayerbotAI::ObsDrainCoverage`, about 230 KB a pull. `shutdown` and
+  `mapgone` write no coverage: they close with the thread pool gone.
+- **Rows are per bot, not raid-summed.** A reader can sum per-bot rows and cannot un-sum an
+  aggregate, and the failures this exists to catch are role-shaped. The view sums with an `n/25 bots`
+  column; `--by-bot` splits it.
+
 ## Adding a probe
 
 Declare a probe in `RaidObs.h`, define it in the `RaidObs*.cpp` that owns its concern.
 `RaidObsSession.h` is shared state, never public API.
 
-Store assignment state in the traced containers and it records itself — instrumentation follows the
-data, not the call sites, so a new boss is covered without further work:
-
-```cpp
-RaidObs::ObsGuidMap<uint8> meleeSlots{"thorim.slot"};      // per-bot assignment
-RaidObs::ObsGuidSet ringArrived{"thorim.ringarrived"};     // membership latch
-RaidObs::ObsValue<uint32> runicSmashSide{"thorim.smashside"};  // per-instance scalar
-```
+Store assignment state in the traced containers — `RaidObs::ObsGuidMap<T>` (per-bot assignment),
+`ObsGuidSet` (membership latch), `ObsValue<T>` (per-instance scalar), each constructed with its key
+(`{"thorim.slot"}`) — and it records itself: instrumentation follows the data, not the call sites, so a
+new boss is covered without further work.
 
 They emit only on real change since the trace opened: they outlive the pull, so their first write in
-a trace restates the whole container - Yogg's second pull on one build once had no `yogg.phase=1`.
-Non-const iteration and iterator-`erase` exist for prune loops and
-deliberately emit nothing — dropping a departed member is not an assignment. `erase(guid)` does emit,
-on both containers: clearing one named bot is a wipe reset or a boss that is gone, which is real news.
-Keep scan timestamps and cached guid lookups in bare types; tracing bookkeeping is noise.
+a trace restates the whole container. Non-const iteration and iterator-`erase` exist for prune loops
+and deliberately emit nothing — dropping a departed member is not an assignment. `erase(guid)` does
+emit, on both containers: clearing one named bot is a wipe reset or a boss that is gone, which is real
+news. Keep scan timestamps and cached guid lookups in bare types; tracing bookkeeping is noise.
 
 The key guid decides which session the record lands in; where it is not a player, the bot whose tick
-set it does. Before that fallback existed, a container keyed on anything but a player emitted nothing
-at all - `fl.frozen` is keyed on a vehicle and was absent from 129 traces while its six siblings
-carried 1,556 rows.
+set it does (`NoteAssignment` falls back as `NoteDerived` does). Before that fallback, a container
+keyed on a vehicle emitted nothing at all — `fl.frozen` was absent from 129 traces while its six
+siblings carried 1,556 rows.
 
 State **derived** fresh on every call rather than stored — Hodir derives every position that way on
-purpose — has nothing for a container to watch. Probe inside the helper that derives it, never at the
-call sites: trigger and action both route through the helper, so one probe covers both and two cannot
-disagree about what was decided.
-
-```cpp
-RaidObs::NoteDerived(bot, "hodir.anchor", RaidObs::DescribeDerived(slot));  // emits only on a change
-```
+purpose — has nothing for a container to watch. Probe inside the helper that derives it, with
+`RaidObs::NoteDerived(bot, key, RaidObs::DescribeDerived(value))`, which emits only on a change — never
+at the call sites: trigger and action both route through the helper, so one probe covers both and two
+cannot disagree about what was decided.
 
 **Probe the rule, not the coordinate.** A derived destination is already a `move` record naming the
 action that issued it, and one derived from the crowd or the bot's own position moves every tick, so
@@ -489,41 +529,39 @@ A pull no instance script reports — a gauntlet, trash, a mid-phase re-engage �
 source)`, where `source` names the file. Thorim's corridor uses it.
 
 For a hazard with no world object — a cone, a rolling wave, a rotating sweep — nothing can sweep for
-it, so the helper that derives the geometry must say so (Thorim's Runic Smash lanes do):
-
-```cpp
-RaidObs::NoteHazardCircle(map, spellId, pos, radius, ttlMs);
-RaidObs::NoteHazard(map, spellId, origin, "sweep", "\"lead\":1.2,\"rate\":0.5", ttlMs);
-RaidObs::NoteHazard(map, spellId, origin, "wedge", "\"facing\":2.10,\"arc\":8.0,\"range\":25.0", ttlMs);
-```
-
-It lands on the timeline only, so give the shape enough fields to reconstruct it by hand: Yogg-Saron's
-Crush wedge carries its facing for exactly that reason, while its body's permanent knockback ring —
-an aura on the boss, not an object — needs only a circle. `NoteHazard` has no change-latch, so pace
-these per instance; 25 bots reaching one once a tick writes 25 rows a tick.
+it, so the helper that derives the geometry must say so (Thorim's Runic Smash lanes do), with
+`RaidObs::NoteHazardCircle(map, spellId, pos, radius, ttlMs)` or `NoteHazard(map, spellId, origin,
+shape, fields, ttlMs)` for a `sweep` or `wedge`. It lands on the timeline only, so give the shape
+enough fields to reconstruct it by hand: Yogg-Saron's Crush wedge carries its facing for exactly that
+reason, while its body's permanent knockback ring — an aura on the boss, not an object — needs only a
+circle. `NoteHazard` has no change-latch, so pace these per instance; 25 bots reaching one once a tick
+writes 25 rows a tick.
 
 Anything else: `RaidObs::Note(bot, kind, text)`, which emits every call rather than on change. Reserve
 it for something that happens once and is in no other stream; nothing uses it today.
 
 Everything above this section is raid-agnostic and already covers every instance map — only the `note`
 stream needs per-raid wiring, because only the encounter code knows what an assignment is. Converted:
-Ulduar (Thorim, Vezax, Algalon, Iron Assembly, Hodir, XT-002, Mimiron, Flame Leviathan,
-Yogg-Saron), Black Temple, SSC, Obsidian Sanctum, Onyxia. Still bare: Hyjal and Tempest Keep (upstream's
-rewrites replaced the converted code), ICC's `IccInstanceState` (`std::map`, needs an ordered container
-variant), SWP's instance-keyed nested maps (the inner map must be default-constructible, which a
-kind-carrying container is not), and Naxx's function-local statics. Timestamps, thresholds and caches
-are left bare on purpose.
+Ulduar, Trial of the Crusader, Black Temple, Obsidian Sanctum, Onyxia. Still bare: Hyjal, Tempest
+Keep and SSC (upstream's rewrites replaced the converted code), ICC's `IccInstanceState`
+(`std::map`, needs an ordered container variant), SWP's instance-keyed nested maps (the inner map
+must be default-constructible, which a kind-carrying container is not), and Naxx's function-local
+statics. Timestamps, thresholds and caches are left bare on purpose.
 
 ## What a trace cannot tell you
 
 - **A `cast` row is the cast start only for a spell with a cast time.** A Speed 0 instant's `dmg`
   rows land 0-6 ms *before* it, since `Spell::prepare` runs `cast(true)` before `OnSpellPrepare`
-  fires (`Spell.cpp:3798-3804`); one with a Speed (`Spell.cpp:4127`) lands after it by the flight.
-  Match a Speed 0 instant's hits to the nearest cast on either side.
+  fires; one with a Speed (`Spell::_cast`) lands after it by the flight. Match a Speed 0 instant's
+  hits to the nearest cast on either side.
 - **Snapshots ~240 ms apart miss a CC broken between two samples** (15 of 67 Fears on Faction
   Champions never showed as moveGen 9), so a landing count from snapshots or a refresh-written probe
   is a lower bound.
-
+- **A creature's death reaches no record at all.** The `death` stream is roster-only, and so is `dmg`,
+  so nothing says an add died or who killed it — a count over `death` for a creature is not low, it is
+  structurally zero. What a trace does carry is the last health the snapshot sampled before the unit
+  stopped appearing, and whatever it cast on the way out: Yogg's Guardians are counted through their
+  Shadow Nova for exactly this reason.
 - **Pet damage is not recorded.** `dmg` rows are written only for raid members and their vehicles, so
   nothing involving a pet as a damage source or a chain-lightning link can be confirmed from a trace.
   Thorim's phase 2 carries a median of 6 and a p90 of 25 live pets and guardians, which is the
@@ -538,12 +576,12 @@ are left bare on purpose.
   Guardian deaths inside 15 yd of her are the only proxy. `yogg.phase` supplies the boundaries, which
   is why an encounter with an unsampled boss needs one.
 - **An aura on a creature is never recorded.** `NoteAura` goes through `ObsSession::Tracks`, which
-  wants a player (`RaidObsSession.cpp:349`), so a boss debuff has no `aura` row — Hodir's doc once read
-  that silence as Singed never landing, when 115-173 procs a pull had. A proc debuff still shows as a
-  triggered `cast` (`tr:1`) with `tgt` the creature: count those and model the stacks, as
-  `bosses/hodir.py --singed` does. The mod-chronicle log does carry creature auras. Its
-  `SPELL_AURA_APPLIED` fires on every aura client update, so a refresh with no cast behind it
-  (Everlasting Affliction rolling Corruption) reads as a repeat `APPLIED` with no `REMOVED` between.
+  wants a player, so a boss debuff has no `aura` row — Hodir's doc once read that silence as Singed
+  never landing, when 115-173 procs a pull had. A proc debuff still shows as a triggered `cast`
+  (`tr:1`) with `tgt` the creature: count those and model the stacks, as `bosses/hodir.py --singed`
+  does. The mod-chronicle log does carry creature auras. Its `SPELL_AURA_APPLIED` fires on every aura
+  client update, so a refresh with no cast behind it (Everlasting Affliction rolling Corruption) reads
+  as a repeat `APPLIED` with no `REMOVED` between.
 - **A friendly creature is not swept either**, so Yogg-Saron's one-use portals (34072) leave no row
   anywhere but `yogg.wave`. Where a mechanic's unit is not hostile, the probe is the only record.
 - **`cfg.cheats` is the conf string, not a record of cheats exercised.** `EnvFieldsJson` copies
@@ -555,25 +593,16 @@ are left bare on purpose.
 
 **Snapshot gaps time the world.** `snap` is written from `OnMapUpdate` every `SnapshotIntervalMs`, so
 gaps run ~220-320 ms; a stall is a second or more with no record of any kind. `t` counts
-`getMSTime()` from a wall-clock `hdr.ts`, so it keeps wall time only while the steady clock does.
-Under WSL2 that failed until 2026-09-16: Ubuntu's `systemd-timesyncd` (on by default in WSL) stepped
-the clock ~1.6 s every ~30 s toward NTP while WSL's hidden `chronyd` held it to the Windows host, so
-chrony slowed the kernel tick and the steady clock, with every server timer, ran ~5.5% slow (36 s
-over 11 minutes). On older traces, match RaidObs against the mod-chronicle combat log or
-`docker logs --timestamps` on a shared event, never the clock. timesyncd is now disabled; if the
-steps return, run `systemctl disable --now systemd-timesyncd`, then `wsl --shutdown` to reset chrony.
+`getMSTime()` from a wall-clock `hdr.ts`, so it keeps wall time only while the steady clock does; where
+that is in doubt, match RaidObs against the mod-chronicle combat log or `docker logs --timestamps` on a
+shared event, never the clock.
 
-**The login ramp used to stall.** For ~10 minutes after a start `RandomPlayerbotMgr` issues 60
-logins every ~31 s, and the DB callbacks logged the whole batch in during one world tick: ~1.1-1.7 s
-with the world thread busy and the map threads idle. A login cost ~20 ms and ~77 synchronous queries
-from module hooks — ~46 of them mod-individual-progression's account-name lookup, ~22
-mod-weapon-visual's per-item subquery. `PlayerbotHolder::UpdatePendingLogins` now runs the login callbacks
-under a 10 ms budget per world tick (at least one), so a batch enters
-over ~1.5-2.5 s; an alt whose master left while it was queued is dropped, not logged in as a random
-bot. Traces from older builds still carry these stalls: discount gaps until Playerbots.log prints the
-last `N/N Bot ... logged in`. Both modules carry local patches (account kind cached per account, no
-per-item query while loading); losing them makes each login slower again, the queue still spreads
-them.
+Bot logins run their DB callbacks under a 10 ms budget per world tick, at least one a tick
+(`PlayerbotHolder::UpdatePendingLogins`), so `RandomPlayerbotMgr`'s login batches spread over a few
+seconds instead of stalling one tick; an alt whose master left while it was queued is dropped, not
+logged in as a random bot. Each login's synchronous module queries stay cheap only through local
+patches in mod-individual-progression (account kind cached per account) and mod-weapon-visual (no
+per-item query while loading).
 
 **Attributing a stall**, read-only on a live server:
 - sample `/proc/<pid>/task/<tid>/{stat,wchan,io}` every ~20-30 ms. The main thread (tid = pid) is
@@ -584,14 +613,13 @@ them.
 
 ## Timing a bot: `.playerbots pmon`
 
-`PlayerbotCommandScript.cpp:63`, `SEC_GAMEMASTER`. `pmon toggle` to arm, `pmon reset` at the pull,
-`pmon` afterwards. `AC_PLAYERBOTS_PERF_MON_ENABLED` is **0** by default, so it is off unless asked
-for.
+A `SEC_GAMEMASTER` command (`PlayerbotCommandScript`): `pmon toggle` to arm, `pmon reset` at the pull,
+`pmon` afterwards. `Playerbots.PerfMonEnabled` is **0** by default, so it is off unless asked for.
 
 Two traps make its absolute numbers meaningless. **It does not time `isUseful` or `isPossible`** —
 both show up only inside the single `PlayerbotAI::UpdateAIInternal I` bucket. Multipliers are timed
-per name (`Mult`, with block counts). And its global mutex plus a per-call string build inflate every figure once
-a thousand random bots are logged in. **Read ratios between buckets, never times.**
+per name (`Mult`, with block counts). And its global mutex plus a per-call string build inflate every
+figure once a thousand random bots are logged in. **Read ratios between buckets, never times.**
 
 ## Constraints
 
@@ -629,8 +657,8 @@ action's movement on nobody. Construct it only under `Active()`: it copies the n
 `OnAuraApplicationClientUpdate` hooks are local core additions (commit `208764946`), absent from
 `mod-playerbots/azerothcore-wotlk`, so module CI cannot compile it. Deliberate.
 
-Probes in `Engine.cpp` (`BeginTick` plus seven verdict sites) and in `MovementActions.cpp` (the
-`MoveTo` wrapper plus `JumpTo`, `Follow` and `ChaseTo`) will conflict on upstream merges. They sit
-beside the existing `LogAction` calls and the `MotionMaster` calls respectively, so re-applying is
-mechanical. `MoveToImpl` returning `RaidObs::MoveOutcome` rather than `bool` is the one part that is
-not.
+Probes in `Engine.cpp` (`BeginTick`, the verdict sites and the coverage counters in `ProcessTriggers`)
+and in `MovementActions.cpp` (the `MoveTo` wrapper plus `JumpTo`, `Follow` and `ChaseTo`) will
+conflict on upstream merges. They sit beside the existing `LogAction` calls and the `MotionMaster`
+calls respectively, so re-applying is mechanical. `MoveToImpl` returning `RaidObs::MoveOutcome` rather
+than `bool` is the one part that is not.
