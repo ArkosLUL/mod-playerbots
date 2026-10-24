@@ -17,13 +17,17 @@ Bots never start a hard mode, they play the one the raid starts. Four bosses hav
 
 Flame Leviathan's towers, Freya's Elders, Thorim's Sif and Yogg-Saron's Keepers need no option. Bots react to those mechanics whenever they show up.
 
-A few bosses need a certain raid setup:
+Notes for some of the bosses:
 
-- **Flame Leviathan**: at least 2 real players in Demolishers to deal with the turrets and stun Leviathan.
-- **Thorim**: two well geared tanks, and paladins should be the best fit. The main tank should be a bot, and it'll stay with the arena squad.
-- **Freya**: I built and tested it with a human off-tank in mind. Off-tank is the most important role in this fight, so it's best if you take it yourself.
+- **Flame Leviathan**: 2 real players should share one Demolisher to deal with the turrets and stun Leviathan.
+- **Auriaya**: fight her near the corridor to Vezax.
 - **Hodir**: a bot with good enough gear can solo tank him.
-- **Mimiron**: a bot with good enough gear can solo tank him too. Bring extra healers, I tested with 5. Between phases it's on you to position the bots so they handle the flames, use the `summon` command if needed.
+- **Thorim**: two well geared tanks, and paladins should be the best fit. The main tank should be a bot, and it'll stay with the arena squad.
+- **Freya**: it's best if you take the off-tank yourself, it's the most important role in this fight.
+- **Mimiron**: a bot with good enough gear can solo tank him. Bring extra healers, I tested with 5. Between phases it's on you to position the bots so they handle the flames, use the `summon` command if needed.
+- **General Vezax**: a bot can solo tank him. Don't use a paladin for it, they run into mana issues.
+- **Yogg-Saron**: always ask Freya for help, however many Keepers you take. 1-light is doable, 0-light isn't. Bots use Nitro Boosts to run through the Dragon Soul illusion, so it's worth having them on the melee bots. With Freya as the only Keeper, Phase 3 works a lot like a real raid's 0-light strategy, which you can find on Wowhead or similar sites.
+- **Algalon**: bots get into position before the pull but won't start the fight themselves. You need 2 well geared tanks and smart use of personal and raid wide defensives. Bots with Nitro Boosts enchanted also use them to reach the black hole.
 
 ## Feature Evaluation
 
@@ -38,7 +42,7 @@ A few bosses need a certain raid setup:
 ## How to Test the Changes
 
 1. Take a raid of bots into Ulduar, 10 or 25 man. `ulduar` is applied automatically on map 603 with `Playerbots.ApplyInstanceStrategies = 1`, which is the default.
-2. Pull the bosses. The notes above say what setup a few of them need.
+2. Pull the bosses. Read the notes above first, some fights need a certain setup.
 3. For a hard mode, start it the usual way (leave the towers up, keep the vapors alive, press Mimiron's button, ...). For Vezax, Iron Assembly, XT-002 and Mimiron, turn that boss's option on first.
 
 ## Impact Assessment
@@ -79,7 +83,7 @@ Was any code in this PR copied or adapted from a sister / upstream project (e.g.
 
 ## Final Checklist
 
-- - [ ] Changes are understood and tested for server stability and performance impact.
+- - [x] Changes are understood and tested for server stability and performance impact.
 - - [x] Any new bot dialogue lines are translated.
 - - [x] New source files use the GPLv2 header.
 - - [x] Documentation updated if needed (Code comments, Conf comments, WiKi commands).
