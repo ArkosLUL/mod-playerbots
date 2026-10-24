@@ -24,7 +24,7 @@ Notes for some of the bosses:
 - **Hodir**: a bot with good enough gear can solo tank him.
 - **Thorim**: two well geared tanks, and paladins should be the best fit. The main tank should be a bot, and it'll stay with the arena squad.
 - **Freya**: it's best if you take the off-tank yourself, it's the most important role in this fight.
-- **Mimiron**: a bot with good enough gear can solo tank him. Bring extra healers, I tested with 5. Between phases it's on you to position the bots so they handle the flames, use the `summon` command if needed.
+- **Mimiron**: a bot with good enough gear can solo tank him. Bring extra healers, I tested with 5. Between phases the bots don't handle the flames on their own, but you can use the `summon` command to choose where they land.
 - **General Vezax**: a bot can solo tank him. Don't use a paladin for it, they run into mana issues.
 - **Yogg-Saron**: always ask Freya for help, however many Keepers you take. 1-light is doable, 0-light isn't. Bots use Nitro Boosts to run through the Dragon Soul illusion, so it's worth having them on the melee bots. With Freya as the only Keeper, Phase 3 works a lot like a real raid's 0-light strategy, which you can find on Wowhead or similar sites.
 - **Algalon**: bots get into position before the pull but won't start the fight themselves. You need 2 well geared tanks and smart use of personal and raid wide defensives. Bots with Nitro Boosts enchanted also use them to reach the black hole.
