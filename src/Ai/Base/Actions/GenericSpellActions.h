@@ -127,6 +127,7 @@ public:
         : CastBuffSpellAction(botAI, spell, checkIsOwner, beforeDuration) {}
 
     bool isUseful() override;
+    bool isPossible() override;
     bool Execute(Event event) override;
 };
 

@@ -47,10 +47,12 @@ void ClearMissingBuffReagentNotice(PlayerbotAI* botAI, std::string const& groupN
 bool TryAnnounceMissingBuffReagents(
     PlayerbotAI* botAI, std::string const& baseName, std::string const& groupName);
 
+// Keep this free of side effects: GroupBuffSpellAction calls it from isPossible too.
 std::string UpgradeToGroupIfAppropriate(
     Player* bot,
     PlayerbotAI* botAI,
     std::string const& baseName,
+    Unit* target,
     std::string* outMissingReagentGroupName = nullptr);
 
 // Same name match as the "find target" value, but resolved against the grid sweep rather than the

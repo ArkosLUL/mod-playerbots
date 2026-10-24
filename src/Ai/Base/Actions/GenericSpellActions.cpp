@@ -308,18 +308,30 @@ bool GroupBuffSpellAction::isUseful()
     return BuffBelowRefreshTarget(botAI, aura, beforeDuration);
 }
 
+bool GroupBuffSpellAction::isPossible()
+{
+    if (botAI->IsInVehicle() && !botAI->IsInVehicle(false, false, true))
+        return false;
+
+    Unit* target = GetTarget();
+    return botAI->CanCastSpell(ai::buff::UpgradeToGroupIfAppropriate(bot, botAI, spell, target), target);
+}
+
 bool GroupBuffSpellAction::Execute(Event /*event*/)
 {
     botAI->forceRebuff.NoteBuffWork();
 
+    Unit* target = GetTarget();
     std::string missingReagentGroupName;
     std::string const castName = ai::buff::UpgradeToGroupIfAppropriate(
-        bot, botAI, spell, &missingReagentGroupName);
+        bot, botAI, spell, target, &missingReagentGroupName);
 
-    if (!botAI->CastSpell(castName, GetTarget()))
+    if (!botAI->CastSpell(castName, target))
         return false;
 
-    if (!missingReagentGroupName.empty())
+    if (castName != spell)
+        ai::buff::ClearMissingBuffReagentNotice(botAI, castName);
+    else if (!missingReagentGroupName.empty())
         ai::buff::TryAnnounceMissingBuffReagents(botAI, spell, missingReagentGroupName);
 
     return true;

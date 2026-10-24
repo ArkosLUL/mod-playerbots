@@ -199,6 +199,11 @@ front replaces the whole chain for the common case. Encounter rules enforce this
 - `HasAura(..., maxStack = false, maxAuraAmount = -1)` is a **presence** check, not a stack check.
 - `CastBuffSpellAction` resolves the highest known rank by parsing the `Rank N` subtext, so spell ids
   never need hardcoding.
+- `GroupBuffSpellAction` checks and casts the group variant (Prayer of Fortitude, Gift of the Wild,
+  Arcane Brilliance, ...) when the target already wears it: since core PR #27419 an equal-amount,
+  shorter aura from the same `EXCLUSIVE_HIGHEST` group is refused (`SPELL_FAILED_AURA_BOUNCED`).
+  Checking the single spell made every refresh impossible, so `rebuff` found no buff work and ended
+  at once.
 - A paladin aura's class action (`CastBuffSpellAction`, `isOwner` false) checks the aura by name, so
   it refuses while another paladin's aura of that name is on the bot, even without the bot's own: an
   elected holder keeps its current aura instead of stacking a stripped duplicate.

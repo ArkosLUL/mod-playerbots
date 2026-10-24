@@ -276,6 +276,7 @@ namespace ai::buff
         Player* bot,
         PlayerbotAI* botAI,
         std::string const& baseName,
+        Unit* target,
         std::string* outMissingReagentGroupName)
     {
         if (outMissingReagentGroupName)
@@ -288,19 +289,21 @@ namespace ai::buff
         if (groupName.empty())
             return baseName;
 
-        // Prefer singles until at least three living, in-world group members on the bot's map
-        // are missing both the single-target buff and its group variant.
-        if (!HasEnoughSameMapMissingPlayersForGroupVariant(bot, botAI, baseName, groupName))
+        // The core bounces the single buff off its longer group version (SPELL_FAILED_AURA_BOUNCED),
+        // so a target already wearing the group buff can only be refreshed with it.
+        bool const targetHasGroupBuff = target && botAI->GetAura(groupName, target);
+
+        // Otherwise prefer singles until at least three living, in-world group members on the bot's
+        // map are missing both the single-target buff and its group variant.
+        if (!targetHasGroupBuff &&
+            !HasEnoughSameMapMissingPlayersForGroupVariant(bot, botAI, baseName, groupName))
             return baseName;
 
         uint32 const groupSpellId = botAI->GetAiObjectContext()
             ->GetValue<uint32>("spell id", groupName)->Get();
 
         if (groupSpellId && HasRequiredReagents(bot, groupSpellId))
-        {
-            ClearMissingBuffReagentNotice(botAI, groupName);
             return groupName;
-        }
 
         if (groupSpellId && outMissingReagentGroupName)
             *outMissingReagentGroupName = groupName;
