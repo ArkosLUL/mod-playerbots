@@ -53,7 +53,7 @@ INSERT INTO `spell_custom_attr` (`spell_id`, `attributes`) VALUES
 ## AC rev. hash/commit
 
 ```
-AzerothCore rev. 62fb09c68d5e+ 2026-10-17 14:29:37 +0300 (Custom branch) (Unix, RelWithDebInfo, Static) (worldserver-daemon)
+AzerothCore rev. e2829262b39c+ 2026-10-24 12:31:35 +0300 (Custom branch) (Unix, RelWithDebInfo, Static) (worldserver-daemon)
 OpenSSL 3.0.13, Boost 1.83.0, MySQL 8.4.8, ACDB 335.17-dev
 ```
 
