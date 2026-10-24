@@ -28,7 +28,6 @@ Flame Leviathan's towers, Freya's Elders, Thorim's Sif and Yogg-Saron's Keepers 
     - Flame Leviathan, Thorim, Mimiron, Yogg-Saron and Algalon use the once per tick hook from #2876 for their planners and housekeeping, and only while their gate is open.
     - A few reads are cached per bot per tick in `thread_local`s, since a bot's whole tick runs on one map thread.
     - Not everything is cached yet. About 20 triggers still scan nearby units or walk the group in `IsActive`, mostly on Yogg-Saron, XT-002, Mimiron, Freya and Hodir, plus group walks on Iron Assembly, Kologarn and Razorscale. They use short radii and only run while their boss's gate is open. Happy to move them behind cached values if you want that before merge.
-    - No pmon numbers yet.
 
 ## How to Test the Changes
 
@@ -55,7 +54,7 @@ Only in Ulduar, which is the point of the PR. The hard mode handling for Vezax, 
     - - [ ] No
     - - [x] Yes (**explain below**)
 
-Ulduar goes from 11 files and about 7.5k lines to 140 files and about 52k lines.
+Ulduar goes from 11 files and about 7.5k lines to 140 files and about 53k lines.
 
 ## AI Assistance
 
@@ -63,7 +62,7 @@ Was AI assistance used while working on this change?
 - - [ ] No
 - - [x] Yes (**explain below**)
 
-Yes. I used Claude Code to read the core's Ulduar boss scripts and spell data, write and refactor the strategy, and port it from my fork and clean it up for this repo's guidelines. I reviewed all of it and tested it in game on my fork.
+Yes. I used Claude Code to read the core's Ulduar boss scripts and spell data, write and refactor the strategy, and port it from my fork and clean it up for this repo's guidelines. I haven't reviewed the code line by line, there's too much of it. I tested it in game on my fork instead, over more than 10 Ulduar lockouts.
 
 ## Code Provenance / Attribution
 
@@ -82,7 +81,7 @@ Was any code in this PR copied or adapted from a sister / upstream project (e.g.
 
 ## Notes for Reviewers
 
-- It's a draft so people can test it on their servers. I tested it on my fork, not on test-staging's core, and there are no pmon numbers yet. The build matrix on this PR will be the first full build against test-staging.
+- It's a draft so people can test it on their servers. I tested it over more than 10 Ulduar lockouts on my fork, not on test-staging's core. The build matrix on this PR will be the first full build against test-staging.
 - Commits go: remove the old strategy, add the shared files, one commit per boss, then the config options. Only the tip builds, since the shared headers name every boss.
 - My fork's core makes a few Ulduar spells resistible that test-staging's core doesn't: Algalon's Cosmic Smash (fire), Mimiron's Water Spray and Sif's spells (frost), and Yogg-Saron's shadow damage. The resistance aura picks for those don't help against them on test-staging's core.
 - Not cheats, but worth knowing: Mimiron hands the Magnetic Core to a bot with `StoreNewItem`, and bots that fall through the floor on Auriaya, Kologarn, Thorim and Yogg-Saron get put back with `NearTeleportTo`.
