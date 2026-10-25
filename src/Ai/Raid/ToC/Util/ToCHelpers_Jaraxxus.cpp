@@ -773,7 +773,7 @@ bool JaraxxusMainTankHolds(PlayerbotAI* botAI)
     if (!botAI || !PlayerbotAI::IsMainTank(botAI->GetBot()))
         return false;
 
-    // out of combat he's the respawn after a wipe, attackable: the retry pull is the leader's
+    // Barrett's gossip frees him straight into combat, so out of combat there's nothing to hold yet
     Unit* jaraxxus = GetJaraxxus(botAI);
     return jaraxxus && jaraxxus->IsInCombat();
 }

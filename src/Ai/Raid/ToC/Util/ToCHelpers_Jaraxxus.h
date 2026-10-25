@@ -58,7 +58,7 @@ enum class JaraxxusFlameRole : uint8
 
 // Every reader below gives its empty answer off map 649.
 
-// Alive and attackable, so null through the intro
+// Alive and attackable, so null through the intro and while a retry waits chained for the gossip
 Unit* GetJaraxxus(PlayerbotAI* botAI);
 
 bool JaraxxusHasNetherPower(Unit* jaraxxus);

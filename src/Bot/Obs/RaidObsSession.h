@@ -248,8 +248,8 @@ public:
     // Combat while most of the roster was alive. Never set means nobody pulled: a raid lying dead after
     // a wipe while one human is still in combat.
     bool sawRaidAlive = false;
-    // Scripts without boss state only. ToC raises IsEncounterInProgress before the pull, so only a fall
-    // after the roster fought while it was up ends one.
+    // Scripts without boss state only. Only a fall after the roster fought while it was up ends one, so
+    // an in-progress read before the pull ends nothing.
     bool encounterInProgress = false;
     bool combatWhileInProgress = false;
     // Encounter credit that landed while IsEncounterInProgress still answered true.

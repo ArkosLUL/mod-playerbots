@@ -16,6 +16,7 @@
 #include "ToCHelpers_Icehowl.h"
 #include "ToCHelpers_Jormungars.h"
 #include "ToCHelpers_NorthrendBeasts.h"
+#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -264,11 +265,12 @@ bool NorthrendWormsTankHoldAction::Execute(Event /*event*/)
     return mobile && DragOffHazards(worm);
 }
 
-// The mobile holder only needs taunt range when it comes up. The stationary worm is rooted, so its
-// holder waits in melee of where it surfaces.
+// A mobile worm only needs taunt range when it comes up. A stationary one is rooted, so its holder
+// waits in melee of where it surfaces. Goes by the form it comes up in: a lone survivor's holder keeps
+// the mobile duty through its stationary emerges.
 bool NorthrendWormsTankHoldAction::ApproachSubmerged(Unit* worm)
 {
-    float const stand = duty == BeastsTankDuty::WormMobile ? WORM_TAUNT_STAND : WORM_MELEE_RANGE - 2.0f;
+    float const stand = IsWormMobile(worm) ? WORM_TAUNT_STAND : WORM_MELEE_RANGE - 2.0f;
 
     Position chargeStart;
     Position chargeEnd;
@@ -471,4 +473,16 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
             NoteWormMove(bot, "locked");
             return plan.urgent;
     }
+}
+
+bool NorthrendWormsHealToxinCarrierAction::Execute(Event /*event*/)
+{
+    Player* carrier = GetWormToxinHealTarget(botAI);
+    return carrier && CastToCThroughputHeal(botAI, carrier);
+}
+
+bool NorthrendWormsPurgeToxinAction::Execute(Event /*event*/)
+{
+    char const* purge = GetWormToxinSelfPurge(botAI);
+    return purge && botAI->CastSpell(purge, bot);
 }

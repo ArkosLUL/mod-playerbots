@@ -231,8 +231,9 @@ Bile, so the mobile Dreadscale keeps Bile on its tank, the mobile Acidmaw Toxin 
 stationary one sprays its debuff on a random player and everyone within 10 yd.
 
 - **Paralytic Toxin** (row above), 60 s, no dispel type: a snare that starts at 10% and deepens 10% a
-  tick (`SpellAuraEffects.cpp`) to a full stop after 18 s, 13.5 s on heroic. A re-application
-  recalculates the aura's amounts, so every Bite restarts the ramp.
+  tick (`SpellAuraEffects.cpp`) to a full stop after 18 s, 13.5 s on heroic, then Paralysis 66830, a
+  mechanic-less stun only Toxin's removal ends. A refresh keeps the snare reached (core #27975 locks
+  the amount). Only a Bile pulse removes it; Divine Shield and Ice Block purge it by school immunity.
 - **Burning Bile** 66869 (24 s, no row) casts its pulse every 2 s on every ally within 10 yd, the
   carrier and pets included, exact distance (a player caster adds no reach against players). A
   `spell_linked_spell` row strips Paralytic Toxin from each one it hits, so a Toxin carrier within
@@ -242,8 +243,9 @@ stationary one sprays its debuff on a random player and everyone within 10 yd.
 
 **First death.** The survivor gets Enrage 68335 (+50% damage done, permanent) at once; the 10 s in
 `instance_trial_of_the_crusader.cpp` only times the achievement. It keeps its 45-50 s submerge and
-flips form at every emerge, so a stationary survivor stays up 45-50 s. A lone Acidmaw's Toxin on
-its tank has no Bile left to cure it.
+flips form at every emerge, so a stationary survivor stays up 45-50 s and Sprays 2-3 times. Toxin
+from a lone Acidmaw has no Bile left to cure it: on 25H (2026-10-24) its Spray 4 s after Dreadscale
+died killed both victims 40-45 s later.
 
 **Heroic** has no worm branch of its own beyond the ids: they attack on the 150 s timer with Gormok
 alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`: 1.26M, 5.02M,
@@ -258,8 +260,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
   dies, and the 10 s only times the achievement.
 - **Holds** (`northrend worms mobile tank duty` → `northrend worms tank hold mobile worm`, `… stationary
   tank duty` → `… tank hold stationary worm`, `ACTION_RAID + 1`) take the worm from `GetBeastOfDuty`.
-  - Under ground, the mobile holder closes to 20 yd and the stationary one into melee of the spot
-    (it's rooted), at `MOVEMENT_COMBAT`, re-issued only once the worm stands 3 yd off where it was at
+  - Under ground, the holder closes to 20 yd of a worm coming up mobile and into melee of one coming
+    up stationary (it's rooted; a lone survivor's holder keeps the mobile duty through both), at `MOVEMENT_COMBAT`, re-issued only once the worm stands 3 yd off where it was at
     the last issue (it moves once, 2.5 s in): the worm walks to its taunter
     ([xt002.md](../ulduar/xt002.md)). Not while an Icehowl charge is latched: the charge guard spares
     attack actions. `nb.wormmove` `approach`.
@@ -316,7 +318,7 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     Bile carrier (a human never answers) holding no duty, or a holder whose worm is under ground. A
     runner already within 8 yd serves that carrier, then last pairs hold while both qualify, so two
     runners don't trade carriers. Guide: free them while the worms are submerged; script: every Bite
-    restarts the snare, so a mobile Acidmaw's tank is never cured otherwise. One holding no beast
+    refreshes it, so a mobile Acidmaw's tank is never cured otherwise. One holding no beast
     with no runner walks to the nearest Bile carrier, a human too (`nb.cure` `seek`): on 25N three
     melee kept Toxin 60 s with only the human tank carrying Bile. Holders still wait: a walking
     holder drags its worm and turns its Spew.
@@ -331,7 +333,7 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     | Bile | a bot without Toxin, of every other carrier; a carrier holding no beast and not sent as a runner, of everyone but Toxin carriers | 10.5 / 12 | the pulse's 10 yd exact; guide: spread from everyone, melee too |
     | Sweep | all but the holder, of a stationary worm that is up; a melee whose target isn't a worm (Gormok in a heroic overlap) or is a lone stationary survivor only during the cast, since `reach melee` would walk it back | 16 / 18 | its 15 yd circle |
     | Spew | everyone, of the up mobile worm's cone while armed: spewing, or within 4 s of its next Spew (11 s past its engage, its emerge, 22 s past its last cast start) | cone + 5° / + 12° | a 1 s cast leaves no time to clear 55 yd; guide: never stand in front of the mobile worm. A cone kept up all the time turns with the Emerge cast's 40-80° facing swings, which beat any hysteresis |
-    | Spread | ranged and healers carrying neither debuff, of each other carrying neither (below), and of the up mobile worm's melee as one 19.3 / 22.3 circle on it; while both live and the stationary worm is up | 10 / 13 | the Spray's 10 yd splash, centre to centre, cast only by the stationary worm; guide `/range 10`. Spacing off all 24, melee and tanks included, fed the 25N oscillation. Carriers keep their Bile and cure rules |
+    | Spread | ranged and healers carrying neither debuff, of each other carrying neither (below), and of the up mobile worm's melee as one 19.3 / 22.3 circle on it; while a stationary worm is up, a lone survivor too | 10 / 13 | the Spray's 10 yd splash, centre to centre, cast only by the stationary worm; guide `/range 10`. Spacing off all 24, melee and tanks included, fed the 25N oscillation. Carriers keep their Bile and cure rules |
     | Melee | a melee bot (not a tank) with neither debuff whose target is the up mobile worm, held to its stand | 2.5 off it / — | worms parry from the front |
     | Reach | a bot holding no beast whose `reach melee` or `reach spell` walk to its stop point, 30 yd at most, would cross a pool | — | the reposition goes round it |
 
@@ -438,6 +440,20 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     Bile's 24 s (guide: spread even as melee). Without it the Bile rule and `reach melee` trade the
     bot all Bile long ([pitfalls.md](../../engine/pitfalls.md), the Hodir case); leaving melee out
     of the rule instead would put the pulse, up to 9.7k every 2 s, on the whole stack.
+- **Toxin no Bile can cure**: with no worm engaged (the worm state, cure pairing included, drops
+  then) or nobody carrying Bile, while the Beasts gate is open, so through the gap and Icehowl.
+  - Each carrier gets one healer bot without Toxin, nearest first (guid ties), latched till the
+    Toxin ends (`nb.toxinheal`): `northrend worms toxin carrier hurt` → `northrend worms heal toxin
+    carrier` under 80%, in heal reach and sight, `ACTION_RAID + 3`, above the staging and breath
+    stand walks, which hold the tick while in flight. Heals in throughput order, HoTs last, one
+    already ticking skipped (`CastToCThroughputHeal`, the Jaraxxus Incinerate list). On 25H the
+    victims held 40 s on HoTs, then healing went to Icehowl's tank.
+  - A non-tank paladin or mage carrier snared 70% or more casts Divine Shield or Ice Block
+    (`northrend worms toxin stuck` → `northrend worms purge toxin`, `ACTION_EMERGENCY + 5`), before
+    Paralysis: `CanCastSpell` refuses everything under lost control. Tanks' immunities stay with
+    their defensive chain. Cloak of Shadows has no school immunity, so rogues get nothing.
+  - Not done: keeping the cure pairing past the worms. The gate stops being live with no worm
+    engaged, and Bile outlives Dreadscale by 24 s at most.
 
 ## Icehowl
 
@@ -454,27 +470,28 @@ Whirl throw in about 2 s.
 - **Arctic Breath** (66689 / 67650 / 67651 / 67652, started by 66688's script effect), first at
   17-20 s then every 20-30 s, and 5-8 s after a charge ends in rage or the daze ends (20-23 s after
   that charge), at a random player within 90 yd
-  off his threat list, tank included. An instant 5 s channel: `Spell::_cast` faces him to the
-  target, then picks the cone's victims once, so nothing telegraphs it and only standing apart
+  off his threat list, tank included. An instant 5 s channel, cast triggered: 66688's `Spell::_cast`
+  faces him to the target, then the channel picks the cone's victims once, so nothing telegraphs it and only standing apart
   beforehand helps. The cone reaches 100 yd from his centre and is **60° wide on 10N only**
   (`spell_cone` row 66689; the other three ids have no row, so `TARGET_UNIT_CONE_ENEMY_24` makes it
   24°). Its bisector is the target's bearing, so
   another player is hit only within half the width of it, 30° or 12°, at any distance. 5 s stun and
   3k / 4k / 4k / 6k a second, 15k / 20k / 20k / 30k in all.
 
-**The charge**, 30 s after the pull, then 30-50 s after a rage or 45-65 s after a daze, whose
+**The charge**, 35 s after the pull, then 30-50 s after a rage or 45-65 s after a daze, whose
 `DelayEvents(15s)` also holds the next jump. He is `REACT_PASSIVE` while in combat only during this
 cycle, which makes that an exact read.
 
 1. He jumps to `ARENA_CENTER`, drops his victim and clears his target.
-2. 2 s later, Massive Crash (66683 / 67660 / 67661 / 67662), 1 s cast: 150 yd, knockback 40 yd/s out
-   and 15 up (~62 yd, so the raid lands at the wall), damage and a stun.
-3. 2 s later he gazes at a random player off his threat list: `UNIT_FIELD_TARGET` holds it.
-4. 2 s later he fixes the line from himself to that player and jumps 35 yd the other way. The charge
-   ends 50 yd out along the line (46 when its angle falls in (1, 2) rad, the gate). Here the crash stun
-   comes off every player; normal also grants Surge of Adrenaline 68667 (+50% speed, 8 s), heroic
-   does not.
-5. 1.5 s later he charges at 65 yd/s, ~1.3 s end to end, target cleared.
+2. 0.9 s after landing, Massive Crash (66683 / 67660 / 67661 / 67662), 1 s cast: 150 yd, knockback
+   40 yd/s out and 15 up (~62 yd, so the raid lands at the wall), damage and a 6.5 s stun.
+3. 3.9 s after the crash he gazes at a random player off his threat list: `UNIT_FIELD_TARGET` holds
+   it. The charge ends 50 yd out along his line to that player (46 when its angle falls in (1, 2)
+   rad, the gate).
+4. 1.8 s later Roar, 1.5 s cast; the crash stun comes off about then. Normal also grants Surge of
+   Adrenaline 68667 (+50% speed, 8 s), heroic does not.
+5. 2.8 s after Roar starts he jumps ~36 yd back off the line, and 2 s later charges at
+   65 yd/s, ~1.3 s end to end, target cleared.
 
 **Contact is tested twice, not along the path**: any living player within 12 yd (3D, centre to
 centre) about 100 ms into the charge, and again on arrival (`DoTrampleIfValid`). The first check runs
@@ -542,7 +559,7 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
     round `ARENA_CENTER` predicts. So few survive only at the wall with his back to it: a charge
     ends there and his tank arrives from the centre, the reverse of the guide's tank with *its* back
     to a wall. They re-latch, `k` kept, when he moves 8 yd, his victim's bearing turns 30° (Whirl
-    throws the tank ~31 yd every 15-20 s and he follows), or his drift cuts a kept bearing's room
+    throws the tank ~31 yd every 16 s and he follows), or his drift cuts a kept bearing's room
     under its own floor.
   - **Deal**: living non-tank bots of the group (humans can't be moved, tanks hold him), rebuilt
     each second, dealt healers, melee, then ranged, each by guid, or ranged fill the few bearings
@@ -612,7 +629,9 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
   holder threat on it: the mobile holder re-taunts, at the cost of taunt diminishing returns.
 - In the 1.5 s between the two worms' submerges DPS have no pick and fall back to `dps assist`.
 - No Hand of Protection on a snobolled healer or caster, no external on Ferocious Butt (guide).
-- Heroic Frothing Rage can't be dispelled; only the holder's defensive answers it.
+- Heroic Frothing Rage can't be dispelled; only the holder's defensive answers it. Externals on his
+  victim were offered after a 25H wipe (2026-10-24: a trampled human tank, both tanks dead in 10 s)
+  and declined by the user.
 - Melee eat every Whirl.
 - No spread against Fire Bomb in Gormok's stage (guide: stay spread); the impact dodge is the only
   answer.
@@ -625,7 +644,7 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 - At the wall with his back to it he keeps 3-4 bearings: no tank turns his back to the open floor
   (guide: the tank's back to a wall). Melee with every bearing within 57° of his back walled under
   14 yd hold none, and `set behind` stacks them behind him, so a breath on one freezes them all.
-- With no wall tanking, Whirl moves him every 15-20 s and the whole spread walks after him once he
+- With no wall tanking, Whirl moves him every 16 s and the whole spread walks after him once he
   stands. After a daze the breath usually lands as he finishes following the thrown tank, with the
   raid compressed behind him (17 frozen on 25H); only a tank with its back to a wall, so no throw,
   avoids it.
@@ -655,6 +674,7 @@ Position, verdicts and movement come from the raid-agnostic streams. The Beasts 
 | `dodge` | The charge dodge's branch: `move <yd>` walk issued, its length; `tight` walk to a 13 yd spot; `hold` its own walk in flight; `clear` arrived, already there, or parked past 13; `stunned` can't move; `locked` another forced walk holds movement; `none` no spot within 30 yd |
 | `worm` | 0 no worm engaged, 1 Dreadscale mobile, 2 Acidmaw mobile, 3 a worm under ground, 4 lone Dreadscale, 5 lone Acidmaw. Per instance |
 | `cure` | A bot's pairing: `seek <Bile carrier>`, `run <Toxin carrier>` as its runner, `wait <runner>` or `wait` stuck with no runner, `none` |
+| `toxinheal` | A healer bot's carrier of Toxin no Bile can cure, `0` when the duty ends |
 | `wormmove` | The reposition branch, as `dodge` with a reason (`cure`, `run`, `pool`, `spray`, `bile`, `sweep`, `spew`, `spread`, `melee`, `reach`) and the search tier that found the spot (`stand`, `full`, `pair`, `nospread`, `partner`, `direct`, `partial`, `escape`, `loose`, `cross`): `move <yd> <reason> <tier>`, `hold <reason>` its walk to the held spot in flight, `clear` already there, `none <reason>` (not urgent: a 1 s backoff), `locked` (also a cast pinning a non-urgent move), `stunned`. Holders: `approach <yd>` under ground, `drag <yd>` |
 | `wormhold` | A bot's held spot: `set <reason> <tier>` latched by a walk or an arrival (a walk back to it writes none), `park` within 1 yd, `unpark` pushed off it, walking back, `release <cause>`. Cause: a rule (`pool`, `spray`, `bile`, `sweep`, `spew`, `spread`), `melee` the rear arc, `reach` the role reach at a parked spot, `path` off the floor or across a pool or Sweep, `target` the target or a cure or run partner changed, left or drifted out of 8 yd, `cure` a cure walk owed, `phase` `worm` changed, 0 included, `drift` the anchor worm moved or turned, `heal` the heal target out of reach, `arrived` an escape, loose, partial, cross or Spray walk ended, `gone` the bot died or left |
 | `spread` | A non-tank bot's bearing `k` from straight behind Icehowl (`0`, `1`, `-1`, …), kept while the layout holds through his walk, or `none` while it is off (the daze included) or the bot holds none. Written when a trigger asks |
@@ -674,8 +694,9 @@ to see it young; `ttl` is the modelled time left to the impact, not a measured o
 `snap.hz` either.
 
 `tools/botobs/bosses/northrend_beasts.py <file>` reads the rest. On heroic its banner gives Berserk
-26662 from its triggered `cast` row on a beast, else due 509 s in (the trace opens at Gormok's
-engage, 11 s after the intro's end; Berserk lands 520 s after that end) or `not reached`, with each
+26662 from its triggered `cast` row on a beast, else due 520 s after the intro's end: 520 s into a
+trace whose first `pull` is `bossstate` (it opens there), 509 s into one opened at Gormok's engage, 11
+s later. Or `not reached`, with each
 beast's health from its last living snapshot row within 1.5 s, else `dead`: a dead creature leaves
 the snapshot without a 0% row. Then stage spans with the deaths in each and when each beast first
 targeted someone (`--stage`); duties per tank, every change of Gormok's
@@ -707,8 +728,8 @@ who took its debuff from that worm (the first 400 ms of applies 0.8-4 s after th
 ranged and healers, humans included, carrying neither debuff within 10 yd: median, max, and the
 share with one beside two others), `wormhold` releases by cause and role, `wormmove` and `wormhold`
 branches (`--worms`); Paralytic Toxin spans per carrier, ended `cured` (a Bile pulse on it within 250 ms of the removal),
-`died`, `expired` (59 s or more), `other` or `open`, with seconds carried and `stuck` past 18 s
-(13.5 heroic), Burning Bile spans with the pulse hits on bots carrying neither debuff, each given to
+`died`, `expired` (59 s or more), `other` or `open`, with seconds carried, `stuck` past 18 s
+(13.5 heroic) and `outlived the worms` past the last `nb.stage` span with a worm, Burning Bile spans with the pulse hits on bots carrying neither debuff, each given to
 the carrier nearest its victim within 10 yd in the nearest snapshot, their damage and the raid's
 total, and `cure` branches (`--cure`).
 

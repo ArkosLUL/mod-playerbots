@@ -298,8 +298,7 @@ void ProcessPendingBossState(Map* map, uint32 instanceId)
 
 namespace
 {
-// Must match the test ToC's IsEncounterInProgress runs first: asked with nobody alive, it resets its
-// encounter to NOT_STARTED and InstanceCleanup then charges the wipe no heroic attempt.
+// With nobody alive the pull is lost, whatever the script still answers
 bool AnyAliveNonGmPlayer(Map* map)
 {
     Map::PlayerList const& players = map->GetPlayers();

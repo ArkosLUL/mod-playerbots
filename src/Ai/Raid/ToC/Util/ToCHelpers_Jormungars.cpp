@@ -1396,6 +1396,106 @@ void ReleaseHold(Player* bot, JormungarsState& state, char const* cause)
     state.holds.erase(bot->GetGUID());
     NoteHold(bot, std::string("release ") + cause);
 }
+
+// Kept apart from JormungarsState, which drops everything once no worm is engaged
+struct ToxinHealState
+{
+    uint32 memoMs = 0;
+    bool memoValid = false;
+    bool open = false;
+    bool cureRuns = false;  // the worm stage's cure pairing has a Bile carrier to send
+    RaidObs::ObsGuidMap<ObjectGuid> carrierOf{"nb.toxinheal"};  // healer bot -> the carrier it keeps up
+};
+
+RaidInstanceState<ToxinHealState> toxinHealStates;
+
+bool HasPlayer(std::vector<Player*> const& players, ObjectGuid const& guid)
+{
+    return std::any_of(players.begin(), players.end(), [&guid](Player* player) { return player->GetGUID() == guid; });
+}
+
+// Null off map 649. Every toxin trigger on every bot asks, so one read per instance per ms.
+ToxinHealState* RefreshToxinHeals(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    Map* map = bot ? bot->FindMap() : nullptr;
+    if (!map || map->GetId() != TRIAL_OF_THE_CRUSADER_MAP_ID || !bot->GetInstanceId())
+        return nullptr;
+
+    ToxinHealState& state = toxinHealStates.For(bot->GetInstanceId());
+    uint32 const now = getMSTime();
+    if (state.memoValid && state.memoMs == now)
+        return &state;
+
+    state.memoMs = now;
+    state.memoValid = true;
+    state.open = ToCEncounterGateOpen(botAI, ToCEncounter::NorthrendBeasts);
+
+    std::vector<Player*> carriers;
+    std::vector<Player*> healers;
+    bool bile = false;
+    Group* group = bot->GetGroup();
+    if (group && state.open)
+    {
+        uint32 const toxinId = sSpellMgr->GetSpellIdForDifficulty(SPELL_PARALYTIC_TOXIN, bot);
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsInWorld() || !member->IsAlive() ||
+                member->GetMapId() != TRIAL_OF_THE_CRUSADER_MAP_ID || member->GetInstanceId() != bot->GetInstanceId())
+                continue;
+
+            bile = bile || member->HasAura(SPELL_BURNING_BILE);
+            if (member->HasAura(toxinId))
+                carriers.push_back(member);
+            else if (PlayerbotAI::IsHeal(member) && GET_PLAYERBOT_AI(member))
+                healers.push_back(member);
+        }
+    }
+
+    JormungarsState const* worms = Refresh(botAI);
+    state.cureRuns = bile && worms && worms->engaged;
+    if (state.cureRuns)
+        carriers.clear();
+
+    std::vector<ObjectGuid> ended;
+    for (auto const& duty : state.carrierOf)
+        if (!HasPlayer(healers, duty.first) || !HasPlayer(carriers, duty.second))
+            ended.push_back(duty.first);
+
+    for (ObjectGuid const& healer : ended)
+        state.carrierOf.erase(healer);
+
+    std::sort(carriers.begin(), carriers.end(),
+              [](Player* lhs, Player* rhs) { return lhs->GetGUID() < rhs->GetGUID(); });
+    for (Player* carrier : carriers)
+    {
+        ObjectGuid const carrierGuid = carrier->GetGUID();
+        if (std::any_of(state.carrierOf.begin(), state.carrierOf.end(),
+                        [&carrierGuid](auto const& duty) { return duty.second == carrierGuid; }))
+            continue;
+
+        Player* nearest = nullptr;
+        float nearestDist = 0.0f;
+        for (Player* healer : healers)
+        {
+            if (state.carrierOf.count(healer->GetGUID()))
+                continue;
+
+            float const dist = healer->GetExactDist(carrier);
+            if (!nearest || dist < nearestDist || (!(nearestDist < dist) && healer->GetGUID() < nearest->GetGUID()))
+            {
+                nearest = healer;
+                nearestDist = dist;
+            }
+        }
+
+        if (nearest)
+            state.carrierOf[nearest->GetGUID()] = carrierGuid;
+    }
+
+    return &state;
+}
 }  // namespace
 
 bool IsWormSubmerged(Unit* worm) { return worm && worm->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE); }
@@ -1779,9 +1879,9 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
             rules.cones.push_back(worm.pos);
 
     // Spray's splash is 10 yd round where it lands, so casters keep that far off each other and off the
-    // melee round the mobile worm. Nothing sprays while the stationary worm is under ground. Carriers
-    // keep to their Bile and cure rules instead.
-    if (!cureWalk && caster && !toxin && !bile && bothWorms && stationaryUp)
+    // melee round the mobile worm. Only an up stationary worm sprays, a lone survivor too. Carriers keep
+    // to their Bile and cure rules instead.
+    if (!cureWalk && caster && !toxin && !bile && stationaryUp)
     {
         rules.self = self;
         for (WormMember const& member : state->roster)
@@ -2128,6 +2228,44 @@ bool WormReachCrossesPool(PlayerbotAI* botAI)
     WormRole const role = me ? me->role : RoleOf(bot);
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     return ReachCrossesPool(botAI, bot, *state, role, target, duty, HeldOut(*state, me, duty));
+}
+
+Player* GetWormToxinHealTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    ToxinHealState* state = bot && bot->IsAlive() ? RefreshToxinHeals(botAI) : nullptr;
+    if (!state)
+        return nullptr;
+
+    auto const duty = state->carrierOf.find(bot->GetGUID());
+    return duty != state->carrierOf.end() ? ObjectAccessor::GetPlayer(*bot, duty->second) : nullptr;
+}
+
+// Not a tank: its immunities belong to the tank defensive chain
+char const* GetWormToxinSelfPurge(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive() || IsBeastsTank(bot))
+        return nullptr;
+
+    ToxinHealState* state = RefreshToxinHeals(botAI);
+    if (!state || !state->open || state->cureRuns)
+        return nullptr;
+
+    Aura* toxin = bot->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_PARALYTIC_TOXIN, bot));
+    AuraEffect* slow = toxin ? toxin->GetEffect(EFFECT_0) : nullptr;
+    if (!slow || slow->GetAmount() > WORM_TOXIN_STUCK_SLOW)
+        return nullptr;
+
+    switch (bot->getClass())
+    {
+        case CLASS_PALADIN:
+            return "divine shield";
+        case CLASS_MAGE:
+            return "ice block";
+        default:
+            return nullptr;
+    }
 }
 
 }

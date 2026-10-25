@@ -903,7 +903,7 @@ def move(when: int, guid: int, action: str, ok: bool = True) -> dict:
             "ok": 1 if ok else 0, "r": "" if ok else "dup", "by": action, "pr": "combat"}
 
 
-def heroic_pull(berserk_row: bool = True, end: int = 515000) -> list[dict]:
+def heroic_pull(berserk_row: bool = True, end: int = 515000, src: str = "engage") -> list[dict]:
     records = [
         {"e": "hdr", "v": 13, "ts": 1789800000000, "map": 649, "inst": 11, "diff": 3,
          "boss": "gormok-the-impaler", "roster": [
@@ -913,7 +913,7 @@ def heroic_pull(berserk_row: bool = True, end: int = 515000) -> list[dict]:
              {"g": ROAM, "n": "Roam", "r": "ranged", "c": "warlock", "h": 0},
              {"g": STILL, "n": "Still", "r": "heal", "c": "priest", "h": 0},
              {"g": STAB, "n": "Stab", "r": "melee", "c": "rogue", "h": 0}]},
-        {"t": 0, "e": "pull", "boss": "gormok-the-impaler", "src": "engage"},
+        {"t": 0, "e": "pull", "boss": "gormok-the-impaler", "src": src},
         {"t": 1, "e": "unit", "g": GORMOK, "en": nb.NPC_GORMOK, "n": "Gormok the Impaler", "b": 1},
         {"t": 1, "e": "unit", "g": ACIDMAW, "en": nb.NPC_ACIDMAW, "n": "Acidmaw", "b": 1},
         {"t": 1, "e": "unit", "g": DREADSCALE, "en": nb.NPC_DREADSCALE, "n": "Dreadscale", "b": 1},
@@ -1077,6 +1077,8 @@ class BerserkWithoutRow(unittest.TestCase):
         cls.due = load(cls.folder.name, "649_12_gormok-the-impaler_1789800000.ndjson", heroic_pull(False))
         cls.short = load(cls.folder.name, "649_13_gormok-the-impaler_1789800000.ndjson",
                          heroic_pull(False, end=400000))
+        cls.on_state = load(cls.folder.name, "649_14_gormok-the-impaler_1789800000.ndjson",
+                            heroic_pull(False, src="bossstate"))
 
     @classmethod
     def tearDownClass(cls):
@@ -1098,6 +1100,53 @@ class BerserkWithoutRow(unittest.TestCase):
     def test_a_trace_ending_first_never_reaches_it(self):
         self.assertEqual(nb.berserk(self.short), {"t": 509000, "cast": False, "reached": False, "health": {}})
         self.assertIn("Berserk 26662 due at 8:29.000, not reached", self.banner(self.short))
+
+    def test_a_trace_opened_on_the_boss_state_dates_it_520_s_in(self):
+        self.assertEqual(nb.berserk(self.on_state), {"t": 520000, "cast": False, "reached": False, "health": {}})
+        self.assertIn("Berserk 26662 due at 8:40.000, not reached", self.banner(self.on_state))
+
+
+def toxin_after_worms_pull() -> list[dict]:
+    """Wall's Toxin ends inside the worm stage, Still's runs on past its end."""
+    return [
+        {"e": "hdr", "v": 13, "ts": 1789900000000, "map": 649, "inst": 15, "diff": 3,
+         "boss": "trial-of-the-crusader", "roster": [
+             {"g": WALL, "n": "Wall", "r": "tank", "c": "warrior", "h": 0},
+             {"g": STILL, "n": "Still", "r": "heal", "c": "priest", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "trial-of-the-crusader", "src": "bossstate"},
+        note(0, WALL, "nb.stage", "2"),
+        note(50000, WALL, "nb.stage", "0"),
+        note(65000, WALL, "nb.stage", "4"),
+        debuff(20000, WALL, PARALYTIC_TOXIN, ACIDMAW),
+        debuff(30000, WALL, PARALYTIC_TOXIN, ACIDMAW, removed=True),
+        debuff(45000, STILL, PARALYTIC_TOXIN, ACIDMAW),
+        debuff(90000, STILL, PARALYTIC_TOXIN, ACIDMAW, removed=True),
+        {"t": 120000, "e": "end", "out": "wipe"},
+    ]
+
+
+class ToxinAfterWorms(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, "649_15_trial-of-the-crusader_1789900000.ndjson", toxin_after_worms_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_worm_stage_ends_with_its_last_span(self):
+        self.assertEqual(nb.worms_end(self.trace), 50000)
+
+    def test_only_toxin_carried_past_the_worms_outlives_them(self):
+        self.assertEqual([(row["carrier"], row["outlived"]) for row in nb.toxin_spans(self.trace)],
+                         [(WALL, False), (STILL, True)])
+
+    def test_cure_prints_the_outlived_spans(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_cure(self.trace)
+        self.assertIn("outlived the worms: 1", out.getvalue())
 
 
 if __name__ == "__main__":

@@ -41,6 +41,24 @@ public:
     bool IsActive() override;
 };
 
+// A healer's Toxin carrier, one no Bile can cure, is hurt and in heal reach
+class NorthrendWormsToxinCarrierHurtTrigger : public Trigger
+{
+public:
+    NorthrendWormsToxinCarrierHurtTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms toxin carrier hurt") {}
+    bool IsActive() override;
+};
+
+// The bot's own uncurable Toxin has it stuck and its immunity is ready
+class NorthrendWormsToxinStuckTrigger : public Trigger
+{
+public:
+    NorthrendWormsToxinStuckTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms toxin stuck") {}
+    bool IsActive() override;
+};
+
 class ToCJormungarsTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
@@ -56,6 +74,10 @@ public:
             &ToCJormungarsTriggerContext::northrend_worms_misplaced;
         creators["northrend worms dps target"] =
             &ToCJormungarsTriggerContext::northrend_worms_dps_target;
+        creators["northrend worms toxin carrier hurt"] =
+            &ToCJormungarsTriggerContext::northrend_worms_toxin_carrier_hurt;
+        creators["northrend worms toxin stuck"] =
+            &ToCJormungarsTriggerContext::northrend_worms_toxin_stuck;
     }
 
 private:
@@ -77,6 +99,14 @@ private:
 
     static Trigger* northrend_worms_dps_target(PlayerbotAI* botAI) {
         return new NorthrendBeastsDpsTargetTrigger(botAI, "northrend worms dps target", NorthrendBeastsStem::Worms);
+    }
+
+    static Trigger* northrend_worms_toxin_carrier_hurt(PlayerbotAI* botAI) {
+        return new NorthrendWormsToxinCarrierHurtTrigger(botAI);
+    }
+
+    static Trigger* northrend_worms_toxin_stuck(PlayerbotAI* botAI) {
+        return new NorthrendWormsToxinStuckTrigger(botAI);
     }
 };
 

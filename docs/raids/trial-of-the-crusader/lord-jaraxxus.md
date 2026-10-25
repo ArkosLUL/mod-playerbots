@@ -10,10 +10,10 @@ Raid-wide facts and the code layout: [README.md](README.md). Mechanics source:
   and attacks `SelectNearestTarget(200)`, so whoever stands nearest takes the first swings.
 - He is a `BossAI` on boss state `BOSS_JARAXXUS` (1): `_JustEngagedWith` sets it `IN_PROGRESS`.
   `MoveInLineOfSight` is empty, so he never aggros by proximity.
-- **Wipe**: evade despawns his summons, sets `NON_ATTACKABLE` and `TYPE_FAILED`; the cleanup respawns
-  him at the centre, attackable and aggressive, wearing the cosmetic chains 67924 until pulled. The
-  stage stays 3, so the gate stays open: the main tank's hold waits for combat, and the leader pulls
-  the retry. `Reset` despawns every portal and volcano within 500 yd.
+- **Wipe**: evade despawns his summons, sets `NON_ATTACKABLE` and `TYPE_FAILED`; the cleanup (Tirion)
+  respawns him at the centre chained (67924), unattackable and passive, and sets `FAIL`. The stage
+  stays 3, so the gate stays open; the retry gossip frees him straight into a forced attack on the
+  nearest player, so bots stage round the centre meanwhile and the main tank's hold waits for combat. `Reset` despawns every portal and volcano within 500 yd.
 - **Kill**: `summons.DespawnAll` takes the portals and volcanoes, not the Mistresses and Infernals
   they summoned, which live on into stage 4 (heroic Mistresses keep kissing). Multipliers that
   concern the adds gate on "open", not "live".

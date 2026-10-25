@@ -8,12 +8,13 @@ boss turned hostile, and whom the boss went for first.
 Raid-wide, so it reads a trace of any ToC encounter. What the generic views miss here, and what this
 reads instead:
 
-- **A release is a unit's first victim.** ToC keeps no boss state, and a Beasts trace opens at
-  Gormok's engage, so nothing marks a later beast turning on the raid but the first snapshot row
-  whose target column is set. Gormok, each worm, Icehowl, Jaraxxus, each twin and Anub'arak get their
+- **A release is a unit's first victim.** One boss state spans all four beasts, set at the intro's
+  end, so nothing marks a later beast turning on the raid but the first snapshot row whose target
+  column is set. Gormok, each worm, Icehowl, Jaraxxus, each twin and Anub'arak get their
   own; of the 28 champions only the first to take a target. Jaraxxus kills Fizzlebang with a
   triggered cast, which sets no victim, so the intro never reads as one.
-- **`toc.stage` is per bot and change only, and a session opens at the engage.** A note written
+- **`toc.stage` is per bot and change only, and a session opens on the boss state or the first
+  engage, whichever comes first.** A note written
   before the open never reaches the file, so for 2 s after the arrival closes any bot's tick notes
   every bot's last label again. The note that counts is the bot's latest up to 2 s past the release:
   `none` when that reads `none` (in the window with no stand), else its latest whose label leads with

@@ -29,6 +29,22 @@ bool NorthrendWormsMisplacedTrigger::IsActive()
     return GetWormMovePlan(botAI, plan) && plan.reason != WormMoveReason::None;
 }
 
+bool NorthrendWormsToxinCarrierHurtTrigger::IsActive()
+{
+    if (!PlayerbotAI::IsHeal(bot))
+        return false;
+
+    Player* carrier = GetWormToxinHealTarget(botAI);
+    return carrier && carrier->GetHealthPct() < WORM_TOXIN_HEAL_PCT &&
+           bot->GetDistance(carrier) <= sPlayerbotAIConfig.HealDistance && bot->IsWithinLOSInMap(carrier);
+}
+
+bool NorthrendWormsToxinStuckTrigger::IsActive()
+{
+    char const* purge = GetWormToxinSelfPurge(botAI);
+    return purge && botAI->CanCastSpell(purge, bot);
+}
+
 void AddToCJormungarsTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(new TriggerNode("northrend worms mobile tank duty", {
@@ -45,4 +61,12 @@ void AddToCJormungarsTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("northrend worms misplaced", {
         NextAction("northrend worms reposition", ACTION_EMERGENCY + 6) }));
+
+    triggers.push_back(new TriggerNode("northrend worms toxin stuck", {
+        NextAction("northrend worms purge toxin", ACTION_EMERGENCY + 5) }));
+
+    // Above the staging and breath stand walks, which hold the tick while in flight: on the move only the
+    // instants go out
+    triggers.push_back(new TriggerNode("northrend worms toxin carrier hurt", {
+        NextAction("northrend worms heal toxin carrier", ACTION_RAID + 3) }));
 }

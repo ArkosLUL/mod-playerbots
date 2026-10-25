@@ -1,6 +1,9 @@
 #ifndef PLAYERBOTS_RAID_TOCHELPERS_SHARED_H
 #define PLAYERBOTS_RAID_TOCHELPERS_SHARED_H
 
+#include <functional>
+#include <string>
+
 #include "PlayerbotAI.h"
 #include "ToCData.h"
 
@@ -36,6 +39,11 @@ bool ToCPetOffPick(PlayerbotAI* botAI, Unit* pick);
 // On map 649, puts a bot's rti of cross, square, triangle or diamond back to skull: rti is saved per
 // bot and no ToC node reads those tags. rti cc stays, Faction Champions uses it.
 void ToCRestoreLegacyRti(PlayerbotAI* botAI);
+
+// Casts the first heal this bot can land on target: big instants, then cast-time heals, HoTs last. A HoT
+// it already has ticking there is skipped, and so is any heal skip() turns down.
+bool CastToCThroughputHeal(PlayerbotAI* botAI, Unit* target,
+                           std::function<bool(std::string const&)> const& skip = nullptr);
 
 }
 

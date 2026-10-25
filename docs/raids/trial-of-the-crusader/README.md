@@ -31,7 +31,7 @@ things:
   | 0 | before the intro | Beasts |
   | 1 | intro done | Beasts |
   | 2 | Beasts dead, Fizzlebang intro (Jaraxxus not attackable) | Jaraxxus |
-  | 3 | Jaraxxus released; after a wipe he respawns at the centre, aggressive | Jaraxxus |
+  | 3 | Jaraxxus released; after a wipe he respawns at the centre chained, unattackable and passive till Barrett's gossip | Jaraxxus |
   | 4 | Jaraxxus dead | Faction Champions |
   | 6 | champions dead | Twin Val'kyr |
   | 8 | twins dead, Lich King scene | none |
@@ -42,7 +42,7 @@ things:
   It goes true before most pulls: from the end of the Beasts intro (stage 1) through every walk-in
   until the last beast dies, at the champions' release, 3.25 s before the twins turn aggressive.
   Jaraxxus and Anub'arak set it on engage. An evade (`TYPE_FAILED`) or an all-dead cleanup sets every
-  `IN_PROGRESS` boss back to `NOT_STARTED`.
+  `IN_PROGRESS` boss to `FAIL` (RaidObs closes the trace `wipe`).
 - **`GetGuidData`**: Gormok (4), Dreadscale (6), Acidmaw (7), the twins by NPC entry (34497 Fjola,
   34496 Eydis), Anub'arak (11, also while submerged). Icehowl, Jaraxxus and the champions only by
   entry. Resolve with `map->GetCreature(GetGuidData(type))`; `InstanceScript::GetCreature(type)`
@@ -237,7 +237,7 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
 | Gormok | `Locs[1]` (563.9, 178.4), the gate front | forced: `AttackStart(SelectNearestTarget(200))` 10 s after his summon, 46 s from the first gossip, 11 s on a retry |
 | Dreadscale (mobile), Acidmaw (stationary) | `Locs[2]` (575.7, 171.5), `Locs[3]` (549.9, 171.5) | forced, 17.5 s after Gormok dies; heroic on the 150 s timer |
 | Icehowl | `Locs[1]` | forced, 15.5 s after the second worm dies |
-| Jaraxxus | (563.7, 129.6), 10 yd south of `Locs[4]` | forced, 70.8 s from the gossip. A wipe respawns him on `Locs[4]` chained and unattackable; the retry gossip frees him with a forced attack at once |
+| Jaraxxus | (563.7, 129.6), 10 yd south of `Locs[4]` | forced, 71.8 s from the gossip. A wipe respawns him on `Locs[4]` chained and unattackable; the retry gossip frees him with a forced attack at once |
 | Faction Champions | `FactionChampionLoc[10..19]`, x 520-536 for an Alliance raid, mirrored about `Locs[4]` x for Horde | proximity, from 4 s after the jump; the first engaged pulls all (`TYPE_FACTION_CHAMPIONS_START`) |
 | Twins | Fjola `Locs[9]` (585.5, 170), Eydis `Locs[10]` (545.5, 170), 6 yd up | proximity, from 25.5 s after the gossip |
 | Anub'arak | `Locs[17]` (785.9, 133.4) | attackable once a player is inside 80 yd, then proximity |
@@ -263,7 +263,8 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
 
 - Opens at the gossip, not before, so bots stay with the player while they buff, eat or talk: no
   Barrett gossip after one was seen at this stage. The latch keeps the gap after a kill closed until
-  the next stage's Barrett shows.
+  the next stage's Barrett shows. A lost one is searched for at once, else every 500 ms, so a gossip
+  picked as he spawns is still seen.
 - Stage 3 (a Jaraxxus retry) opens during the gossip too, since it frees him at once. Stage 9 opens
   with no Barrett test.
 - The next beast by guid slot: Gormok while slot 4 is empty or alive, else the worms while slot 6 or 7

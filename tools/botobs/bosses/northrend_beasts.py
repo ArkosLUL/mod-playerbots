@@ -22,9 +22,9 @@ What the generic views get wrong here, and what this reads instead:
   row. `nb.charge` 4 and 5 are the only record of how a charge ended, and `--charge` reads the daze
   as the 15 s from the 4.
 - **Heroic Berserk 26662 shows only as a triggered `cast` row** on a beast. With none the banner
-  takes its due time, 509 s into the trace: the trace opens at Gormok's engage, 11 s after the
-  intro's end, and the script casts Berserk 520 s after that end. A dead creature drops out of the
-  snapshot, so a beast with no row in the 1.5 s before it reads dead.
+  takes its due time: the script casts it 520 s after the intro's end, where a `bossstate` pull
+  opens, so 520 s into such a trace and 509 s into one opened at Gormok's engage, 11 s later. A dead
+  creature drops out of the snapshot, so a beast with no row in the 1.5 s before it reads dead.
 - **The charge has no world object.** Its path is a `haz` `lane` row, which never reaches `snap.hz`,
   so no death block says STOOD IN for Trample. `--charge` measures the lane's end against the nearest
   snapshot instead: the script tests contact on arrival, 12 yd round his end point.
@@ -101,7 +101,11 @@ SPELL_BERSERK = 26662
 WHIRL = (67345, 67663, 67664, 67665)
 
 HEROIC = (2, 3)
-BERSERK_DUE_MS = 509000
+# The script casts Berserk 520 s after the intro's end, where the boss state's `bossstate` pull opens;
+# an `engage` pull opens at Gormok's forced attack, 11 s on
+BERSERK_AFTER_INTRO_MS = 520000
+GORMOK_AFTER_INTRO_MS = 11000
+WORMS_STAGE_BIT = 2
 
 STAGE_BITS = ((1, "gormok"), (2, "worms"), (4, "icehowl"))
 
@@ -194,6 +198,13 @@ def beast_health(trace: Trace, entry: int, when: int) -> float | None:
     return None
 
 
+def berserk_due_ms(trace: Trace) -> int:
+    """When Berserk is due on the trace's clock, from how its first `pull` row opened it."""
+    pulls = trace.of("pull")
+    opened_on_state = bool(pulls) and pulls[0].get("src") == "bossstate"
+    return BERSERK_AFTER_INTRO_MS - (0 if opened_on_state else GORMOK_AFTER_INTRO_MS)
+
+
 def berserk(trace: Trace) -> dict | None:
     """Heroic only: when Berserk landed, from its cast row on a beast, else when it was due, whether
     the trace reached it, and each beast's health then by name, None for dead."""
@@ -202,7 +213,7 @@ def berserk(trace: Trace) -> dict | None:
     beasts = {guid for _, entry in BEASTS for guid in guids_of_entry(trace, entry)}
     cast = next((rec for rec in trace.of("cast") if rec.get("sp") == SPELL_BERSERK and rec.get("s") in beasts),
                 None)
-    when = cast["t"] if cast else BERSERK_DUE_MS
+    when = cast["t"] if cast else berserk_due_ms(trace)
     reached = when <= pull_end(trace)
     return {
         "t": when,
@@ -1241,10 +1252,25 @@ def carried(trace: Trace, spells) -> list[tuple[int, int, int, bool]]:
     return sorted(out, key=lambda row: (row[1], row[0]))
 
 
+def worms_end(trace: Trace) -> int | None:
+    """When the last `nb.stage` span holding a worm ended, None with no worm stage."""
+    ends = []
+    for span in stage_spans(trace):
+        try:
+            mask = int(span["value"])
+        except ValueError:
+            continue
+        if mask & WORMS_STAGE_BIT:
+            ends.append(span["stop"])
+    return max(ends) if ends else None
+
+
 def toxin_spans(trace: Trace) -> list[dict]:
     """Every Paralytic Toxin span with how it ended: `died`, `cured` (a Bile pulse hit the carrier
     within 250 ms of the removal), `expired` (59 s or more), `other`, or `open` at the end of the file.
-    `stuck` once carried past the snare's full stop."""
+    `stuck` once carried past the snare's full stop, `outlived` once carried past the worm stage's end,
+    where the bots' cure pairing stops."""
+    last_worm = worms_end(trace)
     pulses: dict[int, list[int]] = collections.defaultdict(list)
     for rec in trace.of("dmg"):
         if rec.get("sp") in SPELL_BILE_PULSE:
@@ -1264,7 +1290,8 @@ def toxin_spans(trace: Trace) -> list[dict]:
             ended = "expired"
         else:
             ended = "other" if removed else "open"
-        out.append({"carrier": guid, "start": start, "stop": stop, "end": ended, "stuck": stop - start > stuck})
+        out.append({"carrier": guid, "start": start, "stop": stop, "end": ended, "stuck": stop - start > stuck,
+                    "outlived": last_worm is not None and stop > last_worm})
     return out
 
 
@@ -1343,11 +1370,14 @@ def show_cure(trace: Trace) -> None:
         for span in toxins:
             print(f"    {trace.name(span['carrier'])[:14]:14} {trace.role(span['carrier']):6}"
                   f" {clock(span['start']):>9} {clock(span['stop']):>9} {(span['stop'] - span['start']) / 1000:6.1f}"
-                  f"  {span['end']}" + ("  stuck" if span["stuck"] else ""))
+                  f"  {span['end']}" + ("  stuck" if span["stuck"] else "")
+                  + ("  outlived the worms" if span["outlived"] else ""))
         tally = collections.Counter(span["end"] for span in toxins)
         stuck = sum(1 for span in toxins if span["stuck"])
+        outlived = sum(1 for span in toxins if span["outlived"])
         print("  ended: " + ", ".join(f"{end} {n}" for end, n in tally.most_common())
-              + f"; stuck past {toxin_stuck_ms(trace.header.get('diff')) / 1000:.1f} s: {stuck}")
+              + f"; stuck past {toxin_stuck_ms(trace.header.get('diff')) / 1000:.1f} s: {stuck}"
+              + f"; outlived the worms: {outlived}")
 
     biles = bile_spans(trace)
     if not biles:

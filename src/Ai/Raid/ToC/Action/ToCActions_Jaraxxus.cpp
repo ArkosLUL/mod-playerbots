@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iterator>
 #include <string>
 #include <vector>
 
@@ -14,6 +13,7 @@
 #include "ToCData.h"
 #include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_Jaraxxus.h"
+#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -42,21 +42,6 @@ void DropForeignBooking(LastMovement& last, Position const& own, MovementPriorit
         last.clear();
 }
 
-// Highest throughput first: big instants, then cast-time heals, HoTs last
-char const* const INCINERATE_HEALS[] = {
-    "holy shock", "riptide", "swiftmend", "penance",
-    "holy light", "greater heal", "healing wave", "nourish", "healing touch",
-    "flash of light", "flash heal", "lesser healing wave", "regrowth",
-    "renew", "rejuvenation", "lifebloom", "wild growth", "prayer of mending",
-};
-
-char const* const INCINERATE_HOTS[] = {"renew", "rejuvenation", "lifebloom", "wild growth", "prayer of mending"};
-
-bool IsHot(std::string const& heal)
-{
-    return std::any_of(std::begin(INCINERATE_HOTS), std::end(INCINERATE_HOTS),
-                       [&heal](char const* hot) { return heal == hot; });
-}
 }  // namespace
 
 bool JaraxxusInterruptFelFireballAction::Execute(Event /*event*/)
@@ -348,22 +333,6 @@ bool JaraxxusHealIncinerateTargetAction::Execute(Event /*event*/)
 
     // the kiss punishes anything still casting on its 0.5 s check
     bool const kissed = HasMistressKiss(bot);
-    for (char const* heal : INCINERATE_HEALS)
-    {
-        if (kissed && JaraxxusSpellHasCastTime(botAI, heal))
-            continue;
-
-        // a HoT already ticking is a recast for nothing
-        if (IsHot(heal))
-        {
-            uint32 const spellId = AI_VALUE2(uint32, "spell id", heal);
-            if (spellId && target->HasAura(spellId, bot->GetGUID()))
-                continue;
-        }
-
-        if (botAI->CanCastSpell(heal, target))
-            return botAI->CastSpell(heal, target);
-    }
-
-    return false;
+    return CastToCThroughputHeal(botAI, target, [this, kissed](std::string const& heal)
+                                 { return kissed && JaraxxusSpellHasCastTime(botAI, heal); });
 }

@@ -1,4 +1,9 @@
 #include "ToCHelpers_Shared.h"
+
+#include <algorithm>
+#include <cstring>
+#include <iterator>
+
 #include "Playerbots.h"
 #include "Creature.h"
 #include "Group.h"
@@ -115,6 +120,41 @@ void ToCRestoreLegacyRti(PlayerbotAI* botAI)
     std::string const mark = rti->Get();
     if (mark == "cross" || mark == "square" || mark == "triangle" || mark == "diamond")
         rti->Set("skull");
+}
+
+bool CastToCThroughputHeal(PlayerbotAI* botAI, Unit* target, std::function<bool(std::string const&)> const& skip)
+{
+    static char const* const heals[] = {
+        "holy shock", "riptide", "swiftmend", "penance",
+        "holy light", "greater heal", "healing wave", "nourish", "healing touch",
+        "flash of light", "flash heal", "lesser healing wave", "regrowth",
+        "renew", "rejuvenation", "lifebloom", "wild growth", "prayer of mending",
+    };
+    static char const* const hots[] = {"renew", "rejuvenation", "lifebloom", "wild growth", "prayer of mending"};
+
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !target)
+        return false;
+
+    for (char const* heal : heals)
+    {
+        if (skip && skip(heal))
+            continue;
+
+        bool const hot = std::any_of(std::begin(hots), std::end(hots),
+                                     [heal](char const* name) { return std::strcmp(heal, name) == 0; });
+        if (hot)
+        {
+            uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", heal)->Get();
+            if (spellId && target->HasAura(spellId, bot->GetGUID()))
+                continue;
+        }
+
+        if (botAI->CanCastSpell(heal, target))
+            return botAI->CastSpell(heal, target);
+    }
+
+    return false;
 }
 
 }

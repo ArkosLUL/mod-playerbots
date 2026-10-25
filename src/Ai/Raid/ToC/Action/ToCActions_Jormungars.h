@@ -88,6 +88,24 @@ private:
     bool hasIssuedSpot = false;
 };
 
+// Heals the healer's Toxin carrier, one no Bile can cure
+class NorthrendWormsHealToxinCarrierAction : public Action
+{
+public:
+    NorthrendWormsHealToxinCarrierAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms heal toxin carrier") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// Divine Shield or Ice Block off the bot's own uncurable Toxin
+class NorthrendWormsPurgeToxinAction : public Action
+{
+public:
+    NorthrendWormsPurgeToxinAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms purge toxin") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class ToCJormungarsActionContext : public NamedObjectContext<Action>
 {
 public:
@@ -103,6 +121,10 @@ public:
             &ToCJormungarsActionContext::northrend_worms_reposition;
         creators["northrend worms dps target"] =
             &ToCJormungarsActionContext::northrend_worms_dps_target;
+        creators["northrend worms heal toxin carrier"] =
+            &ToCJormungarsActionContext::northrend_worms_heal_toxin_carrier;
+        creators["northrend worms purge toxin"] =
+            &ToCJormungarsActionContext::northrend_worms_purge_toxin;
     }
 
 private:
@@ -124,6 +146,14 @@ private:
 
     static Action* northrend_worms_dps_target(PlayerbotAI* botAI) {
         return new NorthrendBeastsDpsTargetAction(botAI, "northrend worms dps target");
+    }
+
+    static Action* northrend_worms_heal_toxin_carrier(PlayerbotAI* botAI) {
+        return new NorthrendWormsHealToxinCarrierAction(botAI);
+    }
+
+    static Action* northrend_worms_purge_toxin(PlayerbotAI* botAI) {
+        return new NorthrendWormsPurgeToxinAction(botAI);
     }
 };
 

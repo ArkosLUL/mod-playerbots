@@ -71,6 +71,8 @@ constexpr float WORM_CURE_REACH = 6.0f;
 constexpr float WORM_CURE_TRIGGER = 8.0f;
 // Toxin's snare amount (EFFECT_0) at which its carrier waits for a runner instead of walking
 constexpr int32 WORM_TOXIN_STUCK_SLOW = -70;
+// A carrier no Bile can cure gets its healer's heal under this health
+constexpr float WORM_TOXIN_HEAL_PCT = 80.0f;
 
 // Held spots
 constexpr float WORM_HOLD_ARRIVE = 1.0f;
@@ -250,6 +252,14 @@ void BackOffWormSearch(PlayerbotAI* botAI);     // the plan stays quiet on non-u
 // reach melee or reach spell would walk this bot through a pool, and the reposition can still find a
 // way round: not while its search backs off, nor past the search radius
 bool WormReachCrossesPool(PlayerbotAI* botAI);
+
+// Toxin no Bile can cure: no worm is engaged, so the cure pairing is off, or nobody carries Bile. Only
+// a Bile pulse removes it, and it ticks on to 60 s, so a lone survivor's Spray kills unhealed. Each such
+// carrier gets one healer bot, nearest first, latched till its Toxin ends, while the Beasts gate is open.
+Player* GetWormToxinHealTarget(PlayerbotAI* botAI);  // the carrier this healer bot keeps up, else nullptr
+// This non-tank bot's own such Toxin has it stuck: "divine shield" or "ice block", whose school immunity
+// purges it, else nullptr. Before Paralysis, which leaves the bot unable to cast anything.
+char const* GetWormToxinSelfPurge(PlayerbotAI* botAI);
 
 }
 

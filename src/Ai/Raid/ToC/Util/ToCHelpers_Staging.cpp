@@ -40,7 +40,9 @@ namespace
 std::vector<uint32> const BARRETT_ENTRIES = {34816, 35909, 35035, 35766, 35770, 35771};
 // He stands about 50 yd from ARENA_CENTER, so this reaches him from anywhere in the arena
 constexpr float BARRETT_SEARCH_RADIUS = 250.0f;
-constexpr uint32 BARRETT_SEARCH_MS = 2000;
+// Each stage summons a new Barrett whose gossip can be picked as soon as he spawns, and the window only
+// opens once a read saw him with it
+constexpr uint32 BARRETT_SEARCH_MS = 500;
 
 // The reader takes a stand noted up to 2 s past the release
 constexpr uint32 STAGING_NOTE_TAIL_MS = 2000;
@@ -832,11 +834,12 @@ Creature* FindBarrett(Player* bot, StagingState& state, uint32 now)
     if (!map)
         return nullptr;
 
-    if (!state.barrett.IsEmpty())
+    bool const lost = !state.barrett.IsEmpty();
+    if (lost)
         if (Creature* barrett = map->GetCreature(state.barrett))
             return barrett;
 
-    if (state.barrettSearched && getMSTimeDiff(state.barrettSearchMs, now) < BARRETT_SEARCH_MS)
+    if (!lost && state.barrettSearched && getMSTimeDiff(state.barrettSearchMs, now) < BARRETT_SEARCH_MS)
         return nullptr;
 
     state.barrettSearched = true;
