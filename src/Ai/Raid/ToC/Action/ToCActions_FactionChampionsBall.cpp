@@ -123,6 +123,12 @@ bool FactionChampionsKiteAction::Execute(Event /*event*/)
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED);
 }
 
+bool FactionChampionsSpeedBoostAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = FactionChampionsSpeedBoost(botAI);
+    return spellId && botAI->CastSpell(spellId, bot);
+}
+
 bool FactionChampionsOpenerAction::Execute(Event /*event*/)
 {
     uint32 spellId = 0;

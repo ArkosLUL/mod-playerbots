@@ -26,8 +26,8 @@
     faction_champions.py <file> --damage   damage to the raid per champion, and how the melee were controlled
     faction_champions.py <file> --personal personal defensives and the health they went up at, per death (the
                                            melee champions' share, the pins, a kite before), healthstones over 70%,
-                                           the escapes and kites, how far the chasers were after, whether they
-                                           dropped the bot and it lived
+                                           the escapes, Sprint and Dash casts and kites, how far the chasers were
+                                           after, whether they dropped the bot and it lived
     faction_champions.py <file> --focus    4+ champions on one raid member: episodes, the externals and
                                            immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --hold     each melee champion's holder: the champion on it, how far off the
@@ -389,6 +389,7 @@ NITRO_REASONS = ("focus", "melee", "contact", "next", "walk")
 NITRO_RUN_MS = 5000
 # a caster's Nova, Blink, circle teleport or fear off the melee champions on it, the spell's name
 ESCAPE = "fc.escape"
+SPEED_SPELLS = {2983: "Sprint", 8696: "Sprint", 11305: "Sprint", 1850: "Dash", 9821: "Dash", 33357: "Dash"}
 ESCAPE_WATCH_MS = 10000
 # a bot's hop off the melee champions on it, `<chasers> melee, <nearest> yd`
 KITE = "fc.kite"
@@ -2999,6 +3000,17 @@ def escape_rows(trace: Trace) -> list[dict]:
              **chase_after(trace, rec.get("g"), rec["t"])} for rec in notes(trace, ESCAPE)]
 
 
+def speed_rows(trace: Trace) -> list[dict]:
+    """Every raid Sprint or Dash cast in the pull: `t`, `bot`, `spell`, and the `chase_after` fields at it."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    roster = roster_guids(trace)
+    start, end = pull_start(trace), pull_end(trace)
+    return [{"t": rec["t"], "bot": rec["s"], "spell": SPEED_SPELLS[rec["sp"]],
+             **chase_after(trace, rec["s"], rec["t"])} for rec in trace.of("cast")
+            if rec.get("sp") in SPEED_SPELLS and rec.get("s") in roster and start <= rec["t"] <= end]
+
+
 def kite_rows(trace: Trace) -> list[dict]:
     """Every kite, a bot's `fc.kite` hops with under KITE_GAP_MS between them: `t` of its first hop, `bot`,
     `hops`, `secs` from its first hop to its last, and the `chase_after` fields at the first."""
@@ -3137,6 +3149,15 @@ def show_personal(trace: Trace) -> None:
         print("  fc.escape: " + ", ".join(f"{name} {count}" for name, count in tally.most_common()))
     else:
         print("\n  fc.escape: none")
+    speeds = speed_rows(trace)
+    if speeds:
+        print(f"\n  {'speed at':>9} {'bot':14} {'spell':10} {chase_head}")
+        for row in speeds:
+            print(f"  {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {row['spell']:10}{chase_cells(row)}")
+        chased = sum(1 for row in speeds if row["melee"])
+        print(f"  Sprint and Dash: {len(speeds)} cast(s), {chased} with a melee champion on the bot")
+    else:
+        print("  Sprint and Dash: none")
     kites = kite_rows(trace)
     if kites:
         print(f"\n  {'kite at':>9} {'bot':14} {'role':6} {'hops':>4} {'secs':>5} {chase_head}")
@@ -3147,7 +3168,8 @@ def show_personal(trace: Trace) -> None:
         print(f"  {KITE}: {len(kites)} kite(s), the chasers dropped the bot in {len(dropped)}")
     else:
         print(f"  {KITE}: none")
-    print("  hp is the bot's health in the last sample at or before the cast or first hop; melee and other are the"
+    print("  speed rows are every raid Sprint or Dash cast in the pull; hp is the bot's health in the last sample at or"
+          " before the cast or first hop; melee and other are the"
           f" champions with the bot as target then, {looks} the nearest of those melee champions' distance in yd"
           f" after, dropped none of them on the bot {DROPPED_MS // 1000} s after; a kite is a bot's {KITE} hops"
           f" under {KITE_GAP_MS // 1000} s apart; a death's melee is the melee champions' share of the champion"

@@ -9,8 +9,9 @@ class PlayerbotAI;
 class Unit;
 
 // Faction Champions positioning: healers and ranged stay put, the Cyclone stand, the healers' step off the
-// melee, the trinket opener, the Nitro Boosts run, the kite and the casters' escapes. Every reader answers null or
-// false unless the encounter is live, but the pre-pull Demonic Circle and FactionChampionsKitesFrom.
+// melee, the trinket opener, the Nitro Boosts run, the kite, Sprint and Dash and the casters' escapes. Every
+// reader answers null or false unless the encounter is live, but the pre-pull Demonic Circle and
+// FactionChampionsKitesFrom.
 namespace TrialOfTheCrusaderHelpers
 {
 
@@ -55,6 +56,11 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot);
 // A melee champion the bot kites from is within 45 yd: reaching its target or a heal target would walk it
 // back in
 bool FactionChampionsKiteHold(PlayerbotAI* botAI);
+
+// The Sprint or Dash rank to cast now, else 0: a rogue, or a druid in Cat Form, with a melee champion it kites from
+// within 8 yd that isn't rooted, slowed or stunned, the spell ready and no speed buff as fast on it yet, Nitro
+// Boosts' included. Not while rooted, stunned, on a Nitro run or a CC duty.
+uint32 FactionChampionsSpeedBoost(PlayerbotAI* botAI);
 
 constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
 

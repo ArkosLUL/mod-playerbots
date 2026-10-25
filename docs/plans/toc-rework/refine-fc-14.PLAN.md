@@ -36,6 +36,10 @@ pulls below ran.
    15 yd; the class node is zeroed.
 5. **Reader:** per-role chase spacing, Nitro travel and chaser after, wall grips with `regrip`, death causes, Chains
    of Ice freed. Tests, docs.
+6. **Speed boost** (follow-up commit): rogues Sprint and Cat Form druids Dash with a free melee champion they kite
+   from within 8 yd, under Nitro and over the kite; the class `sprint` and `dash` zeroed all fight. Ghost Wolf left
+   out: no shaman has Improved Ghost Wolf. Reader: Sprint and Dash casts in `--personal` (today: 3 and 4, all on the
+   opening run-in but one).
 
 ## Targets (next 25H)
 

@@ -1607,6 +1607,9 @@ def focus_pull() -> list[dict]:
         # the mage blinks off its four and lives, the priest screams and dies 1.8 s later
         note(1000, MAGE, fc.ESCAPE, "Blink"),
         note(3000, PRIEST, fc.ESCAPE, "Psychic Scream"),
+        # the moonkin dashes with nobody on it, the mage sprints inside its four
+        cast(500, MOON, 33357, MOON),
+        cast(1000, MAGE, 11305, MAGE),
         # two mage hops 1.4 s apart make one kite
         note(1100, MAGE, fc.KITE, "2 melee, 20 yd"),
         note(2500, MAGE, fc.KITE, "0 melee, 20 yd"),
@@ -1678,6 +1681,14 @@ class FocusAndRepick(unittest.TestCase):
         self.assertTrue(mage["dropped"])
         self.assertEqual((priest["near"], priest["dropped"]), ([None, None], None))
         self.assertRegex(self.render(fc.show_personal), r"0:01\.000 Frost +Blink +2\+2 +\d+% +20 +20 +yes  yes")
+
+    def test_sprint_and_dash_read_the_champions_on_their_bot(self):
+        rows = fc.speed_rows(self.trace)
+        self.assertEqual([(row["t"], row["bot"], row["spell"], row["melee"], row["others"]) for row in rows],
+                         [(500, MOON, "Dash", 0, 0), (1000, MAGE, "Sprint", 2, 2)])
+        text = self.render(fc.show_personal)
+        self.assertRegex(text, r"0:01\.000 Frost +Sprint +2\+2 ")
+        self.assertIn("Sprint and Dash: 2 cast(s), 1 with a melee champion on the bot", text)
 
     def test_hops_close_together_are_one_kite(self):
         rows = fc.kite_rows(self.trace)
@@ -1939,6 +1950,7 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.personal_rows(trace), [])
         self.assertEqual(fc.personal_deaths(trace), [])
         self.assertEqual(fc.escape_rows(trace), [])
+        self.assertEqual(fc.speed_rows(trace), [])
         self.assertEqual(fc.kite_rows(trace), [])
         self.assertEqual(fc.chase_spacing(trace), [])
         self.assertEqual(fc.outside_grips(trace), [])

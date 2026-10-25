@@ -45,11 +45,19 @@ public:
     bool Execute(Event event) override;
 };
 
-// A ranged dps bot's hop away from the melee champion on it, till that one re-picks someone else
+// A bot's hop away from the melee champions on it, till they re-pick someone else
 class FactionChampionsKiteAction : public NorthrendBeastsWalkAction
 {
 public:
     FactionChampionsKiteAction(PlayerbotAI* botAI) : NorthrendBeastsWalkAction(botAI, "faction champions kite") {}
+    bool Execute(Event event) override;
+};
+
+// Sprint or Dash: no cast time and no GCD, so the kite's walk goes on
+class FactionChampionsSpeedBoostAction : public Action
+{
+public:
+    FactionChampionsSpeedBoostAction(PlayerbotAI* botAI) : Action(botAI, "faction champions speed boost") {}
     bool Execute(Event event) override;
 };
 
@@ -94,6 +102,8 @@ public:
         creators["faction champions opener"] = &ToCFactionChampionsBallActionContext::faction_champions_opener;
         creators["faction champions chased"] = &ToCFactionChampionsBallActionContext::faction_champions_chased;
         creators["faction champions kite"] = &ToCFactionChampionsBallActionContext::faction_champions_kite;
+        creators["faction champions speed boost"] =
+            &ToCFactionChampionsBallActionContext::faction_champions_speed_boost;
     }
 
 private:
@@ -116,6 +126,11 @@ private:
     static Action* faction_champions_chased(PlayerbotAI* botAI) { return new FactionChampionsChasedAction(botAI); }
 
     static Action* faction_champions_kite(PlayerbotAI* botAI) { return new FactionChampionsKiteAction(botAI); }
+
+    static Action* faction_champions_speed_boost(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsSpeedBoostAction(botAI);
+    }
 
     static Action* faction_champions_escape(PlayerbotAI* botAI) { return new FactionChampionsEscapeAction(botAI); }
 

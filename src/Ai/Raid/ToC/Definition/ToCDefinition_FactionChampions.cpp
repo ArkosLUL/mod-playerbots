@@ -142,6 +142,9 @@ void DefineFactionChampions(EncounterBuilder& e)
     // the class node spends the 25 s cooldown on whoever it sees first; faction champions freedom keeps it for a
     // rooted kiter
     e.Block("faction champions freedom guard", Role::Any, FactionChampionsLive, 0, {"hand of freedom on party"});
+    // the class nodes spend them closing on a target, the opening run-in too; faction champions speed boost keeps
+    // them for a melee champion in contact
+    e.Block("faction champions speed boost guard", Role::Any, FactionChampionsLive, 0, {"sprint", "dash"});
 
     // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
     e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);

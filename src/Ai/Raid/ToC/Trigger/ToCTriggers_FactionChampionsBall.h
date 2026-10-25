@@ -48,6 +48,13 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsSpeedBoostTrigger : public Trigger
+{
+public:
+    FactionChampionsSpeedBoostTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions speed boost") {}
+    bool IsActive() override;
+};
+
 class FactionChampionsOpenerTrigger : public Trigger
 {
 public:
@@ -86,6 +93,8 @@ public:
         creators["faction champions opener"] = &ToCFactionChampionsBallTriggerContext::faction_champions_opener;
         creators["faction champions chased"] = &ToCFactionChampionsBallTriggerContext::faction_champions_chased;
         creators["faction champions kite"] = &ToCFactionChampionsBallTriggerContext::faction_champions_kite;
+        creators["faction champions speed boost"] =
+            &ToCFactionChampionsBallTriggerContext::faction_champions_speed_boost;
     }
 
 private:
@@ -108,6 +117,11 @@ private:
     static Trigger* faction_champions_chased(PlayerbotAI* botAI) { return new FactionChampionsChasedTrigger(botAI); }
 
     static Trigger* faction_champions_kite(PlayerbotAI* botAI) { return new FactionChampionsKiteTrigger(botAI); }
+
+    static Trigger* faction_champions_speed_boost(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsSpeedBoostTrigger(botAI);
+    }
 
     static Trigger* faction_champions_escape(PlayerbotAI* botAI) { return new FactionChampionsEscapeTrigger(botAI); }
 

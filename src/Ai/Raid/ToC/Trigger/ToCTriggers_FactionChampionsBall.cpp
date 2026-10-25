@@ -63,6 +63,11 @@ bool FactionChampionsKiteTrigger::IsActive()
     return botAI->CanMove() && FactionChampionsKite(botAI, spot);
 }
 
+bool FactionChampionsSpeedBoostTrigger::IsActive()
+{
+    return botAI->CanMove() && FactionChampionsSpeedBoost(botAI);
+}
+
 bool FactionChampionsOpenerTrigger::IsActive()
 {
     uint32 spellId = 0;
@@ -88,6 +93,10 @@ void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("faction champions chased", {
         NextAction("faction champions chased", ACTION_RAID + 2.5f) }));
+
+    // over the kite, which takes every tick of its walk; under Nitro, whose faster boost would cancel it out
+    triggers.push_back(new TriggerNode("faction champions speed boost", {
+        NextAction("faction champions speed boost", ACTION_RAID + 2.48f) }));
 
     triggers.push_back(new TriggerNode("faction champions kite", {
         NextAction("faction champions kite", ACTION_RAID + 2.45f) }));

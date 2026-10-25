@@ -54,8 +54,8 @@ constexpr uint32 STEP_OFF_REST_MS = 3000;
 constexpr uint32 NITRO_FOCUS = 3;
 // lower, the boots no longer outrun the hits
 constexpr float NITRO_MIN_HEALTH_PCT = 30.0f;
-// a free melee champion this close keeps hitting through a kite, only the boots open a gap on it
-constexpr float NITRO_CONTACT = 8.0f;
+// a free melee champion this close keeps hitting through a kite, only a speed boost opens a gap on it
+constexpr float BOOST_CONTACT = 8.0f;
 // each bearing's run steps back this much from the boost's reach till it ends on clear floor
 constexpr float NITRO_STEP_BACK = 5.0f;
 constexpr float NITRO_MIN_RUN = 15.0f;
@@ -86,6 +86,9 @@ constexpr OpenerSpell SHADOWFURY{{47847, 47846, 30414, 30413, 30283, 0}};
 // Feared and frozen both pass the champions' CC test, which pops the trinket
 constexpr std::array<OpenerSpell, 5> OPENER_SPELLS = {INTIMIDATING_SHOUT, PSYCHIC_SCREAM, HUNGERING_COLD,
                                                       HOWL_OF_TERROR, FROST_NOVA};
+
+constexpr OpenerSpell SPRINT{{11305, 8696, 2983, 0, 0, 0}};
+constexpr OpenerSpell DASH{{33357, 9821, 1850, 0, 0, 0}};
 
 // A healer or ranged bot runs or CCs its way out once a melee champion on it is this close
 constexpr float ESCAPE_MELEE_REACH = 8.0f;
@@ -327,6 +330,13 @@ std::vector<Unit*> MeleeOn(PlayerbotAI* botAI, Player* bot, float radius)
             on.push_back(champion);
 
     return on;
+}
+
+// rooted, slowed or stunned, it drops behind a walking kite anyway
+bool Unhindered(Unit* champion)
+{
+    return !champion->HasUnitState(UNIT_STATE_LOST_CONTROL) && !champion->HasAuraType(SPELL_AURA_MOD_ROOT) &&
+           !champion->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED);
 }
 
 // Other living healers: a spot this close to one drags the chaser onto it
@@ -648,8 +658,7 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
                 ++meleeOn;
                 meleeSum[0] += champion->GetPositionX();
                 meleeSum[1] += champion->GetPositionY();
-                if (bot->GetExactDist2d(champion) <= NITRO_CONTACT && !champion->HasAuraType(SPELL_AURA_MOD_ROOT) &&
-                    !champion->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED))
+                if (bot->GetExactDist2d(champion) <= BOOST_CONTACT && Unhindered(champion))
                     ++contact;
             }
         }
@@ -986,6 +995,31 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
 bool FactionChampionsKiteHold(PlayerbotAI* botAI)
 {
     return Refresh(botAI) && !MeleeOn(botAI, botAI->GetBot(), KITE_HOLD).empty();
+}
+
+uint32 FactionChampionsSpeedBoost(PlayerbotAI* botAI)
+{
+    BallState* state = Refresh(botAI);
+    if (!state)
+        return 0;
+
+    Player* bot = botAI->GetBot();
+    uint32 rank = 0;
+    if (bot->getClass() == CLASS_ROGUE)
+        rank = KnownOpenerRank(bot, SPRINT);
+    else if (bot->getClass() == CLASS_DRUID && bot->GetShapeshiftForm() == FORM_CAT)
+        rank = KnownOpenerRank(bot, DASH);
+
+    // same speed aura type as Nitro Boosts, only the fastest one counts
+    SpellInfo const* info = rank ? ReadyInstant(bot, rank) : nullptr;
+    if (!info ||
+        bot->GetMaxPositiveAuraModifier(SPELL_AURA_MOD_INCREASE_SPEED) >= info->Effects[EFFECT_0].CalcValue(bot) ||
+        bot->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->HasAuraType(SPELL_AURA_MOD_ROOT) ||
+        state->runs.count(bot->GetGUID()) || FactionChampionsHasCcDuty(botAI, bot->GetGUID()))
+        return 0;
+
+    std::vector<Unit*> const chasers = MeleeOn(botAI, bot, BOOST_CONTACT);
+    return std::any_of(chasers.begin(), chasers.end(), Unhindered) ? rank : 0;
 }
 
 bool FactionChampionsCircleDue(PlayerbotAI* botAI)
