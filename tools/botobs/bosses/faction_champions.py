@@ -395,6 +395,10 @@ ESCAPE_WATCH_MS = 10000
 KITE = "fc.kite"
 # hops this close together by one bot are one kite
 KITE_GAP_MS = 3000
+# a kite or Nitro run should end this close to a living healer, the code's KITE_HEAL_REACH
+KITE_HEAL_REACH = 30.0
+# a kite's healer distance is read this long after its last hop
+KITE_HEAL_AFTER_MS = 2000
 # the chasers' distance after an escape or kite start, and the re-pick that should have dropped the bot
 CHASE_LOOKS_MS = (2000, 6000)
 DROPPED_MS = 9000
@@ -1722,6 +1726,20 @@ def snap_at(trace: Trace, when: int) -> dict | None:
     return frames(trace)[index] if index >= 0 else None
 
 
+def healer_gap(trace: Trace, bot: int, when: int) -> float | None:
+    """The bot's distance to the nearest other living roster healer in the last sample at or before `when`, None
+    once the bot is dead, without a sample or with no other healer alive."""
+    snap = snap_at(trace, when)
+    rows = {row[0]: row for row in snap.get("u", [])} if snap else {}
+    me = rows.get(bot)
+    if not me or me[5] <= 0:
+        return None
+    roster = roster_guids(trace)
+    gaps = [distance(me, row) for guid, row in rows.items()
+            if guid != bot and row[5] > 0 and guid in roster and trace.role(guid) == "heal"]
+    return min(gaps) if gaps else None
+
+
 def snap_near(trace: Trace, when: int) -> dict | None:
     """The snapshot nearest `when` on either side, the earlier on a tie."""
     stamps = snap_stamps(trace)
@@ -2675,7 +2693,8 @@ def nitro_rows(trace: Trace) -> list[dict]:
     move row nearest it within 1 s (`by` its action, `dist` the distance to its target from that sample), None
     without one; `travel`, how far the bot got by the last sample at or before 5 s on, and `chaser`, the nearest
     melee champion that had it as target at the use then, each None once the bot is dead or without a sample;
-    and `still`, one of those still on it 9 s on, None without any or once the bot is dead."""
+    `still`, one of those still on it 9 s on, None without any or once the bot is dead; and `heal`, the bot's
+    `healer_gap` 5 s on."""
     if encounter_of(trace) != ENCOUNTER:
         return []
     roster = roster_guids(trace)
@@ -2704,7 +2723,8 @@ def nitro_rows(trace: Trace) -> list[dict]:
                     "dist": math.hypot(me[1] - move["x"], me[2] - move["y"]) if move and me else None,
                     "travel": distance(me, there) if me and there else None,
                     "chaser": min(dists) if dists else None,
-                    "still": None if chase["dropped"] is None else not chase["dropped"]})
+                    "still": None if chase["dropped"] is None else not chase["dropped"],
+                    "heal": healer_gap(trace, bot, rec["t"] + NITRO_RUN_MS)})
     return out
 
 
@@ -2815,17 +2835,22 @@ def show_stands(trace: Trace) -> None:
         travel = "-" if row["travel"] is None else f"{row['travel']:.0f}"
         chaser = "-" if row["chaser"] is None else f"{row['chaser']:.0f}"
         still = "-" if row["still"] is None else ("yes" if row["still"] else "no")
+        heal = "-" if row["heal"] is None else f"{row['heal']:.0f}"
         print(f"    {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {row['reason']:9} {hp:>4}"
-              f"  ran {travel:>3} chaser {chaser:>3} still on {still:>3}  {row['by'] or '-'} {dist}")
+              f"  ran {travel:>3} chaser {chaser:>3} still on {still:>3} healer {heal:>3}  {row['by'] or '-'} {dist}")
     travels = [row["travel"] for row in boosts if row["travel"] is not None]
     if travels:
         print(f"  Nitro run in {NITRO_RUN_MS // 1000} s: median {statistics.median(travels):.0f} yd")
+        far = sum(1 for row in boosts if row["heal"] is not None and row["heal"] > KITE_HEAL_REACH)
+        print(f"  Nitro runs past {KITE_HEAL_REACH:.0f} yd of every healer {NITRO_RUN_MS // 1000} s on:"
+              f" {far} of {len(boosts)}")
     print(f"  jumps are stand targets {SLOT_JUMP:.0f}+ yd off the one before; path and net are the bot's snapshot"
           f" path and end-to-end distance from its first stand move; a boost's reason is the bot's {NITRO} note"
           f" within {NITRO_MOVE_MS / 1000:.0f} s, walk without one, its hp the bot's health at the use and its"
           f" move the nearest move row and the distance to its target; ran is how far the bot got"
           f" {NITRO_RUN_MS // 1000} s on and chaser the nearest melee champion on it at the use then, still on one"
-          f" of those on it {DROPPED_MS // 1000} s on; a role's spacing counts its live samples with a melee"
+          f" of those on it {DROPPED_MS // 1000} s on, healer its nearest other living healer then;"
+          f" a role's spacing counts its live samples with a melee"
           f" champion alive, humans apart, its damage per second counting the chasers' hits up to the next sample"
           f" {CHASE_STEP_MS / 1000:.1f} s or less on; in reach is the kill target within"
           f" {SPELL_REACH} yd and the covered healer within {CYCLONE_REACH:.0f} yd, centre to centre; a healer's"
@@ -3013,7 +3038,8 @@ def speed_rows(trace: Trace) -> list[dict]:
 
 def kite_rows(trace: Trace) -> list[dict]:
     """Every kite, a bot's `fc.kite` hops with under KITE_GAP_MS between them: `t` of its first hop, `bot`,
-    `hops`, `secs` from its first hop to its last, and the `chase_after` fields at the first."""
+    `hops`, `secs` from its first hop to its last, `heal`, the bot's `healer_gap` KITE_HEAL_AFTER_MS after its last,
+    and the `chase_after` fields at the first."""
     if encounter_of(trace) != ENCOUNTER:
         return []
     kites: list[dict] = []
@@ -3028,6 +3054,7 @@ def kite_rows(trace: Trace) -> list[dict]:
         last[bot] = {"t": when, "bot": bot, "hops": 1, "last": when}
         kites.append(last[bot])
     return [{"t": kite["t"], "bot": kite["bot"], "hops": kite["hops"], "secs": (kite["last"] - kite["t"]) / 1000,
+             "heal": healer_gap(trace, kite["bot"], kite["last"] + KITE_HEAL_AFTER_MS),
              **chase_after(trace, kite["bot"], kite["t"])} for kite in kites]
 
 
@@ -3160,19 +3187,23 @@ def show_personal(trace: Trace) -> None:
         print("  Sprint and Dash: none")
     kites = kite_rows(trace)
     if kites:
-        print(f"\n  {'kite at':>9} {'bot':14} {'role':6} {'hops':>4} {'secs':>5} {chase_head}")
+        print(f"\n  {'kite at':>9} {'bot':14} {'role':6} {'hops':>4} {'secs':>5} {'heal':>4} {chase_head}")
         for row in kites:
+            heal = "-" if row["heal"] is None else f"{row['heal']:.0f}"
             print(f"  {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {trace.role(row['bot']):6} {row['hops']:4}"
-                  f" {row['secs']:5.1f}{chase_cells(row)}")
+                  f" {row['secs']:5.1f} {heal:>4}{chase_cells(row)}")
         dropped = [row for row in kites if row["dropped"]]
-        print(f"  {KITE}: {len(kites)} kite(s), the chasers dropped the bot in {len(dropped)}")
+        far = [row for row in kites if row["heal"] is not None and row["heal"] > KITE_HEAL_REACH]
+        print(f"  {KITE}: {len(kites)} kite(s), the chasers dropped the bot in {len(dropped)}; ending past"
+              f" {KITE_HEAL_REACH:.0f} yd of every healer: {len(far)}")
     else:
         print(f"  {KITE}: none")
     print("  speed rows are every raid Sprint or Dash cast in the pull; hp is the bot's health in the last sample at or"
           " before the cast or first hop; melee and other are the"
           f" champions with the bot as target then, {looks} the nearest of those melee champions' distance in yd"
           f" after, dropped none of them on the bot {DROPPED_MS // 1000} s after; a kite is a bot's {KITE} hops"
-          f" under {KITE_GAP_MS // 1000} s apart; a death's melee is the melee champions' share of the champion"
+          f" under {KITE_GAP_MS // 1000} s apart, heal its nearest other living healer {KITE_HEAL_AFTER_MS // 1000} s"
+          f" after its last hop; a death's melee is the melee champions' share of the champion"
           f" damage on it in the {DEATH_DAMAGE_MS // 1000} s before, kited a {KITE} or {NITRO} note on it in the"
           f" {DEATH_KITE_MS // 1000} s before, pinned by the champion roots, stuns and slows landing on it in the"
           f" {DEATH_PIN_MS // 1000} s before")

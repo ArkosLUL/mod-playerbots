@@ -176,7 +176,7 @@ Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId);
 bool FactionChampionsBreakablePeelAt(PlayerbotAI* botAI, Unit* champion);
 
 // The group member this bot covers with an external defensive and the spell id, when none of the four
-// covers it yet: Hand of Protection on a healer or ranged with a physical champion or four of any on it,
+// covers it yet: Hand of Protection on a non-tank non-holder with a physical champion or four of any on it,
 // the others with four or more champions on a non-tank, or two at 60% health or under, casters counted.
 // Champions about to pick it at their next re-pick (fc.nextfocus) count as on it. One caster per member.
 // A non-tank with four on it that got none gets Divine Sacrifice from a paladin with Divine Guardian, while
@@ -184,6 +184,10 @@ bool FactionChampionsBreakablePeelAt(PlayerbotAI* botAI, Unit* champion);
 // in 15 s, from a paladin bot other than the member within 40 yd, healers first, held until the cast goes
 // out or 2 s.
 Unit* FactionChampionsProtectTarget(PlayerbotAI* botAI, uint32& spellId);
+
+// Live, and 2 or more champions stand within 8 yd of this dead bot: a self-res there comes back low inside
+// the pack and is their next pick
+bool FactionChampionsCorpseCrowded(PlayerbotAI* botAI);
 
 // The corpse this druid bot battle-resurrects and the Rebirth rank: fewer than 2 champions within 8 yd
 // of it, healers then tanks, one druid per corpse. Never a dps.

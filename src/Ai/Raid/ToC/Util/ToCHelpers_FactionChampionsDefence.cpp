@@ -2139,13 +2139,12 @@ bool ProtectCovered(Player* member)
                                SPELL_PAIN_SUPPRESSION, SPELL_GUARDIAN_SPIRIT, SPELL_HAND_OF_SACRIFICE});
 }
 
-// Healers and ranged only: a melee bot under it can't swing, and every champion leaves it at once, which
-// would cost a holder its champion
+// Every champion leaves it at once, so never a holder, whose champion would go loose. A melee bot can't swing
+// under it for 10 s, still cheaper than dying to a six champion focus
 bool HandOfProtectionFits(Member const& member)
 {
     Player* player = member.player;
-    return (member.healer || PlayerbotAI::IsRanged(player)) && !IsTankMember(player) &&
-           !FactionChampionsIsHolder(player) && !player->HasAura(SPELL_FORBEARANCE);
+    return !IsTankMember(player) && !FactionChampionsIsHolder(player) && !player->HasAura(SPELL_FORBEARANCE);
 }
 
 // The spell id of the external this caster can put on member now, in the order they're worth spending.
@@ -2571,6 +2570,14 @@ bool BeingResurrected(std::vector<Member> const& members, ObjectGuid corpse)
                        });
 }
 
+bool CorpseCrowded(std::vector<Unit*> const& champions, Player* corpse)
+{
+    uint32 const near = static_cast<uint32>(
+        std::count_if(champions.begin(), champions.end(), [corpse](Unit* champion)
+                      { return champion->GetExactDist2d(corpse) <= CORPSE_PACK_RADIUS; }));
+    return near > CORPSE_PACK_MAX;
+}
+
 void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vector<Member> const& members,
                      std::vector<Unit*> const& champions)
 {
@@ -2583,10 +2590,7 @@ void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vect
         if (!PlayerbotAI::IsHeal(corpse) && !IsTankMember(corpse))
             continue;
 
-        uint32 const near = static_cast<uint32>(
-            std::count_if(champions.begin(), champions.end(), [corpse](Unit* champion)
-                          { return champion->GetExactDist2d(corpse) <= CORPSE_PACK_RADIUS; }));
-        if (near <= CORPSE_PACK_MAX && !BeingResurrected(members, corpse->GetGUID()))
+        if (!CorpseCrowded(champions, corpse) && !BeingResurrected(members, corpse->GetGUID()))
             corpses.push_back(corpse);
     }
 
@@ -3416,16 +3420,27 @@ Unit* FactionChampionsWallGrip(PlayerbotAI* botAI, Position& stand, uint32& spel
 
 void FactionChampionsNoteWallGrip(PlayerbotAI* botAI, Unit* champion)
 {
-    FactionChampionsDefenceState* state = champion ? Refresh(botAI) : nullptr;
-    if (!state)
+    // no Refresh: on a new ms it reruns UpdateWalls, which sees Death Grip on cooldown and drops the duty first
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!champion || !bot || !bot->GetInstanceId() || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
         return;
 
-    auto const duty = state->walls.find(botAI->GetBot()->GetGUID());
-    if (duty == state->walls.end() || duty->second.champion != champion->GetGUID() || duty->second.gripped)
+    FactionChampionsDefenceState& state = defenceStates.For(bot->GetInstanceId());
+    auto const duty = state.walls.find(bot->GetGUID());
+    if (duty == state.walls.end() || duty->second.champion != champion->GetGUID() || duty->second.gripped)
         return;
 
     duty->second.gripped = true;
     duty->second.grippedMs = getMSTime();
+}
+
+bool FactionChampionsCorpseCrowded(PlayerbotAI* botAI)
+{
+    if (!botAI || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return false;
+
+    std::vector<Unit*> const champions = FactionChampionsInCombat(botAI);
+    return CorpseCrowded(champions, botAI->GetBot());
 }
 
 Unit* FactionChampionsFreedomTarget(PlayerbotAI* botAI, uint32& spellId)

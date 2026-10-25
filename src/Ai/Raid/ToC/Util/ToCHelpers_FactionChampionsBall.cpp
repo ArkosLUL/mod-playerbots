@@ -119,6 +119,8 @@ constexpr uint32 KITE_STEP_MS = 2500;
 // a chaser dragged onto a healer would just re-pick the healer
 constexpr float KITE_HEALER_GAP = 10.0f;
 constexpr float KITE_HOLD = 45.0f;
+// the Hands' reach, heals go to 40 so the healers can drift a bit
+constexpr float KITE_HEAL_REACH = 30.0f;
 
 struct Vec
 {
@@ -348,6 +350,23 @@ bool NearHealer(Player* bot, std::vector<Player*> const& members, Position const
                            return member != bot && PlayerbotAI::IsHeal(member) &&
                                   member->GetExactDist2d(&spot) < KITE_HEALER_GAP;
                        });
+}
+
+// Nearest living healer other than the bot, max with none
+float HealerGap(Player* bot, std::vector<Player*> const& members, Position const& spot)
+{
+    float nearest = std::numeric_limits<float>::max();
+    for (Player* member : members)
+        if (member != bot && member->IsAlive() && PlayerbotAI::IsHeal(member))
+            nearest = std::min(nearest, member->GetExactDist2d(&spot));
+
+    return nearest;
+}
+
+// In heal reach, or nearer a healer than the bot is now so one out of reach walks back in
+bool Healed(float gap, float nowGap)
+{
+    return gap <= KITE_HEAL_REACH || gap < nowGap || nowGap == std::numeric_limits<float>::max();
 }
 
 // On the rings round the kill target, so the druid still hits it. First a spot that stays in Cyclone reach
@@ -686,7 +705,9 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
     float const reach = bot->GetSpeed(MOVE_RUN) * EncounterHelpers::NITRO_BOOSTS_SPEED_FACTOR *
                         EncounterHelpers::NITRO_BOOSTS_DURATION_MS / IN_MILLISECONDS;
     std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
-    std::vector<Player*> const members = PlayerbotAI::IsHeal(bot) ? std::vector<Player*>() : GroupOnMap(bot);
+    std::vector<Player*> const group = GroupOnMap(bot);
+    std::vector<Player*> const members = PlayerbotAI::IsHeal(bot) ? std::vector<Player*>() : group;
+    float const nowGap = HealerGap(bot, group, bot->GetPosition());
     bool found = false;
     float bestClear = 0.0f;
     float bestRun = 0.0f;
@@ -697,7 +718,8 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
         for (float run = reach; run >= NITRO_MIN_RUN; run -= NITRO_STEP_BACK)
         {
             Position const target = Along(bot->GetPosition(), dir, run);
-            if (!Clear(target, hazards) || NearHealer(bot, members, target))
+            if (!Clear(target, hazards) || NearHealer(bot, members, target) ||
+                !Healed(HealerGap(bot, group, target), nowGap))
                 continue;
 
             float const clear = MeleeClearance(botAI, target);
@@ -966,7 +988,12 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
     std::vector<Player*> const members = GroupOnMap(bot);
     std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
     Vec const away = Unit2(bot->GetPositionX() - sumX / chasers.size(), bot->GetPositionY() - sumY / chasers.size());
-    float bestClear = -1.0f;
+    // kites to the wall left bots out of heals, so a healed hop always beats a clearer one
+    float const nowGap = HealerGap(bot, members, bot->GetPosition());
+    bool found = false;
+    bool bestHealed = false;
+    float bestClear = 0.0f;
+    float bestGap = 0.0f;
     Position best;
     for (float turn : RUN_TURNS)
     {
@@ -974,15 +1001,22 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
         if (!Clear(target, hazards) || NearHealer(bot, members, target))
             continue;
 
+        float const gap = HealerGap(bot, members, target);
+        bool const healed = Healed(gap, nowGap);
         float const clear = MeleeClearance(botAI, target);
-        if (clear > bestClear)
+        bool const better = !found || (healed && !bestHealed) ||
+                            (healed == bestHealed && (healed ? clear > bestClear : gap < bestGap));
+        if (better)
         {
+            found = true;
+            bestHealed = healed;
             bestClear = clear;
+            bestGap = gap;
             best = target;
         }
     }
 
-    if (bestClear < 0.0f)
+    if (!found)
         return false;
 
     state->kites[guid] = {now, best};

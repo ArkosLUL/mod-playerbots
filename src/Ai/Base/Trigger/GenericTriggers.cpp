@@ -24,6 +24,7 @@
 #include "TemporarySummon.h"
 #include "ThreatManager.h"
 #include "Timer.h"
+#include "ToCHelpers_FactionChampionsDefence.h"
 #include <string>
 
 bool LowManaTrigger::IsActive()
@@ -294,6 +295,10 @@ bool SelfResurrectTrigger::IsActive()
     uint32 const SPELL_REINCARNATION_SELF_RES = 21169;
     if (resSpell == SPELL_REINCARNATION_SELF_RES && sPlayerbotAIConfig.BattleRezBossOnly &&
         !AttackersValue::IsInBossFight(botAI))
+        return false;
+
+    // up at low health inside the champion pack makes it their next pick
+    if (TrialOfTheCrusaderHelpers::FactionChampionsCorpseCrowded(botAI))
         return false;
 
     // Rises charmed again otherwise, and the self-res is gone for nothing.

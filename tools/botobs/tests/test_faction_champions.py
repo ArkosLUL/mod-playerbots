@@ -1385,11 +1385,13 @@ class StandsAndBoosts(unittest.TestCase):
         rows = fc.nitro_rows(self.trace)
         # nobody chases them, and the last sample stands in for 5 s on
         quiet = {"travel": 0.0, "chaser": None, "still": None}
+        # the priest is the one healer, so only the mage has one to measure
         self.assertEqual(rows, [
             {"t": 4000, "bot": PRIEST, "reason": "focus 3", "hp": 100.0, "by": "faction champions chased",
-             "dist": 25.0, **quiet},
-            {"t": 6000, "bot": MAGE, "reason": "next", "hp": 100.0, "by": None, "dist": None, **quiet},
-            {"t": 8000, "bot": PRIEST, "reason": "walk", "hp": 60.0, "by": "reach spell", "dist": 10.0, **quiet}])
+             "dist": 25.0, **quiet, "heal": None},
+            {"t": 6000, "bot": MAGE, "reason": "next", "hp": 100.0, "by": None, "dist": None, **quiet, "heal": 10.0},
+            {"t": 8000, "bot": PRIEST, "reason": "walk", "hp": 60.0, "by": "reach spell", "dist": 10.0, **quiet,
+             "heal": None}])
         self.assertEqual(fc.nitro_tally(rows), [("focus", 1), ("next", 1), ("walk", 1)])
 
     def test_a_healer_reads_its_moving_and_casting_share(self):
@@ -1412,12 +1414,13 @@ class StandsAndBoosts(unittest.TestCase):
         self.assertRegex(out.getvalue(), r"Prayer +heal +30%: faction champions step off 20%, none 10%")
         self.assertIn("raid healed 0.2k/s effective, took 0.2k/s; per healer: Prayer 2k", out.getvalue())
         self.assertIn("Nitro Boosts: 3 use(s): focus 1, next 1, walk 1", out.getvalue())
-        self.assertRegex(out.getvalue(), r"0:04\.000 Prayer +focus 3 +100%  ran +0 chaser +- still on +-"
+        self.assertRegex(out.getvalue(), r"0:04\.000 Prayer +focus 3 +100%  ran +0 chaser +- still on +- healer +-"
                                          r"  faction champions chased 25 yd")
-        self.assertRegex(out.getvalue(), r"0:06\.000 Frost +next +100%  ran +0 chaser +- still on +-  - -")
-        self.assertRegex(out.getvalue(), r"0:08\.000 Prayer +walk +60%  ran +0 chaser +- still on +-"
+        self.assertRegex(out.getvalue(), r"0:06\.000 Frost +next +100%  ran +0 chaser +- still on +- healer +10  - -")
+        self.assertRegex(out.getvalue(), r"0:08\.000 Prayer +walk +60%  ran +0 chaser +- still on +- healer +-"
                                          r"  reach spell 10 yd")
         self.assertIn("Nitro run in 5 s: median 0 yd", out.getvalue())
+        self.assertIn("Nitro runs past 30 yd of every healer 5 s on: 0 of 3", out.getvalue())
 
 
 MOON = 5021  # a balance druid bot
@@ -1613,6 +1616,8 @@ def focus_pull() -> list[dict]:
         # two mage hops 1.4 s apart make one kite
         note(1100, MAGE, fc.KITE, "2 melee, 20 yd"),
         note(2500, MAGE, fc.KITE, "0 melee, 20 yd"),
+        # the moonkin's hop after the priest, the one healer, is dead
+        note(5000, MOON, fc.KITE, "0 melee, 30 yd"),
         {"t": 7000, "e": "end", "out": "wipe"},
     ]
     return records + [focus_snap(when) for when in range(0, 7001, 500)]
@@ -1693,10 +1698,16 @@ class FocusAndRepick(unittest.TestCase):
     def test_hops_close_together_are_one_kite(self):
         rows = fc.kite_rows(self.trace)
         self.assertEqual([(row["t"], row["bot"], row["hops"], row["secs"], row["melee"], row["dropped"])
-                          for row in rows], [(1100, MAGE, 2, 1.4, 2, True)])
+                          for row in rows], [(1100, MAGE, 2, 1.4, 2, True), (5000, MOON, 1, 0.0, 0, None)])
         text = self.render(fc.show_personal)
-        self.assertRegex(text, r"0:01\.100 Frost +ranged +2 +1\.4 +2\+2")
-        self.assertIn("fc.kite: 1 kite(s), the chasers dropped the bot in 1", text)
+        self.assertRegex(text, r"0:01\.100 Frost +ranged +2 +1\.4 +5 +2\+2")
+        self.assertIn("fc.kite: 2 kite(s), the chasers dropped the bot in 1; ending past 30 yd of every healer: 0",
+                      text)
+
+    def test_a_kite_reads_the_nearest_living_healer_after_its_last_hop(self):
+        # the mage ends 5 yd off the priest; the moonkin's kite ends with no healer alive
+        self.assertEqual([row["heal"] for row in fc.kite_rows(self.trace)], [5.0, None])
+        self.assertRegex(self.render(fc.show_personal), r"0:05\.000 Moon +ranged +1 +0\.0 +- +0\+0")
 
     def test_chase_spacing_reads_each_role_off_the_nearest_melee_champion(self):
         # the mage 20 yd and the moonkin 30 yd off the rogue and warrior, never reached; the rogue on the tank

@@ -42,15 +42,17 @@ Unit* FactionChampionsOpener(PlayerbotAI* botAI, uint32& spellId);
 // melee champion does from within 8 yd unrooted and unslowed, or it is fc.nextfocus, at 30% health or more.
 // Away from the melee on it (else all on it, else those within 30 yd), straight or 30-120° off: on each
 // bearing the farthest clear floor spot up to the boost's reach (~87 yd), stepping back 5 yd, 15 yd at least
-// and, for a non-healer, 10 yd off other healers; the one farthest from every melee champion, a tie to the
-// longer run. Latched to arrival or the boost's end. Not for a tank, a holder, a CC duty holder or a bot
-// rooted or stunned. Each run notes fc.nitro.
+// and, for a non-healer, 10 yd off other healers, within 30 yd of another living healer or nearer one than
+// the bot is now; the one farthest from every melee champion, a tie to the longer run. Latched to arrival
+// or the boost's end. Not for a tank, a holder, a CC duty holder or a bot rooted or stunned. Each run notes
+// fc.nitro.
 bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot);
 
 // Where a bot kites: a melee champion it kites from (FactionChampionsKitesFrom) is within 30 yd, however
-// close. 15 yd hops away from them, on the floor, clear of AoE and off other healers, farthest from every
-// melee champion; latched to arrival or 2.5 s, dropped once none is within 30 yd. Not while rooted, stunned,
-// on a Nitro run or a CC duty. Each hop notes fc.kite.
+// close. 15 yd hops away from them, on the floor, clear of AoE and off other healers. Of those within 30 yd
+// of another living healer or nearer one than the bot is now, the farthest from every melee champion; with
+// none, the one nearest a healer. Latched to arrival or 2.5 s, dropped once none is within 30 yd. Not while
+// rooted, stunned, on a Nitro run or a CC duty. Each hop notes fc.kite.
 bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot);
 
 // A melee champion the bot kites from is within 45 yd: reaching its target or a heal target would walk it
