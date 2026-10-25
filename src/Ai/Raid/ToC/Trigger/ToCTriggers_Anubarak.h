@@ -100,6 +100,20 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakRaidGathersTrigger : public Trigger
+{
+public:
+    AnubarakRaidGathersTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak raid gathers") {}
+    bool IsActive() override;
+};
+
+class AnubarakDemonicCircleDueTrigger : public Trigger
+{
+public:
+    AnubarakDemonicCircleDueTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak demonic circle due") {}
+    bool IsActive() override;
+};
+
 class AnubarakScarabOnRaidTrigger : public Trigger
 {
 public:
@@ -152,6 +166,10 @@ public:
             &ToCAnubarakTriggerContext::anubarak_side_tank_dead;
         creators["anubarak grip frost sphere"] =
             &ToCAnubarakTriggerContext::anubarak_grip_frost_sphere;
+        creators["anubarak raid gathers"] =
+            &ToCAnubarakTriggerContext::anubarak_raid_gathers;
+        creators["anubarak demonic circle due"] =
+            &ToCAnubarakTriggerContext::anubarak_demonic_circle_due;
         creators["anubarak scarab on raid"] =
             &ToCAnubarakTriggerContext::anubarak_scarab_on_raid;
         creators["anubarak engaged by main tank"] =
@@ -211,6 +229,14 @@ private:
 
     static Trigger* anubarak_grip_frost_sphere(PlayerbotAI* botAI) {
         return new AnubarakGripFrostSphereTrigger(botAI);
+    }
+
+    static Trigger* anubarak_raid_gathers(PlayerbotAI* botAI) {
+        return new AnubarakRaidGathersTrigger(botAI);
+    }
+
+    static Trigger* anubarak_demonic_circle_due(PlayerbotAI* botAI) {
+        return new AnubarakDemonicCircleDueTrigger(botAI);
     }
 
     static Trigger* anubarak_scarab_on_raid(PlayerbotAI* botAI) {

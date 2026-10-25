@@ -120,6 +120,22 @@ public:
     std::vector<NextAction> getPrerequisites() override { return {NextAction("caster form")}; }
 };
 
+class AnubarakGatherAction : public MovementAction
+{
+public:
+    AnubarakGatherAction(PlayerbotAI* botAI, std::string const name = "anubarak gather")
+        : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakDemonicCircleAction : public Action
+{
+public:
+    AnubarakDemonicCircleAction(PlayerbotAI* botAI, std::string const name = "anubarak demonic circle")
+        : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class AnubarakTankPickUpScarabAction : public AttackAction
 {
 public:
@@ -173,6 +189,10 @@ public:
             &ToCAnubarakActionContext::anubarak_grip_frost_sphere;
         creators["anubarak battle res side tank"] =
             &ToCAnubarakActionContext::anubarak_battle_res_side_tank;
+        creators["anubarak gather"] =
+            &ToCAnubarakActionContext::anubarak_gather;
+        creators["anubarak demonic circle"] =
+            &ToCAnubarakActionContext::anubarak_demonic_circle;
         creators["anubarak tank pick up scarab"] =
             &ToCAnubarakActionContext::anubarak_tank_pick_up_scarab;
         creators["anubarak main tank hold boss"] =
@@ -228,6 +248,14 @@ private:
 
     static Action* anubarak_battle_res_side_tank(PlayerbotAI* botAI) {
         return new AnubarakBattleResSideTankAction(botAI);
+    }
+
+    static Action* anubarak_gather(PlayerbotAI* botAI) {
+        return new AnubarakGatherAction(botAI);
+    }
+
+    static Action* anubarak_demonic_circle(PlayerbotAI* botAI) {
+        return new AnubarakDemonicCircleAction(botAI);
     }
 
     static Action* anubarak_tank_pick_up_scarab(PlayerbotAI* botAI) {

@@ -22,10 +22,13 @@ bool IsAnubarakSurfaced(AnubarakPhase phase)
 
 bool AnubarakKiterNeedsImmunityTrigger::IsActive()
 {
-    // only paladins and mages carry a self immunity that voids Impale
-    uint8 const cls = bot->getClass();
-    return AnubarakEngaged(botAI) && (cls == CLASS_PALADIN || cls == CLASS_MAGE) && AnubarakKiterNeedsImmunity(bot);
+    // Only a paladin's immunities void Impale and leave it running: Ice Block roots the mage
+    return AnubarakEngaged(botAI) && bot->getClass() == CLASS_PALADIN && AnubarakKiterNeedsImmunity(bot);
 }
+
+bool AnubarakRaidGathersTrigger::IsActive() { return AnubarakEngaged(botAI) && AnubarakGathers(botAI); }
+
+bool AnubarakDemonicCircleDueTrigger::IsActive() { return AnubarakDemonicCircleDue(botAI); }
 
 bool AnubarakPursuedBySpikeTrigger::IsActive()
 {
@@ -179,6 +182,12 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak side tank ready", {
         NextAction("anubarak side tank ready", ACTION_RAID + 1.5f) }));
+
+    triggers.push_back(new TriggerNode("anubarak raid gathers", {
+        NextAction("anubarak gather", ACTION_RAID + 0.5f) }));
+
+    triggers.push_back(new TriggerNode("anubarak demonic circle due", {
+        NextAction("anubarak demonic circle", ACTION_RAID + 0.4f) }));
 
     triggers.push_back(new TriggerNode("anubarak engaged by main tank", {
         NextAction("anubarak main tank hold boss", ACTION_RAID + 1) }));

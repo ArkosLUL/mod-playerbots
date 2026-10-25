@@ -94,6 +94,10 @@ void DefineAnubarak(EncounterBuilder& e)
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,
             {"reach melee"});
     e.Block("anubarak pickup tank stand guard", Role::Any, AnubarakPickupTankStands, Family::TankFace);
+    // heroic phase 2: the raid holds its gather, so no walk takes anyone across the spike's run
+    e.Block("anubarak gather hold", Role::Any, AnubarakGathers,
+            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,
+            {"reach melee", "reach spell", "reach party member to heal"});
     // he obeys taunt DR, so two tanks trading taunts soon leave him immune to both
     e.Block("anubarak taunt guard", Role::Any, AnubarakTauntWouldSteal, Family::Taunt);
     e.Block("anubarak sphere shooter drop guard", Role::Any, AnubarakShooterOnDutySphere, Family::DropTarget);

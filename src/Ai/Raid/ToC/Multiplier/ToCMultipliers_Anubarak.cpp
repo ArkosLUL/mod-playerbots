@@ -118,7 +118,15 @@ float AnubarakControlTankMovementMultiplier::GetValue(Action* action)
 
 float AnubarakProtectSpikeKiteMultiplier::GetValue(Action* action)
 {
-    // Spell movers: Blink and Disengage off a scarab would throw the kiter 15-20 yd the kite never chose
+    if (!action)
+        return 1.0f;
+
+    // Feign Death drops the hunter still, and a still target hands the spike on at its current speed
+    if (action->getName() == "feign death")
+        return bot->HasAura(SPELL_MARK) && AnubarakEngaged(botAI) ? 0.0f : 1.0f;
+
+    // Spell movers: Blink and Disengage off a scarab would throw the kiter 15-20 yd the kite never chose.
+    // The kite casts its own Blink directly, so this never holds that one.
     bool const spellMover = dynamic_cast<CastReachTargetSpellAction*>(action) ||
                             dynamic_cast<CastBlinkBackAction*>(action) || dynamic_cast<CastDisengageAction*>(action);
     if (!spellMover)

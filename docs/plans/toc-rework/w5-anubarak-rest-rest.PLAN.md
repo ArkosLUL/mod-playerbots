@@ -1,4 +1,4 @@
-# w5-anubarak-rest-rest — Anub'arak: phase 3 economy, Freezing Slash, burrowers, scarabs, phase 2 positioning
+# w5-anubarak-rest-rest — Anub'arak: phase 3 economy, Freezing Slash, burrowers once he is low, scarabs
 
 Carried over from `w5-anubarak-rest`; it runs after that lane merges and branches from the merge.
 Rules, sources, naming contract and checks: [toc-rework.PLAN.md](toc-rework.PLAN.md). Mechanics and
@@ -24,19 +24,15 @@ In this order, as far as the lane holds; apply the overview's oversized-lane rul
 2. **Freezing Slash defensives.** Guide: one per slash. Instant, untelegraphed, no row (66012), on
    his victim: first 7-15 s after the engage or emerge, then every 15-20 s, so only a timer model on
    those edges can place one. 2026-10-16 25N: three slashes on the tanks for 0.8-7.2k.
-3. **Burrower pacing.** Guide: throttle AoE so each wave (45 s) dies just before the next; once he is
-   low, ignore burrowers for him (heroic keeps them coming in phase 3). 2026-10-16 25N: eight
-   burrowers, 0-55% of each one's samples on Permafrost, one submerge, DPS on the focus 78-94% of
-   its hold.
+3. **Burrowers once he is low.** Guide: ignore them for him (heroic keeps them coming in phase 3).
+   Wave pacing, side tanks and Spider Frenzy spacing shipped in `refine-anubarak` (anubarak.md).
 4. **Scarabs.** 20000 threat on a random player each; Acid-Drenched Mandibles (65775/67861/67862/67863)
    stacks a nature DoT (guide: limit stacks going into phase 3). Consider a DPS threat brake (none
    exists, see `docs/engine/pitfalls.md`) and stack management. 2026-10-16 25N: 123k Mandible damage
    in all, five stacks at most.
-5. **Spider Frenzy** (66128 → 66129): burrowers within 12 yd haste each other; 25H brings four a wave
-   to two patches, 10H two to one tank. A third patch, or spacing on the patch.
-6. **Phase 2 raid positioning.** Guide: raid to one corner for the first spike, back to the centre,
-   then stacked where he should emerge. 2026-10-16 25N: 13 Impales on non-kiters for 170k; three
-   ranged died at 2:08 to a fast spike re-targeted onto a bot among them.
+5. **10H Spider Frenzy:** one side tank holds both burrowers of a wave on one patch. Heroic phase 2
+   positioning shipped in `refine-anubarak`; normal's (guide: a corner for the first spike, then
+   stacked where he should emerge) is still open.
 
 ## Owns
 

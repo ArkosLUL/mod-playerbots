@@ -15,7 +15,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// The spike's target moves only through the kite. Attack actions stay so it keeps a target.
+// The spike's target moves only through the kite, and never feigns death. Attack actions stay so it
+// keeps a target.
 class AnubarakProtectSpikeKiteMultiplier : public Multiplier
 {
 public:

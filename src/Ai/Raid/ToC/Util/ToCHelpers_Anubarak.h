@@ -90,7 +90,28 @@ constexpr float ANUBARAK_SPIKE_PATCH_REACH = 11.5f;
 constexpr float ANUBARAK_KITE_STAND_OFFSET = 8.5f;
 constexpr float ANUBARAK_KITE_ARRIVE = 2.0f;
 constexpr float ANUBARAK_KITE_REAIM_DEGREES = 30.0f;
-constexpr float ANUBARAK_KITE_RING_RADIUS = 35.0f;
+// navprobe-clean all round, 15 yd outside the raid gathered in phase 2
+constexpr float ANUBARAK_KITE_RING_RADIUS = 40.0f;
+// Heroic: the spike this close and faster than the kiter sends the next speed boost out
+constexpr float ANUBARAK_KITE_BOOST_RANGE = 15.0f;
+// Heroic: the spike's route keeps this far off a patch it isn't meant to take, its 11.5 yd test plus 3
+constexpr float ANUBARAK_SPIKE_ROUTE_CLEARANCE = 14.5f;
+// Heroic: an immunity this close to running out sends the kiter to its patch
+constexpr uint32 ANUBARAK_KITE_IMMUNE_LEFT_MS = 2000;
+// Demonic Circle: Teleport's 40 yd less a margin; the circle has to be this much farther from the spike
+constexpr float ANUBARAK_CIRCLE_TELEPORT_RANGE = 38.0f;
+constexpr float ANUBARAK_CIRCLE_TELEPORT_GAIN = 15.0f;
+// A circle with less left than this is cast again
+constexpr int32 ANUBARAK_CIRCLE_REFRESH_MS = 100000;
+constexpr float ANUBARAK_BLINK_DISTANCE = 20.0f;
+// Heroic phase 2: the raid stands this far past where he went down, away from the tank patches, and
+// never further out than the floor radius
+constexpr float ANUBARAK_GATHER_PAST = 5.0f;
+constexpr float ANUBARAK_GATHER_FLOOR = 25.0f;
+constexpr float ANUBARAK_GATHER_ARRIVE = 6.0f;
+constexpr float ANUBARAK_GATHER_SPREAD = 3.0f;
+// A gathered melee bot takes a scarab this close before the focus burrower
+constexpr float ANUBARAK_GATHER_MELEE_SCARAB = 10.0f;
 constexpr float ANUBARAK_KITE_RING_STEP_DEGREES = 40.0f;
 constexpr float ANUBARAK_SPIKE_DANGER_RADIUS = 10.0f;
 constexpr float ANUBARAK_SPIKE_CLEARANCE = 13.0f;
@@ -140,7 +161,8 @@ constexpr float ANUBARAK_KITE_PROTECT_RANGE = 12.0f;
 constexpr float ANUBARAK_KITE_IMMUNITY_RANGE = 9.0f;
 constexpr float ANUBARAK_HOP_RANGE = 30.0f;
 constexpr uint32 SPELL_FORBEARANCE = 25771;
-// Hand of Protection ranks, Divine Shield, Ice Block
+// Hand of Protection ranks, Divine Shield, Ice Block. Bots never cast Ice Block: it roots the mage,
+// and a still target loses the spike to someone else at its current speed.
 constexpr uint32 ANUBARAK_KITE_IMMUNITIES[] = {1022, 5599, 10278, 642, 45438};
 
 // Written raw into anub.phase
@@ -159,6 +181,30 @@ enum class AnubarakKiteBranch : uint8
     Detour,
     Ring,
     Hold
+};
+
+// Heroic only, written raw into anub.kitestage with the boost's spell
+enum class AnubarakKiteStage : uint8
+{
+    None,
+    // Round the ring, clear of every patch
+    Run,
+    // The spike gains within 15 yd: the next speed boost goes out
+    Boost,
+    // Hand of Protection or Divine Shield up, still running
+    Immune,
+    // Nothing left, or the immunity running out: to a patch
+    Patch
+};
+
+struct AnubarakKiteBoost
+{
+    uint32 spellId = 0;
+    // Nitro Boosts is the boots' use, no spell to cast
+    bool nitro = false;
+    // Blink goes the way the bot faces
+    bool face = false;
+    float facing = 0.0f;
 };
 
 // For Detour, stand is the waypoint round the patch, not the final stand
@@ -332,8 +378,17 @@ bool AnubarakSphereInReach(Player* bot, Unit* sphere);
 // Floor point toward the sphere where it is in reach, off the spike and its lane. False when none.
 bool GetAnubarakSphereStand(Player* bot, Unit* sphere, Position& out);
 // Where the spike's target runs. previous is the stand the caller latched last time, may be null.
-// False while there's no spike.
+// False while there's no spike. Heroic runs the ring until the kite stage says patch.
 bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, AnubarakKiteStand& out);
+// Heroic only, None elsewhere and for an unmarked bot. With Boost, boost says what to use.
+AnubarakKiteStage GetAnubarakKiteStage(Player* kiter, AnubarakKiteBoost* boost = nullptr);
+// Heroic phase 2: this bot's spot in the raid's gather, not floor-checked, false when it doesn't gather
+// (the kiter, side and main tanks)
+bool GetAnubarakGatherSpot(Player* bot, Position& out);
+bool AnubarakGathers(PlayerbotAI* botAI);
+// A warlock bot's Demonic Circle is missing or under 100 s: on its Anub'arak stand before the pull, or
+// while he is up
+bool AnubarakDemonicCircleDue(PlayerbotAI* botAI);
 
 bool AnubarakInSpikeDanger(Player* bot);
 // Heroic keeps out of Permafrost's slow reach when any spot allows it

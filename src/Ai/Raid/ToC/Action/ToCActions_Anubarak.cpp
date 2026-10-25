@@ -29,7 +29,9 @@ constexpr uint32 ANUBARAK_STALL_MS = 500;
 constexpr float ANUBARAK_RANGED_REACH_MARGIN = 2.0f;
 constexpr float ANUBARAK_BOOKED_TOLERANCE = 0.5f;
 
-char const* const KITER_SELF_IMMUNITIES[] = {"divine shield", "hand of protection", "ice block"};
+// No Ice Block: it roots the mage, and a still target hands the spike on at its current speed
+char const* const KITER_SELF_IMMUNITIES[] = {"divine shield", "hand of protection"};
+constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
 
 char const* const PENETRATING_COLD_HEALS[] = {
     "greater heal", "flash heal", "penance",
@@ -165,6 +167,25 @@ bool AnubarakProtectKiterAction::Execute(Event /*event*/)
 
 bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
 {
+    // Heroic chains its speed boosts once the spike gains on it; each is instant and leaves the run going
+    AnubarakKiteBoost boost;
+    if (GetAnubarakKiteStage(bot, &boost) == AnubarakKiteStage::Boost)
+    {
+        if (boost.nitro)
+        {
+            if (UseNitroBoosts(bot))
+                return true;
+        }
+        else if (boost.spellId)
+        {
+            if (boost.face)
+                bot->SetOrientation(boost.facing);
+
+            if (botAI->CastSpell(boost.spellId, bot))
+                return true;
+        }
+    }
+
     Creature* spike = GetPursuingSpike(bot);
     ObjectGuid const spikeGuid = spike ? spike->GetGUID() : ObjectGuid::Empty;
     bool const keep = hasLatched && latchedSpike == spikeGuid;
@@ -398,6 +419,33 @@ bool AnubarakBattleResSideTankAction::Execute(Event /*event*/)
                                                      MovementPriority::MOVEMENT_COMBAT);
 
     return botAI->CastSpell("rebirth", tank);
+}
+
+bool AnubarakGatherAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!GetAnubarakGatherSpot(bot, spot))
+        return false;
+
+    if (bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ANUBARAK_GATHER_ARRIVE)
+    {
+        RaidObs::NoteDerived(bot, "anub.gather", "hold");
+        return false;
+    }
+
+    RaidObs::NoteDerived(bot, "anub.gather", "walk");
+    Position const walk = ValidateFloorPoint(bot, spot);
+    BreakChannelPinningTheFeet(bot);
+    if (WalkInFlight(botAI, bot, walk))
+        return true;
+
+    return MoveTo(bot->GetMapId(), walk.GetPositionX(), walk.GetPositionY(), walk.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool AnubarakDemonicCircleAction::Execute(Event /*event*/)
+{
+    return AnubarakDemonicCircleDue(botAI) && botAI->CastSpell(SPELL_DEMONIC_CIRCLE_SUMMON, bot);
 }
 
 bool AnubarakTankPickUpScarabAction::Execute(Event /*event*/)
