@@ -2,6 +2,7 @@
 
 #include "PlayerbotAI.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_Shared.h"
 #include "ToCHelpers_TwinValkyr.h"
 
@@ -35,6 +36,19 @@ void DefineTwinValkyr(EncounterBuilder& e)
 {
     e.OwnTargeting("twin valkyr dps target guard", Role::Any, TwinValkyrDpsTargetOwned, Family::DpsAssist);
     e.OwnTargeting("twin valkyr tank target guard", Role::Any, TwinValkyrTankTargetOwned, Family::TankAssist);
+
+    // the tunnel is past every orb, so the raid only leaves it for a portal, and those walks are the
+    // encounter's own movers
+    e.Block("twin valkyr door hold", Role::Any, TwinValkyrDoorHold,
+            Family::Reach | Family::ReachHeal | Family::SetBehind | Family::RearFlank | Family::CombatFormationMove |
+                Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink |
+                Family::Disengage);
+
+    e.Block("twin valkyr raid cover hold", Role::Any, TwinValkyrRaidCoverHeld, 0, ToCRaidCoverClassNodes());
+
+    // the burst row's flag covers every role, and a healer holds only this one for lust
+    e.Block("twin valkyr power infusion hold", Role::Heal, TwinValkyrBurstHeld, 0,
+            {"power infusion", "power infusion on party"});
 }
 }  // namespace
 

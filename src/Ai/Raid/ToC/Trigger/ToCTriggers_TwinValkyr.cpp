@@ -1,6 +1,7 @@
 #include "ToCTriggers_TwinValkyr.h"
 #include "ToCData.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_Shared.h"
 #include "ToCHelpers_TwinValkyr.h"
 #include "Playerbots.h"
@@ -39,9 +40,16 @@ bool TwinValkyrOrbIncomingTrigger::IsActive()
     return !TwinValkyrMustSwapEssence(botAI, true) && TwinOrbThreatens(botAI, TWIN_ORB_DODGE_CLEARANCE);
 }
 
-bool TwinValkyrShieldRequiresEssenceTrigger::IsActive()
+bool TwinValkyrVortexRaidCoverTrigger::IsActive()
 {
-    return WantsEssenceFor(botAI, bot, TwinEssenceReason::Shield);
+    ToCPredictedHit hit;
+    return GetToCRaidCover(botAI, GetTwinVortexRaidHit(botAI, hit) ? &hit : nullptr) != ToCRaidCover::None;
+}
+
+bool TwinValkyrVortexDefensiveTrigger::IsActive()
+{
+    ToCPredictedHit hit;
+    return static_cast<bool>(GetToCPersonalDefensive(botAI, GetTwinVortexHit(botAI, hit) ? &hit : nullptr));
 }
 
 bool TwinValkyrNeedsBaseEssenceTrigger::IsActive()
@@ -82,6 +90,8 @@ bool TwinValkyrRedirectThreatTrigger::IsActive()
     return tank && tank != bot && tank->IsAlive();
 }
 
+bool TwinValkyrDoorStandTrigger::IsActive() { return TwinValkyrDoorWalkDue(botAI); }
+
 bool TwinValkyrDpsTargetTrigger::IsActive()
 {
     if (!IsToCDpsBot(bot) || !ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr))
@@ -94,32 +104,38 @@ bool TwinValkyrDpsTargetTrigger::IsActive()
 void AddToCTwinValkyrTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(new TriggerNode("twin valkyr pact interrupt duty", {
-        NextAction("twin valkyr interrupt pact", ACTION_EMERGENCY + 7) }));
+        NextAction("twin valkyr interrupt pact", ACTION_EMERGENCY + 8) }));
 
-    // Touch over Vortex: in this core a Touch ticks on the whole raid until the touched bot swaps
+    triggers.push_back(new TriggerNode("twin valkyr vortex requires essence", {
+        NextAction("twin valkyr swap essence for vortex", ACTION_EMERGENCY + 7) }));
+
+    // in this core a Touch ticks on the whole raid until the touched bot swaps
     triggers.push_back(new TriggerNode("twin valkyr touched requires essence", {
         NextAction("twin valkyr swap essence for touch", ACTION_EMERGENCY + 6) }));
 
-    triggers.push_back(new TriggerNode("twin valkyr vortex requires essence", {
-        NextAction("twin valkyr swap essence for vortex", ACTION_EMERGENCY + 5) }));
+    triggers.push_back(new TriggerNode("twin valkyr vortex raid cover", {
+        NextAction("twin valkyr cast vortex raid cover", ACTION_EMERGENCY + 5) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr vortex defensive", {
+        NextAction("twin valkyr cast vortex defensive", ACTION_EMERGENCY + 4) }));
 
     triggers.push_back(new TriggerNode("twin valkyr orb incoming", {
-        NextAction("twin valkyr dodge orb", ACTION_EMERGENCY + 4) }));
-
-    triggers.push_back(new TriggerNode("twin valkyr shield requires essence", {
-        NextAction("twin valkyr swap essence for shield", ACTION_RAID + 5) }));
+        NextAction("twin valkyr dodge orb", ACTION_EMERGENCY + 3) }));
 
     triggers.push_back(new TriggerNode("twin valkyr needs base essence", {
-        NextAction("twin valkyr take base essence", ACTION_RAID + 4) }));
+        NextAction("twin valkyr take base essence", ACTION_RAID + 5) }));
 
     triggers.push_back(new TriggerNode("twin valkyr engaged by main tank", {
-        NextAction("twin valkyr main tank hold light twin", ACTION_RAID + 3) }));
+        NextAction("twin valkyr main tank hold light twin", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode("twin valkyr darkbane needs assist tank", {
-        NextAction("twin valkyr assist tank hold dark twin", ACTION_RAID + 2) }));
+        NextAction("twin valkyr assist tank hold dark twin", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode("twin valkyr redirect threat", {
-        NextAction("twin valkyr redirect threat", ACTION_RAID + 1) }));
+        NextAction("twin valkyr redirect threat", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr door stand", {
+        NextAction("twin valkyr move to door stand", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode("twin valkyr dps target", {
         NextAction("twin valkyr focus twin", ACTION_RAID) }));

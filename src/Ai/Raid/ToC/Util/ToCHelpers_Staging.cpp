@@ -73,10 +73,6 @@ constexpr Point2 LOC_GATE_FRONT{563.93f, 178.37f};          // 1, Gormok and Ice
 constexpr Point2 LOC_DREADSCALE{575.74f, 171.5f};           // 2
 constexpr Point2 LOC_ACIDMAW{549.93f, 171.5f};              // 3
 constexpr Point2 LOC_CENTER{563.672974f, 139.571f};         // 4
-constexpr Point2 LOC_VALKYR_DEST_2_RIGHT{585.5f, 170.0f};   // 9, Fjola
-constexpr Point2 LOC_VALKYR_DEST_2_LEFT{545.5f, 170.0f};    // 10, Eydis
-constexpr Point2 LOC_DARKESS_1{586.060242f, 117.514809f};   // 13
-constexpr Point2 LOC_LIGHTESS_1{541.021118f, 117.262932f};  // 15
 // The intro walks him from LOC_CENTER to 10 yd south of it
 constexpr Point2 JARAXXUS_INTRO_SPOT{563.672974f, 129.571f};
 
@@ -148,13 +144,6 @@ constexpr float CHAMPION_GRIP_LANE = 10.0f;
 constexpr float CHAMPION_HEAL_BEHIND = 12.0f;
 constexpr uint32 SPELL_DEATH_GRIP = 49576;
 constexpr float CHAMPION_LATTICE_STEP = 10.0f;
-
-// Twins: tanks on the line from the south portal of their colour to their twin, the raid by Dark 1.
-// Every stand ends up 30+ yd from both twins and nearer its south portal than the north one.
-constexpr float TWIN_TANK_STAND = 22.5f;
-constexpr float TWIN_STACK_AHEAD = 16.0f;
-constexpr float TWIN_STACK_RADIUS = 8.0f;
-constexpr float TWIN_STACK_STEP = 4.0f;
 
 // Anub'arak: the raid west of the room centre, 40+ yd from Locs[17], so his run ends on the anchor
 constexpr float ANUBARAK_MELEE_STAND = 8.0f;
@@ -598,39 +587,16 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
     SortOrder(layout, StandRole::Melee, [&](Point2 slot) { return Dist(slot, centroid); });
 }
 
-void LayoutTwins(std::vector<Player*> const& bots, std::vector<DutyStand>& duties, Layout& layout)
+// The fight's own door stands, so nobody walks at the pull. They sit in the entrance tunnel, past the
+// arena floor radius AddArenaSlot keeps to.
+void LayoutTwins(std::vector<Player*> const& bots, std::vector<DutyStand>& duties)
 {
-    Point2 const centre = PointOf(ARENA_CENTER);
-    Point2 const fjola = Along(LOC_DARKESS_1, Direction(LOC_DARKESS_1, LOC_VALKYR_DEST_2_RIGHT), TWIN_TANK_STAND);
-    Point2 const eydis = Along(LOC_LIGHTESS_1, Direction(LOC_LIGHTESS_1, LOC_VALKYR_DEST_2_LEFT), TWIN_TANK_STAND);
-    Point2 const both = Along(LOC_DARKESS_1, Direction(LOC_DARKESS_1, centre), TWIN_TANK_STAND);
-
     for (Player* member : bots)
     {
-        switch (GetTwinTankRole(member))
-        {
-            case TwinTankRole::Fjola:
-                duties.push_back({member->GetGUID(), "fjola", At(fjola, ARENA_STAND_Z), false, Position()});
-                break;
-            case TwinTankRole::Eydis:
-                duties.push_back({member->GetGUID(), "eydis", At(eydis, ARENA_STAND_Z), false, Position()});
-                break;
-            case TwinTankRole::Both:
-                duties.push_back({member->GetGUID(), "both", At(both, ARENA_STAND_Z), false, Position()});
-                break;
-            default:
-                break;
-        }
+        TwinDoorStand const stand = GetTwinDoorStand(member);
+        if (stand.role != TwinDoorRole::None)
+            duties.push_back({member->GetGUID(), stand.label, stand.spot, false, Position()});
     }
-
-    Point2 const stack = Along(LOC_DARKESS_1, Direction(LOC_DARKESS_1, centre), TWIN_STACK_AHEAD);
-    for (Point2 const& point : HexLattice(stack, TWIN_STACK_STEP, stack, TWIN_STACK_RADIUS))
-        AddArenaSlot(layout, point, {StandRole::Healer, StandRole::Ranged, StandRole::Melee});
-
-    auto const outer = [&](Point2 slot) { return -Dist(slot, centre); };
-    SortOrder(layout, StandRole::Healer, outer);
-    SortOrder(layout, StandRole::Ranged, outer);
-    SortOrder(layout, StandRole::Melee, [&](Point2 slot) { return Dist(slot, centre); });
 }
 
 void LayoutAnubarak(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
@@ -776,7 +742,7 @@ void Deal(PlayerbotAI* botAI, StagingState& state, ToCStagingBoss arrival, uint3
             LayoutChampions(bot, bots, duties, layout);
             break;
         case ToCStagingBoss::Twins:
-            LayoutTwins(bots, duties, layout);
+            LayoutTwins(bots, duties);
             break;
         case ToCStagingBoss::Anubarak:
             LayoutAnubarak(bot, duties, layout);

@@ -108,7 +108,8 @@ Nodes keyed on these, each live on a difficulty only through the remap or all fo
 | `jaraxxus fel fireball interruptible` | Fel Fireball cast |
 | `jaraxxus nether power active` | Nether Power |
 | `jaraxxus legion flame nearby` | Legion Flame |
-| `twin valkyr needs base essence`, `… vortex requires essence`, `… touched requires essence`, `… shield requires essence` | essences, Vortex casts, Touch, shields |
+| `twin valkyr needs base essence`, `… vortex requires essence`, `… touched requires essence`, `… door stand` | essences, Vortex casts, Touch |
+| `twin valkyr vortex defensive`, `… vortex raid cover` | Vortex casts |
 | `twin valkyr pact interrupt duty` | Twin's Pact cast |
 | `anubarak dps target` | Permafrost on the burrower |
 | `anubarak penetrating cold on raid` | Penetrating Cold |
@@ -313,10 +314,9 @@ park within 1 yd, walk back past 2.5.
     ([faction-champions.md](faction-champions.md), Escapes). 25H 2026-10-23 evening, farthest-first:
     healers 40-53 yd behind the tanks walked 25-31 yd at the pull, and the gripped healer landed
     among them.
-  - Twins: the Fjola tank 22.5 yd from Dark 1 toward her, the Eydis tank 22.5 yd from Light 1 toward
-    Eydis, a lone tank (`both`) 22.5 yd from Dark 1 toward the centre; the raid on a 4 yd lattice
-    16 yd from Dark 1, since it starts Dark. Every stand is 30+ yd from both twins and nearer the
-    south portal of its colour. A bot due an essence walk gets no stand until it has it.
+  - Twins: every bot on its fight door stand in the entrance tunnel, `GetTwinDoorStand`
+    ([twin-valkyr.md](twin-valkyr.md#strategy)), past `AddArenaSlot`'s floor radius, 80+ yd from
+    both twins. A bot due an essence walk gets no stand until it has it.
   - Anub'arak, from `GetAnubarakPrepullTanks` (bots before humans, a human on the side point he stands at): `pickup` (the main tank, else the first bot side tank)
     on `GetAnubarakPickupStand`, `side0`/`side1` on the side points; melee 8 yd west of
     `ANUBARAK_ROOM_CENTER`, casters on 22 and 30 yd rings west of it, all 40.9+ yd from him.
@@ -365,8 +365,8 @@ The `ResistAura` stem picks:
   that still qualify are kept first; each empty school then takes the lowest of: own aura strategy
   already that school, another unelected paladin on the same aura strategy (so the raid keeps
   Devotion), cost (resistance or `bspeed` 0, `baoe` or none 1, `bcast` 2, `barmor` 3), guid. On
-  Jaraxxus fire goes first to a paladin who knows Aura Mastery, and a kept fire holder without it
-  gives way.
+  Jaraxxus and the Twins fire goes first to a paladin who knows Aura Mastery, and a kept fire holder
+  without it gives way.
 - **Hunter**: Aspect of the Wild for `GetNatureResistanceHunter` while nature is wanted; it hands the
   duty on by mana, through Viper. In 2026-10-22 traces it held the aura on the worms, Jaraxxus and
   Anub'arak only (nature 7%, 45% with Fel Lightning, 58% of damage taken).
@@ -384,7 +384,7 @@ The `ResistAura` stem picks:
   falls back to the raw stand.
 - A heroic raid out of attempts keeps the window open: no Barrett comes back.
 - Shaman resistance totems don't count toward a school; Aura Mastery is called only as a Jaraxxus
-  cover; with no hunter at or above 30% mana the one wearing Aspect of the Wild stays pinned in it
+  or normal Light Vortex cover; with no hunter at or above 30% mana the one wearing Aspect of the Wild stays pinned in it
   and loses Viper (`GetNatureResistanceHunter`'s last fallback).
 - A holder already covered by another paladin's aura of its school fires its trigger every tick
   without casting (the class action reads that aura by name) and keeps its own aura meanwhile.

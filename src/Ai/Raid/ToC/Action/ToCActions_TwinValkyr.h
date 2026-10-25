@@ -49,20 +49,36 @@ public:
         : TwinValkyrEssenceActionBase(botAI, name, TrialOfTheCrusaderHelpers::TwinEssenceReason::Vortex) {}
 };
 
-class TwinValkyrSwapEssenceForShieldAction : public TwinValkyrEssenceActionBase
-{
-public:
-    TwinValkyrSwapEssenceForShieldAction(
-        PlayerbotAI* botAI, std::string const name = "twin valkyr swap essence for shield")
-        : TwinValkyrEssenceActionBase(botAI, name, TrialOfTheCrusaderHelpers::TwinEssenceReason::Shield) {}
-};
-
 class TwinValkyrTakeBaseEssenceAction : public TwinValkyrEssenceActionBase
 {
 public:
     TwinValkyrTakeBaseEssenceAction(
         PlayerbotAI* botAI, std::string const name = "twin valkyr take base essence")
         : TwinValkyrEssenceActionBase(botAI, name, TrialOfTheCrusaderHelpers::TwinEssenceReason::Base) {}
+};
+
+class TwinValkyrCastVortexRaidCoverAction : public Action
+{
+public:
+    TwinValkyrCastVortexRaidCoverAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr cast vortex raid cover") : Action(botAI, name) {}
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrCastVortexDefensiveAction : public Action
+{
+public:
+    TwinValkyrCastVortexDefensiveAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr cast vortex defensive") : Action(botAI, name) {}
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrMoveToDoorStandAction : public MovementAction
+{
+public:
+    TwinValkyrMoveToDoorStandAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr move to door stand") : MovementAction(botAI, name) {}
+    bool Execute(Event event) override;
 };
 
 class TwinValkyrDodgeOrbAction : public MovementAction
@@ -77,6 +93,8 @@ private:
     uint32 dodgeSpotMs = 0;
 };
 
+// Waits on its door spot for its twin and taunts her in. Walks out only to fetch one that stopped
+// short of taunt range.
 class TwinValkyrTankHoldAction : public ToCMainTankHoldAction
 {
 public:
@@ -84,6 +102,12 @@ public:
 
 protected:
     bool HoldTwin(Unit* twin);
+
+private:
+    bool FetchTwin(Unit* twin);
+    bool WalkToDoor(Unit* twin);
+
+    bool doorWalk = false;
 };
 
 class TwinValkyrMainTankHoldLightTwinAction : public TwinValkyrTankHoldAction
@@ -135,10 +159,12 @@ public:
             &ToCTwinValkyrActionContext::twin_valkyr_swap_essence_for_touch;
         creators["twin valkyr swap essence for vortex"] =
             &ToCTwinValkyrActionContext::twin_valkyr_swap_essence_for_vortex;
+        creators["twin valkyr cast vortex raid cover"] =
+            &ToCTwinValkyrActionContext::twin_valkyr_cast_vortex_raid_cover;
+        creators["twin valkyr cast vortex defensive"] =
+            &ToCTwinValkyrActionContext::twin_valkyr_cast_vortex_defensive;
         creators["twin valkyr dodge orb"] =
             &ToCTwinValkyrActionContext::twin_valkyr_dodge_orb;
-        creators["twin valkyr swap essence for shield"] =
-            &ToCTwinValkyrActionContext::twin_valkyr_swap_essence_for_shield;
         creators["twin valkyr take base essence"] =
             &ToCTwinValkyrActionContext::twin_valkyr_take_base_essence;
         creators["twin valkyr main tank hold light twin"] =
@@ -147,6 +173,8 @@ public:
             &ToCTwinValkyrActionContext::twin_valkyr_assist_tank_hold_dark_twin;
         creators["twin valkyr redirect threat"] =
             &ToCTwinValkyrActionContext::twin_valkyr_redirect_threat;
+        creators["twin valkyr move to door stand"] =
+            &ToCTwinValkyrActionContext::twin_valkyr_move_to_door_stand;
         creators["twin valkyr focus twin"] =
             &ToCTwinValkyrActionContext::twin_valkyr_focus_twin;
     }
@@ -168,8 +196,12 @@ private:
         return new TwinValkyrDodgeOrbAction(botAI);
     }
 
-    static Action* twin_valkyr_swap_essence_for_shield(PlayerbotAI* botAI) {
-        return new TwinValkyrSwapEssenceForShieldAction(botAI);
+    static Action* twin_valkyr_cast_vortex_raid_cover(PlayerbotAI* botAI) {
+        return new TwinValkyrCastVortexRaidCoverAction(botAI);
+    }
+
+    static Action* twin_valkyr_cast_vortex_defensive(PlayerbotAI* botAI) {
+        return new TwinValkyrCastVortexDefensiveAction(botAI);
     }
 
     static Action* twin_valkyr_take_base_essence(PlayerbotAI* botAI) {
@@ -186,6 +218,10 @@ private:
 
     static Action* twin_valkyr_redirect_threat(PlayerbotAI* botAI) {
         return new TwinValkyrRedirectThreatAction(botAI);
+    }
+
+    static Action* twin_valkyr_move_to_door_stand(PlayerbotAI* botAI) {
+        return new TwinValkyrMoveToDoorStandAction(botAI);
     }
 
     static Action* twin_valkyr_focus_twin(PlayerbotAI* botAI) {

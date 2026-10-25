@@ -10,6 +10,7 @@
 #include "Playerbots.h"
 #include "RogueActions.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_TwinValkyr.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -131,8 +132,12 @@ void AddToCTwinValkyrMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& m
     multipliers.push_back(new TwinValkyrRedirectGuardMultiplier(botAI));
 }
 
-// Lust goes into breaking a shield fast: past it, the Pact is one kick from failing
+// A DPS bot's cooldowns stack with lust. Healers hold only Power Infusion, a rule of the encounter's,
+// and tanks nothing.
 ToCBurstWindow ToCTwinValkyrBurstWindow(PlayerbotAI* botAI)
 {
-    return {true, GetShieldedTwin(botAI) != nullptr};
+    ToCBurstWindow window;
+    window.allowLust = TwinValkyrLustWindowOpen(botAI);
+    window.allowAll = !IsToCDpsBot(botAI->GetBot()) || !TwinValkyrBurstHeld(botAI);
+    return window;
 }

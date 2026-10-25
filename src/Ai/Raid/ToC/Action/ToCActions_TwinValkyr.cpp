@@ -1,5 +1,6 @@
 #include "ToCActions_TwinValkyr.h"
 #include "ToCData.h"
+#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_TwinValkyr.h"
 #include "Playerbots.h"
 #include "Creature.h"
@@ -9,6 +10,8 @@
 #include "Unit.h"
 #include "WorldSession.h"
 #include "WorldPacket.h"
+
+#include <cmath>
 
 using namespace TrialOfTheCrusaderHelpers;
 using namespace EncounterHelpers;
@@ -21,6 +24,19 @@ constexpr uint32 STALLED_WALK_MS = 500;
 constexpr float SAME_WALK_DESTINATION = 1.0f;
 // a spot kept from an earlier wave is no answer to this one
 constexpr uint32 DODGE_SPOT_LATCH_MS = 1000;
+// inside the 30 yd taunt with room for her to drift
+constexpr float TWIN_FETCH_STOP = 25.0f;
+// the floor read is taken only this close to the traced height
+constexpr float DOOR_FLOOR_TOLERANCE = 3.0f;
+
+Position DoorFloor(Player* bot, Position const& spot)
+{
+    float const ground = bot->GetMapWaterOrGroundLevel(spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ());
+    if (std::fabs(ground - spot.GetPositionZ()) > DOOR_FLOOR_TOLERANCE)
+        return spot;
+
+    return Position(spot.GetPositionX(), spot.GetPositionY(), ground);
+}
 
 // Drops a stalled booking, and with releaseElsewhere a booking for any other destination too, since
 // forced doesn't outrank forced. A walk still headed for destination is kept so the duplicate check
@@ -139,10 +155,67 @@ bool TwinValkyrDodgeOrbAction::Execute(Event /*event*/)
     return bot->isMoving();
 }
 
+bool TwinValkyrCastVortexRaidCoverAction::Execute(Event /*event*/)
+{
+    ToCPredictedHit hit;
+    ToCRaidCover const cover = GetToCRaidCover(botAI, GetTwinVortexRaidHit(botAI, hit) ? &hit : nullptr);
+    uint32 const spellId = ToCRaidCoverSpellId(botAI, cover);
+    if (!spellId)
+        return false;
+
+    // a channel fails any other cast's check, and a moving bot breaks its own channel
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    if (IsToCRaidCoverChannel(cover) && bot->isMoving())
+        bot->StopMoving();
+
+    if (!botAI->CastSpell(spellId, bot))
+        return false;
+
+    FinishToCRaidCover(botAI, cover);
+    return true;
+}
+
+bool TwinValkyrCastVortexDefensiveAction::Execute(Event /*event*/)
+{
+    ToCPredictedHit hit;
+    ToCPersonalPick const pick = GetToCPersonalDefensive(botAI, GetTwinVortexHit(botAI, hit) ? &hit : nullptr);
+    if (!pick)
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    return pick.consumable ? botAI->DoSpecificAction(pick.consumable, Event(), true)
+                           : botAI->CastSpell(pick.spellId, bot);
+}
+
+bool TwinValkyrMoveToDoorStandAction::Execute(Event /*event*/)
+{
+    TwinDoorStand const stand = GetTwinDoorStand(bot);
+    if (stand.role == TwinDoorRole::None)
+        return false;
+
+    Position const spot = DoorFloor(bot, stand.spot);
+    if (bot->GetExactDist2d(spot) <= TWIN_DOOR_PARK)
+        return false;
+
+    ReleaseWalk(botAI, bot, spot, false);
+
+    // the tunnel is straight and has no navmesh
+    if (MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false,
+               false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false))
+        return true;
+
+    return bot->isMoving();
+}
+
 bool TwinValkyrTankHoldAction::HoldTwin(Unit* twin)
 {
-    if (AI_VALUE(Unit*, "current target") != twin)
-        return Attack(twin);
+    // the target can be out of sight round the tunnel mouth, and the walk below still has to run
+    if (AI_VALUE(Unit*, "current target") != twin && Attack(twin))
+        return true;
 
     // Taunt back an assigned twin that's on someone else. Taunts diminish on the twins, so the 5th
     // without a 15 s gap is immune.
@@ -155,7 +228,61 @@ bool TwinValkyrTankHoldAction::HoldTwin(Unit* twin)
         }
     }
 
-    return DragBossToAnchor(twin, ARENA_CENTER);
+    return TwinValkyrFetchDue(botAI, twin) ? FetchTwin(twin) : WalkToDoor(twin);
+}
+
+// Walks to 25 yd of her for the taunt. If it can't land, the door hold is off while fetching, so
+// reach melee walks the rest.
+bool TwinValkyrTankHoldAction::FetchTwin(Unit* twin)
+{
+    doorWalk = false;
+    if (bot->GetExactDist2d(twin) <= TWIN_FETCH_STOP)
+        return false;
+
+    Position const door = GetTwinDoorSpot(bot, twin);
+    float const span = twin->GetExactDist2d(door);
+    if (span <= 0.0f)
+        return false;
+
+    float const x = twin->GetPositionX() + (door.GetPositionX() - twin->GetPositionX()) * TWIN_FETCH_STOP / span;
+    float const y = twin->GetPositionY() + (door.GetPositionY() - twin->GetPositionY()) * TWIN_FETCH_STOP / span;
+    float const ground = bot->GetMapWaterOrGroundLevel(x, y, bot->GetPositionZ());
+    float const z = ground > INVALID_HEIGHT ? ground : bot->GetPositionZ();
+
+    ReleaseWalk(botAI, bot, Position(x, y, z), false);
+    if (MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, x, y, z, false, false, false, false, MovementPriority::MOVEMENT_COMBAT,
+               true, false))
+        return true;
+
+    return bot->isMoving();
+}
+
+bool TwinValkyrTankHoldAction::WalkToDoor(Unit* twin)
+{
+    Position const spot = DoorFloor(bot, GetTwinDoorStand(bot).spot);
+    float const off = bot->GetExactDist2d(spot);
+    if (off <= TWIN_DOOR_PARK || (!doorWalk && off <= TWIN_DOOR_UNPARK))
+    {
+        doorWalk = false;
+        return false;
+    }
+
+    doorWalk = true;
+    ReleaseWalk(botAI, bot, spot, false);
+
+    // Backing up keeps her in front, and a tank takes no parry or block from behind. Only when she's on
+    // the far side of the walk, or it would turn its back on her.
+    float const toSpotX = spot.GetPositionX() - bot->GetPositionX();
+    float const toSpotY = spot.GetPositionY() - bot->GetPositionY();
+    float const toTwinX = twin->GetPositionX() - bot->GetPositionX();
+    float const toTwinY = twin->GetPositionY() - bot->GetPositionY();
+    bool const backwards = twin->GetVictim() == bot && toSpotX * toTwinX + toSpotY * toTwinY < 0.0f;
+
+    if (MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false,
+               false, false, true, MovementPriority::MOVEMENT_COMBAT, true, backwards))
+        return true;
+
+    return bot->isMoving();
 }
 
 bool TwinValkyrMainTankHoldLightTwinAction::Execute(Event /*event*/)

@@ -32,6 +32,8 @@ constexpr float TWIN_ORB_HORIZON = 7.0f;
 // Popping an orb of your own colour still hits other-colour allies in the blast
 constexpr float TWIN_ORB_SPLASH_ALLY_RADIUS = 7.0f;
 
+struct ToCPredictedHit;
+
 enum class TwinColour : uint8
 {
     None,
@@ -39,14 +41,14 @@ enum class TwinColour : uint8
     Dark
 };
 
-// Ordered by priority, Touch highest
+// Hold: keeps the colour it has through a running Vortex, so no walk
 enum class TwinEssenceReason : uint8
 {
     None,
     Base,
-    Shield,
-    Vortex,
-    Touch
+    Hold,
+    Touch,
+    Vortex
 };
 
 struct TwinEssenceWant
@@ -62,6 +64,29 @@ enum class TwinTankRole : uint8
     Eydis,
     Both
 };
+
+enum class TwinDoorRole : uint8
+{
+    None,
+    Tank,
+    Melee,
+    Ranged,
+    Heal
+};
+
+struct TwinDoorStand
+{
+    TwinDoorRole role = TwinDoorRole::None;
+    // the staging label: fjola, eydis, both, melee, ranged, healer
+    char const* label = "none";
+    Position spot;
+};
+
+// A walk back starts past UNPARK and ends inside PARK
+constexpr float TWIN_DOOR_PARK = 1.0f;
+constexpr float TWIN_DOOR_UNPARK = 2.5f;
+// A twin further than this off her door spot is out of melee reach from the tunnel
+constexpr float TWIN_DOOR_MELEE_REACH = 12.0f;
 
 // Alive, else nullptr
 Unit* GetFjola(PlayerbotAI* botAI);
@@ -89,17 +114,47 @@ Unit* GetShieldedTwin(PlayerbotAI* botAI);
 // Main tank on Fjola, first living assist on Eydis. A lone tank gets both.
 Player* GetTwinTank(Player* bot, Unit* twin);
 bool IsTwinTank(Player* bot, Unit* twin);
-// The same split by role, twins up or not. No tv.tank note.
-TwinTankRole GetTwinTankRole(Player* bot);
 
+// A running Vortex first: a tank keeps its colour, and on normal so does the raid through a Light Vortex
+// while a Fire Resistance Aura paladin had Aura Mastery ready at the cast start. Then a Touch, then Light
+// for Eydis's tank and Dark for everyone else.
 TwinEssenceWant GetWantedEssence(PlayerbotAI* botAI);
 // urgentOnly: only a Touch or a Vortex counts
 bool TwinValkyrMustSwapEssence(PlayerbotAI* botAI, bool urgentOnly);
+// The portal of that colour with the shortest walk to it and on to the bot's door stand
 Creature* GetEssencePortal(Player* bot, TwinColour colour);
 
-// A player's skull on either twin, else the Pact twin while one casts, else Fjola under a lone tank,
-// else the twin of the other colour than the bot's essence
+// A player's skull on either twin, else the Pact twin while one casts (heroic either, normal only
+// Fjola), else Fjola under a lone tank, else the twin of the other colour than the bot's essence. A
+// melee bot skips a twin more than TWIN_DOOR_MELEE_REACH off her door spot.
 Unit* GetTwinDpsTarget(PlayerbotAI* botAI);
+
+// The bot's stand in the entrance tunnel, 51+ yd from the arena centre, so past every orb. Dealt by
+// guid over the group's bots, so staging and the fight agree. Writes tv.door, role:x,y.
+TwinDoorStand GetTwinDoorStand(Player* bot);
+// Where the twin's tank holds her
+Position GetTwinDoorSpot(Player* bot, Unit* twin);
+// Every bot with a door stand, except a tank walking out to fetch its twin
+bool TwinValkyrDoorHold(PlayerbotAI* botAI);
+// A bot off its door stand, tanks aside, with no essence walk due and none waiting on the end of a
+// running Vortex. Keeps the park latch.
+bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI);
+// The twin is on someone else, past taunt range of her door spot, and hasn't closed on it for 2 s
+bool TwinValkyrFetchDue(PlayerbotAI* botAI, Unit* twin);
+
+// The running Vortex for a bot keeping its colour through it
+bool GetTwinVortexHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
+// The running Vortex while the whole raid keeps Dark through a normal Light Vortex
+bool GetTwinVortexRaidHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
+// Before that one's first tick
+bool TwinValkyrRaidCoverHeld(PlayerbotAI* botAI);
+
+// Heroic: Eydis's shield goes up, or the 3rd special starts with no Eydis Pact among them. Normal: both
+// twins tanked at their door spots, or 20 s into the pull. Latched for the pull.
+bool TwinValkyrLustWindowOpen(PlayerbotAI* botAI);
+// Burst cooldowns wait for lust to land on the bot. With no lust coming they wait for the window only,
+// and with lust coming at most 10 s past it.
+bool TwinValkyrBurstHeld(PlayerbotAI* botAI);
 
 // Only interrupts the twins aren't immune to, in range, off cooldown and affordable. Null for a real
 // player.

@@ -156,7 +156,8 @@ struct ResistAuraState
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
     uint8 wanted = 0;
-    // Jaraxxus: Aura Mastery is spent on Burning Inferno, and doubles only its caster's own aura
+    // Jaraxxus and the Twins: Aura Mastery is spent on Burning Inferno or a normal Light Vortex, and
+    // doubles only its caster's own aura
     bool fireWithMastery = false;
 
     bool elected = false;
@@ -208,8 +209,11 @@ uint8 SchoolsOfBeastsStage(uint32 mask)
 bool FireWantsMastery(PlayerbotAI* botAI)
 {
     ToCEncounter const live = ToCLiveEncounter(botAI);
-    return live == ToCEncounter::Jaraxxus ||
-           (live == ToCEncounter::None && GetToCStagedArrival(botAI) == ToCStagingBoss::Jaraxxus);
+    if (live != ToCEncounter::None)
+        return live == ToCEncounter::Jaraxxus || live == ToCEncounter::TwinValkyr;
+
+    ToCStagingBoss const staged = GetToCStagedArrival(botAI);
+    return staged == ToCStagingBoss::Jaraxxus || staged == ToCStagingBoss::Twins;
 }
 
 uint8 WantedSchools(PlayerbotAI* botAI, uint8 previous)

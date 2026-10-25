@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score a Twin Val'kyr pull from a RaidObs trace: essences, Touch, Pact, orbs, tanks and targets.
+"""Score a Twin Val'kyr pull from a RaidObs trace: essences, Touch, Pact, orbs, tanks, targets, door.
 
     val_kyr_twins.py <file>             every section
     val_kyr_twins.py <file> --essence   time without an essence, swaps by reason, who ate each Vortex
@@ -8,6 +8,7 @@
     val_kyr_twins.py <file> --orbs      Unleashed hits taken or absorbed, tv.orb rules, Powering Up
     val_kyr_twins.py <file> --tanks     who each twin hit, taunts, where the twins stood
     val_kyr_twins.py <file> --targets   how long each DPS bot hit the twin its rule sends it to
+    val_kyr_twins.py <file> --door      time on the door stand and in the tunnel, time out by reason
 
 Ids are listed for 10N, 25N, 10H and 25H: the Spell constructor remaps every cast to the map's
 difficulty, so rows carry that difficulty's id. Interrupts, taunts and lust are matched by the spell
@@ -29,6 +30,8 @@ What the generic views miss here, and what this reads instead:
   at its death. Duty is only read inside a Pact's unshielded window.
 - **A lone tank sends every DPS bot to Fjola** outside a Pact. The reader takes a `tv.tank` of `both`
   for that, so a lone human tank goes unnoticed.
+- **The door stand rides on `tv.door`** as `role:x,y`: the deal runs over the group in guid order, which
+  the trace can't replay.
 """
 from __future__ import annotations
 
@@ -125,6 +128,10 @@ DUPLICATE_AURA_MS = 100
 # one snapshot gap longer than this is a hole in the trace, not time spent anywhere
 MAX_STEP_MS = 2000
 START = -(1 << 62)
+# every door stand is 51+ yd from ARENA_CENTER, past every orb
+DOOR_RADIUS = 51.0
+# TWIN_DOOR_UNPARK: a bot this close to its stand doesn't walk back
+DOOR_STAND_YD = 2.5
 
 SILENT_WHY = {
     "tv.shield": "no twin helper ran with a bot on this map (the value restates on every trace open)",
@@ -348,10 +355,12 @@ def essence_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
 
 def vortexes(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Every Vortex cast: how many living bots held its colour when the channel opened, of those
-    whose colour is known, and each bot's unabsorbed hits and damage from it."""
+    whose colour is known, the bots whose `tv.essence` kept their colour through it on purpose, and
+    each bot's unabsorbed hits and damage from it."""
     samples = samples or Samples(trace)
     roster = roster_guids(trace)
     timelines = essence_timelines(trace)
+    wanted = note_track(trace, "tv.essence")
     hits = [rec for rec in trace.of("dmg")
             if rec.get("sp") in VORTEX_DAMAGE and rec.get("a", 0) > 0 and rec.get("d") in roster]
 
@@ -379,8 +388,10 @@ def vortexes(trace: Trace, samples: Samples | None = None) -> list[dict]:
             if VORTEX_DAMAGE[hit["sp"]] == colour and start <= hit["t"] <= stop:
                 taken[hit["d"]] += 1
                 damage[hit["d"]] += hit["a"]
+        held = {guid for guid in roster
+                if str(value_at(wanted.get(guid), channel) or "").startswith("hold:")}
         out.append({"t": start, "caster": rec.get("s"), "colour": colour, "matched": matched,
-                    "known": known, "hits": taken, "damage": damage})
+                    "known": known, "held": held, "hits": taken, "damage": damage})
     return out
 
 
@@ -393,7 +404,7 @@ def show_essence(trace: Trace) -> None:
         print("  no essence or Surge rows")
         return
 
-    reasons = ["touch", "vortex", "shield", "base", "other", "-"]
+    reasons = ["touch", "vortex", "base", "other", "-"]
     print(f"  {'bot':14} {'role':6} {'at pull':7} {'at end':6} {'no ess':>7}"
           + "".join(f" {reason:>6}" for reason in reasons))
     for row in rows:
@@ -412,18 +423,22 @@ def show_essence(trace: Trace) -> None:
         print("  no Vortex cast")
         return
     for cast in casts:
-        by_role: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0, 0])
-        for guid, count in cast["hits"].items():
-            tally = by_role[trace.role(guid)]
-            tally[0] += 1
-            tally[1] += count
-            tally[2] += cast["damage"][guid]
-        eaten = "  ".join(f"{role} {bots} bot(s) {count} hit(s) {damage:,}"
-                          for role, (bots, count, damage) in sorted(by_role.items())) or "nobody"
-        names = ", ".join(trace.name(guid) for guid in sorted(cast["hits"], key=trace.name))
         print(f"  {clock(cast['t']):>9} {cast['colour']:5} {trace.name(cast['caster'])[:16]:16}"
-              f" matched {cast['matched']}/{cast['known']}  unabsorbed: {eaten}"
-              + (f"  ({names})" if names else ""))
+              f" matched {cast['matched']}/{cast['known']}, held {len(cast['held'])}")
+        for label, keep in (("held", True), ("missed", False)):
+            by_role: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0, 0])
+            eaters = sorted((guid for guid in cast["hits"] if (guid in cast["held"]) == keep), key=trace.name)
+            for guid in eaters:
+                tally = by_role[trace.role(guid)]
+                tally[0] += 1
+                tally[1] += cast["hits"][guid]
+                tally[2] += cast["damage"][guid]
+            eaten = "  ".join(f"{role} {bots} bot(s) {count} hit(s) {damage:,}"
+                              for role, (bots, count, damage) in sorted(by_role.items())) or "nobody"
+            names = ", ".join(map(trace.name, eaters))
+            print(f"            unabsorbed, {label}: {eaten}" + (f"  ({names})" if names else ""))
+    print("  held is a tv.essence of hold at the channel's open: a tank, or the raid through a normal"
+          " Light Vortex")
 
 
 # -------------------------------------------------------------------------------------------- touch
@@ -781,16 +796,18 @@ def lone_tank_windows(trace: Trace, end: int) -> list[tuple[int, int]]:
 
 def target_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Per DPS bot, living sampled time on the twin the rule names (its `tv.target` twin while that
-    reads `skull`, else the Pact twin during a Pact, else Fjola under a lone tank, else Eydis for a
-    Light bot and Fjola for Dark or none), on the other twin, or on neither, off its own `snap.u[7]`.
-    Time with its colour unknown counts nowhere."""
+    reads `skull`, or `door` for a melee bot whose twin is out of reach of the tunnel, else the Pact
+    twin during a Pact, Eydis's only on heroic, else Fjola under a lone tank, else Eydis for a Light
+    bot and Fjola for Dark or none), on the other twin, or on neither, off its own `snap.u[7]`. Time
+    with its colour unknown counts nowhere."""
     samples = samples or Samples(trace)
     end = pull_end(trace)
     twins = twin_guids(trace, samples)
     fjola, eydis = twins["fjola"], twins["eydis"]
     if fjola is None or eydis is None:
         return []
-    windows = pact_windows(trace, samples)
+    heroic = trace.header.get("diff") in (2, 3)
+    windows = [window for window in pact_windows(trace, samples) if heroic or window[2] == fjola]
     lone = lone_tank_windows(trace, end)
     timelines = essence_timelines(trace)
     picks = note_track(trace, "tv.target")
@@ -805,7 +822,7 @@ def target_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
             if not row or row[5] <= 0:
                 continue
             name, _, rule = str(value_at(picks.get(guid), when) or "").partition(":")
-            want = twins.get(name) if rule == "skull" else None
+            want = twins.get(name) if rule in ("skull", "door") else None
             if want is None:
                 want = next((twin for low, high, twin in windows if low <= when < high), None)
             if want is None and any(low <= when < high for low, high in lone):
@@ -839,6 +856,85 @@ def show_targets(trace: Trace) -> None:
     known = sum(row["right"] + row["wrong"] + row["neither"] for row in rows)
     print(f"\n  on the rule twin {share(right, known)} of DPS time; without a lone tank the wrong one"
           " halves a bot's damage and the right one adds 50%")
+
+
+# --------------------------------------------------------------------------------------------- door
+
+def parse_stand(value: str) -> tuple[str, tuple[float, float] | None]:
+    """`melee:563.2,87.0` as its role and spot; `none`, or anything unparsed, has no spot."""
+    role, _, spot = value.partition(":")
+    try:
+        x, y = (float(part) for part in spot.split(","))
+    except ValueError:
+        return role, None
+    return role, (x, y)
+
+
+def door_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per roster bot with a door stand: living combat time, the part of it within DOOR_STAND_YD of
+    the stand and the part DOOR_RADIUS or more from ARENA_CENTER, time out of the tunnel under the
+    `tv.essence` reason it held then, and its Unleashed hits taken in the tunnel and out of it."""
+    samples = samples or Samples(trace)
+    end = pull_end(trace)
+    stands = holder_spans(trace, "tv.door", end)
+    wanted = note_track(trace, "tv.essence")
+    unleashed = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("sp") in UNLEASHED and rec.get("a", 0) > 0 and rec["t"] >= 0:
+            unleashed[rec.get("d")].append(rec["t"])
+
+    out = []
+    for guid in sorted(roster_guids(trace), key=trace.name):
+        spans = [(parse_stand(value), low, high) for value, low, high in stands.get(guid, [])]
+        spans = [(stand, low, high) for stand, low, high in spans if stand[1] is not None]
+        if not spans:
+            continue
+        alive = on_stand = tunnel = 0
+        role = spans[-1][0][0]
+        away: collections.Counter = collections.Counter()
+        for when, weight in samples.steps(0, end):
+            row = samples.exact(guid, when)
+            stand = next((stand for stand, low, high in spans if low <= when < high), None)
+            if not row or row[5] <= 0 or stand is None:
+                continue
+            alive += weight
+            on_stand += weight if dist2(row[1:3], stand[1]) <= DOOR_STAND_YD else 0
+            if dist2(row[1:3], ARENA_CENTER) >= DOOR_RADIUS:
+                tunnel += weight
+            else:
+                away[str(value_at(wanted.get(guid), when) or "-").partition(":")[0]] += weight
+        if not alive:
+            continue
+
+        inside = outside = 0
+        for when in unleashed.get(guid, []):
+            row = samples.row(guid, when)
+            if row and dist2(row[1:3], ARENA_CENTER) >= DOOR_RADIUS:
+                inside += 1
+            elif row:
+                outside += 1
+        out.append({"guid": guid, "role": role, "alive": alive, "stand": on_stand, "tunnel": tunnel,
+                    "away": away, "unleashed_in": inside, "unleashed_out": outside})
+    return out
+
+
+def show_door(trace: Trace) -> None:
+    print("DOOR")
+    rows = door_rows(trace)
+    if not rows:
+        print("  no tv.door stand")
+        return
+
+    print(f"  {'bot':14} {'stand':6} {'on it':>6} {'tunnel':>6} {'unleashed in/out':>16}  out of the tunnel by reason")
+    for row in rows:
+        away = ", ".join(f"{reason} {weight / 1000:.1f}s" for reason, weight in row["away"].most_common())
+        print(f"  {trace.name(row['guid'])[:14]:14} {row['role']:6} {share(row['stand'], row['alive']):>6}"
+              f" {share(row['tunnel'], row['alive']):>6} {row['unleashed_in']:>7}/{row['unleashed_out']:<8}"
+              f"  {away or '-'}")
+    alive = sum(row["alive"] for row in rows)
+    print(f"\n  in the tunnel {share(sum(row['tunnel'] for row in rows), alive)} of living time,"
+          f" Unleashed taken there {sum(row['unleashed_in'] for row in rows)}; the tunnel is"
+          f" {DOOR_RADIUS:.0f}+ yd from ARENA_CENTER, past every orb")
 
 
 # ------------------------------------------------------------------------------------------- banner
@@ -876,6 +972,7 @@ SECTIONS = (
     ("orbs", "Unleashed hits taken or absorbed, tv.orb rules, Powering Up, Empowered", show_orbs),
     ("tanks", "each twin's victim against her tv.tank, taunts, distances", show_tanks),
     ("targets", "each DPS bot's time on the twin its rule names", show_targets),
+    ("door", "time on the door stand and in the tunnel, time out by reason, Unleashed there", show_door),
 )
 
 

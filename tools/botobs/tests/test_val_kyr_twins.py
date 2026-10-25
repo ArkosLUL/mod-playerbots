@@ -198,6 +198,33 @@ def pact_pull() -> list[dict]:
     return records
 
 
+def door_pull() -> list[dict]:
+    """Shiv walks out to Light 1 for a Vortex from 10 s to 20 s; Frost steps 4 yd off its stand at 5 s
+    and takes an Unleashed there, Shiv one out at the portal."""
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3,
+         "boss": "fjola-lightbane", "roster": [
+             {"g": SHIV, "n": "Shiv", "r": "melee", "c": "rogue", "h": 0},
+             {"g": FROST, "n": "Frost", "r": "ranged", "c": "mage", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "fjola-lightbane", "src": "engage"},
+        note(0, SHIV, "tv.door", "melee:563.2,87.0"),
+        note(0, FROST, "tv.door", "ranged:563.2,81.0"),
+        note(0, SHIV, "tv.essence", "base:dark"),
+        note(10000, SHIV, "tv.essence", "vortex:light"),
+        note(20000, SHIV, "tv.essence", "base:dark"),
+        dmg(6000, 0, FROST, 65795, 8000),
+        dmg(12000, 0, SHIV, 65795, 8000),
+        {"t": 30000, "e": "end", "out": "kill"},
+    ]
+    for when in range(0, 31000, 1000):
+        shiv = (541.0, 117.0) if 10000 <= when < 20000 else (563.2, 87.0)
+        frost = (563.2, 85.0) if when == 5000 or when == 6000 else (563.2, 81.0)
+        records.append({"t": when, "e": "snap", "hz": [], "u": [
+            [SHIV, shiv[0], shiv[1], CZ, 0.0, 100.0, 100.0, FJOLA, 0, 0, 0, 0],
+            [FROST, frost[0], frost[1], CZ, 0.0, 100.0, 100.0, FJOLA, 0, 0, 0, 0]]})
+    return records
+
+
 def load(folder: str, records: list[dict]) -> Trace:
     path = pathlib.Path(folder) / "649_1_fjola-lightbane_1789500000.ndjson"
     path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
@@ -331,6 +358,58 @@ class SkullPick(unittest.TestCase):
             rows = {row["guid"]: row for row in vk.target_rows(load(folder, twins_pull() + picks))}
         self.assertEqual((rows[SHIV]["right"], rows[SHIV]["wrong"]), (43000, 12000))
         self.assertEqual((rows[FROST]["right"], rows[FROST]["wrong"]), (30000, 25000))
+
+
+class NormalPact(unittest.TestCase):
+    def test_eydiss_pact_sends_nobody_on_normal(self):
+        records = twins_pull()
+        records[0] = {**records[0], "diff": 1}
+        with tempfile.TemporaryDirectory() as folder:
+            rows = {row["guid"]: row for row in vk.target_rows(load(folder, records))}
+        # Shiv stays on Fjola through Eydis's Pact at 26 s to 34 s, wrong only while it held Light
+        self.assertEqual((rows[SHIV]["right"], rows[SHIV]["wrong"]), (43000, 12000))
+
+
+class VortexHold(unittest.TestCase):
+    def test_a_bot_keeping_its_colour_counts_as_held_not_missed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, twins_pull() + [note(6100, BULWARK, "tv.essence", "hold:dark")])
+            cast = vk.vortexes(trace)[0]
+        self.assertEqual(cast["held"], {BULWARK})
+        self.assertEqual(cast["hits"], {TIDE: 1, BULWARK: 2})
+
+
+class DoorStand(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, door_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_stand_note_carries_its_spot(self):
+        self.assertEqual(vk.parse_stand("melee:563.2,87.0"), ("melee", (563.2, 87.0)))
+        self.assertEqual(vk.parse_stand("none"), ("none", None))
+
+    def test_time_out_of_the_tunnel_sits_under_the_reason_held(self):
+        rows = {row["guid"]: row for row in vk.door_rows(self.trace)}
+        shiv = rows[SHIV]
+        self.assertEqual((shiv["alive"], shiv["stand"], shiv["tunnel"]), (30000, 20000, 20000))
+        self.assertEqual(shiv["away"], {"vortex": 10000})
+        self.assertEqual((shiv["unleashed_in"], shiv["unleashed_out"]), (0, 1))
+
+    def test_a_step_off_the_stand_stays_in_the_tunnel(self):
+        frost = {row["guid"]: row for row in vk.door_rows(self.trace)}[FROST]
+        self.assertEqual((frost["stand"], frost["tunnel"]), (28000, 30000))
+        self.assertEqual((frost["unleashed_in"], frost["unleashed_out"]), (1, 0))
+
+    def test_the_section_prints(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            vk.show_door(self.trace)
+        self.assertIn("in the tunnel", out.getvalue())
 
 
 class TwoBrokenPacts(unittest.TestCase):
