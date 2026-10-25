@@ -22,18 +22,66 @@ constexpr uint32 SPELL_PERMAFROST = 66193;
 constexpr uint32 SPELL_PENETRATING_COLD = 66013;
 // Heroic burrower cast, no difficulty row
 constexpr uint32 SPELL_SHADOW_STRIKE = 66134;
+// On the burrower's victim, +25% physical damage taken a stack
+constexpr uint32 SPELL_EXPOSE_WEAKNESS = 67721;
+constexpr uint32 SPELL_DEATH_GRIP = 49576;
 
 // Middle of the open floor, navprobe-clean out to 50 yd
 extern const Position ANUBARAK_ROOM_CENTER;
 // Sphere and spike sweeps reach the whole room from anywhere in it
 constexpr float ANUBARAK_ROOM_RADIUS = 120.0f;
-// Tank patch side points sit at ROOM_CENTER.y +/- this
-constexpr float ANUBARAK_TANK_PATCH_OFFSET = 12.0f;
+// Tank spots sit at ROOM_CENTER.y +/- this, so the two patches end up 14 yd apart, past Spider Frenzy's 12
+constexpr float ANUBARAK_TANK_PATCH_OFFSET = 7.0f;
 // Furthest a patch can be from its side point and still count as that side's tank patch
 constexpr float ANUBARAK_TANK_PATCH_LATCH = 30.0f;
 constexpr float ANUBARAK_TANK_PATCH_ARRIVE = 2.0f;
 // 6 yd aura plus 1.5 player reach
 constexpr float ANUBARAK_PERMAFROST_SLOW_REACH = 7.5f;
+// The main tank keeps this far off every patch, so a step or a drag never ends in the slow
+constexpr float ANUBARAK_TANK_KEEPOUT = ANUBARAK_PERMAFROST_SLOW_REACH + 1.0f;
+// Pre-pull pickup stand, west of the room centre: he runs in from the east and stops on the anchor
+constexpr float ANUBARAK_PICKUP_STAND_OFFSET = 10.0f;
+
+// Shooting a tank patch: a sphere this close to the spot goes at once, the nearest within FAR after the wait
+constexpr float ANUBARAK_SIDE_SHOOT_NEAR = 12.0f;
+constexpr float ANUBARAK_SIDE_SHOOT_FAR = 20.0f;
+constexpr uint32 ANUBARAK_SIDE_SHOOT_WAIT_MS = 10000;
+// A sphere this close to the other tank patch would put both sides' burrowers in one Spider Frenzy
+constexpr float ANUBARAK_TANK_PATCH_GAP = 13.0f;
+
+// Death Grip's 30 yd less a margin, 3D: a flying sphere sits about 13.5 yd up
+constexpr float ANUBARAK_GRIP_RANGE = 28.0f;
+// The sphere landed on the DK. Not there 3 s after the cast: the grip failed and the pull shoots.
+constexpr float ANUBARAK_GRIP_LANDED = 3.0f;
+constexpr float ANUBARAK_GRIP_LANDED_HEIGHT = 4.0f;
+constexpr uint32 ANUBARAK_GRIP_JUDGE_MS = 3000;
+// A side waits this long for a DK's grip to come back. Burrowers can't submerge for 30 s after spawn.
+constexpr uint32 ANUBARAK_GRIP_COOLDOWN_WAIT_MS = 40000;
+// A ready DK on its spot with no sphere in reach this long hands the side to the shooters
+constexpr uint32 ANUBARAK_GRIP_IDLE_MS = 12000;
+
+// Burrowers a side tank holds before the next one goes to the other side (Spider Frenzy)
+constexpr uint8 ANUBARAK_BURROWERS_PER_SIDE = 2;
+// Burrower waves: 5-8 s after the pull or an emerge, then every 45 s, none while he is down
+constexpr uint32 ANUBARAK_WAVE_FIRST_MS = 5000;
+constexpr uint32 ANUBARAK_WAVE_INTERVAL_MS = 45000;
+// New burrowers further apart than this belong to separate waves
+constexpr uint32 ANUBARAK_WAVE_GAP_MS = 10000;
+// Side tanks leave scarabs alone this long before a wave
+constexpr uint32 ANUBARAK_WAVE_READY_MS = 8000;
+// He submerges 80 s after the pull or an emerge and is selectable again 62 s later
+constexpr uint32 ANUBARAK_SURFACED_MS = 80000;
+constexpr uint32 ANUBARAK_SUBMERGED_MS = 62000;
+// Focus fire on the burrowers starts once killing them at the raid's rate, plus this, reaches the next wave
+constexpr uint32 ANUBARAK_FOCUS_MARGIN_MS = 5000;
+constexpr uint32 ANUBARAK_DAMAGE_WINDOW_MS = 10000;
+constexpr uint32 ANUBARAK_DAMAGE_SAMPLE_MS = 500;
+constexpr uint32 ANUBARAK_DAMAGE_MIN_SPAN_MS = 3000;
+
+constexpr uint32 ANUBARAK_SIDE_DEFENSIVE_STACKS = 5;
+constexpr float ANUBARAK_SIDE_DEFENSIVE_PCT = 50.0f;
+// Rebirth's 30 yd less a margin
+constexpr float ANUBARAK_BATTLE_RES_REACH = 28.0f;
 // The spike's 8 yd sphere test adds both sizes: 1.5 spike, 2.0 patch, 1.0 falling sphere. So 11.5 yd
 // round a patch and 10.5 round a falling one.
 constexpr float ANUBARAK_SPIKE_PATCH_REACH = 11.5f;
@@ -50,11 +98,9 @@ constexpr float ANUBARAK_SPIKE_LANE_HALF_WIDTH = 7.0f;
 constexpr float ANUBARAK_SPIKE_LANE_CLEARANCE = 9.0f;
 constexpr float ANUBARAK_SPIKE_DODGE_SEARCH = 30.0f;
 constexpr float ANUBARAK_INTERRUPT_RANGE = 30.0f;
-// Heroic has six spheres for the whole pull: tank patches never take the last two
-constexpr uint8 ANUBARAK_HEROIC_KITE_RESERVE = 2;
-// He submerges 80 s after the pull or an emerge, the spike is summoned on him, and the guide drags
-// him off the patches 15 s before
-constexpr uint32 ANUBARAK_SUBMERGE_PREP_MS = 65000;
+// He submerges 80 s after the pull or an emerge and the spike is summoned on him, so he is dragged off
+// the patches 10 s before
+constexpr uint32 ANUBARAK_SUBMERGE_PREP_MS = 70000;
 
 // Drag deadband, measured on him. In the submerge window DONE is also the start radius.
 constexpr float ANUBARAK_DRAG_START = 8.0f;
@@ -73,9 +119,10 @@ constexpr float ANUBARAK_THREAT_CAP = 0.9f;
 constexpr float ANUBARAK_THREAT_RELEASE = 0.8f;
 
 constexpr uint8 ANUBARAK_SHOOTERS_PER_NEED = 2;
-// Patches that aren't tank patches kept ready in phase 2, falling spheres counted
+// Patches that aren't tank patches kept ready in phase 2, falling spheres counted. Heroic has six
+// spheres for the pull, so its kites get a share per submerge instead.
 constexpr uint8 ANUBARAK_P2_PATCH_STOCK = 2;
-constexpr uint8 ANUBARAK_P2_PATCH_STOCK_HEROIC = 1;
+constexpr uint8 ANUBARAK_P2_PATCH_STOCK_HEROIC = 0;
 // A shooter reaches a sphere within its "spell" range less this, 3D, in line of sight
 constexpr float ANUBARAK_SHOOT_MARGIN = 2.0f;
 
@@ -139,13 +186,38 @@ struct AnubarakBurrowerPick
 {
     // On this side tank, its current target first
     Creature* held = nullptr;
-    // On someone holding no burrower side, nearest hold
+    // This side's, on someone else: one hitting a healer first, then the nearest the hold
     Creature* loose = nullptr;
-    // This side's patch, else its side point
+    // This side's patch, else its spot
     Position hold;
     uint8 side = 0;
+    // Loose ones within 10 yd of the bot, for a challenging shout
+    uint8 looseNear = 0;
+    // The group member most of this side's loose ones hit, for Righteous Defense
+    Player* rescue = nullptr;
 
     explicit operator bool() const { return held || loose; }
+};
+
+enum class AnubarakGripStep : uint8
+{
+    None,
+    // To the side's spot
+    Walk,
+    // On the spot with nothing in reach, or the gripped sphere on its way
+    Hold,
+    Cast,
+    // The gripped sphere landed on the DK
+    Kill
+};
+
+struct AnubarakGripDuty
+{
+    // Null while no sphere is in reach of the spot
+    Creature* sphere = nullptr;
+    Position spot;
+    uint8 side = 0;
+    AnubarakGripStep step = AnubarakGripStep::None;
 };
 
 // Through the instance's guid slot, so he still resolves while submerged and unselectable
@@ -174,18 +246,30 @@ bool UnitOnPermafrost(Unit* unit);
 
 // Side 0 sits at ROOM_CENTER.y + offset, side 1 at y - offset
 Position GetAnubarakTankSidePoint(uint8 side);
-// Null until a patch lies within the latch distance of the side point
+// Null until a patch lies within the latch distance of the side point, nearer it than the other side's
 Creature* GetAnubarakTankPatch(Player* bot, uint8 side);
+// The side's patch, else its side point moved with the other side's patch so the two stay 14 yd apart
+Position GetAnubarakTankSpot(Player* bot, uint8 side);
 // Midpoint of both tank patches, else the room centre
 Position GetAnubarakBossAnchor(Player* bot);
+// Pre-pull stand of the pickup tank, west of the anchor and off both tank spots
+Position GetAnubarakPickupStand(Player* bot);
 // Midpoint of both latched tank patches. False until both have landed: he is held where picked up.
 bool GetAnubarakDragAnchor(Player* bot, Position& out);
-// From 65 s after the pull or an emerge: a spot clear of every patch by
-// ANUBARAK_SUBMERGE_PATCH_CLEARANCE, else by _MIN, so the spike summoned on him doesn't burn one.
-// False otherwise.
+// The anchor, then points 4 and 7.5 yd off it toward his side of the patch line, for when the leg to
+// the anchor would walk the tank through Permafrost. Empty without an anchor.
+std::vector<Position> GetAnubarakDragPoints(Player* bot, Creature* boss);
+// From 70 s after the pull or an emerge: a spot clear of every patch by
+// ANUBARAK_SUBMERGE_PATCH_CLEARANCE, else by _MIN, so the spike summoned on him doesn't burn one,
+// on the tank's side away from the tank patches. False otherwise.
 bool GetAnubarakSubmergeSpot(Player* bot, Position& out);
-// The pickup tank's leg toward point, latched per instance. Called by the hold action only.
+// The pickup tank's leg toward point, latched per instance. Called by the hold action only. No leg
+// whose tank spot or walk comes within the slow reach of a patch.
 AnubarakDragLeg GetAnubarakDragLeg(Player* bot, Creature* boss, Position const& point, bool submerge);
+// The main tank stands in a patch's slow reach: the nearest spot clear of every patch by
+// ANUBARAK_TANK_KEEPOUT, within his melee reach when there is one. False when it is clear already.
+bool GetAnubarakTankStepOut(Player* bot, Creature* boss, Position& out);
+bool AnubarakTankPatchLatched(Player* bot);
 void ClearAnubarakDrag(Player* bot);
 // A latched leg is walking or waiting for him to settle: the Block rule's predicate, a pure read
 bool IsAnubarakDragInFlight(PlayerbotAI* botAI);
@@ -194,8 +278,14 @@ bool IsAnubarakDragInFlight(PlayerbotAI* botAI);
 bool AnubarakTauntWouldSteal(PlayerbotAI* botAI);
 // Latched per bot: capped at ANUBARAK_THREAT_CAP of his tank victim's threat, freed under RELEASE
 bool AnubarakThreatCapped(Player* bot);
-// 0 or 1 for the two side tanks latched for the pull, else -1
+// 0 or 1 for the two bot side tanks latched for the pull, else -1
 int8 GetAnubarakBurrowerTankSide(Player* player);
+// Expose Weakness at ANUBARAK_SIDE_DEFENSIVE_STACKS or health under the pct, on a side tank
+bool AnubarakSideTankNeedsDefensive(Player* bot);
+// A dead bot side tank this druid can Rebirth now, else null
+Player* GetAnubarakSideTankToRes(PlayerbotAI* botAI);
+// A burrower wave is due within ANUBARAK_WAVE_READY_MS while he is up
+bool AnubarakWaveImminent(PlayerbotAI* botAI);
 // Main tank while alive, else side 0's tank
 bool IsAnubarakPickupTank(Player* bot);
 // IsTank can read false for a tank for a tick, so the spec is asked too
@@ -213,12 +303,16 @@ AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot);
 // Alive burrowers in the room, submerged ones too: they come back up where they went down
 std::vector<Creature*> GetAnubarakBurrowers(Player* bot);
 // What a side tank takes. Empty for a bot with no side, and with nothing selectable to take.
+// Each burrower belongs to the side of its burrow exit, at most two a side; one on a side tank stays
+// with it, and a dead or marked side tank's go to the other.
 AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI);
 // The burrower DPS focus, latched per instance in anub.focus. Only ones standing on Permafrost count,
 // since one below 80% off it submerges and comes back full. The latched one stays while it qualifies.
 Creature* GetAnubarakFocusBurrower(Player* bot);
-// This DPS bot's target: a player's skull, the focus burrower, him while selectable, else while he's
-// down the nearest scarab in reach. Null outside the pull, for non-DPS and for a sphere shooter.
+// This DPS bot's target: a player's skull, him while selectable, else the focus burrower, else while
+// he's down the nearest scarab in reach. The focus burrower goes ahead of him while he's down, or once
+// killing the burrowers on Permafrost at the raid's damage rate would run within 5 s of the next wave.
+// Null outside the pull, for non-DPS and for a bot on sphere duty.
 Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI);
 // Nearest scarab within 30 yd hitting someone who isn't a tank
 Creature* GetAnubarakScarabToPickUp(Player* bot);
@@ -227,6 +321,12 @@ Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI);
 
 // The flying sphere this bot shoots now, null when it has no sphere duty
 Creature* GetAnubarakSphereToShoot(Player* bot);
+// The DK's grip of a sphere onto its side's spot. False without one.
+bool GetAnubarakGripDuty(Player* bot, AnubarakGripDuty& out);
+// Called once the DK's Death Grip on its duty sphere went out
+void NoteAnubarakGripCast(Player* bot, Creature* sphere);
+// The shot or gripped sphere this bot's duty is on, else null
+Creature* GetAnubarakDutySphere(Player* bot);
 // 3D within the bot's spell range less ANUBARAK_SHOOT_MARGIN, in line of sight
 bool AnubarakSphereInReach(Player* bot, Unit* sphere);
 // Floor point toward the sphere where it is in reach, off the spike and its lane. False when none.

@@ -7,10 +7,13 @@
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
 #include "MageActions.h"
+#include "Map.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
 #include "RaidSplash.h"
 #include "ReachTargetActions.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "ToCActions_Anubarak.h"
 #include "ToCData.h"
 #include "ToCHelpers_Anubarak.h"
@@ -40,6 +43,52 @@ bool IsSphereCrowdControl(std::string const& name)
     }
 
     return false;
+}
+
+// Damage that lands late (a DoT with no hit of its own, a channel) or on everything round the sphere: a
+// sphere that dies late lands wherever it drifted, and a splash can down a second one
+bool SlowOrSpreadOnSphere(PlayerbotAI* botAI, Action* action)
+{
+    if (IsToCAreaDamage(botAI, action))
+        return true;
+
+    CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action);
+    if (!cast)
+        return false;
+
+    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", cast->getSpell())->Get();
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info)
+        return false;
+
+    if (info->IsChanneled() || info->IsAffectingArea())
+        return true;
+
+    bool direct = false;
+    bool periodic = false;
+    for (SpellEffectInfo const& effect : info->Effects)
+    {
+        switch (effect.Effect)
+        {
+            case SPELL_EFFECT_SCHOOL_DAMAGE:
+            case SPELL_EFFECT_WEAPON_DAMAGE:
+            case SPELL_EFFECT_WEAPON_DAMAGE_NOSCHOOL:
+            case SPELL_EFFECT_NORMALIZED_WEAPON_DMG:
+            case SPELL_EFFECT_WEAPON_PERCENT_DAMAGE:
+                direct = true;
+                break;
+            case SPELL_EFFECT_APPLY_AURA:
+                if (effect.ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE ||
+                    effect.ApplyAuraName == SPELL_AURA_PERIODIC_LEECH ||
+                    effect.ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE_PERCENT)
+                    periodic = true;
+                break;
+            default:
+                break;
+        }
+    }
+
+    return periodic && !direct;
 }
 
 }
@@ -77,9 +126,11 @@ float AnubarakProtectSpikeKiteMultiplier::GetValue(Action* action)
         if (!dynamic_cast<MovementAction*>(action) || dynamic_cast<AnubarakKiteSpikeToPermafrostAction*>(action))
             return 1.0f;
 
-        // Attack actions, but these two holds walk the tank to its spot
+        // Attack actions, but these holds walk the tank or the DK to its spot
         bool const walkingHold = dynamic_cast<AnubarakMainTankHoldBossAction*>(action) ||
-                                 dynamic_cast<AnubarakAssistTankHoldBurrowerAction*>(action);
+                                 dynamic_cast<AnubarakAssistTankHoldBurrowerAction*>(action) ||
+                                 dynamic_cast<AnubarakSideTankReadyAction*>(action) ||
+                                 dynamic_cast<AnubarakGripFrostSphereAction*>(action);
         if (dynamic_cast<AttackAction*>(action) && !walkingHold)
             return 1.0f;
     }
@@ -114,6 +165,11 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
     if (!action || !AnubarakEngaged(botAI))
         return 1.0f;
 
+    // Starfall's stars find the spheres overhead, and heroic has six for the pull
+    Map* map = bot->GetMap();
+    if (map && map->IsHeroic() && action->getName() == "starfall")
+        return 0.0f;
+
     // actions that pick their target in Execute read "self target" here, so the stem's own picks pass
     Unit* target = action->GetTarget();
     Creature* sphere = target ? target->ToCreature() : nullptr;
@@ -123,7 +179,10 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
     if (IsSphereCrowdControl(action->getName()))
         return 0.0f;
 
-    return sphere == GetAnubarakSphereToShoot(bot) ? 1.0f : 0.0f;
+    if (sphere != GetAnubarakDutySphere(bot))
+        return 0.0f;
+
+    return SlowOrSpreadOnSphere(botAI, action) ? 0.0f : 1.0f;
 }
 
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)

@@ -72,6 +72,34 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakSideTankReadyTrigger : public Trigger
+{
+public:
+    AnubarakSideTankReadyTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak side tank ready") {}
+    bool IsActive() override;
+};
+
+class AnubarakSideTankNeedsDefensiveTrigger : public Trigger
+{
+public:
+    AnubarakSideTankNeedsDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak side tank needs defensive") {}
+    bool IsActive() override;
+};
+
+class AnubarakSideTankDeadTrigger : public Trigger
+{
+public:
+    AnubarakSideTankDeadTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak side tank dead") {}
+    bool IsActive() override;
+};
+
+class AnubarakGripFrostSphereTrigger : public Trigger
+{
+public:
+    AnubarakGripFrostSphereTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak grip frost sphere") {}
+    bool IsActive() override;
+};
+
 class AnubarakScarabOnRaidTrigger : public Trigger
 {
 public:
@@ -116,6 +144,14 @@ public:
             &ToCAnubarakTriggerContext::anubarak_dps_target;
         creators["anubarak burrower needs assist tank"] =
             &ToCAnubarakTriggerContext::anubarak_burrower_needs_assist_tank;
+        creators["anubarak side tank ready"] =
+            &ToCAnubarakTriggerContext::anubarak_side_tank_ready;
+        creators["anubarak side tank needs defensive"] =
+            &ToCAnubarakTriggerContext::anubarak_side_tank_needs_defensive;
+        creators["anubarak side tank dead"] =
+            &ToCAnubarakTriggerContext::anubarak_side_tank_dead;
+        creators["anubarak grip frost sphere"] =
+            &ToCAnubarakTriggerContext::anubarak_grip_frost_sphere;
         creators["anubarak scarab on raid"] =
             &ToCAnubarakTriggerContext::anubarak_scarab_on_raid;
         creators["anubarak engaged by main tank"] =
@@ -159,6 +195,22 @@ private:
 
     static Trigger* anubarak_burrower_needs_assist_tank(PlayerbotAI* botAI) {
         return new AnubarakBurrowerNeedsAssistTankTrigger(botAI);
+    }
+
+    static Trigger* anubarak_side_tank_ready(PlayerbotAI* botAI) {
+        return new AnubarakSideTankReadyTrigger(botAI);
+    }
+
+    static Trigger* anubarak_side_tank_needs_defensive(PlayerbotAI* botAI) {
+        return new AnubarakSideTankNeedsDefensiveTrigger(botAI);
+    }
+
+    static Trigger* anubarak_side_tank_dead(PlayerbotAI* botAI) {
+        return new AnubarakSideTankDeadTrigger(botAI);
+    }
+
+    static Trigger* anubarak_grip_frost_sphere(PlayerbotAI* botAI) {
+        return new AnubarakGripFrostSphereTrigger(botAI);
     }
 
     static Trigger* anubarak_scarab_on_raid(PlayerbotAI* botAI) {

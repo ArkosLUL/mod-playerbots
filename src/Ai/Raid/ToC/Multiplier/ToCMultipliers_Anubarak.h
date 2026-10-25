@@ -33,8 +33,9 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Nothing aimed at a Frost Sphere but the bot's own duty sphere, and no crowd control even on that.
-// Area spells have no target and stay unguarded. Wired from the definition.
+// Nothing aimed at a Frost Sphere but the bot's own duty sphere, and on that only direct damage: no
+// crowd control, DoT, channel or area spell. Heroic: no Starfall at all. Other area spells have no
+// target and stay unguarded. Wired from the definition.
 class AnubarakSphereGuardMultiplier : public Multiplier
 {
 public:

@@ -638,7 +638,7 @@ void LayoutAnubarak(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
     Point2 const centre = PointOf(ANUBARAK_ROOM_CENTER);
 
     AnubarakPrepullTanks const tanks = GetAnubarakPrepullTanks(bot);
-    Point2 const pickup = PointOf(GetAnubarakBossAnchor(bot));
+    Point2 const pickup = PointOf(GetAnubarakPickupStand(bot));
     if (!tanks.pickup.IsEmpty())
         duties.push_back({tanks.pickup, "pickup", At(pickup, ANUBARAK_STAND_Z), false, Position()});
 

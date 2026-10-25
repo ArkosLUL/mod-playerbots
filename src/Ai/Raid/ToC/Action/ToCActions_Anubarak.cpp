@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <vector>
 
 #include "Creature.h"
@@ -38,6 +39,8 @@ char const* const PENETRATING_COLD_HEALS[] = {
 };
 
 char const* const CLASS_TAUNTS[] = {"taunt", "hand of reckoning", "dark command", "growl"};
+char const* const BURROWER_SHOUTS[] = {"challenging roar", "challenging shout"};
+char const* const BURROWER_CLOSERS[] = {"feral charge - bear", "intercept", "avenger's shield", "death grip"};
 
 // MoveTo refuses a repeat of its last point for up to 5 s even once the bot has stopped (a potion's
 // StopMoving, a knockback), so drop the booking when the bot stands still past the issue.
@@ -99,6 +102,46 @@ bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
     }
 
     return false;
+}
+
+// A loose burrower is on a healer or ranged more often than not: Righteous Defense off whoever most of
+// them hit, a shout for two or more close by, the class taunt, then a charge or pull
+bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick const& pick)
+{
+    float stop = 0.0f;
+    if (pick.rescue && pick.rescue != bot && botAI->CanCastSpell("righteous defense", pick.rescue) &&
+        InSpellReach(botAI, bot, pick.rescue, "righteous defense", stop))
+        return botAI->CastSpell("righteous defense", pick.rescue);
+
+    if (pick.looseNear >= 2)
+        for (char const* shout : BURROWER_SHOUTS)
+            if (botAI->CanCastSpell(shout, bot))
+                return botAI->CastSpell(shout, bot);
+
+    if (TryClassTaunt(botAI, bot, pick.loose))
+        return true;
+
+    // A DK owed a grip keeps Death Grip for the side's tank patch
+    AnubarakGripDuty grip;
+    bool const gripOwed = GetAnubarakGripDuty(bot, grip);
+    for (char const* closer : BURROWER_CLOSERS)
+    {
+        if (gripOwed && std::strcmp(closer, "death grip") == 0)
+            continue;
+
+        if (botAI->CanCastSpell(closer, pick.loose) && InSpellReach(botAI, bot, pick.loose, closer, stop))
+            return botAI->CastSpell(closer, pick.loose);
+    }
+
+    return false;
+}
+
+// Already walking there: every MoveTo clears the spline, so a walk in flight is left alone
+bool WalkInFlight(PlayerbotAI* botAI, Player* bot, Position const& spot)
+{
+    ReleaseStalledWalk(botAI, bot);
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    return bot->isMoving() && BookedOn(last, spot);
 }
 
 }
@@ -263,10 +306,14 @@ bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    // Taunts even with one already held: a wave brings more burrowers than there are side tanks
-    if (pick.loose && TryClassTaunt(botAI, bot, pick.loose))
+    // Picks up even with one already held: a wave brings more burrowers than there are side tanks
+    if (pick.loose && TryBurrowerPickup(botAI, bot, pick))
+    {
+        RaidObs::NoteDerived(bot, "anub.sidetank", "pickup");
         return true;
+    }
 
+    RaidObs::NoteDerived(bot, "anub.sidetank", pick.held ? "hold" : "pickup");
     if (Attack(target))
         return true;
 
@@ -282,6 +329,75 @@ bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
 
     return MoveTo(bot->GetMapId(), hold.GetPositionX(), hold.GetPositionY(), hold.GetPositionZ(), false, false,
                   false, false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool AnubarakSideTankReadyAction::Execute(Event /*event*/)
+{
+    int8 const side = GetAnubarakBurrowerTankSide(bot);
+    if (side < 0)
+        return false;
+
+    RaidObs::NoteDerived(bot, "anub.sidetank", "ready");
+
+    // Scarabs that come to it get Permafrost's slow on the patch
+    for (Unit* attacker : bot->getAttackers())
+        if (attacker->GetEntry() == static_cast<uint32>(ToCNpcs::NPC_SWARM_SCARAB) && Attack(attacker))
+            return true;
+
+    Position const hold = GetAnubarakTankSpot(bot, static_cast<uint8>(side));
+    if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) <= ANUBARAK_TANK_PATCH_ARRIVE ||
+        AnubarakSpikeLaneCrosses(bot, hold) || WalkInFlight(botAI, bot, hold))
+        return false;
+
+    return MoveTo(bot->GetMapId(), hold.GetPositionX(), hold.GetPositionY(), hold.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool AnubarakGripFrostSphereAction::Execute(Event /*event*/)
+{
+    AnubarakGripDuty duty;
+    if (!GetAnubarakGripDuty(bot, duty))
+        return false;
+
+    switch (duty.step)
+    {
+        case AnubarakGripStep::Kill:
+            return duty.sphere && Attack(duty.sphere);
+        case AnubarakGripStep::Walk:
+        {
+            Position const& spot = duty.spot;
+            if (WalkInFlight(botAI, bot, spot))
+                return true;
+
+            return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false,
+                          false, false, false, MovementPriority::MOVEMENT_COMBAT, true);
+        }
+        case AnubarakGripStep::Cast:
+        {
+            Creature* sphere = duty.sphere;
+            if (bot->GetExactDist(sphere) > ANUBARAK_GRIP_RANGE || !bot->IsWithinLOSInMap(sphere) ||
+                !botAI->CanCastSpell("death grip", sphere) || !botAI->CastSpell("death grip", sphere))
+                return false;
+
+            NoteAnubarakGripCast(bot, sphere);
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+bool AnubarakBattleResSideTankAction::Execute(Event /*event*/)
+{
+    Player* tank = GetAnubarakSideTankToRes(botAI);
+    if (!tank)
+        return false;
+
+    if (bot->GetExactDist(tank) > ANUBARAK_BATTLE_RES_REACH || !bot->IsWithinLOSInMap(tank))
+        return !IsAnubarakDodgeHeld(botAI) && MoveTo(tank, ANUBARAK_BATTLE_RES_REACH - ANUBARAK_RANGED_REACH_MARGIN,
+                                                     MovementPriority::MOVEMENT_COMBAT);
+
+    return botAI->CastSpell("rebirth", tank);
 }
 
 bool AnubarakTankPickUpScarabAction::Execute(Event /*event*/)
@@ -316,16 +432,39 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
         return true;
     }
 
+    // Slowed 80% in a patch the tank would crawl through every leg
+    Position stepOut;
+    if (GetAnubarakTankStepOut(bot, boss, stepOut))
+    {
+        ClearAnubarakDrag(bot);
+        RaidObs::NoteDerived(bot, "anub.pickup", "stepout");
+        if (WalkInFlight(botAI, bot, stepOut))
+            return false;
+
+        DropForeignBooking(AI_VALUE(LastMovement&, "last movement"), stepOut, MovementPriority::MOVEMENT_COMBAT);
+        return MoveTo(bot->GetMapId(), stepOut.GetPositionX(), stepOut.GetPositionY(), stepOut.GetPositionZ(), false,
+                      false, false, false, MovementPriority::MOVEMENT_COMBAT, true);
+    }
+
     Position point;
     bool const submerge = GetAnubarakSubmergeSpot(bot, point);
-    if (!submerge && !GetAnubarakDragAnchor(bot, point))
+    std::vector<Position> const points = submerge ? std::vector<Position>{point} : GetAnubarakDragPoints(bot, boss);
+    if (points.empty())
     {
         ClearAnubarakDrag(bot);
         RaidObs::NoteDerived(bot, "anub.pickup", "hold");
         return false;
     }
 
-    AnubarakDragLeg const leg = GetAnubarakDragLeg(bot, boss, point, submerge);
+    // A latched leg comes back whatever the point; otherwise the first point with a clean leg wins
+    AnubarakDragLeg leg;
+    for (Position const& candidate : points)
+    {
+        leg = GetAnubarakDragLeg(bot, boss, candidate, submerge);
+        if (leg.step != AnubarakDragStep::None)
+            break;
+    }
+
     if (leg.step == AnubarakDragStep::None)
     {
         RaidObs::NoteDerived(bot, "anub.pickup", "hold");

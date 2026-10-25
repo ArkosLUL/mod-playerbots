@@ -2,14 +2,16 @@
 
     python -m unittest discover -s tools/botobs/tests
 
-A synthetic 10H pull pins the arithmetic behind each section, and the shared fixture shows every
-section reads empty on a trace that is not Anub'arak rather than raising.
+A synthetic 10H pull pins the arithmetic behind each section, a 25H one the side tank, grip, kite
+stage and allowance probes, and the shared fixture shows every section reads empty on a trace that
+is not Anub'arak rather than raising.
 """
 from __future__ import annotations
 
 import contextlib
 import io
 import json
+import math
 import pathlib
 import sys
 import tempfile
@@ -471,6 +473,19 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(dict(rows[1]["pickup"]), {(TANK, "taunt"): 1, (TANK, "hold"): 1})
         self.assertEqual([dict(row["capped"]) for row in rows], [{}, {KITE: 2, LATE: 1}, {}])
 
+    def test_the_submerge_spot_is_his_last_surfaced_sample_against_each_tank_patch(self):
+        gaps = ab.threat_rows(self.trace)[0]["submerge"]
+        self.assertEqual(gaps["spot"], (X + 10.0, Y + 15.0))
+        self.assertEqual({side: round(yards, 1) for side, yards in gaps["patches"].items()}, {0: 3.0, 1: 27.0})
+
+    def test_waves_fall_back_to_burrower_spawns_without_anub_wave(self):
+        self.assertEqual(ab.wave_starts(self.trace), [(1, 2000)])
+
+    def test_a_key_the_reader_reads_is_absent_whatever_the_source_declares(self):
+        gone = ab.missing_probes(self.trace)
+        self.assertIn("anub.wave", gone)
+        self.assertNotIn("anub.phase", gone)
+
     def test_swarm_reads_the_probe_and_falls_back_to_the_aura(self):
         self.assertEqual(ab.swarm_span(self.trace), (50000, 60000, "anub.phase"))
         self.assertEqual(ab.swarm_span(self.trace, []), (50200, 60000, "Leeching Swarm"))
@@ -502,7 +517,7 @@ class SyntheticPull(unittest.TestCase):
         self.assertIn("3 taunt(s): bot 2, human 1", text)
         self.assertIn("anubarak threat cap vetoes: Trueshot 2, Straggler 1", text)
         self.assertIn("Hand of Protection by Justice +2.5 s; anub.protect Justice hop +1.0 s", text)
-        self.assertIn("Ice Block +0.3 s; anub.protect Trueshot self +0.2 s", text)
+        self.assertIn("Ice Block +0.3 s unwanted; anub.protect Trueshot self +0.2 s", text)
         self.assertIn("spans with a cast: side 0 1 of 1, side 1 1 of 1, kite 1 of 1, stock 1 of 1", text)
 
 
@@ -574,6 +589,347 @@ class BurrowerFocus(unittest.TestCase):
         self.assertRegex(text, rf"#{B1 & 0xFFFFFFFF} +4\.0s +88%")
         self.assertRegex(text, rf"#{B2 & 0xFFFFFFFF} +4\.0s +57%")
         self.assertIn("anub.dps: Drifter burrower 1; Trueshot burrower 2, boss 1", text)
+
+
+MAIN, SIDE0, SIDE1, DK, MAGE, LOCK, ROGUE, DRUID, HUNTER, DRAGON = range(6001, 6011)
+IMP = (2 << 32) | 7001
+G0, G1, K1, K2, IDLE = (CREATURE | n for n in range(911, 916))
+BN1, BN2, BS1, BS2 = (CREATURE | n for n in range(921, 925))
+WN, WS = CREATURE | 931, CREATURE | 932
+PERMAFROST_25H = 67857
+
+O = ab.TANK_PATCH_OFFSET
+GAP = ab.SIDE_SPOT_GAP
+EXIT_N1, EXIT_N2, EXIT_S1, EXIT_S2 = (740.2, 193.4), (694.5, 185.4), (732.0, 83.4), (694.9, 102.5)
+WAVE1 = {BN1: EXIT_N1, BN2: EXIT_N2, BS1: EXIT_S1, BS2: EXIT_S2}
+WAVE2 = {WN: EXIT_N1, WS: EXIT_S1}
+PATCH0 = (X + 3.0, Y + O)            # G0, 3 yd off side 0's spot
+G1_LAND = (X + 3.0, Y + O - GAP - 2.0)  # 2 yd off side 1's spot once G0 latched
+G1_FLY = (X + 20.0, Y - 20.0)
+SUBMERGE_AT = (X - 9.0, Y + O)       # 12 yd off G0
+SPOTS = {SIDE0: (X + 3.0, Y + O + 4.0), SIDE1: (X, Y - O - 2.0), DK: (X + 3.0, Y + O + 0.5),
+         MAGE: (X - 10.0, Y - 3.0), LOCK: (X - 12.0, Y + 3.0), ROGUE: (X + 15.0, Y), DRUID: (X - 14.0, Y - 6.0),
+         HUNTER: (X + 15.0, Y + 6.0), IMP: (X - 13.0, Y + 4.0)}
+
+
+def refine_sphere(guid: int, when: int):
+    """`(xy, z)` or None. The DK grips G0 onto itself at 4 s and it dies at 5 s; the grip on G1 at 8 s
+    misses, and the imp kills it at 12.5 s; K1 and K2 die while he is under."""
+    if when < 0:
+        return None
+    if guid == G0:
+        if when < 4500:
+            return (X + 10.0, Y + 20.0), FLYING_Z
+        return PATCH0, PATCH_Z if when >= 6500 else Z + 0.5
+    if guid == G1:
+        if when < 12500:
+            return (G1_FLY if when < 11500 else G1_LAND), FLYING_Z
+        return G1_LAND, PATCH_Z if when >= 14000 else FALLING_Z
+    for sphere, spot, killed in ((K1, (X - 20.0, Y + 20.0), 32500), (K2, (X - 20.0, Y - 20.0), 36500)):
+        if guid == sphere:
+            if when < killed:
+                return spot, FLYING_Z
+            return spot, PATCH_Z if when >= killed + 1500 else FALLING_Z
+    return (X, Y + 30.0), FLYING_Z
+
+
+def refine_burrower_target(guid: int, when: int) -> int:
+    if guid == BN1:
+        return MAGE if when < 7000 else SIDE0
+    if guid == BN2:
+        return 0 if when < 6000 else (MAIN if when < 9000 else SIDE1)
+    if guid == BS1:
+        return SIDE1
+    if guid == BS2:
+        return DRUID
+    return 0 if when < 50500 else (SIDE0 if guid == WN else SIDE1)
+
+
+def refine_snap(when: int) -> dict:
+    main = (X + 3.0, Y + O - 3.0) if 20000 <= when < 30000 else (X - 5.0, Y)
+    units = [[MAIN, *main, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]]
+    units += [[guid, *spot, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0] for guid, spot in SPOTS.items()]
+    boss = SUBMERGE_AT if 28000 <= when < 50000 else (X - 5.0, Y + 2.0)
+    target = MAIN if 1000 <= when < 30000 or when >= 51000 else 0
+    units.append([BOSS, *boss, Z, 0.0, 100.0 - max(when, 0) / 1000.0, 0.0, target, 0, 0, 0, 0])
+    hz = []
+    for guid in (G0, G1, K1, K2, IDLE):
+        place = refine_sphere(guid, when)
+        if place is None:
+            continue
+        (x, y), z = place
+        units.append([guid, x, y, z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        if z == PATCH_Z:
+            hz.append([PERMAFROST_25H, x, y, PATCH_Z, 6.0, 1])
+    for guid, (x, y) in {**WAVE1, **WAVE2}.items():
+        if (guid in WAVE1 and 5000 <= when <= 44500) or (guid in WAVE2 and when >= 50000):
+            units.append([guid, x, y, Z, 0.0, 100.0, 0.0, refine_burrower_target(guid, when), 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def triggered(when: int, source: int, spell: int, target: int) -> dict:
+    return {**cast(when, source, spell, target), "tr": 1}
+
+
+def refine_pull() -> list[dict]:
+    """A 25H pull on the new probes: P1 to 30 s, P2 to 50 s, then up again, burrower waves at 5 and 50 s."""
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 5, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": MAIN, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0},
+             {"g": SIDE0, "n": "Ecoterrorist", "r": "tank", "c": "druid", "h": 0},
+             {"g": SIDE1, "n": "Aegis", "r": "tank", "c": "paladin", "h": 0},
+             {"g": DK, "n": "Deathsong", "r": "melee", "c": "deathknight", "h": 0},
+             {"g": MAGE, "n": "Frostfire", "r": "ranged", "c": "mage", "h": 0},
+             {"g": LOCK, "n": "Hellflame", "r": "ranged", "c": "warlock", "h": 0},
+             {"g": ROGUE, "n": "Shadowstep", "r": "melee", "c": "rogue", "h": 0},
+             {"g": DRUID, "n": "Druidica", "r": "ranged", "c": "druid", "h": 0},
+             {"g": HUNTER, "n": "Trueshot", "r": "ranged", "c": "hunter", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -1000, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": -1000, "e": "unit", "g": IMP, "en": 416, "n": "Ruirin", "own": LOCK},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"}
+          for guid in (G0, G1, K1, K2, IDLE)),
+        *({"t": 5000, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"} for guid in WAVE1),
+        *({"t": 50000, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"} for guid in WAVE2),
+        *({"e": "spell", "sp": spell, "n": name} for spell, name in (
+            (42842, "Frostbolt"), (47964, "Firebolt"), (47813, "Corruption"), (53190, "Starfall"))),
+
+        note(0, MAIN, "anub.phase", 1),
+        note(30000, MAIN, "anub.phase", 2),
+        note(50000, MAIN, "anub.phase", 1),
+        # a cleared latch restated at the trace's open
+        note(-500, MAIN, "anub.side0", 0),
+        note(0, MAIN, "anub.side0", SIDE0),
+        note(0, SIDE1, "anub.side1", SIDE1),
+        note(0, MAIN, "anub.patch0", 0),
+        note(7000, DK, "anub.patch0", G0),
+        note(0, MAIN, "anub.patch1", 0),
+        note(5000, SIDE0, "anub.wave", 1),
+        note(50000, SIDE1, "anub.wave", 2),
+        note(0, MAIN, "anub.focusdue", 0),
+        note(20000, MAGE, "anub.focusdue", 1),
+        note(45000, MAGE, "anub.focusdue", 0),
+        note(55000, MAGE, "anub.focusdue", 1),
+        note(0, DK, "anub.grip", 1),
+        note(11000, DK, "anub.grip", 2),
+        note(30000, MAIN, "anub.allow", 1),
+
+        # BN2 moves from side 0 to side 1, BS2 never gets a row so its exit decides
+        note(5000, BN1, "anub.bside", 0),
+        note(5000, BN2, "anub.bside", 0),
+        note(8000, BN2, "anub.bside", 1),
+        note(5000, BS1, "anub.bside", 1),
+        note(50000, WN, "anub.bside", 0),
+        note(50000, WS, "anub.bside", 1),
+
+        note(3000, DK, "anub.sphere", "grip0"),
+        note(7500, DK, "anub.sphere", "grip1"),
+        note(11000, DK, "anub.sphere", "none"),
+        note(11000, LOCK, "anub.sphere", 1),
+        note(13000, LOCK, "anub.sphere", "none"),
+        note(30500, MAGE, "anub.sphere", "kite"),
+        note(33000, MAGE, "anub.sphere", "none"),
+        *(note(when, DK, "anub.gripstep", step) for when, step in (
+            (3000, "walk"), (3900, "cast"), (4500, "kill"), (6500, "none"), (7500, "walk"), (7900, "cast"),
+            (11000, "none"))),
+        note(0, SIDE0, "anub.sidetank", "ready"),
+        note(7000, SIDE0, "anub.sidetank", "pickup"),
+        note(8000, SIDE0, "anub.sidetank", "hold"),
+        note(0, SIDE1, "anub.sidetank", "ready"),
+        note(5000, SIDE1, "anub.sidetank", "pickup"),
+        note(1000, MAIN, "anub.pickup", "attack"),
+        note(25000, MAIN, "anub.pickup", "stepout"),
+        note(26000, MAIN, "anub.pickup", "hold"),
+        note(30500, MAGE, "anub.gather", "walk"),
+        note(32000, MAGE, "anub.gather", "hold"),
+        note(50000, MAGE, "anub.gather", "none"),
+
+        # G0 takes a hit from the mage, then a later shadow bolt cast: the hit is the killer
+        cast(4000, DK, ab.SPELL_DEATH_GRIP, G0),
+        cast(4500, MAGE, 42842, G0),
+        dmg(4700, MAGE, G0, 42842, 9000),
+        cast(4800, LOCK, 47809, G0),
+        # G1: the grip misses, then a proc and a Hunter's Mark after the imp's bolt are no killer
+        cast(8000, DK, ab.SPELL_DEATH_GRIP, G1),
+        cast(12000, IMP, 47964, G1),
+        triggered(12200, MAGE, 12579, G1),
+        cast(12300, HUNTER, 53338, G1),
+        cast(31000, LOCK, 47813, K1),
+        cast(32000, MAGE, 42842, K1),
+        triggered(36000, DRUID, 53190, K2),
+        triggered(36100, MAGE, 12579, K2),
+
+        aura(31000, ROGUE, ab.SPELL_MARK, False),
+        *(note(when, ROGUE, "anub.kitestage", stage) for when, stage in (
+            (31000, "run"), (33000, "boost:11305"), (35000, "immune"), (39000, "patch"), (40000, "none"))),
+        cast(33000, ROGUE, 11305, ROGUE),
+        cast(35000, SIDE1, 10278, ROGUE),
+        aura(40000, ROGUE, ab.SPELL_MARK, True),
+        # one Nitro Boosts read three times: the use, its triggered speed and the aura
+        aura(41000, HUNTER, ab.SPELL_MARK, False),
+        *(note(when, HUNTER, "anub.kitestage", stage) for when, stage in (
+            (41000, "run"), (42000, "boost:55004"), (46000, "patch"), (48000, "none"))),
+        cast(42000, HUNTER, 55004, HUNTER),
+        triggered(42010, HUNTER, 54861, HUNTER),
+        aura(42020, HUNTER, 54861, False, HUNTER),
+        cast(44000, HUNTER, 5384, HUNTER),
+        aura(48000, HUNTER, ab.SPELL_MARK, True),
+        {"t": 60000, "e": "end", "out": "wipe"},
+    ]
+    records += [refine_snap(when) for when in range(-1000, 60000, 500)]
+    return records
+
+
+class RefinedPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_5_anub-arak_1789500002.ndjson", refine_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_each_burrower_reads_its_exit_and_side(self):
+        rows = {row["guid"]: row for row in ab.pickup_rows(self.trace)}
+        self.assertEqual({guid: (row["wave"], row["exit"], row["side"], row["probed"]) for guid, row in rows.items()},
+                         {BN1: (1, EXIT_N1, 0, True), BN2: (1, EXIT_N2, 1, True), BS1: (1, EXIT_S1, 1, True),
+                          BS2: (1, EXIT_S2, 1, False), WN: (2, EXIT_N1, 0, True), WS: (2, EXIT_S1, 1, True)})
+
+    def test_pickup_times_any_tank_apart_from_its_side_tank(self):
+        rows = {row["guid"]: row for row in ab.pickup_rows(self.trace)}
+        self.assertEqual({guid: (row["to_tank"], row["to_side"], row["tank"]) for guid, row in rows.items()},
+                         {BN1: (2000, 2000, SIDE0), BN2: (1000, 4000, SIDE1), BS1: (0, 0, SIDE1),
+                          BS2: (None, None, SIDE1), WN: (500, 500, SIDE0), WS: (500, 500, SIDE1)})
+
+    def test_the_side_tank_is_measured_from_its_patch_else_its_spot(self):
+        rows = {row["guid"]: row for row in ab.pickup_rows(self.trace)}
+        self.assertEqual((rows[BN1]["from"], round(rows[BN1]["gap"], 2)), ("spot", 5.0))
+        self.assertEqual((rows[BS1]["from"], round(rows[BS1]["gap"], 2)), ("spot", 2.0))
+        self.assertEqual((rows[WN]["from"], round(rows[WN]["gap"], 2)), ("patch", 4.0))
+        # side 1 has no patch, so its spot hangs off side 0's
+        self.assertEqual(rows[WS]["from"], "spot")
+        self.assertAlmostEqual(rows[WS]["gap"], math.dist(SPOTS[SIDE1], (PATCH0[0], PATCH0[1] - GAP)))
+
+    def test_focus_due_per_wave_against_the_next_spawn(self):
+        waves = ab.wave_starts(self.trace)
+        self.assertEqual(waves, [(1, 5000), (2, 50000)])
+        self.assertEqual(ab.focus_due_rows(self.trace, waves),
+                         [{"wave": 1, "spawn": 5000, "due": 20000, "next": 50000},
+                          {"wave": 2, "spawn": 50000, "due": 55000, "next": None}])
+
+    def test_focus_due_only_after_the_next_wave_counts_as_never(self):
+        rows = ab.focus_due_rows(self.trace, [(1, 5000), (2, 10000), (3, 50000)])
+        self.assertEqual([row["due"] for row in rows], [None, 20000, 55000])
+
+    def test_each_dead_sphere_names_its_killer(self):
+        rows = ab.sphere_deaths(self.trace)
+        self.assertEqual([(row["guid"], row["killed"], row["killer"], row["pet"], row["spell"], row["source"],
+                           row["shape"]) for row in rows],
+                         [(G0, 5000, MAGE, None, 42842, "dmg", ()),
+                          (G1, 12500, LOCK, IMP, 47964, "cast", ()),
+                          (K1, 32500, MAGE, None, 42842, "cast", ()),
+                          (K2, 36500, DRUID, None, 53190, "cast", ("area",))])
+
+    def test_a_sphere_lands_against_its_sides_spot(self):
+        rows = {row["guid"]: row for row in ab.sphere_deaths(self.trace)}
+        self.assertEqual({guid: (row["side"], row["latched"], row["duty"]) for guid, row in rows.items()},
+                         {G0: (0, True, None), G1: (1, False, "1"), K1: (None, False, "kite"),
+                          K2: (None, False, None)})
+        self.assertAlmostEqual(rows[G0]["off_spot"], 3.0)
+        # G0 had latched by then, so side 1's spot is GAP off it
+        self.assertAlmostEqual(rows[G1]["off_spot"], 2.0)
+        self.assertIsNone(rows[K1]["off_spot"])
+
+    def test_a_grip_lands_only_within_reach_of_the_dk_in_time(self):
+        rows = ab.grip_rows(self.trace)
+        self.assertEqual([(row["t"], row["sphere"], row["duty"], row["landed"]) for row in rows],
+                         [(4000, G0, "grip0", 500), (8000, G1, "grip1", None)])
+        self.assertAlmostEqual(rows[1]["closest"], math.hypot(17.0, 20.0 + O + 0.5))
+
+    def test_spheres_spent_per_submerge_against_the_allowance(self):
+        self.assertEqual(ab.allowance_rows(self.trace, ab.sphere_deaths(self.trace)),
+                         [{"label": "P2", "start": 30000, "allow": 1, "tank": 0, "other": 2}])
+
+    def test_kite_stages_and_boosts_per_window(self):
+        windows = ab.mark_windows(self.trace)
+        self.assertEqual([window["stages"] for window in windows],
+                         [{"run": 2000, "boost:11305": 2000, "immune": 4000, "patch": 1000},
+                          {"run": 1000, "boost:55004": 4000, "patch": 2000}])
+        self.assertEqual([[(rec["t"], rec["sp"]) for rec in window["boosts"]] for window in windows],
+                         [[(33000, 11305)], [(42000, 55004)]])
+        self.assertEqual([[rec["sp"] for rec in window["own"]] for window in windows], [[], [5384]])
+
+    def test_main_tank_share_in_a_patch_and_the_submerge_gaps(self):
+        rows = ab.threat_rows(self.trace)
+        self.assertEqual([(row["label"], row["main"], row["in_patch"], row["living"]) for row in rows],
+                         [("P1", MAIN, 20, 60), ("P1b", MAIN, 0, 20)])
+        self.assertEqual(rows[0]["submerge"]["spot"], SUBMERGE_AT)
+        self.assertEqual({side: round(yards, 1) for side, yards in rows[0]["submerge"]["patches"].items()}, {0: 12.0})
+        self.assertIsNone(rows[1]["submerge"])
+
+    def test_both_bot_side_tanks_latched(self):
+        self.assertEqual(ab.side_tanks(self.trace), (2, {0: SIDE0, 1: SIDE1}))
+
+    def test_every_section_prints(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_banner(self.trace)
+            for _, _, section in ab.SECTIONS:
+                section(self.trace)
+        text = out.getvalue()
+        self.assertNotIn("bot side tanks latched", text)
+        self.assertRegex(text, r"#911 .* Frostfire +Frostbolt 42842 +dmg +- +0 latched +3\.0 yd")
+        self.assertRegex(text, r"#912 .* Hellflame's pet +Firebolt 47964 +cast +- +1 +2\.0 yd")
+        self.assertIn("periodic or area spells aimed at a sphere: Hellflame Corruption 47813 1,"
+                      " Druidica Starfall 53190 1", text)
+        self.assertIn("P2     0:30.000  allowance  1  tank 0  other 2  over", text)
+        self.assertIn("anub.grip: gripping from 0:00.000, shooting from 0:11.000", text)
+        self.assertRegex(text, r"Deathsong +grip1 +#912 +missed, closest \d+\.\d yd")
+        self.assertIn("kitestage run 2.0 s, boost Sprint 2.0 s, immune 4.0 s, patch 1.0 s; boosts Sprint +2.0 s",
+                      text)
+        self.assertIn("kitestage run 1.0 s, boost Nitro Boosts 4.0 s, patch 2.0 s; boosts Nitro Boosts +1.0 s", text)
+        self.assertIn("Feign Death +3.0 s unwanted", text)
+        self.assertIn("Ice Block or Feign Death on a kiter: Feign Death 1", text)
+        self.assertIn("wave 1 0:05.000: focus due 0:20.000, 30.0 s before wave 2 at 0:50.000", text)
+        self.assertIn("wave 2 0:50.000: focus due 0:55.000, the last wave", text)
+        self.assertIn("main tank Bulwark in a patch 33% of 60 samples", text)
+        self.assertIn(f"submerged 0:30.000 at {SUBMERGE_AT[0]:.1f}, {SUBMERGE_AT[1]:.1f}: patch0 12.0 yd under",
+                      text)
+        self.assertIn("anub.pickup: Bulwark attack 1, stepout 1, hold 1", text)
+
+
+def side_pull(diff: int, side1: int) -> list[dict]:
+    return [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 6, "diff": diff, "boss": "anub-arak",
+         "roster": [{"g": SIDE0, "n": "Ecoterrorist", "r": "tank", "c": "druid", "h": 0},
+                    {"g": DRAGON, "n": "Dragon", "r": "tank", "c": "paladin", "h": 1}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        note(0, SIDE0, "anub.side0", SIDE0),
+        note(0, SIDE0, "anub.side1", side1),
+        {"t": 1000, "e": "end", "out": "wipe"},
+    ]
+
+
+class SideTanks(unittest.TestCase):
+    def banner(self, diff: int, side1: int) -> tuple[tuple, str]:
+        with tempfile.TemporaryDirectory() as folder:
+            trace = write_trace(folder, "649_6_anub-arak_1789500003.ndjson", side_pull(diff, side1))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                ab.show_banner(trace)
+            return ab.side_tanks(trace), out.getvalue()
+
+    def test_a_human_on_a_side_leaves_25_man_one_bot_side_tank_short(self):
+        latched, text = self.banner(1, DRAGON)
+        self.assertEqual(latched, (2, {0: SIDE0}))
+        self.assertIn("bot side tanks latched: 1 of 2 needed (side 0 Ecoterrorist, side 1 none)", text)
+
+    def test_10_man_needs_one(self):
+        latched, text = self.banner(2, 0)
+        self.assertEqual(latched, (1, {0: SIDE0}))
+        self.assertNotIn("bot side tanks latched", text)
 
 
 class EveryView(unittest.TestCase):

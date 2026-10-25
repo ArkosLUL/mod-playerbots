@@ -78,12 +78,45 @@ bool AnubarakBurrowerNeedsAssistTankTrigger::IsActive()
     return static_cast<bool>(GetAnubarakBurrowerPick(botAI));
 }
 
+bool AnubarakSideTankReadyTrigger::IsActive()
+{
+    if (!AnubarakEngaged(botAI) || GetAnubarakBurrowerTankSide(bot) < 0 || bot->HasAura(SPELL_MARK))
+        return false;
+
+    if (IsAnubarakPickupTank(bot) && IsAnubarakSurfaced(GetAnubarakPhase(botAI)))
+        return false;
+
+    return !GetAnubarakBurrowerPick(botAI);
+}
+
+bool AnubarakSideTankNeedsDefensiveTrigger::IsActive()
+{
+    return AnubarakEngaged(botAI) && AnubarakSideTankNeedsDefensive(bot) && NextTankDefensive(botAI, bot, nullptr);
+}
+
+bool AnubarakSideTankDeadTrigger::IsActive()
+{
+    return AnubarakEngaged(botAI) && GetAnubarakSideTankToRes(botAI);
+}
+
+bool AnubarakGripFrostSphereTrigger::IsActive()
+{
+    AnubarakGripDuty duty;
+    return AnubarakEngaged(botAI) && GetAnubarakGripDuty(bot, duty);
+}
+
 bool AnubarakScarabOnRaidTrigger::IsActive()
 {
     if (!AnubarakEngaged(botAI) || !IsAnubarakTankPlayer(bot))
         return false;
 
-    if (IsAnubarakPickupTank(bot) && GetAnubarakPhase(botAI) != AnubarakPhase::Submerged)
+    AnubarakPhase const phase = GetAnubarakPhase(botAI);
+    if (IsAnubarakPickupTank(bot) && phase != AnubarakPhase::Submerged)
+        return false;
+
+    // Phase 2's scarabs are the main tank's: side tanks hold their patches, and keep their taunts for
+    // a wave that's due
+    if (GetAnubarakBurrowerTankSide(bot) >= 0 && (!IsAnubarakSurfaced(phase) || AnubarakWaveImminent(botAI)))
         return false;
 
     // Leaves burrower duty to the hold node, which outranks this one and would swap targets back
@@ -120,8 +153,17 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("anubarak burrower casting shadow strike", {
         NextAction("anubarak interrupt shadow strike", ACTION_EMERGENCY + 3) }));
 
+    triggers.push_back(new TriggerNode("anubarak side tank dead", {
+        NextAction("anubarak battle res side tank", ACTION_RAID + 7) }));
+
+    triggers.push_back(new TriggerNode("anubarak side tank needs defensive", {
+        NextAction("anubarak tank defensive", ACTION_RAID + 6.5f) }));
+
     triggers.push_back(new TriggerNode("anubarak leeching swarm on tank", {
         NextAction("anubarak tank defensive", ACTION_RAID + 6) }));
+
+    triggers.push_back(new TriggerNode("anubarak grip frost sphere", {
+        NextAction("anubarak grip frost sphere", ACTION_RAID + 5.5f) }));
 
     triggers.push_back(new TriggerNode("anubarak ranged should seed permafrost", {
         NextAction("anubarak destroy frost sphere", ACTION_RAID + 5) }));
@@ -134,6 +176,9 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak scarab on raid", {
         NextAction("anubarak tank pick up scarab", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode("anubarak side tank ready", {
+        NextAction("anubarak side tank ready", ACTION_RAID + 1.5f) }));
 
     triggers.push_back(new TriggerNode("anubarak engaged by main tank", {
         NextAction("anubarak main tank hold boss", ACTION_RAID + 1) }));

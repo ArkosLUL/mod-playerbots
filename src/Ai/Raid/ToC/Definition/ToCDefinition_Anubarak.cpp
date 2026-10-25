@@ -26,18 +26,24 @@ bool AnubarakPickupTankHolds(PlayerbotAI* botAI)
     return phase == AnubarakPhase::Surface || phase == AnubarakPhase::Swarm;
 }
 
-// Only while the hold node has one for it: a side tank with nothing to take keeps tank assist
+// The whole pull: a side tank on him or on a scarab when a wave lands leaves the wave on the healers.
+// The ready node holds it on its patch.
 bool AnubarakSideTankHolds(PlayerbotAI* botAI)
 {
-    return AnubarakEngaged(botAI) && GetAnubarakBurrowerPick(botAI);
+    return AnubarakEngaged(botAI) && GetAnubarakBurrowerTankSide(botAI->GetBot()) >= 0;
 }
 
 // A flying sphere is out of combat, so never the dps target, and assist would take the shooter off it
-// every tick
+// every tick. A DK waiting on its grip spot keeps assist.
 bool AnubarakSphereShooterHolds(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    return AnubarakEngaged(botAI) && PlayerbotAI::IsRangedDps(bot) && GetAnubarakSphereToShoot(bot);
+    if (!AnubarakEngaged(botAI))
+        return false;
+
+    AnubarakGripDuty grip;
+    return (PlayerbotAI::IsRangedDps(bot) && GetAnubarakSphereToShoot(bot)) ||
+           (GetAnubarakGripDuty(bot, grip) && grip.step != AnubarakGripStep::Hold);
 }
 
 // An untouched sphere is a critter out of combat, which invalid target drops 0.2 s after every Attack()
@@ -46,9 +52,23 @@ bool AnubarakShooterOnDutySphere(PlayerbotAI* botAI)
     if (!AnubarakEngaged(botAI))
         return false;
 
-    Creature* sphere = GetAnubarakSphereToShoot(botAI->GetBot());
+    Creature* sphere = GetAnubarakDutySphere(botAI->GetBot());
     return sphere && IsFrostSphereFlying(sphere) &&
            botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() == sphere;
+}
+
+// Walking off the spot to reach him moves where the gripped sphere lands
+bool AnubarakGripHolds(PlayerbotAI* botAI)
+{
+    AnubarakGripDuty grip;
+    return AnubarakEngaged(botAI) && GetAnubarakGripDuty(botAI->GetBot(), grip) &&
+           grip.step != AnubarakGripStep::Kill;
+}
+
+// Tank face walks the tank round him, through whichever patch lies on the way
+bool AnubarakPickupTankStands(PlayerbotAI* botAI)
+{
+    return AnubarakPickupTankHolds(botAI) && AnubarakTankPatchLatched(botAI->GetBot());
 }
 
 void DefineAnubarak(EncounterBuilder& e)
@@ -70,6 +90,10 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak boss drag hold", Role::Any, IsAnubarakDragInFlight,
             Family::SetBehind | Family::TankFace | Family::CombatFormationMove | Family::Follow | Family::Charge,
             {"reach melee"});
+    e.Block("anubarak grip spot hold", Role::Any, AnubarakGripHolds,
+            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,
+            {"reach melee"});
+    e.Block("anubarak pickup tank stand guard", Role::Any, AnubarakPickupTankStands, Family::TankFace);
     // he obeys taunt DR, so two tanks trading taunts soon leave him immune to both
     e.Block("anubarak taunt guard", Role::Any, AnubarakTauntWouldSteal, Family::Taunt);
     e.Block("anubarak sphere shooter drop guard", Role::Any, AnubarakShooterOnDutySphere, Family::DropTarget);

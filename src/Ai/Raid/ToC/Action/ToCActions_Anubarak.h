@@ -94,6 +94,32 @@ public:
     bool Execute(Event event) override;
 };
 
+class AnubarakSideTankReadyAction : public AttackAction
+{
+public:
+    AnubarakSideTankReadyAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak side tank ready") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakGripFrostSphereAction : public AttackAction
+{
+public:
+    AnubarakGripFrostSphereAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak grip frost sphere") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakBattleResSideTankAction : public MovementAction
+{
+public:
+    AnubarakBattleResSideTankAction(PlayerbotAI* botAI, std::string const name = "anubarak battle res side tank")
+        : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+    // Rebirth won't go out in cat or bear form
+    std::vector<NextAction> getPrerequisites() override { return {NextAction("caster form")}; }
+};
+
 class AnubarakTankPickUpScarabAction : public AttackAction
 {
 public:
@@ -141,6 +167,12 @@ public:
             &ToCAnubarakActionContext::anubarak_dps_target;
         creators["anubarak assist tank hold burrower"] =
             &ToCAnubarakActionContext::anubarak_assist_tank_hold_burrower;
+        creators["anubarak side tank ready"] =
+            &ToCAnubarakActionContext::anubarak_side_tank_ready;
+        creators["anubarak grip frost sphere"] =
+            &ToCAnubarakActionContext::anubarak_grip_frost_sphere;
+        creators["anubarak battle res side tank"] =
+            &ToCAnubarakActionContext::anubarak_battle_res_side_tank;
         creators["anubarak tank pick up scarab"] =
             &ToCAnubarakActionContext::anubarak_tank_pick_up_scarab;
         creators["anubarak main tank hold boss"] =
@@ -184,6 +216,18 @@ private:
 
     static Action* anubarak_assist_tank_hold_burrower(PlayerbotAI* botAI) {
         return new AnubarakAssistTankHoldBurrowerAction(botAI);
+    }
+
+    static Action* anubarak_side_tank_ready(PlayerbotAI* botAI) {
+        return new AnubarakSideTankReadyAction(botAI);
+    }
+
+    static Action* anubarak_grip_frost_sphere(PlayerbotAI* botAI) {
+        return new AnubarakGripFrostSphereAction(botAI);
+    }
+
+    static Action* anubarak_battle_res_side_tank(PlayerbotAI* botAI) {
+        return new AnubarakBattleResSideTankAction(botAI);
     }
 
     static Action* anubarak_tank_pick_up_scarab(PlayerbotAI* botAI) {
