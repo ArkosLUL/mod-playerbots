@@ -54,7 +54,13 @@ constexpr uint32 STEP_OFF_REST_MS = 3000;
 constexpr uint32 NITRO_FOCUS = 3;
 // lower, the boots no longer outrun the hits
 constexpr float NITRO_MIN_HEALTH_PCT = 30.0f;
-constexpr float RUN_DIST = 25.0f;
+// a free melee champion this close keeps hitting through a kite, only the boots open a gap on it
+constexpr float NITRO_CONTACT = 8.0f;
+// each bearing's run steps back this much from the boost's reach till it ends on clear floor
+constexpr float NITRO_STEP_BACK = 5.0f;
+constexpr float NITRO_MIN_RUN = 15.0f;
+// off straight away from the chasers, for the Nitro run and each kite hop
+constexpr std::array<float, 9> RUN_TURNS = {0.0f, 30.0f, -30.0f, 60.0f, -60.0f, 90.0f, -90.0f, 120.0f, -120.0f};
 constexpr float RUN_ARRIVE = 2.0f;
 // the focus on a bot fearing to be picked next, read off the champions around it
 constexpr float NEXT_FOCUS_RADIUS = 30.0f;
@@ -105,8 +111,6 @@ constexpr float DISENGAGE_DIST = 15.0f;
 
 // cloth beats a plate DPS in melee for the re-pick up to ~27 yd, plus the 110% switch margin
 constexpr float KITE_CLEAR = 30.0f;
-// closer than this a free chaser keeps hitting while it follows, so running gains nothing
-constexpr float KITE_CONTACT = 6.0f;
 constexpr float KITE_STEP = 15.0f;
 constexpr uint32 KITE_STEP_MS = 2500;
 // a chaser dragged onto a healer would just re-pick the healer
@@ -142,7 +146,7 @@ struct BallState
     bool memoValid = false;
     std::unordered_map<ObjectGuid, Run> runs;   // chased bot -> its boosted run
     std::unordered_map<ObjectGuid, Run> steps;  // healer -> its step off the melee
-    std::unordered_map<ObjectGuid, Run> kites;  // ranged dps -> its current hop
+    std::unordered_map<ObjectGuid, Run> kites;  // kiting bot -> its current hop
     std::unordered_map<ObjectGuid, uint32> stepEndMs;
     std::unordered_map<ObjectGuid, CycloneStand> cycloneStands;
 };
@@ -302,6 +306,38 @@ bool Clear(Position const& spot, std::vector<EncounterHelpers::HazardCircle> con
     return OnFloor(spot) && std::none_of(hazards.begin(), hazards.end(),
                                          [&spot](EncounterHelpers::HazardCircle const& hazard)
                                          { return spot.GetExactDist2d(hazard.first) < hazard.second; });
+}
+
+// Distance from the spot to the nearest melee champion, max with none
+float MeleeClearance(PlayerbotAI* botAI, Position const& spot)
+{
+    float nearest = std::numeric_limits<float>::max();
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+        if (IsFactionChampionMelee(champion->GetEntry()))
+            nearest = std::min(nearest, champion->GetExactDist2d(&spot));
+
+    return nearest;
+}
+
+std::vector<Unit*> MeleeOn(PlayerbotAI* botAI, Player* bot, float radius)
+{
+    std::vector<Unit*> on;
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+        if (FactionChampionsKitesFrom(bot, champion) && bot->GetExactDist2d(champion) <= radius)
+            on.push_back(champion);
+
+    return on;
+}
+
+// Other living healers: a spot this close to one drags the chaser onto it
+bool NearHealer(Player* bot, std::vector<Player*> const& members, Position const& spot)
+{
+    return std::any_of(members.begin(), members.end(),
+                       [bot, &spot](Player* member)
+                       {
+                           return member != bot && PlayerbotAI::IsHeal(member) &&
+                                  member->GetExactDist2d(&spot) < KITE_HEALER_GAP;
+                       });
 }
 
 // On the rings round the kill target, so the druid still hits it. First a spot that stays in Cyclone reach
@@ -468,6 +504,14 @@ bool FactionChampionsStaysPut(PlayerbotAI* botAI)
            (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot)) && !FactionChampionsIsHolder(bot);
 }
 
+// no refresh here, the champion refresh asks it for its CC duties
+bool FactionChampionsKitesFrom(Player* member, Unit* champion)
+{
+    return member && champion && member->IsAlive() && !PlayerbotAI::IsTank(member) &&
+           IsFactionChampionMelee(champion->GetEntry()) && champion->GetVictim() == member &&
+           FactionChampionsHeldBy(member) != champion->GetGUID();
+}
+
 bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot)
 {
     BallState* state = Refresh(botAI);
@@ -494,7 +538,7 @@ bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot)
     auto const rested = state->stepEndMs.find(guid);
     if (!PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsTank(bot) || FactionChampionsIsHolder(bot) ||
         bot->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->HasAuraType(SPELL_AURA_MOD_ROOT) ||
-        bot->IsNonMeleeSpellCast(false) || state->runs.count(guid) ||
+        bot->IsNonMeleeSpellCast(false) || state->runs.count(guid) || state->kites.count(guid) ||
         (rested != state->stepEndMs.end() && getMSTimeDiff(rested->second, now) < STEP_OFF_REST_MS))
         return false;
 
@@ -584,10 +628,10 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
 
     uint32 on = 0;
     uint32 meleeOn = 0;
-    float sumX = 0.0f;
-    float sumY = 0.0f;
-    float nearX = 0.0f;
-    float nearY = 0.0f;
+    uint32 contact = 0;
+    std::array<float, 2> onSum = {0.0f, 0.0f};
+    std::array<float, 2> meleeSum = {0.0f, 0.0f};
+    std::array<float, 2> nearSum = {0.0f, 0.0f};
     uint32 near = 0;
     for (Unit* champion : FactionChampionsInCombat(botAI))
     {
@@ -597,47 +641,79 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
         if (champion->GetVictim() == bot)
         {
             ++on;
-            meleeOn += IsFactionChampionMelee(champion->GetEntry()) ? 1 : 0;
-            sumX += champion->GetPositionX();
-            sumY += champion->GetPositionY();
+            onSum[0] += champion->GetPositionX();
+            onSum[1] += champion->GetPositionY();
+            if (IsFactionChampionMelee(champion->GetEntry()))
+            {
+                ++meleeOn;
+                meleeSum[0] += champion->GetPositionX();
+                meleeSum[1] += champion->GetPositionY();
+                if (bot->GetExactDist2d(champion) <= NITRO_CONTACT && !champion->HasAuraType(SPELL_AURA_MOD_ROOT) &&
+                    !champion->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED))
+                    ++contact;
+            }
         }
 
         if (bot->GetExactDist2d(champion) <= NEXT_FOCUS_RADIUS)
         {
             ++near;
-            nearX += champion->GetPositionX();
-            nearY += champion->GetPositionY();
+            nearSum[0] += champion->GetPositionX();
+            nearSum[1] += champion->GetPositionY();
         }
     }
 
     bool const next = FactionChampionsNextFocus(botAI) == bot->GetGUID();
     bool const melee = meleeOn >= NITRO_MELEE_FOCUS;
-    if (on < NITRO_FOCUS && !melee && !next)
+    if (on < NITRO_FOCUS && !melee && !next && !contact)
         return false;
 
-    // about to be picked with nobody on it yet: away from the champions round it
-    uint32 const from = on ? on : near;
+    // away from the melee on it, else everything on it, else, about to be picked, the champions round it
+    uint32 const from = meleeOn ? meleeOn : (on ? on : near);
+    std::array<float, 2> const& sum = meleeOn ? meleeSum : (on ? onSum : nearSum);
     if (!from)
         return false;
 
-    float const fromX = (on ? sumX : nearX) / from;
-    float const fromY = (on ? sumY : nearY) / from;
-    Vec const away = Unit2(bot->GetPositionX() - fromX, bot->GetPositionY() - fromY);
-    for (float turn : {0.0f, 45.0f, -45.0f, 90.0f, -90.0f})
+    Vec const away = Unit2(bot->GetPositionX() - sum[0] / from, bot->GetPositionY() - sum[1] / from);
+    float const reach = bot->GetSpeed(MOVE_RUN) * EncounterHelpers::NITRO_BOOSTS_SPEED_FACTOR *
+                        EncounterHelpers::NITRO_BOOSTS_DURATION_MS / IN_MILLISECONDS;
+    std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
+    std::vector<Player*> const members = PlayerbotAI::IsHeal(bot) ? std::vector<Player*>() : GroupOnMap(bot);
+    bool found = false;
+    float bestClear = 0.0f;
+    float bestRun = 0.0f;
+    Position best;
+    for (float turn : RUN_TURNS)
     {
-        Position const target = Along(bot->GetPosition(), Rotate(away, turn), RUN_DIST);
-        if (!OnFloor(target))
-            continue;
+        Vec const dir = Rotate(away, turn);
+        for (float run = reach; run >= NITRO_MIN_RUN; run -= NITRO_STEP_BACK)
+        {
+            Position const target = Along(bot->GetPosition(), dir, run);
+            if (!Clear(target, hazards) || NearHealer(bot, members, target))
+                continue;
 
-        state->runs[bot->GetGUID()] = {now, target};
-        RaidObs::Note(bot, "fc.nitro", on >= NITRO_FOCUS ? "focus " + std::to_string(on)
-                                       : melee         ? "melee " + std::to_string(meleeOn)
-                                                       : "next");
-        spot = target;
-        return true;
+            float const clear = MeleeClearance(botAI, target);
+            if (!found || clear > bestClear || (clear == bestClear && run > bestRun))
+            {
+                found = true;
+                bestClear = clear;
+                bestRun = run;
+                best = target;
+            }
+
+            break;
+        }
     }
 
-    return false;
+    if (!found)
+        return false;
+
+    state->runs[bot->GetGUID()] = {now, best};
+    RaidObs::Note(bot, "fc.nitro", on >= NITRO_FOCUS ? "focus " + std::to_string(on)
+                                   : melee         ? "melee " + std::to_string(meleeOn)
+                                   : contact       ? "contact " + std::to_string(contact)
+                                                   : "next");
+    spot = best;
+    return true;
 }
 
 namespace
@@ -664,34 +740,6 @@ bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bo
     }
 
     return true;
-}
-
-// Distance from the spot to the nearest melee champion, max with none
-float MeleeClearance(PlayerbotAI* botAI, Position const& spot)
-{
-    float nearest = std::numeric_limits<float>::max();
-    for (Unit* champion : FactionChampionsInCombat(botAI))
-        if (IsFactionChampionMelee(champion->GetEntry()))
-            nearest = std::min(nearest, champion->GetExactDist2d(&spot));
-
-    return nearest;
-}
-
-std::vector<Unit*> MeleeOn(PlayerbotAI* botAI, Player* bot, float radius)
-{
-    std::vector<Unit*> on;
-    for (Unit* champion : FactionChampionsInCombat(botAI))
-        if (IsFactionChampionMelee(champion->GetEntry()) && champion->GetVictim() == bot &&
-            bot->GetExactDist2d(champion) <= radius)
-            on.push_back(champion);
-
-    return on;
-}
-
-// Healers keep their step-off, only ranged dps kites
-bool KiteBot(PlayerbotAI* botAI)
-{
-    return FactionChampionsStaysPut(botAI) && !PlayerbotAI::IsHeal(botAI->GetBot()) && botAI->GetBot()->IsAlive();
 }
 
 bool AoeEscape(PlayerbotAI* botAI, OpenerSpell const& spell, Unit* at, bool fear, FactionChampionsEscapeCast& cast)
@@ -865,7 +913,7 @@ bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast
 
 bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
 {
-    BallState* state = botAI && KiteBot(botAI) ? Refresh(botAI) : nullptr;
+    BallState* state = Refresh(botAI);
     if (!state)
         return false;
 
@@ -895,39 +943,26 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
         state->kites.erase(kite);
     }
 
-    bool gains = false;
+    // even in contact a chaser does about half its damage to a moving bot, so no chaser is too close to run from
     float sumX = 0.0f;
     float sumY = 0.0f;
     float nearest = std::numeric_limits<float>::max();
     for (Unit* chaser : chasers)
     {
-        float const dist = bot->GetExactDist2d(chaser);
-        nearest = std::min(nearest, dist);
+        nearest = std::min(nearest, bot->GetExactDist2d(chaser));
         sumX += chaser->GetPositionX();
         sumY += chaser->GetPositionY();
-        if (dist > KITE_CONTACT || chaser->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
-            chaser->HasAuraType(SPELL_AURA_MOD_ROOT) || chaser->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED))
-            gains = true;
     }
 
-    if (!gains)
-        return false;
-
-    std::vector<Player*> healers;
-    for (Player* member : GroupOnMap(bot))
-        if (member != bot && member->IsAlive() && PlayerbotAI::IsHeal(member))
-            healers.push_back(member);
-
+    std::vector<Player*> const members = GroupOnMap(bot);
     std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
     Vec const away = Unit2(bot->GetPositionX() - sumX / chasers.size(), bot->GetPositionY() - sumY / chasers.size());
     float bestClear = -1.0f;
     Position best;
-    for (float turn : {0.0f, 30.0f, -30.0f, 60.0f, -60.0f, 90.0f, -90.0f, 120.0f, -120.0f})
+    for (float turn : RUN_TURNS)
     {
         Position const target = Along(bot->GetPosition(), Rotate(away, turn), KITE_STEP);
-        if (!Clear(target, hazards) ||
-            std::any_of(healers.begin(), healers.end(),
-                        [&target](Player* healer) { return healer->GetExactDist2d(&target) < KITE_HEALER_GAP; }))
+        if (!Clear(target, hazards) || NearHealer(bot, members, target))
             continue;
 
         float const clear = MeleeClearance(botAI, target);
@@ -950,7 +985,7 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
 
 bool FactionChampionsKiteHold(PlayerbotAI* botAI)
 {
-    return botAI && KiteBot(botAI) && !MeleeOn(botAI, botAI->GetBot(), KITE_HOLD).empty();
+    return Refresh(botAI) && !MeleeOn(botAI, botAI->GetBot(), KITE_HOLD).empty();
 }
 
 bool FactionChampionsCircleDue(PlayerbotAI* botAI)

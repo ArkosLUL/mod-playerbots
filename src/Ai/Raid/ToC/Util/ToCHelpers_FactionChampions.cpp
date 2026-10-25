@@ -26,6 +26,7 @@
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
 #include "ToCHelpers_Shared.h"
 #include "ToCHelpers_Staging.h"
@@ -94,6 +95,8 @@ constexpr uint32 SPELL_HEX_RANK = 51514;
 constexpr float CC_WALK_REACH = 15.0f;
 // a walk-in duty's walk on top of CC_DUTY_MS
 constexpr uint32 CC_WALK_MS = 3000;
+// a CC bot with a melee champion this close kites instead, the kite's own reach
+constexpr float CC_CHASED_RADIUS = 30.0f;
 
 // The pack: champions this close to its last centre, the kill target left out
 constexpr float PACK_RADIUS = 20.0f;
@@ -998,6 +1001,18 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, std::vector<Playe
                            [guid](Champion const* champion) { return champion->guid == guid; });
     };
 
+    // the kite stands down for a CC duty, and a cast pins the bot for the chaser
+    auto const chased = [&state, bot](Player* member)
+    {
+        return std::any_of(state.champions.begin(), state.champions.end(),
+                           [bot, member](Champion const& champion)
+                           {
+                               Creature* creature = champion.inCombat ? AliveCreature(bot, champion.guid) : nullptr;
+                               return creature && FactionChampionsKitesFrom(member, creature) &&
+                                      member->GetExactDist2d(creature) <= CC_CHASED_RADIUS;
+                           });
+    };
+
     std::vector<ObjectGuid> released;
     for (auto const& held : state.ccDuties)
     {
@@ -1013,7 +1028,7 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, std::vector<Playe
         if (casting && !target)
             caster->first->InterruptNonMeleeSpells(false);
 
-        bool keep = caster != casters.end() && target && InControl(caster->first);
+        bool keep = caster != casters.end() && target && InControl(caster->first) && !chased(caster->first);
         if (keep && !casting)
         {
             // the caster's old one in its last seconds isn't the recast landing
@@ -1036,7 +1051,7 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, std::vector<Playe
 
     std::vector<bool> busy(casters.size(), false);
     for (size_t i = 0; i < casters.size(); ++i)
-        busy[i] = state.ccDuties.count(casters[i].first->GetGUID()) > 0;
+        busy[i] = state.ccDuties.count(casters[i].first->GetGUID()) > 0 || chased(casters[i].first);
 
     std::vector<std::vector<Champion const*>> tied(casters.size());
     for (size_t i = 0; i < casters.size(); ++i)

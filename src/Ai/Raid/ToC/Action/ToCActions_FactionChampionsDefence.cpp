@@ -26,6 +26,8 @@ constexpr float GRIP_SAME_STAND = 0.5f;
 constexpr uint32 AOE_LATCH_MS = 3000;
 // standing still this long past the issue means something stopped the walk short
 constexpr uint32 AOE_STALL_MS = 500;
+// the wall grip hands back the DK's own spot once it's at its stand
+constexpr float WALL_AT_STAND = 0.5f;
 // a CC walk stops this far inside the spell's range, the champion keeps moving
 constexpr float CC_WALK_INSIDE = 3.0f;
 // the champion moved less than this since the walk went out, so it still heads the right way
@@ -211,6 +213,58 @@ bool FactionChampionsChainGripAction::Execute(Event /*event*/)
 
     FactionChampionsNoteChainGrip(botAI, target);
     return true;
+}
+
+bool FactionChampionsWallGripAction::Execute(Event /*event*/)
+{
+    Position stand;
+    uint32 spellId = 0;
+    bool gripped = false;
+    Unit* champion = FactionChampionsWallGrip(botAI, stand, spellId, &gripped);
+    if (!champion)
+    {
+        DropWalk();
+        return false;
+    }
+
+    if (spellId)
+    {
+        DropWalk();
+        if (!botAI->CastSpell(spellId, champion))
+            return false;
+
+        if (!gripped)
+            FactionChampionsNoteWallGrip(botAI, champion);
+
+        return true;
+    }
+
+    // waiting on the cooldown or the landing, the DK fights from where it stands meanwhile
+    if (bot->GetExactDist2d(&stand) <= WALL_AT_STAND)
+    {
+        DropWalk();
+        return false;
+    }
+
+    Position const* walking = WalkInFlight();
+    if (walking && walking->GetExactDist2d(&stand) < GRIP_SAME_STAND)
+        return true;
+
+    return WalkTo(stand, MovementPriority::MOVEMENT_FORCED);
+}
+
+bool FactionChampionsFreedomAction::Execute(Event /*event*/)
+{
+    uint32 spellId = 0;
+    Unit* member = FactionChampionsFreedomTarget(botAI, spellId);
+    return member && botAI->CastSpell(spellId, member);
+}
+
+// A queued basket can pop ticks after its trigger fired, once the root wore off or another paladin took it
+bool FactionChampionsFreedomAction::isUseful()
+{
+    uint32 spellId = 0;
+    return FactionChampionsFreedomTarget(botAI, spellId) != nullptr;
 }
 
 bool FactionChampionsChannelInterruptAction::Execute(Event /*event*/)

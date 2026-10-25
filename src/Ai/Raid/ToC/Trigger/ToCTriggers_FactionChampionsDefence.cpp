@@ -62,6 +62,20 @@ bool FactionChampionsDeathGripTrigger::IsActive()
 
 bool FactionChampionsChainGripTrigger::IsActive() { return FactionChampionsOpenerGripDue(botAI); }
 
+bool FactionChampionsWallGripTrigger::IsActive()
+{
+    Position stand;
+    uint32 spellId = 0;
+    bool gripped = false;
+    return FactionChampionsWallGrip(botAI, stand, spellId, &gripped) && (spellId || !gripped);
+}
+
+bool FactionChampionsFreedomTrigger::IsActive()
+{
+    uint32 spellId = 0;
+    return FactionChampionsFreedomTarget(botAI, spellId) != nullptr;
+}
+
 bool FactionChampionsSnareTrigger::IsActive()
 {
     uint32 spellId = 0;
@@ -100,6 +114,9 @@ void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& trigge
     triggers.push_back(new TriggerNode("faction champions protect", {
         NextAction("faction champions protect", ACTION_EMERGENCY + 4) }));
 
+    triggers.push_back(new TriggerNode("faction champions freedom", {
+        NextAction("faction champions freedom", ACTION_EMERGENCY + 3) }));
+
     // over the hold nodes, so the DK tank leaves its champion for it
     triggers.push_back(new TriggerNode("faction champions chain grip", {
         NextAction("faction champions chain grip", ACTION_RAID + 4.6f) }));
@@ -130,6 +147,10 @@ void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& trigge
 
     triggers.push_back(new TriggerNode("faction champions physical switch", {
         NextAction("faction champions physical switch", ACTION_RAID + 2.5f) }));
+
+    // under the kite and the Nitro run, over the holds and the focus
+    triggers.push_back(new TriggerNode("faction champions wall grip", {
+        NextAction("faction champions wall grip", ACTION_RAID + 2.3f) }));
 
     triggers.push_back(new TriggerNode("faction champions purge kill target", {
         NextAction("faction champions purge kill target", ACTION_RAID) }));

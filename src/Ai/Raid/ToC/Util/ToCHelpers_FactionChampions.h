@@ -158,7 +158,8 @@ bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 // never-breaking, then the longest, then the nearest. Polymorph, Fear and Hex only on a champion with no
 // group member or pet on it and no group DoT. Latched until a fresh one lands (over its cast time plus
 // 0.4 s left) or 3 s pass with none going
-// (6 s for a walk), written to fc.cc. Null unless the encounter is live.
+// (6 s for a walk), written to fc.cc. None for, and dropped by, a caster a melee champion it kites from
+// (FactionChampionsKitesFrom) is within 30 yd of. Null unless the encounter is live.
 Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The member holds a CC duty

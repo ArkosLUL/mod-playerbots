@@ -49,6 +49,15 @@ bool FactionChampionsGripHeld(PlayerbotAI* botAI)
     return FactionChampionsGripTarget(botAI, stand) != nullptr;
 }
 
+// Walking to its wall stand or waiting there for the grip
+bool FactionChampionsWallGripHeld(PlayerbotAI* botAI)
+{
+    Position stand;
+    uint32 spellId = 0;
+    bool gripped = false;
+    return FactionChampionsWallGrip(botAI, stand, spellId, &gripped) && !gripped;
+}
+
 bool FactionChampionsLive(PlayerbotAI* botAI) { return ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions); }
 
 // Its 30 s marker blocks Divine Shield, Divine Protection and Hand of Protection, and these paladins are
@@ -96,6 +105,12 @@ void DefineFactionChampions(EncounterBuilder& e)
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
             {"reach melee", "reach spell"});
 
+    // the same for a DK on its way to the wall, or waiting there for its grip
+    e.Block("faction champions wall grip hold", Role::Any, FactionChampionsWallGripHeld,
+            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Flee |
+                Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
+            {"reach melee", "reach spell"});
+
     // its champion follows wherever it goes, and these would walk it toward the raid
     e.Block("faction champions holder hold", Role::Any, FactionChampionsHolding,
             Family::CombatFormationMove | Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom);
@@ -106,8 +121,10 @@ void DefineFactionChampions(EncounterBuilder& e)
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Flee |
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage);
 
-    // a kiting bot walking back into reach of its target hands the chaser its gap again
-    e.Block("faction champions kite hold", Role::Any, FactionChampionsKiteHold, 0, {"reach spell"});
+    // a kiting bot walking or charging back into reach of its target, or its heal target, hands the chaser its
+    // gap again
+    e.Block("faction champions kite hold", Role::Any, FactionChampionsKiteHold, Family::Charge,
+            {"reach spell", "reach melee", "reach party member to heal"});
 
     e.Block("faction champions kill squad wait", Role::Any, FactionChampionsKillSquadWait, Family::Charge,
             {"reach melee"});
@@ -122,6 +139,9 @@ void DefineFactionChampions(EncounterBuilder& e)
     e.Block("faction champions avenging wrath hold", Role::Any, FactionChampionsWrathHeld, 0, {"avenging wrath"});
     // faction champions protect spends it on a focused bot
     e.Block("faction champions divine sacrifice hold", Role::Any, FactionChampionsLive, 0, {"divine sacrifice"});
+    // the class node spends the 25 s cooldown on whoever it sees first; faction champions freedom keeps it for a
+    // rooted kiter
+    e.Block("faction champions freedom guard", Role::Any, FactionChampionsLive, 0, {"hand of freedom on party"});
 
     // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
     e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);

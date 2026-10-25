@@ -87,6 +87,20 @@ public:
     bool IsActive() override;
 };
 
+class FactionChampionsWallGripTrigger : public Trigger
+{
+public:
+    FactionChampionsWallGripTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions wall grip") {}
+    bool IsActive() override;
+};
+
+class FactionChampionsFreedomTrigger : public Trigger
+{
+public:
+    FactionChampionsFreedomTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions freedom") {}
+    bool IsActive() override;
+};
+
 class FactionChampionsSnareTrigger : public Trigger
 {
 public:
@@ -141,6 +155,10 @@ public:
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_death_grip;
         creators["faction champions chain grip"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_chain_grip;
+        creators["faction champions wall grip"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_wall_grip;
+        creators["faction champions freedom"] =
+            &ToCFactionChampionsDefenceTriggerContext::faction_champions_freedom;
         creators["faction champions snare"] =
             &ToCFactionChampionsDefenceTriggerContext::faction_champions_snare;
         creators["faction champions crowd control"] =
@@ -188,6 +206,14 @@ private:
 
     static Trigger* faction_champions_chain_grip(PlayerbotAI* botAI) {
         return new FactionChampionsChainGripTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_wall_grip(PlayerbotAI* botAI) {
+        return new FactionChampionsWallGripTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_freedom(PlayerbotAI* botAI) {
+        return new FactionChampionsFreedomTrigger(botAI);
     }
 
     static Trigger* faction_champions_snare(PlayerbotAI* botAI) {

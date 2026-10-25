@@ -88,6 +88,23 @@ public:
     bool Execute(Event event) override;
 };
 
+// Walks the DK to its wall stand, grips the melee champion there, then slows it with Chains of Ice
+class FactionChampionsWallGripAction : public NorthrendBeastsWalkAction
+{
+public:
+    FactionChampionsWallGripAction(PlayerbotAI* botAI)
+        : NorthrendBeastsWalkAction(botAI, "faction champions wall grip") {}
+    bool Execute(Event event) override;
+};
+
+class FactionChampionsFreedomAction : public Action
+{
+public:
+    FactionChampionsFreedomAction(PlayerbotAI* botAI) : Action(botAI, "faction champions freedom") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class FactionChampionsChannelInterruptAction : public Action
 {
 public:
@@ -171,6 +188,10 @@ public:
             &ToCFactionChampionsDefenceActionContext::faction_champions_death_grip;
         creators["faction champions chain grip"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_chain_grip;
+        creators["faction champions wall grip"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_wall_grip;
+        creators["faction champions freedom"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_freedom;
         creators["faction champions channel interrupt"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_channel_interrupt;
         creators["faction champions snare"] =
@@ -216,6 +237,14 @@ private:
 
     static Action* faction_champions_chain_grip(PlayerbotAI* botAI) {
         return new FactionChampionsChainGripAction(botAI);
+    }
+
+    static Action* faction_champions_wall_grip(PlayerbotAI* botAI) {
+        return new FactionChampionsWallGripAction(botAI);
+    }
+
+    static Action* faction_champions_freedom(PlayerbotAI* botAI) {
+        return new FactionChampionsFreedomAction(botAI);
     }
 
     static Action* faction_champions_channel_interrupt(PlayerbotAI* botAI) {

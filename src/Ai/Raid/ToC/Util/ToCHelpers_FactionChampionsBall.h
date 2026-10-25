@@ -9,8 +9,8 @@ class PlayerbotAI;
 class Unit;
 
 // Faction Champions positioning: healers and ranged stay put, the Cyclone stand, the healers' step off the
-// melee, the trinket opener, the Nitro Boosts run, the ranged kite and the casters' escapes. Every reader answers null or
-// false unless the encounter is live, but the pre-pull Demonic Circle.
+// melee, the trinket opener, the Nitro Boosts run, the kite and the casters' escapes. Every reader answers null or
+// false unless the encounter is live, but the pre-pull Demonic Circle and FactionChampionsKitesFrom.
 namespace TrialOfTheCrusaderHelpers
 {
 
@@ -19,9 +19,13 @@ namespace TrialOfTheCrusaderHelpers
 // healer stays in Cyclone reach and the kill target within 36 yd of it. None while it holds a CC duty.
 bool FactionChampionsCycloneStand(PlayerbotAI* botAI, Position& spot);
 
-// Healers and ranged, tanks and holders aside: they move only to dodge, run, step off, CC or get their
+// Healers and ranged, tanks and holders aside: they move only to dodge, run, kite, step off, CC or get their
 // target in range
 bool FactionChampionsStaysPut(PlayerbotAI* botAI);
+
+// A melee champion with the member as victim that the member runs from: the member alive, not a tank and not
+// the champion's holder. Reads no refresh, so the champion refresh may ask it.
+bool FactionChampionsKitesFrom(Player* member, Unit* champion);
 
 // A healer not casting, rooted or stunned, with a melee champion within 8 yd: 10 yd away from them, on the
 // floor and clear of Bladestorm and Hellfire. Latched to arrival or 2.5 s, then none for 3 s.
@@ -33,18 +37,23 @@ bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot);
 // unit to cast it at. Written to fc.opener.
 Unit* FactionChampionsOpener(PlayerbotAI* botAI, uint32& spellId);
 
-// Where a bot runs on Nitro Boosts: three or more champions, or two melee champions, have it as victim, or it
-// is fc.nextfocus, at 30% health or more. 25 yd away from them (±45°, ±90° to stay on the floor), latched for
-// the boost. Not for a tank, a holder, a CC duty holder or a bot rooted or stunned. Each run notes fc.nitro.
+// Where a bot runs on Nitro Boosts: three or more champions, or two melee champions, have it as victim, one
+// melee champion does from within 8 yd unrooted and unslowed, or it is fc.nextfocus, at 30% health or more.
+// Away from the melee on it (else all on it, else those within 30 yd), straight or 30-120° off: on each
+// bearing the farthest clear floor spot up to the boost's reach (~87 yd), stepping back 5 yd, 15 yd at least
+// and, for a non-healer, 10 yd off other healers; the one farthest from every melee champion, a tie to the
+// longer run. Latched to arrival or the boost's end. Not for a tank, a holder, a CC duty holder or a bot
+// rooted or stunned. Each run notes fc.nitro.
 bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot);
 
-// Where a ranged DPS bot kites: a melee champion has it as victim within 30 yd and is past 6 yd, CC'd, rooted
-// or snared, so running gains ground before its next re-pick. 15 yd hops away from them, on the floor, clear
-// of AoE and off our healers, farthest from every melee champion; latched to arrival or 2.5 s, dropped once
-// none on it is within 30 yd. Not while rooted, stunned, on a Nitro run or a CC duty. Each hop notes fc.kite.
+// Where a bot kites: a melee champion it kites from (FactionChampionsKitesFrom) is within 30 yd, however
+// close. 15 yd hops away from them, on the floor, clear of AoE and off other healers, farthest from every
+// melee champion; latched to arrival or 2.5 s, dropped once none is within 30 yd. Not while rooted, stunned,
+// on a Nitro run or a CC duty. Each hop notes fc.kite.
 bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot);
 
-// A ranged DPS bot some melee champion within 45 yd has as victim: reaching its target would walk it back in
+// A melee champion the bot kites from is within 45 yd: reaching its target or a heal target would walk it
+// back in
 bool FactionChampionsKiteHold(PlayerbotAI* botAI);
 
 constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;

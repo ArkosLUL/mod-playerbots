@@ -34,6 +34,7 @@
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_FactionChampions.h"
+#include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_Staging.h"
 
 namespace TrialOfTheCrusaderHelpers
@@ -77,6 +78,8 @@ constexpr float SPELL_LOCK_RANGE = 30.0f;
 
 constexpr float AOE_SEARCH_RADIUS = 30.0f;
 constexpr float HEAL_REACH = 30.0f;
+// a dodge this close to a melee champion trades the AoE for its swings
+constexpr float DODGE_MELEE_GAP = 8.0f;
 // The floor the Beasts spots are known to reach, round ARENA_CENTER
 constexpr float ARENA_FLOOR_RADIUS = 44.0f;
 
@@ -110,7 +113,20 @@ constexpr uint32 CHAIN_LAND_MS = 300;
 // the player's own grip, the chain's last link, came 3-4 s after the bot DK's
 constexpr uint32 GRIP_GUARD_TAIL_MS = 6000;
 
-constexpr float SNARE_HEALTH_PCT = 50.0f;
+// A wall grip lands the melee champion this far off ARENA_CENTER at least, past the raid's 16-24 yd spread
+constexpr float WALL_MIN_OFF_CENTRE = 34.0f;
+// the champion lands in front of the DK, so a stand this far off it at each bearing
+constexpr std::array<float, 2> WALL_STAND_DISTS = {27.0f, 22.0f};
+// the DK keeps its heals at the wall
+constexpr float WALL_HEAL_REACH = 38.0f;
+// a longer walk to the stand outlasts the 8 s duty
+constexpr uint32 WALL_WALK_MAX_MS = 6000;
+constexpr float WALL_ARRIVE = 1.5f;
+// a grip any raider made this recently stays where it put the champion
+constexpr uint32 WALL_AIRBORNE_MS = 8000;
+// Chains of Ice goes on it this long after the grip, or never
+constexpr uint32 WALL_CHAIN_MS = 4000;
+
 constexpr float PIERCING_HOWL_RADIUS = 10.0f;
 constexpr float CHAINS_OF_ICE_RANGE = 20.0f;
 constexpr float CONCUSSIVE_SHOT_RANGE = 35.0f;
@@ -141,8 +157,6 @@ constexpr uint32 SPELL_BLIND = 2094;
 // the arrow drops a trap whose freeze (the effect) is what lands and breaks
 constexpr uint32 SPELL_FREEZING_ARROW = 60192;
 constexpr uint32 SPELL_FREEZING_ARROW_EFFECT = 60210;
-// closer, the holder DK's own walk and swings already reach it
-constexpr float HOLD_GRIP_MIN = 8.0f;
 
 // Hand of Protection waits for four champions, actual or about to pick, the rest for two and this much
 // health, so they're still up when the focused member drops. Four on a non-tank don't wait.
@@ -161,6 +175,10 @@ constexpr uint32 SPELL_DIVINE_SACRIFICE = 64205;
 // what Divine Sacrifice puts up with the talent: 20% less damage taken, raid wide, 6 s
 constexpr uint32 SPELL_DIVINE_GUARDIAN = 70940;
 constexpr float HAND_RANGE = 30.0f;
+// The player spell, one rank. Its immunity strips a root or snare already on (purge on immunity), never Dazed.
+constexpr uint32 SPELL_HAND_OF_FREEDOM_PLAYER = 1044;
+// a rooted kiter with a melee champion this close is about to be caught
+constexpr float FREEDOM_CHASER_REACH = 15.0f;
 constexpr float PRIEST_EXTERNAL_RANGE = 40.0f;
 // Hand of Sacrifice moves 30% of the damage onto the paladin
 constexpr float SACRIFICE_MIN_HEALTH_PCT = 50.0f;
@@ -285,6 +303,16 @@ struct GripPick
     bool walkOnly = false;
 };
 
+// A DK's grip of a melee champion off its victim to a stand by the arena wall, then its Chains of Ice
+struct WallDuty
+{
+    ObjectGuid champion;
+    Position stand;
+    uint32 sinceMs = 0;
+    uint32 grippedMs = 0;
+    bool gripped = false;
+};
+
 // A champion, a group member or a corpse, and the spell the bot holding the duty casts on it
 struct SpellDuty
 {
@@ -326,8 +354,12 @@ struct FactionChampionsDefenceState
     RaidObs::ObsGuidMap<ObjectGuid> grips{"fc.grip"};
     RaidObs::ObsGuidMap<ObjectGuid> peelNotes{"fc.peel"};
     RaidObs::ObsGuidMap<ObjectGuid> kickNotes{"fc.kick"};  // interrupter -> warlock
+    RaidObs::ObsGuidMap<ObjectGuid> wallNotes{"fc.wall"};  // DK -> melee champion
     std::unordered_map<ObjectGuid, KickDuty> kicks;        // warlock -> interrupter
     GripDuty grip;
+    std::unordered_map<ObjectGuid, WallDuty> walls;       // DK -> its wall grip
+    std::unordered_map<ObjectGuid, uint32> airborneMs;    // melee champion -> last seen in the air
+    std::unordered_map<ObjectGuid, SpellDuty> freedoms;   // paladin -> group member
     std::unordered_map<ObjectGuid, SpellDuty> snares;     // snarer -> melee champion
     std::unordered_map<ObjectGuid, SpellDuty> peels;      // peeler -> melee champion
     std::unordered_map<ObjectGuid, SpellDuty> protects;   // caster -> group member
@@ -1419,6 +1451,200 @@ bool SnareImmune(Unit* champion)
            champion->IsImmunedToDamage(SPELL_SCHOOL_MASK_MAGIC);
 }
 
+// The champion's victim as a group member, null when it's on none
+Member const* VictimMember(std::vector<Member> const& members, Unit* champion)
+{
+    Unit* victim = champion->GetVictim();
+    auto const member = victim ? FindMember(members, victim->GetGUID()) : members.end();
+    return member != members.end() ? &*member : nullptr;
+}
+
+// Not the grip duty's DK or the chain's two DKs while a pull is open, and no pack tank, which holds the pack
+bool WallDk(FactionChampionsDefenceState const& state, Player* player, Player* opener, ObjectGuid chainDk)
+{
+    return player->getClass() == CLASS_DEATH_KNIGHT && GET_PLAYERBOT_AI(player) &&
+           player->HasSpell(SPELL_DEATH_GRIP) && InControl(player) && player->GetGUID() != state.grip.dk &&
+           player != opener && player->GetGUID() != chainDk &&
+           (FactionChampionsIsHolder(player) || !FactionChampionsIsPackTank(player));
+}
+
+// A holder DK takes only its own champion, any other DK one on a raider that's neither a tank nor its holder
+bool WallVictim(Player* dk, Unit* champion, Member const* victim)
+{
+    if (!victim || victim->player == dk)
+        return false;
+
+    ObjectGuid const held = FactionChampionsHeldBy(dk);
+    if (!held.IsEmpty())
+        return held == champion->GetGUID();
+
+    return !IsTankMember(victim->player) && FactionChampionsHeldBy(victim->player) != champion->GetGUID();
+}
+
+// The 8 s since anyone's grip keeps a human's grip where it put the champion
+bool WallGrippable(FactionChampionsDefenceState const& state, PlayerbotAI* botAI, Unit* champion, Unit* killTarget,
+                   uint32 now)
+{
+    auto const air = state.airborneMs.find(champion->GetGUID());
+    return IsFactionChampionMelee(champion->GetEntry()) && champion != killTarget && !MidJump(champion) &&
+           (air == state.airborneMs.end() || getMSTimeDiff(air->second, now) >= WALL_AIRBORNE_MS) &&
+           !champion->HasAuraType(SPELL_AURA_MOD_ROOT) && !champion->HasUnitState(UNIT_STATE_LOST_CONTROL) &&
+           std::find(state.guarded.begin(), state.guarded.end(), champion->GetGUID()) == state.guarded.end() &&
+           GripLands(champion) && !FactionChampionsCcProtected(botAI, champion);
+}
+
+// The champion lands where the DK stands, so the stand on the floor 34-44 yd off ARENA_CENTER, 27 or 22 yd
+// off the champion, farthest from its victim and 12+ yd farther than the champion is now
+bool DeriveWallStand(FactionChampionsDefenceState const& state, Player* dk, Unit* champion, Unit* victim,
+                     std::vector<Member> const& members, Position& stand)
+{
+    float const minAway = victim->GetExactDist2d(champion) + GRIP_MIN_GAIN;
+    bool found = false;
+    float best = 0.0f;
+    for (float distance : WALL_STAND_DISTS)
+    {
+        for (uint32 bearing = 0; bearing < GRIP_BEARINGS; ++bearing)
+        {
+            float const angle = 2.0f * static_cast<float>(M_PI) * bearing / GRIP_BEARINGS;
+            Position const spot(champion->GetPositionX() + distance * std::cos(angle),
+                                champion->GetPositionY() + distance * std::sin(angle), champion->GetPositionZ());
+            float const offCentre = ARENA_CENTER.GetExactDist2d(spot);
+            float const away = victim->GetExactDist2d(&spot);
+            if (offCentre > ARENA_FLOOR_RADIUS || offCentre < WALL_MIN_OFF_CENTRE || away < minAway ||
+                (found && away <= best) || WalkMs(dk, spot) > WALL_WALK_MAX_MS)
+                continue;
+
+            bool const healed = std::any_of(members.begin(), members.end(),
+                                            [dk, &spot](Member const& member)
+                                            {
+                                                return member.healer && member.player != dk &&
+                                                       member.player->GetExactDist2d(&spot) <= WALL_HEAL_REACH;
+                                            });
+            bool const clear = std::none_of(state.hazards.begin(), state.hazards.end(),
+                                            [&spot](HazardSource const& source)
+                                            { return spot.GetExactDist2d(source.pos) < source.clearance; });
+            if (!healed || !clear)
+                continue;
+
+            stand = spot;
+            best = away;
+            found = true;
+        }
+    }
+
+    return found;
+}
+
+// Latched through the grip to its Chains of Ice. Before the grip it drops once the cooldown outlasts the walk,
+// the stand is past 29 yd of the champion, 8 s pass, someone else grips or holds it, or it leaves its victim.
+void UpdateWalls(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::vector<Member> const& members,
+                 std::vector<Unit*> const& champions, Unit* killTarget, uint32 now)
+{
+    for (Unit* champion : champions)
+        if (IsFactionChampionMelee(champion->GetEntry()) && MidJump(champion))
+            state.airborneMs[champion->GetGUID()] = now;
+
+    Player* bot = botAI->GetBot();
+    bool const chainOpen = !FactionChampionsChainTarget(bot).IsEmpty();
+    Player* const opener = chainOpen ? ChainOpener(bot) : nullptr;
+    ObjectGuid const chainDk = chainOpen ? FactionChampionsChainDk(bot) : ObjectGuid::Empty;
+    auto const findChampion = [&champions](ObjectGuid guid) -> Unit*
+    {
+        auto const found = std::find_if(champions.begin(), champions.end(),
+                                        [guid](Unit* champion) { return champion->GetGUID() == guid; });
+        return found != champions.end() ? *found : nullptr;
+    };
+
+    std::vector<ObjectGuid> released;
+    for (auto const& [dkGuid, duty] : state.walls)
+    {
+        auto const member = FindMember(members, dkGuid);
+        Player* dk = member != members.end() ? member->player : nullptr;
+        Unit* champion = dk ? findChampion(duty.champion) : nullptr;
+        bool keep = champion && champion != killTarget && WallDk(state, dk, opener, chainDk);
+        if (keep && duty.gripped)
+            keep = getMSTimeDiff(duty.grippedMs, now) < WALL_CHAIN_MS &&
+                   !champion->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED) && !SnareImmune(champion);
+        else if (keep)
+            keep = getMSTimeDiff(duty.sinceMs, now) < GRIP_DUTY_MS && GripReadyInTime(dk, duty.stand, true) &&
+                   champion->GetExactDist2d(&duty.stand) <= GRIP_KEEP_RANGE &&
+                   WallVictim(dk, champion, VictimMember(members, champion)) &&
+                   WallGrippable(state, botAI, champion, killTarget, now);
+
+        if (!keep)
+            released.push_back(dkGuid);
+    }
+
+    for (ObjectGuid const& dk : released)
+    {
+        state.walls.erase(dk);
+        state.wallNotes.erase(dk);
+    }
+
+    std::vector<Player*> dks;
+    for (Member const& member : members)
+    {
+        Player* player = member.player;
+        if (!state.walls.count(player->GetGUID()) && WallDk(state, player, opener, chainDk) &&
+            player->GetSpellCooldownDelay(SPELL_DEATH_GRIP) <= GRIP_READY_SLACK_MS + WALL_WALK_MAX_MS)
+            dks.push_back(player);
+    }
+
+    std::sort(dks.begin(), dks.end(),
+              [](Player* a, Player* b)
+              {
+                  bool const aHolds = FactionChampionsIsHolder(a);
+                  if (aHolds != FactionChampionsIsHolder(b))
+                      return aHolds;
+
+                  return a->GetGUID() < b->GetGUID();
+              });
+
+    struct Candidate
+    {
+        Unit* champion;
+        Member const* victim;
+    };
+
+    for (Player* dk : dks)
+    {
+        std::vector<Candidate> candidates;
+        for (Unit* champion : champions)
+        {
+            bool const taken = std::any_of(state.walls.begin(), state.walls.end(), [champion](auto const& held)
+                                           { return held.second.champion == champion->GetGUID(); });
+            Member const* victim = VictimMember(members, champion);
+            if (!taken && dk->GetExactDist2d(champion) <= GRIP_ELECT_REACH && WallVictim(dk, champion, victim) &&
+                WallGrippable(state, botAI, champion, killTarget, now))
+                candidates.push_back({champion, victim});
+        }
+
+        std::sort(candidates.begin(), candidates.end(),
+                  [](Candidate const& a, Candidate const& b)
+                  {
+                      if (a.victim->healer != b.victim->healer)
+                          return a.victim->healer;
+
+                      if (a.victim->player->GetHealthPct() != b.victim->player->GetHealthPct())
+                          return a.victim->player->GetHealthPct() < b.victim->player->GetHealthPct();
+
+                      return a.champion->GetGUID() < b.champion->GetGUID();
+                  });
+
+        for (Candidate const& candidate : candidates)
+        {
+            Position stand;
+            if (!DeriveWallStand(state, dk, candidate.champion, candidate.victim->player, members, stand) ||
+                !GripReadyInTime(dk, stand, true))
+                continue;
+
+            state.walls[dk->GetGUID()] = {candidate.champion->GetGUID(), stand, now, 0, false};
+            state.wallNotes.Set(dk->GetGUID(), candidate.champion->GetGUID());
+            break;
+        }
+    }
+}
+
 void UpdateSnares(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::vector<Member> const& members,
                   std::vector<Unit*> const& champions)
 {
@@ -1444,14 +1670,14 @@ void UpdateSnares(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::
         if (member != members.end() && FactionChampionsHeldBy(member->player) == champion->GetGUID())
             continue;
 
-        bool const healerVictim = member != members.end() && member->healer;
-        float const victimHealth = member != members.end() ? victim->GetHealthPct() : 100.0f;
+        // the kite only gains ground on a slowed chaser
+        bool const kited = member != members.end() && FactionChampionsKitesFrom(member->player, champion);
         // one off the tank and out of the pack is on its way to the raid
         bool const loose = FactionChampionsIsEscapee(botAI, champion);
-        if (!loose && (member == members.end() || (!healerVictim && victimHealth >= SNARE_HEALTH_PCT)))
+        if (!kited && !loose)
             continue;
 
-        needy.push_back({champion, healerVictim, victimHealth});
+        needy.push_back({champion, kited && member->healer, kited ? victim->GetHealthPct() : 100.0f});
     }
 
     if (needy.empty())
@@ -1469,11 +1695,12 @@ void UpdateSnares(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::
                   return a.champion->GetGUID() < b.champion->GetGUID();
               });
 
-    // The DK walking to its grip stand runs its grip node first
+    // The DK walking to its grip stand runs its grip node first, and a wall grip DK keeps its frost rune for
+    // the champion it grips
     std::vector<Player*> snarers;
     for (Member const& member : members)
-        if (!member.healer && member.player->GetGUID() != state.grip.dk && GET_PLAYERBOT_AI(member.player) &&
-            FreeToAct(member.player))
+        if (!member.healer && member.player->GetGUID() != state.grip.dk &&
+            !state.walls.count(member.player->GetGUID()) && GET_PLAYERBOT_AI(member.player) && FreeToAct(member.player))
             snarers.push_back(member.player);
 
     std::vector<bool> taken(snarers.size(), false);
@@ -1551,10 +1778,8 @@ bool ClearOfOurHits(std::vector<Member> const& members, Unit* champion)
 }
 
 // The peel this bot can put on champion from where it stands, 0 when none. Roots and Frost Nova stay off
-// a champion near a pack tank, and Death Grip only goes where it lands the champion back toward the pack,
-// never on the kill target.
-uint32 ReadyPeel(Player* peeler, Unit* champion, Position const& packCentre, bool nearPackTank, ObjectGuid chainDk,
-                 ObjectGuid opener, Unit* killTarget, bool danger)
+// a champion near a pack tank. A DK has none: its grips go to the wall.
+uint32 ReadyPeel(Player* peeler, Unit* champion, bool nearPackTank, bool danger)
 {
     bool const inMelee = peeler->IsWithinMeleeRange(champion);
     bool const disarmed = champion->HasUnitFlag(UNIT_FLAG_DISARMED);
@@ -1604,17 +1829,6 @@ uint32 ReadyPeel(Player* peeler, Unit* champion, Position const& packCentre, boo
             return SpellReady(peeler, SPELL_PSYCHIC_HORROR) && InSpellRange(peeler, champion, SPELL_PSYCHIC_HORROR)
                        ? SPELL_PSYCHIC_HORROR
                        : 0;
-        case CLASS_DEATH_KNIGHT:
-        {
-            bool const spare = champion != killTarget && peeler->GetGUID() != opener &&
-                               (FactionChampionsIsPackTank(peeler) || peeler->GetGUID() != chainDk);
-            bool const towardPack =
-                peeler->GetExactDist2d(&packCentre) + GRIP_MIN_GAIN <= champion->GetExactDist2d(&packCentre);
-            return spare && towardPack && GripLands(champion) && peeler->IsWithinCombatRange(champion, GRIP_RANGE) &&
-                           SpellReady(peeler, SPELL_DEATH_GRIP)
-                       ? SPELL_DEATH_GRIP
-                       : 0;
-        }
         default:
             return 0;
     }
@@ -1637,7 +1851,7 @@ uint32 GroupUnitsWithin(std::vector<Member> const& members, Unit* centre, float 
 }
 
 void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::vector<Member> const& members,
-                std::vector<Unit*> const& champions, Unit* killTarget)
+                std::vector<Unit*> const& champions)
 {
     state.peels.clear();
 
@@ -1702,9 +1916,6 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
                 FreeToAct(member.player) && !FactionChampionsHasCcDuty(botAI, member.player->GetGUID()))
                 peelers.push_back(member.player);
 
-    ObjectGuid const chainDk = FactionChampionsChainDk(botAI->GetBot());
-    Player* const openerDk = ChainOpener(botAI->GetBot());
-    ObjectGuid const opener = openerDk ? openerDk->GetGUID() : ObjectGuid::Empty;
     std::vector<bool> taken(peelers.size(), false);
     for (Needy const& entry : needy)
     {
@@ -1730,8 +1941,7 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
         {
             size_t const i = nearest.second;
             Player* peeler = peelers[i];
-            uint32 const spellId =
-                ReadyPeel(peeler, champion, centre, nearPackTank, chainDk, opener, killTarget, entry.danger);
+            uint32 const spellId = ReadyPeel(peeler, champion, nearPackTank, entry.danger);
             SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
             SpellInfo const* landing = spellId ? sSpellMgr->GetSpellInfo(PeelLanding(spellId)) : nullptr;
             if (!info || !landing || champion->IsImmunedToSpell(landing) || !peeler->IsWithinLOSInMap(champion) ||
@@ -2212,6 +2422,93 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
     }
 }
 
+// What Hand of Freedom strips on landing, so not Dazed, put on by a champion: the DK champion's Chains of Ice
+// roots for its whole 10 s
+bool ChampionRootOrSnare(Player* member)
+{
+    uint64 const freed = (1ULL << MECHANIC_ROOT) | (1ULL << MECHANIC_SNARE);
+    for (auto const& applied : member->GetAppliedAuras())
+    {
+        Aura const* aura = applied.second->GetBase();
+        ObjectGuid const caster = aura->GetCasterGUID();
+        if (caster.IsCreature() && IsFactionChampion(caster.GetEntry()) &&
+            (aura->GetSpellInfo()->GetAllEffectsMechanicMask() & freed))
+            return true;
+    }
+
+    return false;
+}
+
+// After UpdateProtect, whose paladins are spoken for
+void UpdateFreedom(FactionChampionsDefenceState& state, std::vector<Member> const& members,
+                   std::vector<Unit*> const& champions)
+{
+    state.freedoms.clear();
+
+    std::vector<Member> held;
+    for (Member const& member : members)
+    {
+        Player* player = member.player;
+        if (player->HasAura(SPELL_HAND_OF_FREEDOM_PLAYER) || !ChampionRootOrSnare(player))
+            continue;
+
+        if (std::any_of(champions.begin(), champions.end(),
+                        [player](Unit* champion)
+                        {
+                            return FactionChampionsKitesFrom(player, champion) &&
+                                   player->GetExactDist2d(champion) <= FREEDOM_CHASER_REACH;
+                        }))
+            held.push_back(member);
+    }
+
+    if (held.empty())
+        return;
+
+    std::sort(held.begin(), held.end(),
+              [](Member const& a, Member const& b)
+              {
+                  if (a.healer != b.healer)
+                      return a.healer;
+
+                  if (a.player->GetHealthPct() != b.player->GetHealthPct())
+                      return a.player->GetHealthPct() < b.player->GetHealthPct();
+
+                  return a.player->GetGUID() < b.player->GetGUID();
+              });
+
+    std::vector<Player*> paladins;
+    for (Member const& member : members)
+    {
+        Player* player = member.player;
+        if (player->getClass() == CLASS_PALADIN && GET_PLAYERBOT_AI(player) && FreeToAct(player) &&
+            !state.protects.count(player->GetGUID()) && SpellReady(player, SPELL_HAND_OF_FREEDOM_PLAYER))
+            paladins.push_back(player);
+    }
+
+    std::vector<bool> taken(paladins.size(), false);
+    for (Member const& member : held)
+    {
+        size_t chosen = paladins.size();
+        for (size_t i = 0; i < paladins.size(); ++i)
+        {
+            Player* paladin = paladins[i];
+            if (taken[i] || !paladin->IsWithinDistInMap(member.player, HAND_RANGE) ||
+                !paladin->IsWithinLOSInMap(member.player))
+                continue;
+
+            if (chosen == paladins.size() ||
+                paladin->GetExactDist2d(member.player) < paladins[chosen]->GetExactDist2d(member.player))
+                chosen = i;
+        }
+
+        if (chosen == paladins.size())
+            continue;
+
+        state.freedoms[paladins[chosen]->GetGUID()] = {member.player->GetGUID(), SPELL_HAND_OF_FREEDOM_PLAYER};
+        taken[chosen] = true;
+    }
+}
+
 void UpdateHealthLog(FactionChampionsDefenceState& state, std::vector<Member> const& members, uint32 now)
 {
     if (getMSTimeDiff(state.healthSampleMs, now) < HEALTH_SAMPLE_MS)
@@ -2413,16 +2710,32 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     UpdatePurge(state, members, champions, killTarget);
     UpdateGrip(state, botAI, members, champions, killTarget, now);
     UpdateGuard(state, bot, champions, now);
+    UpdateWalls(state, botAI, members, champions, killTarget, now);
     UpdateSnares(state, botAI, members, champions);
-    UpdatePeel(state, botAI, members, champions, killTarget);
+    UpdatePeel(state, botAI, members, champions);
     UpdateFocusClock(state, bot, champions, now);
     UpdateProtect(state, members, champions);
+    UpdateFreedom(state, members, champions);
     UpdateBattleRes(state, bot, members, champions);
     UpdateHealthLog(state, members, now);
     return &state;
 }
 
 bool IgnoredBy(HazardSource const& source, Player* bot) { return source.kicker == bot->GetGUID(); }
+
+// A Bladestorm whose warrior chases the bot: a dodge stops at the nearest clear spot and he walks back in, the
+// kite keeps running from him, clear of his clearance
+bool LeftToKite(HazardSource const& source, Player* bot)
+{
+    if (source.spellId != SPELL_BLADESTORM || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
+        bot->HasAuraType(SPELL_AURA_MOD_ROOT))
+        return false;
+
+    Unit* warrior = ObjectAccessor::GetUnit(*bot, source.guid);
+    return warrior && FactionChampionsKitesFrom(bot, warrior);
+}
+
+bool DodgeSkips(HazardSource const& source, Player* bot) { return IgnoredBy(source, bot) || LeftToKite(source, bot); }
 
 Creature* AliveCreature(Player* bot, ObjectGuid guid)
 {
@@ -2533,7 +2846,7 @@ bool FactionChampionsInAoe(PlayerbotAI* botAI)
     return std::any_of(state->hazards.begin(), state->hazards.end(),
                        [bot](HazardSource const& source)
                        {
-                           return !IgnoredBy(source, bot) &&
+                           return !DodgeSkips(source, bot) &&
                                   bot->GetExactDist2d(source.pos) <= source.radius + IN_AOE_MARGIN;
                        });
 }
@@ -2969,16 +3282,9 @@ Unit* FactionChampionsHoldControl(PlayerbotAI* botAI, uint32& spellId)
                 spellId = SPELL_HAMSTRING;
             break;
         case CLASS_DEATH_KNIGHT:
-            // on someone else it runs to them until its next pick, so it's pulled back onto the DK and slowed
-            if (onBot)
-                break;
-
-            if (bot->GetExactDist2d(champion) >= HOLD_GRIP_MIN && !MidJump(champion) && GripLands(champion) &&
-                !FactionChampionsGripGuarded(botAI, champion) && bot->IsWithinCombatRange(champion, GRIP_RANGE) &&
-                SpellReady(bot, SPELL_DEATH_GRIP))
-                spellId = SPELL_DEATH_GRIP;
-            else if (!slowed && bot->IsWithinCombatRange(champion, CHAINS_OF_ICE_RANGE) &&
-                     SpellReady(bot, SPELL_CHAINS_OF_ICE) && FrostRuneReady(bot))
+            // on someone else it runs to them until its next pick; the wall grip moves it, this slows it
+            if (!onBot && !slowed && bot->IsWithinCombatRange(champion, CHAINS_OF_ICE_RANGE) &&
+                SpellReady(bot, SPELL_CHAINS_OF_ICE) && FrostRuneReady(bot))
                 spellId = SPELL_CHAINS_OF_ICE;
             break;
         default:
@@ -3007,7 +3313,7 @@ Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI)
     std::vector<EncounterHelpers::HazardCircle> others;
     for (HazardSource const& source : state->hazards)
     {
-        if (IgnoredBy(source, bot))
+        if (DodgeSkips(source, bot))
             continue;
 
         clearances.emplace_back(source.pos, source.clearance);
@@ -3033,28 +3339,103 @@ Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI)
         y += healer.GetPositionY();
     }
 
+    std::vector<Position> melee;
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+        if (IsFactionChampionMelee(champion->GetEntry()))
+            melee.push_back(champion->GetPosition());
+
     float const count = static_cast<float>(healers.size());
     Position const centre(x / count, y / count, bot->GetPositionZ());
     Position const from = bot->GetPosition();
-    auto const inHealReach = [&healers, &others, &from](float spotX, float spotY)
+    auto const accept = [&healers, &melee, &others, &from](float spotX, float spotY)
     {
         bool const reached = std::any_of(healers.begin(), healers.end(), [spotX, spotY](Position const& healer)
                                          { return healer.GetExactDist2d(spotX, spotY) <= HEAL_REACH; });
+        bool const offMelee = std::none_of(melee.begin(), melee.end(), [spotX, spotY](Position const& champion)
+                                           { return champion.GetExactDist2d(spotX, spotY) < DODGE_MELEE_GAP; });
         Position const spot(spotX, spotY, from.GetPositionZ());
-        return reached && std::none_of(others.begin(), others.end(),
-                                       [&from, &spot](EncounterHelpers::HazardCircle const& circle)
-                                       { return EncounterHelpers::SegmentCrossesCircle(from, spot, circle); });
+        return reached && offMelee &&
+               std::none_of(others.begin(), others.end(),
+                            [&from, &spot](EncounterHelpers::HazardCircle const& circle)
+                            { return EncounterHelpers::SegmentCrossesCircle(from, spot, circle); });
     };
 
     constexpr float ringStep = 2.0f;
     constexpr float angleStep = static_cast<float>(M_PI) / 8.0f;
     Position spot = EncounterHelpers::FindNearestPositionClearOfHazards(bot, clearances, AOE_SEARCH_RADIUS, ringStep,
-                                                                        angleStep, &centre, inHealReach, &cache);
+                                                                        angleStep, &centre, accept, &cache);
     if (IsNoSpot(spot))
         spot = EncounterHelpers::FindNearestPositionClearOfHazards(bot, clearances, AOE_SEARCH_RADIUS, ringStep,
                                                                    angleStep, &centre, {}, &cache);
 
     return spot;
+}
+
+Unit* FactionChampionsWallGrip(PlayerbotAI* botAI, Position& stand, uint32& spellId, bool* gripped)
+{
+    spellId = 0;
+    if (!botAI || botAI->GetBot()->getClass() != CLASS_DEATH_KNIGHT)
+        return nullptr;
+
+    FactionChampionsDefenceState* state = Refresh(botAI);
+    if (!state)
+        return nullptr;
+
+    Player* bot = botAI->GetBot();
+    auto const duty = state->walls.find(bot->GetGUID());
+    Creature* champion = duty != state->walls.end() ? AliveCreature(bot, duty->second.champion) : nullptr;
+    if (!champion)
+        return nullptr;
+
+    if (gripped)
+        *gripped = duty->second.gripped;
+
+    stand = duty->second.stand;
+    if (!duty->second.gripped && bot->GetExactDist2d(&stand) > WALL_ARRIVE)
+        return champion;
+
+    // at the stand, or slowing the champion where it landed: the DK stays put
+    stand = bot->GetPosition();
+    if (!duty->second.gripped)
+    {
+        if (!MidJump(champion) && bot->IsWithinCombatRange(champion, GRIP_RANGE) && bot->IsWithinLOSInMap(champion) &&
+            SpellReady(bot, SPELL_DEATH_GRIP))
+            spellId = SPELL_DEATH_GRIP;
+
+        return champion;
+    }
+
+    SpellInfo const* chains = sSpellMgr->GetSpellInfo(SPELL_CHAINS_OF_ICE);
+    if (chains && !MidJump(champion) && !champion->IsImmunedToSpell(chains) &&
+        bot->IsWithinCombatRange(champion, CHAINS_OF_ICE_RANGE) && SpellReady(bot, SPELL_CHAINS_OF_ICE) &&
+        FrostRuneReady(bot) && bot->IsWithinLOSInMap(champion))
+        spellId = SPELL_CHAINS_OF_ICE;
+
+    return champion;
+}
+
+void FactionChampionsNoteWallGrip(PlayerbotAI* botAI, Unit* champion)
+{
+    FactionChampionsDefenceState* state = champion ? Refresh(botAI) : nullptr;
+    if (!state)
+        return;
+
+    auto const duty = state->walls.find(botAI->GetBot()->GetGUID());
+    if (duty == state->walls.end() || duty->second.champion != champion->GetGUID() || duty->second.gripped)
+        return;
+
+    duty->second.gripped = true;
+    duty->second.grippedMs = getMSTime();
+}
+
+Unit* FactionChampionsFreedomTarget(PlayerbotAI* botAI, uint32& spellId)
+{
+    if (!botAI || botAI->GetBot()->getClass() != CLASS_PALADIN)
+        return nullptr;
+
+    FactionChampionsDefenceState* state = Refresh(botAI);
+    Unit* member = state ? DutyTarget(state->freedoms, botAI->GetBot(), spellId) : nullptr;
+    return member && member->IsAlive() ? member : nullptr;
 }
 
 }

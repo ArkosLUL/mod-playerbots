@@ -826,7 +826,8 @@ def pack_pull() -> list[dict]:
         note(10050, GRIPPER, fc.GRIP, 0),
 
         # Concussive Shot on the rogue champion while it's on the priest; Hamstring on the warrior champion
-        # on a warrior bot at 80%.
+        # on the warrior bot holding it.
+        note(500, WARRIOR, fc.HOLD, WARRIOR_C),
         cast(12000, HUNTER, 5116, ROGUE_C),
         cast(13000, WARRIOR, 1715, WARRIOR_C),
 
@@ -907,7 +908,7 @@ class PackAndPeel(unittest.TestCase):
         self.assertEqual(fc.grip_holds(self.trace), [
             {"bot": GRIPPER, "target": PALADIN, "start": 9000, "stop": 10050, "cast": True}])
 
-    def test_a_snare_is_needed_when_its_champion_is_on_a_healer_or_a_hurt_raider(self):
+    def test_a_snare_is_needed_when_its_champion_chases_a_raider_other_than_its_holder(self):
         self.assertEqual([(row["spell"], row["needed"]) for row in fc.snare_casts(self.trace)],
                          [("Concussive Shot", True), ("Hamstring", False)])
 
@@ -1210,7 +1211,8 @@ class GripChain(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             fc.show_chain(self.trace)
         self.assertIn("pull on Velanaa at 0:01.000, open 2.6 s: in order", out.getvalue())
-        self.assertIn("bot grips outside a pull: 1 (Obliteration 0:30.000 on Irieth Shadowstep)", out.getvalue())
+        self.assertIn("bot grips outside a pull: 1\n", out.getvalue())
+        self.assertRegex(out.getvalue(), r"0:30\.000 Obliteration +Irieth Shadowstep +- +\d+ +-\n")
 
 
 MIGHTY = 5020  # a warrior bot holding a champion
@@ -1381,11 +1383,13 @@ class StandsAndBoosts(unittest.TestCase):
 
     def test_a_boost_reads_its_reason_health_and_the_move_it_served(self):
         rows = fc.nitro_rows(self.trace)
+        # nobody chases them, and the last sample stands in for 5 s on
+        quiet = {"travel": 0.0, "chaser": None, "still": None}
         self.assertEqual(rows, [
             {"t": 4000, "bot": PRIEST, "reason": "focus 3", "hp": 100.0, "by": "faction champions chased",
-             "dist": 25.0},
-            {"t": 6000, "bot": MAGE, "reason": "next", "hp": 100.0, "by": None, "dist": None},
-            {"t": 8000, "bot": PRIEST, "reason": "walk", "hp": 60.0, "by": "reach spell", "dist": 10.0}])
+             "dist": 25.0, **quiet},
+            {"t": 6000, "bot": MAGE, "reason": "next", "hp": 100.0, "by": None, "dist": None, **quiet},
+            {"t": 8000, "bot": PRIEST, "reason": "walk", "hp": 60.0, "by": "reach spell", "dist": 10.0, **quiet}])
         self.assertEqual(fc.nitro_tally(rows), [("focus", 1), ("next", 1), ("walk", 1)])
 
     def test_a_healer_reads_its_moving_and_casting_share(self):
@@ -1408,9 +1412,12 @@ class StandsAndBoosts(unittest.TestCase):
         self.assertRegex(out.getvalue(), r"Prayer +heal +30%: faction champions step off 20%, none 10%")
         self.assertIn("raid healed 0.2k/s effective, took 0.2k/s; per healer: Prayer 2k", out.getvalue())
         self.assertIn("Nitro Boosts: 3 use(s): focus 1, next 1, walk 1", out.getvalue())
-        self.assertRegex(out.getvalue(), r"0:04\.000 Prayer +focus 3 +100%  faction champions chased 25 yd")
-        self.assertRegex(out.getvalue(), r"0:06\.000 Frost +next +100%  - -")
-        self.assertRegex(out.getvalue(), r"0:08\.000 Prayer +walk +60%  reach spell 10 yd")
+        self.assertRegex(out.getvalue(), r"0:04\.000 Prayer +focus 3 +100%  ran +0 chaser +- still on +-"
+                                         r"  faction champions chased 25 yd")
+        self.assertRegex(out.getvalue(), r"0:06\.000 Frost +next +100%  ran +0 chaser +- still on +-  - -")
+        self.assertRegex(out.getvalue(), r"0:08\.000 Prayer +walk +60%  ran +0 chaser +- still on +-"
+                                         r"  reach spell 10 yd")
+        self.assertIn("Nitro run in 5 s: median 0 yd", out.getvalue())
 
 
 MOON = 5021  # a balance druid bot
@@ -1677,16 +1684,20 @@ class FocusAndRepick(unittest.TestCase):
         self.assertEqual([(row["t"], row["bot"], row["hops"], row["secs"], row["melee"], row["dropped"])
                           for row in rows], [(1100, MAGE, 2, 1.4, 2, True)])
         text = self.render(fc.show_personal)
-        self.assertRegex(text, r"0:01\.100 Frost +2 +1\.4 +2\+2")
+        self.assertRegex(text, r"0:01\.100 Frost +ranged +2 +1\.4 +2\+2")
         self.assertIn("fc.kite: 1 kite(s), the chasers dropped the bot in 1", text)
 
-    def test_ranged_spacing_reads_the_nearest_melee_champion(self):
-        # the mage 20 yd and the moonkin 30 yd off the rogue and warrior, never reached
-        spacing = fc.ranged_spacing(self.trace)
-        self.assertEqual((spacing["samples"], round(spacing["median"]), spacing["contact"], spacing["chased"],
-                          spacing["moving"]), (30, 25, 0.0, 0, None))
-        self.assertIn("ranged dps to the nearest melee champion: median 25.0 yd, within 8 yd 0%",
-                      self.render(fc.show_stands))
+    def test_chase_spacing_reads_each_role_off_the_nearest_melee_champion(self):
+        # the mage 20 yd and the moonkin 30 yd off the rogue and warrior, never reached; the rogue on the tank
+        # 1 yd off from 5 s, which deals it nothing
+        rows = {row["role"]: row for row in fc.chase_spacing(self.trace)}
+        self.assertEqual(list(rows), ["heal", "ranged", "tank"])
+        ranged, tank = rows["ranged"], rows["tank"]
+        self.assertEqual((ranged["samples"], round(ranged["median"]), ranged["contact"], ranged["chased"],
+                          ranged["moving"]), (30, 25, 0.0, 0, None))
+        self.assertEqual((tank["samples"], tank["contact"], tank["chased"], tank["moving"], tank["dps_moving"],
+                          tank["dps_standing"]), (15, 1.0, 5, 0.0, None, 0.0))
+        self.assertRegex(self.render(fc.show_stands), r"ranged +25\.0 yd +0%  chased +0 moving +-  -/-/s")
 
 
 def latch_pull() -> list[dict]:
@@ -1730,6 +1741,132 @@ class HealerLatch(unittest.TestCase):
             path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
             path.write_text("\n".join(json.dumps(rec) for rec in champions_pull()) + "\n", encoding="utf-8")
             self.assertEqual(fc.healer_off_latch(Trace(path)), [])
+
+
+CX, CY = fc.ARENA_CENTER[0], fc.ARENA_CENTER[1]
+
+
+def chase_snap(when: int) -> dict:
+    # the rogue champion on the mage in contact to 2 s, 30 yd behind its 40 yd Nitro run after, on the priest
+    # from 10 s, gripped to the wall at 16 s; the warrior champion on the priest, gripped by the human at 12 s
+    # and by the bot DK a second later
+    if when <= 2000:
+        rogue = (CX + 12.0, CY, MAGE)
+    elif when < 17000:
+        rogue = (CX, CY + 1.0, MAGE if when < 10000 else PRIEST)
+    else:
+        rogue = (CX + 36.0, CY, PRIEST)
+    warrior = (CX + 20.0, CY + 20.0) if when < 13000 else (CX - 10.0, CY) if when < 14000 else (CX + 30.0, CY)
+    mage = placed(MAGE, CX + 10.0 if when <= 2000 else CX - 30.0, CY, 0.0 if when >= 22000 else 100.0, ROGUE_C)
+    mage[8] = int(1000 <= when <= 2000)
+    units = [mage, placed(PRIEST, CX, CY, 0.0 if when >= 23000 else 100.0, 0),
+             placed(PALADIN_BOT, CX + 5.0, CY, 100.0, 0), placed(HUMAN_DK, CX - 10.0, CY, 100.0, WARRIOR_C),
+             placed(GRIPPER, CX + (36.0 if when >= 15000 else 30.0), CY, 100.0, ROGUE_C),
+             placed(ROGUE_C, rogue[0], rogue[1], 100.0, rogue[2]),
+             placed(WARRIOR_C, *warrior, 100.0, PRIEST), placed(PALADIN, CX + 40.0, CY, 100.0, MAGE)]
+    return {"t": when, "e": "snap", "hz": [], "u": units}
+
+
+def chase_pull() -> list[dict]:
+    roster = [{"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0},
+              {"g": PRIEST, "n": "Mercy", "r": "heal", "c": 5, "h": 0},
+              {"g": PALADIN_BOT, "n": "Justice", "r": "heal", "c": 2, "h": 0},
+              {"g": GRIPPER, "n": "Obliteration", "r": "melee", "c": 6, "h": 0},
+              {"g": HUMAN_DK, "n": "Deathsong", "r": "melee", "c": 6, "h": 1}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
+        # 2k on the standing mage in its first second, 2k over the next two moving
+        dmg(100, ROGUE_C, MAGE, 0), dmg(200, ROGUE_C, MAGE, 0), dmg(1100, ROGUE_C, MAGE, 0),
+        dmg(2100, ROGUE_C, MAGE, 0),
+        note(2000, MAGE, fc.NITRO, "contact 1"),
+        cast(2000, MAGE, fc.SPELL_NITRO, 0),
+        # the human's grip on the warrior champion, the bot DK's a second on; the bot DK's wall grip on the rogue
+        # champion and its Chains of Ice
+        cast(12000, HUMAN_DK, fc.SPELL_DEATH_GRIP, WARRIOR_C),
+        cast(13000, GRIPPER, fc.SPELL_DEATH_GRIP, WARRIOR_C),
+        note(15000, GRIPPER, fc.WALL, ROGUE_C),
+        cast(16000, GRIPPER, fc.SPELL_DEATH_GRIP, ROGUE_C),
+        cast(17000, GRIPPER, fc.SPELL_CHAINS_OF_ICE, ROGUE_C),
+        note(17100, GRIPPER, fc.WALL, 0),
+        # the DK champion's Chains of Ice on the mage, freed a second later, and on the priest, never freed
+        aura(18000, MAGE, ROGUE_C, fc.SPELL_CHAMPION_CHAINS, False, 10000),
+        cast(19000, PALADIN_BOT, fc.SPELL_HAND_OF_FREEDOM, MAGE),
+        aura(20000, PRIEST, ROGUE_C, fc.SPELL_CHAMPION_CHAINS, False, 10000),
+        # the mage kites, is dazed and dies with the rogue champion doing three quarters of the damage
+        note(19500, MAGE, fc.KITE, "1 melee, 3 yd"),
+        dmg(20000, ROGUE_C, MAGE, 0), dmg(20500, ROGUE_C, MAGE, 0), dmg(21000, ROGUE_C, MAGE, 0),
+        dmg(21500, PALADIN, MAGE, 0),
+        aura(21000, MAGE, ROGUE_C, 1604, False, 4000),
+        {"t": 22000, "e": "death", "g": MAGE, "killer": ROGUE_C, "x": CX - 30.0, "y": CY, "z": 0.0},
+        {"t": 23000, "e": "death", "g": PRIEST, "killer": WARRIOR_C, "x": CX, "y": CY, "z": 0.0},
+        {"t": 24000, "e": "end", "out": "wipe"},
+    ]
+    return records + [chase_snap(when) for when in range(0, 24001, 1000)]
+
+
+class ChaseAndWall(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in chase_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def render(self, section) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            section(self.trace)
+        return out.getvalue()
+
+    def test_the_chasers_damage_splits_moving_and_standing(self):
+        ranged = next(row for row in fc.chase_spacing(self.trace) if row["role"] == "ranged")
+        self.assertEqual((ranged["chased"], round(ranged["moving"], 2), ranged["dps_moving"], ranged["dps_standing"]),
+                         (3, 0.67, 1000.0, 2000.0))
+        self.assertRegex(self.render(fc.show_stands), r"ranged +\d+\.\d yd +\d+%  chased +3 moving +67%  1\.0k/2\.0k/s")
+
+    def test_a_boost_reads_how_far_it_ran_and_whether_the_chaser_stayed(self):
+        row = fc.nitro_rows(self.trace)[0]
+        self.assertEqual((row["reason"], row["travel"], round(row["chaser"]), row["still"]),
+                         ("contact 1", 40.0, 30, False))
+        text = self.render(fc.show_stands)
+        self.assertRegex(text, r"0:02\.000 Frost +contact 1 +100%  ran +40 chaser +30 still on +no")
+        self.assertIn("Nitro Boosts: 1 use(s): contact 1", text)
+
+    def test_a_bot_grip_outside_a_pull_reads_its_landing_chains_and_regrip(self):
+        self.assertEqual([(row["t"], row["target"], row["victim"], round(row["off"]), row["chained"], row["regrip"])
+                          for row in fc.outside_grips(self.trace)],
+                         [(13000, WARRIOR_C, PRIEST, 30, False, True), (16000, ROGUE_C, PRIEST, 36, True, False)])
+        text = self.render(fc.show_chain)
+        self.assertRegex(text, r"0:13\.000 Obliteration +Shocuul +Mercy +30 +-  regrip")
+        self.assertRegex(text, r"0:16\.000 Obliteration +Irieth Shadowstep +Mercy +36 +yes\n")
+        self.assertIn("fc.wall holds: 1, 1 with the DK's grip inside", text)
+
+    def test_hand_of_freedom_counts_against_the_dk_champions_chains(self):
+        roots, hands = fc.freedom_rows(self.trace)
+        self.assertEqual([(row["bot"], row["freed"]) for row in roots], [(MAGE, True), (PRIEST, False)])
+        self.assertEqual(hands, collections.Counter({"ranged": 1}))
+        self.assertIn("DK champion Chains of Ice on the raid: 2, freed by Hand of Freedom within 4 s: 1;"
+                      " Hand of Freedom casts by target: ranged 1", self.render(fc.show_peel))
+
+    def test_a_death_reads_the_melee_share_the_pins_and_a_kite_before(self):
+        rows = {row["bot"]: row for row in fc.personal_deaths(self.trace)}
+        self.assertEqual((rows[MAGE]["melee"], rows[MAGE]["pins"], rows[MAGE]["kited"]),
+                         (0.75, ["Chains of Ice", "Dazed"], True))
+        self.assertEqual((rows[PRIEST]["melee"], rows[PRIEST]["pins"], rows[PRIEST]["kited"]),
+                         (None, ["Chains of Ice"], False))
+        text = self.render(fc.show_personal)
+        self.assertRegex(text, r"0:22\.000 Frost +ranged +75% +yes  Chains of Ice, Dazed")
+        self.assertIn("deaths with melee champions doing half the damage or more: 1 of 2", text)
+        self.assertRegex(text, r"0:19\.500 Frost +ranged +1 +0\.0")
 
 
 class EveryView(unittest.TestCase):
@@ -1803,7 +1940,9 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.personal_deaths(trace), [])
         self.assertEqual(fc.escape_rows(trace), [])
         self.assertEqual(fc.kite_rows(trace), [])
-        self.assertIsNone(fc.ranged_spacing(trace))
+        self.assertEqual(fc.chase_spacing(trace), [])
+        self.assertEqual(fc.outside_grips(trace), [])
+        self.assertEqual(fc.freedom_rows(trace), ([], collections.Counter()))
         self.assertEqual(fc.healer_off_latch(trace), [])
         self.assertEqual(fc.focus_peaks(trace), collections.Counter())
         self.assertEqual(fc.focus_episodes(trace), [])
