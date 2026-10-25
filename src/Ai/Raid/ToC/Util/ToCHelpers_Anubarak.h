@@ -239,6 +239,8 @@ struct AnubarakBurrowerPick
     uint8 side = 0;
     // Loose ones within 10 yd of the bot, for a challenging shout
     uint8 looseNear = 0;
+    // One of the other side's within 10 yd, which a shout would take too
+    bool otherNear = false;
     // The group member most of this side's loose ones hit, for Righteous Defense
     Player* rescue = nullptr;
 
@@ -324,21 +326,22 @@ bool IsAnubarakDragInFlight(PlayerbotAI* botAI);
 bool AnubarakTauntWouldSteal(PlayerbotAI* botAI);
 // Latched per bot: capped at ANUBARAK_THREAT_CAP of his tank victim's threat, freed under RELEASE
 bool AnubarakThreatCapped(Player* bot);
-// 0 or 1 for the two bot side tanks latched for the pull, else -1
+// 0 or 1 for the two side tanks latched for the pull, else -1. Bots go first; a human takes a side no
+// bot can, and his side is the tank spot he stands at.
 int8 GetAnubarakBurrowerTankSide(Player* player);
 // Expose Weakness at ANUBARAK_SIDE_DEFENSIVE_STACKS or health under the pct, on a side tank
 bool AnubarakSideTankNeedsDefensive(Player* bot);
-// A dead bot side tank this druid can Rebirth now, else null
+// A dead side tank this druid can Rebirth now, else null
 Player* GetAnubarakSideTankToRes(PlayerbotAI* botAI);
 // A burrower wave is due within ANUBARAK_WAVE_READY_MS while he is up
 bool AnubarakWaveImminent(PlayerbotAI* botAI);
-// Main tank while alive, else side 0's tank
+// Main tank while alive, else the side tank he's on, else the first bot side tank
 bool IsAnubarakPickupTank(Player* bot);
 // IsTank can read false for a tank for a tick, so the spec is asked too
 bool IsAnubarakTankPlayer(Player* player);
 
 // Who the pull's latches would pick if it started now, read fresh with nothing latched. pickup is
-// the main tank while alive, else side[0], which then holds both.
+// the main tank while alive, else the first bot side tank, which then leaves its burrowers to the other.
 struct AnubarakPrepullTanks
 {
     ObjectGuid pickup;
@@ -350,7 +353,8 @@ AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot);
 std::vector<Creature*> GetAnubarakBurrowers(Player* bot);
 // What a side tank takes. Empty for a bot with no side, and with nothing selectable to take.
 // Each burrower belongs to the side of its burrow exit, at most two a side; one on a side tank stays
-// with it, and a dead or marked side tank's go to the other.
+// with it, and a dead or marked side tank's go to the other, as do all of one holding him. A human side
+// tank's still loose 5 s after it came out goes to a bot side tank, past two.
 AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI);
 // The burrower DPS focus, latched per instance in anub.focus. Only ones standing on Permafrost count,
 // since one below 80% off it submerges and comes back full. The latched one stays while it qualifies.

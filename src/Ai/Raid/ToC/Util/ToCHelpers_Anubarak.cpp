@@ -69,6 +69,13 @@ constexpr float ANUBARAK_SUBMERGE_SPOT_FLOOR = 35.0f;
 constexpr float ANUBARAK_TANK_STEP_SEARCH = 15.0f;
 // Challenging Roar and Challenging Shout reach 10 yd
 constexpr float ANUBARAK_SIDE_SHOUT_RADIUS = 10.0f;
+// A human side tank takes the other side once he stands this close to its spot, this much nearer it
+// than to his own, for the dwell
+constexpr float ANUBARAK_HUMAN_SIDE_REACH = 8.0f;
+constexpr float ANUBARAK_HUMAN_SIDE_MARGIN = 4.0f;
+constexpr uint32 ANUBARAK_HUMAN_SIDE_DWELL_MS = 3000;
+// A human side tank's burrower still loose this long after it came out goes to the bot side tank
+constexpr uint32 ANUBARAK_HUMAN_PICKUP_GRACE_MS = 5000;
 
 // His chase stops on the 400 ms recheck after the tank does, half of it on average
 constexpr float ANUBARAK_DRAG_STOP_LAG_S = 0.2f;
@@ -174,6 +181,12 @@ struct GripCast
     bool landed = false;
 };
 
+struct BurrowerExit
+{
+    uint8 side = 0;
+    uint32 seenMs = 0;
+};
+
 struct SideNeed
 {
     bool open = false;
@@ -225,13 +238,16 @@ struct AnubarakState
     Position submergeSpot;
     ObjectGuid mainTank;
     ObjectGuid sideTanks[2];
+    // A human side tank has stood at the other side's spot since then
+    bool humanSwapValid = false;
+    uint32 humanSwapMs = 0;
     // Side tanks that died this pull, for the battle res
     std::vector<ObjectGuid> deadSideTanks;
     // Last marked player seen, so its anub.kite closes when the mark moves on
     ObjectGuid kiter;
 
-    // Every burrower seen this pull, with the side of the exit it came out of
-    std::unordered_map<ObjectGuid, uint8> exitSides;
+    // Every burrower seen this pull: the side of the exit it came out of, and when
+    std::unordered_map<ObjectGuid, BurrowerExit> exits;
     bool waveSeen = false;
     uint32 lastWaveMs = 0;
     bool ownerMemoValid = false;
@@ -487,6 +503,7 @@ void ClearPullLatches(AnubarakState& state)
     state.submergeSpotValid = false;
     state.sideTanks[0].Clear();
     state.sideTanks[1].Clear();
+    state.humanSwapValid = false;
     state.deadSideTanks.clear();
     state.patch0 = ObjectGuid::Empty;
     state.patch1 = ObjectGuid::Empty;
@@ -497,7 +514,7 @@ void ClearPullLatches(AnubarakState& state)
     state.allowance = 0;
     state.burrowerSide.clear();
     state.surfacedPct = 100.0f;
-    state.exitSides.clear();
+    state.exits.clear();
     state.waveSeen = false;
     state.ownerMemoValid = false;
     state.owners.clear();
@@ -568,28 +585,33 @@ ObjectGuid StableMainTankGuid(Group* group)
     return ObjectGuid::Empty;
 }
 
-// Living bot tanks on the map other than the main tank, in IsAssistTankOfIndex's order: assistants
-// first. No player: a side slot is a promise bots build the sphere and burrower plan on.
+// Living tanks on the map other than the main tank, bots first, so a human only takes a side no bot
+// can. Each in IsAssistTankOfIndex's order: assistants first.
 std::vector<ObjectGuid> RankSideTanks(Player* bot, Group* group, ObjectGuid const& mainTank)
 {
-    std::vector<ObjectGuid> roster;
-    std::vector<ObjectGuid> others;
+    // Bot assistants, other bots, human assistants, other humans
+    std::vector<ObjectGuid> ranks[4];
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || !member->IsInMap(bot) || member->GetGUID() == mainTank ||
-            !GET_PLAYERBOT_AI(member) || !IsAnubarakTankPlayer(member))
+            !IsAnubarakTankPlayer(member))
             continue;
 
-        (group->IsAssistant(member->GetGUID()) ? roster : others).push_back(member->GetGUID());
+        uint8 const rank = (GET_PLAYERBOT_AI(member) ? 0 : 2) + (group->IsAssistant(member->GetGUID()) ? 0 : 1);
+        ranks[rank].push_back(member->GetGUID());
     }
-    roster.insert(roster.end(), others.begin(), others.end());
+
+    std::vector<ObjectGuid> roster;
+    for (std::vector<ObjectGuid> const& rank : ranks)
+        roster.insert(roster.end(), rank.begin(), rank.end());
+
     return roster;
 }
 
 // Each side keeps its tank for the pull while it lives. Re-reading the assist tank index every tick
-// swaps sides whenever IsTank blinks.
-void RefreshSideTanks(Player* bot, AnubarakState& state)
+// swaps sides whenever IsTank blinks. placed says which sides took a new tank.
+void RefreshSideTanks(Player* bot, AnubarakState& state, bool placed[2])
 {
     Group* group = bot->GetGroup();
     if (!group)
@@ -634,13 +656,11 @@ void RefreshSideTanks(Player* bot, AnubarakState& state)
             if (guid != state.sideTanks[1 - side])
             {
                 state.sideTanks[side] = guid;
+                placed[side] = true;
                 break;
             }
         }
     }
-
-    state.side0 = state.sideTanks[0];
-    state.side1 = state.sideTanks[1];
 }
 
 // anub.kite only changes while the kite runs, so the kiter's next window would open on the branch its
@@ -699,6 +719,63 @@ Position SideSpot(std::vector<Creature*> const& spheres, ObjectGuid const held[2
     Position const otherPoint = GetAnubarakTankSidePoint(1 - side);
     return Position(other->GetPositionX() + point.GetPositionX() - otherPoint.GetPositionX(),
                     other->GetPositionY() + point.GetPositionY() - otherPoint.GetPositionY(), point.GetPositionZ());
+}
+
+// Within reach of the spot and clearly nearer it than the other one
+bool StandsAtSpot(Player* player, Position const& spot, Position const& otherSpot)
+{
+    float const dist = Dist2d(player->GetPosition(), spot);
+    return dist <= ANUBARAK_HUMAN_SIDE_REACH &&
+           dist + ANUBARAK_HUMAN_SIDE_MARGIN <= Dist2d(player->GetPosition(), otherSpot);
+}
+
+// The side whose human tank stands at the other side's spot, else -1. Never between two humans: there's
+// no bot side tank to move.
+int8 HumanOnOtherSpot(Player* bot, ObjectGuid const sides[2], Position const spots[2])
+{
+    Player* tanks[2];
+    for (uint8 side = 0; side < 2; ++side)
+        tanks[side] = sides[side].IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, sides[side]);
+
+    for (uint8 side = 0; side < 2; ++side)
+    {
+        Player* other = tanks[1 - side];
+        if (tanks[side] && !GET_PLAYERBOT_AI(tanks[side]) && (!other || GET_PLAYERBOT_AI(other)) &&
+            StandsAtSpot(tanks[side], spots[1 - side], spots[side]))
+            return static_cast<int8>(side);
+    }
+
+    return -1;
+}
+
+// Bots can't tell a human his side, so it's the tank spot he stands at and the bot side tank takes the
+// other. At once when a side just took a new tank, else after he has stood there for the dwell, so
+// walking past doesn't swap.
+void FollowHumanSideTank(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres,
+                         bool const placed[2], uint32 now)
+{
+    ObjectGuid const held[2] = {state.patch0.Get(), state.patch1.Get()};
+    Position const spots[2] = {SideSpot(spheres, held, 0), SideSpot(spheres, held, 1)};
+    if (HumanOnOtherSpot(bot, state.sideTanks, spots) < 0)
+    {
+        state.humanSwapValid = false;
+        return;
+    }
+
+    if (!placed[0] && !placed[1])
+    {
+        if (!state.humanSwapValid)
+        {
+            state.humanSwapValid = true;
+            state.humanSwapMs = now;
+        }
+
+        if (getMSTimeDiff(state.humanSwapMs, now) < ANUBARAK_HUMAN_SIDE_DWELL_MS)
+            return;
+    }
+
+    std::swap(state.sideTanks[0], state.sideTanks[1]);
+    state.humanSwapValid = false;
 }
 
 // Within the latch of this side's spot and nearer it than the other side's, so a patch 14 yd off
@@ -761,10 +838,11 @@ void TrackWaves(Player* bot, AnubarakState& state, uint32 now)
     for (Creature* burrower : ResolveAlive(bot, state.burrowers))
     {
         ObjectGuid const guid = burrower->GetGUID();
-        if (state.exitSides.count(guid))
+        if (state.exits.count(guid))
             continue;
 
-        state.exitSides[guid] = burrower->GetPositionY() >= ANUBARAK_ROOM_CENTER.GetPositionY() ? 0 : 1;
+        uint8 const side = burrower->GetPositionY() >= ANUBARAK_ROOM_CENTER.GetPositionY() ? 0 : 1;
+        state.exits[guid] = BurrowerExit{side, now};
         if (!state.waveSeen || getMSTimeDiff(state.lastWaveMs, now) > ANUBARAK_WAVE_GAP_MS)
         {
             state.waveSeen = true;
@@ -939,10 +1017,15 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
     if (state->phaseValue == AnubarakPhase::Submerged)
         state->drag = DragLegLatch();
 
-    RefreshSideTanks(bot, *state);
-
     std::vector<Creature*> const spheres = ResolveSpheres(bot, *state);
     RefreshTankPatches(*state, spheres);
+
+    bool placed[2] = {false, false};
+    RefreshSideTanks(bot, *state, placed);
+    FollowHumanSideTank(bot, *state, spheres, placed, now);
+    state->side0 = state->sideTanks[0];
+    state->side1 = state->sideTanks[1];
+
     TrackWaves(bot, *state, now);
     SampleDamage(bot, *state, boss, now);
     if (submerging && AnubarakHeroic(bot))
@@ -1615,11 +1698,31 @@ Creature* StockSphere(std::vector<Creature*> const& flying, std::vector<SphereDu
 char const* const SIDE_LABELS[2] = {"0", "1"};
 char const* const GRIP_LABELS[2] = {"grip0", "grip1"};
 
-// The bot holding him: the main tank while alive, else side 0's tank
+// A living bot side tank, side 0 first, else whichever side is held
+ObjectGuid FirstBotSideTank(Player* bot, ObjectGuid const sides[2])
+{
+    for (uint8 side = 0; side < 2; ++side)
+        if (Player* tank = sides[side].IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, sides[side]))
+            if (tank->IsAlive() && GET_PLAYERBOT_AI(tank))
+                return sides[side];
+
+    return sides[0].IsEmpty() ? sides[1] : sides[0];
+}
+
+// Who holds him: the main tank while alive. Else the side tank he's on, so a human who taunted him keeps
+// him and no bot taunts him back, else the first bot side tank.
 ObjectGuid PickupGuid(Player* bot, AnubarakState const& state)
 {
     Player* main = state.mainTank.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state.mainTank);
-    return main && main->IsAlive() ? state.mainTank : state.sideTanks[0];
+    if (main && main->IsAlive())
+        return state.mainTank;
+
+    Creature* boss = GetAnubarak(bot);
+    Unit* victim = boss ? boss->GetVictim() : nullptr;
+    if (victim && (victim->GetGUID() == state.sideTanks[0] || victim->GetGUID() == state.sideTanks[1]))
+        return victim->GetGUID();
+
+    return FirstBotSideTank(bot, state.sideTanks);
 }
 
 // A DK side tank grips for its own side, else the lowest-guid DK bot holding no tank duty
@@ -1813,7 +1916,7 @@ Creature* SideSphere(AnubarakState const& state, uint8 side, Position const& spo
     return best;
 }
 
-// Sides missing their tank patch. 10H shoots one per bot side tank, the rest go to the kites.
+// Sides missing their tank patch. 10H shoots one per side tank, the rest go to the kites.
 uint32 MissingTankPatches(Player* bot, AnubarakState const& state)
 {
     bool const tenManHeroic = AnubarakHeroic(bot) && !bot->GetMap()->Is25ManRaid();
@@ -2238,7 +2341,8 @@ char const* ProtectRole(Player* bot, ProtectClaim const& claim)
 
 // Once per instance per ms. One on a usable side tank stays with it, so a side tank never taunts one off
 // the other. The rest go by exit, at most two a side while both side tanks are usable, and a dead or
-// marked side tank's to the other.
+// marked side tank's to the other, as do all of one holding him while he's up. A human side tank's
+// still loose 5 s after it came out goes to a bot side tank, past two.
 std::unordered_map<ObjectGuid, uint8> const& BurrowerOwners(Player* bot, AnubarakState& state)
 {
     uint32 const now = getMSTime();
@@ -2249,11 +2353,14 @@ std::unordered_map<ObjectGuid, uint8> const& BurrowerOwners(Player* bot, Anubara
     state.ownerMemoMs = now;
     state.owners.clear();
 
+    ObjectGuid const pickup = state.phaseValue == AnubarakPhase::Submerged ? ObjectGuid::Empty : PickupGuid(bot, state);
     bool usable[2];
+    bool human[2];
     for (uint8 side = 0; side < 2; ++side)
     {
         Player* tank = state.sideTanks[side].IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state.sideTanks[side]);
-        usable[side] = tank && tank->IsAlive() && !tank->HasAura(SPELL_MARK);
+        usable[side] = tank && tank->IsAlive() && !tank->HasAura(SPELL_MARK) && tank->GetGUID() != pickup;
+        human[side] = usable[side] && !GET_PLAYERBOT_AI(tank);
     }
 
     std::vector<Creature*> burrowers = ResolveAlive(bot, state.burrowers);
@@ -2280,12 +2387,17 @@ std::unordered_map<ObjectGuid, uint8> const& BurrowerOwners(Player* bot, Anubara
 
     for (Creature* burrower : free)
     {
-        auto const exit = state.exitSides.find(burrower->GetGUID());
-        uint8 owner = exit != state.exitSides.end() ? exit->second : 0;
+        auto const exit = state.exits.find(burrower->GetGUID());
+        bool const known = exit != state.exits.end();
+        uint8 owner = known ? exit->second.side : 0;
         if (!usable[owner] && usable[1 - owner])
             owner = 1 - owner;
         else if (usable[0] && usable[1] && count[owner] >= ANUBARAK_BURROWERS_PER_SIDE &&
                  count[1 - owner] < ANUBARAK_BURROWERS_PER_SIDE)
+            owner = 1 - owner;
+
+        if (human[owner] && usable[1 - owner] && !human[1 - owner] && known &&
+            getMSTimeDiff(exit->second.seenMs, now) >= ANUBARAK_HUMAN_PICKUP_GRACE_MS)
             owner = 1 - owner;
 
         state.owners[burrower->GetGUID()] = owner;
@@ -2875,14 +2987,7 @@ int8 GetAnubarakBurrowerTankSide(Player* player)
 bool IsAnubarakPickupTank(Player* bot)
 {
     AnubarakState const* state = bot && bot->IsAlive() ? LatchesFor(bot) : nullptr;
-    if (!state)
-        return false;
-
-    Player* main = state->mainTank.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state->mainTank);
-    if (main && main->IsAlive())
-        return main == bot;
-
-    return state->sideTanks[0] == bot->GetGUID();
+    return state && PickupGuid(bot, *state) == bot->GetGUID();
 }
 
 bool IsAnubarakTankPlayer(Player* player)
@@ -2902,8 +3007,12 @@ AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot)
     for (size_t side = 0; side < 2 && side < sides.size(); ++side)
         tanks.side[side] = sides[side];
 
+    Position const points[2] = {GetAnubarakTankSidePoint(0), GetAnubarakTankSidePoint(1)};
+    if (HumanOnOtherSpot(bot, tanks.side, points) >= 0)
+        std::swap(tanks.side[0], tanks.side[1]);
+
     Player* main = mainTank.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, mainTank);
-    tanks.pickup = main && main->IsAlive() ? mainTank : tanks.side[0];
+    tanks.pickup = main && main->IsAlive() ? mainTank : FirstBotSideTank(bot, tanks.side);
     return tanks;
 }
 
@@ -2996,7 +3105,12 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
 
         auto const owner = owners.find(burrower->GetGUID());
         if (owner == owners.end() || owner->second != pick.side)
+        {
+            if (bot->GetExactDist2d(burrower) <= ANUBARAK_SIDE_SHOUT_RADIUS)
+                pick.otherNear = true;
+
             continue;
+        }
 
         Player* victim = burrower->GetVictim() ? burrower->GetVictim()->ToPlayer() : nullptr;
         if (victim)

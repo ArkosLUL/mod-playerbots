@@ -317,7 +317,7 @@ park within 1 yd, walk back past 2.5.
     Eydis, a lone tank (`both`) 22.5 yd from Dark 1 toward the centre; the raid on a 4 yd lattice
     16 yd from Dark 1, since it starts Dark. Every stand is 30+ yd from both twins and nearer the
     south portal of its colour. A bot due an essence walk gets no stand until it has it.
-  - Anub'arak, from `GetAnubarakPrepullTanks` (side tanks bots only): `pickup` (the main tank, else side 0)
+  - Anub'arak, from `GetAnubarakPrepullTanks` (bots before humans, a human on the side point he stands at): `pickup` (the main tank, else the first bot side tank)
     on `GetAnubarakPickupStand`, `side0`/`side1` on the side points; melee 8 yd west of
     `ANUBARAK_ROOM_CENTER`, casters on 22 and 30 yd rings west of it, all 40.9+ yd from him.
 

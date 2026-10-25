@@ -149,12 +149,16 @@ or he is below 30%; else `Surface`; `None` while he is not engaged. Every gated 
 engage, so nothing reads the phase between pulls: a read 5 s after the last starts a new pull and
 resets every latch. Heroic is the map's difficulty, as the script reads it.
 
-**Side tanks are latched per pull**, each while it lives: the first two living **bot** tanks after
-the main tank, assistants first as in `IsAssistTankOfIndex`. No player: the sphere and burrower plan
-assumes the slot is played (in a 2026-10-25 wipe the slots went to a human and nobody). A tank is
-`IsTank` or tank by spec, the main tank the explicit one, else the first living tank: `IsTank` can
-read false for a tick, and a re-read index swaps the sides. A side tank that dies is remembered for
-the battle res.
+**Side tanks are latched per pull**, each while it lives: the first two living tanks after the main
+tank, bots before humans, assistants first as in `IsAssistTankOfIndex`, so a human takes only a side
+no bot can (two bots and a human off-tank, or three bots, both work). A tank is `IsTank` or tank by
+spec, the main tank the explicit one, else the first living tank: `IsTank` can read false for a tick,
+and a re-read index swaps the sides. A side tank that dies is remembered for the battle res.
+
+**A human side tank's side is the tank spot he stands at**, since no bot can tell him one: standing
+within 8 yd of the other side's spot and 4 yd nearer it than his own, he swaps sides with the bot side
+tank, at once when a side just took a new tank (and pre-pull, on the side points), else after 3 s
+there, so walking past doesn't swap. Never between two humans.
 
 **Waves**, per pull: a burrower first seen more than 10 s after the last opens a wave
 (`anub.wave`), and its exit fixes its side, the north exits (y above the room centre) side 0. The
@@ -184,7 +188,9 @@ No ties, since a tie falls to insertion order:
 | RAID+0.4 | `anubarak demonic circle due` → `anubarak demonic circle` | heroic, a still warlock bot, circle missing or under 100 s; on its staging stand before the pull, or while he is up | Demonic Circle: Summon |
 | MEDIUM_HEAL+5 | `anubarak penetrating cold on raid` → `anubarak heal penetrating cold` | healer, a carrier below 90% | first direct heal `CanCastSpell` allows, on the lowest |
 
-The **pickup tank** is the main tank while alive, else side 0's tank. Target guards zero `TankAssist`
+The **pickup tank** is the main tank while alive, else the side tank he is on (a human who taunted
+him keeps him, no bot taunts him back), else the first bot side tank; while he is up its burrowers go
+to the other side. Target guards zero `TankAssist`
 and `DpsAssist` for it while he is up (`anubarak pickup tank target guard`) and for a side tank all
 pull (`anubarak side tank target guard`): in the 2026-10-25 wipes a side tank was on him when a wave
 landed. `DpsAssist` is zeroed for a sphere shooter and a gripping DK not just waiting on its spot
@@ -282,9 +288,10 @@ heroic-gated (guide: "bring burrowers to your designated frost patch"). **Each b
 (`anub.bside`), once per instance per ms: one on a living unmarked side tank stays with it, so a side
 tank never taunts one off the other; the rest go by exit, at most two a side while both side tanks
 are usable, and a dead or marked side tank's to the other (a marked one only exists in phase 2). A
-side tank attacks the burrower on it, else its side's loose one, one hitting a healer first, then the
+human side tank's still loose 5 s after it came out goes to the bot side tank, past two: three on one
+patch frenzy, but none eats a healer. A side tank attacks the burrower on it, else its side's loose one, one hitting a healer first, then the
 nearest its patch, and picks a loose one up even while holding one: Righteous Defense on whoever most
-of them hit, Challenging Roar or Shout with two within 10 yd, the class taunt, then Feral Charge,
+of them hit, Challenging Roar or Shout with two within 10 yd and none of the other side's, the class taunt, then Feral Charge,
 Intercept, Avenger's Shield or Death Grip, each gated on `CanCastSpell` and reach; else it walks in. In
 the 2026-10-25 wipes burrowers were on a tank 18-41% of their life and two warlocks died to them in
 every pull. It walks to its patch (none latched: its spot) only once its pick is on it; an untaunted
@@ -505,7 +512,7 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 | `phase` | 1 up, 2 submerged, 3 swarm; no row before the pull, the last value stands to the end. Per instance |
 | `patches`, `flying` | Patches alive and flying spheres, as the helper's sweep saw them. Per instance |
 | `patch0`, `patch1` | Each side's latched tank patch, 0 when none. Per instance |
-| `side0`, `side1` | Each side's bot tank, 0 when none. Per instance |
+| `side0`, `side1` | Each side's tank, human included, 0 when none. Per instance |
 | `wave` | Burrower waves seen this pull. Per instance |
 | `bside` | A burrower's side, keyed on the burrower |
 | `focusdue` | 1 while the focus burrower goes ahead of him. Per instance |
@@ -555,8 +562,8 @@ spheres, logged from the pull, else the last cast at it; pet to owner, DoT or ar
 tank patch landed against its spot, each grip and whether it landed, patches per submerge against
 `allow`; `--spike` seconds per `kitestage`, the boosts and immunities cast, Ice Block and Feign Death
 flagged; `--threat` the main tank's share of samples inside 7.5 yd of a patch and his distance to each
-tank patch at every submerge. The banner names declared probes the pull never wrote, and side tanks
-short of 2 (25-man) or 1 (10-man).
+tank patch at every submerge. The banner names declared probes the pull never wrote, and each side's
+tanks in order when short of 2 (25-man) or 1 (10-man) or a human holds one.
 
 - **A `patch` outcome is an inference:** the mark came off with no Impale and no death. A patch seen
   going within 3 s confirms it; an immunity reads the same without one. `emerge` is a mark that

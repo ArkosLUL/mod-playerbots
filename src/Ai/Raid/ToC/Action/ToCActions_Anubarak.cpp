@@ -115,7 +115,7 @@ bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick con
         InSpellReach(botAI, bot, pick.rescue, "righteous defense", stop))
         return botAI->CastSpell("righteous defense", pick.rescue);
 
-    if (pick.looseNear >= 2)
+    if (pick.looseNear >= 2 && !pick.otherNear)
         for (char const* shout : BURROWER_SHOUTS)
             if (botAI->CanCastSpell(shout, bot))
                 return botAI->CastSpell(shout, bot);

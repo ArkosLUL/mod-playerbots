@@ -15,7 +15,7 @@
                                      main tank's time in Permafrost, his submerge spot against the tank patches
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust, Penetrating Cold, deaths
 
-The banner names the probes the pull never wrote, and a side left without a bot side tank.
+The banner names the probes the pull never wrote, a side left without a side tank, and a human on one.
 
 What the generic views get wrong here, and what this reads instead:
 
@@ -347,15 +347,19 @@ def missing_probes(trace: Trace) -> list[str]:
     return sorted(declared | {key for key in READ_KEYS if key not in emitted})
 
 
-def side_tanks(trace: Trace) -> tuple[int, dict[int, int]]:
-    """Bot side tanks the raid size needs, and the first bot `anub.side0` and `anub.side1` each latched."""
+def side_tanks(trace: Trace) -> tuple[int, dict[int, list[int]]]:
+    """Side tanks the raid size needs, and each side's holders in the order `anub.side0` and
+    `anub.side1` latched them, humans included: a human side tank swaps sides with the bot one."""
     needed = SIDE_TANKS_NEEDED.get(trace.header.get("diff"), 2)
     latched = {}
     for side in (0, 1):
-        guids = [as_guid(rec.get("txt")) for rec in notes(trace, f"anub.side{side}")]
-        bots = [guid for guid in guids if guid and guid not in trace.humans]
-        if bots:
-            latched[side] = bots[0]
+        holders: list[int] = []
+        for rec in notes(trace, f"anub.side{side}"):
+            guid = as_guid(rec.get("txt"))
+            if guid and (not holders or holders[-1] != guid):
+                holders.append(guid)
+        if holders:
+            latched[side] = holders
     return needed, latched
 
 
@@ -383,9 +387,14 @@ def show_banner(trace: Trace) -> None:
     # with neither key written the absent line above already says so
     if notes(trace, "anub.side0") or notes(trace, "anub.side1"):
         needed, latched = side_tanks(trace)
-        if len(latched) < needed:
-            print(f"bot side tanks latched: {len(latched)} of {needed} needed ("
-                  + ", ".join(f"side {side} {trace.name(latched[side]) if side in latched else 'none'}"
+        human = any(guid in trace.humans for holders in latched.values() for guid in holders)
+        if len(latched) < needed or human:
+            def label(guid: int) -> str:
+                return trace.name(guid) + (" (human)" if guid in trace.humans else "")
+
+            print(f"side tanks latched: {len(latched)} of {needed} needed ("
+                  + ", ".join(f"side {side} "
+                              + (" > ".join(label(guid) for guid in latched[side]) if side in latched else "none")
                               for side in (0, 1)) + ")")
 
 

@@ -870,7 +870,7 @@ class RefinedPull(unittest.TestCase):
         self.assertIsNone(rows[1]["submerge"])
 
     def test_both_bot_side_tanks_latched(self):
-        self.assertEqual(ab.side_tanks(self.trace), (2, {0: SIDE0, 1: SIDE1}))
+        self.assertEqual(ab.side_tanks(self.trace), (2, {0: [SIDE0], 1: [SIDE1]}))
 
     def test_every_section_prints(self):
         out = io.StringIO()
@@ -879,7 +879,7 @@ class RefinedPull(unittest.TestCase):
             for _, _, section in ab.SECTIONS:
                 section(self.trace)
         text = out.getvalue()
-        self.assertNotIn("bot side tanks latched", text)
+        self.assertNotIn("side tanks latched", text)
         self.assertRegex(text, r"#911 .* Frostfire +Frostbolt 42842 +dmg +- +0 latched +3\.0 yd")
         self.assertRegex(text, r"#912 .* Hellflame's pet +Firebolt 47964 +cast +- +1 +2\.0 yd")
         self.assertIn("periodic or area spells aimed at a sphere: Hellflame Corruption 47813 1,"
@@ -900,7 +900,7 @@ class RefinedPull(unittest.TestCase):
         self.assertIn("anub.pickup: Bulwark attack 1, stepout 1, hold 1", text)
 
 
-def side_pull(diff: int, side1: int) -> list[dict]:
+def side_pull(diff: int, side1: int, later: list[dict] | None = None) -> list[dict]:
     return [
         {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 6, "diff": diff, "boss": "anub-arak",
          "roster": [{"g": SIDE0, "n": "Ecoterrorist", "r": "tank", "c": "druid", "h": 0},
@@ -908,28 +908,40 @@ def side_pull(diff: int, side1: int) -> list[dict]:
         {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
         note(0, SIDE0, "anub.side0", SIDE0),
         note(0, SIDE0, "anub.side1", side1),
+        *(later or []),
         {"t": 1000, "e": "end", "out": "wipe"},
     ]
 
 
 class SideTanks(unittest.TestCase):
-    def banner(self, diff: int, side1: int) -> tuple[tuple, str]:
+    def banner(self, diff: int, side1: int, later: list[dict] | None = None) -> tuple[tuple, str]:
         with tempfile.TemporaryDirectory() as folder:
-            trace = write_trace(folder, "649_6_anub-arak_1789500003.ndjson", side_pull(diff, side1))
+            trace = write_trace(folder, "649_6_anub-arak_1789500003.ndjson", side_pull(diff, side1, later))
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 ab.show_banner(trace)
             return ab.side_tanks(trace), out.getvalue()
 
-    def test_a_human_on_a_side_leaves_25_man_one_bot_side_tank_short(self):
+    def test_a_human_side_tank_is_named(self):
         latched, text = self.banner(1, DRAGON)
-        self.assertEqual(latched, (2, {0: SIDE0}))
-        self.assertIn("bot side tanks latched: 1 of 2 needed (side 0 Ecoterrorist, side 1 none)", text)
+        self.assertEqual(latched, (2, {0: [SIDE0], 1: [DRAGON]}))
+        self.assertIn("side tanks latched: 2 of 2 needed (side 0 Ecoterrorist, side 1 Dragon (human))", text)
+
+    def test_a_swap_lists_each_side_in_order(self):
+        latched, text = self.banner(1, DRAGON, [note(500, SIDE0, "anub.side0", DRAGON),
+                                                note(500, SIDE0, "anub.side1", SIDE0)])
+        self.assertEqual(latched, (2, {0: [SIDE0, DRAGON], 1: [DRAGON, SIDE0]}))
+        self.assertIn("(side 0 Ecoterrorist > Dragon (human), side 1 Dragon (human) > Ecoterrorist)", text)
+
+    def test_25_man_one_short(self):
+        latched, text = self.banner(1, 0)
+        self.assertEqual(latched, (2, {0: [SIDE0]}))
+        self.assertIn("side tanks latched: 1 of 2 needed (side 0 Ecoterrorist, side 1 none)", text)
 
     def test_10_man_needs_one(self):
         latched, text = self.banner(2, 0)
-        self.assertEqual(latched, (1, {0: SIDE0}))
-        self.assertNotIn("bot side tanks latched", text)
+        self.assertEqual(latched, (1, {0: [SIDE0]}))
+        self.assertNotIn("side tanks latched", text)
 
 
 class EveryView(unittest.TestCase):
