@@ -41,8 +41,9 @@ uses `ll <strategy>`, queries with `ll ?`, and previews a specific item with `ll
 where"** for the roll vote (`"item usage"`), auto-equip (trade, item push, won rolls), vendor buys
 and `calc`, so a vote and a trade can't disagree. Never add a gear check on one path only. Order:
 
-1. **Eligibility** from the template (usable, slot, Titan's Grip type, unique-equipped per target
-   slot), plus binding for a bag item.
+1. **Eligibility** from the template (usable, armor and weapon proficiency, reputation, slot, Titan's
+   Grip type, unique-equipped per target slot), plus binding for a bag item. The template
+   `CanUseItem` skips proficiency and reputation: only its `Item` overload checks them.
 2. **Fitness**, never overwritten by the comparison: unslotted score > 0, `IsRoleItemizationMismatch`,
    `CanEquipWeapon`, and under `Roll.SmartNeedBySpec` the spec checks (`IsPrimaryForSpec`, else
    `IsFallbackNeedReasonableForSpec`, and an off-spec ring/neck/trinket/cloak only over grey or

@@ -1218,6 +1218,27 @@ static BagSlot SmallestBagSlot(Player* bot)
     return best;
 }
 
+static bool HasProficiency(Player* bot, ItemTemplate const* proto)
+{
+    uint32 const skill = proto->GetSkill();
+    if (!skill || bot->GetSkillValue(skill))
+        return true;
+
+    // heirloom plate and mail can be worn before the skill is learned
+    if (proto->Quality == ITEM_QUALITY_HEIRLOOM && proto->Class == ITEM_CLASS_ARMOR)
+    {
+        if (bot->IsClass(CLASS_PALADIN, CLASS_CONTEXT_EQUIP_ARMOR_CLASS) ||
+            bot->IsClass(CLASS_WARRIOR, CLASS_CONTEXT_EQUIP_ARMOR_CLASS))
+            return skill == SKILL_PLATE_MAIL;
+
+        if (bot->IsClass(CLASS_HUNTER, CLASS_CONTEXT_EQUIP_ARMOR_CLASS) ||
+            bot->IsClass(CLASS_SHAMAN, CLASS_CONTEXT_EQUIP_ARMOR_CLASS))
+            return skill == SKILL_MAIL;
+    }
+
+    return false;
+}
+
 // Template-level refusals: anything here means no slot ever takes the item.
 static char const* EquipRefusal(Player* bot, ItemTemplate const* proto, Item const* candidate)
 {
@@ -1226,6 +1247,14 @@ static char const* EquipRefusal(Player* bot, ItemTemplate const* proto, Item con
 
     if (bot->CanUseItem(proto) != EQUIP_ERR_OK)
         return "can't use";
+
+    // the template CanUseItem skips these two, only the Item overload checks them
+    if (!HasProficiency(bot, proto))
+        return "no proficiency";
+
+    if (proto->RequiredReputationFaction &&
+        uint32(bot->GetReputationRank(proto->RequiredReputationFaction)) < proto->RequiredReputationRank)
+        return "reputation too low";
 
     if (proto->Class == ITEM_CLASS_WEAPON && proto->SubClass == ITEM_SUBCLASS_WEAPON_MISC)
         return "misc weapon";
