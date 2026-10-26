@@ -791,16 +791,22 @@ class RefinedPull(unittest.TestCase):
     def tearDownClass(cls):
         cls.folder.cleanup()
 
-    def test_each_burrower_reads_its_exit_and_side(self):
+    def test_each_burrower_reads_its_exit_and_side_at_the_spawn(self):
         rows = {row["guid"]: row for row in ab.pickup_rows(self.trace)}
         self.assertEqual({guid: (row["wave"], row["exit"], row["side"], row["probed"]) for guid, row in rows.items()},
-                         {BN1: (1, EXIT_N1, 0, True), BN2: (1, EXIT_N2, 1, True), BS1: (1, EXIT_S1, 1, True),
+                         {BN1: (1, EXIT_N1, 0, True), BN2: (1, EXIT_N2, 0, True), BS1: (1, EXIT_S1, 1, True),
                           BS2: (1, EXIT_S2, 1, False), WN: (2, EXIT_N1, 0, True), WS: (2, EXIT_S1, 1, True)})
 
-    def test_pickup_times_any_tank_apart_from_its_side_tank(self):
+    def test_every_owner_in_turn(self):
         rows = {row["guid"]: row for row in ab.pickup_rows(self.trace)}
+        self.assertEqual(rows[BN2]["owners"], [0, 1])
+        self.assertEqual(rows[BS2]["owners"], [1])
+
+    def test_pickup_times_any_tank_apart_from_its_owning_side_tank(self):
+        rows = {row["guid"]: row for row in ab.pickup_rows(self.trace)}
+        # BN2's side 1 owns it from 8 s, when its side tank picks it up at 9 s
         self.assertEqual({guid: (row["to_tank"], row["to_side"], row["tank"]) for guid, row in rows.items()},
-                         {BN1: (2000, 2000, SIDE0), BN2: (1000, 4000, SIDE1), BS1: (0, 0, SIDE1),
+                         {BN1: (2000, 2000, SIDE0), BN2: (1000, 4000, SIDE0), BS1: (0, 0, SIDE1),
                           BS2: (None, None, SIDE1), WN: (500, 500, SIDE0), WS: (500, 500, SIDE1)})
 
     def test_the_side_tank_is_measured_from_its_patch_else_its_spot(self):
@@ -848,6 +854,18 @@ class RefinedPull(unittest.TestCase):
                          [(4000, G0, "grip0", 500), (8000, G1, "grip1", None)])
         self.assertAlmostEqual(rows[1]["closest"], math.hypot(17.0, 20.0 + O + 0.5))
 
+    def test_a_grip_reads_the_side_it_served_and_the_side_that_latched_it(self):
+        self.assertEqual([(row["served"], row["latched"]) for row in ab.grip_rows(self.trace)],
+                         [(0, 0), (1, None)])
+
+    def test_a_side_without_a_tank_patch_while_burrowers_are_out(self):
+        # side 0 latches 2 s after wave 1; side 1 never does, so all of wave 1's P1 and P1b count
+        self.assertEqual(ab.unpatched_ms(self.trace, ab.Samples(self.trace)), {0: 2000, 1: 34500})
+
+    def test_covered_counts_overlaps_once(self):
+        self.assertEqual(ab.covered([(0, 10), (5, 20), (30, 40)], 2, 35), 23)
+        self.assertEqual(ab.covered([(0, 10)], 20, 30), 0)
+
     def test_spheres_spent_per_submerge_against_the_allowance(self):
         self.assertEqual(ab.allowance_rows(self.trace, ab.sphere_deaths(self.trace)),
                          [{"label": "P2", "start": 30000, "allow": 1, "tank": 0, "other": 2}])
@@ -886,7 +904,10 @@ class RefinedPull(unittest.TestCase):
                       " Druidica Starfall 53190 1", text)
         self.assertIn("P2     0:30.000  allowance  1  tank 0  other 2  over", text)
         self.assertIn("anub.grip: gripping from 0:00.000, shooting from 0:11.000", text)
-        self.assertRegex(text, r"Deathsong +grip1 +#912 +missed, closest \d+\.\d yd")
+        self.assertRegex(text, r"Deathsong +grip1 +#912 +missed, closest \d+\.\d yd\n")
+        self.assertRegex(text, r"Deathsong +grip0 +#911 +landed \+0\.5 s, latched side 0\n")
+        self.assertIn("no tank patch with burrowers out while he was up: side 1 34.5 s", text)
+        self.assertRegex(text, r"#922 +1 N 694\.5,185\.4 0>1 ")
         self.assertIn("kitestage run 2.0 s, boost Sprint 2.0 s, immune 4.0 s, patch 1.0 s; boosts Sprint +2.0 s",
                       text)
         self.assertIn("kitestage run 1.0 s, boost Nitro Boosts 4.0 s, patch 2.0 s; boosts Nitro Boosts +1.0 s", text)

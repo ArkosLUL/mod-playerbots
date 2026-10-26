@@ -110,6 +110,8 @@ FOCUS = "anub.focus"
 DPS_ROLES = ("melee", "ranged")
 SIDE_TANKS_NEEDED = {0: 1, 1: 2, 2: 1, 3: 2}
 GRIP_STATES = {"0": "none", "1": "gripping", "2": "shooting"}
+# A side this long without a tank patch while he's up with burrowers out: its pair can submerge to full
+UNPATCHED_FLAG_MS = 15000
 
 # Every key a section reads, so the banner flags one this trace lacks even while the source doesn't
 # declare it in a shape the probe parse finds.
@@ -363,6 +365,37 @@ def side_tanks(trace: Trace) -> tuple[int, dict[int, list[int]]]:
     return needed, latched
 
 
+def covered(spans: list[tuple[int, int]], lo: int, hi: int) -> int:
+    """Milliseconds of `[lo, hi)` inside the union of `spans`."""
+    total = 0
+    reach = lo
+    for start, stop in sorted(spans):
+        start, stop = max(start, reach), min(stop, hi)
+        if start < stop:
+            total += stop - start
+            reach = stop
+    return total
+
+
+def unpatched_ms(trace: Trace, samples: Samples) -> dict[int, int]:
+    """Per side with a side tank, how long he was up with a burrower alive and no tank patch latched."""
+    lives = []
+    for guid in guids_of_entry(trace, NPC_BURROWER):
+        stamps, _ = samples.track(guid)
+        if stamps:
+            lives.append((stamps[0], stamps[-1]))
+    up = [(start, stop) for start, stop, phase, _ in phase_spans(trace) if phase in (1, 3)]
+    _, holders = side_tanks(trace)
+    out = {}
+    for side, spans in enumerate(patch_latches(trace)):
+        if side not in holders:
+            continue
+        bare = [(start, stop) for value, start, stop in spans if not as_guid(value)]
+        out[side] = sum(covered(lives, max(start, up_start), min(stop, up_stop))
+                        for start, stop in bare for up_start, up_stop in up)
+    return out
+
+
 def is_toc_anubarak(trace: Trace) -> bool:
     return (encounter_of(trace) == "anub-arak"
             and trace.header.get("map", map_of(trace.path)) == MAP_TOC)
@@ -396,6 +429,12 @@ def show_banner(trace: Trace) -> None:
                   + ", ".join(f"side {side} "
                               + (" > ".join(label(guid) for guid in latched[side]) if side in latched else "none")
                               for side in (0, 1)) + ")")
+
+    if notes(trace, "anub.patch0") or notes(trace, "anub.patch1"):
+        bare = {side: ms for side, ms in unpatched_ms(trace, Samples(trace)).items() if ms >= UNPATCHED_FLAG_MS}
+        if bare:
+            print("no tank patch with burrowers out while he was up: "
+                  + ", ".join(f"side {side} {ms / 1000:.1f} s" for side, ms in sorted(bare.items())))
 
 
 # --------------------------------------------------------------------------------------------- phases
@@ -898,10 +937,12 @@ def sphere_deaths(trace: Trace, samples: Samples | None = None) -> list[dict]:
 
 def grip_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Each Death Grip at a sphere, and how long after it the sphere first sat within GRIP_LANDED yd and
-    GRIP_LANDED_HEIGHT of the DK, inside GRIP_JUDGE_MS. `closest` is its nearest ground gap meanwhile."""
+    GRIP_LANDED_HEIGHT of the DK, inside GRIP_JUDGE_MS. `closest` is its nearest ground gap meanwhile.
+    `served` is the side its grip duty was for, `latched` the side whose `anub.patchN` later named it."""
     samples = samples or Samples(trace)
     spheres = guids_of_entry(trace, NPC_FROST_SPHERE)
     duty = holder_spans(trace, "anub.sphere", pull_end(trace))
+    latches = patch_latches(trace)
     out = []
     for rec in trace.of("cast"):
         if rec.get("sp") != SPELL_DEATH_GRIP or rec.get("tgt") not in spheres or rec.get("tr"):
@@ -918,8 +959,12 @@ def grip_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
             if gap <= GRIP_LANDED and abs(rows[index][3] - mine[3]) <= GRIP_LANDED_HEIGHT:
                 landed = stamps[index] - start
                 break
-        out.append({"t": start, "dk": dk, "sphere": sphere, "duty": held_at(duty.get(dk, []), start),
-                    "landed": landed, "closest": closest})
+        label = held_at(duty.get(dk, []), start)
+        served = int(label[-1]) if label in ("grip0", "grip1") else None
+        latched = next((side for side in (0, 1) for value, begin, _ in latches[side]
+                        if begin >= start and as_guid(value) == sphere), None)
+        out.append({"t": start, "dk": dk, "sphere": sphere, "duty": label, "landed": landed, "closest": closest,
+                    "served": served, "latched": latched})
     return out
 
 
@@ -995,6 +1040,10 @@ def show_grips(trace: Trace, samples: Samples) -> None:
                 verdict = f"landed +{row['landed'] / 1000:.1f} s"
             elif row["closest"] is not None:
                 verdict = f"missed, closest {row['closest']:.1f} yd"
+            if row["latched"] is not None:
+                verdict += f", latched side {row['latched']}"
+                if row["served"] is not None and row["latched"] != row["served"]:
+                    verdict += f", not its grip's side {row['served']}"
             print(f"    {clock(row['t']):>9} {trace.name(row['dk'])[:14]:14} {row['duty'] or '-':6}"
                   f" {short(trace, row['sphere']):8} {verdict}")
     spans = latch_spans(trace, "anub.grip", pull_end(trace))
@@ -1162,10 +1211,17 @@ def wave_starts(trace: Trace, samples: Samples | None = None) -> list[tuple[int,
     return out
 
 
+def owner_at(changes: list[tuple[int, int]], first: int, when: int) -> int:
+    """The side an `anub.bside` history had at `when`, `first` before its first row."""
+    return next((owner for start, owner in reversed(changes) if start <= when), first)
+
+
 def pickup_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
-    """Per burrower: its wave, exit and side, the time from its first sample to the first with any tank
-    on it and with its side's tank on it, and how far that side tank stood at the spawn from its side's
-    patch, or from the side's spot before one latched."""
+    """Per burrower: its wave, exit and side at the spawn, every owner it had in turn, the time from its
+    first sample to the first with any tank on it and with its owning side's tank on it then, and how
+    far that side tank stood at the spawn from its side's patch, or from the side's spot before one
+    latched. The side is the first `anub.bside`: a dead side tank's burrowers all move, so the last says
+    little."""
     samples = samples or Samples(trace)
     end = pull_end(trace)
     sides = [latch_spans(trace, f"anub.side{side}", end) for side in (0, 1)]
@@ -1179,12 +1235,13 @@ def pickup_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
             continue
         spawn = stamps[0]
         x, y, exit_side = min(BURROW_EXITS, key=lambda spot: dist2(spot, rows[0][1:3]))
-        probed = [int(value) for _, value in owned.get(guid, []) if value in ("0", "1")]
-        side = probed[-1] if probed else exit_side
+        changes = [(when, int(value)) for when, value in owned.get(guid, []) if value in ("0", "1")]
+        side = changes[0][1] if changes else exit_side
+        owners = [owner for index, (_, owner) in enumerate(changes) if not index or owner != changes[index - 1][1]]
         targets = [(when, row[7]) for when, row in zip(stamps, rows) if len(row) > 7 and row[7]]
         to_tank = next((when - spawn for when, target in targets if trace.role(target) == "tank"), None)
         to_side = next((when - spawn for when, target in targets
-                        if as_guid(held_at(sides[side], when)) == target), None)
+                        if as_guid(held_at(sides[owner_at(changes, side, when)], when)) == target), None)
         tank = as_guid(held_at(sides[side], spawn))
         stand = samples.row(tank, spawn) if tank else None
         gap = kind = None
@@ -1194,8 +1251,8 @@ def pickup_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
             gap = dist2(stand[1:3], point or side_spot(latches, samples, side, spawn))
         out.append({"guid": guid, "spawn": spawn, "exit": (x, y), "exit_side": exit_side,
                     "wave": next((wave for wave, start in reversed(waves) if start <= spawn + NEAR_MS), None),
-                    "side": side, "probed": bool(probed), "to_tank": to_tank, "to_side": to_side,
-                    "tank": tank or None, "gap": gap, "from": kind})
+                    "side": side, "probed": bool(changes), "owners": owners or [side], "to_tank": to_tank,
+                    "to_side": to_side, "tank": tank or None, "gap": gap, "from": kind})
     return out
 
 
@@ -1221,17 +1278,19 @@ def show_pickups(trace: Trace, samples: Samples) -> None:
     rows = pickup_rows(trace, samples)
     if not rows:
         return
-    print(f"\n  {'burrower':10} {'wave':>4} {'exit':13} {'side':4} {'to tank':>7} {'to side':>7}"
+    print(f"\n  {'burrower':10} {'wave':>4} {'exit':13} {'side':7} {'to tank':>7} {'to side':>7}"
           f" {'side tank':14} at the spawn")
     for row in rows:
         exit_name = f"{'N' if row['exit_side'] == 0 else 'S'} {row['exit'][0]:.1f},{row['exit'][1]:.1f}"
         tank = "-" if row["tank"] is None else trace.name(row["tank"])
         gap = "-" if row["gap"] is None else f"{row['gap']:.1f} yd off its {row['from']}"
+        owners = ">".join(str(owner) for owner in row["owners"]) + ("" if row["probed"] else "*")
         print(f"  {short(trace, row['guid']):10} {row['wave'] or '-':>4} {exit_name:13}"
-              f" {str(row['side']) + ('' if row['probed'] else '*'):4} {secs(row['to_tank']):>7}"
+              f" {owners[:7]:7} {secs(row['to_tank']):>7}"
               f" {secs(row['to_side']):>7} {tank[:14]:14} {gap}")
-    print("  to tank and to side run from its first sample to the first with any tank, then its side's"
-          " tank, on it;\n  a * side is read off its exit, with no anub.bside row")
+    print("  side is its owner at the spawn, then each one after; to tank and to side run from its first"
+          " sample\n  to the first with any tank, then its owning side's tank, on it; a * side is read off"
+          " its exit,\n  with no anub.bside row; side tank is the spawn side's")
 
     waves = wave_starts(trace, samples)
     if not notes(trace, "anub.wave"):

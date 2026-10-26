@@ -45,8 +45,8 @@ bool IsSphereCrowdControl(std::string const& name)
     return false;
 }
 
-// Damage that lands late (a DoT with no hit of its own, a channel) or on everything round the sphere: a
-// sphere that dies late lands wherever it drifted, and a splash can down a second one
+// Damage that lands late (any DoT, a hit of its own or not, a channel) or on everything round the sphere:
+// a sphere that dies late lands wherever it drifted, and a splash can down a second one
 bool SlowOrSpreadOnSphere(PlayerbotAI* botAI, Action* action)
 {
     if (IsToCAreaDamage(botAI, action))
@@ -64,31 +64,13 @@ bool SlowOrSpreadOnSphere(PlayerbotAI* botAI, Action* action)
     if (info->IsChanneled() || info->IsAffectingArea())
         return true;
 
-    bool direct = false;
-    bool periodic = false;
     for (SpellEffectInfo const& effect : info->Effects)
-    {
-        switch (effect.Effect)
-        {
-            case SPELL_EFFECT_SCHOOL_DAMAGE:
-            case SPELL_EFFECT_WEAPON_DAMAGE:
-            case SPELL_EFFECT_WEAPON_DAMAGE_NOSCHOOL:
-            case SPELL_EFFECT_NORMALIZED_WEAPON_DMG:
-            case SPELL_EFFECT_WEAPON_PERCENT_DAMAGE:
-                direct = true;
-                break;
-            case SPELL_EFFECT_APPLY_AURA:
-                if (effect.ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE ||
-                    effect.ApplyAuraName == SPELL_AURA_PERIODIC_LEECH ||
-                    effect.ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE_PERCENT)
-                    periodic = true;
-                break;
-            default:
-                break;
-        }
-    }
+        if (effect.Effect == SPELL_EFFECT_APPLY_AURA &&
+            (effect.ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE || effect.ApplyAuraName == SPELL_AURA_PERIODIC_LEECH ||
+             effect.ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE_PERCENT))
+            return true;
 
-    return periodic && !direct;
+    return false;
 }
 
 }

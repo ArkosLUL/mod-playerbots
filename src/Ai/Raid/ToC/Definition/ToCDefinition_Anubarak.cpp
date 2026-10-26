@@ -71,6 +71,13 @@ bool AnubarakPickupTankStands(PlayerbotAI* botAI)
     return AnubarakPickupTankHolds(botAI) && AnubarakTankPatchLatched(botAI->GetBot());
 }
 
+// The DK rotation spends Death Grip on a loose burrower, and the tank patch waits out its cooldown
+bool AnubarakGripOwed(PlayerbotAI* botAI)
+{
+    AnubarakGripDuty grip;
+    return AnubarakEngaged(botAI) && GetAnubarakGripDuty(botAI->GetBot(), grip);
+}
+
 void DefineAnubarak(EncounterBuilder& e)
 {
     e.OwnTargeting("anubarak dps target guard", Role::Any, AnubarakDpsTargetOwned, Family::DpsAssist);
@@ -101,6 +108,9 @@ void DefineAnubarak(EncounterBuilder& e)
     // he obeys taunt DR, so two tanks trading taunts soon leave him immune to both
     e.Block("anubarak taunt guard", Role::Any, AnubarakTauntWouldSteal, Family::Taunt);
     e.Block("anubarak sphere shooter drop guard", Role::Any, AnubarakShooterOnDutySphere, Family::DropTarget);
+    e.Block("anubarak grip reserve", Role::Any, AnubarakGripOwed, 0, {"death grip"});
+    // the ghouls taunt burrowers off their side tanks and off the patches, where they submerge to full
+    e.Block("anubarak no ghouls", Role::Any, AnubarakEngaged, 0, {"army of the dead"});
 
     e.Multiplier<AnubarakThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakSphereGuardMultiplier>(Family::Spell | Family::Attack);

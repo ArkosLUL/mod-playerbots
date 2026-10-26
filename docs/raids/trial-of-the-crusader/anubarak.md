@@ -177,7 +177,7 @@ No ties, since a tie falls to insertion order:
 | RAID+7 | `anubarak side tank dead` → `anubarak battle res side tank` | the lowest-guid bot druid with Rebirth ready, a dead side tank's corpse with no self-res pending | caster form, walks to 26 yd, Rebirth |
 | RAID+6.5 | `anubarak side tank needs defensive` → `anubarak tank defensive` | a side tank at Expose Weakness (67721) 5+ or under 50%, a defensive ready | `NextTankDefensive` on self |
 | RAID+6 | `anubarak leeching swarm on tank` → `anubarak tank defensive` | his victim in `Swarm`, a defensive ready | `NextTankDefensive` on self |
-| RAID+5.5 | `anubarak grip frost sphere` → `anubarak grip frost sphere` | a DK with a grip duty | `walk` to the side's spot, `cast` Death Grip on the duty sphere, `kill` it once landed |
+| RAID+5.5 | `anubarak grip frost sphere` → `anubarak grip frost sphere` | a DK with a grip duty | `walk` to its stand, `cast` Death Grip on the duty sphere, `kill` it once landed |
 | RAID+5 | `anubarak ranged should seed permafrost` → `anubarak destroy frost sphere` | a sphere duty | attacks the sphere, out of reach walks in first |
 | RAID+4 | `anubarak dps target` → `anubarak dps target` | DPS whose `GetAnubarakDpsTarget` pick isn't its current target or its pet's | attacks the pick, pet too |
 | RAID+3 | `anubarak burrower needs assist tank` → `anubarak assist tank hold burrower` | a side tank with a burrower to take, not the pickup tank while he is up | picks up, holds one on its side's patch |
@@ -214,29 +214,43 @@ to top threat after 3 s anyway ([thorim.md](../ulduar/thorim.md)).
 (745, 135 ± 7), navprobe-clean: 14 yd apart, past Spider Frenzy's 12. Once one side has a patch, the
 other's spot is that patch moved 14 yd toward its own side, so a patch off its spot drags the pair
 along. Each side latches the patch nearest its spot within 30 yd and nearer its spot than the
-other's, never the other side's, re-latching once it is gone; the anchor is their midpoint. Guide:
-two spheres "one on Anub'arak's left and one on his right", the boss "perfectly in-between two frost
-patches". **Until both have landed he is held where the tank picks him up**: a room-centre fallback
-dragged him twice before the patches landed at 9-12 s. The pre-pull pickup stand is 10 yd west of the
+other's, never the other side's, re-latching once it is gone. A gripped sphere's patch is the side's
+it was gripped for wherever it lands, within 30 yd of the spot and 13 of the other side's patch: a
+gripped sphere drifts back toward its route while it dies, and in 3 of 5 2026-10-26 wipes the north
+grip's patch latched south. The anchor is the midpoint of the two spots. Guide: two spheres "one on
+Anub'arak's left and one on his right", the boss "perfectly in-between two frost patches". **Until
+one has landed he is held where the tank picks him up**: a room-centre fallback dragged him twice
+before the patches landed at 9-12 s. With one down he goes to the anchor all the same: held where
+picked up, he stood 14-31 yd off the burrowers in the 2026-10-26 wipes. The pre-pull pickup stand is 10 yd west of the
 anchor (`GetAnubarakPickupStand`, (735, 135), navprobe-clean), off both spots; he runs in from the
 east and stops on the anchor.
 
-A side's patch is **gripped** while it can be (`anub.grip` 1): a bot DK, the side's own tank if it is
-one, else the lowest guid holding no tank duty, never the pickup tank, walks to the spot and Death
-Grips (49576, 28 yd 3D) the nearest flying sphere in reach. The core lets the grip through (sphere
-rank 0, no dungeon-boss flag), and the sphere lands on the DK, which kills it there. The side's
-shooters join only once it is within 3 yd (and 4 yd up) of the DK. One DK does the sides in turn,
-the second waiting up to 40 s for the grip to come back; burrowers can't submerge for 30 s after
-spawn. **A grip not landed 3 s after the cast switches the pull to shooting** (`anub.grip` 2); a ready
-DK on its spot with no sphere in reach for 12 s hands that need to the shooters. Until the kill,
-`anubarak grip spot hold` blocks `reach melee`, set behind, flank, formation, follow and charges, so
-the DK stays where the patch belongs; one waiting on its spot hits him from there, and a DK owed a
-grip keeps Death Grip out of its burrower pickup.
+**A sphere within 12 yd of a side's spot is shot first**, no grip spent. At the pull one always hovers
+over the south spot (~(745, 120), 8-9 yd off); the other five orbit 25-70 yd out, only the north one
+coming in grip reach of the north spot, 15-30 s at a time. Gripping first, the north side took the
+south sphere, nearest to it at 22 yd.
 
-**Shooting** a tank patch takes a sphere within 12 yd of the spot at once, else after 10 s the nearest
-within 20 yd, never one within 13 yd of the other side's patch, its gripped spot or its shot sphere;
-the pick is latched while it qualifies. In the 2026-10-25 wipes the nearest sphere swapped every tick,
-the two shooters split, and both shot spheres landed 31.5 yd out, past the latch.
+A side still open is **gripped** while it can be (`anub.grip` 1): a bot DK with Death Grip back within
+3 s, the side's own tank if it is one, else the lowest guid holding no tank duty, else, before any
+burrower is up, the other side's DK tank; never the pickup tank. It Death Grips (49576, 28 yd 3D) the
+nearest flying sphere in reach of the spot, never one within 12 yd of the other side's spot, in
+flight to another grip or picked by the other side's DK (two DKs once pulled the same sphere). With
+none, it steps up to 8 yd toward the nearest within 36 yd, never nearer the other side's spot, only
+as far as reach needs, floor-checked; it casts as soon as the sphere is in reach from anywhere in
+that area. The core lets the grip through (sphere rank 0, no dungeon-boss flag), and the sphere lands
+on the DK, which kills it there. The side's shooters join only once it is within 3 yd (and 4 yd up)
+of the DK. **No side waits on a cooldown**: with no DK ready it shoots (a 40 s wait left sides bare to
+0:40-0:43). **A grip not landed 3 s after the cast switches the pull to shooting** (`anub.grip` 2); a
+ready DK on its spot with no sphere in reach for 12 s hands that need to the shooters. Until the kill,
+`anubarak grip spot hold` blocks `reach melee`, set behind, flank, formation, follow and charges, so
+the DK stays where the patch belongs; one waiting on its spot hits him from there. A DK owed a grip
+keeps Death Grip out of its burrower pickup, and `anubarak grip reserve` blocks the DK rotation's
+`death grip`, which spent it on burrowers at 0:09 and 0:56 in a 2026-10-26 wipe.
+
+**Shooting** a tank patch otherwise takes a sphere within 12 yd of the spot at once, else after 10 s
+the nearest within 20 yd, never one within 13 yd of the other side's patch, its gripped spot or its
+shot sphere; the pick is latched while it qualifies. In the 2026-10-25 wipes the nearest sphere
+swapped every tick, the two shooters split, and both shot spheres landed 31.5 yd out, past the latch.
 
 **The main tank never stands in Permafrost.** Within 7.5 yd of a patch it first steps to the nearest
 spot 8.5 yd clear of every patch, inside his 11.5 yd reach when one is (`stepout`): slowed 80%, a
@@ -289,7 +303,8 @@ heroic-gated (guide: "bring burrowers to your designated frost patch"). **Each b
 tank never taunts one off the other; the rest go by exit, at most two a side while both side tanks
 are usable, and a dead or marked side tank's to the other (a marked one only exists in phase 2). A
 human side tank's still loose 5 s after it came out goes to the bot side tank, past two: three on one
-patch frenzy, but none eats a healer. A side tank attacks the burrower on it, else its side's loose one, one hitting a healer first, then the
+patch frenzy, but none eats a healer. `anubarak no ghouls` blocks `army of the dead` all fight: its
+ghouls taunted burrowers off the side tanks and the patches, where one submerged to full. A side tank attacks the burrower on it, else its side's loose one, one hitting a healer first, then the
 nearest its patch, and picks a loose one up even while holding one: Righteous Defense on whoever most
 of them hit, Challenging Roar or Shout with two within 10 yd and none of the other side's, the class taunt, then Feral Charge,
 Intercept, Avenger's Shield or Death Grip, each gated on `CanCastSpell` and reach; else it walks in. In
@@ -308,10 +323,11 @@ he is engaged), first match:
    never a sphere, which heroic has six of for the pull;
 2. heroic phase 2, a gathered melee bot: the nearest scarab within 10 yd;
 3. the **focus burrower** while it goes **ahead of him** (`anub.focusdue` 1): always while he is
-   down, else once the burrowers on Permafrost would take the raid's damage rate (his and their
-   health lost over the last 10 s, 3 s of samples at least), plus 5 s, to kill before the next wave.
-   Phase 3 too. In the 2026-10-25 wipes the old burrower-first order put 55-64% of DPS on them and he
-   lost 14-17% a phase;
+   down, else once every burrower alive, a submerged one at full health, would take the raid's
+   damage rate (his and their health lost over the last 10 s, 3 s of samples at least), plus 15 s, to
+   kill before the next wave. Phase 3 too. In the 2026-10-25 wipes the old burrower-first order put
+   55-64% of DPS on them and he lost 14-17% a phase; counting only those on Permafrost, plus 5 s, he
+   lost 28-34% in the 2026-10-26 wipes but wave 1 outlived wave 2's spawn in every one;
 4. him while selectable;
 5. the focus burrower (`anub.focus`, per instance), kept while alive, selectable and on Permafrost,
    else the lowest-health one that is, guid breaking a tie. Only Permafrost counts: off it, one below
@@ -363,9 +379,9 @@ target](#frost-spheres-and-permafrost). `anubarak sphere guard` zeroes any spell
 a sphere but the bot's own duty sphere, and crowd control even on that one (`polymorph`, `hex`,
 `repentance`, `freezing trap`, `shackle undead`, `fear`, `banish`, `hibernate`, `entangling roots`,
 `cyclone`, `sap`, `blind`, `seduction`, also as a name's leading word): guide "Do not attack Frost
-Spheres unless explicitly told to", and heroic has six. On the duty sphere it also zeroes a DoT with
-no hit of its own, a channel and an area spell: a sphere that dies late lands wherever it drifted,
-and a splash downs a second one. Heroic zeroes `starfall` for every bot all pull: its stars found a
+Spheres unless explicitly told to", and heroic has six. On the duty sphere it also zeroes any DoT,
+hit of its own or not (Flame Shock's ticks downed two spheres late), a channel and an area spell: a
+sphere that dies late lands wherever it drifted, and a splash downs a second one. Heroic zeroes `starfall` for every bot all pull: its stars found a
 second sphere in every 2026-10-25 wipe, so the pull made three patches. Other area spells have no
 target and stay unguarded.
 
@@ -398,7 +414,9 @@ patch, 4-5 a phase 2:
 
 - `run`: no patch search. The ring step, 40°, else 25° or 55°, either way, whose leg passes every
   patch by 14.5 yd and keeps the spike behind; a warlock with a circle takes the one within 38 yd of
-  it furthest from it. None: the plain ring step.
+  it furthest from it. None: the plain ring step. A kiter within 14.5 yd of a patch first steps
+  16.5 yd off it, straight away or turned up to 90° to keep the spike behind: no leg can clear it, and
+  the plain ring step once ran a kiter marked 5 yd off a tank patch past it.
 - `boost:<spell>` once the spike is within 15 yd and faster: Sprint, Dash in cat form, Nitro Boosts
   (none while one of those runs, one speed aura type), Blink 20 yd the way it faces when that lands
   farther from the spike, then Demonic Circle: Teleport with the circle in reach and 15+ yd farther
@@ -486,8 +504,10 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 - A human's Ice Block still holds the mage still, so the spike drops it and moves on at its current
   speed.
 - 10H with one side tank puts both burrowers of a wave on one patch, inside Spider Frenzy's 12 yd.
-- With one DK the second tank patch waits up to 40 s for its grip, its burrowers off Permafrost
-  meanwhile. A gripped sphere back on its random walk before it dies lands where it got to.
+- A stepped-out grip can leave the patches 20-28 yd apart, him 10-14 yd from each, past melee reach
+  of the burrowers.
+- After a kite ends on the far rim, the spike re-targets across the room centre and can spend a tank
+  patch on the way (2.8 s into a 2026-10-26 kite).
 - The Demonic Circle goes down where the warlock stands, its staging stand only before the pull.
 - A gathered ranged bot whose burrower is out of spell range idles: the gather blocks `reach spell`.
 - The direct-heal list is a copy of `JaraxxusHealIncinerateTargetAction`'s with "lesser healing
@@ -556,14 +576,17 @@ tank patches latched, before the window's first `submerge` row; taunts on him, R
 counted when its friend was his victim, split bot and human; `pickup` and `anubarak threat cap` veto
 rows per bot), `--swarm` (phase 3 length, 66240 per bot, lust against the phase 3 start, Penetrating
 Cold windows and heals onto the carriers, `defensive`, deaths). Also: `--burrowers` each burrower's
-exit, side, seconds to the first tank and to its side tank, that tank's distance from its spot, and
-per wave the focus start against the next wave; `--spheres` what downed each sphere (hit rows on
-spheres, logged from the pull, else the last cast at it; pet to owner, DoT or area flagged), where a
-tank patch landed against its spot, each grip and whether it landed, patches per submerge against
+exit, side at the spawn then each owner after (a dead side tank moves them all, so the last says
+little), seconds to the first tank and to its owning side's tank, the spawn side tank's distance from
+its spot, and per wave the focus start against the next wave; `--spheres` what downed each sphere (hit
+rows on spheres, logged from the pull, else the last cast at it; pet to owner, DoT or area flagged),
+where a tank patch landed against its spot, each grip, whether it landed and the side that latched it
+against the side it served, patches per submerge against
 `allow`; `--spike` seconds per `kitestage`, the boosts and immunities cast, Ice Block and Feign Death
 flagged; `--threat` the main tank's share of samples inside 7.5 yd of a patch and his distance to each
 tank patch at every submerge. The banner names declared probes the pull never wrote, and each side's
-tanks in order when short of 2 (25-man) or 1 (10-man) or a human holds one.
+tanks in order when short of 2 (25-man) or 1 (10-man) or a human holds one, and a side with a tank
+but no tank patch for 15+ s while he was up with burrowers out.
 
 - **A `patch` outcome is an inference:** the mark came off with no Impale and no death. A patch seen
   going within 3 s confirms it; an immunity reads the same without one. `emerge` is a mark that

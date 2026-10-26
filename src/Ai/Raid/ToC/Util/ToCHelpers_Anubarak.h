@@ -55,8 +55,11 @@ constexpr float ANUBARAK_GRIP_RANGE = 28.0f;
 constexpr float ANUBARAK_GRIP_LANDED = 3.0f;
 constexpr float ANUBARAK_GRIP_LANDED_HEIGHT = 4.0f;
 constexpr uint32 ANUBARAK_GRIP_JUDGE_MS = 3000;
-// A side waits this long for a DK's grip to come back. Burrowers can't submerge for 30 s after spawn.
-constexpr uint32 ANUBARAK_GRIP_COOLDOWN_WAIT_MS = 40000;
+// A DK whose grip is back within this still grips; any later and the side shoots instead
+constexpr uint32 ANUBARAK_GRIP_COOLDOWN_WAIT_MS = 3000;
+// Only one sphere flies near the tank spots, so with none in reach the DK grips from up to this far off
+// its spot, toward the nearest
+constexpr float ANUBARAK_GRIP_STEP_OUT = 8.0f;
 // A ready DK on its spot with no sphere in reach this long hands the side to the shooters
 constexpr uint32 ANUBARAK_GRIP_IDLE_MS = 12000;
 
@@ -72,8 +75,9 @@ constexpr uint32 ANUBARAK_WAVE_READY_MS = 8000;
 // He submerges 80 s after the pull or an emerge and is selectable again 62 s later
 constexpr uint32 ANUBARAK_SURFACED_MS = 80000;
 constexpr uint32 ANUBARAK_SUBMERGED_MS = 62000;
-// Focus fire on the burrowers starts once killing them at the raid's rate, plus this, reaches the next wave
-constexpr uint32 ANUBARAK_FOCUS_MARGIN_MS = 5000;
+// Focus fire on the burrowers starts once killing every one alive at the raid's rate, plus this, reaches
+// the next wave. The margin pays for the switch, the melee walking off him to the patches.
+constexpr uint32 ANUBARAK_FOCUS_MARGIN_MS = 15000;
 constexpr uint32 ANUBARAK_DAMAGE_WINDOW_MS = 10000;
 constexpr uint32 ANUBARAK_DAMAGE_SAMPLE_MS = 500;
 constexpr uint32 ANUBARAK_DAMAGE_MIN_SPAN_MS = 3000;
@@ -261,8 +265,9 @@ enum class AnubarakGripStep : uint8
 
 struct AnubarakGripDuty
 {
-    // Null while no sphere is in reach of the spot
+    // Null while no sphere is in reach of the stand
     Creature* sphere = nullptr;
+    // The stand: the side's spot, or up to ANUBARAK_GRIP_STEP_OUT off it toward the sphere
     Position spot;
     uint8 side = 0;
     AnubarakGripStep step = AnubarakGripStep::None;
@@ -371,7 +376,7 @@ Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI);
 
 // The flying sphere this bot shoots now, null when it has no sphere duty
 Creature* GetAnubarakSphereToShoot(Player* bot);
-// The DK's grip of a sphere onto its side's spot. False without one.
+// The DK's grip of a sphere for its side's tank patch. False without one.
 bool GetAnubarakGripDuty(Player* bot, AnubarakGripDuty& out);
 // Called once the DK's Death Grip on its duty sphere went out
 void NoteAnubarakGripCast(Player* bot, Creature* sphere);
