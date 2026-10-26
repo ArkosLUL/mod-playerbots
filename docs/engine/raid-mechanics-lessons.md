@@ -190,6 +190,12 @@ Every distance helper measures differently, and a large-model boss inflates all 
 - **Measure a formation from where the boss stands, against his reach.** Algalon's rings hung off the
   tank's slot, which put healers 7 yd and a mage 1.9 yd from a boss whose swing lands at 11.8 yd.
   Harmless while he holds still on his tank, one hit each the moment he doesn't.
+- **A chasing add is pure pursuit** (`MoveChase`): it heads at where its target is each moment, so
+  its path follows from the kiter's, and a straight lane to the kiter's future spot misses the corner
+  it cuts when the kiter runs an arc faster than it. Simulate it from the kiter's planned path
+  (Anub'arak's spike: 0.9 yd p90 off the real one 6 s on, the lane 19.7;
+  [anubarak.md](../raids/trial-of-the-crusader/anubarak.md#pursuing-spike-34660)). A slow on the kiter
+  that it walks out of in a step doesn't decide the race: count its unslowed speed.
 - **A boss that opens on a random player** (`AttackStart(SelectTargetFromPlayerList(...))` when an
   intro ends) is answered by staging, not by taunt speed: the pickup tank waits inside his reach and
   taunts on the first selectable tick, and everyone else waits outside it until a tank holds him

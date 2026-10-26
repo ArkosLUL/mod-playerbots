@@ -5,8 +5,10 @@
 A synthetic 10H pull pins the arithmetic behind each section, a 25H one the side tank, grip, kite
 stage and allowance probes, a second 25H one the gather and the burrower window, a third the
 Permafrost time, the focus picks and the tank patches spent, a fourth the tank spots, a dropped grip,
-a burrower's submerge, the speeds at a cover, the healer and tank views, and the shared fixture shows
-every section reads empty on a trace that is not Anub'arak rather than raising.
+a burrower's submerge, the speeds at a cover, the healer and tank views, a fifth the kite flip-flop, the
+ready paladin, a dropped Feign Death and the pursuit replay, a sixth the scarabs, the redirects and the
+burrower openers, and the shared fixture shows every section reads empty on a trace that is not
+Anub'arak rather than raising.
 """
 from __future__ import annotations
 
@@ -1453,7 +1455,7 @@ class FrostPull(unittest.TestCase):
             ab.show_tanks(self.trace)
         self.assertIn("no cov records, so no engine passes and no raid healer engine coverage\n", out.getvalue())
         self.assertIn("anub.hstand: no rows\n", out.getvalue())
-        self.assertIn("no anub.defensive cast\n", out.getvalue())
+        self.assertIn("no tank defensive cast\n", out.getvalue())
 
     def test_every_section_prints(self):
         out = io.StringIO()
@@ -1687,6 +1689,13 @@ def refill_pull() -> list[dict]:
         note(9500, SIDE0, "anub.defensive", "divine protection"),
         note(11500, SIDE1, "anub.defensive", "anti magic shell"),
         note(12000, SIDE1, "anub.defensive", "covered"),
+        # no note for the second Divine Protection, its verdict didn't change. The triggered copy and the
+        # dps DK's Icebound Fortitude don't count
+        cast(9500, SIDE0, 498, SIDE0),
+        cast(11500, SIDE1, 48707, SIDE1),
+        cast(13000, SIDE0, 498, SIDE0),
+        triggered(13000, SIDE0, 498, SIDE0),
+        cast(12500, DK, 48792, DK),
 
         # side 1's death: the hit at 2.5 s and the heal at 16 s fall outside its 12 s
         dmg(2500, RY, SIDE1, 0, 20000),
@@ -1834,8 +1843,9 @@ class RefillPull(unittest.TestCase):
         self.assertEqual([(row["t"], row["guid"], row["spell"], row["stacks"], row["side"], row["phase"])
                           for row in rows],
                          [(9500, SIDE0, "divine protection", 5, 0, "P1"),
-                          (11500, SIDE1, "anti magic shell", 3, 1, "P1")])
-        self.assertEqual([ab.magic_on_side_tank(row) for row in rows], [False, True])
+                          (11500, SIDE1, "anti magic shell", 3, 1, "P1"),
+                          (13000, SIDE0, "divine protection", 6, 0, "P1")])
+        self.assertEqual([ab.magic_on_side_tank(row) for row in rows], [False, True, False])
 
     def test_a_tank_death_reads_the_12_s_before_it(self):
         rows = ab.tank_deaths(self.trace)
@@ -1886,10 +1896,415 @@ class RefillPull(unittest.TestCase):
         self.assertIn("wave 1   0:02.000  Bulwark 6 (9.0 s), Felesta 3 (0.0 s)\n", text)
         self.assertIn("Expose Weakness on anyone else, peak over the pull: Mercy 2\n", text)
         self.assertRegex(text, r"anti magic shell +stack  3  hp 100%  magic only on a side tank\n")
-        self.assertIn("from 5 stacks: 1 of 2 side tank cast(s); magic only on a side tank outside phase 3: 1\n", text)
+        self.assertIn("from 5 stacks: 2 of 3 side tank cast(s); magic only on a side tank outside phase 3: 1\n", text)
+        self.assertIn("casts per tank: Bulwark divine protection 2; Felesta anti magic shell 1\n", text)
         self.assertRegex(text, r"0:15\.000 Felesta +side 1 P1 +taken 75,000 \(burrower 60,000, Anub'arak 10,000,"
                                r" scarab 5,000\); healed 13,000 by 3 heal\(s\), 5,000 over; absorbed 3,000;"
                                r" Expose peak 3\n")
+
+
+RANGER, STALKER, TRAPPER, CASTER = range(7001, 7005)
+PAL_NEAR, PAL_CD, PAL_FAR, PAL_DEAD, PAL_HUMAN = range(7011, 7016)
+SPK4 = CREATURE | 1051
+CHASE_PATCH = (X - 14.0, Y + 3.0)
+FLIP_A, FLIP_B, FLIP_C = (X, Y - 30.0), (X, Y - 10.0), (X + 20.0, Y - 20.0)
+PALADIN_SPOTS = {PAL_NEAR: (X - 6.0, Y - 10.0), PAL_CD: (X - 6.0, Y - 15.0), PAL_FAR: (X - 6.0, Y + 20.0),
+                 PAL_DEAD: (X - 6.0, Y - 17.0), PAL_HUMAN: (X - 6.0, Y - 18.0)}
+
+
+def stalker_x(when: int) -> float:
+    """The rogue runs east 1 yd a snapshot through its mark, 20-30 s."""
+    return X - 10.0 + (min(max(when, 20000), 30000) - 20000) / 500.0
+
+
+def stalker_spike() -> dict[int, float]:
+    """The spike's x per snapshot of the rogue's mark, in pure pursuit at 3 yd a snapshot from 20 yd behind."""
+    out = {20000: X - 30.0}
+    for when in range(20000, 30000, 500):
+        gap = stalker_x(when) - out[when]
+        out[when + 500] = out[when] + min(3.0, gap)
+    return out
+
+
+def chase_spike(when: int, path: dict[int, float]) -> list | None:
+    """The ranger's spike walks north 1 yd a snapshot past it instead of at it; the others sit 3 yd off theirs."""
+    if 12000 <= when <= 18000:
+        return [SPK4, X - 20.0, Y + (when - 12000) / 500.0, Z, 0.0, 100.0, 0.0, RANGER, 1, 0, 0, 0]
+    if 20000 <= when <= 30000:
+        return [SPK4, path[when], Y - 20.0, Z, 0.0, 100.0, 0.0, STALKER, 1, 0, 0, 0]
+    if 32000 <= when <= 36000:
+        return [SPK4, X + 23.0, Y + 20.0, Z, 0.0, 100.0, 0.0, TRAPPER, 0, 0, 0, 0]
+    if 42000 <= when <= 46000:
+        return [SPK4, X + 13.0, Y, Z, 0.0, 100.0, 0.0, CASTER, 0, 0, 0, 0]
+    return None
+
+
+def chase_snap(when: int, path: dict[int, float]) -> dict:
+    spots = {RANGER: (X, Y), STALKER: (stalker_x(when), Y - 20.0), TRAPPER: (X + 20.0, Y + 20.0),
+             CASTER: (X + 10.0, Y), **PALADIN_SPOTS}
+    units = [[guid, *spot, Z, 0.0, 0.0 if guid == PAL_DEAD else 100.0, 100.0, 0, 0, 0, 0, 0]
+             for guid, spot in spots.items()]
+    units.append([BOSS, X, Y + 30.0, Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+    spike = chase_spike(when, path)
+    if spike:
+        units.append(spike)
+    hz = [[PERMAFROST_25H, *CHASE_PATCH, PATCH_Z, 6.0, 1]] if 12000 <= when <= 18000 else []
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def move(when: int, guid: int, spot: tuple[float, float]) -> dict:
+    return {"t": when, "e": "move", "g": guid, "k": "point", "x": spot[0], "y": spot[1], "z": Z, "tgt": 0, "ok": 1,
+            "r": "", "by": "anubarak kite spike to permafrost", "pr": "forced"}
+
+
+def chase_pull() -> list[dict]:
+    """A 25H pull under him from 10 s with four marks: the ranger's spike walks past it (12-18 s), the rogue's
+    chases it in pure pursuit while its walk flip-flops (20-30 s), the trapper carries Forbearance and drops a
+    Feign Death at once (32-36 s), and the caster's Hand of Protection lands the tick the spike is near
+    (42-46 s). Five paladins: one ready, one on cooldown, one far, one dead, one human."""
+    path = stalker_spike()
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 10, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": RANGER, "n": "Ranger", "r": "ranged", "c": 3, "h": 0},
+             {"g": STALKER, "n": "Stalker", "r": "melee", "c": 4, "h": 0},
+             {"g": TRAPPER, "n": "Trapper", "r": "ranged", "c": 3, "h": 0},
+             {"g": CASTER, "n": "Caster", "r": "ranged", "c": 8, "h": 0},
+             {"g": PAL_NEAR, "n": "Lightbringer", "r": "heal", "c": 2, "h": 0},
+             {"g": PAL_CD, "n": "Ashbringer", "r": "heal", "c": 2, "h": 0},
+             {"g": PAL_FAR, "n": "Faithful", "r": "melee", "c": 2, "h": 0},
+             {"g": PAL_DEAD, "n": "Fallen", "r": "heal", "c": 2, "h": 0},
+             {"g": PAL_HUMAN, "n": "Arthas", "r": "melee", "c": 2, "h": 1}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 11000, "e": "unit", "g": SPK4, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        note(0, RANGER, "anub.phase", 1),
+        note(10000, RANGER, "anub.phase", 2),
+        *(aura(when, kiter, ab.SPELL_MARK, removed, SPK4) for kiter, start, stop in (
+            (RANGER, 12000, 18000), (STALKER, 20000, 30000), (TRAPPER, 32000, 36000), (CASTER, 42000, 46000))
+          for when, removed in ((start, False), (stop, True))),
+
+        # the ranger's Feign Death sticks
+        cast(17900, RANGER, ab.SPELL_FEIGN_DEATH, 0),
+        aura(17900, RANGER, ab.SPELL_FEIGN_DEATH, False, RANGER),
+        aura(19000, RANGER, ab.SPELL_FEIGN_DEATH, True, RANGER),
+        # the stalker walks 10 yd ahead of itself, then its target flips 20 yd and back four times in 0.6 s,
+        # then twice more 0.9 s apart
+        *(move(when, STALKER, (stalker_x(when) + 10.0, Y - 20.0)) for when in range(20000, 26000, 200)),
+        *(move(when, STALKER, spot) for when, spot in (
+            (26000, FLIP_A), (26200, FLIP_B), (26400, FLIP_A), (26600, FLIP_B), (26800, FLIP_A), (29000, FLIP_C),
+            (29900, FLIP_A))),
+        cast(5000, PAL_CD, 10278, PAL_NEAR),
+        cast(23000, PAL_NEAR, 10278, STALKER),
+        aura(30000, TRAPPER, ab.SPELL_FORBEARANCE, False, PAL_NEAR),
+        aura(40000, TRAPPER, ab.SPELL_FORBEARANCE, True, PAL_NEAR),
+        cast(34000, TRAPPER, ab.SPELL_FEIGN_DEATH, 0),
+        aura(34000, TRAPPER, ab.SPELL_FEIGN_DEATH, False, TRAPPER),
+        aura(34000, TRAPPER, ab.SPELL_FEIGN_DEATH, True, TRAPPER),
+        cast(42000, PAL_FAR, 10278, CASTER),
+        aura(42000, CASTER, ab.SPELL_FORBEARANCE, False, PAL_FAR),
+        {"t": 50000, "e": "end", "out": "wipe"},
+    ]
+    records += [chase_snap(when, path) for when in range(-500, 50001, 500)]
+    return records
+
+
+class ChasePull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_10_anub-arak_1789500007.ndjson", chase_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_walk_reversing_three_times_in_2_s_flip_flops(self):
+        # the first flip jumps off the walk with no jump before it, so it reverses nothing
+        moves = sorted(self.trace.of("move"), key=lambda rec: rec["t"])
+        self.assertEqual(ab.flip_flops(moves, 20000, 30000), [(26200, 26800, 4)])
+        self.assertEqual(ab.flip_flops(moves, 26500, 30000), [])
+        self.assertEqual([window["flips"] for window in ab.mark_windows(self.trace)],
+                         [[], [(26200, 26800, 4)], [], []])
+
+    def test_a_feign_death_off_in_the_same_tick_is_dropped(self):
+        self.assertEqual([window["feign_drops"] for window in ab.mark_windows(self.trace)], [[], [], [34000], []])
+
+    def test_the_nearest_ready_paladin_as_the_spike_closes_to_12_yd(self):
+        escorts = [window["escort"] for window in ab.mark_windows(self.trace)]
+        self.assertIsNone(escorts[0])
+        # the one on cooldown, the dead one and the human stand nearer
+        self.assertEqual((escorts[1]["t"], escorts[1]["guid"], escorts[1]["forbearance"]), (22000, PAL_NEAR, False))
+        self.assertAlmostEqual(escorts[1]["yards"], 10.0)
+        self.assertEqual((escorts[2]["guid"], escorts[2]["forbearance"]), (None, True))
+
+    def test_a_hand_landing_that_tick_reads_who_was_ready_before_it(self):
+        escort = ab.mark_windows(self.trace)[3]["escort"]
+        self.assertEqual((escort["t"], escort["guid"], escort["forbearance"]), (41999, PAL_FAR, False))
+        self.assertAlmostEqual(escort["yards"], math.hypot(16.0, 20.0))
+
+    def test_a_marked_paladin_is_not_ready(self):
+        samples = ab.Samples(self.trace)
+        ready = ab.hop_readiness(self.trace)
+        self.assertEqual(ready["paladins"], {PAL_NEAR, PAL_CD, PAL_FAR, PAL_DEAD})
+        marked = {**ready, "marks": ready["marks"] + [(PAL_NEAR, 21000, 23000, True)]}
+        escort = ab.ready_paladin(samples, marked, STALKER, 22000)
+        self.assertEqual(escort["guid"], PAL_FAR)
+        self.assertAlmostEqual(escort["yards"], 40.0)
+
+    def test_pursuit_replays_each_kite_against_the_real_spike(self):
+        rows = ab.pursuit_rows(self.trace)
+        self.assertEqual([row["guid"] for row in rows], [RANGER, STALKER, TRAPPER, CASTER])
+        ranger, stalker = rows[0], rows[1]
+        # the model heads at the ranger while the spike walks north past it
+        self.assertEqual([len(ranger["ends"][horizon]) for horizon in (3000, 6000)], [1, 1])
+        self.assertAlmostEqual(ranger["ends"][3000][0], math.hypot(6.0, 6.0))
+        self.assertAlmostEqual(ranger["ends"][6000][0], math.hypot(12.0, 12.0))
+        self.assertEqual([[round(value, 6) for value in ranger["passes"][horizon]] for horizon in (3000, 6000)],
+                         [[-3.0], [-3.0]])
+        self.assertEqual([len(stalker["ends"][horizon]) for horizon in (3000, 6000)], [9, 9])
+        self.assertLess(max(stalker["ends"][3000] + stalker["ends"][6000]), 1e-9)
+        self.assertEqual(stalker["passes"], {3000: [], 6000: []})
+        self.assertEqual((rows[2]["ends"], rows[3]["ends"]), ({3000: [], 6000: []},) * 2)
+
+    def test_a_snapshot_gap_ends_a_chase(self):
+        runs = ab.chase_runs(ab.Samples(self.trace), {SPK4}, STALKER, 20000, 30000)
+        self.assertEqual([(run[0][0], run[-1][0]) for run in runs], [(20000, 30000)])
+        # a 500 ms hole at 1.25 s and the spike off the kiter at 3.5 s keep one chase; a 1 s hole splits it
+        snaps = [{"t": when, "e": "snap", "hz": [],
+                  "u": [[RANGER, X, Y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+                        [SPK4, X - 5.0, Y, Z, 0.0, 100.0, 0.0, 0 if when == 3500 else RANGER, 0, 0, 0, 0]]}
+                 for when in range(0, 5001, 250) if when != 1250]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = write_trace(folder, "649_12_anub-arak_1789500009.ndjson", [
+                {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 12, "diff": 3,
+                 "boss": "anub-arak", "roster": [{"g": RANGER, "n": "Ranger", "r": "ranged", "c": 3, "h": 0}]},
+                {"t": 0, "e": "unit", "g": SPK4, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1}, *snaps])
+            runs = ab.chase_runs(ab.Samples(trace), {SPK4}, RANGER, 0, 5000)
+        self.assertEqual([(run[0][0], run[-1][0]) for run in runs], [(0, 5000)])
+        self.assertEqual([len(run) for run in runs], [19])
+        with tempfile.TemporaryDirectory() as folder:
+            trace = write_trace(folder, "649_12_anub-arak_1789500009.ndjson", [
+                {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 12, "diff": 3,
+                 "boss": "anub-arak", "roster": [{"g": RANGER, "n": "Ranger", "r": "ranged", "c": 3, "h": 0}]},
+                {"t": 0, "e": "unit", "g": SPK4, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+                *(snap for snap in snaps if not 3250 <= snap["t"] <= 3750)])
+            runs = ab.chase_runs(ab.Samples(trace), {SPK4}, RANGER, 0, 5000)
+        self.assertEqual([(run[0][0], run[-1][0]) for run in runs], [(0, 3000), (4000, 5000)])
+
+    def test_a_p90_over_the_flag_line_flags_a_kite(self):
+        # p90 is the value at index int(n * 0.9) once sorted, so of ten it is the largest
+        self.assertTrue(ab.pursuit_flagged([0.1] * 9 + [-3.0]))
+        self.assertFalse(ab.pursuit_flagged([0.1] * 10 + [-3.0]))
+        self.assertFalse(ab.pursuit_flagged([]))
+
+    def test_every_section_prints(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_banner(self.trace)
+            for _, _, section in ab.SECTIONS:
+                section(self.trace)
+        text = out.getvalue()
+        self.assertIn("            spike within 12 yd +2.0 s, nearest Hand of Protection-ready paladin: Lightbringer"
+                      " 10.0 yd\n", text)
+        self.assertIn("nearest Hand of Protection-ready paladin: Faithful 25.6 yd\n", text)
+        self.assertIn("            walk flip-flopped from +6.2 s for 0.6 s, 4 reversals\n", text)
+        self.assertIn("            Feign Death dropped at once +2.0 s\n", text)
+        self.assertIn("walk flip-flopped, move targets 5+ yd apart reversing 3+ times in 2 s: Stalker 0:20.000"
+                      " from +6.2 s\n", text)
+        self.assertIn("Feign Death dropped within 100 ms: Trapper 0:32.000 +2.0 s\n", text)
+        self.assertIn("as the spike came within 12 yd: within 30 yd in 2 of 3; further or none: Trapper 0:32.000"
+                      " (Forbearance on the kiter)\n", text)
+        self.assertRegex(text, r"0:12\.000 Ranger +3 s n 1: end 8\.5 / 8\.5 yd, patch pass 3\.0 / 3\.0 yd bias -3\.0"
+                               r" \(n 1\); 6 s n 1: end 17\.0 / 17\.0 yd, .*  patch pass p90 over 1\.5 yd\n")
+        self.assertIn("all kites, 3 s, n 10: end 0.0 / 8.5 yd, patch pass 3.0 / 3.0 yd bias -3.0 (n 1)\n", text)
+        self.assertIn("all kites, 6 s, n 10: end 0.0 / 17.0 yd, patch pass 3.0 / 3.0 yd bias -3.0 (n 1)\n", text)
+        self.assertIn("p90 patch-pass error over 1.5 yd over all kites: 3 s, 6 s\n", text)
+
+
+WB1, WB2 = CREATURE | 1061, CREATURE | 1062
+SPH = CREATURE | 1071
+SC1, SC2, SC3 = (CREATURE | n for n in range(1081, 1084))
+MANDIBLES_25H = 67863
+WAVE_SPOTS = {MAIN: (X - 5.0, Y), SIDE0: (X + 3.0, Y + 16.0), SIDE1: (EXIT_S1[0], EXIT_S1[1] + 10.0),
+              HUNTER: (EXIT_N1[0], EXIT_N1[1] - 10.0), MAGE: (EXIT_N1[0], EXIT_N1[1] - 15.0),
+              LOCK: (EXIT_N1[0], EXIT_N1[1] - 20.0), ROGUE: (EXIT_S1[0], EXIT_S1[1] + 18.0),
+              HEAL: (EXIT_S1[0], EXIT_S1[1] + 25.0), DK: (EXIT_S1[0], EXIT_S1[1] + 3.0), PALADIN: (X + 10.0, Y),
+              IMP: (EXIT_N1[0], EXIT_N1[1] - 3.4)}
+
+
+def wave_target(guid: int, when: int) -> int:
+    if guid == HUNTER:
+        return WB1 if 3000 <= when < 15000 else BOSS
+    if guid == ROGUE:
+        return WB2 if 4000 <= when < 8000 else 0
+    if guid == WB1:
+        if when == 2000:
+            return SPH
+        if when <= 3000:
+            return IMP
+        return HUNTER if 7000 <= when <= 10000 else SIDE0
+    if guid == WB2:
+        return SIDE1
+    return 0
+
+
+def wave_scarabs(when: int) -> list[list]:
+    """SC1 on the healer dies at 25 s and its corpse is sampled to 32 s; SC2 sits on the main tank, then on the
+    mage from 35 s, and outlives the 30 s emerge to 45 s; SC3 comes up in phase 1 on the healer, 40-48 s."""
+    rows = []
+    for guid, first, last, target in ((SC1, 12000, 25000, HEAL), (SC2, 12000, 45000, MAIN if when < 35000 else MAGE),
+                                      (SC3, 40000, 48000, HEAL)):
+        if first <= when <= last:
+            rows.append([guid, X - 5.0, Y - 2.0, Z, 0.0, 100.0, 0.0, target, 0, 0, 0, 0])
+    if 25000 < when <= 32000:
+        rows.append([SC1, X - 5.0, Y - 2.0, Z, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0])
+    return rows
+
+
+def wave_snap(when: int) -> dict:
+    units = [[guid, *spot, Z, 0.0, 0.0 if guid == DK else 100.0, 100.0, wave_target(guid, when), 0, 0, 0, 0]
+             for guid, spot in WAVE_SPOTS.items()]
+    up = 0 <= when < 10000 or when >= 30000
+    units.append([BOSS, X, Y + 2.0, Z, 0.0, 100.0, 0.0, MAIN if up else 0, 0, 0, 0, 0])
+    units.append([SPH, X, Y + 30.0, FLYING_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+    if 2000 <= when <= 15000:
+        units += [[guid, *exit_spot, Z, 0.0, 100.0 - (when - 2000) / 200.0, 0.0, wave_target(guid, when), 0, 0, 0, 0]
+                  for guid, exit_spot in ((WB1, EXIT_N1), (WB2, EXIT_S1))]
+    units += wave_scarabs(when)
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def mandibles(when: int, guid: int, stacks: int, scarab: int) -> dict:
+    return {"t": when, "e": "aura", "d": guid, "s": scarab, "sp": MANDIBLES_25H, "r": 1 if not stacks else 0,
+            "st": stacks}
+
+
+def wave_pull() -> list[dict]:
+    """A 25H pull: P1 to 10 s, P2 to 30 s, then up again to the end at 60 s. Two burrowers spawn at 2 s, one
+    aimed at a sphere for a tick, then the warlock's imp, then its side tank; the hunter misdirects at the pull
+    and off that burrower, the rogue's Tricks go off the other burrower and to a side tank."""
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 11, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": MAIN, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+             {"g": SIDE0, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+             {"g": SIDE1, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": HUNTER, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0},
+             {"g": ROGUE, "n": "Shadowstep", "r": "melee", "c": 4, "h": 0},
+             {"g": DK, "n": "Deathsong", "r": "melee", "c": 6, "h": 0},
+             {"g": MAGE, "n": "Frostfire", "r": "ranged", "c": 8, "h": 0},
+             {"g": LOCK, "n": "Hellflame", "r": "ranged", "c": 9, "h": 0},
+             {"g": HEAL, "n": "Mercy", "r": "heal", "c": 5, "h": 0},
+             {"g": PALADIN, "n": "Justice", "r": "melee", "c": 2, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": -500, "e": "unit", "g": IMP, "en": 416, "n": "Ruirin", "own": LOCK},
+        {"t": -500, "e": "unit", "g": SPH, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"},
+        *({"t": 2000, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"} for guid in (WB1, WB2)),
+        *({"t": 12000, "e": "unit", "g": guid, "en": ab.NPC_SCARAB, "n": "Swarm Scarab"} for guid in (SC1, SC2, SC3)),
+        *(note(when, MAIN, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (30000, 1))),
+        note(0, MAIN, "anub.side0", SIDE0),
+        note(0, MAIN, "anub.side1", SIDE1),
+        note(2000, MAIN, "anub.wave", 1),
+
+        cast(500, HUNTER, 34477, MAIN),
+        triggered(600, HUNTER, 34477, MAIN),
+        cast(4000, HUNTER, 34477, MAIN),
+        cast(5000, ROGUE, 57934, PALADIN),
+        cast(20000, ROGUE, 57934, SIDE0),
+
+        *(mandibles(when, MAIN, stacks, SC2) for when, stacks in
+          ((13000, 1), (16000, 2), (20000, 3), (28000, 4), (50000, 0))),
+        *(mandibles(when, HEAL, stacks, SC1) for when, stacks in ((14000, 1), (18000, 2), (22000, 0))),
+        *(mandibles(when, MAGE, stacks, SC2) for when, stacks in ((38000, 1), (45000, 0))),
+        *(dmg(when, SC2, MAIN, MANDIBLES_25H, 1000) for when in (15000, 18000, 21000)),
+        *(dmg(when, SC2, MAIN, MANDIBLES_25H, 4000) for when in (32000, 35000)),
+        *(dmg(when, SC1, HEAL, MANDIBLES_25H, 500) for when in (17000, 20000)),
+        dmg(41000, SC2, MAGE, MANDIBLES_25H, 700),
+        dmg(41000, SC2, IMP, MANDIBLES_25H, 300),
+        {"t": 60000, "e": "end", "out": "wipe"},
+    ]
+    records += [wave_snap(when) for when in range(-500, 60001, 500)]
+    return records
+
+
+class WavePull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_11_anub-arak_1789500008.ndjson", wave_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_scarabs_alive_after_each_emerge_by_target(self):
+        rows = ab.scarab_emerges(self.trace)
+        self.assertEqual([(row["label"], row["start"], row["main"], row["stacks"]) for row in rows],
+                         [("P1b", 30000, MAIN, 4)])
+        # SC1's corpse is still sampled at the emerge
+        self.assertEqual([(offset, dict(targets)) for offset, targets in rows[0]["alive"]],
+                         [(0, {MAIN: 1}), (10000, {MAGE: 1, HEAL: 1}), (20000, {}), (30000, {})])
+
+    def test_each_scarabs_life_and_how_long_it_outlived_its_phase(self):
+        self.assertEqual([(row["guid"], row["first"], row["last"], row["label"], row["past"])
+                          for row in ab.scarab_lives(self.trace)],
+                         [(SC1, 12000, 25000, "P2", None), (SC2, 12000, 45000, "P2", 15000),
+                          (SC3, 40000, 48000, "P1b", None)])
+
+    def test_mandibles_peak_stack_and_damage_per_player_per_phase(self):
+        # a stack carried over the emerge is its peak there; the imp's tick is off the roster
+        self.assertEqual([(row["label"], row["players"]) for row in ab.mandible_windows(self.trace)],
+                         [("P1", []), ("P2", [(MAIN, 4, 3000), (HEAL, 2, 1000)]),
+                          ("P1b", [(MAIN, 4, 8000), (MAGE, 1, 700)])])
+
+    def test_each_redirect_reads_the_casters_target_and_the_burrowers_after(self):
+        rows = ab.redirect_rows(self.trace)
+        self.assertEqual([(row["t"], row["spell"], row["caster"], row["to"], row["group"], row["target"],
+                           row["on_burrower"]) for row in rows],
+                         [(500, 34477, HUNTER, MAIN, "main tank", BOSS, False),
+                          (4000, 34477, HUNTER, MAIN, "main tank", WB1, True),
+                          (5000, 57934, ROGUE, PALADIN, "melee", WB2, True),
+                          (20000, 57934, ROGUE, SIDE0, "side tank", 0, False)])
+        self.assertEqual([row["after"] for row in rows],
+                         [[], [(1000, SIDE0), (3000, HUNTER), (8000, SIDE0)], [(1000, SIDE1)], []])
+
+    def test_each_burrower_reads_its_opener_and_the_players_nearest_its_exit(self):
+        rows = {row["guid"]: row for row in ab.pickup_rows(self.trace)}
+        # a tick on the sphere at the spawn is no opener; the dead DK 3 yd off the south exit and the imp
+        # are no player
+        self.assertEqual({guid: row["opener"] for guid, row in rows.items()}, {WB1: (500, IMP), WB2: (0, SIDE1)})
+        self.assertEqual({guid: [(member, round(yards, 6)) for member, yards in row["nearest"]]
+                          for guid, row in rows.items()},
+                         {WB1: [(HUNTER, 10.0), (MAGE, 15.0), (LOCK, 20.0)],
+                          WB2: [(SIDE1, 10.0), (ROGUE, 18.0), (HEAL, 25.0)]})
+
+    def test_every_section_prints(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_banner(self.trace)
+            for _, _, section in ab.SECTIONS:
+                section(self.trace)
+        text = out.getvalue()
+        self.assertIn("P1b    0:30.000  +0 s 1 (Ecoterrorist 1); +10 s 2 (Frostfire 1, Mercy 1); +20 s 0; +30 s 0\n"
+                      "                     main tank Ecoterrorist 4\n", text)
+        self.assertIn("P2     0:10.000  2 scarab(s), median 23.0 s, longest 33.0 s; 1 lived past its end, longest"
+                      " 15.0 s on\n", text)
+        self.assertIn("P1b    0:30.000  1 scarab(s), median 8.0 s, longest 8.0 s; 0 lived past its end\n", text)
+        self.assertIn("P2     0:10.000  4,000: Ecoterrorist 4 3,000, Mercy 2 1,000\n", text)
+        self.assertIn("P1b    0:30.000  8,700: Ecoterrorist 4 8,000, Frostfire 1 700\n", text)
+        self.assertRegex(text, r"0:04\.000 Misdirection +Trueshot +> Ecoterrorist +main tank on burrower #1061:"
+                               r" \+1 s Bulwark, \+3 s Trueshot, \+8 s Bulwark\n")
+        self.assertIn("Misdirection 2: Ecoterrorist (main tank) 2; by group main tank 2; the caster on a burrower 1\n",
+                      text)
+        self.assertIn("Tricks of the Trade 2: Justice (melee) 1, Bulwark (side tank) 1; by group melee 1, side tank 1;"
+                      " the caster on a burrower 1\n", text)
+        self.assertRegex(text, r"#1061 +1 Ruirin \(Hellflame\) \+0\.5 s +nearest Trueshot ranged 10, Frostfire ranged"
+                               r" 15, Hellflame ranged 20\n")
+        self.assertRegex(text, r"#1062 +1 Felesta \(tank\) \+0\.0 s +nearest Felesta tank 10, Shadowstep melee 18,"
+                               r" Mercy heal 25\n")
+        self.assertIn("opened on a non-tank: 1 of 2; to a tank after it: median 1.5 s, longest 1.5 s\n", text)
 
 
 def side_pull(diff: int, side1: int, later: list[dict] | None = None) -> list[dict]:
@@ -1948,6 +2363,8 @@ class EveryView(unittest.TestCase):
         self.assertNotIn("locked out", out.getvalue())
         self.assertIn("HEALERS\n  not an Anub'arak pull\n", out.getvalue())
         self.assertIn("TANKS\n  not an Anub'arak pull\n", out.getvalue())
+        for title in ("SCARABS", "REDIRECTS", "PURSUIT"):
+            self.assertIn(f"{title}\n  not an Anub'arak pull\n", out.getvalue())
 
     def test_azjol_nerubs_anubarak_is_not_this_one(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -7,6 +7,7 @@
 #include "NamedObjectContext.h"
 #include "ObjectGuid.h"
 #include "Position.h"
+#include "RaidRedirectThreat.h"
 #include "ToCActions_Shared.h"
 #include "ToCHelpers_Anubarak.h"
 
@@ -24,6 +25,33 @@ public:
     AnubarakProtectKiterAction(
         PlayerbotAI* botAI, std::string const name = "anubarak protect kiter") : Action(botAI, name) {};
     bool Execute(Event event) override;
+};
+
+class AnubarakFreeKiterAction : public Action
+{
+public:
+    AnubarakFreeKiterAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak free kiter") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakHopEscortAction : public MovementAction
+{
+public:
+    AnubarakHopEscortAction(PlayerbotAI* botAI, std::string const name = "anubarak hop escort")
+        : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakRedirectThreatAction : public RaidRedirectThreatAction
+{
+public:
+    AnubarakRedirectThreatAction(PlayerbotAI* botAI, std::string const name = "anubarak redirect threat")
+        : RaidRedirectThreatAction(botAI, name) {};
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
 };
 
 class AnubarakKiteSpikeToPermafrostAction : public MovementAction
@@ -197,6 +225,12 @@ public:
             &ToCAnubarakActionContext::anubarak_kiter_immunity;
         creators["anubarak protect kiter"] =
             &ToCAnubarakActionContext::anubarak_protect_kiter;
+        creators["anubarak free kiter"] =
+            &ToCAnubarakActionContext::anubarak_free_kiter;
+        creators["anubarak hop escort"] =
+            &ToCAnubarakActionContext::anubarak_hop_escort;
+        creators["anubarak redirect threat"] =
+            &ToCAnubarakActionContext::anubarak_redirect_threat;
         creators["anubarak kite spike to permafrost"] =
             &ToCAnubarakActionContext::anubarak_kite_spike_to_permafrost;
         creators["anubarak avoid spike"] =
@@ -244,6 +278,18 @@ private:
 
     static Action* anubarak_protect_kiter(PlayerbotAI* botAI) {
         return new AnubarakProtectKiterAction(botAI);
+    }
+
+    static Action* anubarak_free_kiter(PlayerbotAI* botAI) {
+        return new AnubarakFreeKiterAction(botAI);
+    }
+
+    static Action* anubarak_hop_escort(PlayerbotAI* botAI) {
+        return new AnubarakHopEscortAction(botAI);
+    }
+
+    static Action* anubarak_redirect_threat(PlayerbotAI* botAI) {
+        return new AnubarakRedirectThreatAction(botAI);
     }
 
     static Action* anubarak_kite_spike_to_permafrost(PlayerbotAI* botAI) {

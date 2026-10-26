@@ -27,6 +27,27 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakKiterNeedsFreedomTrigger : public Trigger
+{
+public:
+    AnubarakKiterNeedsFreedomTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak kiter needs freedom") {}
+    bool IsActive() override;
+};
+
+class AnubarakHopEscortTrigger : public Trigger
+{
+public:
+    AnubarakHopEscortTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak hop escort") {}
+    bool IsActive() override;
+};
+
+class AnubarakRedirectThreatTrigger : public Trigger
+{
+public:
+    AnubarakRedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak redirect threat") {}
+    bool IsActive() override;
+};
+
 class AnubarakSpikeNearbyTrigger : public Trigger
 {
 public:
@@ -167,6 +188,12 @@ public:
             &ToCAnubarakTriggerContext::anubarak_pursued_by_spike;
         creators["anubarak kiter needs protection"] =
             &ToCAnubarakTriggerContext::anubarak_kiter_needs_protection;
+        creators["anubarak kiter needs freedom"] =
+            &ToCAnubarakTriggerContext::anubarak_kiter_needs_freedom;
+        creators["anubarak hop escort"] =
+            &ToCAnubarakTriggerContext::anubarak_hop_escort;
+        creators["anubarak redirect threat"] =
+            &ToCAnubarakTriggerContext::anubarak_redirect_threat;
         creators["anubarak spike nearby"] =
             &ToCAnubarakTriggerContext::anubarak_spike_nearby;
         creators["anubarak burrower casting shadow strike"] =
@@ -216,6 +243,18 @@ private:
 
     static Trigger* anubarak_kiter_needs_protection(PlayerbotAI* botAI) {
         return new AnubarakKiterNeedsProtectionTrigger(botAI);
+    }
+
+    static Trigger* anubarak_kiter_needs_freedom(PlayerbotAI* botAI) {
+        return new AnubarakKiterNeedsFreedomTrigger(botAI);
+    }
+
+    static Trigger* anubarak_hop_escort(PlayerbotAI* botAI) {
+        return new AnubarakHopEscortTrigger(botAI);
+    }
+
+    static Trigger* anubarak_redirect_threat(PlayerbotAI* botAI) {
+        return new AnubarakRedirectThreatTrigger(botAI);
     }
 
     static Trigger* anubarak_spike_nearby(PlayerbotAI* botAI) {

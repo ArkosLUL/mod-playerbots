@@ -28,6 +28,7 @@ namespace
 constexpr uint32 ANUBARAK_STALL_MS = 500;
 constexpr float ANUBARAK_RANGED_REACH_MARGIN = 2.0f;
 constexpr float ANUBARAK_BOOKED_TOLERANCE = 0.5f;
+constexpr float ANUBARAK_ESCORT_REAIM = 3.0f;
 
 constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
 
@@ -176,8 +177,14 @@ bool AnubarakKiterImmunityAction::Execute(Event /*event*/)
 
     for (char const* immunity : immunities)
     {
-        if (botAI->CanCastSpell(immunity, bot))
-            return botAI->CastSpell(immunity, bot);
+        if (!botAI->CanCastSpell(immunity, bot))
+            continue;
+
+        // Feign Death drops the moment the hunter moves, the same ms it lands when cast mid run
+        if (bot->getClass() == CLASS_HUNTER && bot->isMoving())
+            bot->StopMoving();
+
+        return botAI->CastSpell(immunity, bot);
     }
 
     return false;
@@ -187,6 +194,42 @@ bool AnubarakProtectKiterAction::Execute(Event /*event*/)
 {
     Player* kiter = GetAnubarakKiterToProtect(bot);
     return kiter && botAI->CastSpell("hand of protection", kiter);
+}
+
+bool AnubarakFreeKiterAction::Execute(Event /*event*/)
+{
+    Player* kiter = GetAnubarakKiterToFree(bot);
+    return kiter && botAI->CastSpell("hand of freedom", kiter);
+}
+
+bool AnubarakHopEscortAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!GetAnubarakEscortSpot(bot, spot))
+        return false;
+
+    // The spot moves with the kiter, so a walk already headed close enough is left running
+    ReleaseStalledWalk(botAI, bot);
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    if (bot->isMoving() && last.msTime &&
+        spot.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= ANUBARAK_ESCORT_REAIM)
+        return true;
+
+    BreakChannelPinningTheFeet(bot);
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+Player* AnubarakRedirectThreatAction::GetRedirectTank()
+{
+    AnubarakRedirect redirect;
+    return GetAnubarakRedirect(bot, redirect) ? redirect.tank : nullptr;
+}
+
+Unit* AnubarakRedirectThreatAction::GetThreatDumpTarget()
+{
+    AnubarakRedirect redirect;
+    return GetAnubarakRedirect(bot, redirect) ? redirect.dump : nullptr;
 }
 
 bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
@@ -369,7 +412,7 @@ bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
     // The spike dodge would walk the tank straight back out
     Position const& hold = pick.hold;
     if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) <= ANUBARAK_TANK_PATCH_ARRIVE ||
-        AnubarakSpikeLaneCrosses(bot, hold))
+        AnubarakSpikeReachesFirst(bot, hold))
         return false;
 
     return MoveTo(bot->GetMapId(), hold.GetPositionX(), hold.GetPositionY(), hold.GetPositionZ(), false, false,
@@ -391,7 +434,7 @@ bool AnubarakSideTankReadyAction::Execute(Event /*event*/)
 
     Position const hold = GetAnubarakSideTankHold(bot, static_cast<uint8>(side));
     if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) <= ANUBARAK_TANK_PATCH_ARRIVE ||
-        AnubarakSpikeLaneCrosses(bot, hold) || WalkInFlight(botAI, bot, hold))
+        AnubarakSpikeReachesFirst(bot, hold) || WalkInFlight(botAI, bot, hold))
         return false;
 
     return MoveTo(bot->GetMapId(), hold.GetPositionX(), hold.GetPositionY(), hold.GetPositionZ(), false, false,
@@ -541,7 +584,7 @@ bool AnubarakTankPickUpScarabAction::Execute(Event /*event*/)
     if (!scarab)
         return false;
 
-    bool const taunted = TryClassTaunt(botAI, bot, scarab);
+    bool const taunted = scarab->GetVictim() != bot && TryClassTaunt(botAI, bot, scarab);
     return Attack(scarab) || taunted;
 }
 

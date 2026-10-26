@@ -92,7 +92,13 @@ Named "Anub'arak", rank 3 and `CREATURE_TYPE_FLAG_BOSS_MOB` (so `isWorldBoss()`)
 (67574). A reader keys the boss on entry 34564, never on name or boss flag.
 
 - **Speed** 3.5 yd/s, 6.1 from 7 s, 11.4 from 14 s (`speed_run` 0.5 with +75%, then +225%). A
-  player at 7 yd/s gains about 30 yd in the first 14 s, then loses it in 7.
+  player at 7 yd/s gains about 30 yd in the first 14 s, then loses it in 7. The steps are auras:
+  65920 and 65922 last 7 s and the next goes out as each ends, 65923 stays, so the time to the next
+  step is the running aura's duration. A fail strips them all.
+- **Pure pursuit**: it heads straight at its target's position each moment. Replayed from the
+  kiter's real path over six 25H pulls (2026-10-26), its position 6 s on is within 0.3 yd median,
+  0.9 p90, its closest pass by a patch 0.4 p90; a straight lane to where the kiter will be is 6.5 /
+  19.7 and 10.4. A kiter faster than it (Nitro, about 17.5 yd/s) running an arc has it cut the chord.
 - **Each tick** (1.5 / 0.8 / 0.4 s by speed stage) it tests for an alive sphere within 8 yd, 3D plus
   both sizes (spike 1.5, patch 2.0 at scale 2, falling sphere 1.0): **11.5 yd round a patch, 10.5
   round a falling sphere**. One found: it teleports onto it, `SPIKE_FAIL` strips the sphere's auras
@@ -111,7 +117,11 @@ Named "Anub'arak", rank 3 and `CREATURE_TYPE_FLAG_BOSS_MOB` (so `isWorldBoss()`)
   keeps the speed auras). Hand of Protection keeps the mark, a still target included (core
   `102c26d97`, 2026-10-05).
 - **Immunities**: Impale is physical (school 1), so Hand of Protection (1022/5599/10278, 30 yd)
-  voids it. Forbearance (25771) bars a second one within 2 min.
+  voids it. Forbearance (25771) bars a second one within 2 min. Feign Death (5384) drops on movement:
+  cast mid run it lands and goes in the same ms.
+- **Hand of Freedom** (1044, snare and root immunity) strips Permafrost's slow (mechanic 11) and
+  keeps it off 6 s; in the traces every one on a carrier removed it the same ms. A paladin's Hands on
+  one target replace each other (`SPELL_SPECIFIC_HAND`, per caster).
 - **Cadence**: while patches lasted, the 2026-10-16 25N kites started 5.4-5.6 s apart, so one
   phase 2 asks about ten patches.
 
@@ -126,8 +136,12 @@ Named "Anub'arak", rank 3 and `CREATURE_TYPE_FLAG_BOSS_MOB` (so `isWorldBoss()`)
   30-45 s after spawn, then every 30-45 s, on a random player; on hit it teleports behind the target
   and attacks it.
 - **Swarm Scarab** (34605): adds 20000 threat on a random player, so neither threat nor redirect
-  holds one. Acid-Drenched Mandibles stacks a nature DoT. Determination fires first at 10-50 s, then
-  every 20-60 s: full heal, +100% speed, immune to most crowd control.
+  holds one. Acid-Drenched Mandibles (25H 67863) stacks a nature DoT, 1,800 a stack every 3 s, 60 s,
+  refreshed by each hit, up to 40, no dispel; the scarab's melee itself does nothing. Determination
+  fires first at 10-50 s, then every 20-60 s: full heal, +100% speed, immune to most crowd control.
+  Phase 2's are 600 s summons (66340), living a median 12-17 s, 3-4 a submerge 20-60 s past the
+  emerge in the 2026-10-26 late wipes, where the main tank, their pickup, came up with 7-13 stacks
+  and died to them plus his melee (58-123k Mandibles in his last 20 s) in every one.
 
 ## How the bots play it
 
@@ -167,7 +181,8 @@ No ties, since a tie falls to insertion order:
 
 | Relevance | Trigger → action | Who, when | Does |
 |---|---|---|---|
-| EMERGENCY+9 | `anubarak kiter needs immunity` → `anubarak kiter immunity` | a marked bot, no protector, the spike within 9 yd and faster than it, no patch stand it reaches first (heroic: no boost left) | paladin `hand of protection` while it has a patch to walk to or the emerge is 10 s off, else `divine shield`, the other as fallback; mage `ice block`; rogue `vanish`; hunter `feign death` |
+| EMERGENCY+9 | `anubarak kiter needs immunity` → `anubarak kiter immunity` | a marked bot, no protector, the spike within 9 yd and faster than it, no patch stand it reaches first (heroic: no boost left) | paladin `hand of protection` while it has a patch to walk to or the emerge is 10 s off, else `divine shield`, the other as fallback; mage `ice block`; rogue `vanish`; hunter stops, then `feign death` |
+| EMERGENCY+8.5 | `anubarak kiter needs freedom` → `anubarak free kiter` | the paladin bot picked for a kiter carrying Permafrost | `hand of freedom` on it ([below](#how-the-bots-play-it)) |
 | EMERGENCY+8 | `anubarak pursued by spike` → `anubarak kite spike to permafrost` | carries 67574 | heroic `boost` stage: the boost; else walks to the kite stand, `MOVEMENT_FORCED` |
 | EMERGENCY+7 | `anubarak kiter needs protection` → `anubarak protect kiter` | the paladin holding the kiter's claim | `hand of protection` on the kiter |
 | EMERGENCY+6 | `anubarak spike nearby` → `anubarak avoid spike` | unmarked, within 10 yd of the spike or 7 yd of its line to the kiter (16 and 10 while it outruns the bot) | walks to its held dodge spot, `MOVEMENT_FORCED` |
@@ -178,11 +193,13 @@ No ties, since a tie falls to insertion order:
 | RAID+6 | `anubarak leeching swarm on tank` → `anubarak tank defensive` | his victim in `Swarm`, a defensive ready | `NextTankDefensive` on self |
 | RAID+5.5 | `anubarak grip frost sphere` → `anubarak grip frost sphere` | a DK with a grip duty | `walk` to its stand, stops and `cast`s Death Grip on the duty sphere, `kill`s it once landed |
 | RAID+5 | `anubarak ranged should seed permafrost` → `anubarak destroy frost sphere` | a sphere duty | attacks the sphere, out of reach walks in first |
+| RAID+4.5 | `anubarak hop escort` → `anubarak hop escort` | heroic, the escort paladin over 4 yd off its spot (`anub.escort` `walk`/`hold`) | walks there |
 | RAID+4 | `anubarak dps target` → `anubarak dps target` | DPS whose `GetAnubarakDpsTarget` pick isn't its current target or its pet's | attacks the pick, pet too |
 | RAID+3.8 | `anubarak melee burrower stand` → `anubarak melee burrower stand` | a melee DPS bot on a burrower near a patch, out of reach or within 8 yd of a patch | walks to its stand |
 | RAID+3 | `anubarak burrower needs assist tank` → `anubarak assist tank hold burrower` | a side tank with a burrower to take, not the pickup tank while he is up | picks up, holds it from its rim |
-| RAID+2 | `anubarak scarab on raid` → `anubarak tank pick up scarab` | the pickup tank while he is down; a side tank with no burrower to take while he is up and no wave due within 8 s; a scarab within 30 yd on a non-tank | taunt, attack |
-| RAID+1.5 | `anubarak side tank ready` → `anubarak side tank ready` | an unmarked side tank with nothing to take, not the pickup tank while he is up, not gathered | attacks a scarab on itself, walks to its rim (else spot) |
+| RAID+2 | `anubarak scarab on raid` → `anubarak tank pick up scarab` | the pickup tank while he is down; an unmarked side tank, not the escort, with no burrower to take and no wave due within 8 s, while he is up (heroic also down); a scarab within 30 yd on a non-tank: heroic side tanks only one on a healer, heroic phase 2's pickup tank only one on itself | taunt (not one on itself), attack |
+| RAID+1.5 | `anubarak side tank ready` → `anubarak side tank ready` | an unmarked side tank with nothing to take, not the pickup tank while he is up, not gathered, not the escort | attacks a scarab on itself, walks to its rim (else spot) |
+| RAID+1.2 | `anubarak redirect threat` → `anubarak redirect threat` | a hunter or rogue bot with a [redirect duty](#how-the-bots-play-it), its redirect ready or Misdirection's charges left | Misdirection or Tricks on the tank, then Steady Shot into the dump target |
 | RAID+1 | `anubarak engaged by main tank` → `anubarak main tank hold boss` | the pickup tank while he is up | steps out of Permafrost, else leads him in latched legs onto the anchor, or from 65 s onto the submerge spot |
 | RAID+0.5 | `anubarak raid gathers` → `anubarak gather` | heroic phase 2, not the kiter or a side tank with a burrower to hold or take | walks to its gather slot, round any patch |
 | RAID+0.45 | `anubarak healer stand` → `anubarak healer stand` | a healer bot while he is up, unmarked, no dodge held, off Permafrost, over 6 yd off its stand | walks there, round any patch |
@@ -196,7 +213,9 @@ and `DpsAssist` for it while he is up (`anubarak pickup tank target guard`) and 
 pull (`anubarak side tank target guard`): in the 2026-10-25 wipes a side tank was on him when a wave
 landed. `DpsAssist` is zeroed for a sphere shooter and a gripping DK not just waiting on its spot
 (`anubarak sphere shooter target guard`): a flying sphere is out of combat, never the dps target, so
-assist would swap the shooter off it every tick. A side tank with nothing to take falls through to
+assist would swap the shooter off it every tick. Heroic phase 2 zeroes `TankAssist` and blocks
+`Taunt` for the pickup tank (`anubarak main tank scarab guard`, `... scarab taunt guard`), so it hits
+only scarabs on itself. A side tank with nothing to take falls through to
 the scarab node, else the ready node. `anubarak control tank movement multiplier` zeroes formation
 moves for a tank on him or a burrower.
 
@@ -359,10 +378,12 @@ Intercept, Avenger's Shield or Death Grip, each gated on `CanCastSpell` and reac
 the 2026-10-25 wipes burrowers were on a tank 18-41% of their life and two warlocks died to them in
 every pull. It walks to its **hold** only once its pick is on it; an untaunted
 one is attacked in place, since walking off leaves it on its victim and the patch walk and reach
-melee trade the tank back and forth. It skips the walk while the hold lies within 9 yd of the
-spike's lane, where the dodge would walk it straight back out. With nothing to take it stands on its
-hold (`anub.sidetank` `ready`), hitting any scarab on itself, and in phase 2 the scarab node is the
-main tank's only.
+melee trade the tank back and forth. It skips the walk (and the ready node's) only while the spike
+could reach the hold within the walk plus 2 s (distances over speeds), where the dodge would walk it
+straight back out; a veto on the spike's lane crossing the hold, however far the spike, kept side
+tanks 7-18 yd off at three phase 2 starts of the 2026-10-26 late wipes, each losing a burrower to a
+submerge. With nothing to take it stands on its hold (`anub.sidetank` `ready`), hitting any scarab
+on itself, and in normal phase 2 the scarab node is the main tank's only.
 
 **The hold is the patch's rim toward him** (`GetAnubarakSideTankHold`): 7 yd from the centre toward
 the anchor once every burrower on the tank carries Permafrost, the centre while one doesn't, so it
@@ -389,8 +410,10 @@ he is engaged), first match:
    25-40k/s. In the 2026-10-25 wipes the old burrower-first order put 55-64% of DPS on them and he lost
    14-17% a phase; the unlatched rate check flipped off at 0:14 with the focus at 38-54%, and wave 2's
    focus never came due before the submerge, so it lived through phase 2 in the 2026-10-26 wipes;
-4. him while selectable;
-5. the focus burrower (`anub.focus`, per instance): selectable and under 10%; else **settled**, a
+4. once he is up, every difficulty, the nearest leftover scarab within 30 yd ([Adds](#adds): their
+   stacks last a minute and every hit refreshes them);
+5. him while selectable;
+6. the focus burrower (`anub.focus`, per instance): selectable and under 10%; else **settled**, a
    tank within 5 yd has it, or its side has no usable side tank, and then on Permafrost or in its
    **free time**, the 25 s after it first shows or emerges, since the script's first submerge
    check comes at 30 s. Unsettled, it is still walking in from its exit: every wave's first pick in
@@ -400,7 +423,7 @@ he is engaged), first match:
    free time outranks it. Off Permafrost one below 80% submerges on a 3 s check and comes back full,
    but one under 10% dies first (one was left at 0.1% in a 2026-10-26 wipe). Shooting only patched
    ones, side 0's wave 1 lived 39-45 s in a 2026-10-26 pull;
-6. while he is down, the nearest scarab within 30 yd that is selectable, attackable and in combat.
+7. while he is down, the nearest scarab within 30 yd that is selectable, attackable and in combat.
    Each puts 20000 threat on a random player, so no tank gathers them; 30 yd is the tank pickup
    reach.
 
@@ -487,7 +510,11 @@ tank patches to replace it after the emerge, else 0; spent (written 0) once a la
 disappears while he is down, whatever spent it. Six spheres, no respawn. Under it the kite may end on
 a tank patch, a side holding no burrower first, or on a stray patch 16.75+ yd from every tank patch
 (after a fail the spike restarts there, and its first test reaches 11.5 yd plus its 5.25 yd first
-walk); route clear first: spike to kiter to stand passing no other tank patch within 14.5 yd.
+walk); route clear first: spike to kiter to stand passing no other tank patch within 14.5 yd; then,
+every difficulty, a walk passing the gather by 12 yd. Under its own Hand of Protection the kiter
+ignores the spike-behind tests: G 1:22 Holylight's immune turn timed the 26 yd walk to the near
+patch, the stand pick refused it with the spike 2.5 yd off her and sent her 44 yd through the gather,
+the hand ran out 15 yd short and Felesta died to the Impales.
 Branches, as `anub.kite`:
 
 - `hold` within 2 yd; returns false, so a healer or caster keeps working.
@@ -503,23 +530,28 @@ Permafrost), the stage per instance per ms. The 2026-10-25 bot kites lasted 1-15
 patch, 4-5 a phase 2:
 
 - `run`: no patch search. A **lane step**: 16 headings, 10 yd out, floor-checked, within 40 yd of
-  the room centre (or no further out than the kiter is), the spike behind and no nearer. A heading
-  clears when no obstacle lies inside the triangle spike, kiter, **probe** (the spike chases, so its
-  path stays inside it) and both the spike's leg and the kiter's to the probe pass it by its
-  clearance, a leg starting inside that only having to head away. The probe is where the heading
-  takes the kiter in 3 s (10 yd at least): two 2026-10-26 kiters with Nitro left looped the rim on
-  10 yd steps that each cleared while the loop swept the spike across a tank patch. Obstacles: every patch at 14.5 yd, and in phase
+  the room centre (or no further out than the kiter is), the spike behind and no nearer. Each heading
+  is judged by the **pursuit model** (`ToCAnubarakPursuit.h`, no game headers, nativetest): 100 ms
+  steps of [pure pursuit](#pursuing-spike-34660) with the speed steps off its auras, 6 s of the kiter
+  running straight along it to the ring radius, then round the ring the way it turns (a square-on
+  heading away from the spike's bearing). It clears when the spike's simulated run passes every
+  obstacle by its clearance and the kiter's own run every patch by 8.5, one starting inside that only
+  having to head away. A straight lane missed G 4:04 (2026-10-26): Agony on Nitro, faster than the
+  spike, rounded the north rim and the spike cut inside it within 8 yd of a tank patch, spent in
+  `run`; the model puts that pass at 9.5 and the south heading's at 39. Obstacles: every patch at 14.5 yd, and in phase
   2 the gather point at 20 (3 yd slots, up to 6 off them, Impale's 7.5, 3.5 margin), since Impale is
   cast round the spike as it moves: at 12 the spike passed within 10 yd of six gathered bots. Ranked:
-  clear of every patch; then the **restart line**, probe to the gather, passing every tank patch by
+  clear of every patch; then the **restart line**, the kiter's modelled spot 3 s on to the gather, passing every tank patch by
   14.5, since after a death or hand-off the spike runs from there to the raid (C 1:57 the line crossed
   the south patch 0.5 yd off); then clear of the gather; then, while the spike is faster and a patch it
-  may end on lives, a step within 25 yd of its stand; then the widest lane past the patches, then past
+  may end on lives, a step within 25 yd of its stand; then the widest pass by the patches, then by
   the gather, margins capped at 20 yd, then the step furthest from the spike. None clear of the
   patches: the widest patch margin alone, the gather left out: weighing the gather like a tank patch,
   the second kite of every 2026-10-26 pull walked the spike over the last tank patch. The last
-  heading (within 15°) stays while it ranks with the best and is within 3 yd of its margins: kiters
-  dithered ±1 yd at the rim for 2-3 s. None at all: the plain ring step. The ring step this replaced checked only the kiter's
+  heading (within 15°) stays while it clears the patches whenever the best does (with none clear,
+  within 3 yd of its margin): at the rim only two opposite headings pass, and re-ranked on the gather
+  and tiebreak terms they swapped every tick, Mighty (G 2:09) and Prayer (H 6:16) stalling 5-6 s,
+  Prayer to death. None at all: the plain ring step. The ring step this replaced checked only the kiter's
   leg: all four early 2026-10-26 kites circled a tank patch at 15 yd while the spike cut straight
   across it. A warlock kept within 38 yd of its circle circled it and let a speed-2 spike cut the
   chord.
@@ -532,7 +564,12 @@ patch, 4-5 a phase 2:
   immunity wait while any boost is ready or running; the generic `feign death` is zeroed for a marked
   bot.
 - `patch`, to the stand of the patch it may end on, T away at the kiter's speed, only while the spike
-  is faster: under the hand once both its end and Impale's reach are within T + 1.5 s (turning at the
+  is faster. **A kiter carrying Permafrost counts at base run speed** (7 yd/s, more if boosted), here,
+  in `boost`, the protection claim and the leash: it runs that once off the patch. Read at 1.4 yd/s,
+  Bulwark marked in his own tank patch turned `patch` 0.1 s in against a 3.5 yd/s spike (F 1:22, H
+  6:06) and spent the submerge's allowance. Impale's reach comes from the pursuit model along the
+  kiter's facing (away from the spike while it stands), the spike's next steps in, 20 s horizon. T is
+  timed on the same patch and stand the walk takes (`ChooseKitePatch`). Under the hand once both its end and Impale's reach are within T + 1.5 s (turning at the
   hand's end spent a patch with the spike 17 yd back at 6.1 yd/s, 8 s of running left); else, no boost
   and no immunity coming (Forbearance, no paladin bot in 30 yd with Hand of Protection ready), once
   the spike would close to Impale's 7.5 yd within T + 1 s, or is within 9 yd. With none, 2 s of
@@ -578,7 +615,9 @@ back.
 **Hand of Protection covers a kiter the spike closes on.** Once the spike is within 12 yd of a kiter
 and faster than it (a slowed kiter counts), with no Hand of Protection, Divine Shield, Ice Block or
 Forbearance, the first alive unmarked paladin
-bot by guid within 30 yd and in sight that `CanCastSpell` allows claims it; range and sight are
+bot within 30 yd and in sight that `CanCastSpell` allows claims it, in the **protector order**:
+neither tank nor healer, a side tank with no burrower to hold or take, a healer, any other tank, by
+guid within each; range and sight are
 asked apart, since `CanCastSpell` waves an out-of-range target through. One claim per mark, kept
 until the mark moves; one 1.5 s old with no immunity on the kiter passes to the next paladin, and
 one lapses, for the same paladin to retake, when the spike falls back past 12 yd or slows. Two
@@ -591,10 +630,42 @@ Divine Shield 7 yd from the gather in a 2026-10-26 wipe handed an 11.4 yd/s spik
 Impales, 5 dead in 0.8 s. Impale is physical, and 5 of the 6 kites after the patches ran out took
 Impales in the 2026-10-16 kill.
 
-**Scarabs.** DPS take them only while he is down (branch 4 of the DPS target above); the guide only
-asks raiders to mind their scarab aggro. Phase 2's are 600 s summons (66340) and outlive the emerge,
-but once he is selectable the boss pick holds and `dps assist` stays zeroed, so leftovers fall to
-`anubarak scarab on raid` alone: tanks taunt them off non-tanks.
+**A paladin escorts a kiter with no patch to end on** (heroic, user call). In the 2026-10-26 late
+wipes the paladins stood at the gather while such kiters ran the far side of the 40 yd ring, 31-43 yd
+off, and died with no hand. While the kiter has no kite patch stand, no Forbearance or immunity and
+isn't a paladin bot with its own hand ready, the first paladin bot in the protector order with Hand
+of Protection ready on it is the **escort**, once per instance per ms, so it is the one the claim
+picks. Its spot is on the line from the room centre to the kiter, 25 yd short of it (the centre when
+nearer), turned 15° and 30° either way round the centre until 15 yd off the spike, the dodge lane
+clearance off its line to the kiter, 29 yd of the kiter, 8.5 yd off every patch and on the floor
+(inside the centre's navprobe-clean 50 yd); none clear, no escort. Over 4 yd off it walks there, a
+walk headed within 3 yd left running. The gather and the side tank nodes skip it, and `anubarak hop
+escort hold` blocks `reach melee`, `reach spell`, `reach party member to heal`, set behind, flank,
+formation, follow and charges. It ends with the hand, the mark or the emerge.
+
+**Hand of Freedom frees a kiter marked in Permafrost**, every difficulty: itself when a paladin bot,
+else the first paladin bot within 30 yd and in sight in the protector order, never one with a Hand of
+its own on the kiter or holding the protection claim (`anub.freedom` `cast`). The generic `hand of
+freedom on party` already skips a target with the caster's Hand on it; `HasAnyPaladinHandFromCaster`
+checked only Hand of Protection rank 1, so it now lists all three.
+
+**Scarabs** (user call: spread the stacks). DPS take them while he is down (branches 2 and 7 of the
+DPS target above), and leftovers ahead of him once he is up (branch 4). Heroic phase 2's pickup tank
+takes none off others, so it surfaces clean, and holds its gather edge hitting any on itself; a free
+side tank, unmarked and not the escort, peels one only off a healer, as heroic side tanks do while he
+is up. Normal phase 2 keeps the pickup tank on them.
+
+**Redirects go to the tanks that need the threat** (`GetAnubarakRedirect`). In the 2026-10-26 late
+wipes every Misdirection went to the main tank (most cast with the hunter on a burrower) and 12-19 of
+each pull's 18-27 Tricks to a melee DPS, nothing to a side tank, while 22-26 burrowers a pull opened
+on a non-tank (the nearest at the spawn is ranged or a pet, 28-46 yd off the exits). `anubarak
+redirect guard` blocks the class `misdirection on main tank`, `tricks of the trade` and `tricks of the
+trade on main tank` all fight. In the pull's first 10 s the first hunter and the first rogue bot in
+group order redirect to the main tank (user call), Misdirection's shots dumped into him; the others
+keep theirs for wave 1. Otherwise each selectable burrower not on the usable bot side tank owning it
+(`anub.bside`), by guid, takes one hunter in group order (the pull's aside) whose Misdirection goes
+to that tank and Steady Shots into it; a rogue Tricks that tank only while hitting that burrower and
+within 20 yd, since Tricks moves only the threat of what the rogue hits.
 
 **Shadow Strike** gets one interrupter per casting burrower, derived once per instance per ms, since
 25H's four a wave overlap their 8 s casts. Each goes to its victim if unmarked with an interrupt
@@ -638,8 +709,10 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
   first reader's protection claim. Side tanks are latched per instance.
 - While he is down, a DPS bot with no scarab within 30 yd falls back to `dps assist`, which can take
   a burrower off Permafrost.
-- Scarabs alive at the emerge are no DPS pick once he surfaces; only side tanks with nothing to take
-  peel them off non-tanks.
+- A human marked by his own tank patch spends it (H 1:22 Deathsong); nothing steers a human kiter.
+- The pursuit model runs the kiter straight then round the 40 yd ring at its speed now; a boost
+  running out or a turn inside the ring is outside it.
+- A rogue's Tricks waits until it hits a loose burrower, which its DPS pick rarely is.
 - Side tanks die to two frenzied burrowers at 9 Expose Weakness stacks (+225%, 5+ stacks 17-34 s of
   each 2026-10-26 wave), and most burrower submerges followed a side tank's death; no healer is
   assigned to a side tank.
@@ -648,8 +721,6 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
   2026-10-26 wipe); only bots are blocked.
 - A DPS bot can still pull a freshly taunted burrower off its side tank on plain threat (two did
   within 3 s in a 2026-10-26 pull).
-- Scarab Mandible stacks on the main tank in phase 2 go unanswered beyond the nature aura (8.8k to
-  24.9k ticks, dead at 4:31 in a 2026-10-26 wipe).
 - Not handled: the phase 3 heal hold and stamina-buff cancel, Freezing Slash defensives, ignoring
   burrowers once he is low, scarab threat, normal's phase 2 raid positioning.
 
@@ -680,6 +751,8 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 | `kite` | The kiter's branch: `patch` (walking to a stand), `detour`, `ring`, `hold`; `none` when there's no spike or the mark moved on |
 | `dodge` | A new dodge spot's reason: `spike` (within 10 yd of it), `lane` (on its line to the kiter), `none` (no clear spot) |
 | `protect` | `hop` while this paladin holds the kiter's claim, `self` while the marked bot needs its own immunity, `none` |
+| `escort` | Heroic escort paladin: `walk`, `hold`, `none` |
+| `freedom` | `cast` while this paladin owes the kiter Hand of Freedom, `none` |
 | `interrupter` | `1` while the bot holds Shadow Strike duty, `0` once the cast ends |
 | `pickup` | The pickup tank's step: `taunt` (off a non-tank), `attack`, `stepout` (out of Permafrost), `hold` (no leg), `drag` (a leg to the anchor), `submerge` (a leg to the submerge spot) |
 | `defensive` | What a side tank or the Swarm tank cast, `covered` (one running) or `none` |
@@ -748,7 +821,21 @@ each engine's pass count (no row names the engine per tick, so a total), `raid h
 the coverage, `hstand` rows, per side tank the seconds with no healer within 40 yd; `--tanks` per
 wave and side tank the Expose Weakness peak and seconds at 5+, each `defensive` with its stack and
 health (a magic-only one on a side tank flagged), each tank death with damage by source, heals and
-absorbs in the 12 s before. Baseline, the 2026-10-26 25H wipes C, D, E: Hand of Protection on a
+absorbs in the 12 s before, each tank's defensives from its cast rows (`anub.defensive` writes only
+on a change). Then: `--spike` per kite a walk flip-flop (move targets 5+ yd apart reversing 3+
+times in 2 s), the nearest Hand of Protection-ready paladin when the spike first came within 12 yd
+(ready: a bot, alive, unmarked, no hand of its own in 180 s, no Forbearance on the kiter; past 30 yd
+flagged), Feign Death dropped within 100 ms; `--scarabs` scarabs alive at each emerge +0/10/20/30 s
+with targets, the main tank's Mandibles stacks then, lives per phase, Mandibles damage and peak stacks
+per player per phase; `--redirects` each Misdirection and Tricks with caster, recipient, the caster's
+target and a burrower's target 1-8 s on; `--burrowers` each opener (the encounter's own creatures
+skipped) and the three players nearest its exit at the spawn; `--pursuit` pure pursuit replayed per
+kite at 3 and 6 s, end and patch-pass error, flagged past a 1.5 yd p90. Late baseline, the
+2026-10-26 25H wipes F, G, H: Misdirection 18/17/28 all to the main tank, Tricks 22/18/27 with
+19/12/19 to melee DPS; openers on a non-tank 23/24, 22/24, 26/32; main tank Mandibles stacks at the
+emerges 11, 4 / 9, 13 / 0, 10, 7; raid Mandibles a phase 1 443-829k; pursuit patch-pass p90 0.3-0.4;
+flip-flops G Mighty 2:09, H Prayer 6:16 (and four short ones); paladin past 30 yd at 3 of 5, 2 of 3,
+1 of 5 kites. Baseline, the 2026-10-26 25H wipes C, D, E: Hand of Protection on a
 slower spike C 1:22, E 1:22 and 1:47; patches spent in `run` C 1:57, 4:13, D 2:03, E 1:44; 10-13
 players within 20 yd at each first submerge; `raid healer engine` absent, healers 13-19 yd from the
 main tank with 7-45% of passes on the non-combat engine; Anti-Magic Shell on a side tank 5 times. The banner names declared probes the pull never wrote, and each side's

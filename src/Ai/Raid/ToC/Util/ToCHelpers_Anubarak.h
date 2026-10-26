@@ -200,6 +200,8 @@ constexpr uint32 ANUBARAK_DODGE_HOLD_MS = 8000;
 
 // Spike this close: a paladin HoPs the kiter
 constexpr float ANUBARAK_KITE_PROTECT_RANGE = 12.0f;
+// The escort walks back to its spot once further off it
+constexpr float ANUBARAK_ESCORT_HOLD = 4.0f;
 // Impale's 6 + 1.5 plus a margin: the kiter's own immunity
 constexpr float ANUBARAK_KITE_IMMUNITY_RANGE = 9.0f;
 constexpr float ANUBARAK_HOP_RANGE = 30.0f;
@@ -328,6 +330,8 @@ Creature* GetPursuingSpike(Player* bot);
 Player* GetSpikeTarget(Player* bot);
 // Spot sits within ANUBARAK_SPIKE_LANE_CLEARANCE of the spike's line to its target
 bool AnubarakSpikeLaneCrosses(Player* bot, Position const& spot);
+// The spike could run to spot within the bot's walk there plus 2 s
+bool AnubarakSpikeReachesFirst(Player* bot, Position const& spot);
 
 bool IsFrostSphereFlying(Unit* sphere);
 // Killed but still dropping, turns into a patch 1.5 s after the kill
@@ -411,8 +415,9 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI);
 // within ANUBARAK_BURROWER_FREE_MS of coming up. Those off it go first, the one whose time ends first,
 // then the lowest health. The latched one stays while it qualifies and none of those outranks it.
 Creature* GetAnubarakFocusBurrower(Player* bot);
-// This DPS bot's target: a player's skull, him while selectable, else the focus burrower, else while
-// he's down the nearest scarab in reach. The focus burrower goes ahead of him while he's down, while
+// This DPS bot's target: a player's skull, a scarab left over once he's up, him while selectable, else
+// the focus burrower, else while he's down the nearest scarab in reach. The focus burrower goes ahead
+// of a leftover scarab and him while he's down, while
 // it's off Permafrost in its free time, or once killing every burrower at ANUBARAK_FOCUS_RATE_SHARE of
 // the raid's rate would run within the margin of the next wave, then until the focus it came due on
 // dies; for a melee bot only with a stand off the patches in its reach. Null outside the pull, for
@@ -433,8 +438,20 @@ bool AnubarakNonTankOnPermafrost(Player* bot);
 bool GetAnubarakPermafrostStepOut(Player* bot, Position& out);
 // The first leg toward to: a corner round a patch whose slow reach the straight walk would cut, else to
 Position GetAnubarakPatchSafeLeg(Player* bot, Position const& to);
-// Nearest scarab within 30 yd hitting someone who isn't a tank
+// Nearest scarab within 30 yd hitting someone who isn't a tank. Heroic spreads Acid-Drenched Mandibles:
+// in phase 2 the main tank takes only one already on it, and a side tank only one on a healer.
 Creature* GetAnubarakScarabToPickUp(Player* bot);
+// What a hunter or rogue bot's Misdirection or Tricks of the Trade does now
+struct AnubarakRedirect
+{
+    Player* tank = nullptr;
+    // Where a hunter spends the redirected shots
+    Unit* dump = nullptr;
+};
+// The pull's first 10 s: the first hunter and the first rogue bot, to the main tank. Otherwise to the bot
+// side tank owning a selectable burrower that isn't on it: one hunter a burrower by guid, and a rogue
+// only for the one it's hitting, within Tricks' 20 yd. False with no such duty.
+bool GetAnubarakRedirect(Player* bot, AnubarakRedirect& out);
 // Lowest health Penetrating Cold carrier under 90% this healer can reach
 Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI);
 
@@ -456,7 +473,7 @@ bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, Anubar
 // Heroic only, None elsewhere and for an unmarked bot. With Boost, boost says what to use.
 AnubarakKiteStage GetAnubarakKiteStage(Player* kiter, AnubarakKiteBoost* boost = nullptr);
 // Heroic phase 2: this bot's spot in the raid's gather, not floor-checked, false when it doesn't gather
-// (the kiter, a side tank a burrower is on). The main tank's is on the gather's edge.
+// (the kiter, a side tank a burrower is on, the escort). The main tank's is on the gather's edge.
 bool GetAnubarakGatherSpot(Player* bot, Position& out);
 bool AnubarakGathers(PlayerbotAI* botAI);
 // While he is up, every difficulty: a healer bot's slot on the gather's ring round the raid point, clear
@@ -478,6 +495,12 @@ bool IsAnubarakDodgeHeld(PlayerbotAI* botAI);
 
 // The kiter this paladin bot covers with Hand of Protection now, null when it has no such duty
 Player* GetAnubarakKiterToProtect(Player* bot);
+// Heroic: the spot of the paladin bot that walks to keep a kiter with no patch left to end on inside
+// Hand of Protection's reach, the one in line to cast it. False for every other bot.
+bool GetAnubarakEscortSpot(Player* bot, Position& out);
+bool IsAnubarakEscort(PlayerbotAI* botAI);
+// The kiter, marked while it carries Permafrost, this paladin bot casts Hand of Freedom on now
+Player* GetAnubarakKiterToFree(Player* bot);
 // The marked bot itself must cast an immunity now: the spike within the immunity range, no boost, no
 // protector, and no patch stand it reaches before the spike reaches it
 bool AnubarakKiterNeedsImmunity(Player* bot);
