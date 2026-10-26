@@ -59,6 +59,20 @@ public:
     void InitMultipliers(std::vector<Multiplier*>& multipliers) override;
 };
 
+// Its own context without siblings: in the raid strategies' context, adding the raid's strategy
+// would remove this one.
+class RaidHealerEngineStrategyContext : public NamedObjectContext<Strategy>
+{
+public:
+    RaidHealerEngineStrategyContext()
+    {
+        creators["raid healer engine"] = &RaidHealerEngineStrategyContext::raid_healer_engine;
+    }
+
+private:
+    static Strategy* raid_healer_engine(PlayerbotAI* botAI) { return new RaidHealerEngineStrategy(botAI); }
+};
+
 class RaidHealerEngineTriggerContext : public NamedObjectContext<Trigger>
 {
 public:

@@ -4,8 +4,9 @@
 
 A synthetic 10H pull pins the arithmetic behind each section, a 25H one the side tank, grip, kite
 stage and allowance probes, a second 25H one the gather and the burrower window, a third the
-Permafrost time, the focus picks and the tank patches spent, and the shared fixture shows every
-section reads empty on a trace that is not Anub'arak rather than raising.
+Permafrost time, the focus picks and the tank patches spent, a fourth the tank spots, a dropped grip,
+a burrower's submerge, the speeds at a cover, the healer and tank views, and the shared fixture shows
+every section reads empty on a trace that is not Anub'arak rather than raising.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import io
 import json
 import math
 import pathlib
+import statistics
 import sys
 import tempfile
 import unittest
@@ -491,6 +493,8 @@ class SyntheticPull(unittest.TestCase):
     def test_a_key_the_reader_reads_is_absent_whatever_the_source_declares(self):
         gone = ab.missing_probes(self.trace)
         self.assertIn("anub.wave", gone)
+        self.assertIn("anub.spot0", gone)
+        self.assertIn("anub.hstand", gone)
         self.assertNotIn("anub.phase", gone)
 
     def test_swarm_reads_the_probe_and_falls_back_to_the_aura(self):
@@ -1435,6 +1439,22 @@ class FrostPull(unittest.TestCase):
     def test_side_tank_gather_time_per_submerge(self):
         self.assertEqual(ab.side_tank_gather(self.trace), [("P2", 20000, {SIDE0: 19000}), ("P2b", 55000, {})])
 
+    def test_the_newer_probes_read_empty_on_a_pull_without_their_rows(self):
+        self.assertEqual(ab.spot_changes(self.trace), [])
+        self.assertEqual(ab.hstand_time(self.trace), {})
+        self.assertEqual(ab.engine_passes(self.trace), {})
+        self.assertEqual(ab.healer_engine_coverage(self.trace), {})
+        self.assertEqual(ab.healer_follows(self.trace), {})
+        self.assertEqual(ab.defensive_rows(self.trace), [])
+        self.assertEqual([row["step"] for row in ab.grip_rows(self.trace)], [None, None])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_healers(self.trace)
+            ab.show_tanks(self.trace)
+        self.assertIn("no cov records, so no engine passes and no raid healer engine coverage\n", out.getvalue())
+        self.assertIn("anub.hstand: no rows\n", out.getvalue())
+        self.assertIn("no anub.defensive cast\n", out.getvalue())
+
     def test_every_section_prints(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -1471,6 +1491,405 @@ class FrostPull(unittest.TestCase):
         self.assertRegex(text, r"0:22\.000 Shadowstep +melee +8\.0 +- +patch +0 +0 +-  tank patch 1 spent\n")
         self.assertIn("marked 3.0 yd from a Permafrost centre, inside its slow\n", text)
         self.assertIn("marked within 7.5 yd of a Permafrost centre: Trueshot 0:57.000 3.0 yd\n", text)
+
+
+R0, RG, RR = (CREATURE | n for n in range(1001, 1004))
+RX, RY = CREATURE | 1011, CREATURE | 1012
+GHOUL = CREATURE | 1021
+SCARAB = CREATURE | 1031
+SPK3 = CREATURE | 1041
+EXPOSE_25 = 67847
+EXPOSE_10 = 67721
+
+MAIN_AT = (X - 5.0, Y)
+SIDE0_AT = (X + 3.0, Y + O + 4.0)
+SIDE1_AT = (X, Y - O - 2.0)
+H_NEAR, H_OUT, H_STAND = (X - 5.0, Y + 10.0), (X - 5.0, Y + 30.0), (X - 5.0, Y + 5.0)
+PAL_AT = (X - 41.0, Y - 14.0)       # 41 yd from side 1's tank, 53 from side 0's
+B_DOWN = (X - 20.0, Y)
+K0 = (X - 22.0, Y + 3.0)
+DK_GRIP0, DK_P2, DK_P1B = (X + 3.0, Y + O + 0.5), (X - 30.0, Y), (X - 10.0, Y + 5.0)
+G_SPOT = (X + 3.0, Y - 4.0)         # 20 yd from side 0's tank, 16 from its patch
+RG_FLY = (X - 10.0, Y + 25.0)
+RR_FLY, RR_LAND = (X - 25.0, Y + 40.0), (X - 23.0, Y + 15.0)
+SPOT0_NEW = (X - 25.0, Y + 15.0)    # 2 yd from where the refill lands
+
+
+def refill_kiter(when: int) -> tuple[float, float]:
+    """The hunter runs east at 7 yd/s from its mark at 22.5 s, stands still 26-28 s, then runs on to 32 s."""
+    if when < 22500:
+        return K0
+    run = min(when, 26000) - 22500 + max(0, min(when, 32000) - 28000)
+    return K0[0] + 7.0 * run / 1000.0, K0[1]
+
+
+def refill_player(guid: int, when: int) -> list:
+    hp, target = 100.0, 0
+    if guid == MAIN:
+        spot, target = MAIN_AT, BOSS
+    elif guid == SIDE0:
+        spot = SIDE0_AT
+    elif guid == SIDE1:
+        spot, hp = SIDE1_AT, 0.0 if when >= 15000 else 100.0
+    elif guid == HEAL:
+        spot = H_NEAR if when < 10000 else H_OUT if when < 40000 else H_STAND
+    elif guid == PALADIN:
+        spot = PAL_AT
+    elif guid == HUNTER:
+        spot = refill_kiter(when)
+    elif guid == ROGUE:
+        spot = (X - 18.0, Y - 6.0)
+    elif guid == MELEE:
+        spot = (X - 20.0, Y + 15.0)
+    else:
+        spot = DK_GRIP0 if when < 5000 else DK_P2 if when < 40000 else DK_P1B
+    return [guid, *spot, Z, 0.0, hp, 100.0, target, 0, 0, 0, 0]
+
+
+def refill_sphere(guid: int, when: int):
+    """`(xy, z)` or None. The DK grips R0 at 2 s and it dies at 3 s onto side 0's spot, where the hunter's kite
+    spends it at 32 s; the DK grips RG at 43 s, it lands, nobody kills it and it floats back up at 48.5 s; RR
+    is shot down at 50 s 2 yd from side 0's new spot."""
+    if when < 0:
+        return None
+    if guid == R0:
+        if when > 32000:
+            return None
+        if when < 2500:
+            return (X + 10.0, Y + 20.0), FLYING_Z
+        return TP0, Z + 0.5 if when < 3000 else FALLING_Z if when < 4500 else PATCH_Z
+    if guid == RG:
+        return (DK_P1B, Z + 0.5) if 43500 <= when < 48500 else (RG_FLY, FLYING_Z)
+    if when < 50000:
+        return RR_FLY, FLYING_Z
+    return RR_LAND, FALLING_Z if when < 51500 else PATCH_Z
+
+
+def refill_burrowers(when: int) -> list[list]:
+    """RX holds side 0's tank to 10 s, goes for the human's ghoul and goes under at 12 s, 20 yd from its tank,
+    back up full at 22.5 s; RY sits on side 1's tank until it dies at 15 s."""
+    rows = []
+    spot = hp = None
+    target = 0
+    if 2000 <= when < 10000:
+        spot, hp, target = (SIDE0_AT[0] + 1.0, SIDE0_AT[1]), 100.0 - (when - 2000) / 400.0, SIDE0
+    elif when == 10000:
+        spot, hp, target = (X + 3.0, Y + 6.0), 79.0, GHOUL
+    elif when == 10500:
+        spot, hp, target = (X + 3.0, Y + 1.0), 78.5, GHOUL
+    elif 11000 <= when < 12000:
+        spot, hp, target = G_SPOT, 78.0 if when == 11000 else 75.0, GHOUL
+    elif 12000 <= when <= 22000:
+        spot, hp = G_SPOT, 70.0
+    elif 22500 <= when <= 30000:
+        spot, hp = EXIT_N1, 100.0
+    if spot is not None:
+        rows.append([RX, *spot, Z, 0.0, hp, 0.0, target, 0, 0, 0, 0])
+    if 2000 <= when <= 20000:
+        rows.append([RY, SIDE1_AT[0] + 1.0, SIDE1_AT[1], Z, 0.0, 100.0 - (when - 2000) / 1000.0, 0.0,
+                     SIDE1 if when < 15000 else 0, 0, 0, 0, 0])
+    return rows
+
+
+def refill_snap(when: int) -> dict:
+    units = [refill_player(guid, when) for guid in (MAIN, SIDE0, SIDE1, HEAL, PALADIN, HUNTER, ROGUE, MELEE, DK)]
+    up = 0 <= when < 20000 or when >= 40000
+    units.append([BOSS, *(B_DOWN if 15000 <= when < 40000 else (X - 5.0, Y + 2.0)), Z, 0.0,
+                  100.0 - max(when, 0) / 1000.0, 0.0, MAIN if up else 0, 0, 0, 0, 0])
+    if 22500 <= when <= 32000:
+        units.append([SPK3, K0[0] - 6.0 + 3.5 * (when - 22500) / 1000.0, K0[1], Z, 0.0, 100.0, 0.0, HUNTER,
+                      0, 0, 0, 0])
+    hz = []
+    for guid in (R0, RG, RR):
+        place = refill_sphere(guid, when)
+        if place is None:
+            continue
+        (x, y), z = place
+        units.append([guid, x, y, z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        if z == PATCH_Z:
+            hz.append([PERMAFROST_25H, x, y, PATCH_Z, 6.0, 1])
+    units += refill_burrowers(when)
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def expose(when: int, guid: int, spell: int, stacks: int) -> dict:
+    return {"t": when, "e": "aura", "d": guid, "s": RX, "sp": spell, "r": 1 if not stacks else 0, "st": stacks}
+
+
+def act(when: int, guid: int, action: str, verdict: str = "OK") -> dict:
+    return {"t": when, "e": "act", "g": guid, "a": action, "rel": 1.0, "vd": verdict}
+
+
+def refill_pull() -> list[dict]:
+    """A 25H pull: P1 to 20 s, P2 to 40 s, P1b to the end at 60 s, burrower waves at 2 and 47 s. Side 1's tank
+    dies at 15 s; the hunter's kite takes a Hand of Protection on a spike half its speed and spends side 0's
+    patch while running."""
+    spot = "{:.2f},{:.2f},142.60".format
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 9, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": MAIN, "n": "Ecoterrorist", "r": "tank", "c": "druid", "h": 0},
+             {"g": SIDE0, "n": "Bulwark", "r": "tank", "c": "paladin", "h": 0},
+             {"g": SIDE1, "n": "Felesta", "r": "tank", "c": "deathknight", "h": 0},
+             {"g": HEAL, "n": "Mercy", "r": "heal", "c": "priest", "h": 0},
+             {"g": PALADIN, "n": "Justice", "r": "heal", "c": "paladin", "h": 0},
+             {"g": HUNTER, "n": "Trueshot", "r": "ranged", "c": "hunter", "h": 0},
+             {"g": ROGUE, "n": "Shadowstep", "r": "melee", "c": "rogue", "h": 0},
+             {"g": MELEE, "n": "Arkos", "r": "melee", "c": "deathknight", "h": 1},
+             {"g": DK, "n": "Obliteration", "r": "melee", "c": "deathknight", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 22000, "e": "unit", "g": SPK3, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"} for guid in (R0, RG, RR)),
+        *({"t": 2000, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"} for guid in (RX, RY)),
+        {"t": 9000, "e": "unit", "g": GHOUL, "en": 24207, "n": "Army of the Dead Ghoul", "own": MELEE},
+        {"t": 12000, "e": "unit", "g": SCARAB, "en": ab.NPC_SCARAB, "n": "Swarm Scarab"},
+        {"e": "covdef", "d": [[1, "timer", "nc", "n"], [2, "party member low health", "holy", "c"],
+                              [3, "party member medium health", "holy", "c"], [5, "often", "holy", "c"],
+                              [6, "raid healer combat engine trigger", ab.HEALER_ENGINE, "c"],
+                              [7, "raid healer combat engine trigger", ab.HEALER_ENGINE, "n"]]},
+
+        *(note(when, MAIN, "anub.phase", value) for when, value in ((0, 1), (20000, 2), (40000, 1))),
+        note(0, MAIN, "anub.side0", SIDE0),
+        note(0, MAIN, "anub.side1", SIDE1),
+        *(note(when, MAIN, "anub.patch0", value) for when, value in ((0, 0), (5000, R0), (32100, 0), (52000, RR))),
+        note(0, MAIN, "anub.patch1", 0),
+        # instance-level, x,y,z; side 1's written bare x,y
+        note(0, MAIN, "anub.spot0", spot(X, Y + O)),
+        note(0, MAIN, "anub.spot1", f"{X:.2f},{Y - O:.2f}"),
+        note(33000, MAIN, "anub.spot0", spot(*SPOT0_NEW)),
+        note(2000, MAIN, "anub.wave", 1),
+        note(47000, MAIN, "anub.wave", 2),
+        note(2000, RX, "anub.bside", 0),
+        note(2000, RY, "anub.bside", 1),
+
+        *(note(when, DK, "anub.gripstep", step) for when, step in (
+            (1000, "walk"), (1900, "cast"), (2200, "wait"), (2500, "kill"), (4000, "none"), (41000, "walk"),
+            (42900, "cast"), (43000, "none"))),
+        *(note(when, DK, "anub.sphere", duty) for when, duty in (
+            (1000, "grip0"), (2500, "0"), (4000, "none"), (41000, "grip1"), (43000, "none"))),
+        cast(2000, DK, ab.SPELL_DEATH_GRIP, R0),
+        dmg(2800, HUNTER, R0, 75, 9000),
+        cast(43000, DK, ab.SPELL_DEATH_GRIP, RG),
+        dmg(49800, HUNTER, RR, 75, 9000),
+
+        aura(22500, HUNTER, ab.SPELL_MARK, False, SPK3),
+        aura(32000, HUNTER, ab.SPELL_MARK, True, SPK3),
+        note(22500, HUNTER, "anub.kitestage", "run"),
+        note(32000, HUNTER, "anub.kitestage", "none"),
+        cast(22700, PALADIN, 10278, HUNTER),
+
+        *(expose(when, SIDE0, EXPOSE_25, stacks) for when, stacks in (
+            (5000, 1), (6000, 2), (7000, 3), (8000, 4), (9000, 5), (10000, 6), (18000, 0))),
+        *(expose(when, SIDE1, EXPOSE_10, stacks) for when, stacks in ((6000, 1), (8000, 2), (11000, 3), (15000, 0))),
+        *(expose(when, HEAL, EXPOSE_25, stacks) for when, stacks in ((10500, 1), (11000, 2), (20000, 0))),
+        note(1000, MAIN, "anub.defensive", "none"),
+        note(9500, SIDE0, "anub.defensive", "divine protection"),
+        note(11500, SIDE1, "anub.defensive", "anti magic shell"),
+        note(12000, SIDE1, "anub.defensive", "covered"),
+
+        # side 1's death: the hit at 2.5 s and the heal at 16 s fall outside its 12 s
+        dmg(2500, RY, SIDE1, 0, 20000),
+        *(dmg(when, RY, SIDE1, 0, 20000) for when in (5000, 10000, 14900)),
+        dmg(12000, BOSS, SIDE1, 0, 10000),
+        dmg(13000, SCARAB, SIDE1, 0, 5000),
+        {"t": 8000, "e": "heal", "s": HEAL, "d": SIDE1, "sp": 48071, "a": 8000, "oh": 1000},
+        {"t": 13000, "e": "heal", "s": HEAL, "d": SIDE1, "sp": 48071, "a": 6000, "oh": 0},
+        {"t": 14000, "e": "heal", "s": PALADIN, "d": SIDE1, "sp": 48782, "a": 4000, "oh": 4000},
+        {"t": 16000, "e": "heal", "s": HEAL, "d": SIDE1, "sp": 48071, "a": 5000, "oh": 0},
+        {"t": 11000, "e": "abs", "d": SIDE1, "s": HEAL, "sp": 48066, "a": 3000},
+        {"t": 15000, "e": "death", "g": SIDE1, "killer": RY, "x": SIDE1_AT[0], "y": SIDE1_AT[1], "z": Z,
+         "blow": [RY, 20000]},
+
+        act(-1000, HEAL, "follow"),
+        act(30000, HEAL, "follow"),
+        act(30500, HEAL, "follow", "FAILED"),
+        act(31000, HEAL, "follow"),
+        act(35000, PALADIN, "follow"),
+        act(36000, HUNTER, "follow"),
+        note(41000, HEAL, "anub.hstand", "walk"),
+        note(44000, HEAL, "anub.hstand", "hold"),
+        note(41000, PALADIN, "anub.hstand", "hold"),
+        # Mercy's often node reads double; Justice never carries the non-combat raid healer node
+        {"t": 60000, "e": "cov", "g": HEAL, "r": [[1, 50, 0, 0, 0, 0, 10], [2, 300, 20, 20, 15],
+                                                  [3, 280, 0, 0, 0, 0, 20], [5, 600], [6, 300, 4, 4, 3],
+                                                  [7, 60, 2, 2, 2]]},
+        {"t": 60000, "e": "cov", "g": PALADIN, "r": [[1, 30], [2, 250], [6, 250]]},
+        {"t": 60000, "e": "end", "out": "wipe"},
+    ]
+    records += [refill_snap(when) for when in range(-500, 60000, 500)]
+    return records
+
+
+class RefillPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_9_anub-arak_1789500006.ndjson", refill_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_spot_parses_x_and_y_with_or_without_z(self):
+        self.assertEqual(ab.parse_spot("721.04,129.01,142.6"), (721.04, 129.01))
+        self.assertEqual(ab.parse_spot("721.0,129.0"), (721.0, 129.0))
+        self.assertIsNone(ab.parse_spot("721.0"))
+        self.assertIsNone(ab.parse_spot("a,b"))
+
+    def test_each_spot_change_reads_its_side_and_how_far_it_moved(self):
+        rows = ab.spot_changes(self.trace)
+        self.assertEqual([(row["side"], row["t"]) for row in rows], [(0, 0), (1, 0), (0, 33000)])
+        self.assertAlmostEqual(rows[2]["spot"][0], SPOT0_NEW[0])
+        self.assertAlmostEqual(rows[2]["moved"], math.dist(SPOT0_NEW, (X, Y + O)), places=2)
+        self.assertIsNone(rows[0]["moved"])
+
+    def test_a_refill_lands_against_the_spot_its_side_wrote(self):
+        rows = {row["guid"]: row for row in ab.sphere_deaths(self.trace)}
+        self.assertEqual((rows[RR]["side"], rows[RR]["killed"]), (0, 50000))
+        self.assertAlmostEqual(rows[RR]["off_spot"], 2.0, places=2)
+        self.assertAlmostEqual(rows[R0]["off_spot"], 3.0, places=2)
+
+    def test_a_grip_reads_whether_its_duty_held_to_kill_and_a_sphere_back_up(self):
+        self.assertEqual([(row["t"], row["sphere"], row["landed"], row["step"], row["step_ms"], row["rose"])
+                          for row in ab.grip_rows(self.trace)],
+                         [(2000, R0, 500, "kill", 500, None), (43000, RG, 500, "none", 0, 5500)])
+
+    def test_a_burrower_submerge_reads_where_it_went_under(self):
+        rows = ab.burrower_submerges(self.trace)
+        self.assertEqual([(row["guid"], row["t"], row["back"], row["spot"], row["hp"], row["patches"], row["side"],
+                           row["tank"], row["alive"], row["victim"]) for row in rows],
+                         [(RX, 12000, 22500, G_SPOT, 70.0, 1, 0, SIDE0, True, GHOUL)])
+        self.assertAlmostEqual(rows[0]["frost"], 16.0)
+        self.assertAlmostEqual(rows[0]["tank_yd"], 20.0)
+        self.assertEqual(ab.submerge_reasons(rows[0]), ["off its side tank"])
+
+    def test_a_ghoul_reads_by_name_and_owner(self):
+        self.assertEqual(ab.unit_label(self.trace, GHOUL), "Army of the Dead Ghoul (Arkos)")
+
+    def test_a_cover_on_a_spike_no_faster_than_the_kiter_is_flagged(self):
+        windows = ab.mark_windows(self.trace)
+        self.assertEqual(len(windows), 1)
+        cover = windows[0]["cover"]
+        self.assertEqual([(row["rec"]["t"], row["slow"]) for row in cover], [(22700, True)])
+        self.assertAlmostEqual(cover[0]["spike"], 3.5)
+        self.assertAlmostEqual(cover[0]["kiter"], 7.0)
+
+    def test_a_kiter_standing_still_while_marked_reads_stalled(self):
+        self.assertEqual(ab.mark_windows(self.trace)[0]["stalled"], (2000, 2000))
+
+    def test_a_tank_patch_spent_while_running_is_a_run_spend(self):
+        rows = ab.spent_patches(self.trace)
+        self.assertEqual([(row["side"], row["guid"], row["kiter"], row["stage"]) for row in rows],
+                         [(0, R0, HUNTER, "run")])
+        self.assertTrue(ab.run_spend(rows[0]))
+        self.assertFalse(ab.run_spend({"stage": "patch"}))
+        self.assertTrue(ab.run_spend({"stage": "boost:55004"}))
+
+    def test_the_crowd_where_he_went_down_and_the_first_kiters_gap(self):
+        rows = ab.submerge_crowds(self.trace)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["spot"], B_DOWN)
+        self.assertEqual({yards: dict(counts) for yards, counts in rows[0]["near"].items()},
+                         {8.0: {"ranged": 1, "melee": 1}, 12.0: {"ranged": 1, "melee": 2},
+                          20.0: {"tank": 1, "ranged": 1, "melee": 3}})
+        self.assertEqual((rows[0]["kiter"], rows[0]["mark"]), (HUNTER, 22500))
+        self.assertAlmostEqual(rows[0]["spike_yd"], 6.0)
+
+    def test_healer_distances_per_phase(self):
+        gaps = ab.healer_rows(self.trace)["gaps"]
+        self.assertAlmostEqual(statistics.median(gaps[(HEAL, "P1b")]["main"]), 5.0)
+        self.assertNotIn(1, gaps[(HEAL, "P1b")])
+        self.assertAlmostEqual(statistics.median(gaps[(PALADIN, "P1")]["main"]), math.dist(PAL_AT, MAIN_AT))
+
+    def test_seconds_far_from_a_side_tank_a_burrower_is_on(self):
+        far = ab.healer_rows(self.trace)["far"]
+        self.assertEqual({key: ms for key, ms in far.items() if ms},
+                         {(PALADIN, 1, "P1"): 13000, (PALADIN, 0, "P1"): 8000, (HEAL, 1, "P1"): 5000})
+
+    def test_a_side_tank_with_no_healer_in_reach(self):
+        bare = ab.healer_rows(self.trace)["bare"]
+        self.assertEqual({key: ms for key, ms in bare.items() if ms}, {(1, SIDE1, "P1"): 5000})
+
+    def test_follow_acts_count_only_ok_rows_from_a_healer_in_the_pull(self):
+        self.assertEqual(ab.healer_follows(self.trace), {HEAL: [30000, 31000], PALADIN: [35000]})
+
+    def test_engine_passes_take_the_most_common_node_sum(self):
+        self.assertEqual(ab.engine_passes(self.trace), {HEAL: {"n": 60, "c": 300}, PALADIN: {"n": 30, "c": 250}})
+
+    def test_raid_healer_engine_coverage_per_engine(self):
+        self.assertEqual(ab.healer_engine_coverage(self.trace),
+                         {"c": {"bots": {HEAL, PALADIN}, "checks": 550, "fires": 4, "won": 3},
+                          "n": {"bots": {HEAL}, "checks": 60, "fires": 2, "won": 2}})
+
+    def test_hstand_seconds_per_value(self):
+        self.assertEqual(ab.hstand_time(self.trace), {HEAL: {"walk": 3000, "hold": 16000}, PALADIN: {"hold": 19000}})
+
+    def test_expose_weakness_peak_per_wave_and_side_tank(self):
+        self.assertEqual([(row["wave"], row["tank"], row["peak"], row["ms"]) for row in ab.expose_waves(self.trace)],
+                         [(1, SIDE0, 6, 9000), (1, SIDE1, 3, 0), (2, SIDE0, 0, 0), (2, SIDE1, 0, 0)])
+
+    def test_each_defensive_reads_the_stack_at_the_cast(self):
+        rows = ab.defensive_rows(self.trace)
+        self.assertEqual([(row["t"], row["guid"], row["spell"], row["stacks"], row["side"], row["phase"])
+                          for row in rows],
+                         [(9500, SIDE0, "divine protection", 5, 0, "P1"),
+                          (11500, SIDE1, "anti magic shell", 3, 1, "P1")])
+        self.assertEqual([ab.magic_on_side_tank(row) for row in rows], [False, True])
+
+    def test_a_tank_death_reads_the_12_s_before_it(self):
+        rows = ab.tank_deaths(self.trace)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row["guid"], row["side"], row["main"], dict(row["taken"])),
+                         (SIDE1, 1, False, {"burrower": 60000, "Anub'arak": 10000, "scarab": 5000}))
+        self.assertEqual((row["heals"], row["gross"], row["overheal"], row["absorbed"], row["expose"]),
+                         (3, 18000, 5000, 3000, 3))
+
+    def test_the_new_keys_count_as_present(self):
+        gone = ab.missing_probes(self.trace)
+        for key in ("anub.spot0", "anub.spot1", "anub.hstand"):
+            self.assertNotIn(key, gone)
+
+    def test_every_section_prints(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_banner(self.trace)
+            for _, _, section in ab.SECTIONS:
+                section(self.trace)
+        text = out.getvalue()
+        self.assertIn("tank patch 0 spent in run\n", text)
+        self.assertIn("speeds at the cover: Hand of Protection +0.2 s: spike 3.5 yd/s, kiter 7.0 yd/s, no faster\n",
+                      text)
+        self.assertIn("stood still 2.0 s while marked, longest 2.0 s\n", text)
+        self.assertIn("on a spike no faster than the kiter: Trueshot 0:22.700 Hand of Protection (3.5 vs 7.0 yd/s)\n",
+                      text)
+        self.assertIn("tank patch spent while the kiter ran or boosted: Trueshot 0:32.000 side 0 run\n", text)
+        self.assertIn(": 8 yd 2 (melee 1, ranged 1); 12 yd 3 (melee 2, ranged 1); 20 yd 5 (tank 1, melee 3,"
+                      " ranged 1)\n          first mark Trueshot 0:22.500, 6.0 yd from the spike\n", text)
+        self.assertIn("duty held to kill +0.5 s\n", text)
+        self.assertIn("duty dropped to none +0.0 s, never at kill; sphere back above z 150 +5.5 s\n", text)
+        self.assertIn("grip duty never at kill: 1 of 2; gripped sphere back above z 150: #1002 0:48.500\n", text)
+        self.assertRegex(text, r"side 0 +0:33\.000 +\d+\.\d, \d+\.\d +25\.2 yd on\n")
+        self.assertRegex(text, r"#1011 +0:12\.000 .* 70% +16\.0 yd +1 +0 Bulwark 20\.0 yd +Army of the Dead Ghoul"
+                               r" \(Arkos\)  off its side tank\n")
+        self.assertIn("1 of 1 went under with its side tank alive and a patch alive", text)
+        self.assertIn("follow acts, OK and alive in the pull: Justice 1 (0:35.000-0:35.000), Mercy 2"
+                      " (0:30.000-0:31.000)", text)
+        self.assertIn("Justice combat 250, non-combat 30 (11%), dead 0; Mercy combat 300, non-combat 60 (17%),"
+                      " dead 0\n", text)
+        self.assertIn("raid healer engine in the coverage: combat 2 bot(s), 550 checks, 4 fires, 3 won; non-combat"
+                      " 1 bot(s), 60 checks, 2 fires, 2 won\n", text)
+        self.assertIn("anub.hstand: Justice hold 1; Mercy walk 1, hold 1\n", text)
+        self.assertIn("anub.hstand seconds: Justice hold 19.0 s; Mercy walk 3.0 s, hold 16.0 s\n", text)
+        self.assertRegex(text, r"\n    side 1 Felesta +P1 5\.0 s\n")
+        self.assertIn("wave 1   0:02.000  Bulwark 6 (9.0 s), Felesta 3 (0.0 s)\n", text)
+        self.assertIn("Expose Weakness on anyone else, peak over the pull: Mercy 2\n", text)
+        self.assertRegex(text, r"anti magic shell +stack  3  hp 100%  magic only on a side tank\n")
+        self.assertIn("from 5 stacks: 1 of 2 side tank cast(s); magic only on a side tank outside phase 3: 1\n", text)
+        self.assertRegex(text, r"0:15\.000 Felesta +side 1 P1 +taken 75,000 \(burrower 60,000, Anub'arak 10,000,"
+                               r" scarab 5,000\); healed 13,000 by 3 heal\(s\), 5,000 over; absorbed 3,000;"
+                               r" Expose peak 3\n")
 
 
 def side_pull(diff: int, side1: int, later: list[dict] | None = None) -> list[dict]:
@@ -1527,6 +1946,8 @@ class EveryView(unittest.TestCase):
                 section(trace)
         self.assertIn("not a Trial of the Crusader Anub'arak pull", out.getvalue())
         self.assertNotIn("locked out", out.getvalue())
+        self.assertIn("HEALERS\n  not an Anub'arak pull\n", out.getvalue())
+        self.assertIn("TANKS\n  not an Anub'arak pull\n", out.getvalue())
 
     def test_azjol_nerubs_anubarak_is_not_this_one(self):
         with tempfile.TemporaryDirectory() as folder:

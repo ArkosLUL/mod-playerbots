@@ -107,6 +107,13 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakHealerStandTrigger : public Trigger
+{
+public:
+    AnubarakHealerStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak healer stand") {}
+    bool IsActive() override;
+};
+
 class AnubarakOnPermafrostTrigger : public Trigger
 {
 public:
@@ -182,6 +189,8 @@ public:
             &ToCAnubarakTriggerContext::anubarak_grip_frost_sphere;
         creators["anubarak raid gathers"] =
             &ToCAnubarakTriggerContext::anubarak_raid_gathers;
+        creators["anubarak healer stand"] =
+            &ToCAnubarakTriggerContext::anubarak_healer_stand;
         creators["anubarak on permafrost"] =
             &ToCAnubarakTriggerContext::anubarak_on_permafrost;
         creators["anubarak melee burrower stand"] =
@@ -251,6 +260,10 @@ private:
 
     static Trigger* anubarak_raid_gathers(PlayerbotAI* botAI) {
         return new AnubarakRaidGathersTrigger(botAI);
+    }
+
+    static Trigger* anubarak_healer_stand(PlayerbotAI* botAI) {
+        return new AnubarakHealerStandTrigger(botAI);
     }
 
     static Trigger* anubarak_on_permafrost(PlayerbotAI* botAI) {

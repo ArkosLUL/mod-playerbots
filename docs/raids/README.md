@@ -221,8 +221,9 @@ rule on exactly `resolver != nullptr` and list the windows `dps assist` takes as
 
 **Healers are the exception: a ladder may give them nothing.** A targetless healer drops to the
 non-combat engine (no mana cooldowns, potions, shields or Beacon) and only `dps assist` brings it
-back. `raid healer engine` (`RaidHealerEngine.h`), added on every raid map by
-`ApplyInstanceStrategies`, keeps a bot healer on the combat engine in combat while the instance has
+back. `raid healer engine` (`RaidHealerEngine.h`, its own strategy context without siblings, or the
+raid's strategy would remove it, [pitfalls.md](../engine/pitfalls.md#names-fail-silently-at-runtime)),
+added on every raid map by `ApplyInstanceStrategies`, keeps a bot healer on the combat engine in combat while the instance has
 an encounter in progress, outside vehicles, and blocks `drop target` on a null target. Strategies that
 leave healers targetless, so removing it strands them: Malygos P1, Lady Vashj P2-P3, the Lich King's
 Remorseless Winters, Valithria after each portal, Sindragosa's P3 tomb hides, Yogg-Saron P3. Trash

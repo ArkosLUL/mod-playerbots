@@ -108,6 +108,9 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak gather hold", Role::Any, AnubarakGathers,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,
             {"reach melee", "reach spell", "reach party member to heal"});
+    // healers hold their stand while he is up; reach still walks one to a heal target out of range
+    e.Block("anubarak healer stand hold", Role::Heal, AnubarakHealerStandApplies,
+            Family::CombatFormationMove | Family::Follow);
     // he obeys taunt DR, so two tanks trading taunts soon leave him immune to both
     e.Block("anubarak taunt guard", Role::Any, AnubarakTauntWouldSteal, Family::Taunt);
     e.Block("anubarak sphere shooter drop guard", Role::Any, AnubarakShooterOnDutySphere, Family::DropTarget);

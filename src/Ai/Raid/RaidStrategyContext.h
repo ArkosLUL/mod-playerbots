@@ -22,7 +22,6 @@
 #include "OnyStrategy.h"
 #include "RSStrategy.h"
 #include "RaidAq40Strategy.h"
-#include "RaidHealerEngine.h"
 #include "SSCStrategy.h"
 #include "SWPStrategy.h"
 #include "Strategy.h"
@@ -59,7 +58,6 @@ public:
         creators["icc"] = &RaidStrategyContext::icc;
         creators["rs"] = &RaidStrategyContext::rs;
         creators["trialofthecrusader"] = &RaidStrategyContext::trialofthecrusader;
-        creators["raid healer engine"] = &RaidStrategyContext::raid_healer_engine;
     }
 
 private:
@@ -85,7 +83,6 @@ private:
     static Strategy* sunwell(PlayerbotAI* botAI) { return new RaidSunwellStrategy(botAI); }
     static Strategy* rs(PlayerbotAI* botAI) { return new RaidRsStrategy(botAI); }
     static Strategy* trialofthecrusader(PlayerbotAI* botAI) { return new RaidTrialOfTheCrusaderStrategy(botAI); }
-    static Strategy* raid_healer_engine(PlayerbotAI* botAI) { return new RaidHealerEngineStrategy(botAI); }
 };
 
 #endif

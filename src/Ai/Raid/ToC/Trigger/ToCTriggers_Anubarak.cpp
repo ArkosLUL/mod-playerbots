@@ -2,6 +2,7 @@
 
 #include "Creature.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RaidTankDefensive.h"
 #include "Strategy.h"
 #include "ToCData.h"
@@ -26,6 +27,23 @@ bool AnubarakKiterNeedsImmunityTrigger::IsActive()
 }
 
 bool AnubarakRaidGathersTrigger::IsActive() { return AnubarakEngaged(botAI) && AnubarakGathers(botAI); }
+
+bool AnubarakHealerStandTrigger::IsActive()
+{
+    if (!AnubarakEngaged(botAI) || !PlayerbotAI::IsHeal(bot))
+        return false;
+
+    Position slot;
+    if (!GetAnubarakHealerStand(bot, slot) || IsAnubarakDodgeHeld(botAI) || UnitOnPermafrost(bot))
+    {
+        RaidObs::NoteDerived(bot, "anub.hstand", "none");
+        return false;
+    }
+
+    bool const off = bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) > ANUBARAK_HEALER_STAND_LEAVE;
+    RaidObs::NoteDerived(bot, "anub.hstand", off ? "walk" : "hold");
+    return off;
+}
 
 bool AnubarakDemonicCircleDueTrigger::IsActive() { return AnubarakDemonicCircleDue(botAI); }
 
@@ -101,7 +119,8 @@ bool AnubarakSideTankReadyTrigger::IsActive()
 
 bool AnubarakSideTankNeedsDefensiveTrigger::IsActive()
 {
-    return AnubarakEngaged(botAI) && AnubarakSideTankNeedsDefensive(bot) && NextTankDefensive(botAI, bot, nullptr);
+    return AnubarakEngaged(botAI) && AnubarakSideTankNeedsDefensive(bot) &&
+           NextTankDefensive(botAI, bot, nullptr, true);
 }
 
 bool AnubarakSideTankDeadTrigger::IsActive()
@@ -170,7 +189,7 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
         NextAction("anubarak battle res side tank", ACTION_RAID + 7) }));
 
     triggers.push_back(new TriggerNode("anubarak side tank needs defensive", {
-        NextAction("anubarak tank defensive", ACTION_RAID + 6.5f) }));
+        NextAction("anubarak side tank defensive", ACTION_RAID + 6.5f) }));
 
     triggers.push_back(new TriggerNode("anubarak leeching swarm on tank", {
         NextAction("anubarak tank defensive", ACTION_RAID + 6) }));
@@ -199,6 +218,9 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak raid gathers", {
         NextAction("anubarak gather", ACTION_RAID + 0.5f) }));
+
+    triggers.push_back(new TriggerNode("anubarak healer stand", {
+        NextAction("anubarak healer stand", ACTION_RAID + 0.45f) }));
 
     triggers.push_back(new TriggerNode("anubarak demonic circle due", {
         NextAction("anubarak demonic circle", ACTION_RAID + 0.4f) }));

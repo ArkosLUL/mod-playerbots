@@ -73,6 +73,9 @@ constexpr float ANUBARAK_KITE_GATHER_CLEARANCE =
 // Heroic kite: a heading is judged by the spike's lane to where the kiter is this far ahead, since a
 // faster kiter's 10 yd steps each clear while the loop they add up to sweeps the spike across a patch
 constexpr float ANUBARAK_KITE_LANE_HORIZON_S = 3.0f;
+// The last heading, matched within this, stays while no more than this many yd narrower than the best
+constexpr float ANUBARAK_KITE_LANE_KEEP_DEGREES = 15.0f;
+constexpr float ANUBARAK_KITE_LANE_KEEP = 3.0f;
 
 constexpr float ANUBARAK_SCARAB_PICKUP_RANGE = 30.0f;
 constexpr float ANUBARAK_PENETRATING_COLD_HEAL_PCT = 90.0f;
@@ -82,7 +85,7 @@ constexpr float ANUBARAK_PENETRATING_COLD_HEAL_PCT = 90.0f;
 constexpr float ANUBARAK_PIT_RADIUS = 60.0f;
 constexpr float ANUBARAK_PIT_CEILING_Z = 200.0f;
 constexpr float ANUBARAK_SUBMERGE_SPOT_SEARCH = 40.0f;
-constexpr float ANUBARAK_SUBMERGE_SPOT_FLOOR = 35.0f;
+constexpr float ANUBARAK_SUBMERGE_SPOT_FLOOR = 40.0f;
 // Far from every patch first: the spike summoned on him runs a long way before it can reach one
 constexpr float ANUBARAK_SUBMERGE_CLEARANCES[] = {30.0f, 25.0f, ANUBARAK_SUBMERGE_PATCH_CLEARANCE,
                                                   ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN};
@@ -110,6 +113,26 @@ constexpr float ANUBARAK_SPHERE_STAND_SLACK = 1.0f;
 
 // A claimed protector with no immunity on the kiter by then passes the claim on
 constexpr uint32 ANUBARAK_PROTECT_CLAIM_MS = 1500;
+
+// The boss script's Frost Sphere spawns, AnubLocs 5 to 10, at floor height
+const Position ANUBARAK_SPHERE_HOMES[] = {{786.64f, 108.25f, 142.6f}, {806.84f, 150.59f, 142.6f},
+                                          {759.14f, 163.97f, 142.6f}, {744.37f, 119.52f, 142.6f},
+                                          {710.02f, 120.82f, 142.6f}, {706.64f, 161.53f, 142.6f}};
+constexpr uint8 ANUBARAK_SPHERE_HOME_COUNT = 6;
+// Heroic refills: an open spot at most this far from the held patch, an open pair pulled in to this apart
+constexpr float ANUBARAK_REFILL_MAX = 30.0f;
+// Refill spots are pulled in to this far from the room centre, inside the navprobe-clean 45 yd ring
+constexpr float ANUBARAK_REFILL_FLOOR = 45.0f;
+// The raid point sits this far off the anchor, at right angles to the line through the tank spots
+constexpr float ANUBARAK_RAID_POINT_OFFSET = 18.0f;
+constexpr float ANUBARAK_RAID_POINT_SLACK = 0.5f;
+// The slow's 7.5 yd plus a yard
+constexpr float ANUBARAK_HEALER_PATCH_CLEARANCE = 8.5f;
+constexpr uint32 ANUBARAK_HEALER_SLOT_TRIES = 12;
+// The spike is summoned where he goes down, so that is kept this far from the raid point
+constexpr float ANUBARAK_SUBMERGE_RAID_CLEARANCE = 25.0f;
+// Heroic phase 2: the main tank's gather slot, off the raid point away from where he went down
+constexpr float ANUBARAK_GATHER_TANK_EDGE = 6.0f;
 
 std::vector<uint32> const SWEEP_ENTRIES = {
     static_cast<uint32>(ToCNpcs::NPC_FROST_SPHERE),
@@ -173,6 +196,8 @@ struct ProtectClaim
     std::vector<ObjectGuid> passed;
     bool need = false;
     bool spikeInImmunityRange = false;
+    // A spike no faster than the kiter never catches it, so no immunity is spent on one
+    bool spikeFaster = false;
     // Heroic: a speed boost still ready or running goes before any immunity
     bool boostLeft = false;
     // The kiter gets to its patch's stand before the spike gets to it
@@ -236,6 +261,20 @@ struct KiteStageRead
     // A boost ready or one running
     bool boostLeft = false;
     bool immunityComing = false;
+};
+
+// What the refill spots were built from: the patches held, the spawn slots of the spheres left
+struct RefillKey
+{
+    ObjectGuid held[2];
+    uint8 homes = 0;
+    bool firstPairDone = false;
+
+    bool operator==(RefillKey const& other) const
+    {
+        return held[0] == other.held[0] && held[1] == other.held[1] && homes == other.homes &&
+               firstPairDone == other.firstPairDone;
+    }
 };
 
 struct AnubarakState
@@ -308,6 +347,26 @@ struct AnubarakState
     // A sphere that landed on a DK, and the side it was gripped for. A gripped sphere drifts back toward
     // its route while it dies, so its patch can come down nearer the other side's spot.
     std::unordered_map<ObjectGuid, uint8> grippedFor;
+
+    // Each sphere's slot in ANUBARAK_SPHERE_HOMES, read at its first sample. Heroic never respawns one.
+    std::unordered_map<ObjectGuid, uint8> sphereHomes;
+    // Both sides have held a patch this pull
+    bool firstPairDone = false;
+    // Heroic after the first pair: an open side's spot by the spheres left
+    bool refillKeyValid = false;
+    RefillKey refillKey;
+    bool refillValid[2] = {false, false};
+    Position refill[2];
+    RaidObs::ObsValue<Position> spot0{"anub.spot0"};
+    RaidObs::ObsValue<Position> spot1{"anub.spot1"};
+
+    // The healer stand while he is up, and heroic's phase 2 gather. Held for a submerge, so a tank patch
+    // spent while he is down doesn't move the gather under the raid.
+    bool raidPointValid = false;
+    Position raidPointAnchor;
+    Position raidPoint;
+    bool raidPointHeld = false;
+    uint32 raidPointHeldMs = 0;
 
     bool phaseMemoValid = false;
     uint32 phaseMemoMs = 0;
@@ -567,6 +626,13 @@ void ClearPullLatches(AnubarakState& state)
         cast = GripCast();
     state.gripDuties.clear();
     state.grippedFor.clear();
+    state.sphereHomes.clear();
+    state.firstPairDone = false;
+    state.refillKeyValid = false;
+    state.refillValid[0] = false;
+    state.refillValid[1] = false;
+    state.raidPointValid = false;
+    state.raidPointHeld = false;
     state.duties.clear();
     state.bossStillValid = false;
     state.drag = DragLegLatch();
@@ -738,13 +804,172 @@ bool SwarmStarted(Player* bot, Creature* boss)
     return carried;
 }
 
-// The side's patch, else its side point moved with the other side's patch, so a patch shot off its
-// spot drags the other side's spot along and the pair keeps its spacing
-Position SideSpot(std::vector<Creature*> const& spheres, ObjectGuid const held[2], uint8 side)
+bool OnFloor(Player* bot, Position const& raw, Position& valid)
+{
+    valid = ValidateFloorPoint(bot, raw);
+    return Dist2d(valid, raw) <= ANUBARAK_FLOOR_XY_TOLERANCE &&
+           std::fabs(valid.GetPositionZ() - raw.GetPositionZ()) <= ANUBARAK_FLOOR_Z_TOLERANCE;
+}
+
+void RecordSphereHomes(AnubarakState& state, std::vector<Creature*> const& spheres)
+{
+    for (Creature* sphere : spheres)
+    {
+        if (!IsFrostSphereFlying(sphere) || state.sphereHomes.count(sphere->GetGUID()))
+            continue;
+
+        uint8 nearest = 0;
+        for (uint8 slot = 1; slot < ANUBARAK_SPHERE_HOME_COUNT; ++slot)
+            if (Dist2d(sphere->GetPosition(), ANUBARAK_SPHERE_HOMES[slot]) <
+                Dist2d(sphere->GetPosition(), ANUBARAK_SPHERE_HOMES[nearest]))
+                nearest = slot;
+
+        state.sphereHomes[sphere->GetGUID()] = nearest;
+    }
+}
+
+// Pulled in toward the room centre to the refill floor. False off the navmesh.
+bool RefillOnFloor(Player* bot, Position raw, Position& out)
+{
+    Vec2 const fromCenter = Delta(ANUBARAK_ROOM_CENTER, raw);
+    float const radius = Length(fromCenter);
+    if (radius > ANUBARAK_REFILL_FLOOR)
+        raw = Offset(ANUBARAK_ROOM_CENTER, {fromCenter.x / radius, fromCenter.y / radius}, ANUBARAK_REFILL_FLOOR);
+
+    raw.m_positionZ = ANUBARAK_ROOM_CENTER.GetPositionZ();
+    return OnFloor(bot, raw, out);
+}
+
+// Heroic after the first pair, so the patch comes down where the spheres still fly (they drift round
+// their spawns). One side held: the open spot is on the line from the held patch to the nearest spawn
+// past it on the open side (north is +y), 20 to 30 yd out. Both open: the nearest north and south spawns
+// 20+ apart, pulled in until 30 apart. Run after the latches: a falling sphere keeps its spawn counted,
+// so the spot it falls for holds until its patch has latched.
+void UpdateRefillSpots(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres)
+{
+    RefillKey key;
+    key.firstPairDone = state.firstPairDone;
+    key.held[0] = state.patch0.Get();
+    key.held[1] = state.patch1.Get();
+    for (ObjectGuid& guid : key.held)
+        if (!IsPermafrostPatch(FindSphere(spheres, guid)))
+            guid.Clear();
+
+    std::vector<uint8> homes;
+    for (Creature* sphere : spheres)
+    {
+        auto const home = state.sphereHomes.find(sphere->GetGUID());
+        if (home == state.sphereHomes.end() || !(IsFrostSphereFlying(sphere) || IsFrostSphereFalling(sphere)) ||
+            (key.homes & (1u << home->second)))
+            continue;
+
+        key.homes = static_cast<uint8>(key.homes | (1u << home->second));
+        homes.push_back(home->second);
+    }
+
+    if (state.refillKeyValid && state.refillKey == key)
+        return;
+
+    state.refillKeyValid = true;
+    state.refillKey = key;
+    state.refillValid[0] = false;
+    state.refillValid[1] = false;
+    if (!key.firstPairDone || !AnubarakHeroic(bot))
+        return;
+
+    bool const open[2] = {key.held[0].IsEmpty(), key.held[1].IsEmpty()};
+    if (open[0] && open[1])
+    {
+        int8 north = -1;
+        int8 south = -1;
+        float apart = 0.0f;
+        for (uint8 a : homes)
+            for (uint8 b : homes)
+            {
+                Position const& n = ANUBARAK_SPHERE_HOMES[a];
+                Position const& s = ANUBARAK_SPHERE_HOMES[b];
+                float const dist = Dist2d(n, s);
+                if (n.GetPositionY() <= s.GetPositionY() || dist < ANUBARAK_TANK_PATCH_GAP ||
+                    (north >= 0 && dist >= apart))
+                    continue;
+
+                north = static_cast<int8>(a);
+                south = static_cast<int8>(b);
+                apart = dist;
+            }
+
+        if (north < 0)
+            return;
+
+        Position n = ANUBARAK_SPHERE_HOMES[north];
+        Position s = ANUBARAK_SPHERE_HOMES[south];
+        if (apart > ANUBARAK_REFILL_MAX)
+        {
+            Vec2 const toSouth = {(s.GetPositionX() - n.GetPositionX()) / apart,
+                                  (s.GetPositionY() - n.GetPositionY()) / apart};
+            float const pull = (apart - ANUBARAK_REFILL_MAX) / 2.0f;
+            n = Offset(n, toSouth, pull);
+            s = Offset(s, {-toSouth.x, -toSouth.y}, pull);
+        }
+
+        Position spots[2];
+        if (RefillOnFloor(bot, n, spots[0]) && RefillOnFloor(bot, s, spots[1]) &&
+            Dist2d(spots[0], spots[1]) >= ANUBARAK_TANK_PATCH_GAP)
+            for (uint8 side = 0; side < 2; ++side)
+            {
+                state.refill[side] = spots[side];
+                state.refillValid[side] = true;
+            }
+
+        return;
+    }
+
+    if (open[0] == open[1])
+        return;
+
+    uint8 const side = open[0] ? 0 : 1;
+    Position const kept = FindSphere(spheres, key.held[1 - side])->GetPosition();
+    int8 best = -1;
+    float bestDist = 0.0f;
+    for (uint8 slot : homes)
+    {
+        Position const& home = ANUBARAK_SPHERE_HOMES[slot];
+        bool const past = side == 0 ? home.GetPositionY() > kept.GetPositionY()
+                                    : home.GetPositionY() < kept.GetPositionY();
+        float const dist = Dist2d(home, kept);
+        if (!past || dist < ANUBARAK_TANK_PATCH_GAP || (best >= 0 && dist >= bestDist))
+            continue;
+
+        best = static_cast<int8>(slot);
+        bestDist = dist;
+    }
+
+    if (best < 0)
+        return;
+
+    Vec2 const toward = Delta(kept, ANUBARAK_SPHERE_HOMES[best]);
+    Position const raw = Offset(kept, {toward.x / bestDist, toward.y / bestDist},
+                                std::min(bestDist, ANUBARAK_REFILL_MAX));
+    Position spot;
+    if (RefillOnFloor(bot, raw, spot) && Dist2d(spot, kept) >= ANUBARAK_TANK_PATCH_GAP)
+    {
+        state.refill[side] = spot;
+        state.refillValid[side] = true;
+    }
+}
+
+// The side's patch. Heroic after the first pair, an open side's refill spot. Else its side point moved
+// with the other side's patch, so a patch shot off its spot drags the other side's spot along and the
+// pair keeps its spacing.
+Position SideSpot(AnubarakState const& state, std::vector<Creature*> const& spheres, ObjectGuid const held[2],
+                  uint8 side)
 {
     Creature* own = FindSphere(spheres, held[side]);
     if (IsPermafrostPatch(own))
         return own->GetPosition();
+
+    if (state.refillValid[side])
+        return state.refill[side];
 
     Position const point = GetAnubarakTankSidePoint(side);
     Creature* other = FindSphere(spheres, held[1 - side]);
@@ -754,6 +979,35 @@ Position SideSpot(std::vector<Creature*> const& spheres, ObjectGuid const held[2
     Position const otherPoint = GetAnubarakTankSidePoint(1 - side);
     return Position(other->GetPositionX() + point.GetPositionX() - otherPoint.GetPositionX(),
                     other->GetPositionY() + point.GetPositionY() - otherPoint.GetPositionY(), point.GetPositionZ());
+}
+
+// At right angles to the line through the tank spots, on the room centre's side of the anchor, west on a
+// tie. Follows the anchor while he is up, held from the first read of a submerge to the emerge.
+void UpdateRaidPoint(Player* bot, AnubarakState& state, Position const& spot0, Position const& spot1)
+{
+    bool const down = state.phaseValue == AnubarakPhase::Submerged;
+    if (down && state.raidPointValid && state.raidPointHeld && state.raidPointHeldMs == state.submergedMs)
+        return;
+
+    state.raidPointHeld = down;
+    state.raidPointHeldMs = state.submergedMs;
+    Position const anchor((spot0.GetPositionX() + spot1.GetPositionX()) / 2.0f,
+                          (spot0.GetPositionY() + spot1.GetPositionY()) / 2.0f,
+                          (spot0.GetPositionZ() + spot1.GetPositionZ()) / 2.0f);
+    if (state.raidPointValid && Dist2d(anchor, state.raidPointAnchor) < ANUBARAK_RAID_POINT_SLACK)
+        return;
+
+    Vec2 const along = Delta(spot0, spot1);
+    float const length = Length(along);
+    Vec2 normal = length > 1.0f ? Vec2{-along.y / length, along.x / length} : Vec2{-1.0f, 0.0f};
+    Vec2 const toCenter = Delta(anchor, ANUBARAK_ROOM_CENTER);
+    float const lean = normal.x * toCenter.x + normal.y * toCenter.y;
+    if (lean <= -1.0f || (lean < 1.0f && normal.x > 0.0f))
+        normal = {-normal.x, -normal.y};
+
+    state.raidPointValid = true;
+    state.raidPointAnchor = anchor;
+    state.raidPoint = ValidateFloorPoint(bot, Offset(anchor, normal, ANUBARAK_RAID_POINT_OFFSET));
 }
 
 // Within reach of the spot and clearly nearer it than the other one
@@ -790,7 +1044,7 @@ void FollowHumanSideTank(Player* bot, AnubarakState& state, std::vector<Creature
                          bool const placed[2], uint32 now)
 {
     ObjectGuid const held[2] = {state.patch0.Get(), state.patch1.Get()};
-    Position const spots[2] = {SideSpot(spheres, held, 0), SideSpot(spheres, held, 1)};
+    Position const spots[2] = {SideSpot(state, spheres, held, 0), SideSpot(state, spheres, held, 1)};
     if (HumanOnOtherSpot(bot, state.sideTanks, spots) < 0)
     {
         state.humanSwapValid = false;
@@ -858,8 +1112,8 @@ void RefreshTankPatches(AnubarakState& state, std::vector<Creature*> const& sphe
         if (!held[side].IsEmpty())
             continue;
 
-        Position const point = SideSpot(spheres, held, side);
-        Position const otherPoint = SideSpot(spheres, held, 1 - side);
+        Position const point = SideSpot(state, spheres, held, side);
+        Position const otherPoint = SideSpot(state, spheres, held, 1 - side);
         Creature* other = FindSphere(spheres, held[1 - side]);
         Creature* nearest = nullptr;
         float nearestDist = 0.0f;
@@ -1086,13 +1340,24 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
     for (ObjectGuid const& guid : {state->patch0.Get(), state->patch1.Get()})
         tankPatchLost = tankPatchLost || (!guid.IsEmpty() && !IsPermafrostPatch(FindSphere(spheres, guid)));
 
+    RecordSphereHomes(*state, spheres);
     RefreshTankPatches(*state, spheres);
+    if (!state->patch0.Get().IsEmpty() && !state->patch1.Get().IsEmpty())
+        state->firstPairDone = true;
+
+    UpdateRefillSpots(bot, *state, spheres);
 
     bool placed[2] = {false, false};
     RefreshSideTanks(bot, *state, placed);
     FollowHumanSideTank(bot, *state, spheres, placed, now);
     state->side0 = state->sideTanks[0];
     state->side1 = state->sideTanks[1];
+
+    ObjectGuid const held[2] = {state->patch0.Get(), state->patch1.Get()};
+    Position const spots[2] = {SideSpot(*state, spheres, held, 0), SideSpot(*state, spheres, held, 1)};
+    state->spot0 = spots[0];
+    state->spot1 = spots[1];
+    UpdateRaidPoint(bot, *state, spots[0], spots[1]);
 
     TrackWaves(bot, *state, now);
     SampleDamage(bot, *state, boss, now);
@@ -1151,42 +1416,14 @@ std::vector<Position> PatchPositions(Player* bot, AnubarakState const& state)
     return patches;
 }
 
-// Heroic phase 2: 5 yd past where he went down, away from the tank patches, so the spike starts there
-// and runs for the kiter away from the raid. Never further out than the floor radius.
+// Heroic phase 2: the raid point, where the healers already stand. He is dragged 25+ yd off it before he
+// goes down, and the spike is summoned there.
 bool GatherCentre(Player* bot, AnubarakState const& state, Position& out)
 {
-    if (state.phaseValue != AnubarakPhase::Submerged || !state.submergePosValid || !AnubarakHeroic(bot))
+    if (state.phaseValue != AnubarakPhase::Submerged || !state.raidPointValid || !AnubarakHeroic(bot))
         return false;
 
-    Position const& down = state.submergePos;
-    Position from = ANUBARAK_ROOM_CENTER;
-    uint32 count = 0;
-    float sumX = 0.0f;
-    float sumY = 0.0f;
-    for (uint8 side = 0; side < 2; ++side)
-    {
-        if (Creature* patch = LatchedTankPatch(bot, state, side))
-        {
-            sumX += patch->GetPositionX();
-            sumY += patch->GetPositionY();
-            ++count;
-        }
-    }
-
-    if (count)
-        from.Relocate(sumX / count, sumY / count);
-
-    Vec2 away = Delta(from, down);
-    float const length = Length(away);
-    Position gather = length > 1.0f ? Offset(down, {away.x / length, away.y / length}, ANUBARAK_GATHER_PAST) : down;
-
-    Vec2 const fromCenter = Delta(ANUBARAK_ROOM_CENTER, gather);
-    float const radius = Length(fromCenter);
-    if (radius > ANUBARAK_GATHER_FLOOR)
-        gather = Offset(ANUBARAK_ROOM_CENTER, {fromCenter.x / radius, fromCenter.y / radius}, ANUBARAK_GATHER_FLOOR);
-
-    gather.m_positionZ = down.GetPositionZ();
-    out = gather;
+    out = state.raidPoint;
     return true;
 }
 
@@ -1222,13 +1459,6 @@ SpikeDodgeReach DodgeReach(Player* bot, Creature* spike)
 
     return {ANUBARAK_SPIKE_DANGER_RADIUS, ANUBARAK_SPIKE_CLEARANCE, ANUBARAK_SPIKE_LANE_HALF_WIDTH,
             ANUBARAK_SPIKE_LANE_CLEARANCE};
-}
-
-bool OnFloor(Player* kiter, Position const& raw, Position& valid)
-{
-    valid = ValidateFloorPoint(kiter, raw);
-    return Dist2d(valid, raw) <= ANUBARAK_FLOOR_XY_TOLERANCE &&
-           std::fabs(valid.GetPositionZ() - raw.GetPositionZ()) <= ANUBARAK_FLOOR_Z_TOLERANCE;
 }
 
 // Past the patch on the far side from the spike, turned round the patch until it lands on the floor.
@@ -1309,17 +1539,29 @@ struct LaneObstacle
 {
     Position pos;
     float clearance;
+    // A latched tank patch
+    bool tank = false;
+    bool gather = false;
 };
 
 std::vector<LaneObstacle> LaneObstacles(Player* kiter, AnubarakState const& state)
 {
+    std::vector<Position> tanks;
+    for (uint8 side = 0; side < 2; ++side)
+        if (Creature* patch = LatchedTankPatch(kiter, state, side))
+            tanks.push_back(patch->GetPosition());
+
     std::vector<LaneObstacle> obstacles;
     for (Position const& patch : PatchPositions(kiter, state))
-        obstacles.push_back({patch, ANUBARAK_SPIKE_ROUTE_CLEARANCE});
+    {
+        bool const tank = std::any_of(tanks.begin(), tanks.end(),
+                                      [&patch](Position const& held) { return Dist2d(held, patch) < 0.5f; });
+        obstacles.push_back({patch, ANUBARAK_SPIKE_ROUTE_CLEARANCE, tank, false});
+    }
 
     Position gather;
     if (GatherCentre(kiter, state, gather))
-        obstacles.push_back({gather, ANUBARAK_KITE_GATHER_CLEARANCE});
+        obstacles.push_back({gather, ANUBARAK_KITE_GATHER_CLEARANCE, false, true});
 
     return obstacles;
 }
@@ -1634,9 +1876,10 @@ bool ImpaleInMs(Player* kiter, Creature* spike, float& ms)
 }
 
 // Heroic only. Runs until the spike gains within 15 yd or closes to 10, then the next boost. Under
-// Hand of Protection it keeps running, and turns for the kite patch in time to walk there before the
-// hand ends. With nothing left it turns in time to get there ahead of Impale, or once the spike is
-// within 9 yd. Turned for a kite patch, it stays turned while the patch lasts.
+// Hand of Protection it keeps running, and turns for the kite patch once both the hand's end and Impale
+// are within the walk there plus 1.5 s. With nothing left it turns in time to get there ahead of Impale,
+// or once the spike is within 9 yd. A spike no faster than the kiter never turns it: it can't catch up.
+// Turned for a kite patch, it stays turned while the patch lasts.
 KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState& state)
 {
     KiteStageRead& read = state.kiteStage;
@@ -1665,14 +1908,15 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
         read.stage = AnubarakKiteStage::Patch;
     else if (AnubarakKiterImmune(kiter))
     {
-        float const turnMs = patch ? walkMs + static_cast<float>(ANUBARAK_KITE_IMMUNE_COMMIT_MS)
-                                   : static_cast<float>(ANUBARAK_KITE_IMMUNE_LEFT_MS);
-        read.stage = static_cast<float>(ImmunityLeftMs(kiter)) <= turnMs ? AnubarakKiteStage::Patch
-                                                                         : AnubarakKiteStage::Immune;
+        float const leftMs = static_cast<float>(ImmunityLeftMs(kiter));
+        bool const turn = patch ? closing && std::max(leftMs, impaleMs) <=
+                                                 walkMs + static_cast<float>(ANUBARAK_KITE_IMMUNE_COMMIT_MS)
+                                : gaining && leftMs <= static_cast<float>(ANUBARAK_KITE_IMMUNE_LEFT_MS);
+        read.stage = turn ? AnubarakKiteStage::Patch : AnubarakKiteStage::Immune;
     }
     else if (hasBoost && ((gaining && dist <= ANUBARAK_KITE_BOOST_RANGE) || dist <= ANUBARAK_KITE_BOOST_CLOSE))
         read.stage = AnubarakKiteStage::Boost;
-    else if (!read.boostLeft && !read.immunityComing &&
+    else if (!read.boostLeft && !read.immunityComing && gaining &&
              (dist <= ANUBARAK_KITE_IMMUNITY_RANGE ||
               (patch && closing && impaleMs <= walkMs + static_cast<float>(ANUBARAK_KITE_SPIKE_COMMIT_MS))))
         read.stage = AnubarakKiteStage::Patch;
@@ -1698,19 +1942,33 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
 struct LaneStep
 {
     Position raw;
-    bool clear;
+    Vec2 dir;
+    bool patchClear;
+    // The line from the probe to the gather misses every tank patch: the spike's run there after a death
+    // or a hand-off
+    bool restartClear;
+    bool gatherClear;
     bool leashed;
-    float score;
+    float patchScore;
+    float gatherScore;
     float fromSpike;
 };
 
+bool SameLaneClass(LaneStep const& a, LaneStep const& b)
+{
+    return a.patchClear == b.patchClear && a.restartClear == b.restartClear && a.gatherClear == b.gatherClear &&
+           a.leashed == b.leashed;
+}
+
 // Heroic run with no patch: a 10 yd step that keeps the spike behind and no nearer, inside the ring
-// radius (or no further out than the kiter already is), the spike's lane to where that heading takes the
-// kiter in ANUBARAK_KITE_LANE_HORIZON_S clear of every obstacle. Then one within the leash of the stand
-// of a patch the kite may end on, the widest lane, the step furthest from the spike. None clear: the
-// widest lane anyway. None at all: the plain ring step.
+// radius (or no further out than the kiter already is), judged by the spike's lane to where that heading
+// takes the kiter in ANUBARAK_KITE_LANE_HORIZON_S. Ranked: lane clear of every patch, restart line clear,
+// lane clear of the gather, within the leash of a kite patch's stand, then the widest lane past the
+// patches, then past the gather. None clear of the patches: the widest patch margin alone. The heading
+// toward keep stays while it ranks with the best and is within ANUBARAK_KITE_LANE_KEEP of its margins.
+// None at all: the plain ring step.
 Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle> const& obstacles,
-                       Position const* leash)
+                       Position const* leash, Position const* keep)
 {
     Position const& from = kiter->GetPosition();
     Position const& spikePos = spike->GetPosition();
@@ -1718,6 +1976,16 @@ Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle>
     float const radius = std::max(ANUBARAK_KITE_RING_RADIUS, Dist2d(from, ANUBARAK_ROOM_CENTER));
     float const ahead =
         std::max(ANUBARAK_KITE_LANE_STEP, kiter->GetSpeed(MOVE_RUN) * ANUBARAK_KITE_LANE_HORIZON_S);
+
+    std::vector<LaneObstacle> patches;
+    std::vector<LaneObstacle> gathers;
+    std::vector<Position> tanks;
+    for (LaneObstacle const& obstacle : obstacles)
+    {
+        (obstacle.gather ? gathers : patches).push_back(obstacle);
+        if (obstacle.tank)
+            tanks.push_back(obstacle.pos);
+    }
 
     std::vector<LaneStep> steps;
     for (uint32 i = 0; i < ANUBARAK_KITE_LANE_HEADINGS; ++i)
@@ -1731,21 +1999,63 @@ Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle>
             continue;
 
         Position const probe = Offset(from, dir, ahead);
-        bool const clear = LaneClears(spikePos, from, probe, obstacles, true);
+        bool const restartClear = std::all_of(gathers.begin(), gathers.end(), [&](LaneObstacle const& gather)
+            {
+                return std::all_of(tanks.begin(), tanks.end(), [&](Position const& tank)
+                                   { return SegmentDistance2d(probe, gather.pos, tank) >= ANUBARAK_SPIKE_ROUTE_CLEARANCE; });
+            });
         bool const leashed = !leash || Dist2d(raw, *leash) <= ANUBARAK_KITE_STAND_LEASH;
-        steps.push_back({raw, clear, leashed, LaneScore(spikePos, from, probe, obstacles), fromSpike});
+        steps.push_back({raw, dir, LaneClears(spikePos, from, probe, patches, true), restartClear,
+                         LaneClears(spikePos, from, probe, gathers, true), leashed,
+                         LaneScore(spikePos, from, probe, patches), LaneScore(spikePos, from, probe, gathers),
+                         fromSpike});
     }
 
     std::sort(steps.begin(), steps.end(), [](LaneStep const& a, LaneStep const& b)
               {
-                  if (a.clear != b.clear)
-                      return a.clear;
+                  if (a.patchClear != b.patchClear)
+                      return a.patchClear;
+                  if (!a.patchClear)
+                  {
+                      if (a.patchScore != b.patchScore)
+                          return a.patchScore > b.patchScore;
+                      return a.fromSpike > b.fromSpike;
+                  }
+                  if (a.restartClear != b.restartClear)
+                      return a.restartClear;
+                  if (a.gatherClear != b.gatherClear)
+                      return a.gatherClear;
                   if (a.leashed != b.leashed)
                       return a.leashed;
-                  if (a.score != b.score)
-                      return a.score > b.score;
+                  if (a.patchScore != b.patchScore)
+                      return a.patchScore > b.patchScore;
+                  if (a.gatherScore != b.gatherScore)
+                      return a.gatherScore > b.gatherScore;
                   return a.fromSpike > b.fromSpike;
               });
+
+    // Re-picking every tick flips between near-equal headings at the rim and the kiter stalls
+    Vec2 const wanted = keep ? Delta(from, *keep) : Vec2{0.0f, 0.0f};
+    if (!steps.empty() && Length(wanted) > 1.0f)
+    {
+        auto kept = steps.end();
+        float nearest = ANUBARAK_KITE_LANE_KEEP_DEGREES * ANUBARAK_DEG_TO_RAD;
+        for (auto it = steps.begin(); it != steps.end(); ++it)
+        {
+            float const angle = AngleBetween(wanted, it->dir);
+            if (angle <= nearest)
+            {
+                nearest = angle;
+                kept = it;
+            }
+        }
+
+        LaneStep const& best = steps.front();
+        if (kept != steps.end() && kept != steps.begin() && SameLaneClass(*kept, best) &&
+            kept->patchScore + ANUBARAK_KITE_LANE_KEEP >= best.patchScore &&
+            kept->gatherScore + ANUBARAK_KITE_LANE_KEEP >= best.gatherScore)
+            std::rotate(steps.begin(), kept, kept + 1);
+    }
 
     // Best first, so the floor raycasts stop at the first step that lands on the floor
     for (LaneStep const& step : steps)
@@ -1778,10 +2088,11 @@ bool SpikeRouteNearPatch(Position const& spike, Position const& kiter, Position 
 }
 
 // seekPatch false runs the ring without looking for a patch: heroic until the kite stage says patch.
-// lane is what heroic's run keeps the spike off, leash the patch stand its steps stay near.
+// lane is what heroic's run keeps the spike off, leash the patch stand its steps stay near, keep the
+// last lane step.
 void ComputeKiteStand(Player* kiter, Creature* spike, AnubarakState const& state, std::vector<Creature*> const& spheres,
                       std::vector<LaneObstacle> const& lane, AnubarakKiteStand const* previous, bool seekPatch,
-                      Position const* leash, AnubarakKiteStand& out)
+                      Position const* leash, Position const* keep, AnubarakKiteStand& out)
 {
     Position const spikePos = spike->GetPosition();
     bool const heroic = AnubarakHeroic(kiter);
@@ -1905,7 +2216,7 @@ void ComputeKiteStand(Player* kiter, Creature* spike, AnubarakState const& state
 
     if (!chosenPatch)
     {
-        out.stand = heroic ? LaneStepStand(kiter, spike, lane, leash) : RingStand(kiter, spike);
+        out.stand = heroic ? LaneStepStand(kiter, spike, lane, leash, keep) : RingStand(kiter, spike);
         out.patch.Clear();
         out.branch = AnubarakKiteBranch::Ring;
         return;
@@ -2349,7 +2660,8 @@ void ComputeDuties(Player* bot, AnubarakState& state)
                 if (Creature* sphere = FindSphere(flying, cast.sphere))
                     reserved.push_back(sphere);
 
-        Position const spots[2] = {SideSpot(spheres, tankPatches, 0), SideSpot(spheres, tankPatches, 1)};
+        Position const spots[2] = {SideSpot(state, spheres, tankPatches, 0),
+                                   SideSpot(state, spheres, tankPatches, 1)};
         bool open[2] = {false, false};
         for (uint8 side = 0; side < 2; ++side)
         {
@@ -2454,7 +2766,8 @@ void ComputeDuties(Player* bot, AnubarakState& state)
     if (!heroic && target && spike && spike->IsAlive() && !FallingNear(spheres, target->GetPosition()))
     {
         AnubarakKiteStand stand;
-        ComputeKiteStand(target, spike, state, spheres, LaneObstacles(target, state), nullptr, true, nullptr, stand);
+        ComputeKiteStand(target, spike, state, spheres, LaneObstacles(target, state), nullptr, true, nullptr,
+                         nullptr, stand);
         if (stand.branch == AnubarakKiteBranch::Ring)
         {
             std::vector<Creature*> open;
@@ -2635,6 +2948,7 @@ ProtectClaim const* DeriveProtection(Player* bot)
     claim.memoMs = now;
     claim.need = false;
     claim.spikeInImmunityRange = false;
+    claim.spikeFaster = false;
     claim.standReachable = false;
 
     Creature* spike = GetPursuingSpike(bot);
@@ -2653,12 +2967,13 @@ ProtectClaim const* DeriveProtection(Player* bot)
     float const spikeDist = Dist2d(spike->GetPosition(), kiter->GetPosition());
     bool const immune = AnubarakKiterImmune(kiter);
     claim.spikeInImmunityRange = spikeDist <= ANUBARAK_KITE_IMMUNITY_RANGE;
+    claim.spikeFaster = spike->GetSpeed(MOVE_RUN) > kiter->GetSpeed(MOVE_RUN);
     claim.boostLeft = AnubarakHeroic(bot) && ReadKiteStage(kiter, spike, *state).boostLeft;
     Position stand;
     float impaleMs = 0.0f;
     claim.standReachable = KitePatchStand(kiter, spike, *state, stand) &&
                            (!ImpaleInMs(kiter, spike, impaleMs) || WalkMs(kiter, stand) <= impaleMs);
-    claim.need = !immune && !claim.boostLeft && !kiter->HasAura(SPELL_FORBEARANCE) &&
+    claim.need = !immune && claim.spikeFaster && !claim.boostLeft && !kiter->HasAura(SPELL_FORBEARANCE) &&
                  spikeDist <= ANUBARAK_KITE_PROTECT_RANGE;
 
     if (!claim.protector.IsEmpty() && !immune)
@@ -2711,7 +3026,7 @@ char const* ProtectRole(Player* bot, ProtectClaim const& claim)
     if (claim.need && claim.protector == bot->GetGUID())
         return "hop";
 
-    if (claim.kiter == bot->GetGUID() && claim.spikeInImmunityRange && !claim.boostLeft &&
+    if (claim.kiter == bot->GetGUID() && claim.spikeInImmunityRange && claim.spikeFaster && !claim.boostLeft &&
         claim.protector.IsEmpty() && !claim.standReachable && !AnubarakKiterImmune(bot))
         return "self";
 
@@ -3144,7 +3459,7 @@ Position GetAnubarakTankSpot(Player* bot, uint8 side)
         return GetAnubarakTankSidePoint(side > 1 ? 0 : side);
 
     ObjectGuid const held[2] = {state->patch0.Get(), state->patch1.Get()};
-    return SideSpot(ResolveSpheres(bot, *state), held, side);
+    return SideSpot(*state, ResolveSpheres(bot, *state), held, side);
 }
 
 Position GetAnubarakSideTankHold(Player* bot, uint8 side)
@@ -3249,9 +3564,20 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
     // the clearance the spot was found with.
     if (!state->submergeSpotValid || !clear(state->submergeSpot, state->submergeSpotClearance))
     {
-        // navprobe-clean out to 35 yd, so he never ends up against a wall
+        // navprobe-clean out to 45 yd, so he never ends up against a wall
         auto const onFloor = [](float x, float y)
         { return ANUBARAK_ROOM_CENTER.GetExactDist2d(x, y) <= ANUBARAK_SUBMERGE_SPOT_FLOOR; };
+
+        // The spike is summoned on him, so it starts away from the raid and its run to the raid spends no
+        // patch. Dropped when nothing passes.
+        Position const raid = state->raidPoint;
+        auto const offRaid = [&](float x, float y)
+        {
+            Position const spot(x, y, raid.GetPositionZ());
+            return onFloor(x, y) && Dist2d(spot, raid) >= ANUBARAK_SUBMERGE_RAID_CLEARANCE &&
+                   std::none_of(patches.begin(), patches.end(), [&](Position const& patch)
+                                { return SegmentDistance2d(spot, raid, patch) < ANUBARAK_SPIKE_ROUTE_CLEARANCE; });
+        };
 
         // Within the nearest clear ring, the spot toward a point 40 yd past the tank, away from the tank
         // patches, so the spike starts on the far side from both
@@ -3277,22 +3603,30 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
 
         state->submergeSpotValid = false;
         HazardSweepCache cache;
-        for (float clearance : ANUBARAK_SUBMERGE_CLEARANCES)
+        for (bool const awayFromRaid : {true, false})
         {
-            std::vector<HazardCircle> hazards;
-            for (Position const& patch : patches)
-                hazards.emplace_back(patch, clearance);
-
-            Position const spot = FindNearestPositionClearOfHazards(bot, hazards, ANUBARAK_SUBMERGE_SPOT_SEARCH, 2.0f,
-                                                                    static_cast<float>(M_PI) / 8.0f, &prefer,
-                                                                    onFloor, &cache);
-            if (spot == Position())
+            if (state->submergeSpotValid || (awayFromRaid && !state->raidPointValid))
                 continue;
 
-            state->submergeSpotValid = true;
-            state->submergeSpot = spot;
-            state->submergeSpotClearance = clearance;
-            break;
+            for (float clearance : ANUBARAK_SUBMERGE_CLEARANCES)
+            {
+                std::vector<HazardCircle> hazards;
+                for (Position const& patch : patches)
+                    hazards.emplace_back(patch, clearance);
+
+                std::function<bool(float, float)> const accept =
+                    awayFromRaid ? std::function<bool(float, float)>(offRaid) : std::function<bool(float, float)>(onFloor);
+                Position const spot = FindNearestPositionClearOfHazards(bot, hazards, ANUBARAK_SUBMERGE_SPOT_SEARCH,
+                                                                        2.0f, static_cast<float>(M_PI) / 8.0f, &prefer,
+                                                                        accept, &cache);
+                if (spot == Position())
+                    continue;
+
+                state->submergeSpotValid = true;
+                state->submergeSpot = spot;
+                state->submergeSpotClearance = clearance;
+                break;
+            }
         }
     }
 
@@ -3574,7 +3908,8 @@ std::vector<Creature*> GetAnubarakBurrowers(Player* bot)
 bool AnubarakSideTankNeedsDefensive(Player* bot)
 {
     return bot && bot->IsAlive() && GetAnubarakBurrowerTankSide(bot) >= 0 &&
-           (bot->GetAuraCount(SPELL_EXPOSE_WEAKNESS) >= ANUBARAK_SIDE_DEFENSIVE_STACKS ||
+           (bot->GetAuraCount(sSpellMgr->GetSpellIdForDifficulty(SPELL_EXPOSE_WEAKNESS, bot)) >=
+                ANUBARAK_SIDE_DEFENSIVE_STACKS ||
             bot->GetHealthPct() < ANUBARAK_SIDE_DEFENSIVE_PCT);
 }
 
@@ -4104,21 +4439,23 @@ bool GetAnubarakGripDuty(Player* bot, AnubarakGripDuty& out)
     return true;
 }
 
-void NoteAnubarakGripCast(Player* bot, Creature* sphere)
+// No duty re-read here: a recompute after the cast sees Death Grip on cooldown and drops the DK, and the
+// landed sphere would go unrecorded
+void NoteAnubarakGripCast(Player* bot, Creature* sphere, uint8 side)
 {
-    AnubarakGripDuty duty;
-    AnubarakState* state = sphere && GetAnubarakGripDuty(bot, duty) ? ResolveDuties(bot) : nullptr;
+    AnubarakState* state = bot && sphere && side < 2 ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
     if (!state)
         return;
 
-    GripCast& cast = state->grips[duty.side];
+    state->dutyMemoValid = false;
+    GripCast& cast = state->grips[side];
     cast.valid = true;
     cast.dk = bot->GetGUID();
     cast.sphere = sphere->GetGUID();
     cast.castMs = getMSTime();
     cast.from = bot->GetPosition();
     cast.landed = false;
-    state->needs[duty.side].gripFailed = false;
+    state->needs[side].gripFailed = false;
 }
 
 Creature* GetAnubarakDutySphere(Player* bot)
@@ -4206,8 +4543,9 @@ bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, Anubar
     Position leash;
     bool const leashed = heroic && spike->GetSpeed(MOVE_RUN) > bot->GetSpeed(MOVE_RUN) &&
                          KitePatchStand(bot, spike, *state, leash);
+    Position const* keep = previous && previous->branch == AnubarakKiteBranch::Ring ? &previous->stand : nullptr;
     ComputeKiteStand(bot, spike, *state, ResolveSpheres(bot, *state), LaneObstacles(bot, *state),
-                     seekPatch ? previous : nullptr, seekPatch, leashed ? &leash : nullptr, out);
+                     seekPatch ? previous : nullptr, seekPatch, leashed ? &leash : nullptr, keep, out);
     RaidObs::NoteDerived(bot, "anub.kite", KiteBranchName(out.branch));
     return true;
 }
@@ -4230,14 +4568,13 @@ AnubarakKiteStage GetAnubarakKiteStage(Player* kiter, AnubarakKiteBoost* boost)
 }
 
 // A side tank with no burrower of its side to hold or take gathers too: standing on its patch, a mark
-// on it would walk the spike straight into one
+// on it would walk the spike straight into one. So does the main tank, off where the spike is summoned.
 static AnubarakState const* GatherState(Player* bot)
 {
     PlayerbotAI* botAI = bot && AnubarakHeroic(bot) ? GET_PLAYERBOT_AI(bot) : nullptr;
     AnubarakState const* state = botAI ? ReadPhase(botAI) : nullptr;
     if (!state || state->phaseValue != AnubarakPhase::Submerged || !state->submergePosValid ||
-        bot->HasAura(SPELL_MARK) || bot->GetGUID() == state->mainTank ||
-        (GetAnubarakBurrowerTankSide(bot) >= 0 && GetAnubarakBurrowerPick(botAI)))
+        bot->HasAura(SPELL_MARK) || (GetAnubarakBurrowerTankSide(bot) >= 0 && GetAnubarakBurrowerPick(botAI)))
         return nullptr;
 
     return state;
@@ -4250,6 +4587,15 @@ bool GetAnubarakGatherSpot(Player* bot, Position& out)
     if (!state || !GatherCentre(bot, *state, gather))
         return false;
 
+    // On the edge away from where he went down: the spike is summoned there 2.5 s in
+    if (bot->GetGUID() == state->mainTank)
+    {
+        Vec2 const away = Delta(state->submergePos, gather);
+        float const length = Length(away);
+        out = length > 1.0f ? Offset(gather, {away.x / length, away.y / length}, ANUBARAK_GATHER_TANK_EDGE) : gather;
+        return true;
+    }
+
     // A slot per bot round the point, so twenty bots don't stand on one spot
     float const angle = static_cast<float>(bot->GetGUID().GetCounter() % 12) * 30.0f * ANUBARAK_DEG_TO_RAD;
     out = Offset(gather, {std::cos(angle), std::sin(angle)}, ANUBARAK_GATHER_SPREAD);
@@ -4257,6 +4603,58 @@ bool GetAnubarakGatherSpot(Player* bot, Position& out)
 }
 
 bool AnubarakGathers(PlayerbotAI* botAI) { return botAI && GatherState(botAI->GetBot()); }
+
+static AnubarakState const* HealerStandState(Player* bot)
+{
+    PlayerbotAI* botAI = bot && bot->IsAlive() && PlayerbotAI::IsHeal(bot) ? GET_PLAYERBOT_AI(bot) : nullptr;
+    AnubarakState const* state = botAI ? ReadPhase(botAI) : nullptr;
+    if (!state || !state->raidPointValid || bot->HasAura(SPELL_MARK) ||
+        (state->phaseValue != AnubarakPhase::Surface && state->phaseValue != AnubarakPhase::Swarm))
+        return nullptr;
+
+    return state;
+}
+
+bool AnubarakHealerStandApplies(PlayerbotAI* botAI) { return botAI && HealerStandState(botAI->GetBot()); }
+
+bool GetAnubarakHealerStand(Player* bot, Position& out)
+{
+    AnubarakState const* state = HealerStandState(bot);
+    if (!state)
+        return false;
+
+    std::vector<ObjectGuid> healers;
+    ForEachGroupMember(bot, [&](Player* member)
+    {
+        if (member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member))
+            healers.push_back(member->GetGUID());
+
+        return false;
+    });
+
+    std::sort(healers.begin(), healers.end());
+    size_t const index = static_cast<size_t>(
+        std::distance(healers.begin(), std::find(healers.begin(), healers.end(), bot->GetGUID())));
+    float const count = static_cast<float>(std::max<size_t>(healers.size(), 1));
+    float const base = 2.0f * static_cast<float>(M_PI) * static_cast<float>(index) / count;
+
+    std::vector<Position> const patches = PatchPositions(bot, *state);
+    for (uint32 turn = 0; turn < ANUBARAK_HEALER_SLOT_TRIES; ++turn)
+    {
+        float const angle = base + 2.0f * static_cast<float>(M_PI) * static_cast<float>(turn) /
+                                       static_cast<float>(ANUBARAK_HEALER_SLOT_TRIES);
+        Position const slot = Offset(state->raidPoint, {std::cos(angle), std::sin(angle)}, ANUBARAK_GATHER_SPREAD);
+        if (std::none_of(patches.begin(), patches.end(), [&slot](Position const& patch)
+                         { return Dist2d(slot, patch) < ANUBARAK_HEALER_PATCH_CLEARANCE; }))
+        {
+            out = slot;
+            return true;
+        }
+    }
+
+    out = state->raidPoint;
+    return true;
+}
 
 bool AnubarakDemonicCircleDue(PlayerbotAI* botAI)
 {

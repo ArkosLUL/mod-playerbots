@@ -313,7 +313,7 @@ bool AnubarakInterruptShadowStrikeAction::Execute(Event /*event*/)
 
 bool AnubarakTankDefensiveAction::Execute(Event /*event*/)
 {
-    uint32 const defensive = NextTankDefensive(botAI, bot, "anub.defensive");
+    uint32 const defensive = NextTankDefensive(botAI, bot, "anub.defensive", physicalOnly);
     return defensive && botAI->CastSpell(defensive, bot);
 }
 
@@ -432,7 +432,7 @@ bool AnubarakGripFrostSphereAction::Execute(Event /*event*/)
             if (!botAI->CastSpell("death grip", sphere))
                 return false;
 
-            NoteAnubarakGripCast(bot, sphere);
+            NoteAnubarakGripCast(bot, sphere, duty.side);
             return true;
         }
         default:
@@ -471,6 +471,20 @@ bool AnubarakGatherAction::Execute(Event /*event*/)
     RaidObs::NoteDerived(bot, "anub.gather", "walk");
     Position const walk = GetAnubarakPatchSafeLeg(bot, ValidateFloorPoint(bot, spot));
     BreakChannelPinningTheFeet(bot);
+    if (WalkInFlight(botAI, bot, walk))
+        return true;
+
+    return MoveTo(bot->GetMapId(), walk.GetPositionX(), walk.GetPositionY(), walk.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool AnubarakHealerStandAction::Execute(Event /*event*/)
+{
+    Position slot;
+    if (!GetAnubarakHealerStand(bot, slot))
+        return false;
+
+    Position const walk = GetAnubarakPatchSafeLeg(bot, ValidateFloorPoint(bot, slot));
     if (WalkInFlight(botAI, bot, walk))
         return true;
 

@@ -78,6 +78,14 @@ Registration is not activation, and that fails just as quietly. `DpsAoeStrategy`
 `"dps aoe"` — only the unrelated `"aoe"` — so it never runs. Check for both the `creators[...]`
 entry **and** an `addStrategies*` mention.
 
+**Adding a strategy removes its siblings.** In a `NamedObjectContext<Strategy>` built with
+`supportsSiblings` true (`RaidStrategyContext`, `DungeonStrategyContext`, the movement, assist and
+quest contexts, the class factories), `Engine::addStrategy` drops every other strategy of that
+context (`GetSiblings`). `raid healer engine` sat in `RaidStrategyContext`, so `ApplyInstanceStrategies`
+adding the raid's own strategy after it removed it on every raid that has one: its trigger was in
+no coverage of 94 traces. A strategy meant to stack goes in a context without siblings
+(`RaidHealerEngineStrategyContext`).
+
 ## A moving bot cannot cast
 
 `PlayerbotAI::CanCastSpell` / `CastSpell` refuse **any** spell with a non-zero cast time while

@@ -22,7 +22,8 @@ constexpr uint32 SPELL_PERMAFROST = 66193;
 constexpr uint32 SPELL_PENETRATING_COLD = 66013;
 // Heroic burrower cast, no difficulty row
 constexpr uint32 SPELL_SHADOW_STRIKE = 66134;
-// On the burrower's victim, +25% physical damage taken a stack
+// On the burrower's victim, +25% physical damage taken a stack. 10N id, 25-man pulls carry 67847: remap
+// it at the call
 constexpr uint32 SPELL_EXPOSE_WEAKNESS = 67721;
 constexpr uint32 SPELL_DEATH_GRIP = 49576;
 
@@ -142,12 +143,11 @@ constexpr float ANUBARAK_CIRCLE_TELEPORT_GAIN = 15.0f;
 // A circle with less left than this is cast again
 constexpr int32 ANUBARAK_CIRCLE_REFRESH_MS = 100000;
 constexpr float ANUBARAK_BLINK_DISTANCE = 20.0f;
-// Heroic phase 2: the raid stands this far past where he went down, away from the tank patches, and
-// never further out than the floor radius
-constexpr float ANUBARAK_GATHER_PAST = 5.0f;
-constexpr float ANUBARAK_GATHER_FLOOR = 35.0f;
+// Heroic phase 2: slots this far round the raid point, held from up to ARRIVE off them. The healer stand
+// uses the same ring while he is up, and walks back once a healer is LEAVE off its slot.
 constexpr float ANUBARAK_GATHER_ARRIVE = 6.0f;
 constexpr float ANUBARAK_GATHER_SPREAD = 3.0f;
+constexpr float ANUBARAK_HEALER_STAND_LEAVE = 6.0f;
 // A gathered melee bot takes a scarab this close before the focus burrower
 constexpr float ANUBARAK_GATHER_MELEE_SCARAB = 10.0f;
 constexpr float ANUBARAK_KITE_RING_STEP_DEGREES = 40.0f;
@@ -442,8 +442,8 @@ Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI);
 Creature* GetAnubarakSphereToShoot(Player* bot);
 // The DK's grip of a sphere for its side's tank patch. False without one.
 bool GetAnubarakGripDuty(Player* bot, AnubarakGripDuty& out);
-// Called once the DK's Death Grip on its duty sphere went out
-void NoteAnubarakGripCast(Player* bot, Creature* sphere);
+// Called once the DK's Death Grip on its duty sphere went out, with the side its duty had before the cast
+void NoteAnubarakGripCast(Player* bot, Creature* sphere, uint8 side);
 // The shot or gripped sphere this bot's duty is on, else null
 Creature* GetAnubarakDutySphere(Player* bot);
 // 3D within the bot's spell range less ANUBARAK_SHOOT_MARGIN, in line of sight
@@ -456,9 +456,13 @@ bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, Anubar
 // Heroic only, None elsewhere and for an unmarked bot. With Boost, boost says what to use.
 AnubarakKiteStage GetAnubarakKiteStage(Player* kiter, AnubarakKiteBoost* boost = nullptr);
 // Heroic phase 2: this bot's spot in the raid's gather, not floor-checked, false when it doesn't gather
-// (the kiter, the main tank, a side tank a burrower is on)
+// (the kiter, a side tank a burrower is on). The main tank's is on the gather's edge.
 bool GetAnubarakGatherSpot(Player* bot, Position& out);
 bool AnubarakGathers(PlayerbotAI* botAI);
+// While he is up, every difficulty: a healer bot's slot on the gather's ring round the raid point, clear
+// of every patch, not floor-checked. False for anyone else or while marked.
+bool GetAnubarakHealerStand(Player* bot, Position& out);
+bool AnubarakHealerStandApplies(PlayerbotAI* botAI);
 // A warlock bot's Demonic Circle is missing or under 100 s: on its Anub'arak stand before the pull, or
 // while he is up
 bool AnubarakDemonicCircleDue(PlayerbotAI* botAI);

@@ -64,9 +64,13 @@ public:
 class AnubarakTankDefensiveAction : public Action
 {
 public:
-    AnubarakTankDefensiveAction(
-        PlayerbotAI* botAI, std::string const name = "anubarak tank defensive") : Action(botAI, name) {};
+    AnubarakTankDefensiveAction(PlayerbotAI* botAI, std::string const name = "anubarak tank defensive",
+                                bool physicalOnly = false)
+        : Action(botAI, name), physicalOnly(physicalOnly) {};
     bool Execute(Event event) override;
+
+private:
+    bool physicalOnly;
 };
 
 class AnubarakDestroyFrostSphereAction : public AttackAction
@@ -124,6 +128,14 @@ class AnubarakGatherAction : public MovementAction
 {
 public:
     AnubarakGatherAction(PlayerbotAI* botAI, std::string const name = "anubarak gather")
+        : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakHealerStandAction : public MovementAction
+{
+public:
+    AnubarakHealerStandAction(PlayerbotAI* botAI, std::string const name = "anubarak healer stand")
         : MovementAction(botAI, name) {};
     bool Execute(Event event) override;
 };
@@ -193,6 +205,8 @@ public:
             &ToCAnubarakActionContext::anubarak_interrupt_shadow_strike;
         creators["anubarak tank defensive"] =
             &ToCAnubarakActionContext::anubarak_tank_defensive;
+        creators["anubarak side tank defensive"] =
+            &ToCAnubarakActionContext::anubarak_side_tank_defensive;
         creators["anubarak destroy frost sphere"] =
             &ToCAnubarakActionContext::anubarak_destroy_frost_sphere;
         creators["anubarak dps target"] =
@@ -207,6 +221,8 @@ public:
             &ToCAnubarakActionContext::anubarak_battle_res_side_tank;
         creators["anubarak gather"] =
             &ToCAnubarakActionContext::anubarak_gather;
+        creators["anubarak healer stand"] =
+            &ToCAnubarakActionContext::anubarak_healer_stand;
         creators["anubarak leave permafrost"] =
             &ToCAnubarakActionContext::anubarak_leave_permafrost;
         creators["anubarak melee burrower stand"] =
@@ -246,6 +262,11 @@ private:
         return new AnubarakTankDefensiveAction(botAI);
     }
 
+    // Burrower melee is physical: Anti-Magic Shell would waste itself there
+    static Action* anubarak_side_tank_defensive(PlayerbotAI* botAI) {
+        return new AnubarakTankDefensiveAction(botAI, "anubarak side tank defensive", true);
+    }
+
     static Action* anubarak_destroy_frost_sphere(PlayerbotAI* botAI) {
         return new AnubarakDestroyFrostSphereAction(botAI);
     }
@@ -272,6 +293,10 @@ private:
 
     static Action* anubarak_gather(PlayerbotAI* botAI) {
         return new AnubarakGatherAction(botAI);
+    }
+
+    static Action* anubarak_healer_stand(PlayerbotAI* botAI) {
+        return new AnubarakHealerStandAction(botAI);
     }
 
     static Action* anubarak_leave_permafrost(PlayerbotAI* botAI) {
