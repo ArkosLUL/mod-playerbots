@@ -107,6 +107,20 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakOnPermafrostTrigger : public Trigger
+{
+public:
+    AnubarakOnPermafrostTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak on permafrost") {}
+    bool IsActive() override;
+};
+
+class AnubarakMeleeBurrowerStandTrigger : public Trigger
+{
+public:
+    AnubarakMeleeBurrowerStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak melee burrower stand") {}
+    bool IsActive() override;
+};
+
 class AnubarakDemonicCircleDueTrigger : public Trigger
 {
 public:
@@ -168,6 +182,10 @@ public:
             &ToCAnubarakTriggerContext::anubarak_grip_frost_sphere;
         creators["anubarak raid gathers"] =
             &ToCAnubarakTriggerContext::anubarak_raid_gathers;
+        creators["anubarak on permafrost"] =
+            &ToCAnubarakTriggerContext::anubarak_on_permafrost;
+        creators["anubarak melee burrower stand"] =
+            &ToCAnubarakTriggerContext::anubarak_melee_burrower_stand;
         creators["anubarak demonic circle due"] =
             &ToCAnubarakTriggerContext::anubarak_demonic_circle_due;
         creators["anubarak scarab on raid"] =
@@ -233,6 +251,14 @@ private:
 
     static Trigger* anubarak_raid_gathers(PlayerbotAI* botAI) {
         return new AnubarakRaidGathersTrigger(botAI);
+    }
+
+    static Trigger* anubarak_on_permafrost(PlayerbotAI* botAI) {
+        return new AnubarakOnPermafrostTrigger(botAI);
+    }
+
+    static Trigger* anubarak_melee_burrower_stand(PlayerbotAI* botAI) {
+        return new AnubarakMeleeBurrowerStandTrigger(botAI);
     }
 
     static Trigger* anubarak_demonic_circle_due(PlayerbotAI* botAI) {

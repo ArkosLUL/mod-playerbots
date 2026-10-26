@@ -389,7 +389,7 @@ bool AnubarakSideTankReadyAction::Execute(Event /*event*/)
         if (attacker->GetEntry() == static_cast<uint32>(ToCNpcs::NPC_SWARM_SCARAB) && Attack(attacker))
             return true;
 
-    Position const hold = GetAnubarakTankSpot(bot, static_cast<uint8>(side));
+    Position const hold = GetAnubarakSideTankHold(bot, static_cast<uint8>(side));
     if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) <= ANUBARAK_TANK_PATCH_ARRIVE ||
         AnubarakSpikeLaneCrosses(bot, hold) || WalkInFlight(botAI, bot, hold))
         return false;
@@ -459,6 +459,9 @@ bool AnubarakGatherAction::Execute(Event /*event*/)
     if (!GetAnubarakGatherSpot(bot, spot))
         return false;
 
+    if (GetAnubarakBurrowerTankSide(bot) >= 0)
+        RaidObs::NoteDerived(bot, "anub.sidetank", "gather");
+
     if (bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ANUBARAK_GATHER_ARRIVE)
     {
         RaidObs::NoteDerived(bot, "anub.gather", "hold");
@@ -466,8 +469,46 @@ bool AnubarakGatherAction::Execute(Event /*event*/)
     }
 
     RaidObs::NoteDerived(bot, "anub.gather", "walk");
-    Position const walk = ValidateFloorPoint(bot, spot);
+    Position const walk = GetAnubarakPatchSafeLeg(bot, ValidateFloorPoint(bot, spot));
     BreakChannelPinningTheFeet(bot);
+    if (WalkInFlight(botAI, bot, walk))
+        return true;
+
+    return MoveTo(bot->GetMapId(), walk.GetPositionX(), walk.GetPositionY(), walk.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool AnubarakLeavePermafrostAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!GetAnubarakPermafrostStepOut(bot, spot))
+    {
+        RaidObs::NoteDerived(bot, "anub.leave", "none");
+        return false;
+    }
+
+    RaidObs::NoteDerived(bot, "anub.leave", "walk");
+    BreakChannelPinningTheFeet(bot);
+    if (WalkInFlight(botAI, bot, spot))
+        return true;
+
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool AnubarakMeleeBurrowerStandAction::Execute(Event /*event*/)
+{
+    Unit* target = AI_VALUE(Unit*, "current target");
+    Creature* burrower = target ? target->ToCreature() : nullptr;
+    Position stand;
+    if (!burrower || !GetAnubarakMeleeBurrowerStand(bot, burrower, stand))
+    {
+        RaidObs::NoteDerived(bot, "anub.mstand", "none");
+        return false;
+    }
+
+    RaidObs::NoteDerived(bot, "anub.mstand", "walk");
+    Position const walk = GetAnubarakPatchSafeLeg(bot, stand);
     if (WalkInFlight(botAI, bot, walk))
         return true;
 

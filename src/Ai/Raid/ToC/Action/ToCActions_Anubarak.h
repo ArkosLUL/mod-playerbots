@@ -128,6 +128,22 @@ public:
     bool Execute(Event event) override;
 };
 
+class AnubarakLeavePermafrostAction : public MovementAction
+{
+public:
+    AnubarakLeavePermafrostAction(PlayerbotAI* botAI, std::string const name = "anubarak leave permafrost")
+        : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakMeleeBurrowerStandAction : public MovementAction
+{
+public:
+    AnubarakMeleeBurrowerStandAction(PlayerbotAI* botAI, std::string const name = "anubarak melee burrower stand")
+        : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class AnubarakDemonicCircleAction : public Action
 {
 public:
@@ -191,6 +207,10 @@ public:
             &ToCAnubarakActionContext::anubarak_battle_res_side_tank;
         creators["anubarak gather"] =
             &ToCAnubarakActionContext::anubarak_gather;
+        creators["anubarak leave permafrost"] =
+            &ToCAnubarakActionContext::anubarak_leave_permafrost;
+        creators["anubarak melee burrower stand"] =
+            &ToCAnubarakActionContext::anubarak_melee_burrower_stand;
         creators["anubarak demonic circle"] =
             &ToCAnubarakActionContext::anubarak_demonic_circle;
         creators["anubarak tank pick up scarab"] =
@@ -252,6 +272,14 @@ private:
 
     static Action* anubarak_gather(PlayerbotAI* botAI) {
         return new AnubarakGatherAction(botAI);
+    }
+
+    static Action* anubarak_leave_permafrost(PlayerbotAI* botAI) {
+        return new AnubarakLeavePermafrostAction(botAI);
+    }
+
+    static Action* anubarak_melee_burrower_stand(PlayerbotAI* botAI) {
+        return new AnubarakMeleeBurrowerStandAction(botAI);
     }
 
     static Action* anubarak_demonic_circle(PlayerbotAI* botAI) {

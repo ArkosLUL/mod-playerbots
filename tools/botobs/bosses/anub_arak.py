@@ -6,19 +6,24 @@
     anub_arak.py <file> --pull       who was locked out or never landed, and stage 9 to the pull
     anub_arak.py <file> --spike      every Pursued by Anub'arak window: kiter, kite branch, outcome, protection,
                                      time in each kite stage, the kiter's boosts, its own immunities and
-                                     whether anub.protect asked for them,
-                                     the spike's closest approach to each latched tank patch; at the mark's end
-                                     the spike's distance from the gather centre and any kite patch alive, a
-                                     death or own immunity within 20 yd of the gather flagged
+                                     whether anub.protect asked for them, a kiter marked inside a patch's slow,
+                                     the tank patch it spent, the spike's closest approach to each latched tank
+                                     patch; at the mark's end the spike's distance from the gather centre and
+                                     any unlatched patch alive, a death or own immunity within 20 yd of the
+                                     gather flagged
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips
-                                     against the DK's spot at the cast, spheres spent per submerge against the
-                                     kite allowance; per submerge the kite patch: when it formed, grip or shots,
-                                     its distance from each tank patch and the gather centre
+                                     against the DK's spot at the cast, each side's first tank patch; per
+                                     submerge the spheres spent and the tank patches gone against the kite
+                                     allowance, each with its kiter, and when that side's patch came back
     anub_arak.py <file> --burrowers  each burrower: life, submerges, Permafrost, Shadow Strike, its exit, side
                                      and pickup, DPS focus, DPS casts at any other burrower; whether it died
                                      inside its first 30 s up; per wave, those deaths, when the focus came due,
-                                     and each time it stopped with the focus alive
+                                     and each time it stopped with the focus alive; each focus pick against its
+                                     tank and the patches, each burrower's distance from the patch centre while
+                                     on a side tank
+    anub_arak.py <file> --frost      seconds carrying Permafrost per group and bot, he up and he down, and every
+                                     stint over 3 s with the bot's target at its start
     anub_arak.py <file> --threat     per surfaced window: his target, his drag legs, taunts, threat cap, the
                                      main tank's time in Permafrost, his submerge spot against the tank patches
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust, Penetrating Cold, deaths
@@ -147,6 +152,8 @@ GRIP_JUDGE_MS = 3000
 # tank patch is a fallback
 SUBMERGE_PATCH_CLEARANCE = 25.0
 SPIKE_PATCH_REACH = radius("ANUBARAK_SPIKE_PATCH_REACH")
+FOCUS_SETTLE = radius("ANUBARAK_FOCUS_SETTLE")
+FOCUS_LOW_PCT = radius("ANUBARAK_FOCUS_OFF_FROST_PCT")
 # ANUBARAK_KITE_GATHER_CLEARANCE, a sum radius() doesn't read: a kite ending nearer hands the spike to the
 # gather
 KITE_END_GATHER_YD = 20.0
@@ -192,6 +199,9 @@ NEAR_MS = 2000
 # one snapshot gap longer than this is a hole in the trace, not time spent anywhere
 MAX_STEP_MS = 2000
 TIMELINE_SHOWN = 30
+# a Permafrost stint longer than this is listed on its own
+FROST_STINT_MS = 3000
+FROST_GROUPS = ("main tank", "side tank", "tank", "melee", "ranged", "heal")
 
 
 def pull_end(trace: Trace) -> int:
@@ -215,6 +225,17 @@ def short(trace: Trace, guid: int) -> str:
     if guid in trace.roles:
         return trace.name(guid)
     return f"#{guid & 0xFFFFFFFF}"
+
+
+def unit_label(trace: Trace, guid) -> str:
+    """A target as a reader recognises it: a roster name, him, or a creature's kind and counter."""
+    entry = trace.entries.get(guid)
+    if not guid or guid in trace.roles or entry is None:
+        return trace.name(guid)
+    if entry == NPC_ANUBARAK:
+        return "Anub'arak"
+    kind = {NPC_BURROWER: "burrower", NPC_FROST_SPHERE: "sphere", NPC_SPIKE: "spike"}.get(entry, trace.name(guid))
+    return f"{kind} {short(trace, guid)}"
 
 
 def per_bot(trace: Trace, key: str) -> dict[int, list[tuple[int, str]]]:
@@ -780,6 +801,8 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
         spike = spike_at(samples, spikes, guid, stop)
         centre = gather_centre(holds, samples, submerged, stop, {guid})
         to_gather = dist2(spike[1:3], centre) if spike and centre is not None else None
+        stand = samples.row(guid, start)
+        frost = [dist2(stand[1:3], point) for point in samples.frost_at(start)] if stand else []
         out.append({"guid": guid, "start": start, "stop": stop,
                     "branches": branches_in(kite.get(guid, []), start, stop),
                     "impales": len(hits), "damage": sum(rec.get("a", 0) for rec in hits),
@@ -793,7 +816,9 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "tank_near": tank_patch_approach(samples, latches, spikes, start, stop),
                     "ended": ended, "gather": centre, "to_gather": to_gather,
                     "kite_patches": unlatched_patches(samples, latches, stop),
-                    "near_gather": ended is not None and to_gather is not None and to_gather <= KITE_END_GATHER_YD})
+                    "near_gather": ended is not None and to_gather is not None and to_gather <= KITE_END_GATHER_YD,
+                    "frost_yd": min(frost) if frost else None,
+                    "in_frost": bool(frost) and min(frost) <= PERMAFROST_SLOW_REACH})
     return out
 
 
@@ -808,7 +833,9 @@ def stray_impales(trace: Trace, windows: list[dict]) -> list[dict]:
 
 def show_spike(trace: Trace) -> None:
     print("PURSUING SPIKE")
-    windows = mark_windows(trace)
+    samples = Samples(trace)
+    windows = mark_windows(trace, samples)
+    spends = {(row["kiter"], row["mark"]): row for row in spent_patches(trace, samples) if row["kiter"]}
     if not windows:
         print("  nobody carried Pursued by Anub'arak")
     else:
@@ -817,10 +844,15 @@ def show_spike(trace: Trace) -> None:
         for window in windows:
             branches = ">".join(window["branches"]) or "-"
             near = "-" if window["near"] is None else f"{window['near'] / 1000:.1f}"
+            spend = spends.get((window["guid"], window["start"]))
+            gone = (f"  tank patch {spend['side']} spent" if spend
+                    else "  patch seen going" if window["consumed"] else "")
             print(f"  {clock(window['start']):>9} {trace.name(window['guid'])[:14]:14}"
                   f" {trace.role(window['guid']):6} {(window['stop'] - window['start']) / 1000:5.1f}"
                   f" {branches[:24]:24} {window['outcome']:7} {window['impales']:7} {window['damage']:8,}"
-                  f" {near:>5}" + ("  patch seen going" if window["consumed"] else ""))
+                  f" {near:>5}" + gone)
+            if window["in_frost"]:
+                print(f"            marked {window['frost_yd']:.1f} yd from a Permafrost centre, inside its slow")
             cover = protection(trace, window)
             if cover:
                 print(f"            {cover}")
@@ -859,6 +891,10 @@ def show_spike(trace: Trace) -> None:
                            for window in flagged) or "none"))
         print("  the gather is the mean spot of the living bots holding anub.gather since he went under, the"
               " kiter left out")
+        inside = [window for window in windows if window["in_frost"]]
+        print(f"  marked within {PERMAFROST_SLOW_REACH} yd of a Permafrost centre: "
+              + (", ".join(f"{trace.name(window['guid'])} {clock(window['start'])} {window['frost_yd']:.1f} yd"
+                           for window in inside) or "none"))
 
     stray = stray_impales(trace, windows)
     if stray:
@@ -1101,92 +1137,157 @@ def grip_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
-def allowance_rows(trace: Trace, deaths: list[dict]) -> list[dict]:
-    """Per submerge, the `anub.allow` written as he went under, and the spheres that died while he was
-    down: `tank` the ones a side owned, `other` the rest."""
+def last_grip(grips: list[dict], sphere: int, before: int, since: int | None = None) -> dict | None:
+    """The last Death Grip at the sphere cast at or before `before`, and not before `since`."""
+    return next((row for row in reversed(grips) if row["sphere"] == sphere and row["t"] <= before
+                 and (since is None or row["t"] >= since)), None)
+
+
+def first_patches(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per side, the first sphere its `anub.patchN` latched: when, the last Death Grip at it before then and its
+    death row. `guid` is None for a side that never latched one."""
+    samples = samples or Samples(trace)
+    grips = grip_rows(trace, samples)
+    deaths = {row["guid"]: row for row in sphere_deaths(trace, samples)}
+    out = []
+    for side, spans in enumerate(patch_latches(trace)):
+        when, guid = next(((start, as_guid(value)) for value, start, _ in spans if as_guid(value)), (None, None))
+        out.append({"side": side, "t": when, "guid": guid,
+                    "grip": last_grip(grips, guid, when) if guid else None, "death": deaths.get(guid)})
+    return out
+
+
+def spent_patches(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Each tank patch a side held as it went while he was down: its side and submerge, its last sample, the
+    mark that ended on it (else the one running then) with that kiter's last kite stage and the seconds
+    into its window, and in `back` the side's next latch: when, a Death Grip at it since, its death row."""
+    samples = samples or Samples(trace)
+    end = pull_end(trace)
+    latches = patch_latches(trace)
+    lives = patch_lives(trace, samples)
+    used = consumed_patches(trace, samples)
+    last = samples.stamps[-1] if samples.stamps else 0
+    spans = phase_spans(trace)
+    marks = mark_spans(trace)
+    stages = holder_spans(trace, "anub.kitestage", end)
+    grips = grip_rows(trace, samples)
+    deaths = {row["guid"]: row for row in sphere_deaths(trace, samples)}
+    out = []
+    for side, latch in enumerate(latches):
+        for guid in dict.fromkeys(as_guid(value) for value, _, _ in latch):
+            if not guid or guid not in lives or lives[guid][1] >= last:
+                continue
+            gone = lives[guid][1]
+            # the latch clearing and the patch's last sample can land a tick apart, either way round
+            if not any(as_guid(value) == guid and start <= gone < stop + NEAR_MS for value, start, stop in latch):
+                continue
+            under = next(((start, stop, label) for start, stop, phase, label in spans
+                          if phase == 2 and start <= gone < stop), None)
+            if under is None:
+                continue
+            row = {"side": side, "guid": guid, "gone": gone, "label": under[2], "start": under[0],
+                   "emerge": under[1], "kiter": None, "mark": None, "into": None, "stage": None}
+            if guid in used:
+                hit = used[guid][1]
+                mark = next((span for span in marks if span[3] and span[2] == hit), None)
+            else:
+                hit = gone
+                mark = next((span for span in marks if span[1] <= gone <= span[2]), None)
+            if mark:
+                kiter, low, high, _ = mark
+                held = [value for value, begin, stop in stages.get(kiter, [])
+                        if value != "none" and begin < high and stop > low]
+                row.update({"kiter": kiter, "mark": low, "into": hit - low, "stage": held[-1] if held else None})
+            when, again = next(((start, as_guid(value)) for value, start, _ in latch
+                                if start > gone and as_guid(value) not in (0, guid)), (None, None))
+            row["back"] = None if again is None else {
+                "t": when, "guid": again, "grip": last_grip(grips, again, when, gone), "death": deaths.get(again)}
+            out.append(row)
+    return sorted(out, key=lambda row: row["gone"])
+
+
+def allowance_rows(trace: Trace, deaths: list[dict], spent: list[dict]) -> list[dict]:
+    """Per submerge: the `anub.allow` written as he went under and when it next read 0 inside it, the spheres
+    that died while he was down (`tank` the ones a side owned, `other` the rest), and the tank patches gone.
+    `over` is heroic only, where the allowance is the tank patches the kiter may spend."""
     spans = latch_spans(trace, "anub.allow", pull_end(trace))
+    heroic = is_heroic(trace)
     out = []
     for start, stop, phase, label in phase_spans(trace):
         if phase != 2:
             continue
         # a row from another bot's tick can trail the phase edge
         value = held_at(spans, min(start + NEAR_MS, stop - 1))
+        allow = int(value) if value and value.isdigit() else None
+        dropped = next((low for held, low, _ in spans if held == "0" and start + NEAR_MS < low < stop),
+                       None) if allow else None
         made = [row for row in deaths if start <= row["killed"] < stop]
-        out.append({"label": label, "start": start,
-                    "allow": int(value) if value and value.isdigit() else None,
+        mine = [row for row in spent if row["start"] == start]
+        out.append({"label": label, "start": start, "allow": allow, "dropped": dropped,
                     "tank": sum(1 for row in made if row["side"] is not None),
-                    "other": sum(1 for row in made if row["side"] is None)})
+                    "other": sum(1 for row in made if row["side"] is None), "spent": mine,
+                    "over": heroic and allow is not None and len(mine) > allow})
     return out
 
 
-def tank_patch_named(latches, guid: int, formed: int) -> bool:
-    """Whether a side latched the patch as it formed. The latch lands a tick or so before the Permafrost
-    centre shows; one naming it later is a side taking over a kite patch."""
-    return any(as_guid(value) == guid and start <= formed + NEAR_MS for spans in latches for value, start, _ in spans)
+def patch_source(trace: Trace, grip: dict | None, death: dict | None) -> str:
+    """How a patch came down: a Death Grip at it and whether it landed, else shots; then its killer and its
+    landing against its side's spot."""
+    text = "from shots"
+    if grip:
+        verdict = "missed" if grip["landed"] is None else f"landed +{grip['landed'] / 1000:.1f} s"
+        text = f"from a grip by {trace.name(grip['dk'])} at {clock(grip['t'])}, {verdict}"
+    if death and death["killer"]:
+        text += (f", killed by {trace.name(death['killer'])}" + ("'s pet" if death["pet"] else "")
+                 + ("" if death["spell"] is None else f" {trace.spell(death['spell'])}"))
+    if death and death["off_spot"] is not None:
+        text += f", {death['off_spot']:.1f} yd off its spot"
+    return text
 
 
-def kite_patch_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
-    """Per submerge, its kite patch: the first patch to form while he was under that no side latched as it
-    formed. When it formed, a Death Grip at it in the submerge, its death row, and its distance from each
-    latched tank patch and from the gather centre then. `carried` is the patches no side held as he went
-    under."""
-    samples = samples or Samples(trace)
-    latches = patch_latches(trace)
-    holds = holder_spans(trace, "anub.gather", pull_end(trace))
-    submerged = submerged_spans(trace)
-    marks = mark_spans(trace)
-    grips = grip_rows(trace, samples)
-    deaths = {row["guid"]: row for row in sphere_deaths(trace, samples)}
-    formed = {}
-    for guid in guids_of_entry(trace, NPC_FROST_SPHERE):
-        when = patch_formed(samples, guid)
-        if when is not None and not tank_patch_named(latches, guid, when):
-            formed[guid] = when
-
-    out = []
-    for start, stop, phase, label in phase_spans(trace):
-        if phase != 2:
-            continue
-        row = {"label": label, "start": start, "guid": None, "carried": unlatched_patches(samples, latches, start)}
-        mine = sorted((when, guid) for guid, when in formed.items() if start <= when < stop)
-        if mine:
-            when, guid = mine[0]
-            spot = tuple(samples.row(guid, when)[1:3])
-            centre = gather_centre(holds, samples, submerged, when,
-                                   {kiter for kiter, low, high, _ in marks if low <= when <= high})
-            tanks = {side: dist2(spot, point) for side, point in
-                     enumerate(latched_patch(spans, samples, when) for spans in latches) if point}
-            row.update({"guid": guid, "formed": when, "spot": spot, "tanks": tanks,
-                        "grip": next((grip for grip in grips if grip["sphere"] == guid and start <= grip["t"] <= when),
-                                     None),
-                        "death": deaths.get(guid), "gather": None if centre is None else dist2(spot, centre)})
-        out.append(row)
-    return out
+def spend_line(trace: Trace, row: dict) -> str:
+    head = f"side {row['side']} {short(trace, row['guid'])} gone {clock(row['gone'])}"
+    if row["kiter"] is None:
+        return head + ", nobody marked"
+    stage = stage_name(trace, row["stage"]) if row["stage"] else "-"
+    return head + f", {trace.name(row['kiter'])}'s mark {row['into'] / 1000:.1f} s in, kitestage {stage}"
 
 
-def show_kite_patches(trace: Trace, samples: Samples) -> None:
-    rows = kite_patch_rows(trace, samples)
+def back_line(trace: Trace, row: dict) -> str:
+    back = row["back"]
+    if back is None:
+        return "not back by the end"
+    after = (back["t"] - row["emerge"]) / 1000
+    edge = f"{after:.1f} s after the emerge" if after >= 0 else f"{-after:.1f} s before the emerge"
+    return (f"back {clock(back['t'])}, {edge}: {short(trace, back['guid'])}"
+            f" {patch_source(trace, back['grip'], back['death'])}")
+
+
+def show_tank_patches(trace: Trace, samples: Samples) -> None:
+    print("\n  first tank patch per side, at its anub.patchN latch:")
+    for row in first_patches(trace, samples):
+        if row["guid"] is None:
+            print(f"    side {row['side']}  never latched one")
+        else:
+            print(f"    side {row['side']}  {clock(row['t']):>9}  {short(trace, row['guid'])}"
+                  f" {patch_source(trace, row['grip'], row['death'])}")
+
+    rows = allowance_rows(trace, sphere_deaths(trace, samples), spent_patches(trace, samples))
     if not rows:
         return
-    print("\n  kite patch per submerge, the first patch formed while he was under that no side latched as it formed:")
+    print("\n  per submerge: anub.allow as he went under, the spheres that died while he was down (tank the ones a"
+          "\n  side owned, other the rest) and the latched tank patches gone meanwhile, over the allowance in heroic"
+          " flagged:")
     for row in rows:
-        head = f"    {row['label']:5} {clock(row['start']):>9}  "
-        if row["guid"] is None:
-            carried = ", ".join(short(trace, guid) for guid in row["carried"])
-            print(head + "none formed" + (f", unlatched patches alive as he went under: {carried}" if carried else ""))
-            continue
-        grip, death = row["grip"], row["death"]
-        source = "from shots"
-        if grip:
-            verdict = "missed" if grip["landed"] is None else f"landed +{grip['landed'] / 1000:.1f} s"
-            source = f"from a grip by {trace.name(grip['dk'])} at {clock(grip['t'])}, {verdict}"
-        if death and death["killer"]:
-            source += (f", killed by {trace.name(death['killer'])}" + ("'s pet" if death["pet"] else "")
-                       + ("" if death["spell"] is None else f" {trace.spell(death['spell'])}"))
-        print(head + f"{short(trace, row['guid'])} formed +{(row['formed'] - row['start']) / 1000:.1f} s {source}")
-        gaps = [f"tank patch {side} {yards:.1f} yd" for side, yards in sorted(row["tanks"].items())]
-        gaps.append("nobody holding the gather" if row["gather"] is None else f"gather {row['gather']:.1f} yd")
-        print("            " + ", ".join(gaps))
+        allow = "-" if row["allow"] is None else str(row["allow"])
+        print(f"    {row['label']:5} {clock(row['start']):>9}  allowance {allow:>2}  tank {row['tank']}"
+              f"  other {row['other']}  spent {len(row['spent'])}" + ("  over" if row["over"] else "")
+              + ("" if row["dropped"] is None else f", allowance 0 from {clock(row['dropped'])}"))
+        for spend in row["spent"]:
+            print(f"      {spend_line(trace, spend)}\n        {back_line(trace, spend)}")
+    print(f"  a patch is gone at its last sample; its mark is the one that ended within {CONSUMED_MS / 1000:.0f} s"
+          " of it, else the one\n  running then, with the seconds into it and its last kitestage; back is that"
+          " side's next anub.patchN latch")
 
 
 def show_deaths(trace: Trace, samples: Samples) -> None:
@@ -1219,15 +1320,6 @@ def show_deaths(trace: Trace, samples: Samples) -> None:
                                  if rec.get("tgt") in spheres and spell_shape(rec.get("sp")))
     print("  periodic or area spells aimed at a sphere: " + (", ".join(
         f"{trace.name(guid)} {trace.spell(spell)} {n}" for (guid, spell), n in shaped.most_common()) or "none"))
-
-    allowance = allowance_rows(trace, deaths)
-    if allowance:
-        print("\n  spheres that died per submerge against anub.allow, tank being the ones a side owned:")
-        for row in allowance:
-            allow = "-" if row["allow"] is None else str(row["allow"])
-            over = row["allow"] is not None and row["other"] > row["allow"]
-            print(f"    {row['label']:5} {clock(row['start']):>9}  allowance {allow:>2}  tank {row['tank']}"
-                  f"  other {row['other']}" + ("  over" if over else ""))
 
 
 def show_grips(trace: Trace, samples: Samples) -> None:
@@ -1318,7 +1410,7 @@ def show_spheres(trace: Trace) -> None:
 
     show_deaths(trace, samples)
     show_grips(trace, samples)
-    show_kite_patches(trace, samples)
+    show_tank_patches(trace, samples)
 
 
 # ------------------------------------------------------------------------------------------ burrowers
@@ -1538,6 +1630,114 @@ def focus_due_drops(trace: Trace, samples: Samples) -> list[dict]:
     return out
 
 
+def side_spans(trace: Trace) -> list[list[tuple[str, int, int]]]:
+    """`anub.side0` and `anub.side1` spans, indexed by side."""
+    end = pull_end(trace)
+    return [latch_spans(trace, f"anub.side{side}", end) for side in (0, 1)]
+
+
+def focus_picks(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per `anub.focus` pick of a burrower: its health, the milliseconds since it came up (first sight or its
+    last emerge), its target, and how far it stood from the nearest living side tank and the nearest
+    Permafrost centre. `settled` is a tank as its target within FOCUS_SETTLE of it."""
+    samples = samples or Samples(trace)
+    sides = side_spans(trace)
+    holders = {as_guid(value) for spans in sides for value, _, _ in spans} - {0}
+    ups = {row["guid"]: row["ups"] for row in burrower_rows(trace, samples)}
+    out = []
+    for value, start, _ in latch_spans(trace, FOCUS, pull_end(trace)):
+        guid = as_guid(value)
+        row = samples.row(guid, start) if guid else None
+        if row is None:
+            continue
+        came = [when for when in ups.get(guid, []) if when <= start] or ups.get(guid, [start])[:1]
+        target = row[7] if len(row) > 7 else 0
+        victim = samples.recent(target, start) if target else None
+        tanks = [samples.recent(tank, start) for tank in {as_guid(held_at(spans, start)) for spans in sides} - {0}]
+        to_tank = [dist2(row[1:3], tank[1:3]) for tank in tanks if tank and tank[5] > 0]
+        to_frost = [dist2(row[1:3], point) for point in samples.frost_at(start)]
+        out.append({"t": start, "guid": guid, "hp": row[5], "up": max(0, start - came[-1]), "target": target,
+                    "side_tank": min(to_tank) if to_tank else None, "patch": min(to_frost) if to_frost else None,
+                    "settled": victim is not None and (trace.role(target) == "tank" or target in holders)
+                    and dist2(row[1:3], victim[1:3]) <= FOCUS_SETTLE})
+    return out
+
+
+def held_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per burrower ever on a side tank, its target the tank holding a side then and within FOCUS_SETTLE of it:
+    those samples, and its median distance from the patch that side had latched, over the ones with a patch.
+    A side with none would read the other side's patch as the nearest."""
+    samples = samples or Samples(trace)
+    sides = side_spans(trace)
+    latches = patch_latches(trace)
+    out = []
+    for guid in sorted(guids_of_entry(trace, NPC_BURROWER)):
+        stamps, rows = samples.track(guid)
+        held = 0
+        gaps = []
+        for when, row in zip(stamps, rows):
+            target = row[7] if len(row) > 7 else 0
+            side = next((side for side, spans in enumerate(sides)
+                         if target and as_guid(held_at(spans, when)) == target), None)
+            if side is None:
+                continue
+            tank = samples.recent(target, when)
+            if tank is None or dist2(row[1:3], tank[1:3]) > FOCUS_SETTLE:
+                continue
+            held += 1
+            patch = latched_patch(latches[side], samples, when)
+            if patch:
+                gaps.append(dist2(row[1:3], patch))
+        if held:
+            out.append({"guid": guid, "held": held, "gaps": gaps, "median": statistics.median(gaps) if gaps else None})
+    return out
+
+
+def side_tank_gather(trace: Trace) -> list[tuple[str, int, dict[int, int]]]:
+    """Per submerge, the milliseconds each bot held `anub.sidetank` gather while he was down."""
+    spans = holder_spans(trace, "anub.sidetank", pull_end(trace))
+    out = []
+    for start, stop, phase, label in phase_spans(trace):
+        if phase == 2:
+            held = {guid: covered([(low, high) for value, low, high in rows if value == "gather"], start, stop)
+                    for guid, rows in spans.items()}
+            out.append((label, start, {guid: ms for guid, ms in held.items() if ms}))
+    return out
+
+
+def show_focus_picks(trace: Trace, samples: Samples) -> None:
+    picks = focus_picks(trace, samples)
+    if picks:
+        print("\n  each anub.focus pick: the burrower's health, seconds since it came up, target, and its distance to"
+              "\n  the nearest living side tank and Permafrost centre:")
+        print(f"  {'at':>9} {'focus':10} {'hp':>4} {'up':>6} {'target':14} {'side tank':>9} {'patch':>7}")
+        for row in picks:
+            tank = "-" if row["side_tank"] is None else f"{row['side_tank']:.1f} yd"
+            patch = "-" if row["patch"] is None else f"{row['patch']:.1f} yd"
+            early = not row["settled"] and row["hp"] >= FOCUS_LOW_PCT
+            print(f"  {clock(row['t']):>9} {short(trace, row['guid']):10} {row['hp']:3.0f}% {row['up'] / 1000:4.1f} s"
+                  f" {unit_label(trace, row['target'])[:14]:14} {tank:>9} {patch:>7}"
+                  + ("  before its tank" if early else ""))
+        early = sum(1 for row in picks if not row["settled"] and row["hp"] >= FOCUS_LOW_PCT)
+        print(f"  {early} of {len(picks)} pick(s) before its target was a tank within {FOCUS_SETTLE:.0f} yd, at"
+              f" {FOCUS_LOW_PCT:.0f}% or more health; up runs from its first sample or its last emerge")
+
+    held = held_rows(trace, samples)
+    if not held:
+        print(f"  no burrower sampled on a side tank within {FOCUS_SETTLE:.0f} yd")
+        return
+    print(f"\n  on a side tank, its target the tank holding a side and within {FOCUS_SETTLE:.0f} yd: median distance"
+          " from\n  that side's latched tank patch over those samples with one")
+    print(f"  {'burrower':10} {'samples':>7} {'patched':>7} {'median':>7}")
+    for row in held:
+        median = "-" if row["median"] is None else f"{row['median']:.1f} yd"
+        print(f"  {short(trace, row['guid']):10} {row['held']:7} {len(row['gaps']):7} {median:>7}")
+    gaps = [gap for row in held for gap in row["gaps"]]
+    if gaps:
+        print(f"  all: median {statistics.median(gaps):.1f} yd over {len(gaps)} sample(s), a burrower's own reach on"
+              f" the slow being {BURROWER_PERMAFROST_REACH:.1f} yd")
+
+
 def show_burrower_windows(trace: Trace, samples: Samples) -> None:
     rows = burrower_windows(trace, samples)
     print(f"\n  dead inside {BURROWER_SAFE_MS / 1000:.0f} s of coming up, before the core's first submerge check:")
@@ -1591,6 +1791,11 @@ def show_pickups(trace: Trace, samples: Samples) -> None:
                        f" wave {row['wave'] + 1} at {clock(row['next'])}")
         print(f"  wave {row['wave']} {clock(row['spawn'])}: {verdict}")
     show_counts(trace, "anub.sidetank")
+    if any(str(rec.get("txt")) == "gather" for rec in notes(trace, "anub.sidetank")):
+        print("  anub.sidetank gather while he was down: " + "; ".join(
+            f"{label} " + (", ".join(f"{trace.name(guid)} {ms / 1000:.1f} s" for guid, ms in sorted(held.items()))
+                           or "none")
+            for label, _, held in side_tank_gather(trace)))
 
 
 def show_burrowers(trace: Trace) -> None:
@@ -1624,6 +1829,7 @@ def show_burrowers(trace: Trace) -> None:
             share = "-" if row["share"] is None else f"{row['share'] * 100:.0f}%"
             print(f"  {short(trace, row['guid']):10} {row['held'] / 1000:6.1f}s {share:>9}")
         print("  dps on it is the share of living DPS bot samples whose target was the focus while it held")
+    show_focus_picks(trace, samples)
 
     stray = stray_burrower_casts(trace)
     if stray:
@@ -1639,6 +1845,100 @@ def show_burrowers(trace: Trace) -> None:
           + (", ".join(f"{clock(row['t'])} {short(trace, row['guid'])} at {row['hp']:.0f}%" for row in drops)
              if drops else "never"))
     show_counts(trace, "anub.dps")
+    if notes(trace, "anub.mstand"):
+        show_counts(trace, "anub.mstand")
+
+
+# ---------------------------------------------------------------------------------------------- frost
+
+def frost_groups(trace: Trace, samples: Samples) -> dict[int, str]:
+    """Each roster member's group: `side tank` for any holder of `anub.side0` or `anub.side1`, `main tank` for
+    the other tank he targeted most, else its role."""
+    _, holders = side_tanks(trace)
+    sides = {guid for guids in holders.values() for guid in guids}
+    _, rows = samples.track(boss_guid(trace))
+    hit = collections.Counter(row[7] for row in rows
+                              if len(row) > 7 and row[7] not in sides and trace.role(row[7]) == "tank")
+    main = hit.most_common(1)[0][0] if hit else None
+    return {guid: "side tank" if guid in sides else "main tank" if guid == main else trace.role(guid)
+            for guid in roster_guids(trace)}
+
+
+def frost_stints(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Each Permafrost stint on the roster: the bot and its group, the milliseconds of it while he was down,
+    the phase it began in and the bot's target then. One still on when the trace ends runs to the end."""
+    samples = samples or Samples(trace)
+    groups = frost_groups(trace, samples)
+    spans = phase_spans(trace)
+    down = [(start, stop) for start, stop, phase, _ in spans if phase == 2]
+    out = []
+    for guid, stints in aura_spans(trace, PERMAFROST).items():
+        if guid not in groups:
+            continue
+        for start, stop, closed in stints:
+            row = samples.row(guid, start)
+            out.append({"guid": guid, "group": groups[guid], "start": start, "stop": stop, "closed": closed,
+                        "down": covered(down, start, stop), "phase": phase_at(spans, start),
+                        "target": row[7] if row and len(row) > 7 else 0})
+    return sorted(out, key=lambda row: (row["start"], row["guid"]))
+
+
+def frost_totals(stints: list[dict]) -> dict[int, dict]:
+    """Per bot: its group, milliseconds carrying Permafrost up and down, stint count and longest stint."""
+    out: dict[int, dict] = {}
+    for row in stints:
+        bot = out.setdefault(row["guid"], {"group": row["group"], "up": 0, "down": 0, "stints": 0, "longest": 0})
+        span = row["stop"] - row["start"]
+        bot["up"] += span - row["down"]
+        bot["down"] += row["down"]
+        bot["stints"] += 1
+        bot["longest"] = max(bot["longest"], span)
+    return out
+
+
+def show_frost(trace: Trace) -> None:
+    print("PERMAFROST")
+    stints = frost_stints(trace)
+    if not stints:
+        print("  nobody on the roster carried Permafrost")
+    else:
+        totals = frost_totals(stints)
+
+        def rank(group: str) -> int:
+            return FROST_GROUPS.index(group) if group in FROST_GROUPS else len(FROST_GROUPS)
+
+        groups: dict[str, list[dict]] = collections.defaultdict(list)
+        for guid, bot in totals.items():
+            if guid not in trace.humans:
+                groups[bot["group"]].append(bot)
+        print(f"  seconds carrying it, bots only:\n  {'group':10} {'bots':>4} {'up':>7} {'down':>7} {'total':>7}")
+        for group in sorted(groups, key=rank):
+            up = sum(bot["up"] for bot in groups[group]) / 1000
+            down = sum(bot["down"] for bot in groups[group]) / 1000
+            print(f"  {group:10} {len(groups[group]):4} {up:7.1f} {down:7.1f} {up + down:7.1f}")
+
+        print(f"\n  {'bot':14} {'group':10} {'up':>7} {'down':>7} {'total':>7} {'stints':>6} {'longest':>7}")
+        for guid, bot in sorted(totals.items(), key=lambda item: (rank(item[1]["group"]),
+                                                                    -(item[1]["up"] + item[1]["down"]))):
+            print(f"  {trace.name(guid)[:14]:14} {bot['group']:10} {bot['up'] / 1000:7.1f} {bot['down'] / 1000:7.1f}"
+                  f" {(bot['up'] + bot['down']) / 1000:7.1f} {bot['stints']:6} {bot['longest'] / 1000:7.1f}"
+                  + ("  human" if guid in trace.humans else ""))
+
+        long = [row for row in stints if row["stop"] - row["start"] > FROST_STINT_MS]
+        if long:
+            print(f"\n  stints over {FROST_STINT_MS / 1000:.0f} s:\n  {'at':>9} {'bot':14} {'group':10} {'secs':>7}"
+                  f" {'phase':5} target at its start")
+        else:
+            print(f"\n  no stint over {FROST_STINT_MS / 1000:.0f} s")
+        for row in long:
+            print(f"  {clock(row['start']):>9} {trace.name(row['guid'])[:14]:14} {row['group']:10}"
+                  f" {(row['stop'] - row['start']) / 1000:5.1f} s {row['phase']:5} {unit_label(trace, row['target'])}"
+                  + ("  human" if row["guid"] in trace.humans else "")
+                  + ("" if row["closed"] else "  on at the end"))
+        print("  up is every moment outside a phase 2 anub.phase span; side tanks are every anub.side0 and"
+              " anub.side1\n  holder, the main tank the other tank he targeted most")
+    if notes(trace, "anub.leave"):
+        show_counts(trace, "anub.leave")
 
 
 # --------------------------------------------------------------------------------------------- threat
@@ -1975,14 +2275,17 @@ SECTIONS = (
     ("phases", "anub.phase spans, his health at each edge, deaths per phase", show_phases),
     ("pull", "locked out past the Web Door or never landed, stage 9 to the pull", show_pull),
     ("spike", "every Pursued by Anub'arak window, kite branches, outcome, protection, kite stages, boosts,"
-     " the spike's approach to each tank patch, the spike against the gather and kite patches at each mark's"
-     " end, Impale on others", show_spike),
+     " a kiter marked in a patch, the tank patch spent, the spike's approach to each tank patch, the spike"
+     " against the gather and unlatched patches at each mark's end, Impale on others", show_spike),
     ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots, killers,"
-     " landings, grips from the cast spot, spheres per submerge against the allowance, each submerge's kite"
-     " patch", show_spheres),
+     " landings, grips from the cast spot, each side's first tank patch, spheres and tank patches spent per"
+     " submerge against the allowance and when the side's patch came back", show_spheres),
     ("burrowers", "each burrower: life, submerges, Permafrost, Shadow Strike, dead inside 30 s up, exit, side,"
-     " pickup, DPS focus, casts off the focus, focus due per wave and dropped with the focus alive",
+     " pickup, DPS focus, casts off the focus, focus due per wave and dropped with the focus alive, each focus"
+     " pick against its tank and the patches, distance from the patch centre while on a side tank",
      show_burrowers),
+    ("frost", "seconds carrying Permafrost per group and bot, he up and he down, stints over 3 s with the"
+     " bot's target", show_frost),
     ("threat", "per surfaced window: his target by role, time to a tank, drag legs, taunts, threat cap, main"
      " tank in a patch, submerge spot to the tank patches", show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, Penetrating Cold heals, defensives, deaths", show_swarm),

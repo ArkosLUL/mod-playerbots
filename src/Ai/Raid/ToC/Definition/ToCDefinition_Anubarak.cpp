@@ -101,6 +101,9 @@ void DefineAnubarak(EncounterBuilder& e)
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,
             {"reach melee"});
     e.Block("anubarak pickup tank stand guard", Role::Any, AnubarakPickupTankStands, Family::TankFace);
+    // the melee stand walks it off the patch, and behind a held burrower is its patch
+    e.Block("anubarak melee burrower stand hold", Role::Any, AnubarakMeleeBurrowerStandApplies,
+            Family::SetBehind | Family::RearFlank, {"reach melee"});
     // heroic phase 2: the raid holds its gather, so no walk takes anyone across the spike's run
     e.Block("anubarak gather hold", Role::Any, AnubarakGathers,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,

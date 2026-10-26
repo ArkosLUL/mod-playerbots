@@ -29,6 +29,14 @@ bool AnubarakRaidGathersTrigger::IsActive() { return AnubarakEngaged(botAI) && A
 
 bool AnubarakDemonicCircleDueTrigger::IsActive() { return AnubarakDemonicCircleDue(botAI); }
 
+// A held dodge spot inside a patch, when none was clear of one, stays: the lane is worse than the slow
+bool AnubarakOnPermafrostTrigger::IsActive()
+{
+    return AnubarakEngaged(botAI) && !IsAnubarakDodgeHeld(botAI) && AnubarakNonTankOnPermafrost(bot);
+}
+
+bool AnubarakMeleeBurrowerStandTrigger::IsActive() { return AnubarakMeleeNeedsBurrowerStand(botAI); }
+
 bool AnubarakPursuedBySpikeTrigger::IsActive()
 {
     return AnubarakEngaged(botAI) && bot->HasAura(SPELL_MARK);
@@ -88,7 +96,7 @@ bool AnubarakSideTankReadyTrigger::IsActive()
     if (IsAnubarakPickupTank(bot) && IsAnubarakSurfaced(GetAnubarakPhase(botAI)))
         return false;
 
-    return !GetAnubarakBurrowerPick(botAI);
+    return !GetAnubarakBurrowerPick(botAI) && !AnubarakGathers(botAI);
 }
 
 bool AnubarakSideTankNeedsDefensiveTrigger::IsActive()
@@ -152,6 +160,9 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("anubarak spike nearby", {
         NextAction("anubarak avoid spike", ACTION_EMERGENCY + 6) }));
 
+    triggers.push_back(new TriggerNode("anubarak on permafrost", {
+        NextAction("anubarak leave permafrost", ACTION_EMERGENCY + 5) }));
+
     triggers.push_back(new TriggerNode("anubarak burrower casting shadow strike", {
         NextAction("anubarak interrupt shadow strike", ACTION_EMERGENCY + 3) }));
 
@@ -172,6 +183,10 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak dps target", {
         NextAction("anubarak dps target", ACTION_RAID + 4) }));
+
+    // Under the target pick, so a new focus is taken before the walk to the old one's stand
+    triggers.push_back(new TriggerNode("anubarak melee burrower stand", {
+        NextAction("anubarak melee burrower stand", ACTION_RAID + 3.8f) }));
 
     triggers.push_back(new TriggerNode("anubarak burrower needs assist tank", {
         NextAction("anubarak assist tank hold burrower", ACTION_RAID + 3) }));
