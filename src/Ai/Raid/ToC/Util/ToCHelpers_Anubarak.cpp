@@ -57,6 +57,16 @@ constexpr float ANUBARAK_DETOUR_MARGIN = 0.5f;
 constexpr float ANUBARAK_PATH_CLIP_SLACK = 0.1f;
 constexpr float ANUBARAK_DEG_TO_RAD = static_cast<float>(M_PI) / 180.0f;
 
+// Heroic kite: one step this far out on each of these headings, judged by the spike's lane to it
+constexpr float ANUBARAK_KITE_LANE_STEP = 10.0f;
+constexpr uint32 ANUBARAK_KITE_LANE_HEADINGS = 16;
+// Lanes this far off everything are all as good, so the step furthest from the spike wins
+constexpr float ANUBARAK_KITE_LANE_CAP = 20.0f;
+// A leg starting inside an obstacle's clearance passes while it gets no closer than this past its start
+constexpr float ANUBARAK_KITE_LANE_START_SLACK = 0.5f;
+// Gathered bots dodge a spike lane within 7 yd and stand on 3 yd slots round the gather point
+constexpr float ANUBARAK_KITE_GATHER_CLEARANCE = ANUBARAK_SPIKE_LANE_HALF_WIDTH + ANUBARAK_GATHER_SPREAD + 2.0f;
+
 constexpr float ANUBARAK_SCARAB_PICKUP_RANGE = 30.0f;
 constexpr float ANUBARAK_PENETRATING_COLD_HEAL_PCT = 90.0f;
 
@@ -64,8 +74,11 @@ constexpr float ANUBARAK_PENETRATING_COLD_HEAL_PCT = 90.0f;
 // landed is still up near z 395.
 constexpr float ANUBARAK_PIT_RADIUS = 60.0f;
 constexpr float ANUBARAK_PIT_CEILING_Z = 200.0f;
-constexpr float ANUBARAK_SUBMERGE_SPOT_SEARCH = 30.0f;
+constexpr float ANUBARAK_SUBMERGE_SPOT_SEARCH = 40.0f;
 constexpr float ANUBARAK_SUBMERGE_SPOT_FLOOR = 35.0f;
+// Far from every patch first: the spike summoned on him runs a long way before it can reach one
+constexpr float ANUBARAK_SUBMERGE_CLEARANCES[] = {30.0f, 25.0f, ANUBARAK_SUBMERGE_PATCH_CLEARANCE,
+                                                  ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN};
 constexpr float ANUBARAK_TANK_STEP_SEARCH = 15.0f;
 // Challenging Roar and Challenging Shout reach 10 yd
 constexpr float ANUBARAK_SIDE_SHOUT_RADIUS = 10.0f;
@@ -264,6 +277,8 @@ struct AnubarakState
     bool focusMemoValid = false;
     uint32 focusMemoMs = 0;
     bool focusAhead = false;
+    // The focus burrower when the focus came due; it stays due until this one dies
+    ObjectGuid focusDueBurrower;
 
     // Heroic: kite spheres this submerge may spend, and the ones it has
     uint32 kiteAllowance = 0;
@@ -528,6 +543,7 @@ void ClearPullLatches(AnubarakState& state)
     state.damage.clear();
     state.focusMemoValid = false;
     state.focusAhead = false;
+    state.focusDueBurrower.Clear();
     state.kiteAllowance = 0;
     state.kiteSpheres.clear();
     state.kiteStage = KiteStageRead();
@@ -1113,6 +1129,45 @@ std::vector<Position> PatchPositions(Player* bot, AnubarakState const& state)
     return patches;
 }
 
+// Heroic phase 2: 5 yd past where he went down, away from the tank patches, so the spike starts there
+// and runs for the kiter away from the raid. Never further out than the floor radius.
+bool GatherCentre(Player* bot, AnubarakState const& state, Position& out)
+{
+    if (state.phaseValue != AnubarakPhase::Submerged || !state.submergePosValid || !AnubarakHeroic(bot))
+        return false;
+
+    Position const& down = state.submergePos;
+    Position from = ANUBARAK_ROOM_CENTER;
+    uint32 count = 0;
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    for (uint8 side = 0; side < 2; ++side)
+    {
+        if (Creature* patch = LatchedTankPatch(bot, state, side))
+        {
+            sumX += patch->GetPositionX();
+            sumY += patch->GetPositionY();
+            ++count;
+        }
+    }
+
+    if (count)
+        from.Relocate(sumX / count, sumY / count);
+
+    Vec2 away = Delta(from, down);
+    float const length = Length(away);
+    Position gather = length > 1.0f ? Offset(down, {away.x / length, away.y / length}, ANUBARAK_GATHER_PAST) : down;
+
+    Vec2 const fromCenter = Delta(ANUBARAK_ROOM_CENTER, gather);
+    float const radius = Length(fromCenter);
+    if (radius > ANUBARAK_GATHER_FLOOR)
+        gather = Offset(ANUBARAK_ROOM_CENTER, {fromCenter.x / radius, fromCenter.y / radius}, ANUBARAK_GATHER_FLOOR);
+
+    gather.m_positionZ = down.GetPositionZ();
+    out = gather;
+    return true;
+}
+
 bool TankWalkClear(Position const& from, Position const& to, std::vector<Position> const& patches)
 {
     return std::none_of(patches.begin(), patches.end(), [&](Position const& patch)
@@ -1208,6 +1263,84 @@ Position RingStand(Player* kiter, Creature* spike)
     return ValidateFloorPoint(kiter, Offset(center, dir, ANUBARAK_KITE_RING_RADIUS));
 }
 
+// What the heroic spike's run keeps clear of: every patch, and the phase 2 gather
+struct LaneObstacle
+{
+    Position pos;
+    float clearance;
+};
+
+std::vector<LaneObstacle> LaneObstacles(Player* kiter, AnubarakState const& state)
+{
+    std::vector<LaneObstacle> obstacles;
+    for (Position const& patch : PatchPositions(kiter, state))
+        obstacles.push_back({patch, ANUBARAK_SPIKE_ROUTE_CLEARANCE});
+
+    Position gather;
+    if (GatherCentre(kiter, state, gather))
+        obstacles.push_back({gather, ANUBARAK_KITE_GATHER_CLEARANCE});
+
+    return obstacles;
+}
+
+// Twice the signed area of a, b, p; its sign says which side of a to b p is on
+float Cross(Position const& a, Position const& b, Position const& p)
+{
+    Vec2 const ab = Delta(a, b);
+    Vec2 const ap = Delta(a, p);
+    return ab.x * ap.y - ab.y * ap.x;
+}
+
+// A flat triangle reads as holding every point, so one under a square yard holds none
+bool InsideTriangle(Position const& a, Position const& b, Position const& c, Position const& p)
+{
+    if (std::fabs(Cross(a, b, c)) < 2.0f)
+        return false;
+
+    float const d1 = Cross(a, b, p);
+    float const d2 = Cross(b, c, p);
+    float const d3 = Cross(c, a, p);
+    bool const negative = d1 < 0.0f || d2 < 0.0f || d3 < 0.0f;
+    bool const positive = d1 > 0.0f || d2 > 0.0f || d3 > 0.0f;
+    return !(negative && positive);
+}
+
+// A leg that starts inside the clearance only has to head away
+bool LegClears(Position const& from, Position const& to, LaneObstacle const& obstacle)
+{
+    float const need =
+        std::min(obstacle.clearance, Dist2d(from, obstacle.pos) - ANUBARAK_KITE_LANE_START_SLACK);
+    return SegmentDistance2d(from, to, obstacle.pos) >= need;
+}
+
+// The spike chases the kiter, so its run to the step stays inside the triangle spike, kiter, step.
+// walked is false for a Blink, which leaves no trail for the spike to cut along.
+bool LaneClears(Position const& spike, Position const& kiter, Position const& step,
+                std::vector<LaneObstacle> const& obstacles, bool walked)
+{
+    return std::none_of(obstacles.begin(), obstacles.end(), [&](LaneObstacle const& obstacle)
+                        {
+                            return InsideTriangle(spike, kiter, step, obstacle.pos) ||
+                                   !LegClears(spike, step, obstacle) || (walked && !LegClears(kiter, step, obstacle));
+                        });
+}
+
+// The spike's lane past the obstacle it comes closest to, less that one's clearance, capped
+float LaneScore(Position const& spike, Position const& kiter, Position const& step,
+                std::vector<LaneObstacle> const& obstacles)
+{
+    float score = ANUBARAK_KITE_LANE_CAP - ANUBARAK_SPIKE_ROUTE_CLEARANCE;
+    for (LaneObstacle const& obstacle : obstacles)
+    {
+        float const lane = InsideTriangle(spike, kiter, step, obstacle.pos)
+                               ? 0.0f
+                               : SegmentDistance2d(spike, step, obstacle.pos);
+        score = std::min(score, lane - obstacle.clearance);
+    }
+
+    return score;
+}
+
 constexpr uint32 SPRINT_RANKS[] = {11305, 8696, 2983};
 constexpr uint32 DASH_RANKS[] = {33357, 9821, 1850};
 constexpr uint32 HAND_OF_PROTECTION_RANKS[] = {10278, 5599, 1022};
@@ -1262,9 +1395,10 @@ GameObject* WarlockCircle(Player* player)
     return player->getClass() == CLASS_WARLOCK ? player->GetGameObject(SPELL_CIRCLE_SUMMON) : nullptr;
 }
 
-// The next speed boost in the chain: Sprint, Dash, Nitro Boosts, Blink the way it runs, then the teleport
-// back to a circle well behind the spike
-bool NextKiteBoost(Player* kiter, Creature* spike, AnubarakKiteBoost& out)
+// The next speed boost in the chain: Sprint, Dash, Nitro Boosts, Blink the way it runs when the spike's
+// lane to the landing stays clear, then the teleport back to a circle well behind the spike
+bool NextKiteBoost(Player* kiter, Creature* spike, std::vector<LaneObstacle> const& obstacles,
+                   AnubarakKiteBoost& out)
 {
     out = AnubarakKiteBoost();
     if (!SpeedBoostRunning(kiter))
@@ -1294,7 +1428,8 @@ bool NextKiteBoost(Player* kiter, Creature* spike, AnubarakKiteBoost& out)
         Position const landing =
             Offset(kiter->GetPosition(), {std::cos(facing), std::sin(facing)}, ANUBARAK_BLINK_DISTANCE);
         if (Dist2d(landing, ANUBARAK_ROOM_CENTER) <= ANUBARAK_PIT_RADIUS - ANUBARAK_BLINK_DISTANCE / 2.0f &&
-            Dist2d(landing, spike->GetPosition()) > Dist2d(kiter->GetPosition(), spike->GetPosition()))
+            Dist2d(landing, spike->GetPosition()) > Dist2d(kiter->GetPosition(), spike->GetPosition()) &&
+            LaneClears(spike->GetPosition(), kiter->GetPosition(), landing, obstacles, false))
         {
             out.spellId = SPELL_BLINK;
             out.face = true;
@@ -1363,7 +1498,7 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
     read.kiter = kiter->GetGUID();
 
     bool const bot = GET_PLAYERBOT_AI(kiter) != nullptr;
-    bool const hasBoost = bot && NextKiteBoost(kiter, spike, read.boost);
+    bool const hasBoost = bot && NextKiteBoost(kiter, spike, LaneObstacles(kiter, state), read.boost);
     read.boostLeft = hasBoost || SpeedBoostRunning(kiter);
     read.immunityComing = ImmunityComing(kiter);
 
@@ -1393,99 +1528,59 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
     return read;
 }
 
-// A kiter marked inside a patch's route clearance has no clear ring leg, since every leg starts too
-// close, and the plain ring step can run it straight past the patch. So it steps off the patch first,
-// straight away from it or turned up to 90 deg to keep the spike behind.
-bool StepOffPatch(Player* kiter, Creature* spike, std::vector<Position> const& patches, Position& out)
+struct LaneStep
+{
+    Position raw;
+    bool clear;
+    float score;
+    float fromSpike;
+};
+
+// Heroic run with no patch: a 10 yd step that keeps the spike behind and no nearer, inside the ring
+// radius (or no further out than the kiter already is), its lane clear of every obstacle. The widest
+// lane wins, then the step furthest from the spike; a warlock keeps its circle within teleport reach.
+// None clear: the widest lane anyway. None at all: the plain ring step.
+Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle> const& obstacles)
 {
     Position const& from = kiter->GetPosition();
-    Position const* nearest = nullptr;
-    float nearestDist = 0.0f;
-    for (Position const& patch : patches)
-    {
-        float const dist = Dist2d(from, patch);
-        if (dist < ANUBARAK_SPIKE_ROUTE_CLEARANCE && (!nearest || dist < nearestDist))
-        {
-            nearest = &patch;
-            nearestDist = dist;
-        }
-    }
+    Position const& spikePos = spike->GetPosition();
+    float const gap = Dist2d(from, spikePos);
+    float const radius = std::max(ANUBARAK_KITE_RING_RADIUS, Dist2d(from, ANUBARAK_ROOM_CENTER));
+    GameObject* circle = WarlockCircle(kiter);
 
-    if (!nearest)
-        return false;
-
-    Vec2 const away = nearestDist > 0.5f ? Delta(*nearest, from) : Delta(spike->GetPosition(), from);
-    float const base = std::atan2(away.y, away.x);
-    for (float degrees : {0.0f, 45.0f, -45.0f, 90.0f, -90.0f})
+    std::vector<LaneStep> steps;
+    for (uint32 i = 0; i < ANUBARAK_KITE_LANE_HEADINGS; ++i)
     {
-        float const angle = base + degrees * ANUBARAK_DEG_TO_RAD;
-        Position const stand = ValidateFloorPoint(kiter, Offset(*nearest, {std::cos(angle), std::sin(angle)},
-                                                                ANUBARAK_SPIKE_ROUTE_CLEARANCE + ANUBARAK_KITE_ARRIVE));
-        if (!SpikeBehind(kiter, spike, stand) ||
-            std::any_of(patches.begin(), patches.end(), [&](Position const& patch)
-                        { return Dist2d(stand, patch) < ANUBARAK_SPIKE_ROUTE_CLEARANCE; }))
+        float const angle = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i) /
+                            static_cast<float>(ANUBARAK_KITE_LANE_HEADINGS);
+        Position const raw = Offset(from, {std::cos(angle), std::sin(angle)}, ANUBARAK_KITE_LANE_STEP);
+        float const fromSpike = Dist2d(raw, spikePos);
+        if (fromSpike < gap || !SpikeBehind(kiter, spike, raw) || Dist2d(raw, ANUBARAK_ROOM_CENTER) > radius)
             continue;
 
-        out = stand;
-        return true;
+        bool const clear = LaneClears(spikePos, from, raw, obstacles, true) &&
+                           (!circle || Dist2d(raw, circle->GetPosition()) <= ANUBARAK_CIRCLE_TELEPORT_RANGE);
+        steps.push_back({raw, clear, LaneScore(spikePos, from, raw, obstacles), fromSpike});
     }
 
-    return false;
-}
+    std::sort(steps.begin(), steps.end(), [](LaneStep const& a, LaneStep const& b)
+              {
+                  if (a.clear != b.clear)
+                      return a.clear;
+                  if (a.score != b.score)
+                      return a.score > b.score;
+                  return a.fromSpike > b.fromSpike;
+              });
 
-// The kite's leg, and the spike's after it, keep clear of every patch, so none is spent before the
-// kiter means to. A warlock stays within its circle's reach and turns the way that takes it furthest
-// from it. Falls back to the plain ring step.
-Position RouteRingStand(Player* kiter, Creature* spike, std::vector<Position> const& patches)
-{
-    Position stepOff;
-    if (StepOffPatch(kiter, spike, patches, stepOff))
-        return stepOff;
-
-    Position const& center = ANUBARAK_ROOM_CENTER;
-    Vec2 const fromCenter = Delta(center, kiter->GetPosition());
-    Vec2 const bearingVec = Length(fromCenter) > 1.0f ? fromCenter : Delta(spike->GetPosition(), kiter->GetPosition());
-    Vec2 const spikeVec = Delta(center, spike->GetPosition());
-    float const bearing = std::atan2(bearingVec.y, bearingVec.x);
-    float const opening = std::remainder(bearing - std::atan2(spikeVec.y, spikeVec.x), 2.0f * static_cast<float>(M_PI));
-    float const primary = opening >= 0.0f ? 1.0f : -1.0f;
-
-    GameObject* circle = WarlockCircle(kiter);
-    bool found = false;
-    float bestCircleDist = 0.0f;
-    Position best;
-    for (float sign : {primary, -primary})
+    // Best first, so the floor raycasts stop at the first step that lands on the floor
+    for (LaneStep const& step : steps)
     {
-        for (float degrees : {ANUBARAK_KITE_RING_STEP_DEGREES, 25.0f, 55.0f})
-        {
-            float const angle = bearing + sign * degrees * ANUBARAK_DEG_TO_RAD;
-            Position const stand = ValidateFloorPoint(
-                kiter, Offset(center, {std::cos(angle), std::sin(angle)}, ANUBARAK_KITE_RING_RADIUS));
-            if (!SpikeBehind(kiter, spike, stand))
-                continue;
-
-            bool const clear = std::none_of(patches.begin(), patches.end(), [&](Position const& patch)
-                                            {
-                                                return SegmentDistance2d(kiter->GetPosition(), stand, patch) <
-                                                       ANUBARAK_SPIKE_ROUTE_CLEARANCE;
-                                            });
-            if (!clear)
-                continue;
-
-            if (!circle)
-                return stand;
-
-            float const circleDist = Dist2d(stand, circle->GetPosition());
-            if (circleDist <= ANUBARAK_CIRCLE_TELEPORT_RANGE && (!found || circleDist > bestCircleDist))
-            {
-                found = true;
-                bestCircleDist = circleDist;
-                best = stand;
-            }
-        }
+        Position valid;
+        if (OnFloor(kiter, step.raw, valid))
+            return valid;
     }
 
-    return found ? best : RingStand(kiter, spike);
+    return RingStand(kiter, spike);
 }
 
 struct StandCandidate
@@ -1524,19 +1619,16 @@ bool NearTankPatch(Position const& patch, std::vector<Position> const& tankSpots
                        { return Dist2d(patch, tank) < ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN; });
 }
 
-// seekPatch false runs the ring without looking for a patch: heroic until the kite stage says patch
+// seekPatch false runs the ring without looking for a patch: heroic until the kite stage says patch.
+// lane is what heroic's run keeps the spike off.
 void ComputeKiteStand(Player* kiter, Creature* spike, std::vector<Creature*> const& spheres,
                       ObjectGuid const tankPatches[2], bool heroic, bool burrowers,
-                      AnubarakKiteStand const* previous, bool seekPatch, AnubarakKiteStand& out)
+                      std::vector<LaneObstacle> const& lane, AnubarakKiteStand const* previous, bool seekPatch,
+                      AnubarakKiteStand& out)
 {
     Position const spikePos = spike->GetPosition();
 
     std::vector<Position> tankSpots;
-    std::vector<Position> allPatches;
-    for (Creature* sphere : spheres)
-        if (IsPermafrostPatch(sphere))
-            allPatches.push_back(sphere->GetPosition());
-
     for (uint8 side = 0; side < 2; ++side)
     {
         Creature* patch = FindSphere(spheres, tankPatches[side]);
@@ -1658,7 +1750,7 @@ void ComputeKiteStand(Player* kiter, Creature* spike, std::vector<Creature*> con
 
     if (!chosenPatch)
     {
-        out.stand = heroic ? RouteRingStand(kiter, spike, allPatches) : RingStand(kiter, spike);
+        out.stand = heroic ? LaneStepStand(kiter, spike, lane) : RingStand(kiter, spike);
         out.patch.Clear();
         out.branch = AnubarakKiteBranch::Ring;
         return;
@@ -2236,7 +2328,8 @@ void ComputeDuties(Player* bot, AnubarakState& state)
     if (kiteWantsPatch && target && spike && spike->IsAlive() && !FallingNear(spheres, target->GetPosition()))
     {
         AnubarakKiteStand stand;
-        ComputeKiteStand(target, spike, spheres, tankPatches, heroic, AnyBurrower(bot, state), nullptr, true, stand);
+        ComputeKiteStand(target, spike, spheres, tankPatches, heroic, AnyBurrower(bot, state),
+                         LaneObstacles(target, state), nullptr, true, stand);
         if (stand.branch == AnubarakKiteBranch::Ring)
         {
             std::vector<Position> tankSpots;
@@ -2612,12 +2705,27 @@ bool RebirthReady(Player* player)
 bool IsFocusableBurrower(Creature* burrower)
 {
     return burrower && burrower->IsAlive() && !burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) &&
-           UnitOnPermafrost(burrower);
+           (UnitOnPermafrost(burrower) || burrower->GetHealthPct() < ANUBARAK_FOCUS_OFF_FROST_PCT);
+}
+
+// Time to the next wave, heroic phase 2 counted at its share: the deadline after the submerge is the
+// wave 5 s after the emerge
+float FocusAvailableMs(Player* bot, AnubarakState const& state, uint32 now)
+{
+    float const untilWave = static_cast<float>(MsUntilWave(state, now));
+    float const untilSubmerge = static_cast<float>(static_cast<int32>(state.surfacedMs + ANUBARAK_SURFACED_MS - now));
+    if (state.phaseValue != AnubarakPhase::Surface || !AnubarakHeroic(bot) || untilSubmerge < 0.0f ||
+        untilWave <= untilSubmerge)
+        return untilWave;
+
+    float const down = std::min(untilWave - untilSubmerge, static_cast<float>(ANUBARAK_SUBMERGED_MS));
+    return untilWave - down * (1.0f - ANUBARAK_FOCUS_SUBMERGED_SHARE);
 }
 
 // Once per instance per ms. While he is down, always; while he is up, once every burrower alive would
-// take the raid's current rate, plus the margin, to kill before the next wave lands. One off Permafrost
+// take the raid's burrower rate, plus the margin, to kill before the next wave lands. One off Permafrost
 // counts too, since it still has to die before then, and a submerged one comes back at full health.
+// Once due it stays due until the focus it came due on dies, so a started kill is finished.
 bool FocusAhead(Player* bot, AnubarakState& state)
 {
     uint32 const now = getMSTime();
@@ -2631,15 +2739,21 @@ bool FocusAhead(Player* bot, AnubarakState& state)
     for (Creature* burrower : ResolveAlive(bot, state.burrowers))
         remaining += burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ? burrower->GetMaxHealth() : burrower->GetHealth();
 
+    Creature* held = ResolveCreature(bot, state.focusDueBurrower);
     bool ahead = false;
-    if (remaining && state.phaseValue == AnubarakPhase::Submerged)
+    if (remaining && held && held->IsAlive())
+        ahead = true;
+    else if (remaining && state.phaseValue == AnubarakPhase::Submerged)
         ahead = true;
     else if (remaining)
     {
-        float const rate = DamageRate(state);
+        float const rate = DamageRate(state) * ANUBARAK_FOCUS_RATE_SHARE;
         float const killMs = rate > 0.0f ? static_cast<float>(remaining) * IN_MILLISECONDS / rate : 0.0f;
-        ahead = rate > 0.0f && killMs + ANUBARAK_FOCUS_MARGIN_MS >= static_cast<float>(MsUntilWave(state, now));
+        ahead = rate > 0.0f && killMs + ANUBARAK_FOCUS_MARGIN_MS >= FocusAvailableMs(bot, state, now);
     }
+
+    if (!ahead || !held || !held->IsAlive())
+        state.focusDueBurrower = ahead ? state.focusBurrower.Get() : ObjectGuid::Empty;
 
     state.focusAhead = ahead;
     state.focusDue = ahead ? 1 : 0;
@@ -2898,7 +3012,7 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
         auto const onFloor = [](float x, float y)
         { return ANUBARAK_ROOM_CENTER.GetExactDist2d(x, y) <= ANUBARAK_SUBMERGE_SPOT_FLOOR; };
 
-        // Within the nearest clear ring, the spot toward a point 30 yd past the tank, away from the tank
+        // Within the nearest clear ring, the spot toward a point 40 yd past the tank, away from the tank
         // patches, so the spike starts on the far side from both
         Position prefer = ANUBARAK_ROOM_CENTER;
         std::vector<Position> tankPatches;
@@ -2922,7 +3036,7 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
 
         state->submergeSpotValid = false;
         HazardSweepCache cache;
-        for (float clearance : {ANUBARAK_SUBMERGE_PATCH_CLEARANCE, ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN})
+        for (float clearance : ANUBARAK_SUBMERGE_CLEARANCES)
         {
             std::vector<HazardCircle> hazards;
             for (Position const& patch : patches)
@@ -3683,7 +3797,7 @@ bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, Anubar
     bool const heroic = AnubarakHeroic(bot);
     bool const seekPatch = !heroic || GetAnubarakKiteStage(bot) == AnubarakKiteStage::Patch;
     ComputeKiteStand(bot, spike, ResolveSpheres(bot, *state), tankPatches, heroic, AnyBurrower(bot, *state),
-                     seekPatch ? previous : nullptr, seekPatch, out);
+                     LaneObstacles(bot, *state), seekPatch ? previous : nullptr, seekPatch, out);
     RaidObs::NoteDerived(bot, "anub.kite", KiteBranchName(out.branch));
     return true;
 }
@@ -3718,43 +3832,13 @@ static AnubarakState const* GatherState(Player* bot)
 bool GetAnubarakGatherSpot(Player* bot, Position& out)
 {
     AnubarakState const* state = GatherState(bot);
-    if (!state)
+    Position gather;
+    if (!state || !GatherCentre(bot, *state, gather))
         return false;
-
-    // Past where he went down, on the far side from the tank patches: the spike starts there and runs
-    // for the kiter, away from the raid
-    Position const& down = state->submergePos;
-    Position from = ANUBARAK_ROOM_CENTER;
-    uint32 count = 0;
-    float sumX = 0.0f;
-    float sumY = 0.0f;
-    for (uint8 side = 0; side < 2; ++side)
-    {
-        if (Creature* patch = LatchedTankPatch(bot, *state, side))
-        {
-            sumX += patch->GetPositionX();
-            sumY += patch->GetPositionY();
-            ++count;
-        }
-    }
-
-    if (count)
-        from.Relocate(sumX / count, sumY / count);
-
-    Vec2 away = Delta(from, down);
-    float const length = Length(away);
-    Position gather = length > 1.0f ? Offset(down, {away.x / length, away.y / length}, ANUBARAK_GATHER_PAST) : down;
-
-    Vec2 const fromCenter = Delta(ANUBARAK_ROOM_CENTER, gather);
-    float const radius = Length(fromCenter);
-    if (radius > ANUBARAK_GATHER_FLOOR)
-        gather = Offset(ANUBARAK_ROOM_CENTER, {fromCenter.x / radius, fromCenter.y / radius}, ANUBARAK_GATHER_FLOOR);
 
     // A slot per bot round the point, so twenty bots don't stand on one spot
     float const angle = static_cast<float>(bot->GetGUID().GetCounter() % 12) * 30.0f * ANUBARAK_DEG_TO_RAD;
-    gather = Offset(gather, {std::cos(angle), std::sin(angle)}, ANUBARAK_GATHER_SPREAD);
-    gather.m_positionZ = down.GetPositionZ();
-    out = gather;
+    out = Offset(gather, {std::cos(angle), std::sin(angle)}, ANUBARAK_GATHER_SPREAD);
     return true;
 }
 

@@ -73,6 +73,38 @@ bool SlowOrSpreadOnSphere(PlayerbotAI* botAI, Action* action)
     return false;
 }
 
+// Each one moves a burrower off its side tank's patch, where it submerges back to full
+char const* const BURROWER_MOVERS[] = {"death grip", "dark command", "taunt", "growl", "hand of reckoning"};
+
+bool MovesBurrower(std::string const& name)
+{
+    for (char const* mover : BURROWER_MOVERS)
+        if (name == mover)
+            return true;
+
+    return false;
+}
+
+// Interrupts and stuns, for a burrower's Shadow Strike
+bool StopsCast(PlayerbotAI* botAI, Action* action)
+{
+    CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action);
+    if (!cast)
+        return false;
+
+    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", cast->getSpell())->Get();
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info)
+        return false;
+
+    for (SpellEffectInfo const& effect : info->Effects)
+        if (effect.Effect == SPELL_EFFECT_INTERRUPT_CAST ||
+            (effect.Effect == SPELL_EFFECT_APPLY_AURA && effect.ApplyAuraName == SPELL_AURA_MOD_STUN))
+            return true;
+
+    return false;
+}
+
 }
 
 float AnubarakControlTankMovementMultiplier::GetValue(Action* action)
@@ -173,6 +205,27 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
         return 0.0f;
 
     return SlowOrSpreadOnSphere(botAI, action) ? 0.0f : 1.0f;
+}
+
+float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || IsAnubarakTankPlayer(bot) ||
+        !AnubarakEngaged(botAI))
+        return 1.0f;
+
+    // actions that pick their target in Execute read "self target" here, so the stem's own picks pass
+    Unit* target = action->GetTarget();
+    Creature* burrower = target ? target->ToCreature() : nullptr;
+    if (!burrower || burrower->GetEntry() != static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER))
+        return 1.0f;
+
+    if (MovesBurrower(action->getName()))
+        return 0.0f;
+
+    if (burrower->HasUnitState(UNIT_STATE_CASTING) && StopsCast(botAI, action))
+        return 1.0f;
+
+    return burrower == GetAnubarakDpsTarget(botAI) ? 1.0f : 0.0f;
 }
 
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)

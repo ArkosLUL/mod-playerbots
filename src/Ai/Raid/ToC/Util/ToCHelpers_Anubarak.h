@@ -78,6 +78,14 @@ constexpr uint32 ANUBARAK_SUBMERGED_MS = 62000;
 // Focus fire on the burrowers starts once killing every one alive at the raid's rate, plus this, reaches
 // the next wave. The margin pays for the switch, the melee walking off him to the patches.
 constexpr uint32 ANUBARAK_FOCUS_MARGIN_MS = 15000;
+// The raid's rate on burrowers against its rate on him: melee lose reach on the patches (128k against
+// 174k/s, 25H)
+constexpr float ANUBARAK_FOCUS_RATE_SHARE = 0.7f;
+// Heroic phase 2 time before the deadline counts at this share: only the ranged reach the patches from
+// the gather (25-40k/s)
+constexpr float ANUBARAK_FOCUS_SUBMERGED_SHARE = 0.25f;
+// One this low off Permafrost still dies before its next 3 s submerge check
+constexpr float ANUBARAK_FOCUS_OFF_FROST_PCT = 10.0f;
 constexpr uint32 ANUBARAK_DAMAGE_WINDOW_MS = 10000;
 constexpr uint32 ANUBARAK_DAMAGE_SAMPLE_MS = 500;
 constexpr uint32 ANUBARAK_DAMAGE_MIN_SPAN_MS = 3000;
@@ -94,7 +102,7 @@ constexpr float ANUBARAK_SPIKE_PATCH_REACH = 11.5f;
 constexpr float ANUBARAK_KITE_STAND_OFFSET = 8.5f;
 constexpr float ANUBARAK_KITE_ARRIVE = 2.0f;
 constexpr float ANUBARAK_KITE_REAIM_DEGREES = 30.0f;
-// navprobe-clean all round, 15 yd outside the raid gathered in phase 2
+// navprobe-clean all round; heroic's kite steps stay inside it
 constexpr float ANUBARAK_KITE_RING_RADIUS = 40.0f;
 // Heroic: the spike this close and faster than the kiter sends the next speed boost out
 constexpr float ANUBARAK_KITE_BOOST_RANGE = 15.0f;
@@ -111,7 +119,7 @@ constexpr float ANUBARAK_BLINK_DISTANCE = 20.0f;
 // Heroic phase 2: the raid stands this far past where he went down, away from the tank patches, and
 // never further out than the floor radius
 constexpr float ANUBARAK_GATHER_PAST = 5.0f;
-constexpr float ANUBARAK_GATHER_FLOOR = 25.0f;
+constexpr float ANUBARAK_GATHER_FLOOR = 35.0f;
 constexpr float ANUBARAK_GATHER_ARRIVE = 6.0f;
 constexpr float ANUBARAK_GATHER_SPREAD = 3.0f;
 // A gathered melee bot takes a scarab this close before the focus burrower
@@ -124,8 +132,8 @@ constexpr float ANUBARAK_SPIKE_LANE_CLEARANCE = 9.0f;
 constexpr float ANUBARAK_SPIKE_DODGE_SEARCH = 30.0f;
 constexpr float ANUBARAK_INTERRUPT_RANGE = 30.0f;
 // He submerges 80 s after the pull or an emerge and the spike is summoned on him, so he is dragged off
-// the patches 10 s before
-constexpr uint32 ANUBARAK_SUBMERGE_PREP_MS = 70000;
+// the patches 15 s before
+constexpr uint32 ANUBARAK_SUBMERGE_PREP_MS = 65000;
 
 // Drag deadband, measured on him. In the submerge window DONE is also the start radius.
 constexpr float ANUBARAK_DRAG_START = 8.0f;
@@ -136,7 +144,7 @@ constexpr uint32 ANUBARAK_DRAG_SETTLE_MS = 500;
 constexpr uint32 ANUBARAK_DRAG_LEG_MS = 6000;
 // Spike reach round a patch, plus its 3.5 yd/s * 1.5 s first walk, plus the drag's done radius
 constexpr float ANUBARAK_SUBMERGE_PATCH_CLEARANCE = ANUBARAK_SPIKE_PATCH_REACH + 5.25f + ANUBARAK_DRAG_DONE;
-// Second search when no spot clears the first
+// Last search when no spot clears the others
 constexpr float ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN = ANUBARAK_SPIKE_PATCH_REACH + 5.25f;
 
 // DPS bots stop on him at this share of his tank victim's threat, resume under the release share
@@ -191,7 +199,7 @@ enum class AnubarakKiteBranch : uint8
 enum class AnubarakKiteStage : uint8
 {
     None,
-    // Round the ring, clear of every patch
+    // Steps whose spike lane clears every patch
     Run,
     // The spike gains within 15 yd: the next speed boost goes out
     Boost,
@@ -312,9 +320,9 @@ bool GetAnubarakDragAnchor(Player* bot, Position& out);
 // The anchor, then points 4 and 7.5 yd off it toward his side of the patch line, for when the leg to
 // the anchor would walk the tank through Permafrost. Empty without an anchor.
 std::vector<Position> GetAnubarakDragPoints(Player* bot, Creature* boss);
-// From 70 s after the pull or an emerge: a spot clear of every patch by
-// ANUBARAK_SUBMERGE_PATCH_CLEARANCE, else by _MIN, so the spike summoned on him doesn't burn one,
-// on the tank's side away from the tank patches. False otherwise.
+// From 65 s after the pull or an emerge: a spot 30 yd from every patch, else 25, else
+// ANUBARAK_SUBMERGE_PATCH_CLEARANCE, else _MIN, so the spike summoned on him doesn't burn one, on the
+// tank's side away from the tank patches. False otherwise.
 bool GetAnubarakSubmergeSpot(Player* bot, Position& out);
 // The pickup tank's leg toward point, latched per instance. Called by the hold action only. No leg
 // whose tank spot or walk comes within the slow reach of a patch.
@@ -362,12 +370,14 @@ std::vector<Creature*> GetAnubarakBurrowers(Player* bot);
 // tank's still loose 5 s after it came out goes to a bot side tank, past two.
 AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI);
 // The burrower DPS focus, latched per instance in anub.focus. Only ones standing on Permafrost count,
-// since one below 80% off it submerges and comes back full. The latched one stays while it qualifies.
+// since one below 80% off it submerges and comes back full, plus any under ANUBARAK_FOCUS_OFF_FROST_PCT.
+// The latched one stays while it qualifies.
 Creature* GetAnubarakFocusBurrower(Player* bot);
 // This DPS bot's target: a player's skull, him while selectable, else the focus burrower, else while
 // he's down the nearest scarab in reach. The focus burrower goes ahead of him while he's down, or once
-// killing the burrowers on Permafrost at the raid's damage rate would run within 5 s of the next wave.
-// Null outside the pull, for non-DPS and for a bot on sphere duty.
+// killing every burrower at ANUBARAK_FOCUS_RATE_SHARE of the raid's rate would run within the margin of
+// the next wave, then until the focus it came due on dies. Null outside the pull, for non-DPS and for
+// a bot on sphere duty.
 Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI);
 // Nearest scarab within 30 yd hitting someone who isn't a tank
 Creature* GetAnubarakScarabToPickUp(Player* bot);
@@ -387,7 +397,7 @@ bool AnubarakSphereInReach(Player* bot, Unit* sphere);
 // Floor point toward the sphere where it is in reach, off the spike and its lane. False when none.
 bool GetAnubarakSphereStand(Player* bot, Unit* sphere, Position& out);
 // Where the spike's target runs. previous is the stand the caller latched last time, may be null.
-// False while there's no spike. Heroic runs the ring until the kite stage says patch.
+// False while there's no spike. Heroic runs lane steps until the kite stage says patch.
 bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, AnubarakKiteStand& out);
 // Heroic only, None elsewhere and for an unmarked bot. With Boost, boost says what to use.
 AnubarakKiteStage GetAnubarakKiteStage(Player* kiter, AnubarakKiteBoost* boost = nullptr);

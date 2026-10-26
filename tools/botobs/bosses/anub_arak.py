@@ -5,12 +5,14 @@
     anub_arak.py <file> --phases     anub.phase spans, his health at each edge, deaths per phase
     anub_arak.py <file> --pull       who was locked out or never landed, and stage 9 to the pull
     anub_arak.py <file> --spike      every Pursued by Anub'arak window: kiter, kite branch, outcome, protection,
-                                     time in each kite stage, the kiter's boosts, Ice Block and Feign Death
+                                     time in each kite stage, the kiter's boosts, Ice Block and Feign Death,
+                                     the spike's closest approach to each latched tank patch
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips,
                                      spheres spent per submerge against the kite allowance
     anub_arak.py <file> --burrowers  each burrower: life, submerges, Permafrost, Shadow Strike, its exit, side
-                                     and pickup, DPS focus; per wave, when the focus came due
+                                     and pickup, DPS focus, DPS casts at any other burrower; per wave, when the
+                                     focus came due, and each time it stopped with the focus alive
     anub_arak.py <file> --threat     per surfaced window: his target, his drag legs, taunts, threat cap, the
                                      main tank's time in Permafrost, his submerge spot against the tank patches
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust, Penetrating Cold, deaths
@@ -131,8 +133,10 @@ GRIP_LANDED_HEIGHT = radius("ANUBARAK_GRIP_LANDED_HEIGHT")
 SIDE_SPOT_GAP = 2.0 * TANK_PATCH_OFFSET
 # ANUBARAK_GRIP_JUDGE_MS, a uint32 radius() doesn't read
 GRIP_JUDGE_MS = 3000
-# ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN, an expression radius() doesn't read
-SUBMERGE_PATCH_CLEARANCE = 16.75
+# The second of ANUBARAK_SUBMERGE_CLEARANCES, an array radius() doesn't read: a submerge spot nearer a
+# tank patch is a fallback
+SUBMERGE_PATCH_CLEARANCE = 25.0
+SPIKE_PATCH_REACH = radius("ANUBARAK_SPIKE_PATCH_REACH")
 # Permafrost's target search adds only the target's size. A burrower's display has no combat reach, so
 # it gets the core's 0.389 default, not the 1.5 of ANUBARAK_PERMAFROST_SLOW_REACH's player.
 BURROWER_PERMAFROST_REACH = 6.0 + 0.389
@@ -623,6 +627,21 @@ def spike_near(samples: Samples, spikes, guid: int, start: int, stop: int) -> in
     return None
 
 
+def tank_patch_approach(samples: Samples, latches, spikes, start: int, stop: int) -> dict[int, float]:
+    """Per side, the spike's closest approach in the window to the tank patch that side had latched at each
+    sample. A spent patch stops being sampled, so its last read is the spike on top of it."""
+    out: dict[int, float] = {}
+    for spike in spikes:
+        stamps, rows = samples.track(spike)
+        for index in range(bisect.bisect_left(stamps, start), bisect.bisect_right(stamps, stop)):
+            for side, spans in enumerate(latches):
+                patch = latched_patch(spans, samples, stamps[index])
+                if patch:
+                    yards = dist2(rows[index][1:3], patch)
+                    out[side] = min(out.get(side, yards), yards)
+    return out
+
+
 def stage_time(spans, start: int, stop: int) -> dict[str, int]:
     """Milliseconds per `anub.kitestage` value inside the window, `none` left out, in the order first held."""
     out: dict[str, int] = {}
@@ -674,6 +693,7 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     own = [rec for rec in casts if rec.get("sp") in KITER_OWN]
     protect = notes(trace, "anub.protect")
     spikes = guids_of_entry(trace, NPC_SPIKE)
+    latches = patch_latches(trace)
 
     out = []
     for guid, start, stop, closed in mark_spans(trace):
@@ -702,7 +722,8 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "own": [rec for rec in own if rec.get("s") == guid and start <= rec["t"] <= stop],
                     "protect": [rec for rec in protect if start <= rec["t"] <= stop],
                     "stages": stage_time(stages.get(guid, []), start, stop),
-                    "boosts": kiter_boosts(boosts, guid, start, stop)})
+                    "boosts": kiter_boosts(boosts, guid, start, stop),
+                    "tank_near": tank_patch_approach(samples, latches, spikes, start, stop)})
     return out
 
 
@@ -736,9 +757,16 @@ def show_spike(trace: Trace) -> None:
             run = kite_line(trace, window)
             if run:
                 print(f"            {run}")
+            approach = tank_line(window)
+            if approach:
+                print(f"            spike to tank patch: {approach}")
         outcomes = collections.Counter(window["outcome"] for window in windows)
         print(f"\n  {len(windows)} window(s): "
               + ", ".join(f"{name} {n}" for name, n in outcomes.most_common()))
+        reached = sum(1 for window in windows
+                      if any(yards < SPIKE_PATCH_REACH for yards in window["tank_near"].values()))
+        print(f"  spike within {SPIKE_PATCH_REACH} yd of a latched tank patch, its fail test's reach:"
+              f" {reached} window(s)")
         near = [window for window in windows if window["near"] is not None]
         print(f"  near is the seconds in when the spike first came within {KITE_PROTECT_RANGE:.0f} yd of the"
               f" kiter: {len(near)} window(s), Hand of Protection in"
@@ -778,6 +806,12 @@ def protection(trace: Trace, window: dict) -> str:
     parts += [f"anub.protect {trace.name(rec.get('g'))} {rec.get('txt')} {rel(rec)}"
               for rec in window["protect"] if str(rec.get("txt")) != "none"]
     return "; ".join(parts)
+
+
+def tank_line(window: dict) -> str:
+    """The spike's closest approach to each latched tank patch in one window."""
+    return ", ".join(f"side {side} {yards:.1f} yd" + (" in reach" if yards < SPIKE_PATCH_REACH else "")
+                     for side, yards in sorted(window["tank_near"].items()))
 
 
 def kite_line(trace: Trace, window: dict) -> str:
@@ -1271,6 +1305,43 @@ def focus_due_rows(trace: Trace, waves: list[tuple[int, int]]) -> list[dict]:
     return out
 
 
+def stray_burrower_casts(trace: Trace) -> list[dict]:
+    """DPS bot casts aimed at a burrower other than the `anub.focus` held then, triggered ones and humans
+    left out, and a cast landing while its target cast Shadow Strike, since interrupts may go anywhere."""
+    burrowers = guids_of_entry(trace, NPC_BURROWER)
+    dps = {guid for guid in roster_guids(trace) if trace.role(guid) in DPS_ROLES and guid not in trace.humans}
+    focus = latch_spans(trace, FOCUS, pull_end(trace))
+    strikes = [(rec.get("s"), rec["t"], rec["t"] + (rec.get("ct") or SHADOW_STRIKE_CAST_MS))
+               for rec in trace.of("cast") if rec.get("sp") == SPELL_SHADOW_STRIKE]
+    out = []
+    for rec in trace.of("cast"):
+        target = rec.get("tgt")
+        if rec.get("tr") or rec.get("s") not in dps or target not in burrowers:
+            continue
+        if as_guid(held_at(focus, rec["t"])) == target:
+            continue
+        if any(source == target and low <= rec["t"] <= high for source, low, high in strikes):
+            continue
+        out.append(rec)
+    return out
+
+
+def focus_due_drops(trace: Trace, samples: Samples) -> list[dict]:
+    """Each time `anub.focusdue` went from 1 to 0 with the `anub.focus` burrower still alive, and its
+    health then."""
+    end = pull_end(trace)
+    focus = latch_spans(trace, FOCUS, end)
+    out = []
+    for value, _, stop in latch_spans(trace, "anub.focusdue", end):
+        if value != "1" or stop >= end:
+            continue
+        guid = as_guid(held_at(focus, stop - 1))
+        row = samples.recent(guid, stop) if guid else None
+        if row and row[5] > 0:
+            out.append({"t": stop, "guid": guid, "hp": row[5]})
+    return out
+
+
 def show_pickups(trace: Trace, samples: Samples) -> None:
     def secs(ms):
         return "never" if ms is None else f"{ms / 1000:.1f} s"
@@ -1338,6 +1409,20 @@ def show_burrowers(trace: Trace) -> None:
             share = "-" if row["share"] is None else f"{row['share'] * 100:.0f}%"
             print(f"  {short(trace, row['guid']):10} {row['held'] / 1000:6.1f}s {share:>9}")
         print("  dps on it is the share of living DPS bot samples whose target was the focus while it held")
+
+    stray = stray_burrower_casts(trace)
+    if stray:
+        casters = collections.Counter(rec["s"] for rec in stray)
+        spells = collections.Counter(rec["sp"] for rec in stray)
+        print(f"  DPS casts at a burrower other than the focus: {len(stray)}, by "
+              + ", ".join(f"{trace.name(guid)} {n}" for guid, n in casters.most_common())
+              + "; most: " + ", ".join(f"{trace.spell(spell)} {n}" for spell, n in spells.most_common(5)))
+    else:
+        print("  no DPS cast at a burrower other than the focus")
+    drops = focus_due_drops(trace, samples)
+    print("  anub.focusdue dropped with the focus alive: "
+          + (", ".join(f"{clock(row['t'])} {short(trace, row['guid'])} at {row['hp']:.0f}%" for row in drops)
+             if drops else "never"))
     show_counts(trace, "anub.dps")
 
 
@@ -1675,11 +1760,11 @@ SECTIONS = (
     ("phases", "anub.phase spans, his health at each edge, deaths per phase", show_phases),
     ("pull", "locked out past the Web Door or never landed, stage 9 to the pull", show_pull),
     ("spike", "every Pursued by Anub'arak window, kite branches, outcome, protection, kite stages, boosts,"
-     " Impale on others", show_spike),
+     " the spike's approach to each tank patch, Impale on others", show_spike),
     ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots, killers,"
      " landings, grips, spheres per submerge against the allowance", show_spheres),
     ("burrowers", "each burrower: life, submerges, Permafrost, Shadow Strike, exit, side, pickup, DPS focus,"
-     " focus due per wave", show_burrowers),
+     " casts off the focus, focus due per wave and dropped with the focus alive", show_burrowers),
     ("threat", "per surfaced window: his target by role, time to a tank, drag legs, taunts, threat cap, main"
      " tank in a patch, submerge spot to the tank patches", show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, Penetrating Cold heals, defensives, deaths", show_swarm),

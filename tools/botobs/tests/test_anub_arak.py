@@ -524,7 +524,8 @@ class SyntheticPull(unittest.TestCase):
 def focus_pull() -> list[dict]:
     """B1 holds the focus from 1 to 5 s, nothing to 6 s, then B2 to the end at 10 s. Trueshot leaves B1
     for the boss at 4 s, Drifter stays on the boss through B2 and is dead at 9 s, and the human and the
-    healer never count."""
+    healer never count. B1 is last sampled at 2 s, the focus due drops at 2 and 4.5 s, and Trueshot puts
+    Corruption on B2 twice around B2's Shadow Strike, which Drifter kicks."""
     def target(guid: int, when: int) -> int:
         if guid in (MELEE, FLOAT) and 1000 <= when < 5000:
             return B1
@@ -535,6 +536,9 @@ def focus_pull() -> list[dict]:
     def focus_snap(when: int) -> dict:
         units = [[guid, X, Y, Z, 0.0, 0.0 if guid == FLOAT and when == 9000 else 100.0, 100.0,
                   target(guid, when), 0, 0, 0, 0] for guid in (KITE, FLOAT, MELEE, HEAL)]
+        if when <= 2000:
+            units.append([B1, X + 5.0, Y, Z, 0.0, 100.0 - when / 100.0, 0.0, 0, 0, 0, 0, 0])
+        units.append([B2, X - 5.0, Y, Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
         return {"t": when, "e": "snap", "u": units, "hz": []}
 
     records = [
@@ -557,6 +561,16 @@ def focus_pull() -> list[dict]:
         note(4000, KITE, "anub.dps", "boss"),
         note(4500, KITE, "anub.dps", "burrower"),
         note(1000, FLOAT, "anub.dps", "burrower"),
+        *(note(when, KITE, "anub.focusdue", due) for when, due in (
+            (0, 0), (1000, 1), (2000, 0), (3000, 1), (4500, 0), (6500, 1))),
+        {"e": "spell", "sp": 47813, "n": "Corruption"},
+        cast(1500, KITE, 47813, B2),
+        cast(1500, MELEE, 1766, B2),
+        cast(2500, KITE, 49050, B1),
+        {"t": 3000, "e": "cast", "s": B2, "sp": ab.SPELL_SHADOW_STRIKE, "tgt": KITE, "ct": 1000},
+        cast(3500, FLOAT, 6552, B2),
+        {**cast(3600, KITE, 47813, B2), "tr": 1},
+        cast(4500, KITE, 47813, B2),
         {"t": 10000, "e": "end", "out": "wipe"},
     ]
     records += [focus_snap(when) for when in range(0, 10000, 1000)]
@@ -589,6 +603,17 @@ class BurrowerFocus(unittest.TestCase):
         self.assertRegex(text, rf"#{B1 & 0xFFFFFFFF} +4\.0s +88%")
         self.assertRegex(text, rf"#{B2 & 0xFFFFFFFF} +4\.0s +57%")
         self.assertIn("anub.dps: Drifter burrower 1; Trueshot burrower 2, boss 1", text)
+        self.assertIn("DPS casts at a burrower other than the focus: 2, by Trueshot 2; most: Corruption 47813 2",
+                      text)
+        self.assertIn(f"anub.focusdue dropped with the focus alive: 0:02.000 #{B1 & 0xFFFFFFFF} at 80%", text)
+
+    def test_casts_off_the_focus_leave_out_humans_triggers_and_a_kick_on_a_cast(self):
+        self.assertEqual([(rec["t"], rec["s"], rec["tgt"]) for rec in ab.stray_burrower_casts(self.trace)],
+                         [(1500, KITE, B2), (4500, KITE, B2)])
+
+    def test_focus_due_drops_only_count_a_focus_still_sampled(self):
+        rows = ab.focus_due_drops(self.trace, ab.Samples(self.trace))
+        self.assertEqual([(row["t"], row["guid"], row["hp"]) for row in rows], [(2000, B1, 80.0)])
 
 
 MAIN, SIDE0, SIDE1, DK, MAGE, LOCK, ROGUE, DRUID, HUNTER, DRAGON = range(6001, 6011)
@@ -596,6 +621,7 @@ IMP = (2 << 32) | 7001
 G0, G1, K1, K2, IDLE = (CREATURE | n for n in range(911, 916))
 BN1, BN2, BS1, BS2 = (CREATURE | n for n in range(921, 925))
 WN, WS = CREATURE | 931, CREATURE | 932
+SPK = CREATURE | 941
 PERMAFROST_25H = 67857
 
 O = ab.TANK_PATCH_OFFSET
@@ -607,6 +633,8 @@ PATCH0 = (X + 3.0, Y + O)            # G0, 3 yd off side 0's spot
 G1_LAND = (X + 3.0, Y + O - GAP - 2.0)  # 2 yd off side 1's spot once G0 latched
 G1_FLY = (X + 20.0, Y - 20.0)
 SUBMERGE_AT = (X - 9.0, Y + O)       # 12 yd off G0
+SPIKE_ROGUE = (PATCH0[0] + 9.0, PATCH0[1])  # in the fail test's reach of G0
+SPIKE_HUNTER = (X - 25.0, Y - 25.0)
 SPOTS = {SIDE0: (X + 3.0, Y + O + 4.0), SIDE1: (X, Y - O - 2.0), DK: (X + 3.0, Y + O + 0.5),
          MAGE: (X - 10.0, Y - 3.0), LOCK: (X - 12.0, Y + 3.0), ROGUE: (X + 15.0, Y), DRUID: (X - 14.0, Y - 6.0),
          HUNTER: (X + 15.0, Y + 6.0), IMP: (X - 13.0, Y + 4.0)}
@@ -652,6 +680,9 @@ def refine_snap(when: int) -> dict:
     boss = SUBMERGE_AT if 28000 <= when < 50000 else (X - 5.0, Y + 2.0)
     target = MAIN if 1000 <= when < 30000 or when >= 51000 else 0
     units.append([BOSS, *boss, Z, 0.0, 100.0 - max(when, 0) / 1000.0, 0.0, target, 0, 0, 0, 0])
+    if 31000 <= when < 48000:
+        spike = SPIKE_ROGUE if when < 40000 else SPIKE_HUNTER
+        units.append([SPK, *spike, Z, 0.0, 100.0, 0.0, ROGUE if when < 40000 else HUNTER, 0, 0, 0, 0])
     hz = []
     for guid in (G0, G1, K1, K2, IDLE):
         place = refine_sphere(guid, when)
@@ -688,6 +719,7 @@ def refine_pull() -> list[dict]:
         {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
         {"t": -1000, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
         {"t": -1000, "e": "unit", "g": IMP, "en": 416, "n": "Ruirin", "own": LOCK},
+        {"t": 30000, "e": "unit", "g": SPK, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
         *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"}
           for guid in (G0, G1, K1, K2, IDLE)),
         *({"t": 5000, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"} for guid in WAVE1),
@@ -879,6 +911,12 @@ class RefinedPull(unittest.TestCase):
                          [[(33000, 11305)], [(42000, 55004)]])
         self.assertEqual([[rec["sp"] for rec in window["own"]] for window in windows], [[], [5384]])
 
+    def test_the_spikes_closest_approach_to_each_latched_tank_patch(self):
+        # side 1 never latches, so only side 0 reads
+        windows = ab.mark_windows(self.trace)
+        self.assertEqual([{side: round(yards, 2) for side, yards in window["tank_near"].items()} for window in windows],
+                         [{0: 9.0}, {0: round(math.dist(SPIKE_HUNTER, PATCH0), 2)}])
+
     def test_main_tank_share_in_a_patch_and_the_submerge_gaps(self):
         rows = ab.threat_rows(self.trace)
         self.assertEqual([(row["label"], row["main"], row["in_patch"], row["living"]) for row in rows],
@@ -919,6 +957,8 @@ class RefinedPull(unittest.TestCase):
         self.assertIn(f"submerged 0:30.000 at {SUBMERGE_AT[0]:.1f}, {SUBMERGE_AT[1]:.1f}: patch0 12.0 yd under",
                       text)
         self.assertIn("anub.pickup: Bulwark attack 1, stepout 1, hold 1", text)
+        self.assertIn("spike to tank patch: side 0 9.0 yd in reach\n", text)
+        self.assertIn("spike within 11.5 yd of a latched tank patch, its fail test's reach: 1 window(s)", text)
 
 
 def side_pull(diff: int, side1: int, later: list[dict] | None = None) -> list[dict]:

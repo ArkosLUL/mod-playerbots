@@ -16,6 +16,7 @@
 #include "Timer.h"
 #include "ToCData.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Anubarak.h"
 #include "ToCHelpers_NorthrendBeasts.h"
 #include "ToCHelpers_Staging.h"
 
@@ -184,7 +185,7 @@ uint8 SchoolsOfArrival(ToCStagingBoss arrival)
         case ToCStagingBoss::Twins:
             return FIRE | SHADOW;
         case ToCStagingBoss::Anubarak:
-            return FROST | NATURE;
+            return FROST;  // nature joins in phase 3, for Leeching Swarm
         case ToCStagingBoss::Champions:
             return FIRE;  // mostly physical, but the hunter, warlock and enhancement shaman burn
         default:
@@ -234,7 +235,8 @@ uint8 WantedSchools(PlayerbotAI* botAI, uint8 previous)
         case ToCEncounter::TwinValkyr:
             return SchoolsOfArrival(ToCStagingBoss::Twins);
         case ToCEncounter::Anubarak:
-            return SchoolsOfArrival(ToCStagingBoss::Anubarak);
+            return static_cast<uint8>(SchoolsOfArrival(ToCStagingBoss::Anubarak) |
+                                      (GetAnubarakPhase(botAI) == AnubarakPhase::Swarm ? NATURE : 0));
         default:
             return SchoolsOfArrival(GetToCStagedArrival(botAI));
     }

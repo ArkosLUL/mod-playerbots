@@ -44,6 +44,16 @@ public:
     float GetValue(Action* action) override;
 };
 
+// A non-tank's damage on a burrower only on its own dps pick, so a multidot doesn't pull a loose one
+// onto a raider. Interrupts and stuns on a casting one go through; a taunt or Death Grip never.
+// Wired from the definition.
+class AnubarakBurrowerGuardMultiplier : public Multiplier
+{
+public:
+    AnubarakBurrowerGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak burrower guard") {}
+    float GetValue(Action* action) override;
+};
+
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 ToCBurstWindow ToCAnubarakBurstWindow(PlayerbotAI* botAI);

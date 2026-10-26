@@ -171,8 +171,11 @@ portal this way.
   `navprobe` answers both halves offline, per map and per point, without a pull. It lives in the
   **core fork** at `src/tools/navprobe`, not in this module, so it never shows up in module history;
   it is prebuilt in the `acore/ac-wotlk-build:master` image, and the tiles are in the
-  `ac-client-data` Docker volume — **not** in the host's `env/dist/data`. Run it from Git Bash with
-  `MSYS_NO_PATHCONV=1`, or the entrypoint is mangled into a Windows path. Read the **settled Z**,
+  `azerothcore-wotlk-pb_ac-client-data` Docker volume (a bare `ac-client-data` volume exists but is
+  empty) — **not** in the host's `env/dist/data`. Run it from Git Bash with
+  `MSYS_NO_PATHCONV=1`, or the entrypoint is mangled into a Windows path: `docker run --rm -v
+  azerothcore-wotlk-pb_ac-client-data:/d:ro --entrypoint /azerothcore/env/dist/bin/navprobe
+  acore/ac-wotlk-build:master --map 649 --data /d ring X Y Z RADIUS 16`. Read the **settled Z**,
   never the trailing "N/N on mesh" line — a point can report a nearest poly within 2 yd and still
   settle to terrain, off the floor. The value carries two labels: **`UpdateAllowedPositionZ`** for a
   single point (plus a `** Z would be rewritten by N yards **` line past a 1 yd drop), and the

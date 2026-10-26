@@ -109,11 +109,14 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak taunt guard", Role::Any, AnubarakTauntWouldSteal, Family::Taunt);
     e.Block("anubarak sphere shooter drop guard", Role::Any, AnubarakShooterOnDutySphere, Family::DropTarget);
     e.Block("anubarak grip reserve", Role::Any, AnubarakGripOwed, 0, {"death grip"});
+    // the pickup casts its grip directly; the rotation's would yank a burrower the tank just taunted
+    e.Block("anubarak side tank grip reserve", Role::Any, AnubarakSideTankHolds, 0, {"death grip"});
     // the ghouls taunt burrowers off their side tanks and off the patches, where they submerge to full
     e.Block("anubarak no ghouls", Role::Any, AnubarakEngaged, 0, {"army of the dead"});
 
     e.Multiplier<AnubarakThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakSphereGuardMultiplier>(Family::Spell | Family::Attack);
+    e.Multiplier<AnubarakBurrowerGuardMultiplier>(Family::Spell | Family::Attack);
 }
 }  // namespace
 
