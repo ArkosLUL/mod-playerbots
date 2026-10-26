@@ -22,8 +22,7 @@ bool IsAnubarakSurfaced(AnubarakPhase phase)
 
 bool AnubarakKiterNeedsImmunityTrigger::IsActive()
 {
-    // Only a paladin's immunities void Impale and leave it running: Ice Block roots the mage
-    return AnubarakEngaged(botAI) && bot->getClass() == CLASS_PALADIN && AnubarakKiterNeedsImmunity(bot);
+    return AnubarakEngaged(botAI) && AnubarakKiterNeedsImmunity(bot);
 }
 
 bool AnubarakRaidGathersTrigger::IsActive() { return AnubarakEngaged(botAI) && AnubarakGathers(botAI); }

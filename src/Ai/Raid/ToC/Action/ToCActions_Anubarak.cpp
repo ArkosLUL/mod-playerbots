@@ -29,8 +29,6 @@ constexpr uint32 ANUBARAK_STALL_MS = 500;
 constexpr float ANUBARAK_RANGED_REACH_MARGIN = 2.0f;
 constexpr float ANUBARAK_BOOKED_TOLERANCE = 0.5f;
 
-// No Ice Block: it roots the mage, and a still target hands the spike on at its current speed
-char const* const KITER_SELF_IMMUNITIES[] = {"divine shield", "hand of protection"};
 constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
 
 char const* const PENETRATING_COLD_HEALS[] = {
@@ -111,7 +109,10 @@ bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
 bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick const& pick)
 {
     float stop = 0.0f;
-    if (pick.rescue && pick.rescue != bot && botAI->CanCastSpell("righteous defense", pick.rescue) &&
+    // Righteous Defense taunts everything hitting the member, him included
+    Creature* boss = GetAnubarak(bot);
+    bool const bossOnRescue = boss && pick.rescue && boss->GetVictim() == pick.rescue;
+    if (pick.rescue && pick.rescue != bot && !bossOnRescue && botAI->CanCastSpell("righteous defense", pick.rescue) &&
         InSpellReach(botAI, bot, pick.rescue, "righteous defense", stop))
         return botAI->CastSpell("righteous defense", pick.rescue);
 
@@ -148,9 +149,32 @@ bool WalkInFlight(PlayerbotAI* botAI, Player* bot, Position const& spot)
 
 }
 
+// Hand of Protection keeps the spike on the paladin; the rest hand it on at its current speed
 bool AnubarakKiterImmunityAction::Execute(Event /*event*/)
 {
-    for (char const* immunity : KITER_SELF_IMMUNITIES)
+    std::vector<char const*> immunities;
+    switch (bot->getClass())
+    {
+        case CLASS_PALADIN:
+            if (AnubarakKiterKeepsMark(bot))
+                immunities = {"hand of protection", "divine shield"};
+            else
+                immunities = {"divine shield", "hand of protection"};
+            break;
+        case CLASS_MAGE:
+            immunities = {"ice block"};
+            break;
+        case CLASS_ROGUE:
+            immunities = {"vanish"};
+            break;
+        case CLASS_HUNTER:
+            immunities = {"feign death"};
+            break;
+        default:
+            break;
+    }
+
+    for (char const* immunity : immunities)
     {
         if (botAI->CanCastSpell(immunity, bot))
             return botAI->CastSpell(immunity, bot);
@@ -397,7 +421,15 @@ bool AnubarakGripFrostSphereAction::Execute(Event /*event*/)
         {
             Creature* sphere = duty.sphere;
             if (bot->GetExactDist(sphere) > ANUBARAK_GRIP_RANGE || !bot->IsWithinLOSInMap(sphere) ||
-                !botAI->CanCastSpell("death grip", sphere) || !botAI->CastSpell("death grip", sphere))
+                !botAI->CanCastSpell("death grip", sphere))
+                return false;
+
+            // The sphere comes down where the DK stands as the grip goes out, so a walk still running
+            // would leave the patch behind it
+            if (bot->isMoving())
+                bot->StopMoving();
+
+            if (!botAI->CastSpell("death grip", sphere))
                 return false;
 
             NoteAnubarakGripCast(bot, sphere);

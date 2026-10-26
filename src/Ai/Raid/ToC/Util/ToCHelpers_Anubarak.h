@@ -51,10 +51,13 @@ constexpr float ANUBARAK_TANK_PATCH_GAP = 13.0f;
 
 // Death Grip's 30 yd less a margin, 3D: a flying sphere sits about 13.5 yd up
 constexpr float ANUBARAK_GRIP_RANGE = 28.0f;
-// The sphere landed on the DK. Not there 3 s after the cast: the grip failed and the pull shoots.
+// A gripped sphere comes down where the DK cast from. One not landed 3 s after the cast failed, and its
+// side shoots until a Death Grip is back.
 constexpr float ANUBARAK_GRIP_LANDED = 3.0f;
 constexpr float ANUBARAK_GRIP_LANDED_HEIGHT = 4.0f;
 constexpr uint32 ANUBARAK_GRIP_JUDGE_MS = 3000;
+// AnubarakGripDuty::side of heroic's kite patch grip
+constexpr uint8 ANUBARAK_KITE_GRIP = 2;
 // A DK whose grip is back within this still grips; any later and the side shoots instead
 constexpr uint32 ANUBARAK_GRIP_COOLDOWN_WAIT_MS = 3000;
 // Only one sphere flies near the tank spots, so with none in reach the DK grips from up to this far off
@@ -86,6 +89,9 @@ constexpr float ANUBARAK_FOCUS_RATE_SHARE = 0.7f;
 constexpr float ANUBARAK_FOCUS_SUBMERGED_SHARE = 0.25f;
 // One this low off Permafrost still dies before its next 3 s submerge check
 constexpr float ANUBARAK_FOCUS_OFF_FROST_PCT = 10.0f;
+// The script's first submerge check comes 30 s after a burrower spawns or emerges, so one off Permafrost
+// is still worth killing this long after either
+constexpr uint32 ANUBARAK_BURROWER_FREE_MS = 25000;
 constexpr uint32 ANUBARAK_DAMAGE_WINDOW_MS = 10000;
 constexpr uint32 ANUBARAK_DAMAGE_SAMPLE_MS = 500;
 constexpr uint32 ANUBARAK_DAMAGE_MIN_SPAN_MS = 3000;
@@ -104,14 +110,23 @@ constexpr float ANUBARAK_KITE_ARRIVE = 2.0f;
 constexpr float ANUBARAK_KITE_REAIM_DEGREES = 30.0f;
 // navprobe-clean all round; heroic's kite steps stay inside it
 constexpr float ANUBARAK_KITE_RING_RADIUS = 40.0f;
-// Heroic: the spike this close and faster than the kiter sends the next speed boost out
+// Heroic: the spike this close and faster than the kiter sends the next speed boost out, and at CLOSE
+// whatever its speed
 constexpr float ANUBARAK_KITE_BOOST_RANGE = 15.0f;
+constexpr float ANUBARAK_KITE_BOOST_CLOSE = 10.0f;
 // Heroic: the spike's route keeps this far off a patch it isn't meant to take, its 11.5 yd test plus 3
 constexpr float ANUBARAK_SPIKE_ROUTE_CLEARANCE = 14.5f;
-// Heroic: an immunity this close to running out sends the kiter to its patch
+// Heroic: an immunity this close to running out sends the kiter to its patch, when there's none to walk to
 constexpr uint32 ANUBARAK_KITE_IMMUNE_LEFT_MS = 2000;
-// Demonic Circle: Teleport's 40 yd less a margin; the circle has to be this much farther from the spike
-constexpr float ANUBARAK_CIRCLE_TELEPORT_RANGE = 38.0f;
+// Heroic, a kite patch alive: the kiter turns for it this much ahead of its walk there, under Hand of
+// Protection before the hand runs out, otherwise before the spike closes to Impale's reach
+constexpr uint32 ANUBARAK_KITE_IMMUNE_COMMIT_MS = 1500;
+constexpr uint32 ANUBARAK_KITE_SPIKE_COMMIT_MS = 1000;
+// Impale's 6 yd plus 1.5 reach
+constexpr float ANUBARAK_IMPALE_REACH = 7.5f;
+// Heroic, a kite patch alive and the spike faster: lane steps keep the kiter this close to its stand
+constexpr float ANUBARAK_KITE_STAND_LEASH = 25.0f;
+// The teleport back to the Demonic Circle only goes when the circle is this much farther from the spike
 constexpr float ANUBARAK_CIRCLE_TELEPORT_GAIN = 15.0f;
 // A circle with less left than this is cast again
 constexpr int32 ANUBARAK_CIRCLE_REFRESH_MS = 100000;
@@ -129,6 +144,11 @@ constexpr float ANUBARAK_SPIKE_DANGER_RADIUS = 10.0f;
 constexpr float ANUBARAK_SPIKE_CLEARANCE = 13.0f;
 constexpr float ANUBARAK_SPIKE_LANE_HALF_WIDTH = 7.0f;
 constexpr float ANUBARAK_SPIKE_LANE_CLEARANCE = 9.0f;
+// A spike faster than the bot: 10 yd is under a second at 11.4 yd/s
+constexpr float ANUBARAK_SPIKE_DANGER_RADIUS_FAST = 16.0f;
+constexpr float ANUBARAK_SPIKE_CLEARANCE_FAST = 19.0f;
+constexpr float ANUBARAK_SPIKE_LANE_HALF_WIDTH_FAST = 10.0f;
+constexpr float ANUBARAK_SPIKE_LANE_CLEARANCE_FAST = 12.0f;
 constexpr float ANUBARAK_SPIKE_DODGE_SEARCH = 30.0f;
 constexpr float ANUBARAK_INTERRUPT_RANGE = 30.0f;
 // He submerges 80 s after the pull or an emerge and the spike is summoned on him, so he is dragged off
@@ -173,8 +193,10 @@ constexpr float ANUBARAK_KITE_PROTECT_RANGE = 12.0f;
 constexpr float ANUBARAK_KITE_IMMUNITY_RANGE = 9.0f;
 constexpr float ANUBARAK_HOP_RANGE = 30.0f;
 constexpr uint32 SPELL_FORBEARANCE = 25771;
-// Hand of Protection ranks, Divine Shield, Ice Block. Bots never cast Ice Block: it roots the mage,
-// and a still target loses the spike to someone else at its current speed.
+// The kiter's own Hand of Protection keeps the spike off it within this much of the emerge
+constexpr uint32 ANUBARAK_KITE_HOP_EMERGE_MS = 10000;
+// Hand of Protection ranks, Divine Shield, Ice Block. Only the hand keeps the mark; the others, Feign
+// Death and Vanish hand the spike on at its current speed.
 constexpr uint32 ANUBARAK_KITE_IMMUNITIES[] = {1022, 5599, 10278, 642, 45438};
 
 // Written raw into anub.phase
@@ -201,11 +223,11 @@ enum class AnubarakKiteStage : uint8
     None,
     // Steps whose spike lane clears every patch
     Run,
-    // The spike gains within 15 yd: the next speed boost goes out
+    // The spike gains within 15 yd, or is within 10: the next speed boost goes out
     Boost,
-    // Hand of Protection or Divine Shield up, still running
+    // Hand of Protection up, still running
     Immune,
-    // Nothing left, or the immunity running out: to a patch
+    // The hand or the lead running out before the walk to the kite patch, or nothing left: to a patch
     Patch
 };
 
@@ -275,8 +297,9 @@ struct AnubarakGripDuty
 {
     // Null while no sphere is in reach of the stand
     Creature* sphere = nullptr;
-    // The stand: the side's spot, or up to ANUBARAK_GRIP_STEP_OUT off it toward the sphere
+    // The stand: the side's spot, or up to ANUBARAK_GRIP_STEP_OUT off it toward the sphere; the kite spot
     Position spot;
+    // 0 or 1, or ANUBARAK_KITE_GRIP
     uint8 side = 0;
     AnubarakGripStep step = AnubarakGripStep::None;
 };
@@ -369,15 +392,16 @@ std::vector<Creature*> GetAnubarakBurrowers(Player* bot);
 // with it, and a dead or marked side tank's go to the other, as do all of one holding him. A human side
 // tank's still loose 5 s after it came out goes to a bot side tank, past two.
 AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI);
-// The burrower DPS focus, latched per instance in anub.focus. Only ones standing on Permafrost count,
-// since one below 80% off it submerges and comes back full, plus any under ANUBARAK_FOCUS_OFF_FROST_PCT.
-// The latched one stays while it qualifies.
+// The burrower DPS focus, latched per instance in anub.focus. Ones standing on Permafrost count, since
+// one below 80% off it submerges and comes back full, plus any under ANUBARAK_FOCUS_OFF_FROST_PCT, plus
+// any off it within ANUBARAK_BURROWER_FREE_MS of coming up. Those go first, the one whose time ends
+// first, then the lowest health. The latched one stays while it qualifies and none of those outranks it.
 Creature* GetAnubarakFocusBurrower(Player* bot);
 // This DPS bot's target: a player's skull, him while selectable, else the focus burrower, else while
-// he's down the nearest scarab in reach. The focus burrower goes ahead of him while he's down, or once
-// killing every burrower at ANUBARAK_FOCUS_RATE_SHARE of the raid's rate would run within the margin of
-// the next wave, then until the focus it came due on dies. Null outside the pull, for non-DPS and for
-// a bot on sphere duty.
+// he's down the nearest scarab in reach. The focus burrower goes ahead of him while he's down, while
+// it's off Permafrost in its free time, or once killing every burrower at ANUBARAK_FOCUS_RATE_SHARE of
+// the raid's rate would run within the margin of the next wave, then until the focus it came due on
+// dies. Null outside the pull, for non-DPS and for a bot on sphere duty.
 Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI);
 // Nearest scarab within 30 yd hitting someone who isn't a tank
 Creature* GetAnubarakScarabToPickUp(Player* bot);
@@ -420,8 +444,12 @@ bool IsAnubarakDodgeHeld(PlayerbotAI* botAI);
 
 // The kiter this paladin bot covers with Hand of Protection now, null when it has no such duty
 Player* GetAnubarakKiterToProtect(Player* bot);
-// The marked bot itself must cast an immunity now: no protector, spike within the immunity range
+// The marked bot itself must cast an immunity now: the spike within the immunity range, no boost, no
+// protector, and no kite patch stand it reaches before the spike reaches it
 bool AnubarakKiterNeedsImmunity(Player* bot);
+// The marked paladin's own Hand of Protection keeps it on the spike to a kite patch or the emerge;
+// otherwise Divine Shield hands the spike on
+bool AnubarakKiterKeepsMark(Player* bot);
 bool AnubarakKiterImmune(Unit* kiter);
 
 // The burrower whose Shadow Strike this bot interrupts, null when it has none

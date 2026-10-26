@@ -357,7 +357,8 @@ The `ResistAura` stem picks:
 
 - **Schools**: Gormok fire; worms fire + nature; Icehowl frost; Jaraxxus fire + nature; champions
   fire; Twins fire, then shadow (the raid starts Dark and takes Light's fire);
-  Anub'arak frost, plus nature in phase 3 (Leeching Swarm; nothing earlier needs Aspect of the Wild). The live encounter's set (Beasts by stage mask, unioned in a heroic
+  Anub'arak frost, plus nature in phases 2 and 3 (scarab Mandibles, then Leeching Swarm; a 2026-10-26
+  main tank died at 24.9k Mandible ticks). The live encounter's set (Beasts by stage mask, unioned in a heroic
   overlap; an empty mask keeps the last set), else the staged arrival's, else none, so paladins go
   back to their own aura between pulls.
 - **Paladins**: one bot holder per school, fire, frost, shadow in that order, re-elected every second

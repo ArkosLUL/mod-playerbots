@@ -3,8 +3,9 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic 10H pull pins the arithmetic behind each section, a 25H one the side tank, grip, kite
-stage and allowance probes, and the shared fixture shows every section reads empty on a trace that
-is not Anub'arak rather than raising.
+stage and allowance probes, a second 25H one the kite patch, the gather and the burrower window, and
+the shared fixture shows every section reads empty on a trace that is not Anub'arak rather than
+raising.
 """
 from __future__ import annotations
 
@@ -517,7 +518,7 @@ class SyntheticPull(unittest.TestCase):
         self.assertIn("3 taunt(s): bot 2, human 1", text)
         self.assertIn("anubarak threat cap vetoes: Trueshot 2, Straggler 1", text)
         self.assertIn("Hand of Protection by Justice +2.5 s; anub.protect Justice hop +1.0 s", text)
-        self.assertIn("Ice Block +0.3 s unwanted; anub.protect Trueshot self +0.2 s", text)
+        self.assertIn("Ice Block +0.3 s; anub.protect Trueshot self +0.2 s", text)
         self.assertIn("spans with a cast: side 0 1 of 1, side 1 1 of 1, kite 1 of 1, stock 1 of 1", text)
 
 
@@ -898,6 +899,15 @@ class RefinedPull(unittest.TestCase):
         self.assertEqual(ab.covered([(0, 10), (5, 20), (30, 40)], 2, 35), 23)
         self.assertEqual(ab.covered([(0, 10)], 20, 30), 0)
 
+    def test_a_kite_patch_shot_down_names_its_killer(self):
+        rows = ab.kite_patch_rows(self.trace)
+        self.assertEqual([(row["label"], row["guid"], row["formed"], row["grip"], row["death"]["killer"])
+                          for row in rows], [("P2", K1, 34000, None, MAGE)])
+        # side 1 never latches, and the mage holds the gather alone
+        self.assertEqual(set(rows[0]["tanks"]), {0})
+        self.assertAlmostEqual(rows[0]["tanks"][0], math.dist((X - 20.0, Y + 20.0), PATCH0))
+        self.assertAlmostEqual(rows[0]["gather"], math.dist((X - 20.0, Y + 20.0), SPOTS[MAGE]))
+
     def test_spheres_spent_per_submerge_against_the_allowance(self):
         self.assertEqual(ab.allowance_rows(self.trace, ab.sphere_deaths(self.trace)),
                          [{"label": "P2", "start": 30000, "allow": 1, "tank": 0, "other": 2}])
@@ -949,8 +959,8 @@ class RefinedPull(unittest.TestCase):
         self.assertIn("kitestage run 2.0 s, boost Sprint 2.0 s, immune 4.0 s, patch 1.0 s; boosts Sprint +2.0 s",
                       text)
         self.assertIn("kitestage run 1.0 s, boost Nitro Boosts 4.0 s, patch 2.0 s; boosts Nitro Boosts +1.0 s", text)
-        self.assertIn("Feign Death +3.0 s unwanted", text)
-        self.assertIn("Ice Block or Feign Death on a kiter: Feign Death 1", text)
+        self.assertIn("Feign Death +3.0 s unasked", text)
+        self.assertIn("own immunity on a kiter anub.protect never asked for: Feign Death 1", text)
         self.assertIn("wave 1 0:05.000: focus due 0:20.000, 30.0 s before wave 2 at 0:50.000", text)
         self.assertIn("wave 2 0:50.000: focus due 0:55.000, the last wave", text)
         self.assertIn("main tank Bulwark in a patch 33% of 60 samples", text)
@@ -959,6 +969,252 @@ class RefinedPull(unittest.TestCase):
         self.assertIn("anub.pickup: Bulwark attack 1, stepout 1, hold 1", text)
         self.assertIn("spike to tank patch: side 0 9.0 yd in reach\n", text)
         self.assertIn("spike within 11.5 yd of a latched tank patch, its fail test's reach: 1 window(s)", text)
+        self.assertIn("P2     0:30.000  #913 formed +4.0 s from shots, killed by Frostfire Frostbolt 42842\n", text)
+
+
+T0, R1, KA, KB = (CREATURE | n for n in range(951, 955))
+BA, BB, BC, BD = (CREATURE | n for n in range(961, 965))
+SPK2 = CREATURE | 942
+TP0, TP1 = (X + 3.0, Y + O), (X + 3.0, Y - O)
+R1_FLY = (X + 20.0, Y - 25.0)
+KA_FLY = (X - 30.0, Y + 25.0)
+DK_CAST = (X - 26.0, Y + 12.0)   # 20 yd off the first submerge's gather centre
+DK_AFTER = (X - 20.0, Y + 12.0)  # 6 yd on from the cast
+KB_SPOT = (X - 25.0, Y - 15.0)
+SLOTS = {MAGE: (X - 13.0, Y), DRUID: (X - 7.0, Y), LOCK: (X - 10.0, Y + 3.0), HUNTER: (X - 10.0, Y - 3.0),
+         ROGUE: (X - 10.0, Y + 3.0)}
+# kiter, mark on, mark off, and where the spike sits meanwhile
+KITES = ((ROGUE, 11000, 17000, (X + 2.0, Y)), (HUNTER, 18000, 25000, (X - 10.0, Y + 13.0)),
+         (MAGE, 42000, 46000, (X + 17.0, Y - 20.0)), (LOCK, 46500, 52000, (X - 10.0, Y + 11.0)),
+         (ROGUE, 52500, 53000, (X - 10.0, Y - 10.0)))
+# guid, exit, first and last sample, emerge
+BURROWERS = ((BA, EXIT_N1, 2000, 20000, None), (BB, EXIT_N2, 2000, 50000, 36000), (BC, EXIT_S1, 2000, 40000, None),
+             (BD, EXIT_S2, 46000, 60000, None))
+
+
+def kite_player(guid: int, when: int) -> list:
+    """Mage, druid, warlock and hunter hold the gather in the first submerge, mage, druid and rogue in the
+    second. The hunter dies on its kite at 25 s and the warlock stands off in the second submerge."""
+    spot, hp = {MAIN: (X - 5.0, Y), SIDE0: (TP0[0], TP0[1] + 2.0), SIDE1: (TP1[0], TP1[1] - 2.0),
+                DRUID: SLOTS[DRUID]}.get(guid, (X + 10.0, Y)), 100.0
+    if guid == DK:
+        spot = DK_AFTER if when >= 15500 else DK_CAST if when >= 13000 else (X - 5.0, Y + 5.0)
+    elif guid == MAGE:
+        spot = (X + 20.0, Y - 20.0) if 42000 < when <= 46000 else SLOTS[MAGE]
+    elif guid == LOCK:
+        spot = (X + 15.0, Y + 15.0) if when >= 30000 else SLOTS[LOCK]
+    elif guid == HUNTER:
+        spot = (X - 10.0, Y + 16.0) if when > 18000 else SLOTS[HUNTER]
+        hp = 0.0 if when >= 25000 else 100.0
+    elif guid == ROGUE and 40000 <= when < 52500:
+        spot = SLOTS[ROGUE]
+    return [guid, *spot, Z, 0.0, hp, 100.0, 0, 0, 0, 0, 0]
+
+
+def kite_sphere(guid: int, when: int):
+    """`(xy, z)` or None. T0 lies on side 0's spot from the pull. In the first submerge R1 lands on side 1's
+    spot and latches, the DK grips KA at 15 s, which dies where the DK stood, and KB is shot down after."""
+    if when < 0:
+        return None
+    if guid == T0:
+        return TP0, PATCH_Z
+    if guid == R1:
+        return (R1_FLY, FLYING_Z) if when < 12500 else (TP1, PATCH_Z if when >= 14000 else FALLING_Z)
+    if guid == KA:
+        return (KA_FLY, FLYING_Z) if when <= 15000 else (DK_CAST, PATCH_Z if when >= 17500 else Z + 0.5)
+    return KB_SPOT, FLYING_Z if when < 20000 else PATCH_Z if when >= 21500 else FALLING_Z
+
+
+def kite_snap(when: int) -> dict:
+    units = [kite_player(guid, when) for guid in (MAIN, SIDE0, SIDE1, DK, MAGE, LOCK, ROGUE, DRUID, HUNTER)]
+    units.append([BOSS, X - 5.0, Y + 2.0, Z, 0.0, 100.0 - max(when, 0) / 1000.0, 0.0, MAIN, 0, 0, 0, 0])
+    units += [[SPK2, *spot, Z, 0.0, 100.0, 0.0, kiter, 0, 0, 0, 0]
+              for kiter, start, stop, spot in KITES if start <= when <= stop]
+    hz = []
+    for guid in (T0, R1, KA, KB):
+        place = kite_sphere(guid, when)
+        if place is None:
+            continue
+        (x, y), z = place
+        units.append([guid, x, y, z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        if z == PATCH_Z:
+            hz.append([PERMAFROST_25H, x, y, PATCH_Z, 6.0, 1])
+    for guid, spot, first, last, emerge in BURROWERS:
+        if first <= when <= last:
+            up = emerge if emerge and when >= emerge else first
+            units.append([guid, *spot, Z, 0.0, 100.0 - (when - up) / 1000.0, 0.0, 0, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def kite_pull() -> list[dict]:
+    """A 25H pull: P1 to 10 s, P2 to 30 s, P1b to 40 s, P2b to 55 s. The marks end on a Vanish and a death
+    near the gather, an Ice Block far from it, a patch, and a Vanish as the emerge takes the spike."""
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 7, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": MAIN, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0},
+             {"g": SIDE0, "n": "Ecoterrorist", "r": "tank", "c": "druid", "h": 0},
+             {"g": SIDE1, "n": "Aegis", "r": "tank", "c": "paladin", "h": 0},
+             {"g": DK, "n": "Deathsong", "r": "melee", "c": "deathknight", "h": 0},
+             {"g": MAGE, "n": "Frostfire", "r": "ranged", "c": "mage", "h": 0},
+             {"g": LOCK, "n": "Hellflame", "r": "ranged", "c": "warlock", "h": 0},
+             {"g": ROGUE, "n": "Shadowstep", "r": "melee", "c": "rogue", "h": 0},
+             {"g": DRUID, "n": "Druidica", "r": "ranged", "c": "druid", "h": 0},
+             {"g": HUNTER, "n": "Trueshot", "r": "ranged", "c": "hunter", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 11000, "e": "unit", "g": SPK2, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"}
+          for guid in (T0, R1, KA, KB)),
+        *({"t": first, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"}
+          for guid, _, first, _, _ in BURROWERS),
+        *({"e": "spell", "sp": spell, "n": name} for spell, name in (
+            (42842, "Frostbolt"), (47809, "Shadow Bolt"), (75, "Auto Shot"))),
+
+        *(note(when, MAIN, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (30000, 1), (40000, 2),
+                                                                     (55000, 1))),
+        note(0, MAIN, "anub.patch0", T0),
+        note(0, MAIN, "anub.patch1", 0),
+        note(13900, SIDE1, "anub.patch1", R1),
+        note(13000, DK, "anub.grip", 1),
+        note(16000, DK, "anub.grip", 0),
+        note(13000, DK, "anub.sphere", "gripk"),
+        note(16000, DK, "anub.sphere", "none"),
+        note(15500, MAGE, "anub.sphere", "kite"),
+        note(16500, MAGE, "anub.sphere", "none"),
+        *(note(when, DK, "anub.gripstep", step) for when, step in (
+            (13000, "walk"), (14900, "cast"), (15500, "kill"), (16000, "none"))),
+        *(note(when, guid, "anub.gather", value) for guid in (MAGE, DRUID, LOCK, HUNTER)
+          for when, value in ((10200, "walk"), (11000, "hold"))),
+        *(note(when, guid, "anub.gather", value) for guid in (MAGE, DRUID, ROGUE)
+          for when, value in ((40200, "walk"), (41000, "hold"))),
+
+        cast(12500, HUNTER, 75, R1),
+        cast(15000, DK, ab.SPELL_DEATH_GRIP, KA),
+        cast(16000, MAGE, 42842, KA),
+        dmg(16000, MAGE, KA, 42842, 9000),
+        cast(20000, LOCK, 47809, KB),
+
+        *(aura(when, kiter, ab.SPELL_MARK, removed, SPK2) for kiter, start, stop, _ in KITES
+          for when, removed in ((start, False), (stop, True))),
+        {"t": 25000, "e": "death", "g": HUNTER, "killer": SPK2, "x": X - 10.0, "y": Y + 16.0, "z": Z,
+         "blow": [SPK2, 20000]},
+        cast(17000, ROGUE, 26889, ROGUE),
+        cast(45900, MAGE, 45438, MAGE),
+        cast(53100, ROGUE, 26889, ROGUE),
+        {"t": 57000, "e": "end", "out": "wipe"},
+    ]
+    records += [kite_snap(when) for when in range(-500, 57000, 500)]
+    return records
+
+
+class KitePull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_7_anub-arak_1789500004.ndjson", kite_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def holds(self):
+        return ab.holder_spans(self.trace, "anub.gather", ab.pull_end(self.trace))
+
+    def centre(self, when: int, skip=frozenset()):
+        return ab.gather_centre(self.holds(), ab.Samples(self.trace), ab.submerged_spans(self.trace), when, skip)
+
+    def assertSpot(self, spot, expected):
+        self.assertIsNotNone(spot)
+        self.assertAlmostEqual(spot[0], expected[0])
+        self.assertAlmostEqual(spot[1], expected[1])
+
+    def test_the_kite_patch_is_the_first_formed_under_that_no_side_latched_as_it_formed(self):
+        # R1 forms first, at 14 s, but side 1 latches it
+        row = ab.kite_patch_rows(self.trace)[0]
+        self.assertEqual((row["label"], row["guid"], row["formed"], row["spot"]), ("P2", KA, 17500, DK_CAST))
+
+    def test_a_kite_patch_a_death_grip_brought_down_names_the_grip(self):
+        row = ab.kite_patch_rows(self.trace)[0]
+        self.assertEqual((row["grip"]["dk"], row["grip"]["t"], row["grip"]["landed"]), (DK, 15000, 500))
+        self.assertEqual(row["death"]["killer"], MAGE)
+
+    def test_a_kite_patch_reads_its_distance_from_each_tank_patch_and_the_gather(self):
+        row = ab.kite_patch_rows(self.trace)[0]
+        self.assertEqual(set(row["tanks"]), {0, 1})
+        self.assertAlmostEqual(row["tanks"][0], math.dist(DK_CAST, TP0))
+        self.assertAlmostEqual(row["tanks"][1], math.dist(DK_CAST, TP1))
+        self.assertAlmostEqual(row["gather"], 20.0)
+
+    def test_a_submerge_with_no_new_kite_patch_names_the_unlatched_ones_carried_in(self):
+        row = ab.kite_patch_rows(self.trace)[1]
+        self.assertEqual((row["label"], row["guid"], row["carried"]), ("P2b", None, [KA, KB]))
+
+    def test_a_grip_lands_against_the_dks_spot_at_the_cast_not_where_it_walked_after(self):
+        # the DK is 6 yd on by the first sample after the cast, past the 3 yd test
+        rows = ab.grip_rows(self.trace)
+        self.assertEqual([(row["sphere"], row["duty"], row["cast_at"], row["landed"], row["served"]) for row in rows],
+                         [(KA, "gripk", DK_CAST, 500, None)])
+        self.assertAlmostEqual(rows[0]["closest"], 0.0)
+
+    def test_the_gather_centre_is_the_mean_spot_of_the_bots_holding_it(self):
+        self.assertSpot(self.centre(17000), (X - 10.0, Y))
+        self.assertSpot(self.centre(17000, {MAGE}), (X - 9.0, Y))
+
+    def test_the_gather_centre_leaves_out_the_dead_and_holds_from_an_earlier_submerge(self):
+        # the dead hunter, then the warlock standing off on its first submerge's hold
+        self.assertSpot(self.centre(28000), (X - 10.0, Y + 1.0))
+        self.assertSpot(self.centre(41500), (X - 10.0, Y + 1.0))
+
+    def test_the_gather_centre_is_none_with_nobody_holding_or_while_he_is_up(self):
+        self.assertIsNone(self.centre(10500))
+        self.assertIsNone(self.centre(35000))
+
+    def test_each_mark_end_reads_the_spike_against_the_gather_and_the_kite_patches_alive(self):
+        windows = ab.mark_windows(self.trace)
+        self.assertEqual([window["guid"] for window in windows], [ROGUE, HUNTER, MAGE, LOCK, ROGUE])
+        self.assertEqual([round(window["to_gather"], 2) for window in windows],
+                         [12.0, 12.0, round(math.hypot(25.5, 21.5), 2), 10.0, 10.0])
+        self.assertEqual([window["kite_patches"] for window in windows], [[], *[[KA, KB]] * 4])
+
+    def test_a_kite_ended_by_a_death_or_an_own_immunity_near_the_gather_is_flagged(self):
+        windows = ab.mark_windows(self.trace)[:4]
+        self.assertEqual([(window["ended"], window["near_gather"]) for window in windows],
+                         [("Vanish", True), ("death", True), ("Ice Block", False), (None, False)])
+
+    def test_an_immunity_as_the_emerge_takes_the_spike_ends_nothing(self):
+        window = ab.mark_windows(self.trace)[4]
+        self.assertEqual((window["outcome"], window["ended"], window["near_gather"]), ("emerge", None, False))
+
+    def test_a_burrower_dies_inside_30_s_of_its_first_sight_or_its_last_emerge(self):
+        rows = {row["guid"]: row for row in ab.burrower_windows(self.trace)}
+        self.assertEqual({guid: (row["wave"], row["up"], row["emerged"], row["died"], row["inside"])
+                          for guid, row in rows.items()},
+                         {BA: (1, 2000, False, 20000, True), BB: (1, 36000, True, 50000, True),
+                          BC: (1, 2000, False, 40000, False), BD: (2, 46000, False, None, None)})
+
+    def test_every_section_prints(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_banner(self.trace)
+            for _, _, section in ab.SECTIONS:
+                section(self.trace)
+        text = out.getvalue()
+        self.assertIn("P2     0:10.000  #953 formed +7.5 s from a grip by Deathsong at 0:15.000, landed +0.5 s,"
+                      " killed by Frostfire Frostbolt 42842\n", text)
+        self.assertIn(f"tank patch 0 {math.dist(DK_CAST, TP0):.1f} yd, tank patch 1 {math.dist(DK_CAST, TP1):.1f} yd,"
+                      " gather 20.0 yd\n", text)
+        self.assertIn("P2b    0:40.000  none formed, unlatched patches alive as he went under: #953, #954\n", text)
+        self.assertRegex(text, r"Deathsong +gripk +#953 +landed \+0\.5 s\n")
+        self.assertIn("at the end: spike 12.0 yd from the gather; no kite patch; ended by Vanish within 20 yd of"
+                      " the gather\n", text)
+        self.assertIn("at the end: spike 33.4 yd from the gather; kite patch #953, #954; ended by Ice Block\n", text)
+        self.assertIn("kite ended by a death or an own immunity within 20 yd of the gather: Shadowstep 0:17.000"
+                      " Vanish, Trueshot 0:25.000 death\n", text)
+        self.assertRegex(text, r"#962 +1 +0:36\.000 emerge +0:50\.000 +14\.0 s yes\n")
+        self.assertRegex(text, r"#964 +2 +0:46\.000 sight +alive +- -\n")
+        self.assertIn("wave 1: 2 of 3 dead inside, 1 later, 0 alive\n", text)
+        self.assertIn("wave 2: 0 of 1 dead inside, 0 later, 1 alive\n", text)
 
 
 def side_pull(diff: int, side1: int, later: list[dict] | None = None) -> list[dict]:

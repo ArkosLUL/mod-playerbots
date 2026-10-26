@@ -185,7 +185,7 @@ uint8 SchoolsOfArrival(ToCStagingBoss arrival)
         case ToCStagingBoss::Twins:
             return FIRE | SHADOW;
         case ToCStagingBoss::Anubarak:
-            return FROST;  // nature joins in phase 3, for Leeching Swarm
+            return FROST;  // nature joins from phase 2: scarab Mandibles, then Leeching Swarm
         case ToCStagingBoss::Champions:
             return FIRE;  // mostly physical, but the hunter, warlock and enhancement shaman burn
         default:
@@ -235,8 +235,11 @@ uint8 WantedSchools(PlayerbotAI* botAI, uint8 previous)
         case ToCEncounter::TwinValkyr:
             return SchoolsOfArrival(ToCStagingBoss::Twins);
         case ToCEncounter::Anubarak:
-            return static_cast<uint8>(SchoolsOfArrival(ToCStagingBoss::Anubarak) |
-                                      (GetAnubarakPhase(botAI) == AnubarakPhase::Swarm ? NATURE : 0));
+        {
+            AnubarakPhase const phase = GetAnubarakPhase(botAI);
+            bool const nature = phase == AnubarakPhase::Submerged || phase == AnubarakPhase::Swarm;
+            return static_cast<uint8>(SchoolsOfArrival(ToCStagingBoss::Anubarak) | (nature ? NATURE : 0));
+        }
         default:
             return SchoolsOfArrival(GetToCStagedArrival(botAI));
     }

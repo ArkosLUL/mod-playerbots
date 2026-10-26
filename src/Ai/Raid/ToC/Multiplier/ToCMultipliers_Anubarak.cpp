@@ -135,7 +135,7 @@ float AnubarakProtectSpikeKiteMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    // Feign Death drops the hunter still, and a still target hands the spike on at its current speed
+    // Feign Death hands the spike on at its current speed; the kiter immunity casts it only as a last resort
     if (action->getName() == "feign death")
         return bot->HasAura(SPELL_MARK) && AnubarakEngaged(botAI) ? 0.0f : 1.0f;
 

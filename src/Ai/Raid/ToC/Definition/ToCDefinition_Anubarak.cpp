@@ -111,6 +111,9 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak grip reserve", Role::Any, AnubarakGripOwed, 0, {"death grip"});
     // the pickup casts its grip directly; the rotation's would yank a burrower the tank just taunted
     e.Block("anubarak side tank grip reserve", Role::Any, AnubarakSideTankHolds, 0, {"death grip"});
+    // the class chain's Righteous Defense off the main tank taunts him too; the pickup casts its own
+    e.Block("anubarak side tank righteous defense reserve", Role::Any, AnubarakSideTankHolds, 0,
+            {"righteous defense"});
     // the ghouls taunt burrowers off their side tanks and off the patches, where they submerge to full
     e.Block("anubarak no ghouls", Role::Any, AnubarakEngaged, 0, {"army of the dead"});
 
