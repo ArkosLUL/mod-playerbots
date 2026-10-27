@@ -4,6 +4,7 @@
  * or (at your option) any later version.
  */
 
+#include "EncounterHelpers.h"
 #include "GenericSpellActions.h"
 #include "ICCActions.h"
 #include "ICCScripts.h"
@@ -12,11 +13,27 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
-#include <ctime>
-#include <fstream>
 #include <limits>
+#include <string>
+
+namespace
+{
+    // `rule` is why the skull moved: ooze, cloud, boss, or clear when there's no unit
+    void PutricideSetSkull(Player* bot, Group* group, Unit* unit, char const* rule)
+    {
+        group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), unit ? unit->GetGUID() : ObjectGuid::Empty);
+        if (!RaidObs::Active())
+            return;
+
+        std::string value = rule;
+        if (unit)
+            value += " " + RaidObs::DescribeAssignment(unit->GetGUID());
+        RaidObs::NoteDerived(bot, "pp.skull", value);
+    }
+}
 
 // Professor Putricide
 bool IccPutricideMutatedPlagueAction::Execute(Event /*event*/)
@@ -93,7 +110,7 @@ bool IccPutricideGrowingOozePuddleAction::Execute(Event /*event*/)
     if (!PlayerbotAI::IsMainTank(bot))
     {
         Unit* bossP3 = AI_VALUE2(Unit*, "find target", "professor putricide");
-        if (bossP3 && bossP3->HealthBelowPct(35))
+        if (bossP3 && IccPutricidePhase(bot, bossP3) == 3)
             return false;
     }
 
@@ -107,7 +124,7 @@ bool IccPutricideGrowingOozePuddleAction::Execute(Event /*event*/)
     if (PlayerbotAI::IsMainTank(bot))
     {
         Unit* boss = AI_VALUE2(Unit*, "find target", "professor putricide");
-        if (boss && boss->IsAlive() && boss->GetVictim() == bot && !boss->HealthBelowPct(35))
+        if (boss && boss->IsAlive() && boss->GetVictim() == bot && IccPutricidePhase(bot, boss) != 3)
         {
             constexpr float puddleNearBossRange = 8.0f;
             constexpr float puddleSafeRadius = 10.0f;
@@ -229,7 +246,7 @@ Unit* IccPutricideGrowingOozePuddleAction::FindClosestThreateningPuddle()
 
     // Phase 3: MT no longer kites, treat as regular bot for puddle avoidance.
     Unit* boss = AI_VALUE2(Unit*, "find target", "professor putricide");
-    bool const isMainTank = PlayerbotAI::IsMainTank(bot) && !(boss && boss->HealthBelowPct(35));
+    bool const isMainTank = PlayerbotAI::IsMainTank(bot) && !(boss && IccPutricidePhase(bot, boss) == 3);
 
     Unit* closestPuddle = nullptr;
     float closestDistance = FLT_MAX;
@@ -270,8 +287,9 @@ Position IccPutricideGrowingOozePuddleAction::CalculateSafeMovePosition(Unit* cl
     constexpr float tankShoveDistance = 6.0f;
 
     Unit* boss = AI_VALUE2(Unit*, "find target", "professor putricide");
-    bool const isMainTank = PlayerbotAI::IsMainTank(bot) && !(boss && boss->HealthBelowPct(35));
-    bool const isP3Tank = PlayerbotAI::IsMainTank(bot) && boss && boss->HealthBelowPct(35);
+    bool const phase3 = boss && IccPutricidePhase(bot, boss) == 3;
+    bool const isMainTank = PlayerbotAI::IsMainTank(bot) && !phase3;
+    bool const isP3Tank = PlayerbotAI::IsMainTank(bot) && phase3;
 
     float botX = bot->GetPositionX();
     float botY = bot->GetPositionY();
@@ -501,7 +519,7 @@ bool IccPutricideVolatileOozeAction::Execute(Event /*event*/)
     if (PlayerbotAI::IsMainTank(bot) &&
         bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != FOLLOW_MOTION_TYPE &&
         bot->GetExactDist2d(ICC_PUTRICIDE_TANK_POSITION) > 20.0f &&
-        !boss->HealthBelowPct(36) && boss->GetVictim() == bot)
+        IccPutricidePhase(bot, boss) != 3 && boss->GetVictim() == bot)
         return MoveTo(bot->GetMapId(), ICC_PUTRICIDE_TANK_POSITION.GetPositionX(),
                       ICC_PUTRICIDE_TANK_POSITION.GetPositionY(), ICC_PUTRICIDE_TANK_POSITION.GetPositionZ(), false,
                       false, false, true, MovementPriority::MOVEMENT_COMBAT, true, false);
@@ -618,10 +636,10 @@ bool IccPutricideVolatileOozeAction::MarkOozeWithSkull(Unit* ooze)
     Unit* markedUnit = botAI->GetUnit(skullGuid);
 
     if (markedUnit && (!markedUnit->IsAlive() || (ooze && markedUnit != ooze)))
-        group->SetTargetIcon(skullIconId, bot->GetGUID(), ObjectGuid::Empty);
+        PutricideSetSkull(bot, group, nullptr, "clear");
 
     if (ooze && ooze->IsAlive() && (!skullGuid || !markedUnit))
-        group->SetTargetIcon(skullIconId, bot->GetGUID(), ooze->GetGUID());
+        PutricideSetSkull(bot, group, ooze, "ooze");
 
     return false;
 }
@@ -657,7 +675,7 @@ bool IccPutricideGasCloudAction::Execute(Event /*event*/)
 
     if (PlayerbotAI::IsTank(bot) &&
         bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != FOLLOW_MOTION_TYPE &&
-        bot->GetExactDist2d(ICC_PUTRICIDE_TANK_POSITION) > 20.0f && !boss->HealthBelowPct(36) &&
+        bot->GetExactDist2d(ICC_PUTRICIDE_TANK_POSITION) > 20.0f && IccPutricidePhase(bot, boss) != 3 &&
         boss->GetVictim() == bot)
         return MoveTo(bot->GetMapId(), ICC_PUTRICIDE_TANK_POSITION.GetPositionX(),
                       ICC_PUTRICIDE_TANK_POSITION.GetPositionY(), ICC_PUTRICIDE_TANK_POSITION.GetPositionZ(), false,
@@ -700,7 +718,7 @@ bool IccPutricideGasCloudAction::HandleGaseousBloatMovement(Unit* gasCloud)
 
     if (!botAI->HasAura("Gaseous Bloat", bot))
     {
-        g_bloatLastDir.erase(bot->GetGUID());
+        IccPutricideForgetBloatFlee(bot);
         return false;
     }
 
@@ -722,8 +740,12 @@ bool IccPutricideGasCloudAction::HandleGaseousBloatMovement(Unit* gasCloud)
         return (candDx * lastDirX + candDy * lastDirY) <= 0.0f;
     };
 
-    auto commitDir = [&](float fromX, float fromY, float toX, float toY)
+    // `rule`: the search branch that produced the leg (corner, wedge, open, loose, straight)
+    auto commitDir = [&](float fromX, float fromY, float toX, float toY, char const* rule)
     {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "pp.bloatflee", rule);
+
         float ddx = toX - fromX;
         float ddy = toY - fromY;
         float l = std::sqrt(ddx * ddx + ddy * ddy);
@@ -732,8 +754,7 @@ bool IccPutricideGasCloudAction::HandleGaseousBloatMovement(Unit* gasCloud)
         g_bloatLastDir[botKey] = { ddx / l, ddy / l };
     };
 
-    if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "pp.nitro"))
-        bot->AddAura(SPELL_NITRO_BOOSTS, bot);
+    EncounterHelpers::UseNitroBoosts(bot);
 
     constexpr int numAngles = 32;
     constexpr float gasBombSafeDist = 6.0f;
@@ -823,7 +844,7 @@ bool IccPutricideGasCloudAction::HandleGaseousBloatMovement(Unit* gasCloud)
             // Must be moving away, open locally, and open at range.
             if (escCloudDist > cloudDist && freeDirs >= 12 && farFreeDirs >= 6)
             {
-                commitDir(botPos.GetPositionX(), botPos.GetPositionY(), escX, escY);
+                commitDir(botPos.GetPositionX(), botPos.GetPositionY(), escX, escY, "corner");
                 botAI->Reset();
                 return MoveTo(bot->GetMapId(), escX, escY, escZ, false, false, false, false,
                               MovementPriority::MOVEMENT_COMBAT);
@@ -867,7 +888,7 @@ bool IccPutricideGasCloudAction::HandleGaseousBloatMovement(Unit* gasCloud)
         }
         if (bestRelOpen >= 0)
         {
-            commitDir(botPos.GetPositionX(), botPos.GetPositionY(), bestRelX, bestRelY);
+            commitDir(botPos.GetPositionX(), botPos.GetPositionY(), bestRelX, bestRelY, "wedge");
             botAI->Reset();
             return MoveTo(bot->GetMapId(), bestRelX, bestRelY, bestRelZ, false, false, false, false,
                           MovementPriority::MOVEMENT_COMBAT);
@@ -963,8 +984,8 @@ bool IccPutricideGasCloudAction::HandleGaseousBloatMovement(Unit* gasCloud)
 
     if (foundPath)
     {
-        commitDir(botPos.GetPositionX(), botPos.GetPositionY(),
-                  bestPos.GetPositionX(), bestPos.GetPositionY());
+        commitDir(botPos.GetPositionX(), botPos.GetPositionY(), bestPos.GetPositionX(), bestPos.GetPositionY(),
+                  "open");
         botAI->Reset();
         return MoveTo(bot->GetMapId(), bestPos.GetPositionX(), bestPos.GetPositionY(), bestPos.GetPositionZ(), false,
                       false, false, false, MovementPriority::MOVEMENT_COMBAT);
@@ -1038,8 +1059,8 @@ bool IccPutricideGasCloudAction::HandleGaseousBloatMovement(Unit* gasCloud)
 
     if (foundFallback)
     {
-        commitDir(botPos.GetPositionX(), botPos.GetPositionY(),
-                  bestFallbackPos.GetPositionX(), bestFallbackPos.GetPositionY());
+        commitDir(botPos.GetPositionX(), botPos.GetPositionY(), bestFallbackPos.GetPositionX(),
+                  bestFallbackPos.GetPositionY(), "loose");
         botAI->Reset();
         return MoveTo(bot->GetMapId(), bestFallbackPos.GetPositionX(), bestFallbackPos.GetPositionY(),
                       bestFallbackPos.GetPositionZ(), false, false, false, false,
@@ -1050,7 +1071,7 @@ bool IccPutricideGasCloudAction::HandleGaseousBloatMovement(Unit* gasCloud)
     // Better to slide along a wall than to stand and eat it.
     float lastX = botPos.GetPositionX() + dx * movementIncrement;
     float lastY = botPos.GetPositionY() + dy * movementIncrement;
-    commitDir(botPos.GetPositionX(), botPos.GetPositionY(), lastX, lastY);
+    commitDir(botPos.GetPositionX(), botPos.GetPositionY(), lastX, lastY, "straight");
     botAI->Reset();
     return MoveTo(bot->GetMapId(), lastX, lastY, botPos.GetPositionZ(), false, false, false, false,
                   MovementPriority::MOVEMENT_COMBAT);
@@ -1071,7 +1092,7 @@ bool IccPutricideGasCloudAction::HandleGroupAuraSituation(Unit* gasCloud)
         ObjectGuid currentSkull = group->GetTargetIcon(skullIconId);
         Unit* markedUnit = botAI->GetUnit(currentSkull);
         if (!markedUnit || !markedUnit->IsAlive() || markedUnit != gasCloud)
-            group->SetTargetIcon(skullIconId, bot->GetGUID(), gasCloud->GetGUID());
+            PutricideSetSkull(bot, group, gasCloud, "cloud");
     }
 
     float currentDist = gasCloud ? bot->GetDistance(gasCloud) : 0.0f;
@@ -1129,7 +1150,8 @@ bool IccPutricideAvoidMalleableGooAction::Execute(Event /*event*/)
     // candidate that clears the danger radius for all goos is chosen.
     // Only active in phase 1/2 (>35% HP) - in phase 3 bots must stack on the
     // boss for Mutated Plague healing.
-    if (!boss->HealthBelowPct(35))
+    bool const phase3 = IccPutricidePhase(bot, boss) == 3;
+    if (!phase3)
     {
         constexpr float gooDangerRadius = 8.0f;   // 5yd AoE + 3yd safety
         constexpr float puddleAvoidRadius = 6.0f;
@@ -1256,7 +1278,7 @@ bool IccPutricideAvoidMalleableGooAction::Execute(Event /*event*/)
 
     // Only stack at boss in phase 3 (<=35% HP). Above 35% bots may stand
     // anywhere; the goo flee block above handles emergencies.
-    if (!boss->HealthBelowPct(35))
+    if (!phase3)
         return false;
 
     return HandleBossPositioning(boss);
@@ -1276,7 +1298,7 @@ bool IccPutricideAvoidMalleableGooAction::HandleTankPositioning(Unit* boss)
             ObjectGuid skullGuid = group->GetTargetIcon(skullIconId);
             Unit* markedUnit = botAI->GetUnit(skullGuid);
             if (!skullGuid || !markedUnit || !markedUnit->IsAlive())
-                group->SetTargetIcon(skullIconId, bot->GetGUID(), boss->GetGUID());
+                PutricideSetSkull(bot, group, boss, "boss");
         }
     }
 
@@ -1297,7 +1319,7 @@ bool IccPutricideAvoidMalleableGooAction::HandleTankPositioning(Unit* boss)
 
 bool IccPutricideAvoidMalleableGooAction::HandleUnboundPlague(Unit* boss)
 {
-    if (boss && boss->HealthBelowPct(35))
+    if (boss && IccPutricidePhase(bot, boss) == 3)
         return false;
 
     if (!botAI->HasAura("Unbound Plague", bot))
@@ -1609,7 +1631,7 @@ bool IccPutricideAbominationAction::Execute(Event /*event*/)
 
     if (!piloting)
     {
-        if (boss->HealthBelowPct(35))
+        if (IccPutricidePhase(bot, boss) == 3)
             return false;
         if (IsSomeoneAlreadyPiloting())
             return false;

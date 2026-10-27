@@ -4,6 +4,7 @@
  * or (at your option) any later version.
  */
 
+#include "EncounterHelpers.h"
 #include "GenericSpellActions.h"
 #include "ICCActions.h"
 #include "ICCScripts.h"
@@ -13,12 +14,29 @@
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
 #include "RaidDifficulty.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Timer.h"
 #include "Vehicle.h"
 #include <array>
 #include <cmath>
 #include <map>
+#include <string>
+
+namespace
+{
+    // `rule`: the branch that gave the bot its Big Ooze (pickup, kite, none)
+    void NoteBigOozeDuty(Player* bot, char const* rule, Unit* ooze)
+    {
+        if (!RaidObs::Active())
+            return;
+
+        std::string value = rule;
+        if (ooze)
+            value += " " + RaidObs::DescribeAssignment(ooze->GetGUID());
+        RaidObs::NoteDerived(bot, "rf.bigooze", value);
+    }
+}
 
 // Rotface
 bool IccRotfaceTankPositionAction::Execute(Event /*event*/)
@@ -55,6 +73,7 @@ bool IccRotfaceTankPositionAction::Execute(Event /*event*/)
         if (bigOoze && bigOoze->IsAlive() && !assistTankAlive && !bigOozeHandled)
             return HandleAssistTankPositioning(boss);
 
+        NoteBigOozeDuty(bot, "none", nullptr);
         return PositionMainTankAndMelee(boss, smallOoze);
     }
 
@@ -66,7 +85,12 @@ bool IccRotfaceTankPositionAction::Execute(Event /*event*/)
 
 bool IccRotfaceTankPositionAction::MarkBossWithSkull(Unit* boss)
 {
+    Group* group = bot->GetGroup();
+    bool const moves = group && botAI->GetUnit(group->GetTargetIcon(RtiTargetValue::skullIndex)) != boss;
     IccEnsureIconOn(bot, botAI, RtiTargetValue::skullIndex, boss);
+    if (moves && RaidObs::Active())
+        RaidObs::NoteDerived(bot, "rf.skull", "boss " + RaidObs::DescribeAssignment(boss->GetGUID()));
+
     return false;
 }
 
@@ -136,7 +160,10 @@ bool IccRotfaceTankPositionAction::HandleAssistTankPositioning(Unit*)
     }
 
     if (activeBigOozes.empty())
+    {
+        NoteBigOozeDuty(bot, "none", nullptr);
         return false;
+    }
 
     Unit* uncollectedOoze = nullptr;
     float minUncollectedDist = FLT_MAX;
@@ -145,8 +172,6 @@ bool IccRotfaceTankPositionAction::HandleAssistTankPositioning(Unit*)
         if (ooze->GetVictim() == bot)
             continue;
 
-        if (!bot->HasAura(SPELL_SPITEFULL_FURY) && IccRaidCheat(botAI, "rf.spitefulfury"))
-            bot->AddAura(SPELL_SPITEFULL_FURY, bot);
         IccCastClassTaunt(bot, botAI, ooze);
 
         float const dist = bot->GetExactDist2d(ooze);
@@ -159,8 +184,8 @@ bool IccRotfaceTankPositionAction::HandleAssistTankPositioning(Unit*)
 
     if (uncollectedOoze)
     {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
-            bot->AddAura(SPELL_NITRO_BOOSTS, bot);
+        NoteBigOozeDuty(bot, "pickup", uncollectedOoze);
+        EncounterHelpers::UseNitroBoosts(bot);
         return MoveTo(bot->GetMapId(), uncollectedOoze->GetPositionX(), uncollectedOoze->GetPositionY(),
                       uncollectedOoze->GetPositionZ(), false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
     }
@@ -180,6 +205,7 @@ bool IccRotfaceTankPositionAction::HandleAssistTankPositioning(Unit*)
     if (!targetOoze)
         return false;
 
+    NoteBigOozeDuty(bot, "kite", targetOoze);
     return HandleBigOozeKiting(targetOoze);
 }
 
@@ -231,11 +257,7 @@ Unit* IccRotfaceTankPositionAction::FindAssignedBigOoze(Unit* /*boss*/, std::vec
 bool IccRotfaceTankPositionAction::HandleBigOozeKiting(Unit* bigOoze)
 {
     if (bigOoze->GetVictim() != bot && bigOoze->IsAlive())
-    {
-        if (!bot->HasAura(SPELL_SPITEFULL_FURY) && IccRaidCheat(botAI, "rf.spitefulfury"))
-            bot->AddAura(SPELL_SPITEFULL_FURY, bot);
         IccCastClassTaunt(bot, botAI, bigOoze);
-    }
 
     float const oozeDistance = bot->GetExactDist2d(bigOoze);
 
@@ -244,11 +266,7 @@ bool IccRotfaceTankPositionAction::HandleBigOozeKiting(Unit* bigOoze)
         bot->SetTarget(bigOoze->GetGUID());
         bot->SetFacingToObject(bigOoze);
         if (bigOoze->GetVictim() != bot)
-        {
-            if (!bot->HasAura(SPELL_SPITEFULL_FURY) && IccRaidCheat(botAI, "rf.spitefulfury"))
-                bot->AddAura(SPELL_SPITEFULL_FURY, bot);
             IccCastClassTaunt(bot, botAI, bigOoze);
-        }
         return false;
     }
 
@@ -689,8 +707,7 @@ bool IccRotfaceGroupPositionAction::PositionHeroicGrid(Unit* boss)
         float const targetX = bot->GetPositionX() + (dx / dist) * step;
         float const targetY = bot->GetPositionY() + (dy / dist) * step;
 
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
-            bot->AddAura(SPELL_NITRO_BOOSTS, bot);
+        EncounterHelpers::UseNitroBoosts(bot);
 
         return MoveTo(bot->GetMapId(), targetX, targetY, spot.GetPositionZ(), false, false, false, true,
                       MovementPriority::MOVEMENT_COMBAT);
@@ -747,8 +764,7 @@ bool IccRotfaceGroupPositionAction::PositionHeroicGrid(Unit* boss)
                     if (distToTank <= 12.0f)
                         return false;
 
-                    if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
-                        bot->AddAura(SPELL_NITRO_BOOSTS, bot);
+                    EncounterHelpers::UseNitroBoosts(bot);
 
                     return MoveTo(bot->GetMapId(), member->GetPositionX(), member->GetPositionY(),
                                   member->GetPositionZ(), false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
@@ -781,8 +797,7 @@ bool IccRotfaceMoveAwayFromExplosionAction::Execute(Event /*event*/)
         return false;
     }
 
-    if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
-        bot->AddAura(SPELL_NITRO_BOOSTS, bot);
+    EncounterHelpers::UseNitroBoosts(bot);
 
     Position const anchor = ICC_ROTFACE_CENTER_POSITION_BOSS;
 
@@ -905,6 +920,16 @@ bool IccRotfaceAvoidVileGasAction::Execute(Event /*event*/)
 {
     uint32 const now = getMSTime();
 
+    // The node runs every tick of a Vile Gas window, so a gap means the last window closed and its spot
+    // was picked against puddles and oozes that have moved since.
+    if (_hasSafeSpot && getMSTimeDiff(_lastRunMs, now) > 2000)
+    {
+        _hasSafeSpot = false;
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "rf.vilegasspot", "none");
+    }
+    _lastRunMs = now;
+
     IcecrownHelpers::IccInstanceState& st = IcecrownHelpers::IccState(bot->GetMap()->GetInstanceId());
     bool const isVictim =
         st.rotfaceVileGas.victimGuid == bot->GetGUID() &&
@@ -919,6 +944,8 @@ bool IccRotfaceAvoidVileGasAction::Execute(Event /*event*/)
     {
         if (waitIt != waitMap.end())
             waitMap.erase(waitIt);
+        if (_hasSafeSpot && RaidObs::Active())
+            RaidObs::NoteDerived(bot, "rf.vilegasspot", "none");
         _hasSafeSpot = false;
         return false;
     }
@@ -963,6 +990,8 @@ bool IccRotfaceAvoidVileGasAction::Execute(Event /*event*/)
         constexpr float stepAngle = 2.0f * static_cast<float>(M_PI) / sweepSteps;
 
         float chosenAngle = baseAngle;
+        // `offset N`: 15 degree steps the bot turned off its own bearing from the centre
+        std::string rule = "blocked";
         for (int32 i = 0; i < sweepSteps; ++i)
         {
             int32 const sign = (i % 2 == 0) ? 1 : -1;
@@ -974,6 +1003,7 @@ bool IccRotfaceAvoidVileGasAction::Execute(Event /*event*/)
             if (isSafe(x, y, z))
             {
                 chosenAngle = angle;
+                rule = "offset " + std::to_string(sign * magnitude);
                 break;
             }
         }
@@ -982,12 +1012,13 @@ bool IccRotfaceAvoidVileGasAction::Execute(Event /*event*/)
                              anchor.GetPositionY() + escapeDistance * std::sin(chosenAngle),
                              anchor.GetPositionZ());
         _hasSafeSpot = true;
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "rf.vilegasspot", rule);
     }
 
     if (bot->GetExactDist2d(_safeSpot) > 2.0f)
     {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
-            bot->AddAura(SPELL_NITRO_BOOSTS, bot);
+        EncounterHelpers::UseNitroBoosts(bot);
 
         return MoveTo(bot->GetMapId(), _safeSpot.GetPositionX(), _safeSpot.GetPositionY(),
                       _safeSpot.GetPositionZ(), false, false, false, false,

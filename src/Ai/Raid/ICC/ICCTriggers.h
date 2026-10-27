@@ -195,12 +195,11 @@ enum SpellIdsICC
     SPELL_OOZE_FLOOD                    = 71215,
     SPELL_UNSTABLE_OOZE_EXPLOSION       = 69839,
     SPELL_OOZE_FLOOD_VISUAL             = 69785,
-    // Cast by Professor Putricide from balcony during Rotface heroic.
-    // Single ID (no difficulty variants in spelldifficulty_dbc).
+    // Festergut's Vile Gas, which Putricide casts from the balcony on Rotface heroic. The client DBC
+    // remaps it per difficulty (69240/71218/73019/73020), so a cast hook sees 73019 or 73020 there.
     SPELL_VILE_GAS_H                    = 69240,
 
     // Putricide
-    SPELL_MALLEABLE_GOO                 = 70852,
     SPELL_GROW_AURA                     = 70347,
 
     // Blood Prince Council
@@ -257,12 +256,9 @@ inline constexpr uint32 DEFILE_CAST_ID         = 72762;
 inline constexpr uint32 DEFILE_NPC_ID          = 38757;
 inline constexpr size_t DEFILE_AURA_COUNT      = 4;
 
-// Malleable Goo (Putricide / Festergut-heroic). Multiple variants because of
-// SpellDifficulty remapping and the balcony stalker variant.
+// Malleable Goo as Putricide casts it in his own fight and from the balcony on Festergut heroic. Neither
+// id has a spelldifficulty row, so both hold on every difficulty despite the first one's name.
 inline constexpr uint32 SPELL_MALLEABLE_GOO_10N     = 70852;
-inline constexpr uint32 SPELL_MALLEABLE_GOO_25N     = 72297;
-inline constexpr uint32 SPELL_MALLEABLE_GOO_10H     = 74280;
-inline constexpr uint32 SPELL_MALLEABLE_GOO_25H     = 74281;
 inline constexpr uint32 SPELL_MALLEABLE_GOO_BALCONY = 72296;
 
 // All fanatics and adherents entry ids Lady Deathwhisper
@@ -354,17 +350,13 @@ public:
 };
 
 //FESTERGUT
+// Festergut's spore cycle: true while any group member carries Gas Spore. Publishes fg.phase.
+bool IccFestergutSporeCycle(Player* bot);
+
 class IccFestergutGroupPositionTrigger : public Trigger
 {
 public:
     IccFestergutGroupPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, "icc festergut group position") {}
-    bool IsActive() override;
-};
-
-class IccFestergutMainTankGastricBloatTrigger : public Trigger
-{
-public:
-    IccFestergutMainTankGastricBloatTrigger(PlayerbotAI* botAI) : Trigger(botAI, "icc festergut main tank gastric bloat") {}
     bool IsActive() override;
 };
 
@@ -402,11 +394,14 @@ class IccRotfaceMoveAwayFromExplosionTrigger : public Trigger
 {
 public:
     IccRotfaceMoveAwayFromExplosionTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, "icc rotface move away from explosion"), _castEndTime(0), _wasCasting(false) {}
+        : Trigger(botAI, "icc rotface move away from explosion"), _castEndMs(0), _castEnded(false), _wasCasting(false)
+    {
+    }
     bool IsActive() override;
 
 private:
-    time_t _castEndTime;
+    uint32 _castEndMs;
+    bool _castEnded;
     bool _wasCasting;
 };
 
@@ -419,6 +414,12 @@ public:
 };
 
 //PP
+// Professor Putricide's phase, 1 to 3, from the health his DamageTaken hook tests: phase 2 at 80% and
+// below, phase 3 at 35% and below. Publishes pp.phase.
+uint8 IccPutricidePhase(Player* bot, Unit* boss);
+// Drops the bot's committed Gaseous Bloat flee direction, so the next bloat starts without one.
+void IccPutricideForgetBloatFlee(Player* bot);
+
 class IccPutricideVolatileOozeTrigger : public Trigger
 {
 public:

@@ -411,12 +411,14 @@ public:
     IccRotfaceAvoidVileGasAction(PlayerbotAI* botAI, std::string const name = "icc rotface avoid vile gas")
         : MovementAction(botAI, name),
           _safeSpot(0.0f, 0.0f, 0.0f),
-          _hasSafeSpot(false) {}
+          _hasSafeSpot(false),
+          _lastRunMs(0) {}
     bool Execute(Event event) override;
 
 private:
     Position _safeSpot;
     bool _hasSafeSpot;
+    uint32 _lastRunMs;
 };
 
 //PP

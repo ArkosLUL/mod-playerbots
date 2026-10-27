@@ -13,6 +13,7 @@
 #include "Playerbots.h"
 #include "RaidDifficulty.h"
 #include "RtiValue.h"
+#include "SpellMgr.h"
 #include "Vehicle.h"
 #include <unordered_map>
 #include <unordered_set>
@@ -147,8 +148,9 @@ bool IccValithriaGroupAction::Execute(Event /*event*/)
         if (!z || !z->IsAlive())
             continue;
 
+        uint32 const acidBurst = sSpellMgr->GetSpellIdForDifficulty(SPELL_ACID_BURST, z);
         bool const exploding =
-            z->HealthBelowPct(5) || z->FindCurrentSpellBySpellId(SPELL_ACID_BURST) || z->HasAura(SPELL_ACID_BURST);
+            z->HealthBelowPct(5) || z->FindCurrentSpellBySpellId(acidBurst) || z->HasAura(acidBurst);
         float const d = bot->GetExactDist2d(z);
 
         if (exploding && d < 20.0f && (!explodingZombie || d < bot->GetExactDist2d(explodingZombie)))

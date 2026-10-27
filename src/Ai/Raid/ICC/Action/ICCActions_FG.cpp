@@ -12,9 +12,11 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
 #include <limits>
+#include <string>
 
 // Festergut
 bool IccFestergutGroupPositionAction::Execute(Event /*event*/)
@@ -79,7 +81,7 @@ bool IccFestergutGroupPositionAction::Execute(Event /*event*/)
 
 bool IccFestergutGroupPositionAction::HasSporesInGroup()
 {
-    return IccAnyGroupMemberHasAura(bot, SPELL_GAS_SPORE);
+    return IccFestergutSporeCycle(bot);
 }
 
 bool IccFestergutGroupPositionAction::PositionNonTankMembers()
@@ -270,6 +272,9 @@ Position IccFestergutSporeAction::CalculateSpreadPosition()
         }
     }
 
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "fg.sporespot", std::to_string(state.currentSlot));
+
     // Unique angle based on bot's GUID
     float angle = (bot->GetGUID().GetCounter() % 16) * (M_PI / 8);
 
@@ -429,7 +434,7 @@ bool IccFestergutAvoidMalleableGooAction::Execute(Event /*event*/)
     // tank spot, so we ignore melee allies (the tank/melee pile would reject
     // every nearby candidate). When no spore is active, melee also spread.
     constexpr float botSpacing = 10.0f;
-    bool const sporeActive = IccAnyGroupMemberHasAura(bot, SPELL_GAS_SPORE);
+    bool const sporeActive = IccFestergutSporeCycle(bot);
 
     std::vector<Position> alliesToSpace;
     if (Group* group = bot->GetGroup())
