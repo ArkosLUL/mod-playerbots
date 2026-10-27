@@ -109,6 +109,8 @@ void IccApplyHeroicBuffToMember(Player* bot, Player* member, bool applyPainSupp,
 // every human in its instance.
 void IccStripExperienced(Player* bot);
 bool IccBossCastingBlisteringCold(Unit* boss);
+// 1 for the first Remorseless Winter, 2 for the second, 0 for none: the aura or its 2.5 s cast.
+uint8 IccRemorselessWinterOf(Unit* boss);
 bool IccBossHasRemorselessWinter(Unit* boss);
 bool IccBossCastingRemorselessWinter(Unit* boss);
 bool IccAnyGroupMemberHasAura(Player* bot, uint32 spellId);

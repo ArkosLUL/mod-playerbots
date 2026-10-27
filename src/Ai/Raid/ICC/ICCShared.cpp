@@ -242,34 +242,45 @@ bool IccBossCastingBlisteringCold(Unit* boss)
                     boss->FindCurrentSpellBySpellId(SPELL_BLISTERING_COLD4));
 }
 
-bool IccBossCastingRemorselessWinter(Unit* boss)
+namespace
 {
-    if (!boss || !boss->HasUnitState(UNIT_STATE_CASTING))
-        return false;
+    // 1 or 2 by the winter's row, 0 when the boss casts neither
+    uint8 IccRemorselessWinterCastOf(Unit* boss)
+    {
+        if (!boss || !boss->HasUnitState(UNIT_STATE_CASTING))
+            return 0;
 
-    return boss->FindCurrentSpellBySpellId(SPELL_REMORSELESS_WINTER1) ||
-           boss->FindCurrentSpellBySpellId(SPELL_REMORSELESS_WINTER2) ||
-           boss->FindCurrentSpellBySpellId(SPELL_REMORSELESS_WINTER3) ||
-           boss->FindCurrentSpellBySpellId(SPELL_REMORSELESS_WINTER4) ||
-           boss->FindCurrentSpellBySpellId(SPELL_REMORSELESS_WINTER5) ||
-           boss->FindCurrentSpellBySpellId(SPELL_REMORSELESS_WINTER6) ||
-           boss->FindCurrentSpellBySpellId(SPELL_REMORSELESS_WINTER7) ||
-           boss->FindCurrentSpellBySpellId(SPELL_REMORSELESS_WINTER8);
+        for (uint32 const spellId : ICC_LK_FIRST_WINTER)
+            if (boss->FindCurrentSpellBySpellId(spellId))
+                return 1;
+
+        for (uint32 const spellId : ICC_LK_SECOND_WINTER)
+            if (boss->FindCurrentSpellBySpellId(spellId))
+                return 2;
+
+        return 0;
+    }
 }
 
-bool IccBossHasRemorselessWinter(Unit* boss)
+bool IccBossCastingRemorselessWinter(Unit* boss) { return IccRemorselessWinterCastOf(boss) != 0; }
+
+uint8 IccRemorselessWinterOf(Unit* boss)
 {
     if (!boss)
-        return false;
+        return 0;
 
-    if (boss->HasAura(SPELL_REMORSELESS_WINTER1) || boss->HasAura(SPELL_REMORSELESS_WINTER2) ||
-        boss->HasAura(SPELL_REMORSELESS_WINTER3) || boss->HasAura(SPELL_REMORSELESS_WINTER4) ||
-        boss->HasAura(SPELL_REMORSELESS_WINTER5) || boss->HasAura(SPELL_REMORSELESS_WINTER6) ||
-        boss->HasAura(SPELL_REMORSELESS_WINTER7) || boss->HasAura(SPELL_REMORSELESS_WINTER8))
-        return true;
+    for (uint32 const spellId : ICC_LK_FIRST_WINTER)
+        if (boss->HasAura(spellId))
+            return 1;
 
-    return IccBossCastingRemorselessWinter(boss);
+    for (uint32 const spellId : ICC_LK_SECOND_WINTER)
+        if (boss->HasAura(spellId))
+            return 2;
+
+    return IccRemorselessWinterCastOf(boss);
 }
+
+bool IccBossHasRemorselessWinter(Unit* boss) { return IccRemorselessWinterOf(boss) != 0; }
 
 bool IccAnyGroupMemberHasAura(Player* bot, uint32 spellId)
 {
