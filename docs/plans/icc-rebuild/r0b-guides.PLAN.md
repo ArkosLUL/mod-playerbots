@@ -97,14 +97,46 @@ the cache directory above (not in git).
 
 ## Task list
 
+- [x] `tools/guides/guide_text.py` with `fetch` and `convert`, stdlib only, UTF-8 output.
+- [x] Manifest `tools/guides/sources/icc.json`: 17 slugs (the 15 contract slugs plus the overview
+  `icecrown-citadel`), 38 source URLs, 13 Wowhead guide URLs.
+- [x] Tests `tools/guides/tests/test_guide_text.py` on synthetic fixtures (Wowhead saved page, MHTML,
+  WordPress, Blogger, robots refusals, Wowhead refusal, title fallback, non-ASCII, fetch/convert/INDEX).
+- [x] Cache filled with `fetch --images` and `convert`; `INDEX.md` written.
+- [x] `docs/systems/guide-sources.md`, linked from `docs/README.md`.
+
 ## Decisions for review
+
+| Choice | Source | Alternative |
+|---|---|---|
+| noobtoboss is not used: its robots.txt disallows `ClaudeBot` (checked through the tool 2026-10-27). Lanes that list it get Warcraft Tavern 25/10 and instant-carry. | robots rule in this brief | The user saves noobtoboss pages by hand; `convert` would need a saved-pages folder for non-Wowhead sites |
+| `zamimg.com` is refused like `wowhead.com`: it is Wowhead's image and icon host. | "never wowhead.com by any route" | Fetch it under its own robots.txt |
+| The overview slug is `icecrown-citadel`, the raid's doc directory name. | `docs/raids/icecrown-citadel/` | `overview` |
+| Warcraft Tavern's 10-man overview exists at `icecrown-citadel-10-raid-guide/` and is listed as `wt10`. Every boss `-10` page is a real 10-man edition (e.g. Marrowgar: 3 players at range, 1 impale). | fetched pages | 25-man overview only |
+| Sections: instant-carry's overview is cut to "Gunship Battle" for the gunship slug and kept whole for the overview; the Svalna blog to "The Frostwing Halls"; the weekly-quest blog to "Securing the Ramparts" for the frost giant. The Sindragosa gauntlet and the Stinky and Precious blogs stay whole: their parts have no heading of their own. | page structure | Paragraph-anchored sections |
+| Rimefang and Spinestalker have no source of their own; their text is in `sindragosa-gauntlet.blog.md`. | the blog | A `blog` source on the `sindragosa` slug |
+| Content hidden by CSS or `hidden` is kept: tabs and accordions hide every panel but one until clicked. | Warcraft Tavern markup | Drop hidden content |
+| A bold-only line counts as a heading below every real one, for sections in blogs. | Blogger and WordPress.com posts | Real headings only |
+| A robots.txt that fails or answers 5xx refuses the host; 401, 403 and 429 on it stop the host. | `urllib.robotparser`'s own handling, made stricter | Treat a missing answer as allow-all |
+| Images with a declared side under 64 px are dropped as icons. | Warcraft Tavern's 18 px spell icons | Keep every image |
 
 ## Carried over
 
 - `r14-closeout`: `docs/plans/toc-rework/toc-rework.PLAN.md` says "Wowhead blocks automated reads".
   The real reason is its robots opt-out for Anthropic's agents. Another session has that file dirty,
   so it isn't edited here.
+- Merge stage: the briefs of `r3`, `r4`, `r11`, `r12` and `r13` list noobtoboss among their guides; it
+  is refused by robots.txt, so those lanes report it as a missing source.
+- User: no Wowhead page is saved yet. `INDEX.md` lists the 13 URLs to save into
+  `build-icc-wt/_guides/wowhead/`; the next `convert` picks them up.
 
 ## Known gaps
+
+- Wowhead's body selectors (`#guide-body`, `.guide-body`, …) are unverified: no saved page existed to
+  check. A miss falls back to the densest text block; compare the first converted page with the saved
+  one.
+- Nothing covers the Crimson Hall trash (`blood-prince-trash`).
+- Warcraft Tavern pages carry no author or update date; their text files show the fetch date only.
+- `convert` reads saved pages for Wowhead only.
 
 ## Blocked

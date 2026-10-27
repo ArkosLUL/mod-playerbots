@@ -1,0 +1,132 @@
+{
+  "raid": "icc",
+  "name": "Icecrown Citadel",
+  "slugs": {
+    "icecrown-citadel": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/icecrown-citadel-25-raid-guide/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/icecrown-citadel-10-raid-guide/"},
+        {"tag": "ntb", "url": "https://noobtoboss.com/icecrown-citadel-guide/"},
+        {"tag": "ic", "url": "https://instant-carry.com/blog/wotlk-classic-icecrown-citadel-guide/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/overview",
+      "wowhead_title": "icecrown citadel"
+    },
+    "lord-marrowgar": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/lord-marrowgar/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/lord-marrowgar-10/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/lord-marrowgar-strategy"
+    },
+    "lady-deathwhisper": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/lady-deathwhisper/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/lady-deathwhisper-10/"},
+        {"tag": "ntb", "url": "https://noobtoboss.com/lady-deathwhisper-guide/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/lady-deathwhisper-strategy"
+    },
+    "icecrown-gunship-battle": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/gunship-battle/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/gunship-battle-10/"},
+        {"tag": "ntb", "url": "https://noobtoboss.com/gunship-battle-guide/"},
+        {"tag": "ic", "url": "https://instant-carry.com/blog/wotlk-classic-icecrown-citadel-guide/",
+         "sections": ["Gunship Battle"]}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/gunship-battle-strategy"
+    },
+    "deathbringer-saurfang": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/deathbringer-saurfang/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/deathbringer-saurfang-10/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/deathbringer-saurfang-strategy"
+    },
+    "festergut": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/festergut/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/festergut-10/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/festergut-strategy"
+    },
+    "rotface": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/rotface/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/rotface-10/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/rotface-strategy"
+    },
+    "professor-putricide": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/professor-putricide/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/professor-putricide-10/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/professor-putricide-strategy"
+    },
+    "blood-prince-council": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/blood-prince-council/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/blood-prince-council-10/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/blood-prince-council-strategy"
+    },
+    "blood-queen-lana-thel": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/blood-queen-lanathel/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/blood-queen-lanathel-10/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/blood-queen-lanathel-strategy"
+    },
+    "sister-svalna": {
+      "sources": [
+        {"tag": "blog", "url": "http://mischiefmagicandrocketscience.blogspot.com/2010/09/mages-guide-to-icecrown-citadel-part_18.html",
+         "sections": ["The Frostwing Halls"]}
+      ]
+    },
+    "valithria-dreamwalker": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/valithria-dreamwalker/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/valithria-dreamwalker-10/"},
+        {"tag": "ntb", "url": "https://noobtoboss.com/valithria-dreamwalker-guide/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/valithria-dreamwalker-strategy"
+    },
+    "sindragosa": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/sindragosa/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/sindragosa-10/"},
+        {"tag": "ntb", "url": "https://noobtoboss.com/sindragosa-guide-icc/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/sindragosa-strategy"
+    },
+    "the-lich-king": {
+      "sources": [
+        {"tag": "wt25", "url": "https://www.warcrafttavern.com/wotlk/guides/the-lich-king/"},
+        {"tag": "wt10", "url": "https://www.warcrafttavern.com/wotlk/guides/the-lich-king-10/"},
+        {"tag": "ntb", "url": "https://noobtoboss.com/the-lich-king-guide-icc-raid-wotlk-classic/"}
+      ],
+      "wowhead": "https://www.wowhead.com/wotlk/guide/raids/icecrown-citadel/the-lich-king-strategy"
+    },
+    "sindragosa-gauntlet": {
+      "sources": [
+        {"tag": "blog", "url": "http://mischiefmagicandrocketscience.blogspot.com/2010/09/mages-guide-to-icecrown-citadel-part_18.html"}
+      ]
+    },
+    "blood-prince-trash": {
+      "note": "no guide found that covers the Crimson Hall trash"
+    },
+    "stinky-and-precious": {
+      "sources": [
+        {"tag": "blog", "url": "https://battlechicken.wordpress.com/2010/01/14/icecrown-citadel-the-plagueworks-getting-there/"}
+      ]
+    },
+    "rotting-frost-giant": {
+      "sources": [
+        {"tag": "blog", "url": "https://dontstandinthefire.wordpress.com/2010/02/04/guide-to-completing-the-icecrown-citadel-weekly-raid-quests/",
+         "sections": ["Securing the Ramparts"]}
+      ]
+    }
+  }
+}
