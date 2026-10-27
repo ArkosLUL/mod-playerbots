@@ -96,7 +96,7 @@ table when a fact disproves one.
 | Sindragosa gauntlet | 13 | `sindragosa-gauntlet` | `sg.` |
 | Blood Prince trash | 14 | `blood-prince-trash` | `bpc.` |
 | Stinky and Precious | — (`MarkPull`) | `stinky-and-precious` | `dogs.` |
-| Rotting Frost Giant | — (`MarkPull`) | `rotting-frost-giant` | `icc.` |
+| Rotting Frost Giant | — (`MarkPull`) | `rotting-frost-giant` | `rfg.` (was `icc.` until `i1-lower-spire`) |
 | raid-wide | any | — | `icc.`, matches every ICC slug |
 
 Each boss publishes its phase as `<prefix>.phase`.

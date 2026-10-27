@@ -19,6 +19,12 @@ Run the boss lane steps for `lord-marrowgar`, `lady-deathwhisper`, `rotting-fros
      each such caller now risks in its boss doc; don't redesign it.
    - `IccStripExperienced` strips human group members too, so nobody keeps Experienced (71188) or 1%
      Threat (70115) once the heroic fight ends.
+1b. **Frost Giant prefix `icc.` → `rfg.`** (user's call after wave 1). Under the shared raid-wide
+   `icc.` prefix, `--probes` reports every giant key as silent on every ICC pull. Move all giant keys
+   to `rfg.`: the C++ keys (`icc.deathplague` → `rfg.deathplague`, `ICCActions_LDW.cpp` ~781, plus any
+   giant probe), `ICC_KEY_PREFIXES["rotting-frost-giant"]` and its comment in
+   `tools/botobs/raidobs/encounter.py`, the tests that pin it, the README's naming and cheat tables,
+   and any `icc.` giant mention in `docs/systems/observability.md`. `icc.` stays raid-wide only.
 2. **Phases.**
    - Marrowgar: Bone Storm, from the boss's aura.
    - Deathwhisper: the Mana Barrier phase is read as `HealthAbovePct(95)` today. Check the core
@@ -45,9 +51,7 @@ Run the boss lane steps for `lord-marrowgar`, `lady-deathwhisper`, `rotting-fros
 5. **Bugs.**
    - The Gunship unstuck (`ICCActions_GSB.cpp` ~200) uses a same-map `TeleportTo`, which drops
      combat. Make it `NearTeleportTo`, and put the bot back over its own deck spot if the core allows.
-   - pblint warns that `IccDbsMainTankRuneOfBloodTrigger` (`ICCTriggers.cpp`) calls
-     `IsAssistTankOfIndex` without `ignoreDeadPlayers`. Wave 1 dropped its creator, so delete the dead
-     class if nothing else uses it.
+   - The dead `IccDbsMainTankRuneOfBloodTrigger` class is already gone (wave 1).
 
 ## Owns
 
@@ -56,7 +60,9 @@ files. `ICCShared.{h,cpp}` for scope item 1. Readers `bosses/lord_marrowgar.py`,
 `lady_deathwhisper.py`, `rotting_frost_giant.py`, `icecrown_gunship_battle.py`,
 `deathbringer_saurfang.py` with their tests. Docs `docs/raids/icecrown-citadel/lord-marrowgar.md`,
 `lady-deathwhisper.md`, `rotting-frost-giant.md`, `icecrown-gunship-battle.md`,
-`deathbringer-saurfang.md`. This brief.
+`deathbringer-saurfang.md`. This brief. For item 1b only: the giant row and comment in
+`raidobs/encounter.py`, the tests that pin it, and the giant lines of the ICC README and
+`observability.md`.
 
 ## Task list
 
