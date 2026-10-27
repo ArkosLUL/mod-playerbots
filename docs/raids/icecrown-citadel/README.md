@@ -50,7 +50,7 @@ boss state renames a trace open under another name, except one `MarkPull` opened
 | 9 | [Sister Svalna](sister-svalna.md) | `BossAI::_JustEngagedWith` | `sister-svalna` | `ss.` |
 | 10 | [Valithria Dreamwalker](valithria-dreamwalker.md) | her `JustEnteredCombat`, as the adds reach her | `valithria-dreamwalker` | `vd.` |
 | 11 | [Sindragosa](sindragosa.md) | her `JustEngagedWith` | `sindragosa` | `sg.` |
-| 12 | The Lich King | his `JustEngagedWith` | `the-lich-king` | `lk.` |
+| 12 | [The Lich King](the-lich-king.md) | his `JustEngagedWith` | `the-lich-king` | `lk.` |
 | 13 | [Sindragosa gauntlet](sindragosa.md#sindragosa-gauntlet) | the gauntlet's `DoAction(ACTION_START_GAUNTLET)` | `sindragosa-gauntlet` | `sg.` |
 | 14 | [Blood Prince trash](blood-prince-council.md#blood-prince-trash) | never: `NOT_STARTED`, then `DONE` when the trash dies | `blood-prince-trash` | `bpc.` |
 | — | [Stinky and Precious](stinky-and-precious.md) | no boss state | `stinky-and-precious` | `dogs.` |
@@ -83,8 +83,6 @@ says what replaced it.
 
 | Key | Class | Gate | Sites |
 |---|---|---|---|
-| `lk.nitro` | remove | raid | `IccLichKingWinterAction`, `IccLichKingAddsAction::HandleDefileMechanics` (on the Defile target, humans too), `HandleVileSpiritMechanics` |
-| `lk.painsuppression`, `lk.aegis` | remove | raid | `HandleVileSpiritMechanics`, beside its Nitro, no replacement |
 | `ldw.cyclone` | gap | raid | `IccAddsLadyDeathwhisperAction`: Cyclone on a Dominate Mind victim, bot or human |
 | `ldw.insignificance` | gap | raid | same action: tank strips Touch of Insignificance |
 | `rfg.deathplague` | gap | raid | `IccRottingFrostGiantTankPositionAction`: strips Death Plague |
@@ -99,6 +97,7 @@ says what replaced it.
 | `lk.ragingspiritkill` | gap | raid | `IccLichKingWinterAction`: kills the fullest Raging Spirit past two |
 | `lk.wickedspiritkill` | gap | raid | `HandleSpiritMarkingAndTargeting`: kills the star Wicked Spirit |
 | `lk.hoj` | gap | raid | `HandleAssistTankAddManagement`: Hammer of Justice on Shamblings from any class |
+| `lk.frostmourneescape` | gap | raid | `HandleTeleportationFixes`, normal: snaps a Harvest Soul victim out of Frostmourne on its first tick, skipping the Spirit Warden |
 | `ldw.nothreat`, `ldw.spitefulfury` | buffs | iccbuffs | `IccAddsLadyDeathwhisperAction` |
 | `pp.heroicbuff`, `pp.spitefulfury` | buffs | iccbuffs | `IccPutricideMalleableGooTrigger`, on every member |
 | `sg.heroicbuff`, `sg.spitefulfury` | buffs | iccbuffs | `IccSindragosaGroupPositionTrigger`, on every member |
@@ -128,7 +127,8 @@ Each boss doc says what its callers risk.
 
 Documented, not wrapped: Valithria's floor snaps (`IccValithriaPortalAction`,
 `IccValithriaHealAction`) skip fall damage through `NearTeleportTo`, which keeps combat; `IccLichKingAddsAction`'s Val'kyr edge-dive puts the
-carry aura on itself and suicides at the bottom. Not cheats: spell clicks and object use in range,
+carry aura on itself and suicides at the bottom; the Lich King's 1 yd platform snap cancels knockbacks
+mid-flight ([the-lich-king.md](the-lich-king.md#unstucks)). Not cheats: spell clicks and object use in range,
 real item use, own-aura cancels, the spell listeners.
 
 ## Per-instance state

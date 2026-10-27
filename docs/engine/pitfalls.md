@@ -494,12 +494,16 @@ The recurring fatal shape is **a mechanic wired to a cast the bots cannot observ
 - **Heigan**: the dance once advanced on the boss casting Eruption (29371). He never casts it — the
   instance script erupts floor GameObjects (`HeiganEruptSections`), so every bot parked on one
   waypoint for the whole 90 s phase.
-- **Noth**: the threat-reset protection keyed on catching `UNIT_STATE_CASTING` with Blink. The core
-  casts it as `CastSpell(me, SPELL_BLINK, true)` — **a triggered instant never sets
-  `UNIT_STATE_CASTING`** and is gone before the next bot tick.
+- **Noth**: the threat-reset protection keyed on catching `UNIT_STATE_CASTING` with Blink, which the
+  core casts as `CastSpell(me, SPELL_BLINK, true)`, a triggered instant.
+- **The Lich King**: the spirit-flee guard read `FindCurrentSpellBySpellId` on Harvest Soul, a
+  non-triggered instant.
 
-Find the adjacent *non-triggered* cast (Noth's Cripple 29212) or the resulting aura, or build a timer
-model anchored on a phase edge.
+**An instant (`CastingTimeIndex` 1), triggered or not, never shows as `UNIT_STATE_CASTING` or a
+current spell to a bot tick**: `Spell::prepare` casts it on the spot. Check `CastingTimeIndex` in
+`spell.reference.csv` before keying on a cast (Noth's Cripple 29212 is instant too). Read a cast with a
+cast time, the resulting aura (Harvest Soul's 6 s victim aura), or build a timer model anchored on a
+phase edge.
 
 Related traps:
 
@@ -617,7 +621,15 @@ Related traps:
   floor-fall rescue built on it drops the bot out of the fight. Use `NearTeleportTo`, which passes it
   (and returns `void`, so return `true` after). It keeps the bot's transport and stale offset by
   default (`TELE_TO_NOT_LEAVE_TRANSPORT`): for a fall off one, pass `removeTransport = true` and let
-  `PlayerbotAI`'s 1 s `GetTransportForPos` check re-board it.
+  `PlayerbotAI`'s 1 s `GetTransportForPos` check re-board it. Both also exit the bot's vehicle unless
+  given `TELE_TO_NOT_LEAVE_VEHICLE` (`NearTeleportTo`'s `vehicleTeleport = true`), so a snap that can
+  fire on a passenger frees it.
+- **A position-keyed unstuck is a hidden cheat wherever legit movement trips it.**
+  - "Far from the encounter area" also fires where the script sends the bot: the Lich King's snap-back
+    pulled every normal-mode Harvest Soul victim out of Frostmourne on its first tick. Check every place the
+    script teleports players first.
+  - A Z band around the floor fires on every jump and knockback, teleporting the bot down mid-flight.
+    Test only below the floor; narrowing an existing band to that changes play, so log it.
 - **A direct `Attack()` has no out-of-combat guard** and reaches `SightDistance` (100 yd), so every
   branch of a resolver feeding it needs an in-combat unit, or the raid pulls itself
   ([kologarn.md](../raids/ulduar/kologarn.md)).
