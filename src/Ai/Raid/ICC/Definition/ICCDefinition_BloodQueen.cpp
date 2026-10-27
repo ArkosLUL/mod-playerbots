@@ -22,13 +22,13 @@ void DefineBloodQueen(EncounterBuilder& e)
     e.Node<IccBqlPactOfDarkfallenTrigger, IccBqlPactOfDarkfallenAction>(ACTION_RAID + 1);
     e.Node<IccBqlVampiricBiteTrigger, IccBqlVampiricBiteAction>(ACTION_EMERGENCY + 5);
 
-    e.Multiplier<IccBqlMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<IccBqlMultiplier>(Family::AnyAction);
 }
 }  // namespace
 
 EncounterDefinition const& IccBloodQueenDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_BLOOD_QUEEN_LANA_THEL, IccPassThroughGate,
+    static EncounterDefinition const definition(ICC_BOSS_BLOOD_QUEEN_LANA_THEL, BossStateGate,
                                                 "blood-queen-lana-thel", &DefineBloodQueen);
     return definition;
 }

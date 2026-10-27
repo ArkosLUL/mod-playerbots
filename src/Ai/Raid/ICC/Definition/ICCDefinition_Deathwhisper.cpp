@@ -23,13 +23,13 @@ void DefineDeathwhisper(EncounterBuilder& e)
     e.Node<IccLadyDeathwhisperTrigger, IccAddsLadyDeathwhisperAction>(ACTION_RAID + 3);
     e.Node<IccLadyDeathwhisperTrigger, IccShadeLadyDeathwhisperAction>(ACTION_RAID + 4);
 
-    e.Multiplier<IccLadyDeathwhisperMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<IccLadyDeathwhisperMultiplier>(Family::AnyAction);
 }
 }  // namespace
 
 EncounterDefinition const& IccDeathwhisperDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_LADY_DEATHWHISPER, IccPassThroughGate,
+    static EncounterDefinition const definition(ICC_BOSS_LADY_DEATHWHISPER, BossStateGate,
                                                 "lady-deathwhisper", &DefineDeathwhisper);
     return definition;
 }

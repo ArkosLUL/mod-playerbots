@@ -6,10 +6,11 @@
 
 What the generic views miss here:
 
-- **No trace opens under this slug today.** Boss state 14 goes `NOT_STARTED` then `DONE` when the
-  fourth of the Darkfallen Advisor, Archmage, Blood Knight and Noble guarding the Crimson Hall door
-  dies, never `IN_PROGRESS`, and none of the trash is boss-flagged or opens a `MarkPull`. Its `DONE`
-  only closes whatever trace is open, as `kill`.
+- **A hook opens the trace, not the boss state.** Boss state 14 goes `NOT_STARTED` then `DONE` when
+  the fourth of the Darkfallen Advisor, Archmage, Blood Knight and Noble guarding the Crimson Hall
+  door dies, never `IN_PROGRESS`, and none of the trash is boss-flagged. So `ICCScripts.cpp` calls
+  `MarkPull` when any of those four entries engages a player. The `DONE` closes the pull that kills
+  the last guard as `kill`; any other closes `idle`.
 - **The strategy has no trash code**, so the trash publishes no phase and no probe. `bpc` is the
   council's prefix too: a `bpc.*` key here is council code running in a trash pull.
 """

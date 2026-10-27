@@ -39,7 +39,7 @@ ROW_TRIGGER_NAME = re.compile(r'\.Node\(\s*"([^"]+)"')
 ENCOUNTERS = tuple(ICC_KEY_PREFIXES)
 
 # ICC triggers that belong to no encounter, so they lead with no ICC_PREFIXES key.
-RAID_WIDE_TRIGGERS: frozenset[str] = frozenset()
+RAID_WIDE_TRIGGERS: frozenset[str] = frozenset({"icc opener swing", "icc opener redirect", "icc resistance aura"})
 
 # The names a pull can file under when no boss-id table named it: DungeonEncounter.dbc's names on
 # normal, the creature's on heroic, the captain's for the gunship and the creature MarkPull was given.

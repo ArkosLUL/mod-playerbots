@@ -22,6 +22,7 @@
 #include "Playerbots.h"
 #include "PositionValue.h"
 #include "PullStrategy.h"
+#include "RaidDefensive.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "SharedDefines.h"
@@ -32,7 +33,6 @@
 #include "ThreatManager.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
-#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_Staging.h"
@@ -2220,7 +2220,7 @@ void DealDivineSacrifice(FactionChampionsDefenceState& state, std::vector<Member
         for (size_t i = 0; i < casters.size(); ++i)
         {
             Player* caster = casters[i].player;
-            if (taken[i] || caster->getClass() != CLASS_PALADIN || !ToCHasDivineGuardian(caster) ||
+            if (taken[i] || caster->getClass() != CLASS_PALADIN || !RaidHasDivineGuardian(caster) ||
                 caster->GetHealthPct() < SACRIFICE_MIN_HEALTH_PCT || !SpellReady(caster, SPELL_DIVINE_SACRIFICE) ||
                 caster->GetExactDist(member.player) > reach)
                 continue;
@@ -3197,7 +3197,7 @@ Unit* FactionChampionsBattleResTarget(PlayerbotAI* botAI, uint32& spellId)
     return corpse && !corpse->IsAlive() ? corpse : nullptr;
 }
 
-bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
+bool FactionChampionsPersonalHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
 {
     FactionChampionsDefenceState* state = Refresh(botAI);
     if (!state)
@@ -3230,7 +3230,7 @@ bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
 
     uint32 const now = getMSTime();
     uint32 const health = bot->GetHealth();
-    float const floor = bot->GetMaxHealth() * TOC_DEFENSIVE_FLOOR_PCT / 100.0f;
+    float const floor = bot->GetMaxHealth() * RAID_DEFENSIVE_FLOOR_PCT / 100.0f;
     float projected = 0.0f;
     auto const log = state->healthLog.find(bot->GetGUID());
     if (log != state->healthLog.end())

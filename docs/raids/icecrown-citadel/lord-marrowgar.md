@@ -1,8 +1,8 @@
 # Lord Marrowgar
 
-Boss id 0, slug `lord-marrowgar`, prefix `lm.`. Code: `Action/ICCActions_LM.cpp`, nodes `icc lm` →
-`icc lm tank position` (`ACTION_RAID + 5`), `icc spike` (`+ 3`). Raid conventions:
-[README.md](README.md).
+Boss id 0, slug `lord-marrowgar`, prefix `lm.`. Code: stem `Marrowgar`
+(`src/Ai/Raid/ICC/*/ICC*_Marrowgar.*`), nodes `icc lm` → `icc lm tank position` (`ACTION_RAID + 5`),
+`icc spike` (`+ 3`). Raid conventions: [README.md](README.md).
 
 ## Mechanics (core)
 

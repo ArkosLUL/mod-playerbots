@@ -1,7 +1,7 @@
 # Rotface
 
-Boss id 5, trace slug `rotface`, prefix `rf.` ([README](README.md)). Code: `Action/ICCActions_RF.cpp`
-and the Rotface regions of the shared ICC files. Mechanics: `boss_rotface.cpp`.
+Boss id 5, trace slug `rotface`, prefix `rf.` ([README](README.md)). Code: stem `Rotface`
+(`src/Ai/Raid/ICC/*/ICC*_Rotface.*`). Mechanics: `boss_rotface.cpp`.
 
 ## Mechanics
 

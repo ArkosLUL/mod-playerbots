@@ -87,7 +87,7 @@ BeastsTankDuty GetDutyOfBeast(PlayerbotAI* botAI, Unit* beast);
 
 // A DPS bot's target: a player's skull on a unit of the encounter, its snobold, Gormok, the mobile
 // worm while up, Icehowl. Each needs a unit in combat. The worm goes by form, never by its holder.
-// Empty without a note off map 649 or for a bot that isn't IsToCDpsBot. Notes nb.dps.
+// Empty without a note off map 649 or for a bot that isn't IsRaidDpsBot. Notes nb.dps.
 BeastsDpsPick GetBeastsDpsTarget(PlayerbotAI* botAI);
 
 }

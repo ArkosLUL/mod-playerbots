@@ -145,7 +145,7 @@ void AddToCFactionChampionsMultipliers(PlayerbotAI* botAI, std::vector<Multiplie
 }
 
 // Lust and every cooldown go at the pull, each early kill makes the rest easier
-ToCBurstWindow ToCFactionChampionsBurstWindow(PlayerbotAI* /*botAI*/)
+RaidBurstWindow ToCFactionChampionsBurstWindow(PlayerbotAI* /*botAI*/)
 {
     return {true, true};
 }

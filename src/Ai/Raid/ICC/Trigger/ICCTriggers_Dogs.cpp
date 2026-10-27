@@ -12,12 +12,5 @@
 
 bool IccDogsTrigger::IsActive()
 {
-    Unit* dog = AI_VALUE2(Unit*, "find target", "stinky");
-    if (!dog)
-        dog = AI_VALUE2(Unit*, "find target", "precious");
-    if (!dog)
-        return false;
-
-    IccMarkPull(bot, dog, "stinky-and-precious");
-    return true;
+    return AI_VALUE2(Unit*, "find target", "stinky") || AI_VALUE2(Unit*, "find target", "precious");
 }

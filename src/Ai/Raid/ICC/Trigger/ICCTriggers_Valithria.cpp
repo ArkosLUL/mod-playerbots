@@ -12,13 +12,7 @@
 
 bool IccValithriaGroupTrigger::IsActive()
 {
-    Unit* boss = bot->FindNearestCreature(NPC_VALITHRIA_DREAMWALKER, 100.0f);
-    if (!boss)
-        return false;
-
-    IccStripExperienced(bot);
-
-    return true;
+    return bot->FindNearestCreature(NPC_VALITHRIA_DREAMWALKER, 100.0f) != nullptr;
 }
 
 bool IccValithriaZombieKiteTrigger::IsActive()

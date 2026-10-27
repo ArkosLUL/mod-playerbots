@@ -1,8 +1,8 @@
 # Deathbringer Saurfang
 
-Boss id 3, slug `deathbringer-saurfang`, prefix `dbs.`. Code: `Action/ICCActions_DBS.cpp`, node
-`icc dbs` → `icc dbs tank position` (`ACTION_RAID + 3`), `icc adds dbs` (`+ 5`);
-`IccAddsDbsMultiplier`. Raid conventions: [README.md](README.md).
+Boss id 3, slug `deathbringer-saurfang`, prefix `dbs.`. Code: stem `Saurfang`
+(`src/Ai/Raid/ICC/*/ICC*_Saurfang.*`), node `icc dbs` → `icc dbs tank position` (`ACTION_RAID + 3`),
+`icc adds dbs` (`+ 5`); `IccAddsDbsMultiplier`. Raid conventions: [README.md](README.md).
 
 ## Mechanics (core)
 

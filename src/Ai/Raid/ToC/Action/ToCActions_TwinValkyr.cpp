@@ -1,6 +1,6 @@
 #include "ToCActions_TwinValkyr.h"
 #include "ToCData.h"
-#include "ToCHelpers_Defensive.h"
+#include "RaidDefensive.h"
 #include "ToCHelpers_TwinValkyr.h"
 #include "Playerbots.h"
 #include "Creature.h"
@@ -157,9 +157,9 @@ bool TwinValkyrDodgeOrbAction::Execute(Event /*event*/)
 
 bool TwinValkyrCastVortexRaidCoverAction::Execute(Event /*event*/)
 {
-    ToCPredictedHit hit;
-    ToCRaidCover const cover = GetToCRaidCover(botAI, GetTwinVortexRaidHit(botAI, hit) ? &hit : nullptr);
-    uint32 const spellId = ToCRaidCoverSpellId(botAI, cover);
+    RaidPredictedHit hit;
+    RaidCover const cover = GetRaidCover(botAI, TOC_DEFENSIVE_SCOPE, GetTwinVortexRaidHit(botAI, hit) ? &hit : nullptr);
+    uint32 const spellId = RaidCoverSpellId(botAI, cover);
     if (!spellId)
         return false;
 
@@ -167,20 +167,21 @@ bool TwinValkyrCastVortexRaidCoverAction::Execute(Event /*event*/)
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
-    if (IsToCRaidCoverChannel(cover) && bot->isMoving())
+    if (IsRaidCoverChannel(cover) && bot->isMoving())
         bot->StopMoving();
 
     if (!botAI->CastSpell(spellId, bot))
         return false;
 
-    FinishToCRaidCover(botAI, cover);
+    FinishRaidCover(botAI, cover);
     return true;
 }
 
 bool TwinValkyrCastVortexDefensiveAction::Execute(Event /*event*/)
 {
-    ToCPredictedHit hit;
-    ToCPersonalPick const pick = GetToCPersonalDefensive(botAI, GetTwinVortexHit(botAI, hit) ? &hit : nullptr);
+    RaidPredictedHit hit;
+    RaidPersonalPick const pick =
+        GetRaidPersonalDefensive(botAI, TOC_DEFENSIVE_SCOPE, GetTwinVortexHit(botAI, hit) ? &hit : nullptr);
     if (!pick)
         return false;
 

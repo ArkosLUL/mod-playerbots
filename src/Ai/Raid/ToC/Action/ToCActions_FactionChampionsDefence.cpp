@@ -6,10 +6,10 @@
 #include "EncounterHelpers.h"
 #include "LastMovementValue.h"
 #include "Playerbots.h"
+#include "RaidDefensive.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
-#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
 
@@ -369,7 +369,7 @@ bool FactionChampionsProtectAction::Execute(Event /*event*/)
     if (!botAI->CastSpell(spellId, bot))
         return false;
 
-    FinishToCRaidCover(botAI, ToCRaidCover::DivineSacrifice);
+    FinishRaidCover(botAI, RaidCover::DivineSacrifice);
     return true;
 }
 
@@ -382,9 +382,9 @@ bool FactionChampionsProtectAction::isUseful()
 
 bool FactionChampionsPersonalDefensiveAction::Execute(Event /*event*/)
 {
-    ToCPredictedHit hit;
-    ToCPersonalPick const pick =
-        GetToCPersonalDefensive(botAI, FactionChampionsPersonalHit(botAI, hit) ? &hit : nullptr);
+    RaidPredictedHit hit;
+    RaidPersonalPick const pick =
+        GetRaidPersonalDefensive(botAI, TOC_DEFENSIVE_SCOPE, FactionChampionsPersonalHit(botAI, hit) ? &hit : nullptr);
     if (!pick)
         return false;
 

@@ -17,6 +17,8 @@
 #include "Pet.h"
 #include "Player.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
+#include "RaidDirectTargeting.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "Spell.h"
@@ -28,7 +30,6 @@
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
-#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_Staging.h"
 
 namespace TrialOfTheCrusaderHelpers
@@ -432,7 +433,7 @@ bool InControl(Player* player)
 // a melee druid would leave cat form for it
 bool CycloneBot(Player* member)
 {
-    return member && member->getClass() == CLASS_DRUID && GET_PLAYERBOT_AI(member) && IsToCDpsBot(member) &&
+    return member && member->getClass() == CLASS_DRUID && GET_PLAYERBOT_AI(member) && IsRaidDpsBot(member) &&
            !PlayerbotAI::IsMelee(member) && member->HasSpell(SPELL_CYCLONE);
 }
 
@@ -441,7 +442,7 @@ std::vector<uint32> CcSpells(Player* member, Map* map)
 {
     std::vector<uint32> spells;
     if (!member || !member->IsInWorld() || !member->IsAlive() || member->FindMap() != map ||
-        !GET_PLAYERBOT_AI(member) || !IsToCDpsBot(member))
+        !GET_PLAYERBOT_AI(member) || !IsRaidDpsBot(member))
         return spells;
 
     auto const add = [&spells](uint32 spellId)
@@ -1348,7 +1349,7 @@ FactionChampionsState* Refresh(PlayerbotAI* botAI)
     ScanChampions(*state, bot);
     UpdatePack(*state, now);
     UpdateCcAuras(*state);
-    Unit* skull = GetToCHumanSkull(botAI, &IsChampionUnit);
+    Unit* skull = GetRaidHumanSkull(botAI, &IsChampionUnit);
     state->skulled = skull ? skull->GetGUID() : ObjectGuid::Empty;
     UpdateKillLatch(*state, bot);
     std::vector<Player*> const members = GroupMembers(bot);

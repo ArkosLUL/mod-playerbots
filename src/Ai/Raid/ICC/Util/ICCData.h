@@ -34,6 +34,20 @@ enum CreatureIdsICC
     NPC_SPIKE3_25H                      = 38975,
     NPC_COLDFLAME                       = 36672,
 
+    // Rotting Frost Giant, one entry per raid size
+    NPC_ROTTING_FROST_GIANT_10          = 38490,
+    NPC_ROTTING_FROST_GIANT_25          = 38494,
+
+    // Stinky and Precious: DB ids, icecrown_citadel.h has none
+    NPC_STINKY                          = 37025,
+    NPC_PRECIOUS                        = 37217,
+
+    // Blood Prince trash at the Crimson Hall door
+    NPC_DARKFALLEN_ADVISOR              = 37571,
+    NPC_DARKFALLEN_ARCHMAGE             = 37664,
+    NPC_DARKFALLEN_BLOOD_KNIGHT         = 37595,
+    NPC_DARKFALLEN_NOBLE                = 37663,
+
     // Lady Deathwhisper
     NPC_DARNAVAN_10                     = 38472,
     NPC_DARNAVAN_25                     = 38485,

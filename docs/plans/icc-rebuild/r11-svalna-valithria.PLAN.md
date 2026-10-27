@@ -11,8 +11,8 @@ Wave 3e, parallel with `r10-blood-queen`. Rules, conventions and the boss lane r
   the mischiefmagicandrocketscience blog.
 - **Valithria Dreamwalker:** slug `valithria-dreamwalker`, prefix `vd.`, boss id 10, stem `Valithria`.
   Core `boss_valithria_dreamwalker.cpp`. Doc `valithria-dreamwalker.md`, reader
-  `valithria_dreamwalker.py`. Guides in the cache: Warcraft Tavern 25 and 10, noobtoboss, Wowhead if
-  saved.
+  `valithria_dreamwalker.py`. Guides in the cache: Warcraft Tavern 25 and 10, instant-carry's raid
+  overview, Wowhead if saved.
 
 ## Facts as of `824468439`
 

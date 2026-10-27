@@ -10,42 +10,33 @@
 #include "InstanceScript.h"
 #include "Map.h"
 #include "Player.h"
+#include "RaidInstanceState.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
 #include <algorithm>
-#include <mutex>
 #include <string>
 
 namespace
 {
-    std::unordered_map<uint32, IcecrownHelpers::IccInstanceState> g_state;
-    std::mutex g_stateMutex;
+    RaidInstanceState<IcecrownHelpers::IccInstanceState> iccStates;
 }
 
 namespace IcecrownHelpers
 {
-    IccInstanceState& IccState(uint32 instanceId)
-    {
-        std::lock_guard lock(g_stateMutex);
-        return g_state[instanceId];
-    }
-
-    void IccResetInstance(uint32 instanceId)
-    {
-        std::lock_guard lock(g_stateMutex);
-        g_state.erase(instanceId);
-    }
+    IccInstanceState& IccState(uint32 instanceId) { return iccStates.For(instanceId); }
 
     std::vector<Position> ActiveGooPositions(uint32 instanceId, uint32 lifetimeMs)
     {
         std::vector<Position> out;
-        IccInstanceState& st = IccState(instanceId);
+        IccInstanceState const* st = iccStates.Find(instanceId);
+        if (!st)
+            return out;
 
         uint32 const now = getMSTime();
-        for (auto const& impact : st.malleableGoo)
+        for (auto const& impact : st->malleableGoo)
             if (getMSTimeDiff(impact.castTime, now) <= lifetimeMs)
                 out.push_back(impact.position);
 
@@ -176,31 +167,45 @@ public:
 
         uint32 const instanceId = map->GetInstanceId();
         uint32 const now = getMSTime();
-        IcecrownHelpers::IccInstanceState& st = IcecrownHelpers::IccState(instanceId);
 
         for (uint32 bossId = 0; bossId < script->GetEncounterCount(); ++bossId)
         {
             if (script->GetBossState(bossId) == IN_PROGRESS)
             {
-                st.lastBossCombatMs = now;
+                iccStates.For(instanceId).lastBossCombatMs = now;
                 return;
             }
         }
 
-        if (st.lastBossCombatMs != 0 && getMSTimeDiff(st.lastBossCombatMs, now) > ICC_RESET_GRACE_MS)
-            IcecrownHelpers::IccResetInstance(instanceId);
+        IcecrownHelpers::IccInstanceState const* st = iccStates.Find(instanceId);
+        if (st && st->lastBossCombatMs != 0 && getMSTimeDiff(st->lastBossCombatMs, now) > ICC_RESET_GRACE_MS)
+            iccStates.Reset(instanceId);
     }
 };
 
-class IccMapCleanupScript : public AllMapScript
+// Boss state 14 never goes IN_PROGRESS and none of this trash is boss flagged, so nothing else opens
+// its trace.
+class IccBloodPrinceTrashScript : public UnitScript
 {
 public:
-    IccMapCleanupScript() : AllMapScript("IccMapCleanupScript") { }
+    IccBloodPrinceTrashScript() : UnitScript("IccBloodPrinceTrashScript", true, {UNITHOOK_ON_UNIT_ENTER_COMBAT}) { }
 
-    void OnDestroyMap(Map* map) override
+    void OnUnitEnterCombat(Unit* unit, Unit* victim) override
     {
-        if (map->GetId() == ICC_MAP_ID)
-            IcecrownHelpers::IccResetInstance(map->GetInstanceId());
+        if (!unit || !victim || unit->GetMapId() != ICC_MAP_ID || !victim->IsPlayer())
+            return;
+
+        switch (unit->GetEntry())
+        {
+            case NPC_DARKFALLEN_ADVISOR:
+            case NPC_DARKFALLEN_ARCHMAGE:
+            case NPC_DARKFALLEN_BLOOD_KNIGHT:
+            case NPC_DARKFALLEN_NOBLE:
+                RaidObs::MarkPull(unit->GetMap(), unit, "blood-prince-trash");
+                break;
+            default:
+                break;
+        }
     }
 };
 
@@ -229,5 +234,5 @@ void AddSC_IcecrownBotScripts()
     new IccRotfaceListenerScript();
     new IccLichKingListenerScript();
     new IccBossStateResetScript();
-    new IccMapCleanupScript();
+    new IccBloodPrinceTrashScript();
 }

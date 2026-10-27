@@ -1,9 +1,9 @@
 #include "ToCTriggers_NorthrendBeasts.h"
 
 #include "Playerbots.h"
+#include "RaidDirectTargeting.h"
 #include "ToCData.h"
 #include "ToCHelpers_NorthrendBeasts.h"
-#include "ToCHelpers_Shared.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 
@@ -30,5 +30,5 @@ bool NorthrendBeastsDpsTargetTrigger::IsActive()
 {
     Unit* pick = GetBeastsDpsTarget(botAI).unit;
     return pick && BelongsToStem(pick, stem) &&
-           (AI_VALUE(Unit*, "current target") != pick || ToCPetOffPick(botAI, pick));
+           (AI_VALUE(Unit*, "current target") != pick || RaidPetOffPick(botAI, pick));
 }

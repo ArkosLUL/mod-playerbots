@@ -10,6 +10,7 @@
 #include "Map.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
 #include "RaidSplash.h"
 #include "ReachTargetActions.h"
 #include "SpellInfo.h"
@@ -17,7 +18,6 @@
 #include "ToCActions_Anubarak.h"
 #include "ToCData.h"
 #include "ToCHelpers_Anubarak.h"
-#include "ToCHelpers_Shared.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 
@@ -53,7 +53,7 @@ bool IsSphereCrowdControl(std::string const& name)
 // a sphere that dies late lands wherever it drifted, and a splash can down a second one
 bool SlowOrSpreadOnSphere(PlayerbotAI* botAI, Action* action)
 {
-    if (IsToCAreaDamage(botAI, action))
+    if (IsRaidAreaDamage(botAI, action))
         return true;
 
     CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action);
@@ -180,7 +180,7 @@ float AnubarakThreatCapMultiplier::GetValue(Action* action)
     if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
         return 0.0f;
 
-    if (IsToCAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= ANUBARAK_AREA_THREAT_REACH)
+    if (IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= ANUBARAK_AREA_THREAT_REACH)
         return 0.0f;
 
     return 1.0f;
@@ -213,7 +213,7 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
 
 float AnubarakBurrowerThreatCapMultiplier::GetValue(Action* action)
 {
-    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !IsToCDpsBot(bot) || !AnubarakEngaged(botAI))
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidDpsBot(bot) || !AnubarakEngaged(botAI))
         return 1.0f;
 
     Unit* target = action->GetTarget();
@@ -221,7 +221,7 @@ float AnubarakBurrowerThreatCapMultiplier::GetValue(Action* action)
     if (aimed && AnubarakBurrowerThreatCapped(bot, aimed))
         return 0.0f;
 
-    if (IsToCAreaDamage(botAI, action) &&
+    if (IsRaidAreaDamage(botAI, action) &&
         (AnubarakBurrowerThreatCappedNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH) ||
          (aimed && AnubarakBurrowerThreatCappedNear(bot, aimed->GetPosition(), ANUBARAK_BURROWER_AREA_REACH))))
         return 0.0f;
@@ -242,7 +242,7 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     // The main tank's Swipe or Thunder Clap pulls a burrower walking past onto him, and its Expose
     // Weakness stacks come with it
     if (IsAnubarakTankPlayer(bot))
-        return GetAnubarakBurrowerTankSide(bot) < 0 && IsToCAreaDamage(botAI, action) &&
+        return GetAnubarakBurrowerTankSide(bot) < 0 && IsRaidAreaDamage(botAI, action) &&
                        AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, false)
                    ? 0.0f
                    : 1.0f;
@@ -250,7 +250,7 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     // actions that pick their target in Execute read "self target" here, so the stem's own picks pass
     Unit* target = action->GetTarget();
     // Before its side tank has held it a while, a burrower takes the threat of whatever hits it
-    if (IsToCAreaDamage(botAI, action))
+    if (IsRaidAreaDamage(botAI, action))
     {
         Unit* aimed = target ? target : AI_VALUE(Unit*, "current target");
         if (AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, true) ||
@@ -278,7 +278,7 @@ void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& mul
 }
 
 // Lust waits for phase 3, where Leeching Swarm turns the fight into a race
-ToCBurstWindow ToCAnubarakBurstWindow(PlayerbotAI* botAI)
+RaidBurstWindow ToCAnubarakBurstWindow(PlayerbotAI* botAI)
 {
     return {true, GetAnubarakPhase(botAI) == AnubarakPhase::Swarm};
 }

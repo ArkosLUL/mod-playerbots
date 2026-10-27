@@ -12,6 +12,8 @@
 #include "Map.h"
 #include "Player.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
+#include "RaidDirectTargeting.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "Spell.h"
@@ -22,7 +24,6 @@
 #include "TemporarySummon.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
-#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 using namespace EncounterHelpers;
@@ -79,7 +80,7 @@ struct InfernoMemo
     bool valid = false;
     uint32 ms = 0;
     InfernoPhase phase = InfernoPhase::None;
-    ToCPredictedHit hit;
+    RaidPredictedHit hit;
 };
 
 struct JaraxxusState
@@ -317,7 +318,7 @@ bool CannotChannel(Player* player)
     return HasMistressKiss(player) || GetJaraxxusFlameRole(player) != JaraxxusFlameRole::None;
 }
 
-InfernoPhase InfernoFor(Player* bot, JaraxxusState& state, ToCPredictedHit& hit)
+InfernoPhase InfernoFor(Player* bot, JaraxxusState& state, RaidPredictedHit& hit)
 {
     InfernoMemo& memo = state.inferno;
     uint32 const now = getMSTime();
@@ -330,9 +331,9 @@ InfernoPhase InfernoFor(Player* bot, JaraxxusState& state, ToCPredictedHit& hit)
     memo.valid = true;
     memo.ms = now;
     memo.phase = InfernoPhase::None;
-    memo.hit = ToCPredictedHit();
+    memo.hit = RaidPredictedHit();
 
-    ToCPredictedHit next;
+    RaidPredictedHit next;
     next.durationMs = (JARAXXUS_INFERNO_TICKS - 1) * IN_MILLISECONDS;
     next.school = SPELL_SCHOOL_MASK_FIRE;
     next.noChannel = &CannotChannel;
@@ -787,7 +788,7 @@ bool JaraxxusAssistTankHolds(PlayerbotAI* botAI, uint8 index)
 Unit* GetJaraxxusDpsTarget(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!StateFor(bot) || !IsToCDpsBot(bot))
+    if (!StateFor(bot) || !IsRaidDpsBot(bot))
         return nullptr;
 
     Unit* target = nullptr;
@@ -801,7 +802,7 @@ Unit* GetJaraxxusDpsTarget(PlayerbotAI* botAI)
         auto const belongs = [](Unit* unit)
         { return IsJaraxxusAdd(unit) || unit->GetEntry() == static_cast<uint32>(ToCNpcs::NPC_JARAXXUS); };
 
-        target = GetToCHumanSkull(botAI, belongs);
+        target = GetRaidHumanSkull(botAI, belongs);
         if (target)
             branch = "skull";
         else if (focus)
@@ -996,14 +997,14 @@ bool JaraxxusAnyLegionFlame(PlayerbotAI* botAI)
     return scan && !scan->flames.empty();
 }
 
-bool GetJaraxxusBurningInferno(PlayerbotAI* botAI, ToCPredictedHit& hit)
+bool GetJaraxxusBurningInferno(PlayerbotAI* botAI, RaidPredictedHit& hit)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     JaraxxusState* state = StateFor(bot);
     return state && InfernoFor(bot, *state, hit) != InfernoPhase::None;
 }
 
-bool GetJaraxxusPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
+bool GetJaraxxusPersonalHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     JaraxxusState* state = StateFor(bot);
@@ -1028,7 +1029,7 @@ bool GetJaraxxusPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
         return false;
 
     uint32 const trailId = sSpellMgr->GetSpellIdForDifficulty(SPELL_LEGION_FLAME_TRAIL, bot);
-    hit = ToCPredictedHit();
+    hit = RaidPredictedHit();
     hit.school = SPELL_SCHOOL_MASK_FIRE;
     if (Aura const* trail = bot->GetAura(trailId))
     {
@@ -1053,29 +1054,29 @@ bool GetJaraxxusPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
 
 bool JaraxxusRaidCoverHeld(PlayerbotAI* botAI)
 {
-    ToCPredictedHit hit;
-    return GetJaraxxusBurningInferno(botAI, hit) && ToCRaidHitLeadIn(hit);
+    RaidPredictedHit hit;
+    return GetJaraxxusBurningInferno(botAI, hit) && RaidHitLeadIn(hit);
 }
 
 bool JaraxxusMagicHitOnBot(PlayerbotAI* botAI)
 {
-    ToCPredictedHit hit;
+    RaidPredictedHit hit;
     return botAI && (IsLegionFlameCarrier(botAI->GetBot()) || GetJaraxxusBurningInferno(botAI, hit));
 }
 
 bool JaraxxusRaidCoverPinned(Player* member)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-    ToCPredictedHit hit;
+    RaidPredictedHit hit;
     return memberAI && GetJaraxxusBurningInferno(memberAI, hit) &&
-           GetToCRaidCover(memberAI, &hit) != ToCRaidCover::None;
+           GetRaidCover(memberAI, TOC_DEFENSIVE_SCOPE, &hit) != RaidCover::None;
 }
 
 Unit* GetJaraxxusPortalToClear(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     JaraxxusState* state = StateFor(bot);
-    if (!state || !bot->IsAlive() || !IsToCDpsBot(bot) || PlayerbotAI::IsRanged(bot))
+    if (!state || !bot->IsAlive() || !IsRaidDpsBot(bot) || PlayerbotAI::IsRanged(bot))
         return nullptr;
 
     JaraxxusScan const& scan = ScanOf(bot, *state);
@@ -1115,7 +1116,7 @@ bool DeriveJaraxxusPortalExit(Player* bot, Unit* portal, Position& spot)
 bool JaraxxusThreatCapped(Player* bot)
 {
     JaraxxusState* state = StateFor(bot);
-    if (!state || !IsToCDpsBot(bot))
+    if (!state || !IsRaidDpsBot(bot))
         return false;
 
     ThreatCapLatch& cap = state->threatCaps[bot->GetGUID()];

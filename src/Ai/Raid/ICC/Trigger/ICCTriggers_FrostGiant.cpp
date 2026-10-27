@@ -12,12 +12,5 @@
 
 bool IccRottingFrostGiantTankPositionTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "rotting frost giant");
-    if (!boss)
-        return false;
-
-    IccMarkPull(bot, boss, "rotting-frost-giant");
-    IccStripExperienced(bot);
-
-    return true;
+    return AI_VALUE2(Unit*, "find target", "rotting frost giant") != nullptr;
 }

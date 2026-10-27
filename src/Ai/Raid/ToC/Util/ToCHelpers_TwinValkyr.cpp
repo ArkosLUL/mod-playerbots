@@ -12,6 +12,8 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidDefensive.h"
+#include "RaidDirectTargeting.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "Spell.h"
@@ -20,8 +22,6 @@
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
-#include "ToCHelpers_Defensive.h"
-#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 #include <algorithm>
@@ -781,7 +781,7 @@ char const* DoorRoleName(TwinDoorRole role)
 
 // What the running Vortex still has to deal each player, before resistance. Its first tick lands a
 // period into the channel.
-bool VortexHit(PlayerbotAI* botAI, TwinValkyrState const& state, ToCPredictedHit& hit)
+bool VortexHit(PlayerbotAI* botAI, TwinValkyrState const& state, RaidPredictedHit& hit)
 {
     if (state.vortex == TwinColour::None)
         return false;
@@ -819,7 +819,7 @@ bool VortexHit(PlayerbotAI* botAI, TwinValkyrState const& state, ToCPredictedHit
         ticksLeft -= std::min(ticks, static_cast<uint32>(elapsed / period));
     }
 
-    hit = ToCPredictedHit();
+    hit = RaidPredictedHit();
     hit.startMs = channelStart + static_cast<uint32>(period);
     hit.durationMs = (ticks - 1) * static_cast<uint32>(period);
     hit.damage = perTick * ticksLeft;
@@ -1039,7 +1039,7 @@ Unit* GetTwinDpsTarget(PlayerbotAI* botAI)
 
     Unit* target = nullptr;
     char const* rule = "none";
-    Unit* skull = GetToCHumanSkull(botAI, [](Unit* unit) { return TwinColourOf(unit) != TwinColour::None; });
+    Unit* skull = GetRaidHumanSkull(botAI, [](Unit* unit) { return TwinColourOf(unit) != TwinColour::None; });
     if (reachable(skull))
     {
         target = skull;
@@ -1331,13 +1331,13 @@ bool TwinValkyrFetchDue(PlayerbotAI* botAI, Unit* twin)
            getMSTimeDiff(approach.sinceMs, getMSTime()) >= TWIN_FETCH_STALL_MS;
 }
 
-bool GetTwinVortexHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
+bool GetTwinVortexHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
 {
     TwinValkyrState const* state = botAI ? ReadTwins(botAI) : nullptr;
     return state && WantedEssence(botAI).reason == TwinEssenceReason::Hold && VortexHit(botAI, *state, hit);
 }
 
-bool GetTwinVortexRaidHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
+bool GetTwinVortexRaidHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
 {
     TwinValkyrState const* state = botAI ? ReadTwins(botAI) : nullptr;
     return state && state->pull.raidHold && state->vortex == TwinColour::Light && VortexHit(botAI, *state, hit);
@@ -1345,8 +1345,8 @@ bool GetTwinVortexRaidHit(PlayerbotAI* botAI, ToCPredictedHit& hit)
 
 bool TwinValkyrRaidCoverHeld(PlayerbotAI* botAI)
 {
-    ToCPredictedHit hit;
-    return GetTwinVortexRaidHit(botAI, hit) && ToCRaidHitLeadIn(hit);
+    RaidPredictedHit hit;
+    return GetTwinVortexRaidHit(botAI, hit) && RaidHitLeadIn(hit);
 }
 
 bool TwinValkyrLustWindowOpen(PlayerbotAI* botAI)

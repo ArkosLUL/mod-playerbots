@@ -17,6 +17,7 @@
 #include "ICCActions_LichKing.h"
 #include "ICCActions_Marrowgar.h"
 #include "ICCActions_Putricide.h"
+#include "ICCActions_RaidWide.h"
 #include "ICCActions_Rotface.h"
 #include "ICCActions_Saurfang.h"
 #include "ICCActions_Sindragosa.h"

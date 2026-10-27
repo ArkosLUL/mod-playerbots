@@ -1,9 +1,10 @@
 # Icecrown Citadel (map 631)
 
 Strategy key `icc`, one strategy for every encounter. Cross-raid conventions are in
-[../README.md](../README.md). Mechanics source: `src/server/scripts/Northrend/IcecrownCitadel/`.
-During an upstream merge ICC keeps ours; the merge report lists upstream's ICC changes so the user
-can pick which to port. Tactics come from the guides in
+[../README.md](../README.md). Mechanics source: `src/server/scripts/Northrend/IcecrownCitadel/`. A
+code comment calling the core bugged is checked against it; the boss doc gives the verdict, with issue
+text when it holds. During an upstream merge ICC keeps ours; the merge report lists upstream's ICC
+changes so the user can pick which to port. Tactics come from the guides in
 [guide-sources.md](../../systems/guide-sources.md), converted into `build-icc-wt/_guides/`
 (`text/<slug>.<tag>.md`, listed in `INDEX.md`).
 
@@ -28,11 +29,47 @@ multipliers. Raid-wide parts:
   Malleable Goo ids the spell listeners watch. A new encounter-specific id or position goes in the
   stem's helpers.
 - `Util/ICCEncounterGate.h`: the boss state ids (`IccEncounterId`, mirroring the core's `DataTypes`)
-  and the gate.
-- `Util/ICCScripts.{h,cpp}`: per-instance state, the spell listeners, the state reset and the RaidObs
-  name table, registered by `AddSC_IcecrownBotScripts` from `src/Script/Playerbots.cpp`.
+  and `IccRaidWideGate`.
+- `Util/ICCSeams.{h,cpp}`: the hooks table and the configs for the raid-wide helpers in
+  `src/Ai/Raid/` (seams below).
+- Raid-wide definitions, on `IccRaidWideGate` (open, never live), `ICC_BOSS_NONE` and no trace name:
+  `RaidWide` (`Trigger/ICCTriggers_RaidWide`, `Action/ICCActions_RaidWide`,
+  `Definition/ICCDefinition_RaidWide.cpp`: the opener and resistance aura rows, their holds, and the
+  direct-targeting bases) and `Definition/ICCDefinition_HeroicBuffs.cpp` (the strip, [Cheats](#cheats)).
+- `Util/ICCScripts.{h,cpp}`: per-instance state, the spell listeners, the state reset, the Blood
+  Prince trash hook and the RaidObs name table, registered by `AddSC_IcecrownBotScripts` from
+  `src/Script/Playerbots.cpp`.
 - Umbrellas `Action/ICCActions.h`, `Trigger/ICCTriggers.h`, `Multiplier/ICCMultipliers.h` include
   every stem; `RS/RSMultipliers.cpp` includes `ICCActions.h`.
+
+**Gates.** An encounter's definition carries its slug from the table below as trace name. A boss
+definition takes `BossStateGate` with its `IccEncounterId` (Svalna 9): open unless that boss is done
+or another is in progress, so pre-pull steps run; live while `IN_PROGRESS`. `Dogs` and `FrostGiant` (`ICC_BOSS_NONE`, 255) take `UnitGate<entries>` (`RaidEncounter.h`) on Stinky 37025 and Precious
+37217, and on the giant's 38490 (10) and 38494 (25): open while one is alive on the bot's
+map, live while it is in combat with a victim in the bot's group (a pet counts as its owner) or with
+the bot. A per-instance guid cache, rescanned at most once a second, finds it, so one in an unloaded
+grid leaves the gate closed. Their ticks open the trace through `IccMarkPull` while live. Each trigger
+still tests its boss itself, mostly through `"find target"` (the bot's threat list), Sindragosa's
+through a 200 yd `FindNearestCreature`; one firing while its gate is live names the trace
+(`RaidObs::NamePull`). The strip, the heroic buffs and `IccMarkPull` run in definition ticks, which
+run while the gate is open; `icc sindragosa group position` still runs its raid cheats and Nitro
+Boosts inside `IsActive`.
+
+Rows, rules, `e.Multiplier` and ticks run while open, `e.LiveMultiplier` only while live. Every
+multiplier is live but Festergut's and Rotface's: their state moves when Putricide reaches his balcony
+point, about 7 s into the pull (~102 and ~104 yd at 15 yd/s). What acts before live:
+
+| Encounter | Before live |
+|---|---|
+| Festergut | the multiplier, `icc festergut group position` |
+| Rotface | the multiplier (assist tank off Rotface, formation and AoE vetoes), `icc rotface tank position`, `icc rotface group position` |
+| Gunship | `icc gunship rocket pack setup` (friendly cannon within 100 yd), `icc gunship cannon near`, `icc in cannon`, `icc gunship rocket jump` (enemy captain within 100 yd) |
+| Valithria | `icc valithria group` (she is within 100 yd), `icc valithria heal` (healers within 100 yd); live once the first archmage pulls the combat trigger |
+| Sindragosa | `icc sindragosa group position` (she is within 200 yd), its raid cheats and Nitro Boosts included |
+
+Nothing else: Marrowgar's, Stinky and Precious's and the giant's nodes need the bot on the threat
+list, any prince's engage pulls Valanar into the state in the same update, and the rest key on fight
+auras, units or `"find target"`.
 
 **Seams.** An encounter gains a trigger, action, multiplier, rule or tick in its stem files and
 definition alone:
@@ -40,28 +77,39 @@ definition alone:
 - trigger and action: classes carrying their name as `static constexpr char const* Name`, joined by
   an `e.Node<Trigger, Action>(priority)` row. Rows naming one trigger back to back share a node.
   pblint resolves a row through both `Name`s, so keep each on one line.
-- multiplier: `e.Multiplier<M>(families)`; rules (`OwnMovement`, `OwnTargeting`, `Block`,
-  `Exclusive`) and `Tick` likewise, rules after the stem's multipliers.
+- multiplier: `e.LiveMultiplier<M>(families)`, `e.Multiplier<M>` only for one that acts before live;
+  rules (`OwnMovement`, `OwnTargeting`, `Block`, `Exclusive`) and `Tick` likewise, rules after the
+  stem's multipliers.
+- direct targeting: a resolver `Unit* (PlayerbotAI*)` in the stem's helpers, `GetRaidHumanSkull` its
+  first branch, every branch an in-combat unit, its pick probed there. A trigger class on
+  `IccDirectTargetTrigger` and an action on `IccDirectAttackAction` pass their `Name` and the resolver;
+  one row joins them, and `e.OwnTargeting(name, roles, &IccResolverPicks<&Resolver>, pickers)`
+  follows the stem's multipliers. The action sends the pet first, the trigger also fires while the
+  pet is off the pick. `RaidRestoreLegacyRti` stays unwired until no ICC code writes `rti`.
+- hooks: a row in `HookRows()` (`Util/ICCSeams.cpp`), `{&Icc<Stem>Definition, burstWindow,
+  openerBosses, resistSchools, fireWantsMastery}`, unused hooks null, the functions in the stem's
+  helpers. Only the first row whose definition is live is asked, so none answers before live (the
+  table above). `burstWindow` feeds `icc burst window` (`RaidBurstWindow.h`), which with no row lets
+  every burst through. `openerBosses` feeds the opener (`RaidOpener.h`, `icc.opener`): a DPS bot holds
+  its damage on a listed boss until a group tank has held it 2 s, or 5 s after it came into combat.
+  `resistSchools` and `fireWantsMastery` feed the aura election (`RaidResistAura.h`, `icc.aura`): one
+  bot paladin per wanted fire, frost or shadow school, the nature hunter's Aspect of the Wild, and the
+  hold rules keep each holder's own auras or aspects off. With no hook the opener and aura triggers neither fire nor note.
+- defensives: `GetRaidCover` and `GetRaidPersonalDefensive` (`RaidDefensive.h`) with
+  `ICC_DEFENSIVE_SCOPE` (`icc.cover`, `icc.personal`) and a `RaidPredictedHit` the stem builds.
+- opening positions: a `Mover` row in the definition whose trigger holds the stand while the gate is
+  open and not live, its positions navprobed in the stem's helpers. No raid-wide staging.
 
 **The root only dispatches.** `ICCStrategy.cpp` adds nodes and runs `OnTick` in
 `IccEncounterDefinitions()` order, and adds multipliers in its own: Marrowgar, Deathwhisper,
 FrostGiant, Saurfang, Dogs, Festergut, Rotface, Putricide, BloodPrinces, BloodQueen, Svalna,
-Valithria, Sindragosa, LichKing, Gunship. **Both orders are behaviour**: equal relevances pop in
-insertion order, and the engine stops at the first multiplier that zeroes an action, crediting it
-with the veto, while several ICC multipliers act inside `GetValue`. `ICCActionContext.h` and
-`ICCTriggerContext.h` register every definition's rows. The registration sites name only these root
-files: `RaidStrategyContext.h`, `BuildSharedActionContexts.cpp`, `BuildSharedTriggerContexts.cpp`,
-and `PlayerbotAI.cpp` (map 631 → `icc`, and the instance-strategy name list).
-
-**Pass-through gate.** Every definition takes `IccPassThroughGate`: open and never live, so
-every encounter's nodes and multipliers run in every fight and no trigger names a trace. Each
-trigger tests its boss itself, mostly through `"find target"` (the bot's threat list),
-Sindragosa's through a 200 yd `FindNearestCreature`. Definitions carry the boss id and slug from
-the table below; `Dogs` and `FrostGiant` have no boss state and take `ICC_BOSS_NONE` (255), an id
-`BossStateGate` leaves open.
-
-**Triggers act inside `IsActive`.** Several strip Experienced, apply the heroic buffs or run a cheat
-there, so the side effect runs whenever the node is asked, whatever wins the tick.
+Valithria, Sindragosa, LichKing, Gunship, RaidWide, then `icc burst window`. **Both orders are
+behaviour**: equal relevances pop in insertion order, and the engine stops at the first multiplier
+that zeroes an action, crediting it with the veto, while several ICC multipliers act inside
+`GetValue`. `ICCActionContext.h` and `ICCTriggerContext.h` register every definition's rows. The
+registration sites name only these root files: `RaidStrategyContext.h`,
+`BuildSharedActionContexts.cpp`, `BuildSharedTriggerContexts.cpp`, and `PlayerbotAI.cpp` (map 631 →
+`icc`, and the instance-strategy name list).
 
 ## Boss states and trace names
 
@@ -70,7 +118,8 @@ there, so the side effect runs whenever the node is asked, whatever wins the tic
 A trace opened while that boss is `IN_PROGRESS` takes the slug outright, whether the boss state opens
 it or an engage does: the core runs the engage hook after `JustEngagedWith` has queued the state. A
 boss state renames a trace open under another name, except one `MarkPull` opened, which it closes
-(`idle`) and replaces. Nothing renames a slug-named trace afterwards.
+(`idle`) and replaces: a dogs trace in its 30 s idle window would otherwise absorb the Festergut
+pull. Nothing renames a slug-named trace afterwards.
 
 | Id | Encounter | `IN_PROGRESS` from (core) | Trace slug | Prefix |
 |---|---|---|---|---|
@@ -88,17 +137,20 @@ boss state renames a trace open under another name, except one `MarkPull` opened
 | 11 | [Sindragosa](sindragosa.md) | her `JustEngagedWith` | `sindragosa` | `sg.` |
 | 12 | [The Lich King](the-lich-king.md) | his `JustEngagedWith` | `the-lich-king` | `lk.` |
 | 13 | [Sindragosa gauntlet](sindragosa.md#sindragosa-gauntlet) | the gauntlet's `DoAction(ACTION_START_GAUNTLET)` | `sindragosa-gauntlet` | `sg.` |
-| 14 | [Blood Prince trash](blood-prince-council.md#blood-prince-trash) | never: `NOT_STARTED`, then `DONE` when the trash dies | `blood-prince-trash` | `bpc.` |
+| 14 | [Blood Prince trash](blood-prince-council.md#blood-prince-trash) | never: `NOT_STARTED`, then `DONE` once its four door guards die | `blood-prince-trash` | `bpc.` |
 | — | [Stinky and Precious](stinky-and-precious.md) | no boss state | `stinky-and-precious` | `dogs.` |
 | — | [Rotting Frost Giant](rotting-frost-giant.md) | no boss state | `rotting-frost-giant` | `rfg.` |
 
 `icc.` is raid-wide, matches every ICC slug and belongs to none: a slug owning it would have its keys
-read silent on every other ICC pull. Festergut and Rotface engage before their state
-moves, so their traces open on the engage, named by the DBC encounter credit, which matches the slug.
-The last two rows open through `IccMarkPull` from `icc dogs` and `icc rotting frost giant tank
-position` once the bot and the unit are both in combat. The dungeon bosses are the kill-credit
-creatures: Marrowgar, Deathwhisper, Saurfang, Festergut, Rotface, Putricide, Valanar, the Blood-Queen,
-Sindragosa, the Lich King. Gunship and Valithria credit by spell (72959, 72706), Svalna not at all.
+read silent on every other ICC pull. An encounter with a phase publishes it as `<prefix>.phase`;
+`tools/botobs/bosses/icecrown_citadel.py --phases` reads it as one raid-wide timeline, each step from
+the first bot to note it. Festergut and Rotface engage before their state moves, so their traces open
+on the engage, named by the DBC encounter credit, which matches the slug. The last two rows open
+through `IccMarkPull` from their definitions' ticks while the gate is live, the Blood Prince trash
+through a hook in `Util/ICCScripts.cpp` ([its section](blood-prince-council.md#blood-prince-trash)).
+The dungeon bosses are the kill-credit creatures: Marrowgar, Deathwhisper, Saurfang, Festergut,
+Rotface, Putricide, Valanar, the Blood-Queen, Sindragosa, the Lich King. Gunship and Valithria credit
+by spell (72959, 72706), Svalna not at all.
 
 ## Cheats
 
@@ -112,10 +164,13 @@ acted on when it is not the bot:
   gate (shipped 1), act on heroic only, and reach human raiders too; the header carries it as
   `cfg.iccbuffs`.
 
-Class **remove**: bots already have the legit answer (walking, a real class taunt, their own Nitro
-Boosts), so the cheat is due to go. **Gap**: kept until a legit answer exists. **Buffs**: the
-`EnableICCBuffs` operator option. A removed cheat leaves the table; its boss doc's Cheats section
-says what replaced it.
+`tools/botobs/bosses/icecrown_citadel.py --cheats` is the only view of `cheat` rows: `--bot` and
+`--notes` skip them.
+
+Class **gap**: kept until the encounter carries the guide's answer; one survives only where bots
+can't carry that answer out at all, its reason in the boss doc. **Buffs**: the `EnableICCBuffs`
+operator option, kept. A removed cheat leaves the table; its boss doc's Cheats section says what
+replaced it.
 
 | Key | Class | Gate | Sites |
 |---|---|---|---|
@@ -135,16 +190,17 @@ says what replaced it.
 | `lk.hoj` | gap | raid | `HandleAssistTankAddManagement`: Hammer of Justice on Shamblings from any class |
 | `lk.frostmourneescape` | gap | raid | `HandleTeleportationFixes`, normal: snaps a Harvest Soul victim out of Frostmourne on its first tick, skipping the Spirit Warden |
 | `ldw.nothreat`, `ldw.spitefulfury` | buffs | iccbuffs | `IccAddsLadyDeathwhisperAction` |
-| `pp.heroicbuff`, `pp.spitefulfury` | buffs | iccbuffs | `IccPutricideMalleableGooTrigger`, on every member |
-| `sg.heroicbuff`, `sg.spitefulfury` | buffs | iccbuffs | `IccSindragosaGroupPositionTrigger`, on every member |
+| `pp.heroicbuff`, `pp.spitefulfury` | buffs | iccbuffs | the Putricide definition's tick while live, on every member |
+| `sg.heroicbuff`, `sg.spitefulfury` | buffs | iccbuffs | the Sindragosa definition's tick while live, on every member |
 | `lk.heroicbuff` | buffs | iccbuffs | `IccLichKingShadowTrapAction`, `IccLichKingWinterAction`, `IccLichKingAddsAction` (every member) |
 | `lk.empoweredblood`, `lk.valkyrstun` | buffs | iccbuffs | `IccLichKingAddsAction`, `HandleValkyrAssignment` |
 
 `*.heroicbuff` is `IccApplyHeroicBuffToMember` (Experienced, Aegis of Dalaran, Pain Suppression, 1%
 Threat), recorded when it adds any, on members in the bot's own instance only. Experienced 71188 and
-1% Threat 70115 never expire, so `IccStripExperienced`, run by the Marrowgar, giant, Saurfang,
-Festergut, Rotface, council, Blood-Queen and Valithria triggers, takes both off the bot and off every
-human in the instance. Every raid-gated site keeps the cheat's exact behaviour while the raid cheat is
+1% Threat 70115 never expire, so `IccHeroicBuffsDefinition`'s tick takes both off whenever none of the
+fights handing them out (Deathwhisper, Putricide, Sindragosa, the Lich King) is `IN_PROGRESS`: each bot
+off itself, and the first bot past a 1 s per-instance throttle off every human on the map. Every
+raid-gated site keeps the cheat's exact behaviour while the raid cheat is
 on; off, the site skips the cheat. The cleanup halves (Cyclone, Magic Barrier, 1% Threat removal) stay
 ungated.
 
@@ -169,22 +225,25 @@ real item use, own-aura cancels, the spell listeners.
 
 ## Per-instance state
 
-`IccInstanceState` (`Util/ICCScripts.h`), one per instance id behind a mutex, `IccState(id)` creating
-it. ICC keeps this store rather than `RaidInstanceState`. Assignments and latches are traced containers:
+`IccInstanceState` (`Util/ICCScripts.h`) sits in a `RaidInstanceState` store: `IccState(id)` creates
+it, and a has-state read (`ActiveGooPositions`, the reset) uses `Find`. Assignments and latches are
+traced containers:
 `lk.winterinbound`, `lk.mtinbound`, `lk.rangedinbound`, `lk.sharedslot` (-1 none), `sg.flaredblue`,
 `sg.group`, `sg.tomb`, `sg.freedfallback`, `bql.curve`, `bql.airslot`, `bql.slot`, `vd.portalclaim`,
 `dbs.slot`, `rf.explosionslot`. They are unordered, and no loop over one depends on its order.
 Timestamps, throttles, caches, edge detectors (`sgLastPhase3`) and struct values stay bare;
 `sgFlaredRedThisPhase`, an int set, is noted as `sg.flaredred` where it changes.
 
-**Reset**: `IccBossStateResetScript` erases the whole state 5 s (`ICC_RESET_GRACE_MS`) after the last
-boss state leaves `IN_PROGRESS`, kill or wipe, never mid-fight; `IccMapCleanupScript` erases it on
-`OnDestroyMap`. It is keyed on boss state because Gunship, Valithria, Svalna, Keleseth and Taldaram are
+**Reset**: `IccBossStateResetScript` stamps the state while any boss is `IN_PROGRESS` and erases it 5 s
+(`ICC_RESET_GRACE_MS`) after the last one leaves it, kill or wipe, never mid-fight;
+`RaidInstanceStateMapScript` drops it with the map. It is keyed on boss state because Gunship, Valithria, Svalna, Keleseth and Taldaram are
 not dungeon bosses, so a reset on "a dungeon boss left combat" let their latches outlive a wipe.
 
 ## Spell listeners
 
-`Util/ICCScripts.cpp`, on the caster's map thread, so their probes satisfy RaidObs's threading rule:
+`Util/ICCScripts.cpp`, on the caster's map thread, so their probes satisfy RaidObs's threading rule.
+Unpaced: each fires once per cast, and 25H goo hits two players at once. A note's `txt` is the spell
+id.
 
 - **Malleable Goo**: Putricide's 70852 and the balcony's 72296, neither with a spelldifficulty row.
   The missiles and impacts they trigger (72297 row 2197; 72295/72615/74280/74281 row 2211) carry
@@ -202,13 +261,15 @@ Every trigger name starts `icc `, mostly followed by its boss: `lm`, `lady death
 `festergut`, `rotface`, `putricide`, `bpc`, `bql`, `valithria`, `sindragosa`, `lich king`. The others:
 `icc dark reckoning` (Deathwhisper), `icc in cannon` and the `icc gunship` ones (Gunship), `icc
 rotting frost giant tank position`, `icc dogs` (Stinky and Precious), `icc valkyre spear` and `icc
-sister svalna` (Svalna). Rows register classes under their `Name`, so two classes sharing one leave
+sister svalna` (Svalna). The raid-wide `icc opener swing`, `icc opener redirect` and `icc resistance
+aura` belong to no encounter. Rows register classes under their `Name`, so two classes sharing one leave
 one unbuilt: `IccGunshipCannonNearTrigger` called itself `icc in cannon` and merged its coverage
 into the real one.
 
 ## Known gaps
 
-- Targeting is by raid icon throughout. Converting to direct targeting is a tactic rework; boss
-  lanes probe every icon pick.
+- Targeting is by raid icon throughout; the probes record every pick.
 - Every gap cheat above: a mechanic it makes survivable is open, and a server with the raid cheat off
   loses it.
+- The hooks answer only while a definition is live, so an opener or aura hook for Festergut, Rotface
+  or Valithria sits out the seconds before their state moves.

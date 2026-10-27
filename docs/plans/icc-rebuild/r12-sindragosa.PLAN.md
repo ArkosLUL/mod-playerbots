@@ -7,7 +7,8 @@ Layout and seams: `docs/raids/icecrown-citadel/README.md`, "Code layout". It may
 
 - **Sindragosa:** slug `sindragosa`, prefix `sg.`, boss id 11, stem `Sindragosa`. Core
   `boss_sindragosa.cpp`, which also holds Rimefang and Spinestalker. Doc `sindragosa.md`, reader
-  `sindragosa.py`. Guides in the cache: Warcraft Tavern 25 and 10, noobtoboss, Wowhead if saved.
+  `sindragosa.py`. Guides in the cache: Warcraft Tavern 25 and 10, instant-carry's raid overview,
+  Wowhead if saved.
 - **Rimefang and Spinestalker:** no boss state. Use `r1`'s unit gate, with the slug and prefix of
   Sindragosa's encounter.
 - **Sindragosa gauntlet:** slug `sindragosa-gauntlet`, prefix `sg.`, boss id 13. Core

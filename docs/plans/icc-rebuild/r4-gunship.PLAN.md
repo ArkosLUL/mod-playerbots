@@ -8,8 +8,8 @@ Wave 3b, parallel with `r5-saurfang`. Rules, conventions and the boss lane recip
 
 Slug `icecrown-gunship-battle`, prefix `gsb.`, boss id 2, stem `Gunship`. Core
 `boss_icecrown_gunship_battle.cpp`. Doc `icecrown-gunship-battle.md`, reader `icecrown_gunship_battle.py`.
-Both factions' ships. Guides in the cache: Warcraft Tavern 25 and 10, noobtoboss, instant-carry,
-Wowhead if saved.
+Both factions' ships. Guides in the cache: Warcraft Tavern 25 and 10, instant-carry, Wowhead if
+saved.
 
 ## Facts as of `824468439`
 

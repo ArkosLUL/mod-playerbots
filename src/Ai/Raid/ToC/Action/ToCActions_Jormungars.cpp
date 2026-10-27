@@ -8,6 +8,7 @@
 #include "EncounterHelpers.h"
 #include "LastMovementValue.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
 #include "RaidObs.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -16,7 +17,6 @@
 #include "ToCHelpers_Icehowl.h"
 #include "ToCHelpers_Jormungars.h"
 #include "ToCHelpers_NorthrendBeasts.h"
-#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -478,7 +478,7 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
 bool NorthrendWormsHealToxinCarrierAction::Execute(Event /*event*/)
 {
     Player* carrier = GetWormToxinHealTarget(botAI);
-    return carrier && CastToCThroughputHeal(botAI, carrier);
+    return carrier && CastRaidThroughputHeal(botAI, carrier);
 }
 
 bool NorthrendWormsPurgeToxinAction::Execute(Event /*event*/)

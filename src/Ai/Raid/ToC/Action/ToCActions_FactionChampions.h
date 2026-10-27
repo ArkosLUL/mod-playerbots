@@ -3,7 +3,7 @@
 
 #include "NamedObjectContext.h"
 #include "RaidAntiFear.h"
-#include "ToCActions_Shared.h"
+#include "RaidDirectTargeting.h"
 
 class FactionChampionsAntiFearAction : public RaidAntiFearAction
 {
@@ -14,11 +14,11 @@ protected:
     bool FearWindowActive() override;
 };
 
-class FactionChampionsFocusPriorityAction : public ToCDirectAttackAction
+class FactionChampionsFocusPriorityAction : public RaidDirectAttackAction
 {
 public:
     FactionChampionsFocusPriorityAction(PlayerbotAI* botAI)
-        : ToCDirectAttackAction(botAI, "faction champions focus priority") {}
+        : RaidDirectAttackAction(botAI, "faction champions focus priority") {}
     bool Execute(Event event) override;
 };
 

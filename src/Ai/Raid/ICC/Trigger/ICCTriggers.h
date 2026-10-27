@@ -17,6 +17,7 @@
 #include "ICCTriggers_LichKing.h"
 #include "ICCTriggers_Marrowgar.h"
 #include "ICCTriggers_Putricide.h"
+#include "ICCTriggers_RaidWide.h"
 #include "ICCTriggers_Rotface.h"
 #include "ICCTriggers_Saurfang.h"
 #include "ICCTriggers_Sindragosa.h"

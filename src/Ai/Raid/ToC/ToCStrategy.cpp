@@ -1,7 +1,8 @@
 #include "ToCStrategy.h"
+#include "RaidDirectTargeting.h"
+#include "ToCData.h"
 #include "ToCDefinitions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
-#include "ToCHelpers_Shared.h"
 #include "ToCRaidMultipliers.h"
 #include "ToCRaidTriggers.h"
 
@@ -15,7 +16,7 @@ void RaidTrialOfTheCrusaderStrategy::OnTick()
         return;
 
     legacyRtiChecked = true;
-    TrialOfTheCrusaderHelpers::ToCRestoreLegacyRti(botAI);
+    RaidRestoreLegacyRti(botAI, TrialOfTheCrusaderHelpers::TRIAL_OF_THE_CRUSADER_MAP_ID);
 }
 
 // Don't reorder: equal relevances pop in insertion order.
@@ -57,5 +58,5 @@ void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& m
     ToCStagingDefinition().AddMultipliers(botAI, multipliers);
     ToCResistAuraDefinition().AddMultipliers(botAI, multipliers);
     ToCOpenerDefinition().AddMultipliers(botAI, multipliers);
-    multipliers.push_back(new ToCBurstWindowMultiplier(botAI));
+    multipliers.push_back(new RaidBurstWindowMultiplier(botAI, "toc burst window", &ToCLiveBurstWindow));
 }

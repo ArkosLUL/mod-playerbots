@@ -7,9 +7,7 @@
 #include "ICCTriggers_Putricide.h"
 #include "ICCHelpers_Putricide.h"
 #include "ICCHelpers_Shared.h"
-#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
-#include "RaidDifficulty.h"
 #include "Trigger.h"
 #include "Vehicle.h"
 
@@ -75,37 +73,7 @@ bool IccPutricideMutatedPlagueTrigger::IsActive()
 
 bool IccPutricideMalleableGooTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "professor putricide");
-    if (!boss)
-        return false;
-
-    Difficulty const diff = GetRaidMapDifficulty(bot);
-
-    // Heroic cheat buffs — apply to all group members (bots + real players)
-    if (boss && boss->IsInCombat() && sPlayerbotAIConfig.EnableICCBuffs &&
-        (diff == RAID_DIFFICULTY_10MAN_HEROIC || diff == RAID_DIFFICULTY_25MAN_HEROIC))
-    {
-        if (Group* buffGroup = bot->GetGroup())
-        {
-            for (GroupReference* itr = buffGroup->GetFirstMember(); itr; itr = itr->next())
-            {
-                Player* member = itr->GetSource();
-                if (!member || !member->IsAlive() || !member->IsInWorld())
-                    continue;
-
-                IccApplyHeroicBuffToMember(bot, member, false, true, "pp.heroicbuff");
-
-                if (PlayerbotAI::IsTank(member) && !member->HasAura(SPELL_SPITEFULL_FURY) &&
-                    boss->GetVictim() != member)
-                {
-                    member->AddAura(SPELL_SPITEFULL_FURY, member);
-                    IccNoteCheat(bot, "pp.spitefulfury", member);
-                }
-            }
-        }
-    }
-
-    return true;
+    return AI_VALUE2(Unit*, "find target", "professor putricide") != nullptr;
 }
 
 bool IccPutricideAbominationTrigger::IsActive()

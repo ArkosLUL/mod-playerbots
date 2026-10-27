@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "Multiplier.h"
-#include "ToCMultipliers_Shared.h"
+#include "RaidBurstWindow.h"
 
 // Keeps a twin's tank on her instead of drifting with the combat formation
 class TwinValkyrControlTankMovementMultiplier : public Multiplier
@@ -45,6 +45,6 @@ public:
 
 void AddToCTwinValkyrMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
-ToCBurstWindow ToCTwinValkyrBurstWindow(PlayerbotAI* botAI);
+RaidBurstWindow ToCTwinValkyrBurstWindow(PlayerbotAI* botAI);
 
 #endif

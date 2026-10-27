@@ -24,13 +24,13 @@ void DefineValithria(EncounterBuilder& e)
     e.Node<IccValithriaHealTrigger, IccValithriaHealAction>(ACTION_RAID + 2);
     e.Node<IccValithriaDreamCloudTrigger, IccValithriaDreamCloudAction>(ACTION_RAID + 4);
 
-    e.Multiplier<IccValithriaDreamCloudMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<IccValithriaDreamCloudMultiplier>(Family::AnyAction);
 }
 }  // namespace
 
 EncounterDefinition const& IccValithriaDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_VALITHRIA_DREAMWALKER, IccPassThroughGate,
+    static EncounterDefinition const definition(ICC_BOSS_VALITHRIA_DREAMWALKER, BossStateGate,
                                                 "valithria-dreamwalker", &DefineValithria);
     return definition;
 }

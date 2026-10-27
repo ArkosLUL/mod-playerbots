@@ -4,17 +4,12 @@
 #include <vector>
 
 #include "NamedObjectContext.h"
+#include "RaidResistAura.h"
+#include "ToCHelpers_ResistAura.h"
 #include "Trigger.h"
 
-// A paladin or hunter whose resistance duty isn't up yet. No encounter prefix, so the gate never
-// wraps it: the wanted schools carry their own window, staging included.
-class ToCResistAuraTrigger : public Trigger
-{
-public:
-    ToCResistAuraTrigger(PlayerbotAI* botAI) : Trigger(botAI, "toc resistance aura") {}
-    bool IsActive() override;
-};
-
+// No encounter prefix, so the gate never wraps it: the wanted schools carry their own window, staging
+// included.
 class ToCResistAuraTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
@@ -24,7 +19,10 @@ public:
     }
 
 private:
-    static Trigger* toc_resistance_aura(PlayerbotAI* botAI) { return new ToCResistAuraTrigger(botAI); }
+    static Trigger* toc_resistance_aura(PlayerbotAI* botAI)
+    {
+        return new RaidResistAuraTrigger(botAI, "toc resistance aura", TrialOfTheCrusaderHelpers::TOC_RESIST_AURA);
+    }
 };
 
 void AddToCResistAuraTriggerNodes(std::vector<TriggerNode*>& triggers);

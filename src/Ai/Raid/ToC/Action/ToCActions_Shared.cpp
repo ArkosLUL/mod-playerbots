@@ -1,5 +1,4 @@
 #include "ToCActions_Shared.h"
-#include "EncounterHelpers.h"
 #include "ToCData.h"
 #include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
@@ -41,19 +40,4 @@ bool ToCMainTankHoldAction::DragBossToAnchor(Unit* boss, Position const& anchor)
 
     return MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, moveX, moveY, anchor.GetPositionZ(),
                   false, false, false, false, MovementPriority::MOVEMENT_COMBAT, true, true);
-}
-
-bool ToCDirectAttackAction::AttackDirect(Unit* target)
-{
-    if (!target)
-        return false;
-
-    // Above the early return: the generic pet attack node is off, so a pet keeps whatever it
-    // latched onto. No-op when the pet is already there.
-    EncounterHelpers::CommandPetAttack(botAI, target);
-
-    if (AI_VALUE(Unit*, "current target") == target)
-        return false;
-
-    return Attack(target);
 }

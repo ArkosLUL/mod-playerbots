@@ -24,14 +24,14 @@ void DefineLichKing(EncounterBuilder& e)
     e.Node<IccLichKingAddsTrigger, IccLichKingAddsAction>(ACTION_RAID + 2);
     e.Node<IccLichKingSpiritBombTrigger, IccLichKingSpiritBombAction>(ACTION_RAID + 7);
 
-    e.Multiplier<IccLichKingAddsMultiplier>(Family::AnyAction);
-    e.Multiplier<IccLichKingSpiritBombMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<IccLichKingAddsMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<IccLichKingSpiritBombMultiplier>(Family::AnyAction);
 }
 }  // namespace
 
 EncounterDefinition const& IccLichKingDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_THE_LICH_KING, IccPassThroughGate,
+    static EncounterDefinition const definition(ICC_BOSS_THE_LICH_KING, BossStateGate,
                                                 "the-lich-king", &DefineLichKing);
     return definition;
 }

@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "Multiplier.h"
-#include "ToCMultipliers_Shared.h"
+#include "RaidBurstWindow.h"
 
 // Keep tanks anchored on Anub'arak and his burrowers instead of drifting with the combat formation
 class AnubarakControlTankMovementMultiplier : public Multiplier
@@ -68,6 +68,6 @@ public:
 
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
-ToCBurstWindow ToCAnubarakBurstWindow(PlayerbotAI* botAI);
+RaidBurstWindow ToCAnubarakBurstWindow(PlayerbotAI* botAI);
 
 #endif

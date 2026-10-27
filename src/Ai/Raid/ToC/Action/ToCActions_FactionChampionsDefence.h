@@ -6,8 +6,8 @@
 #include "MovementActions.h"
 #include "NamedObjectContext.h"
 #include "Position.h"
+#include "RaidDirectTargeting.h"
 #include "ToCActions_NorthrendBeasts.h"
-#include "ToCActions_Shared.h"
 
 // Walks out of a Bladestorm or Hellfire, the two champion AoEs a bot can see coming
 class FactionChampionsAvoidAoeAction : public MovementAction
@@ -41,11 +41,11 @@ public:
     bool isUseful() override;
 };
 
-class FactionChampionsKillTotemAction : public ToCDirectAttackAction
+class FactionChampionsKillTotemAction : public RaidDirectAttackAction
 {
 public:
     FactionChampionsKillTotemAction(
-        PlayerbotAI* botAI) : ToCDirectAttackAction(botAI, "faction champions kill totem") {}
+        PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, "faction champions kill totem") {}
     bool Execute(Event event) override;
 };
 

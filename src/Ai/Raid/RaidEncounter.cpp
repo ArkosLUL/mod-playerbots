@@ -11,6 +11,7 @@
 
 #include "AttackAction.h"
 #include "ChooseTargetActions.h"
+#include "Creature.h"
 #include "DKActions.h"
 #include "DruidBearActions.h"
 #include "FollowActions.h"
@@ -18,14 +19,17 @@
 #include "HunterActions.h"
 #include "InstanceScript.h"
 #include "MageActions.h"
+#include "Map.h"
 #include "MovementActions.h"
 #include "PaladinActions.h"
 #include "PetsAction.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "ReachTargetActions.h"
 #include "Timer.h"
+#include "TypeContainerVisitor.h"
 #include "WarriorActions.h"
 
 namespace Rules = RaidEncounterRules;
@@ -203,12 +207,13 @@ namespace
     {
     public:
         EncounterGatedMultiplier(PlayerbotAI* botAI, Multiplier* inner, Rules::FamilyMask families, EncounterGate gate,
-                                 uint32 encounterId)
+                                 uint32 encounterId, bool live)
             : Multiplier(botAI, inner->getName()),
               _inner(inner),
               _families(families),
               _gate(gate),
-              _encounterId(encounterId)
+              _encounterId(encounterId),
+              _live(live)
         {
         }
 
@@ -217,7 +222,7 @@ namespace
         float GetValue(Action* action) override
         {
             if (!action || !_cache.Get(action, [&] { return (ClassifyAction(action) & _families) != 0; }) ||
-                !_gate.open(botAI, _encounterId))
+                !(_live ? _gate.live(botAI, _encounterId) : _gate.open(botAI, _encounterId)))
                 return 1.0f;
 
             return _inner->GetValue(action);
@@ -228,8 +233,87 @@ namespace
         Rules::FamilyMask _families;
         EncounterGate _gate;
         uint32 _encounterId;
+        bool _live;
         CaresCache _cache;
     };
+
+    constexpr uint32 UNIT_GATE_RESCAN_MS = 1000;
+
+    using GuidsByEntry = std::unordered_map<uint32, std::vector<ObjectGuid>>;
+
+    // Every entry a unit gate asked for on one instance, with the guids the last scan found.
+    struct UnitGateUnits
+    {
+        GuidsByEntry byEntry;
+        uint32 scannedMs = 0;
+        bool scanned = false;  // 0 is a real getMSTime value
+    };
+
+    RaidInstanceState<UnitGateUnits> unitGateUnits;
+
+    class UnitGateScan
+    {
+    public:
+        explicit UnitGateScan(GuidsByEntry& byEntry) : _byEntry(byEntry) {}
+
+        void Visit(std::unordered_map<ObjectGuid, Creature*>& creatures)
+        {
+            for (auto const& [guid, creature] : creatures)
+            {
+                if (!creature)
+                    continue;
+
+                auto const found = _byEntry.find(creature->GetEntry());
+                if (found != _byEntry.end())
+                    found->second.push_back(guid);
+            }
+        }
+
+        template <class T>
+        void Visit(std::unordered_map<ObjectGuid, T*>&)
+        {
+        }
+
+    private:
+        GuidsByEntry& _byEntry;
+    };
+
+    // Map-wide, but the object store only holds creatures in loaded grids.
+    UnitGateUnits& UnitGateUnitsOf(Map* map, uint32 const* entries, std::size_t count)
+    {
+        UnitGateUnits& units = unitGateUnits.For(map->GetInstanceId());
+        uint32 const now = getMSTime();
+        bool rescan = !units.scanned || getMSTimeDiff(units.scannedMs, now) >= UNIT_GATE_RESCAN_MS;
+        for (std::size_t i = 0; i < count; ++i)
+            rescan |= units.byEntry.try_emplace(entries[i]).second;
+
+        if (!rescan)
+            return units;
+
+        units.scannedMs = now;
+        units.scanned = true;
+        for (auto& entry : units.byEntry)
+            entry.second.clear();
+
+        UnitGateScan scan(units.byEntry);
+        TypeContainerVisitor<UnitGateScan, MapStoredObjectTypesContainer> visitor(scan);
+        visitor.Visit(map->GetObjectsStore());
+        return units;
+    }
+
+    // A pet or totem on the victim side counts as its owner.
+    bool FightsBotGroup(Player* bot, Creature* unit)
+    {
+        if (!unit->IsInCombat())
+            return false;
+
+        if (Unit* victim = unit->GetVictim())
+            if (Player* player = victim->GetCharmerOrOwnerPlayerOrPlayerItself())
+                if (bot->IsInSameRaidWith(player))
+                    return true;
+
+        return bot->IsInCombatWith(unit);
+    }
 }  // namespace
 
 bool BossStateGateOpen(PlayerbotAI* botAI, uint32 encounterId)
@@ -259,6 +343,60 @@ bool BossStateGateLive(PlayerbotAI* botAI, uint32 encounterId)
         return false;
 
     return instance->GetBossState(encounterId) == IN_PROGRESS;
+}
+
+UnitGateDetail::Read const& UnitGateDetail::Get(PlayerbotAI* botAI, uint32 const* entries, std::size_t count,
+                                                Read& read)
+{
+    if (!botAI)
+    {
+        read = Read();
+        return read;
+    }
+
+    uint32 const pass = CurrentGatePass(botAI);
+    if (read.pass == pass)
+        return read;
+
+    read.pass = pass;
+    read.open = false;
+    read.live.Clear();
+
+    Player* bot = botAI->GetBot();
+    Map* map = bot ? bot->FindMap() : nullptr;
+    if (!map || !map->GetInstanceId())
+        return read;
+
+    UnitGateUnits const& units = UnitGateUnitsOf(map, entries, count);
+    for (std::size_t i = 0; i < count; ++i)
+    {
+        auto const found = units.byEntry.find(entries[i]);
+        if (found == units.byEntry.end())
+            continue;
+
+        for (ObjectGuid const& guid : found->second)
+        {
+            Creature* unit = map->GetCreature(guid);
+            if (!unit || !unit->IsAlive())
+                continue;
+
+            read.open = true;
+            if (FightsBotGroup(bot, unit))
+            {
+                read.live = guid;
+                return read;
+            }
+        }
+    }
+
+    return read;
+}
+
+Creature* UnitGateDetail::LiveUnit(PlayerbotAI* botAI, ObjectGuid const& guid)
+{
+    Player* bot = botAI && !guid.IsEmpty() ? botAI->GetBot() : nullptr;
+    Map* map = bot ? bot->FindMap() : nullptr;
+    return map ? map->GetCreature(guid) : nullptr;
 }
 
 uint32 EncounterTriggerPassId(PlayerbotAI* botAI)
@@ -546,11 +684,11 @@ void EncounterBuilder::AddRule(char const* name, RoleMask roles, Predicate predi
         { return new EncounterRuleMultiplier(botAI, name, shared, roles, predicate, gate, encounterId); });
 }
 
-void EncounterBuilder::HandWritten(FamilyMask families, EncounterDefinition::MultiplierCreator make)
+void EncounterBuilder::HandWritten(FamilyMask families, EncounterDefinition::MultiplierCreator make, bool live)
 {
     EncounterGate const gate = _definition._gate;
     uint32 const encounterId = _definition._encounterId;
     _definition._multipliers.push_back(
-        [families, make, gate, encounterId](PlayerbotAI* botAI) -> ::Multiplier*
-        { return new EncounterGatedMultiplier(botAI, make(botAI), families, gate, encounterId); });
+        [families, make, gate, encounterId, live](PlayerbotAI* botAI) -> ::Multiplier*
+        { return new EncounterGatedMultiplier(botAI, make(botAI), families, gate, encounterId, live); });
 }

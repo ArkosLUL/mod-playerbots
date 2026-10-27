@@ -32,7 +32,8 @@ gaps.
 5. **Fold and delete.**
    - Move durable content left in the briefs into `docs/raids/icecrown-citadel/`.
    - Move ICC from "Still bare" to the converted list in `docs/systems/observability.md`.
-   - Correct `docs/engine/pitfalls.md`'s raid-cheat bullet for ICC.
+   - Correct `docs/engine/pitfalls.md`'s raid-cheat bullet: in ICC every kept cheat sits behind `raid`
+     and records itself, and Yogg-Saron no longer checks the raid cheat.
    - Update `docs/raids/README.md`'s ICC row.
    - Delete `docs/plans/icc-rebuild/`.
    - Fold with `compact-docs-writer`.
@@ -48,6 +49,20 @@ lines, and this directory, which it deletes.
 ## Decisions for review
 
 ## Carried over
+
+From `docs/plans/icc-raidobs/`, still true at `206bacaca`:
+
+- Scope 2 also checks that each file name carries its contract slug (watch Valithria, Svalna,
+  Gunship, the gauntlet, the Blood Prince trash, the dogs and the giants) and that the
+  `icecrown_citadel.py` banner shows `iccbuffs`.
+- `raidobs/verify.py`: add `"cheat": ("g", "tgt")` to `VERIFY_UNIT_FIELDS`, so `--verify` catches a
+  `NoteCheat` that skips `EnsureUnit`.
+- The ICC boss readers each repeat the refusal and cheat code a shared helper in
+  `bosses/icecrown_citadel.py` could hold. Its `--phases` prints "`<key>` never written" for an
+  encounter that publishes no phase (Saurfang, the giant, the dogs, Rotface, Svalna, Valithria, the
+  gauntlet, the trash).
+- `docs/systems/observability.md`'s `ICC_PREFIXES` paragraph still says ICC triggers sit behind no
+  gate; `r1-foundation` gated them.
 
 ## Known gaps
 

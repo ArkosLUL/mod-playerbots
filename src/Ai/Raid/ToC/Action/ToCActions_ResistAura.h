@@ -3,16 +3,8 @@
 
 #include "Action.h"
 #include "NamedObjectContext.h"
-
-// Casts the duty's aura directly, no ChangeStrategy: an added strategy is never taken off again and
-// outlives the raid. The hold rules keep the bot's own aura nodes off the slot meanwhile.
-class ToCRaiseResistAuraAction : public Action
-{
-public:
-    ToCRaiseResistAuraAction(PlayerbotAI* botAI) : Action(botAI, "toc raise resistance aura") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
+#include "RaidResistAura.h"
+#include "ToCHelpers_ResistAura.h"
 
 class ToCResistAuraActionContext : public NamedObjectContext<Action>
 {
@@ -23,7 +15,11 @@ public:
     }
 
 private:
-    static Action* toc_raise_resistance_aura(PlayerbotAI* botAI) { return new ToCRaiseResistAuraAction(botAI); }
+    static Action* toc_raise_resistance_aura(PlayerbotAI* botAI)
+    {
+        return new RaidRaiseResistAuraAction(botAI, "toc raise resistance aura",
+                                             TrialOfTheCrusaderHelpers::TOC_RESIST_AURA);
+    }
 };
 
 #endif

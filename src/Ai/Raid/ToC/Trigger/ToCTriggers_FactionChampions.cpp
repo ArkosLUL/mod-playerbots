@@ -1,8 +1,8 @@
 #include "ToCTriggers_FactionChampions.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
-#include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
+#include "RaidDirectTargeting.h"
 #include "Strategy.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -16,7 +16,7 @@ bool FactionChampionsShouldFocusTrigger::IsActive()
 
     Unit* killTarget = FactionChampionsKillTarget(botAI);
     return killTarget &&
-           (AI_VALUE(Unit*, "current target") != killTarget || ToCPetOffPick(botAI, killTarget));
+           (AI_VALUE(Unit*, "current target") != killTarget || RaidPetOffPick(botAI, killTarget));
 }
 
 bool FactionChampionsKillTargetHealingTrigger::IsActive() { return FactionChampionsCounterspellDuty(botAI); }

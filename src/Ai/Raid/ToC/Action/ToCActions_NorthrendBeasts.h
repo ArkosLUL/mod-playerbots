@@ -9,13 +9,13 @@
 #include "NamedObjectContext.h"
 #include "Playerbots.h"
 #include "Position.h"
+#include "RaidDirectTargeting.h"
 #include "Timer.h"
-#include "ToCActions_Shared.h"
 
-class NorthrendBeastsDpsTargetAction : public ToCDirectAttackAction
+class NorthrendBeastsDpsTargetAction : public RaidDirectAttackAction
 {
 public:
-    NorthrendBeastsDpsTargetAction(PlayerbotAI* botAI, std::string const name) : ToCDirectAttackAction(botAI, name) {}
+    NorthrendBeastsDpsTargetAction(PlayerbotAI* botAI, std::string const name) : RaidDirectAttackAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 

@@ -22,7 +22,7 @@ void DefineMarrowgar(EncounterBuilder& e)
 
 EncounterDefinition const& IccMarrowgarDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_LORD_MARROWGAR, IccPassThroughGate,
+    static EncounterDefinition const definition(ICC_BOSS_LORD_MARROWGAR, BossStateGate,
                                                 "lord-marrowgar", &DefineMarrowgar);
     return definition;
 }

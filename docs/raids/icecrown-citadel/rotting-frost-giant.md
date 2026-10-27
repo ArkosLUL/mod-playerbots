@@ -1,8 +1,8 @@
 # Rotting Frost Giant
 
-No boss state: slug `rotting-frost-giant`, prefix `rfg.` (`icc.` is raid-wide only). Code:
-`IccRottingFrostGiantTankPositionTrigger` (opens the pull with `IccMarkPull` once bot and giant are
-both in combat) and `IccRottingFrostGiantTankPositionAction`, in `Action/ICCActions_LDW.cpp`. Raid
+No boss state: slug `rotting-frost-giant`, prefix `rfg.` (`icc.` is raid-wide only). Code: stem
+`FrostGiant` (`src/Ai/Raid/ICC/*/ICC*_FrostGiant.*`), `IccRottingFrostGiantTankPositionTrigger` and
+its action; the definition's tick opens the pull with `IccMarkPull` while the gate is live. Raid
 conventions: [README.md](README.md).
 
 ## Death Plague (core)
