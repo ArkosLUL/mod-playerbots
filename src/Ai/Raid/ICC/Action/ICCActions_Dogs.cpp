@@ -4,9 +4,8 @@
  * or (at your option) any later version.
  */
 
+#include "ICCActions_Dogs.h"
 #include "GenericSpellActions.h"
-#include "ICCActions.h"
-#include "ICCTriggers.h"
 #include "Multiplier.h"
 #include "Playerbots.h"
 
