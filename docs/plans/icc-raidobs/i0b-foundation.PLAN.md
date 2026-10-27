@@ -90,10 +90,82 @@ removals and bug fixes.
 
 ## Task list
 
+Sized as one lane: the work is mechanical edits across shared ICC files, so a split would only
+re-read the same files. All done:
+
+- [x] `Bot/Obs`: `NameBossStates` table, naming at open (bossstate row, queued boss id for engage and
+  mark opens), boss-state takeover of a differently named trace, `MarkPull(map, source, name)`,
+  `NoteCheat` + `cheat` record with per-(bot, key) latch in `BotTrace`, close-time flush, schema 14,
+  `cfg.iccbuffs`.
+- [x] `ICCShared`: `IccRaidCheat`, `IccNoteCheat`, `IccMarkPull`; taunt helper through the fixed keys;
+  `IccApplyHeroicBuffToMember(bot, member, …, key)`.
+- [x] All 53 cheat sites wrapped (19 remove, 12 buffs, 22 gap); borderline sites documented only.
+- [x] `IccInstanceState`: 16 fields to traced containers; `T&` sites rewritten (`LK` shared slot,
+  `BQL` latches); VT claim prune erases by guid.
+- [x] Listeners: goo hazard circle, `rf.vilegas`, `lk.defile` + circle; Vile Gas id fixed.
+- [x] Trigger renames, orphan creator (and its dead class) removed, boss-state reset.
+- [x] `docs/raids/icecrown-citadel/README.md`, raid row.
+- [x] Checks: syntax (lane `.cpp` alone, then headers), pblint 23/25 warnings (was 26/31, rest are
+  i2/i5 rows), botobs suite, codestyle.
+
 ## Decisions for review
+
+- **`MarkPull` takes a name** (dogs, giants) rather than `MarkPull` + `NamePull`. Source:
+  `UpgradeBossName` upgrades only the map-name fallback, so a trace `MarkPull` named "stinky" can never
+  be renamed. Alternative: `MarkPull(map, nullptr)` then `NamePull`, which writes a rename every pull.
+- **Engage and mark opens also take the table name**, from the boss id still queued in
+  `g_pendingBossState`. Source: `Creature::AtEngage` runs `JustEngagedWith` (which sets `IN_PROGRESS`)
+  before `OnUnitEnterCombat`, so most ICC traces open on the engage, before the boss-state update.
+  Alternative: table only for `bossstate` opens; those traces would open under the creature's name
+  (BQL as `queen-lana-thel`) and take a rename record a tick later.
+- **A boss state on a table map renames a differently named open trace, and closes (`idle`) one
+  `MarkPull` opened.** Source: a dogs trace in its 30 s idle window would absorb a Festergut pull.
+  Alternative: leave both alone.
+- **Reset**: 5 s after the last `IN_PROGRESS` boss state ends, kill or wipe. Source: today's reset
+  fires after any dungeon boss leaves combat, corpses included (`Creature::Update` calls the hook for
+  `Corpse`), so it already resets on kills; "wipe-only" read as "never mid-fight". Alternative: reset
+  only on `NOT_STARTED`/`FAIL`, carrying a killed boss's state into the next pull.
+- **Bare**: struct values incl. `ValithriaCloudSync`, `SpreadSlotState`, `DefileCastInfo`,
+  `VileGasVictim` (brief rule); edge detectors `sgLastPhase3`, `bqlBossWasAirborne` (last-observation
+  caches); `sgFlaredRedThisPhase` (`std::set<int>`, no traced int container). Alternative for the last:
+  an `ObsValue<uint32>` bitmask.
+- **Listener probes unpaced**: each fires once per cast; per-instance pacing would drop real casts (25H
+  goo hits two players at once). Alternative: pace per instance.
+- **Malleable Goo ids**: dropped 72297, 74280, 74281 from the listener. Source:
+  `Spell::EffectTriggerMissileSpell` gives the child spell the caster (Putricide) as unit target, so
+  they never pass the player test; 70852 and 72296 have no spelldifficulty row. Alternative: complete
+  rows 2197 and 2211, five more dead ids.
+- **Defile circle**: 6 yd (`GetDefileEffectiveRadius` base) for `Spell::GetCastTime()`; the note `txt`
+  of both listener notes is the spell id. Alternative ttl: none fits, Defile grows and never expires.
+- **Records count real uses only**: taunt reset only with a running cooldown (`HasSpellCooldown`),
+  `vd.speed` only when a rate differs, tomb strips only with an aura to strip, heroic buffs only when
+  one is added. Behaviour is identical: each skipped call was a no-op. Alternative: record every call.
+- **Raid cheat off**: `pp.freeooze` casts at full energy (`TRIGGERED_NONE`) rather than skipping;
+  `pp.unboundplague` returns false rather than true; cleanup removals (Cyclone, Magic Barrier, 1%
+  Threat, speed restore) stay ungated so they still undo the cheat.
+- **Keys** beyond the fixed ones: `lk.painsuppression`, `lk.aegis` split from LK:4054's Nitro;
+  `lk.hoj` (ungated Shambling stun) vs `lk.valkyrstun` (buffs-gated Val'kyr stun); `*.heroicbuff`
+  per encounter; full list in the README cheat table.
+- **Orphan**: also removed `IccDbsMainTankRuneOfBloodTrigger` and its `IsActive`, unreachable once the
+  creator went (it was pblint's `assist-index-default` warning too).
 
 ## Carried over
 
+- **i2-plagueworks**: `SPELL_MALLEABLE_GOO_25N/_10H/_25H` (`ICCTriggers.h`) now have no user; the
+  Vile Gas row is handled in the listener, `SPELL_VILE_GAS_H`'s only user. Acid Burst and Gastric
+  Bloat warnings remain theirs. `fgSlotState` is bare for a `NoteDerived`.
+- **i4-frostwing**: `vtCloudSync.targetCloudGuid` and `sgFlaredRedThisPhase` are bare for a
+  `NoteDerived`.
+- **Merge stage**: `docs/systems/observability.md` (i0a's) should gain `NameBossStates`,
+  `MarkPull(…, name)`, and the boss-state rename/close rule under "Lifecycle". `docs/raids/README.md`'s
+  "Not migrated … ICC (clears on its own `OnDestroyMap`)" now also resets on boss state.
+- **All boss lanes**: the README cheat table lists every site; update its rows as removals land.
+
 ## Known gaps
+
+- Raid-icon targeting throughout (README Known gaps); boss lanes probe the picks.
+- Festergut and Rotface reach `IN_PROGRESS` only when Putricide reaches his balcony point; their traces
+  open on the engage, named by the DBC credit, which matches the slug.
+- Gap cheats stay open mechanics (README).
 
 ## Blocked

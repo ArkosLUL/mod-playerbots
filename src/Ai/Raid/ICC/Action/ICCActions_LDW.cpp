@@ -131,14 +131,23 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
         (diff == RAID_DIFFICULTY_10MAN_HEROIC || diff == RAID_DIFFICULTY_25MAN_HEROIC))
     {
         if (!bot->HasAura(SPELL_NO_THREAT) && botAI->HasAggro(boss) && !PlayerbotAI::IsTank(bot))
+        {
             bot->AddAura(SPELL_NO_THREAT, bot);
+            IccNoteCheat(bot, "ldw.nothreat");
+        }
 
         if (PlayerbotAI::IsMainTank(bot) && !bot->HasAura(SPELL_SPITEFULL_FURY) && boss->GetVictim() != bot)
+        {
             bot->AddAura(SPELL_SPITEFULL_FURY, bot);
+            IccNoteCheat(bot, "ldw.spitefulfury");
+        }
     }
 
     if (botAI->HasAura("Dominate Mind", bot, false, false) && !bot->HasAura(SPELL_CYCLONE))
-        bot->AddAura(SPELL_CYCLONE, bot);
+    {
+        if (IccRaidCheat(botAI, "ldw.cyclone"))
+            bot->AddAura(SPELL_CYCLONE, bot);
+    }
     else if (bot->HasAura(SPELL_CYCLONE) && !botAI->HasAura("Dominate Mind", bot, false, false))
         bot->RemoveAura(SPELL_CYCLONE);
 
@@ -155,7 +164,10 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
                 continue;
 
             if (botAI->HasAura("Dominate Mind", member, false, false) && !member->HasAura(SPELL_CYCLONE))
-                member->AddAura(SPELL_CYCLONE, member);
+            {
+                if (IccRaidCheat(botAI, "ldw.cyclone", member))
+                    member->AddAura(SPELL_CYCLONE, member);
+            }
             else if (member->HasAura(SPELL_CYCLONE) && !botAI->HasAura("Dominate Mind", member, false, false))
                 member->RemoveAura(SPELL_CYCLONE);
         }
@@ -165,7 +177,7 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
 
     if (PlayerbotAI::IsTank(bot))
     {
-        if (bot->HasAura(SPELL_TOUCH_OF_INSIGNIFICANCE))
+        if (bot->HasAura(SPELL_TOUCH_OF_INSIGNIFICANCE) && IccRaidCheat(botAI, "ldw.insignificance"))
             bot->RemoveAura(SPELL_TOUCH_OF_INSIGNIFICANCE);
 
         if (IsTargetedByShade(shadeEntryId))
@@ -766,7 +778,7 @@ bool IccRottingFrostGiantTankPositionAction::Execute(Event /*event*/)
         return false;
 
     Aura* aura = botAI->GetAura("death plague", bot, false, false);
-    if (aura)
+    if (aura && IccRaidCheat(botAI, "icc.deathplague"))
         bot->RemoveAura(aura->GetId());
 
     /* TODO: code works for handling plague, but atm script is bugged and one bot can have 2 plagues at the same time or

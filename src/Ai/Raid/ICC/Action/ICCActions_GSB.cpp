@@ -344,7 +344,7 @@ bool IccGunshipRocketJumpAction::Execute(Event /*event*/)
                                                         SPELL_BATTLE_FURY3, SPELL_BATTLE_FURY4,
                                                         SPELL_BATTLE_FURY5};
             for (uint32 const id : BATTLE_FURY_IDS)
-                if (captain->HasAura(id))
+                if (captain->HasAura(id) && IccRaidCheat(botAI, "gsb.battlefury", captain))
                     captain->RemoveAurasDueToSpell(id);
         }
 

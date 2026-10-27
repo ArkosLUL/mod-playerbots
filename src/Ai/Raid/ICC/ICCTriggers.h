@@ -320,7 +320,7 @@ public:
 class IccGunshipCannonNearTrigger : public Trigger
 {
 public:
-    IccGunshipCannonNearTrigger(PlayerbotAI* botAI) : Trigger(botAI, "icc in cannon") {}
+    IccGunshipCannonNearTrigger(PlayerbotAI* botAI) : Trigger(botAI, "icc gunship cannon near") {}
     bool IsActive() override;
 };
 
@@ -343,13 +343,6 @@ class IccDbsTrigger : public Trigger
 {
 public:
     IccDbsTrigger(PlayerbotAI* botAI) : Trigger(botAI, "icc dbs") {}
-    bool IsActive() override;
-};
-
-class IccDbsMainTankRuneOfBloodTrigger : public Trigger
-{
-public:
-    IccDbsMainTankRuneOfBloodTrigger(PlayerbotAI* botAI) : Trigger(botAI, "icc dbs main tank rune of blood") {}
     bool IsActive() override;
 };
 
@@ -508,7 +501,7 @@ public:
 class IccBqlGroupPositionTrigger : public Trigger
 {
 public:
-    IccBqlGroupPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, "icc bql tank position") {}
+    IccBqlGroupPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, "icc bql group position") {}
     bool IsActive() override;
 };
 

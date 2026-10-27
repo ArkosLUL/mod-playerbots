@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 class Aura;
 class Map;
@@ -32,7 +33,7 @@ class Unit;
 namespace RaidObs
 {
 // Bumped whenever a record's field layout changes, so the analyzer can still read older traces.
-constexpr uint32 SCHEMA_VERSION = 13;
+constexpr uint32 SCHEMA_VERSION = 14;
 
 // True only while at least one trace is open. Probes on shared hot paths test this before doing
 // anything else, so with nothing recording the framework costs one predictable branch.
@@ -66,8 +67,16 @@ void OnEncounterCredit(Map* map);
 void OnCreatureEngage(Unit* creature, Unit* victim);
 
 // Opens a trace for a pull no instance script reports: gauntlets, trash, a mid-phase re-engage.
-// `source` names the file and may be null, in which case the map's own name is used.
-void MarkPull(Map* map, Unit* source);
+// `name` names the file outright when given; otherwise `source` does, and with neither the map's own
+// name is used. On an open trace it only upgrades the map-name fallback, as NamePull does.
+void MarkPull(Map* map, Unit* source, char const* name = nullptr);
+
+// A raid's trace name for each of its boss-state ids. A trace that opens on that map while one of those
+// bosses is IN_PROGRESS takes the name outright, where it would otherwise carry the engaged creature's
+// or the map's: an encounter fought against several bosses, or one with no boss-flagged unit, then
+// still files under one name. Call while scripts load, before any map updates: the table is read
+// unlocked from every map thread.
+void NameBossStates(uint32 mapId, std::vector<std::pair<uint32, std::string>> names);
 
 // Names a pull the engage hook cannot. That hook needs a boss to enter combat with a player, and an
 // encounter whose opening phase is fought against adds has none: a Yogg-Saron wipe in phase one was
@@ -242,6 +251,11 @@ void NoteAssignment(ObjectGuid guid, char const* kind, std::string const& value)
 // inside the helper that derives it - trigger and action both route through there, and two probes at
 // two call sites can disagree about what was decided.
 void NoteDerived(Player* bot, char const* key, std::string const& value);
+
+// A bot cheat ran: `bot` is the bot whose code ran it and `target` the unit it acted on, when that is not
+// the bot. A cheat site can fire every tick, so each (bot, key) writes on its first use in a trace, then
+// at most once per 10 s with the uses since its last row, and once more at the close.
+void NoteCheat(Player* bot, char const* key, Unit* target = nullptr);
 
 // From now until the pull ends, every hit the roster or its pets land on this NPC entry is a `dmg` row.
 void LogHitsOn(Player* bot, uint32 entry);

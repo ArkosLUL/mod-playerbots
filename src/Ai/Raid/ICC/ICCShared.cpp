@@ -9,6 +9,7 @@
 #include "ICCScripts.h"
 #include "ICCTriggers.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "ThreatManager.h"
 #include "Timer.h"
 #include <algorithm>
@@ -46,6 +47,33 @@ std::vector<Creature*> IccGetCreaturesByEntries(WorldObject* searcher, std::init
     return out;
 }
 
+bool IccRaidCheat(PlayerbotAI* botAI, char const* key, Unit* target)
+{
+    if (!botAI->HasCheat(BotCheatMask::raid))
+        return false;
+
+    RaidObs::NoteCheat(botAI->GetBot(), key, target);
+    return true;
+}
+
+void IccNoteCheat(Player* bot, char const* key, Unit* target) { RaidObs::NoteCheat(bot, key, target); }
+
+void IccMarkPull(Player* bot, Unit* source, char const* slug)
+{
+    if (source && bot->IsInCombat() && source->IsInCombat())
+        RaidObs::MarkPull(bot->GetMap(), source, slug);
+}
+
+namespace
+{
+    // Removing a cooldown that is not running changes nothing, so only a real reset counts as a use.
+    void IccResetTauntCooldown(Player* bot, PlayerbotAI* botAI, uint32 spellId)
+    {
+        if (bot->HasSpellCooldown(spellId) && IccRaidCheat(botAI, "icc.tauntreset"))
+            bot->RemoveSpellCooldown(spellId, true);
+    }
+}
+
 bool IccCastClassTaunt(Player* bot, PlayerbotAI* botAI, Unit* target)
 {
     if (!target || !target->IsAlive())
@@ -57,9 +85,7 @@ bool IccCastClassTaunt(Player* bot, PlayerbotAI* botAI, Unit* target)
         return false;
     last = now;
 
-    bool const threatReset = botAI->HasCheat(BotCheatMask::raid);
-
-    if (threatReset && target->GetVictim() != bot)
+    if (target->GetVictim() != bot && IccRaidCheat(botAI, "icc.tauntfixate", target))
     {
         ThreatManager& mgr = target->GetThreatMgr();
         mgr.AddThreat(bot, 1000000.0f, nullptr, true, true);
@@ -69,26 +95,22 @@ bool IccCastClassTaunt(Player* bot, PlayerbotAI* botAI, Unit* target)
     switch (bot->getClass())
     {
         case CLASS_PALADIN:
-            if (threatReset)
-                bot->RemoveSpellCooldown(SPELL_TAUNT_PALADIN, true);
+            IccResetTauntCooldown(bot, botAI, SPELL_TAUNT_PALADIN);
             if (botAI->CastSpell("hand of reckoning", target))
                 return true;
             break;
         case CLASS_DEATH_KNIGHT:
-            if (threatReset)
-                bot->RemoveSpellCooldown(SPELL_TAUNT_DK, true);
+            IccResetTauntCooldown(bot, botAI, SPELL_TAUNT_DK);
             if (botAI->CastSpell("dark command", target))
                 return true;
             break;
         case CLASS_DRUID:
-            if (threatReset)
-                bot->RemoveSpellCooldown(SPELL_TAUNT_DRUID, true);
+            IccResetTauntCooldown(bot, botAI, SPELL_TAUNT_DRUID);
             if (botAI->CastSpell("growl", target))
                 return true;
             break;
         case CLASS_WARRIOR:
-            if (threatReset)
-                bot->RemoveSpellCooldown(SPELL_TAUNT_WARRIOR, true);
+            IccResetTauntCooldown(bot, botAI, SPELL_TAUNT_WARRIOR);
             if (botAI->CastSpell("taunt", target))
                 return true;
             break;
@@ -149,7 +171,8 @@ void IccEnsureIconOn(Player* bot, PlayerbotAI* botAI, int8 icon, Unit* target)
         group->SetTargetIcon(icon, bot->GetGUID(), target->GetGUID());
 }
 
-void IccApplyHeroicBuffToMember(Player* member, bool applyPainSupp, bool applyNoThreat)
+void IccApplyHeroicBuffToMember(Player* bot, Player* member, bool applyPainSupp, bool applyNoThreat,
+                                char const* cheatKey)
 {
     uint32 const now = getMSTime();
     uint32& last = IcecrownHelpers::IccState(member->GetInstanceId()).lastBuffMs[member->GetGUID()];
@@ -157,17 +180,27 @@ void IccApplyHeroicBuffToMember(Player* member, bool applyPainSupp, bool applyNo
         return;
     last = now;
 
+    bool applied = false;
+    auto const apply = [&](uint32 spellId)
+    {
+        member->AddAura(spellId, member);
+        applied = true;
+    };
+
     if (!member->HasAura(SPELL_EXPERIENCED))
-        member->AddAura(SPELL_EXPERIENCED, member);
+        apply(SPELL_EXPERIENCED);
 
     if (!member->HasAura(SPELL_AGEIS_OF_DALARAN))
-        member->AddAura(SPELL_AGEIS_OF_DALARAN, member);
+        apply(SPELL_AGEIS_OF_DALARAN);
 
     if (applyPainSupp && !member->HasAura(SPELL_PAIN_SUPPRESION))
-        member->AddAura(SPELL_PAIN_SUPPRESION, member);
+        apply(SPELL_PAIN_SUPPRESION);
 
     if (applyNoThreat && !PlayerbotAI::IsTank(member) && !member->HasAura(SPELL_NO_THREAT))
-        member->AddAura(SPELL_NO_THREAT, member);
+        apply(SPELL_NO_THREAT);
+
+    if (applied)
+        IccNoteCheat(bot, cheatKey, member);
 }
 
 void IccStripExperienced(Player* bot)

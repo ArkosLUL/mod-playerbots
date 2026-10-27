@@ -7,13 +7,17 @@
 #include "ICCScripts.h"
 #include "Creature.h"
 #include "ICCTriggers.h"
+#include "InstanceScript.h"
+#include "Map.h"
 #include "Player.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
 #include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "Timer.h"
 #include <algorithm>
 #include <mutex>
+#include <string>
 
 namespace
 {
@@ -59,11 +63,9 @@ public:
         if (!caster || !spellInfo)
             return;
 
-        if (spellInfo->Id != SPELL_MALLEABLE_GOO_10N &&
-            spellInfo->Id != SPELL_MALLEABLE_GOO_25N &&
-            spellInfo->Id != SPELL_MALLEABLE_GOO_10H &&
-            spellInfo->Id != SPELL_MALLEABLE_GOO_25H &&
-            spellInfo->Id != SPELL_MALLEABLE_GOO_BALCONY)
+        // Neither id has a spelldifficulty row, so they hold on every difficulty. The missiles and
+        // impacts they trigger carry Putricide as their unit target, which the player test refuses.
+        if (spellInfo->Id != SPELL_MALLEABLE_GOO_10N && spellInfo->Id != SPELL_MALLEABLE_GOO_BALCONY)
             return;
 
         // Malleable Goo is cast triggered, so m_UniqueTargetInfo is not yet
@@ -80,6 +82,9 @@ public:
 
         auto& impacts = IcecrownHelpers::IccState(caster->GetMap()->GetInstanceId()).malleableGoo;
         impacts.push_back(impact);
+
+        // Festergut's avoid trigger reads an impact as 12 yd for 8 s, the widest model any consumer uses.
+        RaidObs::NoteHazardCircle(caster->GetMap(), spellInfo->Id, impact.position, 12.0f, 8000);
 
         // Evict stale entries to keep the list bounded. Retention covers the
         // longest consumer window (Festergut avoid: 8s) + slack.
@@ -98,17 +103,13 @@ public:
 
     void OnSpellCast(Spell* spell, Unit* caster, SpellInfo const* spellInfo, bool /*skipCheck*/) override
     {
-        if (!caster || !spellInfo)
+        // Professor Putricide casts Vile Gas from the balcony during Rotface heroic. Festergut casts the
+        // same spell himself, so the caster entry is what scopes this hook to Rotface.
+        if (!caster || !spellInfo || caster->GetEntry() != NPC_PROFESSOR_PUTRICIDE)
             return;
 
-        if (spellInfo->Id != SPELL_VILE_GAS_H)
-            return;
-
-        // Professor Putricide casts vile gas from the balcony during Rotface
-        // heroic. Filtering on caster entry keeps this hook scoped to the
-        // Rotface encounter only (Festergut also uses 'vile gas' as the gas
-        // spore aura name but a different spell ID).
-        if (caster->GetEntry() != NPC_PROFESSOR_PUTRICIDE)
+        // Heroic only, so the Spell constructor has already remapped the base id to 73019 or 73020.
+        if (spellInfo->Id != sSpellMgr->GetSpellIdForDifficulty(SPELL_VILE_GAS_H, caster))
             return;
 
         Unit* target = spell->m_targets.GetUnitTarget();
@@ -119,6 +120,8 @@ public:
             IcecrownHelpers::IccState(caster->GetMap()->GetInstanceId()).rotfaceVileGas;
         entry.victimGuid = target->GetGUID();
         entry.castTime = getMSTime();
+
+        RaidObs::Note(target->ToPlayer(), "rf.vilegas", std::to_string(spellInfo->Id));
     }
 };
 
@@ -146,27 +149,42 @@ public:
             IcecrownHelpers::IccState(caster->GetMap()->GetInstanceId()).defileCast;
         entry.targetGuid = target->GetGUID();
         entry.castTime = getMSTime();
+
+        // Where the puddle lands at the 6 yd it spawns with; once down it is a creature the trace samples.
+        RaidObs::Note(target->ToPlayer(), "lk.defile", std::to_string(spellInfo->Id));
+        RaidObs::NoteHazardCircle(caster->GetMap(), spellInfo->Id, target->GetPosition(), 6.0f,
+                                  static_cast<uint32>(std::max(spell->GetCastTime(), 0)));
     }
 };
 
-class IccBossStateResetScript : public AllCreatureScript
+// Keyed on boss state rather than on a boss in combat: Gunship, Valithria, Svalna and two of the
+// three princes are not dungeon bosses, so their latches used to outlive a wipe.
+class IccBossStateResetScript : public AllMapScript
 {
 public:
-    IccBossStateResetScript() : AllCreatureScript("IccBossStateResetScript") { }
+    IccBossStateResetScript() : AllMapScript("IccBossStateResetScript") { }
 
-    void OnAllCreatureUpdate(Creature* creature, uint32 /*diff*/) override
+    void OnMapUpdate(Map* map, uint32 /*diff*/) override
     {
-        if (!creature || creature->GetMapId() != ICC_MAP_ID || !creature->IsDungeonBoss())
+        if (!map || map->GetId() != ICC_MAP_ID)
             return;
 
-        uint32 const instanceId = creature->GetInstanceId();
+        InstanceMap* instance = map->ToInstanceMap();
+        InstanceScript* script = instance ? instance->GetInstanceScript() : nullptr;
+        if (!script)
+            return;
+
+        uint32 const instanceId = map->GetInstanceId();
         uint32 const now = getMSTime();
         IcecrownHelpers::IccInstanceState& st = IcecrownHelpers::IccState(instanceId);
 
-        if (creature->IsInCombat())
+        for (uint32 bossId = 0; bossId < script->GetEncounterCount(); ++bossId)
         {
-            st.lastBossCombatMs = now;
-            return;
+            if (script->GetBossState(bossId) == IN_PROGRESS)
+            {
+                st.lastBossCombatMs = now;
+                return;
+            }
         }
 
         if (st.lastBossCombatMs != 0 && getMSTimeDiff(st.lastBossCombatMs, now) > ICC_RESET_GRACE_MS)
@@ -188,6 +206,25 @@ public:
 
 void AddSC_IcecrownBotScripts()
 {
+    // Ids are the core's DATA_* boss order in icecrown_citadel.h.
+    RaidObs::NameBossStates(ICC_MAP_ID, {
+        {0, "lord-marrowgar"},
+        {1, "lady-deathwhisper"},
+        {2, "icecrown-gunship-battle"},
+        {3, "deathbringer-saurfang"},
+        {4, "festergut"},
+        {5, "rotface"},
+        {6, "professor-putricide"},
+        {7, "blood-prince-council"},
+        {8, "blood-queen-lana-thel"},
+        {9, "sister-svalna"},
+        {10, "valithria-dreamwalker"},
+        {11, "sindragosa"},
+        {12, "the-lich-king"},
+        {13, "sindragosa-gauntlet"},
+        {14, "blood-prince-trash"},
+    });
+
     new IccPutricideListenerScript();
     new IccRotfaceListenerScript();
     new IccLichKingListenerScript();

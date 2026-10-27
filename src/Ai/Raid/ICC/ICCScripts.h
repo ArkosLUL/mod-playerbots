@@ -9,6 +9,7 @@
 
 #include "ObjectGuid.h"
 #include "Position.h"
+#include "RaidObs.h"
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -72,6 +73,9 @@ namespace IcecrownHelpers
         float y;
     };
 
+    // Assignments and latches are traced containers, which write each change into the RaidObs trace.
+    // Timestamps, throttles, caches, edge detectors and struct values stay bare. The traced containers
+    // are unordered, so nothing may read their iteration order.
     struct IccInstanceState
     {
         std::vector<MalleableGooImpact> malleableGoo;
@@ -85,44 +89,44 @@ namespace IcecrownHelpers
         uint32 lastBossCombatMs = 0;
 
         std::map<ObjectGuid, WinterStageState> winterStage;
-        std::map<ObjectGuid, bool> winterStageInbound;
-        std::map<ObjectGuid, bool> mtAddInbound;
-        std::map<ObjectGuid, bool> rangedInbound;
+        RaidObs::ObsGuidMap<bool> winterStageInbound{"lk.winterinbound"};
+        RaidObs::ObsGuidMap<bool> mtAddInbound{"lk.mtinbound"};
+        RaidObs::ObsGuidMap<bool> rangedInbound{"lk.rangedinbound"};
         std::map<ObjectGuid, StackChoice> mtStackChoice;
         float defileLastUnsafeX = 0.0f;
         float defileLastUnsafeY = 0.0f;
         uint32 defileLastUnsafeTime = 0;
         uint32 lkLastYellMs = 0;
-        int lkSharedSlot = -1;
+        RaidObs::ObsValue<int> lkSharedSlot{"lk.sharedslot", -1};
 
         std::set<int> sgFlaredRedThisPhase;
-        bool sgFlaredBluePhase3 = false;
+        RaidObs::ObsValue<bool> sgFlaredBluePhase3{"sg.flaredblue"};
         bool sgLastPhase3 = false;
-        std::map<ObjectGuid, int> sgGroupAssignments;
-        std::map<ObjectGuid, ObjectGuid> sgTombAssignments;
-        std::set<ObjectGuid> sgFreedFallback;
+        RaidObs::ObsGuidMap<int> sgGroupAssignments{"sg.group"};
+        RaidObs::ObsGuidMap<ObjectGuid> sgTombAssignments{"sg.tomb"};
+        RaidObs::ObsGuidSet sgFreedFallback{"sg.freedfallback"};
         std::map<ObjectGuid, LastLosMove> sgLastLosMove;
 
-        std::map<ObjectGuid, int> bqlBotCurrentCurve;
-        bool bqlGroundPhaseEstablished = false;
+        RaidObs::ObsGuidMap<int> bqlBotCurrentCurve{"bql.curve"};
+        RaidObs::ObsValue<bool> bqlGroundPhaseEstablished{"bql.groundphase"};
         bool bqlBossWasAirborne = false;
-        bool bqlPostAirLanding = false;
-        std::map<ObjectGuid, int> bqlAirSlotMemory;
-        std::map<ObjectGuid, int> bqlBotSlotMemory;
+        RaidObs::ObsValue<bool> bqlPostAirLanding{"bql.postairlanding"};
+        RaidObs::ObsGuidMap<int> bqlAirSlotMemory{"bql.airslot"};
+        RaidObs::ObsGuidMap<int> bqlBotSlotMemory{"bql.slot"};
 
         ValithriaCloudSync vtCloudSync;
-        std::map<ObjectGuid, ObjectGuid> vtPortalClaim;
+        RaidObs::ObsGuidMap<ObjectGuid> vtPortalClaim{"vd.portalclaim"};
 
         Position gsbLastStarPos;
         std::map<ObjectGuid, uint32> gsbLastRocketPackUse;
 
-        std::map<ObjectGuid, int> dbsBotSlotMemory;
+        RaidObs::ObsGuidMap<int> dbsBotSlotMemory{"dbs.slot"};
 
         std::map<ObjectGuid, uint32> bpcSpreadLockTimers;
 
         SpreadSlotState fgSlotState;
 
-        std::map<ObjectGuid, int32> rfExplosionSlotMemory;
+        RaidObs::ObsGuidMap<int32> rfExplosionSlotMemory{"rf.explosionslot"};
 
         std::map<ObjectGuid, BloatDir> ppBloatLastDir;
     };

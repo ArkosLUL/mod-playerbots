@@ -23,6 +23,57 @@
 
 namespace RaidObs
 {
+namespace
+{
+// Map id -> boss-state id -> trace name. Filled while scripts load and only read after that.
+std::unordered_map<uint32, std::unordered_map<uint32, std::string>> g_bossNames;
+
+// The core sets a boss IN_PROGRESS inside the creature's JustEngagedWith, before the engage hook runs,
+// so an engage that opens the trace finds its boss id still queued for the next map update.
+char const* QueuedInProgressBossName(Map* map)
+{
+    if (g_bossNames.find(map->GetId()) == g_bossNames.end())
+        return nullptr;
+
+    InstanceMap* instance = map->ToInstanceMap();
+    InstanceScript* script = instance ? instance->GetInstanceScript() : nullptr;
+    if (!script)
+        return nullptr;
+
+    std::vector<uint32> queued;
+    {
+        std::lock_guard<std::mutex> guard(g_registryMutex);
+        auto it = g_pendingBossState.find(map->GetInstanceId());
+        if (it != g_pendingBossState.end())
+            queued = it->second;
+    }
+
+    for (uint32 bossId : queued)
+        if (script->GetBossState(bossId) == IN_PROGRESS)
+            if (char const* name = RegisteredBossName(map->GetId(), bossId))
+                return name;
+
+    return nullptr;
+}
+}  // namespace
+
+void NameBossStates(uint32 mapId, std::vector<std::pair<uint32, std::string>> names)
+{
+    std::unordered_map<uint32, std::string>& table = g_bossNames[mapId];
+    for (auto& [bossId, name] : names)
+        table[bossId] = std::move(name);
+}
+
+char const* RegisteredBossName(uint32 mapId, uint32 bossId)
+{
+    auto map = g_bossNames.find(mapId);
+    if (map == g_bossNames.end())
+        return nullptr;
+
+    auto row = map->second.find(bossId);
+    return row == map->second.end() ? nullptr : row->second.c_str();
+}
+
 // --- opening and closing a trace ----------------------------------------------
 
 std::string ResolveBossName(Map* map, Unit* source)
@@ -69,7 +120,7 @@ Unit* FindEngagedBoss(Map* map)
     return nullptr;
 }
 
-void OpenSession(Map* map, Unit* source, char const* trigger)
+void OpenSession(Map* map, Unit* source, char const* trigger, char const* name)
 {
     if (!g_cfg.enabled || !MapIsTracked(map))
         return;
@@ -78,6 +129,9 @@ void OpenSession(Map* map, Unit* source, char const* trigger)
     if (FindSession(instanceId))
         return;
 
+    if (!name)
+        name = QueuedInProgressBossName(map);
+
     auto session = std::make_unique<ObsSession>();
     ObsSession& s = *session;
     s.map = map;
@@ -85,7 +139,8 @@ void OpenSession(Map* map, Unit* source, char const* trigger)
     s.instanceId = instanceId;
     s.startMs = getMSTime();
     s.lastCombatMs = s.startMs;
-    s.bossSlug = SlugOf(ResolveBossName(map, source));
+    s.bossSlug = SlugOf(name ? std::string(name) : ResolveBossName(map, source));
+    s.marked = !strcmp(trigger, "mark");
 
     s.RebuildRoster();
     if (s.roster.empty())
@@ -96,9 +151,9 @@ void OpenSession(Map* map, Unit* source, char const* trigger)
     std::filesystem::create_directories(dir, ec);
 
     time_t const now = time(nullptr);
-    std::string name = std::to_string(s.mapId) + "_" + std::to_string(instanceId) + "_" + s.bossSlug + "_" +
-                       std::to_string(static_cast<uint64>(now)) + ".ndjson";
-    s.path = (dir / name).string();
+    std::string fileName = std::to_string(s.mapId) + "_" + std::to_string(instanceId) + "_" + s.bossSlug + "_" +
+                           std::to_string(static_cast<uint64>(now)) + ".ndjson";
+    s.path = (dir / fileName).string();
 
     s.file.open(s.path, std::ios::out | std::ios::trunc);
     if (!s.file.is_open())
@@ -217,6 +272,7 @@ void CloseSession(uint32 instanceId, char const* outcome)
     for (auto& entry : session->bots)
         session->FlushTick(entry.first, entry.second);
 
+    session->FlushCheats();
     session->EmitCoverage();
 
     // Hodir's script reports NOT_STARTED when the raid releases, so a 23-of-24 wipe was filed under
@@ -279,8 +335,21 @@ void ProcessPendingBossState(Map* map, uint32 instanceId)
         switch (script->GetBossState(bossId))
         {
             case IN_PROGRESS:
-                OpenSession(map, FindEngagedBoss(map), "bossstate");
+            {
+                char const* const registered = RegisteredBossName(map->GetId(), bossId);
+                ObsSession* open = registered ? FindSession(instanceId) : nullptr;
+                if (open && open->bossSlug != SlugOf(registered))
+                {
+                    // A trash pull still inside its idle window is a separate pull, not this one.
+                    if (open->marked)
+                        CloseSession(instanceId, "idle");
+                    else
+                        open->Rename(SlugOf(registered));
+                }
+
+                OpenSession(map, FindEngagedBoss(map), "bossstate", registered);
                 break;
+            }
             case DONE:
                 CloseSession(instanceId, "kill");
                 break;
@@ -529,10 +598,15 @@ void ObsSession::UpgradeBossName(Creature* boss)
 // upgrades the map-name fallback: a session that already named itself is never renamed.
 void ObsSession::UpgradeBossName(std::string const& slug)
 {
-    if (!map || path.empty() || slug.empty())
+    if (!map || bossSlug != SlugOf(map->GetMapName()))
         return;
 
-    if (bossSlug != SlugOf(map->GetMapName()) || slug == bossSlug)
+    Rename(slug);
+}
+
+void ObsSession::Rename(std::string const& slug)
+{
+    if (!map || path.empty() || slug.empty() || slug == bossSlug)
         return;
 
     std::filesystem::path const from(path);
@@ -608,20 +682,22 @@ void OnCreatureEngage(Unit* creature, Unit* victim)
 // Renames rather than doing nothing when a trace is already open: a session that beat the strategy
 // to the pull is exactly the one carrying the map name, since whatever opened it had no boss to name
 // it after.
-void MarkPull(Map* map, Unit* source)
+void MarkPull(Map* map, Unit* source, char const* name)
 {
     if (!map)
         return;
 
     if (ObsSession* session = FindSession(map->GetInstanceId()))
     {
-        if (Creature* boss = source ? source->ToCreature() : nullptr)
+        if (name && *name)
+            session->UpgradeBossName(SlugOf(name));
+        else if (Creature* boss = source ? source->ToCreature() : nullptr)
             session->UpgradeBossName(boss);
 
         return;
     }
 
-    OpenSession(map, source, "mark");
+    OpenSession(map, source, "mark", name && *name ? name : nullptr);
 }
 
 void NamePull(Map* map, char const* bossName)

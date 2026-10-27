@@ -23,7 +23,7 @@ bool IccBqlGroupPositionAction::Execute(Event /*event*/)
     Aura* frenzyAura = botAI->GetAura("Frenzied Bloodthirst", bot);
     Aura* shadowAura = botAI->GetAura("Swarming Shadows", bot);
     bool isTank = PlayerbotAI::IsTank(bot);
-    if (isTank && shadowAura)
+    if (isTank && shadowAura && IccRaidCheat(botAI, "bql.swarmingshadows"))
     {
         bot->RemoveAurasDueToSpell(shadowAura->GetId());
         return true;
@@ -482,9 +482,9 @@ bool IccBqlGroupPositionAction::HandleGroupPosition(Unit* boss, Aura* frenzyAura
     // during the post-air walk-back and die to lingering AoE.
     uint32 instanceId = bot->GetInstanceId();
     IcecrownHelpers::IccInstanceState& bqlState = IcecrownHelpers::IccState(instanceId);
-    bool& groundPhaseEstablished = bqlState.bqlGroundPhaseEstablished;
+    auto& groundPhaseEstablished = bqlState.bqlGroundPhaseEstablished;
     bool& wasAirborne = bqlState.bqlBossWasAirborne;
-    bool& postAirLanding = bqlState.bqlPostAirLanding;
+    auto& postAirLanding = bqlState.bqlPostAirLanding;
     float bossFromTank = boss->GetExactDist2d(ICC_BQL_TANK_POSITION);
     float bossFromCenter = boss->GetExactDist2d(ICC_BQL_CENTER_POSITION);
     bool bossAirborne = (boss->GetPositionZ() - ICC_BQL_CENTER_POSITION.GetPositionZ()) > 5.0f;

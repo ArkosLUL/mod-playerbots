@@ -461,6 +461,56 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
     probe.Session().Emit(getMSTime(), "note", fields);
 }
 
+void ObsSession::EmitCheat(uint64 key, std::string const& kind, CheatLatch& latch)
+{
+    std::string fields = "\"g\":" + std::to_string(key);
+    if (latch.target)
+        fields += ",\"tgt\":" + std::to_string(latch.target);
+    fields += ",\"k\":" + Quoted(kind);
+    fields += ",\"n\":" + std::to_string(latch.pending);
+
+    Emit(latch.lastUseMs, "cheat", fields);
+    latch.pending = 0;
+    latch.lastRowMs = latch.lastUseMs;
+    latch.written = true;
+}
+
+void ObsSession::FlushCheats()
+{
+    for (auto& [key, trace] : bots)
+        for (auto& [kind, latch] : trace.cheats)
+            if (latch.pending)
+                EmitCheat(key, kind, latch);
+}
+
+void NoteCheat(Player* bot, char const* key, Unit* target)
+{
+    if (!Active() || !key)
+        return;
+
+    ProbeTarget probe(bot);
+    if (!probe)
+        return;
+
+    ObsSession& s = probe.Session();
+    CheatLatch& latch = probe.Trace().cheats[key];
+    uint32 const now = getMSTime();
+
+    ++latch.pending;
+    latch.lastUseMs = now;
+    latch.target = 0;
+    if (target && target != bot)
+    {
+        s.EnsureUnit(target);
+        latch.target = GuidKey(target->GetGUID());
+    }
+
+    if (latch.written && getMSTimeDiff(latch.lastRowMs, now) < OBS_CHEAT_REPEAT_MS)
+        return;
+
+    s.EmitCheat(probe.Key(), key, latch);
+}
+
 void NoteHazard(Map* map, uint32 spellId, Position const& origin, char const* shape, std::string const& params,
                 uint32 ttlMs)
 {
