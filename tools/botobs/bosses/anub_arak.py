@@ -16,7 +16,9 @@
                                      flip-flopping between two move targets; the nearest Hand of Protection-ready
                                      paladin as the spike first came within 12 yd; a Feign Death dropped at once;
                                      per submerge the living players within 8, 12 and 20 yd of where he went
-                                     down, by role, and the first kiter's distance from the spike at its mark
+                                     down, by role, and the first kiter's distance from the spike at its mark;
+                                     each kite's anub.kiteplan terminals and whether the last one was used
+                                     before the mark ended, and a kiter dead with it unused
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips
                                      against the DK's spot at the cast, whether the grip duty held to kill and
@@ -25,17 +27,24 @@
                                      gone against the kite allowance, each with its kiter, and when that side's
                                      patch came back
     anub_arak.py <file> --burrowers  each burrower: life, submerges, Permafrost, Shadow Strike, its exit, side
-                                     and pickup, DPS focus, DPS casts at any other burrower; whether it died
-                                     inside its first 30 s up; per wave, those deaths, when the focus came due,
-                                     and each time it stopped with the focus alive; each focus pick against its
-                                     tank and the patches, each burrower's distance from the patch centre while
+                                     and pickup, DPS focus per side, DPS casts at a burrower no focus held;
+                                     whether it died inside its first 30 s up; per wave those deaths, and on
+                                     older traces when the focus came due and each time it stopped with the
+                                     focus alive; each focus pick against its tank and the patches, labelled
+                                     by side, each burrower's distance from the patch centre while
                                      on a side tank; each submerge where it went under: the nearest patch, the
                                      patches alive, its side tank alive and how far, its target; each one's
                                      opener and the three players nearest its exit at the spawn
     anub_arak.py <file> --frost      seconds carrying Permafrost per group and bot, he up and he down, and every
                                      stint over 3 s with the bot's target at its start
     anub_arak.py <file> --threat     per surfaced window: his target, his drag legs, taunts, threat cap, the
-                                     main tank's time in Permafrost, his submerge spot against the tank patches
+                                     main tank's time in Permafrost, his submerge spot against the tank
+                                     patches, and the longest stretch he stood 10+ yd off the midpoint of the
+                                     side spots with no drag leg
+    anub_arak.py <file> --dps        per phase and DPS role, bots only: samples by target kind, moving, yards
+                                     walked by move order and damage by target kind; his health lost per
+                                     phase 1, under 20% flagged; anub.dps rows per role; each anub.dside group
+                                     per wave, and melee walks across the midline between the side spots
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust, Penetrating Cold, deaths
     anub_arak.py <file> --healers    per healer and phase its median distance to the main tank and each side
                                      tank, the seconds over 35 yd from a side tank a burrower was on, follow
@@ -70,13 +79,17 @@ What the generic views get wrong here, and what this reads instead:
   a bot that takes the same branch twice writes one row. `anub.kite` goes back to `none` when the mark
   moves on, so a window never opens on the branch the last one ended with. `anub.gather` never does,
   so a bot still reads `hold` while it kites, after it dies and into the next submerge: the gather
-  centre counts only living bots off the mark whose hold began in this submerge.
-- **`anub.focus` is one raid-wide latch**, so the `g` on its rows is whichever bot's read moved it, and
-  whether the DPS followed it is read off their snapshot targets, not off `anub.dps`. So are
-  `anub.side0`, `anub.side1`, `anub.wave`, `anub.focusdue`, `anub.grip`, `anub.allow`, and `anub.spot0`
-  and `anub.spot1`: each side's tank spot as `x,y,z`, its latched patch while it has one, else where the
-  open side wants one; z is left out here. `anub.bside` is per burrower, its `g` the burrower, and
-  `anub.hstand` per healer, `walk` or `hold`.
+  centre counts only living bots off the mark whose hold began in this submerge. `anub.kiteplan` never
+  resets either, so a kiter marked again on the same terminal writes nothing: a mark reads the value
+  carried in only when no row of its own lands within a second of it.
+- **`anub.focus0` and `anub.focus1` are raid-wide latches, one per side**, so the `g` on their rows is
+  whichever bot's read moved them, and whether the DPS followed is read off their snapshot targets, not
+  off `anub.dps`. So are `anub.side0`, `anub.side1`, `anub.wave`, `anub.grip`, `anub.allow`, and
+  `anub.spot0` and `anub.spot1`: each side's tank spot as `x,y,z`, its latched patch while it has one,
+  else where the open side wants one; z is left out here. Older traces carry one raid-wide `anub.focus`
+  and its `anub.focusdue` instead, read here as a focus with no side. `anub.bside` is per burrower, its
+  `g` the burrower, and `anub.dside` per DPS bot, the burrower side it serves, written at a wave's split
+  only for a bot whose side changed. `anub.hstand` is per healer, `walk` or `hold`.
 - **No row carries a speed.** The spike's speed and the kiter's are the median of their moving
   snapshot steps around the moment, and the spike's speed auras are creature auras, never recorded.
 - **No `act` row names its engine.** `cov` counts each engine's passes per bot from the session's open,
@@ -171,6 +184,7 @@ NO_DAMAGE = {SPELL_DEATH_GRIP, 53338, 47865}
 PHASE_LABELS = {0: "none", 1: "P1", 2: "P2", 3: "P3"}
 
 FOCUS = "anub.focus"
+FOCUS_KEYS = ("anub.focus0", "anub.focus1")
 DPS_ROLES = ("melee", "ranged")
 SIDE_TANKS_NEEDED = {0: 1, 1: 2, 2: 1, 3: 2}
 GRIP_STATES = {"0": "none", "1": "gripping", "2": "shooting"}
@@ -180,10 +194,10 @@ UNPATCHED_FLAG_MS = 15000
 # Every key a section reads, so the banner flags one this trace lacks even while the source doesn't
 # declare it in a shape the probe parse finds.
 READ_KEYS = ("toc.progress", "anub.phase", "anub.patch0", "anub.patch1", "anub.sphere", "anub.kite",
-             "anub.dodge", "anub.protect", "anub.interrupter", "anub.pickup", "anub.defensive", "anub.focus",
-             "anub.dps", "anub.side0", "anub.side1", "anub.wave", "anub.focusdue", "anub.grip", "anub.allow",
-             "anub.bside", "anub.gripstep", "anub.sidetank", "anub.kitestage", "anub.gather", "anub.spot0",
-             "anub.spot1", "anub.hstand")
+             "anub.dodge", "anub.protect", "anub.interrupter", "anub.pickup", "anub.defensive", "anub.focus0",
+             "anub.focus1", "anub.dps", "anub.side0", "anub.side1", "anub.wave", "anub.grip", "anub.allow",
+             "anub.bside", "anub.dside", "anub.gripstep", "anub.sidetank", "anub.kitestage", "anub.kiteplan",
+             "anub.gather", "anub.spot0", "anub.spot1", "anub.hstand")
 SPOT_KEYS = ("anub.spot0", "anub.spot1")
 
 # Read from the source so a retune shows up here without a second edit.
@@ -227,6 +241,10 @@ WAVE_SPLIT_MS = 10000
 
 LEG_MIN_YD = 2.0
 REVERSAL_DEGREES = 120.0
+# he stood this far off the midpoint of the side spots with no drag leg: held off the anchor
+OFF_ANCHOR_YD = 10.0
+HELD_OFF_FLAG_MS = 10000
+DRAG_LEGS = ("drag", "submerge")
 
 # the spike's fail despawns the patch 1.5 s after the mark comes off
 CONSUMED_MS = 3000
@@ -268,6 +286,10 @@ FLIP_COUNT = 3
 FLIP_MS = 2000
 # Feign Death breaks on move, so cast while running it comes off the same tick
 FEIGN_DROP_MS = 100
+# the plan is judged at the mark, so a kiter's row this close to it is that mark's first pick
+KITEPLAN_SETTLE_MS = 1000
+# what each anub.kiteplan terminal spends; `none` spends nothing
+PLAN_NEEDS = {"patch": ("patch",), "hand": ("hand",), "patch+hand": ("patch", "hand"), "own": ("own",)}
 HOP_RANGE = radius("ANUBARAK_HOP_RANGE")
 # HoP cooldown with both ranks of Guardian's Favor, the shortest it gets. No row carries cooldowns, so a
 # paladin reads ready this long after its last one.
@@ -294,6 +316,17 @@ HEALER_ENGINE = "raid healer engine"
 ENGINE_NAMES = {"c": "combat", "n": "non-combat", "d": "dead"}
 # Every node of an engine lands in exactly one of these columns on every pass
 PASS_COLUMNS = ("checks", "shared", "throttled", "minimal", "dead")
+DPS_KINDS = ("boss", "burrower", "scarab", "other", "none")
+# a kill needs about this much of his health per phase 1, with Berserk at 10:00
+BOSS_PACE_PCT = 20.0
+# a snapshot step under this is jitter and over that a release or a teleport, so neither is a walk
+WALK_MIN_YD = 0.3
+WALK_MAX_YD = 30.0
+# a step counts toward the bot's last move row only this long after it
+MOVE_ROW_MS = 4000
+WALKED_SHOWN = 6
+# a melee bot this close to the midline between the side spots stands on neither side's half
+MIDLINE_BAND_YD = 5.0
 
 
 def pull_end(trace: Trace) -> int:
@@ -770,6 +803,19 @@ def branches_in(rows: list[tuple[int, str]], start: int, stop: int) -> list[str]
     return out
 
 
+def plan_terminals(rows: list[tuple[int, str]], start: int, stop: int) -> list[str]:
+    """A kite's `anub.kiteplan` terminals in turn. The value carried in from an earlier mark counts only
+    when no row lands within KITEPLAN_SETTLE_MS of this one."""
+    fresh = [(when, value) for when, value in rows if start - KITEPLAN_SETTLE_MS <= when < stop]
+    out: list[str] = []
+    if not fresh or fresh[0][0] > start + KITEPLAN_SETTLE_MS:
+        out = [value for when, value in rows if when < start - KITEPLAN_SETTLE_MS][-1:]
+    for _, value in fresh:
+        if not out or out[-1] != value:
+            out.append(value)
+    return out
+
+
 def spike_near(samples: Samples, spikes, guid: int, start: int, stop: int) -> int | None:
     """Milliseconds into the window the spike first came within KITE_PROTECT_RANGE of the kiter."""
     stamps, rows = samples.track(guid)
@@ -994,6 +1040,7 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     impales = [rec for rec in trace.of("dmg") if rec.get("sp") in IMPALE]
     deaths = combat_deaths(trace)
     kite = per_bot(trace, "anub.kite")
+    plans = per_bot(trace, "anub.kiteplan")
     stages = holder_spans(trace, "anub.kitestage", pull_end(trace))
     holds = holder_spans(trace, "anub.gather", pull_end(trace))
     boosts = boost_rows(trace)
@@ -1050,6 +1097,7 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                                                                   if rec["t"] <= start + near])
         out.append({"guid": guid, "start": start, "stop": stop,
                     "branches": branches_in(kite.get(guid, []), start, stop),
+                    "plan": plan_terminals(plans.get(guid, []), start, stop),
                     "impales": len(hits), "damage": sum(rec.get("a", 0) for rec in hits),
                     "outcome": outcome, "consumed": consumed, "died": died,
                     "near": near,
@@ -1147,6 +1195,9 @@ def show_spike(trace: Trace) -> None:
                   f" {trace.role(window['guid']):6} {(window['stop'] - window['start']) / 1000:5.1f}"
                   f" {branches[:24]:24} {window['outcome']:7} {window['impales']:7} {window['damage']:8,}"
                   f" {near:>5}" + gone)
+            plan = plan_line(window, spend)
+            if plan:
+                print(f"            {plan}")
             if window["in_frost"]:
                 print(f"            marked {window['frost_yd']:.1f} yd from a Permafrost centre, inside its slow")
             cover = protection(trace, window)
@@ -1175,6 +1226,7 @@ def show_spike(trace: Trace) -> None:
         outcomes = collections.Counter(window["outcome"] for window in windows)
         print(f"\n  {len(windows)} window(s): "
               + ", ".join(f"{name} {n}" for name, n in outcomes.most_common()))
+        show_plans(trace, windows, spends)
         reached = sum(1 for window in windows
                       if any(yards < SPIKE_PATCH_REACH for yards in window["tank_near"].values()))
         print(f"  spike within {SPIKE_PATCH_REACH} yd of a latched tank patch, its fail test's reach:"
@@ -1267,6 +1319,48 @@ def protection(trace: Trace, window: dict) -> str:
     parts += [f"anub.protect {trace.name(rec.get('g'))} {rec.get('txt')} {rel(rec)}"
               for rec in window["protect"] if str(rec.get("txt")) != "none"]
     return "; ".join(parts)
+
+
+def plan_missing(terminal: str, window: dict, spend: dict | None) -> list[str] | None:
+    """What a kite's terminal still lacked when its mark ended, empty when it was used: a tank patch the
+    spike spent for `patch`, Hand of Protection on the kiter for `hand`, both for `patch+hand`, the kiter's
+    own immunity for `own`. None for `none`, which has nothing to use."""
+    if terminal not in PLAN_NEEDS:
+        return None
+    have = {"patch": spend is not None, "hand": bool(window["hop"]), "own": bool(window["own"])}
+    names = {"patch": "no tank patch spent", "hand": "no Hand of Protection", "own": "no own immunity"}
+    return [names[need] for need in PLAN_NEEDS[terminal] if not have[need]]
+
+
+def plan_line(window: dict, spend: dict | None) -> str:
+    """A kite's anub.kiteplan terminals and whether the last one was used before the mark ended."""
+    if not window["plan"]:
+        return ""
+    missing = plan_missing(window["plan"][-1], window, spend)
+    if missing is None:
+        verdict = "nothing to use"
+    else:
+        verdict = "unused, " + ", ".join(missing) if missing else "used"
+    return f"kiteplan {'>'.join(window['plan'])}: {verdict}"
+
+
+def show_plans(trace: Trace, windows: list[dict], spends: dict) -> None:
+    planned = [(window, plan_missing(window["plan"][-1], window, spends.get((window["guid"], window["start"]))))
+               for window in windows if window["plan"]]
+    if not planned:
+        print("  no anub.kiteplan rows")
+        return
+    tally: dict[str, list[int]] = {}
+    for window, missing in planned:
+        counts = tally.setdefault(window["plan"][-1], [0, 0])
+        counts[0] += 1
+        counts[1] += missing == []
+    print("  anub.kiteplan terminal at the mark's end, used before it ended: " + ", ".join(
+        f"{terminal} {used} of {n}" if terminal in PLAN_NEEDS else f"{terminal} {n}"
+        for terminal, (n, used) in sorted(tally.items(), key=lambda item: -item[1][0])))
+    dead = [window for window, missing in planned if missing and window["outcome"] == "death"]
+    print("  kiter dead with its terminal unused: " + (", ".join(
+        f"{trace.name(window['guid'])} {clock(window['start'])} {window['plan'][-1]}" for window in dead) or "none"))
 
 
 def cover_name(rec: dict) -> str:
@@ -1950,34 +2044,61 @@ def as_guid(value) -> int:
     return int(text) if text.isdigit() else 0
 
 
-def focus_rows(trace: Trace) -> list[dict]:
-    """Per burrower `anub.focus` held: the time it held it, and the share of living DPS bot samples
-    (melee and ranged roles, humans left out) whose target it was meanwhile."""
-    spans = [(as_guid(value), start, stop) for value, start, stop in latch_spans(trace, FOCUS, pull_end(trace))]
-    starts = [start for _, start, _ in spans]
-    dps = {guid for guid in roster_guids(trace) if trace.role(guid) in DPS_ROLES and guid not in trace.humans}
+def focus_latches(trace: Trace) -> list[tuple[int | None, list[tuple[str, int, int]]]]:
+    """`(side, spans)` per burrower focus latch: `anub.focus0` and `anub.focus1`, else the one raid-wide
+    `anub.focus` of older traces, side None."""
+    end = pull_end(trace)
+    if any(notes(trace, key) for key in FOCUS_KEYS):
+        return [(side, latch_spans(trace, key, end)) for side, key in enumerate(FOCUS_KEYS)]
+    return [(None, latch_spans(trace, FOCUS, end))]
 
+
+def focus_label(side: int | None) -> str:
+    return "-" if side is None else str(side)
+
+
+def dside_at(groups: dict[int, list[tuple[int, str]]], guid: int, when: int) -> int | None:
+    """The burrower side `anub.dside` gave a DPS bot at `when`, None before its first row."""
+    side = next((value for start, value in reversed(groups.get(guid, [])) if start <= when), None)
+    return int(side) if side in ("0", "1") else None
+
+
+def focus_rows(trace: Trace) -> list[dict]:
+    """Per side and burrower a focus latch held: the time it held it, and the share of living DPS bot
+    samples (melee and ranged roles, humans left out, only that side's `anub.dside` group when the trace
+    has one) whose target it was meanwhile."""
+    dps = {guid for guid in roster_guids(trace) if trace.role(guid) in DPS_ROLES and guid not in trace.humans}
+    groups = per_bot(trace, "anub.dside")
     held: collections.Counter = collections.Counter()
-    for guid, start, stop in spans:
-        if guid:
-            held[guid] += stop - start
+    latches = []
+    for side, values in focus_latches(trace):
+        spans = [(as_guid(value), start, stop) for value, start, stop in values]
+        latches.append((side, spans, [start for _, start, _ in spans]))
+        for guid, start, stop in spans:
+            if guid:
+                held[(side, guid)] += stop - start
 
     on: collections.Counter = collections.Counter()
     total: collections.Counter = collections.Counter()
     for snap in frames(trace):
-        index = bisect.bisect_right(starts, snap["t"]) - 1
-        if index < 0:
-            continue
-        focus, _, stop = spans[index]
-        if not focus or snap["t"] >= stop:
-            continue
-        for row in snap.get("u", []):
-            if row[0] in dps and len(row) > 7 and row[5] > 0:
-                total[focus] += 1
-                on[focus] += row[7] == focus
+        when = snap["t"]
+        rows = [row for row in snap.get("u", []) if row[0] in dps and len(row) > 7 and row[5] > 0]
+        for side, spans, starts in latches:
+            index = bisect.bisect_right(starts, when) - 1
+            if index < 0:
+                continue
+            focus, _, stop = spans[index]
+            if not focus or when >= stop:
+                continue
+            for row in rows:
+                if side is not None and groups and dside_at(groups, row[0], when) != side:
+                    continue
+                total[(side, focus)] += 1
+                on[(side, focus)] += row[7] == focus
 
-    return [{"guid": guid, "held": held[guid], "share": on[guid] / total[guid] if total[guid] else None}
-            for guid in sorted(held)]
+    return [{"side": side, "guid": guid, "held": held[(side, guid)],
+             "share": on[(side, guid)] / total[(side, guid)] if total[(side, guid)] else None}
+            for side, guid in sorted(held)]
 
 
 def wave_starts(trace: Trace, samples: Samples | None = None) -> list[tuple[int, int]]:
@@ -2071,11 +2192,12 @@ def focus_due_rows(trace: Trace, waves: list[tuple[int, int]]) -> list[dict]:
 
 
 def stray_burrower_casts(trace: Trace) -> list[dict]:
-    """DPS bot casts aimed at a burrower other than the `anub.focus` held then, triggered ones and humans
-    left out, and a cast landing while its target cast Shadow Strike, since interrupts may go anywhere."""
+    """DPS bot casts aimed at a burrower no focus latch held then, either side's counting, triggered ones and
+    humans left out, and a cast landing while its target cast Shadow Strike, since interrupts may go
+    anywhere."""
     burrowers = guids_of_entry(trace, NPC_BURROWER)
     dps = {guid for guid in roster_guids(trace) if trace.role(guid) in DPS_ROLES and guid not in trace.humans}
-    focus = latch_spans(trace, FOCUS, pull_end(trace))
+    latches = [spans for _, spans in focus_latches(trace)]
     strikes = [(rec.get("s"), rec["t"], rec["t"] + (rec.get("ct") or SHADOW_STRIKE_CAST_MS))
                for rec in trace.of("cast") if rec.get("sp") == SPELL_SHADOW_STRIKE]
     out = []
@@ -2083,7 +2205,7 @@ def stray_burrower_casts(trace: Trace) -> list[dict]:
         target = rec.get("tgt")
         if rec.get("tr") or rec.get("s") not in dps or target not in burrowers:
             continue
-        if as_guid(held_at(focus, rec["t"])) == target:
+        if any(as_guid(held_at(spans, rec["t"])) == target for spans in latches):
             continue
         if any(source == target and low <= rec["t"] <= high for source, low, high in strikes):
             continue
@@ -2093,7 +2215,7 @@ def stray_burrower_casts(trace: Trace) -> list[dict]:
 
 def focus_due_drops(trace: Trace, samples: Samples) -> list[dict]:
     """Each time `anub.focusdue` went from 1 to 0 with the `anub.focus` burrower still alive, and its
-    health then."""
+    health then. Only older traces write either."""
     end = pull_end(trace)
     focus = latch_spans(trace, FOCUS, end)
     out = []
@@ -2114,15 +2236,17 @@ def side_spans(trace: Trace) -> list[list[tuple[str, int, int]]]:
 
 
 def focus_picks(trace: Trace, samples: Samples | None = None) -> list[dict]:
-    """Per `anub.focus` pick of a burrower: its health, the milliseconds since it came up (first sight or its
-    last emerge), its target, and how far it stood from the nearest living side tank and the nearest
-    Permafrost centre. `settled` is a tank as its target within FOCUS_SETTLE of it."""
+    """Per focus latch pick of a burrower, with the latch's side: its health, the milliseconds since it came
+    up (first sight or its last emerge), its target, and how far it stood from the nearest living side tank
+    and the nearest Permafrost centre. `settled` is a tank as its target within FOCUS_SETTLE of it."""
     samples = samples or Samples(trace)
     sides = side_spans(trace)
     holders = {as_guid(value) for spans in sides for value, _, _ in spans} - {0}
     ups = {row["guid"]: row["ups"] for row in burrower_rows(trace, samples)}
     out = []
-    for value, start, _ in latch_spans(trace, FOCUS, pull_end(trace)):
+    picks = sorted(((start, side, value) for side, spans in focus_latches(trace) for value, start, _ in spans),
+                   key=lambda pick: (pick[0], pick[1] or 0))
+    for start, side, value in picks:
         guid = as_guid(value)
         row = samples.row(guid, start) if guid else None
         if row is None:
@@ -2133,7 +2257,8 @@ def focus_picks(trace: Trace, samples: Samples | None = None) -> list[dict]:
         tanks = [samples.recent(tank, start) for tank in {as_guid(held_at(spans, start)) for spans in sides} - {0}]
         to_tank = [dist2(row[1:3], tank[1:3]) for tank in tanks if tank and tank[5] > 0]
         to_frost = [dist2(row[1:3], point) for point in samples.frost_at(start)]
-        out.append({"t": start, "guid": guid, "hp": row[5], "up": max(0, start - came[-1]), "target": target,
+        out.append({"t": start, "side": side, "guid": guid, "hp": row[5], "up": max(0, start - came[-1]),
+                    "target": target,
                     "side_tank": min(to_tank) if to_tank else None, "patch": min(to_frost) if to_frost else None,
                     "settled": victim is not None and (trace.role(target) == "tank" or target in holders)
                     and dist2(row[1:3], victim[1:3]) <= FOCUS_SETTLE})
@@ -2235,15 +2360,16 @@ def side_tank_gather(trace: Trace) -> list[tuple[str, int, dict[int, int]]]:
 def show_focus_picks(trace: Trace, samples: Samples) -> None:
     picks = focus_picks(trace, samples)
     if picks:
-        print("\n  each anub.focus pick: the burrower's health, seconds since it came up, target, and its distance to"
-              "\n  the nearest living side tank and Permafrost centre:")
-        print(f"  {'at':>9} {'focus':10} {'hp':>4} {'up':>6} {'target':14} {'side tank':>9} {'patch':>7}")
+        print("\n  each focus pick: the burrower's health, seconds since it came up, target, its distance to the"
+              "\n  nearest living side tank and Permafrost centre, and the side whose latch picked it, - for the"
+              " single\n  anub.focus of older traces:")
+        print(f"  {'at':>9} {'focus':10} {'hp':>4} {'up':>6} {'target':14} {'side tank':>9} {'patch':>7} side")
         for row in picks:
             tank = "-" if row["side_tank"] is None else f"{row['side_tank']:.1f} yd"
             patch = "-" if row["patch"] is None else f"{row['patch']:.1f} yd"
             early = not row["settled"] and row["hp"] >= FOCUS_LOW_PCT
             print(f"  {clock(row['t']):>9} {short(trace, row['guid']):10} {row['hp']:3.0f}% {row['up'] / 1000:4.1f} s"
-                  f" {unit_label(trace, row['target'])[:14]:14} {tank:>9} {patch:>7}"
+                  f" {unit_label(trace, row['target'])[:14]:14} {tank:>9} {patch:>7} {focus_label(row['side']):>4}"
                   + ("  before its tank" if early else ""))
         early = sum(1 for row in picks if not row["settled"] and row["hp"] >= FOCUS_LOW_PCT)
         print(f"  {early} of {len(picks)} pick(s) before its target was a tank within {FOCUS_SETTLE:.0f} yd, at"
@@ -2351,16 +2477,19 @@ def show_pickups(trace: Trace, samples: Samples) -> None:
     waves = wave_starts(trace, samples)
     if not notes(trace, "anub.wave"):
         print(f"  no anub.wave rows, so waves are burrower spawns {WAVE_SPLIT_MS / 1000:.0f} s or more apart")
-    for row in focus_due_rows(trace, waves):
-        if row["next"] is None:
-            verdict = "focus never due" if row["due"] is None else f"focus due {clock(row['due'])}"
-            verdict += ", the last wave"
-        elif row["due"] is None:
-            verdict = f"focus never due before wave {row['wave'] + 1} at {clock(row['next'])}"
-        else:
-            verdict = (f"focus due {clock(row['due'])}, {(row['next'] - row['due']) / 1000:.1f} s before"
-                       f" wave {row['wave'] + 1} at {clock(row['next'])}")
-        print(f"  wave {row['wave']} {clock(row['spawn'])}: {verdict}")
+    if not notes(trace, "anub.focusdue"):
+        print("  no anub.focusdue rows, so no focus due per wave: only older traces write it")
+    else:
+        for row in focus_due_rows(trace, waves):
+            if row["next"] is None:
+                verdict = "focus never due" if row["due"] is None else f"focus due {clock(row['due'])}"
+                verdict += ", the last wave"
+            elif row["due"] is None:
+                verdict = f"focus never due before wave {row['wave'] + 1} at {clock(row['next'])}"
+            else:
+                verdict = (f"focus due {clock(row['due'])}, {(row['next'] - row['due']) / 1000:.1f} s before"
+                           f" wave {row['wave'] + 1} at {clock(row['next'])}")
+            print(f"  wave {row['wave']} {clock(row['spawn'])}: {verdict}")
     show_counts(trace, "anub.sidetank")
     if any(str(rec.get("txt")) == "gather" for rec in notes(trace, "anub.sidetank")):
         print("  anub.sidetank gather while he was down: " + "; ".join(
@@ -2394,13 +2523,16 @@ def show_burrowers(trace: Trace) -> None:
 
     focus = focus_rows(trace)
     if not focus:
-        print("  anub.focus never held a burrower")
+        print("  no focus latch ever held a burrower")
     else:
-        print(f"\n  {'focus':10} {'held':>7} {'dps on it':>9}")
+        print(f"\n  {'focus':10} {'held':>7} {'dps on it':>9} side")
         for row in focus:
             share = "-" if row["share"] is None else f"{row['share'] * 100:.0f}%"
-            print(f"  {short(trace, row['guid']):10} {row['held'] / 1000:6.1f}s {share:>9}")
-        print("  dps on it is the share of living DPS bot samples whose target was the focus while it held")
+            print(f"  {short(trace, row['guid']):10} {row['held'] / 1000:6.1f}s {share:>9}"
+                  f" {focus_label(row['side']):>4}")
+        print("  dps on it is the share of living DPS bot samples whose target was the focus while it held, over"
+              " the\n  side's anub.dside group when the trace has one; side - is the single anub.focus of older"
+              " traces")
     show_focus_picks(trace, samples)
 
     stray = stray_burrower_casts(trace)
@@ -2412,13 +2544,269 @@ def show_burrowers(trace: Trace) -> None:
               + "; most: " + ", ".join(f"{trace.spell(spell)} {n}" for spell, n in spells.most_common(5)))
     else:
         print("  no DPS cast at a burrower other than the focus")
-    drops = focus_due_drops(trace, samples)
-    print("  anub.focusdue dropped with the focus alive: "
-          + (", ".join(f"{clock(row['t'])} {short(trace, row['guid'])} at {row['hp']:.0f}%" for row in drops)
-             if drops else "never"))
+    if notes(trace, "anub.focusdue"):
+        drops = focus_due_drops(trace, samples)
+        print("  anub.focusdue dropped with the focus alive: "
+              + (", ".join(f"{clock(row['t'])} {short(trace, row['guid'])} at {row['hp']:.0f}%" for row in drops)
+                 if drops else "never"))
+    else:
+        print("  anub.focusdue dropped with the focus alive: no anub.focusdue rows")
     show_counts(trace, "anub.dps")
     if notes(trace, "anub.mstand"):
         show_counts(trace, "anub.mstand")
+
+
+# ------------------------------------------------------------------------------------------------ dps
+
+def target_kind(trace: Trace, guid) -> str:
+    if not guid:
+        return "none"
+    return {NPC_ANUBARAK: "boss", NPC_BURROWER: "burrower", NPC_SCARAB: "scarab"}.get(trace.entries.get(guid), "other")
+
+
+def dps_bots(trace: Trace) -> dict[int, str]:
+    """Each melee and ranged bot on the roster, by role. Humans are left out."""
+    return {guid: trace.role(guid) for guid in roster_guids(trace)
+            if trace.role(guid) in DPS_ROLES and guid not in trace.humans}
+
+
+def move_orders(trace: Trace) -> dict[int, tuple[list[int], list[str]]]:
+    """Per bot, its `move` rows' stamps and the action each one names in `by`, in time order."""
+    out: dict[int, tuple[list[int], list[str]]] = {}
+    for rec in sorted(trace.of("move"), key=lambda rec: rec["t"]):
+        stamps, orders = out.setdefault(rec.get("g"), ([], []))
+        stamps.append(rec["t"])
+        orders.append(rec.get("by") or "?")
+    return out
+
+
+def dps_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per phase span and DPS role, over its bots' living samples: the samples per target kind and those
+    flagged moving, and per step to the next sample the damage dealt, charged to the target kind held at
+    the step's start, and the yards walked, charged to the `by` of the bot's last `move` row within
+    MOVE_ROW_MS. A step under WALK_MIN_YD or over WALK_MAX_YD, or across a snapshot hole, walks nothing.
+    `hp` is his health at the span's two edges."""
+    samples = samples or Samples(trace)
+    boss = boss_guid(trace)
+    bots = dps_bots(trace)
+    orders = move_orders(trace)
+    out = []
+    for start, stop, phase, label in phase_spans(trace):
+        if not phase:
+            continue
+        roles = {role: {"bots": set(), "samples": 0, "moving": 0, "kinds": collections.Counter(),
+                        "dealt": collections.Counter(), "walked": collections.Counter(), "yards": 0.0}
+                 for role in DPS_ROLES}
+        for guid, role in bots.items():
+            group = roles[role]
+            stamps, rows = samples.track(guid)
+            moved, by = orders.get(guid, ([], []))
+            for index in range(bisect.bisect_left(stamps, start), bisect.bisect_left(stamps, stop)):
+                row = rows[index]
+                if row[5] <= 0:
+                    continue
+                kind = target_kind(trace, row[7] if len(row) > 7 else 0)
+                group["bots"].add(guid)
+                group["samples"] += 1
+                group["kinds"][kind] += 1
+                group["moving"] += bool(len(row) > 8 and row[8])
+                if index + 1 >= len(rows):
+                    continue
+                after = rows[index + 1]
+                if len(row) > 11 and len(after) > 11 and after[11] > row[11]:
+                    group["dealt"][kind] += after[11] - row[11]
+                step = dist2(row[1:3], after[1:3])
+                if stamps[index + 1] - stamps[index] > MAX_STEP_MS or not WALK_MIN_YD <= step <= WALK_MAX_YD:
+                    continue
+                last = bisect.bisect_right(moved, stamps[index]) - 1
+                order = by[last] if last >= 0 and stamps[index] - moved[last] <= MOVE_ROW_MS else "no move row"
+                group["walked"][order] += step
+                group["yards"] += step
+        out.append({"label": label, "phase": phase, "start": start, "stop": stop,
+                    "hp": (health(samples, boss, start), health(samples, boss, stop - 1)), "roles": roles})
+    return out
+
+
+def boss_lost(row: dict) -> float | None:
+    before, after = row["hp"]
+    return None if before is None or after is None else before - after
+
+
+def side_groups(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per burrower wave, each side's `anub.dside` group NEAR_MS after the wave landed: its living bots by
+    role. Empty without anub.dside rows."""
+    groups = per_bot(trace, "anub.dside")
+    if not groups:
+        return []
+    samples = samples or Samples(trace)
+    waves = wave_starts(trace, samples)
+    end = pull_end(trace)
+    out = []
+    for index, (wave, spawn) in enumerate(waves):
+        upto = waves[index + 1][1] if index + 1 < len(waves) else end
+        when = max(spawn, min(spawn + NEAR_MS, upto - 1))
+        sides: dict[int, dict[str, list[int]]] = {side: {role: [] for role in DPS_ROLES} for side in (0, 1)}
+        for guid in sorted(groups, key=trace.name):
+            side = dside_at(groups, guid, when)
+            row = samples.recent(guid, when)
+            if side is None or row is None or row[5] <= 0 or trace.role(guid) not in DPS_ROLES:
+                continue
+            sides[side][trace.role(guid)].append(guid)
+        out.append({"wave": wave, "t": spawn, "sides": sides})
+    return out
+
+
+def midline_half(noted, point, when: int) -> int | None:
+    """Which side spot's half of the room `point` stands in at `when`: None within MIDLINE_BAND_YD of the
+    midline between them, or while either spot is unread."""
+    spots = [held_at(spans, when) for spans in noted]
+    if None in spots:
+        return None
+    (x0, y0), (x1, y1) = spots
+    gap = math.hypot(x1 - x0, y1 - y0)
+    if gap < 1e-6:
+        return None
+    along = ((point[0] - (x0 + x1) / 2.0) * (x1 - x0) + (point[1] - (y0 + y1) / 2.0) * (y1 - y0)) / gap
+    if abs(along) < MIDLINE_BAND_YD:
+        return None
+    return 1 if along > 0 else 0
+
+
+def side_crossings(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Each walk of a melee DPS bot from one side spot's half of the room to the other's while he was up.
+    A sample on the midline keeps the half the bot last stood in, and a death, a snapshot hole or a new
+    window forgets it. `group` is the bot's `anub.dside` side then, None without one."""
+    samples = samples or Samples(trace)
+    noted = spot_spans(trace)
+    groups = per_bot(trace, "anub.dside")
+    melee = [guid for guid, role in dps_bots(trace).items() if role == "melee"]
+    up = [(start, stop, label) for start, stop, phase, label in phase_spans(trace) if phase in (1, 3)]
+    out = []
+    for guid in melee:
+        stamps, rows = samples.track(guid)
+        for start, stop, label in up:
+            half = last = None
+            for index in range(bisect.bisect_left(stamps, start), bisect.bisect_left(stamps, stop)):
+                when, row = stamps[index], rows[index]
+                if row[5] <= 0 or (last is not None and when - last > MAX_STEP_MS):
+                    half = None
+                last = when
+                now = midline_half(noted, row[1:3], when) if row[5] > 0 else None
+                if now is None:
+                    continue
+                if half is not None and now != half:
+                    out.append({"guid": guid, "t": when, "label": label, "frm": half, "to": now,
+                                "group": dside_at(groups, guid, when)})
+                half = now
+    return sorted(out, key=lambda row: (row["t"], row["guid"]))
+
+
+def show_dps_role(role: str, group: dict, seconds: float) -> None:
+    samples = group["samples"]
+    bots = len(group["bots"])
+    kinds = ", ".join(f"{kind} {group['kinds'][kind] * 100 / samples:.0f}%" for kind in DPS_KINDS)
+    print(f"    {role:6} {bots:2} bot(s): target {kinds}; moving {group['moving'] * 100 / samples:.0f}%;"
+          f" {group['yards'] / bots:.0f} yd a bot")
+    walked = group["walked"].most_common()
+    if walked:
+        rest = sum(yards for _, yards in walked[WALKED_SHOWN:])
+        print(f"           walked {group['yards']:.0f} yd: "
+              + ", ".join(f"{order} {yards:.0f}" for order, yards in walked[:WALKED_SHOWN])
+              + (f", the rest {rest:.0f}" if rest else ""))
+    dealt = sum(group["dealt"].values())
+    if dealt:
+        print(f"           dealt {dealt / seconds / 1000:.1f}k/s: "
+              + ", ".join(f"{kind} {group['dealt'][kind] * 100 / dealt:.0f}%" for kind in DPS_KINDS))
+    else:
+        print("           dealt nothing")
+
+
+def show_side_groups(trace: Trace, samples: Samples) -> None:
+    waves = side_groups(trace, samples)
+    if not waves:
+        print("  no anub.dside rows, so no side groups")
+        return
+    print(f"\n  each anub.dside group {NEAR_MS / 1000:.0f} s after the wave landed, living bots:")
+    previous = None
+    for row in waves:
+        head = f"    wave {row['wave']} {clock(row['t']):>9}"
+        if row["sides"] == previous:
+            print(f"{head}  as before")
+            continue
+        previous = row["sides"]
+        for side in (0, 1):
+            members = "; ".join(f"{role} " + ", ".join(trace.name(guid) for guid in row["sides"][side][role])
+                                for role in DPS_ROLES if row["sides"][side][role])
+            print(f"{head if side == 0 else ' ' * len(head)}  side {side}: {members or 'nobody'}")
+
+
+def show_crossings(trace: Trace, samples: Samples) -> None:
+    if not all(spot_spans(trace)):
+        print("  no anub.spot0 and anub.spot1 rows, so no walks across the midline")
+        return
+    rows = side_crossings(trace, samples)
+    print("\n  melee walks from one side spot's half to the other's while he was up: the halves meet at the"
+          f" midline\n  between anub.spot0 and anub.spot1, and {MIDLINE_BAND_YD:.0f} yd either side of it belongs to"
+          " neither; astray is a walk into\n  the half of the side its anub.dside group doesn't serve:")
+    for start, _, phase, label in phase_spans(trace):
+        if phase not in (1, 3):
+            continue
+        mine = [row for row in rows if row["label"] == label]
+        per: dict[int, list[dict]] = collections.defaultdict(list)
+        for row in mine:
+            per[row["guid"]].append(row)
+        bots = ", ".join(
+            f"{trace.name(guid)} {len(walks)}"
+            + (f" ({sum(1 for row in walks if row['group'] is not None and row['to'] != row['group'])} astray)"
+               if any(row["group"] is not None for row in walks) else "")
+            for guid, walks in sorted(per.items(), key=lambda item: (-len(item[1]), trace.name(item[0]))))
+        print(f"    {label:5} {clock(start):>9}  {len(mine)} walk(s)" + (f": {bots}" if bots else ""))
+
+
+def show_dps(trace: Trace) -> None:
+    print("DPS")
+    if not is_toc_anubarak(trace):
+        print("  not an Anub'arak pull")
+        return
+    samples = Samples(trace)
+    rows = dps_rows(trace, samples)
+    if not rows:
+        print("  no anub.phase rows")
+        return
+    end = pull_end(trace)
+    for row in rows:
+        seconds = max(row["stop"] - row["start"], 1) / 1000
+        lost = boss_lost(row)
+        health_text = "boss unsampled"
+        if lost is not None:
+            health_text = f"boss {row['hp'][0]:.1f}% -> {row['hp'][1]:.1f}%, {lost:.1f}% lost"
+            if row["phase"] == 1 and lost < BOSS_PACE_PCT:
+                health_text += f"  under {BOSS_PACE_PCT:.0f}%"
+                if row["stop"] >= end:
+                    health_text += ", the pull ended in it"
+        print(f"  {row['label']:5} {clock(row['start']):>9} {seconds:6.1f} s  {health_text}")
+        for role in DPS_ROLES:
+            if row["roles"][role]["samples"]:
+                show_dps_role(role, row["roles"][role], seconds)
+
+    surfaced = [row for row in rows if row["phase"] == 1 and boss_lost(row) is not None]
+    print("\n  boss health lost per phase 1: " + (", ".join(
+        f"{row['label']} {boss_lost(row):.1f}%" + (" under" if boss_lost(row) < BOSS_PACE_PCT else "")
+        for row in surfaced) or "none sampled"))
+    bots = dps_bots(trace)
+    branches = {role: collections.Counter() for role in DPS_ROLES}
+    for guid, counts in value_counts(trace, "anub.dps").items():
+        if guid in bots:
+            branches[bots[guid]].update(counts)
+    print("  anub.dps rows per role: " + ("; ".join(
+        f"{role} " + ", ".join(f"{value} {n}" for value, n in counts.most_common())
+        for role, counts in branches.items() if counts) or "none"))
+    print("  target is the share of living samples by the bot's target, moving the share flagged moving; walked"
+          f"\n  charges each snapshot step to the action of the bot's last move row within {MOVE_ROW_MS // 1000} s,"
+          f" steps under\n  {WALK_MIN_YD} or over {WALK_MAX_YD:.0f} yd left out; dealt is the bot's damage, its pets'"
+          " included, charged to the target\n  it held at the step's start")
+    show_side_groups(trace, samples)
+    show_crossings(trace, samples)
 
 
 # ---------------------------------------------------------------------------------------------- frost
@@ -2540,6 +2928,37 @@ def drag_anchor(latches, samples: Samples, when: int) -> tuple[float, float] | N
     return None
 
 
+def spot_anchor(noted, when: int) -> tuple[float, float] | None:
+    """The midpoint of `anub.spot0` and `anub.spot1` at `when`, None while either is unread."""
+    spots = [held_at(spans, when) for spans in noted]
+    if None in spots:
+        return None
+    return (spots[0][0] + spots[1][0]) / 2.0, (spots[0][1] + spots[1][1]) / 2.0
+
+
+def held_off(samples: Samples, boss: int, noted, pickup, start: int, stop: int) -> tuple[int, int | None]:
+    """`(ms, from)` of the longest stretch of `[start, stop)` he stood OFF_ANCHOR_YD or more off the midpoint
+    of the side spots while `anub.pickup` named no drag leg. Each sample holds to the next one, and a
+    snapshot hole ends a stretch."""
+    stamps, rows = samples.track(boss)
+    best: tuple[int, int | None] = (0, None)
+    run, began = 0, None
+    for index in range(bisect.bisect_left(stamps, start), bisect.bisect_left(stamps, stop)):
+        when = stamps[index]
+        upto = min(stamps[index + 1], stop) if index + 1 < len(stamps) else stop
+        point = spot_anchor(noted, when)
+        off = (point is not None and dist2(rows[index][1:3], point) >= OFF_ANCHOR_YD
+               and held_at(pickup, when) not in DRAG_LEGS)
+        if not off or upto - when > MAX_STEP_MS:
+            run, began = 0, None
+            continue
+        began = when if began is None else began
+        run += upto - when
+        if run > best[0]:
+            best = (run, began)
+    return best
+
+
 def turn(before, after) -> float:
     """Degrees between two ground headings, 0 when either is no move at all."""
     first, second = math.hypot(*before), math.hypot(*after)
@@ -2637,6 +3056,8 @@ def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     taunts = boss_taunts(trace, samples, boss)
     latches = patch_latches(trace)
     pickups = notes(trace, "anub.pickup")
+    pickup = latch_spans(trace, "anub.pickup", pull_end(trace))
+    noted = spot_spans(trace)
     capped = [rec for rec in trace.of("veto") if rec.get("m") == THREAT_CAP]
     stamps, rows = samples.track(boss)
     spans = phase_spans(trace)
@@ -2666,6 +3087,7 @@ def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "to_tank": None if tank is None else tank - start,
                     "taunts": [rec for rec in taunts if start <= rec["t"] < stop],
                     "off_anchor": statistics.median(spread) if spread else None,
+                    "held_off": held_off(samples, boss, noted, pickup, start, cutoff) if all(noted) else None,
                     "legs": len(legs),
                     "yards": sum(leg["yards"] for leg in legs),
                     "reversals": leg_reversals(legs),
@@ -2695,6 +3117,10 @@ def show_threat(trace: Trace) -> None:
               f" {(row['stop'] - row['start']) / 1000:6.1f} s  to a tank {to_tank:>7}"
               f"  off anchor {anchor_gap:>8}  {share}")
         print(f"          {row['legs']} leg(s), {row['yards']:.0f} yd, {row['reversals']} reversal(s)")
+        if row["held_off"] is not None:
+            ms, began = row["held_off"]
+            print("          held off the anchor with no drag leg: "
+                  + (f"longest {ms / 1000:.1f} s from {clock(began)}" if ms else "never"))
         for rec in row["taunts"]:
             print(f"          taunt {clock(rec['t'])} {trace.name(rec.get('s'))[:14]:14}"
                   f" {'human' if rec.get('s') in trace.humans else 'bot':5} {TAUNT_SPELLS[rec['sp']]}")
@@ -2733,6 +3159,14 @@ def show_threat(trace: Trace) -> None:
               " patch reads under")
     print("  off anchor is his median distance from the midpoint of both latched tank patches, over the"
           " samples\n  that have both, before the window's first submerge leg; - when none does")
+    if any(row["held_off"] is not None for row in rows):
+        flagged = [row for row in rows if row["held_off"] and row["held_off"][0] >= HELD_OFF_FLAG_MS]
+        print(f"  held off is the longest stretch he stood {OFF_ANCHOR_YD:.0f}+ yd off the midpoint of anub.spot0 and"
+              " anub.spot1 while\n  anub.pickup named no drag leg, neither drag nor submerge, before the window's"
+              f" first submerge leg;\n  {HELD_OFF_FLAG_MS // 1000} s or more: "
+              + (", ".join(f"{row['label']} {row['held_off'][0] / 1000:.1f} s" for row in flagged) or "none"))
+    else:
+        print("  no anub.spot0 and anub.spot1 rows, so no stretch held off the anchor")
     print(f"  a leg is a run of samples flagged moving, {LEG_MIN_YD:.0f} yd or more start to stop; a reversal is"
           f" a leg\n  heading more than {REVERSAL_DEGREES:.0f} degrees off the one before;"
           f" {THREAT_CAP} vetoes are rows, one per verdict change")
@@ -3532,19 +3966,25 @@ SECTIONS = (
      " a kiter marked in a patch, the tank patch spent and one spent in the run stage, the spike's approach to"
      " each tank patch, the spike against the gather and unlatched patches at each mark's end, the speeds at"
      " each cover, the kiter standing still, a flip-flopping walk, the nearest HoP-ready paladin at 12 yd, Feign"
-     " Death dropped at once, Impale on others, the crowd where he went down", show_spike),
+     " Death dropped at once, Impale on others, the crowd where he went down, each kite's anub.kiteplan"
+     " terminals and whether the last was used before the mark ended", show_spike),
     ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots, killers,"
      " landings, grips from the cast spot, the grip duty to kill and a sphere back up, anub.spot0 and"
      " anub.spot1 changes, each side's first tank patch, spheres and tank patches spent per submerge against"
      " the allowance and when the side's patch came back", show_spheres),
     ("burrowers", "each burrower: life, submerges, Permafrost, Shadow Strike, dead inside 30 s up, exit, side,"
-     " pickup, DPS focus, casts off the focus, focus due per wave and dropped with the focus alive, each focus"
-     " pick against its tank and the patches, distance from the patch centre while on a side tank, where each"
-     " submerge went under, each opener and the players nearest its exit", show_burrowers),
+     " pickup, DPS focus per side, casts off every focus, on older traces focus due per wave and dropped with"
+     " the focus alive, each focus pick by side against its tank and the patches, distance from the patch"
+     " centre while on a side tank, where each submerge went under, each opener and the players nearest its"
+     " exit", show_burrowers),
+    ("dps", "per phase and DPS role: target kind share, moving share, yards walked by move order, damage by"
+     " target kind; his health lost per phase 1, flagged under 20 percent; anub.dps rows per role; each anub.dside"
+     " group per wave and melee walks across the midline between the side spots", show_dps),
     ("frost", "seconds carrying Permafrost per group and bot, he up and he down, stints over 3 s with the"
      " bot's target", show_frost),
     ("threat", "per surfaced window: his target by role, time to a tank, drag legs, taunts, threat cap, main"
-     " tank in a patch, submerge spot to the tank patches", show_threat),
+     " tank in a patch, submerge spot to the tank patches, the longest stretch held 10+ yd off the side spots'"
+     " midpoint with no drag leg", show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, Penetrating Cold heals, defensives, deaths", show_swarm),
     ("healers", "per healer and phase the distance to the main and side tanks, far from a side tank on a burrower,"
      " follow acts, engine passes, anub.hstand; side tanks with no healer in reach; raid healer engine coverage",

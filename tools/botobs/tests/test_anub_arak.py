@@ -7,8 +7,9 @@ stage and allowance probes, a second 25H one the gather and the burrower window,
 Permafrost time, the focus picks and the tank patches spent, a fourth the tank spots, a dropped grip,
 a burrower's submerge, the speeds at a cover, the healer and tank views, a fifth the kite flip-flop, the
 ready paladin, a dropped Feign Death and the pursuit replay, a sixth the scarabs, the redirects and the
-burrower openers, and the shared fixture shows every section reads empty on a trace that is not
-Anub'arak rather than raising.
+burrower openers, a seventh the DPS split, the side groups, the focus per side, the kite plans and the
+stretch held off the anchor, and the shared fixture shows every section reads empty on a trace that is
+not Anub'arak rather than raising.
 """
 from __future__ import annotations
 
@@ -484,6 +485,9 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(dict(rows[1]["pickup"]), {(TANK, "taunt"): 1, (TANK, "hold"): 1})
         self.assertEqual([dict(row["capped"]) for row in rows], [{}, {KITE: 2, LATE: 1}, {}])
 
+    def test_no_side_spots_means_no_stretch_held_off(self):
+        self.assertEqual([row["held_off"] for row in ab.threat_rows(self.trace)], [None, None, None])
+
     def test_the_submerge_spot_is_his_last_surfaced_sample_against_each_tank_patch(self):
         gaps = ab.threat_rows(self.trace)[0]["submerge"]
         self.assertEqual(gaps["spot"], (X + 10.0, Y + 15.0))
@@ -627,6 +631,15 @@ class BurrowerFocus(unittest.TestCase):
     def test_focus_due_drops_only_count_a_focus_still_sampled(self):
         rows = ab.focus_due_drops(self.trace, ab.Samples(self.trace))
         self.assertEqual([(row["t"], row["guid"], row["hp"]) for row in rows], [(2000, B1, 80.0)])
+
+    def test_an_older_trace_reads_its_one_focus_with_no_side(self):
+        self.assertEqual([side for side, _ in ab.focus_latches(self.trace)], [None])
+        self.assertEqual([(row["side"], row["guid"]) for row in ab.focus_rows(self.trace)], [(None, B1), (None, B2)])
+        self.assertEqual([(row["side"], row["guid"]) for row in ab.focus_picks(self.trace)], [(None, B1), (None, B2)])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_burrowers(self.trace)
+        self.assertRegex(out.getvalue(), rf"#{B1 & 0xFFFFFFFF} +4\.0s +88% +-\n")
 
 
 MAIN, SIDE0, SIDE1, DK, MAGE, LOCK, ROGUE, DRUID, HUNTER, DRAGON = range(6001, 6011)
@@ -2307,6 +2320,299 @@ class WavePull(unittest.TestCase):
         self.assertIn("opened on a non-tank: 1 of 2; to a tank after it: median 1.5 s, longest 1.5 s\n", text)
 
 
+SLICER, BASHER, BRAWLER, ARCHER, GUNNER, LIGHT = range(8001, 8007)
+BU0, BU1 = CREATURE | 1101, CREATURE | 1102
+SP1 = CREATURE | 1111
+SPOT0, SPOT1 = (X, Y + 15.0), (X, Y - 15.0)
+SP1_AT = (X + 5.0, Y - 15.0)
+# damage dealt a snapshot while he is up
+RATES = {SLICER: 1000, BASHER: 2000, BRAWLER: 5000, ARCHER: 1500, GUNNER: 1000}
+
+
+def split_up(when: int) -> bool:
+    return 0 <= when < 20000 or 40000 <= when < 50000
+
+
+def split_dealt(guid: int, when: int) -> int:
+    return RATES.get(guid, 0) * sum(1 for stamp in range(0, 50000, 500) if split_up(stamp) and stamp < when)
+
+
+def split_player(guid: int, when: int) -> list:
+    """Assasin holds BU0 on side 0's half, walks across the midline to BU1 at 5-7 s, turns to him at 15 s
+    and jumps 31 yd at the submerge; Mighty stands on him on the midline and steps 2 yd at 12 s with no
+    move row; Trueshot walks 4 yd at the pull; Hellflame dies at 39.5 s; Deathsong is human."""
+    up = split_up(when)
+    boss = BOSS if up else 0
+    moving = 0
+    if guid == SLICER:
+        if when < 5000:
+            spot, target = (X, Y + 14.0), BU0 if when >= 0 else 0
+        elif when < 7000:
+            spot, target, moving = (X, Y + 14.0 - 7.0 * (when - 5000) / 500), BU1, 1
+        elif when < 20000:
+            spot, target = (X, Y - 14.0), BU1 if when < 15000 else BOSS
+        else:
+            spot, target = (X, Y + 17.0), boss
+    elif guid == BASHER:
+        spot, target = (X + 2.0, Y if when < 12000 else Y + 2.0), boss
+    elif guid == BRAWLER:
+        spot, target = (X + 3.0, Y + 14.0), BU0 if 1000 <= when < 10000 else boss
+    elif guid == ARCHER:
+        spot = (X - 20.0, Y + 10.0)
+        target = BU0 if 0 <= when < 10000 else BOSS if 10000 <= when < 20000 else 0
+    elif guid == GUNNER:
+        spot = (X - 24.0 + min(max(when, 0), 2000) / 500, Y - 10.0)
+        target, moving = BU1 if 0 <= when < 20000 else boss, int(0 <= when < 2000)
+    else:
+        spot = {MAIN: (X + 1.0, Y + 1.0), SIDE0: SPOT0, SIDE1: SPOT1, LIGHT: (X - 15.0, Y)}[guid]
+        target = boss if guid == MAIN else 0
+    hp = 0.0 if guid == ARCHER and when >= 39500 else 100.0
+    return [guid, *spot, Z, 0.0, hp, 100.0, target, moving, 0, 0, split_dealt(guid, when)]
+
+
+def split_snap(when: int) -> dict:
+    units = [split_player(guid, when) for guid in (MAIN, SIDE0, SIDE1, SLICER, BASHER, BRAWLER, ARCHER, GUNNER, LIGHT)]
+    # held 12 yd off the anchor from 10 s to the submerge
+    spot = (X + 12.0, Y) if 10000 <= when < 20000 else (X, Y)
+    hp = 100.0 - min(max(when, 0), 15000) / 1000.0 if when < 40000 else 85.0 - 3.0 * (when - 40000) / 1000.0
+    units.append([BOSS, *spot, Z, 0.0, hp, 0.0, MAIN if split_up(when) else 0, 0, 0, 0, 0])
+    if 1000 <= when <= 10000:
+        units.append([BU0, X, Y + 16.0, Z, 0.0, 100.0 - (when - 1000) / 100.0, 0.0, SIDE0, 0, 0, 0, 0])
+    if 1000 <= when <= 20000:
+        units.append([BU1, X, Y - 16.0, Z, 0.0, 100.0 - (when - 1000) / 200.0, 0.0, SIDE1, 0, 0, 0, 0])
+    hz = []
+    if 0 <= when <= 27000:
+        units.append([SP1, *SP1_AT, PATCH_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        hz.append([PERMAFROST_25H, *SP1_AT, PATCH_Z, 6.0, 1])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def move_row(when: int, guid: int, spot: tuple[float, float], by: str) -> dict:
+    return {**move(when, guid, spot), "by": by, "pr": "combat"}
+
+
+def split_pull() -> list[dict]:
+    """A 25H pull on the side split: P1 to 20 s, P2 to 40 s, then up again to the end at 50 s. Burrower
+    waves at 1 and 45 s; side 0 focuses BU0 to 10 s, side 1 BU1 to 15 s. Four kites under him: a bridge that
+    spends side 1's patch, a hand, an own immunity, and a patch kite carried over that dies unused."""
+    spot = "{:.2f},{:.2f},{:.2f}"
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 13, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": MAIN, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+             {"g": SIDE0, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+             {"g": SIDE1, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": SLICER, "n": "Assasin", "r": "melee", "c": 4, "h": 0},
+             {"g": BASHER, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
+             {"g": BRAWLER, "n": "Deathsong", "r": "melee", "c": 6, "h": 1},
+             {"g": ARCHER, "n": "Hellflame", "r": "ranged", "c": 9, "h": 0},
+             {"g": GUNNER, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0},
+             {"g": LIGHT, "n": "Holylight", "r": "heal", "c": 2, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 0, "e": "unit", "g": SP1, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"},
+        *({"t": 1000, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"} for guid in (BU0, BU1)),
+        {"e": "spell", "sp": 49052, "n": "Steady Shot"},
+        {"e": "spell", "sp": 47486, "n": "Mortal Strike"},
+        *(note(when, MAIN, "anub.phase", value) for when, value in ((0, 1), (20000, 2), (40000, 1))),
+        note(0, MAIN, "anub.side0", SIDE0),
+        note(0, MAIN, "anub.side1", SIDE1),
+        note(0, MAIN, "anub.spot0", spot.format(*SPOT0, Z)),
+        note(0, MAIN, "anub.spot1", spot.format(*SPOT1, Z)),
+        note(5000, SIDE1, "anub.patch1", SP1),
+        note(27500, SIDE1, "anub.patch1", 0),
+        note(1000, MAIN, "anub.wave", 1),
+        note(45000, MAIN, "anub.wave", 2),
+
+        # the split at each wave writes only the bots whose side changed: Hellflame is dead by wave 2
+        *(note(1000, guid, "anub.dside", side) for guid, side in ((SLICER, 0), (BASHER, 1), (ARCHER, 0), (GUNNER, 1))),
+        note(45000, GUNNER, "anub.dside", 0),
+        note(0, MAIN, "anub.focus0", 0),
+        note(1000, SLICER, "anub.focus0", BU0),
+        note(10000, ARCHER, "anub.focus0", 0),
+        note(1000, GUNNER, "anub.focus1", BU1),
+        note(15000, GUNNER, "anub.focus1", 0),
+        *(note(when, guid, "anub.dps", branch) for when, guid, branch in (
+            (0, SLICER, "burrower"), (5000, SLICER, "loose"), (15000, SLICER, "boss"), (0, ARCHER, "burrower"),
+            (10000, ARCHER, "boss"), (0, GUNNER, "burrower"), (0, BRAWLER, "burrower"))),
+        # side 0's focus is no stray for a side 1 bot; BU1 after side 1 let it go is
+        cast(3000, BASHER, 47486, BU0),
+        cast(16000, GUNNER, 49052, BU1),
+        move_row(5000, SLICER, (X, Y - 14.0), "anubarak melee burrower stand"),
+        move_row(0, GUNNER, (X - 20.0, Y - 10.0), "reach spell"),
+
+        # a drag leg at 13 s splits the 12 yd hold in two, and the submerge leg from 18 s ends it
+        *(note(when, MAIN, "anub.pickup", value) for when, value in (
+            (0, "attack"), (9000, "drag"), (10000, "hold"), (13000, "drag"), (14000, "hold"), (18000, "submerge"),
+            (40000, "attack"), (40500, "hold"))),
+
+        *(aura(when, kiter, ab.SPELL_MARK, removed, BOSS) for kiter, start, stop in (
+            (ARCHER, 21000, 27000), (GUNNER, 28000, 33000), (GUNNER, 34000, 37500), (ARCHER, 38000, 39500))
+          for when, removed in ((start, False), (stop, True))),
+        note(21100, ARCHER, "anub.kiteplan", "patch+hand"),
+        note(23000, ARCHER, "anub.kiteplan", "patch"),
+        note(28100, GUNNER, "anub.kiteplan", "hand"),
+        note(34200, GUNNER, "anub.kiteplan", "own"),
+        cast(30000, LIGHT, 10278, GUNNER),
+        cast(37000, GUNNER, ab.SPELL_FEIGN_DEATH, 0),
+        {"t": 39500, "e": "death", "g": ARCHER, "killer": BOSS, "x": X - 20.0, "y": Y + 10.0, "z": Z,
+         "blow": [BOSS, 20000]},
+        {"t": 50000, "e": "end", "out": "wipe"},
+    ]
+    records += [split_snap(when) for when in range(-500, 50000, 500)]
+    return records
+
+
+class SplitPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_13_anub-arak_1789500010.ndjson", split_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, *sections) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for section in sections:
+                section(self.trace)
+        return out.getvalue()
+
+    def test_each_phase_splits_samples_damage_and_walks_per_role(self):
+        rows = ab.dps_rows(self.trace)
+        self.assertEqual([(row["label"], row["phase"]) for row in rows], [("P1", 1), ("P2", 2), ("P1b", 1)])
+        melee, ranged = rows[0]["roles"]["melee"], rows[0]["roles"]["ranged"]
+        # Deathsong is human, and Assasin's 31 yd jump at the submerge is no walk
+        self.assertEqual((melee["bots"], melee["samples"], dict(melee["kinds"]), melee["moving"]),
+                         ({SLICER, BASHER}, 80, {"boss": 50, "burrower": 30}, 4))
+        self.assertEqual({order: round(yards, 6) for order, yards in melee["walked"].items()},
+                         {"anubarak melee burrower stand": 28.0, "no move row": 2.0})
+        self.assertEqual(dict(melee["dealt"]), {"boss": 90000, "burrower": 30000})
+        self.assertEqual((dict(ranged["kinds"]), ranged["moving"], round(ranged["yards"], 6), dict(ranged["dealt"])),
+                         ({"burrower": 60, "boss": 20}, 4, 4.0, {"burrower": 70000, "boss": 30000}))
+        self.assertEqual(dict(rows[1]["roles"]["melee"]["kinds"]), {"none": 80})
+
+    def test_a_dead_bot_drops_out_of_the_split(self):
+        rows = ab.dps_rows(self.trace)
+        self.assertEqual(rows[1]["roles"]["ranged"]["samples"], 79)
+        self.assertEqual(rows[2]["roles"]["ranged"]["bots"], {GUNNER})
+
+    def test_his_health_lost_per_phase(self):
+        self.assertEqual([round(ab.boss_lost(row), 6) for row in ab.dps_rows(self.trace)], [15.0, 0.0, 28.5])
+
+    def test_each_wave_reads_its_side_groups_from_the_living(self):
+        self.assertEqual([(row["wave"], row["t"], row["sides"]) for row in ab.side_groups(self.trace)],
+                         [(1, 1000, {0: {"melee": [SLICER], "ranged": [ARCHER]},
+                                     1: {"melee": [BASHER], "ranged": [GUNNER]}}),
+                          (2, 45000, {0: {"melee": [SLICER], "ranged": [GUNNER]},
+                                      1: {"melee": [BASHER], "ranged": []}})])
+
+    def test_a_melee_walk_across_the_midline_reads_its_group(self):
+        # Mighty never leaves the midline, and Assasin's P1b start on side 0 is a new window
+        self.assertEqual(ab.side_crossings(self.trace),
+                         [{"guid": SLICER, "t": 6500, "label": "P1", "frm": 0, "to": 1, "group": 0}])
+        noted = ab.spot_spans(self.trace)
+        self.assertEqual([ab.midline_half(noted, (X, Y + dy), 1000) for dy in (6.0, 4.0, -4.0, -6.0)],
+                         [0, None, None, 1])
+
+    def test_each_side_has_its_own_focus_latch(self):
+        self.assertEqual([side for side, _ in ab.focus_latches(self.trace)], [0, 1])
+        rows = ab.focus_rows(self.trace)
+        self.assertEqual([(row["side"], row["guid"], row["held"]) for row in rows], [(0, BU0, 9000), (1, BU1, 14000)])
+        # side 0: Assasin 8 of 18, Hellflame 18 of 18; side 1: Mighty on him, Trueshot 28 of 28
+        self.assertAlmostEqual(rows[0]["share"], 26 / 36)
+        self.assertAlmostEqual(rows[1]["share"], 0.5)
+
+    def test_each_focus_pick_is_labelled_by_side(self):
+        self.assertEqual([(row["t"], row["side"], row["guid"], row["target"], row["settled"])
+                          for row in ab.focus_picks(self.trace)],
+                         [(1000, 0, BU0, SIDE0, True), (1000, 1, BU1, SIDE1, True)])
+
+    def test_a_cast_off_both_focuses_is_stray(self):
+        self.assertEqual([(rec["t"], rec["s"], rec["tgt"]) for rec in ab.stray_burrower_casts(self.trace)],
+                         [(16000, GUNNER, BU1)])
+
+    def test_each_kite_reads_its_plan_terminals(self):
+        self.assertEqual([(window["guid"], window["plan"]) for window in ab.mark_windows(self.trace)],
+                         [(ARCHER, ["patch+hand", "patch"]), (GUNNER, ["hand"]), (GUNNER, ["own"]),
+                          (ARCHER, ["patch"])])
+
+    def test_a_plan_carried_in_counts_only_without_a_row_near_the_mark(self):
+        self.assertEqual(ab.plan_terminals([(900, "patch"), (1500, "hand")], 1000, 5000), ["patch", "hand"])
+        self.assertEqual(ab.plan_terminals([(100, "patch")], 5000, 9000), ["patch"])
+        self.assertEqual(ab.plan_terminals([(100, "hand"), (5300, "own")], 5000, 9000), ["own"])
+        self.assertEqual(ab.plan_terminals([(100, "hand"), (7000, "patch")], 5000, 9000), ["hand", "patch"])
+        self.assertEqual(ab.plan_terminals([], 0, 1000), [])
+
+    def test_a_terminal_is_used_only_with_everything_it_spends(self):
+        hand = {"hop": [{"t": 1}], "own": []}
+        self.assertEqual(ab.plan_missing("patch+hand", hand, None), ["no tank patch spent"])
+        self.assertEqual(ab.plan_missing("patch+hand", hand, {"side": 1}), [])
+        self.assertEqual(ab.plan_missing("own", hand, None), ["no own immunity"])
+        self.assertIsNone(ab.plan_missing("none", hand, None))
+
+    def test_the_longest_stretch_held_off_the_anchor_with_no_drag_leg(self):
+        self.assertEqual([(row["label"], row["held_off"]) for row in ab.threat_rows(self.trace)],
+                         [("P1", (4000, 14000)), ("P1b", (0, None))])
+
+    def test_the_dps_section_prints(self):
+        text = self.text(ab.show_dps)
+        self.assertIn("20.0 s  boss 100.0% -> 85.0%, 15.0% lost  under 20%\n", text)
+        self.assertIn("walked 30 yd: anubarak melee burrower stand 28, no move row 2\n", text)
+        self.assertIn("dealt 6.0k/s: boss 75%, burrower 25%, scarab 0%, other 0%, none 0%\n", text)
+        self.assertIn("    ranged  2 bot(s): target boss 25%, burrower 75%, scarab 0%, other 0%, none 0%; moving 5%;"
+                      " 2 yd a bot\n", text)
+        self.assertIn("dealt 5.0k/s: boss 30%, burrower 70%, scarab 0%, other 0%, none 0%\n", text)
+        self.assertIn("boss health lost per phase 1: P1 15.0% under, P1b 28.5%\n", text)
+        self.assertIn("anub.dps rows per role: melee burrower 1, loose 1, boss 1; ranged burrower 2, boss 1\n", text)
+        self.assertIn("    wave 1  0:01.000  side 0: melee Assasin; ranged Hellflame\n"
+                      "                      side 1: melee Mighty; ranged Trueshot\n", text)
+        self.assertIn("    wave 2  0:45.000  side 0: melee Assasin; ranged Trueshot\n"
+                      "                      side 1: melee Mighty\n", text)
+        self.assertIn("    P1     0:00.000  1 walk(s): Assasin 1 (1 astray)\n", text)
+        self.assertIn("    P1b    0:40.000  0 walk(s)\n", text)
+
+    def test_the_burrower_section_prints_each_side_and_no_focus_due(self):
+        text = self.text(ab.show_burrowers)
+        self.assertRegex(text, rf"#{BU0 & 0xFFFFFFFF} +9\.0s +72% +0\n")
+        self.assertRegex(text, rf"#{BU1 & 0xFFFFFFFF} +14\.0s +50% +1\n")
+        self.assertRegex(text, rf"0:01\.000 #{BU1 & 0xFFFFFFFF} +100% +0\.0 s Felesta .* +1\n")
+        self.assertIn("no anub.focusdue rows, so no focus due per wave: only older traces write it\n", text)
+        self.assertIn("anub.focusdue dropped with the focus alive: no anub.focusdue rows\n", text)
+        self.assertIn("DPS casts at a burrower other than the focus: 1, by Trueshot 1; most: Steady Shot 49052 1\n",
+                      text)
+        self.assertIn("anub.dps: Assasin burrower 1, loose 1, boss 1;", text)
+
+    def test_the_spike_section_prints_each_plan_and_its_use(self):
+        text = self.text(ab.show_spike)
+        self.assertIn("  tank patch 1 spent\n            kiteplan patch+hand>patch: used\n", text)
+        self.assertIn("            kiteplan hand: used\n", text)
+        self.assertIn("            kiteplan own: used\n", text)
+        self.assertIn("            kiteplan patch: unused, no tank patch spent\n", text)
+        self.assertIn("anub.kiteplan terminal at the mark's end, used before it ended: patch 1 of 2, hand 1 of 1,"
+                      " own 1 of 1\n", text)
+        self.assertIn("kiter dead with its terminal unused: Hellflame 0:38.000 patch\n", text)
+
+    def test_the_threat_section_prints_the_stretch_held_off(self):
+        text = self.text(ab.show_threat)
+        self.assertIn("          held off the anchor with no drag leg: longest 4.0 s from 0:14.000\n", text)
+        self.assertIn("          held off the anchor with no drag leg: never\n", text)
+        self.assertIn("first submerge leg;\n  10 s or more: none\n", text)
+
+    def test_the_new_keys_count_as_present(self):
+        gone = ab.missing_probes(self.trace)
+        for key in ("anub.dside", "anub.focus0", "anub.focus1", "anub.kiteplan"):
+            self.assertNotIn(key, gone)
+        self.assertNotIn("anub.focus", gone)
+        self.assertNotIn("anub.focusdue", gone)
+
+    def test_every_section_prints(self):
+        text = self.text(ab.show_banner, *(section for _, _, section in ab.SECTIONS))
+        self.assertIn("DPS\n  P1 ", text)
+
+
 def side_pull(diff: int, side1: int, later: list[dict] | None = None) -> list[dict]:
     return [
         {"e": "hdr", "v": 13, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 6, "diff": diff, "boss": "anub-arak",
@@ -2363,7 +2669,7 @@ class EveryView(unittest.TestCase):
         self.assertNotIn("locked out", out.getvalue())
         self.assertIn("HEALERS\n  not an Anub'arak pull\n", out.getvalue())
         self.assertIn("TANKS\n  not an Anub'arak pull\n", out.getvalue())
-        for title in ("SCARABS", "REDIRECTS", "PURSUIT"):
+        for title in ("SCARABS", "REDIRECTS", "PURSUIT", "DPS"):
             self.assertIn(f"{title}\n  not an Anub'arak pull\n", out.getvalue())
 
     def test_azjol_nerubs_anubarak_is_not_this_one(self):

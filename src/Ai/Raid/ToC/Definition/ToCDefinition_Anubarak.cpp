@@ -89,6 +89,15 @@ bool AnubarakMainTankLeavesScarabs(PlayerbotAI* botAI)
            GetAnubarakPhase(botAI) == AnubarakPhase::Submerged;
 }
 
+// Heroic phase 2: an immunity spent off the mark is gone for the kites, and Forbearance from Divine
+// Shield blocks Hand of Protection too. The marked bot's own kite casts its immunity directly.
+bool AnubarakKiteImmunitiesKept(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return AnubarakEngaged(botAI) && bot->GetMap()->IsHeroic() && !bot->HasAura(SPELL_MARK) &&
+           GetAnubarakPhase(botAI) == AnubarakPhase::Submerged;
+}
+
 void DefineAnubarak(EncounterBuilder& e)
 {
     e.OwnTargeting("anubarak dps target guard", Role::Any, AnubarakDpsTargetOwned, Family::DpsAssist);
@@ -143,6 +152,8 @@ void DefineAnubarak(EncounterBuilder& e)
             {"righteous defense"});
     // the ghouls taunt burrowers off their side tanks and off the patches, where they submerge to full
     e.Block("anubarak no ghouls", Role::Any, AnubarakEngaged, 0, {"army of the dead"});
+    e.Block("anubarak kite immunity reserve", Role::Any, AnubarakKiteImmunitiesKept, 0,
+            {"divine shield", "ice block", "vanish", "feign death"});
 
     e.Multiplier<AnubarakThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakSphereGuardMultiplier>(Family::Spell | Family::Attack);

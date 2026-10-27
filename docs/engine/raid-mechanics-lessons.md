@@ -196,6 +196,13 @@ Every distance helper measures differently, and a large-model boss inflates all 
   (Anub'arak's spike: 0.9 yd p90 off the real one 6 s on, the lane 19.7;
   [anubarak.md](../raids/trial-of-the-crusader/anubarak.md#pursuing-spike-34660)). A slow on the kiter
   that it walks out of in a step doesn't decide the race: count its unslowed speed.
+- **Commit to an escape by simulating it, never by distance or the chaser's speed now.** A chaser
+  that steps up its speed (Anub'arak's spike: 3.5, 6.1, 11.4 yd/s, 7 s apart) is slower at the start,
+  so a turn gated on "faster now" comes at top speed with the gap gone. Run on only while turning a
+  fixed delay later still makes it; a margin on the escape's own lead won't do, since that lead is
+  bounded by the stand's distance over the chaser's speed and reads thin at once. A timer of its own
+  (a boost running) must never hold the commit back
+  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-plan)).
 - **A boss that opens on a random player** (`AttackStart(SelectTargetFromPlayerList(...))` when an
   intro ends) is answered by staging, not by taunt speed: the pickup tank waits inside his reach and
   taunts on the first selectable tick, and everyone else waits outside it until a tank holds him

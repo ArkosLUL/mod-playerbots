@@ -234,23 +234,22 @@ Unit* AnubarakRedirectThreatAction::GetThreatDumpTarget()
 
 bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
 {
-    // Heroic chains its speed boosts once the spike gains on it; each is instant and leaves the run going
+    // Heroic chains its speed boosts once the spike gains on it, the walk to a patch included; each is
+    // instant and leaves the run going
     AnubarakKiteBoost boost;
-    if (GetAnubarakKiteStage(bot, &boost) == AnubarakKiteStage::Boost)
+    GetAnubarakKiteStage(bot, &boost);
+    if (boost.nitro)
     {
-        if (boost.nitro)
-        {
-            if (UseNitroBoosts(bot))
-                return true;
-        }
-        else if (boost.spellId)
-        {
-            if (boost.face)
-                bot->SetOrientation(boost.facing);
+        if (UseNitroBoosts(bot))
+            return true;
+    }
+    else if (boost.spellId)
+    {
+        if (boost.face)
+            bot->SetOrientation(boost.facing);
 
-            if (botAI->CastSpell(boost.spellId, bot))
-                return true;
-        }
+        if (botAI->CastSpell(boost.spellId, bot))
+            return true;
     }
 
     Creature* spike = GetPursuingSpike(bot);

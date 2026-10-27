@@ -87,15 +87,6 @@ constexpr uint32 ANUBARAK_WAVE_READY_MS = 8000;
 // He submerges 80 s after the pull or an emerge and is selectable again 62 s later
 constexpr uint32 ANUBARAK_SURFACED_MS = 80000;
 constexpr uint32 ANUBARAK_SUBMERGED_MS = 62000;
-// Focus fire on the burrowers starts once killing every one alive at the raid's rate, plus this, reaches
-// the next wave. The margin pays for the switch, the melee walking off him to the patches.
-constexpr uint32 ANUBARAK_FOCUS_MARGIN_MS = 15000;
-// The raid's rate on burrowers against its rate on him: melee lose reach on the patches (128k against
-// 174k/s, 25H)
-constexpr float ANUBARAK_FOCUS_RATE_SHARE = 0.7f;
-// Heroic phase 2 time before the deadline counts at this share: only the ranged reach the patches from
-// the gather (25-40k/s)
-constexpr float ANUBARAK_FOCUS_SUBMERGED_SHARE = 0.25f;
 // One this low off Permafrost still dies before its next 3 s submerge check
 constexpr float ANUBARAK_FOCUS_OFF_FROST_PCT = 10.0f;
 // A burrower is a focus pick once a tank it is on stands this close: before, it is still walking in from
@@ -104,9 +95,6 @@ constexpr float ANUBARAK_FOCUS_SETTLE = 5.0f;
 // The script's first submerge check comes 30 s after a burrower spawns or emerges, so one off Permafrost
 // is still worth killing this long after either
 constexpr uint32 ANUBARAK_BURROWER_FREE_MS = 25000;
-constexpr uint32 ANUBARAK_DAMAGE_WINDOW_MS = 10000;
-constexpr uint32 ANUBARAK_DAMAGE_SAMPLE_MS = 500;
-constexpr uint32 ANUBARAK_DAMAGE_MIN_SPAN_MS = 3000;
 
 constexpr uint32 ANUBARAK_SIDE_DEFENSIVE_STACKS = 5;
 constexpr float ANUBARAK_SIDE_DEFENSIVE_PCT = 50.0f;
@@ -128,12 +116,6 @@ constexpr float ANUBARAK_KITE_BOOST_RANGE = 15.0f;
 constexpr float ANUBARAK_KITE_BOOST_CLOSE = 10.0f;
 // Heroic: the spike's route keeps this far off a patch it isn't meant to take, its 11.5 yd test plus 3
 constexpr float ANUBARAK_SPIKE_ROUTE_CLEARANCE = 14.5f;
-// Heroic: an immunity this close to running out sends the kiter to its patch, when there's none to walk to
-constexpr uint32 ANUBARAK_KITE_IMMUNE_LEFT_MS = 2000;
-// Heroic, a patch the kite may end on: the kiter turns for it this much ahead of its walk there, under
-// Hand of Protection before the hand runs out, otherwise before the spike closes to Impale's reach
-constexpr uint32 ANUBARAK_KITE_IMMUNE_COMMIT_MS = 1500;
-constexpr uint32 ANUBARAK_KITE_SPIKE_COMMIT_MS = 1000;
 // Impale's 6 yd plus 1.5 reach
 constexpr float ANUBARAK_IMPALE_REACH = 7.5f;
 // Heroic, a patch the kite may end on and the spike faster: lane steps keep the kiter this close to its stand
@@ -236,11 +218,11 @@ enum class AnubarakKiteStage : uint8
     None,
     // Steps whose spike lane clears every patch
     Run,
-    // The spike gains within 15 yd, or is within 10: the next speed boost goes out
+    // Running, and the next speed boost goes out
     Boost,
     // Hand of Protection up, still running
     Immune,
-    // The hand or the lead running out before the walk to a patch, or nothing left: to the patch
+    // A patch kite whose walk to its stand would no longer beat the catch by the commit margin: to the patch
     Patch
 };
 
@@ -310,7 +292,8 @@ struct AnubarakGripDuty
 {
     // Null while no sphere is in reach of the stand
     Creature* sphere = nullptr;
-    // The stand: the side's spot, or up to ANUBARAK_GRIP_STEP_OUT off it toward the sphere
+    // The stand: the side's spot, up to ANUBARAK_GRIP_STEP_OUT off it toward the sphere, or with every
+    // sphere further out, just inside Death Grip's reach of the nearest
     Position spot;
     uint8 side = 0;
     AnubarakGripStep step = AnubarakGripStep::None;
@@ -358,7 +341,9 @@ Position GetAnubarakPickupStand(Player* bot);
 // Midpoint of both latched tank patches. False until both have landed: he is held where picked up.
 bool GetAnubarakDragAnchor(Player* bot, Position& out);
 // The anchor, then points 4 and 7.5 yd off it toward his side of the patch line, for when the leg to
-// the anchor would walk the tank through Permafrost. Empty without an anchor.
+// the anchor would walk the tank through Permafrost; then waypoints round a patch on his line to the
+// anchor, and once he has stood 8+ yd off it 5 s with no leg, a ring 8 yd round it. Empty without an
+// anchor. Called by the hold action only: it times the stall.
 std::vector<Position> GetAnubarakDragPoints(Player* bot, Creature* boss);
 // From 65 s after the pull or an emerge: a spot 30 yd from every patch, else 25, else
 // ANUBARAK_SUBMERGE_PATCH_CLEARANCE, else _MIN, so the spike summoned on him doesn't burn one, on the
@@ -409,22 +394,24 @@ std::vector<Creature*> GetAnubarakBurrowers(Player* bot);
 // with it, and a dead or marked side tank's go to the other, as do all of one holding him. A human side
 // tank's still loose 5 s after it came out goes to a bot side tank, past two.
 AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI);
-// The burrower DPS focus, latched per instance in anub.focus. Any under ANUBARAK_FOCUS_OFF_FROST_PCT
-// counts; else only one a tank stands within ANUBARAK_FOCUS_SETTLE of, or whose side has no usable side
-// tank, and then on Permafrost, since one below 80% off it submerges and comes back full, or off it
-// within ANUBARAK_BURROWER_FREE_MS of coming up. Those off it go first, the one whose time ends first,
-// then the lowest health. The latched one stays while it qualifies and none of those outranks it.
+// The burrower DPS focus of the bot's side (anub.dside: living DPS bots per role by guid, the sides in
+// turn, split again at each wave), else either side's; each side's latched in anub.focus0 and
+// anub.focus1 over the burrowers that side holds. Any under ANUBARAK_FOCUS_OFF_FROST_PCT counts; else
+// only one a tank stands within ANUBARAK_FOCUS_SETTLE of, or whose side has no usable side tank, and then
+// on Permafrost, since one below 80% off it submerges and comes back full, or off it within
+// ANUBARAK_BURROWER_FREE_MS of coming up. Those off it go first, the one whose time ends first, then the
+// lowest health. The latched one stays while it qualifies and none of those outranks it.
 Creature* GetAnubarakFocusBurrower(Player* bot);
-// This DPS bot's target: a player's skull, a scarab left over once he's up, him while selectable, else
-// the focus burrower, else while he's down the nearest scarab in reach. The focus burrower goes ahead
-// of a leftover scarab and him while he's down, while
-// it's off Permafrost in its free time, or once killing every burrower at ANUBARAK_FOCUS_RATE_SHARE of
-// the raid's rate would run within the margin of the next wave, then until the focus it came due on
-// dies; for a melee bot only with a stand off the patches in its reach. Null outside the pull, for
-// non-DPS and for a bot on sphere duty.
+// This DPS bot's target: a player's skull; gathered melee in heroic phase 2, a scarab within 10 yd; a
+// melee bot, a burrower within 10 yd on a non-tank; its side's focus (a melee bot's only with a stand off
+// the patches in its reach); once he's up, a leftover scarab (melee within 10 yd); a ranged bot, the
+// other side's focus; him while selectable; while he's down, the nearest scarab in reach. Null outside
+// the pull, for non-DPS and for a bot on sphere duty.
 Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI);
 // A floor point within ANUBARAK_MELEE_BURROWER_REACH of the burrower and ANUBARAK_MELEE_PATCH_CLEARANCE
-// from every patch, nearest the bot. False when none is, or no patch is near enough to matter.
+// from every patch: in his melee reach behind him first, then in his reach, nearest the bot; else the
+// one nearest him. Held per bot while the burrower stays put. False when none is, or no patch is near
+// enough to matter.
 bool GetAnubarakMeleeBurrowerStand(Player* bot, Creature* burrower, Position& out);
 // A melee DPS bot's current target is a burrower near a patch with a stand off it, so its own walk
 // replaces reach melee, set behind and flank: behind a held burrower is its patch
@@ -470,14 +457,17 @@ bool GetAnubarakSphereStand(Player* bot, Unit* sphere, Position& out);
 // Where the spike's target runs. previous is the stand the caller latched last time, may be null.
 // False while there's no spike. Heroic runs lane steps until the kite stage says patch.
 bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, AnubarakKiteStand& out);
-// Heroic only, None elsewhere and for an unmarked bot. With Boost, boost says what to use.
+// Heroic only, None elsewhere and for an unmarked bot. boost is set to the speed boost to use now, if any,
+// whatever the stage.
 AnubarakKiteStage GetAnubarakKiteStage(Player* kiter, AnubarakKiteBoost* boost = nullptr);
 // Heroic phase 2: this bot's spot in the raid's gather, not floor-checked, false when it doesn't gather
 // (the kiter, a side tank a burrower is on, the escort). The main tank's is on the gather's edge.
 bool GetAnubarakGatherSpot(Player* bot, Position& out);
 bool AnubarakGathers(PlayerbotAI* botAI);
 // While he is up, every difficulty: a healer bot's slot on the gather's ring round the raid point, clear
-// of every patch, not floor-checked. False for anyone else or while marked.
+// of every patch, not floor-checked. With the tank patches 40+ yd apart the healers split in two groups
+// by guid, each ring 17.5 yd off its side's patch toward the raid point, when that keeps it clear and in
+// reach of the main tank. False for anyone else or while marked.
 bool GetAnubarakHealerStand(Player* bot, Position& out);
 bool AnubarakHealerStandApplies(PlayerbotAI* botAI);
 // A warlock bot's Demonic Circle is missing or under 100 s: on its Anub'arak stand before the pull, or
@@ -495,17 +485,19 @@ bool IsAnubarakDodgeHeld(PlayerbotAI* botAI);
 
 // The kiter this paladin bot covers with Hand of Protection now, null when it has no such duty
 Player* GetAnubarakKiterToProtect(Player* bot);
-// Heroic: the spot of the paladin bot that walks to keep a kiter with no patch left to end on inside
-// Hand of Protection's reach, the one in line to cast it. False for every other bot.
+// Heroic: the spot of the paladin bot whose Hand of Protection the kite plan ends or bridges the kite
+// on, keeping the kiter inside its reach until the hand lands. False for every other bot.
 bool GetAnubarakEscortSpot(Player* bot, Position& out);
 bool IsAnubarakEscort(PlayerbotAI* botAI);
 // The kiter, marked while it carries Permafrost, this paladin bot casts Hand of Freedom on now
 Player* GetAnubarakKiterToFree(Player* bot);
-// The marked bot itself must cast an immunity now: the spike within the immunity range, no boost, no
-// protector, and no patch stand it reaches before the spike reaches it
+// The marked bot itself must cast an immunity now. Heroic: its planned own Hand 1 s before the catch,
+// its planned immunity 0.6 s before, or that once the plan failed (no protector, no patch walk that
+// beats the catch). Normal: the spike within the immunity range, no protector, no reachable patch stand.
 bool AnubarakKiterNeedsImmunity(Player* bot);
-// The marked paladin's own Hand of Protection keeps it on the spike to a patch or the emerge;
-// otherwise Divine Shield hands the spike on
+// The marked paladin's own Hand of Protection keeps it on the spike to a patch or the emerge, or the
+// kite plan ends on it; otherwise, and always for a plan ending on its own immunity, Divine Shield hands
+// the spike on
 bool AnubarakKiterKeepsMark(Player* bot);
 bool AnubarakKiterImmune(Unit* kiter);
 
