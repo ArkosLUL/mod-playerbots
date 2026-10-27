@@ -43,6 +43,17 @@ Trial of the Crusader: `gormok-the-impaler`, `acidmaw`, `dreadscale`, `icehowl` 
 engage under their encounter's slug. Never alias `the-lich-king`: ICC's boss, and a passive
 boss-flagged unit here. `anub-arak` is also Azjol-Nerub's boss, so a slug cannot tell the two apart.
 
+Icecrown Citadel hands RaidObs a boss-id → slug table, so a boss-state open files under its contract
+slug (`encounter.ICC_KEY_PREFIXES`). The aliases cover a pull no table named: `blood-council` (the
+DBC name Valanar's credit takes on normal), `prince-keleseth`, `prince-taldaram`, `prince-valanar`
+(heroic has no encounter list, so the creature names it) → `blood-prince-council`; `queen-lana-thel`
+→ `blood-queen-lana-thel`; the enemy captain, `muradin-bronzebeard` or `high-overlord-saurfang`, →
+`icecrown-gunship-battle`, whose credit is a spell; `stinky`, `precious` → `stinky-and-precious`,
+since `MarkPull` names a session after its creature and only a map-named one is ever renamed. None
+collides with another raid's slug, but Utgarde Keep's Keleseth and Ahn'kahet's Taldaram share the
+princes' slugs once `Obs.Maps` traces a 5-man. Deathbringer's Rise's friendly Muradin and Saurfang
+are boss-flagged too but never fight the raid, so they never name a file.
+
 `--coverage` and `--probes` join on that name too, and the map-name fallback (`ulduar`) matches no
 encounter, which would fold every node into the "gate shut this pull" line and read as a closed gate
 when only the join failed. So a slug still equal to its map's `Map.dbc` name (`encounter.MAP_SLUGS`)
@@ -56,6 +67,10 @@ encounter of the raid into that gated line rather than list it NEVER. The owner 
 prefix the node leads with: `ULD_PREFIXES` holds the Ulduar ones, and `TOC_PREFIXES` holds
 `gormok`, `northrend worms`, `icehowl`, `jaraxxus`, `faction champions`, `twin valkyr`, `anubarak`.
 Every per-encounter ToC trigger name leads with one, so a new ToC encounter prefix needs a row.
+`ICC_PREFIXES` holds ICC's: `icc ` then the boss, spelled out or short (`lm`, `dbs`, `bpc`, `bql`,
+`dogs`), plus `icc dark reckoning`, `icc in cannon` and `icc valkyre spear`. ICC triggers test for
+their own boss instead of sitting behind a gate, so every ICC node is asked in every ICC pull; the
+gauntlet and the Blood Prince trash own no trigger, so their pulls fold every one.
 
 **The fight supplies the point, `geometry.py` the rest.** `--from` names a `const Position`, in any
 initialiser form, declared anywhere under `src/Ai/Raid/`, and `--band` a `constexpr float` radius
@@ -99,10 +114,12 @@ timeline, an assignment (`ObsGuidMap`/`ObsGuidSet`) per holder, an event (`Note`
 ranks keys by churn: changes per minute and A-B-A flips back to the value just left.
 A key's boss comes from its prefix. `NOTE_PREFIXES` decides alone where it has a row: `nb`,
 `jaraxxus`, `fc`, `tv`, `anub` name ToC's five encounters, and `toc` is raid-wide, matching all five;
-the table is also what keeps `anub` off Naxx's `anub-rekhan`. Any other prefix matches as the slug
-spelled out (`thorim`), its initials (`fl`) or its first word (`yogg`). The declared set is parsed
-from `src/`, call sites wrapped across lines included; a hand-kept key list goes wrong in both
-directions within a week, so never keep one beside the parse.
+the table is also what keeps `anub` off Naxx's `anub-rekhan`. Every ICC contract prefix has a row,
+built from `ICC_KEY_PREFIXES` so none claims another raid's slug by initials: `sg` covers Sindragosa
+and her gauntlet, `bpc` the council and its trash, and `icc` every ICC slug. Any other prefix
+matches as the slug spelled out (`thorim`), its initials (`fl`) or its first word (`yogg`). The
+declared set is parsed from `src/`, call sites wrapped across lines included; a hand-kept key list
+goes wrong in both directions within a week, so never keep one beside the parse.
 
 ### Reading traps
 
@@ -159,8 +176,11 @@ The build's timestamp is not proof the code ran. Where a change's effect must be
 from the records: a node the change added appears at least once, and an action a new multiplier
 zeroes carries that multiplier's label in a `veto` row instead of its own relevance.
 
-`cfg` also carries `cheats` and `mapthreads`, and is a fixed short list on purpose: a full dump would
-grow with every option and bury the few that decide whether a pull counts.
+`cfg` also carries `cheats`, `mapthreads` and, from v14, `iccbuffs` (`Playerbots.EnableICCBuffs`, 0
+or 1), and is a fixed short list on purpose: a full dump would grow with every option and bury the
+few that decide whether a pull counts. Two banner lines never disqualify: `iccbuffs` on an ICC pull,
+flagged when on in heroic, since every `EnableICCBuffs` site tests 10H/25H; and `cheated`, the cheat
+kinds fired and their total uses, `none recorded` only on a v14 ICC pull, where every site records.
 
 ## Config
 
@@ -240,7 +260,7 @@ Guardians pre-pull that way; against `t=0` none of them was.
 `reset`. **Latched during combat**, never at the close — `IdleCloseSeconds` (30 s) has by then let
 everyone release and run back alive, which filed a 31-death Flame Leviathan attempt as `idle`.
 
-## Schema (`v: 13`)
+## Schema (`v: 14`)
 
 `t` is milliseconds from the `hdr`. A guid is a type tag in the high 32 bits over
 `ObjectGuid::GetCounter()` in the low 32 — the counter alone is a separate numbering space per type, so
@@ -250,7 +270,7 @@ else `7`. `0` still means no unit.
 
 | `e` | Fields |
 |---|---|
-| `hdr` | `v`, `ts` epoch ms, `map`, `inst`, `diff`, `boss`, `bin`, `cfg`, `roster[]` of `{g,n,c,r,h}` — `r` role, `h` human |
+| `hdr` | `v`, `ts` epoch ms, `map`, `inst`, `diff`, `boss`, `bin`, `cfg` (`iccbuffs` from v14), `roster[]` of `{g,n,c,r,h}` — `r` role, `h` human |
 | `pull` / `end` | `boss`,`src`: bossstate, mark, engage, rename (then `was`) / `out`: kill, wipe, reset, idle, mapgone, shutdown |
 | `unit` | `g`,`en` entry,`n`,`lvl`,`mhp`,`b` is-boss,`own` owner guid when it has one, plus `c`,`r`,`h` for a player — once per guid |
 | `spell` | `sp`,`n` — once per spell id |
@@ -266,6 +286,7 @@ else `7`. `0` still means no unit.
 | `cov` | `g`,`r[]` rows `[id,checks,fires,pushes,won,shared,throttled,minimal,dead]`, trailing zeros trimmed - pad short rows back out ([node coverage](#node-coverage)) |
 | `move` | `g`,`k` generator,`x`,`y`,`z`,`tgt`,`ok`,`r` reason,`by` owning action,`pr` priority; on `wait` also `hpr`,`hms` — the walk that beat it |
 | `note` | `g`,`k` kind,`txt` — assignments, latches, phases, derived state |
+| `cheat` | `g` bot whose code cheated,`tgt` unit it acted on (absent: the bot itself),`k` `<prefix>.<kind>`,`n` uses since this bot's last row for `k` |
 | `haz` | `sp`,`shape`,`x`,`y`,`z`,`ttl`, plus shape fields — hazards with no world object; timeline only, never tested against a death |
 | `death` | `g`,`killer`,`x`,`y`,`z`,`dist{}`,`auras[]`,`rewind[]`,`blow[]`,`hplast[]`,`acts[]`,`lastmove{}`,`cause` |
 | `truncated` | file hit `MaxFileMB`; the `end` record is still written past it |
@@ -275,6 +296,11 @@ and `appliedT` −1 when the aura was applied before the session opened;
 `death.rewind` rows are `[t,source,sp,amount]`; `death.blow` is `[source,amount]` and `death.hplast`
 `[hp%,t]`; `death.acts` rows are `[firstT,lastT,action,rel,verdict,repeats]`, a veto's verdict reading
 `VETO:<multiplier>`.
+
+**A `cheat` row is paced, so sum `n`.** A bot writes one on its first use of a key in the session,
+then at most one per 10 s, and the close flushes the rest. `tgt` names only the use that wrote the
+row: who was acted on, never how often. `RaidObs::NoteCheat(bot, key, target)` is raid-agnostic and
+gates on `Active()`; ICC calls it through `IccRaidCheat`, which also tests `BotCheatMask::raid`.
 
 **`dmg.hp` is the health a hit landed *on*; `heal.hp` is what the heal left behind.** The core logs
 damage before applying it and a heal after. So `dmg.hp` never reads 0, and `ok` is the row's only sign
@@ -587,10 +613,11 @@ statics. Timestamps, thresholds and caches are left bare on purpose.
   only witness to its real bar.
 - **A friendly creature is not swept either**, so Yogg-Saron's one-use portals (34072) leave no row
   anywhere but `yogg.wave`. Where a mechanic's unit is not hostile, the probe is the only record.
-- **`cfg.cheats` is the conf string, not a record of cheats exercised.** `EnvFieldsJson` copies
-  `Playerbots.BotCheats` verbatim, so a header reading `food,taxi,raid` says nothing about whether
-  any node took a cheat branch. An encounter that stopped cheating reads identically before and
-  after; only the body can show it.
+- **A `cheat` row covers only a wrapped site.** `cfg.cheats` is `Playerbots.BotCheats` verbatim
+  (`EnvFieldsJson`): what was allowed, not what ran. From v14 a `cheat` row names each use of a site
+  that calls `NoteCheat`, which is every ICC site and nothing elsewhere yet. Off ICC an empty stream
+  is no clean pull, and an encounter that stopped cheating reads identically before and after; only
+  the body can show it.
 
 ## Server stalls
 

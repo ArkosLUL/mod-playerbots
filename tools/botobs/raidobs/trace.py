@@ -9,7 +9,7 @@ import json
 import pathlib
 import sys
 
-SUPPORTED_SCHEMA = 13
+SUPPORTED_SCHEMA = 14
 
 # Columns of a `cov` row after the node id, in order. Rows are written with trailing zeros trimmed, so
 # a short row is padded back out here and a column appended in a later schema reads as zero on an
@@ -24,8 +24,9 @@ COVERAGE_COLUMNS = ("checks", "fires", "pushes", "won", "shared", "throttled", "
 # hdr.cfg, so a pre-v11 file only cannot say which build or settings produced it. v12 adds the covdef
 # and cov records, so --coverage is the one view a pre-v12 trace cannot answer. v13 adds `dmg` rows for
 # a ridden vehicle and appends power type and power % to a snapshot row, so an older file has no hull
-# damage and reads as short rows for power.
-READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+# damage and reads as short rows for power. v14 adds the `cheat` record and hdr.cfg.iccbuffs, so an
+# older file cannot say which cheat fired.
+READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
 
 
 def clock(ms: int) -> str:
@@ -222,3 +223,23 @@ def first_deaths(trace: Trace) -> dict[int, int]:
 
 def notes(trace: Trace, key: str) -> list[dict]:
     return [rec for rec in trace.of("note") if rec.get("k") == key]
+
+
+def cheat_uses(trace: Trace) -> dict[str, dict]:
+    """Per cheat key: `n` total uses, `first` use's `t`, `bots` as guid -> uses, and `targets`, the
+    units its rows name.
+
+    A row's `n` counts the uses since that bot's previous row for the key, so the total is the sum and
+    the first row stamps the first use. Its `tgt` is only the unit of the use that wrote the row, so
+    targets say who was acted on, never how often. A row without `tgt` acted on the bot itself: 0 here.
+    """
+    uses: dict[str, dict] = {}
+    for rec in trace.of("cheat"):
+        entry = uses.setdefault(rec.get("k", "?"), {"n": 0, "first": rec["t"], "bots": {}, "targets": set()})
+        count = int(rec.get("n", 0))
+        entry["n"] += count
+        entry["first"] = min(entry["first"], rec["t"])
+        bot = rec.get("g", 0)
+        entry["bots"][bot] = entry["bots"].get(bot, 0) + count
+        entry["targets"].add(rec.get("tgt", 0))
+    return uses

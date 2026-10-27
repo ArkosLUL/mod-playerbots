@@ -57,6 +57,19 @@ BOSS_ALIASES = {
         "baelnor-lightbearer", "irieth-shadowstep", "brienna-nightfell", "serissa-grimdabbler",
         "shocuul",
     )},
+    # ICC: Valanar and the Blood-Queen file under their DBC encounter names on normal only, since
+    # heroic has no encounter list. Gunship credits a spell, so its enemy captain names the file.
+    # Utgarde Keep and Ahn'kahet have their own Keleseth and Taldaram, but no 5-man is traced by default.
+    "blood-council": "blood-prince-council",
+    "prince-keleseth": "blood-prince-council",
+    "prince-taldaram": "blood-prince-council",
+    "prince-valanar": "blood-prince-council",
+    "queen-lana-thel": "blood-queen-lana-thel",
+    "muradin-bronzebeard": "icecrown-gunship-battle",
+    "high-overlord-saurfang": "icecrown-gunship-battle",
+    # MarkPull names a session after the creature, and only a map-named one can be renamed later.
+    "stinky": "stinky-and-precious",
+    "precious": "stinky-and-precious",
     # The Lich King is boss-flagged in ToC too, but `the-lich-king` is ICC's encounter. Never alias it.
 }
 
@@ -206,9 +219,52 @@ TOC_PREFIXES = {
     "anubarak": "anub-arak",
 }
 
+ICC_MAP = 631
+
+# Every ICC trigger name leads with `icc ` and one of these, so a new ICC trigger prefix needs a row.
+ICC_PREFIXES = {
+    "icc lm": "lord-marrowgar",
+    "icc lady deathwhisper": "lady-deathwhisper", "icc dark reckoning": "lady-deathwhisper",
+    "icc rotting frost giant": "rotting-frost-giant",
+    "icc gunship": "icecrown-gunship-battle", "icc in cannon": "icecrown-gunship-battle",
+    "icc dbs": "deathbringer-saurfang",
+    "icc dogs": "stinky-and-precious",
+    "icc festergut": "festergut",
+    "icc rotface": "rotface",
+    "icc putricide": "professor-putricide",
+    "icc bpc": "blood-prince-council",
+    "icc bql": "blood-queen-lana-thel",
+    "icc valkyre spear": "sister-svalna", "icc sister svalna": "sister-svalna",
+    "icc valithria": "valithria-dreamwalker",
+    "icc sindragosa": "sindragosa",
+    "icc lich king": "the-lich-king",
+}
+
+# ICC's naming contract: every slug an ICC pull files under, and the prefix its note and cheat keys
+# carry. `icc` is the raid-wide prefix and also the Rotting Frost Giant's.
+ICC_KEY_PREFIXES = {
+    "lord-marrowgar": "lm",
+    "lady-deathwhisper": "ldw",
+    "icecrown-gunship-battle": "gsb",
+    "deathbringer-saurfang": "dbs",
+    "festergut": "fg",
+    "rotface": "rf",
+    "professor-putricide": "pp",
+    "blood-prince-council": "bpc",
+    "blood-queen-lana-thel": "bql",
+    "sister-svalna": "ss",
+    "valithria-dreamwalker": "vd",
+    "sindragosa": "sg",
+    "the-lich-king": "lk",
+    "sindragosa-gauntlet": "sg",
+    "blood-prince-trash": "bpc",
+    "stinky-and-precious": "dogs",
+    "rotting-frost-giant": "icc",
+}
+
 
 def node_encounter(node: str) -> str | None:
-    for table in (ULD_PREFIXES, TOC_PREFIXES):
+    for table in (ULD_PREFIXES, TOC_PREFIXES, ICC_PREFIXES):
         for prefix, boss in table.items():
             if node.startswith(prefix):
                 return boss
@@ -216,6 +272,8 @@ def node_encounter(node: str) -> str | None:
 
 
 # Note-key prefixes that name their encounters outright. `toc` is raid-wide, so it names all five.
+# Every ICC contract prefix gets a row, the derivable ones too, so none can claim another raid's slug
+# by its initials. `lk` must stay off ToC, whose Lich King is boss-flagged as well.
 NOTE_PREFIXES = {
     "nb": frozenset({"northrend-beasts"}),
     "jaraxxus": frozenset({"lord-jaraxxus"}),
@@ -223,6 +281,9 @@ NOTE_PREFIXES = {
     "tv": frozenset({"val-kyr-twins"}),
     "anub": frozenset({"anub-arak"}),
     "toc": frozenset(TOC_PREFIXES.values()),
+    **{prefix: frozenset(slug for slug, own in ICC_KEY_PREFIXES.items() if own == prefix)
+       for prefix in set(ICC_KEY_PREFIXES.values()) - {"icc"}},
+    "icc": frozenset(ICC_KEY_PREFIXES),
 }
 
 
@@ -230,7 +291,8 @@ def prefix_matches_boss(prefix: str, boss: str) -> bool:
     """Whether a key prefix names the boss a trace fought.
 
     NOTE_PREFIXES goes first and a hit there decides on its own. `jaraxxus`, `tv` and `toc` can't be
-    derived from any slug, and a derived `anub` would also claim Naxx's `anub-rekhan`.
+    derived from any slug, a derived `anub` would also claim Naxx's `anub-rekhan`, and every ICC key
+    prefix comes from the naming contract.
 
     Everything else is derived, three ways: `thorim`/`mimiron`/`algalon` spell the slug out with the
     punctuation dropped, `fl` is the slug's initials, and `yogg` is its first word. Without the
