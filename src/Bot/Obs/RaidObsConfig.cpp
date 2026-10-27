@@ -74,7 +74,11 @@ std::string EnvFieldsJson()
     out += ",\"iron-assembly\":" + std::to_string(sPlayerbotAIConfig.UlduarIronAssemblyHardMode ? 1 : 0);
     out += ",\"mimiron\":" + std::to_string(sPlayerbotAIConfig.UlduarMimironHardMode ? 1 : 0);
     out += ",\"vezax\":" + std::to_string(sPlayerbotAIConfig.UlduarVezaxHardMode ? 1 : 0);
-    out += "}}";
+    out += "}";
+    // ICC's heroic buffs reach human raiders too and sit outside the raid cheat, so the conf string
+    // alone cannot say whether a heroic pull had them.
+    out += ",\"iccbuffs\":" + std::to_string(sPlayerbotAIConfig.EnableICCBuffs ? 1 : 0);
+    out += "}";
 
     return out;
 }

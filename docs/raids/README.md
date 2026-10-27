@@ -19,6 +19,7 @@ vehicles, movement stability, reach and per-raid cost are in
 | [vault-of-archavon.md](vault-of-archavon.md) | Vault of Archavon |
 | [ulduar/](ulduar/README.md) | Ulduar, a file per boss |
 | [trial-of-the-crusader/](trial-of-the-crusader/README.md) | Trial of the Crusader, a file per boss |
+| [icecrown-citadel/](icecrown-citadel/README.md) | Icecrown Citadel, a file per boss |
 
 ## File layout and wiring
 

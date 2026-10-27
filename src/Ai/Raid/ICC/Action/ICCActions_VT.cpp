@@ -738,13 +738,13 @@ bool IccValithriaPortalAction::Execute(Event /*event*/)
         if (p)
             livePortalGuids.insert(p->GetGUID());
 
-    for (auto it = claims.begin(); it != claims.end();)
-    {
-        if (!livePortalGuids.count(it->second))
-            it = claims.erase(it);
-        else
-            ++it;
-    }
+    // Erase by guid: unlike an iterator erase it writes the lapsed claim into the trace.
+    std::vector<ObjectGuid> lapsedClaims;
+    for (auto const& [healer, portal] : claims)
+        if (!livePortalGuids.count(portal))
+            lapsedClaims.push_back(healer);
+    for (ObjectGuid const& healer : lapsedClaims)
+        claims.erase(healer);
 
     if (preEffectPortals.empty() && realPortals.empty())
         return false;
@@ -925,9 +925,15 @@ bool IccValithriaDreamCloudAction::Execute(Event /*event*/)
     if (!bot->HasAura(SPELL_DREAM_STATE))
         return false;
 
-    bot->SetSpeed(MOVE_RUN, 2.0f, true);
-    bot->SetSpeed(MOVE_WALK, 2.0f, true);
-    bot->SetSpeed(MOVE_FLIGHT, 2.0f, true);
+    // SetSpeed ignores an unchanged rate, so only a real change counts as a use.
+    bool const atDreamSpeed = bot->GetSpeedRate(MOVE_RUN) == 2.0f && bot->GetSpeedRate(MOVE_WALK) == 2.0f &&
+                              bot->GetSpeedRate(MOVE_FLIGHT) == 2.0f;
+    if (!atDreamSpeed && IccRaidCheat(botAI, "vd.speed"))
+    {
+        bot->SetSpeed(MOVE_RUN, 2.0f, true);
+        bot->SetSpeed(MOVE_WALK, 2.0f, true);
+        bot->SetSpeed(MOVE_FLIGHT, 2.0f, true);
+    }
 
     std::vector<Player*> allDream;
     std::vector<Player*> realDream;
@@ -959,7 +965,7 @@ bool IccValithriaDreamCloudAction::Execute(Event /*event*/)
     if (!realDream.empty())
     {
         constexpr float STACK_DIST = 1.0f;
-        if (bot->GetDistance(leader) > STACK_DIST)
+        if (bot->GetDistance(leader) > STACK_DIST && IccRaidCheat(botAI, "vd.dreamteleport", leader))
         {
             bot->TeleportTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(),
                             bot->GetOrientation());
@@ -1025,7 +1031,7 @@ bool IccValithriaDreamCloudAction::Execute(Event /*event*/)
     }
 
     // All bots teleport to the shared target so none miss the cloud
-    if (target)
+    if (target && IccRaidCheat(botAI, "vd.cloudteleport", target))
         bot->TeleportTo(target->GetMapId(), target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(),
                         bot->GetOrientation());
 
@@ -1086,7 +1092,7 @@ bool IccValithriaZombieKiteAction::Execute(Event /*event*/)
     if (threatZombies.empty())
         return false;
 
-    if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+    if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "vd.nitro"))
         bot->AddAura(SPELL_NITRO_BOOSTS, bot);
 
     // Stop active channeling that would root the bot

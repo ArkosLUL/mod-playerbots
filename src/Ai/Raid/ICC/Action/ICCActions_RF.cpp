@@ -145,7 +145,7 @@ bool IccRotfaceTankPositionAction::HandleAssistTankPositioning(Unit*)
         if (ooze->GetVictim() == bot)
             continue;
 
-        if (!bot->HasAura(SPELL_SPITEFULL_FURY))
+        if (!bot->HasAura(SPELL_SPITEFULL_FURY) && IccRaidCheat(botAI, "rf.spitefulfury"))
             bot->AddAura(SPELL_SPITEFULL_FURY, bot);
         IccCastClassTaunt(bot, botAI, ooze);
 
@@ -159,7 +159,7 @@ bool IccRotfaceTankPositionAction::HandleAssistTankPositioning(Unit*)
 
     if (uncollectedOoze)
     {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
             bot->AddAura(SPELL_NITRO_BOOSTS, bot);
         return MoveTo(bot->GetMapId(), uncollectedOoze->GetPositionX(), uncollectedOoze->GetPositionY(),
                       uncollectedOoze->GetPositionZ(), false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
@@ -232,7 +232,7 @@ bool IccRotfaceTankPositionAction::HandleBigOozeKiting(Unit* bigOoze)
 {
     if (bigOoze->GetVictim() != bot && bigOoze->IsAlive())
     {
-        if (!bot->HasAura(SPELL_SPITEFULL_FURY))
+        if (!bot->HasAura(SPELL_SPITEFULL_FURY) && IccRaidCheat(botAI, "rf.spitefulfury"))
             bot->AddAura(SPELL_SPITEFULL_FURY, bot);
         IccCastClassTaunt(bot, botAI, bigOoze);
     }
@@ -245,7 +245,7 @@ bool IccRotfaceTankPositionAction::HandleBigOozeKiting(Unit* bigOoze)
         bot->SetFacingToObject(bigOoze);
         if (bigOoze->GetVictim() != bot)
         {
-            if (!bot->HasAura(SPELL_SPITEFULL_FURY))
+            if (!bot->HasAura(SPELL_SPITEFULL_FURY) && IccRaidCheat(botAI, "rf.spitefulfury"))
                 bot->AddAura(SPELL_SPITEFULL_FURY, bot);
             IccCastClassTaunt(bot, botAI, bigOoze);
         }
@@ -689,7 +689,7 @@ bool IccRotfaceGroupPositionAction::PositionHeroicGrid(Unit* boss)
         float const targetX = bot->GetPositionX() + (dx / dist) * step;
         float const targetY = bot->GetPositionY() + (dy / dist) * step;
 
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
             bot->AddAura(SPELL_NITRO_BOOSTS, bot);
 
         return MoveTo(bot->GetMapId(), targetX, targetY, spot.GetPositionZ(), false, false, false, true,
@@ -747,7 +747,7 @@ bool IccRotfaceGroupPositionAction::PositionHeroicGrid(Unit* boss)
                     if (distToTank <= 12.0f)
                         return false;
 
-                    if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+                    if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
                         bot->AddAura(SPELL_NITRO_BOOSTS, bot);
 
                     return MoveTo(bot->GetMapId(), member->GetPositionX(), member->GetPositionY(),
@@ -781,7 +781,7 @@ bool IccRotfaceMoveAwayFromExplosionAction::Execute(Event /*event*/)
         return false;
     }
 
-    if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+    if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
         bot->AddAura(SPELL_NITRO_BOOSTS, bot);
 
     Position const anchor = ICC_ROTFACE_CENTER_POSITION_BOSS;
@@ -986,7 +986,7 @@ bool IccRotfaceAvoidVileGasAction::Execute(Event /*event*/)
 
     if (bot->GetExactDist2d(_safeSpot) > 2.0f)
     {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "rf.nitro"))
             bot->AddAura(SPELL_NITRO_BOOSTS, bot);
 
         return MoveTo(bot->GetMapId(), _safeSpot.GetPositionX(), _safeSpot.GetPositionY(),

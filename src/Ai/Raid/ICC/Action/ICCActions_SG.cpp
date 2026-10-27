@@ -490,7 +490,7 @@ bool IccSindragosaFrostBeaconAction::TryDropTombFlares(Unit const* boss)
     }
 
     uint32 const itemId = phase3 ? ITEM_BLUE_SMOKE_FLARE : ITEM_RED_SMOKE_FLARE;
-    if (bot->GetItemCount(itemId, false) == 0)
+    if (bot->GetItemCount(itemId, false) == 0 && IccRaidCheat(botAI, "sg.flares"))
         bot->StoreNewItemInBestSlots(itemId, 10);
 
     Item* flare = bot->GetItemByEntry(itemId);
@@ -611,7 +611,7 @@ bool IccSindragosaFrostBeaconAction::HandleBeaconedPlayer(Unit const* boss)
     // Phase 3 positioning (below 35% health, not flying)
     if (boss->HealthBelowPct(35) && !IsBossFlying(boss))
     {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "sg.nitro"))
             bot->AddAura(SPELL_NITRO_BOOSTS, bot);
         botAI->Reset();
         return MoveToPositionIfNeeded(ICC_SINDRAGOSA_THOMBMB2_POSITION, POSITION_TOLERANCE);
@@ -793,7 +793,7 @@ bool IccSindragosaBlisteringColdAction::Execute(Event /*event*/)
 
         if (distToTarget > 0.1f)  // Avoid division by zero
         {
-            if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+            if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "sg.nitro"))
                 bot->AddAura(SPELL_NITRO_BOOSTS, bot);
             // Calculate direction vector
             float dirX = targetPos.GetPositionX() - bot->GetPositionX();
@@ -978,7 +978,8 @@ bool IccSindragosaMysticBuffetAction::Execute(Event /*event*/)
         ObjectGuid const currentIcon = group->GetTargetIcon(SKULL_ICON);
         if (!currentIcon.IsEmpty())
             group->SetTargetIcon(SKULL_ICON, bot->GetGUID(), ObjectGuid::Empty);
-        if (tombs.size() == 1)
+        bool const tombHasAuras = !tomb->GetAppliedAuras().empty() || !tomb->GetOwnedAuras().empty();
+        if (tombs.size() == 1 && tombHasAuras && IccRaidCheat(botAI, "sg.tombstrip", tomb))
             tomb->RemoveAllAuras();
         bot->AttackStop();
         return true;
@@ -1052,6 +1053,14 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
             return false;
         };
 
+        auto const hasTimedAura = [](Unit* unit)
+        {
+            for (auto const& entry : unit->GetOwnedAuras())
+                if (entry.second && entry.second->GetDuration() != -1)
+                    return true;
+            return false;
+        };
+
         bool anyAlive = false;
         bool anyKillable = false;
         for (Unit* tomb : myTombs)
@@ -1061,7 +1070,8 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
             anyAlive = true;
             bool const marked = isMarked(tomb);
 
-            if (!marked && tomb->GetHealthPct() < STRIP_HP_PCT)
+            if (!marked && tomb->GetHealthPct() < STRIP_HP_PCT && hasTimedAura(tomb) &&
+                IccRaidCheat(botAI, "sg.tombstrip", tomb))
             {
                 Unit::AuraMap& auras = tomb->GetOwnedAuras();
                 for (Unit::AuraMap::iterator it = auras.begin(); it != auras.end();)

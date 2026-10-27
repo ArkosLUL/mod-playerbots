@@ -27,7 +27,6 @@ public:
         creators["icc gunship rocket pack setup"] = &RaidIccTriggerContext::icc_gunship_rocket_pack_setup;
 
         creators["icc dbs"] = &RaidIccTriggerContext::icc_dbs;
-        creators["icc dbs main tank rune of blood"] = &RaidIccTriggerContext::icc_dbs_main_tank_rune_of_blood;
 
         creators["icc dogs"] = &RaidIccTriggerContext::icc_dogs;
 
@@ -95,7 +94,6 @@ private:
     static Trigger* icc_gunship_rocket_pack_setup(PlayerbotAI* botAI) { return new IccGunshipRocketPackSetupTrigger(botAI); }
 
     static Trigger* icc_dbs(PlayerbotAI* botAI) { return new IccDbsTrigger(botAI); }
-    static Trigger* icc_dbs_main_tank_rune_of_blood(PlayerbotAI* botAI) { return new IccDbsMainTankRuneOfBloodTrigger(botAI); }
 
     static Trigger* icc_dogs(PlayerbotAI* botAI) { return new IccDogsTrigger(botAI); }
 

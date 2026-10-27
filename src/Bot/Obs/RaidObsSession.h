@@ -59,6 +59,9 @@ constexpr float OBS_WIPE_DEAD_SHARE = 0.5f;
 // Node names per `covdef` record. A 25-man Ulduar pull defines around 950 of them, and one line
 // carrying all of them is awkward to read and awkward to recover from if the file is cut short.
 constexpr uint32 OBS_COVERAGE_CHUNK = 200;
+// How often one bot's cheat key writes again while it keeps firing. Part of the `cheat` record's
+// contract: readers take `n` as the uses since the row before.
+constexpr uint32 OBS_CHEAT_REPEAT_MS = 10000;
 
 struct ObsConfig
 {
@@ -135,6 +138,16 @@ struct ActionLatch
     bool seen = false;
 };
 
+// Uses of one cheat key not yet written, and the latest of them, which is what the next row carries.
+struct CheatLatch
+{
+    uint32 pending = 0;
+    uint32 lastUseMs = 0;
+    uint32 lastRowMs = 0;
+    uint64 target = 0;
+    bool written = false;
+};
+
 // Per-bot state that only exists to answer "has this changed since last time", plus the rewind rings a
 // death record is built from.
 struct BotTrace
@@ -169,6 +182,7 @@ struct BotTrace
     std::unordered_map<uint32 /*spellId*/, AuraState> auras;
     // Last value emitted for each NoteDerived key, so a helper can be probed on every call.
     std::unordered_map<std::string, std::string> derived;
+    std::unordered_map<std::string, CheatLatch> cheats;
     float lastMoveX = 0.0f, lastMoveY = 0.0f, lastMoveZ = 0.0f;
     std::string lastMoveBy;
     bool hasMove = false;
@@ -254,6 +268,9 @@ public:
     bool combatWhileInProgress = false;
     // Encounter credit that landed while IsEncounterInProgress still answered true.
     bool credited = false;
+    // Opened by MarkPull: a trash or gauntlet pull, which a boss pull starting before its idle close
+    // ends rather than renames.
+    bool marked = false;
 
     std::vector<ObjectGuid> roster;
     std::unordered_set<uint64> seenUnits;
@@ -304,6 +321,10 @@ public:
     void EmitCoverage();
     // Closes the pass being buffered for one bot and writes whatever in it is news.
     void FlushTick(uint64 key, BotTrace& trace);
+    // One `cheat` row carrying every use the latch has pending.
+    void EmitCheat(uint64 key, std::string const& kind, CheatLatch& latch);
+    // Writes the uses the repeat window still holds back, at the close.
+    void FlushCheats();
 
     // --- lifecycle (RaidObsLifecycle.cpp) ---
 
@@ -312,6 +333,8 @@ public:
     bool EncounterFellAfterCombat(bool inCombat);
     void UpgradeBossName(Creature* boss);
     void UpgradeBossName(std::string const& slug);
+    // Renames whatever the trace is called now. UpgradeBossName is the guarded form.
+    void Rename(std::string const& slug);
 };
 
 // The registry is the only shared structure here. Bumped on every open and close so map threads can
@@ -394,7 +417,10 @@ bool ShouldEmit(BotTrace& trace, TickEntry const& entry);
 
 std::string ResolveBossName(Map* map, Unit* source);
 Unit* FindEngagedBoss(Map* map);
-void OpenSession(Map* map, Unit* source, char const* trigger);
+// The name NameBossStates gave this boss id on this map, or null.
+char const* RegisteredBossName(uint32 mapId, uint32 bossId);
+// `name`, when given, names the trace outright.
+void OpenSession(Map* map, Unit* source, char const* trigger, char const* name = nullptr);
 void CloseSession(uint32 instanceId, char const* outcome);
 void ProcessPendingBossState(Map* map, uint32 instanceId);
 void ProcessPendingCredit(Map* map, uint32 instanceId);

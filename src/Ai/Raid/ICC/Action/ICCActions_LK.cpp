@@ -174,7 +174,7 @@ bool IccLichKingShadowTrapAction::Execute(Event /*event*/)
     Difficulty const diff = GetRaidMapDifficulty(bot);
 
     if (sPlayerbotAIConfig.EnableICCBuffs && boss->IsInCombat() && IsHeroicLk(diff))
-        IccApplyHeroicBuffToMember(bot, true, false);
+        IccApplyHeroicBuffToMember(bot, bot, true, false, "lk.heroicbuff");
 
     static constexpr float CIRCLE_RADIUS = 20.0f;
     static constexpr float SAFE_DISTANCE = 12.0f;
@@ -371,10 +371,10 @@ bool IccLichKingWinterAction::Execute(Event /*event*/)
     Difficulty const diff = GetRaidMapDifficulty(bot);
 
     if (sPlayerbotAIConfig.EnableICCBuffs && boss->IsInCombat() && IsHeroicLk(diff))
-        IccApplyHeroicBuffToMember(bot, true, true);
+        IccApplyHeroicBuffToMember(bot, bot, true, true, "lk.heroicbuff");
 
     // Speed boost to help escape the inward push
-    if (bot->GetDistance2d(boss) < 35.0f && !bot->HasAura(SPELL_NITRO_BOOSTS))
+    if (bot->GetDistance2d(boss) < 35.0f && !bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "lk.nitro"))
         bot->AddAura(SPELL_NITRO_BOOSTS, bot);
 
     // Heroic: if more than 2 Raging Spirits are alive, kill the one with the
@@ -398,7 +398,8 @@ bool IccLichKingWinterAction::Execute(Event /*event*/)
         {
             Unit* killTarget = *std::max_element(spirits.begin(), spirits.end(),
                 [](Unit const* a, Unit const* b) { return a->GetHealth() < b->GetHealth(); });
-            bot->Kill(bot, killTarget);
+            if (IccRaidCheat(botAI, "lk.ragingspiritkill", killTarget))
+                bot->Kill(bot, killTarget);
         }
     }
 
@@ -1818,11 +1819,14 @@ bool IccLichKingAddsAction::Execute(Event /*event*/)
                 if (!member || !member->IsAlive() || !member->IsInWorld())
                     continue;
 
-                IccApplyHeroicBuffToMember(member, true, true);
+                IccApplyHeroicBuffToMember(bot, member, true, true, "lk.heroicbuff");
 
                 if (boss && boss->HealthBelowPct(60) && boss->HealthAbovePct(40) &&
                     !member->HasAura(SPELL_EMPOWERED_BLOOD))
+                {
                     member->AddAura(SPELL_EMPOWERED_BLOOD, member);
+                    IccNoteCheat(bot, "lk.empoweredblood", member);
+                }
             }
         }
     }
@@ -2428,7 +2432,8 @@ bool IccLichKingAddsAction::HandleSpiritMarkingAndTargeting(Difficulty diff, Uni
             bot->SetTarget(starTarget->GetGUID());
             bot->SetFacingToObject(starTarget);
             Attack(starTarget);
-            bot->Kill(bot, starTarget);
+            if (IccRaidCheat(botAI, "lk.wickedspiritkill", starTarget))
+                bot->Kill(bot, starTarget);
             return true;
         }
     }
@@ -2724,7 +2729,7 @@ bool IccLichKingAddsAction::HandleAssistTankAddManagement(Unit* boss, Difficulty
                     continue;
                 if (!IsLkShambling(unit->GetEntry()))
                     continue;
-                if (!unit->HasAura(SPELL_HAMMER_OF_JUSTICE))
+                if (!unit->HasAura(SPELL_HAMMER_OF_JUSTICE) && IccRaidCheat(botAI, "lk.hoj", unit))
                     bot->AddAura(SPELL_HAMMER_OF_JUSTICE, unit);
             }
         }
@@ -3562,7 +3567,7 @@ bool IccLichKingAddsAction::HandleDefileMechanics(Unit* boss, Difficulty diff)
         lastYellMs = info.castTime;
     }
 
-    if (!target->HasAura(SPELL_NITRO_BOOSTS))
+    if (!target->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "lk.nitro", target))
         target->AddAura(SPELL_NITRO_BOOSTS, target);
 
     // Real players run themselves; only the targeted bot moves.
@@ -3832,7 +3837,10 @@ bool IccLichKingAddsAction::HandleValkyrAssignment(std::vector<Unit*> const& gra
     Difficulty const diff = GetRaidMapDifficulty(bot);
     if (sPlayerbotAIConfig.EnableICCBuffs && IsHeroicLk(diff) &&
         !myValkyr->HasAura(SPELL_HAMMER_OF_JUSTICE))
+    {
         bot->AddAura(SPELL_HAMMER_OF_JUSTICE, myValkyr);
+        IccNoteCheat(bot, "lk.valkyrstun", myValkyr);
+    }
 
     ApplyCCToValkyr(myValkyr);
 
@@ -3931,7 +3939,7 @@ bool IccLichKingAddsAction::HandleVileSpiritMechanics()
     // Shared raid-wide slot choice. All bots converge on the same position so
     // they stay stacked. Reset when no spirits are alive. Keyed per-instance to
     // avoid cross-instance pollution when multiple ICCs run simultaneously.
-    int& sharedSlot = IcecrownHelpers::IccState(bot->GetInstanceId()).lkSharedSlot;
+    auto& sharedSlot = IcecrownHelpers::IccState(bot->GetInstanceId()).lkSharedSlot;
 
     if (spiritCount == 0)
     {
@@ -4051,11 +4059,11 @@ bool IccLichKingAddsAction::HandleVileSpiritMechanics()
     // for chase speed.
     if (PlayerbotAI::IsAssistTank(bot))
     {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "lk.nitro"))
             bot->AddAura(SPELL_NITRO_BOOSTS, bot);
-        if (!bot->HasAura(SPELL_PAIN_SUPPRESION))
+        if (!bot->HasAura(SPELL_PAIN_SUPPRESION) && IccRaidCheat(botAI, "lk.painsuppression"))
             bot->AddAura(SPELL_PAIN_SUPPRESION, bot);
-        if (!bot->HasAura(SPELL_AGEIS_OF_DALARAN))
+        if (!bot->HasAura(SPELL_AGEIS_OF_DALARAN) && IccRaidCheat(botAI, "lk.aegis"))
             bot->AddAura(SPELL_AGEIS_OF_DALARAN, bot);
 
         static constexpr float LEASH_RADIUS = 40.0f;

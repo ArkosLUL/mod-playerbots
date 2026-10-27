@@ -521,7 +521,8 @@ bool IccPutricideVolatileOozeAction::Execute(Event /*event*/)
     if (aliveOozes.size() > 1)
     {
         for (size_t i = 0; i < aliveOozes.size() - 1; ++i)
-            bot->Kill(bot, aliveOozes[i]);
+            if (IccRaidCheat(botAI, "pp.oozekill", aliveOozes[i]))
+                bot->Kill(bot, aliveOozes[i]);
     }
 
     MarkOozeWithSkull(ooze);
@@ -680,7 +681,8 @@ bool IccPutricideGasCloudAction::Execute(Event /*event*/)
     if (aliveGasCloud.size() > 1)
     {
         for (size_t i = 0; i < aliveGasCloud.size() - 1; ++i)
-            bot->Kill(bot, aliveGasCloud[i]);
+            if (IccRaidCheat(botAI, "pp.gascloudkill", aliveGasCloud[i]))
+                bot->Kill(bot, aliveGasCloud[i]);
     }
 
     if (!hasGaseousBloat && volatileOoze)
@@ -730,7 +732,7 @@ bool IccPutricideGasCloudAction::HandleGaseousBloatMovement(Unit* gasCloud)
         g_bloatLastDir[botKey] = { ddx / l, ddy / l };
     };
 
-    if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+    if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "pp.nitro"))
         bot->AddAura(SPELL_NITRO_BOOSTS, bot);
 
     constexpr int numAngles = 32;
@@ -1326,6 +1328,9 @@ bool IccPutricideAvoidMalleableGooAction::HandleUnboundPlague(Unit* boss)
 
     if (!closestPlayer || closestDistance >= unboundPlagueDistance)
     {
+        if (!IccRaidCheat(botAI, "pp.unboundplague"))
+            return false;
+
         bot->Kill(bot, bot);
         return true;
     }
@@ -1552,7 +1557,9 @@ bool IccPutricideAbominationAction::TryRegurgitate(Unit* abo, Unit* target)
         return false;
     }
 
-    Spell* spell = new Spell(abo, spellInfo, TRIGGERED_IGNORE_POWER_AND_REAGENT_COST);
+    TriggerCastFlags const castFlags =
+        IccRaidCheat(botAI, "pp.freeooze", target) ? TRIGGERED_IGNORE_POWER_AND_REAGENT_COST : TRIGGERED_NONE;
+    Spell* spell = new Spell(abo, spellInfo, castFlags);
     SpellCastTargets targets;
     targets.SetUnitTarget(target);
     spell->prepare(&targets);

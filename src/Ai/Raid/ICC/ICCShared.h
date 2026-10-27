@@ -83,10 +83,23 @@ struct IccGuidLess
     bool operator()(WorldObject const* a, WorldObject const* b) const { return a->GetGUID() < b->GetGUID(); }
 };
 
+// Every bot cheat in ICC goes through one of the next two, so a trace says which one ran, by whom, on
+// what. `key` is "<encounter prefix>.<kind>" and `target` the unit acted on when it is not the bot.
+// IccRaidCheat is the raid cheat's gate: true when the bot may cheat, and then the use is recorded,
+// so ask it last, once the cheat is otherwise about to run.
+bool IccRaidCheat(PlayerbotAI* botAI, char const* key, Unit* target = nullptr);
+// For the Playerbots.EnableICCBuffs buffs, which keep that gate of their own and only record.
+void IccNoteCheat(Player* bot, char const* key, Unit* target = nullptr);
+
+// Opens the trace for a pull no boss state reports, under `slug`, once the bot is fighting `source`.
+void IccMarkPull(Player* bot, Unit* source, char const* slug);
+
 bool IccCastClassTaunt(Player* bot, PlayerbotAI* botAI, Unit* target);
 std::optional<bool> IccTryClassCC(Player* bot, PlayerbotAI* botAI, Unit* target);
 void IccEnsureIconOn(Player* bot, PlayerbotAI* botAI, int8 icon, Unit* target);
-void IccApplyHeroicBuffToMember(Player* member, bool applyPainSupp, bool applyNoThreat);
+// `bot` is the one whose code applies the buffs to `member`, recorded under `cheatKey`.
+void IccApplyHeroicBuffToMember(Player* bot, Player* member, bool applyPainSupp, bool applyNoThreat,
+                                char const* cheatKey);
 void IccStripExperienced(Player* bot);
 bool IccBossCastingBlisteringCold(Unit* boss);
 bool IccBossHasRemorselessWinter(Unit* boss);

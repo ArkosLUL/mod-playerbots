@@ -54,6 +54,7 @@ bool IccRottingFrostGiantTankPositionTrigger::IsActive()
     if (!boss)
         return false;
 
+    IccMarkPull(bot, boss, "rotting-frost-giant");
     IccStripExperienced(bot);
 
     return true;
@@ -144,33 +145,16 @@ bool IccDbsTrigger::IsActive()
     return true;
 }
 
-bool IccDbsMainTankRuneOfBloodTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "deathbringer saurfang");
-
-    if (!boss)
-        return false;
-
-    if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0))
-        return false;
-
-    Unit* mt = AI_VALUE(Unit*, "main tank");
-    if (!mt)
-        return false;
-
-    Aura* aura = botAI->GetAura("rune of blood", mt);
-    if (!aura)
-        return false;
-
-    return true;
-}
-
 bool IccDogsTrigger::IsActive()
 {
-    if (AI_VALUE2(Unit*, "find target", "stinky") || AI_VALUE2(Unit*, "find target", "precious"))
-        return true;
+    Unit* dog = AI_VALUE2(Unit*, "find target", "stinky");
+    if (!dog)
+        dog = AI_VALUE2(Unit*, "find target", "precious");
+    if (!dog)
+        return false;
 
-    return false;
+    IccMarkPull(bot, dog, "stinky-and-precious");
+    return true;
 }
 
 //FESTERGUT
@@ -402,11 +386,14 @@ bool IccPutricideMalleableGooTrigger::IsActive()
                 if (!member || !member->IsAlive() || !member->IsInWorld())
                     continue;
 
-                IccApplyHeroicBuffToMember(member, false, true);
+                IccApplyHeroicBuffToMember(bot, member, false, true, "pp.heroicbuff");
 
                 if (PlayerbotAI::IsTank(member) && !member->HasAura(SPELL_SPITEFULL_FURY) &&
                     boss->GetVictim() != member)
+                {
                     member->AddAura(SPELL_SPITEFULL_FURY, member);
+                    IccNoteCheat(bot, "pp.spitefulfury", member);
+                }
             }
         }
     }
@@ -785,11 +772,14 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
                 if (!member || !member->IsAlive() || !member->IsInWorld())
                     continue;
 
-                IccApplyHeroicBuffToMember(member, false, true);
+                IccApplyHeroicBuffToMember(bot, member, false, true, "sg.heroicbuff");
 
                 if (PlayerbotAI::IsMainTank(member) && boss->GetVictim() != member &&
                     !member->HasAura(SPELL_SPITEFULL_FURY))
+                {
                     member->AddAura(SPELL_SPITEFULL_FURY, member);
+                    IccNoteCheat(bot, "sg.spitefulfury", member);
+                }
             }
         }
         //-------CHEAT-------
@@ -799,7 +789,7 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
     if (boss->IsInCombat() && PlayerbotAI::IsTank(bot) &&
         boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(), ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) < 50.0f)
     {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS))
+        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "sg.nitro"))
             bot->AddAura(SPELL_NITRO_BOOSTS, bot);
     }
 
@@ -807,14 +797,17 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
     // Strip its Frost Beacon so the tomb-positioning logic doesn't apply. The
     // assist tank keeps its beacon and is allowed to move to the beacon spot.
     if (PlayerbotAI::IsMainTank(bot) && bot->HasAura(SPELL_FROST_BEACON) && boss->HealthBelowPct(35) &&
-        boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(), ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) >= 30.0f)
+        boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(),
+                             ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) >= 30.0f &&
+        IccRaidCheat(botAI, "sg.frostbeacon"))
         bot->RemoveAura(SPELL_FROST_BEACON);
 
     if (PlayerbotAI::IsTank(bot))
     {
         // Strip Mystic Buffet: the cheat that makes single-tanking P3 survivable.
-        if (Aura* aura = botAI->GetAura("mystic buffet", bot, false, false))
-            bot->RemoveAura(aura->GetId());
+        Aura* buffet = botAI->GetAura("mystic buffet", bot, false, false);
+        if (buffet && IccRaidCheat(botAI, "sg.mysticbuffet"))
+            bot->RemoveAura(buffet->GetId());
 
         // Shield tanks while a tomb is up, Blistering Cold is casting, or a last
         // phase beacon is out (tomb about to form, healers already scattering).
@@ -822,7 +815,10 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
                             (boss->HealthBelowPct(35) && IccAnyGroupMemberHasAura(bot, SPELL_FROST_BEACON)) ||
                             !IccGetCreaturesByEntries(bot, {NPC_TOMB1, NPC_TOMB2, NPC_TOMB3, NPC_TOMB4}, 150.0f).empty();
         if (shield && !bot->HasAura(SPELL_MAGIC_BARRIER))
-            bot->AddAura(SPELL_MAGIC_BARRIER, bot);
+        {
+            if (IccRaidCheat(botAI, "sg.magicbarrier"))
+                bot->AddAura(SPELL_MAGIC_BARRIER, bot);
+        }
         else if (!shield && bot->HasAura(SPELL_MAGIC_BARRIER))
             bot->RemoveAura(SPELL_MAGIC_BARRIER);
 
@@ -844,7 +840,7 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
 
         if (mtAlive && !PlayerbotAI::IsMainTank(bot))
         {
-            if (!bot->HasAura(SPELL_NO_THREAT))
+            if (!bot->HasAura(SPELL_NO_THREAT) && IccRaidCheat(botAI, "sg.nothreat"))
                 bot->AddAura(SPELL_NO_THREAT, bot);
         }
         else if (bot->HasAura(SPELL_NO_THREAT))
