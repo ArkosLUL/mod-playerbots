@@ -540,8 +540,6 @@ public:
     IccBpcKineticBombAction(PlayerbotAI* botAI)
         : AttackAction(botAI, "icc bpc kinetic bomb") {}
     bool Execute(Event event) override;
-
-    Unit* FindNearestBomb();
 };
 
 class IccBpcBallOfFlameAction : public MovementAction

@@ -11,10 +11,176 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
+#include <string>
 
 static float const BPC_FLOOR_Z = 361.18222f;
+
+namespace
+{
+    // Angle of `slot` out of `count` on a ring round Valanar, turned in 10 degree steps either way off any
+    // Shock Vortex within 13 yd. bpc.spread says which ring, the slot, and whether it had to move.
+    float BpcSpreadAngle(Player* bot, Unit* valanar, char const* ring, int slot, int count, float radius)
+    {
+        static float const VORTEX_AVOID_DIST = 13.0f;
+        static float const ANGLE_NUDGE = static_cast<float>(M_PI) / 18.0f;
+        static int const MAX_NUDGE_STEPS = 18;
+
+        std::list<Creature*> vortexList;
+        bot->GetCreatureListWithEntryInGrid(vortexList, NPC_SHOCK_VORTEX, 100.0f);
+
+        auto isAngleSafe = [&](float angle) -> bool
+        {
+            float testX = valanar->GetPositionX() + radius * std::cos(angle);
+            float testY = valanar->GetPositionY() + radius * std::sin(angle);
+            for (Creature* vortex : vortexList)
+            {
+                if (!vortex || !vortex->IsAlive())
+                    continue;
+                float vdx = testX - vortex->GetPositionX();
+                float vdy = testY - vortex->GetPositionY();
+                if (std::sqrt(vdx * vdx + vdy * vdy) < VORTEX_AVOID_DIST)
+                    return false;
+            }
+            return true;
+        };
+
+        float const angleStep = 2.0f * static_cast<float>(M_PI) / static_cast<float>(count);
+        float const targetAngle = angleStep * static_cast<float>(slot);
+        float bestAngle = targetAngle;
+        char const* nudge = "";
+        if (!isAngleSafe(targetAngle))
+        {
+            nudge = " blocked";
+            for (int i = 1; i <= MAX_NUDGE_STEPS; ++i)
+            {
+                float plusAngle = targetAngle + ANGLE_NUDGE * static_cast<float>(i);
+                if (isAngleSafe(plusAngle))
+                {
+                    bestAngle = plusAngle;
+                    nudge = " nudged";
+                    break;
+                }
+                float minusAngle = targetAngle - ANGLE_NUDGE * static_cast<float>(i);
+                if (isAngleSafe(minusAngle))
+                {
+                    bestAngle = minusAngle;
+                    nudge = " nudged";
+                    break;
+                }
+            }
+        }
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "bpc.spread",
+                                 std::string(ring) + " " + std::to_string(slot) + "/" + std::to_string(count) + nudge);
+
+        return bestAngle;
+    }
+}
+
+Unit* IccBpcAssignedKineticBomb(PlayerbotAI* botAI)
+{
+    static constexpr std::array<uint32, 4> BOMB_ENTRIES = {NPC_KINETIC_BOMB1, NPC_KINETIC_BOMB2, NPC_KINETIC_BOMB3,
+                                                           NPC_KINETIC_BOMB4};
+    static float const MAX_HEIGHT_DIFF = 35.0f;
+    static float const MAX_ASSIGN_RANGE = 80.0f;
+
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsRangedDps(bot))
+        return nullptr;
+
+    auto* context = botAI->GetAiObjectContext();
+    std::vector<Unit*> kineticBombs;
+    for (auto const& guid : AI_VALUE(GuidVector, "possible targets no los"))
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (std::find(BOMB_ENTRIES.begin(), BOMB_ENTRIES.end(), unit->GetEntry()) == BOMB_ENTRIES.end())
+            continue;
+
+        if (unit->GetPositionZ() - BPC_FLOOR_Z > MAX_HEIGHT_DIFF)
+            continue;
+
+        kineticBombs.push_back(unit);
+    }
+
+    if (kineticBombs.empty())
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "bpc.bomb", "none");
+        return nullptr;
+    }
+
+    // lowest first, the next to land
+    std::sort(kineticBombs.begin(), kineticBombs.end(),
+              [](Unit* unitA, Unit* unitB) { return unitA->GetPositionZ() < unitB->GetPositionZ(); });
+
+    // bots only, a human ranged never gets a bomb
+    std::vector<Player*> rangedDps;
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+        {
+            Player* member = itr->GetSource();
+            if (member && member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsRangedDps(member))
+                rangedDps.push_back(member);
+        }
+    }
+    else
+    {
+        rangedDps.push_back(bot);
+    }
+
+    static constexpr std::array<uint8, 3> CLASS_PRIORITY = {CLASS_HUNTER, CLASS_DRUID, 0};
+    static char const* const TIER_NAMES[] = {"hunter", "druid", "any"};
+    std::set<Player*> assigned;
+    for (Unit* bomb : kineticBombs)
+    {
+        for (size_t tier = 0; tier < CLASS_PRIORITY.size(); ++tier)
+        {
+            Player* nearest = nullptr;
+            float nearestDist = std::numeric_limits<float>::max();
+            for (Player* dps : rangedDps)
+            {
+                if (assigned.count(dps))
+                    continue;
+
+                if (CLASS_PRIORITY[tier] != 0 && dps->getClass() != CLASS_PRIORITY[tier])
+                    continue;
+
+                float dist = dps->GetDistance(bomb);
+                if (dist < nearestDist && dist < MAX_ASSIGN_RANGE)
+                {
+                    nearestDist = dist;
+                    nearest = dps;
+                }
+            }
+
+            if (!nearest)
+                continue;
+
+            assigned.insert(nearest);
+            if (nearest == bot)
+            {
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "bpc.bomb",
+                                         std::string(TIER_NAMES[tier]) + " " +
+                                             RaidObs::DescribeAssignment(bomb->GetGUID()));
+                return bomb;
+            }
+            break;
+        }
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "bpc.bomb", "spare");
+    return nullptr;
+}
 
 bool IccBpcKelesethTankAction::Execute(Event /*event*/)
 {
@@ -28,7 +194,7 @@ bool IccBpcKelesethTankAction::Execute(Event /*event*/)
     float centerZ = ICC_BPC_CENTER_POSITION.GetPositionZ();
     if (std::abs(bot->GetPositionZ() - centerZ) > Z_TELEPORT_THRESHOLD)
     {
-        bot->TeleportTo(bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY(), centerZ, bot->GetOrientation());
+        bot->NearTeleportTo(bot->GetPositionX(), bot->GetPositionY(), centerZ, bot->GetOrientation());
         return false;
     }
 
@@ -185,26 +351,7 @@ bool IccBpcMainTankAction::MarkEmpoweredPrince()
 {
     static constexpr uint8 SKULL_RAID_ICON = RtiTargetValue::skullIndex;
 
-    // Find empowered prince (Invocation of Blood)
-    Unit* empoweredPrince = nullptr;
-    GuidVector const& targets = AI_VALUE(GuidVector, "possible targets");
-
-    for (auto const& targetGuid : targets)
-    {
-        Unit* unit = botAI->GetUnit(targetGuid);
-        if (!unit || !unit->IsAlive())
-            continue;
-
-        if (botAI->HasAura("Invocation of Blood", unit))
-        {
-            uint32 const entry = unit->GetEntry();
-            if (entry == NPC_PRINCE_KELESETH || entry == NPC_PRINCE_VALANAR || entry == NPC_PRINCE_TALDARAM)
-            {
-                empoweredPrince = unit;
-                break;
-            }
-        }
-    }
+    Unit* empoweredPrince = IccBpcEmpoweredPrince(botAI);
 
     // Handle marking if we found an empowered prince
     if (empoweredPrince && empoweredPrince->IsAlive())
@@ -226,7 +373,17 @@ bool IccBpcMainTankAction::MarkEmpoweredPrince()
 
             // Mark alive empowered prince if needed
             if (!markedUnit)
+            {
                 group->SetTargetIcon(SKULL_RAID_ICON, bot->GetGUID(), empoweredPrince->GetGUID());
+                // naming the unit it came off keeps a later re-mark of the same prince from reading as a repeat
+                if (RaidObs::Active())
+                {
+                    std::string value = "empowered " + RaidObs::DescribeAssignment(empoweredPrince->GetGUID());
+                    if (!currentSkullGuid.IsEmpty())
+                        value += " from " + RaidObs::DescribeAssignment(currentSkullGuid);
+                    RaidObs::NoteDerived(bot, "bpc.skull", value);
+                }
+            }
         }
     }
 
@@ -262,7 +419,11 @@ bool IccBpcEmpoweredVortexAction::MaintainRangedSpacing()
 
     bool const isRanged = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
     if (!isRanged)
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "bpc.spread", "none");
         return false;
+    }
 
     Unit* valanar = AI_VALUE2(Unit*, "find target", "prince valanar");
     if (!valanar)
@@ -308,54 +469,8 @@ bool IccBpcEmpoweredVortexAction::MaintainRangedSpacing()
     if (slotIndex < 0)
         return false;
 
-    // Calculate angular position around Valanar
-    float angleStep = 2.0f * static_cast<float>(M_PI) / static_cast<float>(rangedBots.size());
-    float targetAngle = angleStep * static_cast<float>(slotIndex);
-
-    // Collect shock vortex positions to avoid
-    static float const VORTEX_AVOID_DIST = 13.0f;
-    std::list<Creature*> vortexList;
-    bot->GetCreatureListWithEntryInGrid(vortexList, NPC_SHOCK_VORTEX, 100.0f);
-
-    // Find safe angle — try assigned slot first, then nudge away from vortices
-    static float const ANGLE_NUDGE = static_cast<float>(M_PI) / 18.0f;
-    static int const MAX_NUDGE_STEPS = 18;
-    float bestAngle = targetAngle;
-
-    auto isAngleSafe = [&](float angle) -> bool
-    {
-        float testX = valanar->GetPositionX() + IDEAL_RADIUS * std::cos(angle);
-        float testY = valanar->GetPositionY() + IDEAL_RADIUS * std::sin(angle);
-        for (Creature* vortex : vortexList)
-        {
-            if (!vortex || !vortex->IsAlive())
-                continue;
-            float vdx = testX - vortex->GetPositionX();
-            float vdy = testY - vortex->GetPositionY();
-            if (std::sqrt(vdx * vdx + vdy * vdy) < VORTEX_AVOID_DIST)
-                return false;
-        }
-        return true;
-    };
-
-    if (!isAngleSafe(bestAngle))
-    {
-        for (int i = 1; i <= MAX_NUDGE_STEPS; ++i)
-        {
-            float plusAngle = targetAngle + ANGLE_NUDGE * static_cast<float>(i);
-            if (isAngleSafe(plusAngle))
-            {
-                bestAngle = plusAngle;
-                break;
-            }
-            float minusAngle = targetAngle - ANGLE_NUDGE * static_cast<float>(i);
-            if (isAngleSafe(minusAngle))
-            {
-                bestAngle = minusAngle;
-                break;
-            }
-        }
-    }
+    float const bestAngle = BpcSpreadAngle(bot, valanar, "ranged", slotIndex, static_cast<int>(rangedBots.size()),
+                                           IDEAL_RADIUS);
 
     float targetX = valanar->GetPositionX() + IDEAL_RADIUS * std::cos(bestAngle);
     float targetY = valanar->GetPositionY() + IDEAL_RADIUS * std::sin(bestAngle);
@@ -463,53 +578,8 @@ bool IccBpcEmpoweredVortexAction::HandleEmpoweredVortexSpread()
     if (idealRadius > 38.0f)
         idealRadius = 38.0f;
 
-    float angleStep = 2.0f * static_cast<float>(M_PI) / botCount;
-    float targetAngle = angleStep * static_cast<float>(slotIndex);
-
-    // Collect shock vortex positions to avoid
-    static float const VORTEX_AVOID_DIST = 13.0f;
-    std::list<Creature*> vortexList;
-    bot->GetCreatureListWithEntryInGrid(vortexList, NPC_SHOCK_VORTEX, 100.0f);
-
-    // Find safe angle — try assigned slot first, then nudge away from vortices
-    static float const ANGLE_NUDGE = static_cast<float>(M_PI) / 18.0f;
-    static int const MAX_NUDGE_STEPS = 18;
-    float bestAngle = targetAngle;
-
-    auto isAngleSafe = [&](float angle) -> bool
-    {
-        float testX = valanar->GetPositionX() + idealRadius * std::cos(angle);
-        float testY = valanar->GetPositionY() + idealRadius * std::sin(angle);
-        for (Creature* vortex : vortexList)
-        {
-            if (!vortex || !vortex->IsAlive())
-                continue;
-            float vdx = testX - vortex->GetPositionX();
-            float vdy = testY - vortex->GetPositionY();
-            if (std::sqrt(vdx * vdx + vdy * vdy) < VORTEX_AVOID_DIST)
-                return false;
-        }
-        return true;
-    };
-
-    if (!isAngleSafe(bestAngle))
-    {
-        for (int i = 1; i <= MAX_NUDGE_STEPS; ++i)
-        {
-            float plusAngle = targetAngle + ANGLE_NUDGE * static_cast<float>(i);
-            if (isAngleSafe(plusAngle))
-            {
-                bestAngle = plusAngle;
-                break;
-            }
-            float minusAngle = targetAngle - ANGLE_NUDGE * static_cast<float>(i);
-            if (isAngleSafe(minusAngle))
-            {
-                bestAngle = minusAngle;
-                break;
-            }
-        }
-    }
+    float const bestAngle = BpcSpreadAngle(bot, valanar, "vortex", slotIndex, static_cast<int>(spreadBots.size()),
+                                           idealRadius);
 
     float targetX = valanar->GetPositionX() + idealRadius * std::cos(bestAngle);
     float targetY = valanar->GetPositionY() + idealRadius * std::sin(bestAngle);
@@ -557,13 +627,9 @@ bool IccBpcKineticBombAction::Execute(Event /*event*/)
 
     // Fix bot stuck above arena
     if (bot->GetPositionZ() > SAFE_HEIGHT_Z)
-    {
-        bot->TeleportTo(bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY(), TELEPORT_DOWN_Z,
-                        bot->GetOrientation());
-    }
+        bot->NearTeleportTo(bot->GetPositionX(), bot->GetPositionY(), TELEPORT_DOWN_Z, bot->GetOrientation());
 
-    // Assign bombs 1-to-1 to nearest available ranged DPS
-    Unit* assignedBomb = FindNearestBomb();
+    Unit* assignedBomb = IccBpcAssignedKineticBomb(botAI);
     if (!assignedBomb)
         return false;
 
@@ -582,102 +648,6 @@ bool IccBpcKineticBombAction::Execute(Event /*event*/)
     bot->SetFacingToObject(assignedBomb);
     Attack(assignedBomb);
     return false;
-}
-
-Unit* IccBpcKineticBombAction::FindNearestBomb()
-{
-    static constexpr std::array<uint32, 4> BOMB_ENTRIES = {NPC_KINETIC_BOMB1, NPC_KINETIC_BOMB2, NPC_KINETIC_BOMB3,
-                                                           NPC_KINETIC_BOMB4};
-    static float const MAX_HEIGHT_DIFF = 35.0f;
-
-    GuidVector const targets = AI_VALUE(GuidVector, "possible targets no los");
-    if (targets.empty())
-        return nullptr;
-
-    // Gather all valid bombs, sorted by Z ascending (lowest = most urgent)
-    std::vector<Unit*> kineticBombs;
-    for (auto const& guid : targets)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
-            continue;
-
-        if (std::find(BOMB_ENTRIES.begin(), BOMB_ENTRIES.end(), unit->GetEntry()) == BOMB_ENTRIES.end())
-            continue;
-
-        if (unit->GetPositionZ() - BPC_FLOOR_Z > MAX_HEIGHT_DIFF)
-            continue;
-
-        kineticBombs.push_back(unit);
-    }
-
-    if (kineticBombs.empty())
-        return nullptr;
-
-    std::sort(kineticBombs.begin(), kineticBombs.end(),
-              [](Unit* unitA, Unit* unitB) { return unitA->GetPositionZ() < unitB->GetPositionZ(); });
-
-    // Gather alive ranged DPS bots only (no real players)
-    std::vector<Player*> rangedDps;
-    Group* group = bot->GetGroup();
-    if (group)
-    {
-        for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
-        {
-            Player* member = itr->GetSource();
-            if (member && member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsRangedDps(member))
-                rangedDps.push_back(member);
-        }
-    }
-    else
-    {
-        rangedDps.push_back(bot);
-    }
-
-    // Greedy 1-to-1 assignment: hunters first, druids second, then any ranged DPS
-    static float const MAX_ASSIGN_RANGE = 80.0f;
-    std::set<Player*> assigned;
-    for (Unit* bomb : kineticBombs)
-    {
-        Player* nearest = nullptr;
-        float nearestDist = std::numeric_limits<float>::max();
-
-        // Priority classes: hunter > druid > any
-        static constexpr std::array<uint8, 3> classPriority = {CLASS_HUNTER, CLASS_DRUID, 0};
-        for (uint8 priorityClass : classPriority)
-        {
-            nearest = nullptr;
-            nearestDist = std::numeric_limits<float>::max();
-
-            for (Player* dps : rangedDps)
-            {
-                if (assigned.count(dps))
-                    continue;
-
-                if (priorityClass != 0 && dps->getClass() != priorityClass)
-                    continue;
-
-                float dist = dps->GetDistance(bomb);
-                if (dist < nearestDist && dist < MAX_ASSIGN_RANGE)
-                {
-                    nearestDist = dist;
-                    nearest = dps;
-                }
-            }
-
-            if (nearest)
-                break;
-        }
-
-        if (nearest)
-        {
-            assigned.insert(nearest);
-            if (nearest == bot)
-                return bomb;
-        }
-    }
-
-    return nullptr;
 }
 
 bool IccBpcBallOfFlameAction::Execute(Event /*event*/)

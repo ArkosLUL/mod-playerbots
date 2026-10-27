@@ -76,6 +76,11 @@ class IccBpcAssistMultiplier : public Multiplier
 public:
     IccBpcAssistMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc bpc assist") {}
     float GetValue(Action* action) override;
+
+private:
+    uint32 _flamesCheckedMs = 0;
+    bool _infernoFlameUp = false;
+    bool _chasedByFlame = false;
 };
 
 //BQL

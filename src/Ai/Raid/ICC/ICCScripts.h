@@ -108,9 +108,6 @@ namespace IcecrownHelpers
         std::map<ObjectGuid, LastLosMove> sgLastLosMove;
 
         RaidObs::ObsGuidMap<int> bqlBotCurrentCurve{"bql.curve"};
-        RaidObs::ObsValue<bool> bqlGroundPhaseEstablished{"bql.groundphase"};
-        bool bqlBossWasAirborne = false;
-        RaidObs::ObsValue<bool> bqlPostAirLanding{"bql.postairlanding"};
         RaidObs::ObsGuidMap<int> bqlAirSlotMemory{"bql.airslot"};
         RaidObs::ObsGuidMap<int> bqlBotSlotMemory{"bql.slot"};
 
