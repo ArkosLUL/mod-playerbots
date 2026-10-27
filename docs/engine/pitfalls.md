@@ -305,6 +305,9 @@ portal this way.
 
   Gate on the boss being **in combat**, and pair a guid lookup with a room screen
   (`IsNearMimironRoom`) or a combat test.
+- **A pass-through gate is never live.** `EncounterGatedTrigger` reads `live` only to call
+  `RaidObs::NamePull`, so an always-live placeholder lets any firing trigger, another boss's
+  included, rename a trace still under the map name.
 - **The gate's boss ids are a copy of AC's.** `UldEncounterGate.h` ports `ulduar.h`, which AC
   renumbers: #28079 moved Freya from 7 to 9. A stale id keys the gate to another boss's state, so
   that boss's whole strategy stays off (every node NEVER, banner `strategy-off`) while whichever
@@ -711,7 +714,10 @@ None of these fail to compile when reverted, so a merge that takes upstream's si
 - **CI builds with `-Werror`** (the module's `.github/workflows` CXXFLAGS), and Custom-only code
   carries warnings — mostly `-Wunused-parameter` on `Execute(Event event)` overrides and on free
   helpers taking an unused `PlayerbotAI* botAI`. CI jobs go red on the first upstream PR until they
-  are cleared.
+  are cleared. `NaxxGetRoleGroups` (`NaxxBossHelper.h`) is one, so every TU including it fails,
+  `BuildShared{Action,Trigger}Contexts.cpp` among them. The syntax check hides warnings on passing
+  TUs; a `-Wall -Wextra -Werror` pass can reuse the build image's `compile_commands.json` only with
+  `clang++`, since that build is clang (`-Xclang` flags).
 - **`GatherStrategyTargetExclusions` keeps the fork's `candidates` argument**, and every caller
   passes the list it will filter. Upstream calls it without one; an empty list makes Ulduar's
   Yogg-Saron sweep return early and its Guardian exclusion drops.

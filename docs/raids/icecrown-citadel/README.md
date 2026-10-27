@@ -3,7 +3,9 @@
 Strategy key `icc`, one strategy for every encounter. Cross-raid conventions are in
 [../README.md](../README.md). Mechanics source: `src/server/scripts/Northrend/IcecrownCitadel/`.
 During an upstream merge ICC keeps ours; the merge report lists upstream's ICC changes so the user
-can pick which to port.
+can pick which to port. Tactics come from the guides in
+[guide-sources.md](../../systems/guide-sources.md), converted into `build-icc-wt/_guides/`
+(`text/<slug>.<tag>.md`, listed in `INDEX.md`).
 
 ## Code layout and registration
 

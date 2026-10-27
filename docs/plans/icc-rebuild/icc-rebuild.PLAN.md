@@ -14,8 +14,8 @@ The merge stage alone edits this table.
 
 | Wave | Lane | State | Merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
-| 1 | r0a-restructure | pending | | | |
-| 1 | r0b-guides | pending | | | |
+| 1 | r0a-restructure | merged | `18bf92d57` | one generator, no split; pass-through gate never live; ids and gate in `ICCEncounterGate.h`; Dogs/FrostGiant `ICC_BOSS_NONE`=255; `Node<T, A>` with `Name`; root owns multiplier order from wave 3 | pure move, every old behaviour issue live; never built, CMake re-run needed; boss docs' `Code:` lines name pre-split files; dead code for r3 (Rotting Giant TODO) and r7 (`spellEntriesFlood`, commented multiplier); r1 only swaps `IccPassThroughGate` |
+| 1 | r0b-guides | merged | `9be681d7f` | noobtoboss refused (robots.txt); `zamimg.com` refused like Wowhead; overview slug `icecrown-citadel`; per-source sections; hidden tab content kept | 13 Wowhead pages to save (`_guides/INDEX.md`); Wowhead selectors untested; no Crimson Hall trash guide; r3, r4, r11-r13 briefs still list noobtoboss; r14: toc-rework plan's Wowhead reason is wrong |
 | 2 | r1-foundation | pending | | | |
 | 3a | r2-marrowgar | pending | | | |
 | 3a | r3-deathwhisper | pending | | | |

@@ -437,6 +437,12 @@ tree, compile both together with counting stubs, and enumerate the input space â
 combinations, 0 mismatches on XT-002. Include a red-capability check so a pass means something:
 dropping `purgingImmunity` produced 1,392 mismatches and dropping the main-tank exemption 11,520.
 
+**A pure move** (a file split, no body changes) needs no harness: one generator reads every source
+from the base ref, anchors each segment on a regex searched in order and fails on any miss; an
+independent parity check then compares node order, creator maps, multiplier order and a multiset of
+code lines. Splitting the move across agents repeats the reading and still leaves the parity work.
+ICC's 21k-line split went this way.
+
 **Timing** is `.playerbots pmon` ([../systems/observability.md](../systems/observability.md#timing-a-bot-playerbots-pmon)):
 read ratios, never absolute times.
 
