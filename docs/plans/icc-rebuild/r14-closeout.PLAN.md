@@ -20,8 +20,8 @@ gaps.
      its doc, and the report lists it.
 3. **Audit.**
    - The README cheat table equals the `IccRaidCheat` sites in code, each with its reason.
-   - No raid-icon write remains in `src/Ai/Raid/ICC/` except one placed for humans that bots never
-     read.
+   - No raid-icon write and no `rti` or `rti cc` use remains in `src/Ai/Raid/ICC/`. The only icon a
+     bot reads is a player's skull, in the resolvers.
    - Each boss doc has its mechanics table for all four difficulties.
 4. **Leftovers.**
    - Remove the ToC aliases `r1-foundation` kept for dirty files, if those files are clean now.

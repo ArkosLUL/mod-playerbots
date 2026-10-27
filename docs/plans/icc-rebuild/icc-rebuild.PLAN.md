@@ -89,12 +89,12 @@ These bind every rebuilt encounter. Sources: **R** `docs/raids/README.md`, **P**
 2. Everything sits behind the encounter gate, keyed on the fight (`BossStateGate` by boss id), not on a unit. (R "File layout and wiring")
 3. A config read, a guid lookup or a hand-pushed multiplier is not a gate. (P "Movement that silently no-ops")
 4. Housekeeping (notes, latch writes, wipe resets, buffs and strips) goes in the definition `Tick`, cheap checks first, never in a predicate or `IsActive`. (R "File layout and wiring")
-5. Direct targeting: one resolver per encounter, an action on the direct-attack base, `OwnTargeting` with predicate "resolver returns a unit". Bots place no raid icons. (T "Targeting is direct, no raid icons"; R "Targeting: the whole fight")
-6. Each resolver takes a player's skull first: alive, in combat, selectable. (T)
+5. Direct targeting: one resolver per encounter, an action on the direct-attack base, `OwnTargeting` with predicate "resolver returns a unit". No raid icons: bots never set one, for bots or for humans, and never steer through `rti` or `rti cc`. CC duties cast directly on their target. (T "Targeting is direct, no raid icons"; R "Targeting: the whole fight")
+6. Each resolver takes a player's skull first: alive, in combat, selectable. It is the only icon a bot reads. (T)
 7. Every resolver branch returns an in-combat unit: `Attack()` has no out-of-combat guard and reaches 100 yd. (P "Before the pull, and out of combat")
 8. The direct-attack action commands the pet before its early return; the trigger also fires while the pet is off the pick. (A "Multiplier semantics")
 9. Every targeting veto is paired with a node that assigns a target. `raid healer engine` keeps targetless healers working. (A; R)
-10. Mid-pull retargeting clears `prioritized targets` and any skull the encounter wrote, and restores icons it overwrote. (P "A targeting mark never clears inside a pull")
+10. Mid-pull retargeting clears `prioritized targets`. A bot `rti` setting the old code changed is reset once, as ToC's `ToCRestoreLegacyRti` does. (P "A targeting mark never clears inside a pull")
 11. Movement is held with `OwnMovement` rules and `EncounterRow::Mover` rows, never blanket `MovementAction` vetoes (`AttackAction` is one). `ReachHeal` where healers must walk. Spell movers need a `Block`. (R "Encounter rules"; L "Movement that oscillates")
 12. Never zero `ReachTargetAction` whole; block `reach melee`/`reach spell` by name. (P)
 13. One mover per bot or vehicle, and it never fails silently (off-mesh `MoveTo`). (R "Movement: the only mover left"; L "Vehicles and flight")
@@ -244,6 +244,8 @@ Waves 3a-3g run it for every encounter in their brief.
    "Decisions for review" (choice, source, alternative) into the brief.
 3. **Rebuild** the encounter to the Conventions.
    - Rewrite rather than patch where the old code breaks them.
+   - Remove every icon write and `rti` use the brief lists: a resolver picks the unit and the bot
+     attacks it directly.
    - Navprobe every coordinate kept or added.
    - Opening positions live in the definition.
 4. **Cheats.** Implement the guide's answer for each cheat and borderline snap in the brief. Apply

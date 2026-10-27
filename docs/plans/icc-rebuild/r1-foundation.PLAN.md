@@ -44,7 +44,7 @@ layout"). It may split.
    - `ToC/Util/ToCHelpers_Defensive.{h,cpp}`: the predicted hit, raid covers and personal
      defensives. Turn its map check into a parameter;
    - from `ToC/Util/ToCHelpers_Shared.{h,cpp}`: `IsToCDpsBot`, `GetToCHumanSkull`, `ToCPetOffPick`,
-     `IsToCAreaDamage`, `CastToCThroughputHeal`;
+     `IsToCAreaDamage`, `CastToCThroughputHeal`, `ToCRestoreLegacyRti`;
    - the per-encounter burst window (`ToC/Multiplier/ToCMultipliers_Shared.{h,cpp}`), as a hook a
      definition fills, replacing `ToCLiveEncounter` with the caller's live test;
    - the opener hold (`ToC/Util/ToCHelpers_Opener.{h,cpp}`), with the boss list from the caller;
