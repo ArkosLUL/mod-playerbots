@@ -303,10 +303,24 @@ one waits): the side shoots and grips again once a DK's Death Grip is back. A pu
 side 0 bare all of one wipe and side 1 bare 114 s of another. **A far grip** takes the nearest sphere
 when every one left hovers past the 44 yd search: a DK with no tank duty first, the side's own tank
 only without one, walks to a floor point just inside reach (28 yd 3D less 3) on the sphere's side
-nearest the spot, turned ±20°/40° off the spike's 16 yd and its lane's 12, and grips as above; the
-patch serves the side wherever it lands, and the spot and anchor follow it. In 2026-10-27 pull I the
-last sphere hovered 60-70 yd off side 1's spot (789-815, 136-165, z 157-165) and the side stood bare
-101 s. Without even that the DK keeps its duty and the side's shooters take any they can; a 12 s idle
+nearest the spot, turned ±20°/40° off the spike's 16 yd and its lane's 12, and grips as above, or
+earlier once the sphere is in reach from a point no farther from the spot than the stand; the patch
+serves the side wherever it lands, and the spot and anchor follow it. In 2026-10-27 pull I the last
+sphere hovered 60-70 yd off side 1's spot (789-815, 136-165, z 157-165) and the side stood bare 101 s.
+From 13-17 yd up one grip gains 0-20 yd: in the evening pulls M and N it landed 46-49 yd off side 1's
+spot, about 70 from side 0, and side 1 lost its tank in both (N: then side 0's, then the raid); in N
+the stand, read off a sphere rising past z 165, walked Obliteration 53 yd out to 8 yd under it.
+
+**A relay grips it again** (`PlanRelay`; `RelayPosts`, pure, nativetest): a landing over 20 yd off the
+spot gets a next link, the side's own DK tank first (its burrowers walk with it, its pickup keeps
+Death Grip), else the lowest-guid DK bot with no tank duty, never the pickup or the other side's tank,
+Death Grip back within 3 s. It posts 25 yd from the landing toward the spot (the spot when nearer;
+turned ±20°/40°; on the floor, 8.5 yd off every patch, off the spike's 16 and its lane's 12) while the
+link before walks out, and grips once that one has landed and the sphere is in reach from a point no
+farther from the spot than the post; low, it is about 24 yd more. Until the last link lands the DKs
+before it hold and nobody hits the sphere. A link that dies, is marked, loses its grip or hasn't
+gripped 3 s after the landing (the sphere rises back out of reach in about 4) drops the relay, and the
+sphere is killed where it is. A side tank linked in holds where it grips from. Without even that the DK keeps its duty and the side's shooters take any they can; a 12 s idle
 hand-off to the shooters alone left the north side bare 40 s. Refills come only while he is up: nobody leaves the gather. Until the kill,
 `anubarak grip spot hold` blocks `reach melee`, set behind, flank, formation, follow and charges, so
 the DK stays where the patch belongs; one waiting on its spot hits him from there. A DK owed a grip
@@ -337,7 +351,12 @@ point (4 yd in the submerge window). The tank spot lies on his ray to the point,
 out, all read live: C both combat reaches plus `CONTACT_DISTANCE`, k his run speed over the tank's
 backward speed (backing up keeps its front to him for parries and blocks),
 E his speed × 0.2 s, D his distance to the point; floor-checked; no leg if that pulls it inside
-C, or puts the tank's spot within 8.5 yd of a patch or its walk within 7.5. The line between the
+C or puts the tank's spot within 8.5 yd of a patch. A tank whose walk there passes within 7.5 of one
+first steps round him (`prestep`; `DragPreSteps`, pure, nativetest): the nearest floor point 9, 10 or
+11 yd from him, inside his 12 yd chase start so he stays put, 8.5 off every patch, with the walk there
+and on to the spot clear; dropped if he moves meanwhile or after 6 s. In 2026-10-27 N P1b the
+step-out left the tank 7.6 yd from side 1's patch on its far side from the anchor, every leg crossed
+it, and he was held 56.3 s, 27.4 yd off the anchor (12.3% of him that phase 1). The line between the
 patches is all Permafrost, so the hold tries the anchor, then points 4 and 7.5 yd off it toward his
 side, then for each patch within 11.5 yd of his line to the anchor points 12 yd either side of it,
 square to the line, the nearer first, 8.5 clear of every patch (`DragDetours`, pure, nativetest);
@@ -359,7 +378,7 @@ R with its line to R passing every patch by 14.5, so the spike starts away from 
 there spends none, about (712, 156) or (712, 114) for the first pair; dropped when nothing passes. At
 the 2026-10-26 heroic submerges 10-13 players stood within 20 yd of where he went down, and 3 of 4
 first kites started with the spike within 12 yd. Latched for the window, redone
-once a patch lands closer than the clearance it was found with. With no patch alive or no spot clear,
+once a patch lands closer than the clearance it was found with; each search writes `anub.subspot`. With no patch alive or no spot clear,
 the anchor rule applies. At 20.75 he went down 18.9-25.5 yd from the patches in the 2026-10-26 wipes,
 the spike starting close enough to spend them.
 
@@ -369,7 +388,9 @@ spells and melee on him and its area damage within 30 yd of him; heals pass. Thr
 threat list, never the `threat` AI value, a uint8 share that wraps past 255%. No bot has a threat
 brake ([pitfalls.md](../../engine/pitfalls.md)), and in both 2026-10-16 kills Angry pulled him and
 died to one hit (5.6 s, the tank still walking, 32.6k; 13.7 s, 33.1k). White swings go on:
-`Attack()` starts auto-attack itself, so the hold zeroes only actions.
+`Attack()` starts auto-attack itself, so the hold zeroes only actions. The same 90/80 latch runs per
+DPS bot and burrower whose victim is a tank (`anubarak burrower threat cap`, every phase): its actions
+on that burrower and its area damage within 10 yd of it or its target with one there.
 
 **Taunt guard.** `anubarak taunt guard` blocks `Taunt`, Righteous Defense included, while the bot's
 current target is him and his victim is another tank, a human included; the pickup tank's own taunt
@@ -468,7 +489,10 @@ never inside the slow.
 **Burrower guard** (`anubarak burrower guard`, spells and attacks): while he is engaged, a non-tank's
 action aimed at a burrower other than its own pick is zeroed, and a taunt or Death Grip on any
 burrower always, and its area damage (`IsToCAreaDamage`) while a burrower still settling stands
-within 10 yd of it or its target; an interrupt or stun on a casting one passes. Affliction multidots
+within 10 yd of it or its target; an interrupt or stun on a casting one passes. Bladestorm waits
+while any burrower is within 25 yd: the guard reads only the cast, and in 2026-10-27 N Mighty's at
+0:14.5 outlived his pick, which moved to a burrower, the stand walked him spinning into side 1's
+pack, and one turned on him (dead 0:21.8). Affliction multidots
 put Corruption, Unstable Affliction and Curse of Agony on all four wave-1 burrowers at 8-15 s while
 the pick was him, and Agony died to a loose one every 2026-10-26 pull. A tank holding no side holds
 its area damage with any burrower within 10 yd, and `anubarak main tank shout guard` blocks its
@@ -562,8 +586,7 @@ in), L the time to the emerge (`PickTerminal`, pure, nativetest):
 
 - T ≥ L − 1 s: `none`, it outlasts the emerge;
 - a patch it may end on and L − T ≥ 12 s: `patch`, a spent patch buying a fresh run from base
-  speed; `patch+hand` when the walk there can't beat the catch now, or 2+ paladin bots have the
-  hand ready (one stays for a later kite): the hand first, then the patch;
+  speed; `patch+hand` with a hand ready: the hand at the catch, then the patch under it;
 - a hand ready (an escort's, or a marked paladin bot's own; none under Forbearance): `hand`;
 - the patch, unless it can't be reached and an own immunity is ready: `patch`;
 - Divine Shield, Ice Block, Vanish or Feign Death ready: `own`; else `none`.
@@ -594,13 +617,20 @@ Prayer circled her patch at 12-19 yd, the spike 2.5-3.7 behind, until the hand r
 spike between kiter and patches every stand failed the spike-behind test (L 3:44 Druidica ran the
 ring and died). Normal keeps the stand (`PickKiteCandidate`: rank, then the nearest).
 
-**A `patch+hand` kite runs as a patch kite** (`JudgeBridge`, `anub.bridge`). When its turn comes due
-with the walk still making it now, the Hand is asked for then (`ask`) if its paladin is alive,
-unmarked, within 30 yd and in sight with it ready and the kiter free of Forbearance, and waited on
-1 s; landed (`hand`), the kite runs on under it and walks `in` with 1 s of it left; else it turns
-without (`turn`) and the plan becomes `patch`. A walk lost already leaves the hand to 1 s before the
-catch. Turning only once the hand landed, L 8:29 Stormweaver never turned: the claim lapsed, the
-paladin was 37 yd off at the catch, and she died after 22.1 s with the patch unused.
+**A `patch+hand` kite takes the hand at the catch, then the patch** (`JudgeBridge`, `anub.bridge`).
+Until the hand it runs as a `hand` kite, within its escort's leash, the patch clearance keeping the
+spike off its patch; the hand goes 1 s before the catch, and landed (`hand`) the kite runs on under
+it and walks `in` with 1 s of it left. It turns without (`turn`, the plan becoming `patch`) only once
+the walk still makes it now but not 1.5 s on, with no hand able to land: the kiter's own, or a ready
+alive unmarked paladin bot within 30 yd and in sight, the kiter free of Forbearance. A patch walk
+can't be held long on this floor: replayed per heading, a fresh spike 23-47 yd off catches on the
+40 yd ring 10-16 s in, the walk stays possible 4.5-7.5 s at most, and the patch goes 6-13 s in under
+any turn rule (as now, graded by margin, latest by scan). With the hand at the turn the 2026-10-27
+evening pulls spent each submerge's first tank patch M 11.9/7.1/15.2 s and N 15.2/10.2 s into phase 2
+and every later kite had none; at the catch the patch goes about 25 s in and the restarted spike's
+next catch lands near the emerge. Turning only once the hand landed, L 8:29 Stormweaver never turned:
+the claim lapsed, the paladin was 37 yd off at the catch, and she died after 22.1 s with the patch
+unused.
 
 **Heroic kites run first** (`anub.kitestage`, guide: as long as possible without touching
 Permafrost), the stage per instance per ms. The 2026-10-25 bot kites lasted 1-15 s, each ending on a
@@ -779,7 +809,8 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 
 - Untargeted raid AoE still pops spheres, all of it in normal (Starfall made every patch in the
   2026-10-16 kill), all but Starfall in heroic.
-- A melee bot under the threat cap keeps white-swinging, so it can still climb past his tank.
+- A melee bot under a threat cap keeps white-swinging, so it can still climb past his or a burrower's
+  tank.
 - A human kiter or tank reads none of this: no protection claim waits on a human paladin, a human
   kiter gets no boost stage, and the drag waits while a human holds him.
 - A human's Divine Shield, Ice Block, Feign Death or Vanish hands the spike on at its current speed,
@@ -817,8 +848,9 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 - The kite ring (40 yd round the centre) runs past the west refill pair at 36-43 yd.
 - A human's Army of the Dead ghouls still taunt burrowers off the patches (one submerged at 0:39 in a
   2026-10-26 wipe); only bots are blocked.
-- A DPS bot can still pull a burrower off its side tank on plain threat once the 4 s settle is up (two
-  did within 3 s of the taunt in a 2026-10-26 pull, Mighty 2.7-4 s in L 2:28).
+- A healer's heal threat still pulls burrowers off a side tank as the taunt's 3 s run out (Elemena
+  11-12 times a pull in the 2026-10-27 evening wipes).
+- A far grip with one DK bot, or with the side's DK tank's grip spent, has no relay.
 - Not handled: the phase 3 heal hold and stamina-buff cancel, Freezing Slash defensives, ignoring
   burrowers once he is low, scarab threat, normal's phase 2 raid positioning.
 
@@ -839,14 +871,15 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 | `spot0`, `spot1` | Each side's tank spot, `x,y,z`: its latched patch, else the open spot. Per instance |
 | `allow` | Heroic tank patches the submerge's kites may spend, 0 or 1, written as he submerges, 0 once one goes while he is down. Per instance |
 | `sphere` | Sphere duty: `kite` and `stock` (normal), `0` or `1` (a side), `grip0`/`grip1` (a DK's grip for a side), `none` |
-| `gripstep` | The DK's grip: `walk`, `hold`, `cast`, `wait` (sphere in the air), `kill`, `none` |
+| `gripstep` | The DK's grip: `walk`, `hold`, `cast`, `wait` (sphere in the air, or a relay link still to grip it), `kill`, `post` (a relay link to or on its post), `none` |
+| `relay` | A relay link DK: `wait` (posted), `cast` (gripped), `drop` (relay dropped), `none` (no grip duty) |
 | `sidetank` | `hold`, `pickup`, `ready`, `gather` (heroic phase 2, nothing to hold) |
 | `leave` | `walk` while a non-tank steps out of Permafrost, `none` |
 | `mstand` | `walk` while a melee bot walks to its burrower stand, `none` |
 | `kitestage` | Heroic kiter: `run`, `boost:<spell>` (Nitro Boosts as 55004), `immune`, `patch`, `none` |
 | `kiteplan` | Heroic kiter's terminal: `patch`, `patch+hand`, `hand`, `own`, `none`; can change within a mark |
 | `kitemove` | Heroic kiter's patch walk: `in`, `edge0` (patch on its left), `edge1`, `none`; re-picked each judge until it turns |
-| `bridge` | Heroic `patch+hand` kiter: `ask` (Hand asked at the turn), `hand` (on), `turn` (turned without), `none` |
+| `bridge` | Heroic `patch+hand` kiter: `hand` (on), `turn` (turned without, no hand could land), `none`; older traces `ask` (Hand asked at the turn) |
 | `gather` | Heroic phase 2: `walk`, `hold` |
 | `hstand` | A healer bot's stand while he is up: `walk`, `hold`, `none` |
 | `kite` | The kiter's branch: `patch` (walking to a stand, heroic its move's leg), `detour` (normal), `ring`, `hold`; `none` when there's no spike or the mark moved on |
@@ -855,7 +888,8 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 | `escort` | Heroic escort paladin: `walk`, `hold`, `none` |
 | `freedom` | `cast` while this paladin owes the kiter Hand of Freedom, `none` |
 | `interrupter` | `1` while the bot holds Shadow Strike duty, `0` once the cast ends |
-| `pickup` | The pickup tank's step: `taunt` (off a non-tank), `attack`, `stepout` (out of Permafrost), `hold` (no leg), `drag` (a leg to the anchor), `submerge` (a leg to the submerge spot) |
+| `pickup` | The pickup tank's step: `taunt` (off a non-tank), `attack`, `stepout` (out of Permafrost), `hold` (no leg), `drag` (a leg to the anchor), `submerge` (a leg to the submerge spot), `prestep` (the step round him before a leg) |
+| `subspot` | The pickup tank at each submerge-spot search: `x,y,z rN` (N the patch clearance found with) or `none` |
 | `defensive` | What a side tank or the Swarm tank cast, `covered` (one running) or `none` |
 | `focus0`, `focus1` | Each side's focus burrower, 0 when none; kept current under a skull. Per instance. Traces before 2026-10-27 carry one raid-wide `focus` and `focusdue` |
 | `dps` | A DPS bot's pick: `skull`, `loose`, `burrower`, `boss`, `scarab`, `none` (a sphere shooter too) |
@@ -955,7 +989,16 @@ of a patch before the turn, a patch it spawned inside counting once it leaves; I
 seconds it had held and the puller's casts on it in the 3 s before. `--tanks` each run of the main
 tank's Expose Weakness: its peak, the burrowers on him at a stack (the shared aura's row names only
 the first caster), his area casts from 5 s before. `--threat` per window the longest stretch 10+ yd off the anchor with no
-drag leg, cut at the first submerge leg, 10 s or more listed. Baseline, the 2026-10-27 25H wipes I,
+drag leg, cut at the first submerge leg, 10 s or more listed. `--spike` per `patch+hand` kite its
+Hand against the catch the reader predicts (`ImpaleInMs` ported: the kiter on its heading at its
+measured speed, then the ring; spike steps from its last restart), the spike's speed and distance
+then, whether the patch followed under it; a `hand` row with no `ask` before it is the Hand at the
+catch, its turn the first `patch` stage after; after a `turn` the nearest ready paladin; per submerge
+the seconds into phase 2 when its first tank patch went (its `patchN` latch let go). `--spheres` per
+far grip each link (DK, cast, landing, distance to the spot before and after) and `relay` rows.
+`--burrowers` Bladestorm casts with a burrower within 25 yd, `anubarak burrower guard` vetoes on it,
+`anubarak burrower threat cap` vetoes per bot. `--threat` drag pre-steps (counted as legs) and
+`subspot` rows per window with how far he went down from the last spot. Baseline, the 2026-10-27 25H wipes I,
 J (`1496982cf`): his health a phase 1 I 24.8/13.7/14.3/14.8%, J 19.6/16.1/4.0%; melee 142-255 yd a
 bot a phase 1, moving 24-59%, 17-55 midline crossings; ranged 27-43 yd; held off J P1c 64.8 s.
 Baseline, the 2026-10-27 afternoon 25H wipes K, L (`8145d288f`): his health a phase 1 K
@@ -963,6 +1006,10 @@ Baseline, the 2026-10-27 afternoon 25H wipes K, L (`8145d288f`): his health a ph
 L's four deaths with a patch unused (Prayer 1:22 and 8:51, Druidica 3:44, Stormweaver 8:29); K 1:22
 Power's spike 14.2 yd from a tank patch 8.7 s in, never turned; Impale ×6 on Felesta K 6:57; the main
 tank at Expose Weakness 5 L 3:31.
+Baseline, the 2026-10-27 evening 25H wipes M, N (`5d6963920`): his health a phase 1 M
+25.1/17.3/3.9/0.4%, N 25.6/12.3/4.1%; the first tank patch of each submerge M 11.9/7.1/15.2 s, N
+15.2/10.2 s into phase 2; patch walks taken M 3/3, N 2/2; kite deaths M 7 of 15 (a human's first,
+then 5 in the gather), N 3 of 9; far grips 46-49 yd off side 1's spot; N P1b drag held 56.3 s.
 Baseline, the 2026-10-26 25H wipes C, D, E: Hand of Protection on a
 slower spike C 1:22, E 1:22 and 1:47; patches spent in `run` C 1:57, 4:13, D 2:03, E 1:44; 10-13
 players within 20 yd at each first submerge; `raid healer engine` absent, healers 13-19 yd from the

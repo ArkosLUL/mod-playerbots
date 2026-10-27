@@ -47,12 +47,22 @@ public:
 // A non-tank's damage on a burrower only on its own dps pick, so a multidot doesn't pull a loose one
 // onto a raider, and no area damage within 10 yd of the bot or its target while a burrower there is
 // still settling on its side tank. Interrupts and stuns on a casting one go through; a taunt or Death
-// Grip never. A tank holding no side holds its area damage with any burrower within 10 yd. Wired from
-// the definition.
+// Grip never. A tank holding no side holds its area damage with any burrower within 10 yd. No Bladestorm
+// with a burrower within 25 yd. Wired from the definition.
 class AnubarakBurrowerGuardMultiplier : public Multiplier
 {
 public:
     AnubarakBurrowerGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak burrower guard") {}
+    float GetValue(Action* action) override;
+};
+
+// A DPS bot's damage on a burrower it has 90% of the side tank's threat on, until under 80%, and its
+// area damage within 10 yd of the bot or its target with one such burrower there. Heals pass, and white
+// swings go on. Wired from the definition.
+class AnubarakBurrowerThreatCapMultiplier : public Multiplier
+{
+public:
+    AnubarakBurrowerThreatCapMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak burrower threat cap") {}
     float GetValue(Action* action) override;
 };
 

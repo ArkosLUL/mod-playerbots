@@ -10,8 +10,10 @@ ready paladin, a dropped Feign Death and the pursuit replay, a sixth the scarabs
 burrower openers, a seventh the DPS split, the side groups, the focus per side, the kite plans and the
 stretch held off the anchor, an eighth each patch kite's turn, the bridge's Hand, the spike's first pass
 by a patch, Impale on a side tank, a burrower pulled off its side tank and the main tank's Expose
-Weakness, and the shared fixture shows every section reads empty on a trace that is not Anub'arak rather
-than raising.
+Weakness, a ninth a Hand against its predicted catch, a turn with no Hand, the first tank patch per
+submerge, a relayed far grip, Bladestorm near a burrower, the burrower threat cap, the drag's pre-steps
+and the submerge spot search, and the shared fixture shows every section reads empty on a trace that is
+not Anub'arak rather than raising.
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ import statistics
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 BOTOBS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOTOBS))
@@ -2946,6 +2949,311 @@ class TurnPull(unittest.TestCase):
     def test_every_section_prints(self):
         text = self.text(self.trace, ab.show_banner, *(section for _, _, section in ab.SECTIONS))
         self.assertIn("TANKS\n", text)
+
+
+RECO, RBUL, RFELESTA, ROBLIT, RPRAY, RAGONY, RJUSTICE, RMIGHTY, RLOCK = range(9101, 9110)
+RBOSS = CREATURE | 1300
+RSPIKE = CREATURE | 1301
+RPATCH_N, RPATCH_S, RSPHERE = CREATURE | 1311, CREATURE | 1312, CREATURE | 1313
+RBUR = CREATURE | 1321
+RSPOT1 = (X, Y - 20.0)
+RPATCH_S_AT = (X + 42.0, Y - 2.0)
+# where the far grip's sphere flies, then where each link brings it down
+RSPHERE_FLY, RLINK1_AT, RLINK2_AT = (X + 60.0, Y - 30.0), (X + 40.0, Y - 25.0), (X + 18.0, Y - 22.0)
+SPIKE_RUN_YD_S = 3.5 * 3.25
+
+
+def relay_up(when: int) -> bool:
+    return when < 10000 or when >= 50000
+
+
+def relay_spot(guid: int, when: int) -> tuple[float, float]:
+    if guid == RECO:
+        return lerp([(2000, 0.0, 0.0), (4000, 6.0, 8.0)], when)
+    if guid == RPRAY:
+        return lerp([(24000, 0.0, 0.0), (30000, 42.0, 0.0)], when)
+    if guid == RMIGHTY:
+        return (X - 5.0, Y + 10.0) if when < 30000 else (X + 30.0, Y + 23.0)
+    if guid == ROBLIT:
+        return RLINK1_AT if when >= 50000 else (X + 10.0, Y - 10.0)
+    if guid == RFELESTA:
+        return RLINK2_AT if when >= 50000 else (X - 5.0, Y - 25.0)
+    return {RBUL: (X - 20.0, Y + 25.0), RAGONY: (X + 30.0, Y + 20.0), RJUSTICE: (X + 5.0, Y - 5.0),
+            RLOCK: (X - 30.0, Y)}[guid]
+
+
+def relay_spike(when: int) -> tuple[tuple[float, float], int]:
+    """Still on Agony, then 12 yd behind Prayer at the Hand and closing at its last speed step, then idle after
+    the fail."""
+    if when < 20000:
+        return (X + 30.0, Y - 10.0), RAGONY
+    if when < 25000:
+        return (X - 20.0, Y), RPRAY
+    if when <= 27000:
+        return (X + 2.0 + SPIKE_RUN_YD_S * (when - 26000) / 1000.0, Y), RPRAY
+    if when <= 30000:
+        return (relay_spot(RPRAY, when)[0] - 7.625, Y), RPRAY
+    return (X + 40.0, Y + 30.0), 0
+
+
+def relay_sphere(when: int) -> tuple[tuple[float, float], float] | None:
+    if when < 52500:
+        return RSPHERE_FLY, FLYING_Z
+    if when < 54500:
+        return RLINK1_AT, FALLING_Z
+    return RLINK2_AT, PATCH_Z if when >= 56000 else FALLING_Z
+
+
+def relay_snap(when: int) -> dict:
+    units = []
+    for guid in (RECO, RBUL, RFELESTA, ROBLIT, RPRAY, RAGONY, RJUSTICE, RMIGHTY, RLOCK):
+        hp = 0.0 if guid == RAGONY and when >= 19900 else 100.0
+        target = RBOSS if guid == RECO and relay_up(when) else 0
+        units.append([guid, *relay_spot(guid, when), Z, 0.0, hp, 100.0, target, 0, 0, 0, 0])
+    units.append([RBOSS, X + 5.0, Y + 1.0, Z, 0.0, 90.0, 0.0, RECO if relay_up(when) else 0, 0, 0, 0, 0])
+    if 10000 <= when < 50000:
+        spot, target = relay_spike(when)
+        units.append([RSPIKE, *spot, Z, 0.0, 100.0, 0.0, target, 1, 0, 0, 0])
+    hz = []
+    for guid, spot, last in ((RPATCH_N, (X, Y + 20.0), 70000), (RPATCH_S, RPATCH_S_AT, 30800)):
+        if 0 <= when <= last:
+            units.append([guid, *spot, PATCH_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+            hz.append([PERMAFROST_25H, *spot, PATCH_Z, 6.0, 1])
+    if when >= 0:
+        spot, z = relay_sphere(when)
+        units.append([RSPHERE, *spot, z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        if z == PATCH_Z:
+            hz.append([PERMAFROST_25H, *spot, PATCH_Z, 6.0, 1])
+    if 1000 <= when <= 69000:
+        units.append([RBUR, X - 5.0, Y + 23.0, Z, 0.0, 100.0 - (when - 1000) / 2000.0, 0.0, RBUL, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def relay_pull(new_rows: bool = True) -> list[dict]:
+    """A 25H pull: up to 10 s, under to 50 s, up again to 70 s. Under him a patch+hand kite turns without a Hand
+    and dies, and the next one takes its Hand 12 yd off a spike at its last speed step and spends its patch under
+    it. Back up, a far grip at a sphere is gripped again by a relay link nearer the spot. Before the submerge the
+    main tank pre-steps twice and the submerge spot search writes three rows. Mighty Bladestorms near a burrower
+    and far from it. `new_rows` False drops anub.relay, anub.subspot, the prestep rows and the burrower vetoes."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 16, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": RECO, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+             {"g": RBUL, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+             {"g": RFELESTA, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": ROBLIT, "n": "Obliteration", "r": "melee", "c": 6, "h": 0},
+             {"g": RPRAY, "n": "Prayer", "r": "heal", "c": 5, "h": 0},
+             {"g": RAGONY, "n": "Agony", "r": "ranged", "c": 9, "h": 0},
+             {"g": RJUSTICE, "n": "Justice", "r": "melee", "c": 2, "h": 0},
+             {"g": RMIGHTY, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
+             {"g": RLOCK, "n": "Fel", "r": "ranged", "c": 9, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": RBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 10000, "e": "unit", "g": RSPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"}
+          for guid in (RPATCH_N, RPATCH_S, RSPHERE)),
+        {"t": 1000, "e": "unit", "g": RBUR, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        *(note(when, RECO, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (50000, 1))),
+        note(0, RECO, "anub.side0", RBUL),
+        note(0, RECO, "anub.side1", RFELESTA),
+        note(0, RBUL, "anub.patch0", RPATCH_N),
+        note(0, RFELESTA, "anub.patch1", RPATCH_S),
+        note(31500, RFELESTA, "anub.patch1", 0),
+        note(56000, RFELESTA, "anub.patch1", RSPHERE),
+        note(0, RECO, "anub.spot0", f"{X},{Y + 20.0},{Z}"),
+        note(0, RECO, "anub.spot1", f"{RSPOT1[0]},{RSPOT1[1]},{Z}"),
+
+        # Agony turns without a Hand and dies, handing the spike on at its speed; Prayer's Hand lands and its
+        # patch walk comes under it
+        *(aura(when, kiter, ab.SPELL_MARK, removed, RBOSS)
+          for kiter, start, stop in ((RAGONY, 10500, 19900), (RPRAY, 20000, 30000))
+          for when, removed in ((start, False), (stop, True))),
+        {"t": 19900, "e": "death", "g": RAGONY, "killer": RSPIKE, "x": X + 30.0, "y": Y + 20.0, "z": Z,
+         "blow": [RSPIKE, 30000]},
+        note(10600, RAGONY, "anub.kiteplan", "patch+hand"),
+        note(20100, RPRAY, "anub.kiteplan", "patch+hand"),
+        *(note(when, guid, "anub.kitestage", stage) for when, guid, stage in (
+            (10500, RAGONY, "run"), (15000, RAGONY, "patch"), (19900, RAGONY, "none"),
+            (20000, RPRAY, "run"), (26000, RPRAY, "immune"), (28000, RPRAY, "patch"), (30000, RPRAY, "none"))),
+        *(note(when, guid, "anub.bridge", value) for when, guid, value in (
+            (10600, RAGONY, "none"), (15000, RAGONY, "turn"), (19900, RAGONY, "none"),
+            (20100, RPRAY, "none"), (26000, RPRAY, "hand"), (30000, RPRAY, "none"))),
+        cast(26000, RJUSTICE, 10278, RPRAY),
+        aura(26000, RPRAY, 10278, False, RJUSTICE),
+        aura(36000, RPRAY, 10278, True, RJUSTICE),
+
+        # link 1 grips from far off, link 2 from its post nearer the spot once link 1's grip has landed
+        *(note(when, guid, "anub.sphere", value) for when, guid, value in (
+            (50000, ROBLIT, "grip1"), (56000, ROBLIT, "none"), (50000, RFELESTA, "grip1"), (56000, RFELESTA, "none"))),
+        *(note(when, guid, "anub.gripstep", value) for when, guid, value in (
+            (50000, ROBLIT, "walk"), (52000, ROBLIT, "cast"), (52600, ROBLIT, "wait"), (54100, ROBLIT, "none"),
+            (50000, RFELESTA, "post"), (54000, RFELESTA, "cast"), (54600, RFELESTA, "kill"),
+            (56000, RFELESTA, "none"))),
+        cast(52000, ROBLIT, ab.SPELL_DEATH_GRIP, RSPHERE),
+        cast(54000, RFELESTA, ab.SPELL_DEATH_GRIP, RSPHERE),
+
+        *(note(when, RECO, "anub.pickup", value) for when, value in (
+            (500, "hold"), (4000, "drag"), (6000, "hold"), (50500, "hold"))),
+        cast(5000, RMIGHTY, ab.SPELL_BLADESTORM, 0),
+        cast(60000, RMIGHTY, ab.SPELL_BLADESTORM, 0),
+        veto(6500, RMIGHTY, ab.BURROWER_GUARD, "heroic strike"),
+        {"t": 70000, "e": "end", "out": "wipe"},
+    ]
+    if new_rows:
+        records += [
+            note(2000, RECO, "anub.pickup", "prestep"),
+            note(8000, RECO, "anub.pickup", "prestep"),
+            *(note(when, RECO, "anub.subspot", value) for when, value in (
+                (6000, "750,135,143 r25"), (7000, "none"), (9000, "750,139,143 r22"))),
+            *(note(when, RFELESTA, "anub.relay", value) for when, value in ((51000, "wait"), (54000, "cast"),
+                                                                            (56000, "none"))),
+            veto(5500, RMIGHTY, ab.BURROWER_GUARD, "bladestorm"),
+            veto(7000, RLOCK, ab.BURROWER_THREAT_CAP, "shadow bolt"),
+            veto(8000, RLOCK, ab.BURROWER_THREAT_CAP, "shadow bolt"),
+            veto(9000, RMIGHTY, ab.BURROWER_THREAT_CAP, "cleave"),
+        ]
+    records += [relay_snap(when) for when in range(-500, 70000, 500)]
+    return records
+
+
+class RelayPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_16_anub-arak_1789500030.ndjson", relay_pull())
+        cls.bare = write_trace(cls.folder.name, "649_16_anub-arak_1789500031.ndjson", relay_pull(False))
+        cls.windows = ab.mark_windows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, trace, *sections) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for section in sections:
+                section(trace)
+        return out.getvalue()
+
+    def test_the_catch_is_pure_pursuit_stepping_its_speed_after_a_kiter_running_on(self):
+        self.assertEqual(ab.predicted_catch((X, Y), 15.5, (X + 5.0, Y), (1.0, 0.0), 7.0), 0.0)
+        # 12 yd off at its last step, closing 4.375 yd/s, inside 7.5 yd on the eleventh tick
+        self.assertAlmostEqual(ab.predicted_catch((X + 2.0, Y), 15.5, (X + 14.0, Y), (1.0, 0.0), 7.0), 1.1)
+        # at its base speed it only steps up to the kiter's at 14 s, so it closes much later
+        self.assertGreater(ab.predicted_catch((X + 2.0, Y), 0.0, (X + 14.0, Y), (1.0, 0.0), 7.0), 14.0)
+        with unittest.mock.patch.object(ab, "KITE_RING_RADIUS", 1000.0):
+            self.assertIsNone(ab.predicted_catch((X - 10.0, Y), 15.5, (X, Y), (1.0, 0.0), 12.0))
+
+    def test_the_spike_restarts_at_a_submerges_first_mark_or_after_a_gap(self):
+        marks = [(1, 1000, 5000, True), (2, 5100, 9000, True), (3, 13000, 15000, True)]
+        self.assertEqual(ab.spike_restart(marks, [(0, 20000)], 6000), 1000)
+        self.assertEqual(ab.spike_restart(marks, [(0, 20000)], 14000), 13000)
+        self.assertIsNone(ab.spike_restart(marks, [(0, 20000)], 25000))
+
+    def test_a_hand_row_with_no_ask_turns_at_the_patch_stage_after_it(self):
+        stages = [("run", 1000, 2000), ("immune", 2000, 4000), ("patch", 4000, 9000)]
+        self.assertEqual(ab.kite_turn([(2000, "hand")], stages, 1000, 9000, ("patch", "immune")), (4000, "kitestage"))
+        self.assertEqual(ab.kite_turn([(2000, "hand")], stages[:2], 1000, 9000, ("patch", "immune")), (None, None))
+        window = {"plan": ["patch+hand"], "bridge": ["hand"], "turn": 4000, "hop": []}
+        self.assertEqual(ab.bridge_verdict(window), "catch")
+
+    def test_each_hand_reads_against_its_predicted_catch_and_the_patch_under_it(self):
+        agony, prayer = self.windows
+        self.assertEqual((agony["catch"], prayer["turn"], prayer["turn_by"]), ([], 28000, "kitestage"))
+        row, = prayer["catch"]
+        self.assertAlmostEqual(row["before"], 1.1)
+        self.assertAlmostEqual(row["yards"], 12.0)
+        self.assertAlmostEqual(row["spike"], SPIKE_RUN_YD_S)
+        self.assertEqual((row["end"], row["under"]), (36000, True))
+        self.assertEqual((agony["turn_escort"]["guid"], prayer["turn_escort"]), (RJUSTICE, None))
+        self.assertAlmostEqual(agony["turn_escort"]["yards"], math.hypot(25.0, 25.0))
+
+    def test_the_spike_section_prints_the_hand_the_fallback_turn_and_the_first_patch_per_submerge(self):
+        text = self.text(self.trace, ab.show_spike)
+        self.assertIn("            patch+hand: turned without a Hand, read off anub.bridge\n", text)
+        self.assertIn("            no Hand at the turn, nearest Hand of Protection-ready paladin then: Justice 35.4 yd,"
+                      " past its 30 yd reach\n", text)
+        self.assertIn("            patch+hand: Hand at the catch, the turn under it, read off anub.bridge; Hand of"
+                      " Protection by Justice -2.0 s from the turn\n", text)
+        self.assertIn("            Hand against the catch, by Justice +6.0 s: 1.1 s before the predicted catch, spike"
+                      " 12.0 yd off at 11.4 yd/s; the patch followed under it, 6.0 s of it left\n", text)
+        self.assertIn("  patch+hand kites' Hand against the catch predicted as it went out: Prayer 0:20.000 1.1 s"
+                      " before, patch under it\n", text)
+        # the latch clears at 31.5 s, after the patch's last sample at 30.8 s
+        self.assertIn("  first tank patch gone per submerge, seconds into phase 2 at its anub.patchN clear, its side,"
+                      " kiter and kiteplan:\n    P2 21.5 side 1 Prayer patch+hand\n", text)
+
+    def test_each_far_grip_reads_every_link_against_its_sides_spot(self):
+        chain, = ab.far_grips(self.trace)
+        self.assertEqual((chain["sphere"], chain["side"]), (RSPHERE, 1))
+        self.assertEqual([(link["dk"], link["t"], link["landed"]) for link in chain["links"]],
+                         [(ROBLIT, 52000, 500), (RFELESTA, 54000, 500)])
+        first, second = chain["links"]
+        self.assertAlmostEqual(first["before"], math.hypot(60.0, 10.0))
+        self.assertAlmostEqual(first["after"], second["before"])
+        self.assertAlmostEqual(first["after"], math.hypot(40.0, 5.0))
+        self.assertAlmostEqual(second["after"], math.hypot(18.0, 2.0))
+        self.assertAlmostEqual(chain["death"]["off_spot"], math.hypot(18.0, 2.0))
+
+    def test_the_sphere_section_prints_each_link_and_the_relay_rows(self):
+        text = self.text(self.trace, ab.show_spheres)
+        self.assertIn(f"    #{RSPHERE & 0xFFFFFFFF} side 1, died 0:54.500, 18.1 yd off its spot\n"
+                      f"      link 1 {'0:52.000':>9} {'Obliteration':22} {'landed +0.5 s':24} 60.8 > 40.3 yd\n"
+                      f"      link 2 {'0:54.000':>9} {'Felesta':22} {'landed +0.5 s':24} 40.3 > 18.1 yd\n", text)
+        self.assertIn("  anub.relay: 0:51.000 Felesta wait, 0:54.000 Felesta cast\n", text)
+        self.assertIn("Felesta post 1", text)
+        self.assertIn("  anub.relay: no rows\n", self.text(self.bare, ab.show_spheres))
+
+    def test_each_bladestorm_reads_the_nearest_burrower(self):
+        rows = ab.bladestorm_casts(self.trace)
+        self.assertEqual([(row["t"], row["guid"], row["burrower"]) for row in rows],
+                         [(5000, RMIGHTY, RBUR), (60000, RMIGHTY, RBUR)])
+        self.assertEqual([round(row["yards"], 1) for row in rows], [13.0, 35.0])
+        capped, held = ab.burrower_vetoes(self.trace)
+        self.assertEqual((dict(capped), dict(held)), ({RLOCK: 2, RMIGHTY: 1}, {RMIGHTY: 1}))
+
+    def test_the_burrower_section_prints_bladestorm_and_the_threat_cap(self):
+        text = self.text(self.trace, ab.show_burrowers)
+        burrower = f"#{RBUR & 0xFFFFFFFF}"
+        self.assertIn(f"  Bladestorm, the nearest living burrower at the cast, near within 25 yd: Mighty 0:05.000"
+                      f" {burrower} 13.0 yd near, Mighty 1:00.000 {burrower} 35.0 yd; near in 1 of 2\n", text)
+        self.assertIn("  anubarak burrower guard vetoes on bladestorm: Mighty 1\n", text)
+        self.assertIn("  anubarak burrower threat cap vetoes per bot, one per verdict change: Fel 2, Mighty 1\n", text)
+        bare = self.text(self.bare, ab.show_burrowers)
+        self.assertIn("  anubarak burrower guard vetoes on bladestorm: no rows\n", bare)
+        self.assertIn("  anubarak burrower threat cap vetoes per bot, one per verdict change: no rows\n", bare)
+
+    def test_a_subspot_parses_its_spot_and_clearance(self):
+        self.assertEqual(ab.parse_subspot("750,139,143 r22"), ((750.0, 139.0), 22))
+        self.assertEqual(ab.parse_subspot("none"), (None, None))
+
+    def test_the_drags_pre_steps_and_the_subspot_rows_per_window(self):
+        first, later = ab.threat_rows(self.trace)
+        self.assertEqual([(step["t"], step["next"], step["after"], round(step["walked"], 1))
+                          for step in first["presteps"]], [(2000, "drag", 2000, 10.0), (8000, None, None, 0.0)])
+        self.assertEqual(first["subspot"], [(6000, "750,135,143 r25"), (7000, "none"), (9000, "750,139,143 r22")])
+        self.assertEqual((later["presteps"], later["subspot"]), ([], []))
+
+    def test_the_threat_section_prints_the_pre_steps_and_the_subspot_rows(self):
+        text = self.text(self.trace, ab.show_threat)
+        self.assertIn("          drag pre-steps: Ecoterrorist 0:02.000 walked 10.0 yd, then drag +2.0 s; Ecoterrorist"
+                      " 0:08.000 walked 0.0 yd, nothing after it\n", text)
+        self.assertIn("          anub.subspot: 750,135,143 r25 0:06.000, none 0:07.000, 750,139,143 r22 0:09.000;"
+                      " he went down 3.0 yd off its last spot\n", text)
+        self.assertIn("  anub.subspot is each submerge-spot search, the spot and its clearance r in yards\n", text)
+        bare = self.text(self.bare, ab.show_threat)
+        self.assertIn("next pickup row; no prestep rows\n", bare)
+        self.assertIn("clearance r in yards; no anub.subspot rows\n", bare)
+        self.assertNotIn("anub.subspot: ", bare)
+
+    def test_the_new_keys_count_as_present_and_absent_without_their_rows(self):
+        for key in ("anub.relay", "anub.subspot"):
+            self.assertNotIn(key, ab.missing_probes(self.trace))
+            self.assertIn(key, ab.missing_probes(self.bare))
+
+    def test_every_section_prints(self):
+        text = self.text(self.trace, ab.show_banner, *(section for _, _, section in ab.SECTIONS))
+        self.assertIn("PURSUIT\n", text)
 
 
 def side_pull(diff: int, side1: int, later: list[dict] | None = None) -> list[dict]:

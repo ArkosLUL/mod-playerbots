@@ -648,7 +648,7 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
         return false;
     }
 
-    RaidObs::NoteDerived(bot, "anub.pickup", submerge ? "submerge" : "drag");
+    RaidObs::NoteDerived(bot, "anub.pickup", leg.preStep ? "prestep" : submerge ? "submerge" : "drag");
     if (leg.step != AnubarakDragStep::Walk)
         return false;
 

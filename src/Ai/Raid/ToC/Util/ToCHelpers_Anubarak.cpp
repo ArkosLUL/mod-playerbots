@@ -8,6 +8,7 @@
 #include <functional>
 #include <initializer_list>
 #include <list>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -86,8 +87,6 @@ constexpr float ANUBARAK_KITE_PLAYER_CLEARANCE = 10.0f;
 constexpr float ANUBARAK_PERMAFROST_HEROIC_SLOW = 0.2f;
 // An edge pass runs on this far past where it touches the keepout ring
 constexpr float ANUBARAK_KITE_EDGE_RUN_ON = 15.0f;
-// A patch+hand kite whose turn came due waits this long for the Hand asked for then, then turns without
-constexpr uint32 ANUBARAK_KITE_BRIDGE_WAIT_MS = 1000;
 // How far ahead a catch is looked for: 40 yd back at the slowest closing speed is under that
 constexpr float ANUBARAK_KITE_CATCH_HORIZON_S = 20.0f;
 // A step heading within this of the held one counts as the held one
@@ -225,6 +224,9 @@ struct DragLegLatch
     ObjectGuid tank;
     Position point;
     Position tankSpot;
+    // Walked first when the tank's own walk to its spot would cross a patch's slow
+    bool preStep = false;
+    Position preStepSpot;
     uint32 plannedMs = 0;
     // He was planned on standing still, so only a stop after moving means he followed
     bool bossMoved = false;
@@ -304,8 +306,25 @@ struct GripDuty
     ObjectGuid dk;
     ObjectGuid sphere;
     uint8 side = 0;
-    // Where the DK grips from: the side's spot, up to ANUBARAK_GRIP_STEP_OUT off it, or FarGripStand's
+    // Where the DK grips from: the side's spot, up to ANUBARAK_GRIP_STEP_OUT off it, FarGripStand's, or a
+    // relay link's post
     Position stand;
+    // A relay link: grips only once the grip before it has landed
+    bool relay = false;
+};
+
+// A far grip's next link: a DK posted nearer the spot grips the sphere again once the grip before it has
+// brought it down, before it rises back out of reach
+struct GripRelay
+{
+    ObjectGuid dk;
+    Position post;
+    // Where the grip before it brings the sphere down
+    Position from;
+    // When that grip landed, 0 while it's still out
+    uint32 landedMs = 0;
+    // No further link for this sphere: its next landing is killed where it is
+    bool closed = false;
 };
 
 struct GripCast
@@ -351,10 +370,9 @@ struct KiteStageRead
 enum class KiteBridge : uint8
 {
     None,
-    // A patch+hand kite's turn came due and its Hand was asked for then
-    Ask,
+    // A patch+hand kite's Hand landed
     Hand,
-    // It turned for the patch without one
+    // It turned for the patch without one, no paladin able to land it at the catch
     Turn
 };
 
@@ -369,7 +387,6 @@ struct KitePlan
     ObjectGuid hand;
     bool handLanded = false;
     KiteBridge bridge = KiteBridge::None;
-    uint32 bridgeMs = 0;
     // Seconds to the catch on the run it is on now, negative past the horizon
     float catchS = -1.0f;
     // A patch the kite may end on, the walk onto it, and PatchMargin of that walk now and of the best one
@@ -485,6 +502,7 @@ struct AnubarakState
     SideNeed needs[2];
     bool gripUsed = false;
     GripCast grips[2];
+    GripRelay relays[2];
     std::vector<GripDuty> gripDuties;
     // A sphere that landed on a DK, and the side it was gripped for. A gripped sphere drifts back toward
     // its route while it dies, so its patch can come down nearer the other side's spot.
@@ -544,6 +562,8 @@ struct AnubarakState
 
     std::unordered_map<ObjectGuid, DodgeHold> dodgeHolds;
     std::unordered_map<ObjectGuid, ThreatCapLatch> threatCaps;
+    // Per DPS bot and burrower: capped on its side tank's threat
+    std::map<std::pair<ObjectGuid, ObjectGuid>, bool> burrowerCaps;
     ProtectClaim protect;
     EscortRead escort;
     FreedomRead freedom;
@@ -788,6 +808,7 @@ void ClearPullLatches(AnubarakState& state)
     state.dragFreeValid = false;
     state.dodgeHolds.clear();
     state.threatCaps.clear();
+    state.burrowerCaps.clear();
     state.protect = ProtectClaim();
     state.escort = EscortRead();
     state.freedom = FreedomRead();
@@ -2438,8 +2459,6 @@ char const* KiteBridgeName(KiteBridge bridge)
 {
     switch (bridge)
     {
-        case KiteBridge::Ask:
-            return "ask";
         case KiteBridge::Hand:
             return "hand";
         case KiteBridge::Turn:
@@ -2449,41 +2468,31 @@ char const* KiteBridgeName(KiteBridge bridge)
     }
 }
 
-// A patch+hand kite's turn: due once its walk still makes it now but not after running on. The Hand goes
-// out then if its paladin can land it, waited on ANUBARAK_KITE_BRIDGE_WAIT_MS; else, or past the wait, the
-// kite turns for the patch without it. A walk lost already leaves the Hand to the catch.
-void JudgeBridge(Player* kiter, KitePlan& plan, uint32 now)
+// A Hand of Protection could land on the kiter now: its own, or a ready paladin's in range and sight
+bool HandInReach(Player* kiter)
 {
-    if (plan.bridge == KiteBridge::Ask)
-    {
-        if (getMSTimeDiff(plan.bridgeMs, now) >= ANUBARAK_KITE_BRIDGE_WAIT_MS)
-        {
-            plan.terminal = AnubarakPursuit::KiteTerminal::Patch;
-            plan.bridge = KiteBridge::Turn;
-        }
+    std::vector<Player*> const hands = ReadyHands(kiter);
+    return std::any_of(hands.begin(), hands.end(), [kiter](Player* paladin)
+                       {
+                           return paladin == kiter || (paladin->IsWithinDistInMap(kiter, ANUBARAK_HOP_RANGE) &&
+                                                       paladin->IsWithinLOSInMap(kiter));
+                       });
+}
 
+// A patch+hand kite runs to its catch for the Hand. Once its walk still makes it now but not after running
+// on, it turns for the patch without the Hand only when no paladin could land it.
+void JudgeBridge(Player* kiter, KitePlan& plan)
+{
+    if (plan.patchMarginS < 0.0f || plan.patchLaterS >= 0.0f || HandInReach(kiter))
         return;
-    }
-
-    if (plan.patchMarginS < 0.0f || plan.patchLaterS >= 0.0f)
-        return;
-
-    Player* paladin = HandHolds(kiter, plan) ? ObjectAccessor::GetPlayer(*kiter, plan.hand) : nullptr;
-    if (paladin && (paladin == kiter || (paladin->IsWithinDistInMap(kiter, ANUBARAK_HOP_RANGE) &&
-                                         paladin->IsWithinLOSInMap(kiter))))
-    {
-        plan.bridge = KiteBridge::Ask;
-        plan.bridgeMs = now;
-        return;
-    }
 
     plan.terminal = AnubarakPursuit::KiteTerminal::Patch;
     plan.bridge = KiteBridge::Turn;
 }
 
 // Heroic, every 250 ms. The terminal is picked at the mark and kept until it can't be had: the patch
-// gone, the hand's paladin dead or without it, Forbearance on the kiter, the own immunity spent. A bridge
-// whose hand can't come any more goes on as a patch kite.
+// gone, the hand's paladin dead or without it, Forbearance on the kiter, the own immunity spent. Then it's
+// picked again.
 KitePlan& JudgeKitePlan(Player* kiter, Creature* spike, AnubarakState& state)
 {
     using AnubarakPursuit::KiteTerminal;
@@ -2518,13 +2527,7 @@ KitePlan& JudgeKitePlan(Player* kiter, Creature* spike, AnubarakState& state)
             keep = plan.patch;
             break;
         case KiteTerminal::PatchHand:
-            keep = plan.patch;
-            if (keep && !plan.handLanded && !HandHolds(kiter, plan))
-            {
-                plan.terminal = KiteTerminal::Patch;
-                if (plan.bridge == KiteBridge::Ask)
-                    plan.bridge = KiteBridge::Turn;
-            }
+            keep = plan.patch && (plan.handLanded || HandHolds(kiter, plan));
             break;
         case KiteTerminal::Hand:
             keep = HandHolds(kiter, plan);
@@ -2546,7 +2549,6 @@ KitePlan& JudgeKitePlan(Player* kiter, Creature* spike, AnubarakState& state)
         options.patch = plan.patch;
         options.patchReachable = plan.patch && plan.patchMarginS >= 0.0f;
         options.hand = !hands.empty();
-        options.handsReady = static_cast<int>(hands.size());
         options.own = OwnImmunitySpell(kiter) != 0;
         plan.terminal = AnubarakPursuit::PickTerminal(options);
         bool const hand = plan.terminal == KiteTerminal::Hand || plan.terminal == KiteTerminal::PatchHand;
@@ -2560,7 +2562,7 @@ KitePlan& JudgeKitePlan(Player* kiter, Creature* spike, AnubarakState& state)
         if (plan.handLanded)
             plan.bridge = KiteBridge::Hand;
         else
-            JudgeBridge(kiter, plan, now);
+            JudgeBridge(kiter, plan);
     }
 
     if (GET_PLAYERBOT_AI(kiter))
@@ -2575,8 +2577,8 @@ KitePlan& JudgeKitePlan(Player* kiter, Creature* spike, AnubarakState& state)
 }
 
 // Heroic only. A patch kite runs on while turning ANUBARAK_KITE_PATCH_COMMIT_S later would still beat the
-// catch, then turns; a bridge runs on as one, under its Hand once JudgeBridge got it on. Turned, it stays
-// turned while the patch lasts. A boost goes out once the spike, faster, gains within 15 yd, or is within
+// catch, then turns; a patch+hand kite runs as a hand kite until its Hand lands, then as a patch kite under
+// it. Turned, it stays turned while the patch lasts. A boost goes out once the spike, faster, gains within 15 yd, or is within
 // 10 and catching up; a boost never holds back the turn.
 KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState& state)
 {
@@ -3158,16 +3160,19 @@ ObjectGuid PickupGuid(Player* bot, AnubarakState const& state)
 // any burrower is up, the other side's DK side tank. Only one whose grip is back within the wait. A far
 // grip walks the DK well off the side, so the one with no tank duty goes first and the side's own tank
 // only without one.
-Player* PickGripper(Player* bot, AnubarakState const& state, uint8 side, ObjectGuid const& busy, bool far = false)
+bool GripperReady(Player* member, ObjectGuid const& pickup, std::vector<ObjectGuid> const& busy)
+{
+    return member && member->IsAlive() && GET_PLAYERBOT_AI(member) && member->getClass() == CLASS_DEATH_KNIGHT &&
+           member->HasSpell(SPELL_DEATH_GRIP) && !member->HasAura(SPELL_MARK) && InAnubarakPit(member) &&
+           member->GetGUID() != pickup && std::find(busy.begin(), busy.end(), member->GetGUID()) == busy.end() &&
+           member->GetSpellCooldownDelay(SPELL_DEATH_GRIP) <= ANUBARAK_GRIP_COOLDOWN_WAIT_MS;
+}
+
+Player* PickGripper(Player* bot, AnubarakState const& state, uint8 side, std::vector<ObjectGuid> const& busy,
+                    bool far = false)
 {
     ObjectGuid const pickup = PickupGuid(bot, state);
-    auto const eligible = [&](Player* member)
-    {
-        return member && member->IsAlive() && GET_PLAYERBOT_AI(member) && member->getClass() == CLASS_DEATH_KNIGHT &&
-               member->HasSpell(SPELL_DEATH_GRIP) && !member->HasAura(SPELL_MARK) && InAnubarakPit(member) &&
-               member->GetGUID() != pickup && member->GetGUID() != busy &&
-               member->GetSpellCooldownDelay(SPELL_DEATH_GRIP) <= ANUBARAK_GRIP_COOLDOWN_WAIT_MS;
-    };
+    auto const eligible = [&](Player* member) { return GripperReady(member, pickup, busy); };
 
     Player* own = state.sideTanks[side].IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state.sideTanks[side]);
     if (eligible(own) && !far)
@@ -3310,11 +3315,80 @@ bool GrippedDown(Creature* sphere, GripCast const& cast)
     return sphere->GetPositionZ() - cast.from.GetPositionZ() <= ANUBARAK_GRIP_LANDED_HEIGHT;
 }
 
+// A grip landing this far off the spot gets another link, posted Death Grip's reach less the margin
+// from the landing: the landed sphere sits low. It rises back above reach about 4 s after the landing.
+constexpr float ANUBARAK_GRIP_RELAY_FROM = ANUBARAK_SIDE_SHOOT_FAR;
+constexpr float ANUBARAK_GRIP_RELAY_REACH = ANUBARAK_GRIP_RANGE - ANUBARAK_GRIP_REACH_MARGIN;
+constexpr uint32 ANUBARAK_GRIP_RELAY_WAIT_MS = 3000;
+
+// The side's own DK tank first, its burrowers walking along with it, then the lowest-guid DK bot with no
+// tank duty. Never the pickup tank or the other side's tank.
+Player* PickRelayLink(Player* bot, AnubarakState const& state, uint8 side, std::vector<ObjectGuid> const& busy)
+{
+    ObjectGuid const pickup = PickupGuid(bot, state);
+    Player* own = state.sideTanks[side].IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state.sideTanks[side]);
+    if (GripperReady(own, pickup, busy))
+        return own;
+
+    Player* best = nullptr;
+    ForEachGroupMember(bot, [&](Player* member)
+    {
+        if (GripperReady(member, pickup, busy) && member->GetGUID() != state.sideTanks[0] &&
+            member->GetGUID() != state.sideTanks[1] && (!best || member->GetGUID() < best->GetGUID()))
+            best = member;
+
+        return false;
+    });
+
+    return best;
+}
+
+// The next link for a grip bringing the sphere down at from, on the first RelayPosts point that's on the
+// floor, out of every patch's slow and off the spike and its lane. None closes the relay.
+void PlanRelay(Player* bot, AnubarakState const& state, uint8 side, Position const& from, Position const& spot,
+               std::vector<ObjectGuid> const& busy, GripRelay& relay)
+{
+    relay.dk.Clear();
+    relay.from = from;
+    relay.closed = true;
+    Player* dk = PickRelayLink(bot, state, side, busy);
+    if (!dk)
+        return;
+
+    std::vector<Position> const patches = PatchPositions(bot, state);
+    Creature* spike = GetPursuingSpike(dk);
+    Player* kiter = spike ? GetSpikeTarget(dk) : nullptr;
+    for (AnubarakPursuit::Point const& point :
+         AnubarakPursuit::RelayPosts(ToPoint(from), ToPoint(spot), ANUBARAK_GRIP_RELAY_REACH))
+    {
+        Position const raw(point.x, point.y, spot.GetPositionZ());
+        if (std::any_of(patches.begin(), patches.end(),
+                        [&raw](Position const& patch) { return Dist2d(raw, patch) < ANUBARAK_TANK_KEEPOUT; }))
+            continue;
+
+        if (spike && (Dist2d(raw, spike->GetPosition()) < ANUBARAK_SPIKE_DANGER_RADIUS_FAST ||
+                      (kiter && SegmentDistance2d(spike->GetPosition(), kiter->GetPosition(), raw) <
+                                    ANUBARAK_SPIKE_LANE_CLEARANCE_FAST)))
+            continue;
+
+        Position valid;
+        if (OnFloor(dk, raw, valid))
+        {
+            relay.dk = dk->GetGUID();
+            relay.post = valid;
+            relay.closed = false;
+            return;
+        }
+    }
+}
+
 // True while a grip has a sphere for the side. The sphere it pulls is reserved, and the side's shooters
 // join once it is down where the DK cast from, or anywhere it still makes the side's patch. One not
 // landed 3 s on leaves the side to its shooters until a DK's Death Grip is back. With none in reach the
 // DK keeps its duty and the side's shooters take any sphere they can. No grip takes a sphere already
-// near the other side's spot, or one another side's DK has picked.
+// near the other side's spot, or one another side's DK has picked. A grip landing over 20 yd off the spot
+// passes the sphere to a relay link, which grips it again within 3 s of the landing; it stays reserved
+// until the last link's grip lands, or is killed where it is once the link can't.
 template <typename Taken>
 bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position const& spot, Position const& otherSpot,
                      std::vector<Creature*> const& spheres, std::vector<Creature*> const& flying,
@@ -3324,6 +3398,11 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
 {
     SideNeed& need = state.needs[side];
     GripCast& cast = state.grips[side];
+    GripRelay& relay = state.relays[side];
+    std::vector<ObjectGuid> busy;
+    for (GripDuty const& duty : state.gripDuties)
+        busy.push_back(duty.dk);
+
     if (cast.valid)
     {
         Creature* sphere = FindSphere(spheres, cast.sphere);
@@ -3338,7 +3417,38 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
                  (Dist2d(at, spot) <= ANUBARAK_SIDE_SHOOT_FAR && Dist2d(at, other) >= ANUBARAK_TANK_PATCH_GAP)))
                 cast.landed = true;
 
-            if (cast.landed || getMSTimeDiff(cast.castMs, now) < ANUBARAK_GRIP_JUDGE_MS)
+            bool const live = cast.landed || getMSTimeDiff(cast.castMs, now) < ANUBARAK_GRIP_JUDGE_MS;
+            if (live && !relay.closed && Dist2d(cast.from, spot) > ANUBARAK_GRIP_RELAY_FROM)
+            {
+                if (relay.dk.IsEmpty() || Dist2d(relay.from, cast.from) > ANUBARAK_GRIP_LANDED)
+                {
+                    std::vector<ObjectGuid> others = busy;
+                    others.push_back(cast.dk);
+                    PlanRelay(bot, state, side, cast.from, spot, others, relay);
+                }
+
+                if (cast.landed && !relay.landedMs)
+                    relay.landedMs = now;
+
+                Player* next = relay.dk.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, relay.dk);
+                if (next && GripperReady(next, PickupGuid(bot, state), busy) &&
+                    (!relay.landedMs || getMSTimeDiff(relay.landedMs, now) < ANUBARAK_GRIP_RELAY_WAIT_MS))
+                {
+                    state.gripDuties.push_back({cast.dk, sphere->GetGUID(), side, cast.from});
+                    state.gripDuties.push_back({relay.dk, sphere->GetGUID(), side, relay.post, true});
+                    reserved.push_back(sphere);
+                    RaidObs::NoteDerived(next, "anub.relay", "wait");
+                    return true;
+                }
+
+                if (next)
+                    RaidObs::NoteDerived(next, "anub.relay", "drop");
+
+                relay.dk.Clear();
+                relay.closed = true;
+            }
+
+            if (live)
             {
                 state.gripDuties.push_back({cast.dk, sphere->GetGUID(), side, cast.from});
                 if (cast.landed)
@@ -3361,10 +3471,7 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
         cast = GripCast();
     }
 
-    ObjectGuid busy;
-    for (GripDuty const& duty : state.gripDuties)
-        busy = duty.dk;
-
+    relay = GripRelay();
     Player* dk = PickGripper(bot, state, side, busy);
     if (!dk)
         return false;
@@ -3404,6 +3511,21 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
     state.gripDuties.push_back({dk->GetGUID(), sphere ? sphere->GetGUID() : ObjectGuid::Empty, side, stand});
     if (!sphere)
         return false;
+
+    // Posted while the first link walks out, so it's in reach when the sphere comes down
+    if (Dist2d(stand, spot) > ANUBARAK_GRIP_RELAY_FROM)
+    {
+        busy.push_back(dk->GetGUID());
+        PlanRelay(bot, state, side, stand, spot, busy, relay);
+        if (Player* next = relay.dk.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, relay.dk))
+        {
+            state.gripDuties.push_back({relay.dk, sphere->GetGUID(), side, relay.post, true});
+            RaidObs::NoteDerived(next, "anub.relay", "wait");
+        }
+
+        // None now, the cast looks again from where it lands
+        relay.closed = false;
+    }
 
     reserved.push_back(sphere);
     return true;
@@ -3602,6 +3724,8 @@ void ComputeDuties(Player* bot, AnubarakState& state)
         state.needs[1] = SideNeed();
         state.grips[0] = GripCast();
         state.grips[1] = GripCast();
+        state.relays[0] = GripRelay();
+        state.relays[1] = GripRelay();
     }
 
     bool const gripWaits = state.needs[0].gripFailed || state.needs[1].gripFailed;
@@ -3816,10 +3940,10 @@ std::vector<Player*> ProtectorOrder(Player* bot)
 
 // Once per instance per ms. The claim stands for the mark window: one paladin covers the kiter, and
 // passes it on only when its Hand of Protection hasn't landed 1.5 s in. Heroic follows the kite plan:
-// its hand 1 s before the catch, or at a patch+hand kite's turn once JudgeBridge asks, the planned paladin
-// first, and any paladin in reach at the catch once the plan has failed, with no patch walk that beats the
-// catch (or the spike within the immunity range anyway) and no Hand or immunity of the kiter's own
-// planned. The kiter's own goes 0.6 s before the catch, its Hand 1 s before or at the turn.
+// its hand 1 s before the catch, the planned paladin first, and any paladin in reach at the catch once the
+// plan has failed, with no patch walk that beats the catch (or the spike within the immunity range anyway)
+// and no Hand or immunity of the kiter's own planned. The kiter's own goes 0.6 s before the catch, its
+// Hand 1 s before.
 ProtectClaim const* DeriveProtection(Player* bot)
 {
     AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
@@ -3865,18 +3989,16 @@ ProtectClaim const* DeriveProtection(Player* bot)
     ObjectGuid planned;
     bool selfHand = false;
     bool ownPlanned = false;
-    bool bridgeDue = false;
     if (claim.heroic)
     {
         KitePlan const& plan = JudgeKitePlan(kiter, spike, *state);
         bool const handKite = HandKite(plan);
         selfHand = handKite && plan.hand == kiterGuid;
         ownPlanned = plan.terminal == AnubarakPursuit::KiteTerminal::Own;
-        bridgeDue = handKite && plan.bridge == KiteBridge::Ask;
         // A spike within the immunity range has beaten whatever walk the model gave the kiter
         claim.standReachable = plan.patch && plan.patchMarginS >= 0.0f && !claim.spikeInImmunityRange;
-        claim.need = !immune && !forbearance && !selfHand &&
-                     (bridgeDue || (handDue && (handKite || (!claim.standReachable && !ownPlanned))));
+        claim.need = !immune && !forbearance && !selfHand && handDue &&
+                     (handKite || (!claim.standReachable && !ownPlanned));
         if (handKite && !selfHand)
             planned = plan.hand;
     }
@@ -3934,7 +4056,7 @@ ProtectClaim const* DeriveProtection(Player* bot)
     if (claim.heroic && !immune)
     {
         bool const ownDue = caught && impaleMs <= ANUBARAK_KITE_OWN_LEAD_S * IN_MILLISECONDS;
-        claim.selfDue = (selfHand && (handDue || bridgeDue) && !forbearance) ||
+        claim.selfDue = (selfHand && handDue && !forbearance) ||
                         (ownDue && (ownPlanned || (claim.protector.IsEmpty() && !claim.standReachable)));
     }
 
@@ -4503,6 +4625,12 @@ Position GetAnubarakTankSpot(Player* bot, uint8 side)
 
 Position GetAnubarakSideTankHold(Player* bot, uint8 side)
 {
+    // Linked into its side's grip: where it grips from, so its own walks and the grip's agree
+    if (AnubarakState const* state = ReadPhase(GET_PLAYERBOT_AI(bot)))
+        for (GripDuty const& duty : state->gripDuties)
+            if (duty.dk == bot->GetGUID() && duty.side == side)
+                return duty.stand;
+
     Creature* patch = GetAnubarakTankPatch(bot, side);
     if (!patch)
         return GetAnubarakTankSpot(bot, side);
@@ -4698,6 +4826,12 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
                 break;
             }
         }
+
+        RaidObs::NoteDerived(bot, "anub.subspot",
+                             state->submergeSpotValid
+                                 ? RaidObs::DescribeDerived(state->submergeSpot) + " r" +
+                                       std::to_string(static_cast<int32>(std::lround(state->submergeSpotClearance)))
+                                 : "none");
     }
 
     if (!state->submergeSpotValid)
@@ -4705,6 +4839,38 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
 
     out = state->submergeSpot;
     return true;
+}
+
+// Pre-steps sit this far inside his chase start, so he stays put while the tank walks round him
+constexpr float ANUBARAK_DRAG_PRESTEP_INSIDE[] = {3.0f, 2.0f, 1.0f};
+
+// The first DragPreSteps point on the floor that's still inside his chase start
+static bool DragPreStep(Player* bot, Creature* boss, Position const& spot, std::vector<Position> const& patches,
+                        float chaseStart, Position& out)
+{
+    std::vector<AnubarakPursuit::Point> points;
+    for (Position const& patch : patches)
+        points.push_back(ToPoint(patch));
+
+    std::vector<float> radii;
+    for (float inside : ANUBARAK_DRAG_PRESTEP_INSIDE)
+        radii.push_back(chaseStart - inside);
+
+    for (AnubarakPursuit::Point const& point :
+         AnubarakPursuit::DragPreSteps(ToPoint(boss->GetPosition()), ToPoint(bot->GetPosition()), ToPoint(spot), points,
+                                       radii, ANUBARAK_TANK_KEEPOUT, ANUBARAK_PERMAFROST_SLOW_REACH))
+    {
+        Position valid;
+        if (OnFloor(bot, Position(point.x, point.y, bot->GetPositionZ()), valid) &&
+            Dist2d(valid, boss->GetPosition()) < chaseStart && TankWalkClear(bot->GetPosition(), valid, patches) &&
+            TankWalkClear(valid, spot, patches))
+        {
+            out = valid;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 AnubarakDragLeg GetAnubarakDragLeg(Player* bot, Creature* boss, Position const& point, bool submerge)
@@ -4725,14 +4891,34 @@ AnubarakDragLeg GetAnubarakDragLeg(Player* bot, Creature* boss, Position const& 
     }
 
     uint32 const now = getMSTime();
-    if (latch.valid)
+    if (latch.valid && Dist2d(boss->GetPosition(), latch.point) <= ANUBARAK_DRAG_DONE)
     {
-        if (Dist2d(boss->GetPosition(), latch.point) <= ANUBARAK_DRAG_DONE)
-        {
+        latch = DragLegLatch();
+        return leg;
+    }
+
+    // Followed on the pre-step, the leg planned off where he stood is stale
+    if (latch.valid && latch.preStep)
+    {
+        if (latch.bossMoved || getMSTimeDiff(latch.plannedMs, now) >= ANUBARAK_DRAG_LEG_MS)
             latch = DragLegLatch();
+        else if (bot->GetExactDist2d(latch.preStepSpot.GetPositionX(), latch.preStepSpot.GetPositionY()) >
+                 ANUBARAK_DRAG_SPOT_ARRIVE)
+        {
+            leg.step = AnubarakDragStep::Walk;
+            leg.tankSpot = latch.preStepSpot;
+            leg.preStep = true;
             return leg;
         }
+        else
+        {
+            latch.preStep = false;
+            latch.plannedMs = now;
+        }
+    }
 
+    if (latch.valid)
+    {
         bool const onSpot = bot->GetExactDist2d(latch.tankSpot.GetPositionX(), latch.tankSpot.GetPositionY()) <=
                             ANUBARAK_DRAG_SPOT_ARRIVE;
         if (onSpot && !latch.arrived)
@@ -4781,15 +4967,30 @@ AnubarakDragLeg GetAnubarakDragLeg(Player* bot, Creature* boss, Position const& 
     if (Dist2d(spot, boss->GetPosition()) <= chaseStart)
         return leg;
 
-    // Slowed 80% the tank crawls and he stops short, so no leg ends in a patch or walks through one
-    if (!TankWalkClear(bot->GetPosition(), spot, PatchPositions(bot, *state)))
+    // Slowed 80% the tank crawls and he stops short, so no leg ends in a patch or walks through one. A
+    // tank cut off from its spot by one first steps round him.
+    std::vector<Position> const patches = PatchPositions(bot, *state);
+    bool const spotClear = std::none_of(patches.begin(), patches.end(), [&spot](Position const& patch)
+                                        { return Dist2d(spot, patch) < ANUBARAK_TANK_KEEPOUT; });
+    Position preStep;
+    bool const cutOff = !TankWalkClear(bot->GetPosition(), spot, patches);
+    if (!spotClear || (cutOff && !DragPreStep(bot, boss, spot, patches, chaseStart, preStep)))
         return leg;
 
     latch.valid = true;
     latch.tank = bot->GetGUID();
     latch.point = point;
     latch.tankSpot = spot;
+    latch.preStep = cutOff;
+    latch.preStepSpot = preStep;
     latch.plannedMs = now;
+    if (cutOff)
+    {
+        leg.step = AnubarakDragStep::Walk;
+        leg.tankSpot = preStep;
+        leg.preStep = true;
+        return leg;
+    }
 
     bool const onSpot = bot->GetExactDist2d(latch.tankSpot.GetPositionX(), latch.tankSpot.GetPositionY()) <=
                         ANUBARAK_DRAG_SPOT_ARRIVE;
@@ -4922,6 +5123,42 @@ bool AnubarakThreatCapped(Player* bot)
 
     cap.value = cap.capped;
     return cap.value;
+}
+
+bool AnubarakBurrowerThreatCapped(Player* bot, Unit* burrower)
+{
+    if (!IsToCDpsBot(bot) || !burrower || burrower->GetEntry() != static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER))
+        return false;
+
+    AnubarakState* state = ReadPhase(GET_PLAYERBOT_AI(bot));
+    Unit* victim = state ? burrower->GetVictim() : nullptr;
+    Player* tank = victim ? victim->ToPlayer() : nullptr;
+    if (!tank || tank == bot || !IsAnubarakTankPlayer(tank))
+        return false;
+
+    float const own = burrower->GetThreatMgr().GetThreat(bot);
+    float const held = burrower->GetThreatMgr().GetThreat(tank);
+    bool& capped = state->burrowerCaps[{bot->GetGUID(), burrower->GetGUID()}];
+    if (!capped && own > 0.0f && own >= ANUBARAK_THREAT_CAP * held)
+        capped = true;
+    else if (capped && own < ANUBARAK_THREAT_RELEASE * held)
+        capped = false;
+
+    return capped;
+}
+
+bool AnubarakBurrowerThreatCappedNear(Player* bot, Position const& at, float range)
+{
+    AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
+    if (!state)
+        return false;
+
+    for (Creature* burrower : ResolveAlive(bot, state->burrowers))
+        if (!burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) && Dist2d(burrower->GetPosition(), at) <= range &&
+            AnubarakBurrowerThreatCapped(bot, burrower))
+            return true;
+
+    return false;
 }
 
 int8 GetAnubarakBurrowerTankSide(Player* player)
@@ -5494,6 +5731,7 @@ bool GetAnubarakGripDuty(Player* bot, AnubarakGripDuty& out)
     {
         RaidObs::NoteDerived(bot, "anub.gripstep", "none");
         RaidObs::NoteDerived(bot, "anub.sphere", "none");
+        RaidObs::NoteDerived(bot, "anub.relay", "none");
         return false;
     }
 
@@ -5503,23 +5741,44 @@ bool GetAnubarakGripDuty(Player* bot, AnubarakGripDuty& out)
     out.sphere = IsFrostSphereFlying(sphere) ? sphere : nullptr;
 
     // In reach from where it stands, inside the step-out and no nearer the other side: the stand follows
-    // the sphere, so walking on would only chase it
+    // the sphere, so walking on would only chase it. Further out, in reach while no further from the spot
+    // than the stand: walking on would only bring the landing nearer the sphere.
     bool const ready = out.sphere && !bot->GetSpellCooldownDelay(SPELL_DEATH_GRIP);
+    bool const inReach = ready && bot->GetExactDist(out.sphere) <= ANUBARAK_GRIP_RANGE;
     Position const sideSpot = GetAnubarakTankSpot(bot, duty->side);
     Position const otherSpot = GetAnubarakTankSpot(bot, 1 - duty->side);
-    bool const reachesFromHere =
-        ready && bot->GetExactDist(out.sphere) <= ANUBARAK_GRIP_RANGE &&
-        Dist2d(bot->GetPosition(), sideSpot) <= ANUBARAK_GRIP_STEP_OUT + ANUBARAK_TANK_PATCH_ARRIVE &&
+    bool const offOther =
         Dist2d(bot->GetPosition(), otherSpot) + ANUBARAK_TANK_PATCH_ARRIVE >= Dist2d(sideSpot, otherSpot);
+    bool const reachesFromHere =
+        inReach && offOther &&
+        Dist2d(bot->GetPosition(), sideSpot) <= ANUBARAK_GRIP_STEP_OUT + ANUBARAK_TANK_PATCH_ARRIVE;
+    bool const reachesEarly = inReach && Dist2d(bot->GetPosition(), sideSpot) <=
+                                             Dist2d(out.spot, sideSpot) + ANUBARAK_TANK_PATCH_ARRIVE;
 
     GripCast const& cast = state->grips[duty->side];
+    GripRelay const& relay = state->relays[duty->side];
     char const* name = "hold";
-    if (cast.valid && cast.dk == bot->GetGUID())
+    if (duty->relay)
     {
-        out.step = cast.landed ? AnubarakGripStep::Kill : AnubarakGripStep::Hold;
-        name = cast.landed ? "kill" : "wait";
+        // Posted until the grip before it lands, then it grips as soon as it reaches
+        bool const grips = relay.landedMs && reachesEarly;
+        if (grips)
+            out.step = AnubarakGripStep::Cast;
+        else if (Dist2d(bot->GetPosition(), out.spot) > ANUBARAK_TANK_PATCH_ARRIVE)
+            out.step = AnubarakGripStep::Walk;
+        else
+            out.step = AnubarakGripStep::Hold;
+
+        name = grips ? "cast" : "post";
     }
-    else if (reachesFromHere)
+    else if (cast.valid && cast.dk == bot->GetGUID())
+    {
+        // A relay link grips it again from nearer the spot
+        bool const kill = cast.landed && relay.dk.IsEmpty();
+        out.step = kill ? AnubarakGripStep::Kill : AnubarakGripStep::Hold;
+        name = kill ? "kill" : "wait";
+    }
+    else if (reachesFromHere || (reachesEarly && offOther))
     {
         out.step = AnubarakGripStep::Cast;
         name = "cast";
@@ -5560,6 +5819,14 @@ void NoteAnubarakGripCast(Player* bot, Creature* sphere, uint8 side)
     cast.from = bot->GetPosition();
     cast.landed = false;
     state->needs[side].gripFailed = false;
+
+    // The next link, if any, is posted from where this one lands
+    GripRelay& relay = state->relays[side];
+    if (relay.dk == bot->GetGUID())
+    {
+        relay = GripRelay();
+        RaidObs::NoteDerived(bot, "anub.relay", "cast");
+    }
 }
 
 Creature* GetAnubarakDutySphere(Player* bot)
@@ -5567,8 +5834,12 @@ Creature* GetAnubarakDutySphere(Player* bot)
     if (Creature* sphere = GetAnubarakSphereToShoot(bot))
         return sphere;
 
+    // Held off it while a relay link has still to grip it again
     AnubarakGripDuty grip;
-    return GetAnubarakGripDuty(bot, grip) ? grip.sphere : nullptr;
+    return GetAnubarakGripDuty(bot, grip) &&
+                   (grip.step == AnubarakGripStep::Kill || grip.step == AnubarakGripStep::Cast)
+               ? grip.sphere
+               : nullptr;
 }
 
 bool AnubarakSphereInReach(Player* bot, Unit* sphere)
@@ -5653,7 +5924,9 @@ bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, Anubar
     if (plan)
     {
         using AnubarakPursuit::KiteTerminal;
-        if (plan->patch && (plan->terminal == KiteTerminal::Patch || plan->terminal == KiteTerminal::PatchHand))
+        // Before its Hand a patch+hand kite runs for the escort, the patch clearance keeping the spike off it
+        if (plan->patch && (plan->terminal == KiteTerminal::Patch ||
+                            (plan->terminal == KiteTerminal::PatchHand && plan->handLanded)))
         {
             goal.patch = true;
             goal.patchPos = plan->patchPos;

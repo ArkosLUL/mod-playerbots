@@ -28,6 +28,8 @@ namespace
 constexpr float ANUBARAK_AREA_THREAT_REACH = 30.0f;
 // Swipe, Cleave, Thunder Clap and the like reach about this far round the caster or its target
 constexpr float ANUBARAK_BURROWER_AREA_REACH = 10.0f;
+// Bladestorm spins 6 s at run speed, so a burrower this far off is within its reach before it ends
+constexpr float ANUBARAK_BLADESTORM_BURROWER_REACH = 25.0f;
 
 // Matched as a leading word too, so "cyclone on cc" or "repentance on enemy healer" count
 char const* const SPHERE_CROWD_CONTROL[] = {
@@ -209,10 +211,33 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
     return SlowOrSpreadOnSphere(botAI, action) ? 0.0f : 1.0f;
 }
 
+float AnubarakBurrowerThreatCapMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !IsToCDpsBot(bot) || !AnubarakEngaged(botAI))
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    Unit* aimed = target ? target : AI_VALUE(Unit*, "current target");
+    if (aimed && AnubarakBurrowerThreatCapped(bot, aimed))
+        return 0.0f;
+
+    if (IsToCAreaDamage(botAI, action) &&
+        (AnubarakBurrowerThreatCappedNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH) ||
+         (aimed && AnubarakBurrowerThreatCappedNear(bot, aimed->GetPosition(), ANUBARAK_BURROWER_AREA_REACH))))
+        return 0.0f;
+
+    return 1.0f;
+}
+
 float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
 {
     if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !AnubarakEngaged(botAI))
         return 1.0f;
+
+    // Its pick can move to a burrower mid-spin, and the stand walks it into that side's pack
+    if (action->getName() == "bladestorm" &&
+        AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BLADESTORM_BURROWER_REACH, false))
+        return 0.0f;
 
     // The main tank's Swipe or Thunder Clap pulls a burrower walking past onto him, and its Expose
     // Weakness stacks come with it

@@ -256,6 +256,8 @@ struct AnubarakDragLeg
 {
     AnubarakDragStep step = AnubarakDragStep::None;
     Position tankSpot;
+    // The walk is to a pre-step round him, the leg's spot after it
+    bool preStep = false;
 };
 
 struct AnubarakBurrowerPick
@@ -280,9 +282,9 @@ struct AnubarakBurrowerPick
 enum class AnubarakGripStep : uint8
 {
     None,
-    // To the side's spot
+    // To its stand
     Walk,
-    // On the spot with nothing in reach, or the gripped sphere on its way
+    // On its stand with nothing in reach, the gripped sphere on its way, or a relay link's grip still to come
     Hold,
     Cast,
     // The gripped sphere landed on the DK
@@ -293,8 +295,8 @@ struct AnubarakGripDuty
 {
     // Null while no sphere is in reach of the stand
     Creature* sphere = nullptr;
-    // The stand: the side's spot, up to ANUBARAK_GRIP_STEP_OUT off it toward the sphere, or with every
-    // sphere further out, just inside Death Grip's reach of the nearest
+    // The stand: the side's spot, up to ANUBARAK_GRIP_STEP_OUT off it toward the sphere, with every
+    // sphere further out just inside Death Grip's reach of the nearest, or a relay link's post
     Position spot;
     uint8 side = 0;
     AnubarakGripStep step = AnubarakGripStep::None;
@@ -365,6 +367,10 @@ bool IsAnubarakDragInFlight(PlayerbotAI* botAI);
 bool AnubarakTauntWouldSteal(PlayerbotAI* botAI);
 // Latched per bot: capped at ANUBARAK_THREAT_CAP of his tank victim's threat, freed under RELEASE
 bool AnubarakThreatCapped(Player* bot);
+// The same per DPS bot and burrower, on a burrower a tank holds
+bool AnubarakBurrowerThreatCapped(Player* bot, Unit* burrower);
+// A selectable burrower within range of at that the bot is capped on
+bool AnubarakBurrowerThreatCappedNear(Player* bot, Position const& at, float range);
 // 0 or 1 for the two side tanks latched for the pull, else -1. Bots go first; a human takes a side no
 // bot can, and his side is the tank spot he stands at.
 int8 GetAnubarakBurrowerTankSide(Player* player);

@@ -166,6 +166,7 @@ void DefineAnubarak(EncounterBuilder& e)
             {"challenging roar", "challenging shout"});
 
     e.Multiplier<AnubarakThreatCapMultiplier>(Family::Spell | Family::Melee);
+    e.Multiplier<AnubarakBurrowerThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakSphereGuardMultiplier>(Family::Spell | Family::Attack);
     e.Multiplier<AnubarakBurrowerGuardMultiplier>(Family::Spell | Family::Attack);
 }

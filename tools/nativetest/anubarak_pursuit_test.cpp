@@ -439,30 +439,29 @@ void PassHorizonCoversTheRun()
     CHECK(full.spikeArriveS[0] > 6.0f);
 }
 
-// The patch first with 12+ s to the emerge, a Hand bridging with a second one ready; then a Hand, the
-// patch as the last resort, the kiter's own immunity
+// The patch with 12+ s to the emerge, behind any ready Hand; then a Hand, the patch as the last resort,
+// the kiter's own immunity
 void TerminalOrder()
 {
     using AnubarakPursuit::KiteOptions;
     using AnubarakPursuit::KiteTerminal;
     using AnubarakPursuit::PickTerminal;
 
-    // A ret paladin marked early in a submerge, its own Hand and Divine Shield ready, another paladin's too
+    // A ret paladin marked early in a submerge, its own Hand and Divine Shield ready
     KiteOptions early;
     early.catchS = 20.0f;
     early.emergeS = 58.0f;
     early.patch = true;
     early.patchReachable = true;
     early.hand = true;
-    early.handsReady = 2;
     early.own = true;
     CHECK(PickTerminal(early) == KiteTerminal::PatchHand);
 
-    KiteOptions lone = early;
-    lone.handsReady = 1;
-    CHECK(PickTerminal(lone) == KiteTerminal::Patch);
+    KiteOptions handless = early;
+    handless.hand = false;
+    CHECK(PickTerminal(handless) == KiteTerminal::Patch);
 
-    KiteOptions distant = lone;
+    KiteOptions distant = early;
     distant.patchReachable = false;
     CHECK(PickTerminal(distant) == KiteTerminal::PatchHand);
 
@@ -476,7 +475,6 @@ void TerminalOrder()
 
     KiteOptions bare = distant;
     bare.hand = false;
-    bare.handsReady = 0;
     CHECK(PickTerminal(bare) == KiteTerminal::Own);
     bare.own = false;
     CHECK(PickTerminal(bare) == KiteTerminal::Patch);
@@ -485,10 +483,72 @@ void TerminalOrder()
     spent.patch = false;
     spent.patchReachable = false;
     spent.hand = false;
-    spent.handsReady = 0;
     CHECK(PickTerminal(spent) == KiteTerminal::Own);
     spent.own = false;
     CHECK(PickTerminal(spent) == KiteTerminal::None);
+}
+
+// The 2026-10-27 N far grip: the sphere came down at (796,144), 68 yd off side 1's spot. The next link
+// stands 25 yd nearer, every post in reach of the landing; a landing in reach of the spot gets the spot.
+void RelayPostsCloseOnTheSpot()
+{
+    using AnubarakPursuit::Dist;
+    using AnubarakPursuit::RelayPosts;
+
+    Point const landing = {796.0f, 144.0f};
+    Point const spot = {728.45f, 139.85f};
+    std::vector<Point> const posts = RelayPosts(landing, spot, 25.0f);
+    CHECK(posts.size() == 5);
+    CHECK(Near(Dist(posts.front(), spot), Dist(landing, spot) - 25.0f, 0.05f));
+    for (Point const& post : posts)
+    {
+        CHECK(Near(Dist(post, landing), 25.0f, 0.05f));
+        CHECK(Dist(post, spot) >= Dist(posts.front(), spot) - 0.05f);
+    }
+
+    std::vector<Point> const near = RelayPosts({745.0f, 150.0f}, spot, 25.0f);
+    CHECK(near.size() == 1);
+    CHECK(Near(near.front().x, spot.x, 0.01f) && Near(near.front().y, spot.y, 0.01f));
+}
+
+// The 2026-10-27 N drag that held 56 s: the step-out left the tank 7.6 yd from side 1's patch, on its far
+// side from the anchor, so every leg's walk crossed the slow. A step round him, inside his 12 yd chase
+// start, clears the walk to the first detour.
+void DragPreStepClearsTheStall()
+{
+    using AnubarakPursuit::Dist;
+    using AnubarakPursuit::DragDetours;
+    using AnubarakPursuit::DragPreSteps;
+    using AnubarakPursuit::SegmentDist;
+
+    constexpr float KEEPOUT = 8.5f;
+    constexpr float SLOW = 7.5f;
+    Point const boss = {729.8f, 125.2f};
+    Point const tank = {724.6f, 129.1f};
+    Point const anchor = {709.9f, 144.1f};
+    std::vector<Point> const patches = {{717.6f, 134.0f}, {702.1f, 154.2f}};
+
+    auto const clear = [&](Point from, Point to)
+    {
+        for (Point const& patch : patches)
+            if (Dist(to, patch) < KEEPOUT || SegmentDist(from, to, patch) < SLOW)
+                return false;
+
+        return true;
+    };
+
+    std::vector<Point> const detours = DragDetours(boss, anchor, patches, KEEPOUT + 3.0f, 12.0f, KEEPOUT);
+    CHECK(!detours.empty());
+    Point const leg = detours.front();
+    CHECK(!clear(tank, anchor));
+    CHECK(!clear(tank, leg));
+
+    std::vector<Point> const steps = DragPreSteps(boss, tank, leg, patches, {9.0f, 10.0f, 11.0f}, KEEPOUT, SLOW);
+    CHECK(!steps.empty());
+    CHECK(Dist(steps.front(), boss) <= 11.05f);
+    CHECK(clear(tank, steps.front()) && clear(steps.front(), leg));
+    for (Point const& step : steps)
+        CHECK(Dist(tank, step) >= Dist(tank, steps.front()) - 0.01f);
 }
 }  // namespace
 
@@ -507,6 +567,8 @@ int main()
     SpikeBetweenKiterAndPatches();
     PassHorizonCoversTheRun();
     TerminalOrder();
+    RelayPostsCloseOnTheSpot();
+    DragPreStepClearsTheStall();
     std::printf("anubarak_pursuit_test: ok\n");
     return 0;
 }

@@ -442,8 +442,6 @@ struct KiteOptions
     bool patchReachable = false;
     // A Hand of Protection can reach it: an escort with one ready, or a marked paladin's own
     bool hand = false;
-    // Paladin bots with one ready, the kiter counted
-    int handsReady = 0;
     bool own = false;
 };
 
@@ -452,15 +450,16 @@ struct KiteOptions
 constexpr float KITE_PATCH_EARLY_S = 12.0f;
 constexpr float KITE_OUTLAST_S = 1.0f;
 
-// The patch first while the catch leaves 12+ s, a Hand bridging when the walk to it is too late or a
-// second Hand stays ready for a later kite; then a Hand, the patch as the last resort, the kiter's own
+// The patch while the catch leaves 12+ s, behind a Hand at the catch when one is ready: the walk onto it
+// can't be held past 4-8 s of the run, so a patch alone goes early. Then a Hand, the patch as the last
+// resort, the kiter's own.
 inline KiteTerminal PickTerminal(KiteOptions const& o)
 {
     if (o.catchS >= o.emergeS - KITE_OUTLAST_S)
         return KiteTerminal::None;
 
     bool const early = o.patch && o.emergeS - o.catchS >= KITE_PATCH_EARLY_S;
-    if (early && o.hand && (!o.patchReachable || o.handsReady >= 2))
+    if (early && o.hand)
         return KiteTerminal::PatchHand;
 
     if (early && o.patchReachable)
@@ -502,6 +501,53 @@ inline std::vector<Point> DragDetours(Point boss, Point anchor, std::vector<Poin
     }
 
     std::sort(out.begin(), out.end(), [boss](Point const& a, Point const& b) { return Dist(boss, a) < Dist(boss, b); });
+    return out;
+}
+
+// A drag's first step when the tank's walk to its leg spot crosses a patch's slow: sixteen points on each
+// radius round the boss, out of keepout of every patch, the walk there and the walk on to the leg spot
+// both clear of every slow; the nearest the tank first
+inline std::vector<Point> DragPreSteps(Point boss, Point tank, Point legSpot, std::vector<Point> const& patches,
+                                       std::vector<float> const& radii, float keepout, float slow)
+{
+    auto const clear = [&patches, keepout, slow](Point from, Point to)
+    {
+        return std::none_of(patches.begin(), patches.end(), [&](Point const& patch)
+                            { return Dist(to, patch) < keepout || SegmentDist(from, to, patch) < slow; });
+    };
+
+    std::vector<Point> out;
+    for (float radius : radii)
+        for (int i = 0; i < 16; ++i)
+        {
+            float const angle = static_cast<float>(i) * 0.392699082f;
+            Point const point = {boss.x + radius * std::cos(angle), boss.y + radius * std::sin(angle)};
+            if (clear(tank, point) && clear(point, legSpot))
+                out.push_back(point);
+        }
+
+    std::sort(out.begin(), out.end(), [tank](Point const& a, Point const& b) { return Dist(tank, a) < Dist(tank, b); });
+    return out;
+}
+
+// Where a grip relay's next link grips the landed sphere again: reach short of the landing toward the
+// spot, then turned 20 and 40 degrees either way round the landing. The spot alone when it's in reach.
+inline std::vector<Point> RelayPosts(Point landing, Point spot, float reach)
+{
+    float const length = Dist(landing, spot);
+    if (length <= reach)
+        return {spot};
+
+    Point const dir = {(spot.x - landing.x) / length, (spot.y - landing.y) / length};
+    std::vector<Point> out;
+    for (float degrees : {0.0f, 20.0f, -20.0f, 40.0f, -40.0f})
+    {
+        float const angle = degrees * 0.0174532925f;
+        float const c = std::cos(angle);
+        float const s = std::sin(angle);
+        out.push_back({landing.x + (dir.x * c - dir.y * s) * reach, landing.y + (dir.x * s + dir.y * c) * reach});
+    }
+
     return out;
 }
 

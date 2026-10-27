@@ -210,6 +210,11 @@ Every distance helper measures differently, and a large-model boss inflates all 
   a pass along its edge from 20.
 - **Size a prediction horizon by the chaser's travel, not seconds.** 6 s of a 3.5 yd/s chaser is 21
   yd: the pass it makes 9 s on never shows. Judge up to the predicted catch, capped.
+- **Replay a timing rule against the traces before shipping it.** A rule that commits once waiting
+  longer would fail spends a one-shot resource as early as the geometry allows: Anub'arak's patch walk
+  stays possible only 4.5-7.5 s of a 10-16 s run, so a Hand asked at the turn went 2-6 s in with the
+  patch; taken at the catch it covers 10 s and the patch goes about 25 s in
+  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-plan)).
 - **A boss that opens on a random player** (`AttackStart(SelectTargetFromPlayerList(...))` when an
   intro ends) is answered by staging, not by taunt speed: the pickup tank waits inside his reach and
   taunts on the first selectable tick, and everyone else waits outside it until a tank holds him
