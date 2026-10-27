@@ -5,6 +5,7 @@
  */
 
 #include "ICCTriggers.h"
+#include "EncounterHelpers.h"
 #include "GenericTriggers.h"
 #include "GridNotifiers.h"
 #include "ICCActions.h"
@@ -694,6 +695,15 @@ bool IccBqlVampiricBiteTrigger::IsActive()
 }
 
 // Sister Svalna
+bool IccSvalnaShielded(Player* bot, Unit* svalna)
+{
+    bool const shielded = svalna->HasAura(SPELL_AETHER_SHIELD);
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "ss.shield", shielded ? "up" : "down");
+
+    return shielded;
+}
+
 bool IccValkyreSpearTrigger::IsActive()
 {
     // Check if there's a spear nearby
@@ -712,10 +722,40 @@ bool IccSisterSvalnaTrigger::IsActive()
     if (bot->GetExactDist2d(boss) > 30.0f)
         return false;
 
-    return true;
+    return IccSvalnaShielded(bot, boss);
 }
 
 // VDW
+std::vector<Creature*> IccValithriaPortals(Player* bot)
+{
+    std::vector<Creature*> portals = IccGetCreaturesByEntries(
+        bot, {NPC_DREAM_PORTAL, NPC_DREAM_PORTAL_PRE_EFFECT, NPC_NIGHTMARE_PORTAL, NPC_NIGHTMARE_PORTAL_PRE_EFFECT},
+        100.0f);
+
+    // A bot in Dream State is phased away from every portal, so it would read none mid-wave
+    if (RaidObs::Active() && !bot->HasAura(SPELL_DREAM_STATE))
+    {
+        // A pre-effect lingers 6 s past its real portal with its visual gone, so it counts only while shown.
+        constexpr uint32 SPELL_DREAM_PORTAL_VISUAL_PRE = 71304;
+        constexpr uint32 SPELL_NIGHTMARE_PORTAL_VISUAL_PRE = 71986;
+        char const* wave = "none";
+        for (Creature* portal : portals)
+        {
+            uint32 const entry = portal->GetEntry();
+            if (entry == NPC_DREAM_PORTAL || entry == NPC_NIGHTMARE_PORTAL)
+            {
+                wave = "open";
+                break;
+            }
+            if (portal->HasAura(SPELL_DREAM_PORTAL_VISUAL_PRE) || portal->HasAura(SPELL_NIGHTMARE_PORTAL_VISUAL_PRE))
+                wave = "pre";
+        }
+        RaidObs::NoteDerived(bot, "vd.wave", wave);
+    }
+
+    return portals;
+}
+
 bool IccValithriaGroupTrigger::IsActive()
 {
     Unit* boss = bot->FindNearestCreature(NPC_VALITHRIA_DREAMWALKER, 100.0f);
@@ -753,12 +793,15 @@ bool IccValithriaPortalTrigger::IsActive()
     if (!boss)
         return false;
 
-    Aura* aura = botAI->GetAura("Twisted Nightmares", bot, false, true);
-    if (aura && aura->GetStackAmount() >= 25)
-        return false;
-
     // Only healers should use portals
     if (!PlayerbotAI::IsHeal(bot) || bot->HasAura(SPELL_DREAM_STATE))
+        return false;
+
+    // Read ahead of the checks below so every healer publishes the wave, the raid healers too.
+    bool const portalUp = !IccValithriaPortals(bot).empty();
+
+    Aura* aura = botAI->GetAura("Twisted Nightmares", bot, false, true);
+    if (aura && aura->GetStackAmount() >= 25)
         return false;
 
     Creature* worm = bot->FindNearestCreature(NPC_ROT_WORM, 100.0f);
@@ -771,16 +814,7 @@ bool IccValithriaPortalTrigger::IsActive()
     if (!shouldHealRaid.has_value() || *shouldHealRaid)
         return false;
 
-    // Find the nearest portal creature
-    Creature* portal1 = bot->FindNearestCreature(NPC_DREAM_PORTAL, 100.0f);
-    if (!portal1)
-        portal1 = bot->FindNearestCreature(NPC_DREAM_PORTAL_PRE_EFFECT, 100.0f);
-
-    Creature* portal2 = bot->FindNearestCreature(NPC_NIGHTMARE_PORTAL, 100.0f);
-    if (!portal2)
-        portal2 = bot->FindNearestCreature(NPC_NIGHTMARE_PORTAL_PRE_EFFECT, 100.0f);
-
-    return portal1 || portal2;
+    return portalUp;
 }
 
 bool IccValithriaHealTrigger::IsActive()
@@ -827,12 +861,38 @@ bool IccValithriaDreamCloudTrigger::IsActive()
 }
 
 //SINDRAGOSA
+IccSindragosaPhaseId IccSindragosaPhase(Player* bot, Unit const* boss)
+{
+    // Her air phase sets her passive at takeoff and aggressive again at touchdown, and nothing else does.
+    Creature const* const creature = boss->ToCreature();
+    IccSindragosaPhaseId phase = IccSindragosaPhaseId::Ground;
+    if (boss->IsInCombat() && creature && creature->GetReactState() == REACT_PASSIVE)
+        phase = IccSindragosaPhaseId::Air;
+    else if (!boss->HealthAbovePct(35))
+        phase = IccSindragosaPhaseId::Last;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "sg.phase",
+                             phase == IccSindragosaPhaseId::Air ? "air"
+                             : phase == IccSindragosaPhaseId::Last ? "last" : "ground");
+
+    return phase;
+}
+
+bool IccSindragosaOverAirStation(Player* bot, Unit const* boss, float radius)
+{
+    return IccSindragosaPhase(bot, boss) == IccSindragosaPhaseId::Air &&
+           boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(),
+                                ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) < radius;
+}
+
 bool IccSindragosaGroupPositionTrigger::IsActive()
 {
     Unit* boss = bot->FindNearestCreature(NPC_SINDRAGOSA, 200.0f);  // sindra
     if (!boss)
         return false;
 
+    IccSindragosaPhaseId const phase = IccSindragosaPhase(bot, boss);
     Difficulty diff = GetRaidMapDifficulty(bot);
 
     if (sPlayerbotAIConfig.EnableICCBuffs && boss->IsInCombat() && diff &&
@@ -861,20 +921,16 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
         //-------CHEAT-------
     }
 
-    // Air phase: give all tanks nitro boosts so they can quickly reposition to tombs
-    if (boss->IsInCombat() && PlayerbotAI::IsTank(bot) &&
-        boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(), ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) < 50.0f)
-    {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "sg.nitro"))
-            bot->AddAura(SPELL_NITRO_BOOSTS, bot);
-    }
+    bool const overAirStation = IccSindragosaOverAirStation(bot, boss, 50.0f);
+
+    // Air phase: tanks use their Nitro Boosts to reach the tomb spots
+    if (overAirStation && PlayerbotAI::IsTank(bot))
+        EncounterHelpers::UseNitroBoosts(bot);
 
     // Last phase: the main tank must keep tanking, never run to a tomb spot.
     // Strip its Frost Beacon so the tomb-positioning logic doesn't apply. The
     // assist tank keeps its beacon and is allowed to move to the beacon spot.
-    if (PlayerbotAI::IsMainTank(bot) && bot->HasAura(SPELL_FROST_BEACON) && boss->HealthBelowPct(35) &&
-        boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(),
-                             ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) >= 30.0f &&
+    if (PlayerbotAI::IsMainTank(bot) && bot->HasAura(SPELL_FROST_BEACON) && phase == IccSindragosaPhaseId::Last &&
         IccRaidCheat(botAI, "sg.frostbeacon"))
         bot->RemoveAura(SPELL_FROST_BEACON);
 
@@ -888,7 +944,8 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
         // Shield tanks while a tomb is up, Blistering Cold is casting, or a last
         // phase beacon is out (tomb about to form, healers already scattering).
         bool const shield = (boss->HasUnitState(UNIT_STATE_CASTING) && IccBossCastingBlisteringCold(boss)) ||
-                            (boss->HealthBelowPct(35) && IccAnyGroupMemberHasAura(bot, SPELL_FROST_BEACON)) ||
+                            (phase == IccSindragosaPhaseId::Last &&
+                             IccAnyGroupMemberHasAura(bot, SPELL_FROST_BEACON)) ||
                             !IccGetCreaturesByEntries(bot, {NPC_TOMB1, NPC_TOMB2, NPC_TOMB3, NPC_TOMB4}, 150.0f).empty();
         if (shield && !bot->HasAura(SPELL_MAGIC_BARRIER))
         {
@@ -923,7 +980,7 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
             bot->RemoveAura(SPELL_NO_THREAT);
     }
 
-    if (!boss || bot->HasAura(SPELL_FROST_BEACON) || boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(), ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) < 50.0f)
+    if (bot->HasAura(SPELL_FROST_BEACON) || overAirStation)
         return false;
 
     return true;
@@ -1050,7 +1107,7 @@ bool IccSindragosaMysticBuffetTrigger::IsActive()
     // Last phase only. Do not gate on the bot's own Mystic Buffet aura:
     // hiding sheds it, so aura-less bots must still run the action or nobody
     // is left to mark and kill the tomb once the raid has shed its stacks.
-    if (!boss->HealthBelowPct(35))
+    if (IccSindragosaPhase(bot, boss) != IccSindragosaPhaseId::Last)
         return false;
 
     if (bot->HasAura(SPELL_FROST_BEACON))
@@ -1076,8 +1133,12 @@ bool IccSindragosaFrostBombTrigger::IsActive()
     // Tombed bots intentionally pass through: the action pins their group to
     // the current tomb's zone so when freed they don't migrate to the wrong
     // zone. The action returns false for tombed bots without moving them.
-    if (boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(), ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) < 50.0f && !boss->HealthBelowPct(25) && !boss->HealthAbovePct(99))
+    if (IccSindragosaOverAirStation(bot, boss, 50.0f))
         return true;
+
+    // closes the sg.losmove window the action writes while she's over a station
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "sg.losmove", "none");
 
     return false;
 }

@@ -696,7 +696,6 @@ public:
     bool HandleNonBeaconedPlayer(Unit const* boss);
     bool MoveToPositionIfNeeded(Position const& position, float tolerance);
     bool MoveToPosition(Position const& position);
-    bool IsBossFlying(Unit const* boss);
     bool TryDropTombFlares(Unit const* boss);
 
     private:

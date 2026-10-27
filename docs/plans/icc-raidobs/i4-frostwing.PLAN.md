@@ -54,10 +54,76 @@ as a section). This brief.
 
 ## Task list
 
+Sized as one lane: most of the work sits in the shared ICC files, and the readers hang on the probe
+design. No `631_*` trace exists, so nothing was read as evidence. All done:
+
+- [x] Phases: `IccSindragosaPhase` (`sg.phase`) and `IccSindragosaOverAirStation` in `ICCTriggers`,
+  every Sindragosa phase and air test routed through them; `IccValithriaPortals` (`vd.wave`);
+  `IccSvalnaShielded` (`ss.shield`).
+- [x] Probes: `vd.raidheal`, `vd.cloud`, `vd.group`, `vd.skull`, `vd.cross`, `sg.losmove`,
+  `sg.flaredred`, `sg.skull`, `sg.cross`, `sg.star`.
+- [x] Cheats: `vd.nitro` (1) and `sg.nitro` (3 sites) to `UseNitroBoosts`; `vd.speed` and its speed
+  reset removed. Gap and buff sites unchanged.
+- [x] Bugs: known-spell checks on Valithria's heals and Hand of Freedom; Valithria floor snaps on
+  `NearTeleportTo`; Sindragosa's 25%/99% bands and 35% tests on her script's phase.
+- [x] Multipliers: per-ms cache in Valithria's and Sindragosa's.
+- [x] Wipe check: portal claims and the cloud target clear 5 s after Valithria's `NOT_STARTED`.
+- [x] Readers `sister_svalna.py`, `valithria_dreamwalker.py`, `sindragosa.py`,
+  `sindragosa_gauntlet.py` with tests; docs `sister-svalna.md`, `valithria-dreamwalker.md`,
+  `sindragosa.md`.
+- [x] Checks: syntax (lane `.cpp`, then the 20 header includers and the `BuildShared*` contexts),
+  pblint 22/23 warnings (unchanged), botobs suite, codestyle.
+
 ## Decisions for review
+
+- **Sindragosa's phase from her react state**: `air` while in combat and passive, takeoff to
+  touchdown; `last` at 35% and under on the ground. Source: `EVENT_AIR_PHASE`, `POINT_LAND_GROUND`,
+  `DamageTaken` and `EVENT_THIRD_PHASE_CHECK`. Changes play only for a last phase reached mid-air,
+  whose behaviour now waits for touchdown as the script's does. Alternative: the coordinate tests.
+- **Station tests kept** (30 yd far station, 50 yd both) inside the air phase. Source: the script
+  casts beacons and drops bombs only there; the whole air phase would also run the Frost Bomb action's
+  no-marker branch, which stops attacks, through takeoff and the flight back. The script-free 25%/99%
+  bands went. Alternative: every air test on the whole air phase.
+- **`vd.wave` reads the pre-effect's visual**. Source: addon auras 71304/71986, the 6 s linger
+  (`DelayedCastEvent`). Alternative: any live pre-effect, which reads `pre` again after the portals.
+  Healers in Dream State write none: they are phased away from the portals.
+- **No Dream State probe**: the `aura` stream carries 70766 (`LogAuras` defaults to 1). Alternative: a
+  per-bot `NoteDerived`.
+- **Floor snaps on `NearTeleportTo`** as a small-bug fix (same-map `TeleportTo` drops combat). The two
+  kept teleports stay `TeleportTo` so the raid cheat behaves identically; their combat drop is in the
+  boss doc. Alternative: `NearTeleportTo` there too.
+- **Speed reset removed with `vd.speed`**: `SetSpeed(..., 1.0)` each tick set the rate outright and
+  cancelled Sprint and other speed auras. Alternative: keep it as cleanup.
+- **Nitro after `CastStop`** on the zombie kite: `UseNitroBoosts` refuses a casting bot.
+- **Unknown heals are skipped** to the next spell in the chain. Alternative: return false.
+- **Svalna's trigger gates on the shield** so `ss.shield` is written each tick a bot is in range;
+  neutral, the action returned false without it.
+- **Icon and cloud probes noted only by the bot that moves them**, as `pp.skull`.
+- **No `sg.beaconspot`**: beacon spots follow from the count and guid order, and the moves show them.
+- **No Blistering Cold hazard circle**: her 5 s `cast` row already times it, and pacing a circle per
+  instance needs `IccInstanceState` (`ICCScripts.h`, outside the lane); unpaced, every bot writes one
+  per cast. Alternative: a `sgBlisteringColdNotedMs` field there.
+- **Healer ranking unchanged**: humans counted, a selfbot asking ranks nobody (upstream's
+  `IsRealPlayer` port). Both are tactic choices, listed as gaps.
+- **Gap rechecks: all kept.** The teleports need a flight mover; the beacon and buffet strips a tank
+  swap; Magic Barrier a Blistering Cold run plus cooldowns; 1% Threat a threat brake; tomb strips a
+  DoT-aware stop; flares bots carrying them.
 
 ## Carried over
 
+- **Merge stage, ICC README**: delete the `vd.nitro`, `vd.speed` and `sg.nitro` rows; link
+  `sister-svalna.md`, `valithria-dreamwalker.md`, `sindragosa.md`; the floor snaps now use
+  `NearTeleportTo`.
+- **i5-lich-king**: `SPELL_NITRO_BOOSTS` stays for the Lich King's sites. Humans keep Sindragosa's
+  heroic buffs, since no later node strips them off heroic.
+- **i6-closeout**: the four readers repeat the refusal and cheat code too.
+- **Engine lessons** (lane report): a probe that reads the world must skip a bot phased away from
+  it; `SetSpeed` sets the rate outright, so a reset to 1.0 cancels speed auras.
+
 ## Known gaps
+
+In the boss docs: icon targeting; the kept gap cheats; Dream State bots hover with the raid cheat
+off; humans hold healer ranks; a selfbot gets no rank; every bot rushes a Svalna spear; red flares
+burn out after 5 min; humans keep Sindragosa's heroic buffs; no ICC trace carries these probes yet.
 
 ## Blocked

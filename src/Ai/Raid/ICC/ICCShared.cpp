@@ -325,7 +325,11 @@ std::optional<bool> IccValithriaShouldHealRaid(Player* bot)
 
     auto botGuidPos = std::find(healerGuids.begin(), healerGuids.end(), bot->GetGUID());
     if (botGuidPos == healerGuids.end())
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "vd.raidheal", "none");
         return std::nullopt;
+    }
 
     int healerIndex = std::distance(healerGuids.begin(), botGuidPos);
     bool isDruid = (bot->getClass() == CLASS_DRUID);
@@ -352,6 +356,9 @@ std::optional<bool> IccValithriaShouldHealRaid(Player* bot)
         shouldHealRaid = (healerIndex >= (healerCount - 2));
     else
         shouldHealRaid = (healerIndex == (healerCount - 1));
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "vd.raidheal", shouldHealRaid ? "raid" : "boss");
 
     return shouldHealRaid;
 }

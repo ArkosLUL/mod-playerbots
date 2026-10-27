@@ -4,6 +4,7 @@
  * or (at your option) any later version.
  */
 
+#include "EncounterHelpers.h"
 #include "GenericSpellActions.h"
 #include "ICCActions.h"
 #include "ICCTriggers.h"
@@ -12,9 +13,12 @@
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
 #include "RaidDifficulty.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "SpellMgr.h"
 #include "Vehicle.h"
+#include <array>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -23,15 +27,40 @@ namespace
 // How long (ms) all bots stay at a cloud before advancing to the next one.
 // This window lets every portal bot teleport in and collect the cloud together.
 constexpr uint32 CLOUD_SYNC_WAIT_MS = 1000;
+
+// The kill priority's tiers by rank, as both marking passes walk them
+constexpr std::array<char const*, 6> ADD_TIER_NAMES = {"skeleton", "suppresser", "archmage",
+                                                       "zombie",   "abomination", "worm"};
+
+// `rule` is the tier the icon went to, or clear. Only the bot that moves the icon calls this.
+void VdNoteIcon(Player* bot, bool skull, std::string const& rule, Unit* unit)
+{
+    if (!RaidObs::Active())
+        return;
+
+    std::string value = rule;
+    if (unit)
+        value += " " + RaidObs::DescribeAssignment(unit->GetGUID());
+    if (skull)
+        RaidObs::NoteDerived(bot, "vd.skull", value);
+    else
+        RaidObs::NoteDerived(bot, "vd.cross", value);
+}
+
+void VdNoteCloud(Player* bot, char const* rule, Unit* unit)
+{
+    if (!RaidObs::Active())
+        return;
+
+    std::string value = rule;
+    if (unit)
+        value += " " + RaidObs::DescribeAssignment(unit->GetGUID());
+    RaidObs::NoteDerived(bot, "vd.cloud", value);
+}
 }
 
 bool IccValithriaGroupAction::Execute(Event /*event*/)
 {
-    std::vector<Creature*> const portalList = IccGetCreaturesByEntries(
-        bot, {NPC_DREAM_PORTAL, NPC_DREAM_PORTAL_PRE_EFFECT, NPC_NIGHTMARE_PORTAL, NPC_NIGHTMARE_PORTAL_PRE_EFFECT},
-        100.0f);
-    Creature* portal = portalList.empty() ? nullptr : portalList.front();
-
     Creature* worm = bot->FindNearestCreature(NPC_ROT_WORM, 100.0f);
     Creature* manaVoid = bot->FindNearestCreature(NPC_MANA_VOID, 100.0f);
 
@@ -103,7 +132,8 @@ bool IccValithriaGroupAction::Execute(Event /*event*/)
     }
 
     // Healers move toward the heal position when no portal is active
-    if (PlayerbotAI::IsHeal(bot) && !portal && bot->GetExactDist2d(ICC_VDW_HEAL_POSITION) > 30.0f)
+    if (PlayerbotAI::IsHeal(bot) && bot->GetExactDist2d(ICC_VDW_HEAL_POSITION) > 30.0f &&
+        IccValithriaPortals(bot).empty())
     {
         return MoveTo(bot->GetMapId(), ICC_VDW_HEAL_POSITION.GetPositionX(), ICC_VDW_HEAL_POSITION.GetPositionY(),
                       ICC_VDW_HEAL_POSITION.GetPositionZ(), false, false, false, false,
@@ -369,6 +399,13 @@ bool IccValithriaGroupAction::Handle25ManGroupLogic()
         inGroup2 = std::any_of(group2.begin(), group2.end(), [this](Player* p) { return p == bot; });
     }
 
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "vd.group",
+                             singleMarkMode ? (inGroup1 ? "single" : "none")
+                             : inGroup1     ? "skull"
+                             : inGroup2     ? "cross"
+                                            : "none");
+
     if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsDps(bot) || PlayerbotAI::IsHeal(bot))
         HandleMarkingLogic(inGroup1, inGroup2, singleMarkMode);
 
@@ -556,18 +593,26 @@ bool IccValithriaGroupAction::HandleMarkingLogic(bool inGroup1, bool inGroup2, b
     if (!bestTarget)
     {
         if (currentIconUnit && !group->GetTargetIcon(iconIndex).IsEmpty())
+        {
             group->SetTargetIcon(iconIndex, bot->GetGUID(), ObjectGuid::Empty);
+            VdNoteIcon(bot, iconIndex == SKULL_ICON, "clear", nullptr);
+        }
         return false;
     }
 
     group->SetTargetIcon(iconIndex, bot->GetGUID(), bestTarget->GetGUID());
+    VdNoteIcon(bot, iconIndex == SKULL_ICON,
+               std::string(ADD_TIER_NAMES[bestRank]) + (bestTargetOwnSide ? "" : " other"), bestTarget);
 
     if (singleMarkMode)
     {
         uint8 const crossIcon = CROSS_ICON;
         Unit* currentCrossUnit = botAI->GetUnit(group->GetTargetIcon(crossIcon));
         if (currentCrossUnit && !group->GetTargetIcon(crossIcon).IsEmpty())
+        {
             group->SetTargetIcon(crossIcon, bot->GetGUID(), ObjectGuid::Empty);
+            VdNoteIcon(bot, false, "clear", nullptr);
+        }
     }
 
     tryDispatchRti(bestTarget->GetGUID());
@@ -695,11 +740,15 @@ bool IccValithriaGroupAction::Handle10ManGroupLogic()
     if (!bestTarget)
     {
         if (currentIconUnit && !group->GetTargetIcon(DEFAULT_ICON).IsEmpty())
+        {
             group->SetTargetIcon(DEFAULT_ICON, bot->GetGUID(), ObjectGuid::Empty);
+            VdNoteIcon(bot, true, "clear", nullptr);
+        }
         return false;
     }
 
     group->SetTargetIcon(DEFAULT_ICON, bot->GetGUID(), bestTarget->GetGUID());
+    VdNoteIcon(bot, true, ADD_TIER_NAMES[bestRank], bestTarget);
 
     tryDispatchRti(bestTarget->GetGUID());
 
@@ -716,7 +765,7 @@ bool IccValithriaPortalAction::Execute(Event /*event*/)
     constexpr float MAX_Z = 367.961f;
     constexpr float TARGET_Z = 365.0f;
     if (bot->GetPositionZ() > MAX_Z)
-        bot->TeleportTo(bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY(), TARGET_Z, bot->GetOrientation());
+        bot->NearTeleportTo(bot->GetPositionX(), bot->GetPositionY(), TARGET_Z, bot->GetOrientation());
 
     constexpr float SEARCH_RANGE = 200.0f;
 
@@ -856,22 +905,18 @@ bool IccValithriaHealAction::Execute(Event /*event*/)
     constexpr float MAX_Z = 367.961f;
     constexpr float TARGET_Z = 365.0f;
     if (bot->GetPositionZ() > MAX_Z)
-        bot->TeleportTo(bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY(), TARGET_Z, bot->GetOrientation());
+        bot->NearTeleportTo(bot->GetPositionX(), bot->GetPositionY(), TARGET_Z, bot->GetOrientation());
 
     if (bot->GetHealthPct() < 50.0f)
         return false;
 
-    if (!bot->HasAura(SPELL_DREAM_STATE))
-    {
-        constexpr float NORMAL_SPEED = 1.0f;
-        bot->SetSpeed(MOVE_RUN, NORMAL_SPEED, true);
-        bot->SetSpeed(MOVE_WALK, NORMAL_SPEED, true);
-        bot->SetSpeed(MOVE_FLIGHT, NORMAL_SPEED, true);
-    }
-
     Creature* valithria = bot->FindNearestCreature(NPC_VALITHRIA_DREAMWALKER, 100.0f);
     if (!valithria)
         return false;
+
+    // CastSpell by id never checks the spellbook, so a rank or talent the bot lacks would still cast
+    auto const knows = [this](uint32 spellId) { return bot->HasSpell(spellId); };
+    ObjectGuid const me = bot->GetGUID();
 
     switch (bot->getClass())
     {
@@ -883,38 +928,41 @@ bool IccValithriaHealAction::Execute(Event /*event*/)
             constexpr uint32 SPELL_WILD_GROWTH = 53251;
             constexpr uint8 LIFEBLOOM_MAX = 3;
 
-            if (!valithria->HasAura(SPELL_REJUVENATION, bot->GetGUID()))
+            if (!valithria->HasAura(SPELL_REJUVENATION, me) && knows(SPELL_REJUVENATION))
                 return botAI->CastSpell(SPELL_REJUVENATION, valithria);
 
-            if (!valithria->HasAura(SPELL_REGROWTH, bot->GetGUID()))
+            if (!valithria->HasAura(SPELL_REGROWTH, me) && knows(SPELL_REGROWTH))
                 return botAI->CastSpell(SPELL_REGROWTH, valithria);
 
-            Aura* lb = valithria->GetAura(SPELL_LIFEBLOOM, bot->GetGUID());
-            if (!lb || lb->GetStackAmount() < LIFEBLOOM_MAX)
+            Aura* lb = valithria->GetAura(SPELL_LIFEBLOOM, me);
+            if ((!lb || lb->GetStackAmount() < LIFEBLOOM_MAX) && knows(SPELL_LIFEBLOOM))
                 return botAI->CastSpell(SPELL_LIFEBLOOM, valithria);
 
-            return botAI->CastSpell(SPELL_WILD_GROWTH, valithria);
+            return knows(SPELL_WILD_GROWTH) && botAI->CastSpell(SPELL_WILD_GROWTH, valithria);
         }
         case CLASS_SHAMAN:
         {
             constexpr uint32 SPELL_RIPTIDE = 61301;
             constexpr uint32 SPELL_HEALING_WAVE = 49273;
-            return valithria->HasAura(SPELL_RIPTIDE, bot->GetGUID()) ? botAI->CastSpell(SPELL_HEALING_WAVE, valithria)
-                                                                     : botAI->CastSpell(SPELL_RIPTIDE, valithria);
+            if (!valithria->HasAura(SPELL_RIPTIDE, me) && knows(SPELL_RIPTIDE))
+                return botAI->CastSpell(SPELL_RIPTIDE, valithria);
+            return knows(SPELL_HEALING_WAVE) && botAI->CastSpell(SPELL_HEALING_WAVE, valithria);
         }
         case CLASS_PRIEST:
         {
             constexpr uint32 SPELL_RENEW = 48068;
             constexpr uint32 SPELL_GREATER_HEAL = 48063;
-            return valithria->HasAura(SPELL_RENEW, bot->GetGUID()) ? botAI->CastSpell(SPELL_GREATER_HEAL, valithria)
-                                                                   : botAI->CastSpell(SPELL_RENEW, valithria);
+            if (!valithria->HasAura(SPELL_RENEW, me) && knows(SPELL_RENEW))
+                return botAI->CastSpell(SPELL_RENEW, valithria);
+            return knows(SPELL_GREATER_HEAL) && botAI->CastSpell(SPELL_GREATER_HEAL, valithria);
         }
         case CLASS_PALADIN:
         {
             constexpr uint32 SPELL_BEACON = 53563;
             constexpr uint32 SPELL_HOLY_LIGHT = 48782;
-            return valithria->HasAura(SPELL_BEACON, bot->GetGUID()) ? botAI->CastSpell(SPELL_HOLY_LIGHT, valithria)
-                                                                    : botAI->CastSpell(SPELL_BEACON, valithria);
+            if (!valithria->HasAura(SPELL_BEACON, me) && knows(SPELL_BEACON))
+                return botAI->CastSpell(SPELL_BEACON, valithria);
+            return knows(SPELL_HOLY_LIGHT) && botAI->CastSpell(SPELL_HOLY_LIGHT, valithria);
         }
         default:
             break;
@@ -926,16 +974,6 @@ bool IccValithriaDreamCloudAction::Execute(Event /*event*/)
 {
     if (!bot->HasAura(SPELL_DREAM_STATE))
         return false;
-
-    // SetSpeed ignores an unchanged rate, so only a real change counts as a use.
-    bool const atDreamSpeed = bot->GetSpeedRate(MOVE_RUN) == 2.0f && bot->GetSpeedRate(MOVE_WALK) == 2.0f &&
-                              bot->GetSpeedRate(MOVE_FLIGHT) == 2.0f;
-    if (!atDreamSpeed && IccRaidCheat(botAI, "vd.speed"))
-    {
-        bot->SetSpeed(MOVE_RUN, 2.0f, true);
-        bot->SetSpeed(MOVE_WALK, 2.0f, true);
-        bot->SetSpeed(MOVE_FLIGHT, 2.0f, true);
-    }
 
     std::vector<Player*> allDream;
     std::vector<Player*> realDream;
@@ -966,6 +1004,7 @@ bool IccValithriaDreamCloudAction::Execute(Event /*event*/)
 
     if (!realDream.empty())
     {
+        VdNoteCloud(bot, "human", leader);
         constexpr float STACK_DIST = 1.0f;
         if (bot->GetDistance(leader) > STACK_DIST && IccRaidCheat(botAI, "vd.dreamteleport", leader))
         {
@@ -990,6 +1029,8 @@ bool IccValithriaDreamCloudAction::Execute(Event /*event*/)
 
     if (allClouds.empty())
     {
+        if (!sync.targetCloudGuid.IsEmpty())
+            VdNoteCloud(bot, "none", nullptr);
         sync = IcecrownHelpers::ValithriaCloudSync{};
         return false;
     }
@@ -1025,10 +1066,10 @@ bool IccValithriaDreamCloudAction::Execute(Event /*event*/)
         }
 
         target = closest;
-        if (target)
-            sync.targetCloudGuid = target->GetGUID();
-        else
-            sync.targetCloudGuid = ObjectGuid::Empty;
+        ObjectGuid const picked = target ? target->GetGUID() : ObjectGuid::Empty;
+        if (picked != sync.targetCloudGuid)
+            VdNoteCloud(bot, picked.IsEmpty() ? "none" : "cloud", target);
+        sync.targetCloudGuid = picked;
         sync.moveOnAfterMs = nowMs + CLOUD_SYNC_WAIT_MS;
     }
 
@@ -1094,11 +1135,9 @@ bool IccValithriaZombieKiteAction::Execute(Event /*event*/)
     if (threatZombies.empty())
         return false;
 
-    if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "vd.nitro"))
-        bot->AddAura(SPELL_NITRO_BOOSTS, bot);
-
-    // Stop active channeling that would root the bot
+    // Stop active channeling that would root the bot, and that would also refuse the boots
     bot->CastStop();
+    EncounterHelpers::UseNitroBoosts(bot);
 
     constexpr float ANCHOR_RADIUS_LIMIT = 25.0f;  // kite stays within this radius of heal anchor
     constexpr float STEP = 18.0f;                 // how far we move per tick
