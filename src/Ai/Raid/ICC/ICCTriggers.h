@@ -205,6 +205,9 @@ enum SpellIdsICC
     SPELL_GROW_AURA                     = 70347,
 
     // Blood Prince Council
+    SPELL_INVOCATION_OF_BLOOD_VALANAR   = 70952,
+    SPELL_INVOCATION_OF_BLOOD_KELESETH  = 70981,
+    SPELL_INVOCATION_OF_BLOOD_TALDARAM  = 70982,
     SPELL_EMPOWERED_SHOCK_VORTEX1       = 72039,
     SPELL_EMPOWERED_SHOCK_VORTEX2       = 73037,
     SPELL_EMPOWERED_SHOCK_VORTEX3       = 73038,
@@ -465,6 +468,14 @@ public:
 };
 
 //BPC
+// The prince Invocation of Blood is on, the only one that takes damage: Valanar from the pull, then one of
+// the other two at random, then the last, moving every 46 s. Null while none carries it. `present` says
+// whether the bot sees any prince at all. Publishes bpc.phase.
+Unit* IccBpcEmpoweredPrince(PlayerbotAI* botAI, bool* present = nullptr);
+// The Kinetic Bomb this ranged dps bot is to shoot, from one greedy pass over the lowest bombs: hunters
+// first, then druids, then anyone within 80 yd. Null for a bot left without one. Publishes bpc.bomb.
+Unit* IccBpcAssignedKineticBomb(PlayerbotAI* botAI);
+
 class IccBpcKelesethTankTrigger : public Trigger
 {
 public:
@@ -501,6 +512,18 @@ public:
 };
 
 //Bql
+enum class IccBqlPhase : uint8
+{
+    Ground,
+    Center,  // passive and walking to the room's centre, then Incite Terror there
+    Air,     // gravity off, from takeoff until she lands
+};
+
+// From her own air phase: REACT_PASSIVE from the walk to the centre until she lands, gravity off from
+// takeoff to landing. She carries CREATURE_FLAG_EXTRA_NO_MOVE_FLAGS_UPDATE, so only her script moves
+// the gravity flag. Publishes bql.phase.
+IccBqlPhase IccBqlPhaseOf(Player* bot, Unit* boss);
+
 class IccBqlGroupPositionTrigger : public Trigger
 {
 public:

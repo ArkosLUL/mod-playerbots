@@ -456,6 +456,47 @@ bool IccPutricideAbominationTrigger::IsActive()
 }
 
 //BPC
+Unit* IccBpcEmpoweredPrince(PlayerbotAI* botAI, bool* present)
+{
+    struct Prince
+    {
+        char const* name;
+        uint32 invocation;
+        char const* phase;
+    };
+    static constexpr Prince PRINCES[] = {
+        {"prince valanar", SPELL_INVOCATION_OF_BLOOD_VALANAR, "valanar"},
+        {"prince keleseth", SPELL_INVOCATION_OF_BLOOD_KELESETH, "keleseth"},
+        {"prince taldaram", SPELL_INVOCATION_OF_BLOOD_TALDARAM, "taldaram"},
+    };
+
+    auto* context = botAI->GetAiObjectContext();
+    bool seen = false;
+    Unit* empowered = nullptr;
+    char const* phase = "none";
+    for (Prince const& prince : PRINCES)
+    {
+        Unit* unit = AI_VALUE2(Unit*, "find target", prince.name);
+        if (!unit)
+            continue;
+
+        seen = true;
+        if (unit->HasAura(prince.invocation))
+        {
+            empowered = unit;
+            phase = prince.phase;
+            break;
+        }
+    }
+
+    if (present)
+        *present = seen;
+    if (seen && RaidObs::Active())
+        RaidObs::NoteDerived(botAI->GetBot(), "bpc.phase", phase);
+
+    return empowered;
+}
+
 bool IccBpcKelesethTankTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "prince keleseth");
@@ -503,9 +544,13 @@ bool IccBpcEmpoweredVortexTrigger::IsActive()
         if (aura->GetStackAmount() > 12)
             return false;
 
-    Aura* auraValanar = botAI->GetAura("Invocation of Blood", valanar);
-    if (!auraValanar)
+    if (IccBpcEmpoweredPrince(botAI) != valanar)
+    {
+        // Ends the spread window, so the next one writes its slot even if it lands on the same one.
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "bpc.spread", "none");
         return false;
+    }
 
     return true;
 }
@@ -560,21 +605,40 @@ bool IccBpcBallOfFlameTrigger::IsActive()
     if (PlayerbotAI::IsTank(bot))
         return false;
 
-    Unit* valanar = AI_VALUE2(Unit*, "find target", "prince valanar");
-    Unit* taldaram = AI_VALUE2(Unit*, "find target", "prince taldaram");
-    Unit* keleseth = AI_VALUE2(Unit*, "find target", "prince keleseth");
-
-    if (!(valanar || taldaram || keleseth))
+    bool present = false;
+    Unit* empowered = IccBpcEmpoweredPrince(botAI, &present);
+    if (!present)
         return false;
 
-    Aura* auraTaldaram = botAI->GetAura("Invocation of Blood", taldaram);
-    if (!auraTaldaram)
-        return false;
+    if (empowered && empowered->GetEntry() == NPC_PRINCE_TALDARAM)
+        return true;
 
-    return true;
+    // A ball chases its victim whoever is empowered, and the multiplier leaves that bot only the ball action.
+    for (uint32 entry : {NPC_BALL_OF_FLAME, NPC_BALL_OF_INFERNO_FLAME})
+        if (Unit* ball = bot->FindNearestCreature(entry, 100.0f))
+            if (ball->GetVictim() == bot)
+                return true;
+
+    return false;
 }
 
 // BQL
+IccBqlPhase IccBqlPhaseOf(Player* bot, Unit* boss)
+{
+    IccBqlPhase phase = IccBqlPhase::Ground;
+    Creature* queen = boss->ToCreature();
+    if (queen && queen->HasReactState(REACT_PASSIVE))
+        phase = boss->IsLevitating() ? IccBqlPhase::Air : IccBqlPhase::Center;
+
+    if (RaidObs::Active())
+    {
+        static char const* const NAMES[] = {"ground", "center", "air"};
+        RaidObs::NoteDerived(bot, "bql.phase", NAMES[static_cast<uint8>(phase)]);
+    }
+
+    return phase;
+}
+
 bool IccBqlGroupPositionTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "blood-queen lana'thel");
@@ -600,7 +664,11 @@ bool IccBqlPactOfDarkfallenTrigger::IsActive()
 
     Aura* aura = botAI->GetAura("Pact of the Darkfallen", bot);
     if (!aura)
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "bql.pact", "none");
         return false;
+    }
 
     return true;
 }
@@ -616,7 +684,11 @@ bool IccBqlVampiricBiteTrigger::IsActive()
 
     Aura* aura = botAI->GetAura("Frenzied Bloodthirst", bot);
     if (!aura)
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "bql.bite", "none");
         return false;
+    }
 
     return true;
 }

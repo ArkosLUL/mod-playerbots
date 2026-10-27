@@ -488,101 +488,17 @@ float IccBpcAssistMultiplier::GetValue(Action* action)
 
     Aura* aura = botAI->GetAura("Shadow Prison", bot, false, true);
 
-    // Bomb assignment check (done early so it can override shadow prison stack limits)
-    static const std::array<uint32, 4> bombEntries = {NPC_KINETIC_BOMB1, NPC_KINETIC_BOMB2, NPC_KINETIC_BOMB3,
-                                                      NPC_KINETIC_BOMB4};
-    GuidVector const bombs = AI_VALUE(GuidVector, "possible targets no los");
-
-    std::vector<Unit*> kineticBombs;
-    for (auto const& guid : bombs)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
-            continue;
-
-        if (std::find(bombEntries.begin(), bombEntries.end(), unit->GetEntry()) == bombEntries.end())
-            continue;
-
-        if (unit->GetPositionZ() - bot->GetPositionZ() > 35.0f)
-            continue;
-
-        kineticBombs.push_back(unit);
-    }
-
-    bool botAssignedToBomb = false;
-    if (!kineticBombs.empty() && PlayerbotAI::IsRangedDps(bot) &&
-        !(aura && aura->GetStackAmount() > 18))
-    {
-        std::sort(kineticBombs.begin(), kineticBombs.end(),
-                  [](Unit* a, Unit* b) { return a->GetPositionZ() < b->GetPositionZ(); });
-
-        std::vector<Player*> rangedDps;
-        Group* group = bot->GetGroup();
-        if (group)
-        {
-            for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
-            {
-                Player* member = itr->GetSource();
-                if (member && member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsRangedDps(member))
-                    rangedDps.push_back(member);
-            }
-        }
-
-        static float const MAX_ASSIGN_RANGE = 80.0f;
-        std::set<Player*> assigned;
-        for (Unit* bomb : kineticBombs)
-        {
-            Player* nearest = nullptr;
-            float nearestDist = std::numeric_limits<float>::max();
-
-            // Priority classes: hunter > druid > any
-            static constexpr std::array<uint8, 3> classPriority = {CLASS_HUNTER, CLASS_DRUID, 0};
-            for (uint8 priorityClass : classPriority)
-            {
-                nearest = nullptr;
-                nearestDist = std::numeric_limits<float>::max();
-
-                for (Player* dps : rangedDps)
-                {
-                    if (assigned.count(dps))
-                        continue;
-
-                    if (priorityClass != 0 && dps->getClass() != priorityClass)
-                        continue;
-
-                    float dist = dps->GetDistance(bomb);
-                    if (dist < nearestDist && dist < MAX_ASSIGN_RANGE)
-                    {
-                        nearestDist = dist;
-                        nearest = dps;
-                    }
-                }
-
-                if (nearest)
-                    break;
-            }
-
-            if (nearest)
-            {
-                assigned.insert(nearest);
-                if (nearest == bot)
-                    botAssignedToBomb = true;
-            }
-        }
-    }
-
-    // Bomb-assigned bot: block target switching and non-bomb BPC actions, allow combat rotation
-    if (botAssignedToBomb)
-    {
-        if (dynamic_cast<IccBpcKineticBombAction*>(action) || dynamic_cast<AvoidAoeAction*>(action))
-            return 1.0f;
-
-        if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-            dynamic_cast<AttackRtiTargetAction*>(action) || dynamic_cast<IccBpcEmpoweredVortexAction*>(action) ||
-            dynamic_cast<IccBpcBallOfFlameAction*>(action) || dynamic_cast<CombatFormationMoveAction*>(action) ||
-            dynamic_cast<FollowAction*>(action))
-            return 0.0f;
-    }
+    // Bomb-assigned bot: block target switching and non-bomb BPC actions, allow combat rotation. Ahead of the
+    // Shadow Prison and flame checks below, which it overrides. The assignment only decides these actions.
+    bool const bombKeeps = dynamic_cast<IccBpcKineticBombAction*>(action) || dynamic_cast<AvoidAoeAction*>(action);
+    bool const bombBlocks =
+        !bombKeeps &&
+        (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
+         dynamic_cast<AttackRtiTargetAction*>(action) || dynamic_cast<IccBpcEmpoweredVortexAction*>(action) ||
+         dynamic_cast<IccBpcBallOfFlameAction*>(action) || dynamic_cast<CombatFormationMoveAction*>(action) ||
+         dynamic_cast<FollowAction*>(action));
+    if ((bombKeeps || bombBlocks) && !(aura && aura->GetStackAmount() > 18) && IccBpcAssignedKineticBomb(botAI))
+        return bombKeeps ? 1.0f : 0.0f;
 
     // Shadow prison movement block (non-bomb bots use normal 12 stack limit).
     // AttackAction derives from MovementAction, so it must be excluded here or
@@ -612,12 +528,18 @@ float IccBpcAssistMultiplier::GetValue(Action* action)
             return 0.0f;
     }
 
-    Unit* flame1 = bot->FindNearestCreature(NPC_BALL_OF_FLAME, 100.0f);
-    Unit* flame2 = bot->FindNearestCreature(NPC_BALL_OF_INFERNO_FLAME, 100.0f);
-    bool ballOfFlame = flame1 && flame1->GetVictim() == bot;
-    bool infernoFlame = flame2 && flame2->GetVictim() == bot;
+    // Cached per ms: two grid searches, asked for every action the bot weighs. A bot never ticks twice in one ms.
+    uint32 const now = getMSTime();
+    if (now != _flamesCheckedMs)
+    {
+        _flamesCheckedMs = now;
+        Unit* flame1 = bot->FindNearestCreature(NPC_BALL_OF_FLAME, 100.0f);
+        Unit* flame2 = bot->FindNearestCreature(NPC_BALL_OF_INFERNO_FLAME, 100.0f);
+        _infernoFlameUp = flame2 != nullptr;
+        _chasedByFlame = (flame1 && flame1->GetVictim() == bot) || (flame2 && flame2->GetVictim() == bot);
+    }
 
-    if (flame2)
+    if (_infernoFlameUp)
     {
         if (dynamic_cast<AvoidAoeAction*>(action) || dynamic_cast<IccBpcKineticBombAction*>(action))
             return 0.0f;
@@ -626,7 +548,7 @@ float IccBpcAssistMultiplier::GetValue(Action* action)
             return 1.0f;
     }
 
-    if (ballOfFlame || infernoFlame)
+    if (_chasedByFlame)
     {
         if (dynamic_cast<IccBpcBallOfFlameAction*>(action))
             return 1.0f;
@@ -676,13 +598,12 @@ float IccBqlMultiplier::GetValue(Action* action)
     }
 
     // Air phase: block movement/chase actions, allow combat rotation (attacks/heals)
-    if (((boss->GetPositionZ() - ICC_BQL_CENTER_POSITION.GetPositionZ()) > 5.0f) && !aura)
-    {
-        if (dynamic_cast<AvoidAoeAction*>(action) || dynamic_cast<FleeAction*>(action) ||
-            dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<CastDisengageAction*>(action) ||
-            dynamic_cast<ReachMeleeAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
-            return 0.0f;
-    }
+    if (!aura &&
+        (dynamic_cast<AvoidAoeAction*>(action) || dynamic_cast<FleeAction*>(action) ||
+         dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<CastDisengageAction*>(action) ||
+         dynamic_cast<ReachMeleeAction*>(action) || dynamic_cast<ReachTargetAction*>(action)) &&
+        IccBqlPhaseOf(bot, boss) == IccBqlPhase::Air)
+        return 0.0f;
 
     // If bot has frenzied bloodthirst, allow highest priority for bite action
     if (aura) // If bot has frenzied bloodthirst

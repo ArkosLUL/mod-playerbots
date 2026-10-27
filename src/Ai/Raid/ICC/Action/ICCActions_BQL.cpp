@@ -11,8 +11,10 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
+#include <string>
 
 bool IccBqlGroupPositionAction::Execute(Event /*event*/)
 {
@@ -23,11 +25,10 @@ bool IccBqlGroupPositionAction::Execute(Event /*event*/)
     Aura* frenzyAura = botAI->GetAura("Frenzied Bloodthirst", bot);
     Aura* shadowAura = botAI->GetAura("Swarming Shadows", bot);
     bool isTank = PlayerbotAI::IsTank(bot);
-    if (isTank && shadowAura && IccRaidCheat(botAI, "bql.swarmingshadows"))
-    {
-        bot->RemoveAurasDueToSpell(shadowAura->GetId());
-        return true;
-    }
+
+    // The lane is per trail: a later Swarming Shadows on this bot picks its own
+    if (!shadowAura)
+        IcecrownHelpers::IccState(bot->GetInstanceId()).bqlBotCurrentCurve.erase(bot->GetGUID());
 
     // Handle tank positioning
     if (isTank && HandleTankPosition(boss, frenzyAura, shadowAura))
@@ -473,38 +474,12 @@ bool IccBqlGroupPositionAction::HandleGroupPosition(Unit* boss, Aura* frenzyAura
     bool isTank = PlayerbotAI::IsTank(bot);
     bool isMeleeDps = PlayerbotAI::IsMelee(bot) && !isTank;
 
-    // Air-phase latch: only arm once boss has been anchored at tank pos (ground phase
-    // established). Prevents false-trigger at pull when boss comes near center.
-    // Disarm when boss returns to tank pos (ground phase resumed after landing).
-    // Keyed per-instance so concurrent ICC raids don't share the latch.
-    // Armed when boss lands from air, disarmed when boss returns to tank pos.
-    // While armed, bots skip the pre-air center stack so they don't bunch up at center
-    // during the post-air walk-back and die to lingering AoE.
-    uint32 instanceId = bot->GetInstanceId();
-    IcecrownHelpers::IccInstanceState& bqlState = IcecrownHelpers::IccState(instanceId);
-    auto& groundPhaseEstablished = bqlState.bqlGroundPhaseEstablished;
-    bool& wasAirborne = bqlState.bqlBossWasAirborne;
-    auto& postAirLanding = bqlState.bqlPostAirLanding;
-    float bossFromTank = boss->GetExactDist2d(ICC_BQL_TANK_POSITION);
-    float bossFromCenter = boss->GetExactDist2d(ICC_BQL_CENTER_POSITION);
-    bool bossAirborne = (boss->GetPositionZ() - ICC_BQL_CENTER_POSITION.GetPositionZ()) > 5.0f;
+    IccBqlPhase const phase = IccBqlPhaseOf(bot, boss);
+    bool const bossAirborne = phase == IccBqlPhase::Air;
+    bool const bossMovingToCenter = phase == IccBqlPhase::Center;
+    bool const isAirPhase = phase != IccBqlPhase::Ground;
 
-    // Landing edge: arm post-air latch
-    if (wasAirborne && !bossAirborne)
-        postAirLanding = true;
-    wasAirborne = bossAirborne;
-
-    if (!bossAirborne && bossFromTank < 10.0f)
-    {
-        groundPhaseEstablished = true;
-        postAirLanding = false;
-    }
-
-    bool bossMovingToCenter = groundPhaseEstablished && !bossAirborne && !postAirLanding &&
-                              bossFromCenter < 20.0f && bossFromTank > 10.0f;
-    bool isAirPhase = bossAirborne || bossMovingToCenter;
-
-    // Pre-airborne: nitro boost + move all bots to center (not ring slots yet)
+    // Pre-airborne: move all bots to center (not ring slots yet)
     if (bossMovingToCenter)
     {
         float cx = ICC_BQL_CENTER_POSITION.GetPositionX();
@@ -1042,8 +1017,10 @@ bool IccBqlPactOfDarkfallenAction::Execute(Event /*event*/)
     if (playersWithAura.empty())
         return false;
 
-    // Determine target position
+    // Determine target position. bql.pact names the rule: `hold` for the tank, `tank` and `partner` with the
+    // player walked to, `center` with how many meet there.
     Position targetPos;
+    std::string rule;
     if (tankWithAura)
     {
         // If there's a tank with aura, everyone moves to the tank (including the tank itself for center positioning)
@@ -1051,28 +1028,35 @@ bool IccBqlPactOfDarkfallenAction::Execute(Event /*event*/)
         {
             // If current bot is the tank, stay put or move slightly for better positioning
             targetPos.Relocate(bot);
+            rule = "hold";
         }
         else
         {
             // Non-tank bots move to the tank
             targetPos.Relocate(tankWithAura);
+            rule = "tank " + RaidObs::DescribeAssignment(tankWithAura->GetGUID());
         }
     }
     else if (playersWithAura.size() >= 2)
     {
         // Calculate center position of all players with aura (including bot)
         CalculateCenterPosition(targetPos, playersWithAura);
+        rule = "center " + std::to_string(playersWithAura.size() + 1);
     }
     else if (playersWithAura.size() == 1)
     {
         // Move to the single other player with aura
         targetPos.Relocate(playersWithAura[0]);
+        rule = "partner " + RaidObs::DescribeAssignment(playersWithAura[0]->GetGUID());
     }
     else
     {
         // No valid movement case found
         return true;
     }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "bql.pact", rule);
 
     // Move to target position if needed
     return MoveToTargetPosition(targetPos, playersWithAura.size() + 1);  // +1 to include the bot itself
@@ -1231,11 +1215,20 @@ Player* IccBqlVampiricBiteAction::FindBestBiteTarget(Group* group)
         return myPick;
     };
 
-    if (Player* pick = pickFromPool(dpsHealCandidates))
-        return pick;
+    Player* pick = pickFromPool(dpsHealCandidates);
+    char const* pool = "dps";
+    if (!pick)
+    {
+        // Fallback: tanks only when no DPS/heal target available
+        pick = pickFromPool(tankCandidates);
+        pool = "tank";
+    }
 
-    // Fallback: tanks only when no DPS/heal target available
-    return pickFromPool(tankCandidates);
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "bql.bite",
+                             pick ? std::string(pool) + " " + RaidObs::DescribeAssignment(pick->GetGUID()) : "nobody");
+
+    return pick;
 }
 
 bool IccBqlVampiricBiteAction::IsInvalidTarget(Player* player)
