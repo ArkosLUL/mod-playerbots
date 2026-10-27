@@ -739,7 +739,16 @@ def is_content_image(node: Node) -> bool:
         if value.isdigit() and int(value) < MIN_IMAGE_SIDE:
             return False
     names = set(re.split(r"[\s_-]+", node.attrs.get("class", "").lower()))
-    return not names & {"emoji", "smiley", "avatar", "icon", "logo"} and bool(image_src(node))
+    if names & {"emoji", "smiley", "avatar", "icon", "logo"}:
+        return False
+    # saved Wowhead pages declare no icon size: spell and class icons sit in an "icontiny" link, button
+    # icons in a "wh-button-icon" span, and inline faction logos are "content-image no-border"
+    if {"content-image", "no-border"} <= node.classes():
+        return False
+    wrappers = (node.parent, node.parent.parent if node.parent is not None else None)
+    if any(w is not None and any(n.startswith("icon") for n in _name_tokens(w)) for w in wrappers):
+        return False
+    return bool(image_src(node))
 
 
 def image_src(node: Node) -> str:

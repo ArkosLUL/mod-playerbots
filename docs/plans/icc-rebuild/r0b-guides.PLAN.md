@@ -132,9 +132,8 @@ the cache directory above (not in git).
 
 ## Known gaps
 
-- Wowhead's body selectors (`#guide-body`, `.guide-body`, …) are unverified: no saved page existed to
-  check. A miss falls back to the densest text block; compare the first converted page with the saved
-  one.
+- Wowhead conversion checked on the 12 saved boss pages (2026-10-28); unsized inline icons are now
+  dropped.
 - Nothing covers the Crimson Hall trash (`blood-prince-trash`).
 - Warcraft Tavern pages carry no author or update date; their text files show the fetch date only.
 - `convert` reads saved pages for Wowhead only.

@@ -72,7 +72,8 @@ contract slugs plus one for the raid overview. Per slug:
 Tab and accordion titles (Warcraft Tavern's role summaries and ability lists) become headings under the
 heading they sit below. A link carrying `spell=N`, `npc=N` or `item=N`, or the `/spell/N` form
 Warcraft Tavern's wowclassicdb links use, becomes `Name (spell N)`. An image becomes
-`[diagram: <caption or alt>](<local path or URL>)`; icons under 64 px are dropped. A per-site body
+`[diagram: <caption or alt>](<local path or URL>)`; icons are dropped: under 64 px, or (Wowhead,
+unsized) inside an `icon*`-classed link or span, or `content-image no-border` logos. A per-site body
 selector, falling back to the densest text block, drops menus, comments, ads, tables of contents and
 related-guide strips.
 

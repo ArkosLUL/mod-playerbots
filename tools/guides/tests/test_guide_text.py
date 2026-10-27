@@ -134,7 +134,11 @@ class WowheadSavedPageTest(CacheCase):
         self.assertIn("**Saber Lash**", text)
         self.assertIn("[diagram: Where everyone stands](../wowhead/Lord%20Marrowgar%20Strategy_files/arena.png)", text)
         self.assertIn("Icon text stays.", text)
-        for junk in ("tiny icon", "never shown", "must not appear", "Share this", "Guides"):
+        self.assertIn("Dodge Coldflame (spell 69140) lines.", text)
+        self.assertIn("Raid Overview", text)
+        self.assertIn("Orgrim's Hammer (npc 30342).", text)
+        for junk in ("tiny icon", "never shown", "must not appear", "Share this", "Guides", "bluehellfire",
+                     "achievement_boss_lichking", "horde.png"):
             self.assertNotIn(junk, text)
         index = (self.cache / "INDEX.md").read_text(encoding="utf-8")
         self.assertIn("| lord-marrowgar | wowhead |", index)
