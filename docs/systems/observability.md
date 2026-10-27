@@ -544,7 +544,11 @@ purpose — has nothing for a container to watch. Probe inside the helper that d
 at the call sites: trigger and action both route through the helper, so one probe covers both and two
 cannot disagree about what was decided. Being change-latched per bot, it hides the same decision
 made again in a later window: write an explicit `none` at the window's end. A raid-icon pick is
-noted by the bot that moves the icon only, or 25 rows describe one placement.
+noted by the bot that moves the icon only, or 25 rows describe one placement; put the unit the icon
+came off into the value, or the same move repeated after another bot moved the icon stays hidden. A
+probe that reads world state skips a bot phased away from it: grid searches filter by the
+searcher's phase, so a bot in a phase aura (Valithria's Dream State) reads "nothing there" and flips
+a shared latch mid-window.
 
 **Probe the rule, not the coordinate.** A derived destination is already a `move` record naming the
 action that issued it, and one derived from the crowd or the bot's own position moves every tick, so

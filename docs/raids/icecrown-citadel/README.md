@@ -45,14 +45,14 @@ boss state renames a trace open under another name, except one `MarkPull` opened
 | 4 | [Festergut](festergut.md) | Putricide's `MovementInform` at his balcony point, seconds after the pull | `festergut` | `fg.` |
 | 5 | [Rotface](rotface.md) | the same, at Rotface's point | `rotface` | `rf.` |
 | 6 | [Professor Putricide](professor-putricide.md) | his `JustEngagedWith` | `professor-putricide` | `pp.` |
-| 7 | Blood Prince Council | Valanar's `JustEngagedWith`; Keleseth and Taldaram pull him in | `blood-prince-council` | `bpc.` |
-| 8 | Blood-Queen Lana'thel | her `JustEngagedWith` | `blood-queen-lana-thel` | `bql.` |
-| 9 | Sister Svalna | `BossAI::_JustEngagedWith` | `sister-svalna` | `ss.` |
-| 10 | Valithria Dreamwalker | her `JustEnteredCombat`, as the adds reach her | `valithria-dreamwalker` | `vd.` |
-| 11 | Sindragosa | her `JustEngagedWith` | `sindragosa` | `sg.` |
+| 7 | [Blood Prince Council](blood-prince-council.md) | Valanar's `JustEngagedWith`; Keleseth and Taldaram pull him in | `blood-prince-council` | `bpc.` |
+| 8 | [Blood-Queen Lana'thel](blood-queen-lana-thel.md) | her `JustEngagedWith` | `blood-queen-lana-thel` | `bql.` |
+| 9 | [Sister Svalna](sister-svalna.md) | `BossAI::_JustEngagedWith` | `sister-svalna` | `ss.` |
+| 10 | [Valithria Dreamwalker](valithria-dreamwalker.md) | her `JustEnteredCombat`, as the adds reach her | `valithria-dreamwalker` | `vd.` |
+| 11 | [Sindragosa](sindragosa.md) | her `JustEngagedWith` | `sindragosa` | `sg.` |
 | 12 | The Lich King | his `JustEngagedWith` | `the-lich-king` | `lk.` |
-| 13 | Sindragosa gauntlet | the gauntlet's `DoAction(ACTION_START_GAUNTLET)` | `sindragosa-gauntlet` | `sg.` |
-| 14 | Blood Prince trash | never: `NOT_STARTED`, then `DONE` when the trash dies | `blood-prince-trash` | `bpc.` |
+| 13 | [Sindragosa gauntlet](sindragosa.md#sindragosa-gauntlet) | the gauntlet's `DoAction(ACTION_START_GAUNTLET)` | `sindragosa-gauntlet` | `sg.` |
+| 14 | [Blood Prince trash](blood-prince-council.md#blood-prince-trash) | never: `NOT_STARTED`, then `DONE` when the trash dies | `blood-prince-trash` | `bpc.` |
 | — | [Stinky and Precious](stinky-and-precious.md) | no boss state | `stinky-and-precious` | `dogs.` |
 | — | [Rotting Frost Giant](rotting-frost-giant.md) | no boss state | `rotting-frost-giant` | `rfg.` |
 
@@ -83,11 +83,8 @@ says what replaced it.
 
 | Key | Class | Gate | Sites |
 |---|---|---|---|
-| `vd.nitro` | remove | raid | `IccValithriaZombieKiteAction` |
-| `sg.nitro` | remove | raid | `IccSindragosaGroupPositionTrigger`, `IccSindragosaFrostBeaconAction::HandleBeaconedPlayer`, `IccSindragosaBlisteringColdAction` |
 | `lk.nitro` | remove | raid | `IccLichKingWinterAction`, `IccLichKingAddsAction::HandleDefileMechanics` (on the Defile target, humans too), `HandleVileSpiritMechanics` |
 | `lk.painsuppression`, `lk.aegis` | remove | raid | `HandleVileSpiritMechanics`, beside its Nitro, no replacement |
-| `vd.speed` | remove | raid | `IccValithriaDreamCloudAction`: run, walk and flight rate 2.0 in Dream State |
 | `ldw.cyclone` | gap | raid | `IccAddsLadyDeathwhisperAction`: Cyclone on a Dominate Mind victim, bot or human |
 | `ldw.insignificance` | gap | raid | same action: tank strips Touch of Insignificance |
 | `rfg.deathplague` | gap | raid | `IccRottingFrostGiantTankPositionAction`: strips Death Plague |
@@ -95,7 +92,6 @@ says what replaced it.
 | `pp.oozekill`, `pp.gascloudkill` | gap | raid | `IccPutricideVolatileOozeAction`, `IccPutricideGasCloudAction`: kill every extra add of the entry |
 | `pp.unboundplague` | gap | raid | `IccPutricideAvoidMalleableGooAction::HandleUnboundPlague`: suicide with nobody near |
 | `pp.freeooze` | gap | raid | `IccPutricideAbominationAction::TryRegurgitate`: Regurgitated Ooze with no energy cost; off, it casts at full cost |
-| `bql.swarmingshadows` | gap | raid | `IccBqlGroupPositionAction`: tank strips Swarming Shadows |
 | `vd.dreamteleport`, `vd.cloudteleport` | gap | raid | `IccValithriaDreamCloudAction`: onto a human in Dream State, onto the shared cloud |
 | `sg.frostbeacon`, `sg.mysticbuffet`, `sg.magicbarrier`, `sg.nothreat` | gap | raid | `IccSindragosaGroupPositionTrigger`: main tank's P3 beacon strip, tanks' Mystic Buffet strip, Magic Barrier on tanks, 1% Threat on assist tanks |
 | `sg.flares` | gap | raid | `IccSindragosaFrostBeaconAction::TryDropTombFlares`: smoke flares from `StoreNewItemInBestSlots` |
@@ -114,8 +110,8 @@ Threat), recorded when it adds any, on members in the bot's own instance only. E
 1% Threat 70115 never expire, so `IccStripExperienced`, run by the Marrowgar, giant, Saurfang,
 Festergut, Rotface, council, Blood-Queen and Valithria triggers, takes both off the bot and off every
 human in the instance. Every raid-gated site keeps the cheat's exact behaviour while the raid cheat is
-on; off, the site skips the cheat. The cleanup halves (Cyclone, Magic Barrier, 1% Threat removal,
-`SetSpeed` back to normal) stay ungated.
+on; off, the site skips the cheat. The cleanup halves (Cyclone, Magic Barrier, 1% Threat removal) stay
+ungated.
 
 **The class taunt** (`IccCastClassTaunt`, ten bosses) casts the real taunt, at most once per 500 ms
 per bot; a taunt on cooldown fails with no ranged pull, which would face the add. The 1M threat with
@@ -131,7 +127,7 @@ per bot; a taunt on cooldown fails with no ranged pull, which would face the add
 Each boss doc says what its callers risk.
 
 Documented, not wrapped: Valithria's floor snaps (`IccValithriaPortalAction`,
-`IccValithriaHealAction`) skip fall damage; `IccLichKingAddsAction`'s Val'kyr edge-dive puts the
+`IccValithriaHealAction`) skip fall damage through `NearTeleportTo`, which keeps combat; `IccLichKingAddsAction`'s Val'kyr edge-dive puts the
 carry aura on itself and suicides at the bottom. Not cheats: spell clicks and object use in range,
 real item use, own-aura cancels, the spell listeners.
 
@@ -140,11 +136,10 @@ real item use, own-aura cancels, the spell listeners.
 `IccInstanceState` (`ICCScripts.h`), one per instance id behind a mutex, `IccState(id)` creating it.
 ICC keeps this store rather than `RaidInstanceState`. Assignments and latches are traced containers:
 `lk.winterinbound`, `lk.mtinbound`, `lk.rangedinbound`, `lk.sharedslot` (-1 none), `sg.flaredblue`,
-`sg.group`, `sg.tomb`, `sg.freedfallback`, `bql.curve`, `bql.groundphase`, `bql.postairlanding`,
-`bql.airslot`, `bql.slot`, `vd.portalclaim`, `dbs.slot`, `rf.explosionslot`. They are unordered, and
-no loop over one depends on its order. Timestamps, throttles, caches, edge detectors
-(`sgLastPhase3`, `bqlBossWasAirborne`) and struct values stay bare, as does `sgFlaredRedThisPhase`,
-an int set no traced container holds.
+`sg.group`, `sg.tomb`, `sg.freedfallback`, `bql.curve`, `bql.airslot`, `bql.slot`, `vd.portalclaim`,
+`dbs.slot`, `rf.explosionslot`. They are unordered, and no loop over one depends on its order.
+Timestamps, throttles, caches, edge detectors (`sgLastPhase3`) and struct values stay bare;
+`sgFlaredRedThisPhase`, an int set, is noted as `sg.flaredred` where it changes.
 
 **Reset**: `IccBossStateResetScript` erases the whole state 5 s (`ICC_RESET_GRACE_MS`) after the last
 boss state leaves `IN_PROGRESS`, kill or wipe, never mid-fight; `IccMapCleanupScript` erases it on

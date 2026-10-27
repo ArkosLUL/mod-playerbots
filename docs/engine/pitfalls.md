@@ -139,6 +139,9 @@ mechanic that punishes an ongoing cast (Mistress' Kiss) can only be answered fro
 tick, by `RequestSpellInterrupt` on the caster. A channel runs triggers but fails `CanCastSpell`, so a
 caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge).
 
+`EncounterHelpers::UseNitroBoosts` refuses a bot mid-cast (`IsNonMeleeSpellCast`): a kite stops the
+cast before it uses the boots.
+
 ## An ability lock makes a portal or spell click a silent no-op
 
 `GameObject::Use` on a goober and `Unit::HandleSpellClick` make the **user** cast the spell,
@@ -406,6 +409,8 @@ portal this way.
 - **A `ReachCombatTo` leg of 6 yd or more stops half way**: it shortens the path to
   `disToGo / 2 + distance`. A walk at a far target ends wherever the midpoint is, on top of whatever
   stands there ([yogg-saron.md](../raids/ulduar/yogg-saron.md#phase-2-the-body-is-a-wall-and-the-portals-run-on-a-clock)).
+- **`Unit::SetSpeed(type, rate)` sets the rate outright**, skipped only when unchanged, so a per-tick
+  "reset to 1.0" cancels Sprint, Nitro Boosts and every other speed aura until the next `UpdateSpeed`.
 
 ## Things the bot cannot see
 
@@ -503,6 +508,10 @@ Related traps:
   state read — `boss->ToCreature()->GetReactState() == REACT_PASSIVE` is exact and has no lag. Unit
   flags work the same way (`UNIT_FLAG_NOT_SELECTABLE` for Noth's balcony, `UNIT_FLAG_DISABLE_MOVE` for
   Gothik's).
+- **Gravity and fly flags are a phase signal only under `CREATURE_FLAG_EXTRA_NO_MOVE_FLAGS_UPDATE`
+  (0x200).** Then only the script moves them, so `IsLevitating()` is exact and lag-free (the
+  Blood-Queen's air phase); without it, `Creature::UpdateMovementFlags` rewrites them from the
+  movement template and the creature's height.
 - **`GetData` is a completion flag as often as a live signal.** Vezax's `GetData(1)` returns
   `lootMode == 3`, set only *after* the Animus dies. Mimiron's `GetData(1)` is authoritative but sits
   on a unit that never becomes a bot target. Thorim's `SPELL_SIF_CHANNEL_HOLOGRAM` (64324) is defined

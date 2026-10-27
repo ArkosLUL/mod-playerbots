@@ -193,6 +193,10 @@ engine. A rule wider than its assigning node strands the bot the same way in the
 strands it the same way (Yogg-Saron's phase 3 healers ran dry); in raid boss fights
 `raid healer engine` covers that ([../raids/README.md](../raids/README.md#targeting-the-whole-fight)).
 
+**A multiplier that leaves a bot one boss action needs that action's trigger in exactly the same
+state**, or the bot runs nothing and stands still: the Blood Prince Council's plain Ball of Flame
+victim did, its trigger also wanting Taldaram empowered. Derive both from one helper.
+
 **A direct-attack action is the pet's only sender**: no generic strategy wires `pet attack`. Command
 the pet before the "already on the pick" early return, and let the trigger also fire while the pet is
 off the pick.
