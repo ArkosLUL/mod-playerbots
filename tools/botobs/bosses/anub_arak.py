@@ -18,7 +18,13 @@
                                      per submerge the living players within 8, 12 and 20 yd of where he went
                                      down, by role, and the first kiter's distance from the spike at its mark;
                                      each kite's anub.kiteplan terminals and whether the last one was used
-                                     before the mark ended, and a kiter dead with it unused
+                                     before the mark ended, and a kiter dead with it unused; each patch kite's
+                                     turn for its patch, its anub.kitemove then, the patch it went for with the
+                                     kiter's and the spike's closest approach after the turn, and whether the
+                                     spike failed on it; for patch+hand whether the Hand landed at the turn, read
+                                     off anub.bridge, else off the Hand of Protection casts; the first snapshot
+                                     before the turn with the spike within 14.5 yd of a patch it was not already
+                                     inside at the mark; Impale on a side tank flagged
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips
                                      against the DK's spot at the cast, whether the grip duty held to kill and
@@ -34,7 +40,10 @@
                                      by side, each burrower's distance from the patch centre while
                                      on a side tank; each submerge where it went under: the nearest patch, the
                                      patches alive, its side tank alive and how far, its target; each one's
-                                     opener and the three players nearest its exit at the spawn
+                                     opener and the three players nearest its exit at the spawn; each one pulled
+                                     off its side tank by a non-tank within 15 s of coming up: who, the seconds
+                                     since it came up and on the side tank, the puller's casts on it in the 3 s
+                                     before
     anub_arak.py <file> --frost      seconds carrying Permafrost per group and bot, he up and he down, and every
                                      stint over 3 s with the bot's target at its start
     anub_arak.py <file> --threat     per surfaced window: his target, his drag legs, taunts, threat cap, the
@@ -50,9 +59,11 @@
                                      tank, the seconds over 35 yd from a side tank a burrower was on, follow
                                      acts in the pull, its engine passes, anub.hstand; per side tank the seconds
                                      alive with no healer within 40 yd; raid healer engine in the coverage
-    anub_arak.py <file> --tanks      Expose Weakness peak per burrower wave per side tank, each tank defensive
-                                     cast with the stack then, from its cast row, each tank death with the damage
-                                     taken and the heals landed in the 12 s before
+    anub_arak.py <file> --tanks      Expose Weakness peak per burrower wave per side tank; per run of it on the
+                                     main tank its peak, the burrowers on him at a stack and his area casts (Swipe,
+                                     Challenging Roar, ...) from 5 s before the first stack to the peak; each tank
+                                     defensive cast with the stack then, from its cast row, each tank death with
+                                     the damage taken and the heals landed in the 12 s before
     anub_arak.py <file> --scarabs    the scarabs alive 0, 10, 20 and 30 s after each emerge with their targets,
                                      the main tank's Mandibles stack at the emerge, scarab lives per phase, and
                                      per phase each player's Mandibles peak stack and tick damage
@@ -81,7 +92,9 @@ What the generic views get wrong here, and what this reads instead:
   so a bot still reads `hold` while it kites, after it dies and into the next submerge: the gather
   centre counts only living bots off the mark whose hold began in this submerge. `anub.kiteplan` never
   resets either, so a kiter marked again on the same terminal writes nothing: a mark reads the value
-  carried in only when no row of its own lands within a second of it.
+  carried in only when no row of its own lands within a second of it. `anub.kitemove` and `anub.bridge`
+  go back to `none` as the mark moves on, so a turn reads the kitemove held then and a bridge counts only
+  from rows inside the window.
 - **`anub.focus0` and `anub.focus1` are raid-wide latches, one per side**, so the `g` on their rows is
   whichever bot's read moved them, and whether the DPS followed is read off their snapshot targets, not
   off `anub.dps`. So are `anub.side0`, `anub.side1`, `anub.wave`, `anub.grip`, `anub.allow`, and
@@ -197,7 +210,7 @@ READ_KEYS = ("toc.progress", "anub.phase", "anub.patch0", "anub.patch1", "anub.s
              "anub.dodge", "anub.protect", "anub.interrupter", "anub.pickup", "anub.defensive", "anub.focus0",
              "anub.focus1", "anub.dps", "anub.side0", "anub.side1", "anub.wave", "anub.grip", "anub.allow",
              "anub.bside", "anub.dside", "anub.gripstep", "anub.sidetank", "anub.kitestage", "anub.kiteplan",
-             "anub.gather", "anub.spot0", "anub.spot1", "anub.hstand")
+             "anub.gather", "anub.spot0", "anub.spot1", "anub.hstand", "anub.kitemove", "anub.bridge")
 SPOT_KEYS = ("anub.spot0", "anub.spot1")
 
 # Read from the source so a retune shows up here without a second edit.
@@ -215,6 +228,7 @@ GRIP_JUDGE_MS = 3000
 # tank patch is a fallback
 SUBMERGE_PATCH_CLEARANCE = 25.0
 SPIKE_PATCH_REACH = radius("ANUBARAK_SPIKE_PATCH_REACH")
+SPIKE_ROUTE_CLEARANCE = radius("ANUBARAK_SPIKE_ROUTE_CLEARANCE")
 FOCUS_SETTLE = radius("ANUBARAK_FOCUS_SETTLE")
 FOCUS_LOW_PCT = radius("ANUBARAK_FOCUS_OFF_FROST_PCT")
 # ANUBARAK_KITE_GATHER_CLEARANCE, a sum radius() doesn't read: a kite ending nearer hands the spike to the
@@ -290,6 +304,16 @@ FEIGN_DROP_MS = 100
 KITEPLAN_SETTLE_MS = 1000
 # what each anub.kiteplan terminal spends; `none` spends nothing
 PLAN_NEEDS = {"patch": ("patch",), "hand": ("hand",), "patch+hand": ("patch", "hand"), "own": ("own",)}
+PATCH_PLANS = ("patch", "patch+hand")
+# anub.bridge values a patch+hand kite writes from its turn on
+BRIDGE_TURNS = ("ask", "hand", "turn")
+# rows one tick writes can land a few ms apart
+NOTE_TICK_MS = 200
+# the bridge waits up to 1 s at the turn for its Hand, and the immune stage follows the cast by a tick
+HAND_AT_TURN_MS = 1500
+BRIDGE_TEXT = {"hand": "Hand at the turn", "turn": "turned without a Hand",
+               "ask": "Hand asked for, never landed or turned", "early": "Hand before the turn",
+               "late": "Hand after the turn", "never": "never turned"}
 HOP_RANGE = radius("ANUBARAK_HOP_RANGE")
 # HoP cooldown with both ranks of Guardian's Favor, the shortest it gets. No row carries cooldowns, so a
 # paladin reads ready this long after its last one.
@@ -309,9 +333,16 @@ PURSUIT_FLAG_YD = 1.5
 FROZEN_YD = 0.3
 # a submerged burrower targets nobody, so its victim is the last target it had this far back
 VICTIM_LOOKBACK_MS = 5000
+# a burrower pulled off its side tank this soon after it came up, and the puller's casts on it this far back
+PULL_WINDOW_MS = 15000
+PULL_CASTS_MS = 3000
 HEALER_FAR_YD = 35.0
 HEALER_REACH_YD = 40.0
 TANK_DEATH_LOOKBACK_MS = 12000
+# Challenging Roar and Challenging Shout: taunts that reach every enemy around the tank
+AREA_TAUNTS = (5209, 1161)
+# the main tank's area casts this far before a burrower's first Expose Weakness on him
+EXPOSE_LEAD_MS = 5000
 HEALER_ENGINE = "raid healer engine"
 ENGINE_NAMES = {"c": "combat", "n": "non-combat", "d": "dead"}
 # Every node of an engine lands in exactly one of these columns on every pass
@@ -1035,6 +1066,100 @@ def ready_paladin(samples: Samples, ready: dict, kiter: int, when: int) -> dict:
     return out
 
 
+def patch_spots(samples: Samples, when: int) -> dict[int, tuple[float, float]]:
+    """Each patch in the snapshot at or before `when` and where it sits."""
+    index = samples.index_at(when)
+    if index < 0:
+        return {}
+    kinds = samples.sphere_kinds(when)
+    return {row[0]: (row[1], row[2]) for row in samples.sphere_rows[index] if kinds.get(row[0]) == "patch"}
+
+
+def patch_side(latches, guid: int, when: int) -> int | None:
+    """The side whose `anub.patchN` held the patch at `when`, None for one no side held."""
+    return next((side for side, spans in enumerate(latches) if as_guid(held_at(spans, when)) == guid), None)
+
+
+def kite_turn(bridge: list[tuple[int, str]], stages, start: int, stop: int,
+              walks=("patch",)) -> tuple[int | None, str | None]:
+    """When a patch kite turned for its patch and what says so: its first `anub.bridge` ask, hand or turn in
+    the window, else the first of its `walks` kitestages there. None for one that never turned."""
+    when = next((when for when, value in bridge if start <= when <= stop and value in BRIDGE_TURNS), None)
+    if when is not None:
+        return when, "anub.bridge"
+    when = min((max(low, start) for value, low, high in stages if value in walks and low < stop and high > start),
+               default=None)
+    return (when, "kitestage") if when is not None else (None, None)
+
+
+def moves_from(rows: list[tuple[int, str]], turn: int, stop: int) -> list[str]:
+    """The kiter's `anub.kitemove` at the turn, carried in when no row lands there, then each change before the
+    mark's end, where the reset to `none` lands."""
+    out = [value for when, value in rows if when <= turn + NOTE_TICK_MS][-1:]
+    for when, value in rows:
+        if turn + NOTE_TICK_MS < when < stop and (not out or out[-1] != value):
+            out.append(value)
+    return out
+
+
+def turned_for(samples: Samples, spikes, latches, taken, guid: int, turn: int, stop: int) -> dict | None:
+    """The patch a kite turned for: the one the spike failed on as the mark ended when it was alive at the turn,
+    else the one alive then the kiter came nearest after it. Where it sat, the side holding it at the turn, the
+    kiter's and the spike's closest approach to it from the turn to the mark's end, and `failed`, the spike
+    failing on it. None with no patch alive at the turn."""
+    spots = patch_spots(samples, turn)
+    stamps, rows = samples.track(guid)
+    first, last = bisect.bisect_left(stamps, turn), bisect.bisect_right(stamps, stop)
+    if not spots or first >= last:
+        return None
+    ended = next((patch for patch, (_, end) in taken.items() if end == stop and patch in spots), None)
+    nearest = {patch: min(dist2(row[1:3], spot) for row in rows[first:last]) for patch, spot in spots.items()}
+    patch = ended or min(nearest, key=nearest.get)
+    chase = [row for row in (spike_at(samples, spikes, guid, when) for when in stamps[first:last]) if row]
+    return {"guid": patch, "spot": spots[patch], "side": patch_side(latches, patch, turn), "kiter": nearest[patch],
+            "spike": min((dist2(row[1:3], spots[patch]) for row in chase), default=None), "failed": ended is not None}
+
+
+def first_patch_pass(samples: Samples, spikes, latches, kiter: int, start: int, stop: int) -> dict | None:
+    """The first snapshot in `[start, stop]` with the spike chasing the kiter within SPIKE_ROUTE_CLEARANCE of a
+    patch: when, the nearest such patch, where it sat, how far, and the side holding it then. A patch the spike
+    was already inside at its first sample counts only once it got out, since the run never led it there."""
+    spawned = None
+    for when in samples.stamps[bisect.bisect_left(samples.stamps, start):bisect.bisect_right(samples.stamps, stop)]:
+        spike = spike_at(samples, spikes, kiter, when)
+        if spike is None:
+            continue
+        inside = sorted((dist2(spike[1:3], spot), guid, spot) for guid, spot in patch_spots(samples, when).items()
+                        if dist2(spike[1:3], spot) <= SPIKE_ROUTE_CLEARANCE)
+        if spawned is None:
+            spawned = {guid for _, guid, _ in inside}
+            continue
+        spawned &= {guid for _, guid, _ in inside}
+        passed = [row for row in inside if row[1] not in spawned]
+        if passed:
+            yards, guid, spot = passed[0]
+            return {"t": when, "guid": guid, "spot": spot, "yards": yards, "side": patch_side(latches, guid, when)}
+    return None
+
+
+def bridge_verdict(window: dict) -> str | None:
+    """How a patch+hand kite's turn went, a BRIDGE_TEXT key: from its `anub.bridge` rows, else from a Hand of
+    Protection's cast against the turn. None for a kite that never planned one."""
+    if "patch+hand" not in window["plan"]:
+        return None
+    for value in ("hand", "turn", "ask"):
+        if value in window["bridge"]:
+            return value
+    if window["turn"] is None:
+        return "never"
+    gaps = [rec["t"] - window["turn"] for rec in window["hop"]]
+    if any(abs(gap) <= HAND_AT_TURN_MS for gap in gaps):
+        return "hand"
+    if not gaps:
+        return "turn"
+    return "early" if gaps[0] < 0 else "late"
+
+
 def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     samples = samples or Samples(trace)
     impales = [rec for rec in trace.of("dmg") if rec.get("sp") in IMPALE]
@@ -1044,7 +1169,8 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     stages = holder_spans(trace, "anub.kitestage", pull_end(trace))
     holds = holder_spans(trace, "anub.gather", pull_end(trace))
     boosts = boost_rows(trace)
-    used = {stop for _, stop in consumed_patches(trace, samples).values()}
+    taken = consumed_patches(trace, samples)
+    used = {stop for _, stop in taken.values()}
     submerged = submerged_spans(trace)
     emerges = [stop for _, stop in submerged]
     casts = [rec for rec in trace.of("cast") if not rec.get("tr")]
@@ -1059,6 +1185,9 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
             moves[rec.get("g")].append(rec)
     feigns = aura_spans(trace, (SPELL_FEIGN_DEATH,))
     ready = hop_readiness(trace)
+    bridges = per_bot(trace, "anub.bridge")
+    kitemoves = per_bot(trace, "anub.kitemove")
+    sides = side_spans(trace)
 
     out = []
     for guid, start, stop, closed in mark_spans(trace):
@@ -1118,7 +1247,25 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "frost_yd": min(frost) if frost else None,
                     "in_frost": bool(frost) and min(frost) <= PERMAFROST_SLOW_REACH,
                     "stalled": stalled(samples, guid, start, stop)})
-        out[-1]["cover"] = cover_speeds(samples, spikes, out[-1])
+        window = out[-1]
+        window["cover"] = cover_speeds(samples, spikes, window)
+        window["patch_kite"] = (any(terminal in PATCH_PLANS for terminal in window["plan"])
+                                or "patch" in window["stages"])
+        # under the Hand a patch+hand kite walks its patch in the immune stage
+        walks = ("patch", "immune") if "patch+hand" in window["plan"] else ("patch",)
+        turn, by = (kite_turn(bridges.get(guid, []), stages.get(guid, []), start, stop, walks)
+                    if window["patch_kite"] else (None, None))
+        window.update({
+            "turn": turn, "turn_by": by,
+            "bridge": [value for when, value in bridges.get(guid, [])
+                       if start <= when <= stop + NOTE_TICK_MS and value != "none"],
+            "moves": moves_from(kitemoves.get(guid, []), turn, stop) if turn is not None else [],
+            "turned_for": (turned_for(samples, spikes, latches, taken, guid, turn, stop)
+                           if turn is not None else None),
+            "first_pass": first_patch_pass(samples, spikes, latches, guid, start, stop if turn is None else turn),
+            "side_impales": [(rec, held_side(sides, rec.get("d"), rec["t"])) for rec in impales
+                             if rec.get("d") != guid and start <= rec["t"] <= stop + IMPALE_SLACK_MS
+                             and held_side(sides, rec.get("d"), rec["t"]) is not None]})
     return out
 
 
@@ -1198,6 +1345,10 @@ def show_spike(trace: Trace) -> None:
             plan = plan_line(window, spend)
             if plan:
                 print(f"            {plan}")
+            for line in (turn_line(trace, window), bridge_line(trace, window), pass_line(trace, window),
+                         side_impale_line(trace, window)):
+                if line:
+                    print(f"            {line}")
             if window["in_frost"]:
                 print(f"            marked {window['frost_yd']:.1f} yd from a Permafrost centre, inside its slow")
             cover = protection(trace, window)
@@ -1227,6 +1378,7 @@ def show_spike(trace: Trace) -> None:
         print(f"\n  {len(windows)} window(s): "
               + ", ".join(f"{name} {n}" for name, n in outcomes.most_common()))
         show_plans(trace, windows, spends)
+        show_turns(trace, windows)
         reached = sum(1 for window in windows
                       if any(yards < SPIKE_PATCH_REACH for yards in window["tank_near"].values()))
         print(f"  spike within {SPIKE_PATCH_REACH} yd of a latched tank patch, its fail test's reach:"
@@ -1363,6 +1515,41 @@ def show_plans(trace: Trace, windows: list[dict], spends: dict) -> None:
         f"{trace.name(window['guid'])} {clock(window['start'])} {window['plan'][-1]}" for window in dead) or "none"))
 
 
+def show_turns(trace: Trace, windows: list[dict]) -> None:
+    def who(window: dict) -> str:
+        return f"{trace.name(window['guid'])} {clock(window['start'])}"
+
+    kites = [window for window in windows if window["patch_kite"]]
+    turned = [window for window in kites if window["turn"] is not None]
+    failed = sum(1 for window in turned if window["turned_for"] and window["turned_for"]["failed"])
+    moves = collections.Counter(window["moves"][0] if window["moves"] else "-" for window in turned)
+    inside = sum(1 for window in turned
+                 if window["turned_for"] and window["turned_for"]["kiter"] <= PERMAFROST_SLOW_REACH)
+    print(f"  patch kites turned for a patch: {len(turned)} of {len(kites)}, the spike failed on it in {failed},"
+          f" the kiter inside its {PERMAFROST_SLOW_REACH} yd slow after the turn in {inside}; anub.kitemove at the"
+          " turn: " + (", ".join(f"{move} {n}" for move, n in moves.most_common()) or "none")
+          + ("" if notes(trace, "anub.kitemove") else ", no anub.kitemove rows"))
+    verdicts: dict[str, list[dict]] = collections.defaultdict(list)
+    for window in windows:
+        verdict = bridge_verdict(window)
+        if verdict:
+            verdicts[verdict].append(window)
+    print("  patch+hand kites at the turn: " + ("; ".join(
+        f"{BRIDGE_TEXT[verdict]} {len(rows)}" + ("" if verdict == "hand" else ": " + ", ".join(map(who, rows)))
+        for verdict, rows in sorted(verdicts.items(), key=lambda item: -len(item[1]))) or "none")
+          + ("" if notes(trace, "anub.bridge") else "; no anub.bridge rows, so read off Hand of Protection casts"))
+    passed = [window for window in windows if window["first_pass"]]
+    print(f"  spike within {SPIKE_ROUTE_CLEARANCE} yd of a patch, its route clearance, before the turn or in a kite"
+          " with none: " + (", ".join(
+              f"{who(window)} +{(window['first_pass']['t'] - window['start']) / 1000:.1f} s" for window in passed)
+              or "none"))
+    hits = collections.Counter((window["guid"], window["start"], rec.get("d"), side)
+                               for window in windows for rec, side in window["side_impales"])
+    print("  Impale on a side tank: " + (", ".join(
+        f"{trace.name(tank)} (side {side}) {n} in {trace.name(kiter)}'s kite {clock(start)}"
+        for (kiter, start, tank, side), n in hits.items()) or "none"))
+
+
 def cover_name(rec: dict) -> str:
     return KITER_OWN.get(rec.get("sp")) or "Hand of Protection"
 
@@ -1444,6 +1631,63 @@ def kite_line(trace: Trace, window: dict) -> str:
     boosts = ", ".join(f"{KITE_BOOSTS[rec['sp']]} {(rec['t'] - window['start']) / 1000:+.1f} s"
                        for rec in window["boosts"])
     return "; ".join(part for part in (stages and f"kitestage {stages}", boosts and f"boosts {boosts}") if part)
+
+
+def patch_label(trace: Trace, patch: dict) -> str:
+    kind = "kite patch" if patch["side"] is None else f"side {patch['side']} patch"
+    return f"{kind} {short(trace, patch['guid'])} ({patch['spot'][0]:.1f},{patch['spot'][1]:.1f})"
+
+
+def turn_line(trace: Trace, window: dict) -> str:
+    """A patch kite's turn: when and what says so, its anub.kitemove, the patch it went for, and whether the
+    spike failed on it."""
+    if not window["patch_kite"]:
+        return ""
+    if window["turn"] is None:
+        return "never turned for a patch"
+    text = (f"turned +{(window['turn'] - window['start']) / 1000:.1f} s ({window['turn_by']}),"
+            f" kitemove {'>'.join(window['moves']) or '-'}")
+    patch = window["turned_for"]
+    if patch is None:
+        return text + "; no patch alive then"
+    spike = "unsampled" if patch["spike"] is None else f"{patch['spike']:.1f} yd"
+    return (text + f"; {patch_label(trace, patch)}, closest after the turn: kiter {patch['kiter']:.1f} yd,"
+            f" spike {spike}; " + ("the spike failed on it" if patch["failed"] else f"unspent, {window['outcome']}"))
+
+
+def bridge_line(trace: Trace, window: dict) -> str:
+    """How a patch+hand kite's turn went, with each Hand of Protection on the kiter against the turn. The turn
+    line already says a kite never turned."""
+    verdict = bridge_verdict(window)
+    if verdict in (None, "never"):
+        return ""
+    source = "anub.bridge" if window["bridge"] else "Hand of Protection casts"
+    text = f"patch+hand: {BRIDGE_TEXT[verdict]}, read off {source}"
+    if window["turn"] is None or not window["hop"]:
+        return text
+    # adding 0.0 turns a -0.0 that rounding leaves into 0.0
+    hands = ", ".join(f"by {trace.name(rec.get('s'))} {round((rec['t'] - window['turn']) / 1000, 1) + 0.0:+.1f} s"
+                      for rec in window["hop"])
+    return f"{text}; Hand of Protection {hands} from the turn"
+
+
+def pass_line(trace: Trace, window: dict) -> str:
+    """The first snapshot before the turn with the spike within SPIKE_ROUTE_CLEARANCE of a patch."""
+    row = window["first_pass"]
+    if row is None:
+        return ""
+    when = "before the turn" if window["turn"] is not None else "never turned" if window["patch_kite"] else ""
+    return (f"spike within {SPIKE_ROUTE_CLEARANCE} yd of {patch_label(trace, row)}: {row['yards']:.1f} yd"
+            f" +{(row['t'] - window['start']) / 1000:.1f} s" + (f", {when}" if when else ""))
+
+
+def side_impale_line(trace: Trace, window: dict) -> str:
+    hits: dict[tuple[int, int], list[dict]] = collections.defaultdict(list)
+    for rec, side in window["side_impales"]:
+        hits[(rec.get("d"), side)].append(rec)
+    return "; ".join(f"Impale on side {side} tank {trace.name(guid)}: {len(recs)} hit(s) for"
+                     f" {sum(rec.get('a', 0) for rec in recs):,} from +{(recs[0]['t'] - window['start']) / 1000:.1f} s"
+                     for (guid, side), recs in hits.items())
 
 
 # -------------------------------------------------------------------------------------------- spheres
@@ -2213,6 +2457,49 @@ def stray_burrower_casts(trace: Trace) -> list[dict]:
     return out
 
 
+def member_of(trace: Trace, guid) -> int:
+    """The roster player a pet, guardian or totem belongs to, else the guid itself."""
+    return trace.owners.get(guid, guid)
+
+
+def burrower_pulls(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Each burrower pulled off a side tank by a non-tank within PULL_WINDOW_MS of coming up, first sight or an
+    emerge: its target going from the tank holding a side to a player off the tank role or one's pet, snapshots
+    with no target skipped. When, the side tank and its side, the puller, when the side tank first had it in
+    that run, and the puller's casts on it in the PULL_CASTS_MS before, triggered ones left out."""
+    samples = samples or Samples(trace)
+    sides = side_spans(trace)
+    waves = wave_starts(trace, samples)
+    casts: dict[tuple, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if not rec.get("tr"):
+            casts[(rec.get("s"), rec.get("tgt"))].append(rec)
+    out = []
+    for row in burrower_rows(trace, samples):
+        guid = row["guid"]
+        stamps, rows = samples.track(guid)
+        for up in row["ups"]:
+            tank = since = side = None
+            for index in range(bisect.bisect_left(stamps, up), bisect.bisect_right(stamps, up + PULL_WINDOW_MS)):
+                when, unit = stamps[index], rows[index]
+                target = unit[7] if len(unit) > 7 else 0
+                if not target or unit[5] <= 0:
+                    continue
+                held = held_side(sides, target, when)
+                if held is not None:
+                    if target != tank:
+                        tank, since, side = target, when, held
+                    continue
+                puller = member_of(trace, target)
+                if tank is not None and puller in trace.roles and trace.role(puller) != "tank":
+                    out.append({"guid": guid, "wave": wave_of(waves, row["first"]), "up": up,
+                                "emerged": up != row["ups"][0], "t": when, "tank": tank, "side": side, "on": since,
+                                "puller": target, "casts": [rec for rec in casts[(target, guid)]
+                                                            if when - PULL_CASTS_MS <= rec["t"] <= when]})
+                tank = None
+    return sorted(out, key=lambda pull: (pull["t"], pull["guid"]))
+
+
 def focus_due_drops(trace: Trace, samples: Samples) -> list[dict]:
     """Each time `anub.focusdue` went from 1 to 0 with the `anub.focus` burrower still alive, and its
     health then. Only older traces write either."""
@@ -2498,6 +2785,22 @@ def show_pickups(trace: Trace, samples: Samples) -> None:
             for label, _, held in side_tank_gather(trace)))
 
 
+def show_pulls(trace: Trace, samples: Samples) -> None:
+    rows = burrower_pulls(trace, samples)
+    print(f"\n  pulled off its side tank by a non-tank within {PULL_WINDOW_MS / 1000:.0f} s of coming up: the seconds"
+          f" since it came up and\n  on the side tank, and the puller's casts on it in the {PULL_CASTS_MS / 1000:.0f} s"
+          " before, triggered ones left out:" + ("" if rows else " none"))
+    for row in rows:
+        casts = ", ".join(f"{trace.spell(rec['sp'])} +{(rec['t'] - row['up']) / 1000:.1f} s" for rec in row["casts"])
+        print(f"    {short(trace, row['guid']):10} wave {row['wave'] or '-'} {'emerge' if row['emerged'] else 'sight'}"
+              f" {clock(row['up'])}: {trace.name(row['tank'])} (side {row['side']}) > {trace.name(row['puller'])}"
+              f" ({trace.role(member_of(trace, row['puller']))}) +{(row['t'] - row['up']) / 1000:.1f} s,"
+              f" {(row['t'] - row['on']) / 1000:.1f} s on the side tank; casts on it: {casts or 'none'}")
+    if rows:
+        pullers = collections.Counter(row["puller"] for row in rows)
+        print("  pulls per puller: " + ", ".join(f"{trace.name(guid)} {n}" for guid, n in pullers.most_common()))
+
+
 def show_burrowers(trace: Trace) -> None:
     print("NERUBIAN BURROWERS")
     samples = Samples(trace)
@@ -2554,6 +2857,8 @@ def show_burrowers(trace: Trace) -> None:
     show_counts(trace, "anub.dps")
     if notes(trace, "anub.mstand"):
         show_counts(trace, "anub.mstand")
+    if rows:
+        show_pulls(trace, samples)
 
 
 # ------------------------------------------------------------------------------------------------ dps
@@ -3597,6 +3902,64 @@ def tank_deaths(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
+def main_tank_exposes(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Each run of Expose Weakness on the main tank, from its first stack to its removal (`off` None for one up
+    at the end): the peak and when it first read so, the burrowers that put stacks on in turn, and his own area
+    casts, AREA's and AREA_TAUNTS' with triggered ones left out, from EXPOSE_LEAD_MS before the first stack to
+    the peak. Every burrower shares one aura whose row names only its first caster, so each burrower sampled on
+    him at a stack counts too."""
+    samples = samples or Samples(trace)
+    main = main_tank(trace, samples)
+    if main is None:
+        return []
+    burrowers = sorted(guids_of_entry(trace, NPC_BURROWER))
+    out: list[dict] = []
+    run = None
+    for rec in trace.of("aura"):
+        if rec.get("sp") not in EXPOSE_WEAKNESS or rec.get("d") != main:
+            continue
+        stacks = 0 if rec.get("r") else int(rec.get("st") or 1)
+        if not stacks:
+            if run:
+                run["off"] = rec["t"]
+                out.append(run)
+            run = None
+            continue
+        if run is None:
+            run = {"start": rec["t"], "peak": 0, "at": rec["t"], "off": None, "by": []}
+        if stacks > run["peak"]:
+            run.update(peak=stacks, at=rec["t"])
+        on = [rec.get("s")] + [guid for guid in burrowers if (row := samples.recent(guid, rec["t"]))
+                               and row[5] > 0 and len(row) > 7 and row[7] == main]
+        run["by"] = list(dict.fromkeys(run["by"] + [guid for guid in on if guid]))
+    if run:
+        out.append(run)
+    area = [rec for rec in trace.of("cast") if rec.get("s") == main and not rec.get("tr")
+            and (rec.get("sp") in AREA or rec.get("sp") in AREA_TAUNTS)]
+    for run in out:
+        run["area"] = [rec for rec in area if run["start"] - EXPOSE_LEAD_MS <= rec["t"] <= run["at"]]
+    return out
+
+
+def show_main_exposes(trace: Trace, samples: Samples) -> None:
+    main = main_tank(trace, samples)
+    if main is None:
+        return
+    rows = main_tank_exposes(trace, samples)
+    if not rows:
+        print(f"  the main tank {trace.name(main)}'s Expose Weakness: none")
+        return
+    print(f"  the main tank {trace.name(main)}'s Expose Weakness per run of stacks: its peak, the burrowers on him at"
+          f" a stack,\n  and his area casts from {EXPOSE_LEAD_MS / 1000:.0f} s before the first stack to the peak,"
+          " triggered ones left out:")
+    for row in rows:
+        off = "up at the end" if row["off"] is None else f"off {clock(row['off'])}"
+        casts = ", ".join(f"{trace.spell(rec['sp'])} {round((rec['t'] - row['start']) / 1000, 1) + 0.0:+.1f} s"
+                          for rec in row["area"])
+        print(f"    {clock(row['start']):>9}  peak {row['peak']} at {clock(row['at'])}, {off};"
+              f" by {', '.join(short(trace, guid) for guid in row['by']) or '-'}; area casts: {casts or 'none'}")
+
+
 def show_tanks(trace: Trace) -> None:
     print("TANKS")
     if not is_toc_anubarak(trace):
@@ -3621,6 +3984,7 @@ def show_tanks(trace: Trace) -> None:
     print("  Expose Weakness on anyone else, peak over the pull: "
           + (", ".join(f"{trace.name(guid)} {peak}" for guid, peak in sorted(others.items(), key=lambda item: -item[1]))
              or "none"))
+    show_main_exposes(trace, samples)
 
     rows = defensive_rows(trace, samples)
     if not rows:
@@ -3967,7 +4331,9 @@ SECTIONS = (
      " each tank patch, the spike against the gather and unlatched patches at each mark's end, the speeds at"
      " each cover, the kiter standing still, a flip-flopping walk, the nearest HoP-ready paladin at 12 yd, Feign"
      " Death dropped at once, Impale on others, the crowd where he went down, each kite's anub.kiteplan"
-     " terminals and whether the last was used before the mark ended", show_spike),
+     " terminals and whether the last was used before the mark ended, each patch kite's turn with its"
+     " anub.kitemove and whether the spike failed on its patch, a patch+hand kite's Hand at the turn, the spike"
+     " within 14.5 yd of a patch before the turn, Impale on a side tank", show_spike),
     ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots, killers,"
      " landings, grips from the cast spot, the grip duty to kill and a sphere back up, anub.spot0 and"
      " anub.spot1 changes, each side's first tank patch, spheres and tank patches spent per submerge against"
@@ -3976,7 +4342,8 @@ SECTIONS = (
      " pickup, DPS focus per side, casts off every focus, on older traces focus due per wave and dropped with"
      " the focus alive, each focus pick by side against its tank and the patches, distance from the patch"
      " centre while on a side tank, where each submerge went under, each opener and the players nearest its"
-     " exit", show_burrowers),
+     " exit, each pulled off its side tank by a non-tank within 15 s of coming up with the puller's casts",
+     show_burrowers),
     ("dps", "per phase and DPS role: target kind share, moving share, yards walked by move order, damage by"
      " target kind; his health lost per phase 1, flagged under 20 percent; anub.dps rows per role; each anub.dside"
      " group per wave and melee walks across the midline between the side spots", show_dps),
@@ -3989,8 +4356,9 @@ SECTIONS = (
     ("healers", "per healer and phase the distance to the main and side tanks, far from a side tank on a burrower,"
      " follow acts, engine passes, anub.hstand; side tanks with no healer in reach; raid healer engine coverage",
      show_healers),
-    ("tanks", "Expose Weakness per wave per side tank, each tank defensive cast with its stack, each tank death"
-     " with the damage and heals before it", show_tanks),
+    ("tanks", "Expose Weakness per wave per side tank, the main tank's with the burrowers and his area casts"
+     " before it, each tank defensive cast with its stack, each tank death with the damage and heals before it",
+     show_tanks),
     ("scarabs", "scarabs alive after each emerge and their targets, the main tank's Mandibles stack then, scarab"
      " lives per phase, Mandibles peak stack and damage per player per phase", show_scarabs),
     ("redirects", "each Misdirection and Tricks of the Trade with its caster's target and a burrower's target"

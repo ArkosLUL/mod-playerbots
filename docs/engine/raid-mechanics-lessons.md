@@ -203,6 +203,13 @@ Every distance helper measures differently, and a large-model boss inflates all 
   bounded by the stand's distance over the chaser's speed and reads thin at once. A timer of its own
   (a boost running) must never hold the commit back
   ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-plan)).
+- **An immune kiter walks the chaser straight into its trigger.** Immune, it has the chaser on its
+  heels, so a stand past the trigger on the far side from the chaser circles round it: walk into the
+  trigger's centre and let the chaser follow. Slowed or not, pick the ending by simulating each,
+  slow included: Anub'arak's straight walk into a patch beats a top-speed spike only from 40 yd back,
+  a pass along its edge from 20.
+- **Size a prediction horizon by the chaser's travel, not seconds.** 6 s of a 3.5 yd/s chaser is 21
+  yd: the pass it makes 9 s on never shows. Judge up to the predicted catch, capped.
 - **A boss that opens on a random player** (`AttackStart(SelectTargetFromPlayerList(...))` when an
   intro ends) is answered by staging, not by taunt speed: the pickup tank waits inside his reach and
   taunts on the first selectable tick, and everyone else waits outside it until a tank holds him

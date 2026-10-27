@@ -89,9 +89,10 @@ constexpr uint32 ANUBARAK_SURFACED_MS = 80000;
 constexpr uint32 ANUBARAK_SUBMERGED_MS = 62000;
 // One this low off Permafrost still dies before its next 3 s submerge check
 constexpr float ANUBARAK_FOCUS_OFF_FROST_PCT = 10.0f;
-// A burrower is a focus pick once a tank it is on stands this close: before, it is still walking in from
-// its exit and the raid would chase it there
+// A burrower is a focus pick once a tank it is on has stood this close this long: before, it is still
+// walking in from its exit and the raid would chase it there, or pull it off the tank
 constexpr float ANUBARAK_FOCUS_SETTLE = 5.0f;
+constexpr uint32 ANUBARAK_FOCUS_SETTLE_MS = 4000;
 // The script's first submerge check comes 30 s after a burrower spawns or emerges, so one off Permafrost
 // is still worth killing this long after either
 constexpr uint32 ANUBARAK_BURROWER_FREE_MS = 25000;
@@ -408,6 +409,9 @@ Creature* GetAnubarakFocusBurrower(Player* bot);
 // other side's focus; him while selectable; while he's down, the nearest scarab in reach. Null outside
 // the pull, for non-DPS and for a bot on sphere duty.
 Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI);
+// A living, selectable burrower within range of at. waiting: only one no tank has held for the settle
+// yet, above the off-Permafrost kill line.
+bool AnubarakBurrowerNear(Player* bot, Position const& at, float range, bool waiting);
 // A floor point within ANUBARAK_MELEE_BURROWER_REACH of the burrower and ANUBARAK_MELEE_PATCH_CLEARANCE
 // from every patch: in his melee reach behind him first, then in his reach, nearest the bot; else the
 // one nearest him. Held per bot while the burrower stays put. False when none is, or no patch is near

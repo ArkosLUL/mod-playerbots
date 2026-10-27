@@ -8,8 +8,10 @@ Permafrost time, the focus picks and the tank patches spent, a fourth the tank s
 a burrower's submerge, the speeds at a cover, the healer and tank views, a fifth the kite flip-flop, the
 ready paladin, a dropped Feign Death and the pursuit replay, a sixth the scarabs, the redirects and the
 burrower openers, a seventh the DPS split, the side groups, the focus per side, the kite plans and the
-stretch held off the anchor, and the shared fixture shows every section reads empty on a trace that is
-not Anub'arak rather than raising.
+stretch held off the anchor, an eighth each patch kite's turn, the bridge's Hand, the spike's first pass
+by a patch, Impale on a side tank, a burrower pulled off its side tank and the main tank's Expose
+Weakness, and the shared fixture shows every section reads empty on a trace that is not Anub'arak rather
+than raising.
 """
 from __future__ import annotations
 
@@ -2611,6 +2613,339 @@ class SplitPull(unittest.TestCase):
     def test_every_section_prints(self):
         text = self.text(ab.show_banner, *(section for _, _, section in ab.SECTIONS))
         self.assertIn("DPS\n  P1 ", text)
+
+
+BEAR, SHIELD, DEATH, ARMS, RUNNER, WALKER, SAVIOR, ARCHER2 = range(9001, 9009)
+BOSS3 = CREATURE | 1200
+SPIKE3 = CREATURE | 1201
+PATCH_N, PATCH_S = CREATURE | 1211, CREATURE | 1212
+PATCH_N_AT, PATCH_S_AT = (X, Y + 20.0), (X, Y - 20.0)
+BUR1, BUR2 = CREATURE | 1221, CREATURE | 1222
+WOLF = CREATURE | 1231
+IMPALE_25H = 67860
+SPELL_CHARGE, SPELL_CHARGE_STUN, SPELL_SUNDER, SPELL_CLAW = 11578, 7922, 7386, 52476
+SPELL_SWIPE, SPELL_ROAR, SPELL_MAUL = 48562, 5209, 48480
+# (start, stop, kiter) per mark under him
+TURN_MARKS = ((12000, 20000, RUNNER), (25000, 32000, WALKER), (35000, 42000, ARCHER2), (44000, 49000, ARMS))
+
+
+def lerp(path: list[tuple[int, float, float]], when: int) -> tuple[float, float]:
+    """The spot on a `(t, dx, dy)` path off the room centre at `when`, held before its first point and after its
+    last."""
+    if when <= path[0][0]:
+        return X + path[0][1], Y + path[0][2]
+    for (low, x0, y0), (high, x1, y1) in zip(path, path[1:]):
+        if when <= high:
+            share = (when - low) / (high - low)
+            return X + x0 + (x1 - x0) * share, Y + y0 + (y1 - y0) * share
+    return X + path[-1][1], Y + path[-1][2]
+
+
+RUNNER_PATH = [(12000, 30.0, 22.0), (15000, 15.0, 5.0), (19000, 1.0, -19.0)]
+WALKER_PATH = [(25000, 30.0, 20.0), (27000, 20.0, 20.0), (32000, 12.0, 20.0)]
+# spawned 10 yd from the north patch, out past its clearance, back in at 14 s, then down to the south patch
+SPIKE_RUN = [(12000, 10.0, 20.0), (12500, 16.0, 20.0), (13500, 15.0, 10.0), (14000, 10.0, 12.0), (15000, 6.0, 0.0),
+             (20000, 2.0, -14.0)]
+
+
+def turn_kiter(when: int) -> int:
+    return next((kiter for start, stop, kiter in TURN_MARKS if start <= when <= stop), 0)
+
+
+def turn_spike(when: int) -> tuple[float, float]:
+    if when <= 20000:
+        return lerp(SPIKE_RUN, when)
+    if when < 35000:
+        return X + 30.0, Y - 10.0
+    if 46000 <= when <= 49000:
+        return X + 10.0, Y + 30.0
+    return X + 40.0, Y + 30.0 if when >= 44000 else Y
+
+
+def bur1_target(when: int) -> int:
+    """On Felesta from 1.5 s, off to Mighty at 4 s, back, onto the main tank at 6.5 s, back, to Trueshot's wolf at
+    7.5 s, back, and to Mighty again at 17 s, past the 15 s after it came up."""
+    if when < 1500:
+        return RUNNER
+    targets = {4000: ARMS, 6500: BEAR, 7500: WOLF}
+    if when in targets:
+        return targets[when]
+    return ARMS if when >= 17000 else DEATH
+
+
+def bur2_target(when: int) -> int:
+    return BEAR if 5000 <= when <= 8000 or 64500 <= when <= 65500 else SHIELD
+
+
+def turn_player(guid: int, when: int) -> list:
+    spot = {BEAR: (X, Y), SHIELD: (X - 5.0, Y + 25.0), DEATH: (X - 5.0, Y - 25.0), ARMS: (X + 5.0, Y - 30.0),
+            SAVIOR: (X - 10.0, Y), ARCHER2: (X - 30.0, Y)}.get(guid)
+    if guid == RUNNER:
+        spot = lerp(RUNNER_PATH, when)
+    elif guid == WALKER:
+        spot = lerp(WALKER_PATH, when)
+    hp = 0.0 if guid == WALKER and when >= 32000 else 100.0
+    up = when < 10000 or when >= 50000
+    return [guid, *spot, Z, 0.0, hp, 100.0, BOSS3 if up and guid == BEAR else 0, 0, 0, 0, 0]
+
+
+def turn_snap(when: int) -> dict:
+    units = [turn_player(guid, when) for guid in (BEAR, SHIELD, DEATH, ARMS, RUNNER, WALKER, SAVIOR, ARCHER2)]
+    up = when < 10000 or when >= 50000
+    units.append([BOSS3, X, Y + 1.0, Z, 0.0, 90.0, 0.0, BEAR if up else 0, 0, 0, 0, 0])
+    units.append([WOLF, X - 28.0, Y, Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+    if 10000 <= when < 50000:
+        units.append([SPIKE3, *turn_spike(when), Z, 0.0, 100.0, 0.0, turn_kiter(when), 1, 0, 0, 0])
+    hz = []
+    for guid, spot, last in ((PATCH_N, PATCH_N_AT, 70000), (PATCH_S, PATCH_S_AT, 20000)):
+        if 0 <= when <= last:
+            units.append([guid, *spot, PATCH_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+            hz.append([PERMAFROST_25H, *spot, PATCH_Z, 6.0, 1])
+    if 1000 <= when <= 18000:
+        units.append([BUR1, X - 5.0, Y - 23.0, Z, 0.0, 100.0 - (when - 1000) / 500.0, 0.0, bur1_target(when),
+                      0, 0, 0, 0])
+    if when >= 1000:
+        units.append([BUR2, X - 5.0, Y + 23.0, Z, 0.0, 100.0 - (when - 1000) / 2000.0, 0.0, bur2_target(when),
+                      0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def turn_pull(with_turn_notes: bool = True) -> list[dict]:
+    """A 25H pull: up to 10 s, under to 50 s, up again to 70 s. Four kites under him: a patch+hand bridge with
+    anub.bridge and anub.kitemove rows that the spike fails on, a patch kite that dies short of its patch while
+    the spike impales a side tank, a patch+hand kite whose Hand lands with its immune stage, and a patch+hand kite
+    that never turns. While he is up a burrower is pulled off its side tank by a melee and by a pet, and the main
+    tank takes Expose Weakness twice. `with_turn_notes` False drops the anub.bridge and anub.kitemove rows."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789500000000, "map": ab.MAP_TOC, "inst": 15, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": BEAR, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+             {"g": SHIELD, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+             {"g": DEATH, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": ARMS, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
+             {"g": RUNNER, "n": "Prayer", "r": "heal", "c": 5, "h": 0},
+             {"g": WALKER, "n": "Druidica", "r": "ranged", "c": 11, "h": 0},
+             {"g": SAVIOR, "n": "Justice", "r": "melee", "c": 2, "h": 0},
+             {"g": ARCHER2, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": BOSS3, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 10000, "e": "unit", "g": SPIKE3, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"}
+          for guid in (PATCH_N, PATCH_S)),
+        *({"t": 1000, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"}
+          for guid in (BUR1, BUR2)),
+        {"t": -500, "e": "unit", "g": WOLF, "n": "Wolf", "own": ARCHER2},
+        *({"e": "spell", "sp": spell, "n": name} for spell, name in (
+            (SPELL_CHARGE, "Charge"), (SPELL_SUNDER, "Sunder Armor"), (SPELL_CLAW, "Claw"),
+            (SPELL_SWIPE, "Swipe (Bear)"), (SPELL_ROAR, "Challenging Roar"), (SPELL_MAUL, "Maul"))),
+        *(note(when, BEAR, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (50000, 1))),
+        note(0, BEAR, "anub.side0", SHIELD),
+        note(0, BEAR, "anub.side1", DEATH),
+        note(0, SHIELD, "anub.patch0", PATCH_N),
+        note(0, DEATH, "anub.patch1", PATCH_S),
+        note(20200, DEATH, "anub.patch1", 0),
+        note(1000, BEAR, "anub.wave", 1),
+
+        # Mighty's opener on BUR1 is older than 3 s by the pull at 4 s, and the stun is triggered
+        cast(500, ARMS, SPELL_MAUL, BUR1),
+        cast(1500, ARMS, SPELL_CHARGE, BUR1),
+        triggered(2000, ARMS, SPELL_CHARGE_STUN, BUR1),
+        cast(3000, ARMS, SPELL_SUNDER, BUR2),
+        cast(3500, ARMS, SPELL_SUNDER, BUR1),
+        cast(7200, WOLF, SPELL_CLAW, BUR1),
+
+        # the main tank: a Swipe too early, one in, the Roar, a triggered Swipe and one past the peak
+        cast(500, BEAR, SPELL_SWIPE, 0),
+        cast(2000, BEAR, SPELL_SWIPE, 0),
+        cast(6200, BEAR, SPELL_ROAR, 0),
+        cast(6300, BEAR, SPELL_MAUL, BOSS3),
+        triggered(6400, BEAR, SPELL_SWIPE, 0),
+        cast(7000, BEAR, SPELL_SWIPE, 0),
+        {"t": 6000, "e": "aura", "d": BEAR, "s": BUR2, "sp": 67847, "r": 0, "st": 1},
+        {"t": 6500, "e": "aura", "d": BEAR, "s": BUR2, "sp": 67847, "r": 0, "st": 2},
+        {"t": 9000, "e": "aura", "d": BEAR, "s": BUR2, "sp": 67847, "r": 1},
+        {"t": 65000, "e": "aura", "d": BEAR, "s": BUR2, "sp": 67847, "r": 0, "st": 1},
+
+        *(aura(when, kiter, ab.SPELL_MARK, removed, BOSS3) for start, stop, kiter in TURN_MARKS
+          for when, removed in ((start, False), (stop, True))),
+        note(12100, RUNNER, "anub.kiteplan", "patch+hand"),
+        note(25100, WALKER, "anub.kiteplan", "patch"),
+        note(35100, ARCHER2, "anub.kiteplan", "patch+hand"),
+        note(44100, ARMS, "anub.kiteplan", "patch+hand"),
+        *(note(when, guid, "anub.kitestage", stage) for when, guid, stage in (
+            (12000, RUNNER, "run"), (15400, RUNNER, "immune"), (18000, RUNNER, "patch"), (20000, RUNNER, "none"),
+            (25000, WALKER, "run"), (27000, WALKER, "patch"), (32000, WALKER, "none"),
+            (35000, ARCHER2, "run"), (37100, ARCHER2, "immune"), (42000, ARCHER2, "none"),
+            (44000, ARMS, "run"), (49000, ARMS, "none"))),
+        cast(15300, SAVIOR, 10278, RUNNER),
+        cast(37000, SAVIOR, 10278, ARCHER2),
+        dmg(28000, SPIKE3, SHIELD, IMPALE_25H, 10000),
+        dmg(28500, SPIKE3, SHIELD, IMPALE_25H, 12000),
+        dmg(31900, SPIKE3, WALKER, IMPALE_25H, 30000),
+        {"t": 32000, "e": "death", "g": WALKER, "killer": SPIKE3, "x": X + 12.0, "y": Y + 20.0, "z": Z,
+         "blow": [SPIKE3, 30000]},
+        {"t": 70000, "e": "end", "out": "wipe"},
+    ]
+    if with_turn_notes:
+        records += [note(when, RUNNER, key, value) for when, key, value in (
+            (12100, "anub.bridge", "none"), (15000, "anub.bridge", "ask"), (15400, "anub.bridge", "hand"),
+            (20000, "anub.bridge", "none"), (12100, "anub.kitemove", "edge0"), (17000, "anub.kitemove", "in"))]
+    records += [turn_snap(when) for when in range(-500, 70000, 500)]
+    return records
+
+
+class TurnPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_15_anub-arak_1789500020.ndjson", turn_pull())
+        cls.bare = write_trace(cls.folder.name, "649_15_anub-arak_1789500021.ndjson", turn_pull(False))
+        cls.windows = ab.mark_windows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, trace, *sections) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for section in sections:
+                section(trace)
+        return out.getvalue()
+
+    def test_the_turn_is_the_first_bridge_row_else_the_first_walk_stage(self):
+        stages = [("run", 1000, 3000), ("immune", 3000, 5000), ("patch", 5000, 9000)]
+        self.assertEqual(ab.kite_turn([(2000, "none"), (2500, "ask")], stages, 1000, 9000), (2500, "anub.bridge"))
+        self.assertEqual(ab.kite_turn([(500, "turn")], stages, 1000, 9000), (5000, "kitestage"))
+        self.assertEqual(ab.kite_turn([], stages, 1000, 9000, ("patch", "immune")), (3000, "kitestage"))
+        self.assertEqual(ab.kite_turn([], [("patch", 0, 9000)], 1000, 9000), (1000, "kitestage"))
+        self.assertEqual(ab.kite_turn([], stages[:1], 1000, 9000), (None, None))
+
+    def test_the_kitemove_at_the_turn_is_carried_in_then_each_change(self):
+        rows = [(100, "edge1"), (5100, "in"), (6000, "in"), (7000, "edge0")]
+        self.assertEqual(ab.moves_from(rows, 5000, 9000), ["in", "edge0"])
+        self.assertEqual(ab.moves_from(rows, 4000, 6500), ["edge1", "in"])
+        self.assertEqual(ab.moves_from([], 4000, 6500), [])
+
+    def test_a_patch_hand_turn_reads_the_bridge_else_the_hand_against_the_turn(self):
+        def window(bridge, turn, hands, plan=("patch+hand",)):
+            return {"plan": list(plan), "bridge": bridge, "turn": turn, "hop": [{"t": when} for when in hands]}
+
+        self.assertEqual(ab.bridge_verdict(window(["ask", "hand"], 1000, [])), "hand")
+        self.assertEqual(ab.bridge_verdict(window(["ask", "turn"], 1000, [1200])), "turn")
+        self.assertEqual(ab.bridge_verdict(window(["ask"], 1000, [])), "ask")
+        self.assertEqual(ab.bridge_verdict(window([], None, [500])), "never")
+        self.assertEqual(ab.bridge_verdict(window([], 5000, [3600])), "hand")
+        self.assertEqual(ab.bridge_verdict(window([], 5000, [3000])), "early")
+        self.assertEqual(ab.bridge_verdict(window([], 5000, [7000])), "late")
+        self.assertEqual(ab.bridge_verdict(window([], 5000, [])), "turn")
+        self.assertIsNone(ab.bridge_verdict(window([], 5000, [], ("hand",))))
+
+    def test_each_patch_kite_reads_its_turn_its_move_and_the_patch_it_went_for(self):
+        rows = [(window["guid"], window["patch_kite"], window["turn"], window["turn_by"], window["moves"],
+                 window["bridge"]) for window in self.windows]
+        self.assertEqual(rows, [(RUNNER, True, 15000, "anub.bridge", ["edge0", "in"], ["ask", "hand"]),
+                                (WALKER, True, 27000, "kitestage", [], []),
+                                (ARCHER2, True, 37100, "kitestage", [], []),
+                                (ARMS, True, None, None, [], [])])
+        bridge, walk, hand, _ = (window["turned_for"] for window in self.windows)
+        self.assertEqual((bridge["guid"], bridge["side"], bridge["failed"]), (PATCH_S, 1, True))
+        self.assertAlmostEqual(bridge["kiter"], math.sqrt(2.0))
+        self.assertAlmostEqual(bridge["spike"], math.hypot(2.0, 6.0))
+        # the south patch is gone by then, so the north one is the only candidate
+        self.assertEqual((walk["guid"], walk["side"], walk["failed"]), (PATCH_N, 0, False))
+        self.assertAlmostEqual(walk["kiter"], 12.0)
+        self.assertAlmostEqual(hand["kiter"], math.hypot(30.0, 20.0))
+
+    def test_the_first_pass_before_the_turn_leaves_out_a_patch_the_spike_spawned_inside(self):
+        first, walk, hand, never = (window["first_pass"] for window in self.windows)
+        self.assertEqual((first["t"], first["guid"], first["side"]), (14000, PATCH_N, 0))
+        self.assertAlmostEqual(first["yards"], math.hypot(10.0, 8.0))
+        self.assertIsNone(walk)
+        self.assertIsNone(hand)
+        self.assertEqual((never["t"], never["guid"]), (46000, PATCH_N))
+
+    def test_impale_on_a_side_tank_lands_in_its_window_with_the_side(self):
+        self.assertEqual([[(rec["t"], rec["d"], side) for rec, side in window["side_impales"]]
+                          for window in self.windows], [[], [(28000, SHIELD, 0), (28500, SHIELD, 0)], [], []])
+
+    def test_the_spike_section_prints_each_turn_and_its_summary(self):
+        text = self.text(self.trace, ab.show_spike)
+        south = f"side 1 patch #{PATCH_S & 0xFFFFFFFF} ({X:.1f},{Y - 20.0:.1f})"
+        north = f"side 0 patch #{PATCH_N & 0xFFFFFFFF} ({X:.1f},{Y + 20.0:.1f})"
+        self.assertIn(f"            turned +3.0 s (anub.bridge), kitemove edge0>in; {south}, closest after the turn:"
+                      " kiter 1.4 yd, spike 6.3 yd; the spike failed on it\n"
+                      "            patch+hand: Hand at the turn, read off anub.bridge; Hand of Protection by Justice"
+                      " +0.3 s from the turn\n"
+                      f"            spike within 14.5 yd of {north}: 12.8 yd +2.0 s, before the turn\n", text)
+        self.assertIn(f"            turned +2.0 s (kitestage), kitemove -; {north}, closest after the turn: kiter"
+                      " 12.0 yd, spike 42.4 yd; unspent, death\n"
+                      "            Impale on side 0 tank Bulwark: 2 hit(s) for 22,000 from +3.0 s\n", text)
+        self.assertIn("            patch+hand: Hand at the turn, read off Hand of Protection casts; Hand of Protection"
+                      " by Justice -0.1 s from the turn\n", text)
+        self.assertIn("            never turned for a patch\n"
+                      f"            spike within 14.5 yd of {north}: 14.1 yd +2.0 s, never turned\n", text)
+        self.assertIn("  patch kites turned for a patch: 3 of 4, the spike failed on it in 1, the kiter inside its 7.5"
+                      " yd slow after the turn in 1; anub.kitemove at the turn: - 2, edge0 1\n", text)
+        self.assertIn("  patch+hand kites at the turn: Hand at the turn 2; never turned 1: Mighty 0:44.000\n", text)
+        self.assertIn("  spike within 14.5 yd of a patch, its route clearance, before the turn or in a kite with none:"
+                      " Prayer 0:12.000 +2.0 s, Mighty 0:44.000 +2.0 s\n", text)
+        self.assertIn("  Impale on a side tank: Bulwark (side 0) 2 in Druidica's kite 0:25.000\n", text)
+
+    def test_without_the_turn_notes_the_spike_section_falls_back_on_the_stages_and_the_casts(self):
+        bridge = ab.mark_windows(self.bare)[0]
+        self.assertEqual((bridge["turn"], bridge["turn_by"], bridge["moves"], bridge["bridge"]),
+                         (15400, "kitestage", [], []))
+        self.assertEqual(ab.bridge_verdict(bridge), "hand")
+        text = self.text(self.bare, ab.show_spike)
+        self.assertIn("anub.kitemove at the turn: - 3, no anub.kitemove rows\n", text)
+        self.assertIn("  patch+hand kites at the turn: Hand at the turn 2; never turned 1: Mighty 0:44.000; no"
+                      " anub.bridge rows, so read off Hand of Protection casts\n", text)
+
+    def test_the_new_keys_count_as_present_and_absent_without_their_rows(self):
+        self.assertNotIn("anub.kitemove", ab.missing_probes(self.trace))
+        self.assertNotIn("anub.bridge", ab.missing_probes(self.trace))
+        gone = ab.missing_probes(self.bare)
+        self.assertIn("anub.kitemove", gone)
+        self.assertIn("anub.bridge", gone)
+
+    def test_a_burrower_pulled_off_its_side_tank_reads_the_puller_and_its_casts(self):
+        rows = ab.burrower_pulls(self.trace)
+        self.assertEqual([(row["guid"], row["t"], row["tank"], row["side"], row["on"], row["puller"], row["up"],
+                           row["wave"], row["emerged"]) for row in rows],
+                         [(BUR1, 4000, DEATH, 1, 1500, ARMS, 1000, 1, False),
+                          (BUR1, 7500, DEATH, 1, 7000, WOLF, 1000, 1, False)])
+        self.assertEqual([[(rec["t"], rec["sp"]) for rec in row["casts"]] for row in rows],
+                         [[(1500, SPELL_CHARGE), (3500, SPELL_SUNDER)], [(7200, SPELL_CLAW)]])
+
+    def test_the_burrower_section_prints_each_pull(self):
+        text = self.text(self.trace, ab.show_burrowers)
+        self.assertIn(f"    #{BUR1 & 0xFFFFFFFF}      wave 1 sight 0:01.000: Felesta (side 1) > Mighty (melee) +3.0 s,"
+                      " 2.5 s on the side tank; casts on it: Charge 11578 +0.5 s, Sunder Armor 7386 +2.5 s\n", text)
+        self.assertIn(f"    #{BUR1 & 0xFFFFFFFF}      wave 1 sight 0:01.000: Felesta (side 1) > Wolf (Trueshot)"
+                      " (ranged) +6.5 s, 0.5 s on the side tank; casts on it: Claw 52476 +6.2 s\n", text)
+        self.assertIn("  pulls per puller: Mighty 1, Wolf (Trueshot) 1\n", text)
+
+    def test_the_main_tanks_expose_weakness_reads_its_burrowers_and_his_area_casts(self):
+        rows = ab.main_tank_exposes(self.trace)
+        self.assertEqual([(row["start"], row["peak"], row["at"], row["off"], row["by"]) for row in rows],
+                         [(6000, 2, 6500, 9000, [BUR2, BUR1]), (65000, 1, 65000, None, [BUR2])])
+        self.assertEqual([[(rec["t"], rec["sp"]) for rec in row["area"]] for row in rows],
+                         [[(2000, SPELL_SWIPE), (6200, SPELL_ROAR)], []])
+
+    def test_the_tank_section_prints_the_main_tanks_expose_weakness(self):
+        text = self.text(self.trace, ab.show_tanks)
+        self.assertIn("  the main tank Ecoterrorist's Expose Weakness per run of stacks: its peak, the burrowers on him"
+                      " at a stack,\n  and his area casts from 5 s before the first stack to the peak, triggered ones"
+                      " left out:\n"
+                      f"     0:06.000  peak 2 at 0:06.500, off 0:09.000; by #{BUR2 & 0xFFFFFFFF}, #{BUR1 & 0xFFFFFFFF};"
+                      " area casts: Swipe (Bear) 48562 -4.0 s, Challenging Roar 5209 +0.2 s\n"
+                      f"     1:05.000  peak 1 at 1:05.000, up at the end; by #{BUR2 & 0xFFFFFFFF}; area casts: none\n",
+                      text)
+
+    def test_every_section_prints(self):
+        text = self.text(self.trace, ab.show_banner, *(section for _, _, section in ab.SECTIONS))
+        self.assertIn("TANKS\n", text)
 
 
 def side_pull(diff: int, side1: int, later: list[dict] | None = None) -> list[dict]:

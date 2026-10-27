@@ -433,11 +433,13 @@ wipes one raid-wide focus switched sides 24-30 yd apart 13-25 times a phase 1, a
    reach.
 
 A bot outside the split (a human, one joined since) takes side 0's focus, else side 1's. A side's
-focus (per instance): selectable and under 10%; else **settled**, a tank within 5 yd has it, or its
-side has no usable side tank, and then on Permafrost or in its **free time**, the 25 s after it first
+focus (per instance): selectable and under 10%; else **settled**, a tank within 5 yd has held it 4 s
+straight (reset on a new victim or the tank past 5 yd), or its side has no usable side tank, and then on Permafrost or in its **free time**, the 25 s after it first
 shows or emerges, since the script's first submerge check comes at 30 s. Unsettled, it is still
 walking in from its exit: every wave's first pick in the 2026-10-26 late wipes came at the spawn,
-51-61 yd from any tank, and the raid ran across the patches after it. Off Permafrost in its free time
+51-61 yd from any tank, and the raid ran across the patches after it. Picked the moment a tank stood
+within 5 yd, it lost Mighty in 2026-10-27 L 2:28: Felesta held both south burrowers from +0.7 s,
+Mighty hit one from +2.3 s and had both by +4.7 s. Off Permafrost in its free time
 goes first, the one whose time ends first, then the lowest health, guid breaking a tie; the pick is
 kept while it qualifies, stays on the side, and nothing in its free time outranks it. Off Permafrost
 one below 80% submerges on a 3 s check and comes back full, but one under 10% dies first (one was left
@@ -465,9 +467,13 @@ never inside the slow.
 
 **Burrower guard** (`anubarak burrower guard`, spells and attacks): while he is engaged, a non-tank's
 action aimed at a burrower other than its own pick is zeroed, and a taunt or Death Grip on any
-burrower always; an interrupt or stun on a casting one passes. Affliction multidots put Corruption,
-Unstable Affliction and Curse of Agony on all four wave-1 burrowers at 8-15 s while the pick was him,
-and Agony died to a loose one every 2026-10-26 pull.
+burrower always, and its area damage (`IsToCAreaDamage`) while a burrower still settling stands
+within 10 yd of it or its target; an interrupt or stun on a casting one passes. Affliction multidots
+put Corruption, Unstable Affliction and Curse of Agony on all four wave-1 burrowers at 8-15 s while
+the pick was him, and Agony died to a loose one every 2026-10-26 pull. A tank holding no side holds
+its area damage with any burrower within 10 yd, and `anubarak main tank shout guard` blocks its
+`challenging roar` and `challenging shout`: in L 3:32 a burrower walked to 3 yd of the bear main
+tank, his Swipe and Challenging Roar took four, and he died at Expose Weakness 5.
 
 A sphere shooter and a gripping DK not
 waiting on its spot get no pick, or the sphere node (+5) and this one swap the target every tick.
@@ -564,14 +570,37 @@ in), L the time to the emerge (`PickTerminal`, pure, nativetest):
 
 **Commit by simulating the escape, never by distance or the spike's speed now.** A walk "beats the
 catch" when the spike comes within 11.5 yd of the patch 1 s before it would close to 7.5 of the kiter
-(`PatchMargin`); under Hand of Protection the catch counts from the hand's end. A patch kite (a
-bridge once its hand is on) runs on while turning 1.5 s later would still beat it
-(`PatchMarginAfter`), else turns, and stays turned. In 2026-10-27 J 6:06 and I 3:44 Felesta, marked
+(`PatchMargin`); under Hand of Protection the catch counts from the hand's end, and never with the
+kiter within 4 yd of the centre, where the spike fails first. A patch kite runs on while turning
+1.5 s later would still beat it (`PatchWalkAfter`, over the moves allowed at the pick), else turns,
+and stays turned. In 2026-10-27 J 6:06 and I 3:44 Felesta, marked
 with the allowance 1 and the spike at base speed, ran on because the old reading of Impale needed the
 spike faster now, turned as it reached top speed 10.7 yd back and died; replayed, the rule turns her
 within 4 s. The hand goes out 1 s before the catch on the run it is on, an own immunity 0.6 s before.
 A boost never holds anything back: in J 1:22 Justice's running Nitro gated both the patch turn and
 his own Divine Shield and Hand, and he died with all three.
+
+**The walk onto the patch is one of three moves, picked by simulation** (`BestPatchWalk`,
+`anub.kitemove`): `in`, straight to the centre through the slow (heroic 80%: 1.4 yd/s inside 7.5,
+none under Hand of Freedom); `edge0`/`edge1`, to the tangent point on the 8.5 yd ring, the patch on
+the kiter's left or right, then 15 yd on (from outside 8.5 only). The widest margin wins; under Hand
+of Protection `in` only, since the spike sits 2-3 yd behind and only its test ends it. At top speed
+`in` needs the spike about 40 yd back, an edge pass about 20 with the spike behind on the kiter's
+line. The patch: rank first, then the nearest with a move whose spike route (spike, kiter, legs)
+passes every other tank patch by 14.5 and whose walk passes the gather by 12, then either, then any;
+an edge's legs land on the floor. Turned, the kite keeps its walk while it still makes it, else goes
+`in`. The stand 8.5 yd past the patch off the spike it replaced was the far side under a hand: L 1:22
+Prayer circled her patch at 12-19 yd, the spike 2.5-3.7 behind, until the hand ran out; and with the
+spike between kiter and patches every stand failed the spike-behind test (L 3:44 Druidica ran the
+ring and died). Normal keeps the stand (`PickKiteCandidate`: rank, then the nearest).
+
+**A `patch+hand` kite runs as a patch kite** (`JudgeBridge`, `anub.bridge`). When its turn comes due
+with the walk still making it now, the Hand is asked for then (`ask`) if its paladin is alive,
+unmarked, within 30 yd and in sight with it ready and the kiter free of Forbearance, and waited on
+1 s; landed (`hand`), the kite runs on under it and walks `in` with 1 s of it left; else it turns
+without (`turn`) and the plan becomes `patch`. A walk lost already leaves the hand to 1 s before the
+catch. Turning only once the hand landed, L 8:29 Stormweaver never turned: the claim lapsed, the
+paladin was 37 yd off at the catch, and she died after 22.1 s with the patch unused.
 
 **Heroic kites run first** (`anub.kitestage`, guide: as long as possible without touching
 Permafrost), the stage per instance per ms. The 2026-10-25 bot kites lasted 1-15 s, each ending on a
@@ -580,15 +609,19 @@ patch, 4-5 a phase 2:
 - `run`: no patch search. A **lane step**: 16 headings, 10 yd out, floor-checked, within 40 yd of
   the room centre (or no further out than the kiter is), the spike behind and no nearer. Each heading
   is judged by the **pursuit model** (`ToCAnubarakPursuit.h`, no game headers, nativetest): 100 ms
-  steps of [pure pursuit](#pursuing-spike-34660) with the speed steps off its auras, 6 s of the kiter
-  running straight along it to the ring radius, then round the ring the way it turns (a square-on
+  steps of [pure pursuit](#pursuing-spike-34660) with the speed steps off its auras, up to the kite's
+  catch (6-20 s) of the kiter running straight along it to the ring radius, then round the ring the way it turns (a square-on
   heading away from the spike's bearing). It clears when the spike's simulated run passes every
   obstacle by its clearance and the kiter's own run every patch by 8.5, one starting inside that only
   having to head away. A straight lane missed G 4:04 (2026-10-26): Agony on Nitro, faster than the
   spike, rounded the north rim and the spike cut inside it within 8 yd of a tank patch, spent in
-  `run`; the model puts that pass at 9.5 and the south heading's at 39. Obstacles: every patch at 14.5 yd, and in phase
-  2 the gather point at 20 (3 yd slots, up to 6 off them, Impale's 7.5, 3.5 margin), since Impale is
-  cast round the spike as it moves: at 12 the spike passed within 10 yd of six gathered bots. Ranked:
+  `run`; the model puts that pass at 9.5 and the south heading's at 39. Over 6 s at base speed the spike
+  covers 21 yd: K 1:22 (2026-10-27) Power's south heading read clear and the spike cut over a tank
+  patch 9.5 s in. Obstacles: every patch at 14.5 yd; in phase 2 the gather point at 20 (3 yd slots, up
+  to 6 off them, Impale's 7.5, 3.5 margin), since Impale is cast round the spike as it moves: at 12
+  the spike passed within 10 yd of six gathered bots; and every living player outside the gather but
+  the kiter at 10 (Impale's 7.5 plus 2.5), ranked with the gather: K 6:57 Assasin under a hand walked
+  the spike over side tank Felesta, 6 Impales. Ranked:
   the plan's goal (a patch kite: turning 1.5 s on along it still beats the catch; a hand kite: the
   step within 25 yd of its escort); clear of every patch; an own kite, the step's distance off the
   gather in 5 yd bands, so the spike's next random target starts farther off; clear of the gather;
@@ -596,8 +629,9 @@ patch, 4-5 a phase 2:
   gather, passing every tank patch by 14.5, since after a death or hand-off the spike runs from there
   to the raid (C 1:57 the line crossed the south patch 0.5 yd off); then, while the spike is faster
   and a patch it may end on lives, a step within 25 yd of its stand; then the widest pass by the
-  patches, then by the gather, margins capped at 20 yd, then the step furthest from the spike. None
-  clear of the patches: the widest patch margin alone, the gather left out: weighing the gather like
+  patches, then by the gather and players, margins capped at 20 yd, then the step furthest from the
+  spike. None clear of the patches: the latest first pass inside a patch's clearance, then the widest
+  patch margin, the gather left out: weighing the gather like
   a tank patch, the second kite of every 2026-10-26 pull walked the spike over the last tank patch.
   **The heading is held** (within 15°) 1.5 s once picked, then while it matches the best on the goal,
   patch, distance and gather keys, and either way only while its catch stays within 2 s of the best
@@ -617,8 +651,8 @@ patch, 4-5 a phase 2:
 - `immune`: Hand of Protection up, still running; the generic `feign death` is zeroed for a marked
   bot.
 - `patch`: a `patch` kite, or a `patch+hand` one once its hand is on, whose walk no longer beats the
-  catch now or 1.5 s on ([the plan](#the-kite-plan)), to the stand the walk is timed on
-  (`ChooseKitePatch`), round the patch when it clips the slow. **A kiter carrying Permafrost counts at
+  catch now or 1.5 s on ([the plan](#the-kite-plan)): the plan's move, leg by leg (2 yd arrive),
+  holding on the last. **A kiter carrying Permafrost counts at
   base run speed** (7 yd/s, more if boosted) in every simulation: it runs that once off the patch.
   Read at 1.4 yd/s, Bulwark marked in his own tank patch turned `patch` 0.1 s in against a 3.5 yd/s
   spike (F 1:22, H 6:06) and spent the submerge's allowance. Turned for a patch, it stays turned until
@@ -695,7 +729,9 @@ kite whose hand hasn't landed, latched by the plan (the first in the protector o
 when the plan was picked), none for the kiter's own hand, so it is the one the claim picks. Its spot is on the line from the room centre to the kiter, 25 yd short of it (the centre when
 nearer), turned 15° and 30° either way round the centre until 15 yd off the spike, the dodge lane
 clearance off its line to the kiter, 29 yd of the kiter, 8.5 yd off every patch and on the floor
-(inside the centre's navprobe-clean 50 yd); none clear, no escort. Over 4 yd off it walks there, a
+(inside the centre's navprobe-clean 50 yd); none clear, as with the spike crossing the centre (L 8:29),
+points 15, 20 and 25 yd round the kiter at 30° steps, the nearest the paladin first, on the same
+tests; none of those, no escort. Over 4 yd off it walks there, a
 walk headed within 3 yd left running. The gather and the side tank nodes skip it, and `anubarak hop
 escort hold` blocks `reach melee`, `reach spell`, `reach party member to heal`, set behind, flank,
 formation, follow and charges. It ends with the hand, the mark, the emerge or the plan's re-pick.
@@ -754,8 +790,10 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 - A grip stepped out 16 yd, or a far grip, can leave the patches 40+ yd apart; past about 36 a melee
   stand between him and a rim burrower no longer reaches both.
 - A human's generic Divine Shield, Ice Block, Vanish or Feign Death in phase 2 is not held back.
-- The kite plan's catch runs the kiter on its heading then the ring; the patch walk past a step skips
-  the detour round the patch, and the stand 1.5 s on is the raw one past the patch, not floor-checked.
+- The kite plan's catch runs the kiter on its heading then the ring; the walk 1.5 s on takes the moves
+  allowed now, not floor-checked there.
+- The run's ring turn is the one away from the spike's bearing; K 1:22 Power ran round the other way,
+  so its first heading never showed the corner the spike cut.
 - After a fail on one tank patch, a spike re-marking the other side's tank, still holding burrowers
   on its patch, spends that one too (about 1 in 24 per spent patch).
 - A spent tank patch stays bare until he emerges, then waits on a sphere in reach.
@@ -779,8 +817,8 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 - The kite ring (40 yd round the centre) runs past the west refill pair at 36-43 yd.
 - A human's Army of the Dead ghouls still taunt burrowers off the patches (one submerged at 0:39 in a
   2026-10-26 wipe); only bots are blocked.
-- A DPS bot can still pull a freshly taunted burrower off its side tank on plain threat (two did
-  within 3 s in a 2026-10-26 pull).
+- A DPS bot can still pull a burrower off its side tank on plain threat once the 4 s settle is up (two
+  did within 3 s of the taunt in a 2026-10-26 pull, Mighty 2.7-4 s in L 2:28).
 - Not handled: the phase 3 heal hold and stamina-buff cancel, Freezing Slash defensives, ignoring
   burrowers once he is low, scarab threat, normal's phase 2 raid positioning.
 
@@ -807,9 +845,11 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 | `mstand` | `walk` while a melee bot walks to its burrower stand, `none` |
 | `kitestage` | Heroic kiter: `run`, `boost:<spell>` (Nitro Boosts as 55004), `immune`, `patch`, `none` |
 | `kiteplan` | Heroic kiter's terminal: `patch`, `patch+hand`, `hand`, `own`, `none`; can change within a mark |
+| `kitemove` | Heroic kiter's patch walk: `in`, `edge0` (patch on its left), `edge1`, `none`; re-picked each judge until it turns |
+| `bridge` | Heroic `patch+hand` kiter: `ask` (Hand asked at the turn), `hand` (on), `turn` (turned without), `none` |
 | `gather` | Heroic phase 2: `walk`, `hold` |
 | `hstand` | A healer bot's stand while he is up: `walk`, `hold`, `none` |
-| `kite` | The kiter's branch: `patch` (walking to a stand), `detour`, `ring`, `hold`; `none` when there's no spike or the mark moved on |
+| `kite` | The kiter's branch: `patch` (walking to a stand, heroic its move's leg), `detour` (normal), `ring`, `hold`; `none` when there's no spike or the mark moved on |
 | `dodge` | A new dodge spot's reason: `spike` (within 10 yd of it), `lane` (on its line to the kiter), `none` (no clear spot) |
 | `protect` | `hop` while this paladin holds the kiter's claim, `self` while the marked bot needs its own immunity, `none` |
 | `escort` | Heroic escort paladin: `walk`, `hold`, `none` |
@@ -906,10 +946,23 @@ group, a cast off focus only when neither side's focus held it, and says when `f
 `--spike` per kite its `kiteplan` terminals and `used` (a tank patch spent for `patch`, the hand on
 the kiter for `hand`, both for `patch+hand`, its own immunity for `own`), a value carried from the
 last kiter counting only with no row of its own within 1 s of the mark; tallies and a kiter dead
-with its terminal unused. `--threat` per window the longest stretch 10+ yd off the anchor with no
+with its terminal unused. `--spike` per patch kite its turn (the first `bridge` row, else the first
+`patch` stage, `immune` for `patch+hand`), the `kitemove` then, the patch, and whether the spike
+failed on it; per `patch+hand` the Hand at the turn, turned without, or asked and never landed
+(older traces: Hand of Protection casts within 1.5 s of the turn); the spike's first pass within 14.5
+of a patch before the turn, a patch it spawned inside counting once it leaves; Impale on a side tank.
+`--burrowers` each burrower pulled off its side tank by a non-tank within 15 s of coming up, with the
+seconds it had held and the puller's casts on it in the 3 s before. `--tanks` each run of the main
+tank's Expose Weakness: its peak, the burrowers on him at a stack (the shared aura's row names only
+the first caster), his area casts from 5 s before. `--threat` per window the longest stretch 10+ yd off the anchor with no
 drag leg, cut at the first submerge leg, 10 s or more listed. Baseline, the 2026-10-27 25H wipes I,
 J (`1496982cf`): his health a phase 1 I 24.8/13.7/14.3/14.8%, J 19.6/16.1/4.0%; melee 142-255 yd a
 bot a phase 1, moving 24-59%, 17-55 midline crossings; ranged 27-43 yd; held off J P1c 64.8 s.
+Baseline, the 2026-10-27 afternoon 25H wipes K, L (`8145d288f`): his health a phase 1 K
+22.0/19.1/17.7/9.2%, L 20.8/21.5/11.7/11.6/3.4%; melee 105-218 yd a bot a phase 1; kites K 10, L 13,
+L's four deaths with a patch unused (Prayer 1:22 and 8:51, Druidica 3:44, Stormweaver 8:29); K 1:22
+Power's spike 14.2 yd from a tank patch 8.7 s in, never turned; Impale ×6 on Felesta K 6:57; the main
+tank at Expose Weakness 5 L 3:31.
 Baseline, the 2026-10-26 25H wipes C, D, E: Hand of Protection on a
 slower spike C 1:22, E 1:22 and 1:47; patches spent in `run` C 1:57, 4:13, D 2:03, E 1:44; 10-13
 players within 20 yd at each first submerge; `raid healer engine` absent, healers 13-19 yd from the

@@ -101,9 +101,53 @@ struct LegPath
     Point start;
     std::vector<Point> legs;
     float speed = 7.0f;
+    // Where it stands every TICK_S from the start once Slow() ran, else empty
+    std::vector<Point> track;
+
+    // Inside radius of centre it goes at speed * factor, judged where each tick starts: Permafrost's
+    // slow. Set the legs first; the track runs until the last leg or horizonS.
+    void Slow(Point centre, float radius, float factor, float horizonS)
+    {
+        track.assign(1, start);
+        if (speed <= 0.0f || legs.empty())
+            return;
+
+        Point at = start;
+        size_t leg = 0;
+        int const ticks = static_cast<int>(std::ceil(horizonS / TICK_S));
+        for (int i = 0; i < ticks && leg < legs.size(); ++i)
+        {
+            float left = speed * TICK_S * (Dist(at, centre) < radius ? factor : 1.0f);
+            while (leg < legs.size() && left > 0.0f)
+            {
+                float const length = Dist(at, legs[leg]);
+                if (left < length)
+                {
+                    at = {at.x + (legs[leg].x - at.x) * left / length, at.y + (legs[leg].y - at.y) * left / length};
+                    break;
+                }
+
+                left -= length;
+                at = legs[leg++];
+            }
+
+            track.push_back(at);
+        }
+    }
 
     Point At(float t) const
     {
+        if (!track.empty())
+        {
+            float const tick = std::max(t, 0.0f) / TICK_S;
+            size_t const i = static_cast<size_t>(tick);
+            if (i + 1 >= track.size())
+                return track.back();
+
+            float const f = tick - static_cast<float>(i);
+            return {track[i].x + (track[i + 1].x - track[i].x) * f, track[i].y + (track[i + 1].y - track[i].y) * f};
+        }
+
         float left = speed * t;
         Point at = start;
         for (Point const& next : legs)
@@ -150,21 +194,35 @@ inline void ChaseTick(Spike& spike, Point kiter, float t)
     }
 }
 
-// Path is a KiterPath or a LegPath
+// Catches Simulate leaves out: before fromS, while Hand of Protection holds, and with the kiter inside
+// safeRadius of safe
+struct CatchRule
+{
+    float fromS = 0.0f;
+    Point safe;
+    float safeRadius = 0.0f;
+
+    bool Counts(float t, Point kiter) const
+    {
+        return t >= fromS - 0.001f && (safeRadius <= 0.0f || Dist(kiter, safe) > safeRadius);
+    }
+};
+
+// Path is a KiterPath or a LegPath. arrives holds a radius per point, 0 for none.
 template <typename Path>
 Pursuit Simulate(Spike spike, Path const& path, float horizonS, std::vector<Point> const& points, float reach,
-                 float arrive = 0.0f)
+                 std::vector<float> const& arrives, CatchRule const& rule = CatchRule())
 {
     Pursuit out;
     Point kiter = path.start;
-    for (Point const& point : points)
+    for (size_t k = 0; k < points.size(); ++k)
     {
-        out.spikeClosest.push_back(Dist(spike.pos, point));
-        out.kiterClosest.push_back(Dist(kiter, point));
-        out.spikeArriveS.push_back(arrive > 0.0f && Dist(spike.pos, point) <= arrive ? 0.0f : -1.0f);
+        out.spikeClosest.push_back(Dist(spike.pos, points[k]));
+        out.kiterClosest.push_back(Dist(kiter, points[k]));
+        out.spikeArriveS.push_back(arrives[k] > 0.0f && Dist(spike.pos, points[k]) <= arrives[k] ? 0.0f : -1.0f);
     }
 
-    if (Dist(spike.pos, kiter) <= reach)
+    if (Dist(spike.pos, kiter) <= reach && rule.Counts(0.0f, kiter))
         out.catchS = 0.0f;
 
     int const ticks = static_cast<int>(std::ceil(horizonS / TICK_S - 0.001f));
@@ -181,50 +239,154 @@ Pursuit Simulate(Spike spike, Path const& path, float horizonS, std::vector<Poin
             float const pass = SegmentDist(spikeFrom, spike.pos, points[k]);
             out.spikeClosest[k] = std::min(out.spikeClosest[k], pass);
             out.kiterClosest[k] = std::min(out.kiterClosest[k], SegmentDist(kiterFrom, kiter, points[k]));
-            if (arrive > 0.0f && out.spikeArriveS[k] < 0.0f && pass <= arrive)
+            if (arrives[k] > 0.0f && out.spikeArriveS[k] < 0.0f && pass <= arrives[k])
                 out.spikeArriveS[k] = t + TICK_S;
         }
 
-        if (out.catchS < 0.0f && Dist(spike.pos, kiter) <= reach)
+        if (out.catchS < 0.0f && Dist(spike.pos, kiter) <= reach && rule.Counts(t + TICK_S, kiter))
             out.catchS = t + TICK_S;
     }
 
     return out;
 }
 
+// The same arrive radius round every point
+template <typename Path>
+Pursuit Simulate(Spike spike, Path const& path, float horizonS, std::vector<Point> const& points, float reach,
+                 float arrive = 0.0f)
+{
+    return Simulate(spike, path, horizonS, points, reach, std::vector<float>(points.size(), arrive));
+}
+
 // The walk now: how much sooner than the catch the spike comes within patchReach of the patch and fails
 // there, less leadS; negative when it doesn't. Under Hand of Protection the catch counts from the hand's
-// end, immuneS in.
+// end, immuneS in. A kiter within patchReach - reach of the patch can't be caught: the spike fails first.
 template <typename Path>
 float PatchMargin(Spike const& spike, Path const& walk, Point patch, float patchReach, float reach, float immuneS,
                   float horizonS, float leadS)
 {
-    Pursuit const run = Simulate(spike, walk, horizonS, {patch}, reach, patchReach);
+    CatchRule rule;
+    rule.fromS = immuneS;
+    rule.safe = patch;
+    rule.safeRadius = patchReach - reach;
+    Pursuit const run = Simulate(spike, walk, horizonS, {patch}, reach, std::vector<float>{patchReach}, rule);
     float const arrive = run.spikeArriveS[0];
-    float const caught = run.catchS < 0.0f ? -1.0f : std::max(run.catchS, immuneS);
     if (arrive < 0.0f)
-        return caught < 0.0f ? horizonS : -1.0f;
+        return run.catchS < 0.0f ? horizonS : -1.0f;
 
-    return (caught < 0.0f ? horizonS : caught) - arrive - leadS;
+    return (run.catchS < 0.0f ? horizonS : run.catchS) - arrive - leadS;
 }
 
-// offset past the patch on the far side from the spike
-inline Point StandPast(Point patch, Point spike, float offset)
+// How a patch ends a kite
+enum class PatchMove : int
 {
-    float const d = Dist(spike, patch);
-    if (d < 0.001f)
-        return patch;
+    // Straight to the centre, through the slow
+    In,
+    // Past the patch's edge with it on the kiter's left, then on along the tangent
+    EdgeLeft,
+    EdgeRight
+};
 
-    return {patch.x + (patch.x - spike.x) / d * offset, patch.y + (patch.y - spike.y) / d * offset};
+struct PatchRules
+{
+    // The spike's patch test and Impale's reach, centre to centre
+    float patchReach = 11.5f;
+    float impaleReach = 7.5f;
+    float slowReach = 7.5f;
+    // The kiter's speed inside the slow, as a share of its own: 1 for none
+    float slowFactor = 1.0f;
+    // An edge pass touches this ring round the centre, then runs on this far
+    float edgeRadius = 8.5f;
+    float edgeRunOn = 15.0f;
+    float horizonS = 20.0f;
+    float leadS = 1.0f;
+};
+
+struct PatchWalk
+{
+    bool valid = false;
+    PatchMove move = PatchMove::In;
+    std::vector<Point> legs;
+    // PatchMargin of the walk
+    float marginS = -1.0f;
+};
+
+// The move's legs from from. An edge needs from outside the edge ring: the tangent point, then edgeRunOn
+// on along the tangent.
+inline bool PatchMoveLegs(PatchMove move, Point from, Point patch, PatchRules const& rules, std::vector<Point>& legs)
+{
+    legs.clear();
+    if (move == PatchMove::In)
+    {
+        legs.push_back(patch);
+        return true;
+    }
+
+    float const d = Dist(from, patch);
+    if (d <= rules.edgeRadius + 0.01f)
+        return false;
+
+    float const base = std::atan2(from.y - patch.y, from.x - patch.x);
+    float const turn = std::acos(rules.edgeRadius / d) * (move == PatchMove::EdgeLeft ? 1.0f : -1.0f);
+    Point const tangent = {patch.x + rules.edgeRadius * std::cos(base + turn),
+                           patch.y + rules.edgeRadius * std::sin(base + turn)};
+    float const along = Dist(from, tangent);
+    legs.push_back(tangent);
+    legs.push_back({tangent.x + (tangent.x - from.x) / along * rules.edgeRunOn,
+                    tangent.y + (tangent.y - from.y) / along * rules.edgeRunOn});
+    return true;
 }
 
-// PatchMargin of the walk to the stand past the patch, started once the kiter has run on along run for
-// delayS: whether turning that much later still makes it. The walk goes at walkSpeed.
+inline float PatchWalkMargin(Spike const& spike, Point from, float speed, Point patch, std::vector<Point> const& legs,
+                             PatchRules const& rules, float immuneS)
+{
+    LegPath walk;
+    walk.start = from;
+    walk.legs = legs;
+    walk.speed = speed;
+    if (rules.slowFactor < 1.0f)
+        walk.Slow(patch, rules.slowReach, rules.slowFactor, rules.horizonS);
+
+    return PatchMargin(spike, walk, patch, rules.patchReach, rules.impaleReach, immuneS, rules.horizonS, rules.leadS);
+}
+
+// The move with the widest margin of those allow(move, legs) passes. Under Hand of Protection only In: the
+// spike sits on the kiter, so it has to be walked into its test.
+template <typename Allow>
+PatchWalk BestPatchWalk(Spike const& spike, Point from, float speed, Point patch, PatchRules const& rules,
+                        float immuneS, Allow const& allow)
+{
+    PatchWalk best;
+    for (PatchMove move : {PatchMove::In, PatchMove::EdgeLeft, PatchMove::EdgeRight})
+    {
+        PatchWalk walk;
+        walk.move = move;
+        if ((immuneS > 0.0f && move != PatchMove::In) || !PatchMoveLegs(move, from, patch, rules, walk.legs) ||
+            !allow(move, walk.legs))
+            continue;
+
+        walk.valid = true;
+        walk.marginS = PatchWalkMargin(spike, from, speed, patch, walk.legs, rules, immuneS);
+        if (!best.valid || walk.marginS > best.marginS)
+            best = walk;
+    }
+
+    return best;
+}
+
+inline PatchWalk BestPatchWalk(Spike const& spike, Point from, float speed, Point patch, PatchRules const& rules,
+                               float immuneS)
+{
+    return BestPatchWalk(spike, from, speed, patch, rules, immuneS,
+                         [](PatchMove, std::vector<Point> const&) { return true; });
+}
+
+// Runs the chase on along run for delayS: where the kiter and the spike are then, the spike's speed
+// schedule moved on with it
 template <typename Path>
-float PatchMarginAfter(Spike spike, Path const& run, float delayS, float walkSpeed, Point patch, float standOffset,
-                       float patchReach, float reach, float immuneS, float horizonS, float leadS)
+float ChaseAlong(Spike& spike, Path const& run, float delayS, Point& kiter)
 {
-    Point kiter = run.start;
+    kiter = run.start;
     int const ticks = static_cast<int>(std::ceil(delayS / TICK_S - 0.001f));
     for (int i = 0; i < ticks; ++i)
     {
@@ -235,11 +397,26 @@ float PatchMarginAfter(Spike spike, Path const& run, float delayS, float walkSpe
 
     float const elapsed = static_cast<float>(ticks) * TICK_S;
     spike.nextStepS -= elapsed;
-    LegPath walk;
-    walk.start = kiter;
-    walk.legs = {StandPast(patch, spike.pos, standOffset)};
-    walk.speed = walkSpeed;
-    return PatchMargin(spike, walk, patch, patchReach, reach, std::max(immuneS - elapsed, 0.0f), horizonS, leadS);
+    return elapsed;
+}
+
+// The best patch walk once the kiter has run on along run for delayS: whether turning that much later
+// still makes it. The walk goes at walkSpeed.
+template <typename Path, typename Allow>
+PatchWalk PatchWalkAfter(Spike spike, Path const& run, float delayS, float walkSpeed, Point patch,
+                         PatchRules const& rules, float immuneS, Allow const& allow)
+{
+    Point kiter;
+    float const elapsed = ChaseAlong(spike, run, delayS, kiter);
+    return BestPatchWalk(spike, kiter, walkSpeed, patch, rules, std::max(immuneS - elapsed, 0.0f), allow);
+}
+
+template <typename Path>
+PatchWalk PatchWalkAfter(Spike spike, Path const& run, float delayS, float walkSpeed, Point patch,
+                         PatchRules const& rules, float immuneS)
+{
+    return PatchWalkAfter(spike, run, delayS, walkSpeed, patch, rules, immuneS,
+                          [](PatchMove, std::vector<Point> const&) { return true; });
 }
 
 // What ends a heroic kite

@@ -156,9 +156,28 @@ void DragRoutesRoundAPatch()
 
 using AnubarakPursuit::LegPath;
 using AnubarakPursuit::PatchMargin;
+using AnubarakPursuit::PatchMove;
+using AnubarakPursuit::PatchRules;
+using AnubarakPursuit::PatchWalk;
 
 constexpr float PATCH_REACH = 11.5f;
 constexpr float STAND_OFFSET = 8.5f;
+// Heroic Permafrost: 80% slower inside its 7.5 yd
+constexpr float HEROIC_SLOW = 0.2f;
+
+PatchRules HeroicRules()
+{
+    PatchRules rules;
+    rules.slowFactor = HEROIC_SLOW;
+    return rules;
+}
+
+// STAND_OFFSET past the patch on the far side from the spike: the stand the old rule walked to
+Point StandPast(Point patch, Point spike)
+{
+    float const d = AnubarakPursuit::Dist(spike, patch);
+    return {patch.x + (patch.x - spike.x) / d * STAND_OFFSET, patch.y + (patch.y - spike.y) / d * STAND_OFFSET};
+}
 
 struct KiteOutcome
 {
@@ -177,39 +196,51 @@ struct RunOn
     Point At(float t) const { return base->At(from + t); }
 };
 
-// The kite played out: the kiter runs its path, re-judged every 0.3 s, and once turned walks to the
-// stand past the patch, re-aimed off the spike. newRule turns once the walk now fails, or would after
-// running on 1.5 s; the old one only once the spike outran the kiter and Impale came within the walk
-// plus 1 s.
+// The kite played out: the kiter runs its path, re-judged every 0.3 s. newRule turns once the best patch
+// walk now fails, or would after running on 1.5 s, and walks that one's legs, slowed in the patch; the old
+// one turns only once the spike outran the kiter and Impale came within the walk plus 1 s, and walks to
+// the stand past the patch, re-aimed off the spike.
 KiteOutcome PlayKite(Spike spike, KiterPath const& run, Point patch, float speed, bool newRule)
 {
+    PatchRules const rules = HeroicRules();
     KiteOutcome out;
     Point kiter = run.start;
     float runT = 0.0f;
+    std::vector<Point> legs;
+    LegPath walk;
+    float walkT = 0.0f;
     for (int tick = 0; tick < 400; ++tick)
     {
         float const t = static_cast<float>(tick) * AnubarakPursuit::TICK_S;
-        Point const stand = AnubarakPursuit::StandPast(patch, spike.pos, STAND_OFFSET);
         if (out.turnS < 0.0f && tick % 3 == 0)
         {
-            LegPath walk;
-            walk.start = kiter;
-            walk.legs = {stand};
-            walk.speed = speed;
             Spike ahead = spike;
             ahead.nextStepS -= t;
             bool turn = false;
             if (newRule)
-                turn = PatchMargin(ahead, walk, patch, PATCH_REACH, IMPALE_REACH, 0.0f, 20.0f, 1.0f) < 0.0f ||
-                       AnubarakPursuit::PatchMarginAfter(ahead, RunOn{&run, runT, kiter}, 1.5f, speed, patch,
-                                                         STAND_OFFSET, PATCH_REACH, IMPALE_REACH, 0.0f, 20.0f,
-                                                         1.0f) < 0.0f;
+            {
+                PatchWalk const now = AnubarakPursuit::BestPatchWalk(ahead, kiter, speed, patch, rules, 0.0f);
+                turn = now.marginS < 0.0f ||
+                       AnubarakPursuit::PatchWalkAfter(ahead, RunOn{&run, runT, kiter}, 1.5f, speed, patch, rules,
+                                                       0.0f)
+                               .marginS < 0.0f;
+                legs = now.legs;
+            }
             else if (spike.speed > speed)
             {
                 KiterPath const rest = MakeKiterPath(kiter, Heading(90.0f), speed, ROOM_CENTER, 40.0f, 1.0f);
                 float const impale = Simulate(ahead, rest, 20.0f, {}, IMPALE_REACH).catchS;
-                float const walkS = AnubarakPursuit::Dist(kiter, stand) / speed;
+                float const walkS = AnubarakPursuit::Dist(kiter, StandPast(patch, spike.pos)) / speed;
                 turn = AnubarakPursuit::Dist(spike.pos, kiter) <= 9.0f || (impale >= 0.0f && impale <= walkS + 1.0f);
+            }
+
+            if (turn && newRule)
+            {
+                walk = LegPath();
+                walk.start = kiter;
+                walk.legs = legs;
+                walk.speed = speed;
+                walk.Slow(patch, rules.slowReach, rules.slowFactor, 40.0f);
             }
 
             if (turn)
@@ -229,11 +260,16 @@ KiteOutcome PlayKite(Spike spike, KiterPath const& run, Point patch, float speed
             runT += AnubarakPursuit::TICK_S;
             kiter = run.At(runT);
         }
+        else if (newRule)
+        {
+            walkT += AnubarakPursuit::TICK_S;
+            kiter = walk.At(walkT);
+        }
         else
         {
             LegPath step;
             step.start = kiter;
-            step.legs = {stand};
+            step.legs = {StandPast(patch, spike.pos)};
             step.speed = speed;
             kiter = step.At(AnubarakPursuit::TICK_S);
         }
@@ -289,6 +325,118 @@ void HandBridgesTheWalk()
     // The walk stands on its last point
     CHECK(Near(walk.At(10.0f).x, 25.0f, 0.01f));
     CHECK(Near(walk.At(1.0f).x, 7.0f, 0.01f));
+}
+
+float ArriveS(Spike const& spike, Point kiter, float speed, Point patch, std::vector<Point> const& legs)
+{
+    LegPath walk;
+    walk.start = kiter;
+    walk.legs = legs;
+    walk.speed = speed;
+    walk.Slow(patch, 7.5f, HEROIC_SLOW, 20.0f);
+    return Simulate(spike, walk, 20.0f, {patch}, IMPALE_REACH, PATCH_REACH).spikeArriveS[0];
+}
+
+// The slow holds the walk to a fifth of its speed inside 7.5 yd, and only there
+void SlowedWalk()
+{
+    LegPath walk;
+    walk.start = {20.0f, 0.0f};
+    walk.legs = {{0.0f, 0.0f}};
+    walk.Slow({0.0f, 0.0f}, 7.5f, HEROIC_SLOW, 20.0f);
+    CHECK(Near(walk.At(1.0f).x, 13.0f, 0.01f));
+    // 12.5 yd at 7, then 1.4 yd/s
+    CHECK(Near(walk.At(12.5f / 7.0f + 1.0f).x, 7.5f - 1.4f, 0.2f));
+    CHECK(Near(walk.At(19.0f).x, 0.0f, 0.01f));
+}
+
+// A 25H pull: under Hand of Protection with the spike on its heels, the kiter circled its patch until
+// the hand ran out. Walked straight in, the spike fails on the patch with the hand still up.
+void HandWalksIntoThePatch()
+{
+    PatchRules const rules = HeroicRules();
+    Spike spike;
+    spike.pos = {767.0f, 110.0f};
+    spike.speed = 11.3f;
+    spike.step = AnubarakPursuit::LAST_STEP;
+    Point const kiter = {762.0f, 103.0f};
+    Point const patch = {742.0f, 117.0f};
+
+    PatchWalk const walk = AnubarakPursuit::BestPatchWalk(spike, kiter, 7.0f, patch, rules, 10.0f);
+    CHECK(walk.valid && walk.move == PatchMove::In);
+    CHECK(walk.marginS >= 0.0f);
+    float const arrive = ArriveS(spike, kiter, 7.0f, patch, walk.legs);
+    CHECK(arrive >= 0.0f && arrive < 4.0f);
+
+    // Re-marked at the top speed 64 yd from its patch, 9.2 s of hand left
+    spike.pos = {721.0f, 131.0f};
+    spike.speed = AnubarakPursuit::SPEEDS[AnubarakPursuit::LAST_STEP];
+    CHECK(AnubarakPursuit::BestPatchWalk(spike, {721.0f, 137.0f}, 7.0f, {779.0f, 111.0f}, rules, 9.2f).marginS >= 0.0f);
+}
+
+// The spike 20 yd behind the kiter at its top speed, on its line past the patch's edge: walked straight in,
+// the slow lets the spike close before it fails; past the edge it fails while the kiter is still clear
+void EdgeBeatsTheSlow()
+{
+    PatchRules const rules = HeroicRules();
+    Point const patch = {0.0f, 0.0f};
+    Point const kiter = {10.0f, 0.0f};
+
+    // Left keeps the patch on the kiter's left; inside the edge ring there is no edge to pass
+    std::vector<Point> left;
+    CHECK(AnubarakPursuit::PatchMoveLegs(PatchMove::EdgeLeft, kiter, patch, rules, left));
+    CHECK(left.size() == 2 && left[0].y > 0.0f && Near(AnubarakPursuit::Dist(left[0], patch), 8.5f, 0.01f));
+    CHECK(Near(AnubarakPursuit::SegmentDist(kiter, left[1], patch), 8.5f, 0.01f));
+    std::vector<Point> none;
+    CHECK(!AnubarakPursuit::PatchMoveLegs(PatchMove::EdgeRight, {8.0f, 0.0f}, patch, rules, none));
+
+    float const along = AnubarakPursuit::Dist(kiter, left[0]);
+    Spike spike;
+    spike.pos = {kiter.x + (kiter.x - left[0].x) / along * 20.0f, kiter.y + (kiter.y - left[0].y) / along * 20.0f};
+    spike.speed = AnubarakPursuit::SPEEDS[AnubarakPursuit::LAST_STEP];
+    spike.step = AnubarakPursuit::LAST_STEP;
+
+    std::vector<Point> in;
+    CHECK(AnubarakPursuit::PatchMoveLegs(PatchMove::In, kiter, patch, rules, in));
+    CHECK(AnubarakPursuit::PatchWalkMargin(spike, kiter, 7.0f, patch, in, rules, 0.0f) < 0.0f);
+
+    PatchWalk const best = AnubarakPursuit::BestPatchWalk(spike, kiter, 7.0f, patch, rules, 0.0f);
+    CHECK(best.valid && best.move == PatchMove::EdgeLeft && best.marginS >= 0.0f);
+
+    // Under Hand of Freedom the walk in is quick enough
+    PatchRules free = rules;
+    free.slowFactor = 1.0f;
+    CHECK(AnubarakPursuit::PatchWalkMargin(spike, kiter, 7.0f, patch, in, free, 0.0f) >= 0.0f);
+}
+
+// A 25H pull: the spike between the kiter and both patches at its base speed. Every stand past a patch
+// lay beyond the spike, so the kiter ran the ring and died; a walk onto one still beats the catch.
+void SpikeBetweenKiterAndPatches()
+{
+    PatchRules const rules = HeroicRules();
+    Spike spike;
+    spike.pos = {733.0f, 129.0f};
+    bool any = false;
+    for (Point const& patch : {Point{742.0f, 117.0f}, Point{715.0f, 122.0f}})
+        any = any || AnubarakPursuit::BestPatchWalk(spike, {750.0f, 142.0f}, 7.0f, patch, rules, 0.0f).marginS >= 0.0f;
+
+    CHECK(any);
+}
+
+// A 25H pull: the kiter ran south between both tank patches, the spike fresh 35 yd off, then east round
+// the ring. Judged over 6 s the heading kept the spike off both; it cut the corner over the south one 9.5 s
+// in.
+void PassHorizonCoversTheRun()
+{
+    Spike spike;
+    spike.pos = {719.0f, 158.0f};
+    Point const south = {744.0f, 118.0f};
+    KiterPath const path = MakeKiterPath({748.0f, 138.0f}, Heading(270.0f), 7.0f, ROOM_CENTER, 40.0f, 1.0f);
+
+    Pursuit const brief = Simulate(spike, path, 6.0f, {south}, IMPALE_REACH, PATCH_REACH);
+    CHECK(brief.spikeArriveS[0] < 0.0f);
+    Pursuit const full = Simulate(spike, path, 12.0f, {south}, IMPALE_REACH, PATCH_REACH);
+    CHECK(full.spikeArriveS[0] > 6.0f);
 }
 
 // The patch first with 12+ s to the emerge, a Hand bridging with a second one ready; then a Hand, the
@@ -353,6 +501,11 @@ int main()
     DragRoutesRoundAPatch();
     PatchCommitBeatsTheSpeedUp();
     HandBridgesTheWalk();
+    SlowedWalk();
+    HandWalksIntoThePatch();
+    EdgeBeatsTheSlow();
+    SpikeBetweenKiterAndPatches();
+    PassHorizonCoversTheRun();
     TerminalOrder();
     std::printf("anubarak_pursuit_test: ok\n");
     return 0;

@@ -26,6 +26,8 @@ namespace
 
 // Area damage from this close counts as hitting him
 constexpr float ANUBARAK_AREA_THREAT_REACH = 30.0f;
+// Swipe, Cleave, Thunder Clap and the like reach about this far round the caster or its target
+constexpr float ANUBARAK_BURROWER_AREA_REACH = 10.0f;
 
 // Matched as a leading word too, so "cyclone on cc" or "repentance on enemy healer" count
 char const* const SPHERE_CROWD_CONTROL[] = {
@@ -209,12 +211,28 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
 
 float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
 {
-    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || IsAnubarakTankPlayer(bot) ||
-        !AnubarakEngaged(botAI))
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !AnubarakEngaged(botAI))
         return 1.0f;
+
+    // The main tank's Swipe or Thunder Clap pulls a burrower walking past onto him, and its Expose
+    // Weakness stacks come with it
+    if (IsAnubarakTankPlayer(bot))
+        return GetAnubarakBurrowerTankSide(bot) < 0 && IsToCAreaDamage(botAI, action) &&
+                       AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, false)
+                   ? 0.0f
+                   : 1.0f;
 
     // actions that pick their target in Execute read "self target" here, so the stem's own picks pass
     Unit* target = action->GetTarget();
+    // Before its side tank has held it a while, a burrower takes the threat of whatever hits it
+    if (IsToCAreaDamage(botAI, action))
+    {
+        Unit* aimed = target ? target : AI_VALUE(Unit*, "current target");
+        if (AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, true) ||
+            (aimed && AnubarakBurrowerNear(bot, aimed->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, true)))
+            return 0.0f;
+    }
+
     Creature* burrower = target ? target->ToCreature() : nullptr;
     if (!burrower || burrower->GetEntry() != static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER))
         return 1.0f;

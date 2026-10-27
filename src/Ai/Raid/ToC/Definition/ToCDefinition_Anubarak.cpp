@@ -89,6 +89,13 @@ bool AnubarakMainTankLeavesScarabs(PlayerbotAI* botAI)
            GetAnubarakPhase(botAI) == AnubarakPhase::Submerged;
 }
 
+// A tank bot holding no side: the main tank, or one waiting to take over
+bool AnubarakMainTankEngaged(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return AnubarakEngaged(botAI) && IsAnubarakTankPlayer(bot) && GetAnubarakBurrowerTankSide(bot) < 0;
+}
+
 // Heroic phase 2: an immunity spent off the mark is gone for the kites, and Forbearance from Divine
 // Shield blocks Hand of Protection too. The marked bot's own kite casts its immunity directly.
 bool AnubarakKiteImmunitiesKept(PlayerbotAI* botAI)
@@ -154,6 +161,9 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak no ghouls", Role::Any, AnubarakEngaged, 0, {"army of the dead"});
     e.Block("anubarak kite immunity reserve", Role::Any, AnubarakKiteImmunitiesKept, 0,
             {"divine shield", "ice block", "vanish", "feign death"});
+    // the side tanks' pickups; from the main tank they pull the burrowers walking past onto him
+    e.Block("anubarak main tank shout guard", Role::Any, AnubarakMainTankEngaged, 0,
+            {"challenging roar", "challenging shout"});
 
     e.Multiplier<AnubarakThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakSphereGuardMultiplier>(Family::Spell | Family::Attack);
