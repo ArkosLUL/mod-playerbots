@@ -2,27 +2,61 @@
 
 Strategy key `icc`, one strategy for every encounter. Cross-raid conventions are in
 [../README.md](../README.md). Mechanics source: `src/server/scripts/Northrend/IcecrownCitadel/`.
-The code is upstream's: keep tactic changes inside the existing files, since splitting them conflicts
-with every upstream merge.
+During an upstream merge ICC keeps ours; the merge report lists upstream's ICC changes so the user
+can pick which to port.
 
 ## Code layout and registration
 
-`src/Ai/Raid/ICC/`:
+`src/Ai/Raid/ICC/` splits per encounter stem, in dispatch order: `Marrowgar`, `Deathwhisper`,
+`FrostGiant` (Rotting Frost Giants), `Gunship`, `Saurfang`, `Dogs` (Stinky and Precious), `Festergut`,
+`Rotface`, `Putricide`, `BloodPrinces` (council and trash), `BloodQueen`, `Svalna`, `Valithria`,
+`Sindragosa` (boss and gauntlet), `LichKing`. A stem owns:
 
-- `ICCStrategy.cpp`: 51 trigger nodes and 13 multipliers. ICC has **no encounter gate**: each
-  trigger tests its boss itself, mostly through `"find target"` (the bot's threat list), Sindragosa's
-  through a 200 yd `FindNearestCreature`, so every encounter's nodes are asked in every fight.
-- `ICCTriggers.{h,cpp}`, `ICCMultipliers.{h,cpp}`, `ICCTriggerContext.h`, `ICCActionContext.h`.
-- `Action/ICCActions.h` plus `Action/ICCActions_<stem>.cpp`: `LM`, `LDW`, `GSB`, `DBS`, `Dogs`, `FG`,
-  `RF`, `PP`, `BPC`, `BQL`, `SS`, `VT`, `SG`, `LK`.
-- `ICCShared.{h,cpp}`: cross-boss helpers (class taunt and CC, raid icons, heroic buffs, the cheat
-  helpers).
-- `ICCScripts.{h,cpp}`: per-instance state, the spell listeners, the state reset and the RaidObs name
-  table, registered by `AddSC_IcecrownBotScripts` from `src/Script/Playerbots.cpp`.
+- `Action/ICCActions_<Stem>`, `Trigger/ICCTriggers_<Stem>`, `Multiplier/ICCMultipliers_<Stem>`;
+- `Util/ICCHelpers_<Stem>`: its positions, constants, phase readers and other helpers;
+- `Definition/ICCDefinition_<Stem>.cpp`: one `EncounterDefinition` with its rows and multipliers,
+  the accessor declared in `Definition/ICCDefinitions.h`.
 
-The strategy is registered in `RaidStrategyContext.h`, `BuildSharedActionContexts.cpp`,
-`BuildSharedTriggerContexts.cpp`, and `PlayerbotAI.cpp` (map 631 → `icc`, and the instance-strategy
-name list).
+A file exists once it has content: `Dogs` has no helpers; `Marrowgar`, `FrostGiant` and `Svalna` no
+multipliers. Raid-wide parts:
+
+- `Util/ICCHelpers_Shared`: helpers several encounters use (class taunt and CC, raid icons, heroic
+  buffs, the cheat helpers).
+- `Util/ICCData.h`: map id, the `CreatureIdsICC` and `SpellIdsICC` enums, and the Defile and
+  Malleable Goo ids the spell listeners watch. A new encounter-specific id or position goes in the
+  stem's helpers.
+- `Util/ICCEncounterGate.h`: the boss state ids (`IccEncounterId`, mirroring the core's `DataTypes`)
+  and the gate.
+- `Util/ICCScripts.{h,cpp}`: per-instance state, the spell listeners, the state reset and the RaidObs
+  name table, registered by `AddSC_IcecrownBotScripts` from `src/Script/Playerbots.cpp`.
+- Umbrellas `Action/ICCActions.h`, `Trigger/ICCTriggers.h`, `Multiplier/ICCMultipliers.h` include
+  every stem; `RS/RSMultipliers.cpp` includes `ICCActions.h`.
+
+**Seams.** An encounter gains a trigger, action, multiplier, rule or tick in its stem files and
+definition alone:
+
+- trigger and action: classes carrying their name as `static constexpr char const* Name`, joined by
+  an `e.Node<Trigger, Action>(priority)` row. Rows naming one trigger back to back share a node.
+  pblint resolves a row through both `Name`s, so keep each on one line.
+- multiplier: `e.Multiplier<M>(families)`; rules (`OwnMovement`, `OwnTargeting`, `Block`,
+  `Exclusive`) and `Tick` likewise, rules after the stem's multipliers.
+
+**The root only dispatches.** `ICCStrategy.cpp` adds nodes and runs `OnTick` in
+`IccEncounterDefinitions()` order, and adds multipliers in its own: Marrowgar, Deathwhisper,
+FrostGiant, Saurfang, Dogs, Festergut, Rotface, Putricide, BloodPrinces, BloodQueen, Svalna,
+Valithria, Sindragosa, LichKing, Gunship. **Both orders are behaviour**: equal relevances pop in
+insertion order, and the engine stops at the first multiplier that zeroes an action, crediting it
+with the veto, while several ICC multipliers act inside `GetValue`. `ICCActionContext.h` and
+`ICCTriggerContext.h` register every definition's rows. The registration sites name only these root
+files: `RaidStrategyContext.h`, `BuildSharedActionContexts.cpp`, `BuildSharedTriggerContexts.cpp`,
+and `PlayerbotAI.cpp` (map 631 → `icc`, and the instance-strategy name list).
+
+**Pass-through gate.** Every definition takes `IccPassThroughGate`: open and never live, so
+every encounter's nodes and multipliers run in every fight and no trigger names a trace. Each
+trigger tests its boss itself, mostly through `"find target"` (the bot's threat list),
+Sindragosa's through a 200 yd `FindNearestCreature`. Definitions carry the boss id and slug from
+the table below; `Dogs` and `FrostGiant` have no boss state and take `ICC_BOSS_NONE` (255), an id
+`BossStateGate` leaves open.
 
 **Triggers act inside `IsActive`.** Several strip Experienced, apply the heroic buffs or run a cheat
 there, so the side effect runs whenever the node is asked, whatever wins the tick.
@@ -66,7 +100,7 @@ Sindragosa, the Lich King. Gunship and Valithria credit by spell (72959, 72706),
 
 ## Cheats
 
-Every cheat site runs through one of two `ICCShared` helpers and writes a `cheat` record
+Every cheat site runs through one of two `ICCHelpers_Shared` helpers and writes a `cheat` record
 ([observability.md](../../systems/observability.md)) keyed `<prefix>.<kind>`, with `tgt` the unit
 acted on when it is not the bot:
 
@@ -133,8 +167,8 @@ real item use, own-aura cancels, the spell listeners.
 
 ## Per-instance state
 
-`IccInstanceState` (`ICCScripts.h`), one per instance id behind a mutex, `IccState(id)` creating it.
-ICC keeps this store rather than `RaidInstanceState`. Assignments and latches are traced containers:
+`IccInstanceState` (`Util/ICCScripts.h`), one per instance id behind a mutex, `IccState(id)` creating
+it. ICC keeps this store rather than `RaidInstanceState`. Assignments and latches are traced containers:
 `lk.winterinbound`, `lk.mtinbound`, `lk.rangedinbound`, `lk.sharedslot` (-1 none), `sg.flaredblue`,
 `sg.group`, `sg.tomb`, `sg.freedfallback`, `bql.curve`, `bql.airslot`, `bql.slot`, `vd.portalclaim`,
 `dbs.slot`, `rf.explosionslot`. They are unordered, and no loop over one depends on its order.
@@ -148,7 +182,7 @@ not dungeon bosses, so a reset on "a dungeon boss left combat" let their latches
 
 ## Spell listeners
 
-`ICCScripts.cpp`, on the caster's map thread, so their probes satisfy RaidObs's threading rule:
+`Util/ICCScripts.cpp`, on the caster's map thread, so their probes satisfy RaidObs's threading rule:
 
 - **Malleable Goo**: Putricide's 70852 and the balcony's 72296, neither with a spelldifficulty row.
   The missiles and impacts they trigger (72297 row 2197; 72295/72615/74280/74281 row 2211) carry
@@ -162,12 +196,13 @@ not dungeon bosses, so a reset on "a dungeon boss left combat" let their latches
 
 ## Trigger names
 
-Every creator starts `icc `, mostly followed by its boss: `lm`, `lady deathwhisper`, `dbs`,
+Every trigger name starts `icc `, mostly followed by its boss: `lm`, `lady deathwhisper`, `dbs`,
 `festergut`, `rotface`, `putricide`, `bpc`, `bql`, `valithria`, `sindragosa`, `lich king`. The others:
 `icc dark reckoning` (Deathwhisper), `icc in cannon` and the `icc gunship` ones (Gunship), `icc
 rotting frost giant tank position`, `icc dogs` (Stinky and Precious), `icc valkyre spear` and `icc
-sister svalna` (Svalna). A trigger class's own name must equal its node's: `IccGunshipCannonNearTrigger`
-called itself `icc in cannon` and merged its coverage into the real one.
+sister svalna` (Svalna). Rows register classes under their `Name`, so two classes sharing one leave
+one unbuilt: `IccGunshipCannonNearTrigger` called itself `icc in cannon` and merged its coverage
+into the real one.
 
 ## Known gaps
 
