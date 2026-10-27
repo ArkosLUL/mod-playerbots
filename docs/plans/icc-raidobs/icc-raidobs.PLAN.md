@@ -12,8 +12,8 @@ The merge stage alone edits this table.
 
 | Wave | Lane | State | Merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
-| 1 | i0a-tooling | pending | | | |
-| 1 | i0b-foundation | pending | | | |
+| 1 | i0a-tooling | merged | `3bd3925a3` | No `icc spike` prefix row (it is an action); a NOTE_PREFIXES row per contract prefix; `icc` matches contract slugs only; extra aliases `stinky`, `precious`; `iccbuffs` flagged only on heroic; `cheated none recorded` only on v14 ICC; `--cheats` targets as a set; ICC pulls can now get strategy-off | `verify.py` could check `cheat` `g`/`tgt`; `--bot`/`--notes` skip cheat rows; giant keys read silent under shared `icc.`; aliases not map-scoped (Utgarde Keep, Ahn'kahet princes) |
+| 1 | i0b-foundation | merged | `4923506dd` | `MarkPull` takes a name; engage/mark opens read the queued boss id; a boss state renames a trace or closes a MarkPull one; reset 5 s after the last boss state ends (kill or wipe); struct values and edge detectors left bare; listener probes unpaced; cheat rows count real uses only | Boss lanes: replace `*.nitro` with `UseNitroBoosts`, Big Ooze pickup with the real taunt, drop `IccCastClassTaunt` threat/reset and `vd.speed`, update the README cheat rows; i2: unused `SPELL_MALLEABLE_GOO_*`, `fgSlotState`; i4: `vtCloudSync.targetCloudGuid`, `sgFlaredRedThisPhase`; gaps: icon targeting, humans keep Experienced |
 | 2a | i1-lower-spire | pending | | | |
 | 2a | i2-plagueworks | pending | | | |
 | 2b | i3-crimson-hall | pending | | | |

@@ -363,7 +363,7 @@ entry a reset just erased.
   ThreadSanitizer, without the core, so the header must stay std-only.
 
 Not migrated, on purpose: Naxx (upstream still edits `NaxxBossHelper.h`) and ICC (clears on its own
-`OnDestroyMap`). **Known gap:** BT, SSC, SWP, Hyjal, Mag, Kara, TK, ZA and RS (`RSActions_SAV.cpp`,
+`OnDestroyMap` and 5 s after its last boss state leaves `IN_PROGRESS`). **Known gap:** BT, SSC, SWP, Hyjal, Mag, Kara, TK, ZA and RS (`RSActions_SAV.cpp`,
 `RSActions_BAL.cpp`) share unlocked `extern` maps across instances, a data race once two raids run at
 once. Move them here when touched.
 

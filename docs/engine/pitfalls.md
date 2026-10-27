@@ -561,12 +561,22 @@ Related traps:
     XT-002 pulls wiped on it, the carrier trigger never once true across 13,437 and 22,424 asks.
   - **Any member id resolves its row**, not only the 10-man base: Touch of Light 67297 is a 10H id,
     which `GetSpellIdForDifficulty` still remaps and a base-keyed lookup misses.
+  - **Spell hooks see the remapped id.** The `Spell` constructor remaps first, so a listener on the
+    base id misses a heroic-only cast: Putricide's Vile Gas 69240 arrives as 73019 (10H) or 73020
+    (25H).
   - **`pblint.py --spell-difficulty --warnings`** reads both sources (exit 2 if one is missing). Per
     raid directory it warns once per row, at the first referenced member, when some id of the row
     appears nowhere and no referenced member is handled: in the first argument of a
     `GetSpellIdForDifficulty` call, declared and never used, named as a non-spell (`npc`, `entry`, …;
     a brace list's name counts), or marked `// pblint: spell-difficulty-ok` on its line or the one
     above.
+- **A spell listener sees every cast on the server.** `AllSpellScript::OnSpellCast`/`OnSpellPrepare`
+  fire for all of them, so test the caster entry or a constant id before a lookup like
+  `GetSpellIdForDifficulty`. A trigger-missile child takes its caster as unit target
+  (`Spell::EffectTriggerMissileSpell`, hit branch), so a filter on a player target never sees it:
+  Malleable Goo's impacts carry Putricide.
+- **`OnCreatureUpdate` runs for corpses too** (`Creature::Update`), so "boss not in combat" also holds
+  after a kill: ICC's old state reset fired on kills as well as wipes.
 - **`TricksOfTheTradeTargetValue::TankNeedsRedirect` never takes its opener branch, and the fallback
   is wrong for the class that casts it.** The opener branch keys on `"combat start time"`, which
   `PlayerbotAI::ChangeEngineOnCombat` sets **only** under the `wait for attack` strategy — so it is 0

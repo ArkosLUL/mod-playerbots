@@ -238,7 +238,7 @@ as `reset`.
 **A trace can rename itself.** Opened by `bossstate` or `MarkPull` with nothing engaged yet, it has
 only the map name to use. Whatever names it first renames the file and emits a second `pull`, `src`
 `rename`, carrying `was`. `hdr.boss` stays stale, line one being long written, so **prefer the rename
-record**. Only the map-name fallback is ever upgraded.
+record**. Only the map-name fallback is ever upgraded, except by a boss-state table.
 
 Three callers reach it, because the boss cannot always say: `OnCreatureEngage`, the first boss to
 swing at a player; `MarkPull` on an already-open session; and `NamePull(map, name)`, which takes the
@@ -247,6 +247,13 @@ the Guardians, none flagged a boss, so nothing engages and the only boss the fil
 Vezax, swept in from the next room. `EncounterGatedTrigger` calls `NamePull` when a trigger fires
 while its own encounter is `IN_PROGRESS` (the gate's own test leaves every trigger open between pulls,
 far too loose to name by), and ToC's gate names its pull from the encounter slug (`ToCEncounterSlug`).
+
+**A boss-state table names a trace outright.** `RaidObs::NameBossStates(mapId, {{id, slug}, …})`,
+called while scripts load (ICC's `AddSC_IcecrownBotScripts`), gives boss ids a slug. A trace opened on
+that map while one is `IN_PROGRESS` takes it, whatever opened it: an engage open reads the boss id
+still queued, since the core sets `IN_PROGRESS` inside `JustEngagedWith`, before the engage hook. A
+listed boss going `IN_PROGRESS` renames an open trace of another name, or, if `MarkPull` opened it,
+closes it `idle` and opens its own, so a trash trace in its idle window never absorbs the boss pull.
 
 While a raid sits on a tracked map with no session, snapshots go to a `PreRollSeconds` ring that is
 flushed into the file when a pull starts — so the trace opens *before* the engage, and pre-pull
@@ -522,7 +529,9 @@ They emit only on real change since the trace opened: they outlive the pull, so 
 a trace restates the whole container. Non-const iteration and iterator-`erase` exist for prune loops
 and deliberately emit nothing — dropping a departed member is not an assignment. `erase(guid)` does
 emit, on both containers: clearing one named bot is a wipe reset or a boss that is gone, which is real
-news. Keep scan timestamps and cached guid lookups in bare types; tracing bookkeeping is noise.
+news. Keep scan timestamps and cached guid lookups in bare types; tracing bookkeeping is noise. Reset
+an `ObsValue` by assigning it a value: copying over a struct that holds one (`state = Struct{}`)
+changes it without emitting.
 
 The key guid decides which session the record lands in; where it is not a player, the bot whose tick
 set it does (`NoteAssignment` falls back as `NoteDerived` does). Before that fallback, a container
@@ -552,7 +561,8 @@ Assembly legitimately spans three bosses under one slug. A prefix the slug does 
 in `NOTE_PREFIXES`, or `--probes` never ties the key to its boss.
 
 A pull no instance script reports — a gauntlet, trash, a mid-phase re-engage — needs `MarkPull(map,
-source)`, where `source` names the file. Thorim's corridor uses it.
+source, name)`, where `name`, else `source`, names the file. Thorim's corridor and ICC's dogs and
+giants use it.
 
 For a hazard with no world object — a cone, a rolling wave, a rotating sweep — nothing can sweep for
 it, so the helper that derives the geometry must say so (Thorim's Runic Smash lanes do), with
