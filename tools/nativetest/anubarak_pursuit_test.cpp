@@ -439,53 +439,211 @@ void PassHorizonCoversTheRun()
     CHECK(full.spikeArriveS[0] > 6.0f);
 }
 
-// The patch with 12+ s to the emerge, behind any ready Hand; then a Hand, the patch as the last resort,
-// the kiter's own immunity
+// Early with a Hand, the patch behind it; else the kiter's own immunity, which leaves the patch to the
+// next kiter; late, a non-paladin's Hand first and its own after; then a Hand, the patch alone
 void TerminalOrder()
 {
     using AnubarakPursuit::KiteOptions;
     using AnubarakPursuit::KiteTerminal;
     using AnubarakPursuit::PickTerminal;
 
-    // A ret paladin marked early in a submerge, its own Hand and Divine Shield ready
+    // A mage marked early in a submerge, a paladin's Hand and its Ice Block ready
     KiteOptions early;
     early.catchS = 20.0f;
     early.emergeS = 58.0f;
     early.patch = true;
-    early.patchReachable = true;
     early.hand = true;
     early.own = true;
     CHECK(PickTerminal(early) == KiteTerminal::PatchHand);
 
+    // No Hand coming: Ice Block at the catch, not the patch walked alone
     KiteOptions handless = early;
     handless.hand = false;
+    CHECK(PickTerminal(handless) == KiteTerminal::Own);
+    handless.own = false;
     CHECK(PickTerminal(handless) == KiteTerminal::Patch);
 
-    KiteOptions distant = early;
-    distant.patchReachable = false;
-    CHECK(PickTerminal(distant) == KiteTerminal::PatchHand);
+    // A paladin kiter with Divine Shield ready keeps it: a Hand first would leave it Forbearance
+    KiteOptions shield = early;
+    shield.paladinShield = true;
+    CHECK(PickTerminal(shield) == KiteTerminal::Own);
 
+    // Late: the Hand, and Ice Block as it runs out
     KiteOptions late = early;
     late.catchS = 50.0f;
     CHECK(PickTerminal(late) == KiteTerminal::Hand);
+    late.paladinShield = true;
+    CHECK(PickTerminal(late) == KiteTerminal::Own);
 
+    // Marked 4.5 s into the submerge, the spike's 60 s life leaves 55.5 s: a catch 54.6 s on outlasts it,
+    // which the 62 s to his emerge would have read as a catch to cover
     KiteOptions outlast = early;
-    outlast.catchS = 57.5f;
+    outlast.emergeS = 60.0f - 4.5f;
+    outlast.catchS = 54.6f;
     CHECK(PickTerminal(outlast) == KiteTerminal::None);
-
-    KiteOptions bare = distant;
-    bare.hand = false;
-    CHECK(PickTerminal(bare) == KiteTerminal::Own);
-    bare.own = false;
-    CHECK(PickTerminal(bare) == KiteTerminal::Patch);
+    outlast.emergeS = 62.0f - 4.5f;
+    CHECK(PickTerminal(outlast) == KiteTerminal::Hand);
 
     KiteOptions spent = late;
     spent.patch = false;
-    spent.patchReachable = false;
     spent.hand = false;
+    spent.paladinShield = false;
     CHECK(PickTerminal(spent) == KiteTerminal::Own);
     spent.own = false;
     CHECK(PickTerminal(spent) == KiteTerminal::None);
+}
+
+// The second tank patch only when nothing else saves the kiter: under a Hand at the walk in's last moment,
+// without one with the catch a second off
+void SecondPatchOnlyAsLastResort()
+{
+    using AnubarakPursuit::SecondPatchDue;
+    using AnubarakPursuit::SecondPatchRead;
+
+    SecondPatchRead hand;
+    hand.handLeftS = 2.0f;
+    hand.beforeEnd = true;
+    hand.sphereSpare = true;
+    hand.walkS = 0.6f;
+    hand.walkLaterS = -0.4f;
+    CHECK(SecondPatchDue(hand));
+
+    // Still makes it running on: not yet
+    SecondPatchRead early = hand;
+    early.walkLaterS = 0.8f;
+    CHECK(!SecondPatchDue(early));
+
+    // Each other way out rules it out
+    for (int i = 0; i < 5; ++i)
+    {
+        SecondPatchRead other = hand;
+        other.own = i == 0;
+        other.otherHand = i == 1;
+        other.beforeEnd = i != 2;
+        other.sphereSpare = i != 3;
+        other.walkS = i == 4 ? -0.1f : other.walkS;
+        CHECK(!SecondPatchDue(other));
+    }
+
+    SecondPatchRead bare;
+    bare.catchS = 0.8f;
+    bare.beforeEnd = true;
+    bare.sphereSpare = true;
+    bare.walkS = 0.2f;
+    CHECK(SecondPatchDue(bare));
+    bare.catchS = 1.6f;
+    CHECK(!SecondPatchDue(bare));
+}
+
+// A 25H pull: with every heading at the rim passing a patch, the hold let go and the kiter reversed ten
+// times in 2.5 s. The held heading now stays while its pass comes no sooner than the best's by 1 s, and
+// a reversal waits a second.
+void HeldHeadingRidesOut()
+{
+    using AnubarakPursuit::HeadingRead;
+    using AnubarakPursuit::KeepHeading;
+
+    HeadingRead const best = {13.0f, 20.0f, 10.0f};
+    // Clear of the test: kept while young or ranked alike
+    CHECK(KeepHeading({12.0f, 20.0f, 9.0f}, best, false, true, 1.0f, 45.0f));
+    CHECK(!KeepHeading({12.0f, 20.0f, 9.0f}, best, false, true, 2.0f, 45.0f));
+    CHECK(KeepHeading({12.0f, 20.0f, 9.0f}, best, true, true, 2.0f, 45.0f));
+    // Its catch 2+ s sooner than the best's: dropped
+    CHECK(!KeepHeading({12.0f, 20.0f, 7.5f}, best, true, true, 1.0f, 45.0f));
+
+    // Every heading passing a patch: the first pass decides
+    HeadingRead const rim = {9.0f, 6.0f, 10.0f};
+    CHECK(KeepHeading({8.0f, 5.5f, 9.5f}, rim, false, false, 3.0f, 170.0f));
+    CHECK(!KeepHeading({8.0f, 4.5f, 9.5f}, rim, false, false, 3.0f, 170.0f));
+
+    // A reversal waits a second whatever the reads
+    CHECK(KeepHeading({8.0f, 2.0f, 4.0f}, rim, false, false, 0.5f, 170.0f));
+    CHECK(!KeepHeading({8.0f, 2.0f, 4.0f}, rim, false, false, 1.2f, 170.0f));
+    CHECK(!KeepHeading({8.0f, 2.0f, 4.0f}, rim, false, false, 0.5f, 60.0f));
+}
+
+// The run's path family: both ways round the ring and the rim, and with the spike at its base speed the
+// straight leg cut short at its speed-up, then round the circle the kiter stands on
+void PathFamilyRingsBothWays()
+{
+    using AnubarakPursuit::Dist;
+    using AnubarakPursuit::PathFamily;
+    using AnubarakPursuit::PathMember;
+
+    CHECK(PathFamily(40.0f, 45.0f, 0.0f).size() == 4);
+    std::vector<PathMember> const family = PathFamily(40.0f, 45.0f, 20.0f);
+    CHECK(family.size() == 6);
+    int clockwise = 0;
+    for (PathMember const& member : family)
+        clockwise += member.turn < 0.0f;
+    CHECK(clockwise == 3);
+
+    PathMember cut;
+    cut.radius = 45.0f;
+    cut.turn = -1.0f;
+    cut.straightCap = 20.0f;
+    KiterPath const path = MakeKiterPath(ROOM_CENTER, Heading(0.0f), 7.0f, ROOM_CENTER, cut);
+    CHECK(Near(path.straight, 20.0f, 0.01f));
+    CHECK(Near(path.At(2.0f).x, ROOM_CENTER.x + 14.0f, 0.01f));
+    for (float t : {20.0f / 7.0f, 4.0f, 6.0f})
+        CHECK(Near(Dist(path.At(t), ROOM_CENTER), 20.0f, 0.01f));
+    CHECK(path.At(4.0f).y < ROOM_CENTER.y);
+
+    // Uncut, the member runs to its circle like KiterPath, the way round it was given
+    PathMember rim;
+    rim.radius = 45.0f;
+    rim.turn = 1.0f;
+    KiterPath const wide = MakeKiterPath(ROOM_CENTER, Heading(0.0f), 7.0f, ROOM_CENTER, rim);
+    CHECK(Near(wide.straight, 45.0f, 0.01f));
+    CHECK(wide.At(8.0f).y > ROOM_CENTER.y);
+}
+
+// Posts round a catch 25 yd north of the centre, the spike coming from the south-west: every post off the
+// patches, the spike's track and its lane to the catch, on the paladin's side of the chase, the nearest the
+// paladin first
+void EscortPostsKeepOffTheChase()
+{
+    using AnubarakPursuit::Cross;
+    using AnubarakPursuit::Dist;
+    using AnubarakPursuit::EscortPosts;
+    using AnubarakPursuit::EscortRules;
+    using AnubarakPursuit::SegmentDist;
+
+    Point const catchPoint = {745.0f, 160.0f};
+    Point const spike = {720.0f, 130.0f};
+    Point const kiter = {760.0f, 150.0f};
+    std::vector<Point> const track = {spike, {735.0f, 150.0f}, {742.0f, 154.0f}};
+    std::vector<Point> const patches = {{745.0f, 172.0f}};
+    EscortRules rules;
+    rules.centre = ROOM_CENTER;
+
+    for (Point const paladin : {Point{765.0f, 125.0f}, Point{720.0f, 165.0f}})
+    {
+        std::vector<Point> const posts = EscortPosts(catchPoint, spike, kiter, paladin, track, patches, rules);
+        CHECK(!posts.empty());
+        float last = 0.0f;
+        for (Point const& post : posts)
+        {
+            CHECK(Dist(post, ROOM_CENTER) <= rules.centreReach + 0.01f);
+            CHECK(Dist(post, patches[0]) >= rules.patchClearance);
+            CHECK(SegmentDist(spike, catchPoint, post) >= rules.laneClearance);
+            for (size_t k = 1; k < track.size(); ++k)
+                CHECK(SegmentDist(track[k - 1], track[k], post) >= rules.trackClearance);
+            CHECK(Cross(spike, kiter, post) * Cross(spike, kiter, paladin) >= 0.0f);
+            CHECK(Dist(paladin, post) >= last - 0.01f);
+            last = Dist(paladin, post);
+        }
+
+        // Off a spike faster than the paladin the posts sit further out, so fewer pass
+        EscortRules fast = rules;
+        fast.trackClearance = 19.0f;
+        CHECK(EscortPosts(catchPoint, spike, kiter, paladin, track, patches, fast).size() <= posts.size());
+    }
+
+    // The east paladin's side has none 30 yd off the track
+    EscortRules wide = rules;
+    wide.trackClearance = 30.0f;
+    CHECK(EscortPosts(catchPoint, spike, kiter, {765.0f, 125.0f}, track, patches, wide).empty());
 }
 
 // The 2026-10-27 N far grip: the sphere came down at (796,144), 68 yd off side 1's spot. The next link
@@ -567,6 +725,10 @@ int main()
     SpikeBetweenKiterAndPatches();
     PassHorizonCoversTheRun();
     TerminalOrder();
+    SecondPatchOnlyAsLastResort();
+    HeldHeadingRidesOut();
+    PathFamilyRingsBothWays();
+    EscortPostsKeepOffTheChase();
     RelayPostsCloseOnTheSpot();
     DragPreStepClearsTheStall();
     std::printf("anubarak_pursuit_test: ok\n");

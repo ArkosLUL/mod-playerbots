@@ -95,6 +95,47 @@ inline KiterPath MakeKiterPath(Point start, Point dir, float speed, Point centre
     return path;
 }
 
+// One of the heroic run's paths per heading: the circle it ends on, the way round, and how far the
+// straight leg runs before it, the whole leg when that's past the circle
+struct PathMember
+{
+    float radius = 40.0f;
+    float turn = 1.0f;
+    float straightCap = 1e9f;
+};
+
+// MakeKiterPath with the way round set, the straight leg cut short at straightCap: the kiter then rounds
+// the circle it stands on
+inline KiterPath MakeKiterPath(Point start, Point dir, float speed, Point centre, PathMember const& member)
+{
+    KiterPath path = MakeKiterPath(start, dir, speed, centre, member.radius, member.turn);
+    path.turn = member.turn;
+    if (member.straightCap < path.straight)
+    {
+        path.straight = std::max(0.0f, member.straightCap);
+        path.radius = Dist({start.x + dir.x * path.straight, start.y + dir.y * path.straight}, centre);
+    }
+
+    return path;
+}
+
+// Every member for one heading: both ways round the ring and the rim, and while the spike is at its base
+// speed both ways round from where the straight leg stands as it speeds up, the rim at the latest. Ringed
+// one way only, a kite never showed the corner the spike cut the other way.
+inline std::vector<PathMember> PathFamily(float ring, float rim, float stepCapYd)
+{
+    std::vector<PathMember> out;
+    for (float turn : {1.0f, -1.0f})
+    {
+        out.push_back({ring, turn, 1e9f});
+        out.push_back({rim, turn, 1e9f});
+        if (stepCapYd > 0.0f)
+            out.push_back({rim, turn, stepCapYd});
+    }
+
+    return out;
+}
+
 // Through each leg's end in turn, then stands on the last
 struct LegPath
 {
@@ -436,13 +477,15 @@ struct KiteOptions
 {
     // On the kiter's best run
     float catchS = 0.0f;
+    // Seconds to the spike's despawn
     float emergeS = 0.0f;
-    // A patch the kite may end on, and the walk to it beats the catch now
+    // A patch the kite may end on
     bool patch = false;
-    bool patchReachable = false;
     // A Hand of Protection can reach it: an escort with one ready, or a marked paladin's own
     bool hand = false;
     bool own = false;
+    // The kiter is a paladin with Divine Shield ready, which a Hand's Forbearance would cost it
+    bool paladinShield = false;
 };
 
 // A patch spent early buys a fresh run from the spike's base speed; a later catch is left to a Hand,
@@ -450,28 +493,166 @@ struct KiteOptions
 constexpr float KITE_PATCH_EARLY_S = 12.0f;
 constexpr float KITE_OUTLAST_S = 1.0f;
 
-// The patch while the catch leaves 12+ s, behind a Hand at the catch when one is ready: the walk onto it
-// can't be held past 4-8 s of the run, so a patch alone goes early. Then a Hand, the patch as the last
-// resort, the kiter's own.
+// Early with a Hand ready, the Hand at the catch and the patch under it. Else the kiter's own immunity,
+// which leaves the patch to the next kiter; late, a non-paladin takes the Hand first and its own as the
+// Hand runs out. Then a Hand, the patch alone.
 inline KiteTerminal PickTerminal(KiteOptions const& o)
 {
     if (o.catchS >= o.emergeS - KITE_OUTLAST_S)
         return KiteTerminal::None;
 
     bool const early = o.patch && o.emergeS - o.catchS >= KITE_PATCH_EARLY_S;
-    if (early && o.hand)
+    if (early && o.hand && !o.paladinShield)
         return KiteTerminal::PatchHand;
 
-    if (early && o.patchReachable)
-        return KiteTerminal::Patch;
+    if (o.own)
+        return o.hand && !early && !o.paladinShield ? KiteTerminal::Hand : KiteTerminal::Own;
 
     if (o.hand)
         return KiteTerminal::Hand;
 
-    if (o.patch && (o.patchReachable || !o.own))
-        return KiteTerminal::Patch;
+    return o.patch ? KiteTerminal::Patch : KiteTerminal::None;
+}
 
-    return o.own ? KiteTerminal::Own : KiteTerminal::None;
+// The submerge's second tank patch, read when the kite would otherwise die
+struct SecondPatchRead
+{
+    float handLeftS = 0.0f;
+    // On the held run, negative past the horizon
+    float catchS = -1.0f;
+    bool own = false;
+    // A ready Hand in reach could still land
+    bool otherHand = false;
+    // The catch, or the Hand's end, comes before the spike's last second
+    bool beforeEnd = false;
+    // More spheres flying than tank patches missing
+    bool sphereSpare = false;
+    // PatchMargin of the walk straight in now, and after running on the commit delay
+    float walkS = -1.0f;
+    float walkLaterS = -1.0f;
+};
+
+constexpr float SECOND_PATCH_CATCH_S = 1.0f;
+
+// Only when nothing else saves the kiter and the walk in still makes it. Under a Hand it goes at the walk's
+// last moment, the way a patch+hand kite turns: the kiter keeps 15.5 yd off the tank patches until then, so
+// the Hand's last second is too late to walk in.
+inline bool SecondPatchDue(SecondPatchRead const& r)
+{
+    if (r.own || r.otherHand || !r.beforeEnd || !r.sphereSpare || r.walkS < 0.0f)
+        return false;
+
+    if (r.handLeftS > 0.0f)
+        return r.walkLaterS < 0.0f;
+
+    return r.catchS >= 0.0f && r.catchS <= SECOND_PATCH_CATCH_S;
+}
+
+// A run heading as the hold judges it
+struct HeadingRead
+{
+    // The spike's closest pass by any patch, and when it first comes inside a patch's clearance
+    float patchPass = 0.0f;
+    float firstInS = 0.0f;
+    float catchS = 0.0f;
+};
+
+struct HeadingHold
+{
+    // The spike's fail test round a patch
+    float testReach = 11.5f;
+    float catchSlackS = 2.0f;
+    float holdS = 1.5f;
+    // With every heading passing a patch, the held one stays while it gets there at most this much sooner
+    float firstInSlackS = 1.0f;
+    float dwellS = 1.0f;
+    float dwellDegrees = 90.0f;
+};
+
+// Whether the held heading stays ahead of the best one: while it clears the fail test, young or ranked with
+// the best; while every heading passes a patch, as long as its pass comes no sooner than the best's by the
+// slack; and a turn past dwellDegrees waits until it has been held dwellS. Re-picked freely, the two
+// headings left at the rim swapped every tick and the kiter stood between them.
+inline bool KeepHeading(HeadingRead const& held, HeadingRead const& best, bool sameClass, bool anyIntact,
+                        float heldAgeS, float turnDegrees, HeadingHold const& rules = HeadingHold())
+{
+    bool const catchKept = held.catchS >= best.catchS - rules.catchSlackS;
+    if (held.patchPass >= rules.testReach && catchKept && (heldAgeS < rules.holdS || sameClass))
+        return true;
+
+    if (!anyIntact && catchKept && held.firstInS >= best.firstInS - rules.firstInSlackS)
+        return true;
+
+    return turnDegrees > rules.dwellDegrees && heldAgeS < rules.dwellS;
+}
+
+// Where the spike is every everyTicks of its pursuit along path, from its start to the horizon
+template <typename Path>
+std::vector<Point> SpikeTrack(Spike spike, Path const& path, float horizonS, int everyTicks)
+{
+    std::vector<Point> track = {spike.pos};
+    Point kiter = path.start;
+    int const ticks = static_cast<int>(std::ceil(horizonS / TICK_S - 0.001f));
+    for (int i = 0; i < ticks; ++i)
+    {
+        float const t = static_cast<float>(i) * TICK_S;
+        ChaseTick(spike, kiter, t);
+        kiter = path.At(t + TICK_S);
+        if ((i + 1) % everyTicks == 0 || i + 1 == ticks)
+            track.push_back(spike.pos);
+    }
+
+    return track;
+}
+
+// Twice the signed area of a, b, p: which side of a to b p is on
+inline float Cross(Point a, Point b, Point p) { return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x); }
+
+struct EscortRules
+{
+    std::vector<float> rings = {15.0f, 20.0f, 25.0f};
+    int bearings = 12;
+    Point centre;
+    float centreReach = 45.0f;
+    float patchClearance = 8.5f;
+    // Off the spike's track, and off its lane from where it is to the catch
+    float trackClearance = 15.0f;
+    float laneClearance = 9.0f;
+};
+
+// Where the escort waits for the catch: round the predicted catch point, off the spike's track to it and
+// on the paladin's side of the spike's line to the kiter, so the walk there never crosses the chase and the
+// dodge never sends it off again. The nearest the paladin first.
+inline std::vector<Point> EscortPosts(Point catchPoint, Point spike, Point kiter, Point paladin,
+                                      std::vector<Point> const& track, std::vector<Point> const& patches,
+                                      EscortRules const& rules)
+{
+    float const side = Cross(spike, kiter, paladin);
+    std::vector<Point> out;
+    for (float radius : rules.rings)
+        for (int i = 0; i < rules.bearings; ++i)
+        {
+            float const angle = 6.28318531f * static_cast<float>(i) / static_cast<float>(rules.bearings);
+            Point const post = {catchPoint.x + radius * std::cos(angle), catchPoint.y + radius * std::sin(angle)};
+            if (Dist(post, rules.centre) > rules.centreReach || side * Cross(spike, kiter, post) < 0.0f ||
+                SegmentDist(spike, catchPoint, post) < rules.laneClearance)
+                continue;
+
+            if (std::any_of(patches.begin(), patches.end(),
+                            [&](Point const& patch) { return Dist(post, patch) < rules.patchClearance; }))
+                continue;
+
+            bool clear = track.size() != 1 || Dist(track.front(), post) >= rules.trackClearance;
+            for (size_t k = 1; clear && k < track.size(); ++k)
+                clear = SegmentDist(track[k - 1], track[k], post) >= rules.trackClearance;
+
+            if (clear)
+                out.push_back(post);
+        }
+
+    std::sort(out.begin(), out.end(),
+              [paladin](Point const& a, Point const& b) { return Dist(paladin, a) < Dist(paladin, b); });
+    return out;
 }
 
 // Drag waypoints for when the boss's straight line to the anchor passes within trigger of a patch:

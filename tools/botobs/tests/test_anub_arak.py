@@ -12,8 +12,9 @@ stretch held off the anchor, an eighth each patch kite's turn, the bridge's Hand
 by a patch, Impale on a side tank, a burrower pulled off its side tank and the main tank's Expose
 Weakness, a ninth a Hand against its predicted catch, a turn with no Hand, the first tank patch per
 submerge, a relayed far grip, Bladestorm near a burrower, the burrower threat cap, the drag's pre-steps
-and the submerge spot search, and the shared fixture shows every section reads empty on a trace that is
-not Anub'arak rather than raising.
+and the submerge spot search, a tenth the anub.lane, escort, claim, Hand, second patch and per submerge
+kite reads and the Hand's cooldown off anub.hands, and the shared fixture shows every section reads empty
+on a trace that is not Anub'arak rather than raising.
 """
 from __future__ import annotations
 
@@ -173,6 +174,14 @@ def dmg(when: int, source: int, victim: int, spell: int, amount: int) -> dict:
 
 def cast(when: int, source: int, spell: int, target: int) -> dict:
     return {"t": when, "e": "cast", "s": source, "sp": spell, "tgt": target, "ct": 0}
+
+
+def grip(when: int, source: int, target: int, pulls: bool = True) -> list[dict]:
+    # A Death Grip that hits casts its triggered pull the same ms; one that misses casts only itself
+    rows = [cast(when, source, ab.SPELL_DEATH_GRIP, target)]
+    if pulls:
+        rows.append({**cast(when, source, ab.SPELL_DEATH_GRIP_PULL, target), "tr": 1})
+    return rows
 
 
 def veto(when: int, guid: int, multiplier: str, action: str) -> dict:
@@ -809,12 +818,12 @@ def refine_pull() -> list[dict]:
         note(50000, MAGE, "anub.gather", "none"),
 
         # G0 takes a hit from the mage, then a later shadow bolt cast: the hit is the killer
-        cast(4000, DK, ab.SPELL_DEATH_GRIP, G0),
+        *grip(4000, DK, G0),
         cast(4500, MAGE, 42842, G0),
         dmg(4700, MAGE, G0, 42842, 9000),
         cast(4800, LOCK, 47809, G0),
         # G1: the grip misses, then a proc and a Hunter's Mark after the imp's bolt are no killer
-        cast(8000, DK, ab.SPELL_DEATH_GRIP, G1),
+        *grip(8000, DK, G1),
         cast(12000, IMP, 47964, G1),
         triggered(12200, MAGE, 12579, G1),
         cast(12300, HUNTER, 53338, G1),
@@ -1113,7 +1122,7 @@ def kite_pull() -> list[dict]:
           for when, value in ((40200, "walk"), (41000, "hold"))),
 
         cast(12500, HUNTER, 75, R1),
-        cast(15000, DK, ab.SPELL_DEATH_GRIP, KA),
+        *grip(15000, DK, KA),
         cast(16000, MAGE, 42842, KA),
         dmg(16000, MAGE, KA, 42842, 9000),
         cast(20000, LOCK, 47809, KB),
@@ -1356,11 +1365,11 @@ def frost_pull() -> list[dict]:
         note(12500, ROGUE, "anub.mstand", "walk"),
         note(14000, ROGUE, "anub.mstand", "none"),
 
-        cast(3000, DK, ab.SPELL_DEATH_GRIP, Q0),
+        *grip(3000, DK, Q0),
         dmg(4000, MAGE, Q0, 42842, 9000),
         cast(7500, HUNTER, 75, Q1),
         dmg(8000, HUNTER, Q1, 75, 9000),
-        cast(43000, DK, ab.SPELL_DEATH_GRIP, QR),
+        *grip(43000, DK, QR),
         dmg(44000, MAGE, QR, 42842, 9000),
 
         aura(22000, ROGUE, ab.SPELL_MARK, False),
@@ -1688,9 +1697,9 @@ def refill_pull() -> list[dict]:
             (42900, "cast"), (43000, "none"))),
         *(note(when, DK, "anub.sphere", duty) for when, duty in (
             (1000, "grip0"), (2500, "0"), (4000, "none"), (41000, "grip1"), (43000, "none"))),
-        cast(2000, DK, ab.SPELL_DEATH_GRIP, R0),
+        *grip(2000, DK, R0),
         dmg(2800, HUNTER, R0, 75, 9000),
-        cast(43000, DK, ab.SPELL_DEATH_GRIP, RG),
+        *grip(43000, DK, RG),
         dmg(49800, HUNTER, RR, 75, 9000),
 
         aura(22500, HUNTER, ab.SPELL_MARK, False, SPK3),
@@ -3089,8 +3098,8 @@ def relay_pull(new_rows: bool = True) -> list[dict]:
             (50000, ROBLIT, "walk"), (52000, ROBLIT, "cast"), (52600, ROBLIT, "wait"), (54100, ROBLIT, "none"),
             (50000, RFELESTA, "post"), (54000, RFELESTA, "cast"), (54600, RFELESTA, "kill"),
             (56000, RFELESTA, "none"))),
-        cast(52000, ROBLIT, ab.SPELL_DEATH_GRIP, RSPHERE),
-        cast(54000, RFELESTA, ab.SPELL_DEATH_GRIP, RSPHERE),
+        *grip(52000, ROBLIT, RSPHERE),
+        *grip(54000, RFELESTA, RSPHERE),
 
         *(note(when, RECO, "anub.pickup", value) for when, value in (
             (500, "hold"), (4000, "drag"), (6000, "hold"), (50500, "hold"))),
@@ -3106,7 +3115,9 @@ def relay_pull(new_rows: bool = True) -> list[dict]:
             *(note(when, RECO, "anub.subspot", value) for when, value in (
                 (6000, "750,135,143 r25"), (7000, "none"), (9000, "750,139,143 r22"))),
             *(note(when, RFELESTA, "anub.relay", value) for when, value in ((51000, "wait"), (54000, "cast"),
-                                                                            (56000, "none"))),
+                                                                            (56000, "none"), (58600, "miss"))),
+            # a later grip that missed its hit roll: the cast with no triggered pull
+            *grip(58000, RFELESTA, CREATURE | 1399, pulls=False),
             veto(5500, RMIGHTY, ab.BURROWER_GUARD, "bladestorm"),
             veto(7000, RLOCK, ab.BURROWER_THREAT_CAP, "shadow bolt"),
             veto(8000, RLOCK, ab.BURROWER_THREAT_CAP, "shadow bolt"),
@@ -3200,9 +3211,16 @@ class RelayPull(unittest.TestCase):
         self.assertIn(f"    #{RSPHERE & 0xFFFFFFFF} side 1, died 0:54.500, 18.1 yd off its spot\n"
                       f"      link 1 {'0:52.000':>9} {'Obliteration':22} {'landed +0.5 s':24} 60.8 > 40.3 yd\n"
                       f"      link 2 {'0:54.000':>9} {'Felesta':22} {'landed +0.5 s':24} 40.3 > 18.1 yd\n", text)
-        self.assertIn("  anub.relay: 0:51.000 Felesta wait, 0:54.000 Felesta cast\n", text)
+        self.assertIn("  anub.relay: 0:51.000 Felesta wait, 0:54.000 Felesta cast, 0:58.600 Felesta miss\n", text)
         self.assertIn("Felesta post 1", text)
         self.assertIn("  anub.relay: no rows\n", self.text(self.bare, ab.show_spheres))
+
+    def test_a_grip_triggering_no_pull_counts_as_a_miss_per_caster(self):
+        self.assertEqual(ab.grip_misses(self.trace), {ROBLIT: (1, 0), RFELESTA: (2, 1)})
+        self.assertEqual(ab.grip_misses(self.bare), {ROBLIT: (1, 0), RFELESTA: (1, 0)})
+        self.assertTrue(all(row["pulled"] for row in ab.grip_rows(self.trace)))
+        self.assertIn("with no pull, its 49576 triggering no 49560: Felesta 1 of 2, Obliteration 0 of 1\n",
+                      self.text(self.trace, ab.show_spheres))
 
     def test_each_bladestorm_reads_the_nearest_burrower(self):
         rows = ab.bladestorm_casts(self.trace)
@@ -3298,6 +3316,155 @@ class SideTanks(unittest.TestCase):
         latched, text = self.banner(2, 0)
         self.assertEqual(latched, (1, {0: [SIDE0]}))
         self.assertNotIn("side tanks latched", text)
+
+
+WKITER, WPALADIN, WTANK = range(9201, 9204)
+WBOSS = CREATURE | 1400
+WSPIKE = CREATURE | 1401
+WPATCH = CREATURE | 1411
+WPATCH_AT = (X, Y + 20.0)
+WPALADIN_AT = (X + 5.0, Y - 15.0)
+# south, back north, past the tank patch under the Hand, then west
+WKITER_PATH = [(12000, 30.0, -20.0), (20000, 30.0, 10.0), (24000, 8.0, 14.0), (30000, -20.0, 10.0)]
+SPELL_HOP3, SPELL_ICE_BLOCK, SPELL_BLINK = 10278, 45438, 1953
+
+
+def rework_snap(when: int) -> dict:
+    kiter = lerp(WKITER_PATH, when)
+    units = [[WTANK, X, Y + 1.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [WPALADIN, *WPALADIN_AT, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [WKITER, *kiter, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [WBOSS, X, Y, Z, 0.0, 80.0, 0.0, 0, 0, 0, 0, 0],
+             [WPATCH, *WPATCH_AT, PATCH_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0]]
+    if 12000 <= when <= 30000:
+        units.append([WSPIKE, kiter[0] - 6.0, kiter[1], Z, 0.0, 100.0, 0.0, WKITER, 1, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": [[PERMAFROST_25H, *WPATCH_AT, PATCH_Z, 6.0, 1]]}
+
+
+def rework_pull(with_hands: bool = True) -> list[dict]:
+    """A 25H submerge from 10 s to 72 s and one Hand kite in it, 12 s to 30 s: an anub.lane step off the
+    patches while another heading was clear, the escort walking and dodging, its claim 0.2 s before its Hand,
+    the kiter past the tank patch under the Hand, a Blink in it, Ice Block after it and a second patch grant.
+    The paladin's earlier Hand and an anub.hands row put its cooldown at 180 s; `with_hands` False drops the
+    row."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789600000000, "map": ab.MAP_TOC, "inst": 16, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": WTANK, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+                    {"g": WPALADIN, "n": "Holylight", "r": "heal", "c": 2, "h": 0},
+                    {"g": WKITER, "n": "Smartface", "r": "ranged", "c": 8, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": WBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 10000, "e": "unit", "g": WSPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        {"t": 0, "e": "unit", "g": WPATCH, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"},
+        *(note(when, WTANK, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (72000, 1))),
+        note(0, WTANK, "anub.patch0", WPATCH),
+        aura(12000, WKITER, ab.SPELL_MARK, False, WSPIKE),
+        aura(30000, WKITER, ab.SPELL_MARK, True, WSPIKE),
+        note(12100, WKITER, "anub.kiteplan", "hand"),
+        *(note(when, WKITER, "anub.lane", value) for when, value in (
+            (12500, "prc:90"), (13000, "rc:270"), (14000, "pr:270"))),
+        *(note(when, WPALADIN, "anub.escort", value) for when, value in (
+            (12500, "walk"), (15000, "post"), (30000, "none"))),
+        *(move_row(when, WPALADIN, WPALADIN_AT, by) for when, by in (
+            (13000, ab.ESCORT_BY), (13400, ab.DODGE_BY), (13800, ab.ESCORT_BY), (16000, ab.DODGE_BY))),
+        note(19800, WPALADIN, "anub.protect", "hop"),
+        note(20100, WPALADIN, "anub.protect", "none"),
+        cast(2000, WPALADIN, SPELL_HOP3, WTANK),
+        cast(20000, WPALADIN, SPELL_HOP3, WKITER),
+        aura(20000, WKITER, SPELL_HOP3, False, WPALADIN),
+        aura(28000, WKITER, SPELL_HOP3, True, WPALADIN),
+        cast(22000, WKITER, SPELL_BLINK, WKITER),
+        cast(28500, WKITER, SPELL_ICE_BLOCK, WKITER),
+        note(29000, WKITER, "anub.second", "grant"),
+        {"t": 75000, "e": "end", "out": "wipe"},
+    ]
+    if with_hands:
+        records.append(note(12100, WKITER, "anub.hands", f"{WPALADIN}:170:25"))
+    records += [rework_snap(when) for when in range(-500, 75000, 500)]
+    return records
+
+
+class ReworkPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_16_anub-arak_1789600000.ndjson", rework_pull())
+        cls.bare = write_trace(cls.folder.name, "649_16_anub-arak_1789600001.ndjson", rework_pull(False))
+        cls.window = ab.mark_windows(cls.trace)[0]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, trace) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_spike(trace)
+        return out.getvalue()
+
+    def test_the_hand_cooldown_reads_off_anub_hands_else_the_base_five_minutes(self):
+        self.assertEqual(ab.hop_cooldown(self.trace), (180000, "anub.hands"))
+        self.assertEqual(ab.hop_cooldown(self.bare), (ab.HOP_COOLDOWN_MS, "default"))
+        self.assertEqual(ab.hand_reads(self.trace), [(12100, WPALADIN, 170000, 25)])
+
+    def test_a_lane_row_reads_its_heading_and_a_step_off_the_patches(self):
+        rows = [(1000, "pr:90"), (2000, "rc:180"), (3000, "x:")]
+        self.assertEqual(ab.lane_heading(rows, 500), None)
+        heading = ab.lane_heading(rows, 1500)
+        self.assertAlmostEqual(heading[0], 0.0)
+        self.assertAlmostEqual(heading[1], 1.0)
+        self.assertIsNone(ab.lane_heading(rows, 3500))
+        self.assertEqual(ab.lane_offs(rows, 0, 5000), [2000])
+        self.assertEqual(self.window["lane_offs"], [13000])
+
+    def test_the_escort_reads_its_distance_at_the_claim_and_its_swaps(self):
+        escort = self.window["escort_read"]
+        self.assertEqual((escort["guid"], escort["t"], escort["swaps"]), (WPALADIN, 19800, 2))
+        self.assertAlmostEqual(escort["yards"], math.hypot(25.0, 23.125))
+
+    def test_each_hand_reads_its_claim_its_held_catch_and_what_followed(self):
+        window = self.window
+        self.assertEqual([(rec["s"], gap) for rec, gap in window["claim_casts"]], [(WPALADIN, 200)])
+        self.assertEqual(len(window["held_catches"]), 1)
+        self.assertIsNotNone(window["held_catches"][0][1])
+        near = window["hand_patch"]
+        self.assertEqual((near["t"], near["side"]), (25500, 0))
+        self.assertAlmostEqual(near["yards"], math.sqrt(50.0))
+        self.assertEqual([(rec["sp"], gap) for rec, gap in window["own_after_hand"]], [(SPELL_ICE_BLOCK, 500)])
+        self.assertEqual([rec["sp"] for rec in window["hand_boosts"]], [SPELL_BLINK])
+        self.assertEqual(window["second"], [29000])
+
+    def test_per_submerge_the_kite_and_idle_seconds_and_the_terminals(self):
+        rows = ab.submerge_kites(self.trace, ab.mark_windows(self.trace), ab.spent_patches(self.trace))
+        self.assertEqual([(row["label"], row["kite"], row["idle"], dict(row["terminals"]), row["after"], row["deaths"])
+                          for row in rows], [("P2", 18000, 40000, {"hand": 1}, None, 0)])
+
+    def test_the_spike_section_prints_the_rework_lines(self):
+        text = self.text(self.trace)
+        self.assertIn("            anub.lane step off the patches while another heading was clear of them: 1 time(s)"
+                      " from +1.0 s\n"
+                      "            escort Holylight 34.1 yd off at the claim +7.8 s, past its 30 yd reach; walk and dodge"
+                      " swapped 2 time(s) within 1 s\n"
+                      "            claim to cast: Holylight 0.2 s\n", text)
+        self.assertIn("            under the Hand 7.1 yd from the side 0 tank patch +13.5 s, inside 15.5 yd\n"
+                      "            Ice Block 0.5 s after the Hand ran out\n"
+                      "            boost in a Hand's first 8 s: Blink +10.0 s\n"
+                      "            anub.second grant +17.0 s\n", text)
+        self.assertIn("  ready is a bot paladin alive and unmarked, its last Hand of Protection 180 s or more back, the\n"
+                      "  cooldown read off anub.hands, with no Forbearance on the kiter\n", text)
+        self.assertIn("  escort within 30 yd of the kiter at the claim: 0 of 1; further: Smartface 0:12.000 34.1 yd\n", text)
+        self.assertIn("  claim to cast, Hand of Protection: median 0.2 s, over 0.3 s: none\n", text)
+        self.assertIn("  kiter within 15.5 yd of a tank patch under a Hand: Smartface 0:12.000 7.1 yd\n", text)
+        self.assertIn("  own immunity after a Hand ran out: Smartface 0:12.000 Ice Block +0.5 s\n", text)
+        self.assertIn("  anub.second grants: Smartface 0:12.000 +17.0 s\n", text)
+        self.assertIn("    P2     0:10.000  kite 18.0 s, idle 40.0 s; hand 1; no tank patch gone; 0 kiter death(s)\n",
+                      text)
+
+    def test_the_new_keys_count_as_present(self):
+        gone = ab.missing_probes(self.trace)
+        for key in ("anub.lane", "anub.second", "anub.hands"):
+            self.assertNotIn(key, gone)
+        self.assertIn("anub.hands", ab.missing_probes(self.bare))
 
 
 class EveryView(unittest.TestCase):

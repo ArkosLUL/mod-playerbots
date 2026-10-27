@@ -106,16 +106,37 @@ constexpr float ANUBARAK_KITE_PATCH_COMMIT_S = 1.5f;
 // the hunter stopped first
 constexpr float ANUBARAK_KITE_HAND_LEAD_S = 1.0f;
 constexpr float ANUBARAK_KITE_OWN_LEAD_S = 0.6f;
+// Heroic runs ring the room on the 40 yd circle or this rim, both navprobe-clean all round
+constexpr float ANUBARAK_KITE_RIM_RADIUS = 45.0f;
 // A run heading is held this long once picked, and after that while it ranks with the best; either way
 // only while its catch stays within the slack of the best
 constexpr uint32 ANUBARAK_KITE_HEADING_HOLD_MS = 1500;
 constexpr float ANUBARAK_KITE_HEADING_CATCH_SLACK_S = 2.0f;
 // Run headings whose catches lie within one band rank alike, so the tiebreaks still count
 constexpr float ANUBARAK_KITE_CATCH_BAND_S = 2.0f;
-// A Hand kite's steps keep it this close to its escort
-constexpr float ANUBARAK_KITE_ESCORT_LEASH = 25.0f;
 // An own kite's steps away from the gather rank in bands this wide
 constexpr float ANUBARAK_KITE_GATHER_BAND = 5.0f;
+// The emerge despawns the spike a minute after he goes down, 2 s before he is selectable again
+constexpr uint32 ANUBARAK_SPIKE_LIFE_MS = 60000;
+// Under a Hand the spike trails the kiter by 2-3 yd, so the kiter keeps the 11.5 yd test plus that and a
+// yard off every tank patch until it walks in
+constexpr float ANUBARAK_KITE_HAND_PATCH_CLEARANCE = 15.5f;
+// The paladin due to cast the Hand keeps its GCD free from this long before the catch
+constexpr float ANUBARAK_KITE_HAND_RESERVE_S = 2.5f;
+// The Hand also waits for the spike within Impale's reach plus this much of its closing speed
+constexpr float ANUBARAK_KITE_HAND_CLOSE_S = 1.5f;
+// A non-paladin's own immunity after a Hand goes out this long before the Hand ends
+constexpr float ANUBARAK_KITE_OWN_AFTER_HAND_S = 0.8f;
+// No boost while a Hand has more than this left: the spike sits on the kiter either way
+constexpr float ANUBARAK_KITE_BOOST_HAND_S = 0.5f;
+// A kiter marked inside the gather's clearance ranks steps away from it first, for this long
+constexpr uint32 ANUBARAK_KITE_GATHER_FIRST_MS = 3000;
+// The second tank patch needs the kite to end before the spike's last second
+constexpr uint32 ANUBARAK_SECOND_PATCH_BEFORE_MS = ANUBARAK_SPIKE_LIFE_MS - 1000;
+// After a fail the spike restarts from the spent patch, so the gather steps this far off it, inside the
+// navprobe-clean 45 yd
+constexpr float ANUBARAK_GATHER_STEP = 12.0f;
+constexpr float ANUBARAK_GATHER_STEP_REACH = 45.0f;
 
 // The spike's speed auras. The first two last 7 s and the next one goes out as each runs out.
 constexpr uint32 SPELL_SPIKE_SPEED1 = 65920;
@@ -281,6 +302,8 @@ struct EscortRead
     ObjectGuid paladin;
     bool spotValid = false;
     Position spot;
+    // The spot is a post by the predicted catch, not the shadow of the kiter
+    bool post = false;
 };
 
 // The paladin bot casting Hand of Freedom on a kiter marked in Permafrost
@@ -336,6 +359,12 @@ struct GripCast
     // Where the DK stood: the sphere comes down there
     Position from;
     bool landed = false;
+    // The sphere's distance from the DK as the grip went out
+    float startDist = 0.0f;
+    // A relay link's grip, and the landed grip before it, which stands again if this one pulls nothing
+    bool relayLink = false;
+    ObjectGuid prevDk;
+    Position prevFrom;
 };
 
 struct BurrowerExit
@@ -404,6 +433,22 @@ struct KitePlan
     bool headingValid = false;
     AnubarakPursuit::Point heading;
     uint32 headingMs = 0;
+    // The path family member the held heading runs
+    AnubarakPursuit::PathMember member;
+    // The catch on the held heading as judged, negative past the horizon
+    float heldCatchS = -1.0f;
+    uint32 markMs = 0;
+    // Marked inside the gather's clearance
+    bool startedInGather = false;
+};
+
+// Where the escort waits for the catch, kept until the catch point it was built on drifts
+struct EscortPostLatch
+{
+    bool valid = false;
+    ObjectGuid kiter;
+    Position catchPoint;
+    Position post;
 };
 
 // A burrower's tank within ANUBARAK_FOCUS_SETTLE, and since when
@@ -493,8 +538,14 @@ struct AnubarakState
 
     // Heroic: tank patches this submerge's kites may still spend
     uint32 kiteAllowance = 0;
+    // This submerge's second tank patch has been granted
+    bool secondPatch = false;
+    // Each side's tank patch where it was last seen, for the gather to step off once it's spent
+    bool tankPatchSeen[2] = {false, false};
+    Position tankPatchPos[2];
     KiteStageRead kiteStage;
     KitePlan kitePlan;
+    EscortPostLatch escortPost;
     // Where he went down, for the heroic phase 2 gather
     bool submergePosValid = false;
     Position submergePos;
@@ -783,9 +834,13 @@ void ClearPullLatches(AnubarakState& state)
     state.meleeStands.clear();
     state.settles.clear();
     state.kiteAllowance = 0;
+    state.secondPatch = false;
+    state.tankPatchSeen[0] = false;
+    state.tankPatchSeen[1] = false;
     state.kitePatchKiter.Clear();
     state.kiteStage = KiteStageRead();
     state.kitePlan = KitePlan();
+    state.escortPost = EscortPostLatch();
     state.submergePosValid = false;
     state.needs[0] = SideNeed();
     state.needs[1] = SideNeed();
@@ -952,12 +1007,15 @@ void TrackKiter(Player* bot, AnubarakState& state, Player* target)
             RaidObs::NoteDerived(last, "anub.kitestage", "none");
             RaidObs::NoteDerived(last, "anub.kitemove", "none");
             RaidObs::NoteDerived(last, "anub.bridge", "none");
+            if (state.secondPatch)
+                RaidObs::NoteDerived(last, "anub.second", "none");
         }
     }
 
     state.kiter = guid;
     state.kitePatchKiter.Clear();
     state.kitePlan = KitePlan();
+    state.escortPost = EscortPostLatch();
 
     // A bot waits out a cast in progress before any action runs, its kite included
     PlayerbotAI* ai = target ? GET_PLAYERBOT_AI(target) : nullptr;
@@ -1170,12 +1228,14 @@ void UpdateRaidPoint(Player* bot, AnubarakState& state, Position const& spot0, P
     if (down && state.raidPointValid && state.raidPointHeld && state.raidPointHeldMs == state.submergedMs)
         return;
 
+    // The gather may have stepped off a spent patch while he was down
+    bool const released = !down && state.raidPointHeld;
     state.raidPointHeld = down;
     state.raidPointHeldMs = state.submergedMs;
     Position const anchor((spot0.GetPositionX() + spot1.GetPositionX()) / 2.0f,
                           (spot0.GetPositionY() + spot1.GetPositionY()) / 2.0f,
                           (spot0.GetPositionZ() + spot1.GetPositionZ()) / 2.0f);
-    if (state.raidPointValid && Dist2d(anchor, state.raidPointAnchor) < ANUBARAK_RAID_POINT_SLACK)
+    if (!released && state.raidPointValid && Dist2d(anchor, state.raidPointAnchor) < ANUBARAK_RAID_POINT_SLACK)
         return;
 
     Vec2 const along = Delta(spot0, spot1);
@@ -1189,6 +1249,29 @@ void UpdateRaidPoint(Player* bot, AnubarakState& state, Position const& spot0, P
     state.raidPointValid = true;
     state.raidPointAnchor = anchor;
     state.raidPoint = ValidateFloorPoint(bot, Offset(anchor, normal, ANUBARAK_RAID_POINT_OFFSET));
+}
+
+// Heroic: a tank patch spent while he is down moves the held gather straight away from it
+void StepGatherOff(Player* bot, AnubarakState& state, Position const& patch)
+{
+    if (!state.raidPointValid || !state.raidPointHeld)
+        return;
+
+    Vec2 away = Delta(patch, state.raidPoint);
+    float length = Length(away);
+    if (length < 0.5f)
+    {
+        away = Delta(patch, ANUBARAK_ROOM_CENTER);
+        length = Length(away);
+    }
+
+    if (length < 0.5f)
+        return;
+
+    Position const raw = Offset(state.raidPoint, {away.x / length, away.y / length}, ANUBARAK_GATHER_STEP);
+    Position valid;
+    if (Dist2d(raw, ANUBARAK_ROOM_CENTER) <= ANUBARAK_GATHER_STEP_REACH && OnFloor(bot, raw, valid))
+        state.raidPoint = valid;
 }
 
 // Within reach of the spot and clearly nearer it than the other one
@@ -1388,8 +1471,8 @@ uint32 NextWaveMs(AnubarakState const& state)
 
 int32 MsUntilWave(AnubarakState const& state, uint32 now) { return static_cast<int32>(NextWaveMs(state) - now); }
 
-// One tank patch this submerge, while a sphere flies spare of the missing ones to replace it after
-void ComputeKiteAllowance(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres)
+// More spheres fly than tank patches are missing, so one could replace a tank patch after the emerge
+bool SphereSpare(Player* bot, AnubarakState const& state, std::vector<Creature*> const& spheres)
 {
     uint32 flying = 0;
     for (Creature* sphere : spheres)
@@ -1403,8 +1486,15 @@ void ComputeKiteAllowance(Player* bot, AnubarakState& state, std::vector<Creatur
             !(tenMan && state.sideTanks[side].IsEmpty()))
             ++missing;
 
-    state.kiteAllowance = flying > missing ? 1 : 0;
+    return flying > missing;
+}
+
+// One tank patch this submerge, while a sphere flies spare of the missing ones to replace it after
+void ComputeKiteAllowance(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres)
+{
+    state.kiteAllowance = SphereSpare(bot, state, spheres) ? 1 : 0;
     state.allowance = state.kiteAllowance;
+    state.secondPatch = false;
 }
 
 // Null while he isn't engaged. Refreshes phase, latches and probes once per instance per ms.
@@ -1475,8 +1565,27 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
 
     std::vector<Creature*> const spheres = ResolveSpheres(bot, *state);
     bool tankPatchLost = false;
-    for (ObjectGuid const& guid : {state->patch0.Get(), state->patch1.Get()})
-        tankPatchLost = tankPatchLost || (!guid.IsEmpty() && !IsPermafrostPatch(FindSphere(spheres, guid)));
+    std::vector<Position> lostAt;
+    for (uint8 side = 0; side < 2; ++side)
+    {
+        ObjectGuid const guid = side == 0 ? state->patch0.Get() : state->patch1.Get();
+        if (guid.IsEmpty())
+            continue;
+
+        Creature* patch = FindSphere(spheres, guid);
+        if (IsPermafrostPatch(patch))
+        {
+            state->tankPatchSeen[side] = true;
+            state->tankPatchPos[side] = patch->GetPosition();
+            continue;
+        }
+
+        tankPatchLost = true;
+        if (state->tankPatchSeen[side])
+            lostAt.push_back(state->tankPatchPos[side]);
+
+        state->tankPatchSeen[side] = false;
+    }
 
     RecordSphereHomes(*state, spheres);
     RefreshTankPatches(*state, spheres);
@@ -1496,6 +1605,9 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
     state->spot0 = spots[0];
     state->spot1 = spots[1];
     UpdateRaidPoint(bot, *state, spots[0], spots[1]);
+    if (state->phaseValue == AnubarakPhase::Submerged && AnubarakHeroic(bot))
+        for (Position const& patch : lostAt)
+            StepGatherOff(bot, *state, patch);
 
     TrackWaves(bot, *state, now);
     if (submerging && AnubarakHeroic(bot))
@@ -1625,6 +1737,13 @@ AnubarakPursuit::KiterPath KiterRun(Player* kiter, Creature* spike, Vec2 dir)
     return AnubarakPursuit::MakeKiterPath(ToPoint(from), {dir.x, dir.y}, KiterRunSpeed(kiter),
                                           ToPoint(ANUBARAK_ROOM_CENTER), ANUBARAK_KITE_RING_RADIUS,
                                           RingTurn(from, spike->GetPosition()));
+}
+
+// Heroic: one member of the run's path family along dir
+AnubarakPursuit::KiterPath KiterRun(Player* kiter, Vec2 dir, AnubarakPursuit::PathMember const& member)
+{
+    return AnubarakPursuit::MakeKiterPath(ToPoint(kiter->GetPosition()), {dir.x, dir.y}, KiterRunSpeed(kiter),
+                                          ToPoint(ANUBARAK_ROOM_CENTER), member);
 }
 
 // How far off the spike and its lane a bot dodges, further while the spike outruns it
@@ -2077,13 +2196,13 @@ bool KiteWalkStand(Player* kiter, Creature* spike, AnubarakState const& state, P
     return true;
 }
 
-// The lane steps' headings: a 10 yd step that keeps the spike behind and no nearer, inside the ring
-// radius or no further out than the kiter already is
+// The lane steps' headings: a 10 yd step that keeps the spike behind and no nearer, inside the rim or no
+// further out than the kiter already is
 std::vector<std::pair<Vec2, Position>> RunHeadings(Player* kiter, Creature* spike)
 {
     Position const& from = kiter->GetPosition();
     float const gap = Dist2d(from, spike->GetPosition());
-    float const radius = std::max(ANUBARAK_KITE_RING_RADIUS, Dist2d(from, ANUBARAK_ROOM_CENTER));
+    float const radius = std::max(ANUBARAK_KITE_RIM_RADIUS, Dist2d(from, ANUBARAK_ROOM_CENTER));
     std::vector<std::pair<Vec2, Position>> headings;
     for (uint32 i = 0; i < ANUBARAK_KITE_LANE_HEADINGS; ++i)
     {
@@ -2124,6 +2243,30 @@ float BestRunCatchS(Player* kiter, Creature* spike)
     return ms / IN_MILLISECONDS;
 }
 
+// The run the kite holds: its heading on its path family member
+AnubarakPursuit::KiterPath HeldRun(Player* kiter, KitePlan const& plan)
+{
+    return KiterRun(kiter, {plan.heading.x, plan.heading.y}, plan.member);
+}
+
+// The catch on the heading the kite holds, else on the way it faces: mid flip-flop a kiter faces the
+// spike, which reads a catch seconds early. Negative past the catch horizon.
+float HeldCatchS(Player* kiter, Creature* spike, KitePlan const& plan)
+{
+    if (!plan.headingValid)
+    {
+        float ms = 0.0f;
+        return ImpaleInMs(kiter, spike, ms) ? ms / IN_MILLISECONDS : -1.0f;
+    }
+
+    if (Dist2d(spike->GetPosition(), kiter->GetPosition()) <= ANUBARAK_IMPALE_REACH)
+        return 0.0f;
+
+    return AnubarakPursuit::Simulate(PursuitSpike(spike), HeldRun(kiter, plan), ANUBARAK_KITE_CATCH_HORIZON_S, {},
+                                     ANUBARAK_IMPALE_REACH)
+        .catchS;
+}
+
 float HandLeftS(Unit* kiter)
 {
     int32 left = 0;
@@ -2149,13 +2292,13 @@ AnubarakPursuit::PatchRules KitePatchRules(Player* kiter)
     return rules;
 }
 
-// The best walk onto the patch, of the moves allowed, started after running on along dir for
+// The best walk onto the patch, of the moves allowed, started after running on along run for
 // ANUBARAK_KITE_PATCH_COMMIT_S: its margin
-float PatchLaterMargin(Player* kiter, Creature* spike, Position const& patch, Vec2 dir,
+float PatchLaterMargin(Player* kiter, Creature* spike, Position const& patch, AnubarakPursuit::KiterPath const& run,
                        std::array<bool, 3> const& allowed)
 {
     AnubarakPursuit::PatchWalk const walk = AnubarakPursuit::PatchWalkAfter(
-        PursuitSpike(spike), KiterRun(kiter, spike, dir), ANUBARAK_KITE_PATCH_COMMIT_S, KiterRunSpeed(kiter),
+        PursuitSpike(spike), run, ANUBARAK_KITE_PATCH_COMMIT_S, KiterRunSpeed(kiter),
         ToPoint(patch), KitePatchRules(kiter), HandLeftS(kiter),
         [&allowed](AnubarakPursuit::PatchMove move, std::vector<AnubarakPursuit::Point> const&)
         { return allowed[static_cast<size_t>(move)]; });
@@ -2490,6 +2633,101 @@ void JudgeBridge(Player* kiter, KitePlan& plan)
     plan.bridge = KiteBridge::Turn;
 }
 
+// anub.hands at each pick: every paladin bot as guid:seconds of Hand cooldown left:yards to the kiter
+void NoteHands(Player* kiter)
+{
+    std::string text;
+    for (Player* paladin : ProtectorOrder(kiter))
+    {
+        uint32 const rank = KnownRank(paladin, HAND_OF_PROTECTION_RANKS);
+        if (!rank)
+            continue;
+
+        if (!text.empty())
+            text += ' ';
+
+        text += std::to_string(paladin->GetGUID().GetCounter()) + ':' +
+                std::to_string((paladin->GetSpellCooldownDelay(rank) + 500) / IN_MILLISECONDS) + ':' +
+                std::to_string(static_cast<int32>(std::lround(paladin->GetExactDist2d(kiter))));
+    }
+
+    RaidObs::NoteDerived(kiter, "anub.hands", text.empty() ? "none" : text);
+}
+
+// Heroic, the submerge's tank patch already spent: a second one when the kite would otherwise die
+void TrySecondPatch(Player* kiter, Creature* spike, AnubarakState& state, KitePlan& plan)
+{
+    using AnubarakPursuit::KiteTerminal;
+    if (state.kiteAllowance || state.secondPatch || plan.patch || state.phaseValue != AnubarakPhase::Submerged)
+        return;
+
+    AnubarakPursuit::SecondPatchRead read;
+    read.handLeftS = HandLeftS(kiter);
+    read.catchS = plan.heldCatchS;
+    if (read.handLeftS <= 0.0f && (read.catchS < 0.0f || read.catchS > AnubarakPursuit::SECOND_PATCH_CATCH_S))
+        return;
+
+    read.own = OwnImmunitySpell(kiter) != 0;
+    read.otherHand = HandInReach(kiter);
+    uint32 const endMs = static_cast<uint32>(std::max(read.handLeftS, std::max(read.catchS, 0.0f)) * IN_MILLISECONDS);
+    read.beforeEnd = static_cast<int32>(getMSTime() + endMs - (state.submergedMs + ANUBARAK_SECOND_PATCH_BEFORE_MS)) < 0;
+    read.sphereSpare = SphereSpare(kiter, state, ResolveSpheres(kiter, state));
+    if (read.own || read.otherHand || !read.beforeEnd || !read.sphereSpare)
+        return;
+
+    AnubarakPursuit::PatchRules const rules = KitePatchRules(kiter);
+    AnubarakPursuit::Spike const chase = PursuitSpike(spike);
+    AnubarakPursuit::Point const from = ToPoint(kiter->GetPosition());
+    AnubarakPursuit::KiterPath const run =
+        plan.headingValid ? HeldRun(kiter, plan) : KiterRun(kiter, spike, RunDir(kiter, spike));
+    Creature* best = nullptr;
+    float bestMargin = -1.0f;
+    for (uint8 side = 0; side < 2; ++side)
+    {
+        Creature* patch = LatchedTankPatch(kiter, state, side);
+        if (!patch)
+            continue;
+
+        AnubarakPursuit::Point const centre = ToPoint(patch->GetPosition());
+        read.walkS = AnubarakPursuit::PatchWalkMargin(chase, from, KiterRunSpeed(kiter), centre, {centre}, rules,
+                                                      read.handLeftS);
+        AnubarakPursuit::PatchWalk const later = AnubarakPursuit::PatchWalkAfter(
+            chase, run, ANUBARAK_KITE_PATCH_COMMIT_S, KiterRunSpeed(kiter), centre, rules,
+            read.handLeftS,
+            [](AnubarakPursuit::PatchMove move, std::vector<AnubarakPursuit::Point> const&)
+            { return move == AnubarakPursuit::PatchMove::In; });
+        read.walkLaterS = later.valid ? later.marginS : -1.0f;
+        if (AnubarakPursuit::SecondPatchDue(read) && (!best || read.walkS > bestMargin))
+        {
+            best = patch;
+            bestMargin = read.walkS;
+        }
+    }
+
+    if (!best)
+        return;
+
+    bool const underHand = read.handLeftS > 0.0f;
+    state.secondPatch = true;
+    state.kiteAllowance = 1;
+    state.allowance = 2;
+    state.kitePatchKiter = kiter->GetGUID();
+    plan.patch = true;
+    plan.patchGuid = best->GetGUID();
+    plan.patchPos = best->GetPosition();
+    plan.walk = AnubarakPursuit::PatchWalk();
+    plan.walk.valid = true;
+    plan.walk.legs = {ToPoint(best->GetPosition())};
+    plan.walk.marginS = bestMargin;
+    plan.movesAllowed = {true, false, false};
+    plan.patchMarginS = bestMargin;
+    plan.patchLaterS = -1.0f;
+    plan.terminal = underHand ? KiteTerminal::PatchHand : KiteTerminal::Patch;
+    plan.handLanded = underHand;
+    if (GET_PLAYERBOT_AI(kiter))
+        RaidObs::NoteDerived(kiter, "anub.second", "grant");
+}
+
 // Heroic, every 250 ms. The terminal is picked at the mark and kept until it can't be had: the patch
 // gone, the hand's paladin dead or without it, Forbearance on the kiter, the own immunity spent. Then it's
 // picked again.
@@ -2507,6 +2745,10 @@ KitePlan& JudgeKitePlan(Player* kiter, Creature* spike, AnubarakState& state)
         plan = KitePlan();
         plan.valid = true;
         plan.kiter = kiter->GetGUID();
+        plan.markMs = now;
+        Position gather;
+        plan.startedInGather =
+            GatherCentre(kiter, state, gather) && Dist2d(kiter->GetPosition(), gather) <= ANUBARAK_KITE_GATHER_CLEARANCE;
     }
 
     plan.judgedMs = now;
@@ -2514,10 +2756,11 @@ KitePlan& JudgeKitePlan(Player* kiter, Creature* spike, AnubarakState& state)
 
     float catchMs = 0.0f;
     plan.catchS = ImpaleInMs(kiter, spike, catchMs) ? catchMs / IN_MILLISECONDS : -1.0f;
+    plan.heldCatchS = HeldCatchS(kiter, spike, plan);
 
     ChooseKitePatchWalk(kiter, spike, state, plan, state.kitePatchKiter == kiter->GetGUID());
-    plan.patchLaterS = plan.patch ? PatchLaterMargin(kiter, spike, plan.patchPos, RunDir(kiter, spike),
-                                                     plan.movesAllowed)
+    plan.patchLaterS = plan.patch ? PatchLaterMargin(kiter, spike, plan.patchPos,
+                                                     KiterRun(kiter, spike, RunDir(kiter, spike)), plan.movesAllowed)
                                   : -1.0f;
 
     bool keep = false;
@@ -2542,21 +2785,25 @@ KitePlan& JudgeKitePlan(Player* kiter, Creature* spike, AnubarakState& state)
     if (!keep)
     {
         std::vector<Player*> const hands = ReadyHands(kiter);
+        uint32 const own = OwnImmunitySpell(kiter);
         AnubarakPursuit::KiteOptions options;
         options.catchS = BestRunCatchS(kiter, spike);
-        options.emergeS = static_cast<float>(static_cast<int32>(state.submergedMs + ANUBARAK_SUBMERGED_MS - now)) /
+        options.emergeS = static_cast<float>(static_cast<int32>(state.submergedMs + ANUBARAK_SPIKE_LIFE_MS - now)) /
                           IN_MILLISECONDS;
         options.patch = plan.patch;
-        options.patchReachable = plan.patch && plan.patchMarginS >= 0.0f;
         options.hand = !hands.empty();
-        options.own = OwnImmunitySpell(kiter) != 0;
+        options.own = own != 0;
+        options.paladinShield = own == SPELL_DIVINE_SHIELD;
         plan.terminal = AnubarakPursuit::PickTerminal(options);
         bool const hand = plan.terminal == KiteTerminal::Hand || plan.terminal == KiteTerminal::PatchHand;
         plan.hand = hand ? hands.front()->GetGUID() : ObjectGuid::Empty;
         plan.handLanded = false;
         plan.bridge = KiteBridge::None;
+        if (GET_PLAYERBOT_AI(kiter))
+            NoteHands(kiter);
     }
 
+    TrySecondPatch(kiter, spike, state, plan);
     if (plan.terminal == KiteTerminal::PatchHand)
     {
         if (plan.handLanded)
@@ -2595,7 +2842,8 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
 
     bool const bot = GET_PLAYERBOT_AI(kiter) != nullptr;
     AnubarakKiteBoost boost;
-    bool const hasBoost = bot && NextKiteBoost(kiter, spike, LaneObstacles(kiter, state), boost);
+    bool const hasBoost = bot && HandLeftS(kiter) <= ANUBARAK_KITE_BOOST_HAND_S &&
+                          NextKiteBoost(kiter, spike, LaneObstacles(kiter, state), boost);
 
     KitePlan const& plan = JudgeKitePlan(kiter, spike, state);
     bool const patchKite = plan.patch && (plan.terminal == KiteTerminal::Patch ||
@@ -2638,13 +2886,10 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
 // What the kite plan asks of a run step
 struct LaneGoal
 {
-    // A patch kite: turning after the commit delay on the step's heading still beats the catch
+    // A patch kite: turning after the commit delay on the step's path still beats the catch
     bool patch = false;
     Position patchPos;
     std::array<bool, 3> movesAllowed = {false, false, false};
-    // A Hand kite: the step stays within ANUBARAK_KITE_ESCORT_LEASH of its escort
-    bool escort = false;
-    Position escortPos;
     // An own kite: steps away from the gather, so the spike's next target starts further off
     bool away = false;
     Position gather;
@@ -2654,6 +2899,7 @@ struct LaneStep
 {
     Position raw;
     Vec2 dir;
+    AnubarakPursuit::PathMember member;
     bool goalOk;
     bool patchClear;
     // The line from the probe to the gather misses every tank patch: the spike's run there after a death
@@ -2672,14 +2918,15 @@ struct LaneStep
     float firstInS;
 };
 
-// The goal, the spike's run clear of every patch, for an own kite the distance off the gather, then its
-// run clear of the gather: what a held heading must still match the best on
+// The spike's run clear of every patch, the goal, for an own kite the distance off the gather, then its
+// run clear of the gather: what a held heading must still match the best on. The goal comes second: it is
+// worth nothing on a heading that spends a tank patch.
 int8 CompareLaneClass(LaneStep const& a, LaneStep const& b)
 {
-    if (a.goalOk != b.goalOk)
-        return a.goalOk ? -1 : 1;
     if (a.patchClear != b.patchClear)
         return a.patchClear ? -1 : 1;
+    if (a.goalOk != b.goalOk)
+        return a.goalOk ? -1 : 1;
     if (a.awayBand != b.awayBand)
         return a.awayBand > b.awayBand ? -1 : 1;
     if (a.gatherClear != b.gatherClear)
@@ -2687,24 +2934,60 @@ int8 CompareLaneClass(LaneStep const& a, LaneStep const& b)
     return 0;
 }
 
-// Heroic run: a RunHeadings step judged by the spike's pursuit of the kiter along that heading and then
-// round the ring, up to the kite's catch for the passes (ANUBARAK_KITE_PURSUIT_HORIZON_S to _MAX_S) and the
-// plan horizon for the catch. Ranked by CompareLaneClass, then the latest catch (in bands), restart line
-// clear, within the leash of a kite patch's stand, the widest pass by the patches, then by the gather and
-// the players. None clear of the patches: the latest first pass inside a patch's clearance, then the widest
-// patch margin. The held heading stays for ANUBARAK_KITE_HEADING_HOLD_MS, then while it ranks with the
-// best, as long as its catch stays within the slack of the best and its spike passes no patch within the
-// 11.5 yd test. None at all: the plain ring step.
+bool SameMember(AnubarakPursuit::PathMember const& a, AnubarakPursuit::PathMember const& b)
+{
+    return a.radius == b.radius && a.turn == b.turn && a.straightCap == b.straightCap;
+}
+
+// anub.lane: g goal met, p clear of the patches, r clear of the gather and players, h the held heading kept
+// over the best, x no heading clear of the 11.5 yd test, c some heading clear of the patches; then the heading
+void NoteLane(Player* kiter, LaneStep const& step, bool goal, bool kept, bool anyIntact, bool anyClear)
+{
+    std::string text;
+    if (goal && step.goalOk)
+        text += 'g';
+    if (step.patchClear)
+        text += 'p';
+    if (step.gatherClear)
+        text += 'r';
+    if (kept)
+        text += 'h';
+    if (!anyIntact)
+        text += 'x';
+    if (anyClear)
+        text += 'c';
+
+    float degrees = std::atan2(step.dir.y, step.dir.x) / ANUBARAK_DEG_TO_RAD;
+    if (degrees < 0.0f)
+        degrees += 360.0f;
+
+    RaidObs::NoteDerived(kiter, "anub.lane", text + ':' + std::to_string(std::lround(degrees) % 360));
+}
+
+// Heroic run: a RunHeadings step judged on each of its path family members by the spike's pursuit, up to the
+// kite's catch for the passes (ANUBARAK_KITE_PURSUIT_HORIZON_S to _MAX_S), to a Hand's end under one, and the
+// plan horizon for the catch. Ranked by CompareLaneClass, then, for a kiter marked inside the gather's
+// clearance, the widest pass by the gather for its first 3 s, the latest catch (in bands), restart line
+// clear, within the leash of a kite patch's stand, the widest pass by the patches, then by the gather and the
+// players. None clear of the patches: the latest first pass inside a patch's clearance, then the widest patch
+// margin. KeepHeading says whether the held heading stays first. None at all: the plain ring step.
 Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle> const& obstacles,
                        Position const* leash, LaneGoal const& goal, KitePlan* hold)
 {
     Position const& from = kiter->GetPosition();
     Position const& spikePos = spike->GetPosition();
     AnubarakPursuit::Spike const chase = PursuitSpike(spike);
-    float const horizonS = hold && hold->catchS >= 0.0f
-                               ? std::clamp(hold->catchS, ANUBARAK_KITE_PURSUIT_HORIZON_S,
-                                            ANUBARAK_KITE_PURSUIT_HORIZON_MAX_S)
-                               : ANUBARAK_KITE_PURSUIT_HORIZON_MAX_S;
+    float const handLeft = HandLeftS(kiter);
+    float horizonS = hold && hold->catchS >= 0.0f
+                         ? std::clamp(hold->catchS, ANUBARAK_KITE_PURSUIT_HORIZON_S, ANUBARAK_KITE_PURSUIT_HORIZON_MAX_S)
+                         : ANUBARAK_KITE_PURSUIT_HORIZON_MAX_S;
+    if (handLeft > 0.0f)
+        horizonS = std::clamp(handLeft, AnubarakPursuit::TICK_S, ANUBARAK_KITE_PURSUIT_HORIZON_MAX_S);
+
+    float const tankKeep = handLeft > 0.0f ? ANUBARAK_KITE_HAND_PATCH_CLEARANCE : ANUBARAK_TANK_KEEPOUT;
+    uint32 const now = getMSTime();
+    bool const gatherFirst =
+        hold && hold->startedInGather && getMSTimeDiff(hold->markMs, now) < ANUBARAK_KITE_GATHER_FIRST_MS;
 
     std::vector<AnubarakPursuit::Point> points;
     // One already inside its clearance only has to be headed away from
@@ -2721,63 +3004,66 @@ Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle>
             tanks.push_back(obstacle.pos);
     }
 
+    float const stepCap = chase.step == 0 ? chase.nextStepS * KiterRunSpeed(kiter) : 0.0f;
+    std::vector<AnubarakPursuit::PathMember> const family =
+        AnubarakPursuit::PathFamily(ANUBARAK_KITE_RING_RADIUS, ANUBARAK_KITE_RIM_RADIUS, stepCap);
     float const cap = ANUBARAK_KITE_LANE_CAP - ANUBARAK_SPIKE_ROUTE_CLEARANCE;
     std::vector<LaneStep> steps;
     for (auto const& [dir, raw] : RunHeadings(kiter, spike))
-    {
-        AnubarakPursuit::KiterPath const path = KiterRun(kiter, spike, dir);
-        AnubarakPursuit::Pursuit const run =
-            AnubarakPursuit::Simulate(chase, path, horizonS, points, ANUBARAK_IMPALE_REACH, needs);
-
-        LaneStep step = {raw,  dir, true, true, true, true, true, cap, cap, Dist2d(raw, spikePos), 0,
-                         0.0f, ANUBARAK_ROOM_RADIUS, horizonS};
-        for (size_t k = 0; k < obstacles.size(); ++k)
+        for (AnubarakPursuit::PathMember const& member : family)
         {
-            LaneObstacle const& obstacle = obstacles[k];
-            bool clear = run.spikeClosest[k] >= needs[k];
-            float const margin = run.spikeClosest[k] - obstacle.clearance;
-            if (obstacle.gather || obstacle.player)
+            AnubarakPursuit::KiterPath const path = KiterRun(kiter, dir, member);
+            AnubarakPursuit::Pursuit const run =
+                AnubarakPursuit::Simulate(chase, path, horizonS, points, ANUBARAK_IMPALE_REACH, needs);
+
+            LaneStep step = {raw,  dir,  member, true, true, true, true, true, cap, cap, Dist2d(raw, spikePos), 0,
+                             0.0f, ANUBARAK_ROOM_RADIUS, horizonS};
+            for (size_t k = 0; k < obstacles.size(); ++k)
             {
-                step.gatherClear = step.gatherClear && clear;
-                step.gatherScore = std::min(step.gatherScore, margin);
-                continue;
+                LaneObstacle const& obstacle = obstacles[k];
+                bool clear = run.spikeClosest[k] >= needs[k];
+                float const margin = run.spikeClosest[k] - obstacle.clearance;
+                if (obstacle.gather || obstacle.player)
+                {
+                    step.gatherClear = step.gatherClear && clear;
+                    step.gatherScore = std::min(step.gatherScore, margin);
+                    continue;
+                }
+
+                // The kiter's own run kept out of the slow, and under a Hand off the tank patches by the trail
+                float const keep = obstacle.tank ? tankKeep : ANUBARAK_TANK_KEEPOUT;
+                clear = clear && run.kiterClosest[k] >=
+                                     std::min(keep, Dist2d(from, obstacle.pos) - ANUBARAK_KITE_LANE_START_SLACK);
+                step.patchClear = step.patchClear && clear;
+                step.patchScore = std::min(step.patchScore, margin);
+                step.patchPass = std::min(step.patchPass, run.spikeClosest[k]);
+                if (run.spikeArriveS[k] >= 0.0f)
+                    step.firstInS = std::min(step.firstInS, run.spikeArriveS[k]);
             }
 
-            // The kiter's own run kept out of the slow
-            clear = clear && run.kiterClosest[k] >= std::min(ANUBARAK_TANK_KEEPOUT, Dist2d(from, obstacle.pos) -
-                                                                                        ANUBARAK_KITE_LANE_START_SLACK);
-            step.patchClear = step.patchClear && clear;
-            step.patchScore = std::min(step.patchScore, margin);
-            step.patchPass = std::min(step.patchPass, run.spikeClosest[k]);
-            if (run.spikeArriveS[k] >= 0.0f)
-                step.firstInS = std::min(step.firstInS, run.spikeArriveS[k]);
+            step.catchS = RunCatchS(chase, path);
+            if (goal.patch)
+                step.goalOk = PatchLaterMargin(kiter, spike, goal.patchPos, path, goal.movesAllowed) >= 0.0f;
+
+            if (goal.away)
+                step.awayBand = static_cast<int32>(Dist2d(raw, goal.gather) / ANUBARAK_KITE_GATHER_BAND);
+
+            if (anyGather && !tanks.empty())
+            {
+                AnubarakPursuit::Point const ahead = path.At(ANUBARAK_KITE_LANE_HORIZON_S);
+                Position const probe(ahead.x, ahead.y, from.GetPositionZ());
+                for (LaneObstacle const& obstacle : obstacles)
+                    if (obstacle.gather)
+                        for (Position const& tank : tanks)
+                            if (SegmentDistance2d(probe, obstacle.pos, tank) < ANUBARAK_SPIKE_ROUTE_CLEARANCE)
+                                step.restartClear = false;
+            }
+
+            step.leashed = !leash || Dist2d(raw, *leash) <= ANUBARAK_KITE_STAND_LEASH;
+            steps.push_back(step);
         }
 
-        step.catchS = RunCatchS(chase, path);
-        if (goal.patch)
-            step.goalOk = PatchLaterMargin(kiter, spike, goal.patchPos, dir, goal.movesAllowed) >= 0.0f;
-        else if (goal.escort)
-            step.goalOk = Dist2d(raw, goal.escortPos) <= ANUBARAK_KITE_ESCORT_LEASH;
-
-        if (goal.away)
-            step.awayBand = static_cast<int32>(Dist2d(raw, goal.gather) / ANUBARAK_KITE_GATHER_BAND);
-
-        if (anyGather && !tanks.empty())
-        {
-            AnubarakPursuit::Point const ahead = path.At(ANUBARAK_KITE_LANE_HORIZON_S);
-            Position const probe(ahead.x, ahead.y, from.GetPositionZ());
-            for (LaneObstacle const& obstacle : obstacles)
-                if (obstacle.gather)
-                    for (Position const& tank : tanks)
-                        if (SegmentDistance2d(probe, obstacle.pos, tank) < ANUBARAK_SPIKE_ROUTE_CLEARANCE)
-                            step.restartClear = false;
-        }
-
-        step.leashed = !leash || Dist2d(raw, *leash) <= ANUBARAK_KITE_STAND_LEASH;
-        steps.push_back(step);
-    }
-
-    std::sort(steps.begin(), steps.end(), [](LaneStep const& a, LaneStep const& b)
+    std::sort(steps.begin(), steps.end(), [gatherFirst](LaneStep const& a, LaneStep const& b)
               {
                   if (int8 const order = CompareLaneClass(a, b))
                       return order < 0;
@@ -2789,6 +3075,8 @@ Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle>
                           return a.patchScore > b.patchScore;
                       return a.fromSpike > b.fromSpike;
                   }
+                  if (gatherFirst && a.gatherScore != b.gatherScore)
+                      return a.gatherScore > b.gatherScore;
                   int32 const bandA = static_cast<int32>(a.catchS / ANUBARAK_KITE_CATCH_BAND_S);
                   int32 const bandB = static_cast<int32>(b.catchS / ANUBARAK_KITE_CATCH_BAND_S);
                   if (bandA != bandB)
@@ -2804,30 +3092,44 @@ Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle>
                   return a.fromSpike > b.fromSpike;
               });
 
-    // Re-picking every tick flips between the two headings left at the rim, and the kiter stalls between
-    // them
-    uint32 const now = getMSTime();
+    bool const anyIntact = std::any_of(steps.begin(), steps.end(), [](LaneStep const& step)
+                                       { return step.patchPass >= ANUBARAK_SPIKE_PATCH_REACH; });
+    bool const anyClear =
+        std::any_of(steps.begin(), steps.end(), [](LaneStep const& step) { return step.patchClear; });
+    bool kept = false;
     if (hold && hold->headingValid && !steps.empty())
     {
         Vec2 const held = {hold->heading.x, hold->heading.y};
-        auto kept = steps.end();
+        auto keptStep = steps.end();
         float nearest = ANUBARAK_KITE_LANE_KEEP_DEGREES * ANUBARAK_DEG_TO_RAD;
         for (auto it = steps.begin(); it != steps.end(); ++it)
         {
             float const angle = AngleBetween(held, it->dir);
-            if (angle <= nearest)
+            bool const closer = angle < nearest - 0.0001f || (keptStep == steps.end() && angle <= nearest);
+            bool const sameMember = keptStep != steps.end() && std::fabs(angle - nearest) <= 0.0001f &&
+                                    SameMember(it->member, hold->member) && !SameMember(keptStep->member, hold->member);
+            if (closer || sameMember)
             {
                 nearest = angle;
-                kept = it;
+                keptStep = it;
             }
         }
 
-        LaneStep const& best = steps.front();
-        bool const intact = kept != steps.end() && kept->patchPass >= ANUBARAK_SPIKE_PATCH_REACH &&
-                            kept->catchS >= best.catchS - ANUBARAK_KITE_HEADING_CATCH_SLACK_S;
-        bool const young = getMSTimeDiff(hold->headingMs, now) < ANUBARAK_KITE_HEADING_HOLD_MS;
-        if (intact && kept != steps.begin() && (young || CompareLaneClass(best, *kept) == 0))
-            std::rotate(steps.begin(), kept, kept + 1);
+        if (keptStep != steps.end() && keptStep != steps.begin())
+        {
+            LaneStep const& best = steps.front();
+            AnubarakPursuit::HeadingHold rules;
+            rules.testReach = ANUBARAK_SPIKE_PATCH_REACH;
+            rules.catchSlackS = ANUBARAK_KITE_HEADING_CATCH_SLACK_S;
+            rules.holdS = static_cast<float>(ANUBARAK_KITE_HEADING_HOLD_MS) / IN_MILLISECONDS;
+            kept = AnubarakPursuit::KeepHeading({keptStep->patchPass, keptStep->firstInS, keptStep->catchS},
+                                                {best.patchPass, best.firstInS, best.catchS},
+                                                CompareLaneClass(best, *keptStep) == 0, anyIntact,
+                                                static_cast<float>(getMSTimeDiff(hold->headingMs, now)) / IN_MILLISECONDS,
+                                                AngleBetween(held, best.dir) / ANUBARAK_DEG_TO_RAD, rules);
+            if (kept)
+                std::rotate(steps.begin(), keptStep, keptStep + 1);
+        }
     }
 
     // Best first, so the floor raycasts stop at the first step that lands on the floor
@@ -2837,14 +3139,21 @@ Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle>
         if (!OnFloor(kiter, step.raw, valid))
             continue;
 
-        if (hold && (!hold->headingValid ||
-                     AngleBetween({hold->heading.x, hold->heading.y}, step.dir) >
-                         ANUBARAK_KITE_LANE_KEEP_DEGREES * ANUBARAK_DEG_TO_RAD))
+        if (hold)
         {
-            hold->headingValid = true;
-            hold->heading = {step.dir.x, step.dir.y};
-            hold->headingMs = now;
+            if (!hold->headingValid || AngleBetween({hold->heading.x, hold->heading.y}, step.dir) >
+                                           ANUBARAK_KITE_LANE_KEEP_DEGREES * ANUBARAK_DEG_TO_RAD)
+            {
+                hold->headingValid = true;
+                hold->heading = {step.dir.x, step.dir.y};
+                hold->headingMs = now;
+            }
+
+            hold->member = step.member;
         }
+
+        if (GET_PLAYERBOT_AI(kiter))
+            NoteLane(kiter, step, goal.patch, kept && &step == &steps.front(), anyIntact, anyClear);
 
         return valid;
     }
@@ -3321,6 +3630,18 @@ constexpr float ANUBARAK_GRIP_RELAY_FROM = ANUBARAK_SIDE_SHOOT_FAR;
 constexpr float ANUBARAK_GRIP_RELAY_REACH = ANUBARAK_GRIP_RANGE - ANUBARAK_GRIP_REACH_MARGIN;
 constexpr uint32 ANUBARAK_GRIP_RELAY_WAIT_MS = 3000;
 
+// A grip that takes jumps the sphere about 20 yd inside 120 ms. Death Grip 49576 is magic-class, so it
+// can miss the hit roll and leave the sphere where it was
+constexpr uint32 ANUBARAK_GRIP_PULL_MS = 600;
+constexpr float ANUBARAK_GRIP_PULL_GAIN = 3.0f;
+
+bool GripTookNoPull(Creature* sphere, GripCast const& cast, uint32 now)
+{
+    return getMSTimeDiff(cast.castMs, now) >= ANUBARAK_GRIP_PULL_MS &&
+           sphere->GetExactDist(cast.from.GetPositionX(), cast.from.GetPositionY(), cast.from.GetPositionZ()) >
+               cast.startDist - ANUBARAK_GRIP_PULL_GAIN;
+}
+
 // The side's own DK tank first, its burrowers walking along with it, then the lowest-guid DK bot with no
 // tank duty. Never the pickup tank or the other side's tank.
 Player* PickRelayLink(Player* bot, AnubarakState const& state, uint8 side, std::vector<ObjectGuid> const& busy)
@@ -3384,7 +3705,8 @@ void PlanRelay(Player* bot, AnubarakState const& state, uint8 side, Position con
 
 // True while a grip has a sphere for the side. The sphere it pulls is reserved, and the side's shooters
 // join once it is down where the DK cast from, or anywhere it still makes the side's patch. One not
-// landed 3 s on leaves the side to its shooters until a DK's Death Grip is back. With none in reach the
+// landed 3 s on, or that pulled nothing 0.6 s on, leaves the side to its shooters until a DK's Death Grip
+// is back. With none in reach the
 // DK keeps its duty and the side's shooters take any sphere they can. No grip takes a sphere already
 // near the other side's spot, or one another side's DK has picked. A grip landing over 20 yd off the spot
 // passes the sphere to a relay link, which grips it again within 3 s of the landing; it stays reserved
@@ -3406,6 +3728,21 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
     if (cast.valid)
     {
         Creature* sphere = FindSphere(spheres, cast.sphere);
+
+        // A relay link pulling nothing leaves the sphere low where the grip before it landed it, so that
+        // landing counts again: the next link grips from there, or the side kills it there
+        if (sphere && cast.relayLink && !cast.landed && GripTookNoPull(sphere, cast, now))
+        {
+            if (Player* missed = ObjectAccessor::GetPlayer(*bot, cast.dk))
+                RaidObs::NoteDerived(missed, "anub.relay", "miss");
+
+            cast.dk = cast.prevDk;
+            cast.from = cast.prevFrom;
+            cast.landed = true;
+            cast.relayLink = false;
+            relay = GripRelay();
+        }
+
         Player* dk = ObjectAccessor::GetPlayer(*bot, cast.dk);
         if (IsFrostSphereFlying(sphere) && dk && dk->IsAlive())
         {
@@ -3417,7 +3754,9 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
                  (Dist2d(at, spot) <= ANUBARAK_SIDE_SHOOT_FAR && Dist2d(at, other) >= ANUBARAK_TANK_PATCH_GAP)))
                 cast.landed = true;
 
-            bool const live = cast.landed || getMSTimeDiff(cast.castMs, now) < ANUBARAK_GRIP_JUDGE_MS;
+            // A first grip pulling nothing goes back to picking a DK at once, not after the judge window
+            bool const live = cast.landed || (getMSTimeDiff(cast.castMs, now) < ANUBARAK_GRIP_JUDGE_MS &&
+                                              !GripTookNoPull(sphere, cast, now));
             if (live && !relay.closed && Dist2d(cast.from, spot) > ANUBARAK_GRIP_RELAY_FROM)
             {
                 if (relay.dk.IsEmpty() || Dist2d(relay.from, cast.from) > ANUBARAK_GRIP_LANDED)
@@ -3980,27 +4319,42 @@ ProtectClaim const* DeriveProtection(Player* bot)
     float const spikeDist = Dist2d(spike->GetPosition(), kiter->GetPosition());
     bool const immune = AnubarakKiterImmune(kiter);
     bool const forbearance = kiter->HasAura(SPELL_FORBEARANCE);
+    KitePlan const* plan = claim.heroic ? &JudgeKitePlan(kiter, spike, *state) : nullptr;
     float impaleMs = 0.0f;
-    bool const caught = ImpaleInMs(kiter, spike, impaleMs);
-    bool const handDue = caught && impaleMs <= ANUBARAK_KITE_HAND_LEAD_S * IN_MILLISECONDS;
+    bool caught = false;
+    if (plan)
+    {
+        float const catchS = HeldCatchS(kiter, spike, *plan);
+        caught = catchS >= 0.0f;
+        impaleMs = (caught ? catchS : ANUBARAK_KITE_CATCH_HORIZON_S) * IN_MILLISECONDS;
+    }
+    else
+        caught = ImpaleInMs(kiter, spike, impaleMs);
+
+    bool handDue = caught && impaleMs <= ANUBARAK_KITE_HAND_LEAD_S * IN_MILLISECONDS;
+    // A kiter that leaves the run its catch was read off isn't caught then, so the Hand also waits for the
+    // spike to close
+    if (plan)
+        handDue = handDue && spikeDist <= ANUBARAK_IMPALE_REACH +
+                                              std::max(0.0f, spike->GetSpeed(MOVE_RUN) - KiterRunSpeed(kiter)) *
+                                                  ANUBARAK_KITE_HAND_CLOSE_S;
     claim.spikeInImmunityRange = spikeDist <= ANUBARAK_KITE_IMMUNITY_RANGE;
     claim.spikeFaster = caught;
 
     ObjectGuid planned;
     bool selfHand = false;
     bool ownPlanned = false;
-    if (claim.heroic)
+    if (plan)
     {
-        KitePlan const& plan = JudgeKitePlan(kiter, spike, *state);
-        bool const handKite = HandKite(plan);
-        selfHand = handKite && plan.hand == kiterGuid;
-        ownPlanned = plan.terminal == AnubarakPursuit::KiteTerminal::Own;
+        bool const handKite = HandKite(*plan);
+        selfHand = handKite && plan->hand == kiterGuid;
+        ownPlanned = plan->terminal == AnubarakPursuit::KiteTerminal::Own;
         // A spike within the immunity range has beaten whatever walk the model gave the kiter
-        claim.standReachable = plan.patch && plan.patchMarginS >= 0.0f && !claim.spikeInImmunityRange;
+        claim.standReachable = plan->patch && plan->patchMarginS >= 0.0f && !claim.spikeInImmunityRange;
         claim.need = !immune && !forbearance && !selfHand && handDue &&
                      (handKite || (!claim.standReachable && !ownPlanned));
         if (handKite && !selfHand)
-            planned = plan.hand;
+            planned = plan->hand;
     }
     else
     {
@@ -4053,11 +4407,19 @@ ProtectClaim const* DeriveProtection(Player* bot)
         }
     }
 
-    if (claim.heroic && !immune)
+    if (plan && !immune)
     {
         bool const ownDue = caught && impaleMs <= ANUBARAK_KITE_OWN_LEAD_S * IN_MILLISECONDS;
         claim.selfDue = (selfHand && handDue && !forbearance) ||
                         (ownDue && (ownPlanned || (claim.protector.IsEmpty() && !claim.standReachable)));
+    }
+    // A Hand kite whose own immunity waits behind its Hand casts it before the Hand ends: cast after,
+    // Impale's next tick could land first
+    else if (plan && plan->terminal == AnubarakPursuit::KiteTerminal::Hand && plan->handLanded &&
+             kiter->getClass() != CLASS_PALADIN && OwnImmunitySpell(kiter))
+    {
+        float const left = HandLeftS(kiter);
+        claim.selfDue = left > 0.0f && left <= ANUBARAK_KITE_OWN_AFTER_HAND_S;
     }
 
     return &claim;
@@ -4068,11 +4430,15 @@ char const* ProtectRole(Player* bot, ProtectClaim const& claim)
     if (claim.need && claim.protector == bot->GetGUID())
         return "hop";
 
-    if (claim.kiter != bot->GetGUID() || AnubarakKiterImmune(bot))
+    if (claim.kiter != bot->GetGUID())
         return "none";
 
+    // Heroic's own after a Hand goes out while the Hand still holds
     if (claim.heroic)
         return claim.selfDue ? "self" : "none";
+
+    if (AnubarakKiterImmune(bot))
+        return "none";
 
     return claim.spikeInImmunityRange && claim.spikeFaster && claim.protector.IsEmpty() && !claim.standReachable
                ? "self"
@@ -5812,16 +6178,21 @@ void NoteAnubarakGripCast(Player* bot, Creature* sphere, uint8 side)
 
     state->dutyMemoValid = false;
     GripCast& cast = state->grips[side];
+    GripRelay& relay = state->relays[side];
+    bool const relayLink = relay.dk == bot->GetGUID() && cast.valid && cast.landed && cast.sphere == sphere->GetGUID();
+    cast.prevDk = relayLink ? cast.dk : ObjectGuid::Empty;
+    cast.prevFrom = relayLink ? cast.from : Position();
+    cast.relayLink = relayLink;
     cast.valid = true;
     cast.dk = bot->GetGUID();
     cast.sphere = sphere->GetGUID();
     cast.castMs = getMSTime();
     cast.from = bot->GetPosition();
     cast.landed = false;
+    cast.startDist = bot->GetExactDist(sphere);
     state->needs[side].gripFailed = false;
 
     // The next link, if any, is posted from where this one lands
-    GripRelay& relay = state->relays[side];
     if (relay.dk == bot->GetGUID())
     {
         relay = GripRelay();
@@ -5924,20 +6295,14 @@ bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, Anubar
     if (plan)
     {
         using AnubarakPursuit::KiteTerminal;
-        // Before its Hand a patch+hand kite runs for the escort, the patch clearance keeping the spike off it
+        // Before its Hand a patch+hand kite runs free, the patch clearance keeping the spike off its patch;
+        // the escort comes to the catch instead
         if (plan->patch && (plan->terminal == KiteTerminal::Patch ||
                             (plan->terminal == KiteTerminal::PatchHand && plan->handLanded)))
         {
             goal.patch = true;
             goal.patchPos = plan->patchPos;
             goal.movesAllowed = plan->movesAllowed;
-        }
-        else if (Player* escort = HandKite(*plan) && plan->hand != bot->GetGUID()
-                                      ? ObjectAccessor::GetPlayer(*bot, plan->hand)
-                                      : nullptr)
-        {
-            goal.escort = true;
-            goal.escortPos = escort->GetPosition();
         }
 
         goal.away = plan->terminal == KiteTerminal::Own && GatherCentre(bot, *state, goal.gather);
@@ -5968,25 +6333,36 @@ AnubarakKiteStage GetAnubarakKiteStage(Player* kiter, AnubarakKiteBoost* boost)
 
 // On the line from the room centre to the kiter this far short of it, the centre when the kiter is nearer
 constexpr float ANUBARAK_ESCORT_SHORT = 25.0f;
+// Off the spike by the dodge's clearance, or the dodge sends the escort off its spot: 15 yd off a spike
+// faster than the paladin is inside the dodge's 16 yd, and the two swap every half second
 constexpr float ANUBARAK_ESCORT_SPIKE_CLEARANCE = 15.0f;
+constexpr float ANUBARAK_ESCORT_SPIKE_CLEARANCE_FAST = ANUBARAK_SPIKE_CLEARANCE_FAST;
 constexpr float ANUBARAK_ESCORT_RINGS[] = {15.0f, 20.0f, 25.0f};
+// The escort shadows the kiter until the held catch is this near, then waits at a post by it. Read any
+// earlier, the catch point swings 30-60 yd with each new heading and the escort walks after it.
+constexpr float ANUBARAK_ESCORT_COMMIT_S = 4.0f;
+// A post is built again once the catch point drifts this far from the one it was built on
+constexpr float ANUBARAK_ESCORT_REAIM = 6.0f;
+constexpr float ANUBARAK_ESCORT_CENTRE_REACH = 45.0f;
+constexpr int ANUBARAK_ESCORT_TRACK_TICKS = 5;
+// Hand of Freedom from the paladin due to cast the Hand would spend the GCD the Hand needs
+constexpr float ANUBARAK_FREEDOM_HAND_DUE_S = 3.0f;
 
 // Turned round the room centre until clear of the spike, its lane and the patches, and on the floor. None
 // there, which a spike crossing the centre can leave: ANUBARAK_ESCORT_RINGS round the kiter, the nearest
 // the paladin first.
-static bool EscortSpot(Player* paladin, Player* kiter, Creature* spike, AnubarakState const& state, Position& out)
+static bool ShadowSpot(Player* paladin, Player* kiter, Creature* spike, std::vector<Position> const& patches,
+                       float spikeClearance, float laneClearance, Position& out)
 {
     Vec2 const toCenter = Delta(kiter->GetPosition(), ANUBARAK_ROOM_CENTER);
     float const length = Length(toCenter);
     Position const base = length > ANUBARAK_ESCORT_SHORT
                               ? Offset(kiter->GetPosition(), {toCenter.x / length, toCenter.y / length}, ANUBARAK_ESCORT_SHORT)
                               : ANUBARAK_ROOM_CENTER;
-    std::vector<Position> const patches = PatchPositions(kiter, state);
-    SpikeDodgeReach const reach = DodgeReach(paladin, spike);
     auto const clear = [&](Position const& raw)
     {
-        return Dist2d(raw, spike->GetPosition()) >= ANUBARAK_ESCORT_SPIKE_CLEARANCE &&
-               SegmentDistance2d(spike->GetPosition(), kiter->GetPosition(), raw) >= reach.laneClearance &&
+        return Dist2d(raw, spike->GetPosition()) >= spikeClearance &&
+               SegmentDistance2d(spike->GetPosition(), kiter->GetPosition(), raw) >= laneClearance &&
                Dist2d(raw, kiter->GetPosition()) <= ANUBARAK_HOP_RANGE - 1.0f &&
                std::none_of(patches.begin(), patches.end(), [&raw](Position const& patch)
                             { return Dist2d(raw, patch) < ANUBARAK_HEALER_PATCH_CLEARANCE; });
@@ -6030,6 +6406,73 @@ static bool EscortSpot(Player* paladin, Player* kiter, Creature* spike, Anubarak
     return false;
 }
 
+// EscortPosts round the catch on the held run, the first on the floor, kept until the catch point drifts or
+// the spike closes on it
+static bool CatchPost(Player* paladin, Player* kiter, Creature* spike, AnubarakState& state, KitePlan const& plan,
+                      float catchS, std::vector<Position> const& patches, float spikeClearance, float laneClearance,
+                      Position& out)
+{
+    AnubarakPursuit::KiterPath const run = HeldRun(kiter, plan);
+    AnubarakPursuit::Point const catchPoint = run.At(catchS);
+    Position const catchPos(catchPoint.x, catchPoint.y, kiter->GetPositionZ());
+    EscortPostLatch& latch = state.escortPost;
+    if (latch.valid && latch.kiter == kiter->GetGUID() && Dist2d(latch.catchPoint, catchPos) <= ANUBARAK_ESCORT_REAIM &&
+        Dist2d(latch.post, spike->GetPosition()) >= spikeClearance &&
+        SegmentDistance2d(spike->GetPosition(), catchPos, latch.post) >= laneClearance)
+    {
+        out = latch.post;
+        return true;
+    }
+
+    latch = EscortPostLatch();
+    AnubarakPursuit::EscortRules rules;
+    rules.centre = ToPoint(ANUBARAK_ROOM_CENTER);
+    rules.centreReach = ANUBARAK_ESCORT_CENTRE_REACH;
+    rules.patchClearance = ANUBARAK_HEALER_PATCH_CLEARANCE;
+    rules.trackClearance = spikeClearance;
+    rules.laneClearance = laneClearance;
+    std::vector<AnubarakPursuit::Point> points;
+    for (Position const& patch : patches)
+        points.push_back(ToPoint(patch));
+
+    std::vector<AnubarakPursuit::Point> const track =
+        AnubarakPursuit::SpikeTrack(PursuitSpike(spike), run, catchS, ANUBARAK_ESCORT_TRACK_TICKS);
+    for (AnubarakPursuit::Point const& post :
+         AnubarakPursuit::EscortPosts(catchPoint, ToPoint(spike->GetPosition()), ToPoint(kiter->GetPosition()),
+                                      ToPoint(paladin->GetPosition()), track, points, rules))
+    {
+        Position valid;
+        if (OnFloor(paladin, Position(post.x, post.y, paladin->GetPositionZ()), valid))
+        {
+            latch = {true, kiter->GetGUID(), catchPos, valid};
+            out = valid;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// The shadow of the kiter until the held catch is near, then a post by the catch; the shadow again when no
+// post is on the floor
+static bool EscortSpot(Player* paladin, Player* kiter, Creature* spike, AnubarakState& state, KitePlan const& plan,
+                       Position& out, bool& post)
+{
+    std::vector<Position> const patches = PatchPositions(kiter, state);
+    SpikeDodgeReach const reach = DodgeReach(paladin, spike);
+    float const spikeClearance = spike->GetSpeed(MOVE_RUN) > paladin->GetSpeed(MOVE_RUN)
+                                     ? ANUBARAK_ESCORT_SPIKE_CLEARANCE_FAST
+                                     : ANUBARAK_ESCORT_SPIKE_CLEARANCE;
+    float const catchS = plan.headingValid ? HeldCatchS(kiter, spike, plan) : -1.0f;
+    bool const commit = catchS >= 0.0f && catchS <= ANUBARAK_ESCORT_COMMIT_S;
+    if (!commit)
+        state.escortPost = EscortPostLatch();
+
+    post = commit && CatchPost(paladin, kiter, spike, state, plan, catchS, patches, spikeClearance,
+                               reach.laneClearance, out);
+    return post || ShadowSpot(paladin, kiter, spike, patches, spikeClearance, reach.laneClearance, out);
+}
+
 // Heroic, once per instance per ms. The paladin bot whose Hand of Protection the kite plan ends or
 // bridges the kite on, so the one walking there is the one DeriveProtection claims first. Latched by the
 // plan, it ends with the hand, the mark, or the paladin unable to cast it.
@@ -6062,8 +6505,18 @@ static EscortRead const* DeriveEscort(Player* bot)
         return &escort;
 
     escort.paladin = plan.hand;
-    escort.spotValid = EscortSpot(paladin, kiter, spike, *state, escort.spot);
+    escort.spotValid = EscortSpot(paladin, kiter, spike, *state, plan, escort.spot, escort.post);
     return &escort;
+}
+
+// The seconds to the plan's held catch now, negative with none
+static float HeldCatchLeftS(KitePlan const& plan)
+{
+    if (plan.heldCatchS < 0.0f)
+        return -1.0f;
+
+    return std::max(0.0f, plan.heldCatchS - static_cast<float>(getMSTimeDiff(plan.judgedMs, getMSTime())) /
+                                                IN_MILLISECONDS);
 }
 
 // Once per instance per ms. A kiter marked while it carries Permafrost gets Hand of Freedom from itself
@@ -6091,10 +6544,21 @@ static FreedomRead const* DeriveFreedom(Player* bot)
 
     ProtectClaim const* claim = DeriveProtection(bot);
     ObjectGuid const protector = claim ? claim->protector : ObjectGuid::Empty;
+    ObjectGuid handDue;
+    Creature* spike = AnubarakHeroic(bot) ? GetPursuingSpike(bot) : nullptr;
+    if (spike)
+    {
+        KitePlan const& plan = JudgeKitePlan(kiter, spike, *state);
+        float const left = HeldCatchLeftS(plan);
+        if (HandKite(plan) && left >= 0.0f && left <= ANUBARAK_FREEDOM_HAND_DUE_S)
+            handDue = plan.hand;
+    }
+
     auto const frees = [&](Player* paladin)
     {
         PlayerbotAI* ai = paladin->getClass() == CLASS_PALADIN && paladin->IsAlive() ? GET_PLAYERBOT_AI(paladin) : nullptr;
-        return ai && paladin->GetGUID() != protector && !ai::paladin::HasAnyPaladinHandFromCaster(kiter, paladin) &&
+        return ai && paladin->GetGUID() != protector && paladin->GetGUID() != handDue &&
+               !ai::paladin::HasAnyPaladinHandFromCaster(kiter, paladin) &&
                (paladin == kiter ||
                 (paladin->IsWithinDistInMap(kiter, ANUBARAK_HOP_RANGE) && paladin->IsWithinLOSInMap(kiter))) &&
                ai->CanCastSpell("hand of freedom", kiter);
@@ -6119,14 +6583,42 @@ static FreedomRead const* DeriveFreedom(Player* bot)
     return &freedom;
 }
 
-bool GetAnubarakEscortSpot(Player* bot, Position& out)
+bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post)
 {
     EscortRead const* escort = bot && bot->getClass() == CLASS_PALADIN ? DeriveEscort(bot) : nullptr;
     if (!escort || escort->paladin != bot->GetGUID() || !escort->spotValid)
         return false;
 
     out = escort->spot;
+    if (post)
+        *post = escort->post;
+
     return true;
+}
+
+bool AnubarakHandReserved(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->getClass() != CLASS_PALADIN || !AnubarakHeroic(bot))
+        return false;
+
+    AnubarakState const* state = ReadPhase(botAI);
+    if (!state)
+        return false;
+
+    KitePlan const& plan = state->kitePlan;
+    ObjectGuid const guid = bot->GetGUID();
+    bool const planned = HandKite(plan) && plan.hand == guid;
+    bool const claimed = state->protect.protector == guid && state->protect.kiter == plan.kiter;
+    if (!plan.valid || (!planned && !claimed))
+        return false;
+
+    float const left = HeldCatchLeftS(plan);
+    if (left < 0.0f || left > ANUBARAK_KITE_HAND_RESERVE_S)
+        return false;
+
+    Player* kiter = ObjectAccessor::GetPlayer(*bot, plan.kiter);
+    return kiter && kiter->HasAura(SPELL_MARK) && !UnderHandOfProtection(kiter);
 }
 
 bool IsAnubarakEscort(PlayerbotAI* botAI)
@@ -6450,7 +6942,7 @@ bool AnubarakKiterKeepsMark(Player* bot)
     if (KitePatchStand(bot, spike, *state, stand))
         return true;
 
-    int32 const toEmerge = static_cast<int32>(state->submergedMs + ANUBARAK_SUBMERGED_MS - getMSTime());
+    int32 const toEmerge = static_cast<int32>(state->submergedMs + ANUBARAK_SPIKE_LIFE_MS - getMSTime());
     return state->phaseValue == AnubarakPhase::Submerged && toEmerge <= static_cast<int32>(ANUBARAK_KITE_HOP_EMERGE_MS);
 }
 

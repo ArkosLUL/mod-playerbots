@@ -142,7 +142,11 @@ void DefineAnubarak(EncounterBuilder& e)
     // the escort keeps the kiter in Hand of Protection's reach, whatever its target or heal target
     e.Block("anubarak hop escort hold", Role::Any, IsAnubarakEscort,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,
-            {"reach melee", "reach spell", "reach party member to heal"});
+            {"reach melee", "reach spell", "reach party member to heal", "anubarak melee burrower stand"});
+    // a GCD or a cast under way when the Hand comes due delays it past the catch; the Hand itself goes
+    // through the protect kiter action, which no Spell family covers
+    e.Block("anubarak hand reserve", Role::Any, AnubarakHandReserved, Family::Spell,
+            {"anubarak heal penetrating cold", "anubarak interrupt shadow strike"});
     e.Block("anubarak main tank scarab taunt guard", Role::Any, AnubarakMainTankLeavesScarabs, Family::Taunt);
     // the class triggers send Misdirection to the main tank and Tricks to a melee DPS, so a burrower's
     // threat goes to whoever hits it; the encounter's redirect sends both to the side tanks

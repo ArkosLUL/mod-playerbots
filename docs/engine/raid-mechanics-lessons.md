@@ -215,6 +215,9 @@ Every distance helper measures differently, and a large-model boss inflates all 
   stays possible only 4.5-7.5 s of a 10-16 s run, so a Hand asked at the turn went 2-6 s in with the
   patch; taken at the catch it covers 10 s and the patch goes about 25 s in
   ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-plan)).
+- **Seed a closed-loop replay only with state from before its start.** Seeded with every Forbearance
+  span of the real pull, Anub'arak's harness blocked Hands the replayed kite had not yet cast and
+  flipped its verdict on a path change.
 - **A boss that opens on a random player** (`AttackStart(SelectTargetFromPlayerList(...))` when an
   intro ends) is answered by staging, not by taunt speed: the pickup tank waits inside his reach and
   taunts on the first selectable tick, and everyone else waits outside it until a tank holds him

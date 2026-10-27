@@ -78,14 +78,15 @@ bool AnubarakHopEscortTrigger::IsActive()
     if (bot->getClass() != CLASS_PALADIN || !AnubarakEngaged(botAI))
         return false;
 
-    if (!GetAnubarakEscortSpot(bot, spot))
+    bool post = false;
+    if (!GetAnubarakEscortSpot(bot, spot, &post))
     {
         RaidObs::NoteDerived(bot, "anub.escort", "none");
         return false;
     }
 
     bool const off = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > ANUBARAK_ESCORT_HOLD;
-    RaidObs::NoteDerived(bot, "anub.escort", off ? "walk" : "hold");
+    RaidObs::NoteDerived(bot, "anub.escort", post ? "post" : off ? "walk" : "hold");
     return off;
 }
 

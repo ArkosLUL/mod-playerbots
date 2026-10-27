@@ -27,12 +27,20 @@
                                      whether the patch followed under it, and at an anub.bridge turn the nearest
                                      Hand-ready paladin; the first snapshot before the turn with the spike within
                                      14.5 yd of a patch it was not already inside at the mark; Impale on a side
-                                     tank flagged; per submerge the seconds into phase 2 its first tank patch went
+                                     tank flagged; per submerge the seconds into phase 2 its first tank patch went;
+                                     per kite an anub.lane step off the patches while another heading was clear,
+                                     the escort's distance at the claim and its walk and dodge swaps within 1 s,
+                                     claim to cast for each Hand, the Hand against the held-heading catch, the
+                                     kiter within 15.5 yd of a tank patch under a Hand, an own immunity after a
+                                     Hand ran out, a boost in a Hand's first 8 s, anub.second grants; the Hand's
+                                     cooldown off anub.hands, else 300 s; per submerge the seconds kited and idle,
+                                     the terminals, the seconds after the first tank patch, kiters dead
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips
                                      against the DK's spot at the cast, whether the grip duty held to kill and
-                                     a gripped sphere back up, per far grip each link with the sphere's distance
-                                     from its side's spot at the cast and where it came down, anub.relay rows,
+                                     a gripped sphere back up, a grip that triggered no pull, per far grip each
+                                     link with the sphere's distance from its side's spot at the cast and where
+                                     it came down, Death Grips with no pull per caster, anub.relay rows,
                                      each side's first tank patch, each anub.spot0 and anub.spot1 change; per
                                      submerge the spheres spent and the tank patches gone against the kite
                                      allowance, each with its kiter, and when that side's patch came back
@@ -177,6 +185,9 @@ NITRO_SPEED = 54861
 # one boost read twice, a use and its aura or a cast and its triggered copy
 BOOST_PAIR_MS = 1000
 SPELL_DEATH_GRIP = 49576
+# 49576 is magic-class and can miss: one that hits casts this triggered pull the same ms
+SPELL_DEATH_GRIP_PULL = 49560
+GRIP_PULL_MS = 5
 SPELL_BLADESTORM = 46924
 THREAT_CAP = "anubarak threat cap"
 BURROWER_THREAT_CAP = "anubarak burrower threat cap"
@@ -337,9 +348,23 @@ BRIDGE_TEXT = {"hand": "Hand at the turn", "turn": "turned without a Hand",
                "late": "Hand after the turn", "never": "never turned",
                "catch": "Hand at the catch, the turn under it"}
 HOP_RANGE = radius("ANUBARAK_HOP_RANGE")
-# HoP cooldown with both ranks of Guardian's Favor, the shortest it gets. No row carries cooldowns, so a
-# paladin reads ready this long after its last one.
-HOP_COOLDOWN_MS = 180000
+# HoP's base cooldown, for a trace with no anub.hands to read it off: a paladin bot read 180 s after its
+# last Hand stayed unclaimable for 277-293 s, so the bots carry no Guardian's Favor
+HOP_COOLDOWN_MS = 300000
+# anub.lane: its flags before the colon, the heading in degrees after it
+LANE_GOAL, LANE_CLEAR, LANE_HELD, LANE_ANY_CLEAR = "g", "p", "h", "c"
+ESCORT_BY = "anubarak hop escort"
+DODGE_BY = "anubarak avoid spike"
+# a walk to the escort spot and a dodge this close together are one swap
+ALTERNATE_MS = 1000
+# a claim shows as the claimer's first anub.protect hop row, at most this long before its cast
+CLAIM_LOOKBACK_MS = 5000
+CLAIM_CAST_FLAG_MS = 300
+# a boost this early in a Hand runs while the spike sits on the kiter anyway
+HAND_BOOST_MS = 8000
+HAND_PATCH_CLEARANCE = radius("ANUBARAK_KITE_HAND_PATCH_CLEARANCE")
+# the emerge despawns the spike a minute after he goes down
+SPIKE_LIFE_MS = 60000
 # rank 3, for a cast whose aura the trace doesn't hold
 HOP_DURATION_MS = 10000
 IMPALE_REACH = radius("ANUBARAK_IMPALE_REACH")
@@ -1064,22 +1089,53 @@ def flip_flops(moves: list[dict], start: int, stop: int) -> list[tuple[int, int,
     return [(low, high, sum(1 for when in reversals if low <= when <= high)) for low, high in merged(spans)]
 
 
+def hand_reads(trace: Trace) -> list[tuple[int, int, int, int]]:
+    """`(t, paladin, cooldown left ms, yards)` for each paladin in each `anub.hands` row."""
+    out = []
+    for rec in notes(trace, "anub.hands"):
+        for part in str(rec.get("txt", "")).split():
+            fields = part.split(":")
+            if len(fields) == 3 and all(field.lstrip("-").isdigit() for field in fields):
+                out.append((rec["t"], int(fields[0]), int(fields[1]) * 1000, int(fields[2])))
+    return out
+
+
+def hop_cooldown(trace: Trace, casts: dict[int, list[int]] | None = None) -> tuple[int, str]:
+    """Hand of Protection's cooldown and where it came from: the median over the `anub.hands` reads of a
+    cooldown still running of the time since that paladin's last Hand plus what was left, to the second;
+    else HOP_COOLDOWN_MS, `default`."""
+    if casts is None:
+        casts = collections.defaultdict(list)
+        for rec in trace.of("cast"):
+            if rec.get("sp") in HAND_OF_PROTECTION and not rec.get("tr"):
+                casts[rec.get("s")].append(rec["t"])
+    spans = []
+    for when, paladin, left, _ in hand_reads(trace):
+        last = [cast for cast in casts.get(paladin, []) if cast <= when]
+        if left > 0 and last:
+            spans.append(when - last[-1] + left)
+    if not spans:
+        return HOP_COOLDOWN_MS, "default"
+    return int(round(statistics.median(spans) / 1000.0)) * 1000, "anub.hands"
+
+
 def hop_readiness(trace: Trace) -> dict:
     """What `ready_paladin` reads: the bot paladins on the roster, each one's Hand of Protection casts, the
-    marks and Forbearance."""
+    marks, Forbearance and the cooldown."""
     paladins = {member["g"] for member in trace.header.get("roster", [])
                 if member.get("c") == CLASS_PALADIN and not member.get("h")}
     casts: dict[int, list[int]] = collections.defaultdict(list)
     for rec in trace.of("cast"):
         if rec.get("sp") in HAND_OF_PROTECTION and not rec.get("tr") and rec.get("s") in paladins:
             casts[rec["s"]].append(rec["t"])
+    cooldown, source = hop_cooldown(trace, casts)
     return {"paladins": paladins, "casts": casts, "marks": mark_spans(trace),
-            "forbearance": aura_spans(trace, (SPELL_FORBEARANCE,))}
+            "forbearance": aura_spans(trace, (SPELL_FORBEARANCE,)), "cooldown": cooldown, "cooldown_by": source}
 
 
 def ready_paladin(samples: Samples, ready: dict, kiter: int, when: int) -> dict:
     """The nearest bot paladin that could Hand of Protection the kiter at `when`: alive, unmarked, its last one
-    HOP_COOLDOWN_MS or more back. `guid` is None with none, and `forbearance` says the kiter carried it, which
+    the cooldown or more back. `guid` is None with none, and `forbearance` says the kiter carried it, which
     rules out every paladin."""
     forbearance = any(low <= when < high for low, high, _ in ready["forbearance"].get(kiter, []))
     out = {"t": when, "guid": None, "yards": None, "forbearance": forbearance}
@@ -1092,7 +1148,7 @@ def ready_paladin(samples: Samples, ready: dict, kiter: int, when: int) -> dict:
             continue
         if any(marked == guid and low <= when < high for marked, low, high, _ in ready["marks"]):
             continue
-        if any(when - HOP_COOLDOWN_MS < cast < when for cast in ready["casts"].get(guid, [])):
+        if any(when - ready.get("cooldown", HOP_COOLDOWN_MS) < cast < when for cast in ready["casts"].get(guid, [])):
             continue
         gap = dist2(row[1:3], spot[1:3])
         if out["yards"] is None or gap < out["yards"]:
@@ -1315,6 +1371,149 @@ def hand_catches(samples: Samples, spikes, window: dict, marks, submerged, hands
     return out
 
 
+def lane_heading(rows: list[tuple[int, str]], when: int) -> tuple[float, float] | None:
+    """The unit heading of the kiter's last `anub.lane` row at or before `when`, None with none."""
+    held = [value for at, value in rows if at <= when]
+    degrees = held[-1].partition(":")[2] if held else ""
+    try:
+        radians = math.radians(float(degrees))
+    except ValueError:
+        return None
+    return math.cos(radians), math.sin(radians)
+
+
+def lane_offs(rows: list[tuple[int, str]], start: int, stop: int) -> list[int]:
+    """When the kiter's `anub.lane` step was off the patches while another heading was clear of them."""
+    out = []
+    for when, value in rows:
+        flags = value.partition(":")[0]
+        if start <= when <= stop and LANE_ANY_CLEAR in flags and LANE_CLEAR not in flags:
+            out.append(when)
+    return out
+
+
+def alternations(moves: list[dict], start: int, stop: int) -> int:
+    """How often the paladin's walk to its escort spot and its dodge swapped within ALTERNATE_MS."""
+    rows = [rec for rec in moves if start <= rec["t"] <= stop and rec.get("by") in (ESCORT_BY, DODGE_BY)]
+    return sum(1 for one, two in zip(rows, rows[1:])
+               if one.get("by") != two.get("by") and two["t"] - one["t"] <= ALTERNATE_MS)
+
+
+def escort_read(samples: Samples, escorts: dict[int, list[tuple[int, str]]], window: dict,
+                moves: dict[int, list[dict]]) -> dict | None:
+    """The escort in a window, the paladin whose `anub.escort` reads anything but none there, most rows first:
+    its distance to the kiter at the claim, the first `anub.protect` hop row in the window or, with none, as
+    the spike came within KITE_PROTECT_RANGE; and its walk and dodge swaps. None with no escort."""
+    start, stop = window["start"], window["stop"]
+    counts = {guid: sum(1 for when, value in rows if start <= when <= stop and value != "none")
+              for guid, rows in escorts.items()}
+    counts = {guid: n for guid, n in counts.items() if n}
+    if not counts:
+        return None
+    guid = max(sorted(counts), key=counts.get)
+    claim = next((rec["t"] for rec in window["protect"] if str(rec.get("txt")) == "hop"), None)
+    if claim is None and window["near"] is not None:
+        claim = start + window["near"]
+    yards = None
+    if claim is not None:
+        mine, kiter = samples.recent(guid, claim), samples.recent(window["guid"], claim)
+        if mine and kiter:
+            yards = dist2(mine[1:3], kiter[1:3])
+    return {"guid": guid, "t": claim, "yards": yards, "swaps": alternations(moves.get(guid, []), start, stop)}
+
+
+def claim_casts(window: dict) -> list[tuple[dict, int | None]]:
+    """Each Hand of Protection on the kiter with its claimer's first hop row before it, in ms, None with none."""
+    out = []
+    for rec in window["hop"]:
+        rows = [note["t"] for note in window["protect"]
+                if note.get("g") == rec.get("s") and str(note.get("txt")) == "hop"
+                and rec["t"] - CLAIM_LOOKBACK_MS <= note["t"] <= rec["t"]]
+        out.append((rec, rec["t"] - rows[0] if rows else None))
+    return out
+
+
+def held_catches(samples: Samples, spikes, window: dict, marks, submerged, lanes) -> list[tuple[dict, float | None]]:
+    """Each Hand of Protection on the kiter against the catch predicted on its held `anub.lane` heading as it went
+    out, None with no heading or no catch within the horizon."""
+    guid = window["guid"]
+    out = []
+    for row in window["cover"]:
+        rec = row["rec"]
+        if rec.get("sp") not in HAND_OF_PROTECTION:
+            continue
+        when = rec["t"]
+        spike, unit = spike_at(samples, spikes, guid, when), samples.recent(guid, when)
+        heading = lane_heading(lanes, when)
+        before = None
+        if spike and unit and heading:
+            restart = spike_restart(marks, submerged, when)
+            before = predicted_catch(spike[1:3], (when - (restart or when)) / 1000.0, unit[1:3], heading,
+                                     row["kiter"] or BASE_RUN_YD_S)
+        out.append((rec, before))
+    return out
+
+
+def hand_patch_pass(samples: Samples, latches, window: dict, hands) -> dict | None:
+    """The kiter's closest approach to a latched tank patch while its Hand of Protection held, before its turn for
+    a patch: when, how far and the side. None when it kept HAND_PATCH_CLEARANCE off every one."""
+    guid = window["guid"]
+    stop = window["turn"] if window["turn"] is not None else window["stop"]
+    stamps, rows = samples.track(guid)
+    best = None
+    for low, high, _ in hands.get(guid, []):
+        for index in range(bisect.bisect_left(stamps, max(low, window["start"])), bisect.bisect_right(stamps, min(high, stop))):
+            for side, spans in enumerate(latches):
+                patch = latched_patch(spans, samples, stamps[index])
+                if patch is None:
+                    continue
+                yards = dist2(rows[index][1:3], patch)
+                if best is None or yards < best["yards"]:
+                    best = {"t": stamps[index], "yards": yards, "side": side}
+    return best if best and best["yards"] < HAND_PATCH_CLEARANCE else None
+
+
+def own_after_hand(window: dict, hands) -> list[tuple[dict, int]]:
+    """Each own immunity cast after a Hand of Protection on the kiter ran out inside the window, and how long
+    after."""
+    ended = [high for low, high, closed in hands.get(window["guid"], []) if closed and window["start"] <= high]
+    out = []
+    for rec in window["own"]:
+        before = [high for high in ended if high <= rec["t"]]
+        if before:
+            out.append((rec, rec["t"] - before[-1]))
+    return out
+
+
+def hand_boosts(window: dict, hands) -> list[dict]:
+    """The kiter's boosts in the first HAND_BOOST_MS of a Hand of Protection on it."""
+    spans = hands.get(window["guid"], [])
+    return [rec for rec in window["boosts"]
+            if any(low <= rec["t"] < min(high, low + HAND_BOOST_MS) for low, high, _ in spans)]
+
+
+def submerge_kites(trace: Trace, windows: list[dict], spent: list[dict]) -> list[dict]:
+    """Per submerge: the seconds someone carried the mark and the seconds the spike idled between marks, from the
+    first mark to its despawn; the terminal each kite ended on; the seconds the spike lived on after the
+    submerge's first tank patch went, None with none; kiters dead."""
+    firsts = {first["start"]: first["row"] for first in first_spends(trace, spent)}
+    out = []
+    for start, stop, phase, label in phase_spans(trace):
+        if phase != 2:
+            continue
+        end = min(stop, start + SPIKE_LIFE_MS)
+        inside = [window for window in windows if start <= window["start"] < end]
+        kite = sum(min(window["stop"], end) - window["start"] for window in inside)
+        idle = max(0, end - inside[0]["start"] - kite) if inside else 0
+        row = firsts.get(start)
+        out.append({"label": label, "start": start, "kite": kite, "idle": idle,
+                    "terminals": collections.Counter(window["plan"][-1] if window["plan"] else "-"
+                                                     for window in inside),
+                    "after": end - row["cleared"] if row and row["cleared"] < end else None,
+                    "deaths": sum(1 for window in inside if window["outcome"] == "death")})
+    return out
+
+
 def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     samples = samples or Samples(trace)
     impales = [rec for rec in trace.of("dmg") if rec.get("sp") in IMPALE]
@@ -1345,6 +1544,9 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     sides = side_spans(trace)
     marks = mark_spans(trace)
     hand_auras = aura_spans(trace, HAND_OF_PROTECTION)
+    lanes = per_bot(trace, "anub.lane")
+    escorts = per_bot(trace, "anub.escort")
+    seconds = per_bot(trace, "anub.second")
 
     out = []
     for guid, start, stop, closed in marks:
@@ -1427,6 +1629,16 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                            if "patch+hand" in window["plan"] else [])
         window["turn_escort"] = (ready_paladin(samples, ready, guid, turn)
                                  if "turn" in window["bridge"] and turn is not None else None)
+        window.update({
+            "lane_offs": lane_offs(lanes.get(guid, []), start, stop),
+            "escort_read": escort_read(samples, escorts, window, moves),
+            "claim_casts": claim_casts(window),
+            "held_catches": held_catches(samples, spikes, window, marks, submerged, lanes.get(guid, [])),
+            "hand_patch": hand_patch_pass(samples, latches, window, hand_auras),
+            "own_after_hand": own_after_hand(window, hand_auras),
+            "hand_boosts": hand_boosts(window, hand_auras),
+            "second": [when for when, value in seconds.get(guid, [])
+                       if start <= when <= stop + NOTE_TICK_MS and value == "grant"]})
     return out
 
 
@@ -1536,6 +1748,8 @@ def show_spike(trace: Trace) -> None:
             if approach:
                 print(f"            spike to tank patch: {approach}")
             print(f"            at the end: {end_line(trace, window)}")
+            for line in rework_lines(trace, window):
+                print(f"            {line}")
         outcomes = collections.Counter(window["outcome"] for window in windows)
         print(f"\n  {len(windows)} window(s): "
               + ", ".join(f"{name} {n}" for name, n in outcomes.most_common()))
@@ -1601,8 +1815,11 @@ def show_spike(trace: Trace) -> None:
               f" within {HOP_RANGE:.0f} yd in {len(neared) - len(far)} of {len(neared)}; further or none: "
               + (", ".join(f"{trace.name(window['guid'])} {clock(window['start'])} ({escort_brief(trace, window)})"
                            for window in far) or "none"))
-        print(f"  ready is a bot paladin alive and unmarked, its last Hand of Protection {HOP_COOLDOWN_MS // 1000} s"
-              " or more back, the\n  shortest cooldown, with no Forbearance on the kiter")
+        cooldown, source = hop_cooldown(trace)
+        print(f"  ready is a bot paladin alive and unmarked, its last Hand of Protection {cooldown // 1000} s"
+              f" or more back, the\n  cooldown {'read off anub.hands' if source == 'anub.hands' else 'with no anub.hands'},"
+              " with no Forbearance on the kiter")
+        show_rework(trace, windows, spent)
     show_crowds(trace, samples)
 
     stray = stray_impales(trace, windows)
@@ -1615,6 +1832,102 @@ def show_spike(trace: Trace) -> None:
     show_counts(trace, "anub.dodge")
     show_counts(trace, "anub.protect")
     show_counts(trace, "anub.gather")
+
+
+def rel_s(window: dict, when: int) -> str:
+    return f"{(when - window['start']) / 1000:+.1f} s"
+
+
+def rework_lines(trace: Trace, window: dict) -> list[str]:
+    """One kite's anub.lane steps off the patches, its escort at the claim and its swaps, claim to cast, the
+    Hand against the held-heading catch, the kiter near a tank patch under a Hand, an own immunity after a
+    Hand, a boost early in a Hand, and anub.second grants."""
+    lines = []
+    offs = window["lane_offs"]
+    if offs:
+        lines.append(f"anub.lane step off the patches while another heading was clear of them: {len(offs)} time(s)"
+                     f" from {rel_s(window, offs[0])}")
+    escort = window["escort_read"]
+    if escort:
+        yards = "-" if escort["yards"] is None else f"{escort['yards']:.1f}"
+        at = "no claim" if escort["t"] is None else f"{yards} yd off at the claim {rel_s(window, escort['t'])}"
+        text = f"escort {trace.name(escort['guid'])} {at}"
+        if escort["yards"] is not None and escort["yards"] > HOP_RANGE:
+            text += f", past its {HOP_RANGE:.0f} yd reach"
+        if escort["swaps"]:
+            text += f"; walk and dodge swapped {escort['swaps']} time(s) within {ALTERNATE_MS / 1000:.0f} s"
+        lines.append(text)
+    casts = [f"{trace.name(rec.get('s'))} " + ("no hop row" if gap is None else f"{gap / 1000:.1f} s")
+             for rec, gap in window["claim_casts"]]
+    if casts:
+        lines.append("claim to cast: " + ", ".join(casts))
+    held = [f"{rel_s(window, rec['t'])} " + ("no held-heading catch" if before is None else f"{before:.1f} s before it")
+            for rec, before in window["held_catches"]]
+    if held:
+        lines.append("Hand against the held-heading catch: " + ", ".join(held))
+    near = window["hand_patch"]
+    if near:
+        lines.append(f"under the Hand {near['yards']:.1f} yd from the side {near['side']} tank patch"
+                     f" {rel_s(window, near['t'])}, inside {HAND_PATCH_CLEARANCE} yd")
+    for rec, gap in window["own_after_hand"]:
+        lines.append(f"{KITER_OWN[rec['sp']]} {gap / 1000:.1f} s after the Hand ran out")
+    boosts = window["hand_boosts"]
+    if boosts:
+        lines.append(f"boost in a Hand's first {HAND_BOOST_MS // 1000} s: "
+                     + ", ".join(f"{KITE_BOOSTS[rec['sp']]} {rel_s(window, rec['t'])}" for rec in boosts))
+    for when in window["second"]:
+        lines.append(f"anub.second grant {rel_s(window, when)}")
+    return lines
+
+
+def show_rework(trace: Trace, windows: list[dict], spent: list[dict]) -> None:
+    def who(window: dict) -> str:
+        return f"{trace.name(window['guid'])} {clock(window['start'])}"
+
+    offs = [window for window in windows if window["lane_offs"]]
+    print("  anub.lane step off the patches while another heading was clear of them: "
+          + (", ".join(f"{who(window)} {len(window['lane_offs'])}" for window in offs) or "none")
+          + ("" if notes(trace, "anub.lane") else ", no anub.lane rows"))
+    escorted = [window for window in windows if window["escort_read"] and window["escort_read"]["yards"] is not None]
+    far = [window for window in escorted if window["escort_read"]["yards"] > HOP_RANGE]
+    print(f"  escort within {HOP_RANGE:.0f} yd of the kiter at the claim: {len(escorted) - len(far)} of {len(escorted)}"
+          + ("; further: " + ", ".join(f"{who(window)} {window['escort_read']['yards']:.1f} yd" for window in far)
+             if far else ""))
+    swapped = [window for window in windows if window["escort_read"] and window["escort_read"]["swaps"]]
+    print(f"  escort walk and dodge swapped within {ALTERNATE_MS / 1000:.0f} s: "
+          + (", ".join(f"{who(window)} {window['escort_read']['swaps']}" for window in swapped) or "none"))
+    gaps = [(window, rec, gap) for window in windows for rec, gap in window["claim_casts"] if gap is not None]
+    slow = [(window, rec, gap) for window, rec, gap in gaps if gap > CLAIM_CAST_FLAG_MS]
+    if gaps:
+        print(f"  claim to cast, Hand of Protection: median {statistics.median(gap for _, _, gap in gaps) / 1000:.1f} s,"
+              f" over {CLAIM_CAST_FLAG_MS / 1000:.1f} s: "
+              + (", ".join(f"{trace.name(rec.get('s'))} for {who(window)} {gap / 1000:.1f} s" for window, rec, gap in slow)
+                 or "none"))
+    held = [(window, before) for window in windows for _, before in window["held_catches"] if before is not None]
+    print("  Hand against the held-heading catch: "
+          + (", ".join(f"{who(window)} {before:.1f} s before" for window, before in held) or "none"))
+    near = [window for window in windows if window["hand_patch"]]
+    print(f"  kiter within {HAND_PATCH_CLEARANCE} yd of a tank patch under a Hand: "
+          + (", ".join(f"{who(window)} {window['hand_patch']['yards']:.1f} yd" for window in near) or "none"))
+    late = [(window, rec, gap) for window in windows for rec, gap in window["own_after_hand"]]
+    print("  own immunity after a Hand ran out: "
+          + (", ".join(f"{who(window)} {KITER_OWN[rec['sp']]} +{gap / 1000:.1f} s" for window, rec, gap in late)
+             or "none"))
+    boosted = [(window, rec) for window in windows for rec in window["hand_boosts"]]
+    print(f"  boost in a Hand's first {HAND_BOOST_MS // 1000} s: "
+          + (", ".join(f"{who(window)} {KITE_BOOSTS[rec['sp']]}" for window, rec in boosted) or "none"))
+    granted = [(window, when) for window in windows for when in window["second"]]
+    print("  anub.second grants: " + (", ".join(f"{who(window)} {rel_s(window, when)}" for window, when in granted)
+                                      or "none"))
+    rows = submerge_kites(trace, windows, spent)
+    if rows:
+        print("  per submerge, the seconds kited and idle from the first mark to the spike's end, the terminals the"
+              "\n  kites ended on, the seconds the spike lived on after the first tank patch went, and kiters dead:")
+        for row in rows:
+            after = "no tank patch gone" if row["after"] is None else f"{row['after'] / 1000:.1f} s after the first tank patch"
+            print(f"    {row['label']:5} {clock(row['start']):>9}  kite {row['kite'] / 1000:.1f} s, idle"
+                  f" {row['idle'] / 1000:.1f} s; " + ", ".join(f"{name} {n}" for name, n in row["terminals"].most_common())
+                  + f"; {after}; {row['deaths']} kiter death(s)")
 
 
 def unasked(window: dict, rec: dict) -> bool:
@@ -2074,7 +2387,8 @@ def grip_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     its grip duty was for, `latched` the side whose `anub.patchN` later named it. `step` is the DK's first
     `anub.gripstep` of `kill` or `none` from the cast to its next grip and `step_ms` how long after the cast:
     `kill` held the duty to the kill, `none` dropped it. `rose` is when the sphere was first back above
-    SPHERE_FLYING_Z after it came down, before the next grip at it."""
+    SPHERE_FLYING_Z after it came down, before the next grip at it. `pulled` is False when the cast
+    triggered no SPELL_DEATH_GRIP_PULL: it missed, and the sphere stayed where it was."""
     samples = samples or Samples(trace)
     spheres = guids_of_entry(trace, NPC_FROST_SPHERE)
     duty = holder_spans(trace, "anub.sphere", pull_end(trace))
@@ -2082,6 +2396,7 @@ def grip_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     latches = patch_latches(trace)
     casts = [rec for rec in trace.of("cast")
              if rec.get("sp") == SPELL_DEATH_GRIP and rec.get("tgt") in spheres and not rec.get("tr")]
+    pulls = grip_pulls(trace)
     out = []
     for index, rec in enumerate(casts):
         dk, sphere, start = rec.get("s"), rec["tgt"], rec["t"]
@@ -2105,7 +2420,37 @@ def grip_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                         if begin >= start and as_guid(value) == sphere), None)
         out.append({"t": start, "dk": dk, "sphere": sphere, "duty": label, "landed": landed, "closest": closest,
                     "cast_at": (stand[1], stand[2]) if stand else None, "served": served, "latched": latched,
-                    "step": step[0], "step_ms": step[1], "rose": back_up(samples, sphere, start, again)})
+                    "step": step[0], "step_ms": step[1], "rose": back_up(samples, sphere, start, again),
+                    "pulled": pulled(pulls, rec)})
+    return out
+
+
+def grip_pulls(trace: Trace) -> dict[int, list[int]]:
+    """Per caster, the sorted stamps of its triggered SPELL_DEATH_GRIP_PULL casts."""
+    out: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("sp") == SPELL_DEATH_GRIP_PULL and rec.get("tr"):
+            out[rec.get("s")].append(rec["t"])
+    for stamps in out.values():
+        stamps.sort()
+    return out
+
+
+def pulled(pulls: dict[int, list[int]], cast: dict) -> bool:
+    """Whether the Death Grip cast row triggered its pull within GRIP_PULL_MS."""
+    stamps = pulls.get(cast.get("s"), [])
+    index = bisect.bisect_left(stamps, cast["t"] - GRIP_PULL_MS)
+    return index < len(stamps) and stamps[index] <= cast["t"] + GRIP_PULL_MS
+
+
+def grip_misses(trace: Trace) -> dict[int, tuple[int, int]]:
+    """Per caster, its Death Grip casts at anything and how many of them triggered no pull."""
+    pulls = grip_pulls(trace)
+    out: dict[int, tuple[int, int]] = {}
+    for rec in trace.of("cast"):
+        if rec.get("sp") == SPELL_DEATH_GRIP and not rec.get("tr"):
+            total, missed = out.get(rec.get("s"), (0, 0))
+            out[rec.get("s")] = (total + 1, missed + (not pulled(pulls, rec)))
     return out
 
 
@@ -2398,6 +2743,8 @@ def show_grips(trace: Trace, samples: Samples) -> None:
                 verdict = f"landed +{row['landed'] / 1000:.1f} s"
             elif row["closest"] is not None:
                 verdict = f"missed, closest {row['closest']:.1f} yd"
+            if not row["pulled"]:
+                verdict += ", no pull"
             if row["latched"] is not None:
                 verdict += f", latched side {row['latched']}"
                 if row["served"] is not None and row["latched"] != row["served"]:
@@ -2413,6 +2760,11 @@ def show_grips(trace: Trace, samples: Samples) -> None:
               f" {SPHERE_FLYING_Z:.0f}: " + (", ".join(f"{short(trace, row['sphere'])} {clock(row['t'] + row['rose'])}"
                                                        for row in rose) or "none"))
         show_far_grips(trace, samples)
+    misses = grip_misses(trace)
+    if misses:
+        print("  Death Grip at anything with no pull, its 49576 triggering no 49560: "
+              + ", ".join(f"{trace.name(dk)} {missed} of {total}"
+                          for dk, (total, missed) in sorted(misses.items(), key=lambda item: -item[1][1])))
     spans = latch_spans(trace, "anub.grip", pull_end(trace))
     if spans:
         print("  anub.grip: " + ", ".join(f"{GRIP_STATES.get(value, value)} from {clock(start)}"
@@ -2437,6 +2789,7 @@ def show_far_grips(trace: Trace, samples: Samples) -> None:
         print(f"    {short(trace, chain['sphere'])} side {chain['side']}, {died}")
         for index, link in enumerate(chain["links"], 1):
             verdict = (f"landed +{link['landed'] / 1000:.1f} s" if link["landed"] is not None
+                       else "no pull" if not link["pulled"]
                        else "missed" if link["closest"] is None else f"missed, closest {link['closest']:.1f} yd")
             yards = " > ".join("-" if value is None else f"{value:.1f}" for value in (link["before"], link["after"]))
             dk = trace.name(link["dk"]) + (" (human)" if link["dk"] in trace.humans else "")

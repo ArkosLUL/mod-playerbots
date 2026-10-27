@@ -109,7 +109,7 @@ constexpr float ANUBARAK_SPIKE_PATCH_REACH = 11.5f;
 constexpr float ANUBARAK_KITE_STAND_OFFSET = 8.5f;
 constexpr float ANUBARAK_KITE_ARRIVE = 2.0f;
 constexpr float ANUBARAK_KITE_REAIM_DEGREES = 30.0f;
-// navprobe-clean all round; heroic's kite steps stay inside it
+// navprobe-clean all round; heroic's kite paths ring it or the 45 yd rim
 constexpr float ANUBARAK_KITE_RING_RADIUS = 40.0f;
 // Heroic: the spike this close and faster than the kiter sends the next speed boost out, and at CLOSE
 // whatever its speed
@@ -496,14 +496,18 @@ bool IsAnubarakDodgeHeld(PlayerbotAI* botAI);
 // The kiter this paladin bot covers with Hand of Protection now, null when it has no such duty
 Player* GetAnubarakKiterToProtect(Player* bot);
 // Heroic: the spot of the paladin bot whose Hand of Protection the kite plan ends or bridges the kite
-// on, keeping the kiter inside its reach until the hand lands. False for every other bot.
-bool GetAnubarakEscortSpot(Player* bot, Position& out);
+// on: shadowing the kiter, then from 4 s before the catch a post by it (post set). False for every other
+// bot.
+bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post = nullptr);
 bool IsAnubarakEscort(PlayerbotAI* botAI);
+// Heroic: this paladin bot is the one planned or claimed for the kiter's Hand, within 2.5 s of the catch
+bool AnubarakHandReserved(PlayerbotAI* botAI);
 // The kiter, marked while it carries Permafrost, this paladin bot casts Hand of Freedom on now
 Player* GetAnubarakKiterToFree(Player* bot);
 // The marked bot itself must cast an immunity now. Heroic: its planned own Hand 1 s before the catch,
 // its planned immunity 0.6 s before, or that once the plan failed (no protector, no patch walk that
-// beats the catch). Normal: the spike within the immunity range, no protector, no reachable patch stand.
+// beats the catch); a non-paladin's own behind a planned Hand with 0.8 s of the Hand left. Normal: the
+// spike within the immunity range, no protector, no reachable patch stand.
 bool AnubarakKiterNeedsImmunity(Player* bot);
 // The marked paladin's own Hand of Protection keeps it on the spike to a patch or the emerge, or the
 // kite plan ends on it; otherwise, and always for a plan ending on its own immunity, Divine Shield hands
