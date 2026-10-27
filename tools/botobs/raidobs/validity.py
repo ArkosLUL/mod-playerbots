@@ -12,13 +12,17 @@ import pathlib
 import subprocess
 
 from .coverage import collect
-from .encounter import boss_of, encounter_of, node_encounter
+from .encounter import ICC_MAP, boss_of, encounter_of, map_of, node_encounter
 from .paths import REPO
-from .trace import Trace, roster_guids
+from .trace import Trace, cheat_uses, roster_guids
 
 # Raid difficulty ids. Only raid maps are tracked unless Obs.Maps names one, so these are the labels
 # that apply; a 5-man would read 0/1 as normal/heroic instead.
 DIFFICULTY = {0: "10-man normal", 1: "25-man normal", 2: "10-man heroic", 3: "25-man heroic"}
+HEROIC = (2, 3)
+
+# Kinds named on the banner's one cheat line; --cheats in the raid's reader has the rest.
+CHEAT_KINDS_SHOWN = 6
 
 
 def build_time(trace: Trace) -> datetime.datetime | None:
@@ -161,14 +165,20 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
     hdr = trace.header
     cfg = hdr.get("cfg") or {}
     boss = boss_of(trace)
+    icc = hdr.get("map", map_of(trace.path)) == ICC_MAP
     facts = {
         "built": build_time(trace),
         "boss": boss,
         "encounter": encounter_of(trace),
         "diff": DIFFICULTY.get(hdr.get("diff"), f"difficulty {hdr.get('diff')}"),
+        "heroic": hdr.get("diff") in HEROIC,
         "hardmode": None,
         "humans": humans(trace),
         "cheats": cfg.get("cheats") or "",
+        "iccbuffs": cfg.get("iccbuffs") if icc else None,
+        "cheat_uses": cheat_uses(trace),
+        # Every ICC cheat site records itself, so only there does an empty stream mean none fired.
+        "cheats_wrapped": icc and (hdr.get("v") or 0) >= 14,
         "mapthreads": cfg.get("mapthreads"),
         "age_hours": None,
     }
@@ -231,10 +241,22 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
         warnings.append((
             "strategy-off",
             f"no {facts['encounter']} node fired on any bot ({silent[0]} nodes, asked {silent[1]}x): its "
-            "gate never opened, so the pull ran without its strategy",
+            "gate never opened or no trigger found its boss, so the pull ran without its strategy",
         ))
 
     return facts, warnings
+
+
+def cheat_line(facts: dict) -> str:
+    """The kinds that fired and their total uses, most used first; empty when the trace cannot say."""
+    uses = facts["cheat_uses"]
+    if not uses:
+        return "none recorded" if facts["cheats_wrapped"] else ""
+    kinds = sorted(uses, key=lambda key: (-uses[key]["n"], key))
+    listed = ", ".join(kinds[:CHEAT_KINDS_SHOWN])
+    more = f" and {len(kinds) - CHEAT_KINDS_SHOWN} more" if len(kinds) > CHEAT_KINDS_SHOWN else ""
+    total = sum(entry["n"] for entry in uses.values())
+    return f"{len(kinds)} kind(s), {total} use(s): {listed}{more}"
 
 
 def show_validity(trace: Trace, since: str | None = None, hardmode: bool = False) -> int:
@@ -266,6 +288,15 @@ def show_validity(trace: Trace, since: str | None = None, hardmode: bool = False
         print(f"humans  {len(facts['humans'])} in the raid: {', '.join(facts['humans'])}")
     if facts["cheats"]:
         print(f"cheats  {facts['cheats']}")
+    line = cheat_line(facts)
+    if line:
+        print(f"cheated {line}")
+    if facts["iccbuffs"] is not None:
+        line = f"iccbuffs Playerbots.EnableICCBuffs = {facts['iccbuffs']}"
+        if facts["iccbuffs"]:
+            line += ("  <-- heroic: the buffs acted on this pull" if facts["heroic"]
+                     else "  (normal mode: the buffs only act on heroic)")
+        print(line)
     if facts["mapthreads"]:
         print(f"threads MapUpdate.Threads = {facts['mapthreads']}")
 

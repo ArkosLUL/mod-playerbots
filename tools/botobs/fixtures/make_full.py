@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Build `full-v12.ndjson` and `full-v13.ndjson`: one small pull carrying every record type the recorder
-can write.
+"""Build `full-v12.ndjson`, `full-v13.ndjson` and `full-v14.ndjson`: one small pull carrying every record
+type the recorder can write.
 
 `coverage-v12.ndjson` holds only the six records the coverage view needs, so ten of the sixteen
 invariant checks iterate an empty list against it and pass without testing anything. This one has
@@ -12,6 +12,8 @@ row behind it - and keeping that consistent by hand is how a fixture ends up pro
 
 The v13 file is the same pull plus what v13 adds: a ridden siege engine with its own `dmg` row, and
 power type and power % on every snapshot row. The v12 file stays, so a pre-v13 reading keeps a test.
+The v14 file adds `cfg.iccbuffs` and `cheat` rows: one acting on the boss, and one bot's self-cast key
+written on first use and again at the close.
 """
 from __future__ import annotations
 
@@ -53,15 +55,19 @@ SPOTS = {
 def build(version: int) -> list[dict]:
     records: list[dict] = []
     v13 = version >= 13
+    v14 = version >= 14
     units = [TANK, HEAL, RANGED, HUMAN, PET, BOSS, ADD] + ([SIEGE] if v13 else [])
     power = dict(POWER)
+    cfg = {"cheats": "", "mapthreads": 2, "hardmode": {"fixtureboss": False}}
+    if v14:
+        cfg["iccbuffs"] = 0
 
     def add(**fields):
         records.append(fields)
 
     add(e="hdr", v=version, ts=1789500000000, map=603, inst=4, diff=1, boss="fixtureboss",
         bin=1789499000000,
-        cfg={"cheats": "", "mapthreads": 2, "hardmode": {"fixtureboss": False}},
+        cfg=cfg,
         roster=[{"g": guid, "n": name, "r": role, "c": klass, "h": human}
                 for guid, (name, role, klass, human) in PLAYERS.items()])
 
@@ -139,6 +145,9 @@ def build(version: int) -> list[dict]:
     add(t=190, e="haz", sp=105, shape="circle", x=12.0, y=0.0, z=0.0, ttl=8000, rad=6.0)
     add(t=200, e="aura", d=TANK, s=BOSS, sp=105, r=0, st=1, dur=8000, p=0)
     add(t=210, e="abs", d=TANK, s=HEAL, sp=102, a=1200)
+    if v14:
+        add(t=220, e="cheat", g=TANK, tgt=BOSS, k="fixture.fixate", n=1)
+        add(t=230, e="cheat", g=RANGED, k="fixture.speed", n=1)
 
     hurt(300, BOSS, TANK, 104, 9000)
     mend(400, HEAL, TANK, 101, 6000)
@@ -174,12 +183,14 @@ def build(version: int) -> list[dict]:
     add(t=2600, e="cov", g=TANK, r=[[1, 40, 12, 10, 8, 1, 2], [3, 40, 0]])
     add(t=2600, e="cov", g=HEAL, r=[[2, 38, 20, 18, 15]])
     add(t=2600, e="cov", g=RANGED, r=[[3, 40, 5, 4, 2, 0, 1, 0, 1]])
+    if v14:
+        add(t=2700, e="cheat", g=RANGED, k="fixture.speed", n=3)
     add(t=2700, e="end", out="wipe")
     return records
 
 
 def main() -> int:
-    for version in (12, 13):
+    for version in (12, 13, 14):
         records = build(version)
         out = pathlib.Path(__file__).resolve().parent / f"full-v{version}.ndjson"
         with out.open("w", encoding="utf-8", newline="\n") as handle:
