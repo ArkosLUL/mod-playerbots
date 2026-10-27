@@ -14,6 +14,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RaidDifficulty.h"
+#include "RaidObs.h"
 #include "Trigger.h"
 #include "Vehicle.h"
 
@@ -126,6 +127,15 @@ bool IccDogsTrigger::IsActive()
 }
 
 //FESTERGUT
+bool IccFestergutSporeCycle(Player* bot)
+{
+    bool const spores = IccAnyGroupMemberHasAura(bot, SPELL_GAS_SPORE);
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "fg.phase", spores ? "spore" : "normal");
+
+    return spores;
+}
+
 bool IccFestergutGroupPositionTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "festergut");
@@ -143,7 +153,7 @@ bool IccFestergutSporeTrigger::IsActive()
     if (!boss || PlayerbotAI::IsTank(bot))
         return false;
 
-    return IccAnyGroupMemberHasAura(bot, SPELL_GAS_SPORE);
+    return IccFestergutSporeCycle(bot);
 }
 
 bool IccFestergutAvoidMalleableGooTrigger::IsActive()
@@ -159,7 +169,7 @@ bool IccFestergutAvoidMalleableGooTrigger::IsActive()
 
     // During spore phase, position switching handles goo avoidance — free-dodge
     // would pull bots out of their assigned spore spots.
-    if (IccAnyGroupMemberHasAura(bot, SPELL_GAS_SPORE))
+    if (IccFestergutSporeCycle(bot))
         return false;
 
     constexpr uint32 impactLifetimeMs = 8000;
@@ -184,6 +194,8 @@ bool IccFestergutAvoidMalleableGooTrigger::IsActive()
             auto& slot = st.festergutGooWaitUntil[botGuid];
             if (waitUntil > slot)
                 slot = waitUntil;
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "fg.goohold", "dodge");
             return true;
         }
     }
@@ -192,8 +204,14 @@ bool IccFestergutAvoidMalleableGooTrigger::IsActive()
     if (it != st.festergutGooWaitUntil.end())
     {
         if (now < it->second)
+        {
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "fg.goohold", "hold");
             return true;
+        }
         st.festergutGooWaitUntil.erase(it);
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "fg.goohold", "none");
     }
 
     return false;
@@ -229,7 +247,7 @@ bool IccRotfaceMoveAwayFromExplosionTrigger::IsActive()
     if (castingNow)
     {
         _wasCasting = true;
-        _castEndTime = 0;
+        _castEnded = false;
         return true;
     }
 
@@ -237,15 +255,15 @@ bool IccRotfaceMoveAwayFromExplosionTrigger::IsActive()
     if (_wasCasting)
     {
         _wasCasting = false;
-        if (_castEndTime == 0)
-            _castEndTime = time(nullptr);
+        _castEnded = true;
+        _castEndMs = getMSTime();
     }
 
     // Stay active for 6 seconds after cast ended (2s wait + return movement)
-    if (_castEndTime > 0 && time(nullptr) - _castEndTime < 6)
+    if (_castEnded && getMSTimeDiff(_castEndMs, getMSTime()) < 6000)
         return true;
 
-    _castEndTime = 0;
+    _castEnded = false;
     return false;
 }
 
@@ -276,6 +294,21 @@ bool IccRotfaceAvoidVileGasTrigger::IsActive()
 }
 
 //PP
+uint8 IccPutricidePhase(Player* bot, Unit* boss)
+{
+    uint8 const phase = boss->HealthAbovePct(80) ? 1 : (boss->HealthAbovePct(35) ? 2 : 3);
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "pp.phase", std::to_string(phase));
+
+    return phase;
+}
+
+void IccPutricideForgetBloatFlee(Player* bot)
+{
+    auto& lastDir = IcecrownHelpers::IccState(bot->GetMap()->GetInstanceId()).ppBloatLastDir;
+    if (lastDir.erase(bot->GetGUID()) && RaidObs::Active())
+        RaidObs::NoteDerived(bot, "pp.bloatflee", "none");
+}
 
 bool IccPutricideGrowingOozePuddleTrigger::IsActive()
 {
@@ -319,6 +352,9 @@ bool IccPutricideGasCloudTrigger::IsActive()
     Unit* boss1 = AI_VALUE2(Unit*, "find target", "volatile ooze");
 
     bool hasGaseousBloat = botAI->HasAura("Gaseous Bloat", bot);
+    // each bloat is a new cast on a new victim, so a direction kept from the last one is stale
+    if (!hasGaseousBloat)
+        IccPutricideForgetBloatFlee(bot);
 
     if (hasGaseousBloat && boss1)
         return true;
@@ -387,7 +423,7 @@ bool IccPutricideAbominationTrigger::IsActive()
     }
 
     // Phase 3: boss takes toy back. No transformation.
-    if (boss->HealthBelowPct(35))
+    if (IccPutricidePhase(bot, boss) == 3)
         return false;
 
     // Someone else already piloting - do not drink.

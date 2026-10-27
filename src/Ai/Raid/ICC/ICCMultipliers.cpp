@@ -437,7 +437,7 @@ float IccAddsPutricideMultiplier::GetValue(Action* action)
             return 0.0f; // Cancel all other actions when we need to handle Gaseous Bloat
     }
 
-    if (hasUnboundPlague && boss && !boss->HealthBelowPct(35))
+    if (hasUnboundPlague && IccPutricidePhase(bot, boss) != 3)
     {
         if (dynamic_cast<IccPutricideAvoidMalleableGooAction*>(action))
             return 1.0f;
