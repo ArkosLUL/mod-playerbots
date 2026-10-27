@@ -21,6 +21,13 @@ each lane's carried-over items and gaps.
      shows `iccbuffs`.
    - The boss reader runs on its own pulls and refuses another encounter's.
    - Fix what fails, by the lane rules.
+2b. **Trace Blood Prince trash** (user's call after wave 2b; the user wants trash traced). Boss state 14
+   goes `NOT_STARTED` → `DONE` and never `IN_PROGRESS`, and the trash isn't boss-flagged, so no trace
+   opens under `blood-prince-trash` (see the "Blood Prince trash" section of
+   `docs/raids/icecrown-citadel/blood-prince-council.md`). Add a `MarkPull(631, source,
+   "blood-prince-trash")` hook in `src/Ai/Raid/ICC/ICCScripts.cpp` when a bot enters combat with that
+   trash, entries from the core's instance script. Only the hook: the strategy gets no trash code.
+   Update that doc section and the reader test if it pins the "never opens" fact.
 3. **Bosses with no pull** stay unverified. Each such boss doc says "not yet seen in a trace", and
    the report lists them.
 4. **Fold and delete.**
@@ -34,7 +41,7 @@ each lane's carried-over items and gaps.
 
 ## Owns
 
-Anything the verification needs fixed, listed in the report. `docs/raids/icecrown-citadel/`,
+Anything the verification needs fixed, listed in the report. The trash hook in `ICCScripts.cpp`. `docs/raids/icecrown-citadel/`,
 `docs/systems/observability.md`, `docs/engine/pitfalls.md`, `docs/raids/README.md`, and this
 directory, which it deletes.
 
