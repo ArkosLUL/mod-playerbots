@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ICCMULTIPLIERS_H
 
 #include "Multiplier.h"
+#include "ObjectGuid.h"
 
 //Lady Deathwhisper
 class IccLadyDeathwhisperMultiplier : public Multiplier
@@ -92,6 +93,12 @@ class IccValithriaDreamCloudMultiplier : public Multiplier
 public:
     IccValithriaDreamCloudMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc valithria dream cloud") {}
     float GetValue(Action* action) override;
+
+private:
+    uint32 _checkedMs = 0;
+    bool _bossPresent = false;
+    bool _cloudBuff = false;
+    bool _chasedByZombie = false;
 };
 
 //SINDRAGOSA
@@ -100,6 +107,12 @@ class IccSindragosaMultiplier : public Multiplier
 public:
     IccSindragosaMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc sindragosa") {}
     float GetValue(Action* action) override;
+
+private:
+    uint32 _checkedMs = 0;
+    ObjectGuid _bossGuid;
+    bool _lastPhase = false;
+    bool _overBombStation = false;
 };
 
 //LK

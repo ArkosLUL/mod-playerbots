@@ -714,12 +714,30 @@ float IccBqlMultiplier::GetValue(Action* action)
 //VDW
 float IccValithriaDreamCloudMultiplier::GetValue(Action* action)
 {
-    Unit* boss = bot->FindNearestCreature(NPC_VALITHRIA_DREAMWALKER, 100.0f);
+    // Cached per ms: asked for every action the bot weighs, and a bot never ticks twice in one ms.
+    uint32 const now = getMSTime();
+    if (now != _checkedMs)
+    {
+        _checkedMs = now;
+        _bossPresent = bot->FindNearestCreature(NPC_VALITHRIA_DREAMWALKER, 100.0f) != nullptr;
+        _cloudBuff = botAI->GetAura("Twisted Nightmares", bot) || botAI->GetAura("Emerald Vigor", bot);
+        _chasedByZombie = false;
+        if (_bossPresent && !PlayerbotAI::IsTank(bot))
+        {
+            std::list<Creature*> zombies;
+            bot->GetCreatureListWithEntryInGrid(zombies, NPC_BLISTERING_ZOMBIE, 100.0f);
+            for (Creature* z : zombies)
+            {
+                if (z && z->IsAlive() && z->GetVictim() == bot)
+                {
+                    _chasedByZombie = true;
+                    break;
+                }
+            }
+        }
+    }
 
-    Aura* twistedNightmares = botAI->GetAura("Twisted Nightmares", bot);
-    Aura* emeraldVigor = botAI->GetAura("Emerald Vigor", bot);
-
-    if (!boss && !bot->HasAura(SPELL_DREAM_STATE))
+    if (!_bossPresent && !bot->HasAura(SPELL_DREAM_STATE))
         return 1.0f;
 
     if (dynamic_cast<FollowAction*>(action) || dynamic_cast<CombatFormationMoveAction*>(action))
@@ -727,25 +745,11 @@ float IccValithriaDreamCloudMultiplier::GetValue(Action* action)
 
     // Zombie victim: only the kite action runs. Blocks combat/movement so bot
     // doesn't try to attack/cast/move toward marks while being chased.
-    if (boss && !PlayerbotAI::IsTank(bot))
+    if (_chasedByZombie && !PlayerbotAI::IsTank(bot))
     {
-        Creature* attackingZombie = nullptr;
-        std::list<Creature*> zombies;
-        bot->GetCreatureListWithEntryInGrid(zombies, NPC_BLISTERING_ZOMBIE, 100.0f);
-        for (Creature* z : zombies)
-        {
-            if (z && z->IsAlive() && z->GetVictim() == bot)
-            {
-                attackingZombie = z;
-                break;
-            }
-        }
-        if (attackingZombie)
-        {
-            if (dynamic_cast<IccValithriaZombieKiteAction*>(action))
-                return 1.0f;
-            return 0.0f;
-        }
+        if (dynamic_cast<IccValithriaZombieKiteAction*>(action))
+            return 1.0f;
+        return 0.0f;
     }
 
     if (PlayerbotAI::IsTank(bot))
@@ -790,7 +794,7 @@ float IccValithriaDreamCloudMultiplier::GetValue(Action* action)
         }
     }
 
-    if (PlayerbotAI::IsHeal(bot) && (twistedNightmares || emeraldVigor))
+    if (PlayerbotAI::IsHeal(bot) && _cloudBuff)
         if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<AttackRtiTargetAction*>(action))
             return 0.0f;
 
@@ -810,7 +814,22 @@ float IccValithriaDreamCloudMultiplier::GetValue(Action* action)
 
 float IccSindragosaMultiplier::GetValue(Action* action)
 {
-    Unit* boss = bot->FindNearestCreature(NPC_SINDRAGOSA, 200.0f);
+    // Cached per ms: asked for every action the bot weighs in every ICC fight, and the boss lookup is a
+    // 200 yd grid search. A bot never ticks twice in one ms.
+    uint32 const now = getMSTime();
+    if (now != _checkedMs)
+    {
+        _checkedMs = now;
+        Unit* const found = bot->FindNearestCreature(NPC_SINDRAGOSA, 200.0f);
+        _bossGuid = found ? found->GetGUID() : ObjectGuid::Empty;
+        _lastPhase = found && IccSindragosaPhase(bot, found) == IccSindragosaPhaseId::Last;
+        _overBombStation = found && IccSindragosaOverAirStation(bot, found, 30.0f);
+    }
+
+    if (_bossGuid.IsEmpty())
+        return 1.0f;
+
+    Unit* boss = ObjectAccessor::GetUnit(*bot, _bossGuid);
     if (!boss)
         return 1.0f;
 
@@ -878,10 +897,7 @@ float IccSindragosaMultiplier::GetValue(Action* action)
 
     bool anyoneHasFrostBeacon = IccAnyGroupMemberHasAura(bot, SPELL_FROST_BEACON);
 
-    if (anyoneHasFrostBeacon && boss &&
-        boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(),
-                             ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) < 30.0f &&
-        !boss->HealthBelowPct(25) && !boss->HealthAbovePct(99))
+    if (anyoneHasFrostBeacon && _overBombStation)
     {
         if (dynamic_cast<IccSindragosaFrostBeaconAction*>(action))
             return 1.0f;
@@ -898,8 +914,7 @@ float IccSindragosaMultiplier::GetValue(Action* action)
     // Pin healers at the LOS2 hide spot while the hide is in effect (last
     // phase, tomb up, no beacon). A beacon releases the pin so healers can
     // reposition with the raid.
-    if (PlayerbotAI::IsHeal(bot) && dynamic_cast<MovementAction*>(action) && !anyoneHasFrostBeacon &&
-        boss->HealthBelowPct(35) &&
+    if (PlayerbotAI::IsHeal(bot) && dynamic_cast<MovementAction*>(action) && !anyoneHasFrostBeacon && _lastPhase &&
         bot->GetExactDist2d(ICC_SINDRAGOSA_LOS2_POSITION.GetPositionX(),
                             ICC_SINDRAGOSA_LOS2_POSITION.GetPositionY()) <= 2.0f &&
         !IccGetCreaturesByEntries(bot, {NPC_TOMB1, NPC_TOMB2, NPC_TOMB3, NPC_TOMB4}, 150.0f).empty())
@@ -907,19 +922,19 @@ float IccSindragosaMultiplier::GetValue(Action* action)
 
     // Last phase with a beacon out: only ranged DPS burn the tomb. Melee and
     // healers reposition (via FrostBeaconAction) instead of chasing the skull.
-    if (anyoneHasFrostBeacon && boss->HealthBelowPct(35) && !PlayerbotAI::IsTank(bot) &&
+    if (anyoneHasFrostBeacon && _lastPhase && !PlayerbotAI::IsTank(bot) &&
         !(PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot)) && dynamic_cast<AttackAction*>(action))
         return 0.0f;
 
-    if (!PlayerbotAI::IsTank(bot) && boss && boss->HealthBelowPct(35))
+    if (!PlayerbotAI::IsTank(bot) && _lastPhase)
     {
         if (dynamic_cast<IccSindragosaGroupPositionAction*>(action))
             return 0.0f;
     }
 
-    if (boss && PlayerbotAI::IsTank(bot))
+    if (PlayerbotAI::IsTank(bot))
     {
-        if (boss->HealthBelowPct(35))
+        if (_lastPhase)
         {
             // Assist tank: hold the tank position and face the boss only, never
             // chase the marked tomb. A beaconed assist tank returns at the Frost
@@ -940,7 +955,7 @@ float IccSindragosaMultiplier::GetValue(Action* action)
         }
     }
 
-    if (boss && boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(), ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) < 30.0f && !boss->HealthBelowPct(25) && !boss->HealthAbovePct(99))
+    if (_overBombStation)
     {
         if (dynamic_cast<IccSindragosaFrostBombAction*>(action))
             return 1.0f;

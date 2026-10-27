@@ -43,7 +43,7 @@ bool IccValkyreSpearAction::Execute(Event /*event*/)
 bool IccSisterSvalnaAction::Execute(Event /*event*/)
 {
     Unit* svalna = AI_VALUE2(Unit*, "find target", "sister svalna");
-    if (!svalna || !svalna->HasAura(SPELL_AETHER_SHIELD))
+    if (!svalna || !IccSvalnaShielded(bot, svalna))
         return false;
 
     // Check if bot has the spear item

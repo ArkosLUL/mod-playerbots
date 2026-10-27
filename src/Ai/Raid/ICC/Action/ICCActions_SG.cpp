@@ -4,6 +4,7 @@
  * or (at your option) any later version.
  */
 
+#include "EncounterHelpers.h"
 #include "GenericSpellActions.h"
 #include "ICCActions.h"
 #include "ICCTriggers.h"
@@ -12,12 +13,70 @@
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
 #include "RaidDifficulty.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
 #include <limits>
+#include <set>
+#include <string>
 
 namespace
 {
+// Puts `icon` on `unit` unless it already sits there alive, or clears it when `unit` is null. `rule` is
+// why, noted under the icon's key only when the icon really moves.
+void SgSetIcon(Player* bot, PlayerbotAI* botAI, Group* group, int8 icon, Unit* unit, char const* rule)
+{
+    if (unit)
+    {
+        Unit* const current = botAI->GetUnit(group->GetTargetIcon(icon));
+        if (current && current->IsAlive() && current == unit)
+            return;
+        group->SetTargetIcon(icon, bot->GetGUID(), unit->GetGUID());
+    }
+    else
+    {
+        if (group->GetTargetIcon(icon).IsEmpty())
+            return;
+        group->SetTargetIcon(icon, bot->GetGUID(), ObjectGuid::Empty);
+    }
+
+    if (!RaidObs::Active())
+        return;
+
+    std::string value = rule;
+    if (unit)
+        value += " " + RaidObs::DescribeAssignment(unit->GetGUID());
+    if (icon == RtiTargetValue::skullIndex)
+        RaidObs::NoteDerived(bot, "sg.skull", value);
+    else if (icon == RtiTargetValue::crossIndex)
+        RaidObs::NoteDerived(bot, "sg.cross", value);
+    else if (icon == RtiTargetValue::starIndex)
+        RaidObs::NoteDerived(bot, "sg.star", value);
+}
+
+// The rule that placed the bot during an air phase hide, for sg.losmove
+void SgNoteLosMove(Player* bot, char const* rule)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "sg.losmove", rule);
+}
+
+// Tomb spots already flared red this phase, for sg.flaredred
+void SgNoteFlaredRed(Player* bot, std::set<int> const& flared)
+{
+    if (!RaidObs::Active())
+        return;
+
+    std::string value;
+    for (int spot : flared)
+    {
+        if (!value.empty())
+            value += ' ';
+        value += std::to_string(spot);
+    }
+    RaidObs::NoteDerived(bot, "sg.flaredred", value.empty() ? "none" : value);
+}
+
 bool SgMajorityLostMysticBuffet(Player* bot, PlayerbotAI* botAI)
 {
     Group* group = bot->GetGroup();
@@ -197,7 +256,7 @@ bool IccSindragosaGroupPositionAction::HandleNonTankPositioning()
     // single skull). Multiplier branches evaluated earlier (heroic Unchained
     // Magic) can leak this action through in P3, so hard-stop it here.
     Unit* const p3Boss = AI_VALUE2(Unit*, "find target", "sindragosa");
-    if (p3Boss && p3Boss->HealthBelowPct(35))
+    if (p3Boss && IccSindragosaPhase(bot, p3Boss) == IccSindragosaPhaseId::Last)
         return false;
 
     // Collect all alive raid members
@@ -221,9 +280,7 @@ bool IccSindragosaGroupPositionAction::HandleNonTankPositioning()
     // immediately so the raid DPSes it and frees the tank. Any bot can issue
     // the mark — redundant SetTargetIcon calls are idempotent.
     Unit* const bossForFlyCheck = AI_VALUE2(Unit*, "find target", "sindragosa");
-    bool const bossGrounded = bossForFlyCheck &&
-        bossForFlyCheck->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(),
-                                         ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) >= 30.0f;
+    bool const bossGrounded = bossForFlyCheck && !IccSindragosaOverAirStation(bot, bossForFlyCheck, 30.0f);
 
     Player* entombedTank = nullptr;
     if (bossGrounded)
@@ -258,7 +315,7 @@ bool IccSindragosaGroupPositionAction::HandleNonTankPositioning()
 
     if (tankTomb)
     {
-        IccEnsureIconOn(bot, botAI, SKULL_ICON_INDEX, tankTomb);
+        SgSetIcon(bot, botAI, group, SKULL_ICON_INDEX, tankTomb, "tanktomb");
         context->GetValue<std::string>("rti")->Set("skull");
     }
     else
@@ -269,14 +326,10 @@ bool IccSindragosaGroupPositionAction::HandleNonTankPositioning()
         {
             Unit* boss = AI_VALUE2(Unit*, "find target", "sindragosa");
             if (boss && boss->IsAlive())
-                IccEnsureIconOn(bot, botAI, SKULL_ICON_INDEX, boss);
+                SgSetIcon(bot, botAI, group, SKULL_ICON_INDEX, boss, "boss");
 
             for (size_t i = 1; i < 3; ++i)
-            {
-                int8 const icon = ICC_BUCKET_MARKERS[i].icon;
-                if (!group->GetTargetIcon(icon).IsEmpty())
-                    group->SetTargetIcon(icon, bot->GetGUID(), ObjectGuid::Empty);
-            }
+                SgSetIcon(bot, botAI, group, ICC_BUCKET_MARKERS[i].icon, nullptr, "clear");
 
             context->GetValue<std::string>("rti")->Set("skull");
         }
@@ -301,18 +354,15 @@ bool IccSindragosaGroupPositionAction::HandleNonTankPositioning()
                     if (!iconTomb[i])
                     {
                         iconTomb[i] = tomb;
-                        IccEnsureIconOn(bot, botAI, ICC_BUCKET_MARKERS[i].icon, tomb);
+                        SgSetIcon(bot, botAI, group, ICC_BUCKET_MARKERS[i].icon, tomb, "tomb");
                         break;
                     }
                 }
             }
 
             for (size_t i = 0; i < 3; ++i)
-            {
-                int8 const icon = ICC_BUCKET_MARKERS[i].icon;
-                if (!iconTomb[i] && !group->GetTargetIcon(icon).IsEmpty())
-                    group->SetTargetIcon(icon, bot->GetGUID(), ObjectGuid::Empty);
-            }
+                if (!iconTomb[i])
+                    SgSetIcon(bot, botAI, group, ICC_BUCKET_MARKERS[i].icon, nullptr, "clear");
 
             // Each DPS keeps its air phase group mark while that tomb lives,
             // then falls to the first live mark (skull first).
@@ -388,13 +438,14 @@ bool IccSindragosaFrostBeaconAction::TryDropTombFlares(Unit const* boss)
     // Keyed per-instance so concurrent ICC raids don't share phase state.
     uint32 const instanceId = bot->GetInstanceId();
     IcecrownHelpers::IccInstanceState& sgState = IcecrownHelpers::IccState(instanceId);
-    bool const phase3 = boss->HealthBelowPct(35);
+    bool const phase3 = IccSindragosaPhase(bot, boss) == IccSindragosaPhaseId::Last;
     bool& lastPhase3 = sgState.sgLastPhase3;
     if (phase3 != lastPhase3)
     {
         sgState.sgFlaredRedThisPhase.clear();
         sgState.sgFlaredBluePhase3 = false;
         lastPhase3 = phase3;
+        SgNoteFlaredRed(bot, sgState.sgFlaredRedThisPhase);
     }
 
     // Build position list for current phase.
@@ -520,7 +571,10 @@ bool IccSindragosaFrostBeaconAction::TryDropTombFlares(Unit const* boss)
     if (phase3)
         sgState.sgFlaredBluePhase3 = true;
     else
+    {
         sgState.sgFlaredRedThisPhase.insert(chosenIdx);
+        SgNoteFlaredRed(bot, sgState.sgFlaredRedThisPhase);
+    }
     return false;
 }
 
@@ -547,7 +601,7 @@ bool IccSindragosaFrostBeaconAction::HandleSupportActions()
     Group* group = bot->GetGroup();
 
     // Tank support - Paladin Hand of Freedom
-    if (group && bot->getClass() == CLASS_PALADIN)
+    if (group && bot->getClass() == CLASS_PALADIN && bot->HasSpell(SPELL_HAND_OF_FREEDOM))
     {
         for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
         {
@@ -608,11 +662,9 @@ bool IccSindragosaHotAction::Execute(Event /*event*/)
 
 bool IccSindragosaFrostBeaconAction::HandleBeaconedPlayer(Unit const* boss)
 {
-    // Phase 3 positioning (below 35% health, not flying)
-    if (boss->HealthBelowPct(35) && !IsBossFlying(boss))
+    if (IccSindragosaPhase(bot, boss) == IccSindragosaPhaseId::Last)
     {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "sg.nitro"))
-            bot->AddAura(SPELL_NITRO_BOOSTS, bot);
+        EncounterHelpers::UseNitroBoosts(bot);
         botAI->Reset();
         return MoveToPositionIfNeeded(ICC_SINDRAGOSA_THOMBMB2_POSITION, POSITION_TOLERANCE);
     }
@@ -690,7 +742,7 @@ bool IccSindragosaFrostBeaconAction::HandleNonBeaconedPlayer(Unit const* boss)
     }
 
     // Air phase positioning
-    if (IsBossFlying(boss))
+    if (IccSindragosaOverAirStation(bot, boss, 30.0f))
     {
         if (!bot->HasAura(SPELL_FROST_BEACON))
         {
@@ -761,12 +813,6 @@ bool IccSindragosaFrostBeaconAction::MoveToPosition(Position const& position)
                   true, false);
 }
 
-bool IccSindragosaFrostBeaconAction::IsBossFlying(Unit const* boss)
-{
-    return boss->GetExactDist2d(ICC_SINDRAGOSA_FLYING_POSITION.GetPositionX(),
-                                ICC_SINDRAGOSA_FLYING_POSITION.GetPositionY()) < 30.0f;
-}
-
 bool IccSindragosaBlisteringColdAction::Execute(Event /*event*/)
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "sindragosa");
@@ -793,8 +839,7 @@ bool IccSindragosaBlisteringColdAction::Execute(Event /*event*/)
 
         if (distToTarget > 0.1f)  // Avoid division by zero
         {
-            if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "sg.nitro"))
-                bot->AddAura(SPELL_NITRO_BOOSTS, bot);
+            EncounterHelpers::UseNitroBoosts(bot);
             // Calculate direction vector
             float dirX = targetPos.GetPositionX() - bot->GetPositionX();
             float dirY = targetPos.GetPositionY() - bot->GetPositionY();
@@ -866,7 +911,7 @@ bool IccSindragosaMysticBuffetAction::Execute(Event /*event*/)
     if (!boss || !bot || !bot->IsAlive())
         return false;
 
-    if (!boss->HealthBelowPct(35))
+    if (IccSindragosaPhase(bot, boss) != IccSindragosaPhaseId::Last)
         return false;
 
     if (boss->GetVictim() == bot)
@@ -889,11 +934,7 @@ bool IccSindragosaMysticBuffetAction::Execute(Event /*event*/)
     // Last phase uses the skull only; drop cross/star left over from the air
     // phase zone split.
     for (size_t i = 1; i < 3; ++i)
-    {
-        int8 const icon = ICC_BUCKET_MARKERS[i].icon;
-        if (!group->GetTargetIcon(icon).IsEmpty())
-            group->SetTargetIcon(icon, bot->GetGUID(), ObjectGuid::Empty);
-    }
+        SgSetIcon(bot, botAI, group, ICC_BUCKET_MARKERS[i].icon, nullptr, "clear");
 
     constexpr uint8 SKULL_ICON = RtiTargetValue::skullIndex;
 
@@ -901,7 +942,7 @@ bool IccSindragosaMysticBuffetAction::Execute(Event /*event*/)
     if (tombs.empty())
     {
         if (boss->IsAlive())
-            IccEnsureIconOn(bot, botAI, SKULL_ICON, boss);
+            SgSetIcon(bot, botAI, group, SKULL_ICON, boss, "boss");
 
         // Between tombs, keep non-tanks out at their DPS spot instead of
         // clustering at LOS2 (~6y from the tomb drop) where the next beacon
@@ -931,14 +972,10 @@ bool IccSindragosaMysticBuffetAction::Execute(Event /*event*/)
             if (SgMajorityLostMysticBuffet(bot, botAI))
             {
                 context->GetValue<std::string>("rti")->Set("skull");
-                IccEnsureIconOn(bot, botAI, SKULL_ICON, tombs.front());
+                SgSetIcon(bot, botAI, group, SKULL_ICON, tombs.front(), "tomb");
             }
             else
-            {
-                ObjectGuid const currentIcon = group->GetTargetIcon(SKULL_ICON);
-                if (!currentIcon.IsEmpty())
-                    group->SetTargetIcon(SKULL_ICON, bot->GetGUID(), ObjectGuid::Empty);
-            }
+                SgSetIcon(bot, botAI, group, SKULL_ICON, nullptr, "clear");
         }
         return false;
     }
@@ -971,13 +1008,11 @@ bool IccSindragosaMysticBuffetAction::Execute(Event /*event*/)
         if (tombs.size() == 1 && tomb->GetHealthPct() > 50.0f)
         {
             context->GetValue<std::string>("rti")->Set("skull");
-            IccEnsureIconOn(bot, botAI, SKULL_ICON, tomb);
+            SgSetIcon(bot, botAI, group, SKULL_ICON, tomb, "preburn");
             return false;
         }
 
-        ObjectGuid const currentIcon = group->GetTargetIcon(SKULL_ICON);
-        if (!currentIcon.IsEmpty())
-            group->SetTargetIcon(SKULL_ICON, bot->GetGUID(), ObjectGuid::Empty);
+        SgSetIcon(bot, botAI, group, SKULL_ICON, nullptr, "hold");
         bool const tombHasAuras = !tomb->GetAppliedAuras().empty() || !tomb->GetOwnedAuras().empty();
         if (tombs.size() == 1 && tombHasAuras && IccRaidCheat(botAI, "sg.tombstrip", tomb))
             tomb->RemoveAllAuras();
@@ -987,7 +1022,7 @@ bool IccSindragosaMysticBuffetAction::Execute(Event /*event*/)
 
     // Majority clear: single skull on the lowest-GUID tomb, burn it down.
     context->GetValue<std::string>("rti")->Set("skull");
-    IccEnsureIconOn(bot, botAI, SKULL_ICON, tombs.front());
+    SgSetIcon(bot, botAI, group, SKULL_ICON, tombs.front(), "kill");
     return false;
 }
 
@@ -1006,12 +1041,14 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
     {
         PinGroupToCurrentZone();
         sgState.sgFreedFallback.insert(bot->GetGUID());
+        SgNoteLosMove(bot, "tombed");
         return false;
     }
 
     FrostBombContext ctx;
     if (!CollectContext(ctx))
     {
+        SgNoteLosMove(bot, "wait");
         bot->AttackStop();
         return true;
     }
@@ -1170,6 +1207,7 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
                 float const fbY = nearest->GetPositionY() + std::sin(fbAngle) * 6.5f;
                 float const fbZ = nearest->GetPositionZ();
 
+                SgNoteLosMove(bot, "fallback");
                 if (bot->GetDistance2d(fbX, fbY) > 0.1f)
                 {
                     botAI->Reset();
@@ -1186,6 +1224,7 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
         float const preX = myZone.GetPositionX() + std::cos(preAngle) * 6.5f;
         float const preY = myZone.GetPositionY() + std::sin(preAngle) * 6.5f;
 
+        SgNoteLosMove(bot, "zone");
         if (bot->GetDistance2d(preX, preY) > 3.0f)
         {
             botAI->Reset();
@@ -1213,6 +1252,7 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
             if (getMSTimeDiff(it->second.timestampMs, now) <= 2000 &&
                 bot->GetDistance2d(it->second.x, it->second.y) > 0.1f)
             {
+                SgNoteLosMove(bot, "replay");
                 botAI->Reset();
                 bot->AttackStop();
                 return MoveTo(bot->GetMapId(), it->second.x, it->second.y, it->second.z,
@@ -1220,6 +1260,7 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
             }
             sgState.sgLastLosMove.erase(it);
         }
+        SgNoteLosMove(bot, "lost");
         return false;
     }
 
@@ -1231,6 +1272,7 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
     float const losDist = bot->GetDistance2d(posX, posY);
     if (losDist > 0.1f)
     {
+        SgNoteLosMove(bot, "hide");
         botAI->Reset();
         bot->AttackStop();
         // Mark the tomb early (within 5yd) so the raid converges on the kill
@@ -1251,6 +1293,7 @@ bool IccSindragosaFrostBombAction::Execute(Event /*event*/)
 
     // Reached LOS spot — clear the replay stamp.
     sgState.sgLastLosMove.erase(losKey);
+    SgNoteLosMove(bot, "parked");
 
     // Bot is parked at LOS spot. Face away from the LOS tomb only when our
     // zone has no kill-candidates left (every remaining tomb is protected).
@@ -1579,16 +1622,13 @@ bool IccSindragosaFrostBombAction::HandleRtiMarking(Group* group, int groupIndex
     if (!tombToMark)
     {
         // All tombs at/below threshold — clear icon and stand idle
-        ObjectGuid const currentIcon = group->GetTargetIcon(iconIndex);
-        if (!currentIcon.IsEmpty())
-            group->SetTargetIcon(iconIndex, bot->GetGUID(), ObjectGuid::Empty);
+        SgSetIcon(bot, botAI, group, iconIndex, nullptr, "clear");
 
         bot->AttackStop();
         return true;
     }
 
-    if (!currentIconUnit || !currentIconUnit->IsAlive() || currentIconUnit != tombToMark)
-        group->SetTargetIcon(iconIndex, bot->GetGUID(), tombToMark->GetGUID());
+    SgSetIcon(bot, botAI, group, iconIndex, tombToMark, tombToMark == losTomb ? "sticky" : "extra");
 
     // Let combat actions fire so this bot DPSes the marked tomb
     return false;

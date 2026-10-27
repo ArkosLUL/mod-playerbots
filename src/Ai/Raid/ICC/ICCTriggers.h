@@ -523,6 +523,9 @@ public:
 };
 
 // Sister Svalna
+// Aether Shield is up from each Impaling Spear until a Hurl Spear breaks it. Publishes ss.shield.
+bool IccSvalnaShielded(Player* bot, Unit* svalna);
+
 class IccValkyreSpearTrigger : public Trigger
 {
 public:
@@ -538,6 +541,9 @@ public:
 };
 
 // Valithria Dreamwalker
+// Every Dream or Nightmare Portal and pre-effect within 100 yd. Publishes vd.wave: open while a real portal
+// stands, pre while a pre-effect still shows its 15 s visual, none otherwise.
+std::vector<Creature*> IccValithriaPortals(Player* bot);
 
 class IccValithriaGroupTrigger : public Trigger
 {
@@ -575,6 +581,20 @@ public:
 };
 
 //SINDRAGOSA
+enum class IccSindragosaPhaseId : uint8
+{
+    Ground,
+    Air,
+    Last,
+};
+
+// Sindragosa's phase as her script runs it: Air from takeoff to touchdown, while it holds her passive,
+// else Last once her health is no longer above 35%. Publishes sg.phase.
+IccSindragosaPhaseId IccSindragosaPhase(Player* bot, Unit const* boss);
+// In the air and within `radius` of her far air station, where the Frost Bombs fall. 30 yd covers that
+// station alone, 50 yd also the near one 49.6 yd off, where she casts the Frost Beacons.
+bool IccSindragosaOverAirStation(Player* bot, Unit const* boss, float radius);
+
 class IccSindragosaGroupPositionTrigger : public Trigger
 {
 public:
