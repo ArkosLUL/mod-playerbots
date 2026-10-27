@@ -227,6 +227,9 @@ What lands on a raid add is not what PvP experience predicts.
   caster. Both tests read the owner first, so a player's pet counts as a player. To predict the next
   duration, `Unit::GetDiminishing` returns the level the next hit lands at (non-const: it resets a
   stale entry).
+- **Taunt immunity is a `creature_immunities` row** (`CreatureImmunitiesId`, which replaced
+  `mechanic_immune_mask`): aura 11 or effect 114. Check it, and 0x80000 below, before a plan relies on
+  a taunt.
 - **Taunt diminishes only on a creature flagged for it.** `flags_extra` 0x80000
   (`OBEYS_TAUNT_DIMINISHING_RETURNS`) runs taunts at 100/65/42/27% duration, then immune until 15 s
   after the last one fades (`Unit::GetDiminishing`, `Spell.cpp` DR block). A taunt every 8 s plus a
@@ -237,6 +240,9 @@ What lands on a raid add is not what PvP experience predicts.
   whose table is empty at a phase change (one untouched until then) gives the taunter nothing to
   match, so it goes back to the highest real threat as the aura fades
   ([Thorim](../raids/ulduar/thorim.md#somebody-has-to-hold-the-boss-and-a-taunt-will-not-do-it)).
+- **A ranged pull as a taunt's fallback turns the tank.** Shoot or Throw faces its target, so a
+  "taunt, else pull" helper retried while the taunt cools down points a tank holding the boss at the
+  add. Gate the fallback on the taunt's own cooldown; a cooldown reset hides this (`IccCastClassTaunt`).
 - **Death Grip (49576 → 49560) splits its effects.** A creature immune to taunt and attack-me
   (`CreatureImmunitiesId` with aura 11 and effect 114) still takes the dummy pull, with no aura and
   so no DR. Where the taunt aura lands, the grip shares `DIMINISHING_TAUNT` with every class taunt,
@@ -352,7 +358,8 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   (`CalculatedValue::Get`), so each `GetFirstAliveUnitByEntry` or `"nearest npcs"` read is a fresh
   sight-range sweep, and Ulduar code took 20-60 of them per bot per tick. One **per-bot scan stamped
   with `getMSTime()`** collapses them (`RazorscaleScan`, `IronAssemblyScan`): a bot never ticks twice
-  in one ms. `FindTargetValue` (`"find target"`) is built with interval 1 too, and every read runs
+  in one ms. A multiplier is per bot and asked once per action, so its boss lookup or sweep caches
+  the same way (`IccLadyDeathwhisperMultiplier`). `FindTargetValue` (`"find target"`) is built with interval 1 too, and every read runs
   `Utf8toWStr` + `wstrToLower` + `Utf8FitTo` on each entry of the bot's threat list
   ([Eye of Eternity](../raids/eye-of-eternity.md)).
 - **World state holds still only through the trigger checks.** `ProcessTriggers` checks every trigger
@@ -472,6 +479,8 @@ Vehicle spellbooks are built on these, and so are several boss auras.
   *every* application from the combo points held at that moment — the pool is still there, since
   `_handle_immediate_phase` applies before `_handle_finish_phase` clears — so a long duration cannot
   be bought once and kept.
+- **Periodic auras from different casters stack as separate copies** (`Aura::CanStackWith`), so a
+  boss that re-targets an afflicted player can give it a second copy ticking on its own.
 - **A defensive finisher wants the smallest bank that spans the window, and it wants to be late.**
   Cast at the warning it can expire before the damage lands; cast at full bank it has just spent the
   offensive finisher. Latch when the warning was first seen and cast at `windowEnd − duration(cp)`.

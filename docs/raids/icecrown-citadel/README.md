@@ -38,13 +38,13 @@ boss state renames a trace open under another name, except one `MarkPull` opened
 
 | Id | Encounter | `IN_PROGRESS` from (core) | Trace slug | Prefix |
 |---|---|---|---|---|
-| 0 | Lord Marrowgar | his `JustEngagedWith` | `lord-marrowgar` | `lm.` |
-| 1 | Lady Deathwhisper | her `JustEngagedWith` | `lady-deathwhisper` | `ldw.` |
-| 2 | Gunship Battle | the enemy captain's `DoAction(ACTION_ENEMY_GUNSHIP_TALK)` at the battle start | `icecrown-gunship-battle` | `gsb.` |
-| 3 | Deathbringer Saurfang | his `JustEngagedWith` | `deathbringer-saurfang` | `dbs.` |
-| 4 | Festergut | Putricide's `MovementInform` at his balcony point, seconds after the pull | `festergut` | `fg.` |
-| 5 | Rotface | the same, at Rotface's point | `rotface` | `rf.` |
-| 6 | Professor Putricide | his `JustEngagedWith` | `professor-putricide` | `pp.` |
+| 0 | [Lord Marrowgar](lord-marrowgar.md) | his `JustEngagedWith` | `lord-marrowgar` | `lm.` |
+| 1 | [Lady Deathwhisper](lady-deathwhisper.md) | her `JustEngagedWith` | `lady-deathwhisper` | `ldw.` |
+| 2 | [Gunship Battle](icecrown-gunship-battle.md) | the enemy captain's `DoAction(ACTION_ENEMY_GUNSHIP_TALK)` at the battle start | `icecrown-gunship-battle` | `gsb.` |
+| 3 | [Deathbringer Saurfang](deathbringer-saurfang.md) | his `JustEngagedWith` | `deathbringer-saurfang` | `dbs.` |
+| 4 | [Festergut](festergut.md) | Putricide's `MovementInform` at his balcony point, seconds after the pull | `festergut` | `fg.` |
+| 5 | [Rotface](rotface.md) | the same, at Rotface's point | `rotface` | `rf.` |
+| 6 | [Professor Putricide](professor-putricide.md) | his `JustEngagedWith` | `professor-putricide` | `pp.` |
 | 7 | Blood Prince Council | Valanar's `JustEngagedWith`; Keleseth and Taldaram pull him in | `blood-prince-council` | `bpc.` |
 | 8 | Blood-Queen Lana'thel | her `JustEngagedWith` | `blood-queen-lana-thel` | `bql.` |
 | 9 | Sister Svalna | `BossAI::_JustEngagedWith` | `sister-svalna` | `ss.` |
@@ -53,8 +53,8 @@ boss state renames a trace open under another name, except one `MarkPull` opened
 | 12 | The Lich King | his `JustEngagedWith` | `the-lich-king` | `lk.` |
 | 13 | Sindragosa gauntlet | the gauntlet's `DoAction(ACTION_START_GAUNTLET)` | `sindragosa-gauntlet` | `sg.` |
 | 14 | Blood Prince trash | never: `NOT_STARTED`, then `DONE` when the trash dies | `blood-prince-trash` | `bpc.` |
-| — | Stinky and Precious | no boss state | `stinky-and-precious` | `dogs.` |
-| — | Rotting Frost Giant | no boss state | `rotting-frost-giant` | `rfg.` |
+| — | [Stinky and Precious](stinky-and-precious.md) | no boss state | `stinky-and-precious` | `dogs.` |
+| — | [Rotting Frost Giant](rotting-frost-giant.md) | no boss state | `rotting-frost-giant` | `rfg.` |
 
 `icc.` is raid-wide, matches every ICC slug and belongs to none: a slug owning it would have its keys
 read silent on every other ICC pull. Festergut and Rotface engage before their state
@@ -78,17 +78,15 @@ acted on when it is not the bot:
 
 Class **remove**: bots already have the legit answer (walking, a real class taunt, their own Nitro
 Boosts), so the cheat is due to go. **Gap**: kept until a legit answer exists. **Buffs**: the
-`EnableICCBuffs` operator option.
+`EnableICCBuffs` operator option. A removed cheat leaves the table; its boss doc's Cheats section
+says what replaced it.
 
 | Key | Class | Gate | Sites |
 |---|---|---|---|
-| `rf.nitro` | remove | raid | `ICCActions_RF.cpp`: `IccRotfaceTankPositionAction::HandleAssistTankPositioning`, `IccRotfaceGroupPositionAction::PositionHeroicGrid`, `IccRotfaceMoveAwayFromExplosionAction`, `IccRotfaceAvoidVileGasAction` (5) |
-| `pp.nitro` | remove | raid | `IccPutricideGasCloudAction::HandleGaseousBloatMovement` |
 | `vd.nitro` | remove | raid | `IccValithriaZombieKiteAction` |
 | `sg.nitro` | remove | raid | `IccSindragosaGroupPositionTrigger`, `IccSindragosaFrostBeaconAction::HandleBeaconedPlayer`, `IccSindragosaBlisteringColdAction` |
 | `lk.nitro` | remove | raid | `IccLichKingWinterAction`, `IccLichKingAddsAction::HandleDefileMechanics` (on the Defile target, humans too), `HandleVileSpiritMechanics` |
 | `lk.painsuppression`, `lk.aegis` | remove | raid | `HandleVileSpiritMechanics`, beside its Nitro, no replacement |
-| `rf.spitefulfury` | remove | raid | `IccRotfaceTankPositionAction`, Big Ooze pickup (3) |
 | `vd.speed` | remove | raid | `IccValithriaDreamCloudAction`: run, walk and flight rate 2.0 in Dream State |
 | `ldw.cyclone` | gap | raid | `IccAddsLadyDeathwhisperAction`: Cyclone on a Dominate Mind victim, bot or human |
 | `ldw.insignificance` | gap | raid | same action: tank strips Touch of Insignificance |

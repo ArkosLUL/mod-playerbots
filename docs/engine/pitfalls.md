@@ -508,6 +508,8 @@ Related traps:
   on a unit that never becomes a bot target. Thorim's `SPELL_SIF_CHANNEL_HOLOGRAM` (64324) is defined
   but **never cast** in this core. Prefer a boss's empower aura where one exists — it also tells you
   *which* thing is active, not just how many.
+- **`Creature::GetEntry` is the normal-difficulty entry on every difficulty** (`InitEntry`), so a
+  `difficulty_entry_*` id in an entry list never matches.
 - **A call site is not proof of its effect.** `InitFight` calls `me->SetInCombatWithZone()` on Sara,
   which reads as the pull, but `CombatManager::CanBeginCombat` refuses a combat reference while either
   side is friendly and neither hostile — she is `FACTION_FRIENDLY` for all of phase 1, so the call puts
@@ -604,7 +606,9 @@ Related traps:
   `mimiron drink guard` rule).
 - **A same-map `Player::TeleportTo` calls `CombatStop()`** unless given `TELE_TO_NOT_LEAVE_COMBAT`, so a
   floor-fall rescue built on it drops the bot out of the fight. Use `NearTeleportTo`, which passes it
-  (and returns `void`, so return `true` after).
+  (and returns `void`, so return `true` after). It keeps the bot's transport and stale offset by
+  default (`TELE_TO_NOT_LEAVE_TRANSPORT`): for a fall off one, pass `removeTransport = true` and let
+  `PlayerbotAI`'s 1 s `GetTransportForPos` check re-board it.
 - **A direct `Attack()` has no out-of-combat guard** and reaches `SightDistance` (100 yd), so every
   branch of a resolver feeding it needs an in-combat unit, or the raid pulls itself
   ([kologarn.md](../raids/ulduar/kologarn.md)).
@@ -742,6 +746,10 @@ it, through an ungated node where the encounter gate can close before cleanup.
 state and waypoint steps into the next pull, accumulating over attempts. Split it: a per-bot
 `resetDone` guid set for the work, a raid-wide flag for the detection. How a traced container shows
 carried-in state is in [../systems/observability.md](../systems/observability.md#adding-a-probe).
+
+**A latch cleared only in its action's closing branch never clears** when the trigger stops firing
+first: the action never sees the window close. Reset it on an idle gap, or where the close is
+observed (`IccRotfaceAvoidVileGasAction`'s safe spot).
 
 ## A targeting mark never clears inside a pull
 

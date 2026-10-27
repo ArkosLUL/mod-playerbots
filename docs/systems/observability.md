@@ -542,7 +542,9 @@ State **derived** fresh on every call rather than stored — Hodir derives every
 purpose — has nothing for a container to watch. Probe inside the helper that derives it, with
 `RaidObs::NoteDerived(bot, key, RaidObs::DescribeDerived(value))`, which emits only on a change — never
 at the call sites: trigger and action both route through the helper, so one probe covers both and two
-cannot disagree about what was decided.
+cannot disagree about what was decided. Being change-latched per bot, it hides the same decision
+made again in a later window: write an explicit `none` at the window's end. A raid-icon pick is
+noted by the bot that moves the icon only, or 25 rows describe one placement.
 
 **Probe the rule, not the coordinate.** A derived destination is already a `move` record naming the
 action that issued it, and one derived from the crowd or the bot's own position moves every tick, so
