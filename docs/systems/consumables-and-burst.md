@@ -257,7 +257,7 @@ registered in two places: a base `RitualOfSoulsStrategy` (join + soulwell, all c
 `WarlockRitualOfSoulsStrategy` (base plus the cast trigger) in the warlock context. Strategy lookup
 resolves through the class context first, so the warlock override wins for warlocks and the base
 serves everyone else — no duplicated triggers. The fork adds it to every bot's defaults outside
-battlegrounds (`AiFactory.cpp`); upstream ships it off (`nc +ritualofsouls` or
+battlegrounds (`AiFactory.cpp`); upstream PR #3007 ships it off (`nc +ritualofsouls` or
 `Playerbots.[RandomBot]NonCombatStrategies`), so no default list there carries it.
 
 **The caster is picked, not raced.** `go_soulwell` (core `go_scripts.cpp`) chooses the stone spell
