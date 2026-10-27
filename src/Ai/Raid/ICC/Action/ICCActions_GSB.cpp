@@ -12,8 +12,47 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
+
+Unit* IccGunshipEnemyCaptain(Player* bot, float range)
+{
+    for (uint32 const entry : {NPC_HIGH_OVERLORD_SAURFANG, NPC_MURADIN_BRONZEBEARD})
+    {
+        Unit* captain = bot->FindNearestCreature(entry, range);
+        if (captain && captain->IsAlive() && captain->IsHostileTo(bot))
+            return captain;
+    }
+
+    return nullptr;
+}
+
+bool IccGunshipCannonsFrozen(Player* bot)
+{
+    bool ownCannons = false;
+    for (uint32 const entry : {NPC_CANNONA, NPC_CANNONH})
+    {
+        std::list<Creature*> cannons;
+        bot->GetCreatureListWithEntryInGrid(cannons, entry, 100.0f);
+        for (Creature* cannon : cannons)
+        {
+            if (!cannon || !cannon->IsFriendlyTo(bot))
+                continue;
+
+            ownCannons = true;
+            if (cannon->HasAura(SPELL_BELOW_ZERO))
+            {
+                RaidObs::NoteDerived(bot, "gsb.phase", "frozen");
+                return true;
+            }
+        }
+    }
+
+    if (ownCannons)
+        RaidObs::NoteDerived(bot, "gsb.phase", "fight");
+    return false;
+}
 
 bool IccCannonFireAction::Execute(Event /*event*/)
 {
@@ -199,13 +238,14 @@ bool IccGunshipRocketJumpAction::Execute(Event /*event*/)
     // Z-axis correction: teleport bot back if fallen below deck
     if (!bot->GetVehicle())
     {
-        Position const& zRef = (side == GunshipSide::ALLY) ? ICC_GUNSHIP_ROCKET_JUMP_ALLY2 : ICC_GUNSHIP_ROCKET_JUMP_HORDE2;
-        Position const& zDest = (side == GunshipSide::ALLY) ? ICC_GUNSHIP_ROCKET_JUMP_ALLY2 : ICC_GUNSHIP_ROCKET_JUMP_HORDE2;
-        float const Z_THRESHOLD = zRef.GetPositionZ() - 5.0f;
-        if (bot->GetPositionZ() < Z_THRESHOLD)
+        Position const& deck =
+            (side == GunshipSide::ALLY) ? ICC_GUNSHIP_ROCKET_JUMP_ALLY2 : ICC_GUNSHIP_ROCKET_JUMP_HORDE2;
+        if (bot->GetPositionZ() < deck.GetPositionZ() - 5.0f)
         {
-            bot->TeleportTo(bot->GetMapId(), zDest.GetPositionX(), zDest.GetPositionY(),
-                            zDest.GetPositionZ(), bot->GetOrientation());
+            // Leaves the transport: its stored offset is where the bot fell. PlayerbotAI's transport check
+            // boards it again at the deck within a second.
+            bot->NearTeleportTo(deck.GetPositionX(), deck.GetPositionY(), deck.GetPositionZ(), bot->GetOrientation(),
+                                false, false, false, true);
             botAI->Reset();
             return false;
         }
@@ -238,23 +278,14 @@ bool IccGunshipRocketJumpAction::Execute(Event /*event*/)
 
     CleanupSkullIcon(SKULL_ICON_INDEX);
 
-    uint32 const cannonEntry = (side == GunshipSide::ALLY) ? NPC_CANNONA : NPC_CANNONH;
-    bool cannonsHaveBelowZero = false;
-    {
-        std::list<Creature*> cannons;
-        bot->GetCreatureListWithEntryInGrid(cannons, cannonEntry, 100.0f);
-        for (Creature* c : cannons)
-        {
-            if (c && c->IsFriendlyTo(bot) && c->HasAura(SPELL_BELOW_ZERO))
-            {
-                cannonsHaveBelowZero = true;
-                break;
-            }
-        }
-    }
+    bool const cannonsHaveBelowZero = IccGunshipCannonsFrozen(bot);
 
     bool const botOnEnemyShip = bot->GetExactDist2d(attackPos) <= MAX_ATTACK_DISTANCE;
     bool const mageAlive = boss && boss->IsAlive() && boss->HasUnitState(UNIT_STATE_CASTING);
+    RaidObs::NoteDerived(bot, "gsb.deck", bot->GetVehicle() ? "cannon"
+                                          : botOnEnemyShip ? "enemy"
+                                          : bot->GetExactDist2d(waitPos) <= maxWaitingDistance ? "friendly"
+                                                                                               : "between");
 
     // Assist tank stays on friendly ship to collect and tank adds
     if (PlayerbotAI::IsAssistTank(bot))
@@ -607,6 +638,8 @@ bool IccGunshipRocketJumpAction::Execute(Event /*event*/)
     }
     else
     {
+        RaidObs::NoteDerived(bot, "gsb.skull", "none");
+
         // Stranded at middle point: force jump back to friendly point
         if (isHorde)
         {
@@ -730,7 +763,8 @@ bool IccGunshipRocketJumpAction::Execute(Event /*event*/)
                 }
                 else
                 {
-                    Position const refPos = (lastStarPos.GetPositionX() != 0.0f || lastStarPos.GetPositionY() != 0.0f)
+                    bool const handoff = lastStarPos.GetPositionX() != 0.0f || lastStarPos.GetPositionY() != 0.0f;
+                    Position const refPos = handoff
                         ? lastStarPos
                         : Position(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
 
@@ -758,10 +792,13 @@ bool IccGunshipRocketJumpAction::Execute(Event /*event*/)
                                                nextAdd->GetPositionY(),
                                                nextAdd->GetPositionZ());
                         starTarget = nextAdd;
+                        RaidObs::NoteDerived(bot, "gsb.star", std::string(handoff ? "handoff " : "fresh ") +
+                                                                  RaidObs::DescribeAssignment(nextAdd->GetGUID()));
                     }
                     else
                     {
                         starTarget = nullptr;
+                        RaidObs::NoteDerived(bot, "gsb.star", "none");
                     }
                 }
 
@@ -969,6 +1006,7 @@ bool IccGunshipRocketJumpAction::UpdateBossSkullIcon(Unit* boss, uint8 skullIcon
     if (group->GetTargetIcon(skullIconIndex) != boss->GetGUID())
         group->SetTargetIcon(skullIconIndex, bot->GetGUID(), boss->GetGUID());
 
+    RaidObs::NoteDerived(bot, "gsb.skull", "mage");
     return false;
 }
 

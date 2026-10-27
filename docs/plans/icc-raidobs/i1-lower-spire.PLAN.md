@@ -66,10 +66,68 @@ files. `ICCShared.{h,cpp}` for scope item 1. Readers `bosses/lord_marrowgar.py`,
 
 ## Task list
 
+Sized as one lane: each encounter's change is small, and a split would make every implementer re-read
+the same shared files. No ICC trace exists on disk (`631_*`), so nothing was read as evidence. All done:
+
+- [x] `ICCShared`: taunt helper without fixate or reset, no ranged pull while the taunt cools down;
+  `IccStripExperienced` takes Experienced and 1% Threat off the bot and every human in the instance;
+  `IccSameInstance` guard on the heroic buff and on Deathwhisper's member loop.
+- [x] Giant prefix `rfg.`: `rfg.deathplague`, `ICC_KEY_PREFIXES`, its comment, a pinning test, README.
+- [x] Phases: `lm.phase` (Bone Storm aura), `ldw.phase` (Mana Barrier aura, replacing seven
+  `HealthAbovePct(95)` tests), `gsb.phase` (Below Zero on the raid's cannons).
+- [x] Probes: `lm.stormanchor`, `lm.mark`, `lm.spike`, `ldw.skull`, `gsb.deck`, `gsb.skull`, `gsb.star`,
+  `dbs.skull` (`dbs.slot` was traced in wave 1).
+- [x] Gunship unstuck on `NearTeleportTo`; shared `IccGunshipEnemyCaptain`, `IccGunshipCannonsFrozen`.
+- [x] Multipliers: per-ms cache in Deathwhisper's and the gunship's, Saurfang's tests the action first.
+- [x] Readers `lord_marrowgar.py`, `lady_deathwhisper.py`, `icecrown_gunship_battle.py`,
+  `deathbringer_saurfang.py`, `rotting_frost_giant.py` with tests; five boss docs; README rows.
+- [x] Checks: syntax (lane `.cpp` alone, then the four headers' 20 TUs), pblint 23/25 warnings (wave 1's
+  baseline), botobs suite, codestyle.
+
 ## Decisions for review
+
+- **Taunt on cooldown**: returns false without the `shoot`/`throw` fallback. Source: the fallback faces
+  its target (`PlayerbotAI::CastSpell`), and with the reset gone every 500 ms retry inside the cooldown
+  would turn a tank holding the boss toward the add. Alternative: keep the fallback on every failure.
+- **Strip scope**: humans and the bot itself, never other bots (each strips itself); Aegis and Pain
+  Suppression are left, both expire (10 s, 8 s). Alternative: strip every member from every bot.
+- **Deathwhisper phase**: Mana Barrier aura, the core's own phase-2 edge (`DamageTaken` removes it).
+  Changes play: phase-2 positioning, the end of Viper Sting and the add consolidation now start at the
+  break, not at 95% health. Alternative: keep 95%.
+- **Gunship radii**: trigger 100 yd, multiplier 200 yd, unchanged. Source: no core value decides, and
+  200 for the trigger would keep bots steering at world-coordinate deck points longer while a ship
+  leaves. Alternative: unify on either.
+- **Gunship unstuck**: `NearTeleportTo(..., removeTransport = true)` onto the same friendly deck
+  point. Source: kept on the transport, the bot keeps the offset of where it fell; PlayerbotAI's 1 s
+  check re-boards it. The core's Check for Players already rescues deeper falls, so the snap is
+  documented as borderline, not wrapped. Alternative: the bot's own x, y at deck height, which is
+  mid-air for a bot off the edge.
+- **Phase keys**: Saurfang and the giant publish none (no phase in the script); `gsb.phase` is the
+  freeze, since "fight active" is the trigger gate itself and writes nothing a trace lacks.
+- **Probe values**: rule names, one guid only in `gsb.star` (the unit the star went on); per-bot
+  latches throughout, merged by the readers from the first bot to note each step.
+- **Gap rechecks**: all four kept. Cyclone needs a CC election, Insignificance a tank-swap duty, Death
+  Plague a spread duty, Battle Fury a stack threshold. Death Plague's core-bug claim half holds (issue
+  text in `rotting-frost-giant.md`), Battle Fury's does not.
 
 ## Carried over
 
+- **i2-plagueworks**: Festergut's bloat swap, Stinky and Precious's swap and add taunts, Putricide's
+  plague swap, Rotface's Big Ooze loop now get one taunt per 8 s cooldown and no fixate; note each in
+  its boss doc (README "The class taunt").
+- **i3-crimson-hall**: the council assist tank's taunts on Keleseth, Valanar, Taldaram and stray Dark
+  Nuclei, one per cooldown.
+- **i4-frostwing**: Sindragosa's main-tank taunt-back and Valithria's stray-add taunt.
+- **i5-lich-king**: the add taunt passes (`ICCActions_LK.cpp` ~1439, ~1674) and the Raging Spirit loop
+  (~2792) reach one unit per cooldown.
+- **Merge stage**: observability.md needs no giant edit (it names no giant prefix). Generic lessons are
+  in the lane report.
+
 ## Known gaps
+
+- Raid-icon targeting on every encounter here (boss docs).
+- Deathwhisper's skull rule never moves the icon off a live non-add left marked earlier (`other`).
+- The four kept gap cheats (boss docs).
+- `HandleAddTargeting` in `ICCActions_LDW.cpp` has no caller; left for the upstream merge's sake.
 
 ## Blocked

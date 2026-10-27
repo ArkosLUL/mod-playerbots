@@ -162,7 +162,7 @@ enum SpellIdsICC
     SPELL_AGEIS_OF_DALARAN              = 71638, //268 all ress
     SPELL_CYCLONE                       = 33786,
     SPELL_HAMMER_OF_JUSTICE             = 10308, //stun
-    // Taunt spells (used to reset cooldowns for assist tank)
+    // Class taunts, each a single rank
     SPELL_TAUNT_WARRIOR                 = 355,
     SPELL_TAUNT_PALADIN                 = 62124,  // Hand of Reckoning
     SPELL_TAUNT_DK                      = 56222,  // Dark Command
@@ -171,10 +171,12 @@ enum SpellIdsICC
 
     // Lord Marrowgar
     SPELL_LM_IMPALED                    = 69065,
+    SPELL_LM_BONE_STORM                 = 69076,
 
     // Lady Deathwhisper
     SPELL_DARK_RECKONING                = 69483,
     SPELL_TOUCH_OF_INSIGNIFICANCE       = 71204,
+    SPELL_LDW_MANA_BARRIER              = 70842,
 
     // Gunship Battle
     SPELL_DEATH_PLAGUE                  = 72865,

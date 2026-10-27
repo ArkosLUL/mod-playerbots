@@ -161,6 +161,12 @@ class NoteKeyPrefixes(unittest.TestCase):
             self.assertTrue(prefix_matches_boss("icc", slug), slug)
         self.assertFalse(prefix_matches_boss("icc", "icecrown-citadel"))
 
+    def test_the_giant_has_its_own_prefix(self):
+        self.assertEqual(ICC_KEY_PREFIXES["rotting-frost-giant"], "rfg")
+        self.assertTrue(prefix_matches_boss("rfg", "rotting-frost-giant"))
+        self.assertFalse(prefix_matches_boss("rfg", "festergut"))
+        self.assertNotIn("icc", ICC_KEY_PREFIXES.values())
+
     def test_shared_prefixes_cover_the_gauntlet_and_the_trash(self):
         self.assertTrue(prefix_matches_boss("sg", "sindragosa-gauntlet"))
         self.assertTrue(prefix_matches_boss("bpc", "blood-prince-trash"))
@@ -191,7 +197,7 @@ class GatedFold(unittest.TestCase):
 
     DECLARED = {
         key: (LATCH, "fixture")
-        for key in ("fg.phase", "rf.phase", "icc.state", "lk.phase", "toc.progress")
+        for key in ("fg.phase", "rf.phase", "icc.state", "lk.phase", "rfg.plague", "toc.progress")
     }
 
     def trace(self, filed: str) -> Trace:

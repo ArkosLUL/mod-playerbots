@@ -32,58 +32,66 @@
 // Lady Deathwhisper
 float IccLadyDeathwhisperMultiplier::GetValue(Action* action)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "lady deathwhisper");
-    if (!boss)
+    // Cached per ms: asked for every action the bot weighs, and "nearest hostile npcs" casts a sight ray
+    // per unit on every read. A bot never ticks twice in one ms.
+    uint32 const now = getMSTime();
+    if (now != _checkedMs)
+    {
+        _checkedMs = now;
+        _bossPresent = AI_VALUE2(Unit*, "find target", "lady deathwhisper") != nullptr;
+        _shadeOnBot = false;
+        if (_bossPresent)
+        {
+            for (auto const& npcGuid : AI_VALUE(GuidVector, "nearest hostile npcs"))
+            {
+                Unit* shade = botAI->GetUnit(npcGuid);
+                if (shade && shade->GetEntry() == NPC_SHADE && shade->GetVictim() == bot)
+                {
+                    _shadeOnBot = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!_bossPresent)
         return 1.0f;
 
     if (dynamic_cast<FleeAction*>(action) || dynamic_cast<CastBlinkBackAction*>(action) || dynamic_cast<FollowAction*>(action) || dynamic_cast<CombatFormationMoveAction*>(action))
         return 0.0f;
 
-    static constexpr uint32 VENGEFUL_SHADE_ID = NPC_SHADE;
-
-    // Get the nearest hostile NPCs
-    const GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-
     // Allow the IccShadeLadyDeathwhisperAction to run
     if (dynamic_cast<IccShadeLadyDeathwhisperAction*>(action))
         return 1.0f;
 
-    for (auto const& npcGuid : npcs)
-    {
-        Unit* shade = botAI->GetUnit(npcGuid);
-
-        if (!shade || shade->GetEntry() != VENGEFUL_SHADE_ID)
-            continue;
-
-        if (!shade->GetVictim() || shade->GetVictim()->GetGUID() != bot->GetGUID())
-            continue;
-
-        return 0.0f; // Cancel all other actions when we need to handle Vengeful Shade
-    }
-
-    return 1.0f;
+    // Cancel all other actions when we need to handle Vengeful Shade
+    return _shadeOnBot ? 0.0f : 1.0f;
 }
 
 // dbs
 float IccAddsDbsMultiplier::GetValue(Action* action)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "deathbringer saurfang");
-    if (!boss)
-        return 1.0f;
-
-    if (dynamic_cast<DpsAoeAction*>(action) || dynamic_cast<CastHurricaneAction*>(action) ||
+    // The boss lookup runs only for an action this can zero, since it is asked about every one.
+    bool const blocked =
+        dynamic_cast<DpsAoeAction*>(action) || dynamic_cast<CastHurricaneAction*>(action) ||
         dynamic_cast<CastVolleyAction*>(action) || dynamic_cast<CastBlizzardAction*>(action) ||
         dynamic_cast<CastStarfallAction*>(action) || dynamic_cast<FanOfKnivesAction*>(action) ||
         dynamic_cast<CastWhirlwindAction*>(action) || dynamic_cast<CastMindSearAction*>(action) ||
         dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action) ||
-        dynamic_cast<FleeAction*>(action) || dynamic_cast<CastArmyOfTheDeadAction*>(action))
+        dynamic_cast<FleeAction*>(action) || dynamic_cast<CastArmyOfTheDeadAction*>(action) ||
+        (dynamic_cast<ReachSpellAction*>(action) && PlayerbotAI::IsRanged(bot));
+    bool const tank = PlayerbotAI::IsTank(bot);
+    if (!blocked && !tank)
+        return 1.0f;
+
+    Unit* boss = AI_VALUE2(Unit*, "find target", "deathbringer saurfang");
+    if (!boss)
+        return 1.0f;
+
+    if (blocked)
         return 0.0f;
 
-    if (PlayerbotAI::IsRanged(bot))
-        if (dynamic_cast<ReachSpellAction*>(action))
-            return 0.0f;
-
-    if (PlayerbotAI::IsTank(bot))
+    if (tank)
     {
         Aura* aura = botAI->GetAura("rune of blood", bot);
         if (aura)
@@ -107,12 +115,17 @@ float IccAddsDbsMultiplier::GetValue(Action* action)
 // Gunship
 float IccGunshipMultiplier::GetValue(Action* action)
 {
-    // Detect gunship encounter via hostile enemy captain nearby
-    Unit* saurfang = bot->FindNearestCreature(NPC_HIGH_OVERLORD_SAURFANG, 200.0f);
-    Unit* muradin = bot->FindNearestCreature(NPC_MURADIN_BRONZEBEARD, 200.0f);
-    bool const inGunship = (saurfang && saurfang->IsAlive() && saurfang->IsHostileTo(bot)) ||
-                           (muradin && muradin->IsAlive() && muradin->IsHostileTo(bot));
-    if (!inGunship)
+    // Cached per ms: asked for every action the bot weighs, and a bot never ticks twice in one ms.
+    uint32 const now = getMSTime();
+    if (now != _captainCheckedMs)
+    {
+        _captainCheckedMs = now;
+        Unit* captain = IccGunshipEnemyCaptain(bot, 200.0f);
+        _inGunship = captain != nullptr;
+        _hordeSide = captain && captain->GetEntry() == NPC_MURADIN_BRONZEBEARD;
+    }
+
+    if (!_inGunship)
         return 1.0f;
 
     if (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action))
@@ -124,15 +137,12 @@ float IccGunshipMultiplier::GetValue(Action* action)
 
     // Bot in transit between ships: lock to rocket-jump action only so combat/movement
     // actions don't interfere with jump packet timing.
-    bool const isHordeSide = muradin && muradin->IsAlive() && muradin->IsHostileTo(bot);
-    //@TODO use isAllySide or remove.
-    //bool const isAllySide = saurfang && saurfang->IsAlive() && saurfang->IsHostileTo(bot);
-    Position const friendlyPoint = isHordeSide ? ICC_GUNSHIP_ROCKET_JUMP_HORDE_FRIENDLY_POINT
-                                               : ICC_GUNSHIP_ROCKET_JUMP_ALLY_FRIENDLY_POINT;
-    Position const middlePoint = isHordeSide ? ICC_GUNSHIP_ROCKET_JUMP_HORDE_MIDDLE_POINT
-                                             : ICC_GUNSHIP_ROCKET_JUMP_ALLY_MIDDLE_POINT;
-    Position const attackPos = isHordeSide ? ICC_GUNSHIP_ROCKET_JUMP_HORDE
-                                           : ICC_GUNSHIP_ROCKET_JUMP_ALLY;
+    Position const friendlyPoint = _hordeSide ? ICC_GUNSHIP_ROCKET_JUMP_HORDE_FRIENDLY_POINT
+                                              : ICC_GUNSHIP_ROCKET_JUMP_ALLY_FRIENDLY_POINT;
+    Position const middlePoint = _hordeSide ? ICC_GUNSHIP_ROCKET_JUMP_HORDE_MIDDLE_POINT
+                                            : ICC_GUNSHIP_ROCKET_JUMP_ALLY_MIDDLE_POINT;
+    Position const attackPos = _hordeSide ? ICC_GUNSHIP_ROCKET_JUMP_HORDE
+                                          : ICC_GUNSHIP_ROCKET_JUMP_ALLY;
     static constexpr float JUMP_GATE = 30.0f;
     bool const nearFriendly = bot->GetExactDist2d(friendlyPoint) <= JUMP_GATE;
     bool const nearMiddle = bot->GetExactDist2d(middlePoint) <= JUMP_GATE;

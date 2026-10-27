@@ -73,49 +73,17 @@ bool IccInCannonTrigger::IsActive()
 
 bool IccGunshipCannonNearTrigger::IsActive()
 {
-    if (bot->GetVehicle())
+    if (bot->GetVehicle() || !PlayerbotAI::IsDps(bot))
         return false;
 
-    Unit* mount1 = bot->FindNearestCreature(NPC_CANNONA, 100.0f);
-    Unit* mount2 = bot->FindNearestCreature(NPC_CANNONH, 100.0f);
-
-    if (!mount1 && !mount2)
+    if (!bot->FindNearestCreature(NPC_CANNONA, 100.0f) && !bot->FindNearestCreature(NPC_CANNONH, 100.0f))
         return false;
 
-    // If cannons have Below Zero aura, don't try to enter them
-    Unit* friendlyCannon = nullptr;
-    if (mount1 && mount1->IsFriendlyTo(bot))
-        friendlyCannon = mount1;
-    else if (mount2 && mount2->IsFriendlyTo(bot))
-        friendlyCannon = mount2;
-
-    if (friendlyCannon && friendlyCannon->HasAura(SPELL_BELOW_ZERO))
-        return false;
-
-    if (!PlayerbotAI::IsDps(bot))
-        return false;
-
-    return true;
+    return !IccGunshipCannonsFrozen(bot);
 }
 
-bool IccGunshipRocketJumpTrigger::IsActive()
-{
-    // The rocket jump mechanic is only needed when the gunship battle is active.
-    // We detect which ship we are on by checking which enemy boss is present:
-    //  - Saurfang hostile  => we are on the Alliance ship
-    //  - Muradin hostile   => we are on the Horde ship
-    // Using the hostile boss (not cannon friendliness) avoids conflicting with
-    // the cannon-near trigger that fires on the same condition.
-    Unit* saurfang = bot->FindNearestCreature(NPC_HIGH_OVERLORD_SAURFANG, 100.0f);
-    if (saurfang && saurfang->IsAlive() && saurfang->IsHostileTo(bot))
-        return true;
-
-    Unit* muradin = bot->FindNearestCreature(NPC_MURADIN_BRONZEBEARD, 100.0f);
-    if (muradin && muradin->IsAlive() && muradin->IsHostileTo(bot))
-        return true;
-
-    return false;
-}
+// Keyed on the enemy captain rather than on cannon friendliness, which the cannon-near trigger uses.
+bool IccGunshipRocketJumpTrigger::IsActive() { return IccGunshipEnemyCaptain(bot, 100.0f) != nullptr; }
 
 bool IccGunshipRocketPackSetupTrigger::IsActive()
 {

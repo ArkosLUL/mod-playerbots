@@ -94,12 +94,19 @@ void IccNoteCheat(Player* bot, char const* key, Unit* target = nullptr);
 // Opens the trace for a pull no boss state reports, under `slug`, once the bot is fighting `source`.
 void IccMarkPull(Player* bot, Unit* source, char const* slug);
 
+// The class taunt, at most once per 500 ms per bot, else a ranged pull when the bot has no taunt or it
+// failed off cooldown. A taunt on cooldown fails, so a caller taunting several units in a row reaches
+// the next one only once the cooldown is up.
 bool IccCastClassTaunt(Player* bot, PlayerbotAI* botAI, Unit* target);
 std::optional<bool> IccTryClassCC(Player* bot, PlayerbotAI* botAI, Unit* target);
 void IccEnsureIconOn(Player* bot, PlayerbotAI* botAI, int8 icon, Unit* target);
+// In the world on the bot's own instance, so touching its auras stays on this map's thread.
+bool IccSameInstance(Player* bot, Player* member);
 // `bot` is the one whose code applies the buffs to `member`, recorded under `cheatKey`.
 void IccApplyHeroicBuffToMember(Player* bot, Player* member, bool applyPainSupp, bool applyNoThreat,
                                 char const* cheatKey);
+// Removes the two heroic buffs that never expire, Experienced and 1% Threat, from the bot and from
+// every human in its instance.
 void IccStripExperienced(Player* bot);
 bool IccBossCastingBlisteringCold(Unit* boss);
 bool IccBossHasRemorselessWinter(Unit* boss);
