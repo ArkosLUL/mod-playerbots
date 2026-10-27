@@ -126,6 +126,15 @@ class IccLichKingAddsMultiplier : public Multiplier
 public:
     IccLichKingAddsMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc lich king adds") {}
     float GetValue(Action* action) override;
+
+private:
+    uint32 _checkedMs = 0;
+    bool _nearValithria = false;
+    bool _nearHeroicTerenas = false;
+    ObjectGuid _bossGuid;
+    bool _phaseOne = false;
+    bool _winter = false;
+    bool _castingWinter = false;
 };
 
 class IccLichKingSpiritBombMultiplier : public Multiplier

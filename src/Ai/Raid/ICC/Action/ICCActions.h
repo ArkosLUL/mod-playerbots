@@ -840,6 +840,10 @@ public:
     std::pair<float, float> DefileAwareStep(float tx, float ty,
                                            std::vector<Unit*> const& defiles,
                                            Difficulty diff);
+
+private:
+    // Read once per Execute, for the handlers it calls
+    IccLichKingPhaseId _phase = IccLichKingPhaseId::One;
 };
 
 class IccLichKingSpiritBombAction : public MovementAction

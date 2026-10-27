@@ -155,7 +155,6 @@ enum SpellIdsICC
     SPELL_EXPERIENCED                   = 71188, //dmg 30% 20% att speed
     SPELL_NO_THREAT                     = 70115, //reduce threat
     SPELL_SPITEFULL_FURY                = 36886, //500% more threat
-    SPELL_NITRO_BOOSTS                  = 54861, //Speed
     SPELL_MAGIC_BARRIER                 = 38112, //damage reduction shield
     SPELL_FROST_TRAP1                   = 13809, //Hunter slow trap
     SPELL_PAIN_SUPPRESION               = 69910, //40% dmg reduction
@@ -240,21 +239,16 @@ enum SpellIdsICC
     // The Lich King
     SPELL_HARVEST_SOUL_VALKYR           = 68985,
     SPELL_QUAKE                         = 72262,
-    SPELL_REMORSELESS_WINTER1           = 72259,
-    SPELL_REMORSELESS_WINTER2           = 74273,
-    SPELL_REMORSELESS_WINTER3           = 74274,
-    SPELL_REMORSELESS_WINTER4           = 74275,
-    SPELL_REMORSELESS_WINTER5           = 68981,
-    SPELL_REMORSELESS_WINTER6           = 74270,
-    SPELL_REMORSELESS_WINTER7           = 74271,
-    SPELL_REMORSELESS_WINTER8           = 74272,
     SPELL_VALKYR_CARRY                  = 30440,
-    SPELL_HARVEST_SOUL_LK               = 68980,
-    SPELL_HARVEST_SOULS_LK_25           = 73654,
-    SPELL_HARVEST_SOULS_LK_H1           = 74295,
-    SPELL_HARVEST_SOULS_LK_H2           = 74296,
-    SPELL_HARVEST_SOULS_LK_H3           = 74297,
 };
+
+// The Lich King's spelldifficulty rows, 10N/25N/10H/25H. The first Remorseless Winter (70%) and the
+// second (40%) are separate rows, which is how the phase tells them apart.
+inline constexpr uint32 ICC_LK_FIRST_WINTER[]  = {68981, 74270, 74271, 74272};
+inline constexpr uint32 ICC_LK_SECOND_WINTER[] = {72259, 74273, 74274, 74275};
+// Normal mode's single-player Harvest Soul, and heroic's Harvest Souls on the whole raid
+inline constexpr uint32 ICC_LK_HARVEST_SOUL[]  = {68980, 74325, 74326, 74327};
+inline constexpr uint32 ICC_LK_HARVEST_SOULS[] = {73654, 74295, 74296, 74297};
 
 inline constexpr uint32 DEFILE_AURAS[]         = {72756, 74162, 74163, 74164};
 inline constexpr uint32 DEFILE_CAST_ID         = 72762;
@@ -675,6 +669,24 @@ public:
 };
 
 //LICH KING
+// Ordered, so "past the first threshold" reads phase >= Winter1.
+enum class IccLichKingPhaseId : uint8
+{
+    One,
+    Winter1,
+    Two,
+    Winter2,
+    Three,
+    Frostmourne,
+};
+
+// The Lich King's phase as his script runs it, for the bot asking: a winter phase from the turn to
+// passive at 70% or 40% until he turns aggressive 5 s after the Quake, Frostmourne while heroic's
+// Harvest Souls holds him passive. Publishes lk.phase. A unit that is not the Lich King reads One.
+IccLichKingPhaseId IccLichKingPhase(Player* bot, Unit* boss);
+// Inside the Frostmourne room, the 40 yd round its centre that the script itself tests.
+bool IccLichKingInFrostmourne(Unit const* unit);
+
 class IccLichKingShadowTrapTrigger : public Trigger
 {
 public:

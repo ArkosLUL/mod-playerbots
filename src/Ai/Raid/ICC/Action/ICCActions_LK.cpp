@@ -4,6 +4,7 @@
  * or (at your option) any later version.
  */
 
+#include "EncounterHelpers.h"
 #include "GenericSpellActions.h"
 #include "ICCActions.h"
 #include "ICCScripts.h"
@@ -13,8 +14,69 @@
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
 #include "RaidDifficulty.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
+#include <string>
+
+namespace
+{
+// Puts `icon` on `unit` unless it already sits there alive, or clears it when `unit` is null. `rule` is
+// why, noted under the icon's key only when the icon really moves.
+void LkSetIcon(Player* bot, PlayerbotAI* botAI, Group* group, uint8 icon, Unit* unit, char const* rule)
+{
+    if (unit)
+    {
+        Unit* const current = botAI->GetUnit(group->GetTargetIcon(icon));
+        if (current && current->IsAlive() && current == unit)
+            return;
+        group->SetTargetIcon(icon, bot->GetGUID(), unit->GetGUID());
+    }
+    else
+    {
+        if (group->GetTargetIcon(icon).IsEmpty())
+            return;
+        group->SetTargetIcon(icon, bot->GetGUID(), ObjectGuid::Empty);
+    }
+
+    if (!RaidObs::Active())
+        return;
+
+    std::string value = rule;
+    if (unit)
+        value += " " + RaidObs::DescribeAssignment(unit->GetGUID());
+    if (icon == RtiTargetValue::skullIndex)
+        RaidObs::NoteDerived(bot, "lk.skull", value);
+    else if (icon == RtiTargetValue::crossIndex)
+        RaidObs::NoteDerived(bot, "lk.cross", value);
+    else if (icon == RtiTargetValue::starIndex)
+        RaidObs::NoteDerived(bot, "lk.star", value);
+    else if (icon == RtiTargetValue::circleIndex)
+        RaidObs::NoteDerived(bot, "lk.circle", value);
+}
+
+// A raider is being carried off by normal mode's Harvest Soul, an instant cast with no cast bar to read,
+// so its 6 s aura on the victim is the window.
+bool IsLkSoulBeingHarvested(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !IccSameInstance(bot, member))
+            continue;
+
+        for (uint32 const spellId : ICC_LK_HARVEST_SOUL)
+            if (member->HasAura(spellId))
+                return true;
+    }
+
+    return false;
+}
+}
 
 static bool IsLkShambling(uint32 entry)
 {
@@ -315,10 +377,9 @@ bool IccLichKingNecroticPlagueAction::Execute(Event /*event*/)
     bot->AttackStop();
     bot->SetTarget(ObjectGuid::Empty);
 
-    // During winter (boss <= 71% HP) approach from behind the shambling to
-    // avoid its frontal Shockwave.
+    // Past phase one, approach from behind the shambling to avoid its frontal Shockwave.
     Unit* boss = AI_VALUE2(Unit*, "find target", "the lich king");
-    bool const duringWinter = boss && !boss->HealthAbovePct(71);
+    bool const duringWinter = boss && IccLichKingPhase(bot, boss) != IccLichKingPhaseId::One;
 
     if (duringWinter)
     {
@@ -374,8 +435,8 @@ bool IccLichKingWinterAction::Execute(Event /*event*/)
         IccApplyHeroicBuffToMember(bot, bot, true, true, "lk.heroicbuff");
 
     // Speed boost to help escape the inward push
-    if (bot->GetDistance2d(boss) < 35.0f && !bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "lk.nitro"))
-        bot->AddAura(SPELL_NITRO_BOOSTS, bot);
+    if (bot->GetDistance2d(boss) < 35.0f)
+        EncounterHelpers::UseNitroBoosts(bot);
 
     // Heroic: if more than 2 Raging Spirits are alive, kill the one with the
     // highest HP. Only the main tank does this to avoid simultaneous actions.
@@ -444,11 +505,8 @@ bool IccLichKingWinterAction::Execute(Event /*event*/)
             }
 
             Unit* markTarget = bestShambling ? bestShambling : bestSpirit;
-
-            if (markTarget)
-                group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), markTarget->GetGUID());
-            else if (!group->GetTargetIcon(RtiTargetValue::skullIndex).IsEmpty())
-                group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), ObjectGuid::Empty);
+            LkSetIcon(bot, botAI, group, RtiTargetValue::skullIndex, markTarget,
+                      bestShambling ? "shambling" : bestSpirit ? "spirit" : "clear");
         }
     }
 
@@ -513,6 +571,16 @@ bool IccLichKingWinterAction::Execute(Event /*event*/)
                 chosen = &ICC_LK_VILE_SPIRIT2_POSITION;
 
             winterIt = s_winterStage.emplace(winterKey, IcecrownHelpers::WinterStageState{now, chosen}).first;
+
+            if (RaidObs::Active())
+            {
+                std::string value = IccRemorselessWinterOf(boss) == 2 ? "winter2 " : "winter1 ";
+                value += chosen == &ICC_LK_VILE_SPIRIT1_POSITION   ? "spirit1"
+                         : chosen == &ICC_LK_VILE_SPIRIT3_POSITION ? "spirit3"
+                         : chosen                                  ? "spirit2"
+                                                                   : "none";
+                RaidObs::NoteDerived(bot, "lk.winterstage", value);
+            }
         }
 
         uint32 const elapsed = getMSTimeDiff(winterIt->second.startMs, now);
@@ -659,14 +727,11 @@ bool IccLichKingWinterAction::Execute(Event /*event*/)
 
 bool IccLichKingWinterAction::FixPlatformPosition()
 {
-    if (std::abs(bot->GetPositionZ() - PLATFORM_Z) > 1.0f)
-    {
-        bot->TeleportTo(bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY(),
-                        PLATFORM_Z, bot->GetOrientation());
-        return true;
-    }
+    if (std::abs(bot->GetPositionZ() - PLATFORM_Z) <= 1.0f)
+        return false;
 
-    return false;
+    bot->NearTeleportTo(bot->GetPositionX(), bot->GetPositionY(), PLATFORM_Z, bot->GetOrientation());
+    return true;
 }
 
 bool IccLichKingWinterAction::ClearInvalidTarget()
@@ -1802,6 +1867,7 @@ bool IccLichKingAddsAction::Execute(Event /*event*/)
         return false;
 
     Unit* boss = AI_VALUE2(Unit*, "find target", "the lich king");
+    _phase = boss ? IccLichKingPhase(bot, boss) : IccLichKingPhaseId::One;
     Difficulty const diff = GetRaidMapDifficulty(bot);
     bool const hasPlague = botAI->HasAura("Necrotic Plague", bot);
     Unit* const terenas = bot->FindNearestCreature(NPC_TERENAS_MENETHIL_HC, 55.0f);
@@ -1857,7 +1923,7 @@ bool IccLichKingAddsAction::Execute(Event /*event*/)
             // During Vile Spirit windows, melee can't reach the spirits — mark boss on cross
             // and route melee DPS there.
             bool phase3 = false;
-            if (boss && boss->HealthBelowPct(40) && !IccBossHasRemorselessWinter(boss))
+            if (boss && _phase >= IccLichKingPhaseId::Winter2 && !IccBossHasRemorselessWinter(boss))
             {
                 phase3 = true;
 
@@ -1894,17 +1960,14 @@ bool IccLichKingAddsAction::Execute(Event /*event*/)
                 // + hunter frost trap).
                 if (nearestRaging)
                 {
-                    if (!ragingMarked && group->GetTargetIcon(RtiTargetValue::skullIndex) != nearestRaging->GetGUID())
-                        group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), nearestRaging->GetGUID());
+                    if (!ragingMarked)
+                        LkSetIcon(bot, botAI, group, RtiTargetValue::skullIndex, nearestRaging, "spirit");
                 }
-                else if (group->GetTargetIcon(RtiTargetValue::skullIndex) != boss->GetGUID())
-                {
-                    group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), boss->GetGUID());
-                }
+                else
+                    LkSetIcon(bot, botAI, group, RtiTargetValue::skullIndex, boss, "boss");
 
                 // Cross marker is no longer used for vile windows — clear if set
-                if (!group->GetTargetIcon(CROSS_ICON).IsEmpty())
-                    group->SetTargetIcon(CROSS_ICON, bot->GetGUID(), ObjectGuid::Empty);
+                LkSetIcon(bot, botAI, group, CROSS_ICON, nullptr, "clear");
 
                 // Per-bot RTI: melee non-tanks always target skull (boss or raging)
                 if (PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot))
@@ -1915,11 +1978,8 @@ bool IccLichKingAddsAction::Execute(Event /*event*/)
             {
                 // skip default skull logic
             }
-            else if (boss && boss->HealthAbovePct(71))
-            {
-                if (group->GetTargetIcon(RtiTargetValue::skullIndex) != boss->GetGUID())
-                    group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), boss->GetGUID());
-            }
+            else if (boss && _phase == IccLichKingPhaseId::One)
+                LkSetIcon(bot, botAI, group, RtiTargetValue::skullIndex, boss, "boss");
             else if (boss)
             {
                 Unit* currentSkull = botAI->GetUnit(group->GetTargetIcon(RtiTargetValue::skullIndex));
@@ -1950,14 +2010,9 @@ bool IccLichKingAddsAction::Execute(Event /*event*/)
                     }
 
                     if (nearestSpirit)
-                    {
-                        if (group->GetTargetIcon(RtiTargetValue::skullIndex) != nearestSpirit->GetGUID())
-                            group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), nearestSpirit->GetGUID());
-                    }
-                    else if (group->GetTargetIcon(RtiTargetValue::skullIndex) != boss->GetGUID())
-                    {
-                        group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), boss->GetGUID());
-                    }
+                        LkSetIcon(bot, botAI, group, RtiTargetValue::skullIndex, nearestSpirit, "spirit");
+                    else
+                        LkSetIcon(bot, botAI, group, RtiTargetValue::skullIndex, boss, "boss");
                 }
             }
         }
@@ -1974,8 +2029,7 @@ bool IccLichKingAddsAction::Execute(Event /*event*/)
     }
 
     // Detect bots fallen off edge and initiate dive
-    if (boss && boss->GetHealthPct() < 70.0f && boss->GetHealthPct() > 40.0f &&
-        !IccBossHasRemorselessWinter(boss))
+    if (boss && _phase == IccLichKingPhaseId::Two)
     {
         static constexpr float PLATFORM_CENTER_X = 503.0f;
         static constexpr float PLATFORM_CENTER_Y = -2124.0f;
@@ -2001,7 +2055,9 @@ bool IccLichKingAddsAction::Execute(Event /*event*/)
     HandleHeroicNonTankPositioning(diff, terenas);
     HandleSpiritMarkingAndTargeting(diff, terenas);
 
-    if (terenas)
+    // Everything below works the platform. A normal Harvest Soul victim fights in Frostmourne alone,
+    // where those walks would be straight lines out through the walls.
+    if (terenas || IccLichKingInFrostmourne(bot))
         return false;
 
     // Normal encounter flow
@@ -2039,12 +2095,12 @@ bool IccLichKingAddsAction::HandleTeleportationFixes(Difficulty diff, Unit* tere
     static constexpr float MAX_Z_DIFF  = 1.0f;
     static constexpr float SPIRIT_Z_TOLERANCE = 5.0f;
 
-    // Normal mode: snap back if teleported far outside the encounter area
-    // (Harvest Soul victim exits Frostmourne room). Land on the main tank,
-    // falling back to assist tank, then the fixed adds anchor. Iterate group
-    // directly so distance/LOS gating in PartyMemberValue::Check doesn't hide
-    // a far-away main tank.
-    if (!IsHeroicLk(diff) && std::abs(bot->GetPositionY() - (-2095.7915f)) > MAX_Y_DRIFT)
+    // Normal mode: snap back if teleported far outside the encounter area. This fires on a Harvest
+    // Soul victim's first tick in Frostmourne, so it skips the Spirit Warden fight. Land on the main
+    // tank, falling back to assist tank, then the fixed adds anchor. Iterate group directly so
+    // distance/LOS gating in PartyMemberValue::Check doesn't hide a far-away main tank.
+    if (!IsHeroicLk(diff) && std::abs(bot->GetPositionY() - (-2095.7915f)) > MAX_Y_DRIFT &&
+        IccRaidCheat(botAI, "lk.frostmourneescape"))
     {
         Player* mainTank = nullptr;
         Player* assistTank = nullptr;
@@ -2064,24 +2120,22 @@ bool IccLichKingAddsAction::HandleTeleportationFixes(Difficulty diff, Unit* tere
         Unit* anchor = mainTank ? static_cast<Unit*>(mainTank) : static_cast<Unit*>(assistTank);
 
         if (anchor)
-            bot->TeleportTo(bot->GetMapId(), anchor->GetPositionX(), anchor->GetPositionY(),
-                            anchor->GetPositionZ(), bot->GetOrientation());
+            bot->NearTeleportTo(anchor->GetPositionX(), anchor->GetPositionY(), anchor->GetPositionZ(),
+                                bot->GetOrientation());
         else
-            bot->TeleportTo(bot->GetMapId(),
-                            ICC_LICH_KING_ADDS_POSITION.GetPositionX(),
-                            ICC_LICH_KING_ADDS_POSITION.GetPositionY(),
-                            ICC_LICH_KING_ADDS_POSITION.GetPositionZ(),
-                            bot->GetOrientation());
+            bot->NearTeleportTo(ICC_LICH_KING_ADDS_POSITION.GetPositionX(),
+                                ICC_LICH_KING_ADDS_POSITION.GetPositionY(),
+                                ICC_LICH_KING_ADDS_POSITION.GetPositionZ(), bot->GetOrientation());
         return true;
     }
 
-    // Fix bots going underground (buggy ice-platform collisions)
+    // Fix bots going underground (buggy ice-platform collisions). Frostmourne's floor is 200 yd higher,
+    // and its Harvest Soul aura can run out a moment before the script sends the soul back.
     if (!botAI->GetAura("Harvest Soul", bot, false, false) &&
-        !botAI->GetAura("Harvest Souls", bot, false, false) &&
+        !botAI->GetAura("Harvest Souls", bot, false, false) && !IccLichKingInFrostmourne(bot) &&
         std::abs(bot->GetPositionZ() - PLATFORM_Z) > MAX_Z_DIFF)
     {
-        bot->TeleportTo(bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY(),
-                        PLATFORM_Z, bot->GetOrientation());
+        bot->NearTeleportTo(bot->GetPositionX(), bot->GetPositionY(), PLATFORM_Z, bot->GetOrientation());
         return true;
     }
 
@@ -2105,8 +2159,7 @@ bool IccLichKingAddsAction::HandleTeleportationFixes(Difficulty diff, Unit* tere
             }
         }
         Unit* anchor = mainTank ? static_cast<Unit*>(mainTank) : terenas;
-        bot->TeleportTo(bot->GetMapId(), anchor->GetPositionX(), anchor->GetPositionY(),
-                        SPIRIT_Z, bot->GetOrientation());
+        bot->NearTeleportTo(anchor->GetPositionX(), anchor->GetPositionY(), SPIRIT_Z, bot->GetOrientation());
         return true;
     }
 
@@ -2149,8 +2202,7 @@ bool IccLichKingSpiritBombAction::Execute(Event)
     static constexpr float SPIRIT_Z_TOLERANCE = 5.0f;
     if (std::abs(bot->GetPositionZ() - SPIRIT_Z) > SPIRIT_Z_TOLERANCE)
     {
-        bot->TeleportTo(bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY(),
-                        SPIRIT_Z, bot->GetOrientation());
+        bot->NearTeleportTo(bot->GetPositionX(), bot->GetPositionY(), SPIRIT_Z, bot->GetOrientation());
         return true;
     }
 
@@ -2194,8 +2246,18 @@ bool IccLichKingSpiritBombAction::Execute(Event)
         }
     }
 
+    // Which rule placed the main tank among the bombs, for lk.bombdodge
+    auto const noteDodge = [this](char const* rule)
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "lk.bombdodge", rule);
+    };
+
     if (currentlySafe)
+    {
+        noteDodge("safe");
         return true;
+    }
 
     lastUnsafeX = bot->GetPositionX();
     lastUnsafeY = bot->GetPositionY();
@@ -2273,6 +2335,8 @@ bool IccLichKingSpiritBombAction::Execute(Event)
             break;
     }
 
+    char const* dodgeRule = found ? "dodge" : "escape";
+
     // Fallback: surrounded with no clean path. Pick direction where the
     // blocking bomb is highest on Z axis and move thru there
     if (!found)
@@ -2329,9 +2393,12 @@ bool IccLichKingSpiritBombAction::Execute(Event)
     if (found && bot->IsWithinLOS(bestX, bestY, bestZ) &&
         std::abs(bestZ - bot->GetPositionZ()) <= MAX_HEIGHT_DIFF)
     {
+        noteDodge(dodgeRule);
         MoveTo(bot->GetMapId(), bestX, bestY, bestZ,
                false, false, false, true, MovementPriority::MOVEMENT_FORCED);
     }
+    else
+        noteDodge("stuck");
 
     return true;
 }
@@ -2418,7 +2485,7 @@ bool IccLichKingAddsAction::HandleSpiritMarkingAndTargeting(Difficulty diff, Uni
 
         Unit* toMark = prioritySpirit ? prioritySpirit : nearestSpirit;
         if (toMark && (needNewMark || (prioritySpirit && !markOnTarget)))
-            group->SetTargetIcon(STAR_ICON, bot->GetGUID(), toMark->GetGUID());
+            LkSetIcon(bot, botAI, group, STAR_ICON, toMark, prioritySpirit ? "chasing" : "nearest");
     }
 
     // Ranged DPS focus the star target
@@ -2715,9 +2782,9 @@ bool IccLichKingAddsAction::HandleAssistTankAddManagement(Unit* boss, Difficulty
     if (!PlayerbotAI::IsAssistTank(bot) || !boss)
         return false;
 
-    // Below 71%: stun all shamblings until winter starts so they don't
+    // Phase one's last 2%: stun all shamblings until winter starts so they don't
     // shockwave the raid during the transition gap.
-    if (boss->HealthBelowPct(72) && boss->HealthAbovePct(70))
+    if (_phase == IccLichKingPhaseId::One && boss->HealthBelowPct(72))
     {
         if (!IccBossHasRemorselessWinter(boss))
         {
@@ -2872,8 +2939,8 @@ bool IccLichKingAddsAction::HandleAssistTankAddManagement(Unit* boss, Difficulty
         }
     }
 
-    // Hold position during phase 1 (boss above 70%)
-    if (boss->HealthAbovePct(70))
+    // Hold position during phase 1
+    if (_phase == IccLichKingPhaseId::One)
     {
         if (!isHeroic)
         {
@@ -2944,7 +3011,7 @@ bool IccLichKingAddsAction::HandleAssistTankAddManagement(Unit* boss, Difficulty
 
     // No adds at all — stay at hold position
     if (addsOnUs.empty() && addsElsewhere.empty())
-        return boss->HealthAbovePct(70);
+        return _phase == IccLichKingPhaseId::One;
 
     // Target priority by mob type (stable, not victim-dependent):
     //   Tier 1 — Shambling Horror
@@ -3118,7 +3185,7 @@ bool IccLichKingAddsAction::HandleAssistTankAddManagement(Unit* boss, Difficulty
 bool IccLichKingAddsAction::HandleMeleePositioning(Unit* boss, bool hasPlague, Difficulty diff)
 {
     if (!boss || !PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsAssistTank(bot) ||
-        boss->HealthBelowPct(71) || hasPlague || IsHeroicLk(diff))
+        _phase != IccLichKingPhaseId::One || hasPlague || IsHeroicLk(diff))
         return false;
 
     float const distToPos = bot->GetDistance(ICC_LICH_KING_MELEE_POSITION);
@@ -3219,7 +3286,7 @@ bool IccLichKingAddsAction::HandleMainTankTargeting(Unit* boss, Difficulty diff)
         }
     }
 
-    if (!IsHeroicLk(diff) || boss->HealthBelowPct(71))
+    if (!IsHeroicLk(diff) || _phase != IccLichKingPhaseId::One)
         return false;
 
     bot->SetTarget(boss->GetGUID());
@@ -3234,7 +3301,7 @@ bool IccLichKingAddsAction::HandleNonTankHeroicPositioning(Unit* boss, Difficult
     if (PlayerbotAI::IsTank(bot) || !boss || !IsHeroicLk(diff))
         return false;
 
-    if (boss->HealthBelowPct(71) || hasPlague)
+    if (_phase != IccLichKingPhaseId::One || hasPlague)
         return false;
 
     Unit* mainTank = AI_VALUE(Unit*, "main tank");
@@ -3283,7 +3350,7 @@ bool IccLichKingAddsAction::HandleNonTankHeroicPositioning(Unit* boss, Difficult
 
 bool IccLichKingAddsAction::HandleRangedPositioning(Unit* boss, bool hasPlague, Difficulty diff)
 {
-    if (!boss || !PlayerbotAI::IsRanged(bot) || boss->HealthBelowPct(71) ||
+    if (!boss || !PlayerbotAI::IsRanged(bot) || _phase != IccLichKingPhaseId::One ||
         hasPlague || IsHeroicLk(diff))
         return false;
 
@@ -3303,7 +3370,7 @@ bool IccLichKingAddsAction::HandleRangedPositioning(Unit* boss, bool hasPlague, 
 
 bool IccLichKingAddsAction::HandleCenterStacking(Unit* boss, Difficulty diff)
 {
-    if (!boss || !boss->HealthBelowPct(67) || IccBossHasRemorselessWinter(boss))
+    if (!boss || _phase < IccLichKingPhaseId::Two || IccBossHasRemorselessWinter(boss))
         return false;
 
     // Defile target: let HandleDefileMechanics() handle movement
@@ -3337,8 +3404,7 @@ bool IccLichKingAddsAction::HandleCenterStacking(Unit* boss, Difficulty diff)
     static constexpr float STACK_SAFETY = 3.0f;
     static constexpr float STACK_DEFILE_BUFFER = HUNTER_DISTANCE + STACK_SAFETY;
 
-    bool const lastPhase   = boss->HealthBelowPct(37);
-    bool const spiritPhase = boss->HealthBelowPct(43) && boss->HealthAbovePct(37);
+    bool const phaseThree = _phase >= IccLichKingPhaseId::Winter2;
 
     GuidVector const& npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
     std::vector<Unit*> defiles;
@@ -3357,7 +3423,7 @@ bool IccLichKingAddsAction::HandleCenterStacking(Unit* boss, Difficulty diff)
     }
 
     Position dest;
-    if (spiritPhase || lastPhase)
+    if (phaseThree)
     {
         // Phase 3: pick the safe vile-spirit slot closest to the bot.
         Position const slots[3] = {
@@ -3413,6 +3479,9 @@ bool IccLichKingAddsAction::HandleCenterStacking(Unit* boss, Difficulty diff)
                 }
             }
             s_stackChoice[stackKey] = {now, chosen};
+
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "lk.stackslot", chosen == 0 ? "spirit1" : chosen == 2 ? "spirit3" : "none");
         }
 
         if (chosen < 0)
@@ -3567,9 +3636,6 @@ bool IccLichKingAddsAction::HandleDefileMechanics(Unit* boss, Difficulty diff)
         lastYellMs = info.castTime;
     }
 
-    if (!target->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "lk.nitro", target))
-        target->AddAura(SPELL_NITRO_BOOSTS, target);
-
     // Real players run themselves; only the targeted bot moves.
     if (target != bot)
         return false;
@@ -3665,6 +3731,7 @@ bool IccLichKingAddsAction::HandleDefileMechanics(Unit* boss, Difficulty diff)
     bot->UpdateAllowedPositionZ(destX, destY, destZ);
 
     bot->CastStop();
+    EncounterHelpers::UseNitroBoosts(bot);
     MoveTo(bot->GetMapId(), destX, destY, destZ,
            false, false, false, true, MovementPriority::MOVEMENT_FORCED);
     return true;
@@ -3695,8 +3762,11 @@ bool IccLichKingAddsAction::HandleValkyrMechanics(Difficulty diff)
     }
 
     // No active valkyrs — reset bots still targeting an excluded valkyr
-    if (grabbingValkyrs.empty() || (boss && boss->HealthBelowPct(40)))
+    if (grabbingValkyrs.empty() || _phase >= IccLichKingPhaseId::Winter2)
     {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "lk.valkyr", "none");
+
         Unit* currentTarget = bot->GetVictim();
         if (currentTarget && IsLkValkyr(currentTarget) && boss)
         {
@@ -3748,16 +3818,13 @@ bool IccLichKingAddsAction::HandleValkyrMarking(std::vector<Unit*> const& grabbi
             bool const stale = !marked->HasAura(SPELL_HARVEST_SOUL_VALKYR) ||
                                std::abs(marked->GetPositionZ() - bot->GetPositionZ()) > 5.0f;
             if (stale)
-                group->SetTargetIcon(iconIdx, bot->GetGUID(), ObjectGuid::Empty);
+                LkSetIcon(bot, botAI, group, iconIdx, nullptr, "clear");
         }
     }
 
     // Clear icon slots beyond the current Val'kyr count
     for (size_t i = sorted.size(); i < Icons.size(); ++i)
-    {
-        if (!group->GetTargetIcon(Icons[i]).IsEmpty())
-            group->SetTargetIcon(Icons[i], bot->GetGUID(), ObjectGuid::Empty);
-    }
+        LkSetIcon(bot, botAI, group, Icons[i], nullptr, "clear");
 
     // Assign an icon to each active Val'kyr.
     // Skip skull if a Raging Spirit currently owns it.
@@ -3772,9 +3839,7 @@ bool IccLichKingAddsAction::HandleValkyrMarking(std::vector<Unit*> const& grabbi
                 continue;
         }
 
-        Unit* marked = botAI->GetUnit(group->GetTargetIcon(iconIdx));
-        if (!marked || marked != sorted[i])
-            group->SetTargetIcon(iconIdx, bot->GetGUID(), sorted[i]->GetGUID());
+        LkSetIcon(bot, botAI, group, iconIdx, sorted[i], "valkyr");
     }
 
     return true;
@@ -3786,8 +3851,7 @@ bool IccLichKingAddsAction::HandleValkyrAssignment(std::vector<Unit*> const& gra
     if (!group)
         return false;
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "the lich king");
-    if (boss && boss->HealthBelowPct(40))
+    if (_phase >= IccLichKingPhaseId::Winter2)
         return false;
 
     std::vector<Unit*> valid;
@@ -3831,6 +3895,10 @@ bool IccLichKingAddsAction::HandleValkyrAssignment(std::vector<Unit*> const& gra
 
     Unit* myValkyr = valid[valkyrIndex];
     context->GetValue<std::string>("rti")->Set(IccRtiNameForBucket(valkyrIndex));
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "lk.valkyr",
+                             std::string(IccRtiNameForBucket(valkyrIndex)) + " " +
+                                 RaidObs::DescribeAssignment(myValkyr->GetGUID()));
 
     Attack(myValkyr);
 
@@ -4055,17 +4123,10 @@ bool IccLichKingAddsAction::HandleVileSpiritMechanics()
     Position const& slotPos = slots[chosen];
 
     // Assist tank: stacks with the raid at the chosen vile slot, but allowed
-    // a 40y leash to intercept the spirit nearest the slot. Keeps nitro boost
+    // a 40y leash to intercept the spirit nearest the slot, on Nitro Boosts
     // for chase speed.
     if (PlayerbotAI::IsAssistTank(bot))
     {
-        if (!bot->HasAura(SPELL_NITRO_BOOSTS) && IccRaidCheat(botAI, "lk.nitro"))
-            bot->AddAura(SPELL_NITRO_BOOSTS, bot);
-        if (!bot->HasAura(SPELL_PAIN_SUPPRESION) && IccRaidCheat(botAI, "lk.painsuppression"))
-            bot->AddAura(SPELL_PAIN_SUPPRESION, bot);
-        if (!bot->HasAura(SPELL_AGEIS_OF_DALARAN) && IccRaidCheat(botAI, "lk.aegis"))
-            bot->AddAura(SPELL_AGEIS_OF_DALARAN, bot);
-
         static constexpr float LEASH_RADIUS = 40.0f;
 
         float const anchorX = slotPos.GetPositionX();
@@ -4114,6 +4175,7 @@ bool IccLichKingAddsAction::HandleVileSpiritMechanics()
         float sz = az;
         bot->UpdateAllowedPositionZ(sx, sy, sz);
 
+        EncounterHelpers::UseNitroBoosts(bot);
         return MoveTo(bot->GetMapId(), sx, sy, sz, false, false, false, true, MovementPriority::MOVEMENT_FORCED, true,
                       false);
     }
@@ -4145,18 +4207,10 @@ bool IccLichKingAddsAction::HandleVileSpiritMechanics()
         }
     }
 
-    // Skip the spirit-flee logic entirely if boss is casting Harvest Soul(s).
+    // Skip the spirit-flee logic entirely while a soul is being harvested.
     // The harvested player must stay alive — flee movement breaks range for
     // healers and gets the soul victim killed, buffing LK and wiping raid.
-    Unit* Boss = AI_VALUE2(Unit*, "find target", "the lich king");
-    bool const bossCastingHarvest = Boss && Boss->HasUnitState(UNIT_STATE_CASTING) &&
-        (Boss->FindCurrentSpellBySpellId(SPELL_HARVEST_SOUL_LK) ||
-         Boss->FindCurrentSpellBySpellId(SPELL_HARVEST_SOULS_LK_25) ||
-         Boss->FindCurrentSpellBySpellId(SPELL_HARVEST_SOULS_LK_H1) ||
-         Boss->FindCurrentSpellBySpellId(SPELL_HARVEST_SOULS_LK_H2) ||
-         Boss->FindCurrentSpellBySpellId(SPELL_HARVEST_SOULS_LK_H3));
-
-    if (!PlayerbotAI::IsTank(bot) && !bossCastingHarvest)
+    if (!PlayerbotAI::IsTank(bot) && !IsLkSoulBeingHarvested(bot))
     {
         // Flee to MT if a spirit is targeting this bot OR is within FLEE_RANGE.
         // Either condition is enough — proximity catches spirits that haven't
@@ -4277,14 +4331,9 @@ bool IccLichKingAddsAction::HandleIceSphereMechanics()
             }
         }
 
-        if (nearestSphere)
-            group->SetTargetIcon(SPHERE_ICON, bot->GetGUID(), nearestSphere->GetGUID());
-        else
-        {
-            if (!group->GetTargetIcon(SPHERE_ICON).IsEmpty())
-                group->SetTargetIcon(SPHERE_ICON, bot->GetGUID(), ObjectGuid::Empty);
+        LkSetIcon(bot, botAI, group, SPHERE_ICON, nearestSphere, nearestSphere ? "sphere" : "clear");
+        if (!nearestSphere)
             return false;
-        }
 
         currentMark = botAI->GetUnit(group->GetTargetIcon(SPHERE_ICON));
     }

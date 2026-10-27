@@ -901,11 +901,26 @@ float IccSindragosaMultiplier::GetValue(Action* action)
 
 float IccLichKingAddsMultiplier::GetValue(Action* action)
 {
-    if (bot->FindNearestCreature(NPC_VALITHRIA_DREAMWALKER, 100.0f))
+    // Cached per ms: two grid searches and the boss state, asked for every action the bot weighs in
+    // every ICC fight. A bot never ticks twice in one ms.
+    uint32 const now = getMSTime();
+    if (now != _checkedMs)
+    {
+        _checkedMs = now;
+        _nearValithria = bot->FindNearestCreature(NPC_VALITHRIA_DREAMWALKER, 100.0f) != nullptr;
+        _nearHeroicTerenas = !_nearValithria && bot->FindNearestCreature(NPC_TERENAS_MENETHIL_HC, 55.0f);
+        Unit* const found =
+            _nearValithria || _nearHeroicTerenas ? nullptr : AI_VALUE2(Unit*, "find target", "the lich king");
+        _bossGuid = found ? found->GetGUID() : ObjectGuid::Empty;
+        _phaseOne = found && IccLichKingPhase(bot, found) == IccLichKingPhaseId::One;
+        _winter = found && IccBossHasRemorselessWinter(found);
+        _castingWinter = found && IccBossCastingRemorselessWinter(found);
+    }
+
+    if (_nearValithria)
         return 1.0f;
 
-    Unit* terenas = bot->FindNearestCreature(NPC_TERENAS_MENETHIL_HC, 55.0f);
-    if (terenas)
+    if (_nearHeroicTerenas)
     {
         // Warlocks and melee stay functional (movement + adds action only)
         if (PlayerbotAI::IsMelee(bot) || bot->getClass() == CLASS_WARLOCK)
@@ -933,7 +948,7 @@ float IccLichKingAddsMultiplier::GetValue(Action* action)
         return 1.0f;
     }
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "the lich king");
+    Unit* boss = _bossGuid.IsEmpty() ? nullptr : ObjectAccessor::GetUnit(*bot, _bossGuid);
     if (!boss)
         return 1.0f;
 
@@ -942,10 +957,6 @@ float IccLichKingAddsMultiplier::GetValue(Action* action)
         dynamic_cast<CastCleanseDiseaseOnPartyAction*>(action) ||
         dynamic_cast<CastCleanseSpiritCurseOnPartyAction*>(action) || dynamic_cast<CastCleanseSpiritAction*>(action))
     {
-        Unit* boss = AI_VALUE2(Unit*, "find target", "the lich king");
-        if (!boss)
-            return 1.0f;
-
         Group* group = bot->GetGroup();
         if (!group)
             return 1.0f;
@@ -1024,7 +1035,7 @@ float IccLichKingAddsMultiplier::GetValue(Action* action)
     if (dynamic_cast<FleeAction*>(action) && bot->getClass() != CLASS_HUNTER)
         return 0.0f;
 
-    if (boss->HealthAbovePct(71))
+    if (_phaseOne)
     {
         // Assist tank targeting is fully managed by HandleAssistTankAddManagement —
         // suppress generic target-switching actions so they don't override it.
@@ -1046,7 +1057,7 @@ float IccLichKingAddsMultiplier::GetValue(Action* action)
             return 0.0f;
     }
 
-    if (IccBossHasRemorselessWinter(boss))
+    if (_winter)
     {
         // Winter action and facing take priority
         if (dynamic_cast<IccLichKingWinterAction*>(action) || dynamic_cast<SetFacingTargetAction*>(action))
@@ -1054,7 +1065,7 @@ float IccLichKingAddsMultiplier::GetValue(Action* action)
 
         // Staging window: while boss is casting Winter, non-tanks must commit
         // to the staging move. Only heals are allowed; everything else blocked.
-        if (IccBossCastingRemorselessWinter(boss) && !PlayerbotAI::IsTank(bot))
+        if (_castingWinter && !PlayerbotAI::IsTank(bot))
         {
             if (dynamic_cast<HealPartyMemberAction*>(action) ||
                 dynamic_cast<ReachPartyMemberToHealAction*>(action))
@@ -1123,27 +1134,22 @@ float IccLichKingAddsMultiplier::GetValue(Action* action)
         }
     }
 
-    if (PlayerbotAI::IsRanged(bot) && !botAI->GetAura("Harvest Soul", bot, false, false))
+    if (PlayerbotAI::IsRanged(bot) &&
+        (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action) ||
+         dynamic_cast<FleeAction*>(action) || dynamic_cast<MoveRandomAction*>(action) ||
+         dynamic_cast<MoveFromGroupAction*>(action)) &&
+        !botAI->GetAura("Harvest Soul", bot, false, false))
     {
         GuidVector const& npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-        bool defilePresent = false;
         for (ObjectGuid const& guid : npcs)
         {
             Unit* unit = botAI->GetUnit(guid);
             if (unit && unit->IsAlive() && unit->GetEntry() == DEFILE_NPC_ID)
-            {
-                defilePresent = true;
-                break;
-            }
+                return 0.0f;
         }
-
-        if (defilePresent && (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action) ||
-                              dynamic_cast<FleeAction*>(action) || dynamic_cast<MoveRandomAction*>(action) ||
-                              dynamic_cast<MoveFromGroupAction*>(action)))
-            return 0.0f;
     }
 
-    if (PlayerbotAI::IsAssistTank(bot) && boss->HealthAbovePct(71))
+    if (PlayerbotAI::IsAssistTank(bot) && _phaseOne)
     {
         Unit* currentTarget = AI_VALUE(Unit*, "current target");
         if (currentTarget && currentTarget == boss && dynamic_cast<AttackRtiTargetAction*>(action))
