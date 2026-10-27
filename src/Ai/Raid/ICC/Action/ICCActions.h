@@ -189,7 +189,7 @@ public:
 
     bool IsTargetedByShade(uint32 shadeEntry);
     bool HandleAddTargeting(Unit* boss);
-    bool UpdateRaidTargetIcon(Unit* target);
+    bool UpdateRaidTargetIcon(Unit* target, Unit* boss);
     bool HandleNonTankAddEvasion();
     bool IsAdd(Unit* unit);
     bool IsAssistTankAlive();
@@ -220,6 +220,14 @@ public:
 };
 
 // Gunship Battle
+
+// The enemy captain within `range`, alive and hostile: High Overlord Saurfang to a raid on the Skybreaker,
+// Muradin to one on Orgrim's Hammer. Null off the gunship.
+Unit* IccGunshipEnemyCaptain(Player* bot, float range);
+// Below Zero on the bot's own cannons: the enemy mage's 15 min freeze, which sends the raid across to
+// kill him.
+bool IccGunshipCannonsFrozen(Player* bot);
+
 class IccCannonFireAction : public Action
 {
 public:

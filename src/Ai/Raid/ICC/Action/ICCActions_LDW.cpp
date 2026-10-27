@@ -12,10 +12,21 @@
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
 #include "RaidDifficulty.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
 
 // Lady Deathwhisper
+
+// Phase 2 starts when a hit drains the last of her mana and the core strips Mana Barrier (70842). The
+// barrier tops her health up every second until then, so her health says nothing about the phase.
+static bool IccLdwBarrierUp(Player* bot, Unit* boss)
+{
+    bool const barrier = boss->HasAura(SPELL_LDW_MANA_BARRIER);
+    RaidObs::NoteDerived(bot, "ldw.phase", barrier ? "1" : "2");
+    return barrier;
+}
+
 bool IccDarkReckoningAction::Execute(Event /*event*/)
 {
     constexpr float SAFE_DISTANCE_THRESHOLD = 2.0f;
@@ -125,6 +136,7 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
+    bool const barrierUp = IccLdwBarrierUp(bot, boss);
     Difficulty diff = GetRaidMapDifficulty(bot);
 
     if (sPlayerbotAIConfig.EnableICCBuffs && boss->IsInCombat() && diff &&
@@ -156,7 +168,7 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
-            if (!member || !member->IsAlive() || member == bot)
+            if (!member || !member->IsAlive() || member == bot || !IccSameInstance(bot, member))
                 continue;
 
             PlayerbotAI* memberBotAI = GET_PLAYERBOT_AI(member);
@@ -191,13 +203,13 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
             {
                 constexpr float MARK_RANGE = 25.0f;
                 Unit* nearAdd = FindAddNearBoss(boss, MARK_RANGE);
-                UpdateRaidTargetIcon(nearAdd ? nearAdd : boss);
+                UpdateRaidTargetIcon(nearAdd ? nearAdd : boss, boss);
             }
 
             if (currentTarget->GetVictim() == bot)
             {
                 constexpr float KITE_THRESHOLD = 25.0f;
-                if (!boss->HealthAbovePct(95))
+                if (!barrierUp)
                 {
                     Position const& tankPos = ICC_LDW_TANK_POSTION;
                     if (bot->GetExactDist2d(tankPos.GetPositionX(), tankPos.GetPositionY()) > KITE_THRESHOLD)
@@ -223,7 +235,7 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
             {
                 constexpr float MARK_RANGE = 25.0f;
                 Unit* nearAdd = FindAddNearBoss(boss, MARK_RANGE);
-                UpdateRaidTargetIcon(nearAdd ? nearAdd : boss);
+                UpdateRaidTargetIcon(nearAdd ? nearAdd : boss, boss);
             }
         }
 
@@ -232,10 +244,10 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
             {
                 constexpr float MARK_RANGE = 25.0f;
                 Unit* nearAdd = FindAddNearBoss(boss, MARK_RANGE);
-                UpdateRaidTargetIcon(nearAdd ? nearAdd : boss);
+                UpdateRaidTargetIcon(nearAdd ? nearAdd : boss, boss);
             }
 
-            if (!boss->HealthAbovePct(95))
+            if (!barrierUp)
             {
                 bool anyTankHasAggro = false;
                 if (Group* group = bot->GetGroup())
@@ -266,7 +278,8 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
 
     // Phase 1 mana drain: every hunter keeps its own Viper Sting up on boss.
     // Per-hunter aura tracking via caster-GUID so multiple hunters stack cleanly.
-    if (bot->getClass() == CLASS_HUNTER && boss && boss->HealthAbovePct(95) && boss->IsAlive() && !boss->HasAura(SPELL_VIPER_STING, bot->GetGUID()) && botAI->CanCastSpell(SPELL_VIPER_STING, boss))
+    if (bot->getClass() == CLASS_HUNTER && barrierUp && boss->IsAlive() &&
+        !boss->HasAura(SPELL_VIPER_STING, bot->GetGUID()) && botAI->CanCastSpell(SPELL_VIPER_STING, boss))
         botAI->CastSpell("viper sting", boss);
 
     if (HandleNonTankAddEvasion())
@@ -274,7 +287,7 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
 
     ApplyNearbyAddCC();
 
-    if (!boss->HealthAbovePct(95) && (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot)))
+    if (!barrierUp && (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot)))
     {
         bool threatened = false;
         GuidVector const npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
@@ -301,7 +314,7 @@ bool IccAddsLadyDeathwhisperAction::Execute(Event /*event*/)
     if (IsAddsAlive())
         return false;
 
-    if (boss->HealthAbovePct(95))
+    if (barrierUp)
         return EngageBoss();
 
     return false;
@@ -405,7 +418,7 @@ Unit* IccAddsLadyDeathwhisperAction::FindAndCollectAdd(Unit* boss)
         }
     }
 
-    if (boss && boss->HealthAbovePct(95))
+    if (boss && IccLdwBarrierUp(bot, boss))
     {
         constexpr float CONSOLIDATE_THRESHOLD = 5.0f;
         if (bestAdd->GetExactDist2d(boss) > CONSOLIDATE_THRESHOLD)
@@ -441,7 +454,7 @@ bool IccAddsLadyDeathwhisperAction::HandleNonTankAddEvasion()
     if (!boss)
         return false;
 
-    if (boss->HealthAbovePct(95))
+    if (IccLdwBarrierUp(bot, boss))
     {
         Unit* closestAdd = nullptr;
         float closestDist = FLT_MAX;
@@ -669,12 +682,12 @@ bool IccAddsLadyDeathwhisperAction::HandleAddTargeting(Unit* boss)
         priorityTarget = boss;
 
     if (priorityTarget)
-        UpdateRaidTargetIcon(priorityTarget);
+        UpdateRaidTargetIcon(priorityTarget, boss);
 
     return false;
 }
 
-bool IccAddsLadyDeathwhisperAction::UpdateRaidTargetIcon(Unit* target)
+bool IccAddsLadyDeathwhisperAction::UpdateRaidTargetIcon(Unit* target, Unit* boss)
 {
     static constexpr uint8 SKULL_ICON_INDEX = RtiTargetValue::skullIndex;
 
@@ -695,6 +708,9 @@ bool IccAddsLadyDeathwhisperAction::UpdateRaidTargetIcon(Unit* target)
 
     if (shouldUpdate)
         group->SetTargetIcon(SKULL_ICON_INDEX, bot->GetGUID(), target->GetGUID());
+
+    Unit* const onSkull = shouldUpdate ? target : currentSkullUnit;
+    RaidObs::NoteDerived(bot, "ldw.skull", IsAdd(onSkull) ? "add" : onSkull == boss ? "boss" : "other");
 
     return false;
 }
@@ -778,7 +794,7 @@ bool IccRottingFrostGiantTankPositionAction::Execute(Event /*event*/)
         return false;
 
     Aura* aura = botAI->GetAura("death plague", bot, false, false);
-    if (aura && IccRaidCheat(botAI, "icc.deathplague"))
+    if (aura && IccRaidCheat(botAI, "rfg.deathplague"))
         bot->RemoveAura(aura->GetId());
 
     /* TODO: code works for handling plague, but atm script is bugged and one bot can have 2 plagues at the same time or

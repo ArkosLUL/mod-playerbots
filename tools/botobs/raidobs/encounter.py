@@ -241,7 +241,8 @@ ICC_PREFIXES = {
 }
 
 # ICC's naming contract: every slug an ICC pull files under, and the prefix its note and cheat keys
-# carry. `icc` is the raid-wide prefix and also the Rotting Frost Giant's.
+# carry. `icc` is the raid-wide prefix and belongs to no slug, or every ICC pull would report that
+# slug's keys silent.
 ICC_KEY_PREFIXES = {
     "lord-marrowgar": "lm",
     "lady-deathwhisper": "ldw",
@@ -259,7 +260,7 @@ ICC_KEY_PREFIXES = {
     "sindragosa-gauntlet": "sg",
     "blood-prince-trash": "bpc",
     "stinky-and-precious": "dogs",
-    "rotting-frost-giant": "icc",
+    "rotting-frost-giant": "rfg",
 }
 
 

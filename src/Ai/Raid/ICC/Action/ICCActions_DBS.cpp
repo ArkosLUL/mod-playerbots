@@ -11,6 +11,7 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
 
@@ -365,11 +366,15 @@ Unit* IccAddsDbsAction::FindPriorityTarget(Unit* boss)
         {
             Unit* unit = botAI->GetUnit(guid);
             if (unit && unit->IsAlive() && unit->GetEntry() == entry)
+            {
+                RaidObs::NoteDerived(bot, "dbs.skull", "beast");
                 return unit;
+            }
         }
     }
 
     // Only fallback to boss if it's alive
+    RaidObs::NoteDerived(bot, "dbs.skull", boss->IsAlive() ? "boss" : "none");
     return boss->IsAlive() ? const_cast<Unit*>(boss) : nullptr;
 }
 

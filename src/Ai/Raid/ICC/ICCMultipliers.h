@@ -15,6 +15,11 @@ class IccLadyDeathwhisperMultiplier : public Multiplier
 public:
     IccLadyDeathwhisperMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc lady deathwhisper") {}
     float GetValue(Action* action) override;
+
+private:
+    uint32 _checkedMs = 0;
+    bool _bossPresent = false;
+    bool _shadeOnBot = false;
 };
 
 //DBS
@@ -118,6 +123,11 @@ class IccGunshipMultiplier : public Multiplier
 public:
     IccGunshipMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc gunship") {}
     float GetValue(Action* action) override;
+
+private:
+    uint32 _captainCheckedMs = 0;
+    bool _inGunship = false;
+    bool _hordeSide = false;
 };
 
 #endif

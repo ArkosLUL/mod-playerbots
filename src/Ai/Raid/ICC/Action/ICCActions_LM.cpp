@@ -11,10 +11,19 @@
 #include "NearestNpcsValue.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RtiValue.h"
 #include "Vehicle.h"
 
 // Lord Marrowgar
+
+// Bone Storm (69076) has a 3 s cast, so the phase opens when the aura lands and he starts to spin.
+static bool IccLmInBoneStorm(Player* bot, Unit* boss)
+{
+    bool const storm = boss->HasAura(SPELL_LM_BONE_STORM);
+    RaidObs::NoteDerived(bot, "lm.phase", storm ? "bonestorm" : "normal");
+    return storm;
+}
 
 // Group iteration filter for same-instance, alive, in-world members.
 static bool IsValidLmMember(Player* member, Player* bot)
@@ -80,6 +89,14 @@ static std::vector<Player*> PickBoneStormRangedTargets(Player* bot)
     return result;
 }
 
+static bool IsBoneStormAnchor(Player* bot)
+{
+    std::vector<Player*> const picks = PickBoneStormRangedTargets(bot);
+    bool const anchor = std::find(picks.begin(), picks.end(), bot) != picks.end();
+    RaidObs::NoteDerived(bot, "lm.stormanchor", anchor ? "1" : "0");
+    return anchor;
+}
+
 // True if any coldflame line sits within 10f of the anchor position.
 // Used to widen the tank's "stay-put" tolerance so AvoidAoe can move them
 // off the line without IccLmTankPositionAction dragging them back.
@@ -99,13 +116,12 @@ bool IccLmTankPositionAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    bool const isBossInBoneStorm = botAI->GetAura("Bone Storm", boss) != nullptr;
+    bool const isBossInBoneStorm = IccLmInBoneStorm(bot, boss);
     float const maxDistanceThreshold = 3.0f;
 
     if (isBossInBoneStorm)
     {
-        std::vector<Player*> const rangedTargets = PickBoneStormRangedTargets(bot);
-        if (std::find(rangedTargets.begin(), rangedTargets.end(), bot) != rangedTargets.end())
+        if (IsBoneStormAnchor(bot))
         {
             float const anchorDist = bot->GetExactDist2d(ICC_LM_BONE_STORM_AT_POSITION.GetPositionX(),
                                                          ICC_LM_BONE_STORM_AT_POSITION.GetPositionY());
@@ -262,7 +278,7 @@ bool IccSpikeAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    bool const isBossInBoneStorm = botAI->GetAura("Bone Storm", boss) != nullptr;
+    bool const isBossInBoneStorm = IccLmInBoneStorm(bot, boss);
     std::vector<Unit*> const spikes = FindAliveSpikes();
 
     if (!spikes.empty())
@@ -272,6 +288,7 @@ bool IccSpikeAction::Execute(Event /*event*/)
     }
 
     // No spikes alive -- skull on boss, clear cross, all bots on skull
+    RaidObs::NoteDerived(bot, "lm.spike", "none");
     HandleNoSpikesMarking(boss);
 
     // Melee non-tanks in front of boss should reposition
@@ -329,6 +346,8 @@ bool IccSpikeAction::HandleSpikeMarking(std::vector<Unit*> const& spikes, Unit* 
     Player* firstSpikeVictim = spikes.size() == 1 ? GetSpikeVictim(spikes[0]) : nullptr;
     bool const onlyTankSpike = firstSpikeVictim && PlayerbotAI::IsTank(firstSpikeVictim);
 
+    RaidObs::NoteDerived(bot, "lm.mark", onlyTankSpike ? "tankspike" : "spikes" + std::to_string(spikes.size()));
+
     if (onlyTankSpike)
     {
         // Skull on spike, Cross on boss
@@ -368,6 +387,8 @@ bool IccSpikeAction::HandleNoSpikesMarking(Unit* boss)
     if (!group)
         return false;
 
+    RaidObs::NoteDerived(bot, "lm.mark", "boss");
+
     // Clear cross and star
     for (uint8 const iconIdx : {uint8(6), uint8(0)})
     {
@@ -406,10 +427,12 @@ bool IccSpikeAction::HandleSpikeAssignment(std::vector<Unit*> const& spikes, Uni
         {
             if (isTankSpike(spike))
             {
+                RaidObs::NoteDerived(bot, "lm.spike", "tank");
                 Attack(spike);
                 return false;
             }
         }
+        RaidObs::NoteDerived(bot, "lm.spike", "idle");
         return false;
     }
 
@@ -419,11 +442,13 @@ bool IccSpikeAction::HandleSpikeAssignment(std::vector<Unit*> const& spikes, Uni
     {
         if (isMelee)
         {
+            RaidObs::NoteDerived(bot, "lm.spike", "boss");
             context->GetValue<std::string>("rti")->Set("cross");
             Attack(boss);
         }
         else
         {
+            RaidObs::NoteDerived(bot, "lm.spike", "skull");
             context->GetValue<std::string>("rti")->Set("skull");
             Attack(spikes[0]);
         }
@@ -454,6 +479,7 @@ bool IccSpikeAction::HandleSpikeAssignment(std::vector<Unit*> const& spikes, Uni
             }
         }
 
+        RaidObs::NoteDerived(bot, "lm.spike", bestSpike ? "nearest" : "nosafe");
         if (bestSpike)
             Attack(bestSpike);
 
@@ -477,24 +503,28 @@ bool IccSpikeAction::HandleSpikeAssignment(std::vector<Unit*> const& spikes, Uni
         rangedMembers.push_back(member);
     }
 
-    if (rangedMembers.empty())
-        return false;
-
     std::sort(rangedMembers.begin(), rangedMembers.end(),
               [](Player const* a, Player const* b) { return a->GetGUID() < b->GetGUID(); });
 
     auto const it = std::find(rangedMembers.begin(), rangedMembers.end(), bot);
     if (it == rangedMembers.end())
+    {
+        RaidObs::NoteDerived(bot, "lm.spike", "none");
         return false;
+    }
 
     size_t const myIndex = std::distance(rangedMembers.begin(), it);
     std::vector<size_t> const groupSizes = IccBalancedGroupSizes(rangedMembers.size(), spikes.size());
     size_t const spikeIndex = IccAssignedBucketIndex(myIndex, groupSizes);
 
     if (spikeIndex >= spikes.size())
+    {
+        RaidObs::NoteDerived(bot, "lm.spike", "none");
         return false;
+    }
 
     Unit* mySpike = spikes[spikeIndex];
+    RaidObs::NoteDerived(bot, "lm.spike", IccRtiNameForBucket(spikeIndex));
     context->GetValue<std::string>("rti")->Set(IccRtiNameForBucket(spikeIndex));
 
     Attack(mySpike);

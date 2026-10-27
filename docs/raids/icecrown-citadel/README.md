@@ -54,9 +54,10 @@ boss state renames a trace open under another name, except one `MarkPull` opened
 | 13 | Sindragosa gauntlet | the gauntlet's `DoAction(ACTION_START_GAUNTLET)` | `sindragosa-gauntlet` | `sg.` |
 | 14 | Blood Prince trash | never: `NOT_STARTED`, then `DONE` when the trash dies | `blood-prince-trash` | `bpc.` |
 | — | Stinky and Precious | no boss state | `stinky-and-precious` | `dogs.` |
-| — | Rotting Frost Giant | no boss state | `rotting-frost-giant` | `icc.` |
+| — | Rotting Frost Giant | no boss state | `rotting-frost-giant` | `rfg.` |
 
-`icc.` is raid-wide and matches every ICC slug. Festergut and Rotface engage before their state
+`icc.` is raid-wide, matches every ICC slug and belongs to none: a slug owning it would have its keys
+read silent on every other ICC pull. Festergut and Rotface engage before their state
 moves, so their traces open on the engage, named by the DBC encounter credit, which matches the slug.
 The last two rows open through `IccMarkPull` from `icc dogs` and `icc rotting frost giant tank
 position` once the bot and the unit are both in combat. The dungeon bosses are the kill-credit
@@ -88,12 +89,10 @@ Boosts), so the cheat is due to go. **Gap**: kept until a legit answer exists. *
 | `lk.nitro` | remove | raid | `IccLichKingWinterAction`, `IccLichKingAddsAction::HandleDefileMechanics` (on the Defile target, humans too), `HandleVileSpiritMechanics` |
 | `lk.painsuppression`, `lk.aegis` | remove | raid | `HandleVileSpiritMechanics`, beside its Nitro, no replacement |
 | `rf.spitefulfury` | remove | raid | `IccRotfaceTankPositionAction`, Big Ooze pickup (3) |
-| `icc.tauntfixate` | remove | raid | `IccCastClassTaunt`: 1M threat plus `FixateTarget` |
-| `icc.tauntreset` | remove | raid | `IccCastClassTaunt`: clears a running class taunt cooldown |
 | `vd.speed` | remove | raid | `IccValithriaDreamCloudAction`: run, walk and flight rate 2.0 in Dream State |
 | `ldw.cyclone` | gap | raid | `IccAddsLadyDeathwhisperAction`: Cyclone on a Dominate Mind victim, bot or human |
 | `ldw.insignificance` | gap | raid | same action: tank strips Touch of Insignificance |
-| `icc.deathplague` | gap | raid | `IccRottingFrostGiantTankPositionAction`: strips Death Plague |
+| `rfg.deathplague` | gap | raid | `IccRottingFrostGiantTankPositionAction`: strips Death Plague |
 | `gsb.battlefury` | gap | raid | `IccGunshipRocketJumpAction`: strips Battle Fury off the enemy captain |
 | `pp.oozekill`, `pp.gascloudkill` | gap | raid | `IccPutricideVolatileOozeAction`, `IccPutricideGasCloudAction`: kill every extra add of the entry |
 | `pp.unboundplague` | gap | raid | `IccPutricideAvoidMalleableGooAction::HandleUnboundPlague`: suicide with nobody near |
@@ -113,9 +112,25 @@ Boosts), so the cheat is due to go. **Gap**: kept until a legit answer exists. *
 | `lk.empoweredblood`, `lk.valkyrstun` | buffs | iccbuffs | `IccLichKingAddsAction`, `HandleValkyrAssignment` |
 
 `*.heroicbuff` is `IccApplyHeroicBuffToMember` (Experienced, Aegis of Dalaran, Pain Suppression, 1%
-Threat), recorded when it adds any. Every raid-gated site keeps the cheat's exact behaviour while the
-raid cheat is on; off, the site skips the cheat. The cleanup halves (Cyclone, Magic Barrier, 1% Threat
-removal, `SetSpeed` back to normal) stay ungated.
+Threat), recorded when it adds any, on members in the bot's own instance only. Experienced 71188 and
+1% Threat 70115 never expire, so `IccStripExperienced`, run by the Marrowgar, giant, Saurfang,
+Festergut, Rotface, council, Blood-Queen and Valithria triggers, takes both off the bot and off every
+human in the instance. Every raid-gated site keeps the cheat's exact behaviour while the raid cheat is
+on; off, the site skips the cheat. The cleanup halves (Cyclone, Magic Barrier, 1% Threat removal,
+`SetSpeed` back to normal) stay ungated.
+
+**The class taunt** (`IccCastClassTaunt`, ten bosses) casts the real taunt, at most once per 500 ms
+per bot; a taunt on cooldown fails with no ranged pull, which would face the add. The 1M threat with
+`FixateTarget` and the cooldown reset are gone, so:
+
+- a caller taunting several units in a row reaches one per cooldown (8 s on every class): Saurfang's
+  Blood Beasts, the gunship assist tank's boarders, Rotface's Big Ooze loop, the council's princes and
+  Dark Nuclei, the Lich King's add passes and Raging Spirits, Stinky and Precious's adds;
+- a taunted unit holds the taunter for the 3 s aura, then real threat decides;
+- a tank swap (Festergut, Stinky and Precious, Putricide, Saurfang, Sindragosa) waits out a cooldown
+  spent elsewhere, while the stacked tank has already stopped.
+
+Each boss doc says what its callers risk.
 
 Documented, not wrapped: Valithria's floor snaps (`IccValithriaPortalAction`,
 `IccValithriaHealAction`) skip fall damage; `IccLichKingAddsAction`'s Val'kyr edge-dive puts the
@@ -167,5 +182,3 @@ called itself `icc in cannon` and merged its coverage into the real one.
   lanes probe every icon pick.
 - Every gap cheat above: a mechanic it makes survivable is open, and a server with the raid cheat off
   loses it.
-- `IccStripExperienced` strips only the bot that asks, so humans keep Experienced and 1% Threat after
-  the fight.

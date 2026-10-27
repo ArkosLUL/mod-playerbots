@@ -10,7 +10,6 @@
 #include "ICCTriggers.h"
 #include "Playerbots.h"
 #include "RaidObs.h"
-#include "ThreatManager.h"
 #include "Timer.h"
 #include <algorithm>
 #include <map>
@@ -64,16 +63,6 @@ void IccMarkPull(Player* bot, Unit* source, char const* slug)
         RaidObs::MarkPull(bot->GetMap(), source, slug);
 }
 
-namespace
-{
-    // Removing a cooldown that is not running changes nothing, so only a real reset counts as a use.
-    void IccResetTauntCooldown(Player* bot, PlayerbotAI* botAI, uint32 spellId)
-    {
-        if (bot->HasSpellCooldown(spellId) && IccRaidCheat(botAI, "icc.tauntreset"))
-            bot->RemoveSpellCooldown(spellId, true);
-    }
-}
-
 bool IccCastClassTaunt(Player* bot, PlayerbotAI* botAI, Unit* target)
 {
     if (!target || !target->IsAlive())
@@ -85,37 +74,39 @@ bool IccCastClassTaunt(Player* bot, PlayerbotAI* botAI, Unit* target)
         return false;
     last = now;
 
-    if (target->GetVictim() != bot && IccRaidCheat(botAI, "icc.tauntfixate", target))
-    {
-        ThreatManager& mgr = target->GetThreatMgr();
-        mgr.AddThreat(bot, 1000000.0f, nullptr, true, true);
-        mgr.FixateTarget(bot);
-    }
-
+    char const* taunt = nullptr;
+    uint32 tauntId = 0;
     switch (bot->getClass())
     {
         case CLASS_PALADIN:
-            IccResetTauntCooldown(bot, botAI, SPELL_TAUNT_PALADIN);
-            if (botAI->CastSpell("hand of reckoning", target))
-                return true;
+            taunt = "hand of reckoning";
+            tauntId = SPELL_TAUNT_PALADIN;
             break;
         case CLASS_DEATH_KNIGHT:
-            IccResetTauntCooldown(bot, botAI, SPELL_TAUNT_DK);
-            if (botAI->CastSpell("dark command", target))
-                return true;
+            taunt = "dark command";
+            tauntId = SPELL_TAUNT_DK;
             break;
         case CLASS_DRUID:
-            IccResetTauntCooldown(bot, botAI, SPELL_TAUNT_DRUID);
-            if (botAI->CastSpell("growl", target))
-                return true;
+            taunt = "growl";
+            tauntId = SPELL_TAUNT_DRUID;
             break;
         case CLASS_WARRIOR:
-            IccResetTauntCooldown(bot, botAI, SPELL_TAUNT_WARRIOR);
-            if (botAI->CastSpell("taunt", target))
-                return true;
+            taunt = "taunt";
+            tauntId = SPELL_TAUNT_WARRIOR;
             break;
         default:
             break;
+    }
+
+    if (taunt)
+    {
+        // No ranged pull while the taunt cools down: it faces its target and would turn a tank holding
+        // the boss toward the add on every retry.
+        if (bot->HasSpellCooldown(tauntId))
+            return false;
+
+        if (botAI->CastSpell(taunt, target))
+            return true;
     }
 
     if (botAI->CastSpell("shoot", target) || botAI->CastSpell("throw", target))
@@ -171,9 +162,18 @@ void IccEnsureIconOn(Player* bot, PlayerbotAI* botAI, int8 icon, Unit* target)
         group->SetTargetIcon(icon, bot->GetGUID(), target->GetGUID());
 }
 
+bool IccSameInstance(Player* bot, Player* member)
+{
+    return member && member->IsInWorld() && member->GetMapId() == bot->GetMapId() &&
+           member->GetInstanceId() == bot->GetInstanceId();
+}
+
 void IccApplyHeroicBuffToMember(Player* bot, Player* member, bool applyPainSupp, bool applyNoThreat,
                                 char const* cheatKey)
 {
+    if (!IccSameInstance(bot, member))
+        return;
+
     uint32 const now = getMSTime();
     uint32& last = IcecrownHelpers::IccState(member->GetInstanceId()).lastBuffMs[member->GetGUID()];
     if (last != 0 && getMSTimeDiff(last, now) < 500)
@@ -203,10 +203,35 @@ void IccApplyHeroicBuffToMember(Player* bot, Player* member, bool applyPainSupp,
         IccNoteCheat(bot, cheatKey, member);
 }
 
+namespace
+{
+    void IccStripPermanentBuffs(Player* member)
+    {
+        if (member->HasAura(SPELL_EXPERIENCED))
+            member->RemoveAura(SPELL_EXPERIENCED);
+
+        if (member->HasAura(SPELL_NO_THREAT))
+            member->RemoveAura(SPELL_NO_THREAT);
+    }
+}
+
 void IccStripExperienced(Player* bot)
 {
-    if (bot->HasAura(SPELL_EXPERIENCED))
-        bot->RemoveAura(SPELL_EXPERIENCED);
+    IccStripPermanentBuffs(bot);
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return;
+
+    // Each bot strips itself. Humans run no trigger, so this covers them.
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member == bot || !IccSameInstance(bot, member) || GET_PLAYERBOT_AI(member))
+            continue;
+
+        IccStripPermanentBuffs(member);
+    }
 }
 
 bool IccBossCastingBlisteringCold(Unit* boss)
