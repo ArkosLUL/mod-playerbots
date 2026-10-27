@@ -9,6 +9,7 @@
 
 #include "Value.h"
 
+class Player;
 class PlayerbotAI;
 class Unit;
 
@@ -34,5 +35,17 @@ bool ImmolateNeedsRefresh(PlayerbotAI* botAI, Unit* target);
 
 // One curse per caster per target, so any other curse of ours would replace it.
 bool HasOwnCurseOfDoom(PlayerbotAI* botAI, Unit* target);
+
+// Highest Ritual of Souls rank the warlock can cast right now, 0 when none.
+uint32 ReadyRitualOfSoulsRank(Player* warlock);
+
+// The bot is the group's chosen ritual caster and enough nearby members lack a healthstone.
+class ShouldCastRitualOfSoulsValue : public BoolCalculatedValue
+{
+public:
+    ShouldCastRitualOfSoulsValue(PlayerbotAI* botAI) : BoolCalculatedValue(botAI, "should cast ritual of souls", 5) {}
+
+    bool Calculate() override;
+};
 
 #endif

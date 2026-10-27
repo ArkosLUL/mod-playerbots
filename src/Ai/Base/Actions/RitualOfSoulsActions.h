@@ -8,58 +8,32 @@
 #define PLAYERBOTS_RITUALOFSOULSACTIONS_H
 
 #include "MovementActions.h"
-#include "Trigger.h"
 
 class PlayerbotAI;
 class GameObject;
 
-// Ritual of Souls spawns a "Soul Portal" (GAMEOBJECT_TYPE_RITUAL). Once enough group members have
-// clicked it, the channel completes and a Soulwell (GAMEOBJECT_TYPE_SPELLCASTER) spawns that hands
-// out healthstones to the caster's raid. R1 = Master Healthstone, R2 = Fel Healthstone.
-constexpr uint32 GO_SOUL_PORTAL_R1 = 181622;
-constexpr uint32 GO_SOUL_PORTAL_R2 = 193168;
-constexpr uint32 GO_SOULWELL_R1 = 181621;
-constexpr uint32 GO_SOULWELL_R2 = 193169;
-
-constexpr uint32 SPELL_RITUAL_OF_SOULS_R1 = 29893;
-constexpr uint32 SPELL_RITUAL_OF_SOULS_R2 = 58887;
-
-constexpr float RITUAL_OF_SOULS_GO_RANGE = 40.0f;
-
-// Soul Portal of a group member within range. When excludeSelf is set the bot's own ritual is
-// skipped (a caster must not try to "join" its own portal).
-GameObject* FindGroupRitualPortal(PlayerbotAI* botAI, bool excludeSelf = true,
-                                  float range = RITUAL_OF_SOULS_GO_RANGE);
-// Nearest Soulwell owned by a group member. Only searched for in the few minutes after a group bot
-// saw a portal, so a soulwell whose portal nobody looked up stays invisible.
-GameObject* FindGroupSoulwell(PlayerbotAI* botAI, float range = RITUAL_OF_SOULS_GO_RANGE);
-
-class JoinRitualOfSoulsAction : public MovementAction
+class UseRitualOfSoulsObjectAction : public MovementAction
 {
 public:
-    JoinRitualOfSoulsAction(PlayerbotAI* botAI) : MovementAction(botAI, "join ritual of souls") {}
+    UseRitualOfSoulsObjectAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
+
+protected:
+    bool MoveToAndUse(GameObject* go);
+};
+
+class JoinRitualOfSoulsAction : public UseRitualOfSoulsObjectAction
+{
+public:
+    JoinRitualOfSoulsAction(PlayerbotAI* botAI) : UseRitualOfSoulsObjectAction(botAI, "join ritual of souls") {}
     bool Execute(Event event) override;
 };
 
-class UseSoulwellAction : public MovementAction
+class UseSoulwellAction : public UseRitualOfSoulsObjectAction
 {
 public:
-    UseSoulwellAction(PlayerbotAI* botAI) : MovementAction(botAI, "use soulwell") {}
+    UseSoulwellAction(PlayerbotAI* botAI) : UseRitualOfSoulsObjectAction(botAI, "use soulwell") {}
+    bool isUseful() override;
     bool Execute(Event event) override;
-};
-
-class RitualPortalNearbyTrigger : public Trigger
-{
-public:
-    RitualPortalNearbyTrigger(PlayerbotAI* botAI) : Trigger(botAI, "ritual of souls portal nearby", 2000) {}
-    bool IsActive() override;
-};
-
-class SoulwellNearbyTrigger : public Trigger
-{
-public:
-    SoulwellNearbyTrigger(PlayerbotAI* botAI) : Trigger(botAI, "soulwell nearby", 2000) {}
-    bool IsActive() override;
 };
 
 #endif

@@ -21,7 +21,7 @@
 #include "PullTriggers.h"
 #include "PvpTriggers.h"
 #include "RangeTriggers.h"
-#include "RitualOfSoulsActions.h"
+#include "RitualOfSoulsTriggers.h"
 #include "RpgTriggers.h"
 #include "RtiTriggers.h"
 #include "StuckTriggers.h"

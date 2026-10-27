@@ -252,31 +252,41 @@ The mechanic itself (ritual channel, participant count, soulwell spawn, healthst
 server-side. The module supplies three behaviours: the warlock casts, helpers walk to the portal and
 click, and anyone lacking a healthstone walks to the soulwell and clicks.
 
-**The interesting part is the strategy-override architecture.** One name, `"ritualofsouls"` (on by
-default outside battlegrounds), is registered in two places: a base `RitualOfSoulsStrategy` (join +
-soulwell, all classes) and a `WarlockRitualOfSoulsStrategy` (base plus the cast trigger) in the
-warlock context. Strategy lookup resolves through the class context first, so the warlock override
-wins for warlocks and the base serves everyone else — no duplicated triggers.
+**The interesting part is the strategy-override architecture.** One name, `"ritualofsouls"`, is
+registered in two places: a base `RitualOfSoulsStrategy` (join + soulwell, all classes) and a
+`WarlockRitualOfSoulsStrategy` (base plus the cast trigger) in the warlock context. Strategy lookup
+resolves through the class context first, so the warlock override wins for warlocks and the base
+serves everyone else — no duplicated triggers. The fork adds it to every bot's defaults outside
+battlegrounds (`AiFactory.cpp`); upstream ships it off (`nc +ritualofsouls` or
+`Playerbots.[RandomBot]NonCombatStrategies`), so no default list there carries it.
 
 **The caster is picked, not raced.** `go_soulwell` (core `go_scripts.cpp`) chooses the stone spell
 from the *soulwell owner's* Improved Healthstone aura (18693 R2 / 18692 R1), so the talented warlock
 must cast. Among nearby warlock bots with the strategy, a shard, and the ritual off cooldown, the
 winner is: higher ritual rank (a Fel soulwell beats an improved Master one), then talent rank, then
-lowest GUID. Only the winner scans members' bags; the group cast reservation stays as backstop.
+lowest GUID. Only the winner scans members' bags; the group cast reservation stays as backstop and
+must outlast the cached cast decision (8 s vs 5 s), or a stale yes recasts.
 
-**Lookups stay cheap; triggers check every 2 s.** A ritual portal sits on its caster's GO list
-(`Unit::AddGameObject`), so `FindGroupRitualPortal` reads same-map warlocks' `GetGameObject(spellId)`
-— no grid search, and never another map's lists (other thread). The soulwell is *not* on that list,
-so it needs a grid search; each portal sighting stamps the group, and `FindGroupSoulwell` searches
-only within 190 s of it (180 s soulwell + slack). A soulwell whose portal no group bot saw is
-invisible. Don't use the ritual's cooldown as a "ritual happened" signal: its on-event timing runs
-through `Spell::finish(false)` and `Unit::RemoveGameObject` and isn't provable by reading.
+**Triggers are O(1); the scans sit behind cached values** (upstream's rule).
+`"ritual of souls portal"` and `"ritual of souls soulwell"` (`Base/Value/RitualOfSoulsValues`,
+2 s) cache `ObjectGuid`s; the warlock's `"should cast ritual of souls"` (`WarlockValues`, 5 s)
+holds the caster pick and the bag count, and its trigger gates on own state first (grouped, no own
+portal, ritual ready, shard). The soulwell's healthstone check is `UseSoulwellAction::isUseful`, not
+the value: the warlock reads the value too and usually holds a stone. A ritual portal sits on its
+caster's GO list (`Unit::AddGameObject`), so the portal value reads same-map warlocks'
+`GetGameObject(spellId)` — no grid search, and never another map's lists (other thread). The
+soulwell is *not* on that list, so it needs a grid search; each portal sighting stamps the group,
+and the soulwell value searches only within 190 s of it (180 s soulwell + slack). A soulwell whose
+portal no group bot saw is invisible. Don't use the ritual's cooldown as a "ritual happened" signal:
+its on-event timing runs through `Spell::finish(false)` and `Unit::RemoveGameObject` and isn't
+provable by reading.
 
 Reusable patterns this established:
 
-- **Move-to-GO then click**: `FindNearestGameObject(entry, range)` → `MoveTo` if not at interact
-  distance, else `WorldPacket(CMSG_GAMEOBJ_USE) << go->GetGUID()` →
-  `HandleGameObjectUseOpcode`, as `EnterTwilightPortalAction` (`OSActions.cpp`) does.
+- **Move-to-GO then click**: `MoveTo` if not at interact distance, else
+  `WorldPacket(CMSG_GAMEOBJ_USE) << go->GetGUID()` → `HandleGameObjectUseOpcode`
+  (`UseRitualOfSoulsObjectAction::MoveToAndUse`; `EnterTwilightPortalAction` in `OSActions.cpp`
+  does the same).
 - **Cross-bot reservation** to stop a stampede: static map + mutex + expiry cleanup, keyed on the GO
   GUID for helper slots and on the group GUID so only one warlock casts, the shape of
   `soulstoneReservations` (`WarlockActions.cpp`).

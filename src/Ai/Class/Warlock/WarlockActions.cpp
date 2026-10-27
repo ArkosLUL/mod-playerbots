@@ -22,12 +22,14 @@
 
 const int ITEM_SOUL_SHARD = 6265;
 
-// Only one warlock per group should cast the ritual; the first to actually cast reserves the group
-// for a short window so any others back off (and it also stops the caster re-casting every tick).
+// Outlasts the cached "should cast ritual of souls" value, so a stale yes can't recast
+static constexpr uint32 RITUAL_CAST_RESERVATION_MS = 8000;
+
+// Group GUID to expiry. The first warlock to cast holds the group so others back off.
 static std::unordered_map<ObjectGuid, uint32> ritualCastReservations;
 static std::mutex ritualCastReservationsMutex;
 
-// Caller must hold ritualCastReservationsMutex.
+// caller holds ritualCastReservationsMutex
 static void CleanupRitualCastReservations(uint32 now)
 {
     for (auto it = ritualCastReservations.begin(); it != ritualCastReservations.end();)
@@ -48,8 +50,7 @@ bool CastRitualOfSoulsAction::isUseful()
     if (!group)
         return false;
 
-    // Read-only: never mutate the reservation from a predicate that can run multiple times per
-    // decision. The slot is claimed in Execute, once we actually commit to the cast.
+    // read only, isUseful can run several times per decision. Execute claims the group.
     std::lock_guard<std::mutex> lock(ritualCastReservationsMutex);
     CleanupRitualCastReservations(getMSTime());
     return ritualCastReservations.find(group->GetGUID()) == ritualCastReservations.end();
@@ -67,14 +68,14 @@ bool CastRitualOfSoulsAction::Execute(Event event)
         std::lock_guard<std::mutex> lock(ritualCastReservationsMutex);
         CleanupRitualCastReservations(getMSTime());
         if (ritualCastReservations.count(groupGuid))
-            return false;  // another warlock beat us to this group's ritual
+            return false;
     }
 
     if (!CastBuffSpellAction::Execute(event))
         return false;
 
     std::lock_guard<std::mutex> lock(ritualCastReservationsMutex);
-    ritualCastReservations[groupGuid] = getMSTime() + 8000;
+    ritualCastReservations[groupGuid] = getMSTime() + RITUAL_CAST_RESERVATION_MS;
     return true;
 }
 

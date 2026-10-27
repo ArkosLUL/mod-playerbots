@@ -11,8 +11,8 @@
 
 class PlayerbotAI;
 
-// Base version (all classes): join a group member's ritual and grab from the resulting soulwell.
-// Warlocks get an override that additionally casts the ritual (WarlockRitualOfSoulsStrategy).
+// Joins a group member's ritual and takes a healthstone from the soulwell. Warlocks get
+// WarlockRitualOfSoulsStrategy under the same name instead, which also casts it.
 class RitualOfSoulsStrategy : public NonCombatStrategy
 {
 public:

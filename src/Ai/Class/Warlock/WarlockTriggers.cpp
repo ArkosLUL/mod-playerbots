@@ -5,15 +5,12 @@
  */
 
 #include "WarlockTriggers.h"
-#include "Bag.h"
 #include "GenericTriggers.h"
-#include "Group.h"
-#include "Item.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
-#include "RitualOfSoulsActions.h"
+#include "RitualOfSoulsValues.h"
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
@@ -332,120 +329,13 @@ bool RainOfFireChannelCheckTrigger::IsActive()
     return false;
 }
 
-char* strstri(char const* haystack, char const* needle);
-
-// Match the same rule the "healthstone" inventory value uses (item name contains "Healthstone"),
-// so this stays in sync with the soulwell / use-item paths instead of a parallel id list that can
-// drift as new ranks/variants are added.
-static bool ItemNameHasHealthstone(Item* item)
-{
-    ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
-    return proto && strstri(proto->Name1.c_str(), "Healthstone");
-}
-
-static bool HasAnyHealthstone(Player* player)
-{
-    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
-        if (ItemNameHasHealthstone(player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot)))
-            return true;
-
-    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
-        if (Bag* pBag = player->GetBagByPos(bag))
-            for (uint32 j = 0; j < pBag->GetBagSize(); ++j)
-                if (ItemNameHasHealthstone(pBag->GetItemByPos(j)))
-                    return true;
-
-    return false;
-}
-
-static constexpr float RITUAL_NEARBY_RANGE = 30.0f;
-static constexpr uint32 RITUAL_MIN_PARTICIPANTS = 3;  // caster + 2 helpers
-static constexpr uint32 RITUAL_MIN_MISSING = 3;       // don't bother for a single missing stone
-
-static constexpr uint32 SPELL_IMPROVED_HEALTHSTONE_R1 = 18692;
-static constexpr uint32 SPELL_IMPROVED_HEALTHSTONE_R2 = 18693;
-
-static uint32 ReadyRitualRank(Player* warlock)
-{
-    if (GetSoulShardCount(warlock) < 1)
-        return 0;
-
-    if (warlock->HasSpell(SPELL_RITUAL_OF_SOULS_R2))
-        return warlock->HasSpellCooldown(SPELL_RITUAL_OF_SOULS_R2) ? 0 : 2;
-    if (warlock->HasSpell(SPELL_RITUAL_OF_SOULS_R1))
-        return warlock->HasSpellCooldown(SPELL_RITUAL_OF_SOULS_R1) ? 0 : 1;
-    return 0;
-}
-
-// The soulwell hands out improved stones only when its owner has Improved Healthstone, so the
-// talented warlock should be the one casting. A higher ritual rank still wins over the talent.
-static bool IsPreferredRitualCaster(Player* bot, Group* group)
-{
-    Player* best = nullptr;
-    uint32 bestPreference = 0;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || member->getClass() != CLASS_WARLOCK || !member->IsAlive() || member->IsInCombat())
-            continue;
-        if (member != bot && !bot->IsWithinDistInMap(member, RITUAL_NEARBY_RANGE))
-            continue;
-
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (!memberAI || !memberAI->HasStrategy("ritualofsouls", BOT_STATE_NON_COMBAT))
-            continue;
-
-        uint32 ritualRank = ReadyRitualRank(member);
-        if (!ritualRank)
-            continue;
-
-        uint32 talentRank = member->HasAura(SPELL_IMPROVED_HEALTHSTONE_R2) ? 2
-                            : (member->HasAura(SPELL_IMPROVED_HEALTHSTONE_R1) ? 1 : 0);
-        uint32 preference = ritualRank * 3 + talentRank;  // talent rank is 0-2, ritual rank decides first
-        if (best && (preference < bestPreference ||
-                     (preference == bestPreference && best->GetGUID() < member->GetGUID())))
-            continue;
-
-        best = member;
-        bestPreference = preference;
-    }
-
-    return best == bot;
-}
-
 bool RitualOfSoulsTrigger::IsActive()
 {
-    if (bot->IsInCombat())
+    if (bot->IsInCombat() || !bot->GetGroup())
         return false;
 
-    Group* group = bot->GetGroup();
-    if (!group)
+    if (bot->GetGameObject(SPELL_RITUAL_OF_SOULS_R2) || bot->GetGameObject(SPELL_RITUAL_OF_SOULS_R1))
         return false;
 
-    if (GetSoulShardCount(bot) < 1)
-        return false;
-
-    // Don't re-cast while a ritual or soulwell (ours or a group member's) is already up.
-    if (FindGroupRitualPortal(botAI, false) || FindGroupSoulwell(botAI))
-        return false;
-
-    if (!IsPreferredRitualCaster(bot, group))
-        return false;
-
-    uint32 nearbyMembers = 0;  // alive, out of combat, in range (incl. self) -> potential participants
-    uint32 missing = 0;        // of those, how many lack a healthstone
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->IsInCombat())
-            continue;
-        if (member != bot && !bot->IsWithinDistInMap(member, RITUAL_NEARBY_RANGE))
-            continue;
-
-        ++nearbyMembers;
-        if (!HasAnyHealthstone(member))
-            ++missing;
-    }
-
-    return nearbyMembers >= RITUAL_MIN_PARTICIPANTS && missing >= RITUAL_MIN_MISSING;
+    return ReadyRitualOfSoulsRank(bot) && AI_VALUE(bool, "should cast ritual of souls");
 }

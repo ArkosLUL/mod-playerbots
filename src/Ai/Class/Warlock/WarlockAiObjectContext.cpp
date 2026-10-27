@@ -385,10 +385,12 @@ public:
     WarlockValueContextInternal()
     {
         creators["seed of corruption target"] = &WarlockValueContextInternal::seed_of_corruption_target;
+        creators["should cast ritual of souls"] = &WarlockValueContextInternal::should_cast_ritual_of_souls;
     }
 
 private:
     static UntypedValue* seed_of_corruption_target(PlayerbotAI* botAI) { return new SeedOfCorruptionTargetValue(botAI); }
+    static UntypedValue* should_cast_ritual_of_souls(PlayerbotAI* botAI) { return new ShouldCastRitualOfSoulsValue(botAI); }
 };
 
 SharedNamedObjectContextList<Strategy> WarlockAiObjectContext::sharedStrategyContexts;

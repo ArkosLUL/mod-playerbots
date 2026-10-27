@@ -21,8 +21,7 @@ public:
     void InitTriggers(std::vector<TriggerNode*>& triggers) override;
 };
 
-// Warlock variant of the "ritualofsouls" strategy: everything the base strategy does (join a
-// group ritual, grab from the soulwell) plus auto-casting the ritual itself.
+// Replaces the base "ritualofsouls" strategy for warlocks and also casts the ritual.
 class WarlockRitualOfSoulsStrategy : public RitualOfSoulsStrategy
 {
 public:

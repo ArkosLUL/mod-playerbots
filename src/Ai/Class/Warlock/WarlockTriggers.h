@@ -131,12 +131,10 @@ public:
     HasHealthstoneTrigger(PlayerbotAI* botAI) : WarlockConjuredItemTrigger(botAI, "healthstone") {}
 };
 
-// Active when enough nearby, out-of-combat group members lack a healthstone to make a Ritual of
-// Souls worthwhile (and the warlock has a soul shard and no ritual/soulwell is already up).
 class RitualOfSoulsTrigger : public Trigger
 {
 public:
-    RitualOfSoulsTrigger(PlayerbotAI* botAI) : Trigger(botAI, "group needs healthstones", 5) {}
+    RitualOfSoulsTrigger(PlayerbotAI* botAI) : Trigger(botAI, "group needs healthstones", 2) {}
     bool IsActive() override;
 };
 
