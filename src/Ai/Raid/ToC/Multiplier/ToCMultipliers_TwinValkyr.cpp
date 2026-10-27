@@ -8,9 +8,9 @@
 #include "HunterActions.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
 #include "RogueActions.h"
 #include "ToCEncounterGate.h"
-#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_TwinValkyr.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -134,10 +134,10 @@ void AddToCTwinValkyrMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& m
 
 // A DPS bot's cooldowns stack with lust. Healers hold only Power Infusion, a rule of the encounter's,
 // and tanks nothing.
-ToCBurstWindow ToCTwinValkyrBurstWindow(PlayerbotAI* botAI)
+RaidBurstWindow ToCTwinValkyrBurstWindow(PlayerbotAI* botAI)
 {
-    ToCBurstWindow window;
+    RaidBurstWindow window;
     window.allowLust = TwinValkyrLustWindowOpen(botAI);
-    window.allowAll = !IsToCDpsBot(botAI->GetBot()) || !TwinValkyrBurstHeld(botAI);
+    window.allowAll = !IsRaidDpsBot(botAI->GetBot()) || !TwinValkyrBurstHeld(botAI);
     return window;
 }

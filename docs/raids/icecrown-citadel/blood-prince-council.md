@@ -1,8 +1,8 @@
 # Blood Prince Council
 
-Boss id 7, trace slug `blood-prince-council`, prefix `bpc.` ([README](README.md)). Code:
-`Action/ICCActions_BPC.cpp`, the `icc bpc` nodes, `IccBpcAssistMultiplier`. Mechanics:
-`boss_blood_prince_council.cpp`.
+Boss id 7, trace slug `blood-prince-council`, prefix `bpc.` ([README](README.md)). Code: stem
+`BloodPrinces` (`src/Ai/Raid/ICC/*/ICC*_BloodPrinces.*`), the `icc bpc` nodes,
+`IccBpcAssistMultiplier`. Mechanics: `boss_blood_prince_council.cpp`.
 
 ## Mechanics
 
@@ -76,11 +76,14 @@ returns ([pitfalls.md](../../engine/pitfalls.md#detection-that-never-fires)).
 
 ## Blood Prince trash
 
-Boss id 14, slug `blood-prince-trash`, prefix `bpc.`. The state goes `NOT_STARTED` then `DONE` when
-the fourth of the Darkfallen Advisor 37571, Archmage 37664, Blood Knight 37595 and Noble 37663 that
-guard the Crimson Hall door dies, never `IN_PROGRESS`. None is boss-flagged and nothing calls
-`MarkPull` for them, so **no trace opens under this slug**; the `DONE` only closes whatever trace is
-open, as `kill`. The strategy has no trash code.
+Boss id 14, slug `blood-prince-trash`, prefix `bpc.`. The state goes `NOT_STARTED` then `DONE` once
+the four spawns guarding the Crimson Hall door (201479, 201482, 201646, 201659) die, never
+`IN_PROGRESS`, and none of the trash is boss-flagged. So a `UnitScript` in `Util/ICCScripts.cpp`
+opens the trace with `RaidObs::MarkPull(map, creature, "blood-prince-trash")` when any spawn of the
+Darkfallen Advisor 37571, Archmage 37664, Blood Knight 37595 or Noble 37663 engages a player (18
+spawns on 631). The pull that kills the last door guard closes on the `DONE`, as `kill`; any other
+closes `idle`. A pet's pull is traced only once one of them engages a player: each fires the hook
+once, at `Creature::AtEngage`, on its first target. The strategy has no trash code.
 
 ## What a trace answers
 

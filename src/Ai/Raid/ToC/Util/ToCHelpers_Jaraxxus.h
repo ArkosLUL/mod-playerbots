@@ -6,8 +6,8 @@
 
 #include "PlayerbotAI.h"
 #include "Position.h"
+#include "RaidDefensive.h"
 #include "ToCData.h"
-#include "ToCHelpers_Defensive.h"
 
 namespace TrialOfTheCrusaderHelpers
 {
@@ -77,10 +77,10 @@ Unit* GetIncinerateFleshTarget(PlayerbotAI* botAI);
 // The Burning Inferno coming or running, as the raid takes it: from an Incinerate Flesh within
 // JARAXXUS_INFERNO_LEAD_MS of running out with absorb left, or a Burning Inferno on a member. Nether
 // Power's stacks count in the damage.
-bool GetJaraxxusBurningInferno(PlayerbotAI* botAI, ToCPredictedHit& hit);
+bool GetJaraxxusBurningInferno(PlayerbotAI* botAI, RaidPredictedHit& hit);
 // The same hit as this bot takes it once its own Burning Inferno runs, else the raid's; and the rest of
 // the trail on a Legion Flame carrier under JARAXXUS_CARRIER_DEFENSIVE_PCT.
-bool GetJaraxxusPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
+bool GetJaraxxusPersonalHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
 // Before a predicted Burning Inferno lands: when the class nodes for the raid cooldowns are held
 bool JaraxxusRaidCoverHeld(PlayerbotAI* botAI);
 // A Burning Inferno coming or running, or the bot carrying Legion Flame: what Evasion and Deterrence

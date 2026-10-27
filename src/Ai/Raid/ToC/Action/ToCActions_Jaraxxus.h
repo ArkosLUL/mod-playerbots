@@ -8,6 +8,7 @@
 #include "MovementActions.h"
 #include "NamedObjectContext.h"
 #include "Position.h"
+#include "RaidDirectTargeting.h"
 #include "ToCActions_Shared.h"
 
 class JaraxxusInterruptFelFireballAction : public Action
@@ -119,11 +120,11 @@ public:
     bool Execute(Event event) override;
 };
 
-class JaraxxusDpsTargetAction : public ToCDirectAttackAction
+class JaraxxusDpsTargetAction : public RaidDirectAttackAction
 {
 public:
     JaraxxusDpsTargetAction(
-        PlayerbotAI* botAI, std::string const name = "jaraxxus dps target") : ToCDirectAttackAction(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "jaraxxus dps target") : RaidDirectAttackAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 

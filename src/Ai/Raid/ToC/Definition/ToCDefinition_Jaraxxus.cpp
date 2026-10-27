@@ -1,8 +1,8 @@
 #include "ToCDefinitions.h"
 
 #include "PlayerbotAI.h"
+#include "RaidDefensive.h"
 #include "ToCEncounterGate.h"
-#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_Jaraxxus.h"
 #include "ToCMultipliers_Jaraxxus.h"
 
@@ -34,7 +34,7 @@ void DefineJaraxxus(EncounterBuilder& e)
                 Family::MoveRandom | Family::Charge,
             {"reach melee"});
     // the cover node spends them on the Burning Inferno itself, the class nodes would go early or twice
-    e.Block("jaraxxus raid cover hold", Role::Any, JaraxxusRaidCoverHeld, 0, ToCRaidCoverClassNodes());
+    e.Block("jaraxxus raid cover hold", Role::Any, JaraxxusRaidCoverHeld, 0, RaidCoverClassNodes());
     // neither does anything against fire on everyone or a burning trail
     e.Block("jaraxxus magic button guard", Role::Any, JaraxxusMagicHitOnBot, 0, {"evasion", "deterrence"});
 

@@ -22,12 +22,13 @@ void DefineFestergut(EncounterBuilder& e)
     e.Node<IccFestergutSporeTrigger, IccFestergutSporeAction>(ACTION_MOVE + 5);
     e.Node<IccFestergutAvoidMalleableGooTrigger, IccFestergutAvoidMalleableGooAction>(ACTION_RAID + 7);
 
+    // Open, not live: the state only moves once Putricide reaches his balcony, about 7 s into the pull.
     e.Multiplier<IccFestergutMultiplier>(Family::AnyAction);
 }
 }  // namespace
 
 EncounterDefinition const& IccFestergutDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_FESTERGUT, IccPassThroughGate, "festergut", &DefineFestergut);
+    static EncounterDefinition const definition(ICC_BOSS_FESTERGUT, BossStateGate, "festergut", &DefineFestergut);
     return definition;
 }

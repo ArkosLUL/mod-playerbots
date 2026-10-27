@@ -24,13 +24,13 @@ void DefineBloodPrinces(EncounterBuilder& e)
     e.Node<IccBpcKineticBombTrigger, IccBpcKineticBombAction>(ACTION_RAID + 6);
     e.Node<IccBpcBallOfFlameTrigger, IccBpcBallOfFlameAction>(ACTION_RAID + 7);
 
-    e.Multiplier<IccBpcAssistMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<IccBpcAssistMultiplier>(Family::AnyAction);
 }
 }  // namespace
 
 EncounterDefinition const& IccBloodPrincesDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_BLOOD_PRINCE_COUNCIL, IccPassThroughGate,
+    static EncounterDefinition const definition(ICC_BOSS_BLOOD_PRINCE_COUNCIL, BossStateGate,
                                                 "blood-prince-council", &DefineBloodPrinces);
     return definition;
 }

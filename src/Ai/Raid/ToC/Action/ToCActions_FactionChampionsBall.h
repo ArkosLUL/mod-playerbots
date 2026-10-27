@@ -3,13 +3,13 @@
 
 #include "Action.h"
 #include "NamedObjectContext.h"
+#include "RaidDirectTargeting.h"
 #include "ToCActions_NorthrendBeasts.h"
-#include "ToCActions_Shared.h"
 
-class FactionChampionsHoldAction : public ToCDirectAttackAction
+class FactionChampionsHoldAction : public RaidDirectAttackAction
 {
 public:
-    FactionChampionsHoldAction(PlayerbotAI* botAI) : ToCDirectAttackAction(botAI, "faction champions hold") {}
+    FactionChampionsHoldAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, "faction champions hold") {}
     bool Execute(Event event) override;
 };
 

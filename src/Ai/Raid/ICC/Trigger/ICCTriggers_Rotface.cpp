@@ -14,12 +14,7 @@
 bool IccRotfaceTankPositionTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "rotface");
-    if (!boss || !(PlayerbotAI::IsTank(bot) || PlayerbotAI::IsMelee(bot)))
-        return false;
-
-    IccStripExperienced(bot);
-
-    return true;
+    return boss && (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsMelee(bot));
 }
 
 bool IccRotfaceGroupPositionTrigger::IsActive()

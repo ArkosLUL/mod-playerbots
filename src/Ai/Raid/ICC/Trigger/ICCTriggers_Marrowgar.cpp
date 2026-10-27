@@ -12,11 +12,5 @@
 
 bool IccLmTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "lord marrowgar");
-    if (!boss)
-        return false;
-
-    IccStripExperienced(bot);
-
-    return true;
+    return AI_VALUE2(Unit*, "find target", "lord marrowgar") != nullptr;
 }

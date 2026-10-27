@@ -121,10 +121,10 @@ Nodes keyed on these, each live on a difficulty only through the remap or all fo
 `Multiplier/ToCMultipliers_<Stem>`, `Util/ToCHelpers_<Stem>`. `NorthrendBeasts` holds what the three
 beasts share, `Shared` what several encounters use. `Definition/ToCDefinition_<Encounter>.cpp` holds
 an encounter's rules: an `EncounterDefinition` with gate `ToCGate` and no rows or tick, its accessor
-declared in `Definition/ToCDefinitions.h`. The raid-wide stems `Staging` and `ResistAura`
-([below](#pre-pull-staging)) belong to no encounter: their names take no encounter prefix, so their
-triggers run ungated, and their definitions take `ToCRaidWideGate` (always open, never live), id
-`ToCEncounter::None` and no trace name.
+declared in `Definition/ToCDefinitions.h`. The raid-wide stems `Staging`, `ResistAura`
+([below](#pre-pull-staging)) and `Opener` ([below](#opener-hold)) belong to no encounter: their names
+take no encounter prefix, so their triggers run ungated, and their definitions take `ToCRaidWideGate`
+(always open, never live), id `ToCEncounter::None` and no trace name.
 
 **Seams.** A boss gains a trigger, action or multiplier by editing only its own stem:
 
@@ -135,9 +135,11 @@ triggers run ungated, and their definitions take `ToCRaidWideGate` (always open,
 - rule: the encounter's Definition file, wired in `ToCStrategy::InitMultipliers` right after its
   stem multipliers, since a trace credits the first rule or multiplier that zeroes an action;
 - burst row: each encounter stem (`NorthrendBeasts`, `Jaraxxus`, `FactionChampions`, `TwinValkyr`,
-  `Anubarak`) answers `ToC<Stem>BurstWindow` with a `ToCBurstWindow`. `ToCBurstWindowMultiplier`
-  (`Multiplier/ToCMultipliers_Shared.{h,cpp}`) applies the live encounter's row to in-combat burst
-  cooldowns, mana-return ones exempt: `allowLust` to Bloodlust/Heroism, `allowAll` to the rest.
+  `Anubarak`) answers `ToC<Stem>BurstWindow` with a `RaidBurstWindow`, and `ToCLiveBurstWindow`
+  (`Multiplier/ToCMultipliers_Shared.{h,cpp}`) picks the live encounter's.
+  `RaidBurstWindowMultiplier` (`src/Ai/Raid/RaidBurstWindow.{h,cpp}`, named `toc burst window`)
+  applies that row to in-combat burst cooldowns, mana-return ones exempt: `allowLust` to
+  Bloodlust/Heroism, `allowAll` to the rest.
   Every row ANDs with the shared tank-held-boss gate.
 
 The root only dispatches: `ToCStrategy.cpp` calls every stem's node and multiplier list and every
@@ -181,12 +183,21 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
 - Shared bases (`Action/ToCActions_Shared.h`): `ToCMainTankHoldAction::DragBossToAnchor` backs the
   tank 5 yd at a time toward an anchor while it tanks the boss and stands more than 12 yd from it;
   the boss follows, so it settles up to melee reach past that, possibly on a hazard. Where the spot
-  matters, measure arrival on the boss (Anub'arak's pre-submerge drag). `ToCDirectAttackAction` is
-  the base of every resolver action ([below](#targeting-is-direct-no-raid-icons)).
-- Shared helpers (`Util/ToCHelpers_Shared.h`): `IsToCDpsBot` (not a tank by role or spec, not a
-  healer) is the role every DPS resolver and its rule test; `GetToCHumanSkull` reads the human
-  skull and `ToCPetOffPick` is the resolver triggers' pet clause
-  ([below](#targeting-is-direct-no-raid-icons)).
+  matters, measure arrival on the boss (Anub'arak's pre-submerge drag).
+- Raid-wide helpers in `src/Ai/Raid/` ([below](#targeting-is-direct-no-raid-icons)):
+  - `RaidDirectTargeting`: `RaidDirectAttackAction` is the base of every resolver action,
+    `GetRaidHumanSkull` reads the human skull, `RaidPetOffPick` is the resolver triggers' pet clause,
+    `RaidRestoreLegacyRti` resets old `rti` tags.
+  - `RaidCombatHelpers`: `IsRaidDpsBot` (not a tank by role or spec, not a healer) is the role every
+    DPS resolver and its rule test; also `IsRaidAreaDamage` and `CastRaidThroughputHeal`.
+  - `Util/ToCHelpers_Shared.h` aliases `IsToCDpsBot`, `GetToCHumanSkull` and `ToCPetOffPick` to the
+    raid-wide names for `ToCHelpers_Anubarak.cpp` and `ToCTriggers_Anubarak.cpp`, which still call
+    them.
+  - `RaidDefensive`, `RaidOpener` and `RaidResistAura` take map 649 and their `toc.` keys from ToC
+    configs: `TOC_DEFENSIVE_SCOPE` (`Util/ToCData.cpp`), `TOC_OPENER` (plus the live encounter's
+    bosses, `Util/ToCHelpers_Opener.h`), `TOC_RESIST_AURA` (plus the wanted schools and whether fire
+    wants Aura Mastery, `Util/ToCHelpers_ResistAura.h`). The `Opener` and `ResistAura` stems hold
+    only that config and the context entries that build the raid-wide classes under ToC's names.
 - `AvoidCreatureClusterAction` is the legacy `FleePosition` dodge, capped at
   `Playerbots.FleeDistance` (5 yd), with no caller left. A new hazard uses `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
   [pitfalls.md](../../engine/pitfalls.md).
@@ -200,8 +211,8 @@ Bots mark no kill target.
 
 - **Resolver.** One function per encounter returns the bot's pick, or null outside its window or
   role, and notes it through `RaidObs::NoteDerived` (change-only, per bot). Its trigger fires while
-  the pick exists and isn't `current target`, or the pet is off it (`ToCPetOffPick`); its action
-  derives from `ToCDirectAttackAction` and calls `AttackDirect(pick)`.
+  the pick exists and isn't `current target`, or the pet is off it (`RaidPetOffPick`); its action
+  derives from `RaidDirectAttackAction` and calls `AttackDirect(pick)`.
 - **Rule.** The encounter's DPS `OwnTargeting` predicate is `resolver(botAI) != nullptr`, so rule
   and resolver cover the same window by construction. This breaks the raid-wide
   [whole fight](../README.md#targeting-the-whole-fight) rule on purpose: no ToC resolver ends in a
@@ -213,7 +224,7 @@ Bots mark no kill target.
   trigger's pet clause sends back a resummoned, revived or drawn-off pet at no tick's cost.
 - **Pre-pull.** Every resolver branch needs an in-combat unit: `Attack()` has no out-of-combat guard
   and reaches 100 yd ([kologarn.md](../ulduar/kologarn.md)).
-- **Human skull.** Each resolver's first branch is `GetToCHumanSkull`: the group skull on a unit of
+- **Human skull.** Each resolver's first branch is `GetRaidHumanSkull`: the group skull on a unit of
   the encounter that is alive, in combat, selectable and attackable by the bot. Bots here place no
   skull, so it's a player's, unless a bot runs `mark rti`. `attack rti target` is wired into no
   generic strategy, so without this read a player's mark does nothing.
@@ -222,7 +233,7 @@ Bots mark no kill target.
   choice; Faction Champions zeroes that pipeline while live and casts its own CC duty.
 - **Legacy `rti`.** `rti` is saved per bot, so the strategy's first `OnTick` on map 649 resets the
   tags older builds set (`cross`, `square`, `triangle`, `diamond`) to `skull`
-  (`ToCRestoreLegacyRti`). Once per strategy object, so a player's later `rti` order sticks until
+  (`RaidRestoreLegacyRti`). Once per strategy object, so a player's later `rti` order sticks until
   the strategy is rebuilt.
 - **No icon clear at a pull.** Group icons live in memory only (`Group::SetTargetIcon` never writes
   the DB), so no icon from an older build survives a restart, and a clear could only remove a
@@ -394,8 +405,8 @@ The `ResistAura` stem picks:
 
 Every encounter but the champions: a DPS bot holds its damage on a boss (Gormok, Acidmaw,
 Dreadscale, Icehowl, Jaraxxus, Fjola, Eydis, Anub'arak) until a group tank has been its victim for
-2 s straight, or 5 s after it came into combat (`ToCHelpers_Opener`). Once a boss is free it stays
-free until it leaves combat.
+2 s straight, or 5 s after it came into combat (`RaidOpener`, bosses from `ToCOpenerBosses`). Once a
+boss is free it stays free until it leaves combat.
 
 - `toc opener hold` zeroes spells and attacks on a held boss and area damage within 30 yd of one.
   The first pick of the boss goes through, so melee walk in; `toc opener stop swing` ends the swing

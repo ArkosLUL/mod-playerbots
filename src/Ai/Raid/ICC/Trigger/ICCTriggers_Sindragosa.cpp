@@ -9,9 +9,7 @@
 #include "ICCHelpers_Shared.h"
 #include "ICCHelpers_Sindragosa.h"
 #include "ObjectAccessor.h"
-#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
-#include "RaidDifficulty.h"
 #include "RaidObs.h"
 #include "Trigger.h"
 
@@ -22,33 +20,6 @@ bool IccSindragosaGroupPositionTrigger::IsActive()
         return false;
 
     IccSindragosaPhaseId const phase = IccSindragosaPhase(bot, boss);
-    Difficulty diff = GetRaidMapDifficulty(bot);
-
-    if (sPlayerbotAIConfig.EnableICCBuffs && boss->IsInCombat() && diff &&
-        (diff == RAID_DIFFICULTY_10MAN_HEROIC || diff == RAID_DIFFICULTY_25MAN_HEROIC))
-    {
-        //-------CHEAT-------
-        // Apply to every alive group member so real players benefit too,
-        if (Group* group = bot->GetGroup())
-        {
-            for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
-            {
-                Player* member = itr->GetSource();
-                if (!member || !member->IsAlive() || !member->IsInWorld())
-                    continue;
-
-                IccApplyHeroicBuffToMember(bot, member, false, true, "sg.heroicbuff");
-
-                if (PlayerbotAI::IsMainTank(member) && boss->GetVictim() != member &&
-                    !member->HasAura(SPELL_SPITEFULL_FURY))
-                {
-                    member->AddAura(SPELL_SPITEFULL_FURY, member);
-                    IccNoteCheat(bot, "sg.spitefulfury", member);
-                }
-            }
-        }
-        //-------CHEAT-------
-    }
 
     bool const overAirStation = IccSindragosaOverAirStation(bot, boss, 50.0f);
 

@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "Multiplier.h"
-#include "ToCMultipliers_Shared.h"
+#include "RaidBurstWindow.h"
 
 // Keep tanks anchored on Jaraxxus and his adds instead of drifting with the combat formation
 class JaraxxusControlTankMovementMultiplier : public Multiplier
@@ -51,6 +51,6 @@ public:
 
 void AddToCJaraxxusMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
-ToCBurstWindow ToCJaraxxusBurstWindow(PlayerbotAI* botAI);
+RaidBurstWindow ToCJaraxxusBurstWindow(PlayerbotAI* botAI);
 
 #endif

@@ -1,10 +1,11 @@
 #include "ToCTriggers_TwinValkyr.h"
 #include "ToCData.h"
 #include "ToCEncounterGate.h"
-#include "ToCHelpers_Defensive.h"
-#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_TwinValkyr.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
+#include "RaidDefensive.h"
+#include "RaidDirectTargeting.h"
 #include "Strategy.h"
 #include "Unit.h"
 
@@ -42,14 +43,16 @@ bool TwinValkyrOrbIncomingTrigger::IsActive()
 
 bool TwinValkyrVortexRaidCoverTrigger::IsActive()
 {
-    ToCPredictedHit hit;
-    return GetToCRaidCover(botAI, GetTwinVortexRaidHit(botAI, hit) ? &hit : nullptr) != ToCRaidCover::None;
+    RaidPredictedHit hit;
+    return GetRaidCover(botAI, TOC_DEFENSIVE_SCOPE, GetTwinVortexRaidHit(botAI, hit) ? &hit : nullptr) !=
+           RaidCover::None;
 }
 
 bool TwinValkyrVortexDefensiveTrigger::IsActive()
 {
-    ToCPredictedHit hit;
-    return static_cast<bool>(GetToCPersonalDefensive(botAI, GetTwinVortexHit(botAI, hit) ? &hit : nullptr));
+    RaidPredictedHit hit;
+    return static_cast<bool>(
+        GetRaidPersonalDefensive(botAI, TOC_DEFENSIVE_SCOPE, GetTwinVortexHit(botAI, hit) ? &hit : nullptr));
 }
 
 bool TwinValkyrNeedsBaseEssenceTrigger::IsActive()
@@ -94,11 +97,11 @@ bool TwinValkyrDoorStandTrigger::IsActive() { return TwinValkyrDoorWalkDue(botAI
 
 bool TwinValkyrDpsTargetTrigger::IsActive()
 {
-    if (!IsToCDpsBot(bot) || !ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr))
+    if (!IsRaidDpsBot(bot) || !ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr))
         return false;
 
     Unit* twin = GetTwinDpsTarget(botAI);
-    return twin && (AI_VALUE(Unit*, "current target") != twin || ToCPetOffPick(botAI, twin));
+    return twin && (AI_VALUE(Unit*, "current target") != twin || RaidPetOffPick(botAI, twin));
 }
 
 void AddToCTwinValkyrTriggerNodes(std::vector<TriggerNode*>& triggers)

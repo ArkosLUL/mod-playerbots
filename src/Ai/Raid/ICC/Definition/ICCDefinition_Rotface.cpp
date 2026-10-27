@@ -23,12 +23,13 @@ void DefineRotface(EncounterBuilder& e)
     e.Node<IccRotfaceMoveAwayFromExplosionTrigger, IccRotfaceMoveAwayFromExplosionAction>(ACTION_RAID + 7);
     e.Node<IccRotfaceAvoidVileGasTrigger, IccRotfaceAvoidVileGasAction>(ACTION_RAID + 8);
 
+    // Open, not live: the state only moves once Putricide reaches his balcony, about 7 s into the pull.
     e.Multiplier<IccRotfaceMultiplier>(Family::AnyAction);
 }
 }  // namespace
 
 EncounterDefinition const& IccRotfaceDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_ROTFACE, IccPassThroughGate, "rotface", &DefineRotface);
+    static EncounterDefinition const definition(ICC_BOSS_ROTFACE, BossStateGate, "rotface", &DefineRotface);
     return definition;
 }

@@ -6,6 +6,7 @@
 #include "ToCData.h"
 
 class Creature;
+struct RaidPredictedHit;
 
 namespace TrialOfTheCrusaderHelpers
 {
@@ -31,8 +32,6 @@ constexpr float TWIN_ORB_DODGE_SEARCH_RADIUS = 12.0f;
 constexpr float TWIN_ORB_HORIZON = 7.0f;
 // Popping an orb of your own colour still hits other-colour allies in the blast
 constexpr float TWIN_ORB_SPLASH_ALLY_RADIUS = 7.0f;
-
-struct ToCPredictedHit;
 
 enum class TwinColour : uint8
 {
@@ -143,9 +142,9 @@ bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI);
 bool TwinValkyrFetchDue(PlayerbotAI* botAI, Unit* twin);
 
 // The running Vortex for a bot keeping its colour through it
-bool GetTwinVortexHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
+bool GetTwinVortexHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
 // The running Vortex while the whole raid keeps Dark through a normal Light Vortex
-bool GetTwinVortexRaidHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
+bool GetTwinVortexRaidHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
 // Before that one's first tick
 bool TwinValkyrRaidCoverHeld(PlayerbotAI* botAI);
 

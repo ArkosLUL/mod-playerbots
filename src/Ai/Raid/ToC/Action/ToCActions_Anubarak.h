@@ -7,6 +7,7 @@
 #include "NamedObjectContext.h"
 #include "ObjectGuid.h"
 #include "Position.h"
+#include "RaidDirectTargeting.h"
 #include "RaidRedirectThreat.h"
 #include "ToCActions_Shared.h"
 #include "ToCHelpers_Anubarak.h"
@@ -109,11 +110,11 @@ public:
     bool Execute(Event event) override;
 };
 
-class AnubarakDpsTargetAction : public ToCDirectAttackAction
+class AnubarakDpsTargetAction : public RaidDirectAttackAction
 {
 public:
     AnubarakDpsTargetAction(
-        PlayerbotAI* botAI, std::string const name = "anubarak dps target") : ToCDirectAttackAction(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "anubarak dps target") : RaidDirectAttackAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 

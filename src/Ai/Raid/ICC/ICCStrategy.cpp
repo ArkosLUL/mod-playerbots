@@ -7,6 +7,8 @@
 #include "ICCStrategy.h"
 
 #include "ICCDefinitions.h"
+#include "ICCSeams.h"
+#include "RaidBurstWindow.h"
 
 void RaidIccStrategy::OnTick()
 {
@@ -39,4 +41,6 @@ void RaidIccStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     IccSindragosaDefinition().AddMultipliers(botAI, multipliers);
     IccLichKingDefinition().AddMultipliers(botAI, multipliers);
     IccGunshipDefinition().AddMultipliers(botAI, multipliers);
+    IccRaidWideDefinition().AddMultipliers(botAI, multipliers);
+    multipliers.push_back(new RaidBurstWindowMultiplier(botAI, "icc burst window", &IccLiveBurstWindow));
 }

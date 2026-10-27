@@ -23,13 +23,13 @@ void DefineSaurfang(EncounterBuilder& e)
 
     // Boss taunt on Rune of Blood is handled inside icc dbs tank position action
 
-    e.Multiplier<IccAddsDbsMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<IccAddsDbsMultiplier>(Family::AnyAction);
 }
 }  // namespace
 
 EncounterDefinition const& IccSaurfangDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_DEATHBRINGER_SAURFANG, IccPassThroughGate,
+    static EncounterDefinition const definition(ICC_BOSS_DEATHBRINGER_SAURFANG, BossStateGate,
                                                 "deathbringer-saurfang", &DefineSaurfang);
     return definition;
 }

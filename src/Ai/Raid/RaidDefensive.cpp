@@ -1,9 +1,16 @@
-#include "ToCHelpers_Defensive.h"
+/*
+ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
+ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
+ * or (at your option) any later version.
+ */
+
+#include "RaidDefensive.h"
 
 #include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <iterator>
+#include <optional>
 
 #include "BossAuraTriggers.h"
 #include "EncounterHelpers.h"
@@ -22,10 +29,7 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
-#include "ToCData.h"
 
-namespace TrialOfTheCrusaderHelpers
-{
 namespace
 {
 constexpr uint32 SPELL_DIVINE_SACRIFICE = 64205;
@@ -56,7 +60,7 @@ constexpr uint32 DEAL_RETRY_MS = 250;
 
 struct CoverSpec
 {
-    ToCRaidCover cover;
+    RaidCover cover;
     uint8 playerClass;
     char const* name;
     bool channel;
@@ -68,11 +72,11 @@ struct CoverSpec
 // Deal order, and a bot takes one at most: the aura holder gets Aura Mastery before Divine Sacrifice
 // could claim it.
 constexpr CoverSpec COVERS[] = {
-    {ToCRaidCover::AuraMastery, CLASS_PALADIN, "aura mastery", false},
-    {ToCRaidCover::DivineSacrifice, CLASS_PALADIN, "divine sacrifice", false},
-    {ToCRaidCover::AntiMagicZone, CLASS_DEATH_KNIGHT, "anti magic zone", false, SPELL_ANTI_MAGIC_ZONE},
-    {ToCRaidCover::DivineHymn, CLASS_PRIEST, "divine hymn", true},
-    {ToCRaidCover::Tranquility, CLASS_DRUID, "tranquility", true},
+    {RaidCover::AuraMastery, CLASS_PALADIN, "aura mastery", false},
+    {RaidCover::DivineSacrifice, CLASS_PALADIN, "divine sacrifice", false},
+    {RaidCover::AntiMagicZone, CLASS_DEATH_KNIGHT, "anti magic zone", false, SPELL_ANTI_MAGIC_ZONE},
+    {RaidCover::DivineHymn, CLASS_PRIEST, "divine hymn", true},
+    {RaidCover::Tranquility, CLASS_DRUID, "tranquility", true},
 };
 constexpr size_t COVER_COUNT = std::size(COVERS);
 
@@ -83,23 +87,29 @@ struct DefensiveState
     uint32 startMs = 0;
     uint32 retryMs = 0;
     std::array<ObjectGuid, COVER_COUNT> holder{};
-    RaidObs::ObsGuidMap<ToCRaidCover> covers{"toc.cover"};
+    // Built on first use with the scope's key. Every raid shares the store, and an instance id
+    // belongs to one map, so an entry only ever sees one scope.
+    std::optional<RaidObs::ObsGuidMap<RaidCover>> covers;
 };
 
 RaidInstanceState<DefensiveState> defensiveStates;
 
-DefensiveState* StateFor(Player* bot)
+DefensiveState* StateFor(Player* bot, RaidDefensiveScope const& scope)
 {
-    if (!bot || !bot->IsInWorld() || bot->GetMapId() != TRIAL_OF_THE_CRUSADER_MAP_ID || !bot->GetInstanceId())
+    if (!bot || !bot->IsInWorld() || bot->GetMapId() != scope.mapId || !bot->GetInstanceId())
         return nullptr;
 
-    return &defensiveStates.For(bot->GetInstanceId());
+    DefensiveState& state = defensiveStates.For(bot->GetInstanceId());
+    if (!state.covers)
+        state.covers.emplace(scope.coverKey);
+
+    return &state;
 }
 
 // getMSTime wraps, so a time either side of now is read signed
 int32 MsFrom(uint32 from, uint32 to) { return static_cast<int32>(to - from); }
 
-CoverSpec const* SpecOf(ToCRaidCover cover)
+CoverSpec const* SpecOf(RaidCover cover)
 {
     for (CoverSpec const& spec : COVERS)
         if (spec.cover == cover)
@@ -132,7 +142,7 @@ std::vector<Player*> MembersInInstance(Player* bot)
 
 // What the hit takes off the member: its average resistance and the damage taken modifiers up now, a
 // running Divine Guardian or Barkskin included
-float ExpectedDamage(Player* member, ToCPredictedHit const& hit)
+float ExpectedDamage(Player* member, RaidPredictedHit const& hit)
 {
     if (member->IsImmunedToDamage(hit.school))
         return 0.0f;
@@ -147,7 +157,7 @@ float ExpectedDamage(Player* member, ToCPredictedHit const& hit)
 
 bool EndsUnderFloor(Player* member, float expected)
 {
-    float const floor = member->GetMaxHealth() * TOC_DEFENSIVE_FLOOR_PCT / 100.0f;
+    float const floor = member->GetMaxHealth() * RAID_DEFENSIVE_FLOOR_PCT / 100.0f;
     return static_cast<float>(member->GetHealth()) - expected < floor;
 }
 
@@ -185,7 +195,7 @@ uint32 CoverSpellId(Player* member, CoverSpec const& spec)
 
 // Could cast the cover from where it stands, its own cast check aside: a healer mid heal fails
 // CanCastSpell, and the pinned-cast break gets it out of that inside the window
-bool CoverReady(Player* member, CoverSpec const& spec, ToCPredictedHit const& hit,
+bool CoverReady(Player* member, CoverSpec const& spec, RaidPredictedHit const& hit,
                 std::vector<Player*> const& members)
 {
     if (member->getClass() != spec.playerClass || !GET_PLAYERBOT_AI(member))
@@ -202,21 +212,21 @@ bool CoverReady(Player* member, CoverSpec const& spec, ToCPredictedHit const& hi
 
     switch (spec.cover)
     {
-        case ToCRaidCover::AuraMastery:
+        case RaidCover::AuraMastery:
         {
             uint32 const aura = ResistAuraOf(hit.school);
             return aura && member->GetAuraOfRankedSpell(aura, member->GetGUID());
         }
-        case ToCRaidCover::DivineSacrifice:
-            return ToCHasDivineGuardian(member) && member->GetHealthPct() >= SACRIFICE_MIN_PCT;
-        case ToCRaidCover::AntiMagicZone:
+        case RaidCover::DivineSacrifice:
+            return RaidHasDivineGuardian(member) && member->GetHealthPct() >= SACRIFICE_MIN_PCT;
+        case RaidCover::AntiMagicZone:
         {
             SpellInfo const* zone = sSpellMgr->GetSpellInfo(SPELL_ANTI_MAGIC_ZONE_AURA);
             float const radius = zone ? zone->Effects[EFFECT_0].CalcRadius() : 0.0f;
             uint32 const inside = static_cast<uint32>(std::count_if(
                 members.begin(), members.end(),
                 [member, radius](Player* other) { return member->GetExactDist(other) <= radius; }));
-            return inside >= TOC_COVER_MIN_UNDER;
+            return inside >= RAID_COVER_MIN_UNDER;
         }
         default:
             return true;
@@ -228,7 +238,7 @@ void ClearDeal(DefensiveState& state)
     for (ObjectGuid& holder : state.holder)
     {
         if (!holder.IsEmpty())
-            state.covers.erase(holder);
+            state.covers->erase(holder);
 
         holder = ObjectGuid::Empty;
     }
@@ -237,7 +247,7 @@ void ClearDeal(DefensiveState& state)
     state.dealt = false;
 }
 
-void Deal(Player* bot, DefensiveState& state, ToCPredictedHit const& hit, uint32 now)
+void Deal(Player* bot, DefensiveState& state, RaidPredictedHit const& hit, uint32 now)
 {
     if (state.retryMs && MsFrom(state.retryMs, now) < 0)
         return;
@@ -246,7 +256,7 @@ void Deal(Player* bot, DefensiveState& state, ToCPredictedHit const& hit, uint32
     std::vector<Player*> const members = MembersInInstance(bot);
     auto const hurt = [&hit](Player* member) { return EndsUnderFloor(member, ExpectedDamage(member, hit)); };
     uint32 const under = static_cast<uint32>(std::count_if(members.begin(), members.end(), hurt));
-    if (under < TOC_COVER_MIN_UNDER)
+    if (under < RAID_COVER_MIN_UNDER)
         return;
 
     state.dealt = true;
@@ -272,25 +282,25 @@ void Deal(Player* bot, DefensiveState& state, ToCPredictedHit const& hit, uint32
             continue;
 
         state.holder[i] = best->GetGUID();
-        state.covers.Set(best->GetGUID(), spec.cover);
+        state.covers->Set(best->GetGUID(), spec.cover);
         taken.push_back(best->GetGUID());
     }
 }
 
-bool InWindow(ToCPredictedHit const& hit, uint32 now)
+bool InWindow(RaidPredictedHit const& hit, uint32 now)
 {
     int32 const fromStart = MsFrom(hit.startMs, now);
-    return fromStart >= -static_cast<int32>(TOC_COVER_WINDOW_LEAD_MS) &&
-           fromStart <= static_cast<int32>(TOC_COVER_WINDOW_LATE_MS);
+    return fromStart >= -static_cast<int32>(RAID_COVER_WINDOW_LEAD_MS) &&
+           fromStart <= static_cast<int32>(RAID_COVER_WINDOW_LATE_MS);
 }
 
-ToCRaidCover HeldBy(DefensiveState const& state, Player* bot)
+RaidCover HeldBy(DefensiveState const& state, Player* bot)
 {
     for (size_t i = 0; i < COVER_COUNT; ++i)
         if (state.holder[i] == bot->GetGUID())
             return COVERS[i].cover;
 
-    return ToCRaidCover::None;
+    return RaidCover::None;
 }
 
 bool ChannelsRaidCover(Player* bot)
@@ -366,13 +376,13 @@ uint32 ImmunityReady(Player* bot, uint32 spellId)
     return held ? 0 : spellId;
 }
 
-ToCPersonalPick PickPersonal(PlayerbotAI* botAI, ToCPredictedHit const& hit, char const*& why)
+RaidPersonalPick PickPersonal(PlayerbotAI* botAI, RaidPredictedHit const& hit, char const*& why)
 {
-    ToCPersonalPick pick;
+    RaidPersonalPick pick;
     Player* bot = botAI->GetBot();
     uint32 const now = getMSTime();
     int32 const fromStart = MsFrom(hit.startMs, now);
-    if (fromStart < -static_cast<int32>(TOC_PERSONAL_LEAD_MS) || fromStart > static_cast<int32>(hit.durationMs))
+    if (fromStart < -static_cast<int32>(RAID_PERSONAL_LEAD_MS) || fromStart > static_cast<int32>(hit.durationMs))
         return pick;
 
     if (ChannelsRaidCover(bot))
@@ -425,26 +435,26 @@ ToCPersonalPick PickPersonal(PlayerbotAI* botAI, ToCPredictedHit const& hit, cha
 }  // namespace
 
 // A passive talent is only in the talent map, never the spell map HasSpell reads
-bool ToCHasDivineGuardian(Player* paladin)
+bool RaidHasDivineGuardian(Player* paladin)
 {
     uint8 const spec = paladin->GetActiveSpec();
     return paladin->HasTalent(SPELL_DIVINE_GUARDIAN_RANK_1, spec) ||
            paladin->HasTalent(SPELL_DIVINE_GUARDIAN_RANK_2, spec);
 }
 
-ToCRaidCover GetToCRaidCover(PlayerbotAI* botAI, ToCPredictedHit const* hit)
+RaidCover GetRaidCover(PlayerbotAI* botAI, RaidDefensiveScope const& scope, RaidPredictedHit const* hit)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    DefensiveState* state = StateFor(bot);
+    DefensiveState* state = StateFor(bot, scope);
     if (!state)
-        return ToCRaidCover::None;
+        return RaidCover::None;
 
     if (!hit)
     {
         if (state->active)
             ClearDeal(*state);
 
-        return ToCRaidCover::None;
+        return RaidCover::None;
     }
 
     uint32 const now = getMSTime();
@@ -459,38 +469,38 @@ ToCRaidCover GetToCRaidCover(PlayerbotAI* botAI, ToCPredictedHit const* hit)
     if (!state->dealt)
         Deal(bot, *state, *hit, now);
 
-    ToCRaidCover const cover = HeldBy(*state, bot);
+    RaidCover const cover = HeldBy(*state, bot);
     CoverSpec const* spec = SpecOf(cover);
     if (!spec || !InWindow(*hit, now) || (spec->channel && hit->noChannel && hit->noChannel(bot)))
-        return ToCRaidCover::None;
+        return RaidCover::None;
 
     // on cooldown is cast: it was dealt only while ready
     uint32 const spellId = CoverSpellId(bot, *spec);
-    return spellId && !bot->HasSpellCooldown(spellId) ? cover : ToCRaidCover::None;
+    return spellId && !bot->HasSpellCooldown(spellId) ? cover : RaidCover::None;
 }
 
-uint32 ToCRaidCoverSpellId(PlayerbotAI* botAI, ToCRaidCover cover)
+uint32 RaidCoverSpellId(PlayerbotAI* botAI, RaidCover cover)
 {
     CoverSpec const* spec = SpecOf(cover);
     return spec && botAI ? CoverSpellId(botAI->GetBot(), *spec) : 0;
 }
 
-bool IsToCRaidCoverChannel(ToCRaidCover cover)
+bool IsRaidCoverChannel(RaidCover cover)
 {
     CoverSpec const* spec = SpecOf(cover);
     return spec && spec->channel;
 }
 
-void FinishToCRaidCover(PlayerbotAI* botAI, ToCRaidCover cover)
+void FinishRaidCover(PlayerbotAI* botAI, RaidCover cover)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (bot && cover == ToCRaidCover::DivineSacrifice && bot->HasAura(SPELL_DIVINE_GUARDIAN))
+    if (bot && cover == RaidCover::DivineSacrifice && bot->HasAura(SPELL_DIVINE_GUARDIAN))
         bot->RemoveAurasDueToSpell(SPELL_DIVINE_SACRIFICE);
 }
 
-bool ToCRaidHitLeadIn(ToCPredictedHit const& hit) { return MsFrom(hit.startMs, getMSTime()) < 0; }
+bool RaidHitLeadIn(RaidPredictedHit const& hit) { return MsFrom(hit.startMs, getMSTime()) < 0; }
 
-std::vector<std::string> ToCRaidCoverClassNodes()
+std::vector<std::string> RaidCoverClassNodes()
 {
     std::vector<std::string> names;
     for (CoverSpec const& spec : COVERS)
@@ -499,22 +509,21 @@ std::vector<std::string> ToCRaidCoverClassNodes()
     return names;
 }
 
-ToCPersonalPick GetToCPersonalDefensive(PlayerbotAI* botAI, ToCPredictedHit const* hit)
+RaidPersonalPick GetRaidPersonalDefensive(PlayerbotAI* botAI, RaidDefensiveScope const& scope,
+                                          RaidPredictedHit const* hit)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!StateFor(bot))
+    if (!StateFor(bot, scope))
         return {};
 
     char const* why = "none";
-    ToCPersonalPick const pick = hit ? PickPersonal(botAI, *hit, why) : ToCPersonalPick();
+    RaidPersonalPick const pick = hit ? PickPersonal(botAI, *hit, why) : RaidPersonalPick();
     if (RaidObs::Active())
     {
         SpellInfo const* info = pick.spellId ? sSpellMgr->GetSpellInfo(pick.spellId) : nullptr;
-        RaidObs::NoteDerived(bot, "toc.personal",
+        RaidObs::NoteDerived(bot, scope.personalKey,
                              pick.consumable ? pick.consumable : (info ? info->SpellName[0] : why));
     }
 
     return pick;
-}
-
 }

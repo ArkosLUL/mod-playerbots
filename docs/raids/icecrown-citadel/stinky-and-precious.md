@@ -1,7 +1,8 @@
 # Stinky and Precious
 
 Festergut's and Rotface's dogs. Trace slug `stinky-and-precious`, prefix `dogs.`
-([README](README.md)). Code: `Action/ICCActions_Dogs.cpp`, the `icc dogs` trigger and multiplier.
+([README](README.md)). Code: stem `Dogs` (`src/Ai/Raid/ICC/*/ICC*_Dogs.*`), the `icc dogs` trigger
+and multiplier.
 Mechanics: `npc_stinky_icc` (`boss_festergut.cpp`), `npc_precious_icc` (`boss_rotface.cpp`).
 
 ## Mechanics
@@ -10,8 +11,8 @@ Mechanics: `npc_stinky_icc` (`boss_festergut.cpp`), `npc_precious_icc` (`boss_ro
 - Both: Mortal Wound 71127 on the victim every 1.5-2.5 s, 15 s, stacking, one id on every difficulty;
   Decimate 71123 every 20-25 s.
 - Precious: Awaken Plagued Zombies every 20-25 s, first at 25-30 s.
-- No boss state. `icc dogs` opens the trace through `IccMarkPull` once the bot and a dog are both in
-  combat, so one file is one dog.
+- No boss state. The definition's tick opens the trace through `IccMarkPull` while the gate is live,
+  so one file is one dog.
 
 ## Tactics
 

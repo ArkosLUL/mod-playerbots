@@ -1,8 +1,7 @@
 # Valithria Dreamwalker
 
-Boss id 10, trace slug `valithria-dreamwalker`, prefix `vd.` ([README](README.md)). Code:
-`Action/ICCActions_VT.cpp`, `IccValithriaShouldHealRaid` in `ICCShared.cpp` and the Valithria regions
-of the shared ICC files. Mechanics: `boss_valithria_dreamwalker.cpp`.
+Boss id 10, trace slug `valithria-dreamwalker`, prefix `vd.` ([README](README.md)). Code: stem
+`Valithria` (`src/Ai/Raid/ICC/*/ICC*_Valithria.*`). Mechanics: `boss_valithria_dreamwalker.cpp`.
 
 ## Mechanics
 
@@ -54,7 +53,8 @@ of the shared ICC files. Mechanics: `boss_valithria_dreamwalker.cpp`.
 ## Waves
 
 Valithria has no phase. `IccValithriaPortals` lists the portals for the portal trigger and the
-healers' anchor move, and publishes `vd.wave`. A healer in Dream State is phased away from them, so
+healers' anchor move, and publishes `vd.wave`, keyed on the pre-effect's visual, since the pre-effect
+lingers 6 s after its portal opens. A healer in Dream State is phased away from them, so
 it writes none. Portal claims and the cloud target clear 5 s after the wipe's `NOT_STARTED`, with the
 rest of the instance state; claims also drop with their portal, the target once no cloud is left.
 

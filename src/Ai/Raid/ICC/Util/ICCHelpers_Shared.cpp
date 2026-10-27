@@ -202,37 +202,6 @@ void IccApplyHeroicBuffToMember(Player* bot, Player* member, bool applyPainSupp,
         IccNoteCheat(bot, cheatKey, member);
 }
 
-namespace
-{
-    void IccStripPermanentBuffs(Player* member)
-    {
-        if (member->HasAura(SPELL_EXPERIENCED))
-            member->RemoveAura(SPELL_EXPERIENCED);
-
-        if (member->HasAura(SPELL_NO_THREAT))
-            member->RemoveAura(SPELL_NO_THREAT);
-    }
-}
-
-void IccStripExperienced(Player* bot)
-{
-    IccStripPermanentBuffs(bot);
-
-    Group* group = bot->GetGroup();
-    if (!group)
-        return;
-
-    // Each bot strips itself. Humans run no trigger, so this covers them.
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (member == bot || !IccSameInstance(bot, member) || GET_PLAYERBOT_AI(member))
-            continue;
-
-        IccStripPermanentBuffs(member);
-    }
-}
-
 bool IccAnyGroupMemberHasAura(Player* bot, uint32 spellId)
 {
     Group* group = bot->GetGroup();

@@ -8,7 +8,7 @@ transitions, phase 2, phase 3 with Frostmourne are natural groups.
 
 Slug `the-lich-king`, prefix `lk.`, boss id 12, stem `LichKing`. Core `boss_the_lich_king.cpp`. Doc
 `the-lich-king.md`, reader `the_lich_king.py`. Guides in the cache: Warcraft Tavern 25 and 10,
-noobtoboss, Wowhead if saved.
+instant-carry's raid overview, Wowhead if saved.
 
 ## Facts as of `824468439`
 
@@ -51,7 +51,7 @@ Sites are named by function.
   - Dispel Necrotic Plague next to the adds so it kills them.
   - Shambling Horrors: the off-tank faces Shockwave away. Dispel Enrage with Tranquilizing Shot or
     Anesthetic Poison, and keep the horror stunned through Frenzy.
-  - Shadow Trap: noobtoboss marks it heroic-only.
+  - Shadow Trap is heroic-only (the script).
 - **Transitions:**
   - A tank picks up each Raging Spirit at once and faces it away, and the raid burns it before the
     next phase. Its Soul Shriek silence is dispellable.

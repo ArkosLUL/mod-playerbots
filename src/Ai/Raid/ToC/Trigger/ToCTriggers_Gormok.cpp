@@ -1,8 +1,8 @@
 #include "ToCTriggers_Gormok.h"
 #include "ToCHelpers_Gormok.h"
 #include "ToCHelpers_NorthrendBeasts.h"
-#include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
+#include "RaidDirectTargeting.h"
 #include "Strategy.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -19,7 +19,7 @@ bool GormokSwapTankDutyTrigger::IsActive()
         return false;
 
     Unit* gormok = GetEngagedBeast(botAI, NorthrendBeast::Gormok);
-    return gormok && (AI_VALUE(Unit*, "current target") != gormok || ToCPetOffPick(botAI, gormok));
+    return gormok && (AI_VALUE(Unit*, "current target") != gormok || RaidPetOffPick(botAI, gormok));
 }
 
 bool GormokTankSwapNeededTrigger::IsActive()

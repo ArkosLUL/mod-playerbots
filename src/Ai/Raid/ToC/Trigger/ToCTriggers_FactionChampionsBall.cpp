@@ -1,11 +1,11 @@
 #include "ToCTriggers_FactionChampionsBall.h"
 
 #include "Playerbots.h"
+#include "RaidDirectTargeting.h"
 #include "Strategy.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
-#include "ToCHelpers_Shared.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 
@@ -28,7 +28,7 @@ bool FactionChampionsHoldTrigger::IsActive()
                (pet && pet->GetVictim());
     }
 
-    return AI_VALUE(Unit*, "current target") != champion || ToCPetOffPick(botAI, champion);
+    return AI_VALUE(Unit*, "current target") != champion || RaidPetOffPick(botAI, champion);
 }
 
 bool FactionChampionsHoldControlTrigger::IsActive()

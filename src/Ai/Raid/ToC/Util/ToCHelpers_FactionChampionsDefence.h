@@ -9,10 +9,10 @@
 #include "Position.h"
 #include "ToCData.h"
 
+struct RaidPredictedHit;
+
 namespace TrialOfTheCrusaderHelpers
 {
-
-struct ToCPredictedHit;
 
 // Faction Champion spells (boss_faction_champions.cpp). These sit in a spell difficulty row, so read
 // them through sSpellMgr->GetSpellIdForDifficulty.
@@ -194,10 +194,10 @@ bool FactionChampionsCorpseCrowded(PlayerbotAI* botAI);
 Unit* FactionChampionsBattleResTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The bot is focused: 2 or more champions have it as victim and its health loss over the last 2 s, run
-// on for 4 s, would leave it under TOC_DEFENSIVE_FLOOR_PCT; or 4 or more on a non-tank, a hit just past
+// on for 4 s, would leave it under RAID_DEFENSIVE_FLOOR_PCT; or 4 or more on a non-tank, a hit just past
 // that floor. Champions about to pick it at their next re-pick count as on it. Fills a measured hit for
-// GetToCPersonalDefensive, physical when a physical champion is among them, focus at four or more.
-bool FactionChampionsPersonalHit(PlayerbotAI* botAI, ToCPredictedHit& hit);
+// GetRaidPersonalDefensive, physical when a physical champion is among them, focus at four or more.
+bool FactionChampionsPersonalHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
 
 // Where a bot dodging a Bladestorm or Hellfire goes: the nearest clear ring, the spot in it nearest the
 // healers' centre, within 30 yd of another living healer and 8+ yd off every melee champion when one is.

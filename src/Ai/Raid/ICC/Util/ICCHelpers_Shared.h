@@ -105,9 +105,6 @@ bool IccSameInstance(Player* bot, Player* member);
 // `bot` is the one whose code applies the buffs to `member`, recorded under `cheatKey`.
 void IccApplyHeroicBuffToMember(Player* bot, Player* member, bool applyPainSupp, bool applyNoThreat,
                                 char const* cheatKey);
-// Removes the two heroic buffs that never expire, Experienced and 1% Threat, from the bot and from
-// every human in its instance.
-void IccStripExperienced(Player* bot);
 bool IccAnyGroupMemberHasAura(Player* bot, uint32 spellId);
 bool IccAnyBloodPrincePresent(PlayerbotAI* botAI);
 std::vector<Creature*> IccGetCreaturesByEntries(WorldObject* searcher, std::initializer_list<uint32> entries,

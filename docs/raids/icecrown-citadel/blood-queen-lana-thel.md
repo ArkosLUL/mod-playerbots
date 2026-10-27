@@ -1,8 +1,8 @@
 # Blood-Queen Lana'thel
 
-Boss id 8, trace slug `blood-queen-lana-thel`, prefix `bql.` ([README](README.md)). Code:
-`Action/ICCActions_BQL.cpp`, the `icc bql` nodes, `IccBqlMultiplier`. Mechanics:
-`boss_blood_queen_lana_thel.cpp`.
+Boss id 8, trace slug `blood-queen-lana-thel`, prefix `bql.` ([README](README.md)). Code: stem
+`BloodQueen` (`src/Ai/Raid/ICC/*/ICC*_BloodQueen.*`), the `icc bql` nodes, `IccBqlMultiplier`.
+Mechanics: `boss_blood_queen_lana_thel.cpp`.
 
 ## Mechanics
 

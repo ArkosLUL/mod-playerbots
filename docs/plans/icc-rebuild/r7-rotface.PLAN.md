@@ -63,6 +63,9 @@ Stem `Rotface` and its definition, the doc, the reader and its test, this brief.
 
 ## Carried over
 
+- From `r0a-restructure`: `spellEntriesFlood` (`Util/ICCHelpers_Rotface.h`) has no user, and
+  `Multiplier/ICCMultipliers_Rotface.h` keeps the commented-out `IccRotfaceGroupPositionMultiplier`.
+
 ## Known gaps
 
 ## Blocked

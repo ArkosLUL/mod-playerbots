@@ -22,7 +22,7 @@ void DefineSvalna(EncounterBuilder& e)
 
 EncounterDefinition const& IccSvalnaDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_SISTER_SVALNA, IccPassThroughGate,
+    static EncounterDefinition const definition(ICC_BOSS_SISTER_SVALNA, BossStateGate,
                                                 "sister-svalna", &DefineSvalna);
     return definition;
 }

@@ -1,9 +1,9 @@
 #include "ToCTriggers_FactionChampionsDefence.h"
-#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
-#include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
+#include "RaidDefensive.h"
+#include "RaidDirectTargeting.h"
 #include "Strategy.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -33,7 +33,7 @@ bool FactionChampionsDispelCcTrigger::IsActive()
 bool FactionChampionsKillTotemTrigger::IsActive()
 {
     Unit* totem = FactionChampionsTotemTarget(botAI);
-    return totem && (AI_VALUE(Unit*, "current target") != totem || ToCPetOffPick(botAI, totem));
+    return totem && (AI_VALUE(Unit*, "current target") != totem || RaidPetOffPick(botAI, totem));
 }
 
 bool FactionChampionsPhysicalSwitchTrigger::IsActive()
@@ -96,8 +96,9 @@ bool FactionChampionsBattleResTrigger::IsActive()
 
 bool FactionChampionsPersonalDefensiveTrigger::IsActive()
 {
-    ToCPredictedHit hit;
-    return static_cast<bool>(GetToCPersonalDefensive(botAI, FactionChampionsPersonalHit(botAI, hit) ? &hit : nullptr));
+    RaidPredictedHit hit;
+    return static_cast<bool>(
+        GetRaidPersonalDefensive(botAI, TOC_DEFENSIVE_SCOPE, FactionChampionsPersonalHit(botAI, hit) ? &hit : nullptr));
 }
 
 void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& triggers)

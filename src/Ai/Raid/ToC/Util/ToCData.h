@@ -4,12 +4,17 @@
 #include "Define.h"
 #include "Position.h"
 
+struct RaidDefensiveScope;
+
 // Raid-wide values only. Boss-specific ids, constants and positions go in that boss's
 // Util/ToCHelpers_<Stem>.h.
 namespace TrialOfTheCrusaderHelpers
 {
 
 constexpr uint32 TRIAL_OF_THE_CRUSADER_MAP_ID = 649;
+
+// Map 649, covers under toc.cover, personal picks under toc.personal
+extern RaidDefensiveScope const TOC_DEFENSIVE_SCOPE;
 
 // Center of the Crusaders' Coliseum arena (trial_of_the_crusader.h Locs[LOC_CENTER])
 extern const Position ARENA_CENTER;

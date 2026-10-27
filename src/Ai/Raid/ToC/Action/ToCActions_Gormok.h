@@ -5,6 +5,7 @@
 #include "AttackAction.h"
 #include "MovementActions.h"
 #include "NamedObjectContext.h"
+#include "RaidDirectTargeting.h"
 #include "ToCActions_NorthrendBeasts.h"
 #include "ToCActions_Shared.h"
 
@@ -18,11 +19,11 @@ public:
 
 // Never taunts, that would pull him off the holder between swaps. The swap itself is
 // "gormok tank swap taunt".
-class GormokSwapTankHoldAction : public ToCDirectAttackAction
+class GormokSwapTankHoldAction : public RaidDirectAttackAction
 {
 public:
     GormokSwapTankHoldAction(PlayerbotAI* botAI, std::string const name = "gormok swap tank hold")
-        : ToCDirectAttackAction(botAI, name) {};
+        : RaidDirectAttackAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 

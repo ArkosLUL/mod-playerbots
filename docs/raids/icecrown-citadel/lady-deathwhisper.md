@@ -1,8 +1,8 @@
 # Lady Deathwhisper
 
-Boss id 1, slug `lady-deathwhisper`, prefix `ldw.`. Code: `Action/ICCActions_LDW.cpp`, nodes
-`icc dark reckoning`, `icc lady deathwhisper` → ranged position, adds, shade; `IccLadyDeathwhisperMultiplier`.
-Raid conventions: [README.md](README.md).
+Boss id 1, slug `lady-deathwhisper`, prefix `ldw.`. Code: stem `Deathwhisper`
+(`src/Ai/Raid/ICC/*/ICC*_Deathwhisper.*`), nodes `icc dark reckoning`, `icc lady deathwhisper` →
+ranged position, adds, shade; `IccLadyDeathwhisperMultiplier`. Raid conventions: [README.md](README.md).
 
 ## Mechanics (core)
 
@@ -38,8 +38,8 @@ Kept, `raid` gate:
   stacks.
 
 Record-only, `EnableICCBuffs` on heroic: `ldw.nothreat` (1% Threat on a non-tank holding her) and
-`ldw.spitefulfury` (the main tank, while she is on someone else). The next boss's strip removes the
-1% Threat ([README.md](README.md#cheats)).
+`ldw.spitefulfury` (the main tank, while she is on someone else). The raid-wide strip takes the 1%
+Threat off once her fight ends ([README.md](README.md#cheats)).
 
 No class-taunt caller: the adds action casts its own taunts.
 

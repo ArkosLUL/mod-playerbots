@@ -13,7 +13,7 @@ Wave 3a, parallel with `r2-marrowgar`. Rules, conventions and the boss lane reci
   gate), stem `FrostGiant`. Core `icecrown_citadel.cpp`. Doc `rotting-frost-giant.md`, reader
   `rotting_frost_giant.py`.
 - Guides in the cache:
-  - Deathwhisper: Warcraft Tavern 25 and 10, noobtoboss, Wowhead if saved;
+  - Deathwhisper: Warcraft Tavern 25 and 10, instant-carry's raid overview, Wowhead if saved;
   - giant: the dontstandinthefire blog.
 
 ## Facts as of `824468439`
@@ -38,8 +38,9 @@ Sites are named by function.
 
 ## Guide answers to build on
 
-- **Dominate Mind** takes 3 non-tanks for 12 s. noobtoboss says not on 10N. The raid stops cleaving,
-  and a druid Cyclones each victim (it doesn't break on damage); any CC works. Victims can be humans.
+- **Dominate Mind** takes 3 non-tanks for 12 s (the script: 1/1/3 on 25N/10H/25H, none on 10N). The
+  raid stops cleaving, and a druid Cyclones each victim (it doesn't break on damage); any CC works.
+  Victims can be humans.
 - **Touch of Insignificance:** each stack cuts threat 20%. The guide says she can't be taunted, so tanks
   keep threat neck and neck with Misdirection and Tricks of the Trade, and Divine Shield drops the
   stacks. Check against the script whether taunts work on normal.
@@ -68,6 +69,10 @@ this brief.
 ## Decisions for review
 
 ## Carried over
+
+- From `r0a-restructure`: `Action/ICCActions_FrostGiant.cpp` keeps the comment "Rotting Giant WiP
+  (waiting for core fix)" and a commented-out `TODO` block, the only user of
+  `ICC_ROTTING_FROST_GIANT_TANK_POSITION`. Both break the no-nonsense-comments rule.
 
 ## Known gaps
 

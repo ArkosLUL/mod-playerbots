@@ -29,15 +29,4 @@ protected:
     bool DragBossToAnchor(Unit* boss, Position const& anchor);
 };
 
-// Base for the actions that put a bot on a target picked in code, never through a raid icon.
-class ToCDirectAttackAction : public AttackAction
-{
-public:
-    ToCDirectAttackAction(PlayerbotAI* botAI, std::string const name) : AttackAction(botAI, name) {}
-
-protected:
-    // Sends the pet every call, then false once the bot is already on target so lower nodes run.
-    bool AttackDirect(Unit* target);
-};
-
 #endif

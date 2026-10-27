@@ -1,0 +1,36 @@
+/*
+ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
+ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
+ * or (at your option) any later version.
+ */
+
+#include "RaidBurstWindow.h"
+
+#include "Action.h"
+#include "BurstCooldowns.h"
+#include "Playerbots.h"
+#include "Timer.h"
+
+float RaidBurstWindowMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    std::string const name = action->getName();
+    if (!IsBurstCooldownAction(name) || IsManaReturnCooldown(bot, name))
+        return 1.0f;
+
+    if (!bot->IsInCombat())
+        return 1.0f;
+
+    uint32 const now = getMSTime();
+    if (now != cachedAtMs || !cachedAtMs)
+    {
+        cachedAtMs = now;
+        cachedValue = _window(botAI);
+    }
+
+    bool const allowed = (name == "bloodlust" || name == "heroism") ? cachedValue.allowLust : cachedValue.allowAll;
+
+    return allowed ? 1.0f : 0.0f;
+}

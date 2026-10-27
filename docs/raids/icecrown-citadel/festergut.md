@@ -1,7 +1,7 @@
 # Festergut
 
-Boss id 4, trace slug `festergut`, prefix `fg.` ([README](README.md)). Code: `Action/ICCActions_FG.cpp`
-and the Festergut regions of the shared ICC files. Mechanics: `boss_festergut.cpp`.
+Boss id 4, trace slug `festergut`, prefix `fg.` ([README](README.md)). Code: stem `Festergut`
+(`src/Ai/Raid/ICC/*/ICC*_Festergut.*`). Mechanics: `boss_festergut.cpp`.
 
 ## Mechanics
 

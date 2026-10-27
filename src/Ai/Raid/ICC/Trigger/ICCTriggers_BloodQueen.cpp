@@ -17,12 +17,7 @@ bool IccBqlGroupPositionTrigger::IsActive()
     if (!boss)
         return false;
 
-    if (IccAnyBloodPrincePresent(botAI))
-        return false;
-
-    IccStripExperienced(bot);
-
-    return true;
+    return !IccAnyBloodPrincePresent(botAI);
 }
 
 bool IccBqlPactOfDarkfallenTrigger::IsActive()

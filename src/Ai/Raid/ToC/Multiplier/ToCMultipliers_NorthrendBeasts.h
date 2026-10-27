@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "Multiplier.h"
-#include "ToCMultipliers_Shared.h"
+#include "RaidBurstWindow.h"
 
 // Keep beast tanks anchored instead of drifting with the combat formation
 class NorthrendBeastsControlTankMovementMultiplier : public Multiplier
@@ -26,6 +26,6 @@ public:
 
 void AddToCNorthrendBeastsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
-ToCBurstWindow ToCNorthrendBeastsBurstWindow(PlayerbotAI* botAI);
+RaidBurstWindow ToCNorthrendBeastsBurstWindow(PlayerbotAI* botAI);
 
 #endif

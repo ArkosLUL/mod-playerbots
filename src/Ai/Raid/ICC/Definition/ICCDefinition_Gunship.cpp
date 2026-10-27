@@ -23,13 +23,13 @@ void DefineGunship(EncounterBuilder& e)
     e.Node<IccGunshipRocketJumpTrigger, IccGunshipRocketJumpAction>(ACTION_RAID + 4);
     e.Node<IccGunshipRocketPackSetupTrigger, IccGunshipRocketPackSetupAction>(ACTION_RAID + 2);
 
-    e.Multiplier<IccGunshipMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<IccGunshipMultiplier>(Family::AnyAction);
 }
 }  // namespace
 
 EncounterDefinition const& IccGunshipDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_GUNSHIP_BATTLE, IccPassThroughGate,
+    static EncounterDefinition const definition(ICC_BOSS_GUNSHIP_BATTLE, BossStateGate,
                                                 "icecrown-gunship-battle", &DefineGunship);
     return definition;
 }

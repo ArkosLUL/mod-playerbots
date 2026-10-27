@@ -9,11 +9,11 @@
 #include "LastMovementValue.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
+#include "RaidDefensive.h"
 #include "Timer.h"
 #include "ToCData.h"
-#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_Jaraxxus.h"
-#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -219,10 +219,10 @@ bool JaraxxusLeavePortalAction::Execute(Event /*event*/)
 
 bool JaraxxusCastRaidCoverAction::Execute(Event /*event*/)
 {
-    ToCPredictedHit hit;
-    ToCRaidCover const cover =
-        GetToCRaidCover(botAI, GetJaraxxusBurningInferno(botAI, hit) ? &hit : nullptr);
-    uint32 const spellId = ToCRaidCoverSpellId(botAI, cover);
+    RaidPredictedHit hit;
+    RaidCover const cover =
+        GetRaidCover(botAI, TOC_DEFENSIVE_SCOPE, GetJaraxxusBurningInferno(botAI, hit) ? &hit : nullptr);
+    uint32 const spellId = RaidCoverSpellId(botAI, cover);
     if (!spellId)
         return false;
 
@@ -230,21 +230,21 @@ bool JaraxxusCastRaidCoverAction::Execute(Event /*event*/)
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
-    if (IsToCRaidCoverChannel(cover) && bot->isMoving())
+    if (IsRaidCoverChannel(cover) && bot->isMoving())
         bot->StopMoving();
 
     if (!botAI->CastSpell(spellId, bot))
         return false;
 
-    FinishToCRaidCover(botAI, cover);
+    FinishRaidCover(botAI, cover);
     return true;
 }
 
 bool JaraxxusCastPersonalDefensiveAction::Execute(Event /*event*/)
 {
-    ToCPredictedHit hit;
-    ToCPersonalPick const pick =
-        GetToCPersonalDefensive(botAI, GetJaraxxusPersonalHit(botAI, hit) ? &hit : nullptr);
+    RaidPredictedHit hit;
+    RaidPersonalPick const pick =
+        GetRaidPersonalDefensive(botAI, TOC_DEFENSIVE_SCOPE, GetJaraxxusPersonalHit(botAI, hit) ? &hit : nullptr);
     if (!pick)
         return false;
 
@@ -333,6 +333,6 @@ bool JaraxxusHealIncinerateTargetAction::Execute(Event /*event*/)
 
     // the kiss punishes anything still casting on its 0.5 s check
     bool const kissed = HasMistressKiss(bot);
-    return CastToCThroughputHeal(botAI, target, [this, kissed](std::string const& heal)
+    return CastRaidThroughputHeal(botAI, target, [this, kissed](std::string const& heal)
                                  { return kissed && JaraxxusSpellHasCastTime(botAI, heal); });
 }

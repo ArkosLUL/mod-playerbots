@@ -31,15 +31,14 @@ enum IccEncounterId : uint32
     ICC_BOSS_SINDRAGOSA_GAUNTLET = 13,
     ICC_BOSS_BLOOD_PRINCE_TRASH = 14,
 
-    // Stinky and Precious and the Rotting Frost Giants have no boss state. BossStateGate leaves an id past
-    // the script's encounter count open.
+    // No boss state: Stinky and Precious and the Rotting Frost Giants, gated on their units, and the
+    // raid-wide definitions.
     ICC_BOSS_NONE = 255
 };
 
-// Open and never live: every encounter's rows and multipliers run in every fight, and no trigger renames a
-// trace.
-inline bool IccPassThroughGateOpen(PlayerbotAI* /*botAI*/, uint32 /*encounterId*/) { return true; }
-inline bool IccPassThroughGateLive(PlayerbotAI* /*botAI*/, uint32 /*encounterId*/) { return false; }
-inline constexpr EncounterGate IccPassThroughGate{&IccPassThroughGateOpen, &IccPassThroughGateLive};
+// For a raid-wide definition, with ICC_BOSS_NONE and no trace name: open in every fight, never live.
+inline bool IccRaidWideGateOpen(PlayerbotAI* /*botAI*/, uint32 /*encounterId*/) { return true; }
+inline bool IccRaidWideGateLive(PlayerbotAI* /*botAI*/, uint32 /*encounterId*/) { return false; }
+inline constexpr EncounterGate IccRaidWideGate{&IccRaidWideGateOpen, &IccRaidWideGateLive};
 
 #endif

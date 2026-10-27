@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_RAIDENCOUNTER_H
 #define PLAYERBOTS_RAIDENCOUNTER_H
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
@@ -14,10 +15,12 @@
 #include <vector>
 
 #include "Multiplier.h"
+#include "ObjectGuid.h"
 #include "RaidEncounterRules.h"
 #include "Trigger.h"
 
 class Action;
+class Creature;
 class PlayerbotAI;
 
 // Open: the encounter's mechanics may run. Live: the encounter itself is in progress. A raid strategy
@@ -33,6 +36,54 @@ struct EncounterGate
 bool BossStateGateOpen(PlayerbotAI* botAI, uint32 encounterId);
 bool BossStateGateLive(PlayerbotAI* botAI, uint32 encounterId);
 inline constexpr EncounterGate BossStateGate{&BossStateGateOpen, &BossStateGateLive};
+
+namespace UnitGateDetail
+{
+struct Read
+{
+    uint32 pass = 0;
+    bool open = false;
+    ObjectGuid live;
+};
+
+Read const& Get(PlayerbotAI* botAI, uint32 const* entries, std::size_t count, Read& read);
+Creature* LiveUnit(PlayerbotAI* botAI, ObjectGuid const& guid);
+
+// One read per gate pass and per entry list.
+template <uint32... Entries>
+Read const& Of(PlayerbotAI* botAI)
+{
+    static constexpr uint32 entries[] = {Entries...};
+    thread_local Read read;
+    return Get(botAI, entries, sizeof...(Entries), read);
+}
+
+template <uint32... Entries>
+bool Open(PlayerbotAI* botAI, uint32 /*encounterId*/)
+{
+    return Of<Entries...>(botAI).open;
+}
+
+template <uint32... Entries>
+bool Live(PlayerbotAI* botAI, uint32 /*encounterId*/)
+{
+    return !Of<Entries...>(botAI).live.IsEmpty();
+}
+}  // namespace UnitGateDetail
+
+// For an encounter with no boss state. Open while a unit of one of the entries is alive in the bot's
+// instance, live while that unit is in combat and its victim is in the bot's group or the bot fights it.
+// Units come from a per-instance guid cache rescanned at most once a second, so a unit in an unloaded
+// grid isn't found and the gate stays closed.
+template <uint32... Entries>
+inline constexpr EncounterGate UnitGate{&UnitGateDetail::Open<Entries...>, &UnitGateDetail::Live<Entries...>};
+
+// The unit holding UnitGate<Entries...> live, or null.
+template <uint32... Entries>
+Creature* UnitGateLiveUnit(PlayerbotAI* botAI)
+{
+    return UnitGateDetail::LiveUnit(botAI, UnitGateDetail::Of<Entries...>(botAI).live);
+}
 
 // Non-zero only inside a gated trigger's Check, unique per trigger pass. Triggers don't change the
 // world, so a read cached under one id holds for that pass; actions and multipliers always get 0.
@@ -99,6 +150,9 @@ public:
 
     // Housekeeping for Strategy::OnTick. Runs only while the gate is open.
     void OnTick(PlayerbotAI* botAI) const;
+
+    bool Open(PlayerbotAI* botAI) const { return _gate.open(botAI, _encounterId); }
+    bool Live(PlayerbotAI* botAI) const { return _gate.live(botAI, _encounterId); }
 
 private:
     friend class EncounterBuilder;
@@ -170,7 +224,16 @@ public:
     template <class M, class... Args>
     void Multiplier(FamilyMask families, Args... args)
     {
-        HandWritten(families, [args...](PlayerbotAI* botAI) -> ::Multiplier* { return new M(botAI, args...); });
+        HandWritten(families, [args...](PlayerbotAI* botAI) -> ::Multiplier* { return new M(botAI, args...); },
+                    false);
+    }
+
+    // As Multiplier, but it only sees actions while the gate is live, so it stays out of the pre-pull.
+    template <class M, class... Args>
+    void LiveMultiplier(FamilyMask families, Args... args)
+    {
+        HandWritten(families, [args...](PlayerbotAI* botAI) -> ::Multiplier* { return new M(botAI, args...); },
+                    true);
     }
 
     void Tick(EncounterDefinition::TickFn tick);
@@ -182,7 +245,7 @@ private:
 
     void AddRule(char const* name, RoleMask roles, Predicate predicate, RaidEncounterRules::Rule rule,
                  bool moverRows);
-    void HandWritten(FamilyMask families, EncounterDefinition::MultiplierCreator make);
+    void HandWritten(FamilyMask families, EncounterDefinition::MultiplierCreator make, bool live);
 
     EncounterDefinition& _definition;
     std::vector<std::shared_ptr<RaidEncounterRules::Rule>> _moverRules;  // filled once define returns

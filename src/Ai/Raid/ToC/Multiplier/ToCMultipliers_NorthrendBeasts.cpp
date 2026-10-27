@@ -54,9 +54,9 @@ void AddToCNorthrendBeastsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier
 // Everything goes into Icehowl's daze (+100% damage taken for 15 s). Lust is one 10 minute cooldown,
 // so it's held through Gormok and the worms or it's gone by then. The rest come back mid fight, so
 // they stay free on those two.
-ToCBurstWindow ToCNorthrendBeastsBurstWindow(PlayerbotAI* botAI)
+RaidBurstWindow ToCNorthrendBeastsBurstWindow(PlayerbotAI* botAI)
 {
-    ToCBurstWindow window;
+    RaidBurstWindow window;
     Unit* icehowl = GetEngagedBeast(botAI, NorthrendBeast::Icehowl);
     if (!icehowl)
     {

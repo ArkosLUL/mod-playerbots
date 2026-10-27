@@ -1,10 +1,10 @@
 #include "ToCTriggers_Jaraxxus.h"
 #include "ToCData.h"
-#include "ToCHelpers_Defensive.h"
 #include "ToCHelpers_Jaraxxus.h"
-#include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
 #include "PlayerbotAIConfig.h"
+#include "RaidDefensive.h"
+#include "RaidDirectTargeting.h"
 #include "Strategy.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -34,14 +34,16 @@ bool JaraxxusPortalSpawnTrigger::IsActive()
 
 bool JaraxxusRaidCoverTrigger::IsActive()
 {
-    ToCPredictedHit hit;
-    return GetToCRaidCover(botAI, GetJaraxxusBurningInferno(botAI, hit) ? &hit : nullptr) != ToCRaidCover::None;
+    RaidPredictedHit hit;
+    return GetRaidCover(botAI, TOC_DEFENSIVE_SCOPE, GetJaraxxusBurningInferno(botAI, hit) ? &hit : nullptr) !=
+           RaidCover::None;
 }
 
 bool JaraxxusPersonalDefensiveTrigger::IsActive()
 {
-    ToCPredictedHit hit;
-    return static_cast<bool>(GetToCPersonalDefensive(botAI, GetJaraxxusPersonalHit(botAI, hit) ? &hit : nullptr));
+    RaidPredictedHit hit;
+    return static_cast<bool>(
+        GetRaidPersonalDefensive(botAI, TOC_DEFENSIVE_SCOPE, GetJaraxxusPersonalHit(botAI, hit) ? &hit : nullptr));
 }
 
 bool JaraxxusEngagedByMainTankTrigger::IsActive() { return JaraxxusMainTankHolds(botAI); }
@@ -59,7 +61,7 @@ bool JaraxxusNetherPowerActiveTrigger::IsActive()
 bool JaraxxusDpsTargetTrigger::IsActive()
 {
     Unit* target = GetJaraxxusDpsTarget(botAI);
-    return target && (AI_VALUE(Unit*, "current target") != target || ToCPetOffPick(botAI, target));
+    return target && (AI_VALUE(Unit*, "current target") != target || RaidPetOffPick(botAI, target));
 }
 
 bool JaraxxusIncinerateFleshOnRaidTrigger::IsActive()

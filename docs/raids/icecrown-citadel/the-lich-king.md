@@ -1,7 +1,7 @@
 # The Lich King
 
-Boss id 12, trace slug `the-lich-king`, prefix `lk.` ([README](README.md)). Code: `Action/ICCActions_LK.cpp`
-and the Lich King regions of the shared ICC files. Mechanics: `boss_the_lich_king.cpp`.
+Boss id 12, trace slug `the-lich-king`, prefix `lk.` ([README](README.md)). Code: stem `LichKing`
+(`src/Ai/Raid/ICC/*/ICC*_LichKing.*`). Mechanics: `boss_the_lich_king.cpp`.
 
 ## Mechanics
 
@@ -34,8 +34,8 @@ and the Lich King regions of the shared ICC files. Mechanics: `boss_the_lich_kin
 
 ## Phase
 
-`IccLichKingPhase(bot, boss)` (`ICCTriggers`) publishes `lk.phase`; the winter trigger asks it for
-every bot each tick:
+`IccLichKingPhase(bot, boss)` (`Util/ICCHelpers_LichKing`) publishes `lk.phase`; the winter trigger
+asks it for every bot each tick:
 
 | Value | When |
 |---|---|
@@ -101,8 +101,9 @@ Documented, not wrapped: the Val'kyr drop dive. A bot over the edge (52-70 yd ou
 ## Unstucks
 
 All `NearTeleportTo`, which keeps combat: the platform snap (winter and adds actions) for a bot more
-than 1 yd off 840.857, in place, never inside Frostmourne; heroic Frostmourne bots more than 5 yd off
-its floor, onto the main tank, or in place for the main tank.
+than 1 yd off 840.857, in place, never inside Frostmourne, where an expired Harvest Soul aura would
+send a normal victim to Z 840 over the void; heroic Frostmourne bots more than 5 yd off its floor,
+onto the main tank, or in place for the main tank.
 
 The 1 yd band also fires on any jump or knockback and cancels it mid-flight: heroic Shadow Traps
 (73529, which only the main tank dodges) and the Ice Spheres' Ice Burst (69108). The script counts a unit on the platform within 90
@@ -120,7 +121,6 @@ and a snap under the floor alone would let those knockbacks land, which changes 
 - The Harvest Soul hold reads normal's 6 s victim aura; heroic's Harvest Souls aura has no timed end,
   so it stays outside the hold.
 - The Val'kyr bucket on skull keeps its `rti` while a Raging Spirit holds the skull.
-- Humans keep Experienced and 1% Threat after a heroic pull: nothing strips them.
 - No ICC trace yet carries these probes, so nothing here is measured.
 
 ## What a trace answers
@@ -138,7 +138,8 @@ and a snap under the floor alone would let those knockbacks land, which changes 
 | `lk.skull`, `lk.cross`, `lk.star`, `lk.circle` | the bot that moved the icon | Rule and unit, or `clear`: winter `shambling`, `spirit`; outside it `boss`, `spirit`; `valkyr`; Wicked Spirit `chasing`, `nearest`; `sphere` |
 
 `lk.circle` is rare: the adds action that places it is vetoed while the winter is up, so only a sphere
-outliving its winter is marked.
+outliving its winter is marked. No hazard notes besides Defile's: every other hazard is a sampled
+creature or a cast row.
 
 `tools/botobs/bosses/the_lich_king.py`; its banner names declared keys the pull never wrote, sparing
 `lk.cross` on 10-man, `lk.star` on 10N, `lk.bombdodge` off heroic:

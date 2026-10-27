@@ -1,9 +1,9 @@
 #include "ToCDefinitions.h"
 
 #include "PlayerbotAI.h"
+#include "RaidCombatHelpers.h"
+#include "RaidDefensive.h"
 #include "ToCEncounterGate.h"
-#include "ToCHelpers_Defensive.h"
-#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_TwinValkyr.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -16,7 +16,7 @@ namespace
 // The dps target trigger's test, so the rule and the node cover the same window
 bool TwinValkyrDpsTargetOwned(PlayerbotAI* botAI)
 {
-    return IsToCDpsBot(botAI->GetBot()) && ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr) &&
+    return IsRaidDpsBot(botAI->GetBot()) && ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr) &&
            GetTwinDpsTarget(botAI);
 }
 
@@ -44,7 +44,7 @@ void DefineTwinValkyr(EncounterBuilder& e)
                 Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink |
                 Family::Disengage);
 
-    e.Block("twin valkyr raid cover hold", Role::Any, TwinValkyrRaidCoverHeld, 0, ToCRaidCoverClassNodes());
+    e.Block("twin valkyr raid cover hold", Role::Any, TwinValkyrRaidCoverHeld, 0, RaidCoverClassNodes());
 
     // the burst row's flag covers every role, and a healer holds only this one for lust
     e.Block("twin valkyr power infusion hold", Role::Heal, TwinValkyrBurstHeld, 0,

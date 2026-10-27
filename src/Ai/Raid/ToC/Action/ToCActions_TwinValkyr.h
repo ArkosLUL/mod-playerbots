@@ -5,6 +5,7 @@
 #include "AttackAction.h"
 #include "MovementActions.h"
 #include "NamedObjectContext.h"
+#include "RaidDirectTargeting.h"
 #include "RaidRedirectThreat.h"
 #include "ToCActions_Shared.h"
 #include "ToCHelpers_TwinValkyr.h"
@@ -140,11 +141,11 @@ protected:
     Unit* GetThreatDumpTarget() override;
 };
 
-class TwinValkyrFocusTwinAction : public ToCDirectAttackAction
+class TwinValkyrFocusTwinAction : public RaidDirectAttackAction
 {
 public:
     TwinValkyrFocusTwinAction(
-        PlayerbotAI* botAI, std::string const name = "twin valkyr focus twin") : ToCDirectAttackAction(botAI, name) {}
+        PlayerbotAI* botAI, std::string const name = "twin valkyr focus twin") : RaidDirectAttackAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 

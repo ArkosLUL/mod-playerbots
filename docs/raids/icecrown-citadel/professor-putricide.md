@@ -1,8 +1,7 @@
 # Professor Putricide
 
-Boss id 6, trace slug `professor-putricide`, prefix `pp.` ([README](README.md)). Code:
-`Action/ICCActions_PP.cpp` and the Putricide regions of the shared ICC files. Mechanics:
-`boss_professor_putricide.cpp`.
+Boss id 6, trace slug `professor-putricide`, prefix `pp.` ([README](README.md)). Code: stem
+`Putricide` (`src/Ai/Raid/ICC/*/ICC*_Putricide.*`). Mechanics: `boss_professor_putricide.cpp`.
 
 ## Mechanics
 
@@ -31,9 +30,10 @@ Boss id 6, trace slug `professor-putricide`, prefix `pp.` ([README](README.md)).
 
 ## Phase
 
-`IccPutricidePhase(bot, boss)` derives 1-3 from the same thresholds and publishes `pp.phase`. Every
-phase test calls it, the abomination, goo, Unbound Plague, puddle and tank-spot ones, so all take
-phase 3 at the core's 35% and under.
+`IccPutricidePhase(bot, boss)` derives 1-3 from the same thresholds and publishes `pp.phase`, rather
+than read his `_phase` (`GetData(DATA_PHASE)`), which flips only at `ChangePhase`, a tick or a cast
+later. Every phase test calls it, the abomination, goo, Unbound Plague, puddle and tank-spot ones, so
+all take phase 3 at the core's 35% and under.
 
 ## Tactics
 

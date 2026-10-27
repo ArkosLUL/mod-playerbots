@@ -141,7 +141,7 @@ COVER_SPAN_MS = 5000
 COVER_IN_TIME_MS = 1000
 # a personal button from this long before the first tick
 PERSONAL_LEAD_MS = 3000
-# toc.cover values, ToCRaidCover's order
+# toc.cover values, RaidCover's order
 COVER_KINDS = {1: "aura mastery", 2: "divine sacrifice", 3: "anti magic zone", 4: "divine hymn", 5: "tranquility"}
 # cast names, any rank; Divine Guardian is Divine Sacrifice's proc
 RAID_COVERS = frozenset({"Aura Mastery", "Divine Sacrifice", "Divine Guardian", "Anti-Magic Zone", "Divine Hymn",

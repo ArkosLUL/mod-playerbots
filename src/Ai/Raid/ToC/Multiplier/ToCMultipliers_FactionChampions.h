@@ -5,7 +5,7 @@
 
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
-#include "ToCMultipliers_Shared.h"
+#include "RaidBurstWindow.h"
 
 // Single-target only: Champion's Aegis 68595 is a flat -75% to AoE damage on every champion
 class FactionChampionsSuppressAoeMultiplier : public Multiplier
@@ -60,6 +60,6 @@ public:
 
 void AddToCFactionChampionsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
-ToCBurstWindow ToCFactionChampionsBurstWindow(PlayerbotAI* botAI);
+RaidBurstWindow ToCFactionChampionsBurstWindow(PlayerbotAI* botAI);
 
 #endif

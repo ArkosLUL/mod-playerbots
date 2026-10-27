@@ -14,6 +14,8 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
+#include "RaidDirectTargeting.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "Timer.h"
@@ -21,7 +23,6 @@
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Gormok.h"
 #include "ToCHelpers_Jormungars.h"
-#include "ToCHelpers_Shared.h"
 
 namespace TrialOfTheCrusaderHelpers
 {
@@ -344,7 +345,7 @@ BeastsDpsPick ResolveDpsPick(PlayerbotAI* botAI)
     // Read even under a skull, so nb.snobold stays current
     Unit* snobold = GetGormokSnoboldPick(botAI);
 
-    if (Unit* skull = GetToCHumanSkull(botAI, &IsBeastsSkullTarget))
+    if (Unit* skull = GetRaidHumanSkull(botAI, &IsBeastsSkullTarget))
         return {skull, BeastsDpsBranch::Skull};
 
     if (snobold)
@@ -462,7 +463,7 @@ BeastsTankDuty GetDutyOfBeast(PlayerbotAI* botAI, Unit* beast)
 BeastsDpsPick GetBeastsDpsTarget(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!bot || bot->GetMapId() != TRIAL_OF_THE_CRUSADER_MAP_ID || !IsToCDpsBot(bot))
+    if (!bot || bot->GetMapId() != TRIAL_OF_THE_CRUSADER_MAP_ID || !IsRaidDpsBot(bot))
         return {};
 
     BeastsDpsPick const pick = ResolveDpsPick(botAI);

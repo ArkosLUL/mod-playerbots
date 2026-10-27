@@ -128,8 +128,8 @@ namespace IcecrownHelpers
         std::map<ObjectGuid, BloatDir> ppBloatLastDir;
     };
 
+    // Erased 5 s after the last boss state leaves IN_PROGRESS, and with the map.
     IccInstanceState& IccState(uint32 instanceId);
-    void IccResetInstance(uint32 instanceId);
 
     std::vector<Position> ActiveGooPositions(uint32 instanceId, uint32 lifetimeMs);
 }

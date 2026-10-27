@@ -1,8 +1,9 @@
 # Icecrown Gunship Battle
 
-Boss id 2, slug `icecrown-gunship-battle`, prefix `gsb.`. Code: `Action/ICCActions_GSB.cpp`, nodes
-`icc gunship cannon near`, `icc in cannon`, `icc gunship rocket jump`, `icc gunship rocket pack
-setup`; `IccGunshipMultiplier`. Raid conventions: [README.md](README.md).
+Boss id 2, slug `icecrown-gunship-battle`, prefix `gsb.`. Code: stem `Gunship`
+(`src/Ai/Raid/ICC/*/ICC*_Gunship.*`), nodes `icc gunship cannon near`, `icc in cannon`, `icc gunship
+rocket jump`, `icc gunship rocket pack setup`; `IccGunshipMultiplier`. Raid conventions:
+[README.md](README.md).
 
 ## Mechanics (core)
 

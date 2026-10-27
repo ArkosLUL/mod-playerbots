@@ -26,6 +26,10 @@ EncounterDefinition const& IccSvalnaDefinition();
 EncounterDefinition const& IccValithriaDefinition();
 EncounterDefinition const& IccSindragosaDefinition();
 EncounterDefinition const& IccLichKingDefinition();
+// Raid-wide: the opener and resistance aura rows, fed by the live encounter's hooks (Util/ICCSeams.h).
+EncounterDefinition const& IccRaidWideDefinition();
+// Raid-wide: strips the heroic buffs that never expire while no fight that hands them out is in progress.
+EncounterDefinition const& IccHeroicBuffsDefinition();
 
 // Every ICC encounter in node order. Don't reorder: equal relevances pop in insertion order. The contexts
 // and the strategy's tick walk it too.
@@ -47,6 +51,8 @@ inline std::vector<EncounterDefinition const*> const& IccEncounterDefinitions()
         &IccValithriaDefinition(),
         &IccSindragosaDefinition(),
         &IccLichKingDefinition(),
+        &IccRaidWideDefinition(),
+        &IccHeroicBuffsDefinition(),
     };
     return definitions;
 }

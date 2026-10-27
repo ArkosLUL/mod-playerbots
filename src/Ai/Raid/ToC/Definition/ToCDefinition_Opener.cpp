@@ -1,7 +1,10 @@
 #include "ToCDefinitions.h"
 
+#include <functional>
+
+#include "RaidOpener.h"
 #include "ToCEncounterGate.h"
-#include "ToCMultipliers_Opener.h"
+#include "ToCHelpers_Opener.h"
 
 namespace Family = RaidEncounterRules::Family;
 
@@ -9,7 +12,8 @@ namespace
 {
 void DefineOpener(EncounterBuilder& e)
 {
-    e.Multiplier<ToCOpenerHoldMultiplier>(Family::Spell | Family::Attack);
+    e.Multiplier<RaidOpenerHoldMultiplier>(Family::Spell | Family::Attack, "toc opener hold",
+                                           std::cref(TrialOfTheCrusaderHelpers::TOC_OPENER));
 }
 }  // namespace
 

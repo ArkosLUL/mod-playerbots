@@ -17,8 +17,6 @@ bool IccBpcKelesethTankTrigger::IsActive()
     if (!boss)
         return false;
 
-    IccStripExperienced(bot);
-
     if (!PlayerbotAI::IsAssistTank(bot))
         return false;
 
@@ -32,15 +30,7 @@ bool IccBpcKelesethTankTrigger::IsActive()
 
 bool IccBpcMainTankTrigger::IsActive()
 {
-    if (!PlayerbotAI::IsTank(bot))
-        return false;
-
-    if (!IccAnyBloodPrincePresent(botAI))
-        return false;
-
-    IccStripExperienced(bot);
-
-    return true;
+    return PlayerbotAI::IsTank(bot) && IccAnyBloodPrincePresent(botAI);
 }
 
 bool IccBpcEmpoweredVortexTrigger::IsActive()

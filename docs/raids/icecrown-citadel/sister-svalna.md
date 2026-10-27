@@ -1,8 +1,8 @@
 # Sister Svalna
 
-Boss id 9, trace slug `sister-svalna`, prefix `ss.` ([README](README.md)). Code:
-`Action/ICCActions_SS.cpp` and the Svalna regions of the shared ICC files. Mechanics:
-`boss_sister_svalna` in `icecrown_citadel.cpp`. Not boss-flagged and no kill credit, so only the
+Boss id 9, trace slug `sister-svalna`, prefix `ss.` ([README](README.md)). Code: stem
+`Svalna` (`src/Ai/Raid/ICC/*/ICC*_Svalna.*`). Mechanics: `boss_sister_svalna` in
+`icecrown_citadel.cpp`. Not boss-flagged and no kill credit, so only the
 boss-state table names her trace.
 
 ## Mechanics

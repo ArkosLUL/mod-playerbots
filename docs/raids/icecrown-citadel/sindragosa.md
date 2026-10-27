@@ -1,8 +1,8 @@
 # Sindragosa
 
-Boss id 11, trace slug `sindragosa`, prefix `sg.` ([README](README.md)). Code: `Action/ICCActions_SG.cpp`
-and the Sindragosa regions of the shared ICC files. Mechanics: `boss_sindragosa.cpp`. Her gauntlet
-is the last section.
+Boss id 11, trace slug `sindragosa`, prefix `sg.` ([README](README.md)). Code: stem `Sindragosa`
+(`src/Ai/Raid/ICC/*/ICC*_Sindragosa.*`). Mechanics: `boss_sindragosa.cpp`. Her gauntlet is the last
+section.
 
 ## Mechanics
 
@@ -29,7 +29,9 @@ in combat and passive (takeoff to touchdown), `last` at 35% and under on the gro
 Every phase test calls it. `IccSindragosaOverAirStation(bot, boss, radius)` is the air phase within
 30 yd of the far station (the bombs) or 50 yd (both stations, from the beacons on). It replaced
 coordinate tests that also carried health bands (not under 25%, not over 99%) the script never
-uses.
+uses. The station tests stay because the script casts beacons and drops bombs only there: over the
+whole air phase, the Frost Bomb action's no-marker branch would stop attacks through takeoff and the
+flight back.
 
 ## Tactics
 
@@ -83,8 +85,6 @@ Record-only, `EnableICCBuffs`: `sg.heroicbuff` and `sg.spitefulfury` on every me
 - Icons by raid icon (README); `sg.skull`, `sg.cross` and `sg.star` record every move.
 - The red flares latch until the last phase, so an air phase more than 5 min after the first finds
   them burnt out. Only humans read them.
-- No Sindragosa node strips the heroic buffs, so humans keep Experienced and 1% Threat until a later
-  boss strips them.
 - Beacon spots are not probed: they follow from the beacon count and guid order, and the moves show
   them.
 - No ICC trace yet carries these probes, so nothing here is measured.
@@ -102,7 +102,8 @@ Record-only, `EnableICCBuffs`: `sg.heroicbuff` and `sg.spitefulfury` on every me
 | `sg.flaredred` | the bot that flared | Spots flared red (0-2, 1 is 25-man only), `none` once cleared |
 | `sg.flaredblue` | traced value | The last phase flare is down |
 
-Change-only per bot, so a bot repeating its own last value writes nothing.
+Change-only per bot, so a bot repeating its own last value writes nothing. Blistering Cold has no
+hazard circle: her 5 s `cast` row times it.
 
 `tools/botobs/bosses/sindragosa.py`; its banner names declared keys the pull never wrote, sparing
 `sg.star` on 10-man:
