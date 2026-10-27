@@ -525,7 +525,10 @@ Related traps:
   but **never cast** in this core. Prefer a boss's empower aura where one exists — it also tells you
   *which* thing is active, not just how many.
 - **`Creature::GetEntry` is the normal-difficulty entry on every difficulty** (`InitEntry`), so a
-  `difficulty_entry_*` id in an entry list never matches.
+  `difficulty_entry_*` id in an entry list never matches, and the base entry alone covers all four
+  difficulties.
+- **`UNITHOOK_ON_UNIT_ENTER_COMBAT` fires once per engage** (`Creature::AtEngage`) **with the first
+  target only.** A hook keyed on a player victim misses a pull a pet opens.
 - **A call site is not proof of its effect.** `InitFight` calls `me->SetInCombatWithZone()` on Sara,
   which reads as the pull, but `CombatManager::CanBeginCombat` refuses a combat reference while either
   side is friendly and neither hostile — she is `FACTION_FRIENDLY` for all of phase 1, so the call puts

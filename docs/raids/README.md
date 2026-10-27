@@ -65,6 +65,12 @@ still check the boss. "Live" means `IN_PROGRESS`. The gated trigger (`EncounterG
 the inner trigger's name and check interval, hands out `EncounterTriggerPassId`, and calls
 `RaidObs::NamePull` when it fires while live.
 
+`e.Multiplier<M>` acts while the gate is open, `e.LiveMultiplier<M>` only while live. A boss state
+that moves after the pull needs `Multiplier` to cover the pull window: ICC's Festergut and Rotface
+go `IN_PROGRESS` about 7 s in, when Putricide reaches his balcony point. An encounter with no boss
+state takes `UnitGate<entries...>`: open while one is alive on the bot's map, live while it fights
+the bot or a member of its group.
+
 Gate on the fight, not the unit: a drake Sartharion calls in never starts its own encounter, so OS
 mechanics sit in his definition, while a drake pulled alone starts one and closes his gate. A node
 that also serves another encounter stays in the strategy, outside every gate, after the
@@ -111,6 +117,8 @@ contexts reach every `BuildShared*` TU.
   `taunt`, so every list caught it and the Taunt family missed it until it was added.
 - A class named otherwise than its registration takes the registered name, unless its base reads the
   name (`HasAuraTrigger`'s aura, `MoveInsideAction`): then `Name` only registers.
+- To hoist a helper while another session edits one of its call sites, alias the old name in the
+  header (`inline constexpr auto& OldName = NewName;`) so the dirty file needs no change.
 
 Not migrated, by choice: deeper Mimiron and Thorim modules, Naxx's per-node helper copies, the threat
 redirect trio, and the Four Horsemen lookup ([naxxramas.md](naxxramas.md#four-horsemen)).
@@ -362,8 +370,7 @@ entry a reset just erased.
 - **Testing:** `tools/nativetest/run.sh` builds `tools/nativetest/*_test.cpp` in the build image under
   ThreadSanitizer, without the core, so the header must stay std-only.
 
-Not migrated, on purpose: Naxx (upstream still edits `NaxxBossHelper.h`) and ICC (clears on its own
-`OnDestroyMap` and 5 s after its last boss state leaves `IN_PROGRESS`). **Known gap:** BT, SSC, SWP, Hyjal, Mag, Kara, TK, ZA and RS (`RSActions_SAV.cpp`,
+Not migrated, on purpose: Naxx (upstream still edits `NaxxBossHelper.h`). **Known gap:** BT, SSC, SWP, Hyjal, Mag, Kara, TK, ZA and RS (`RSActions_SAV.cpp`,
 `RSActions_BAL.cpp`) share unlocked `extern` maps across instances, a data race once two raids run at
 once. Move them here when touched.
 

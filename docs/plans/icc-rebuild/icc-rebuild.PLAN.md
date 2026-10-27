@@ -16,7 +16,7 @@ The merge stage alone edits this table.
 |---|---|---|---|---|---|
 | 1 | r0a-restructure | merged | `18bf92d57` | one generator, no split; pass-through gate never live; ids and gate in `ICCEncounterGate.h`; Dogs/FrostGiant `ICC_BOSS_NONE`=255; `Node<T, A>` with `Name`; root owns multiplier order from wave 3 | pure move, every old behaviour issue live; never built, CMake re-run needed; boss docs' `Code:` lines name pre-split files; dead code for r3 (Rotting Giant TODO) and r7 (`spellEntriesFlood`, commented multiplier); r1 only swaps `IccPassThroughGate` |
 | 1 | r0b-guides | merged | `9be681d7f` | noobtoboss refused (robots.txt); `zamimg.com` refused like Wowhead; overview slug `icecrown-citadel`; per-source sections; hidden tab content kept | 13 Wowhead pages to save (`_guides/INDEX.md`); Wowhead selectors untested; no Crimson Hall trash guide; r3, r4, r11-r13 briefs still list noobtoboss; r14: toc-rework plan's Wowhead reason is wrong |
-| 2 | r1-foundation | pending | | | |
+| 2 | r1-foundation | merged | `6c1bd0f05` | other encounters' nodes close while one is in progress, multipliers live-only but Festergut's and Rotface's (state moves ~7 s in); one `HookRows()` table, first live row answers; opener and aura triggers silent without a hook; raid-wide rows at +2.5/+1.5/+0.5; ToC's Anub'arak files untouched behind three aliases; no config-key pattern in `probes.py` | never built, CMake re-run (11 .cpp added, 4 ToC .cpp deleted); hooks miss the pre-live window (r6, r7, r11); unit gate closed in an unloaded grid; pet-opened Blood Prince trash pull untraced until a player is hit; no ICC seam user yet; r14: drop the ToC aliases, ToC boss docs' pre-hoist names, `probes.py` config-key pattern |
 | 3a | r2-marrowgar | pending | | | |
 | 3a | r3-deathwhisper | pending | | | |
 | 3b | r4-gunship | pending | | | |
@@ -160,8 +160,9 @@ force, stash, `clean`, a checkout that discards changes.
 
 **Files a lane may touch.** Its brief's "Owns" list. Anything else only where the brief says so, listed
 in the report. Never this file, `src/Ai/Raid/Uld/`, or `src/Ai/Raid/ToC/` (except `r1-foundation`'s
-hoist). From wave 3 on, the root strategy, the contexts, the umbrella headers and
-`docs/raids/icecrown-citadel/README.md` belong to the merge stage: a boss lane reports what they need.
+hoist). From wave 3 on, the root strategy, the contexts, the umbrella headers, `HookRows()` in
+`src/Ai/Raid/ICC/Util/ICCSeams.cpp` and `docs/raids/icecrown-citadel/README.md` belong to the merge
+stage: a boss lane reports what they need.
 
 **Sources.**
 

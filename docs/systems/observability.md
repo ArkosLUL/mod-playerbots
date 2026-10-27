@@ -68,9 +68,10 @@ prefix the node leads with: `ULD_PREFIXES` holds the Ulduar ones, and `TOC_PREFI
 `gormok`, `northrend worms`, `icehowl`, `jaraxxus`, `faction champions`, `twin valkyr`, `anubarak`.
 Every per-encounter ToC trigger name leads with one, so a new ToC encounter prefix needs a row.
 `ICC_PREFIXES` holds ICC's: `icc ` then the boss, spelled out or short (`lm`, `dbs`, `bpc`, `bql`,
-`dogs`), plus `icc dark reckoning`, `icc in cannon` and `icc valkyre spear`. ICC triggers test for
-their own boss instead of sitting behind a gate, so every ICC node is asked in every ICC pull; the
-gauntlet and the Blood Prince trash own no trigger, so their pulls fold every one.
+`dogs`), plus `icc dark reckoning`, `icc in cannon` and `icc valkyre spear`. The raid-wide `icc opener
+swing`, `icc opener redirect` and `icc resistance aura` lead with none and never fold. Each other ICC
+node sits behind its encounter's `BossStateGate` or `UnitGate`; the gauntlet and the Blood Prince
+trash own no trigger, so their pulls fold every one.
 
 **The fight supplies the point, `geometry.py` the rest.** `--from` names a `const Position`, in any
 initialiser form, declared anywhere under `src/Ai/Raid/`, and `--band` a `constexpr float` radius
@@ -565,6 +566,12 @@ in one pass, while the one the bot goes for is already in `hodir.dpstarget`.
 Prefix every note key with the encounter that owns it — that is what `--notes KEY` filters on, and Iron
 Assembly legitimately spans three bosses under one slug. A prefix the slug does not derive needs a row
 in `NOTE_PREFIXES`, or `--probes` never ties the key to its boss.
+
+`probes.py`'s `declared_keys()` finds only literal keys at `ObsGuidMap`, `ObsGuidSet`, `ObsValue` and
+`NoteDerived` sites, so a raid-wide helper taking its key from a caller's config
+(`RaidDefensiveScope`, `RaidOpenerConfig`, `RaidResistAuraConfig`) hides that key from `--probes`. Such
+a helper's trigger checks first that the current encounter takes part; otherwise it notes a constant
+(`free`, `none`) every pass in raids that never use it.
 
 A pull no instance script reports — a gauntlet, trash, a mid-phase re-engage — needs `MarkPull(map,
 source, name)`, where `name`, else `source`, names the file. Thorim's corridor and ICC's dogs and
