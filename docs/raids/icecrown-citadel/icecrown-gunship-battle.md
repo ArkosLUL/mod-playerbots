@@ -20,10 +20,10 @@ a vehicle (`WipeGunshipBlizzlike`). Bots put a unit on the ship on its side of t
 |---|---|---|---|
 | Cannons: Cannon Blast 69399/70172, Incinerating Blast 69401/70174 | 2 cannons on 10, 4 on 25 (spawn masks). Blast adds 6-10 heat, 500 ms; Incinerating spends it, 1000 + (heat - 10)² × 8, 1500 ms; 100 heat is Overheat 69487 (2.5 s) | spam Blast, Incinerate near full, aim the mortars | ranged DPS first, then melee, one per live cannon; Incinerate from 90 heat; mortars, then gunners, then anything on the enemy deck |
 | Below Zero 69705 | the freeze mage's 900 s channel stuns every cannon and ejects its gunner; first when the enemy ship falls under 90% and 45 s after his ship spawned, then 30-33.5 s after the last one dies | board, kill the mage, come back | see Boarding |
-| Captain (36939 / 36948), Battle Fury 69638 | attacks only players on his deck, never dies; each hit adds a stack, +10% on normal (72306 on 25), +12% on heroic (72307, 72308), 16 s, refreshed per stack; Cleave 15284, Rending Throw 70309 off melee, Taste of Blood 69634 under 65%; taunts diminish on him (`flags_extra` 0x80000) | a tank picks him up first and drags him to the edge; leave with the party | the board tank holds him; retreat on stacks |
+| Captain (36939 / 36948), Battle Fury 69638 | attacks only players on his deck, never dies (his health is held at 1); each hit adds a stack, +10% on normal (72306 on 25), +12% on heroic (72307, 72308), 16 s, refreshed per stack; Cleave 15284, Rending Throw 70309 off melee, Taste of Blood 69634 under 65%; taunts diminish on him (`flags_extra` 0x80000) | a tank picks him up first and drags him to the edge; leave with the party; a defensive if the stacks climb | the board tank holds him and spends a button at +50% and at +100% of his hit ([Defensives](#defensives)); retreat at +200% |
 | Riflemen 36969 / Axethrowers 36968 | 4 on 10, 8 on 25, 30 s respawn; Shoot / Hurl Axe (2 s, rows 2195-2196) at players on the other ship | ranged clear them from the edge | home ranged, after boarders, in range only |
-| Mortars 36978 / Rocketeers 36982 | 2 on 10, 4 on 25, every 9 s: 69679, a 5 s cast at a player's spot on the raid's ship, the 71371 marker for 5 s from launch, then Explosion 4 yd centre to centre (69680, 69687; heroic 69688/69689 knock back) | move out | dodge |
-| Boarders: marines 36950 / reavers 36957, sergeants 36961 / 36960 | 12 s in, then every 60 s: 2 + 1 on 10, 4 + 2 on 25, through the portal to the raid's ship; Wounding Strike 69651; Bladestorm 69652, whose 69653 has no radius, so it hits nobody here; Desperate Resolve under 25%; Burning Pitch on the hull when no player is valid | the home tank collects them, the raid kills the oldest first | home tank at the portal exit, taunts; home melee and ranged by rank |
+| Mortars 36978 / Rocketeers 36982 | 2 on 10, 4 on 25, every 9 s: 69679, a 5 s cast at a player's spot on the raid's ship, the 71371 marker for 5 s from launch, then Explosion 4 yd centre to centre (69680, 69687; heroic 69688/69689 knock back) | move out; the cannons kill them, no player reaches them | dodge; cannons aim at them first |
+| Boarders: marines 36950 / reavers 36957, sergeants 36961 / 36960 | 12 s in, then every 60 s: 2 + 1 on 10, 4 + 2 on 25, through the portal to the raid's ship; Wounding Strike 69651; Bladestorm 69652, whose 69653 has no radius, so it hits nobody here; Desperate Resolve under 25%; Burning Pitch on the hull when no player is valid | the home tank collects them, the raid kills the oldest first | home tank at the portal exit, taunts, one button per wave on it ([Defensives](#defensives)); home melee and ranged by rank |
 | Battle Experience | adds rank up 100 s after reaching their slot, then 70, 60 and on heroic 90 more (71188, 71193, 71195, 72525) | "every 30 s" | rank orders the kills |
 | Check for Players 70332 | every 5 s, anyone 10 yd under the raid's ship creature is teleported back on deck | don't fall | nothing to do: the ground is 620 yd down, so a faller is back within ~6.5 s |
 | Rocket Pack 68645 (item 49278, shirt slot) | 40 yd jump, 1 s; needs Rocket Pack Useable 70348 (200 yd round Zafod 37184); flight aura 68721 until landing | jump across | the only cross-deck mover |
@@ -81,12 +81,59 @@ still without one holds no stand, since the stand would pull it back from Zafod.
   transport-local) and on the bot's deck: `FindNearestPositionClearOfHazards`' navmesh check refuses
   every point on a transport deck.
 
+## Defensives
+
+Every bot tank (board and home) spends `NextTankDefensive`, physical only, one button per window
+(`gsb.defensive`):
+
+- **On the enemy deck, holding the captain**: window 1 once his stacks add 50% to his hit, window 2 at 100%
+  (5 and 10 stacks on normal, 5 and 9 on heroic); the retreat stays at 200%. `gsb.furywindow` is the window.
+- **On the raid's deck**: window 1 when 3 boarders sit on the tank with a party member across, or one is a
+  Veteran; window 2 at Elite.
+- The latch per tank, deck and window ends with its window (stacks gone, wave dead, deck left).
+- Under 40% health a tank spends one outside the windows. The class nodes (`HeldTankDefensiveNames()`) stay
+  held above 25%, so only this node casts them.
+- A human holding the captain gets `CallHumanTankDefensive` at the windows and under 40% (`gsb.humancall`).
+
+The thresholds are unmeasured. He swings every 1.5 s, so the windows open about 8 s and 15 s into a hold
+on normal and the retreat at 30 s (25 s on heroic); a button's 12 to 20 s covers each leg. A Veteran needs
+170 s alive, so the wave of 3 is the usual trigger.
+
+**Burst.** Lust waits for the base gate, which resolves the boss from the main tank's victim: it goes
+once any tank has held the captain 3 s, which is the boarding. Personal cooldowns stay held for the whole
+fight: the base gate saves them for boss-flagged targets and the freeze mage is not one (type flags 72;
+the captain is, and cannot die). A per-boss window only holds, so releasing them on the mage needs an
+entry-keyed exemption in the shared gate (`BurstCooldowns.cpp`, outside this stem).
+
 ## Coordinates
 
 The world points (launch, landing, mage area) are kept from the old code and match the core's y bounds;
 the edge slots and the portal exit are transport-local from the core's spawns. Every deck is a
 gameobject floor: navprobe reads each point off mesh with terrain 620 yd below, so none can be checked
-offline.
+offline, and gameobject collision needs a live server, so sight from a stand to a target is unchecked
+too.
+
+**Where the ships stop**, from the core's data: the battle stops are the path nodes of the `TaxiPathNode`
+DBC (paths 1814 and 1816 for the Alliance raid, 1818 and 1819 for the Horde), and a stop frame's heading
+is the Catmull-Rom tangent plus π (`MotionTransport::Update`).
+
+| Raid | Raid ship at (x, y) heading | Enemy ship at (x, y) heading | Origins apart |
+|---|---|---|---|
+| Alliance | Skybreaker (-377.2, 2073.5), 15.5° | Orgrim's Hammer (-384.9, 1989.8), 17.6° | 84 yd |
+| Horde | Orgrim's Hammer (-438.1, 2395.7), 9.2° | Skybreaker (-435.9, 2475.3), 5.1° | 80 yd |
+
+- **The cannon side faces the enemy ship** on all four ships: the cannons sit at transport-local y about
+  -25 on the Skybreaker and +31 on Orgrim's Hammer, and the gun side's direction has a cosine of 0.92 to
+  0.99 with the line to the other ship. The edge slots stand on the right side.
+- Launch and landing re-derive to transport-local spots on those rails (Alliance: (-19, -23) on the
+  Skybreaker, (12, 31) on the Hammer; Horde: (-3, 25), (-16, -25)), 24 and 30 yd apart as the jump needs;
+  the mage area lies within 5 yd of the freeze mage's slot.
+- Every hull y lies inside the core's bounds, bar the Alliance Skybreaker's rearmost cannon (y 2041, 1 yd
+  short of 2042).
+- The healers' four nearest edge slots stand 34 to 35 yd from the board tank's spot, the farthest slots 42
+  to 46 yd.
+- Edge slots to the nearest enemy mortar: 84 to 93 yd (Alliance), 72 to 81 yd (Horde), out of every
+  player's reach: the cannons are the answer.
 
 ## Cheats
 
@@ -96,17 +143,18 @@ fall.
 
 ## Known gaps
 
-- No 631 trace yet.
-- The edge slots assume the cannon side faces the enemy ship.
-- No tank defensive or burst on the captain's stacks.
-- Mortars sit beyond every player's reach; only the cannons kill them.
-- A human holds no duty: a human tank on the captain is respected, nothing else.
+- No 631 trace yet; never built, so no `-Werror` pass either.
+- No coordinate or line of sight is checked: the decks are gameobject floors (see Coordinates).
+- Personal burst cooldowns stay held on the freeze mage (see Defensives).
+- The defensive thresholds are guesses until a pull shows the stacks against the tank's health.
+- A human holds no duty: a human tank on the captain gets the call, nothing else.
 
 ## Next pull
 
 25N, then 25H: `gsb.fury` at each thaw (the stacks when the mage died) and any `gsb.retreat`; time from
-`frozen` to the first `go` and to `fight`; `gsb.dodge` entries against Explosion hits; deaths by falls
-(the rescue's teleport 67335) and to the captain.
+`frozen` to the first `go` and to `fight`; `--defensives`: a tank button in each `gsb.furywindow` stretch
+and the casts off the windows (a boarding wave); `gsb.dodge` entries against Explosion hits; deaths by
+falls (the rescue's teleport 67335) and to the captain, which settle the thresholds.
 
 ## What a trace answers
 
@@ -122,6 +170,10 @@ fall.
 | `gsb.dodge` | per bot | `rocket`, `pitch`, `none` |
 | `gsb.retreat` | per instance | the stack count a retreat latched at, 0 when it clears |
 | `gsb.fury` | per instance | the captain's stacks at each thaw |
+| `gsb.furywindow` | per instance | the board tank's defensive window the stacks open: 1, 2, 0 once gone |
+| `gsb.defensive` | per tank bot | the button offered (cast name), `covered` once one runs, `none` with nothing ready, `idle` outside a window above 40% health |
+| `gsb.humancall` | per call | the button a human tank was told to press |
 
 Each mortar cast is a hazard circle (69679, 4 yd). No cheat key. `tools/botobs/bosses/icecrown_gunship_battle.py`:
-`--phases`, `--duties`, `--decks`, `--boarding`, `--targets`, `--cannons`, `--dodges`, `--cheats`.
+`--phases`, `--duties`, `--decks`, `--boarding`, `--targets`, `--cannons`, `--dodges`, `--defensives`,
+`--cheats`.

@@ -20,6 +20,8 @@ bool IccGunshipRocketJumpTrigger::IsActive()
 
 bool IccGunshipTauntTrigger::IsActive() { return GsbTauntTarget(botAI) != nullptr; }
 
+bool IccGunshipTankDefensiveTrigger::IsActive() { return GsbTankDefensive(botAI) != 0; }
+
 bool IccGunshipCannonNearTrigger::IsActive() { return GsbWantsCannon(botAI); }
 
 bool IccInCannonTrigger::IsActive()

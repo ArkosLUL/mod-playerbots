@@ -27,6 +27,7 @@ FULL = BOTOBS / "fixtures" / "full-v14.ndjson"
 BULWARK = 6301  # board tank
 ARROW = 6302    # ranged cannoneer
 SHIV = 6303     # melee boarder
+WARD = 6304     # home tank
 ADD = (1 << 32) | 900
 
 
@@ -40,7 +41,7 @@ def pull(boss: str = "icecrown-gunship-battle") -> list[dict]:
          "cfg": {"cheats": "food,taxi,raid", "iccbuffs": 0},
          "roster": [{"g": guid, "n": name, "r": role, "c": "x", "h": 0}
                     for guid, name, role in ((BULWARK, "Bulwark", "tank"), (ARROW, "Arrow", "ranged"),
-                                             (SHIV, "Shiv", "melee"))]},
+                                             (SHIV, "Shiv", "melee"), (WARD, "Ward", "tank"))]},
         {"t": 0, "e": "pull", "boss": boss, "src": "bossstate"},
         note(100, BULWARK, gsb.DUTY, "boardtank"),
         note(100, ARROW, gsb.DUTY, "cannon"),
@@ -70,6 +71,23 @@ def pull(boss: str = "icecrown-gunship-battle") -> list[dict]:
         note(53000, ARROW, gsb.CANNON, "gunner"),
         note(60000, SHIV, gsb.DODGE, "rocket"),
         note(61000, SHIV, gsb.DODGE, "none"),
+        {"e": "spell", "sp": 871, "n": "Shield Wall"},
+        {"e": "spell", "sp": 12975, "n": "Last Stand"},
+        {"e": "spell", "sp": 498, "n": "Divine Protection"},
+        note(100, WARD, gsb.DECK, "friendly"),
+        note(100, BULWARK, gsb.DECK, "enemy"),
+        note(38000, BULWARK, gsb.FURY_WINDOW, "1"),
+        note(38500, BULWARK, gsb.DEFENSIVE, "shield wall"),
+        {"t": 38600, "e": "cast", "s": BULWARK, "sp": 871},
+        note(39000, BULWARK, gsb.DEFENSIVE, "covered"),
+        note(44000, BULWARK, gsb.FURY_WINDOW, "2"),
+        note(44200, BULWARK, gsb.DEFENSIVE, "last stand"),
+        {"t": 44300, "e": "cast", "s": BULWARK, "sp": 12975},
+        note(66000, BULWARK, gsb.FURY_WINDOW, "0"),
+        note(66000, BULWARK, gsb.DEFENSIVE, "idle"),
+        note(75000, WARD, gsb.DEFENSIVE, "divine protection"),
+        {"t": 75100, "e": "cast", "s": WARD, "sp": 498},
+        note(75500, ARROW, gsb.HUMAN_CALL, "Shield Wall"),
         {"t": 90000, "e": "end", "out": "kill"},
     ]
 
@@ -112,6 +130,34 @@ class SyntheticPull(unittest.TestCase):
 
     def test_dodges(self):
         self.assertEqual(gsb.entries(self.trace, gsb.DODGE), {"rocket": (1, 1)})
+
+    def test_the_stacks_open_one_stretch_of_two_windows(self):
+        [stretch] = gsb.fury_stretches(self.trace)
+        self.assertEqual((stretch["start"], stretch["stop"], stretch["levels"]),
+                         (38000, 66000, [(38000, 1), (44000, 2)]))
+
+    def test_defensives_section(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            gsb.show_defensives(self.trace)
+        self.assertEqual(out.getvalue(), (
+            "TANK DEFENSIVES\n"
+            "  1  stacks past a window for 0:28.000: window 1 from 0:38.000, window 2 from 0:44.000\n"
+            "      cast     Shield Wall Bulwark +0.6s, Last Stand Bulwark +6.3s\n"
+            "      offered  Bulwark covered x1, Bulwark last stand x1, Bulwark shield wall x1\n"
+            "  off the windows  Divine Protection Ward 1:15.100 on the friendly deck\n"
+            "  calls to a human tank  Shield Wall 1:15.500\n"
+            "\n"
+            "  1 of 1 stack windows saw a tank button; a window opens when his stacks add 50% to his hit,"
+            " the second at 100%\n"))
+
+    def test_a_pull_with_no_window_says_so(self):
+        quiet = [rec for rec in pull() if rec.get("k") not in (gsb.FURY_WINDOW, gsb.DEFENSIVE, gsb.HUMAN_CALL)
+                 and rec.get("e") != "cast"]
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            gsb.show_defensives(load(quiet))
+        self.assertIn("no tank button cast, and the captain's stacks never reached a window", out.getvalue())
 
     def test_no_cheat(self):
         self.assertEqual(gsb.own_cheats(self.trace), [])
