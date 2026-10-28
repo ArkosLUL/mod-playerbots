@@ -198,8 +198,9 @@ portal this way.
   from stdin, one verdict a line: loading the vmap tree dominates, so batch the rays in one
   invocation. The eye is `--collision` above both endpoints, matching `IsWithinLOSInMap`.
   **GameObject collision needs a live server**, and a map with no vmap tree reads every ray as clear
-  (`coverage` warns). The prebuilt binary in `acore/ac-wotlk-build:master` has neither (its usage
-  lists only `coverage`, `point`, `path` and `ring`), so with it sight stays unchecked.
+  (`coverage` warns). The worldserver build never re-tags `acore/ac-wotlk-build:master`, so its
+  navprobe can trail the source: if its usage lacks `los`, rebuild the `ac-navprobe` service, capped
+  like a worldserver build.
 
   **A gameobject floor is invisible to navprobe.** The static mesh and vmaps have nothing under it,
   so every point reads off mesh with no height: there the offline check is impossible, not failed.
