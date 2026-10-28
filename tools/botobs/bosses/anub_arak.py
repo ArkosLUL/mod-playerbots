@@ -29,12 +29,16 @@
                                      14.5 yd of a patch it was not already inside at the mark; Impale on a side
                                      tank flagged; per submerge the seconds into phase 2 its first tank patch went;
                                      per kite an anub.lane step off the patches while another heading was clear,
-                                     the escort's distance at the claim and its walk and dodge swaps within 1 s,
-                                     claim to cast for each Hand, the Hand against the held-heading catch, the
+                                     the escort's distance at the claim, at the kiter's boost before any Hand
+                                     and at the end, its seconds in Permafrost and its walk and dodge swaps
+                                     within 1 s, a kiter dead to anything but the spike with its own immunity
+                                     unused, claim to cast for each Hand, the Hand against the held-heading catch, the
                                      kiter within 15.5 yd of a tank patch under a Hand, an own immunity after a
                                      Hand ran out, a boost in a Hand's first 8 s, anub.second grants; the Hand's
                                      cooldown off anub.hands, else 300 s; per submerge the seconds kited and idle,
-                                     the terminals, the seconds after the first tank patch, kiters dead; per
+                                     the terminals, the seconds after the first tank patch, kiters dead;
+                                     heroic, each kite tool (Sprint, Nitro, Divine Shield, Ice Block, Vanish,
+                                     Feign Death) a bot spent off its own mark before phase 3, per phase; per
                                      submerge the bystanders' gather and dodge swaps within 1.5 s, total and top
                                      5 bots, and each bot's dodge walks
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
@@ -73,8 +77,9 @@
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust, Penetrating Cold, deaths
     anub_arak.py <file> --healers    per healer and phase its median distance to the main tank and each side
                                      tank, the seconds over 35 yd from a side tank a burrower was on, follow
-                                     acts in the pull, its engine passes, anub.hstand; per side tank the seconds
-                                     alive with no healer within 40 yd; raid healer engine in the coverage
+                                     acts in the pull, its engine passes, anub.hstand; per side tank and the
+                                     main tank the seconds alive with no healer within 40 yd; raid healer engine
+                                     in the coverage
     anub_arak.py <file> --tanks      Expose Weakness peak per burrower wave per side tank; per run of it on the
                                      main tank its peak, the burrowers on him at a stack and his area casts (Swipe,
                                      Challenging Roar, ...) from 5 s before the first stack to the peak; each tank
@@ -347,6 +352,10 @@ KITEPLAN_SETTLE_MS = 1000
 # what each anub.kiteplan terminal spends; `none` spends nothing
 PLAN_NEEDS = {"patch": ("patch",), "hand": ("hand",), "patch+hand": ("patch", "hand"), "own": ("own",)}
 PATCH_PLANS = ("patch", "patch+hand")
+HAND_PLANS = ("hand", "patch+hand")
+# what a kite runs on, any rank; 55004 is the Nitro Boosts use
+KITE_TOOLS = {11305: "Sprint", 8696: "Sprint", 2983: "Sprint", 55004: "Nitro Boosts", 642: "Divine Shield",
+              45438: "Ice Block", 26889: "Vanish", 1857: "Vanish", 1856: "Vanish", SPELL_FEIGN_DEATH: "Feign Death"}
 # anub.bridge values a patch+hand kite writes at its turn. Older traces ask for the Hand there, so their
 # hand row follows the ask; with no ask the hand row is the Hand landing at the catch, and the kite turns
 # under it later.
@@ -1417,11 +1426,21 @@ def alternations(moves: list[dict], start: int, stop: int) -> int:
                if one.get("by") != two.get("by") and two["t"] - one["t"] <= ALTERNATE_MS)
 
 
+def escort_yards(samples: Samples, guid: int, kiter: int, when: int) -> float | None:
+    mine, theirs = samples.recent(guid, when), samples.recent(kiter, when)
+    return dist2(mine[1:3], theirs[1:3]) if mine and theirs else None
+
+
+def frost_seconds(spans: list[tuple[int, int, bool]], start: int, stop: int) -> float:
+    return sum(max(0, min(high, stop) - max(low, start)) for low, high, _ in spans) / 1000.0
+
+
 def escort_read(samples: Samples, escorts: dict[int, list[tuple[int, str]]], window: dict,
-                moves: dict[int, list[dict]]) -> dict | None:
+                moves: dict[int, list[dict]], frost: dict[int, list[tuple[int, int, bool]]]) -> dict | None:
     """The escort in a window, the paladin whose `anub.escort` reads anything but none there, most rows first:
     its distance to the kiter at the claim, the first `anub.protect` hop row in the window or, with none, as
-    the spike came within KITE_PROTECT_RANGE; and its walk and dodge swaps. None with no escort."""
+    the spike came within KITE_PROTECT_RANGE; at the kiter's first boost before any Hand on it, and at the
+    window's end; the seconds it carried Permafrost; and its walk and dodge swaps. None with no escort."""
     start, stop = window["start"], window["stop"]
     counts = {guid: sum(1 for when, value in rows if start <= when <= stop and value != "none")
               for guid, rows in escorts.items()}
@@ -1432,12 +1451,13 @@ def escort_read(samples: Samples, escorts: dict[int, list[tuple[int, str]]], win
     claim = next((rec["t"] for rec in window["protect"] if str(rec.get("txt")) == "hop"), None)
     if claim is None and window["near"] is not None:
         claim = start + window["near"]
-    yards = None
-    if claim is not None:
-        mine, kiter = samples.recent(guid, claim), samples.recent(window["guid"], claim)
-        if mine and kiter:
-            yards = dist2(mine[1:3], kiter[1:3])
-    return {"guid": guid, "t": claim, "yards": yards, "swaps": alternations(moves.get(guid, []), start, stop)}
+    yards = None if claim is None else escort_yards(samples, guid, window["guid"], claim)
+    first_hand = min((rec["t"] for rec in window["hop"]), default=stop + 1)
+    boost = next((rec["t"] for rec in window["boosts"] if rec["t"] < first_hand), None)
+    return {"guid": guid, "t": claim, "yards": yards, "swaps": alternations(moves.get(guid, []), start, stop),
+            "boost": boost, "boost_yd": None if boost is None else escort_yards(samples, guid, window["guid"], boost),
+            "end_yd": escort_yards(samples, guid, window["guid"], stop),
+            "frost_s": frost_seconds(frost.get(guid, []), start, stop)}
 
 
 def claim_casts(window: dict) -> list[tuple[dict, int | None]]:
@@ -1565,13 +1585,15 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     lanes = per_bot(trace, "anub.lane")
     escorts = per_bot(trace, "anub.escort")
     seconds = per_bot(trace, "anub.second")
+    frost_auras = aura_spans(trace, PERMAFROST)
 
     out = []
     for guid, start, stop, closed in marks:
         hits = [rec for rec in impales
                 if rec.get("d") == guid and start <= rec["t"] <= stop + IMPALE_SLACK_MS]
-        died = next((rec["t"] for rec in deaths
-                     if rec.get("g") == guid and start <= rec["t"] <= stop + IMPALE_SLACK_MS), None)
+        death = next((rec for rec in deaths
+                      if rec.get("g") == guid and start <= rec["t"] <= stop + IMPALE_SLACK_MS), None)
+        died = None if death is None else death["t"]
         consumed = closed and stop in used
         by_emerge = any(abs(stop - edge) <= EMERGE_SLACK_MS for edge in emerges)
         if died is not None:
@@ -1606,6 +1628,8 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "plan": plan_terminals(plans.get(guid, []), start, stop),
                     "impales": len(hits), "damage": sum(rec.get("a", 0) for rec in hits),
                     "outcome": outcome, "consumed": consumed, "died": died,
+                    "killer": None if death is None else death.get("killer"),
+                    "killer_spike": death is not None and death.get("killer") in spikes,
                     "near": near,
                     "escort": None if asked is None else ready_paladin(samples, ready, guid, asked),
                     "flips": flip_flops(moves.get(guid, []), start, stop),
@@ -1649,7 +1673,7 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                                  if "turn" in window["bridge"] and turn is not None else None)
         window.update({
             "lane_offs": lane_offs(lanes.get(guid, []), start, stop),
-            "escort_read": escort_read(samples, escorts, window, moves),
+            "escort_read": escort_read(samples, escorts, window, moves, frost_auras),
             "claim_casts": claim_casts(window),
             "held_catches": held_catches(samples, spikes, window, marks, submerged, lanes.get(guid, [])),
             "hand_patch": hand_patch_pass(samples, latches, window, hand_auras),
@@ -1857,6 +1881,42 @@ def rel_s(window: dict, when: int) -> str:
     return f"{(when - window['start']) / 1000:+.1f} s"
 
 
+def own_unused_death(window: dict) -> bool:
+    """Dead to something other than the spike with its own immunity planned and never cast."""
+    return (window["outcome"] == "death" and not window["killer_spike"] and "own" in window["plan"]
+            and not window["own"])
+
+
+def boost_in_reach(window: dict) -> bool:
+    """A hand kite's boost before its Hand while the escort was still inside the Hand's reach."""
+    escort = window["escort_read"]
+    return (bool(escort) and escort["boost_yd"] is not None and escort["boost_yd"] <= HOP_RANGE
+            and any(terminal in HAND_PLANS for terminal in window["plan"]))
+
+
+def spent_kite_tools(trace: Trace, windows: list[dict]) -> list[tuple[str, dict]]:
+    """Heroic: each kite tool a bot cast outside its own marks before phase 3, with the phase it went in."""
+    if not is_heroic(trace):
+        return []
+    spans = phase_spans(trace)
+    roster = roster_guids(trace)
+    marked = collections.defaultdict(list)
+    for window in windows:
+        marked[window["guid"]].append((window["start"], window["stop"]))
+    out = []
+    for rec in trace.of("cast"):
+        guid = rec.get("s")
+        if rec.get("tr") or rec.get("sp") not in KITE_TOOLS or guid in trace.humans or guid not in roster:
+            continue
+        if any(low <= rec["t"] <= high for low, high in marked.get(guid, [])):
+            continue
+        phase = next((phase for start, stop, phase, _ in spans if start <= rec["t"] < stop), None)
+        if phase == 3:
+            continue
+        out.append((phase_at(spans, rec["t"]) or "-", rec))
+    return out
+
+
 def rework_lines(trace: Trace, window: dict) -> list[str]:
     """One kite's anub.lane steps off the patches, its escort at the claim and its swaps, claim to cast, the
     Hand against the held-heading catch, the kiter near a tank patch under a Hand, an own immunity after a
@@ -1875,7 +1935,15 @@ def rework_lines(trace: Trace, window: dict) -> list[str]:
             text += f", past its {HOP_RANGE:.0f} yd reach"
         if escort["swaps"]:
             text += f"; walk and dodge swapped {escort['swaps']} time(s) within {ALTERNATE_MS / 1000:.0f} s"
+        if escort["boost_yd"] is not None:
+            text += f"; {escort['boost_yd']:.1f} yd at the boost {rel_s(window, escort['boost'])}"
+        if escort["end_yd"] is not None:
+            text += f"; {escort['end_yd']:.1f} yd at the end"
+        if escort["frost_s"]:
+            text += f"; carried Permafrost {escort['frost_s']:.1f} s"
         lines.append(text)
+    if own_unused_death(window):
+        lines.append(f"died to {trace.name(window['killer'])} with its own immunity unused")
     casts = [f"{trace.name(rec.get('s'))} " + ("no hop row" if gap is None else f"{gap / 1000:.1f} s")
              for rec, gap in window["claim_casts"]]
     if casts:
@@ -1915,6 +1983,24 @@ def show_rework(trace: Trace, windows: list[dict], spent: list[dict]) -> None:
     swapped = [window for window in windows if window["escort_read"] and window["escort_read"]["swaps"]]
     print(f"  escort walk and dodge swapped within {ALTERNATE_MS / 1000:.0f} s: "
           + (", ".join(f"{who(window)} {window['escort_read']['swaps']}" for window in swapped) or "none"))
+    reached = [window for window in windows if boost_in_reach(window)]
+    print(f"  hand kite boosted before its Hand with the escort within {HOP_RANGE:.0f} yd: "
+          + (", ".join(f"{who(window)} {window['escort_read']['boost_yd']:.1f} yd, "
+                       + ("-" if window["escort_read"]["end_yd"] is None
+                          else f"{window['escort_read']['end_yd']:.1f}") + " at the end"
+                       for window in reached) or "none"))
+    frozen = [window for window in windows if window["escort_read"] and window["escort_read"]["frost_s"]]
+    print("  escort carrying Permafrost in the kite: "
+          + (", ".join(f"{who(window)} {window['escort_read']['frost_s']:.1f} s" for window in frozen) or "none"))
+    unused = [window for window in windows if own_unused_death(window)]
+    print("  kiter dead to anything but the spike with its own immunity unused: "
+          + (", ".join(f"{who(window)} by {trace.name(window['killer'])}" for window in unused) or "none"))
+    tools = spent_kite_tools(trace, windows)
+    if is_heroic(trace):
+        print("  kite tools a bot spent off its own mark, per phase: "
+              + ("; ".join(f"{label} " + ", ".join(f"{trace.name(rec.get('s'))} {KITE_TOOLS[rec['sp']]} {clock(rec['t'])}"
+                                                   for at, rec in tools if at == label)
+                           for label in dict.fromkeys(at for at, _ in tools)) or "none"))
     gaps = [(window, rec, gap) for window in windows for rec, gap in window["claim_casts"] if gap is not None]
     slow = [(window, rec, gap) for window, rec, gap in gaps if gap > CLAIM_CAST_FLAG_MS]
     if gaps:
@@ -4497,9 +4583,9 @@ def main_tank(trace: Trace, samples: Samples) -> int | None:
 def healer_rows(trace: Trace, samples: Samples | None = None) -> dict:
     """From the pull on, per living healer and phase its distances to the main tank and to whoever held each
     side (`gaps[(healer, label)]["main"|0|1]`), the milliseconds over HEALER_FAR_YD from a side tank a living
-    burrower targeted (`far[(healer, side, label)]`), and per side the milliseconds its holder lived with no
-    living healer within HEALER_REACH_YD (`bare[(side, tank, label)]`). A snapshot stands for the time since
-    the one before, capped at MAX_STEP_MS."""
+    burrower targeted (`far[(healer, side, label)]`), and per side, and for the main tank under side "main",
+    the milliseconds its holder lived with no living healer within HEALER_REACH_YD (`bare[(side, tank,
+    label)]`). A snapshot stands for the time since the one before, capped at MAX_STEP_MS."""
     samples = samples or Samples(trace)
     healers = healer_guids(trace)
     main = main_tank(trace, samples) if healers else None
@@ -4535,7 +4621,7 @@ def healer_rows(trace: Trace, samples: Samples | None = None) -> dict:
                 gaps[(row[0], label)][key].append(gap)
                 if key != "main" and held[key] and gap > HEALER_FAR_YD:
                     far[(row[0], key, label)] += step
-        for side, tank in tanks.items():
+        for side, tank in list(tanks.items()) + [("main", main)]:
             unit = units.get(tank) if tank else None
             if unit is not None and unit[5] > 0 and not any(dist2(row[1:3], unit[1:3]) <= HEALER_REACH_YD
                                                             for row in living):
@@ -4668,13 +4754,20 @@ def show_healers(trace: Trace) -> None:
             for guid, values in sorted(held.items(), key=lambda item: trace.name(item[0]))))
 
     bare: dict[tuple[int, int], list[str]] = collections.defaultdict(list)
+    main_bare: list[str] = []
     for (side, tank, label), ms in rows["bare"].items():
-        if ms:
+        if not ms:
+            continue
+        if side == "main":
+            main_bare.append(f"{label} {ms / 1000:.1f} s")
+        else:
             bare[(side, tank)].append(f"{label} {ms / 1000:.1f} s")
     print(f"  side tank alive with no living healer within {HEALER_REACH_YD:.0f} yd:"
           + ("" if bare else " none"))
     for (side, tank), parts in sorted(bare.items()):
         print(f"    side {side} {trace.name(tank)[:14]:14} {', '.join(parts)}")
+    print(f"  main tank {trace.name(rows['main']) if rows['main'] else '-'} alive with no living healer within"
+          f" {HEALER_REACH_YD:.0f} yd: " + (", ".join(main_bare) or "none"))
 
 
 # ---------------------------------------------------------------------------------------------- tanks
@@ -5236,7 +5329,9 @@ SECTIONS = (
      " terminals and whether the last was used before the mark ended, each patch kite's turn with its"
      " anub.kitemove and whether the spike failed on its patch, a patch+hand kite's Hand at the turn and against"
      " the predicted catch with the patch under it, the paladin nearest an anub.bridge turn, the spike within"
-     " 14.5 yd of a patch before the turn, Impale on a side tank, each submerge's first tank patch gone",
+     " 14.5 yd of a patch before the turn, Impale on a side tank, each submerge's first tank patch gone, the"
+     " escort at the boost and the end and in Permafrost, a kiter dead to anything but the spike with its own"
+     " immunity unused, kite tools spent off the mark",
      show_spike),
     ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots, killers,"
      " landings, grips from the cast spot, the grip duty to kill and a sphere back up, each far grip's links"
@@ -5259,7 +5354,8 @@ SECTIONS = (
      " midpoint with no drag leg, the drag's pre-steps, anub.subspot rows", show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, Penetrating Cold heals, defensives, deaths", show_swarm),
     ("healers", "per healer and phase the distance to the main and side tanks, far from a side tank on a burrower,"
-     " follow acts, engine passes, anub.hstand; side tanks with no healer in reach; raid healer engine coverage",
+     " follow acts, engine passes, anub.hstand; side tanks and the main tank with no healer in reach; raid healer"
+     " engine coverage",
      show_healers),
     ("tanks", "Expose Weakness per wave per side tank, the main tank's with the burrowers and his area casts"
      " before it, each tank defensive cast with its stack, each tank death with the damage and heals before it",

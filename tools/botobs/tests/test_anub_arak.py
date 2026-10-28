@@ -15,7 +15,8 @@ submerge, a relayed far grip, Bladestorm near a burrower, the burrower threat ca
 and the submerge spot search, a tenth the anub.lane, escort, claim, Hand, second patch and per submerge
 kite reads and the Hand's cooldown off anub.hands, an eleventh three burrowers on one side tank and the
 two sides' burrowers within Spider Frenzy's reach, a twelfth the bystanders' gather and dodge swaps and
-dodge walks, and the shared fixture shows every section reads empty on a trace that is not Anub'arak
+dodge walks, a thirteenth the escort at the boost, at the end and in Permafrost, an own kite dead to a scarab,
+kite tools spent off the mark and the main tank out of the healers' reach, and the shared fixture shows every section reads empty on a trace that is not Anub'arak
 rather than raising.
 """
 from __future__ import annotations
@@ -3447,7 +3448,7 @@ class ReworkPull(unittest.TestCase):
         self.assertIn("            anub.lane step off the patches while another heading was clear of them: 1 time(s)"
                       " from +1.0 s\n"
                       "            escort Holylight 34.1 yd off at the claim +7.8 s, past its 30 yd reach; walk and dodge"
-                      " swapped 2 time(s) within 1 s\n"
+                      " swapped 2 time(s) within 1 s; 35.4 yd at the end\n"
                       "            claim to cast: Holylight 0.2 s\n", text)
         self.assertIn("            under the Hand 7.1 yd from the side 0 tank patch +13.5 s, inside 15.5 yd\n"
                       "            Ice Block 0.5 s after the Hand ran out\n"
@@ -3552,6 +3553,122 @@ class SideTankCrowds(unittest.TestCase):
         row = {"subspot": [(1000, "706,138,142 r25")], "submerge": None, "subleg": False, "subhold": 2}
         self.assertEqual(ab.subspot_text(row), "706,138,142 r25 0:01.000; no submerge leg, 2 subhold row(s)")
         self.assertEqual(ab.subspot_text({**row, "subleg": True}), "706,138,142 r25 0:01.000")
+
+
+ETANK, EPALADIN, EKITER, EOWN, EROGUE, EHEAL = range(9501, 9507)
+EBOSS = CREATURE | 1600
+ESPIKE = CREATURE | 1601
+ESCARAB = CREATURE | 1602
+EKITER_AT = (X + 30.0, Y)
+EOWN_AT = (X, Y + 30.0)
+SPELL_NITRO_USE, SPELL_SPRINT = 55004, 11305
+
+
+def escort_snap(when: int) -> dict:
+    """The escort 20 yd off its kiter until 25 s, then 45; the healer 50 yd off the main tank for the first 4 s."""
+    paladin = (X + 10.0, Y) if when < 25000 else (X - 15.0, Y)
+    heal = (X + 50.0, Y + 30.0) if when < 4000 else (X + 5.0, Y + 5.0)
+    units = [[ETANK, X, Y + 1.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [EPALADIN, *paladin, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [EKITER, *EKITER_AT, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [EOWN, *EOWN_AT, Z, 0.0, 0.0 if when >= 48000 else 100.0, 100.0, 0, 0, 0, 0, 0],
+             [EROGUE, X - 5.0, Y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [EHEAL, *heal, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [EBOSS, X, Y, Z, 0.0, 80.0, 0.0, ETANK, 0, 0, 0, 0]]
+    if 12000 <= when <= 30000:
+        units.append([ESPIKE, EKITER_AT[0] - 6.0, EKITER_AT[1], Z, 0.0, 100.0, 0.0, EKITER, 1, 0, 0, 0])
+    elif 40000 <= when <= 48000:
+        units.append([ESPIKE, EOWN_AT[0] - 6.0, EOWN_AT[1], Z, 0.0, 100.0, 0.0, EOWN, 1, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def escort_pull() -> list[dict]:
+    """A 25H submerge from 10 s to 72 s: a hand kite whose Nitro goes with its escort 20 yd off, the escort then
+    in Permafrost and 45 yd off at the end; an own kite dead to a scarab with its Divine Shield unused; a rogue
+    Sprint off the mark in phases 1 and 2; and the main tank past every healer's reach for 4 s."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789800000000, "map": ab.MAP_TOC, "inst": 18, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": ETANK, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+                    {"g": EPALADIN, "n": "Justice", "r": "melee", "c": 2, "h": 0},
+                    {"g": EKITER, "n": "Agony", "r": "ranged", "c": 9, "h": 0},
+                    {"g": EOWN, "n": "Holylight", "r": "melee", "c": 2, "h": 0},
+                    {"g": EROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
+                    {"g": EHEAL, "n": "Elemena", "r": "heal", "c": 7, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": EBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 10000, "e": "unit", "g": ESPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        {"t": 40000, "e": "unit", "g": ESCARAB, "en": ab.NPC_SCARAB, "n": "Swarm Scarab"},
+        *(note(when, ETANK, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (72000, 1))),
+        aura(12000, EKITER, ab.SPELL_MARK, False, ESPIKE),
+        aura(30000, EKITER, ab.SPELL_MARK, True, ESPIKE),
+        note(12100, EKITER, "anub.kiteplan", "hand"),
+        *(note(when, EPALADIN, "anub.escort", value) for when, value in ((12500, "walk"), (30000, "none"))),
+        cast(20000, EKITER, SPELL_NITRO_USE, EKITER),
+        aura(22000, EPALADIN, PERMAFROST_25H, False),
+        aura(25000, EPALADIN, PERMAFROST_25H, True),
+        aura(40000, EOWN, ab.SPELL_MARK, False, ESPIKE),
+        note(40100, EOWN, "anub.kiteplan", "own"),
+        {"t": 48000, "e": "death", "g": EOWN, "killer": ESCARAB, "x": EOWN_AT[0], "y": EOWN_AT[1], "z": Z},
+        aura(48000, EOWN, ab.SPELL_MARK, True, ESPIKE),
+        cast(5000, EROGUE, SPELL_SPRINT, EROGUE),
+        cast(50000, EROGUE, SPELL_SPRINT, EROGUE),
+        {"t": 75000, "e": "end", "out": "wipe"},
+    ]
+    records += [escort_snap(when) for when in range(-500, 75000, 500)]
+    return records
+
+
+class EscortPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_18_anub-arak_1789800000.ndjson", escort_pull())
+        cls.windows = ab.mark_windows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_escort_reads_at_the_boost_at_the_end_and_in_permafrost(self):
+        escort = self.windows[0]["escort_read"]
+        self.assertEqual((escort["guid"], escort["boost"]), (EPALADIN, 20000))
+        self.assertAlmostEqual(escort["boost_yd"], 20.0)
+        self.assertAlmostEqual(escort["end_yd"], 45.0)
+        self.assertAlmostEqual(escort["frost_s"], 3.0)
+        self.assertTrue(ab.boost_in_reach(self.windows[0]))
+        self.assertFalse(ab.boost_in_reach(self.windows[1]))
+
+    def test_a_kiter_dead_to_a_scarab_with_its_own_unused(self):
+        own = self.windows[1]
+        self.assertEqual((own["guid"], own["outcome"], own["killer"], own["killer_spike"]),
+                         (EOWN, "death", ESCARAB, False))
+        self.assertTrue(ab.own_unused_death(own))
+        self.assertFalse(ab.own_unused_death(self.windows[0]))
+
+    def test_kite_tools_spent_off_the_mark_per_phase(self):
+        self.assertEqual([(label, rec["s"], rec["sp"], rec["t"]) for label, rec in ab.spent_kite_tools(self.trace, self.windows)],
+                         [("P1", EROGUE, SPELL_SPRINT, 5000), ("P2", EROGUE, SPELL_SPRINT, 50000)])
+
+    def test_the_main_tank_out_of_every_healers_reach(self):
+        bare = ab.healer_rows(self.trace)["bare"]
+        self.assertEqual({key: ms for key, ms in bare.items() if ms}, {("main", ETANK, "P1"): 4000})
+
+    def test_the_sections_print_them(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_spike(self.trace)
+            ab.show_healers(self.trace)
+        text = out.getvalue()
+        self.assertIn("; 20.0 yd at the boost +8.0 s; 45.0 yd at the end; carried Permafrost 3.0 s\n", text)
+        self.assertIn("            died to Swarm Scarab with its own immunity unused\n", text)
+        self.assertIn("  hand kite boosted before its Hand with the escort within 30 yd: Agony 0:12.000 20.0 yd,"
+                      " 45.0 at the end\n", text)
+        self.assertIn("  escort carrying Permafrost in the kite: Agony 0:12.000 3.0 s\n", text)
+        self.assertIn("  kiter dead to anything but the spike with its own immunity unused: Holylight 0:40.000 by"
+                      " Swarm Scarab\n", text)
+        self.assertIn("  kite tools a bot spent off its own mark, per phase: P1 Shadow Sprint 0:05.000;"
+                      " P2 Shadow Sprint 0:50.000\n", text)
+        self.assertIn("  main tank Ecoterrorist alive with no living healer within 40 yd: P1 4.0 s\n", text)
 
 
 DANGRY, DHOLY = 9401, 9402

@@ -807,6 +807,22 @@ void CloseHoldsTurnApart()
     CHECK(Near(apart.a.x, -along.x, 0.01f) && Near(apart.a.y, -along.y, 0.01f));
     CHECK(Near(apart.b.x, along.x, 0.01f) && Near(apart.b.y, along.y, 0.01f));
 }
+
+void BoostLeadClearsImpaleAtTheHandsEnd()
+{
+    using AnubarakPursuit::BoostLeadS;
+
+    // Nitro 2.5 yd behind under the Hand: out past 7.5 + 1.5 just as it ends
+    float const nitro = BoostLeadS(2.5f, 17.5f, 11.375f, IMPALE_REACH, 1.5f, 2.0f);
+    CHECK(Near(nitro, 6.5f / 6.125f, 0.01f));
+    CHECK(2.5f + nitro * (17.5f - 11.375f) >= IMPALE_REACH + 1.5f - 0.01f);
+
+    // Already that far off: no lead
+    CHECK(BoostLeadS(10.0f, 17.5f, 11.375f, IMPALE_REACH, 1.5f, 2.0f) == 0.0f);
+    // Sprint barely outruns it, and no boost slower than the spike ever opens it: the cap
+    CHECK(Near(BoostLeadS(2.5f, 11.9f, 11.375f, IMPALE_REACH, 1.5f, 2.0f), 2.0f, 0.01f));
+    CHECK(Near(BoostLeadS(2.5f, 10.0f, 11.375f, IMPALE_REACH, 1.5f, 2.0f), 2.0f, 0.01f));
+}
 }  // namespace
 
 int main()
@@ -833,6 +849,7 @@ int main()
     RelayPostsCloseOnTheSpot();
     DragPreStepClearsTheStall();
     CloseHoldsTurnApart();
+    BoostLeadClearsImpaleAtTheHandsEnd();
     std::printf("anubarak_pursuit_test: ok\n");
     return 0;
 }

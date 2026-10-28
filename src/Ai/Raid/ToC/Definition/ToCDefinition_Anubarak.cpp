@@ -105,6 +105,15 @@ bool AnubarakKiteImmunitiesKept(PlayerbotAI* botAI)
            GetAnubarakPhase(botAI) == AnubarakPhase::Submerged;
 }
 
+// Heroic, a submerge still ahead: Sprint's cooldown outlasts a phase 1, so one spent closing on a target
+// is gone for the next kite
+bool AnubarakKiteSprintKept(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return AnubarakEngaged(botAI) && bot->GetMap()->IsHeroic() && !bot->HasAura(SPELL_MARK) &&
+           GetAnubarakPhase(botAI) != AnubarakPhase::Swarm;
+}
+
 void DefineAnubarak(EncounterBuilder& e)
 {
     e.OwnTargeting("anubarak dps target guard", Role::Any, AnubarakDpsTargetOwned, Family::DpsAssist);
@@ -165,6 +174,7 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak no ghouls", Role::Any, AnubarakEngaged, 0, {"army of the dead"});
     e.Block("anubarak kite immunity reserve", Role::Any, AnubarakKiteImmunitiesKept, 0,
             {"divine shield", "ice block", "vanish", "feign death"});
+    e.Block("anubarak kite sprint reserve", Role::Any, AnubarakKiteSprintKept, 0, {"sprint"});
     // the side tanks' pickups; from the main tank they pull the burrowers walking past onto him
     e.Block("anubarak main tank shout guard", Role::Any, AnubarakMainTankEngaged, 0,
             {"challenging roar", "challenging shout"});

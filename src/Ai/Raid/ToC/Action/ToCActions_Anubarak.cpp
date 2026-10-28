@@ -208,15 +208,17 @@ bool AnubarakHopEscortAction::Execute(Event /*event*/)
     if (!GetAnubarakEscortSpot(bot, spot))
         return false;
 
+    // A straight walk to the spot can cross a patch, and the 80% slow leaves the kiter out of Hand reach
+    Position const walk = GetAnubarakPatchSafeLeg(bot, spot);
     // The spot moves with the kiter, so a walk already headed close enough is left running
     ReleaseStalledWalk(botAI, bot);
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     if (bot->isMoving() && last.msTime &&
-        spot.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= ANUBARAK_ESCORT_REAIM)
+        walk.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= ANUBARAK_ESCORT_REAIM)
         return true;
 
     BreakChannelPinningTheFeet(bot);
-    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+    return MoveTo(bot->GetMapId(), walk.GetPositionX(), walk.GetPositionY(), walk.GetPositionZ(), false, false, false,
                   false, MovementPriority::MOVEMENT_COMBAT, true);
 }
 

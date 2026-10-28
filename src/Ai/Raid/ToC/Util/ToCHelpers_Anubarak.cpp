@@ -130,8 +130,17 @@ constexpr float ANUBARAK_KITE_HAND_RESERVE_S = 2.5f;
 constexpr float ANUBARAK_KITE_HAND_CLOSE_S = 1.5f;
 // A non-paladin's own immunity after a Hand goes out this long before the Hand ends
 constexpr float ANUBARAK_KITE_OWN_AFTER_HAND_S = 0.8f;
-// No boost while a Hand has more than this left: the spike sits on the kiter either way
+// No boost while a Hand has more than this left: the spike sits on the kiter either way. That's for Blink
+// and the circle, which jump; a speed boost goes earlier (BoostLeadS), never past the max
 constexpr float ANUBARAK_KITE_BOOST_HAND_S = 0.5f;
+constexpr float ANUBARAK_KITE_BOOST_HAND_MAX_S = 2.0f;
+// A speed boost under a Hand puts the kiter this far past Impale's reach as the Hand ends. A hand kite
+// also holds its boost for the Hand until the spike is that close
+constexpr float ANUBARAK_KITE_BOOST_MARGIN = 1.5f;
+// Hand of Protection's duration; a hand kite judges its run that far past the catch
+constexpr float ANUBARAK_HAND_DURATION_S = 10.0f;
+// An own kite this hurt goes immune at once: scarab ticks can kill it before the catch
+constexpr float ANUBARAK_KITE_OWN_LOW_HEALTH_PCT = 50.0f;
 // A kiter marked inside the gather's clearance ranks steps away from it first, for this long
 constexpr uint32 ANUBARAK_KITE_GATHER_FIRST_MS = 3000;
 // The second tank patch needs the kite to end before the spike's last second
@@ -2045,6 +2054,36 @@ bool NextKiteBoost(Player* kiter, Creature* spike, std::vector<LaneObstacle> con
     return false;
 }
 
+// The kiter's run speed on the boost, 0 for Blink and the circle, which jump
+float BoostRunSpeed(Player* kiter, AnubarakKiteBoost const& boost)
+{
+    if (boost.nitro)
+        return KiterRunSpeed(kiter) * NITRO_BOOSTS_SPEED_FACTOR;
+
+    SpellInfo const* info = boost.spellId ? sSpellMgr->GetSpellInfo(boost.spellId) : nullptr;
+    if (!info)
+        return 0.0f;
+
+    for (SpellEffectInfo const& effect : info->Effects)
+        if (effect.ApplyAuraName == SPELL_AURA_MOD_INCREASE_SPEED)
+            return KiterRunSpeed(kiter) * (1.0f + static_cast<float>(effect.CalcValue()) / 100.0f);
+
+    return 0.0f;
+}
+
+// The Hand time left at which the boost goes under a Hand
+float BoostHandLeadS(Player* kiter, Creature* spike, AnubarakKiteBoost const& boost)
+{
+    float const speed = BoostRunSpeed(kiter, boost);
+    if (speed <= 0.0f)
+        return ANUBARAK_KITE_BOOST_HAND_S;
+
+    return std::max(ANUBARAK_KITE_BOOST_HAND_S,
+                    AnubarakPursuit::BoostLeadS(Dist2d(spike->GetPosition(), kiter->GetPosition()), speed,
+                                                spike->GetSpeed(MOVE_RUN), ANUBARAK_IMPALE_REACH,
+                                                ANUBARAK_KITE_BOOST_MARGIN, ANUBARAK_KITE_BOOST_HAND_MAX_S));
+}
+
 bool UnderHandOfProtection(Unit* unit)
 {
     return std::any_of(std::begin(HAND_OF_PROTECTION_RANKS), std::end(HAND_OF_PROTECTION_RANKS),
@@ -2847,7 +2886,7 @@ KitePlan& JudgeKitePlan(Player* kiter, Creature* spike, AnubarakState& state)
 // Heroic only. A patch kite runs on while turning ANUBARAK_KITE_PATCH_COMMIT_S later would still beat the
 // catch, then turns; a patch+hand kite runs as a hand kite until its Hand lands, then as a patch kite under
 // it. Turned, it stays turned while the patch lasts. A boost goes out once the spike, faster, gains within 15 yd, or is within
-// 10 and catching up; a boost never holds back the turn.
+// 10 and catching up; a boost never holds back the turn. A hand kite holds it while a Hand can land.
 KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState& state)
 {
     using AnubarakPursuit::KiteTerminal;
@@ -2862,11 +2901,17 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
     read.kiter = kiter->GetGUID();
 
     bool const bot = GET_PLAYERBOT_AI(kiter) != nullptr;
-    AnubarakKiteBoost boost;
-    bool const hasBoost = bot && HandLeftS(kiter) <= ANUBARAK_KITE_BOOST_HAND_S &&
-                          NextKiteBoost(kiter, spike, LaneObstacles(kiter, state), boost);
-
     KitePlan const& plan = JudgeKitePlan(kiter, spike, state);
+    float const dist = Dist2d(spike->GetPosition(), kiter->GetPosition());
+    float const handLeft = HandLeftS(kiter);
+    // Boosted first, the kiter runs out of its escort's reach just before the Hand is due
+    bool const handFirst = HandKite(plan) && dist > ANUBARAK_IMPALE_REACH + ANUBARAK_KITE_BOOST_MARGIN &&
+                           HandInReach(kiter);
+    AnubarakKiteBoost boost;
+    bool const hasBoost = bot && !handFirst && handLeft <= ANUBARAK_KITE_BOOST_HAND_MAX_S &&
+                          NextKiteBoost(kiter, spike, LaneObstacles(kiter, state), boost) &&
+                          (handLeft <= 0.0f || handLeft <= BoostHandLeadS(kiter, spike, boost));
+
     bool const patchKite = plan.patch && (plan.terminal == KiteTerminal::Patch ||
                                           (plan.terminal == KiteTerminal::PatchHand && plan.handLanded));
     if (plan.patch && state.kitePatchKiter == kiter->GetGUID())
@@ -2878,7 +2923,6 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
     else
         read.stage = AnubarakKiteStage::Run;
 
-    float const dist = Dist2d(spike->GetPosition(), kiter->GetPosition());
     bool const faster = spike->GetSpeed(MOVE_RUN) > KiterRunSpeed(kiter);
     if (hasBoost && plan.catchS >= 0.0f &&
         ((faster && dist <= ANUBARAK_KITE_BOOST_RANGE) || dist <= ANUBARAK_KITE_BOOST_CLOSE))
@@ -2999,8 +3043,14 @@ Position LaneStepStand(Player* kiter, Creature* spike, std::vector<LaneObstacle>
     Position const& spikePos = spike->GetPosition();
     AnubarakPursuit::Spike const chase = PursuitSpike(spike);
     float const handLeft = HandLeftS(kiter);
+    // A hand kite runs on under the Hand after the catch; judged only to the catch, it ran into a corner by a
+    // patch and spent it once the Hand landed
+    float const throughHand = hold && handLeft <= 0.0f && HandKite(*hold) && HandInReach(kiter)
+                                  ? ANUBARAK_HAND_DURATION_S
+                                  : 0.0f;
     float horizonS = hold && hold->catchS >= 0.0f
-                         ? std::clamp(hold->catchS, ANUBARAK_KITE_PURSUIT_HORIZON_S, ANUBARAK_KITE_PURSUIT_HORIZON_MAX_S)
+                         ? std::clamp(hold->catchS + throughHand, ANUBARAK_KITE_PURSUIT_HORIZON_S,
+                                      ANUBARAK_KITE_PURSUIT_HORIZON_MAX_S)
                          : ANUBARAK_KITE_PURSUIT_HORIZON_MAX_S;
     if (handLeft > 0.0f)
         horizonS = std::clamp(handLeft, AnubarakPursuit::TICK_S, ANUBARAK_KITE_PURSUIT_HORIZON_MAX_S);
@@ -4431,7 +4481,8 @@ ProtectClaim const* DeriveProtection(Player* bot)
     if (plan && !immune)
     {
         bool const ownDue = caught && impaleMs <= ANUBARAK_KITE_OWN_LEAD_S * IN_MILLISECONDS;
-        claim.selfDue = (selfHand && handDue && !forbearance) ||
+        bool const ownNow = ownPlanned && kiter->GetHealthPct() <= ANUBARAK_KITE_OWN_LOW_HEALTH_PCT;
+        claim.selfDue = (selfHand && handDue && !forbearance) || ownNow ||
                         (ownDue && (ownPlanned || (claim.protector.IsEmpty() && !claim.standReachable)));
     }
     // A Hand kite whose own immunity waits behind its Hand casts it before the Hand ends: cast after,
@@ -6436,8 +6487,9 @@ AnubarakKiteStage GetAnubarakKiteStage(Player* kiter, AnubarakKiteBoost* boost)
     return read.stage;
 }
 
-// On the line from the room centre to the kiter this far short of it, the centre when the kiter is nearer
-constexpr float ANUBARAK_ESCORT_SHORT = 25.0f;
+// On the line from the room centre to the kiter this far short of it, the centre when the kiter is nearer.
+// The escort lags its spot, and at 25 yd that put it past the Hand's 30
+constexpr float ANUBARAK_ESCORT_SHORT = 20.0f;
 // Off the spike by the dodge's clearance, or the dodge sends the escort off its spot: 15 yd off a spike
 // faster than the paladin is inside the dodge's 16 yd, and the two swap every half second
 constexpr float ANUBARAK_ESCORT_SPIKE_CLEARANCE = 15.0f;
@@ -6840,6 +6892,18 @@ bool GetAnubarakHealerStand(Player* bot, Position& out)
             count = (healers.size() - index % 2 + 1) / 2;
             index /= 2;
         }
+    }
+
+    // A main tank who takes him far off the anchor, as a human can, is past a heal from the raid point
+    if (mainTank && mainTank->IsAlive() && Dist2d(centre, mainTank->GetPosition()) > ANUBARAK_HEALER_MAIN_TANK_REACH)
+    {
+        Vec2 const toward = Delta(centre, mainTank->GetPosition());
+        float const length = Length(toward);
+        Position const raw =
+            Offset(centre, {toward.x / length, toward.y / length}, length - ANUBARAK_HEALER_MAIN_TANK_REACH);
+        Position valid;
+        if (clear(raw) && OnFloor(bot, raw, valid))
+            centre = valid;
     }
 
     float const base = 2.0f * static_cast<float>(M_PI) * static_cast<float>(index) / static_cast<float>(count);

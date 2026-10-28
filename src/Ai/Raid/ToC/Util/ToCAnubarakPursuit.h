@@ -543,6 +543,18 @@ inline bool SecondPatchDue(SecondPatchRead const& r)
     return (r.handLeftS > 0.0f || r.catchS >= 0.0f) && r.walkLaterS < 0.0f;
 }
 
+// Hand time left at which a speed boost goes, so the kiter is past reach + margin when the Hand ends. The
+// spike trails at gap under the Hand. Capped, since a boost barely faster than the spike never opens it
+inline float BoostLeadS(float gap, float boostSpeed, float spikeSpeed, float reach, float margin, float capS)
+{
+    float const need = reach + margin - gap;
+    if (need <= 0.0f)
+        return 0.0f;
+
+    float const gain = boostSpeed - spikeSpeed;
+    return gain > 0.0f ? std::min(need / gain, capS) : capS;
+}
+
 // A run heading as the hold judges it
 struct HeadingRead
 {
