@@ -305,6 +305,13 @@ bool ThorimTankPickupTrigger::IsActive()
     return !tank || !tank->IsAlive() || !NearThorimEncounter(tank);
 }
 
+bool ThorimPersonalDefensiveTrigger::IsActive()
+{
+    RaidPredictedHit hit;
+    return static_cast<bool>(GetRaidPersonalDefensive(
+        botAI, ULDUAR_THORIM_DEFENSIVE_SCOPE, GetThorimLightningChargeHit(botAI, hit) ? &hit : nullptr));
+}
+
 bool ThorimSifBlizzardTrigger::IsActive()
 {
     // No tank dodges in phase 2, by role: the holder check alone drops out for the half second after a human

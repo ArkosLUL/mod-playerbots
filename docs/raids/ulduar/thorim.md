@@ -330,6 +330,29 @@ home as covered, at 36° inside the 40° half-width, so the absent row was the w
 replacement home clears all seven cones — the best is covered by one and sits 42 yd away — so moving the
 camp spot was rejected too.
 
+**Survival cooldowns are spent on health, not on the tell, so the tell needs its own row.** Bots do use
+them: **235** casts over one phase 2 across 15 bots, non-tanks included (Barkskin, Dispersion,
+Deterrence, Ice Block, Evasion, Anti-Magic Shell, Pain Suppression, Divine Protection, Hand of
+Sacrifice). But **7 of the 13** the cone killed used none at all in the whole pull, and of the 9 casts
+that did land inside a warning window, every one came 2-4 s after it opened — reacting to the damage
+already taken, not to the cone coming. Only the tank had buttons up near its cone death, Rune Tap and
+Vampiric Blood 4 s before, and it died anyway.
+
+`thorim personal defensive` answers the tell for **non-tanks**, the first Ulduar user of the shared
+`RaidDefensive` row (`ULDUAR_THORIM_DEFENSIVE_SCOPE`, personal picks only, so its cover key is never
+written). It predicts the cone as **27,000 pre-resistance nature** and lets `GetRaidPersonalDefensive`
+pick the bot's own button, which goes up only where the hit would leave it under
+`RAID_DEFENSIVE_FLOOR_PCT` (25%). That figure is the measured pre-mitigation median: one cast spans
+**13,017-41,492** before mitigation (p50 26,899, 19.8% resisted and 7.4% absorbed) and
+**997-36,738** after, p50 19,362 and p90 31,892 over 25 hits, so a mid figure buys a button for the
+bots it would drop and not for the rest.
+
+**The predicted start is one scan interval early, deliberately.** `lightningOrbLitMs` is stamped on the
+dark-to-lit rescan and cleared when the orb goes dark, so it is never early and can be a whole
+`ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS` late; the row opens the pick only `RAID_PERSONAL_LEAD_MS`
+(1 s) before the start it is handed. Without the shift the window could open 0.5 s before the damage,
+which is too late for the cast to land.
+
 Pushing camp spots outward from the **live** boss was modelled and rejected — it brings camp pairs to
 6.4-7.1 yd under orbs 1 and 3, inside the 8 yd jump. The melee ring's cone offset is likewise left
 untouched: 25 of 44 ring moves inside the orb→Chain-Lightning window are cone dodges that have to
@@ -605,6 +628,11 @@ out of hazards is a cost with no payoff.
 returns true, and this action returns false so the bot still gets its own node that tick. Its real
 evidence is the verdict stream, where it shows `FAILED` 25-31 times a pull.
 
+**Spell names come from `trace.spells`, and `trace.of("spell")` is always empty**: the loader folds
+those records into that dict as it reads. A filter built on the record stream matches nothing and reads
+as "the raid never cast it", which is how a whole phase of survival cooldowns was once reported as
+zero.
+
 ## Aspect of the Wild has exactly one holder
 
 Thorim's nature damage earns the aura, but 49071 is `APPLY_AREA_AURA_RAID` + `MOD_RESISTANCE_EXCLUSIVE`,
@@ -729,11 +757,10 @@ from the Touch of Dominion cast. The spread is corridor-trash time and it is sti
 **92.8 s** held on the slow pull against **48.6-51.4 s** on the rest, with Colossus and Rune Giant time
 identical. Snapshot cadence never moved (p50 227-229 ms), so it is bot behaviour, not load.
 
-**The tanks eat the Lightning Charge cone and nothing is spent on it.** They took **7 of 25** cone hits
-in one pull and cannot dodge: both tank spots are fixed, and the Blizzard row already excuses both tank
-roles for the same reason. No cooldown answers the 4.8 s warning either — **zero** personal survival
-cooldowns were cast across a whole phase 2, while the heavy ones read `IMPOSSIBLE` 60+ times (divine
-sacrifice 23, barkskin 15, icebound fortitude 8, divine shield 5, rune tap 5, pain suppression 4).
+**The tanks eat the Lightning Charge cone, and are left out of the button on purpose.** They took
+**7 of 25** cone hits in one pull and cannot dodge: both tank spots are fixed, and the Blizzard row
+already excuses both tank roles for the same reason. Their buttons stay for his melee and Unbalancing
+Strike, which is what actually kills them.
 
 **The shelter run is uncapped.** Observed distances to the shelter when the note fired were **52.1 and
 60.6 yd** against a table solved for 25.6, and a bot that does not make it takes the cone while moving.

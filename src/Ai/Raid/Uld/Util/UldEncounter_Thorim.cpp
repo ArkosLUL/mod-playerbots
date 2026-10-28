@@ -2682,6 +2682,37 @@ bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot)
     return state && state->ringArrived.count(bot->GetGUID()) > 0;
 }
 
+bool GetThorimLightningChargeHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive() || !ThorimPhase2Active(botAI) || PlayerbotAI::IsTank(bot))
+        return false;
+
+    Unit* boss = GetThorim(botAI);
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
+    if (!boss || !orb)
+        return false;
+
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state || !state->lightningOrbLitMs)
+        return false;
+
+    // The camp's own margin, not the ring's: it is the closest read of who the cone actually covers, so a
+    // bot well outside it does not spend anything.
+    float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
+    if (!InLightningChargeConeRanged(BearingFromBoss(boss, bot->GetPositionX(), bot->GetPositionY()),
+                                     coneBearing))
+        return false;
+
+    // One interval early: the sweep can only notice the orb late, and the row opens the pick just a second
+    // before the start it is given.
+    hit.startMs = state->lightningOrbLitMs + ULDUAR_THORIM_LIGHTNING_CHARGE_WARNING_MS -
+                  ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS;
+    hit.damage = ULDUAR_THORIM_LIGHTNING_CHARGE_DAMAGE;
+    hit.school = SPELL_SCHOOL_MASK_NATURE;
+    return true;
+}
+
 bool ThorimTankOnAnchor(PlayerbotAI* botAI, Player* bot)
 {
     if (!bot || !ThorimPhase2Active(botAI))
@@ -2732,6 +2763,16 @@ Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell)
             found = orb;
             break;
         }
+    }
+
+    // Only the rescan sees the change, so the lit time is good to the scan interval. Cleared when it goes
+    // dark, or a stale one would time a hit that is not coming.
+    if (lightning)
+    {
+        if (found && cachedGuid.Get().IsEmpty())
+            state.lightningOrbLitMs = getMSTime();
+        else if (!found)
+            state.lightningOrbLitMs = 0;
     }
 
     // Written once: clearing it before the sweep and putting it back after would emit a pair of notes

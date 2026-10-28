@@ -89,6 +89,27 @@ bool ThorimArenaPositioningAction::Execute(Event /*event*/)
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
+bool ThorimCastPersonalDefensiveAction::isUseful()
+{
+    ThorimPersonalDefensiveTrigger thorimPersonalDefensiveTrigger(botAI);
+    return thorimPersonalDefensiveTrigger.IsActive();
+}
+
+bool ThorimCastPersonalDefensiveAction::Execute(Event /*event*/)
+{
+    RaidPredictedHit hit;
+    RaidPersonalPick const pick = GetRaidPersonalDefensive(
+        botAI, ULDUAR_THORIM_DEFENSIVE_SCOPE, GetThorimLightningChargeHit(botAI, hit) ? &hit : nullptr);
+    if (!pick)
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    return pick.consumable ? botAI->DoSpecificAction(pick.consumable, Event(), true)
+                           : botAI->CastSpell(pick.spellId, bot);
+}
+
 bool ThorimFrostAuraAction::isUseful()
 {
     ThorimFrostAuraTrigger thorimFrostAuraTrigger(botAI);
