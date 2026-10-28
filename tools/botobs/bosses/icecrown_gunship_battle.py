@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
-"""Read an Icecrown Gunship Battle pull from a RaidObs trace: the freeze, the decks, the icons.
+"""Read an Icecrown Gunship Battle pull from a RaidObs trace: the freezes, the roster, the boarding party.
 
-    icecrown_gunship_battle.py <file>           every section
-    icecrown_gunship_battle.py <file> --phases  gsb.phase: fight, or frozen while Below Zero holds the cannons
-    icecrown_gunship_battle.py <file> --decks   per bot, time on each deck and the trips across
-    icecrown_gunship_battle.py <file> --icons   the mage skull window and the ranged star picks
-    icecrown_gunship_battle.py <file> --cheats  this encounter's cheat uses
+    icecrown_gunship_battle.py <file>             every section
+    icecrown_gunship_battle.py <file> --phases    gsb.phase, and the captain's stacks at each thaw and retreat
+    icecrown_gunship_battle.py <file> --duties    gsb.duty: who boards, who mans a cannon, who holds the deck
+    icecrown_gunship_battle.py <file> --decks     per bot, time on each deck and the trips across
+    icecrown_gunship_battle.py <file> --boarding  per freeze, when the party went and came back
+    icecrown_gunship_battle.py <file> --targets   time per pick rule, and the stands held
+    icecrown_gunship_battle.py <file> --cannons   what the cannons aimed at, and any overheat
+    icecrown_gunship_battle.py <file> --dodges    Rocket Artillery and Burning Pitch dodges
+    icecrown_gunship_battle.py <file> --cheats    this encounter's cheat uses
 
 What the generic views miss here:
 
-- **`gsb.deck` comes from the rocket-jump action, so a bot that never runs it writes nothing.** A bot
-  in a cannon fires instead of reaching it, and shows `cannon` only on the ticks its cannon was cooling
-  down. `between` is anywhere off both decks: mid-jump, the middle point, or falling.
-- **`gsb.star` is written by the bot that moved the star.** `handoff` picked the add nearest the
-  last star's spot, `fresh` the add nearest the picking bot, since no star had been placed yet; the
-  guid after it is the add. A bot that found the star alive writes nothing.
+- **`gsb.deck` is by position against the core's own y bounds, not the transport**, so a bot just landed
+  reads `enemy` before its transport check moves it across. `between` is airborne, `falling` under the deck
+  until the core's Check for Players puts it back; a seated gunner reads `cannon`.
+- **`gsb.board` is per bot**: `wait` at the launch point until a tank holds the captain, `go`, `back` once
+  the mage dies, `retreat` on the captain's stacks. A bot outside the boarding party stays `home`.
+- **`gsb.fury` and `gsb.retreat` are per instance**: the stack count at each thaw, and the one a retreat
+  latched at, back to 0 when his stacks fall off.
 - **A pull can file under the captain's name.** The credit is a spell, so without the boss-state table
   the trace takes `muradin-bronzebeard` or `high-overlord-saurfang`, which the aliases fold here.
 """
@@ -35,10 +40,16 @@ from raidobs.trace import Trace, cheat_uses, clock, combat_deaths, notes  # noqa
 SLUG = "icecrown-gunship-battle"
 NAME = "Gunship Battle"
 PHASE = "gsb.phase"
+DUTY = "gsb.duty"
 DECK = "gsb.deck"
-SKULL = "gsb.skull"
-STAR = "gsb.star"
-DECKS = ("friendly", "between", "enemy", "cannon")
+BOARD = "gsb.board"
+STAND = "gsb.stand"
+TARGET = "gsb.target"
+CANNON = "gsb.cannon"
+DODGE = "gsb.dodge"
+RETREAT = "gsb.retreat"
+FURY = "gsb.fury"
+DECKS = ("friendly", "between", "enemy", "cannon", "falling")
 DIFFICULTIES = {0: "10N", 1: "25N", 2: "10H", 3: "25H"}
 
 
@@ -57,6 +68,32 @@ def phase_steps(trace: Trace) -> list[tuple[str, int, int]]:
     return latch_spans(trace, PHASE, pull_end(trace))
 
 
+def freezes(trace: Trace) -> list[tuple[int, int]]:
+    """`(start, stop)` per Below Zero window."""
+    return [(start, stop) for value, start, stop in phase_steps(trace) if value == "frozen"]
+
+
+def instance_marks(trace: Trace, key: str) -> list[tuple[int, int]]:
+    """`(t, value)` for a per-instance number, skipping the zeros that clear it."""
+    out = []
+    for rec in sorted(notes(trace, key), key=lambda rec: rec["t"]):
+        try:
+            value = int(str(rec.get("txt", "0")))
+        except ValueError:
+            continue
+        if value:
+            out.append((rec["t"], value))
+    return out
+
+
+def duties(trace: Trace) -> dict[str, list[int]]:
+    """Per duty, the bots that held it last."""
+    out: dict[str, list[int]] = collections.defaultdict(list)
+    for guid, spans in holder_spans(trace, DUTY, pull_end(trace)).items():
+        out[spans[-1][0]].append(guid)
+    return dict(out)
+
+
 def deck_rows(trace: Trace) -> dict[int, dict]:
     """Per bot: ms held on each deck value, and `trips`, its spans on the enemy deck."""
     out = {}
@@ -68,9 +105,49 @@ def deck_rows(trace: Trace) -> dict[int, dict]:
     return out
 
 
-def star_picks(trace: Trace) -> collections.Counter:
-    """Star moves per rule: `handoff`, `fresh`, `none`."""
-    return collections.Counter(str(rec.get("txt", "")).split(" ")[0] for rec in notes(trace, STAR))
+def boarding(trace: Trace) -> list[dict]:
+    """Per freeze: its window, and the first `go` and `back` any bot noted inside it, with who went."""
+    boards = holder_spans(trace, BOARD, pull_end(trace))
+    out = []
+    for start, stop in freezes(trace):
+        went, first_go, first_back, retreats = set(), None, None, 0
+        for guid, spans in boards.items():
+            for value, begin, _ in spans:
+                if not start <= begin <= stop + 15000:
+                    continue
+                if value == "go":
+                    went.add(guid)
+                    first_go = begin if first_go is None else min(first_go, begin)
+                elif value == "back":
+                    first_back = begin if first_back is None else min(first_back, begin)
+                elif value == "retreat":
+                    retreats += 1
+        out.append({"start": start, "stop": stop, "go": first_go, "back": first_back, "went": sorted(went),
+                    "retreats": retreats})
+    return out
+
+
+def span_time(trace: Trace, key: str) -> dict[str, tuple[int, int]]:
+    """Per value of a per-bot key: `(bots, ms held summed over bots)`."""
+    bots: dict[str, set[int]] = collections.defaultdict(set)
+    held: dict[str, int] = collections.defaultdict(int)
+    for guid, spans in holder_spans(trace, key, pull_end(trace)).items():
+        for value, start, stop in spans:
+            bots[value].add(guid)
+            held[value] += stop - start
+    return {value: (len(bots[value]), held[value]) for value in held}
+
+
+def entries(trace: Trace, key: str, idle: str = "none") -> dict[str, tuple[int, int]]:
+    """Per value but `idle`: `(times a bot entered it, bots)`."""
+    count: dict[str, int] = collections.defaultdict(int)
+    bots: dict[str, set[int]] = collections.defaultdict(set)
+    for guid, spans in holder_spans(trace, key, pull_end(trace)).items():
+        for value, _, _ in spans:
+            if value != idle:
+                count[value] += 1
+                bots[value].add(guid)
+    return {value: (count[value], len(bots[value])) for value in count}
 
 
 def own_cheats(trace: Trace) -> list[tuple[str, dict]]:
@@ -92,20 +169,33 @@ def show_banner(trace: Trace) -> None:
         print(f"  not a {NAME} pull, every section below reads empty")
 
 
-def show_steps(key: str, trace: Trace) -> None:
-    steps = latch_spans(trace, key, pull_end(trace))
-    if not steps:
-        print(f"  {key} never written")
-        return
-    print(f"    {'from':>9}  {'held':>9}  {key}")
-    for value, start, stop in steps:
-        print(f"    {clock(start):>9}  {clock(stop - start):>9}  {value}")
-
-
 def show_phases(trace: Trace) -> None:
     print("PHASES")
-    if mine(trace):
-        show_steps(PHASE, trace)
+    if not mine(trace):
+        return
+    steps = phase_steps(trace)
+    if not steps:
+        print(f"  {PHASE} never written")
+        return
+    print(f"    {'from':>9}  {'held':>9}  {PHASE}")
+    for value, start, stop in steps:
+        print(f"    {clock(start):>9}  {clock(stop - start):>9}  {value}")
+    for key, label in ((FURY, "stacks at the thaw"), (RETREAT, "retreat latched at")):
+        marks = instance_marks(trace, key)
+        if marks:
+            print(f"  {label}: " + ", ".join(f"{value} at {clock(when)}" for when, value in marks))
+
+
+def show_duties(trace: Trace) -> None:
+    print("DUTIES")
+    if not mine(trace):
+        return
+    rows = duties(trace)
+    if not rows:
+        print(f"  {DUTY} never written")
+        return
+    for duty in sorted(rows):
+        print(f"  {duty:<11} {names(trace, rows[duty])}")
 
 
 def show_decks(trace: Trace) -> None:
@@ -123,16 +213,57 @@ def show_decks(trace: Trace) -> None:
         print(f"  {trace.name(guid):<14}{cells}  {rows[guid]['trips']:>5}")
 
 
-def show_icons(trace: Trace) -> None:
-    print("ICONS")
+def show_boarding(trace: Trace) -> None:
+    print("BOARDING")
     if not mine(trace):
         return
-    show_steps(SKULL, trace)
-    picks = star_picks(trace)
-    if picks:
-        print("  star moves: " + ", ".join(f"{rule} {count}" for rule, count in sorted(picks.items())))
-    else:
-        print(f"  {STAR} never written")
+    rows = boarding(trace)
+    if not rows:
+        print("  no freeze")
+        return
+    for row in rows:
+        went = f"go +{clock(row['go'] - row['start'])}" if row["go"] is not None else "nobody went"
+        back = f"back +{clock(row['back'] - row['start'])}" if row["back"] is not None else "no return"
+        retreat = f"  {row['retreats']} retreat(s)" if row["retreats"] else ""
+        print(f"  frozen {clock(row['start'])} for {clock(row['stop'] - row['start'])}: {went}, {back}{retreat}"
+              f"  ({len(row['went'])} bot(s))")
+
+
+def show_targets(trace: Trace) -> None:
+    print("TARGETS")
+    if not mine(trace):
+        return
+    for key in (TARGET, STAND):
+        rows = span_time(trace, key)
+        if not rows:
+            print(f"  {key} never written")
+            continue
+        print(f"  {key}: " + ", ".join(f"{value} {bots} bot(s) {clock(held)}"
+                                       for value, (bots, held) in sorted(rows.items())))
+
+
+def show_cannons(trace: Trace) -> None:
+    print("CANNONS")
+    if not mine(trace):
+        return
+    rows = span_time(trace, CANNON)
+    if not rows:
+        print(f"  {CANNON} never written")
+        return
+    for value, (bots, held) in sorted(rows.items()):
+        print(f"  {value:<9} {bots} gunner(s)  {clock(held)}")
+
+
+def show_dodges(trace: Trace) -> None:
+    print("DODGES")
+    if not mine(trace):
+        return
+    rows = entries(trace, DODGE)
+    if not rows:
+        print("  no dodge")
+        return
+    for value, (count, bots) in sorted(rows.items()):
+        print(f"  {value:<7} {count} dodge(s) by {bots} bot(s)")
 
 
 def show_cheats(trace: Trace) -> None:
@@ -148,9 +279,13 @@ def show_cheats(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("phases", "gsb.phase: fight, or frozen while Below Zero holds the cannons", show_phases),
+    ("phases", "gsb.phase, and the captain's stacks at each thaw and retreat", show_phases),
+    ("duties", "gsb.duty: who boards, who mans a cannon, who holds the deck", show_duties),
     ("decks", "per bot, time on each deck and the trips across", show_decks),
-    ("icons", "the mage skull window and the ranged star picks", show_icons),
+    ("boarding", "per freeze, when the party went and came back", show_boarding),
+    ("targets", "time per pick rule, and the stands held", show_targets),
+    ("cannons", "what the cannons aimed at, and any overheat", show_cannons),
+    ("dodges", "Rocket Artillery and Burning Pitch dodges", show_dodges),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 

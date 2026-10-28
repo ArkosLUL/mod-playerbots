@@ -7,38 +7,66 @@
 #ifndef PLAYERBOTS_ICCACTIONS_GUNSHIP_H
 #define PLAYERBOTS_ICCACTIONS_GUNSHIP_H
 
-#include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
-#include "ICCHelpers_Gunship.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
-#include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include <string>
 
-class IccCannonFireAction : public Action
+#include "Action.h"
+#include "ICCActions_RaidWide.h"
+#include "ICCHelpers_Gunship.h"
+#include "MovementActions.h"
+#include "RaidDirectTargeting.h"
+
+class Item;
+
+class IccGunshipWalkAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc cannon fire";
+    IccGunshipWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
-    IccCannonFireAction(PlayerbotAI* botAI, std::string const name = Name) : Action(botAI, name) {}
+protected:
+    // The latched spot while the bot is still walking to it, else nullptr
+    Position const* WalkInFlight();
+    // False without booking anything while a cast pins the bot's feet
+    bool WalkTo(Position const& spot, MovementPriority priority);
+    void DropWalk() { walking = false; }
+
+private:
+    bool BookedOnWalkSpot();
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
+};
+
+// One forced walk to the nearest deck spot clear of every hazard, left running while that spot stays clear
+class IccGunshipDodgeAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "icc gunship dodge";
+
+    IccGunshipDodgeAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+// Walks to the launch or landing point, then jumps across with the rocket pack
+class IccGunshipRocketJumpAction : public IccGunshipWalkAction
+{
+public:
+    static constexpr char const* Name = "icc gunship rocket jump";
+
+    IccGunshipRocketJumpAction(PlayerbotAI* botAI) : IccGunshipWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
-    Unit* FindValidCannonTarget();
-    bool TryCastCannonSpell(uint32 spellId, Unit* target, Unit* vehicleBase);
+    bool Fire(Item* pack, Position const& destination);
+};
+
+class IccGunshipTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc gunship taunt";
+
+    IccGunshipTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 class IccGunshipEnterCannonAction : public MovementAction
@@ -46,43 +74,37 @@ class IccGunshipEnterCannonAction : public MovementAction
 public:
     static constexpr char const* Name = "icc gunship enter cannon";
 
-    IccGunshipEnterCannonAction(PlayerbotAI* botAI, std::string const name = Name)
-        : MovementAction(botAI, name) {}
+    IccGunshipEnterCannonAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
-
-private:
-    Unit* FindBestAvailableCannon();
-    bool IsValidCannon(Unit* vehicle);
-    bool EnterVehicle(Unit* vehicleBase, bool moveIfFar);
 };
 
-class IccGunshipRocketJumpAction : public AttackAction
+class IccCannonFireAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc gunship rocket jump";
+    static constexpr char const* Name = "icc cannon fire";
 
-    IccGunshipRocketJumpAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccCannonFireAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
-    enum class GunshipSide
-    {
-        NONE,
-        ALLY,
-        HORDE
-    };
+    bool TryCast(char const* spell, Unit* target, Unit* cannon);
+};
 
-    GunshipSide DetectShip() const;
-    Item* FindRocketPack() const;
-    bool UseRocketPack(Position const& destination, bool walkIfOutOfRange);
-    bool RocketPackJumpToward(Position const& target);
-    bool ExitCannonIfSeated();
-    bool CleanupSkullIcon(uint8 skullIconIndex);
-    bool UpdateBossSkullIcon(Unit* boss, uint8 skullIconIndex);
-    bool IsMainTankOnEnemyShip(GunshipSide side) const;
-    bool AnyNonTankAwayFromFriendly(GunshipSide side) const;
-    Unit* FindNearestFriendlyCannon(GunshipSide side) const;
+class IccGunshipTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc gunship target";
+
+    IccGunshipTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GsbTarget) {}
+};
+
+class IccGunshipStandAction : public IccGunshipWalkAction
+{
+public:
+    static constexpr char const* Name = "icc gunship stand";
+
+    IccGunshipStandAction(PlayerbotAI* botAI) : IccGunshipWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 class IccGunshipRocketPackSetupAction : public MovementAction
@@ -90,12 +112,10 @@ class IccGunshipRocketPackSetupAction : public MovementAction
 public:
     static constexpr char const* Name = "icc gunship rocket pack setup";
 
-    IccGunshipRocketPackSetupAction(PlayerbotAI* botAI, std::string const name = Name)
-        : MovementAction(botAI, name) {}
+    IccGunshipRocketPackSetupAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
-    Item* FindRocketPack() const;
     bool AcquireRocketPack();
     bool EquipRocketPack();
 };

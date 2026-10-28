@@ -9,16 +9,13 @@
 
 #include "Multiplier.h"
 
-class IccGunshipMultiplier : public Multiplier
+// Zeroes a reach, heal reach or charge at a unit on the other deck: the walk goes straight off the edge.
+// A rule can't see the action's target, hence a hand-written one.
+class IccGunshipDeckGuardMultiplier : public Multiplier
 {
 public:
-    IccGunshipMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc gunship") {}
+    IccGunshipDeckGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc gunship deck guard") {}
     float GetValue(Action* action) override;
-
-private:
-    uint32 _captainCheckedMs = 0;
-    bool _inGunship = false;
-    bool _hordeSide = false;
 };
 
 #endif

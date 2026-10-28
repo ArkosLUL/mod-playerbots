@@ -5,48 +5,55 @@
  */
 
 #include "ICCTriggers_Gunship.h"
-#include "ICCHelpers_Gunship.h"
+
+#include "ICCEncounterGate.h"
+#include "InstanceScript.h"
 #include "Playerbots.h"
-#include "Trigger.h"
+#include "Transport.h"
 #include "Vehicle.h"
+
+namespace
+{
+constexpr float GSB_ZAFOD_RANGE = 150.0f;
+}
+
+bool IccGunshipDodgeTrigger::IsActive() { return GsbDodging(botAI); }
+
+bool IccGunshipRocketJumpTrigger::IsActive()
+{
+    Position spot;
+    GsbJump const plan = GsbJumpPlan(botAI, spot);
+    return plan == GsbJump::Walk || plan == GsbJump::Fire;
+}
+
+bool IccGunshipTauntTrigger::IsActive() { return GsbTauntTarget(botAI) != nullptr; }
+
+bool IccGunshipCannonNearTrigger::IsActive() { return GsbWantsCannon(botAI); }
 
 bool IccInCannonTrigger::IsActive()
 {
     Unit* vehicleBase = bot->GetVehicleBase();
-    Vehicle* vehicle = bot->GetVehicle();
-    if (!vehicleBase || !vehicle)
+    if (!vehicleBase || !bot->GetVehicle())
         return false;
 
-    uint32 entry = vehicleBase->GetEntry();
+    uint32 const entry = vehicleBase->GetEntry();
     return entry == NPC_CANNONA || entry == NPC_CANNONH;
 }
 
-bool IccGunshipCannonNearTrigger::IsActive()
+bool IccGunshipStandTrigger::IsActive()
 {
-    if (bot->GetVehicle() || !PlayerbotAI::IsDps(bot))
-        return false;
-
-    if (!bot->FindNearestCreature(NPC_CANNONA, 100.0f) && !bot->FindNearestCreature(NPC_CANNONH, 100.0f))
-        return false;
-
-    return !IccGunshipCannonsFrozen(bot);
+    Position spot;
+    return GsbStandWalk(botAI, spot);
 }
-
-// Keyed on the enemy captain rather than on cannon friendliness, which the cannon-near trigger uses.
-bool IccGunshipRocketJumpTrigger::IsActive() { return IccGunshipEnemyCaptain(bot, 100.0f) != nullptr; }
 
 bool IccGunshipRocketPackSetupTrigger::IsActive()
 {
-    // Fires any time a bot is standing on a friendly gunship deck, regardless of
-    // combat state. Lets bots walk to Zafod and equip the rocket pack before the
-    // encounter starts (and keep it ready if they acquire it mid-fight).
-    Unit* cannonA = bot->FindNearestCreature(NPC_CANNONA, 100.0f);
-    if (cannonA && cannonA->IsFriendlyTo(bot))
-        return true;
+    // Aboard the raid's own ship, before the battle or during it
+    Transport* transport = bot->GetTransport();
+    InstanceScript* instance = transport ? bot->GetInstanceScript() : nullptr;
+    if (!instance || transport->GetGUID() != instance->GetGuidData(ICC_BOSS_GUNSHIP_BATTLE) || bot->GetVehicle() ||
+        GsbHasRocketPack(bot))
+        return false;
 
-    Unit* cannonH = bot->FindNearestCreature(NPC_CANNONH, 100.0f);
-    if (cannonH && cannonH->IsFriendlyTo(bot))
-        return true;
-
-    return false;
+    return bot->FindNearestCreature(NPC_ZAFOD_BOOMBOX, GSB_ZAFOD_RANGE) != nullptr;
 }
