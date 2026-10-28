@@ -120,25 +120,56 @@ bool IccLmDodgeColdflameAction::Execute(Event /*event*/)
 
     Position stand;
     Position const* preferNear = GetLmStandSpot(botAI, stand) ? &stand : nullptr;
-    auto const insideGate = [](float x, float /*y*/) { return x < LM_GATE_X_LIMIT; };
+
+    // The walk may start inside the patch it leaves but must not cross another line
+    Position const from = bot->GetPosition();
+    std::vector<HazardCircle> others;
+    for (Position const& circle : circles)
+        if (circle.GetExactDist2d(from) >= LM_DODGE_TRIGGER)
+            others.emplace_back(circle, LM_DODGE_TRIGGER);
 
     HazardSweepCache sweep;
-    auto const findSpot = [&](float clearance)
+    auto const findSpot = [&](float clearance, bool checkWalk)
     {
         std::vector<HazardCircle> hazards;
         hazards.reserve(circles.size());
         for (Position const& circle : circles)
             hazards.emplace_back(circle, clearance);
+        auto const accept = [&](float x, float y)
+        {
+            if (x >= LM_GATE_X_LIMIT)
+                return false;
+
+            Position const to(x, y, from.GetPositionZ());
+            return !checkWalk || std::none_of(others.begin(), others.end(), [&](HazardCircle const& other)
+                                              { return SegmentCrossesCircle(from, to, other); });
+        };
         return FindNearestPositionClearOfHazards(bot, hazards, DODGE_SWEEP_RADIUS, 2.0f,
-                                                 static_cast<float>(M_PI) / 8.0f, preferNear, insideGate, &sweep);
+                                                 static_cast<float>(M_PI) / 8.0f, preferNear, accept, &sweep);
     };
 
-    bool tight = false;
-    Position spot = findSpot(LM_DODGE_CLEARANCE);
-    if (spot == Position())
+    // Wide clearance first, then tight, each on a walk that crosses nothing. The last two cross a line
+    // rather than stand in one.
+    struct Attempt
     {
-        tight = true;
-        spot = findSpot(LM_DODGE_TIGHT_CLEARANCE);
+        float clearance;
+        bool checkWalk;
+        char const* branch;
+    };
+    Attempt const attempts[] = {{LM_DODGE_CLEARANCE, true, "move"},
+                                {LM_DODGE_TIGHT_CLEARANCE, true, "tight"},
+                                {LM_DODGE_CLEARANCE, false, "cross"},
+                                {LM_DODGE_TIGHT_CLEARANCE, false, "cross"}};
+    char const* branch = "move";
+    Position spot;
+    for (Attempt const& attempt : attempts)
+    {
+        spot = findSpot(attempt.clearance, attempt.checkWalk);
+        if (spot != Position())
+        {
+            branch = attempt.branch;
+            break;
+        }
     }
 
     if (spot == Position())
@@ -163,6 +194,41 @@ bool IccLmDodgeColdflameAction::Execute(Event /*event*/)
         return false;
     }
 
-    NoteDodge(bot, tight ? "tight" : "move " + std::to_string(static_cast<int32>(std::lround(travel))));
+    std::string note = branch;
+    if (note == "move")
+        note += " " + std::to_string(static_cast<int32>(std::lround(travel)));
+
+    NoteDodge(bot, note);
+    return true;
+}
+
+bool IccLmCastTankDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = GetLmTankDefensive(botAI, "lm.defensive");
+    if (!spellId || !botAI->CastSpell(spellId, bot))
+        return false;
+
+    LatchLmTankDefensive(botAI);
+    return true;
+}
+
+bool IccLmCastStormCoverAction::Execute(Event /*event*/)
+{
+    RaidCover const cover = GetLmStormCover(botAI);
+    uint32 const spellId = RaidCoverSpellId(botAI, cover);
+    if (!spellId)
+        return false;
+
+    // A cast in progress fails this one's check, and a moving bot breaks its own channel
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    if (IsRaidCoverChannel(cover) && bot->isMoving())
+        bot->StopMoving();
+
+    if (!botAI->CastSpell(spellId, bot))
+        return false;
+
+    FinishRaidCover(botAI, cover);
     return true;
 }

@@ -15,3 +15,7 @@ bool IccLmStandTrigger::IsActive()
 }
 
 bool IccLmColdflameTrigger::IsActive() { return IsLmInColdflame(botAI); }
+
+bool IccLmTankDefensiveTrigger::IsActive() { return GetLmTankDefensive(botAI, "lm.defensive") != 0; }
+
+bool IccLmStormCoverTrigger::IsActive() { return GetLmStormCover(botAI) != RaidCover::None; }

@@ -12,6 +12,7 @@
 #include "Define.h"
 #include "ICCData.h"
 #include "Position.h"
+#include "RaidDefensive.h"
 
 class Creature;
 class Player;
@@ -24,6 +25,8 @@ constexpr uint32 NPC_LORD_MARROWGAR = 36612;
 // The Coldflame casts and Bone Storm have no difficulty row.
 constexpr uint32 SPELL_LM_COLDFLAME_PATCH = 69146;
 constexpr uint32 SPELL_LM_COLDFLAME_STORM = 72705;
+// The hit Bone Storm triggers every 2 s, 69075 on 10N, remapped at the call
+constexpr uint32 SPELL_LM_BONE_STORM_HIT = 69075;
 
 // His combat reach. Coldflame picks among players further than reach + 1.5 + 1 from his centre, and each
 // line starts half his reach out from him.
@@ -41,7 +44,8 @@ constexpr float LM_INNER_ARC_DEG = 160.0f;
 // while healers at his centre keep it in their 38.5 yd range. Neighbours are 10.8 yd apart, past a line.
 constexpr float LM_BAIT_RADIUS = 31.0f;
 constexpr float LM_BAIT_SPACING_DEG = 20.0f;
-constexpr uint32 LM_BAIT_SLOTS = 10;
+// Slots 9 and 10 land outside the walls once he settles 6 yd or more to the side of his spot
+constexpr uint32 LM_BAIT_SLOTS = 8;
 static_assert(LM_INNER_RADIUS + 1.0f < LM_COLDFLAME_FIRST - LM_COLDFLAME_REACH,
               "a parked inner bot stays clear of every line");
 // Spell::CheckRange adds the melee range to a ranged spell's 5 yd minimum
@@ -55,6 +59,25 @@ constexpr float LM_SLICE_KEEPOUT = 8.0f;
 
 // A melee dps takes a spike this close, unless it stands inside LM_SLICE_KEEPOUT of the main tank
 constexpr float LM_MELEE_SPIKE_REACH = 10.0f;
+// In a storm nobody leaves a stand for a spike, a ranged dps takes only one it can already shoot
+constexpr float LM_STORM_RANGED_REACH = 28.0f;
+
+// Bone Slice resumes this long after the engage and after each storm (EVENT_ENABLE_BONE_SLICE). A tank
+// spends a defensive from LM_DEFENSIVE_LEAD_MS before that until LM_DEFENSIVE_SPAN_MS after.
+constexpr uint32 LM_SLICE_DELAY_MS = 10000;
+constexpr uint32 LM_DEFENSIVE_LEAD_MS = 1000;
+constexpr uint32 LM_DEFENSIVE_SPAN_MS = 6000;
+// Under this a tank spends one outside the window too. Under LM_TANK_LAST_RESORT_PCT its class buttons are
+// free again, so a second can stack on the first.
+constexpr float LM_TANK_DEFENSIVE_PCT = 40.0f;
+constexpr float LM_TANK_LAST_RESORT_PCT = 25.0f;
+
+// Bone Storm ticks every 2 s and a raid cover lasts 6 s, so a cover window is three ticks. Damage is divided
+// by sqrt(d - 9) past 9 yd. He ping-pongs between anchors 34 yd from the stack, so the raid averages about
+// this far from him.
+constexpr uint32 LM_STORM_TICK_MS = 2000;
+constexpr uint32 LM_STORM_WINDOW_TICKS = 3;
+constexpr float LM_STORM_RAID_DISTANCE = 28.0f;
 
 constexpr float LM_STACK_SLOT_RADIUS = 1.5f;
 
@@ -123,7 +146,23 @@ void GetLmColdflame(PlayerbotAI* botAI, std::vector<Position>& circles);
 // Alive, free to move and inside LM_DODGE_TRIGGER of one of those. Notes lm.dodge clear once out.
 bool IsLmInColdflame(PlayerbotAI* botAI);
 
-// The phase note, the duty roster, the stand latches, the reset after a wipe, a bot's saved rti once
+// The button this tank spends now, 0 for none: the first Bone Slice window after the engage and each
+// storm, or an emergency. Physical only. Notes lm.defensive when noteKind is set.
+uint32 GetLmTankDefensive(PlayerbotAI* botAI, char const* noteKind);
+// A tank's class defensive nodes stay off until GetLmTankDefensive or LM_TANK_LAST_RESORT_PCT
+bool IsLmTankDefensiveHeld(PlayerbotAI* botAI);
+void LatchLmTankDefensive(PlayerbotAI* botAI);
+
+// The window of three Bone Storm ticks about to start, as a hit for GetRaidCover. False outside a storm and
+// until the window is twice the cover lead away.
+bool GetLmStormHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
+// Anti-Magic Zone is dealt out: Bone Storm is physical
+RaidCover GetLmStormCover(PlayerbotAI* botAI);
+// The class cover nodes wait until the window's first tick
+bool IsLmStormCoverHeld(PlayerbotAI* botAI);
+
+// The phase note, the duty roster, the stand latches, the reset after a wipe, a bot's saved rti once, the
+// Bone Slice and storm windows, the call to a human tank
 void TickLmEncounter(PlayerbotAI* botAI);
 
 // The opener hook's boss list

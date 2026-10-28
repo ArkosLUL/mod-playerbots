@@ -25,6 +25,7 @@
 #include "GroupReference.h"
 #include "ICCEncounterGate.h"
 #include "ICCHelpers_Shared.h"
+#include "ICCSeams.h"
 #include "InstanceScript.h"
 #include "Map.h"
 #include "MoveSpline.h"
@@ -34,8 +35,12 @@
 #include "RaidCombatHelpers.h"
 #include "RaidDifficulty.h"
 #include "RaidDirectTargeting.h"
+#include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "RaidTankDefensive.h"
+#include "SpellAuras.h"
+#include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
 
@@ -152,6 +157,16 @@ struct LmState
     bool pulling = false;
     Position pull;
     uint32 pulls = 0;
+
+    // Bone Slice is off in a storm and resumes LM_SLICE_DELAY_MS after it. sliceWindow counts the windows.
+    bool sliceArmed = false;
+    uint32 sliceOpenMs = 0;
+    uint32 sliceWindow = 0;
+    std::unordered_map<ObjectGuid, uint32> defensiveWindow;
+    uint32 humanCallWindow = 0;
+
+    bool stormArmed = false;
+    uint32 stormStartMs = 0;
 
     uint32 hazardMs = 0;
     bool hazardScanned = false;
@@ -763,6 +778,90 @@ void NoteSpike(Player* bot, char const* rule)
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "lm.spike", rule);
 }
+
+// The aura lands when the 3 s cast ends, and he starts to spin then
+IccLmPhase ReadPhase(Creature* boss)
+{
+    if (boss->HasAura(SPELL_LM_BONE_STORM))
+        return IccLmPhase::Storm;
+
+    return boss->FindCurrentSpellBySpellId(SPELL_LM_BONE_STORM) ? IccLmPhase::StormCast : IccLmPhase::Normal;
+}
+
+bool HoldsAnchor(Player* player)
+{
+    LmState* state = player->GetInstanceId() ? lmStates.Find(player->GetInstanceId()) : nullptr;
+    return state && AnchorOf(*state, player->GetGUID()) != 0;
+}
+
+// Bone Storm lasts 20 s on 10-man and 30 s on 25-man (EVENT_BEGIN_BONE_STORM). The core shortens the aura
+// just after it lands, so a longer reading means no time has passed.
+uint32 StormElapsedMs(Aura const* storm, bool raid25)
+{
+    uint32 const total = raid25 ? 30000 : 20000;
+    int32 const left = storm->GetDuration();
+    return left < 0 || static_cast<uint32>(left) > total ? 0 : total - static_cast<uint32>(left);
+}
+
+// Signed, so a time already past reads negative
+int32 UntilMs(uint32 when, uint32 now) { return static_cast<int32>(when - now); }
+
+// Bone Slice is off from the storm cast, and resumes LM_SLICE_DELAY_MS after the aura ends
+void ArmWindows(LmState& state, Player* bot, Creature* boss, IccLmPhase phase, uint32 now)
+{
+    if (phase != IccLmPhase::Normal)
+        state.sliceArmed = false;
+    else if (!state.sliceArmed)
+    {
+        state.sliceArmed = true;
+        state.sliceOpenMs = now + LM_SLICE_DELAY_MS;
+        ++state.sliceWindow;
+    }
+
+    Aura const* storm = phase == IccLmPhase::Storm ? boss->GetAura(SPELL_LM_BONE_STORM) : nullptr;
+    if (!storm)
+        state.stormArmed = false;
+    else if (!state.stormArmed)
+    {
+        state.stormArmed = true;
+        state.stormStartMs = now - StormElapsedMs(storm, IsRaid25Man(bot));
+    }
+}
+
+// Where the window sits for a tank: due from LM_DEFENSIVE_LEAD_MS before Bone Slice resumes until
+// LM_DEFENSIVE_SPAN_MS after
+bool InSliceWindow(LmState const& state, uint32 now)
+{
+    int32 const until = UntilMs(state.sliceOpenMs, now);
+    return state.sliceArmed && until <= static_cast<int32>(LM_DEFENSIVE_LEAD_MS) &&
+           -until < static_cast<int32>(LM_DEFENSIVE_SPAN_MS);
+}
+
+bool SlicingNow(LmState const& state, uint32 now) { return state.sliceArmed && UntilMs(state.sliceOpenMs, now) <= 0; }
+
+// The human main tank gets the same window as a bot tank, as a call he presses himself
+void CallHumanTank(LmState& state, Player* sender, Creature* boss, uint32 now)
+{
+    Unit* victim = boss->GetVictim();
+    Player* human = victim ? victim->ToPlayer() : nullptr;
+    if (!human || GET_PLAYERBOT_AI(human) || !human->IsAlive() || !IsLmTank(human))
+        return;
+
+    bool const window = InSliceWindow(state, now) && state.humanCallWindow != state.sliceWindow;
+    bool const low = SlicingNow(state, now) && human->GetHealthPct() < LM_TANK_DEFENSIVE_PCT;
+    if (!window && !low)
+        return;
+
+    uint32 const spellId = ReadyTankDefensiveSpell(human, true, 0, 0);
+    if (!spellId)
+        return;
+
+    uint32 const hitIn = window ? static_cast<uint32>(std::max(UntilMs(state.sliceOpenMs, now), 0)) : 0;
+    if (CallHumanTankDefensive(sender, human, spellId, hitIn, window ? "Bone Slice resumes" : "you are low",
+                               "lm.humancall") &&
+        window)
+        state.humanCallWindow = state.sliceWindow;
+}
 }  // namespace
 
 bool IsLmLive(PlayerbotAI* botAI)
@@ -800,13 +899,7 @@ Creature* GetLmBoss(PlayerbotAI* botAI)
 
 IccLmPhase GetLmPhase(Player* bot, Creature* boss)
 {
-    // The aura lands when the 3 s cast ends, and he starts to spin then
-    IccLmPhase phase = IccLmPhase::Normal;
-    if (boss->HasAura(SPELL_LM_BONE_STORM))
-        phase = IccLmPhase::Storm;
-    else if (boss->FindCurrentSpellBySpellId(SPELL_LM_BONE_STORM))
-        phase = IccLmPhase::StormCast;
-
+    IccLmPhase const phase = ReadPhase(boss);
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "lm.phase",
                              phase == IccLmPhase::Storm       ? "bonestorm"
@@ -834,12 +927,15 @@ Unit* GetLmTarget(PlayerbotAI* botAI)
 
     ReadSpikes(*state, bot, getMSTime());
     Map* map = bot->GetMap();
+    // A walk to a spike in a heroic storm crosses his lanes, so only one the bot reaches from its stand counts
+    bool const storm = !state->spikes.empty() && ReadPhase(boss) != IccLmPhase::Normal;
+    float const stormReach = PlayerbotAI::IsRanged(bot) ? LM_STORM_RANGED_REACH : LM_MELEE_SPIKE_REACH;
     std::vector<Creature*> spikes;
     std::vector<Creature*> far;
     for (size_t i = 0; i < state->spikes.size(); ++i)
     {
         Creature* spike = map->GetCreature(state->spikes[i]);
-        if (!spike || !spike->IsAlive())
+        if (!spike || !spike->IsAlive() || (storm && bot->GetExactDist2d(spike) > stormReach))
             continue;
 
         spikes.push_back(spike);
@@ -959,6 +1055,104 @@ bool IsLmInColdflame(PlayerbotAI* botAI)
     return inside;
 }
 
+uint32 GetLmTankDefensive(PlayerbotAI* botAI, char const* noteKind)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive())
+        return 0;
+
+    Creature* boss = GetLmBoss(botAI);
+    LmState* state = boss ? LiveState(botAI) : nullptr;
+    if (!state)
+        return 0;
+
+    uint8 const duty = DutyOf(*state, bot->GetGUID());
+    if (duty != static_cast<uint8>(IccLmDuty::MainTank) && duty != static_cast<uint8>(IccLmDuty::OffTank))
+        return 0;
+
+    uint32 const now = getMSTime();
+    auto const spent = state->defensiveWindow.find(bot->GetGUID());
+    bool const windowOpen =
+        InSliceWindow(*state, now) && (spent == state->defensiveWindow.end() || spent->second != state->sliceWindow);
+    bool const emergency = SlicingNow(*state, now) && bot->GetHealthPct() < LM_TANK_DEFENSIVE_PCT;
+    if (!windowOpen && !emergency)
+    {
+        // Change-latched, so the way out of a window is written too
+        if (noteKind && RaidObs::Active())
+            RaidObs::NoteDerived(bot, noteKind, "idle");
+
+        return 0;
+    }
+
+    return NextTankDefensive(botAI, bot, noteKind, true);
+}
+
+bool IsLmTankDefensiveHeld(PlayerbotAI* botAI)
+{
+    return IsLmLive(botAI) && botAI->GetBot()->GetHealthPct() >= LM_TANK_LAST_RESORT_PCT;
+}
+
+void LatchLmTankDefensive(PlayerbotAI* botAI)
+{
+    LmState* state = LiveState(botAI);
+    if (state)
+        state->defensiveWindow[botAI->GetBot()->GetGUID()] = state->sliceWindow;
+}
+
+bool GetLmStormHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
+{
+    Creature* boss = GetLmBoss(botAI);
+    LmState* state = boss ? LiveState(botAI) : nullptr;
+    Aura const* storm = state && state->stormArmed ? boss->GetAura(SPELL_LM_BONE_STORM) : nullptr;
+    SpellInfo const* tick =
+        storm ? sSpellMgr->GetSpellInfo(sSpellMgr->GetSpellIdForDifficulty(SPELL_LM_BONE_STORM_HIT, boss)) : nullptr;
+    if (!tick || storm->GetDuration() < 0)
+        return false;
+
+    // The first window that hasn't passed its late edge, counted from the storm's first tick
+    uint32 const windowMs = LM_STORM_TICK_MS * LM_STORM_WINDOW_TICKS;
+    uint32 const now = getMSTime();
+    uint32 const firstTick = state->stormStartMs + LM_STORM_TICK_MS;
+    int32 const past = static_cast<int32>(now - firstTick) - static_cast<int32>(RAID_COVER_WINDOW_LATE_MS);
+    uint32 const index = past <= 0 ? 0 : (static_cast<uint32>(past) + windowMs - 1) / windowMs;
+    uint32 const start = firstTick + index * windowMs;
+    if (UntilMs(start, now) > static_cast<int32>(2 * RAID_COVER_WINDOW_LEAD_MS))
+        return false;
+
+    uint32 const end = now + static_cast<uint32>(storm->GetDuration());
+    uint32 ticks = 0;
+    while (ticks < LM_STORM_WINDOW_TICKS && UntilMs(end, start + ticks * LM_STORM_TICK_MS) > 0)
+        ++ticks;
+
+    if (!ticks)
+        return false;
+
+    SpellEffectInfo const& effect = tick->Effects[EFFECT_0];
+    int32 const perTick = std::max(effect.BasePoints + (effect.DieSides + 1) / 2, 0);
+    float const divisor = std::max(std::sqrt(std::max(LM_STORM_RAID_DISTANCE - 9.0f, 0.0f)), 1.0f);
+
+    hit = RaidPredictedHit();
+    hit.startMs = start;
+    hit.durationMs = (ticks - 1) * LM_STORM_TICK_MS;
+    hit.damage = static_cast<uint32>(static_cast<float>(perTick * static_cast<int32>(ticks)) / divisor);
+    hit.school = SPELL_SCHOOL_MASK_NORMAL;
+    hit.noChannel = &HoldsAnchor;
+    return true;
+}
+
+RaidCover GetLmStormCover(PlayerbotAI* botAI)
+{
+    RaidPredictedHit hit;
+    RaidCover const cover = GetRaidCover(botAI, ICC_DEFENSIVE_SCOPE, GetLmStormHit(botAI, hit) ? &hit : nullptr);
+    return cover == RaidCover::AntiMagicZone ? RaidCover::None : cover;
+}
+
+bool IsLmStormCoverHeld(PlayerbotAI* botAI)
+{
+    RaidPredictedHit hit;
+    return GetLmStormHit(botAI, hit) && RaidHitLeadIn(hit);
+}
+
 void TickLmEncounter(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -1002,7 +1196,9 @@ void TickLmEncounter(PlayerbotAI* botAI)
         state.pulls = 0;
     }
 
+    ArmWindows(state, bot, boss, phase, now);
     RefreshRoster(state, bot, now);
+    CallHumanTank(state, bot, boss, now);
     UpdateStand(state, botAI, boss, phase, now);
 }
 

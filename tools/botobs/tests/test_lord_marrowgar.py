@@ -78,6 +78,19 @@ def pull(boss: str = "lord-marrowgar") -> list[dict]:
         note(155000, SHIV, lm.PHASE, "normal"),
         {"t": 50000, "e": "cheat", "g": SHIV, "k": "lm.example", "n": 2},
         {"t": 60000, "e": "cheat", "g": SHIV, "k": "rf.nitro", "n": 1},
+        {"e": "spell", "sp": 871, "n": "Shield Wall"},
+        {"e": "spell", "sp": 498, "n": "Divine Protection"},
+        {"e": "spell", "sp": 64205, "n": "Divine Sacrifice"},
+        note(9500, WALL, lm.DEFENSIVE, "shield wall"),
+        note(10200, WALL, lm.DEFENSIVE, "covered"),
+        note(17000, WALL, lm.DEFENSIVE, "idle"),
+        {"t": 10000, "e": "cast", "s": WALL, "sp": 871},
+        note(10100, ARROW, lm.HUMAN_CALL, "Shield Wall"),
+        note(44500, SHIV, lm.COVER, "2"),
+        {"t": 44900, "e": "cast", "s": SHIV, "sp": 64205},
+        note(75000, BULWARK, lm.DEFENSIVE, "divine protection"),
+        {"t": 75300, "e": "cast", "s": BULWARK, "sp": 498},
+        {"t": 100000, "e": "cast", "s": WALL, "sp": 871},
         {"t": 160000, "e": "end", "out": "kill"},
     ]
 
@@ -119,6 +132,45 @@ class SyntheticPull(unittest.TestCase):
 
     def test_spike_rules(self):
         self.assertEqual(lm.held_values(self.trace, lm.SPIKE), {"melee": {SHIV}, "far": {ARROW}, "boss": {SHIV}})
+
+    def test_slice_windows_open_ten_seconds_into_a_phase_that_lasts_that_long(self):
+        self.assertEqual(lm.slice_windows(self.trace), [10100, 75000])
+
+    def test_defensives_section(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            lm.show_defensives(self.trace)
+        self.assertEqual(out.getvalue(), (
+            "TANK DEFENSIVES\n"
+            "  1  Bone Slice from 0:10.100\n"
+            "      cast     Shield Wall Wall -0.1s\n"
+            "      offered  Wall covered x1, Wall shield wall x1\n"
+            "  2  Bone Slice from 1:15.000\n"
+            "      cast     Divine Protection Bulwark +0.3s\n"
+            "      offered  Bulwark divine protection x1\n"
+            "  off the windows  Shield Wall Wall 1:40.000\n"
+            "  calls to a human tank  Shield Wall 0:10.100\n"
+            "\n"
+            "  2 of 2 windows saw a tank button; a window opens 10 s into each normal phase\n"))
+
+    def test_covers_section(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            lm.show_covers(self.trace)
+        self.assertEqual(out.getvalue(), (
+            "STORM COVER\n"
+            "  1  0:45.000 for 0:20.000\n"
+            "      dealt    Shiv divine sacrifice\n"
+            "      cast     Divine Sacrifice Shiv -0.1s\n"
+            "  2  2:15.000 for 0:20.000\n"
+            "      dealt    none\n"
+            "      cast     none\n"))
+
+    def test_phases_show_the_berserk_margin(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            lm.show_phases(self.trace)
+        self.assertIn("Berserk at 10:00.000, pull ended at 2:40.000: 7:20.000 to spare", out.getvalue())
 
     def test_dodges_count_branches_not_clear(self):
         self.assertEqual(lm.dodges(self.trace), {ARROW: {"move": 1, "hold": 1, "tight": 1}})

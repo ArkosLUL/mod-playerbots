@@ -37,4 +37,22 @@ public:
     bool IsActive() override;
 };
 
+class IccLmTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lm tank defensive";
+
+    IccLmTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccLmStormCoverTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lm storm cover";
+
+    IccLmStormCoverTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 #endif
