@@ -50,8 +50,9 @@ Done, in this order:
 |---|---|---|
 | A victim that already had a control aura takes an instant CC first; the duty goes out in the Cyclone's last second | `CanCastSpell` refuses a Cycloned target, so a Cyclone recast starts at the fade; the brief's own suggestion | Cyclone recast, 1.5-2 s free |
 | A druid or shaman in a form drops it to cast, ranked just behind one who needn't | Guides: Cyclone from every druid spec; `SpellInfo::CheckShapeshift`; `RemoveShapeshift` ends only druid and shaman forms | leave them out (r3) |
-| Deformed Fanatic: a defensive on the tank it is on, no bounce | Wowhead: no face-tank without a major defensive; the add walks 4 yd/s, so a kite drags the tank into the raid | taunt ping-pong, Distracting Shot |
+| Deformed Fanatic: a defensive on the tank it is on, no bounce | The Tavern base guide bounces it; Wowhead kites it or face-tanks it on a major defensive; the add walks 4 yd/s, so a kite drags the tank into the raid | taunt ping-pong, Distracting Shot |
 | Tank windows: Deformed in melee, a Frostbolt no kick is ready for (last 1.1 s), under 35%; class buttons held all fight | Convention 43, `OSDefinition_Sartharion` hold | one button per Frostbolt |
+| No window on her own swing or the Touch stacks, which the brief named | A steady hit every 2 s (about 11k on 10N, 28k on 25H before armor) is healed, Touch costs threat only, and the 35% valve covers a bad stretch | a window on 25H phase 2 |
 | The brake runs on every difficulty at 90%/80% of the top tank's threat | ToC Anub'arak's cap; one code path | heroic only |
 | No Divine Shield | A shielded victim is immune and she drops it; untauntable on heroic she takes the next threat; the tanks already trade her by stacks | bubble at 4-5 stacks with a second tank in reach |
 | The slowed shade victim is not a gap | The shade lives 7 s and is rooted for 2, so it chases 5 s at 5.25 yd/s; a 4.9 yd/s victim gives up 1.75 yd | Hand of Freedom |
@@ -76,7 +77,9 @@ Also in the boss docs:
   at phase 2's open nothing holds a ranged bot back but the redirects and the buffs.
 - No instant CC in the raid leaves the 1.5-2 s Cyclone recast gap; a holder mid-cast at the fade waits out
   its cast; one Hammer of Justice (1 min) covers one victim a round.
-- A defensive per unkicked Frostbolt spends a long cooldown; tank health is unmeasured.
+- A defensive per unkicked Frostbolt, and the next one each time a button ends under a Deformed Fanatic,
+  spends long cooldowns; tank health is unmeasured. The defensive hold keys on `Role::Tank` and the window
+  on the shared tank test, which also counts a spec tank on a DPS strategy.
 - Darnavan is outside the kill order.
 - Giant: a pair with a tank or a player still makes the others dodge; a carrier with every other player
   carrying dies; only a pair's spot is tested, not its walk.

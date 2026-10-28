@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <iterator>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "CellImpl.h"
 #include "DynamicObject.h"
@@ -68,8 +69,8 @@ struct LdwState
 {
     RaidObs::ObsGuidMap<ObjectGuid> ccDuty{"ldw.cc"};
     std::unordered_map<ObjectGuid, uint32> ccSince;
-    // Dominate Mind victims that have had a control aura this domination, by when it was last seen.
-    std::unordered_map<ObjectGuid, uint32> ccSeen;
+    // Dominate Mind victims that have had a control aura this domination.
+    std::unordered_set<ObjectGuid> ccSeen;
     uint32 ccUpdatedMs = 0;
 
     RaidObs::ObsGuidSet braked{"ldw.brake"};
@@ -622,10 +623,11 @@ Incoming IncomingFor(Player* tank, Creature* boss, LdwState& state)
         }
     }
 
-    if (boss->GetVictim() == tank && !boss->HasAura(SPELL_LDW_MANA_BARRIER))
+    // Read the bolt's own target: a taunt swap mid-cast leaves it on the tank who is no longer her victim.
+    Spell* cast = boss->FindCurrentSpellBySpellId(sSpellMgr->GetSpellIdForDifficulty(SPELL_LDW_FROSTBOLT, boss));
+    if (cast && cast->m_targets.GetUnitTargetGUID() == tank->GetGUID())
     {
-        Spell* cast = boss->FindCurrentSpellBySpellId(sSpellMgr->GetSpellIdForDifficulty(SPELL_LDW_FROSTBOLT, boss));
-        int32 const left = cast ? cast->GetCastTimeRemaining() : -1;
+        int32 const left = cast->GetCastTimeRemaining();
         if (left >= 0 && left <= static_cast<int32>(LDW_FROSTBOLT_LAST_MS) && !AnyKickReady(tank, boss))
         {
             incoming.frostbolt = true;
@@ -824,11 +826,11 @@ void LdwUpdateCcDuties(PlayerbotAI* botAI)
     };
 
     for (auto seen = state.ccSeen.begin(); seen != state.ccSeen.end();)
-        seen = IsDominated(member(seen->first)) ? std::next(seen) : state.ccSeen.erase(seen);
+        seen = IsDominated(member(*seen)) ? std::next(seen) : state.ccSeen.erase(seen);
 
     for (Player* candidate : members)
         if (IsDominated(candidate) && HeldForMs(candidate) > 0)
-            state.ccSeen[candidate->GetGUID()] = now;
+            state.ccSeen.insert(candidate->GetGUID());
 
     std::vector<ObjectGuid> released;
     // Skipped below for this pass, or the best-ranked caster that timed out is picked straight back.
@@ -1147,7 +1149,7 @@ bool LdwThreatBraked(PlayerbotAI* botAI)
     return state && state->braked.count(bot->GetGUID());
 }
 
-uint32 LdwTankDefensive(PlayerbotAI* botAI, bool note)
+uint32 LdwTankDefensive(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     if (!IsDutyBot(bot) || !IsTankPlayer(bot))
@@ -1161,7 +1163,7 @@ uint32 LdwTankDefensive(PlayerbotAI* botAI, bool note)
     if (!incoming.Any())
         return 0;
 
-    return NextTankDefensive(botAI, bot, note ? "ldw.defensive" : nullptr, incoming.Physical());
+    return NextTankDefensive(botAI, bot, "ldw.defensive", incoming.Physical());
 }
 
 void LdwTick(PlayerbotAI* botAI)

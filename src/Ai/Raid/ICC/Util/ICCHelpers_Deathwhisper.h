@@ -61,6 +61,7 @@ constexpr float LDW_LOW_HEALTH_PCT = 35.0f;
 // She pulls at 110% of her victim's threat. A damage dealer holds fire from 90% of the top tank's.
 constexpr float LDW_THREAT_CAP = 0.9f;
 constexpr float LDW_THREAT_RELEASE = 0.8f;
+// A braked bot's area damage from this close splashes onto her.
 constexpr float LDW_BRAKE_AREA_REACH = 12.0f;
 
 enum class LdwHazardKind : uint8
@@ -110,12 +111,12 @@ void LdwLeaveFormFor(PlayerbotAI* botAI, char const* spell);
 // A Dominate Mind victim takes damage within range of the bot or of its target.
 bool LdwVictimInSplash(PlayerbotAI* botAI, float range);
 
-// Heroic phase 2 threat brake, set by the tick: this damage dealer holds fire on her.
+// Phase 2 threat brake, set by the tick: this damage dealer holds fire on her.
 bool LdwThreatBraked(PlayerbotAI* botAI);
 
 // The button this tank should press now, by what is about to hit it: a Deformed Fanatic in melee, a
-// Frostbolt nobody can kick, or low health. 0 when none. `note` writes ldw.defensive.
-uint32 LdwTankDefensive(PlayerbotAI* botAI, bool note);
+// Frostbolt nobody can kick, or low health. 0 when none. Writes ldw.defensive.
+uint32 LdwTankDefensive(PlayerbotAI* botAI);
 
 // She casts Frostbolt and this bot is the lowest-guid one with an interrupt ready and in reach. Writes
 // ldw.interrupter.

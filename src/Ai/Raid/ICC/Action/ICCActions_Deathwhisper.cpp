@@ -132,7 +132,7 @@ bool IccLadyDeathwhisperFrostboltAction::Execute(Event /*event*/)
 
 bool IccLadyDeathwhisperDefensiveAction::Execute(Event /*event*/)
 {
-    uint32 const defensive = LdwTankDefensive(botAI, true);
+    uint32 const defensive = LdwTankDefensive(botAI);
     return defensive && botAI->CastSpell(defensive, bot);
 }
 

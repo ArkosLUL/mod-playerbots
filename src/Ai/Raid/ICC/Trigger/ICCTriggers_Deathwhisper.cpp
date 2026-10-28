@@ -13,7 +13,7 @@ bool IccDarkReckoningTrigger::IsActive() { return LdwDarkReckoningDodging(botAI)
 
 bool IccLadyDeathwhisperDodgeTrigger::IsActive() { return LdwDodgeKind(botAI) != LdwHazardKind::None; }
 
-bool IccLadyDeathwhisperDefensiveTrigger::IsActive() { return LdwTankDefensive(botAI, false) != 0; }
+bool IccLadyDeathwhisperDefensiveTrigger::IsActive() { return LdwTankDefensive(botAI) != 0; }
 
 bool IccLadyDeathwhisperFrostboltTrigger::IsActive() { return LdwIsFrostboltInterrupter(botAI); }
 
