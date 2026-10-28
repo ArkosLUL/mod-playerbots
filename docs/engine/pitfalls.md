@@ -969,3 +969,10 @@ name first and skip the query whenever one is missing. `BisDatasetMgr` (`src/Mgr
 does this before every load and version poll of `bistooltip_dataset`/`_subject`/`_block` — tables
 mod-bis-tooltip owns and playerbots only reads, absent on any server that hasn't loaded that module or
 run its import yet.
+
+## A new character inherits a deleted one's bot rows
+
+Deleting a character leaves its `playerbots_db_store` and `playerbots_random_bots` rows, and the
+guid generator reuses the number after a restart. A new character on that guid then loads the dead
+bot's strategies, and its stale `specNo` feeds `IsSpecPvp`, which can switch item scoring to PvP.
+After creating an alt bot, delete both tables' rows for its guid before it first logs in.

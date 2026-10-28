@@ -186,3 +186,20 @@ Ominous Clouds are off this list: `yogg-saron phase 1 spacing` dodges them witho
 detector instead (Thorim on the Unbalancing Strike debuff, Kologarn on Crunch Armor stacks, Hodir on
 Frozen Blows). There is no enrage-timer awareness anywhere, which blocks every hard-mode kill-timer
 requirement.
+
+## Test roster
+
+A second 25-man roster exists only for strategy testing: accounts **ULD1/ULD2/ULD3** (password
+`1234`, linked to ARKOS), cloned with `.pdump` from the core raid, so talents, glyphs, pets and
+progression match. Tanks are two prot paladins and a blood DK, to pick the setup per fight.
+
+| Role | Bots |
+|---|---|
+| Tank | Rampart, Bastion (prot paladin), Gravewarden (blood DK) |
+| Heal | Dawnmender (holy paladin), Tidecaller (resto shaman), Wildbloom (resto druid), Penance (disc priest) |
+| Melee | Verdict (ret), Stormfist (enh), Sunderer (arms), Bloodrage (fury), Venomblade (assassination), Cutthroat (combat), Rimefang (frost DK) |
+| Ranged | Deadeye (survival), Beastcaller (BM), Spellsurge (arcane), Pyroclast (fire), Starfall (balance), Lavaburst (elemental), Mindflay (shadow), Demonbound (demo), Chaosbolt (destro), Soulrot (affliction) |
+
+Gear is Ulduar drops and Conqueror's T8.5 only: ilvl 226, weapons 232 (Ulduar has no
+226 weapons), **no gems or enchants**, nothing in bags. `maintenance` and `autogear` would add both
+(`AltMaintenanceGemsEnchants = 1`), so don't run them on these bots.
