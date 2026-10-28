@@ -82,6 +82,11 @@ constexpr uint8 TWIN_LUST_SPECIALS = 3;
 constexpr uint32 TWIN_NORMAL_LUST_MS = 20000;
 constexpr uint32 TWIN_LUST_GRACE_MS = 10000;
 
+// 5 s of Nitro covers ~87 yd, anything this short isn't worth a 3 min cooldown
+constexpr float TWIN_NITRO_MIN_WALK = 15.0f;
+// a Vortex walk ending closer than this to the cast's end takes the boots
+constexpr uint32 TWIN_NITRO_SPARE_MS = 1500;
+
 constexpr uint32 SPELL_AURA_MASTERY = 31821;
 constexpr uint32 SPELL_BLOODLUST = 2825;
 constexpr uint32 SPELL_HEROISM = 32182;
@@ -125,6 +130,7 @@ struct TwinPull
     uint8 specials = 0;
     bool eydisPact = false;
     TwinColour lastVortex = TwinColour::None;
+    bool lightVortexSeen = false;
     // latched at a normal Light Vortex's start
     bool raidHold = false;
     bool lustOpen = false;
@@ -378,6 +384,7 @@ void UpdatePull(TwinValkyrState& state, Creature* fjola, Creature* eydis, bool e
         pull.raidHold = state.vortex == TwinColour::Light && !map->IsHeroic() && FireMasteryReady(group, map);
 
     pull.lastVortex = state.vortex;
+    pull.lightVortexSeen = pull.lightVortexSeen || state.vortex == TwinColour::Light;
 
     TrackApproach(pull.approach[0], fjola, DoorOf(TwinColour::Light, state.tanks.size()), now);
     TrackApproach(pull.approach[1], eydis, DoorOf(TwinColour::Dark, state.tanks.size()), now);
@@ -781,17 +788,24 @@ char const* DoorRoleName(TwinDoorRole role)
 
 // What the running Vortex still has to deal each player, before resistance. Its first tick lands a
 // period into the channel.
-bool VortexHit(PlayerbotAI* botAI, TwinValkyrState const& state, RaidPredictedHit& hit)
+// Cast or channel
+Spell* RunningVortex(PlayerbotAI* botAI, TwinValkyrState const& state, Creature*& twin)
 {
+    twin = nullptr;
     if (state.vortex == TwinColour::None)
-        return false;
+        return nullptr;
 
     bool const light = state.vortex == TwinColour::Light;
-    Creature* twin = ResolveAlive(botAI, light ? state.fjola : state.eydis);
-    Spell* spell =
-        twin ? twin->FindCurrentSpellBySpellId(
-                   sSpellMgr->GetSpellIdForDifficulty(light ? SPELL_LIGHT_VORTEX : SPELL_DARK_VORTEX, twin))
-             : nullptr;
+    twin = ResolveAlive(botAI, light ? state.fjola : state.eydis);
+    return twin ? twin->FindCurrentSpellBySpellId(
+                      sSpellMgr->GetSpellIdForDifficulty(light ? SPELL_LIGHT_VORTEX : SPELL_DARK_VORTEX, twin))
+                : nullptr;
+}
+
+bool VortexHit(PlayerbotAI* botAI, TwinValkyrState const& state, RaidPredictedHit& hit)
+{
+    Creature* twin = nullptr;
+    Spell* spell = RunningVortex(botAI, state, twin);
     SpellInfo const* info = spell ? spell->GetSpellInfo() : nullptr;
     if (!info)
         return false;
@@ -1020,6 +1034,67 @@ Creature* GetEssencePortal(Player* bot, TwinColour colour)
             best = &portal;
 
     return best ? ResolveAlive(botAI, best->guid) : nullptr;
+}
+
+bool TwinValkyrArrived(PlayerbotAI* botAI)
+{
+    TwinValkyrState const* state = botAI ? ReadTwins(botAI) : nullptr;
+    return state && !state->portals.empty();
+}
+
+bool TwinValkyrBoostEssenceWalk(PlayerbotAI* botAI, TwinEssenceReason reason, Creature* portal)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    TwinValkyrState const* state = bot && portal ? ReadTwins(botAI) : nullptr;
+    if (!state || !state->pull.engaged || bot->HasAura(NITRO_BOOSTS_SPEED_SPELL) || !NitroBoostsReady(bot))
+        return false;
+
+    float walk = bot->GetExactDist2d(portal);
+    if (reason == TwinEssenceReason::Base)
+    {
+        TwinDoorStand const stand = GetTwinDoorStand(bot);
+        if (stand.role != TwinDoorRole::None)
+            walk += portal->GetExactDist2d(stand.spot);
+    }
+
+    if (walk <= TWIN_NITRO_MIN_WALK)
+        return false;
+
+    switch (reason)
+    {
+        case TwinEssenceReason::Vortex:
+        {
+            // once it channels every tick counts
+            Creature* twin = nullptr;
+            Spell* spell = RunningVortex(botAI, *state, twin);
+            if (!spell || spell->getState() != SPELL_STATE_PREPARING)
+                break;
+
+            float const speed = std::max(bot->GetSpeed(MOVE_RUN), 1.0f);
+            uint32 const walkMs = static_cast<uint32>(walk / speed * IN_MILLISECONDS);
+            if (walkMs + TWIN_NITRO_SPARE_MS <= static_cast<uint32>(std::max(spell->GetCastTimeRemaining(), 0)))
+                return false;
+
+            break;
+        }
+        case TwinEssenceReason::Touch:
+        case TwinEssenceReason::Base:
+            if (!state->pull.lightVortexSeen)
+                return false;
+
+            break;
+        default:
+            return false;
+    }
+
+    // Refused mid-cast. Touch and Vortex walks clip theirs first, a base walk gets them next tick.
+    if (!UseNitroBoosts(bot))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "tv.nitro", ReasonName(reason));
+
+    return true;
 }
 
 Unit* GetTwinDpsTarget(PlayerbotAI* botAI)
@@ -1277,7 +1352,8 @@ Position GetTwinDoorSpot(Player* bot, Unit* twin)
 bool TwinValkyrDoorHold(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!bot || GetTwinDoorStand(bot).role == TwinDoorRole::None)
+    TwinValkyrState const* state = bot ? ReadTwins(botAI) : nullptr;
+    if (!state || !state->pull.engaged || GetTwinDoorStand(bot).role == TwinDoorRole::None)
         return false;
 
     for (Unit* twin : {GetFjola(botAI), GetEydis(botAI)})
@@ -1291,7 +1367,7 @@ bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     TwinValkyrState* state = bot ? ReadTwins(botAI) : nullptr;
-    if (!state || !bot->IsAlive() || TankRoleOf(bot) != TwinTankRole::None)
+    if (!state || !state->pull.engaged || !bot->IsAlive() || TankRoleOf(bot) != TwinTankRole::None)
         return false;
 
     TwinDoorStand const stand = GetTwinDoorStand(bot);

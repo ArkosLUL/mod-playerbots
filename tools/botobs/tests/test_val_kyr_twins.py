@@ -199,8 +199,8 @@ def pact_pull() -> list[dict]:
 
 
 def door_pull() -> list[dict]:
-    """Shiv walks out to Light 1 for a Vortex from 10 s to 20 s; Frost steps 4 yd off its stand at 5 s
-    and takes an Unleashed there, Shiv one out at the portal."""
+    """Shiv walks out to Light 1 for a Vortex from 10 s to 20 s on Nitro Boosts; Frost steps 4 yd off
+    its stand at 5 s and takes an Unleashed there, Shiv one out at the portal."""
     records = [
         {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3,
          "boss": "fjola-lightbane", "roster": [
@@ -211,6 +211,7 @@ def door_pull() -> list[dict]:
         note(0, FROST, "tv.door", "ranged:563.2,81.0"),
         note(0, SHIV, "tv.essence", "base:dark"),
         note(10000, SHIV, "tv.essence", "vortex:light"),
+        note(10000, SHIV, "tv.nitro", "vortex"),
         note(20000, SHIV, "tv.essence", "base:dark"),
         dmg(6000, 0, FROST, 65795, 8000),
         dmg(12000, 0, SHIV, 65795, 8000),
@@ -405,11 +406,16 @@ class DoorStand(unittest.TestCase):
         self.assertEqual((frost["stand"], frost["tunnel"]), (28000, 30000))
         self.assertEqual((frost["unleashed_in"], frost["unleashed_out"]), (1, 0))
 
+    def test_nitro_uses_sit_under_their_walk(self):
+        rows = {row["guid"]: row for row in vk.door_rows(self.trace)}
+        self.assertEqual((rows[SHIV]["nitro"], rows[FROST]["nitro"]), (["vortex"], []))
+
     def test_the_section_prints(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             vk.show_door(self.trace)
         self.assertIn("in the tunnel", out.getvalue())
+        self.assertIn("Nitro Boosts on colour walks: 1 (vortex 1)", out.getvalue())
 
 
 class TwoBrokenPacts(unittest.TestCase):

@@ -153,13 +153,19 @@ and a base walk is due at its end. Touch and Vortex walks first clip a cast that
 range clears `last movement`, which otherwise refuses the repeat as a duplicate for 5 s; one still
 walking holds the tick, or a lower node's charge leaps the bot back onto the twin. Touch and
 Vortex walks and the orb dodge also clear a booking headed elsewhere: forced doesn't outrank forced.
-Once the gossip lands the essence the bot stops rather than finish the walk under the lock. No
+Once the gossip lands the essence the bot stops rather than finish the walk under the lock.
+`TwinValkyrBoostEssenceWalk` spends Nitro Boosts (3 min, so about one per pull) on a walk over 15 yd,
+mid-pull only: a Vortex walk when it would end under 1.5 s before the cast does (heroic's 40 yd in 6
+s; normal's 35-38 yd in 8 s doesn't), a Touch or base walk only once the pull's Light Vortex has
+started, which on normal means the trip back to Dark and the stand. No
 essence-swap multiplier: a blanket `MovementAction` veto also vetoes `AttackAction`
 ([pitfalls.md](../../engine/pitfalls.md)).
 
 **Door hold.** `twin valkyr door hold` blocks reach (heal reach too), set behind, rear flank,
 formation, follow, flee, run away, move random, charge, blink and disengage for every bot with a
-door stand, tanks included, except a tank fetching its twin. Essence walks and the orb dodge are the
+door stand once a twin is in combat, tanks included, except a tank fetching its twin. Both it and the door
+stand wait for the pull: the gate opens at the Faction Champions kill, so bots would stand in the
+tunnel and stop following from then. Essence walks and the orb dodge are the
 encounter's own movers. `twin valkyr door stand` walks a non-tank back past 2.5 yd off and parks it
 within 1 yd (straight walk, the tunnel has no navmesh), yielding to any essence walk.
 
@@ -252,15 +258,20 @@ walks multiply. The door deal refreshes once a second.
 
 ### Known gaps
 
-- Untested in a live pull: the 2026-10-25 25H kill (2:43, 0 deaths, trace
-  `649_39_val-kyr-twins_1792953674`) ran the old centre stack. Targets: bots 51+ yd out outside
-  swap walks, no Unleashed hits in the tunnel (56 then), Eydis's Touch at most once per Light Vortex
-  (3 then), tanks alive through each Vortex, no normal Vortex deaths, DPS cooldowns inside the lust
-  window, a 25H kill around 3:00-3:15.
+- 25N 2026-10-28 (trace `649_3_fjola-lightbane_1793222782`): 2:22, 0 deaths, the raid in the tunnel
+  87% of living time, 2 Unleashed hits there. Its Light Vortex swap took Light 2.3-5.1 s into the 8 s
+  cast and kept bots off their stands 17.8-23.5 s from the cast (77-108 yd); nobody used Nitro then.
+  Heroic is untested; against the old centre stack (25H 2026-10-25, 2:43, trace
+  `649_39_val-kyr-twins_1792953674`) the targets are no Unleashed hits in the tunnel (56 then),
+  Eydis's Touch at most once per Light Vortex (3 then), tanks alive through each Vortex, DPS
+  cooldowns inside the lust window, a kill around 3:00-3:15.
+- A human paladin on Fire Resistance Aura leaves no bot fire holder (`ResistAura` skips his school),
+  so the normal raid hold through a Light Vortex never latches and the raid swaps (25N 2026-10-28).
 - Humans hold no stand and no interrupt duty: there is no `PlayerbotAI` to ask. A human Eydis tank
   who keeps her in the arena leaves melee on Fjola only.
 - A tank with no defensive ready holds through a Vortex anyway, on heals.
-- The heroic Light Vortex walk to Light 1 barely fits the 6 s cast; a late bot eats a tick or two.
+- The heroic Light Vortex walk to Light 1 barely fits the 6 s cast; a late bot without Nitro Boosts
+  eats a tick or two.
 - A lone tank can't truly hold both (**Targets**): Light bots deal half on Fjola, and an Eydis
   Pact still pulls her off.
 - Deferred cleanup: each essence and orb trigger re-derives `GetWantedEssence` every tick. A
@@ -277,6 +288,7 @@ Position, verdicts and movement come from the raid-agnostic streams. The Twins r
 | `essence` | `<reason>:<colour>` wanted: `vortex`, `hold` (keeps its colour through a Vortex), `touch`, `base`, or `none` with neither twin alive |
 | `target` | `<fjola\|eydis>:<rule>`, the twin the DPS rule names and why: `skull` (a player's), `pact`, `lone` (a lone tank), `door` (a melee bot's sister fallback), or the essence held (`light`, `dark`, `none`); `none` with no twin in reach |
 | `door` | `<role>:<x>,<y>`, the door stand: role `tank`, `melee`, `ranged`, `heal`; `none` without one |
+| `nitro` | `vortex`, `touch` or `base`, the walk a Nitro Boosts use went on; per use |
 | `tank` | `fjola`, `eydis`, `both` or `none`, tanks only |
 | `shield` | The shielded twin, `0` none, `1` Fjola, `2` Eydis. Per instance |
 | `interrupt` | `duty`, `standby` or `none` (no ready interrupt), written by every living bot while a twin casts an unshielded Pact; a dead bot's goes stale, so the reader cuts it at the death |
@@ -293,7 +305,8 @@ absorbed, peak Powering Up and Empowered per bot, and which bots dodged under ea
 the twins (`--tanks`); each DPS bot's time on the twin the rule names: its `tv.target` twin while
 that reads `skull` or `door`, Fjola while a `tv.tank` reads `both`, no Eydis Pact on normal
 (`--targets`); per bot, living time within 2.5 yd of its `tv.door` stand and 51+ yd out, time out
-of the tunnel by `tv.essence` reason, and Unleashed hits taken in the tunnel and out (`--door`).
+of the tunnel by `tv.essence` reason, Unleashed hits taken in the tunnel and out, and `tv.nitro`
+uses by walk (`--door`).
 
 Still invisible, and what stands in:
 

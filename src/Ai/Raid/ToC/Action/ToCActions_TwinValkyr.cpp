@@ -88,6 +88,8 @@ bool TwinValkyrEssenceActionBase::AcquireEssence(TwinColour colour)
         if (reason != TwinEssenceReason::Base && bot->IsMovementPreventedByCasting())
             bot->InterruptNonMeleeSpells(true);
 
+        TwinValkyrBoostEssenceWalk(botAI, reason, portal);
+
         bool const urgent = reason == TwinEssenceReason::Touch || reason == TwinEssenceReason::Vortex;
         ReleaseWalk(botAI, bot, portal->GetPosition(), urgent);
 

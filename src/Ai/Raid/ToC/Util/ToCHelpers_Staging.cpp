@@ -588,9 +588,13 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
 }
 
 // The fight's own door stands, so nobody walks at the pull. They sit in the entrance tunnel, past the
-// arena floor radius AddArenaSlot keeps to.
-void LayoutTwins(std::vector<Player*> const& bots, std::vector<DutyStand>& duties)
+// arena floor radius AddArenaSlot keeps to. None till the twins and their portals show up, 16 s after
+// the gossip: bots follow the player meanwhile, then take the essence and walk to the stand once.
+void LayoutTwins(PlayerbotAI* botAI, std::vector<Player*> const& bots, std::vector<DutyStand>& duties)
 {
+    if (!TwinValkyrArrived(botAI))
+        return;
+
     for (Player* member : bots)
     {
         TwinDoorStand const stand = GetTwinDoorStand(member);
@@ -742,7 +746,7 @@ void Deal(PlayerbotAI* botAI, StagingState& state, ToCStagingBoss arrival, uint3
             LayoutChampions(bot, bots, duties, layout);
             break;
         case ToCStagingBoss::Twins:
-            LayoutTwins(bots, duties);
+            LayoutTwins(botAI, bots, duties);
             break;
         case ToCStagingBoss::Anubarak:
             LayoutAnubarak(bot, duties, layout);

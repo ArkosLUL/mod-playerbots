@@ -8,7 +8,8 @@
     val_kyr_twins.py <file> --orbs      Unleashed hits taken or absorbed, tv.orb rules, Powering Up
     val_kyr_twins.py <file> --tanks     who each twin hit, taunts, where the twins stood
     val_kyr_twins.py <file> --targets   how long each DPS bot hit the twin its rule sends it to
-    val_kyr_twins.py <file> --door      time on the door stand and in the tunnel, time out by reason
+    val_kyr_twins.py <file> --door      time on the door stand and in the tunnel, time out by reason,
+                                        Nitro Boosts per bot by walk
 
 Ids are listed for 10N, 25N, 10H and 25H: the Spell constructor remaps every cast to the map's
 difficulty, so rows carry that difficulty's id. Interrupts, taunts and lust are matched by the spell
@@ -138,6 +139,7 @@ SILENT_WHY = {
     "tv.interrupt": "written by every living bot while a twin casts an unshielded Pact, so no shield broke",
     "tv.orb": "written only when a bot looks for a dodge spot",
     "tv.tank": "no bot held a tank role",
+    "tv.nitro": "written only when a bot spends Nitro Boosts on a colour walk",
 }
 
 
@@ -873,11 +875,15 @@ def parse_stand(value: str) -> tuple[str, tuple[float, float] | None]:
 def door_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Per roster bot with a door stand: living combat time, the part of it within DOOR_STAND_YD of
     the stand and the part DOOR_RADIUS or more from ARENA_CENTER, time out of the tunnel under the
-    `tv.essence` reason it held then, and its Unleashed hits taken in the tunnel and out of it."""
+    `tv.essence` reason it held then, its Unleashed hits taken in the tunnel and out of it, and the
+    walk reason of each Nitro Boosts use (`tv.nitro`)."""
     samples = samples or Samples(trace)
     end = pull_end(trace)
     stands = holder_spans(trace, "tv.door", end)
     wanted = note_track(trace, "tv.essence")
+    nitro = collections.defaultdict(list)
+    for rec in notes(trace, "tv.nitro"):
+        nitro[rec.get("g")].append(rec.get("txt", "?"))
     unleashed = collections.defaultdict(list)
     for rec in trace.of("dmg"):
         if rec.get("sp") in UNLEASHED and rec.get("a", 0) > 0 and rec["t"] >= 0:
@@ -914,7 +920,8 @@ def door_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
             elif row:
                 outside += 1
         out.append({"guid": guid, "role": role, "alive": alive, "stand": on_stand, "tunnel": tunnel,
-                    "away": away, "unleashed_in": inside, "unleashed_out": outside})
+                    "away": away, "unleashed_in": inside, "unleashed_out": outside,
+                    "nitro": nitro.get(guid, [])})
     return out
 
 
@@ -925,16 +932,20 @@ def show_door(trace: Trace) -> None:
         print("  no tv.door stand")
         return
 
-    print(f"  {'bot':14} {'stand':6} {'on it':>6} {'tunnel':>6} {'unleashed in/out':>16}  out of the tunnel by reason")
+    print(f"  {'bot':14} {'stand':6} {'on it':>6} {'tunnel':>6} {'unleashed in/out':>16} {'nitro':12}"
+          "  out of the tunnel by reason")
     for row in rows:
         away = ", ".join(f"{reason} {weight / 1000:.1f}s" for reason, weight in row["away"].most_common())
         print(f"  {trace.name(row['guid'])[:14]:14} {row['role']:6} {share(row['stand'], row['alive']):>6}"
               f" {share(row['tunnel'], row['alive']):>6} {row['unleashed_in']:>7}/{row['unleashed_out']:<8}"
-              f"  {away or '-'}")
+              f" {','.join(row['nitro']) or '-':12}  {away or '-'}")
     alive = sum(row["alive"] for row in rows)
     print(f"\n  in the tunnel {share(sum(row['tunnel'] for row in rows), alive)} of living time,"
           f" Unleashed taken there {sum(row['unleashed_in'] for row in rows)}; the tunnel is"
           f" {DOOR_RADIUS:.0f}+ yd from ARENA_CENTER, past every orb")
+    uses = collections.Counter(reason for row in rows for reason in row["nitro"])
+    detail = ", ".join(f"{reason} {count}" for reason, count in uses.most_common())
+    print(f"  Nitro Boosts on colour walks: {sum(uses.values())}{f' ({detail})' if detail else ''}")
 
 
 # ------------------------------------------------------------------------------------------- banner
@@ -972,7 +983,8 @@ SECTIONS = (
     ("orbs", "Unleashed hits taken or absorbed, tv.orb rules, Powering Up, Empowered", show_orbs),
     ("tanks", "each twin's victim against her tv.tank, taunts, distances", show_tanks),
     ("targets", "each DPS bot's time on the twin its rule names", show_targets),
-    ("door", "time on the door stand and in the tunnel, time out by reason, Unleashed there", show_door),
+    ("door", "time on the door stand and in the tunnel, time out by reason, Unleashed there, Nitro",
+     show_door),
 )
 
 

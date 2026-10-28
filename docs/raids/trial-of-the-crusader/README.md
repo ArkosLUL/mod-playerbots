@@ -327,7 +327,8 @@ park within 1 yd, walk back past 2.5.
     among them.
   - Twins: every bot on its fight door stand in the entrance tunnel, `GetTwinDoorStand`
     ([twin-valkyr.md](twin-valkyr.md#strategy)), past `AddArenaSlot`'s floor radius, 80+ yd from
-    both twins. A bot due an essence walk gets no stand until it has it.
+    both twins. None until the twins and their portals appear (16 s after the gossip), so bots
+    follow the player through the speech; a bot due an essence walk gets no stand until it has it.
   - Anub'arak, from `GetAnubarakPrepullTanks` (bots before humans, a human on the side point he stands at): `pickup` (the main tank, else the first bot side tank)
     on `GetAnubarakPickupStand`, `side0`/`side1` on the side points; melee 8 yd west of
     `ANUBARAK_ROOM_CENTER`, casters on 22 and 30 yd rings west of it, all 40.9+ yd from him.

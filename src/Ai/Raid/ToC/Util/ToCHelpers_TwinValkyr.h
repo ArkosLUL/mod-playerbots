@@ -122,6 +122,12 @@ TwinEssenceWant GetWantedEssence(PlayerbotAI* botAI);
 bool TwinValkyrMustSwapEssence(PlayerbotAI* botAI, bool urgentOnly);
 // The portal of that colour with the shortest walk to it and on to the bot's door stand
 Creature* GetEssencePortal(Player* bot, TwinColour colour);
+// The twins are summoned and their portals found, so pre-pull stands can be dealt
+bool TwinValkyrArrived(PlayerbotAI* botAI);
+// Nitro Boosts for an essence walk to portal, mid-pull only. A Vortex walk takes them only when it
+// would end less than 1.5 s before the cast does; a Touch or base walk only once this pull's Light
+// Vortex has started, since heroic's 6 s one is the walk that kills. Writes tv.nitro on use.
+bool TwinValkyrBoostEssenceWalk(PlayerbotAI* botAI, TwinEssenceReason reason, Creature* portal);
 
 // A player's skull on either twin, else the Pact twin while one casts (heroic either, normal only
 // Fjola), else Fjola under a lone tank, else the twin of the other colour than the bot's essence. A
@@ -133,10 +139,11 @@ Unit* GetTwinDpsTarget(PlayerbotAI* botAI);
 TwinDoorStand GetTwinDoorStand(Player* bot);
 // Where the twin's tank holds her
 Position GetTwinDoorSpot(Player* bot, Unit* twin);
-// Every bot with a door stand, except a tank walking out to fetch its twin
+// Every bot with a door stand once a twin is pulled, except a tank walking out to fetch its twin. The
+// gate is open from the Faction Champions kill, so without the pull test bots stand here from then.
 bool TwinValkyrDoorHold(PlayerbotAI* botAI);
-// A bot off its door stand, tanks aside, with no essence walk due and none waiting on the end of a
-// running Vortex. Keeps the park latch.
+// Mid-pull, a bot off its door stand, tanks aside, with no essence walk due and none waiting on the
+// end of a running Vortex. Keeps the park latch.
 bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI);
 // The twin is on someone else, past taunt range of her door spot, and hasn't closed on it for 2 s
 bool TwinValkyrFetchDue(PlayerbotAI* botAI, Unit* twin);
