@@ -7,54 +7,59 @@
 #ifndef PLAYERBOTS_ICCACTIONS_MARROWGAR_H
 #define PLAYERBOTS_ICCACTIONS_MARROWGAR_H
 
-#include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
-#include "ICCHelpers_Marrowgar.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
-#include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include <string>
 
-class IccLmTankPositionAction : public AttackAction
+#include "ICCActions_RaidWide.h"
+#include "ICCHelpers_Marrowgar.h"
+#include "MovementActions.h"
+#include "Position.h"
+
+class IccLmAttackTargetAction : public IccDirectAttackAction
 {
 public:
-    static constexpr char const* Name = "icc lm tank position";
+    static constexpr char const* Name = "icc lm attack target";
 
-    IccLmTankPositionAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
-    bool Execute(Event event) override;
-
-    bool MoveTowardPosition(Position const& position, float incrementSize);
+    IccLmAttackTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetLmTarget) {}
 };
 
-class IccSpikeAction : public AttackAction
+// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
+// re-issued each tick to a bot still walking never lands.
+class IccLmWalkAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc spike";
+    IccLmWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
-    IccSpikeAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
+protected:
+    // The latched spot while the bot is still walking to it, else nullptr
+    Position const* WalkInFlight();
+    // False without booking anything while a cast pins the bot's feet
+    bool WalkTo(Position const& spot, MovementPriority priority);
+    void DropWalk() { walking = false; }
+
+private:
+    bool BookedOnWalkSpot();
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
+};
+
+class IccLmMoveToStandAction : public IccLmWalkAction
+{
+public:
+    static constexpr char const* Name = "icc lm move to stand";
+
+    IccLmMoveToStandAction(PlayerbotAI* botAI) : IccLmWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
+};
 
-    std::vector<Unit*> FindAliveSpikes();
-    bool HandleSpikeMarking(std::vector<Unit*> const& spikes, Unit* boss);
-    bool HandleNoSpikesMarking(Unit* boss);
-    bool HandleSpikeAssignment(std::vector<Unit*> const& spikes, Unit* boss);
-    bool MoveTowardPosition(Position const& position, float incrementSize);
-    bool IsSpikeInColdFlame(Unit* spike);
-    static Player* GetSpikeVictim(Unit* spike);
+class IccLmDodgeColdflameAction : public IccLmWalkAction
+{
+public:
+    static constexpr char const* Name = "icc lm dodge coldflame";
+
+    IccLmDodgeColdflameAction(PlayerbotAI* botAI) : IccLmWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 #endif

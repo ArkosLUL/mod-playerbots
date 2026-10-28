@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
-"""Read a Lord Marrowgar pull from a RaidObs trace: Bone Storm, its anchors, the spikes, the cheats.
+"""Read a Lord Marrowgar pull from a RaidObs trace: Bone Storm, the duties, the spikes, the dodges.
 
     lord_marrowgar.py <file>            every section
-    lord_marrowgar.py <file> --phases   lm.phase: each Bone Storm, from the first bot to note it
-    lord_marrowgar.py <file> --storms   who drew each Bone Storm to the far stand
-    lord_marrowgar.py <file> --spikes   the icon layout over the pull, and the spike duty each bot held
+    lord_marrowgar.py <file> --phases   lm.phase: each Bone Storm cast and storm, from the first bot to note it
+    lord_marrowgar.py <file> --duties   who tanked, stacked, stood inside him and baited Coldflame
+    lord_marrowgar.py <file> --storms   each storm's anchors, and who stood on an anchor or the stack
+    lord_marrowgar.py <file> --spikes   the spike rule each bot followed
+    lord_marrowgar.py <file> --dodges   the Coldflame dodge branches each bot took
     lord_marrowgar.py <file> --cheats   this encounter's cheat uses
 
 What the generic views miss here:
 
-- **An anchor is decided again in every storm but written only on change.** `lm.stormanchor` is
-  asked only while Bone Storm is up, so a bot that anchored the last storm and still does writes no
-  row in the next one. A storm's anchors are the bots that wrote `1` in it, or held `1` from earlier
-  and wrote nothing.
-- **`lm.spike` is the duty a bot took, not what it hit.** `skull`, `cross`, `star` are the ranged
-  buckets, `nearest` a melee on the closest safe spike, `nosafe` a melee that found none, `tank` the
-  assist tank on the tank's spike, `boss` a melee left on him while only the tank's spike stands.
-- **`lm.mark` is the icon rule, and every bot writes it.** `spikesN` puts skull, cross and star on
-  the N spikes in guid order, `tankspike` skull on the tank's spike and cross on him, `boss` skull on
-  him; the steps start at the first bot to note each.
+- **`lm.duty` and `lm.anchor` are the roster, rebuilt once a second while he is in progress.** A value
+  is the duty number (1 main tank, 2 off-tank, 3 inside him, 4 Coldflame bait) or the anchor slot (1-3
+  for 0, 120 and 240 degrees round the storm stack); `0` is a bot that lost it, dead or gone.
+- **`lm.stand` is the stand a bot holds, `none` while it holds none.** A melee or caster on a spike
+  holds none, so reach can walk it; so does everyone while he walks between stands.
+- **`lm.spike` is the rule that picked, not what was hit.** `skull` a player's mark, `melee` a spike in
+  reach, `far` a ranged on a spike no melee reaches, `spread` a ranged helping on the others, `boss`
+  him.
+- **`lm.dodge` writes `clear` whenever a bot is out of every patch**, so a dodge is the row before it:
+  `move N` (yards walked), `tight` (the wide clearance was full), `hold` (still walking), `none`,
+  `locked`, `stunned`.
 """
 from __future__ import annotations
 
@@ -38,9 +41,14 @@ SLUG = "lord-marrowgar"
 NAME = "Lord Marrowgar"
 PHASE = "lm.phase"
 STORM = "bonestorm"
-ANCHOR = "lm.stormanchor"
-MARK = "lm.mark"
+DUTY = "lm.duty"
+ANCHOR = "lm.anchor"
+STAND = "lm.stand"
 SPIKE = "lm.spike"
+DODGE = "lm.dodge"
+DUTIES = {"1": "main tank", "2": "off-tank", "3": "inside", "4": "bait"}
+ANCHOR_SLOTS = {"1": "0", "2": "120", "3": "240"}
+STORM_STANDS = ("anchor", "stack")
 DIFFICULTIES = {0: "10N", 1: "25N", 2: "10H", 3: "25H"}
 
 
@@ -63,27 +71,52 @@ def storms(trace: Trace) -> list[tuple[int, int]]:
     return [(start, stop) for value, start, stop in phase_steps(trace) if value == STORM]
 
 
-def anchors(trace: Trace, start: int, stop: int) -> set[int]:
-    """The bots that drew the storm in `[start, stop)`."""
-    rows: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
-    for rec in sorted(notes(trace, ANCHOR), key=lambda rec: rec["t"]):
-        rows[rec["g"]].append((rec["t"], str(rec.get("txt", ""))))
-    out = set()
-    for guid, track in rows.items():
-        held = next((value for when, value in reversed(track) if when < start), "0")
-        inside = [value for when, value in track if start <= when < stop]
-        if "1" in inside or (held == "1" and not inside):
-            out.add(guid)
+def holders_at(trace: Trace, key: str, when: int) -> dict[int, str]:
+    """`{guid: value}` for every bot whose `key` held a value other than `0` at `when`."""
+    out = {}
+    for guid, spans in holder_spans(trace, key, pull_end(trace)).items():
+        for value, start, stop in spans:
+            if start <= when < stop and value != "0":
+                out[guid] = value
     return out
 
 
-def duties(trace: Trace) -> dict[str, set[int]]:
-    """Per spike duty other than `none`, the bots that held it at some point."""
+def anchors(trace: Trace, start: int, stop: int) -> dict[str, int]:
+    """`{slot: guid}` for the anchors assigned when the storm in `[start, stop)` began."""
+    return {ANCHOR_SLOTS.get(value, value): guid for guid, value in holders_at(trace, ANCHOR, start).items()}
+
+
+def storm_stands(trace: Trace, start: int, stop: int) -> dict[str, set[int]]:
+    """Per storm stand, the bots that held it at some point of the storm."""
     out: dict[str, set[int]] = collections.defaultdict(set)
-    for guid, spans in holder_spans(trace, SPIKE, pull_end(trace)).items():
-        for value, _, _ in spans:
-            if value != "none":
+    for guid, spans in holder_spans(trace, STAND, pull_end(trace)).items():
+        for value, span_start, span_stop in spans:
+            if value in STORM_STANDS and span_start < stop and span_stop > start:
                 out[value].add(guid)
+    return dict(out)
+
+
+def held_values(trace: Trace, key: str, skip: tuple[str, ...] = ()) -> dict[str, set[int]]:
+    """Per value of a per-bot key, the bots that held it at some point."""
+    out: dict[str, set[int]] = collections.defaultdict(set)
+    for guid, spans in holder_spans(trace, key, pull_end(trace)).items():
+        for value, _, _ in spans:
+            if value not in skip:
+                out[value].add(guid)
+    return dict(out)
+
+
+def duties(trace: Trace) -> dict[str, set[int]]:
+    return {DUTIES.get(value, value): guids for value, guids in held_values(trace, DUTY, ("0",)).items()}
+
+
+def dodges(trace: Trace) -> dict[int, collections.Counter]:
+    """Per bot, how often it took each dodge branch. `move N` counts under `move`."""
+    out: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for rec in notes(trace, DODGE):
+        value = str(rec.get("txt", ""))
+        if value != "clear":
+            out[rec["g"]][value.split(" ")[0]] += 1
     return dict(out)
 
 
@@ -119,6 +152,18 @@ def show_phases(trace: Trace) -> None:
         print(f"    {clock(start):>9}  {clock(stop - start):>9}  {value}")
 
 
+def show_duties(trace: Trace) -> None:
+    print("DUTIES")
+    if not mine(trace):
+        return
+    held = duties(trace)
+    if not held:
+        print(f"  {DUTY} never written")
+        return
+    for value in sorted(held):
+        print(f"  {value:<10} {names(trace, held[value])}")
+
+
 def show_storms(trace: Trace) -> None:
     print("BONE STORMS")
     if not mine(trace):
@@ -128,26 +173,37 @@ def show_storms(trace: Trace) -> None:
         print("  no Bone Storm in this pull")
         return
     for index, (start, stop) in enumerate(spans, 1):
-        drawn = names(trace, anchors(trace, start, stop))
+        slots = anchors(trace, start, stop)
+        drawn = ", ".join(f"{slot}: {trace.name(guid)}" for slot, guid in sorted(slots.items())) or "none"
+        stood = storm_stands(trace, start, stop)
         print(f"  {index}  {clock(start)} for {clock(stop - start)}  anchors {drawn}")
+        for stand in STORM_STANDS:
+            print(f"       on the {stand}: {names(trace, stood.get(stand, ()))}")
 
 
 def show_spikes(trace: Trace) -> None:
     print("SPIKES")
     if not mine(trace):
         return
-    layout = latch_spans(trace, MARK, pull_end(trace))
-    if not layout:
-        print(f"  {MARK} never written")
-    for value, start, stop in layout:
-        print(f"    {clock(start):>9}  {clock(stop - start):>9}  {value}")
-    held = duties(trace)
+    held = held_values(trace, SPIKE)
     if not held:
-        print("  no bot took a spike duty")
+        print(f"  {SPIKE} never written")
         return
-    print()
     for value in sorted(held):
         print(f"  {value:<8} {names(trace, held[value])}")
+
+
+def show_dodges(trace: Trace) -> None:
+    print("COLDFLAME DODGES")
+    if not mine(trace):
+        return
+    rows = dodges(trace)
+    if not rows:
+        print("  no bot dodged")
+        return
+    for guid, counts in sorted(rows.items(), key=lambda row: trace.name(row[0])):
+        line = "  ".join(f"{branch} {count}" for branch, count in sorted(counts.items()))
+        print(f"  {trace.name(guid):<16} {line}")
 
 
 def show_cheats(trace: Trace) -> None:
@@ -163,9 +219,11 @@ def show_cheats(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("phases", "lm.phase: each Bone Storm, from the first bot to note it", show_phases),
-    ("storms", "who drew each Bone Storm to the far stand", show_storms),
-    ("spikes", "the icon layout over the pull, and the spike duty each bot held", show_spikes),
+    ("phases", "lm.phase: each Bone Storm cast and storm, from the first bot to note it", show_phases),
+    ("duties", "who tanked, stacked, stood inside him and baited Coldflame", show_duties),
+    ("storms", "each storm's anchors, and who stood on an anchor or the stack", show_storms),
+    ("spikes", "the spike rule each bot followed", show_spikes),
+    ("dodges", "the Coldflame dodge branches each bot took", show_dodges),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 

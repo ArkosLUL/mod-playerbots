@@ -5,12 +5,13 @@
  */
 
 #include "ICCTriggers_Marrowgar.h"
-#include "ICCHelpers_Marrowgar.h"
-#include "ICCHelpers_Shared.h"
-#include "Playerbots.h"
-#include "Trigger.h"
 
-bool IccLmTrigger::IsActive()
+#include "Position.h"
+
+bool IccLmStandTrigger::IsActive()
 {
-    return AI_VALUE2(Unit*, "find target", "lord marrowgar") != nullptr;
+    Position spot;
+    return GetLmStandWalk(botAI, spot);
 }
+
+bool IccLmColdflameTrigger::IsActive() { return IsLmInColdflame(botAI); }
