@@ -3,7 +3,8 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic 10N pull pins the phase steps, the stands, the pick totals, a swapped and yielded rune and
-an unswapped one, a shared Blood Nova, the kill and control duties, a healed and an unhealed Mark and the cheat
+an unswapped one, a shared Blood Nova, the kill and control duties, a healed and an unhealed Mark, the tank
+windows with a call to a human tank and a marked bot's button, a Hand of Protection duty and the cheat
 filter, and the shared v14 fixture shows every section reads empty on a trace that is not his.
 """
 from __future__ import annotations
@@ -89,7 +90,23 @@ def pull(boss: str = "deathbringer-saurfang") -> list[dict]:
         note(50100, FEL, dbs.MARKHEAL, MEND),
         {"t": 70000, "e": "death", "g": FEL, "killer": 1 << 32},
         aura(80000, ARROW, dbs.SPELL_MARK_OF_THE_FALLEN_CHAMPION),
+        {"e": "spell", "sp": 871, "n": "Shield Wall"},
+        {"e": "spell", "sp": 12975, "n": "Last Stand"},
+        {"e": "spell", "sp": 10278, "n": "Hand of Protection"},
+        note(50200, MEND, dbs.PROTECT, FEL),
+        {"t": 50300, "e": "cast", "s": MEND, "sp": 10278},
+        note(53000, MEND, dbs.PROTECT, 0),
+        note(55000, FEL, dbs.PERSONAL, "Barkskin"),
+        note(56000, FEL, dbs.PERSONAL, "none"),
+        note(90000, BULWARK, dbs.DEFENSIVE, "last stand"),
+        {"t": 90100, "e": "cast", "s": BULWARK, "sp": 12975},
+        note(91000, BULWARK, dbs.DEFENSIVE, "covered"),
+        note(93000, BULWARK, dbs.DEFENSIVE, "idle"),
+        note(95000, ARROW, dbs.HUMAN_CALL, "Shield Wall"),
         note(100000, BULWARK, dbs.PHASE, 2),
+        note(105000, AEGIS, dbs.DEFENSIVE, "shield wall"),
+        {"t": 105050, "e": "cast", "s": AEGIS, "sp": 871},
+        note(106000, AEGIS, dbs.DEFENSIVE, "idle"),
         {"t": 40000, "e": "cheat", "g": BULWARK, "k": "ldw.nothreat", "n": 1},
         {"t": 120000, "e": "end", "out": "kill"},
     ]
@@ -152,6 +169,24 @@ class SyntheticPull(unittest.TestCase):
         text = printed(dbs.show_marks, self.trace)
         self.assertIn("Fel  Mend  died 1:10.000", text)
         self.assertIn("Arrow  no healer  alive", text)
+
+    def test_tank_windows_run_from_the_first_offer_to_idle(self):
+        self.assertEqual(dbs.tank_windows(self.trace), [
+            (90000, 93000, BULWARK, ["last stand", "covered"]),
+            (105000, 106000, AEGIS, ["shield wall"]),
+        ])
+
+    def test_defensives_section(self):
+        self.assertEqual(printed(dbs.show_defensives, self.trace), (
+            "TANK DEFENSIVES\n"
+            "  1:30.000  Bulwark     0:03.000  peak or low offered last stand, covered; cast Last Stand +0.1s\n"
+            "  1:45.000  Aegis       0:01.000  frenzy      offered shield wall; cast Shield Wall +0.1s\n"
+            "  calls to a human tank  Shield Wall 1:35.000\n"
+            "  marked bots' own buttons  Barkskin Fel 0:55.000\n"))
+
+    def test_protect_duty_and_its_cast(self):
+        self.assertEqual(dbs.protect_duties(self.trace), [(50200, 53000, MEND, FEL, 50300)])
+        self.assertIn("0:50.200  Mend on Fel  held 0:02.800  cast +0.1s", printed(dbs.show_protect, self.trace))
 
     def test_cheats_filter_other_encounters(self):
         self.assertIn("no dbs.* or icc.* cheat fired", printed(dbs.show_cheats, self.trace))

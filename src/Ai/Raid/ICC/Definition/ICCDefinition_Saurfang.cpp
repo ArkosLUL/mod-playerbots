@@ -12,6 +12,7 @@
 #include "ICCMultipliers_Saurfang.h"
 #include "ICCSeams.h"
 #include "ICCTriggers_Saurfang.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 
 namespace Family = RaidEncounterRules::Family;
@@ -21,6 +22,9 @@ namespace
 {
 void DefineSaurfang(EncounterBuilder& e)
 {
+    e.Node<IccDbsMarkDefensiveTrigger, IccDbsCastMarkDefensiveAction>(ACTION_RAID + 10);
+    e.Node<IccDbsTankDefensiveTrigger, IccDbsCastTankDefensiveAction>(ACTION_RAID + 9);
+    e.Node<IccDbsProtectTrigger, IccDbsProtectAction>(ACTION_RAID + 8);
     e.Node<IccDbsRuneSwapTrigger, IccDbsRuneSwapAction>(ACTION_RAID + 7);
     e.Node<IccDbsRuneYieldTrigger, IccDbsRuneYieldAction>(ACTION_RAID + 6);
     e.Node<IccDbsBeastTauntTrigger, IccDbsBeastTauntAction>(ACTION_RAID + 5);
@@ -51,6 +55,8 @@ void DefineSaurfang(EncounterBuilder& e)
     e.Block("icc dbs army", Role::Any, &IsDbsArmyHeld, 0, {"army of the dead"});
     // A yielding tank has no target, and a druid's non-combat nodes drop bear form
     e.Block("icc dbs tank form", Role::Tank, &IsDbsLive, 0, {"caster form"});
+    // The tank buttons wait for Blood Power, Frenzy or a low tank
+    e.Block("icc dbs tank defensive hold", Role::Tank, &IsDbsTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
     e.Tick(&TickDbsEncounter);
 }

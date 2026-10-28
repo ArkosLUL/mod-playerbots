@@ -10,12 +10,21 @@
     deathbringer_saurfang.py <file> --kills     each Blood Beast and the ranged on its kill duty
     deathbringer_saurfang.py <file> --control   each control duty on a beast
     deathbringer_saurfang.py <file> --marks     each Mark of the Fallen Champion, its healer and fate
+    deathbringer_saurfang.py <file> --defensives  tank buttons, calls to a human tank, the marked bots' own buttons
+    deathbringer_saurfang.py <file> --protect   each Hand of Protection duty and whether the hand went out
     deathbringer_saurfang.py <file> --cheats    this encounter's cheat uses
 
 What the generic views miss here:
 
-- **`dbs.slot` counts from 1.** 1-11 are the spread slots, 12 the stack behind him, 13-15 the tank
-  spots; `0` is a release, never a slot.
+- **`dbs.slot` counts from 1.** 1-11 are the spread slots (9 and under west of him, 10 and 11 on the
+  east causeway), 12 the stack behind him, 13-15 the tank spots; `0` is a release, never a slot. A melee
+  bot on a slot is a fill: too few ranged and healers were out to give Blood Nova victims.
+- **`dbs.defensive` is the tank ladder's pick**, a cast name, `covered` once one runs, `none` with
+  nothing ready, `idle` outside a window. A window is the holder from Blood Power 70 (40 with a Mark)
+  once per cycle, the holder all through Frenzy, or any tank under 40%. Blood Power itself is not
+  traced: Frenzy is `dbs.phase` 2, a cycle ends at each Mark.
+- **`icc.personal` is shared with the other raids.** Here it is a marked bot's pick at Blood Power 70
+  or in Frenzy.
 - **A swap is the elected tank's taunt.** `dbs.swap` goes `1` for the bot the rule elects once the rune
   sits on the tank holding him; the taunt is its `icc dbs rune swap` act row. `dbs.yield` then goes `1`
   on the rune tank while it stays off him.
@@ -35,7 +44,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of, prefix_matches_boss  # noqa: E402
 from raidobs.probes import holder_spans, latch_spans  # noqa: E402
-from raidobs.trace import Trace, cheat_uses, clock, combat_deaths, first_deaths  # noqa: E402
+from raidobs.trace import Trace, cheat_uses, clock, combat_deaths, first_deaths, notes, roster_guids  # noqa: E402
 
 SLUG = "deathbringer-saurfang"
 NAME = "Deathbringer Saurfang"
@@ -47,6 +56,10 @@ YIELD = "dbs.yield"
 KILL = "dbs.kill"
 CONTROL = "dbs.cc"
 MARKHEAL = "dbs.markheal"
+DEFENSIVE = "dbs.defensive"
+HUMAN_CALL = "dbs.humancall"
+PROTECT = "dbs.protect"
+PERSONAL = "icc.personal"
 SWAP_ACTION = "icc dbs rune swap"
 SPELL_RUNE_OF_BLOOD = 72410
 SPELL_MARK_OF_THE_FALLEN_CHAMPION = 72293
@@ -55,6 +68,18 @@ RUNE_MS = 20000
 NOVA_WINDOW_MS = 200
 STACK = 12
 FIRST_TANK_SPOT = 13
+# a button counts for a window from this long before it opens until this long after it closes
+WINDOW_LEAD_MS = 1500
+WINDOW_TAIL_MS = 1500
+# a Hand of Protection cast counts for a duty from this long before it opens until this long after it ends
+PROTECT_LEAD_MS = 500
+PROTECT_TAIL_MS = 2500
+# cast names, any rank
+TANK_BUTTONS = frozenset({"Last Stand", "Shield Wall", "Divine Protection", "Barkskin", "Frenzied Regeneration",
+                          "Survival Instincts", "Anti-Magic Shell", "Vampiric Blood", "Icebound Fortitude"})
+HAND_OF_PROTECTION = frozenset({"Hand of Protection"})
+# icc.personal values that are not a pick
+NO_PICK = frozenset({"none", "covered", "channel"})
 DIFFICULTIES = {0: "10N", 1: "25N", 2: "10H", 3: "25H"}
 
 
@@ -154,6 +179,47 @@ def marks(trace: Trace) -> list[tuple[int, int, list[int], int | None]]:
         died = dead_at.get(victim)
         out.append((when, victim, healers, died if died is not None and died >= when else None))
     return out
+
+
+def casts_named(trace: Trace, names: frozenset) -> list[tuple[int, int, str]]:
+    """`(t, guid, spell name)` for every roster cast of one of `names`, once per ms."""
+    roster = roster_guids(trace)
+    named = ((rec["t"], rec.get("s"), trace.spells.get(rec.get("sp"), "")) for rec in trace.of("cast")
+             if rec.get("s") in roster)
+    return sorted({cast for cast in named if cast[2] in names})
+
+
+def frenzy_start(trace: Trace) -> int | None:
+    """When `dbs.phase` first reads 2, or None."""
+    return next((start for value, start, _ in latch_spans(trace, PHASE, pull_end(trace)) if value == "2"), None)
+
+
+def tank_windows(trace: Trace) -> list[tuple[int, int, int, list[str]]]:
+    """`(start, stop, tank, values)` per run of non-idle `dbs.defensive` values of one tank."""
+    out = []
+    for guid, spans in holder_spans(trace, DEFENSIVE, pull_end(trace)).items():
+        run: list[tuple[str, int, int]] = []
+        for span in spans + [("idle", pull_end(trace), pull_end(trace))]:
+            if span[0] != "idle":
+                run.append(span)
+            elif run:
+                out.append((run[0][1], run[-1][2], guid, [value for value, _, _ in run]))
+                run = []
+    return sorted(out)
+
+
+def protect_duties(trace: Trace) -> list[tuple[int, int, int, int, int | None]]:
+    """`(start, stop, paladin, target, t of its Hand of Protection cast or None)` per duty."""
+    casts = casts_named(trace, HAND_OF_PROTECTION)
+    out = []
+    for paladin, spans in holder_spans(trace, PROTECT, pull_end(trace)).items():
+        for value, start, stop in spans:
+            if not value.isdigit() or value == "0":
+                continue
+            cast = next((when for when, guid, _ in casts
+                         if guid == paladin and start - PROTECT_LEAD_MS <= when <= stop + PROTECT_TAIL_MS), None)
+            out.append((start, stop, paladin, int(value), cast))
+    return sorted(out)
 
 
 def own_cheats(trace: Trace) -> list[tuple[str, dict]]:
@@ -285,6 +351,46 @@ def show_marks(trace: Trace) -> None:
         print(f"  {clock(when)}  {trace.name(victim)}  {healer}  {fate}")
 
 
+def show_defensives(trace: Trace) -> None:
+    print("TANK DEFENSIVES")
+    if not mine(trace):
+        return
+    windows = tank_windows(trace)
+    if not windows:
+        print(f"  {DEFENSIVE} never offered a button")
+    casts = casts_named(trace, TANK_BUTTONS)
+    frenzy = frenzy_start(trace)
+    for start, stop, tank, values in windows:
+        low, high = start - WINDOW_LEAD_MS, stop + WINDOW_TAIL_MS
+        spent = [cast for cast in casts if cast[1] == tank and low <= cast[0] <= high]
+        kind = "frenzy" if frenzy is not None and start >= frenzy else "peak or low"
+        offered = ", ".join(dict.fromkeys(values))
+        cast = ", ".join(f"{name} {(when - start) / 1000:+.1f}s" for when, _, name in spent) or "none"
+        print(f"  {clock(start)}  {trace.name(tank):<10} {clock(stop - start):>9}  {kind:<11} "
+              f"offered {offered}; cast {cast}")
+    calls = notes(trace, HUMAN_CALL)
+    if calls:
+        print("  calls to a human tank  " + ", ".join(f"{rec['txt']} {clock(rec['t'])}" for rec in calls))
+    picks = sorted((rec["t"], rec.get("g"), rec["txt"]) for rec in notes(trace, PERSONAL)
+                   if str(rec.get("txt", "")).lower() not in NO_PICK)
+    if picks:
+        print("  marked bots' own buttons  " + ", ".join(f"{name} {trace.name(guid)} {clock(when)}"
+                                                         for when, guid, name in picks))
+
+
+def show_protect(trace: Trace) -> None:
+    print("HAND OF PROTECTION")
+    if not mine(trace):
+        return
+    duties = protect_duties(trace)
+    if not duties:
+        print(f"  {PROTECT} never written")
+        return
+    for start, stop, paladin, target, cast in duties:
+        landed = f"cast {(cast - start) / 1000:+.1f}s" if cast is not None else "never cast"
+        print(f"  {clock(start)}  {trace.name(paladin)} on {trace.name(target)}  held {clock(stop - start)}  {landed}")
+
+
 def show_cheats(trace: Trace) -> None:
     print("CHEATS")
     if not mine(trace):
@@ -306,6 +412,8 @@ SECTIONS = (
     ("kills", "each Blood Beast and the ranged on its kill duty", show_kills),
     ("control", "each control duty on a beast", show_control),
     ("marks", "each Mark of the Fallen Champion, its healer and fate", show_marks),
+    ("defensives", "tank buttons, calls to a human tank, the marked bots' own buttons", show_defensives),
+    ("protect", "each Hand of Protection duty and whether the hand went out", show_protect),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 

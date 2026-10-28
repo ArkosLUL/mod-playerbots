@@ -10,6 +10,7 @@
 
 #include "Creature.h"
 #include "ICCHelpers_Shared.h"
+#include "ICCSeams.h"
 #include "LastMovementValue.h"
 #include "Playerbots.h"
 #include "RaidCombatHelpers.h"
@@ -76,6 +77,39 @@ bool IccDbsMarkHealAction::Execute(Event /*event*/)
         return botAI->CastSpell("beacon of light", mark);
 
     return CastRaidThroughputHeal(botAI, mark);
+}
+
+bool IccDbsProtectAction::Execute(Event /*event*/)
+{
+    Player* target = GetDbsProtectTarget(botAI);
+    return target && botAI->CastSpell("hand of protection", target);
+}
+
+bool IccDbsCastTankDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = GetDbsTankDefensive(botAI, "dbs.defensive");
+    if (!spellId || !botAI->CastSpell(spellId, bot))
+        return false;
+
+    LatchDbsTankDefensive(botAI);
+    return true;
+}
+
+bool IccDbsCastMarkDefensiveAction::Execute(Event /*event*/)
+{
+    RaidPredictedHit hit;
+    if (!GetDbsMarkHit(botAI, hit))
+        return false;
+
+    RaidPersonalPick const pick = GetRaidPersonalDefensive(botAI, ICC_DEFENSIVE_SCOPE, &hit);
+    if (!pick)
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    return pick.consumable ? botAI->DoSpecificAction(pick.consumable, Event(), true)
+                           : botAI->CastSpell(pick.spellId, bot);
 }
 
 bool IccDbsStandAction::Execute(Event /*event*/)
