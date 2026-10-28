@@ -9,18 +9,13 @@
 
 #include "Multiplier.h"
 
-class IccRotfaceMultiplier : public Multiplier
+// Holds a damage dealer's area damage near an ooze: the damage buys threat on it, and a Big Ooze taken off
+// its kiter walks into the raid.
+class IccRotfaceOozeSplashMultiplier : public Multiplier
 {
 public:
-    IccRotfaceMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc rotface") {}
+    IccRotfaceOozeSplashMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc rotface ooze splash") {}
     float GetValue(Action* action) override;
 };
-
-/*class IccRotfaceGroupPositionMultiplier : public Multiplier
-{
-public:
-    IccRotfaceGroupPositionMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc rotface group position") {}
-    float GetValue(Action* action) override;
-};*/
 
 #endif

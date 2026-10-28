@@ -1,29 +1,34 @@
 #!/usr/bin/env python3
-"""Read a Rotface pull from a RaidObs trace: the Big Oozes, the explosion slots, Vile Gas, the skull.
+"""Read a Rotface pull from a RaidObs trace: the Big Oozes and their kiter, the carriers, the dodges.
 
     rotface.py <file>               every section
-    rotface.py <file> --oozes       who the Big Oozes hit, and each tank's Big Ooze duty
-    rotface.py <file> --explosion   Unstable Ooze Explosion casts and the escape slots
-    rotface.py <file> --vilegas     heroic Vile Gas: each victim and the spot it ran to
-    rotface.py <file> --skull       every move of the skull onto Rotface
+    rotface.py <file> --oozes       who the Big Oozes hit, the kiter and its duty
+    rotface.py <file> --carriers    each bot walking its ooze to a merge, and each cure duty
+    rotface.py <file> --dodges      each dodge by hazard and how it went
+    rotface.py <file> --spread      the slots, the flooding quadrant and the ooze spot
+    rotface.py <file> --vilegas     heroic Vile Gas: each victim
     rotface.py <file> --cheats      this encounter's cheat uses
 
 Rotface has no phase. What the generic views miss here:
 
-- **`rf.bigooze` is per tank**: `pickup <ooze>` while walking to a Big Ooze not yet on it, `kite <ooze>`
-  once every one is, `none` with no Big Ooze up, or for the main tank while the assist tank lives.
 - **The Big Oozes' victims are the snapshot's target column.** Nothing fixates them, so a Big Ooze
-  on a healer is threat the assist tank lost, and the share on a tank says how well it held them.
-- **`rf.explosionslot` is a traced map**: a slot index per bot on a 40 yd ring, at most two bots a slot,
-  kept between explosions. An erase is written as `0`, which is also a real slot.
-- **`rf.vilegas` names the victim of Putricide's heroic Vile Gas cast**; `rf.vilegasspot` is the spot
-  that bot then took: `offset N` 15 degree steps off its own bearing from the centre, `blocked` with no
-  safe bearing, `none` when the window closes. A bot hit by the splash only writes the spot.
-- **`rf.skull` is written only by the bot that moved the icon**, so a bot repeating its own last
-  placement writes nothing.
+  on anyone but the kiter is threat the kiter lost.
+- **`rf.kiter` is the elected tank, `rf.bigooze` its duty**: `spot` waiting at the ooze spot for the
+  first merge, `pickup <ooze>` with one not on it, `tank <ooze>` holding it at the spot under 3 stacks,
+  `kite <ooze>` on the kite ring, `hold <ooze>` while the kiter carries an ooze itself, `none`.
+- **`rf.carrier` is per bot**: `ooze` walking to a Big Ooze, `little` to another Little Ooze, `spot` to
+  the ooze spot, `none` once it carries nothing. `rf.dispel` is keyed on the infected player, its value
+  the bot that cures it; the duty opens only once the carrier stands where its ooze merges, or runs low.
+- **`rf.dodge` is `<hazard> <branch> <yards>`**: hazard `spray`, `mark`, `sticky`, `flood`, `gas` or
+  `ooze`; branch `move`, `tight` or `cross` (a walk across another hazard); `hold` while a dodge is in
+  flight, `<hazard> none` with no clear spot, `<hazard> locked` when the walk was refused, `pinned` when
+  the bot can't move.
+- **`rf.slot` counts from 1.** 1-6 the inner ring, 7-19 the outer, 20 the stack behind him; `0` is a
+  release. `rf.flood` and `rf.oozespot` are quadrants counter-clockwise from east, 1-4, `0` for none.
 """
 from __future__ import annotations
 
+import collections
 import pathlib
 import sys
 
@@ -34,17 +39,18 @@ from bosses import icecrown_citadel as icc  # noqa: E402
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.geometry import guids_of_entry  # noqa: E402
-from raidobs.probes import emitted_keys, holder_spans, resolve_guids, silent_keys  # noqa: E402
+from raidobs.probes import emitted_keys, holder_spans, latch_spans, resolve_guids, silent_keys  # noqa: E402
 from raidobs.space import threat_share  # noqa: E402
 from raidobs.trace import Trace, clock, notes  # noqa: E402
 
 ENCOUNTER = "rotface"
 TITLE = "Rotface"
 BIG_OOZE = (36899, 38123)
-SPELL_UNSTABLE_OOZE_EXPLOSION = 69839
-VILE_GAS_WINDOW_MS = 8000
 HEROIC = (2, 3)
-HEROIC_ONLY = {"rf.vilegas", "rf.vilegasspot"}
+HEROIC_ONLY = {"rf.vilegas"}
+STACK_SLOT = 20
+INNER_SLOTS = 6
+QUADRANTS = {"1": "NE", "2": "NW", "3": "SW", "4": "SE"}
 
 
 def mine(trace: Trace) -> bool:
@@ -90,10 +96,29 @@ def ooze_share(trace: Trace) -> dict[str, float]:
     return {role: span * 100.0 / total for role, span in held.most_common()} if total else {}
 
 
-def duty_rows(trace: Trace) -> dict[int, list[tuple[str, int, int]]]:
+def spans_by_bot(trace: Trace, key: str) -> dict[int, list[tuple[str, int, int]]]:
     end = icc.pull_end(trace)
     return {guid: [(resolve_guids(trace, value), start, stop) for value, start, stop in spans]
-            for guid, spans in holder_spans(trace, "rf.bigooze", end).items()}
+            for guid, spans in holder_spans(trace, key, end).items()}
+
+
+def duty_rows(trace: Trace) -> dict[int, list[tuple[str, int, int]]]:
+    return spans_by_bot(trace, "rf.bigooze")
+
+
+def kiter_spans(trace: Trace) -> list[tuple[str, int, int]]:
+    return [(resolve_guids(trace, value), start, stop)
+            for value, start, stop in latch_spans(trace, "rf.kiter", icc.pull_end(trace))]
+
+
+def print_spans(trace: Trace, rows: dict[int, list[tuple[str, int, int]]], skip: str | None = None) -> None:
+    for guid, spans in sorted(rows.items(), key=lambda item: trace.name(item[0])):
+        shown = [span for span in spans if span[0] != skip]
+        if not shown:
+            continue
+        print(f"    {trace.name(guid)}")
+        for value, start, stop in shown:
+            print(f"      {clock(start):>9}  {clock(stop - start):>9}  {value}")
 
 
 def show_oozes(trace: Trace) -> None:
@@ -104,45 +129,98 @@ def show_oozes(trace: Trace) -> None:
         print("  Big Oozes' time on target: " + ", ".join(f"{role} {pct:.1f}%" for role, pct in share.items()))
     else:
         print("  no Big Ooze sampled with a target")
+    kiters = kiter_spans(trace)
+    if kiters:
+        print("  kiter: " + ", ".join(f"{'none' if value in ('', '0') else value}@{clock(start)}"
+                                      for value, start, _ in kiters))
     rows = duty_rows(trace)
     if not rows:
         print("  rf.bigooze never written")
         return
-    print("\n  rf.bigooze per tank, each change")
-    for guid, spans in sorted(rows.items(), key=lambda item: trace.name(item[0])):
-        print(f"    {trace.name(guid)}")
-        for value, start, stop in spans:
-            print(f"      {clock(start):>9}  {clock(stop - start):>9}  {value}")
+    print("\n  rf.bigooze, each change")
+    print_spans(trace, rows)
 
 
-def show_explosion(trace: Trace) -> None:
-    if refuse(trace, "EXPLOSION"):
-        return
-    oozes = big_oozes(trace)
-    casts = [rec["t"] for rec in trace.of("cast")
-             if rec.get("sp") == SPELL_UNSTABLE_OOZE_EXPLOSION and rec.get("s") in oozes]
-    print(f"  {len(casts)} Unstable Ooze Explosion cast(s)" +
-          (": " + ", ".join(clock(when) for when in casts) if casts else ""))
-    slots = holder_spans(trace, "rf.explosionslot", icc.pull_end(trace))
-    if not slots:
-        print("  rf.explosionslot never written")
-        return
-    print("\n  rf.explosionslot per bot, each slot it held")
-    for guid, spans in sorted(slots.items(), key=lambda item: trace.name(item[0])):
-        print(f"    {trace.name(guid):<14}  " + ", ".join(f"{value}@{clock(start)}" for value, start, _ in spans))
-
-
-def vile_gas_rows(trace: Trace) -> list[dict]:
-    """Per cast: `t`, the `victim`, and the first spot the victim noted inside the window, or None."""
-    spots = notes(trace, "rf.vilegasspot")
+def dispel_rows(trace: Trace) -> list[tuple[int, int, int]]:
+    """`(when, carrier, dispeller)` for each cure duty handed out; a release is not a duty."""
     rows = []
-    for rec in notes(trace, "rf.vilegas"):
-        victim = rec["g"]
-        taken = next((spot.get("txt") for spot in spots
-                      if spot["g"] == victim and rec["t"] <= spot["t"] < rec["t"] + VILE_GAS_WINDOW_MS
-                      and spot.get("txt") != "none"), None)
-        rows.append({"t": rec["t"], "victim": victim, "spot": taken})
+    for rec in notes(trace, "rf.dispel"):
+        txt = str(rec.get("txt", ""))
+        if txt.isdigit() and int(txt) != 0:
+            rows.append((rec["t"], rec["g"], int(txt)))
     return rows
+
+
+def show_carriers(trace: Trace) -> None:
+    if refuse(trace, "CARRIERS"):
+        return
+    rows = spans_by_bot(trace, "rf.carrier")
+    walks = {guid: [span for span in spans if span[0] != "none"] for guid, spans in rows.items()}
+    if not any(walks.values()):
+        print("  rf.carrier never left none")
+    else:
+        counts = collections.Counter(span[0] for spans in walks.values() for span in spans)
+        print("  merge walks: " + ", ".join(f"{rule} {n}" for rule, n in sorted(counts.items())))
+        print_spans(trace, rows, skip="none")
+    duties = dispel_rows(trace)
+    if not duties:
+        print("\n  rf.dispel never handed out")
+        return
+    print(f"\n  {len(duties)} cure duty(ies)")
+    for when, carrier, dispeller in duties:
+        print(f"    {clock(when):>9}  {trace.name(carrier):<14}  by {trace.name(dispeller)}")
+
+
+def dodge_counts(trace: Trace) -> collections.Counter:
+    """Dodge outcomes by `<hazard> <branch>`, yards dropped; `hold` rows are a walk already in flight."""
+    counts: collections.Counter = collections.Counter()
+    for rec in notes(trace, "rf.dodge"):
+        words = str(rec.get("txt", "")).split()
+        if words and words[0] != "hold":
+            counts[" ".join(words[:2])] += 1
+    return counts
+
+
+def show_dodges(trace: Trace) -> None:
+    if refuse(trace, "DODGES"):
+        return
+    counts = dodge_counts(trace)
+    if not counts:
+        print("  rf.dodge never written")
+        return
+    for outcome, n in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
+        print(f"    {n:>4}  {outcome}")
+    per_bot = collections.Counter(rec["g"] for rec in notes(trace, "rf.dodge")
+                                  if str(rec.get("txt", "")).split()[:1] not in (["hold"], []))
+    print("\n  by bot: " + ", ".join(f"{trace.name(guid)} {n}" for guid, n in per_bot.most_common()))
+
+
+def slot_name(value: str) -> str:
+    if not value.isdigit():
+        return value
+    slot = int(value)
+    if slot == 0:
+        return "released"
+    if slot == STACK_SLOT:
+        return "stack"
+    return f"inner {slot}" if slot <= INNER_SLOTS else f"outer {slot}"
+
+
+def show_spread(trace: Trace) -> None:
+    if refuse(trace, "SPREAD"):
+        return
+    end = icc.pull_end(trace)
+    for label, key in (("flood", "rf.flood"), ("ooze spot", "rf.oozespot")):
+        marks = [f"{QUADRANTS.get(value, 'none')}@{clock(start)}" for value, start, _ in latch_spans(trace, key, end)]
+        print(f"  {label}: " + (", ".join(marks) if marks else "never written"))
+    slots = holder_spans(trace, "rf.slot", end)
+    if not slots:
+        print("  rf.slot never written")
+        return
+    print("\n  rf.slot per bot, each slot it held")
+    for guid, spans in sorted(slots.items(), key=lambda item: trace.name(item[0])):
+        held = ", ".join(f"{slot_name(value)}@{clock(start)}" for value, start, _ in spans)
+        print(f"    {trace.name(guid):<14}  {held}")
 
 
 def show_vilegas(trace: Trace) -> None:
@@ -151,29 +229,16 @@ def show_vilegas(trace: Trace) -> None:
     if not heroic(trace):
         print("  normal mode: Putricide casts no Vile Gas on Rotface")
         return
-    rows = vile_gas_rows(trace)
+    rows = notes(trace, "rf.vilegas")
     if not rows:
         print("  rf.vilegas never written")
         return
-    print(f"  {len(rows)} cast(s); spot is the first the victim took inside {VILE_GAS_WINDOW_MS // 1000} s\n")
-    for row in rows:
-        spot = row["spot"] or ("human" if row["victim"] in trace.humans else "-")
-        print(f"    {clock(row['t']):>9}  {trace.name(row['victim']):<14}  {spot}")
-    victims = {row["victim"] for row in rows}
-    splashed = {rec["g"] for rec in notes(trace, "rf.vilegasspot") if rec["g"] not in victims}
-    if splashed:
-        print(f"\n  ran without being the target: {', '.join(sorted(trace.name(guid) for guid in splashed))}")
-
-
-def show_skull(trace: Trace) -> None:
-    if refuse(trace, "SKULL"):
-        return
-    rows = notes(trace, "rf.skull")
-    if not rows:
-        print("  rf.skull never written")
-        return
+    print(f"  {len(rows)} cast(s)")
     for rec in rows:
-        print(f"    {clock(rec['t']):>9}  {trace.name(rec['g']):<14}  {resolve_guids(trace, str(rec.get('txt', '')))}")
+        human = " (human)" if rec["g"] in trace.humans else ""
+        print(f"    {clock(rec['t']):>9}  {trace.name(rec['g'])}{human}")
+    counts = collections.Counter(rec["g"] for rec in rows)
+    print("  by victim: " + ", ".join(f"{trace.name(guid)} {n}" for guid, n in counts.most_common()))
 
 
 def show_cheats(trace: Trace) -> None:
@@ -196,10 +261,11 @@ def show_cheats(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("oozes", "who the Big Oozes hit, each tank's Big Ooze duty", show_oozes),
-    ("explosion", "Unstable Ooze Explosion casts and escape slots", show_explosion),
-    ("vilegas", "heroic Vile Gas victims and the spot each took", show_vilegas),
-    ("skull", "every move of the skull onto Rotface", show_skull),
+    ("oozes", "who the Big Oozes hit, the kiter and its duty", show_oozes),
+    ("carriers", "merge walks and cure duties", show_carriers),
+    ("dodges", "each dodge by hazard and how it went", show_dodges),
+    ("spread", "slots, the flooding quadrant and the ooze spot", show_spread),
+    ("vilegas", "heroic Vile Gas victims", show_vilegas),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 

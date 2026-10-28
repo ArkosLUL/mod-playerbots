@@ -59,13 +59,55 @@ Stem `Rotface` and its definition, the doc, the reader and its test, this brief.
 
 ## Task list
 
+All done, one lead, no split: the stem shares one state, one hazard model and one tick.
+
+1. Mechanics table in `rotface.md` from `boss_rotface.cpp`, the DBC/DB rows and the guides. Done.
+2. State in a stem `RaidInstanceState`: one 200 ms scan of oozes, puddles, explosion marks (each with
+   its landing time from the stalker's age and the 5 yd/s flight), the wet stalkers and the spray axis;
+   duties every 200 ms. Done.
+3. Direct targeting: resolver, `OwnTargeting`, no icon. Done.
+4. Main tank stand with the drag; kiter election, ooze spot, pickup taunt, hold under 3 stacks, kite
+   legs on a computed 36 yd ring. Done.
+5. Carrier walk and the cure duty; class cures blocked. Done.
+6. Two-ring spread with flood, puddle and ooze swaps; stack overflow. Done.
+7. One forced dodge for spray, marks, puddles, floods, Vile Gas carriers and Big Oozes; stand
+   walk-back waits for the spot to clear; hazard hold rule. Done.
+8. Tank defensives and human calls; splash hold multiplier; death grip, Army and avoid aoe blocks. Done.
+9. Navprobe every ring and spot; reader rewrite with tests. Done.
+
 ## Decisions for review
+
+| Choice | Source | Alternative |
+|---|---|---|
+| Spread on two rings 9.5 yd apart, normal included | Warcraft Tavern (everyone 8 yd apart); Vile Gas 8 yd + park | Wowhead normal: stack behind him |
+| Healers inner (12 yd), ranged outer (21.5 yd), hunters outer only | Vile Gas picks beyond 14.5 yd when 3 / 8 stand there; his reach puts a hunter's minimum at 15.8 | One ring |
+| Kite ring 36 yd, counter-clockwise first, legs of 10-40 degrees | Flood rotation is counter-clockwise (script); 14.5 yd clear of the outer ring | Old 24-34 yd ring, fixed points |
+| Ooze spot opposite the last flood | It floods two floods later | Fixed spot |
+| Face-tank the Big Ooze under 3 stacks | Wowhead: threat lead while weak | Kite from the pickup |
+| One taunt path, skipped at taunt-immune DR; generic taunts blocked for the kiter | `flags_extra` 0x80000 | Old taunt loop |
+| Cure at the merge, hold the first, emergency under 35% | Wowhead's order; the script summons on any removal | Never cure (old) |
+| Dodge every explosion mark until it lands | Script: stalkers at cast end, 5 yd/s missiles | 25 slots at 40 yd (old) |
+| Slime Spray: step out of the cone | Script cone, 2 yd boundary | Stack on his centre (old, inside the boundary) |
+| Vile Gas: spread, others step out of 8 yd; carriers don't move | 69248 confuses them 6 s | 40 yd run (old) |
+| Main tank drags him back past 4.5 yd | 10.8 yd reach | No drag |
+| No kiter without a second bot tank | Humans decision | Main tank kites (old) |
+| Holder and kiter skip a player's skull | Each must keep its unit (Saurfang precedent) | Skull wins |
+| No opening positions | First hazard at 8 s | Pre-pull stands |
+| Old multiplier replaced by rules plus a splash hold | Conventions 11, 31, 32, 35 | Keep the family vetoes |
 
 ## Carried over
 
-- From `r0a-restructure`: `spellEntriesFlood` (`Util/ICCHelpers_Rotface.h`) has no user, and
-  `Multiplier/ICCMultipliers_Rotface.h` keeps the commented-out `IccRotfaceGroupPositionMultiplier`.
+- From `r0a-restructure`: `spellEntriesFlood` and the commented-out
+  `IccRotfaceGroupPositionMultiplier` are deleted with the rewrite.
+- For the merge stage or `r14-closeout`: `IccInstanceState::rotfaceVileGasWaitUntil` and
+  `rfExplosionSlotMemory` (`rf.explosionslot`) in `Util/ICCScripts.h` have no user; until removed,
+  `rotface.py`'s banner lists `rf.explosionslot` as silent. `NPC_PUDDLE`, `NPC_SMALL_OOZE`,
+  `NPC_BIG_OOZE`, `SPELL_OOZE_FLOOD`, `SPELL_OOZE_FLOOD_VISUAL`, `SPELL_SLIME_SPRAY` and
+  `SPELL_UNSTABLE_OOZE_EXPLOSION` in `ICCData.h` have no user (the stem keeps its own ids).
+  `IccRotfaceWalkAction` is a fourth copy of the stand-walk base.
 
 ## Known gaps
+
+See `rotface.md`, "Known gaps".
 
 ## Blocked

@@ -5,78 +5,37 @@
  */
 
 #include "ICCTriggers_Rotface.h"
-#include "ICCHelpers_Rotface.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
+
 #include "Playerbots.h"
-#include "Trigger.h"
+#include "Position.h"
 
-bool IccRotfaceTankPositionTrigger::IsActive()
+bool IccRotfaceDodgeTrigger::IsActive() { return GetRfHazardKind(botAI) != nullptr; }
+
+bool IccRotfaceTankDefensiveTrigger::IsActive() { return GetRfTankDefensive(botAI, "rf.defensive") != 0; }
+
+bool IccRotfaceDispelTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "rotface");
-    return boss && (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsMelee(bot));
+    char const* spell = nullptr;
+    return GetRfDispelTarget(botAI, spell) != nullptr;
 }
 
-bool IccRotfaceGroupPositionTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "rotface");
-    if (!boss)
-        return false;
+bool IccRotfaceOozeTauntTrigger::IsActive() { return GetRfOozeToTaunt(botAI) != nullptr; }
 
-    return true;
+bool IccRotfaceKiteTrigger::IsActive()
+{
+    Position spot;
+    int8 dir = 0;
+    return GetRfKiteWalk(botAI, spot, dir);
 }
 
-bool IccRotfaceMoveAwayFromExplosionTrigger::IsActive()
+bool IccRotfaceCarrierTrigger::IsActive()
 {
-    Creature* boss = bot->FindNearestCreature(NPC_BIG_OOZE, 100.0f);
-    bool castingNow = boss && boss->IsAlive() &&
-        boss->HasUnitState(UNIT_STATE_CASTING) && boss->FindCurrentSpellBySpellId(SPELL_UNSTABLE_OOZE_EXPLOSION);
-
-    if (castingNow)
-    {
-        _wasCasting = true;
-        _castEnded = false;
-        return true;
-    }
-
-    // Cast just ended — record the time
-    if (_wasCasting)
-    {
-        _wasCasting = false;
-        _castEnded = true;
-        _castEndMs = getMSTime();
-    }
-
-    // Stay active for 6 seconds after cast ended (2s wait + return movement)
-    if (_castEnded && getMSTimeDiff(_castEndMs, getMSTime()) < 6000)
-        return true;
-
-    _castEnded = false;
-    return false;
+    Position spot;
+    return GetRfCarrierWalk(botAI, spot);
 }
 
-bool IccRotfaceAvoidVileGasTrigger::IsActive()
+bool IccRotfaceStandTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "rotface");
-    if (!boss)
-        return false;
-
-    uint32 const now = getMSTime();
-
-    IcecrownHelpers::IccInstanceState& st = IcecrownHelpers::IccState(bot->GetMap()->GetInstanceId());
-    bool const isVictim =
-        st.rotfaceVileGas.victimGuid == bot->GetGUID() &&
-        getMSTimeDiff(st.rotfaceVileGas.castTime, now) < 8000;
-    if (isVictim)
-        return true;
-
-    if (botAI->HasAura("Vile Gas", bot))
-        return true;
-
-    auto const& waitMap = st.rotfaceVileGasWaitUntil;
-    auto it = waitMap.find(bot->GetGUID());
-    if (it != waitMap.end() && now < it->second)
-        return true;
-
-    return false;
+    Position spot;
+    return GetRfStandWalk(botAI, spot);
 }
