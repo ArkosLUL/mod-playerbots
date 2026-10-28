@@ -93,7 +93,7 @@ Implementation, following the `raid-boss-strategy-recipe` skill:
 - **RaidObs note** (Custom only) when the hold starts and ends, with Vezax's health.
 - **Docs/conf**: hold section in `docs/raids/ulduar/vezax.md`; rewrite the `UlduarVezaxHardMode` text
   in `conf/playerbots.conf.dist:373-377` (stale "Profound Darkness" wording) to describe the hold.
-- Close per `CLAUDE.local.md` (syntax check, pblint, docs, commit). Wave 1 doesn't wait for an
+- Close per `CLAUDE.local.md` (`pb-check`, docs, commit). Wave 1 doesn't wait for an
   in-game check; if the user tests it later (10 + 25, hard mode on/off, Vezax's health at the Animus
   summon in the trace), fixes land on Custom and travel with `sync`.
 
@@ -203,10 +203,8 @@ parity check of the delta; record the new base.
   --hard, force, stash or clean. Never start, stop or restart a Docker container. Stage only own
   files by explicit path (other sessions edit Custom concurrently). Never ask the user; log choices
   under Decisions for review.
-- Lane checks: `~/.claude/scripts/pb-syntax-check.sh` on changed `.cpp` + includers of changed `.h`
-  (`PB_REPO=<worktree>` on PR branches; it compiles against the stale build image's core, so
-  upstream `Playerbots.cpp` can't compile there — known); `python apps/codestyle/codestyle-cpp.py`;
-  `tools/pblint/pblint.py` on Custom paths. Commit messages via `use-conversational-language`;
+- Lane checks: `~/.claude/scripts/pb-check <changed and new files>` (`PB_REPO=<worktree>` on PR
+  branches, where pblint and the tests don't exist and are skipped). Commit messages via `use-conversational-language`;
   PR-branch commits use `type(Scope/Subscope): Summary` ≤72.
 - After each wave this session reports merged commits, decisions for review and whether a rebuild is
   needed, then waits for "go".

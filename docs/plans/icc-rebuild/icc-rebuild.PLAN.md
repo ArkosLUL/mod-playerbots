@@ -202,16 +202,12 @@ stage: a boss lane reports what they need.
 
 **Checks**, from the worktree root:
 
-- `PB_REPO=<wt> PB_MAX_FANOUT=60 ~/.claude/scripts/pb-syntax-check.sh <changed .cpp and .h>`, plus the
-  lane's own `.cpp` files in a run of their own (a widely included header fills the cap first).
-- `python tools/pblint/pblint.py --warnings src/Ai/Raid/ICC src/Ai/Raid/RaidStrategyContext.h src/Bot/PlayerbotAI.cpp`,
-  plus the same paths with `--spell-difficulty`. Add `src/Ai/Raid/ToC` and any new `src/Ai/Raid/*`
-  file in `r1-foundation`. Stay scoped: the whole tree carries known errors.
-- `python -m unittest discover -s tools/botobs/tests`, plus `python -m unittest discover -s tools/guides/tests`
-  once it exists.
-- `python apps/codestyle/codestyle-cpp.py` (scans all of `src`; a failure in an untouched file isn't
-  the lane's).
-- `tools/nativetest/run.sh` when a header a native test includes changes.
+- `PB_REPO=<wt> ~/.claude/scripts/pb-check --warnings <changed and new files> src/Ai/Raid/ICC src/Ai/Raid/RaidStrategyContext.h src/Bot/PlayerbotAI.cpp tools/guides`:
+  one call runs the syntax check (a `.h` reaches every `.cpp` including it, directly or not), pblint
+  scoped to those paths (the whole tree carries known errors), codestyle, the botobs and guides
+  tests, and the native tests when a header they include changed. On `INCOMPLETE`, rerun with
+  `PB_MAX_FANOUT=all`.
+- `python tools/pblint/pblint.py --spell-difficulty src/Ai/Raid/ICC src/Ai/Raid/RaidStrategyContext.h src/Bot/PlayerbotAI.cpp`.
 - In a split lane only the finisher runs the checks.
 
 **Commit.** One commit per lane on `iccr/<lane>`, plus one for the reviewer's fixes (message file

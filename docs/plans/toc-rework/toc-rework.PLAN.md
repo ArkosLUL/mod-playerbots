@@ -191,13 +191,11 @@ effort in the main tree, so a lane touching it will fail to merge: stay out of i
 
 **Checks**, from the worktree root:
 
-- `PB_REPO=<wt> PB_MAX_FANOUT=60 ~/.claude/scripts/pb-syntax-check.sh <changed .cpp and .h>` (a
-  `.h` expands to the `.cpp` files including it by name). A widely included header (`EncounterHelpers.h`,
-  145 TUs) fills the cap first, so also pass the lane's own `.cpp` files in a run of their own.
-- `python tools/pblint/pblint.py src/Ai/Raid/ToC src/Bot/PlayerbotAI.cpp src/Ai/Raid/RaidStrategyContext.h`,
-  plus `--spell-difficulty` once `w0b-tooling` has merged. Stay scoped: the whole tree carries known
-  errors.
-- `python -m unittest discover -s tools/botobs/tests`.
+- `PB_REPO=<wt> ~/.claude/scripts/pb-check <changed and new files> src/Ai/Raid/ToC src/Bot/PlayerbotAI.cpp src/Ai/Raid/RaidStrategyContext.h tools/botobs`:
+  one call runs the syntax check (a `.h` reaches every `.cpp` including it, directly or not), pblint
+  scoped to those paths (the whole tree carries known errors), codestyle and the botobs tests. On
+  `INCOMPLETE`, rerun with `PB_MAX_FANOUT=all`.
+- `python tools/pblint/pblint.py --spell-difficulty src/Ai/Raid/ToC src/Bot/PlayerbotAI.cpp src/Ai/Raid/RaidStrategyContext.h`.
 - In a split lane only the finisher runs checks.
 
 **Commit.** One commit per lane on `toc/<lane>`, staged by explicit path, never `-A`. Subject ≤72

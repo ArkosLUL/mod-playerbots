@@ -97,8 +97,7 @@ did anything.
 
 Give its classes `Name` constants, write its definition, list it, and call its `AddTriggerNodes` /
 `AddMultipliers` at its old spot in the strategy, which keeps node and veto order; then delete its
-creators and the hand gating the definition replaces. Syntax-check with a raised `PB_MAX_FANOUT`: the
-contexts reach every `BuildShared*` TU.
+creators and the hand gating the definition replaces.
 
 - A multiplier becomes rules only where they are exactly equivalent; otherwise it stays hand-written,
   keeps its name and declares its families. `Multiplier<M>(families, args...)` passes constructor

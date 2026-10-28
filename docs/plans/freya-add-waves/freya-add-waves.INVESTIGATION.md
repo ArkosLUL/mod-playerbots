@@ -54,8 +54,7 @@ make the last tier try other bearings instead of one.
 
 ## Verification
 
-1. `~/.claude/scripts/pb-syntax-check.sh` on changed `.cpp` plus includers of changed `.h`, then
-   `tools/pblint/pblint.py` on the same paths, then `python apps/codestyle/codestyle-cpp.py`.
+1. `~/.claude/scripts/pb-check <changed files>`.
 2. One hard-mode pull: Army cast inside 1s of the pack spawning, lashers on ghouls at +5.5s;
    `postmortem.py <trace> --coverage freya` for the new multiplier.
 3. Lasher wave clear time and raid damage a minute must not get worse.
