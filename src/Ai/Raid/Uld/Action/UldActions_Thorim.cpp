@@ -226,6 +226,11 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         return MoveToGauntletWaypoint(leftLane, index, false);
     }
 
+    // Past the waypoints the master is the only anchor left, and a trailing healer heals nobody.
+    if (PlayerbotAI::IsHeal(bot) && bot->GetDistance2d(master) > ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE)
+        return MoveTo(bot->GetMapId(), master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(),
+                      false, false, false, true, MovementPriority::MOVEMENT_NORMAL, true);
+
     return false;
 }
 

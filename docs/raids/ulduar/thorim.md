@@ -239,6 +239,14 @@ once for the instance — everyone in a slot reads the same point, and no candid
 The note reads `slot N bearing B solved S`, and the gap between two slots' `solved` is what Chain
 Lightning reads; one latched bearing per slot replaced the 3-33° smear.
 
+**Two of the three slots straddle his front arc by construction.** `SlotBearing` places them at the
+anchor bearing **+90°, +180° and +270°**, which empties his tank side but leaves the outer two on the
+front/back boundary, where parry and block apply. Measured over 884 phase 2 snapshots within 12 yd of
+him, melee stood in his front arc **59.9%** of the time: three bots at 89-95%, three at 26-32%.
+Narrowing to 60° (+120/+180/+240) would put all three behind him but cut the slot gap from 12.4 yd to
+**8.8** against the 8 yd chain jump, and 75° gives 10.7. **90° is kept** — the chain is what kills
+melee, and fixing the facing swing below moves the boundary slots without touching the gap.
+
 **60° was exactly the jump at r 8, which is why the ring is 8.8.** Zero margin meant most honoured
 floors still bridged, so the radius carries the margin instead: a 60° gap is 8.8 yd, and one Blizzard
 forbids **77° of ring rather than 87**. The ceiling is real melee range **9.083 yd** — his `CombatReach`
@@ -281,6 +289,12 @@ until the next orb lit instead, 68 of 71 shelter exits over five pulls were walk
 landed, and one chain ran from three bots stacked on a shelter through two walking home, killing a
 healer at hop 6.
 
+**Lightning Charge is a burst one-shot, not attrition.** 62466 was **8.8%** of phase 2 damage taken
+against Frostbolt Volley's 28.3%, yet it killed **6 of the 16** bots that died before the first tank and
+took 4 at once twice (110,163 and 115,700 in a cast); **8 of those 16 died from full health in one
+hit**. The tell is reliable: `thorim.lightningorb` goes live **4.6-4.9 s** ahead on every cast and the
+shelter row answers within 0.1 s, so what fails is the table or the walk, never the warning.
+
 **The camp dodge trades one hazard for a smaller one on purpose.** A Lightning Charge is 10-36k in one
 instant against a Blizzard tick's 4-5k, so a camp bot in the lit cone leaves the Blizzard to make its
 shelter walk. That is what `ULDUAR_THORIM_CAMP_BLIZZARD_ESCAPE_RADIUS` (15) and
@@ -296,13 +310,25 @@ clear at any anchor, nowhere near six spots 11 yd apart.
 `ULDUAR_THORIM_SHELTER_SPOTS` has no rows for orb indices 4 and 5 ((2092.95, −263.00) and
 (2104.94, −233.44)), whose cones point away from the camp. Its longest run, 25.6 yd, is ~3.7 s against
 the 4.9 s worst warning, and a bot commits from wherever it stands, so walking home the moment the orb
-goes dark costs an extra run only when two orbs in a row cover one slot. Three of orb 2's four rows sit
+goes dark costs an extra run only when two orbs in a row cover one slot. Four of orb 2's five rows sit
 7.6-8.2 yd from the Blizzard track, inside the 9.8 yd reach, because the pocket off that cone and 11 yd
 clear of the track is ~97 sq yd and four points 9 yd apart do not fit
 ([solved tables](../../engine/pitfalls.md#a-solved-table-outlives-the-traces-it-was-solved-from));
 standing on a shelter was 14% of the camp's Blizzard damage, walking to one 63%. Rows (orb 3, slot 1)
 and (orb 6, slot 5) sit under 3 yd from home, 34-37° off the cone, and walk only because the camp
 trigger arrives at 1 yd, not the ring's 3.
+
+**A pair with no row is not a pair that is safe.** `ThorimRangedSpot` returns false when
+`ThorimShelterFor` misses and the bot stays home, which is only right where home already clears that
+cone. Slot 4's home is covered by orbs **0, 1 and 2**; rows existed for 0 and 1, so with orb 2 lighting
+every cast of one pull the camp stood in it. The added row is **(2130.00, −224.00, 420.146)**: 94.3° off
+the cone centre, 34.5 yd off the tank spot, 29.6-32.0 from the boss, 9+ from every body, and 8.11 yd off
+the Blizzard track against the shipped table's worst of 7.15. Its **29.35 yd** walk is the table's
+longest, ~4.3 s against the 4.6-4.9 s warning.
+`ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN` (2.5°) is deliberately untouched: it already read that
+home as covered, at 36° inside the 40° half-width, so the absent row was the whole defect. No
+replacement home clears all seven cones — the best is covered by one and sits 42 yd away — so moving the
+camp spot was rejected too.
 
 Pushing camp spots outward from the **live** boss was modelled and rejected — it brings camp pairs to
 6.4-7.1 yd under orbs 1 and 3, inside the 8 yd jump. The melee ring's cone offset is likewise left
@@ -330,13 +356,21 @@ on the human.
 
 **`thorim.anchortank` latches one bot tank for the phase instead.** Elected bots-only — a human cannot
 be steered onto a spot — preferring whoever already holds him, then lowest guid; held while it is still
-alive, still a tank and still on the floor, so a trade moves nobody. That tank alone takes the main
-tank spot and **every other tank takes the off-tank one**, never the ring: a ring point is measured off
-the boss, so a tank on one orbits him at 8 yd instead of walking him, which once left Thorim **26 yd**
-off the anchor for a whole pull. An off-tank does not run the ring's arrive/reposition path in the
-positioning trigger and action either. `ThorimTankPicked` takes `tank assist` away from tanks in phase
-2 only: left voting, it held a tank on a Warbringer for the first 30 s while Thorim ate the camp, and in
-phase 1 holding whatever swings at the raid beats steering a tank onto the ranged pick.
+alive, still a tank and still on the floor, so a trade moves nobody. Never the ring for either of them:
+a ring point is measured off the boss, so a tank on one orbits him at 8 yd instead of walking him, which
+once left Thorim **26 yd** off the anchor for a whole pull. An off-tank does not run the ring's
+arrive/reposition path in the positioning trigger and action either. `ThorimTankPicked` takes
+`tank assist` away from tanks in phase 2 only: left voting, it held a tank on a Warbringer for the first
+30 s while Thorim ate the camp, and in phase 1 holding whatever swings at the raid beats steering a tank
+onto the ranged pick.
+
+**A tank's spot, not just its role, decides which way he faces.** The anchor tank holds him squarely on
+the design axis — **0°** off the boss→tank-spot bearing over 406 snapshots — while an off-tank holding
+him from the off-tank spot turns him **39°** off it over 399, half the phase each. The ring is solved
+against that axis, so the swing is what drags the outer slots into his front arc. **Whichever tank holds
+him now takes the anchor**, the other takes the off-tank spot, and both are fixed points: at 3.5 yd apart
+a trade steps him inside `ULDUAR_THORIM_RING_REPOSITION_TOLERANCE` (5), so it no longer unlatches the
+ring the way the old 7.07 yd off-tank spot did.
 
 **Thorim's threat table is empty at the phase change**, because he sits at 100% untouched through
 phase 1, so the pickup taunt hands him straight back
@@ -668,13 +702,23 @@ slot's players. **Human-owned pets are 13-30% of the bodies and are not steerabl
 
 **The last 67 yd of the lower corridor are unwaypointed** — waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,
-where the smash is most dangerous.
+where the smash is most dangerous. The formation hit the same wall: trigger and action both place the
+squad off `ThorimGauntletLaneIndex(master, …)`, which needs the master **standing inside a waypoint
+radius**, so once he walks past the chain the row goes quiet for everyone. DPS do not notice, since
+`reach melee` and `reach spell` chase their targets the rest of the way, but a healer chases nothing and
+`follow` cannot cover it, being `BOT_STATE_NON_COMBAT` in a running fight. Measured: the 11 non-healers
+reached **183-191 yd** out while the two healers stalled at **148 and 129**, one of them with **no move
+order at all** across 22 s, leaving the human 68.8 and 101.1 yd behind against the 40 yd heal range and
+his last outside heal 21 s before he died. `ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE` (20 yd) now walks a
+trailing healer to the master once the lane index fails — healers only, since a tether on the rest would
+fight `reach melee`.
 
-**Both 110 yd gates cut the left lane short.** `ThorimGauntletPositioningTrigger` and
-`ThorimFallFromFloorTrigger` bail past `ULDUAR_THORIM_FLOOR_RANGE` (110 yd) from the arena centre, while
-the left lane's last three waypoints are **117.3 / 120.8 / 126.1 yd** out — so a left-lane squad loses
-its corridor node for the final stretch and finishes on `follow`. The fall rescue `NearTeleportTo`s onto
-the master, same map only ([pitfalls](../../engine/pitfalls.md#before-the-pull-and-out-of-combat)).
+**The fall rescue still stops at 110 yd.** `ThorimFallFromFloorTrigger` bails past
+`ULDUAR_THORIM_FLOOR_RANGE` (110 yd) from the arena centre, short of the left lane's last three
+waypoints at **117.3 / 120.8 / 126.1 yd** and of the corridor's far end, and it `NearTeleportTo`s onto
+the master, same map only ([pitfalls](../../engine/pitfalls.md#before-the-pull-and-out-of-combat)). The
+gauntlet row no longer shares that gate: it reads `ULDUAR_THORIM_ENCOUNTER_PROXIMITY` (200), which
+covers the whole corridor.
 
 **The ~28 s opening wait is deliberate.** The squad does not move until the master reaches
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It is left in
@@ -684,6 +728,12 @@ because it is the difference between missing and making the clock.
 from the Touch of Dominion cast. The spread is corridor-trash time and it is still Iron Honor Guard:
 **92.8 s** held on the slow pull against **48.6-51.4 s** on the rest, with Colossus and Rune Giant time
 identical. Snapshot cadence never moved (p50 227-229 ms), so it is bot behaviour, not load.
+
+**The tanks eat the Lightning Charge cone and nothing is spent on it.** They took **7 of 25** cone hits
+in one pull and cannot dodge: both tank spots are fixed, and the Blizzard row already excuses both tank
+roles for the same reason. No cooldown answers the 4.8 s warning either — **zero** personal survival
+cooldowns were cast across a whole phase 2, while the heavy ones read `IMPOSSIBLE` 60+ times (divine
+sacrifice 23, barkskin 15, icebound fortitude 8, divine shield 5, rune tap 5, pain suppression 4).
 
 **The shelter run is uncapped.** Observed distances to the shelter when the note fired were **52.1 and
 60.6 yd** against a table solved for 25.6, and a bot that does not make it takes the cone while moving.

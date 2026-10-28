@@ -94,6 +94,10 @@ inline constexpr float ULDUAR_THORIM_FLOOR_RANGE = 110.0f;
 inline constexpr float ULDUAR_THORIM_GATE_RADIUS = 10.0f;
 inline constexpr float ULDUAR_THORIM_GATE_FOLLOW_DISTANCE = 5.0f;
 
+// How far a corridor healer may trail the master once the lane waypoints run out. Inside heal range with
+// room to spare, since the squad spreads: a healer that stops has no chase of its own to catch up on.
+inline constexpr float ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE = 20.0f;
+
 // Cheap first gate for both halves. Distance alone reaches Hodir's room, height doesn't: corridor z 412,
 // arena 420, Hodir 433.
 inline constexpr float ULDUAR_THORIM_ENCOUNTER_PROXIMITY = 200.0f;
