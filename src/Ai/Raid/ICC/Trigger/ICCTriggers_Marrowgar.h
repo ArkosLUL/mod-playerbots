@@ -7,16 +7,33 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_MARROWGAR_H
 #define PLAYERBOTS_ICCTRIGGERS_MARROWGAR_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_Marrowgar.h"
+#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
 
-class IccLmTrigger : public Trigger
+class IccLmTargetTrigger : public IccDirectTargetTrigger
 {
 public:
-    static constexpr char const* Name = "icc lm";
+    static constexpr char const* Name = "icc lm target";
 
-    IccLmTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccLmTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetLmTarget) {}
+};
+
+class IccLmStandTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lm stand";
+
+    IccLmStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccLmColdflameTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lm coldflame";
+
+    IccLmColdflameTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

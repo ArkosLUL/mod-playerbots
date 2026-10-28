@@ -5,558 +5,164 @@
  */
 
 #include "ICCActions_Marrowgar.h"
-#include "GenericSpellActions.h"
-#include "Multiplier.h"
-#include "NearestNpcsValue.h"
-#include "ObjectAccessor.h"
+
+#include <algorithm>
+#include <cmath>
+#include <string>
+#include <vector>
+
+#include "EncounterHelpers.h"
+#include "LastMovementValue.h"
 #include "Playerbots.h"
 #include "RaidObs.h"
-#include "RtiValue.h"
-#include "Vehicle.h"
+#include "Timer.h"
 
-// Bone Storm (69076) has a 3 s cast, so the phase opens when the aura lands and he starts to spin.
-static bool IccLmInBoneStorm(Player* bot, Unit* boss)
+using namespace EncounterHelpers;
+
+namespace
 {
-    bool const storm = boss->HasAura(SPELL_LM_BONE_STORM);
-    RaidObs::NoteDerived(bot, "lm.phase", storm ? "bonestorm" : "normal");
-    return storm;
+constexpr float WALK_SPOT_TOLERANCE = 0.5f;
+// A spline issued last tick may not show in isMoving yet
+constexpr uint32 WALK_STALL_MS = 500;
+constexpr float DODGE_SWEEP_RADIUS = 16.0f;
+
+void NoteDodge(Player* bot, std::string const& branch)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "lm.dodge", branch);
 }
 
-// Group iteration filter for same-instance, alive, in-world members.
-static bool IsValidLmMember(Player* member, Player* bot)
+bool ClearOf(Position const& spot, std::vector<Position> const& circles, float radius)
 {
-    if (!member || !member->IsInWorld() || !member->IsAlive())
-        return false;
-    if (member->GetMapId() != bot->GetMapId())
-        return false;
-    if (member->GetInstanceId() != bot->GetInstanceId())
-        return false;
-    if (member->HasAura(SPELL_LM_IMPALED))
-        return false;
-    return true;
+    return std::none_of(circles.begin(), circles.end(),
+                        [&spot, radius](Position const& circle) { return circle.GetExactDist2d(spot) < radius; });
+}
+}  // namespace
+
+Position const* IccLmWalkAction::WalkInFlight()
+{
+    // Moving on some other node's walk doesn't count
+    if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
+        return nullptr;
+
+    return &walkSpot;
 }
 
-// Up to two lowest-GUID ranged bots in same instance, hunter-priority.
-static std::vector<Player*> PickBoneStormRangedTargets(Player* bot)
+bool IccLmWalkAction::WalkTo(Position const& spot, MovementPriority priority)
 {
-    std::vector<Player*> result;
+    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
+    // until that runs out
+    if (bot->IsMovementPreventedByCasting())
+        return false;
 
-    Group* group = bot->GetGroup();
-    if (!group)
-        return result;
+    // A stun or a channel stopped the last walk short, and its booking would refuse this one
+    uint32 const now = getMSTime();
+    if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
+        AI_VALUE(LastMovement&, "last movement").clear();
 
-    std::vector<Player*> ranged;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    walkSpot = spot;
+    walking = true;
+    walkIssuedMs = now;
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  false, priority);
+}
+
+bool IccLmWalkAction::BookedOnWalkSpot()
+{
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    return std::fabs(last.lastMoveToX - walkSpot.GetPositionX()) <= WALK_SPOT_TOLERANCE &&
+           std::fabs(last.lastMoveToY - walkSpot.GetPositionY()) <= WALK_SPOT_TOLERANCE;
+}
+
+bool IccLmMoveToStandAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!GetLmStandWalk(botAI, spot))
     {
-        Player* member = ref->GetSource();
-        if (!IsValidLmMember(member, bot))
-            continue;
-        if (PlayerbotAI::IsTank(member))
-            continue;
-        if (!PlayerbotAI::IsRanged(member))
-            continue;
-
-        ranged.push_back(member);
+        DropWalk();
+        return false;
     }
 
-    if (ranged.empty())
-        return result;
-
-    std::sort(ranged.begin(), ranged.end(),
-              [](Player const* a, Player const* b) { return a->GetGUID() < b->GetGUID(); });
-
-    for (Player* p : ranged)
-    {
-        if (p->getClass() != CLASS_HUNTER)
-            continue;
-        result.push_back(p);
-        if (result.size() == 2)
-            return result;
-    }
-
-    for (Player* p : ranged)
-    {
-        if (p->getClass() == CLASS_HUNTER)
-            continue;
-        result.push_back(p);
-        if (result.size() == 2)
-            return result;
-    }
-
-    return result;
-}
-
-static bool IsBoneStormAnchor(Player* bot)
-{
-    std::vector<Player*> const picks = PickBoneStormRangedTargets(bot);
-    bool const anchor = std::find(picks.begin(), picks.end(), bot) != picks.end();
-    RaidObs::NoteDerived(bot, "lm.stormanchor", anchor ? "1" : "0");
-    return anchor;
-}
-
-// True if any coldflame line sits within 10f of the anchor position.
-// Used to widen the tank's "stay-put" tolerance so AvoidAoe can move them
-// off the line without IccLmTankPositionAction dragging them back.
-static bool ColdflameNearAnchor(Player* bot, Position const& anchor, float leash)
-{
-    std::list<Creature*> coldflames;
-    bot->GetCreatureListWithEntryInGrid(coldflames, NPC_COLDFLAME, 200.0f);
-    for (Creature* c : coldflames)
-        if (c->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY()) < leash)
+    if (Position const* inFlight = WalkInFlight())
+        if (inFlight->GetExactDist2d(spot) <= WALK_SPOT_TOLERANCE)
             return true;
-    return false;
+
+    return WalkTo(spot, MovementPriority::MOVEMENT_COMBAT);
 }
 
-bool IccLmTankPositionAction::Execute(Event /*event*/)
+bool IccLmDodgeColdflameAction::Execute(Event /*event*/)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "lord marrowgar");
-    if (!boss)
-        return false;
-
-    bool const isBossInBoneStorm = IccLmInBoneStorm(bot, boss);
-    float const maxDistanceThreshold = 3.0f;
-
-    if (isBossInBoneStorm)
+    if (!IsLmInColdflame(botAI))
     {
-        if (IsBoneStormAnchor(bot))
-        {
-            float const anchorDist = bot->GetExactDist2d(ICC_LM_BONE_STORM_AT_POSITION.GetPositionX(),
-                                                         ICC_LM_BONE_STORM_AT_POSITION.GetPositionY());
-
-            float const bossDist = bot->GetExactDist2d(boss);
-            float const proximityTrigger = 20.0f;
-            float const leash = 10.0f;
-
-            // Boss too close or standing in coldflame: reposition within leash from anchor
-            bool const bossNear = bossDist < proximityTrigger;
-            bool const inColdflame = [&]()
-            {
-                std::list<Creature*> coldflames;
-                bot->GetCreatureListWithEntryInGrid(coldflames, NPC_COLDFLAME, 4.0f);
-                return !coldflames.empty();
-            }();
-
-            if (bossNear || inColdflame)
-            {
-                // Try eight candidate offsets from the anchor at the leash radius;
-                // pick first one that is far from boss and clear of coldflames.
-                float bestX = bot->GetPositionX();
-                float bestY = bot->GetPositionY();
-                float bestScore = -1.0f;
-                bool found = false;
-
-                for (int i = 0; i < 8; ++i)
-                {
-                    float const angle = (float)i * (float)M_PI / 4.0f;
-                    float const cx = ICC_LM_BONE_STORM_AT_POSITION.GetPositionX() + std::cos(angle) * leash;
-                    float const cy = ICC_LM_BONE_STORM_AT_POSITION.GetPositionY() + std::sin(angle) * leash;
-
-                    float const dx = cx - boss->GetPositionX();
-                    float const dy = cy - boss->GetPositionY();
-                    float const distToBoss = std::sqrt(dx * dx + dy * dy);
-
-                    std::list<Creature*> coldflames;
-                    bot->GetCreatureListWithEntryInGrid(coldflames, NPC_COLDFLAME, 200.0f);
-                    bool hitColdflame = false;
-                    for (Creature* c : coldflames)
-                    {
-                        if (c->GetExactDist2d(cx, cy) < 4.0f)
-                        {
-                            hitColdflame = true;
-                            break;
-                        }
-                    }
-                    if (hitColdflame)
-                        continue;
-
-                    if (distToBoss > bestScore)
-                    {
-                        bestScore = distToBoss;
-                        bestX = cx;
-                        bestY = cy;
-                        found = true;
-                    }
-                }
-
-                if (found)
-                    return MoveTo(bot->GetMapId(), bestX, bestY, ICC_LM_BONE_STORM_AT_POSITION.GetPositionZ(), false,
-                                  false, false, false, MovementPriority::MOVEMENT_COMBAT);
-            }
-
-            if (anchorDist > maxDistanceThreshold)
-                return MoveTo(bot->GetMapId(), ICC_LM_BONE_STORM_AT_POSITION.GetPositionX(),
-                              ICC_LM_BONE_STORM_AT_POSITION.GetPositionY(),
-                              ICC_LM_BONE_STORM_AT_POSITION.GetPositionZ(), false, false, false, false,
-                              MovementPriority::MOVEMENT_COMBAT);
-            return true;
-        }
-
-        float const tankLeash =
-            ColdflameNearAnchor(bot, ICC_LM_TANK_POSITION, 10.0f) ? 10.0f : maxDistanceThreshold;
-
-        if (PlayerbotAI::IsMainTank(bot))
-        {
-            float const distance =
-                bot->GetExactDist2d(ICC_LM_TANK_POSITION.GetPositionX(), ICC_LM_TANK_POSITION.GetPositionY());
-            if (distance > tankLeash)
-                return MoveTowardPosition(ICC_LM_TANK_POSITION, maxDistanceThreshold);
-            return false;
-        }
-
-        if (PlayerbotAI::IsAssistTank(bot))
-        {
-            float const distance =
-                bot->GetExactDist2d(ICC_LM_TANK_POSITION.GetPositionX(), ICC_LM_TANK_POSITION.GetPositionY());
-            if (distance > tankLeash)
-                return MoveTo(bot->GetMapId(), ICC_LM_TANK_POSITION.GetPositionX(),
-                              ICC_LM_TANK_POSITION.GetPositionY(), ICC_LM_TANK_POSITION.GetPositionZ(), false, false,
-                              false, false, MovementPriority::MOVEMENT_COMBAT);
-            return false;
-        }
-
-        // Non-tanks: if too far from mid position, move toward it
-        float const distance =
-            bot->GetExactDist2d(ICC_LM_MID_POSITION.GetPositionX(), ICC_LM_MID_POSITION.GetPositionY());
-        if (distance > 35.0f)
-            return MoveTowardPosition(ICC_LM_MID_POSITION, 15.0f);
-
+        DropWalk();
         return false;
     }
 
-    float const tankLeash =
-        ColdflameNearAnchor(bot, ICC_LM_TANK_POSITION, 10.0f) ? 10.0f : maxDistanceThreshold;
-
-    if (botAI->HasAggro(boss) && PlayerbotAI::IsMainTank(bot) && boss->GetVictim() == bot)
+    if (!botAI->CanMove())
     {
-        float const distance =
-            bot->GetExactDist2d(ICC_LM_TANK_POSITION.GetPositionX(), ICC_LM_TANK_POSITION.GetPositionY());
-
-        if (distance > tankLeash)
-            return MoveTowardPosition(ICC_LM_TANK_POSITION, maxDistanceThreshold);
-    }
-
-    if (PlayerbotAI::IsAssistTank(bot))
-    {
-        float const distance =
-            bot->GetExactDist2d(ICC_LM_TANK_POSITION.GetPositionX(), ICC_LM_TANK_POSITION.GetPositionY());
-
-        if (distance > tankLeash)
-            return MoveTo(bot->GetMapId(), ICC_LM_TANK_POSITION.GetPositionX(), ICC_LM_TANK_POSITION.GetPositionY(),
-                          ICC_LM_TANK_POSITION.GetPositionZ(), false, false, false, false,
-                          MovementPriority::MOVEMENT_COMBAT);
-
-        if (distance < maxDistanceThreshold)
-        {
-            bot->SetFacingToObject(boss);
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool IccLmTankPositionAction::MoveTowardPosition(Position const& position, float incrementSize)
-{
-    float moveX;
-    float moveY;
-    if (!IccStepToward(bot, position, incrementSize, moveX, moveY))
+        NoteDodge(bot, "stunned");
         return false;
-
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT);
-}
-
-bool IccSpikeAction::Execute(Event /*event*/)
-{
-    if (bot->HasAura(SPELL_LM_IMPALED))
-        return false;
-
-    Unit* boss = AI_VALUE2(Unit*, "find target", "lord marrowgar");
-    if (!boss)
-        return false;
-
-    bool const isBossInBoneStorm = IccLmInBoneStorm(bot, boss);
-    std::vector<Unit*> const spikes = FindAliveSpikes();
-
-    if (!spikes.empty())
-    {
-        HandleSpikeMarking(spikes, boss);
-        return HandleSpikeAssignment(spikes, boss);
     }
 
-    // No spikes alive -- skull on boss, clear cross, all bots on skull
-    RaidObs::NoteDerived(bot, "lm.spike", "none");
-    HandleNoSpikesMarking(boss);
+    std::vector<Position> circles;
+    GetLmColdflame(botAI, circles);
 
-    // Melee non-tanks in front of boss should reposition
-    if (boss->isInFront(bot) && !PlayerbotAI::IsTank(bot) && !isBossInBoneStorm)
+    Position const* inFlight = WalkInFlight();
+    if (inFlight && ClearOf(*inFlight, circles, LM_DODGE_TRIGGER))
     {
-        Position const safePosition = {-390.6757f, 2230.5283f, 0.0f};
-        float const distance = bot->GetExactDist2d(safePosition.GetPositionX(), safePosition.GetPositionY());
-        if (distance > 3.0f)
-            return MoveTowardPosition(safePosition, 3.0f);
-    }
-
-    return false;
-}
-
-std::vector<Unit*> IccSpikeAction::FindAliveSpikes()
-{
-    // All difficulty variants — AzerothCore spawns a different entry per difficulty mode.
-    // Bonespike NPCs have UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_IMMUNE_TO_PC so they
-    // never appear in "possible targets no los". Use a direct grid search instead.
-    std::vector<Creature*> const found = IccGetCreaturesByEntries(bot,
-        {NPC_SPIKE1, NPC_SPIKE1_10H, NPC_SPIKE1_25N, NPC_SPIKE1_25H,
-         NPC_SPIKE2, NPC_SPIKE2_10H, NPC_SPIKE2_25N, NPC_SPIKE2_25H,
-         NPC_SPIKE3, NPC_SPIKE3_10H, NPC_SPIKE3_25N, NPC_SPIKE3_25H},
-        200.0f);
-    return std::vector<Unit*>(found.begin(), found.end());
-}
-
-bool IccSpikeAction::HandleSpikeMarking(std::vector<Unit*> const& spikes, Unit* boss)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    static uint8 const Icons[] = {RtiTargetValue::skullIndex, RtiTargetValue::crossIndex, RtiTargetValue::starIndex};
-
-    std::vector<ObjectGuid> aliveSpikeGuids;
-    aliveSpikeGuids.reserve(spikes.size());
-    for (Unit* spike : spikes)
-        aliveSpikeGuids.push_back(spike->GetGUID());
-
-    for (uint8 const iconIdx : Icons)
-    {
-        ObjectGuid const iconGuid = group->GetTargetIcon(iconIdx);
-        if (iconGuid.IsEmpty())
-            continue;
-        if (std::find(aliveSpikeGuids.begin(), aliveSpikeGuids.end(), iconGuid) != aliveSpikeGuids.end())
-            continue;
-
-        Unit* marked = botAI->GetUnit(iconGuid);
-        if (marked && !marked->IsAlive())
-            group->SetTargetIcon(iconIdx, bot->GetGUID(), ObjectGuid::Empty);
-    }
-
-    // Check if the only spike left is a tank spike
-    Player* firstSpikeVictim = spikes.size() == 1 ? GetSpikeVictim(spikes[0]) : nullptr;
-    bool const onlyTankSpike = firstSpikeVictim && PlayerbotAI::IsTank(firstSpikeVictim);
-
-    RaidObs::NoteDerived(bot, "lm.mark", onlyTankSpike ? "tankspike" : "spikes" + std::to_string(spikes.size()));
-
-    if (onlyTankSpike)
-    {
-        // Skull on spike, Cross on boss
-        if (group->GetTargetIcon(RtiTargetValue::skullIndex) != spikes[0]->GetGUID())
-            group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), spikes[0]->GetGUID());
-
-        if (group->GetTargetIcon(RtiTargetValue::crossIndex) != boss->GetGUID())
-            group->SetTargetIcon(RtiTargetValue::crossIndex, bot->GetGUID(), boss->GetGUID());
-
-        if (!group->GetTargetIcon(RtiTargetValue::starIndex).IsEmpty())
-            group->SetTargetIcon(RtiTargetValue::starIndex, bot->GetGUID(), ObjectGuid::Empty);
-
+        NoteDodge(bot, "hold");
         return true;
     }
 
-    // Clear icon slots beyond the current spike count
-    for (size_t i = spikes.size(); i < sizeof(Icons); ++i)
+    // A patch ticks every second for 6-14k: the cast is worth less than the step out
+    if (bot->IsMovementPreventedByCasting())
+        bot->InterruptNonMeleeSpells(true);
+
+    Position stand;
+    Position const* preferNear = GetLmStandSpot(botAI, stand) ? &stand : nullptr;
+    auto const insideGate = [](float x, float /*y*/) { return x < LM_GATE_X_LIMIT; };
+
+    HazardSweepCache sweep;
+    auto const findSpot = [&](float clearance)
     {
-        if (!group->GetTargetIcon(Icons[i]).IsEmpty())
-            group->SetTargetIcon(Icons[i], bot->GetGUID(), ObjectGuid::Empty);
-    }
-
-    // Assign Skull/Cross/Star to each alive spike
-    for (size_t i = 0; i < spikes.size() && i < sizeof(Icons); ++i)
-    {
-        uint8 const iconIdx = Icons[i];
-        if (group->GetTargetIcon(iconIdx) != spikes[i]->GetGUID())
-            group->SetTargetIcon(iconIdx, bot->GetGUID(), spikes[i]->GetGUID());
-    }
-
-    return true;
-}
-
-bool IccSpikeAction::HandleNoSpikesMarking(Unit* boss)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    RaidObs::NoteDerived(bot, "lm.mark", "boss");
-
-    // Clear cross and star
-    for (uint8 const iconIdx : {uint8(6), uint8(0)})
-    {
-        if (!group->GetTargetIcon(iconIdx).IsEmpty())
-            group->SetTargetIcon(iconIdx, bot->GetGUID(), ObjectGuid::Empty);
-    }
-
-    // Skull on boss
-    if (group->GetTargetIcon(RtiTargetValue::skullIndex) != boss->GetGUID())
-        group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), boss->GetGUID());
-
-    // Per-bot context value -- every bot needs this for its own ChooseTarget.
-    context->GetValue<std::string>("rti")->Set("skull");
-    return true;
-}
-
-bool IccSpikeAction::HandleSpikeAssignment(std::vector<Unit*> const& spikes, Unit* boss)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    bool const isMelee = PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot);
-    bool const isAssistTank = PlayerbotAI::IsAssistTank(bot);
-
-    auto isTankSpike = [&](Unit* spike) -> bool
-    {
-        Player* victim = GetSpikeVictim(spike);
-        return victim && PlayerbotAI::IsTank(victim);
+        std::vector<HazardCircle> hazards;
+        hazards.reserve(circles.size());
+        for (Position const& circle : circles)
+            hazards.emplace_back(circle, clearance);
+        return FindNearestPositionClearOfHazards(bot, hazards, DODGE_SWEEP_RADIUS, 2.0f,
+                                                 static_cast<float>(M_PI) / 8.0f, preferNear, insideGate, &sweep);
     };
 
-    // Assist tank: only attack tank spike, ignore all others
-    if (isAssistTank)
+    bool tight = false;
+    Position spot = findSpot(LM_DODGE_CLEARANCE);
+    if (spot == Position())
     {
-        for (Unit* spike : spikes)
-        {
-            if (isTankSpike(spike))
-            {
-                RaidObs::NoteDerived(bot, "lm.spike", "tank");
-                Attack(spike);
-                return false;
-            }
-        }
-        RaidObs::NoteDerived(bot, "lm.spike", "idle");
+        tight = true;
+        spot = findSpot(LM_DODGE_TIGHT_CLEARANCE);
+    }
+
+    if (spot == Position())
+    {
+        NoteDodge(bot, "none");
         return false;
     }
 
-    // Only tank spike left -- ranged go skull (spike), melee go cross (boss)
-    bool const onlyTankSpike = spikes.size() == 1 && isTankSpike(spikes[0]);
-    if (onlyTankSpike)
+    // Our own walk still holds the FORCED booking, and a booking only yields to a higher priority
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    bool const lowered = inFlight && last.priority == MovementPriority::MOVEMENT_FORCED;
+    if (lowered)
+        last.priority = MovementPriority::MOVEMENT_COMBAT;
+
+    float const travel = bot->GetExactDist2d(spot);
+    if (!WalkTo(spot, MovementPriority::MOVEMENT_FORCED))
     {
-        if (isMelee)
-        {
-            RaidObs::NoteDerived(bot, "lm.spike", "boss");
-            context->GetValue<std::string>("rti")->Set("cross");
-            Attack(boss);
-        }
-        else
-        {
-            RaidObs::NoteDerived(bot, "lm.spike", "skull");
-            context->GetValue<std::string>("rti")->Set("skull");
-            Attack(spikes[0]);
-        }
+        if (lowered)
+            last.priority = MovementPriority::MOVEMENT_FORCED;
+
+        NoteDodge(bot, "locked");
         return false;
     }
 
-    // Melee DPS: pick closest safe spike within 20y, never tank spikes
-    if (isMelee)
-    {
-        Unit* bestSpike = nullptr;
-        float bestDist = 20.0f;
-        for (Unit* spike : spikes)
-        {
-            if (isTankSpike(spike))
-                continue;
-
-            if (boss->isInFront(spike, 7.0f))
-                continue;
-
-            if (IsSpikeInColdFlame(spike))
-                continue;
-
-            float const dist = bot->GetExactDist2d(spike);
-            if (dist < bestDist)
-            {
-                bestDist = dist;
-                bestSpike = spike;
-            }
-        }
-
-        RaidObs::NoteDerived(bot, "lm.spike", bestSpike ? "nearest" : "nosafe");
-        if (bestSpike)
-            Attack(bestSpike);
-
-        return false;
-    }
-
-    // Ranged / healers: balanced assignment across all spikes
-    std::vector<Player*> rangedMembers;
-    for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
-    {
-        Player* member = itr->GetSource();
-        if (!member || !member->IsAlive() || member->HasAura(SPELL_LM_IMPALED))
-            continue;
-
-        if (PlayerbotAI::IsMainTank(member) || PlayerbotAI::IsAssistTank(member))
-            continue;
-
-        if (PlayerbotAI::IsMelee(member) && !PlayerbotAI::IsTank(member))
-            continue;
-
-        rangedMembers.push_back(member);
-    }
-
-    std::sort(rangedMembers.begin(), rangedMembers.end(),
-              [](Player const* a, Player const* b) { return a->GetGUID() < b->GetGUID(); });
-
-    auto const it = std::find(rangedMembers.begin(), rangedMembers.end(), bot);
-    if (it == rangedMembers.end())
-    {
-        RaidObs::NoteDerived(bot, "lm.spike", "none");
-        return false;
-    }
-
-    size_t const myIndex = std::distance(rangedMembers.begin(), it);
-    std::vector<size_t> const groupSizes = IccBalancedGroupSizes(rangedMembers.size(), spikes.size());
-    size_t const spikeIndex = IccAssignedBucketIndex(myIndex, groupSizes);
-
-    if (spikeIndex >= spikes.size())
-    {
-        RaidObs::NoteDerived(bot, "lm.spike", "none");
-        return false;
-    }
-
-    Unit* mySpike = spikes[spikeIndex];
-    RaidObs::NoteDerived(bot, "lm.spike", IccRtiNameForBucket(spikeIndex));
-    context->GetValue<std::string>("rti")->Set(IccRtiNameForBucket(spikeIndex));
-
-    Attack(mySpike);
-    return false;
-}
-
-bool IccSpikeAction::MoveTowardPosition(Position const& position, float incrementSize)
-{
-    float moveX;
-    float moveY;
-    if (!IccStepToward(bot, position, incrementSize, moveX, moveY))
-        return false;
-
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT);
-}
-
-Player* IccSpikeAction::GetSpikeVictim(Unit* spike)
-{
-    // Spike holds player via vehicle; GetVictim() is unreliable (NPC not in combat)
-    if (Vehicle* veh = spike->GetVehicleKit())
-    {
-        for (auto const& [seatId, seatInfo] : veh->Seats)
-        {
-            if (Unit* passenger = ObjectAccessor::GetUnit(*spike, seatInfo.Passenger.Guid))
-                return passenger->ToPlayer();
-        }
-    }
-    return nullptr;
-}
-
-bool IccSpikeAction::IsSpikeInColdFlame(Unit* spike)
-{
-    float const checkRadius = 6.0f;
-    std::list<Creature*> coldflames;
-    spike->GetCreatureListWithEntryInGrid(coldflames, NPC_COLDFLAME, checkRadius);
-    return !coldflames.empty();
+    NoteDodge(bot, tight ? "tight" : "move " + std::to_string(static_cast<int32>(std::lround(travel))));
+    return true;
 }
