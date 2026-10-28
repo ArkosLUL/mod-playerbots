@@ -22,7 +22,7 @@ a vehicle (`WipeGunshipBlizzlike`). Bots put a unit on the ship on its side of t
 | Below Zero 69705 | the freeze mage's 900 s channel stuns every cannon and ejects its gunner; first when the enemy ship falls under 90% and 45 s after his ship spawned, then 30-33.5 s after the last one dies | board, kill the mage, come back | see Boarding |
 | Captain (36939 / 36948), Battle Fury 69638 | attacks only players on his deck, never dies (his health is held at 1); each hit adds a stack, +10% on normal (72306 on 25), +12% on heroic (72307, 72308), 16 s, refreshed per stack; Cleave 15284, Rending Throw 70309 off melee, Taste of Blood 69634 under 65%; taunts diminish on him (`flags_extra` 0x80000) | a tank picks him up first and drags him to the edge; leave with the party; a defensive if the stacks climb | the board tank holds him and spends a button at +50% and at +100% of his hit ([Defensives](#defensives)); retreat at +200% |
 | Riflemen 36969 / Axethrowers 36968 | 4 on 10, 8 on 25, 30 s respawn; Shoot / Hurl Axe (2 s, rows 2195-2196) at players on the other ship | ranged clear them from the edge | home ranged, after boarders, in range only |
-| Mortars 36978 / Rocketeers 36982 | 2 on 10, 4 on 25, every 9 s: 69679, a 5 s cast at a player's spot on the raid's ship, the 71371 marker for 5 s from launch, then Explosion 4 yd centre to centre (69680, 69687; heroic 69688/69689 knock back) | move out; the cannons kill them, no player reaches them | dodge; cannons aim at them first |
+| Mortars 36978 / Rocketeers 36982 | 2 on 10, 4 on 25, every 9 s: 69679, a 5 s cast at a player's spot on the raid's ship, the 71371 marker for 5 s from launch, then Explosion 4 yd centre to centre (69680, 69687; heroic 69688/69689 knock back) | move out; the cannons kill them, out of ranged reach (IC also sends the boarders) | dodge; cannons aim at them first |
 | Boarders: marines 36950 / reavers 36957, sergeants 36961 / 36960 | 12 s in, then every 60 s: 2 + 1 on 10, 4 + 2 on 25, through the portal to the raid's ship; Wounding Strike 69651; Bladestorm 69652, whose 69653 has no radius, so it hits nobody here; Desperate Resolve under 25%; Burning Pitch on the hull when no player is valid | the home tank collects them, the raid kills the oldest first | home tank at the portal exit, taunts, one button per wave on it ([Defensives](#defensives)); home melee and ranged by rank |
 | Battle Experience | adds rank up 100 s after reaching their slot, then 70, 60 and on heroic 90 more (71188, 71193, 71195, 72525) | "every 30 s" | rank orders the kills |
 | Check for Players 70332 | every 5 s, anyone 10 yd under the raid's ship creature is teleported back on deck | don't fall | nothing to do: the ground is 620 yd down, so a faller is back within ~6.5 s |
@@ -91,8 +91,8 @@ Every bot tank (board and home) spends `NextTankDefensive`, physical only, one b
 - **On the raid's deck**: window 1 when 3 boarders sit on the tank with a party member across, or one is a
   Veteran; window 2 at Elite.
 - The latch per tank, deck and window ends with its window (stacks gone, wave dead, deck left).
-- Under 40% health a tank spends one outside the windows. The class nodes (`HeldTankDefensiveNames()`) stay
-  held above 25%, so only this node casts them.
+- Under 40% health a tank also spends the next ready button outside the windows, one at a time. The class
+  nodes (`HeldTankDefensiveNames()`) stay held above 25%, so only this node casts them.
 - A human holding the captain gets `CallHumanTankDefensive` at the windows and under 40% (`gsb.humancall`).
 
 The thresholds are unmeasured. He swings every 1.5 s, so the windows open about 8 s and 15 s into a hold
@@ -133,7 +133,7 @@ is the Catmull-Rom tangent plus π (`MotionTransport::Update`).
 - The healers' four nearest edge slots stand 34 to 35 yd from the board tank's spot, the farthest slots 42
   to 46 yd.
 - Edge slots to the nearest enemy mortar: 84 to 93 yd (Alliance), 72 to 81 yd (Horde), out of every
-  player's reach: the cannons are the answer.
+  ranged player's reach: the cannons are the answer.
 
 ## Cheats
 
@@ -147,6 +147,8 @@ fall.
 - No coordinate or line of sight is checked: the decks are gameobject floors (see Coordinates).
 - Personal burst cooldowns stay held on the freeze mage (see Defensives).
 - The defensive thresholds are guesses until a pull shows the stacks against the tank's health.
+- A home tank's window latch ends once fewer than 3 boarders sit on it (and none is a Veteran), so a wave
+  that flaps around 3 can cost a second button every 12 s or so. Kept so each fresh wave gets one.
 - A human holds no duty: a human tank on the captain gets the call, nothing else.
 
 ## Next pull

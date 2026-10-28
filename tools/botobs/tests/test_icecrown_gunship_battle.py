@@ -151,6 +151,19 @@ class SyntheticPull(unittest.TestCase):
             "  1 of 1 stack windows saw a tank button; a window opens when his stacks add 50% to his hit,"
             " the second at 100%\n"))
 
+    def test_only_the_tank_on_his_deck_answers_the_stacks(self):
+        records = [rec for rec in pull() if rec.get("e") != "cast"] + [
+            {"t": 40000, "e": "cast", "s": WARD, "sp": 498},
+            {"t": 41000, "e": "cast", "s": ARROW, "sp": 498},
+        ]
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            gsb.show_defensives(load(records))
+        self.assertIn("      cast     none\n", out.getvalue())
+        self.assertIn("off the windows  Divine Protection Ward 0:40.000 on the friendly deck\n", out.getvalue())
+        self.assertNotIn("Arrow", out.getvalue())
+        self.assertIn("0 of 1 stack windows saw a tank button", out.getvalue())
+
     def test_a_pull_with_no_window_says_so(self):
         quiet = [rec for rec in pull() if rec.get("k") not in (gsb.FURY_WINDOW, gsb.DEFENSIVE, gsb.HUMAN_CALL)
                  and rec.get("e") != "cast"]

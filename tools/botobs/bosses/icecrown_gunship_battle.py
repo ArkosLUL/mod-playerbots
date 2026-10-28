@@ -184,10 +184,11 @@ def fury_stretches(trace: Trace) -> list[dict]:
 
 
 def casts_named(trace: Trace, wanted: frozenset) -> list[tuple[int, int, str]]:
-    """`(t, guid, spell name)` for every roster cast of one of `wanted`, once per ms."""
-    roster = roster_guids(trace)
+    """`(t, guid, spell name)` for every cast of one of `wanted` by a roster tank, once per ms. A damage
+    dealer's Divine Protection or Icebound Fortitude is not a tank button."""
+    tanks = {guid for guid in roster_guids(trace) if trace.role(guid) == "tank"}
     named = ((rec["t"], rec.get("s"), trace.spells.get(rec.get("sp"), "")) for rec in trace.of("cast")
-             if rec.get("s") in roster)
+             if rec.get("s") in tanks)
     return sorted({cast for cast in named if cast[2] in wanted})
 
 
@@ -327,7 +328,9 @@ def show_defensives(trace: Trace) -> None:
     for index, stretch in enumerate(stretches, 1):
         low, high = stretch["start"] - WINDOW_LEAD_MS, stretch["stop"] + WINDOW_TAIL_MS
         steps = ", ".join(f"window {level} from {clock(when)}" for when, level in stretch["levels"])
-        spent = [cast for cast in casts if low <= cast[0] <= high]
+        # Only the tank on his deck answers his stacks; the home tank's buttons belong to the boarders
+        spent = [cast for cast in casts
+                 if low <= cast[0] <= high and deck_at(trace, cast[1], cast[0]) == "enemy"]
         spent_in.update(spent)
         covered += bool(spent)
         offered = collections.Counter(f"{trace.name(rec['g'])} {rec['txt']}" for rec in picks
