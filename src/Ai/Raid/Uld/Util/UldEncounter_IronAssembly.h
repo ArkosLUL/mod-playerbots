@@ -9,6 +9,7 @@
 
 #include "ObjectGuid.h"
 #include "Position.h"
+#include "RaidResistAura.h"
 #include "UldData.h"
 
 #include <vector>
@@ -112,12 +113,20 @@ inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SOAK_MAX_TRAVEL = 25.0
 inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SEARCH_RADIUS = 50.0f;
 // A rune within this of a boss's designed tank spot is his. The spots are at least 22.6 yd apart.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_OWNER_RADIUS = 15.0f;
-// Boss centre to rune centre once his tank has backed him off it: out with margin, and melee standing
-// in the rune behind him still reach him.
-inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_BOSS_OFFSET = 6.5f;
-// Melee stand this far into the rune toward the boss: 2 yd inside its edge, 3.5 from a parked boss, so in
-// melee range of all three.
+// Boss centre to rune centre once his tank has backed him off it, when he stops at both reaches plus
+// contact. Chasing a tank that left in one long step he can stop up to OVERSHOOT further out (8.4 traced).
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_BOSS_OFFSET = 5.5f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_BOSS_OVERSHOOT = 2.0f;
+// Where a backed-off boss may end, by distance from the stack point. Brundir outside his Overload
+// clearance and inside caster reach (casters at the stack chased him at 39, not at 36.8), the other two
+// no nearer the stack than their designed spots.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_BRUNDIR_MIN_STACK = 27.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_MELEE_MIN_STACK = 11.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_MAX_STACK = 36.0f;
+// Melee stand this far into the rune toward the boss, deeper up to MAX when he parked further out, so he
+// stays in reach and they stay 1 yd inside the edge.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH = 3.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH_MAX = 4.0f;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_HOLD = 4.5f;
 // Raid spot deadband inside the rune. The default 3 lets a bot re-walk only past 6, outside it.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SLOT_TOLERANCE = 2.0f;
@@ -160,6 +169,14 @@ inline constexpr float ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS = 22.0f
 // Molgeim's last rune outlives him on the stack point, inside this ring, and blocks about 140 degrees
 // of it at CLEARANCE. The clear arc is found by sampling this many bearings.
 inline constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES = 64;
+
+// Ring slots of the two nature resistance sources. Across the ring from each other, their 30 yd auras
+// reach every slot: the farthest is 31 yd off one, 44 * sin 45.
+inline constexpr uint8 ULDUAR_IRON_ASSEMBLY_NATURE_HUNTER_SLOT = 0;
+inline constexpr uint8 ULDUAR_IRON_ASSEMBLY_NATURE_TOTEM_SLOT = ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS / 2;
+// The totem shaman re-drops once it stands this far from its totem, so the totem follows it to the stack,
+// the rune or its ring slot rather than staying where the last spot was.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_NATURE_TOTEM_REDROP = 10.0f;
 
 // Paces haz rows per instance, since NoteHazard writes on every call, and doubles as their ttl. Fine
 // for a 6s Overload and tracks Brundir well enough through a 16s Tendrils.
@@ -250,9 +267,15 @@ bool TryGetIronAssemblyBossTankSpot(PlayerbotAI* botAI, Unit* boss, Position& po
 // spot, not his buff: the buff drops the moment he steps out, and keying on it walks him back in.
 bool TryGetIronAssemblyBossRuneOfPower(PlayerbotAI* botAI, Unit* boss, Position& rune);
 
-// Where ranged and healers stand: in a soakable Rune of Power, else stacked; on the hard-mode spread
-// ring once Steelbreaker is empowered. tolerance is the arrival deadband the spot wants.
+// Where ranged and healers stand: stacked, ranged dps in a soakable Rune of Power instead; on the
+// hard-mode spread ring once Steelbreaker is empowered. tolerance is the arrival deadband the spot wants.
 bool TryGetIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position, float* tolerance = nullptr);
+
+// Ranged dps but hunters. The buff is damage only, so healers gain nothing, and a rune next to Molgeim or
+// Steelbreaker is inside a hunter's 5 yd minimum shot range.
+bool IronAssemblyTakesRuneOfPower(Player* bot);
+// This bot's raid spot is a Rune of Power right now.
+bool IronAssemblyOnRuneOfPower(PlayerbotAI* botAI);
 
 // Where a melee bot stands to hit the focus from inside his Rune of Power. False once it's in, or when
 // there's nothing to walk to.
@@ -297,6 +320,38 @@ bool IronAssemblyHasOverwhelmingPower(Unit* unit);
 
 // Another grouped tank, human or bot, has boss on him.
 bool IronAssemblyHeldByOtherTank(Player* bot, Unit* boss);
+
+// With two bot tanks on three members, one member has no tank and rides the threat table. Brundir's tank
+// gets it back from anyone who isn't a tank: this returns it while that is due, else nullptr.
+Unit* IronAssemblyUnheldMemberToTaunt(PlayerbotAI* botAI, Player* bot);
+
+// How long until an empowered Steelbreaker's Fusion Punch lands on this tank, 0 when none is coming. A 3s
+// cast, 35,000 nature plus a DoT in 25-man, and each Electrical Charge adds 25%: 67k raw traced at two.
+uint32 IronAssemblyFusionPunchIncomingMs(PlayerbotAI* botAI, Player* bot);
+
+// Nature resistance: everything this fight hits with is nature. One hunter holds Aspect of the Wild while
+// the encounter is in progress, both modes.
+uint8 IronAssemblyResistWantedSchools(PlayerbotAI* botAI, uint8 previous);
+inline constexpr RaidResistAuraConfig ULD_IRON_ASSEMBLY_RESIST_AURA{ULDUAR_MAP_ID, "ironassembly.aura",
+                                                                   &IronAssemblyResistWantedSchools, nullptr};
+bool IsIronAssemblyNatureHunter(PlayerbotAI* botAI);
+
+// Nature Resistance Totem is the same aura as Aspect of the Wild, so it only covers what the hunter's 30 yd
+// misses. A spare shaman drops it: one whose air totem another shaman bot already drops, or who drops none,
+// so the swap costs nothing while they stand together.
+Player* IronAssemblyNatureTotemShaman(PlayerbotAI* botAI);
+bool IsIronAssemblyNatureTotemShaman(PlayerbotAI* botAI);
+
+enum class IronAssemblyNatureTotemStep : uint8
+{
+    None,
+    SetButton,  // the multi-cast bar's air button, which Call of the Elements drops
+    Drop,
+};
+
+IronAssemblyNatureTotemStep IronAssemblyNatureTotemNext(PlayerbotAI* botAI);
+// Highest Nature Resistance Totem rank the bot knows, 0 for none.
+uint32 IronAssemblyNatureTotemSpell(Player* bot);
 
 // What this bot does about Overwhelming Power. Carrier: hold, run, parked, late (swap came too late to
 // walk out), nopartner. The other assigned tank: taunt once the carrier is inside SWAP_LEAD.

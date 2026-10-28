@@ -11,6 +11,8 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "EncounterHelpers.h"
+#include "RaidObs.h"
+#include "RaidTankDefensive.h"
 #include "ServerFacade.h"
 #include "UldData.h"
 #include "UldEncounter_IronAssembly.h"
@@ -326,6 +328,46 @@ bool IronAssemblyMeltdownRunOutAction::Execute(Event /*event*/)
     // its threat matching the taunter's after the taunt.
     return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true);
+}
+
+bool IronAssemblyFusionPunchDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const needMs = IronAssemblyFusionPunchIncomingMs(botAI, bot);
+    if (!needMs)
+        return false;
+
+    uint32 const defensive = NextMagicDefensive(botAI, bot, "ironassembly.punchdef", needMs);
+    return defensive && botAI->CastSpell(defensive, bot);
+}
+
+bool IronAssemblyNatureTotemAction::Execute(Event /*event*/)
+{
+    switch (IronAssemblyNatureTotemNext(botAI))
+    {
+        case IronAssemblyNatureTotemStep::SetButton:
+            return botAI->DoSpecificAction("set nature resistance totem", Event(), true);
+        case IronAssemblyNatureTotemStep::Drop:
+        {
+            // By id: the class action skips the cast while the bot still stands in an older totem's aura,
+            // which is exactly the totem this one replaces.
+            uint32 const totem = IronAssemblyNatureTotemSpell(bot);
+            return totem && botAI->CastSpell(totem, bot);
+        }
+        default:
+            return false;
+    }
+}
+
+bool IronAssemblyUnheldTauntAction::Execute(Event /*event*/)
+{
+    Unit* member = IronAssemblyUnheldMemberToTaunt(botAI, bot);
+    if (!member || !CastClassTaunt(botAI, member))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "ironassembly.unheld", RaidObs::DescribeAssignment(member->GetGUID()));
+
+    return true;
 }
 
 bool IronAssemblySetDpsPriorityAction::Execute(Event /*event*/)

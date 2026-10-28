@@ -3,7 +3,9 @@
 
 #include "EventMap.h"
 #include "GenericTriggers.h"
+#include "RaidResistAura.h"
 #include "Trigger.h"
+#include "UldEncounter_IronAssembly.h"
 
 // Iron Assembly
 
@@ -117,6 +119,46 @@ public:
     static constexpr char const* Name = "iron assembly meltdown run out trigger";
 
     IronAssemblyMeltdownRunOutTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+// Empowered Steelbreaker is casting Fusion Punch at this tank and it has a magic defensive for it.
+class IronAssemblyFusionPunchDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "iron assembly fusion punch defensive trigger";
+
+    IronAssemblyFusionPunchDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IronAssemblyNatureAspectTrigger : public RaidResistAuraTrigger
+{
+public:
+    static constexpr char const* Name = "iron assembly nature aspect trigger";
+
+    IronAssemblyNatureAspectTrigger(PlayerbotAI* botAI)
+        : RaidResistAuraTrigger(botAI, Name, ULD_IRON_ASSEMBLY_RESIST_AURA)
+    {
+    }
+};
+
+// The totem shaman's air button or totem isn't Nature Resistance, or it walked away from the totem.
+class IronAssemblyNatureTotemTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "iron assembly nature totem trigger";
+
+    IronAssemblyNatureTotemTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IronAssemblyUnheldTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "iron assembly unheld taunt trigger";
+
+    IronAssemblyUnheldTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

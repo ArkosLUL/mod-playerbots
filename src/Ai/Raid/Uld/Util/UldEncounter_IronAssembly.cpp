@@ -10,16 +10,20 @@
 #include "Creature.h"
 #include "Group.h"
 #include "Map.h"
+#include "ObjectAccessor.h"
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidEncounter.h"
 #include "RaidInstanceState.h"
 #include "EncounterHelpers.h"
 #include "RtiTargetValue.h"
 #include "Spell.h"
 #include "SpellAuras.h"
 #include "Timer.h"
+#include "TotemsShamanStrategy.h"
+#include "UldEncounterGate.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "UldTargets.h"
@@ -31,6 +35,8 @@
 #include <cstdio>
 #include <list>
 #include <set>
+#include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -63,6 +69,11 @@ struct IronAssemblyEncounterState
     // Carriers that started the walk to the Meltdown point. Latched so one slowed or detoured mid-walk
     // doesn't turn "late" and stop halfway, which is the worst place to blow up.
     RaidObs::ObsGuidSet meltdownRunners{"ironassembly.meltdownrun"};
+
+    // The shaman dropping Nature Resistance Totem. Latched until it dies or leaves, so the duty never
+    // trades back and forth between two spares.
+    RaidObs::ObsValue<ObjectGuid> natureTotemShaman{"ironassembly.totem"};
+    uint32 natureTotemElectMs = 0;
 };
 
 // Keyed by instance, because trigger, action and multiplier each hold their own helper instance and
@@ -273,11 +284,17 @@ void EnsureIronAssemblySpreadSlot(PlayerbotAI* botAI, Player* bot)
     uint32 const instanceId = bot->GetInstanceId();
 
     std::unordered_set<ObjectGuid> present;
+    ObjectGuid natureHunter;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (IronAssemblyMemberCounts(member, instanceId) && IronAssemblyTakesRaidSpot(botAI, member))
-            present.insert(member->GetGUID());
+        if (!IronAssemblyMemberCounts(member, instanceId) || !IronAssemblyTakesRaidSpot(botAI, member))
+            continue;
+
+        present.insert(member->GetGUID());
+        if (PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member))
+            if (IsIronAssemblyNatureHunter(memberAI))
+                natureHunter = member->GetGUID();
     }
 
     for (auto itr = state.spreadSlots.begin(); itr != state.spreadSlots.end();)
@@ -290,9 +307,33 @@ void EnsureIronAssemblySpreadSlot(PlayerbotAI* botAI, Player* bot)
     for (auto const& assignment : state.spreadSlots)
         taken.insert(assignment.second);
 
+    // The two nature resistance sources sit across the ring. Their slots stay free while they're here,
+    // anyone takes them otherwise.
+    Player* totemShaman = IronAssemblyNatureTotemShaman(botAI);
+    ObjectGuid const natureTotem =
+        totemShaman && present.count(totemShaman->GetGUID()) ? totemShaman->GetGUID() : ObjectGuid::Empty;
+
+    auto const reservedFor = [&](uint8 slot)
+    {
+        if (slot == ULDUAR_IRON_ASSEMBLY_NATURE_HUNTER_SLOT)
+            return natureHunter;
+
+        return slot == ULDUAR_IRON_ASSEMBLY_NATURE_TOTEM_SLOT ? natureTotem : ObjectGuid::Empty;
+    };
+
+    for (uint8 slot : {ULDUAR_IRON_ASSEMBLY_NATURE_HUNTER_SLOT, ULDUAR_IRON_ASSEMBLY_NATURE_TOTEM_SLOT})
+    {
+        if (reservedFor(slot) == bot->GetGUID() && !taken.count(slot))
+        {
+            state.spreadSlots[bot->GetGUID()] = slot;
+            return;
+        }
+    }
+
     for (uint8 slot = 0; slot < ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS; ++slot)
     {
-        if (!taken.count(slot))
+        ObjectGuid const owner = reservedFor(slot);
+        if (!taken.count(slot) && (owner.IsEmpty() || owner == bot->GetGUID()))
         {
             state.spreadSlots[bot->GetGUID()] = slot;
             return;
@@ -664,6 +705,42 @@ Unit* IronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot)
     return boss;
 }
 
+Unit* IronAssemblyUnheldMemberToTaunt(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || !PlayerbotAI::IsTank(bot) || !IronAssemblyFormationActive(botAI))
+        return nullptr;
+
+    std::vector<Player*> tanks;
+    GatherIronAssemblyTanks(botAI, bot, tanks);
+    if (tanks.size() != 2 || tanks.front() != bot)
+        return nullptr;
+
+    IronAssemblyTargets targets;
+    GatherIronAssemblyTargets(botAI, targets);
+    if (targets.AliveCount() != 3)
+        return nullptr;
+
+    char const* how = nullptr;
+    Unit* const own = DeriveIronAssemblyAssignedBoss(botAI, tanks[0], how);
+    Unit* const partner = DeriveIronAssemblyAssignedBoss(botAI, tanks[1], how);
+
+    for (Unit* member : {targets.steelbreaker, targets.molgeim, targets.brundir})
+    {
+        if (member == own || member == partner)
+            continue;
+
+        // Off anyone in the group but a tank, pets included: a tank's pet holding it is still a loose boss.
+        Unit* const victim = member->GetVictim();
+        Player* const holder = victim ? victim->GetCharmerOrOwnerPlayerOrPlayerItself() : nullptr;
+        if (!holder || holder == bot || holder->GetGroup() != bot->GetGroup())
+            return nullptr;
+
+        return victim == holder && PlayerbotAI::IsTank(holder) ? nullptr : member;
+    }
+
+    return nullptr;
+}
+
 // The designed spot and the bearing it sits on. False for anything but a council member.
 static bool IronAssemblyDesignedTankSpot(Unit* boss, Position& spot, float& bearing)
 {
@@ -727,18 +804,59 @@ bool TryGetIronAssemblyBossTankSpot(PlayerbotAI* botAI, Unit* boss, Position& po
     if (!TryGetIronAssemblyBossRuneOfPower(botAI, boss, rune))
         return true;
 
-    // Back straight away from the rune. He re-chases once the tank leaves his melee range and stops at
-    // both reaches plus contact, so he ends OFFSET off the rune with it behind him, where melee can stand.
-    // Off the rune and the designed spot, both fixed, so the spot holds still while he walks.
+    // Back away from the rune. He re-chases once the tank leaves his melee range and stops at both reaches
+    // plus contact, so he ends OFFSET off the rune with it behind him, where melee can stand. Off the
+    // rune, the designed spot and the stack point, all fixed, so the spot holds still while he walks.
     float const dx = position.GetPositionX() - rune.GetPositionX();
     float const dy = position.GetPositionY() - rune.GetPositionY();
     float const away = dx * dx + dy * dy < 0.25f ? bearing : std::atan2(dy, dx);
     float const reach = ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_BOSS_OFFSET + boss->GetCombatReach() +
                         DEFAULT_COMBAT_REACH + CONTACT_DISTANCE;
 
-    // navprobe: every spot this can produce, out to 16.5 yd round each designed spot, is on the floor.
-    position = Position(rune.GetPositionX() + std::cos(away) * reach, rune.GetPositionY() + std::sin(away) * reach,
-                        position.GetPositionZ());
+    // Straight away can leave the casters behind: a rune on Brundir's own spot backed him out to 45 yd
+    // from the stack. So turn, + first, to the first heading where both ends of where he can stop sit in
+    // his window. A rune too far out or too near the stack for any: the heading that misses it least.
+    bool brundirLast = false;
+    Position const stack = IronAssemblyStackPoint(botAI, brundirLast);
+    float const minStack = boss->GetEntry() == NPC_BRUNDIR ? ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_BRUNDIR_MIN_STACK
+                                                           : ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_MELEE_MIN_STACK;
+    float const nearStop = ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_BOSS_OFFSET;
+    float const farStop = nearStop + ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_BOSS_OVERSHOOT;
+    auto const miss = [&](float heading)
+    {
+        float yards = 0.0f;
+        for (float off : {nearStop, farStop})
+        {
+            float const fromStack = stack.GetExactDist2d(rune.GetPositionX() + std::cos(heading) * off,
+                                                         rune.GetPositionY() + std::sin(heading) * off);
+            yards += std::max(minStack - fromStack, 0.0f) +
+                     std::max(fromStack - ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_MAX_STACK, 0.0f);
+        }
+
+        return yards;
+    };
+
+    float heading = away;
+    float best = miss(away);
+    float const quarter = static_cast<float>(M_PI) / 4.0f;
+    for (int8 turn : {1, -1, 2, -2, 3, -3, 4})
+    {
+        if (best <= 0.0f)
+            break;
+
+        float const candidate = away + quarter * turn;
+        float const yards = miss(candidate);
+        if (yards < best)
+        {
+            heading = candidate;
+            best = yards;
+        }
+    }
+
+    // navprobe: every tank spot and stop this yields, runes out to 14.5 yd round each designed spot on 8
+    // bearings, is on the floor.
+    position = Position(rune.GetPositionX() + std::cos(heading) * reach,
+                        rune.GetPositionY() + std::sin(heading) * reach, position.GetPositionZ());
     return true;
 }
 
@@ -996,6 +1114,22 @@ static bool TryGetIronAssemblySoakRune(PlayerbotAI* botAI, Position& rune)
     return found;
 }
 
+bool IronAssemblyTakesRuneOfPower(Player* bot)
+{
+    return bot && !PlayerbotAI::IsHeal(bot) && bot->getClass() != CLASS_HUNTER;
+}
+
+bool IronAssemblyOnRuneOfPower(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!IronAssemblyTakesRuneOfPower(bot) || !IronAssemblyTakesRaidSpot(botAI, bot) ||
+        !IronAssemblyFormationActive(botAI) || IsSteelbreakerEmpowered(botAI))
+        return false;
+
+    Position rune;
+    return TryGetIronAssemblySoakRune(botAI, rune);
+}
+
 static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position, float& tolerance,
                                        char const*& how)
 {
@@ -1016,7 +1150,7 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
         // Not in the spread phase: one Static Disruption on a stack is +75% nature taken for 20s, and
         // High Voltage is nature.
         Position rune;
-        if (TryGetIronAssemblySoakRune(botAI, rune))
+        if (IronAssemblyTakesRuneOfPower(bot) && TryGetIronAssemblySoakRune(botAI, rune))
         {
             how = "rune-power";
             position = rune;
@@ -1241,11 +1375,15 @@ static bool DeriveIronAssemblyMeleeRuneSpot(PlayerbotAI* botAI, Player* bot, Pos
         return false;
     }
 
-    spot = Position(rune.GetPositionX() + dx / offset * ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH,
-                    rune.GetPositionY() + dy / offset * ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH,
+    // Deeper when he stopped further off, so a boss that overshot his tank stays in reach. Half a yard
+    // inside the reach test below, or rounding fails a spot sitting right on it.
+    float const reach = bot->GetMeleeRange(focus) - 1.0f;
+    float const depth = std::clamp(offset - reach + 0.5f, ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH,
+                                   ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH_MAX);
+    spot = Position(rune.GetPositionX() + dx / offset * depth, rune.GetPositionY() + dy / offset * depth,
                     rune.GetPositionZ());
 
-    if (focus->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > bot->GetMeleeRange(focus) - 1.0f)
+    if (focus->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > reach)
     {
         how = "none:far";
         return false;
@@ -1609,6 +1747,158 @@ bool IronAssemblyHeldByOtherTank(Player* bot, Unit* boss)
     Unit* const victim = boss ? boss->GetVictim() : nullptr;
     Player* const holder = victim ? victim->ToPlayer() : nullptr;
     return holder && holder != bot && holder->GetGroup() == bot->GetGroup() && PlayerbotAI::IsTank(holder);
+}
+
+uint32 IronAssemblyFusionPunchIncomingMs(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || !PlayerbotAI::IsTank(bot) || !IronAssemblyFormationActive(botAI) ||
+        !IsSteelbreakerEmpowered(botAI))
+        return 0;
+
+    Unit* steelbreaker = GetIronAssemblyMember(botAI, NPC_STEELBREAKER);
+    Spell* punch = steelbreaker ? steelbreaker->GetCurrentSpell(CURRENT_GENERIC_SPELL) : nullptr;
+    if (!punch || punch->m_targets.GetUnitTarget() != bot)
+        return 0;
+
+    uint32 const spellId = punch->GetSpellInfo()->Id;
+    if (spellId != SPELL_FUSION_PUNCH_10_MAN && spellId != SPELL_FUSION_PUNCH_25_MAN)
+        return 0;
+
+    return static_cast<uint32>(std::max(punch->GetCastTimeRemaining(), 1));
+}
+
+uint8 IronAssemblyResistWantedSchools(PlayerbotAI* botAI, uint8 /*previous*/)
+{
+    // The boss state, not this bot's view of the hall: one read stands for the whole instance, and a bot
+    // running back from the graveyard must not take the hunter off it for everyone.
+    return BossStateGateLive(botAI, ULD_BOSS_ASSEMBLY) ? RAID_RESIST_NATURE : 0;
+}
+
+bool IsIronAssemblyNatureHunter(PlayerbotAI* botAI)
+{
+    return botAI && IsRaidResistHunterHolding(botAI, ULD_IRON_ASSEMBLY_RESIST_AURA);
+}
+
+uint32 IronAssemblyNatureTotemSpell(Player* bot)
+{
+    if (!bot)
+        return 0;
+
+    for (uint32 spellId : NATURE_RESISTANCE_TOTEM)
+        if (bot->HasSpell(spellId))
+            return spellId;
+
+    return 0;
+}
+
+// The air totem strategy a shaman bot runs, empty for none. Siblings, so a bot runs one at most.
+static std::string IronAssemblyAirTotemStrategy(PlayerbotAI* memberAI)
+{
+    static char const* const strategies[] = {"nature resistance", "wrath of air", "windfury", "grounding"};
+    for (char const* strategy : strategies)
+        if (memberAI->HasStrategy(strategy, BOT_STATE_COMBAT))
+            return strategy;
+
+    return "";
+}
+
+// Bots only: a human shaman's totems are its own business, so one never counts as the spare's twin.
+static Player* ElectIronAssemblyNatureTotemShaman(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    struct Shaman
+    {
+        Player* player;
+        std::string air;
+    };
+
+    std::vector<Shaman> shamans;
+    uint32 const instanceId = bot->GetInstanceId();
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        PlayerbotAI* memberAI = member ? GET_PLAYERBOT_AI(member) : nullptr;
+        if (memberAI && member->getClass() == CLASS_SHAMAN && IronAssemblyMemberCounts(member, instanceId) &&
+            IronAssemblyNatureTotemSpell(member))
+            shamans.push_back({member, IronAssemblyAirTotemStrategy(memberAI)});
+    }
+
+    // Already on it, then a ring slot holder, then guid.
+    auto const rank = [](Shaman const& shaman)
+    {
+        return std::make_tuple(shaman.air == "nature resistance" ? 0 : 1,
+                               PlayerbotAI::IsRanged(shaman.player) ? 0 : 1, shaman.player->GetGUID());
+    };
+
+    Shaman const* best = nullptr;
+    for (Shaman const& shaman : shamans)
+    {
+        bool spare = shaman.air.empty() || shaman.air == "nature resistance";
+        for (Shaman const& other : shamans)
+            if (&other != &shaman && other.air == shaman.air)
+                spare = true;
+
+        if (spare && (!best || rank(shaman) < rank(*best)))
+            best = &shaman;
+    }
+
+    return best ? best->player : nullptr;
+}
+
+Player* IronAssemblyNatureTotemShaman(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot)
+        return nullptr;
+
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
+    ObjectGuid const held = state.natureTotemShaman.Get();
+    Player* holder = held ? ObjectAccessor::FindPlayer(held) : nullptr;
+    if (holder && holder->GetGroup() == bot->GetGroup() && IronAssemblyMemberCounts(holder, bot->GetInstanceId()))
+        return holder;
+
+    // One election per instance per ms: every shaman asks each tick, and the hold rule per action.
+    if (FreshThisTick(state.natureTotemElectMs))
+        return nullptr;
+
+    holder = ElectIronAssemblyNatureTotemShaman(bot);
+    state.natureTotemShaman = holder ? holder->GetGUID() : ObjectGuid::Empty;
+    return holder;
+}
+
+bool IsIronAssemblyNatureTotemShaman(PlayerbotAI* botAI)
+{
+    // Class first: the hold rule asks this of every bot.
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    return bot && bot->getClass() == CLASS_SHAMAN && IronAssemblyFormationActive(botAI) &&
+           IronAssemblyNatureTotemShaman(botAI) == bot;
+}
+
+IronAssemblyNatureTotemStep IronAssemblyNatureTotemNext(PlayerbotAI* botAI)
+{
+    if (!IsIronAssemblyNatureTotemShaman(botAI))
+        return IronAssemblyNatureTotemStep::None;
+
+    Player* bot = botAI->GetBot();
+    uint32 const spellId = IronAssemblyNatureTotemSpell(bot);
+    if (!spellId)
+        return IronAssemblyNatureTotemStep::None;
+
+    ActionButton const* button = bot->GetActionButton(TOTEM_BAR_SLOT_AIR);
+    if (!button || button->GetType() != ACTION_BUTTON_SPELL || button->GetAction() != spellId)
+        return IronAssemblyNatureTotemStep::SetButton;
+
+    // Dropped where it stops, not on the way there.
+    if (bot->isMoving())
+        return IronAssemblyNatureTotemStep::None;
+
+    Creature* totem = bot->GetMap()->GetCreature(bot->m_SummonSlot[SUMMON_SLOT_TOTEM_AIR]);
+    bool const placed = totem && totem->GetUInt32Value(UNIT_CREATED_BY_SPELL) == spellId &&
+                        totem->GetDistance(bot) <= ULDUAR_IRON_ASSEMBLY_NATURE_TOTEM_REDROP;
+    return placed ? IronAssemblyNatureTotemStep::None : IronAssemblyNatureTotemStep::Drop;
 }
 
 bool IronAssemblyEncounterStateIsStale(PlayerbotAI* botAI)

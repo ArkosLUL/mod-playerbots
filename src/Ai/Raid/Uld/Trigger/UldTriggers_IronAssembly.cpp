@@ -6,6 +6,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
+#include "RaidTankDefensive.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
@@ -151,6 +152,22 @@ bool IronAssemblyRuneOfPowerMeleeTrigger::IsActive()
 bool IronAssemblyMeltdownRunOutTrigger::IsActive()
 {
     return IronAssemblyMeltdownRoleFor(botAI, bot) == IronAssemblyMeltdownRole::Run;
+}
+
+bool IronAssemblyFusionPunchDefensiveTrigger::IsActive()
+{
+    uint32 const needMs = IronAssemblyFusionPunchIncomingMs(botAI, bot);
+    return needMs && NextMagicDefensive(botAI, bot, nullptr, needMs);
+}
+
+bool IronAssemblyNatureTotemTrigger::IsActive()
+{
+    return IronAssemblyNatureTotemNext(botAI) != IronAssemblyNatureTotemStep::None;
+}
+
+bool IronAssemblyUnheldTauntTrigger::IsActive()
+{
+    return IronAssemblyUnheldMemberToTaunt(botAI, bot) != nullptr;
 }
 
 bool IronAssemblySetDpsPriorityTrigger::IsActive()

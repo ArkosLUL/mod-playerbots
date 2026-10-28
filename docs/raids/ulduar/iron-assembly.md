@@ -34,6 +34,20 @@ death without exception. A corpse is worth ~1.17M to him, so the phase is decide
 raid feeds him: traced, the raid takes him to **3.08% with all 25 alive** — only the tank dies, and
 only to the guaranteed instakill — then loses 22 people in 20s as the corpses heal him back to full.
 
+**Fusion Punch is a 3 s cast on his victim every 15–20 s** (35,000 nature + a DoT in 25-man, +25% per
+charge): at two charges it hit a full-health DK tank for 67k raw and the wipe followed. So in phase 3 a
+tank it is aimed at casts `NextMagicDefensive` for the remaining cast time (`ironassembly.punchdef`).
+
+**Everything here is nature**, both modes: High Voltage, Fusion Punch, Static Disruption, Meltdown,
+Brundir. One hunter holds Aspect of the Wild while the encounter is `IN_PROGRESS`, through the shared
+`RaidResistAura` (`ironassembly.aura`; an aspect hold keeps its own nodes off); traced, High Voltage
+resists rose from 13–16% to 24%. Nature Resistance Totem is the same exclusive aura (+130, 30 yd raid
+aura), so it only covers what the hunter misses — in phase 3 the far side of the ring, five players for
+~95% of it. A **spare** shaman bot drops it (no air totem, or one another shaman bot also drops; latched
+in `ironassembly.totem`), cast directly with a hold on its own air nodes and bar button, re-dropped
+once 10 yd off. In the spread phase the hunter takes slot 0 and the shaman slot 8, so every slot is
+within 31 yd of one of them. No spare, no totem.
+
 **Every ability is difficulty-mapped through `Unit::CastSpell`**, so each id is a 10/25 pair and
 callers test both (`UldEncounter_IronAssembly.h`). Two corrections to the written guides: Lightning Tendrils is
 **18 yd** (61886/63485), not the 10 of the 61884 dummy; and **Overwhelming Power (64637/61888) is
@@ -110,7 +124,9 @@ drift onto the only real threat on the floor anyway. So the assignment really de
 council parks**: Brundir's spot is 38 yd off the stack, the melee spots 11. Two traced pulls differed
 in nothing else — with the lone tank on Steelbreaker, 5 of 5 Overloads covered the stack and ranged
 stood within 10 yd of a boss 77% of the time; on Brundir, 0 of 4 and 11%. Guid ranking renumbers on a
-tank death, which is wanted: that is when someone must pick up Brundir.
+tank death, which is wanted: that is when someone must pick up Brundir. With two bot tanks the third
+member rides the threat table; when it lands on a non-tank (a dps held Molgeim 13–42 s in one pull,
+killed a paladin and stood in Brundir's rune), Brundir's tank taunts it back (`ironassembly.unheld`).
 
 **Hazards land on the stack point.** `DoCastRandomTarget` puts Rune of Death on a random member, so
 on a stacked raid it covers the stack — four of four in one traced pull, one exactly on it — and it
@@ -202,19 +218,28 @@ tank leaves that range, then stops at both reaches + 0.5.
   back in.
 - **The tank's answer is his spot, not a second node.** A separate drag-out at `MOVEMENT_COMBAT`
   traded the move slot with the tank spot: 339 flip-flops in one pull, a drag target receding a yard a
-  tick because it was recomputed from the bot's live position. The spot moves to `rune + u · (6.5 +
-  boss reach + 1.5 + 0.5)`, `u` from the rune toward the designed spot: fixed inputs, so it holds
-  still, and the boss ends **6.5 yd** off the rune facing the tank, rune behind him. navprobe: every
-  spot this yields (up to 16.5 yd round each designed spot) is on the floor.
-- **Melee** (non-tank, not `IsRanged`) step to `rune + 3 yd toward the focus`: 2 yd inside the edge,
-  3.5 from a parked boss, behind him so nothing parries. Only while that spot is in melee range − 1,
-  ≥ 21 from every Rune of Death, and Brundir isn't in Overload or Tendrils; held while within 4.5 of
-  the rune and in melee range.
-- **Ranged and healers**: the rune *is* the raid spot (`rune-power`), one mover rather than a soak
+  tick because it was recomputed from the bot's live position. The spot moves to `rune + u · (5.5 +
+  boss reach + 1.5 + 0.5)`: the boss ends **5.5 yd** off the rune facing the tank, rune behind him, or
+  up to 2 further when the tank left in one long step (Brundir stopped 1.6 from him, 8.4 off the rune).
+  `u` starts from the rune toward the designed spot (his bearing when they coincide), then turns ±45°
+  steps, + first, to the first heading whose stops at 5.5 and 7.5 sit **27–36 yd** from the stack point
+  for Brundir (Overload clearance; casters chased him at 39), **11–36** for the others; none fits, the
+  least miss. Straight out, a rune on Brundir's own spot put him 45 yd off and the ranged spent 60 s
+  walking toward him and back, at 0–1.6k dps. Fixed inputs, so it holds still. navprobe: all 209 tank
+  spots and stops for runes out to 14.5 yd round each designed spot on 8 bearings are on the floor.
+- **Melee** (non-tank, not `IsRanged`) step into the rune toward the focus, `clamp(d − (melee range −
+  1) + 0.5, 3, 4)` deep for a boss `d` off it: behind him so nothing parries, 1 yd inside the edge, in
+  reach of a boss that overshot. Only while that spot is in melee range − 1, ≥ 21 from every Rune of
+  Death, and Brundir isn't in Overload or Tendrils; held while within 4.5 of the rune and in melee range.
+- **Ranged dps but hunters**: the rune *is* the raid spot (`rune-power`), one mover rather than a soak
   node, when within 25 yd of the **opening** stack point (every rune on Steelbreaker or Molgeim, none
   on Brundir, 38 yd off in Overload range), ≥ 21 from every Rune of Death and outside a live Overload.
-  Deadband 2 / 4, both inside the rune. Never in the spread phase: one Static Disruption on a stack is
-  +75% nature taken for 20s, and High Voltage is nature.
+  Deadband 2 / 4, both inside the rune. Hunters can't shoot inside 5 yd of the hitbox and healers gain
+  nothing (64320 is damage only), so they keep the stack. The rune is inside `enemy too close for spell`
+  of Molgeim, so `iron assembly rune of power hold` blocks Flee, Run Away, Blink and Disengage there:
+  unheld, 12 of 14 traded flee and raid spot every 1.7 s and ranged dps halved (72k → 36k), while the one
+  with no flee node gained 39%. Never in the spread phase: one Static Disruption on a stack is +75%
+  nature taken for 20s, and High Voltage is nature.
 
 **Known-open:** Static Disruption starts at Steelbreaker's phase 2, which in hard mode is Molgeim's
 phase, while the raid stacks: 14 and 10 hits per cast in a 17 Oct wipe, 1 once spread.
@@ -296,7 +321,9 @@ suffix names the hazard that shifted the stack, a bare `spread` is the boss-cent
 `spread-rune` that ring squeezed off a rune, `rune-power` standing in a Rune of Power), `slot` (its
 index on the spread ring, assigned **once** per bot), `meleerune` (`in` / `walk`, or `none:` what
 stopped it), `meltdown` (a tank's swap role: `hold` / `nopartner` / `taunt` / `run` / `parked` /
-`late`), `meltdownrun` (the latched walkers), `nitro` (an event per boots use: `spread` / `meltdown`).
+`late`), `meltdownrun` (the latched walkers), `nitro` (an event per boots use: `spread` / `meltdown`),
+`aura` (a hunter's resistance duty), `totem` (the Nature Resistance shaman), `punchdef` (the defensive
+cast on Fusion Punch), `unheld` (a taunt-back, naming the member).
 Overload,
 Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
 spell radius and the clearance bots keep — equal for Meltdown, which nobody dodges. Rune of Death
