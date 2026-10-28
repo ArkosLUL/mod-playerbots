@@ -5,23 +5,29 @@
  */
 
 #include "ICCTriggers_Deathwhisper.h"
+
 #include "ICCHelpers_Deathwhisper.h"
 #include "Playerbots.h"
-#include "Trigger.h"
 
-bool IccDarkReckoningTrigger::IsActive()
+bool IccDarkReckoningTrigger::IsActive() { return LdwDarkReckoningDodging(botAI); }
+
+bool IccLadyDeathwhisperDodgeTrigger::IsActive() { return LdwDodgeKind(botAI) != LdwHazardKind::None; }
+
+bool IccLadyDeathwhisperFrostboltTrigger::IsActive() { return LdwIsFrostboltInterrupter(botAI); }
+
+bool IccLadyDeathwhisperDominateMindTrigger::IsActive()
 {
-    if (bot->HasAura(SPELL_DARK_RECKONING))
-        return true;
-
-    return false;
+    char const* spell = nullptr;
+    return LdwCcDuty(botAI, spell) != nullptr;
 }
 
-bool IccLadyDeathwhisperTrigger::IsActive()
+bool IccLadyDeathwhisperTauntTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "lady deathwhisper");
-    if (!boss)
-        return false;
+    return LdwLooseAddToTaunt(botAI) || LdwSwapTaunt(botAI);
+}
 
-    return true;
+bool IccLadyDeathwhisperRedirectTrigger::IsActive()
+{
+    uint8 const cls = bot->getClass();
+    return (cls == CLASS_HUNTER || cls == CLASS_ROGUE) && LdwRedirectTank(botAI);
 }

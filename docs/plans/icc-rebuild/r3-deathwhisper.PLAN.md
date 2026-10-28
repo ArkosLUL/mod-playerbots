@@ -66,14 +66,54 @@ this brief.
 
 ## Task list
 
+Done, one implementer (the work shares one helper per stem, so no split):
+
+1. Deathwhisper helpers (`Util/ICCHelpers_Deathwhisper.{h,cpp}`, new `.cpp`): per-instance scan of
+   adds, shades and Death and Decay; resolver by damage school, tanks by side; CC duty `ldw.cc`;
+   Frostbolt interrupt duty; normal taunt swap; redirect tank; hazard model; Dark Reckoning; lust
+   window; tick with the heroic buffs and reset.
+2. Deathwhisper triggers, actions, splash-hold multiplier and definition rewritten: one forced dodge,
+   rules instead of the old blanket veto, no icon writes, no flee vectors, no fixed positions.
+3. Giant helpers (`Util/ICCHelpers_FrostGiant.{h,cpp}`, new `.cpp`): pair duty `rfg.partner`; node
+   renamed `icc rotting frost giant plague`; the cheat and the commented-out block gone.
+4. Readers: `lady_deathwhisper.py` `--targets`, `--cc`, `--kicks`, `--dodges` (no `--skull`);
+   `rotting_frost_giant.py` `--partners`; tests for both.
+5. Boss docs with mechanics tables.
+
 ## Decisions for review
+
+| Choice | Source | Alternative |
+|---|---|---|
+| Tanks own a side each by her y (main tank the lower door) and meet the adds there, no stand at the torches | Warcraft Tavern 25 stands them at the torches to break casters' sight, which bots can't plan | navprobed torch stands |
+| No opening positions | The guides stand the raid behind her, inside her 23 yd aggro radius | a pre-pull stand that would pull her |
+| No phase 2 drag | Wowhead's heroic drag to each wave's side; the free tank takes the add instead | drag her between sides |
+| Kill order by school: physical on adherents, casters on fanatics, each skipping what it can't hurt; casters skip a shrouded adherent | instant-carry, the immunity auras 71234/71235, Shroud 70768 | one shared order |
+| Dominate Mind CC ranked Cyclone, Hammer of Justice, Hex, Polymorph, Repentance, Fear, Blind; tanks hold no duty | guides: Cyclone first, any CC works; the two that don't break first | Cyclone only |
+| Area damage held within 15 yd of a victim not under Cyclone | guides: stop cleaving | hold raid-wide for 12 s |
+| Normal swap at 3 Touch stacks, by a tank carrying none; heroic: both tanks keep hitting her, redirects onto her tank | Wowhead, Warcraft Tavern; script: heroic taunt immunity all fight (DB), DR flag on all four entries | swap at 5 stacks |
+| Generic tank taunts blocked during her fight | taunt DR on her; the encounter's own taunt takes loose adds | generic taunts on |
+| Lust held to phase 2 on every difficulty | Wowhead (heroic only) | normal free |
+| One forced dodge for pools, martyrdom, shade and heroic blast, at `ACTION_EMERGENCY + 6` | conventions 14, 19 | one node per hazard |
+| Dark Reckoning by hazard-clear spot; a marked tank or player stays and the rest clear it | old spot 106 yd from both priests against 56 yd of walk in 8 s | the fixed spot |
+| Giant pairs form round each carrier, cured partner first, never a tank | blog's pairs; script: a cured partner ends the chain | standing pairs |
+| Giant tank position dropped | used only by commented-out code, no guide basis | navprobe it |
 
 ## Carried over
 
-- From `r0a-restructure`: `Action/ICCActions_FrostGiant.cpp` keeps the comment "Rotting Giant WiP
-  (waiting for core fix)" and a commented-out `TODO` block, the only user of
-  `ICC_ROTTING_FROST_GIANT_TANK_POSITION`. Both break the no-nonsense-comments rule.
+- From `r0a-restructure`: the giant's "waiting for core fix" comment and `TODO` block. Done: both
+  removed with the position they used.
 
 ## Known gaps
+
+Also in the boss docs:
+
+- Deformed Fanatic face-tanked, not bounced or kited.
+- No DPS threat brake on heroic phase 2.
+- No Divine Shield to drop Touch stacks.
+- Deathchill Bolt and Curse of Torpor left to the generic interrupt and dispel nodes.
+- A shade victim slowed by Frostbolt Volley is slower than the shade.
+- The lust hook needs a `HookRows()` row (merge stage).
+- Giant: melee dodging a carrier lose uptime; a carrier with no possible partner dies.
+- No 631 trace on disk; nothing measured live.
 
 ## Blocked

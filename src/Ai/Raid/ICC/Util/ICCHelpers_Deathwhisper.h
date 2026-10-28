@@ -7,18 +7,120 @@
 #ifndef PLAYERBOTS_ICCHELPERS_DEATHWHISPER_H
 #define PLAYERBOTS_ICCHELPERS_DEATHWHISPER_H
 
+#include <vector>
+
+#include "EncounterHelpers.h"
 #include "ICCData.h"
 #include "Playerbots.h"
-#include <array>
+#include "RaidBurstWindow.h"
 
-inline const Position ICC_DARK_RECKONING_SAFE_POSITION = Position(-523.33386f, 2211.2031f, 62.823116f);
-inline const Position ICC_LDW_TANK_POSTION = Position(-593.7436f, 2211.298f, 49.476673f); //old closer to stairs -570.1f, 2211.2456f, 49.476616f
-inline const Position ICC_LDW_RANGED_POSITION = Position(-653.11096f, 2211.9568f,51.551437f); //old in frint of the boss (-607.0631f, 2212.2488f, 49.47009f)
+// Base ids. The Spell constructor remaps a cast per difficulty (rows 2123, 2133, 2187, 2188), so each
+// is matched through GetSpellIdForDifficulty at its call site.
+constexpr uint32 SPELL_LDW_DEATH_AND_DECAY = 71001;
+constexpr uint32 SPELL_LDW_FROSTBOLT = 71420;
+constexpr uint32 SPELL_LDW_DARK_MARTYRDOM_FANATIC = 71236;
+constexpr uint32 SPELL_LDW_DARK_MARTYRDOM_ADHERENT = 70903;
+// No difficulty row: one id on every difficulty.
+constexpr uint32 SPELL_LDW_DOMINATE_MIND = 71289;
+constexpr uint32 SPELL_LDW_SHROUD_OF_THE_OCCULT = 70768;
 
-// All fanatics and adherents entry ids Lady Deathwhisper
-static const std::array<uint32, 23> addEntriesLady    = {
-                                                        37949, 38394, 38625, 38626, 38010, 38397, 39000, 39001,
-                                                        38136, 38396, 38632, 38633, 37890, 38393, 38628, 38629,
-                                                        38135, 38395, 38634, 38009, 38398, 38630, 38631};
+// Base entries; GetEntry reports these on every difficulty.
+constexpr uint32 NPC_LADY_DEATHWHISPER = 36855;
+constexpr uint32 NPC_LDW_CULT_FANATIC = 37890;
+constexpr uint32 NPC_LDW_DEFORMED_FANATIC = 38135;
+constexpr uint32 NPC_LDW_REANIMATED_FANATIC = 38009;  // Fanatic's Determination: no physical damage
+constexpr uint32 NPC_LDW_CULT_ADHERENT = 37949;
+constexpr uint32 NPC_LDW_EMPOWERED_ADHERENT = 38136;
+constexpr uint32 NPC_LDW_REANIMATED_ADHERENT = 38010;  // Adherent's Determination: no magic damage
+
+// Death and Decay is an 8 yd dynobject, which adds the player's reach and its own 0.39 yd.
+constexpr float LDW_DND_REACH = 10.0f;
+// Dark Martyrdom and Dark Reckoning are creature area spells, measured centre to centre.
+constexpr float LDW_MARTYRDOM_REACH = 15.0f;
+constexpr float LDW_DARK_RECKONING_REACH = 15.0f;
+// Vengeful Blast on heroic hits everyone this far from the shade's victim, 10H then 25H.
+constexpr float LDW_BLAST_REACH_10H = 15.0f;
+constexpr float LDW_BLAST_REACH_25H = 20.0f;
+// A shade chases at 5.25 yd/s against a player's 7 and blows up on its first melee swing.
+constexpr float LDW_SHADE_TRIGGER = 12.0f;
+constexpr float LDW_SHADE_CLEAR = 16.0f;
+// Others only clear a heroic blast once the shade is this close to its victim.
+constexpr float LDW_BLAST_IMMINENT = 10.0f;
+// Park tolerance plus a margin, past each hazard's reach.
+constexpr float LDW_DODGE_MARGIN = 2.5f;
+constexpr float LDW_DODGE_SWEEP = 30.0f;
+
+// Touch of Insignificance stacks on the tank she holds before a normal-mode taunt swap.
+constexpr uint8 LDW_SWAP_STACKS = 3;
+constexpr float LDW_TAUNT_RANGE = 30.0f;
+
+enum class LdwHazardKind : uint8
+{
+    None,
+    DeathAndDecay,
+    Martyrdom,
+    Shade,
+    Blast,
+    DarkReckoning
+};
+
+struct LdwHazard
+{
+    Position pos;
+    float trigger;
+    float clear;
+    LdwHazardKind kind;
+};
+
+// Her, while her encounter is live and she is alive.
+Creature* LdwBoss(PlayerbotAI* botAI);
+// Mana Barrier holds: phase 1. Writes ldw.phase.
+bool LdwBarrierUp(Player* bot, Unit* boss);
+
+// The bot's pick: a player's skull, then the adds by the bot's damage school, then her. Tanks pick up
+// their side's adds while the barrier holds and her afterwards. Null for healers and outside the fight.
+// Writes ldw.target.
+Unit* LdwTarget(PlayerbotAI* botAI);
+// A tank's pick is an add a non-tank holds, in taunt range.
+Unit* LdwLooseAddToTaunt(PlayerbotAI* botAI);
+// Normal mode, phase 2: this tank takes her off a tank carrying LDW_SWAP_STACKS of Touch of
+// Insignificance while carrying none itself, the lowest guid of those that can.
+bool LdwSwapTaunt(PlayerbotAI* botAI);
+// Phase 2: the tank she is on, else the main tank.
+Player* LdwRedirectTank(PlayerbotAI* botAI);
+
+// Assigns each Dominate Mind victim not held by CC one bot caster, best spell first. Runs from the tick.
+void LdwUpdateCcDuties(PlayerbotAI* botAI);
+// The victim this bot holds the CC duty on, and the spell it casts. Null without a duty.
+Unit* LdwCcDuty(PlayerbotAI* botAI, char const*& spell);
+// A Dominate Mind victim takes damage within range of the bot or of its target.
+bool LdwVictimInSplash(PlayerbotAI* botAI, float range);
+
+// She casts Frostbolt and this bot is the lowest-guid one with an interrupt ready and in reach. Writes
+// ldw.interrupter.
+bool LdwIsFrostboltInterrupter(PlayerbotAI* botAI);
+// First interrupt the bot can land on her right now.
+char const* LdwReadyInterrupt(Player* bot, Unit* boss);
+
+// Every hazard this bot has to clear right now. The victim of a shade dodges the shade, the rest a
+// heroic blast around that victim.
+std::vector<LdwHazard> LdwHazardsFor(PlayerbotAI* botAI);
+// The hazard the bot stands inside the trigger of, None outside every one. Writes ldw.dodge.
+LdwHazardKind LdwDodgeKind(PlayerbotAI* botAI);
+// Inside some hazard's clearance, where a generic mover would walk the bot back in.
+bool LdwNearHazard(PlayerbotAI* botAI);
+
+// Dark Reckoning, on the Deathspeaker High Priests' trash: a marked bot clears every group member, and
+// everyone clears a marked tank or player, who stay put.
+std::vector<LdwHazard> LdwDarkReckoningHazards(PlayerbotAI* botAI);
+bool LdwDarkReckoningDodging(PlayerbotAI* botAI);
+
+// Lust waits for phase 2, when she can be hit and every bot is still alive.
+RaidBurstWindow IccDeathwhisperBurstWindow(PlayerbotAI* botAI);
+
+// Heroic buffs, the per-instance reset and the CC duties, from the definition's tick.
+void LdwTick(PlayerbotAI* botAI);
+
+inline bool LdwIsEmpty(Position const& pos) { return !pos.GetPositionX() && !pos.GetPositionY(); }
 
 #endif

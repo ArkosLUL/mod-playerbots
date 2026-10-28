@@ -7,34 +7,15 @@
 #ifndef PLAYERBOTS_ICCACTIONS_FROSTGIANT_H
 #define PLAYERBOTS_ICCACTIONS_FROSTGIANT_H
 
-#include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
-#include "ICCHelpers_FrostGiant.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
 
-class IccRottingFrostGiantTankPositionAction : public AttackAction
+// One of each pair walks to the other and stays; anyone else clean steps out of every carrier's reach.
+class IccRottingFrostGiantPlagueAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc rotting frost giant tank position";
+    static constexpr char const* Name = "icc rotting frost giant plague";
 
-    IccRottingFrostGiantTankPositionAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccRottingFrostGiantPlagueAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 

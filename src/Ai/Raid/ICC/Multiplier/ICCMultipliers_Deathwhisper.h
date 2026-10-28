@@ -9,6 +9,8 @@
 
 #include "Multiplier.h"
 
+// Holds area damage while a Dominate Mind victim not under Cyclone stands within reach of the bot or
+// of its target: the victim takes it like any enemy.
 class IccLadyDeathwhisperMultiplier : public Multiplier
 {
 public:
@@ -17,8 +19,7 @@ public:
 
 private:
     uint32 _checkedMs = 0;
-    bool _bossPresent = false;
-    bool _shadeOnBot = false;
+    bool _victimNear = false;
 };
 
 #endif

@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""Read a Rotting Frost Giant pull from a RaidObs trace: Death Plague on the raid, and the cheat strip.
+"""Read a Rotting Frost Giant pull from a RaidObs trace: Death Plague on the raid and the pairs it went to.
 
     rotting_frost_giant.py <file>           every section
-    rotting_frost_giant.py <file> --plague  each player's infections, doubles, cures and deaths carrying it
-    rotting_frost_giant.py <file> --cheats  this encounter's cheat uses
+    rotting_frost_giant.py <file> --plague    each player's infections, doubles, cures and deaths carrying it
+    rotting_frost_giant.py <file> --partners  each carrier's rfg.partner and how long it held
+    rotting_frost_giant.py <file> --cheats    this encounter's cheat uses
 
-The giant has no phase and no assignment to publish. The pull opens through `MarkPull` once a bot and
-the giant are both in combat. What the generic views miss here:
+The giant has no phase. The pull opens through `MarkPull` once a bot and the giant are both in combat.
+What the generic views miss here:
 
 - **A double is two Death Plagues from two casters.** The giant casts one on a random player without
   Recently Infected, whether or not it already carries one, and a spread one is cast by the carrier
   on its neighbour; auras from different casters stack, so both tick.
-- **With the raid cheat on, a bot's plague is stripped the tick it lands.** `rfg.deathplague` counts
-  those strips; an infection with a removal a few ms later is one of them, not a cure.
+- **`rfg.partner` pairs each carrier with the player it stands by when the plague ticks**, one with
+  Recently Infected first, so the plague stops there. `0` is the pair released: the carrier ticked,
+  died or the partner caught a plague of its own.
+- **`rfg.deathplague` is older builds' raid cheat**, a strip the tick the plague landed; an infection
+  with a removal a few ms later is one of those, not a cure.
 """
 from __future__ import annotations
 
@@ -25,12 +29,14 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of, prefix_matches_boss  # noqa: E402
+from raidobs.probes import holder_spans  # noqa: E402
 from raidobs.trace import Trace, cheat_uses, clock, combat_deaths  # noqa: E402
 
 SLUG = "rotting-frost-giant"
 NAME = "Rotting Frost Giant"
 SPELL_DEATH_PLAGUE = 72865
 SPELL_RECENTLY_INFECTED = 72884
+PARTNER = "rfg.partner"
 # A held aura is stamped removed at the death's own time.
 HELD_TO_DEATH_MS = 50
 DIFFICULTIES = {0: "10N", 1: "25N", 2: "10H", 3: "25H"}
@@ -72,6 +78,16 @@ def plague_rows(trace: Trace) -> dict[int, dict]:
     return dict(out)
 
 
+def pairings(trace: Trace) -> list[tuple[int, int, int, int]]:
+    """`(start, carrier, partner, stop)` per pair the encounter set, in start order."""
+    out = []
+    for carrier, spans in holder_spans(trace, PARTNER, pull_end(trace)).items():
+        for value, start, stop in spans:
+            if value.isdigit() and value != "0":
+                out.append((start, carrier, int(value), stop))
+    return sorted(out)
+
+
 def own_cheats(trace: Trace) -> list[tuple[str, dict]]:
     rows = [(key, entry) for key, entry in cheat_uses(trace).items()
             if prefix_matches_boss(key.partition(".")[0], SLUG)]
@@ -106,6 +122,18 @@ def show_plague(trace: Trace) -> None:
         print(f"  {who:<14}{row['infected']:>9}{row['doubles']:>9}{row['cured']:>7}{row['died']:>6}")
 
 
+def show_partners(trace: Trace) -> None:
+    print("PARTNERS")
+    if not mine(trace):
+        return
+    rows = pairings(trace)
+    if not rows:
+        print(f"  {PARTNER} never written")
+        return
+    for start, carrier, partner, stop in rows:
+        print(f"  {clock(start)}  {trace.name(carrier)} -> {trace.name(partner)}  for {clock(stop - start)}")
+
+
 def show_cheats(trace: Trace) -> None:
     print("CHEATS")
     if not mine(trace):
@@ -120,6 +148,7 @@ def show_cheats(trace: Trace) -> None:
 
 SECTIONS = (
     ("plague", "each player's infections, doubles, cures and deaths carrying it", show_plague),
+    ("partners", "each carrier's rfg.partner and how long it held", show_partners),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 
