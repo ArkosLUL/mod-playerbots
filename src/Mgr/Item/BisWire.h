@@ -29,7 +29,7 @@ constexpr uint8_t SIM_SLOT_COUNT = 17;
 // Sim slot -> AC EQUIPMENT_SLOT
 constexpr std::array<uint8_t, SIM_SLOT_COUNT> EQUIP_SLOT = {0, 1, 2, 14, 4, 8, 9, 5, 6, 7, 10, 11, 12, 13, 15, 16, 17};
 
-// Same values as BisSpecTab in BisListMgr.h, which this header can't include.
+// Same values as the BIS_TAB_* sentinels in BisListMgr.h, which this header can't include.
 constexpr uint8_t TAB_FERAL_TANK = 10;
 constexpr uint8_t TAB_BLOOD_TANK = 11;
 constexpr uint8_t TAB_FURY_PROT = 12;

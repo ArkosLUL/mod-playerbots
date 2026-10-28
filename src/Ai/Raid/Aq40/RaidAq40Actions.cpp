@@ -44,7 +44,7 @@
 //     return false;
 // }
 
-bool Aq40MeleeViscidusAction::Execute(Event event)
+bool Aq40MeleeViscidusAction::Execute(Event /*event*/)
 {
     if (Unit* boss = AI_VALUE2(Unit*, "find target", "viscidus"))
     {
@@ -203,7 +203,7 @@ bool Aq40MeleeViscidusAction::Execute(Event event)
 //     return false;
 // }
 
-bool Aq40OuroBurrowedFleeAction::Execute(Event event)
+bool Aq40OuroBurrowedFleeAction::Execute(Event /*event*/)
 {
     bool doFlee = false;
 
@@ -309,7 +309,7 @@ int Aq40Cthun1PositionAction::GetNearestPoint(int excludeouter, bool doinner)
     return retVal;
 }
 
-bool Aq40Cthun1PositionAction::Execute(Event event)
+bool Aq40Cthun1PositionAction::Execute(Event /*event*/)
 {
     // boss_cthun.cpp
     const int SPELL_GREEN_BEAM                            = 26134;
@@ -433,7 +433,7 @@ bool Aq40Cthun1PositionAction::Execute(Event event)
     return false;
 }
 
-bool Aq40Cthun2PositionAction::Execute(Event event)
+bool Aq40Cthun2PositionAction::Execute(Event /*event*/)
 {
     // boss_cthun.cpp
     const int NPC_TRIGGER                                 = 15384;
@@ -442,7 +442,6 @@ bool Aq40Cthun2PositionAction::Execute(Event event)
     const int SPELL_DIGESTIVE_ACID                        = 26476;
 
     // Areatriggers
-    const int SPELL_SPIT_OUT                              = 25383;
     const int SPELL_EXIT_STOMACH                          = 26221;
     const int SPELL_RUBBLE_ROCKY                          = 26271;
 
@@ -554,8 +553,8 @@ bool Aq40Cthun2PositionAction::Execute(Event event)
             }
             else
             {
-                int auraStack = bot->GetAuraCount(SPELL_DIGESTIVE_ACID);
-                int auraDamage = (auraStack + (auraStack + 1) + (auraStack + 2)) * 150; // 150 per stack, 5 second tick
+                uint32 auraStack = bot->GetAuraCount(SPELL_DIGESTIVE_ACID);
+                uint32 auraDamage = (auraStack + (auraStack + 1) + (auraStack + 2)) * 150; // 150 per stack, 5 second tick
 
                 if (auraDamage >= bot->GetHealth())
                 {

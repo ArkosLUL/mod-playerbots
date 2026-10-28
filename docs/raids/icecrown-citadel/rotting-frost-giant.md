@@ -57,7 +57,7 @@ Replaced: `rfg.deathplague`, the strip of every bot's plague, by the pair duty.
   s, and a pair that walked out loses two players' damage for as long.
 - A carrier finds no partner when every other player carries the plague, and dies at its tick.
 - A spot may lie across the giant's cone or a hazard; only the spot, not the walk, is tested.
-- No trace from this build yet, never built, no `-Werror` pass.
+- No trace from this build yet, never built.
 
 ## What a trace answers
 

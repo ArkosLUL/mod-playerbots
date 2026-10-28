@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <limits>
 
-bool SapphironGroundPositionAction::Execute(Event event)
+bool SapphironGroundPositionAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -104,7 +104,7 @@ bool SapphironGroundPositionAction::Execute(Event event)
     return false;
 }
 
-bool SapphironFlightPositionAction::Execute(Event event)
+bool SapphironFlightPositionAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {

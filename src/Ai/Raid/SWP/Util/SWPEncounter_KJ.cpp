@@ -372,7 +372,6 @@ void EnsureKiljaedenRangedArmageddonAssignments(Player* bot)
     auto const& armageddons = armageddonItr->second.armageddons;
     auto const& canonicalAssignments = canonicalItr->second.rangedAssignments;
 
-    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     std::vector<KiljaedenRangedBotAssignment> rangedBots;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {

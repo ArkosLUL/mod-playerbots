@@ -10,7 +10,7 @@
 
 using namespace EncounterHelpers;
 
-bool HorsemanAttractAlternativelyAction::Execute(Event event)
+bool HorsemanAttractAlternativelyAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -70,7 +70,7 @@ Player* FourhorsemanRedirectThreatAction::GetRedirectTank()
 
 Unit* FourhorsemanRedirectThreatAction::GetThreatDumpTarget() { return GetAssignment().second; }
 
-bool HorsemanAttactInOrderAction::Execute(Event event)
+bool HorsemanAttactInOrderAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {

@@ -183,7 +183,7 @@ bool InsideChamber(WorldObject const* object)
            object->GetPositionZ() <= ROOM_MAX_Z;
 }
 
-Player* GetOffTank(PlayerbotAI* botAI, Player* bot)
+Player* GetOffTank(PlayerbotAI* /*botAI*/, Player* bot)
 {
     return GetGroupAssistTank(bot, 0);
 }

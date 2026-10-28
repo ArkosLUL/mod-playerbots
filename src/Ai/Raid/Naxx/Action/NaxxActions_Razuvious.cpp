@@ -149,7 +149,7 @@ bool RazuviousUseObedienceCrystalAction::Execute(Event /*event*/)
     return false;
 }
 
-bool RazuviousTargetAction::Execute(Event event)
+bool RazuviousTargetAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {

@@ -39,7 +39,7 @@ bool CastArcaneShotAction::isUseful()
 
     // Arcane Shot is magic damage, so armor penetration does nothing for it - past ~435 rating the
     // physical fillers out-damage it.
-    int32 armorPenRating = bot->GetUInt32Value(PLAYER_FIELD_COMBAT_RATING_1 + CR_ARMOR_PENETRATION);
+    int32 armorPenRating = bot->GetUInt32Value(PLAYER_FIELD_COMBAT_RATING_1 + static_cast<uint16>(CR_ARMOR_PENETRATION));
     if (armorPenRating > 435)
         return false;
 

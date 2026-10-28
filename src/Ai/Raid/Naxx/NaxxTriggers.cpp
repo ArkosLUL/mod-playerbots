@@ -443,7 +443,6 @@ bool MaexxnaWebWrapTrigger::IsActive()
     }
 
     // Or if the cocoon NPC exists in our target list.
-    static constexpr uint32 MaexxnaWebWrapEntry = 16486;
     GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
     for (ObjectGuid const& guid : targets)
     {

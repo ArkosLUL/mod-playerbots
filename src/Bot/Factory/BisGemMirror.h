@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <numeric>
 #include <vector>
 
 // std only, so tools/nativetest can build it
@@ -60,18 +61,26 @@ public:
         if (found == _byColor.end())
             return {};
 
-        std::vector<Entry> entries = found->second;
-        std::stable_sort(entries.begin(), entries.end(), [](Entry const& a, Entry const& b)
+        // Sorts indexes rather than a copy of the entries: g++ 13 at -O3 reports a false
+        // -Wfree-nonheap-object on the copy, which fails upstream CI's -Werror build.
+        std::vector<Entry> const& entries = found->second;
+        std::vector<std::size_t> order(entries.size());
+        std::iota(order.begin(), order.end(), std::size_t{0});
+        std::sort(order.begin(), order.end(), [&entries](std::size_t a, std::size_t b)
         {
-            if (a.limited != b.limited)
-                return a.limited;
+            if (entries[a].limited != entries[b].limited)
+                return entries[a].limited;
 
-            return a.count > b.count;
+            if (entries[a].count != entries[b].count)
+                return entries[a].count > entries[b].count;
+
+            return a < b;
         });
 
         std::vector<uint32_t> gems;
-        for (Entry const& entry : entries)
-            gems.push_back(entry.gem);
+        gems.reserve(order.size());
+        for (std::size_t i : order)
+            gems.push_back(entries[i].gem);
 
         return gems;
     }

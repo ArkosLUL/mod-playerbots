@@ -743,13 +743,11 @@ None of these fail to compile when reverted, so a merge that takes upstream's si
   rupture 24.0.
 - **`fear ward on main tank` is registered at `ACTION_HIGH + 0.7f` (20.7)**, not upstream's 23.0, which
   puts it below the whole Discipline ladder deliberately.
-- **CI builds with `-Werror`** (the module's `.github/workflows` CXXFLAGS), and Custom-only code
-  carries warnings — mostly `-Wunused-parameter` on `Execute(Event event)` overrides and on free
-  helpers taking an unused `PlayerbotAI* botAI`. CI jobs go red on the first upstream PR until they
-  are cleared. `NaxxGetRoleGroups` (`NaxxBossHelper.h`) is one, so every TU including it fails,
-  `BuildShared{Action,Trigger}Contexts.cpp` among them. The syntax check hides warnings on passing
-  TUs; a `-Wall -Wextra -Werror` pass can reuse the build image's `compile_commands.json` only with
-  `clang++`, since that build is clang (`-Xclang` flags).
+- **CI builds with `-Werror`** (the module's `.github/workflows` CXXFLAGS) on clang 18, g++ 13 and
+  Ubuntu 26.04's g++, plus Apple clang and MSVC `-WX`. `pb-check` runs the first two jobs' flags
+  (clang++ syntax-only, g++ `-O3` codegen, which alone reports flow warnings), so a warning fails
+  it; the newer g++, Apple clang and MSVC stay unchecked here. Unused parameters take the
+  `Execute(Event /*event*/)` form.
 - **`GatherStrategyTargetExclusions` keeps the fork's `candidates` argument**, and every caller
   passes the list it will filter. Upstream calls it without one; an empty list makes Ulduar's
   Yogg-Saron sweep return early and its Guardian exclusion drops.

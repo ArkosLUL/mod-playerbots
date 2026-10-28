@@ -136,15 +136,15 @@ RaidInstanceState<EggCache> eggCaches;
 template <typename T>
 struct TickCache
 {
-    PlayerbotAI* botAI = nullptr;
+    PlayerbotAI* owner = nullptr;
     uint32 atMs = 0;
     T value{};
 
-    bool Fresh(PlayerbotAI* botAI, uint32 now) const { return atMs && botAI == botAI && atMs == now; }
+    bool Fresh(PlayerbotAI* botAI, uint32 now) const { return atMs && owner == botAI && atMs == now; }
 
     T const& Store(PlayerbotAI* botAI, uint32 now, T result)
     {
-        botAI = botAI;
+        owner = botAI;
         atMs = now;
         value = result;
         return value;

@@ -14,7 +14,7 @@ using namespace EncounterHelpers;
 
 bool ThaddiusPrepullSplitAction::isUseful() { return helper.IsPrepullStagingUsable(); }
 
-bool ThaddiusPrepullSplitAction::Execute(Event event)
+bool ThaddiusPrepullSplitAction::Execute(Event /*event*/)
 {
     // Covers the measured-spot and slime-pit checks too: no usable spot means hold off entirely
     // rather than parking someone in the slime or starting the fight early.
@@ -59,7 +59,7 @@ bool ThaddiusAttackNearestPetAction::isUseful()
     return !IsDownOrFeigning(target);
 }
 
-bool ThaddiusAttackNearestPetAction::Execute(Event event)
+bool ThaddiusAttackNearestPetAction::Execute(Event /*event*/)
 {
     Unit* target = helper.GetAssignedPetForBot();
     if (IsDownOrFeigning(target))
@@ -155,7 +155,7 @@ Unit* ThaddiusRedirectThreatAction::GetThreatDumpTarget()
 
 bool ThaddiusMoveToPlatformAction::isUseful() { return true; }
 
-bool ThaddiusMoveToPlatformAction::Execute(Event event)
+bool ThaddiusMoveToPlatformAction::Execute(Event /*event*/)
 {
     std::vector<std::pair<float, float>> position = {
         // high left
@@ -205,7 +205,7 @@ bool ThaddiusMovePolarityAction::isUseful()
     return !PlayerbotAI::IsMainTank(bot) || AI_VALUE2(bool, "has aggro", "current target");
 }
 
-bool ThaddiusMovePolarityAction::Execute(Event event)
+bool ThaddiusMovePolarityAction::Execute(Event /*event*/)
 {
     std::vector<std::pair<float, float>> position = {
         // left melee

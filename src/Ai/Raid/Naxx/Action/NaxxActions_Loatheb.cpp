@@ -25,7 +25,7 @@ constexpr float kSporeRunnerNearRange = 15.0f;     // if runner is already near,
 
 uint8 GetCasterSideIndex(Player* bot)
 {
-    if (Group* group = bot->GetGroup())
+    if (bot->GetGroup())
     {
         return bot->GetSubGroup() % 2;
     }
@@ -331,7 +331,7 @@ void DoSafeInstantRangedHit(PlayerbotAI* botAI, Player* bot, Unit* target)
 }
 } // namespace
 
-bool LoathebPositionAction::Execute(Event event)
+bool LoathebPositionAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -430,7 +430,7 @@ bool LoathebPositionAction::Execute(Event event)
     return false;
 }
 
-bool LoathebChooseTargetAction::Execute(Event event)
+bool LoathebChooseTargetAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -513,7 +513,7 @@ bool LoathebChooseTargetAction::Execute(Event event)
         Player* sporeRunner = nullptr;
         if (!sporeRunnerGuid.IsEmpty())
         {
-            if (Group* group = bot->GetGroup())
+            if (bot->GetGroup())
             {
                 sporeRunner = ObjectAccessor::FindPlayer(sporeRunnerGuid);
                 if (sporeRunner && (bot->GetGUID() != sporeRunner->GetGUID() && bot->GetMapId() != sporeRunner->GetMapId()))

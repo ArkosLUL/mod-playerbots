@@ -60,7 +60,7 @@ struct NaxxRoleGroups
     std::vector<Player*> meleeDps;
 };
 
-inline NaxxRoleGroups NaxxGetRoleGroups(PlayerbotAI* botAI, Player* bot)
+inline NaxxRoleGroups NaxxGetRoleGroups(PlayerbotAI* /*botAI*/, Player* bot)
 {
     NaxxRoleGroups result;
     Group* group = bot ? bot->GetGroup() : nullptr;
@@ -94,7 +94,7 @@ inline NaxxRoleGroups NaxxGetRoleGroups(PlayerbotAI* botAI, Player* bot)
 }
 
 // {slot index, slots on this ring}. Count is never 0, so callers can divide by it.
-inline std::pair<size_t, size_t> NaxxGetSlotIndexAndCount(PlayerbotAI* botAI, Player* bot,
+inline std::pair<size_t, size_t> NaxxGetSlotIndexAndCount(PlayerbotAI* /*botAI*/, Player* bot,
                                                           NaxxRoleGroups const& groups)
 {
     std::vector<Player*> const& slots =

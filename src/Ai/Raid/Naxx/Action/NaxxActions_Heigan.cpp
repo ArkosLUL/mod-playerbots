@@ -36,7 +36,7 @@ bool HeiganDanceAction::MoveToPlatform()
                       MovementPriority::MOVEMENT_COMBAT);
 }
 
-bool HeiganDanceMeleeAction::Execute(Event event)
+bool HeiganDanceMeleeAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -66,7 +66,7 @@ bool HeiganDanceMeleeAction::Execute(Event event)
     return MoveToSafeZone(PlayerbotAI::IsMainTank(bot) ? MainTankSafeZoneSpread : SafeZoneSpread);
 }
 
-bool HeiganDanceRangedAction::Execute(Event event)
+bool HeiganDanceRangedAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -158,7 +158,7 @@ bool HeiganDispelDecrepitFeverAction::isUseful()
     return CanDispelDisease() && GetDecrepitFeverTarget();
 }
 
-bool HeiganDispelDecrepitFeverAction::Execute(Event event)
+bool HeiganDispelDecrepitFeverAction::Execute(Event /*event*/)
 {
     Unit* target = GetDecrepitFeverTarget();
     if (!target)

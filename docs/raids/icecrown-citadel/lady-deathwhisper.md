@@ -127,7 +127,7 @@ raid-wide strip takes the 1% Threat off once her fight ends ([README.md](README.
 - A defensive per unkicked Frostbolt, and the next one each time a button ends under a Deformed Fanatic,
   spends long cooldowns; tank health is unmeasured.
 - Darnavan is outside the kill order.
-- No trace from this build yet, never built, no `-Werror` pass.
+- No trace from this build yet, never built.
 
 ## What a trace answers
 

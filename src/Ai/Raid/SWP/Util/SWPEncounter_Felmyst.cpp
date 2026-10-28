@@ -1065,7 +1065,6 @@ bool TryGetFelmystFogOfCorruptionStageState(Unit* felmyst, FelmystFogOfCorruptio
     const FelmystFogLocation currentLocation = GetFelmystCurrentFogLocation(felmyst);
     const FelmystFogLocation destinationLocation = GetFelmystDestinationFogLocation(felmyst);
     const FelmystFogLane currentLane = GetFelmystFogLaneFromLocation(currentLocation);
-    const FelmystFogLane destinationLane = GetFelmystFogLaneFromLocation(destinationLocation);
 
     bool const isSweeping = felmyst->HasAura(
         static_cast<uint32>(SwpSpells::SPELL_FELMYST_SPEED_BURST));

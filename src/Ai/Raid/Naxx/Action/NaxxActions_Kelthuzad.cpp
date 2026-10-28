@@ -17,7 +17,7 @@
 
 using namespace EncounterHelpers;
 
-bool KelthuzadChooseTargetAction::Execute(Event event)
+bool KelthuzadChooseTargetAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -154,7 +154,7 @@ bool KelthuzadChooseTargetAction::Execute(Event event)
     return Attack(target, false);
 }
 
-bool KelthuzadPositionAction::Execute(Event event)
+bool KelthuzadPositionAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -382,7 +382,7 @@ bool KelthuzadPositionAction::Execute(Event event)
     return false;
 }
 
-bool KelthuzadFleeShadowFissureAction::Execute(Event event)
+bool KelthuzadFleeShadowFissureAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -417,7 +417,7 @@ bool KelthuzadFleeShadowFissureAction::Execute(Event event)
                   MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
-bool KelthuzadMisdirectBossToMainTankAction::Execute(Event event)
+bool KelthuzadMisdirectBossToMainTankAction::Execute(Event /*event*/)
 {
     if (bot->getClass() != CLASS_HUNTER)
     {

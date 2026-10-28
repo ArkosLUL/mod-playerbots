@@ -13,7 +13,7 @@
 
 using namespace EncounterHelpers;
 
-bool GluthChooseTargetAction::Execute(Event event)
+bool GluthChooseTargetAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -106,7 +106,7 @@ bool GluthChooseTargetAction::Execute(Event event)
     // return Attack(target);
 }
 
-bool GluthPositionAction::Execute(Event event)
+bool GluthPositionAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -195,17 +195,12 @@ bool GluthPositionAction::Execute(Event event)
     return false;
 }
 
-bool GluthSlowdownAction::Execute(Event event)
+bool GluthSlowdownAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
         return false;
     }
-    bool raid25 = IsRaid25Man(bot);
-    // if (!raid25)
-    // {
-    //     return false;
-    // }
     if (helper.JustStartCombat())
     {
         return false;
@@ -252,7 +247,7 @@ Player* GluthRedirectThreatAction::GetRedirectTank() { return GetAssignment().fi
 
 Unit* GluthRedirectThreatAction::GetThreatDumpTarget() { return GetAssignment().second; }
 
-bool GluthTranquilizingShotAction::Execute(Event event)
+bool GluthTranquilizingShotAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {

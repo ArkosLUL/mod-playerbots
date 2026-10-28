@@ -568,7 +568,7 @@ std::string StatsWeightCalculator::DescribeWeights()
     }
 }
 
-void StatsWeightCalculator::GenerateBasicWeights(Player* player)
+void StatsWeightCalculator::GenerateBasicWeights(Player* /*player*/)
 {
     // The talent tab alone picks the wrong table for a Blood DK that isn't tanking, a Frost or Unholy
     // DK that is, and a Holy or Discipline priest doing damage (Smite).
@@ -1303,7 +1303,7 @@ float StatsWeightCalculator::ExpertiseRoom(Player* player) const
 {
     // already includes the rating part (Player::UpdateExpertise)
     float const expertise_current = player->GetUInt32Value(PLAYER_EXPERTISE);
-    return (EXPERTISE_OVERFLOW - expertise_current) / player->GetRatingMultiplier(CR_EXPERTISE);
+    return (static_cast<float>(EXPERTISE_OVERFLOW) - expertise_current) / player->GetRatingMultiplier(CR_EXPERTISE);
 }
 
 void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
@@ -1374,7 +1374,7 @@ void StatsWeightCalculator::ApplyWeightFinetune(Player* player)
     // missing, so the last gem before the cap is only worth the part that counts.
     // Bears are exempt: Survival of the Fittest grants crit immunity, so they never chase the cap.
     if (enable_cap_priority_ && (type_ & CollectorType::MELEE_TANK) && cls != CLASS_DRUID &&
-        player->GetRatingBonusValue(CR_DEFENSE_SKILL) < DEFENSE_OVERFLOW)
+        player->GetRatingBonusValue(CR_DEFENSE_SKILL) < static_cast<float>(DEFENSE_OVERFLOW))
     {
         stats_weights_[STATS_TYPE_DEFENSE] = std::max(stats_weights_[STATS_TYPE_DEFENSE], DEFENSE_UNDERCAP_WEIGHT);
     }

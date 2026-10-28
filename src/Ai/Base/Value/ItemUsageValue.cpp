@@ -2438,9 +2438,6 @@ static inline bool IsLikelyDisenchantable(ItemTemplate const* proto)
     if (proto->DisenchantID > 0)
         return true;
 
-    if (proto->DisenchantID < 0)
-        return false;
-
     if (proto->Class != ITEM_CLASS_ARMOR && proto->Class != ITEM_CLASS_WEAPON)
         return false;
 
@@ -2726,7 +2723,7 @@ static RollVote FinalizeRollVote(RollVote vote, ItemTemplate const* proto, ItemU
     return vote;
 }
 
-static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage)
+static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, int32 /*randomProperty*/, ItemUsage usage)
 {
     // Player mimic: upgrade => NEED; useful => GREED; otherwise => PASS
     RollVote vote = PASS;
@@ -2742,7 +2739,6 @@ static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, in
     bool recipeChecked = false;
     bool recipeNeed = false;
     bool recipeUseful = false;
-    bool recipeKnown = false;
 
     // Professions: NEED on useful recipes/patterns/books when enabled.
     if (sPlayerbotAIConfig.NeedOnProfessionRecipes && IsRecipeItem(proto))
@@ -2750,8 +2746,6 @@ static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, in
         RecipeInfo const recipe = BuildRecipeInfo(bot, proto);
 
         recipeChecked = true;
-        recipeKnown = recipe.known;
-
         recipeUseful = IsProfessionRecipeUsefulForBot(recipe);
         if (recipeUseful)
         {

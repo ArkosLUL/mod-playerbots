@@ -29,7 +29,7 @@ constexpr std::array<std::string_view, STAT_COUNT> STAT_NAMES = {
     "SPELL_POWER", "SPELL_PENETRATION", "HEAL_POWER", "MANA_REGENERATION", "ATTACK_POWER",
     "ARMOR_PENETRATION", "EXPERTISE", "MELEE_DPS", "RANGED_DPS", "BONUS"};
 
-// Smite priests have no talent tab of their own. Mustn't collide with BisSpecTab's sentinels.
+// Smite priests have no talent tab of their own. Mustn't collide with the BIS_TAB_* sentinels.
 constexpr uint8_t TAB_PRIEST_SMITE = 13;
 
 constexpr uint8_t PHASE_MAX = 5;

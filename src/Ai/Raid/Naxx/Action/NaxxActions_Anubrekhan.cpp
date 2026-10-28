@@ -65,7 +65,7 @@ void ClampToRoom(float& x, float& y)
 }
 } // namespace
 
-bool AnubrekhanChooseTargetAction::Execute(Event event)
+bool AnubrekhanChooseTargetAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -152,7 +152,7 @@ bool AnubrekhanChooseTargetAction::Execute(Event event)
     return Attack(target);
 }
 
-bool AnubrekhanPositionAction::Execute(Event event)
+bool AnubrekhanPositionAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {

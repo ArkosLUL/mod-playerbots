@@ -54,7 +54,7 @@ namespace
     };
 }  // namespace
 
-bool NothChooseTargetAction::Execute(Event event)
+bool NothChooseTargetAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -301,7 +301,7 @@ bool NothPositionAction::DragChampionToAddTank()
                          addTank->GetPositionY() + sin(angle) * AddTankHandoffDistance);
 }
 
-bool NothPositionAction::Execute(Event event)
+bool NothPositionAction::Execute(Event /*event*/)
 {
     if (!helper.UpdateBossAI())
     {
@@ -393,7 +393,7 @@ bool NothDispelCurseAction::isUseful()
     return GetAssignedTarget() != nullptr;
 }
 
-bool NothDispelCurseAction::Execute(Event event)
+bool NothDispelCurseAction::Execute(Event /*event*/)
 {
     Unit* target = GetAssignedTarget();
     if (!target)

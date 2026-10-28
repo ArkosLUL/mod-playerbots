@@ -7,7 +7,7 @@
 #include "NaxxActions.h"
 #include "Playerbots.h"
 
-bool GrobbulusGoBehindAction::Execute(Event event)
+bool GrobbulusGoBehindAction::Execute(Event /*event*/)
 {
     Unit* boss = AI_VALUE(Unit*, "boss target");
     if (!boss)
@@ -24,7 +24,7 @@ bool GrobbulusGoBehindAction::Execute(Event event)
     return MoveTo(bot->GetMapId(), rx, ry, z, false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
 }
 
-bool GrobbulusMoveAwayAction::Execute(Event event)
+bool GrobbulusMoveAwayAction::Execute(Event /*event*/)
 {
     Unit* boss = AI_VALUE(Unit*, "boss target");
     if (!boss)

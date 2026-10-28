@@ -1547,8 +1547,6 @@ uint32 RaidUnderExplosionLine(Player* bot, Group* group, Hit hit)
     return under;
 }
 
-uint32 RaidUnderExplosionLine(Player* bot, Group* group) { return RaidUnderExplosionLine(bot, group, CanStayOut); }
-
 // Phased members too: they are back long before a kill lands, and left out, the gate opened 1.6 s after a Big Bang
 // hit with the raid still drained by the void.
 bool RaidAffordsExplosion(Player* bot, Group* group) { return !RaidUnderExplosionLine(bot, group, InFight); }

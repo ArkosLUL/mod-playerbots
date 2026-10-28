@@ -201,7 +201,7 @@ bool OnThePlatform(Player* bot)
     return bot->GetMapId() == OS_MAP_ID && !HasTwilightShift(bot);
 }
 
-bool NeedsPlatformReturn(PlayerbotAI* botAI, Player* bot)
+bool NeedsPlatformReturn(PlayerbotAI* /*botAI*/, Player* bot)
 {
     // Not gated on OnThePlatform: that excludes shifted bots, and the Twilight Realm sits on the same
     // coordinates. A shifted bot cannot resolve Sartharion anyway, so the encounter gate covers it.
@@ -265,7 +265,7 @@ bool NeedsFissureDodge(Player* bot)
                              FISSURE_CLEAR_RADIUS, false) != nullptr;
 }
 
-Player* GetOffTank(PlayerbotAI* botAI, Player* bot)
+Player* GetOffTank(PlayerbotAI* /*botAI*/, Player* bot)
 {
     return GetGroupAssistTank(bot, 0);
 }

@@ -45,14 +45,12 @@ enum BisPhase : uint8
 // Highest phase index each expansion actually has rows for.
 constexpr uint8 BIS_MAX_PHASE[BIS_EXP_COUNT] = {6, 5, 5};
 
-// Sentinel tabs for the role splits a talent tab cannot express on its own.
-enum BisSpecTab : uint8
-{
-    BIS_TAB_DRUID_BEAR = 10,
-    BIS_TAB_DK_BLOOD_TANK = 11,
-    BIS_TAB_WARRIOR_FURY_PROT = 12,  // fury-specced tank: Vanilla lists, or the sim dataset's Fury-Prot spec
-    BIS_TAB_NONE = 0xFF
-};
+// Sentinel tabs for the role splits a talent tab cannot express on its own. Plain uint8, not an
+// enum: they share ternaries with real talent tabs, which g++ -Wextra rejects for an enum.
+constexpr uint8 BIS_TAB_DRUID_BEAR = 10;
+constexpr uint8 BIS_TAB_DK_BLOOD_TANK = 11;
+constexpr uint8 BIS_TAB_WARRIOR_FURY_PROT = 12;  // fury-specced tank: Vanilla lists, or the sim dataset's Fury-Prot spec
+constexpr uint8 BIS_TAB_NONE = 0xFF;
 
 // How far a bot has progressed, as a ceiling for list lookups. Lookups never cross expansions, so
 // the pair is compared as a unit and phases from different expansions are never ordered against

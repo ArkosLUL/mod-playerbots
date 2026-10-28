@@ -231,7 +231,6 @@ void EnsureBrutallusRangedAssignments(Player* bot)
         return true;
     };
 
-    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     std::vector<Player*> healers;
     std::vector<Player*> rangedDamage;
 

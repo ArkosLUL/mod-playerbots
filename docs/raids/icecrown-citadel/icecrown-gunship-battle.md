@@ -143,7 +143,7 @@ fall.
 
 ## Known gaps
 
-- No 631 trace yet; never built, so no `-Werror` pass either.
+- No 631 trace yet; never built.
 - No coordinate or line of sight is checked: the decks are gameobject floors (see Coordinates).
 - Personal burst cooldowns stay held on the freeze mage (see Defensives).
 - The defensive thresholds are guesses until a pull shows the stacks against the tank's health.

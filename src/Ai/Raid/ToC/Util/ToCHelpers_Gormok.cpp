@@ -125,7 +125,7 @@ bool IsCarryingSnobold(Player* bot)
     return false;
 }
 
-bool IsRangedDpsOrHealer(PlayerbotAI* botAI, Player* bot)
+bool IsRangedDpsOrHealer(PlayerbotAI* /*botAI*/, Player* bot)
 {
     return !IsBeastsTank(bot) && (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot));
 }
