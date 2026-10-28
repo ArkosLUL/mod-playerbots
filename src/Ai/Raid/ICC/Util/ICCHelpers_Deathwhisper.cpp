@@ -36,8 +36,8 @@ constexpr uint32 LDW_SCAN_MS = 200;
 constexpr uint32 LDW_CC_UPDATE_MS = 200;
 // A duty that has landed nothing this long goes to the next caster.
 constexpr uint32 LDW_CC_DUTY_TIMEOUT_MS = 4000;
-// A victim held this much longer needs no caster yet. Cyclone leaves its target immune to every spell,
-// so the next cast, 1.5 s at most, has to land just after it ends.
+// A victim held this much longer needs no caster yet, so a 1.5 s cast lands just after the hold ends.
+// Not under Cyclone: it makes the victim immune, and CanCastSpell refuses the recast until it fades.
 constexpr int32 LDW_CC_HELD_MS = 1000;
 constexpr float LDW_CC_WALK = 10.0f;
 constexpr float LDW_MELEE_INTERRUPT_RANGE = 5.0f;
@@ -276,7 +276,7 @@ bool HeldByTank(Unit* add)
     return victim && victim->IsPlayer() && IsTankPlayer(victim->ToPlayer());
 }
 
-// While the barrier holds each tank owns the adds on one side of her, the main tank the south door.
+// While the barrier holds each tank owns the adds on one side of her, the main tank the east door.
 // After it, the tank she is on keeps her and the others take any loose add.
 Unit* TankPick(Player* bot, Creature* boss, LdwState& state, Unit* current, char const*& why)
 {
@@ -429,6 +429,15 @@ float SpellRange(PlayerbotAI* memberAI, Player* member, Unit* victim, char const
     return info ? member->GetSpellMaxRangeForTarget(victim, info) : 0.0f;
 }
 
+// CanCastSpell passes SPELL_FAILED_NOT_SHAPESHIFT, but a direct cast in the wrong form fails: Cyclone
+// from cat form or Tree of Life, Hex from Ghost Wolf.
+bool CastableInForm(PlayerbotAI* memberAI, Player* member, char const* spell)
+{
+    uint32 const spellId = memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    return info && info->CheckShapeshift(member->GetShapeshiftForm()) == SPELL_CAST_OK;
+}
+
 // The member's best CC spell that it can cast at the victim now, range aside, with its rank.
 char const* ReadyCcSpell(Player* member, Unit* victim, size_t& rank)
 {
@@ -438,7 +447,8 @@ char const* ReadyCcSpell(Player* member, Unit* victim, size_t& rank)
 
     for (size_t i = 0; i < std::size(LDW_CC_SPELLS); ++i)
     {
-        if (LDW_CC_SPELLS[i].cls != member->getClass() || !memberAI->CanCastSpell(LDW_CC_SPELLS[i].name, victim))
+        if (LDW_CC_SPELLS[i].cls != member->getClass() || !CastableInForm(memberAI, member, LDW_CC_SPELLS[i].name) ||
+            !memberAI->CanCastSpell(LDW_CC_SPELLS[i].name, victim))
             continue;
 
         rank = i;
@@ -655,13 +665,18 @@ void LdwUpdateCcDuties(PlayerbotAI* botAI)
     };
 
     std::vector<ObjectGuid> released;
+    // Skipped below for this pass, or the best-ranked caster that timed out is picked straight back.
+    std::vector<ObjectGuid> timedOut;
     for (auto const& [caster, victimGuid] : state.ccDuty)
     {
         Player* holder = member(caster);
         auto const since = state.ccSince.find(caster);
         bool const stale = since == state.ccSince.end() || getMSTimeDiff(since->second, now) > LDW_CC_DUTY_TIMEOUT_MS;
-        if (!holder || IsDominated(holder) || !NeedsCc(member(victimGuid)) || stale)
+        Player* victim = member(victimGuid);
+        if (!holder || IsDominated(holder) || !NeedsCc(victim) || stale)
             released.push_back(caster);
+        if (stale && NeedsCc(victim))
+            timedOut.push_back(caster);
     }
 
     for (ObjectGuid const& caster : released)
@@ -691,7 +706,8 @@ void LdwUpdateCcDuties(PlayerbotAI* botAI)
         for (Player* caster : members)
         {
             if (caster == victim || !IsDutyBot(caster) || IsTankPlayer(caster) || IsDominated(caster) ||
-                state.ccDuty.count(caster->GetGUID()))
+                state.ccDuty.count(caster->GetGUID()) ||
+                std::find(timedOut.begin(), timedOut.end(), caster->GetGUID()) != timedOut.end())
                 continue;
 
             size_t rank = 0;
@@ -772,7 +788,8 @@ char const* LdwReadyInterrupt(Player* bot, Unit* boss)
     {
         uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", interrupt)->Get();
         SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-        if (!info || !CanPayFor(bot, info))
+        // A false ready here would hold every other kicker back from the election.
+        if (!info || !CanPayFor(bot, info) || info->CheckShapeshift(bot->GetShapeshiftForm()) != SPELL_CAST_OK)
             continue;
 
         float const range = bot->GetSpellMaxRangeForTarget(boss, info);

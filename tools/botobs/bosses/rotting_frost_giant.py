@@ -10,8 +10,8 @@ The giant has no phase. The pull opens through `MarkPull` once a bot and the gia
 What the generic views miss here:
 
 - **A double is two Death Plagues from two casters.** The giant casts one on a random player without
-  Recently Infected, whether or not it already carries one, and a spread one is cast by the carrier
-  on its neighbour; auras from different casters stack, so both tick.
+  Recently Infected, whether or not it already carries one, and a player the plague spreads to casts
+  its own; auras from different casters stack, so both tick.
 - **`rfg.partner` pairs each carrier with the player it stands by when the plague ticks**, one with
   Recently Infected first, so the plague stops there. `0` is the pair released: the carrier ticked,
   died or the partner caught a plague of its own.

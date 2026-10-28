@@ -39,7 +39,11 @@ bool IccRottingFrostGiantPlagueAction::Execute(Event /*event*/)
     if (carriers.empty())
         return false;
 
-    Position const spot = EncounterHelpers::FindNearestPositionClearOfHazards(bot, carriers, RFG_DODGE_SWEEP, nullptr);
+    // Without a preferred point the sweep takes a fixed compass heading, often away from the giant.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    Position const prefer = target ? target->GetPosition() : bot->GetPosition();
+    Position const spot = EncounterHelpers::FindNearestPositionClearOfHazards(
+        bot, carriers, RFG_DODGE_SWEEP, 2.0f, static_cast<float>(M_PI) / 8.0f, &prefer);
     if (!spot.GetPositionX() && !spot.GetPositionY())
         return false;
 

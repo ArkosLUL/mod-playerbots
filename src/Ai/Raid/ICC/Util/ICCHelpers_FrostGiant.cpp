@@ -30,6 +30,9 @@ RaidInstanceState<RfgState> sRfgState;
 
 bool IsTankPlayer(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 
+// A bot of its own: players and selfbots hold no duty.
+bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
+
 bool Carries(Unit* unit) { return unit->HasAura(SPELL_DEATH_PLAGUE); }
 
 bool Cured(Unit* unit) { return unit->HasAura(SPELL_RFG_RECENTLY_INFECTED); }
@@ -59,6 +62,15 @@ Player* Find(std::vector<Player*> const& members, ObjectGuid guid)
     auto const found = std::find_if(members.begin(), members.end(), [guid](Player* p) { return p->GetGUID() == guid; });
     return found == members.end() ? nullptr : *found;
 }
+
+struct CarrierMemo
+{
+    ObjectGuid bot;
+    uint32 ms = 0;
+    std::vector<EncounterHelpers::HazardCircle> hazards;
+};
+
+std::vector<EncounterHelpers::HazardCircle> BuildCarrierHazards(PlayerbotAI* botAI);
 }  // namespace
 
 Creature* RfgGiant(PlayerbotAI* botAI)
@@ -112,7 +124,8 @@ void RfgUpdatePartners(PlayerbotAI* botAI)
         Player* best = nullptr;
         for (Player* candidate : members)
         {
-            if (candidate == carrier || Carries(candidate) || IsTankPlayer(candidate))
+            if (candidate == carrier || Carries(candidate) || IsTankPlayer(candidate) ||
+                (IsTankPlayer(carrier) && !IsDutyBot(candidate)))
                 continue;
 
             bool taken = false;
@@ -158,11 +171,29 @@ Player* RfgPairWalk(PlayerbotAI* botAI)
     if (!mate || !mate->IsAlive() || !mate->IsInMap(bot))
         return nullptr;
 
-    // Only one of the pair walks: the carrier, unless it tanks.
-    return Carries(bot) || IsTankPlayer(mate) ? mate : nullptr;
+    // Only one of the pair walks: the carrier, unless it tanks or is a player.
+    return Carries(bot) || IsTankPlayer(mate) || !IsDutyBot(mate) ? mate : nullptr;
 }
 
 std::vector<EncounterHelpers::HazardCircle> RfgCarrierHazards(PlayerbotAI* botAI)
+{
+    // Per bot and ms: the movement rules ask for every movement action the bot weighs.
+    thread_local CarrierMemo memo;
+    Player* bot = botAI->GetBot();
+    uint32 const now = getMSTime();
+    if (memo.bot != bot->GetGUID() || memo.ms != now)
+    {
+        memo.bot = bot->GetGUID();
+        memo.ms = now;
+        memo.hazards = BuildCarrierHazards(botAI);
+    }
+
+    return memo.hazards;
+}
+
+namespace
+{
+std::vector<EncounterHelpers::HazardCircle> BuildCarrierHazards(PlayerbotAI* botAI)
 {
     std::vector<EncounterHelpers::HazardCircle> hazards;
     Player* bot = botAI->GetBot();
@@ -188,6 +219,7 @@ std::vector<EncounterHelpers::HazardCircle> RfgCarrierHazards(PlayerbotAI* botAI
 
     return hazards;
 }
+}  // namespace
 
 bool RfgPlagueDuty(PlayerbotAI* botAI)
 {
@@ -197,6 +229,16 @@ bool RfgPlagueDuty(PlayerbotAI* botAI)
     Player* bot = botAI->GetBot();
     for (EncounterHelpers::HazardCircle const& carrier : RfgCarrierHazards(botAI))
         if (bot->GetExactDist2d(carrier.first) < RFG_PLAGUE_REACH)
+            return true;
+
+    return false;
+}
+
+bool RfgNearCarrier(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    for (EncounterHelpers::HazardCircle const& carrier : RfgCarrierHazards(botAI))
+        if (bot->GetExactDist2d(carrier.first) < carrier.second)
             return true;
 
     return false;

@@ -13,6 +13,7 @@
 #include "ICCTriggers_FrostGiant.h"
 #include "Strategy.h"
 
+namespace Family = RaidEncounterRules::Family;
 namespace Role = RaidEncounterRules::Role;
 
 namespace
@@ -23,6 +24,9 @@ void DefineFrostGiant(EncounterBuilder& e)
 
     // A carrier stays by its partner until it ticks, and nothing walks a clean bot back into a carrier's reach.
     e.Exclusive("rotting frost giant plague", Role::Any, &RfgPlagueDuty, 0, {IccRottingFrostGiantPlagueAction::Name});
+    // Between the reach and the clearance, or reach and dodge take turns walking the bot in and out.
+    e.Block("rotting frost giant plague band", Role::Any, &RfgNearCarrier,
+            Family::Reach | Family::ReachHeal | Family::Follow | Family::CombatFormationMove | Family::Charge);
 
     e.Tick(&RfgTick);
 }
