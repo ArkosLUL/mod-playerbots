@@ -12,8 +12,9 @@
 What the generic views miss here:
 
 - **`lm.duty` and `lm.anchor` are the roster, rebuilt once a second while he is in progress.** A value
-  is the duty number (1 main tank, 2 off-tank, 3 inside him, 4 Coldflame bait) or the anchor slot (1-3
-  for 0, 120 and 240 degrees round the storm stack); `0` is a bot that lost it, dead or gone.
+  is the duty number (1 main tank, 2 off-tank, 3 inside him, 4 Coldflame bait) or the anchor slot (1 for
+  180 degrees round the storm stack, every tank's, 2 and 3 for 60 and 300); `0` is a bot that lost it,
+  dead or gone.
 - **`lm.stand` is the stand a bot holds, `none` while it holds none.** A melee or caster on a spike
   holds none, so reach can walk it; so does everyone while he walks between stands.
 - **`lm.spike` is the rule that picked, not what was hit.** `skull` a player's mark, `melee` a spike in
@@ -47,7 +48,7 @@ STAND = "lm.stand"
 SPIKE = "lm.spike"
 DODGE = "lm.dodge"
 DUTIES = {"1": "main tank", "2": "off-tank", "3": "inside", "4": "bait"}
-ANCHOR_SLOTS = {"1": "0", "2": "120", "3": "240"}
+ANCHOR_SLOTS = {"1": "180", "2": "60", "3": "300"}
 STORM_STANDS = ("anchor", "stack")
 DIFFICULTIES = {0: "10N", 1: "25N", 2: "10H", 3: "25H"}
 
@@ -81,9 +82,11 @@ def holders_at(trace: Trace, key: str, when: int) -> dict[int, str]:
     return out
 
 
-def anchors(trace: Trace, start: int, stop: int) -> dict[str, int]:
-    """`{slot: guid}` for the anchors assigned when the storm in `[start, stop)` began."""
-    return {ANCHOR_SLOTS.get(value, value): guid for guid, value in holders_at(trace, ANCHOR, start).items()}
+def anchors(trace: Trace, start: int, stop: int) -> dict[str, set[int]]:
+    """`{angle: guids}` in slot order for the anchors assigned when the storm in `[start, stop)` began."""
+    held = holders_at(trace, ANCHOR, start)
+    return {ANCHOR_SLOTS.get(value, value): {guid for guid, slot in held.items() if slot == value}
+            for value in sorted(set(held.values()))}
 
 
 def storm_stands(trace: Trace, start: int, stop: int) -> dict[str, set[int]]:
@@ -174,7 +177,7 @@ def show_storms(trace: Trace) -> None:
         return
     for index, (start, stop) in enumerate(spans, 1):
         slots = anchors(trace, start, stop)
-        drawn = ", ".join(f"{slot}: {trace.name(guid)}" for slot, guid in sorted(slots.items())) or "none"
+        drawn = "; ".join(f"{slot}: {names(trace, guids)}" for slot, guids in slots.items()) or "none"
         stood = storm_stands(trace, start, stop)
         print(f"  {index}  {clock(start)} for {clock(stop - start)}  anchors {drawn}")
         for stand in STORM_STANDS:

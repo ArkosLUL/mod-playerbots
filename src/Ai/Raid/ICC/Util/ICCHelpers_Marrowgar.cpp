@@ -12,6 +12,7 @@
 #include <list>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "CellImpl.h"
@@ -141,7 +142,7 @@ struct LmState
     uint32 rosterMs = 0;
     bool rosterBuilt = false;
     RaidObs::ObsGuidMap<uint8> duty{"lm.duty"};
-    // 1-3 for the anchor at 0, 120 or 240 degrees
+    // 1 for the anchor at 180 degrees, every tank's, 2 and 3 for 60 and 300
     RaidObs::ObsGuidMap<uint8> anchor{"lm.anchor"};
     std::vector<ObjectGuid> offTanks;
     std::vector<ObjectGuid> inner;
@@ -169,6 +170,8 @@ struct LmState
 };
 
 RaidInstanceState<LmState> lmStates;
+// Bots whose saved rti was checked this instance, so a player's later order sticks
+RaidInstanceState<std::unordered_set<ObjectGuid>> lmRtiChecked;
 
 LmState* LiveState(PlayerbotAI* botAI)
 {
@@ -256,6 +259,15 @@ Position Offset(Position const& origin, float angle, float distance)
                     origin.GetPositionY() + distance * std::sin(angle), origin.GetPositionZ());
 }
 
+// From the bearing away from the tank spot outwards, alternating sides in rank order
+Position BaitSlot(Position const& from, size_t index)
+{
+    int32 const rank = static_cast<int32>(index);
+    int32 const steps = (rank % 2 ? 1 : -1) * ((rank + 1) / 2);
+    float const bearing = ICC_LM_TANK_SPOT.GetAngle(&ICC_LM_BOSS_SPOT) + steps * LM_BAIT_SPACING_DEG * DEG;
+    return Offset(from, bearing, LM_BAIT_RADIUS);
+}
+
 int32 IndexOf(std::vector<ObjectGuid> const& guids, ObjectGuid guid)
 {
     auto const itr = std::find(guids.begin(), guids.end(), guid);
@@ -328,22 +340,39 @@ void RefreshRoster(LmState& state, Player* bot, uint32 now)
     auto const isBait = [&baits](Player* member)
     { return std::find(baits.begin(), baits.end(), member) != baits.end(); };
 
-    std::array<Player*, 3> anchors = {nullptr, nullptr, nullptr};
+    // Every tank takes the anchor by the tank spot, and an anchor no tank holds the bait whose ring slot
+    // is nearest it
+    std::unordered_map<ObjectGuid, uint8> slots;
     if (mainTank && GET_PLAYERBOT_AI(mainTank))
-        anchors[1] = mainTank;
-    if (!tanks.empty())
-        anchors[2] = tanks.front();
-    size_t nextBait = 0;
-    for (Player*& slot : anchors)
+        slots[mainTank->GetGUID()] = 1;
+    for (Player* tank : tanks)
+        slots[tank->GetGUID()] = 1;
+
+    bool const tanksAnchor = !slots.empty();
+    auto const anchorNearestBait = [&baits, &slots](Position const& anchor, uint8 slot)
     {
-        if (slot)
-            continue;
-        while (nextBait < baits.size() &&
-               std::find(anchors.begin(), anchors.end(), baits[nextBait]) != anchors.end())
-            ++nextBait;
-        if (nextBait < baits.size())
-            slot = baits[nextBait++];
-    }
+        Player* nearest = nullptr;
+        float nearestDistance = 0.0f;
+        for (size_t i = 0; i < baits.size(); ++i)
+        {
+            if (slots.count(baits[i]->GetGUID()))
+                continue;
+
+            float const distance = BaitSlot(ICC_LM_BOSS_SPOT, i).GetExactDist2d(anchor);
+            if (!nearest || distance < nearestDistance)
+            {
+                nearest = baits[i];
+                nearestDistance = distance;
+            }
+        }
+
+        if (nearest)
+            slots[nearest->GetGUID()] = slot;
+    };
+    anchorNearestBait(ICC_LM_STORM_ANCHOR_60, 2);
+    anchorNearestBait(ICC_LM_STORM_ANCHOR_300, 3);
+    if (!tanksAnchor)
+        anchorNearestBait(ICC_LM_STORM_ANCHOR_180, 1);
 
     state.offTanks.clear();
     state.inner.clear();
@@ -351,7 +380,6 @@ void RefreshRoster(LmState& state, Player* bot, uint32 now)
     state.stack.clear();
 
     std::unordered_map<ObjectGuid, uint8> duties;
-    std::unordered_map<ObjectGuid, uint8> slots;
     for (Player* member : bots)
     {
         ObjectGuid const guid = member->GetGUID();
@@ -369,10 +397,7 @@ void RefreshRoster(LmState& state, Player* bot, uint32 now)
         else if (duty == IccLmDuty::Inner)
             state.inner.push_back(guid);
 
-        auto const anchorItr = std::find(anchors.begin(), anchors.end(), member);
-        if (anchorItr != anchors.end())
-            slots[guid] = static_cast<uint8>(anchorItr - anchors.begin() + 1);
-        else
+        if (!slots.count(guid))
             state.stack.push_back(guid);
     }
     // Rank order, not guid order: bait slots fan out from the middle, so hunters take the centre ones
@@ -415,11 +440,11 @@ Position const& AnchorSpot(uint8 slot)
     switch (slot)
     {
         case 2:
-            return ICC_LM_STORM_ANCHOR_120;
+            return ICC_LM_STORM_ANCHOR_60;
         case 3:
-            return ICC_LM_STORM_ANCHOR_240;
+            return ICC_LM_STORM_ANCHOR_300;
         default:
-            return ICC_LM_STORM_ANCHOR_0;
+            return ICC_LM_STORM_ANCHOR_180;
     }
 }
 
@@ -532,9 +557,11 @@ bool DesiredStand(LmState& state, PlayerbotAI* botAI, Creature* boss, IccLmPhase
             if (index < 0 || !StandBoss(state, guid, StandKind::Inner, boss, now, from))
                 return false;
 
-            float const step = 2.0f * static_cast<float>(M_PI) / std::max<size_t>(state.inner.size(), 1);
+            // He faces the main tank on the tank spot, so his back is the bearing from it to him
+            size_t const count = state.inner.size();
+            float const share = count > 1 ? static_cast<float>(index) / static_cast<float>(count - 1) - 0.5f : 0.0f;
             kind = StandKind::Inner;
-            raw = Offset(from, step * index, LM_INNER_RADIUS);
+            raw = Offset(from, ICC_LM_TANK_SPOT.GetAngle(&from) + share * LM_INNER_ARC_DEG * DEG, LM_INNER_RADIUS);
             return true;
         }
         case IccLmDuty::Bait:
@@ -543,17 +570,20 @@ bool DesiredStand(LmState& state, PlayerbotAI* botAI, Creature* boss, IccLmPhase
             if (index < 0 || !StandBoss(state, guid, StandKind::Bait, boss, now, from))
                 return false;
 
-            // From the bearing away from the tank spot outwards, alternating sides in rank order
-            int32 const steps = (index % 2 ? 1 : -1) * ((index + 1) / 2);
-            float const bearing =
-                ICC_LM_TANK_SPOT.GetAngle(&ICC_LM_BOSS_SPOT) + steps * LM_BAIT_SPACING_DEG * DEG;
             kind = StandKind::Bait;
-            raw = Offset(from, bearing, LM_BAIT_RADIUS);
+            raw = BaitSlot(from, static_cast<size_t>(index));
             return true;
         }
         default:
             return false;
     }
+}
+
+void ReleaseStand(Player* bot, Stand& stand)
+{
+    stand.held = false;
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "lm.stand", "none");
 }
 
 void UpdateStand(LmState& state, PlayerbotAI* botAI, Creature* boss, IccLmPhase phase, uint32 now)
@@ -566,9 +596,7 @@ void UpdateStand(LmState& state, PlayerbotAI* botAI, Creature* boss, IccLmPhase 
     Position from;
     if (!DesiredStand(state, botAI, boss, phase, now, kind, raw, from))
     {
-        stand.held = false;
-        if (RaidObs::Active())
-            RaidObs::NoteDerived(bot, "lm.stand", "none");
+        ReleaseStand(bot, stand);
         return;
     }
 
@@ -937,6 +965,14 @@ void TickLmEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
+    // A saved rti of cross or star keeps a bot off the skull in the icon-led fights after him
+    if (lmRtiChecked.For(bot->GetInstanceId()).insert(bot->GetGUID()).second)
+    {
+        Value<std::string>* rti = botAI->GetAiObjectContext()->GetValue<std::string>("rti");
+        if (rti->Get() == "cross" || rti->Get() == "star")
+            rti->Set("skull");
+    }
+
     // A wipe or a kill ends the pull: the next one rebuilds the roster and every latch
     if (!IsLmLive(botAI))
     {
@@ -945,9 +981,15 @@ void TickLmEncounter(PlayerbotAI* botAI)
         return;
     }
 
+    // Evading home he is out of combat but still in progress, and nothing holds a stand round him
     Creature* boss = GetLmBoss(botAI);
     if (!boss)
+    {
+        if (LmState* state = lmStates.Find(bot->GetInstanceId()))
+            if (auto const held = state->stands.find(bot->GetGUID()); held != state->stands.end() && held->second.held)
+                ReleaseStand(bot, held->second);
         return;
+    }
 
     LmState& state = lmStates.For(bot->GetInstanceId());
     uint32 const now = getMSTime();

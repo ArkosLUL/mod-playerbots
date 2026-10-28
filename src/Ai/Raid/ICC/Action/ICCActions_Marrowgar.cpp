@@ -114,7 +114,7 @@ bool IccLmDodgeColdflameAction::Execute(Event /*event*/)
         return true;
     }
 
-    // A patch ticks every second for 6-14k: the cast is worth less than the step out
+    // A patch ticks every second for 6-11k: the cast is worth less than the step out
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
