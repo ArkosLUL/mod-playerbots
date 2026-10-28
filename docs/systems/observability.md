@@ -533,7 +533,8 @@ emit, on both containers: clearing one named bot is a wipe reset or a boss that 
 news. An `ObsGuidMap` erase records the value `0`, so a stored slot or index counts from 1, or a
 reader can't tell slot 0 from a release. Keep scan timestamps and cached guid lookups in bare types; tracing bookkeeping is noise. Reset
 an `ObsValue` by assigning it a value: copying over a struct that holds one (`state = Struct{}`)
-changes it without emitting.
+changes it without emitting. It emits only when assigned, so a latch left at its constructor default
+never reaches a trace: assign it every pass, so each trace hears the value it opens on.
 
 The key guid decides which session the record lands in; where it is not a player, the bot whose tick
 set it does (`NoteAssignment` falls back as `NoteDerived` does). Before that fallback, a container

@@ -360,7 +360,11 @@ fights" hides the fallback. The call carries any spell id, so it can ask a human
   offered at most twice the cover lead ahead; the deal clears when no hit is offered, and a window 6 s
   later is a new hit (`SAME_HIT_MS` is 2 s). It doesn't filter by school: it deals Anti-Magic Zone to
   a physical hit, so the caller drops that cover or the shared deal skips it for `SPELL_SCHOOL_NORMAL`.
-  A first tick that lands with the aura (`SPELL_ATTR5_EXTRA_INITIAL_PERIOD`) is never covered.
+  A first tick that lands with the aura (`SPELL_ATTR5_EXTRA_INITIAL_PERIOD`) is never covered. For
+  a one-off hit, stamp it on a self-aura the caster gains when the cast completes: `now - (max -
+  remaining)` stays stable across reads, so they stay one hit (Decimate's 3 s self-stun).
+- **`ExpectedDamage` counts `SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN` only**, not AoE avoidance (aura
+  229), so a caller whose players carry such an aura cuts the hit itself (Festergut's Inoculated).
 - **`GetRaidPersonalDefensive` writes its scope note on every call**, so guard it with the encounter's
   own hit check, or every bot notes `none`. When the modelled hit is lethal it falls through to
   Dispersion, class immunity and healthstone: size the hit window to what a healer wouldn't cover.

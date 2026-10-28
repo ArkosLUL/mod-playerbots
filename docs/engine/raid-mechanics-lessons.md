@@ -134,7 +134,7 @@ movement lock that decides which of two movers' orders is accepted is in
   latch fires. An escape that overrides the deadband belongs outside the tolerance choice too, or the
   bot gets one order then re-latches before retrying — and 40-60% of orders are refused.
 
-Three rules that belong with the geometry rather than the action:
+Four rules that belong with the geometry rather than the action:
 
 - **A spot checked only at its endpoint lets the walk cross the hazard it dodges.** Test the path,
   and a growing hazard (a spreading pool) at its size when the walk ends.
@@ -143,6 +143,10 @@ Three rules that belong with the geometry rather than the action:
   it. Required clearance is `hazardRadius + tolerance`.
 - **A loose tolerance is a feature**, not sloppiness: it is what stops a stacked formation piling
   onto a single coordinate.
+- **A lattice spread can leave no dodge.** No point is farther than spacing/√3 from a triangular
+  lattice's nearest member, so a dodge that must clear every member's mark by more (6 yd round an 8
+  yd lattice) finds none: spread on rings, or give the dodge a fallback ladder
+  ([Rotface](../raids/icecrown-citadel/rotface.md)).
 
 ## Range and reach
 
@@ -598,6 +602,13 @@ encounters.
   fight. Check stands against the instance script's boundary as well as the navmesh.
 - **A `TARGET_DEST_TARGET_ENEMY` area spell picks its victims in `Spell::_cast`**, at the cast's end,
   so the cast bar is the whole dodge window and a Speed only delays the damage.
+- **A `TEMPSUMMON_TIMED_DESPAWN` marker's age is `duration - TempSummon::GetTimer()`.** With the
+  summoner's position and the trigger missile's Speed it gives each impact an exact, lag-free landing
+  time (Rotface's explosion marks).
+- **A channel cast through `DoCastSelf` names the caster as its unit target**, so read a cone's axis
+  from the stalker it faces (Rotface's Slime Spray).
+- **`NonTankTargetSelector` excludes only the current threat victim**, so an off-tank can take a
+  "non-tank" spell and needs its dodge too (Festergut's Malleable Goo).
 - **A chain spell jumps by `IsWithinDist`**, both combat reaches added (10 yd magic default + 1.5 +
   1.5 = 13 yd centre to centre, 3D, in LOS, nearest first). `EffectChainAmplitude`
   (`SpellEffectInfo::CalcDamageMultiplier`) multiplies each jump in `Spell::DoAllEffectOnLaunchTarget`,

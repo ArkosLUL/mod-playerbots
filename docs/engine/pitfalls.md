@@ -608,6 +608,9 @@ Related traps:
     XT-002 pulls wiped on it, the carrier trigger never once true across 13,437 and 22,424 asks.
   - **Any member id resolves its row**, not only the 10-man base: Touch of Light 67297 is a 10H id,
     which `GetSpellIdForDifficulty` still remaps and a base-keyed lookup misses.
+  - **An empty raid heroic column falls back to the normal id of the same size** (mode − 2):
+    Inhaled Blight's row 2115 and Plague Stench's 1962 give the normal id on heroic, which is not a
+    missed remap.
   - **Spell hooks see the remapped id.** The `Spell` constructor remaps first, so a listener on the
     base id misses a heroic-only cast: Putricide's Vile Gas 69240 arrives as 73019 (10H) or 73020
     (25H).

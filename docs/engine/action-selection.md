@@ -166,8 +166,9 @@ At scale, match on `getName()` instead: `CastSpellAction`'s constructor passes t
 headers. Racials and trinkets follow the same convention (`"berserking"`, `"blood fury"`,
 `"use trinket"`). A rule matches `getName()` too, but pblint resolves only registered creator names,
 so a class registered under one name that reports another (the paladin's `beacon of light on main
-tank` reports `beacon of light`) can't be listed in a rule: veto it with a narrow `dynamic_cast`
-multiplier on the concrete classes.
+tank` reports `beacon of light`; `cleanse disease`, `cleanse poison` and `cleanse magic` report
+`cleanse`, `purify disease` reports `purify`) can't be listed in a rule: veto it with a narrow
+`dynamic_cast` multiplier on the concrete classes (Rotface's `icc rotface self cure`).
 
 **Test the action before resolving anything.** `Multiplier::GetValue` runs on every popped action that
 passed `isUseful()`, so a multiplier that looks up a boss first pays that lookup for every rotation

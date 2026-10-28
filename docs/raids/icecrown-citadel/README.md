@@ -20,8 +20,8 @@ changes so the user can pick which to port. Tactics come from the guides in
 - `Definition/ICCDefinition_<Stem>.cpp`: one `EncounterDefinition` with its rows and multipliers,
   the accessor declared in `Definition/ICCDefinitions.h`.
 
-A file exists once it has content: `Dogs` has no helpers; `Marrowgar`, `FrostGiant` and `Svalna` no
-multipliers. Raid-wide parts:
+A file exists once it has content: `Marrowgar`, `FrostGiant` and `Svalna` have no multipliers.
+Raid-wide parts:
 
 - `Util/ICCHelpers_Shared`: helpers several encounters use (class taunt and CC, raid icons, heroic
   buffs, the cheat helpers).
@@ -58,19 +58,19 @@ run while the gate is open; `icc sindragosa group position` still runs its raid 
 Boosts inside `IsActive`.
 
 Rows, rules, `e.Multiplier` and ticks run while open, `e.LiveMultiplier` only while live. Every
-multiplier is live but Festergut's and Rotface's: their state moves when Putricide reaches his balcony
+encounter multiplier is live. Festergut's and Rotface's state moves when Putricide reaches his balcony
 point, about 7 s into the pull (~102 and ~104 yd at 15 yd/s). What acts before live:
 
 | Encounter | Before live |
 |---|---|
-| Festergut | the multiplier, `icc festergut group position` |
-| Rotface | the multiplier (assist tank off Rotface, formation and AoE vetoes), `icc rotface tank position`, `icc rotface group position` |
+| Festergut | every row, rule and the tick from his engage, keyed on his combat; only the multiplier `icc festergut brake` waits for live |
+| Rotface | every row and rule, keyed on him being in combat; the multipliers `icc rotface ooze splash` and `icc rotface self cure` wait for live |
 | Gunship | for bots aboard the raid's ship: the definition tick, `icc gunship rocket pack setup` (no pack equipped, Zafod within 150 yd), `icc gunship cannon near` (a cannoneer with its pack), `icc in cannon`; `icc gunship tank defensive` is asked now but returns false until live; `icc gunship rocket jump`, every rule and the multiplier wait for live |
 | Valithria | `icc valithria group` (she is within 100 yd), `icc valithria heal` (healers within 100 yd); live once the first archmage pulls the combat trigger |
 | Sindragosa | `icc sindragosa group position` (she is within 200 yd), its raid cheats and Nitro Boosts included |
 
-Nothing else: Marrowgar's nodes key on his boss state, the giant's on its gate being live, Stinky and
-Precious's need the bot on the threat list, any prince's engage pulls Valanar into the state in the same update, and the rest key on fight
+Nothing else: Marrowgar's nodes key on his boss state, the giant's and the dogs' on their gate being
+live, any prince's engage pulls Valanar into the state in the same update, and the rest key on fight
 auras, units or `"find target"`.
 
 **Seams.** An encounter gains a trigger, action, multiplier, rule or tick in its stem files and
@@ -87,8 +87,9 @@ definition alone:
   `IccDirectTargetTrigger` and an action on `IccDirectAttackAction` pass their `Name` and the resolver;
   one row joins them, and `e.OwnTargeting(name, roles, &IccResolverPicks<&Resolver>, pickers)`
   follows the stem's multipliers. The action sends the pet first, the trigger also fires while the
-  pet is off the pick. Marrowgar, Deathwhisper, the Gunship (`GsbTarget`) and Saurfang
-  (`GetDbsTarget`) use it, with no icon writes or `rti` use. `RaidRestoreLegacyRti` stays unwired
+  pet is off the pick. Marrowgar, Deathwhisper, the Gunship (`GsbTarget`), Saurfang (`GetDbsTarget`),
+  Stinky and Precious (`GetDogsTarget`), Festergut (`GetFgTarget`) and Rotface (`GetRfTarget`) use
+  it, with no icon writes or `rti` use. `RaidRestoreLegacyRti` stays unwired
   until no ICC code writes `rti`, and it never resets `star`. The Marrowgar tick resets a bot's
   `cross` or `star` `rti` to `skull` once per instance, and the Gunship tick a `star` while its gate
   is open; a bot that skips both rooms keeps what the old Marrowgar code set.
@@ -102,7 +103,8 @@ definition alone:
   bot paladin per wanted fire, frost or shadow school, the nature hunter's Aspect of the Wild, and the
   hold rules keep each holder's own auras or aspects off. With no hook the opener and aura triggers neither fire nor note.
   Rows: Marrowgar's opener (boss 36612), Deathwhisper's burst window (lust waits for phase 2),
-  Saurfang's opener (boss 37813) and burst window (lust waits for Frenzy).
+  Saurfang's opener (boss 37813) and burst window (lust waits for Frenzy), Festergut's resist
+  schools (shadow: Gaseous Blight, Blighted Spores, Pungent Blight).
 - defensives: `GetRaidCover` and `GetRaidPersonalDefensive` (`RaidDefensive.h`) with
   `ICC_DEFENSIVE_SCOPE` (`icc.cover`, `icc.personal`) and a `RaidPredictedHit` the stem builds.
   Tank buttons go through `NextTankDefensive` (`RaidTankDefensive.h`) with a `Block` over
@@ -117,7 +119,15 @@ definition alone:
   - Gunship: `icc gunship tank defensive` (`gsb.defensive`, `gsb.furywindow`, `gsb.humancall`);
   - Saurfang: `icc dbs tank defensive` (holder or Mark carrier at Blood Power peaks and through
     Frenzy, `dbs.humancall`) and `icc dbs mark defensive` (`GetRaidPersonalDefensive` on
-    `icc.personal`).
+    `icc.personal`);
+  - Stinky and Precious: `icc dogs tank defensive` (a button in each Decimate cast, `dogs.defensive`,
+    `dogs.humancall`) and `icc dogs decimate cover` (raid cover during the dog's 3 s self-stun after
+    Decimate);
+  - Festergut: `icc festergut tank defensive` (ladder at 2 and 3 Inhaled Blight, `fg.defensive`,
+    `fg.humancall`), `icc festergut pungent cover` and `icc festergut pungent defensive` (raid cover
+    and personal buttons on the Pungent Blight cast);
+  - Rotface: `icc rotface tank defensive` (the kiter under a Big Ooze of 4+ stacks within 6 yd, any
+    tank under 40%, class buttons held to 25%, `rf.defensive`, `rf.humancall`).
 - opening positions: a `Mover` row in the definition whose trigger holds the stand while the gate is
   open and not live, its positions navprobed in the stem's helpers. No raid-wide staging.
 
@@ -226,15 +236,17 @@ per bot; a taunt on cooldown fails with no ranged pull, which would face the add
 `FixateTarget` and the cooldown reset are gone, so:
 
 - a caller taunting several units in a row reaches one per cooldown (8 s on every class): the gunship
-  home tank's boarders, Rotface's Big Ooze loop, the council's princes and Dark Nuclei, the Lich
-  King's add passes and Raging Spirits, Stinky and Precious's adds;
+  home tank's boarders, the council's princes and Dark Nuclei, the Lich King's add passes and Raging
+  Spirits;
 - a taunted unit holds the taunter for the 3 s aura, then real threat decides;
 - a tank swap (Festergut, Stinky and Precious, Putricide, Saurfang, Sindragosa) waits out a cooldown
   spent elsewhere, while the stacked tank has already stopped.
 
-Saurfang and the gunship captain carry taunt diminishing returns (`flags_extra` 0x80000). Saurfang's
-swap is one elected taunt per Rune of Blood with generic taunts blocked, and his free tank taunts one
-Blood Beast only while the next swap stays covered. The gunship's board tank taunts the captain.
+Saurfang, Festergut, Rotface's Big Ooze and the gunship captain carry taunt diminishing returns
+(`flags_extra` 0x80000). Saurfang's swap is one elected taunt per Rune of Blood with generic taunts
+blocked, and his free tank taunts one Blood Beast only while the next swap stays covered. Festergut
+and the dogs swap by one elected taunt, generic taunts blocked. Rotface's kiter taunts a Big Ooze
+through one path, skipped at the immune level. The gunship's board tank taunts the captain.
 
 Each boss doc says what its callers risk.
 
@@ -250,12 +262,15 @@ real item use, own-aura cancels, the spell listeners.
 it, and a has-state read (`ActiveGooPositions`, the reset) uses `Find`. Assignments and latches are
 traced containers:
 `lk.winterinbound`, `lk.mtinbound`, `lk.rangedinbound`, `lk.sharedslot` (-1 none), `sg.flaredblue`,
-`sg.group`, `sg.tomb`, `sg.freedfallback`, `bql.curve`, `bql.airslot`, `bql.slot`, `vd.portalclaim`,
-`rf.explosionslot`. They are unordered, and no loop over one depends on its order. Saurfang keeps
+`sg.group`, `sg.tomb`, `sg.freedfallback`, `bql.curve`, `bql.airslot`, `bql.slot`, `vd.portalclaim`.
+They are unordered, and no loop over one depends on its order. Saurfang keeps
 `dbs.slot`, `dbs.kill`, `dbs.cc`, `dbs.markheal` and `dbs.protect` in its stem's own
-`RaidInstanceState`; Deathwhisper's stem latches `ldw.brake` (`ObsGuidSet`) and the frost giant's
-`rfg.apart` (`ObsGuidSet`) the same way. The gunship fields `gsbLastStarPos` and `gsbLastRocketPackUse`
-are unused.
+`RaidInstanceState`, Festergut `fg.slot`, `fg.carrier`, `fg.leg`, `fg.sporespot` and `fg.brake`,
+Rotface `rf.slot`, `rf.dispel`, `rf.kiter`, `rf.flood` and `rf.oozespot`; Deathwhisper's stem latches
+`ldw.brake` (`ObsGuidSet`) and the frost giant's `rfg.apart` (`ObsGuidSet`) the same way. Unused:
+the gunship's `gsbLastStarPos` and `gsbLastRocketPackUse`, Festergut's `fgSlotState`,
+`festergutGooWaitUntil` and `SpreadSlotState`, Rotface's `rotfaceVileGasWaitUntil` and
+`rfExplosionSlotMemory` (`rf.explosionslot`, silent).
 Timestamps, throttles, caches, edge detectors (`sgLastPhase3`) and struct values stay bare;
 `sgFlaredRedThisPhase`, an int set, is noted as `sg.flaredred` where it changes.
 
@@ -272,11 +287,12 @@ id.
 
 - **Malleable Goo**: Putricide's 70852 and the balcony's 72296, neither with a spelldifficulty row.
   The missiles and impacts they trigger (72297 row 2197; 72295/72615/74280/74281 row 2211) carry
-  Putricide as their unit target and never pass the player test. Each impact is a 12 yd, 8 s hazard
-  circle, Festergut's avoid model and the widest any consumer uses (Putricide's is 8 yd, 6 s).
+  Putricide as their unit target and never pass the player test. Each impact is noted as a 12 yd, 8
+  s hazard circle; consumers size their own, Putricide's 8 yd, 6 s the widest, Festergut's 5 yd,
+  8.5 s.
 - **Vile Gas**: Putricide's balcony cast on Rotface heroic, 69240 remapped by the `Spell` constructor to
   73019 (10H) or 73020 (25H), so it is matched through `GetSpellIdForDifficulty`. Notes `rf.vilegas`
-  on the victim.
+  on the victim; no Rotface code reads `rotfaceVileGas` any more.
 - **Defile** 72762, a 2 s cast with no difficulty row, read at `OnSpellPrepare`. Notes `lk.defile` on
   the target and a 6 yd hazard circle for the cast time; the puddle that follows is a sampled creature.
 
@@ -286,18 +302,20 @@ Every trigger name starts `icc `, mostly followed by its boss: `lm`, `lady death
 `festergut`, `rotface`, `putricide`, `bpc`, `bql`, `valithria`, `sindragosa`, `lich king`. Deathwhisper's are
 `icc lady deathwhisper` dodge, defensive, frostbolt, dominate mind, taunt, redirect and target;
 Marrowgar's include `icc lm tank defensive` and `icc lm storm cover`, Saurfang's `icc dbs tank
-defensive` and `icc dbs mark defensive`. The others:
+defensive` and `icc dbs mark defensive`. Festergut's are `icc festergut` goo, pungent defensive,
+pungent cover, tank defensive, bloat swap, brake, target and stand; Rotface's `icc rotface` dodge,
+tank defensive, dispel, ooze taunt, kite, carrier, target and stand. The others:
 `icc dark reckoning` (Deathwhisper), `icc in cannon` and the `icc gunship` ones (Gunship), `icc
-rotting frost giant plague`, `icc dogs` (Stinky and Precious), `icc valkyre spear` and `icc
-sister svalna` (Svalna). The raid-wide `icc opener swing`, `icc opener redirect` and `icc resistance
+rotting frost giant plague`, `icc dogs` tank defensive, decimate cover, swap, yield and target
+(Stinky and Precious), `icc valkyre spear` and `icc sister svalna` (Svalna). The raid-wide `icc opener swing`, `icc opener redirect` and `icc resistance
 aura` belong to no encounter. Rows register classes under their `Name`, so two classes sharing one leave
 one unbuilt.
 
 ## Known gaps
 
-- Targeting is by raid icon outside Marrowgar, Deathwhisper, the giant, the Gunship and Saurfang; the
-  probes record every pick.
+- Targeting is by raid icon outside Marrowgar, Deathwhisper, the giant, the Gunship, Saurfang,
+  Stinky and Precious, Festergut and Rotface; the probes record every pick.
 - Every gap cheat above: a mechanic it makes survivable is open, and a server with the raid cheat off
   loses it.
-- The hooks answer only while a definition is live, so an opener or aura hook for Festergut, Rotface
-  or Valithria sits out the seconds before their state moves.
+- The hooks answer only while a definition is live, so Festergut's aura hook, and any for Rotface or
+  Valithria, sits out the seconds before their state moves.
