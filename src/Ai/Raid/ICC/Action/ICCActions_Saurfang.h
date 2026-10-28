@@ -8,51 +8,82 @@
 #define PLAYERBOTS_ICCACTIONS_SAURFANG_H
 
 #include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
+#include "ICCActions_RaidWide.h"
 #include "ICCHelpers_Saurfang.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include "Position.h"
+#include "RaidDirectTargeting.h"
 
-class IccDbsTankPositionAction : public AttackAction
+class IccDbsRuneSwapAction : public RaidDirectAttackAction
 {
 public:
-    static constexpr char const* Name = "icc dbs tank position";
+    static constexpr char const* Name = "icc dbs rune swap";
 
-    IccDbsTankPositionAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccDbsRuneSwapAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
     bool Execute(Event event) override;
-
-    bool CrowdControlBloodBeasts();
-    bool EvadeBloodBeasts();
-    bool PositionInRangedFormation();
 };
 
-class IccAddsDbsAction : public AttackAction
+// Drops the attack on him while another tank holds him and this one carries Rune of Blood
+class IccDbsRuneYieldAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc adds dbs";
+    static constexpr char const* Name = "icc dbs rune yield";
 
-    IccAddsDbsAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccDbsRuneYieldAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccDbsBeastTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc dbs beast taunt";
+
+    IccDbsBeastTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccDbsBeastControlAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc dbs beast control";
+
+    IccDbsBeastControlAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccDbsMarkHealAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc dbs mark heal";
+
+    IccDbsMarkHealAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccDbsTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc dbs target";
+
+    IccDbsTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetDbsTarget) {}
+};
+
+// Holds its spot while the walk there is in flight: every MoveTo clears the MotionMaster, so a spot
+// re-issued each tick to a bot still walking never lands.
+class IccDbsStandAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "icc dbs stand";
+
+    IccDbsStandAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
-    Unit* FindPriorityTarget(Unit* boss);
-    bool UpdateSkullMarker(Unit* priorityTarget);
+private:
+    bool BookedOn(Position const& spot);
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
 };
 
 #endif

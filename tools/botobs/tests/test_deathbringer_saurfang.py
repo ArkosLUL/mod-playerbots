@@ -2,8 +2,9 @@
 
     python -m unittest discover -s tools/botobs/tests
 
-A synthetic pull pins the first-slot rule, the skull steps and the rune and mark rows, and the shared
-v14 fixture shows every section reads empty on a trace that is not Saurfang.
+A synthetic 10N pull pins the phase steps, the stands, the pick totals, a swapped and an unswapped
+rune, a shared Blood Nova, the kill and control duties, a healed and an unhealed Mark and the cheat
+filter, and the shared v14 fixture shows every section reads empty on a trace that is not his.
 """
 from __future__ import annotations
 
@@ -23,19 +24,26 @@ from raidobs.trace import Trace  # noqa: E402
 
 FULL = BOTOBS / "fixtures" / "full-v14.ndjson"
 
-BULWARK = 6401  # tank
-AEGIS = 6402    # tank
-ARROW = 6403    # ranged, slot 3
-FEL = 6404      # ranged, slot 7, then gives it up
-SHIV = 6405     # melee
+BULWARK = 6501  # main tank, tank spot 1
+AEGIS = 6502    # off tank, tank spot 2, swaps
+ARROW = 6503    # hunter, slot 7
+FEL = 6504      # ranged, slot 6, then the stack; marked and dies
+MEND = 6505     # healer, slot 1
+SHIV = 6506     # melee
+BEAST_A = (1 << 32) | 9001
+BEAST_B = (1 << 32) | 9002
 
 
-def note(when: int, guid: int, key: str, value: str) -> dict:
-    return {"t": when, "e": "note", "g": guid, "k": key, "txt": value}
+def note(when: int, guid: int, key: str, value) -> dict:
+    return {"t": when, "e": "note", "g": guid, "k": key, "txt": str(value)}
 
 
 def aura(when: int, target: int, spell: int) -> dict:
     return {"t": when, "e": "aura", "d": target, "s": 1 << 32, "sp": spell, "r": 0}
+
+
+def nova(when: int, target: int) -> dict:
+    return {"t": when, "e": "dmg", "s": 1 << 32, "d": target, "sp": 72380, "a": 8000}
 
 
 def pull(boss: str = "deathbringer-saurfang") -> list[dict]:
@@ -45,17 +53,42 @@ def pull(boss: str = "deathbringer-saurfang") -> list[dict]:
          "roster": [{"g": guid, "n": name, "r": role, "c": "x", "h": 0}
                     for guid, name, role in ((BULWARK, "Bulwark", "tank"), (AEGIS, "Aegis", "tank"),
                                              (ARROW, "Arrow", "ranged"), (FEL, "Fel", "ranged"),
-                                             (SHIV, "Shiv", "melee"))]},
+                                             (MEND, "Mend", "heal"), (SHIV, "Shiv", "melee"))]},
         {"t": 0, "e": "pull", "boss": boss, "src": "bossstate"},
-        note(100, ARROW, dbs.SLOT, "3"),
-        note(100, FEL, dbs.SLOT, "7"),
-        note(90000, FEL, dbs.SLOT, "0"),
-        note(200, SHIV, dbs.SKULL, "boss"),
-        note(40000, SHIV, dbs.SKULL, "beast"),
-        note(52000, SHIV, dbs.SKULL, "boss"),
+        {"t": 30000, "e": "unit", "g": BEAST_A, "en": 38508, "n": "Blood Beast A", "b": 0},
+        {"t": 30000, "e": "unit", "g": BEAST_B, "en": 38508, "n": "Blood Beast B", "b": 0},
+        note(50, BULWARK, dbs.PHASE, 1),
+        note(100, ARROW, dbs.SLOT, 7),
+        note(100, FEL, dbs.SLOT, 6),
+        note(100, MEND, dbs.SLOT, 1),
+        note(100, BULWARK, dbs.SLOT, 13),
+        note(100, AEGIS, dbs.SLOT, 14),
+        note(60000, FEL, dbs.SLOT, 12),
+        note(200, ARROW, dbs.TARGET, "boss"),
+        note(30500, ARROW, dbs.TARGET, "kill"),
+        note(38000, ARROW, dbs.TARGET, "boss"),
+        note(200, SHIV, dbs.TARGET, "boss"),
+        note(33000, SHIV, dbs.TARGET, "reach"),
+        note(36000, SHIV, dbs.TARGET, "boss"),
+        nova(17000, ARROW),
         aura(20000, BULWARK, dbs.SPELL_RUNE_OF_BLOOD),
-        aura(40000, AEGIS, dbs.SPELL_RUNE_OF_BLOOD),
-        aura(30000, ARROW, dbs.SPELL_MARK_OF_THE_FALLEN_CHAMPION),
+        note(20050, AEGIS, dbs.SWAP, 1),
+        {"t": 20100, "e": "act", "g": AEGIS, "a": dbs.SWAP_ACTION, "rel": 67.0, "vd": "OK"},
+        note(20400, AEGIS, dbs.SWAP, 0),
+        note(30200, ARROW, dbs.KILL, BEAST_A),
+        note(30200, FEL, dbs.KILL, BEAST_A),
+        note(36000, ARROW, dbs.KILL, 0),
+        note(30300, MEND, dbs.CONTROL, BEAST_B),
+        note(31500, MEND, dbs.CONTROL, 0),
+        nova(37000, FEL),
+        nova(37002, MEND),
+        aura(42000, AEGIS, dbs.SPELL_RUNE_OF_BLOOD),
+        aura(50000, FEL, dbs.SPELL_MARK_OF_THE_FALLEN_CHAMPION),
+        note(50100, FEL, dbs.MARKHEAL, MEND),
+        {"t": 70000, "e": "death", "g": FEL, "killer": 1 << 32},
+        aura(80000, ARROW, dbs.SPELL_MARK_OF_THE_FALLEN_CHAMPION),
+        note(100000, BULWARK, dbs.PHASE, 2),
+        {"t": 40000, "e": "cheat", "g": BULWARK, "k": "ldw.nothreat", "n": 1},
         {"t": 120000, "e": "end", "out": "kill"},
     ]
 
@@ -79,23 +112,45 @@ class SyntheticPull(unittest.TestCase):
     def setUpClass(cls):
         cls.trace = load(pull())
 
-    def test_an_erase_does_not_read_as_slot_zero(self):
-        self.assertEqual(dbs.slots(self.trace), {ARROW: 3, FEL: 7})
+    def test_phase_steps(self):
+        self.assertEqual(printed(dbs.show_phases, self.trace), (
+            "PHASES\n"
+            "     0:00.050   1:39.950  1\n"
+            "     1:40.000   0:20.000  2\n"))
 
-    def test_skull_steps(self):
-        self.assertEqual(printed(dbs.show_skull, self.trace), (
-            "SKULL\n"
-            "     0:00.200   0:39.800  boss\n"
-            "     0:40.000   0:12.000  beast\n"
-            "     0:52.000   1:08.000  boss\n"))
+    def test_stands_keep_order_and_moves(self):
+        self.assertEqual(dbs.stands(self.trace), {ARROW: [7], FEL: [6, 12], MEND: [1], BULWARK: [13], AEGIS: [14]})
+        text = printed(dbs.show_slots, self.trace)
+        self.assertIn("  slot 6   Fel  then stack\n", text)
+        self.assertIn("  tank 2   Aegis\n", text)
 
-    def test_runes_and_marks(self):
-        text = printed(dbs.show_runes, self.trace)
-        self.assertIn("Rune of Blood 2 time(s)", text)
-        self.assertIn("    0:40.000  Aegis\n", text)
-        self.assertIn("Mark of the Fallen Champion 1 time(s): Arrow", text)
+    def test_target_totals(self):
+        rows = dbs.target_time(self.trace)
+        self.assertEqual(rows["kill"], (1, 7500))
+        self.assertEqual(rows["reach"], (1, 3000))
 
-    def test_no_cheat_fired(self):
+    def test_swap_and_missed_swap(self):
+        self.assertEqual(dbs.swaps(self.trace), [(20000, BULWARK, AEGIS, 20100), (42000, AEGIS, None, None)])
+        text = printed(dbs.show_swaps, self.trace)
+        self.assertIn("Bulwark  Aegis taunted 0.1 s after", text)
+        self.assertIn("Aegis  nobody elected", text)
+
+    def test_a_shared_nova(self):
+        self.assertEqual(dbs.novas(self.trace), [(17000, [ARROW]), (37000, [FEL, MEND])])
+        self.assertIn("2 nova(s), 1 hit more than one player", printed(dbs.show_novas, self.trace))
+
+    def test_kill_and_control_duties(self):
+        self.assertEqual(dbs.duty_by_target(self.trace, dbs.KILL), {BEAST_A: (30200, {ARROW, FEL})})
+        self.assertIn("Blood Beast A  2 on it: Arrow, Fel", printed(dbs.show_kills, self.trace))
+        self.assertIn("0:30.300  Mend on Blood Beast B  held 0:01.200", printed(dbs.show_control, self.trace))
+
+    def test_marks(self):
+        self.assertEqual(dbs.marks(self.trace), [(50000, FEL, [MEND], 70000), (80000, ARROW, [], None)])
+        text = printed(dbs.show_marks, self.trace)
+        self.assertIn("Fel  Mend  died 1:10.000", text)
+        self.assertIn("Arrow  no healer  alive", text)
+
+    def test_cheats_filter_other_encounters(self):
         self.assertIn("no dbs.* or icc.* cheat fired", printed(dbs.show_cheats, self.trace))
 
 
@@ -108,7 +163,8 @@ class EveryView(unittest.TestCase):
                 for _, _, section in dbs.SECTIONS:
                     section(trace)
             self.assertIn("not a Deathbringer Saurfang pull", out.getvalue())
-            self.assertNotIn("Rune of Blood", out.getvalue())
+            self.assertNotIn("Rune of Blood", out.getvalue().replace("RUNE OF BLOOD", ""))
+            self.assertNotIn("nova(s)", out.getvalue())
 
 
 if __name__ == "__main__":
