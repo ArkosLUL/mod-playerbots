@@ -189,7 +189,7 @@ void DefineAlgalon(EncounterBuilder& e)
 
     // Ahead of the movement rules below, so a field is what the trace names when it holds a walk.
     e.Multiplier<AlgalonWalkGuardMultiplier>(Family::Reach | Family::ReachHeal | Family::SetBehind |
-                                             Family::RearFlank);
+                                             Family::RearFlank | Family::Charge);
 
     // Attack would chase the constellation and Reach would walk back to Algalon while the handler leads
     // one to a hole. Its own taunts are AttackActions too, and a swap it can't make phases the holder out.

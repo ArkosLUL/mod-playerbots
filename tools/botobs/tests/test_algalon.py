@@ -557,6 +557,16 @@ class SyntheticPull(unittest.TestCase):
         tree = next(row for row in rows if row["guid"] == TREE and row["start"] == 46000)
         self.assertEqual((tree["matter"], tree["died"]), (3000, False))
 
+    def test_a_stray_phase_right_after_a_charge_is_put_on_the_charge(self):
+        def cause(*casts: dict) -> str:
+            with tempfile.TemporaryDirectory() as folder:
+                rows = al.phasing_rows(load(folder, algalon_pull() + list(casts)))
+            return next(row["cause"] for row in rows if row["guid"] == TREE and row["start"] == 65000)
+
+        self.assertEqual(cause(cast(64400, TREE, 11578, E_BOSS)), "charged in (Charge)")
+        self.assertEqual(cause(cast(64400, TREE, 781)), "jumped in (Disengage)")
+        self.assertEqual(cause(cast(63000, TREE, 11578, E_BOSS)), "walked in (algalon raid position action)")
+
     def test_stars_carry_what_each_death_landed_into(self):
         first, second = al.star_rows(self.trace)
         self.assertEqual((first["note"], first["window"], first["meteor"], first["bang"], first["below"]),

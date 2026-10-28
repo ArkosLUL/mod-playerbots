@@ -233,6 +233,8 @@ EXPLOSION_SHARE = 0.5
 MATTER_BANG_MS = 3000
 BANG_LEAD_MS = 1000
 REPHASE_MS = 2000
+# A charge lands within a second; the field's pulse phases it on the next one.
+STRAY_CLOSER_MS = 1500
 NEW_HOLE_MS = 1500
 NEW_HOLE_YD = 7.0
 STAR_NOTE_MS = 2000
@@ -2510,7 +2512,7 @@ def unphased_at(trace: Trace) -> list[tuple[int, int]]:
 
 def stray_cause(trace: Trace, guid: int, start: int) -> str:
     """What put a raid member into a hole outside a Big Bang: Big Bang's 64445 stripping it while it
-    still stood in the field, a hole spawning on it, or a walk."""
+    still stood in the field, a hole spawning on it, a gap closer whose line crossed one, or a walk."""
     if any(target == guid and start - REPHASE_MS <= when <= start for when, target in unphased_at(trace)):
         return "re-phase"
     samples = samples_of(trace)
@@ -2520,6 +2522,11 @@ def stray_cause(trace: Trace, guid: int, start: int) -> str:
         if (spot and seen and abs(seen[0] - start) <= NEW_HOLE_MS
                 and dist2(samples.row(hole, seen[0])[1:3], spot) <= NEW_HOLE_YD):
             return "new hole"
+    closer = next((rec for rec in reversed(trace.of("cast")) if rec.get("s") == guid and rec.get("sp") in GAP_CLOSER_IDS
+                   and not rec.get("tr") and start - STRAY_CLOSER_MS <= rec["t"] <= start), None)
+    if closer:
+        how = "charged in" if closer["sp"] in SPELL_CHARGES else "jumped in"
+        return f"{how} ({spell_name(trace, closer['sp'], GAP_CLOSER_IDS)})"
     walk = next((rec for rec in reversed(moves_of(trace).get(guid, [])) if rec["t"] <= start), None)
     return f"walked in ({walk.get('by') or '?'})" if walk else "walked in"
 

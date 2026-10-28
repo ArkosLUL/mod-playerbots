@@ -217,9 +217,10 @@ two marker creatures each) and turned far stars due. In order, `urgent` overridi
 - not during the Big Bang cast (the raid is running for holes);
 - the kill under way continues while its finish stays 6 s clear, or while dropping it wouldn't help: dropped,
   a star keeps dying at its own slope, capped at 5 %/s, from casts in flight, channels and DoTs (22 % went in
-  3.8 s), as one did into an impact and one 1.5 s into a cast; one barely hit only drains. So a kill is dropped
-  only if the star would then die clear, or sooner than the kill lands. Its log is kept: a flat 5 %/s made a star
-  never hit look due, and the team was sent back to it 4 times in 2 s;
+  3.8 s), as one did into an impact and one 1.5 s into a cast; one barely hit only drains (one dropped at 9% lost
+  1.4 %/s and went off 0.4 s before three meteors, 4 dead). So a kill is dropped only if the star would die clear
+  anywhere from that capped slope to the drain alone, or sooner than the kill lands. Its log is kept: a flat
+  5 %/s made a star never hit look due, and the team was sent back to it 4 times in 2 s;
 - not within 8 s of the last explosion. A "finish stars under 15 %" bypass put two explosions 3.2 s apart
   and killed 12;
 - a **due** star is opened whatever the raid's health, soonest death first: its own death isn't clear and is
@@ -244,8 +245,8 @@ off in the same second. `urgent` takes the lowest star anywhere.
 **Splash breaks the pacing.** Stars died chewed, 75% gone in 11 s with nobody sent, two 1.4 s apart, from
 Starfall, Blade Flurry, Death and Decay, Pestilence diseases, warrior cleaves, Divine Storm and Avenger's
 Shield; the Aoe threat type covers almost none of them. `AlgalonSplashHoldMultiplier` holds Starfall, Blade
-Flurry, Sweeping Strikes, Bladestorm, Explosive Trap and Fire Elemental Totem all of phase 1 (they hit whatever
-comes near, the trap for 30 s; one started before a wave spawns still runs when it lands; the trap and the
+Flurry, Sweeping Strikes, Bladestorm, Explosive Trap (Trap Launcher's too) and Fire Elemental Totem all of
+phase 1 (they hit whatever comes near, the trap for 30 s; one started before a wave spawns still runs when it lands; the trap and the
 elemental's Fire Nova and Fire Shield took 8.6% off an under-star in the 20 s before Big Bang). While a star
 lives, other splash (`SpellSplashes`, `MULTI_TARGET_ACTIONS`, HotR, Avenger's Shield, Seed of Corruption, Mind
 Sear, Corpse Explosion, the Aoe threat type) is held while a star is within 15 yd of the bot (glyphed
@@ -286,8 +287,9 @@ the hole they leave: Big Bang's strip can land mid-walk, and a tank healer walki
 phased again for 10 s while its tank died.
 
 The generic movers know nothing of holes, and holes land beside him where melee stand: 34 stray phases in
-four pulls came off `reach melee`, `set behind` and `reach spell`. `AlgalonWalkGuardMultiplier` holds reach,
-reach-to-heal, set behind and rear flank when the stop point (melee range of the target, 28 yd for spells, both
+four pulls came off `reach melee`, `set behind` and `reach spell`, and 4 in one pull off Charge and Intercept (3
+dead). `AlgalonWalkGuardMultiplier` holds reach, reach-to-heal, set behind, rear flank and the charges (Charge,
+Intercept, Feral Charge) when the stop point (melee range of the target, 28 yd for spells, both
 set-behind spots) is within 7.5 yd of a hole or the walk passes within 6.3 yd of one; for a phased bot within
 8 yd, the hole it left included, since reach walked melee back in before the strip. A held bot waits; holes
 live until a constellation eats one or phase 2.
@@ -631,6 +633,8 @@ with a swap tank out on `noshelter` aside, per cast the hiders that used a gap c
   at the cast (h% dies h−1 to h s later); over one switch per star; 3 Shoot starts in 2 s.
 - `--collateral`: each bot DoT on a star. `--constellations`: a kite blocked 5 s or more, kite stats
   from the elected handler alone.
+- `--phasing`: a stray phase within 1.5 s of a gap closer reads `charged in (<spell>)`, `jumped in` for
+  Blink, Disengage, Shadowstep and Killing Spree; a hole spawning on the bot still reads `new hole`.
 
 Traces from before these probes fall back to what the records alone say: intro end from his first
 swing, the pair from the roster tanks, meteors from the 33105 markers. Its banner names declared keys

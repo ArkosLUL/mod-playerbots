@@ -288,10 +288,15 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
     if (cached == splashes.end())
     {
         // The trap sits 30 s and the elemental's Fire Nova and Fire Shield go wherever it does: on one star they took
-        // 8.6% in the 20 s before Big Bang.
-        static std::set<std::string> const always = {
-            "starfall",       "blade flurry",         "sweeping strikes",          "bladestorm",
-            "explosive trap", "fire elemental totem", "fire elemental totem melee"};
+        // 8.6% in the 20 s before Big Bang. Trap Launcher drops the same trap under its own name.
+        static std::set<std::string> const always = {"starfall",
+                                                     "blade flurry",
+                                                     "sweeping strikes",
+                                                     "bladestorm",
+                                                     "explosive trap",
+                                                     "trap launcher: explosive trap",
+                                                     "fire elemental totem",
+                                                     "fire elemental totem melee"};
         static std::set<std::string> const groundAtBot = {"consecration", "magma totem"};
         // Living Bomb goes off 12 s after the cast, by when a star may have wandered next to its target.
         static std::set<std::string> const groundAtTarget = {
@@ -393,9 +398,10 @@ float AlgalonWalkGuardMultiplier::GetValue(Action* action)
     if (!target)
         return 1.0f;
 
-    // Where the walk stops: in melee range for melee, in heal or spell range for the rest.
+    // Where the walk stops: in melee range for melee and a charge, in heal or spell range for the rest. A charge
+    // runs the straight line whatever lies on it.
     float range = botAI->GetRange("spell");
-    if (name == "reach melee")
+    if (name == "reach melee" || dynamic_cast<CastReachTargetSpellAction*>(action))
         range = bot->GetMeleeRange(target);
     else if (dynamic_cast<ReachPartyMemberToHealAction*>(action))
         range = botAI->GetRange("heal");
