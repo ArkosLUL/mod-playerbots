@@ -20,9 +20,10 @@ Flame Leviathan's towers, Freya's Elders, Thorim's Sif and Yogg-Saron's Keepers 
 Notes for some of the bosses:
 
 - **Flame Leviathan**: 2 real players should share one Demolisher to deal with the turrets and stun Leviathan.
+- **Iron Assembly**: it's a DPS check. Losing more than 2 characters in Phase 3 is most likely a wipe, same as in a real raid.
 - **Auriaya**: fight her near the corridor to Vezax.
 - **Hodir**: a bot with good enough gear can solo tank him.
-- **Thorim**: two well geared tanks, and paladins should be the best fit. The main tank should be a bot, and it'll stay with the arena squad.
+- **Thorim**: two well geared tanks, and paladins should be the best fit. The main tank should be a bot, and it'll stay with the arena squad. You should go with the gauntlet squad, since bots follow their master.
 - **Freya**: it's best if you take the off-tank yourself, it's the most important role in this fight.
 - **Mimiron**: a bot with good enough gear can solo tank him. Bring extra healers, I tested with 5. Between phases the bots don't handle the flames on their own, but you can use the `summon` command to choose where they land.
 - **General Vezax**: a bot can solo tank him. Don't use a paladin for it, they run into mana issues.

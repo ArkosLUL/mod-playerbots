@@ -5,10 +5,11 @@ Stacked on #2876 (the raid encounter framework). Until that one's merged this di
 These are the shared pieces the Ulduar rework (#2986) calls from several bosses:
 
 - `MovementAction::TryMoveTo` returns a `MoveOutcome`, so encounter code with several spots to pick from can tell "no path there" apart from "still walking to the last one". `MoveTo` keeps its bool and now wraps it.
-- `EncounterHelpers`: the nearest spot clear of several hazards, derived points snapped onto the floor, class taunts, frontal cone dodges and Nitro Boosts.
+- `EncounterHelpers`: the nearest spot clear of several hazards, derived points snapped onto the floor, class taunts, frontal cone dodges, Nitro Boosts and a spell's cooldown after talents.
 - `RaidTankDefensive`, `RaidHumanTankCall` and `BurstCooldowns` pick the defensive cooldown a bot should press ahead of a big hit, tell a human tank when to press theirs, and let an encounter hold burst cooldowns until a tank has held the boss for a while.
 - `RaidAntiFear`, `RaidRedirectThreat` and `RaidSplash` are base classes an encounter subclasses for Fear Ward and Tremor Totem, or Misdirection and Tricks of the Trade, plus a check for actions that hit an area.
 - `BossNatureAspectHoldMultiplier` keeps the nature resistance hunter in Aspect of the Wild. Without it the hunter's own aspect nodes recast Dragonhawk on the next GCD. `FindBossByName` scans all possible targets, since a bot on an add never has the boss on its threat list.
+- `RaidDefensive` picks the personal button a bot presses before a hit the encounter sees coming: a class defensive, its immunity on a lethal hit, or a healthstone. `RaidResistAura` gives each wanted resistance aura to one paladin, and Aspect of the Wild to the nature resistance hunter.
 - `RaidDifficulty.h` reads 10 or 25 man from the map instead of the group. A group left on 25 Heroic in Ulduar, Naxxramas or Eye of Eternity plays 25 Normal but still reports 25 Heroic, so a check on the group's setting treats it as 10 man.
 
 Nothing calls the new pieces yet, so on its own this changes no behaviour.
