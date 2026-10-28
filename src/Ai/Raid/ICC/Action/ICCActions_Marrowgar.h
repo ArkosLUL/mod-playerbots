@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "Action.h"
 #include "ICCActions_RaidWide.h"
 #include "ICCHelpers_Marrowgar.h"
 #include "MovementActions.h"
@@ -59,6 +60,24 @@ public:
     static constexpr char const* Name = "icc lm dodge coldflame";
 
     IccLmDodgeColdflameAction(PlayerbotAI* botAI) : IccLmWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccLmCastTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc lm cast tank defensive";
+
+    IccLmCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccLmCastStormCoverAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc lm cast storm cover";
+
+    IccLmCastStormCoverAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 

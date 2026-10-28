@@ -7,6 +7,8 @@
     lord_marrowgar.py <file> --storms   each storm's anchors, and who stood on an anchor or the stack
     lord_marrowgar.py <file> --spikes   the spike rule each bot followed
     lord_marrowgar.py <file> --dodges   the Coldflame dodge branches each bot took
+    lord_marrowgar.py <file> --defensives  the tank buttons spent as Bone Slice resumes, calls to a human tank
+    lord_marrowgar.py <file> --covers   the raid cooldowns dealt and cast in each Bone Storm
     lord_marrowgar.py <file> --cheats   this encounter's cheat uses
 
 What the generic views miss here:
@@ -21,8 +23,15 @@ What the generic views miss here:
   reach, `far` a ranged on a spike no melee reaches, `spread` a ranged helping on the others, `boss`
   him.
 - **`lm.dodge` writes `clear` whenever a bot is out of every patch**, so a dodge is the row before it:
-  `move N` (yards walked), `tight` (the wide clearance was full), `hold` (still walking), `none`,
-  `locked`, `stunned`.
+  `move N` (yards walked), `tight` (the wide clearance was full), `cross` (the walk crosses another
+  line, taken only when no walk is clear), `hold` (still walking), `none`, `locked`, `stunned`.
+- **Bone Slice windows are derived, not noted.** He swings plain for 10 s after the engage and after
+  each storm ends, so a window opens 10 s into every `normal` phase span. `lm.defensive` is the button
+  a main tank or off-tank was offered then: a cast name, `covered` once one runs, `none` with nothing
+  ready, `idle` outside a window. The casts themselves are the `cast` rows.
+- **`icc.cover` is the deal, not the cast**: one holder per raid cooldown, written when a window of
+  three Bone Storm ticks is about to start (3 s before it). Anti-Magic Zone is never cast, Bone Storm
+  being physical.
 """
 from __future__ import annotations
 
@@ -36,17 +45,36 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of, prefix_matches_boss  # noqa: E402
 from raidobs.probes import holder_spans, latch_spans  # noqa: E402
-from raidobs.trace import Trace, cheat_uses, clock, combat_deaths, notes  # noqa: E402
+from raidobs.trace import Trace, cheat_uses, clock, combat_deaths, notes, roster_guids  # noqa: E402
 
 SLUG = "lord-marrowgar"
 NAME = "Lord Marrowgar"
 PHASE = "lm.phase"
 STORM = "bonestorm"
+NORMAL = "normal"
 DUTY = "lm.duty"
 ANCHOR = "lm.anchor"
 STAND = "lm.stand"
 SPIKE = "lm.spike"
 DODGE = "lm.dodge"
+DEFENSIVE = "lm.defensive"
+HUMAN_CALL = "lm.humancall"
+COVER = "icc.cover"
+# Berserk, and when Bone Slice resumes after the engage and after a storm (EVENT_ENABLE_BONE_SLICE)
+BERSERK_MS = 600000
+SLICE_DELAY_MS = 10000
+# a tank button counts for a window from this long before Bone Slice resumes until this long after
+WINDOW_LEAD_MS = 1500
+WINDOW_SPAN_MS = 7000
+# a cover cast counts for a storm from this long before it starts
+COVER_LEAD_MS = 3000
+# icc.cover values, RaidCover's order
+COVER_KINDS = {1: "aura mastery", 2: "divine sacrifice", 3: "anti magic zone", 4: "divine hymn", 5: "tranquility"}
+# cast names, any rank; Divine Guardian is Divine Sacrifice's proc
+RAID_COVERS = frozenset({"Aura Mastery", "Divine Sacrifice", "Divine Guardian", "Anti-Magic Zone", "Divine Hymn",
+                         "Tranquility"})
+TANK_BUTTONS = frozenset({"Last Stand", "Shield Wall", "Divine Protection", "Barkskin", "Frenzied Regeneration",
+                          "Survival Instincts", "Anti-Magic Shell", "Vampiric Blood", "Icebound Fortitude"})
 DUTIES = {"1": "main tank", "2": "off-tank", "3": "inside", "4": "bait"}
 ANCHOR_SLOTS = {"1": "180", "2": "60", "3": "300"}
 STORM_STANDS = ("anchor", "stack")
@@ -70,6 +98,20 @@ def phase_steps(trace: Trace) -> list[tuple[str, int, int]]:
 
 def storms(trace: Trace) -> list[tuple[int, int]]:
     return [(start, stop) for value, start, stop in phase_steps(trace) if value == STORM]
+
+
+def slice_windows(trace: Trace) -> list[int]:
+    """When Bone Slice resumes: 10 s into every `normal` span, unless the next storm cast comes first."""
+    return [start + SLICE_DELAY_MS for value, start, stop in phase_steps(trace)
+            if value == NORMAL and start + SLICE_DELAY_MS < stop]
+
+
+def casts_named(trace: Trace, names: frozenset) -> list[tuple[int, int, str]]:
+    """`(t, guid, spell name)` for every roster cast of one of `names`, once per ms."""
+    roster = roster_guids(trace)
+    named = ((rec["t"], rec.get("s"), trace.spells.get(rec.get("sp"), "")) for rec in trace.of("cast")
+             if rec.get("s") in roster)
+    return sorted({cast for cast in named if cast[2] in names})
 
 
 def holders_at(trace: Trace, key: str, when: int) -> dict[int, str]:
@@ -154,6 +196,10 @@ def show_phases(trace: Trace) -> None:
     for value, start, stop in steps:
         print(f"    {clock(start):>9}  {clock(stop - start):>9}  {value}")
 
+    end = pull_end(trace)
+    spare = f"{clock(BERSERK_MS - end)} to spare" if end < BERSERK_MS else f"{clock(end - BERSERK_MS)} past it"
+    print(f"  Berserk at {clock(BERSERK_MS)}, pull ended at {clock(end)}: {spare}")
+
 
 def show_duties(trace: Trace) -> None:
     print("DUTIES")
@@ -209,6 +255,61 @@ def show_dodges(trace: Trace) -> None:
         print(f"  {trace.name(guid):<16} {line}")
 
 
+def show_defensives(trace: Trace) -> None:
+    print("TANK DEFENSIVES")
+    if not mine(trace):
+        return
+    opens = slice_windows(trace)
+    if not opens:
+        print("  no Bone Slice window in this pull")
+        return
+    casts = casts_named(trace, TANK_BUTTONS)
+    picks = [rec for rec in notes(trace, DEFENSIVE) if rec.get("txt") != "idle"]
+    spent_in = set()
+    covered = 0
+    for index, opened in enumerate(opens, 1):
+        low, high = opened - WINDOW_LEAD_MS, opened + WINDOW_SPAN_MS
+        spent = [cast for cast in casts if low <= cast[0] <= high]
+        spent_in.update(spent)
+        covered += bool(spent)
+        offered = collections.Counter(f"{trace.name(rec['g'])} {rec['txt']}" for rec in picks
+                                      if low <= rec["t"] <= high)
+        print(f"  {index}  Bone Slice from {clock(opened)}")
+        print("      cast     " + (", ".join(f"{name} {trace.name(guid)} {(when - opened) / 1000:+.1f}s"
+                                              for when, guid, name in spent) or "none"))
+        if offered:
+            print("      offered  " + ", ".join(f"{what} x{count}" for what, count in sorted(offered.items())))
+    elsewhere = [cast for cast in casts if cast not in spent_in]
+    if elsewhere:
+        print("  off the windows  " + ", ".join(f"{name} {trace.name(guid)} {clock(when)}"
+                                                 for when, guid, name in elsewhere))
+    calls = notes(trace, HUMAN_CALL)
+    if calls:
+        print("  calls to a human tank  " + ", ".join(f"{rec['txt']} {clock(rec['t'])}" for rec in calls))
+    print(f"\n  {covered} of {len(opens)} windows saw a tank button; a window opens 10 s into each normal phase")
+
+
+def show_covers(trace: Trace) -> None:
+    print("STORM COVER")
+    if not mine(trace):
+        return
+    spans = storms(trace)
+    if not spans:
+        print("  no Bone Storm in this pull")
+        return
+    casts = casts_named(trace, RAID_COVERS)
+    deals = [rec for rec in notes(trace, COVER) if str(rec.get("txt", "")).isdigit() and int(rec["txt"])]
+    for index, (start, stop) in enumerate(spans, 1):
+        low = start - COVER_LEAD_MS
+        raid = [cast for cast in casts if low <= cast[0] <= stop]
+        dealt = [(rec.get("g"), COVER_KINDS.get(int(rec["txt"]), rec["txt"])) for rec in deals
+                 if low <= rec["t"] <= stop]
+        print(f"  {index}  {clock(start)} for {clock(stop - start)}")
+        print("      dealt    " + (", ".join(f"{trace.name(guid)} {kind}" for guid, kind in dealt) or "none"))
+        print("      cast     " + (", ".join(f"{name} {trace.name(guid)} {(when - start) / 1000:+.1f}s"
+                                              for when, guid, name in raid) or "none"))
+
+
 def show_cheats(trace: Trace) -> None:
     print("CHEATS")
     if not mine(trace):
@@ -227,6 +328,8 @@ SECTIONS = (
     ("storms", "each storm's anchors, and who stood on an anchor or the stack", show_storms),
     ("spikes", "the spike rule each bot followed", show_spikes),
     ("dodges", "the Coldflame dodge branches each bot took", show_dodges),
+    ("defensives", "the tank buttons spent as Bone Slice resumes, calls to a human tank", show_defensives),
+    ("covers", "the raid cooldowns dealt and cast in each Bone Storm", show_covers),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 
