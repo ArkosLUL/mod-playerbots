@@ -92,6 +92,9 @@ movement lock that decides which of two movers' orders is accepted is in
   once the anchor's own `isMoving()` has been false a short while (500 ms), not by widening the
   deadband. A "victim in melee range" test misses the walk, since a boss chasing a knocked-back tank
   catches it in flight and keeps it mostly in reach.
+- **A stand held round a boss who moves off.** Hold a boss-relative stand only while he is within a
+  few yards of where it latched; past that, release it so reach follows him, or he drags stale stands
+  along ([Lord Marrowgar](../raids/icecrown-citadel/lord-marrowgar.md)).
 - **A hazard sweep that restarts from a fixed base.** "First clear heading from base" re-finds ground
   *behind* the formation the moment a hazard back there expires, and the whole formation reverses.
   Latch the heading and sweep **forward only** from where it already is; an expiring hazard behind
@@ -233,6 +236,8 @@ What lands on a raid add is not what PvP experience predicts.
   health / 4.75 = 2,652), and `HandleBreakableCCAuraProc` removes it past that, DoT ticks included:
   Fear, Frost Nova, Entangling Roots (66 of 67 Fears on Faction Champions broke within 30 ms of a
   hit). Cyclone has neither. Read both, not the reputation.
+- **Cyclone makes its target immune to every spell, another Cyclone included**, so a CC chain times
+  the recast to land just after it ends, not before.
 - **A stunned creature takes no heal assist threat**: `ThreatManager::ForwardThreatForAssistingMe`
   skips `UNIT_STATE_CONTROLLED` units.
 - **Diminishing returns skip creatures.** `ApplyDiminishingToDuration` diminishes a creature only for a
@@ -244,7 +249,9 @@ What lands on a raid add is not what PvP experience predicts.
   stale entry).
 - **Taunt immunity is a `creature_immunities` row** (`CreatureImmunitiesId`, which replaced
   `mechanic_immune_mask`): aura 11 or effect 114. Check it, and 0x80000 below, before a plan relies on
-  a taunt.
+  a taunt. `Creature::LoadTemplateImmunities` applies it under a placeholder spell id (`uint32` max),
+  so a script's `ApplySpellImmune(0, …, false)` never clears it: Lady Deathwhisper's heroic taunt
+  immunity holds all fight, not from phase 2 as her script reads.
 - **Taunt diminishes only on a creature flagged for it.** `flags_extra` 0x80000
   (`OBEYS_TAUNT_DIMINISHING_RETURNS`) runs taunts at 100/65/42/27% duration, then immune until 15 s
   after the last one fades (`Unit::GetDiminishing`, `Spell.cpp` DR block). A taunt every 8 s plus a
@@ -374,7 +381,7 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   sight-range sweep, and Ulduar code took 20-60 of them per bot per tick. One **per-bot scan stamped
   with `getMSTime()`** collapses them (`RazorscaleScan`, `IronAssemblyScan`): a bot never ticks twice
   in one ms. A multiplier is per bot and asked once per action, so its boss lookup or sweep caches
-  the same way (`IccLadyDeathwhisperMultiplier`). `FindTargetValue` (`"find target"`) is built with interval 1 too, and every read runs
+  the same way (`IccLadyDeathwhisperMultiplier`, the Dominate Mind splash hold). `FindTargetValue` (`"find target"`) is built with interval 1 too, and every read runs
   `Utf8toWStr` + `wstrToLower` + `Utf8FitTo` on each entry of the bot's threat list
   ([Eye of Eternity](../raids/eye-of-eternity.md)).
 - **World state holds still only through the trigger checks.** `ProcessTriggers` checks every trigger
@@ -412,8 +419,10 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   ahead of it, so reject on what stays false for many ticks first — cooldown, a reserve — and only
   then pay range, sight and `CanCastSpell`, which tests the cooldown itself but after the caller's
   raycast. Likewise health before sight ([algalon.md](../raids/ulduar/algalon.md#what-it-costs)).
-- **A rule predicate that constructs trigger objects pays their construction on every action it is
-  asked about.** Read the helpers those triggers wrap instead, keeping each trigger's full condition.
+- **A rule predicate runs for every action it is asked about**, a movement rule for every movement
+  action a bot weighs. One that constructs trigger objects pays their construction each time: read
+  the helpers those triggers wrap instead, keeping each trigger's full condition. A hazard list or
+  resolver it reads needs a per-bot, per-ms memo, or it is rebuilt dozens of times a tick per bot.
 - **A progress latch keyed on a point that moves with the bot grows without bound**: each new key is
   a fresh latch that lives for the server run and never reaches its give-up. Evicting or re-keying
   changes which latch matches — a behaviour change, not only a saving.
@@ -544,6 +553,16 @@ encounters.
 - **A spell's Speed delays even a triggered instant**, so an aura sent with a telegraphed cast can
   land before the telegraphed hit (Fire Bomb's 66318 a second before its 66317). Read Speed and the
   corrections before timing a hazard off its aura.
+- **A line laid by a stepping head is predictable; its patches come too late.** A Coldflame-style
+  head (a `NullCreatureAI` that `NearTeleportTo`s N yd along its facing per tick and leaves a
+  dynobject) lands its next patches where its position and orientation say. Dynobjects show only
+  what has landed, so a dodge keyed on them alone is always late
+  ([Lord Marrowgar](../raids/icecrown-citadel/lord-marrowgar.md)).
+- **A charge's landing point is readable before he lands**: `boss->movespline->FinalDestination()`
+  while `!movespline->Finalized()`, so whoever he will land on moves first (Onyxia, Marrowgar).
+- **A boss boundary evades him.** `Creature::Update` runs `CheckInRoom` against the AI's
+  `SetBoundary` every 2.5 s while engaged, so a charge or tank drag that takes him outside resets the
+  fight. Check stands against the instance script's boundary as well as the navmesh.
 - **A `TARGET_DEST_TARGET_ENEMY` area spell picks its victims in `Spell::_cast`**, at the cast's end,
   so the cast bar is the whole dodge window and a Speed only delays the damage.
 - **A chain spell jumps by `IsWithinDist`**, both combat reaches added (10 yd magic default + 1.5 +

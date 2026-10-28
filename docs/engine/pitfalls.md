@@ -639,6 +639,9 @@ Related traps:
 - **A direct `Attack()` has no out-of-combat guard** and reaches `SightDistance` (100 yd), so every
   branch of a resolver feeding it needs an in-combat unit, or the raid pulls itself
   ([kologarn.md](../raids/ulduar/kologarn.md)).
+- **A creature's aggro radius is its detection range plus its level lead over the player**
+  (`Creature::GetAggroRange`, 1 yd per level): a level-83 boss with detection 20 pulls a level-80
+  player at 23 yd, which rules out pre-pull stands behind most raid bosses.
 - **An encounter gate that requires `boss->IsInCombat()` leaves the strategy inert through the whole
   approach and the instant of the pull.** Generic tank and DPS behaviour therefore picks targets
   first, and the boss-specific rules inherit whatever state that left behind.

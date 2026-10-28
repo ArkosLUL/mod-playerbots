@@ -50,7 +50,8 @@ map, live while it is in combat with a victim in the bot's group (a pet counts a
 the bot. A per-instance guid cache, rescanned at most once a second, finds it, so one in an unloaded
 grid leaves the gate closed. Their ticks open the trace through `IccMarkPull` while live. Each trigger
 still tests its boss itself, mostly through `"find target"` (the bot's threat list), Sindragosa's
-through a 200 yd `FindNearestCreature`; one firing while its gate is live names the trace
+through a 200 yd `FindNearestCreature`, Marrowgar's by entry through a per-instance guid cache, the
+giant's through its gate's live unit; one firing while its gate is live names the trace
 (`RaidObs::NamePull`). The strip, the heroic buffs and `IccMarkPull` run in definition ticks, which
 run while the gate is open; `icc sindragosa group position` still runs its raid cheats and Nitro
 Boosts inside `IsActive`.
@@ -67,8 +68,8 @@ point, about 7 s into the pull (~102 and ~104 yd at 15 yd/s). What acts before l
 | Valithria | `icc valithria group` (she is within 100 yd), `icc valithria heal` (healers within 100 yd); live once the first archmage pulls the combat trigger |
 | Sindragosa | `icc sindragosa group position` (she is within 200 yd), its raid cheats and Nitro Boosts included |
 
-Nothing else: Marrowgar's, Stinky and Precious's and the giant's nodes need the bot on the threat
-list, any prince's engage pulls Valanar into the state in the same update, and the rest key on fight
+Nothing else: Marrowgar's nodes key on his boss state, the giant's on its gate being live, Stinky and
+Precious's need the bot on the threat list, any prince's engage pulls Valanar into the state in the same update, and the rest key on fight
 auras, units or `"find target"`.
 
 **Seams.** An encounter gains a trigger, action, multiplier, rule or tick in its stem files and
@@ -85,7 +86,9 @@ definition alone:
   `IccDirectTargetTrigger` and an action on `IccDirectAttackAction` pass their `Name` and the resolver;
   one row joins them, and `e.OwnTargeting(name, roles, &IccResolverPicks<&Resolver>, pickers)`
   follows the stem's multipliers. The action sends the pet first, the trigger also fires while the
-  pet is off the pick. `RaidRestoreLegacyRti` stays unwired until no ICC code writes `rti`.
+  pet is off the pick. Marrowgar and Deathwhisper use it, with no icon writes or `rti` use.
+  `RaidRestoreLegacyRti` stays unwired until no ICC code writes `rti`; a ranged bot may still carry
+  the skull, cross or star `rti` the old Marrowgar code set.
 - hooks: a row in `HookRows()` (`Util/ICCSeams.cpp`), `{&Icc<Stem>Definition, burstWindow,
   openerBosses, resistSchools, fireWantsMastery}`, unused hooks null, the functions in the stem's
   helpers. Only the first row whose definition is live is asked, so none answers before live (the
@@ -95,6 +98,7 @@ definition alone:
   `resistSchools` and `fireWantsMastery` feed the aura election (`RaidResistAura.h`, `icc.aura`): one
   bot paladin per wanted fire, frost or shadow school, the nature hunter's Aspect of the Wild, and the
   hold rules keep each holder's own auras or aspects off. With no hook the opener and aura triggers neither fire nor note.
+  Rows: Marrowgar's opener (boss 36612), Deathwhisper's burst window (lust waits for phase 2).
 - defensives: `GetRaidCover` and `GetRaidPersonalDefensive` (`RaidDefensive.h`) with
   `ICC_DEFENSIVE_SCOPE` (`icc.cover`, `icc.personal`) and a `RaidPredictedHit` the stem builds.
 - opening positions: a `Mover` row in the definition whose trigger holds the stand while the gate is
@@ -174,9 +178,6 @@ replaced it.
 
 | Key | Class | Gate | Sites |
 |---|---|---|---|
-| `ldw.cyclone` | gap | raid | `IccAddsLadyDeathwhisperAction`: Cyclone on a Dominate Mind victim, bot or human |
-| `ldw.insignificance` | gap | raid | same action: tank strips Touch of Insignificance |
-| `rfg.deathplague` | gap | raid | `IccRottingFrostGiantTankPositionAction`: strips Death Plague |
 | `gsb.battlefury` | gap | raid | `IccGunshipRocketJumpAction`: strips Battle Fury off the enemy captain |
 | `pp.oozekill`, `pp.gascloudkill` | gap | raid | `IccPutricideVolatileOozeAction`, `IccPutricideGasCloudAction`: kill every extra add of the entry |
 | `pp.unboundplague` | gap | raid | `IccPutricideAvoidMalleableGooAction::HandleUnboundPlague`: suicide with nobody near |
@@ -189,7 +190,7 @@ replaced it.
 | `lk.wickedspiritkill` | gap | raid | `HandleSpiritMarkingAndTargeting`: kills the star Wicked Spirit |
 | `lk.hoj` | gap | raid | `HandleAssistTankAddManagement`: Hammer of Justice on Shamblings from any class |
 | `lk.frostmourneescape` | gap | raid | `HandleTeleportationFixes`, normal: snaps a Harvest Soul victim out of Frostmourne on its first tick, skipping the Spirit Warden |
-| `ldw.nothreat`, `ldw.spitefulfury` | buffs | iccbuffs | `IccAddsLadyDeathwhisperAction` |
+| `ldw.nothreat`, `ldw.spitefulfury` | buffs | iccbuffs | the Deathwhisper definition's tick while live |
 | `pp.heroicbuff`, `pp.spitefulfury` | buffs | iccbuffs | the Putricide definition's tick while live, on every member |
 | `sg.heroicbuff`, `sg.spitefulfury` | buffs | iccbuffs | the Sindragosa definition's tick while live, on every member |
 | `lk.heroicbuff` | buffs | iccbuffs | `IccLichKingShadowTrapAction`, `IccLichKingWinterAction`, `IccLichKingAddsAction` (every member) |
@@ -258,9 +259,10 @@ id.
 ## Trigger names
 
 Every trigger name starts `icc `, mostly followed by its boss: `lm`, `lady deathwhisper`, `dbs`,
-`festergut`, `rotface`, `putricide`, `bpc`, `bql`, `valithria`, `sindragosa`, `lich king`. The others:
+`festergut`, `rotface`, `putricide`, `bpc`, `bql`, `valithria`, `sindragosa`, `lich king`. Deathwhisper's are
+`icc lady deathwhisper` dodge, frostbolt, dominate mind, taunt, redirect and target. The others:
 `icc dark reckoning` (Deathwhisper), `icc in cannon` and the `icc gunship` ones (Gunship), `icc
-rotting frost giant tank position`, `icc dogs` (Stinky and Precious), `icc valkyre spear` and `icc
+rotting frost giant plague`, `icc dogs` (Stinky and Precious), `icc valkyre spear` and `icc
 sister svalna` (Svalna). The raid-wide `icc opener swing`, `icc opener redirect` and `icc resistance
 aura` belong to no encounter. Rows register classes under their `Name`, so two classes sharing one leave
 one unbuilt: `IccGunshipCannonNearTrigger` called itself `icc in cannon` and merged its coverage
@@ -268,7 +270,8 @@ into the real one.
 
 ## Known gaps
 
-- Targeting is by raid icon throughout; the probes record every pick.
+- Targeting is by raid icon outside Marrowgar, Deathwhisper and the giant; the probes record every
+  pick.
 - Every gap cheat above: a mechanic it makes survivable is open, and a server with the raid cheat off
   loses it.
 - The hooks answer only while a definition is live, so an opener or aura hook for Festergut, Rotface
