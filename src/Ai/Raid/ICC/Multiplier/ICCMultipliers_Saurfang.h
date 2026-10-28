@@ -9,10 +9,21 @@
 
 #include "Multiplier.h"
 
-class IccAddsDbsMultiplier : public Multiplier
+// Holds a damage dealer's area damage: the boss stands alone and Resistant Skin takes 95% off it on the
+// beasts, so it only pulls them. Tanks keep theirs for threat.
+class IccDbsAreaDamageMultiplier : public Multiplier
 {
 public:
-    IccAddsDbsMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc adds dbs") {}
+    IccDbsAreaDamageMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc dbs area damage") {}
+    float GetValue(Action* action) override;
+};
+
+// A paladin on Mark duty keeps its Beacon of Light on the mark, so its class beacon nodes would move it
+// back to a tank. Those nodes are named after the spell, which no rule can list.
+class IccDbsBeaconDutyMultiplier : public Multiplier
+{
+public:
+    IccDbsBeaconDutyMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc dbs beacon duty") {}
     float GetValue(Action* action) override;
 };
 

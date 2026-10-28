@@ -5,12 +5,36 @@
  */
 
 #include "ICCTriggers_Saurfang.h"
-#include "ICCHelpers_Saurfang.h"
-#include "ICCHelpers_Shared.h"
-#include "Playerbots.h"
-#include "Trigger.h"
 
-bool IccDbsTrigger::IsActive()
+#include "Creature.h"
+#include "Playerbots.h"
+#include "Position.h"
+
+bool IccDbsRuneSwapTrigger::IsActive() { return IsDbsSwapTaunter(botAI); }
+
+bool IccDbsRuneYieldTrigger::IsActive()
 {
-    return AI_VALUE2(Unit*, "find target", "deathbringer saurfang") != nullptr;
+    Creature* boss = GetDbsBoss(botAI);
+    return boss && IsDbsRuneYielding(botAI) &&
+           (bot->GetVictim() == boss || AI_VALUE(Unit*, "current target") == boss);
+}
+
+bool IccDbsBeastTauntTrigger::IsActive() { return GetDbsBeastToTaunt(botAI) != nullptr; }
+
+bool IccDbsBeastControlTrigger::IsActive()
+{
+    char const* spell = nullptr;
+    return GetDbsControlDuty(botAI, spell) != nullptr;
+}
+
+bool IccDbsMarkHealTrigger::IsActive()
+{
+    bool beacon = false;
+    return GetDbsMarkWork(botAI, beacon) != nullptr;
+}
+
+bool IccDbsStandTrigger::IsActive()
+{
+    Position spot;
+    return GetDbsStandWalk(botAI, spot);
 }
