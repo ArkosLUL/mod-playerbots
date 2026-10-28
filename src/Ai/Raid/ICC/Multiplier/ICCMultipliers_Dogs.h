@@ -9,10 +9,11 @@
 
 #include "Multiplier.h"
 
-class IccDogsMultiplier : public Multiplier
+// Holds a yielding tank's spells and swings on the dog, and its area damage near it. Heals pass.
+class IccDogsYieldMultiplier : public Multiplier
 {
 public:
-    IccDogsMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc dogs") {}
+    IccDogsYieldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc dogs yield") {}
     float GetValue(Action* action) override;
 };
 

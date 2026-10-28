@@ -5,65 +5,60 @@
  */
 
 #include "ICCActions_Dogs.h"
-#include "GenericSpellActions.h"
-#include "Multiplier.h"
+
+#include "Creature.h"
+#include "ICCHelpers_Shared.h"
 #include "Playerbots.h"
+#include "RaidDefensive.h"
 
-bool IccDogsTankPositionAction::Execute(Event /*event*/)
+bool IccDogsCastTankDefensiveAction::Execute(Event /*event*/)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "stinky");
-    if (!boss)
-        boss = AI_VALUE2(Unit*, "find target", "precious");
-    if (!boss)
+    uint32 const spellId = GetDogsTankDefensive(botAI, "dogs.defensive");
+    return spellId && botAI->CastSpell(spellId, bot);
+}
+
+bool IccDogsCastDecimateCoverAction::Execute(Event /*event*/)
+{
+    RaidCover const cover = GetDogsDecimateCover(botAI);
+    uint32 const spellId = RaidCoverSpellId(botAI, cover);
+    if (!spellId)
         return false;
 
-    if (PlayerbotAI::IsTank(bot))
-    {
-        Aura* aura = botAI->GetAura("mortal wound", bot, false, true);
-        bool const hasMortalWound = aura && aura->GetStackAmount() >= 8;
+    // A cast in progress fails this one's check, and a moving bot breaks its own channel
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
 
-        if (hasMortalWound)
-        {
-            if (bot->GetVictim() == boss)
-                bot->AttackStop();
+    if (IsRaidCoverChannel(cover) && bot->isMoving())
+        bot->StopMoving();
 
-            return true;
-        }
-
-        // Tank without high mortal wound stacks: taunt boss if current tank has the debuff
-        Unit* currentTarget = boss->GetVictim();
-        if (currentTarget && currentTarget != bot)
-        {
-            Aura* victimAura = botAI->GetAura("mortal wound", currentTarget, false, true);
-            if (victimAura && victimAura->GetStackAmount() >= 8)
-                IccCastClassTaunt(bot, botAI,boss);
-        }
-
-        // Taunt nearby hostile adds not targeting a tank
-        GuidVector const npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-        for (auto const& npc : npcs)
-        {
-            Unit* unit = botAI->GetUnit(npc);
-            if (!unit || !unit->IsAlive())
-                continue;
-
-            if (unit == boss)
-                continue;
-
-            if (bot->GetDistance2d(unit) > 20.0f)
-                continue;
-
-            Unit* victim = unit->GetVictim();
-            Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
-            if (!victimPlayer || !PlayerbotAI::IsTank(victimPlayer))
-            {
-                IccCastClassTaunt(bot, botAI,unit);
-                break;
-            }
-        }
-
+    if (!botAI->CastSpell(spellId, bot))
         return false;
-    }
 
-    return false;
+    FinishRaidCover(botAI, cover);
+    return true;
+}
+
+bool IccDogsSwapAction::Execute(Event /*event*/)
+{
+    Creature* dog = GetDogsBoss(botAI);
+    if (!dog || !IsDogsSwapTaunter(botAI) || !IccCastClassTaunt(bot, botAI, dog))
+        return false;
+
+    AttackDirect(dog);
+    return true;
+}
+
+bool IccDogsYieldAction::Execute(Event /*event*/)
+{
+    Creature* dog = GetDogsBoss(botAI);
+    if (!dog)
+        return false;
+
+    if (bot->GetVictim() == dog)
+        bot->AttackStop();
+
+    if (AI_VALUE(Unit*, "current target") == dog)
+        context->GetValue<Unit*>("current target")->Set(nullptr);
+
+    return true;
 }
