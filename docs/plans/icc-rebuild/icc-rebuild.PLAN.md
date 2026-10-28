@@ -209,7 +209,8 @@ stage: a boss lane reports what they need.
 - `tools/nativetest/run.sh` when a header a native test includes changes.
 - In a split lane only the finisher runs the checks.
 
-**Commit.** One commit per lane on `iccr/<lane>`, staged by explicit path, never `-A`.
+**Commit.** One commit per lane on `iccr/<lane>`, plus one for the reviewer's fixes (message file
+`<lane>-review.txt`), staged by explicit path, never `-A`.
 
 - Subject ≤72 characters. Body at most three lines, only a why the diff can't show. Voice per the
   `use-conversational-language` skill. No AI attribution or `Co-Authored-By`.
@@ -258,6 +259,7 @@ Waves 3a-3g run it for every encounter in their brief.
      full fixture.
 6. **Doc** per the Docs rule, plus targets for the next 25N pull, then 25H.
 7. **Close:** checks, review through the wave script's lenses, fixes, commit.
+8. **Review** by a fresh agent (see Waves), before the merge.
 
 ## Waves
 
@@ -281,7 +283,11 @@ before the next starts.
 
 A lead agent runs each lane: investigate → implement → check → review the change → fix → close and
 commit. Only a big lane splits: the lead hands its Task list to up to 3 implementers on disjoint
-files, and one finisher integrates, checks, reviews, fixes and commits. A merge stage then lands each
-finished lane on `Custom`, runs the checks on the merged tree, updates the status table, the ICC
+files, and one finisher integrates, checks, reviews, fixes and commits. Then one fresh reviewer per
+lane, which never sees the lead's report, reviews the lane's diff through the same lenses against the
+sources, fixes every bug and minor, records what it leaves, re-runs the checks and commits its fixes
+on the lane branch; a review it can't get green blocks the lane. Lanes merged before this stage
+existed (wave 3a) are reviewed the same way on `iccr/<lane>-review`, a worktree from `Custom`. A merge
+stage then lands each finished lane on `Custom`, runs the checks on the merged tree, updates the status table, the ICC
 README and the engine docs, and removes merged worktrees and branches. Script:
 `G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/icc-rebuild-wave.js`.
