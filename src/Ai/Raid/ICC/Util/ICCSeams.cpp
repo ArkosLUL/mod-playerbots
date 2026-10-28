@@ -7,6 +7,8 @@
 #include "ICCSeams.h"
 
 #include "ICCDefinitions.h"
+#include "ICCHelpers_Deathwhisper.h"
+#include "ICCHelpers_Marrowgar.h"
 #include "RaidEncounter.h"
 
 namespace
@@ -15,7 +17,10 @@ namespace
 // encounter's own stem files.
 std::vector<IccEncounterHooks> const& HookRows()
 {
-    static std::vector<IccEncounterHooks> const rows = {};
+    static std::vector<IccEncounterHooks> const rows = {
+        {&IccMarrowgarDefinition, nullptr, &GetLmOpenerBosses, nullptr, nullptr},
+        {&IccDeathwhisperDefinition, &IccDeathwhisperBurstWindow},
+    };
     return rows;
 }
 }  // namespace
