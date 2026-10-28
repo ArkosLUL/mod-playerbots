@@ -56,6 +56,33 @@ public:
     bool IsActive() override;
 };
 
+class IccDbsProtectTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc dbs protect";
+
+    IccDbsProtectTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccDbsTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc dbs tank defensive";
+
+    IccDbsTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccDbsMarkDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc dbs mark defensive";
+
+    IccDbsMarkDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccDbsTargetTrigger : public IccDirectTargetTrigger
 {
 public:

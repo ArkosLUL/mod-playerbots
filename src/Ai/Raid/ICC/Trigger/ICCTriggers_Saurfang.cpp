@@ -7,6 +7,7 @@
 #include "ICCTriggers_Saurfang.h"
 
 #include "Creature.h"
+#include "ICCSeams.h"
 #include "Playerbots.h"
 #include "Position.h"
 
@@ -31,6 +32,16 @@ bool IccDbsMarkHealTrigger::IsActive()
 {
     bool beacon = false;
     return GetDbsMarkWork(botAI, beacon) != nullptr;
+}
+
+bool IccDbsProtectTrigger::IsActive() { return GetDbsProtectTarget(botAI) != nullptr; }
+
+bool IccDbsTankDefensiveTrigger::IsActive() { return GetDbsTankDefensive(botAI, "dbs.defensive") != 0; }
+
+bool IccDbsMarkDefensiveTrigger::IsActive()
+{
+    RaidPredictedHit hit;
+    return GetDbsMarkHit(botAI, hit) && static_cast<bool>(GetRaidPersonalDefensive(botAI, ICC_DEFENSIVE_SCOPE, &hit));
 }
 
 bool IccDbsStandTrigger::IsActive()

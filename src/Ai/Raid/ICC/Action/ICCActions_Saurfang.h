@@ -60,6 +60,33 @@ public:
     bool Execute(Event event) override;
 };
 
+class IccDbsProtectAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc dbs protect";
+
+    IccDbsProtectAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccDbsCastTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc dbs cast tank defensive";
+
+    IccDbsCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccDbsCastMarkDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc dbs cast mark defensive";
+
+    IccDbsCastMarkDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 class IccDbsTargetAction : public IccDirectAttackAction
 {
 public:

@@ -104,8 +104,6 @@ One implementer, no split: every part shares the helpers' per-instance state.
 - Those in the boss doc.
 - Never built: CMake re-run needed (new `Util/ICCHelpers_Saurfang.cpp`); no `-Werror` pass (the syntax
   check hides warnings).
-- Slot sight to him unchecked: the prebuilt navprobe has no `los`.
-- A bot counted a tank by spec alone (a Thick Hide cat) takes a tank spot: the ICC stems share that
-  tank test (reviewer). Its taunt no longer wins the swap, since the election checks the form.
+- Slot sight to him unchecked: the prebuilt navprobe has no `los`. Checked in g5-saurfang, which moved slots 10 and 11.
 
 ## Blocked

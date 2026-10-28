@@ -30,8 +30,10 @@
 #include "RaidCombatHelpers.h"
 #include "RaidDifficulty.h"
 #include "RaidDirectTargeting.h"
+#include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "RaidTankDefensive.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -43,6 +45,7 @@ constexpr float BEAST_SCAN_RANGE = 100.0f;
 constexpr uint32 BEAST_SCAN_MS = 200;
 constexpr uint32 ROSTER_REFRESH_MS = 1000;
 constexpr uint32 DUTY_REFRESH_MS = 200;
+constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 constexpr float TAUNT_RANGE = 30.0f;
 constexpr float ROOM_RADIUS = 80.0f;
 // Where reach spell walks a caster in: 28.5 + 0.5 plus both 1.5 yd reaches
@@ -61,7 +64,17 @@ constexpr int32 BEACON_REFRESH_MS = 5000;
 
 // The central slots first: from 1 a healer reaches every slot and tank spot
 constexpr uint8 HEALER_SLOTS[] = {1, 3, 2, 10, 11};
-constexpr uint8 RANGED_SLOTS[] = {7, 6, 5, 4, 9, 8, 1, 3, 2};
+constexpr uint8 RANGED_SLOTS[] = {7, 6, 5, 4, 9, 8, 1, 3, 2, 10, 11};
+// Melee fill these when too few ranged and healers are out, inner slots first
+constexpr uint8 FILL_SLOTS[] = {1, 3, 2, 4, 5, 7, 6, 9, 8, 10, 11};
+// Blood Nova draws from the farthest this many players when fewer stand 12 yd off his edge
+constexpr size_t NOVA_MIN_TARGETS_10 = 4;
+constexpr size_t NOVA_MIN_TARGETS_25 = 10;
+
+// How much splash a marked bot's own button is judged against, and his swing rate
+constexpr uint32 MARK_HIT_WINDOW_MS = 4000;
+constexpr float SWINGS_PER_SECOND = 1.0f;
+constexpr float FRENZY_SWING_FACTOR = 1.3f;
 
 struct ControlSpell
 {
@@ -119,6 +132,18 @@ struct DbsState
     std::unordered_map<ObjectGuid, uint32> controlSince;
     // Keyed on the marked player, so one healer can carry two marks
     RaidObs::ObsGuidMap<ObjectGuid> markHealer{"dbs.markheal"};
+    // Paladin -> the marked player it casts Hand of Protection on
+    RaidObs::ObsGuidMap<ObjectGuid> protect{"dbs.protect"};
+
+    // Marks so far, read off Blood Power falling back from 100. A tank spends once per cycle.
+    uint32 powerLast = 0;
+    uint32 powerCycle = 0;
+    std::unordered_map<ObjectGuid, uint32> defensiveCycle;
+    // Human tank calls: humanPeakCall is the cycle of the last peak call plus one, 0 for none
+    bool humanFrenzyCalled = false;
+    uint32 humanPeakCall = 0;
+    uint32 humanCallMs = 0;
+    bool humanCallRan = false;
 
     std::unordered_map<ObjectGuid, Stand> stands;
     std::unordered_map<ObjectGuid, TargetMemo> targets;
@@ -426,6 +451,7 @@ void RefreshRoster(DbsState& state, Player* bot, uint32 now)
     std::vector<Player*> tanks;
     std::vector<Player*> healers;
     std::vector<Player*> ranged;
+    std::vector<Player*> melee;
     for (Player* member : MembersOnMap(bot))
     {
         if (!IsDutyBot(member))
@@ -437,10 +463,13 @@ void RefreshRoster(DbsState& state, Player* bot, uint32 now)
             healers.push_back(member);
         else if (PlayerbotAI::IsRanged(member))
             ranged.push_back(member);
+        else
+            melee.push_back(member);
     }
 
     std::sort(healers.begin(), healers.end(), IccGuidLess());
     std::sort(ranged.begin(), ranged.end(), IccGuidLess());
+    std::sort(melee.begin(), melee.end(), IccGuidLess());
     state.rangedDps.clear();
     for (Player* member : ranged)
         state.rangedDps.push_back(member->GetGUID());
@@ -462,14 +491,14 @@ void RefreshRoster(DbsState& state, Player* bot, uint32 now)
         wanted[tanks[i]->GetGUID()] = static_cast<uint8>(DBS_STAND_TANK + i);
 
     bool taken[DBS_SLOT_COUNT + 1] = {};
-    auto const keep = [&](Player* member, bool healer)
+    auto const keep = [&](Player* member)
     {
         auto const held = state.slot.find(member->GetGUID());
         if (held == state.slot.end())
             return false;
 
         uint8 const id = held->second;
-        if (id < 1 || id > (healer ? DBS_SLOT_COUNT : DBS_INNER_SLOTS) || taken[id])
+        if (id < 1 || id > DBS_SLOT_COUNT || taken[id])
             return false;
 
         taken[id] = true;
@@ -494,10 +523,10 @@ void RefreshRoster(DbsState& state, Player* bot, uint32 now)
     std::vector<Player*> openHealers;
     std::vector<Player*> openRanged;
     for (Player* member : healers)
-        if (!keep(member, true))
+        if (!keep(member))
             openHealers.push_back(member);
     for (Player* member : ranged)
-        if (!keep(member, false))
+        if (!keep(member))
             openRanged.push_back(member);
 
     std::vector<Player*> spareHealers;
@@ -510,6 +539,23 @@ void RefreshRoster(DbsState& state, Player* bot, uint32 now)
     for (Player* member : spareHealers)
         if (!take(RANGED_SLOTS, std::size(RANGED_SLOTS), member))
             wanted[member->GetGUID()] = DBS_STAND_STACK;
+
+    // Too few out and Blood Nova picks among the farthest, melee included, and the stack shares it.
+    // Melee fill the gap, the ones already out first.
+    size_t slotted = 0;
+    for (uint8 id = 1; id <= DBS_SLOT_COUNT; ++id)
+        slotted += taken[id] ? 1 : 0;
+    size_t const novaNeeds = IsRaid25Man(bot) ? NOVA_MIN_TARGETS_25 : NOVA_MIN_TARGETS_10;
+    if (slotted < novaNeeds)
+    {
+        size_t fill = novaNeeds - slotted;
+        for (Player* member : melee)
+            if (fill && keep(member))
+                --fill;
+        for (Player* member : melee)
+            if (fill && !wanted.count(member->GetGUID()) && take(FILL_SLOTS, std::size(FILL_SLOTS), member))
+                --fill;
+    }
 
     std::vector<ObjectGuid> departed;
     for (auto const& [guid, id] : state.slot.Raw())
@@ -861,6 +907,178 @@ Unit* ResolveTarget(PlayerbotAI* botAI, DbsState& state, Creature* boss)
     Note(bot, "dbs.target", pick ? why : "none");
     return pick;
 }
+
+// Energy only falls when a Mark resets it from 100
+void UpdatePower(DbsState& state, Creature* boss)
+{
+    uint32 const power = boss->GetPower(POWER_ENERGY);
+    if (power + DBS_BLOOD_POWER_RESET_DROP <= state.powerLast)
+        ++state.powerCycle;
+
+    state.powerLast = power;
+}
+
+uint32 BloodPowerPeakFor(Player* tank)
+{
+    return tank->HasAura(SPELL_DBS_MARK) ? DBS_BLOOD_POWER_PEAK_MARKED : DBS_BLOOD_POWER_PEAK;
+}
+
+// The hand also pacifies for 10 s, so only a bot that fights with spells takes it
+bool CanBeProtected(Player* member)
+{
+    return IsDutyBot(member) && !IsTankPlayer(member) && !PlayerbotAI::IsMelee(member) &&
+           member->getClass() != CLASS_HUNTER;
+}
+
+bool CanCastProtection(Player* paladin, Player* target)
+{
+    PlayerbotAI* paladinAI = GET_PLAYERBOT_AI(paladin);
+    uint32 const spellId =
+        paladinAI ? paladinAI->GetAiObjectContext()->GetValue<uint32>("spell id", "hand of protection")->Get() : 0;
+    return spellId && !paladin->HasSpellCooldown(spellId) && !target->HasAura(SPELL_DBS_FORBEARANCE) &&
+           paladin->GetExactDist2d(target) <= DBS_PROTECT_RANGE && paladin->IsWithinLOSInMap(target) &&
+           paladinAI->CanCastSpell(spellId, target);
+}
+
+// One paladin per marked bot with Boiling Blood: ticks and splash are physical, so the hand takes both
+// and the Blood Power they would feed
+void UpdateProtect(DbsState& state, Creature* boss, std::vector<Player*> const& members)
+{
+    uint32 const boiling = sSpellMgr->GetSpellIdForDifficulty(SPELL_DBS_BOILING_BLOOD, boss);
+    std::vector<Player*> targets;
+    std::vector<Player*> paladins;
+    for (Player* member : members)
+    {
+        if (member->getClass() == CLASS_PALADIN && IsDutyBot(member) && !IsTankPlayer(member))
+            paladins.push_back(member);
+
+        Aura const* aura = member->HasAura(SPELL_DBS_MARK) ? member->GetAura(boiling) : nullptr;
+        if (aura && aura->GetDuration() >= DBS_PROTECT_MIN_LEFT_MS && CanBeProtected(member) &&
+            !member->HasAura(SPELL_DBS_FORBEARANCE))
+            targets.push_back(member);
+    }
+
+    auto const find = [](std::vector<Player*> const& list, ObjectGuid guid) -> Player*
+    {
+        auto const found = std::find_if(list.begin(), list.end(), [guid](Player* p) { return p->GetGUID() == guid; });
+        return found == list.end() ? nullptr : *found;
+    };
+
+    // A duty ends once its target is covered, out of reach or no longer in need
+    std::vector<ObjectGuid> released;
+    for (auto const& [paladinGuid, targetGuid] : state.protect.Raw())
+    {
+        Player* paladin = find(paladins, paladinGuid);
+        Player* member = find(targets, targetGuid);
+        if (!paladin || !member || !CanCastProtection(paladin, member))
+            released.push_back(paladinGuid);
+    }
+    for (ObjectGuid const& paladin : released)
+        state.protect.erase(paladin);
+
+    std::sort(targets.begin(), targets.end(), IccGuidLess());
+    for (Player* target : targets)
+    {
+        bool covered = false;
+        for (auto const& [paladin, held] : state.protect.Raw())
+            covered = covered || held == target->GetGUID();
+        if (covered)
+            continue;
+
+        Player* best = nullptr;
+        float bestDistance = 0.0f;
+        for (Player* paladin : paladins)
+        {
+            if (state.protect.count(paladin->GetGUID()) || !CanCastProtection(paladin, target))
+                continue;
+
+            float const distance = paladin->GetExactDist2d(target);
+            if (!best || distance < bestDistance)
+            {
+                best = paladin;
+                bestDistance = distance;
+            }
+        }
+
+        if (best)
+            state.protect.Set(best->GetGUID(), target->GetGUID());
+    }
+}
+
+uint32 TauntSpellId(Player* player)
+{
+    switch (player->getClass())
+    {
+        case CLASS_PALADIN:
+            return SPELL_TAUNT_PALADIN;
+        case CLASS_DEATH_KNIGHT:
+            return SPELL_TAUNT_DK;
+        case CLASS_DRUID:
+            return SPELL_TAUNT_DRUID;
+        case CLASS_WARRIOR:
+            return SPELL_TAUNT_WARRIOR;
+        default:
+            return 0;
+    }
+}
+
+// A human tank has no trigger, so it gets told: its taunt when the rune sits on a bot holding him with no
+// bot tank free, a defensive at the holder's windows
+void CallHumanTank(DbsState& state, Player* sender, Creature* boss, uint32 now)
+{
+    if (state.humanCallRan && getMSTimeDiff(state.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
+        return;
+
+    state.humanCallRan = true;
+    state.humanCallMs = now;
+
+    Unit* victim = boss->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    if (!holder || !holder->IsAlive())
+        return;
+
+    if (IsDutyBot(holder))
+    {
+        if (!IsTankPlayer(holder) || !HasRune(holder) || boss->HasAuraType(SPELL_AURA_MOD_TAUNT) ||
+            SwapTaunter(sender, boss))
+            return;
+
+        for (Player* member : MembersOnMap(sender))
+        {
+            uint32 const taunt = IsDutyBot(member) ? 0 : TauntSpellId(member);
+            if (taunt && member != holder && IsTankPlayer(member) && !HasRune(member) && member->HasSpell(taunt) &&
+                !member->HasSpellCooldown(taunt))
+            {
+                CallHumanTankDefensive(sender, member, taunt, 0, "Rune of Blood is on your partner", "dbs.humancall");
+                return;
+            }
+        }
+
+        return;
+    }
+
+    if (!IsTankPlayer(holder))
+        return;
+
+    uint32 const power = boss->GetPower(POWER_ENERGY);
+    bool const frenzy = boss->HasAura(SPELL_DBS_FRENZY);
+    bool const peak = power >= BloodPowerPeakFor(holder) && state.humanPeakCall != state.powerCycle + 1;
+    bool const unspentFrenzy = frenzy && !state.humanFrenzyCalled;
+    bool const low = holder->GetHealthPct() < DBS_TANK_DEFENSIVE_PCT;
+    if (!peak && !unspentFrenzy && !low)
+        return;
+
+    uint32 const spellId = ReadyTankDefensiveSpell(holder, true, 0, 0);
+    char const* why = low ? "you are low" : (unspentFrenzy ? "Frenzy" : "Blood Power is high");
+    if (!CallHumanTankDefensive(sender, holder, spellId, 0, why, "dbs.humancall"))
+        return;
+
+    if (peak)
+        state.humanPeakCall = state.powerCycle + 1;
+
+    if (unspentFrenzy)
+        state.humanFrenzyCalled = true;
+}
 }  // namespace
 
 bool IsDbsLive(PlayerbotAI* botAI)
@@ -1056,6 +1274,91 @@ bool IsDbsBeaconDutyHeld(PlayerbotAI* botAI)
     return false;
 }
 
+Player* GetDbsProtectTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    DbsState* state = LiveState(botAI);
+    if (!state || !bot->IsAlive() || bot->getClass() != CLASS_PALADIN)
+        return nullptr;
+
+    auto const duty = state->protect.find(bot->GetGUID());
+    Player* target = duty == state->protect.end() ? nullptr : ObjectAccessor::GetPlayer(*bot, duty->second);
+    return target && target->IsAlive() && CanCastProtection(bot, target) ? target : nullptr;
+}
+
+uint32 GetDbsTankDefensive(PlayerbotAI* botAI, char const* noteKind)
+{
+    DbsState* state = LiveState(botAI);
+    Creature* boss = state ? GetDbsBoss(botAI) : nullptr;
+    Player* bot = botAI->GetBot();
+    if (!boss || !bot->IsAlive() || !IsDutyBot(bot) || !IsTankPlayer(bot))
+        return 0;
+
+    bool window = bot->GetHealthPct() < DBS_TANK_DEFENSIVE_PCT;
+    // The splash lands on a Mark carrier every swing, tank or not, holding him or not
+    if (boss->GetVictim() == bot || bot->HasAura(SPELL_DBS_MARK))
+    {
+        auto const spent = state->defensiveCycle.find(bot->GetGUID());
+        bool const fresh = spent == state->defensiveCycle.end() || spent->second != state->powerCycle;
+        window = window || boss->HasAura(SPELL_DBS_FRENZY) ||
+                 (fresh && boss->GetPower(POWER_ENERGY) >= BloodPowerPeakFor(bot));
+    }
+
+    if (!window)
+    {
+        // Change-latched, so the way out of a window is written too
+        if (noteKind)
+            Note(bot, noteKind, "idle");
+
+        return 0;
+    }
+
+    return NextTankDefensive(botAI, bot, noteKind, true);
+}
+
+bool IsDbsTankDefensiveHeld(PlayerbotAI* botAI)
+{
+    return IsDbsLive(botAI) && botAI->GetBot()->GetHealthPct() >= DBS_TANK_LAST_RESORT_PCT;
+}
+
+void LatchDbsTankDefensive(PlayerbotAI* botAI)
+{
+    DbsState* state = LiveState(botAI);
+    if (state)
+        state->defensiveCycle[botAI->GetBot()->GetGUID()] = state->powerCycle;
+}
+
+bool GetDbsMarkHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
+{
+    Player* bot = botAI->GetBot();
+    Creature* boss = LiveState(botAI) ? GetDbsBoss(botAI) : nullptr;
+    if (!boss || !bot->IsAlive() || !IsDutyBot(bot) || IsTankPlayer(bot) || !bot->HasAura(SPELL_DBS_MARK))
+        return false;
+
+    uint32 const power = boss->GetPower(POWER_ENERGY);
+    bool const frenzy = boss->HasAura(SPELL_DBS_FRENZY);
+    SpellInfo const* splash =
+        power >= DBS_BLOOD_POWER_PEAK || frenzy
+            ? sSpellMgr->GetSpellInfo(sSpellMgr->GetSpellIdForDifficulty(SPELL_DBS_MARK_SPLASH, boss))
+            : nullptr;
+    if (!splash)
+        return false;
+
+    // One splash per swing, scaled by Blood Power, armor ignored
+    SpellEffectInfo const& effect = splash->Effects[EFFECT_0];
+    float const perSwing = static_cast<float>(std::max(effect.BasePoints + (effect.DieSides + 1) / 2, 0)) *
+                           static_cast<float>(100 + power) / 100.0f;
+    float const swings = SWINGS_PER_SECOND * (frenzy ? FRENZY_SWING_FACTOR : 1.0f) *
+                         static_cast<float>(MARK_HIT_WINDOW_MS) / 1000.0f;
+
+    hit = RaidPredictedHit();
+    hit.startMs = getMSTime();
+    hit.durationMs = MARK_HIT_WINDOW_MS;
+    hit.damage = static_cast<uint32>(perSwing * swings);
+    hit.school = SPELL_SCHOOL_MASK_NORMAL;
+    return true;
+}
+
 bool IsDbsHoldingStand(PlayerbotAI* botAI) { return HeldStand(botAI) != nullptr; }
 
 bool IsDbsHoldingSpreadStand(PlayerbotAI* botAI)
@@ -1099,6 +1402,7 @@ void TickDbsEncounter(PlayerbotAI* botAI)
 
     DbsState& state = dbsStates.For(bot->GetInstanceId());
     uint32 const now = getMSTime();
+    UpdatePower(state, boss);
     ScanBeasts(state, boss, now);
     RefreshRoster(state, bot, now);
 
@@ -1111,8 +1415,10 @@ void TickDbsEncounter(PlayerbotAI* botAI)
         UpdateKill(state, bot, beasts);
         UpdateControl(state, boss, members, beasts, now);
         UpdateMarks(state, members);
+        UpdateProtect(state, boss, members);
     }
 
+    CallHumanTank(state, bot, boss, now);
     UpdateStand(state, bot);
 }
 
