@@ -83,6 +83,6 @@ Also in the boss docs:
 - Darnavan is outside the kill order.
 - Giant: a pair with a tank or a player still makes the others dodge; a carrier with every other player
   carrying dies; only a pair's spot is tested, not its walk.
-- No 631 trace, never built, no `-Werror` pass, and the shared tank test counts a Thick Hide cat.
+- No 631 trace, never built, no `-Werror` pass.
 
 ## Blocked
