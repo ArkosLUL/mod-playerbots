@@ -5,12 +5,19 @@
  */
 
 #include "ICCTriggers_Dogs.h"
-#include "ICCData.h"
-#include "ICCHelpers_Shared.h"
-#include "Playerbots.h"
-#include "Trigger.h"
 
-bool IccDogsTrigger::IsActive()
+#include "Creature.h"
+#include "Playerbots.h"
+#include "RaidDefensive.h"
+
+bool IccDogsTankDefensiveTrigger::IsActive() { return GetDogsTankDefensive(botAI, "dogs.defensive") != 0; }
+
+bool IccDogsDecimateCoverTrigger::IsActive() { return GetDogsDecimateCover(botAI) != RaidCover::None; }
+
+bool IccDogsSwapTrigger::IsActive() { return IsDogsSwapTaunter(botAI); }
+
+bool IccDogsYieldTrigger::IsActive()
 {
-    return AI_VALUE2(Unit*, "find target", "stinky") || AI_VALUE2(Unit*, "find target", "precious");
+    Creature* dog = GetDogsBoss(botAI);
+    return dog && IsDogsYielding(botAI) && (bot->GetVictim() == dog || AI_VALUE(Unit*, "current target") == dog);
 }

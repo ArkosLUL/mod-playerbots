@@ -5,41 +5,32 @@
  */
 
 #include "ICCMultipliers_Dogs.h"
-#include "DKActions.h"
-#include "DruidBearActions.h"
-#include "FollowActions.h"
-#include "ICCActions_Dogs.h"
-#include "MovementActions.h"
-#include "PaladinActions.h"
-#include "PlayerbotAI.h"
-#include "PriestActions.h"
-#include "WarriorActions.h"
 
-float IccDogsMultiplier::GetValue(Action* action)
+#include "Creature.h"
+#include "GenericSpellActions.h"
+#include "ICCHelpers_Dogs.h"
+#include "PlayerbotAI.h"
+#include "Playerbots.h"
+#include "RaidCombatHelpers.h"
+
+namespace
 {
-    if (!AI_VALUE2(Unit*, "find target", "stinky") && !AI_VALUE2(Unit*, "find target", "precious"))
+// The dogs' combat reach is 9: a tank's area spell from this close reaches one
+constexpr float YIELD_AREA_REACH = 15.0f;
+}  // namespace
+
+float IccDogsYieldMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action))
         return 1.0f;
 
-    if (PlayerbotAI::IsTank(bot))
-    {
-        Aura* aura = botAI->GetAura("mortal wound", bot, false, true);
-        if (aura && aura->GetStackAmount() >= 8)
-        {
-            if (dynamic_cast<MovementAction*>(action))
-                return 1.0f;
+    Creature* dog = GetDogsBoss(botAI);
+    if (!dog || !IsDogsYielding(botAI))
+        return 1.0f;
 
-            if (dynamic_cast<CastTauntAction*>(action) ||
-                dynamic_cast<CastDarkCommandAction*>(action) ||
-                dynamic_cast<CastHandOfReckoningAction*>(action) ||
-                dynamic_cast<CastGrowlAction*>(action))
-                return 0.0f;
-
-            return 0.0f;
-        }
-    }
-
-    if (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action))
+    Unit* target = action->GetTarget();
+    if (target == dog || (!target && AI_VALUE(Unit*, "current target") == dog))
         return 0.0f;
 
-    return 1.0f;
+    return IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(dog) <= YIELD_AREA_REACH ? 0.0f : 1.0f;
 }

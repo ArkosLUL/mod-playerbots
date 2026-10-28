@@ -6,33 +6,43 @@
 
 #include "ICCDefinitions.h"
 
-#include "Creature.h"
 #include "ICCActions_Dogs.h"
 #include "ICCData.h"
 #include "ICCEncounterGate.h"
-#include "ICCHelpers_Shared.h"
+#include "ICCHelpers_Dogs.h"
 #include "ICCMultipliers_Dogs.h"
+#include "ICCSeams.h"
 #include "ICCTriggers_Dogs.h"
-#include "PlayerbotAI.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 
 namespace Family = RaidEncounterRules::Family;
+namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-void TickDogs(PlayerbotAI* botAI)
-{
-    if (Creature* dog = UnitGateLiveUnit<NPC_STINKY, NPC_PRECIOUS>(botAI))
-        IccMarkPull(botAI->GetBot(), dog, "stinky-and-precious");
-}
-
 void DefineDogs(EncounterBuilder& e)
 {
-    e.Node<IccDogsTrigger, IccDogsTankPositionAction>(ACTION_RAID + 3);
+    e.Node<IccDogsTankDefensiveTrigger, IccDogsCastTankDefensiveAction>(ACTION_RAID + 6);
+    e.Node<IccDogsDecimateCoverTrigger, IccDogsCastDecimateCoverAction>(ACTION_RAID + 5);
+    e.Node<IccDogsSwapTrigger, IccDogsSwapAction>(ACTION_RAID + 4);
+    e.Node<IccDogsYieldTrigger, IccDogsYieldAction>(ACTION_RAID + 3);
+    e.Node<IccDogsTargetTrigger, IccDogsTargetAction>(ACTION_RAID + 2);
 
-    e.LiveMultiplier<IccDogsMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<IccDogsYieldMultiplier>(Family::Spell | Family::Melee);
 
-    e.Tick(&TickDogs);
+    e.OwnTargeting("icc dogs targeting", Role::Any, &IccResolverPicks<&GetDogsTarget>,
+                   Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
+    // A yielding tank's resolver hands it a zombie or nothing, so no picker may give it the dog back
+    e.Block("icc dogs yield hold", Role::Tank, &IsDogsYielding,
+            Family::DpsAssist | Family::TankAssist | Family::DpsAoe | Family::AggressiveTarget |
+                Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti);
+    // The free tank's generic taunt would take the dog straight back off its partner
+    e.Block("icc dogs taunts", Role::Tank, &IsDogsLive, Family::Taunt);
+    // The tank buttons wait for Decimate or a low tank
+    e.Block("icc dogs tank defensive hold", Role::Tank, &IsDogsTankDefensiveHeld, 0, HeldTankDefensiveNames());
+
+    e.Tick(&TickDogsEncounter);
 }
 }  // namespace
 

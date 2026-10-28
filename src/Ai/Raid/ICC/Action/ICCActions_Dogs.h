@@ -8,33 +8,53 @@
 #define PLAYERBOTS_ICCACTIONS_DOGS_H
 
 #include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
-#include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include "ICCActions_RaidWide.h"
+#include "ICCHelpers_Dogs.h"
+#include "RaidDirectTargeting.h"
 
-class IccDogsTankPositionAction : public AttackAction
+class IccDogsCastTankDefensiveAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc dogs tank position";
+    static constexpr char const* Name = "icc dogs cast tank defensive";
 
-    IccDogsTankPositionAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccDogsCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
+};
+
+class IccDogsCastDecimateCoverAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc dogs cast decimate cover";
+
+    IccDogsCastDecimateCoverAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccDogsSwapAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc dogs swap";
+
+    IccDogsSwapAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+// Drops the attack on the dog while this tank still carries Mortal Wound and the other holds it
+class IccDogsYieldAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc dogs yield";
+
+    IccDogsYieldAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccDogsTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc dogs target";
+
+    IccDogsTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetDogsTarget) {}
 };
 
 #endif

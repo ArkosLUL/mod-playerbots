@@ -9,10 +9,11 @@
 
 #include "Multiplier.h"
 
-class IccFestergutMultiplier : public Multiplier
+// Holds a braked tank's spells and swings on him, and its area damage near him. Heals pass.
+class IccFestergutBrakeMultiplier : public Multiplier
 {
 public:
-    IccFestergutMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc festergut") {}
+    IccFestergutBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc festergut brake") {}
     float GetValue(Action* action) override;
 };
 

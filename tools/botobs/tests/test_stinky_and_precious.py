@@ -3,7 +3,9 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic Stinky pull, filed under the contract slug and under the creature as older traces were,
-pins each section, and the shared v14 fixture shows every section reads empty off ICC.
+pins the tank runs, a swap election with its taunt and the yield after it, the picks, a Decimate with
+its tank button and cover, and the cheat filter; the shared v14 fixture shows every section reads empty
+off ICC.
 """
 from __future__ import annotations
 
@@ -35,6 +37,10 @@ def snap(when: int, target: int) -> dict:
     return {"t": when, "e": "snap", "hz": [], "u": [[STINKY, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, target, 0, 0, 0, 0]]}
 
 
+def note(when: int, guid: int, key: str, value) -> dict:
+    return {"t": when, "e": "note", "g": guid, "k": key, "txt": str(value)}
+
+
 def wound(when: int, guid: int, stacks: int) -> dict:
     return {"t": when, "e": "aura", "d": guid, "s": STINKY, "sp": dogs.SPELL_MORTAL_WOUND, "r": 0, "st": stacks}
 
@@ -48,6 +54,18 @@ def pull(boss: str = "stinky-and-precious") -> list[dict]:
         {"t": 1, "e": "unit", "g": STINKY, "en": 37025, "n": "Stinky", "lvl": 82},
         snap(0, 0), snap(500, BULWARK), snap(20000, AEGIS), snap(40000, BULWARK),
         wound(5000, BULWARK, 4), wound(19000, BULWARK, 8), wound(39000, AEGIS, 9),
+        {"t": 1, "e": "spell", "sp": 871, "n": "Shield Wall"},
+        note(19500, AEGIS, dogs.SWAP, 1),
+        {"t": 19600, "e": "act", "g": AEGIS, "a": dogs.SWAP_ACTION, "rel": 64.0, "vd": "OK"},
+        note(19900, AEGIS, dogs.SWAP, 0),
+        note(20000, BULWARK, dogs.YIELD, 1), note(34000, BULWARK, dogs.YIELD, 0),
+        note(200, BULWARK, dogs.TARGET, "dog"), note(200, AEGIS, dogs.TARGET, "dog"),
+        note(20000, BULWARK, dogs.TARGET, "none"), note(34000, BULWARK, dogs.TARGET, "dog"),
+        {"t": 25000, "e": "cast", "s": STINKY, "d": AEGIS, "sp": dogs.SPELL_DECIMATE},
+        note(22000, AEGIS, dogs.DEFENSIVE, "Shield Wall"),
+        {"t": 22100, "e": "cast", "s": AEGIS, "d": AEGIS, "sp": 871},
+        note(25000, AEGIS, dogs.DEFENSIVE, "idle"),
+        note(25300, MEND, dogs.COVER, "Divine Hymn"),
         {"t": 21000, "e": "cheat", "g": AEGIS, "k": "icc.tauntreset", "n": 1},
         {"t": 45000, "e": "end", "out": "idle"},
     ]
@@ -77,10 +95,35 @@ class Tanks(unittest.TestCase):
             "     0:20.000   0:20.000  Aegis (tank)\n"
             "     0:40.000   0:00.000  Bulwark (tank)\n"
             "\n"
-            "  Mortal Wound peak, the swap is at 8: Aegis 9, Bulwark 8\n"))
+            "  Mortal Wound peak, the swap is at 6: Aegis 9, Bulwark 8\n"))
 
     def test_a_trace_filed_under_the_creature_is_the_same_encounter(self):
         self.assertIn("Stinky: who it hit", printed(dogs.show_tanks, load(pull(boss="stinky"))))
+
+
+class Swaps(unittest.TestCase):
+    def test_election_taunt_and_yield(self):
+        trace = load(pull())
+        self.assertEqual(dogs.elections(trace), [(19500, AEGIS, 19600)])
+        self.assertEqual(dogs.yields(trace), [(20000, 34000, BULWARK)])
+        self.assertEqual(printed(dogs.show_swaps, trace), (
+            "SWAPS\n"
+            "  0:19.500  Aegis elected, taunted 0.1 s after\n"
+            "  0:20.000  Bulwark yielded 0:14.000\n"))
+
+
+class Targets(unittest.TestCase):
+    def test_time_per_rule(self):
+        rows = dogs.target_time(load(pull()))
+        self.assertEqual(rows["none"], (1, 14000))
+        self.assertEqual(rows["dog"][0], 2)
+
+
+class Defensives(unittest.TestCase):
+    def test_window_cast_and_cover(self):
+        out = printed(dogs.show_defensives, load(pull()))
+        self.assertIn("  0:22.000  Aegis       0:03.000  offered Shield Wall; cast Shield Wall +0.1s\n", out)
+        self.assertIn("  Decimate 0:25.000: Divine Hymn Mend\n", out)
 
 
 class Cheats(unittest.TestCase):

@@ -7,35 +7,78 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_FESTERGUT_H
 #define PLAYERBOTS_ICCTRIGGERS_FESTERGUT_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_Festergut.h"
+#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
 
-class IccFestergutGroupPositionTrigger : public Trigger
+class IccFestergutGooTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc festergut group position";
+    static constexpr char const* Name = "icc festergut goo";
 
-    IccFestergutGroupPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccFestergutGooTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccFestergutSporeTrigger : public Trigger
+class IccFestergutPungentDefensiveTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc festergut spore";
+    static constexpr char const* Name = "icc festergut pungent defensive";
 
-    IccFestergutSporeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccFestergutPungentDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccFestergutAvoidMalleableGooTrigger : public Trigger
+class IccFestergutPungentCoverTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc festergut avoid malleable goo";
+    static constexpr char const* Name = "icc festergut pungent cover";
 
-    IccFestergutAvoidMalleableGooTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, Name) {}
+    IccFestergutPungentCoverTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccFestergutTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc festergut tank defensive";
+
+    IccFestergutTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccFestergutBloatSwapTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc festergut bloat swap";
+
+    IccFestergutBloatSwapTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccFestergutBrakeTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc festergut brake";
+
+    IccFestergutBrakeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccFestergutTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc festergut target";
+
+    IccFestergutTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetFgTarget) {}
+};
+
+class IccFestergutStandTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc festergut stand";
+
+    IccFestergutStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

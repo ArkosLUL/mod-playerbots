@@ -5,78 +5,32 @@
  */
 
 #include "ICCMultipliers_Festergut.h"
-#include "DKActions.h"
-#include "DruidBearActions.h"
-#include "FollowActions.h"
-#include "HunterActions.h"
-#include "ICCActions_Festergut.h"
-#include "ICCScripts.h"
-#include "MageActions.h"
-#include "MovementActions.h"
-#include "PaladinActions.h"
-#include "PlayerbotAI.h"
-#include "PriestActions.h"
-#include "ReachTargetActions.h"
-#include "WarriorActions.h"
 
-float IccFestergutMultiplier::GetValue(Action* action)
+#include "Creature.h"
+#include "GenericSpellActions.h"
+#include "ICCHelpers_Festergut.h"
+#include "PlayerbotAI.h"
+#include "Playerbots.h"
+#include "RaidCombatHelpers.h"
+
+namespace
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "festergut");
+// His combat reach is 8: a tank's area spell from this close reaches him
+constexpr float BRAKE_AREA_REACH = 14.0f;
+}  // namespace
+
+float IccFestergutBrakeMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !IsFgBraked(botAI))
+        return 1.0f;
+
+    Creature* boss = GetFgBoss(botAI);
     if (!boss)
         return 1.0f;
 
-    if (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FollowAction*>(action))
+    Unit* target = action->GetTarget();
+    if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
         return 0.0f;
 
-    if (dynamic_cast<FleeAction*>(action))
-        return 0.0f;
-
-    if (dynamic_cast<CastDisengageAction*>(action) || dynamic_cast<CastBlinkBackAction*>(action))
-        return 0.0f;
-
-    if (PlayerbotAI::IsTank(bot))
-    {
-        Aura* aura = botAI->GetAura("gastric bloat", bot, false, true);
-        if (aura && aura->GetStackAmount() >= 6)
-        {
-            if (dynamic_cast<CastTauntAction*>(action) ||
-                dynamic_cast<CastDarkCommandAction*>(action) ||
-                dynamic_cast<CastHandOfReckoningAction*>(action) ||
-                dynamic_cast<CastGrowlAction*>(action))
-                return 0.0f;
-
-            if (dynamic_cast<MovementAction*>(action))
-                return 1.0f;
-
-            return 0.0f;
-        }
-    }
-
-    if (dynamic_cast<IccFestergutSporeAction*>(action))
-        return 1.0f;
-
-    if (bot->HasAura(SPELL_GAS_SPORE))
-    {
-        if (dynamic_cast<MovementAction*>(action) || dynamic_cast<FleeAction*>(action) ||
-            dynamic_cast<ReachSpellAction*>(action))
-            return 0.0f;
-    }
-
-    // Hold position during the 8s malleable goo wait window so the bot can
-    // keep DPS/heal rotations running without drifting back into the impact.
-    // Avoid action itself is whitelisted (may still need to dodge new goos).
-    {
-        auto const& waitMap = IcecrownHelpers::IccState(bot->GetMap()->GetInstanceId()).festergutGooWaitUntil;
-        auto it = waitMap.find(bot->GetGUID());
-        if (it != waitMap.end() && getMSTime() < it->second)
-        {
-            if (dynamic_cast<IccFestergutAvoidMalleableGooAction*>(action))
-                return 1.0f;
-
-            if (dynamic_cast<MovementAction*>(action))
-                return 0.0f;
-        }
-    }
-
-    return 1.0f;
+    return IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= BRAKE_AREA_REACH ? 0.0f : 1.0f;
 }

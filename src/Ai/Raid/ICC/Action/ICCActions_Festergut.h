@@ -7,71 +7,106 @@
 #ifndef PLAYERBOTS_ICCACTIONS_FESTERGUT_H
 #define PLAYERBOTS_ICCACTIONS_FESTERGUT_H
 
+#include <string>
+
 #include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
+#include "ICCActions_RaidWide.h"
 #include "ICCHelpers_Festergut.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include "Position.h"
+#include "RaidDirectTargeting.h"
 
-class IccFestergutGroupPositionAction : public AttackAction
+// Holds its spot while the walk there is in flight: every MoveTo clears the MotionMaster, so a spot
+// re-issued each tick to a bot still walking never lands.
+class IccFestergutWalkAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc festergut group position";
+    IccFestergutWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
-    IccFestergutGroupPositionAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
-    bool Execute(Event event) override;
+protected:
+    // The latched spot while the bot is still walking to it, else nullptr
+    Position const* WalkInFlight();
+    // False without booking anything while a cast pins the bot's feet
+    bool WalkTo(Position const& spot, MovementPriority priority);
+    void DropWalk() { walking = false; }
 
-    bool HasSporesInGroup();
-    bool PositionNonTankMembers();
-    int CalculatePositionIndex(Group* group);
+private:
+    bool BookedOnWalkSpot();
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
 };
 
-class IccFestergutSporeAction : public AttackAction
+class IccFestergutDodgeGooAction : public IccFestergutWalkAction
 {
 public:
-    static constexpr char const* Name = "icc festergut spore";
+    static constexpr char const* Name = "icc festergut dodge goo";
 
-    IccFestergutSporeAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccFestergutDodgeGooAction(PlayerbotAI* botAI) : IccFestergutWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
-
-    Position CalculateSpreadPosition();
-    struct SporeInfo
-    {
-        std::vector<Unit*> sporedPlayers;
-        ObjectGuid lowestGuid;
-        bool hasLowestGuid = false;
-    };
-    SporeInfo FindSporedPlayers();
-    Position DetermineTargetPosition(bool hasSpore, SporeInfo const& sporeInfo, Position const& spreadRangedPos);
-    bool CheckMainTankSpore();
-    bool GooNear(Position const& pos);
 };
 
-class IccFestergutAvoidMalleableGooAction : public MovementAction
+class IccFestergutCastPungentDefensiveAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc festergut avoid malleable goo";
+    static constexpr char const* Name = "icc festergut cast pungent defensive";
 
-    IccFestergutAvoidMalleableGooAction(PlayerbotAI* botAI,
-                                        std::string const name = Name)
-        : MovementAction(botAI, name) {}
+    IccFestergutCastPungentDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccFestergutCastPungentCoverAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc festergut cast pungent cover";
+
+    IccFestergutCastPungentCoverAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccFestergutCastTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc festergut cast tank defensive";
+
+    IccFestergutCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccFestergutBloatSwapAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc festergut bloat swap";
+
+    IccFestergutBloatSwapAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+// Drops the attack on him while the threat brake holds this tank
+class IccFestergutBrakeStopAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc festergut brake stop";
+
+    IccFestergutBrakeStopAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccFestergutTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc festergut target";
+
+    IccFestergutTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetFgTarget) {}
+};
+
+class IccFestergutStandAction : public IccFestergutWalkAction
+{
+public:
+    static constexpr char const* Name = "icc festergut stand";
+
+    IccFestergutStandAction(PlayerbotAI* botAI) : IccFestergutWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
