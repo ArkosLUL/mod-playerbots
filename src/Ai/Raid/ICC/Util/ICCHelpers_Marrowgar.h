@@ -33,8 +33,10 @@ constexpr float LM_COMBAT_REACH = 20.25f;
 constexpr float LM_COLDFLAME_REACH = 4.5f;
 constexpr float LM_COLDFLAME_STEP = 5.0f;
 constexpr float LM_COLDFLAME_FIRST = LM_COMBAT_REACH / 2.0f;
-// Inner slots sit this close to his centre, so a line starting at LM_COLDFLAME_FIRST never reaches them
+// Inner slots sit this close to his centre, so a line starting at LM_COLDFLAME_FIRST never reaches them.
+// They spread over this arc of his back, out of his parry arc and as far from Bone Slice as his centre.
 constexpr float LM_INNER_RADIUS = 2.0f;
+constexpr float LM_INNER_ARC_DEG = 160.0f;
 // Bait ring: outside the Coldflame exclusion and past a hunter's ~28 yd dead zone on a 20 yd boss,
 // while healers at his centre keep it in their 38.5 yd range. Neighbours are 10.8 yd apart, past a line.
 constexpr float LM_BAIT_RADIUS = 31.0f;
@@ -54,9 +56,6 @@ constexpr float LM_SLICE_KEEPOUT = 8.0f;
 // A melee dps takes a spike this close, unless it stands inside LM_SLICE_KEEPOUT of the main tank
 constexpr float LM_MELEE_SPIKE_REACH = 10.0f;
 
-// Storm anchors: 34 yd from the stack keeps them in a healer's reach from it. Bone Storm's cross runs along
-// the world diagonals, so from the two side anchors it passes the stack 34 * sin(15 deg) = 8.8 yd off.
-constexpr float LM_STORM_ANCHOR_RADIUS = 34.0f;
 constexpr float LM_STACK_SLOT_RADIUS = 1.5f;
 
 // A stand parks within LM_STAND_PARK and walks back once pushed past LM_STAND_UNPARK
@@ -76,10 +75,12 @@ static_assert(LM_DODGE_TRIGGER < LM_DODGE_TIGHT_CLEARANCE && LM_DODGE_TIGHT_CLEA
 inline Position const ICC_LM_BOSS_SPOT(-401.37f, 2211.14f, 41.99f);
 inline Position const ICC_LM_TANK_SPOT(-415.37f, 2211.14f, 41.99f);
 inline Position const ICC_LM_STORM_STACK(-384.0f, 2211.0f, 41.99f);
-// At 0, 120 and 240 degrees round the stack
-inline Position const ICC_LM_STORM_ANCHOR_0(-350.0f, 2211.0f, 42.44f);
-inline Position const ICC_LM_STORM_ANCHOR_120(-401.0f, 2240.44f, 41.99f);
-inline Position const ICC_LM_STORM_ANCHOR_240(-401.0f, 2181.56f, 41.98f);
+// 34 yd from the stack at 180, 60 and 300 degrees: a healer there reaches them all. 180 sits 2.6 yd from
+// the tank spot and each side one 14-19 yd from a bait slot, so all three are held when his first charge
+// picks the farthest players 3 s into the cast. From the side ones his cross passes the stack 8.8 yd off.
+inline Position const ICC_LM_STORM_ANCHOR_180(-418.0f, 2211.0f, 41.99f);
+inline Position const ICC_LM_STORM_ANCHOR_60(-367.0f, 2240.44f, 41.76f);
+inline Position const ICC_LM_STORM_ANCHOR_300(-367.0f, 2181.56f, 41.76f);
 constexpr float LM_GATE_X_LIMIT = -340.0f;
 
 enum class IccLmPhase : uint8
@@ -122,7 +123,7 @@ void GetLmColdflame(PlayerbotAI* botAI, std::vector<Position>& circles);
 // Alive, free to move and inside LM_DODGE_TRIGGER of one of those. Notes lm.dodge clear once out.
 bool IsLmInColdflame(PlayerbotAI* botAI);
 
-// The phase note, the duty roster, the stand latches, the reset after a wipe
+// The phase note, the duty roster, the stand latches, the reset after a wipe, a bot's saved rti once
 void TickLmEncounter(PlayerbotAI* botAI);
 
 // The opener hook's boss list

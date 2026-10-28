@@ -24,10 +24,11 @@ from raidobs.trace import Trace  # noqa: E402
 
 FULL = BOTOBS / "fixtures" / "full-v14.ndjson"
 
-WALL = 6100   # main tank, anchors at 120
-ARROW = 6101  # hunter bait, anchors at 0
-FEL = 6102    # warlock bait, on the stack, dies before the second storm
-SHIV = 6104   # melee inside
+WALL = 6100     # main tank, anchors at 180
+ARROW = 6101    # hunter bait, anchors at 60
+FEL = 6102      # warlock bait, on the stack, dies before the second storm
+BULWARK = 6103  # off-tank, anchors at 180 beside the main tank
+SHIV = 6104     # melee inside
 
 
 def note(when: int, guid: int, key: str, value: str) -> dict:
@@ -40,15 +41,18 @@ def pull(boss: str = "lord-marrowgar") -> list[dict]:
          "cfg": {"cheats": "food,taxi,raid", "iccbuffs": 0},
          "roster": [{"g": guid, "n": name, "r": role, "c": "x", "h": 0}
                     for guid, name, role in ((WALL, "Wall", "tank"), (ARROW, "Arrow", "ranged"),
-                                             (FEL, "Fel", "ranged"), (SHIV, "Shiv", "melee"))]},
+                                             (FEL, "Fel", "ranged"), (BULWARK, "Bulwark", "tank"),
+                                             (SHIV, "Shiv", "melee"))]},
         {"t": 0, "e": "pull", "boss": boss, "src": "bossstate"},
         note(100, SHIV, lm.PHASE, "normal"),
         note(100, WALL, lm.DUTY, "1"),
         note(100, ARROW, lm.DUTY, "4"),
         note(100, FEL, lm.DUTY, "4"),
+        note(100, BULWARK, lm.DUTY, "2"),
         note(100, SHIV, lm.DUTY, "3"),
-        note(100, WALL, lm.ANCHOR, "2"),
-        note(100, ARROW, lm.ANCHOR, "1"),
+        note(100, WALL, lm.ANCHOR, "1"),
+        note(100, ARROW, lm.ANCHOR, "2"),
+        note(100, BULWARK, lm.ANCHOR, "1"),
         note(200, ARROW, lm.PHASE, "normal"),
         note(300, SHIV, lm.STAND, "inner"),
         note(5000, ARROW, lm.DODGE, "move 7"),
@@ -58,11 +62,13 @@ def pull(boss: str = "lord-marrowgar") -> list[dict]:
         note(12900, ARROW, lm.DODGE, "clear"),
         note(42000, ARROW, lm.PHASE, "stormcast"),
         note(42100, WALL, lm.STAND, "anchor"),
+        note(42100, BULWARK, lm.STAND, "anchor"),
         note(42100, FEL, lm.STAND, "stack"),
         note(45000, ARROW, lm.PHASE, "bonestorm"),
         note(45050, ARROW, lm.STAND, "anchor"),
         note(65000, ARROW, lm.PHASE, "normal"),
         note(65100, WALL, lm.STAND, "tank"),
+        note(65200, BULWARK, lm.STAND, "offtank"),
         note(70000, SHIV, lm.SPIKE, "melee"),
         note(70100, ARROW, lm.SPIKE, "far"),
         note(76000, SHIV, lm.SPIKE, "boss"),
@@ -97,18 +103,19 @@ class SyntheticPull(unittest.TestCase):
     def test_storms_are_the_spins_only(self):
         self.assertEqual(lm.storms(self.trace), [(45000, 65000), (135000, 155000)])
 
-    def test_anchors_carry_over_without_a_new_row(self):
+    def test_anchors_carry_over_without_a_new_row_and_share_a_slot(self):
         first, second = lm.storms(self.trace)
-        self.assertEqual(lm.anchors(self.trace, *first), {"0": ARROW, "120": WALL})
-        self.assertEqual(lm.anchors(self.trace, *second), {"0": ARROW, "120": WALL})
+        self.assertEqual(list(lm.anchors(self.trace, *first).items()), [("180", {WALL, BULWARK}), ("60", {ARROW})])
+        self.assertEqual(lm.anchors(self.trace, *second), {"180": {WALL, BULWARK}, "60": {ARROW}})
 
     def test_storm_stands_overlap_the_storm(self):
         first, second = lm.storms(self.trace)
-        self.assertEqual(lm.storm_stands(self.trace, *first), {"anchor": {WALL, ARROW}, "stack": {FEL}})
+        self.assertEqual(lm.storm_stands(self.trace, *first), {"anchor": {WALL, ARROW, BULWARK}, "stack": {FEL}})
         self.assertEqual(lm.storm_stands(self.trace, *second), {"anchor": {ARROW}, "stack": {FEL}})
 
     def test_duties_name_the_numbers_and_skip_a_lost_one(self):
-        self.assertEqual(lm.duties(self.trace), {"main tank": {WALL}, "bait": {ARROW, FEL}, "inside": {SHIV}})
+        self.assertEqual(lm.duties(self.trace), {"main tank": {WALL}, "off-tank": {BULWARK}, "bait": {ARROW, FEL},
+                                                 "inside": {SHIV}})
 
     def test_spike_rules(self):
         self.assertEqual(lm.held_values(self.trace, lm.SPIKE), {"melee": {SHIV}, "far": {ARROW}, "boss": {SHIV}})
@@ -125,10 +132,10 @@ class SyntheticPull(unittest.TestCase):
             lm.show_storms(self.trace)
         self.assertEqual(out.getvalue(), (
             "BONE STORMS\n"
-            "  1  0:45.000 for 0:20.000  anchors 0: Arrow, 120: Wall\n"
-            "       on the anchor: Arrow, Wall\n"
+            "  1  0:45.000 for 0:20.000  anchors 180: Bulwark, Wall; 60: Arrow\n"
+            "       on the anchor: Arrow, Bulwark, Wall\n"
             "       on the stack: Fel\n"
-            "  2  2:15.000 for 0:20.000  anchors 0: Arrow, 120: Wall\n"
+            "  2  2:15.000 for 0:20.000  anchors 180: Bulwark, Wall; 60: Arrow\n"
             "       on the anchor: Arrow\n"
             "       on the stack: Fel\n"))
 
