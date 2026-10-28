@@ -2685,16 +2685,29 @@ bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot)
 bool GetThorimLightningChargeHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!bot || !bot->IsAlive() || !ThorimPhase2Active(botAI) || PlayerbotAI::IsTank(bot))
+    if (!bot || !bot->IsAlive() || PlayerbotAI::IsTank(bot))
+        return false;
+
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state || !state->lightningOrbLitMs)
+        return false;
+
+    // One interval early: the sweep can only notice the orb late, and the row opens the pick just a second
+    // before the start it is given.
+    uint32 const startMs = state->lightningOrbLitMs + ULDUAR_THORIM_LIGHTNING_CHARGE_WARNING_MS -
+                           ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS;
+
+    // Before anything that reads the world: the row offers nothing outside that last second, and a start
+    // already past takes getMSTimeDiff's overflow branch, so a stale latch fails closed here too.
+    if (getMSTimeDiff(getMSTime(), startMs) > RAID_PERSONAL_LEAD_MS)
+        return false;
+
+    if (!ThorimPhase2Active(botAI))
         return false;
 
     Unit* boss = GetThorim(botAI);
     Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
     if (!boss || !orb)
-        return false;
-
-    ThorimEncounterState const* state = FindState(bot);
-    if (!state || !state->lightningOrbLitMs)
         return false;
 
     // The camp's own margin, not the ring's: it is the closest read of who the cone actually covers, so a
@@ -2704,10 +2717,7 @@ bool GetThorimLightningChargeHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
                                      coneBearing))
         return false;
 
-    // One interval early: the sweep can only notice the orb late, and the row opens the pick just a second
-    // before the start it is given.
-    hit.startMs = state->lightningOrbLitMs + ULDUAR_THORIM_LIGHTNING_CHARGE_WARNING_MS -
-                  ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS;
+    hit.startMs = startMs;
     hit.damage = ULDUAR_THORIM_LIGHTNING_CHARGE_DAMAGE;
     hit.school = SPELL_SCHOOL_MASK_NATURE;
     return true;
