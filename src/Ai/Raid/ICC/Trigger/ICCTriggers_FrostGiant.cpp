@@ -5,12 +5,7 @@
  */
 
 #include "ICCTriggers_FrostGiant.h"
-#include "ICCHelpers_FrostGiant.h"
-#include "ICCHelpers_Shared.h"
-#include "Playerbots.h"
-#include "Trigger.h"
 
-bool IccRottingFrostGiantTankPositionTrigger::IsActive()
-{
-    return AI_VALUE2(Unit*, "find target", "rotting frost giant") != nullptr;
-}
+#include "ICCHelpers_FrostGiant.h"
+
+bool IccRottingFrostGiantPlagueTrigger::IsActive() { return RfgPlagueDuty(botAI); }

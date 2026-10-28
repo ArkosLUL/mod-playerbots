@@ -7,81 +7,88 @@
 #ifndef PLAYERBOTS_ICCACTIONS_DEATHWHISPER_H
 #define PLAYERBOTS_ICCACTIONS_DEATHWHISPER_H
 
-#include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
-#include "ICCHelpers_Deathwhisper.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
-#include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include <vector>
 
-class IccDarkReckoningAction : public MovementAction
+#include "Action.h"
+#include "ICCActions_RaidWide.h"
+#include "ICCHelpers_Deathwhisper.h"
+#include "MovementActions.h"
+#include "RaidDirectTargeting.h"
+#include "RaidRedirectThreat.h"
+
+// One forced walk to the nearest spot clear of every hazard, left running while its spot stays clear.
+class IccDeathwhisperDodgeAction : public MovementAction
+{
+public:
+    IccDeathwhisperDodgeAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
+
+protected:
+    bool Dodge(std::vector<LdwHazard> const& hazards, LdwHazardKind kind);
+};
+
+class IccDarkReckoningAction : public IccDeathwhisperDodgeAction
 {
 public:
     static constexpr char const* Name = "icc dark reckoning";
 
-    IccDarkReckoningAction(PlayerbotAI* botAI, std::string const name = Name)
-        : MovementAction(botAI, name) {}
+    IccDarkReckoningAction(PlayerbotAI* botAI) : IccDeathwhisperDodgeAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccRangedPositionLadyDeathwhisperAction : public AttackAction
+class IccLadyDeathwhisperDodgeAction : public IccDeathwhisperDodgeAction
 {
 public:
-    static constexpr char const* Name = "icc ranged position lady deathwhisper";
+    static constexpr char const* Name = "icc lady deathwhisper dodge";
 
-    IccRangedPositionLadyDeathwhisperAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccLadyDeathwhisperDodgeAction(PlayerbotAI* botAI) : IccDeathwhisperDodgeAction(botAI, Name) {}
     bool Execute(Event event) override;
-
-    bool MaintainRangedSpacing();
 };
 
-class IccAddsLadyDeathwhisperAction : public AttackAction
+class IccLadyDeathwhisperFrostboltAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc adds lady deathwhisper";
+    static constexpr char const* Name = "icc lady deathwhisper frostbolt";
 
-    IccAddsLadyDeathwhisperAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccLadyDeathwhisperFrostboltAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
-
-    bool IsTargetedByShade(uint32 shadeEntry);
-    bool HandleAddTargeting(Unit* boss);
-    bool UpdateRaidTargetIcon(Unit* target, Unit* boss);
-    bool HandleNonTankAddEvasion();
-    bool IsAdd(Unit* unit);
-    bool IsAssistTankAlive();
-    bool ApplyNearbyAddCC();
-    bool ApplyCCToAdd(Unit* add);
-    bool IsAddsAlive();
-    bool EngageBoss();
-    Unit* FindAndCollectAdd(Unit* boss);
-    Unit* FindAddNearBoss(Unit* boss, float maxDist);
-
 };
 
-class IccShadeLadyDeathwhisperAction : public MovementAction
+class IccLadyDeathwhisperDominateMindAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc shade lady deathwhisper";
+    static constexpr char const* Name = "icc lady deathwhisper dominate mind";
 
-    IccShadeLadyDeathwhisperAction(PlayerbotAI* botAI, std::string const name = Name)
-        : MovementAction(botAI, name) {}
+    IccLadyDeathwhisperDominateMindAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
+};
+
+class IccLadyDeathwhisperTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc lady deathwhisper taunt";
+
+    IccLadyDeathwhisperTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccLadyDeathwhisperRedirectAction : public RaidRedirectThreatAction
+{
+public:
+    static constexpr char const* Name = "icc lady deathwhisper redirect";
+
+    IccLadyDeathwhisperRedirectAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, Name) {}
+
+protected:
+    Player* GetRedirectTank() override { return LdwRedirectTank(botAI); }
+    Unit* GetThreatDumpTarget() override { return LdwBoss(botAI); }
+};
+
+class IccLadyDeathwhisperTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc lady deathwhisper target";
+
+    IccLadyDeathwhisperTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &LdwTarget) {}
 };
 
 #endif

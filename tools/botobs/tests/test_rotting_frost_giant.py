@@ -44,6 +44,9 @@ def pull(boss: str = "rotting-frost-giant") -> list[dict]:
         aura(30000, MEND, MEND, rfg.SPELL_RECENTLY_INFECTED),
         aura(30000, MEND, GIANT, rfg.SPELL_DEATH_PLAGUE, removed=1),
         aura(31000, ARROW, GIANT, rfg.SPELL_DEATH_PLAGUE),
+        {"t": 15200, "e": "note", "g": MEND, "k": rfg.PARTNER, "txt": str(ARROW)},
+        {"t": 30000, "e": "note", "g": MEND, "k": rfg.PARTNER, "txt": "0"},
+        {"t": 30100, "e": "note", "g": ARROW, "k": rfg.PARTNER, "txt": str(MEND)},
         {"t": 45000, "e": "death", "g": ARROW, "killer": ARROW,
          "auras": [[rfg.SPELL_DEATH_PLAGUE, 1, 0, MEND, 30000, 45000, 0]]},
         {"t": 15010, "e": "cheat", "g": MEND, "k": "rfg.deathplague", "n": 1},
@@ -68,6 +71,9 @@ class SyntheticPull(unittest.TestCase):
             MEND: {"infected": 1, "doubles": 0, "cured": 1, "died": 0},
             ARROW: {"infected": 2, "doubles": 1, "cured": 0, "died": 1},
         })
+
+    def test_a_released_pair_ends_its_span(self):
+        self.assertEqual(rfg.pairings(self.trace), [(15200, MEND, ARROW, 30000), (30100, ARROW, MEND, 60000)])
 
     def test_the_cheat_is_under_the_giants_own_prefix(self):
         self.assertEqual([key for key, _ in rfg.own_cheats(self.trace)], ["rfg.deathplague"])

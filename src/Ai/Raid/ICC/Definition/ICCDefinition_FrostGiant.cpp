@@ -6,28 +6,25 @@
 
 #include "ICCDefinitions.h"
 
-#include "Creature.h"
 #include "ICCActions_FrostGiant.h"
 #include "ICCData.h"
 #include "ICCEncounterGate.h"
-#include "ICCHelpers_Shared.h"
+#include "ICCHelpers_FrostGiant.h"
 #include "ICCTriggers_FrostGiant.h"
-#include "PlayerbotAI.h"
 #include "Strategy.h"
+
+namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-void TickFrostGiant(PlayerbotAI* botAI)
-{
-    if (Creature* giant = UnitGateLiveUnit<NPC_ROTTING_FROST_GIANT_10, NPC_ROTTING_FROST_GIANT_25>(botAI))
-        IccMarkPull(botAI->GetBot(), giant, "rotting-frost-giant");
-}
-
 void DefineFrostGiant(EncounterBuilder& e)
 {
-    e.Node<IccRottingFrostGiantTankPositionTrigger, IccRottingFrostGiantTankPositionAction>(ACTION_RAID + 5);
+    e.Node<IccRottingFrostGiantPlagueTrigger, IccRottingFrostGiantPlagueAction>(ACTION_RAID + 5, EncounterRow::Mover);
 
-    e.Tick(&TickFrostGiant);
+    // A carrier stays by its partner until it ticks, and nothing walks a clean bot back into a carrier's reach.
+    e.Exclusive("rotting frost giant plague", Role::Any, &RfgPlagueDuty, 0, {IccRottingFrostGiantPlagueAction::Name});
+
+    e.Tick(&RfgTick);
 }
 }  // namespace
 

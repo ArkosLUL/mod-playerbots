@@ -7,9 +7,34 @@
 #ifndef PLAYERBOTS_ICCHELPERS_FROSTGIANT_H
 #define PLAYERBOTS_ICCHELPERS_FROSTGIANT_H
 
+#include <vector>
+
+#include "EncounterHelpers.h"
 #include "ICCData.h"
 #include "Playerbots.h"
 
-inline const Position ICC_ROTTING_FROST_GIANT_TANK_POSITION = Position(-328.5085f, 2225.5142f, 199.97298f);
+constexpr uint32 SPELL_RFG_RECENTLY_INFECTED = 72884;
+
+// Death Plague's tick (72864) is an 8 yd ally area spell a player casts, so it adds the target's reach.
+constexpr float RFG_PLAGUE_REACH = 10.0f;
+constexpr float RFG_PLAGUE_CLEAR = 12.5f;
+// The carrier stands this close to its partner, well inside the reach.
+constexpr float RFG_PAIR_DISTANCE = 3.0f;
+
+// The giant holding the encounter live, or null.
+Creature* RfgGiant(PlayerbotAI* botAI);
+
+// Gives each Death Plague carrier one partner to stand by when it ticks: a player who already carries
+// Recently Infected first, so the plague stops there, else the nearest clean one. Runs from the tick.
+void RfgUpdatePartners(PlayerbotAI* botAI);
+// Who this bot walks to so the pair stands together when the plague ticks: a carrier's partner, or for
+// the partner of a carrying tank that tank, who keeps the giant where it is. Null otherwise.
+Player* RfgPairWalk(PlayerbotAI* botAI);
+// The carriers this bot keeps out of reach of: every one but the carrier it partners.
+std::vector<EncounterHelpers::HazardCircle> RfgCarrierHazards(PlayerbotAI* botAI);
+// The carrier still has to reach its partner, or someone else stands in a carrier's reach.
+bool RfgPlagueDuty(PlayerbotAI* botAI);
+
+void RfgTick(PlayerbotAI* botAI);
 
 #endif

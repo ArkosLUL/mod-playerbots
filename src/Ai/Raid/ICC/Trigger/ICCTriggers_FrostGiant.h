@@ -11,12 +11,12 @@
 #include "Playerbots.h"
 #include "Trigger.h"
 
-class IccRottingFrostGiantTankPositionTrigger : public Trigger
+class IccRottingFrostGiantPlagueTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc rotting frost giant tank position";
+    static constexpr char const* Name = "icc rotting frost giant plague";
 
-    IccRottingFrostGiantTankPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccRottingFrostGiantPlagueTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
