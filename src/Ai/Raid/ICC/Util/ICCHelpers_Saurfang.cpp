@@ -139,7 +139,7 @@ struct DbsState
     uint32 powerLast = 0;
     uint32 powerCycle = 0;
     std::unordered_map<ObjectGuid, uint32> defensiveCycle;
-    // Calls to a human tank: the cycle (plus one) of the last peak call, and whether Frenzy has had its
+    // Human tank calls: humanPeakCall is the cycle of the last peak call plus one, 0 for none
     bool humanFrenzyCalled = false;
     uint32 humanPeakCall = 0;
     uint32 humanCallMs = 0;
@@ -1295,7 +1295,8 @@ uint32 GetDbsTankDefensive(PlayerbotAI* botAI, char const* noteKind)
         return 0;
 
     bool window = bot->GetHealthPct() < DBS_TANK_DEFENSIVE_PCT;
-    if (boss->GetVictim() == bot)
+    // The splash lands on a Mark carrier every swing, tank or not, holding him or not
+    if (boss->GetVictim() == bot || bot->HasAura(SPELL_DBS_MARK))
     {
         auto const spent = state->defensiveCycle.find(bot->GetGUID());
         bool const fresh = spent == state->defensiveCycle.end() || spent->second != state->powerCycle;

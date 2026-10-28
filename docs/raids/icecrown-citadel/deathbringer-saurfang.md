@@ -42,12 +42,13 @@ returns (`flags_extra` 0x80000) and is immune to nearly all control and knockbac
   reach. The tank not holding him taunts the loose beast nearest its victim, only while its own rune
   has the taunt cooldown plus 0.5 s left or another bot tank free of the rune has its taunt ready, so
   the next swap is covered; Scent of Blood lifts that.
-- **Tank defensives** (`dbs.defensive`, physical only): the holder spends one button from Blood Power
-  70 (40 with a Mark, whose splash hits it every swing too) once per cycle, a cycle ending at each Mark,
-  and whatever is ready all through Frenzy; any tank under 40% spends one. Class nodes stay held until
-  25%. A human holder gets the same windows as calls (`dbs.humancall`): per cycle, at Frenzy, when low.
-  A human partner is called to taunt when the rune sits on a bot holder and no bot tank is free. The
-  rune is no window: the swap ends it in a swing or two.
+- **Tank defensives** (`dbs.defensive`, physical only): the holder, or a tank carrying a Mark, spends
+  one button from Blood Power 70 (40 with a Mark, whose splash hits it every swing, held or not) once per
+  cycle, a cycle ending at each Mark, and whatever is ready all through Frenzy; any tank under 40% spends
+  one. Class nodes stay held until 25%. A human holder gets the same windows as calls
+  (`dbs.humancall`): per cycle, at Frenzy, when low. A human partner is called to taunt when the rune
+  sits on a bot holder and no bot tank is free. The rune is no window: the swap ends it in a swing or
+  two.
 - **Ranged and healers**: one latched slot each (`dbs.slot`). Healers take 1, 3, 2, 10, 11 first;
   ranged, hunters leading, take 7, 6, 5, 4, 9, 8, 1, 3, 2, 10, 11; spare healers the inner rest; the
   rest stack 3.5 yd behind him (12). Every slot sits within 31 yd of his spot, inside `reach spell`'s
@@ -78,7 +79,8 @@ returns (`flags_extra` 0x80000) and is immune to nearly all control and knockbac
 
 Slots, navprobe-clean (`--nav 0x09`; settled z 539.28-539.29 west, 541.11 east and on the tank
 spots, stack 540.64), paths from the stack normal. `los` from every slot, the stack and each tank spot
-to him and to the three tank spots is clear with him anywhere in 2.5 yd of his spot (144 rays).
+to him and to the three tank spots is clear with him anywhere in 2.5 yd of his spot (177 rays: each
+of the 15 stands to his spot, 8 points on a 2.5 yd ring round it, and the tank spots).
 Gameobject collision isn't in navprobe's sight.
 
 | Slot | x, y | From his spot |
@@ -114,7 +116,7 @@ Gameobject collision isn't in navprobe's sight.
 | Holder ignores a player's skull | it must keep him | |
 | Scent of Blood by the latest wave's clock | the script's 10 s event on every live beast; 72771's target is unproven | the aura |
 | Tank ladder: one button at Blood Power 70, all in Frenzy, class nodes held to 25% | Wowhead tank tips (defensives from 70, majors for Frenzy); convention 43 | A button per Rune; a timer |
-| A Mark on the holder opens its window at 40 | the splash hits it every swing and Blood Power scales that too | 70 |
+| A Mark on a tank opens its window at 40, holder or not | the splash hits it every swing and Blood Power scales that too | 70; the holder only |
 | Marked bots ask the shared personal pick about 4 s of splash | Wowhead (personal cooldowns at 70+ and in Frenzy); the pick adds an immunity or a healthstone only when the model reads lethal | Class buttons only |
 | Hand of Protection only on bots that fight with spells | Wowhead (on Boiling Blood, preferably marked); 1022/10278 is physical immunity plus pacify, and nothing on 72255 or 72385 pierces it | Any marked victim; Divine Intervention and Hearthstone lines (cheese) |
 | Melee fill free slots below the Nova minimum | `spell_deathbringer_blood_nova_targeting`: victim among players off his edge, else the farthest 4 / 10, stack included | The stack takes the Nova |
@@ -138,7 +140,8 @@ so are the melee skull icon and the root CC (`IccTryClassCC`'s Frost Nova and En
 - No healer external cooldowns (Pain Suppression, Guardian Spirit, Hand of Sacrifice) at Blood Power 70
   or in Frenzy: no shared dealer exists for a single-target cooldown.
 - A rune holder with no free tank, and a tank on a scented beast, get only the low-health rule. A human
-  holder gets one call at Frenzy, then low-health calls.
+  holder gets one call at Frenzy, then low-health calls. A call is held back while a button of the
+  human's is running, and a taunt call and a button call share one 6 s repeat window.
 - Overflow ranged and healers in the stack sit beside the beasts' back spawn points: no room on the
   floor or the causeway holds them 13.5 yd from the rest. `--control` and `--marks` show whether stack
   bots die to first strikes.

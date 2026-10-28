@@ -20,8 +20,8 @@ What the generic views miss here:
   east causeway), 12 the stack behind him, 13-15 the tank spots; `0` is a release, never a slot. A melee
   bot on a slot is a fill: too few ranged and healers were out to give Blood Nova victims.
 - **`dbs.defensive` is the tank ladder's pick**, a cast name, `covered` once one runs, `none` with
-  nothing ready, `idle` outside a window. A window is the holder from Blood Power 70 (40 with a Mark)
-  once per cycle, the holder all through Frenzy, or any tank under 40%. Blood Power itself is not
+  nothing ready, `idle` outside a window. A window is the holder or a Mark carrier from Blood Power 70
+  (40 with a Mark) once per cycle, the same all through Frenzy, or any tank under 40%. Blood Power is not
   traced: Frenzy is `dbs.phase` 2, a cycle ends at each Mark.
 - **`icc.personal` is shared with the other raids.** Here it is a marked bot's pick at Blood Power 70
   or in Frenzy.

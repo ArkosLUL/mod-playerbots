@@ -29,11 +29,11 @@ Stem `Saurfang` and its definition, the doc, the reader and its test, this brief
 One lead, no split: every change sits in the stem's helpers and per-instance state.
 
 1. [x] Line of sight: navprobe `los` and `ring --los-from` from all 11 slots, the stack and the tank spots
-   to him (up to 2.5 yd off his spot) and to the three tank spots, 144 rays. Slots 10 and 11 (33 yd
+   to him (up to 2.5 yd off his spot) and to the three tank spots, 177 rays. Slots 10 and 11 (33 yd
    north and south) saw him but no tank spot: moved onto the east causeway. Every stand re-probed for
    floor and path.
-2. [x] Tank defensives (convention 43): the holder spends a physical-only button from Blood Power 70
-   (40 with a Mark) once per cycle and through Frenzy, any tank under 40%, class nodes held to 25%; a human
+2. [x] Tank defensives (convention 43): the holder or a Mark carrier spends a physical-only button from
+   Blood Power 70 (40 with a Mark) once per cycle and through Frenzy, any tank under 40%, class nodes held to 25%; a human
    holder is called; probe `dbs.defensive`.
 3. [x] Marked bots' own buttons from Blood Power 70 and in Frenzy through `GetRaidPersonalDefensive`
    (`icc.personal`).
@@ -51,7 +51,7 @@ One lead, no split: every change sits in the stem's helpers and per-instance sta
 |---|---|---|
 | Slots 10 and 11 move to the east causeway, (-478.85, 2211.33) and (-465.35, 2211.33), z 541.11, 17.5 and 31 yd out; both now take DPS too | navprobe `los`: from 33 yd north or south of him the platform edge hides the tank spots while his own spot stays visible (on a 33 yd ring blind from 80° to 95° and from 265° to 285°, clear from 100° and 260° out); the old healer-only slots were healers 4 and 5, who never saw a tank. First robust west spots (-502, 2248 / 2175) sit 37-39 yd from the tank spots, past the 38.5 yd heal reach of the far one | Keep 33 yd; 37 yd slots |
 | Tank ladder: the holder one button at Blood Power 70, all of them in Frenzy, any tank under 40%; class nodes held until 25% | Wowhead tank tips (defensives from 70, majors for Frenzy); convention 43; everything he does is physical and Blood Power is +1% a point; g2's shape | A button per Rune of Blood (the swap ends it within a swing or two) |
-| A Mark on the holder opens its window at Blood Power 40 | the splash lands on the tank every swing and Blood Power scales it | Same 70 |
+| A Mark on a tank opens its window at Blood Power 40, holder or not | the splash lands on the carrier every swing and Blood Power scales it; review found a marked off-tank had no window short of 40% health | Same 70; the holder only |
 | Marked non-tank bots ask `GetRaidPersonalDefensive` about 4 s of splash at the current Blood Power (1.3 swings a second in Frenzy) | Wowhead tips for the marked (personal cooldowns at 70+ and in Frenzy); the shared pick adds an immunity or a healthstone when the model reads lethal, which a Mark's death (boss +5%, +20% heroic) earns | Class buttons only (`NextPhysicalDefensive`) |
 | Hand of Protection only on bots that fight with spells (no melee, hunter or tank) | Wowhead (on Boiling Blood, preferably also marked); 1022/10278 is physical immunity plus pacify, and 72255 and 72385 carry no piercing attribute | Any marked victim; the Divine Intervention and Hearthstone lines (cheese) |
 | Melee fill free inner slots while fewer bots than Blood Nova's minimum hold one | `spell_deathbringer_blood_nova_targeting`: victim among players off his edge, else the farthest 4 (10) / 10 (25) | Let the stack take the Nova |
@@ -62,6 +62,8 @@ One lead, no split: every change sits in the stem's helpers and per-instance sta
 ## Carried over
 
 - Merge stage: `HookRows()` row and `#include "ICCHelpers_Saurfang.h"` in `Util/ICCSeams.cpp` (from r5, unchanged).
+- Merge stage, `icc-rebuild.PLAN.md` Status: the r5 row still lists "Thick Hide cat counts as a tank" and "slot LOS
+  unchecked" as gaps; both are closed or ruled out here.
 - Merge stage or r14: `IccInstanceState::dbsBotSlotMemory` has no reader; `NPC_BLOOD_BEAST1`-`4` are unused;
   `IccTryClassCC` keeps one caller (Valithria); hoist one stand walk base (all from r5).
 - Merge stage, README: drop the Known gaps bullet on the shared tank test and Thick Hide cats; the defensives
@@ -77,6 +79,8 @@ One lead, no split: every change sits in the stem's helpers and per-instance sta
 - The tank ladder keeps no major cooldown back for Frenzy (Wowhead): `--defensives` says what each window spent.
 - A marked mage, paladin or priest that the model reads as lethal takes its class immunity or a healthstone,
   even when its healer would have held. `icc.personal` in the next pull says how often.
+- A human tank's call is held back while one of its buttons runs, and a taunt call and a button call share one
+  6 s repeat window (`CallHumanTankDefensive`, a shared file).
 - Gameobject collision isn't in navprobe's sight.
 
 ## Blocked

@@ -47,11 +47,9 @@ inline Position const ICC_DBS_TANK_SPOTS[] = {
 // Behind him with the melee, for ranged and healers past the slots
 inline Position const ICC_DBS_STACK_SPOT(-499.85f, 2211.33f, 540.64f);
 
-// Blood Nova hits everyone within 12 yd of its victim, centre to centre from a creature, so slots sit
-// that far apart plus the park tolerance of both. All lie within 31 yd of his spot, inside the 32 yd at
-// which reach spell walks a caster in. 1-9 are west of him on the floor; 10 and 11 are east of the tanks
-// on the causeway (12 yd wide), because the platform's edge hides the tank spots from anything
-// 33 yd north or south of him.
+// Blood Nova hits everyone within 12 yd of its victim, so slots sit that far apart plus both park
+// tolerances, and within 31 yd of his spot (reach spell walks in at 32). 10 and 11 are on the east
+// causeway: the platform edge hides the tank spots from 33 yd north or south of him.
 constexpr float DBS_SLOT_SPACING = 13.5f;
 inline Position const ICC_DBS_SLOTS[] = {
     {-515.85f, 2211.33f, 539.29f}, {-511.07f, 2224.12f, 539.29f}, {-511.07f, 2198.54f, 539.29f},
@@ -72,9 +70,8 @@ constexpr float DBS_STAND_UNPARK = 2.5f;
 static_assert(DBS_STAND_PARK < DBS_STAND_UNPARK, "a walk has to end inside its own trigger");
 static_assert(DBS_SLOT_SPACING >= 12.0f + 2 * DBS_STAND_PARK, "two parked neighbours must not share a Blood Nova");
 
-// Blood Power: his energy, 0-100, +1% damage a point, reset by a Mark at 100. The holder spends a tank
-// button from PEAK once per cycle, from PEAK_MARKED when it carries a Mark (the splash hits it every
-// swing too). A drop of RESET_DROP or more between two reads is a Mark.
+// Blood Power: his energy, +1% damage a point, reset by a Mark at 100. A tank spends one button a cycle
+// from PEAK, or PEAK_MARKED with a Mark. A drop of RESET_DROP between two reads is a Mark.
 constexpr uint32 DBS_BLOOD_POWER_PEAK = 70;
 constexpr uint32 DBS_BLOOD_POWER_PEAK_MARKED = 40;
 constexpr uint32 DBS_BLOOD_POWER_RESET_DROP = 30;
@@ -118,15 +115,15 @@ bool IsDbsBeaconDutyHeld(PlayerbotAI* botAI);
 // loses nothing to a pacify. Notes dbs.protect.
 Player* GetDbsProtectTarget(PlayerbotAI* botAI);
 
-// The button this tank spends now, 0 for none: the holder from Blood Power PEAK once per cycle and all
-// through Frenzy, any tank under DBS_TANK_DEFENSIVE_PCT. Physical only, all his damage is.
+// The button this tank spends now, 0 for none: the holder or a Mark carrier from Blood Power PEAK once
+// per cycle and all through Frenzy, any tank under DBS_TANK_DEFENSIVE_PCT. Physical only.
 uint32 GetDbsTankDefensive(PlayerbotAI* botAI, char const* noteKind);
 // Class defensive nodes stay off until GetDbsTankDefensive or DBS_TANK_LAST_RESORT_PCT
 bool IsDbsTankDefensiveHeld(PlayerbotAI* botAI);
 void LatchDbsTankDefensive(PlayerbotAI* botAI);
 
 // The splash a marked bot takes from Blood Power PEAK on and in Frenzy, as a hit for
-// GetRaidPersonalDefensive. False for a tank: the holder has the ladder above.
+// GetRaidPersonalDefensive. False for a tank: it has the ladder above.
 bool GetDbsMarkHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
 
 bool IsDbsHoldingStand(PlayerbotAI* botAI);
