@@ -109,6 +109,10 @@ constexpr uint32 NITRO_MELEE_FOCUS = 2;
 constexpr float BLINK_FLEE_RADIUS = 15.0f;
 constexpr float BLINK_MIN_CLEAR = 12.0f;
 constexpr uint32 SPELL_DISENGAGE = 781;
+// Shares its 30 s cooldown with Freezing Arrow, the peel's. Its trap arms 1 s after it's set in combat and
+// goes off at 2.5 yd, laying a 10 yd slick that slows 50% for 30 s; Entrapment adds a root there.
+constexpr uint32 SPELL_FROST_TRAP = 13809;
+constexpr float FROST_TRAP_SLICK = 10.0f;
 constexpr float DISENGAGE_REACH = 5.0f;
 constexpr float DISENGAGE_DIST = 15.0f;
 
@@ -784,6 +788,17 @@ bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bo
     return true;
 }
 
+// Entrapment's root would pop an iced champion's trinket, its Chains going with it, and end a grip in the air
+bool FrostTrapClear(PlayerbotAI* botAI, Position const& centre)
+{
+    for (Unit* champion : FactionChampionsInCombat(botAI))
+        if (champion->GetExactDist2d(&centre) <= FROST_TRAP_SLICK + ESCAPE_AOE_SLACK &&
+            (FactionChampionsIced(botAI, champion) || FactionChampionsGripGuarded(botAI, champion)))
+            return false;
+
+    return true;
+}
+
 bool AoeEscape(PlayerbotAI* botAI, OpenerSpell const& spell, Unit* at, bool fear, FactionChampionsEscapeCast& cast)
 {
     Player* bot = botAI->GetBot();
@@ -932,6 +947,14 @@ bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast
             return AoeEscape(botAI, PSYCHIC_SCREAM, bot, true, cast);
         case CLASS_HUNTER:
         {
+            // at its feet, so the chaser walks over it on the kite after
+            if (KnownReady(bot, SPELL_FROST_TRAP) && FrostTrapClear(botAI, bot->GetPosition()))
+            {
+                cast.spellId = SPELL_FROST_TRAP;
+                cast.target = bot;
+                return true;
+            }
+
             if (bot->GetExactDist2d(nearest) > DISENGAGE_REACH || !KnownReady(bot, SPELL_DISENGAGE))
                 return false;
 

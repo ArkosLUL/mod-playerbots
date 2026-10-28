@@ -80,7 +80,8 @@ struct FactionChampionsEscapeCast
 // ready instant, CC before movement. Mage Frost Nova, Blink 20 yd away from every melee champion within 15 yd
 // (on the floor, clear of Bladestorm and Hellfire, landing 12+ yd off all of them), Dragon's Breath; warlock
 // Shadowfury on the nearest, Demonic Circle: Teleport when the circle is 12+ yd farther from them, instant
-// Howl of Terror, Death Coil on the nearest; priest Psychic Scream; hunter Disengage with one within 5 yd. An
+// Howl of Terror, Death Coil on the nearest; priest Psychic Scream; hunter Frost Trap at its feet with no iced
+// or grip-guarded champion within 12 yd, then Disengage with one within 5 yd. An
 // AoE only with no champion inside held by our breakable fear, stun or confuse or grip-guarded, a fear or
 // Dragon's Breath not on the kill target.
 bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast);
