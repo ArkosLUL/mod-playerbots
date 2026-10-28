@@ -216,6 +216,8 @@ bool AlgalonExplosionPersonalAction::Execute(Event /*event*/)
 
 bool AlgalonShadowAuraAction::Execute(Event /*event*/) { return botAI->CastSpell("shadow resistance aura", bot); }
 
+bool AlgalonFireTotemAction::Execute(Event /*event*/) { return botAI->CastSpell("fire resistance totem", bot); }
+
 bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 {
     Position shelter;
@@ -475,14 +477,25 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
     // The far spot is past the hole, so the straight walk there crosses it.
     Position next;
     if (!AlgalonWalkAround(bot, spot, next))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "algalon.kite", "stuck");
+
         return false;
+    }
 
     // Combat, not forced, so the exit and the meteor dodge always win over it.
     ReleaseStalledWalk(botAI, bot);
     DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_COMBAT);
     if (!MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false, false,
                 false, MovementPriority::MOVEMENT_COMBAT, true))
+    {
+        // Refused on its own walk's second tick is normal; refused standing still is not.
+        if (!bot->isMoving() && RaidObs::Active())
+            RaidObs::NoteDerived(bot, "algalon.kite", "stuck");
+
         return false;
+    }
 
     _walk = next;
     return true;

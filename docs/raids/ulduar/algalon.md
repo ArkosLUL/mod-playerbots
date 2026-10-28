@@ -312,8 +312,9 @@ above the floor, where no hole takes one (2-23 s of descent after waking), it is
 the gather. At Big Bang it **hides last**,
 since they follow it in and close the hole (65509, 6 yd) while those already inside stay phased: 62168 is
 owned by each target, and a despawning caster strips only area and single-target auras. It takes its kite
-hole, nobody else's, else its shelter, and (with no star under) waits there (`hold`) until every hider bound for that hole is in
-(bots by shelter, humans by the nearest hole, kite hole included), or until its walk plus 2 s is left: a tank
+hole, nobody else's, else its shelter, and waits there (`hold`; with a star under only a tank above the explosion's
+top roll, since a handler going straight in closed the only hole on the other tank) until every hider bound for
+that hole is in (bots by shelter, humans by the nearest hole, kite hole included), or until its walk plus 2 s is left: a tank
 is caught out under its walk plus 1.5 s, and with the same threshold a 250 ms tick read that first. From 10 s
 before the cast it only taunts (`gather`), keeping its kite hole unless that became the raid's: a constellation
 keeps its victim 9.5 s from the cast start, and one chasing a healer closed a hole a ranged was walking to.
@@ -337,10 +338,11 @@ So, per handler (`algalon.kite`), with the walk going round any hole it would cl
 A spot clamped into the room (44 yd) must stay 7.8 yd from the hole, on its side, and 8 yd off every other
 hole, else ±30°; a hole needs both spots. A loose one is taunted from the far spot of the hole nearest it
 (`behind`) when that is within 28 yd of it, the handler holding there while the taunt cools, so it comes straight
-across; not while gathering or with no hole spare. Loose ones go first only while the class taunt is ready:
-taunted one per 8 s after every swap, they held the kite 71 s of a pull. With it cooling, held ones go to a spare
-hole if one fits, and a pass past its stage walk is finished first (taunting from behind latches a new kite and
-drops it). Never kited: the raid's hole with Big Bang due, and the only
+across; not while gathering or with no hole spare. A held one goes to a spare hole that fits before any loose one
+is taunted: taunting each time the class taunt came back walked the handler off its stage every 8 s, and with
+healers and diseases peeling them it crossed 5 times in 305 s. Once held, the taunt's spot past the hole is
+dropped: a stage walk kept on it found no way round and stood still until the next taunt (`stuck`, a walk refused
+standing still). Never kited: the raid's hole with Big Bang due, and the only
 hole within 35 yd of the hold spot, the swap tanks' reach. The walks run at combat priority: a straight forced
 walk crossed the field, and its booking refused both the tank slot walk and the exit when the handler took him
 as Big Bang began. Its movement rule still passes its taunts, the pickup and the swap: all are
@@ -444,7 +446,8 @@ taken, while the same healers put 67 k into others. Main hand, off hand and Quan
 
 The tick latches **tank healers**, bots only, ranked holy paladin, discipline priest, resto druid, resto
 shaman, holy priest: 2 on 25-man, 1 on 10-man, never more than half the living healers (humans counted),
-since the star `raidhp` window waits on the rest topping up the raid. Re-derived until the pull; in it the
+since the star `raidhp` window waits on the rest topping up the raid; in phase 2, with no stars, all but one, a lone
+one included (one tank healer left both tanks dead within 20 s of it). Re-derived until the pull; in it the
 dead or departed are replaced and the list trimmed. A phased one stays: Big Bang phases them all.
 
 A tank healer heals the holder (else the lower pair tank), itself under 50 %, then the partner:
@@ -544,6 +547,13 @@ no `window` Hand of Sacrifice (both fired in one tick, the Hand first, and the s
 
 The class Divine Sacrifice node is blocked while stars live and Aura Mastery all fight.
 
+**Fire resistance.** Cosmic Smash is fire (1.3-1.4 M a pull), and auras and totems here reach all 25: the kill
+had a human's Fire Resistance Aura up and resisted 24% of it against 15% without. The tick elects
+`algalon.firetotem`, a bot shaman whose water totem another bot shaman also drops (an ele and a resto both run
+Mana Spring), a dps first; it drops Fire Resistance Totem all fight and a `Block` holds its other water totems.
+None without a duplicate: Mana Spring or Healing Stream is worth more. Frost Resistance Aura is blocked while he is
+engaged: a paladin still carrying `rfrost` from an earlier boss traded the tank's Devotion for it.
+
 **Personal buttons** (`ACTION_EMERGENCY`, after the cover): 23 of 41 explosion deaths had one ready, and bots
 press them only once already low. With a star dying within 1.5 s, an unphased bot outside the swap pair under the
 top roll (× 0.8 with Divine Guardian on it or within 40 yd of the Aura Mastery paladin; the largest of 87 hits
@@ -571,14 +581,14 @@ Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
 
 - **Raid-wide, written by the instance tick:** `algalon.phase` (0 idle, 1 intro, 2 phase 1, 3 phase 2,
   4 won), `algalon.bigbang` (the cast's ordinal while latched, else 0), `algalon.soaker`,
-  `algalon.backup`, `algalon.disperser`, `algalon.shadowaura`, `algalon.urgent`, `algalon.holes`,
+  `algalon.backup`, `algalon.disperser`, `algalon.shadowaura`, `algalon.firetotem`, `algalon.urgent`, `algalon.holes`,
   `algalon.focusstar`, `algalon.handler`, `algalon.tankhealslots`.
 - **Per guid:** `algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam` (urgent
   recruits aren't recorded), `algalon.swappair`, `algalon.tankhealer`.
 - **Derived per bot, each inside the helper that derives it:** `algalon.tankheal`
   (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
   (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is a chased bot waiting
-  to go last), `algalon.kite` (`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`nohole`/`none`;
+  to go last), `algalon.kite` (`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`nohole`/`stuck`/`none`;
   older traces `hole`), `algalon.spot`
   (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`),
   `algalon.hazard` (`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`,
@@ -625,7 +635,8 @@ second (humans starred); `--help` lists the views. Its verdicts, beyond `--verdi
 eating or drinking while he is engaged, per star going off in the cast the bots it hit by hide state
 with a swap tank out on `noshelter` aside, per cast the hiders that used a gap closer):
 
-- `--defensives`: a press or cover after its star's death; a held button a class node spent (phased,
+- `--defensives` lists fire resistance holders, their reach and the Cosmic Smash share resisted. Verdicts: a press or
+  cover after its star's death; a held button a class node spent (phased,
   or in phase 1; judged on health after the last hit, not the snapshot); a cover cast with fewer than
   2 under the line; a failed cover with another ready; `window` cutters on a holder at 80% or more.
 - `--stars`: a release within 8 s of the cast; 1% or more of splash, off the focus, on an

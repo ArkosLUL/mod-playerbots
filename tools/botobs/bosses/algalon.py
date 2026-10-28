@@ -4975,6 +4975,26 @@ def cover_label(trace: Trace, ready: list[tuple[int, int]]) -> str:
     return ", ".join(f"{trace.name(guid)}'s {COVER_SPELLS[spell]}" for guid, spell in ready)
 
 
+def fire_resistance(trace: Trace) -> tuple[dict[int, tuple[str, set[int]]], float | None]:
+    """Who raised Fire Resistance Totem or Aura, each with the raid members it reached, and the share of Cosmic
+    Smash resisted (None without a hit)."""
+    sources: dict[int, tuple[str, set[int]]] = {}
+    for rec in trace.of("aura"):
+        name = trace.spells.get(rec.get("sp"), "")
+        if rec.get("r") or not name.startswith("Fire Resistance") or rec.get("d") not in trace.roles:
+            continue
+        source = trace.owners.get(rec.get("s"), rec.get("s"))
+        label = "totem" if source != rec.get("s") else "aura"
+        sources.setdefault(source, (label, set()))[1].add(rec["d"])
+    landed = resisted = 0
+    for rec in trace.of("dmg"):
+        if rec.get("sp") in SPELL_COSMIC_SMASH and rec.get("d") in trace.roles:
+            landed += rec.get("a", 0) + rec.get("ab", 0)
+            resisted += rec.get("rs", 0)
+    share = resisted / (landed + resisted) if landed + resisted else None
+    return sources, share
+
+
 def show_defensives(trace: Trace) -> None:
     print("TANK DEFENSIVES AND EXPLOSION COVER")
     if boss_guid(trace) is None:
@@ -5013,6 +5033,11 @@ def show_defensives(trace: Trace) -> None:
     print("  cover providers: " + ("; ".join(
         f"{trace.name(guid)} {', '.join(COVER_SPELLS[spell] for spell in spells)}"
         for guid, spells in sorted(providers.items(), key=lambda item: trace.name(item[0]))) or "none seen"))
+    sources, share = fire_resistance(trace)
+    print("  fire resistance: " + ("; ".join(
+        f"{trace.name(guid)} {label} on {len(reached)}"
+        for guid, (label, reached) in sorted(sources.items(), key=lambda item: trace.name(item[0]))) or "none")
+        + ("" if share is None else f"; Cosmic Smash {share:.0%} resisted"))
     explosions = explosion_rows(trace)
     safe = explosion_safe_hp(trace)
     print(f"  star explosions: {len(explosions)}; under each, every unphased bot at or under its line ({safe:,},"

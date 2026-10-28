@@ -477,6 +477,8 @@ struct AlgalonEncounterState
     RaidObs::ObsValue<ObjectGuid> disperser{"algalon.disperser"};
     // The paladin running Shadow Resistance Aura while stars live, so its Aura Mastery doubles it.
     RaidObs::ObsValue<ObjectGuid> shadowAuraPaladin{"algalon.shadowaura"};
+    // Cosmic Smash is fire; totems reach the whole raid, so one duplicate water totem is free to swap.
+    RaidObs::ObsValue<ObjectGuid> fireTotemShaman{"algalon.firetotem"};
     RaidObs::ObsValue<bool> urgent{"algalon.urgent"};
     RaidObs::ObsValue<uint32> holeCount{"algalon.holes"};
     RaidObs::ObsValue<ObjectGuid> focusStar{"algalon.focusstar"};
@@ -663,6 +665,8 @@ AlgalonPersonalPick GetAlgalonExplosionPersonal(PlayerbotAI* botAI);
 void ClaimAlgalonExplosionPersonal(Player* bot, AlgalonPersonalPick const& pick);
 // Runs Shadow Resistance Aura while stars live.
 bool IsAlgalonShadowAuraPaladin(Player* bot);
+// Drops Fire Resistance Totem in place of a water totem another shaman already drops.
+bool IsAlgalonFireTotemShaman(Player* bot);
 
 // What this bot does about the current Big Bang. Traced as algalon.hide.
 enum class AlgalonHideRole : uint8

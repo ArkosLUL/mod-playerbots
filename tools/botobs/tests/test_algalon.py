@@ -557,6 +557,22 @@ class SyntheticPull(unittest.TestCase):
         tree = next(row for row in rows if row["guid"] == TREE and row["start"] == 46000)
         self.assertEqual((tree["matter"], tree["died"]), (3000, False))
 
+    def test_fire_resistance_names_the_totem_owner_and_the_smash_resisted(self):
+        totem = CREATURE | 777
+        smash = {**dmg(30000, ALGALON, SHIV, 64596, 3000), "rs": 1000}
+        records = algalon_pull() + [
+            {"t": 1, "e": "spell", "sp": 58745, "n": "Fire Resistance"},
+            {"t": 2, "e": "unit", "g": totem, "en": 15488, "n": "Fire Resistance Totem", "own": TREE},
+            {**aura(20000, SHIV, 58745), "s": totem}, {**aura(20000, MERCY, 58745), "s": totem},
+            {**aura(25000, SHIV, 58745, True), "s": totem}, smash]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, records)
+            sources, share = al.fire_resistance(trace)
+            self.assertEqual(sources, {TREE: ("totem", {SHIV, MERCY})})
+            # the pull's own meteors land 9,000 unresisted
+            self.assertAlmostEqual(share, 1000 / 13000)
+            self.assertIn("fire resistance: Tree totem on 2; Cosmic Smash 8% resisted", render(trace, "defensives"))
+
     def test_a_stray_phase_right_after_a_charge_is_put_on_the_charge(self):
         def cause(*casts: dict) -> str:
             with tempfile.TemporaryDirectory() as folder:
