@@ -292,7 +292,7 @@ public:
     static constexpr char const* Name = "thaddius prepull split";
 
     // Resolving the adds out of combat costs a grid search, so do not run it every tick.
-    ThaddiusPrepullSplitTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 2), helper(botAI) {}
+    ThaddiusPrepullSplitTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 2000), helper(botAI) {}
     bool IsActive() override;
 
 private:

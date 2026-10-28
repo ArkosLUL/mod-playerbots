@@ -54,7 +54,7 @@ RE_TRIGGER_NODE = re.compile(r'\bTriggerNode\(\s*"([^"]*)"')
 RE_ADD_STRATEGY = re.compile(r'\baddStrategies?\w*\s*\(\s*"([^"]*)"')
 RE_ADD_STRATEGY_LIST = re.compile(r'"([^"]+)"')
 # `: Action(botAI, "name")` / `: Trigger(botAI, "name", 200)` in a member-init list.
-RE_SELF_NAME = re.compile(r':\s*(?:public\s+)?(\w+)\s*\(\s*(?:bot)?AI\s*,\s*"([^"]*)"')
+RE_SELF_NAME = re.compile(r':\s*(?:public\s+)?(\w+)\s*\(\s*\w+\s*,\s*"([^"]*)"')
 
 # Encounter definitions (Raid/RaidEncounter.h). A class there spells its name once, as a `Name`
 # constant, and a row registers both creators and the node from it, so none of the literals above
@@ -450,7 +450,7 @@ def check_trigger_interval(sources) -> list[Finding]:
     """Trigger's checkInterval is normalised as `< 100 ? value * 1000 : value`, so 2..99 silently
     means seconds. A positioning trigger throttled to 5 s is not a positioning trigger."""
     out = []
-    pattern = re.compile(r':\s*Trigger\s*\(\s*(?:bot)?AI\s*,\s*(?:"[^"]*"|Name)\s*,\s*(\d+)\s*\)')
+    pattern = re.compile(r':\s*Trigger\s*\(\s*\w+\s*,\s*(?:"[^"]*"|Name)\s*,\s*(\d+)\s*\)')
     for src in sources:
         for number, line in enumerate(src.lines, 1):
             match = pattern.search(line)

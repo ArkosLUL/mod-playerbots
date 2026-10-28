@@ -14,7 +14,7 @@ class MimironResetEncounterStateTrigger : public Trigger
 public:
     static constexpr char const* Name = "mimiron reset encounter state trigger";
 
-    MimironResetEncounterStateTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 5) {}
+    MimironResetEncounterStateTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 5000) {}
     bool IsActive() override;
 };
 
