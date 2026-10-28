@@ -18,8 +18,10 @@
 #include "Playerbots.h"
 #include "RaidDifficulty.h"
 #include "RaidDirectTargeting.h"
+#include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "RaidTankDefensive.h"
 #include "Spell.h"
 #include "SpellAuras.h"
 #include "SpellMgr.h"
@@ -38,6 +40,7 @@ constexpr uint32 GSB_TANK_LAST_MS = 10000;
 // Cannon Blast and Incinerating Blast reach 150 yd
 constexpr float GSB_CANNON_RANGE = 150.0f;
 constexpr float GSB_HAZARD_SCAN = 80.0f;
+constexpr uint32 GSB_HUMAN_CALL_MS = 1000;
 
 GsbSide const GSB_ALLIANCE{false,
                            NPC_CANNONA,
@@ -102,6 +105,13 @@ struct GsbStand
     bool parked = false;
 };
 
+// The deck and window a tank's last defensive was cast for
+struct GsbSpent
+{
+    GsbDeck deck = GsbDeck::None;
+    uint8 window = 0;
+};
+
 struct GsbState
 {
     bool wasLive = false;
@@ -130,6 +140,11 @@ struct GsbState
 
     std::unordered_map<ObjectGuid, GsbStand> stands;
     std::unordered_map<ObjectGuid, Position> notedCasts;
+
+    // 1 or 2 while the captain's stacks put the board tank in a defensive window
+    RaidObs::ObsValue<uint32> furyWindow{"gsb.furywindow", 0};
+    std::unordered_map<ObjectGuid, GsbSpent> defensiveSpent;
+    uint32 humanCallMs = 0;
 };
 
 RaidInstanceState<GsbState> sGsbState;
@@ -530,11 +545,27 @@ uint32 FuryStacks(Creature* captain)
     return aura ? aura->GetStackAmount() : 0;
 }
 
-uint32 RetreatStacks(Creature* captain)
+// The percent one stack adds
+int32 FuryPerStack(Creature* captain)
 {
     SpellInfo const* info = sSpellMgr->GetSpellInfo(sSpellMgr->GetSpellIdForDifficulty(SPELL_BATTLE_FURY2, captain));
-    int32 const perStack = info ? std::max(1, info->Effects[EFFECT_0].CalcValue()) : 10;
+    return info ? std::max(1, info->Effects[EFFECT_0].CalcValue()) : 10;
+}
+
+uint32 RetreatStacks(Creature* captain)
+{
+    int32 const perStack = FuryPerStack(captain);
     return static_cast<uint32>((GSB_FURY_RETREAT_BONUS + perStack - 1) / perStack);
+}
+
+// 0 below the first defensive window, else 1 or 2
+uint8 FuryWindow(Creature* captain)
+{
+    int32 const bonus = static_cast<int32>(FuryStacks(captain)) * FuryPerStack(captain);
+    if (bonus >= GSB_FURY_SECOND_WINDOW_BONUS)
+        return 2;
+
+    return bonus >= GSB_FURY_FIRST_WINDOW_BONUS ? 1 : 0;
 }
 
 void UpdateFreeze(PlayerbotAI* botAI, GsbState& state, uint32 now)
@@ -557,6 +588,7 @@ void UpdateFreeze(PlayerbotAI* botAI, GsbState& state, uint32 now)
             state.retreat = 0u;
     }
 
+    state.furyWindow = captain ? static_cast<uint32>(FuryWindow(captain)) : 0u;
     state.frozen = frozen;
     if (!frozen || !captain)
         return;
@@ -974,6 +1006,93 @@ Unit* ResolveTarget(PlayerbotAI* botAI, char const*& why)
     return nullptr;
 }
 
+// 1: a wave on the tank with the party across, or a Veteran. 2: an Elite
+uint8 WaveWindow(GsbState const& state, GsbSide const& side, Player* tank)
+{
+    uint32 held = 0;
+    uint8 rank = 0;
+    for (ObjectGuid const& guid : state.boarders)
+    {
+        Creature* boarder = AliveCreature(tank, guid);
+        if (!boarder || boarder->GetVictim() != tank || GsbDeckOf(side, boarder) != GsbDeck::Home ||
+            !tank->IsWithinMeleeRange(boarder))
+            continue;
+
+        ++held;
+        rank = std::max(rank, Rank(boarder));
+    }
+
+    if (rank >= GSB_WAVE_RANK_SECOND)
+        return 2;
+
+    if (rank >= GSB_WAVE_RANK_FIRST || (held >= GSB_WAVE_ON_TANK && OthersOnEnemyDeck(tank, side)))
+        return 1;
+
+    return 0;
+}
+
+// The window a tank stands in: the captain's stacks on his deck, the boarders on its own
+uint8 DefensiveWindow(GsbState const& state, GsbSide const& side, Player* tank, GsbDeck deck)
+{
+    if (deck == GsbDeck::Home)
+        return WaveWindow(state, side, tank);
+
+    if (deck != GsbDeck::Enemy)
+        return 0;
+
+    Creature* captain = AliveCreature(tank, state.captain);
+    if (!captain || captain->GetVictim() != tank)
+        return 0;
+
+    return FuryWindow(captain);
+}
+
+uint8 SpentWindow(GsbState const& state, Player* tank, GsbDeck deck)
+{
+    auto const found = state.defensiveSpent.find(tank->GetGUID());
+    if (found == state.defensiveSpent.end() || found->second.deck != deck)
+        return 0;
+
+    return found->second.window;
+}
+
+bool IsTankDuty(GsbDuty duty) { return duty == GsbDuty::BoardTank || duty == GsbDuty::HomeTank; }
+
+// the latch ends with its window, so the next one gets a button
+void UpdateDefensive(PlayerbotAI* botAI, GsbState& state, GsbSide const& side)
+{
+    Player* bot = botAI->GetBot();
+    if (!IsTankDuty(DutyIn(state, bot)))
+        return;
+
+    if (!DefensiveWindow(state, side, bot, GsbDeckOf(side, bot)))
+        state.defensiveSpent.erase(bot->GetGUID());
+}
+
+// a human holding the captain gets a call at the same windows
+void CallHumanTank(PlayerbotAI* botAI, GsbState& state, uint32 now)
+{
+    if (state.humanCallMs && getMSTimeDiff(state.humanCallMs, now) < GSB_HUMAN_CALL_MS)
+        return;
+
+    state.humanCallMs = now;
+    Player* bot = botAI->GetBot();
+    Creature* captain = AliveCreature(bot, state.captain);
+    Unit* victim = captain ? captain->GetVictim() : nullptr;
+    Player* human = victim ? victim->ToPlayer() : nullptr;
+    if (!human || !human->IsAlive() || IsDutyBot(human))
+        return;
+
+    bool const low = human->GetHealthPct() < GSB_TANK_DEFENSIVE_PCT;
+    if (!low && !FuryWindow(captain))
+        return;
+
+    uint32 const spellId = ReadyTankDefensiveSpell(human, true, 0, 0);
+    if (spellId)
+        CallHumanTankDefensive(bot, human, spellId, 0, low ? "you are low" : "Battle Fury is stacking",
+                               "gsb.humancall");
+}
+
 void ResetLegacyRti(PlayerbotAI* botAI)
 {
     Value<std::string>* rti = botAI->GetAiObjectContext()->GetValue<std::string>("rti");
@@ -1118,6 +1237,48 @@ Unit* GsbTauntTarget(PlayerbotAI* botAI)
     }
 
     return best;
+}
+
+uint32 GsbTankDefensive(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    GsbSide const* side = GsbSideOf(bot);
+    GsbState* state = StateOf(bot);
+    if (!side || !state || !bot->IsAlive() || bot->GetVehicle() || !IsTankDuty(DutyIn(*state, bot)) ||
+        !GsbLive(botAI))
+        return 0;
+
+    GsbDeck const deck = GsbDeckOf(*side, bot);
+    if (deck != GsbDeck::Home && deck != GsbDeck::Enemy)
+        return 0;
+
+    bool const open = DefensiveWindow(*state, *side, bot, deck) > SpentWindow(*state, bot, deck);
+    if (!open && bot->GetHealthPct() >= GSB_TANK_DEFENSIVE_PCT)
+    {
+        // Change-latched, so the way out of a window is written too
+        RaidObs::NoteDerived(bot, "gsb.defensive", "idle");
+        return 0;
+    }
+
+    return NextTankDefensive(botAI, bot, "gsb.defensive", true);
+}
+
+void GsbSpentTankDefensive(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    GsbSide const* side = GsbSideOf(bot);
+    GsbState* state = StateOf(bot);
+    if (!side || !state)
+        return;
+
+    GsbDeck const deck = GsbDeckOf(*side, bot);
+    uint8 const window = std::max(SpentWindow(*state, bot, deck), DefensiveWindow(*state, *side, bot, deck));
+    state->defensiveSpent[bot->GetGUID()] = GsbSpent{deck, window};
+}
+
+bool GsbTankDefensiveHeld(PlayerbotAI* botAI)
+{
+    return GsbLive(botAI) && botAI->GetBot()->GetHealthPct() >= GSB_TANK_LAST_RESORT_PCT;
 }
 
 bool GsbHasRocketPack(Player* bot)
@@ -1374,4 +1535,6 @@ void GsbTick(PlayerbotAI* botAI)
     GsbBotDeck(botAI);
     GsbBoardOf(botAI);
     UpdateStand(botAI, state, *side);
+    UpdateDefensive(botAI, state, *side);
+    CallHumanTank(botAI, state, now);
 }

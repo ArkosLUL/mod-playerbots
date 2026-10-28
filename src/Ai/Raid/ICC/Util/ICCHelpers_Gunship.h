@@ -58,6 +58,18 @@ constexpr uint32 GSB_INCINERATE_HEAT = 90;
 // Each Battle Fury stack adds 10% on normal and 12% on heroic (row 2155). The party leaves once he
 // hits for three times his base.
 constexpr int32 GSB_FURY_RETREAT_BONUS = 200;
+// board tank spends a defensive at each bonus, one per window
+constexpr int32 GSB_FURY_FIRST_WINDOW_BONUS = 50;
+constexpr int32 GSB_FURY_SECOND_WINDOW_BONUS = 100;
+static_assert(GSB_FURY_SECOND_WINDOW_BONUS < GSB_FURY_RETREAT_BONUS, "the party leaves after the last window");
+// below this health a tank spends a button outside the windows
+constexpr float GSB_TANK_DEFENSIVE_PCT = 40.0f;
+// its class defensive nodes stay held above this
+constexpr float GSB_TANK_LAST_RESORT_PCT = 25.0f;
+// home tank windows: a wave of this many on it with the party across, or a boarder at these ranks
+constexpr uint32 GSB_WAVE_ON_TANK = 3;
+constexpr uint8 GSB_WAVE_RANK_FIRST = 2;
+constexpr uint8 GSB_WAVE_RANK_SECOND = 3;
 // Rocket Pack reaches 40 yd, launch to landing is 24 (Alliance) or 30 yd (Horde)
 constexpr float GSB_JUMP_READY = 2.5f;
 constexpr float GSB_ZAFOD_RANGE = 150.0f;
@@ -172,6 +184,14 @@ GsbBoard GsbBoardOf(PlayerbotAI* botAI);
 Unit* GsbTarget(PlayerbotAI* botAI);
 // A tank's pick: the captain off a non-tank, or a boarder on the raid's deck nobody tanks
 Unit* GsbTauntTarget(PlayerbotAI* botAI);
+
+// The tank button to cast now, or 0: one per window the captain's stacks or a boarding wave open, and
+// any under GSB_TANK_DEFENSIVE_PCT. Notes gsb.defensive.
+uint32 GsbTankDefensive(PlayerbotAI* botAI);
+// The window the button just cast was for
+void GsbSpentTankDefensive(PlayerbotAI* botAI);
+// A tank's class defensive nodes stay off above GSB_TANK_LAST_RESORT_PCT, so GsbTankDefensive paces them
+bool GsbTankDefensiveHeld(PlayerbotAI* botAI);
 
 // The cross-deck move this bot owes: where to walk, or where to jump
 GsbJump GsbJumpPlan(PlayerbotAI* botAI, Position& spot);

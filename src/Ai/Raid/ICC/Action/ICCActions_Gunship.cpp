@@ -209,6 +209,16 @@ bool IccGunshipTauntAction::Execute(Event /*event*/)
     return true;
 }
 
+bool IccGunshipTankDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = GsbTankDefensive(botAI);
+    if (!spellId || !botAI->CastSpell(spellId, bot))
+        return false;
+
+    GsbSpentTankDefensive(botAI);
+    return true;
+}
+
 bool IccGunshipEnterCannonAction::Execute(Event /*event*/)
 {
     if (bot->GetVehicle() || !GsbWantsCannon(botAI))

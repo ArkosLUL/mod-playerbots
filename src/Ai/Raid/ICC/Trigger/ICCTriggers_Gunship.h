@@ -40,6 +40,15 @@ public:
     bool IsActive() override;
 };
 
+class IccGunshipTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc gunship tank defensive";
+
+    IccGunshipTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccGunshipCannonNearTrigger : public Trigger
 {
 public:

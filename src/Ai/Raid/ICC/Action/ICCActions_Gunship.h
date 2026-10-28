@@ -69,6 +69,15 @@ public:
     bool Execute(Event event) override;
 };
 
+class IccGunshipTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc gunship tank defensive";
+
+    IccGunshipTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 class IccGunshipEnterCannonAction : public MovementAction
 {
 public:

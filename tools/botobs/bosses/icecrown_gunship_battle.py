@@ -9,6 +9,7 @@
     icecrown_gunship_battle.py <file> --targets   time per pick rule, and the stands held
     icecrown_gunship_battle.py <file> --cannons   what the cannons aimed at, and any overheat
     icecrown_gunship_battle.py <file> --dodges    Rocket Artillery and Burning Pitch dodges
+    icecrown_gunship_battle.py <file> --defensives  the tank buttons spent on the captain's stacks and boarding waves
     icecrown_gunship_battle.py <file> --cheats    this encounter's cheat uses
 
 What the generic views miss here:
@@ -20,6 +21,12 @@ What the generic views miss here:
   the mage dies, `retreat` on the captain's stacks. A bot outside the boarding party stays `home`.
 - **`gsb.fury` and `gsb.retreat` are per instance**: the stack count at each thaw, and the one a retreat
   latched at, back to 0 when his stacks fall off.
+- **`gsb.furywindow` is the board tank's defensive window, per instance**: 1 once the captain's stacks add
+  50% to his hit, 2 at 100%, 0 when they are gone. A boarding wave on the home tank has no such note: its
+  buttons show as casts off the windows, with the deck the tank stood on. `gsb.defensive` is the button a
+  tank duty was offered: a cast name, `covered` once one runs, `none` with nothing ready, `idle` outside a
+  window above 40% health. Aura rows on a creature are never recorded, so the stacks at a cast are only
+  known through these windows.
 - **A pull can file under the captain's name.** The credit is a spell, so without the boss-state table
   the trace takes `muradin-bronzebeard` or `high-overlord-saurfang`, which the aliases fold here.
 """
@@ -35,7 +42,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of, prefix_matches_boss  # noqa: E402
 from raidobs.probes import holder_spans, latch_spans  # noqa: E402
-from raidobs.trace import Trace, cheat_uses, clock, combat_deaths, notes  # noqa: E402
+from raidobs.trace import Trace, cheat_uses, clock, combat_deaths, notes, roster_guids  # noqa: E402
 
 SLUG = "icecrown-gunship-battle"
 NAME = "Gunship Battle"
@@ -49,7 +56,15 @@ CANNON = "gsb.cannon"
 DODGE = "gsb.dodge"
 RETREAT = "gsb.retreat"
 FURY = "gsb.fury"
+FURY_WINDOW = "gsb.furywindow"
+DEFENSIVE = "gsb.defensive"
+HUMAN_CALL = "gsb.humancall"
 DECKS = ("friendly", "between", "enemy", "cannon", "falling")
+# A button counts for a stretch of windows from this long before it opens until this long after it closes
+WINDOW_LEAD_MS = 1500
+WINDOW_TAIL_MS = 4000
+TANK_BUTTONS = frozenset({"Last Stand", "Shield Wall", "Divine Protection", "Barkskin", "Frenzied Regeneration",
+                          "Survival Instincts", "Anti-Magic Shell", "Vampiric Blood", "Icebound Fortitude"})
 DIFFICULTIES = {0: "10N", 1: "25N", 2: "10H", 3: "25H"}
 
 
@@ -148,6 +163,41 @@ def entries(trace: Trace, key: str, idle: str = "none") -> dict[str, tuple[int, 
                 count[value] += 1
                 bots[value].add(guid)
     return {value: (count[value], len(bots[value])) for value in count}
+
+
+def fury_stretches(trace: Trace) -> list[dict]:
+    """Per stretch the captain's stacks held a tank window open: `start`, `stop`, and `levels`, the
+    `(t, level)` steps through it."""
+    out: list[dict] = []
+    current = None
+    for value, start, stop in latch_spans(trace, FURY_WINDOW, pull_end(trace)):
+        level = int(value) if value.isdigit() else 0
+        if not level:
+            current = None
+            continue
+        if current is None:
+            current = {"start": start, "stop": stop, "levels": []}
+            out.append(current)
+        current["stop"] = stop
+        current["levels"].append((start, level))
+    return out
+
+
+def casts_named(trace: Trace, wanted: frozenset) -> list[tuple[int, int, str]]:
+    """`(t, guid, spell name)` for every cast of one of `wanted` by a roster tank, once per ms. A damage
+    dealer's Divine Protection or Icebound Fortitude is not a tank button."""
+    tanks = {guid for guid in roster_guids(trace) if trace.role(guid) == "tank"}
+    named = ((rec["t"], rec.get("s"), trace.spells.get(rec.get("sp"), "")) for rec in trace.of("cast")
+             if rec.get("s") in tanks)
+    return sorted({cast for cast in named if cast[2] in wanted})
+
+
+def deck_at(trace: Trace, guid: int, when: int) -> str:
+    """The `gsb.deck` value a bot held at `when`, `?` when it noted none."""
+    for value, start, stop in holder_spans(trace, DECK, pull_end(trace)).get(guid, []):
+        if start <= when < stop:
+            return value
+    return "?"
 
 
 def own_cheats(trace: Trace) -> list[tuple[str, dict]]:
@@ -266,6 +316,45 @@ def show_dodges(trace: Trace) -> None:
         print(f"  {value:<7} {count} dodge(s) by {bots} bot(s)")
 
 
+def show_defensives(trace: Trace) -> None:
+    print("TANK DEFENSIVES")
+    if not mine(trace):
+        return
+    casts = casts_named(trace, TANK_BUTTONS)
+    picks = [rec for rec in notes(trace, DEFENSIVE) if rec.get("txt") != "idle"]
+    stretches = fury_stretches(trace)
+    spent_in = set()
+    covered = 0
+    for index, stretch in enumerate(stretches, 1):
+        low, high = stretch["start"] - WINDOW_LEAD_MS, stretch["stop"] + WINDOW_TAIL_MS
+        steps = ", ".join(f"window {level} from {clock(when)}" for when, level in stretch["levels"])
+        # Only the tank on his deck answers his stacks; the home tank's buttons belong to the boarders
+        spent = [cast for cast in casts
+                 if low <= cast[0] <= high and deck_at(trace, cast[1], cast[0]) == "enemy"]
+        spent_in.update(spent)
+        covered += bool(spent)
+        offered = collections.Counter(f"{trace.name(rec['g'])} {rec['txt']}" for rec in picks
+                                      if low <= rec["t"] <= high)
+        print(f"  {index}  stacks past a window for {clock(stretch['stop'] - stretch['start'])}: {steps}")
+        print("      cast     " + (", ".join(f"{name} {trace.name(guid)} {(when - stretch['start']) / 1000:+.1f}s"
+                                              for when, guid, name in spent) or "none"))
+        if offered:
+            print("      offered  " + ", ".join(f"{what} x{count}" for what, count in sorted(offered.items())))
+    elsewhere = [cast for cast in casts if cast not in spent_in]
+    if elsewhere:
+        print("  off the windows  " + ", ".join(
+            f"{name} {trace.name(guid)} {clock(when)} on the {deck_at(trace, guid, when)} deck"
+            for when, guid, name in elsewhere))
+    calls = notes(trace, HUMAN_CALL)
+    if calls:
+        print("  calls to a human tank  " + ", ".join(f"{rec['txt']} {clock(rec['t'])}" for rec in calls))
+    if not stretches and not elsewhere and not calls:
+        print("  no tank button cast, and the captain's stacks never reached a window")
+        return
+    print(f"\n  {covered} of {len(stretches)} stack windows saw a tank button; a window opens when his stacks add"
+          " 50% to his hit, the second at 100%")
+
+
 def show_cheats(trace: Trace) -> None:
     print("CHEATS")
     if not mine(trace):
@@ -286,6 +375,7 @@ SECTIONS = (
     ("targets", "time per pick rule, and the stands held", show_targets),
     ("cannons", "what the cannons aimed at, and any overheat", show_cannons),
     ("dodges", "Rocket Artillery and Burning Pitch dodges", show_dodges),
+    ("defensives", "the tank buttons spent on the captain's stacks and boarding waves", show_defensives),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 

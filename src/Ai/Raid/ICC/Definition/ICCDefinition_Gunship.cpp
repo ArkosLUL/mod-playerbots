@@ -12,6 +12,7 @@
 #include "ICCMultipliers_Gunship.h"
 #include "ICCSeams.h"
 #include "ICCTriggers_Gunship.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 
 namespace Family = RaidEncounterRules::Family;
@@ -22,6 +23,7 @@ namespace
 void DefineGunship(EncounterBuilder& e)
 {
     e.Node<IccGunshipDodgeTrigger, IccGunshipDodgeAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
+    e.Node<IccGunshipTankDefensiveTrigger, IccGunshipTankDefensiveAction>(ACTION_RAID + 8);
     e.Node<IccGunshipRocketJumpTrigger, IccGunshipRocketJumpAction>(ACTION_RAID + 7, EncounterRow::Mover);
     e.Node<IccGunshipTauntTrigger, IccGunshipTauntAction>(ACTION_RAID + 6);
     e.Node<IccGunshipCannonNearTrigger, IccGunshipEnterCannonAction>(ACTION_RAID + 5, EncounterRow::Mover);
@@ -45,6 +47,8 @@ void DefineGunship(EncounterBuilder& e)
                 Family::MoveOutOfCollision | Family::AvoidAoe | Family::Blink | Family::Disengage);
     e.OwnMovement("icc gunship stand hold", Role::Any, &GsbHoldsStand, Family::Attack);
     e.OwnTargeting("icc gunship targeting", Role::Any, &IccResolverPicks<&GsbTarget>);
+    // tank buttons wait for the captain's stacks or a boarding wave, and go freely under 25% health
+    e.Block("icc gunship tank defensive hold", Role::Tank, &GsbTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
     e.Tick(&GsbTick);
 }
