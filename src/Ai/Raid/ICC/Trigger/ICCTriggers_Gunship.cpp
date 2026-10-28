@@ -6,16 +6,8 @@
 
 #include "ICCTriggers_Gunship.h"
 
-#include "ICCEncounterGate.h"
-#include "InstanceScript.h"
 #include "Playerbots.h"
-#include "Transport.h"
 #include "Vehicle.h"
-
-namespace
-{
-constexpr float GSB_ZAFOD_RANGE = 150.0f;
-}
 
 bool IccGunshipDodgeTrigger::IsActive() { return GsbDodging(botAI); }
 
@@ -46,14 +38,5 @@ bool IccGunshipStandTrigger::IsActive()
     return GsbStandWalk(botAI, spot);
 }
 
-bool IccGunshipRocketPackSetupTrigger::IsActive()
-{
-    // Aboard the raid's own ship, before the battle or during it
-    Transport* transport = bot->GetTransport();
-    InstanceScript* instance = transport ? bot->GetInstanceScript() : nullptr;
-    if (!instance || transport->GetGUID() != instance->GetGuidData(ICC_BOSS_GUNSHIP_BATTLE) || bot->GetVehicle() ||
-        GsbHasRocketPack(bot))
-        return false;
-
-    return bot->FindNearestCreature(NPC_ZAFOD_BOOMBOX, GSB_ZAFOD_RANGE) != nullptr;
-}
+// Before the battle too
+bool IccGunshipRocketPackSetupTrigger::IsActive() { return GsbNeedsRocketPack(bot); }

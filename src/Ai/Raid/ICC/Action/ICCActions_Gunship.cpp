@@ -26,7 +26,6 @@ constexpr uint32 WALK_STALL_MS = 500;
 constexpr float DODGE_STEP = 1.5f;
 constexpr float DODGE_SWEEP = 12.0f;
 constexpr uint32 DODGE_HEADINGS = 16;
-constexpr float ZAFOD_RANGE = 150.0f;
 constexpr uint32 ZAFOD_GOSSIP_MENU_ID = 10885;
 constexpr uint32 ZAFOD_GOSSIP_OPTION = 0;
 
@@ -296,7 +295,7 @@ bool IccGunshipRocketPackSetupAction::Execute(Event /*event*/)
 
 bool IccGunshipRocketPackSetupAction::AcquireRocketPack()
 {
-    Creature* zafod = bot->FindNearestCreature(NPC_ZAFOD_BOOMBOX, ZAFOD_RANGE);
+    Creature* zafod = bot->FindNearestCreature(NPC_ZAFOD_BOOMBOX, GSB_ZAFOD_RANGE);
     if (!zafod)
         return false;
 

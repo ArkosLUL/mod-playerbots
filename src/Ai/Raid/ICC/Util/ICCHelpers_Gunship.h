@@ -39,9 +39,9 @@ constexpr uint32 GO_GSB_SKYBREAKER_H = 201811;
 constexpr uint32 SPELL_GSB_ROCKET_ARTILLERY = 69679;
 constexpr uint32 SPELL_GSB_ARTILLERY_MARKER = 71371;
 constexpr float GSB_ARTILLERY_RADIUS = 4.0f;
-// A pitch patch is 5 yd for 3 s, and a persistent aura adds the target's reach and its own 0.39
+// A pitch patch is 5 yd for 3 s, plus the target's combat reach like any persistent aura
 constexpr uint32 SPELL_GSB_BURNING_PITCH = 69660;
-constexpr float GSB_PITCH_RADIUS = 5.39f;
+constexpr float GSB_PITCH_RADIUS = 5.0f;
 constexpr uint32 SPELL_GSB_OVERHEAT = 69487;
 // The portal mages' channel, the freeze mage's is SPELL_BELOW_ZERO
 constexpr uint32 SPELL_GSB_SHADOW_CHANNELING = 43897;
@@ -55,11 +55,12 @@ constexpr uint32 SPELL_GSB_BERSERK = 72525;
 
 // Cannon Blast adds 6-10 heat and Overheat comes at 100, so 90 is the last level a Blast is safe below
 constexpr uint32 GSB_INCINERATE_HEAT = 90;
-// Each Battle Fury stack adds 10% on 10-man and 12% on 25-man (row 2155). The party leaves once he
+// Each Battle Fury stack adds 10% on normal and 12% on heroic (row 2155). The party leaves once he
 // hits for three times his base.
 constexpr int32 GSB_FURY_RETREAT_BONUS = 200;
 // Rocket Pack reaches 40 yd, launch to landing is 24 (Alliance) or 30 yd (Horde)
 constexpr float GSB_JUMP_READY = 2.5f;
+constexpr float GSB_ZAFOD_RANGE = 150.0f;
 constexpr float GSB_TANK_SPOT_DEPTH = 6.0f;
 constexpr float GSB_TAUNT_RANGE = 30.0f;
 // A stand parks within GSB_STAND_PARK and walks back once pushed past GSB_STAND_UNPARK
@@ -163,11 +164,7 @@ GsbDeck GsbBotDeck(PlayerbotAI* botAI);
 
 // Below Zero on the raid's cannons. Notes gsb.phase.
 bool GsbCannonsFrozen(PlayerbotAI* botAI);
-Creature* GsbCaptain(PlayerbotAI* botAI);
-// The mage channelling Below Zero
-Creature* GsbFreezeMage(PlayerbotAI* botAI);
 
-GsbDuty GsbDutyOf(PlayerbotAI* botAI);
 // Notes gsb.board
 GsbBoard GsbBoardOf(PlayerbotAI* botAI);
 
@@ -180,6 +177,8 @@ Unit* GsbTauntTarget(PlayerbotAI* botAI);
 GsbJump GsbJumpPlan(PlayerbotAI* botAI, Position& spot);
 bool GsbInFlight(PlayerbotAI* botAI);
 bool GsbHasRocketPack(Player* bot);
+// On the raid's own ship with no pack on and Zafod near enough to hand one out
+bool GsbNeedsRocketPack(Player* bot);
 
 bool GsbHoldsStand(PlayerbotAI* botAI);
 GsbStandKind GsbStandOf(PlayerbotAI* botAI, Position& spot);

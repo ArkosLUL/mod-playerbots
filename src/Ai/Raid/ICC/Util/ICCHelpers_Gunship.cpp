@@ -641,6 +641,10 @@ GsbStandKind DesiredStand(PlayerbotAI* botAI, GsbState const& state, GsbSide con
     if (deck != GsbDeck::Home || board == GsbBoard::Go)
         return GsbStandKind::None;
 
+    // No stand until the pack is on, it'd pull the bot back from its walk to Zafod
+    if (GsbNeedsRocketPack(bot))
+        return GsbStandKind::None;
+
     if (board == GsbBoard::Wait)
     {
         spot = side.launch;
@@ -779,6 +783,21 @@ GsbHazard const* HazardWithin(PlayerbotAI* botAI, float margin)
             return &hazard;
 
     return nullptr;
+}
+
+// Nothing walks a bot back into what it just stepped out of
+bool SpotCovered(PlayerbotAI* botAI, Position const& spot)
+{
+    for (GsbHazard const& hazard : HazardsNow(botAI))
+        if (spot.GetExactDist2d(hazard.pos) < hazard.reach + GSB_DODGE_CLEAR_MARGIN)
+            return true;
+
+    return false;
+}
+
+bool Airborne(Player* bot, GsbSide const& side)
+{
+    return bot->HasAura(SPELL_GSB_ROCKET_PACK_FLIGHT) || GsbDeckOf(side, bot) == GsbDeck::Gap;
 }
 
 // On deck and out of a cannon: a seated bot cannot step out
@@ -1027,27 +1046,6 @@ bool GsbCannonsFrozen(PlayerbotAI* botAI)
     return frozen;
 }
 
-Creature* GsbCaptain(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    GsbState* state = StateOf(bot);
-    return state ? AliveCreature(bot, state->captain) : nullptr;
-}
-
-Creature* GsbFreezeMage(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    GsbState* state = StateOf(bot);
-    return state ? AliveCreature(bot, state->mage) : nullptr;
-}
-
-GsbDuty GsbDutyOf(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    GsbState* state = StateOf(bot);
-    return state ? DutyIn(*state, bot) : GsbDuty::None;
-}
-
 GsbBoard GsbBoardOf(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -1128,6 +1126,19 @@ bool GsbHasRocketPack(Player* bot)
     return pack && pack->IsEquipped();
 }
 
+bool GsbNeedsRocketPack(Player* bot)
+{
+    Transport* transport = bot->GetTransport();
+    if (!transport || bot->GetVehicle() || GsbHasRocketPack(bot))
+        return false;
+
+    InstanceScript* instance = bot->GetInstanceScript();
+    if (!instance || transport->GetGUID() != instance->GetGuidData(ICC_BOSS_GUNSHIP_BATTLE))
+        return false;
+
+    return bot->FindNearestCreature(NPC_ZAFOD_BOOMBOX, GSB_ZAFOD_RANGE) != nullptr;
+}
+
 GsbJump GsbJumpPlan(PlayerbotAI* botAI, Position& spot)
 {
     Player* bot = botAI->GetBot();
@@ -1136,10 +1147,10 @@ GsbJump GsbJumpPlan(PlayerbotAI* botAI, Position& spot)
     if (!side || !state || !bot->IsAlive() || !GsbLive(botAI))
         return GsbJump::None;
 
-    GsbDeck const deck = GsbDeckOf(*side, bot);
-    if (bot->HasAura(SPELL_GSB_ROCKET_PACK_FLIGHT) || deck == GsbDeck::Gap)
+    if (Airborne(bot, *side))
         return GsbJump::InFlight;
 
+    GsbDeck const deck = GsbDeckOf(*side, bot);
     if (deck != GsbDeck::Home && deck != GsbDeck::Enemy)
         return GsbJump::None;
 
@@ -1150,6 +1161,10 @@ GsbJump GsbJumpPlan(PlayerbotAI* botAI, Position& spot)
     Position const& from = deck == GsbDeck::Home ? side->launch : side->landing;
     if (bot->GetExactDist2d(from) > GSB_JUMP_READY)
     {
+        // Don't walk onto a covered jump point, the dodge would just walk the bot back out
+        if (SpotCovered(botAI, from))
+            return GsbJump::None;
+
         spot = from;
         return GsbJump::Walk;
     }
@@ -1158,10 +1173,12 @@ GsbJump GsbJumpPlan(PlayerbotAI* botAI, Position& spot)
     return GsbJump::Fire;
 }
 
+// Asked by the rules for every move a bot weighs, so no full jump plan here
 bool GsbInFlight(PlayerbotAI* botAI)
 {
-    Position spot;
-    return GsbJumpPlan(botAI, spot) == GsbJump::InFlight;
+    Player* bot = botAI->GetBot();
+    GsbSide const* side = GsbSideOf(bot);
+    return side && bot->IsAlive() && GsbLive(botAI) && Airborne(bot, *side);
 }
 
 bool GsbHoldsStand(PlayerbotAI* botAI) { return HeldStand(botAI) != nullptr; }
@@ -1179,13 +1196,8 @@ GsbStandKind GsbStandOf(PlayerbotAI* botAI, Position& spot)
 bool GsbStandWalk(PlayerbotAI* botAI, Position& spot)
 {
     GsbStand const* stand = HeldStand(botAI);
-    if (!stand || stand->parked)
+    if (!stand || stand->parked || SpotCovered(botAI, stand->spot))
         return false;
-
-    // Nothing walks a bot back into what it just stepped out of
-    for (GsbHazard const& hazard : HazardsNow(botAI))
-        if (stand->spot.GetExactDist2d(hazard.pos) < hazard.reach + GSB_DODGE_CLEAR_MARGIN)
-            return false;
 
     spot = stand->spot;
     return true;
@@ -1244,14 +1256,15 @@ bool GsbWantsCannon(PlayerbotAI* botAI)
         state->frozen)
         return false;
 
+    bool const live = GsbLive(botAI);
     // Before the battle the ship still flies, so only the transport says which deck the bot is on
-    bool const onHome = GsbLive(botAI) ? GsbDeckOf(*side, bot) == GsbDeck::Home
-                                       : bot->GetTransport() && bot->GetTransport()->GetGUID() == state->homeShip;
+    bool const onHome = live ? GsbDeckOf(*side, bot) == GsbDeck::Home
+                             : bot->GetTransport() && bot->GetTransport()->GetGUID() == state->homeShip;
     if (!onHome)
         return false;
 
-    // A melee cannoneer boards when Below Zero throws it out
-    if (!IsRangedDpsPlayer(bot) && !GsbHasRocketPack(bot))
+    // Pack first before the battle. A melee cannoneer also needs it to board once Below Zero throws it out.
+    if (!GsbHasRocketPack(bot) && (!live || !IsRangedDpsPlayer(bot)))
         return false;
 
     return GsbFreeCannon(botAI) != nullptr;

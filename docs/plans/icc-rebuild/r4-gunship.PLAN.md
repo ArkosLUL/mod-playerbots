@@ -74,7 +74,7 @@ One lead, no split: every piece reads the same side table, deck test and roster.
 
 | Choice | Source | Alternative |
 |---|---|---|
-| `gsb.battlefury` removed. The party leaves when the freeze mage dies, the tank last (10 s cap); it retreats early once the captain carries +200% from Battle Fury (20 stacks on 10-man, 17 on 25-man) and boards again once his stacks are gone | WT, Wowhead, IC; DBC 69638 row 2155 (16 s, +10/+12%) | tank defensives at a lower stack count; no retreat |
+| `gsb.battlefury` removed. The party leaves when the freeze mage dies, the tank last (10 s cap); it retreats early once the captain carries +200% from Battle Fury (20 stacks on normal, 17 on heroic) and boards again once his stacks are gone | WT, Wowhead, IC; DBC 69638 row 2155 (16 s, +10/+12%) | tank defensives at a lower stack count; no retreat |
 | Fall snap removed: the core's Check for Players (every 5 s, 10 yd under the ship creature) puts every faller back long before the ground, 620 yd down | core, navprobe terrain height | keep it behind `IccRaidCheat` |
 | Roster (bots only): board tank = first bot tank (main tank first), home tank = the next; cannoneers = ranged DPS by guid, then melee DPS, one per live cannon (2 on 10, 4 on 25); home healers 2 on 25, 1 on 10, the rest board; melee DPS board, ranged stay home and board only when no melee DPS bot exists | WT25/WT10, Wowhead, DB spawn masks | Wowhead's all-DPS boarding |
 | Ejected melee cannoneers board during a freeze, ranged ones take an edge slot | Below Zero ejects every passenger | they wait for the thaw |
@@ -90,6 +90,8 @@ One lead, no split: every piece reads the same side table, deck test and roster.
 | A bot's legacy `star` rti goes back to `skull` while the gunship gate is open | Conventions 10 | leave it to r14 |
 | A unit's ship is its side of the middle of the core's gap (y 2033.5 / 2438); only airborne (z 478+) or the flight aura reads as in flight. Dodge spots keep the strict bounds | core y bounds | the strict bounds for both, which would freeze a bot standing on a deck's edge |
 | Unit cache from both ships' passenger sets, the freeze mage by its Below Zero channel, else a mage not channelling the portal | core `PassengerController`, the portal's offset-only teleport | grid searches |
+| Review: Burning Pitch stays in the dodge, though its 69660 patch is cast by the Gunship Hull 37547 (faction 35, friendly to all) and `AnyAoETargetUnitInObjectRangeCheck` hits only units its caster may attack, so it may never reach a player | WT ("avoid fire"); core `spell_igb_burning_pitch`, `DynObjAura::FillTargetMap`, `creature_template` | drop the pitch from the hazards once a trace shows no player hit by 69660 |
+| Review: a bot still without its rocket pack holds no stand, and a cannoneer takes the pack before its seat before the battle (a ranged one still sits without it once live); before, ranged cannoneers sat down packless, and after Below Zero the Zafod walk and the edge stand pulled them back and forth | WT ("has a Goblin Rocket Pack equipped" before the pull); Mover rows at RAID+2 and +1 | block the pack walk while a stand holds, which leaves an ejected bot without a pack for the rest of the pull |
 
 ## Carried over
 
