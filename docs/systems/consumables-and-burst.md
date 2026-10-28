@@ -285,14 +285,15 @@ Reusable patterns this established:
 
 - **Move-to-GO then click**: `MoveTo` if not at interact distance, else
   `WorldPacket(CMSG_GAMEOBJ_USE) << go->GetGUID()` → `HandleGameObjectUseOpcode`
-  (`UseRitualOfSoulsObjectAction::MoveToAndUse`; `EnterTwilightPortalAction` in `OSActions.cpp`
-  does the same).
+  (inline in each `RitualOfSoulsActions.cpp` action: a shared base class breaks SonarCloud's
+  depth-5 limit; `EnterTwilightPortalAction` in `OSActions.cpp` does the same).
 - **Cross-bot reservation** to stop a stampede: static map + mutex + expiry cleanup, keyed on the GO
   GUID for helper slots and on the group GUID so only one warlock casts, the shape of
   `soulstoneReservations` (`WarlockActions.cpp`).
 
-**UX gotchas:** the chat command invokes the cast action directly, bypassing the caster pick, but
-helpers only respond with *their* strategy on. Bots with a saved `nc` string (logged out while
+**UX gotchas:** the `ritual of souls` chat command (trigger in `ChatTriggerContext`; other classes
+lack the action, so the engine skips it) invokes the cast action directly, bypassing the caster
+pick, but helpers only respond with *their* strategy on. Bots with a saved `nc` string (logged out while
 grouped with a real player) reload that list, so they lack the default until sent
 `nc +ritualofsouls` once.
 
