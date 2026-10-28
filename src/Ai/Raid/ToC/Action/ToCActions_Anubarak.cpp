@@ -510,8 +510,22 @@ bool AnubarakGatherAction::Execute(Event /*event*/)
         return false;
     }
 
-    RaidObs::NoteDerived(bot, "anub.gather", "walk");
     Position const walk = GetAnubarakPatchSafeLeg(bot, ValidateFloorPoint(bot, spot));
+    // The spike's path still crosses the way back: wait where it stands, out of danger or the dodge would
+    // have moved it
+    if (!AnubarakWalkClearOfSpike(bot, spot))
+    {
+        RaidObs::NoteDerived(bot, "anub.gather", "wait");
+        if (WalkInFlight(botAI, bot, walk) || WalkInFlight(botAI, bot, spot))
+        {
+            bot->StopMoving();
+            AI_VALUE(LastMovement&, "last movement").clear();
+        }
+
+        return false;
+    }
+
+    RaidObs::NoteDerived(bot, "anub.gather", "walk");
     BreakChannelPinningTheFeet(bot);
     if (WalkInFlight(botAI, bot, walk))
         return true;
@@ -625,7 +639,8 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
 
     Position point;
     bool const submerge = GetAnubarakSubmergeSpot(bot, point);
-    std::vector<Position> const points = submerge ? std::vector<Position>{point} : GetAnubarakDragPoints(bot, boss);
+    std::vector<Position> const points =
+        submerge ? GetAnubarakSubmergeDragPoints(bot, boss, point) : GetAnubarakDragPoints(bot, boss);
     if (points.empty())
     {
         ClearAnubarakDrag(bot);
@@ -644,7 +659,7 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
 
     if (leg.step == AnubarakDragStep::None)
     {
-        RaidObs::NoteDerived(bot, "anub.pickup", "hold");
+        RaidObs::NoteDerived(bot, "anub.pickup", submerge ? "subhold" : "hold");
         return false;
     }
 

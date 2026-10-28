@@ -34,7 +34,9 @@
                                      kiter within 15.5 yd of a tank patch under a Hand, an own immunity after a
                                      Hand ran out, a boost in a Hand's first 8 s, anub.second grants; the Hand's
                                      cooldown off anub.hands, else 300 s; per submerge the seconds kited and idle,
-                                     the terminals, the seconds after the first tank patch, kiters dead
+                                     the terminals, the seconds after the first tank patch, kiters dead; per
+                                     submerge the bystanders' gather and dodge swaps within 1.5 s, total and top
+                                     5 bots, and each bot's dodge walks
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips
                                      against the DK's spot at the cast, whether the grip duty held to kill and
@@ -323,6 +325,16 @@ SPEED_SLACK = 0.2
 BASE_RUN_YD_S = 7.0
 CROWD_YD = (8.0, 12.0, 20.0)
 CROWD_ROLES = ("tank", "heal", "melee", "ranged")
+# Three burrowers on one side tank kill it at 9 Expose Weakness stacks; the taunts in the second before say
+# how it got them. Righteous Defense's triggered taunt goes out once per attacker it took.
+TANK_CROWD = 3
+TANK_CROWD_CAST_MS = 1000
+SPELL_RIGHTEOUS_DEFENSE_TAUNT = 31790
+BURROWER_TAUNTS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command", 6795: "Growl",
+                   SPELL_RIGHTEOUS_DEFENSE_TAUNT: "Righteous Defense", 49576: "Death Grip",
+                   5209: "Challenging Roar", 1161: "Challenging Shout"}
+# Spider Frenzy (66129) hastes burrowers within this of each other
+SPIDER_FRENZY_YD = 12.0
 # a kiter's move targets jumping FLIP_YD or more and back FLIP_COUNT times inside FLIP_MS: two walks
 # cancelling each other out
 FLIP_YD = 5.0
@@ -355,8 +367,14 @@ HOP_COOLDOWN_MS = 300000
 LANE_GOAL, LANE_CLEAR, LANE_HELD, LANE_ANY_CLEAR = "g", "p", "h", "c"
 ESCORT_BY = "anubarak hop escort"
 DODGE_BY = "anubarak avoid spike"
+GATHER_BY = "anubarak gather"
 # a walk to the escort spot and a dodge this close together are one swap
 ALTERNATE_MS = 1000
+# a bystander's gather walk and dodge this close together are one swap, and a dodge this far off its last
+# spot is a new dodge walk
+DODGE_SWAP_MS = 1500
+DODGE_SPOT_YD = 1.0
+DODGE_SWAPPERS_SHOWN = 5
 # a claim shows as the claimer's first anub.protect hop row, at most this long before its cast
 CLAIM_LOOKBACK_MS = 5000
 CLAIM_CAST_FLAG_MS = 300
@@ -1821,6 +1839,7 @@ def show_spike(trace: Trace) -> None:
               " with no Forbearance on the kiter")
         show_rework(trace, windows, spent)
     show_crowds(trace, samples)
+    show_dodges(trace)
 
     stray = stray_impales(trace, windows)
     if stray:
@@ -2143,6 +2162,52 @@ def show_crowds(trace: Trace, samples: Samples) -> None:
             first = f"first mark {trace.name(row['kiter'])} {clock(row['mark'])}, {gap}"
         print(f"    {row['label']:5} {clock(row['start']):>9} at {row['spot'][0]:.1f}, {row['spot'][1]:.1f}: {rings}"
               f"\n          {first}")
+
+
+def dodge_swaps(trace: Trace) -> list[dict]:
+    """Per submerge, each bot's gather and dodge move rows: `swaps`, the row switching from one to the other
+    within DODGE_SWAP_MS of the row before, and `walks`, a dodge row more than DODGE_SPOT_YD off the bot's
+    last dodge spot that submerge, or its first."""
+    rows: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("by") in (GATHER_BY, DODGE_BY):
+            rows[rec["g"]].append(rec)
+    out = []
+    for start, stop, phase, label in phase_spans(trace):
+        if phase != 2:
+            continue
+        swaps: collections.Counter = collections.Counter()
+        walks: collections.Counter = collections.Counter()
+        for guid, mine in rows.items():
+            inside = [rec for rec in mine if start <= rec["t"] < stop]
+            for one, two in zip(inside, inside[1:]):
+                if one["by"] != two["by"] and two["t"] - one["t"] <= DODGE_SWAP_MS:
+                    swaps[guid] += 1
+            spot = None
+            for rec in inside:
+                if rec["by"] != DODGE_BY:
+                    continue
+                here = (rec["x"], rec["y"])
+                if spot is None or dist2(spot, here) > DODGE_SPOT_YD:
+                    walks[guid] += 1
+                spot = here
+        out.append({"label": label, "start": start, "swaps": swaps, "walks": walks})
+    return out
+
+
+def show_dodges(trace: Trace) -> None:
+    rows = dodge_swaps(trace)
+    if not rows:
+        return
+    print(f"\n  per submerge, the bystanders' {GATHER_BY} and {DODGE_BY} move rows: swaps from one to the other"
+          f" within\n  {DODGE_SWAP_MS / 1000:.1f} s of the row before, and dodge walks, a dodge row over"
+          f" {DODGE_SPOT_YD:.0f} yd off the bot's last dodge spot:")
+    for row in rows:
+        top = ", ".join(f"{trace.name(guid)} {n}" for guid, n in row["swaps"].most_common(DODGE_SWAPPERS_SHOWN))
+        walks = ", ".join(f"{trace.name(guid)} {n}" for guid, n in row["walks"].most_common())
+        print(f"    {row['label']:5} {clock(row['start']):>9} swaps {sum(row['swaps'].values())}"
+              + (f": {top}" if top else "")
+              + f"\n          dodge walks {sum(row['walks'].values())}" + (f": {walks}" if walks else ""))
 
 
 def tank_line(window: dict) -> str:
@@ -3495,6 +3560,85 @@ def show_pulls(trace: Trace, samples: Samples) -> None:
         print("  pulls per puller: " + ", ".join(f"{trace.name(guid)} {n}" for guid, n in pullers.most_common()))
 
 
+def burrower_frames(trace: Trace, samples: Samples) -> list[tuple[int, list[list]]]:
+    """Each snapshot's living burrower rows, in time order."""
+    by_stamp: dict[int, list[list]] = collections.defaultdict(list)
+    for guid in guids_of_entry(trace, NPC_BURROWER):
+        for when, row in zip(*samples.track(guid)):
+            if len(row) > 7 and row[5] > 0:
+                by_stamp[when].append(row)
+    return sorted(by_stamp.items())
+
+
+def side_tank_crowds(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Each run of snapshots with TANK_CROWD or more living burrowers on one side tank, read off their
+    targets: the tank, the run's first and last snapshot, the most at once, `alone` when no other side tank
+    lived at its start, and the tank's BURROWER_TAUNTS in the TANK_CROWD_CAST_MS before it by name."""
+    samples = samples or Samples(trace)
+    tanks = side_tank_list(trace)
+    casts = [rec for rec in trace.of("cast") if rec.get("s") in tanks and rec.get("sp") in BURROWER_TAUNTS]
+    out: list[dict] = []
+    running: dict[int, dict] = {}
+    for when, rows in burrower_frames(trace, samples):
+        on = collections.Counter(row[7] for row in rows)
+        for tank in tanks:
+            count = on.get(tank, 0)
+            if count < TANK_CROWD:
+                running.pop(tank, None)
+                continue
+            run = running.get(tank)
+            if run is None:
+                run = running[tank] = {"tank": tank, "start": when, "stop": when, "peak": count}
+                out.append(run)
+            run["stop"] = when
+            run["peak"] = max(run["peak"], count)
+
+    for run in out:
+        run["alone"] = not any((health(samples, tank, run["start"]) or 0.0) > 0.0
+                               for tank in tanks if tank != run["tank"])
+        run["taunts"] = collections.Counter(
+            BURROWER_TAUNTS[rec["sp"]] for rec in casts
+            if rec["s"] == run["tank"] and run["start"] - TANK_CROWD_CAST_MS <= rec["t"] <= run["start"])
+    return out
+
+
+def frenzy_samples(trace: Trace, samples: Samples | None = None) -> list[tuple[str, int, int]]:
+    """Per phase span, `(label, both, close)`: the snapshots with burrowers on both latched side tanks, and
+    those where one on each sits within SPIDER_FRENZY_YD of one on the other."""
+    samples = samples or Samples(trace)
+    end = pull_end(trace)
+    sides = [latch_spans(trace, f"anub.side{side}", end) for side in (0, 1)]
+    spans = phase_spans(trace)
+    counts: dict[str, list[int]] = {}
+    for when, rows in burrower_frames(trace, samples):
+        tanks = [as_guid(held_at(sides[side], when)) for side in (0, 1)]
+        if not all(tanks):
+            continue
+        groups = [[row[1:3] for row in rows if row[7] == tank] for tank in tanks]
+        if not all(groups):
+            continue
+        tally = counts.setdefault(phase_at(spans, when), [0, 0])
+        tally[0] += 1
+        if min(dist2(a, b) for a in groups[0] for b in groups[1]) < SPIDER_FRENZY_YD:
+            tally[1] += 1
+    return [(label, both, close) for label, (both, close) in counts.items()]
+
+
+def show_side_tank_crowds(trace: Trace, samples: Samples) -> None:
+    crowds = side_tank_crowds(trace, samples)
+    print(f"\n  {TANK_CROWD} or more burrowers on one side tank, read off their targets: the most at once, and the"
+          f" tank's taunts in\n  the {TANK_CROWD_CAST_MS / 1000:.0f} s before, Righteous Defense once per burrower it"
+          " took:" + ("" if crowds else " none"))
+    for run in crowds:
+        taunts = ", ".join(f"{name} {n}" for name, n in run["taunts"].most_common()) or "no taunt"
+        print(f"    {clock(run['start'])}-{clock(run['stop'])} {trace.name(run['tank'])} {run['peak']}"
+              + (", the only side tank alive" if run["alone"] else "") + f"; {taunts}")
+    frenzy = frenzy_samples(trace, samples)
+    print(f"  the two side tanks' burrowers within Spider Frenzy's {SPIDER_FRENZY_YD:.0f} yd of each other, per phase,"
+          " of the samples\n  with both holding one: "
+          + (", ".join(f"{label} {close} of {both}" for label, both, close in frenzy) or "none"))
+
+
 def show_burrowers(trace: Trace) -> None:
     print("NERUBIAN BURROWERS")
     samples = Samples(trace)
@@ -3513,6 +3657,7 @@ def show_burrowers(trace: Trace) -> None:
         show_burrower_windows(trace, samples)
         show_pickups(trace, samples)
         show_burrower_submerges(trace, samples)
+        show_side_tank_crowds(trace, samples)
 
     held = sorted({trace.name(guid) for guid, counts in value_counts(trace, "anub.interrupter").items()
                    if counts.get("1")})
@@ -4108,6 +4253,8 @@ def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
             if point is not None:
                 spread.append(dist2(row[1:3], point))
         legs = boss_legs(samples, boss, start, stop)
+        searched = next((when for when, _ in subspots if start <= when < stop), None)
+        sub_legs = [str(rec.get("txt", "")) for rec in pickups if searched is not None and searched <= rec["t"] < stop]
         out.append({**window,
                     "held": held,
                     "to_tank": None if tank is None else tank - start,
@@ -4123,6 +4270,8 @@ def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "main": main, "in_patch": in_patch, "living": living,
                     "presteps": prestep_rows(samples, pickups, start, stop),
                     "subspot": [(when, value) for when, value in subspots if start <= when < stop],
+                    "subleg": None if searched is None else any(value in ("submerge", "prestep") for value in sub_legs),
+                    "subhold": sub_legs.count("subhold"),
                     "submerge": submerge_gaps(latches, samples, boss, stop) if stop in submerges else None})
     return out
 
@@ -4206,6 +4355,7 @@ def show_threat(trace: Trace) -> None:
           " its\n  next pickup row" + ("" if any(row["presteps"] for row in rows) else "; no prestep rows"))
     print("  anub.subspot is each submerge-spot search, the spot and its clearance r in yards"
           + ("" if notes(trace, "anub.subspot") else "; no anub.subspot rows"))
+    print("  no submerge leg is no anub.pickup submerge or prestep after the window's first search")
 
 
 def prestep_text(trace: Trace, step: dict) -> str:
@@ -4216,8 +4366,11 @@ def prestep_text(trace: Trace, step: dict) -> str:
 
 
 def subspot_text(row: dict) -> str:
-    """A window's anub.subspot rows, and how far he went down from the last spot it found."""
+    """A window's anub.subspot rows, `no submerge leg` when the tank walked none after the first, with its
+    `subhold` rows, and how far he went down from the last spot it found."""
     text = ", ".join(f"{value} {clock(when)}" for when, value in row["subspot"])
+    if row.get("subleg") is False:
+        text += "; no submerge leg" + (f", {row['subhold']} subhold row(s)" if row.get("subhold") else "")
     if row["submerge"] is None:
         return text
     spot, _ = parse_subspot(row["subspot"][-1][1])

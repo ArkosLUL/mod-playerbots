@@ -13,8 +13,10 @@ by a patch, Impale on a side tank, a burrower pulled off its side tank and the m
 Weakness, a ninth a Hand against its predicted catch, a turn with no Hand, the first tank patch per
 submerge, a relayed far grip, Bladestorm near a burrower, the burrower threat cap, the drag's pre-steps
 and the submerge spot search, a tenth the anub.lane, escort, claim, Hand, second patch and per submerge
-kite reads and the Hand's cooldown off anub.hands, and the shared fixture shows every section reads empty
-on a trace that is not Anub'arak rather than raising.
+kite reads and the Hand's cooldown off anub.hands, an eleventh three burrowers on one side tank and the
+two sides' burrowers within Spider Frenzy's reach, a twelfth the bystanders' gather and dodge swaps and
+dodge walks, and the shared fixture shows every section reads empty on a trace that is not Anub'arak
+rather than raising.
 """
 from __future__ import annotations
 
@@ -3259,6 +3261,7 @@ class RelayPull(unittest.TestCase):
         self.assertIn("          anub.subspot: 750,135,143 r25 0:06.000, none 0:07.000, 750,139,143 r22 0:09.000;"
                       " he went down 3.0 yd off its last spot\n", text)
         self.assertIn("  anub.subspot is each submerge-spot search, the spot and its clearance r in yards\n", text)
+        self.assertIn("  no submerge leg is no anub.pickup submerge or prestep after the window's first search\n", text)
         bare = self.text(self.bare, ab.show_threat)
         self.assertIn("next pickup row; no prestep rows\n", bare)
         self.assertIn("clearance r in yards; no anub.subspot rows\n", bare)
@@ -3465,6 +3468,143 @@ class ReworkPull(unittest.TestCase):
         for key in ("anub.lane", "anub.second", "anub.hands"):
             self.assertNotIn(key, gone)
         self.assertIn("anub.hands", ab.missing_probes(self.bare))
+
+
+CTANK0, CTANK1, CHEAL = range(9301, 9304)
+CBOSS = CREATURE | 1500
+CB1, CB2, CB3, CB4 = (CREATURE | n for n in range(1501, 1505))
+
+
+def crowd_snap(when: int) -> dict:
+    """Each side tank on two burrowers; from 4 s a third on side 0's for 2 s, then side 1's two 8 yd from
+    side 0's for 4 s, then side 0's tank dead and side 1's on three."""
+    dead = when >= 10000
+    units = [[CTANK0, 718.0, 120.0, Z, 0.0, 0.0 if dead else 100.0, 100.0, 0, 0, 0, 0, 0],
+             [CTANK1, 753.0, 120.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [CHEAL, 735.0, 140.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]]
+    if when < 4000:
+        burrowers = [(CB1, 720.0, 120.0, CTANK0), (CB2, 721.0, 122.0, CTANK0),
+                     (CB3, 750.0, 120.0, CTANK1), (CB4, 751.0, 122.0, CTANK1)]
+    elif when < 6000:
+        burrowers = [(CB1, 720.0, 120.0, CTANK0), (CB2, 721.0, 122.0, CTANK0),
+                     (CB3, 722.0, 121.0, CTANK0), (CB4, 751.0, 122.0, CTANK1)]
+    elif when < 10000:
+        burrowers = [(CB1, 720.0, 120.0, CTANK0), (CB2, 721.0, 122.0, CTANK0),
+                     (CB3, 728.0, 121.0, CTANK1), (CB4, 729.0, 122.0, CTANK1)]
+    else:
+        burrowers = [(CB1, 750.0, 120.0, CTANK1), (CB2, 751.0, 122.0, CTANK1), (CB3, 752.0, 121.0, CTANK1)]
+    units += [[guid, x, y, Z, 0.0, 90.0, 0.0, victim, 0, 0, 0, 0] for guid, x, y, victim in burrowers]
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def crowd_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789700000000, "map": ab.MAP_TOC, "inst": 17, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": CTANK0, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": CTANK1, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+                    {"g": CHEAL, "n": "Elemena", "r": "heal", "c": 7, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": CBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"}
+          for guid in (CB1, CB2, CB3, CB4)),
+        note(0, CTANK0, "anub.phase", 1),
+        note(0, CTANK0, "anub.side0", CTANK0),
+        note(0, CTANK0, "anub.side1", CTANK1),
+        cast(3800, CTANK0, ab.SPELL_RIGHTEOUS_DEFENSE, CHEAL),
+        triggered(3800, CTANK0, ab.SPELL_RIGHTEOUS_DEFENSE_TAUNT, CB2),
+        triggered(3800, CTANK0, ab.SPELL_RIGHTEOUS_DEFENSE_TAUNT, CB3),
+        {"t": 14500, "e": "end", "out": "wipe"},
+    ]
+    records += [crowd_snap(when) for when in range(0, 14500, 500)]
+    return records
+
+
+class SideTankCrowds(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_17_anub-arak_1789700000.ndjson", crowd_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_third_burrower_names_the_taunt_and_a_lone_side_tank(self):
+        crowds = ab.side_tank_crowds(self.trace)
+        self.assertEqual([(run["tank"], run["start"], run["stop"], run["peak"], run["alone"]) for run in crowds],
+                         [(CTANK0, 4000, 5500, 3, False), (CTANK1, 10000, 14000, 3, True)])
+        self.assertEqual(crowds[0]["taunts"], {"Righteous Defense": 2})
+        self.assertFalse(crowds[1]["taunts"])
+
+    def test_frenzy_counts_the_sides_within_12_yd(self):
+        self.assertEqual(ab.frenzy_samples(self.trace), [("P1", 20, 8)])
+
+    def test_the_burrower_section_prints_both(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_side_tank_crowds(self.trace, ab.Samples(self.trace))
+        text = out.getvalue()
+        self.assertIn("0:04.000-0:05.500 Bulwark 3; Righteous Defense 2", text)
+        self.assertIn("0:10.000-0:14.000 Felesta 3, the only side tank alive; no taunt", text)
+        self.assertIn("with both holding one: P1 8 of 20", text)
+
+    def test_a_search_with_no_submerge_leg_says_so(self):
+        row = {"subspot": [(1000, "706,138,142 r25")], "submerge": None, "subleg": False, "subhold": 2}
+        self.assertEqual(ab.subspot_text(row), "706,138,142 r25 0:01.000; no submerge leg, 2 subhold row(s)")
+        self.assertEqual(ab.subspot_text({**row, "subleg": True}), "706,138,142 r25 0:01.000")
+
+
+DANGRY, DHOLY = 9401, 9402
+
+
+def dodge_pull() -> list[dict]:
+    """He is down from 10 to 40 s. Angry swaps between its gather and a dodge four times within 1.5 s and
+    once 2 s apart, dodging to two spots, each picked again within a yard; its dodge before the submerge
+    doesn't count. Holylight dodges once, 5 s before its gather walk."""
+    gather, east, west = (X, Y), (X + 12.0, Y), (X - 12.0, Y)
+    return [
+        {"e": "hdr", "v": 14, "ts": 1789800000000, "map": ab.MAP_TOC, "inst": 18, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": DANGRY, "n": "Angry", "r": "melee", "c": 1, "h": 0},
+                    {"g": DHOLY, "n": "Holylight", "r": "heal", "c": 2, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        note(0, DANGRY, "anub.phase", 1),
+        note(10000, DANGRY, "anub.phase", 2),
+        note(40000, DANGRY, "anub.phase", 1),
+        move_row(5000, DANGRY, east, ab.DODGE_BY),
+        move_row(11000, DANGRY, gather, ab.GATHER_BY),
+        move_row(11500, DANGRY, east, ab.DODGE_BY),
+        move_row(12000, DANGRY, gather, ab.GATHER_BY),
+        move_row(12400, DANGRY, (east[0] + 0.5, east[1]), ab.DODGE_BY),
+        move_row(14400, DANGRY, gather, ab.GATHER_BY),
+        move_row(15000, DANGRY, west, ab.DODGE_BY),
+        move_row(15200, DANGRY, (west[0], west[1] + 0.5), ab.DODGE_BY),
+        move_row(20000, DHOLY, (X, Y + 12.0), ab.DODGE_BY),
+        move_row(25000, DHOLY, gather, ab.GATHER_BY),
+        {"t": 45000, "e": "end", "out": "wipe"},
+    ]
+
+
+class DodgeSwaps(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_18_anub-arak_1789800000.ndjson", dodge_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_swaps_and_walks_count_per_submerge(self):
+        self.assertEqual([(row["label"], row["start"], dict(row["swaps"]), dict(row["walks"]))
+                          for row in ab.dodge_swaps(self.trace)],
+                         [("P2", 10000, {DANGRY: 4}, {DANGRY: 2, DHOLY: 1})])
+
+    def test_the_spike_section_prints_them(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_dodges(self.trace)
+        text = out.getvalue()
+        self.assertIn("    P2     0:10.000 swaps 4: Angry 4\n          dodge walks 3: Angry 2, Holylight 1\n", text)
 
 
 class EveryView(unittest.TestCase):

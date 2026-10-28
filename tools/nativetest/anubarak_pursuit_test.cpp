@@ -493,8 +493,8 @@ void TerminalOrder()
     CHECK(PickTerminal(spent) == KiteTerminal::None);
 }
 
-// The second tank patch only when nothing else saves the kiter: under a Hand at the walk in's last moment,
-// without one with the catch a second off
+// The second tank patch only when nothing else saves the kiter, at the walk in's last moment: under a Hand,
+// or without one once a catch is predicted. A 25H pull lost four kiters in a row with a tank patch still up.
 void SecondPatchOnlyAsLastResort()
 {
     using AnubarakPursuit::SecondPatchDue;
@@ -526,13 +526,20 @@ void SecondPatchOnlyAsLastResort()
     }
 
     SecondPatchRead bare;
-    bare.catchS = 0.8f;
+    bare.catchS = 9.0f;
     bare.beforeEnd = true;
     bare.sphereSpare = true;
     bare.walkS = 0.2f;
+    bare.walkLaterS = -0.3f;
     CHECK(SecondPatchDue(bare));
-    bare.catchS = 1.6f;
-    CHECK(!SecondPatchDue(bare));
+
+    SecondPatchRead running = bare;
+    running.walkLaterS = 0.5f;
+    CHECK(!SecondPatchDue(running));
+
+    SecondPatchRead free = bare;
+    free.catchS = -1.0f;
+    CHECK(!SecondPatchDue(free));
 }
 
 // A 25H pull: with every heading at the rim passing a patch, the hold let go and the kiter reversed ten
@@ -646,6 +653,48 @@ void EscortPostsKeepOffTheChase()
     CHECK(EscortPosts(catchPoint, spike, kiter, {765.0f, 125.0f}, track, patches, wide).empty());
 }
 
+// A track east along y = 0 from x 0 to 20: a point 7 yd off its middle clears 6 but not 8, one past its end
+// is judged off the end, a lone point by its distance, and an empty track is always clear
+void TrackClearReadsEveryLeg()
+{
+    using AnubarakPursuit::TrackClear;
+
+    std::vector<Point> const track = {{0.0f, 0.0f}, {10.0f, 0.0f}, {20.0f, 0.0f}};
+    CHECK(TrackClear(track, {10.0f, 7.0f}, 6.0f));
+    CHECK(!TrackClear(track, {10.0f, 7.0f}, 8.0f));
+    CHECK(TrackClear(track, {30.0f, 0.0f}, 9.9f));
+    CHECK(!TrackClear(track, {30.0f, 0.0f}, 10.1f));
+    CHECK(TrackClear({{0.0f, 0.0f}}, {0.0f, 5.0f}, 5.0f));
+    CHECK(!TrackClear({{0.0f, 0.0f}}, {0.0f, 5.0f}, 5.1f));
+    CHECK(TrackClear({}, {0.0f, 0.0f}, 100.0f));
+
+    // A walk across the track never clears it, one alongside clears by its gap, one stopping short by its end
+    CHECK(!TrackClear(track, {10.0f, -12.0f}, {10.0f, 12.0f}, 0.1f));
+    CHECK(TrackClear(track, {0.0f, 9.0f}, {20.0f, 9.0f}, 9.0f));
+    CHECK(!TrackClear(track, {0.0f, 9.0f}, {20.0f, 9.0f}, 9.1f));
+    CHECK(TrackClear(track, {10.0f, 20.0f}, {10.0f, 8.0f}, 8.0f));
+    CHECK(!TrackClear({{10.0f, 0.0f}}, {0.0f, 3.0f}, {20.0f, 3.0f}, 3.1f));
+}
+
+// 3.5 yd/s north for 3 s every 0.2 s: 16 points, the last on the horizon; a horizon off the step ends on
+// it too, and a still spike is its own point
+void MotionTrackRunsStraightOn()
+{
+    using AnubarakPursuit::MotionTrack;
+
+    std::vector<Point> const track = MotionTrack({740.0f, 115.0f}, {0.0f, 3.5f}, 3.0f, 0.2f);
+    CHECK(track.size() == 16);
+    CHECK(Near(track[1].y, 115.7f, 0.001f) && Near(track[1].x, 740.0f, 0.001f));
+    CHECK(Near(track.back().y, 115.0f + 3.5f * 3.0f, 0.001f));
+
+    std::vector<Point> const odd = MotionTrack({0.0f, 0.0f}, {10.0f, 0.0f}, 0.5f, 0.2f);
+    CHECK(odd.size() == 4);
+    CHECK(Near(odd.back().x, 5.0f, 0.001f) && Near(odd[2].x, 4.0f, 0.001f));
+
+    CHECK(MotionTrack({1.0f, 2.0f}, {0.0f, 0.0f}, 3.0f, 0.2f).size() == 1);
+    CHECK(MotionTrack({1.0f, 2.0f}, {1.0f, 0.0f}, 3.0f, 0.0f).size() == 1);
+}
+
 // The 2026-10-27 N far grip: the sphere came down at (796,144), 68 yd off side 1's spot. The next link
 // stands 25 yd nearer, every post in reach of the landing; a landing in reach of the spot gets the spot.
 void RelayPostsCloseOnTheSpot()
@@ -708,6 +757,56 @@ void DragPreStepClearsTheStall()
     for (Point const& step : steps)
         CHECK(Dist(tank, step) >= Dist(tank, steps.front()) - 0.01f);
 }
+
+// A 25H refill landed 17.7 yd from the other side's patch, both holds faced the middle 3.7 yd apart, and
+// the burrowers frenzied off each other. The holds turn toward the boss just far enough to part them.
+void CloseHoldsTurnApart()
+{
+    using AnubarakPursuit::Cross;
+    using AnubarakPursuit::Dist;
+    using AnubarakPursuit::HoldDirs;
+    using AnubarakPursuit::SideHoldDirs;
+
+    constexpr float INSET = 4.0f;
+    constexpr float APART = 14.0f;
+    auto const toward = [](Point from, Point to)
+    {
+        float const length = Dist(from, to);
+        return Point{(to.x - from.x) / length, (to.y - from.y) / length};
+    };
+    auto const burrowerGap = [&](Point a, Point b, HoldDirs const& dirs)
+    { return Dist({a.x + dirs.a.x * INSET, a.y + dirs.a.y * INSET}, {b.x + dirs.b.x * INSET, b.y + dirs.b.y * INSET}); };
+
+    // The first pair's spots, 24 yd apart: the holds keep facing each other
+    Point const north = {745.0f, 147.0f};
+    Point const south = {745.0f, 123.0f};
+    HoldDirs const first =
+        SideHoldDirs(north, south, toward(north, south), toward(south, north), {735.0f, 135.0f}, INSET, APART);
+    CHECK(!first.turned);
+    CHECK(Near(first.a.y, -1.0f, 0.001f) && Near(first.b.y, 1.0f, 0.001f));
+
+    Point const a = {726.4f, 120.8f};
+    Point const b = {744.0f, 118.9f};
+    Point const boss = {738.2f, 112.0f};
+    HoldDirs const close = SideHoldDirs(a, b, toward(a, b), toward(b, a), boss, INSET, APART);
+    CHECK(close.turned);
+    CHECK(burrowerGap(a, b, close) >= APART - 0.01f);
+    // 60° still leaves them 13.7 yd apart, so 75°
+    Point const along = toward(a, b);
+    CHECK(Near(close.a.x * along.x + close.a.y * along.y, std::cos(75.0f * 0.0174532925f), 0.01f));
+    float const bossSide = Cross(a, b, boss);
+    CHECK(Cross(a, b, {a.x + close.a.x, a.y + close.a.y}) * bossSide > 0.0f);
+    CHECK(Cross(a, b, {b.x + close.b.x, b.y + close.b.y}) * bossSide > 0.0f);
+
+    Point const tight = {a.x + along.x * 10.0f, a.y + along.y * 10.0f};
+    CHECK(burrowerGap(a, tight, SideHoldDirs(a, tight, along, toward(tight, a), boss, INSET, APART)) >= APART - 0.01f);
+
+    // Nothing parts them: straight away from each other
+    Point const touching = {a.x + along.x * 5.0f, a.y + along.y * 5.0f};
+    HoldDirs const apart = SideHoldDirs(a, touching, along, toward(touching, a), boss, INSET, APART);
+    CHECK(Near(apart.a.x, -along.x, 0.01f) && Near(apart.a.y, -along.y, 0.01f));
+    CHECK(Near(apart.b.x, along.x, 0.01f) && Near(apart.b.y, along.y, 0.01f));
+}
 }  // namespace
 
 int main()
@@ -729,8 +828,11 @@ int main()
     HeldHeadingRidesOut();
     PathFamilyRingsBothWays();
     EscortPostsKeepOffTheChase();
+    TrackClearReadsEveryLeg();
+    MotionTrackRunsStraightOn();
     RelayPostsCloseOnTheSpot();
     DragPreStepClearsTheStall();
+    CloseHoldsTurnApart();
     std::printf("anubarak_pursuit_test: ok\n");
     return 0;
 }

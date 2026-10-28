@@ -28,7 +28,11 @@ bool AnubarakKiterNeedsImmunityTrigger::IsActive()
     return AnubarakEngaged(botAI) && AnubarakKiterNeedsImmunity(bot);
 }
 
-bool AnubarakRaidGathersTrigger::IsActive() { return AnubarakEngaged(botAI) && AnubarakGathers(botAI); }
+// A held dodge still counts as gathered for the gather's movement block, it just isn't walked back yet
+bool AnubarakRaidGathersTrigger::IsActive()
+{
+    return AnubarakEngaged(botAI) && AnubarakGathers(botAI) && !IsAnubarakDodgeHeld(botAI);
+}
 
 bool AnubarakHealerStandTrigger::IsActive()
 {
@@ -103,9 +107,10 @@ bool AnubarakRedirectThreatTrigger::IsActive()
            (redirect.dump && bot->HasAura(SPELL_MISDIRECTION_PROC));
 }
 
+// Stays on through the walk to the spot, so one step out of danger doesn't hand the bot to another walk
 bool AnubarakSpikeNearbyTrigger::IsActive()
 {
-    return AnubarakEngaged(botAI) && AnubarakInSpikeDanger(bot);
+    return AnubarakEngaged(botAI) && (AnubarakInSpikeDanger(bot) || AnubarakDodgeWalking(bot));
 }
 
 bool AnubarakBurrowerCastingShadowStrikeTrigger::IsActive()

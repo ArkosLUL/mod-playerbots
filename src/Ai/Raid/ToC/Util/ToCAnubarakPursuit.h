@@ -532,20 +532,15 @@ struct SecondPatchRead
     float walkLaterS = -1.0f;
 };
 
-constexpr float SECOND_PATCH_CATCH_S = 1.0f;
-
-// Only when nothing else saves the kiter and the walk in still makes it. Under a Hand it goes at the walk's
-// last moment, the way a patch+hand kite turns: the kiter keeps 15.5 yd off the tank patches until then, so
-// the Hand's last second is too late to walk in.
+// Only when nothing else saves the kiter and the walk in still makes it, at the walk's last moment, the way
+// a patch kite turns: under a Hand the kiter keeps 15.5 yd off the tank patches until then, and without one
+// a walk left for the catch's last second never beats it. Without a Hand only once a catch is predicted.
 inline bool SecondPatchDue(SecondPatchRead const& r)
 {
     if (r.own || r.otherHand || !r.beforeEnd || !r.sphereSpare || r.walkS < 0.0f)
         return false;
 
-    if (r.handLeftS > 0.0f)
-        return r.walkLaterS < 0.0f;
-
-    return r.catchS >= 0.0f && r.catchS <= SECOND_PATCH_CATCH_S;
+    return (r.handLeftS > 0.0f || r.catchS >= 0.0f) && r.walkLaterS < 0.0f;
 }
 
 // A run heading as the hold judges it
@@ -607,6 +602,65 @@ std::vector<Point> SpikeTrack(Spike spike, Path const& path, float horizonS, int
 
 // Twice the signed area of a, b, p: which side of a to b p is on
 inline float Cross(Point a, Point b, Point p) { return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x); }
+
+// Closest approach of segments ab and cd, 0 where they cross
+inline float SegmentGap(Point a, Point b, Point c, Point d)
+{
+    float const c1 = Cross(a, b, c);
+    float const c2 = Cross(a, b, d);
+    float const c3 = Cross(c, d, a);
+    float const c4 = Cross(c, d, b);
+    bool const straddlesAb = (c1 > 0.0f && c2 < 0.0f) || (c1 < 0.0f && c2 > 0.0f);
+    bool const straddlesCd = (c3 > 0.0f && c4 < 0.0f) || (c3 < 0.0f && c4 > 0.0f);
+    if (straddlesAb && straddlesCd)
+        return 0.0f;
+
+    return std::min({SegmentDist(a, b, c), SegmentDist(a, b, d), SegmentDist(c, d, a), SegmentDist(c, d, b)});
+}
+
+// point keeps clearance off every leg of track, or off its one point. An empty track is clear.
+inline bool TrackClear(std::vector<Point> const& track, Point point, float clearance)
+{
+    if (track.size() == 1)
+        return Dist(track.front(), point) >= clearance;
+
+    for (size_t k = 1; k < track.size(); ++k)
+        if (SegmentDist(track[k - 1], track[k], point) < clearance)
+            return false;
+
+    return true;
+}
+
+// The same for the whole walk from to to
+inline bool TrackClear(std::vector<Point> const& track, Point from, Point to, float clearance)
+{
+    if (track.size() == 1)
+        return SegmentDist(from, to, track.front()) >= clearance;
+
+    for (size_t k = 1; k < track.size(); ++k)
+        if (SegmentGap(track[k - 1], track[k], from, to) < clearance)
+            return false;
+
+    return true;
+}
+
+// Straight on from pos at velocity, in yd/s: where it is every stepS up to horizonS, the last point on
+// the horizon. Standing still, pos alone.
+inline std::vector<Point> MotionTrack(Point pos, Point velocity, float horizonS, float stepS)
+{
+    std::vector<Point> track = {pos};
+    if (stepS <= 0.0f || (velocity.x == 0.0f && velocity.y == 0.0f))
+        return track;
+
+    int const steps = static_cast<int>(std::ceil(horizonS / stepS - 0.001f));
+    for (int i = 1; i <= steps; ++i)
+    {
+        float const t = std::min(static_cast<float>(i) * stepS, horizonS);
+        track.push_back({pos.x + velocity.x * t, pos.y + velocity.y * t});
+    }
+
+    return track;
+}
 
 struct EscortRules
 {
@@ -682,6 +736,49 @@ inline std::vector<Point> DragDetours(Point boss, Point anchor, std::vector<Poin
     }
 
     std::sort(out.begin(), out.end(), [boss](Point const& a, Point const& b) { return Dist(boss, a) < Dist(boss, b); });
+    return out;
+}
+
+struct HoldDirs
+{
+    Point a;
+    Point b;
+    bool turned = false;
+};
+
+// Which way each side tank's hold sits off its patch centre. Its burrowers sit about inset off the centre
+// that way, and the two sides' within Spider Frenzy's reach haste each other: the given directions while
+// they keep apart, else both turned off the line between the patches toward the boss by the smallest step
+// that does, past square to it if need be, at most straight away from each other.
+inline HoldDirs SideHoldDirs(Point a, Point b, Point dirA, Point dirB, Point boss, float inset, float apart,
+                             float stepDegrees = 15.0f)
+{
+    auto const burrowersApart = [&](Point da, Point db)
+    {
+        return Dist({a.x + da.x * inset, a.y + da.y * inset}, {b.x + db.x * inset, b.y + db.y * inset}) >= apart;
+    };
+
+    HoldDirs out = {dirA, dirB, false};
+    float const length = Dist(a, b);
+    if (length < 0.1f || burrowersApart(dirA, dirB))
+        return out;
+
+    Point const along = {(b.x - a.x) / length, (b.y - a.y) / length};
+    Point normal = {-along.y, along.x};
+    if (Cross(a, b, boss) < 0.0f)
+        normal = {-normal.x, -normal.y};
+
+    out.turned = true;
+    for (float degrees = stepDegrees; degrees <= 180.0f + 0.01f; degrees += stepDegrees)
+    {
+        float const c = std::cos(degrees * 0.0174532925f);
+        float const s = std::sin(degrees * 0.0174532925f);
+        out.a = {along.x * c + normal.x * s, along.y * c + normal.y * s};
+        out.b = {-along.x * c + normal.x * s, -along.y * c + normal.y * s};
+        if (burrowersApart(out.a, out.b))
+            return out;
+    }
+
     return out;
 }
 

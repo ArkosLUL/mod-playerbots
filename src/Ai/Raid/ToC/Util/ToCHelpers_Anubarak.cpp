@@ -22,6 +22,7 @@
 #include "Group.h"
 #include "InstanceScript.h"
 #include "Map.h"
+#include "MoveSpline.h"
 #include "ObjectAccessor.h"
 #include "PaladinHelper.h"
 #include "Player.h"
@@ -89,6 +90,8 @@ constexpr float ANUBARAK_PERMAFROST_HEROIC_SLOW = 0.2f;
 constexpr float ANUBARAK_KITE_EDGE_RUN_ON = 15.0f;
 // How far ahead a catch is looked for: 40 yd back at the slowest closing speed is under that
 constexpr float ANUBARAK_KITE_CATCH_HORIZON_S = 20.0f;
+// The spike tests for a patch, else Impales, every 1.5 s at its base speed
+constexpr float ANUBARAK_SPIKE_BASE_TEST_S = 1.5f;
 // A step heading within this of the held one counts as the held one
 constexpr float ANUBARAK_KITE_LANE_KEEP_DEGREES = 15.0f;
 // Under Hand of Protection the spike sits on the kiter and Impales whoever stands near it, so a walk to
@@ -193,6 +196,10 @@ constexpr uint32 ANUBARAK_REDIRECT_PULL_MS = 10000;
 constexpr float ANUBARAK_TRICKS_RANGE = 20.0f;
 // A side tank walks back to its hold unless the spike could get there within its walk plus this
 constexpr float ANUBARAK_SPIKE_WALK_MARGIN_S = 2.0f;
+// Burrowers sit about this far off their patch centre toward the hold, and the two sides' are kept this
+// far apart: Spider Frenzy hastes those within 12 yd of each other
+constexpr float ANUBARAK_SIDE_HOLD_INSET = 4.0f;
+constexpr float ANUBARAK_FRENZY_APART = 14.0f;
 
 // The boss script's Frost Sphere spawns, AnubLocs 5 to 10, at floor height
 const Position ANUBARAK_SPHERE_HOMES[] = {{786.64f, 108.25f, 142.6f}, {806.84f, 150.59f, 142.6f},
@@ -258,11 +265,12 @@ struct DragLegLatch
 struct DodgeHold
 {
     Position spot;
+    // Its gather slot, else where it stood: held until the spike's path keeps off it and the walk back
+    Position home;
     ObjectGuid kiter;
     uint32 setMs = 0;
-    // A lane dodge can start further out than the release distance, so it waits for the spike to recede
-    // past where it was
-    float spikeDistAtSet = 0.0f;
+    // Came within ANUBARAK_DODGE_ARRIVE once, so another walk off the spot isn't pulled back to it
+    bool arrived = false;
 };
 
 struct ThreatCapLatch
@@ -612,6 +620,9 @@ struct AnubarakState
     float submergeSpotClearance = 0.0f;
 
     std::unordered_map<ObjectGuid, DodgeHold> dodgeHolds;
+    bool dodgeTrackMemoValid = false;
+    uint32 dodgeTrackMemoMs = 0;
+    std::vector<AnubarakPursuit::Point> dodgeTrack;
     std::unordered_map<ObjectGuid, ThreatCapLatch> threatCaps;
     // Per DPS bot and burrower: capped on its side tank's threat
     std::map<std::pair<ObjectGuid, ObjectGuid>, bool> burrowerCaps;
@@ -862,6 +873,7 @@ void ClearPullLatches(AnubarakState& state)
     state.drag = DragLegLatch();
     state.dragFreeValid = false;
     state.dodgeHolds.clear();
+    state.dodgeTrackMemoValid = false;
     state.threatCaps.clear();
     state.burrowerCaps.clear();
     state.protect = ProtectClaim();
@@ -2259,11 +2271,20 @@ float HeldCatchS(Player* kiter, Creature* spike, KitePlan const& plan)
         return ImpaleInMs(kiter, spike, ms) ? ms / IN_MILLISECONDS : -1.0f;
     }
 
+    AnubarakPursuit::Spike const chase = PursuitSpike(spike);
+    AnubarakPursuit::CatchRule rule;
     if (Dist2d(spike->GetPosition(), kiter->GetPosition()) <= ANUBARAK_IMPALE_REACH)
-        return 0.0f;
+    {
+        // A boosted kiter is out of a base-speed spike's reach before its next test, so only a catch after
+        // that counts, not a Hand spent the moment the spike re-marks next to it
+        if (chase.step != 0 || !SpeedBoostRunning(kiter))
+            return 0.0f;
 
-    return AnubarakPursuit::Simulate(PursuitSpike(spike), HeldRun(kiter, plan), ANUBARAK_KITE_CATCH_HORIZON_S, {},
-                                     ANUBARAK_IMPALE_REACH)
+        rule.fromS = ANUBARAK_SPIKE_BASE_TEST_S;
+    }
+
+    return AnubarakPursuit::Simulate(chase, HeldRun(kiter, plan), ANUBARAK_KITE_CATCH_HORIZON_S, {},
+                                     ANUBARAK_IMPALE_REACH, {}, rule)
         .catchS;
 }
 
@@ -2664,7 +2685,7 @@ void TrySecondPatch(Player* kiter, Creature* spike, AnubarakState& state, KitePl
     AnubarakPursuit::SecondPatchRead read;
     read.handLeftS = HandLeftS(kiter);
     read.catchS = plan.heldCatchS;
-    if (read.handLeftS <= 0.0f && (read.catchS < 0.0f || read.catchS > AnubarakPursuit::SECOND_PATCH_CATCH_S))
+    if (read.handLeftS <= 0.0f && read.catchS < 0.0f)
         return;
 
     read.own = OwnImmunitySpell(kiter) != 0;
@@ -4456,8 +4477,8 @@ Player* UsableSideTank(Player* bot, AnubarakState const& state, uint8 side)
     return holdsHim ? nullptr : tank;
 }
 
-// Once per instance per ms. One on a usable side tank stays with it, so a side tank never taunts one off
-// the other. The rest go by exit, at most two a side while both side tanks are usable, and a dead or
+// Once per instance per ms. Up to two on a usable side tank stay with it, so a side tank never taunts those
+// off the other; a third goes to the other side while it has room. The rest go by exit, at most two a side while both side tanks are usable, and a dead or
 // marked side tank's to the other, as do all of one holding him while he's up. A human side tank's
 // still loose 5 s after it came out goes to a bot side tank, past two.
 std::unordered_map<ObjectGuid, uint8> const& BurrowerOwners(Player* bot, AnubarakState& state)
@@ -4484,6 +4505,7 @@ std::unordered_map<ObjectGuid, uint8> const& BurrowerOwners(Player* bot, Anubara
 
     uint8 count[2] = {0, 0};
     std::vector<Creature*> free;
+    std::vector<Creature*> onTank[2];
     for (Creature* burrower : burrowers)
     {
         Unit* victim = burrower->GetVictim();
@@ -4493,13 +4515,43 @@ std::unordered_map<ObjectGuid, uint8> const& BurrowerOwners(Player* bot, Anubara
                             : victimGuid == state.sideTanks[1] ? 1
                                                                : -1;
         if (onSide >= 0 && usable[onSide])
-        {
-            state.owners[burrower->GetGUID()] = static_cast<uint8>(onSide);
-            ++count[onSide];
-        }
+            onTank[onSide].push_back(burrower);
         else
             free.push_back(burrower);
     }
+
+    // A side tank keeps two of those on it while the other can take more, its own exit's first: a third
+    // on one tank kills it
+    std::vector<Creature*> extra[2];
+    for (uint8 side = 0; side < 2; ++side)
+    {
+        std::vector<Creature*>& held = onTank[side];
+        if (usable[1 - side] && held.size() > ANUBARAK_BURROWERS_PER_SIDE)
+        {
+            auto const ownExit = [&](Creature* burrower)
+            {
+                auto const exit = state.exits.find(burrower->GetGUID());
+                return exit != state.exits.end() && exit->second.side == side;
+            };
+
+            std::stable_partition(held.begin(), held.end(), ownExit);
+            extra[side].assign(held.begin() + ANUBARAK_BURROWERS_PER_SIDE, held.end());
+            held.resize(ANUBARAK_BURROWERS_PER_SIDE);
+        }
+
+        for (Creature* burrower : held)
+            state.owners[burrower->GetGUID()] = side;
+
+        count[side] = static_cast<uint8>(held.size());
+    }
+
+    for (uint8 side = 0; side < 2; ++side)
+        for (Creature* burrower : extra[side])
+        {
+            uint8 const owner = count[1 - side] < ANUBARAK_BURROWERS_PER_SIDE ? 1 - side : side;
+            state.owners[burrower->GetGUID()] = owner;
+            ++count[owner];
+        }
 
     for (Creature* burrower : free)
     {
@@ -5009,12 +5061,35 @@ Position GetAnubarakSideTankHold(Player* bot, uint8 side)
 
     // Not floor-checked: read every tick through the burrower pick, and it lies between the patch and the
     // anchor, both on the open floor
-    Vec2 const toward = Delta(centre, GetAnubarakBossAnchor(bot));
+    Position const anchor = GetAnubarakBossAnchor(bot);
+    Vec2 const toward = Delta(centre, anchor);
     float const length = Length(toward);
     if (length < ANUBARAK_SIDE_TANK_RIM)
         return centre;
 
-    return Offset(centre, {toward.x / length, toward.y / length}, ANUBARAK_SIDE_TANK_RIM);
+    Vec2 const dir = {toward.x / length, toward.y / length};
+    Creature* other = GetAnubarakTankPatch(bot, 1 - side);
+    if (!other)
+        return Offset(centre, dir, ANUBARAK_SIDE_TANK_RIM);
+
+    // Patches landed close together put both holds' burrowers inside Spider Frenzy, so the rims turn apart.
+    // Both side tanks read the same pair, so they turn the same way.
+    Position const otherCentre = other->GetPosition();
+    Vec2 const otherToward = Delta(otherCentre, anchor);
+    float const otherLength = Length(otherToward);
+    Vec2 const otherDir = otherLength > 0.1f ? Vec2{otherToward.x / otherLength, otherToward.y / otherLength}
+                                             : Vec2{-dir.x, -dir.y};
+    Creature* boss = GetAnubarak(bot);
+    AnubarakPursuit::HoldDirs const dirs =
+        AnubarakPursuit::SideHoldDirs(ToPoint(centre), ToPoint(otherCentre), {dir.x, dir.y}, {otherDir.x, otherDir.y},
+                                      ToPoint(boss ? boss->GetPosition() : anchor), ANUBARAK_SIDE_HOLD_INSET,
+                                      ANUBARAK_FRENZY_APART);
+    if (!dirs.turned)
+        return Offset(centre, dir, ANUBARAK_SIDE_TANK_RIM);
+
+    // Off the line to the anchor it can leave the open floor
+    Position valid;
+    return OnFloor(bot, Offset(centre, {dirs.a.x, dirs.a.y}, ANUBARAK_SIDE_TANK_RIM), valid) ? valid : centre;
 }
 
 Position GetAnubarakBossAnchor(Player* bot)
@@ -5099,6 +5174,33 @@ std::vector<Position> GetAnubarakDragPoints(Player* bot, Creature* boss)
     else if (getMSTimeDiff(state->dragFreeMs, now) >= ANUBARAK_DRAG_STALL_MS)
         add(AnubarakPursuit::RingPoints(ToPoint(anchor), ANUBARAK_DRAG_STALL_RANGE, from, patches,
                                         ANUBARAK_TANK_KEEPOUT));
+
+    return points;
+}
+
+std::vector<Position> GetAnubarakSubmergeDragPoints(Player* bot, Creature* boss, Position const& spot)
+{
+    std::vector<Position> points = {spot};
+    AnubarakState* state = boss ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
+    if (!state)
+        return points;
+
+    // A patch on the way gives no straight leg, and he'd go down wherever he stands, maybe next to it
+    std::vector<AnubarakPursuit::Point> patches;
+    for (Position const& patch : PatchPositions(bot, *state))
+        patches.push_back(ToPoint(patch));
+
+    // Only ones nearer the spot than he is, so arriving at one never offers the way back
+    float const left = Dist2d(boss->GetPosition(), spot);
+    for (AnubarakPursuit::Point const& point :
+         AnubarakPursuit::DragDetours(ToPoint(boss->GetPosition()), ToPoint(spot), patches,
+                                      ANUBARAK_DRAG_DETOUR_TRIGGER, ANUBARAK_DRAG_DETOUR_STANDOFF,
+                                      ANUBARAK_TANK_KEEPOUT))
+    {
+        Position const pos(point.x, point.y, spot.GetPositionZ());
+        if (Dist2d(pos, ANUBARAK_ROOM_CENTER) <= ANUBARAK_SUBMERGE_SPOT_FLOOR && Dist2d(pos, spot) < left)
+            points.push_back(pos);
+    }
 
     return points;
 }
@@ -5655,6 +5757,8 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
     std::unordered_map<ObjectGuid, uint8> const& owners = BurrowerOwners(bot, *state);
     Unit* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     std::unordered_map<Player*, uint8> onMember;
+    std::unordered_set<Player*> otherOnMember;
+    uint8 heldCount = 0;
     bool looseOnHealer = false;
     float looseDist = 0.0f;
     for (Creature* burrower : GetAnubarakBurrowers(bot))
@@ -5665,6 +5769,7 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
 
         if (burrower->GetVictim() == bot)
         {
+            ++heldCount;
             if (!pick.held || burrower == current)
                 pick.held = burrower;
 
@@ -5676,6 +5781,9 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
         {
             if (bot->GetExactDist2d(burrower) <= ANUBARAK_SIDE_SHOUT_RADIUS)
                 pick.otherNear = true;
+
+            if (Player* victim = burrower->GetVictim() ? burrower->GetVictim()->ToPlayer() : nullptr)
+                otherOnMember.insert(victim);
 
             continue;
         }
@@ -5697,9 +5805,15 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
         }
     }
 
+    // Righteous Defense taunts all three attackers on the member, so never one the other side's hit too, a
+    // side tank, or one that would leave this tank past its two
     uint8 most = 0;
     for (auto const& [member, count] : onMember)
     {
+        if (otherOnMember.count(member) || GetAnubarakBurrowerTankSide(member) >= 0 ||
+            heldCount + count > ANUBARAK_BURROWERS_PER_SIDE)
+            continue;
+
         if (count > most || (count == most && pick.rescue && member->GetGUID() < pick.rescue->GetGUID()))
         {
             pick.rescue = member;
@@ -5907,18 +6021,9 @@ bool GetAnubarakPermafrostStepOut(Player* bot, Position& out)
     for (Position const& patch : PatchPositions(bot, *state))
         hazards.emplace_back(patch, ANUBARAK_TANK_KEEPOUT);
 
-    Creature* spike = GetPursuingSpike(bot);
-    Player* kiter = spike ? GetSpikeTarget(bot) : nullptr;
-    auto const offSpike = [&](float x, float y)
-    {
-        if (!spike)
-            return true;
-
-        SpikeDodgeReach const reach = DodgeReach(bot, spike);
-        Position const at(x, y, bot->GetPositionZ());
-        return Dist2d(at, spike->GetPosition()) >= reach.danger &&
-               (!kiter || SegmentDistance2d(spike->GetPosition(), kiter->GetPosition(), at) >= reach.lane);
-    };
+    // Off the dodge's own danger, so the step out never lands where the dodge would walk it off again
+    auto const offSpike = [bot](float x, float y)
+    { return !AnubarakSpikeDangerAt(bot, Position(x, y, bot->GetPositionZ())); };
 
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     float const reach = !target                     ? 0.0f
@@ -6775,51 +6880,142 @@ bool AnubarakDemonicCircleDue(PlayerbotAI* botAI)
     return !circle || (circle->GetDuration() >= 0 && circle->GetDuration() < ANUBARAK_CIRCLE_REFRESH_MS);
 }
 
+// The dodge track's points sit a bot tick apart
+constexpr int ANUBARAK_DODGE_TRACK_TICKS = 2;
+// A spike this close to where it heads stands
+constexpr float ANUBARAK_DODGE_STILL = 0.5f;
+
+// Where the spike heads with nobody marked. A fail idles it 4 s still chasing its last victim at the
+// base speed: 2026-10-28 S it drifted through the gather that way.
+static AnubarakPursuit::Point SpikeMotion(Creature* spike)
+{
+    Position to;
+    if (Unit* victim = spike->GetVictim())
+        to = victim->GetPosition();
+    else if (!spike->movespline->Finalized())
+    {
+        G3D::Vector3 const end = spike->movespline->FinalDestination();
+        to.Relocate(end.x, end.y, end.z);
+    }
+    else
+        return {};
+
+    Vec2 const toward = Delta(spike->GetPosition(), to);
+    float const length = Length(toward);
+    if (length < ANUBARAK_DODGE_STILL)
+        return {};
+
+    float const speed = spike->GetSpeed(MOVE_RUN);
+    return {toward.x / length * speed, toward.y / length * speed};
+}
+
+// The spike's path over ANUBARAK_DODGE_TRACK_S, per instance per ms. A marked kiter is chased along the
+// kite plan's held run, or its walk once it turned for the patch, else the way it faces: read straight
+// on, a chase that turns with its kiter cut through the dodge spots. Nobody marked, straight on.
+static std::vector<AnubarakPursuit::Point> const& DodgeTrack(Player* bot, Creature* spike, AnubarakState& state)
+{
+    uint32 const now = getMSTime();
+    if (state.dodgeTrackMemoValid && state.dodgeTrackMemoMs == now)
+        return state.dodgeTrack;
+
+    std::vector<AnubarakPursuit::Point> track;
+    Player* kiter = GetSpikeTarget(bot);
+    if (!kiter)
+        track = AnubarakPursuit::MotionTrack(ToPoint(spike->GetPosition()), SpikeMotion(spike), ANUBARAK_DODGE_TRACK_S,
+                                             ANUBARAK_DODGE_TRACK_TICKS * AnubarakPursuit::TICK_S);
+    else
+    {
+        // Read, not judged: the kiter's own ticks judge it, and judging here could reach back into the dodge
+        KitePlan const& plan = state.kitePlan;
+        bool const planned = AnubarakHeroic(bot) && plan.valid && plan.kiter == kiter->GetGUID();
+        AnubarakPursuit::Spike const chase = PursuitSpike(spike);
+        if (planned && plan.patch && state.kitePatchKiter == kiter->GetGUID() && plan.walk.valid &&
+            !plan.walk.legs.empty())
+        {
+            AnubarakPursuit::LegPath walk;
+            walk.start = ToPoint(kiter->GetPosition());
+            walk.legs = plan.walk.legs;
+            walk.speed = KiterRunSpeed(kiter);
+            track = AnubarakPursuit::SpikeTrack(chase, walk, ANUBARAK_DODGE_TRACK_S, ANUBARAK_DODGE_TRACK_TICKS);
+        }
+        else if (planned && plan.headingValid)
+            track = AnubarakPursuit::SpikeTrack(chase, HeldRun(kiter, plan), ANUBARAK_DODGE_TRACK_S,
+                                                ANUBARAK_DODGE_TRACK_TICKS);
+        else
+            track = AnubarakPursuit::SpikeTrack(chase, KiterRun(kiter, spike, RunDir(kiter, spike)),
+                                                ANUBARAK_DODGE_TRACK_S, ANUBARAK_DODGE_TRACK_TICKS);
+    }
+
+    state.dodgeTrack = std::move(track);
+    state.dodgeTrackMemoValid = true;
+    state.dodgeTrackMemoMs = now;
+    return state.dodgeTrack;
+}
+
+static bool InDodgeDanger(Creature* spike, std::vector<AnubarakPursuit::Point> const& track,
+                          SpikeDodgeReach const& reach, Position const& at)
+{
+    return Dist2d(spike->GetPosition(), at) < reach.danger ||
+           !AnubarakPursuit::TrackClear(track, ToPoint(at), reach.lane);
+}
+
+// to keeps the clearance off the track, and the walk there the lane off it and the danger radius off the spike
+static bool DodgeWalkClear(Creature* spike, std::vector<AnubarakPursuit::Point> const& track,
+                           SpikeDodgeReach const& reach, Position const& from, Position const& to)
+{
+    return AnubarakPursuit::TrackClear(track, ToPoint(to), reach.clearance) &&
+           AnubarakPursuit::TrackClear(track, ToPoint(from), ToPoint(to), reach.lane) &&
+           SegmentDistance2d(from, to, spike->GetPosition()) >= reach.danger;
+}
+
+// Where the bot goes back to once the spike has passed
+static Position DodgeHome(Player* bot)
+{
+    Position home;
+    return (GetAnubarakGatherSpot(bot, home) || GetAnubarakHealerStand(bot, home)) ? home : bot->GetPosition();
+}
+
+bool AnubarakSpikeDangerAt(Player* bot, Position const& at)
+{
+    Creature* spike = bot ? GetPursuingSpike(bot) : nullptr;
+    AnubarakState* state = spike ? anubarakStates.Find(bot->GetInstanceId()) : nullptr;
+    return state && InDodgeDanger(spike, DodgeTrack(bot, spike, *state), DodgeReach(bot, spike), at);
+}
+
 bool AnubarakInSpikeDanger(Player* bot)
 {
-    if (!bot || bot->HasAura(SPELL_MARK) || !AnubarakEngaged(GET_PLAYERBOT_AI(bot)))
-        return false;
-
-    Creature* spike = GetPursuingSpike(bot);
-    if (!spike)
-        return false;
-
-    SpikeDodgeReach const reach = DodgeReach(bot, spike);
-    if (bot->GetExactDist2d(spike->GetPositionX(), spike->GetPositionY()) < reach.danger)
-        return true;
-
-    Player* target = GetSpikeTarget(bot);
-    return target && SegmentDistance2d(spike->GetPosition(), target->GetPosition(), bot->GetPosition()) < reach.lane;
+    return bot && !bot->HasAura(SPELL_MARK) && AnubarakEngaged(GET_PLAYERBOT_AI(bot)) &&
+           AnubarakSpikeDangerAt(bot, bot->GetPosition());
 }
 
 bool GetAnubarakSpikeDodgeSpot(Player* bot, Position& out)
 {
     Creature* spike = bot ? GetPursuingSpike(bot) : nullptr;
-    if (!spike)
+    AnubarakState* state = spike ? anubarakStates.Find(bot->GetInstanceId()) : nullptr;
+    if (!state)
         return false;
 
-    Position const spikePos = spike->GetPosition();
-    Player* target = GetSpikeTarget(bot);
-    Position const targetPos = target ? target->GetPosition() : spikePos;
+    // Clear of every point on the path, so the spot never lies ahead of the spike
     SpikeDodgeReach const reach = DodgeReach(bot, spike);
+    std::vector<HazardCircle> onTrack;
+    for (AnubarakPursuit::Point const& point : DodgeTrack(bot, spike, *state))
+        onTrack.emplace_back(Position(point.x, point.y, bot->GetPositionZ()), reach.clearance);
 
-    std::vector<HazardCircle> const spikeOnly = {HazardCircle(spikePos, reach.clearance)};
-    std::vector<HazardCircle> withPatches = spikeOnly;
+    std::vector<HazardCircle> withPatches = onTrack;
     if (AnubarakHeroic(bot))
         for (Creature* sphere : GetFrostSpheres(bot))
             if (IsPermafrostPatch(sphere))
                 withPatches.emplace_back(sphere->GetPosition(), ANUBARAK_PERMAFROST_SLOW_REACH);
 
-    auto const clearOfLane = [&](float x, float y)
-    { return !target || SegmentDistance2d(spikePos, targetPos, Position(x, y, 0.0f)) >= reach.laneClearance; };
-
-    // Heroic patches slow 80%, but a dodge into one still beats staying in the lane
+    // Heroic patches slow 80%, but a dodge into one still beats staying in the lane. Ties in a ring go to
+    // the slot's side, for a short walk back.
+    Position const home = DodgeHome(bot);
     HazardSweepCache cache;
     Position spot = FindNearestPositionClearOfHazards(bot, withPatches, ANUBARAK_SPIKE_DODGE_SEARCH, 2.0f,
-                                                      static_cast<float>(M_PI) / 8.0f, nullptr, clearOfLane, &cache);
-    if (spot == Position() && withPatches.size() > spikeOnly.size())
-        spot = FindNearestPositionClearOfHazards(bot, spikeOnly, ANUBARAK_SPIKE_DODGE_SEARCH, 2.0f,
-                                                 static_cast<float>(M_PI) / 8.0f, nullptr, clearOfLane, &cache);
+                                                      static_cast<float>(M_PI) / 8.0f, &home, {}, &cache);
+    if (spot == Position() && withPatches.size() > onTrack.size())
+        spot = FindNearestPositionClearOfHazards(bot, onTrack, ANUBARAK_SPIKE_DODGE_SEARCH, 2.0f,
+                                                 static_cast<float>(M_PI) / 8.0f, &home, {}, &cache);
 
     if (spot == Position())
     {
@@ -6827,72 +7023,98 @@ bool GetAnubarakSpikeDodgeSpot(Player* bot, Position& out)
         return false;
     }
 
-    bool const nearSpike = bot->GetExactDist2d(spikePos.GetPositionX(), spikePos.GetPositionY()) < reach.danger;
+    bool const nearSpike = bot->GetExactDist2d(spike->GetPositionX(), spike->GetPositionY()) < reach.danger;
     RaidObs::NoteDerived(bot, "anub.dodge", nearSpike ? "spike" : "lane");
     out = spot;
     return true;
 }
 
-bool GetAnubarakDodgeHold(Player* bot, Position& spot)
+static DodgeHold* ValidDodgeHold(Player* bot)
 {
     if (!InToCInstance(bot) || !bot->IsAlive() || bot->HasAura(SPELL_MARK) ||
         !AnubarakEngaged(GET_PLAYERBOT_AI(bot)))
-        return false;
+        return nullptr;
 
-    AnubarakState const* state = anubarakStates.Find(bot->GetInstanceId());
+    AnubarakState* state = anubarakStates.Find(bot->GetInstanceId());
     if (!state)
-        return false;
+        return nullptr;
 
     auto const it = state->dodgeHolds.find(bot->GetGUID());
     if (it == state->dodgeHolds.end())
-        return false;
+        return nullptr;
 
-    DodgeHold const& hold = it->second;
+    DodgeHold& hold = it->second;
     uint32 const heldMs = getMSTimeDiff(hold.setMs, getMSTime());
     if (heldMs >= ANUBARAK_DODGE_HOLD_MS ||
         (heldMs >= ANUBARAK_DODGE_WALK_MS && Dist2d(bot->GetPosition(), hold.spot) > ANUBARAK_DODGE_HOLD_TRIGGER))
-        return false;
+        return nullptr;
 
     // The spike idles 4 s between marks with nobody marked, so an empty kiter is a kiter too
     Creature* spike = GetPursuingSpike(bot);
     if (!spike)
-        return false;
+        return nullptr;
 
     Player* kiter = GetSpikeTarget(bot);
     if ((kiter ? kiter->GetGUID() : ObjectGuid::Empty) != hold.kiter)
-        return false;
+        return nullptr;
 
+    // Kept until the gather slot and the walk back clear the path too: let go once it stood clear, a bot
+    // walked straight back into it
     SpikeDodgeReach const reach = DodgeReach(bot, spike);
-    float const spikeDist = Dist2d(spike->GetPosition(), hold.spot);
-    if (spikeDist < reach.danger || spikeDist > std::max(ANUBARAK_DODGE_HOLD_RELEASE, hold.spikeDistAtSet))
+    std::vector<AnubarakPursuit::Point> const& track = DodgeTrack(bot, spike, *state);
+    if (InDodgeDanger(spike, track, reach, hold.spot) || DodgeWalkClear(spike, track, reach, hold.spot, hold.home))
+        return nullptr;
+
+    return &hold;
+}
+
+bool GetAnubarakDodgeHold(Player* bot, Position& spot)
+{
+    DodgeHold const* hold = ValidDodgeHold(bot);
+    if (!hold)
         return false;
 
-    if (kiter && SegmentDistance2d(spike->GetPosition(), kiter->GetPosition(), hold.spot) < reach.lane)
-        return false;
-
-    spot = hold.spot;
+    spot = hold->spot;
     return true;
 }
 
 void SetAnubarakDodgeHold(Player* bot, Position const& spot)
 {
     AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
-    Creature* spike = state ? GetPursuingSpike(bot) : nullptr;
-    if (!spike)
+    if (!state || !GetPursuingSpike(bot))
         return;
 
     Player* kiter = GetSpikeTarget(bot);
     DodgeHold& hold = state->dodgeHolds[bot->GetGUID()];
     hold.spot = spot;
+    hold.home = DodgeHome(bot);
     hold.kiter = kiter ? kiter->GetGUID() : ObjectGuid::Empty;
     hold.setMs = getMSTime();
-    hold.spikeDistAtSet = Dist2d(spike->GetPosition(), spot);
+    hold.arrived = false;
 }
 
 bool IsAnubarakDodgeHeld(PlayerbotAI* botAI)
 {
     Position spot;
     return botAI && GetAnubarakDodgeHold(botAI->GetBot(), spot);
+}
+
+bool AnubarakDodgeWalking(Player* bot)
+{
+    DodgeHold* hold = ValidDodgeHold(bot);
+    if (!hold || hold->arrived)
+        return false;
+
+    hold->arrived = Dist2d(bot->GetPosition(), hold->spot) <= ANUBARAK_DODGE_ARRIVE;
+    return !hold->arrived;
+}
+
+bool AnubarakWalkClearOfSpike(Player* bot, Position const& to)
+{
+    Creature* spike = bot ? GetPursuingSpike(bot) : nullptr;
+    AnubarakState* state = spike ? anubarakStates.Find(bot->GetInstanceId()) : nullptr;
+    return !state ||
+           DodgeWalkClear(spike, DodgeTrack(bot, spike, *state), DodgeReach(bot, spike), bot->GetPosition(), to);
 }
 
 Player* GetAnubarakKiterToProtect(Player* bot)

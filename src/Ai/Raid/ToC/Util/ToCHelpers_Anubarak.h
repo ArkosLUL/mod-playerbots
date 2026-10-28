@@ -176,10 +176,11 @@ constexpr float ANUBARAK_SHOOT_MARGIN = 2.0f;
 constexpr float ANUBARAK_DODGE_ARRIVE = 2.0f;
 // A held bot further off its spot lets go
 constexpr float ANUBARAK_DODGE_HOLD_TRIGGER = 2.5f;
-// Spike this far from the spot: it has passed
-constexpr float ANUBARAK_DODGE_HOLD_RELEASE = 20.0f;
 constexpr uint32 ANUBARAK_DODGE_WALK_MS = 3000;
 constexpr uint32 ANUBARAK_DODGE_HOLD_MS = 8000;
+// How far ahead the dodge reads the spike's path: 34 yd of warning at its top speed. Replayed, 1.5 to 4 s
+// scored alike and 5 s worse.
+constexpr float ANUBARAK_DODGE_TRACK_S = 3.0f;
 
 // Spike this close: a paladin HoPs the kiter
 constexpr float ANUBARAK_KITE_PROTECT_RANGE = 12.0f;
@@ -352,6 +353,8 @@ std::vector<Position> GetAnubarakDragPoints(Player* bot, Creature* boss);
 // ANUBARAK_SUBMERGE_PATCH_CLEARANCE, else _MIN, so the spike summoned on him doesn't burn one, on the
 // tank's side away from the tank patches. False otherwise.
 bool GetAnubarakSubmergeSpot(Player* bot, Position& out);
+// The submerge spot, then waypoints round each patch on his line to it
+std::vector<Position> GetAnubarakSubmergeDragPoints(Player* bot, Creature* boss, Position const& spot);
 // The pickup tank's leg toward point, latched per instance. Called by the hold action only. No leg
 // whose tank spot or walk comes within the slow reach of a patch.
 AnubarakDragLeg GetAnubarakDragLeg(Player* bot, Creature* boss, Position const& point, bool submerge);
@@ -484,14 +487,25 @@ bool AnubarakHealerStandApplies(PlayerbotAI* botAI);
 // while he is up
 bool AnubarakDemonicCircleDue(PlayerbotAI* botAI);
 
+// The spike within its danger radius of `at`, or its path over ANUBARAK_DODGE_TRACK_S within its lane;
+// false with no spike
+bool AnubarakSpikeDangerAt(Player* bot, Position const& at);
+// The same for the bot where it stands, unmarked
 bool AnubarakInSpikeDanger(Player* bot);
-// Heroic keeps out of Permafrost's slow reach when any spot allows it
+// The nearest spot clear of the spike's path by its clearance, the bot's gather slot side first. Heroic
+// keeps out of Permafrost's slow reach when any spot allows it.
 bool GetAnubarakSpikeDodgeSpot(Player* bot, Position& out);
-// The bot's dodge spot while the hold is valid: walking (set within ANUBARAK_DODGE_WALK_MS) or
-// parked within ANUBARAK_DODGE_HOLD_TRIGGER. Pure read; an invalid hold reads false.
+// The bot's dodge spot while the hold is valid: walking (set within ANUBARAK_DODGE_WALK_MS) or parked
+// within ANUBARAK_DODGE_HOLD_TRIGGER, the mark unchanged, the spot out of danger, and the spike's path
+// still near its gather slot or the walk back. An invalid hold reads false and stays stored.
 bool GetAnubarakDodgeHold(Player* bot, Position& spot);
 void SetAnubarakDodgeHold(Player* bot, Position const& spot);
 bool IsAnubarakDodgeHeld(PlayerbotAI* botAI);
+// A valid hold the bot hasn't reached yet and is over ANUBARAK_DODGE_ARRIVE off
+bool AnubarakDodgeWalking(Player* bot);
+// The walk from where the bot stands to `to`, and `to` itself, keep clear of the spike's path: true
+// with no spike
+bool AnubarakWalkClearOfSpike(Player* bot, Position const& to);
 
 // The kiter this paladin bot covers with Hand of Protection now, null when it has no such duty
 Player* GetAnubarakKiterToProtect(Player* bot);
