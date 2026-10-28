@@ -21,6 +21,10 @@ The merge stage alone edits this table.
 | 3a | r3-deathwhisper | merged; review fixed 3 bugs, 7 minor, 2 cleanups | `0f297100f`, review `642e329da` | tanks own a side by her y, no torch stands or P2 drag; no opening positions (23 yd aggro); kill order by damage school; CC Cyclone first, no tank CC; CC and kick picks form-checked (no cat or Tree druid on Cyclone); splash held 15 yd round an uncycloned victim; normal swap at 3 stacks by a stack-free taunter (lands ~4-5 stacks every 30 s), generic taunts blocked; lust held to P2 on all difficulties; one forced dodge; giant pairs round each carrier, partners walk to tank or player carriers | never built, CMake re-run (2 helper .cpp); no 631 trace; Cyclone recast gap (victim free ~1.5-2 s, immune target refused); Deformed Fanatic face-tanked; no heroic P2 DPS threat brake or Divine Shield drop; Deathchill Bolt and Curse of Torpor generic; slowed shade victim outrun; giant: melee uptime loss, unpartnered carrier dies; no `-Werror` pass |
 | 3b | r4-gunship | merged; review fixed 1 bug, 3 minor, 2 cleanups | `3aa38a4e2` | `gsb.battlefury` replaced by return on the mage's death (tank last, 10 s cap) and a retreat at +200% Battle Fury (20 stacks normal, 17 heroic); fall snap dropped for the core rescue; bot roster (board/home tank, ranged on cannons, home healers 2/1, melee board); boarders jump once a tank holds him or 15 s in; edge slots assume the cannon side faces the enemy; dodges on a deck-box sweep, heroic interrupts; no Bladestorm dodge (radius 0); Burning Pitch dodge kept though its faction-35 caster may hit nobody | rebuild needed; no 631 trace; deck points can't be navprobed (transport floors); rocket-pack fix unproven live; no tank defensives against stacks; mortars only killable by cannons; humans hold no duty; no `-Werror` pass; r14: unused `gsbLastStarPos`/`gsbLastRocketPackUse`, `SPELL_FROZEN_CANNON` 69704 not in the DBC, `RaidRestoreLegacyRti` skips `star`, hoist one walk base |
 | 3b | r5-saurfang | merged; review fixed 6 minor | `42e99f6d7` | tanks east, raid spread west on 11 slots 13.5 yd apart; elected swap by the rune-free tank, generic taunts blocked; rune tank yields to beasts; free tank's beast taunt gated on the next swap; ranged on the furthest beast within 32 yd; stuns and snares only; mark healer order holy paladin first; lust on Frenzy; area damage held for DPS all pull; slot holds block heal reach | CMake re-run (new helpers .cpp); no 631 trace; slot LOS unchecked; no Hand of Protection, Blood Power defensives or knockbacks; human tank not told to swap; Nova can pick the melee stack when slots are short; Thick Hide cat counts as a tank; r14: unused `NPC_BLOOD_BEAST1-4`, `IccTryClassCC` roots for Valithria, hoist one stand-walk base |
+| 3ab-gaps | g2-marrowgar | pending | | | |
+| 3ab-gaps | g3-deathwhisper | pending | | | |
+| 3ab-gaps | g4-gunship | pending | | | |
+| 3ab-gaps | g5-saurfang | pending | | | |
 | 3c | r6-festergut | pending | | | |
 | 3c | r7-rotface | pending | | | |
 | 3d | r8-putricide | pending | | | |
@@ -127,6 +131,7 @@ These bind every rebuilt encounter. Sources: **R** `docs/raids/README.md`, **P**
 40. Wiring order is veto credit order: definition rules go after their stem's multipliers. (A; T "Code layout › Seams")
 41. Header names unique ignoring case. (A "Registration")
 42. One code path for 10/25 N/H. Judge a change on raid damage too.
+43. Tank defensives: each tank spends its cooldowns on the boss's predictable big hits and stack peaks through `NextTankDefensive` (`src/Ai/Raid/RaidTankDefensive.h`; `physicalOnly` where Anti-Magic Shell does nothing), with the class defensive nodes held off those buttons (`IsHeldTankDefensive`) until that window. `RaidHumanTankCall` tells a human tank; that is not a duty. (`docs/raids/ulduar/mimiron.md` Plasma Blast; `docs/raids/onyxias-lair.md`; T `anubarak.md`)
 
 ## Lane rules
 
@@ -249,6 +254,7 @@ Waves 3a-3g run it for every encounter in their brief.
    - Remove every icon write and `rti` use the brief lists: a resolver picks the unit and the bot
      attacks it directly.
    - Navprobe every coordinate kept or added.
+   - Tank defensives per convention 43.
    - Opening positions live in the definition.
 4. **Cheats.** Implement the guide's answer for each cheat and borderline snap in the brief. Apply
    the Cheats decision to any survivor.
@@ -261,6 +267,25 @@ Waves 3a-3g run it for every encounter in their brief.
 7. **Close:** checks, review through the wave script's lenses, fixes, commit.
 8. **Review** by a fresh agent (see Waves), before the merge.
 
+## Gap lanes
+
+A gap wave reopens bosses already merged, one `g<n>-<boss>` lane each, and runs the boss lane recipe
+on what changes. Each gap ends closed (bots handle it, and the doc says how) or recorded with
+the reason it can't close offline:
+
+- a gap only a live pull settles stays, naming the trace key or reader flag that settles it;
+- what the Humans decision rules out stays;
+- no 631 trace, never built, no `-Werror` pass: those wait for the user's build and pulls.
+
+Every gap lane also:
+
+1. wires tank defensives per convention 43;
+2. checks line of sight with navprobe `los` and `ring --los-from` (`docs/engine/pitfalls.md`,
+   navprobe bullets) on every stand that must see the boss or a tank, moving a blocked stand and
+   re-probing its floor. If navprobe's usage lists no `los`, it records sight as unchecked and goes on.
+
+The shared `src/Ai/Raid/Raid*` files stay as they are: a change one needs goes in the report.
+
 ## Waves
 
 | Wave | Lanes, two at a time |
@@ -269,6 +294,7 @@ Waves 3a-3g run it for every encounter in their brief.
 | 2 | `r1-foundation` |
 | 3a | `r2-marrowgar`, `r3-deathwhisper` |
 | 3b | `r4-gunship`, `r5-saurfang` |
+| 3ab-gaps | `g2-marrowgar`, `g3-deathwhisper`, `g4-gunship`, `g5-saurfang` (see Gap lanes) |
 | 3c | `r6-festergut`, `r7-rotface` |
 | 3d | `r8-putricide`, `r9-blood-prince-council` |
 | 3e | `r10-blood-queen`, `r11-svalna-valithria` |
