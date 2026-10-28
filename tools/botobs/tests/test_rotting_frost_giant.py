@@ -46,6 +46,8 @@ def pull(boss: str = "rotting-frost-giant") -> list[dict]:
         aura(31000, ARROW, GIANT, rfg.SPELL_DEATH_PLAGUE),
         {"t": 15200, "e": "note", "g": MEND, "k": rfg.PARTNER, "txt": str(ARROW)},
         {"t": 30000, "e": "note", "g": MEND, "k": rfg.PARTNER, "txt": "0"},
+        {"t": 15250, "e": "note", "g": MEND, "k": rfg.APART, "txt": "1"},
+        {"t": 30000, "e": "note", "g": MEND, "k": rfg.APART, "txt": "0"},
         {"t": 30100, "e": "note", "g": ARROW, "k": rfg.PARTNER, "txt": str(MEND)},
         {"t": 45000, "e": "death", "g": ARROW, "killer": ARROW,
          "auras": [[rfg.SPELL_DEATH_PLAGUE, 1, 0, MEND, 30000, 45000, 0]]},
@@ -74,6 +76,17 @@ class SyntheticPull(unittest.TestCase):
 
     def test_a_released_pair_ends_its_span(self):
         self.assertEqual(rfg.pairings(self.trace), [(15200, MEND, ARROW, 30000), (30100, ARROW, MEND, 60000)])
+
+    def test_a_pair_that_walked_out_is_marked(self):
+        first, second = rfg.pairings(self.trace)
+        self.assertTrue(rfg.walked_out(self.trace, first))
+        self.assertFalse(rfg.walked_out(self.trace, second))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rfg.show_partners(self.trace)
+        self.assertIn("  out", out.getvalue().splitlines()[1])
+        self.assertNotIn("  out", out.getvalue().splitlines()[2])
+        self.assertIn("1 of 2 pair(s) walked out to a spot", out.getvalue())
 
     def test_the_cheat_is_under_the_giants_own_prefix(self):
         self.assertEqual([key for key, _ in rfg.own_cheats(self.trace)], ["rfg.deathplague"])

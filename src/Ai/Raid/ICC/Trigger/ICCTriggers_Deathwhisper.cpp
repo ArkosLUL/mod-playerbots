@@ -13,12 +13,15 @@ bool IccDarkReckoningTrigger::IsActive() { return LdwDarkReckoningDodging(botAI)
 
 bool IccLadyDeathwhisperDodgeTrigger::IsActive() { return LdwDodgeKind(botAI) != LdwHazardKind::None; }
 
+bool IccLadyDeathwhisperDefensiveTrigger::IsActive() { return LdwTankDefensive(botAI) != 0; }
+
 bool IccLadyDeathwhisperFrostboltTrigger::IsActive() { return LdwIsFrostboltInterrupter(botAI); }
 
 bool IccLadyDeathwhisperDominateMindTrigger::IsActive()
 {
     char const* spell = nullptr;
-    return LdwCcDuty(botAI, spell) != nullptr;
+    bool waiting = false;
+    return LdwCcDuty(botAI, spell, waiting) != nullptr;
 }
 
 bool IccLadyDeathwhisperTauntTrigger::IsActive()

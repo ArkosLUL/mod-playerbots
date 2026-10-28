@@ -65,13 +65,23 @@ bool IccDeathwhisperDodgeAction::Dodge(std::vector<LdwHazard> const& hazards, Ld
     Unit* target = AI_VALUE(Unit*, "current target");
     Position const prefer = target ? target->GetPosition() : from;
 
+    // A spot behind a torch post costs the bot its target, but a shade's blast kills, so there the
+    // nearest clear spot wins.
+    bool const lethal = kind == LdwHazardKind::Shade || kind == LdwHazardKind::Blast;
+    auto acceptInSight = [&accept, target, &from, lethal](float x, float y)
+    { return accept(x, y) && (lethal || !target || target->IsWithinLOS(x, y, from.GetPositionZ())); };
+
     std::vector<EncounterHelpers::HazardCircle> circles;
     for (LdwHazard const& hazard : hazards)
         circles.push_back({hazard.pos, hazard.clear});
 
     Position spot = EncounterHelpers::FindNearestPositionClearOfHazards(bot, circles, LDW_DODGE_SWEEP, 2.0f,
                                                                         static_cast<float>(M_PI) / 8.0f, &prefer,
-                                                                        accept);
+                                                                        acceptInSight);
+    if (LdwIsEmpty(spot) && !lethal && target)
+        spot = EncounterHelpers::FindNearestPositionClearOfHazards(bot, circles, LDW_DODGE_SWEEP, 2.0f,
+                                                                   static_cast<float>(M_PI) / 8.0f, &prefer, accept);
+
     if (LdwIsEmpty(spot))
     {
         // Overlapping pools can leave nothing clear by the margin; clearing the reach itself still saves the hit.
@@ -120,10 +130,17 @@ bool IccLadyDeathwhisperFrostboltAction::Execute(Event /*event*/)
     return interrupt && botAI->CastSpell(interrupt, boss);
 }
 
+bool IccLadyDeathwhisperDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const defensive = LdwTankDefensive(botAI);
+    return defensive && botAI->CastSpell(defensive, bot);
+}
+
 bool IccLadyDeathwhisperDominateMindAction::Execute(Event /*event*/)
 {
     char const* spell = nullptr;
-    Unit* victim = LdwCcDuty(botAI, spell);
+    bool waiting = false;
+    Unit* victim = LdwCcDuty(botAI, spell, waiting);
     if (!victim || !spell)
         return false;
 
@@ -136,6 +153,11 @@ bool IccLadyDeathwhisperDominateMindAction::Execute(Event /*event*/)
     if (!bot->IsWithinCombatRange(victim, range) || !bot->IsWithinLOSInMap(victim))
         return MoveTo(victim, std::max(range - LDW_CC_STANDOFF, 1.0f), MovementPriority::MOVEMENT_COMBAT);
 
+    // In place under a Cyclone: the cast goes out the tick it fades.
+    if (waiting)
+        return false;
+
+    LdwLeaveFormFor(botAI, spell);
     return botAI->CastSpell(spell, victim);
 }
 

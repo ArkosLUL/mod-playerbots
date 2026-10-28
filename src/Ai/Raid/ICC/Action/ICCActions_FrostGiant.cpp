@@ -21,13 +21,27 @@ constexpr float RFG_REAIM = 2.0f;
 
 bool IccRottingFrostGiantPlagueAction::Execute(Event /*event*/)
 {
-    if (Player* mate = RfgPairWalk(botAI))
+    if (RfgWalk const walk = RfgPairWalk(botAI))
     {
-        // Beside the mate nothing is left to do, so casts go on.
+        LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+        if (walk.toSpot)
+        {
+            // In place nothing is left to do, so casts go on.
+            if (bot->GetExactDist2d(walk.spot) <= RFG_SPOT_ARRIVE)
+                return false;
+
+            if (bot->isMoving() && last.msTime &&
+                walk.spot.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= RFG_SPOT_ARRIVE)
+                return true;
+
+            return MoveTo(bot->GetMapId(), walk.spot.GetPositionX(), walk.spot.GetPositionY(),
+                          walk.spot.GetPositionZ(), false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
+        }
+
+        Player* mate = walk.mate;
         if (bot->GetExactDist2d(mate) <= RFG_PAIR_DISTANCE + 1.0f)
             return false;
 
-        LastMovement& last = AI_VALUE(LastMovement&, "last movement");
         if (bot->isMoving() && last.msTime &&
             mate->GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= RFG_PAIR_DISTANCE + RFG_REAIM)
             return true;

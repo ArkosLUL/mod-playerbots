@@ -31,6 +31,15 @@ public:
     bool IsActive() override;
 };
 
+class IccLadyDeathwhisperDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lady deathwhisper defensive";
+
+    IccLadyDeathwhisperDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccLadyDeathwhisperFrostboltTrigger : public Trigger
 {
 public:

@@ -7,6 +7,7 @@
 #include "ICCHelpers_FrostGiant.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 #include "Group.h"
 #include "ICCHelpers_Shared.h"
@@ -23,6 +24,10 @@ constexpr uint32 RFG_UPDATE_MS = 250;
 struct RfgState
 {
     RaidObs::ObsGuidMap<ObjectGuid> partners{"rfg.partner"};
+    // Carriers whose pair walks out to a spot, and where it stands.
+    RaidObs::ObsGuidSet apart{"rfg.apart"};
+    std::unordered_map<ObjectGuid, Position> spots;
+    std::unordered_map<ObjectGuid, uint32> spotSince;
     uint32 updatedMs = 0;
 };
 
@@ -63,6 +68,38 @@ Player* Find(std::vector<Player*> const& members, ObjectGuid guid)
     return found == members.end() ? nullptr : *found;
 }
 
+bool IsEmpty(Position const& pos) { return !pos.GetPositionX() && !pos.GetPositionY(); }
+
+// A spot at least RFG_PLAGUE_CLEAR from every other player and from the other pairs' spots, in sight of
+// the giant and in a caster's range of it, so casters keep casting. A partner already standing on such
+// ground, the cured one of the last tick, is the spot. Empty when nothing within the sweep is clear.
+Position PairSpot(Player* carrier, Player* partner, std::vector<Player*> const& members, Creature* giant,
+                  RfgState const& state)
+{
+    std::vector<EncounterHelpers::HazardCircle> circles;
+    for (Player* member : members)
+        if (member != carrier && member != partner)
+            circles.push_back({member->GetPosition(), RFG_PLAGUE_CLEAR});
+
+    for (auto const& [guid, spot] : state.spots)
+        if (guid != carrier->GetGUID())
+            circles.push_back({spot, RFG_PLAGUE_CLEAR});
+
+    auto seesGiant = [giant, carrier](float x, float y)
+    { return giant->GetExactDist2d(x, y) <= RFG_SPOT_GIANT_MAX && giant->IsWithinLOS(x, y, carrier->GetPositionZ()); };
+
+    Position const here = partner->GetPosition();
+    auto insideCircle = [&here](EncounterHelpers::HazardCircle const& circle)
+    { return circle.first.GetExactDist2d(here) < circle.second; };
+    bool const clear = std::none_of(circles.begin(), circles.end(), insideCircle);
+    if (clear && seesGiant(here.GetPositionX(), here.GetPositionY()))
+        return here;
+
+    Position const prefer = giant->GetPosition();
+    return EncounterHelpers::FindNearestPositionClearOfHazards(carrier, circles, RFG_SPOT_SWEEP, 2.0f,
+                                                               static_cast<float>(M_PI) / 8.0f, &prefer, seesGiant);
+}
+
 struct CarrierMemo
 {
     ObjectGuid bot;
@@ -101,6 +138,28 @@ void RfgUpdatePartners(PlayerbotAI* botAI)
     for (ObjectGuid const& carrier : released)
         state.partners.erase(carrier);
 
+    // A spot lives with its pair. One the pair hasn't reached in time is dropped, and the pair forms where
+    // it stands.
+    std::vector<ObjectGuid> dropped;
+    for (auto const& [carrierGuid, spot] : state.spots)
+    {
+        auto const pair = state.partners.find(carrierGuid);
+        Player* carrier = Find(members, carrierGuid);
+        Player* partner = pair == state.partners.end() ? nullptr : Find(members, pair->second);
+        bool const late = getMSTimeDiff(state.spotSince[carrierGuid], now) > RFG_SPOT_BUDGET_MS;
+        bool const placed = carrier && partner && carrier->GetExactDist2d(spot) <= RFG_SPOT_ARRIVE + 1.0f &&
+                            partner->GetExactDist2d(spot) <= RFG_SPOT_ARRIVE + 1.0f;
+        if (!partner || (late && !placed))
+            dropped.push_back(carrierGuid);
+    }
+
+    for (ObjectGuid const& carrier : dropped)
+    {
+        state.spots.erase(carrier);
+        state.spotSince.erase(carrier);
+        state.apart.erase(carrier);
+    }
+
     std::vector<Player*> carriers;
     for (Player* member : members)
         if (Carries(member) && !state.partners.count(member->GetGUID()))
@@ -108,6 +167,7 @@ void RfgUpdatePartners(PlayerbotAI* botAI)
 
     std::sort(carriers.begin(), carriers.end(), [](Player* a, Player* b) { return a->GetGUID() < b->GetGUID(); });
 
+    Creature* giant = RfgGiant(botAI);
     for (Player* carrier : carriers)
     {
         // A cured partner ends the chain, a clean one carries it once more back onto the cured carrier.
@@ -121,58 +181,98 @@ void RfgUpdatePartners(PlayerbotAI* botAI)
             return distA != distB ? distA < distB : a->GetGUID() < b->GetGUID();
         };
 
+        // A tank only when no one else is left: it holds the giant where it is, so the carrier walks to it.
         Player* best = nullptr;
-        for (Player* candidate : members)
+        for (bool const tanks : {false, true})
         {
-            if (candidate == carrier || Carries(candidate) || IsTankPlayer(candidate) ||
-                (IsTankPlayer(carrier) && !IsDutyBot(candidate)))
-                continue;
+            for (Player* candidate : members)
+            {
+                if (candidate == carrier || Carries(candidate) || IsTankPlayer(candidate) != tanks ||
+                    (IsTankPlayer(carrier) && !IsDutyBot(candidate)))
+                    continue;
 
-            bool taken = false;
-            for (auto const& pair : state.partners)
-                taken = taken || pair.second == candidate->GetGUID();
+                bool taken = false;
+                for (auto const& pair : state.partners)
+                    taken = taken || pair.second == candidate->GetGUID();
 
-            if (!taken && (!best || better(candidate, best)))
-                best = candidate;
+                if (!taken && (!best || better(candidate, best)))
+                    best = candidate;
+            }
+
+            if (best)
+                break;
         }
 
-        if (best)
-            state.partners[carrier->GetGUID()] = best->GetGUID();
+        if (!best)
+            continue;
+
+        state.partners[carrier->GetGUID()] = best->GetGUID();
+        // Both walk to a spot, so both must be bots; a tank stays at the giant and a player holds no duty.
+        if (!giant || IsTankPlayer(carrier) || IsTankPlayer(best) || !IsDutyBot(carrier) || !IsDutyBot(best))
+            continue;
+
+        Position const spot = PairSpot(carrier, best, members, giant, state);
+        if (!IsEmpty(spot))
+        {
+            state.spots[carrier->GetGUID()] = spot;
+            state.spotSince[carrier->GetGUID()] = now;
+            state.apart.insert(carrier->GetGUID());
+        }
     }
 }
 
-Player* RfgPairWalk(PlayerbotAI* botAI)
+RfgWalk RfgPairWalk(PlayerbotAI* botAI)
 {
+    RfgWalk walk;
     Player* bot = botAI->GetBot();
     if (!RfgGiant(botAI))
-        return nullptr;
+        return walk;
 
     RfgState* state = sRfgState.Find(bot->GetInstanceId());
     if (!state)
-        return nullptr;
+        return walk;
 
+    ObjectGuid carrierGuid;
     ObjectGuid other;
     if (Carries(bot))
     {
         auto const pair = state->partners.find(bot->GetGUID());
         if (pair == state->partners.end() || IsTankPlayer(bot))
-            return nullptr;
+            return walk;
 
+        carrierGuid = bot->GetGUID();
         other = pair->second;
     }
     else
     {
         for (auto const& [carrier, partner] : state->partners)
+        {
             if (partner == bot->GetGUID())
+            {
+                carrierGuid = carrier;
                 other = carrier;
+            }
+        }
     }
 
     Player* mate = other.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, other);
     if (!mate || !mate->IsAlive() || !mate->IsInMap(bot))
-        return nullptr;
+        return walk;
 
-    // Only one of the pair walks: the carrier, unless it tanks or is a player.
-    return Carries(bot) || IsTankPlayer(mate) || !IsDutyBot(mate) ? mate : nullptr;
+    // Both of a pair with a spot walk to it.
+    auto const spot = state->spots.find(carrierGuid);
+    if (spot != state->spots.end())
+    {
+        walk.spot = spot->second;
+        walk.toSpot = true;
+        return walk;
+    }
+
+    // Otherwise only one of the pair walks: the carrier, unless it tanks or is a player.
+    if (Carries(bot) || IsTankPlayer(mate) || !IsDutyBot(mate))
+        walk.mate = mate;
+
+    return walk;
 }
 
 std::vector<EncounterHelpers::HazardCircle> RfgCarrierHazards(PlayerbotAI* botAI)
@@ -207,14 +307,20 @@ std::vector<EncounterHelpers::HazardCircle> BuildCarrierHazards(PlayerbotAI* bot
         if (member == bot || !Carries(member))
             continue;
 
+        Position at = member->GetPosition();
         if (state)
         {
             auto const pair = state->partners.find(member->GetGUID());
             if (pair != state->partners.end() && pair->second == bot->GetGUID())
                 continue;
+
+            // Where it ticks, once a pair walking out to a spot gets there.
+            auto const spot = state->spots.find(member->GetGUID());
+            if (spot != state->spots.end())
+                at = spot->second;
         }
 
-        hazards.push_back({member->GetPosition(), RFG_PLAGUE_CLEAR});
+        hazards.push_back({at, RFG_PLAGUE_CLEAR});
     }
 
     return hazards;

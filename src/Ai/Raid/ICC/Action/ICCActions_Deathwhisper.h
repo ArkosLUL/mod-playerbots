@@ -44,6 +44,15 @@ public:
     bool Execute(Event event) override;
 };
 
+class IccLadyDeathwhisperDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc lady deathwhisper defensive";
+
+    IccLadyDeathwhisperDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 class IccLadyDeathwhisperFrostboltAction : public Action
 {
 public:

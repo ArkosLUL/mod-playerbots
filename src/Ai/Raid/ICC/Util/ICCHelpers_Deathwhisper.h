@@ -54,6 +54,16 @@ constexpr float LDW_DODGE_SWEEP = 30.0f;
 constexpr uint8 LDW_SWAP_STACKS = 3;
 constexpr float LDW_TAUNT_RANGE = 30.0f;
 
+// A Frostbolt with this much cast left and no kicker ready is going to land.
+constexpr uint32 LDW_FROSTBOLT_LAST_MS = 1100;
+constexpr float LDW_LOW_HEALTH_PCT = 35.0f;
+
+// She pulls at 110% of her victim's threat. A damage dealer holds fire from 90% of the top tank's.
+constexpr float LDW_THREAT_CAP = 0.9f;
+constexpr float LDW_THREAT_RELEASE = 0.8f;
+// A braked bot's area damage from this close splashes onto her.
+constexpr float LDW_BRAKE_AREA_REACH = 12.0f;
+
 enum class LdwHazardKind : uint8
 {
     None,
@@ -89,12 +99,24 @@ bool LdwSwapTaunt(PlayerbotAI* botAI);
 // Phase 2: the tank she is on, else the main tank.
 Player* LdwRedirectTank(PlayerbotAI* botAI);
 
-// Assigns each Dominate Mind victim not held by CC one bot caster, best spell first. Runs from the tick.
+// Assigns each Dominate Mind victim not held by CC one bot caster, best spell first. A victim that
+// already had a control aura gets an instant CC, and a Cyclone in its last second hands the duty out
+// early, so the follow-up lands the tick the Cyclone fades. Runs from the tick.
 void LdwUpdateCcDuties(PlayerbotAI* botAI);
-// The victim this bot holds the CC duty on, and the spell it casts. Null without a duty.
-Unit* LdwCcDuty(PlayerbotAI* botAI, char const*& spell);
+// The victim this bot holds the CC duty on, and the spell it casts. Null without a duty. `waiting`: the
+// victim is Cycloned, so the bot only gets into range and sight until the Cyclone fades.
+Unit* LdwCcDuty(PlayerbotAI* botAI, char const*& spell, bool& waiting);
+// Cancels the form the spell can't be cast from: cat form, Tree of Life, ghost wolf.
+void LdwLeaveFormFor(PlayerbotAI* botAI, char const* spell);
 // A Dominate Mind victim takes damage within range of the bot or of its target.
 bool LdwVictimInSplash(PlayerbotAI* botAI, float range);
+
+// Phase 2 threat brake, set by the tick: this damage dealer holds fire on her.
+bool LdwThreatBraked(PlayerbotAI* botAI);
+
+// The button this tank should press now, by what is about to hit it: a Deformed Fanatic in melee, a
+// Frostbolt nobody can kick, or low health. 0 when none. Writes ldw.defensive.
+uint32 LdwTankDefensive(PlayerbotAI* botAI);
 
 // She casts Frostbolt and this bot is the lowest-guid one with an interrupt ready and in reach. Writes
 // ldw.interrupter.
@@ -118,7 +140,8 @@ bool LdwDarkReckoningDodging(PlayerbotAI* botAI);
 // Lust waits for phase 2, when she can be hit and every bot is still alive.
 RaidBurstWindow IccDeathwhisperBurstWindow(PlayerbotAI* botAI);
 
-// Heroic buffs, the per-instance reset and the CC duties, from the definition's tick.
+// Heroic buffs, the per-instance reset, the CC duties, the threat brake and the human tank calls, from
+// the definition's tick.
 void LdwTick(PlayerbotAI* botAI);
 
 inline bool LdwIsEmpty(Position const& pos) { return !pos.GetPositionX() && !pos.GetPositionY(); }

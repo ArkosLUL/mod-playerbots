@@ -12,6 +12,7 @@
 #include "ICCMultipliers_Deathwhisper.h"
 #include "ICCSeams.h"
 #include "ICCTriggers_Deathwhisper.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 
 namespace Family = RaidEncounterRules::Family;
@@ -29,6 +30,7 @@ void DefineDeathwhisper(EncounterBuilder& e)
     // walks fight. Dark Reckoning is trash, never up while she is.
     e.Node<IccLadyDeathwhisperDodgeTrigger, IccLadyDeathwhisperDodgeAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
     e.Node<IccDarkReckoningTrigger, IccDarkReckoningAction>(ACTION_EMERGENCY + 5, EncounterRow::Mover);
+    e.Node<IccLadyDeathwhisperDefensiveTrigger, IccLadyDeathwhisperDefensiveAction>(ACTION_RAID + 7);
     e.Node<IccLadyDeathwhisperFrostboltTrigger, IccLadyDeathwhisperFrostboltAction>(ACTION_RAID + 5);
     e.Node<IccLadyDeathwhisperDominateMindTrigger, IccLadyDeathwhisperDominateMindAction>(ACTION_RAID + 4);
     e.Node<IccLadyDeathwhisperTauntTrigger, IccLadyDeathwhisperTauntAction>(ACTION_RAID + 3);
@@ -36,6 +38,7 @@ void DefineDeathwhisper(EncounterBuilder& e)
     e.Node<IccLadyDeathwhisperTargetTrigger, IccLadyDeathwhisperTargetAction>(ACTION_RAID + 1);
 
     e.LiveMultiplier<IccLadyDeathwhisperMultiplier>(Family::Spell);
+    e.LiveMultiplier<IccLadyDeathwhisperBrakeMultiplier>(Family::Spell | Family::Melee);
 
     e.Exclusive("lady deathwhisper dodge", Role::Any, &LdwDodging, 0, {IccLadyDeathwhisperDodgeAction::Name});
     e.Exclusive("lady deathwhisper dark reckoning", Role::Any, &LdwDarkReckoningDodging, 0,
@@ -48,6 +51,9 @@ void DefineDeathwhisper(EncounterBuilder& e)
     // She carries taunt diminishing returns, so only the swap rule taunts her, and the tanks' own taunt
     // takes the adds.
     e.Block("lady deathwhisper taunts", Role::Tank, &LdwFightLive, Family::Taunt);
+    // The class nodes press these on a bare health trigger; the defensive node spends them on the hits
+    // that are coming.
+    e.Block("lady deathwhisper tank defensives", Role::Tank, &LdwFightLive, 0, HeldTankDefensiveNames());
     e.OwnTargeting("lady deathwhisper targeting", Role::Any, &IccResolverPicks<&LdwTarget>);
 
     e.Tick(&LdwTick);
