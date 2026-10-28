@@ -316,7 +316,7 @@ combat engine for good.
 
 **The paladin resistance auras still have the old defect:** `BossFireResistanceAction`,
 `BossFrostResistanceAction` and `BossShadowResistanceAction` add `+rfire`/`+rfrost`/`+rshadow` and never
-remove them, evicting the sibling blessing strategy for good. Live at Razorscale, Ignis, Freya, Thorim,
+remove them, evicting the sibling blessing strategy for good. Live at Razorscale, Ignis, Freya,
 Mimiron, Sara, Yogg-Saron, Koralon and Toravon; the fix is a per-boss hold multiplier for the paladin
 aura slot.
 

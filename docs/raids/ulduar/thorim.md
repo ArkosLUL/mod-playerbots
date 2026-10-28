@@ -673,7 +673,8 @@ on it and no bot paladin can qualify. And pinning the hunter's aspect but not th
 the exclusive slot be traded back on the next GCD. `ThorimTickFrostAuraPaladin` latches
 `frostAuraPaladin` from **bot paladins only** (lowest guid, must know the spell), the
 `thorim frost aura` node casts it, and the `thorim frost aura hold` Block pins the slot against the
-competing auras. Nobody is elected until `sifJoined` latches on Sif's first Blizzard: in normal mode she
+competing auras. The shared node is gone: it left `+rfrost` on the first paladin, a tank one too, for good.
+Nobody is elected until `sifJoined` latches on Sif's first Blizzard: in normal mode she
 never leaves her balcony.
 
 Nature needs nothing more: Aspect of the Wild was up in all three pulls measured.
