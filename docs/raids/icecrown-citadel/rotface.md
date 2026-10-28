@@ -1,83 +1,147 @@
 # Rotface
 
-Boss id 5, trace slug `rotface`, prefix `rf.` ([README](README.md)). Code: stem `Rotface`
-(`src/Ai/Raid/ICC/*/ICC*_Rotface.*`). Mechanics: `boss_rotface.cpp`.
+Boss id 5, slug `rotface`, prefix `rf.`. Code: stem `Rotface` (`src/Ai/Raid/ICC/*/ICC*_Rotface.*`); nodes
+`icc rotface` dodge, tank defensive, dispel, ooze taunt, kite, carrier, target, stand; multipliers `icc
+rotface ooze splash`, `icc rotface self cure`. Raid conventions: [README.md](README.md). Core: `boss_rotface.cpp`.
 
 ## Mechanics
 
-- **Mutated Infection** row 1991 (69674/71224/73022/73023) on one player every 14 s; 25-man only, the
-  interval drops 2 s every 90 s to a floor of 8 s. Its removal summons a Little Ooze 36897 that seeds
-  500,000 threat on the player.
-- **Oozes**: two Little Oozes merge into a Big Ooze 36899 (25-man 38123); a Big Ooze absorbing another
-  ooze gains Unstable Ooze stacks and at 5 casts Unstable Ooze Explosion 69839, a 4 s cast.
-- **A Big Ooze is tankable.** At its first update it resets its threat list and attacks the nearest
-  player; after that only threat decides, and nothing seeds it again. Its immunity set -361 blocks
-  snares, stuns and roots but neither the taunt aura (11) nor attack-me (114), so a class taunt lands,
-  where the Little Ooze's -362 blocks both. `flags_extra` 0x80000 puts taunts on DR, 100/65/42/27%
-  duration, then immune until 15 s after the last one fades
-  ([raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)).
-  Run speed 0.57, about 4 yd/s.
-- **Slime Spray** 69508, a 1.5 s cast at a random non-tank every 20 s; **Ooze Flood** from a quarter
-  of the room every 25 s, first at 8 s.
-- **Vile Gas, heroic**: Putricide casts 69240 (73019/73020) from the balcony at a random ranged player
-  every 15-20 s, triggered, so no line of sight; 6 s.
-- His state reaches `IN_PROGRESS` only at Putricide's balcony point, so the trace opens on the engage.
+Ids are 10N/25N/10H/25H where they differ; the Spell constructor remaps a cast, so code matches the base
+id through `GetSpellIdForDifficulty`. Every area below is a creature's or a player's on players: centre to
+centre.
 
-No phase.
+| Ability | Script | Guide | Bots |
+|---|---|---|---|
+| Mutated Infection 69674/71224/73022/73023 | From 14 s on one random player but his victim, every 14 s; 25-man only, 2 s shorter every 90 s down to 6 s at 6:00. Disease, 12 s, 3.4-3.6k (10N), 3.9-4.1k (25N, 10H), 4.9-5.1k (25H) a second, healing taken -50% (-75% heroic). Its removal, by expiry, cure or death, summons a Little Ooze on the spot | Bring the ooze to the Big Ooze; hold the first cure, cure the second at once beside the first ooze, later ones beside the Big Ooze | Carrier walk (`rf.carrier`) and a cure duty (`rf.dispel`) |
+| Little Ooze 36897 | 500k threat on its player, taunt-immune, 8 yd/s. Weak Radiating Ooze 10 yd every 2 s; Sticky Ooze on its victim 5 s in, then every 15 s. Merges with another Little Ooze within 8 yd (every 0.5 s) into a Big Ooze | Move it out of the raid | Carrier walk; area damage held near it |
+| Big Ooze 36899 (25: 38123) | 4 yd/s. Opens on the nearest player, then threat only. Radiating Ooze 10 yd every 2 s; absorbs a Little Ooze (+1) or a Big Ooze (stacks added) within 8 yd: Unstable Ooze 69558, +20% a stack. Taunt diminishing returns (0x80000); immune to snares, stuns, roots (-361) | Off-tank grabs every ooze, builds threat while it is weak, kites it later; brings a second Big Ooze to the first | The kiter (`rf.kiter`, `rf.bigooze`) |
+| Unstable Ooze Explosion 69839 | At 5 stacks, 4 s cast. At its end a stalker 38107 marks where every player and pet stands, and a missile flies there from the ooze at 5 yd/s: 9.8-10.3k (10N), 11.7-12.3k (25N, 10H), 14.6-15.4k (25H) within 6 yd. The ooze turns invisible 2 s later | Everyone steps 6+ yd at the cast's end, never onto another's spot; melee to the other leg | Dodge clear of every mark until it lands |
+| Sticky Ooze 37006 | A 30 s puddle: 2.9-3.1k (10), 3.9-4.1k (25) a second within 6 yd, -50% speed | Avoid | Dodge; slots and kite legs keep clear |
+| Slime Spray 69508 | From 20 s, every 20 s, at a random non-tank: a stalker 37986 at the target, 1.5 s cast, 5 s channel. Each second 69507/71213/73189/73190 hits a 25° cone (10N, `spell_cone`) or 24° (others) at any range, and anyone within 2 yd of him | Melee run through him; ranged step aside | Dodge out of the cone |
+| Ooze Flood | From 8 s, every 25 s, one quadrant: random first, then counter-clockwise. Its two ground stalkers 37013 carry 69783/69797/69799/69802 for 5 s, then 69788 for 20 s, each casting 69789/71215/71587/71588 every second within 25 yd: 4.4-4.6k (10N), 5.4-5.6k (25N, 10H), 6.3-6.7k (25H), slowed. Never within 13.9 yd of his spawn | Avoid the wet quadrant | Slots there swap at the warning; dodge; kite legs stay dry (`rf.flood`) |
+| Vile Gas, heroic | Putricide casts 69240 (73019/73020) from 15-20 s, every 15-20 s, triggered, at a random player more than 14.5 yd from him when 3 (10) or 8 (25) stand there, else anyone. 8 yd round the victim at cast; 6 s: damage, -50% speed and confusion (69248), and every carrier hits allies in 8 yd every 2 s | Ranged and healers 8 yd apart | Spread slots; others step out of 8 yd round a carrier |
 
-## Tactics
+He has 8 yd combat reach, so his melee reaches 10.8 yd and a hunter's minimum range against him 15.8 yd. He
+follows only a tank more than 10.8 yd away. No phase, no Berserk in this script. His boundary is x 4385..4505, y
+3082..3195. His state reaches `IN_PROGRESS` only at Putricide's balcony point, seconds in: every node, rule
+and the tick key on him being in combat, the splash multiplier waits for live.
 
-- The main tank drags him to `ICC_ROTFACE_CENTER_POSITION_BOSS`; melee stay on him. Every tank and
-  melee keeps the skull on him.
-- **Big Oozes**: the assist tank taunts each one not on it and walks to the nearest such, then kites
-  the nearest on a 24-34 yd ring around the centre, 13 yd ahead of the ooze and 30 yd from any flood.
-  The main tank takes this over while no assist tank lives and a Big Ooze is not on one.
-- A bot with a Little Ooze, or 4 s or less of Mutated Infection, walks to the assist tank kiting a Big
-  Ooze so the oozes merge there, else to the main tank. Mutated Infection is never dispelled.
-- **Explosion**: non-tanks run to one of 25 slots on a 40 yd ring round the centre, at most two bots a
-  slot (`rfExplosionSlotMemory`, kept between explosions while still safe), hold 2 s, and the trigger
-  stays on 6 s after the cast.
-- **Vile Gas**: the victim, and anyone carrying the aura, run 40 yd out from the centre on the first
-  bearing clear of the Big Ooze (20 yd) and floods (30 yd), in 15 degree steps off its own, then hold
-  4 s. A window idle for 2 s drops its spot, so the next cast picks one against the room as it is.
-- Heroic ranged and healers hold a 22-spot grid; normal ranged stand 3.5 yd off him and on him during
-  Slime Spray.
+## Duties
+
+- **Main tank**: the bot tank he hits holds a stand 5 yd east of his spawn (4445.87, 3137.31). Once he is
+  4.5 yd off it, the stand moves 9 yd past the spawn on the far side from him until he is back within 2.5.
+- **Kiter** (`rf.kiter`): one bot tank, not the one holding him, an assist tank first, kept while it can.
+  Its duty (`rf.bigooze`): with carriers out and no Big Ooze it waits at the ooze spot; it taunts a Big
+  Ooze not on it from 30 yd (`icc rotface ooze taunt`, never at the immune level of taunt diminishing
+  returns) and walks to it; it holds one under 3 stacks at the ooze spot while within 15 yd of it, else
+  kites it: once the ooze is within 15 yd, a leg 10-40 degrees along the kite ring (36 yd),
+  counter-clockwise first, to a point 16 yd from the ooze, dry by 28 yd, clear of puddles, its walk not
+  through the ooze's aura or a flood. It holds while it carries an ooze itself. Towing its ooze, it never
+  dodges within 32.5 yd of his spawn. Generic taunts are blocked for it.
+- **Ooze spot** (`rf.oozespot`): the kite ring point at the middle of the quadrant opposite the latest
+  flood, so it moves on a quadrant with each flood and never floods while it is the spot.
+- **Carriers** (`rf.carrier`): a bot with Mutated Infection or a Little Ooze on it walks to the Big Ooze
+  (the kiter's first), else another Little Ooze, else the ooze spot, and stops within 4 yd.
+- **Cure duty** (`rf.dispel`): an infected player within 6 yd of the Big Ooze, or of another Little Ooze,
+  or of another infected player with neither up, or under 35%, gets the nearest bot priest, paladin or
+  shaman with a disease cure ready within 30 yd and in sight. The class cure nodes, Stoneform and Cleansing
+  Totem are blocked; a paladin's own Cleanse and Purify through `icc rotface self cure`, since they report
+  `cleanse` and `purify`, not the names they register under.
+- **Spread** (`rf.slot`): healers on the inner ring (12 yd, 6 slots), ranged on the outer (21.5 yd, 13),
+  each on the other ring when theirs is full, hunters outer only, the rest the stack 8 yd behind him. A
+  healer's first slot leaves the widest gap to the other healers, so with two or more one always reaches
+  the kiter (inner slots 90 degrees off it are 38 yd away).
+  Every slot is 9.5 yd or more from every other. A slot within 1.75 yd of a flood or puddle or 11.75 of a
+  Big Ooze changes for the nearest usable one. Reach, heal reach and spell movers are held while a stand
+  holds.
+- **Dodge** (`rf.dodge`, emergency, forced): within half a yard of a hazard (Slime Spray cone, a mark not
+  yet landed, a puddle, a flood or its warning, a Vile Gas carrier for others, a Big Ooze for all but the
+  kiter and carriers), to the nearest spot clear of all of them by 2.5 yd, 0.75 when nothing is, its walk
+  across none, the cone cleared by 2 yd; melee and the main tank within 9 yd of him first. A cast is cut
+  for the spray, a mark landing within 2.5 s, a puddle, a gas carrier, a flood or its last 1.5 s of
+  warning. A stand
+  walks back only once no hazard covers its spot; generic movers are held while a mark flies or he sprays.
+- **Targets** (`rf.target`): the kiter's Big Ooze, then a player's skull on him or an ooze for all but the
+  tank holding him, else him. Area damage from a damage dealer is held while an ooze is within 15 yd of it
+  or its target. Army of the Dead (ghouls taunt the oozes) and Death Grip (all three are grip immune) are
+  held.
+- **Tank defensives** (`rf.defensive`): the kiter under a Big Ooze of 4 stacks within 6 yd, any tank under
+  40%; class buttons held to 25%. A human tank gets the same as calls (`rf.humancall`).
+
+Every stand is computed round his spawn, bearings counter-clockwise from east: slot n of 1-6 at
+30 + 60(n-1) degrees on the inner ring, of 7-19 at 13.85 + 27.69(n-7) on the outer, the stack at 180, the
+tank spot at 0, the ooze spots at 45 + 90q on the kite ring, kite points every 10 degrees. All are
+navprobe-clean (`--nav 0x09`, settled z 360.385, in sight of his spawn): the rings at 5, 8, 9 (drag), 12,
+21.5 and 36 yd, and paths from the outer ring to the kite ring and across the room. Gameobject collision
+isn't in navprobe's sight. A flood takes 4-5 outer slots; inner slot 3 sits 1.96 yd outside the north-west
+flood.
+
+## Decisions
+
+| Choice | Source | Alternative |
+|---|---|---|
+| Spread on two rings, 9.5 yd apart, on every difficulty | Warcraft Tavern: everyone 8 yd apart; Vile Gas 8 yd plus park tolerance | Wowhead normal: stack behind him |
+| Healers inside 14.5 yd, ranged outside | Vile Gas picks outside while 3 / 8 stand there, so healers aren't its targets | One ring |
+| Kite ring 36 yd, counter-clockwise first | 14.5 yd past the outer ring; a flood moves counter-clockwise, so a kiter behind it is never flooded onto | Kite ring 24-34 yd; fixed points |
+| Hold the Big Ooze at the ooze spot under 3 stacks, from within 15 yd | Wowhead: threat lead while it is weak, kite once stacked; a straight walk to a far spot drags its aura through the raid | Kite from the pickup |
+| Ooze spot opposite the latest flood | It never floods while it is the spot; one held into its own warning leaves the way out through the raid | Hold it until it floods, then jump across the room |
+| Healers' first slots spread round the inner ring | Kiter in heal reach at any bearing with two healers | Nearest slot |
+| Taunt only off the kiter, never at the immune level | 0x80000 on the ooze | Taunt every ooze each cooldown |
+| Cure at the merge, the first not at all, any under 35% | Wowhead's three-step order; -50/75% healing on a 12 s DoT | Never cure; cure at once |
+| Explosion: dodge every mark until its missile lands | The script: marks at cast end, 5 yd/s flight | 25 slots on a 40 yd ring |
+| Slime Spray: step out of the cone | The script's cone and 2 yd boundary; the old stack onto his centre was inside it | Run through him |
+| Vile Gas: spread, others step away | Its carrier is confused for 6 s | Carrier runs 40 yd out |
+| Main tank drags him back past 4.5 yd | His 10.8 yd reach keeps him where the pull left him | No drag |
+| Only a second bot tank kites | Humans decision; the main tank holds him | Main tank takes over |
+| The holder and the kiter ignore a player's skull | Each must keep its unit; Saurfang's holder does the same | The skull wins |
+| No opening positions | 8 s to the first flood, 14 s to the first infection | Pre-pull stands |
 
 ## Cheats
 
-Removed:
-
-- `rf.nitro` (5 sites): the bot's own Nitro Boosts through `UseNitroBoosts`, its 3 min cooldown
-  included; without boots it walks.
-- `rf.spitefulfury` (3): the Big Ooze pickup is the plain class taunt, which lands per the immunity
-  set above, with nothing resetting the ooze's threat afterwards.
-
-None kept.
+None before, none now: `rf.nitro` and `rf.spitefulfury` were removed earlier. The skull icon write is gone.
 
 ## Known gaps
 
-- **Nothing holds a Big Ooze but the taunt.** The assist tank never attacks one, so it keeps an ooze
-  only by the threat the taunt matched. Heal threat reaches every Big Ooze, since zone combat puts the
-  whole raid on its list, and can pull one onto a healer; repeated taunts run into DR. `--oozes` gives
-  the share of Big Ooze time on a tank.
-- Skull by raid icon (README).
-- `IccRotfaceTankPositionAction::FindAssignedBigOoze` has no caller.
+- The kiter keeps a kited Big Ooze by its threat and instants alone; heal threat can still pull it. The
+  taunt hits the immune level after four taunts inside 15 s of each other. `--oozes` gives the share on a
+  tank.
+- No kite plan through a flood: with no dry leg, nor a dodge spot 32.5 yd out, the kiter holds and tanks
+  the ooze where it stands. No Hand of Freedom or Anti-Magic Shell for a slowed kiter.
+- Curers never walk: in 10-man a merge on the kite ring can sit beyond 30 yd of every curer, and the
+  carrier then runs its 12 s out. With one healer, or the healers dead, the far side is out of heal reach
+  too.
+- A Cleansing Totem already down or dropped by Call of the Elements still cures (only with the opt-in
+  `cleansing` water totem strategy).
+- A class rotation casting at the ooze can turn the kiter mid-leg.
+- Overflow ranged and healers stand in the stack; overflow hunters get no stand.
+- A carrier crossing the raid splashes it (Weak Radiating Ooze); nobody steps away from a Little Ooze.
+- A mark beside the kiter lands too soon to clear. On heroic the kiter, 36 yd out, is a Vile Gas target,
+  and 6 s of confusion lets the ooze catch it.
+- With one bot tank no one kites. Humans hold no duty, but get cured and their gas avoided.
+- No 631 trace from this build yet, and never built.
 
 ## What a trace answers
 
 | Key | Shape | Says |
 |---|---|---|
-| `rf.bigooze` | per tank | `pickup <ooze>` walking to one not on it, `kite <ooze>` once all are, `none` with none up or for the main tank while the assist tank lives |
-| `rf.explosionslot` | per bot | Its escape slot, 0-24, kept between explosions; an erase writes `0`, a real slot too |
+| `rf.target` | per bot | The resolver's rule: `skull`, `ooze`, `boss` |
+| `rf.kiter` | raid | The elected kiter's guid, `0` none |
+| `rf.bigooze` | kiter | `none`, `spot`, `pickup <ooze>`, `tank <ooze>`, `kite <ooze>`, `hold <ooze>` |
+| `rf.carrier` | per bot | Merge walk to `ooze`, `little`, `spot`; `none` |
+| `rf.dispel` | infected → bot | The cure duty; `0` released |
+| `rf.slot` | per bot | 1-6 inner, 7-19 outer, 20 the stack; `0` released |
+| `rf.flood` | raid | The flooding quadrant counter-clockwise from east, 1-4; `0` none |
+| `rf.oozespot` | raid | The ooze spot's quadrant, 1-4; `0` no merge pending |
+| `rf.dodge` | per bot | `<hazard> <branch> <yards>`, branch `move`, `tight` or `cross`; `hold`, `<hazard> none`, `<hazard> locked`, `pinned` |
+| `rf.defensive` | per tank | The ladder's pick, `idle` outside a window |
+| `rf.humancall` | per sender | The button a human tank was told to press |
 | `rf.vilegas` | event | Heroic: the victim of each cast, `txt` the spell id |
-| `rf.vilegasspot` | per bot | Heroic: `offset N` steps of 15 degrees it turned, `blocked` with no clear bearing, `none` when its window closes |
-| `rf.skull` | per bot | `boss <guid>`, only from the bot that moved the icon; a repeat of its own last placement writes nothing |
 
-`tools/botobs/bosses/rotface.py`; its banner names declared keys the pull never wrote, sparing the
-Vile Gas pair on normal:
+`tools/botobs/bosses/rotface.py`; its banner names declared keys the pull never wrote, sparing Vile Gas
+on normal: `--oozes` (Big Ooze time on target by role, the kiter, its duty), `--carriers` (merge walks, cure
+duties), `--dodges` (dodges by hazard and branch, per bot), `--spread` (floods, ooze spot, slots),
+`--vilegas`, `--cheats`.
 
-- `--oozes`: the Big Oozes' time on target by role, and each tank's `rf.bigooze` runs;
-- `--explosion`: the explosion casts and each bot's slots;
-- `--vilegas`: per cast, the victim and the spot it took, and who ran from the splash;
-- `--skull`: each move of the skull;
-- `--cheats`: this encounter's keys plus the raid-wide `icc.` ones.
+Next pull, 25N: the Big Oozes over 90% of their time on the kiter, every cure duty landing within 6 yd of
+the merge, no `<hazard> none` dodge, no explosion mark hitting a second player, no slot holder hit by a
+flood. 25H: no Vile Gas victim within 8 yd of another, the infected alive to the merge.

@@ -28,7 +28,7 @@ ROTFACE = CREATURE | 700
 OOZE_A = CREATURE | 701
 OOZE_B = CREATURE | 702
 BULWARK = 7301  # main tank
-AEGIS = 7302    # assist tank
+AEGIS = 7302    # assist tank, the kiter
 MEND = 7303     # healer
 ARCANE = 7304   # ranged
 ARKOS = 7305    # human ranged
@@ -61,23 +61,41 @@ def pull(boss: str = "rotface", diff: int = 3) -> list[dict]:
         {"t": 1, "e": "unit", "g": OOZE_B, "en": 36899, "n": "Big Ooze"},
         # Ooze A sits on Mend for a second before Aegis picks it up; ooze B goes straight to Aegis.
         snap(10000, MEND), snap(11000, AEGIS), snap(12000, AEGIS, AEGIS), snap(13000, AEGIS, AEGIS),
-        note(100, BULWARK, "rf.skull", f"boss {ROTFACE}"),
+        note(100, BULWARK, "rf.target", "boss"),
+        note(100, ARCANE, "rf.target", "boss"),
+        note(9000, AEGIS, "rf.target", "ooze"),
+        note(100, 0, "rf.kiter", "0"),
+        note(200, 0, "rf.kiter", str(AEGIS)),
         note(500, AEGIS, "rf.bigooze", "none"),
-        note(500, BULWARK, "rf.bigooze", "none"),
+        note(8000, AEGIS, "rf.bigooze", "spot"),
         note(10000, AEGIS, "rf.bigooze", f"pickup {OOZE_A}"),
-        note(11000, AEGIS, "rf.bigooze", f"kite {OOZE_A}"),
-        {"t": 20000, "e": "cast", "s": OOZE_A, "sp": rf.SPELL_UNSTABLE_OOZE_EXPLOSION, "tgt": 0, "ct": 4000},
-        note(20100, ARCANE, "rf.explosionslot", "3"),
-        note(20100, MEND, "rf.explosionslot", "4"),
-        note(30000, ARCANE, "rf.explosionslot", "5"),
-        # Vile Gas on Arcane, which runs; on the human, who has no spot; Mend runs from the splash.
+        note(11000, AEGIS, "rf.bigooze", f"tank {OOZE_A}"),
+        note(30000, AEGIS, "rf.bigooze", f"kite {OOZE_A}"),
+        # Arcane is infected, waits at the spot for a partner, then walks to the Big Ooze and gets cured.
+        note(100, ARCANE, "rf.carrier", "none"),
+        note(4000, ARCANE, "rf.carrier", "spot"),
+        note(10000, ARCANE, "rf.carrier", "ooze"),
+        note(14000, ARCANE, "rf.carrier", "none"),
+        note(13000, ARCANE, "rf.dispel", str(MEND)),
+        note(13500, ARCANE, "rf.dispel", "0"),
+        note(100, MEND, "rf.carrier", "none"),
+        # The flood moves on, Arcane's outer slot floods and it takes another.
+        note(100, ARCANE, "rf.slot", "7"),
+        note(100, MEND, "rf.slot", "1"),
+        note(9000, ARCANE, "rf.slot", "12"),
+        note(8000, 0, "rf.flood", "1"),
+        note(33000, 0, "rf.flood", "2"),
+        note(4000, 0, "rf.oozespot", "3"),
+        note(40000, 0, "rf.oozespot", "0"),
+        # An explosion: Arcane and Mend step off their marks, Mend finds nothing clear from a puddle.
+        note(20100, ARCANE, "rf.dodge", "mark move 9"),
+        note(20200, ARCANE, "rf.dodge", "hold"),
+        note(20100, MEND, "rf.dodge", "mark tight 7"),
+        note(26000, MEND, "rf.dodge", "sticky none"),
+        note(27000, BULWARK, "rf.dodge", "spray move 3"),
         note(15000, ARCANE, "rf.vilegas", "73020"),
-        note(15050, ARCANE, "rf.vilegasspot", "offset 2"),
-        note(15100, MEND, "rf.vilegasspot", "blocked"),
         note(35000, ARKOS, "rf.vilegas", "73020"),
         note(40000, ARCANE, "rf.vilegas", "73020"),
-        note(40050, ARCANE, "rf.vilegasspot", "none"),
-        note(40050, ARCANE, "rf.vilegasspot", "offset 0"),
         {"t": 25000, "e": "cheat", "g": AEGIS, "k": "rf.spitefulfury", "n": 3},
         {"t": 26000, "e": "cheat", "g": MEND, "k": "pp.freeooze", "n": 1},
         {"t": 60000, "e": "end", "out": "wipe"},
@@ -105,42 +123,61 @@ class Oozes(unittest.TestCase):
 
     def test_duty_names_the_ooze(self):
         rows = rf.duty_rows(load(pull()))
-        self.assertEqual(rows[AEGIS], [("none", 500, 10000), ("pickup Big Ooze", 10000, 11000),
-                                       ("kite Big Ooze", 11000, 60000)])
-        self.assertEqual(rows[BULWARK], [("none", 500, 60000)])
+        self.assertEqual(rows[AEGIS], [("none", 500, 8000), ("spot", 8000, 10000), ("pickup Big Ooze", 10000, 11000),
+                                       ("tank Big Ooze", 11000, 30000), ("kite Big Ooze", 30000, 60000)])
+
+    def test_section_names_the_kiter(self):
+        self.assertIn("  kiter: none@0:00.100, Aegis@0:00.200\n", printed(rf.show_oozes, load(pull())))
 
 
-class Explosion(unittest.TestCase):
+class Carriers(unittest.TestCase):
+    def test_walks_skip_none_and_count_rules(self):
+        text = printed(rf.show_carriers, load(pull()))
+        self.assertIn("  merge walks: ooze 1, spot 1\n", text)
+        self.assertIn("       0:04.000   0:06.000  spot\n", text)
+        self.assertNotIn("Mend\n      ", text)
+
+    def test_a_release_is_no_duty(self):
+        self.assertEqual(rf.dispel_rows(load(pull())), [(13000, ARCANE, MEND)])
+        self.assertIn("    0:13.000  Arcane          by Mend\n", printed(rf.show_carriers, load(pull())))
+
+
+class Dodges(unittest.TestCase):
+    def test_counts_drop_yards_and_holds(self):
+        self.assertEqual(rf.dodge_counts(load(pull())),
+                         {"mark move": 1, "mark tight": 1, "sticky none": 1, "spray move": 1})
+
     def test_section(self):
-        self.assertEqual(printed(rf.show_explosion, load(pull())), (
-            "EXPLOSION\n"
-            "  1 Unstable Ooze Explosion cast(s): 0:20.000\n"
+        text = printed(rf.show_dodges, load(pull()))
+        self.assertIn("  by bot: Mend 2, Arcane 1, Bulwark 1\n", text)
+
+
+class Spread(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(rf.show_spread, load(pull())), (
+            "SPREAD\n"
+            "  flood: NE@0:08.000, NW@0:33.000\n"
+            "  ooze spot: SW@0:04.000, none@0:40.000\n"
             "\n"
-            "  rf.explosionslot per bot, each slot it held\n"
-            "    Arcane          3@0:20.100, 5@0:30.000\n"
-            "    Mend            4@0:20.100\n"))
+            "  rf.slot per bot, each slot it held\n"
+            "    Arcane          outer 7@0:00.100, outer 12@0:09.000\n"
+            "    Mend            inner 1@0:00.100\n"))
+
+    def test_slot_names(self):
+        self.assertEqual([rf.slot_name(value) for value in ("0", "6", "19", "20")],
+                         ["released", "inner 6", "outer 19", "stack"])
 
 
 class VileGas(unittest.TestCase):
-    def test_each_cast_finds_its_victims_spot(self):
-        rows = rf.vile_gas_rows(load(pull()))
-        self.assertEqual([(row["t"], row["victim"], row["spot"]) for row in rows], [
-            (15000, ARCANE, "offset 2"), (35000, ARKOS, None), (40000, ARCANE, "offset 0"),
-        ])
-
-    def test_section_marks_humans_and_the_splash(self):
+    def test_section_marks_humans(self):
         text = printed(rf.show_vilegas, load(pull()))
-        self.assertIn("     0:35.000  Arkos           human\n", text)
-        self.assertIn("  ran without being the target: Mend\n", text)
+        self.assertIn("  3 cast(s)\n", text)
+        self.assertIn("     0:35.000  Arkos (human)\n", text)
+        self.assertIn("  by victim: Arcane 2, Arkos 1\n", text)
 
     def test_normal_mode_has_none(self):
         self.assertIn("normal mode: Putricide casts no Vile Gas on Rotface",
                       printed(rf.show_vilegas, load(pull(diff=1))))
-
-
-class Skull(unittest.TestCase):
-    def test_section(self):
-        self.assertEqual(printed(rf.show_skull, load(pull())), "SKULL\n     0:00.100  Bulwark         boss Rotface\n")
 
 
 class Cheats(unittest.TestCase):
@@ -155,13 +192,18 @@ class Cheats(unittest.TestCase):
 
 class Banner(unittest.TestCase):
     def test_normal_mode_does_not_miss_the_heroic_probes(self):
-        records = [rec for rec in pull(diff=1) if not str(rec.get("k", "")).startswith("rf.vilegas")]
-        self.assertIn("all rf.* probes present", printed(rf.show_banner, load(records)))
+        records = [rec for rec in pull(diff=1) if rec.get("k") != "rf.vilegas"]
+        self.assertNotIn("rf.vilegas", rf.missing_probes(load(records)))
 
     def test_heroic_names_them(self):
-        records = [rec for rec in pull() if not str(rec.get("k", "")).startswith("rf.vilegas")]
-        self.assertIn("probes absent from this trace: rf.vilegas, rf.vilegasspot",
-                      printed(rf.show_banner, load(records)))
+        records = [rec for rec in pull() if rec.get("k") != "rf.vilegas"]
+        self.assertIn("rf.vilegas", rf.missing_probes(load(records)))
+
+    def test_every_probe_the_pull_writes_counts(self):
+        gone = rf.missing_probes(load(pull()))
+        for key in ("rf.target", "rf.kiter", "rf.bigooze", "rf.carrier", "rf.dispel", "rf.slot", "rf.flood",
+                    "rf.oozespot", "rf.dodge", "rf.vilegas"):
+            self.assertNotIn(key, gone)
 
 
 class EveryView(unittest.TestCase):

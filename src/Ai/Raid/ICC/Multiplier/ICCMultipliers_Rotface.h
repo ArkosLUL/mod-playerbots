@@ -9,18 +9,22 @@
 
 #include "Multiplier.h"
 
-class IccRotfaceMultiplier : public Multiplier
+// Holds a damage dealer's area damage near an ooze: the damage buys threat on it, and a Big Ooze taken off
+// its kiter walks into the raid.
+class IccRotfaceOozeSplashMultiplier : public Multiplier
 {
 public:
-    IccRotfaceMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc rotface") {}
+    IccRotfaceOozeSplashMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc rotface ooze splash") {}
     float GetValue(Action* action) override;
 };
 
-/*class IccRotfaceGroupPositionMultiplier : public Multiplier
+// A paladin's own disease cures register as "cleanse disease" and "purify disease" but are named "cleanse"
+// and "purify", so the cure rule's name list never matches them.
+class IccRotfaceSelfCureMultiplier : public Multiplier
 {
 public:
-    IccRotfaceGroupPositionMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc rotface group position") {}
+    IccRotfaceSelfCureMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc rotface self cure") {}
     float GetValue(Action* action) override;
-};*/
+};
 
 #endif

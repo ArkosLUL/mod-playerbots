@@ -7,95 +7,106 @@
 #ifndef PLAYERBOTS_ICCACTIONS_ROTFACE_H
 #define PLAYERBOTS_ICCACTIONS_ROTFACE_H
 
+#include <string>
+
 #include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
+#include "ICCActions_RaidWide.h"
 #include "ICCHelpers_Rotface.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include "Position.h"
+#include "RaidDirectTargeting.h"
 
-class IccRotfaceTankPositionAction : public AttackAction
+// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
+// re-issued each tick to a bot still walking never lands.
+class IccRotfaceWalkAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc rotface tank position";
+    IccRotfaceWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
-    IccRotfaceTankPositionAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
-    bool Execute(Event event) override;
-
-    bool MarkBossWithSkull(Unit* boss);
-    bool PositionMainTankAndMelee(Unit* boss, Unit* smallOoze = nullptr);
-    bool HandleAssistTankPositioning(Unit* boss);
-    Unit* FindAssignedBigOoze(Unit* boss, std::vector<Unit*>& bigOozes);
-    bool HandleBigOozeKiting(Unit* bigOoze);
-};
-
-class IccRotfaceGroupPositionAction : public AttackAction
-{
-public:
-    static constexpr char const* Name = "icc rotface group position";
-
-    IccRotfaceGroupPositionAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
-    bool Execute(Event event) override;
-
-    //bool MoveAwayFromBigOoze(Unit* bigOoze);
-    bool HandlePuddleAvoidance(Unit* boss);
-    bool MoveAwayFromPuddle(Unit* boss, Unit* puddle, float puddleDistance);
-    bool HandleOozeTargeting();
-    bool HandleOozeMemberPositioning(Unit* mySmallOoze);
-    bool PositionRangedAndHealers(Unit* boss,Unit* smallOoze);
-    bool PositionHeroicGrid(Unit* boss);
-};
-
-class IccRotfaceMoveAwayFromExplosionAction : public MovementAction
-{
-public:
-    static constexpr char const* Name = "icc rotface move away from explosion";
-
-    IccRotfaceMoveAwayFromExplosionAction(PlayerbotAI* botAI, std::string const name = Name)
-        : MovementAction(botAI, name),
-          _escapePosition(0.0f, 0.0f, 0.0f),
-          _hasEscape(false),
-          _holdUntil(0) {}
-    bool Execute(Event event) override;
+protected:
+    // The latched spot while the bot is still walking to it, else nullptr
+    Position const* WalkInFlight();
+    // False without booking anything while a cast pins the bot's feet
+    bool WalkTo(Position const& spot, MovementPriority priority);
+    void DropWalk() { walking = false; }
 
 private:
-    Position _escapePosition;
-    bool _hasEscape;
-    uint32 _holdUntil;
+    bool BookedOnWalkSpot();
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
 };
 
-class IccRotfaceAvoidVileGasAction : public MovementAction
+class IccRotfaceDodgeAction : public IccRotfaceWalkAction
 {
 public:
-    static constexpr char const* Name = "icc rotface avoid vile gas";
+    static constexpr char const* Name = "icc rotface dodge";
 
-    IccRotfaceAvoidVileGasAction(PlayerbotAI* botAI, std::string const name = Name)
-        : MovementAction(botAI, name),
-          _safeSpot(0.0f, 0.0f, 0.0f),
-          _hasSafeSpot(false),
-          _lastRunMs(0) {}
+    IccRotfaceDodgeAction(PlayerbotAI* botAI) : IccRotfaceWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
+};
 
-private:
-    Position _safeSpot;
-    bool _hasSafeSpot;
-    uint32 _lastRunMs;
+class IccRotfaceCastTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc rotface cast tank defensive";
+
+    IccRotfaceCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccRotfaceDispelAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc rotface dispel";
+
+    IccRotfaceDispelAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccRotfaceOozeTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc rotface ooze taunt";
+
+    IccRotfaceOozeTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccRotfaceKiteAction : public IccRotfaceWalkAction
+{
+public:
+    static constexpr char const* Name = "icc rotface kite";
+
+    IccRotfaceKiteAction(PlayerbotAI* botAI) : IccRotfaceWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccRotfaceCarrierAction : public IccRotfaceWalkAction
+{
+public:
+    static constexpr char const* Name = "icc rotface carrier";
+
+    IccRotfaceCarrierAction(PlayerbotAI* botAI) : IccRotfaceWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccRotfaceTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc rotface target";
+
+    IccRotfaceTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetRfTarget) {}
+};
+
+class IccRotfaceStandAction : public IccRotfaceWalkAction
+{
+public:
+    static constexpr char const* Name = "icc rotface stand";
+
+    IccRotfaceStandAction(PlayerbotAI* botAI) : IccRotfaceWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 #endif

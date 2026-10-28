@@ -7,52 +7,78 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_ROTFACE_H
 #define PLAYERBOTS_ICCTRIGGERS_ROTFACE_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_Rotface.h"
+#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
 
-class IccRotfaceTankPositionTrigger : public Trigger
+class IccRotfaceDodgeTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc rotface tank position";
+    static constexpr char const* Name = "icc rotface dodge";
 
-    IccRotfaceTankPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccRotfaceDodgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccRotfaceGroupPositionTrigger : public Trigger
+class IccRotfaceTankDefensiveTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc rotface group position";
+    static constexpr char const* Name = "icc rotface tank defensive";
 
-    IccRotfaceGroupPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccRotfaceTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccRotfaceMoveAwayFromExplosionTrigger : public Trigger
+class IccRotfaceDispelTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc rotface move away from explosion";
+    static constexpr char const* Name = "icc rotface dispel";
 
-    IccRotfaceMoveAwayFromExplosionTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, Name), _castEndMs(0), _castEnded(false), _wasCasting(false)
-    {
-    }
+    IccRotfaceDispelTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
-
-private:
-    uint32 _castEndMs;
-    bool _castEnded;
-    bool _wasCasting;
 };
 
-class IccRotfaceAvoidVileGasTrigger : public Trigger
+class IccRotfaceOozeTauntTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc rotface avoid vile gas";
+    static constexpr char const* Name = "icc rotface ooze taunt";
 
-    IccRotfaceAvoidVileGasTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, Name) {}
+    IccRotfaceOozeTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccRotfaceKiteTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc rotface kite";
+
+    IccRotfaceKiteTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccRotfaceCarrierTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc rotface carrier";
+
+    IccRotfaceCarrierTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccRotfaceTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc rotface target";
+
+    IccRotfaceTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetRfTarget) {}
+};
+
+class IccRotfaceStandTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc rotface stand";
+
+    IccRotfaceStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
