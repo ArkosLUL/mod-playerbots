@@ -2,9 +2,9 @@
 
     python -m unittest discover -s tools/botobs/tests
 
-A synthetic 25N pull pins the phase steps, the pick totals, the Dominate Mind rows with their duty and
-CC, the Frostbolt kicks, the dodge counts and the cheat filter, and the shared v14 fixture shows every
-section reads empty on a trace that is not hers.
+A synthetic 25N pull pins the phase steps, the pick totals, the Dominate Mind rows with their duty, CC
+chain and free time, the Frostbolt kicks, the dodge counts, the tank defensives, the threat brake and the
+cheat filter, and the shared v14 fixture shows every section reads empty on a trace that is not hers.
 """
 from __future__ import annotations
 
@@ -60,6 +60,8 @@ def pull(boss: str = "lady-deathwhisper") -> list[dict]:
         note(32500, BRAMBLE, ldw.CC, "0"),
         aura(31000, MEND, ldw.SPELL_DOMINATE_MIND),
         aura(32400, MEND, 33786),
+        aura(38400, MEND, 33786, removed=1),
+        aura(38500, MEND, 853),
         aura(31000, ARKOS, ldw.SPELL_DOMINATE_MIND),
         note(40000, BRAMBLE, ldw.DODGE, "dnd"),
         note(41000, BRAMBLE, ldw.DODGE, "none"),
@@ -72,6 +74,15 @@ def pull(boss: str = "lady-deathwhisper") -> list[dict]:
         note(100100, AEGIS, ldw.INTERRUPTER, "1"),
         note(100400, AEGIS, ldw.INTERRUPTER, "0"),
         {"t": 112000, "e": "cast", "s": BOSS, "sp": 72007, "tgt": BULWARK, "ct": 2000},
+        note(100500, BULWARK, ldw.DEFENSIVE, "shield wall"),
+        note(101000, BULWARK, ldw.DEFENSIVE, "covered"),
+        note(112500, BULWARK, ldw.DEFENSIVE, "none"),
+        note(113000, AEGIS, ldw.DEFENSIVE, "none"),
+        note(113400, BRAMBLE, ldw.HUMAN_CALL, "Shield Wall"),
+        note(105000, BRAMBLE, ldw.BRAKE, "1"),
+        note(108000, BRAMBLE, ldw.BRAKE, "0"),
+        note(110000, BRAMBLE, ldw.BRAKE, "1"),
+        note(111000, BRAMBLE, ldw.BRAKE, "0"),
         {"t": 40000, "e": "cheat", "g": BULWARK, "k": "ldw.nothreat", "n": 1},
         {"t": 40000, "e": "cheat", "g": BULWARK, "k": "dbs.example", "n": 1},
         {"t": 120000, "e": "end", "out": "kill"},
@@ -105,14 +116,35 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(rows["boss"], (2, 114000 + 90000))
         self.assertEqual(rows["fanatic"], (1, 29500))
 
-    def test_dominate_rows_pair_the_duty_and_the_cyclone(self):
+    def test_dominate_rows_pair_the_duty_and_the_chain(self):
         self.assertEqual(ldw.dominations(self.trace),
-                         [(31000, MEND, [BRAMBLE], (32400, "Cyclone")), (31000, ARKOS, [], None)])
+                         [(31000, MEND, [BRAMBLE], [(32400, "Cyclone"), (38500, "Hammer of Justice")], 1500),
+                          (31000, ARKOS, [], [], 12000)])
+
+    def test_free_time_is_the_window_no_control_aura_covers(self):
+        # The Cyclone ends at 38400 and the stun lands 100 ms later, so only the lead-in and that gap are free.
+        auras = [aura(32400, MEND, 33786), aura(38400, MEND, 33786, removed=1), aura(38500, MEND, 853)]
+        self.assertEqual(ldw.control_chain(auras, MEND, 31000, 43000),
+                         ([(32400, "Cyclone"), (38500, "Hammer of Justice")], 1500))
+        # A domination cut short at 35000 leaves only the lead-in free.
+        self.assertEqual(ldw.control_chain(auras, MEND, 31000, 35000)[1], 1400)
 
     def test_cc_section_marks_the_human(self):
         text = printed(ldw.show_cc, self.trace)
-        self.assertIn("Mend  duty Bramble  Cyclone 1400 ms after", text)
-        self.assertIn("Arkos human  duty no duty  no CC", text)
+        self.assertIn("Mend  duty Bramble  Cyclone +1400 ms, Hammer of Justice +7500 ms  free 1500 ms", text)
+        self.assertIn("Arkos human  duty no duty  no CC  free 12000 ms", text)
+
+    def test_defensives_count_each_answer_and_the_human_calls(self):
+        self.assertEqual(ldw.defensive_rows(self.trace),
+                         {BULWARK: {"shield wall": 1, "covered": 1, "none": 1}, AEGIS: {"none": 1}})
+        self.assertEqual(ldw.human_calls(self.trace), [(113400, BRAMBLE, "Shield Wall")])
+        text = printed(ldw.show_defensives, self.trace)
+        self.assertIn("Bulwark", text)
+        self.assertIn("Bramble told a human tank: Shield Wall", text)
+
+    def test_brake_holds_sum_the_time_held(self):
+        self.assertEqual(ldw.brake_holds(self.trace), {BRAMBLE: (2, 4000)})
+        self.assertIn("2 hold(s)", printed(ldw.show_brake, self.trace))
 
     def test_a_frostbolt_with_no_latch_is_counted(self):
         self.assertEqual(ldw.frostbolts(self.trace), [(100000, [AEGIS]), (112000, [])])

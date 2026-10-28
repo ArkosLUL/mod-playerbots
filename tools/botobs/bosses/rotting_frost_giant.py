@@ -3,7 +3,8 @@
 
     rotting_frost_giant.py <file>           every section
     rotting_frost_giant.py <file> --plague    each player's infections, doubles, cures and deaths carrying it
-    rotting_frost_giant.py <file> --partners  each carrier's rfg.partner and how long it held
+    rotting_frost_giant.py <file> --partners  each carrier's rfg.partner, how long it held and whether the
+                                              pair walked out to a spot
     rotting_frost_giant.py <file> --cheats    this encounter's cheat uses
 
 The giant has no phase. The pull opens through `MarkPull` once a bot and the giant are both in combat.
@@ -15,6 +16,8 @@ What the generic views miss here:
 - **`rfg.partner` pairs each carrier with the player it stands by when the plague ticks**, one with
   Recently Infected first, so the plague stops there. `0` is the pair released: the carrier ticked,
   died or the partner caught a plague of its own.
+- **`rfg.apart` is `1` for a carrier whose pair walked out to a spot clear of the raid**, so nobody else
+  had to dodge. A pair without it formed where it stood and the players within 10 yd stepped out.
 - **`rfg.deathplague` is older builds' raid cheat**, a strip the tick the plague landed; an infection
   with a removal a few ms later is one of those, not a cure.
 """
@@ -37,6 +40,9 @@ NAME = "Rotting Frost Giant"
 SPELL_DEATH_PLAGUE = 72865
 SPELL_RECENTLY_INFECTED = 72884
 PARTNER = "rfg.partner"
+APART = "rfg.apart"
+# The spot is set a moment after the partner is.
+APART_LEAD_MS = 1000
 # A held aura is stamped removed at the death's own time.
 HELD_TO_DEATH_MS = 50
 DIFFICULTIES = {0: "10N", 1: "25N", 2: "10H", 3: "25H"}
@@ -88,6 +94,13 @@ def pairings(trace: Trace) -> list[tuple[int, int, int, int]]:
     return sorted(out)
 
 
+def walked_out(trace: Trace, pair: tuple[int, int, int, int]) -> bool:
+    """Whether the pair's carrier held `rfg.apart` when the pair formed."""
+    start, carrier, _, _ = pair
+    return any(value == "1" and begin <= start + APART_LEAD_MS and end > start
+               for value, begin, end in holder_spans(trace, APART, pull_end(trace)).get(carrier, []))
+
+
 def own_cheats(trace: Trace) -> list[tuple[str, dict]]:
     rows = [(key, entry) for key, entry in cheat_uses(trace).items()
             if prefix_matches_boss(key.partition(".")[0], SLUG)]
@@ -130,8 +143,14 @@ def show_partners(trace: Trace) -> None:
     if not rows:
         print(f"  {PARTNER} never written")
         return
-    for start, carrier, partner, stop in rows:
-        print(f"  {clock(start)}  {trace.name(carrier)} -> {trace.name(partner)}  for {clock(stop - start)}")
+    out = 0
+    for pair in rows:
+        start, carrier, partner, stop = pair
+        away = walked_out(trace, pair)
+        out += away
+        print(f"  {clock(start)}  {trace.name(carrier)} -> {trace.name(partner)}  for {clock(stop - start)}"
+              f"{'  out' if away else ''}")
+    print(f"  {out} of {len(rows)} pair(s) walked out to a spot")
 
 
 def show_cheats(trace: Trace) -> None:

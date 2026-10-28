@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Read a Lady Deathwhisper pull from a RaidObs trace: the barrier phase, picks, CC, kicks and dodges.
+"""Read a Lady Deathwhisper pull from a RaidObs trace: the barrier phase, picks, CC, kicks, dodges and tanks.
 
     lady_deathwhisper.py <file>              every section
     lady_deathwhisper.py <file> --phases     ldw.phase: 1 while Mana Barrier holds, 2 once it breaks
     lady_deathwhisper.py <file> --targets    what the resolver had the bots on, by add kind
-    lady_deathwhisper.py <file> --cc         each Dominate Mind, its ldw.cc caster and the CC that landed
+    lady_deathwhisper.py <file> --cc         each Dominate Mind, its ldw.cc caster, the CC chain and the time free
     lady_deathwhisper.py <file> --kicks      her Frostbolts and who held ldw.interrupter
     lady_deathwhisper.py <file> --dodges     ldw.dodge: who walked out of which hazard
+    lady_deathwhisper.py <file> --defensives ldw.defensive: the tanks' buttons, and the human tank calls
+    lady_deathwhisper.py <file> --brake      ldw.brake: the damage dealers that held fire on her
     lady_deathwhisper.py <file> --cheats     this encounter's cheat uses
 
 What the generic views miss here:
@@ -16,9 +18,14 @@ What the generic views miss here:
 - **`ldw.target` is the kind of unit picked, per bot.** Melee and hunters take the adherents first,
   casters the fanatics; `boss` is her, `loose` and `held` a tank's add, `skull` a player's mark.
 - **A Dominate Mind victim takes no damage under Cyclone**, so the area-damage hold lifts once one lands.
-  The CC column names the first control aura on the victim inside its 12 s.
+  The CC column lists every control aura on the victim inside its 12 s with the offset it landed at,
+  and `free` is the time inside the window with none: a second Cyclone can't start until the first
+  fades, so an instant CC from another class is what keeps it short.
 - **`ldw.interrupter` is `1` only inside a Frostbolt cast**, for the one bot elected to kick; generic
   interrupts on her current target can beat it to the kick.
+- **`ldw.defensive` is the ladder's answer when a tank asked for a button**: the cast name, `covered`
+  while one runs, `none` with nothing off cooldown. `ldw.brake` is `1` while a damage dealer holds fire
+  at 90% of the top tank's threat.
 """
 from __future__ import annotations
 
@@ -42,6 +49,9 @@ TARGET = "ldw.target"
 CC = "ldw.cc"
 INTERRUPTER = "ldw.interrupter"
 DODGE = "ldw.dodge"
+DEFENSIVE = "ldw.defensive"
+BRAKE = "ldw.brake"
+HUMAN_CALL = "ldw.humancall"
 ENTRY = 36855
 SPELL_DOMINATE_MIND = 71289
 DOMINATE_MS = 12000
@@ -89,8 +99,34 @@ def target_time(trace: Trace) -> dict[str, tuple[int, int]]:
     return {value: (len(bots[value]), held[value]) for value in held}
 
 
-def dominations(trace: Trace) -> list[tuple[int, int, list[int], tuple[int, str] | None]]:
-    """`(t, victim, duty casters, (t, spell) of the first control aura or None)` per Dominate Mind."""
+def control_chain(auras: list[dict], victim: int, start: int, stop: int) -> tuple[list[tuple[int, str]], int]:
+    """`([(t, spell)] per control aura landing in the window, ms of the window with none)`.
+
+    An aura with no removal row runs to the window's end.
+    """
+    landed = []
+    spans = []
+    for cc in auras:
+        if cc.get("d") != victim or cc.get("sp") not in CONTROL or cc.get("r") or not start <= cc["t"] <= stop:
+            continue
+        gone = next((end["t"] for end in auras
+                     if end.get("d") == victim and end.get("sp") == cc["sp"] and end.get("r") and end["t"] > cc["t"]),
+                    stop)
+        landed.append((cc["t"], CONTROL[cc["sp"]]))
+        spans.append((cc["t"], min(gone, stop)))
+
+    covered = 0
+    edge = start
+    for begin, end in sorted(spans):
+        begin = max(begin, edge)
+        if end > begin:
+            covered += end - begin
+            edge = end
+    return landed, stop - start - covered
+
+
+def dominations(trace: Trace) -> list[tuple[int, int, list[int], list[tuple[int, str]], int]]:
+    """`(t, victim, duty casters, [(t, spell) per control aura], ms free)` per Dominate Mind."""
     auras = sorted(trace.of("aura"), key=lambda rec: rec["t"])
     duties = holder_spans(trace, CC, pull_end(trace))
     out = []
@@ -98,13 +134,39 @@ def dominations(trace: Trace) -> list[tuple[int, int, list[int], tuple[int, str]
         if rec.get("sp") != SPELL_DOMINATE_MIND or rec.get("r"):
             continue
         when, victim = rec["t"], rec["d"]
+        stop = min([when + DOMINATE_MS] + [end["t"] for end in auras
+                                           if end.get("d") == victim and end.get("sp") == SPELL_DOMINATE_MIND
+                                           and end.get("r") and end["t"] > when])
         casters = sorted(caster for caster, spans in duties.items()
-                         if any(value == str(victim) and start < when + DOMINATE_MS and stop > when
-                                for value, start, stop in spans))
-        held = next(((cc["t"], CONTROL[cc["sp"]]) for cc in auras
-                     if cc.get("d") == victim and cc.get("sp") in CONTROL and not cc.get("r")
-                     and when <= cc["t"] <= when + DOMINATE_MS), None)
-        out.append((when, victim, casters, held))
+                         if any(value == str(victim) and start < stop and end > when
+                                for value, start, end in spans))
+        chain, free = control_chain(auras, victim, when, stop)
+        out.append((when, victim, casters, chain, free))
+    return out
+
+
+def defensive_rows(trace: Trace) -> dict[int, dict[str, int]]:
+    """Per tank: how often the ladder answered each way (a cast name, `covered`, `none`)."""
+    rows: dict[int, dict[str, int]] = collections.defaultdict(lambda: collections.defaultdict(int))
+    for guid, spans in holder_spans(trace, DEFENSIVE, pull_end(trace)).items():
+        for value, _, _ in spans:
+            rows[guid][value] += 1
+    return {guid: dict(row) for guid, row in rows.items()}
+
+
+def human_calls(trace: Trace) -> list[tuple[int, int, str]]:
+    """`(t, sending bot, spell name)` per call to a human tank."""
+    return sorted((rec["t"], rec.get("g", 0), str(rec.get("txt", "")))
+                  for rec in trace.of("note") if rec.get("k") == HUMAN_CALL)
+
+
+def brake_holds(trace: Trace) -> dict[int, tuple[int, int]]:
+    """Per damage dealer: `(times it began holding fire on her, ms held)`."""
+    out = {}
+    for guid, spans in holder_spans(trace, BRAKE, pull_end(trace)).items():
+        held = [(start, stop) for value, start, stop in spans if value == "1"]
+        if held:
+            out[guid] = (len(held), sum(stop - start for start, stop in held))
     return out
 
 
@@ -188,11 +250,11 @@ def show_cc(trace: Trace) -> None:
     if not rows:
         print("  nobody was dominated (10N casts none)")
         return
-    for when, victim, casters, held in rows:
+    for when, victim, casters, chain, free in rows:
         human = " human" if victim in trace.humans else ""
         duty = names(trace, casters) if casters else "no duty"
-        landed = f"{held[1]} {held[0] - when} ms after" if held else "no CC"
-        print(f"  {clock(when)}  {trace.name(victim)}{human}  duty {duty}  {landed}")
+        landed = ", ".join(f"{spell} +{at - when} ms" for at, spell in chain) or "no CC"
+        print(f"  {clock(when)}  {trace.name(victim)}{human}  duty {duty}  {landed}  free {free} ms")
 
 
 def show_kicks(trace: Trace) -> None:
@@ -221,6 +283,33 @@ def show_dodges(trace: Trace) -> None:
         print(f"  {value:<10} {entries:>4} time(s) by {bots} bot(s)")
 
 
+def show_defensives(trace: Trace) -> None:
+    print("TANK DEFENSIVES")
+    if not mine(trace):
+        return
+    rows = defensive_rows(trace)
+    calls = human_calls(trace)
+    if not rows and not calls:
+        print(f"  {DEFENSIVE} never written")
+        return
+    for guid, row in sorted(rows.items(), key=lambda item: trace.name(item[0])):
+        print(f"  {trace.name(guid):<14}" + ", ".join(f"{value} x{count}" for value, count in sorted(row.items())))
+    for when, sender, spell in calls:
+        print(f"  {clock(when)}  {trace.name(sender)} told a human tank: {spell}")
+
+
+def show_brake(trace: Trace) -> None:
+    print("THREAT BRAKE")
+    if not mine(trace):
+        return
+    rows = brake_holds(trace)
+    if not rows:
+        print(f"  {BRAKE} never held a damage dealer")
+        return
+    for guid, (times, held) in sorted(rows.items(), key=lambda item: trace.name(item[0])):
+        print(f"  {trace.name(guid):<14}{times:>3} hold(s)  {clock(held):>9} held in all")
+
+
 def show_cheats(trace: Trace) -> None:
     print("CHEATS")
     if not mine(trace):
@@ -238,9 +327,11 @@ def show_cheats(trace: Trace) -> None:
 SECTIONS = (
     ("phases", "ldw.phase: 1 while Mana Barrier holds, 2 once it breaks", show_phases),
     ("targets", "what the resolver had the bots on, by add kind", show_targets),
-    ("cc", "each Dominate Mind, its ldw.cc caster and the CC that landed", show_cc),
+    ("cc", "each Dominate Mind, its ldw.cc caster, the CC chain and the time free", show_cc),
     ("kicks", "her Frostbolts and who held ldw.interrupter", show_kicks),
     ("dodges", "ldw.dodge: who walked out of which hazard", show_dodges),
+    ("defensives", "ldw.defensive: the tanks' buttons, and the human tank calls", show_defensives),
+    ("brake", "ldw.brake: the damage dealers that held fire on her", show_brake),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 

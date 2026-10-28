@@ -22,4 +22,12 @@ private:
     bool _victimNear = false;
 };
 
+// Holds a braked damage dealer's attacks on her, and area damage near her. Heals pass.
+class IccLadyDeathwhisperBrakeMultiplier : public Multiplier
+{
+public:
+    IccLadyDeathwhisperBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc lady deathwhisper brake") {}
+    float GetValue(Action* action) override;
+};
+
 #endif

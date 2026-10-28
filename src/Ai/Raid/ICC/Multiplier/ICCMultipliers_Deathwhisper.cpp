@@ -34,3 +34,19 @@ float IccLadyDeathwhisperMultiplier::GetValue(Action* action)
 
     return _victimNear ? 0.0f : 1.0f;
 }
+
+float IccLadyDeathwhisperBrakeMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !LdwThreatBraked(botAI))
+        return 1.0f;
+
+    Creature* boss = LdwBoss(botAI);
+    if (!boss)
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
+        return 0.0f;
+
+    return IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= LDW_BRAKE_AREA_REACH ? 0.0f : 1.0f;
+}
