@@ -33,6 +33,9 @@ void DefineJaraxxus(EncounterBuilder& e)
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow |
                 Family::MoveRandom | Family::Charge,
             {"reach melee"});
+    // their spots ignore the flames, and the dodge would walk the bot straight back out
+    e.Block("jaraxxus flame stand", Role::Any, JaraxxusFlameNear,
+            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove);
     // the cover node spends them on the Burning Inferno itself, the class nodes would go early or twice
     e.Block("jaraxxus raid cover hold", Role::Any, JaraxxusRaidCoverHeld, 0, RaidCoverClassNodes());
     // neither does anything against fire on everyone or a burning trail

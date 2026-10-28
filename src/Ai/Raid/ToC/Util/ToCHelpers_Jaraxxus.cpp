@@ -384,17 +384,13 @@ bool ClearsPortal(PlayerbotAI* botAI, Creature* portal, JaraxxusScan const& scan
     if (spawn && spawn->GetPeriodicTimer() <= static_cast<int32>(JARAXXUS_PORTAL_SPAWN_LEAD_MS))
         return true;
 
-    // she opens on whoever stands nearest, so the melee wait until a tank has her
+    // she opens on whoever stands nearest as she spawns, then goes by threat, so standing off her
+    // portal only matters until she has picked
     for (ObjectGuid guid : scan.mistresses)
     {
         Creature* mistress = ResolveAlive(bot, guid);
         TempSummon const* summon = mistress ? mistress->ToTempSummon() : nullptr;
-        if (!summon || summon->GetSummonerGUID() != portal->GetGUID())
-            continue;
-
-        Unit* victim = mistress->GetVictim();
-        Player* holder = victim ? victim->ToPlayer() : nullptr;
-        if (!holder || (!PlayerbotAI::IsTank(holder) && !PlayerbotAI::IsTank(holder, true)))
+        if (summon && summon->GetSummonerGUID() == portal->GetGUID() && !mistress->GetVictim())
             return true;
     }
 
@@ -498,6 +494,38 @@ void AddFlameHazards(Player* bot, JaraxxusScan const& scan, std::vector<HazardCi
             hazards.emplace_back(flame, JARAXXUS_LEGION_FLAME_CLEAR);
 }
 
+// A bot already inside radius of a centre may walk on as long as it gets no nearer to it
+bool CirclesCrossPath(std::vector<Position> const& centres, float radius, Position const& from, Position const& to)
+{
+    for (Position const& centre : centres)
+    {
+        float const limit = std::min(radius, centre.GetExactDist2d(from) - 0.1f);
+        if (DistanceToSegment2d(centre, from, to) < limit)
+            return true;
+    }
+
+    return false;
+}
+
+bool FlameCrossesPath(JaraxxusScan const& scan, Position const& from, Position const& to)
+{
+    return CirclesCrossPath(scan.flames, JARAXXUS_LEGION_FLAME_CLEAR, from, to);
+}
+
+// A heroic portal drops a Mistress every 6 s, inside any 8 s carry
+std::vector<Position> SelectablePortals(Player* bot, JaraxxusScan const& scan)
+{
+    std::vector<Position> portals;
+    for (ObjectGuid guid : scan.portals)
+    {
+        Creature* portal = ResolveAlive(bot, guid);
+        if (portal && !portal->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+            portals.push_back(portal->GetPosition());
+    }
+
+    return portals;
+}
+
 bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Position& spot)
 {
     std::vector<HazardCircle> flames;
@@ -505,6 +533,12 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
     // next flame lands where the carrier stands. Also keeps the list non-empty before the first
     // flame, since the sweep answers nothing for an empty one
     flames.emplace_back(bot->GetPosition(), JARAXXUS_LEGION_FLAME_CLEAR);
+
+    Position const from = bot->GetPosition();
+    std::vector<Position> const portals = SelectablePortals(bot, scan);
+    std::vector<HazardCircle> offPortals = flames;
+    for (Position const& portal : portals)
+        offPortals.emplace_back(portal, JARAXXUS_PORTAL_CLEAR);
 
     Position const preferNear(bot->GetPositionX() + std::cos(heading) * 2.0f * JARAXXUS_FLAME_CARRIER_MIN_LEG,
                               bot->GetPositionY() + std::sin(heading) * 2.0f * JARAXXUS_FLAME_CARRIER_MIN_LEG,
@@ -524,10 +558,16 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
     };
 
     HazardSweepCache cache;
-    auto const sweep = [&](std::vector<HazardCircle> const& hazards, bool bound)
+    auto const sweep = [&](std::vector<HazardCircle> const& hazards, bool bound, bool offPortal)
     {
         auto const accept = [&](float x, float y)
-        { return bot->GetExactDist2d(x, y) >= JARAXXUS_FLAME_CARRIER_MIN_LEG && (!bound || healable(x, y)); };
+        {
+            if (bot->GetExactDist2d(x, y) < JARAXXUS_FLAME_CARRIER_MIN_LEG || (bound && !healable(x, y)))
+                return false;
+
+            return !offPortal ||
+                   !CirclesCrossPath(portals, JARAXXUS_PORTAL_CLEAR, from, Position(x, y, from.GetPositionZ()));
+        };
         return FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_LEGION_FLAME_SEARCH, 2.0f,
                                                  static_cast<float>(M_PI) / 8.0f, &preferNear, accept, &cache);
     };
@@ -538,12 +578,12 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
     // a tank carrier drags him along, so it can't keep clear of him or of the melee on him
     if (boss && boss->GetVictim() == bot)
     {
-        spot = sweep(flames, true);
+        spot = sweep(offPortals, true, true);
         branch = "tank";
     }
     else
     {
-        std::vector<HazardCircle> hazards = flames;
+        std::vector<HazardCircle> hazards = offPortals;
         for (Player* member : members)
             if (member != bot && bot->GetExactDist2d(member) <= JARAXXUS_FLAME_CARRIER_RAID_SCAN)
                 hazards.emplace_back(member->GetPosition(), JARAXXUS_FLAME_CARRIER_RAID_CLEAR);
@@ -551,19 +591,27 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
         if (boss)
             hazards.emplace_back(boss->GetPosition(), JARAXXUS_FLAME_CARRIER_BOSS_CLEAR);
 
-        spot = sweep(hazards, true);
+        spot = sweep(hazards, true, true);
         if (IsEmptyPosition(spot))
         {
-            spot = sweep(flames, true);
+            spot = sweep(offPortals, true, true);
             branch = "relaxed";
         }
     }
 
     if (IsEmptyPosition(spot) && !healers.empty())
     {
-        spot = sweep(flames, false);
+        spot = sweep(offPortals, false, true);
         if (std::strcmp(branch, "tank"))
             branch = "far";
+    }
+
+    // walking past a portal still beats standing in the trail
+    if (IsEmptyPosition(spot) && !portals.empty())
+    {
+        spot = sweep(flames, false, false);
+        if (std::strcmp(branch, "tank"))
+            branch = "portal";
     }
 
     bool const found = !IsEmptyPosition(spot);
@@ -571,38 +619,81 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
     return found;
 }
 
-// A bot already inside CLEAR of a flame may walk on as long as it gets no nearer to it
-bool FlameCrossesPath(JaraxxusScan const& scan, Position const& from, Position const& to)
-{
-    for (Position const& flame : scan.flames)
-    {
-        float const limit = std::min(JARAXXUS_LEGION_FLAME_CLEAR, flame.GetExactDist2d(from) - 0.1f);
-        if (DistanceToSegment2d(flame, from, to) < limit)
-            return true;
-    }
-
-    return false;
-}
-
 bool DeriveDodgeSpot(Player* bot, JaraxxusScan const& scan, Position& spot)
 {
-    std::vector<HazardCircle> hazards;
-    AddFlameHazards(bot, scan, hazards);
+    std::vector<HazardCircle> flames;
+    AddFlameHazards(bot, scan, flames);
 
-    Position bossSpot;
-    Position const* preferNear = nullptr;
-    if (!PlayerbotAI::IsRanged(bot))
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    Unit* target = botAI ? botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() : nullptr;
+    if (target && !target->IsAlive())
+        target = nullptr;
+
+    // a dodge inside the melee hold's circle only sends the bot back out through the flames
+    Unit* held = botAI ? GetJaraxxusPortalToClear(botAI) : nullptr;
+    std::vector<HazardCircle> hazards = flames;
+    std::vector<Position> heldPortal;
+    if (held)
     {
-        if (Unit* boss = FindJaraxxus(bot))
+        hazards.emplace_back(held->GetPosition(), JARAXXUS_PORTAL_CLEAR);
+        heldPortal.push_back(held->GetPosition());
+    }
+
+    bool const ranged = PlayerbotAI::IsRanged(bot);
+    Position anchor;
+    Position const* preferNear = nullptr;
+    if (!ranged)
+    {
+        if (Unit* toward = target && target != held ? target : FindJaraxxus(bot))
         {
-            bossSpot = boss->GetPosition();
-            preferNear = &bossSpot;
+            anchor = toward->GetPosition();
+            preferNear = &anchor;
         }
     }
 
-    spot = FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_LEGION_FLAME_SEARCH, 2.0f,
-                                             static_cast<float>(M_PI) / 8.0f, preferNear);
-    RaidObs::NoteDerived(bot, "jaraxxus.flame", IsEmptyPosition(spot) ? "none" : "dodge");
+    // the same range reach spell and reach melee walk to, so neither fires from the spot
+    float reach = 0.0f;
+    if (target && target != held)
+    {
+        float const range = ranged ? botAI->GetRange("spell") : sPlayerbotAIConfig.MeleeDistance;
+        reach = range + bot->GetCombatReach() + target->GetCombatReach() - JARAXXUS_DODGE_REACH_MARGIN;
+    }
+
+    Position const from = bot->GetPosition();
+    HazardSweepCache cache;
+    auto const sweep = [&](std::vector<HazardCircle> const& circles, bool keepReach, bool checkWalk)
+    {
+        auto const accept = [&](float x, float y)
+        {
+            if (keepReach && target->GetExactDist2d(x, y) > reach)
+                return false;
+
+            if (!checkWalk)
+                return true;
+
+            Position const to(x, y, from.GetPositionZ());
+            return !FlameCrossesPath(scan, from, to) && !CirclesCrossPath(heldPortal, JARAXXUS_PORTAL_CLEAR, from, to);
+        };
+        return FindNearestPositionClearOfHazards(bot, circles, JARAXXUS_LEGION_FLAME_SEARCH, 2.0f,
+                                                 static_cast<float>(M_PI) / 8.0f, preferNear, accept, &cache);
+    };
+
+    char const* branch = "dodge";
+    spot = Position();
+    if (reach > 0.0f)
+    {
+        spot = sweep(hazards, true, true);
+        if (IsEmptyPosition(spot))
+            branch = "loose";
+    }
+
+    if (IsEmptyPosition(spot))
+        spot = sweep(hazards, false, true);
+
+    if (IsEmptyPosition(spot))
+        spot = sweep(flames, false, false);
+
+    RaidObs::NoteDerived(bot, "jaraxxus.flame", IsEmptyPosition(spot) ? "none" : branch);
     return !IsEmptyPosition(spot);
 }
 
@@ -997,6 +1088,17 @@ bool JaraxxusAnyLegionFlame(PlayerbotAI* botAI)
     return scan && !scan->flames.empty();
 }
 
+bool JaraxxusFlameNear(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    JaraxxusScan const* scan = ScanFor(bot);
+    if (!scan)
+        return false;
+
+    return std::any_of(scan->flames.begin(), scan->flames.end(), [bot](Position const& flame)
+                       { return bot->GetExactDist2d(flame) < JARAXXUS_FLAME_STAND_REACH; });
+}
+
 bool GetJaraxxusBurningInferno(PlayerbotAI* botAI, RaidPredictedHit& hit)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -1105,7 +1207,7 @@ bool DeriveJaraxxusPortalExit(Player* bot, Unit* portal, Position& spot)
     AddFlameHazards(bot, *scan, hazards);
     hazards.emplace_back(portal->GetPosition(), JARAXXUS_PORTAL_CLEAR);
 
-    // back toward him, where the melee go once she's on a tank
+    // back toward him, where the melee go once she has picked
     Unit* boss = FindJaraxxus(bot);
     Position const toward = boss ? boss->GetPosition() : bot->GetPosition();
     spot = FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_PORTAL_CLEAR + JARAXXUS_LEGION_FLAME_SEARCH, 2.0f,

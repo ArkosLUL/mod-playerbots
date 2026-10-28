@@ -102,7 +102,8 @@ onto one random mana user, landing 66334/67905/67906/67907 for 15 s. Every 0.5 s
 mid-cast runs no triggers (`UpdateAIInternal` yields while a spell prepares), so only
 `RequestSpellInterrupt` from outside reaches it. On the 2026-10-17 25H kill both heroic Mistresses
 arrived 6.0-6.3 s after their portal with 8 melee inside its 10 yd, and her first swings (27.6k,
-43.9k) killed two.
+43.9k) killed two. She takes the nearest unit only in `Reset`, as she spawns; after that her victim
+goes by threat (`UpdateVictim`).
 
 **Felflame Infernal** (34815, health ×6/×16/×7/×23; stunnable on normal only, immune to
 INTERRUPT): melee. Every 30 s after 7-20 s, Fel Streak: `DoResetThreatList`, 50,000 threat on a
@@ -121,9 +122,15 @@ The Warcraft Tavern guide, reconciled with the script:
   its add back off anyone else, tanks included; a lone assist tank takes Mistresses first. The boss
   is not walked to the portal for cleave: it spawns 15 yd from him anyway.
 - **Heroic Portal**: melee DPS bots targeting one or inside 12 yd of it keep 14 yd from it, from 1 s
-  before its next Mistress (its aura's periodic timer) until each of its Mistresses is on a tank
-  (`IsTank` by role or spec) or dead; ranged keep killing it. The guide has no such step; it follows
-  from her arrival hit and nearest-player opener.
+  before its next Mistress (its aura's periodic timer) until each of its Mistresses has a victim;
+  ranged keep killing it. The guide has no such step; it follows from her arrival hit and
+  nearest-unit opener. A portal living past 12 s drops a second Mistress: on three 25H kills
+  (2026-10-22 to 10-25) with a human assist tank, the old hold (until she was on a tank) kept melee
+  off portal 2 for 3-7 s, it lived 12.3-13.5 s, and the extra Mistress roamed onto a mage and killed
+  it.
+- **Cooldowns stay boss-only**, by decision: `Playerbots.BurstOnBossOnly` holds every burst cooldown
+  off the portal and volcano (138 `hold burst until tank engaged` vetoes on portal 2 in one 25H pull).
+  The first lever if portal 2 still outlives 12 s.
 - **DPS threat cap**: a DPS bot stops damaging him at 90% of his tank victim's threat, area damage
   within 30 yd included, and resumes under 80% (Anub'arak's latch). On the 2026-10-17 25H kill a DPS
   warrior pulled him three times and held him 18-26 s, and the two tanks' 8 taunts in 20 s ran into
@@ -155,7 +162,15 @@ The Warcraft Tavern guide, reconciled with the script:
   30 yd of a living healer other than itself; everyone else steps clear of the flames. A leg bends
   round the healer ring: the sweep keeps the first ring's clear spot nearest the heading among those in
   reach, and drops the reach only when no clear spot has it. On the 25H kill carriers ended 30-48 yd
-  from the nearest healer. A tank carrier takes the boss with it, rare now: the marker keeps a tank off
+  from the nearest healer. Legs keep 14 yd off a heroic portal, the straight walk included (never
+  nearer than it starts), dropped only when nothing else is clear: a melee carrier heading away from
+  him once walked over portal 2 as its Mistress spawned and died.
+- **Flame dodge** keeps the bot in reach of its current target (`GetRange("spell")` for ranged and
+  healers, `MeleeDistance` for melee, plus both combat reaches, 0.5 yd inside), walking past no flame;
+  melee prefer their target. Out of reach only when no such spot is clear, and off the portal its
+  melee hold names. `jaraxxus flame stand` blocks set behind, rear flank and formation within 10 yd of
+  a flame. Before this, reach spell or reach melee walked the bot back into the flame it had just left:
+  a warlock looped 20 times over 29 s at a third of its damage. A tank carrier takes the boss with it, rare now: the marker keeps a tank off
   Legion Flame while he swings at it.
 - **Mistress' Kiss**: a kissed bot casts instants only; a cast already running is broken from outside.
 - **Lust** at the pull (default burst row): the heroic Portal at 20 s falls inside it, and Berserk is
@@ -239,10 +254,13 @@ is never an assist tank), so their order is arbitrary.
 
 ## Known gaps
 
-- One heroic trace (2026-10-17 25H): the Fel Lightning no-spread held there, untested on 10H.
-- Adds on non-tanks while a human assist tank holds the boss: no bot cover, by decision. On the
-  2026-10-16 25N kill the Mistress spent 89% of her life on non-tanks; on the 25H kill Mistresses
-  100%/40%, Infernals 87%/100%/54%.
+- Five 25H traces, none 10H: the Fel Lightning no-spread held on all. 2026-10-22 to 10-28: 0-1 deaths,
+  25 of 25 Incinerates healed, so the raid cover never fired live.
+- Adds on non-tanks while a human tank holds the boss or picks them up late: no bot cover, by
+  decision. On the 2026-10-16 25N kill the Mistress spent 89% of her life on non-tanks; on the
+  2026-10-17 25H kill Mistresses 100%/40%, Infernals 87%/100%/54%.
+- Reach spell and reach melee still walk straight at a target that moved, through a flame; the dodge
+  answers in one step.
 - Two tanks taunting him off a DPS holder still burn his taunt diminishing returns; the threat cap
   only makes the pull rarer.
 - The class nodes may still spend a cover on a hurt raid before an Inferno is predicted, leaving it
@@ -253,8 +271,8 @@ is never an assist tank), so their order is arbitrary.
 - A holder mid-cast at the window's start only casts once the pinned-cast break lands, up to a tick
   late; one dead or out of reach at its window is not replaced.
 - The Incinerate target uses no healthstone on its own absorb.
-- Assist tank 0 does not wait at the heroic portal, so a Mistress opens on whoever stands nearest, and
-  the held melee stand idle until a tank has her or the portal dies.
+- Assist tank 0 does not wait at the heroic portal, so a Mistress opens on whoever stands nearest:
+  usually a pet or Army of the Dead ghoul.
 - Capped melee keep white-swinging: no action carries a swing.
 - With a human main tank no bot stands on him through the intro, so the release takes whoever stands
   nearest: an assist tank 8 yd off, unless a human is nearer.
@@ -264,7 +282,7 @@ is never an assist tank), so their order is arbitrary.
 ## What a trace answers
 
 Position, verdicts and moves come from the raid-agnostic streams; `postmortem.py --vetoes` covers
-the five multipliers and the five rules. The Jaraxxus rows, under `--notes jaraxxus.` and
+the five multipliers and the six rules. The Jaraxxus rows, under `--notes jaraxxus.` and
 `--notes toc.`:
 
 | Key | Shape | Says |
@@ -275,7 +293,7 @@ the five multipliers and the five rules. The Jaraxxus rows, under `--notes jarax
 | `dps` | per bot | The DPS pick's branch: `skull`, `add`, `boss`, `none`. No reader section |
 | `addtank` | per assist tank | The add it holds, `0` for none; absent when every assist tank is human |
 | `interrupter` | per bot | `1` holding Fel Fireball duty, only inside that cast: rewritten every tick he lives, so it drops to `0` as the cast ends |
-| `flame` | per bot | `carrier`, `relaxed` (nothing clear of raid and boss, so flames only), `tank` (a carrier holding him, flames only), `far` (no clear spot within a healer's reach), `dodge`, `none`. Change-only: counts are switches, not legs |
+| `flame` | per bot | `carrier`, `relaxed` (nothing clear of raid and boss, so flames only), `tank` (a carrier holding him, flames only), `far` (no clear spot within a healer's reach), `portal` (no clear spot off a heroic portal), `dodge`, `loose` (a dodge out of reach of its target), `none`. Change-only: counts are switches, not legs |
 | `portal` | per melee DPS bot | `hold` while it keeps clear of a heroic portal, `none` |
 | `toc.cover` | per holder | The cover dealt for the coming hit, `ToCRaidCover`: 1 Aura Mastery, 2 Divine Sacrifice, 3 Anti-Magic Zone, 4 Divine Hymn, 5 Tranquility; `0` when the deal drops |
 | `toc.personal` | per bot | The button picked (spell name or `healthstone`), `covered` (one running), `channel`, `none` |
@@ -298,11 +316,13 @@ banner names declared probes the pull never wrote.
   target, the absorb it started with and had left, Burning Inferno in the 6 s after.
 - `--flame`: per carrier window (debuff and trail joined), yards walked, legs issued, nearest other
   member and the boss against the carrier's 8 and 15 yd (not judged when every value it switched to
-  is `tank`, or with no switch the one latched at its start), `flame` switches; flame-tick damage
-  per bot, with the nearest sampled flame.
+  is `tank`, or with no switch the one latched at its start), `flame` switches; ping-pong runs (the
+  dodge and another mover taking turns 2 s apart or less, 3+ round trips); flame-tick damage per bot,
+  with the nearest sampled flame.
 - `--adds`: per add, first and last sample and the share of samples on a non-tank; `focus` and
   `addtank` changes; each Mistress' arrival with her portal, the melee inside its 10 yd, her arrival
-  hit, first victim and the `portal` holds then; each Mistress' Kiss, how it ended, its punish and
+  hit, first victim and the `portal` holds then; on heroic each portal's life against the 12 s its
+  second Mistress lands at, and her count; each Mistress' Kiss, how it ended, its punish and
   `kiss cast hold` vetoes.
 - `--cover`: per Burning Inferno against its first tick, hits, damage and deaths; the raid cooldowns
   cast within 5 s either side, the `toc.cover` deal, the personal buttons and `toc.personal` picks,

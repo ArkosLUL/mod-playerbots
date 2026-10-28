@@ -46,6 +46,10 @@ constexpr float JARAXXUS_FLAME_CARRIER_MIN_LEG = 6.0f;     // carrier travel flo
 constexpr float JARAXXUS_FLAME_CARRIER_RAID_CLEAR = 8.0f;  // carrier spot from other members
 constexpr float JARAXXUS_FLAME_CARRIER_BOSS_CLEAR = 15.0f; // carrier spot from the boss
 constexpr float JARAXXUS_FLAME_ARRIVE = 1.5f;
+// Behind, flank and formation moves pick spots blind to the flames, so they stay off this close to one
+constexpr float JARAXXUS_FLAME_STAND_REACH = 10.0f;
+// A dodge spot stays this far inside the bot's reach of its target, or the generic reach walks it back in
+constexpr float JARAXXUS_DODGE_REACH_MARGIN = 0.5f;
 constexpr float JARAXXUS_SCAN_RADIUS = 200.0f;
 constexpr uint32 JARAXXUS_SCAN_MS = 200;
 
@@ -104,8 +108,8 @@ Unit* GetJaraxxusAssistTankAdd(PlayerbotAI* botAI, uint8 index);
 
 // For a melee DPS bot targeting it or near it: the heroic portal it keeps JARAXXUS_PORTAL_CLEAR from,
 // from JARAXXUS_PORTAL_SPAWN_LEAD_MS before the portal's next Mistress until each of its Mistresses
-// is on a tank or dead. Null otherwise. The hold rule and the walk out both read it. Writes
-// jaraxxus.portal: hold or none.
+// has a victim. She takes the nearest unit only as she spawns, then goes by threat. Null otherwise.
+// The hold rule, the walk out and the flame dodge read it. Writes jaraxxus.portal: hold or none.
 Unit* GetJaraxxusPortalToClear(PlayerbotAI* botAI);
 // A spot JARAXXUS_PORTAL_CLEAR from the portal and clear of flames, nearest him
 bool DeriveJaraxxusPortalExit(Player* bot, Unit* portal, Position& spot);
@@ -143,8 +147,11 @@ JaraxxusFlameRole GetJaraxxusFlameRole(Player* bot);
 // Bearing from the boss (ARENA_CENTER without him) to the bot, so the trail leads away from him
 float GetLegionFlameCarrierHeading(Player* bot);
 // One carrier leg or one dodge. A carrier leg ends within JARAXXUS_CARRIER_HEALER_REACH of a living
-// healer where any clear spot does. Writes jaraxxus.flame: carrier, relaxed (flames only), tank (a
-// carrier holding him, flames only), far (no clear spot within a healer's reach), dodge or none.
+// healer where any clear spot does, and keeps JARAXXUS_PORTAL_CLEAR off a heroic portal, walk included,
+// unless nothing else is clear. A dodge keeps the bot in reach of its current target where it can, and
+// off the portal its melee hold names. Writes jaraxxus.flame: carrier, relaxed (flames only), tank (a
+// carrier holding him, flames only), far (no clear spot within a healer's reach), portal (no clear spot
+// off a heroic portal), dodge, loose (a dodge out of reach of its target) or none.
 bool DeriveLegionFlameSpot(Player* bot, JaraxxusFlameRole role, float heading, Position& spot);
 bool IsLegionFlameSpotClear(PlayerbotAI* botAI, Position const& spot);
 // The straight walk from the bot to `to` comes nearer a flame than JARAXXUS_LEGION_FLAME_CLEAR, or
@@ -155,6 +162,8 @@ bool LegionFlameCrossesPath(Player* bot, Position const& to);
 bool DeriveLegionFlameDetour(Player* bot, Position const& anchor, float maxStep, Position& spot);
 // Any Legion Flame on the floor
 bool JaraxxusAnyLegionFlame(PlayerbotAI* botAI);
+// A Legion Flame within JARAXXUS_FLAME_STAND_REACH of the bot
+bool JaraxxusFlameNear(PlayerbotAI* botAI);
 
 }
 

@@ -6,8 +6,8 @@ Legion Flame, the adds.
     lord_jaraxxus.py <file> --boss        Fel Fireball landed or kicked and by whom, Fel Lightning chains and their cost
     lord_jaraxxus.py <file> --nether      Nether Power stacks over the pull, the casts that stripped them
     lord_jaraxxus.py <file> --incinerate  every Incinerate Flesh: heals on it, how it ended, Burning Inferno
-    lord_jaraxxus.py <file> --flame       every Legion Flame carrier's walk and spacing, who stood in fire
-    lord_jaraxxus.py <file> --adds        each add's life and victims, focus and add tank changes, the Kiss
+    lord_jaraxxus.py <file> --flame       each carrier's walk and spacing, dodge ping-pong, who stood in fire
+    lord_jaraxxus.py <file> --adds        each add's life and victims, focus and add tanks, portal life, the Kiss
     lord_jaraxxus.py <file> --cover       raid cooldowns and personal buttons against each Burning Inferno
 
 What the generic views miss here, and what this reads instead:
@@ -159,6 +159,11 @@ ARRIVAL_SEARCH_YD = 8.0
 ARRIVAL_SLACK_MS = 1500
 # a sample older than this no longer places the unit
 FRESH_MS = 1000
+# the dodge and another mover taking turns this close apart, this many round trips, is a ping-pong
+PINGPONG_GAP_MS = 2000
+PINGPONG_TRIPS = 3
+# a heroic portal's second Mistress lands this long after it
+PORTAL_SECOND_MS = 12000
 SHOWN = 12
 
 
@@ -745,6 +750,38 @@ def fire_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return sorted(rows.values(), key=lambda row: -row["damage"])
 
 
+def pingpong_runs(trace: Trace) -> list[dict]:
+    """Per bot, accepted moves that switch between the flame dodge and another mover, each within
+    PINGPONG_GAP_MS of the last: the other mover's spot sits inside a flame the dodge just left. Runs
+    of PINGPONG_TRIPS round trips or more, with the other movers by count."""
+    moves: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("ok") and rec.get("by"):
+            moves[rec.get("g")].append(rec)
+
+    def pingpong(guid: int, run: list[dict]) -> dict | None:
+        switches = [index for index in range(1, len(run))
+                    if (run[index]["by"] == AVOID) != (run[index - 1]["by"] == AVOID)]
+        if len(switches) // 2 < PINGPONG_TRIPS:
+            return None
+        span = run[switches[0] - 1:switches[-1] + 1]
+        return {"guid": guid, "start": span[0]["t"], "stop": span[-1]["t"], "trips": len(switches) // 2,
+                "movers": collections.Counter(rec["by"] for rec in span if rec["by"] != AVOID)}
+
+    out = []
+    for guid, recs in moves.items():
+        run: list[dict] = []
+        for rec in recs + [None]:
+            if rec is None or (run and rec["t"] - run[-1]["t"] > PINGPONG_GAP_MS):
+                found = pingpong(guid, run)
+                if found:
+                    out.append(found)
+                run = []
+            if rec is not None:
+                run.append(rec)
+    return sorted(out, key=lambda row: row["start"])
+
+
 def show_flame(trace: Trace) -> None:
     print("LEGION FLAME")
     samples = Samples(trace)
@@ -778,6 +815,18 @@ def show_flame(trace: Trace) -> None:
     if taken:
         print(f"  {FLAME_KEY} switches: "
               + ", ".join(f"{name} {count}" for name, count in taken.most_common()))
+
+    runs = pingpong_runs(trace)
+    if runs:
+        print(f"\n  {'ping-pong':14} {'role':6} {'from':>9} {'to':>9} {'trips':>5}  other movers")
+        for row in runs:
+            movers = ", ".join(f"{name} {count}" for name, count in row["movers"].most_common())
+            print(f"  {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {clock(row['start']):>9}"
+                  f" {clock(row['stop']):>9} {row['trips']:5}  {movers}")
+        print(f"  a trip is the dodge and another mover walking the bot once each, {PINGPONG_GAP_MS / 1000:.0f} s"
+              f" apart or less; {PINGPONG_TRIPS}+ trips shown")
+    else:
+        print("  no flame ping-pong")
 
     fire = fire_rows(trace, samples)
     if not fire:
@@ -910,6 +959,22 @@ def arrival_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
+def portal_rows(trace: Trace, samples: Samples | None = None, arrivals: list[dict] | None = None) -> list[dict]:
+    """Each Nether Portal: its first and last living sample, and the Mistresses `arrival_rows` traced
+    back to it."""
+    samples = samples or Samples(trace)
+    arrivals = arrival_rows(trace, samples) if arrivals is None else arrivals
+    born = collections.Counter(row["portal"] for row in arrivals if row["portal"])
+    out = []
+    for guid in sorted(guids_of_entry(trace, NPC_NETHER_PORTAL)):
+        found = samples.rows.get(guid)
+        living = [when for when, row in zip(*found) if row[5] > 0] if found else []
+        if living:
+            out.append({"guid": guid, "first": living[0], "last": living[-1], "life": living[-1] - living[0],
+                        "mistresses": born[guid]})
+    return out
+
+
 def show_adds(trace: Trace) -> None:
     print("ADDS")
     rows = add_rows(trace)
@@ -950,6 +1015,16 @@ def show_adds(trace: Trace) -> None:
                   f" {len(row['held']):4}")
         print(f"  melee is roster melee inside {ARRIVAL_YD:.0f} yd of her portal at her first sample, hit her"
               f" arrival's hits; held is bots on {PORTAL_KEY} hold then")
+
+    # a normal portal is unkillable and goes on its own timer
+    portals = portal_rows(trace, arrivals=arrivals) if difficulty(trace) >= 2 else []
+    if portals:
+        print(f"\n  {'portal at':>9} {'lived':>6} {'mistresses':>10}")
+        for row in portals:
+            late = "!" if row["life"] > PORTAL_SECOND_MS else ""
+            print(f"  {clock(row['first']):>9} {row['life'] / 1000:5.1f}{late:1} {row['mistresses']:10}")
+        print(f"  lived is its first to last living sample, ! past the {PORTAL_SECOND_MS / 1000:.0f} s its second"
+              " Mistress lands at")
 
     casts = sum(1 for rec in trace.of("cast") if rec.get("sp") in MISTRESS_KISS_CAST)
     kisses = kiss_windows(trace)
@@ -1056,8 +1131,9 @@ SECTIONS = (
     ("boss", "Fel Fireball landed or kicked and by whom, Fel Lightning chains and their cost", show_boss),
     ("nether", "Nether Power stacks and the casts that stripped them", show_nether),
     ("incinerate", "Incinerate Flesh windows, heals on the target, Burning Inferno after", show_incinerate),
-    ("flame", "Legion Flame carriers' walk and spacing, who stood in fire", show_flame),
-    ("adds", "add lifetimes and victims, focus and add tank changes, Mistress' Kiss", show_adds),
+    ("flame", "Legion Flame carriers' walk and spacing, dodge ping-pong, who stood in fire", show_flame),
+    ("adds", "add lifetimes and victims, focus and add tank changes, heroic portal life, Mistress' Kiss",
+     show_adds),
     ("cover", "raid cooldowns and personal buttons against each Burning Inferno", show_cover),
 )
 

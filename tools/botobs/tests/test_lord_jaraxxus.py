@@ -296,6 +296,54 @@ def flame_pull() -> list[dict]:
     return records
 
 
+def pingpong_pull() -> list[dict]:
+    """The mage's reach spell and the dodge take turns a second apart for three round trips, with a
+    refused reach in between that doesn't count. The warlock manages two, and the hunter's carry is
+    dodge legs alone. The mage's last dodge comes 3 s on, past the gap, so it starts nothing."""
+    def move(when: int, guid: int, by: str, ok: int = 1) -> dict:
+        return {"t": when, "e": "move", "g": guid, "k": "point", "x": 0.0, "y": 0.0, "z": 0.0, "tgt": 0, "ok": ok,
+                "r": "" if ok else "wait", "by": by, "pr": "combat"}
+
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789600000000, "map": 649, "inst": 10, "diff": 1,
+         "boss": "lord-jaraxxus", "roster": [
+             {"g": MAGE, "n": "Frost", "r": "ranged", "c": "mage", "h": 0},
+             {"g": WARLOCK, "n": "Hex", "r": "ranged", "c": "warlock", "h": 0},
+             {"g": HUNTER, "n": "Volley", "r": "ranged", "c": "hunter", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "lord-jaraxxus", "src": "engage"},
+    ]
+    for when in range(1000, 8000, 1000):
+        records.append(move(when, MAGE, lj.AVOID if when % 2000 else "reach spell"))
+    records += [move(2500, MAGE, "reach spell", 0), move(11000, MAGE, lj.AVOID)]
+    for when in range(1000, 6000, 1000):
+        records.append(move(when, WARLOCK, lj.AVOID if when % 2000 else "reach spell"))
+    for when in range(1000, 9000, 700):
+        records.append(move(when, HUNTER, lj.AVOID))
+    records.append({"t": 20000, "e": "end", "out": "kill"})
+    return sorted(records, key=lambda rec: rec.get("t", -1))
+
+
+class PingPong(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder, cls.trace = write_trace(pingpong_pull(), "649_10_lord-jaraxxus_1789600000.ndjson")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_only_three_round_trips_or_more_count(self):
+        rows = lj.pingpong_runs(self.trace)
+        self.assertEqual([(row["guid"], row["start"], row["stop"], row["trips"], dict(row["movers"]))
+                          for row in rows], [(MAGE, 1000, 7000, 3, {"reach spell": 3})])
+
+    def test_the_flame_section_lists_it(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            lj.show_flame(self.trace)
+        self.assertIn("reach spell 3", out.getvalue())
+
+
 PALADIN = 6008
 AURA_MASTERY = 31821
 DIVINE_HYMN = 64843
@@ -597,6 +645,11 @@ class HeroicCover(unittest.TestCase):
         self.assertEqual([(row["portal"], row["melee"], row["hit"], row["damage"], row["victim"], row["held"])
                           for row in rows], [(PORTAL, [ROGUE], 2, 21400, ROGUE, [ROGUE])])
 
+    def test_a_portal_lives_from_its_first_to_its_last_sample_with_its_mistresses(self):
+        rows = lj.portal_rows(self.trace)
+        self.assertEqual([(row["guid"], row["first"], row["life"], row["mistresses"]) for row in rows],
+                         [(PORTAL, 30000, 15000, 1)])
+
     def test_every_section_prints_on_the_pull(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -604,6 +657,7 @@ class HeroicCover(unittest.TestCase):
                 section(self.trace)
         self.assertIn("1 of 1 covered by 1 s past the first tick", out.getvalue())
         self.assertIn("1 reopen the spread call", out.getvalue())
+        self.assertIn("15.0!", out.getvalue())
 
 
 class EveryView(unittest.TestCase):
