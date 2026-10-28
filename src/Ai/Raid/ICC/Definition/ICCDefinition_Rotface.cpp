@@ -33,6 +33,7 @@ void DefineRotface(EncounterBuilder& e)
     e.Node<IccRotfaceStandTrigger, IccRotfaceStandAction>(ACTION_RAID + 3, EncounterRow::Mover);
 
     e.LiveMultiplier<IccRotfaceOozeSplashMultiplier>(Family::Spell);
+    e.LiveMultiplier<IccRotfaceSelfCureMultiplier>(Family::Spell);
 
     // Every rule keys on him being in combat, which comes seconds before his boss state moves
     e.OwnTargeting("icc rotface targeting", Role::Any, &IccResolverPicks<&GetRfTarget>,
@@ -52,13 +53,16 @@ void DefineRotface(EncounterBuilder& e)
     e.Block("icc rotface avoid aoe", Role::Any, &IsRfLive, Family::AvoidAoe);
     // A Big Ooze obeys taunt diminishing returns, so only the ooze taunt spends the kiter's
     e.Block("icc rotface kiter taunts", Role::Tank, &IsRfKiter, Family::Taunt);
-    // A grip drags an ooze into the raid, and the ghouls taunt the oozes
+    // He and both oozes are grip immune, so a grip only wastes the global cooldown, and the ghouls taunt the
+    // oozes
     e.Block("icc rotface pulls", Role::Any, &IsRfLive, 0, {"death grip", "army of the dead"});
-    // Removing Mutated Infection spawns its Little Ooze on the spot: only the dispel duty cures it
+    // Removing Mutated Infection spawns its Little Ooze on the spot: only the dispel duty cures it. Stoneform
+    // and Cleansing Totem strip diseases too.
     e.Block("icc rotface cures", Role::Any, &IsRfLive, 0,
             {"cure disease", "cure disease on party", "abolish disease", "abolish disease on party",
              "cleanse disease", "cleanse disease on party", "purify disease", "purify disease on party",
-             "cleanse spirit", "cleanse spirit disease on party", "cure toxins", "cure toxins disease on party"});
+             "cleanse spirit", "cleanse spirit disease on party", "cure toxins", "cure toxins disease on party",
+             "stoneform", "cleansing totem"});
     // The tank buttons wait for a full-strength Big Ooze or a low tank
     e.Block("icc rotface tank defensive hold", Role::Tank, &IsRfTankDefensiveHeld, 0, HeldTankDefensiveNames());
 

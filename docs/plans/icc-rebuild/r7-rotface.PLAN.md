@@ -82,8 +82,10 @@ All done, one lead, no split: the stem shares one state, one hazard model and on
 | Spread on two rings 9.5 yd apart, normal included | Warcraft Tavern (everyone 8 yd apart); Vile Gas 8 yd + park | Wowhead normal: stack behind him |
 | Healers inner (12 yd), ranged outer (21.5 yd), hunters outer only | Vile Gas picks beyond 14.5 yd when 3 / 8 stand there; his reach puts a hunter's minimum at 15.8 | One ring |
 | Kite ring 36 yd, counter-clockwise first, legs of 10-40 degrees | Flood rotation is counter-clockwise (script); 14.5 yd clear of the outer ring | Old 24-34 yd ring, fixed points |
-| Ooze spot opposite the last flood | It floods two floods later | Fixed spot |
-| Face-tank the Big Ooze under 3 stacks | Wowhead: threat lead while weak | Kite from the pickup |
+| Ooze spot opposite the latest flood, moved with each one (review) | Held until its own warning, kiter and carriers stood in it, the exit through the raid | Hold it until it floods, then jump across |
+| Face-tank the Big Ooze under 3 stacks, only within 15 yd of the spot (review) | Wowhead: threat lead while weak; a walk to a far spot drags its aura through the raid | Kite from the pickup |
+| Kiter towing its ooze dodges no nearer than 32.5 yd to his spawn (review) | The aura follows it onto the outer ring | Nearest clear spot |
+| Healers' first slots spread round the inner ring (review) | Nearest slots left the kiter out of reach of 2 clustered 10-man healers | Nearest slot; heal reach kept |
 | One taunt path, skipped at taunt-immune DR; generic taunts blocked for the kiter | `flags_extra` 0x80000 | Old taunt loop |
 | Cure at the merge, hold the first, emergency under 35% | Wowhead's order; the script summons on any removal | Never cure (old) |
 | Dodge every explosion mark until it lands | Script: stalkers at cast end, 5 yd/s missiles | 25 slots at 40 yd (old) |
@@ -108,6 +110,7 @@ All done, one lead, no split: the stem shares one state, one hazard model and on
 
 ## Known gaps
 
-See `rotface.md`, "Known gaps".
+See `rotface.md`, "Known gaps". The review added: curers never walk to a far merge (10-man), a Cleansing
+Totem already down still cures, a towing kiter with no dodge spot 32.5 yd out holds.
 
 ## Blocked

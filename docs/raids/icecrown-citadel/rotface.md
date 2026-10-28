@@ -1,8 +1,8 @@
 # Rotface
 
 Boss id 5, slug `rotface`, prefix `rf.`. Code: stem `Rotface` (`src/Ai/Raid/ICC/*/ICC*_Rotface.*`); nodes
-`icc rotface` dodge, tank defensive, dispel, ooze taunt, kite, carrier, target, stand; multiplier `icc
-rotface ooze splash`. Raid conventions: [README.md](README.md). Core: `boss_rotface.cpp`.
+`icc rotface` dodge, tank defensive, dispel, ooze taunt, kite, carrier, target, stand; multipliers `icc
+rotface ooze splash`, `icc rotface self cure`. Raid conventions: [README.md](README.md). Core: `boss_rotface.cpp`.
 
 ## Mechanics
 
@@ -33,31 +33,38 @@ and the tick key on him being in combat, the splash multiplier waits for live.
 - **Kiter** (`rf.kiter`): one bot tank, not the one holding him, an assist tank first, kept while it can.
   Its duty (`rf.bigooze`): with carriers out and no Big Ooze it waits at the ooze spot; it taunts a Big
   Ooze not on it from 30 yd (`icc rotface ooze taunt`, never at the immune level of taunt diminishing
-  returns) and walks to it; it holds one at the ooze spot under 3 stacks, then kites it: once the ooze
-  is within 15 yd, a leg 10-40 degrees along the kite ring (36 yd), counter-clockwise first, to a point
-  16 yd from the ooze, dry by 28 yd, clear of puddles, its walk not through the ooze's aura or a flood.
-  It holds while it carries an ooze itself. Generic taunts are blocked for it.
-- **Ooze spot** (`rf.oozespot`): the kite ring point at the middle of the quadrant opposite the last
-  flooded one, so it floods two floods later; replaced once it is about to.
+  returns) and walks to it; it holds one under 3 stacks at the ooze spot while within 15 yd of it, else
+  kites it: once the ooze is within 15 yd, a leg 10-40 degrees along the kite ring (36 yd),
+  counter-clockwise first, to a point 16 yd from the ooze, dry by 28 yd, clear of puddles, its walk not
+  through the ooze's aura or a flood. It holds while it carries an ooze itself. Towing its ooze, it never
+  dodges within 32.5 yd of his spawn. Generic taunts are blocked for it.
+- **Ooze spot** (`rf.oozespot`): the kite ring point at the middle of the quadrant opposite the latest
+  flood, so it moves on a quadrant with each flood and never floods while it is the spot.
 - **Carriers** (`rf.carrier`): a bot with Mutated Infection or a Little Ooze on it walks to the Big Ooze
   (the kiter's first), else another Little Ooze, else the ooze spot, and stops within 4 yd.
 - **Cure duty** (`rf.dispel`): an infected player within 6 yd of the Big Ooze, or of another Little Ooze,
   or of another infected player with neither up, or under 35%, gets the nearest bot priest, paladin or
-  shaman with a disease cure ready within 30 yd and in sight. The class cure nodes are blocked.
+  shaman with a disease cure ready within 30 yd and in sight. The class cure nodes, Stoneform and Cleansing
+  Totem are blocked; a paladin's own Cleanse and Purify through `icc rotface self cure`, since they report
+  `cleanse` and `purify`, not the names they register under.
 - **Spread** (`rf.slot`): healers on the inner ring (12 yd, 6 slots), ranged on the outer (21.5 yd, 13),
-  each on the other ring when theirs is full, hunters outer only, the rest the stack 8 yd behind him.
+  each on the other ring when theirs is full, hunters outer only, the rest the stack 8 yd behind him. A
+  healer's first slot leaves the widest gap to the other healers, so with two or more one always reaches
+  the kiter (inner slots 90 degrees off it are 38 yd away).
   Every slot is 9.5 yd or more from every other. A slot within 1.75 yd of a flood or puddle or 11.75 of a
   Big Ooze changes for the nearest usable one. Reach, heal reach and spell movers are held while a stand
   holds.
-- **Dodge** (`rf.dodge`, emergency, forced): inside a hazard by half a yard (Slime Spray cone, a mark not
+- **Dodge** (`rf.dodge`, emergency, forced): within half a yard of a hazard (Slime Spray cone, a mark not
   yet landed, a puddle, a flood or its warning, a Vile Gas carrier for others, a Big Ooze for all but the
   kiter and carriers), to the nearest spot clear of all of them by 2.5 yd, 0.75 when nothing is, its walk
   across none, the cone cleared by 2 yd; melee and the main tank within 9 yd of him first. A cast is cut
-  for the spray, a mark landing within 2.5 s, a puddle, a flood or its last 1.5 s of warning. A stand
+  for the spray, a mark landing within 2.5 s, a puddle, a gas carrier, a flood or its last 1.5 s of
+  warning. A stand
   walks back only once no hazard covers its spot; generic movers are held while a mark flies or he sprays.
 - **Targets** (`rf.target`): the kiter's Big Ooze, then a player's skull on him or an ooze for all but the
   tank holding him, else him. Area damage from a damage dealer is held while an ooze is within 15 yd of it
-  or its target. Death Grip and Army of the Dead are held.
+  or its target. Army of the Dead (ghouls taunt the oozes) and Death Grip (all three are grip immune) are
+  held.
 - **Tank defensives** (`rf.defensive`): the kiter under a Big Ooze of 4 stacks within 6 yd, any tank under
   40%; class buttons held to 25%. A human tank gets the same as calls (`rf.humancall`).
 
@@ -76,7 +83,9 @@ flood.
 | Spread on two rings, 9.5 yd apart, on every difficulty | Warcraft Tavern: everyone 8 yd apart; Vile Gas 8 yd plus park tolerance | Wowhead normal: stack behind him |
 | Healers inside 14.5 yd, ranged outside | Vile Gas picks outside while 3 / 8 stand there, so healers aren't its targets | One ring |
 | Kite ring 36 yd, counter-clockwise first | 14.5 yd past the outer ring; a flood moves counter-clockwise, so a kiter behind it is never flooded onto | Kite ring 24-34 yd; fixed points |
-| Hold the Big Ooze at the ooze spot under 3 stacks | Wowhead: threat lead while it is weak, kite once stacked | Kite from the pickup |
+| Hold the Big Ooze at the ooze spot under 3 stacks, from within 15 yd | Wowhead: threat lead while it is weak, kite once stacked; a straight walk to a far spot drags its aura through the raid | Kite from the pickup |
+| Ooze spot opposite the latest flood | It never floods while it is the spot; one held into its own warning leaves the way out through the raid | Hold it until it floods, then jump across the room |
+| Healers' first slots spread round the inner ring | Kiter in heal reach at any bearing with two healers | Nearest slot |
 | Taunt only off the kiter, never at the immune level | 0x80000 on the ooze | Taunt every ooze each cooldown |
 | Cure at the merge, the first not at all, any under 35% | Wowhead's three-step order; -50/75% healing on a 12 s DoT | Never cure; cure at once |
 | Explosion: dodge every mark until its missile lands | The script: marks at cast end, 5 yd/s flight | 25 slots on a 40 yd ring |
@@ -96,8 +105,13 @@ None before, none now: `rf.nitro` and `rf.spitefulfury` were removed earlier. Th
 - The kiter keeps a kited Big Ooze by its threat and instants alone; heal threat can still pull it. The
   taunt hits the immune level after four taunts inside 15 s of each other. `--oozes` gives the share on a
   tank.
-- No kite plan through a flood: with no dry leg the kiter holds and tanks the ooze where it stands. No
-  Hand of Freedom or Anti-Magic Shell for a slowed kiter.
+- No kite plan through a flood: with no dry leg, nor a dodge spot 32.5 yd out, the kiter holds and tanks
+  the ooze where it stands. No Hand of Freedom or Anti-Magic Shell for a slowed kiter.
+- Curers never walk: in 10-man a merge on the kite ring can sit beyond 30 yd of every curer, and the
+  carrier then runs its 12 s out. With one healer, or the healers dead, the far side is out of heal reach
+  too.
+- A Cleansing Totem already down or dropped by Call of the Elements still cures (only with the opt-in
+  `cleansing` water totem strategy).
 - A class rotation casting at the ooze can turn the kiter mid-leg.
 - Overflow ranged and healers stand in the stack; overflow hunters get no stand.
 - A carrier crossing the raid splashes it (Weak Radiating Ooze); nobody steps away from a Little Ooze.

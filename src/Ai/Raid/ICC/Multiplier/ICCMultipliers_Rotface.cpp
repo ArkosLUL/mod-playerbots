@@ -8,6 +8,7 @@
 
 #include "GenericSpellActions.h"
 #include "ICCHelpers_Rotface.h"
+#include "PaladinActions.h"
 #include "PlayerbotAI.h"
 #include "RaidCombatHelpers.h"
 
@@ -18,4 +19,12 @@ float IccRotfaceOozeSplashMultiplier::GetValue(Action* action)
         return 1.0f;
 
     return IsRfAreaDamageHeld(botAI) ? 0.0f : 1.0f;
+}
+
+float IccRotfaceSelfCureMultiplier::GetValue(Action* action)
+{
+    if (!dynamic_cast<CastCleanseDiseaseAction*>(action) && !dynamic_cast<CastPurifyDiseaseAction*>(action))
+        return 1.0f;
+
+    return IsRfLive(botAI) ? 0.0f : 1.0f;
 }

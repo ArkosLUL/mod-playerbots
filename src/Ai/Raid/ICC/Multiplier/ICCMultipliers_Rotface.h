@@ -18,4 +18,13 @@ public:
     float GetValue(Action* action) override;
 };
 
+// A paladin's own disease cures register as "cleanse disease" and "purify disease" but are named "cleanse"
+// and "purify", so the cure rule's name list never matches them.
+class IccRotfaceSelfCureMultiplier : public Multiplier
+{
+public:
+    IccRotfaceSelfCureMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc rotface self cure") {}
+    float GetValue(Action* action) override;
+};
+
 #endif

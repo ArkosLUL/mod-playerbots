@@ -69,8 +69,8 @@ constexpr uint32 MARK_LIFETIME_MS = 60000;
 constexpr uint32 MARK_GRACE_MS = 400;
 constexpr uint32 MARK_FLIGHT_CAP_MS = 12000;
 
-// The dodge triggers half a yard inside a hazard's edge and clears it by DODGE_MARGIN: a bot parks up to
-// a yard off its spot, and a step that only just clears re-triggers on the next spawn
+// The dodge triggers within half a yard of a hazard's edge and clears it by DODGE_MARGIN: a bot parks up
+// to a yard off its spot, and a step that only just clears re-triggers on the next spawn
 constexpr float DODGE_TRIGGER = 0.5f;
 constexpr float DODGE_MARGIN = 2.5f;
 constexpr float DODGE_TIGHT = 0.75f;
@@ -90,6 +90,12 @@ constexpr float KITE_OFF_RING = 3.0f;
 constexpr int8 KITE_LEG_STEPS[] = {2, 3, 1, 4};
 constexpr float KITE_FLOOD_CLEARANCE = RF_FLOOD_RADIUS + 3.0f;
 constexpr float KITE_STICKY_CLEARANCE = RF_STICKY_RADIUS + 2.5f;
+// A weak Big Ooze is held at the ooze spot only from this close. Farther off, the kiter kites it round the
+// ring, since a straight walk to the spot drags its aura through the raid.
+constexpr float KITE_TANK_REACH = 15.0f;
+// A kiter with its Big Ooze in tow never dodges this close to his spawn, or the aura follows it onto the
+// outer ring
+constexpr float KITE_KEEP_OUT = RF_OUTER_RADIUS + RF_RADIATING_RADIUS + 1.0f;
 constexpr float TAUNT_RANGE = 30.0f;
 // The Big Ooze's melee range against a player is 4.8 yd: 2 yd reach, the player's 1.5 and the 1.33 lead
 constexpr float OOZE_REACH = 6.0f;
@@ -269,6 +275,13 @@ float BearingDeg(Position const& pos)
                                    pos.GetPositionX() - ICC_RF_CENTER.GetPositionX());
     float const deg = angle * 180.0f / PI_F;
     return deg < 0.0f ? deg + 360.0f : deg;
+}
+
+// Degrees between two slots round his spawn
+float SlotGapDeg(uint8 a, uint8 b)
+{
+    float const gap = std::fabs(BearingDeg(SlotSpot(a)) - BearingDeg(SlotSpot(b)));
+    return gap > 180.0f ? 360.0f - gap : gap;
 }
 
 int8 QuadrantOf(Position const& pos)
@@ -572,13 +585,18 @@ void AssignSlots(RfState& st, Player* bot, std::vector<Player*> const& members)
 
     bool used[RF_SLOT_COUNT + 2] = {};
     std::vector<Player*> unplaced;
+    std::vector<uint8> healerSlots;
     auto const keep = [&](Player* member)
     {
         auto const held = st.slot.find(member->GetGUID());
         uint8 const id = held != st.slot.end() ? held->second : 0;
         bool const hunterInner = member->getClass() == CLASS_HUNTER && id >= 1 && id <= RF_INNER_SLOTS;
         if (id >= 1 && id <= RF_SLOT_COUNT && !used[id] && !hunterInner && SlotUsable(st, bot, id))
+        {
             used[id] = true;
+            if (PlayerbotAI::IsHeal(member) && !IsOuterSlot(id))
+                healerSlots.push_back(id);
+        }
         else
             unplaced.push_back(member);
     };
@@ -591,6 +609,9 @@ void AssignSlots(RfState& st, Player* bot, std::vector<Player*> const& members)
     {
         bool const healer = PlayerbotAI::IsHeal(member);
         bool const hunter = member->getClass() == CLASS_HUNTER;
+        // A healer taking its first slot goes where it leaves the widest gap to the other healers, so one of
+        // them always reaches the kiter on the far side of the room. One pushed off its slot takes the nearest.
+        bool const spread = healer && st.slot.find(member->GetGUID()) == st.slot.end();
         uint8 best = 0;
         float bestScore = 0.0f;
         for (uint8 id = 1; id <= RF_SLOT_COUNT; ++id)
@@ -598,9 +619,18 @@ void AssignSlots(RfState& st, Player* bot, std::vector<Player*> const& members)
             if (used[id] || (hunter && !IsOuterSlot(id)) || !SlotUsable(st, bot, id))
                 continue;
 
-            // The wanted ring first, then the nearest slot on it
+            // The wanted ring first, then the widest gap for a spreading healer, then the nearest slot
             bool const wanted = healer != IsOuterSlot(id);
-            float const score = member->GetExactDist2d(SlotSpot(id)) + (wanted ? 0.0f : 1000.0f);
+            float score = member->GetExactDist2d(SlotSpot(id)) + (wanted ? 0.0f : 100000.0f);
+            if (spread && wanted)
+            {
+                float gap = 180.0f;
+                for (uint8 other : healerSlots)
+                    gap = std::min(gap, SlotGapDeg(id, other));
+
+                score -= 100.0f * std::round(gap);
+            }
+
             if (!best || score < bestScore)
             {
                 best = id;
@@ -612,6 +642,8 @@ void AssignSlots(RfState& st, Player* bot, std::vector<Player*> const& members)
         {
             used[best] = true;
             st.slot[member->GetGUID()] = best;
+            if (healer && !IsOuterSlot(best))
+                healerSlots.push_back(best);
         }
         else if (hunter)
             st.slot.erase(member->GetGUID());
@@ -726,19 +758,12 @@ void UpdateDispel(RfState& st, std::vector<Player*> const& members, Creature* bo
     }
 }
 
-// Opposite the flooding quadrant, so it floods two floods later, and kept until it is about to
+// Opposite the latest flood, so it moves on a quadrant with each flood and never floods while it's the spot.
+// One held into its own flood warning leaves the kiter and the carriers no way out but through the raid.
 void UpdateOozeSpot(RfState& st)
 {
     bool const needed = !st.bigOozes.empty() || !st.littleOozes.empty() || !st.carriers.empty();
-    if (!needed)
-    {
-        st.oozeSpot = 0;
-        return;
-    }
-
-    uint8 const held = st.oozeSpot;
-    if (!held || WetAt(st, OozeSpotOf(held - 1), KITE_FLOOD_CLEARANCE))
-        st.oozeSpot = static_cast<uint8>(WantedOozeQuadrant(st) + 1);
+    st.oozeSpot = needed ? static_cast<uint8>(WantedOozeQuadrant(st) + 1) : 0;
 }
 
 void RefreshDuties(RfState& st, Player* bot, Creature* boss, uint32 now)
@@ -804,8 +829,9 @@ KiteMode ModeOf(Player* kiter, RfState const& st, Creature*& ooze)
         return KiteMode::Hold;
 
     uint8 const spot = st.oozeSpot;
-    bool const spotWet = !spot || WetAt(st, OozeSpotOf(spot - 1), KITE_FLOOD_CLEARANCE);
-    return Stacks(ooze) < RF_KITE_FROM_STACKS && !spotWet ? KiteMode::Tank : KiteMode::Run;
+    bool const spotHeld = spot && !WetAt(st, OozeSpotOf(spot - 1), KITE_FLOOD_CLEARANCE) &&
+                          kiter->GetExactDist2d(OozeSpotOf(spot - 1)) <= KITE_TANK_REACH;
+    return Stacks(ooze) < RF_KITE_FROM_STACKS && spotHeld ? KiteMode::Tank : KiteMode::Run;
 }
 
 char const* ModeName(KiteMode mode)
@@ -1252,6 +1278,8 @@ bool FindRfDodgeSpot(PlayerbotAI* botAI, Position& spot, bool& interrupt, std::s
     }
 
     bool const melee = IsMeleeDuty(bot, *st);
+    Creature* towed = IsKiterBot(bot, *st) ? DutyOoze(bot, *st) : nullptr;
+    bool const keepOut = towed && towed->GetVictim() == bot;
     Position anchor;
     Position const* preferNear = nullptr;
     if (melee)
@@ -1280,7 +1308,9 @@ bool FindRfDodgeSpot(PlayerbotAI* botAI, Position& spot, bool& interrupt, std::s
         auto const accept = [&](float x, float y)
         {
             Position const to(x, y, from.GetPositionZ());
-            if (to.GetExactDist2d(ICC_RF_CENTER) > RF_ROOM_RADIUS || !ClearOfSpray(*st, boss, x, y, SPRAY_MARGIN))
+            float const out = to.GetExactDist2d(ICC_RF_CENTER);
+            if (out > RF_ROOM_RADIUS || (keepOut && out < KITE_KEEP_OUT) ||
+                !ClearOfSpray(*st, boss, x, y, SPRAY_MARGIN))
                 return false;
 
             if (keepMelee && boss->GetExactDist2d(x, y) > MELEE_KEEP)
