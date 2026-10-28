@@ -17,9 +17,10 @@
     faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast, the raid's own splash
     faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds
     faction_champions.py <file> --pack     champions round each role, early melee deaths, first kill, stalls, grips
-    faction_champions.py <file> --chain    each player's pull: the DK tank's, the bot DK's and the player's grips,
-                                           their gaps and carry, the order, what cut each; bot grips outside a pull:
-                                           the landing off ARENA_CENTER, Chains of Ice after, regrips; fc.wall holds
+    faction_champions.py <file> --chain    each player's pull: the bot DK links by post and the player's grip,
+                                           skipped links, their gaps and carry, the order, what cut each; bot grips
+                                           outside a pull: the landing off ARENA_CENTER, Chains of Ice after,
+                                           regrips; fc.wall holds
     faction_champions.py <file> --peel     snares and peels on melee champions, Disarm against Bladestorm,
                                            externals (Lay on Hands too), the DK champion's Chains of Ice on the raid
                                            and the Hands of Freedom on it, battle res and repeat deaths, taunts
@@ -30,8 +31,9 @@
                                            after, whether they dropped the bot and it lived
     faction_champions.py <file> --focus    4+ champions on one raid member: episodes, the externals and
                                            immunities in them, fc.nextfocus against each fc.repick
-    faction_champions.py <file> --hold     each melee champion's holder: the champion on it, how far off the
-                                           healers, its other victims, deaths; melee champions never held
+    faction_champions.py <file> --ice      each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how
+                                           far the champion moved, the share on the DK, its other victims and the
+                                           deaths it caused; melee champions never iced
     faction_champions.py <file> --stands   stand moves, jumps and path against net, who moved healers and
                                            ranged and how much, each role's spacing from the melee champions and
                                            their damage moving or standing, healing against damage taken, the
@@ -64,9 +66,9 @@ What the generic views get wrong here, and what this reads instead:
   moveGen and a Cyclone's or Polymorph's off this key, `n/a` without it and always for Roots. A CC
   broken between two samples shows in neither: on 25N 52 of 67 Fears showed.
 - **`fc.kill`, `fc.physical`, `fc.chain` and `fc.danger` are raid-wide latches and `fc.switch` an event**, so
-  the `g` on any of them is whichever bot's tick made the call. `fc.cc`, `fc.peel`, `fc.totem`, `fc.hold`,
-  `fc.opener`, `fc.cyclone` and `fc.wall` are per bot, keyed on the bot, `0` on a release; `fc.ccaura` is keyed on the
-  champion. An `fc.cc` hold is one cast: it ends when the cast lands or 3 s pass with none going. A
+  the `g` on any of them is whichever bot's tick made the call. `fc.cc`, `fc.peel`, `fc.totem`, `fc.ice`,
+  `fc.link`, `fc.opener`, `fc.cyclone` and `fc.wall` are per bot, keyed on the bot, `0` on a release; `fc.ccaura` is
+  keyed on the champion. An `fc.cc` hold is one cast: it ends when the cast lands or 3 s pass with none going. A
   `skull` switch is a player's skull
   taking the latch: bots place no skull here, so the `g` is still a bot, never the player who marked.
 - **Exhaustion or Sated applied before the trace shows only as its removal.** `--burst` reads a
@@ -94,9 +96,12 @@ What the generic views get wrong here, and what this reads instead:
   and the release never show: `--ball` reads the start off the raid's first cast on a champion.
 - **A pull made before the engage shows from the engage.** The trace opens there, and `fc.chain`
   is restated on the next read, so `--chain` times the first pull from the trace's opening.
-- **A champion on a holder is no escapee.** `fc.hold` gives each melee champion one holder until it turns
-  kill target, and `--ball` counts a champion loose only while its victim is neither a tank nor a bot
-  holding an `fc.hold` at that sample.
+- **An iced champion is no escapee, and Chains of Ice on a champion is read off casts.** No aura on a creature
+  is recorded, so a champion counts as iced for 10 s after its `fc.ice` DK's Chains of Ice cast on it, inside the
+  duty. `--ball` counts a champion loose only while it is neither iced nor on a tank, and `--ice` reads its uptime
+  the same way.
+- **A grip chain opened before the engage restates its links later.** `fc.link` is a map, so the trace hears the
+  open chain's posts on its first write after the trace opens, at the latest when the chain closes.
 - **A Nitro Boosts use with no `fc.nitro` note is a walk boost.** The chase notes `fc.nitro` on the bot as it
   starts each run, `focus N`, `melee N`, `contact N` or `next`; `--stands` reads a use with no note on that bot
   within 1 s as `walk`, a boost no rule asks for any more.
@@ -247,7 +252,8 @@ FC_MULTIPLIERS = (
     "faction champions cc guard multiplier",
     "faction champions totem guard multiplier",
     "faction champions grip hold",
-    "faction champions holder hold",
+    "faction champions ice hold",
+    "faction champions ice rune reserve",
     "faction champions kill squad wait",
     "faction champions battle res guard",
     "faction champions lay on hands guard",
@@ -372,7 +378,25 @@ NOVA_REACH = 12.0
 # a hold this soon after a grip cut its flight
 GRIP_WATCH_MS = 1200
 
-HOLD = "fc.hold"
+# a bot DK's ice duty, keyed on the DK, the melee champion it keeps in Chains of Ice, `0` on a release; the
+# release's reason
+ICE = "fc.ice"
+ICE_OFF = "fc.iceoff"
+# a Chains of Ice slows for 10 s, 45% or more for its first 5
+CHAINS_MS = 10000
+CHAINS_STRONG_MS = 5000
+# a champion's travel is read over this long
+ICE_MOVE_MS = 10000
+# a death is a champion's when it did this share of the damage in the DEATH_DAMAGE_MS before
+KILL_SHARE = 0.5
+# The DK's Frost and Death rune spenders, player ranks: id -> name. Chains of Ice counts off its champion.
+FROST_SPENDERS = {**dict.fromkeys((45477, 49896, 49903, 49904, 49909), "Icy Touch"),
+                  **dict.fromkeys((49020, 51423, 51424, 51425), "Obliterate"),
+                  **dict.fromkeys((49184, 51409, 51410, 51411), "Howling Blast"),
+                  **dict.fromkeys((49998, 49999, 45463, 49923, 49924), "Death Strike"),
+                  **dict.fromkeys((55090, 55265, 55270, 55271), "Scourge Strike"),
+                  **dict.fromkeys((43265, 49936, 49937, 49938), "Death and Decay"),
+                  51271: "Unbreakable Armor", 42650: "Army of the Dead"}
 # the old stand layout, then the Cyclone stand and the healers' step off the melee
 STAND_ACTIONS = ("faction champions ball stand", "faction champions cyclone stand", "faction champions step off")
 # a moving sample is the doing of the bot's last accepted move row this recent
@@ -419,8 +443,10 @@ WALL_CHAIN_MS = 6000
 # another raider's grip on the champion this soon before makes a bot's grip a regrip
 REGRIP_MS = 8000
 SPELL_CHAINS_OF_ICE = 45524
-# a pull with no chased run, escape, kite or wall grip writes none
-OPTIONAL_PROBES = frozenset((NITRO, ESCAPE, KITE, WALL))
+# a grip chain link's skip, `cooldown`, `gone` or `timeout`
+LINK_SKIP = "fc.linkskip"
+# a pull with no chased run, escape, kite, wall grip or skipped link writes none
+OPTIONAL_PROBES = frozenset((NITRO, ESCAPE, KITE, WALL, LINK_SKIP))
 KICK = "fc.kick"
 # champion channels: id -> name, every difficulty
 CHANNEL_SPELLS = {**dict.fromkeys((65816, 68145, 68146, 68147), "Hellfire"),
@@ -478,9 +504,14 @@ DEATH_PIN_MS = 12000
 DEATH_KITE_MS = 5000
 PEEL = "fc.peel"
 CHAIN = "fc.chain"
-# a pull's grips run on past its stop: the bot DK's grip ends it, the player's comes after
+# a pull's grips run on past its stop: the last bot DK's grip ends it, the player's comes after
 CHAIN_TAIL_MS = 20000
+# a pull with no fc.link: the DK tank, the bot DK, then the player
 CHAIN_ORDER = ["tank", "bot DK", "human"]
+# a bot DK link's post counted from 1, keyed on the DK, `0` once the chain closes
+LINK = "fc.link"
+# the code's MAX_LINKS: the player grips last while the bots leave a post free
+CHAIN_POSTS = 3
 # the bots open the next chain within this long of the kill target's death, once a grip is ready
 AFTER_KILL_MS = 20000
 PEEL_SPELLS = {676: "Disarm", 51722: "Dismantle", 64044: "Psychic Horror", 49576: "Death Grip",
@@ -1870,12 +1901,23 @@ def grip_holds(trace: Trace) -> list[dict]:
     return sorted(out, key=lambda row: (row["start"], row["bot"]))
 
 
+def chain_turns(trace: Trace, start: int, until: int) -> tuple[dict[int, int], list[tuple[int, int, str]]]:
+    """`(posts, skips)` inside a chain's window: posts maps each bot DK link to its `fc.link` post counted from 1,
+    and skips is `(t, dk, reason)` per `fc.linkskip`."""
+    posts = {rec["g"]: as_guid(rec.get("txt")) for rec in notes(trace, LINK)
+             if start <= rec["t"] <= until and as_guid(rec.get("txt"))}
+    skips = [(rec["t"], rec["g"], str(rec.get("txt", ""))) for rec in notes(trace, LINK_SKIP)
+             if start <= rec["t"] <= until]
+    return posts, skips
+
+
 def chain_links(trace: Trace) -> tuple[list[dict], list[dict]]:
     """`(chains, outside)`. A chain is one `fc.chain` span: `target`, `start`, `stop`, `after_kill` (ms
-    from the last `dead` switch up to AFTER_KILL_MS before it, else None), and `links`, the raid's Death
+    from the last `dead` switch up to AFTER_KILL_MS before it, else None), `links`, the raid's Death
     Grips on that target from the span's start until the next span or 20 s past its stop, each a `grips` row
-    plus `off`, the target's distance off the pack anchor a second after (None without a sample). `outside`
-    is every bot grip on a champion in no chain's window."""
+    plus `off`, the target's distance off the pack anchor a second after (None without a sample), and `posts`
+    and `skips` as `chain_turns` reads them over the same window. `outside` is every bot grip on a champion in
+    no chain's window."""
     end = pull_end(trace)
     spans = [(as_guid(value), start, stop) for value, start, stop in latch_spans(trace, CHAIN, end)
              if as_guid(value)]
@@ -1899,7 +1941,9 @@ def chain_links(trace: Trace) -> tuple[list[dict], list[dict]]:
             links.append({**row, "off": distance(spot, [0, *anchor]) if spot and anchor else None,
                           "pulled": any(abs(when - row["t"]) <= GRIP_PULL_SLACK_MS for when in pulls.get(target, ())),
                           "cut": grip_cuts(trace, target, row["t"])})
-        chains.append({"target": target, "start": start, "stop": stop, "links": links,
+        posts, skips = chain_turns(trace, start, until)
+        chains.append({"target": target, "start": start, "stop": stop, "links": links, "posts": posts,
+                       "skips": skips,
                        "after_kill": min((start - when for when in deaths if 0 <= start - when <= AFTER_KILL_MS),
                                          default=None)})
     outside = [row for row in rows if row["by"] not in trace.humans
@@ -1959,15 +2003,33 @@ def link_role(trace: Trace, guid: int) -> str:
     return "tank" if trace.role(guid) == "tank" else "bot DK"
 
 
+def chain_order(trace: Trace, chain: dict) -> tuple[list[str], bool]:
+    """Each grip's label and whether the grips came in the order wanted. With `fc.link` the label is the link's
+    post and the order is the links by post, skips left out, then the player while fewer than CHAIN_POSTS bot
+    links are left; without it the label is the role and the order CHAIN_ORDER."""
+    posts = chain["posts"]
+    if not posts:
+        roles = [link_role(trace, link["by"]) for link in chain["links"]]
+        return roles, roles[:len(CHAIN_ORDER)] == CHAIN_ORDER
+
+    skipped = {dk for _, dk, _ in chain["skips"]}
+    wanted: list = [dk for dk in sorted(posts, key=posts.get) if dk not in skipped]
+    if len(wanted) < CHAIN_POSTS:
+        wanted.append("human")
+    got = ["human" if link["by"] in trace.humans else link["by"] for link in chain["links"]]
+    labels = [f"link {posts[link['by']]}/{len(posts)}" if link["by"] in posts else link_role(trace, link["by"])
+              for link in chain["links"]]
+    return labels, got[:len(wanted)] == wanted
+
+
 def show_chain(trace: Trace) -> None:
     print("THE GRIP CHAIN")
     chains, outside = chain_links(trace)
     if not chains:
         print(f"  no chain ({CHAIN} never set)")
     for chain in chains:
-        roles = [link_role(trace, link["by"]) for link in chain["links"]]
-        verdict = "in order" if roles[:len(CHAIN_ORDER)] == CHAIN_ORDER else \
-            ("order " + ", ".join(roles) if roles else "no grip")
+        roles, in_order = chain_order(trace, chain)
+        verdict = "in order" if in_order else ("order " + ", ".join(roles) if roles else "no grip")
         kind = "pull" if chain["after_kill"] is None else \
             f"chain {chain['after_kill'] / 1000:.1f} s after a kill"
         print(f"\n  {kind} on {trace.name(chain['target'])} at {clock(chain['start'])},"
@@ -1978,9 +2040,12 @@ def show_chain(trace: Trace) -> None:
             off = "-" if link["off"] is None else f"{link['off']:.1f}"
             cuts = ", ".join(f"{trace.name(who)} {name} +{after}ms" for after, who, name in link["cut"])
             note_text = ("  no pull" if not link["pulled"] else "") + (f"  cut by {cuts}" if cuts else "")
-            print(f"    {clock(link['t']):>9} {trace.name(link['by'])[:14]:14} {role:7}"
+            print(f"    {clock(link['t']):>9} {trace.name(link['by'])[:14]:14} {role:8}"
                   f" +{(link['t'] - previous) / 1000:.1f}s carry {carry:>5} off pack {off:>5}{note_text}")
             previous = link["t"]
+        if chain["skips"]:
+            print("    skipped: " + ", ".join(f"{trace.name(dk)} ({reason}) at {clock(when)}"
+                                           for when, dk, reason in chain["skips"]))
     rows = outside_grips(trace) if outside else []
     if rows:
         print(f"\n  bot grips outside a pull: {len(rows)}")
@@ -2001,8 +2066,9 @@ def show_chain(trace: Trace) -> None:
     print(f"  {WALL} holds: {len(walls)}, {gripped} with the DK's grip inside")
     print(f"  a chain opened within {AFTER_KILL_MS // 1000} s of a dead switch counts as after a kill;"
           f" a pull's grips run from its {CHAIN} until the next one or {CHAIN_TAIL_MS // 1000} s past its"
-          f" end; the order wanted is the DK tank, the bot DK, then the player; + counts from the pull or"
-          f" the link before; carry is the target's travel, off pack its distance from where the champions"
+          f" end; the order wanted is the bot DK links by their {LINK} post, skips left out, then the player while"
+          f" fewer than {CHAIN_POSTS} links are left, and with no {LINK} the DK tank, the bot DK, then the player;"
+          f" + counts from the pull or the link before; carry is the target's travel, off pack its distance from where the champions"
           f" landed, both {GRIP_SETTLE_MS / 1000:.0f} s after the grip; cut by is a raid or pet hold on the"
           f" champion within {GRIP_WATCH_MS / 1000:.1f} s of the grip, no pull is no {SPELL_GRIP_PULL} cast with it;"
           f" a bot grip outside a pull lands the champion off centre, from ARENA_CENTER {WALL_LAND_MS / 1000:.1f} s"
@@ -2071,19 +2137,25 @@ def victim_at(trace: Trace, champion: int, when: int) -> list | None:
 
 
 def snare_casts(trace: Trace) -> list[dict]:
-    """Every raid snare on a champion: `t`, `by`, `spell`, `target`, and whether its victim then kites from it,
-    neither a tank nor its `fc.hold` holder (`needed`, None when the sample can't say)."""
+    """Every raid snare on a champion but an ice duty's own Chains of Ice on its champion, which `--ice` reads:
+    `t`, `by`, `spell`, `target`, and whether its victim then kites from it, not a tank unless that's the DK whose
+    ice duty the champion is (`needed`, None when the sample can't say)."""
     targets = champions(trace)
     roster = roster_guids(trace)
-    holds = [(hold["bot"], as_guid(hold["value"]), hold["start"], hold["stop"]) for hold in duty_holds(trace, HOLD)]
+    duties = ice_duties(trace)
+
+    def on_duty(dk: int, champion: int, when: int) -> bool:
+        return any(bot == dk and iced == champion and start <= when <= stop for bot, iced, start, stop, _ in duties)
+
     out = []
     for rec in trace.of("cast"):
         if rec.get("sp") not in SNARES or rec.get("tgt") not in targets or rec.get("s") not in roster:
             continue
+        if rec["sp"] == SPELL_CHAINS_OF_ICE and on_duty(rec["s"], rec["tgt"], rec["t"]):
+            continue
         victim = victim_at(trace, rec["tgt"], rec["t"])
-        holder = victim is not None and any(bot == victim[0] and held == rec["tgt"] and start <= rec["t"] < stop
-                                            for bot, held, start, stop in holds)
-        needed = None if victim is None else trace.role(victim[0]) != "tank" and not holder
+        needed = None if victim is None else \
+            trace.role(victim[0]) != "tank" or on_duty(victim[0], rec["tgt"], rec["t"])
         out.append({"t": rec["t"], "by": rec["s"], "spell": SNARES[rec["sp"]], "target": rec["tgt"], "needed": needed})
     return out
 
@@ -2240,8 +2312,8 @@ def show_peel(trace: Trace) -> None:
     klass = classes(trace)
     snares = snare_casts(trace)
     if snares:
-        print(f"  {len(snares)} snare(s) on champions, by spell and class (victim kites from it / its tank or"
-              " holder / unknown):")
+        print(f"  {len(snares)} snare(s) on champions, by spell and class (victim kites from it / on a tank /"
+              " unknown), an ice duty's own Chains of Ice under --ice:")
         groups: dict[tuple[str, str], list[bool | None]] = collections.defaultdict(list)
         for row in snares:
             groups[(row["spell"], klass.get(row["by"], "?"))].append(row["needed"])
@@ -2423,14 +2495,14 @@ def kill_isolation(trace: Trace) -> list[dict]:
 
 
 def escapee_seconds(trace: Trace) -> dict[int, float]:
-    """Per champion, seconds spent past 20 yd of where the pack landed with a victim that is neither a tank nor
-    a bot holding an `fc.hold` at that sample."""
+    """Per champion, seconds spent past 20 yd of where the pack landed while neither iced nor on a tank at that
+    sample."""
     anchor = pack_anchor(trace)
     if anchor is None:
         return {}
     targets = champions(trace)
     start = pull_start(trace)
-    holds = [(hold["bot"], hold["start"], hold["stop"]) for hold in duty_holds(trace, HOLD)]
+    duties = ice_duties(trace)
     out: dict[int, float] = collections.defaultdict(float)
     previous = None
     for snap in frames(trace):
@@ -2438,10 +2510,9 @@ def escapee_seconds(trace: Trace) -> dict[int, float]:
             continue
         if previous is not None:
             step = (snap["t"] - previous) / 1000
-            holders = {bot for bot, begin, stop in holds if begin <= snap["t"] < stop}
             for row in live_rows(snap, targets):
                 victim = row[7] if len(row) > 7 else 0
-                held = trace.role(victim) == "tank" or victim in holders
+                held = trace.role(victim) == "tank" or iced_at(duties, row[0], snap["t"])
                 if distance(row, [0, *anchor]) > BALL_ESCAPE and not held:
                     out[row[0]] += step
         previous = snap["t"]
@@ -2491,57 +2562,136 @@ def first_picks(trace: Trace) -> list[tuple[int, int, int]]:
     return sorted((when, guid, victim) for guid, (when, victim) in seen.items())
 
 
-def hold_rows(trace: Trace) -> list[dict]:
-    """Each `fc.hold` span: `bot`, `champion`, `start`, `stop`; over the champion's live samples inside it,
-    `samples`, `on` (the share with the holder as target, None without samples), `healer` (its median
-    distance to the nearest living raid healer, None without one) and `others` (a Counter of its other
-    targets -> seconds, a sample counting until the next one); `holder_died`, a death of the holder inside
-    the span, and `died`, the champion leaving the snapshots mid-fight by its end or the span open at a
-    kill."""
-    holds = duty_holds(trace, HOLD)
-    if not holds:
+def ice_duties(trace: Trace) -> list[tuple[int, int, int, int, list[int]]]:
+    """`(dk, champion, start, stop, casts)` per `fc.ice` span, casts being the DK's Chains of Ice on the champion
+    inside it."""
+    chains = [(rec["t"], rec.get("s"), rec.get("tgt")) for rec in trace.of("cast")
+              if rec.get("sp") == SPELL_CHAINS_OF_ICE]
+    out = []
+    for hold in duty_holds(trace, ICE):
+        champion = as_guid(hold["value"])
+        casts = [when for when, by, target in chains
+                 if by == hold["bot"] and target == champion and hold["start"] <= when <= hold["stop"]]
+        out.append((hold["bot"], champion, hold["start"], hold["stop"], casts))
+    return out
+
+
+def iced_at(duties: list, champion: int, when: int) -> bool:
+    """A duty's Chains of Ice is on the champion: one of its DK's casts inside the duty in the 10 s before."""
+    return any(iced == champion and start <= when <= stop and any(cast_at <= when < cast_at + CHAINS_MS
+                                                                  for cast_at in casts)
+               for _, iced, start, stop, casts in duties)
+
+
+def covered_spans(casts: list[int], length: int, start: int, stop: int) -> list[tuple[int, int]]:
+    """The union of `[cast, cast + length)` over the casts, clipped to `[start, stop)`, in order."""
+    spans: list[tuple[int, int]] = []
+    for cast_at in sorted(casts):
+        low, high = max(cast_at, start), min(cast_at + length, stop)
+        if low >= high:
+            continue
+        if spans and low <= spans[-1][1]:
+            spans[-1] = (spans[-1][0], max(spans[-1][1], high))
+        else:
+            spans.append((low, high))
+    return spans
+
+
+def longest_gap(spans: list[tuple[int, int]], start: int, stop: int) -> int:
+    """The longest stretch of `[start, stop)` outside the spans, ms."""
+    edges = [start] + [edge for span in spans for edge in span] + [stop]
+    return max((edges[index + 1] - edges[index] for index in range(0, len(edges), 2)), default=0)
+
+
+def champion_kills(trace: Trace, champion: int, deaths: list[tuple[int, int]], start: int, stop: int) -> list[int]:
+    """The roster deaths inside `[start, stop]` the champion, its pets included, did KILL_SHARE or more of the
+    damage to in the DEATH_DAMAGE_MS before."""
+    out = []
+    for when, guid in deaths:
+        if not start <= when <= stop:
+            continue
+        hits = [(trace.owners.get(rec.get("s"), rec.get("s")), rec.get("a", 0)) for rec in trace.of("dmg")
+                if rec.get("d") == guid and when - DEATH_DAMAGE_MS <= rec["t"] <= when]
+        total = sum(amount for _, amount in hits)
+        if total and sum(amount for source, amount in hits if source == champion) >= KILL_SHARE * total:
+            out.append(guid)
+    return out
+
+
+def ice_rows(trace: Trace) -> list[dict]:
+    """Each `fc.ice` span: `bot` (the DK), `champion`, `start`, `stop`, `reason` (its `fc.iceoff` at the stop, None
+    without one); `casts`, the DK's Chains of Ice on the champion inside it, and over the span `uptime` and
+    `strong`, the share inside 10 s and 5 s of one (None for an empty span), and `gap`, the longest stretch with
+    none, ms; `spent`, a Counter of the DK's Frost spenders cast inside it, Chains of Ice on another target
+    included; over the champion's live samples, `moved`, its median travel over 10 s (None with no pair that far
+    apart), `on`, the share with the DK as target (None without samples), and `others`, its other targets ->
+    seconds, a sample counting until the next one; `kills`, the deaths it caused in the span (`champion_kills`);
+    `dk_died`, a death of the DK inside the span, and `died`, the champion leaving the snapshots mid-fight by its
+    end or the span open at a kill."""
+    duties = ice_duties(trace)
+    if not duties:
         return []
-    healers = {guid for guid in roster_guids(trace) if trace.role(guid) == "heal"}
     snaps = frames(trace)
     stamps = snap_stamps(trace)
     seen = Samples(trace)
     last = seen.stamps[-1] if seen.stamps else pull_end(trace)
     end = pull_end(trace)
-    # a kill leaves the last holds open to the end, and those champions are dead either way
+    # a kill leaves the last duties open to the end, and those champions are dead either way
     killed = bool(trace.of("end")) and trace.of("end")[-1].get("out") == "kill"
     deaths = [(rec["t"], rec["g"]) for rec in combat_deaths(trace)]
+    offs = [(rec["t"], rec["g"], str(rec.get("txt", ""))) for rec in notes(trace, ICE_OFF)]
     out = []
-    for hold in holds:
-        bot, champion, start, stop = hold["bot"], as_guid(hold["value"]), hold["start"], hold["stop"]
+    for dk, champion, start, stop, casts in duties:
+        spans = covered_spans(casts, CHAINS_MS, start, stop)
+        strong = covered_spans(casts, CHAINS_STRONG_MS, start, stop)
+        length = stop - start
+        spent: collections.Counter = collections.Counter()
+        for rec in trace.of("cast"):
+            if rec.get("s") != dk or rec.get("tr") or not start <= rec["t"] <= stop:
+                continue
+            if rec.get("sp") in FROST_SPENDERS:
+                spent[FROST_SPENDERS[rec["sp"]]] += 1
+            elif rec.get("sp") == SPELL_CHAINS_OF_ICE and rec.get("tgt") != champion:
+                spent["Chains of Ice"] += 1
         on = total = 0
-        gaps: list[float] = []
         others: collections.Counter = collections.Counter()
+        track: list[tuple[int, float, float]] = []
         for index in range(bisect.bisect_left(stamps, start), bisect.bisect_left(stamps, stop)):
             rows = {row[0]: row for row in snaps[index].get("u", [])}
             row = rows.get(champion)
             if row is None or row[5] <= 0:
                 continue
             total += 1
+            track.append((stamps[index], row[1], row[2]))
             victim = row[7] if len(row) > 7 else 0
-            if victim == bot:
+            if victim == dk:
                 on += 1
             elif victim:
                 until = min(stamps[index + 1] if index + 1 < len(stamps) else stop, stop)
                 others[victim] += (until - stamps[index]) / 1000
-            near = [distance(row, rows[guid]) for guid in healers if guid in rows and rows[guid][5] > 0]
-            if near:
-                gaps.append(min(near))
+        times = [when for when, _, _ in track]
+        travel = []
+        for when, x, y in track:
+            later = bisect.bisect_left(times, when + ICE_MOVE_MS)
+            if later < len(track):
+                travel.append(math.hypot(track[later][1] - x, track[later][2] - y))
         gone = seen.last_seen(champion)
         out.append({
-            "bot": bot,
+            "bot": dk,
             "champion": champion,
             "start": start,
             "stop": stop,
-            "samples": total,
+            "reason": next((reason for when, guid, reason in offs if guid == dk and abs(when - stop) <= 50), None),
+            "casts": len(casts),
+            "uptime": sum(high - low for low, high in spans) / length if length else None,
+            "strong": sum(high - low for low, high in strong) / length if length else None,
+            "gap": longest_gap(spans, start, stop),
+            "spent": spent,
+            "moved": statistics.median(travel) if travel else None,
             "on": on / total if total else None,
-            "healer": statistics.median(gaps) if gaps else None,
             "others": others,
-            "holder_died": any(guid == bot and start <= when <= stop for when, guid in deaths),
+            "kills": champion_kills(trace, champion, deaths, start, stop),
+            "dk_died": any(guid == dk and start <= when <= stop for when, guid in deaths),
             "died": (killed and stop >= end)
                     or (gone is not None and gone + GONE_SLACK_MS < last and start <= gone <= stop + GONE_SLACK_MS),
         })
@@ -2552,32 +2702,36 @@ def share(value: float | None) -> str:
     return "-" if value is None else f"{100 * value:.0f}%"
 
 
-def show_hold(trace: Trace) -> None:
-    print("HOLDS")
-    rows = hold_rows(trace)
-    names = classes(trace)
-    holders = sorted({row["bot"] for row in rows}, key=trace.name)
-    print(f"  {HOLD}: " + (", ".join(f"{trace.name(guid)} ({names.get(guid, '?')})" for guid in holders)
-                           if holders else "none"))
+def show_ice(trace: Trace) -> None:
+    print("ICE DUTIES")
+    rows = ice_rows(trace)
+    dks = sorted({row["bot"] for row in rows}, key=trace.name)
+    print(f"  {ICE}: " + (", ".join(trace.name(guid) for guid in dks) if dks else "none"))
     if rows:
-        print(f"\n  {'holder':14} {'champion':20} {'spec':20} {'from':>9} {'length':>7} {'on holder':>9}"
-              f" {'healer':>6} {'holder died':>11} {'dead':>4}  other victims")
+        print(f"\n  {'DK':14} {'champion':20} {'spec':12} {'from':>9} {'length':>7} {'casts':>5} {'uptime':>6}"
+              f" {'strong':>6} {'gap':>6} {'moved':>5} {'on DK':>5} {'DK died':>7} {'dead':>4}  end")
     for row in rows:
-        healer = "-" if row["healer"] is None else f"{row['healer']:.1f}"
-        others = ", ".join(f"{trace.name(guid)} {seconds:.1f}s" for guid, seconds in row["others"].most_common())
+        moved = "-" if row["moved"] is None else f"{row['moved']:.1f}"
         print(f"  {trace.name(row['bot'])[:14]:14} {trace.name(row['champion'])[:20]:20}"
-              f" {spec(trace, row['champion'])[:20]:20} {clock(row['start']):>9}"
-              f" {(row['stop'] - row['start']) / 1000:6.1f}s {share(row['on']):>9} {healer:>6}"
-              f" {'yes' if row['holder_died'] else '-':>11} {'yes' if row['died'] else '-':>4}  {others or '-'}")
-    held = {row["champion"] for row in rows}
-    never = [guid for guid, name, _ in lineup(trace) if name in MELEE_SPECS and guid not in held]
-    print("\n  melee champions never held: " + (", ".join(trace.name(guid) for guid in never) if never else "none"))
-    shares = [row["on"] for row in rows if row["on"] is not None]
-    print(f"  on holder, median over the holds: {share(statistics.median(shares) if shares else None)}")
-    print("  on holder is the share of the champion's live samples in the hold with the holder as target; healer"
-          " is its median distance to the nearest living raid healer in yd; holder died is a death of the holder"
-          " inside the hold, dead the champion leaving the snapshots mid-fight by its end; other victims are its"
-          " other targets in the hold, each sample counting until the next")
+              f" {spec(trace, row['champion'])[:12]:12} {clock(row['start']):>9}"
+              f" {(row['stop'] - row['start']) / 1000:6.1f}s {row['casts']:5} {share(row['uptime']):>6}"
+              f" {share(row['strong']):>6} {row['gap'] / 1000:5.1f}s {moved:>5} {share(row['on']):>5}"
+              f" {'yes' if row['dk_died'] else '-':>7} {'yes' if row['died'] else '-':>4}  {row['reason'] or '-'}")
+        spent = ", ".join(f"{name} {count}" for name, count in row["spent"].most_common())
+        others = ", ".join(f"{trace.name(guid)} {seconds:.1f}s" for guid, seconds in row["others"].most_common())
+        kills = ", ".join(trace.name(guid) for guid in row["kills"])
+        print(f"      spent {spent or 'none'}; other victims {others or 'none'}; killed {kills or 'none'}")
+    iced = {row["champion"] for row in rows}
+    never = [guid for guid, name, _ in lineup(trace) if name in MELEE_SPECS and guid not in iced]
+    print("\n  melee champions never iced: " + (", ".join(trace.name(guid) for guid in never) if never else "none"))
+    uptimes = [row["uptime"] for row in rows if row["uptime"] is not None]
+    print(f"  uptime, median over the duties: {share(statistics.median(uptimes) if uptimes else None)}")
+    print(f"  uptime is the share of the duty inside {CHAINS_MS // 1000} s of the DK's Chains of Ice on its champion,"
+          f" strong inside {CHAINS_STRONG_MS // 1000} s, the slow's 45%+ part, gap the longest stretch with none;"
+          f" spent counts the DK's Frost spenders in the duty, Chains of Ice on another target included, and wants"
+          f" none; moved is the champion's median travel over {ICE_MOVE_MS // 1000} s in yd; on DK the share of its"
+          f" live samples with the DK as target; killed the deaths it did {KILL_SHARE:.0%} or more of the damage in"
+          f" the {DEATH_DAMAGE_MS // 1000} s before; end is the {ICE_OFF} reason the duty ended on")
 
 
 def stand_rows(trace: Trace) -> list[dict]:
@@ -3355,7 +3509,7 @@ def show_ball(trace: Trace) -> None:
 
     loose = escapee_seconds(trace)
     if loose:
-        print("\n  escapees, s off the landing spot not on a tank or a holder: " + ", ".join(
+        print("\n  escapees, s off the landing spot neither iced nor on a tank: " + ", ".join(
             f"{trace.name(guid)} {seconds:.0f}" for guid, seconds in sorted(loose.items(), key=lambda kv: -kv[1])
             if seconds >= 1))
     print(f"  the pack centre is the champions within {BALL_ANCHOR_RADIUS:.0f} yd of where they landed (their"
@@ -3460,12 +3614,12 @@ SECTIONS = (
     ("aoe", "raid victims per champion crowd-AoE cast, hits per victim for the channels", show_aoe),
     ("adds", "champion totems and treants, treant damage, fc.totem holds", show_adds),
     ("pack", "champions round each role, early melee deaths, first kill, longest stall, grips", show_pack),
-    ("chain", "each player's pull: the DK tank's, the bot DK's and the player's grips, gaps, carry, order;"
-     " bot grips outside a pull", show_chain),
+    ("chain", "each player's pull: the bot DK links by post and the player's grip, skipped links, gaps, carry,"
+     " order; bot grips outside a pull", show_chain),
     ("peel", "snares and peels on melee champions, Disarm against Bladestorm, externals, battle res, taunts",
      show_peel),
-    ("hold", "each melee champion's holder: the champion on it, how far off the healers, its other victims,"
-     " deaths; melee champions never held", show_hold),
+    ("ice", "each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how far the champion moved, the"
+     " share on the DK, its other victims and the deaths it caused; melee champions never iced", show_ice),
     ("stands", "stand moves, jumps and path against net, healers moving and casting, movers, healing, the Cyclone"
               " stand, Nitro Boosts"
      " uses by reason", show_stands),

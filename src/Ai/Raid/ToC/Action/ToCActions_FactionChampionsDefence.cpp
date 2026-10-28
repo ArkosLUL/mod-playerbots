@@ -175,8 +175,25 @@ bool FactionChampionsDeathGripAction::StillWalking(Position const& stand, bool& 
 bool FactionChampionsDeathGripAction::Execute(Event /*event*/)
 {
     Position stand;
+    Unit* target = FactionChampionsGripTarget(botAI, stand);
+    if (!target)
+    {
+        DropWalk();
+        return false;
+    }
+
+    bool walked = false;
+    if (StillWalking(stand, walked))
+        return walked;
+
+    return botAI->CastSpell("death grip", target);
+}
+
+bool FactionChampionsChainGripAction::Execute(Event /*event*/)
+{
+    Position stand;
     bool walkOnly = false;
-    Unit* target = FactionChampionsGripTarget(botAI, stand, &walkOnly);
+    Unit* target = FactionChampionsChainGripTarget(botAI, stand, walkOnly);
     if (!target)
     {
         DropWalk();
@@ -194,25 +211,10 @@ bool FactionChampionsDeathGripAction::Execute(Event /*event*/)
     return true;
 }
 
-bool FactionChampionsChainGripAction::Execute(Event /*event*/)
+bool FactionChampionsChainRequestAction::Execute(Event event)
 {
-    Position stand;
-    Unit* target = FactionChampionsChainGripTarget(botAI, stand);
-    if (!target)
-    {
-        DropWalk();
-        return false;
-    }
-
-    bool walked = false;
-    if (StillWalking(stand, walked))
-        return walked;
-
-    if (!botAI->CastSpell("death grip", target))
-        return false;
-
-    FactionChampionsNoteChainGrip(botAI, target);
-    return true;
+    Player* requester = event.getOwner() ? event.getOwner() : GetMaster();
+    return FactionChampionsRequestChain(botAI, requester);
 }
 
 bool FactionChampionsWallGripAction::Execute(Event /*event*/)

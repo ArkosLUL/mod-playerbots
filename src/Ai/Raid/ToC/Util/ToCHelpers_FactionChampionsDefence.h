@@ -71,7 +71,7 @@ Unit* FactionChampionsMassDispelTarget(PlayerbotAI* botAI);
 
 // The champion and the spell to purge it with: the kill target holding a buff worth taking for the raid's
 // purger, a pack champion holding Bloodlust, Heroism, Avenging Wrath or Hand of Freedom for the next one,
-// melee champions on their holders first.
+// melee champions on an ice duty first.
 Unit* FactionChampionsPurgeTarget(PlayerbotAI* botAI, char const*& spell);
 
 // Where a physical attacker goes while the kill target is immune to physical damage only (Hand of
@@ -101,33 +101,40 @@ bool FactionChampionsReachIntoAoe(PlayerbotAI* botAI);
 // The target carries Unstable Affliction, so a dispel that removes Magic may hit the dispeller
 bool FactionChampionsDispelBackfires(PlayerbotAI* botAI, Unit* target);
 
-// The champion and the stand to Death Grip it from, when this bot is the non-tank DK on grip duty. On a
-// player's pull: a walk to the grip post (walkOnly) until the DK tank's grip has landed the champion,
-// then the grip. Without one, only a pulled kill target still under 45 yd off the pack centre or in 40 yd
-// of another champion healer. Never on a champion in the air. The stand is the DK's own spot when the
-// champion is in reach there and 12+ yd nearer the pack, else 27 yd off the champion on the floor
-// bearing farthest from the pack. Latched raid-wide, written to fc.grip.
-Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand, bool* walkOnly = nullptr);
+// The champion and the stand to Death Grip it from, when this bot DK is on grip duty: with no pull open, a
+// pulled kill target still under 45 yd off the pack centre or in 40 yd of another champion healer. Never
+// on a champion in the air. A DK with no ice duty first. The stand is the DK's own spot when the champion
+// is in reach there and 12+ yd nearer the pack, else 27 yd off the champion on the floor bearing farthest
+// from the pack. Latched raid-wide, written to fc.grip.
+Unit* FactionChampionsGripTarget(PlayerbotAI* botAI, Position& stand);
 
 // The grip chain, which reads the Faction Champions stage, not the fight, so it works before the pull.
-// A tank's generic pull at a champion (the player targets it and types pull) becomes the chain's
-// request, written to fc.chain, and the generic pull is ended. The DK tank grips first, the bot DK
-// once the champion lands, the player last. The request drops after 15 s with no tank grip, or 10 s
-// after it with no bot DK grip.
+// The player targets a champion and types pull: a tank bot's generic pull at it is taken here and ended,
+// and with no tank bot FactionChampionsRequestChain opens it. Written to fc.chain. The bot DKs knowing
+// Death Grip and in control at the open are its links, tank DKs first then by guid, up to three, one per
+// post down the lane. Each grips in turn once the last grip has landed; the player grips last while a post
+// is free. A link is skipped when its Death Grip is over 3 s off (it tells the master), it's dead or out
+// of control, or its turn lapses: 15 s for the first, 10 s after a grip or skip. It closes after the last
+// link. fc.link holds each link's post from 1 while the chain is open, fc.linkskip notes a skip's reason.
 void FactionChampionsTakePullRequest(PlayerbotAI* botAI);
 
-// This bot is the chain's DK tank: a bot tank DK knowing Death Grip, lowest guid
-bool FactionChampionsIsChainOpener(PlayerbotAI* botAI);
+// For a bot DK when the player types pull: opens the chain on the player's target, a champion. False when
+// it's open on that one already.
+bool FactionChampionsRequestChain(PlayerbotAI* botAI, Player* requester);
 
-// The DK tank owes the open request its grip
-bool FactionChampionsOpenerGripDue(PlayerbotAI* botAI);
+// This bot is a link of the open chain still to grip
+bool FactionChampionsChainLink(PlayerbotAI* botAI);
 
-// The champion this DK tank grips and the stand: its own spot when in reach and the grip lands the
-// champion 12+ yd farther from the pack (any grip before the pull), else 27 yd off the champion toward
-// the grip post. Death Grip more than 3 s off its cooldown: tells the master and drops the request.
-Unit* FactionChampionsChainGripTarget(PlayerbotAI* botAI, Position& stand);
+// This link's turn, and the last grip has landed
+bool FactionChampionsChainGripDue(PlayerbotAI* botAI);
 
-// A Death Grip went out on target: the DK tank's marks the first link, the bot DK's ends the request
+// The champion this link grips and the stand. Before its turn, a walk to its post (walkOnly), none while
+// staging holds it. On its turn its own spot when in reach and sight and the grip lands the champion 12+
+// yd farther from the pack (any grip before the pull), else 27 yd off the champion toward its post, else on
+// the floor bearing farthest from the pack.
+Unit* FactionChampionsChainGripTarget(PlayerbotAI* botAI, Position& stand, bool& walkOnly);
+
+// A Death Grip went out on target: the turn passes on when this was the turn's link
 void FactionChampionsNoteChainGrip(PlayerbotAI* botAI, Unit* target);
 
 // The open request's champion, empty without one
@@ -140,8 +147,8 @@ bool FactionChampionsGripPending(PlayerbotAI* botAI);
 // A rooted champion can't take Death Grip's pull, and a root or stun landing mid-flight ends the jump.
 bool FactionChampionsSpellHoldsTarget(uint32 spellId);
 
-// Nothing may hold it: the player's pull until 6 s after the bot DK's grip, a grip duty's target, and any
-// champion in the air
+// Nothing may hold it: the player's pull until 6 s after the last bot DK's grip, a grip duty's target, and
+// any champion in the air
 bool FactionChampionsGripGuarded(PlayerbotAI* botAI, Unit* champion);
 
 // Some champion is guarded
@@ -157,27 +164,27 @@ uint32 FactionChampionsPetAutocastToggle(PlayerbotAI* botAI, bool& enable);
 
 // The melee champion this bot snares and the spell id, when its victim kites from it
 // (FactionChampionsKitesFrom) or it is loose off the tank, and nothing slows it yet. Healer victims first,
-// then the lowest. Not by the grip or a wall grip DK. One snarer per champion.
+// then the lowest. Not by the grip, a wall grip or an ice duty DK. One snarer per champion.
 Unit* FactionChampionsSnareTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The melee champion this bot peels and the spell id: the danger champion wherever it is while it isn't
-// disarmed, one within 10 yd of its victim when that's neither a tank nor its holder, or the Warrior
-// champion with 2 or more of ours (pets too) in Bladestorm reach; danger first, then Warrior, then healer
-// victims, then the lowest victim. Not one CC'd, rooted or immune to the spell. The nearest free bot with a
-// ready peel takes it, not the grip DK or one on a CC duty: Disarm or Dismantle (not on one already
-// disarmed), Hammer of Justice on the danger champion short of its third stun step, else Repentance, Blind,
-// Freezing Arrow, Death Coil, Frost Nova, Entangling Roots or Psychic Horror; a DK's grips go to the wall
-// instead. A CC a hit breaks, roots aside, only on a champion nobody of ours hits but its holder, which stops
-// for it, and with no group DoT. None its DR would make immune. Nothing that pops the trinket on a held
-// champion with it up. No root within 12 yd of a pack tank. Written to fc.peel.
+// disarmed, one within 10 yd of its victim when that's no tank, or the Warrior champion with 2 or more of
+// ours (pets too) in Bladestorm reach; danger first, then Warrior, then healer victims, then the lowest
+// victim. Not one CC'd, rooted, iced or immune to the spell. The nearest free bot with a ready peel takes
+// it, not the grip DK or one on a CC duty: Disarm or Dismantle (not on one already disarmed), Hammer of
+// Justice on the danger champion short of its third stun step, else Repentance, Blind, Freezing Arrow, Death
+// Coil, Frost Nova, Entangling Roots or Psychic Horror; a DK's grips go to the wall instead. A CC a hit
+// breaks, roots aside, only on a champion nobody of ours hits, with no group DoT. None its DR would make
+// immune. No root within 12 yd of a pack tank. Written to fc.peel.
 Unit* FactionChampionsPeelTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // A peel duty's spell that a hit breaks is aimed at the champion
 bool FactionChampionsBreakablePeelAt(PlayerbotAI* botAI, Unit* champion);
 
 // The group member this bot covers with an external defensive and the spell id, when none of the four
-// covers it yet: Hand of Protection on a non-tank non-holder with a physical champion or four of any on it,
-// the others with four or more champions on a non-tank, or two at 60% health or under, casters counted.
+// covers it yet: Hand of Protection on a healer or ranged non-tank with four or more champions on it, a melee
+// one only at 50% health or under, the others with four or more champions on a non-tank, or two at 60% health
+// or under, casters counted.
 // Champions about to pick it at their next re-pick (fc.nextfocus) count as on it. One caster per member.
 // A non-tank with four on it that got none gets Divine Sacrifice from a paladin with Divine Guardian, while
 // none runs. Lay on Hands goes this way too: a member at 20% or under with a champion on it, one per member
@@ -206,21 +213,27 @@ Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI);
 // The member 4+ champions are about to pick at their next re-pick (fc.nextfocus). Empty for none
 ObjectGuid FactionChampionsNextFocus(PlayerbotAI* botAI);
 
-// A holder's spell on its own champion, none of which pops its trinket: a warrior Disarms it, and Hamstrings
-// it while it's on someone else; a DK slows it with Chains of Ice while it's on someone else.
-Unit* FactionChampionsHoldControl(PlayerbotAI* botAI, uint32& spellId);
+// The ice duty champion this DK casts Chains of Ice on now: its own Chains of Ice is off it or has 4 s or
+// less left, the champion isn't CC'd, held by our breakable CC, snare immune or in the air, it's in 20 yd
+// and sight, and the DK is free to cast with a Frost or Death rune ready. Chains never pops the trinket.
+Unit* FactionChampionsIceChains(PlayerbotAI* botAI, uint32& spellId);
+
+// Where an ice duty DK walks when its Chains of Ice is due but the champion is out of 20 yd or sight: 15 yd
+// off the champion on the DK's side, turning up to 90° for the floor and the AoE. Only with a Frost or
+// Death rune ready, and not while rooted or out of control.
+bool FactionChampionsIceReach(PlayerbotAI* botAI, Position& stand);
 
 // The melee champion this bot DK grips to the wall, its stand, and the spell to cast now (0 while it walks
-// or waits). A holder DK takes its own champion while it's on someone else; any other DK, not a pack tank,
-// one within 50 yd on a raider that's neither a tank nor its holder, healer victims first, then the lowest.
-// Not the grip duty's DK, nor the chain's two DKs while a pull is open. Never the kill target, nor one rooted,
+// or waits). An ice duty DK takes its own champion while it's on someone else; any other DK, not a pack
+// tank, one within 50 yd on a raider that's no tank and not on another DK's ice duty, healer victims first,
+// then the lowest. Not the grip duty's DK, nor a chain link still to grip. Never the kill target, nor one rooted,
 // CC'd, guarded, held by our breakable CC or gripped by anyone in the last 8 s. The stand is 27 or 22 yd off
 // the champion, 34-44 yd off ARENA_CENTER, within 38 yd of a healer, clear of AoE and a walk of 6 s or less,
 // landing the champion 12+ yd farther from its victim; the one farthest from it. Taken only once Death Grip
 // is ready by the arrival plus 1 s. Death Grip within 1.5 yd of the stand, then Chains of Ice once it lands;
 // gripped says the grip is out. The stand is the DK's own spot once it's there. Dropped before the grip once the
-// cooldown outlasts the walk, the stand is past 29 yd of the champion, 8 s pass, or someone else grips or
-// holds it or it leaves its victim; after it once the champion is slowed or 4 s pass. Written to fc.wall.
+// cooldown outlasts the walk, the stand is past 29 yd of the champion, 8 s pass, or someone else grips it
+// or it leaves its victim; after it once the champion is slowed or 4 s pass. Written to fc.wall.
 Unit* FactionChampionsWallGrip(PlayerbotAI* botAI, Position& stand, uint32& spellId, bool* gripped = nullptr);
 
 // This DK's wall grip went out on champion

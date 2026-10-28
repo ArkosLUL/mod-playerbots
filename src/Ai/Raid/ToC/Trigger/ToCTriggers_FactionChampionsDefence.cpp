@@ -60,7 +60,12 @@ bool FactionChampionsDeathGripTrigger::IsActive()
     return FactionChampionsGripTarget(botAI, stand) != nullptr;
 }
 
-bool FactionChampionsChainGripTrigger::IsActive() { return FactionChampionsOpenerGripDue(botAI); }
+bool FactionChampionsChainGripTrigger::IsActive()
+{
+    Position stand;
+    bool walkOnly = false;
+    return FactionChampionsChainGripTarget(botAI, stand, walkOnly) != nullptr;
+}
 
 bool FactionChampionsWallGripTrigger::IsActive()
 {
@@ -118,7 +123,11 @@ void AddToCFactionChampionsDefenceTriggerNodes(std::vector<TriggerNode*>& trigge
     triggers.push_back(new TriggerNode("faction champions freedom", {
         NextAction("faction champions freedom", ACTION_EMERGENCY + 3) }));
 
-    // over the hold nodes, so the DK tank leaves its champion for it
+    // the chat command's own trigger: a tank bot takes the pull too, and the chain opens once either way
+    triggers.push_back(new TriggerNode("pull", {
+        NextAction("faction champions chain request", ACTION_RAID + 4.7f) }));
+
+    // over the ice duty nodes, so a link leaves its champion for it
     triggers.push_back(new TriggerNode("faction champions chain grip", {
         NextAction("faction champions chain grip", ACTION_RAID + 4.6f) }));
 

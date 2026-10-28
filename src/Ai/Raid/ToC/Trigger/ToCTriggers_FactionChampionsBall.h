@@ -6,17 +6,24 @@
 #include "NamedObjectContext.h"
 #include "Trigger.h"
 
-class FactionChampionsHoldTrigger : public Trigger
+class FactionChampionsIceTargetTrigger : public Trigger
 {
 public:
-    FactionChampionsHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions hold") {}
+    FactionChampionsIceTargetTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions ice target") {}
     bool IsActive() override;
 };
 
-class FactionChampionsHoldControlTrigger : public Trigger
+class FactionChampionsChainsOfIceTrigger : public Trigger
 {
 public:
-    FactionChampionsHoldControlTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions hold control") {}
+    FactionChampionsChainsOfIceTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions chains of ice") {}
+    bool IsActive() override;
+};
+
+class FactionChampionsIceReachTrigger : public Trigger
+{
+public:
+    FactionChampionsIceReachTrigger(PlayerbotAI* botAI) : Trigger(botAI, "faction champions ice reach") {}
     bool IsActive() override;
 };
 
@@ -84,9 +91,10 @@ public:
         creators["faction champions escape"] = &ToCFactionChampionsBallTriggerContext::faction_champions_escape;
         creators["faction champions demonic circle"] =
             &ToCFactionChampionsBallTriggerContext::faction_champions_demonic_circle;
-        creators["faction champions hold"] = &ToCFactionChampionsBallTriggerContext::faction_champions_hold;
-        creators["faction champions hold control"] =
-            &ToCFactionChampionsBallTriggerContext::faction_champions_hold_control;
+        creators["faction champions ice target"] = &ToCFactionChampionsBallTriggerContext::faction_champions_ice_target;
+        creators["faction champions chains of ice"] =
+            &ToCFactionChampionsBallTriggerContext::faction_champions_chains_of_ice;
+        creators["faction champions ice reach"] = &ToCFactionChampionsBallTriggerContext::faction_champions_ice_reach;
         creators["faction champions cyclone stand"] =
             &ToCFactionChampionsBallTriggerContext::faction_champions_cyclone_stand;
         creators["faction champions step off"] = &ToCFactionChampionsBallTriggerContext::faction_champions_step_off;
@@ -98,11 +106,19 @@ public:
     }
 
 private:
-    static Trigger* faction_champions_hold(PlayerbotAI* botAI) { return new FactionChampionsHoldTrigger(botAI); }
-
-    static Trigger* faction_champions_hold_control(PlayerbotAI* botAI)
+    static Trigger* faction_champions_ice_target(PlayerbotAI* botAI)
     {
-        return new FactionChampionsHoldControlTrigger(botAI);
+        return new FactionChampionsIceTargetTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_chains_of_ice(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsChainsOfIceTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_ice_reach(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsIceReachTrigger(botAI);
     }
 
     static Trigger* faction_champions_cyclone_stand(PlayerbotAI* botAI)

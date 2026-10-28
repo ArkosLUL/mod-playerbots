@@ -20,12 +20,12 @@ namespace
 constexpr uint32 PLAYER_DIVINE_SHIELD = 642;
 constexpr uint32 FORBEARANCE = 25771;
 
-bool FactionChampionsHolding(PlayerbotAI* botAI) { return FactionChampionsHoldOf(botAI).champion != nullptr; }
-
-// The focus trigger's test, so the rule and the node cover the same window. A holder hits its own champion.
+// The focus trigger's test, so the rule and the node cover the same window. An ice duty DK hits its own
+// champion.
 bool FactionChampionsTargetOwned(PlayerbotAI* botAI)
 {
-    return (FactionChampionsFocusBot(botAI) && FactionChampionsKillTarget(botAI)) || FactionChampionsHolding(botAI);
+    return (FactionChampionsFocusBot(botAI) && FactionChampionsKillTarget(botAI)) ||
+           FactionChampionsHasIceDuty(botAI);
 }
 
 bool FactionChampionsStayPut(PlayerbotAI* botAI) { return FactionChampionsStaysPut(botAI); }
@@ -35,7 +35,7 @@ bool FactionChampionsStayPut(PlayerbotAI* botAI) { return FactionChampionsStaysP
 bool FactionChampionsKillSquadWait(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (!PlayerbotAI::IsMelee(bot) || FactionChampionsIsHolder(bot))
+    if (!PlayerbotAI::IsMelee(bot) || FactionChampionsHasIceDuty(botAI))
         return false;
 
     return !FactionChampionsChainTarget(bot).IsEmpty() || FactionChampionsGripPending(botAI);
@@ -43,10 +43,11 @@ bool FactionChampionsKillSquadWait(PlayerbotAI* botAI)
 
 bool FactionChampionsTotemHeld(PlayerbotAI* botAI) { return FactionChampionsTotemTarget(botAI) != nullptr; }
 
+// On grip duty, or a grip chain link still to grip
 bool FactionChampionsGripHeld(PlayerbotAI* botAI)
 {
     Position stand;
-    return FactionChampionsGripTarget(botAI, stand) != nullptr;
+    return FactionChampionsGripTarget(botAI, stand) != nullptr || FactionChampionsChainLink(botAI);
 }
 
 // Walking to its wall stand or waiting there for the grip
@@ -65,8 +66,7 @@ bool FactionChampionsLive(PlayerbotAI* botAI) { return ToCEncounterIsLive(botAI,
 bool FactionChampionsWrathHeld(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    return bot->getClass() == CLASS_PALADIN &&
-           (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot) || FactionChampionsIsHolder(bot)) &&
+    return bot->getClass() == CLASS_PALADIN && (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot)) &&
            FactionChampionsLive(botAI);
 }
 
@@ -111,9 +111,14 @@ void DefineFactionChampions(EncounterBuilder& e)
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,
             {"reach melee", "reach spell"});
 
-    // its champion follows wherever it goes, and these would walk it toward the raid
-    e.Block("faction champions holder hold", Role::Any, FactionChampionsHolding,
+    // these would drag its champion onto the raid, the kite has its own node
+    e.Block("faction champions ice hold", Role::Any, FactionChampionsHasIceDuty,
             Family::CombatFormationMove | Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom);
+
+    // its Frost and Death runes go to the champion's Chains of Ice, cast by faction champions chains of ice
+    e.Block("faction champions ice rune reserve", Role::Any, FactionChampionsHasIceDuty, 0,
+            {"icy touch", "icy touch on attacker", "obliterate", "howling blast", "death strike", "scourge strike",
+             "death and decay", "unbreakable armor", "army of the dead", "chains of ice"});
 
     // a healer or ranged bot on the move neither heals nor casts, so only the reaches walk it, to get its target in
     // range
@@ -149,8 +154,8 @@ void DefineFactionChampions(EncounterBuilder& e)
     // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
     e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);
 
-    // the DK tank's grip opens every chain the player pulls
-    e.Block("faction champions chain grip reserve", Role::Tank, FactionChampionsIsChainOpener, 0, {"death grip"});
+    // every link keeps its Death Grip for its turn in the chain
+    e.Block("faction champions chain grip reserve", Role::Any, FactionChampionsChainLink, 0, {"death grip"});
 }
 }  // namespace
 

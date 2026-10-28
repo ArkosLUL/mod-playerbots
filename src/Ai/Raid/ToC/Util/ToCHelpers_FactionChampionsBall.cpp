@@ -119,6 +119,9 @@ constexpr uint32 KITE_STEP_MS = 2500;
 // a chaser dragged onto a healer would just re-pick the healer
 constexpr float KITE_HEALER_GAP = 10.0f;
 constexpr float KITE_HOLD = 45.0f;
+// a chaser this slow only catches a bot standing next to it, so its victim keeps casting till it's near
+constexpr float KITE_CRAWL_RATE = 0.6f;
+constexpr float KITE_CRAWL_REACH = 10.0f;
 // the Hands' reach, heals go to 40 so the healers can drift a bit
 constexpr float KITE_HEAL_REACH = 30.0f;
 
@@ -341,6 +344,12 @@ bool Unhindered(Unit* champion)
            !champion->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED);
 }
 
+bool Crawling(Unit* champion)
+{
+    return champion->HasUnitState(UNIT_STATE_LOST_CONTROL) || champion->HasAuraType(SPELL_AURA_MOD_ROOT) ||
+           champion->GetSpeedRate(MOVE_RUN) <= KITE_CRAWL_RATE;
+}
+
 // Other living healers: a spot this close to one drags the chaser onto it
 bool NearHealer(Player* bot, std::vector<Player*> const& members, Position const& spot)
 {
@@ -530,15 +539,17 @@ bool FactionChampionsStaysPut(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     return bot && Refresh(botAI) && !PlayerbotAI::IsTank(bot) &&
-           (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot)) && !FactionChampionsIsHolder(bot);
+           (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot));
 }
 
 // no refresh here, the champion refresh asks it for its CC duties
 bool FactionChampionsKitesFrom(Player* member, Unit* champion)
 {
-    return member && champion && member->IsAlive() && !PlayerbotAI::IsTank(member) &&
-           IsFactionChampionMelee(champion->GetEntry()) && champion->GetVictim() == member &&
-           FactionChampionsHeldBy(member) != champion->GetGUID();
+    if (!member || !champion || !member->IsAlive() || !IsFactionChampionMelee(champion->GetEntry()) ||
+        champion->GetVictim() != member)
+        return false;
+
+    return !PlayerbotAI::IsTank(member) || FactionChampionsIceDutyOf(member) == champion->GetGUID();
 }
 
 bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot)
@@ -565,9 +576,9 @@ bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot)
     }
 
     auto const rested = state->stepEndMs.find(guid);
-    if (!PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsTank(bot) || FactionChampionsIsHolder(bot) ||
-        bot->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->HasAuraType(SPELL_AURA_MOD_ROOT) ||
-        bot->IsNonMeleeSpellCast(false) || state->runs.count(guid) || state->kites.count(guid) ||
+    if (!PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsTank(bot) || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
+        bot->HasAuraType(SPELL_AURA_MOD_ROOT) || bot->IsNonMeleeSpellCast(false) || state->runs.count(guid) ||
+        state->kites.count(guid) ||
         (rested != state->stepEndMs.end() && getMSTimeDiff(rested->second, now) < STEP_OFF_REST_MS))
         return false;
 
@@ -650,7 +661,7 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
         state->runs.erase(run);
     }
 
-    if (PlayerbotAI::IsTank(bot) || FactionChampionsIsHolder(bot) || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
+    if (PlayerbotAI::IsTank(bot) || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
         bot->HasAuraType(SPELL_AURA_MOD_ROOT) || FactionChampionsHasCcDuty(botAI, bot->GetGUID()) ||
         bot->GetHealthPct() < NITRO_MIN_HEALTH_PCT || !EncounterHelpers::NitroBoostsReady(bot))
         return false;
@@ -950,7 +961,10 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
 
     Player* bot = botAI->GetBot();
     ObjectGuid const guid = bot->GetGUID();
-    std::vector<Unit*> const chasers = MeleeOn(botAI, bot, KITE_CLEAR);
+    std::vector<Unit*> chasers = MeleeOn(botAI, bot, KITE_CLEAR);
+    chasers.erase(std::remove_if(chasers.begin(), chasers.end(), [bot](Unit* chaser)
+                                 { return Crawling(chaser) && bot->GetExactDist2d(chaser) > KITE_CRAWL_REACH; }),
+                  chasers.end());
     auto const kite = state->kites.find(guid);
     if (chasers.empty() || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->HasAuraType(SPELL_AURA_MOD_ROOT) ||
         state->runs.count(guid) || FactionChampionsHasCcDuty(botAI, guid))

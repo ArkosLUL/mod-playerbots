@@ -14,10 +14,10 @@ namespace
 constexpr float STAND_TRIGGER = 3.0f;
 }  // namespace
 
-// While our breakable CC holds its champion, until the holder has stopped swinging at it
-bool FactionChampionsHoldTrigger::IsActive()
+// While our breakable CC holds its champion, until the DK has stopped swinging at it
+bool FactionChampionsIceTargetTrigger::IsActive()
 {
-    Unit* champion = FactionChampionsHoldOf(botAI).champion;
+    Unit* champion = FactionChampionsIceTarget(botAI);
     if (!champion)
         return false;
 
@@ -31,10 +31,16 @@ bool FactionChampionsHoldTrigger::IsActive()
     return AI_VALUE(Unit*, "current target") != champion || RaidPetOffPick(botAI, champion);
 }
 
-bool FactionChampionsHoldControlTrigger::IsActive()
+bool FactionChampionsChainsOfIceTrigger::IsActive()
 {
     uint32 spellId = 0;
-    return FactionChampionsHoldControl(botAI, spellId) != nullptr;
+    return FactionChampionsIceChains(botAI, spellId) != nullptr;
+}
+
+bool FactionChampionsIceReachTrigger::IsActive()
+{
+    Position stand;
+    return botAI->CanMove() && FactionChampionsIceReach(botAI, stand);
 }
 
 // Not inside a Bladestorm or Hellfire, the dodge walks out first
@@ -98,17 +104,21 @@ void AddToCFactionChampionsBallTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("faction champions speed boost", {
         NextAction("faction champions speed boost", ACTION_RAID + 2.48f) }));
 
+    // an instant, so the kite's walk goes on after it
+    triggers.push_back(new TriggerNode("faction champions chains of ice", {
+        NextAction("faction champions chains of ice", ACTION_RAID + 2.47f) }));
+
     triggers.push_back(new TriggerNode("faction champions kite", {
         NextAction("faction champions kite", ACTION_RAID + 2.45f) }));
+
+    triggers.push_back(new TriggerNode("faction champions ice reach", {
+        NextAction("faction champions ice reach", ACTION_RAID + 2.44f) }));
 
     triggers.push_back(new TriggerNode("faction champions step off", {
         NextAction("faction champions step off", ACTION_RAID + 2.4f) }));
 
-    triggers.push_back(new TriggerNode("faction champions hold control", {
-        NextAction("faction champions hold control", ACTION_RAID + 2.2f) }));
-
-    triggers.push_back(new TriggerNode("faction champions hold", {
-        NextAction("faction champions hold", ACTION_RAID + 2) }));
+    triggers.push_back(new TriggerNode("faction champions ice target", {
+        NextAction("faction champions ice target", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode("faction champions cyclone stand", {
         NextAction("faction champions cyclone stand", ACTION_RAID + 1.9f) }));

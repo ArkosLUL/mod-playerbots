@@ -25,9 +25,9 @@ bool WalkingTo(Position const* walking, Position const& spot)
 }
 }  // namespace
 
-bool FactionChampionsHoldAction::Execute(Event /*event*/)
+bool FactionChampionsIceTargetAction::Execute(Event /*event*/)
 {
-    Unit* champion = FactionChampionsHoldOf(botAI).champion;
+    Unit* champion = FactionChampionsIceTarget(botAI);
     if (!champion)
         return false;
 
@@ -46,11 +46,26 @@ bool FactionChampionsHoldAction::Execute(Event /*event*/)
     return AttackDirect(champion);
 }
 
-bool FactionChampionsHoldControlAction::Execute(Event /*event*/)
+bool FactionChampionsChainsOfIceAction::Execute(Event /*event*/)
 {
     uint32 spellId = 0;
-    Unit* champion = FactionChampionsHoldControl(botAI, spellId);
+    Unit* champion = FactionChampionsIceChains(botAI, spellId);
     return champion && botAI->CastSpell(spellId, champion);
+}
+
+bool FactionChampionsIceReachAction::Execute(Event /*event*/)
+{
+    Position stand;
+    if (!FactionChampionsIceReach(botAI, stand))
+    {
+        DropWalk();
+        return false;
+    }
+
+    if (WalkingTo(WalkInFlight(), stand))
+        return true;
+
+    return WalkTo(stand);
 }
 
 bool FactionChampionsCycloneStandAction::Execute(Event /*event*/)

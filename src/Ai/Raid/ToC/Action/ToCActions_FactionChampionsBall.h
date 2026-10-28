@@ -6,17 +6,28 @@
 #include "RaidDirectTargeting.h"
 #include "ToCActions_NorthrendBeasts.h"
 
-class FactionChampionsHoldAction : public RaidDirectAttackAction
+// An ice duty DK's attack on its own champion
+class FactionChampionsIceTargetAction : public RaidDirectAttackAction
 {
 public:
-    FactionChampionsHoldAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, "faction champions hold") {}
+    FactionChampionsIceTargetAction(PlayerbotAI* botAI)
+        : RaidDirectAttackAction(botAI, "faction champions ice target") {}
     bool Execute(Event event) override;
 };
 
-class FactionChampionsHoldControlAction : public Action
+class FactionChampionsChainsOfIceAction : public Action
 {
 public:
-    FactionChampionsHoldControlAction(PlayerbotAI* botAI) : Action(botAI, "faction champions hold control") {}
+    FactionChampionsChainsOfIceAction(PlayerbotAI* botAI) : Action(botAI, "faction champions chains of ice") {}
+    bool Execute(Event event) override;
+};
+
+// An ice duty DK's walk into Chains of Ice range of its champion
+class FactionChampionsIceReachAction : public NorthrendBeastsWalkAction
+{
+public:
+    FactionChampionsIceReachAction(PlayerbotAI* botAI)
+        : NorthrendBeastsWalkAction(botAI, "faction champions ice reach") {}
     bool Execute(Event event) override;
 };
 
@@ -93,9 +104,10 @@ public:
         creators["faction champions escape"] = &ToCFactionChampionsBallActionContext::faction_champions_escape;
         creators["faction champions demonic circle"] =
             &ToCFactionChampionsBallActionContext::faction_champions_demonic_circle;
-        creators["faction champions hold"] = &ToCFactionChampionsBallActionContext::faction_champions_hold;
-        creators["faction champions hold control"] =
-            &ToCFactionChampionsBallActionContext::faction_champions_hold_control;
+        creators["faction champions ice target"] = &ToCFactionChampionsBallActionContext::faction_champions_ice_target;
+        creators["faction champions chains of ice"] =
+            &ToCFactionChampionsBallActionContext::faction_champions_chains_of_ice;
+        creators["faction champions ice reach"] = &ToCFactionChampionsBallActionContext::faction_champions_ice_reach;
         creators["faction champions cyclone stand"] =
             &ToCFactionChampionsBallActionContext::faction_champions_cyclone_stand;
         creators["faction champions step off"] = &ToCFactionChampionsBallActionContext::faction_champions_step_off;
@@ -107,12 +119,17 @@ public:
     }
 
 private:
-    static Action* faction_champions_hold(PlayerbotAI* botAI) { return new FactionChampionsHoldAction(botAI); }
-
-    static Action* faction_champions_hold_control(PlayerbotAI* botAI)
+    static Action* faction_champions_ice_target(PlayerbotAI* botAI)
     {
-        return new FactionChampionsHoldControlAction(botAI);
+        return new FactionChampionsIceTargetAction(botAI);
     }
+
+    static Action* faction_champions_chains_of_ice(PlayerbotAI* botAI)
+    {
+        return new FactionChampionsChainsOfIceAction(botAI);
+    }
+
+    static Action* faction_champions_ice_reach(PlayerbotAI* botAI) { return new FactionChampionsIceReachAction(botAI); }
 
     static Action* faction_champions_cyclone_stand(PlayerbotAI* botAI)
     {

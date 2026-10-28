@@ -79,12 +79,20 @@ protected:
     bool StillWalking(Position const& stand, bool& walked);
 };
 
-// The DK tank's grip on the champion the player called, the chain's first link
+// A grip chain link's walk to its post, then its grip on the champion the player called
 class FactionChampionsChainGripAction : public FactionChampionsDeathGripAction
 {
 public:
     FactionChampionsChainGripAction(PlayerbotAI* botAI)
         : FactionChampionsDeathGripAction(botAI, "faction champions chain grip") {}
+    bool Execute(Event event) override;
+};
+
+// A bot DK opens the grip chain on the player's target when the player types pull
+class FactionChampionsChainRequestAction : public Action
+{
+public:
+    FactionChampionsChainRequestAction(PlayerbotAI* botAI) : Action(botAI, "faction champions chain request") {}
     bool Execute(Event event) override;
 };
 
@@ -188,6 +196,8 @@ public:
             &ToCFactionChampionsDefenceActionContext::faction_champions_death_grip;
         creators["faction champions chain grip"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_chain_grip;
+        creators["faction champions chain request"] =
+            &ToCFactionChampionsDefenceActionContext::faction_champions_chain_request;
         creators["faction champions wall grip"] =
             &ToCFactionChampionsDefenceActionContext::faction_champions_wall_grip;
         creators["faction champions freedom"] =
@@ -237,6 +247,10 @@ private:
 
     static Action* faction_champions_chain_grip(PlayerbotAI* botAI) {
         return new FactionChampionsChainGripAction(botAI);
+    }
+
+    static Action* faction_champions_chain_request(PlayerbotAI* botAI) {
+        return new FactionChampionsChainRequestAction(botAI);
     }
 
     static Action* faction_champions_wall_grip(PlayerbotAI* botAI) {

@@ -20,12 +20,12 @@ namespace TrialOfTheCrusaderHelpers
 // healer stays in Cyclone reach and the kill target within 36 yd of it. None while it holds a CC duty.
 bool FactionChampionsCycloneStand(PlayerbotAI* botAI, Position& spot);
 
-// Healers and ranged, tanks and holders aside: they move only to dodge, run, kite, step off, CC or get their
-// target in range
+// Healers and ranged, tanks aside: they move only to dodge, run, kite, step off, CC or get their target in
+// range
 bool FactionChampionsStaysPut(PlayerbotAI* botAI);
 
-// A melee champion with the member as victim that the member runs from: the member alive, not a tank and not
-// the champion's holder. Reads no refresh, so the champion refresh may ask it.
+// A melee champion with the member as victim that the member runs from: the member alive and not a tank,
+// or a DK whose ice duty it is, a tank DK too. Reads no refresh, so the champion refresh may ask it.
 bool FactionChampionsKitesFrom(Player* member, Unit* champion);
 
 // A healer not casting, rooted or stunned, with a melee champion within 8 yd: 10 yd away from them, on the
@@ -44,12 +44,14 @@ Unit* FactionChampionsOpener(PlayerbotAI* botAI, uint32& spellId);
 // bearing the farthest clear floor spot up to the boost's reach (~87 yd), stepping back 5 yd, 15 yd at least
 // and, for a non-healer, 10 yd off other healers, within 30 yd of another living healer or nearer one than
 // the bot is now; the one farthest from every melee champion, a tie to the longer run. Latched to arrival
-// or the boost's end. Not for a tank, a holder, a CC duty holder or a bot rooted or stunned. Each run notes
+// or the boost's end. Not for a tank, a CC duty holder or a bot rooted or stunned. Each run notes
 // fc.nitro.
 bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot);
 
 // Where a bot kites: a melee champion it kites from (FactionChampionsKitesFrom) is within 30 yd, however
-// close. 15 yd hops away from them, on the floor, clear of AoE and off other healers. Of those within 30 yd
+// close; one crawling (rooted, out of control or at 60% run speed or less) only within 10 yd, so a bot an iced
+// champion picked keeps casting till it's near. 15 yd hops away from them, on the floor, clear of AoE and
+// off other healers. Of those within 30 yd
 // of another living healer or nearer one than the bot is now, the farthest from every melee champion; with
 // none, the one nearest a healer. Latched to arrival or 2.5 s, dropped once none is within 30 yd. Not while
 // rooted, stunned, on a Nitro run or a CC duty. Each hop notes fc.kite.

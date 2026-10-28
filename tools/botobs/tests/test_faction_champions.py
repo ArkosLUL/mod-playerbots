@@ -306,10 +306,11 @@ class SyntheticPull(unittest.TestCase):
         with mock.patch.object(probes, "declared_keys", return_value=DECLARED):
             self.assertEqual(fc.missing_probes(self.trace), ["fc.interrupter"])
 
-    def test_the_banner_wants_fc_hold_but_not_fc_nitro(self):
-        declared = {**DECLARED, "fc.hold": (HOLDER, "fixture"), "fc.nitro": (EVENT, "fixture")}
+    def test_the_banner_wants_fc_ice_but_not_fc_nitro_or_a_link_skip(self):
+        declared = {**DECLARED, "fc.ice": (HOLDER, "fixture"), "fc.nitro": (EVENT, "fixture"),
+                    "fc.linkskip": (EVENT, "fixture")}
         with mock.patch.object(probes, "declared_keys", return_value=declared):
-            self.assertEqual(fc.missing_probes(self.trace), ["fc.hold", "fc.interrupter"])
+            self.assertEqual(fc.missing_probes(self.trace), ["fc.ice", "fc.interrupter"])
 
     def test_each_hold_carries_the_switch_that_opened_it(self):
         holds = fc.kill_holds(self.trace)
@@ -426,7 +427,7 @@ class SyntheticPull(unittest.TestCase):
             (15000, WARLOCK_C, "Hellfire", {MAGE: 3})])
 
     def test_vetoes_keep_the_faction_champions_multipliers_and_rules_only(self):
-        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 18)
+        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 19)
         self.assertEqual(fc.fc_vetoes(self.trace), collections.Counter({
             (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1,
             (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1,
@@ -826,8 +827,7 @@ def pack_pull() -> list[dict]:
         note(10050, GRIPPER, fc.GRIP, 0),
 
         # Concussive Shot on the rogue champion while it's on the priest; Hamstring on the warrior champion
-        # on the warrior bot holding it.
-        note(500, WARRIOR, fc.HOLD, WARRIOR_C),
+        # on the warrior bot.
         cast(12000, HUNTER, 5116, ROGUE_C),
         cast(13000, WARRIOR, 1715, WARRIOR_C),
 
@@ -908,9 +908,9 @@ class PackAndPeel(unittest.TestCase):
         self.assertEqual(fc.grip_holds(self.trace), [
             {"bot": GRIPPER, "target": PALADIN, "start": 9000, "stop": 10050, "cast": True}])
 
-    def test_a_snare_is_needed_when_its_champion_chases_a_raider_other_than_its_holder(self):
+    def test_a_snare_is_needed_when_its_champion_chases_a_raider_who_is_no_tank(self):
         self.assertEqual([(row["spell"], row["needed"]) for row in fc.snare_casts(self.trace)],
-                         [("Concussive Shot", True), ("Hamstring", False)])
+                         [("Concussive Shot", True), ("Hamstring", True)])
 
     def test_a_peel_counts_its_duty_and_a_nova_needs_a_hold(self):
         self.assertEqual([(row["t"], row["by"], row["spell"], row["target"], row["duty"])
@@ -1039,7 +1039,7 @@ class DeathBall(unittest.TestCase):
         self.assertRegex(text, r"Velanaa +0:00\.000 +20\.0s +49\.\d +75%")
         self.assertIn("first raid cast on a champion: 0:00.050 Trueshot (bot)", text)
         self.assertIn("first picks: tank 3 of 5 (60%), melee 0, ranged 1, heal 1", text)
-        self.assertIn("escapees, s off the landing spot not on a tank or a holder: Noozle Whizzlestick 20,"
+        self.assertIn("escapees, s off the landing spot neither iced nor on a tank: Noozle Whizzlestick 20,"
                       " Velanaa 16", text)
 
 
@@ -1215,32 +1215,109 @@ class GripChain(unittest.TestCase):
         self.assertRegex(out.getvalue(), r"0:30\.000 Obliteration +Irieth Shadowstep +- +\d+ +-\n")
 
 
-MIGHTY = 5020  # a warrior bot holding a champion
+LINK_DK = 5022  # a third bot DK
+
+
+def link_pull(roster: list[dict], posts: list[tuple[int, int]], skips: list[tuple[int, int, str]],
+              grippers: list[tuple[int, int]]) -> list[dict]:
+    """A pull on Velanaa open from 1 to 8 s, its `fc.link` posts restated at the close like a chain opened before
+    the trace."""
+    opener = roster[0]["g"]
+    records = [
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        note(1000, opener, "fc.chain", PALADIN),
+        note(8000, opener, "fc.chain", 0),
+        {"t": 12000, "e": "end", "out": "wipe"},
+    ]
+    records += [note(8000, dk, fc.LINK, post) for dk, post in posts]
+    records += [note(8000, dk, fc.LINK, 0) for dk, _ in posts]
+    records += [note(when, dk, fc.LINK_SKIP, reason) for when, dk, reason in skips]
+    records += [cast(when, by, fc.SPELL_DEATH_GRIP, PALADIN) for when, by in grippers]
+    records += [chain_snap(when) for when in range(0, 12001, 1000)]
+    header = {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+              "roster": roster}
+    return [header] + sorted(records, key=lambda rec: rec["t"])
+
+
+FELESTA = {"g": CHAIN_TANK, "n": "Felesta", "r": "tank", "c": 6, "h": 0}
+OBLITERATION = {"g": GRIPPER, "n": "Obliteration", "r": "melee", "c": 6, "h": 0}
+RIMEFANG = {"g": LINK_DK, "n": "Rimefang", "r": "melee", "c": 6, "h": 0}
+DEATHSONG = {"g": HUMAN_DK, "n": "Deathsong", "r": "melee", "c": 6, "h": 1}
+THREE_POSTS = [(CHAIN_TANK, 1), (GRIPPER, 2), (LINK_DK, 3)]
+
+
+class GripChainLinks(unittest.TestCase):
+    def read(self, records: list[dict]) -> tuple[Trace, dict]:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = pathlib.Path(folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+        trace = Trace(path)
+        chains, _ = fc.chain_links(trace)
+        self.assertEqual(len(chains), 1)
+        return trace, chains[0]
+
+    def shown(self, trace: Trace) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_chain(trace)
+        return out.getvalue()
+
+    def test_three_bot_links_grip_by_post_and_leave_the_player_out(self):
+        trace, chain = self.read(link_pull([FELESTA, OBLITERATION, RIMEFANG, DEATHSONG], THREE_POSTS, [],
+                                           [(2000, CHAIN_TANK), (3500, GRIPPER), (5000, LINK_DK)]))
+        self.assertEqual(chain["posts"], {CHAIN_TANK: 1, GRIPPER: 2, LINK_DK: 3})
+        self.assertEqual(fc.chain_order(trace, chain), (["link 1/3", "link 2/3", "link 3/3"], True))
+        text = self.shown(trace)
+        self.assertIn("open 7.0 s: in order", text)
+        self.assertRegex(text, r"Rimefang +link 3/3 +\+1\.5s")
+
+    def test_a_skipped_link_hands_its_turn_on_and_the_player_grips_last(self):
+        trace, chain = self.read(link_pull([FELESTA, OBLITERATION, RIMEFANG, DEATHSONG], THREE_POSTS,
+                                           [(2100, GRIPPER, "cooldown")],
+                                           [(2000, CHAIN_TANK), (3500, LINK_DK), (6000, HUMAN_DK)]))
+        self.assertEqual(chain["skips"], [(2100, GRIPPER, "cooldown")])
+        self.assertEqual(fc.chain_order(trace, chain), (["link 1/3", "link 3/3", "human"], True))
+        self.assertIn("skipped: Obliteration (cooldown) at 0:02.100", self.shown(trace))
+
+    def test_a_dps_dk_opens_with_no_tank(self):
+        trace, chain = self.read(link_pull([OBLITERATION, DEATHSONG], [(GRIPPER, 1)], [],
+                                           [(2000, GRIPPER), (4000, HUMAN_DK)]))
+        self.assertEqual(fc.chain_order(trace, chain), (["link 1/1", "human"], True))
+
+    def test_grips_out_of_post_order_say_so(self):
+        trace, _ = self.read(link_pull([FELESTA, OBLITERATION, RIMEFANG, DEATHSONG], THREE_POSTS, [],
+                                       [(2000, CHAIN_TANK), (3500, LINK_DK), (5000, GRIPPER)]))
+        self.assertIn("order link 1/3, link 3/3, link 2/3", self.shown(trace))
+
+
+ICE_DK = 5020  # a DK tank keeping the rogue champion in Chains of Ice
 DK_C = CREATURE | 19
 
 
-def hold_snap(when: int) -> dict:
-    # the rogue champion turns to the priest at 8 s; the warrior champion is gone after the 14 s sample
-    rogue_on = MIGHTY if when < 8000 or when >= 10000 else PRIEST
+def ice_snap(when: int) -> dict:
+    # the rogue champion walks 0.5 yd/s; on the DK, then the priest at 10-15 s, the DK again, the tank from 20 s
+    rogue_on = PRIEST if 10000 <= when < 15000 else TANK if when >= 20000 else ICE_DK
     units = [
-        placed(PRIEST, 0.0, 0.0, 100.0, 0),
-        placed(MIGHTY, 41.0, 0.0, 100.0, ROGUE_C),
-        placed(ROGUE, 0.0, 36.0, 0.0 if when >= 8000 else 100.0, WARRIOR_C),
-        placed(TANK, 0.0, 36.0, 100.0, WARRIOR_C),
-        placed(ROGUE_C, 40.0, 0.0, 100.0, rogue_on),
+        placed(PRIEST, 0.0, 30.0, 0.0 if when >= 15000 else 100.0, 0),
+        placed(ICE_DK, 45.0, 0.0, 100.0, ROGUE_C),
+        placed(ROGUE, -30.0, 3.0, 100.0, DK_C),
+        placed(TANK, -30.0, 6.0, 100.0, WARRIOR_C),
+        placed(ROGUE_C, 30.0 + when / 2000.0, 0.0, 100.0, rogue_on),
         placed(PALADIN, -30.0, 0.0, 100.0, TANK),
         placed(DISC, -30.0, 0.0, 100.0, TANK),
-        placed(MAGE_C, -30.0, 0.0, 100.0, TANK),
-        placed(DK_C, -30.0, 0.0, 100.0, TANK),
+        placed(MAGE_C, -30.0, 0.0, 100.0, PRIEST),
+        placed(DK_C, -30.0, 0.0, 100.0, ROGUE),
+        placed(WARRIOR_C, -30.0, 5.0, 100.0, TANK),
     ]
-    if when <= 14000:
-        units.append(placed(WARRIOR_C, 0.0, 35.0, 100.0, ROGUE if when < 8000 else TANK))
     return {"t": when, "e": "snap", "hz": [], "u": units}
 
 
-def hold_pull() -> list[dict]:
+def ice_pull() -> list[dict]:
     roster = [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
-              {"g": MIGHTY, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
+              {"g": ICE_DK, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
               {"g": ROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
               {"g": PRIEST, "n": "Prayer", "r": "heal", "c": 5, "h": 0}]
     records = [
@@ -1253,60 +1330,69 @@ def hold_pull() -> list[dict]:
         {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
         {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
         {"t": 1, "e": "unit", "g": DK_C, "en": 34461, "n": "Gorgrim Shadowcleave", "b": 1},
-        note(-500, TANK, fc.HOLD, 0),
         note(0, TANK, "fc.kill", PALADIN),
-        # Mighty holds the rogue until it turns kill target
-        note(0, MIGHTY, fc.HOLD, ROGUE_C),
-        note(10000, TANK, "fc.kill", ROGUE_C),
-        note(10000, MIGHTY, fc.HOLD, 0),
-        # Shadow holds the warrior and dies on it, the tank takes it over until it dies
-        note(2000, ROGUE, fc.HOLD, WARRIOR_C),
-        {"t": 7500, "e": "death", "g": ROGUE, "killer": WARRIOR_C, "x": 0.0, "y": 36.0, "z": 0.0},
-        note(8000, ROGUE, fc.HOLD, 0),
-        note(8000, TANK, fc.HOLD, WARRIOR_C),
-        note(15000, TANK, fc.HOLD, 0),
-        {"t": 20000, "e": "end", "out": "wipe"},
+        # Felesta keeps the rogue in Chains of Ice until it turns kill target
+        note(0, ICE_DK, fc.ICE, ROGUE_C),
+        cast(1000, ICE_DK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C),
+        cast(3000, ROGUE, 1715, ROGUE_C),
+        # off her champion: a Chains of Ice and an Icy Touch spent, an off-hand Obliterate that's no cast of hers
+        cast(5000, ICE_DK, fc.SPELL_CHAINS_OF_ICE, DK_C),
+        cast(6000, ICE_DK, 49909, PALADIN),
+        cast(6000, ICE_DK, 51425, PALADIN, triggered=True),
+        cast(8000, ROGUE, 1715, WARRIOR_C),
+        # the rogue kills Prayer while its Chains are off
+        dmg(13000, MAGE_C, PRIEST, 0),
+        dmg(14000, ROGUE_C, PRIEST, 0),
+        dmg(14500, ROGUE_C, PRIEST, 0),
+        cast(14000, ICE_DK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C),
+        {"t": 15000, "e": "death", "g": PRIEST, "killer": ROGUE_C, "x": 0.0, "y": 30.0, "z": 0.0},
+        note(20000, TANK, "fc.kill", ROGUE_C),
+        note(20000, ICE_DK, fc.ICE, 0),
+        note(20000, ICE_DK, fc.ICE_OFF, "kill target"),
+        {"t": 24000, "e": "end", "out": "wipe"},
     ]
-    return records + [hold_snap(when) for when in range(0, 20000, 1000)]
+    return records + [ice_snap(when) for when in range(0, 24000, 1000)]
 
 
-class Holds(unittest.TestCase):
+class IceDuty(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.folder = tempfile.TemporaryDirectory()
         path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
-        path.write_text("\n".join(json.dumps(rec) for rec in hold_pull()) + "\n", encoding="utf-8")
+        path.write_text("\n".join(json.dumps(rec) for rec in ice_pull()) + "\n", encoding="utf-8")
         cls.trace = Trace(path)
 
     @classmethod
     def tearDownClass(cls):
         cls.folder.cleanup()
 
-    def test_each_hold_reads_the_share_on_its_holder_the_healer_gap_and_the_deaths(self):
-        self.assertEqual(fc.hold_rows(self.trace), [
-            {"bot": MIGHTY, "champion": ROGUE_C, "start": 0, "stop": 10000, "samples": 10, "on": 0.8,
-             "healer": 40.0, "others": collections.Counter({PRIEST: 2.0}), "holder_died": False, "died": False},
-            {"bot": ROGUE, "champion": WARRIOR_C, "start": 2000, "stop": 8000, "samples": 6, "on": 1.0,
-             "healer": 35.0, "others": collections.Counter(), "holder_died": True, "died": False},
-            {"bot": TANK, "champion": WARRIOR_C, "start": 8000, "stop": 15000, "samples": 7, "on": 1.0,
-             "healer": 35.0, "others": collections.Counter(), "holder_died": False, "died": True}])
+    def test_a_duty_reads_its_uptime_gap_spenders_travel_and_kills(self):
+        self.assertEqual(fc.ice_rows(self.trace), [{
+            "bot": ICE_DK, "champion": ROGUE_C, "start": 0, "stop": 20000, "reason": "kill target", "casts": 2,
+            "uptime": 0.8, "strong": 0.5, "gap": 3000,
+            "spent": collections.Counter({"Chains of Ice": 1, "Icy Touch": 1}), "moved": 5.0, "on": 0.75,
+            "others": collections.Counter({PRIEST: 5.0}), "kills": [PRIEST], "dk_died": False, "died": False}])
 
     def test_the_section_renders(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            fc.show_hold(self.trace)
+            fc.show_ice(self.trace)
         text = out.getvalue()
-        self.assertIn("fc.hold: Bulwark (paladin), Mighty (warrior), Shadow (rogue)", text)
-        self.assertRegex(text, r"Mighty +Irieth Shadowstep +Rogue +0:00\.000 +10\.0s +80% +40\.0 +- +-  Prayer 2\.0s")
-        self.assertRegex(text, r"Shadow +Shocuul +Warrior +0:02\.000 +6\.0s +100% +35\.0 +yes +-  -")
-        self.assertRegex(text, r"Bulwark +Shocuul +Warrior +0:08\.000 +7\.0s +100% +35\.0 +- +yes  -")
-        self.assertIn("melee champions never held: Gorgrim Shadowcleave", text)
-        self.assertIn("on holder, median over the holds: 100%", text)
+        self.assertIn("fc.ice: Felesta", text)
+        self.assertRegex(text, r"Felesta +Irieth Shadowstep +Rogue +0:00\.000 +20\.0s +2 +80% +50% +3\.0s +5\.0 +75%"
+                               r" +- +-  kill target")
+        self.assertIn("spent Chains of Ice 1, Icy Touch 1; other victims Prayer 5.0s; killed Prayer", text)
+        self.assertIn("melee champions never iced: Shocuul, Gorgrim Shadowcleave", text)
+        self.assertIn("uptime, median over the duties: 80%", text)
 
-    def test_a_champion_on_a_holder_is_no_escapee_only_while_the_hold_lasts(self):
-        # the rogue is loose on the priest at 8-9 s and on Mighty once the hold is over; the warrior is
-        # on Shadow a second before his hold opens
-        self.assertEqual(fc.escapee_seconds(self.trace), {ROGUE_C: 12.0, WARRIOR_C: 1.0})
+    def test_a_snare_on_a_champion_its_ice_dk_kites_from_is_needed_and_the_duty_chains_count_apart(self):
+        self.assertEqual([(row["t"], row["spell"], row["target"], row["needed"]) for row in fc.snare_casts(self.trace)],
+                         [(3000, "Hamstring", ROGUE_C, True), (5000, "Chains of Ice", DK_C, True),
+                          (8000, "Hamstring", WARRIOR_C, False)])
+
+    def test_an_iced_champion_is_no_escapee_while_its_chains_last(self):
+        # the rogue is loose on the priest at 11-13 s, between its Chains, and on the tank after the duty
+        self.assertEqual(fc.escapee_seconds(self.trace), {ROGUE_C: 3.0})
 
 
 def stands_pull() -> list[dict]:
@@ -1941,7 +2027,8 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.champion_trinkets(trace), [])
         self.assertEqual(fc.trinket_triggers(trace), [])
         self.assertEqual(fc.opener_holds(trace), [])
-        self.assertEqual(fc.hold_rows(trace), [])
+        self.assertEqual(fc.ice_rows(trace), [])
+        self.assertEqual(fc.ice_duties(trace), [])
         self.assertEqual(fc.first_engage(trace), None)
         self.assertEqual(fc.first_picks(trace), [])
         self.assertEqual(fc.channel_rows(trace), [])

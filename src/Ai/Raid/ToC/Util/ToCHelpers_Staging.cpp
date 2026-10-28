@@ -24,6 +24,7 @@
 #include "SharedDefines.h"
 #include "Timer.h"
 #include "ToCData.h"
+#include "ToCFactionChampionsGripChain.h"
 #include "ToCHelpers_Anubarak.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
 #include "ToCHelpers_Icehowl.h"
@@ -134,10 +135,11 @@ constexpr float CHAMPION_SIDE_STEP = 3.0f;
 // the first engage sends every idle champion at its nearest player, so everyone else stands this much
 // farther from each slot than a tank
 constexpr float CHAMPION_TANK_LEAD = 3.0f;
-// about 24 yd past the tank line, where the DK tank's grip drops a healer, so the bot DK grips without a walk.
-// The player stands 24 yd further out, still on the floor.
+// The grip chain's second post, about 24 yd past the tank line where the first grip drops a healer, so its
+// DK grips without a walk. The last post is 24 yd further out, still on the floor, a third bot DK's or else
+// the player's.
 constexpr float CHAMPION_GRIP_POST = 54.0f;
-constexpr float CHAMPION_PLAYER_POST = CHAMPION_GRIP_POST + 24.0f;
+constexpr float CHAMPION_LAST_POST = CHAMPION_GRIP_POST + 24.0f;
 // the gripped healer is carried down this lane to the player, so healers and ranged wait off it
 constexpr float CHAMPION_GRIP_LANE = 10.0f;
 // healers wait just behind the melee, so the tanks and melee are in heal range from the first second
@@ -517,8 +519,22 @@ Point2 ChampionTankStand(std::vector<Point2> const& landing, Point2 centroid, Ve
     return Along(base, inward, CHAMPION_TANK_SEARCH_MAX);
 }
 
+// Post 0 is the tank line, a non-tank 3 yd behind it so a bot tank still takes the engage rush. Posts 1
+// and 2 sit down the lane.
+Point2 ChampionChainPost(std::vector<Point2> const& landing, Point2 centroid, Vec2 inward, uint32 post, bool tank)
+{
+    if (post == 0)
+    {
+        Point2 const line = ChampionTankStand(landing, centroid, inward, 0.0f);
+        return tank ? line : Along(line, inward, CHAMPION_TANK_LEAD);
+    }
+
+    return Along(centroid, inward, post == 1 ? CHAMPION_GRIP_POST : CHAMPION_LAST_POST);
+}
+
 // Nobody stands in aggro range, so the champions idle until a player engages one. The bot tanks wait
-// nearest them on the way to the arena centre and the grip DKs past them.
+// nearest them on the way to the arena centre, the grip chain's bot DKs on their posts down the lane and a
+// 4th or later one beside the second post.
 void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<DutyStand>& duties, Layout& layout)
 {
     std::vector<Point2> const landing = ChampionLanding(bot);
@@ -526,21 +542,33 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
 
     Point2 const centre = PointOf(ARENA_CENTER);
     Vec2 const inward = Direction(centroid, centre);
+
+    std::vector<FactionChampionsGripChain::Dk> dks;
+    for (Player* member : bots)
+        if (member->getClass() == CLASS_DEATH_KNIGHT && member->HasSpell(SPELL_DEATH_GRIP))
+            dks.push_back({member->GetGUID().GetRawValue(), PlayerbotAI::IsTank(member)});
+
+    std::vector<uint64> const links = FactionChampionsGripChain::OrderLinks(dks);
     std::vector<Point2> tankStands;
-    size_t gripPosts = 0;
+    size_t spares = 0;
     for (Player* member : bots)
     {
-        if (PlayerbotAI::IsTank(member))
+        auto const link = std::find(links.begin(), links.end(), member->GetGUID().GetRawValue());
+        uint32 const post = static_cast<uint32>(link - links.begin());
+        bool const tank = PlayerbotAI::IsTank(member);
+        if (tank && (link == links.end() || post == 0))
         {
             Point2 const stand = ChampionTankStand(landing, centroid, inward, ChampionSideOffset(tankStands.size()));
             AddForcedDuty(duties, member, "tank", stand, centroid);
             tankStands.push_back(stand);
         }
-        else if (member->getClass() == CLASS_DEATH_KNIGHT && member->HasSpell(SPELL_DEATH_GRIP))
+        else if (link != links.end())
         {
-            Point2 const post = Along(Along(centroid, inward, CHAMPION_GRIP_POST), Rotate(inward, 90.0f),
-                                      ChampionSideOffset(gripPosts++));
-            duties.push_back({member->GetGUID(), "grip", At(post, ARENA_STAND_Z), false, Position()});
+            Point2 const stand = post < FactionChampionsGripChain::MAX_LINKS
+                                     ? ChampionChainPost(landing, centroid, inward, post, tank)
+                                     : Along(Along(centroid, inward, CHAMPION_GRIP_POST), Rotate(inward, 90.0f),
+                                             ChampionSideOffset(++spares));
+            duties.push_back({member->GetGUID(), "grip", At(stand, ARENA_STAND_Z), false, Position()});
         }
     }
 
@@ -566,14 +594,14 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
 
     Point2 const front = tankStands.empty() ? ChampionTankStand(landing, centroid, inward, 0.0f) : tankStands.front();
     Point2 const healAnchor = Along(front, inward, CHAMPION_HEAL_BEHIND);
-    Point2 const playerPost = Along(centroid, inward, CHAMPION_PLAYER_POST);
+    Point2 const lastPost = Along(centroid, inward, CHAMPION_LAST_POST);
     auto const inLane = [&](Point2 slot)
     {
         float const along = (slot.x - centroid.x) * inward.x + (slot.y - centroid.y) * inward.y;
         if (along < 0.0f)
             return Dist(slot, centroid) < CHAMPION_GRIP_LANE;
-        if (along > CHAMPION_PLAYER_POST)
-            return Dist(slot, playerPost) < CHAMPION_GRIP_LANE;
+        if (along > CHAMPION_LAST_POST)
+            return Dist(slot, lastPost) < CHAMPION_GRIP_LANE;
 
         return std::fabs((slot.x - centroid.x) * inward.y - (slot.y - centroid.y) * inward.x) < CHAMPION_GRIP_LANE;
     };
@@ -1020,8 +1048,8 @@ ToCStagingRead ReadStand(PlayerbotAI* botAI, bool note)
     }
 
     DealtStand const* dealt = DealtFor(botAI, *state, arrival);
-    // the DK tank walks into Death Grip reach of the champion the player called
-    bool const chainGrip = arrival == ToCStagingBoss::Champions && FactionChampionsOpenerGripDue(botAI);
+    // a grip chain link walks into Death Grip reach of the champion the player called once its turn comes
+    bool const chainGrip = arrival == ToCStagingBoss::Champions && FactionChampionsChainGripDue(botAI);
     if (!dealt || TwinsEssenceFirst(botAI, arrival) || chainGrip)
     {
         state->holds.erase(bot->GetGUID());
@@ -1062,10 +1090,12 @@ Position GetFactionChampionsLandingCentre(Player* bot)
     return At(centroid, ARENA_STAND_Z);
 }
 
-Position GetFactionChampionsGripPost(Player* bot)
+Position GetFactionChampionsChainPost(Player* bot, uint32 post, bool tank)
 {
-    Point2 const centroid = ChampionLandingCentroid(ChampionLanding(bot));
-    return At(Along(centroid, Direction(centroid, PointOf(ARENA_CENTER)), CHAMPION_GRIP_POST), ARENA_STAND_Z);
+    std::vector<Point2> const landing = ChampionLanding(bot);
+    Point2 const centroid = ChampionLandingCentroid(landing);
+    Vec2 const inward = Direction(centroid, PointOf(ARENA_CENTER));
+    return At(ChampionChainPost(landing, centroid, inward, post, tank), ARENA_STAND_Z);
 }
 
 ToCStagingBoss GetToCStagedArrival(PlayerbotAI* botAI)
