@@ -89,9 +89,9 @@ definition alone:
   follows the stem's multipliers. The action sends the pet first, the trigger also fires while the
   pet is off the pick. Marrowgar, Deathwhisper, the Gunship (`GsbTarget`) and Saurfang
   (`GetDbsTarget`) use it, with no icon writes or `rti` use. `RaidRestoreLegacyRti` stays unwired
-  until no ICC code writes `rti`, and it never resets `star`; a ranged bot may still carry the skull,
-  cross or star `rti` the old Marrowgar code set. The Gunship tick resets a `star` to `skull` while
-  its gate is open.
+  until no ICC code writes `rti`, and it never resets `star`. The Marrowgar tick resets a bot's
+  `cross` or `star` `rti` to `skull` once per instance, and the Gunship tick a `star` while its gate
+  is open; a bot that skips both rooms keeps what the old Marrowgar code set.
 - hooks: a row in `HookRows()` (`Util/ICCSeams.cpp`), `{&Icc<Stem>Definition, burstWindow,
   openerBosses, resistSchools, fireWantsMastery}`, unused hooks null, the functions in the stem's
   helpers. Only the first row whose definition is live is asked, so none answers before live (the

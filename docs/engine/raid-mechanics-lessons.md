@@ -161,8 +161,9 @@ Every distance helper measures differently, and a large-model boss inflates all 
   (`OutOfRangeTrigger::IsActive`), so a formation clamped to raw `spellDistance - margin` gives away
   both reaches, 9.5 yd against the MK II, which parked Mimiron's camp on Napalm's floor. An area
   spell's radius goes the other way: `WorldObjectSpellAreaTargetCheck` adds the target's reach only
-  for a player-controlled caster, so a creature's AoE is centre to centre and spacing just over its
-  radius isolates. A persistent area aura is the exception: `DynObjAura::FillTargetMap` adds the
+  when a player-controlled caster hits a target that isn't, so a creature's AoE, or a player's on
+  another player (Death Plague's spread), is centre to centre and spacing just over its radius
+  isolates. A persistent area aura is the exception: `DynObjAura::FillTargetMap` adds the
   target's size whoever cast it, plus the dynobject's own 0.39 for an ally or `TARGET_DEST_DYNOBJ_NONE`
   effect, so a 9 yd Inferno reaches a siege engine (7.7) at 16.7 yd
   ([Flame Leviathan](../raids/ulduar/flame-leviathan.md#hard-mode)).
@@ -241,7 +242,8 @@ What lands on a raid add is not what PvP experience predicts.
   Fear, Frost Nova, Entangling Roots (66 of 67 Fears on Faction Champions broke within 30 ms of a
   hit). Cyclone has neither. Read both, not the reputation.
 - **Cyclone makes its target immune to every spell, another Cyclone included**, so a CC chain times
-  the recast to land just after it ends, not before.
+  the recast to land just after it ends, not before. A bot can't: `CanCastSpell` refuses the immune
+  target, so its recast starts at the fade and the victim is free for the cast time.
 - **A stunned creature takes no heal assist threat**: `ThreatManager::ForwardThreatForAssistingMe`
   skips `UNIT_STATE_CONTROLLED` units.
 - **Diminishing returns skip creatures.** `ApplyDiminishingToDuration` diminishes a creature only for a
@@ -574,6 +576,9 @@ encounters.
   ([Lord Marrowgar](../raids/icecrown-citadel/lord-marrowgar.md)).
 - **A charge's landing point is readable before he lands**: `boss->movespline->FinalDestination()`
   while `!movespline->Finalized()`, so whoever he will land on moves first (Onyxia, Marrowgar).
+- **A charge on the farthest players right after a telegraphed cast** leaves the cast as the whole
+  walk to the stands: whoever is still walking is the farthest, and the hit lands mid-walk
+  (Marrowgar's first Bone Storm charge, 3 s in on 25-man). Keep every stand reachable within it.
 - **A boss boundary evades him.** `Creature::Update` runs `CheckInRoom` against the AI's
   `SetBoundary` every 2.5 s while engaged, so a charge or tank drag that takes him outside resets the
   fight. Check stands against the instance script's boundary as well as the navmesh.

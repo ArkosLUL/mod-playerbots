@@ -210,10 +210,10 @@ off the pick.
   whitelists `SPELL_FAILED_OUT_OF_RANGE` and `SPELL_FAILED_NOT_SHAPESHIFT`, so `isPossible()` never
   checks mana, rage, runes or form, and `CastSpell` never shifts form.
   **Resource and pacing gating must live in a trigger, not in the action**, and a readiness election
-  (who interrupts this cast) tests the cost itself, and the form with
-  `SpellInfo::CheckShapeshift(bot->GetShapeshiftForm())`, or a bear-only Growl or a stance-locked
-  Taunt or Hamstring wins the pick and fails every tick. A known pet spell (Spell Lock) answers true
-  before any cooldown or range check, and `CastSpell` casts it as the bot, so test the bot's own
+  or duty pick (who interrupts this cast, who Cyclones) tests the cost itself, and the form with
+  `SpellInfo::CheckShapeshift(bot->GetShapeshiftForm())`, or a bear-only Growl, a stance-locked
+  Taunt or Hamstring, or a cat or Tree of Life druid's Cyclone wins the pick and fails every tick. A
+  known pet spell (Spell Lock) answers true before any cooldown or range check, and `CastSpell` casts it as the bot, so test the bot's own
   cooldown and range.
 - `CastSpell` selects and faces the target before it fails, and restores the old selection only on
   success, so a taunt or other cooldown cast not gated on `CanCastSpell` plus the DBC range re-faces
