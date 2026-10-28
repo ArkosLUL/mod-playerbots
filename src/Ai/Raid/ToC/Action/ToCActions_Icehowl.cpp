@@ -12,6 +12,7 @@
 #include "RaidTankDefensive.h"
 #include "Timer.h"
 #include "ToCHelpers_Icehowl.h"
+#include "ToCHelpers_Jormungars.h"
 #include "ToCHelpers_NorthrendBeasts.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -56,13 +57,20 @@ std::vector<HazardCircle> LaneCircles(Position const& start, Position const& end
 }
 
 Position FindLaneClearSpot(Player* bot, Position const& start, Position const& end, float clearance,
-                           HazardSweepCache* sweep)
+                           std::vector<HazardCircle> const& pools, HazardSweepCache* sweep)
 {
+    std::vector<HazardCircle> hazards = LaneCircles(start, end, clearance);
+    hazards.insert(hazards.end(), pools.begin(), pools.end());
     return FindNearestPositionClearOfHazards(
-        bot, LaneCircles(start, end, clearance), DODGE_SEARCH_RADIUS, 2.0f, static_cast<float>(M_PI) / 8.0f,
-        nullptr,
+        bot, hazards, DODGE_SEARCH_RADIUS, 2.0f, static_cast<float>(M_PI) / 8.0f, nullptr,
         [&start, &end, clearance](float x, float y) { return DistanceToIcehowlLane(start, end, x, y) >= clearance; },
         sweep);
+}
+
+bool InAnyCircle(std::vector<HazardCircle> const& circles, Position const& at)
+{
+    return std::any_of(circles.begin(), circles.end(),
+                       [&at](HazardCircle const& circle) { return circle.first.GetExactDist2d(at) < circle.second; });
 }
 }  // namespace
 
@@ -140,13 +148,15 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
     }
 
     HazardSweepCache sweep;
+    // The worms' pools can outlive them into this fight
+    std::vector<HazardCircle> const pools = GetSlimePoolCircles(botAI, WORM_POOL_SOON_TICKS, WORM_POOL_CLEARANCE_PAD);
     bool tight = false;
-    Position spot = FindLaneClearSpot(bot, start, end, ICEHOWL_CHARGE_CLEARANCE, &sweep);
+    Position spot = FindLaneClearSpot(bot, start, end, ICEHOWL_CHARGE_CLEARANCE, pools, &sweep);
     if (spot == Position())
     {
         // Already past the tight line, which is all the fallback could buy. Parked, so the next tick
         // skips the sweep.
-        if (fromLane >= ICEHOWL_CHARGE_TIGHT_CLEARANCE)
+        if (fromLane >= ICEHOWL_CHARGE_TIGHT_CLEARANCE && !InAnyCircle(pools, bot->GetPosition()))
         {
             dodgeSpot = bot->GetPosition();
             dodgeSpotMs = now;
@@ -157,7 +167,10 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
         }
 
         tight = true;
-        spot = FindLaneClearSpot(bot, start, end, ICEHOWL_CHARGE_TIGHT_CLEARANCE, &sweep);
+        spot = FindLaneClearSpot(bot, start, end, ICEHOWL_CHARGE_TIGHT_CLEARANCE, pools, &sweep);
+        // Trample is 50k, a pool tick 8-10k
+        if (spot == Position() && !pools.empty())
+            spot = FindLaneClearSpot(bot, start, end, ICEHOWL_CHARGE_TIGHT_CLEARANCE, {}, &sweep);
     }
 
     if (spot == Position())

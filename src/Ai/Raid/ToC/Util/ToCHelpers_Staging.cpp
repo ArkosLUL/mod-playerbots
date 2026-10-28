@@ -1060,11 +1060,13 @@ ToCStagingRead ReadStand(PlayerbotAI* botAI, bool note)
     }
 
     StagingHold& hold = state->holds[bot->GetGUID()];
-    if (!hold.hasSpot || hold.raw.GetExactDist2d(dealt->stand) > STAGING_STAND_MOVED)
+    // The worms' pools outlive them into Icehowl's walk-in
+    Position const stand = PushOutOfSlimePools(botAI, dealt->stand);
+    if (!hold.hasSpot || hold.raw.GetExactDist2d(stand) > STAGING_STAND_MOVED)
     {
-        Position const floor = EncounterHelpers::ValidateFloorPoint(bot, dealt->stand);
-        hold.raw = dealt->stand;
-        hold.spot = floor.GetExactDist(dealt->stand) <= STAGING_FLOOR_TOLERANCE ? floor : dealt->stand;
+        Position const floor = EncounterHelpers::ValidateFloorPoint(bot, stand);
+        hold.raw = stand;
+        hold.spot = floor.GetExactDist(stand) <= STAGING_FLOOR_TOLERANCE ? floor : stand;
         hold.hasSpot = true;
         hold.parked = false;
     }

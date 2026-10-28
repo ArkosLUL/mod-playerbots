@@ -32,6 +32,16 @@ bool GormokTankDefensiveTrigger::IsActive()
     return GormokTankNeedsDefensive(botAI);
 }
 
+bool GormokImpaleResetTrigger::IsActive()
+{
+    return GetGormokImpaleResetTarget(botAI) != nullptr;
+}
+
+bool GormokCancelHandOfProtectionTrigger::IsActive()
+{
+    return GormokHandOfProtectionToCancel(botAI);
+}
+
 bool GormokSnobolledTrigger::IsActive()
 {
     return GetGormokForSnoboldCarrier(botAI) != nullptr;
@@ -69,6 +79,13 @@ void AddToCGormokTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("gormok tank defensive", {
         NextAction("gormok tank defensive", ACTION_RAID + 6) }));
+
+    triggers.push_back(new TriggerNode("gormok impale reset", {
+        NextAction("gormok hand of protection", ACTION_RAID + 5) }));
+
+    // Off the global cooldown, and the hand pacifies the tank till it goes
+    triggers.push_back(new TriggerNode("gormok cancel hand of protection", {
+        NextAction("gormok cancel hand of protection", ACTION_EMERGENCY + 1) }));
 
     triggers.push_back(new TriggerNode("gormok fire bomb incoming", {
         NextAction("gormok dodge fire bomb", ACTION_EMERGENCY + 2) }));

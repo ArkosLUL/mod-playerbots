@@ -38,7 +38,7 @@ What the generic views get wrong here, and what this reads instead:
 - **Fire Bomb's impact has no world object.** The NPC is at best a `snap.u` row and nothing marks when
   66317 lands. Each bomb writes one `haz` `circle` row whose `ttl` is the modelled impact, not a
   measured one, so `--bomb` takes 66317 hits up to 1.5 s past it.
-- **`nb.tank`, `nb.swap`, `nb.snobold`, `nb.dps`, `nb.dodge`, `nb.spread`, `nb.bomb` and
+- **`nb.tank`, `nb.swap`, `nb.hop`, `nb.snobold`, `nb.dps`, `nb.dodge`, `nb.spread`, `nb.bomb` and
   `nb.defensive` are per-bot change-only notes**: a bot that stays on one answer writes one row, so
   counts here are changes, not ticks. `nb.bomb` writes `clear` whenever a bot is outside every young
   bomb's trigger, so a dodge that repeats the last one's branch still shows. `nb.arc` and `nb.breath`
@@ -46,8 +46,9 @@ What the generic views get wrong here, and what this reads instead:
 - **The worms' threat wipe shows only in their target column.** Each resets its threat list under
   ground and comes up on whoever threatens it first, so `--worms` times each worm from its own Emerge
   cast (66947 in the snapshot's casting column) until a tank is the target again: `nb.worm` leaves 3
-  only at the later worm's emerge, up to 1.5 s after the first. `nb.cure`, `nb.wormmove` and
-  `nb.wormhold` are per-bot change-only notes too.
+  only at the later worm's emerge, up to 1.5 s after the first. `nb.cure`, `nb.wormmove`,
+  `nb.wormhold` and `nb.poolmove` (the walk out of a pool with no worm engaged) are per-bot
+  change-only notes too.
 - **Neither worm hazard reaches `snap.hz`.** The Spew cone is a `haz` `wedge` row, `arc` degrees either
   side of `facing`; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 till it
   despawns (11 yd at 30 s on normal, 20 at 60 s on 25H), so `--worms` rebuilds its radius from its
@@ -57,7 +58,8 @@ What the generic views get wrong here, and what this reads instead:
   one burst of applies 1-3 s after the row, so the first burst 0.8-4 s after it is who took it.
 - **Nothing records what a bot attacks but the snapshot's target column**, its victim. `--targets`
   reads it against the `nb.dps` pick in force at each snapshot, so every switch shows up to one
-  snapshot gap off the pick.
+  snapshot gap off the pick. A caster that never melees has none: there its last own `cast` row
+  within 2 s stands in.
 - **A cure has no record of its own.** The Bile pulse strips Toxin as it lands, so `--cure` calls a
   removal cured when a pulse hit the carrier within 250 ms of it.
 - **A Bile pulse names Dreadscale as its source**, never the carrier, so `--cure` gives each hit to the
@@ -347,6 +349,14 @@ def defensive_picks(trace: Trace) -> dict[int, collections.Counter]:
     return branch_counts(trace, "nb.defensive", lambda text: text)
 
 
+def hop_casts(trace: Trace) -> dict[int, collections.Counter]:
+    """`nb.hop` per paladin: `cast <tank>` dealt a Hand of Protection on that tank, or `none`."""
+    def branch(text: str) -> str:
+        word, guid = split_duty(text)
+        return f"{word} {trace.name(guid)}" if guid is not None else word
+    return branch_counts(trace, "nb.hop", branch)
+
+
 def show_tanks(trace: Trace) -> None:
     print("TANKS")
     end = pull_end(trace)
@@ -373,7 +383,7 @@ def show_tanks(trace: Trace) -> None:
             f"{trace.name(guid)} {count}" for guid, count in sorted(peaks.items(), key=lambda item: -item[1])))
 
     for title, table in (("nb.swap", swap_branches(trace)), (SWAP_TAUNT, swap_taunts(trace)),
-                         ("nb.defensive", defensive_picks(trace))):
+                         ("nb.hop", hop_casts(trace)), ("nb.defensive", defensive_picks(trace))):
         if not table:
             print(f"  {title}: none")
             continue
@@ -384,7 +394,9 @@ def show_tanks(trace: Trace) -> None:
 
 NPC_SNOBOLD_VASSAL = 34800
 # nb.dps branch words, in the resolver's order
-DPS_BRANCHES = ("skull", "snobold", "gormok", "mobile", "icehowl")
+DPS_BRANCHES = ("skull", "snobold", "gormok", "acidmaw", "mobile", "icehowl")
+# A cast row this old still says what a caster with an empty target column hits
+CAST_TARGET_MS = 2000
 DPS_ROLES = ("melee", "ranged")
 
 
@@ -398,14 +410,35 @@ def dps_bots(trace: Trace) -> set[int]:
     return {guid for guid in roster_guids(trace) if trace.role(guid) in DPS_ROLES and guid not in trace.humans}
 
 
+def cast_targets(trace: Trace, bots: set[int]) -> dict[int, tuple[list[int], list[int]]]:
+    """Per bot, the times and targets of its own (not triggered) `cast` rows that name a target."""
+    out: dict[int, tuple[list[int], list[int]]] = {}
+    for rec in trace.of("cast"):
+        guid = rec.get("s")
+        if guid in bots and rec.get("tgt") and not rec.get("tr"):
+            times, targets = out.setdefault(guid, ([], []))
+            times.append(rec["t"])
+            targets.append(rec["tgt"])
+    return out
+
+
+def recent_cast_target(casts: tuple[list[int], list[int]] | None, when: int) -> int:
+    if not casts:
+        return 0
+    times, targets = casts
+    index = bisect.bisect_right(times, when) - 1
+    return targets[index] if index >= 0 and when - times[index] <= CAST_TARGET_MS else 0
+
+
 def target_time(trace: Trace) -> dict[int, dict[str, collections.Counter]]:
     """Per DPS bot and `nb.dps` branch, the sampled living ms its target column sat on its pick (`on`),
-    on another beast or snobold (`other`), or on anything else (`neither`). Time under `none`, or
-    before the bot's first `nb.dps` row, counts nowhere. A snapshot's ms run to the next one, capped
-    at 2 s."""
+    on another beast or snobold (`other`), or on anything else (`neither`). An empty column falls back
+    to the bot's last own cast's target within 2 s. Time under `none`, or before the bot's first
+    `nb.dps` row, counts nowhere. A snapshot's ms run to the next one, capped at 2 s."""
     bots = dps_bots(trace)
     picks = holder_spans(trace, "nb.dps", pull_end(trace))
     units = encounter_units(trace)
+    casts = cast_targets(trace, bots)
     snaps = frames(trace)
     out: dict[int, dict[str, collections.Counter]] = collections.defaultdict(
         lambda: collections.defaultdict(collections.Counter))
@@ -420,7 +453,7 @@ def target_time(trace: Trace) -> dict[int, dict[str, collections.Counter]]:
             branch, pick = split_duty(held) if held is not None else ("", None)
             if pick is None:
                 continue
-            target = row[7] if len(row) > 7 else 0
+            target = (row[7] if len(row) > 7 else 0) or recent_cast_target(casts.get(row[0]), snap["t"])
             place = "on" if target == pick else ("other" if target in units else "neither")
             out[row[0]][branch][place] += step
     return {guid: dict(branches) for guid, branches in out.items()}
@@ -1019,6 +1052,11 @@ def drop_numbers(text: str) -> str:
     return " ".join(word for word in text.split() if not NUMBER_WORD.fullmatch(word))
 
 
+def poolmove_branches(trace: Trace) -> dict[int, collections.Counter]:
+    """`nb.poolmove` per bot by branch, the yards dropped: `move`, `hold`, `none`, `locked`, ..."""
+    return branch_counts(trace, "nb.poolmove", drop_numbers)
+
+
 def wormmove_branches(trace: Trace) -> dict[int, collections.Counter]:
     """`nb.wormmove` per bot by branch, the yards dropped: `move pool full`, `hold spew`, `drag`, ..."""
     return branch_counts(trace, "nb.wormmove", drop_numbers)
@@ -1200,7 +1238,8 @@ def show_worms(trace: Trace) -> None:
     for cause, roles in sorted(releases.items(), key=lambda item: (-sum(item[1].values()), item[0])):
         print(f"    {cause:10} {sum(roles.values()):5}  " + ", ".join(f"{role} {n}" for role, n in roles.most_common()))
 
-    for title, branches in (("nb.wormmove", wormmove_branches(trace)), ("nb.wormhold", wormhold_branches(trace))):
+    for title, branches in (("nb.wormmove", wormmove_branches(trace)), ("nb.wormhold", wormhold_branches(trace)),
+                            ("nb.poolmove", poolmove_branches(trace))):
         if not branches:
             print(f"  {title}: none")
             continue

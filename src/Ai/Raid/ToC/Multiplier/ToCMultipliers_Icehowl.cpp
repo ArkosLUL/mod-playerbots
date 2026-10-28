@@ -8,6 +8,7 @@
 #include "Playerbots.h"
 #include "ReachTargetActions.h"
 #include "ToCActions_Icehowl.h"
+#include "ToCActions_Jormungars.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Icehowl.h"
 
@@ -15,10 +16,13 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
+// The pool exit keeps off the lane itself: the Massive Crash knockback lands the raid at the wall,
+// where the heroic pools are
 bool CompetesWithChargeDodge(Action* action)
 {
     if (dynamic_cast<MovementAction*>(action))
-        return !dynamic_cast<AttackAction*>(action) && !dynamic_cast<IcehowlClearChargePathAction*>(action);
+        return !dynamic_cast<AttackAction*>(action) && !dynamic_cast<IcehowlClearChargePathAction*>(action) &&
+               !dynamic_cast<NorthrendWormsLeavePoolAction*>(action);
 
     if (!dynamic_cast<CastSpellAction*>(action))
         return false;

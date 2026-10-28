@@ -331,6 +331,8 @@ char const* DpsBranchName(BeastsDpsBranch branch)
             return "snobold";
         case BeastsDpsBranch::Gormok:
             return "gormok";
+        case BeastsDpsBranch::Acidmaw:
+            return "acidmaw";
         case BeastsDpsBranch::MobileWorm:
             return "mobile";
         case BeastsDpsBranch::Icehowl:
@@ -354,7 +356,18 @@ BeastsDpsPick ResolveDpsPick(PlayerbotAI* botAI)
     if (Unit* gormok = GetEngagedBeast(botAI, NorthrendBeast::Gormok))
         return {gormok, BeastsDpsBranch::Gormok};
 
+    // Acidmaw first: alone, its Toxin has no Bile left to cure it. Melee stay on the mobile worm, out of
+    // the stationary one's Sweep, unless Dreadscale would die first.
     Unit* worm = GetBeastOfDuty(botAI, BeastsTankDuty::WormMobile);
+    Unit* acidmaw = GetEngagedBeast(botAI, NorthrendBeast::Acidmaw);
+    if (acidmaw && !IsWormSubmerged(acidmaw))
+    {
+        Unit* dreadscale = GetEngagedBeast(botAI, NorthrendBeast::Dreadscale);
+        bool const dreadscaleLower = !dreadscale || dreadscale->GetHealthPct() <= acidmaw->GetHealthPct();
+        if (PlayerbotAI::IsRanged(botAI->GetBot()) || acidmaw == worm || dreadscaleLower)
+            return {acidmaw, BeastsDpsBranch::Acidmaw};
+    }
+
     if (worm && !IsWormSubmerged(worm))
         return {worm, BeastsDpsBranch::MobileWorm};
 

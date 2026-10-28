@@ -11,7 +11,8 @@
 #include "ToCData.h"
 
 // Acidmaw and Dreadscale. Worm state, pools and the cure pairing are read once per instance per ms,
-// only on map 649 while the Beasts encounter is live and a worm is engaged.
+// only on map 649 while the Beasts encounter is live and a worm is engaged; the pools also with no
+// worm engaged, while the Beasts gate is open.
 namespace TrialOfTheCrusaderHelpers
 {
 
@@ -82,6 +83,8 @@ constexpr float WORM_HOLD_MELEE_TURN_DEG = 20.0f;   // anchor worm turned, melee
 constexpr float WORM_HOLD_DRIFT = 6.0f;             // anchor worm moved, any other hold
 constexpr uint32 WORM_HOLD_FRESH_MS = 1000;         // a hold the plan hasn't confirmed this long guards nothing
 constexpr uint32 WORM_SEARCH_BACKOFF_MS = 1000;     // after a non-urgent search found no spot
+// Reach into a pool or a Bile pulse stays zeroed this long through backed off searches, then walks in
+constexpr uint32 WORM_REACH_HOLD_MS = 4000;
 
 // A worm counts as settled once it hasn't walked or turned past these for WORM_SETTLE_MS
 constexpr uint32 WORM_SETTLE_MS = 500;
@@ -249,8 +252,9 @@ void SetWormHold(PlayerbotAI* botAI, Position const& spot, WormMoveReason reason
 bool IsWormSpotHeld(PlayerbotAI* botAI);        // a hold the plan confirmed within WORM_HOLD_FRESH_MS
 bool IsWormWalkInFlight(PlayerbotAI* botAI);    // unparked hold, under WORM_WALK_LATCH_MS, moving, booked on it
 void BackOffWormSearch(PlayerbotAI* botAI);     // the plan stays quiet on non-urgent reasons for the backoff
-// reach melee or reach spell would walk this bot through a pool, and the reposition can still find a
-// way round: not while its search backs off, nor past the search radius
+// reach melee or reach spell would walk this bot through a pool, or stop it in one (or in a Bile pulse
+// for a bot with neither debuff). Not past the search radius. While the search finds no way round,
+// only a stop inside counts, and for WORM_REACH_HOLD_MS at most.
 bool WormReachCrossesPool(PlayerbotAI* botAI);
 
 // Toxin no Bile can cure: no worm is engaged, so the cure pairing is off, or nobody carries Bile. Only
@@ -260,6 +264,20 @@ Player* GetWormToxinHealTarget(PlayerbotAI* botAI);  // the carrier this healer 
 // This non-tank bot's own such Toxin has it stuck: "divine shield" or "ice block", whose school immunity
 // purges it, else nullptr. Before Paralysis, which leaves the bot unable to cast anything.
 char const* GetWormToxinSelfPurge(PlayerbotAI* botAI);
+
+// Slime Pools stay read while the Beasts gate is open, so the ones a worm leaves behind still count
+// through the gap and Icehowl (60 s on 25H). Each as its radius `ticks` seconds on, plus pad.
+std::vector<EncounterHelpers::HazardCircle> GetSlimePoolCircles(PlayerbotAI* botAI, uint32 ticks, float pad);
+// The spot moved out to the edge of any pool, 5 s on plus the clearance pad, staying on the spot floor
+Position PushOutOfSlimePools(PlayerbotAI* botAI, Position const& spot);
+// No worm is engaged, so no reposition runs, and the bot stands in a pool or one reaching it before its
+// pinned cast ends
+bool InSlimePoolWithoutWorms(PlayerbotAI* botAI);
+// Nearest spot clear of every pool 5 s on, in reach of its target where it can be, off a latched
+// Icehowl charge lane
+bool FindSlimePoolExit(PlayerbotAI* botAI, Position& spot);
+// A self-res would stand this player up inside a pool
+bool CorpseInSlimePool(Player* dead);
 
 }
 

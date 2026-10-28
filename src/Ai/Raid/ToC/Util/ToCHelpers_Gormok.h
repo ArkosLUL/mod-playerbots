@@ -51,6 +51,9 @@ static_assert(FIRE_BOMB_PULSE_CLEARANCE > FIRE_BOMB_PULSE_RADIUS + FIRE_BOMB_COM
 constexpr uint32 GORMOK_IMPALE_SWAP_STACKS = 3;
 // Holder pops a tank cooldown here, or already at the swap count with no swap tank left
 constexpr uint32 GORMOK_IMPALE_DEFENSIVE_STACKS = 5;
+// A tank he isn't hitting with this many gets Hand of Protection: its physical immunity purges Impale
+constexpr uint32 GORMOK_HOP_RESET_STACKS = 2;
+constexpr float GORMOK_HOP_RANGE = 30.0f;
 
 // Staggering Stomp's school lockout, centre to centre
 constexpr float GORMOK_STOMP_INTERRUPT_RADIUS = 20.0f;
@@ -71,6 +74,11 @@ Unit* GetGormokSwapTauntTarget(PlayerbotAI* botAI);
 
 // This bot holds Gormok and its Impale stacks call for a cooldown
 bool GormokTankNeedsDefensive(PlayerbotAI* botAI);
+// The tank this paladin bot casts Hand of Protection on now, else nullptr. One deal per instance: a
+// tank, bot or human, with GORMOK_HOP_RESET_STACKS or more that no beast is hitting. Notes nb.hop.
+Player* GetGormokImpaleResetTarget(PlayerbotAI* botAI);
+// This bot tank carries Hand of Protection and no Impale: the hand pacifies, so it goes
+bool GormokHandOfProtectionToCancel(PlayerbotAI* botAI);
 
 // The snobold this dps bot should kill, or nullptr. Notes nb.snobold.
 Unit* GetGormokSnoboldPick(PlayerbotAI* botAI);

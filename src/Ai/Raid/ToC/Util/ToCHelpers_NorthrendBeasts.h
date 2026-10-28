@@ -42,6 +42,7 @@ enum class BeastsDpsBranch : uint8
     Skull,
     Snobold,
     Gormok,
+    Acidmaw,
     MobileWorm,
     Icehowl
 };

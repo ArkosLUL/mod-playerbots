@@ -21,6 +21,7 @@
 #include "RaidObs.h"
 #include "SpellMgr.h"
 #include "Timer.h"
+#include "ToCHelpers_Jormungars.h"
 #include "ToCHelpers_NorthrendBeasts.h"
 
 namespace TrialOfTheCrusaderHelpers
@@ -208,6 +209,7 @@ IcehowlChargeState* RefreshCharge(PlayerbotAI* botAI)
 }
 
 constexpr uint32 BREATH_ROSTER_INTERVAL_MS = 1000;
+constexpr float BREATH_POOL_STEP = 1.0f;
 // Bearing counts land on whole multiples of the step, this only absorbs float noise
 constexpr float BEARING_EPSILON_DEG = 0.001f;
 
@@ -262,6 +264,8 @@ struct IcehowlBreathState
     float anchor = 0.0f;
     float stepDeg = 0.0f;
     std::vector<BreathBearing> bearings;
+    // Slime Pools the worms left behind, at their size 5 s on
+    std::vector<EncounterHelpers::HazardCircle> pools;
 
     uint32 rosterMs = 0;
     bool rosterValid = false;
@@ -315,13 +319,43 @@ float BearingAngle(IcehowlBreathState const& state, int32 step)
     return state.anchor + DegToRad(static_cast<float>(step) * state.stepDeg);
 }
 
-// The probe measured from the latched spot, and he may have drifted along the bearing since
+// How far out along the bearing from (x, y) the first pool ahead starts. A pool round the start itself
+// is left to the stand check, which looks for a distance past it.
+float PoolCut(std::vector<EncounterHelpers::HazardCircle> const& pools, float x, float y, float angle)
+{
+    float const dx = std::cos(angle);
+    float const dy = std::sin(angle);
+    float cut = std::numeric_limits<float>::max();
+    for (EncounterHelpers::HazardCircle const& pool : pools)
+    {
+        float const ox = pool.first.GetPositionX() - x;
+        float const oy = pool.first.GetPositionY() - y;
+        float const along = ox * dx + oy * dy;
+        float const across2 = ox * ox + oy * oy - along * along;
+        float const radius2 = pool.second * pool.second;
+        if (ox * ox + oy * oy <= radius2 || along <= 0.0f || across2 >= radius2)
+            continue;
+
+        cut = std::min(cut, along - std::sqrt(radius2 - across2));
+    }
+
+    return cut;
+}
+
+bool InPool(std::vector<EncounterHelpers::HazardCircle> const& pools, float x, float y)
+{
+    return std::any_of(pools.begin(), pools.end(), [x, y](EncounterHelpers::HazardCircle const& pool)
+                       { return pool.first.GetExactDist2d(x, y) < pool.second; });
+}
+
+// The probe measured from the latched spot, and he may have drifted along the bearing since. Pools grow,
+// so they cut it afresh from where he stands.
 float RoomLeft(IcehowlBreathState const& state, BreathBearing const& bearing, Unit* icehowl)
 {
     float const angle = BearingAngle(state, bearing.step);
     float const drift = (icehowl->GetPositionX() - state.spot.GetPositionX()) * std::cos(angle) +
                         (icehowl->GetPositionY() - state.spot.GetPositionY()) * std::sin(angle);
-    return bearing.room - drift;
+    return std::min(bearing.room - drift, PoolCut(state.pools, icehowl->GetPositionX(), icehowl->GetPositionY(), angle));
 }
 
 bool RoomRanShort(IcehowlBreathState const& state, Unit* icehowl)
@@ -374,8 +408,9 @@ void ProbeBearings(Player* bot, Map* map, IcehowlBreathState& state)
         float z = sz;
 
         // From the bot: the floor is a gameobject, and the walk out takes a player's path over it
-        float const room =
+        float const wall =
             map->CheckCollisionAndGetValidCoords(bot, sx, sy, sz, x, y, z) ? std::hypot(x - sx, y - sy) : 0.0f;
+        float const room = std::min(wall, PoolCut(state.pools, sx, sy, angle));
         if (room >= ICEHOWL_SPREAD_MIN_ROOM)
         {
             state.bearings.push_back({k, room, false});
@@ -659,6 +694,7 @@ IcehowlBreathState* RefreshBreath(PlayerbotAI* botAI)
         return &state;
     }
 
+    state.pools = GetSlimePoolCircles(botAI, WORM_POOL_SOON_TICKS, WORM_POOL_CLEARANCE_PAD);
     Unit* victim = nullptr;
     BreathSpread const spread = ReadBreathSpread(botAI, icehowl, state, now, victim);
     SetSpread(state, spread);
@@ -737,11 +773,34 @@ bool ResolveBreathStand(PlayerbotAI* botAI, Player* bot, IcehowlBreathState cons
     if (top < bandMin)
         return false;
 
-    float const distance = std::clamp(bot->GetExactDist2d(icehowl), bandMin, top);
+    float distance = std::clamp(bot->GetExactDist2d(icehowl), bandMin, top);
     float const angle = BearingAngle(state, bearing->step);
+    float const hx = icehowl->GetPositionX();
+    float const hy = icehowl->GetPositionY();
 
-    stand.spot = Position(icehowl->GetPositionX() + distance * std::cos(angle),
-                          icehowl->GetPositionY() + distance * std::sin(angle), icehowl->GetPositionZ());
+    // A pool round him: the band distance nearest the bot's own that clears it, else no stand
+    if (InPool(state.pools, hx + distance * std::cos(angle), hy + distance * std::sin(angle)))
+    {
+        bool found = false;
+        float best = distance;
+        for (float candidate = bandMin; candidate <= top; candidate += BREATH_POOL_STEP)
+        {
+            if (InPool(state.pools, hx + candidate * std::cos(angle), hy + candidate * std::sin(angle)))
+                continue;
+
+            if (!found || std::fabs(candidate - distance) < std::fabs(best - distance))
+                best = candidate;
+
+            found = true;
+        }
+
+        if (!found)
+            return false;
+
+        distance = best;
+    }
+
+    stand.spot = Position(hx + distance * std::cos(angle), hy + distance * std::sin(angle), icehowl->GetPositionZ());
     stand.icehowl = icehowl->GetPosition();
     stand.bearing = angle;
     stand.bandMin = bandMin;

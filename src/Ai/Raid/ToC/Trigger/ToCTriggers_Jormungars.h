@@ -41,6 +41,15 @@ public:
     bool IsActive() override;
 };
 
+// No worm is engaged and the bot stands in a pool one left behind
+class NorthrendWormsPoolAfterWormsTrigger : public Trigger
+{
+public:
+    NorthrendWormsPoolAfterWormsTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms pool after worms") {}
+    bool IsActive() override;
+};
+
 // A healer's Toxin carrier, one no Bile can cure, is hurt and in heal reach
 class NorthrendWormsToxinCarrierHurtTrigger : public Trigger
 {
@@ -72,6 +81,8 @@ public:
             &ToCJormungarsTriggerContext::northrend_worms_redirect_threat;
         creators["northrend worms misplaced"] =
             &ToCJormungarsTriggerContext::northrend_worms_misplaced;
+        creators["northrend worms pool after worms"] =
+            &ToCJormungarsTriggerContext::northrend_worms_pool_after_worms;
         creators["northrend worms dps target"] =
             &ToCJormungarsTriggerContext::northrend_worms_dps_target;
         creators["northrend worms toxin carrier hurt"] =
@@ -95,6 +106,10 @@ private:
 
     static Trigger* northrend_worms_misplaced(PlayerbotAI* botAI) {
         return new NorthrendWormsMisplacedTrigger(botAI);
+    }
+
+    static Trigger* northrend_worms_pool_after_worms(PlayerbotAI* botAI) {
+        return new NorthrendWormsPoolAfterWormsTrigger(botAI);
     }
 
     static Trigger* northrend_worms_dps_target(PlayerbotAI* botAI) {

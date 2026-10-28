@@ -25,6 +25,7 @@
 #include "ThreatManager.h"
 #include "Timer.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
+#include "ToCHelpers_Jormungars.h"
 #include <string>
 
 bool LowManaTrigger::IsActive()
@@ -299,6 +300,10 @@ bool SelfResurrectTrigger::IsActive()
 
     // up at low health inside the champion pack makes it their next pick
     if (TrialOfTheCrusaderHelpers::FactionChampionsCorpseCrowded(botAI))
+        return false;
+
+    // Reincarnation stands it up where it fell, and a worm's pool there kills it again
+    if (TrialOfTheCrusaderHelpers::CorpseInSlimePool(bot))
         return false;
 
     // Rises charmed again otherwise, and the self-res is gone for nothing.

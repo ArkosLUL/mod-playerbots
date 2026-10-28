@@ -29,6 +29,8 @@ bool NorthrendWormsMisplacedTrigger::IsActive()
     return GetWormMovePlan(botAI, plan) && plan.reason != WormMoveReason::None;
 }
 
+bool NorthrendWormsPoolAfterWormsTrigger::IsActive() { return InSlimePoolWithoutWorms(botAI); }
+
 bool NorthrendWormsToxinCarrierHurtTrigger::IsActive()
 {
     if (!PlayerbotAI::IsHeal(bot))
@@ -61,6 +63,9 @@ void AddToCJormungarsTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("northrend worms misplaced", {
         NextAction("northrend worms reposition", ACTION_EMERGENCY + 6) }));
+
+    triggers.push_back(new TriggerNode("northrend worms pool after worms", {
+        NextAction("northrend worms leave pool", ACTION_EMERGENCY + 6) }));
 
     triggers.push_back(new TriggerNode("northrend worms toxin stuck", {
         NextAction("northrend worms purge toxin", ACTION_EMERGENCY + 5) }));

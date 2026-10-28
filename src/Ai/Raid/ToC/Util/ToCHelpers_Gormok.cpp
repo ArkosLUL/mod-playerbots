@@ -3,16 +3,20 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <initializer_list>
 #include <list>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "Creature.h"
+#include "Group.h"
 #include "InstanceScript.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
+#include "PaladinHelper.h"
 #include "Player.h"
+#include "Playerbots.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "SpellMgr.h"
@@ -289,9 +293,169 @@ FireBombCache* ReadFireBombs(PlayerbotAI* botAI, Map*& map)
 }
 }  // namespace
 
+namespace
+{
+constexpr uint32 HOP_FORBEARANCE = 25771;
+// Hand of Protection is instant, so a deal its caster hasn't cast this long after has failed
+constexpr uint32 HOP_DEAL_MS = 3000;
+
+struct ImpaleResetState
+{
+    uint32 memoMs = 0;
+    bool memoValid = false;  // 0 is a real getMSTime value
+    ObjectGuid target;
+    ObjectGuid caster;
+    uint32 dealtMs = 0;
+};
+
+RaidInstanceState<ImpaleResetState> impaleResets;
+
+bool OnMap(Player* member, Map* map)
+{
+    return member && member->IsInWorld() && member->IsAlive() && member->GetMap() == map;
+}
+
+// Never a beast's victim: the immunity suppresses its threat, and the beast turns to the next in line
+bool NeedsImpaleReset(Player* member, std::vector<Unit*> const& victims)
+{
+    return IsBeastsTank(member) && std::find(victims.begin(), victims.end(), member) == victims.end() &&
+           GetGormokImpaleStacks(member) >= GORMOK_HOP_RESET_STACKS && !member->HasAura(HOP_FORBEARANCE) &&
+           !member->IsImmunedToDamage(SPELL_SCHOOL_MASK_NORMAL);
+}
+
+bool CanProtect(Player* paladin, Player* target)
+{
+    PlayerbotAI* paladinAI = GET_PLAYERBOT_AI(paladin);
+    if (!paladinAI || paladin->getClass() != CLASS_PALADIN || paladin->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
+        paladin->IsNonMeleeSpellCast(false))
+        return false;
+
+    uint32 const spellId = paladinAI->GetAiObjectContext()->GetValue<uint32>("spell id", "hand of protection")->Get();
+    return spellId && !paladin->HasSpellCooldown(spellId) && paladin->GetExactDist2d(target) <= GORMOK_HOP_RANGE &&
+           paladin->IsWithinLOSInMap(target) && paladinAI->CanCastSpell(spellId, target);
+}
+
+// The tank itself first, then Retribution, Protection, Holy: a healer's global cooldown costs the most
+uint32 CasterRank(Player* paladin, Player* target)
+{
+    if (paladin == target)
+        return 0;
+
+    if (PlayerbotAI::IsHeal(paladin))
+        return 3;
+
+    return IsBeastsTank(paladin) ? 2 : 1;
+}
+
+ImpaleResetState* RefreshImpaleReset(PlayerbotAI* botAI, Map*& map)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    map = bot ? bot->FindMap() : nullptr;
+    if (!map || map->GetId() != TRIAL_OF_THE_CRUSADER_MAP_ID || !bot->GetInstanceId())
+        return nullptr;
+
+    ImpaleResetState& state = impaleResets.For(bot->GetInstanceId());
+    uint32 const now = getMSTime();
+    if (state.memoValid && state.memoMs == now)
+        return &state;
+
+    state.memoMs = now;
+    state.memoValid = true;
+    Group* group = bot->GetGroup();
+    if (!group || !ToCEncounterGateOpen(botAI, ToCEncounter::NorthrendBeasts))
+    {
+        state.target.Clear();
+        state.caster.Clear();
+        return &state;
+    }
+
+    std::vector<Unit*> victims;
+    for (NorthrendBeast beast :
+         {NorthrendBeast::Gormok, NorthrendBeast::Acidmaw, NorthrendBeast::Dreadscale, NorthrendBeast::Icehowl})
+        if (Unit* engaged = GetEngagedBeast(botAI, beast))
+            if (Unit* victim = engaged->GetVictim())
+                victims.push_back(victim);
+
+    if (!state.target.IsEmpty())
+    {
+        Player* target = ObjectAccessor::GetPlayer(map, state.target);
+        Player* caster = ObjectAccessor::GetPlayer(map, state.caster);
+        if (OnMap(target, map) && OnMap(caster, map) && getMSTimeDiff(state.dealtMs, now) < HOP_DEAL_MS &&
+            NeedsImpaleReset(target, victims))
+            return &state;
+
+        state.target.Clear();
+        state.caster.Clear();
+    }
+
+    std::vector<Player*> members;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        if (OnMap(ref->GetSource(), map))
+            members.push_back(ref->GetSource());
+
+    Player* target = nullptr;
+    for (Player* member : members)
+        if (NeedsImpaleReset(member, victims) &&
+            (!target || GetGormokImpaleStacks(member) > GetGormokImpaleStacks(target)))
+            target = member;
+
+    if (!target)
+        return &state;
+
+    Player* caster = nullptr;
+    for (Player* paladin : members)
+    {
+        if (std::find(victims.begin(), victims.end(), paladin) != victims.end() || !CanProtect(paladin, target))
+            continue;
+
+        uint32 const rank = CasterRank(paladin, target);
+        if (!caster || rank < CasterRank(caster, target) ||
+            (rank == CasterRank(caster, target) && paladin->GetGUID() < caster->GetGUID()))
+            caster = paladin;
+    }
+
+    if (caster)
+    {
+        state.target = target->GetGUID();
+        state.caster = caster->GetGUID();
+        state.dealtMs = now;
+    }
+
+    return &state;
+}
+}  // namespace
+
 uint32 GetGormokImpaleStacks(Unit* unit)
 {
     return unit ? unit->GetAuraCount(sSpellMgr->GetSpellIdForDifficulty(SPELL_IMPALE, unit)) : 0;
+}
+
+Player* GetGormokImpaleResetTarget(PlayerbotAI* botAI)
+{
+    Map* map = nullptr;
+    ImpaleResetState const* state = RefreshImpaleReset(botAI, map);
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!state || bot->getClass() != CLASS_PALADIN)
+        return nullptr;
+
+    Player* target = state->caster == bot->GetGUID() ? ObjectAccessor::GetPlayer(map, state->target) : nullptr;
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "nb.hop",
+                             target ? "cast " + RaidObs::DescribeAssignment(target->GetGUID()) : std::string("none"));
+
+    return target;
+}
+
+bool GormokHandOfProtectionToCancel(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive() || bot->GetMapId() != TRIAL_OF_THE_CRUSADER_MAP_ID || !IsBeastsTank(bot) ||
+        GetGormokImpaleStacks(bot) || !ToCEncounterGateOpen(botAI, ToCEncounter::NorthrendBeasts))
+        return false;
+
+    return bot->HasAura(ai::paladin::SPELL_HAND_OF_PROTECTION) ||
+           bot->HasAura(ai::paladin::SPELL_HAND_OF_PROTECTION_RANK_2) ||
+           bot->HasAura(ai::paladin::SPELL_HAND_OF_PROTECTION_RANK_3);
 }
 
 Unit* GetGormokSwapTauntTarget(PlayerbotAI* botAI)

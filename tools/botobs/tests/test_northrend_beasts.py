@@ -104,6 +104,9 @@ def beasts_pull() -> list[dict]:
         note(10000, SWAP, "nb.tank", f"gormok {GORMOK}"),
         aura(12000, SWAP, 66331, 1),
         aura(38000, HOLD, 67477, 0, removed=True),
+        # Gormok dead, Swap is dealt a Hand of Protection on Hold's stacks, then nothing
+        note(21000, SWAP, "nb.hop", f"cast {HOLD}"),
+        note(22000, SWAP, "nb.hop", "none"),
 
         # Mender carries the snobold for 4 s; both DPS go for it, Arrow lets go once it's dead.
         aura(3000, MENDER, nb.SPELL_SNOBOLLED),
@@ -188,6 +191,9 @@ class SyntheticPull(unittest.TestCase):
     def test_swap_taunts_and_defensives(self):
         self.assertEqual(nb.swap_taunts(self.trace), {SWAP: collections.Counter({"OK": 1})})
         self.assertEqual(nb.defensive_picks(self.trace), {HOLD: collections.Counter({"shield wall": 1})})
+
+    def test_hand_of_protection_deals_name_the_tank(self):
+        self.assertEqual(nb.hop_casts(self.trace), {SWAP: collections.Counter({"cast Hold": 1, "none": 1})})
 
     def test_duty_value_splits_into_duty_and_beast(self):
         self.assertEqual(nb.split_duty(f"gormok {GORMOK}"), ("gormok", GORMOK))
@@ -767,10 +773,12 @@ ONPICK = 5201   # ranged, on its mobile-worm pick from 2 s, pick gone at 10 s
 OFFPICK = 5202  # melee, on the stationary worm until it dies at 8 s
 HOLDER = 5203   # tank, never scored
 PLAYER = 5204   # human ranged, never scored
+CASTER = 5205   # ranged with an empty target column, casting at its Acidmaw pick to 6 s
 
 
 def targets_snap(when: int) -> dict:
-    targets = {ONPICK: ACIDMAW if when >= 2000 else 0, OFFPICK: DREADSCALE, HOLDER: DREADSCALE, PLAYER: DREADSCALE}
+    targets = {ONPICK: ACIDMAW if when >= 2000 else 0, OFFPICK: DREADSCALE, HOLDER: DREADSCALE, PLAYER: DREADSCALE,
+               CASTER: 0}
     units = [[guid, 0.0, 0.0, 0.0, 0.0, 0.0 if guid == OFFPICK and when >= 8000 else 100.0, 100.0, target,
               0, 0, 0, 0] for guid, target in targets.items()]
     units.append([ACIDMAW, 10.0, 0.0, 0.0, 0.0, 100.0, 0.0, HOLDER, 0, 0, 0, 0])
@@ -785,10 +793,12 @@ def targets_pull() -> list[dict]:
              {"g": ONPICK, "n": "Onpick", "r": "ranged", "c": "mage", "h": 0},
              {"g": OFFPICK, "n": "Offpick", "r": "melee", "c": "rogue", "h": 0},
              {"g": HOLDER, "n": "Holder", "r": "tank", "c": "warrior", "h": 0},
-             {"g": PLAYER, "n": "Player", "r": "ranged", "c": "hunter", "h": 1}]},
+             {"g": PLAYER, "n": "Player", "r": "ranged", "c": "hunter", "h": 1},
+             {"g": CASTER, "n": "Caster", "r": "ranged", "c": "warlock", "h": 0}]},
         {"t": 0, "e": "pull", "boss": "gormok-the-impaler", "src": "engage"},
         {"t": 1, "e": "unit", "g": ACIDMAW, "en": nb.NPC_ACIDMAW, "n": "Acidmaw", "b": 1},
         {"t": 1, "e": "unit", "g": DREADSCALE, "en": nb.NPC_DREADSCALE, "n": "Dreadscale", "b": 1},
+        note(0, CASTER, "nb.dps", f"acidmaw {ACIDMAW}"),
         note(0, ONPICK, "nb.dps", f"mobile {ACIDMAW}"),
         note(0, OFFPICK, "nb.dps", f"mobile {ACIDMAW}"),
         note(0, PLAYER, "nb.dps", f"mobile {ACIDMAW}"),
@@ -797,6 +807,10 @@ def targets_pull() -> list[dict]:
         {"t": 12000, "e": "end", "out": "wipe"},
     ]
     records += [targets_snap(when) for when in range(0, 13000, 1000)]
+    # A cast at 6 s still counts through 8 s; the triggered one at 10 s never does
+    records += [{"t": when, "e": "cast", "s": CASTER, "sp": 47809, "tgt": ACIDMAW, "ct": 2500}
+                for when in range(0, 7000, 2000)]
+    records.append({"t": 10000, "e": "cast", "s": CASTER, "sp": 47809, "tgt": ACIDMAW, "ct": 0, "tr": 1})
     return records
 
 
@@ -817,7 +831,8 @@ class TargetsPull(unittest.TestCase):
         # its death.
         self.assertEqual(nb.target_time(self.trace), {
             ONPICK: {"mobile": collections.Counter({"on": 8000, "neither": 2000})},
-            OFFPICK: {"mobile": collections.Counter({"other": 8000})}})
+            OFFPICK: {"mobile": collections.Counter({"other": 8000})},
+            CASTER: {"acidmaw": collections.Counter({"on": 9000, "neither": 3000})}})
 
     def test_raid_share_on_the_pick_per_branch(self):
         share, total = nb.on_pick_share(nb.target_time(self.trace))["mobile"]
@@ -828,7 +843,7 @@ class TargetsPull(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             nb.show_targets(self.trace)
-        self.assertIn("raid on its pick: mobile 44% of 18.0 s", out.getvalue())
+        self.assertIn("raid on its pick: acidmaw 75% of 12.0 s, mobile 44% of 18.0 s", out.getvalue())
 
     def test_targets_reads_empty_on_another_boss(self):
         out = io.StringIO()

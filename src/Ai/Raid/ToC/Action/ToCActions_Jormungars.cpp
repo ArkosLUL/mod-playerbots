@@ -66,6 +66,12 @@ void NoteWormMove(Player* bot, std::string const& branch)
         RaidObs::NoteDerived(bot, "nb.wormmove", branch);
 }
 
+void NotePoolMove(Player* bot, std::string const& branch)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "nb.poolmove", branch);
+}
+
 std::string Yards(float distance) { return std::to_string(static_cast<int32>(std::lround(distance))); }
 
 bool BookedOn(LastMovement const& last, Position const& spot)
@@ -472,6 +478,71 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
         default:
             NoteWormMove(bot, "locked");
             return plan.urgent;
+    }
+}
+
+bool NorthrendWormsLeavePoolAction::Execute(Event /*event*/)
+{
+    if (!InSlimePoolWithoutWorms(botAI))
+    {
+        hasExit = false;
+        return false;
+    }
+
+    if (!botAI->CanMove())
+    {
+        NotePoolMove(bot, "stunned");
+        return false;
+    }
+
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    uint32 const now = getMSTime();
+    if (hasExit)
+    {
+        // Every MoveTo clears the MotionMaster, so a walk still carrying the bot out is left alone
+        uint32 const age = getMSTimeDiff(exitMs, now);
+        bool const exitClear = ClearOfCircles(GetSlimePoolCircles(botAI, 0, WORM_POOL_TRIGGER_PAD), exitSpot);
+        if (exitClear && BookedOn(last, exitSpot) && age < WORM_WALK_LATCH_MS &&
+            (bot->isMoving() || age < WALK_STALL_MS))
+        {
+            NotePoolMove(bot, "hold");
+            return true;
+        }
+
+        // Our own stale walk holds the booking and would refuse its replacement
+        if (BookedOn(last, exitSpot))
+            last.clear();
+
+        hasExit = false;
+    }
+
+    Position spot;
+    if (!FindSlimePoolExit(botAI, spot))
+    {
+        NotePoolMove(bot, "none");
+        return false;
+    }
+
+    if (bot->IsMovementPreventedByCasting())
+        bot->InterruptNonMeleeSpells(true);
+
+    DropForeignBooking(last, spot, MovementPriority::MOVEMENT_COMBAT);
+    float const travel = bot->GetExactDist2d(spot);
+    switch (TryMoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
+                      false, true, MovementPriority::MOVEMENT_FORCED, true))
+    {
+        case MoveOutcome::Issued:
+            exitSpot = spot;
+            exitMs = now;
+            hasExit = true;
+            NotePoolMove(bot, "move " + Yards(travel));
+            return true;
+        case MoveOutcome::AlreadyThere:
+            NotePoolMove(bot, "clear");
+            return false;
+        default:
+            NotePoolMove(bot, "locked");
+            return true;
     }
 }
 

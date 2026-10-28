@@ -39,6 +39,23 @@ public:
     bool IsActive() override;
 };
 
+// This paladin bot is dealt a Hand of Protection to clear a tank's Impale
+class GormokImpaleResetTrigger : public Trigger
+{
+public:
+    GormokImpaleResetTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "gormok impale reset") {}
+    bool IsActive() override;
+};
+
+class GormokCancelHandOfProtectionTrigger : public Trigger
+{
+public:
+    GormokCancelHandOfProtectionTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "gormok cancel hand of protection") {}
+    bool IsActive() override;
+};
+
 class GormokSnobolledTrigger : public Trigger
 {
 public:
@@ -78,6 +95,10 @@ public:
             &ToCGormokTriggerContext::gormok_tank_swap_needed;
         creators["gormok tank defensive"] =
             &ToCGormokTriggerContext::gormok_tank_defensive;
+        creators["gormok impale reset"] =
+            &ToCGormokTriggerContext::gormok_impale_reset;
+        creators["gormok cancel hand of protection"] =
+            &ToCGormokTriggerContext::gormok_cancel_hand_of_protection;
         creators["gormok snobolled"] =
             &ToCGormokTriggerContext::gormok_snobolled;
         creators["gormok stomp range"] =
@@ -105,6 +126,14 @@ private:
 
     static Trigger* gormok_tank_defensive(PlayerbotAI* botAI) {
         return new GormokTankDefensiveTrigger(botAI);
+    }
+
+    static Trigger* gormok_impale_reset(PlayerbotAI* botAI) {
+        return new GormokImpaleResetTrigger(botAI);
+    }
+
+    static Trigger* gormok_cancel_hand_of_protection(PlayerbotAI* botAI) {
+        return new GormokCancelHandOfProtectionTrigger(botAI);
     }
 
     static Trigger* gormok_snobolled(PlayerbotAI* botAI) {

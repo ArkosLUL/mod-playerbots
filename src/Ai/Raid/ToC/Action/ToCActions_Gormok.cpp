@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
 #include "EncounterHelpers.h"
 #include "LastMovementValue.h"
+#include "PaladinHelper.h"
 #include "Playerbots.h"
 #include "RaidTankDefensive.h"
 #include "ToCData.h"
@@ -91,6 +93,25 @@ bool GormokTankDefensiveAction::Execute(Event /*event*/)
 {
     uint32 const defensive = NextTankDefensive(botAI, bot, "nb.defensive");
     return defensive && botAI->CastSpell(defensive, bot);
+}
+
+bool GormokHandOfProtectionAction::Execute(Event /*event*/)
+{
+    Player* target = GetGormokImpaleResetTarget(botAI);
+    uint32 const spellId = target ? AI_VALUE2(uint32, "spell id", "hand of protection") : 0;
+    return spellId && botAI->CastSpell(spellId, target);
+}
+
+bool GormokCancelHandOfProtectionAction::Execute(Event /*event*/)
+{
+    if (!GormokHandOfProtectionToCancel(botAI))
+        return false;
+
+    for (uint32 rank : {ai::paladin::SPELL_HAND_OF_PROTECTION, ai::paladin::SPELL_HAND_OF_PROTECTION_RANK_2,
+                        ai::paladin::SPELL_HAND_OF_PROTECTION_RANK_3})
+        bot->RemoveAurasDueToSpell(rank, ObjectGuid::Empty, 0, AURA_REMOVE_BY_CANCEL);
+
+    return true;
 }
 
 bool GormokBringSnoboldToMeleeAction::Execute(Event /*event*/)

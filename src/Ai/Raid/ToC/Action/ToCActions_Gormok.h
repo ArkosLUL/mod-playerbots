@@ -43,6 +43,23 @@ public:
     bool Execute(Event event) override;
 };
 
+// Hand of Protection on the tank dealt to this paladin bot: the immunity purges Impale
+class GormokHandOfProtectionAction : public Action
+{
+public:
+    GormokHandOfProtectionAction(
+        PlayerbotAI* botAI, std::string const name = "gormok hand of protection") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class GormokCancelHandOfProtectionAction : public Action
+{
+public:
+    GormokCancelHandOfProtectionAction(
+        PlayerbotAI* botAI, std::string const name = "gormok cancel hand of protection") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class GormokBringSnoboldToMeleeAction : public NorthrendBeastsWalkAction
 {
 public:
@@ -86,6 +103,10 @@ public:
             &ToCGormokActionContext::gormok_tank_swap_taunt;
         creators["gormok tank defensive"] =
             &ToCGormokActionContext::gormok_tank_defensive;
+        creators["gormok hand of protection"] =
+            &ToCGormokActionContext::gormok_hand_of_protection;
+        creators["gormok cancel hand of protection"] =
+            &ToCGormokActionContext::gormok_cancel_hand_of_protection;
         creators["gormok bring snobold to melee"] =
             &ToCGormokActionContext::gormok_bring_snobold_to_melee;
         creators["gormok leave stomp range"] =
@@ -113,6 +134,14 @@ private:
 
     static Action* gormok_tank_defensive(PlayerbotAI* botAI) {
         return new GormokTankDefensiveAction(botAI);
+    }
+
+    static Action* gormok_hand_of_protection(PlayerbotAI* botAI) {
+        return new GormokHandOfProtectionAction(botAI);
+    }
+
+    static Action* gormok_cancel_hand_of_protection(PlayerbotAI* botAI) {
+        return new GormokCancelHandOfProtectionAction(botAI);
     }
 
     static Action* gormok_bring_snobold_to_melee(PlayerbotAI* botAI) {

@@ -88,6 +88,20 @@ private:
     bool hasIssuedSpot = false;
 };
 
+// Out of a pool a worm left behind. The walk is latched, so the next tick doesn't re-aim it.
+class NorthrendWormsLeavePoolAction : public MovementAction
+{
+public:
+    NorthrendWormsLeavePoolAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms leave pool") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+
+private:
+    Position exitSpot;
+    uint32 exitMs = 0;
+    bool hasExit = false;
+};
+
 // Heals the healer's Toxin carrier, one no Bile can cure
 class NorthrendWormsHealToxinCarrierAction : public Action
 {
@@ -119,6 +133,8 @@ public:
             &ToCJormungarsActionContext::northrend_worms_redirect_threat;
         creators["northrend worms reposition"] =
             &ToCJormungarsActionContext::northrend_worms_reposition;
+        creators["northrend worms leave pool"] =
+            &ToCJormungarsActionContext::northrend_worms_leave_pool;
         creators["northrend worms dps target"] =
             &ToCJormungarsActionContext::northrend_worms_dps_target;
         creators["northrend worms heal toxin carrier"] =
@@ -142,6 +158,10 @@ private:
 
     static Action* northrend_worms_reposition(PlayerbotAI* botAI) {
         return new NorthrendWormsRepositionAction(botAI);
+    }
+
+    static Action* northrend_worms_leave_pool(PlayerbotAI* botAI) {
+        return new NorthrendWormsLeavePoolAction(botAI);
     }
 
     static Action* northrend_worms_dps_target(PlayerbotAI* botAI) {
