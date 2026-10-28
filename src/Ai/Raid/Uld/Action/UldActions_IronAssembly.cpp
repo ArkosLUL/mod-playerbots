@@ -320,6 +320,8 @@ bool IronAssemblyMeltdownRunOutAction::Execute(Event /*event*/)
     if (!TryGetIronAssemblyRouteStep(botAI, bot, point, step))
         return false;
 
+    IronAssemblyUseNitroBoosts(bot, bot->GetExactDist2d(point.GetPositionX(), point.GetPositionY()), "meltdown");
+
     // MOVEMENT_FORCED and claiming every tick: a carrier that stops to swing takes him straight back,
     // its threat matching the taunter's after the taunt.
     return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
@@ -370,6 +372,10 @@ bool IronAssemblyRaidPositionAction::Execute(Event /*event*/)
     Position step;
     if (!TryGetIronAssemblyRouteStep(botAI, bot, spot, step))
         return false;
+
+    // Phase 3 only: the walk out to the spread ring, while Static Disruption is already looking for a stack.
+    if (IsSteelbreakerEmpowered(botAI))
+        IronAssemblyUseNitroBoosts(bot, distance, "spread");
 
     return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);

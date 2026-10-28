@@ -89,7 +89,7 @@ inline constexpr float ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_RADIUS = 25.0f;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS = 15.0f;
 
 // The other tank taunts with this much Overwhelming Power left, so the carrier can walk out and blow up
-// alone. The walk is 46 yd, about 6.6s.
+// alone. The walk is 46 yd, about 6.6s, 2.6s on Nitro Boosts.
 inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_MELTDOWN_SWAP_LEAD_MS = 10000;
 // Margin on top of the walk. With less left than walk plus this, the carrier stays put: dying halfway
 // lands the blast on the ranged ring instead of the melee.
@@ -99,6 +99,10 @@ inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_MELTDOWN_WALK_SLACK_MS = 1000;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_BEARING = 5.4978f;  // 7*pi/4
 inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_RADIUS = 30.0f;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_TOLERANCE = 2.0f;
+
+// Phase 3 walks over this go on Nitro Boosts. Ranged spend them on the walk to their spread slot, tanks
+// keep theirs for the Meltdown run, their one long walk in the phase.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_NITRO_MIN_WALK = 10.0f;
 
 // Rune of Power buffs any unit whose centre is within 5 yd of the rune's: 2D, no combat reach on either
 // side. Ranged soak a rune within the travel cap of the opening stack point, which takes every rune on
@@ -309,6 +313,10 @@ enum class IronAssemblyMeltdownRole : uint8
 
 IronAssemblyMeltdownRole IronAssemblyMeltdownRoleFor(PlayerbotAI* botAI, Player* bot);
 Position IronAssemblyMeltdownPoint();
+
+// Uses the bot's Nitro Boosts for a walk of this length, if it's long enough and they're ready. why
+// names the walk in the trace.
+bool IronAssemblyUseNitroBoosts(Player* bot, float walk, char const* why);
 
 // One round of burst at the pull is allowed in hard mode: all three up and the pull under 20s old.
 bool IronAssemblyOpenerBurstWindowOpen(PlayerbotAI* botAI);

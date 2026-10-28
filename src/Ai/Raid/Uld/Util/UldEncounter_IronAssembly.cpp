@@ -1296,6 +1296,43 @@ Position IronAssemblyMeltdownPoint()
                                   ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_RADIUS);
 }
 
+static bool IronAssemblyWillBoost(Player* bot, float walk)
+{
+    return walk > ULDUAR_IRON_ASSEMBLY_NITRO_MIN_WALK && !bot->HasAura(NITRO_BOOSTS_SPEED_SPELL) &&
+           NitroBoostsReady(bot);
+}
+
+bool IronAssemblyUseNitroBoosts(Player* bot, float walk, char const* why)
+{
+    if (!bot || !IronAssemblyWillBoost(bot, walk))
+        return false;
+
+    // UseNitroBoosts refuses a bot mid-cast, and the walk breaks the cast anyway.
+    bot->CastStop();
+    if (!UseNitroBoosts(bot))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "ironassembly.nitro", why);
+
+    return true;
+}
+
+// Boots still to use run the first 5s at 2.5x. Once used, the bot's speed already carries them.
+static uint32 IronAssemblyWalkMs(Player* bot, float walk)
+{
+    float const speed = std::max(bot->GetSpeed(MOVE_RUN), 1.0f);
+    if (!IronAssemblyWillBoost(bot, walk))
+        return static_cast<uint32>(walk / speed * IN_MILLISECONDS);
+
+    float const fast = speed * NITRO_BOOSTS_SPEED_FACTOR;
+    float const boosted = fast * NITRO_BOOSTS_DURATION_MS / IN_MILLISECONDS;
+    if (walk <= boosted)
+        return static_cast<uint32>(walk / fast * IN_MILLISECONDS);
+
+    return NITRO_BOOSTS_DURATION_MS + static_cast<uint32>((walk - boosted) / speed * IN_MILLISECONDS);
+}
+
 // A runner keeps walking until the buff is gone, whatever the clock says by then.
 static bool IronAssemblyMeltdownRunner(Player* member, Unit* steelbreaker)
 {
@@ -1330,9 +1367,7 @@ static IronAssemblyMeltdownRole DeriveIronAssemblyMeltdownRole(PlayerbotAI* botA
 
             if (!state.meltdownRunners.count(bot->GetGUID()))
             {
-                float const speed = std::max(bot->GetSpeed(MOVE_RUN), 1.0f);
-                uint32 const walkMs = static_cast<uint32>(distance / speed * IN_MILLISECONDS) +
-                                      ULDUAR_IRON_ASSEMBLY_MELTDOWN_WALK_SLACK_MS;
+                uint32 const walkMs = IronAssemblyWalkMs(bot, distance) + ULDUAR_IRON_ASSEMBLY_MELTDOWN_WALK_SLACK_MS;
                 if (walkMs > left)
                     return IronAssemblyMeltdownRole::Late;
 

@@ -61,6 +61,12 @@ started walk is latched in `ironassembly.meltdownrun` so a detour can't stop it)
 Steelbreaker 180 yd, cut melee uptime to a 16% median and left the raid doing **0.4% of a 12.05M bar
 in a 30s phase**.
 
+**Phase 3 walks over 10 yd go on Nitro Boosts** (shared `UseNitroBoosts`, 3 min, so once a phase; a cast
+is stopped first, since the boots refuse a caster). Ranged and healers spend theirs on the walk out to
+the spread ring. Tanks never use them on the walk to Steelbreaker's spot: the Meltdown run is their one
+long walk, 46 yd in ~2.6 s boosted against 6.6 s, and the `late` test times it boosted when the boots
+are ready.
+
 Outside the swap the tank node **taunts only when the current victim is not a group tank**: the tick
 after a carrier dies, and the path that recovers him when a dps rips threat at the transition. The
 class nodes (`hand of reckoning`, `righteous defense`) bypass that node, so **`iron assembly taunt
@@ -290,7 +296,8 @@ suffix names the hazard that shifted the stack, a bare `spread` is the boss-cent
 `spread-rune` that ring squeezed off a rune, `rune-power` standing in a Rune of Power), `slot` (its
 index on the spread ring, assigned **once** per bot), `meleerune` (`in` / `walk`, or `none:` what
 stopped it), `meltdown` (a tank's swap role: `hold` / `nopartner` / `taunt` / `run` / `parked` /
-`late`), `meltdownrun` (the latched walkers). Overload,
+`late`), `meltdownrun` (the latched walkers), `nitro` (an event per boots use: `spread` / `meltdown`).
+Overload,
 Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
 spell radius and the clearance bots keep — equal for Meltdown, which nobody dodges. Rune of Death
 and Rune of Power do, and are swept instead — only a swept hazard is tested against a death.
