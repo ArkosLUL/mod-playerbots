@@ -44,8 +44,8 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
   power, no combo points (`SPELL_FAILED_NO_COMBO_POINTS`) and GCD collisions all look like success,
   so anything stamped on that answer records a cast that never happened: Flame Leviathan's
   `CastVehicleSelfSpell` stamped Steam Rush's 15 s cooldown on a refusal from the Ram GCD, and a Pursued siege engine went 15.2 s
-  without its escape. **Confirm with a receipt** — energy spent, the aura landed, the channel
-  stopped. `Spell::prepare` calls `cast(true)` inline for instants, so `HasAura` on the same tick is
+  without its escape. **Confirm with a receipt** — energy spent, the vehicle's own power moved (an
+  ICC gunship cannon's heat), the aura landed, the channel stopped. `Spell::prepare` calls `cast(true)` inline for instants, so `HasAura` on the same tick is
   real.
 - **`CanCastVehicleSpell` reports `BAD_TARGETS` for a self-cast**, so the honest check is unavailable
   exactly where it is needed. Substitute `SpellInfo::CalcPowerCost` against live power, guarding
@@ -59,6 +59,10 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
 - **Vehicle power is creature regen.** `unit_class 4` plus `UNIT_FLAG2_REGENERATE_POWER` gives
   `Creature::Regenerate` a flat +20 per `CREATURE_REGEN_INTERVAL` (2 s) — 10/s against a cap of 100.
   Cost per GCD against that rate decides whether the bar ever climbs at all.
+- **A `MotionTransport` keeps DB passengers in `GetStaticPassengers` and summons in
+  `GetPassengers`.** Iterate both for an exact unit list with no grid search. A summon moved by an
+  effect that only rewrites its transport offset stays its own ship's passenger while it stands on
+  the other ship (the ICC gunship boarders).
 - **Do not borrow another instance's vehicle trigger.** `GroupFlyingTrigger` (Oculus) requires the
   *master* to be mounted, so one human who has not taken their vehicle freezes the whole flight.
 
@@ -256,7 +260,9 @@ What lands on a raid add is not what PvP experience predicts.
   (`OBEYS_TAUNT_DIMINISHING_RETURNS`) runs taunts at 100/65/42/27% duration, then immune until 15 s
   after the last one fades (`Unit::GetDiminishing`, `Spell.cpp` DR block). A taunt every 8 s plus a
   Righteous Defense in between keeps such a boss immune, so a plan built on repeated taunt-backs
-  fails there. Onyxia and the Twin Val'kyr carry it.
+  fails there. Onyxia and the Twin Val'kyr carry it. Swaps 20 s or more apart stay at full duration,
+  but generic tank taunts spend the DR in between: block `Family::Taunt` and own the swap
+  ([Saurfang](../raids/icecrown-citadel/deathbringer-saurfang.md)).
 - **A taunt lends the boss for 3 s, then real threat decides.** `Spell::EffectTaunt` only matches the
   taunter to the highest threat on the table, and the 3 s aura forces the target meanwhile. A boss
   whose table is empty at a phase change (one untouched until then) gives the taunter nothing to
@@ -269,6 +275,8 @@ What lands on a raid add is not what PvP experience predicts.
   (`CreatureImmunitiesId` with aura 11 and effect 114) still takes the dummy pull, with no aura and
   so no DR. Where the taunt aura lands, the grip shares `DIMINISHING_TAUNT` with every class taunt,
   and at taunt-immune DR the whole spell misses (`SPELL_MISS_IMMUNE`), pull included.
+- **A rooted creature keeps its threat victim.** `ThreatManager::ReselectVictim` never retargets it
+  to whoever stands in melee, so the retail "a rooted add hits the closest player" doesn't hold here.
 - **A creature drops a victim it can't hurt.** `ThreatReference::ShouldBeSuppressed` takes out of
   contention a target immune to the attacker's melee school, confused, or under a breakable stun, so
   Hand of Protection moves melee attackers off a focused bot at once, as Divine Shield or Ice Block
@@ -536,7 +544,13 @@ encounters.
   the whole reaction: Freya's Ground Tremor is `Effect_1` damage plus `Effect_2 = 68`
   `SPELL_EFFECT_INTERRUPT_CAST`, which silences the raid's school for 10s — the damage number says
   nothing about the mechanic that matters. Read `EffectRadiusIndex` on every effect too; index 28 is
-  50000 yd, i.e. raid-wide and undodgeable.
+  50000 yd, i.e. raid-wide and undodgeable. No index is radius 0: from a creature that hits only a
+  target at 0 yd, since only a player-controlled caster adds the target's reach (ICC gunship
+  sergeants' Bladestorm 69653 hits nobody).
+- **`SPELL_EFFECT_FORCE_CAST` can make the original caster cast the child.** Its special cases in
+  `SpellEffects.cpp` do (Blood Nova 72378/73058: Saurfang casts 72380 on the picked victim), so the
+  child's area is a creature's, centre to centre. Check that switch before sizing a forced child's
+  radius.
 - **`SpellInfoCorrections.cpp` can rewrite a DBC value.** Fire Bomb 66320's radius is 5 yd in the
   DBC and 2 yd in play, so read it before sizing a hazard.
 - **A hardcoded aura handler can scale a trigger spell's radius every tick**, beyond both the DBC and

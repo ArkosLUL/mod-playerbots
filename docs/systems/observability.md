@@ -530,7 +530,8 @@ They emit only on real change since the trace opened: they outlive the pull, so 
 a trace restates the whole container. Non-const iteration and iterator-`erase` exist for prune loops
 and deliberately emit nothing — dropping a departed member is not an assignment. `erase(guid)` does
 emit, on both containers: clearing one named bot is a wipe reset or a boss that is gone, which is real
-news. Keep scan timestamps and cached guid lookups in bare types; tracing bookkeeping is noise. Reset
+news. An `ObsGuidMap` erase records the value `0`, so a stored slot or index counts from 1, or a
+reader can't tell slot 0 from a release. Keep scan timestamps and cached guid lookups in bare types; tracing bookkeeping is noise. Reset
 an `ObsValue` by assigning it a value: copying over a struct that holds one (`state = Struct{}`)
 changes it without emitting.
 

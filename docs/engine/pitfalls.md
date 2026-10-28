@@ -198,12 +198,17 @@ portal this way.
   from stdin, one verdict a line: loading the vmap tree dominates, so batch the rays in one
   invocation. The eye is `--collision` above both endpoints, matching `IsWithinLOSInMap`.
   **GameObject collision needs a live server**, and a map with no vmap tree reads every ray as clear
-  (`coverage` warns).
+  (`coverage` warns). The prebuilt binary in `acore/ac-wotlk-build:master` has neither (its usage
+  lists only `coverage`, `point`, `path` and `ring`), so with it sight stays unchecked.
 
   **A gameobject floor is invisible to navprobe.** The static mesh and vmaps have nothing under it,
   so every point reads off mesh with no height: there the offline check is impossible, not failed.
   Live, a bot's `MoveTo` onto it takes the straight-line `0x11` shortcut, clipped only by the static
   LOS ray, and its Z comes from the object's dynamic collision. ToC's arena (GO 195527) is the case.
+  A transport deck is one too, and `FindNearestPositionClearOfHazards`'s
+  `CheckCollisionAndGetValidCoords` refuses every candidate on it: a dodge on a ship sweeps its own
+  points, bounded in transport-local coordinates through `Transport::CalculatePassengerOffset`
+  ([Gunship Battle](../raids/icecrown-citadel/icecrown-gunship-battle.md)).
 
 - **A floor check clips a derived point back to a gameobject's edge.**
   `EncounterHelpers::ValidateFloorPoint` runs `Map::CheckCollisionAndGetValidCoords` **from the bot**,
@@ -414,6 +419,9 @@ portal this way.
   stands there ([yogg-saron.md](../raids/ulduar/yogg-saron.md#phase-2-the-body-is-a-wall-and-the-portals-run-on-a-clock)).
 - **`Unit::SetSpeed(type, rate)` sets the rate outright**, skipped only when unchanged, so a per-tick
   "reset to 1.0" cancels Sprint, Nitro Boosts and every other speed aura until the next `UpdateSpeed`.
+- **A state read from a position band under an `Exclusive` rule can leave a bot with no mover.** The
+  gunship's "in flight" band between the decks also covered a bot standing on an edge, so nothing
+  moved it. Classify by a midpoint and keep strict bounds only for destinations.
 
 ## Things the bot cannot see
 

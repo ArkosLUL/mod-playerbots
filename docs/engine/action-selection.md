@@ -164,7 +164,10 @@ Unlike creator-name strings, a `dynamic_cast` mistake fails at **compile** time.
 At scale, match on `getName()` instead: `CastSpellAction`'s constructor passes the spell name to
 `Action(botAI, spell)`, so the name is a reliable identifier and does not require including 25 class
 headers. Racials and trinkets follow the same convention (`"berserking"`, `"blood fury"`,
-`"use trinket"`).
+`"use trinket"`). A rule matches `getName()` too, but pblint resolves only registered creator names,
+so a class registered under one name that reports another (the paladin's `beacon of light on main
+tank` reports `beacon of light`) can't be listed in a rule: veto it with a narrow `dynamic_cast`
+multiplier on the concrete classes.
 
 **Test the action before resolving anything.** `Multiplier::GetValue` runs on every popped action that
 passed `isUseful()`, so a multiplier that looks up a boss first pays that lookup for every rotation
@@ -204,9 +207,12 @@ off the pick.
 ## Casting
 
 - `PlayerbotAI::CanCastSpell` builds its probe with `TRIGGERED_IGNORE_POWER_AND_REAGENT_COST` and
-  whitelists `SPELL_FAILED_OUT_OF_RANGE`, so `isPossible()` never checks mana, rage or runes.
+  whitelists `SPELL_FAILED_OUT_OF_RANGE` and `SPELL_FAILED_NOT_SHAPESHIFT`, so `isPossible()` never
+  checks mana, rage, runes or form, and `CastSpell` never shifts form.
   **Resource and pacing gating must live in a trigger, not in the action**, and a readiness election
-  (who interrupts this cast) tests the cost itself. A known pet spell (Spell Lock) answers true
+  (who interrupts this cast) tests the cost itself, and the form with
+  `SpellInfo::CheckShapeshift(bot->GetShapeshiftForm())`, or a bear-only Growl or a stance-locked
+  Taunt or Hamstring wins the pick and fails every tick. A known pet spell (Spell Lock) answers true
   before any cooldown or range check, and `CastSpell` casts it as the bot, so test the bot's own
   cooldown and range.
 - `CastSpell` selects and faces the target before it fails, and restores the old selection only on
