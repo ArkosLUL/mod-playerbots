@@ -146,6 +146,8 @@ Position ValidateStaticFloorPoint(Player* bot, Position const& point);
 bool CastClassTaunt(PlayerbotAI* botAI, Unit* target);
 // The class taunt is known and off cooldown.
 bool ClassTauntReady(PlayerbotAI* botAI);
+// The cooldown casting it now would start, talents and glyphs included.
+int32 SpellCooldownMs(Player* bot, uint32 spellId);
 
 // Nitro Boosts, the engineering boots tinker: +150% run speed for 5 s on a 3 min cooldown. The generic
 // tinker action skips it, so it is only ever spent on an encounter's walk.

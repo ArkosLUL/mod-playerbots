@@ -59,12 +59,14 @@ void DefineIronAssembly(EncounterBuilder& e)
                                                                                      EncounterRow::Mover);
     e.Node<IronAssemblyRuneOfDeathTrigger, IronAssemblyRuneOfDeathAction>(ACTION_EMERGENCY + 5, EncounterRow::Mover);
     e.Node<IronAssemblyInterruptTrigger, IronAssemblyInterruptAction>(ACTION_EMERGENCY + 4);
+    e.Node<IronAssemblyMeltdownRunOutTrigger, IronAssemblyMeltdownRunOutAction>(ACTION_EMERGENCY + 3,
+                                                                               EncounterRow::Mover);
     e.Node<IronAssemblyTankAssignmentTrigger, IronAssemblyTankAssignmentAction>(ACTION_RAID + 6);
     e.Node<IronAssemblyShieldOfRunesTrigger, IronAssemblyShieldOfRunesAction>(ACTION_RAID + 4);
     e.Node<IronAssemblyFusionPunchDispelTrigger, IronAssemblyFusionPunchDispelAction>(ACTION_RAID + 3);
     e.Node<IronAssemblyRedirectThreatTrigger, IronAssemblyRedirectThreatAction>(ACTION_RAID + 2);
-    e.Node<IronAssemblyRuneOfPowerSoakTrigger, IronAssemblyRuneOfPowerSoakAction>(ACTION_RAID + 1,
-                                                                                 EncounterRow::Mover);
+    e.Node<IronAssemblyRuneOfPowerMeleeTrigger, IronAssemblyRuneOfPowerMeleeAction>(ACTION_RAID + 1,
+                                                                                   EncounterRow::Mover);
     e.Node<IronAssemblySetDpsPriorityTrigger, IronAssemblySetDpsPriorityAction>(ACTION_RAID + 1);
     e.Node<IronAssemblyRaidPositionTrigger, IronAssemblyRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);
 

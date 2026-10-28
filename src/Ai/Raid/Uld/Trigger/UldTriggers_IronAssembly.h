@@ -99,14 +99,24 @@ public:
     bool IsActive() override;
 };
 
-// Ranged and healers walk into the rune for the +50%. The tank half is not a node: his spot shifts
-// clear of it instead, so nothing here has to fight him for the move.
-class IronAssemblyRuneOfPowerSoakTrigger : public Trigger
+// Melee step into the focus's Rune of Power behind him. Ranged have no node: the rune is their raid spot,
+// and the tank's spot backs his boss off it.
+class IronAssemblyRuneOfPowerMeleeTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "iron assembly rune of power soak trigger";
+    static constexpr char const* Name = "iron assembly rune of power melee trigger";
 
-    IronAssemblyRuneOfPowerSoakTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IronAssemblyRuneOfPowerMeleeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+// The other tank has Steelbreaker off an Overwhelming Power carrier, who walks to the Meltdown point.
+class IronAssemblyMeltdownRunOutTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "iron assembly meltdown run out trigger";
+
+    IronAssemblyMeltdownRunOutTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

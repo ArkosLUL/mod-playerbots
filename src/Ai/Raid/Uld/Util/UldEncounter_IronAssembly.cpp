@@ -18,6 +18,7 @@
 #include "EncounterHelpers.h"
 #include "RtiTargetValue.h"
 #include "Spell.h"
+#include "SpellAuras.h"
 #include "Timer.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
@@ -28,6 +29,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <list>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -54,6 +56,13 @@ struct IronAssemblyEncounterState
     // Shift-ring heading the raid stepped onto, or -1 on the stack. Latched: Overload walks with Brundir,
     // and re-picking every tick flips the winner mid-cast.
     int8 stackShiftHeading = -1;
+
+    // When the council was first seen engaged with all three up, 0 between pulls. Opens the burst window.
+    uint32 engagedAtMs = 0;
+
+    // Carriers that started the walk to the Meltdown point. Latched so one slowed or detoured mid-walk
+    // doesn't turn "late" and stop halfway, which is the worst place to blow up.
+    RaidObs::ObsGuidSet meltdownRunners{"ironassembly.meltdownrun"};
 };
 
 // Keyed by instance, because trigger, action and multiplier each hold their own helper instance and
@@ -99,6 +108,29 @@ bool IronAssemblyMemberCounts(Player* member, uint32 instanceId)
 {
     return member && member->IsAlive() && member->GetMapId() == ULDUAR_MAP_ID &&
            member->GetInstanceId() == instanceId;
+}
+
+uint32 IronAssemblyOverwhelmingPowerLeftMs(Unit const* unit)
+{
+    if (!unit)
+        return 0;
+
+    for (uint32 spellId : {SPELL_OVERWHELMING_POWER_25_MAN, SPELL_OVERWHELMING_POWER_10_MAN})
+        if (Aura const* aura = unit->GetAura(spellId))
+            return static_cast<uint32>(std::max(aura->GetDuration(), 1));
+
+    return 0;
+}
+
+// The carrier is still up but another grouped tank has Steelbreaker. Facts every bot reads the same way.
+bool IronAssemblySwappedOut(Player* member, Unit* steelbreaker)
+{
+    if (!member || !steelbreaker || !IronAssemblyOverwhelmingPowerLeftMs(member))
+        return false;
+
+    Unit* const victim = steelbreaker->GetVictim();
+    Player* const holder = victim ? victim->ToPlayer() : nullptr;
+    return holder && holder != member && holder->GetGroup() == member->GetGroup() && PlayerbotAI::IsTank(holder);
 }
 
 // Two radii, because they answer different questions: rad is the spell's own, clear is the line the
@@ -190,20 +222,22 @@ void GatherIronAssemblyTankOrder(IronAssemblyTargets const& targets, std::vector
 }
 
 // Bot tanks only, never GetGroupMainTank/GetGroupAssistTank: role flags count humans, and a slot bots
-// can't fill leaves its boss loose. Guid rank renumbers on a tank death, exactly when it's wanted.
-void GatherIronAssemblyTanks(PlayerbotAI* /*botAI*/, Player* bot, std::vector<Player*>& tanks)
+// can't fill leaves its boss loose. Guid rank renumbers on a tank death, exactly when it's wanted, and
+// on a Meltdown swap: the carrier leaves, so the next bot tank becomes the new partner.
+void GatherIronAssemblyTanks(PlayerbotAI* botAI, Player* bot, std::vector<Player*>& tanks)
 {
     Group* group = bot->GetGroup();
     if (!group)
         return;
 
     uint32 const instanceId = bot->GetInstanceId();
+    Unit* steelbreaker = GetIronAssemblyMember(botAI, NPC_STEELBREAKER);
 
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (IronAssemblyMemberCounts(member, instanceId) && GET_PLAYERBOT_AI(member) &&
-            PlayerbotAI::IsTank(member))
+            PlayerbotAI::IsTank(member) && !IronAssemblySwappedOut(member, steelbreaker))
             tanks.push_back(member);
     }
 
@@ -291,6 +325,39 @@ bool IronAssemblyTargetsEngaged(IronAssemblyTargets const& targets)
            (targets.brundir && targets.brundir->IsInCombat());
 }
 
+bool IronAssemblyCouncilAtFullHealth(IronAssemblyTargets const& targets)
+{
+    if (targets.AliveCount() < 3)
+        return false;
+
+    for (Unit* member : {targets.steelbreaker, targets.molgeim, targets.brundir})
+        if (member->GetHealth() < member->GetMaxHealth())
+            return false;
+
+    return true;
+}
+
+// Stamped here rather than by the reset node, which only fires for a bot holding a spread slot, so a wipe
+// before Steelbreaker's phase would leave the last pull's stamp and shut the next pull's window.
+void UpdateIronAssemblyEngage(Player* bot, IronAssemblyTargets const& targets)
+{
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
+
+    if (!IronAssemblyTargetsEngaged(targets))
+    {
+        if (IronAssemblyCouncilAtFullHealth(targets))
+        {
+            state.engagedAtMs = 0;
+            state.meltdownRunners.clear();
+        }
+
+        return;
+    }
+
+    if (!state.engagedAtMs && targets.AliveCount() == 3)
+        state.engagedAtMs = std::max<uint32>(getMSTime(), 1);
+}
+
 }  // namespace
 
 uint8 IronAssemblyTargets::AliveCount() const
@@ -356,8 +423,13 @@ void IronAssemblyScan::Members(IronAssemblyTargets& targets)
 
     // Off the scan's once-a-tick refresh, not a node's predicate, so it doesn't matter which node asks
     // first or what its gates let through. Every lookup in the hall lands here.
-    if (refreshed && IronAssemblyBotInHall(botAI->GetBot()) && IronAssemblyTargetsEngaged(targets))
-        TickIronAssemblyObs(botAI->GetBot(), targets);
+    if (refreshed && IronAssemblyBotInHall(botAI->GetBot()))
+    {
+        UpdateIronAssemblyEngage(botAI->GetBot(), targets);
+
+        if (IronAssemblyTargetsEngaged(targets))
+            TickIronAssemblyObs(botAI->GetBot(), targets);
+    }
 }
 
 Unit* IronAssemblyScan::Member(uint32 entry)
@@ -387,6 +459,23 @@ std::vector<Position> IronAssemblyScan::RunesOfDeath()
     }
 
     return runes;
+}
+
+std::vector<Position> IronAssemblyScan::RunesOfPower()
+{
+    if (!FreshThisTick(runesOfPowerAtMs))
+    {
+        runesOfPower.clear();
+
+        std::list<Creature*> found;
+        botAI->GetBot()->GetCreatureListWithEntryInGrid(found, NPC_IRON_ASSEMBLY_RUNE_OF_POWER,
+                                                        ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SEARCH_RADIUS);
+        for (Creature* rune : found)
+            if (rune && rune->IsAlive() && rune->HasAura(SPELL_RUNE_OF_POWER_PULSE))
+                runesOfPower.push_back(rune->GetPosition());
+    }
+
+    return runesOfPower;
 }
 
 IronAssemblyScan& GetIronAssemblyScan(PlayerbotAI* botAI)
@@ -575,26 +664,13 @@ Unit* IronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot)
     return boss;
 }
 
-// The rune object, not the boss in it: he can drift off while the aura is up, and aiming at his feet
-// makes the destination follow him and never settle.
-static void GatherIronAssemblyRunesOfPower(Player* bot, std::vector<Position>& runes)
-{
-    if (!bot)
-        return;
-
-    std::vector<Position> const found = GetDynamicObjectPositions(
-        bot, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS, SPELL_RUNE_OF_POWER_AREA);
-    runes.insert(runes.end(), found.begin(), found.end());
-}
-
-bool TryGetIronAssemblyBossTankSpot(Player* bot, Unit* boss, Position& position)
+// The designed spot and the bearing it sits on. False for anything but a council member.
+static bool IronAssemblyDesignedTankSpot(Unit* boss, Position& spot, float& bearing)
 {
     if (!boss)
         return false;
 
-    float bearing = 0.0f;
     float radius = 0.0f;
-
     switch (boss->GetEntry())
     {
         case NPC_BRUNDIR:
@@ -613,45 +689,62 @@ bool TryGetIronAssemblyBossTankSpot(Player* bot, Unit* boss, Position& position)
             return false;
     }
 
-    position = IronAssemblyPositionAt(bearing, radius);
+    spot = IronAssemblyPositionAt(bearing, radius);
+    return true;
+}
 
-    // Only his own boss's rune moves him. One anywhere else is the soakers' business, and a tank that
-    // stepped aside for it would drag his boss out of the formation for nothing.
-    if (!boss->HasAura(SPELL_RUNE_OF_POWER))
-        return true;
+bool TryGetIronAssemblyBossRuneOfPower(PlayerbotAI* botAI, Unit* boss, Position& rune)
+{
+    Position designed;
+    float bearing = 0.0f;
+    if (!IronAssemblyDesignedTankSpot(boss, designed, bearing))
+        return false;
 
-    std::vector<Position> runes;
-    GatherIronAssemblyRunesOfPower(bot, runes);
-
-    if (IsIronAssemblyPositionClearOfRunes(position, runes, ULDUAR_IRON_ASSEMBLY_TANK_RUNE_CLEARANCE))
-        return true;
-
-    // Rotate off the designed bearing, nearest step first and alternating sides, so the shift gives up
-    // as little of the formation as it can and the boss still ends on a point the raid can predict.
-    for (uint8 step = 1; step <= ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEPS; ++step)
+    float best = ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_OWNER_RADIUS;
+    bool found = false;
+    for (Position const& candidate : GetIronAssemblyScan(botAI).RunesOfPower())
     {
-        for (float side : {1.0f, -1.0f})
+        float const distance = candidate.GetExactDist2d(designed.GetPositionX(), designed.GetPositionY());
+        if (distance < best)
         {
-            Position const candidate = IronAssemblyPositionAt(
-                bearing + side * static_cast<float>(step) * ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEP, radius);
-
-            if (IsIronAssemblyPositionClearOfRunes(candidate, runes,
-                                                   ULDUAR_IRON_ASSEMBLY_TANK_RUNE_CLEARANCE))
-            {
-                position = candidate;
-                return true;
-            }
+            best = distance;
+            rune = candidate;
+            found = true;
         }
     }
 
-    // Nothing on the ring clears it, which takes runes on both sides at once. Hold the designed spot:
-    // a boss keeping the buff costs the raid less than a tank parked somewhere nobody planned for.
+    return found;
+}
+
+bool TryGetIronAssemblyBossTankSpot(PlayerbotAI* botAI, Unit* boss, Position& position)
+{
+    float bearing = 0.0f;
+    if (!IronAssemblyDesignedTankSpot(boss, position, bearing))
+        return false;
+
+    // Only his own rune moves him. One anywhere else is the soakers' business.
+    Position rune;
+    if (!TryGetIronAssemblyBossRuneOfPower(botAI, boss, rune))
+        return true;
+
+    // Back straight away from the rune. He re-chases once the tank leaves his melee range and stops at
+    // both reaches plus contact, so he ends OFFSET off the rune with it behind him, where melee can stand.
+    // Off the rune and the designed spot, both fixed, so the spot holds still while he walks.
+    float const dx = position.GetPositionX() - rune.GetPositionX();
+    float const dy = position.GetPositionY() - rune.GetPositionY();
+    float const away = dx * dx + dy * dy < 0.25f ? bearing : std::atan2(dy, dx);
+    float const reach = ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_BOSS_OFFSET + boss->GetCombatReach() +
+                        DEFAULT_COMBAT_REACH + CONTACT_DISTANCE;
+
+    // navprobe: every spot this can produce, out to 16.5 yd round each designed spot, is on the floor.
+    position = Position(rune.GetPositionX() + std::cos(away) * reach, rune.GetPositionY() + std::sin(away) * reach,
+                        position.GetPositionZ());
     return true;
 }
 
 bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& position)
 {
-    return TryGetIronAssemblyBossTankSpot(bot, IronAssemblyAssignedBoss(botAI, bot), position);
+    return TryGetIronAssemblyBossTankSpot(botAI, IronAssemblyAssignedBoss(botAI, bot), position);
 }
 
 // What pushed the raid off its stack point, for the ironassembly.spot label.
@@ -864,7 +957,47 @@ static bool SqueezeIronAssemblyRingOffRunes(Position const& centre, float radius
     return true;
 }
 
-static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position, char const*& how)
+// A Rune of Power the ranged can stand in: within the travel cap of the opening stack point (so never
+// Brundir's), clear of every Rune of Death at the stand radius, and outside a live Overload. Nearest to
+// the stack wins. Reads no caller position, so every bot picks the same rune.
+static bool TryGetIronAssemblySoakRune(PlayerbotAI* botAI, Position& rune)
+{
+    std::vector<Position> const runesOfPower = GetIronAssemblyScan(botAI).RunesOfPower();
+    if (runesOfPower.empty())
+        return false;
+
+    Position const opening =
+        IronAssemblyPositionAt(ULDUAR_IRON_ASSEMBLY_STACK_BEARING, ULDUAR_IRON_ASSEMBLY_STACK_RADIUS);
+    std::vector<Position> const runesOfDeath = GetIronAssemblyScan(botAI).RunesOfDeath();
+
+    Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
+    bool const overload = brundir && IronAssemblyOverloadActive(brundir);
+
+    float best = ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SOAK_MAX_TRAVEL;
+    bool found = false;
+    for (Position const& candidate : runesOfPower)
+    {
+        float const travel = candidate.GetExactDist2d(opening.GetPositionX(), opening.GetPositionY());
+        if (travel >= best)
+            continue;
+
+        if (!IsIronAssemblyPositionClearOfRunes(candidate, runesOfDeath, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE))
+            continue;
+
+        if (overload && brundir->GetExactDist2d(candidate.GetPositionX(), candidate.GetPositionY()) <
+                            ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE)
+            continue;
+
+        best = travel;
+        rune = candidate;
+        found = true;
+    }
+
+    return found;
+}
+
+static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position, float& tolerance,
+                                       char const*& how)
 {
     bool brundirLast = false;
     Position const opening = IronAssemblyStackPoint(botAI, brundirLast);
@@ -879,6 +1012,18 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     // healers in range and makes Rune of Power worth soaking.
     if (!IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir))
     {
+        // The rune is the stack while it lasts, so no second mover has to trade the move with this one.
+        // Not in the spread phase: one Static Disruption on a stack is +75% nature taken for 20s, and
+        // High Voltage is nature.
+        Position rune;
+        if (TryGetIronAssemblySoakRune(botAI, rune))
+        {
+            how = "rune-power";
+            position = rune;
+            tolerance = ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SLOT_TOLERANCE;
+            return true;
+        }
+
         how = brundirLast ? IronAssemblySpotLabel(shift, "stack-late", "stack-late-rune",
                                                   "stack-late-overload")
                           : IronAssemblySpotLabel(shift, "stack", "stack-rune", "stack-overload");
@@ -906,7 +1051,7 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     Position centre = stack;
     float ringRadius = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS;
     Position steelbreakerSpot;
-    bool const onBoss = TryGetIronAssemblyBossTankSpot(bot, targets.steelbreaker, steelbreakerSpot);
+    bool const onBoss = TryGetIronAssemblyBossTankSpot(botAI, targets.steelbreaker, steelbreakerSpot);
     bool squeezed = false;
     if (onBoss)
     {
@@ -924,13 +1069,16 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     return true;
 }
 
-bool TryGetIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position)
+bool TryGetIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position, float* tolerance)
 {
     if (!IronAssemblyTakesRaidSpot(botAI, bot))
         return false;
 
     char const* how = "none";
-    bool const found = DeriveIronAssemblyRaidSpot(botAI, bot, position, how);
+    float spotTolerance = ULDUAR_IRON_ASSEMBLY_SLOT_TOLERANCE;
+    bool const found = DeriveIronAssemblyRaidSpot(botAI, bot, position, spotTolerance, how);
+    if (tolerance)
+        *tolerance = spotTolerance;
 
     // The branch, not the coordinate: the move record already has where the bot was sent, and
     // ironassembly.slot the ring index.
@@ -1073,72 +1221,205 @@ bool TryGetIronAssemblyRouteStep(PlayerbotAI* botAI, Player* bot, Position const
     return true;
 }
 
-Unit* IronAssemblyRuneOfPowerCarrier(PlayerbotAI* botAI)
+static bool DeriveIronAssemblyMeleeRuneSpot(PlayerbotAI* botAI, Player* bot, Position& spot, char const*& how)
+{
+    Unit* focus = IronAssemblyFocusTarget(botAI);
+    Position rune;
+    if (!focus || !TryGetIronAssemblyBossRuneOfPower(botAI, focus, rune))
+    {
+        how = "none:norune";
+        return false;
+    }
+
+    // Still on the rune's centre: his tank hasn't backed him off yet, so there's no side to stand on.
+    float const dx = focus->GetPositionX() - rune.GetPositionX();
+    float const dy = focus->GetPositionY() - rune.GetPositionY();
+    float const offset = std::sqrt(dx * dx + dy * dy);
+    if (offset < 0.5f)
+    {
+        how = "none:centred";
+        return false;
+    }
+
+    spot = Position(rune.GetPositionX() + dx / offset * ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH,
+                    rune.GetPositionY() + dy / offset * ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH,
+                    rune.GetPositionZ());
+
+    if (focus->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > bot->GetMeleeRange(focus) - 1.0f)
+    {
+        how = "none:far";
+        return false;
+    }
+
+    std::vector<Position> const runesOfDeath = GetIronAssemblyScan(botAI).RunesOfDeath();
+    if (!IsIronAssemblyPositionClearOfRunes(spot, runesOfDeath, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE))
+    {
+        how = "none:deathrune";
+        return false;
+    }
+
+    Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
+    if (brundir && (IronAssemblyOverloadActive(brundir) || IronAssemblyTendrilsActive(brundir)))
+    {
+        how = "none:brundir";
+        return false;
+    }
+
+    float const fromRune = bot->GetExactDist2d(rune.GetPositionX(), rune.GetPositionY());
+    if (fromRune <= ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_HOLD && bot->IsWithinMeleeRange(focus))
+    {
+        how = "in";
+        return false;
+    }
+
+    how = "walk";
+    return true;
+}
+
+bool TryGetIronAssemblyMeleeRuneSpot(PlayerbotAI* botAI, Player* bot, Position& spot)
+{
+    if (!botAI || !bot || PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsTank(bot))
+        return false;
+
+    char const* how = "none:norune";
+    bool const walk = DeriveIronAssemblyMeleeRuneSpot(botAI, bot, spot, how);
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "ironassembly.meleerune", how);
+
+    return walk;
+}
+
+Position IronAssemblyMeltdownPoint()
+{
+    return IronAssemblyPositionAt(ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_BEARING,
+                                  ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_RADIUS);
+}
+
+// A runner keeps walking until the buff is gone, whatever the clock says by then.
+static bool IronAssemblyMeltdownRunner(Player* member, Unit* steelbreaker)
+{
+    if (!member || !IronAssemblySwappedOut(member, steelbreaker))
+        return false;
+
+    IronAssemblyEncounterState const* state = ironAssemblyStates.Find(member->GetInstanceId());
+    return state && state->meltdownRunners.count(member->GetGUID());
+}
+
+static IronAssemblyMeltdownRole DeriveIronAssemblyMeltdownRole(PlayerbotAI* botAI, Player* bot)
 {
     IronAssemblyTargets targets;
     GatherIronAssemblyTargets(botAI, targets);
 
-    for (Unit* member : {targets.steelbreaker, targets.molgeim, targets.brundir})
-        if (member && member->HasAura(SPELL_RUNE_OF_POWER))
-            return member;
+    Unit* steelbreaker = targets.steelbreaker;
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
 
-    return nullptr;
+    uint32 const left = IronAssemblyOverwhelmingPowerLeftMs(bot);
+    if (!left)
+        state.meltdownRunners.erase(bot->GetGUID());
+
+    if (!IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir))
+        return IronAssemblyMeltdownRole::None;
+
+    if (left)
+    {
+        if (IronAssemblySwappedOut(bot, steelbreaker))
+        {
+            Position const point = IronAssemblyMeltdownPoint();
+            float const distance = bot->GetExactDist2d(point.GetPositionX(), point.GetPositionY());
+
+            if (!state.meltdownRunners.count(bot->GetGUID()))
+            {
+                float const speed = std::max(bot->GetSpeed(MOVE_RUN), 1.0f);
+                uint32 const walkMs = static_cast<uint32>(distance / speed * IN_MILLISECONDS) +
+                                      ULDUAR_IRON_ASSEMBLY_MELTDOWN_WALK_SLACK_MS;
+                if (walkMs > left)
+                    return IronAssemblyMeltdownRole::Late;
+
+                state.meltdownRunners.insert(bot->GetGUID());
+            }
+
+            return distance <= ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_TOLERANCE ? IronAssemblyMeltdownRole::Parked
+                                                                              : IronAssemblyMeltdownRole::Run;
+        }
+
+        if (left <= ULDUAR_IRON_ASSEMBLY_MELTDOWN_SWAP_LEAD_MS)
+        {
+            std::vector<Player*> tanks;
+            GatherIronAssemblyTanks(botAI, bot, tanks);
+            if (tanks.size() < 2)
+                return IronAssemblyMeltdownRole::NoPartner;
+        }
+
+        return IronAssemblyMeltdownRole::Hold;
+    }
+
+    if (!steelbreaker || IronAssemblyAssignedBoss(botAI, bot) != steelbreaker)
+        return IronAssemblyMeltdownRole::None;
+
+    Unit* const victim = steelbreaker->GetVictim();
+    Player* const holder = victim ? victim->ToPlayer() : nullptr;
+    if (!holder || holder == bot || holder->GetGroup() != bot->GetGroup() || !PlayerbotAI::IsTank(holder))
+        return IronAssemblyMeltdownRole::None;
+
+    uint32 const holderLeft = IronAssemblyOverwhelmingPowerLeftMs(holder);
+    return holderLeft && holderLeft <= ULDUAR_IRON_ASSEMBLY_MELTDOWN_SWAP_LEAD_MS ? IronAssemblyMeltdownRole::Taunt
+                                                                                  : IronAssemblyMeltdownRole::None;
 }
 
-static Unit* DeriveIronAssemblyRuneOfPowerSoakSpot(PlayerbotAI* botAI, Player* bot, Position& position,
-                                                   char const*& how)
+static char const* IronAssemblyMeltdownLabel(IronAssemblyMeltdownRole role)
 {
-    Unit* carrier = IronAssemblyRuneOfPowerCarrier(botAI);
-    if (!carrier)
+    switch (role)
     {
-        how = "none:nocarrier";
-        return nullptr;
+        case IronAssemblyMeltdownRole::Hold:
+            return "hold";
+        case IronAssemblyMeltdownRole::NoPartner:
+            return "nopartner";
+        case IronAssemblyMeltdownRole::Taunt:
+            return "taunt";
+        case IronAssemblyMeltdownRole::Run:
+            return "run";
+        case IronAssemblyMeltdownRole::Parked:
+            return "parked";
+        case IronAssemblyMeltdownRole::Late:
+            return "late";
+        default:
+            return "none";
     }
-
-    // The rune sits under the member standing in it, and his tank is already walking him off, so aim at
-    // his feet and accept the spot expires with the pull-out.
-    Position const rune = carrier->GetPosition();
-
-    // Without the cap, a rune that lands on Brundir drags the whole ranged group into Overload.
-    if (bot->GetExactDist2d(rune.GetPositionX(), rune.GetPositionY()) >
-        ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SOAK_MAX_TRAVEL)
-    {
-        how = "none:far";
-        return nullptr;
-    }
-
-    std::vector<Position> const runes = GetIronAssemblyScan(botAI).RunesOfDeath();
-    if (!IsIronAssemblyPositionClearOfRunes(rune, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS))
-    {
-        how = "none:rune";
-        return nullptr;
-    }
-
-    position = rune;
-    return carrier;
 }
 
-bool TryGetIronAssemblyRuneOfPowerSoakSpot(PlayerbotAI* botAI, Player* bot, Position& position)
+IronAssemblyMeltdownRole IronAssemblyMeltdownRoleFor(PlayerbotAI* botAI, Player* bot)
 {
-    if (!IronAssemblyTakesRaidSpot(botAI, bot))
+    if (!botAI || !bot || !PlayerbotAI::IsTank(bot) || !IronAssemblyFormationActive(botAI))
+        return IronAssemblyMeltdownRole::None;
+
+    IronAssemblyMeltdownRole const role = DeriveIronAssemblyMeltdownRole(botAI, bot);
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "ironassembly.meltdown", IronAssemblyMeltdownLabel(role));
+
+    return role;
+}
+
+bool IronAssemblyOpenerBurstWindowOpen(PlayerbotAI* botAI)
+{
+    IronAssemblyTargets targets;
+    GatherIronAssemblyTargets(botAI, targets);
+    if (targets.AliveCount() < 3)
         return false;
 
-    char const* how = "none:nocarrier";
-    Unit* carrier = DeriveIronAssemblyRuneOfPowerSoakSpot(botAI, bot, position, how);
-
-    // Which member's feet the bot is walking to, or which of the two caps stopped it. Both refusals
-    // look the same from outside: the node's trigger comes back false and nothing is written.
-    if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "ironassembly.soak",
-                             carrier ? RaidObs::DescribeAssignment(carrier->GetGUID()) : how);
-
-    return carrier != nullptr;
+    IronAssemblyEncounterState const* state = ironAssemblyStates.Find(botAI->GetBot()->GetInstanceId());
+    return state && state->engagedAtMs &&
+           GetMSTimeDiffToNow(state->engagedAtMs) < ULDUAR_IRON_ASSEMBLY_OPENER_BURST_WINDOW_MS;
 }
 
 bool IronAssemblyMemberMustMove(PlayerbotAI* botAI, Player* member)
 {
     if (!botAI || !member)
         return false;
+
+    if (IronAssemblyMeltdownRunner(member, GetIronAssemblyMember(botAI, NPC_STEELBREAKER)))
+        return true;
 
     if (Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR))
     {
@@ -1302,14 +1583,7 @@ bool IronAssemblyEncounterStateIsStale(PlayerbotAI* botAI)
 
     // All three up and untouched is the pull. Testing combat would wipe the state every Lightning
     // Tendrils, when Brundir spends 16s with no victim by design.
-    if (targets.AliveCount() < 3)
-        return false;
-
-    for (Unit* member : {targets.steelbreaker, targets.molgeim, targets.brundir})
-        if (member->GetHealth() < member->GetMaxHealth())
-            return false;
-
-    return true;
+    return IronAssemblyCouncilAtFullHealth(targets);
 }
 
 bool IronAssemblyBotHasEncounterState(Player* bot)

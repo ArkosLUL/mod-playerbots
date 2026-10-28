@@ -162,19 +162,21 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") != boss)
         return Attack(boss);
 
-    // Shared empowered Steelbreaker: the carrier keeps him until Meltdown, an early taunt saves nobody.
-    // IronAssemblyTauntGuardMultiplier covers the class taunt nodes but never sees this direct cast.
+    // Shared empowered Steelbreaker: leave him on the other tank, bar the Meltdown swap, which takes him
+    // off a carrier in the last SWAP_LEAD so it can walk out. IronAssemblyTauntGuardMultiplier covers the
+    // class taunt nodes but never sees this direct cast.
     Unit* const victim = boss->GetVictim();
     bool const shared = IsSteelbreakerEmpowered(botAI) && boss->GetEntry() == NPC_STEELBREAKER;
+    bool const swap = shared && IronAssemblyMeltdownRoleFor(botAI, bot) == IronAssemblyMeltdownRole::Taunt;
 
     // Stand, do not drag. The tank walks to its spot and the boss follows it there, which never
     // routes a boss through the ranged stack the way a dragged pull does.
-    if (victim != bot && !(shared && IronAssemblyHeldByOtherTank(bot, boss)) && CastClassTaunt(botAI, boss))
+    if (victim != bot && (swap || !(shared && IronAssemblyHeldByOtherTank(bot, boss))) && CastClassTaunt(botAI, boss))
         return true;
 
     // Same boss the assignment above returned, rather than ranking the tanks a second time.
     Position spot;
-    if (!TryGetIronAssemblyBossTankSpot(bot, boss, spot))
+    if (!TryGetIronAssemblyBossTankSpot(botAI, boss, spot))
         return false;
 
     float const distance = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
@@ -296,14 +298,32 @@ bool IronAssemblyRedirectThreatAction::Execute(Event /*event*/)
     return false;
 }
 
-bool IronAssemblyRuneOfPowerSoakAction::Execute(Event /*event*/)
+bool IronAssemblyRuneOfPowerMeleeAction::Execute(Event /*event*/)
 {
-    Position rune;
-    if (!TryGetIronAssemblyRuneOfPowerSoakSpot(botAI, bot, rune))
+    Position spot;
+    if (!TryGetIronAssemblyMeleeRuneSpot(botAI, bot, spot))
         return false;
 
-    return MoveTo(bot->GetMapId(), rune.GetPositionX(), rune.GetPositionY(), rune.GetPositionZ(), false, false,
+    Position step;
+    if (!TryGetIronAssemblyRouteStep(botAI, bot, spot, step))
+        return false;
+
+    return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool IronAssemblyMeltdownRunOutAction::Execute(Event /*event*/)
+{
+    Position const point = IronAssemblyMeltdownPoint();
+
+    Position step;
+    if (!TryGetIronAssemblyRouteStep(botAI, bot, point, step))
+        return false;
+
+    // MOVEMENT_FORCED and claiming every tick: a carrier that stops to swing takes him straight back,
+    // its threat matching the taunter's after the taunt.
+    return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
 
 bool IronAssemblySetDpsPriorityAction::Execute(Event /*event*/)
@@ -327,7 +347,8 @@ bool IronAssemblySetDpsPriorityAction::Execute(Event /*event*/)
 bool IronAssemblyRaidPositionAction::Execute(Event /*event*/)
 {
     Position spot;
-    if (!TryGetIronAssemblyRaidSpot(botAI, bot, spot))
+    float tolerance = ULDUAR_IRON_ASSEMBLY_SLOT_TOLERANCE;
+    if (!TryGetIronAssemblyRaidSpot(botAI, bot, spot, &tolerance))
     {
         _spotReached = false;
         return false;
@@ -337,10 +358,10 @@ bool IronAssemblyRaidPositionAction::Execute(Event /*event*/)
 
     // Reach then hold, with a deadband: a move per yard of drift restarts the spline, and a moving bot
     // never casts or kicks Lightning Whirl.
-    if (_spotReached && distance > ULDUAR_IRON_ASSEMBLY_SLOT_TOLERANCE * 2.0f)
+    if (_spotReached && distance > tolerance * 2.0f)
         _spotReached = false;
 
-    if (_spotReached || distance <= ULDUAR_IRON_ASSEMBLY_SLOT_TOLERANCE)
+    if (_spotReached || distance <= tolerance)
     {
         _spotReached = true;
         return false;

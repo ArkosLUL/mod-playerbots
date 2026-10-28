@@ -112,15 +112,21 @@ private:
     Player* GetRedirectTank();
 };
 
-class IronAssemblyRuneOfPowerSoakAction : public MovementAction
+class IronAssemblyRuneOfPowerMeleeAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "iron assembly rune of power soak action";
+    static constexpr char const* Name = "iron assembly rune of power melee action";
 
-    IronAssemblyRuneOfPowerSoakAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name)
-    {
-    }
+    IronAssemblyRuneOfPowerMeleeAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IronAssemblyMeltdownRunOutAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "iron assembly meltdown run out action";
+
+    IronAssemblyMeltdownRunOutAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 

@@ -38,12 +38,10 @@ enum UlduarIronAssemblyIds
     SPELL_FUSION_PUNCH_25_MAN = 63493,
     SPELL_OVERWHELMING_POWER_10_MAN = 64637,
     SPELL_OVERWHELMING_POWER_25_MAN = 61888,
-    // The rune's ground pulse, reapplied every 0.8s to anything standing within 5 yd of it. One id
-    // for both raid sizes, and it is what marks a boss as standing in his own damage buff.
-    SPELL_RUNE_OF_POWER = 64320,
-    // The rune itself, the only id in the 61973 chain with a persistent area aura, so the DynamicObject to
-    // sweep for. The boss carrying 64320 can walk off it, the object stays where it dropped.
-    SPELL_RUNE_OF_POWER_AREA = 63513,
+    // Rune of Power is a creature, not a DynamicObject: 63513 summons it at the target's feet. It carries
+    // this aura for 60s, pulsing the +50% buff 64320 every 0.5s. A rune without the aura is spent.
+    NPC_IRON_ASSEMBLY_RUNE_OF_POWER = 33705,
+    SPELL_RUNE_OF_POWER_PULSE = 61974,
     // Damage the auras above trigger, only used to name a haz row in a trace. Only Tendrils is a pair:
     // both Overload auras trigger 61878, both Overwhelming Power auras 61889.
     SPELL_OVERLOAD_DAMAGE = 61878,
@@ -86,23 +84,44 @@ inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_DETOUR_STEP = 0.7854f;  // pi/4
 inline constexpr uint8 ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_HEADINGS = 8;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_RADIUS = 25.0f;
 
-// Meltdown 61889: 29,250 nature in 15 yd round whoever Overwhelming Power expires on. Not dodged, the
-// carrier dies anyway and melee stand in it. The ranged ring is sized off it.
+// Meltdown 61889: 29,250 nature to the carrier's allies within 15 yd, centre to centre, and an instakill on
+// the carrier. The ranged ring is sized off it.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS = 15.0f;
 
-// Rune of Power: 64320 within 5 yd, +50% damage, lives 60s. Lands on a council member, so ranged walk in
-// and the tank spot shifts clear. The travel cap keeps a rune on Brundir from towing ranged into Overload.
+// The other tank taunts with this much Overwhelming Power left, so the carrier can walk out and blow up
+// alone. The walk is 46 yd, about 6.6s.
+inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_MELTDOWN_SWAP_LEAD_MS = 10000;
+// Margin on top of the walk. With less left than walk plus this, the carrier stays put: dying halfway
+// lands the blast on the ranged ring instead of the melee.
+inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_MELTDOWN_WALK_SLACK_MS = 1000;
+// Where a carrier goes to die: anchor + 30 yd at 315 degrees, 46 yd from Steelbreaker's spot and 24 off the
+// spread ring, empty once he's the last one up. navprobe: on the floor, straight path from his spot.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_BEARING = 5.4978f;  // 7*pi/4
+inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_RADIUS = 30.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_TOLERANCE = 2.0f;
+
+// Rune of Power buffs any unit whose centre is within 5 yd of the rune's: 2D, no combat reach on either
+// side. Ranged soak a rune within the travel cap of the opening stack point, which takes every rune on
+// Steelbreaker or Molgeim and none on Brundir, 38 yd off and inside Overload range.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_RADIUS = 5.0f;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SOAK_MAX_TRAVEL = 25.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SEARCH_RADIUS = 50.0f;
+// A rune within this of a boss's designed tank spot is his. The spots are at least 22.6 yd apart.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_OWNER_RADIUS = 15.0f;
+// Boss centre to rune centre once his tank has backed him off it: out with margin, and melee standing
+// in the rune behind him still reach him.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_BOSS_OFFSET = 6.5f;
+// Melee stand this far into the rune toward the boss: 2 yd inside its edge, 3.5 from a parked boss, so in
+// melee range of all three.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH = 3.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_HOLD = 4.5f;
+// Raid spot deadband inside the rune. The default 3 lets a bot re-walk only past 6, outside it.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SLOT_TOLERANCE = 2.0f;
 
-// Tank spot clearance from a rune under his own boss: the 5 yd rune, the 5 the boss stops short of him,
-// plus margin. A shifted spot, not a second mover: two at MOVEMENT_COMBAT cancel each other.
-inline constexpr float ULDUAR_IRON_ASSEMBLY_TANK_RUNE_CLEARANCE = 12.0f;
-
-// Bearing offsets tried in order at the boss's radius. Two steps already clear 12 yd on the 16 yd ring, and a fourth
-// would put Steelbreaker's furthest candidate on Molgeim's spot, 90 degrees round.
-inline constexpr float ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEP = 0.3927f;  // pi/8, 22.5 degrees
-inline constexpr uint8 ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEPS = 3;
+// Hard mode holds burst for Steelbreaker's last phase, bar one round at the pull: this window, and only
+// cooldowns of 3 min or less, which are back early in his phase (he's usually alone ~170s in).
+inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_OPENER_BURST_WINDOW_MS = 20000;
+inline constexpr int32 ULDUAR_IRON_ASSEMBLY_OPENER_BURST_MAX_COOLDOWN_MS = 180000;
 
 // Brundir parks at 28, not the 25 his Overload needs, so the stack 38 yd off never reacts to it and
 // stays parked, free to kick Lightning Whirl.
@@ -175,6 +194,9 @@ public:
     // list across another scan read, and that read refills this one the moment the clock moves on.
     std::vector<Position> RunesOfDeath();
 
+    // Live Runes of Power around this bot, off one grid visit, same rules as above.
+    std::vector<Position> RunesOfPower();
+
 private:
     void RefreshMembers();
     Unit* Resolve(ObjectGuid const& guid) const;
@@ -188,6 +210,9 @@ private:
 
     uint32 runesAtMs = 0;
     std::vector<Position> runes;
+
+    uint32 runesOfPowerAtMs = 0;
+    std::vector<Position> runesOfPower;
 };
 
 // This bot's IronAssemblyScan, held by the "iron assembly scan" value.
@@ -209,17 +234,25 @@ Unit* IronAssemblyFocusTarget(PlayerbotAI* botAI);
 // Steelbreaker, Molgeim. Surplus ones get nullptr and fall through to the focus target.
 Unit* IronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot);
 
-// Where that tank stands, so the boss follows him instead of being dragged through the raid. Rotated
-// off its bearing while his boss stands in a Rune of Power, the only answer to that rune.
+// Where that tank stands, so the boss follows him instead of being dragged through the raid. Backed off
+// his boss's Rune of Power so the boss ends just outside it with the rune behind him.
 bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& position);
 
 // The same spot for a named boss rather than the caller's own assignment, so the ranged ring can be
 // built on Steelbreaker's without a tank having to exist.
-bool TryGetIronAssemblyBossTankSpot(Player* bot, Unit* boss, Position& position);
+bool TryGetIronAssemblyBossTankSpot(PlayerbotAI* botAI, Unit* boss, Position& position);
 
-// Where ranged and healers stand. Stacked normally; on the hard-mode spread ring once Steelbreaker
-// is empowered, because Static Disruption only exists from his phase 2.
-bool TryGetIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position);
+// The live Rune of Power nearest this boss's designed tank spot, within OWNER_RADIUS. Keyed on the
+// spot, not his buff: the buff drops the moment he steps out, and keying on it walks him back in.
+bool TryGetIronAssemblyBossRuneOfPower(PlayerbotAI* botAI, Unit* boss, Position& rune);
+
+// Where ranged and healers stand: in a soakable Rune of Power, else stacked; on the hard-mode spread
+// ring once Steelbreaker is empowered. tolerance is the arrival deadband the spot wants.
+bool TryGetIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position, float* tolerance = nullptr);
+
+// Where a melee bot stands to hit the focus from inside his Rune of Power. False once it's in, or when
+// there's nothing to walk to.
+bool TryGetIronAssemblyMeleeRuneSpot(PlayerbotAI* botAI, Player* bot, Position& spot);
 
 bool IronAssemblyOverloadActive(Unit* brundir);
 bool IronAssemblyTendrilsActive(Unit* brundir);
@@ -236,11 +269,6 @@ bool IsIronAssemblyPositionClearOfRunes(Position const& spot, std::vector<Positi
 // Next step toward goal: goal itself, or a point round a Rune of Death the straight line would cross.
 // False means hold, goal or detour point is covered. Walking through a rune hands the bot to the escape.
 bool TryGetIronAssemblyRouteStep(PlayerbotAI* botAI, Player* bot, Position const& goal, Position& step);
-
-// The council member standing in Molgeim's Rune of Power, if any. It lands on a boss, not a player
-// (DoSelectLowestHpFriendly), so the tank walks his boss out while everyone else walks in.
-Unit* IronAssemblyRuneOfPowerCarrier(PlayerbotAI* botAI);
-bool TryGetIronAssemblyRuneOfPowerSoakSpot(PlayerbotAI* botAI, Player* bot, Position& position);
 
 // A bot walking out of a hazard can't cast, so it can't be the interrupter. From the hazards, not
 // isMoving(), so every bot reaches the same answer about every other bot.
@@ -265,6 +293,25 @@ bool IronAssemblyHasOverwhelmingPower(Unit* unit);
 
 // Another grouped tank, human or bot, has boss on him.
 bool IronAssemblyHeldByOtherTank(Player* bot, Unit* boss);
+
+// What this bot does about Overwhelming Power. Carrier: hold, run, parked, late (swap came too late to
+// walk out), nopartner. The other assigned tank: taunt once the carrier is inside SWAP_LEAD.
+enum class IronAssemblyMeltdownRole : uint8
+{
+    None,
+    Hold,
+    NoPartner,
+    Taunt,
+    Run,
+    Parked,
+    Late,
+};
+
+IronAssemblyMeltdownRole IronAssemblyMeltdownRoleFor(PlayerbotAI* botAI, Player* bot);
+Position IronAssemblyMeltdownPoint();
+
+// One round of burst at the pull is allowed in hard mode: all three up and the pull under 20s old.
+bool IronAssemblyOpenerBurstWindowOpen(PlayerbotAI* botAI);
 
 // Reset once the council is back at full health, never on "nobody in combat": Brundir spends 16s of
 // every Lightning Tendrils out of combat by design.
