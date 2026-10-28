@@ -7,16 +7,36 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_GUNSHIP_H
 #define PLAYERBOTS_ICCTRIGGERS_GUNSHIP_H
 
+#include "ICCHelpers_Gunship.h"
+#include "ICCTriggers_RaidWide.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "Trigger.h"
 
-class IccInCannonTrigger : public Trigger
+class IccGunshipDodgeTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc in cannon";
+    static constexpr char const* Name = "icc gunship dodge";
 
-    IccInCannonTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccGunshipDodgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccGunshipRocketJumpTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc gunship rocket jump";
+
+    IccGunshipRocketJumpTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccGunshipTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc gunship taunt";
+
+    IccGunshipTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -29,12 +49,29 @@ public:
     bool IsActive() override;
 };
 
-class IccGunshipRocketJumpTrigger : public Trigger
+class IccInCannonTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc gunship rocket jump";
+    static constexpr char const* Name = "icc in cannon";
 
-    IccGunshipRocketJumpTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccInCannonTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccGunshipTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc gunship target";
+
+    IccGunshipTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GsbTarget) {}
+};
+
+class IccGunshipStandTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc gunship stand";
+
+    IccGunshipStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

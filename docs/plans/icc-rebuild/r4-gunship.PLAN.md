@@ -55,10 +55,60 @@ Stem `Gunship` and its definition, the doc, the reader and its test, this brief.
 
 ## Task list
 
+One lead, no split: every piece reads the same side table, deck test and roster.
+
+- [x] Helpers: side table from `DATA_TEAMID_IN_INSTANCE`, ships from the instance guid slots, deck test
+  from the core's own y bounds, unit cache from the ships' passenger sets, roster, boarding state,
+  retreat latch, stands, hazards, resolver; all housekeeping in the tick.
+- [x] Cannon duty with heat: ranged first, Incinerating Blast at 90 heat, DBC cooldowns on a receipt.
+- [x] Boarding: board tank first, boarders once a tank holds the captain, return when the mage dies,
+  tank last; retreat on Battle Fury stacks. `gsb.battlefury` removed.
+- [x] Home deck: home tank at the portal exit, taunts boarders; healers and ranged on edge slots;
+  ranged kill boarders, then riflemen/axethrowers in range.
+- [x] Direct targeting; no icon or `rti` writes; legacy `star` rti reset in the tick.
+- [x] Rocket Artillery and Burning Pitch dodge on a deck-bounded sweep.
+- [x] Fall snap removed; cross-deck movement guard and deck mover blocks replace the blanket veto.
+- [x] Reader and tests, boss doc, checks.
+
 ## Decisions for review
+
+| Choice | Source | Alternative |
+|---|---|---|
+| `gsb.battlefury` removed. The party leaves when the freeze mage dies, the tank last (10 s cap); it retreats early once the captain carries +200% from Battle Fury (20 stacks on normal, 17 on heroic) and boards again once his stacks are gone | WT, Wowhead, IC; DBC 69638 row 2155 (16 s, +10/+12%) | tank defensives at a lower stack count; no retreat |
+| Fall snap removed: the core's Check for Players (every 5 s, 10 yd under the ship creature) puts every faller back long before the ground, 620 yd down | core, navprobe terrain height | keep it behind `IccRaidCheat` |
+| Roster (bots only): board tank = first bot tank (main tank first), home tank = the next; cannoneers = ranged DPS by guid, then melee DPS, one per live cannon (2 on 10, 4 on 25); home healers 2 on 25, 1 on 10, the rest board; melee DPS board, ranged stay home and board only when no melee DPS bot exists | WT25/WT10, Wowhead, DB spawn masks | Wowhead's all-DPS boarding |
+| Ejected melee cannoneers board during a freeze, ranged ones take an edge slot | Below Zero ejects every passenger | they wait for the thaw |
+| Boarders jump once a tank holds the captain, or 15 s into a freeze with no tank on him | WT ("tank always goes first") | never without a tank |
+| Board tank holds the captain 6 yd inside his deck from the landing point toward the mage: 30 yd (A) / 35 yd (H) from the home edge, inside his attack bound | WT, Wowhead (drag him to the edge); core y bounds | his home spot |
+| Healers and ranged at home stand on slots 5 yd apart, 4 and 8.5 yd inboard of the cannon line, transport-local from the core's cannon spawns; healers take the slots nearest the landing | WT, Wowhead ("stay close to the edge") | no stands |
+| Home ranged order: boarders on the home deck (oldest rank first), then riflemen/axethrowers in range, then mortars in range | Wowhead (riflemen "when you have nothing else"), WT ("kill the oldest adds first") | WT's riflemen first |
+| Cannon Blast under 90 heat, Incinerating Blast from 90 (Cannon Blast adds 6-10, Overheat at 100); mortars first, then gunners; cooldowns 500/1500 ms from the DBC, stamped on an energy receipt (was an invented 1000 ms on any cast) | core `spell_igb_cannon_blast`, DBC 69399/69401/70172/70174; guides | the old 1000 ms stamp |
+| Rocket Artillery: everyone on deck and out of a cannon leaves 4 yd of each mortar cast's spot (5 s cast) and of the 71371 marker; Burning Pitch patches too; interrupt a cast first on heroic only (knockback). The sweep stays inside a deck box from the core's crew slots: `FindNearestPositionClearOfHazards`' navmesh check refuses every point on a transport deck | Wowhead, WT; DBC 69679/69680-69689/71371/69660 | no dodge |
+| No Bladestorm dodge: 69653 has no radius, so it hits nobody here | DBC, `WorldObjectSpellAreaTargetCheck` | the guides' 8 yd |
+| No pre-pull stands: the ship flies until the battle. Before live only the rocket pack and the cannon seats | core intro | stands from the transport offsets |
+| A hand-written multiplier zeroes reach, heal reach and charge whose target stands on the other deck; follow, formation, flee, run away, random moves, collision steps, blink, disengage and avoid aoe are blocked while live | WT's failure list (walking, blinking off the edge); a rule can't see an action's target | the old blanket veto |
+| A bot's legacy `star` rti goes back to `skull` while the gunship gate is open | Conventions 10 | leave it to r14 |
+| A unit's ship is its side of the middle of the core's gap (y 2033.5 / 2438); only airborne (z 478+) or the flight aura reads as in flight. Dodge spots keep the strict bounds | core y bounds | the strict bounds for both, which would freeze a bot standing on a deck's edge |
+| Unit cache from both ships' passenger sets, the freeze mage by its Below Zero channel, else a mage not channelling the portal | core `PassengerController`, the portal's offset-only teleport | grid searches |
+| Review: Burning Pitch stays in the dodge, though its 69660 patch is cast by the Gunship Hull 37547 (faction 35, friendly to all) and `AnyAoETargetUnitInObjectRangeCheck` hits only units its caster may attack, so it may never reach a player | WT ("avoid fire"); core `spell_igb_burning_pitch`, `DynObjAura::FillTargetMap`, `creature_template` | drop the pitch from the hazards once a trace shows no player hit by 69660 |
+| Review: a bot still without its rocket pack holds no stand, and a cannoneer takes the pack before its seat before the battle (a ranged one still sits without it once live); before, ranged cannoneers sat down packless, and after Below Zero the Zafod walk and the edge stand pulled them back and forth | WT ("has a Goblin Rocket Pack equipped" before the pull); Mover rows at RAID+2 and +1 | block the pack walk while a stand holds, which leaves an ejected bot without a pack for the rest of the pull |
 
 ## Carried over
 
+- r14: `IccInstanceState::gsbLastStarPos` and `gsbLastRocketPackUse` (`ICCScripts.h`) are unused now.
+- r14: `SPELL_FROZEN_CANNON` 69704 (`ICCData.h`) is in neither the DBC nor `spell_dbc`.
+- r14: `RaidRestoreLegacyRti` doesn't cover `star`; the gunship tick resets it for its own window.
+- r14: the stem's walk base copies Marrowgar's `IccLmWalkAction`; hoist one.
+
 ## Known gaps
+
+- No 631 trace on disk; nothing here was replayed.
+- The decks are gameobject floors: navprobe reads every point off mesh with terrain 620 yd below, so
+  no coordinate is checked offline.
+- The edge slots assume the cannon side faces the enemy ship, and the world points that the ships stop
+  where the core's y bounds put them.
+- No tank defensive on the captain's stacks, no burst pacing.
+- Mortars sit out of every player's reach; only the cannons kill them.
+- No `-Werror` pass; the syntax check hides warnings.
 
 ## Blocked
