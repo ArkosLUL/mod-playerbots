@@ -33,7 +33,7 @@ constexpr uint32 NPC_LDW_CULT_ADHERENT = 37949;
 constexpr uint32 NPC_LDW_EMPOWERED_ADHERENT = 38136;
 constexpr uint32 NPC_LDW_REANIMATED_ADHERENT = 38010;  // Adherent's Determination: no magic damage
 
-// Death and Decay is an 8 yd dynobject, which adds the player's reach and its own 0.39 yd.
+// Death and Decay is an 8 yd dynobject that also counts the player's 1.5 yd combat reach.
 constexpr float LDW_DND_REACH = 10.0f;
 // Dark Martyrdom and Dark Reckoning are creature area spells, measured centre to centre.
 constexpr float LDW_MARTYRDOM_REACH = 15.0f;

@@ -10,9 +10,9 @@ definition's tick opens the pull with `IccMarkPull` while the gate is live. Raid
 
 | Ability | Script | Guide | Bots |
 |---|---|---|---|
-| Death Plague 72879 → 72865 | Every 15 s on a random player other than his victim and without Recently Infected 72884, the giant as caster. One tick at 15 s: 72864 deals 8,000 to every player within 8 yd of the carrier (10 with reach, a player's ally spell), carrier included. If nobody else is in range, or all of them carry it, the carrier dies (72867); else it gets Recently Infected (35 s) and every hit player with neither aura catches 72865 | Pairs, each more than 10 yd from the next; it hits after 15 s and kills a host with nobody to spread to | Pair duty (`rfg.partner`): each carrier gets one partner, someone with Recently Infected first, so the plague stops there, else the nearest clean player, never a tank. The carrier walks to within 3 yd and stays until it ticks; a tank carrier stays and its partner walks to it. Every other clean non-tank keeps 12.5 yd from each carrier |
-| Stomp 64652 | His victim, from 5-8 s, every 15-18 s: 12k and a knockback | Knocks back 20 yd | Generic; a pair broken by it walks back |
-| Arctic Breath 72848 | His victim, from 10-15 s, every 26-33 s: a frontal cone, 4k each 0.5 s for 2 s | | Generic: the tank faces him away, melee stand behind |
+| Death Plague 72879 → 72865 | Every 15 s on a random player other than his victim and without Recently Infected 72884, the giant as caster. One tick at 15 s: 72864 deals 8,000 to every player within 8 yd of the carrier (a player's area spell adds no reach to another player), carrier included. If nobody else is in range, or all of them carry it, the carrier dies (72867); else it gets Recently Infected (35 s) and every hit player with neither aura catches 72865 | Pairs, each more than 10 yd from the next; it hits after 15 s and kills a host with nobody to spread to | Pair duty (`rfg.partner`): each carrier gets one partner, someone with Recently Infected first, so the plague stops there, else the nearest clean player, never a tank, and a bot for a tank carrier. The carrier walks to within 3 yd and stays until it ticks; a tank or player carrier stays and its partner walks to it. Every other clean non-tank steps out to 12.5 yd once within the guide's 10 of a carrier, and generic movers hold while it is inside 12.5 |
+| Stomp 64652 | Cast at his victim, from 5-8 s, every 15-18 s: 12k and a knockback to everyone within 50 yd of his front | Knocks back 20 yd | Generic; a pair broken by it walks back |
+| Arctic Breath 72848 | His victim, from 10-15 s, every 26-33 s: a frontal cone that stuns for 2 s, 4k each 0.5 s | | Generic: the tank faces him away, melee stand behind |
 
 A clean partner catches the plague and pairs back onto the cured carrier, whose Recently Infected
 ends the chain at the next tick: two infections per giant cast while everyone else keeps clear.
@@ -25,7 +25,7 @@ the spread. The pair duty survives a double, since the partner is still beside i
 
 > Rotting Frost Giant: `EVENT_DEATH_PLAGUE` picks with `SelectTarget(Random, 0, 0.0f, true, false,
 > -SPELL_RECENTLY_INFECTED)`, which skips Recently Infected (72884) but not a player already carrying
-> Death Plague (72865). The giant's 72865 has him as caster and a spread one has the carrier, and
+> Death Plague (72865). The giant's 72865 has him as caster and a spread one its new carrier, and
 > periodic trigger auras from different casters stack, so that player carries two plagues that tick
 > separately. The pick should also skip 72865.
 

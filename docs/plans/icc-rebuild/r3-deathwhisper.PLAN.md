@@ -79,6 +79,8 @@ Done, one implementer (the work shares one helper per stem, so no split):
 4. Readers: `lady_deathwhisper.py` `--targets`, `--cc`, `--kicks`, `--dodges` (no `--skull`);
    `rotting_frost_giant.py` `--partners`; tests for both.
 5. Boss docs with mechanics tables.
+6. Review (`iccr/r3-deathwhisper-review`): form check on CC and kick picks, a timed-out CC duty
+   passes on, the giant's band hold and per-ms carrier memo, partners walk to player carriers.
 
 ## Decisions for review
 
@@ -97,6 +99,9 @@ Done, one implementer (the work shares one helper per stem, so no split):
 | Dark Reckoning by hazard-clear spot; a marked tank or player stays and the rest clear it | old spot 106 yd from both priests against 56 yd of walk in 8 s | the fixed spot |
 | Giant pairs form round each carrier, cured partner first, never a tank | blog's pairs; script: a cured partner ends the chain | standing pairs |
 | Giant tank position dropped | used only by commented-out code, no guide basis | navprobe it |
+| Review: CC and kick picks skip a spell the bot's form blocks, so cat-form and Tree of Life druids hold no Dominate Mind duty; `CanCastSpell` passes `NOT_SHAPESHIFT` and the direct cast then fails | `SpellInfo::CheckShapeshift`; Cyclone excludes Tree of Life and every non-stance form | cancel cat form and Cyclone, as the guide's "any druid" implies |
+| Review: the normal swap needs a taunter free of stacks, which last 30 s, so after the first swap it lands at 4-5 stacks, about every 30 s | Wowhead's "taunt every 30 seconds"; 71204 duration and stacking | let a tank with 1 stack taunt one at 3+ |
+| Review: a tank carrier gets a bot partner, and the partner walks to a tank or player carrier | Humans hold no duty; a tank keeps the giant where it is | the player walks, with nothing to tell them who |
 
 ## Carried over
 
@@ -112,7 +117,9 @@ Also in the boss docs:
 - No Divine Shield to drop Touch stacks.
 - Deathchill Bolt and Curse of Torpor left to the generic interrupt and dispel nodes.
 - A shade victim slowed by Frostbolt Volley is slower than the shade.
-- The lust hook needs a `HookRows()` row (merge stage).
+- A Cycloned victim is free about 1.5-2 s before the recast lands: `CanCastSpell` refuses an immune
+  target. Closing it needs a cast that skips that check, or an instant CC from another class at the
+  fade.
 - Giant: melee dodging a carrier lose uptime; a carrier with no possible partner dies.
 - No 631 trace on disk; nothing measured live.
 
