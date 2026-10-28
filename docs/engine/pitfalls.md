@@ -202,6 +202,18 @@ portal this way.
   navprobe can trail the source: if its usage lacks `los`, rebuild the `ac-navprobe` service, capped
   like a worldserver build.
 
+  **Judge a stand by its neighbourhood and every point it serves.** Sight at a grazing angle flips
+  within a yard of an edge, and a bot parks within 0.75 yd, so probe a 3x3 grid at 1 yd and the
+  tank spots as well as the boss: Saurfang's old north and south slots saw him and no tank. A ring
+  sweep with `--los-from` and `settledZ` shows an edge's shadow at once, where one ray to one
+  representative point passed. Sweep the boss's own offsets too, but probe the slots themselves
+  (the ring's headings), not other ring rows.
+
+  **A transport's heading at a stop frame can be derived offline**, which settles which side of a
+  ship faces another: `TaxiPathNode.dbc` nodes give the spline, an interior stop's orientation is
+  atan2(next - previous) + pi (`MotionTransport::Update` adds pi), and the creature rows whose map is
+  the transport's `mapID` give the cannon or door sides (Gunship Battle).
+
   **A gameobject floor is invisible to navprobe.** The static mesh and vmaps have nothing under it,
   so every point reads off mesh with no height: there the offline check is impossible, not failed.
   Live, a bot's `MoveTo` onto it takes the straight-line `0x11` shortcut, clipped only by the static
@@ -344,6 +356,11 @@ portal this way.
   gets a ~2 yd step: the next spawn puts it back inside the trigger, and the node re-fires forever at
   `MOVEMENT_FORCED`, starving everything under it. Size the clearance a few yards past the trigger
   radius, and fall back to the tight value only where overlap leaves nothing wider.
+
+- **A dodge's straight walk can cross another hazard.** The clearance check tests the destination
+  only. Pass `FindNearestPositionClearOfHazards` an accept callback that tests the segment
+  (`SegmentCrossesCircle`) and run a ladder of attempts, the last ones allowing a crossing: crossing
+  a line beats standing in one (Marrowgar's Coldflame).
 
 - **A sweep that moves for the sake of moving needs a travel floor.** `FindNearestPositionClearOfHazards`
   re-checks each spot against the hazards after the collision check pulls it back, which protects a

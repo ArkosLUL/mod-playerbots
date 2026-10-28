@@ -243,7 +243,13 @@ What lands on a raid add is not what PvP experience predicts.
   hit). Cyclone has neither. Read both, not the reputation.
 - **Cyclone makes its target immune to every spell, another Cyclone included**, so a CC chain times
   the recast to land just after it ends, not before. A bot can't: `CanCastSpell` refuses the immune
-  target, so its recast starts at the fade and the victim is free for the cast time.
+  target, so its recast starts at the fade and the victim is free for the cast time. A follow-up
+  caster can still be elected and positioned during the immunity: test it on its own terms
+  (`HasSpell`, cooldown, cost, form, control), keep it in range and sight, and give it an instant
+  (Hammer of Justice, Repentance, Blind) so it lands the tick the aura fades.
+- **`PlayerbotAI::RemoveShapeshift` ends only druid forms and Ghost Wolf.** Tree of Life needs
+  `RemoveAura("tree of life")` and Metamorphosis can't be cancelled, so a duty that drops a form
+  restricts itself to druids and shamans.
 - **A stunned creature takes no heal assist threat**: `ThreatManager::ForwardThreatForAssistingMe`
   skips `UNIT_STATE_CONTROLLED` units.
 - **Diminishing returns skip creatures.** `ApplyDiminishingToDuration` diminishes a creature only for a
@@ -553,6 +559,14 @@ encounters.
   `SpellEffects.cpp` do (Blood Nova 72378/73058: Saurfang casts 72380 on the picked victim), so the
   child's area is a creature's, centre to centre. Check that switch before sizing a forced child's
   radius.
+- **A guide's "immunity stops X" must be checked against `SPELL_ATTR0_NO_IMMUNITIES`** (0x20000000,
+  `Attributes` in `spell.reference.csv`): `Unit::IsImmunedToDamage` and `IsImmunedToSpell` return
+  false for such a spell, so Impaled ignores Hand of Protection.
+- **A leech's multiplier lives in `EffectMultipleValue`** and differs by difficulty row: Rune of Blood
+  heals Saurfang 10x on normal and 20x on heroic. Read every id.
+- **A summon lives as long as its summon spell's duration** (`DurationIndex`). A script's
+  `DespawnOrUnsummon(30s)` only queues a delayed unsummon and doesn't extend it, so read the index
+  before sizing a chase (Deathwhisper's shade lives 7 s and closes only 1.75 yd on a slowed victim).
 - **`SpellInfoCorrections.cpp` can rewrite a DBC value.** Fire Bomb 66320's radius is 5 yd in the
   DBC and 2 yd in play, so read it before sizing a hazard.
 - **A hardcoded aura handler can scale a trigger spell's radius every tick**, beyond both the DBC and

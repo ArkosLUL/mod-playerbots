@@ -349,7 +349,30 @@ Each call is two whispers from a group bot, to him only:
 
 Traps: `Player::Whisper` ignores its boss-whisper flag, so the packet is built by hand. The client runs
 the fallback through `format()`, so a bare `%` breaks it. DBM's "Hide raid boss emote frame during boss
-fights" hides the fallback.
+fights" hides the fallback. The call carries any spell id, so it can ask a human tank for a taunt too.
+
+## Defensive windows and threat brakes
+
+- **Tank window for a cast:** `Spell::GetCastTimeRemaining` on the boss's current spell, aimed at the
+  cast's own unit target (a taunt swap mid-cast moves `GetVictim()`), plus a check that no
+  interrupter is ready. Hold the class buttons with a `Block` over `HeldTankDefensiveNames` and keep
+  a low-health valve in the encounter node.
+- **Raid cover for a long periodic hit:** `GetRaidCover` takes consecutive windows of three ticks,
+  offered at most twice the cover lead ahead; the deal clears when no hit is offered, and a window 6 s
+  later is a new hit (`SAME_HIT_MS` is 2 s). It doesn't filter by school: it deals Anti-Magic Zone to
+  a physical hit, so the caller drops that cover or the shared deal skips it for `SPELL_SCHOOL_NORMAL`.
+  A first tick that lands with the aura (`SPELL_ATTR5_EXTRA_INITIAL_PERIOD`) is never covered.
+- **`GetRaidPersonalDefensive` writes its scope note on every call**, so guard it with the encounter's
+  own hit check, or every bot notes `none`. When the modelled hit is lethal it falls through to
+  Dispersion, class immunity and healthstone: size the hit window to what a healer wouldn't cover.
+- **A threat brake** reads the threat list (not the `threat` value, which wraps past 255%) against the
+  top tank, with hysteresis (hold at 90%, free at 80%), latches in the encounter tick as an
+  `ObsGuidSet`, and holds only attacks aimed at the boss and area spells near it. It is blind at a
+  threat wipe: a tank at 0 gives no reference.
+- **A chain plague that spreads by proximity** (Rotting Frost Giant): pair the carriers and walk each
+  pair to a spot found by `FindNearestPositionClearOfHazards`, with a circle per other player and
+  per other pair's spot. Accept only spots in sight of the boss, budget the walk under the plague's
+  lead time, fall back to the in-place pair, and check both members are bots.
 
 ## Per-instance state
 

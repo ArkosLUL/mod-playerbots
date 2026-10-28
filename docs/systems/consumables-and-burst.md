@@ -36,6 +36,11 @@ action, so for a healer or off-tank it also covers survival and mana trinkets an
 non-DPS; `avenging wrath` and `power infusion` pass untouched for a healer (`IsHeal`), whose window is
 the raid damage, not the pull; `shadowfiend` doubles as a mana return, so it stays available on trash.
 
+**A per-boss `RaidBurstWindow` can only hold, never release.** A kill-race add that is not
+boss-flagged (the Gunship freeze mage, `type_flags` 72) gets no personal burst from the base gate
+under `BurstOnBossOnly`, and releasing it needs an entry-keyed exemption in `BurstCooldowns.cpp` or
+`BurstWindowStrategy.cpp`.
+
 **`IsManaReturnCooldown(bot, name)` (`BurstCooldowns.cpp`) exempts a priest's `shadowfiend` from the
 per-boss phase holds** — Iron Assembly, XT-002, the shared Ulduar gate, Naxx and Sartharion. Those
 hold for a whole phase rather than a dwell, and shadow carries no mana potions, so the hold does not

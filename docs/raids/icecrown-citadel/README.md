@@ -65,7 +65,7 @@ point, about 7 s into the pull (~102 and ~104 yd at 15 yd/s). What acts before l
 |---|---|
 | Festergut | the multiplier, `icc festergut group position` |
 | Rotface | the multiplier (assist tank off Rotface, formation and AoE vetoes), `icc rotface tank position`, `icc rotface group position` |
-| Gunship | for bots aboard the raid's ship: the definition tick, `icc gunship rocket pack setup` (no pack equipped, Zafod within 150 yd), `icc gunship cannon near` (a cannoneer with its pack), `icc in cannon`; `icc gunship rocket jump`, every rule and the multiplier wait for live |
+| Gunship | for bots aboard the raid's ship: the definition tick, `icc gunship rocket pack setup` (no pack equipped, Zafod within 150 yd), `icc gunship cannon near` (a cannoneer with its pack), `icc in cannon`; `icc gunship tank defensive` is asked now but returns false until live; `icc gunship rocket jump`, every rule and the multiplier wait for live |
 | Valithria | `icc valithria group` (she is within 100 yd), `icc valithria heal` (healers within 100 yd); live once the first archmage pulls the combat trigger |
 | Sindragosa | `icc sindragosa group position` (she is within 200 yd), its raid cheats and Nitro Boosts included |
 
@@ -105,6 +105,19 @@ definition alone:
   Saurfang's opener (boss 37813) and burst window (lust waits for Frenzy).
 - defensives: `GetRaidCover` and `GetRaidPersonalDefensive` (`RaidDefensive.h`) with
   `ICC_DEFENSIVE_SCOPE` (`icc.cover`, `icc.personal`) and a `RaidPredictedHit` the stem builds.
+  Tank buttons go through `NextTankDefensive` (`RaidTankDefensive.h`) with a `Block` over
+  `HeldTankDefensiveNames()` keeping the class nodes off them until a low-health valve, and
+  `CallHumanTankDefensive` tells a human tank. Users:
+  - Marrowgar: `icc lm tank defensive` (each Bone Slice window and under 40%, class buttons held to
+    25%, `lm.defensive`, `lm.humancall`) and `icc lm storm cover` (`GetRaidCover` per 6 s of Bone
+    Storm ticks, class cover nodes held over the lead);
+  - Deathwhisper: `icc lady deathwhisper defensive` (Deformed Fanatic, unkicked Frostbolt, under 35%),
+    plus `icc lady deathwhisper brake`, a `LiveMultiplier` holding damage dealers at 90% of the top
+    tank's threat (frees at 80%);
+  - Gunship: `icc gunship tank defensive` (`gsb.defensive`, `gsb.furywindow`, `gsb.humancall`);
+  - Saurfang: `icc dbs tank defensive` (holder or Mark carrier at Blood Power peaks and through
+    Frenzy, `dbs.humancall`) and `icc dbs mark defensive` (`GetRaidPersonalDefensive` on
+    `icc.personal`).
 - opening positions: a `Mover` row in the definition whose trigger holds the stand while the gate is
   open and not live, its positions navprobed in the stem's helpers. No raid-wide staging.
 
@@ -239,8 +252,10 @@ traced containers:
 `lk.winterinbound`, `lk.mtinbound`, `lk.rangedinbound`, `lk.sharedslot` (-1 none), `sg.flaredblue`,
 `sg.group`, `sg.tomb`, `sg.freedfallback`, `bql.curve`, `bql.airslot`, `bql.slot`, `vd.portalclaim`,
 `rf.explosionslot`. They are unordered, and no loop over one depends on its order. Saurfang keeps
-`dbs.slot`, `dbs.kill`, `dbs.cc` and `dbs.markheal` in its stem's own `RaidInstanceState`. The gunship
-fields `gsbLastStarPos` and `gsbLastRocketPackUse` are unused.
+`dbs.slot`, `dbs.kill`, `dbs.cc`, `dbs.markheal` and `dbs.protect` in its stem's own
+`RaidInstanceState`; Deathwhisper's stem latches `ldw.brake` (`ObsGuidSet`) and the frost giant's
+`rfg.apart` (`ObsGuidSet`) the same way. The gunship fields `gsbLastStarPos` and `gsbLastRocketPackUse`
+are unused.
 Timestamps, throttles, caches, edge detectors (`sgLastPhase3`) and struct values stay bare;
 `sgFlaredRedThisPhase`, an int set, is noted as `sg.flaredred` where it changes.
 
@@ -269,7 +284,9 @@ id.
 
 Every trigger name starts `icc `, mostly followed by its boss: `lm`, `lady deathwhisper`, `dbs`,
 `festergut`, `rotface`, `putricide`, `bpc`, `bql`, `valithria`, `sindragosa`, `lich king`. Deathwhisper's are
-`icc lady deathwhisper` dodge, frostbolt, dominate mind, taunt, redirect and target. The others:
+`icc lady deathwhisper` dodge, defensive, frostbolt, dominate mind, taunt, redirect and target;
+Marrowgar's include `icc lm tank defensive` and `icc lm storm cover`, Saurfang's `icc dbs tank
+defensive` and `icc dbs mark defensive`. The others:
 `icc dark reckoning` (Deathwhisper), `icc in cannon` and the `icc gunship` ones (Gunship), `icc
 rotting frost giant plague`, `icc dogs` (Stinky and Precious), `icc valkyre spear` and `icc
 sister svalna` (Svalna). The raid-wide `icc opener swing`, `icc opener redirect` and `icc resistance
@@ -280,9 +297,6 @@ one unbuilt.
 
 - Targeting is by raid icon outside Marrowgar, Deathwhisper, the giant, the Gunship and Saurfang; the
   probes record every pick.
-- The shared tank test (`IsTank(p) || IsTank(p, true)` in the Deathwhisper, FrostGiant, Marrowgar and
-  Saurfang helpers) counts a bot on a DPS strategy with a tank spec, such as a Thick Hide cat, as a
-  tank. `PlayerbotAI::IsTank(p)` alone already falls back to spec for humans.
 - Every gap cheat above: a mechanic it makes survivable is open, and a server with the raid cheat off
   loses it.
 - The hooks answer only while a definition is live, so an opener or aura hook for Festergut, Rotface
