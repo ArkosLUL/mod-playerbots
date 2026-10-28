@@ -9,6 +9,7 @@
 #include "ICCDefinitions.h"
 #include "ICCHelpers_Deathwhisper.h"
 #include "ICCHelpers_Marrowgar.h"
+#include "ICCHelpers_Saurfang.h"
 #include "RaidEncounter.h"
 
 namespace
@@ -20,6 +21,7 @@ std::vector<IccEncounterHooks> const& HookRows()
     static std::vector<IccEncounterHooks> const rows = {
         {&IccMarrowgarDefinition, nullptr, &GetLmOpenerBosses, nullptr, nullptr},
         {&IccDeathwhisperDefinition, &IccDeathwhisperBurstWindow},
+        {&IccSaurfangDefinition, &IccSaurfangBurstWindow, &GetDbsOpenerBosses, nullptr, nullptr},
     };
     return rows;
 }

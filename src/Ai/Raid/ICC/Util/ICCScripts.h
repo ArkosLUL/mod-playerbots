@@ -117,8 +117,6 @@ namespace IcecrownHelpers
         Position gsbLastStarPos;
         std::map<ObjectGuid, uint32> gsbLastRocketPackUse;
 
-        RaidObs::ObsGuidMap<int> dbsBotSlotMemory{"dbs.slot"};
-
         std::map<ObjectGuid, uint32> bpcSpreadLockTimers;
 
         SpreadSlotState fgSlotState;
