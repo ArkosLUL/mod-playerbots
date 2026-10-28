@@ -16,7 +16,7 @@ and world DB checked). His combat reach is 20.25. Timers run from the engage.
 | Bone Spike Graveyard 69057 / 70826 / 72088 / 72089 | 3 s cast at 10-15 s, then every 15-20 s; normal skips storms and re-arms 15-20 s after. 1 (10) or 3 (25) spikes (36619, 38712, 38711) on random players within 150 yd but his victim and the last Bone Slice targets. Impaled 69065: 10% max HP a second, physical. | Melee cleave spikes near them, ranged take far ones; Hand of Protection stops Impaled's ticks | Direct targeting, below. No Hand of Protection: Impaled carries `SPELL_ATTR0_NO_IMMUNITIES`, so the physical immunity doesn't stop its ticks on this core |
 | Bone Storm 69076, hit 69075 / 70834 / 70835 / 70836 | 3 s cast at 45-50 s, then every 90-95 s. 20 s (10) or 30 s (25). Every 2 s 6k / 6k / 12k / 14k to all, divided by √(d − 9) past 10 yd. Drops his target (so tanks count), then every 5 s charges at 25 yd/s at the farthest player (25: one of the two farthest) under x −337 and drops 72705: four heads 2.5 yd out on the world diagonals. No swings, Bone Slice or plain Coldflame meanwhile. After: back to top threat. | Raid stacked mid-room, tanks and a hunter or warlock in a triangle 30-40 yd out; whoever he reaches steps off the cross; rotate defensive cooldowns, Divine Guardian early | Storm stack and three anchors, below; raid cover per 6 s of ticks ([Defensives](#defensives)) |
 | Heroic | Bone Spike Graveyard goes on through storms, as an instant | Spikes go on through the storm | Same targeting; in a storm a bot takes only a spike it reaches from its stand |
-| Berserk 47008 | 10 min | Very lenient | No pacing; `--phases` prints the margin |
+| Berserk 26662 | 10 min | Very lenient | No pacing; `--phases` prints the margin |
 
 **Room.** He evades if he leaves a circle of r 95 round (−428, 2211) inside x −430..−330, checked every
 2.5 s; the whole floor is inside it. He attacks and charges nobody past x −337, the gate.
@@ -36,9 +36,9 @@ Bots hold one latched stand each (park 1 yd, back past 2.5): `lm.stand`.
   non-baits in melee for the spikes).
 - **Baits**: 3 (10) or 8 (25), every hunter first (he is inside their dead zone otherwise), then
   warlock, priest, druid, shaman, mage; a healer only with no ranged dps. 31 yd from him, 20° apart
-  from the bearing away from the tank spot, at most 8 slots (80° either side): a ninth falls behind
-  the walls once he settles 6 yd to the side, so a ninth hunter stands inside. One bait outside is all
-  the core needs; the count follows the guides.
+  from the bearing away from the tank spot, at most 10 slots: the next heading either side falls
+  behind a wall with him 6 yd west of his spot. One bait outside is all the core needs; the count
+  follows the guides.
 - **Bone Storm**, from the cast: three anchors at `ICC_LM_STORM_ANCHOR_180/60/300`, 34 yd round
   `ICC_LM_STORM_STACK`, and everyone else on a 1.5 yd ring there. Every tank takes 180, 2.6 yd from
   the tank spot; 60 and 300 (and 180 without a bot tank) the bait with the nearest ring slot, 14 yd
@@ -54,17 +54,16 @@ they latched; otherwise reach follows him. A bot on a spike holds no stand, an a
 does anyone while he evades home after a wipe.
 
 Navprobed `--nav 0x09` (settled Z 41.4-42.4): every named spot, the stack ring, the bait ring and inner
-slots for him up to 6 yd off his spot (the bait ring again to 8 yd, below), 10 yd round each anchor, and
-the pull points from each anchor.
+slots for him up to 6 yd off his spot, 10 yd round each anchor, and the pull points from each anchor.
 The floor ends near x −427, inside his boundary. Derived spots also run `ValidateFloorPoint` when they
 latch.
 
 **Line of sight**, navprobe `los` with him on his spot and 3, 6 and 8 yd off it in 16 directions: clear
 for tank spot to him, every inner slot (1 to 20 bots) to him and the tank spot, every bait slot to him,
 the tank spot and the inner arc, the stack ring and stack centre to each anchor, and each anchor to the
-tank spot and the other anchors. Blocked, the raw slot off the floor behind a wall (settled Z −140):
-bait slots 8 and 9 with him 6 yd to the side (now removed), slots 6 and 7 with him 8 yd to the
-north-west or south-west, which is where the re-centre starts. Gameobject collision isn't modelled.
+tank spot and the other anchors. All ten bait slots are also on the floor (settled Z 41-43) with him
+anywhere on a 2 yd grid out to 10.5 yd; only the headings past them (−100° and +120° from the bearing
+away from the tank spot) drop behind a wall, with him 6 yd west. Gameobject collision isn't modelled.
 
 ## Targeting
 
@@ -90,7 +89,7 @@ exists, over standing in a line). A stand never walks into or across one. The an
 ## Defensives
 
 His only predictable tank spike is Bone Slice resuming: plain swings for 10 s after the engage and after
-each storm (`EVENT_ENABLE_BONE_SLICE`), then 300% (400% on 25) split over at most 2 (3) players round the
+each storm (`EVENT_ENABLE_BONE_SLICE`), then 200% (300% on 25) split over at most 2 (3) players round the
 victim on every swing. Arrival after a storm is plain swings, not the spike.
 
 - **Tanks**: the model is the core's timers, so no cast is read. A window opens 10 s into every
@@ -100,7 +99,7 @@ victim on every swing. Arrival after a storm is plain swings, not the spike.
   (`HeldTankDefensiveNames()`) stay held over these casts until the tank is under 25%, when they stack on
   the first. A human tank in the victim's place gets `CallHumanTankDefensive` at the window and under 40%.
 - **Raid**: Bone Storm is physical and unreduced by armor, 6k / 6k / 12k / 14k a tick (10N / 25N / 10H /
-  25H) divided by √(d − 9) past 9 yd. `GetRaidCover` gets each 6 s of ticks (three) as a hit: the tick
+  25H) divided by √(d − 9) past 10 yd. `GetRaidCover` gets each 6 s of ticks (three) as a hit: the tick
   at 28 yd, the raid's mean distance as he ping-pongs between anchors, from the aura's remaining time.
   It deals a cooldown once three members would end under 25% health, one holder per cooldown: Divine
   Sacrifice (Divine Guardian), Divine Hymn, Tranquility. Aura Mastery needs a resistance aura of the hit's
@@ -117,7 +116,10 @@ None.
 
 - No trace yet: every number above is from the core and the guides.
 - Humans hold no duty and count toward nothing: a human far out draws his charges.
-- Bait slots 6 and 7 can sit off the floor with him 8 yd to the north-west or south-west.
+- A heroic spike on an anchor holder is 34 yd from the stack, past a stack bot's reach, so nobody
+  shoots it in the storm: that player lives on the healers until it ends.
+- The first Bone Storm tick lands as the aura does (69076 has `SPELL_ATTR5_EXTRA_INITIAL_PERIOD`),
+  ahead of every cover window, which starts at the second tick.
 - No bot tank has held a Bone Slice window live: `--defensives` says whether the button lands in time.
 - The cover's 28 yd damage is a mean, not each member's own distance; the reader's `--covers` and the
   deaths in a storm say whether it deals too late.

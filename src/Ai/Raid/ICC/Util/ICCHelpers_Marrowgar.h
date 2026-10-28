@@ -44,8 +44,8 @@ constexpr float LM_INNER_ARC_DEG = 160.0f;
 // while healers at his centre keep it in their 38.5 yd range. Neighbours are 10.8 yd apart, past a line.
 constexpr float LM_BAIT_RADIUS = 31.0f;
 constexpr float LM_BAIT_SPACING_DEG = 20.0f;
-// Slots 9 and 10 land outside the walls once he settles 6 yd or more to the side of his spot
-constexpr uint32 LM_BAIT_SLOTS = 8;
+// Ten is the ring's limit: the next heading either side is behind a wall with him 6 yd west of his spot
+constexpr uint32 LM_BAIT_SLOTS = 10;
 static_assert(LM_INNER_RADIUS + 1.0f < LM_COLDFLAME_FIRST - LM_COLDFLAME_REACH,
               "a parked inner bot stays clear of every line");
 // Spell::CheckRange adds the melee range to a ranged spell's 5 yd minimum
@@ -73,7 +73,7 @@ constexpr float LM_TANK_DEFENSIVE_PCT = 40.0f;
 constexpr float LM_TANK_LAST_RESORT_PCT = 25.0f;
 
 // Bone Storm ticks every 2 s and a raid cover lasts 6 s, so a cover window is three ticks. Damage is divided
-// by sqrt(d - 9) past 9 yd. He ping-pongs between anchors 34 yd from the stack, so the raid averages about
+// by sqrt(d - 9) past 10 yd. He ping-pongs between anchors 34 yd from the stack, so the raid averages about
 // this far from him.
 constexpr uint32 LM_STORM_TICK_MS = 2000;
 constexpr uint32 LM_STORM_WINDOW_TICKS = 3;
