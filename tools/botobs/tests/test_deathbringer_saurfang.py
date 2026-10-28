@@ -2,8 +2,8 @@
 
     python -m unittest discover -s tools/botobs/tests
 
-A synthetic 10N pull pins the phase steps, the stands, the pick totals, a swapped and an unswapped
-rune, a shared Blood Nova, the kill and control duties, a healed and an unhealed Mark and the cheat
+A synthetic 10N pull pins the phase steps, the stands, the pick totals, a swapped and yielded rune and
+an unswapped one, a shared Blood Nova, the kill and control duties, a healed and an unhealed Mark and the cheat
 filter, and the shared v14 fixture shows every section reads empty on a trace that is not his.
 """
 from __future__ import annotations
@@ -75,6 +75,8 @@ def pull(boss: str = "deathbringer-saurfang") -> list[dict]:
         note(20050, AEGIS, dbs.SWAP, 1),
         {"t": 20100, "e": "act", "g": AEGIS, "a": dbs.SWAP_ACTION, "rel": 67.0, "vd": "OK"},
         note(20400, AEGIS, dbs.SWAP, 0),
+        note(20600, BULWARK, dbs.YIELD, 1),
+        note(40000, BULWARK, dbs.YIELD, 0),
         note(30200, ARROW, dbs.KILL, BEAST_A),
         note(30200, FEL, dbs.KILL, BEAST_A),
         note(36000, ARROW, dbs.KILL, 0),
@@ -130,10 +132,11 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(rows["reach"], (1, 3000))
 
     def test_swap_and_missed_swap(self):
-        self.assertEqual(dbs.swaps(self.trace), [(20000, BULWARK, AEGIS, 20100), (42000, AEGIS, None, None)])
+        self.assertEqual(dbs.swaps(self.trace),
+                         [(20000, BULWARK, AEGIS, 20100, 20600), (42000, AEGIS, None, None, None)])
         text = printed(dbs.show_swaps, self.trace)
-        self.assertIn("Bulwark  Aegis taunted 0.1 s after", text)
-        self.assertIn("Aegis  nobody elected", text)
+        self.assertIn("Bulwark  Aegis taunted 0.1 s after, yielded 0.6 s after", text)
+        self.assertIn("Aegis  nobody elected, never yielded", text)
 
     def test_a_shared_nova(self):
         self.assertEqual(dbs.novas(self.trace), [(17000, [ARROW]), (37000, [FEL, MEND])])

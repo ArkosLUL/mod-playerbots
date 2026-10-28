@@ -17,9 +17,9 @@ the default 1.5 yd reach.
 | Rune of Blood 72410 | On his victim from 20 s, then every 20-25 s, 20 s aura. Each swing on it leeches 5.1-6.9k (10) or 5.95-8.05k (25) (72409/72447/72448/72449) and heals him 10× that | The other tank taunts at once | A bot tank free of the rune swaps (`dbs.swap`), the rune tank stops hitting him (`dbs.yield`) |
 | Boiling Blood 72385/72441/72442/72443 | From 15.5 s, every 15-20 s: 5k every 3 s for 15 s on 1 (10) or 3 (25) players, never his victim | Heal; Hand of Protection on a marked one | Generic heals |
 | Blood Nova 72378 (10), 73058 (25) | 1 s cast from 17 s, every 20-25 s. Victim drawn at random from players more than 12 yd off his edge (15 yd from his centre, 16.5 at full Blood Power), or the farthest 4 (10) / 10 (25) when fewer. 72380/72438/72439/72440: 7.6-8.4k (10) or 9.5-10.5k (25) to everyone within 12 yd of the victim, centre to centre | Ranged and healers 12 yd apart, part of the raid out of melee | 11 slots, 13.5 yd apart; overflow stacks with the melee |
-| Mark of the Fallen Champion 72293 | At 100 Blood Power, 1.5 s cast, on a random player other than his victim or the marked; permanent, through death. Each of his swings deals 72255/72444/72445/72446, 4.3-4.7k (10) or 6.2-6.8k (25), to every marked player. A marked death heals him 5% (72260) on every difficulty | A healer per Mark, holy paladins with Beacon first; 20% heal on heroic | Mark heal duty (`dbs.markheal`) |
+| Mark of the Fallen Champion 72293 | At 100 Blood Power, 1.5 s cast, on a random player other than his victim or the marked; permanent, through death. Each of his swings deals 72255/72444/72445/72446, 4.3-4.7k (10) or 6.2-6.8k (25), to every marked player. A marked death heals him 5% (72260/72278), 20% on heroic (72279/72280) | A healer per Mark, holy paladins with Beacon first | Mark heal duty (`dbs.markheal`) |
 | Blood Beast 38508 | From 30 s, every 40 s: 2 (10) at his left and right, 5 (25) also back-left, back-right and front, 7 yd out. Rooted 1.5 s, opens on a random player but his victim, then threat; 8 yd/s; Resistant Skin 72723 -95% area damage; open to stun, root, snare, knockback (`creature_immunities` -205) | Ranged focus, the furthest first; melee only those in reach; slows, stuns, knockbacks, no roots; taunt as a last resort; no area damage | Kill split (`dbs.kill`), control duty (`dbs.cc`), the free tank's taunt, melee in reach |
-| Scent of Blood 72769 (heroic) | 10 s after each wave: the raid slowed 80% for 10 s, the beasts +300% damage (72771) | Kill them inside 10 s | A beast 9 s old on heroic tops the control and taunt order |
+| Scent of Blood 72769 (heroic) | 10 s after each wave, on every live beast, older waves too: the raid slowed 80% for 10 s, the beasts +300% damage (72771) | Kill them inside 10 s | 9-21.5 s after the latest wave the beast taunt skips its swap reserve |
 | Frenzy 72737 | Once, at 30%: +30% attack speed | Lust and burn | Lust waits for it; `dbs.phase` 2 |
 | Berserk | 8 min (6 min heroic) | | |
 
@@ -32,23 +32,25 @@ returns (`flags_extra` 0x80000) and is immune to nearly all control and knockbac
 - **Tanks**: the main tank's stand is 2.1 yd east of his spot (-496.35, 2211.33), the next tank's 1.5
   yd north of it, a third's 1.5 yd south: all on the platform inside his melee reach, so he stays on
   his spot facing east. Generic taunts are blocked while he is live. When the rune lands on the
-  holder or a non-tank holds him, the lowest-guid bot tank free of it, taunt ready and within 30 yd,
-  taunts him (a rune tank only for a non-tank holder). The rune tank not holding him
-  drops its attack on him, its pickers blocked, and takes a beast on it or in reach. The tank not
-  holding him taunts the loose beast nearest its victim, only while its own rune has the taunt
-  cooldown plus 0.5 s left or another bot tank free of the rune has its taunt ready, so the next
-  swap is covered; a scented beast lifts that.
+  holder or a non-tank holds him, the lowest-guid bot tank free of it, taunt ready in its form (bear,
+  Defensive Stance) and within 30 yd, taunts him (a rune tank only for a non-tank holder). The rune
+  tank not holding him drops its attack on him, its pickers blocked, and takes a beast on it or in
+  reach. The tank not holding him taunts the loose beast nearest its victim, only while its own rune
+  has the taunt cooldown plus 0.5 s left or another bot tank free of the rune has its taunt ready, so
+  the next swap is covered; Scent of Blood lifts that.
 - **Ranged and healers**: one latched slot each (`dbs.slot`). Healers take 1, 3, 2, 10, 11 first;
   ranged, hunters leading, take 7, 6, 5, 4, 9, 8, then 1, 3, 2; spare healers the inner rest; the
   rest stack 3.5 yd behind him (12). Slots 1-9 sit within 31 yd of his spot, inside `reach spell`'s
-  32; 10 and 11 at 33 yd, healers only. Reach, heal reach and spell movers are held while a slot holds.
+  32; 10 and 11 at 33 yd, healers only. Bots park within 0.75 yd, so neighbours stay 12 yd apart.
+  Reach, heal reach and spell movers are held while a slot holds.
 - **DPS targets** (`dbs.target`): a player's skull, then ranged on their kill duty, split evenly over
   the beasts, each the one furthest from it within 32 yd, kept while in reach; melee on a beast in
   their melee reach; else him.
 - **Control** (`dbs.cc`): each beast on a non-tank and not held by a stun, root or snare with time
-  left gets one bot, any but the tank holding him, casting from where it stands: Hammer of Justice,
-  Concussion Blow, Bash, Chains of Ice, Slow, Concussive Shot, Frost Shock, Curse of Exhaustion,
-  Hamstring, Wing Clip. Released once it lands, after 4 s, or when the beast dies or reaches a tank.
+  left gets one bot, any but the tank holding him, casting from where it stands in a form or stance
+  the spell allows: Hammer of Justice, Concussion Blow, Bash, Chains of Ice, Slow, Concussive Shot,
+  Frost Shock, Curse of Exhaustion, Hamstring, Wing Clip. Released once it lands, after 4 s, or when
+  the beast dies or reaches a tank.
 - **Mark heal** (`dbs.markheal`): one bot healer per marked player, in reach of it first, then the
   least loaded: holy paladins, holy priest, shaman, druid, discipline priest. A paladin keeps Beacon
   of Light on its first mark, its class beacon nodes held (they carry the spell's name, which no rule
@@ -78,7 +80,8 @@ from the stack normal. Sight from them is not checkable offline.
 | Choice | Source | Alternative |
 |---|---|---|
 | Tanks east, the raid west | Warcraft Tavern diagram; the old spot | Wowhead: him facing the ship |
-| 13.5 yd slot spacing, 11 slots, overflow with the melee | 72380's 12 yd plus park tolerance; the floor holds no more inside reach | 12.5 yd for 13 |
+| 13.5 yd slot spacing, 11 slots, overflow with the melee | 72380's 12 yd plus 0.75 yd park tolerance each; the floor holds no more inside reach | 12.5 yd for 13 |
+| Heal reach held on slots | slot 1 reaches every slot and tank spot; a walk breaks the spread | heal reach kept, as `docs/engine/pitfalls.md` advises |
 | No opening positions | 17 s to the first Blood Nova; a pre-pull hold strands bots when the leader leaves | pre-pull stands |
 | Rune tank yields | a taunt only matches threat, so the rune tank could take him back | keep hitting |
 | Beast taunt gated on the rune clock | an 8 s taunt spent on a beast late in the rune misses the next swap | taunt loop |
@@ -86,9 +89,9 @@ from the stack normal. Sight from them is not checkable offline.
 | No roots | a rooted creature here keeps its threat victim, unlike the guides' retail note, but roots break on their damage cap under focus fire | roots |
 | Healer order for Marks | Wowhead: the least effective tank healers carry the marks | |
 | Lust on Frenzy | both guides | |
-| 5% Mark heal and beast Blood Power on every difficulty | the script | the guides' heroic-only notes |
+| Beast Blood Power on every difficulty | the script | Warcraft Tavern: none on normal |
 | Holder ignores a player's skull | it must keep him | |
-| Scent of Blood by a beast's age | the script's 10 s event; 72771's target is unproven | the aura |
+| Scent of Blood by the latest wave's clock | the script's 10 s event on every live beast; 72771's target is unproven | the aura |
 
 ## Cheats
 
@@ -104,6 +107,7 @@ so are the melee skull icon and the root CC (`IccTryClassCC`'s Frost Nova and En
 - With fewer than 4 (10) or 10 (25) players on slots, Blood Nova can pick from the melee stack.
 - Overflow ranged in the stack sit beside the beasts' spawn points.
 - A beast's victim does not kite it.
+- A bot counted a tank by spec alone (a Thick Hide cat) takes a tank spot.
 - No 631 trace from this build yet.
 
 ## What a trace answers
@@ -120,7 +124,7 @@ so are the melee skull icon and the root CC (`IccTryClassCC`'s Frost Nova and En
 | `dbs.yield` | per tank | `1` while the rune tank stands off him |
 
 `tools/botobs/bosses/deathbringer_saurfang.py`: `--phases`, `--slots`, `--targets`, `--swaps` (each
-Rune of Blood, its tank and the swap taunt after it), `--novas` (players each Blood Nova hit),
+Rune of Blood, the swap taunt after it and the rune tank's yield), `--novas` (players each Blood Nova hit),
 `--kills`, `--control`, `--marks` (each Mark, its healer and whether it died), `--cheats`.
 
 Next pull, 25N: every Rune of Blood swapped within 2 s, no second player hit by a Blood Nova, every

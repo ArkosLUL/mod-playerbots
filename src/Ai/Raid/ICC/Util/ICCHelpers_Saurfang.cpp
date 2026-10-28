@@ -10,6 +10,7 @@
 #include <iterator>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "AiFactory.h"
@@ -46,8 +47,9 @@ constexpr float TAUNT_RANGE = 30.0f;
 constexpr float ROOM_RADIUS = 80.0f;
 // Where reach spell walks a caster in: 28.5 + 0.5 plus both 1.5 yd reaches
 constexpr float RANGED_REACH = 32.0f;
-// The script gives every beast of a wave Scent of Blood 10 s after it spawns
-constexpr uint32 SCENT_AGE_MS = 9000;
+// 10 s after each wave every live beast gets Scent of Blood for 10 s. His casts can hold the event back
+constexpr uint32 SCENT_FROM_MS = 9000;
+constexpr uint32 SCENT_UNTIL_MS = 21500;
 constexpr int32 TAUNT_SPARE_SLACK_MS = 500;
 constexpr uint32 CONTROL_TIMEOUT_MS = 4000;
 // A beast held this much longer needs no caster yet
@@ -101,7 +103,9 @@ struct DbsState
     uint32 scanMs = 0;
     bool scanned = false;
     std::vector<ObjectGuid> beasts;
-    std::unordered_map<ObjectGuid, uint32> beastSeenMs;
+    std::unordered_set<ObjectGuid> beastsSeen;
+    uint32 waveMs = 0;
+    bool waveSeen = false;
 
     uint32 rosterMs = 0;
     bool rosterBuilt = false;
@@ -191,7 +195,7 @@ void ScanBeasts(DbsState& state, Creature* boss, uint32 now)
     state.scanMs = now;
     state.beasts.clear();
 
-    std::unordered_map<ObjectGuid, uint32> seen;
+    std::unordered_set<ObjectGuid> seen;
     for (Creature* beast : IccGetCreaturesByEntries(boss, {NPC_DBS_BLOOD_BEAST}, BEAST_SCAN_RANGE))
     {
         if (!beast->IsInCombat())
@@ -199,10 +203,14 @@ void ScanBeasts(DbsState& state, Creature* boss, uint32 now)
 
         ObjectGuid const guid = beast->GetGUID();
         state.beasts.push_back(guid);
-        auto const known = state.beastSeenMs.find(guid);
-        seen[guid] = known != state.beastSeenMs.end() ? known->second : now;
+        seen.insert(guid);
+        if (!state.beastsSeen.count(guid))
+        {
+            state.waveMs = now;
+            state.waveSeen = true;
+        }
     }
-    state.beastSeenMs = std::move(seen);
+    state.beastsSeen = std::move(seen);
 }
 
 std::vector<Creature*> LiveBeasts(Player* bot, DbsState const& state)
@@ -218,10 +226,14 @@ std::vector<Creature*> LiveBeasts(Player* bot, DbsState const& state)
     return beasts;
 }
 
-bool Scented(Player* bot, DbsState const& state, Creature* beast, uint32 now)
+// The scent lands on every live beast, older waves too, so the latest wave's clock decides for all
+bool Scented(Player* bot, DbsState const& state, uint32 now)
 {
-    auto const seen = state.beastSeenMs.find(beast->GetGUID());
-    return IsHeroic(bot) && seen != state.beastSeenMs.end() && getMSTimeDiff(seen->second, now) >= SCENT_AGE_MS;
+    if (!state.waveSeen || !IsHeroic(bot))
+        return false;
+
+    uint32 const age = getMSTimeDiff(state.waveMs, now);
+    return age >= SCENT_FROM_MS && age <= SCENT_UNTIL_MS;
 }
 
 // On a player who is no tank. A pet it chews on is no one-shot.
@@ -270,7 +282,8 @@ char const* ReadyControlSpell(Player* member, Unit* beast, size_t& rank)
         uint32 const spellId =
             memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", CONTROL_SPELLS[i].name)->Get();
         SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-        if (!info || !CanPayFor(member, info))
+        // CanCastSpell lets a wrong form or stance through, so Hamstring would stick to a Defensive Stance warrior
+        if (!info || !CanPayFor(member, info) || info->CheckShapeshift(member->GetShapeshiftForm()) != SPELL_CAST_OK)
             continue;
 
         float const maxRange = member->GetSpellMaxRangeForTarget(beast, info);
@@ -303,6 +316,18 @@ char const* TauntName(Player* bot)
         default:
             return nullptr;
     }
+}
+
+// Off cooldown and castable in its current form. Growl needs bear form and Taunt Defensive Stance, and a
+// tank elected without them would hold the swap without ever landing it.
+bool TauntUsable(Player* member)
+{
+    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+    char const* taunt = memberAI ? TauntName(member) : nullptr;
+    uint32 const spellId = taunt ? memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", taunt)->Get() : 0;
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    return info && !member->HasSpellCooldown(spellId) &&
+           info->CheckShapeshift(member->GetShapeshiftForm()) == SPELL_CAST_OK;
 }
 
 // Paladins first, a mark on Beacon of Light, then the healers least needed on the tanks
@@ -351,7 +376,7 @@ Player* SwapTaunter(Player* bot, Creature* boss)
     for (Player* member : MembersOnMap(bot))
     {
         if (member == victim || !IsDutyBot(member) || !IsTankPlayer(member) ||
-            member->GetExactDist2d(boss) > TAUNT_RANGE || !EncounterHelpers::ClassTauntReady(GET_PLAYERBOT_AI(member)))
+            member->GetExactDist2d(boss) > TAUNT_RANGE || !TauntUsable(member))
             continue;
 
         Player*& pick = HasRune(member) ? runed : free;
@@ -383,7 +408,7 @@ bool TauntSpareForBeast(PlayerbotAI* botAI, Creature* boss)
     for (Player* member : MembersOnMap(bot))
     {
         if (member != bot && member != holder && IsDutyBot(member) && IsTankPlayer(member) && !HasRune(member) &&
-            EncounterHelpers::ClassTauntReady(GET_PLAYERBOT_AI(member)))
+            TauntUsable(member))
             return true;
     }
 
@@ -573,7 +598,7 @@ void UpdateKill(DbsState& state, Player* bot, std::vector<Creature*> const& beas
         state.kill.Set(guid, beast);
 }
 
-void UpdateControl(DbsState& state, Player* bot, Creature* boss, std::vector<Player*> const& members,
+void UpdateControl(DbsState& state, Creature* boss, std::vector<Player*> const& members,
                    std::vector<Creature*> const& beasts, uint32 now)
 {
     auto const memberOf = [&members](ObjectGuid guid) -> Player*
@@ -604,11 +629,10 @@ void UpdateControl(DbsState& state, Player* bot, Creature* boss, std::vector<Pla
         state.controlSince.erase(caster);
     }
 
-    // A scented beast first, then the one nearest the player it runs at
+    // The one nearest the player it runs at first
     struct Want
     {
         Creature* beast;
-        bool scented;
         float gap;
     };
     std::vector<Want> wants;
@@ -616,15 +640,11 @@ void UpdateControl(DbsState& state, Player* bot, Creature* boss, std::vector<Pla
     {
         Player* victim = LooseVictim(beast);
         if (victim && HeldForMs(beast) <= CONTROL_HELD_MS)
-            wants.push_back({beast, Scented(bot, state, beast, now), beast->GetExactDist2d(victim)});
+            wants.push_back({beast, beast->GetExactDist2d(victim)});
     }
     std::sort(wants.begin(), wants.end(),
               [](Want const& a, Want const& b)
-              {
-                  if (a.scented != b.scented)
-                      return a.scented;
-                  return a.gap != b.gap ? a.gap < b.gap : a.beast->GetGUID() < b.beast->GetGUID();
-              });
+              { return a.gap != b.gap ? a.gap < b.gap : a.beast->GetGUID() < b.beast->GetGUID(); });
 
     for (Want const& want : wants)
     {
@@ -919,15 +939,10 @@ Unit* GetDbsBeastToTaunt(PlayerbotAI* botAI)
     Player* bot = botAI->GetBot();
     DbsState* state = LiveState(botAI);
     Creature* boss = state ? GetDbsBoss(botAI) : nullptr;
-    if (!boss || !IsDutyBot(bot) || !IsTankPlayer(bot) || boss->GetVictim() == bot ||
-        !EncounterHelpers::ClassTauntReady(botAI))
+    if (!boss || !IsDutyBot(bot) || !IsTankPlayer(bot) || boss->GetVictim() == bot || !TauntUsable(bot))
         return nullptr;
 
-    uint32 const now = getMSTime();
-    bool spareChecked = false;
-    bool spare = false;
     Creature* best = nullptr;
-    bool bestScented = false;
     float bestGap = 0.0f;
     for (Creature* beast : LiveBeasts(bot, *state))
     {
@@ -936,27 +951,17 @@ Unit* GetDbsBeastToTaunt(PlayerbotAI* botAI)
             bot->GetExactDist2d(beast) > TAUNT_RANGE)
             continue;
 
-        bool const scented = Scented(bot, *state, beast, now);
-        if (!scented)
-        {
-            if (!spareChecked)
-            {
-                spare = TauntSpareForBeast(botAI, boss);
-                spareChecked = true;
-            }
-            if (!spare)
-                continue;
-        }
-
         float const gap = beast->GetExactDist2d(victim);
-        if (!best || (scented && !bestScented) ||
-            (scented == bestScented && (gap < bestGap || (gap == bestGap && beast->GetGUID() < best->GetGUID()))))
+        if (!best || gap < bestGap || (gap == bestGap && beast->GetGUID() < best->GetGUID()))
         {
             best = beast;
-            bestScented = scented;
             bestGap = gap;
         }
     }
+
+    // A scented beast one-shots whoever it reaches, which costs more than a late swap
+    if (best && !Scented(bot, *state, getMSTime()) && !TauntSpareForBeast(botAI, boss))
+        return nullptr;
 
     return best;
 }
@@ -1104,7 +1109,7 @@ void TickDbsEncounter(PlayerbotAI* botAI)
         std::vector<Player*> const members = MembersOnMap(bot);
         std::vector<Creature*> const beasts = LiveBeasts(bot, state);
         UpdateKill(state, bot, beasts);
-        UpdateControl(state, bot, boss, members, beasts, now);
+        UpdateControl(state, boss, members, beasts, now);
         UpdateMarks(state, members);
     }
 

@@ -60,9 +60,10 @@ constexpr uint8 DBS_STAND_TANK = DBS_STAND_STACK + 1;
 constexpr uint8 DBS_TANK_SPOTS = sizeof(ICC_DBS_TANK_SPOTS) / sizeof(ICC_DBS_TANK_SPOTS[0]);
 
 // A stand parks within DBS_STAND_PARK and walks back once pushed past DBS_STAND_UNPARK
-constexpr float DBS_STAND_PARK = 1.0f;
+constexpr float DBS_STAND_PARK = 0.75f;
 constexpr float DBS_STAND_UNPARK = 2.5f;
 static_assert(DBS_STAND_PARK < DBS_STAND_UNPARK, "a walk has to end inside its own trigger");
+static_assert(DBS_SLOT_SPACING >= 12.0f + 2 * DBS_STAND_PARK, "two parked neighbours must not share a Blood Nova");
 
 // He is alive and in combat while his boss state is IN_PROGRESS
 bool IsDbsLive(PlayerbotAI* botAI);
@@ -75,13 +76,13 @@ bool IsDbsArmyHeld(PlayerbotAI* botAI);
 // Notes dbs.target.
 Unit* GetDbsTarget(PlayerbotAI* botAI);
 
-// This bot is the tank to take him: free of Rune of Blood, taunt ready, within 30 yd, lowest guid, while
-// the rune sits on a tank holding him or a non-tank holds him. Notes dbs.swap.
+// This bot is the tank to take him: free of Rune of Blood, taunt ready in its current form, within 30 yd,
+// lowest guid, while the rune sits on a tank holding him or a non-tank holds him. Notes dbs.swap.
 bool IsDbsSwapTaunter(PlayerbotAI* botAI);
 // A tank carrying Rune of Blood while another tank holds him. Notes dbs.yield.
 bool IsDbsRuneYielding(PlayerbotAI* botAI);
 // The tank not holding him, its taunt ready: the beast on a non-tank nearest its victim, while its own
-// rune leaves the taunt time to come back for the next swap or the beast carries Scent of Blood
+// rune leaves the taunt time to come back for the next swap or Scent of Blood is up
 Unit* GetDbsBeastToTaunt(PlayerbotAI* botAI);
 
 // The beast this bot holds the control duty on and the spell it casts, null without a duty

@@ -5,7 +5,7 @@
     deathbringer_saurfang.py <file> --phases    dbs.phase: 1, then 2 once he is in Frenzy
     deathbringer_saurfang.py <file> --slots     each bot's stand: a slot, the stack or a tank spot
     deathbringer_saurfang.py <file> --targets   what the resolver had the bots on, by rule
-    deathbringer_saurfang.py <file> --swaps     each Rune of Blood, its tank and the swap taunt after it
+    deathbringer_saurfang.py <file> --swaps     each Rune of Blood, the swap taunt after it and the rune tank's yield
     deathbringer_saurfang.py <file> --novas     each Blood Nova and how many players it hit
     deathbringer_saurfang.py <file> --kills     each Blood Beast and the ranged on its kill duty
     deathbringer_saurfang.py <file> --control   each control duty on a beast
@@ -17,7 +17,8 @@ What the generic views miss here:
 - **`dbs.slot` counts from 1.** 1-11 are the spread slots, 12 the stack behind him, 13-15 the tank
   spots; `0` is a release, never a slot.
 - **A swap is the elected tank's taunt.** `dbs.swap` goes `1` for the bot the rule elects once the rune
-  sits on the tank holding him; the taunt is its `icc dbs rune swap` act row.
+  sits on the tank holding him; the taunt is its `icc dbs rune swap` act row. `dbs.yield` then goes `1`
+  on the rune tank while it stays off him.
 - **One Blood Nova is one stamp of damage rows.** Its victims all take 72380-72440 in the same update, so
   a nova that hit two players is two rows within a few ms.
 - **`dbs.markheal` is keyed on the marked player**, its value the healer, so one healer can carry two.
@@ -42,6 +43,7 @@ PHASE = "dbs.phase"
 SLOT = "dbs.slot"
 TARGET = "dbs.target"
 SWAP = "dbs.swap"
+YIELD = "dbs.yield"
 KILL = "dbs.kill"
 CONTROL = "dbs.cc"
 MARKHEAL = "dbs.markheal"
@@ -98,9 +100,11 @@ def applications(trace: Trace, spell: int) -> list[tuple[int, int]]:
     return sorted((rec["t"], rec["d"]) for rec in trace.of("aura") if rec.get("sp") == spell and not rec.get("r"))
 
 
-def swaps(trace: Trace) -> list[tuple[int, int, int | None, int | None]]:
-    """`(t, rune tank, elected tank, its swap taunt's t)` per Rune of Blood."""
-    elected = holder_spans(trace, SWAP, pull_end(trace))
+def swaps(trace: Trace) -> list[tuple[int, int, int | None, int | None, int | None]]:
+    """`(t, rune tank, elected tank, its swap taunt's t, the rune tank's yield t)` per Rune of Blood."""
+    last = pull_end(trace)
+    elected = holder_spans(trace, SWAP, last)
+    yields = holder_spans(trace, YIELD, last)
     taunts = sorted((rec["t"], rec["g"]) for rec in trace.of("act")
                     if rec.get("a") == SWAP_ACTION and rec.get("vd") == "OK")
     out = []
@@ -110,7 +114,9 @@ def swaps(trace: Trace) -> list[tuple[int, int, int | None, int | None]]:
                        for value, start, end in spans if value == "1" and start < stop and end > when)
         picked = picks[0][1] if picks else None
         taunt = next((at for at, guid in taunts if guid == picked and when <= at < stop), None)
-        out.append((when, tank, picked, taunt))
+        yielded = next((start for value, start, _ in yields.get(tank, []) if value == "1" and when <= start < stop),
+                       None)
+        out.append((when, tank, picked, taunt, yielded))
     return out
 
 
@@ -214,14 +220,15 @@ def show_swaps(trace: Trace) -> None:
     if not rows:
         print("  no Rune of Blood landed")
         return
-    for when, tank, picked, taunt in rows:
+    for when, tank, picked, taunt, yielded in rows:
         if picked is None:
             swap = "nobody elected"
         elif taunt is None:
             swap = f"{trace.name(picked)} elected, no taunt"
         else:
             swap = f"{trace.name(picked)} taunted {(taunt - when) / 1000:.1f} s after"
-        print(f"  {clock(when)}  {trace.name(tank)}  {swap}")
+        stood_off = "never yielded" if yielded is None else f"yielded {(yielded - when) / 1000:.1f} s after"
+        print(f"  {clock(when)}  {trace.name(tank)}  {swap}, {stood_off}")
 
 
 def show_novas(trace: Trace) -> None:
@@ -294,7 +301,7 @@ SECTIONS = (
     ("phases", "dbs.phase: 1, then 2 once he is in Frenzy", show_phases),
     ("slots", "each bot's stand: a slot, the stack or a tank spot", show_slots),
     ("targets", "what the resolver had the bots on, by rule", show_targets),
-    ("swaps", "each Rune of Blood, its tank and the swap taunt after it", show_swaps),
+    ("swaps", "each Rune of Blood, the swap taunt after it and the rune tank's yield", show_swaps),
     ("novas", "each Blood Nova and how many players it hit", show_novas),
     ("kills", "each Blood Beast and the ranged on its kill duty", show_kills),
     ("control", "each control duty on a beast", show_control),

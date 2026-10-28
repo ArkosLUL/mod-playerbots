@@ -71,10 +71,10 @@ One implementer, no split: every part shares the helpers' per-instance state.
 | Choice | Source | Alternative |
 |---|---|---|
 | Tanks stand east of him on the platform, the holder 2.1 yd off his spot, the partner 1.5 yd north of that; he faces east and the raid spreads west | Warcraft Tavern 25 diagram; the old tank spot | Wowhead: tank west, him facing the ship |
-| 11 slots 19.5-33 yd west of him, 13.5 yd apart: Blood Nova hits 12 yd round its victim, centre to centre from a creature, plus park tolerance. 9 sit inside the bots' 32 yd spell reach, 2 outer ones take healers only; overflow stacks with the melee 3.5 yd behind him | guides' 12 yd; 72380 radius; floor | 12.5 yd for 13 slots; a dynamic spread |
+| 11 slots 19.5-33 yd west of him, 13.5 yd apart: Blood Nova hits 12 yd round its victim, centre to centre from a creature, plus 0.75 yd park tolerance each (reviewer: 1 yd needed 14 yd, the closest pair is 13.56). 9 sit inside the bots' 32 yd spell reach, 2 outer ones take healers only; overflow stacks with the melee 3.5 yd behind him | guides' 12 yd; 72380 radius; floor | 12.5 yd for 13 slots; a dynamic spread |
 | Healers take the central slots first, hunters lead the ranged (no shot from the stack) | reach maths | guid order |
 | No opening positions: stands start with his boss state, 17 s before the first Blood Nova | script timers; a pre-pull hold strands bots when the leader leaves | pre-pull stands (he has no aggro radius) |
-| Rune swap by the bot tank free of Rune of Blood, taunt ready and in range, lowest guid, when the rune lands on the holder or a non-tank holds him; generic taunts blocked for tanks while live | guides; his `flags_extra` 0x80000 (taunt diminishing returns) | generic taunts on |
+| Rune swap by the bot tank free of Rune of Blood, taunt ready in its form (bear, Defensive Stance) and in range, lowest guid, when the rune lands on the holder or a non-tank holds him; generic taunts blocked for tanks while live | guides; his `flags_extra` 0x80000 (taunt diminishing returns) | generic taunts on |
 | The rune tank not holding him stops hitting him (attack stopped, target cleared, pickers blocked) and takes a beast instead | old code; Algalon's swap-pair lesson | keep hitting (threat flip) |
 | Beast taunt: only the free tank, only while its own rune has the taunt cooldown + 0.5 s left or another bot tank free of the rune has its taunt ready, so the next swap is covered; one beast at a time, the one nearest its non-tank victim. On heroic a scented beast lifts the reserve | Wowhead (taunt as last resort); rune timers | the old taunt loop; no taunts |
 | Ranged DPS split evenly over the beasts, each on the one furthest from it within 32 yd, sticky while in reach | Wowhead ("by spawn location, the furthest") | nearest |
@@ -83,12 +83,12 @@ One implementer, no split: every part shares the helpers' per-instance state.
 | One bot healer per Mark: holy paladins first with Beacon of Light on the mark (their class beacon held), then holy priest, shaman, druid, discipline priest; heals the mark under 75% unless a tank is under 35% | Wowhead strategy 1 | generic heals |
 | Lust waits for Frenzy on every difficulty | both guides | free |
 | Opener hold on him | the Marrowgar hook | none |
-| Area damage held while live, the AoE picker owned | Resistant Skin (-95% area damage); guides on AoE threat | only while beasts live |
+| Area damage held while live, the AoE picker owned | Resistant Skin (-95% area damage); guides on AoE threat | only while beasts live (reviewer: the guides tie AoE threat to the spawns, and the hold costs Howling Blast, Divine Storm and the like on him between waves) |
 | Army of the Dead blocked while his gate is open | both guides | |
-| A Mark death heals him 5% and beasts feed Blood Power on every difficulty | 72260 (`HEAL_PCT` 5, no difficulty row); `spell_deathbringer_blood_beast_blood_link` on all modes | the guides' heroic-only 20% |
+| Beasts feed Blood Power on every difficulty; a Mark death heals him 5%, 20% on heroic, as the guides say | `spell_deathbringer_blood_beast_blood_link` on all modes; spelldifficulty 2153 (72260/72278 at 5%, 72279/72280 at 20%) | Warcraft Tavern: no beast Blood Power on normal |
 | A player's skull moves DPS and the free tank, never the holder | holder keeps him | skull for all |
-| Heroic Scent of Blood keyed on a beast's age (9 s; the script's event is 10 s after the wave): a scented beast tops the control and taunt order | script | the aura (72771, radius 0 on the caster, unproven) |
-
+| Heroic Scent of Blood keyed on the latest wave's clock, 9-21.5 s: the script scents every live beast, older waves too, 10 s after each wave for 10 s, and his casts can hold the event back. It lifts the beast taunt's swap reserve | script | the aura (72771, radius 0 on the caster, unproven) |
+| Heal reach held on slots and the stack (reviewer) | slot 1 reaches every slot and tank spot; a healer walking off its slot breaks the Blood Nova spread | heal reach kept, as `docs/engine/pitfalls.md` advises, so a healer reaches a player off the formation |
 ## Carried over
 
 - Merge stage: `HookRows()` row `{&IccSaurfangDefinition, &IccSaurfangBurstWindow, &GetDbsOpenerBosses,
@@ -104,6 +104,8 @@ One implementer, no split: every part shares the helpers' per-instance state.
 - Those in the boss doc.
 - Never built: CMake re-run needed (new `Util/ICCHelpers_Saurfang.cpp`); no `-Werror` pass (the syntax
   check hides warnings).
-- Slot sight to him unchecked: navprobe has no `los`.
+- Slot sight to him unchecked: the prebuilt navprobe has no `los`.
+- A bot counted a tank by spec alone (a Thick Hide cat) takes a tank spot: the ICC stems share that
+  tank test (reviewer). Its taunt no longer wins the swap, since the election checks the form.
 
 ## Blocked
