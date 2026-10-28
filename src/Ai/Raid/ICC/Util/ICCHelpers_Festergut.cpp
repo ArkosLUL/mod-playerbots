@@ -10,6 +10,7 @@
 #include <cmath>
 #include <iterator>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -44,7 +45,7 @@
 
 namespace
 {
-// His room is a 45 yd circle round his spot
+// About his boss boundary, which lies 55-63 yd off his spot
 constexpr float ROOM_RADIUS = 60.0f;
 constexpr uint32 ROSTER_REFRESH_MS = 1000;
 constexpr uint32 DEAL_REFRESH_MS = 200;
@@ -62,7 +63,7 @@ constexpr float SPREAD_KEEPOUT = FG_VILE_GAS_RADIUS + 0.5f;
 constexpr float INOCULATED_CUT = 0.25f;
 constexpr uint32 INOCULATED_MAX = 3;
 
-// The middle slots first: from those every slot and tank spot is in heal range
+// Middle slots first: each reaches both tank spots and all but two or three far slots in 40 yd
 constexpr uint8 HEALER_SLOTS[] = {1, 2, 3, 8, 9, 10};
 constexpr uint8 RANGED_SLOTS[] = {4, 5, 11, 12, 13, 14, 6, 7, 15, 16, 17, 18, 2, 3, 9, 10, 1, 8};
 // Melee fill these when too few ranged stand out for Vile Gas, nearest the legs first
@@ -243,9 +244,20 @@ uint32 BlightStacks(Creature* boss)
     return Stacks(boss, sSpellMgr->GetSpellIdForDifficulty(SPELL_FG_INHALED_BLIGHT, boss));
 }
 
-// The tank to take him now. A taunt aura on him means one just landed and his victim catches up next
-// update, so nobody else spends one.
-Player* SwapTaunter(Player* bot, Creature* boss)
+bool OnTankSpot(FgState const* state, Player* member)
+{
+    // no roster yet, so no tank ranks ahead
+    if (!state)
+        return true;
+
+    auto const held = state->slot.find(member->GetGUID());
+    return held != state->slot.end() && held->second >= FG_STAND_TANK;
+}
+
+// The tank to take him now, one on a tank spot first: a third tank holds him from the legs, which turns
+// him onto the melee and leaves it out of the close spore stack. A taunt aura on him means one just landed
+// and his victim catches up next update, so nobody else spends one.
+Player* SwapTaunter(FgState const* state, Player* bot, Creature* boss)
 {
     Unit* victim = boss->GetVictim();
     if (!victim || boss->HasAuraType(SPELL_AURA_MOD_TAUNT))
@@ -257,7 +269,7 @@ Player* SwapTaunter(Player* bot, Creature* boss)
         return nullptr;
 
     Player* pick = nullptr;
-    uint32 pickStacks = 0;
+    std::tuple<bool, uint32, ObjectGuid> pickRank;
     for (Player* member : MembersOnMap(bot))
     {
         if (member == victim || !IsDutyBot(member) || !IsTankPlayer(member) ||
@@ -268,10 +280,11 @@ Player* SwapTaunter(Player* bot, Creature* boss)
         if (stacks > FG_TAUNTER_MAX_STACKS)
             continue;
 
-        if (!pick || stacks < pickStacks || (stacks == pickStacks && member->GetGUID() < pick->GetGUID()))
+        auto const rank = std::make_tuple(!OnTankSpot(state, member), stacks, member->GetGUID());
+        if (!pick || rank < pickRank)
         {
             pick = member;
-            pickStacks = stacks;
+            pickRank = rank;
         }
     }
 
@@ -370,7 +383,7 @@ void RefreshRoster(FgState& state, Player* bot, uint32 now)
     for (Player* member : spareHealers)
         take(RANGED_SLOTS, std::size(RANGED_SLOTS), member);
 
-    // Too few out and Vile Gas picks among everyone, so one on the melee would take the tanks too
+    // Too few out and Vile Gas picks among everyone, so one on a leg would take every melee on it
     size_t slotted = 0;
     for (uint8 id = 1; id <= FG_SLOT_COUNT; ++id)
         slotted += taken[id] ? 1 : 0;
@@ -715,7 +728,7 @@ void CallHumanTank(FgState& state, Player* sender, Creature* boss, uint32 now)
     if (IsDutyBot(holder))
     {
         if (Stacks(holder, bloat) < FG_SWAP_STACKS || boss->HasAuraType(SPELL_AURA_MOD_TAUNT) ||
-            SwapTaunter(sender, boss))
+            SwapTaunter(&state, sender, boss))
             return;
 
         for (Player* member : MembersOnMap(sender))
@@ -724,7 +737,8 @@ void CallHumanTank(FgState& state, Player* sender, Creature* boss, uint32 now)
             if (taunt && member != holder && IsTankPlayer(member) && Stacks(member, bloat) <= FG_TAUNTER_MAX_STACKS &&
                 member->HasSpell(taunt) && !member->HasSpellCooldown(taunt))
             {
-                CallHumanTankDefensive(sender, member, taunt, 0, "Gastric Bloat is at 9 on your partner", "fg.humancall");
+                CallHumanTankDefensive(sender, member, taunt, 0, "Gastric Bloat is at 9 on your partner",
+                                       "fg.humancall");
                 return;
             }
         }
@@ -807,7 +821,7 @@ bool IsFgSwapTaunter(PlayerbotAI* botAI)
     if (!boss || !IsDutyBot(bot) || !IsTankPlayer(bot))
         return false;
 
-    bool const elected = SwapTaunter(bot, boss) == bot;
+    bool const elected = SwapTaunter(LiveState(botAI), bot, boss) == bot;
     Note(bot, "fg.swap", elected ? "1" : "0");
     return elected;
 }
@@ -944,15 +958,16 @@ bool GetFgGooDodge(PlayerbotAI* botAI, Position& spot)
                 spread.emplace_back(member->GetPosition(), SPREAD_KEEPOUT);
 
     Position const prefer = stand ? stand->spot : bot->GetPosition();
+    float const angleStep = static_cast<float>(M_PI) / 8.0f;
     EncounterHelpers::HazardSweepCache sweep;
     char const* branch = "spread";
-    spot = EncounterHelpers::FindNearestPositionClearOfHazards(bot, spread, DODGE_SWEEP_RADIUS, 2.0f,
-                                                               static_cast<float>(M_PI) / 8.0f, &prefer, {}, &sweep);
+    spot = EncounterHelpers::FindNearestPositionClearOfHazards(bot, spread, DODGE_SWEEP_RADIUS, 2.0f, angleStep,
+                                                               &prefer, {}, &sweep);
     if (spot == Position() && spread.size() > hazards.size())
     {
         branch = "tight";
-        spot = EncounterHelpers::FindNearestPositionClearOfHazards(bot, hazards, DODGE_SWEEP_RADIUS, 2.0f,
-                                                                   static_cast<float>(M_PI) / 8.0f, &prefer, {}, &sweep);
+        spot = EncounterHelpers::FindNearestPositionClearOfHazards(bot, hazards, DODGE_SWEEP_RADIUS, 2.0f, angleStep,
+                                                                   &prefer, {}, &sweep);
     }
 
     bool const found = spot != Position();
@@ -961,12 +976,6 @@ bool GetFgGooDodge(PlayerbotAI* botAI, Position& spot)
 }
 
 bool IsFgHoldingStand(PlayerbotAI* botAI) { return HeldStand(botAI) != nullptr; }
-
-bool IsFgHoldingTankStand(PlayerbotAI* botAI)
-{
-    Stand const* stand = HeldStand(botAI);
-    return stand && stand->id >= FG_STAND_TANK && stand->id < FG_STAND_TANK + FG_TANK_SPOTS;
-}
 
 bool GetFgStandWalk(PlayerbotAI* botAI, Position& spot)
 {
@@ -1019,6 +1028,11 @@ void TickFgEncounter(PlayerbotAI* botAI)
     UpdateBrake(bot, boss, state);
     CallHumanTank(state, bot, boss, now);
     UpdateStand(state, bot, boss);
+
+    // fg.goo only writes a change, so it goes back to out between dodges or two alike would read as one
+    std::vector<Position> impacts;
+    if (GetFgGoo(botAI, impacts) && !IsFgInGoo(botAI))
+        Note(bot, "fg.goo", "out");
 }
 
 uint8 IccFestergutResistSchools(PlayerbotAI* /*botAI*/, uint8 /*previous*/) { return RAID_RESIST_SHADOW; }

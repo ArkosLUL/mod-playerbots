@@ -92,13 +92,14 @@ One lead, no split: the two stems share nothing but the swap shape.
 | Threat brake on every tank not holding him, 90 % hold / 80 % free | Wowhead "stop attacking for a while", WT25 off-tank over-aggro; LDW brake figures | full yield until the aura drops (~100 s idle) |
 | Two spore groups on every difficulty | WT10, Wowhead (melee and tanks collapse together) | WT25's third tank group in 25-man |
 | A group with no carrier collapses on the other, ranged into melee included | script: `DelayEventsToMax(20s)` holds Vile Gas 20 s past every spore | Wowhead's "ranged never collapse into melee" |
-| Goo hazard 5 yd (+1.5 trigger margin, +1 park), live until the farthest stand's flight (8.5 s) | DBC 72297 row 2197, creature caster exact radius, Putricide's watch point 66-97 yd away at 12 yd/s | per-impact flight time |
+| Goo hazard 5 yd (+1.5 trigger margin, +1 park), live until the farthest stand's flight (8.5 s) | DBC 72297 row 2197, creature caster exact radius, Putricide's watch point 46-97 yd from the stands at 12 yd/s | per-impact flight time |
 | Pungent Blight hit scaled by the lowest Inoculated stack on the map | `GetRaidCover` ignores aura 229 | raw damage, cover on every cast |
 | No pre-pull staging | stands inside his aggro radius would pull him; open round room | opening stands at the door |
-| Melee legs at ±135° 6.5 yd, released once he settles 4 yd off his spawn | melee range 10.83 (reach 8 + 1.5 + 4/3) | legs derived from where he settles |
+| Melee legs 7 yd out south-east and north-east, released once he settles 3.5 yd off his spawn | melee range 10.83 (reach 8 + 1.5 + 4/3) | legs derived from where he settles |
+| A third tank is the last swap taunter, after both tank-spot tanks | from its leg stand he faces the melee and the holder misses the close spore stack (11 yd) | the holder's stand moved to the close anchor |
 | Dogs: swap at 6 Mortal Wound when the taunter has 4 fewer; the stacked tank yields until its aura drops | script: 15 s, 1.5-2.5 s apart, −10 % healing a stack; blog | fixed 8 |
 | Dogs: everyone on the dog, the free tank on loose zombies | script despawns zombies with Precious; blog | zombies first |
-| Dogs: Decimate tank button in the cast, raid cover while the dog stuns itself after it | 71123: 3 s cast, everyone to 15 %, 3 s self-stun; Plague Stench 3-4.5k every 3 s | none |
+| Dogs: Decimate tank button in the cast, raid cover while the dog stuns itself after it | 71123: 3 s cast, everyone to 15 %, 3 s self-stun; Plague Stench 3-4.5k every 3 s | the 8 min channels (Divine Hymn, Tranquility) kept for Festergut: `GetRaidCover` deals every ready cover on the first Decimate |
 
 ## Carried over
 
@@ -125,7 +126,8 @@ One lead, no split: the two stems share nothing but the swap shape.
 - Never built; no 631 trace; no `-Werror` pass.
 - Festergut settled more than 3.5 yd off his spawn: melee fall to the generic movers, nobody walks him
   back. A goo on the close stack in a spore window can cost the tanks a stack. Healers walk to heal the
-  far slots. Melee fill counts bots only. Humans hold no duty.
+  far slots. Melee fill counts bots only. Humans hold no duty. A third tank taunts only when neither spot
+  tank can, then holds him from the legs.
 - Dogs: eleven zombies a wave on Precious go to the free tank and incidental area damage only; a free
   tank on the dog can still rip it by threat.
 

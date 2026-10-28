@@ -33,7 +33,7 @@ constexpr uint32 SPELL_FG_INOCULATED = 69291;
 // round it, every stand sees him and both tank spots from a 3x3 grid at 1 yd, and the walks between
 // them are straight normal paths. All inside his boss boundary (x 4205-4325, y 3082-3195).
 inline Position const ICC_FG_BOSS_SPOT(4267.92f, 3137.26f, 360.385f);
-// 6.5 yd from his spot at 40 degrees either side of north, inside his 10.83 yd melee range (reach 8 +
+// 6.5 yd from his spot at 40 degrees either side of west, inside his 10.83 yd melee range (reach 8 +
 // 1.5 + 4/3), so he turns to the holder without moving. 8.4 yd apart: goo on the free tank misses the
 // holder.
 inline Position const ICC_FG_TANK_SPOTS[] = {
@@ -43,7 +43,7 @@ inline Position const ICC_FG_TANK_SPOTS[] = {
 constexpr uint8 FG_TANK_SPOTS = sizeof(ICC_FG_TANK_SPOTS) / sizeof(ICC_FG_TANK_SPOTS[0]);
 // Between the tank spots: the tanks and melee stack here for a spore
 inline Position const ICC_FG_CLOSE_ANCHOR(4267.92f, 3142.24f, 360.385f);
-// His legs, 7 yd out at 135 degrees off north: behind him whichever tank he faces, 9.9 yd apart
+// His legs, 7 yd out south-east and north-east: behind him whichever tank he faces, 9.9 yd apart
 inline Position const ICC_FG_LEGS[] = {
     {4262.97f, 3132.31f, 360.385f},
     {4272.87f, 3132.31f, 360.385f},
@@ -51,7 +51,8 @@ inline Position const ICC_FG_LEGS[] = {
 
 // Vile Gas lands on a ranged player and everyone within 8 yd of each victim, so slots sit 10.4 yd apart
 // at least. Rows at 18 and 28.5 yd behind and beside him: past the 14.5 yd its picker counts as melee,
-// inside reach spell's 38.5 yd. Healers take the middle ones, from which every slot is in heal range.
+// inside reach spell's 38.5 yd. Healers take the middle ones, which reach both tank spots and nearly every
+// slot in 40 yd.
 inline Position const ICC_FG_SLOTS[] = {
     {4267.92f, 3119.26f, 360.385f}, {4257.99f, 3122.25f, 360.385f}, {4277.85f, 3122.25f, 360.385f},
     {4251.35f, 3130.23f, 360.385f}, {4284.49f, 3130.23f, 360.385f}, {4250.22f, 3140.54f, 360.385f},
@@ -74,9 +75,10 @@ constexpr uint8 FG_STAND_TANK = FG_STAND_LEG + 1;
 constexpr float FG_VILE_GAS_RADIUS = 8.0f;
 constexpr float FG_STAND_PARK = 0.75f;
 constexpr float FG_STAND_UNPARK = 2.5f;
-constexpr float FG_SLOT_SPACING = 10.375f;
+constexpr float FG_SLOT_SPACING = 10.37f;
 static_assert(FG_STAND_PARK < FG_STAND_UNPARK, "a walk has to end inside its own trigger");
-static_assert(FG_SLOT_SPACING >= FG_VILE_GAS_RADIUS + 2 * FG_STAND_PARK, "two parked neighbours must not share Vile Gas");
+static_assert(FG_SLOT_SPACING >= FG_VILE_GAS_RADIUS + 2 * FG_STAND_PARK,
+              "two parked neighbours must not share Vile Gas");
 
 // Blighted Spores reaches 8 yd from its carrier. A carrier stands on its group's anchor, the rest on a ring
 // this far round it.
@@ -124,7 +126,8 @@ bool IccFestergutSporeCycle(Player* bot);
 Unit* GetFgTarget(PlayerbotAI* botAI);
 
 // This bot is the tank to take him: a tank holds him at FG_SWAP_STACKS or a non-tank holds him, and this
-// one carries the fewest stacks, at most FG_TAUNTER_MAX_STACKS, its taunt ready. Notes fg.swap.
+// one, on a tank spot unless no such tank can, carries the fewest stacks, at most FG_TAUNTER_MAX_STACKS,
+// its taunt ready. Notes fg.swap.
 bool IsFgSwapTaunter(PlayerbotAI* botAI);
 // A tank not holding him past the threat brake
 bool IsFgBraked(PlayerbotAI* botAI);
@@ -149,7 +152,6 @@ bool IsFgInGoo(PlayerbotAI* botAI);
 bool GetFgGooDodge(PlayerbotAI* botAI, Position& spot);
 
 bool IsFgHoldingStand(PlayerbotAI* botAI);
-bool IsFgHoldingTankStand(PlayerbotAI* botAI);
 // The held stand wants a walk, and its spot is clear of goo
 bool GetFgStandWalk(PlayerbotAI* botAI, Position& spot);
 

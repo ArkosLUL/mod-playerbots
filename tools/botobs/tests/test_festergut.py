@@ -90,14 +90,17 @@ def pull(boss: str = "festergut", diff: int = 3) -> list[dict]:
         note(60000, ARCANE, "fg.phase", "spore"),
         note(60050, SHIV, fg.CARRIER, 1),
         note(72000, ARCANE, "fg.phase", "normal"),
-        # Goo: Arcane dodges twice, Shiv once onto the other leg
+        # Goo: Arcane dodges three times, twice the same way, Shiv once onto the other leg, Mend never
         {"t": 24000, "e": "haz", "sp": 72296, "shape": "circle", "x": 0.0, "y": 0.0, "z": 0.0, "ttl": 8000,
          "rad": 12.0},
         {"t": 40000, "e": "haz", "sp": 72296, "shape": "circle", "x": 0.0, "y": 0.0, "z": 0.0, "ttl": 8000,
          "rad": 12.0},
         note(40100, ARCANE, fg.GOO, "spread"),
         note(40100, SHIV, fg.GOO, "stand"),
+        note(40100, MEND, fg.GOO, fg.GOO_OUT),
         note(40100, MEND, fg.LEG, 2),
+        note(42000, ARCANE, fg.GOO, fg.GOO_OUT),
+        note(43000, ARCANE, fg.GOO, "spread"),
         note(45000, ARCANE, fg.GOO, "tight"),
         # Picks, the swap at 9 and the relieved tank's brake
         note(200, BULWARK, fg.TARGET, "boss"), note(200, SHIV, fg.TARGET, "boss"),
@@ -169,8 +172,9 @@ class Spores(unittest.TestCase):
 class Goo(unittest.TestCase):
     def test_branches_per_bot(self):
         rows = fg.goo_rows(load(pull()))
-        self.assertEqual(dict(rows[ARCANE]), {"spread": 1, "tight": 1})
+        self.assertEqual(dict(rows[ARCANE]), {"spread": 2, "tight": 1})
         self.assertEqual(dict(rows[SHIV]), {"stand": 1})
+        self.assertNotIn(MEND, rows)
 
     def test_normal_mode_has_no_goo(self):
         self.assertIn("normal mode: Putricide throws no goo at Festergut", printed(fg.show_goo, load(pull(diff=1))))

@@ -43,7 +43,7 @@ No stands: Decimate and Plague Stench reach 100 yd, so positioning buys nothing.
 | Generic taunts blocked | the free tank's would take the dog straight back | |
 | Burn the dog, zombies only to the free tank | the script despawns them with Precious; the blog | Zombies first |
 | No zombie taunts | an 8 s taunt spent on a zombie misses the next swap | |
-| Cover after Decimate, button in its cast | everyone at 15% under a 3-4.5k tick every 3 s | |
+| Cover after Decimate, button in its cast | everyone at 15% under a 3-4.5k tick every 3 s | Divine Hymn and Tranquility kept for Festergut: the first Decimate takes every ready cover |
 
 ## Cheats
 

@@ -18,10 +18,10 @@ radius is exact, centre to centre.
 | Gaseous Blight 69157/69162/69164 | Putricide fills the room from his balcony at the pull: shadow every 2 s, three levels, each Inhale Blight a level less | Heal through | Generic heals; shadow resist hook for the merge stage |
 | Inhale Blight 69165, Inhaled Blight 69166 (10), 71912 (25) | 3.5 s cast every 34 s from 25-30 s; each stack +25% (10) or +30% (25) damage and attack speed, three at most | Tank cooldowns: minor at 2 stacks, major at 3 | Holder spends a button at 2 once a cycle, keeps one up from 3 (`fg.defensive`) |
 | Pungent Blight 69195/71219/73031/73032 | The fourth inhale event: 3 s cast, 42.9-45.1k / 48.8-51.3k / 63.4-66.6k / 73.1-76.9k shadow to everyone; takes his stacks and everyone's Inoculated; next Gas Spore 20-25 s later | Three Inoculated; Aura Mastery with Shadow Resistance Aura, shields; immunities | `GetRaidCover` and `GetRaidPersonalDefensive` on the cast, the hit cut 25% per Inoculated stack |
-| Gas Spore 69278 (10), 71221 (25) → 69279 | 2 (10) or 3 (25) random players, first at 20-25 s, every 40-45 s; bursts at 12 s: Blighted Spores 69290/71222/73033/73034 on everyone within 8 yd of the carrier (1.95-2.05k / 2.9-3k / 2.9-3k / 3.9-4.1k shadow a second for 6 s); Inoculated 69291/72101/72102/72103 as it ends, 120 s, −25% shadow area damage a stack, three at most, one per 10 s | Groups stack on a carrier: WT10 melee with tanks and ranged; WT25 tanks, melee, ranged; a spare carrier moves to an empty group | Two groups, a deal per wave (`fg.carrier`, `fg.stand`) |
+| Gas Spore 69278 (10), 71221 (25) → 69279 | 2 (10) or 3 (25) random players, first at 20-25 s, every 40-45 s; bursts at 12 s: Blighted Spores 69290/71222/73033/73034 on everyone within 8 yd of the carrier (1.95-2.05k / 2.9-3.1k / 2.9-3.1k / 3.9-4.1k shadow a second for 6 s); Inoculated 69291/72101/72102/72103 as it ends, 120 s, −25% shadow area damage a stack, three at most, one per 10 s | Groups stack on a carrier: WT10 melee with tanks and ranged; WT25 tanks, melee, ranged; a spare carrier moves to an empty group | Two groups, a deal per wave (`fg.carrier`, `fg.stand`) |
 | Vile Gas 69240/71218/73019/73020 | From 30-40 s, every 28-35 s, held to 20 s after every spore. On a random player past his melee by 5 yd (14.5 yd from his centre) once 3 (10) or 8 (25) stand there, else anyone: everyone within 8 yd of it, then each victim within 8 yd of its allies, 3.9-4.1k / 4.9-5.1k / 4.9-5.1k / 6.3-6.7k every 2 s for 6 s and disoriented | Ranged and healers 8 yd apart | 18 slots, 10.4 yd apart, out past 14.5 yd; melee fill when too few are out |
 | Gastric Bloat 72219/72551/72552/72553 | On his victim from 12.5-15 s, every 15-17.5 s: 9.8-10.3k / 12.2-12.8k / 12.2-12.8k / 14.6-15.4k nature, +10% damage done a stack, 100 s; at 10 Gastric Explosion 72227/72228 (10 yd, 29.3-30.8k) or 72229/72230 (everyone, 48.8-51.3k) | Swap at 9 once the other tank's has dropped; the relieved tank stops attacking a while | Elected swap at 9 (`fg.swap`); threat brake (`fg.brake`) |
-| Malleable Goo (heroic) 72296 → 72297/72548/72549/72550 | Putricide, from his balcony (4324.8, 3166.0, 389.4), at a random player but his victim, from 15-20 s, every 15-20 s; lands where it stood at the throw after the 12 yd/s flight (66-97 yd here, 5.3-8.1 s): 5 yd, 9.8-15.4k nature, 20 s swing and cast slow | Ranged dodge the circle; melee switch legs | Forced dodge, leg and far-anchor flips (`fg.goo`, `fg.leg`, `fg.sporespot`) |
+| Malleable Goo (heroic) 72296 → 72297/72548/72549/72550 | Putricide, from his balcony (4324.8, 3166.0, 389.4), at a random player but his victim, from 15-20 s, every 15-20 s; lands where it stood at the throw after the 12 yd/s flight (46-97 yd to a stand, 3.9-8.1 s): 5 yd, 14.6-15.4k nature (72549/72550), 20 s swing and cast slow | Ranged dodge the circle; melee switch legs | Forced dodge, leg and far-anchor flips (`fg.goo`, `fg.leg`, `fg.sporespot`) |
 | Berserk | 5 min | | |
 
 His boss state moves to `IN_PROGRESS` only once Putricide reaches his balcony point, about 7 s in, so
@@ -31,27 +31,28 @@ diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is
 
 ## Duties
 
-- **Tanks**: one tank spot each, 6.5 yd from his spawn at 40° either side of north and 8.4 yd apart, so
-  he turns to the holder without moving and goo on the free tank misses the holder. Generic taunts are
-  blocked while he fights. Once the holder carries 9 Gastric Bloat, or a non-tank holds him, the bot tank
-  with the fewest stacks, at most 7, taunt ready in its form within 30 yd, taunts him. A tank not holding
-  him stops attacking him at 90% of the holder's threat, its pickers and its area damage near him held,
-  until under 80%. A human partner is called to taunt when no bot can.
+- **Tanks**: one tank spot each, 6.5 yd from his spawn at 40° either side of west and 8.4 yd apart, so
+  he turns to the holder without moving and goo on the free tank misses the holder; a third tank takes the
+  legs. Generic taunts are blocked while he fights. Once the holder carries 9 Gastric Bloat, or a non-tank
+  holds him, the bot tank with the fewest stacks, at most 7, taunt ready in its form within 30 yd, taunts
+  him, one on a tank spot before a third tank. A tank not holding him stops attacking him at 90% of the
+  holder's threat, its pickers and its area damage near him held, until under 80%. A human partner is
+  called to taunt when no bot can.
 - **Tank defensives** (`fg.defensive`, physical only): the holder spends one button at 2 Inhaled Blight
   once a cycle (a cycle ends at each Pungent Blight), and one whenever none runs from 3; any tank under
   40%. Class nodes stay held until 25%. A human holder gets the same windows as calls (`fg.humancall`).
-- **Melee**: both stand on one leg, 7 yd out at 135° off north, behind him whichever tank he faces;
+- **Melee**: both stand on one leg, 7 yd out south-east or north-east, behind him whichever tank he faces;
   `fg.leg` flips to the other once goo lands within 8.25 yd of the one in use and the other is clear. The
   legs release once he stands 3.5 yd off his spawn.
 - **Ranged and healers**: one latched slot each (`fg.slot`), released once he is 10 yd off his spawn.
-  Healers take 1, 2, 3, 8, 9, 10 first; from there every slot and tank spot is in heal range. While fewer
-  than 3 (10) or 8 (25) bots hold a slot, melee fill the free ones. Reach and spell movers are held on a
-  stand, heal reach is not.
+  Healers take 1, 2, 3, 8, 9, 10 first; from there both tank spots and all but two or three slots are in
+  40 yd. While fewer than 3 (10) or 8 (25) bots hold a slot, melee fill the free ones. Reach and spell
+  movers are held on a stand, heal reach is not.
 - **Spores**: per wave, the tanks and melee are the close group, stacking on the anchor between the tank
-  spots, the ranged and healers the far group, on slot 1 or 5 (`fg.sporespot`, flipped like the legs once
-  goo lands within 10.75 yd). A group with no spore takes the one nearest it off a group with two (a
-  melee for the far group, never the holder); a group still without one stacks with the other. A bot
-  carrier stands on its anchor, everyone else on a 2.5 yd ring round it; a group carried only by the
+  spots, the ranged and healers the far group, on slot 1 east of him or 5 north (`fg.sporespot`, flipped
+  like the legs once goo lands within 10.75 yd). A group with no spore takes the one nearest it off a group
+  with two (a melee for the far group, never the holder); a group still without one stacks with the other.
+  A bot carrier stands on its anchor, everyone else on a 2.5 yd ring round it; a group carried only by the
   holder rings round him, one carried only by players round the first of them. A swap inside the wave
   deals again. The holder never moves.
 - **Malleable Goo**: a bot other than the holder within 6.5 yd of a live impact interrupts its cast and
@@ -95,6 +96,8 @@ None before, none now.
 - A goo on the close stack during a spore window can cost the tanks a stack: the anchor sits between them,
   and its dodgers wait outside until the impact ages out. WT25's separate tank group would avoid it.
 - The healers walk to heal the far slots and back.
+- A third tank takes him only when neither spot tank can; it then holds him from the legs, turning him onto
+  the melee and standing 11 yd from the close spore stack.
 - Melee fill counts bots only. Humans hold no duty.
 - The shadow resist hook (`IccFestergutResistSchools`) waits for its `HookRows()` row, so Aura Mastery is
   never dealt for Pungent Blight until then. No opener: hooks answer only once he is live.
@@ -109,7 +112,7 @@ None before, none now.
 | `fg.stand` | per bot | The stand held now: `slot`, `leg`, `tank`, `close`, `far`, `none` |
 | `fg.carrier` | carrier → group | 1 close, 2 far; `0` once the wave ends |
 | `fg.leg`, `fg.sporespot` | raid-wide | The melee leg, the far spore anchor |
-| `fg.goo` | per bot | A dodge's branch: `stand`, `spread`, `tight`, `none` |
+| `fg.goo` | per bot | A dodge's branch: `stand`, `spread`, `tight`, `none`; `out` between dodges while goo is live |
 | `fg.target` | per bot | `boss`, `skull`, `brake` |
 | `fg.swap` | per tank | `1` for the bot elected to taunt him |
 | `fg.brake` | per tank | `1` while braked |

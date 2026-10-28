@@ -22,10 +22,10 @@ What the generic views miss here:
   stack, `none` while it holds nothing (the legs release once he stands 3.5 yd off his spot).
 - **`fg.carrier` is the group a Gas Spore carrier was sent to**, 1 the tanks and melee, 2 the ranged and
   healers, dealt once a wave and again after a swap inside it.
-- **`fg.leg` and `fg.sporespot` are raid-wide**: the melee leg (1 west, 2 east) and the ranged spore
-  stack (1 behind him, 2 east), each flipped once goo lands on the one in use.
+- **`fg.leg` and `fg.sporespot` are raid-wide**: the melee leg (1 south-east, 2 north-east) and the
+  ranged spore stack (1 east, behind him, 2 north), each flipped once goo lands on the one in use.
 - **`fg.goo` is a dodge's branch**: `stand` back to a clear stand, `spread` to a spot 8.5 yd from everyone,
-  `tight` to the nearest clear one, `none` when nothing cleared.
+  `tight` to the nearest clear one, `none` when nothing cleared; `out` between dodges.
 - **The swap is one elected taunt at 9 Gastric Bloat** (row 2198: 72219/72551/72552/72553). `fg.swap` goes
   `1` for the elected tank; the taunt is its `icc festergut bloat swap` act row. `fg.brake` holds a tank
   not holding him past 90% of the holder's threat, until under 80%.
@@ -63,6 +63,7 @@ CARRIER = "fg.carrier"
 LEG = "fg.leg"
 SPORESPOT = "fg.sporespot"
 GOO = "fg.goo"
+GOO_OUT = "out"
 TARGET = "fg.target"
 SWAP = "fg.swap"
 BRAKE = "fg.brake"
@@ -209,7 +210,9 @@ def goo_rows(trace: Trace) -> dict[int, collections.Counter]:
     """Per bot that dodged: how many times it took each branch."""
     out: dict[int, collections.Counter] = {}
     for guid, spans in holder_spans(trace, GOO, icc.pull_end(trace)).items():
-        out[guid] = collections.Counter(value for value, _, _ in spans)
+        branches = collections.Counter(value for value, _, _ in spans if value != GOO_OUT)
+        if branches:
+            out[guid] = branches
     return out
 
 
