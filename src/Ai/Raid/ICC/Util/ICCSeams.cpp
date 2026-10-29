@@ -7,9 +7,11 @@
 #include "ICCSeams.h"
 
 #include "ICCDefinitions.h"
+#include "ICCHelpers_BloodPrinces.h"
 #include "ICCHelpers_Deathwhisper.h"
 #include "ICCHelpers_Festergut.h"
 #include "ICCHelpers_Marrowgar.h"
+#include "ICCHelpers_Putricide.h"
 #include "ICCHelpers_Saurfang.h"
 #include "RaidEncounter.h"
 
@@ -24,6 +26,9 @@ std::vector<IccEncounterHooks> const& HookRows()
         {&IccDeathwhisperDefinition, &IccDeathwhisperBurstWindow},
         {&IccSaurfangDefinition, &IccSaurfangBurstWindow, &GetDbsOpenerBosses, nullptr, nullptr},
         {&IccFestergutDefinition, nullptr, nullptr, &IccFestergutResistSchools, nullptr},
+        {&IccPutricideDefinition, &IccPutricideBurstWindow, &GetPpOpenerBosses, &IccPutricideResistSchools, nullptr},
+        {&IccBloodPrincesDefinition, &IccBloodPrincesBurstWindow, &GetBpcOpenerBosses, &IccBloodPrincesResistSchools,
+         nullptr},
     };
     return rows;
 }
