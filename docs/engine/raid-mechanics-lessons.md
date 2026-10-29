@@ -12,6 +12,9 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
 - **A vehicle has exactly one owner of its position.** Two actions steering the same `MotionMaster`
   produce a visible bounce, not a compromise: each undoes the other every tick. The fix is deleting
   one, never lowering its priority.
+- **A vehicle summoned as its rider's minion** (SummonProperties category vehicle) is dismissed by
+  `Unit::_ExitVehicle` when the rider leaves, which frees a one-at-a-time source for the next driver
+  (Putricide's abomination table).
 - **A vehicle rider never counts as flying.** `Player::CanFly` reads only the bot's own
   `MOVEMENTFLAG_CAN_FLY`, which `UpdateMovementState` strips without a flight aura. So `MoveTo` /
   `ReachCombatTo` (via `bot->UpdateAllowedPositionZ`) or `CheckCollisionAndGetValidCoords` run on
@@ -132,6 +135,9 @@ movement lock that decides which of two movers' orders is accepted is in
   those movers while it holds. Release a spot that ignores reach (an escape) on arrival instead, or
   the block strands the bot out of range. The
   [Northrend Beasts](../raids/trial-of-the-crusader/northrend-beasts.md) worm stage needed both.
+- **One hazard owned by a planner and the forced dodge.** The dodge pulls the bot out of the leg the
+  planner walks it back into. Give each hazard one owner per bot state (Rotface's towing kiter: floods
+  belong to the kite legs, not its dodge).
 - **A walk toward a cooldown-gated action.** A bot walking in to taunt from range arrives, can't act
   while the taunt cools down, and its stand walks it back out, in a loop. The walk waits for the
   cooldown too (the council's Dark Nucleus pickup).
@@ -165,7 +171,8 @@ Rules that belong with the geometry rather than the action:
   ([Rotface](../raids/icecrown-citadel/rotface.md)).
 - **A lattice spaced at the hazard radius plus two park tolerances**, with the tank spots on it,
   stays a valid spread in every phase and role with no per-pull geometry
-  ([Blood Prince Council](../raids/icecrown-citadel/blood-prince-council.md)).
+  ([Blood Prince Council](../raids/icecrown-citadel/blood-prince-council.md)). Set thresholds from
+  the real distances: an 11.69 x step puts 13.5 yd neighbours at 13.499, so `< 13.5` counts them all.
 - **A hazard dropper's newest hazards lie a step behind it**, close enough to foul its next waypoint
   and force re-plans: its next-point check skips the hazards it summoned
   (`TempSummon::GetSummonerGUID`; the Blood-Queen's Swarming Shadows).
@@ -179,7 +186,10 @@ Every distance helper measures differently, and a large-model boss inflates all 
   `GetMeleeRange = max(casterReach + targetReach + 4/3, NOMINAL_MELEE_RANGE)` — against a 20-reach
   boss, ~22.8 yd. Hard-coded stand distances that ignore reach break on large models.
 - **Combat reach can change mid-fight**: a transform aura's display does it (Putricide's 30993 raises
-  his from 7.8 to 9). Read `GetCombatReach()` at runtime, not `creature_model_info`.
+  his from 7.8 to 9), and so does a `MOD_SCALE` aura (Festergut's Inhaled Blight, +20% a stack, 8 to
+  12.8). Read `GetCombatReach()` at runtime, not `creature_model_info`. A chasing creature stops at
+  both combat reaches plus `CONTACT_DISTANCE`, not at melee range, so derive a drag or stand-off
+  distance from those live.
 - **A range literal in a boss script is not the distance it says.** `GetDistance2d(WorldObject
   const*)` subtracts both reaches too: Mimiron's Napalm picks among players at
   `GetDistance2d(mkII) > 15.0f`, which the MK II's CombatReach of 8 makes raw > ~24.5 yd. Convert
@@ -215,7 +225,8 @@ Every distance helper measures differently, and a large-model boss inflates all 
   stand that doesn't cover them fights it and the healer stops healing. Test reach from the stand,
   not the bot.
 - **`Unit::IsWithinMeleeRange(obj, dist)`: `dist` is extra slack**, not an absolute
-  (`maxdist = dist + GetMeleeRange(obj)`).
+  (`maxdist = dist + GetMeleeRange(obj)`). It is 3D with the 5 yd `NOMINAL_MELEE_RANGE` floor, so a
+  hovering unit of reach 0 is in melee reach only within 5 yd, its height included (Kinetic Bombs).
 - A target that walks needs a **sticky margin** on the reach test, or a bot on the edge of range
   swaps target every other tick. Re-test the sticky pick against the cap anyway: stickiness alone is
   a tow rope, and a mob that retargets drags the bot across the room until something outranks it.
@@ -316,7 +327,12 @@ What lands on a raid add is not what PvP experience predicts.
 - **A creature drops a victim it can't hurt.** `ThreatReference::ShouldBeSuppressed` takes out of
   contention a target immune to the attacker's melee school, confused, or under a breakable stun, so
   Hand of Protection moves melee attackers off a focused bot at once, as Divine Shield or Ice Block
-  does.
+  does. School immunity suppresses the holder's reference on apply (`EvaluateSuppressed`), and
+  removing it restores nothing: only the holder's next `AddThreat` does, so a cancelled bubble can
+  still hand the boss to the next player at his once-a-second threat check.
+- **Divine Shield 642 purges as it applies** (`SPELL_ATTR1_IMMUNITY_PURGES_EFFECT`): every
+  non-positive aura without `SPELL_ATTR0_NO_IMMUNITIES` goes, so cast and cancel on the next line is a
+  real stack reset (Festergut's Gastric Bloat). Kept up on a tank, it hands the boss away.
 - **Hunter pet Growl is `SPELL_EFFECT_THREAT` only, not a taunt.** Against a script that seeds player
   threat (Faction Champions' 10M × modifier) it does nothing but burn 15 focus. A multiplier can't
   veto pet autocast: turn it off with `Pet::ToggleAutocast`; the non-combat `toggle pet spell` turns
@@ -325,6 +341,9 @@ What lands on a raid add is not what PvP experience predicts.
   harmful spell the owner casts), `KilledUnit` → `SelectNextTarget` and `AttackedBy`. All three skip a
   passive pet, which still attacks while `IsCommandAttack` is set (`PetAI::CanAttack`)
   ([Yogg-Saron's Crushers](../raids/ulduar/yogg-saron.md#crush-is-a-5-cone-that-tracks-its-victim)).
+- **A kiter's pet must not get the kited unit.** `RaidDirectAttackAction::AttackDirect` sends the pet
+  onto the owner's pick, so a ghoul pulls the kited add's threat and takes its swings: give the pet
+  its own pick ([Rotface](../raids/icecrown-citadel/rotface.md)).
 - **An add that calls `DoResetThreatList` on a timer can be neither tanked, taunted nor redirected.**
   Read its `UpdateAI` before designing any of the three. Freya's Detonating Lasher re-rolls a uniformly
   random player every 10s, which leaves geometry plus a snare as the only handling.
@@ -399,6 +418,16 @@ twenty-five of them agree anyway:
   since re-deriving each tick can flip the destination mid-walk; the rest still agree, because the
   latched one stays nearest while it closes.
 
+Pitfalls in derived assignment:
+
+- **A fallback that elects a lower-ranked bot needs hysteresis** against the higher-ranked one going
+  free for a tick: a main tank is free whenever the boss drops his victim for a moment, and took
+  Rotface's kite from a damage dealer for one refresh.
+- **A greedy spread's stay-put cost counts the bots not yet placed** at their current positions, or
+  the worst spot (the stack) looks cheap to the first bot asked.
+- **A bot sharing a held slot must not mark it used** against its holder, or the holder is evicted on
+  the next deal.
+
 ## What a strategy costs per raid
 
 Cheap per bot, ruinous per raid — and invisible in single-bot testing.
@@ -406,7 +435,8 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
 - **A multiplier runs on every popped action that passed `isUseful()`**, dozens per bot per tick, so
   anything it derives is derived that many times: test the action first
   ([action-selection.md](action-selection.md#multiplier-semantics)). Encounter rules do it by
-  construction.
+  construction. A multiplier needing the encounter's pick reads the resolver's memoized pick:
+  re-deriving it can hide a sight raycast per action.
 - **Role lookups are not free.** `IsMainTank` → `GetMainTankGuid` walks every group member;
   `IsTank`/`IsDps`/`IsRanged`/`IsHeal` cost a `GET_PLAYERBOT_AI` hash lookup plus a bitmask test
   (`Engine::HasStrategyType`). Precompute them for a 25-man loop or a sort comparator, which otherwise
@@ -592,6 +622,19 @@ encounters.
 - **A guide's "immunity stops X" must be checked against `SPELL_ATTR0_NO_IMMUNITIES`** (0x20000000,
   `Attributes` in `spell.reference.csv`): `Unit::IsImmunedToDamage` and `IsImmunedToSpell` return
   false for such a spell, so Impaled ignores Hand of Protection.
+- **Freedoms clear only snares and roots.** Hand of Freedom, Every Man for Himself and Escape Artist
+  remove auras whose spell or effect carries `MECHANIC_SNARE` or `MECHANIC_ROOT`
+  (`Unit::RemoveMovementImpairingAuras`, mechanic immunity masks), so a boss slow with mechanic 0
+  (Sticky Ooze 69778) survives them. Key a freedom duty on `HasAuraWithMechanic`, not
+  `PlayerbotAI::IsMovementImpaired`, which counts every speed cut. Anti-Magic Shell 48707 carries aura
+  267 (school immunity, mask 126), so it also keeps magic-school slows and debuffs from landing.
+- **A `spell_proc` row can narrow its DBC `ProcTypeMask`**: `SpellTypeMask` 1 procs on damaging hits
+  only, so a DoT's application or a debuff never does (Unstable 72059). Check it before trusting the
+  DBC.
+- **A creature's swing is readable live.** `UNIT_FIELD_MINDAMAGE`/`MAXDAMAGE` already carry
+  `DamageModifier`, attack power and `TOTAL_PCT` auras, and `GetAttackTime` reflects haste. With
+  `Unit::CalcArmorReducedDamage` and `GetTotalAuraMultiplierByMiscMask(MOD_DAMAGE_PERCENT_TAKEN, …)`
+  that is a per-swing model with no hard-coded numbers (Putricide's sharers).
 - **A leech's multiplier lives in `EffectMultipleValue`** and differs by difficulty row: Rune of Blood
   heals Saurfang 10x on normal and 20x on heroic. Read every id.
 - **Speeds and cast times differ by difficulty too.** `speed_walk` differs between a creature's

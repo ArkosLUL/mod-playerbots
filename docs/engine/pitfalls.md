@@ -447,8 +447,10 @@ portal this way.
   gunship's "in flight" band between the decks also covered a bot standing on an edge, so nothing
   moved it. Classify by a midpoint and keep strict bounds only for destinations.
 - **Two duty holds on one bot leave it doing nothing.** Where a script can stack several duty auras
-  on one player, each duty's `Exclusive` or `OwnMovement` hold blocks the other's action. Settle one
-  precedence inside the duty predicates (the Blood-Queen: bite, then Swarming Shadows, then Pact).
+  on one player, each duty's `Exclusive` or `OwnMovement` hold blocks the other's action: two
+  `OwnMovement` rules pass only the movers in both lists, so a duty hold plus a stand hold leaves only
+  the dodge. Settle one precedence inside the duty predicates (the Blood-Queen: bite, then Swarming
+  Shadows, then Pact), or let one duty keep the other's stand (Putricide's plagued holder).
 
 ## Things the bot cannot see
 

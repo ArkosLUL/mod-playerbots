@@ -142,13 +142,19 @@ definition alone:
   - Festergut: `icc festergut tank defensive` (ladder at 2 and 3 Inhaled Blight, `fg.defensive`,
     `fg.humancall`), `icc festergut pungent cover` and `icc festergut pungent defensive` (raid cover
     and personal buttons on the Pungent Blight cast);
-  - Rotface: `icc rotface tank defensive` (the kiter under a Big Ooze of 4+ stacks within 6 yd, any
-    tank under 40%, class buttons held to 25%, `rf.defensive`, `rf.humancall`);
+  - Rotface: `icc rotface tank defensive` (a tank kiter under a Big Ooze of 4+ stacks within 6 yd, a
+    damage dealer kiter under any Big Ooze within 6 yd through `NextPhysicalDefensive`, the kiter
+    gassed with its ooze within 20 yd, any tank under 40%, class buttons held to 25%,
+    `rf.defensive`, `rf.humancall`);
   - Putricide: `icc putricide tank defensive` (first 4 s of each phase 3 hold, under 40%, class
     buttons held to 25%, `pp.defensive`, `pp.humancall`), plus `icc putricide brake`, a
     `LiveMultiplier` holding non-holders at 90% of the holder's threat (frees at 80%);
   - Blood Prince Council: `icc bpc tank defensive` (Keleseth's tank through his empowered phase, any
-    tank under 40%, class buttons held to 25%, `bpc.defensive`, `bpc.humancall`);
+    tank under 40%, class buttons held to 25%, `bpc.defensive`, `bpc.humancall`), `icc bpc lance
+    defensive` (a Keleseth stand-in's `GetRaidPersonalDefensive` on `icc.personal` per Shadow Lance),
+    `icc bpc flame defensive` (the Inferno victim's magic row, never Cloak of Shadows, or Dispersion;
+    never an immunity; `bpc.flame`), plus `icc bpc brake`, a `LiveMultiplier` holding non-owners at
+    90% of the empowered prince's owner's threat (frees at 80%);
   - Blood-Queen: `icc bql tank defensive` (any tank under 40%, her holder and the mirror tank in the
     last minute before Berserk, class buttons held to 25%, `bql.defensive`, `bql.humancall`), `icc bql
     whirl cover` and `icc bql whirl defensive` (raid cover and personal buttons on Bloodbolt Whirl),
@@ -266,17 +272,24 @@ per bot; a taunt on cooldown fails with no ranged pull, which would face the add
 - a caller taunting several units in a row reaches one per cooldown (8 s on every class): the gunship
   home tank's boarders, the council's princes and Dark Nuclei, the Lich King's add passes and Raging
   Spirits;
-- a taunted unit holds the taunter for the 3 s aura, then real threat decides;
+- a taunted unit holds the taunter against threat for the 3 s aura, then real threat decides; a
+  later taunt takes it at once (`ThreatManager::TauntUpdate`: the latest taunt wins);
 - a tank swap (Festergut, Stinky and Precious, Putricide, Saurfang, Sindragosa) waits out a cooldown
   spent elsewhere, while the stacked tank has already stopped.
 
 Saurfang, Festergut, Rotface's Big Ooze, Putricide, the princes, the Blood-Queen and the gunship captain carry taunt
 diminishing returns (`flags_extra` 0x80000). Saurfang's swap is one elected taunt per Rune of Blood with generic taunts
 blocked, and his free tank taunts one Blood Beast only while the next swap stays covered. Festergut
-and the dogs swap by one elected taunt, generic taunts blocked. Rotface's kiter taunts a Big Ooze
-through one path, skipped at the immune level. Putricide's swap is one elected taunt, generic taunts
-blocked, held for two Mutated Plague applications. The council's tanks own their princes by roster
-and taunt one back only below DR level 3, generic taunts blocked; so does the Blood-Queen's main
+and the dogs swap by one elected taunt, generic taunts blocked; with fewer than two tanks alive the
+dogs' zombie guard (a Death Knight, else a paladin damage dealer) taunts zombies off healers, and a
+free tank never taunts zombies. Rotface's kiter taunts a Big Ooze through one path, skipped at the
+immune level. Putricide's swap is one elected taunt, generic taunts blocked, held for two Mutated
+Plague applications, or to 3 stacks after one while taunt DR is under level 3; with no tank alive a
+Death Knight or paladin damage dealer picks him up. The council's tanks own their princes by roster
+and taunt one back only below DR level 3, generic taunts blocked; with one tank in the raid a damage
+dealer stands in for Keleseth (a Death Knight or paladin by its class taunt, others by direct hits
+on nuclei), its threat dumps (Soulshatter, Fade, Feign Death, Invisibility, Misdirection on the
+main tank) blocked by `icc bpc stand-in threat`. So does the Blood-Queen's main
 tank, with Death Grip blocked too. Svalna's captains go to bot tanks by roster, taunted back when
 lost. Valithria's tanks taunt worms and zombies off healers, generic taunts blocked. Sindragosa's
 holder taunts her back off a non-tank and her last-phase swap is one elected taunt, generic taunts
@@ -294,10 +307,12 @@ listeners.
 it, and a has-state read (`ActiveGooPositions`, the reset) uses `Find`. Assignments and latches are
 traced containers, unordered, and no loop over one depends on its order. Saurfang keeps
 `dbs.slot`, `dbs.kill`, `dbs.cc`, `dbs.markheal` and `dbs.protect` in its stem's own
-`RaidInstanceState`, Festergut `fg.slot`, `fg.carrier`, `fg.leg`, `fg.sporespot` and `fg.brake`,
-Rotface `rf.slot`, `rf.dispel`, `rf.kiter`, `rf.flood` and `rf.oozespot`, Putricide `pp.spot`,
-`pp.slot`, `pp.driver`, `pp.receiver` and `pp.brake`, the council `bpc.tank`, `bpc.slot`, `bpc.bomb`
-(`ObsGuidMap`) and `bpc.soak` (`ObsGuidSet`), the Blood-Queen `bql.tank`, `bql.slot`, `bql.airslot`,
+`RaidInstanceState`, Stinky and Precious `dogs.brake` and `dogs.guard` (`ObsGuidSet`), Festergut
+`fg.slot`, `fg.carrier`, `fg.leg`, `fg.sporespot`, `fg.brake`, `fg.closeshift`, `fg.farshift` and
+`fg.drag` (`ObsValue`), Rotface `rf.slot`, `rf.dispel`, `rf.kiter`, `rf.flood`, `rf.oozespot` and
+`rf.freedom` (`ObsValue`), Putricide `pp.spot`, `pp.slot`, `pp.rings` (`ObsValue`), `pp.driver`,
+`pp.receiver` and `pp.brake`, the council `bpc.tank`, `bpc.slot`, `bpc.bomb`, `bpc.petbomb`,
+`bpc.dispel` (`ObsGuidMap`), `bpc.soak` and `bpc.brake` (`ObsGuidSet`), the Blood-Queen `bql.tank`, `bql.slot`, `bql.airslot`,
 `bql.group`, `bql.bite`, `bql.cc`, `bql.curve` and `bql.brake`, Svalna `ss.spear` and `ss.tank`,
 Valithria `vd.healer`, `vd.portalclaim` and `vd.tank`, Sindragosa `sg.tank`, `sg.brake`, `sg.breath`,
 `sg.bombs`, `sg.tombhold` and `sg.beacon`, her drakes `sg.drake.tank`, `sg.drake.brake` and
@@ -328,7 +343,8 @@ id.
   The missiles and impacts they trigger (72297 row 2197; 72295/72615/74280/74281 row 2211) carry
   Putricide as their unit target and never pass the player test. Each impact is noted as a 12 yd, 8
   s hazard circle; consumers size their own. The 70852 missile flies 6 yd/s and its impact is 5 yd:
-  Putricide times each landing from the cast time and keeps it 9 s, Festergut uses 5 yd, 8.5 s.
+  Putricide times each landing from where he stood at its first scan after the cast and keeps it
+  16 s (the listener evicts at 9 s only on the next cast), Festergut uses 5 yd, 8.5 s.
 - **Vile Gas**: Putricide's balcony cast on Rotface heroic, 69240 remapped by the `Spell` constructor to
   73019 (10H) or 73020 (25H), so it is matched through `GetSpellIdForDifficulty`. Notes `rf.vilegas`
   on the victim; no Rotface code reads `rotfaceVileGas` any more.
@@ -343,10 +359,12 @@ Every trigger name starts `icc `, mostly followed by its boss: `lm`, `lady death
 `icc lady deathwhisper` dodge, defensive, frostbolt, dominate mind, taunt, redirect and target;
 Marrowgar's include `icc lm tank defensive` and `icc lm storm cover`, Saurfang's `icc dbs tank
 defensive` and `icc dbs mark defensive`. Festergut's are `icc festergut` goo, pungent defensive,
-pungent cover, tank defensive, bloat swap, brake, target and stand; Rotface's `icc rotface` dodge,
-tank defensive, dispel, ooze taunt, kite, carrier, target and stand; Putricide's `icc putricide`
-dodge, swap, tank defensive, kite, plague, stack, abomination, brake, target and stand; the
-council's `icc bpc` dodge, tank defensive, ball, prince taunt, nucleus, soak, target and stand; the
+pungent cover, tank defensive, bloat swap, bloat clear, brake, target and stand; Rotface's `icc
+rotface` dodge, freedom, totem, tank defensive, dispel, ooze taunt, kite, carrier, cure walk, target
+and stand; Putricide's `icc putricide` dodge, swap, tank defensive, kite, plague, stack, abomination,
+brake, target and stand; the council's `icc bpc` dodge, tank defensive, ball, prince taunt, nucleus,
+soak, lance defensive, flame defensive, dispel, brake (action `icc bpc brake stop`), target and
+stand; the
 Blood-Queen's `icc bql` dodge, vampiric bite, swarming shadows, pact of darkfallen, whirl defensive,
 whirl cover, tank defensive, anti fear, frenzy cc, taunt, brake, target and stand; Valithria's `icc
 valithria` dodge, kite, dream, portal, taunt, snare, void, target and heal; Sindragosa's `icc
@@ -358,7 +376,7 @@ King's `icc lich king` quake, shadow trap, defile, vile spirits, frostmourne, ta
 siphon taunt, plague cure, plague walk, tranquilize, stun, valkyr control, silence dispel, harvest
 soul, target, stack, stand and brake. The others:
 `icc dark reckoning` (Deathwhisper), `icc in cannon` and the `icc gunship` ones (Gunship), `icc
-rotting frost giant plague`, `icc dogs` tank defensive, decimate cover, swap, yield and target
+rotting frost giant plague`, `icc dogs` tank defensive, decimate cover, swap, zombie taunt, yield and target
 (Stinky and Precious), `icc valkyre spear` and `icc sister svalna` hurl, taunt and target (Svalna). The raid-wide `icc opener swing`, `icc opener redirect` and `icc resistance
 aura` belong to no encounter. Rows register classes under their `Name`, so two classes sharing one leave
 one unbuilt.

@@ -281,7 +281,7 @@ else `7`. `0` still means no unit.
 
 | `e` | Fields |
 |---|---|
-| `hdr` | `v`, `ts` epoch ms, `map`, `inst`, `diff`, `boss`, `bin`, `cfg` (`iccbuffs` from v14), `roster[]` of `{g,n,c,r,h}` — `r` role, `h` human |
+| `hdr` | `v`, `ts` epoch ms, `map`, `inst`, `diff`, `boss`, `bin`, `cfg` (`iccbuffs` from v14), `roster[]` of `{g,n,c,r,h}` — `c` numeric class id (paladin 2), `r` role, `h` human |
 | `pull` / `end` | `boss`,`src`: bossstate, mark, engage, rename (then `was`) / `out`: kill, wipe, reset, idle, mapgone, shutdown |
 | `unit` | `g`,`en` entry,`n`,`lvl`,`mhp`,`b` is-boss,`own` owner guid when it has one, plus `c`,`r`,`h` for a player — once per guid |
 | `spell` | `sp`,`n` — once per spell id |
