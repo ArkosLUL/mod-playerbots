@@ -9,9 +9,10 @@ brake, target, stand; multiplier `icc festergut brake`. Raid conventions: [READM
 
 Ids are 10N/25N/10H/25H where they differ; the Spell constructor remaps a cast, so code matches the base
 id through `GetSpellIdForDifficulty`. Inhaled Blight's heroic columns are empty and fall back to the
-normal id of the same size. Gas Spore's aura 69279 has no row. His combat reach is 8, so a player's melee
-range is 10.83 yd from his centre. Every area spell here comes from a creature or reaches allies, so its
-radius is exact, centre to centre.
+normal id of the same size. Gas Spore's aura 69279 has no row. His combat reach is 8, 20% more a stack of
+Inhaled Blight (its scale aura), so a player's melee range from his centre is 10.83 yd, 15.63 at three
+stacks. Every area spell here comes from a creature or reaches allies, so its radius is exact, centre to
+centre.
 
 | Ability | Script | Guide | Bots |
 |---|---|---|---|
@@ -24,8 +25,9 @@ radius is exact, centre to centre.
 | Malleable Goo (heroic) 72296 → 72297/72548/72549/72550 | Putricide, from his balcony (4324.8, 3166.0, 389.4), at a random player but his victim, from 15-20 s, every 15-20 s; lands where it stood at the throw after the 12 yd/s flight (46-97 yd to a stand, 3.9-8.1 s): 5 yd, 14.6-15.4k nature (72549/72550), 20 s swing and cast slow | Ranged dodge the circle; melee switch legs | Forced dodge, leg and far-anchor flips, spore stack shifts (`fg.goo`, `fg.leg`, `fg.sporespot`, `fg.closeshift`, `fg.farshift`) |
 | Berserk | 5 min | | |
 
-His swing before armour and Inhaled Blight: 13.3-19.9k / 21.7-32.6k / 20.5-30.8k / 30.9-46.4k
-(damage modifier 75 / 122.6 / 116 / 174.5 on level 83's 177).
+His 2 s swing before armour and Inhaled Blight: 35.2-48.5k / 57.5-79.2k / 54.4-75k / 81.9-112.8k
+(level 83's 177 base plus 805 attack power / 14, times damage modifier 75 / 122.6 / 116 / 174.5 and the
+2 s attack time).
 
 His boss state moves to `IN_PROGRESS` only once Putricide reaches his balcony point, about 7 s in, so
 the trace opens on the engage and every bot rule reads his combat, not the state. He obeys taunt
@@ -46,9 +48,10 @@ diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is
   cancels it as it lands (`fg.bloatclear`), at once when no other tank lives, else 6 s after the 9th stack;
   a human paladin holder is called to. No other class can: his stacks need 100 s to drop, and no damage
   dealer outlives his swing that long.
-- **Drag**: once he stands 3.5 yd off his spawn outside a spore wave, a bot holder walks to 9 yd past his
-  spawn on the far side from him (`fg.drag`, stand `drag`); he follows a tank only past 10.83 yd, so he
-  comes back. It ends within 2.5 yd, or when a wave starts, where the holder keeps its tank spot.
+- **Drag**: once he stands 3.5 yd off his spawn outside a spore wave, a bot holder walks past his spawn,
+  on the far side from him, by the distance his chase stops at: both combat reaches plus 0.5, 10 yd and
+  14.8 at three Inhaled Blight (`fg.drag`, stand `drag`). He follows a tank past his melee range, so he
+  stops on his spawn. It ends within 2.5 yd, or when a wave starts, where the holder keeps its tank spot.
 - **Tank defensives** (`fg.defensive`, physical only): the holder spends one button at 2 Inhaled Blight
   once a cycle (a cycle ends at each Pungent Blight), and one whenever none runs from 3; any tank under
   40%. Class nodes stay held until 25%. A human holder gets the same windows as calls (`fg.humancall`).
@@ -70,7 +73,8 @@ diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is
   fouled, or ringing a player), sends the whole group onto one spot 7.5 yd clear of every impact
   (`fg.closeshift`, `fg.farshift`): the nearest to its stack within 6.75 yd of its fixed player (the player
   it rings, else for the close group the holder), so his burst still lands; failing that the nearest clear
-  spot within 12 yd, the fixed player left out (value 2). It holds for the wave unless goo fouls it.
+  spot within 12 yd, the fixed player left out (value 2). It holds for the wave unless goo fouls it or the
+  fixed player walks 7.25 yd off it.
 - **Malleable Goo**: a bot other than the holder within 6.5 yd of a live impact interrupts its cast and
   walks, forced, to its own stand if that is 7.5 yd clear, else to the nearest clear spot, a ranged one
   8.5 yd from everyone outside a spore window. A stand under goo waits until the impact ages out.
@@ -83,8 +87,8 @@ Stands are in `ICCHelpers_Festergut.h` round his spawn (4267.92, 3137.26): slots
 28.5 yd, behind and beside him. Every one is navprobe-clean (`--nav 0x09`, settled z 360.385); `los` from
 each and its 3x3 neighbourhood at 1 yd to him and both tank spots is clear (657 rays); the walks between
 them are straight normal paths. Rings at 2-44 yd (25 radii, 72 headings) all settle at 360.385 and see his
-spawn out to 42 yd (one heading blind at 44), so the derived spots, the drag's 9 yd ring and shifted stacks
-kept within 40 yd, need no probe of their own. Gameobject collision isn't in navprobe's sight.
+spawn out to 42 yd (one heading blind at 44), so the derived spots, the drag's 10-14.8 yd ring and shifted
+stacks kept within 40 yd, need no probe of their own. Gameobject collision isn't in navprobe's sight.
 
 ## Decisions
 
@@ -101,7 +105,7 @@ kept within 40 yd, need no probe of their own. Gameobject collision isn't in nav
 | Legs at 135°, 7 yd, released 3.5 yd off his spawn | his 10.83 yd melee range; behind him for either tank | Legs derived from where he settles |
 | Heal reach kept on slots | the spread is 55 yd wide; the heal pick adds 30 to a member past 38.5 yd, so a healer walks only for one 30 points lower than everyone in reach; slot 1 reaches every stand, slots 2 and 3 all but two each, each covering the other's | Held, as Saurfang does |
 | Lust free | neither guide times it; a 5 min DPS race | Lust at 3 Inhaled Blight |
-| Drag past 3.5 yd to 9 yd beyond his spawn, done at 2.5, never in a spore wave | Rotface's drag (same 8 yd reach); a holder leaving the close stack costs the tanks Inoculated | Legs derived from where he stands |
+| Drag past 3.5 yd to his chase stop beyond his spawn, done at 2.5, never in a spore wave | core chase: past his melee range he walks to both reaches plus 0.5 off a tank, a fixed 9 yd leaves him short from one Inhaled Blight and unmoved from two; a holder leaving the close stack costs the tanks Inoculated | Legs derived from where he stands |
 | A shifted stack is one spot, kept for the wave | no 2.5 yd ring fits between the 7.5 yd goo clearance and a fixed player 8 yd off; Vile Gas is held for the window; a walk back can land on the burst | Members dodge one by one and wait the impact out |
 | A shift that can't keep its fixed player in still moves the rest | the others keep their stack | Leave the group to dodge |
 | Third tank holding him trades stands with the relieved tank | his facing and the close stack follow the tank spots | Third tank on the close anchor, inside goo reach of both spot tanks |
@@ -118,8 +122,11 @@ None before, none now.
   that the shift can't clear within 6.75 yd of him leaves him out of the burst (`fg.closeshift` 2).
 - One bot tank that is no paladin, with no human able to taunt, explodes at the 10th Gastric Bloat unless
   he dies first (about 150 s in).
-- The drag's end at 2.5 yd assumes his chase stops near melee reach of a tank 9 yd past his spawn;
-  `fg.drag` spans and `--stands` show whether it settles.
+- The drag rests on the core's chase stop distance; `fg.drag` spans and `--stands` show whether each one
+  ends.
+- A cancelled bubble leaves the holder suppressed on his threat list until its next hit or Consecration
+  tick, and his once-a-second threat check in between can hand him to the next player for a swing.
+  `--tanks` shows his target runs round each bubble.
 - Humans hold no duty. Hooks, the resist aura included, answer only once he is live (about 7 s in).
 - Built clean at `623638b99` (2026-10-29); no 631 trace from a build with this stem yet.
 

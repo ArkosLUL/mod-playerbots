@@ -35,16 +35,19 @@ Facts the tasks rest on (core, DBC, DB as of this lane):
   `SPELL_ATTR0_NO_IMMUNITIES`, so nothing removes it. School immunity calls `EvaluateSuppressed`, so a
   bubble kept up turns Festergut onto the next on his threat list.
 - Awaken Plagued Zombies 71159 is set to infinite duration (`SpellInfoCorrections`): zombies live until
-  killed or Precious dies. Zombie 38104/38105: 63k/101k health, 1.2-1.9k/2.1-3.2k a swing before
+  killed or Precious dies. Zombie 38104/38105: 63k/101k health, 3.2-4.4k/5.5-7.6k a swing before
   armour, Infected Wound 71158 → 71157 on every swing (+100 physical damage taken a stack, 99, 60 s).
   Precious 3.15M (10) / 8.82M (25): a wave of 11 is 22% (10) or 13% (25) of her health.
-- Dogs' swings: Stinky 4.9-7.3k (10) / 10.3-15.5k (25), Precious 9.7-14.6k / 20.7-31k before armour.
-  Festergut 13.3-19.9k (10N) before Inhaled Blight.
+- Swings every 2 s before armour, (base + attack power / 14) × damage modifier × 2 (`CalculateMinMaxDamage`):
+  Stinky 12.5-17.4k (10) / 26.4-36.7k (25), Precious 24.9-34.7k / 52.9-73.5k; Festergut 35.2-48.5k (10N)
+  to 81.9-112.8k (25H) before Inhaled Blight.
+- Inhaled Blight's scale aura grows his combat reach 20% a stack (8 → 12.8 at three), and his chase stops at
+  both reaches plus 0.5 off a tank (`ChaseMovementGenerator`).
 
 Tasks:
 
 1. Festergut drag: a bot holder walks him back once he stands 3.5 yd off his spawn outside a spore
-   wave, to a spot 9 yd past his spawn on the far side from him, until he is within 2.5 yd (`fg.drag`,
+   wave, to his chase stop distance past his spawn on the far side from him, until he is within 2.5 yd (`fg.drag`,
    stand `drag`).
 2. Spore stack shift: goo fouling the close stack, or a far stack the flips can't move, sends that group
    onto one spot clear of every impact for the rest of the wave, within 6.75 yd of the player who can't
@@ -63,21 +66,25 @@ Tasks:
 
 | Choice | Source | Alternative |
 |---|---|---|
-| Drag past 3.5 yd, 9 yd past his spawn, done within 2.5 yd, never in a spore wave | Rotface's drag (same 8 yd reach); his legs release at 3.5; a holder walking off the close stack loses the tanks' stack | Legs derived from where he stands |
+| Drag past 3.5 yd, to both combat reaches plus 0.5 past his spawn (10-14.8 yd), done within 2.5 yd, never in a spore wave | core chase stop distance, widened by Inhaled Blight's scale (review: a fixed 9 yd left him short from one stack, unmoved from two); his legs release at 3.5; a holder walking off the close stack loses the tanks' stack | Legs derived from where he stands |
 | Shifted stack is one spot, no ring | a 2.5 yd ring can't fit between a 7.5 yd goo clearance and a fixed holder 8 yd away; Vile Gas is held 20 s past every spore, so a tight stack costs nothing | Members dodge one by one and wait the impact out |
 | Shift kept for the rest of the wave unless goo fouls it again | a walk back can land on the burst | Return once the impact ages out |
 | A shift that can't keep the holder in still moves the rest | three of four keep their stack | Leave the group to dodge one by one |
 | Third tank takes the relieved tank's spot | his facing and the close stack both follow the tank spots | Third tank on the close anchor (inside goo reach of both spot tanks) |
 | Human ranged and healers count toward Vile Gas's quota by spec, not by where they stand | a position count flaps melee in and out as humans move | Position past 14.5 yd |
-| Paladin bubble cleared at 9 at once with no human able to taunt, else 6 s after the 9th stack | Wowhead: Divine Shield removes Gastric Bloat; the next stack lands 15-17.5 s after; suppression turns him while it runs, so it is cancelled at once | Bubble kept up (he turns to the raid) |
-| No damage-dealer swap on Festergut | his stacks need 100 s to drop; 13-20k swings on a damage dealer | — |
-| No damage-dealer swap on the dogs | Decimate leaves the taker at 15% under 5-31k swings within the 15 s the stacks need | — |
+| Paladin bubble cleared at 9 at once when no other tank lives, else 6 s after the 9th stack | Wowhead: Divine Shield removes Gastric Bloat; the next stack lands 15-17.5 s after; suppression turns him while it runs, so it is cancelled at once (it still outlasts the cancel until the holder's next threat, see Known gaps) | Bubble kept up (he turns to the raid) |
+| No damage-dealer swap on Festergut | his stacks need 100 s to drop; 35-113k swings every 2 s before armour on a damage dealer | — |
+| No damage-dealer swap on the dogs | Decimate leaves the taker at 15% under 12.5-73.5k swings within the 15 s the stacks need | — |
 | Dogs brake 90%/80%, folded into the yield | Festergut's and Putricide's brakes | A separate node |
 | Zombie guard only with fewer than two tanks alive, death knight first, then paladin | their taunts work in any presence or seal; plate | Hunters or warlocks with pets |
 | Guard taunts a zombie on a healer; the free tank still doesn't | the guard has no swap to save its taunt for | No guard taunt |
 | Healer walks closed by analysis | the heal pick adds 30 to a member past 38.5 yd, so a healer walks only for one 30 points lower than all in reach; slot 1 reaches every stand, slots 2 and 3 all but two each, and each covers the other's | Block heal reach on slots |
 
 Tasks 1-8 done; healer walks and the resist-hook bullet closed in the doc.
+
+Review: fixed the drag distance (bug), the shift's keep reach, which let a walking fixed player leave the
+burst, the human bubble call missing the Avenging Wrath marker, the swing figures and the explosion
+comment (minor); recorded the bubble's leftover suppression.
 
 ## Carried over
 
@@ -95,7 +102,11 @@ Tasks 1-8 done; healer walks and the resist-hook bullet closed in the doc.
 - No 631 trace from a build with this stem; no `-Werror` pass. Built clean at `623638b99`.
 - Festergut: a goo within 5 yd of the holder still hits him; a shift that can't keep him in leaves him
   out of the burst; one bot tank that is no paladin, with no human able, explodes at the 10th stack; the
-  drag's 2.5 yd end assumes his chase stops near melee reach (`fg.drag`); humans hold no duty.
+  drag rests on the core's chase stop distance (`fg.drag` spans); humans hold no duty.
+- Festergut, from review: a cancelled bubble leaves the holder suppressed on his threat list until its next
+  hit or Consecration tick (only `AddThreat` brings it back), and his once-a-second victim check in that
+  gap can hand him to the next player for a swing. No player action closes it: Hand of Reckoning fails on
+  its own victim. `--tanks` target runs round each bubble show how often.
 - Dogs: one tank carries Mortal Wound to ten stacks; a guard at 15% after Decimate can die to its
   zombies; humans hold no duty.
 

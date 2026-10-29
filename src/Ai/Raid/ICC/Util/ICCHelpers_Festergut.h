@@ -96,11 +96,9 @@ static_assert(FG_SPORE_RING + 2 * FG_STAND_PARK < FG_SPORE_BURST, "the ring sits
 constexpr float FG_SHIFT_REACH = FG_SPORE_BURST - FG_STAND_PARK - 0.5f;
 
 // Legs hold while he stands this close to his spot: 7 + 3.5 stays inside his melee range. Past it a bot
-// holder drags him back: he follows a tank only once it is more than 10.83 yd off, so the holder stands
-// DRAG_DISTANCE past his spot on the far side from him until he is back within BOSS_SETTLED.
+// holder drags him back, standing past his spot on the far side from him until he is within BOSS_SETTLED.
 constexpr float FG_BOSS_DRIFT = 3.5f;
 constexpr float FG_BOSS_SETTLED = 2.5f;
-constexpr float FG_DRAG_DISTANCE = 9.0f;
 static_assert(FG_BOSS_SETTLED < FG_BOSS_DRIFT, "the drag has to stop short of where it starts");
 
 // Malleable Goo (72297 row 2197) hits 5 yd round where its target stood when Putricide threw it. A bot

@@ -16,10 +16,11 @@ Stinky 37025 (25-man 38064) stands in Festergut's room, Precious 37217 (38103) i
 | Mortal Wound 71127 | On the victim every 1.5-2.5 s, −10% healing taken a stack, 15 s, ten at most; one id on every difficulty; `SPELL_ATTR0_NO_IMMUNITIES`, so no bubble removes it | Tank swap | Elected swap at 6 by a tank 4 stacks lighter (`dogs.swap`); the relieved tank yields until its stacks drop (`dogs.yield`); threat brake (`dogs.brake`) |
 | Decimate 71123 | From 20-25 s, every 20-25 s: 3 s cast, everyone within 100 yd (SpellInfoCorrections) above 15% health set to 15%, then the dog stuns itself 3 s | Healers ready for it | The holder spends a tank button in the cast; the raid cover while the dog is stunned (`icc.cover`) |
 | Plague Stench 71805 (Stinky) | Aura from the pull: 71160 (10) 3k, 71161 (25) 4.5k nature every 3 s within 100 yd, no heroic row | Heal through | Counted as two ticks in the Decimate cover |
-| Awaken Plagued Zombies 71159 (Precious) | From 25-30 s, every 20-25 s: 11 Plagued Zombies 38104, each opening on a random player, living until killed (SpellInfoCorrections sets the summon infinite); she despawns them when she dies. 63k / 101k health (10 / 25), 1.2-1.9k / 2.1-3.2k a swing before armour, each swing Infected Wound 71157 (+100 physical damage taken a stack, 99, 60 s) | Kill her, AoE the zombies | Everyone on her; the free tank, or with one tank the zombie guard, takes zombies on non-tanks; area damage free |
+| Awaken Plagued Zombies 71159 (Precious) | From 25-30 s, every 20-25 s: 11 Plagued Zombies 38104, each opening on a random player, living until killed (SpellInfoCorrections sets the summon infinite); she despawns them when she dies. 63k / 101k health (10 / 25), 3.2-4.4k / 5.5-7.6k a 2 s swing before armour, each swing Infected Wound 71157 (+100 physical damage taken a stack, 99, 60 s) | Kill her, AoE the zombies | Everyone on her; the free tank, or with one tank the zombie guard, takes zombies on non-tanks; area damage free |
 
-Each dog has 3.15M (10) / 8.82M (25) health and swings for 4.9-7.3k / 10.3-15.5k (Stinky) or 9.7-14.6k /
-20.7-31k (Precious) before armour. A zombie wave is 22% (10) or 13% (25) of Precious's health.
+Each dog has 3.15M (10) / 8.82M (25) health and swings every 2 s for 12.5-17.4k / 26.4-36.7k (Stinky) or
+24.9-34.7k / 52.9-73.5k (Precious) before armour: level 80's 164.9 base plus 642 attack power / 14, times
+the damage modifier and the 2 s attack time. A zombie wave is 22% (10) or 13% (25) of Precious's health.
 
 ## Duties
 

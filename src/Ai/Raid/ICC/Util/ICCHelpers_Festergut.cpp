@@ -62,7 +62,9 @@ constexpr float SPREAD_KEEPOUT = FG_VILE_GAS_RADIUS + 0.5f;
 // Inoculated takes 25% a stack off his shadow area damage, three at most
 constexpr float INOCULATED_CUT = 0.25f;
 constexpr uint32 INOCULATED_MAX = 3;
+// Either one refuses Divine Shield (spell_pal_immunities)
 constexpr uint32 SPELL_FORBEARANCE = 25771;
+constexpr uint32 SPELL_AVENGING_WRATH_MARKER = 61987;
 // A shifted spore stack is searched on rings this far apart, 16 headings each; one with nobody fixed in it
 // looks this far round its stack
 constexpr float SHIFT_STEP = 0.75f;
@@ -684,8 +686,9 @@ void UpdateShift(Shift& shift, Position const& base, Unit* fixed, std::vector<Po
     Position const fixedAt = fixed ? fixed->GetPosition() : Position();
     if (shift.on)
     {
+        // A parked carrier is within FG_STAND_PARK of the spot, so this keeps a walking player in the burst
         bool const inReach = !fixed || !shift.fixedIn ||
-                             shift.spot.GetExactDist2d(fixedAt) <= FG_SHIFT_REACH + FG_STAND_UNPARK;
+                             shift.spot.GetExactDist2d(fixedAt) <= FG_SPORE_BURST - FG_STAND_PARK;
         if (inReach && ClearOf(shift.spot, impacts, FG_GOO_CLEARANCE))
             return;
     }
@@ -726,7 +729,9 @@ void UpdateShifts(FgState& state, Player* bot, Creature* boss, std::vector<Posit
     state.farShifted = ShiftValue(state.farShift);
 }
 
-bool DragSpot(Creature* boss, Position& spot)
+// His chase stops at both combat reaches plus CONTACT_DISTANCE, and Inhaled Blight grows his reach 20% a
+// stack, so the holder stands that far past his spot and he stops on it
+bool DragSpot(Creature* boss, Player* holder, Position& spot)
 {
     float const dx = ICC_FG_BOSS_SPOT.GetPositionX() - boss->GetPositionX();
     float const dy = ICC_FG_BOSS_SPOT.GetPositionY() - boss->GetPositionY();
@@ -734,8 +739,9 @@ bool DragSpot(Creature* boss, Position& spot)
     if (length < 0.1f)
         return false;
 
-    spot = Position(ICC_FG_BOSS_SPOT.GetPositionX() + dx / length * FG_DRAG_DISTANCE,
-                    ICC_FG_BOSS_SPOT.GetPositionY() + dy / length * FG_DRAG_DISTANCE, ICC_FG_BOSS_SPOT.GetPositionZ());
+    float const reach = boss->GetCombatReach() + holder->GetCombatReach() + CONTACT_DISTANCE;
+    spot = Position(ICC_FG_BOSS_SPOT.GetPositionX() + dx / length * reach,
+                    ICC_FG_BOSS_SPOT.GetPositionY() + dy / length * reach, ICC_FG_BOSS_SPOT.GetPositionZ());
     return true;
 }
 
@@ -811,7 +817,7 @@ bool DesiredStand(FgState const& state, Player* bot, Creature* boss, uint8& id, 
     if (holder == bot && !IsTankPlayer(bot))
         return false;
 
-    if (holder == bot && state.drag.Get() && DragSpot(boss, spot))
+    if (holder == bot && state.drag.Get() && DragSpot(boss, bot, spot))
     {
         id = STAND_DRAG;
         kind = "drag";
@@ -956,7 +962,7 @@ void CallHumanTank(FgState& state, Player* sender, Creature* boss, uint32 now)
 
     if (holder->getClass() == CLASS_PALADIN && holder->HasSpell(SPELL_FG_DIVINE_SHIELD) &&
         !holder->HasSpellCooldown(SPELL_FG_DIVINE_SHIELD) && !holder->HasAura(SPELL_FORBEARANCE) &&
-        NobodyTakesHim(&state, sender, boss) &&
+        !holder->HasAura(SPELL_AVENGING_WRATH_MARKER) && NobodyTakesHim(&state, sender, boss) &&
         CallHumanTankDefensive(sender, holder, SPELL_FG_DIVINE_SHIELD, 0,
                                "Gastric Bloat is at 9 and nobody can take him: bubble, then cancel it", "fg.humancall"))
         return;
