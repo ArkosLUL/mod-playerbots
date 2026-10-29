@@ -8,12 +8,26 @@
 #define PLAYERBOTS_ICCMULTIPLIERS_BLOODQUEEN_H
 
 #include "Multiplier.h"
+#include "RaidAntiFear.h"
 
-class IccBqlMultiplier : public Multiplier
+// A braked bot's attacks on her and its area damage next to her: its threat would take her off her holder
+class IccBqlBrakeMultiplier : public Multiplier
 {
 public:
-    IccBqlMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc bql multiplier") {}
+    IccBqlBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc bql brake") {}
     float GetValue(Action* action) override;
+};
+
+class IccBqlAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
+{
+public:
+    IccBqlAntiFearTotemGuardMultiplier(PlayerbotAI* botAI)
+        : RaidAntiFearTotemGuardMultiplier(botAI, "icc bql anti fear totem guard")
+    {
+    }
+
+protected:
+    bool FearWindowActive() override;
 };
 
 #endif

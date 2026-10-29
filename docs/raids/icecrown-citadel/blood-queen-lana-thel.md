@@ -1,86 +1,173 @@
 # Blood-Queen Lana'thel
 
-Boss id 8, trace slug `blood-queen-lana-thel`, prefix `bql.` ([README](README.md)). Code: stem
-`BloodQueen` (`src/Ai/Raid/ICC/*/ICC*_BloodQueen.*`), the `icc bql` nodes, `IccBqlMultiplier`.
-Mechanics: `boss_blood_queen_lana_thel.cpp`.
+Boss id 8, slug `blood-queen-lana-thel`, prefix `bql.` ([README](README.md)). Code: stem `BloodQueen`
+(`src/Ai/Raid/ICC/*/ICC*_BloodQueen.*`); nodes `icc bql` dodge, vampiric bite, swarming shadows, pact of
+darkfallen, whirl defensive, whirl cover, tank defensive, anti fear, frenzy cc, taunt, brake, target,
+stand; multipliers `icc bql brake`, `icc bql anti fear totem guard`. Core: `boss_blood_queen_lana_thel.cpp`.
 
 ## Mechanics
 
-- Entry 37955 (difficulty entries 38434-38436). `IN_PROGRESS` at her engage, which evades unless the
-  council is `DONE`. Berserk at 330 s. Immunity set -361 lets taunts land; `flags_extra` 0x80000 puts
-  them on DR, and 0x200 (`NO_MOVE_FLAGS_UPDATE`) leaves her movement flags to her script alone.
-- **Blood Mirror** every 2.5 s links her victim to the nearest other player within 39 yd; **Delirious
-  Slash** (row 2091) at 10-12 s, then every 20-24 s, on that player within 10 yd, else her victim.
-- **Vampiric Bite** (row 2093) at 15 s on the highest-threat player who is neither her victim, the
-  Blood Mirror player, nor a vampire: it gains Essence of the Blood Queen (row 2087), whose 75 s tick
-  sets off **Frenzied Bloodthirst** (row 2083: 70877 10-man, 71474 25-man, the same ids on heroic,
-  15 s and 10 s). Biting a non-vampire clears it and renews the Essence; letting it expire brings
-  Uncontrollable Frenzy 70923, a mind control.
-- **Pact of the Darkfallen** 71340 at 20 s, then every 30 s, on 2 players (25-man 3), never her victim
-  or the Blood Mirror player; it ends once every member stands within 5 yd of the others.
-- **Swarming Shadows** at 30 s, then every 30 s, on one random player outside the victim, the Blood
-  Mirror player, Pact and Frenzy: 71264 for 2 s, then 71265 dropping a Swarming Shadows 38163 every
-  0.5 s for 6 s. Both carry the name, so a name test covers the warning and the trail.
-- **Twilight Bloodbolt** at 15-25 s, then every 10-15 s, on 2 players (25-man 4).
-- **Air phase** at 124 s (25-man 127 s): she turns passive and walks to the room's centre, casts
-  Incite Terror 73070 there, and 2.5 s later takes off with gravity off to 22 yd above it, casts
-  Bloodbolt Whirl 71772 at the top and lands 7 s later. The next comes 120 s (25-man 100 s) after she
-  reaches the centre. Pact returns 5 s after landing, Swarming Shadows 20 s after.
+Ids are 10N/25N/10H/25H where they differ; code remaps a difficulty row through
+`GetSpellIdForDifficulty`. The world DB remaps none of hers. Every area is a creature's or a player's
+on players: centre to centre.
+
+| Ability | Script | Guide | Bots |
+|---|---|---|---|
+| Blood-Queen 37955 | Instance guid slot 8. `IN_PROGRESS` at her engage, which evades unless the council is `DONE`; zone combat. Combat reach 7.2, so melee reach her from 10 yd. Taunt DR (`flags_extra` 0x80000), 0x200 leaves her gravity flag to her script. Evades past 64 yd from (4595.93, 2769.37). Berserk at 330 s | 2 tanks, 4-6 healers (10-man 1-3) | Tank roster (`bql.tank`); recovery taunt below DR level 3, generic taunts and Death Grip blocked |
+| Shroud of Sorrow 70986 → 70985 (row 2092) | Every 2 s, shadow within 40 yd: 4k on 10N, 4.5k otherwise | Healed through | Shadow resistance aura (hook) |
+| Presence of the Darkfallen, heroic | Each bite stacks 70995 on her: +5% damage done a vampire | Raid cooldowns late | Counted in the Whirl's predicted hit |
+| Blood Mirror 70821 | From 2.5 s, every 2.5 s: links her victim to the nearest other alive player within 39 yd; the victim carries 70821, the linked player 70838 and takes the victim's damage as shadow | The off-tank stays next to the main tank | Mirror tank stands on the main tank |
+| Delirious Slash 71623 (row 2091) | 10-12 s, then every 20-24 s: 50% weapon damage (heroic 75%) plus a 15 s bleed on the linked player within 10 yd plus both reaches, else her victim | Off-tank in stamina gear | Tank buttons under 40% |
+| Vampiric Bite 71726, hers | Once, at 15 s, on the highest-threat player who is no vampire and not her victim, the linked off-tank included: Essence of the Blood Queen 70867 (row 2082) | Bitten third on threat | Tanks but the main one don't attack her until the first vampire exists |
+| Essence of the Blood Queen 70867, 70879 after a bite (rows 2082, 2087) | 75 s (25-man 60 s): +100% damage, heals 10% of damage done; 70871 sets threat ×0. It ends in Frenzied Bloodthirst 70877 (row 2083: 71474 on 25-man), 15 s (25-man 10 s), with pacify and silence | Bite another player inside the window, in a set order, never a healer | Each frenzied bot is handed a target (`bql.bite`) and bites by id |
+| Vampiric Bite 70946, the vampire's (row 2084) | Melee range, not a vampire: renews the biter's Essence, gives the target one; an override spell, never in the spellbook | As above | Cast by id: a name resolves to nothing |
+| Uncontrollable Frenzy 70923 | A Frenzy that runs out: a permanent charm with +100% damage; she kills them all if she evades | Killed or controlled | One CC bot per victim (`bql.cc`) |
+| Pact of the Darkfallen 71340 | 20 s, then every 30 s (5 s after landing), on 2 players (25-man 3), never her victim, the linked off-tank or a frenzy victim, for 28 s. Every second 71341 hits the carrier and every unlinked ally within 10 yd of it, +10% each 5 s, +20% on heroic; it ends once every member stands within 5 yd of every other | Gather at a spot picked in advance, in the middle | Members walk to the latched Pact spot (`bql.pact`); stands keep 12 yd off it |
+| Swarming Shadows 71264 → 71265 | 30 s, then every 30 s (20 s after landing), on a random player not her victim, the off-tank, a Pact member or a frenzy victim: a 2 s warning, then a Swarming Shadows 38163 at its feet every 0.5 s for 6 s, each living 90 s and hitting 71268 (row 2213) within 4 yd every second; the carrier takes 71277 (row 2214) | Run to the edge of the room, never near the Pact spot | The carrier walks a wall lane (`bql.curve`); everyone else dodges, and nodes near a shadow are re-dealt (`bql.dodge`) |
+| Twilight Bloodbolt 71818 (row 2109) | 15-25 s, then every 10-15 s, on 2 players (25-man 4) not her victim, the off-tank, Pact or frenzy; 15 yd/s missile, then Bloodbolt Splash 71447 (row 2086) within 6 yd | 6 yd spread, melee in 2-3 small stacks | 7.5 yd lattice, melee in up to 3 groups |
+| Air phase | 124 s (25-man 127 s): passive, she runs to (4595.71, 2769.42), casts Incite Terror 73070 there (instant, a 4 s magic fear within 99 yd), takes off 2.5 s later to 22 yd up at 4.5 yd/s, then Bloodbolt Whirl. The next comes 120 s (25-man 100 s) after she reaches the centre | Fear Ward, Tremor Totem, Mass Dispel; tanks stay put | `RaidAntiFear` from 8 s before the walk until takeoff; the main tank holds the tank spot |
+| Bloodbolt Whirl 71772 | A 6 s channel at the top: every 2 s 71899 (row 2113) picks a third of the raid not yet hit, so everyone once; 71446 (row 2085), 30 yd/s from 22 yd up, splashes 71447 within 6 yd. She starts down 7 s after the cast starts, lands at the centre and runs to her top threat | Spread 6 yd, raid and personal cooldowns | Melee, spare and mirror tanks take air nodes until the Whirl ends; raid cover and personal buttons (`icc.cover`, `icc.personal`) |
 
 ## Phase
 
 `IccBqlPhaseOf` publishes `bql.phase` from her own state: `center` while passive with gravity on (the
-walk and Incite Terror), `air` from takeoff until she lands, `ground` otherwise. Every phase test of
-the group action and the multiplier goes through it. It replaced a height test plus three latches,
-which saw the walk only once she was within 20 yd of the centre, never before she had once stood at
-the tank spot, and read her as walking whenever she was tanked off that spot near the centre.
+walk and Incite Terror), `air` from takeoff until she lands, `ground` otherwise. It replaced a height
+test plus three latches that saw the walk late and misread her tanked off-spot near the centre.
 
-Her triggers also bail while a prince is found. The princes die together and stay dead once the
-council is `DONE`, so that never fires in her fight; the council room's intro Blood-Queen 38004
-shares her name but never enters combat, so `"find target"` never resolves it.
+## Layout
 
-## Tactics
+Every point is navprobed with `--nav 0x09` and settles within 0.1 yd of its Z; every node's 3x3 grid at
+1 yd sees her ramp spot and her air spot 22 yd above the centre, and those in 38 yd of the tank spot see
+it and the group spots. The bowl is flat at 400.14 out to 37.5-39 yd from the centre (4595.71, 2769.42)
+on the sides and past 41 yd at the south end; the dais north of it is flat at 401.75 from 27 to 37.5 yd
+north, over a ramp, and drops to the council room below at 38.5 yd.
 
-- The main tank holds her at `ICC_BQL_TANK_POSITION`; the assist tank stands on the main tank, and
-  holds still while it carries Blood Mirror with her above 90%.
-- **Ground**: melee on her; ranged and healers take one of 19 slots on three arcs (20, 27, 35 yd)
-  from the tank spot toward the centre (`bql.slot`), each slot 7 yd clear of any shadow, else follow
-  the lowest-guid melee bot until one frees up.
-- **Center**: everyone walks to the centre. **Air**: tanks stack on the lowest-guid tank at the
-  centre; every other bot takes one of 73 slots on rings of 10, 18, 26 and 34 yd round it, hunters
-  from the outside in (`bql.airslot`), and pops a defensive on Bloodbolt Whirl. Reach, flee and avoid
-  are vetoed in the air.
-- **Swarming Shadows**: the victim, tanks included, walks one of three lanes along the nearer wall,
-  the outermost preferred, in steps of up to 7 yd that keep 4 yd from every shadow, and runs to the
-  centre when all three are blocked and it stands in a shadow. The lane (`bql.curve`) is dropped
-  when the trail ends, so the next trail picks its own.
-- **Frenzied Bloodthirst**: biters in guid order each claim the nearest player who is no vampire,
-  carries no Swarming Shadows and is a dps or healer, tanks only when none is left. A biter cancels
-  Divine Shield, Ice Block, Cloak of Shadows and Deterrence, walks in, and bites within 4 yd.
-- **Pact**: members meet on a tank carrying it, else at their centre, else on the one other member.
-- A biter, a Pact member and a Swarming Shadows victim run only that action.
+- **Tank spot** (4630.71, 2769.42, 401.75), 3.5 yd short of the dais edge (the old one was 1 yd). She
+  stops 9.2 yd short of a tank she chases, on the ramp at (4621.51, 2769.42).
+- **Nodes** (`ICC_BQL_NODES`, 42): one triangular lattice with 7.5 yd sides (6 yd splash plus two
+  0.75 yd park tolerances) within 25 yd of the centre, so a shadow on the inner lane misses it. The 27
+  ground nodes keep 12 yd off the first Pact spot and 9 yd off her default group spots: 17 are in caster
+  reach of her ramp spot, 11 in heal reach of the tank spot too. The rest are air nodes.
+- **Pact spots**: 6 yd south of the centre, then 8 yd either side when a shadow fouls it.
+- **Lanes**: arcs of 35.5 and 30.5 yd round the centre, 40 degrees either side of north round the south
+  end, a point every 5 yd.
+- **Melee groups**: 7.5 yd from her latched spot, behind her and 60 degrees either side (two groups 45
+  degrees), stepped 30 degrees at a time to at most 120 off her back when a shadow or a closer group
+  fouls one; on floor within 2.5 yd of her height, 36 yd of the centre. Groups 60 degrees apart are
+  7.5 yd apart, and 7.5 + 1.5 drift + 0.75 park stays in her 10 yd melee reach.
+
+## Duties
+
+- **Tanks** (`bql.tank`): bot tanks ranked main tank, assist tanks in order, guid: main, mirror, then
+  spares. With a human main tank in the group, the first bot tank is the mirror. The main tank holds the
+  tank spot all fight, air phase included; the mirror stands on it (1.5 yd beside a bot parked on the
+  spot, else on the main tank) and takes an air node until the Whirl ends; spares join the melee groups.
+  The main tank taunts her back below DR level 3 when she is on somebody else on the ground.
+- **Targets and brake** (`bql.target`, `bql.brake`): a player's skull, else her; nothing for a
+  frenzied or braked bot. Non-holders other than healers and vampires are braked past 90% of her
+  holder's threat until under 80%; tanks but the main one are braked until a vampire exists or 20 s in.
+- **Bites** (`bql.bite`): each frenzied bot is handed the nearest damage dealer, then a tank she isn't
+  on, then a healer, never her victim or the main tank, nobody another biter holds, no vampire, mind
+  control or shadows carrier; anyone under 15k health after those. It cancels Ice Block, walks within
+  3 yd and bites by id.
+- **Mind control** (`bql.cc`): each Uncontrollable Frenzy victim gets the nearest bot that can land a
+  CC now (Polymorph, Cyclone, Hex, Repentance or Hammer of Justice, Blind, Fear, Scatter Shot: known, off
+  cooldown, in its form, short of DR immunity, in range); it recasts whenever the victim isn't stunned,
+  confused, feared or pacified.
+- **Pact**: members walk to the latched spot (`bql.pact`) at forced priority, with Nitro Boosts past
+  12 yd, and stop within 1 yd.
+- **Swarming Shadows** (`bql.curve`): the carrier takes the lane and direction with the shortest walk to
+  a point clear of shadows by 5.5 yd and the longest clear run (45 yd wanted), the outer lane first,
+  walks it point to point at forced priority, and re-plans at a lane end or a foreign shadow ahead.
+  Everyone else within 4.5 yd of a shadow steps 5.75 yd clear (`bql.dodge`); melee keep their target
+  in reach.
+- **Precedence**: the bite, then a shadows trail, then the Pact, when the script stacks them on one bot.
+- **Spread** (`bql.slot`, `bql.airslot`, `bql.group`): healers keep a ground node in 36 yd (held to
+  38) of the main tank and her; ranged one in 35.5 yd of her (hunters 40, held to 37.5 and 42), a 30 yd
+  spell reaching 38.7 yd past her 7.2 combat reach. While she
+  walks or flies held nodes stay put. From her walk to the centre until the Whirl ends, every bot but the
+  main tank without a ground node takes the nearest free node. Melee and spares split into up to three
+  balanced groups by guid. Nodes and spots within 5.75 yd of a shadow are given up.
+- **Defensives**: raid cover and personal buttons over the Whirl (a third of a bolt per tick left plus
+  Shroud's ticks, heroic Presence counted; frenzied bots skip it), class cover nodes held over its
+  lead-in; any tank under 40%, and her holder and the mirror tank in the last minute before Berserk,
+  spend `NextTankDefensive` (`bql.defensive`), class buttons held to 25% until that minute; a human
+  tank is called for both (`bql.humancall`).
+- **Fear**: `RaidAntiFear` from 8 s before her predicted walk (124/127 s in, then 120/100 s after she
+  reaches the centre) until takeoff: Fear Ward, Tremor Totem, earth totems held.
+- **Hooks for the merge stage** (`HookRows()`): burst `IccBloodQueenBurstWindow` (lust once vampires
+  reach 8, 16 on 25-man, or 280 s in), opener `GetBqlOpenerBosses` (her), resist
+  `IccBloodQueenResistSchools` (shadow all fight).
+
+Rules: targeting owned for the whole fight; a braked bot's pickers held; a frenzied bot runs only the
+bite and a shadows carrier only its lane; Pact members and stand holders keep attacks and resurrect
+reach only, tanks on their stand attacks only; spell movers, avoid aoe (it flees a shadow 5 yd), generic
+taunts, Death Grip and tank caster form blocked.
+
+## Decisions
+
+- Pact spot 6 yd south of the centre rather than on the medallion: still in the middle, and the same
+  lattice keeps 17 caster and 11 healer nodes against 14 and 7.
+- One lattice for ground and air: rings round the centre (old air slots) can't hold the ground rules.
+- The mirror tank stays off her until the first vampire: her bite takes the off-tank, not only DPS.
+- Bites reach tanks and healers after the damage dealers: Warcraft Tavern's 10-man count of eight
+  vampires by 3:30 needs them, and an Uncontrollable Frenzy costs more. Never the main tank: a vampire
+  makes no threat.
+- The mind-controlled vampire is controlled, not killed.
+- Lust at the vampire peak, after Wowhead.
+- Tank buttons wait for a low tank or the last minute: no hit of hers is predictable, and Wowhead saves
+  them for the end.
+- Lanes as a horseshoe through the south end, so three live trails fit.
+- No opening positions: her aggro radius is 23 yd, and the gate is open everywhere between pulls.
+- Nodes block heal reach: every healer node covers the tank spot and her.
 
 ## Cheats
 
-Removed: `bql.swarmingshadows`, a tank stripping Swarming Shadows. The core never puts it on her
-victim or the Blood Mirror player, and a tank that gets it now walks the trail the way every other
-bot does: the multiplier already held it to the group action, which falls through to the lane walk.
+None, and none before: `bql.swarmingshadows`, a tank stripping Swarming Shadows, was removed earlier (the
+script never puts it on her victim or the off-tank). Own-aura cancels (Ice Block before a bite) are
+not cheats.
 
 ## Known gaps
 
-- `bql.curve`, `bql.slot` and `bql.airslot` write `0` for an erase as well as for lane or slot 0.
-- No ICC trace yet carries these probes, so no figure here is measured.
+- No 631 trace and never built: every threshold is a model until a pull.
+- One bot tank: nobody stands on the main tank, so Blood Mirror goes to whoever is nearest.
+- A human Pact member who doesn't come keeps the Pact up; humans hold no duty.
+- A mind-controlled vampire runs free once DR makes it immune or no bot carries a listed CC.
+- Pact members walking in hurt bots within 10 yd of their path.
+- Three live trails can fill both lanes; the carrier then takes the best partial run.
+- The bite walk and the Pact walk don't path round shadows.
+- A melee group spot only follows her once she has stood still 0.5 s; while she walks, generic reach
+  follows her.
+- On 25-man the ground nodes run short with more than 17 casters and healers; the rest hold no stand.
+- r14: unused `bqlBotCurrentCurve`, `bqlAirSlotMemory`, `bqlBotSlotMemory` (`ICCScripts.h`, whose
+  keys this stem reuses) and `NPC_SWARMING_SHADOWS`, `SPELL_PACT_OF_THE_DARKFALLEN`,
+  `SPELL_BLOODBOLT_WHIRL` in `ICCData.h`; hoist one walk base.
+
+## Targets for the next pulls
+
+25N first: `--bites` ends every window `bit`, the first vampire a damage dealer; `--tanks` holds one
+main and one mirror all fight, and no Blood Mirror lands on anyone but the mirror (aura 70838);
+`--targets` shows `brake` on the mirror until 15 s and rarely after; `--pact` has every bot member on
+`spot 1` and Pacts under 6 s; `--shadows` keeps every trail on a lane and no `--spread` node lost to a
+shadow; `--spread` has every caster and healer on a ground node and nobody hit by two 71447 in one
+Whirl. 25H: the same, plus deaths in the second Whirl.
 
 ## What a trace answers
 
 | Key | Shape | Says |
 |---|---|---|
 | `bql.phase` | per bot | `ground`, `center`, `air` |
-| `bql.bite` | per biter | `dps` (dps or healer) or `tank` and the pick, `nobody`, `none` outside Frenzied Bloodthirst; re-derived each tick, so a switch is the nearest target changing |
-| `bql.pact` | per Pact member | `tank` and the tank walked to, `hold` for that tank, `center n`, `partner` and the other member; `none` outside it |
-| `bql.curve` | per shadowed bot | The wall lane, 0 the outermost; erased when the trail ends |
-| `bql.slot`, `bql.airslot` | per bot | Ground and air slot indices |
+| `bql.target` | per bot | `boss`, `skull`, `brake`, `bite` |
+| `bql.brake` | per bot | `1` braked, `0` free |
+| `bql.tank` | per tank | `1` main, `2` mirror, `3` spare, `0` off the roster |
+| `bql.bite` | per biter | the player handed, `0` once its Frenzy ends |
+| `bql.cc` | per CC bot | the mind-controlled vampire, `0` released |
+| `bql.pact` | per bot | `spot N` while in a Pact, `none` |
+| `bql.curve` | per carrier | lane `1` outer rising, `2` outer falling, `3` inner rising, `4` inner falling, `0` trail over |
+| `bql.slot`, `bql.airslot`, `bql.group` | per bot | ground node 1-27, node 1-42, melee group 1-3; `0` given up |
+| `bql.dodge` | per bot | `melee`, `clear`, `blocked`, `none` |
+| `bql.defensive`, `bql.humancall` | per tank | the button spent, `idle`; the call to a human tank |
 
-`tools/botobs/bosses/blood_queen_lana_thel.py`: `--phases`, `--bites` (per Frenzied Bloodthirst: the
-picks and `bit`, `frenzy`, `died` or `open`), `--pact`, `--shadows` (per trail, the lanes walked),
-`--slots` (first slot and moves per bot), `--cheats`.
+`tools/botobs/bosses/blood_queen_lana_thel.py`: `--phases`, `--targets`, `--tanks`, `--bites`
+(per Frenzied Bloodthirst: the players handed, `bit`, `frenzy`, `died` or `open`), `--cc`, `--pact`,
+`--shadows`, `--spread`, `--defensives`, `--cheats`.

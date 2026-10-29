@@ -5,57 +5,59 @@
  */
 
 #include "ICCTriggers_BloodQueen.h"
-#include "ICCHelpers_BloodQueen.h"
-#include "ICCHelpers_Shared.h"
+
+#include "Creature.h"
+#include "ICCSeams.h"
 #include "Playerbots.h"
-#include "RaidObs.h"
-#include "Trigger.h"
+#include "Position.h"
+#include "RaidDefensive.h"
 
-bool IccBqlGroupPositionTrigger::IsActive()
+bool IccBqlDodgeTrigger::IsActive() { return IsBqlInShadow(botAI); }
+
+bool IccBqlBiteTrigger::IsActive() { return GetBqlBiteTarget(botAI) != nullptr; }
+
+bool IccBqlShadowsTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "blood-queen lana'thel");
-    if (!boss)
-        return false;
-
-    return !IccAnyBloodPrincePresent(botAI);
+    Position spot;
+    return GetBqlShadowsWalk(botAI, spot);
 }
 
-bool IccBqlPactOfDarkfallenTrigger::IsActive()
+bool IccBqlPactTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "blood-queen lana'thel");
-    if (!boss)
-        return false;
-
-    if (IccAnyBloodPrincePresent(botAI))
-        return false;
-
-    Aura* aura = botAI->GetAura("Pact of the Darkfallen", bot);
-    if (!aura)
-    {
-        if (RaidObs::Active())
-            RaidObs::NoteDerived(bot, "bql.pact", "none");
-        return false;
-    }
-
-    return true;
+    Position spot;
+    return GetBqlPactWalk(botAI, spot);
 }
 
-bool IccBqlVampiricBiteTrigger::IsActive()
+bool IccBqlWhirlDefensiveTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "blood-queen lana'thel");
-    if (!boss)
-        return false;
+    // A frenzied bot is silenced, and an immunity would keep its bite from landing
+    RaidPredictedHit hit;
+    return !IsBqlBiting(botAI) && GetBqlWhirlHit(botAI, hit) &&
+           static_cast<bool>(GetRaidPersonalDefensive(botAI, ICC_DEFENSIVE_SCOPE, &hit));
+}
 
-    if (IccAnyBloodPrincePresent(botAI))
-        return false;
+bool IccBqlWhirlCoverTrigger::IsActive() { return GetBqlWhirlCover(botAI) != RaidCover::None; }
 
-    Aura* aura = botAI->GetAura("Frenzied Bloodthirst", bot);
-    if (!aura)
-    {
-        if (RaidObs::Active())
-            RaidObs::NoteDerived(bot, "bql.bite", "none");
-        return false;
-    }
+bool IccBqlTankDefensiveTrigger::IsActive() { return GetBqlTankDefensive(botAI, "bql.defensive") != 0; }
 
-    return true;
+bool IccBqlAntiFearTrigger::FearWindowActive() { return IsBqlFearWindow(botAI); }
+
+bool IccBqlFrenzyCcTrigger::IsActive()
+{
+    uint32 spellId = 0;
+    return GetBqlFrenzyCc(botAI, spellId) != nullptr;
+}
+
+bool IccBqlTauntTrigger::IsActive() { return GetBqlTauntTarget(botAI) != nullptr; }
+
+bool IccBqlBrakeTrigger::IsActive()
+{
+    Creature* queen = IsBqlBraked(botAI) ? GetBqlQueen(botAI) : nullptr;
+    return queen && (bot->GetVictim() == queen || AI_VALUE(Unit*, "current target") == queen);
+}
+
+bool IccBqlStandTrigger::IsActive()
+{
+    Position spot;
+    return GetBqlStandWalk(botAI, spot);
 }
