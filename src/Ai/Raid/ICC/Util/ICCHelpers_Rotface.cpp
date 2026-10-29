@@ -24,6 +24,7 @@
 #include "InstanceScript.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
+#include "PaladinHelper.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -86,8 +87,11 @@ constexpr float MELEE_KEEP = 9.0f;
 constexpr float KITE_GO = 15.0f;
 constexpr float KITE_MIN_LEAD = 16.0f;
 constexpr float KITE_OFF_RING = 3.0f;
-// Legs in ring steps, best first: 20 degrees is 12.5 yd at the kite radius
+// Legs in ring steps, best first: 20 degrees is 12.5 yd at the kite radius. A wade takes the longest
+// first, to be out of the flood sooner.
 constexpr int8 KITE_LEG_STEPS[] = {2, 3, 1, 4};
+constexpr int8 WADE_LEG_STEPS[] = {4, 3, 2, 1};
+static_assert(std::size(KITE_LEG_STEPS) == std::size(WADE_LEG_STEPS), "both leg orders walk the same steps");
 constexpr float KITE_FLOOD_CLEARANCE = RF_FLOOD_RADIUS + 3.0f;
 constexpr float KITE_STICKY_CLEARANCE = RF_STICKY_RADIUS + 2.5f;
 // A weak Big Ooze is held at the ooze spot only from this close. Farther off, the kiter kites it round the
@@ -101,6 +105,43 @@ constexpr float TAUNT_RANGE = 30.0f;
 constexpr float OOZE_REACH = 6.0f;
 // A damage dealer holds its area attacks while an ooze is this close to it or its target
 constexpr float SPLASH_GUARD = 15.0f;
+// Off a Big Ooze casting its explosion: the missiles fly 5 yd/s from it, so a mark this far out lands
+// 2.5 s after the cast, time for the step off it
+constexpr float BURST_CLEAR = 12.5f;
+constexpr char const* KIND_BURST = "burst";
+
+// A slowed kiter gets freed once its ooze is this close. The flood's slow is a snare, which every freedom
+// clears; Sticky Ooze's and Vile Gas's carry no mechanic, so none does.
+constexpr float FREEDOM_OOZE_NEAR = 20.0f;
+constexpr float FREEDOM_RANGE = 30.0f;
+constexpr uint64 FREEDOM_MECHANICS = (1ULL << MECHANIC_SNARE) | (1ULL << MECHANIC_ROOT);
+constexpr uint32 SPELL_RF_HAND_OF_FREEDOM = 1044;
+constexpr uint32 SPELL_RF_EVERY_MAN_FOR_HIMSELF = 59752;
+constexpr uint32 SPELL_RF_ESCAPE_ARTIST = 20589;
+// Immune to magic auras for 5 s and soaks 75% of spell damage, so a wading Death Knight keeps its speed
+constexpr uint32 SPELL_RF_ANTI_MAGIC_SHELL = 48707;
+// Vile Gas confuses its carrier 6 s, in which a Big Ooze closes 24 yd
+constexpr float GAS_OOZE_NEAR = 20.0f;
+
+// A curer with no carrier in reach walks to this far from it, swung round it in these steps until clear
+constexpr float CURE_WALK_REACH = 25.0f;
+constexpr float CURE_WALK_STEP_DEG = 20.0f;
+constexpr int32 CURE_WALK_TRIES = 7;
+// A lone bot healer takes the inner slot nearest the kiter once its own is this far from it. The nearest
+// is never more than 30 degrees off, 26.3 yd from a kite ring point.
+constexpr float LONE_HEALER_REACH = 30.0f;
+
+// A damage dealer kiter can't take a Big Ooze's swings. It walks to DPS_PICKUP_STANDOFF of one it still
+// has to taunt from past DPS_PICKUP_REACH, waits DPS_SPOT_LEAD_DEG ahead of the ooze spot, and with a
+// Little Ooze on it lets the Big Ooze to DPS_MERGE_GO, so the two merge behind it.
+constexpr float DPS_PICKUP_STANDOFF = 20.0f;
+constexpr float DPS_PICKUP_REACH = 25.0f;
+constexpr float DPS_SPOT_LEAD_DEG = 30.0f;
+constexpr float DPS_MERGE_GO = 9.0f;
+
+// Water totems, the first one known replaces a Cleansing Totem: it strips a disease every 3 s
+constexpr uint32 SPELL_RF_CLEANSING_TOTEM = 8170;
+constexpr char const* WATER_TOTEM_SWAPS[] = {"mana spring totem", "healing stream totem"};
 
 struct Mark
 {
@@ -184,9 +225,15 @@ struct RfState
     RaidObs::ObsValue<uint8> oozeSpot{"rf.oozespot"};
     // Infected player -> the bot that cures it
     RaidObs::ObsGuidMap<ObjectGuid> dispel{"rf.dispel"};
+    // Curer -> the carrier it walks to, for a cure duty out of its reach
+    std::unordered_map<ObjectGuid, ObjectGuid> cureWalk;
+    // The bot due to free the kiter, the kiter itself included
+    RaidObs::ObsValue<ObjectGuid> freer{"rf.freedom"};
     std::unordered_set<ObjectGuid> carriers;
     bool dragging = false;
     int8 kiteDir = 1;
+    // The kiter's last leg was a wade, with no dry one left
+    bool kiteWading = false;
 
     uint32 humanCallMs = 0;
     bool humanCallRan = false;
@@ -296,10 +343,19 @@ uint8 WantedOozeQuadrant(RfState const& st)
     return st.lastWetQuadrant >= 0 ? static_cast<uint8>((st.lastWetQuadrant + 2) % 4) : DEFAULT_OOZE_QUADRANT;
 }
 
-Position OozeSpot(RfState const& st)
+uint8 OozeQuadrant(RfState const& st)
 {
     uint8 const held = st.oozeSpot;
-    return OozeSpotOf(held ? held - 1 : WantedOozeQuadrant(st));
+    return held ? held - 1 : WantedOozeQuadrant(st);
+}
+
+Position OozeSpot(RfState const& st) { return OozeSpotOf(OozeQuadrant(st)); }
+
+// Counter-clockwise of the spot, the way it kites off: the new Big Ooze opens on a carrier at the spot and
+// is taunted from here
+Position DpsKiterWait(RfState const& st)
+{
+    return RingPoint(RF_KITE_RADIUS, 45.0f + 90.0f * OozeQuadrant(st) + DPS_SPOT_LEAD_DEG);
 }
 
 Position TankSpot() { return RingPoint(RF_TANK_SPOT_DISTANCE, 0.0f); }
@@ -511,34 +567,66 @@ void Scan(RfState& st, Player* bot, Creature* boss, uint32 now)
     }
 }
 
-// Lower ranks kite first: an assist tank, another tank, the main tank only while someone else holds him
+// With no second bot tank, a damage dealer whose taunt works as it stands kites: Taunt and Growl want
+// Defensive Stance and Bear Form
+bool CanKiteAsDps(Player* member)
+{
+    uint8 const cls = member->getClass();
+    return IsRaidDpsBot(member) && (cls == CLASS_DEATH_KNIGHT || cls == CLASS_PALADIN);
+}
+
+// Lower ranks kite first: an assist tank, another tank, the main tank only while someone else holds him,
+// then a Death Knight, then a paladin damage dealer
 uint8 KiterRank(Player* member)
 {
+    if (!IsTankPlayer(member))
+        return member->getClass() == CLASS_DEATH_KNIGHT ? 3 : 4;
+
     if (PlayerbotAI::IsAssistTank(member))
         return 0;
 
     return PlayerbotAI::IsMainTank(member) ? 2 : 1;
 }
 
-// The tank to kite the Big Ooze, never the one holding him. The kiter keeps the duty while it can.
+// The bot to kite the Big Ooze, never the one holding him. The kiter keeps the duty while it can, a damage
+// dealer only until a tank other than the main tank is free: the main tank is free whenever Rotface drops
+// his victim for a moment, and would take the duty for one refresh.
 Player* ElectKiter(RfState const& st, std::vector<Player*> const& members)
 {
     ObjectGuid const current = st.kiter;
+    Player* kept = nullptr;
     Player* best = nullptr;
     for (Player* member : members)
     {
-        if (!IsDutyBot(member) || !IsTankPlayer(member) || member->GetGUID() == st.holder)
+        if (!IsDutyBot(member) || member->GetGUID() == st.holder || (!IsTankPlayer(member) && !CanKiteAsDps(member)))
             continue;
 
         if (member->GetGUID() == current)
-            return member;
+            kept = member;
 
         uint8 const rank = KiterRank(member);
         if (!best || rank < KiterRank(best) || (rank == KiterRank(best) && member->GetGUID() < best->GetGUID()))
             best = member;
     }
 
-    return best;
+    bool const tankFree = best && IsTankPlayer(best) && !PlayerbotAI::IsMainTank(best);
+    return kept && (IsTankPlayer(kept) || !tankFree) ? kept : best;
+}
+
+bool IsKiterBot(Player* bot, RfState const& st)
+{
+    ObjectGuid const kiter = st.kiter;
+    return !kiter.IsEmpty() && kiter == bot->GetGUID();
+}
+
+bool IsCarrierBot(Player* bot, RfState const& st) { return st.carriers.count(bot->GetGUID()) != 0; }
+
+// The kiter in the same instance as `bot`, nullptr with none
+Player* KiterOf(Player* bot, RfState const& st)
+{
+    ObjectGuid const guid = st.kiter;
+    Player* kiter = guid.IsEmpty() ? nullptr : ObjectAccessor::FindPlayer(guid);
+    return kiter && IccSameInstance(bot, kiter) ? kiter : nullptr;
 }
 
 bool SlotUsable(RfState const& st, Player* bot, uint8 id)
@@ -562,7 +650,7 @@ void AssignSlots(RfState& st, Player* bot, std::vector<Player*> const& members)
     std::vector<Player*> ranged;
     for (Player* member : members)
     {
-        if (!IsDutyBot(member) || IsTankPlayer(member))
+        if (!IsDutyBot(member) || IsTankPlayer(member) || IsKiterBot(member, st))
             continue;
 
         if (PlayerbotAI::IsHeal(member))
@@ -573,6 +661,11 @@ void AssignSlots(RfState& st, Player* bot, std::vector<Player*> const& members)
 
     std::sort(healers.begin(), healers.end(), IccGuidLess());
     std::sort(ranged.begin(), ranged.end(), IccGuidLess());
+
+    // A lone bot healer follows the kiter round the inner ring, or the far side of the kite ring is out of
+    // its heal reach
+    Player* kiter = KiterOf(bot, st);
+    Player* lone = healers.size() == 1 && kiter ? healers.front() : nullptr;
 
     std::unordered_set<ObjectGuid> roster;
     for (Player* member : healers)
@@ -591,7 +684,8 @@ void AssignSlots(RfState& st, Player* bot, std::vector<Player*> const& members)
         auto const held = st.slot.find(member->GetGUID());
         uint8 const id = held != st.slot.end() ? held->second : 0;
         bool const hunterInner = member->getClass() == CLASS_HUNTER && id >= 1 && id <= RF_INNER_SLOTS;
-        if (id >= 1 && id <= RF_SLOT_COUNT && !used[id] && !hunterInner && SlotUsable(st, bot, id))
+        bool const strayed = member == lone && SlotSpot(id).GetExactDist2d(kiter) > LONE_HEALER_REACH;
+        if (id >= 1 && id <= RF_SLOT_COUNT && !used[id] && !hunterInner && !strayed && SlotUsable(st, bot, id))
         {
             used[id] = true;
             if (PlayerbotAI::IsHeal(member) && !IsOuterSlot(id))
@@ -619,9 +713,11 @@ void AssignSlots(RfState& st, Player* bot, std::vector<Player*> const& members)
             if (used[id] || (hunter && !IsOuterSlot(id)) || !SlotUsable(st, bot, id))
                 continue;
 
-            // The wanted ring first, then the widest gap for a spreading healer, then the nearest slot
+            // The wanted ring first, then the widest gap for a spreading healer, then the nearest slot, to the
+            // kiter for a lone healer
             bool const wanted = healer != IsOuterSlot(id);
-            float score = member->GetExactDist2d(SlotSpot(id)) + (wanted ? 0.0f : 100000.0f);
+            Player const* from = member == lone ? kiter : member;
+            float score = from->GetExactDist2d(SlotSpot(id)) + (wanted ? 0.0f : 100000.0f);
             if (spread && wanted)
             {
                 float gap = 180.0f;
@@ -679,8 +775,9 @@ bool CanPayFor(Player* bot, SpellInfo const* info)
            info->CalcPowerCost(bot, info->GetSchoolMask());
 }
 
-// The disease cure the member can land on the carrier from where it stands. Mutated Infection is a disease.
-char const* ReadyCure(Player* member, Player* carrier)
+// The disease cure the member has ready for the carrier, from where it stands unless `inReach` is false.
+// Mutated Infection is a disease.
+char const* ReadyCure(Player* member, Player* carrier, bool inReach = true)
 {
     static char const* const priest[] = {"abolish disease", "cure disease"};
     static char const* const paladin[] = {"cleanse", "purify"};
@@ -688,8 +785,8 @@ char const* ReadyCure(Player* member, Player* carrier)
 
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
     if (!memberAI || !IsDutyBot(member) || !member->IsAlive() || member->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
-        member->HasUnitFlag(UNIT_FLAG_SILENCED) || member->GetExactDist(carrier) > RF_DISPEL_RANGE ||
-        !member->IsWithinLOSInMap(carrier))
+        member->HasUnitFlag(UNIT_FLAG_SILENCED) ||
+        (inReach && (member->GetExactDist(carrier) > RF_DISPEL_RANGE || !member->IsWithinLOSInMap(carrier))))
         return nullptr;
 
     char const* const* names = nullptr;
@@ -720,17 +817,50 @@ char const* ReadyCure(Player* member, Player* carrier)
     return nullptr;
 }
 
-// One bot cures each infected player once it stands where its ooze merges, or once it runs low
+// Free to leave its place for a cure: never the tank holding him or the kiter, nor a carrier, nor one
+// already walking to another carrier
+bool CanWalkToCure(RfState const& st, Player* member, Player* carrier)
+{
+    if (member->GetGUID() == st.holder || IsKiterBot(member, st) || IsCarrierBot(member, st))
+        return false;
+
+    return std::none_of(st.dispel.Raw().begin(), st.dispel.Raw().end(), [&](auto const& duty)
+                        { return duty.second == member->GetGUID() && duty.first != carrier->GetGUID(); });
+}
+
+KiteMode ModeOf(Player* kiter, RfState const& st, Creature*& ooze);
+
+// A damage dealer kiter never lets its Big Ooze within merge reach, so it's cured at once and its Little
+// Ooze merges behind it
+bool DpsKiterTowing(Player* member, RfState const& st)
+{
+    Creature* ooze = nullptr;
+    return IsKiterBot(member, st) && !IsTankPlayer(member) && ModeOf(member, st, ooze) == KiteMode::Run;
+}
+
+// One bot cures each infected player once it stands where its ooze merges, or once it runs low. With no
+// curer in reach, the nearest one free to leave its place walks over.
 void UpdateDispel(RfState& st, std::vector<Player*> const& members, Creature* boss)
 {
     std::unordered_set<ObjectGuid> ready;
     for (Player* member : members)
-        if (Infected(member, boss) &&
-            (MergeReady(st, member, boss) || member->GetHealthPct() < RF_DISPEL_EMERGENCY_PCT))
+        if (Infected(member, boss) && (MergeReady(st, member, boss) || DpsKiterTowing(member, st) ||
+                                       member->GetHealthPct() < RF_DISPEL_EMERGENCY_PCT))
             ready.insert(member->GetGUID());
 
     for (auto itr = st.dispel.begin(); itr != st.dispel.end();)
         itr = ready.count(itr->first) ? std::next(itr) : st.dispel.erase(itr);
+
+    auto const nearest = [&](Player* carrier, bool inReach)
+    {
+        Player* best = nullptr;
+        for (Player* member : members)
+            if (ReadyCure(member, carrier, inReach) && (inReach || CanWalkToCure(st, member, carrier)) &&
+                (!best || member->GetExactDist(carrier) < best->GetExactDist(carrier)))
+                best = member;
+
+        return best;
+    };
 
     for (Player* carrier : members)
     {
@@ -738,23 +868,33 @@ void UpdateDispel(RfState& st, std::vector<Player*> const& members, Creature* bo
             continue;
 
         auto const held = st.dispel.find(carrier->GetGUID());
-        if (held != st.dispel.end())
-        {
-            Player* current = ObjectAccessor::FindPlayer(held->second);
-            if (current && IccSameInstance(carrier, current) && ReadyCure(current, carrier))
-                continue;
-        }
+        Player* current = held != st.dispel.end() ? ObjectAccessor::FindPlayer(held->second) : nullptr;
+        if (current && (!IccSameInstance(carrier, current) || !ReadyCure(current, carrier, false)))
+            current = nullptr;
 
-        Player* best = nullptr;
-        for (Player* member : members)
-            if (ReadyCure(member, carrier) &&
-                (!best || member->GetExactDist(carrier) < best->GetExactDist(carrier)))
-                best = member;
+        if (current && ReadyCure(current, carrier))
+            continue;
+
+        Player* best = nearest(carrier, true);
+        if (!best && current && CanWalkToCure(st, current, carrier))
+            continue;
+
+        if (!best)
+            best = nearest(carrier, false);
 
         if (best)
             st.dispel[carrier->GetGUID()] = best->GetGUID();
         else
             st.dispel.erase(carrier->GetGUID());
+    }
+
+    st.cureWalk.clear();
+    for (auto const& [carrierGuid, curerGuid] : st.dispel.Raw())
+    {
+        Player* carrier = ObjectAccessor::FindPlayer(carrierGuid);
+        Player* curer = ObjectAccessor::FindPlayer(curerGuid);
+        if (carrier && curer && IccSameInstance(carrier, curer) && !ReadyCure(curer, carrier))
+            st.cureWalk[curerGuid] = carrierGuid;
     }
 }
 
@@ -764,43 +904,6 @@ void UpdateOozeSpot(RfState& st)
 {
     bool const needed = !st.bigOozes.empty() || !st.littleOozes.empty() || !st.carriers.empty();
     st.oozeSpot = needed ? static_cast<uint8>(WantedOozeQuadrant(st) + 1) : 0;
-}
-
-void RefreshDuties(RfState& st, Player* bot, Creature* boss, uint32 now)
-{
-    if (st.dutiesRan && getMSTimeDiff(st.dutyMs, now) < DUTY_REFRESH_MS)
-        return;
-
-    st.dutiesRan = true;
-    st.dutyMs = now;
-
-    std::vector<Player*> const members = MembersOnMap(bot);
-
-    Unit* victim = boss->GetVictim();
-    Player* holder = victim ? victim->ToPlayer() : nullptr;
-    st.holder = holder && IsDutyBot(holder) && IsTankPlayer(holder) ? holder->GetGUID() : ObjectGuid::Empty;
-
-    Player* kiter = ElectKiter(st, members);
-    st.kiter = kiter ? kiter->GetGUID() : ObjectGuid::Empty;
-
-    st.carriers.clear();
-    for (Player* member : members)
-        if (IsDutyBot(member) && Infected(member, boss))
-            st.carriers.insert(member->GetGUID());
-    for (Creature* ooze : Resolve(bot, st.littleOozes))
-        if (Player* carrier = LittleOozeVictim(ooze))
-            if (IsDutyBot(carrier))
-                st.carriers.insert(carrier->GetGUID());
-
-    float const drift = boss->GetExactDist2d(ICC_RF_CENTER);
-    if (!st.dragging && drift > RF_BOSS_DRIFT)
-        st.dragging = true;
-    else if (st.dragging && drift <= RF_BOSS_SETTLED)
-        st.dragging = false;
-
-    AssignSlots(st, bot, members);
-    UpdateOozeSpot(st);
-    UpdateDispel(st, members, boss);
 }
 
 // The Big Ooze the kiter works on: one it still has to pick up first, else the one on it
@@ -825,6 +928,10 @@ KiteMode ModeOf(Player* kiter, RfState const& st, Creature*& ooze)
     if (ooze->GetVictim() != kiter)
         return KiteMode::Pickup;
 
+    // A Big Ooze hits a damage dealer for most of its health, so it never stands for one
+    if (!IsTankPlayer(kiter))
+        return KiteMode::Run;
+
     if (st.carriers.count(kiter->GetGUID()))
         return KiteMode::Hold;
 
@@ -834,7 +941,7 @@ KiteMode ModeOf(Player* kiter, RfState const& st, Creature*& ooze)
     return Stacks(ooze) < RF_KITE_FROM_STACKS && spotHeld ? KiteMode::Tank : KiteMode::Run;
 }
 
-char const* ModeName(KiteMode mode)
+char const* ModeName(KiteMode mode, bool wading)
 {
     switch (mode)
     {
@@ -847,19 +954,160 @@ char const* ModeName(KiteMode mode)
         case KiteMode::Hold:
             return "hold";
         case KiteMode::Run:
-            return "kite";
+            return wading ? "wade" : "kite";
         default:
             return "none";
     }
 }
 
-bool IsKiterBot(Player* bot, RfState const& st)
+// A damage dealer kiter with a Little Ooze on it lets the Big Ooze closer, so the two merge behind it
+float KiteGo(Player* kiter, RfState const& st)
 {
-    ObjectGuid const kiter = st.kiter;
-    return !kiter.IsEmpty() && kiter == bot->GetGUID();
+    if (IsTankPlayer(kiter))
+        return KITE_GO;
+
+    for (Creature* little : Resolve(kiter, st.littleOozes))
+        if (LittleOozeVictim(little) == kiter)
+            return DPS_MERGE_GO;
+
+    return KITE_GO;
 }
 
-bool IsCarrierBot(Player* bot, RfState const& st) { return st.carriers.count(bot->GetGUID()) != 0; }
+// From past taunt reach, a damage dealer kiter walks to a stand-off on the line to the ooze
+bool DpsPickupWalk(Player* kiter, Creature* ooze, Position& spot)
+{
+    float const distance = ooze->GetExactDist2d(kiter);
+    if (distance <= DPS_PICKUP_REACH)
+        return false;
+
+    float const scale = DPS_PICKUP_STANDOFF / distance;
+    spot = Position(ooze->GetPositionX() + (kiter->GetPositionX() - ooze->GetPositionX()) * scale,
+                    ooze->GetPositionY() + (kiter->GetPositionY() - ooze->GetPositionY()) * scale,
+                    ICC_RF_CENTER.GetPositionZ());
+    return spot.GetExactDist2d(ICC_RF_CENTER) <= RF_ROOM_RADIUS;
+}
+
+bool KiterWet(RfState const& st, Player* kiter)
+{
+    return WetAt(st, kiter->GetPosition(), RF_FLOOD_RADIUS + DODGE_TRIGGER);
+}
+
+// In a flood that ticks: its 5 s warning neither hurts nor slows
+bool KiterFlooded(RfState const& st, Player* kiter)
+{
+    return std::any_of(st.wet.begin(), st.wet.end(), [kiter](Wet const& wet)
+                       { return wet.flooding && wet.at.GetExactDist2d(kiter) < RF_FLOOD_RADIUS + DODGE_TRIGGER; });
+}
+
+// The kiter slowed by a snare it can be freed of with its ooze closing, or a Death Knight kiter in a flood
+void KiterBind(RfState const& st, Player* kiter, Creature* ooze, bool& impaired, bool& wading)
+{
+    impaired = ooze->GetExactDist2d(kiter) <= FREEDOM_OOZE_NEAR && !kiter->HasAura(SPELL_RF_HAND_OF_FREEDOM) &&
+               kiter->HasAuraWithMechanic(FREEDOM_MECHANICS);
+    wading = kiter->getClass() == CLASS_DEATH_KNIGHT && KiterFlooded(st, kiter);
+}
+
+// The kiter's own way out: Hand of Freedom, then the racials; wading, a Death Knight's Anti-Magic Shell
+uint32 SelfFreedom(PlayerbotAI* kiterAI, Player* kiter, bool impaired, bool wading)
+{
+    if (impaired)
+        for (uint32 spellId : {SPELL_RF_HAND_OF_FREEDOM, SPELL_RF_EVERY_MAN_FOR_HIMSELF, SPELL_RF_ESCAPE_ARTIST})
+            if (kiterAI->CanCastSpell(spellId, kiter))
+                return spellId;
+
+    return wading && kiterAI->CanCastSpell(SPELL_RF_ANTI_MAGIC_SHELL, kiter) ? SPELL_RF_ANTI_MAGIC_SHELL : 0;
+}
+
+Player* FreedomPaladin(Player* kiter, std::vector<Player*> const& members)
+{
+    Player* best = nullptr;
+    for (Player* member : members)
+    {
+        bool const paladinBot = member != kiter && member->getClass() == CLASS_PALADIN && IsDutyBot(member);
+        PlayerbotAI* memberAI = paladinBot ? GET_PLAYERBOT_AI(member) : nullptr;
+        if (!memberAI || member->HasUnitState(UNIT_STATE_LOST_CONTROL) || member->GetExactDist(kiter) > FREEDOM_RANGE ||
+            !member->IsWithinLOSInMap(kiter) || ai::paladin::HasAnyPaladinHandFromCaster(kiter, member) ||
+            !memberAI->CanCastSpell(SPELL_RF_HAND_OF_FREEDOM, kiter))
+            continue;
+
+        if (!best || member->GetExactDist(kiter) < best->GetExactDist(kiter))
+            best = member;
+    }
+
+    return best;
+}
+
+// The kiter frees itself when it can, else the nearest paladin bot in reach
+void UpdateFreedom(RfState& st, Player* bot, std::vector<Player*> const& members)
+{
+    ObjectGuid freer;
+    Player* kiter = KiterOf(bot, st);
+    PlayerbotAI* kiterAI = kiter ? GET_PLAYERBOT_AI(kiter) : nullptr;
+    Creature* ooze = nullptr;
+    if (kiterAI && ModeOf(kiter, st, ooze) == KiteMode::Run)
+    {
+        bool impaired = false;
+        bool wading = false;
+        KiterBind(st, kiter, ooze, impaired, wading);
+        if (SelfFreedom(kiterAI, kiter, impaired, wading))
+            freer = kiter->GetGUID();
+        else if (Player* paladin = impaired ? FreedomPaladin(kiter, members) : nullptr)
+            freer = paladin->GetGUID();
+    }
+
+    st.freer = freer;
+}
+
+// Vile Gas confuses its carrier, so the Big Ooze on it closes in
+bool GassedWithOozeNear(RfState const& st, Player* member, std::vector<Creature*> const& oozes)
+{
+    if (std::find(st.gasCarriers.begin(), st.gasCarriers.end(), member->GetGUID()) == st.gasCarriers.end())
+        return false;
+
+    return std::any_of(oozes.begin(), oozes.end(), [member](Creature* ooze)
+                       { return ooze->GetVictim() == member && ooze->GetExactDist2d(member) <= GAS_OOZE_NEAR; });
+}
+
+void RefreshDuties(RfState& st, Player* bot, Creature* boss, uint32 now)
+{
+    if (st.dutiesRan && getMSTimeDiff(st.dutyMs, now) < DUTY_REFRESH_MS)
+        return;
+
+    st.dutiesRan = true;
+    st.dutyMs = now;
+
+    std::vector<Player*> const members = MembersOnMap(bot);
+
+    Unit* victim = boss->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    st.holder = holder && IsDutyBot(holder) && IsTankPlayer(holder) ? holder->GetGUID() : ObjectGuid::Empty;
+
+    ObjectGuid const lastKiter = st.kiter;
+    Player* kiter = ElectKiter(st, members);
+    st.kiter = kiter ? kiter->GetGUID() : ObjectGuid::Empty;
+    if (st.kiter.Get() != lastKiter)
+        st.kiteWading = false;
+
+    st.carriers.clear();
+    for (Player* member : members)
+        if (IsDutyBot(member) && Infected(member, boss))
+            st.carriers.insert(member->GetGUID());
+    for (Creature* ooze : Resolve(bot, st.littleOozes))
+        if (Player* carrier = LittleOozeVictim(ooze))
+            if (IsDutyBot(carrier))
+                st.carriers.insert(carrier->GetGUID());
+
+    float const drift = boss->GetExactDist2d(ICC_RF_CENTER);
+    if (!st.dragging && drift > RF_BOSS_DRIFT)
+        st.dragging = true;
+    else if (st.dragging && drift <= RF_BOSS_SETTLED)
+        st.dragging = false;
+
+    AssignSlots(st, bot, members);
+    UpdateOozeSpot(st);
+    UpdateDispel(st, members, boss);
+    UpdateFreedom(st, bot, members);
+}
 
 // A kiter carrying an ooze merges it with the Big Ooze it holds, so it walks only while there is none
 bool CarrierWalks(Player* bot, RfState const& st)
@@ -872,7 +1120,7 @@ void UpdateStand(RfState& st, Player* bot, Creature* boss)
     Stand& stand = st.stands[bot->GetGUID()];
     uint8 id = 0;
     Position spot;
-    if (bot->IsAlive() && !IsCarrierBot(bot, st))
+    if (bot->IsAlive() && !IsCarrierBot(bot, st) && !st.cureWalk.count(bot->GetGUID()))
     {
         if (bot->GetGUID() == st.holder)
         {
@@ -886,7 +1134,7 @@ void UpdateStand(RfState& st, Player* bot, Creature* boss)
             if (mode == KiteMode::Spot || mode == KiteMode::Tank)
             {
                 id = STAND_OOZE_SPOT;
-                spot = OozeSpot(st);
+                spot = IsTankPlayer(bot) ? OozeSpot(st) : DpsKiterWait(st);
             }
         }
         else
@@ -971,11 +1219,16 @@ std::vector<Hazard> const& HazardsFor(PlayerbotAI* botAI, RfState& st)
     for (Position const& puddle : st.sticky)
         memo.hazards.push_back({puddle, RF_STICKY_RADIUS, "sticky", true});
 
-    for (Wet const& wet : st.wet)
-    {
-        bool const urgent = wet.flooding || wet.warningLeftMs < URGENT_WARNING_MS;
-        memo.hazards.push_back({wet.at, RF_FLOOD_RADIUS, "flood", urgent});
-    }
+    // A towing kiter's legs plan round the floods and wade one when nothing dry is left: a dodge out would
+    // only fight the next leg back in
+    bool const kiter = IsKiterBot(bot, st);
+    Creature* towed = nullptr;
+    if (!kiter || ModeOf(bot, st, towed) != KiteMode::Run)
+        for (Wet const& wet : st.wet)
+        {
+            bool const urgent = wet.flooding || wet.warningLeftMs < URGENT_WARNING_MS;
+            memo.hazards.push_back({wet.at, RF_FLOOD_RADIUS, "flood", urgent});
+        }
 
     bool const gassed = std::find(st.gasCarriers.begin(), st.gasCarriers.end(), bot->GetGUID()) != st.gasCarriers.end();
     if (!gassed)
@@ -984,16 +1237,28 @@ std::vector<Hazard> const& HazardsFor(PlayerbotAI* botAI, RfState& st)
                 if (IccSameInstance(bot, carrier))
                     memo.hazards.push_back({carrier->GetPosition(), RF_VILE_GAS_RADIUS, "gas", true});
 
-    if (!IsKiterBot(bot, st) && !IsCarrierBot(bot, st))
-        for (Creature* ooze : Resolve(bot, st.bigOozes))
+    // The kiter and the carriers want the oozes close, but nobody stays near one casting its explosion
+    bool const wantsOozes = kiter || IsCarrierBot(bot, st);
+    for (Creature* ooze : Resolve(bot, st.bigOozes))
+    {
+        if (ooze->FindCurrentSpellBySpellId(SPELL_RF_UNSTABLE_OOZE_EXPLOSION))
+            memo.hazards.push_back({ooze->GetPosition(), BURST_CLEAR, KIND_BURST, true});
+        else if (!wantsOozes)
             memo.hazards.push_back({ooze->GetPosition(), RF_RADIATING_RADIUS, "ooze", false});
+    }
+
+    if (!wantsOozes)
+        for (Creature* ooze : Resolve(bot, st.littleOozes))
+            memo.hazards.push_back({ooze->GetPosition(), RF_RADIATING_RADIUS, "little", false});
 
     return memo.hazards;
 }
 
+// The kiter is no melee, whatever its class: its place is the kite ring
 bool IsMeleeDuty(Player* bot, RfState const& st)
 {
-    return bot->GetGUID() == st.holder || (IsRaidDpsBot(bot) && !PlayerbotAI::IsRanged(bot));
+    return !IsKiterBot(bot, st) &&
+           (bot->GetGUID() == st.holder || (IsRaidDpsBot(bot) && !PlayerbotAI::IsRanged(bot)));
 }
 
 Unit* ResolveTarget(PlayerbotAI* botAI, RfState& st, Creature* boss)
@@ -1004,7 +1269,7 @@ Unit* ResolveTarget(PlayerbotAI* botAI, RfState& st, Creature* boss)
         return nullptr;
 
     // The tank holding him and the kiter with an ooze keep their unit whatever a player marks
-    Creature* ooze = tank && IsKiterBot(bot, st) ? DutyOoze(bot, st) : nullptr;
+    Creature* ooze = IsKiterBot(bot, st) ? DutyOoze(bot, st) : nullptr;
     if (ooze)
     {
         NoteDerived(bot, "rf.target", "ooze");
@@ -1022,20 +1287,22 @@ Unit* ResolveTarget(PlayerbotAI* botAI, RfState& st, Creature* boss)
     return boss;
 }
 
-bool PlanKiteLeg(Player* kiter, RfState const& st, Creature* ooze, Position& spot, int8& dir)
+// A wade drops the flood checks: no dry leg was left either way
+bool PlanKiteLeg(Player* kiter, RfState const& st, Creature* ooze, bool wade, Position& spot, int8& dir)
 {
     float const step = 360.0f / RF_KITE_POINTS;
     int32 const from = static_cast<int32>(std::lround(BearingDeg(kiter->GetPosition()) / step));
     Position const here = kiter->GetPosition();
     bool const inReach = ooze->GetExactDist2d(here) < RF_RADIATING_RADIUS + 1.0f;
+    int8 const* legs = wade ? WADE_LEG_STEPS : KITE_LEG_STEPS;
 
     for (int8 const way : {st.kiteDir, static_cast<int8>(-st.kiteDir)})
-        for (int8 const steps : KITE_LEG_STEPS)
+        for (size_t leg = 0; leg < std::size(KITE_LEG_STEPS); ++leg)
         {
-            Position const point = KitePoint(from + way * steps);
+            Position const point = KitePoint(from + way * legs[leg]);
             float const lead = ooze->GetExactDist2d(point);
-            if (lead < KITE_MIN_LEAD || WetAt(st, point, KITE_FLOOD_CLEARANCE) ||
-                StickyAt(st, point, KITE_STICKY_CLEARANCE))
+            if (lead < KITE_MIN_LEAD || StickyAt(st, point, KITE_STICKY_CLEARANCE) ||
+                (!wade && WetAt(st, point, KITE_FLOOD_CLEARANCE)))
                 continue;
 
             // A leg past the ooze would take the kiter through its aura; from inside it, any leg away will do
@@ -1043,12 +1310,13 @@ bool PlanKiteLeg(Player* kiter, RfState const& st, Creature* ooze, Position& spo
                         : SegmentCrossesCircle(here, point, {ooze->GetPosition(), RF_RADIATING_RADIUS + 1.0f}))
                 continue;
 
-            bool const floods = std::any_of(st.wet.begin(), st.wet.end(),
-                                            [&](Wet const& wet)
-                                            {
-                                                return wet.at.GetExactDist2d(here) >= RF_FLOOD_RADIUS &&
-                                                       SegmentCrossesCircle(here, point, {wet.at, RF_FLOOD_RADIUS});
-                                            });
+            bool const floods = !wade && std::any_of(st.wet.begin(), st.wet.end(),
+                                                     [&](Wet const& wet)
+                                                     {
+                                                         return wet.at.GetExactDist2d(here) >= RF_FLOOD_RADIUS &&
+                                                                SegmentCrossesCircle(here, point,
+                                                                                     {wet.at, RF_FLOOD_RADIUS});
+                                                     });
             if (floods)
                 continue;
 
@@ -1092,6 +1360,15 @@ Unit* GetRfTarget(PlayerbotAI* botAI)
     return memo.pick;
 }
 
+Unit* GetRfPetTarget(PlayerbotAI* botAI)
+{
+    Creature* boss = nullptr;
+    RfState* st = LiveState(botAI, &boss);
+    Unit* pick = st ? GetRfTarget(botAI) : nullptr;
+    bool const kited = pick && pick->GetEntry() == NPC_RF_BIG_OOZE && IsKiterBot(botAI->GetBot(), *st);
+    return kited ? boss : pick;
+}
+
 Unit* GetRfOozeToTaunt(PlayerbotAI* botAI)
 {
     RfState* st = LiveState(botAI);
@@ -1108,28 +1385,44 @@ Unit* GetRfOozeToTaunt(PlayerbotAI* botAI)
     return ooze->GetDiminishing(DIMINISHING_TAUNT) < DIMINISHING_LEVEL_TAUNT_IMMUNE ? ooze : nullptr;
 }
 
-bool GetRfKiteWalk(PlayerbotAI* botAI, Position& spot, int8& dir)
+bool GetRfKiteWalk(PlayerbotAI* botAI, Position& spot, int8& dir, bool& wade)
 {
     RfState* st = LiveState(botAI);
     Player* bot = botAI->GetBot();
+    wade = false;
     if (!st || !IsKiterBot(bot, *st))
         return false;
 
     Creature* ooze = nullptr;
-    if (ModeOf(bot, *st, ooze) != KiteMode::Run)
+    KiteMode const mode = ModeOf(bot, *st, ooze);
+    if (mode == KiteMode::Pickup && !IsTankPlayer(bot))
+    {
+        dir = st->kiteDir;
+        return DpsPickupWalk(bot, ooze, spot);
+    }
+
+    if (mode != KiteMode::Run)
         return false;
 
+    // A flood warning under the kiter moves it on whatever the ooze does
     float const offRing = std::fabs(bot->GetExactDist2d(ICC_RF_CENTER) - RF_KITE_RADIUS);
-    if (ooze->GetExactDist2d(bot) >= KITE_GO && offRing <= KITE_OFF_RING)
+    if (!KiterWet(*st, bot) && ooze->GetExactDist2d(bot) >= KiteGo(bot, *st) && offRing <= KITE_OFF_RING)
         return false;
 
-    return PlanKiteLeg(bot, *st, ooze, spot, dir);
+    if (PlanKiteLeg(bot, *st, ooze, false, spot, dir))
+        return true;
+
+    wade = PlanKiteLeg(bot, *st, ooze, true, spot, dir);
+    return wade;
 }
 
-void CommitRfKiteDir(PlayerbotAI* botAI, int8 dir)
+void CommitRfKiteLeg(PlayerbotAI* botAI, int8 dir, bool wade)
 {
     if (RfState* st = LiveState(botAI))
+    {
         st->kiteDir = dir < 0 ? -1 : 1;
+        st->kiteWading = wade;
+    }
 }
 
 bool IsRfKiteSpotSafe(PlayerbotAI* botAI, Position const& spot)
@@ -1140,11 +1433,27 @@ bool IsRfKiteSpotSafe(PlayerbotAI* botAI, Position const& spot)
         return false;
 
     Creature* ooze = nullptr;
-    if (ModeOf(bot, *st, ooze) != KiteMode::Run)
+    KiteMode const mode = ModeOf(bot, *st, ooze);
+    if (mode == KiteMode::Pickup && !IsTankPlayer(bot))
+        return ooze->GetExactDist2d(bot) > DPS_PICKUP_REACH;
+
+    if (mode != KiteMode::Run)
         return false;
 
-    return !WetAt(*st, spot, KITE_FLOOD_CLEARANCE) && !StickyAt(*st, spot, KITE_STICKY_CLEARANCE) &&
+    return (st->kiteWading || !WetAt(*st, spot, KITE_FLOOD_CLEARANCE)) && !StickyAt(*st, spot, KITE_STICKY_CLEARANCE) &&
            ooze->GetExactDist2d(spot) >= RF_RADIATING_RADIUS + 1.0f;
+}
+
+bool IsRfKiteUrgent(PlayerbotAI* botAI)
+{
+    RfState* st = LiveState(botAI);
+    Player* bot = botAI->GetBot();
+    if (!st || !IsKiterBot(bot, *st))
+        return false;
+
+    Creature* ooze = nullptr;
+    ModeOf(bot, *st, ooze);
+    return ooze && (ooze->GetExactDist2d(bot) < RF_RADIATING_RADIUS || KiterWet(*st, bot));
 }
 
 bool IsRfKiter(PlayerbotAI* botAI)
@@ -1160,9 +1469,36 @@ bool IsRfKiteHeld(PlayerbotAI* botAI)
     if (!st || !IsKiterBot(bot, *st))
         return false;
 
+    // A damage dealer taunts its ooze from range, and reach would walk it into the swings
     Creature* ooze = nullptr;
     KiteMode const mode = ModeOf(bot, *st, ooze);
-    return mode == KiteMode::Run || mode == KiteMode::Hold;
+    return mode == KiteMode::Run || mode == KiteMode::Hold || (mode == KiteMode::Pickup && !IsTankPlayer(bot));
+}
+
+Unit* GetRfFreedom(PlayerbotAI* botAI, uint32& spellId)
+{
+    RfState* st = LiveState(botAI);
+    Player* bot = botAI->GetBot();
+    ObjectGuid const freer = st ? st->freer.Get() : ObjectGuid::Empty;
+    Player* kiter = !freer.IsEmpty() && freer == bot->GetGUID() ? KiterOf(bot, *st) : nullptr;
+    if (!kiter)
+        return nullptr;
+
+    if (kiter != bot)
+    {
+        spellId = SPELL_RF_HAND_OF_FREEDOM;
+        return !kiter->HasAura(SPELL_RF_HAND_OF_FREEDOM) && botAI->CanCastSpell(spellId, kiter) ? kiter : nullptr;
+    }
+
+    Creature* ooze = nullptr;
+    if (ModeOf(bot, *st, ooze) != KiteMode::Run)
+        return nullptr;
+
+    bool impaired = false;
+    bool wading = false;
+    KiterBind(*st, bot, ooze, impaired, wading);
+    spellId = SelfFreedom(botAI, bot, impaired, wading);
+    return spellId ? bot : nullptr;
 }
 
 bool GetRfCarrierWalk(PlayerbotAI* botAI, Position& spot)
@@ -1237,6 +1573,69 @@ Player* GetRfDispelTarget(PlayerbotAI* botAI, char const*& spell)
     return nullptr;
 }
 
+bool GetRfCureWalk(PlayerbotAI* botAI, Position& spot)
+{
+    Creature* boss = nullptr;
+    RfState* st = LiveState(botAI, &boss);
+    Player* bot = botAI->GetBot();
+    if (!st || !bot->IsAlive())
+        return false;
+
+    auto const duty = st->cureWalk.find(bot->GetGUID());
+    if (duty == st->cureWalk.end())
+        return false;
+
+    Player* carrier = ObjectAccessor::FindPlayer(duty->second);
+    if (!carrier || !IccSameInstance(bot, carrier) || ReadyCure(bot, carrier) || !ReadyCure(bot, carrier, false))
+        return false;
+
+    // On the side the curer comes from, swung round the carrier until clear of every hazard and in the room
+    std::vector<Hazard> const& hazards = HazardsFor(botAI, *st);
+    float const base = carrier->GetAngle(bot);
+    for (int32 tried = 0; tried < CURE_WALK_TRIES; ++tried)
+    {
+        float const swing =
+            static_cast<float>((tried + 1) / 2) * (tried % 2 ? 1.0f : -1.0f) * CURE_WALK_STEP_DEG * PI_F / 180.0f;
+        Position const at(carrier->GetPositionX() + CURE_WALK_REACH * std::cos(base + swing),
+                          carrier->GetPositionY() + CURE_WALK_REACH * std::sin(base + swing),
+                          ICC_RF_CENTER.GetPositionZ());
+        if (at.GetExactDist2d(ICC_RF_CENTER) > RF_ROOM_RADIUS ||
+            !ClearOfSpray(*st, boss, at.GetPositionX(), at.GetPositionY(), SPRAY_MARGIN) ||
+            std::any_of(hazards.begin(), hazards.end(), [&at](Hazard const& hazard)
+                        { return hazard.at.GetExactDist2d(at) < hazard.radius + DODGE_MARGIN; }))
+            continue;
+
+        spot = at;
+        return true;
+    }
+
+    return false;
+}
+
+bool IsRfCureWalkHeld(PlayerbotAI* botAI)
+{
+    RfState* st = LiveState(botAI);
+    return st && st->cureWalk.count(botAI->GetBot()->GetGUID());
+}
+
+char const* GetRfTotemSwap(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_SHAMAN || !IsDutyBot(bot) || !IsRfLive(botAI))
+        return nullptr;
+
+    ObjectGuid const guid = bot->m_SummonSlot[SUMMON_SLOT_TOTEM_WATER];
+    Creature* totem = guid.IsEmpty() ? nullptr : bot->GetMap()->GetCreature(guid);
+    if (!totem || totem->GetUInt32Value(UNIT_CREATED_BY_SPELL) != SPELL_RF_CLEANSING_TOTEM)
+        return nullptr;
+
+    for (char const* name : WATER_TOTEM_SWAPS)
+        if (botAI->CanCastSpell(name, bot))
+            return name;
+
+    return nullptr;
+}
+
 char const* GetRfHazardKind(PlayerbotAI* botAI)
 {
     Creature* boss = nullptr;
@@ -1268,18 +1667,23 @@ bool FindRfDodgeSpot(PlayerbotAI* botAI, Position& spot, bool& interrupt, std::s
     bool const sprayed = !ClearOfSpray(*st, boss, from.GetPositionX(), from.GetPositionY(), DODGE_TRIGGER);
 
     interrupt = sprayed;
+    bool burst = false;
     std::vector<HazardCircle> crossing;
     for (Hazard const& hazard : hazards)
     {
         bool const inside = hazard.at.GetExactDist2d(from) < hazard.radius + DODGE_TRIGGER;
         interrupt = interrupt || (inside && hazard.urgent);
+        burst = burst || (inside && hazard.kind == KIND_BURST);
         if (!inside)
             crossing.emplace_back(hazard.at, hazard.radius);
     }
 
+    // The kiter stays out on the kite ring: towing, or the aura follows it onto the outer ring; off a
+    // bursting ooze, or its mark lands among the outer slots
     bool const melee = IsMeleeDuty(bot, *st);
-    Creature* towed = IsKiterBot(bot, *st) ? DutyOoze(bot, *st) : nullptr;
-    bool const keepOut = towed && towed->GetVictim() == bot;
+    bool const kiter = IsKiterBot(bot, *st);
+    Creature* towed = kiter ? DutyOoze(bot, *st) : nullptr;
+    bool const keepOut = kiter && (burst || (towed && towed->GetVictim() == bot));
     Position anchor;
     Position const* preferNear = nullptr;
     if (melee)
@@ -1397,19 +1801,26 @@ bool GetRfStandWalk(PlayerbotAI* botAI, Position& spot)
 
 bool IsRfMovementOwned(PlayerbotAI* botAI)
 {
-    return IsRfHoldingStand(botAI) || IsRfKiteHeld(botAI) || IsRfCarrierHeld(botAI);
+    return IsRfHoldingStand(botAI) || IsRfKiteHeld(botAI) || IsRfCarrierHeld(botAI) || IsRfCureWalkHeld(botAI);
 }
 
 uint32 GetRfTankDefensive(PlayerbotAI* botAI, char const* noteKind)
 {
     RfState* st = LiveState(botAI);
     Player* bot = botAI->GetBot();
-    if (!st || !bot->IsAlive() || !IsDutyBot(bot) || !IsTankPlayer(bot))
+    if (!st || !bot->IsAlive() || !IsDutyBot(bot))
         return 0;
 
-    bool window = bot->GetHealthPct() < RF_TANK_DEFENSIVE_PCT;
-    for (Creature* ooze : Resolve(bot, st->bigOozes))
-        window = window || (ooze->GetVictim() == bot && Stacks(ooze) >= RF_OOZE_DEFENSIVE_STACKS &&
+    bool const tank = IsTankPlayer(bot);
+    bool const kiter = IsKiterBot(bot, *st);
+    if (!tank && !kiter)
+        return 0;
+
+    // A damage dealer kiter takes no Big Ooze swing lightly, whatever its stacks
+    std::vector<Creature*> const oozes = Resolve(bot, st->bigOozes);
+    bool window = bot->GetHealthPct() < RF_TANK_DEFENSIVE_PCT || (kiter && GassedWithOozeNear(*st, bot, oozes));
+    for (Creature* ooze : oozes)
+        window = window || (ooze->GetVictim() == bot && (!tank || Stacks(ooze) >= RF_OOZE_DEFENSIVE_STACKS) &&
                             ooze->GetExactDist2d(bot) <= OOZE_REACH);
 
     if (!window)
@@ -1421,7 +1832,7 @@ uint32 GetRfTankDefensive(PlayerbotAI* botAI, char const* noteKind)
         return 0;
     }
 
-    return NextTankDefensive(botAI, bot, noteKind, false);
+    return tank ? NextTankDefensive(botAI, bot, noteKind, false) : NextPhysicalDefensive(botAI, bot, noteKind, 0);
 }
 
 bool IsRfTankDefensiveHeld(PlayerbotAI* botAI)
@@ -1433,7 +1844,7 @@ bool IsRfAreaDamageHeld(PlayerbotAI* botAI)
 {
     RfState* st = LiveState(botAI);
     Player* bot = botAI->GetBot();
-    if (!st || IsTankPlayer(bot))
+    if (!st || IsTankPlayer(bot) || IsKiterBot(bot, *st))
         return false;
 
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
@@ -1451,7 +1862,8 @@ bool IsRfAreaDamageHeld(PlayerbotAI* botAI)
 
 namespace
 {
-// A human tank has no trigger, so it gets told: a button under a Big Ooze at full strength, or when low
+// A human tank has no trigger, so it gets told: a button under a Big Ooze at full strength, gassed with one
+// closing, or when low
 void CallHumanTank(RfState& st, Player* sender, Creature* boss, uint32 now)
 {
     if (st.humanCallRan && getMSTimeDiff(st.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -1477,13 +1889,15 @@ void CallHumanTank(RfState& st, Player* sender, Creature* boss, uint32 now)
             }
 
         bool const low = hit && member->GetHealthPct() < RF_TANK_DEFENSIVE_PCT;
-        if (!oozeHit && !low)
+        bool const gassed = GassedWithOozeNear(st, member, oozes);
+        if (!oozeHit && !low && !gassed)
             continue;
 
+        char const* why = low ? "you are low" : oozeHit ? "the Big Ooze is at full strength"
+                                                        : "Vile Gas has you and the Big Ooze is closing";
         uint32 const spellId = ReadyTankDefensiveSpell(member, false, 0, 0);
         if (spellId)
-            CallHumanTankDefensive(sender, member, spellId, 0, low ? "you are low" : "the Big Ooze is at full strength",
-                                   "rf.humancall");
+            CallHumanTankDefensive(sender, member, spellId, 0, why, "rf.humancall");
     }
 }
 
@@ -1496,8 +1910,12 @@ void NoteDuties(RfState const& st, Player* bot)
     {
         Creature* ooze = nullptr;
         KiteMode const mode = ModeOf(bot, st, ooze);
-        NoteDerived(bot, "rf.bigooze", ooze ? std::string(ModeName(mode)) + " " + DescribeGuid(ooze) : ModeName(mode));
+        char const* name = ModeName(mode, st.kiteWading && KiterWet(st, bot));
+        NoteDerived(bot, "rf.bigooze", ooze ? std::string(name) + " " + DescribeGuid(ooze) : name);
     }
+
+    auto const walk = st.cureWalk.find(bot->GetGUID());
+    NoteDerived(bot, "rf.curewalk", walk != st.cureWalk.end() ? RaidObs::DescribeAssignment(walk->second) : "none");
 
     if (!CarrierWalks(bot, st))
     {

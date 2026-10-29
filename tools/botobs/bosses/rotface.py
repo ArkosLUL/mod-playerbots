@@ -2,8 +2,8 @@
 """Read a Rotface pull from a RaidObs trace: the Big Oozes and their kiter, the carriers, the dodges.
 
     rotface.py <file>               every section
-    rotface.py <file> --oozes       who the Big Oozes hit, the kiter and its duty
-    rotface.py <file> --carriers    each bot walking its ooze to a merge, and each cure duty
+    rotface.py <file> --oozes       who the Big Oozes hit, the kiter, its duty and its freedom
+    rotface.py <file> --carriers    each bot walking its ooze to a merge, each cure duty and cure walk
     rotface.py <file> --dodges      each dodge by hazard and how it went
     rotface.py <file> --spread      the slots, the flooding quadrant and the ooze spot
     rotface.py <file> --vilegas     heroic Vile Gas: each victim
@@ -13,16 +13,20 @@ Rotface has no phase. What the generic views miss here:
 
 - **The Big Oozes' victims are the snapshot's target column.** Nothing fixates them, so a Big Ooze
   on anyone but the kiter is threat the kiter lost.
-- **`rf.kiter` is the elected tank, `rf.bigooze` its duty**: `spot` waiting at the ooze spot for the
-  first merge, `pickup <ooze>` with one not on it, `tank <ooze>` holding it at the spot under 3 stacks,
-  `kite <ooze>` on the kite ring, `hold <ooze>` while the kiter carries an ooze itself, `none`.
+- **`rf.kiter` is the elected bot, `rf.bigooze` its duty**: a tank, or with one bot tank a Death Knight
+  or paladin damage dealer. `spot` waiting at the ooze spot for the first merge, `pickup <ooze>` with
+  one not on it, `tank <ooze>` holding it at the spot under 3 stacks, `kite <ooze>` on the kite ring,
+  `wade <ooze>` through a flood with no dry leg left, `hold <ooze>` while the kiter carries an ooze
+  itself, `none`. `rf.freedom` is the bot due to free a slowed kiter, the kiter itself included, `0`
+  none.
 - **`rf.carrier` is per bot**: `ooze` walking to a Big Ooze, `little` to another Little Ooze, `spot` to
   the ooze spot, `none` once it carries nothing. `rf.dispel` is keyed on the infected player, its value
   the bot that cures it; the duty opens only once the carrier stands where its ooze merges, or runs low.
-- **`rf.dodge` is `<hazard> <branch> <yards>`**: hazard `spray`, `mark`, `sticky`, `flood`, `gas` or
-  `ooze`; branch `move`, `tight` or `cross` (a walk across another hazard); `hold` while a dodge is in
-  flight, `<hazard> none` with no clear spot, `<hazard> locked` when the walk was refused, `pinned` when
-  the bot can't move.
+  `rf.curewalk` is per curer: the carrier it walks to with no cure in reach, `none`.
+- **`rf.dodge` is `<hazard> <branch> <yards>`**: hazard `spray`, `mark`, `sticky`, `flood`, `gas`,
+  `burst` (a Big Ooze casting its explosion), `ooze` or `little`; branch `move`, `tight` or `cross` (a
+  walk across another hazard); `hold` while a dodge is in flight, `<hazard> none` with no clear spot,
+  `<hazard> locked` when the walk was refused, `pinned` when the bot can't move.
 - **`rf.slot` counts from 1.** 1-6 the inner ring, 7-19 the outer, 20 the stack behind him; `0` is a
   release. `rf.flood` and `rf.oozespot` are quadrants counter-clockwise from east, 1-4, `0` for none.
 """
@@ -106,9 +110,18 @@ def duty_rows(trace: Trace) -> dict[int, list[tuple[str, int, int]]]:
     return spans_by_bot(trace, "rf.bigooze")
 
 
-def kiter_spans(trace: Trace) -> list[tuple[str, int, int]]:
+def raid_spans(trace: Trace, key: str) -> list[tuple[str, int, int]]:
     return [(resolve_guids(trace, value), start, stop)
-            for value, start, stop in latch_spans(trace, "rf.kiter", icc.pull_end(trace))]
+            for value, start, stop in latch_spans(trace, key, icc.pull_end(trace))]
+
+
+def kiter_spans(trace: Trace) -> list[tuple[str, int, int]]:
+    return raid_spans(trace, "rf.kiter")
+
+
+def freedom_spans(trace: Trace) -> list[tuple[str, int, int]]:
+    """Each bot handed the kiter's freedom, `0` releases dropped."""
+    return [span for span in raid_spans(trace, "rf.freedom") if span[0] not in ("", "0")]
 
 
 def print_spans(trace: Trace, rows: dict[int, list[tuple[str, int, int]]], skip: str | None = None) -> None:
@@ -133,6 +146,9 @@ def show_oozes(trace: Trace) -> None:
     if kiters:
         print("  kiter: " + ", ".join(f"{'none' if value in ('', '0') else value}@{clock(start)}"
                                       for value, start, _ in kiters))
+    freed = freedom_spans(trace)
+    print("  freedom: " + (", ".join(f"{value}@{clock(start)} for {clock(stop - start)}"
+                                     for value, start, stop in freed) if freed else "never handed out"))
     rows = duty_rows(trace)
     if not rows:
         print("  rf.bigooze never written")
@@ -165,10 +181,17 @@ def show_carriers(trace: Trace) -> None:
     duties = dispel_rows(trace)
     if not duties:
         print("\n  rf.dispel never handed out")
+    else:
+        print(f"\n  {len(duties)} cure duty(ies)")
+        for when, carrier, dispeller in duties:
+            print(f"    {clock(when):>9}  {trace.name(carrier):<14}  by {trace.name(dispeller)}")
+    walks = {guid: [span for span in spans if span[0] != "none"]
+             for guid, spans in spans_by_bot(trace, "rf.curewalk").items()}
+    if not any(walks.values()):
+        print("\n  rf.curewalk never left none")
         return
-    print(f"\n  {len(duties)} cure duty(ies)")
-    for when, carrier, dispeller in duties:
-        print(f"    {clock(when):>9}  {trace.name(carrier):<14}  by {trace.name(dispeller)}")
+    print("\n  cure walks, curer to carrier")
+    print_spans(trace, walks)
 
 
 def dodge_counts(trace: Trace) -> collections.Counter:
@@ -261,8 +284,8 @@ def show_cheats(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("oozes", "who the Big Oozes hit, the kiter and its duty", show_oozes),
-    ("carriers", "merge walks and cure duties", show_carriers),
+    ("oozes", "who the Big Oozes hit, the kiter, its duty and its freedom", show_oozes),
+    ("carriers", "merge walks, cure duties and cure walks", show_carriers),
     ("dodges", "each dodge by hazard and how it went", show_dodges),
     ("spread", "slots, the flooding quadrant and the ooze spot", show_spread),
     ("vilegas", "heroic Vile Gas victims", show_vilegas),

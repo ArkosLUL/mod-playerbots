@@ -9,6 +9,7 @@
 #include <cmath>
 #include <string>
 
+#include "EncounterHelpers.h"
 #include "ICCHelpers_Shared.h"
 #include "LastMovementValue.h"
 #include "Playerbots.h"
@@ -21,7 +22,7 @@ namespace
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
 // A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// A carrier re-aims its walk once the ooze it walks to has moved this far
+// A carrier or a curer re-aims its walk once the spot it walks to has moved this far
 constexpr float CARRIER_REAIM = 2.0f;
 
 void NoteDodge(Player* bot, std::string const& branch)
@@ -121,6 +122,19 @@ bool IccRotfaceDodgeAction::Execute(Event /*event*/)
     return true;
 }
 
+bool IccRotfaceFreedomAction::Execute(Event /*event*/)
+{
+    uint32 spellId = 0;
+    Unit* target = GetRfFreedom(botAI, spellId);
+    return target && botAI->CastSpell(spellId, target);
+}
+
+bool IccRotfaceTotemAction::Execute(Event /*event*/)
+{
+    char const* totem = GetRfTotemSwap(botAI);
+    return totem && botAI->CastSpell(totem, bot);
+}
+
 bool IccRotfaceCastTankDefensiveAction::Execute(Event /*event*/)
 {
     uint32 const spellId = GetRfTankDefensive(botAI, "rf.defensive");
@@ -153,17 +167,38 @@ bool IccRotfaceKiteAction::Execute(Event /*event*/)
 
     Position spot;
     int8 dir = 0;
-    if (!GetRfKiteWalk(botAI, spot, dir))
+    bool wade = false;
+    if (!GetRfKiteWalk(botAI, spot, dir, wade))
     {
         DropWalk();
         return false;
     }
 
+    // A cast that pins the kiter's feet costs less than the ooze catching it
+    if (bot->IsMovementPreventedByCasting() && IsRfKiteUrgent(botAI))
+        bot->InterruptNonMeleeSpells(true);
+
     if (!WalkTo(spot, MovementPriority::MOVEMENT_COMBAT))
         return false;
 
-    CommitRfKiteDir(botAI, dir);
+    CommitRfKiteLeg(botAI, dir, wade);
     return true;
+}
+
+bool IccRotfaceCureWalkAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!GetRfCureWalk(botAI, spot))
+    {
+        DropWalk();
+        return false;
+    }
+
+    if (Position const* inFlight = WalkInFlight())
+        if (inFlight->GetExactDist2d(spot) <= CARRIER_REAIM)
+            return true;
+
+    return WalkTo(spot, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool IccRotfaceCarrierAction::Execute(Event /*event*/)
@@ -180,6 +215,20 @@ bool IccRotfaceCarrierAction::Execute(Event /*event*/)
             return true;
 
     return WalkTo(spot, MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool IccRotfaceTargetAction::Execute(Event /*event*/)
+{
+    Unit* pick = GetRfTarget(botAI);
+    if (!pick)
+        return false;
+
+    // Sent every call, since the generic pet attack node is off; the kiter's pet has a pick of its own
+    EncounterHelpers::CommandPetAttack(botAI, GetRfPetTarget(botAI));
+    if (AI_VALUE(Unit*, "current target") == pick)
+        return false;
+
+    return Attack(pick);
 }
 
 bool IccRotfaceStandAction::Execute(Event /*event*/)

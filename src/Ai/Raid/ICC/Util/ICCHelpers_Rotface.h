@@ -113,17 +113,27 @@ Creature* GetRfBoss(PlayerbotAI* botAI);
 // Tanks and DPS: the kiter's Big Ooze, then a player's skull for all but the tank holding him, else Rotface.
 // Notes rf.target.
 Unit* GetRfTarget(PlayerbotAI* botAI);
+// The unit the bot's pet attacks: GetRfTarget, but Rotface for the kiter's. On the kited ooze a pet would
+// pull it off a kiter that can't reach it, and die to its swings.
+Unit* GetRfPetTarget(PlayerbotAI* botAI);
 
 // The kiter's Big Ooze it still has to take: not on it, in taunt range, taunt ready and the ooze not
 // immune to it yet
 Unit* GetRfOozeToTaunt(PlayerbotAI* botAI);
-// The kiter's next leg on the kite ring while it kites, in `dir` (1 counter-clockwise, -1 clockwise)
-bool GetRfKiteWalk(PlayerbotAI* botAI, Position& spot, int8& dir);
-void CommitRfKiteDir(PlayerbotAI* botAI, int8 dir);
-// The kite leg is still worth walking: dry and clear of the ooze
+// The kiter's next walk: a leg on the kite ring while it kites, in `dir` (1 counter-clockwise, -1
+// clockwise), `wade` when no dry leg is left; for a damage dealer kiter also the stand-off walk to a
+// Big Ooze it still has to taunt
+bool GetRfKiteWalk(PlayerbotAI* botAI, Position& spot, int8& dir, bool& wade);
+void CommitRfKiteLeg(PlayerbotAI* botAI, int8 dir, bool wade);
+// The kite walk in flight is still worth finishing: dry unless it wades, and clear of the ooze
 bool IsRfKiteSpotSafe(PlayerbotAI* botAI, Position const& spot);
+// The ooze is close or the kiter stands in a flood: a cast pinning its feet goes
+bool IsRfKiteUrgent(PlayerbotAI* botAI);
 bool IsRfKiter(PlayerbotAI* botAI);
 bool IsRfKiteHeld(PlayerbotAI* botAI);
+// The kiter slowed with its ooze closing, or a Death Knight kiter wading: the unit this bot frees and
+// the spell, nullptr when it isn't this bot's turn
+Unit* GetRfFreedom(PlayerbotAI* botAI, uint32& spellId);
 
 // A bot with Mutated Infection or a Little Ooze on it walks to the ooze it merges with: the Big Ooze, the
 // other Little Ooze, or the ooze spot
@@ -131,8 +141,13 @@ bool GetRfCarrierWalk(PlayerbotAI* botAI, Position& spot);
 bool IsRfCarrierHeld(PlayerbotAI* botAI);
 // The carrier this bot cures now and the spell
 Player* GetRfDispelTarget(PlayerbotAI* botAI, char const*& spell);
+// A curer with a duty out of its reach walks to a hazard-free spot in reach of the carrier
+bool GetRfCureWalk(PlayerbotAI* botAI, Position& spot);
+bool IsRfCureWalkHeld(PlayerbotAI* botAI);
+// A shaman bot with a Cleansing Totem down: the water totem that replaces it, nullptr for none
+char const* GetRfTotemSwap(PlayerbotAI* botAI);
 
-// The hazard the bot stands in, nullptr when none: spray, mark, sticky, flood, gas, ooze
+// The hazard the bot stands in, nullptr when none: spray, mark, sticky, flood, gas, burst, ooze, little
 char const* GetRfHazardKind(PlayerbotAI* botAI);
 // A spot clear of every hazard, for the dodge. `interrupt` says the hit is close enough to drop a cast for.
 bool FindRfDodgeSpot(PlayerbotAI* botAI, Position& spot, bool& interrupt, std::string& branch);
@@ -143,19 +158,21 @@ bool IsRfHazardHeld(PlayerbotAI* botAI);
 
 bool IsRfHoldingStand(PlayerbotAI* botAI);
 bool GetRfStandWalk(PlayerbotAI* botAI, Position& spot);
-// A stand, the kite or a carrier walk owns the bot's feet
+// A stand, the kite, a carrier or a cure walk owns the bot's feet
 bool IsRfMovementOwned(PlayerbotAI* botAI);
 
-// The button this tank spends now, 0 for none: the kiter under a Big Ooze of RF_OOZE_DEFENSIVE_STACKS in
-// reach, any tank under RF_TANK_DEFENSIVE_PCT
+// The button this tank or kiter spends now, 0 for none: a tank kiter under a Big Ooze of
+// RF_OOZE_DEFENSIVE_STACKS in reach, a damage dealer kiter under any Big Ooze in reach, the kiter gassed
+// with its ooze closing, any of them under RF_TANK_DEFENSIVE_PCT
 uint32 GetRfTankDefensive(PlayerbotAI* botAI, char const* noteKind);
 bool IsRfTankDefensiveHeld(PlayerbotAI* botAI);
 
-// A damage dealer with an ooze near it or its target holds its area attacks, which would pull the ooze
+// A damage dealer but the kiter, with an ooze near it or its target, holds its area attacks, which would
+// pull the ooze
 bool IsRfAreaDamageHeld(PlayerbotAI* botAI);
 
-// The ooze scan, the kiter, the slots, the ooze spot, the dispel duties, the stand latch, the calls to a
-// human tank, the reset after a wipe
+// The ooze scan, the kiter, the slots, the ooze spot, the dispel duties and cure walks, the freedom duty,
+// the stand latch, the calls to a human tank, the reset after a wipe
 void TickRfEncounter(PlayerbotAI* botAI);
 
 #endif

@@ -23,11 +23,15 @@ namespace
 void DefineRotface(EncounterBuilder& e)
 {
     e.Node<IccRotfaceDodgeTrigger, IccRotfaceDodgeAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
-    e.Node<IccRotfaceTankDefensiveTrigger, IccRotfaceCastTankDefensiveAction>(ACTION_RAID + 9);
-    e.Node<IccRotfaceDispelTrigger, IccRotfaceDispelAction>(ACTION_RAID + 8);
-    e.Node<IccRotfaceOozeTauntTrigger, IccRotfaceOozeTauntAction>(ACTION_RAID + 7);
-    e.Node<IccRotfaceKiteTrigger, IccRotfaceKiteAction>(ACTION_RAID + 6, EncounterRow::Mover);
-    e.Node<IccRotfaceCarrierTrigger, IccRotfaceCarrierAction>(ACTION_RAID + 5, EncounterRow::Mover);
+    // Above the kite: a freed kiter walks its next leg at full speed
+    e.Node<IccRotfaceFreedomTrigger, IccRotfaceFreedomAction>(ACTION_RAID + 12);
+    e.Node<IccRotfaceTotemTrigger, IccRotfaceTotemAction>(ACTION_RAID + 11);
+    e.Node<IccRotfaceTankDefensiveTrigger, IccRotfaceCastTankDefensiveAction>(ACTION_RAID + 10);
+    e.Node<IccRotfaceDispelTrigger, IccRotfaceDispelAction>(ACTION_RAID + 9);
+    e.Node<IccRotfaceOozeTauntTrigger, IccRotfaceOozeTauntAction>(ACTION_RAID + 8);
+    e.Node<IccRotfaceKiteTrigger, IccRotfaceKiteAction>(ACTION_RAID + 7, EncounterRow::Mover);
+    e.Node<IccRotfaceCarrierTrigger, IccRotfaceCarrierAction>(ACTION_RAID + 6, EncounterRow::Mover);
+    e.Node<IccRotfaceCureWalkTrigger, IccRotfaceCureWalkAction>(ACTION_RAID + 5, EncounterRow::Mover);
     // Above the stand: a bot takes a new pick before it walks back to its spot
     e.Node<IccRotfaceTargetTrigger, IccRotfaceTargetAction>(ACTION_RAID + 4);
     e.Node<IccRotfaceStandTrigger, IccRotfaceStandAction>(ACTION_RAID + 3, EncounterRow::Mover);
@@ -41,10 +45,13 @@ void DefineRotface(EncounterBuilder& e)
     // Every slot is in range of him, and reach would walk a slot off the spread
     e.OwnMovement("icc rotface stand hold", Role::Any, &IsRfHoldingStand, Family::Attack,
                   {IccRotfaceStandAction::Name, IccRotfaceDodgeAction::Name});
-    e.OwnMovement("icc rotface kite hold", Role::Tank, &IsRfKiteHeld, Family::Attack,
+    // With one bot tank a damage dealer kites
+    e.OwnMovement("icc rotface kite hold", Role::Any, &IsRfKiteHeld, Family::Attack,
                   {IccRotfaceKiteAction::Name, IccRotfaceDodgeAction::Name});
     e.OwnMovement("icc rotface carrier hold", Role::Any, &IsRfCarrierHeld, Family::Attack,
                   {IccRotfaceCarrierAction::Name, IccRotfaceDodgeAction::Name});
+    e.OwnMovement("icc rotface cure walk hold", Role::Any, &IsRfCureWalkHeld, Family::Attack,
+                  {IccRotfaceCureWalkAction::Name, IccRotfaceDodgeAction::Name});
     // Generic movers would walk a bot back onto an explosion mark still in flight or into the spray
     e.OwnMovement("icc rotface hazard hold", Role::Any, &IsRfHazardHeld, Family::Attack);
     e.Block("icc rotface spell movers", Role::Any, &IsRfMovementOwned,
@@ -52,7 +59,7 @@ void DefineRotface(EncounterBuilder& e)
     // avoid aoe sees the Sticky Ooze puddles and flees them 5 yd at most, against the dodge
     e.Block("icc rotface avoid aoe", Role::Any, &IsRfLive, Family::AvoidAoe);
     // A Big Ooze obeys taunt diminishing returns, so only the ooze taunt spends the kiter's
-    e.Block("icc rotface kiter taunts", Role::Tank, &IsRfKiter, Family::Taunt);
+    e.Block("icc rotface kiter taunts", Role::Any, &IsRfKiter, Family::Taunt);
     // He and both oozes are grip immune, so a grip only wastes the global cooldown, and the ghouls taunt the
     // oozes
     e.Block("icc rotface pulls", Role::Any, &IsRfLive, 0, {"death grip", "army of the dead"});
