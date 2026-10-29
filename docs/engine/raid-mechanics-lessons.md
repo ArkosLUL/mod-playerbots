@@ -56,6 +56,9 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
   `RecoveryTime`/`CategoryRecoveryTime` on a cast that returned `SPELL_CAST_OK`
   (`CastPetAcidSpitAction`): an invented duration, or one stamped on an unconfirmed cast, silently
   throws casts away for the rest of the fight.
+- **On a vehicle a bot drives, `AttackAction` refuses to attack.** Send the swing as a player's
+  pet-attack command does, through the vehicle creature's `AI()->AttackStart(target)` (Putricide's
+  Mutated Abomination).
 - **Vehicle power is creature regen.** `unit_class 4` plus `UNIT_FLAG2_REGENERATE_POWER` gives
   `Creature::Regenerate` a flat +20 per `CREATURE_REGEN_INTERVAL` (2 s) — 10/s against a cap of 100.
   Cost per GCD against that rate decides whether the bar ever climbs at all.
@@ -119,6 +122,9 @@ movement lock that decides which of two movers' orders is accepted is in
   those movers while it holds. Release a spot that ignores reach (an escape) on arrival instead, or
   the block strands the bot out of range. The
   [Northrend Beasts](../raids/trial-of-the-crusader/northrend-beasts.md) worm stage needed both.
+- **A walk toward a cooldown-gated action.** A bot walking in to taunt from range arrives, can't act
+  while the taunt cools down, and its stand walks it back out, in a loop. The walk waits for the
+  cooldown too (the council's Dark Nucleus pickup).
 - **A flickering input to a latched layout.** A distance deadband cannot help when the predicate
   itself flips: Icehowl's victim stepped in and out of melee range every ~100 ms and re-dealt the
   breath spread each time. Add time hysteresis, a grace before the change counts.
@@ -147,6 +153,9 @@ Four rules that belong with the geometry rather than the action:
   lattice's nearest member, so a dodge that must clear every member's mark by more (6 yd round an 8
   yd lattice) finds none: spread on rings, or give the dodge a fallback ladder
   ([Rotface](../raids/icecrown-citadel/rotface.md)).
+- **A lattice spaced at the hazard radius plus two park tolerances**, with the tank spots on it,
+  stays a valid spread in every phase and role with no per-pull geometry
+  ([Blood Prince Council](../raids/icecrown-citadel/blood-prince-council.md)).
 
 ## Range and reach
 
@@ -156,6 +165,8 @@ Every distance helper measures differently, and a large-model boss inflates all 
   `UNIT_FIELD_COMBATREACH`, `IsWithinCombatRange` is `dist3d < d + reachSum`, and
   `GetMeleeRange = max(casterReach + targetReach + 4/3, NOMINAL_MELEE_RANGE)` — against a 20-reach
   boss, ~22.8 yd. Hard-coded stand distances that ignore reach break on large models.
+- **Combat reach can change mid-fight**: a transform aura's display does it (Putricide's 30993 raises
+  his from 7.8 to 9). Read `GetCombatReach()` at runtime, not `creature_model_info`.
 - **A range literal in a boss script is not the distance it says.** `GetDistance2d(WorldObject
   const*)` subtracts both reaches too: Mimiron's Napalm picks among players at
   `GetDistance2d(mkII) > 15.0f`, which the MK II's CombatReach of 8 makes raw > ~24.5 yd. Convert
@@ -568,6 +579,10 @@ encounters.
   false for such a spell, so Impaled ignores Hand of Protection.
 - **A leech's multiplier lives in `EffectMultipleValue`** and differs by difficulty row: Rune of Blood
   heals Saurfang 10x on normal and 20x on heroic. Read every id.
+- **Speeds and cast times differ by difficulty too.** `speed_walk` differs between a creature's
+  difficulty entries (Kinetic Bomb 0.8 normal, 1.2 heroic), and a heroic id can cast faster (Empowered
+  Shock Vortex 73038/73039 4 s, 4.5 s on normal). Derive timings from the live unit or the remapped
+  spell, never the normal-mode value.
 - **A summon lives as long as its summon spell's duration** (`DurationIndex`). A script's
   `DespawnOrUnsummon(30s)` only queues a delayed unsummon and doesn't extend it, so read the index
   before sizing a chase (Deathwhisper's shade lives 7 s and closes only 1.75 yd on a slowed victim).
@@ -609,6 +624,9 @@ encounters.
   from the stalker it faces (Rotface's Slime Spray).
 - **`NonTankTargetSelector` excludes only the current threat victim**, so an off-tank can take a
   "non-tank" spell and needs its dodge too (Festergut's Malleable Goo).
+- **A random-target selector can be a positioning rule.** Putricide's `MalleableGooSelector` refuses
+  anyone within 7 yd plus both reaches, so a raid standing inside that radius leaves the spell no
+  target and it is never cast. Read the selector before designing a dodge.
 - **A chain spell jumps by `IsWithinDist`**, both combat reaches added (10 yd magic default + 1.5 +
   1.5 = 13 yd centre to centre, 3D, in LOS, nearest first). `EffectChainAmplitude`
   (`SpellEffectInfo::CalcDamageMultiplier`) multiplies each jump in `Spell::DoAllEffectOnLaunchTarget`,

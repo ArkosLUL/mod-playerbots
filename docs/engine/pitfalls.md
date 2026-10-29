@@ -488,7 +488,8 @@ portal this way.
   `dps assist` swaps a bot off it every tick unless the encounter vetoes `DpsAssist` for that bot. An
   out-of-combat critter also fails `IsPossibleTarget`, so `invalid target` → `drop target` clears an
   `Attack()` on it 0.2 s later and drops the bot to the non-combat engine: shooting one needs
-  `drop target` blocked while it is the bot's duty target (Anub'arak's spheres).
+  `drop target` blocked while it is the bot's duty target (Anub'arak's spheres, ICC's Kinetic
+  Bombs). Such a unit is the one safe out-of-combat `Attack()` pick: hitting it can't start a pull.
 - **No mage counterspells what it is attacking.** Mages have no current-target counterspell node,
   and every `... on enemy healer` value (`EnemyHealerTargetValue`) skips the bot's own current target.
 - **No mage Polymorphs the `rti cc` mark in a raid.** `PolymorphTrigger` is a `HasCcTargetTrigger`,

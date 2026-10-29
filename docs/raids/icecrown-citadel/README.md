@@ -88,8 +88,9 @@ definition alone:
   one row joins them, and `e.OwnTargeting(name, roles, &IccResolverPicks<&Resolver>, pickers)`
   follows the stem's multipliers. The action sends the pet first, the trigger also fires while the
   pet is off the pick. Marrowgar, Deathwhisper, the Gunship (`GsbTarget`), Saurfang (`GetDbsTarget`),
-  Stinky and Precious (`GetDogsTarget`), Festergut (`GetFgTarget`) and Rotface (`GetRfTarget`) use
-  it, with no icon writes or `rti` use. `RaidRestoreLegacyRti` stays unwired
+  Stinky and Precious (`GetDogsTarget`), Festergut (`GetFgTarget`), Rotface (`GetRfTarget`),
+  Putricide (`GetPpTarget`) and the Blood Prince Council (`GetBpcTarget`) use it, with no icon writes
+  or `rti` use. `RaidRestoreLegacyRti` stays unwired
   until no ICC code writes `rti`, and it never resets `star`. The Marrowgar tick resets a bot's
   `cross` or `star` `rti` to `skull` once per instance, and the Gunship tick a `star` while its gate
   is open; a bot that skips both rooms keeps what the old Marrowgar code set.
@@ -104,7 +105,9 @@ definition alone:
   hold rules keep each holder's own auras or aspects off. With no hook the opener and aura triggers neither fire nor note.
   Rows: Marrowgar's opener (boss 36612), Deathwhisper's burst window (lust waits for phase 2),
   Saurfang's opener (boss 37813) and burst window (lust waits for Frenzy), Festergut's resist
-  schools (shadow: Gaseous Blight, Blighted Spores, Pungent Blight).
+  schools (shadow: Gaseous Blight, Blighted Spores, Pungent Blight), Putricide's opener (boss 36678),
+  burst window (lust waits for phase 3) and resist schools (shadow), the council's opener (Valanar
+  37970), burst window (lust in Keleseth's empowered phase) and resist schools (shadow and fire).
 - defensives: `GetRaidCover` and `GetRaidPersonalDefensive` (`RaidDefensive.h`) with
   `ICC_DEFENSIVE_SCOPE` (`icc.cover`, `icc.personal`) and a `RaidPredictedHit` the stem builds.
   Tank buttons go through `NextTankDefensive` (`RaidTankDefensive.h`) with a `Block` over
@@ -127,7 +130,12 @@ definition alone:
     `fg.humancall`), `icc festergut pungent cover` and `icc festergut pungent defensive` (raid cover
     and personal buttons on the Pungent Blight cast);
   - Rotface: `icc rotface tank defensive` (the kiter under a Big Ooze of 4+ stacks within 6 yd, any
-    tank under 40%, class buttons held to 25%, `rf.defensive`, `rf.humancall`).
+    tank under 40%, class buttons held to 25%, `rf.defensive`, `rf.humancall`);
+  - Putricide: `icc putricide tank defensive` (first 4 s of each phase 3 hold, under 40%, class
+    buttons held to 25%, `pp.defensive`, `pp.humancall`), plus `icc putricide brake`, a
+    `LiveMultiplier` holding non-holders at 90% of the holder's threat (frees at 80%);
+  - Blood Prince Council: `icc bpc tank defensive` (Keleseth's tank through his empowered phase, any
+    tank under 40%, class buttons held to 25%, `bpc.defensive`, `bpc.humancall`).
 - opening positions: a `Mover` row in the definition whose trigger holds the stand while the gate is
   open and not live, its positions navprobed in the stem's helpers. No raid-wide staging.
 
@@ -205,9 +213,6 @@ replaced it.
 
 | Key | Class | Gate | Sites |
 |---|---|---|---|
-| `pp.oozekill`, `pp.gascloudkill` | gap | raid | `IccPutricideVolatileOozeAction`, `IccPutricideGasCloudAction`: kill every extra add of the entry |
-| `pp.unboundplague` | gap | raid | `IccPutricideAvoidMalleableGooAction::HandleUnboundPlague`: suicide with nobody near |
-| `pp.freeooze` | gap | raid | `IccPutricideAbominationAction::TryRegurgitate`: Regurgitated Ooze with no energy cost; off, it casts at full cost |
 | `vd.dreamteleport`, `vd.cloudteleport` | gap | raid | `IccValithriaDreamCloudAction`: onto a human in Dream State, onto the shared cloud |
 | `sg.frostbeacon`, `sg.mysticbuffet`, `sg.magicbarrier`, `sg.nothreat` | gap | raid | `IccSindragosaGroupPositionTrigger`: main tank's P3 beacon strip, tanks' Mystic Buffet strip, Magic Barrier on tanks, 1% Threat on assist tanks |
 | `sg.flares` | gap | raid | `IccSindragosaFrostBeaconAction::TryDropTombFlares`: smoke flares from `StoreNewItemInBestSlots` |
@@ -242,11 +247,14 @@ per bot; a taunt on cooldown fails with no ranged pull, which would face the add
 - a tank swap (Festergut, Stinky and Precious, Putricide, Saurfang, Sindragosa) waits out a cooldown
   spent elsewhere, while the stacked tank has already stopped.
 
-Saurfang, Festergut, Rotface's Big Ooze and the gunship captain carry taunt diminishing returns
-(`flags_extra` 0x80000). Saurfang's swap is one elected taunt per Rune of Blood with generic taunts
+Saurfang, Festergut, Rotface's Big Ooze, Putricide, the princes and the gunship captain carry taunt
+diminishing returns (`flags_extra` 0x80000). Saurfang's swap is one elected taunt per Rune of Blood with generic taunts
 blocked, and his free tank taunts one Blood Beast only while the next swap stays covered. Festergut
 and the dogs swap by one elected taunt, generic taunts blocked. Rotface's kiter taunts a Big Ooze
-through one path, skipped at the immune level. The gunship's board tank taunts the captain.
+through one path, skipped at the immune level. Putricide's swap is one elected taunt, generic taunts
+blocked, held for two Mutated Plague applications. The council's tanks own their princes by roster
+and taunt one back only below DR level 3, generic taunts blocked. The gunship's board tank taunts the
+captain.
 
 Each boss doc says what its callers risk.
 
@@ -266,11 +274,14 @@ traced containers:
 They are unordered, and no loop over one depends on its order. Saurfang keeps
 `dbs.slot`, `dbs.kill`, `dbs.cc`, `dbs.markheal` and `dbs.protect` in its stem's own
 `RaidInstanceState`, Festergut `fg.slot`, `fg.carrier`, `fg.leg`, `fg.sporespot` and `fg.brake`,
-Rotface `rf.slot`, `rf.dispel`, `rf.kiter`, `rf.flood` and `rf.oozespot`; Deathwhisper's stem latches
-`ldw.brake` (`ObsGuidSet`) and the frost giant's `rfg.apart` (`ObsGuidSet`) the same way. Unused:
-the gunship's `gsbLastStarPos` and `gsbLastRocketPackUse`, Festergut's `fgSlotState`,
-`festergutGooWaitUntil` and `SpreadSlotState`, Rotface's `rotfaceVileGasWaitUntil` and
-`rfExplosionSlotMemory` (`rf.explosionslot`, silent).
+Rotface `rf.slot`, `rf.dispel`, `rf.kiter`, `rf.flood` and `rf.oozespot`, Putricide `pp.spot`,
+`pp.slot`, `pp.driver`, `pp.receiver` and `pp.brake`, the council `bpc.tank`, `bpc.slot`, `bpc.bomb`
+(`ObsGuidMap`) and `bpc.soak` (`ObsGuidSet`); Deathwhisper's stem latches `ldw.brake` (`ObsGuidSet`)
+and the frost giant's `rfg.apart` (`ObsGuidSet`) the same way. Unused: the gunship's `gsbLastStarPos`
+and `gsbLastRocketPackUse`, Festergut's `fgSlotState`, `festergutGooWaitUntil` and
+`SpreadSlotState`, Rotface's `rotfaceVileGasWaitUntil` and `rfExplosionSlotMemory`
+(`rf.explosionslot`, silent), Putricide's `ppBloatLastDir` and `BloatDir`, the council's
+`bpcSpreadLockTimers`.
 Timestamps, throttles, caches, edge detectors (`sgLastPhase3`) and struct values stay bare;
 `sgFlaredRedThisPhase`, an int set, is noted as `sg.flaredred` where it changes.
 
@@ -288,8 +299,8 @@ id.
 - **Malleable Goo**: Putricide's 70852 and the balcony's 72296, neither with a spelldifficulty row.
   The missiles and impacts they trigger (72297 row 2197; 72295/72615/74280/74281 row 2211) carry
   Putricide as their unit target and never pass the player test. Each impact is noted as a 12 yd, 8
-  s hazard circle; consumers size their own, Putricide's 8 yd, 6 s the widest, Festergut's 5 yd,
-  8.5 s.
+  s hazard circle; consumers size their own. The 70852 missile flies 6 yd/s and its impact is 5 yd:
+  Putricide times each landing from the cast time and keeps it 9 s, Festergut uses 5 yd, 8.5 s.
 - **Vile Gas**: Putricide's balcony cast on Rotface heroic, 69240 remapped by the `Spell` constructor to
   73019 (10H) or 73020 (25H), so it is matched through `GetSpellIdForDifficulty`. Notes `rf.vilegas`
   on the victim; no Rotface code reads `rotfaceVileGas` any more.
@@ -304,7 +315,10 @@ Every trigger name starts `icc `, mostly followed by its boss: `lm`, `lady death
 Marrowgar's include `icc lm tank defensive` and `icc lm storm cover`, Saurfang's `icc dbs tank
 defensive` and `icc dbs mark defensive`. Festergut's are `icc festergut` goo, pungent defensive,
 pungent cover, tank defensive, bloat swap, brake, target and stand; Rotface's `icc rotface` dodge,
-tank defensive, dispel, ooze taunt, kite, carrier, target and stand. The others:
+tank defensive, dispel, ooze taunt, kite, carrier, target and stand; Putricide's `icc putricide`
+dodge, swap, tank defensive, kite, plague, stack, abomination, brake, target and stand; the
+council's `icc bpc` dodge, tank defensive, ball, prince taunt, nucleus, soak, target and stand. The
+others:
 `icc dark reckoning` (Deathwhisper), `icc in cannon` and the `icc gunship` ones (Gunship), `icc
 rotting frost giant plague`, `icc dogs` tank defensive, decimate cover, swap, yield and target
 (Stinky and Precious), `icc valkyre spear` and `icc sister svalna` (Svalna). The raid-wide `icc opener swing`, `icc opener redirect` and `icc resistance
@@ -314,7 +328,8 @@ one unbuilt.
 ## Known gaps
 
 - Targeting is by raid icon outside Marrowgar, Deathwhisper, the giant, the Gunship, Saurfang,
-  Stinky and Precious, Festergut and Rotface; the probes record every pick.
+  Stinky and Precious, Festergut, Rotface, Putricide and the Blood Prince Council; the probes record
+  every pick.
 - Every gap cheat above: a mechanic it makes survivable is open, and a server with the raid cheat off
   loses it.
 - The hooks answer only while a definition is live, so Festergut's aura hook, and any for Rotface or
