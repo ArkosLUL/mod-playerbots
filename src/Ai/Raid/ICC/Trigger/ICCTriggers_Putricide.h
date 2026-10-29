@@ -7,52 +7,61 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_PUTRICIDE_H
 #define PLAYERBOTS_ICCTRIGGERS_PUTRICIDE_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_Putricide.h"
+#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
 
-class IccPutricideVolatileOozeTrigger : public Trigger
+class IccPutricideDodgeTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc putricide volatile ooze";
+    static constexpr char const* Name = "icc putricide dodge";
 
-    IccPutricideVolatileOozeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccPutricideDodgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccPutricideGasCloudTrigger : public Trigger
+class IccPutricideSwapTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc putricide gas cloud";
+    static constexpr char const* Name = "icc putricide swap";
 
-    IccPutricideGasCloudTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccPutricideSwapTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccPutricideGrowingOozePuddleTrigger : public Trigger
+class IccPutricideTankDefensiveTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc putricide growing ooze puddle";
+    static constexpr char const* Name = "icc putricide tank defensive";
 
-    IccPutricideGrowingOozePuddleTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccPutricideTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccPutricideMutatedPlagueTrigger : public Trigger
+class IccPutricideKiteTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc putricide mutated plague";
+    static constexpr char const* Name = "icc putricide kite";
 
-    IccPutricideMutatedPlagueTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccPutricideKiteTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccPutricideMalleableGooTrigger : public Trigger
+class IccPutricidePlagueTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc putricide malleable goo";
+    static constexpr char const* Name = "icc putricide plague";
 
-    IccPutricideMalleableGooTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccPutricidePlagueTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccPutricideStackTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc putricide stack";
+
+    IccPutricideStackTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -62,6 +71,32 @@ public:
     static constexpr char const* Name = "icc putricide abomination";
 
     IccPutricideAbominationTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccPutricideBrakeTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc putricide brake";
+
+    IccPutricideBrakeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccPutricideTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc putricide target";
+
+    IccPutricideTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetPpTarget) {}
+};
+
+class IccPutricideStandTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc putricide stand";
+
+    IccPutricideStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

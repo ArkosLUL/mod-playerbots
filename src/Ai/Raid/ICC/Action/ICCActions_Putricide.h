@@ -7,111 +7,131 @@
 #ifndef PLAYERBOTS_ICCACTIONS_PUTRICIDE_H
 #define PLAYERBOTS_ICCACTIONS_PUTRICIDE_H
 
+#include <string>
+
 #include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
+#include "ICCActions_RaidWide.h"
 #include "ICCHelpers_Putricide.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include "Position.h"
+#include "RaidDirectTargeting.h"
 
-class IccPutricideMutatedPlagueAction : public AttackAction
+// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
+// re-issued each tick to a bot still walking never lands.
+class IccPutricideWalkAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc putricide mutated plague";
+    IccPutricideWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
-    IccPutricideMutatedPlagueAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+protected:
+    // The latched spot while the bot is still walking to it, else nullptr
+    Position const* WalkInFlight();
+    // False without booking anything while a cast pins the bot's feet. A walk of our own still in flight at
+    // the same priority would refuse the new one, so its booking is lowered first.
+    bool WalkTo(Position const& spot, MovementPriority priority);
+    void DropWalk() { walking = false; }
+
+private:
+    bool BookedOnWalkSpot();
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
+};
+
+class IccPutricideDodgeAction : public IccPutricideWalkAction
+{
+public:
+    static constexpr char const* Name = "icc putricide dodge";
+
+    IccPutricideDodgeAction(PlayerbotAI* botAI) : IccPutricideWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccPutricideGrowingOozePuddleAction : public AttackAction
+class IccPutricideSwapAction : public RaidDirectAttackAction
 {
 public:
-    static constexpr char const* Name = "icc putricide growing ooze puddle";
+    static constexpr char const* Name = "icc putricide swap";
 
-    IccPutricideGrowingOozePuddleAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccPutricideSwapAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
     bool Execute(Event event) override;
-
-    Unit* FindClosestThreateningPuddle();
-    Position CalculateSafeMovePosition(Unit* closestPuddle);
-    bool IsPositionTooCloseToOtherPuddles(float x, float y, Unit* ignorePuddle);
-    bool PathCrossesAnyPuddle(float fromX, float fromY, float toX, float toY, Unit* ignorePuddle);
 };
 
-class IccPutricideVolatileOozeAction : public AttackAction
+class IccPutricideCastTankDefensiveAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc putricide volatile ooze";
+    static constexpr char const* Name = "icc putricide cast tank defensive";
 
-    IccPutricideVolatileOozeAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccPutricideCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
-
-    bool MarkOozeWithSkull(Unit* ooze);
-    Unit* FindAuraTarget();
 };
 
-class IccPutricideGasCloudAction : public AttackAction
+class IccPutricideKiteAction : public IccPutricideWalkAction
 {
 public:
-    static constexpr char const* Name = "icc putricide gas cloud";
+    static constexpr char const* Name = "icc putricide kite";
 
-    IccPutricideGasCloudAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccPutricideKiteAction(PlayerbotAI* botAI) : IccPutricideWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
-
-    bool HandleGaseousBloatMovement(Unit* gasCloud);
-    bool HandleGroupAuraSituation(Unit* gasCloud);
-    bool GroupHasGaseousBloat(Group* group);
 };
 
-class IccPutricideAvoidMalleableGooAction : public MovementAction
+class IccPutricidePlagueAction : public IccPutricideWalkAction
 {
 public:
-    static constexpr char const* Name = "icc putricide avoid malleable goo";
+    static constexpr char const* Name = "icc putricide plague";
 
-    IccPutricideAvoidMalleableGooAction(PlayerbotAI* botAI, std::string const name = Name)
-        : MovementAction(botAI, name) {}
+    IccPutricidePlagueAction(PlayerbotAI* botAI) : IccPutricideWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
-
-    bool HandleTankPositioning(Unit* boss);
-    bool HandleUnboundPlague(Unit* boss);
-    bool HandleBossPositioning(Unit* boss);
-    bool HasObstacleBetween(Position const& from, Position const& to);
-    bool IsOnPath(Position const& from, Position const& to, Position const& point, float threshold);
 };
 
-class IccPutricideAbominationAction : public AttackAction
+class IccPutricideStackAction : public IccPutricideWalkAction
+{
+public:
+    static constexpr char const* Name = "icc putricide stack";
+
+    IccPutricideStackAction(PlayerbotAI* botAI) : IccPutricideWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccPutricideAbominationAction : public IccPutricideWalkAction
 {
 public:
     static constexpr char const* Name = "icc putricide abomination";
 
-    IccPutricideAbominationAction(PlayerbotAI* botAI, std::string const name = Name)
-        : AttackAction(botAI, name) {}
+    IccPutricideAbominationAction(PlayerbotAI* botAI) : IccPutricideWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
-    bool BecomeAbomination();
-    bool IsSomeoneAlreadyPiloting();
-    Unit* FindClosestPuddle(float maxRange);
-    Unit* PickSlashTarget(Unit* boss);
-    bool TryRegurgitate(Unit* abo, Unit* target);
-    bool TryEatOoze(Unit* abo, Unit* puddle);
+    uint32 lastDrinkMs = 0;
+    // The abomination's own walk: the bot rides it, so the bot itself never shows as moving
+    Position driveSpot;
+    bool driving = false;
+};
+
+class IccPutricideBrakeStopAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc putricide brake stop";
+
+    IccPutricideBrakeStopAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccPutricideTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc putricide target";
+
+    IccPutricideTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetPpTarget) {}
+};
+
+class IccPutricideStandAction : public IccPutricideWalkAction
+{
+public:
+    static constexpr char const* Name = "icc putricide stand";
+
+    IccPutricideStandAction(PlayerbotAI* botAI) : IccPutricideWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 #endif

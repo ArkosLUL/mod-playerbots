@@ -5,123 +5,50 @@
  */
 
 #include "ICCTriggers_Putricide.h"
-#include "ICCHelpers_Putricide.h"
-#include "ICCHelpers_Shared.h"
+
+#include "Creature.h"
 #include "Playerbots.h"
-#include "Trigger.h"
-#include "Vehicle.h"
+#include "Position.h"
 
-bool IccPutricideGrowingOozePuddleTrigger::IsActive()
+bool IccPutricideDodgeTrigger::IsActive() { return GetPpHazardKind(botAI) != nullptr; }
+
+bool IccPutricideSwapTrigger::IsActive()
 {
-    // Early return if boss doesn't exist
-    Unit* boss = AI_VALUE2(Unit*, "find target", "professor putricide");
-    if (!boss)
-        return false;
-
-    GuidVector const& npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto const& npc : npcs)
-    {
-        if (Unit* unit = botAI->GetUnit(npc))
-        {
-            const uint32 entry = unit->GetEntry();
-            if (entry == NPC_GROWING_OOZE_PUDDLE)
-                return true;
-        }
-    }
-
-    return false;
+    uint32 defensive = 0;
+    return IsPpSwapTaunter(botAI, defensive);
 }
 
-bool IccPutricideVolatileOozeTrigger::IsActive()
+bool IccPutricideTankDefensiveTrigger::IsActive() { return GetPpTankDefensive(botAI, "pp.defensive") != 0; }
+
+bool IccPutricideKiteTrigger::IsActive() { return IsPpKiter(botAI); }
+
+bool IccPutricidePlagueTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "volatile ooze");
-    if (!boss)
-        return false;
-
-    if (botAI->HasAura("Gaseous Bloat", bot))
-        return false;
-
-    return true;
+    Position spot;
+    char const* branch = nullptr;
+    return GetPpPlagueWalk(botAI, spot, branch);
 }
 
-bool IccPutricideGasCloudTrigger::IsActive()
+bool IccPutricideStackTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "gas cloud");
-    if (!boss)
-        return false;
-
-    Unit* boss1 = AI_VALUE2(Unit*, "find target", "volatile ooze");
-
-    bool hasGaseousBloat = botAI->HasAura("Gaseous Bloat", bot);
-    // each bloat is a new cast on a new victim, so a direction kept from the last one is stale
-    if (!hasGaseousBloat)
-        IccPutricideForgetBloatFlee(bot);
-
-    if (hasGaseousBloat && boss1)
-        return true;
-
-    if (boss1)
-        return false;
-
-    return true;
-}
-
-bool IccPutricideMutatedPlagueTrigger::IsActive()
-{
-    return AI_VALUE2(Unit*, "find target", "professor putricide") != nullptr;
-}
-
-bool IccPutricideMalleableGooTrigger::IsActive()
-{
-    return AI_VALUE2(Unit*, "find target", "professor putricide") != nullptr;
+    Position spot;
+    return GetPpStackWalk(botAI, spot);
 }
 
 bool IccPutricideAbominationTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "professor putricide");
-    if (!boss)
-        return false;
+    PpAbomPlan plan;
+    return GetPpAbomPlan(botAI, plan);
+}
 
-    if (!PlayerbotAI::IsAssistTank(bot))
-        return false;
+bool IccPutricideBrakeTrigger::IsActive()
+{
+    Creature* boss = IsPpBraked(botAI) ? GetPpBoss(botAI) : nullptr;
+    return boss && (bot->GetVictim() == boss || AI_VALUE(Unit*, "current target") == boss);
+}
 
-    // Already piloting - keep action firing until vehicle drops.
-    if (Unit* veh = bot->GetVehicleBase())
-    {
-        uint32 e = veh->GetEntry();
-        if (e == NPC_MUTATED_ABOMINATION_10 || e == NPC_MUTATED_ABOMINATION_25)
-            return true;
-    }
-
-    // Phase 3: boss takes toy back. No transformation.
-    if (IccPutricidePhase(bot, boss) == 3)
-        return false;
-
-    // Someone else already piloting - do not drink.
-    if (Group* group = bot->GetGroup())
-    {
-        for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
-        {
-            Player* m = itr->GetSource();
-            if (!m || m == bot || !m->IsAlive())
-                continue;
-            if (Unit* vb = m->GetVehicleBase())
-            {
-                uint32 e = vb->GetEntry();
-                if (e == NPC_MUTATED_ABOMINATION_10 || e == NPC_MUTATED_ABOMINATION_25)
-                    return false;
-            }
-        }
-    }
-
-    // Require at least one Growing Ooze Puddle nearby.
-    GuidVector const npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto const& g : npcs)
-    {
-        if (Unit* u = botAI->GetUnit(g))
-            if (u->GetEntry() == NPC_GROWING_OOZE_PUDDLE)
-                return true;
-    }
-
-    return false;
+bool IccPutricideStandTrigger::IsActive()
+{
+    Position spot;
+    return GetPpStandWalk(botAI, spot);
 }
