@@ -146,15 +146,16 @@ bool IccPutricideDodgeAction::Execute(Event /*event*/)
 bool IccPutricideSwapAction::Execute(Event /*event*/)
 {
     uint32 defensive = 0;
+    bool taunt = false;
     Creature* boss = GetPpBoss(botAI);
-    if (!boss || !IsPpSwapTaunter(botAI, defensive))
+    if (!boss || !IsPpSwapTaunter(botAI, defensive, taunt))
         return false;
 
     // A sharer takes his swings for one application, so its button goes up first
     if (defensive && botAI->CastSpell(defensive, bot))
         return true;
 
-    if (!IccCastClassTaunt(bot, botAI, boss))
+    if (!taunt || !IccCastClassTaunt(bot, botAI, boss))
         return false;
 
     // A taunt moves him, not the bot's own target
@@ -271,6 +272,13 @@ bool IccPutricideAbominationAction::Execute(Event /*event*/)
     Creature* abo = base ? base->ToCreature() : nullptr;
     if (!abo)
         return false;
+
+    if (plan.duty == PpAbomDuty::Exit)
+    {
+        driving = false;
+        bot->ExitVehicle();
+        return true;
+    }
 
     AiObjectContext* aiContext = botAI->GetAiObjectContext();
     if (plan.duty == PpAbomDuty::Spit)

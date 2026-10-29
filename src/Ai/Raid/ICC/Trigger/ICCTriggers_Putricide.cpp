@@ -15,7 +15,8 @@ bool IccPutricideDodgeTrigger::IsActive() { return GetPpHazardKind(botAI) != nul
 bool IccPutricideSwapTrigger::IsActive()
 {
     uint32 defensive = 0;
-    return IsPpSwapTaunter(botAI, defensive);
+    bool taunt = false;
+    return IsPpSwapTaunter(botAI, defensive, taunt) && (taunt || defensive);
 }
 
 bool IccPutricideTankDefensiveTrigger::IsActive() { return GetPpTankDefensive(botAI, "pp.defensive") != 0; }

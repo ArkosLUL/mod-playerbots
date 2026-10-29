@@ -5,9 +5,9 @@
     professor_putricide.py <file> --phases   pp.phase, 1 to 3
     professor_putricide.py <file> --adds     each Volatile Ooze victim and its stack, each Gas Cloud bloat
     professor_putricide.py <file> --abom     the driver and its duty, every Regurgitated Ooze
-    professor_putricide.py <file> --plague   Mutated Plague stacks and swaps, heroic Unbound Plague passes
+    professor_putricide.py <file> --plague   Mutated Plague stacks, swaps and sharer models, heroic Unbound Plague
     professor_putricide.py <file> --dodges   each dodge by hazard and how it went
-    professor_putricide.py <file> --spread   the boss spot and the ring slots
+    professor_putricide.py <file> --spread   the boss spot, the rings' hold and the ring slots
     professor_putricide.py <file> --cheats   this encounter's cheat uses
 
 What the generic views miss here:
@@ -21,17 +21,23 @@ What the generic views miss here:
 - **`pp.kite` is per bloated bot**, the branch of each leg: `away` (straight from the cloud), `wall`
   (clamped to the kite disk's edge), `cross` (through a hazard), `none`, `locked` (the walk was refused).
 - **`pp.driver` is the abomination's driver, `pp.abom` its duty**: `drink`, `spit <unit>` (Regurgitated
-  Ooze), `eat <puddle>`, `slash <unit>`, `none`.
-- **`pp.swap` is per tank or sharer**: `take` before the next Mutated Plague, `share` (a damage dealer
-  taking one), `back` (a tank taking him back from it), `pickup` off anyone else, `none`. `pp.brake`
-  holds the bots past 90% of the holder's threat.
-- **`pp.plague` is per Unbound Plague carrier**: `hold`, `clear` (stepping off everyone), `pass` (walking
-  onto its receiver), `none`. `pp.receiver` is keyed on the carrier, its value the receiver.
+  Ooze), `eat <puddle>`, `slash <unit>`, `exit` (a riding tank leaving to pick him up), `none`. A damage
+  dealer drives when no bot tank is free.
+- **`pp.swap` is per tank, sharer or guard**: `take` before the next Mutated Plague, `share` (a damage
+  dealer taking one), `back` (a tank taking him back from it), `pickup` off anyone else (a Death Knight or
+  paladin damage dealer when no tank is left), `none`. `pp.sharehp` is the health share a would-be sharer's
+  model leaves it after one application, in steps of 5; under 25 it is passed over. `pp.brake` holds the
+  bots past 90% of the holder's threat.
+- **`pp.plague` is per bot**: a carrier's `hold`, `clear` (stepping off everyone), `pass` (walking onto its
+  receiver); `receive`, a receiver walking onto a carrier that can't walk (his holder, the rooted ooze
+  victim, a rider); `none`. `pp.receiver` is keyed on the carrier, its value the receiver.
 - **`pp.dodge` is `<hazard> <branch> <yards>`**: hazard `puddle`, `gas`, `blast`, `goo`, `cloud` (melee off
   a cloud about to re-pick) or `carrier`; branch `move`, `tight` or `cross`; `hold`, `<hazard> none`,
   `<hazard> locked`, `pinned`.
 - **`pp.spot` is the boss spot**: 1 the room's centre, 2-9 the ring at 8 yd, 10-17 the ring at 16.
-  **`pp.slot` counts from 1**: 1-14 the 12 yd ring, 15-38 the 22 yd one; `0` is a release.
+  **`pp.slot` counts from 1**: 1-14 the 12 yd ring, 15-38 the 22 yd one; `0` is a release. **`pp.rings`**
+  is `1` while the slots hold: from his first arrival on the spot, let go past 15 yd off it unless a bot
+  tank drags him.
 """
 from __future__ import annotations
 
@@ -60,6 +66,7 @@ REGURGITATED_OOZE = (70539, 72457, 72875, 72876)
 KITE_BRANCHES = ("away", "wall", "cross", "none", "locked")
 SWAP_KINDS = ("take", "share", "back", "pickup")
 PLAGUE_BRANCHES = ("hold", "clear", "pass")
+SHARE_FLOOR = 25
 INNER_SLOTS = 14
 
 
@@ -214,6 +221,24 @@ def swap_rows(trace: Trace) -> list[tuple[int, int, str]]:
     return sorted(rows)
 
 
+def share_health(trace: Trace) -> dict[int, tuple[int, int]]:
+    """Per would-be sharer, the lowest and highest health share its model predicted after one application."""
+    seen: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in notes(trace, "pp.sharehp"):
+        value = str(rec.get("txt", ""))
+        if value.isdigit():
+            seen[rec["g"]].append(int(value))
+    return {guid: (min(values), max(values)) for guid, values in seen.items()}
+
+
+def receive_rows(trace: Trace) -> list[tuple[int, int]]:
+    """`(when, bot)` each time a receiver started walking onto a carrier that couldn't walk."""
+    rows = []
+    for guid, spans in holder_spans(trace, "pp.plague", icc.pull_end(trace)).items():
+        rows += [(start, guid) for value, start, _ in spans if value == "receive"]
+    return sorted(rows)
+
+
 def show_plague(trace: Trace) -> None:
     if refuse(trace, "PLAGUE"):
         return
@@ -228,6 +253,11 @@ def show_plague(trace: Trace) -> None:
         print(f"  {len(swaps)} swap election(s)")
         for when, guid, kind in swaps:
             print(f"    {clock(when):>9}  {trace.name(guid):<14}  {kind}")
+    models = share_health(trace)
+    if models:
+        shown = ", ".join(f"{trace.name(guid)} {low}-{high}%" + (" (passed over)" if low < SHARE_FLOOR else "")
+                          for guid, (low, high) in sorted(models.items(), key=lambda item: trace.name(item[0])))
+        print(f"  share health model: {shown}")
     braked = {rec["g"] for rec in notes(trace, "pp.brake") if str(rec.get("txt", "")) not in ("", "0")}
     if braked:
         print("  braked: " + ", ".join(sorted(trace.name(guid) for guid in braked)))
@@ -243,6 +273,9 @@ def show_plague(trace: Trace) -> None:
         shown = ", ".join(f"{branch} {seen[branch]}" for branch in PLAGUE_BRANCHES if seen[branch]) or "-"
         print(f"    {clock(row['start']):>9}  {clock(row['stop'] - row['start']):>9}  "
               f"{victim_label(trace, row)}  {shown}")
+    walks = receive_rows(trace)
+    if walks:
+        print("  receivers walking in: " + ", ".join(f"{trace.name(guid)}@{clock(when)}" for when, guid in walks))
 
 
 def dodge_counts(trace: Trace) -> collections.Counter:
@@ -284,6 +317,9 @@ def show_spread(trace: Trace) -> None:
     end = icc.pull_end(trace)
     spots = [f"{value}@{clock(start)}" for value, start, _ in latch_spans(trace, "pp.spot", end)]
     print("  boss spot: " + (", ".join(spots) if spots else "never written"))
+    rings = [f"{'held' if value == '1' else 'released'}@{clock(start)}"
+             for value, start, _ in latch_spans(trace, "pp.rings", end)]
+    print("  rings: " + (", ".join(rings) if rings else "never written"))
     slots = holder_spans(trace, "pp.slot", end)
     if not slots:
         print("  pp.slot never written")
@@ -319,7 +355,7 @@ SECTIONS = (
     ("abom", "the abomination's driver, duty and Regurgitated Ooze", show_abom),
     ("plague", "Mutated Plague stacks and swaps, heroic Unbound Plague", show_plague),
     ("dodges", "each dodge by hazard and how it went", show_dodges),
-    ("spread", "the boss spot and the ring slots", show_spread),
+    ("spread", "the boss spot, the rings' hold and the ring slots", show_spread),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 
