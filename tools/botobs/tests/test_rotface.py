@@ -71,6 +71,17 @@ def pull(boss: str = "rotface", diff: int = 3) -> list[dict]:
         note(10000, AEGIS, "rf.bigooze", f"pickup {OOZE_A}"),
         note(11000, AEGIS, "rf.bigooze", f"tank {OOZE_A}"),
         note(30000, AEGIS, "rf.bigooze", f"kite {OOZE_A}"),
+        # No dry leg left: Aegis wades, Mend frees it, then Aegis shields itself.
+        note(36000, AEGIS, "rf.bigooze", f"wade {OOZE_A}"),
+        note(100, 0, "rf.freedom", "0"),
+        note(36500, 0, "rf.freedom", str(MEND)),
+        note(37000, 0, "rf.freedom", "0"),
+        note(41000, 0, "rf.freedom", str(AEGIS)),
+        note(43000, 0, "rf.freedom", "0"),
+        # No curer in reach of Arcane at the merge: Mend walks over.
+        note(100, MEND, "rf.curewalk", "none"),
+        note(12000, MEND, "rf.curewalk", str(ARCANE)),
+        note(13000, MEND, "rf.curewalk", "none"),
         # Arcane is infected, waits at the spot for a partner, then walks to the Big Ooze and gets cured.
         note(100, ARCANE, "rf.carrier", "none"),
         note(4000, ARCANE, "rf.carrier", "spot"),
@@ -93,6 +104,8 @@ def pull(boss: str = "rotface", diff: int = 3) -> list[dict]:
         note(20100, MEND, "rf.dodge", "mark tight 7"),
         note(26000, MEND, "rf.dodge", "sticky none"),
         note(27000, BULWARK, "rf.dodge", "spray move 3"),
+        note(19000, AEGIS, "rf.dodge", "burst move 8"),
+        note(28000, MEND, "rf.dodge", "little move 4"),
         note(15000, ARCANE, "rf.vilegas", "73020"),
         note(35000, ARKOS, "rf.vilegas", "73020"),
         note(40000, ARCANE, "rf.vilegas", "73020"),
@@ -124,10 +137,16 @@ class Oozes(unittest.TestCase):
     def test_duty_names_the_ooze(self):
         rows = rf.duty_rows(load(pull()))
         self.assertEqual(rows[AEGIS], [("none", 500, 8000), ("spot", 8000, 10000), ("pickup Big Ooze", 10000, 11000),
-                                       ("tank Big Ooze", 11000, 30000), ("kite Big Ooze", 30000, 60000)])
+                                       ("tank Big Ooze", 11000, 30000), ("kite Big Ooze", 30000, 36000),
+                                       ("wade Big Ooze", 36000, 60000)])
 
     def test_section_names_the_kiter(self):
         self.assertIn("  kiter: none@0:00.100, Aegis@0:00.200\n", printed(rf.show_oozes, load(pull())))
+
+    def test_freedom_drops_releases(self):
+        self.assertEqual(rf.freedom_spans(load(pull())), [("Mend", 36500, 37000), ("Aegis", 41000, 43000)])
+        self.assertIn("  freedom: Mend@0:36.500 for 0:00.500, Aegis@0:41.000 for 0:02.000\n",
+                      printed(rf.show_oozes, load(pull())))
 
 
 class Carriers(unittest.TestCase):
@@ -135,21 +154,26 @@ class Carriers(unittest.TestCase):
         text = printed(rf.show_carriers, load(pull()))
         self.assertIn("  merge walks: ooze 1, spot 1\n", text)
         self.assertIn("       0:04.000   0:06.000  spot\n", text)
-        self.assertNotIn("Mend\n      ", text)
+        self.assertNotIn("Mend\n      ", text.split("\n\n")[0])
 
     def test_a_release_is_no_duty(self):
         self.assertEqual(rf.dispel_rows(load(pull())), [(13000, ARCANE, MEND)])
         self.assertIn("    0:13.000  Arcane          by Mend\n", printed(rf.show_carriers, load(pull())))
 
+    def test_cure_walks_name_the_carrier(self):
+        self.assertIn("  cure walks, curer to carrier\n    Mend\n       0:12.000   0:01.000  Arcane\n",
+                      printed(rf.show_carriers, load(pull())))
+
 
 class Dodges(unittest.TestCase):
     def test_counts_drop_yards_and_holds(self):
         self.assertEqual(rf.dodge_counts(load(pull())),
-                         {"mark move": 1, "mark tight": 1, "sticky none": 1, "spray move": 1})
+                         {"mark move": 1, "mark tight": 1, "sticky none": 1, "spray move": 1, "burst move": 1,
+                          "little move": 1})
 
     def test_section(self):
         text = printed(rf.show_dodges, load(pull()))
-        self.assertIn("  by bot: Mend 2, Arcane 1, Bulwark 1\n", text)
+        self.assertIn("  by bot: Mend 3, Aegis 1, Arcane 1, Bulwark 1\n", text)
 
 
 class Spread(unittest.TestCase):
@@ -202,7 +226,7 @@ class Banner(unittest.TestCase):
     def test_every_probe_the_pull_writes_counts(self):
         gone = rf.missing_probes(load(pull()))
         for key in ("rf.target", "rf.kiter", "rf.bigooze", "rf.carrier", "rf.dispel", "rf.slot", "rf.flood",
-                    "rf.oozespot", "rf.dodge", "rf.vilegas"):
+                    "rf.oozespot", "rf.dodge", "rf.vilegas", "rf.freedom", "rf.curewalk"):
             self.assertNotIn(key, gone)
 
 

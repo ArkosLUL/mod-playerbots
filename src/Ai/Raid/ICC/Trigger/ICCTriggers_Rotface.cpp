@@ -11,6 +11,14 @@
 
 bool IccRotfaceDodgeTrigger::IsActive() { return GetRfHazardKind(botAI) != nullptr; }
 
+bool IccRotfaceFreedomTrigger::IsActive()
+{
+    uint32 spellId = 0;
+    return GetRfFreedom(botAI, spellId) != nullptr;
+}
+
+bool IccRotfaceTotemTrigger::IsActive() { return GetRfTotemSwap(botAI) != nullptr; }
+
 bool IccRotfaceTankDefensiveTrigger::IsActive() { return GetRfTankDefensive(botAI, "rf.defensive") != 0; }
 
 bool IccRotfaceDispelTrigger::IsActive()
@@ -25,13 +33,20 @@ bool IccRotfaceKiteTrigger::IsActive()
 {
     Position spot;
     int8 dir = 0;
-    return GetRfKiteWalk(botAI, spot, dir);
+    bool wade = false;
+    return GetRfKiteWalk(botAI, spot, dir, wade);
 }
 
 bool IccRotfaceCarrierTrigger::IsActive()
 {
     Position spot;
     return GetRfCarrierWalk(botAI, spot);
+}
+
+bool IccRotfaceCureWalkTrigger::IsActive()
+{
+    Position spot;
+    return GetRfCureWalk(botAI, spot);
 }
 
 bool IccRotfaceStandTrigger::IsActive()

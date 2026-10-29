@@ -20,6 +20,24 @@ public:
     bool IsActive() override;
 };
 
+class IccRotfaceFreedomTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc rotface freedom";
+
+    IccRotfaceFreedomTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccRotfaceTotemTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc rotface totem";
+
+    IccRotfaceTotemTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccRotfaceTankDefensiveTrigger : public Trigger
 {
 public:
@@ -62,6 +80,15 @@ public:
     static constexpr char const* Name = "icc rotface carrier";
 
     IccRotfaceCarrierTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccRotfaceCureWalkTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc rotface cure walk";
+
+    IccRotfaceCureWalkTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

@@ -47,6 +47,24 @@ public:
     bool Execute(Event event) override;
 };
 
+class IccRotfaceFreedomAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc rotface freedom";
+
+    IccRotfaceFreedomAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccRotfaceTotemAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc rotface totem";
+
+    IccRotfaceTotemAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 class IccRotfaceCastTankDefensiveAction : public Action
 {
 public:
@@ -89,6 +107,15 @@ public:
     static constexpr char const* Name = "icc rotface carrier";
 
     IccRotfaceCarrierAction(PlayerbotAI* botAI) : IccRotfaceWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccRotfaceCureWalkAction : public IccRotfaceWalkAction
+{
+public:
+    static constexpr char const* Name = "icc rotface cure walk";
+
+    IccRotfaceCureWalkAction(PlayerbotAI* botAI) : IccRotfaceWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
