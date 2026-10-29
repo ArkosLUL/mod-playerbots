@@ -354,7 +354,12 @@ stay above it.
   15.7k** of lasher melee and Flame Lash; cast 6.1s late, 102k and a death; not cast (spent on Auriaya),
   **416k in 20s** and five dead. Deliberately **not** named `army of the dead`: `IsBurstCooldownAction`
   matches on the name, and the Ulduar burst gate holds that list until Attuned to Nature drops, the whole
-  add phase. 42650's 10 min cooldown outlasts the pull, so each DK casts it on the first lasher wave.
+  add phase.
+- **One Army per lasher wave** (`IsFreyaArmyTurn`). There are two lasher waves, one per random set of three,
+  1-5 min apart, and 42650's 10 min cooldown (6 with Night of the Dead) outlasts the gap, so one DK
+  never covers both. The lowest-GUID in-combat bot DK with it ready casts. Every DK holds while any DK,
+  a human included, channels Army or has a living ghoul: ghouls re-taunt every second (43264) for
+  their 40s, so they also hold a wave arriving while they're up. Untested until a pull with two bot DKs.
 
 **Ranged focus** is `GetFreyaLasherPackFocus`, the lasher with the most lashers within
 `ULDUAR_FREYA_LASHER_PACK_RADIUS` (8 yd): `AoeTrigger` counts attackers within 8 yd of the ***current
