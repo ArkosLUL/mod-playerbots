@@ -10,7 +10,7 @@
 #include "Multiplier.h"
 
 // Holds a damage dealer's area damage near a prince without the Invocation, whose damage turns into threat
-// on the dealer, and near a Dark Nucleus, which a direct hit takes off its tank.
+// on the dealer, and near a Dark Nucleus, which a cleave or a chain takes off its tank.
 class IccBpcSplashMultiplier : public Multiplier
 {
 public:

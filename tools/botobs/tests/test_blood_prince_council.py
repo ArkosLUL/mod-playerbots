@@ -55,6 +55,7 @@ def pull(boss: str = "blood-prince-council") -> list[dict]:
         {"t": 1, "e": "unit", "g": TALDARAM, "en": 37973, "n": "Prince Taldaram", "lvl": 83, "b": 1},
         {"t": 1, "e": "unit", "g": BOMB_A, "en": 38454, "n": "Kinetic Bomb"},
         {"t": 1, "e": "unit", "g": BOMB_B, "en": 38454, "n": "Kinetic Bomb"},
+        {"t": 1, "e": "spell", "sp": 871, "n": "Shield Wall"},
         note(100, BULWARK, "bpc.phase", "valanar"),
         note(120, SHIV, "bpc.phase", "valanar"),
         note(45000, SHIV, "bpc.phase", "none"),
@@ -100,6 +101,11 @@ def pull(boss: str = "blood-prince-council") -> list[dict]:
         note(22000, AEGIS, "bpc.nucleus", "taunt 1"),
         note(30000, AEGIS, "bpc.nucleus", "walk"),
         note(33000, AEGIS, "bpc.nucleus", "full"),
+        # Keleseth's empowered Shadow Lance on Aegis: Shield Wall inside the window, then a human tank's call
+        note(91200, AEGIS, "bpc.defensive", "Shield Wall"),
+        {"t": 91300, "e": "cast", "s": AEGIS, "d": AEGIS, "sp": 871},
+        note(92000, AEGIS, "bpc.defensive", "idle"),
+        note(93000, BULWARK, "bpc.humancall", "871"),
         {"t": 50000, "e": "cheat", "g": SHIV, "k": "pp.heroicbuff", "n": 2, "tgt": SHIV},
         {"t": 120000, "e": "end", "out": "kill"},
     ]
@@ -201,6 +207,18 @@ class Nucleus(unittest.TestCase):
             "  per tank: spans of each nucleus answer\n"
             "\n"
             "    Aegis  taunt 2, walk 1, cooldown 1, full 1\n"))
+
+
+class Defensives(unittest.TestCase):
+    def test_window_cast_and_call(self):
+        self.assertEqual(printed(bpc.show_defensives, load(pull())), (
+            "DEFENSIVES\n"
+            "  1:31.200  Aegis       0:00.800  offered Shield Wall; cast Shield Wall +0.1s\n"
+            "  calls to a human tank  871 1:33.000\n"))
+
+    def test_no_window(self):
+        records = [rec for rec in pull() if rec.get("k") != "bpc.defensive"]
+        self.assertIn("bpc.defensive never offered a button", printed(bpc.show_defensives, load(records)))
 
 
 class Cheats(unittest.TestCase):

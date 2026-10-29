@@ -41,8 +41,6 @@ constexpr uint32 SPELL_BPC_INVOCATION_TALDARAM = 70982;
 constexpr uint32 SPELL_BPC_SHADOW_RESONANCE = 71822;
 // On a Kinetic Bomb for 3 s after a hit, while it climbs
 constexpr uint32 SPELL_BPC_KINETIC_BOMB_KNOCKBACK = 72087;
-// Heroic: a stack for every second a player moves, gone after 10 s standing still
-constexpr uint32 SPELL_BPC_SHADOW_PRISON = 72999;
 // Difficulty rows: remap at the call
 constexpr uint32 SPELL_BPC_EMPOWERED_SHOCK_VORTEX = 72039;
 constexpr uint32 SPELL_BPC_BALL_OF_FLAMES_PROC = 71756;
@@ -125,6 +123,8 @@ bool IsBpcBombShooting(PlayerbotAI* botAI);
 bool GetBpcBallWalk(PlayerbotAI* botAI, Position& spot);
 // A soaker's intercept point on a Ball of Inferno Flame's path, false while it should stand where it is
 bool GetBpcSoakWalk(PlayerbotAI* botAI, Position& spot);
+// A soaker already on that path and clear of the explosion stays there until the ball passes
+bool IsBpcSoakHeld(PlayerbotAI* botAI);
 
 // A bot near a Shock Vortex with no node to fall back on. Notes bpc.dodge.
 bool IsBpcInVortex(PlayerbotAI* botAI);
@@ -146,7 +146,8 @@ uint32 GetBpcTankDefensive(PlayerbotAI* botAI, char const* noteKind);
 bool IsBpcTankDefensiveHeld(PlayerbotAI* botAI);
 
 // A damage dealer whose area attack would reach a prince without the Invocation, which turns the damage
-// into threat, or a Dark Nucleus, which then leaves its tank
+// into threat, or a Dark Nucleus. Area searches skip a nucleus, but a cleave or a chain takes it off its
+// tank, and the splash test can't tell those apart.
 bool IsBpcAreaDamageHeld(PlayerbotAI* botAI);
 
 // The scan, the tank roster, the nodes, the bomb and soak duties, the stand latch, the calls to a human

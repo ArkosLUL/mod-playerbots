@@ -86,8 +86,10 @@ One lead, no split: the stem shares one state, one hazard scan and one tick.
 | Tank spots at the stair foot, Valanar (and Taldaram with 2 tanks) south, Keleseth north, 40.5 yd apart; Taldaram's own tank 13.5 yd west of Valanar's | WT diagram; the script's 12 yd vortex | the old spots 51 yd apart, out of ranged reach of both |
 | One triangular lattice, 13.5 yd = 12 + two park tolerances, the tank spots on it | Empowered Shock Vortex 72038 radius 12, Saurfang's spacing rule | rings round Valanar (old), which ran out of room on 25-man |
 | Ranged move to the empowered prince's side on a transfer, healers never | spell range 30 vs spots 40.5 apart | one fixed spread: only ~6 nodes reach both sides |
-| Melee scatter only during the 4.5 s cast, onto free nodes within 30 yd | guide (back wall), cast time | melee hold nodes all fight: no melee uptime |
-| Bomb shot below 10 yd above its landing and while it carries no Kinetic Bomb Knockback | script: 2 yd/s fall from 20 yd, a hit lifts it 2 yd/s for 3 s, explodes within 2 yd | old: shoot all the time, a lost DPS slot |
+| Melee scatter only during the cast, onto free nodes reached before it ends (7 yd/s less 0.25 s, at most 28 yd) | guide (back wall); 72039 4.5 s, heroic 73038/73039 4 s | melee hold nodes all fight: no melee uptime; a flat 28 yd (review: late on heroic) |
+| Bomb shot within 5 s of landing (10 yd normal, 15 heroic) and while it carries no Kinetic Bomb Knockback | script: falls at walk speed, 2 yd/s, 3 on heroic (38776/38777 `speed_walk` 1.2), from 20 yd; a hit lifts it 2 yd/s for 3 s; explodes within 2 yd | a flat 10 yd (review: 3.3 s on heroic, short of a mage's cast); old: shoot all the time |
+| Area damage held near a nucleus though area searches skip it (`creature_immunities` -363 `ImmuneAoE`) | the splash test can't split cleaves and chains, which take it, from plain area damage | hold only cleaves and chains near a nucleus: needs a chain test in the shared `RaidSplash.cpp` |
+| A soaker within 6 yd of the ball's path and 16.5 yd of its victim holds there, reach blocked (`icc bpc soak hold`) | lessons: a hold that lets go on arrival | release on arrival, so reach walks it back to its target (review) |
 | Bomb tiers hunter, mage, other ranged DPS | guide (hunter); only direct hits proc Unstable | old: hunter, druid, any |
 | Inferno soak by up to 3 interceptors, melee first | WT, Wowhead (soak the path) | old: step toward a ball 2-10 yd from Taldaram, which ticks nothing before the chase starts |
 | No recovery taunt at DR level 3 or above; threat holds the princes | `flags_extra` 0x80000 | old taunt loop into immunity |
@@ -110,10 +112,12 @@ All tasks done.
   in its own `RaidInstanceState`; `bpcSpreadLockTimers` joins the unused list; trigger names `icc bpc`
   dodge, tank defensive, ball, prince taunt, nucleus, soak, target, stand; drop the council from
   "Targeting is by raid icon outside".
-- r14: unused `bpcSpreadLockTimers` and the council ids in `ICCData.h`; hoist one walk base.
+- r14: unused `bpcSpreadLockTimers` and the council ids in `ICCData.h`; hoist one walk base;
+  `test_icc_naming.py`'s synthetic `icc bpc kinetic bomb` names no registered trigger.
 
 ## Known gaps
 
-In the boss doc's Known gaps. Never built, no 631 trace, no `-Werror` pass beyond `pb-check`.
+In the boss doc's Known gaps, the review's included (no threat brake past taunt DR level 3). Never
+built, no 631 trace, no `-Werror` pass beyond `pb-check`.
 
 ## Blocked

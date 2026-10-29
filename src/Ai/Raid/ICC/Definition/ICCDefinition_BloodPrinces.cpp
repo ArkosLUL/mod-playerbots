@@ -42,7 +42,11 @@ void DefineBloodPrinces(EncounterBuilder& e)
                    "reach party member to resurrect"});
     // The princes come to the tank on its spot
     e.OwnMovement("icc bpc tank hold", Role::Tank, &IsBpcHoldingTankStand, Family::Attack,
-                  {IccBpcStandAction::Name, IccBpcDodgeAction::Name, IccBpcBallAction::Name, IccBpcNucleusAction::Name});
+                  {IccBpcStandAction::Name, IccBpcDodgeAction::Name, IccBpcBallAction::Name,
+                   IccBpcNucleusAction::Name});
+    // Reach would walk a soaker back to its target before the ball passes
+    e.OwnMovement("icc bpc soak hold", Role::Any, &IsBpcSoakHeld, Family::Attack,
+                  {IccBpcSoakAction::Name, IccBpcDodgeAction::Name});
     // Heroic: every second on the move stacks Shadow Prison, so nothing but the encounter and reach moves a bot
     e.OwnMovement("icc bpc prison hold", Role::Any, &IsBpcPrisonHeld,
                   Family::Attack | Family::Reach | Family::ReachHeal,

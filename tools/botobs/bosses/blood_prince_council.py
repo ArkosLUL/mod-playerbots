@@ -9,13 +9,14 @@
     blood_prince_council.py <file> --bombs     per duty bot: the Kinetic Bombs it juggled, its shots
     blood_prince_council.py <file> --balls     per bot: ball victim steps and Inferno Flame soaks
     blood_prince_council.py <file> --nucleus   per tank: Keleseth's tank collecting Dark Nuclei
+    blood_prince_council.py <file> --defensives  tank buttons and calls to a human tank
     blood_prince_council.py <file> --cheats    this encounter's cheat uses
 
 What the generic views miss here:
 
 - **`bpc.phase` is the empowered prince**: `valanar` from the pull, then `keleseth` or `taldaram` at
-  random, then the other, moving every 46 s; `none` between pulls. Per bot, so a step starts at the
-  first bot to note it.
+  random, then the other, then Valanar again, moving at 45 s and every 46 s after; `none` while the
+  Invocation flies to the next one. Per bot, so a step starts at the first bot to note it.
 - **`bpc.target` is the resolver branch**: `owned` (a tank on its own prince), `recover` (its prince
   is on somebody else), `bomb`, `skull`, `empowered`, `none`.
 - **`bpc.tank` is a bit mask per tank**: 1 Valanar, 2 Keleseth, 4 Taldaram; `0` when it lost them.
@@ -30,6 +31,8 @@ What the generic views miss here:
   live Ball of Inferno Flame.
 - **`bpc.nucleus` is Keleseth's tank**: `taunt N` with N Shadow Resonance stacks, `walk` toward one
   out of reach, `cooldown`, `full` at six, `none` with no loose nucleus.
+- **`bpc.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window: Keleseth's tank
+  through his empowered Shadow Lance, any tank under 40%. `bpc.humancall` is a call to a human tank.
 """
 from __future__ import annotations
 
@@ -44,12 +47,20 @@ from bosses import icecrown_citadel as icc  # noqa: E402
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.probes import emitted_keys, holder_spans, silent_keys  # noqa: E402
-from raidobs.trace import Trace, clock  # noqa: E402
+from raidobs.trace import Trace, clock, notes, roster_guids  # noqa: E402
 
 ENCOUNTER = "blood-prince-council"
 TITLE = "Blood Prince Council"
 PRINCES = ((1, "valanar"), (2, "keleseth"), (4, "taldaram"))
 TARGET_BRANCHES = ("owned", "recover", "bomb", "skull", "empowered", "none")
+DEFENSIVE = "bpc.defensive"
+HUMAN_CALL = "bpc.humancall"
+# a button counts for a window from this long before it opens until this long after it closes
+WINDOW_LEAD_MS = 1500
+WINDOW_TAIL_MS = 1500
+# cast names, any rank
+TANK_BUTTONS = frozenset({"Last Stand", "Shield Wall", "Divine Protection", "Barkskin", "Frenzied Regeneration",
+                          "Survival Instincts", "Anti-Magic Shell", "Vampiric Blood", "Icebound Fortitude"})
 
 
 def mine(trace: Trace) -> bool:
@@ -242,6 +253,47 @@ def show_nucleus(trace: Trace) -> None:
         print(f"    {trace.name(guid)}  {counted(counts, ('taunt', 'walk', 'cooldown', 'full', 'none'))}")
 
 
+def casts_named(trace: Trace, names: frozenset) -> list[tuple[int, int, str]]:
+    """`(t, guid, spell name)` for every roster cast of one of `names`, once per ms."""
+    roster = roster_guids(trace)
+    named = ((rec["t"], rec.get("s"), trace.spells.get(rec.get("sp"), "")) for rec in trace.of("cast")
+             if rec.get("s") in roster)
+    return sorted({cast for cast in named if cast[2] in names})
+
+
+def tank_windows(trace: Trace) -> list[tuple[int, int, int, list[str]]]:
+    """`(start, stop, tank, values)` per run of non-idle `bpc.defensive` values of one tank."""
+    end = icc.pull_end(trace)
+    out = []
+    for guid, spans in holder_spans(trace, DEFENSIVE, end).items():
+        run: list[tuple[str, int, int]] = []
+        for span in spans + [("idle", end, end)]:
+            if span[0] != "idle":
+                run.append(span)
+            elif run:
+                out.append((run[0][1], run[-1][2], guid, [value for value, _, _ in run]))
+                run = []
+    return sorted(out)
+
+
+def show_defensives(trace: Trace) -> None:
+    if refuse(trace, "DEFENSIVES"):
+        return
+    windows = tank_windows(trace)
+    if not windows:
+        print(f"  {DEFENSIVE} never offered a button")
+    casts = casts_named(trace, TANK_BUTTONS)
+    for start, stop, tank, values in windows:
+        low, high = start - WINDOW_LEAD_MS, stop + WINDOW_TAIL_MS
+        spent = [cast for cast in casts if cast[1] == tank and low <= cast[0] <= high]
+        offered = ", ".join(dict.fromkeys(values))
+        cast = ", ".join(f"{name} {(when - start) / 1000:+.1f}s" for when, _, name in spent) or "none"
+        print(f"  {clock(start)}  {trace.name(tank):<10} {clock(stop - start):>9}  offered {offered}; cast {cast}")
+    calls = notes(trace, HUMAN_CALL)
+    if calls:
+        print("  calls to a human tank  " + ", ".join(f"{rec['txt']} {clock(rec['t'])}" for rec in calls))
+
+
 def show_cheats(trace: Trace) -> None:
     if refuse(trace, "CHEATS"):
         return
@@ -269,6 +321,7 @@ SECTIONS = (
     ("bombs", "per duty bot: Kinetic Bombs juggled and shots", show_bombs),
     ("balls", "per bot: ball victim steps and Inferno Flame soaks", show_balls),
     ("nucleus", "per tank: Dark Nucleus collection", show_nucleus),
+    ("defensives", "tank buttons and calls to a human tank", show_defensives),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 

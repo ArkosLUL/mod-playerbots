@@ -61,8 +61,10 @@ constexpr float HUNTER_KEEP = 35.0f;
 // Nodes this close to Valanar's spot are where his ranged stand, so a healer with the choice leaves them
 constexpr float VALANAR_RANGED_ZONE = 28.0f;
 
-// Empowered Shock Vortex is a 4.5 s cast: a bot reaches a node this far off before it lands
+// Empowered Shock Vortex is a 4.5 s cast, 4 s on heroic: a bot takes a node no farther than it runs in
+// what is left of the cast less SCATTER_LAG_MS, and never past SCATTER_REACH
 constexpr float SCATTER_REACH = 28.0f;
+constexpr uint32 SCATTER_LAG_MS = 250;
 constexpr uint32 SCATTER_TAIL_MS = 500;
 
 // Shock Vortex hits 12 yd round itself, centre to centre, every 1.5 s from 4.5 s after it appears
@@ -85,8 +87,9 @@ constexpr float BALL_SPEED = 11.0f;
 constexpr float BOT_SPEED = 7.0f;
 constexpr float SOAK_MAX_WALK = 20.0f;
 constexpr float BOMB_DUTY_RANGE = 60.0f;
-// A bomb falls 2 yd/s from 20 yd up and explodes within 2 yd of its landing; a hit lifts it 2 yd/s for 3 s
-constexpr float BOMB_SHOOT_HEIGHT = 10.0f;
+// A bomb falls at its walk speed, 2 yd/s or 3 on heroic, from 20 yd up and explodes within 2 yd of its
+// landing; a hit lifts it 2 yd/s for 3 s. It is shot once it is this close to landing.
+constexpr float BOMB_SHOOT_LEAD_S = 5.0f;
 
 constexpr float TAUNT_RANGE = 30.0f;
 constexpr float NUCLEUS_TAUNT_FROM = 28.0f;
@@ -153,7 +156,7 @@ RaidInstanceState<BpcState> bpcStates;
 
 bool IsTankPlayer(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 
-// A bot of its own, not a player, selfbot included: players hold no duty.
+// Players hold no duty, and a selfbot counts as a player here.
 bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 bool IsHeroic(Player* bot)
@@ -565,6 +568,9 @@ void UpdateScatter(BpcState& st, std::vector<Player*> const& members, Creature* 
         if (IsDutyBot(member) && !IsTankPlayer(member) && !st.slot.count(member->GetGUID()))
             runners.push_back(member);
 
+    int32 const castLeftMs = static_cast<int32>(st.scatterUntilMs - now - SCATTER_TAIL_MS - SCATTER_LAG_MS);
+    float const reach = std::min(SCATTER_REACH, BOT_SPEED * static_cast<float>(std::max(0, castLeftMs)) / 1000.0f);
+
     std::sort(runners.begin(), runners.end(), IccGuidLess());
     for (Player* member : runners)
     {
@@ -576,7 +582,7 @@ void UpdateScatter(BpcState& st, std::vector<Player*> const& members, Creature* 
                 continue;
 
             float const distance = member->GetExactDist2d(NodeSpot(node));
-            if (distance <= SCATTER_REACH && (!best || distance < bestDistance))
+            if (distance <= reach && (!best || distance < bestDistance))
             {
                 best = node;
                 bestDistance = distance;
@@ -698,17 +704,13 @@ float DistanceToSegment(Position const& from, Position const& to, Position const
 {
     float const dx = to.GetPositionX() - from.GetPositionX();
     float const dy = to.GetPositionY() - from.GetPositionY();
+    float const px = pos.GetPositionX() - from.GetPositionX();
+    float const py = pos.GetPositionY() - from.GetPositionY();
     float const length2 = dx * dx + dy * dy;
-    float t = 0.0f;
-    if (length2 > 0.001f)
-        t = std::clamp(((pos.GetPositionX() - from.GetPositionX()) * dx + (pos.GetPositionY() - from.GetPositionY()) * dy) /
-                           length2,
-                       0.0f, 1.0f);
-
-    return std::hypot(from.GetPositionX() + t * dx - pos.GetPositionX(), from.GetPositionY() + t * dy - pos.GetPositionY());
+    float const t = length2 > 0.001f ? std::clamp((px * dx + py * dy) / length2, 0.0f, 1.0f) : 0.0f;
+    return std::hypot(t * dx - px, t * dy - py);
 }
 
-// The melee nearest its path first, then the rest by the same distance
 void ReleaseSoakers(BpcState& st)
 {
     std::vector<ObjectGuid> const soakers(st.soak.begin(), st.soak.end());
@@ -732,6 +734,7 @@ void AssignSoak(BpcState& st, Player* bot, std::vector<Player*> const& members)
 
     ReleaseSoakers(st);
     st.soakBall = ball->GetGUID();
+    // The melee nearest its path first, then the rest by the same distance
     std::vector<std::pair<float, Player*>> ranked;
     for (Player* member : members)
     {
@@ -847,10 +850,10 @@ Creature* ShotFor(BpcState const& st, Player* bot)
     if (!bomb || !bomb->IsAlive() || bomb->HasAura(SPELL_BPC_KINETIC_BOMB_KNOCKBACK))
         return nullptr;
 
-    return BombHeight(bomb) <= BOMB_SHOOT_HEIGHT ? bomb : nullptr;
+    return BombHeight(bomb) <= bomb->GetSpeed(MOVE_WALK) * BOMB_SHOOT_LEAD_S ? bomb : nullptr;
 }
 
-// A bomb its node is out of range of stays the bot's to stand by until it goes
+// A duty bomb out of range of the bot's node keeps it off that node until the bomb goes
 bool BombAway(BpcState const& st, Player* bot)
 {
     auto const duty = st.bomb.find(bot->GetGUID());
@@ -969,6 +972,49 @@ bool InVortexWithoutNode(BpcState const& st, Player* bot)
         return false;
 
     return InVortex(st, bot->GetPosition(), VORTEX_TRIGGER);
+}
+
+enum class SoakPlace : uint8
+{
+    None,
+    OnPath,
+    Walk
+};
+
+// A soaker of the live Ball of Inferno Flame: already on its path and clear of the explosion round the
+// victim, a point of the path to walk to, or neither once the ball has outrun it
+SoakPlace FindSoakPlace(BpcState const& st, Player* bot, Position& spot)
+{
+    if (!st.soak.count(bot->GetGUID()))
+        return SoakPlace::None;
+
+    Player* victim = nullptr;
+    Creature* ball = InfernoBall(st, bot, victim);
+    if (!ball || ball->GetGUID() != st.soakBall)
+        return SoakPlace::None;
+
+    Position const from = ball->GetPosition();
+    Position const to = victim->GetPosition();
+    if (DistanceToSegment(from, to, bot->GetPosition()) <= FLARE_REACH - 2.0f &&
+        bot->GetExactDist2d(victim) >= BALL_CLEAR)
+        return SoakPlace::OnPath;
+
+    // The first point of its path the bot reaches before the ball does, short of the explosion round the victim
+    float const length = from.GetExactDist2d(to);
+    float const dx = (to.GetPositionX() - from.GetPositionX()) / std::max(length, 0.001f);
+    float const dy = (to.GetPositionY() - from.GetPositionY()) / std::max(length, 0.001f);
+    for (float along = 0.0f; along <= length - BALL_CLEAR; along += 1.0f)
+    {
+        Position const point(from.GetPositionX() + dx * along, from.GetPositionY() + dy * along, bot->GetPositionZ());
+        float const walk = bot->GetExactDist2d(point);
+        if (walk <= SOAK_MAX_WALK && walk / BOT_SPEED <= along / BALL_SPEED)
+        {
+            spot = point;
+            return SoakPlace::Walk;
+        }
+    }
+
+    return SoakPlace::None;
 }
 }  // namespace
 
@@ -1151,37 +1197,14 @@ bool GetBpcBallWalk(PlayerbotAI* botAI, Position& spot)
 bool GetBpcSoakWalk(PlayerbotAI* botAI, Position& spot)
 {
     BpcState* st = LiveState(botAI);
-    Player* bot = botAI->GetBot();
-    if (!st || !st->soak.count(bot->GetGUID()))
-        return false;
+    return st && FindSoakPlace(*st, botAI->GetBot(), spot) == SoakPlace::Walk;
+}
 
-    Player* victim = nullptr;
-    Creature* ball = InfernoBall(*st, bot, victim);
-    if (!ball || ball->GetGUID() != st->soakBall)
-        return false;
-
-    // Already where it passes
-    Position const from = ball->GetPosition();
-    Position const to = victim->GetPosition();
-    if (DistanceToSegment(from, to, bot->GetPosition()) <= FLARE_REACH - 2.0f)
-        return false;
-
-    // The first point of its path the bot reaches before the ball does, short of the explosion round the victim
-    float const length = from.GetExactDist2d(to);
-    float const dx = (to.GetPositionX() - from.GetPositionX()) / std::max(length, 0.001f);
-    float const dy = (to.GetPositionY() - from.GetPositionY()) / std::max(length, 0.001f);
-    for (float along = 0.0f; along <= length - BALL_CLEAR; along += 1.0f)
-    {
-        Position const point(from.GetPositionX() + dx * along, from.GetPositionY() + dy * along, bot->GetPositionZ());
-        float const walk = bot->GetExactDist2d(point);
-        if (walk <= SOAK_MAX_WALK && walk / BOT_SPEED <= along / BALL_SPEED)
-        {
-            spot = point;
-            return true;
-        }
-    }
-
-    return false;
+bool IsBpcSoakHeld(PlayerbotAI* botAI)
+{
+    BpcState* st = LiveState(botAI);
+    Position spot;
+    return st && FindSoakPlace(*st, botAI->GetBot(), spot) == SoakPlace::OnPath;
 }
 
 bool IsBpcInVortex(PlayerbotAI* botAI)

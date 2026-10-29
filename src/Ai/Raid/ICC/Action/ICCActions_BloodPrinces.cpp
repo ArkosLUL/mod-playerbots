@@ -18,7 +18,7 @@ namespace
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
 // A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// A soaker or a nucleus walk re-aims once its point has moved this far
+// A ball, soak or nucleus walk re-aims once its point has moved this far
 constexpr float REAIM = 2.0f;
 }  // namespace
 
