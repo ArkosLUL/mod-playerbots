@@ -5,187 +5,134 @@
  */
 
 #include "ICCMultipliers_Sindragosa.h"
-#include "AttackAction.h"
-#include "ChooseTargetActions.h"
-#include "DruidActions.h"
-#include "FollowActions.h"
-#include "GenericSpellActions.h"
-#include "HunterActions.h"
-#include "ICCActions_Sindragosa.h"
-#include "MageActions.h"
-#include "MovementActions.h"
-#include "PaladinActions.h"
-#include "PetsAction.h"
-#include "PlayerbotAI.h"
-#include "PriestActions.h"
-#include "RaidDifficulty.h"
-#include "ReachTargetActions.h"
-#include "RogueActions.h"
-#include "ShamanActions.h"
-#include "WarriorActions.h"
 
-float IccSindragosaMultiplier::GetValue(Action* action)
+#include "Creature.h"
+#include "GenericSpellActions.h"
+#include "PlayerbotAI.h"
+#include "Playerbots.h"
+#include "RaidCombatHelpers.h"
+#include "RaidSplash.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
+#include "Timer.h"
+
+namespace
 {
-    // Cached per ms: asked for every action the bot weighs in every ICC fight, and the boss lookup is a
-    // 200 yd grid search. A bot never ticks twice in one ms.
+// Her combat reach is 18.75: an area spell from this close reaches her
+constexpr float BRAKE_AREA_REACH = 30.0f;
+// Area damage this close to a held tomb can reach it
+constexpr float TOMB_SPLASH_RANGE = 12.0f;
+
+constexpr uint8 KIND_DOT = 1 << 0;
+constexpr uint8 KIND_SPLASH = 1 << 1;
+
+// More of its damage comes from ticks than from the hit, at base values
+bool MostlyPeriodic(SpellInfo const* info, Player* caster)
+{
+    if (!info || info->IsChanneled())
+        return false;
+
+    int32 const duration = info->GetMaxDuration();
+    float periodic = 0.0f;
+    float direct = 0.0f;
+    for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+    {
+        SpellEffectInfo const& effect = info->Effects[i];
+        if (effect.Effect == SPELL_EFFECT_SCHOOL_DAMAGE)
+        {
+            direct += static_cast<float>(effect.CalcValue(caster));
+            continue;
+        }
+
+        if (effect.Effect != SPELL_EFFECT_APPLY_AURA)
+            continue;
+
+        if (effect.ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE_PERCENT)
+            return true;
+
+        if (effect.ApplyAuraName != SPELL_AURA_PERIODIC_DAMAGE && effect.ApplyAuraName != SPELL_AURA_PERIODIC_LEECH)
+            continue;
+
+        if (duration <= 0 || effect.Amplitude <= 0)
+            return true;
+
+        periodic += static_cast<float>(effect.CalcValue(caster)) * static_cast<float>(duration / effect.Amplitude);
+    }
+
+    return periodic > direct;
+}
+}  // namespace
+
+float IccSindragosaBrakeMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !IsSgRestrained(botAI))
+        return 1.0f;
+
+    Creature* boss = GetSgBoss(botAI);
+    if (!boss)
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
+        return 0.0f;
+
+    return IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= BRAKE_AREA_REACH ? 0.0f : 1.0f;
+}
+
+uint8 IccSindragosaTombMultiplier::KindOf(Action* action)
+{
+    auto const cached = _kinds.find(action);
+    if (cached != _kinds.end())
+        return cached->second;
+
+    uint8 kind = 0;
+    if (CastSpellAction* spell = dynamic_cast<CastSpellAction*>(action))
+    {
+        uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell->getSpell())->Get();
+        if (MostlyPeriodic(spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr, bot))
+            kind |= KIND_DOT;
+    }
+
+    if (SpellSplashes(botAI, action) || SummonSplashes(action))
+        kind |= KIND_SPLASH;
+
+    _kinds.emplace(action, kind);
+    return kind;
+}
+
+float IccSindragosaTombMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action))
+        return 1.0f;
+
+    // Asked for every action the bot weighs, and a bot never ticks twice in one ms
     uint32 const now = getMSTime();
     if (now != _checkedMs)
     {
         _checkedMs = now;
-        Unit* const found = bot->FindNearestCreature(NPC_SINDRAGOSA, 200.0f);
-        _bossGuid = found ? found->GetGUID() : ObjectGuid::Empty;
-        _lastPhase = found && IccSindragosaPhase(bot, found) == IccSindragosaPhaseId::Last;
-        _overBombStation = found && IccSindragosaOverAirStation(bot, found, 30.0f);
+        GetSgHeldTombs(botAI, _held);
     }
 
-    if (_bossGuid.IsEmpty())
+    if (_held.empty())
         return 1.0f;
 
-    Unit* boss = ObjectAccessor::GetUnit(*bot, _bossGuid);
-    if (!boss)
+    uint8 const kind = KindOf(action);
+    Unit* target = action->GetTarget();
+    if (!target)
+        target = AI_VALUE(Unit*, "current target");
+
+    if (target && target->GetEntry() == NPC_SG_ICE_TOMB)
+        for (SgHeldTomb const& tomb : _held)
+            if (tomb.guid == target->GetGUID() && (IsSgAtTombFloor(target) || (kind & KIND_DOT)))
+                return 0.0f;
+
+    if (!(kind & KIND_SPLASH))
         return 1.0f;
 
-    // HoT support is an instant cast that never moves the bot. Always allow so
-    // beaconed targets stay topped up across air phase, blistering cold cast,
-    // phase 3 tank lockdown, and other "everything else 0.0f" branches below.
-    if (dynamic_cast<IccSindragosaHotAction*>(action))
-        return 1.0f;
-
-    // Tanks never chase raid icons; they stay on the boss at the tank spot.
-    if (PlayerbotAI::IsTank(bot) && dynamic_cast<AttackRtiTargetAction*>(action))
-        return 0.0f;
-
-    Aura* aura = botAI->GetAura("Unchained Magic", bot, false, true);
-
-    Difficulty diff = GetRaidMapDifficulty(bot);
-
-    if (boss->HealthBelowPct(95))
-    {
-        if (dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<FleeAction*>(action) ||
-            dynamic_cast<FollowAction*>(action) || dynamic_cast<CastStarfallAction*>(action))
+    for (SgHeldTomb const& tomb : _held)
+        if (bot->GetExactDist2d(tomb.pos) <= TOMB_SPLASH_RANGE ||
+            (target && target->GetExactDist2d(tomb.pos) <= TOMB_SPLASH_RANGE))
             return 0.0f;
-    }
-
-    if (aura && (diff == RAID_DIFFICULTY_10MAN_HEROIC || diff == RAID_DIFFICULTY_25MAN_HEROIC) &&
-        !dynamic_cast<IccSindragosaFrostBombAction*>(action))
-    {
-        if (dynamic_cast<MovementAction*>(action) || dynamic_cast<IccSindragosaUnchainedMagicAction*>(action))
-            return 1.0f;
-        else
-            return 0.0f;
-    }
-
-    // Check if boss is casting blistering cold (using both normal and heroic spell IDs)
-    if (boss->HasUnitState(UNIT_STATE_CASTING) && IccBossCastingBlisteringCold(boss))
-    {
-        // If this is the blistering cold action, give it highest priority
-        if (dynamic_cast<IccSindragosaBlisteringColdAction*>(action) ||
-            dynamic_cast<HealPartyMemberAction*>(action) ||
-            dynamic_cast<ReachPartyMemberToHealAction*>(action))
-            return 1.0f;
-
-        // Ranged / healer already beyond the blast radius: keep DPSing or
-        // healing, just block any movement so they don't wander back in.
-        bool const safe = bot->GetExactDist2d(boss) >= 33.0f;
-        if (safe && (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot)))
-        {
-            if (dynamic_cast<MovementAction*>(action))
-                return 0.0f;
-            return 1.0f;
-        }
-
-        // Disable all other actions while blistering cold is casting
-        return 0.0f;
-    }
-
-    // Highest priority if we have beacon
-    if (bot->HasAura(SPELL_FROST_BEACON))
-    {
-        if (dynamic_cast<IccSindragosaFrostBeaconAction*>(action))
-            return 1.0f;
-        else
-            return 0.0f;
-    }
-
-    bool anyoneHasFrostBeacon = IccAnyGroupMemberHasAura(bot, SPELL_FROST_BEACON);
-
-    if (anyoneHasFrostBeacon && _overBombStation)
-    {
-        if (dynamic_cast<IccSindragosaFrostBeaconAction*>(action))
-            return 1.0f;
-        else
-            return 0.0f;
-    }
-
-    if (anyoneHasFrostBeacon && !PlayerbotAI::IsTank(bot))
-    {
-        if (dynamic_cast<IccSindragosaGroupPositionAction*>(action))
-            return 0.0f;
-    }
-
-    // Pin healers at the LOS2 hide spot while the hide is in effect (last
-    // phase, tomb up, no beacon). A beacon releases the pin so healers can
-    // reposition with the raid.
-    if (PlayerbotAI::IsHeal(bot) && dynamic_cast<MovementAction*>(action) && !anyoneHasFrostBeacon && _lastPhase &&
-        bot->GetExactDist2d(ICC_SINDRAGOSA_LOS2_POSITION.GetPositionX(),
-                            ICC_SINDRAGOSA_LOS2_POSITION.GetPositionY()) <= 2.0f &&
-        !IccGetCreaturesByEntries(bot, {NPC_TOMB1, NPC_TOMB2, NPC_TOMB3, NPC_TOMB4}, 150.0f).empty())
-        return 0.0f;
-
-    // Last phase with a beacon out: only ranged DPS burn the tomb. Melee and
-    // healers reposition (via FrostBeaconAction) instead of chasing the skull.
-    if (anyoneHasFrostBeacon && _lastPhase && !PlayerbotAI::IsTank(bot) &&
-        !(PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot)) && dynamic_cast<AttackAction*>(action))
-        return 0.0f;
-
-    if (!PlayerbotAI::IsTank(bot) && _lastPhase)
-    {
-        if (dynamic_cast<IccSindragosaGroupPositionAction*>(action))
-            return 0.0f;
-    }
-
-    if (PlayerbotAI::IsTank(bot))
-    {
-        if (_lastPhase)
-        {
-            // Assist tank: hold the tank position and face the boss only, never
-            // chase the marked tomb. A beaconed assist tank returns at the Frost
-            // Beacon branch above and moves to its beacon spot instead.
-            if (!PlayerbotAI::IsMainTank(bot))
-            {
-                if (dynamic_cast<IccSindragosaGroupPositionAction*>(action) ||
-                    dynamic_cast<TankFaceAction*>(action))
-                    return 1.0f;
-                return 0.0f;
-            }
-
-            if (dynamic_cast<TankFaceAction*>(action) ||
-                dynamic_cast<AttackAction*>(action) || dynamic_cast<MovementAction*>(action))
-                return 1.0f;
-            else
-                return 0.0f;
-        }
-    }
-
-    if (_overBombStation)
-    {
-        if (dynamic_cast<IccSindragosaFrostBombAction*>(action))
-            return 1.0f;
-
-        if (dynamic_cast<FollowAction*>(action) || dynamic_cast<IccSindragosaBlisteringColdAction*>(action) ||
-            dynamic_cast<IccSindragosaChilledToTheBoneAction*>(action) || dynamic_cast<IccSindragosaMysticBuffetAction*>(action) ||
-            dynamic_cast<IccSindragosaFrostBeaconAction*>(action) || dynamic_cast<IccSindragosaUnchainedMagicAction*>(action) ||
-            dynamic_cast<FleeAction*>(action) || dynamic_cast<CastDisengageAction*>(action) || dynamic_cast<PetAttackAction*>(action) ||
-            dynamic_cast<IccSindragosaGroupPositionAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-            dynamic_cast<DpsAoeAction*>(action) || dynamic_cast<CastHurricaneAction*>(action) ||
-            dynamic_cast<CastVolleyAction*>(action) || dynamic_cast<CastBlizzardAction*>(action) ||
-            dynamic_cast<CastStarfallAction*>(action) || dynamic_cast<FanOfKnivesAction*>(action) ||
-            dynamic_cast<CastWhirlwindAction*>(action) || dynamic_cast<CastMindSearAction*>(action) ||
-            dynamic_cast<CastMagmaTotemAction*>(action) || dynamic_cast<CastConsecrationAction*>(action) ||
-            dynamic_cast<CastFlamestrikeAction*>(action) || dynamic_cast<CastExplosiveTrapAction*>(action) ||
-            dynamic_cast<CastExplosiveShotBaseAction*>(action) || dynamic_cast<CastBlinkBackAction*>(action))
-            return 0.0f;
-    }
 
     return 1.0f;
 }

@@ -7,79 +7,123 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_SINDRAGOSA_H
 #define PLAYERBOTS_ICCTRIGGERS_SINDRAGOSA_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_Sindragosa.h"
+#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
 
-class IccSindragosaGroupPositionTrigger : public Trigger
-{
-public:
-    static constexpr char const* Name = "icc sindragosa group position";
-
-    IccSindragosaGroupPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
-    bool IsActive() override;
-};
-
-class IccSindragosaFrostBeaconTrigger : public Trigger
-{
-public:
-    static constexpr char const* Name = "icc sindragosa frost beacon";
-
-    IccSindragosaFrostBeaconTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
-    bool IsActive() override;
-};
-
-class IccSindragosaHotTrigger : public Trigger
-{
-public:
-    static constexpr char const* Name = "icc sindragosa hot";
-
-    IccSindragosaHotTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
-    bool IsActive() override;
-};
-
-class IccSindragosaBlisteringColdTrigger : public Trigger
+class IccSindragosaColdTrigger : public Trigger
 {
 public:
     static constexpr char const* Name = "icc sindragosa blistering cold";
 
-    IccSindragosaBlisteringColdTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccSindragosaColdTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccSindragosaUnchainedMagicTrigger : public Trigger
+class IccSindragosaSplashTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa splash";
+
+    IccSindragosaSplashTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSindragosaBombHideTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa bomb hide";
+
+    IccSindragosaBombHideTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSindragosaBeaconTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa frost beacon";
+
+    IccSindragosaBeaconTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSindragosaTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa tank defensive";
+
+    IccSindragosaTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSindragosaTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa taunt";
+
+    IccSindragosaTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSindragosaBuffetHideTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa buffet hide";
+
+    IccSindragosaBuffetHideTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSindragosaUnchainedTrigger : public Trigger
 {
 public:
     static constexpr char const* Name = "icc sindragosa unchained magic";
 
-    IccSindragosaUnchainedMagicTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccSindragosaUnchainedTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccSindragosaChilledToTheBoneTrigger : public Trigger
+class IccSindragosaFreedomTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc sindragosa chilled to the bone";
+    static constexpr char const* Name = "icc sindragosa hand of freedom";
 
-    IccSindragosaChilledToTheBoneTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccSindragosaFreedomTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccSindragosaMysticBuffetTrigger : public Trigger
+class IccSindragosaBeaconHealTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc sindragosa mystic buffet";
+    static constexpr char const* Name = "icc sindragosa beacon heal";
 
-    IccSindragosaMysticBuffetTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccSindragosaBeaconHealTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccSindragosaFrostBombTrigger : public Trigger
+class IccSindragosaHoldTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc sindragosa frost bomb";
+    static constexpr char const* Name = "icc sindragosa hold";
 
-    IccSindragosaFrostBombTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccSindragosaHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSindragosaTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa target";
+
+    IccSindragosaTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetSgTarget) {}
+};
+
+class IccSindragosaStandTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa stand";
+
+    IccSindragosaStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

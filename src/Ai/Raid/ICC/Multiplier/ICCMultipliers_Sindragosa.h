@@ -7,20 +7,35 @@
 #ifndef PLAYERBOTS_ICCMULTIPLIERS_SINDRAGOSA_H
 #define PLAYERBOTS_ICCMULTIPLIERS_SINDRAGOSA_H
 
-#include "Multiplier.h"
-#include "ObjectGuid.h"
+#include <unordered_map>
+#include <vector>
 
-class IccSindragosaMultiplier : public Multiplier
+#include "ICCHelpers_Sindragosa.h"
+#include "Multiplier.h"
+
+// A braked or chilled bot's attacks on her and its area damage next to her: threat would take her off her
+// holder, and every swing or shot at her stacks Chilled to the Bone
+class IccSindragosaBrakeMultiplier : public Multiplier
 {
 public:
-    IccSindragosaMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc sindragosa") {}
+    IccSindragosaBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc sindragosa brake") {}
+    float GetValue(Action* action) override;
+};
+
+// A held tomb: no damage once it is at its floor, no DoT that would tick it past the floor, and no area
+// damage within reach of it
+class IccSindragosaTombMultiplier : public Multiplier
+{
+public:
+    IccSindragosaTombMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc sindragosa tomb") {}
     float GetValue(Action* action) override;
 
 private:
+    uint8 KindOf(Action* action);
+
+    std::unordered_map<Action*, uint8> _kinds;
     uint32 _checkedMs = 0;
-    ObjectGuid _bossGuid;
-    bool _lastPhase = false;
-    bool _overBombStation = false;
+    std::vector<SgHeldTomb> _held;
 };
 
 #endif
