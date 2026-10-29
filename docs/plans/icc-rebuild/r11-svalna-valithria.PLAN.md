@@ -113,10 +113,8 @@ file.
 
 ## Carried over
 
-- Merge stage: wire `{&IccValithriaDefinition, nullptr, nullptr, &IccValithriaResistSchools, nullptr}`
-  into `HookRows()`; README updates in the lane report; `src/Bot/PlayerbotAI.cpp`'s `CastSpell` (both
-  overloads) to exempt Dream State 70766 from its `IsFlying()` refusal, as Gravity Lapse is, so heroic
-  dreamers can heal each other.
+- Merge stage (done): the `HookRows()` row, the README updates, and `PlayerbotAI::CastSpell`'s
+  Dream State 70766 exemption from its `IsFlying()` refusal, so heroic dreamers heal each other.
 - r14: `IcecrownHelpers::vtCloudSync` and `vtPortalClaim` (`ICCScripts.h`) and `IccTryClassCC`
   (`ICCHelpers_Shared`) have no caller left; `encounter.py` still needs its `icc valkyre spear` row,
   which the spear trigger keeps.
@@ -126,8 +124,7 @@ file.
 ## Known gaps
 
 In the boss docs: Svalna's Ymirjar on the generic AI and untraced, 25-man Dominate Mind generic;
-Valithria's lust and Guardian Spirit, the slowed kiter, heroic dreamers never healing (the flight
-cast guard, Carried over), a dreamer at the win left flagged in the air; no tank ladder or opening
+Valithria's lust and Guardian Spirit, the slowed kiter, a dreamer at the win left flagged in the air; no tank ladder or opening
 positions on either; humans hold no duty.
 
 ## Blocked

@@ -280,8 +280,9 @@ concrete subclasses supply only `FearWindowActive()`.
 Behaviour: a **priest** casts Fear Ward (6346) on the group main tank, or the main healer if the tank
 already has it; a **shaman** drops Tremor Totem, gated on it not already being out. Consumers are
 Onyxia from her phase 3 descent on (Bellowing Roar 18431), Auriaya (Terrifying Screech 64386, fixed
-35s cycle so the totem stays up all fight), and Yogg-Saron P2/P3 (Malady of the Mind 63830/63881,
-Deafening Roar 64189).
+35s cycle so the totem stays up all fight), Yogg-Saron P2/P3 (Malady of the Mind 63830/63881,
+Deafening Roar 64189), and the Blood-Queen (Incite Terror 73070, from 8 s before each air phase walk
+until takeoff).
 
 **Two defects this design exists to avoid:**
 
@@ -365,8 +366,9 @@ fights" hides the fallback. The call carries any spell id, so it can ask a human
   remaining)` stays stable across reads, so they stay one hit (Decimate's 3 s self-stun).
 - **`ExpectedDamage` counts `SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN` only**, not AoE avoidance (aura
   229), so a caller whose players carry such an aura cuts the hit itself (Festergut's Inoculated).
-- **`GetRaidPersonalDefensive` writes its scope note on every call**, so guard it with the encounter's
-  own hit check, or every bot notes `none`. When the modelled hit is lethal it falls through to
+- **`GetRaidPersonalDefensive` and `GetRaidCover` write their scope notes on every call**, the cover
+  even when passed no hit, so guard them with the encounter's own fight and hit checks, or every bot
+  notes `none` on other fights too. When the modelled hit is lethal the personal pick falls through to
   Dispersion, class immunity and healthstone: size the hit window to what a healer wouldn't cover.
 - **A threat brake** reads the threat list (not the `threat` value, which wraps past 255%) against the
   top tank, with hysteresis (hold at 90%, free at 80%), latches in the encounter tick as an

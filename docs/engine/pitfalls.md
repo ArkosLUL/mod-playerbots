@@ -46,6 +46,9 @@ Everything is wired by string. Nothing here is a compile error.
   Protection) are dead this way: no bot cast
   Anti-Magic Shell in twelve Yogg-Saron pulls until the tank-defensive ladder tested its id
   (`RaidTankDefensive.cpp`). Resolve a hyphenated or renamed spell by id.
+- A spell granted by `SPELL_AURA_OVERRIDE_SPELLS` (293) never enters the spellbook, so `"spell id"`
+  resolves it to 0 and `CanCastSpell`'s has-spell check fails: cast it by id with `checkHasSpell`
+  false (the Blood-Queen's player Vampiric Bite 70946).
 - `TwoTriggers`' creator key must exactly equal `getName()` = `"<name1> and <name2>"`.
 
 **`tools/pblint/pblint.py` is this sweep.** Point it at the paths a commit touches; it exits non-zero
@@ -440,9 +443,15 @@ portal this way.
 - **A state read from a position band under an `Exclusive` rule can leave a bot with no mover.** The
   gunship's "in flight" band between the decks also covered a bot standing on an edge, so nothing
   moved it. Classify by a midpoint and keep strict bounds only for destinations.
+- **Two duty holds on one bot leave it doing nothing.** Where a script can stack several duty auras
+  on one player, each duty's `Exclusive` or `OwnMovement` hold blocks the other's action. Settle one
+  precedence inside the duty predicates (the Blood-Queen: bite, then Swarming Shadows, then Pact).
 
 ## Things the bot cannot see
 
+- **A phased bot still resolves a creature by guid**: `Map::GetCreature` skips the phase test. A grid
+  search for objects in another phase runs from any creature sharing that phase (Valithria's combat
+  trigger shares Dream State's phase 16 and sees the clouds).
 - **`"find target"` walks only the bot's own threat list** (`FindTargetValue`, via
   `GetThreatenedByMeList()`) and requires an **exact-length, case-insensitive match** against
   `creature_template.name`. A melee bot parked on Thane never resolves Zeliek, and every Auriaya

@@ -66,6 +66,16 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
   `GetPassengers`.** Iterate both for an exact unit list with no grid search. A summon moved by an
   effect that only rewrites its transport offset stays its own ship's passenger while it stands on
   the other ship (the ICC gunship boarders).
+- **A bot's fly aura sets no flight flags.** `Unit::SetCanFly` only sends a packet to a
+  client-controlled unit, which a bot never answers, and `MovementAction::UpdateMovementState` sets
+  `CAN_FLY|DISABLE_GRAVITY|FLYING` only while the master flies (or there is none), stripping them on
+  the ground under a grounded master. A flight under a grounded human sets the flags itself and calls
+  `MovePoint(generatePath = false)` directly, since `MoveTo` strips them first. While they are set,
+  `PlayerbotAI::CastSpell` refuses every cast but under the auras `CanCastWhileFlying` lists (Gravity
+  Lapse, Dream State).
+- **A bot takes no fall damage by itself**: `Player::HandleFall` runs from the client's landing
+  packet. A fall the strategy causes uses `MoveFall` plus `HandleFall` with `SetFallInformation`, as
+  `CheckMountStateAction::CompleteDismount` does.
 - **Do not borrow another instance's vehicle trigger.** `GroupFlyingTrigger` (Oculus) requires the
   *master* to be mounted, so one human who has not taken their vehicle freezes the whole flight.
 
@@ -140,7 +150,7 @@ movement lock that decides which of two movers' orders is accepted is in
   latch fires. An escape that overrides the deadband belongs outside the tolerance choice too, or the
   bot gets one order then re-latches before retrying — and 40-60% of orders are refused.
 
-Four rules that belong with the geometry rather than the action:
+Rules that belong with the geometry rather than the action:
 
 - **A spot checked only at its endpoint lets the walk cross the hazard it dodges.** Test the path,
   and a growing hazard (a spreading pool) at its size when the walk ends.
@@ -156,6 +166,9 @@ Four rules that belong with the geometry rather than the action:
 - **A lattice spaced at the hazard radius plus two park tolerances**, with the tank spots on it,
   stays a valid spread in every phase and role with no per-pull geometry
   ([Blood Prince Council](../raids/icecrown-citadel/blood-prince-council.md)).
+- **A hazard dropper's newest hazards lie a step behind it**, close enough to foul its next waypoint
+  and force re-plans: its next-point check skips the hazards it summoned
+  (`TempSummon::GetSummonerGUID`; the Blood-Queen's Swarming Shadows).
 
 ## Range and reach
 
@@ -658,3 +671,6 @@ encounters.
   and defer heavy work to the map update.
 - **Flags beat `GetData`.** `UNIT_FLAG_PACIFIED | UNIT_FLAG_DISABLE_MOVE` on a boss is an exact,
   lag-free statement that he is now a fixed point worth anchoring geometry on.
+- **Read which unit a link aura sits on before keying an exclusion on it.** Blood Mirror's 70821 is
+  cast by the linked player onto the boss's victim, so "not the Blood Mirror player" excluded the
+  victim twice and left the off-tank biteable.

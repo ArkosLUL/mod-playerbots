@@ -55,7 +55,9 @@ yd out, 1 yd above her).
   stack is newer than the dream; then the group of refreshed bot dreamers flies onto its lowest-guid
   leader when over 6 yd off, else to the shared cloud nearest the leader, left once the leader has
   waited 1.3 s within 3 yd. A player in Dream State leads instead. Descent in the last 3.5 s; once
-  out, a bot still flagged drops through `MoveFall` and `HandleFall`.
+  out, a bot still flagged drops through `MoveFall` and `HandleFall`. `PlayerbotAI::CastSpell`
+  exempts Dream State 70766 from its in-flight refusal, as it does Gravity Lapse, so heroic dreamers
+  heal each other.
 - **Targets**: tanks and damage dealers; a player's skull, a tank's own abomination, then the tiers,
   nearest her within 50 yd, the current pick kept inside its tier. Zombies are ranged only; damage
   dealers take an abomination only once a tank holds it.
@@ -82,7 +84,7 @@ yd out, 1 yd above her).
   the kiter stays in heal range; a tank holding an abomination face-tanks rather than drag it.
 - **Snares** are ranged only: `IccTryClassCC`'s melee stuns and fears put bots in reach or scatter adds.
 - **No lust hook**: the base gate already holds lust here (Known gaps); a per-boss window can only hold.
-- **Resist hook**: fire, frost and nature, for the merge stage to wire.
+- **Resist hook**: fire, frost and nature.
 
 ## Cheats
 
@@ -98,9 +100,6 @@ Removed:
 - Lust and healer cooldowns: the base burst gate holds lust off non-boss adds and a victimless
   friendly boss, and no node puts Guardian Spirit on her.
 - The kite has no answer to Frostbolt Volley's slow on the kiter.
-- Heroic dreamers never heal each other: `PlayerbotAI::CastSpell` refuses every cast while
-  `IsFlying()`, and the flight keeps its flags all dream. Exempting Dream State 70766 there, as
-  Gravity Lapse is, is a change outside this encounter's files.
 - A dreamer at the win keeps its fly flags until its next move glides it down, no fall: the gate
   closes at `DONE` before Dream State ends.
 - No tank defensive ladder: no boss hits a bot tank.

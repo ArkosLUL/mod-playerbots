@@ -99,7 +99,7 @@ north, over a ramp, and drops to the council room below at 38.5 yd.
   tank is called for both (`bql.humancall`).
 - **Fear**: `RaidAntiFear` from 8 s before her predicted walk (124/127 s in, then 120/100 s after she
   reaches the centre) until takeoff: Fear Ward, Tremor Totem, earth totems held.
-- **Hooks for the merge stage** (`HookRows()`): burst `IccBloodQueenBurstWindow` (lust once vampires
+- **Hooks** (`HookRows()`): burst `IccBloodQueenBurstWindow` (lust once vampires
   reach 8, 16 on 25-man, or 280 s in), opener `GetBqlOpenerBosses` (her), resist
   `IccBloodQueenResistSchools` (shadow all fight).
 

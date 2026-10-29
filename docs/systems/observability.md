@@ -546,7 +546,9 @@ purpose — has nothing for a container to watch. Probe inside the helper that d
 `RaidObs::NoteDerived(bot, key, RaidObs::DescribeDerived(value))`, which emits only on a change — never
 at the call sites: trigger and action both route through the helper, so one probe covers both and two
 cannot disagree about what was decided. Being change-latched per bot, it hides the same decision
-made again in a later window: write an explicit `none` at the window's end. A raid-icon pick is
+made again in a later window: write an explicit `none` at the window's end. Two helpers writing one
+key stay quiet only if they split it by edge: the trigger's writes only `none`, the action's only the
+active value. A raid-icon pick is
 noted by the bot that moves the icon only, or 25 rows describe one placement; put the unit the icon
 came off into the value, or the same move repeated after another bot moved the icon stays hidden. A
 probe that reads world state skips a bot phased away from it: grid searches filter by the
