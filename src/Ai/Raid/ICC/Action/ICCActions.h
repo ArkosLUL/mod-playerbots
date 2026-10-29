@@ -15,6 +15,7 @@
 #include "ICCActions_FrostGiant.h"
 #include "ICCActions_Gunship.h"
 #include "ICCActions_LichKing.h"
+#include "ICCActions_LichKingLate.h"
 #include "ICCActions_Marrowgar.h"
 #include "ICCActions_Putricide.h"
 #include "ICCActions_RaidWide.h"

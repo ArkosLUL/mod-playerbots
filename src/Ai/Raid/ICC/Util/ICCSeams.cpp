@@ -11,6 +11,7 @@
 #include "ICCHelpers_BloodQueen.h"
 #include "ICCHelpers_Deathwhisper.h"
 #include "ICCHelpers_Festergut.h"
+#include "ICCHelpers_LichKing.h"
 #include "ICCHelpers_Marrowgar.h"
 #include "ICCHelpers_Putricide.h"
 #include "ICCHelpers_Saurfang.h"
@@ -39,6 +40,7 @@ std::vector<IccEncounterHooks> const& HookRows()
         {&IccSindragosaDrakesDefinition, nullptr, nullptr, &IccSindragosaDrakesResistSchools, nullptr},
         {&IccSindragosaDefinition, &IccSindragosaBurstWindow, &GetSgOpenerBosses, &IccSindragosaResistSchools,
          nullptr},
+        {&IccLichKingDefinition, &IccLichKingBurstWindow, &GetLkOpenerBosses, &IccLichKingResistSchools, nullptr},
     };
     return rows;
 }

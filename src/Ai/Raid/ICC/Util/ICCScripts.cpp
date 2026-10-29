@@ -141,9 +141,9 @@ public:
         entry.targetGuid = target->GetGUID();
         entry.castTime = getMSTime();
 
-        // Where the puddle lands at the 6 yd it spawns with; once down it is a creature the trace samples.
+        // Where the puddle lands, 10 yd at its spawn scale of 1; once down it is a creature the trace samples.
         RaidObs::Note(target->ToPlayer(), "lk.defile", std::to_string(spellInfo->Id));
-        RaidObs::NoteHazardCircle(caster->GetMap(), spellInfo->Id, target->GetPosition(), 6.0f,
+        RaidObs::NoteHazardCircle(caster->GetMap(), spellInfo->Id, target->GetPosition(), 10.0f,
                                   static_cast<uint32>(std::max(spell->GetCastTime(), 0)));
     }
 };

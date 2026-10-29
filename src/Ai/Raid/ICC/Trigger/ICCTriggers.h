@@ -15,6 +15,7 @@
 #include "ICCTriggers_FrostGiant.h"
 #include "ICCTriggers_Gunship.h"
 #include "ICCTriggers_LichKing.h"
+#include "ICCTriggers_LichKingLate.h"
 #include "ICCTriggers_Marrowgar.h"
 #include "ICCTriggers_Putricide.h"
 #include "ICCTriggers_RaidWide.h"
