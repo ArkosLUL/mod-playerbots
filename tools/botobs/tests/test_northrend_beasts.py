@@ -134,6 +134,10 @@ def beasts_pull() -> list[dict]:
         note(50000, ARROW, "nb.dodge", "clear"),
         note(51000, HOLD, "nb.charge", "4"),
         note(51000, HOLD, "nb.gaze", "0"),
+        # Blade boosts into the daze; Hold's later boost falls in no daze, Arrow's on a cure walk
+        note(51500, BLADE, "nb.nitro", "daze 18"),
+        note(75000, HOLD, "nb.nitro", "daze 12"),
+        note(30000, ARROW, "nb.nitro", "cure 47"),
         note(63000, HOLD, "nb.charge", "0"),
 
         # A missed one: Blade is trampled at the end and dies to the enraged Icehowl.
@@ -222,6 +226,23 @@ class SyntheticPull(unittest.TestCase):
         rows = nb.charges(self.trace)
         self.assertEqual(set(rows[0]["daze"]), {HOLD, SWAP, MENDER, ARROW, BLADE})
         self.assertIsNone(rows[1]["daze"])
+
+    def test_nitro_uses_split_by_kind(self):
+        self.assertEqual(nb.nitro_uses(self.trace, "cure"), [(30000, ARROW, "47")])
+        self.assertEqual(nb.nitro_uses(self.trace, "daze"), [(51500, BLADE, "18"), (75000, HOLD, "12")])
+
+    def test_charge_lists_only_the_boosts_inside_its_daze(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_charge(self.trace)
+        self.assertIn("nb.nitro: Blade 18 yd at 0:51.500", out.getvalue())
+        self.assertNotIn("Hold 12 yd", out.getvalue())
+
+    def test_cure_lists_the_boosted_walks(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_cure(self.trace)
+        self.assertIn("nb.nitro on cure walks: Arrow 47 yd at 0:30.000", out.getvalue())
 
     def test_normal_has_no_berserk_line(self):
         self.assertIsNone(nb.berserk(self.trace))

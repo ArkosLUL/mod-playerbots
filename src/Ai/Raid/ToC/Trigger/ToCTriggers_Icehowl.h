@@ -39,11 +39,21 @@ public:
     bool IsActive() override;
 };
 
+class IcehowlDazeNitroTrigger : public Trigger
+{
+public:
+    IcehowlDazeNitroTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "icehowl daze nitro") {}
+    bool IsActive() override;
+};
+
 class ToCIcehowlTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
     ToCIcehowlTriggerContext() : NamedObjectContext<Trigger>()
     {
+        creators["icehowl daze nitro"] =
+            &ToCIcehowlTriggerContext::icehowl_daze_nitro;
         creators["icehowl tank duty"] =
             &ToCIcehowlTriggerContext::icehowl_tank_duty;
         creators["icehowl charge incoming"] =
@@ -71,6 +81,10 @@ private:
 
     static Trigger* icehowl_breath_spread(PlayerbotAI* botAI) {
         return new IcehowlBreathSpreadTrigger(botAI);
+    }
+
+    static Trigger* icehowl_daze_nitro(PlayerbotAI* botAI) {
+        return new IcehowlDazeNitroTrigger(botAI);
     }
 
     static Trigger* icehowl_dps_target(PlayerbotAI* botAI) {

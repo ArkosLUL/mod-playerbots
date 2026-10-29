@@ -62,6 +62,8 @@ What the generic views get wrong here, and what this reads instead:
   within 2 s stands in.
 - **A cure has no record of its own.** The Bile pulse strips Toxin as it lands, so `--cure` calls a
   removal cured when a pulse hit the carrier within 250 ms of it.
+- **`nb.nitro` is an event**, one row per Nitro Boosts use: `cure <yd>` on a cure or run walk that
+  long, `daze <yd>` that far short of Icehowl's melee range. `--cure` and `--charge` list them.
 - **A Bile pulse names Dreadscale as its source**, never the carrier, so `--cure` gives each hit to the
   carrier nearest its victim within the pulse's 10 yd, in the snapshot nearest the hit.
 """
@@ -631,9 +633,23 @@ def show_charge(trace: Trace) -> None:
                 f"{name} {n}" for name, n in counts.most_common()))
         if row["daze"] is not None:
             show_daze(trace, row["daze"])
+            boosts = [use for use in nitro_uses(trace, "daze") if row["stop"] <= use[0] < row["stop"] + DAZE_MS]
+            print("    nb.nitro: " + (", ".join(f"{trace.name(guid)} {yards} yd at {clock(when)}"
+                                              for when, guid, yards in boosts) or "none"))
 
     tally = collections.Counter(row["outcome"] for row in rows)
     print("\n  " + ", ".join(f"{outcome} {n}" for outcome, n in tally.most_common()))
+
+
+def nitro_uses(trace: Trace, kind: str) -> list[tuple[int, int, str]]:
+    """`nb.nitro` events of one kind, `cure` or `daze`, as (t, bot, yards): the cure walk's length, or
+    how far short of Icehowl's melee range the bot stood."""
+    out = []
+    for rec in notes(trace, "nb.nitro"):
+        words = str(rec.get("txt", "")).split()
+        if words and words[0] == kind:
+            out.append((rec["t"], rec.get("g", 0), words[1] if len(words) > 1 else "?"))
+    return out
 
 
 def show_daze(trace: Trace, table: dict[int, dict]) -> None:
@@ -1432,6 +1448,10 @@ def show_cure(trace: Trace) -> None:
         hits = sum(sum(span["clean"].values()) for span in biles)
         damage = sum(span["damage"] for span in biles)
         print(f"  raid: {hits} clean hit(s), {damage / 1000:.1f}k damage")
+
+    boosts = nitro_uses(trace, "cure")
+    print("  nb.nitro on cure walks: " + (", ".join(f"{trace.name(guid)} {yards} yd at {clock(when)}"
+                                                   for when, guid, yards in boosts) or "none"))
 
     branches = cure_branches(trace)
     if not branches:

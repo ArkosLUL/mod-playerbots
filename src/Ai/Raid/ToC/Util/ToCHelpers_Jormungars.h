@@ -70,6 +70,9 @@ constexpr float WORM_MELEE_REAR_ARC_DEG = 108.0f;            // least angle off 
 // A Toxin carrier stands this close to a Bile carrier, well inside the pulse
 constexpr float WORM_CURE_REACH = 6.0f;
 constexpr float WORM_CURE_TRIGGER = 8.0f;
+// A cure or run walk past this spends Nitro Boosts. Toxin slows harder every second, and on 25H two
+// carriers 47-49 yd out were paralysed before they got there.
+constexpr float WORM_CURE_NITRO_FROM = 15.0f;
 // Toxin's snare amount (EFFECT_0) at which its carrier waits for a runner instead of walking
 constexpr int32 WORM_TOXIN_STUCK_SLOW = -70;
 // A carrier no Bile can cure gets its healer's heal under this health

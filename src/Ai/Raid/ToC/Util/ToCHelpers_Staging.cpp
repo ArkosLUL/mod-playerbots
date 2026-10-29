@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "CombatManager.h"
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "Group.h"
@@ -708,6 +709,30 @@ StandRole RoleOf(Player* member)
     return PlayerbotAI::IsRangedDps(member) ? StandRole::Ranged : StandRole::Melee;
 }
 
+// IsInCombat stays true till a non-selectable add despawns: a Slime Pool keeps a combat ref with every
+// player it hit for its 60 s on 25H, and each heal or buff on one copies it to the caster. So only a
+// live unit the bot could attack counts, which a snobold or Jaraxxus's adds still are.
+bool FightingSomething(Player* bot)
+{
+    CombatManager const& combat = bot->GetCombatManager();
+    for (auto const& entry : combat.GetPvPCombatRefs())
+        if (!entry.second->IsSuppressedFor(bot))
+            return true;
+
+    for (auto const& entry : combat.GetPvECombatRefs())
+    {
+        if (entry.second->IsSuppressedFor(bot))
+            continue;
+
+        Unit* other = entry.second->GetOther(bot);
+        if (other->IsAlive() && !other->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) &&
+            !other->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
+            return true;
+    }
+
+    return false;
+}
+
 bool IsStagingBot(Player* member, uint32 instanceId)
 {
     return member && member->IsInWorld() && member->IsAlive() && member->GetMapId() == TRIAL_OF_THE_CRUSADER_MAP_ID &&
@@ -1132,7 +1157,7 @@ ToCStagingBoss GetToCStagingBoss(PlayerbotAI* botAI)
         return arrival;
 
     Player* bot = botAI->GetBot();
-    if (!bot->IsAlive() || bot->IsInCombat() || !InArrivalRoom(bot, arrival))
+    if (!bot->IsAlive() || FightingSomething(bot) || !InArrivalRoom(bot, arrival))
         return ToCStagingBoss::None;
 
     // A leader who walks out releases the hold

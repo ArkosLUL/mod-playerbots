@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "Creature.h"
+#include "EncounterHelpers.h"
 #include "Group.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
@@ -19,6 +20,7 @@
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "ToCHelpers_Jormungars.h"
@@ -848,6 +850,21 @@ float DistanceToIcehowlLane(Position const& start, Position const& end, float x,
 float IcehowlBreathStepDeg(Unit* anyUnitOnMap) { return BreathStepDeg(anyUnitOnMap); }
 
 bool IsIcehowlStaggered(Unit* icehowl) { return icehowl && icehowl->HasAura(SPELL_STAGGERED_DAZE); }
+
+bool IcehowlDazeNitroDue(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive() || !PlayerbotAI::IsMelee(bot) || !botAI->CanMove() ||
+        bot->IsNonMeleeSpellCast(false, true, true) || !EncounterHelpers::NitroBoostsReady(bot))
+        return false;
+
+    Unit* icehowl = GetEngagedBeast(botAI, NorthrendBeast::Icehowl);
+    Aura* daze = icehowl ? icehowl->GetAura(SPELL_STAGGERED_DAZE) : nullptr;
+    if (!daze || daze->GetDuration() < ICEHOWL_DAZE_NITRO_MIN_LEFT_MS)
+        return false;
+
+    return bot->GetExactDist2d(icehowl) - ICEHOWL_MELEE_RANGE >= ICEHOWL_DAZE_NITRO_FROM;
+}
 
 bool HasIcehowlFrothingRage(Unit* icehowl)
 {

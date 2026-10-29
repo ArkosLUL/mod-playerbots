@@ -269,7 +269,8 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
   every other bearing. Anub'arak's room is navprobe-clean with `--nav 0x09` at 22 and 30 yd round
   `ANUBARAK_ROOM_CENTER` and at its tank side points.
 - Players drop combat 1-3 s after a beast dies (a drink lands 1.6 s after the worms in a 2026-10-17
-  25N trace), so the worms leave about 15 s to stage and Icehowl about 13.
+  25N trace), so the worms leave about 15 s to stage and Icehowl about 13. A live Slime Pool keeps
+  `IsInCombat` up far longer ([pitfalls.md](../../engine/pitfalls.md)).
 
 **Window** (`Util/ToCHelpers_Staging`, read once per instance per ms), with nothing live:
 
@@ -281,10 +282,14 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
   with no Barrett test.
 - The next beast by guid slot: Gormok while slot 4 is empty or alive, else the worms while slot 6 or 7
   is, else Icehowl. A dead beast keeps its slot until a wipe's cleanup clears it.
-- Per bot: alive, out of combat, and in the arrival's room (the arena: within 80 yd 2D of
+- Per bot: alive, fighting nothing it could attack (no unsuppressed PvP ref, no PvE ref to a live
+  unit neither `NOT_SELECTABLE` nor `NON_ATTACKABLE`), and in the arrival's room (the arena: within 80 yd 2D of
   `ARENA_CENTER`, z > 380; Anub'arak's: x > 661.6, z < 200) with its master, else the group leader,
   so a leader who walks out releases it (Naxx Thaddius). Combat ends it, so the engage releases
-  everyone and a leftover snobold beats a stand.
+  everyone and a leftover snobold beats a stand. Plain `IsInCombat` lost the Icehowl stands on 25H
+  (2026-10-29): a pool from the worms outlived them, its combat spread through the raid's heals, 9
+  bots never got a stand and `follow` took them to the player, the tank among them, and Icehowl
+  opened on a healer and killed it.
 
 **Stands**, dealt per instance on an arrival change and every second, so a dead or new bot settles
 within one. Bots only, by guid: duty stands first, then healers (`IsHeal`), ranged (`IsRangedDps`)

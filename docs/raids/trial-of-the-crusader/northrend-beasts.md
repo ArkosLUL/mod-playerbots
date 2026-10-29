@@ -65,7 +65,7 @@ Direct, no raid icons ([README.md](README.md#targeting-is-direct-no-raid-icons))
   2. the bot's snobold pick (below);
   3. Gormok;
   4. Acidmaw while up (`acidmaw`): every ranged DPS in either form, a melee only while Acidmaw is
-     mobile or Dreadscale's health % ≤ Acidmaw's;
+     mobile or the raid's melee switch is on (below);
   5. the mobile worm while up, by form (`GetBeastOfDuty(WormMobile)`), never by its holder: a human
      holder doesn't move the DPS;
   6. Icehowl.
@@ -272,7 +272,10 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
   Acidmaw's Toxin has no Bile left to cure it (25H 2026-10-28: its Spray 10 s after Dreadscale died
   paralysed the bot tank into Icehowl). Ranged hit it in either form; melee stay on the mobile worm,
   out of the stationary one's Sweep, so Dreadscale takes their damage meanwhile and reaches its
-  enraged solo phase lower; they join Acidmaw once Dreadscale's health % is the lower. A melee on a
+  enraged solo phase lower. One per-instance switch moves all melee to Acidmaw once Dreadscale's
+  health % is 5 points under it and back once it's 5 over: melee on one and ranged on the other keep
+  the two within ~1.5, and a bare `≤` flipped every melee bot 20-34 times in the first 41 s on 25H
+  (2026-10-29), starting on Acidmaw at 100/100. A melee on a
   stationary worm dodges only the Sweep cast. The stationary holder now keeps the worm under all
   ranged DPS: unchecked by a cap. The 10 s only times the achievement.
 - **Holds** (`northrend worms mobile tank duty` → `northrend worms tank hold mobile worm`, `… stationary
@@ -322,7 +325,9 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
   - **Run**: a runner past 8 yd of its stuck carrier. **Cure**: a Toxin carrier, neither stuck nor
     carrying Bile, past 8 yd of the nearest Bile carrier, keeping its partner while that one carries
     Bile and is within 8 yd or no carrier is, so it doesn't flip between two. Both walk to 6 yd of
-    the partner (the pulse reaches 10 exact), clear of pools and, but for the `WormStationary`
+    the partner (the pulse reaches 10 exact), a walk past 15 yd spending Nitro Boosts once issued
+    (+150% multiplies with the snare; on 25H two carriers 47-49 yd out were paralysed on the way and
+    kept Toxin 17.5 s, the 28 yd walks were cured in 3.5-5.4), clear of pools and, but for the `WormStationary`
     holder, Sweep. Only that holder pairs with a member within 11 yd of the up stationary worm,
     whose cure spots all lie inside the Sweep path's 16: others take the next carrier, a Toxin'd
     stationary holder waits for the submerge. When the ring search misses that disc (its rays fan
@@ -643,6 +648,10 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
   (guide: tank him at a wall).
 - **Defensive** (`icehowl frothing rage` → `icehowl tank defensive`): his victim under Frothing Rage
   casts `NextTankDefensive`, the only answer on heroic. `nb.defensive`.
+- **Nitro into the daze** (`icehowl daze nitro`, `ACTION_RAID + 3`): a melee bot or tank free to
+  move, Nitro Boosts ready, 10+ yd short of his melee range with 3+ s of Staggered Daze left uses
+  them, and `reach melee` walks inside the boost. One try per daze, so a use that fails can't hold
+  the tick. On 25H melee spent 3-5 s of each daze walking 23-31 yd. `nb.nitro`.
 - **Burst row.** Lust, one 10-minute cooldown, is held through Gormok and the worms, then goes at the
   daze or Icehowl ≤ 50%. Other burst cooldowns during Icehowl only in the daze or ≤ 30%, free
   before. The guide spends everything in the stun; the health floors cover a raid that never lands a
@@ -673,6 +682,10 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
   walk takes no path test, and `reach party member to heal` still walks healers through pools, as
   generic reach does past the search radius or while the search backs off.
 - A Toxin'd `WormStationary` holder gets no runner until its worm submerges.
+- Burning Bile keeps pulsing after the worms, with no Bile rule left (25H: 337k on clean bots in the
+  40 s after the kill).
+- Nitro Boosts (3 min) spent on a cure walk are usually still cooling at Icehowl's first daze;
+  nothing reserves them. Ranged out of spell range at the daze don't boost.
 - A hunter that can't Steady Shot (moving, or too close) leaves held Misdirection charges to its
   rotation, which can spend them on its DPS target, the mobile worm, and hand the `WormStationary`
   holder threat on it: the mobile holder re-taunts, at the cost of taunt diminishing returns.
@@ -717,6 +730,7 @@ Position, verdicts and movement come from the raid-agnostic streams. The Beasts 
 | `swap` | The `GormokSwap` tank's read: `go v=<holder stacks>`, `wait mine=<own stacks>`, `wait v=<holder stacks>` |
 | `hop` | A paladin bot's Impale reset deal: `cast <tank guid>` or `none` |
 | `poolmove` | The walk out of a pool with no worm engaged: `move <yd>`, `hold`, `clear`, `none`, `locked`, `stunned` |
+| `nitro` | An event per Nitro Boosts use: `cure <walk yd>`, `daze <yd short of his melee range>` |
 | `defensive` | The tank defensive picked, `covered` (one running) or `none` |
 | `snobold` | A DPS's pick, `<rider guid> <rider role>`, or `none`; kept current under a skull |
 | `dps` | A DPS bot's target, `<branch> <guid>` with branch `skull`, `snobold`, `gormok`, `acidmaw`, `mobile` or `icehowl`, or `none`. Written when a trigger or the rule asks |
@@ -758,7 +772,7 @@ or on neither (an empty target column, as a caster's, reads its last own cast wi
 outcome, who stood within 12 yd of the lane's end at it (nearest snapshot), dodge branches per bot
 and Trample victims, and per daze each bot's 15 s from it, by share of its living snapshots
 moving: yards walked, the action owning most accepted `move` rows and its own casts, triggered
-ones left out since procs outnumber them several times over (`--charge`); per Arctic Breath its
+ones left out since procs outnumber them several times over, and its `nitro daze` uses (`--charge`); per Arctic Breath its
 target, who froze (applies within 1 s) with their `nb.spread`, who the cone held in the snapshot
 nearest the cast (30° or 12° off the target's bearing), `nb.arc`, `nb.breath`, seconds since his
 last Whirl `cast` row and his walk over the 4 s before, and times frozen per bot, or with no `cast`
@@ -782,7 +796,7 @@ branches (`--worms`); Paralytic Toxin spans per carrier, ended `cured` (a Bile p
 `died`, `expired` (59 s or more), `other` or `open`, with seconds carried, `stuck` past 18 s
 (13.5 heroic) and `outlived the worms` past the last `nb.stage` span with a worm, Burning Bile spans with the pulse hits on bots carrying neither debuff, each given to
 the carrier nearest its victim within 10 yd in the nearest snapshot, their damage and the raid's
-total, and `cure` branches (`--cure`).
+total, `nitro cure` uses and `cure` branches (`--cure`).
 
 Still invisible: creature auras, so Staggered Daze, Frothing Rage, Rising Anger and a lone worm's
 Enrage never get an aura row: `charge` 4 and 5 are the only record of how a charge ended, `worm` 4

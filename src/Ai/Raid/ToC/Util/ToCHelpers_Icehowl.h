@@ -113,6 +113,15 @@ float DistanceToIcehowlLane(Position const& start, Position const& end, float x,
 // The wall crash: 15 s stunned, +100% damage taken
 bool IsIcehowlStaggered(Unit* icehowl);
 
+// Nitro Boosts for a walk into the daze this long or more, with this much of it left. On 25H melee
+// spent 3-5 s of it walking 23-31 yd to him.
+constexpr float ICEHOWL_DAZE_NITRO_FROM = 10.0f;
+constexpr int32 ICEHOWL_DAZE_NITRO_MIN_LEFT_MS = 3000;
+
+// A melee bot or tank free to move, Nitro Boosts ready, ICEHOWL_DAZE_NITRO_FROM or more short of a
+// dazed Icehowl's melee range
+bool IcehowlDazeNitroDue(PlayerbotAI* botAI);
+
 bool HasIcehowlFrothingRage(Unit* icehowl);
 
 // The bot's Arctic Breath stand: Icehowl's spot plus its own distance to him, clamped into its role's

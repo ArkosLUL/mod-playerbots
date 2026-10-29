@@ -468,6 +468,10 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
             hasIssuedSpot = true;
             NoteWormMove(bot, "move " + Yards(travel) + " " + WormMoveReasonName(reason) + " " +
                                   WormSpotTierName(tier));
+            // after the walk is issued: the boots refuse a bot mid cast
+            if (IsWormCureReason(reason) && travel > WORM_CURE_NITRO_FROM && UseNitroBoosts(bot) && RaidObs::Active())
+                RaidObs::Note(bot, "nb.nitro", "cure " + Yards(travel));
+
             return true;
         case MoveOutcome::AlreadyThere:
             if (WormHoldParks(reason, tier))

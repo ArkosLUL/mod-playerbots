@@ -43,6 +43,10 @@ constexpr float ICEHOWL_SEARCH_RADIUS = 200.0f;
 // before he attacks, so a second's delay costs nothing.
 constexpr uint32 ICEHOWL_SEARCH_INTERVAL_MS = 1000;
 
+// Health points Dreadscale has to drop under Acidmaw before melee move to Acidmaw, and climb back over
+// before they return. With melee on one and ranged on the other the two stay within about 1.5.
+constexpr float MELEE_ACIDMAW_MARGIN = 5.0f;
+
 struct BeastsState
 {
     RaidObs::ObsValue<uint32> stage{"nb.stage"};
@@ -56,6 +60,8 @@ struct BeastsState
     // Engaged beast per duty this ms, empty while it isn't up
     std::array<ObjectGuid, DUTY_COUNT> dutyBeast;
     std::array<ObjectGuid, DUTY_COUNT> holder;
+    // One switch for the raid, so melee move together
+    bool meleeOnAcidmaw = false;
 };
 
 RaidInstanceState<BeastsState> beastsStates;
@@ -288,6 +294,17 @@ BeastsState* ReadBeasts(PlayerbotAI* botAI, Map*& map)
         mask |= BEASTS_STAGE_ICEHOWL;
     state.stage = mask;
 
+    if (!acidmaw || !dreadscale)
+        state.meleeOnAcidmaw = false;
+    else
+    {
+        float const gap = dreadscale->GetHealthPct() - acidmaw->GetHealthPct();
+        if (gap <= -MELEE_ACIDMAW_MARGIN)
+            state.meleeOnAcidmaw = true;
+        else if (gap >= MELEE_ACIDMAW_MARGIN)
+            state.meleeOnAcidmaw = false;
+    }
+
     Creature* mobile = nullptr;
     Creature* stationary = nullptr;
     SplitWorms(acidmaw, dreadscale, mobile, stationary);
@@ -357,13 +374,15 @@ BeastsDpsPick ResolveDpsPick(PlayerbotAI* botAI)
         return {gormok, BeastsDpsBranch::Gormok};
 
     // Acidmaw first: alone, its Toxin has no Bile left to cure it. Melee stay on the mobile worm, out of
-    // the stationary one's Sweep, unless Dreadscale would die first.
+    // the stationary one's Sweep, unless Dreadscale falls well under Acidmaw.
     Unit* worm = GetBeastOfDuty(botAI, BeastsTankDuty::WormMobile);
     Unit* acidmaw = GetEngagedBeast(botAI, NorthrendBeast::Acidmaw);
     if (acidmaw && !IsWormSubmerged(acidmaw))
     {
-        Unit* dreadscale = GetEngagedBeast(botAI, NorthrendBeast::Dreadscale);
-        bool const dreadscaleLower = !dreadscale || dreadscale->GetHealthPct() <= acidmaw->GetHealthPct();
+        Map* map = nullptr;
+        BeastsState const* state = ReadBeasts(botAI, map);
+        bool const dreadscaleLower =
+            !GetEngagedBeast(botAI, NorthrendBeast::Dreadscale) || (state && state->meleeOnAcidmaw);
         if (PlayerbotAI::IsRanged(botAI->GetBot()) || acidmaw == worm || dreadscaleLower)
             return {acidmaw, BeastsDpsBranch::Acidmaw};
     }

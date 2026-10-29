@@ -687,6 +687,10 @@ Related traps:
 - **An encounter gate that requires `boss->IsInCombat()` leaves the strategy inert through the whole
   approach and the instant of the pull.** Generic tank and DPS behaviour therefore picks targets
   first, and the boss-specific rules inherit whatever state that left behind.
+- **`IsInCombat()` isn't "fighting something".** A PvE combat ref with a non-selectable hostile (ToC's
+  Slime Pool) lasts until it despawns, and any heal or buff a player casts on a linked target copies
+  the target's refs to the caster (`Spell.cpp` `InheritCombatStatesFrom`), so one hit spreads through
+  the raid. Count only refs to a live unit the bot could attack (`CombatManager::GetPvECombatRefs`).
 - **A rider's own combat state is not the encounter's.** Where threat sits on a vehicle creature, a
   passenger that drives away from the fight drops combat while the pull is still on. Gate on that and
   the encounter's own mover and the multiplier shutting the generic movers out die together, handing

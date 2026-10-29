@@ -47,11 +47,25 @@ public:
     bool Execute(Event event) override;
 };
 
+class IcehowlDazeNitroAction : public Action
+{
+public:
+    IcehowlDazeNitroAction(PlayerbotAI* botAI) : Action(botAI, "icehowl daze nitro") {}
+    bool isUseful() override;
+    bool Execute(Event event) override;
+
+private:
+    uint32 triedMs = 0;
+    bool tried = false;
+};
+
 class ToCIcehowlActionContext : public NamedObjectContext<Action>
 {
 public:
     ToCIcehowlActionContext()
     {
+        creators["icehowl daze nitro"] =
+            &ToCIcehowlActionContext::icehowl_daze_nitro;
         creators["icehowl tank hold boss"] =
             &ToCIcehowlActionContext::icehowl_tank_hold_boss;
         creators["icehowl clear charge path"] =
@@ -79,6 +93,10 @@ private:
 
     static Action* icehowl_move_to_breath_stand(PlayerbotAI* botAI) {
         return new IcehowlMoveToBreathStandAction(botAI);
+    }
+
+    static Action* icehowl_daze_nitro(PlayerbotAI* botAI) {
+        return new IcehowlDazeNitroAction(botAI);
     }
 
     static Action* icehowl_dps_target(PlayerbotAI* botAI) {

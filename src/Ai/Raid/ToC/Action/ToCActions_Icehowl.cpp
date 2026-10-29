@@ -30,6 +30,9 @@ constexpr float DODGE_SPOT_TOLERANCE = 0.5f;
 // Circles along the whole line, so the sweep throws out a spot inside the corridor before paying for
 // its collision check. At this spacing they miss under 0.2 yd of it, and accept catches the rest.
 constexpr float LANE_CIRCLE_SPACING = 4.0f;
+// The daze's length: one try per daze, since a use that fails leaves the boots ready and the trigger
+// would take every tick from the walk
+constexpr uint32 DAZE_NITRO_RETRY_MS = 15000;
 
 void NoteDodge(Player* bot, std::string const& branch)
 {
@@ -258,4 +261,27 @@ bool IcehowlMoveToBreathStandAction::Execute(Event /*event*/)
 
     // A breath is healable, so a pinning cast finishes first
     return WalkTo(stand.spot);
+}
+
+bool IcehowlDazeNitroAction::isUseful()
+{
+    return !tried || getMSTimeDiff(triedMs, getMSTime()) >= DAZE_NITRO_RETRY_MS;
+}
+
+bool IcehowlDazeNitroAction::Execute(Event /*event*/)
+{
+    tried = true;
+    triedMs = getMSTime();
+
+    Unit* icehowl = GetEngagedBeast(botAI, NorthrendBeast::Icehowl);
+    if (!icehowl || !UseNitroBoosts(bot))
+        return false;
+
+    if (RaidObs::Active())
+    {
+        float const walk = bot->GetExactDist2d(icehowl) - ICEHOWL_MELEE_RANGE;
+        RaidObs::Note(bot, "nb.nitro", "daze " + std::to_string(static_cast<int32>(std::lround(walk))));
+    }
+
+    return true;
 }
