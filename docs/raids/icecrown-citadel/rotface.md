@@ -48,7 +48,8 @@ on him being in combat, the splash multiplier waits for live.
   once while it tows, and with a Little Ooze on it lets the Big Ooze to 9 yd so the two merge behind it.
 - **Freedom** (`rf.freedom`): a towing kiter with a snare or root and its ooze within 20 yd casts its own
   Hand of Freedom, Every Man for Himself or Escape Artist, else the nearest paladin bot within 30 yd and in
-  sight casts Hand of Freedom on it. A Death Knight kiter standing in a flood casts Anti-Magic Shell.
+  sight casts Hand of Freedom on it. A Death Knight kiter in a ticking flood, not its warning, casts
+  Anti-Magic Shell.
 - **Ooze spot** (`rf.oozespot`): the kite ring point at the middle of the quadrant opposite the latest
   flood, so it moves on a quadrant with each flood and never floods while it is the spot.
 - **Carriers** (`rf.carrier`): a bot with Mutated Infection or a Little Ooze on it walks to the Big Ooze
@@ -81,7 +82,7 @@ on him being in combat, the splash multiplier waits for live.
 - **Targets** (`rf.target`): the kiter's Big Ooze, then a player's skull on him or an ooze for all but the
   tank holding him, else him. Area damage from a damage dealer but the kiter is held while an ooze is within
   15 yd of it or its target. Army of the Dead (ghouls taunt the oozes) and Death Grip (all three are grip
-  immune) are held.
+  immune) are held. The kiter's pet attacks him, never the kited ooze.
 - **Tank defensives** (`rf.defensive`): a tank kiter under a Big Ooze of 4 stacks within 6 yd, a damage
   dealer kiter under any within 6 yd (its physical buttons), the kiter gassed with its ooze within 20 yd,
   any tank under 40%; class buttons held to 25%. A human tank gets the same as calls (`rf.humancall`).
@@ -136,7 +137,9 @@ None before, none now: `rf.nitro` and `rf.spitefulfury` were removed earlier. Th
 - Sticky Ooze's slow has no mechanic, so only a Death Knight's Anti-Magic Shell keeps it off a kiter. A
   paladin beyond 30 yd never walks to free one. The shell a wading Death Knight spends isn't there for a
   4-stack ooze. A wade can find no leg at all (every point a puddle or past the ooze); the kiter then stands
-  in the flood, which its dodge no longer sees.
+  in the flood, which its dodge no longer sees. A damage dealer kiter's pick-up walk ignores floods its
+  dodge still sees, so the two can trade steps at a flood's edge until the ooze is within 25 yd
+  (reviewer): `rf.dodge` `flood` rows between `rf.bigooze` `pickup` rows show it.
 - A carrier's walk still crosses the raid; those within 10 yd step off its Little Ooze after the first tick.
 - Call of the Elements can drop a Cleansing Totem again; it pulses until the next tick replaces it (only
   with the opt-in `cleansing` water totem strategy).

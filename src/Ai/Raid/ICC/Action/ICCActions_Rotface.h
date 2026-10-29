@@ -125,6 +125,7 @@ public:
     static constexpr char const* Name = "icc rotface target";
 
     IccRotfaceTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetRfTarget) {}
+    bool Execute(Event event) override;
 };
 
 class IccRotfaceStandAction : public IccRotfaceWalkAction

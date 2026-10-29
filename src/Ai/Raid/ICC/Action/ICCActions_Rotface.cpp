@@ -9,6 +9,7 @@
 #include <cmath>
 #include <string>
 
+#include "EncounterHelpers.h"
 #include "ICCHelpers_Shared.h"
 #include "LastMovementValue.h"
 #include "Playerbots.h"
@@ -214,6 +215,20 @@ bool IccRotfaceCarrierAction::Execute(Event /*event*/)
             return true;
 
     return WalkTo(spot, MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool IccRotfaceTargetAction::Execute(Event /*event*/)
+{
+    Unit* pick = GetRfTarget(botAI);
+    if (!pick)
+        return false;
+
+    // Sent every call, since the generic pet attack node is off; the kiter's pet has a pick of its own
+    EncounterHelpers::CommandPetAttack(botAI, GetRfPetTarget(botAI));
+    if (AI_VALUE(Unit*, "current target") == pick)
+        return false;
+
+    return Attack(pick);
 }
 
 bool IccRotfaceStandAction::Execute(Event /*event*/)

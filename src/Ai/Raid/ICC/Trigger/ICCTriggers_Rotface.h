@@ -98,6 +98,7 @@ public:
     static constexpr char const* Name = "icc rotface target";
 
     IccRotfaceTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetRfTarget) {}
+    bool IsActive() override;
 };
 
 class IccRotfaceStandTrigger : public Trigger

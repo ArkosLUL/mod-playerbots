@@ -42,7 +42,9 @@ One lead, no split: every change lands in the stem's one state, hazard model and
 
 All done. Review fixes: a damage dealer kiter keeps the duty against a free main tank (his victim
 blinking handed it over for one refresh); `wade` reads only while the kiter stands wet; a towing damage
-dealer kiter is cured at once.
+dealer kiter is cured at once. Independent review: the election no longer dereferences a null pick when no
+bot can kite (worldserver crash); the kiter's pet attacks him, not the kited ooze it would pull and die
+to; a Death Knight kiter's Anti-Magic Shell waits for a ticking flood, not its warning.
 
 ## Decisions for review
 
@@ -62,6 +64,7 @@ dealer kiter is cured at once.
 | Kite cast cut at 10 yd or wet; instant facing left alone | The spline rewrites orientation each update (`Unit::UpdateSplinePosition`); `PlayerbotAI::CastSpell` refuses a cast-time spell while moving | Block the kiter's rotation |
 | No threat redirect onto the kiter | The pickup taunt recovers it; Misdirection's shots on him would hand the kiter his threat; `--oozes` settles | Misdirection on each pickup |
 | A towing kiter keeps 32.5 yd in its last dodge | A puddle or mark on the kiter costs less than the aura on the outer ring | Drop the keep-out last |
+| Damage dealer kiter waits 30 degrees off the ooze spot, so a new Big Ooze opens on a carrier there and takes one swing before the taunt (reviewer) | Script: a new Big Ooze attacks the nearest player (`SelectNearestPlayer`); 25-man swings average 54k before armor | Wait on the spot in plate and take the opening swing itself |
 
 ## Carried over
 
@@ -77,7 +80,8 @@ dealer kiter is cured at once.
 ## Known gaps
 
 See `rotface.md`, "Known gaps": heal threat on the kiter (worse for a damage dealer), Sticky Ooze's slow
-cleared by no freedom, no walk to free the kiter, a wade with no leg left stands in the flood, a carrier's
+cleared by no freedom, no walk to free the kiter, a wade with no leg left stands in the flood, a damage
+dealer kiter's pick-up walk trading steps with its flood dodge (reviewer), a carrier's
 walk across the raid, Call of the Elements re-dropping a Cleansing Totem, overflow stands, the gassed
 kiter caught, no kiter without a Death Knight or paladin, humans hold no duty, no 631 trace.
 

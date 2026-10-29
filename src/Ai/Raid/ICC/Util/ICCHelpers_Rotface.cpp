@@ -609,7 +609,7 @@ Player* ElectKiter(RfState const& st, std::vector<Player*> const& members)
             best = member;
     }
 
-    bool const tankFree = IsTankPlayer(best) && !PlayerbotAI::IsMainTank(best);
+    bool const tankFree = best && IsTankPlayer(best) && !PlayerbotAI::IsMainTank(best);
     return kept && (IsTankPlayer(kept) || !tankFree) ? kept : best;
 }
 
@@ -992,12 +992,19 @@ bool KiterWet(RfState const& st, Player* kiter)
     return WetAt(st, kiter->GetPosition(), RF_FLOOD_RADIUS + DODGE_TRIGGER);
 }
 
-// The kiter slowed by a snare it can be freed of with its ooze closing, or a Death Knight kiter wading
+// In a flood that ticks: its 5 s warning neither hurts nor slows
+bool KiterFlooded(RfState const& st, Player* kiter)
+{
+    return std::any_of(st.wet.begin(), st.wet.end(), [kiter](Wet const& wet)
+                       { return wet.flooding && wet.at.GetExactDist2d(kiter) < RF_FLOOD_RADIUS + DODGE_TRIGGER; });
+}
+
+// The kiter slowed by a snare it can be freed of with its ooze closing, or a Death Knight kiter in a flood
 void KiterBind(RfState const& st, Player* kiter, Creature* ooze, bool& impaired, bool& wading)
 {
     impaired = ooze->GetExactDist2d(kiter) <= FREEDOM_OOZE_NEAR && !kiter->HasAura(SPELL_RF_HAND_OF_FREEDOM) &&
                kiter->HasAuraWithMechanic(FREEDOM_MECHANICS);
-    wading = kiter->getClass() == CLASS_DEATH_KNIGHT && KiterWet(st, kiter);
+    wading = kiter->getClass() == CLASS_DEATH_KNIGHT && KiterFlooded(st, kiter);
 }
 
 // The kiter's own way out: Hand of Freedom, then the racials; wading, a Death Knight's Anti-Magic Shell
@@ -1351,6 +1358,15 @@ Unit* GetRfTarget(PlayerbotAI* botAI)
     }
 
     return memo.pick;
+}
+
+Unit* GetRfPetTarget(PlayerbotAI* botAI)
+{
+    Creature* boss = nullptr;
+    RfState* st = LiveState(botAI, &boss);
+    Unit* pick = st ? GetRfTarget(botAI) : nullptr;
+    bool const kited = pick && pick->GetEntry() == NPC_RF_BIG_OOZE && IsKiterBot(botAI->GetBot(), *st);
+    return kited ? boss : pick;
 }
 
 Unit* GetRfOozeToTaunt(PlayerbotAI* botAI)

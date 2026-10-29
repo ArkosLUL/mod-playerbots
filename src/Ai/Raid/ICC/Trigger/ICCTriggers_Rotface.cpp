@@ -8,6 +8,7 @@
 
 #include "Playerbots.h"
 #include "Position.h"
+#include "RaidDirectTargeting.h"
 
 bool IccRotfaceDodgeTrigger::IsActive() { return GetRfHazardKind(botAI) != nullptr; }
 
@@ -53,4 +54,10 @@ bool IccRotfaceStandTrigger::IsActive()
 {
     Position spot;
     return GetRfStandWalk(botAI, spot);
+}
+
+bool IccRotfaceTargetTrigger::IsActive()
+{
+    Unit* pick = GetRfTarget(botAI);
+    return pick && (AI_VALUE(Unit*, "current target") != pick || RaidPetOffPick(botAI, GetRfPetTarget(botAI)));
 }

@@ -113,6 +113,9 @@ Creature* GetRfBoss(PlayerbotAI* botAI);
 // Tanks and DPS: the kiter's Big Ooze, then a player's skull for all but the tank holding him, else Rotface.
 // Notes rf.target.
 Unit* GetRfTarget(PlayerbotAI* botAI);
+// The unit the bot's pet attacks: GetRfTarget, but Rotface for the kiter's. On the kited ooze a pet would
+// pull it off a kiter that can't reach it, and die to its swings.
+Unit* GetRfPetTarget(PlayerbotAI* botAI);
 
 // The kiter's Big Ooze it still has to take: not on it, in taunt range, taunt ready and the ooze not
 // immune to it yet
