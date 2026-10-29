@@ -1,27 +1,35 @@
 #!/usr/bin/env python3
-"""Read a Blood Prince Council pull from a RaidObs trace: the empowered prince, bombs, spread, skull, cheats.
+"""Read a Blood Prince Council pull from a RaidObs trace: the empowered prince and every bot duty.
 
-    blood_prince_council.py <file>            every section
-    blood_prince_council.py <file> --phases   bpc.phase, the prince Invocation of Blood is on
-    blood_prince_council.py <file> --bombs    per ranged bot: the Kinetic Bombs it was given, and how
-    blood_prince_council.py <file> --spread   per bot: its slot on the rings round Valanar
-    blood_prince_council.py <file> --skull    every move of the skull onto the empowered prince
-    blood_prince_council.py <file> --cheats   this encounter's cheat uses
+    blood_prince_council.py <file>             every section
+    blood_prince_council.py <file> --phases    bpc.phase, the prince Invocation of Blood is on
+    blood_prince_council.py <file> --targets   per bot: the resolver branches it was handed
+    blood_prince_council.py <file> --tanks     per tank: the princes it owned
+    blood_prince_council.py <file> --spread    per bot: the lattice nodes it held, its vortex dodges
+    blood_prince_council.py <file> --bombs     per duty bot: the Kinetic Bombs it juggled, its shots
+    blood_prince_council.py <file> --balls     per bot: ball victim steps and Inferno Flame soaks
+    blood_prince_council.py <file> --nucleus   per tank: Keleseth's tank collecting Dark Nuclei
+    blood_prince_council.py <file> --cheats    this encounter's cheat uses
 
 What the generic views miss here:
 
 - **`bpc.phase` is the empowered prince**: `valanar` from the pull, then `keleseth` or `taldaram` at
-  random, then the other, moving every 46 s; `none` in the moment between. Per bot, so a step starts
-  at the first bot to note it.
-- **`bpc.bomb` is per ranged dps bot**: `hunter`, `druid` or `any` and the bomb, the tier of the greedy
-  pass that gave it; `spare` when bombs are down but every one went to someone else; `none` while no
-  bomb is low enough. A switch is one bomb straight to another, the assignment flipping under it.
-- **`bpc.spread` is per bot, only while Valanar is empowered**: `vortex i/n` on the ring every non-tank
-  takes during Empowered Shock Vortex, `ranged i/n` on the 25 yd ring ranged and healers hold outside
-  it, `none` for melee outside it or once Valanar loses the Invocation. ` nudged` means a Shock Vortex
-  pushed the slot round, ` blocked` that no angle within 180 degrees was clear.
-- **`bpc.skull` is written only by the tank that moved the icon**, the prince and the unit it came
-  off. The same tank making the very same move again later writes nothing.
+  random, then the other, moving every 46 s; `none` between pulls. Per bot, so a step starts at the
+  first bot to note it.
+- **`bpc.target` is the resolver branch**: `owned` (a tank on its own prince), `recover` (its prince
+  is on somebody else), `bomb`, `skull`, `empowered`, `none`.
+- **`bpc.tank` is a bit mask per tank**: 1 Valanar, 2 Keleseth, 4 Taldaram; `0` when it lost them.
+- **`bpc.slot` is a lattice node per bot**, 1-41, `0` when it gave it up. Healers keep theirs, the
+  ranged follow the empowered prince's side, everyone else holds one only through Empowered Shock
+  Vortex. `bpc.dodge` is a bot without a node stepping off a Shock Vortex: `melee`, `clear`,
+  `blocked` (no clear spot within 20 yd).
+- **`bpc.bomb` is the bomb a duty bot juggles**, `0` once it is gone; `bpc.juggle` `shoot` while the
+  bomb falls low with nobody's hit on it, `wait` otherwise.
+- **`bpc.ball` is a ball's victim**: `plain` or `inferno`, then `clear` (nobody in reach of the
+  explosion), `step` (walking clear) or `none` (no clear spot). `bpc.soak` is `1` on a soaker of the
+  live Ball of Inferno Flame.
+- **`bpc.nucleus` is Keleseth's tank**: `taunt N` with N Shadow Resonance stacks, `walk` toward one
+  out of reach, `cooldown`, `full` at six, `none` with no loose nucleus.
 """
 from __future__ import annotations
 
@@ -35,16 +43,13 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from bosses import icecrown_citadel as icc  # noqa: E402
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
-from raidobs.probes import emitted_keys, holder_spans, latch_spans, resolve_guids, silent_keys  # noqa: E402
+from raidobs.probes import emitted_keys, holder_spans, silent_keys  # noqa: E402
 from raidobs.trace import Trace, clock  # noqa: E402
 
 ENCOUNTER = "blood-prince-council"
 TITLE = "Blood Prince Council"
-BOMB = "bpc.bomb"
-SPREAD = "bpc.spread"
-SKULL = "bpc.skull"
-BOMB_TIERS = ("hunter", "druid", "any")
-RINGS = ("vortex", "ranged")
+PRINCES = ((1, "valanar"), (2, "keleseth"), (4, "taldaram"))
+TARGET_BRANCHES = ("owned", "recover", "bomb", "skull", "empowered", "none")
 
 
 def mine(trace: Trace) -> bool:
@@ -83,27 +88,119 @@ def show_phases(trace: Trace) -> None:
         print(f"    {clock(start):>9}  {clock(stop - start):>9}  {value}")
 
 
-def bomb_rows(trace: Trace) -> list[dict]:
-    """Per bot that noted bpc.bomb: `tiers` (assignments per tier), `bombs` (distinct bombs given),
-    `switches` (one bomb straight to another) and `spare` (spans with bombs down and none for it)."""
+def value_counts(trace: Trace, key: str, word_only: bool = False) -> dict[int, collections.Counter]:
+    """Per guid: how many spans each value of `key` started, by its first word when `word_only`."""
+    rows: dict[int, collections.Counter] = {}
+    for guid, spans in holder_spans(trace, key, icc.pull_end(trace)).items():
+        counts: collections.Counter = collections.Counter()
+        for value, _, _ in spans:
+            counts[value.split(" ")[0] if word_only else value] += 1
+        rows[guid] = counts
+    return rows
+
+
+def by_name(trace: Trace, rows: dict) -> list:
+    return sorted(rows.items(), key=lambda item: trace.name(item[0]))
+
+
+def counted(counts: collections.Counter, order: tuple[str, ...] = ()) -> str:
+    keys = [key for key in order if counts[key]] + sorted(key for key in counts if key not in order)
+    return ", ".join(f"{key} {counts[key]}" for key in keys) or "-"
+
+
+def show_targets(trace: Trace) -> None:
+    if refuse(trace, "TARGETS"):
+        return
+    rows = value_counts(trace, "bpc.target")
+    if not rows:
+        print("  bpc.target never written")
+        return
+    print("  per bot: spans of each resolver branch\n")
+    for guid, counts in by_name(trace, rows):
+        print(f"    {trace.name(guid)}  {counted(counts, TARGET_BRANCHES)}")
+
+
+def prince_names(mask: str) -> str:
+    bits = int(mask) if mask.isdigit() else 0
+    return "+".join(name for bit, name in PRINCES if bits & bit) or "none"
+
+
+def tank_rows(trace: Trace) -> list[dict]:
+    """Per tank that noted bpc.tank: every mask it held in order, as prince names, with its start."""
     rows = []
-    for guid, spans in holder_spans(trace, BOMB, icc.pull_end(trace)).items():
-        tiers: collections.Counter = collections.Counter()
-        bombs: set[str] = set()
-        switches = spare = 0
+    for guid, spans in holder_spans(trace, "bpc.tank", icc.pull_end(trace)).items():
+        rows.append({"guid": guid, "held": [(prince_names(value), start) for value, start, _ in spans]})
+    return sorted(rows, key=lambda row: trace.name(row["guid"]))
+
+
+def show_tanks(trace: Trace) -> None:
+    if refuse(trace, "TANKS"):
+        return
+    rows = tank_rows(trace)
+    if not rows:
+        print("  bpc.tank never written")
+        return
+    print("  per tank: the princes it owned, from when\n")
+    for row in rows:
+        held = ", ".join(f"{names} {clock(start)}" for names, start in row["held"])
+        print(f"    {trace.name(row['guid'])}  {held}")
+
+
+def spread_rows(trace: Trace) -> list[dict]:
+    """Per bot: `nodes` (distinct nodes held), `moves` (node to another node), `released` (back to 0)
+    and `dodges` (bpc.dodge spans other than none, by value)."""
+    dodges = value_counts(trace, "bpc.dodge")
+    rows = {}
+    for guid, spans in holder_spans(trace, "bpc.slot", icc.pull_end(trace)).items():
+        nodes = {value for value, _, _ in spans if value != "0"}
+        moves = released = 0
         last = None
         for value, _, _ in spans:
-            tier, _, bomb = value.partition(" ")
-            if tier in BOMB_TIERS:
-                tiers[tier] += 1
-                bombs.add(bomb)
-                if last is not None and last != bomb:
-                    switches += 1
-                last = bomb
+            if value == "0":
+                released += last is not None
+                last = None
                 continue
-            spare += value == "spare"
-            last = None
-        rows.append({"guid": guid, "tiers": tiers, "bombs": len(bombs), "switches": switches, "spare": spare})
+            moves += last is not None and last != value
+            last = value
+        rows[guid] = {"guid": guid, "nodes": len(nodes), "moves": moves, "released": released}
+    for guid in dodges:
+        rows.setdefault(guid, {"guid": guid, "nodes": 0, "moves": 0, "released": 0})
+    for guid, row in rows.items():
+        counts = dodges.get(guid, collections.Counter())
+        row["dodges"] = collections.Counter({key: n for key, n in counts.items() if key != "none"})
+    return sorted(rows.values(), key=lambda row: trace.name(row["guid"]))
+
+
+def show_spread(trace: Trace) -> None:
+    if refuse(trace, "SPREAD"):
+        return
+    rows = spread_rows(trace)
+    if not rows:
+        print("  bpc.slot and bpc.dodge never written")
+        return
+    print("  per bot: nodes held, node-to-node moves, releases, vortex dodges\n")
+    for row in rows:
+        print(f"    {trace.name(row['guid'])}  nodes {row['nodes']}  moves {row['moves']}"
+              f"  released {row['released']}  dodges {counted(row['dodges'])}")
+
+
+def bomb_rows(trace: Trace) -> list[dict]:
+    """Per duty bot: `bombs` (distinct bombs held), `switches` (one bomb straight to another) and
+    `shots` (bpc.juggle `shoot` spans)."""
+    shots = value_counts(trace, "bpc.juggle")
+    rows = []
+    for guid, spans in holder_spans(trace, "bpc.bomb", icc.pull_end(trace)).items():
+        bombs = {value for value, _, _ in spans if value != "0"}
+        switches = 0
+        last = None
+        for value, _, _ in spans:
+            if value == "0":
+                last = None
+                continue
+            switches += last is not None and last != value
+            last = value
+        rows.append({"guid": guid, "bombs": len(bombs), "switches": switches,
+                     "shots": shots.get(guid, collections.Counter())["shoot"]})
     return sorted(rows, key=lambda row: (-row["bombs"], trace.name(row["guid"])))
 
 
@@ -114,55 +211,35 @@ def show_bombs(trace: Trace) -> None:
     if not rows:
         print("  bpc.bomb never written")
         return
-    print("  per ranged bot: assignments by tier, bombs given, bomb-to-bomb switches, spare spans\n")
+    print("  per duty bot: bombs juggled, bomb-to-bomb switches, shot windows\n")
     for row in rows:
-        tiers = ", ".join(f"{tier} {row['tiers'][tier]}" for tier in BOMB_TIERS if row["tiers"][tier]) or "-"
-        print(f"    {trace.name(row['guid'])}  {tiers}  bombs {row['bombs']}  switches {row['switches']}"
-              f"  spare {row['spare']}")
+        print(f"    {trace.name(row['guid'])}  bombs {row['bombs']}  switches {row['switches']}  shots {row['shots']}")
 
 
-def spread_rows(trace: Trace) -> list[dict]:
-    """Per bot that noted bpc.spread: per ring, the slot spans and how many were `nudged` or `blocked`."""
-    rows = []
-    for guid, spans in holder_spans(trace, SPREAD, icc.pull_end(trace)).items():
-        rings = {ring: collections.Counter() for ring in RINGS}
-        for value, _, _ in spans:
-            words = value.split()
-            if words and words[0] in rings:
-                rings[words[0]]["slots"] += 1
-                for flag in words[2:]:
-                    rings[words[0]][flag] += 1
-        rows.append({"guid": guid, "rings": rings})
-    return sorted(rows, key=lambda row: trace.name(row["guid"]))
-
-
-def show_spread(trace: Trace) -> None:
-    if refuse(trace, "SPREAD"):
+def show_balls(trace: Trace) -> None:
+    if refuse(trace, "BALLS"):
         return
-    rows = spread_rows(trace)
+    victims = value_counts(trace, "bpc.ball")
+    soaks = value_counts(trace, "bpc.soak")
+    if not victims and not soaks:
+        print("  bpc.ball and bpc.soak never written")
+        return
+    print("  per bot: ball victim spans by kind and answer, Inferno Flame soaks\n")
+    for guid in sorted(set(victims) | set(soaks), key=trace.name):
+        soaked = soaks.get(guid, collections.Counter())["1"]
+        print(f"    {trace.name(guid)}  {counted(victims.get(guid, collections.Counter()))}  soaks {soaked}")
+
+
+def show_nucleus(trace: Trace) -> None:
+    if refuse(trace, "NUCLEUS"):
+        return
+    rows = value_counts(trace, "bpc.nucleus", word_only=True)
     if not rows:
-        print("  bpc.spread never written")
+        print("  bpc.nucleus never written")
         return
-    print("  per bot and ring: slots taken, of them nudged off a Shock Vortex or blocked\n")
-    for row in rows:
-        parts = []
-        for ring in RINGS:
-            counts = row["rings"][ring]
-            if counts["slots"]:
-                parts.append(f"{ring} {counts['slots']} (nudged {counts['nudged']}, blocked {counts['blocked']})")
-        print(f"    {trace.name(row['guid'])}  {'  '.join(parts) or 'none'}")
-
-
-def show_skull(trace: Trace) -> None:
-    if refuse(trace, "SKULL"):
-        return
-    spans = latch_spans(trace, SKULL, icc.pull_end(trace))
-    if not spans:
-        print("  bpc.skull never written")
-        return
-    print("  each placement, merged across the tanks that made it\n")
-    for value, start, stop in spans:
-        print(f"    {clock(start):>9}  {clock(stop - start):>9}  {resolve_guids(trace, value)}")
+    print("  per tank: spans of each nucleus answer\n")
+    for guid, counts in by_name(trace, rows):
+        print(f"    {trace.name(guid)}  {counted(counts, ('taunt', 'walk', 'cooldown', 'full', 'none'))}")
 
 
 def show_cheats(trace: Trace) -> None:
@@ -186,9 +263,12 @@ def show_cheats(trace: Trace) -> None:
 
 SECTIONS = (
     ("phases", "bpc.phase, the empowered prince", show_phases),
-    ("bombs", "per ranged bot: Kinetic Bomb assignments and switches", show_bombs),
-    ("spread", "per bot: its slots on the rings round Valanar", show_spread),
-    ("skull", "every move of the skull onto the empowered prince", show_skull),
+    ("targets", "per bot: the resolver branches it was handed", show_targets),
+    ("tanks", "per tank: the princes it owned", show_tanks),
+    ("spread", "per bot: lattice nodes held and vortex dodges", show_spread),
+    ("bombs", "per duty bot: Kinetic Bombs juggled and shots", show_bombs),
+    ("balls", "per bot: ball victim steps and Inferno Flame soaks", show_balls),
+    ("nucleus", "per tank: Dark Nucleus collection", show_nucleus),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )
 

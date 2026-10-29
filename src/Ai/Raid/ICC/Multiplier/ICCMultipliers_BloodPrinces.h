@@ -9,16 +9,13 @@
 
 #include "Multiplier.h"
 
-class IccBpcAssistMultiplier : public Multiplier
+// Holds a damage dealer's area damage near a prince without the Invocation, whose damage turns into threat
+// on the dealer, and near a Dark Nucleus, which a direct hit takes off its tank.
+class IccBpcSplashMultiplier : public Multiplier
 {
 public:
-    IccBpcAssistMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc bpc assist") {}
+    IccBpcSplashMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc bpc splash") {}
     float GetValue(Action* action) override;
-
-private:
-    uint32 _flamesCheckedMs = 0;
-    bool _infernoFlameUp = false;
-    bool _chasedByFlame = false;
 };
 
 #endif

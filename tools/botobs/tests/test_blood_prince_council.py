@@ -34,9 +34,10 @@ AEGIS = 7502    # assist tank
 VOLLEY = 7503   # hunter
 ARCANE = 7504   # ranged
 SHIV = 7505     # melee
+MEND = 7506     # healer
 
 ROSTER = ((BULWARK, "Bulwark", "tank"), (AEGIS, "Aegis", "tank"), (VOLLEY, "Volley", "ranged"),
-          (ARCANE, "Arcane", "ranged"), (SHIV, "Shiv", "melee"))
+          (ARCANE, "Arcane", "ranged"), (SHIV, "Shiv", "melee"), (MEND, "Mend", "healer"))
 
 
 def note(when: int, guid: int, key: str, value: str) -> dict:
@@ -60,25 +61,45 @@ def pull(boss: str = "blood-prince-council") -> list[dict]:
         note(45200, SHIV, "bpc.phase", "taldaram"),
         note(45300, BULWARK, "bpc.phase", "taldaram"),
         note(91000, BULWARK, "bpc.phase", "keleseth"),
-        # Volley takes the first bomb as the hunter, then flips to the second; Arcane is spare, then gets one.
-        note(20000, VOLLEY, "bpc.bomb", f"hunter {BOMB_A}"),
-        note(20000, ARCANE, "bpc.bomb", "spare"),
-        note(22000, VOLLEY, "bpc.bomb", f"hunter {BOMB_B}"),
-        note(23000, ARCANE, "bpc.bomb", f"any {BOMB_A}"),
-        note(30000, VOLLEY, "bpc.bomb", "none"),
-        note(30000, ARCANE, "bpc.bomb", "none"),
-        # Spread rings while Valanar is empowered; the vortex pushes Arcane's slot round once.
-        note(15000, ARCANE, "bpc.spread", "ranged 1/3"),
-        note(15000, SHIV, "bpc.spread", "none"),
-        note(18000, ARCANE, "bpc.spread", "vortex 2/4 nudged"),
-        note(18000, SHIV, "bpc.spread", "vortex 3/4"),
-        note(21000, ARCANE, "bpc.spread", "ranged 1/3"),
-        note(21000, SHIV, "bpc.spread", "none"),
-        note(45000, ARCANE, "bpc.spread", "none"),
-        # Bulwark marks Valanar at the pull; Aegis moves the skull to Taldaram, Bulwark on to Keleseth.
-        note(200, BULWARK, "bpc.skull", f"empowered {VALANAR}"),
-        note(45400, AEGIS, "bpc.skull", f"empowered {TALDARAM} from {VALANAR}"),
-        note(91100, BULWARK, "bpc.skull", f"empowered {KELESETH} from {TALDARAM}"),
+        # Two tanks: Bulwark owns Valanar and Taldaram, Aegis Keleseth.
+        note(50, BULWARK, "bpc.tank", "5"),
+        note(50, AEGIS, "bpc.tank", "2"),
+        # Bulwark pulls Taldaram back first; Shiv follows a player's skull for a second.
+        note(100, BULWARK, "bpc.target", "recover"),
+        note(2000, BULWARK, "bpc.target", "owned"),
+        note(100, SHIV, "bpc.target", "empowered"),
+        note(20000, SHIV, "bpc.target", "skull"),
+        note(21000, SHIV, "bpc.target", "empowered"),
+        note(100, VOLLEY, "bpc.target", "empowered"),
+        note(20100, VOLLEY, "bpc.target", "bomb"),
+        note(21500, VOLLEY, "bpc.target", "empowered"),
+        # Arcane moves to Keleseth's side, Mend keeps its node, Shiv holds one through the cast only.
+        note(100, ARCANE, "bpc.slot", "13"),
+        note(45300, ARCANE, "bpc.slot", "21"),
+        note(100, MEND, "bpc.slot", "20"),
+        note(15000, SHIV, "bpc.slot", "8"),
+        note(19500, SHIV, "bpc.slot", "0"),
+        note(30000, SHIV, "bpc.dodge", "melee"),
+        note(31000, SHIV, "bpc.dodge", "none"),
+        # Volley juggles the first bomb, then the second; Arcane takes the first once Volley moves on.
+        note(20000, VOLLEY, "bpc.bomb", str(BOMB_A)),
+        note(22000, VOLLEY, "bpc.bomb", str(BOMB_B)),
+        note(40000, VOLLEY, "bpc.bomb", "0"),
+        note(23000, ARCANE, "bpc.bomb", str(BOMB_A)),
+        note(30000, ARCANE, "bpc.bomb", "0"),
+        note(20000, VOLLEY, "bpc.juggle", "wait"),
+        note(20100, VOLLEY, "bpc.juggle", "shoot"),
+        note(21500, VOLLEY, "bpc.juggle", "wait"),
+        note(60000, ARCANE, "bpc.ball", "plain step"),
+        note(61000, ARCANE, "bpc.ball", "plain clear"),
+        note(95000, MEND, "bpc.ball", "inferno none"),
+        note(95000, SHIV, "bpc.soak", "1"),
+        note(97000, SHIV, "bpc.soak", "0"),
+        note(11000, AEGIS, "bpc.nucleus", "taunt 0"),
+        note(12000, AEGIS, "bpc.nucleus", "cooldown"),
+        note(22000, AEGIS, "bpc.nucleus", "taunt 1"),
+        note(30000, AEGIS, "bpc.nucleus", "walk"),
+        note(33000, AEGIS, "bpc.nucleus", "full"),
         {"t": 50000, "e": "cheat", "g": SHIV, "k": "pp.heroicbuff", "n": 2, "tgt": SHIV},
         {"t": 120000, "e": "end", "out": "kill"},
     ]
@@ -111,42 +132,75 @@ class Phases(unittest.TestCase):
             "     1:31.000   0:29.000  keleseth\n"))
 
 
-class Bombs(unittest.TestCase):
-    def test_rows_count_tiers_switches_and_spare(self):
-        rows = {row["guid"]: row for row in bpc.bomb_rows(load(pull()))}
-        self.assertEqual(dict(rows[VOLLEY]["tiers"]), {"hunter": 2})
-        self.assertEqual((rows[VOLLEY]["bombs"], rows[VOLLEY]["switches"], rows[VOLLEY]["spare"]), (2, 1, 0))
-        self.assertEqual(dict(rows[ARCANE]["tiers"]), {"any": 1})
-        self.assertEqual((rows[ARCANE]["bombs"], rows[ARCANE]["switches"], rows[ARCANE]["spare"]), (1, 0, 1))
-
-    def test_section(self):
-        self.assertEqual(printed(bpc.show_bombs, load(pull())), (
-            "BOMBS\n"
-            "  per ranged bot: assignments by tier, bombs given, bomb-to-bomb switches, spare spans\n"
+class Targets(unittest.TestCase):
+    def test_section_counts_branches_in_resolver_order(self):
+        self.assertEqual(printed(bpc.show_targets, load(pull())), (
+            "TARGETS\n"
+            "  per bot: spans of each resolver branch\n"
             "\n"
-            "    Volley  hunter 2  bombs 2  switches 1  spare 0\n"
-            "    Arcane  any 1  bombs 1  switches 0  spare 1\n"))
+            "    Bulwark  owned 1, recover 1\n"
+            "    Shiv  skull 1, empowered 2\n"
+            "    Volley  bomb 1, empowered 2\n"))
+
+
+class Tanks(unittest.TestCase):
+    def test_masks_read_as_princes(self):
+        self.assertEqual(printed(bpc.show_tanks, load(pull())), (
+            "TANKS\n"
+            "  per tank: the princes it owned, from when\n"
+            "\n"
+            "    Aegis  keleseth 0:00.050\n"
+            "    Bulwark  valanar+taldaram 0:00.050\n"))
+
+    def test_zero_mask_reads_none(self):
+        self.assertEqual(bpc.prince_names("0"), "none")
 
 
 class Spread(unittest.TestCase):
+    def test_rows_count_moves_releases_and_dodges(self):
+        rows = {row["guid"]: row for row in bpc.spread_rows(load(pull()))}
+        self.assertEqual((rows[ARCANE]["nodes"], rows[ARCANE]["moves"], rows[ARCANE]["released"]), (2, 1, 0))
+        self.assertEqual((rows[SHIV]["nodes"], rows[SHIV]["moves"], rows[SHIV]["released"]), (1, 0, 1))
+        self.assertEqual(dict(rows[SHIV]["dodges"]), {"melee": 1})
+
     def test_section(self):
         self.assertEqual(printed(bpc.show_spread, load(pull())), (
             "SPREAD\n"
-            "  per bot and ring: slots taken, of them nudged off a Shock Vortex or blocked\n"
+            "  per bot: nodes held, node-to-node moves, releases, vortex dodges\n"
             "\n"
-            "    Arcane  vortex 1 (nudged 1, blocked 0)  ranged 2 (nudged 0, blocked 0)\n"
-            "    Shiv  vortex 1 (nudged 0, blocked 0)\n"))
+            "    Arcane  nodes 2  moves 1  released 0  dodges -\n"
+            "    Mend  nodes 1  moves 0  released 0  dodges -\n"
+            "    Shiv  nodes 1  moves 0  released 1  dodges melee 1\n"))
 
 
-class Skull(unittest.TestCase):
-    def test_placements_merge_across_tanks(self):
-        self.assertEqual(printed(bpc.show_skull, load(pull())), (
-            "SKULL\n"
-            "  each placement, merged across the tanks that made it\n"
+class Bombs(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(bpc.show_bombs, load(pull())), (
+            "BOMBS\n"
+            "  per duty bot: bombs juggled, bomb-to-bomb switches, shot windows\n"
             "\n"
-            "     0:00.200   0:45.200  empowered Prince Valanar\n"
-            "     0:45.400   0:45.700  empowered Prince Taldaram from Prince Valanar\n"
-            "     1:31.100   0:28.900  empowered Prince Keleseth from Prince Taldaram\n"))
+            "    Volley  bombs 2  switches 1  shots 1\n"
+            "    Arcane  bombs 1  switches 0  shots 0\n"))
+
+
+class Balls(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(bpc.show_balls, load(pull())), (
+            "BALLS\n"
+            "  per bot: ball victim spans by kind and answer, Inferno Flame soaks\n"
+            "\n"
+            "    Arcane  plain clear 1, plain step 1  soaks 0\n"
+            "    Mend  inferno none 1  soaks 0\n"
+            "    Shiv  -  soaks 1\n"))
+
+
+class Nucleus(unittest.TestCase):
+    def test_section_groups_taunts_by_word(self):
+        self.assertEqual(printed(bpc.show_nucleus, load(pull())), (
+            "NUCLEUS\n"
+            "  per tank: spans of each nucleus answer\n"
+            "\n"
+            "    Aegis  taunt 2, walk 1, cooldown 1, full 1\n"))
 
 
 class Cheats(unittest.TestCase):
