@@ -27,6 +27,8 @@ bool IccFestergutTankDefensiveTrigger::IsActive() { return GetFgTankDefensive(bo
 
 bool IccFestergutBloatSwapTrigger::IsActive() { return IsFgSwapTaunter(botAI); }
 
+bool IccFestergutBloatClearTrigger::IsActive() { return IsFgBloatClear(botAI); }
+
 bool IccFestergutBrakeTrigger::IsActive()
 {
     Creature* boss = GetFgBoss(botAI);

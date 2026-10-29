@@ -3,8 +3,8 @@
 
     stinky_and_precious.py <file>               every section
     stinky_and_precious.py <file> --tanks       per dog: who it hit, the swaps, peak Mortal Wound
-    stinky_and_precious.py <file> --swaps       each swap election, its taunt, the yields after it
-    stinky_and_precious.py <file> --targets     what the resolver had the bots on, by rule
+    stinky_and_precious.py <file> --swaps       each swap election, its taunt, the yields and brakes
+    stinky_and_precious.py <file> --targets     what the resolver had the bots on, by rule; the zombie guard
     stinky_and_precious.py <file> --defensives  tank buttons, calls to a human tank, the cover after Decimate
     stinky_and_precious.py <file> --cheats      this encounter's cheat uses
 
@@ -15,9 +15,12 @@ What the generic views miss here:
   Precious in Rotface's.
 - **The swap is one elected taunt**: `dogs.swap` goes `1` for the tank taking a dog whose holder carries 6
   Mortal Wound (71127, one id on every difficulty), with 4 fewer of its own; the taunt is its
-  `icc dogs swap` act row. `dogs.yield` then goes `1` on the relieved tank until its stacks drop.
-- **`dogs.target` is the resolver's rule**: `dog`, `zombie` (a free tank on a zombie hitting a non-tank),
-  `skull`, `none` for a yielding tank with no zombie.
+  `icc dogs swap` act row. `dogs.yield` then goes `1` on the relieved tank until its stacks drop, and on a
+  tank `dogs.brake` holds past 90% of the holder's threat until under 80%.
+- **`dogs.target` is the resolver's rule**: `dog`, `zombie` (a free tank or the zombie guard on a zombie
+  hitting a non-tank), `skull`, `none` for a yielding tank with no zombie.
+- **`dogs.guard` is the zombie guard**, a damage-dealing death knight or paladin elected on Precious while
+  fewer than two tanks live; its taunts on zombies hitting healers are `icc dogs zombie taunt` act rows.
 - **`dogs.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window: the holder through
   Decimate's cast, any tank under 40%. `icc.cover` deals the raid cover while the dog stuns itself after
   Decimate, everyone at 15%.
@@ -46,11 +49,14 @@ SPELL_DECIMATE = 71123
 MORTAL_WOUND_SWAP = 6
 SWAP = "dogs.swap"
 YIELD = "dogs.yield"
+BRAKE = "dogs.brake"
+GUARD = "dogs.guard"
 TARGET = "dogs.target"
 DEFENSIVE = "dogs.defensive"
 HUMAN_CALL = "dogs.humancall"
 COVER = "icc.cover"
 SWAP_ACTION = "icc dogs swap"
+ZOMBIE_TAUNT_ACTION = "icc dogs zombie taunt"
 # a button counts for a window from this long before it opens until this long after it closes
 WINDOW_LEAD_MS = 1500
 WINDOW_TAIL_MS = 1500
@@ -143,11 +149,32 @@ def elections(trace: Trace) -> list[tuple[int, int, int | None]]:
     return sorted(out)
 
 
-def yields(trace: Trace) -> list[tuple[int, int, int]]:
-    """`(start, stop, tank)` per span dogs.yield held 1."""
+def ones(trace: Trace, key: str) -> list[tuple[int, int, int]]:
+    """`(start, stop, guid)` per span a per-bot key held 1."""
     end = icc.pull_end(trace)
-    return sorted((start, stop, guid) for guid, spans in holder_spans(trace, YIELD, end).items()
+    return sorted((start, stop, guid) for guid, spans in holder_spans(trace, key, end).items()
                   for value, start, stop in spans if value == "1")
+
+
+def yields(trace: Trace) -> list[tuple[int, int, int]]:
+    return ones(trace, YIELD)
+
+
+def brakes(trace: Trace) -> dict[int, tuple[int, int]]:
+    """Per tank: `(times braked, ms held)`."""
+    out: dict[int, tuple[int, int]] = {}
+    for start, stop, guid in ones(trace, BRAKE):
+        times, held = out.get(guid, (0, 0))
+        out[guid] = (times + 1, held + stop - start)
+    return out
+
+
+def guards(trace: Trace) -> list[tuple[int, int, int, int]]:
+    """`(start, stop, guard, zombie taunts it landed)` per span dogs.guard held 1."""
+    taunts = [(rec["t"], rec.get("g")) for rec in trace.of("act")
+              if rec.get("a") == ZOMBIE_TAUNT_ACTION and rec.get("vd") == "OK"]
+    return [(start, stop, guid, sum(1 for when, who in taunts if who == guid and start <= when <= stop))
+            for start, stop, guid in ones(trace, GUARD)]
 
 
 def show_swaps(trace: Trace) -> None:
@@ -161,6 +188,8 @@ def show_swaps(trace: Trace) -> None:
         print(f"  {clock(when)}  {trace.name(guid)} elected, {landed}")
     for start, stop, guid in yields(trace):
         print(f"  {clock(start)}  {trace.name(guid)} yielded {clock(stop - start)}")
+    for guid, (times, held) in sorted(brakes(trace).items(), key=lambda item: trace.name(item[0])):
+        print(f"  {trace.name(guid)} braked {times} time(s), {clock(held)} in all")
 
 
 def target_time(trace: Trace) -> dict[str, tuple[int, int]]:
@@ -180,9 +209,11 @@ def show_targets(trace: Trace) -> None:
     rows = target_time(trace)
     if not rows:
         print(f"  {TARGET} never written")
-        return
     for value, (bots, held) in sorted(rows.items(), key=lambda row: -row[1][1]):
         print(f"  {value:<8} {bots:>3} bot(s)  {clock(held):>9} held in all")
+    for start, stop, guid, taunts in guards(trace):
+        print(f"  zombie guard {trace.name(guid)} from {clock(start)} for {clock(stop - start)}, "
+              f"{taunts} zombie taunt(s)")
 
 
 def casts_named(trace: Trace, names: frozenset) -> list[tuple[int, int, str]]:
@@ -252,8 +283,8 @@ def show_cheats(trace: Trace) -> None:
 
 SECTIONS = (
     ("tanks", "per dog: who it hit, swaps, peak Mortal Wound", show_tanks),
-    ("swaps", "each swap election, its taunt, the yields after it", show_swaps),
-    ("targets", "what the resolver had the bots on, by rule", show_targets),
+    ("swaps", "each swap election, its taunt, the yields and brakes", show_swaps),
+    ("targets", "what the resolver had the bots on, by rule; the zombie guard", show_targets),
     ("defensives", "tank buttons, calls to a human tank, the cover after Decimate", show_defensives),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )

@@ -62,6 +62,13 @@ constexpr float SPREAD_KEEPOUT = FG_VILE_GAS_RADIUS + 0.5f;
 // Inoculated takes 25% a stack off his shadow area damage, three at most
 constexpr float INOCULATED_CUT = 0.25f;
 constexpr uint32 INOCULATED_MAX = 3;
+// Either one refuses Divine Shield (spell_pal_immunities)
+constexpr uint32 SPELL_FORBEARANCE = 25771;
+constexpr uint32 SPELL_AVENGING_WRATH_MARKER = 61987;
+// A shifted spore stack is searched on rings this far apart, 16 headings each; one with nobody fixed in it
+// looks this far round its stack
+constexpr float SHIFT_STEP = 0.75f;
+constexpr float SHIFT_SEARCH = 12.0f;
 
 // Middle slots first: each reaches both tank spots and all but two or three far slots in 40 yd
 constexpr uint8 HEALER_SLOTS[] = {1, 2, 3, 8, 9, 10};
@@ -90,6 +97,15 @@ struct TargetMemo
     Unit* pick = nullptr;
 };
 
+// A spore group goo fouled stands on one spot for the rest of the wave
+struct Shift
+{
+    bool on = false;
+    // The player who can't walk is inside the burst from it, or there is none
+    bool fixedIn = false;
+    Position spot;
+};
+
 struct FgState
 {
     uint32 rosterMs = 0;
@@ -108,6 +124,12 @@ struct FgState
     ObjectGuid farOn;
     RaidObs::ObsValue<uint8> leg{"fg.leg", 1};
     RaidObs::ObsValue<uint8> far{"fg.sporespot", 1};
+    Shift closeShift;
+    Shift farShift;
+    // 0 none, 1 shifted with its fixed player in the burst, 2 shifted without him
+    RaidObs::ObsValue<uint8> closeShifted{"fg.closeshift", 0};
+    RaidObs::ObsValue<uint8> farShifted{"fg.farshift", 0};
+    RaidObs::ObsValue<uint8> drag{"fg.drag", 0};
     RaidObs::ObsGuidSet brake{"fg.brake"};
 
     // Pungent Blight takes his Inhaled Blight stacks: each drop starts a cycle
@@ -291,7 +313,62 @@ Player* SwapTaunter(FgState const* state, Player* bot, Creature* boss)
     return pick;
 }
 
-void RefreshRoster(FgState& state, Player* bot, uint32 now)
+// A human tank other than the holder that could take him: few enough stacks, its taunt ready
+Player* HumanTaunter(Player* sender, Unit* holder, Creature* boss)
+{
+    uint32 const bloat = BloatId(boss);
+    for (Player* member : MembersOnMap(sender))
+    {
+        uint32 const taunt = IsDutyBot(member) ? 0 : TauntSpellId(member);
+        if (taunt && member != holder && IsTankPlayer(member) && Stacks(member, bloat) <= FG_TAUNTER_MAX_STACKS &&
+            member->HasSpell(taunt) && !member->HasSpellCooldown(taunt))
+            return member;
+    }
+
+    return nullptr;
+}
+
+// Nobody to take him off a holder at the swap: his stacks reach 10 unless a paladin's bubble purges them
+bool NobodyTakesHim(FgState const* state, Player* bot, Creature* boss)
+{
+    Unit* victim = boss->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    return holder && IsTankPlayer(holder) && Stacks(holder, BloatId(boss)) >= FG_SWAP_STACKS &&
+           !boss->HasAuraType(SPELL_AURA_MOD_TAUNT) && !SwapTaunter(state, bot, boss);
+}
+
+// A third tank holding him takes the spot of the tank-spot tank with the most Gastric Bloat, the one it
+// relieved: from the legs he would face the melee, and the holder would miss the close spore stack
+void SeatThirdTank(std::unordered_map<ObjectGuid, uint8>& wanted, std::vector<Player*> const& tanks, Creature* boss)
+{
+    Unit* victim = boss->GetVictim();
+    bool const tankHolds = victim && std::find(tanks.begin(), tanks.end(), victim) != tanks.end();
+    auto const held = tankHolds ? wanted.find(victim->GetGUID()) : wanted.end();
+    if (held == wanted.end() || held->second != FG_STAND_LEG)
+        return;
+
+    uint32 const bloat = BloatId(boss);
+    Player* relieved = nullptr;
+    uint32 relievedStacks = 0;
+    for (Player* tank : tanks)
+    {
+        auto const stand = wanted.find(tank->GetGUID());
+        if (stand == wanted.end() || stand->second < FG_STAND_TANK)
+            continue;
+
+        uint32 const stacks = Stacks(tank, bloat);
+        if (!relieved || stacks > relievedStacks || (stacks == relievedStacks && tank->GetGUID() < relieved->GetGUID()))
+        {
+            relieved = tank;
+            relievedStacks = stacks;
+        }
+    }
+
+    if (relieved)
+        std::swap(held->second, wanted[relieved->GetGUID()]);
+}
+
+void RefreshRoster(FgState& state, Player* bot, Creature* boss, uint32 now)
 {
     if (state.rosterBuilt && getMSTimeDiff(state.rosterMs, now) < ROSTER_REFRESH_MS)
         return;
@@ -303,10 +380,17 @@ void RefreshRoster(FgState& state, Player* bot, uint32 now)
     std::vector<Player*> healers;
     std::vector<Player*> ranged;
     std::vector<Player*> melee;
+    size_t playersOut = 0;
     for (Player* member : MembersOnMap(bot))
     {
         if (!IsDutyBot(member))
+        {
+            // Players hold no slot, so their spec says whether they usually stand out for Vile Gas
+            if (!IsTankPlayer(member) && (PlayerbotAI::IsHeal(member) || PlayerbotAI::IsRanged(member)))
+                ++playersOut;
+
             continue;
+        }
 
         if (IsTankPlayer(member))
             tanks.push_back(member);
@@ -334,6 +418,7 @@ void RefreshRoster(FgState& state, Player* bot, uint32 now)
         wanted[tanks[i]->GetGUID()] = i < FG_TANK_SPOTS ? static_cast<uint8>(FG_STAND_TANK + i) : FG_STAND_LEG;
     for (Player* member : melee)
         wanted[member->GetGUID()] = FG_STAND_LEG;
+    SeatThirdTank(wanted, tanks, boss);
 
     bool taken[FG_SLOT_COUNT + 1] = {};
     auto const keep = [&](Player* member)
@@ -384,7 +469,7 @@ void RefreshRoster(FgState& state, Player* bot, uint32 now)
         take(RANGED_SLOTS, std::size(RANGED_SLOTS), member);
 
     // Too few out and Vile Gas picks among everyone, so one on a leg would take every melee on it
-    size_t slotted = 0;
+    size_t slotted = playersOut;
     for (uint8 id = 1; id <= FG_SLOT_COUNT; ++id)
         slotted += taken[id] ? 1 : 0;
     size_t const needed = IsRaid25Man(bot) ? VILE_GAS_MIN_TARGETS_25 : VILE_GAS_MIN_TARGETS_10;
@@ -445,6 +530,8 @@ void ClearDeal(FgState& state)
     state.farCarried = false;
     state.closeOn.Clear();
     state.farOn.Clear();
+    state.closeShift = Shift();
+    state.farShift = Shift();
 }
 
 // Picks the carrier sent across to an empty group: a bot not holding him, nearest that group's anchor
@@ -552,6 +639,127 @@ void UpdateDeal(FgState& state, Creature* boss, std::vector<Player*> const& memb
     state.farOn = GroupAnchorOn(far, holder);
 }
 
+Player* AnchorPlayer(Player* bot, ObjectGuid const& on)
+{
+    Player* player = on.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, on);
+    return player && player->IsAlive() && IccSameInstance(bot, player) ? player : nullptr;
+}
+
+// The spot nearest `base` clear of every impact, within FG_SHIFT_REACH of `fixed` when there is one
+bool FindShiftSpot(Position const& base, Position const* fixed, std::vector<Position> const& impacts, Position& spot)
+{
+    Position const& centre = fixed ? *fixed : base;
+    float const reach = fixed ? FG_SHIFT_REACH : SHIFT_SEARCH;
+    bool found = false;
+    float best = 0.0f;
+    for (uint32 step = 0; static_cast<float>(step) * SHIFT_STEP <= reach; ++step)
+    {
+        float const radius = static_cast<float>(step) * SHIFT_STEP;
+        uint32 const headings = step ? 16 : 1;
+        for (uint32 i = 0; i < headings; ++i)
+        {
+            float const angle = static_cast<float>(i) * static_cast<float>(M_PI) / 8.0f;
+            Position const candidate(centre.GetPositionX() + std::cos(angle) * radius,
+                                     centre.GetPositionY() + std::sin(angle) * radius,
+                                     ICC_FG_BOSS_SPOT.GetPositionZ());
+            if (candidate.GetExactDist2d(ICC_FG_BOSS_SPOT) > FG_FLOOR_RADIUS ||
+                !ClearOf(candidate, impacts, FG_GOO_CLEARANCE))
+                continue;
+
+            float const distance = candidate.GetExactDist2d(base);
+            if (!found || distance < best)
+            {
+                found = true;
+                best = distance;
+                spot = candidate;
+            }
+        }
+    }
+
+    return found;
+}
+
+// Kept while its spot stays clear and in reach of the fixed player; found again once goo fouls the stack
+// the group stands on. With no clear spot the group goes back to its stack and dodges one by one.
+void UpdateShift(Shift& shift, Position const& base, Unit* fixed, std::vector<Position> const& impacts)
+{
+    Position const fixedAt = fixed ? fixed->GetPosition() : Position();
+    if (shift.on)
+    {
+        // A parked carrier is within FG_STAND_PARK of the spot, so this keeps a walking player in the burst
+        bool const inReach = !fixed || !shift.fixedIn ||
+                             shift.spot.GetExactDist2d(fixedAt) <= FG_SPORE_BURST - FG_STAND_PARK;
+        if (inReach && ClearOf(shift.spot, impacts, FG_GOO_CLEARANCE))
+            return;
+    }
+    else if (ClearOf(base, impacts, FG_GOO_CLEARANCE + FG_SPORE_RING))
+        return;
+
+    Position spot;
+    if (fixed && FindShiftSpot(base, &fixedAt, impacts, spot))
+        shift = Shift{true, true, spot};
+    else if (FindShiftSpot(base, nullptr, impacts, spot))
+        shift = Shift{true, !fixed, spot};
+    else
+        shift = Shift();
+}
+
+uint8 ShiftValue(Shift const& shift) { return shift.on ? (shift.fixedIn ? 1 : 2) : 0; }
+
+// The close group keeps the holder in its burst, a group ringing a player that player. A far group a bot
+// carries shifts only once both far anchors are fouled, since the flips move it first. Assigned every
+// pass, so each trace hears the value it opens on.
+void UpdateShifts(FgState& state, Player* bot, Creature* boss, std::vector<Position> const& impacts)
+{
+    if (!state.wave.empty() && state.closeCarried)
+    {
+        Player* on = AnchorPlayer(bot, state.closeOn);
+        Unit* holder = boss->GetVictim();
+        Unit* fixed = on ? on : (holder && holder->IsPlayer() && IsTankPlayer(holder->ToPlayer()) ? holder : nullptr);
+        UpdateShift(state.closeShift, on ? on->GetPosition() : ICC_FG_CLOSE_ANCHOR, fixed, impacts);
+    }
+
+    if (!state.wave.empty() && state.farCarried)
+    {
+        Player* on = AnchorPlayer(bot, state.farOn);
+        UpdateShift(state.farShift, on ? on->GetPosition() : ActiveFarAnchor(state), on, impacts);
+    }
+
+    state.closeShifted = ShiftValue(state.closeShift);
+    state.farShifted = ShiftValue(state.farShift);
+}
+
+// His chase stops at both combat reaches plus CONTACT_DISTANCE, and Inhaled Blight grows his reach 20% a
+// stack, so the holder stands that far past his spot and he stops on it
+bool DragSpot(Creature* boss, Player* holder, Position& spot)
+{
+    float const dx = ICC_FG_BOSS_SPOT.GetPositionX() - boss->GetPositionX();
+    float const dy = ICC_FG_BOSS_SPOT.GetPositionY() - boss->GetPositionY();
+    float const length = std::sqrt(dx * dx + dy * dy);
+    if (length < 0.1f)
+        return false;
+
+    float const reach = boss->GetCombatReach() + holder->GetCombatReach() + CONTACT_DISTANCE;
+    spot = Position(ICC_FG_BOSS_SPOT.GetPositionX() + dx / length * reach,
+                    ICC_FG_BOSS_SPOT.GetPositionY() + dy / length * reach, ICC_FG_BOSS_SPOT.GetPositionZ());
+    return true;
+}
+
+// Never inside a spore wave: a holder walking off would take the tanks out of the close burst
+void UpdateDrag(FgState& state, Creature* boss)
+{
+    Unit* victim = boss->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    float const drift = boss->GetExactDist2d(ICC_FG_BOSS_SPOT);
+    bool dragging = state.drag.Get() != 0;
+    if (!holder || !IsDutyBot(holder) || !IsTankPlayer(holder) || !state.wave.empty() || drift <= FG_BOSS_SETTLED)
+        dragging = false;
+    else if (drift > FG_BOSS_DRIFT)
+        dragging = true;
+
+    state.drag = dragging ? 1 : 0;
+}
+
 // A spot on the ring round an anchor, by guid so neighbours spread out
 Position RingSpot(Position const& anchor, ObjectGuid guid)
 {
@@ -563,6 +771,8 @@ Position RingSpot(Position const& anchor, ObjectGuid guid)
 // Stand ids past every roster id, so a change of kind always resets the latch
 constexpr uint8 STAND_SPORE_CENTRE = 200;
 constexpr uint8 STAND_SPORE_RING = 201;
+constexpr uint8 STAND_SPORE_SHIFT = 202;
+constexpr uint8 STAND_DRAG = 203;
 
 bool SporeStand(FgState const& state, Player* bot, uint8& id, Position& spot, char const*& kind)
 {
@@ -576,6 +786,15 @@ bool SporeStand(FgState const& state, Player* bot, uint8& id, Position& spot, ch
     else if (group == GROUP_FAR && !state.farCarried)
         group = GROUP_CLOSE;
 
+    kind = group == GROUP_CLOSE ? "close" : "far";
+    Shift const& shift = group == GROUP_CLOSE ? state.closeShift : state.farShift;
+    if (shift.on)
+    {
+        id = STAND_SPORE_SHIFT;
+        spot = shift.spot;
+        return true;
+    }
+
     ObjectGuid const on = group == GROUP_CLOSE ? state.closeOn : state.farOn;
     Player* anchorPlayer = on.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, on);
     if (anchorPlayer && (anchorPlayer == bot || !anchorPlayer->IsAlive() || !IccSameInstance(bot, anchorPlayer)))
@@ -586,7 +805,6 @@ bool SporeStand(FgState const& state, Player* bot, uint8& id, Position& spot, ch
     bool const centre = carried != state.carrier.end() && !anchorPlayer;
     id = centre ? STAND_SPORE_CENTRE : STAND_SPORE_RING;
     spot = centre ? anchor : RingSpot(anchor, bot->GetGUID());
-    kind = group == GROUP_CLOSE ? "close" : "far";
     return true;
 }
 
@@ -598,6 +816,13 @@ bool DesiredStand(FgState const& state, Player* bot, Creature* boss, uint8& id, 
     Unit* holder = boss->GetVictim();
     if (holder == bot && !IsTankPlayer(bot))
         return false;
+
+    if (holder == bot && state.drag.Get() && DragSpot(boss, bot, spot))
+    {
+        id = STAND_DRAG;
+        kind = "drag";
+        return true;
+    }
 
     if (holder != bot && SporeStand(state, bot, id, spot, kind))
         return true;
@@ -710,7 +935,8 @@ bool BlightWindow(FgState const& state, Player* tank, uint32 stacks)
 }
 
 // A human tank has no trigger, so it gets told: its taunt when the bot holding him reaches the swap with no
-// bot to take him, a defensive at the holder's Inhaled Blight windows
+// bot to take him, Divine Shield when it holds him there itself as a paladin, a defensive at the holder's
+// Inhaled Blight windows
 void CallHumanTank(FgState& state, Player* sender, Creature* boss, uint32 now)
 {
     if (state.humanCallRan && getMSTimeDiff(state.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -724,27 +950,22 @@ void CallHumanTank(FgState& state, Player* sender, Creature* boss, uint32 now)
     if (!holder || !holder->IsAlive() || !IsTankPlayer(holder))
         return;
 
-    uint32 const bloat = BloatId(boss);
     if (IsDutyBot(holder))
     {
-        if (Stacks(holder, bloat) < FG_SWAP_STACKS || boss->HasAuraType(SPELL_AURA_MOD_TAUNT) ||
-            SwapTaunter(&state, sender, boss))
-            return;
-
-        for (Player* member : MembersOnMap(sender))
-        {
-            uint32 const taunt = IsDutyBot(member) ? 0 : TauntSpellId(member);
-            if (taunt && member != holder && IsTankPlayer(member) && Stacks(member, bloat) <= FG_TAUNTER_MAX_STACKS &&
-                member->HasSpell(taunt) && !member->HasSpellCooldown(taunt))
-            {
-                CallHumanTankDefensive(sender, member, taunt, 0, "Gastric Bloat is at 9 on your partner",
-                                       "fg.humancall");
-                return;
-            }
-        }
+        Player* human = NobodyTakesHim(&state, sender, boss) ? HumanTaunter(sender, holder, boss) : nullptr;
+        if (human)
+            CallHumanTankDefensive(sender, human, TauntSpellId(human), 0, "Gastric Bloat is at 9 on your partner",
+                                   "fg.humancall");
 
         return;
     }
+
+    if (holder->getClass() == CLASS_PALADIN && holder->HasSpell(SPELL_FG_DIVINE_SHIELD) &&
+        !holder->HasSpellCooldown(SPELL_FG_DIVINE_SHIELD) && !holder->HasAura(SPELL_FORBEARANCE) &&
+        !holder->HasAura(SPELL_AVENGING_WRATH_MARKER) && NobodyTakesHim(&state, sender, boss) &&
+        CallHumanTankDefensive(sender, holder, SPELL_FG_DIVINE_SHIELD, 0,
+                               "Gastric Bloat is at 9 and nobody can take him: bubble, then cancel it", "fg.humancall"))
+        return;
 
     uint32 const stacks = BlightStacks(boss);
     bool const minor = stacks >= FG_BLIGHT_MINOR && stacks < FG_BLIGHT_MAJOR &&
@@ -830,6 +1051,31 @@ bool IsFgBraked(PlayerbotAI* botAI)
 {
     FgState* state = LiveState(botAI);
     return state && state->brake.count(botAI->GetBot()->GetGUID());
+}
+
+bool IsFgBloatClear(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Creature* boss = GetFgBoss(botAI);
+    if (!boss || !IsDutyBot(bot) || !IsTankPlayer(bot) || bot->getClass() != CLASS_PALADIN)
+        return false;
+
+    bool clear = false;
+    Aura const* bloat = boss->GetVictim() == bot ? bot->GetAura(BloatId(boss)) : nullptr;
+    if (bloat && NobodyTakesHim(LiveState(botAI), bot, boss))
+    {
+        // The next stack lands 15-17.5 s after this one, so another living tank, which may get its taunt back
+        // or come into range, has a few seconds first
+        std::vector<Player*> const members = MembersOnMap(bot);
+        bool const partner = std::any_of(members.begin(), members.end(), [bot](Player* member)
+                                         { return member != bot && IsTankPlayer(member); });
+        int32 const since = std::max(bloat->GetMaxDuration() - bloat->GetDuration(), 0);
+        clear = (!partner || static_cast<uint32>(since) >= FG_BLOAT_CLEAR_GRACE_MS) &&
+                botAI->CanCastSpell(SPELL_FG_DIVINE_SHIELD, bot);
+    }
+
+    Note(bot, "fg.bloatclear", clear ? "1" : "0");
+    return clear;
 }
 
 uint32 GetFgTankDefensive(PlayerbotAI* botAI, char const* noteKind)
@@ -1015,14 +1261,18 @@ void TickFgEncounter(PlayerbotAI* botAI)
     FgState& state = fgStates.For(bot->GetInstanceId());
     uint32 const now = getMSTime();
     UpdateBlight(state, boss);
-    RefreshRoster(state, bot, now);
+    RefreshRoster(state, bot, boss, now);
 
     if (!state.dealRan || getMSTimeDiff(state.dealMs, now) >= DEAL_REFRESH_MS)
     {
         state.dealRan = true;
         state.dealMs = now;
-        UpdateFlips(state, IcecrownHelpers::ActiveGooPositions(bot->GetInstanceId(), FG_GOO_HAZARD_MS));
+        std::vector<Position> const impacts =
+            IcecrownHelpers::ActiveGooPositions(bot->GetInstanceId(), FG_GOO_HAZARD_MS);
+        UpdateFlips(state, impacts);
         UpdateDeal(state, boss, MembersOnMap(bot));
+        UpdateShifts(state, bot, boss, impacts);
+        UpdateDrag(state, boss);
     }
 
     UpdateBrake(bot, boss, state);

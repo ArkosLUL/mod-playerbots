@@ -158,6 +158,22 @@ bool IccFestergutBloatSwapAction::Execute(Event /*event*/)
     return true;
 }
 
+bool IccFestergutBloatClearAction::Execute(Event /*event*/)
+{
+    if (!IsFgBloatClear(botAI))
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    if (!botAI->CastSpell(SPELL_FG_DIVINE_SHIELD, bot))
+        return false;
+
+    // Left up, the immunity hands him to the next player on his threat list for 12 s
+    bot->RemoveAurasDueToSpell(SPELL_FG_DIVINE_SHIELD);
+    return true;
+}
+
 bool IccFestergutBrakeStopAction::Execute(Event /*event*/)
 {
     Creature* boss = GetFgBoss(botAI);

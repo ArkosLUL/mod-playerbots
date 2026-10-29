@@ -4,10 +4,10 @@
     festergut.py <file>               every section
     festergut.py <file> --phases      fg.phase, the spore cycle
     festergut.py <file> --stands      each bot's roster stand and how long it held each kind
-    festergut.py <file> --spores      each spore window: carriers, where each was sent, who stacked where
+    festergut.py <file> --spores      each spore window: carriers, where each was sent, who stacked where, shifts
     festergut.py <file> --goo         heroic Malleable Goo: impacts, each bot's dodges, the leg flips
     festergut.py <file> --targets     what the resolver had the bots on, by rule
-    festergut.py <file> --tanks       who held him, the swap elections, the brake, peak Gastric Bloat
+    festergut.py <file> --tanks       who held him, swaps, bubbles, the brake, drags, peak Gastric Bloat
     festergut.py <file> --defensives  tank buttons, calls to a human tank, Pungent Blight cover and buttons
     festergut.py <file> --cheats      this encounter's cheat uses
 
@@ -19,11 +19,18 @@ What the generic views miss here:
   `0` is a release. A melee bot on a slot is a fill: too few ranged stood out for Vile Gas (3 on 10-man,
   8 on 25-man).
 - **`fg.stand` is the stand a bot holds right now**: `slot`, `leg`, `tank`, `close` or `far` for a spore
-  stack, `none` while it holds nothing (the legs release once he stands 3.5 yd off his spot).
+  stack, `drag` for the holder walking him back, `none` while it holds nothing (the legs release once he
+  stands 3.5 yd off his spot).
 - **`fg.carrier` is the group a Gas Spore carrier was sent to**, 1 the tanks and melee, 2 the ranged and
   healers, dealt once a wave and again after a swap inside it.
 - **`fg.leg` and `fg.sporespot` are raid-wide**: the melee leg (1 south-east, 2 north-east) and the
   ranged spore stack (1 east, behind him, 2 north), each flipped once goo lands on the one in use.
+- **`fg.closeshift` and `fg.farshift` are raid-wide**: `1` while goo has moved that spore group onto one
+  clear spot with its fixed player (the holder, or the player it rings) still in the burst, `2` without
+  him, `0` otherwise.
+- **`fg.drag` is raid-wide**: `1` while a bot holder walks him back from 3.5 yd off his spot to 2.5 yd.
+- **`fg.bloatclear` goes `1` on a paladin holder at 9 Gastric Bloat with nobody to take him**; its
+  Divine Shield cast is the bubble, cancelled as it lands.
 - **`fg.goo` is a dodge's branch**: `stand` back to a clear stand, `spread` to a spot 8.5 yd from everyone,
   `tight` to the nearest clear one, `none` when nothing cleared; `out` between dodges.
 - **The swap is one elected taunt at 9 Gastric Bloat** (row 2198: 72219/72551/72552/72553). `fg.swap` goes
@@ -62,10 +69,16 @@ STAND = "fg.stand"
 CARRIER = "fg.carrier"
 LEG = "fg.leg"
 SPORESPOT = "fg.sporespot"
+CLOSESHIFT = "fg.closeshift"
+FARSHIFT = "fg.farshift"
+DRAG = "fg.drag"
 GOO = "fg.goo"
 GOO_OUT = "out"
 TARGET = "fg.target"
 SWAP = "fg.swap"
+BLOATCLEAR = "fg.bloatclear"
+DIVINE_SHIELD = 642
+CLASS_PALADIN = 2
 BRAKE = "fg.brake"
 DEFENSIVE = "fg.defensive"
 HUMAN_CALL = "fg.humancall"
@@ -75,6 +88,7 @@ SWAP_ACTION = "icc festergut bloat swap"
 FIRST_LEG = 19
 FIRST_TANK_SPOT = 20
 GROUPS = {"1": "close", "2": "far"}
+SHIFTS = ((CLOSESHIFT, "close"), (FARSHIFT, "far"))
 HEROIC = (2, 3)
 HEROIC_ONLY = {GOO}
 # a button counts for a window from this long before it opens until this long after it closes
@@ -102,9 +116,15 @@ def heroic(trace: Trace) -> bool:
     return trace.header.get("diff") in HEROIC
 
 
+def paladin_tank(trace: Trace) -> bool:
+    """fg.bloatclear is noted on paladin tanks only. The roster carries the class id."""
+    return any(row.get("r") == "tank" and row.get("c") == CLASS_PALADIN for row in trace.header.get("roster") or [])
+
+
 def missing_probes(trace: Trace) -> list[str]:
     gone = [key for key, _, _ in silent_keys(emitted_keys(trace), ENCOUNTER)]
-    return [key for key in gone if heroic(trace) or key not in HEROIC_ONLY]
+    return [key for key in gone
+            if (heroic(trace) or key not in HEROIC_ONLY) and (paladin_tank(trace) or key != BLOATCLEAR)]
 
 
 def show_banner(trace: Trace) -> None:
@@ -168,13 +188,15 @@ def spore_windows(trace: Trace) -> list[tuple[int, int]]:
 
 def window_rows(trace: Trace) -> list[dict]:
     """Per spore window: `start`, `stop`, the `carriers` that gained a spore inside it with the group each
-    was sent to, the far `spots` in use, first written first, and how many bots `stood` close or far."""
+    was sent to, the far `spots` in use, first written first, how many bots `stood` close or far, and the
+    groups goo `shifts` onto one spot."""
     end = icc.pull_end(trace)
     applied = [(rec["t"], rec["d"]) for rec in trace.of("aura")
                if rec.get("sp") == SPELL_GAS_SPORE and not rec.get("r")]
     sent = holder_spans(trace, CARRIER, end)
     stands = holder_spans(trace, STAND, end)
     spots = latch_spans(trace, SPORESPOT, end)
+    shift_spans = [(group, latch_spans(trace, key, end)) for key, group in SHIFTS]
     rows = []
     for start, stop in spore_windows(trace):
         carriers = []
@@ -186,7 +208,10 @@ def window_rows(trace: Trace) -> list[dict]:
         held = [value for value, low, high in spots if low < stop and high > start]
         stood = collections.Counter(value for spans in stands.values() for value, low, high in spans
                                     if value in ("close", "far") and low < stop and high > start)
-        rows.append({"start": start, "stop": stop, "carriers": carriers, "spots": held, "stood": dict(stood)})
+        shifts = [group if value == "1" else f"{group} (fixed out)" for group, spans in shift_spans
+                  for value, low, high in spans if value != "0" and low < stop and high > start]
+        rows.append({"start": start, "stop": stop, "carriers": carriers, "spots": held, "stood": dict(stood),
+                     "shifts": list(dict.fromkeys(shifts))})
     return rows
 
 
@@ -202,8 +227,9 @@ def show_spores(trace: Trace) -> None:
     for row in rows:
         spot = "->".join(row["spots"]) or "-"
         carriers = ", ".join(f"{trace.name(guid)} ({group})" for guid, group in row["carriers"]) or "-"
+        shifted = f"; shifted {', '.join(row['shifts'])}" if row["shifts"] else ""
         print(f"    {clock(row['start']):>9}  {clock(row['stop'] - row['start']):>9}  {spot:<5}  "
-              f"{row['stood'].get('close', 0):>5}  {row['stood'].get('far', 0):>4}  {carriers}")
+              f"{row['stood'].get('close', 0):>5}  {row['stood'].get('far', 0):>4}  {carriers}{shifted}")
 
 
 def goo_rows(trace: Trace) -> dict[int, collections.Counter]:
@@ -294,6 +320,24 @@ def elections(trace: Trace) -> list[tuple[int, int, int | None]]:
     return sorted(out)
 
 
+def bloat_clears(trace: Trace) -> list[tuple[int, int, int | None]]:
+    """`(t, paladin holder, t of its Divine Shield or None)` per time fg.bloatclear went 1."""
+    end = icc.pull_end(trace)
+    bubbles = sorted((rec["t"], rec.get("s")) for rec in trace.of("cast") if rec.get("sp") == DIVINE_SHIELD)
+    out = []
+    for guid, spans in holder_spans(trace, BLOATCLEAR, end).items():
+        for value, start, stop in spans:
+            if value != "1":
+                continue
+            bubble = next((when for when, who in bubbles if who == guid and start <= when <= stop + 500), None)
+            out.append((start, guid, bubble))
+    return sorted(out)
+
+
+def drag_spans(trace: Trace) -> list[tuple[int, int]]:
+    return [(start, stop) for value, start, stop in latch_spans(trace, DRAG, icc.pull_end(trace)) if value == "1"]
+
+
 def brake_time(trace: Trace) -> dict[int, tuple[int, int]]:
     """Per tank: `(times braked, ms held)`."""
     out: dict[int, tuple[int, int]] = {}
@@ -320,8 +364,14 @@ def show_tanks(trace: Trace) -> None:
     for when, guid, taunt in elections(trace):
         landed = f"taunted {(taunt - when) / 1000:.1f} s after" if taunt is not None else "no taunt"
         print(f"  {clock(when)}  {trace.name(guid)} elected, {landed}")
+    for when, guid, bubble in bloat_clears(trace):
+        landed = f"bubbled {(bubble - when) / 1000:.1f} s after" if bubble is not None else "no bubble"
+        print(f"  {clock(when)}  {trace.name(guid)} at 9 with nobody to take him, {landed}")
     for guid, (times, held) in sorted(brake_time(trace).items(), key=lambda item: trace.name(item[0])):
         print(f"  {trace.name(guid)} braked {times} time(s), {clock(held)} in all")
+    drags = drag_spans(trace)
+    if drags:
+        print(f"  dragged back to his spot {len(drags)} time(s), {clock(sum(b - a for a, b in drags))} in all")
     peaks = peak_stacks(trace, GASTRIC_BLOAT)
     if peaks:
         print("\n  Gastric Bloat peak: " + ", ".join(
@@ -400,10 +450,10 @@ def show_cheats(trace: Trace) -> None:
 SECTIONS = (
     ("phases", "fg.phase, the spore cycle", show_phases),
     ("stands", "each bot's roster stand and how long it held each kind", show_stands),
-    ("spores", "each spore window: carriers, where each was sent, who stacked where", show_spores),
+    ("spores", "each spore window: carriers, where each was sent, who stacked where, shifts", show_spores),
     ("goo", "heroic Malleable Goo: impacts, dodges, leg flips", show_goo),
     ("targets", "what the resolver had the bots on, by rule", show_targets),
-    ("tanks", "who he hit, swap elections, the brake, peak Gastric Bloat", show_tanks),
+    ("tanks", "who he hit, swaps, bubbles, the brake, drags, peak Gastric Bloat", show_tanks),
     ("defensives", "tank buttons, calls to a human tank, Pungent Blight cover", show_defensives),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )

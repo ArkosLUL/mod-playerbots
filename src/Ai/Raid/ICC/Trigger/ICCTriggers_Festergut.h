@@ -56,6 +56,15 @@ public:
     bool IsActive() override;
 };
 
+class IccFestergutBloatClearTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc festergut bloat clear";
+
+    IccFestergutBloatClearTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccFestergutBrakeTrigger : public Trigger
 {
 public:

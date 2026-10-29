@@ -48,6 +48,16 @@ bool IccDogsSwapAction::Execute(Event /*event*/)
     return true;
 }
 
+bool IccDogsZombieTauntAction::Execute(Event /*event*/)
+{
+    Unit* zombie = GetDogsZombieTaunt(botAI);
+    if (!zombie || !IccCastClassTaunt(bot, botAI, zombie))
+        return false;
+
+    AttackDirect(zombie);
+    return true;
+}
+
 bool IccDogsYieldAction::Execute(Event /*event*/)
 {
     Creature* dog = GetDogsBoss(botAI);
