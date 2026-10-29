@@ -5,61 +5,67 @@
  */
 
 #include "ICCActions_Svalna.h"
-#include "GenericSpellActions.h"
-#include "Multiplier.h"
-#include "NearestNpcsValue.h"
-#include "ObjectAccessor.h"
-#include "Playerbots.h"
-#include "RtiValue.h"
-#include "Vehicle.h"
 
-bool IccValkyreSpearAction::Execute(Event /*event*/)
+#include "Creature.h"
+#include "ICCHelpers_Shared.h"
+#include "Item.h"
+#include "Playerbots.h"
+
+namespace
 {
-    // Find the nearest spear
-    Creature* spear = bot->FindNearestCreature(NPC_SPEAR, 100.0f);
+// Hurl Spear reaches 25 yd; a thrower out of range walks to this far from her
+constexpr float HURL_WALK_TO = 18.0f;
+constexpr float HURL_RANGE = 24.0f;
+}  // namespace
+
+bool IccSvalnaSpearAction::Execute(Event /*event*/)
+{
+    Creature* spear = GetSsSpearToPull(botAI);
     if (!spear)
         return false;
 
-    // Move to the spear if not in range
+    // The victim loses 10% of its health a second, so a cast in progress costs more than it brings
+    if (bot->IsMovementPreventedByCasting())
+        bot->InterruptNonMeleeSpells(true);
+
     if (!spear->IsWithinDistInMap(bot, INTERACTION_DISTANCE))
-        return MoveTo(spear, INTERACTION_DISTANCE);
+        return MoveTo(spear, 1.0f, MovementPriority::MOVEMENT_FORCED);
 
-    // Remove shapeshift forms
     botAI->RemoveShapeshift();
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
 
-    // Stop movement and click the spear
-    bot->GetMotionMaster()->Clear();
     bot->StopMoving();
     spear->HandleSpellClick(bot);
-
-    // Dismount if mounted
-    WorldPacket emptyPacket;
-    bot->GetSession()->HandleCancelMountAuraOpcode(emptyPacket);
-
-    return false;
+    return true;
 }
 
-bool IccSisterSvalnaAction::Execute(Event /*event*/)
+bool IccSvalnaHurlAction::Execute(Event /*event*/)
 {
-    Unit* svalna = AI_VALUE2(Unit*, "find target", "sister svalna");
-    if (!svalna || !IccSvalnaShielded(bot, svalna))
+    Item* spear = GetSsSpearToThrow(botAI);
+    Creature* svalna = GetSsSvalna(botAI);
+    if (!spear || !svalna)
         return false;
 
-    // Check if bot has the spear item
-    if (!botAI->HasItemInInventory(ITEM_SPEAR))
+    if (bot->GetExactDist(svalna) > HURL_RANGE || !bot->IsWithinLOSInMap(svalna))
+        return MoveTo(svalna, HURL_WALK_TO, MovementPriority::MOVEMENT_COMBAT);
+
+    // Hurl Spear refuses a shapeshifted thrower, and a cast in progress would refuse the item use
+    botAI->RemoveShapeshift();
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    botAI->ImbueItem(spear, svalna);
+    return true;
+}
+
+bool IccSvalnaTauntAction::Execute(Event /*event*/)
+{
+    Unit* captain = GetSsCaptainToTaunt(botAI);
+    if (!captain || !IccCastClassTaunt(bot, botAI, captain))
         return false;
 
-    // Get all items from inventory
-    std::vector<Item*> items = botAI->GetInventoryItems();
-    for (Item* item : items)
-    {
-        if (item->GetEntry() == ITEM_SPEAR)
-        {
-            // Use spear on Svalna
-            botAI->ImbueItem(item, svalna);
-            return false;
-        }
-    }
-
-    return false;
+    // A taunt moves the captain, not the bot's own target
+    AttackDirect(captain);
+    return true;
 }

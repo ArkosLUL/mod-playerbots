@@ -7,25 +7,34 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_VALITHRIA_H
 #define PLAYERBOTS_ICCTRIGGERS_VALITHRIA_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_Valithria.h"
+#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
 
-class IccValithriaGroupTrigger : public Trigger
+class IccValithriaDodgeTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc valithria group";
+    static constexpr char const* Name = "icc valithria dodge";
 
-    IccValithriaGroupTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccValithriaDodgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccValithriaZombieKiteTrigger : public Trigger
+class IccValithriaKiteTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc valithria zombie kite";
+    static constexpr char const* Name = "icc valithria kite";
 
-    IccValithriaZombieKiteTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccValithriaKiteTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccValithriaDreamTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria dream";
+
+    IccValithriaDreamTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -38,21 +47,47 @@ public:
     bool IsActive() override;
 };
 
+class IccValithriaTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria taunt";
+
+    IccValithriaTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccValithriaSnareTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria snare";
+
+    IccValithriaSnareTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccValithriaVoidTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria void";
+
+    IccValithriaVoidTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccValithriaTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc valithria target";
+
+    IccValithriaTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetVdTarget) {}
+};
+
 class IccValithriaHealTrigger : public Trigger
 {
 public:
     static constexpr char const* Name = "icc valithria heal";
 
     IccValithriaHealTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
-    bool IsActive() override;
-};
-
-class IccValithriaDreamCloudTrigger : public Trigger
-{
-public:
-    static constexpr char const* Name = "icc valithria dream cloud";
-
-    IccValithriaDreamCloudTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

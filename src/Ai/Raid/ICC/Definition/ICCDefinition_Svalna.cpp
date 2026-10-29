@@ -8,21 +8,33 @@
 
 #include "ICCActions_Svalna.h"
 #include "ICCEncounterGate.h"
+#include "ICCHelpers_Svalna.h"
+#include "ICCSeams.h"
 #include "ICCTriggers_Svalna.h"
 #include "Strategy.h"
+
+namespace Family = RaidEncounterRules::Family;
+namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
 void DefineSvalna(EncounterBuilder& e)
 {
-    e.Node<IccValkyreSpearTrigger, IccValkyreSpearAction>(ACTION_EMERGENCY + 5);
-    e.Node<IccSisterSvalnaTrigger, IccSisterSvalnaAction>(ACTION_RAID + 5);
+    e.Node<IccSvalnaSpearTrigger, IccSvalnaSpearAction>(ACTION_EMERGENCY + 5, EncounterRow::Mover);
+    e.Node<IccSvalnaHurlTrigger, IccSvalnaHurlAction>(ACTION_RAID + 7, EncounterRow::Mover);
+    e.Node<IccSvalnaTauntTrigger, IccSvalnaTauntAction>(ACTION_RAID + 6);
+    e.Node<IccSvalnaTargetTrigger, IccSvalnaTargetAction>(ACTION_RAID + 5);
+
+    e.OwnTargeting("icc sister svalna targeting", Role::Any, &IccResolverPicks<&GetSsTarget>,
+                   Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
+
+    e.Tick(&TickSsEncounter);
 }
 }  // namespace
 
 EncounterDefinition const& IccSvalnaDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_SISTER_SVALNA, BossStateGate,
-                                                "sister-svalna", &DefineSvalna);
+    static EncounterDefinition const definition(ICC_BOSS_SISTER_SVALNA, BossStateGate, "sister-svalna",
+                                                &DefineSvalna);
     return definition;
 }

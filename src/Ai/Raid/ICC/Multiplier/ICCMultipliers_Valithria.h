@@ -9,17 +9,13 @@
 
 #include "Multiplier.h"
 
-class IccValithriaDreamCloudMultiplier : public Multiplier
+// Holds a damage dealer's area damage near a Blistering Zombie on somebody else: the threat would turn the
+// zombie onto the dealer, and its swings one-shot all but a tank.
+class IccValithriaSplashMultiplier : public Multiplier
 {
 public:
-    IccValithriaDreamCloudMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc valithria dream cloud") {}
+    IccValithriaSplashMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc valithria splash") {}
     float GetValue(Action* action) override;
-
-private:
-    uint32 _checkedMs = 0;
-    bool _bossPresent = false;
-    bool _cloudBuff = false;
-    bool _chasedByZombie = false;
 };
 
 #endif

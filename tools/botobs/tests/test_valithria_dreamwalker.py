@@ -31,7 +31,7 @@ CLOUD1 = CREATURE | 903
 CLOUD2 = CREATURE | 904
 SKELETON = CREATURE | 905
 ZOMBIE = CREATURE | 906
-ARCHMAGE = CREATURE | 907
+ABOMINATION = CREATURE | 907
 BULWARK = 7401  # tank
 MEND = 7402     # healer, takes portals
 LUMEN = 7403    # healer, heals the raid until the second wave
@@ -69,10 +69,10 @@ def pull(boss: str = "valithria-dreamwalker", diff: int = 3) -> list[dict]:
         unit(CLOUD2, 38421, "Nightmare Cloud"),
         unit(SKELETON, 36791, "Blazing Skeleton"),
         unit(ZOMBIE, 37934, "Blistering Zombie"),
-        unit(ARCHMAGE, 37868, "Risen Archmage"),
-        note(100, MEND, "vd.raidheal", "boss"),
-        note(100, LUMEN, "vd.raidheal", "raid"),
-        note(90000, LUMEN, "vd.raidheal", "boss"),
+        unit(ABOMINATION, 37886, "Gluttonous Abomination"),
+        note(100, MEND, "vd.healer", "2"),
+        note(100, LUMEN, "vd.healer", "1"),
+        note(90000, LUMEN, "vd.healer", "2"),
         # The first wave: Mend claims and goes in beside Arkos, a human, so it follows him.
         note(46000, MEND, "vd.wave", "pre"),
         note(46010, LUMEN, "vd.wave", "pre"),
@@ -80,32 +80,49 @@ def pull(boss: str = "valithria-dreamwalker", diff: int = 3) -> list[dict]:
         note(61000, MEND, "vd.wave", "open"),
         dream(61500, MEND),
         dream(62000, ARKOS),
-        note(62100, MEND, "vd.cloud", f"human {ARKOS}"),
+        note(61600, MEND, "vd.dream", "refresh"),
+        note(62100, MEND, "vd.dream", "human"),
+        note(78000, MEND, "vd.dream", "descend"),
         note(71000, MEND, "vd.wave", "none"),
         {"t": 72000, "e": "note", "g": MEND, "k": "vd.portalclaim", "txt": "0"},
         dream(81500, MEND, 1),
         dream(82000, ARKOS, 1),
-        # The second wave: Lumen goes in alone and walks the bot cloud sync.
+        note(81600, MEND, "vd.dream", "none"),
+        # The second wave: Lumen goes in alone and walks the shared clouds.
         note(92000, LUMEN, "vd.wave", "pre"),
         {"t": 92100, "e": "note", "g": LUMEN, "k": "vd.portalclaim", "txt": str(PORTAL2)},
         note(107000, LUMEN, "vd.wave", "open"),
         dream(107500, LUMEN),
+        note(107600, LUMEN, "vd.dream", "refresh"),
+        note(108500, LUMEN, "vd.dream", "cloud"),
         note(108000, LUMEN, "vd.cloud", f"cloud {CLOUD1}"),
         note(109000, LUMEN, "vd.cloud", f"cloud {CLOUD2}"),
         note(115000, LUMEN, "vd.cloud", "none"),
         note(117000, LUMEN, "vd.wave", "none"),
         {"t": 120000, "e": "death", "g": LUMEN, "killer": VALITHRIA},
-        # Marks: the skull goes to a skeleton, is cleared, then takes a zombie off the other half.
-        note(20000, BULWARK, "vd.group", "skull"),
-        note(20000, SHIV, "vd.group", "cross"),
-        note(20000, ARCANE, "vd.group", "single"),
-        note(30000, ARCANE, "vd.group", "cross"),
-        note(30000, BULWARK, "vd.skull", f"skeleton {SKELETON}"),
-        note(35000, ARCANE, "vd.cross", f"archmage {ARCHMAGE}"),
-        note(40000, SHIV, "vd.skull", "clear"),
-        note(50000, BULWARK, "vd.skull", f"zombie other {ZOMBIE}"),
-        {"t": 62200, "e": "cheat", "g": MEND, "k": "vd.dreamteleport", "n": 12, "tgt": ARKOS},
-        {"t": 108100, "e": "cheat", "g": LUMEN, "k": "vd.cloudteleport", "n": 5, "tgt": CLOUD1},
+        # Adds: Bulwark holds the abomination, Shiv and Arcane walk the tiers.
+        note(5000, BULWARK, "vd.tank", str(ABOMINATION)),
+        note(5100, BULWARK, "vd.target", "owned"),
+        note(60000, BULWARK, "vd.tank", "0"),
+        note(60100, BULWARK, "vd.target", "skeleton"),
+        note(30000, SHIV, "vd.target", "skeleton"),
+        note(40000, SHIV, "vd.target", "abomination"),
+        note(30000, ARCANE, "vd.target", "skeleton"),
+        note(40000, ARCANE, "vd.target", "zombie"),
+        note(50000, ARCANE, "vd.target", "skull"),
+        # Zombies: Arcane kites one, Shiv snares it, Mend steps out of a void and a column.
+        note(1000, ARCANE, "vd.kite", "none"),
+        note(41000, ARCANE, "vd.kite", "ring ccw"),
+        note(44000, ARCANE, "vd.kite", "reverse"),
+        note(46000, ARCANE, "vd.kite", "none"),
+        note(41000, SHIV, "vd.snare", "chains of ice"),
+        note(42000, SHIV, "vd.snare", "none"),
+        note(1000, MEND, "vd.dodge", "none"),
+        note(33000, MEND, "vd.dodge", "column"),
+        note(34000, MEND, "vd.dodge", "none"),
+        note(1000, MEND, "vd.void", "none"),
+        note(35000, MEND, "vd.void", "step"),
+        note(36000, MEND, "vd.void", "none"),
         {"t": 130000, "e": "cheat", "g": BULWARK, "k": "lk.hoj", "n": 2, "tgt": SKELETON},
         {"t": 300000, "e": "end", "out": "kill"},
     ]
@@ -158,50 +175,62 @@ class Dream(unittest.TestCase):
             "     1:02.000   0:20.000  Arkos human\n"
             "     1:47.500   3:12.500  Lumen  died\n"
             "\n"
-            "  vd.cloud: cloud 2, human 1, none 1\n"))
+            "  vd.dream per bot: spans of each flight rule\n"
+            "    Lumen           refresh 1, cloud 1\n"
+            "    Mend            refresh 1, human 1, descend 1, none 1\n"
+            "\n"
+            "  vd.cloud: cloud 2, none 1\n"))
 
 
 class Heal(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(vd.show_heal, load(pull())), (
             "HEAL\n"
-            "  vd.raidheal per healer, each change\n"
+            "  vd.healer per bot healer, each change\n"
             "\n"
-            "    Lumen           raid@0:00.100, boss@1:30.000\n"
-            "    Mend            boss@0:00.100\n"))
+            "    Lumen           raid@0:00.100, portal@1:30.000\n"
+            "    Mend            portal@0:00.100\n"))
 
 
-class Marks(unittest.TestCase):
+class Adds(unittest.TestCase):
     def test_section(self):
-        self.assertEqual(printed(vd.show_marks, load(pull())), (
-            "MARKS\n"
-            "     0:30.000  skull  Bulwark         skeleton Blazing Skeleton\n"
-            "     0:35.000  cross  Arcane          archmage Risen Archmage\n"
-            "     0:40.000  skull  Shiv            clear\n"
-            "     0:50.000  skull  Bulwark         zombie other Blistering Zombie\n"
+        self.assertEqual(printed(vd.show_adds, load(pull())), (
+            "ADDS\n"
+            "  vd.target per bot: spans of each pick\n"
             "\n"
-            "  vd.group per bot, each change\n"
-            "    Arcane          single@0:20.000, cross@0:30.000\n"
-            "    Bulwark         skull@0:20.000\n"
-            "    Shiv            cross@0:20.000\n"))
+            "    Arcane          skull 1, skeleton 1, zombie 1\n"
+            "    Bulwark         owned 1, skeleton 1\n"
+            "    Shiv            skeleton 1, abomination 1\n"
+            "\n"
+            "  vd.tank per bot tank: the abominations it held, from when\n"
+            "    Bulwark         Gluttonous Abomination 0:05.000, released 1:00.000\n"))
 
-    def test_ten_man_spares_the_group(self):
-        records = [rec for rec in pull(diff=2) if rec.get("k") not in ("vd.group", "vd.cross")]
-        trace = load(records)
-        self.assertNotIn("vd.group", printed(vd.show_marks, trace))
-        self.assertIn("all vd.* probes present", printed(vd.show_banner, trace))
+
+class Zombies(unittest.TestCase):
+    def test_rows_drop_none(self):
+        rows = vd.zombie_rows(load(pull()))
+        self.assertEqual([(row["guid"], dict(row["vd.kite"]), dict(row["vd.snare"]), dict(row["vd.dodge"]),
+                           dict(row["vd.void"])) for row in rows], [
+            (ARCANE, {"ring ccw": 1, "reverse": 1}, {}, {}, {}),
+            (MEND, {}, {}, {"column": 1}, {"step": 1}),
+            (SHIV, {}, {"chains of ice": 1}, {}, {}),
+        ])
+
+    def test_section(self):
+        self.assertEqual(printed(vd.show_zombies, load(pull())), (
+            "ZOMBIES\n"
+            "  per bot: spans of each kite leg rule, snare spell, dodge and void step\n"
+            "\n"
+            "    Arcane          kite reverse 1, ring ccw 1; snare -; dodge -; void -\n"
+            "    Mend            kite -; snare -; dodge column 1; void step 1\n"
+            "    Shiv            kite -; snare chains of ice 1; dodge -; void -\n"))
 
 
 class Cheats(unittest.TestCase):
-    def test_own_keys(self):
+    def test_no_own_keys(self):
         self.assertEqual(printed(vd.show_cheats, load(pull())), (
             "CHEATS\n"
-            "  vd.dreamteleport  12 use(s) from 1:02.200\n"
-            "    by  Mend 12\n"
-            "    on  Arkos human\n"
-            "  vd.cloudteleport  5 use(s) from 1:48.100\n"
-            "    by  Lumen 5\n"
-            "    on  Nightmare Cloud\n"
+            "  no cheat of this encounter fired\n"
             "  2 use(s) under other encounters' keys: icecrown_citadel.py --cheats\n"))
 
 

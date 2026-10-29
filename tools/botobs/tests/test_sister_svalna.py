@@ -25,6 +25,8 @@ FULL_V14 = BOTOBS / "fixtures" / "full-v14.ndjson"
 
 CREATURE = 1 << 32
 SVALNA = CREATURE | 970
+SPEAR = CREATURE | 971
+ARNATH = CREATURE | 972
 BULWARK = 7401  # tank
 MEND = 7402     # healer
 SHIV = 7403     # melee
@@ -34,8 +36,8 @@ ROSTER = ((BULWARK, "Bulwark", "tank", 0), (MEND, "Mend", "heal", 0), (SHIV, "Sh
           (ARCANE, "Arcane", "ranged", 0))
 
 
-def note(when: int, guid: int, value: str) -> dict:
-    return {"t": when, "e": "note", "g": guid, "k": "ss.shield", "txt": value}
+def note(when: int, guid: int, value: str, key: str = "ss.shield") -> dict:
+    return {"t": when, "e": "note", "g": guid, "k": key, "txt": value}
 
 
 def impale(when: int, guid: int, removed: int = 0) -> dict:
@@ -50,11 +52,22 @@ def pull(boss: str = "sister-svalna") -> list[dict]:
                     for guid, name, role, human in ROSTER]},
         {"t": 0, "e": "pull", "boss": boss, "src": "bossstate"},
         {"t": 1, "e": "unit", "g": SVALNA, "en": 37126, "n": "Sister Svalna", "lvl": 82},
+        {"t": 1, "e": "unit", "g": SPEAR, "en": 38248, "n": "Impaling Spear", "lvl": 80},
+        {"t": 1, "e": "unit", "g": ARNATH, "en": 37491, "n": "Captain Arnath", "lvl": 81},
         note(100, BULWARK, "down"),
         note(110, SHIV, "down"),
-        # Arcane is impaled and freed; Shiv throws the spear that breaks the shield.
+        note(50, BULWARK, str(ARNATH), "ss.tank"),
+        note(60, BULWARK, "owned", "ss.target"),
+        note(60, SHIV, "captain", "ss.target"),
+        note(12000, SHIV, "svalna", "ss.target"),
+        # Arcane is impaled and freed; Shiv pulls the spear and throws it into the shield.
         impale(19000, ARCANE),
         note(20000, BULWARK, "up"),
+        note(19200, SHIV, str(SPEAR), "ss.spear"),
+        note(23500, SHIV, "0", "ss.spear"),
+        note(24000, SHIV, "walk", "ss.hurl"),
+        note(24800, SHIV, "throw", "ss.hurl"),
+        note(25000, SHIV, "hold", "ss.hurl"),
         impale(24000, ARCANE, 1),
         {"t": 24900, "e": "cast", "s": SHIV, "sp": 71466, "tgt": SVALNA, "tr": 1},
         note(25000, SHIV, "down"),
@@ -105,6 +118,21 @@ class Spears(unittest.TestCase):
             "\n"
             "  Hurl Spear casts\n"
             "     0:24.900  Shiv            on Sister Svalna\n"))
+
+
+class Duties(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(ss.show_duties, load(pull())), (
+            "DUTIES\n"
+            "  ss.spear, spear pullers: each unit held, from when\n"
+            "    Shiv            Impaling Spear 0:19.200, released 0:23.500\n"
+            "  ss.tank, captain tanks: each unit held, from when\n"
+            "    Bulwark         Captain Arnath 0:00.050\n"
+            "  ss.hurl per bot: spans of each rule\n"
+            "    Shiv            throw 1, walk 1, hold 1\n"
+            "  ss.target per bot: spans of each rule\n"
+            "    Bulwark         owned 1\n"
+            "    Shiv            captain 1, svalna 1\n"))
 
 
 class Cheats(unittest.TestCase):
