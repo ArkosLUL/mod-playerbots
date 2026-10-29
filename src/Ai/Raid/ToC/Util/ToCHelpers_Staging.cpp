@@ -644,7 +644,8 @@ void LayoutAnubarak(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
     for (uint8 side = 0; side < 2; ++side)
         if (!tanks.side[side].IsEmpty())
             duties.push_back({tanks.side[side], sideNames[side],
-                              At(PointOf(GetAnubarakTankSidePoint(side)), ANUBARAK_STAND_Z), false, Position()});
+                              At(PointOf(GetAnubarakPrepullSideStand(bot, side)), ANUBARAK_STAND_Z), false,
+                              Position()});
 
     auto const addSlot = [&](Point2 point, std::initializer_list<StandRole> roles)
     {

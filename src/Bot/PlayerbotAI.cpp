@@ -933,8 +933,11 @@ void PlayerbotAI::HandleTeleportAck()
             bot->StopMoving();
         }
 
-        // simulate near teleport latency
-        SetNextCheckDelay(urand(1000, 2000));
+        // simulate near teleport latency, not in combat: there it's Blink, the Demonic Circle or a boss's own
+        // teleport, and a second idle on the circle got a warlock kiter impaled
+        if (!bot->IsInCombat())
+            SetNextCheckDelay(urand(1000, 2000));
+
         return;
     }
 }

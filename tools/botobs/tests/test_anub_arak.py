@@ -16,8 +16,9 @@ and the submerge spot search, a tenth the anub.lane, escort, claim, Hand, second
 kite reads and the Hand's cooldown off anub.hands, an eleventh three burrowers on one side tank and the
 two sides' burrowers within Spider Frenzy's reach, a twelfth the bystanders' gather and dodge swaps and
 dodge walks, a thirteenth the escort at the boost, at the end and in Permafrost, an own kite dead to a scarab,
-kite tools spent off the mark and the main tank out of the healers' reach, and the shared fixture shows every section reads empty on a trace that is not Anub'arak
-rather than raising.
+kite tools spent off the mark and the main tank out of the healers' reach, a fourteenth a Demonic Circle
+teleport, a kite sphere spent early and a Feign Death back before the submerge, and the shared fixture shows
+every section reads empty on a trace that is not Anub'arak rather than raising.
 """
 from __future__ import annotations
 
@@ -3722,6 +3723,118 @@ class DodgeSwaps(unittest.TestCase):
             ab.show_dodges(self.trace)
         text = out.getvalue()
         self.assertIn("    P2     0:10.000 swaps 4: Angry 4\n          dodge walks 3: Angry 2, Holylight 1\n", text)
+
+
+CTANK, CLOCK, CHUNTER, CROGUE, CKITER = range(9601, 9606)
+CBOSS = CREATURE | 1700
+CSPIKE = CREATURE | 1701
+CSPHERE = CREATURE | 1702
+CIRCLE = (X - 20.0, Y)
+SPELL_FEIGN, SPELL_CIRCLE_SUMMON, SPELL_CIRCLE_TELEPORT = 5384, 48018, 48020
+
+
+def circle_lock(when: int) -> tuple[float, float]:
+    """On its circle, out 25 yd east of it from 45 s, back on it by the teleport, and off it 1.5 s on."""
+    if 45000 <= when <= 51000:
+        return X + 5.0, Y
+    if 51500 <= when < 53000 or when < 43000:
+        return CIRCLE
+    return (X - 10.0, Y) if when < 45000 else (X - 25.0, Y)
+
+
+def circle_snap(when: int) -> dict:
+    units = [[CTANK, X - 5.0, Y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [CLOCK, *circle_lock(when), Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [CHUNTER, X + 10.0, Y + 10.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [CROGUE, X + 10.0, Y - 10.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [CKITER, X, Y + 20.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [CBOSS, X, Y + 5.0, Z, 0.0, 60.0, 0.0, CTANK, 0, 0, 0, 0]]
+    hz = []
+    if 43000 <= when <= 60000:
+        units.append([CSPIKE, *((X + 1.0, Y) if when < 51500 else (X - 16.0, Y)), Z, 0.0, 100.0, 0.0, CLOCK, 1, 0, 0, 0])
+    elif 66000 <= when <= 70000:
+        units.append([CSPIKE, X, Y + 14.0, Z, 0.0, 100.0, 0.0, CKITER, 1, 0, 0, 0])
+    if when < 61000:
+        units.append([CSPHERE, X, Y - 20.0, FLYING_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+    elif when <= 70000:
+        z = FALLING_Z if when < 62500 else PATCH_Z
+        units.append([CSPHERE, X, Y - 20.0, z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        if z == PATCH_Z:
+            hz.append([PERMAFROST_25H, X, Y - 20.0, PATCH_Z, 6.0, 1])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def circle_pull() -> list[dict]:
+    """A 25H pull, P1 to 40 s, P2 to 102 s. The warlock puts its circle down at 2 s, is marked at 43 s, runs 25 yd
+    east of the circle, Nitros at 48 s and teleports at 51 s with the spike 4 yd off, then stands 1.5 s. A kite
+    sphere goes down at 61 s and a kiter marked at 66 s spends it at 70 s. In phase 1 a hunter's Feign Death,
+    back long before the submerge, and a rogue's Sprint, still out."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789900000000, "map": ab.MAP_TOC, "inst": 19, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": CTANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": CLOCK, "n": "Hellflame", "r": "ranged", "c": 9, "h": 0},
+                    {"g": CHUNTER, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0},
+                    {"g": CROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
+                    {"g": CKITER, "n": "Pyro", "r": "ranged", "c": 8, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": CBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 0, "e": "unit", "g": CSPHERE, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"},
+        {"t": 43000, "e": "unit", "g": CSPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        *(note(when, CTANK, "anub.phase", value) for when, value in ((0, 1), (40000, 2), (102000, 1))),
+        {"t": 2000, "e": "cast", "s": CLOCK, "sp": SPELL_CIRCLE_SUMMON, "tgt": 0, "ct": 500},
+        cast(5000, CHUNTER, SPELL_FEIGN, CHUNTER),
+        cast(5000, CROGUE, SPELL_SPRINT, CROGUE),
+        aura(43000, CLOCK, ab.SPELL_MARK, False, CSPIKE),
+        cast(48000, CLOCK, SPELL_NITRO_USE, CLOCK),
+        cast(51000, CLOCK, SPELL_CIRCLE_TELEPORT, CLOCK),
+        aura(60000, CLOCK, ab.SPELL_MARK, True, CSPIKE),
+        aura(66000, CKITER, ab.SPELL_MARK, False, CSPIKE),
+        aura(70000, CKITER, ab.SPELL_MARK, True, CSPIKE),
+        {"t": 110000, "e": "end", "out": "wipe"},
+    ]
+    records += [circle_snap(when) for when in range(-500, 110000, 500)]
+    return records
+
+
+class CirclePull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_19_anub-arak_1789900000.ndjson", circle_pull())
+        cls.windows = ab.mark_windows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_feign_death_back_before_the_submerge_is_no_spent_tool(self):
+        self.assertEqual([(label, rec["s"], rec["sp"]) for label, rec in ab.spent_kite_tools(self.trace, self.windows)],
+                         [("P1", CROGUE, SPELL_SPRINT)])
+
+    def test_the_teleport_reads_its_circle_its_boost_and_the_stand(self):
+        [row] = ab.circle_teleports(self.trace, self.windows)
+        self.assertEqual((row["guid"], row["t"], row["boost"]["sp"], row["stood"]),
+                         (CLOCK, 51000, SPELL_NITRO_USE, 1500))
+        self.assertAlmostEqual(row["spike_yd"], 4.0)
+        self.assertAlmostEqual(row["circle_yd"], 21.0)
+        self.assertAlmostEqual(row["passed"], 25.0)
+
+    def test_a_kite_sphere_spent_early_in_its_kite(self):
+        [row] = ab.kite_sphere_rows(self.trace)
+        self.assertEqual((row["label"], row["start"]), ("P2", 40000))
+        self.assertEqual(row["spheres"], [{"guid": CSPHERE, "killed": 61000, "spent": 70000, "kiter": CKITER,
+                                           "into": 4000}])
+
+    def test_the_sections_print_them(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_spike(self.trace)
+            ab.show_spheres(self.trace)
+        text = out.getvalue()
+        self.assertIn("  Demonic Circle teleports: Hellflame 0:51.000 spike 4.0 yd off, the circle 21.0 yd from it;"
+                      " Nitro Boosts 3.0 s before, passing the circle at 25.0 yd; stood 1.5 s on landing\n", text)
+        self.assertIn("  kite tools a bot spent off its own mark, per phase: P1 Shadow Sprint 0:05.000\n", text)
+        self.assertIn("down +21.0 s, spent +30.0 s by Pyro 4.0 s into its kite, early\n", text)
 
 
 class EveryView(unittest.TestCase):

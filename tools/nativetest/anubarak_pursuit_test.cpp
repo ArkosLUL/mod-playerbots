@@ -493,53 +493,36 @@ void TerminalOrder()
     CHECK(PickTerminal(spent) == KiteTerminal::None);
 }
 
-// The second tank patch only when nothing else saves the kiter, at the walk in's last moment: under a Hand,
-// or without one once a catch is predicted. A 25H pull lost four kiters in a row with a tank patch still up.
-void SecondPatchOnlyAsLastResort()
+// The heroic tank pair from the east homes (AnubLocs 6 north, 5 south): pulled to 30 apart, then in to the
+// navprobe-clean 45 yd ring, the spots the refills already used
+void EastPairLandsOnTheRing()
 {
-    using AnubarakPursuit::SecondPatchDue;
-    using AnubarakPursuit::SecondPatchRead;
+    using AnubarakPursuit::PairSpots;
 
-    SecondPatchRead hand;
-    hand.handLeftS = 2.0f;
-    hand.beforeEnd = true;
-    hand.sphereSpare = true;
-    hand.walkS = 0.6f;
-    hand.walkLaterS = -0.4f;
-    CHECK(SecondPatchDue(hand));
+    auto const spots = PairSpots({806.84f, 150.59f}, {786.64f, 108.25f}, 30.0f, ROOM_CENTER, 45.0f);
+    CHECK(Near(spots[0].x, 789.6f, 0.2f) && Near(spots[0].y, 141.1f, 0.2f));
+    CHECK(Near(spots[1].x, 786.4f, 0.2f) && Near(spots[1].y, 117.5f, 0.2f));
+    CHECK(AnubarakPursuit::Dist(spots[0], ROOM_CENTER) <= 45.01f);
+    CHECK(AnubarakPursuit::Dist(spots[1], ROOM_CENTER) <= 45.01f);
 
-    // Still makes it running on: not yet
-    SecondPatchRead early = hand;
-    early.walkLaterS = 0.8f;
-    CHECK(!SecondPatchDue(early));
+    // Already close and inside the ring: left where they are
+    auto const close = PairSpots({745.0f, 147.0f}, {745.0f, 123.0f}, 30.0f, ROOM_CENTER, 45.0f);
+    CHECK(Near(close[0].y, 147.0f, 0.01f) && Near(close[1].y, 123.0f, 0.01f));
+}
 
-    // Each other way out rules it out
-    for (int i = 0; i < 5; ++i)
-    {
-        SecondPatchRead other = hand;
-        other.own = i == 0;
-        other.otherHand = i == 1;
-        other.beforeEnd = i != 2;
-        other.sphereSpare = i != 3;
-        other.walkS = i == 4 ? -0.1f : other.walkS;
-        CHECK(!SecondPatchDue(other));
-    }
+// 2026-10-28 V Agony and 2026-10-29 X Hellflame ran Nitro across their own circle and teleported 15-20 yd
+// from the spike: a catch far from the circle buys seconds, one by it or out of range none
+void TeleportBuysByTheCircle()
+{
+    using AnubarakPursuit::TeleportBuyS;
 
-    SecondPatchRead bare;
-    bare.catchS = 9.0f;
-    bare.beforeEnd = true;
-    bare.sphereSpare = true;
-    bare.walkS = 0.2f;
-    bare.walkLaterS = -0.3f;
-    CHECK(SecondPatchDue(bare));
-
-    SecondPatchRead running = bare;
-    running.walkLaterS = 0.5f;
-    CHECK(!SecondPatchDue(running));
-
-    SecondPatchRead free = bare;
-    free.catchS = -1.0f;
-    CHECK(!SecondPatchDue(free));
+    float const far = TeleportBuyS(36.0f, 38.0f, IMPALE_REACH, 11.375f, 7.0f);
+    CHECK(Near(far, 28.5f / 4.375f, 0.01f));
+    CHECK(TeleportBuyS(12.0f, 38.0f, IMPALE_REACH, 11.375f, 7.0f) < far / 4.0f);
+    CHECK(TeleportBuyS(5.0f, 38.0f, IMPALE_REACH, 11.375f, 7.0f) == 0.0f);
+    CHECK(TeleportBuyS(41.0f, 38.0f, IMPALE_REACH, 11.375f, 7.0f) == 0.0f);
+    // A boosted kiter faster than the spike: the closing floor keeps it finite
+    CHECK(TeleportBuyS(30.0f, 38.0f, IMPALE_REACH, 11.375f, 17.5f) == 22.5f);
 }
 
 // A 25H pull: with every heading at the rim passing a patch, the hold let go and the kiter reversed ten
@@ -840,7 +823,8 @@ int main()
     SpikeBetweenKiterAndPatches();
     PassHorizonCoversTheRun();
     TerminalOrder();
-    SecondPatchOnlyAsLastResort();
+    EastPairLandsOnTheRing();
+    TeleportBuysByTheCircle();
     HeldHeadingRidesOut();
     PathFamilyRingsBothWays();
     EscortPostsKeepOffTheChase();

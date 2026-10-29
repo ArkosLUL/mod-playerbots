@@ -2,6 +2,7 @@
 #define PLAYERBOTS_RAID_TOCANUBARAKPURSUIT_H
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -514,33 +515,40 @@ inline KiteTerminal PickTerminal(KiteOptions const& o)
     return o.patch ? KiteTerminal::Patch : KiteTerminal::None;
 }
 
-// The submerge's second tank patch, read when the kite would otherwise die
-struct SecondPatchRead
+// A tank pair from two sphere homes: each pulled toward the other until they are at most maxApart, then in
+// toward the centre to floorRadius. Index 0 is the north home's
+inline std::array<Point, 2> PairSpots(Point north, Point south, float maxApart, Point centre, float floorRadius)
 {
-    float handLeftS = 0.0f;
-    // On the held run, negative past the horizon
-    float catchS = -1.0f;
-    bool own = false;
-    // A ready Hand in reach could still land
-    bool otherHand = false;
-    // The catch, or the Hand's end, comes before the spike's last second
-    bool beforeEnd = false;
-    // More spheres flying than tank patches missing
-    bool sphereSpare = false;
-    // PatchMargin of the walk straight in now, and after running on the commit delay
-    float walkS = -1.0f;
-    float walkLaterS = -1.0f;
-};
+    std::array<Point, 2> spots = {north, south};
+    float const apart = Dist(north, south);
+    if (apart > maxApart)
+    {
+        Point const toSouth = {(south.x - north.x) / apart, (south.y - north.y) / apart};
+        float const pull = (apart - maxApart) / 2.0f;
+        spots[0] = {north.x + toSouth.x * pull, north.y + toSouth.y * pull};
+        spots[1] = {south.x - toSouth.x * pull, south.y - toSouth.y * pull};
+    }
 
-// Only when nothing else saves the kiter and the walk in still makes it, at the walk's last moment, the way
-// a patch kite turns: under a Hand the kiter keeps 15.5 yd off the tank patches until then, and without one
-// a walk left for the catch's last second never beats it. Without a Hand only once a catch is predicted.
-inline bool SecondPatchDue(SecondPatchRead const& r)
+    for (Point& spot : spots)
+    {
+        float const radius = Dist(centre, spot);
+        if (radius > floorRadius)
+            spot = {centre.x + (spot.x - centre.x) * floorRadius / radius,
+                    centre.y + (spot.y - centre.y) * floorRadius / radius};
+    }
+
+    return spots;
+}
+
+// Seconds a Demonic Circle teleport at the catch buys: the spike starts over from the circle's distance and
+// closes at its speed less the kiter's. Nothing once the circle is out of the teleport's range
+inline float TeleportBuyS(float circleDist, float range, float reach, float spikeSpeed, float kiterSpeed)
 {
-    if (r.own || r.otherHand || !r.beforeEnd || !r.sphereSpare || r.walkS < 0.0f)
-        return false;
+    if (circleDist > range || circleDist <= reach)
+        return 0.0f;
 
-    return (r.handLeftS > 0.0f || r.catchS >= 0.0f) && r.walkLaterS < 0.0f;
+    float const closing = std::max(spikeSpeed - kiterSpeed, 1.0f);
+    return (circleDist - reach) / closing;
 }
 
 // Hand time left at which a speed boost goes, so the kiter is past reach + margin when the Hand ends. The

@@ -123,6 +123,8 @@ constexpr float ANUBARAK_IMPALE_REACH = 7.5f;
 constexpr float ANUBARAK_KITE_STAND_LEASH = 25.0f;
 // The teleport back to the Demonic Circle only goes when the circle is this much farther from the spike
 constexpr float ANUBARAK_CIRCLE_TELEPORT_GAIN = 15.0f;
+// A warlock's run counts its teleport only from within this of the circle: the spell's 40 yd less a margin
+constexpr float ANUBARAK_CIRCLE_TELEPORT_REACH = 38.0f;
 // A circle with less left than this is cast again
 constexpr int32 ANUBARAK_CIRCLE_REFRESH_MS = 100000;
 constexpr float ANUBARAK_BLINK_DISTANCE = 20.0f;
@@ -167,9 +169,9 @@ constexpr float ANUBARAK_THREAT_RELEASE = 0.8f;
 
 constexpr uint8 ANUBARAK_SHOOTERS_PER_NEED = 2;
 // Patches that aren't tank patches kept ready in phase 2, falling spheres counted. Heroic has six
-// spheres for the pull, so its kite spends one tank patch a submerge instead.
+// spheres for the pull and never respawns one, so it keeps one down at a time, two a submerge at most.
 constexpr uint8 ANUBARAK_P2_PATCH_STOCK = 2;
-constexpr uint8 ANUBARAK_P2_PATCH_STOCK_HEROIC = 0;
+constexpr uint8 ANUBARAK_P2_PATCH_STOCK_HEROIC = 1;
 // A shooter reaches a sphere within its "spell" range less this, 3D, in line of sight
 constexpr float ANUBARAK_SHOOT_MARGIN = 2.0f;
 
@@ -340,8 +342,11 @@ Position GetAnubarakTankSpot(Player* bot, uint8 side);
 Position GetAnubarakSideTankHold(Player* bot, uint8 side);
 // Midpoint of both tank patches, else the room centre
 Position GetAnubarakBossAnchor(Player* bot);
-// Pre-pull stand of the pickup tank, west of the anchor and off both tank spots
+// Pre-pull stand of the pickup tank, west of the anchor and off both tank spots: heroic's anchor is the
+// east pair's until both patches latch
 Position GetAnubarakPickupStand(Player* bot);
+// Pre-pull stand of a side tank: its side point, heroic the east pair's spot
+Position GetAnubarakPrepullSideStand(Player* bot, uint8 side);
 // Midpoint of both latched tank patches. False until both have landed: he is held where picked up.
 bool GetAnubarakDragAnchor(Player* bot, Position& out);
 // The anchor, then points 4 and 7.5 yd off it toward his side of the patch line, for when the leg to

@@ -16,7 +16,8 @@
                                      flip-flopping between two move targets; the nearest Hand of Protection-ready
                                      paladin as the spike first came within 12 yd; a Feign Death dropped at once;
                                      per submerge the living players within 8, 12 and 20 yd of where he went
-                                     down, by role, and the first kiter's distance from the spike at its mark;
+                                     down, by role, his distance from the gather and the first kiter's distance
+                                     from the spike at its mark;
                                      each kite's anub.kiteplan terminals and whether the last one was used
                                      before the mark ended, and a kiter dead with it unused; each patch kite's
                                      turn for its patch, its anub.kitemove then, the patch it went for with the
@@ -38,9 +39,12 @@
                                      cooldown off anub.hands, else 300 s; per submerge the seconds kited and idle,
                                      the terminals, the seconds after the first tank patch, kiters dead;
                                      heroic, each kite tool (Sprint, Nitro, Divine Shield, Ice Block, Vanish,
-                                     Feign Death) a bot spent off its own mark before phase 3, per phase; per
-                                     submerge the bystanders' gather and dodge swaps within 1.5 s, total and top
-                                     5 bots, and each bot's dodge walks
+                                     Feign Death) a bot spent off its own mark before phase 3 and still on its
+                                     cooldown as a submerge's spike came up, per phase; each Demonic Circle
+                                     teleport with the spike off the kiter and the circle, the boost before it
+                                     and its pass by the circle, and the seconds stood on landing; per submerge
+                                     the bystanders' gather and dodge swaps within 1.5 s, total and top 5 bots,
+                                     and each bot's dodge walks
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips
                                      against the DK's spot at the cast, whether the grip duty held to kill and
@@ -49,7 +53,9 @@
                                      it came down, Death Grips with no pull per caster, anub.relay rows,
                                      each side's first tank patch, each anub.spot0 and anub.spot1 change; per
                                      submerge the spheres spent and the tank patches gone against the kite
-                                     allowance, each with its kiter, and when that side's patch came back
+                                     allowance (heroic 0 with no anub.allow), each with its kiter, and when that
+                                     side's patch came back; heroic, per submerge each kite sphere downed while
+                                     he was down, its spend and the kite it ended, under 15 s into it flagged
     anub_arak.py <file> --burrowers  each burrower: life, submerges, Permafrost, Shadow Strike, its exit, side
                                      and pickup, DPS focus per side, DPS casts at a burrower no focus held;
                                      whether it died inside its first 30 s up; per wave those deaths, and on
@@ -69,7 +75,8 @@
                                      main tank's time in Permafrost, his submerge spot against the tank
                                      patches, and the longest stretch he stood 10+ yd off the midpoint of the
                                      side spots with no drag leg; the drag's pre-steps, each walk and what came
-                                     after it; anub.subspot rows and how far he went down off the last spot
+                                     after it; anub.subspot rows and how far he went down off the last spot;
+                                     when the drag to the submerge spot left
     anub_arak.py <file> --dps        per phase and DPS role, bots only: samples by target kind, moving, yards
                                      walked by move order and damage by target kind; his health lost per
                                      phase 1, under 20% flagged; anub.dps rows per role; each anub.dside group
@@ -238,7 +245,7 @@ UNPATCHED_FLAG_MS = 15000
 # declare it in a shape the probe parse finds.
 READ_KEYS = ("toc.progress", "anub.phase", "anub.patch0", "anub.patch1", "anub.sphere", "anub.kite",
              "anub.dodge", "anub.protect", "anub.interrupter", "anub.pickup", "anub.defensive", "anub.focus0",
-             "anub.focus1", "anub.dps", "anub.side0", "anub.side1", "anub.wave", "anub.grip", "anub.allow",
+             "anub.focus1", "anub.dps", "anub.side0", "anub.side1", "anub.wave", "anub.grip",
              "anub.bside", "anub.dside", "anub.gripstep", "anub.sidetank", "anub.kitestage", "anub.kiteplan",
              "anub.gather", "anub.spot0", "anub.spot1", "anub.hstand", "anub.kitemove", "anub.bridge",
              "anub.relay", "anub.subspot")
@@ -356,6 +363,21 @@ HAND_PLANS = ("hand", "patch+hand")
 # what a kite runs on, any rank; 55004 is the Nitro Boosts use
 KITE_TOOLS = {11305: "Sprint", 8696: "Sprint", 2983: "Sprint", 55004: "Nitro Boosts", 642: "Divine Shield",
               45438: "Ice Block", 26889: "Vanish", 1857: "Vanish", 1856: "Vanish", SPELL_FEIGN_DEATH: "Feign Death"}
+# their base cooldowns: one spent off the mark costs a kite only while still out as a submerge's spike comes up
+KITE_TOOL_COOLDOWN_MS = {11305: 180000, 8696: 180000, 2983: 180000, 55004: 180000, 642: 300000, 45438: 300000,
+                         26889: 180000, 1857: 180000, 1856: 180000, SPELL_FEIGN_DEATH: 30000}
+# the spike is summoned on him this long after he goes down
+SPIKE_SUMMON_MS = 2500
+SPELL_CIRCLE_SUMMON = 48018
+SPELL_CIRCLE_TELEPORT = 48020
+# heroic downs two kite spheres a submerge, so one spent this soon into its kite left the rest uncovered
+KITE_PATCH_EARLY_MS = 15000
+# a teleported warlock has walked on once this far from where it landed, and it landed within this of its
+# circle
+LANDED_MOVE_YD = 1.5
+LANDED_ON_CIRCLE_YD = 3.0
+# most bots hold their phase 2 gather slot this long after he goes down
+GATHER_FORMED_MS = 10000
 # anub.bridge values a patch+hand kite writes at its turn. Older traces ask for the Hand there, so their
 # hand row follows the ask; with no ask the hand row is the Hand landing at the catch, and the kite turns
 # under it later.
@@ -1701,12 +1723,15 @@ def submerge_crowds(trace: Trace, samples: Samples | None = None) -> list[dict]:
     spikes = guids_of_entry(trace, NPC_SPIKE)
     marks = mark_spans(trace)
     roster = roster_guids(trace)
+    holds = holder_spans(trace, "anub.gather", pull_end(trace))
+    submerged = submerged_spans(trace)
     out = []
     for start, stop, phase, label in phase_spans(trace):
         row = samples.row(boss, start - 1) if boss and phase == 2 else None
         if row is None:
             continue
         spot = (row[1], row[2])
+        gather = gather_centre(holds, samples, submerged, min(start + GATHER_FORMED_MS, stop))
         near = {yards: collections.Counter() for yards in CROWD_YD}
         for guid in roster:
             unit = samples.recent(guid, start - 1)
@@ -1725,7 +1750,7 @@ def submerge_crowds(trace: Trace, samples: Samples | None = None) -> list[dict]:
             spike, unit = spike_at(samples, spikes, kiter, at), samples.recent(kiter, at)
             spike_yd = dist2(spike[1:3], unit[1:3]) if spike and unit else None
         out.append({"label": label, "start": start, "spot": spot, "near": near, "kiter": kiter, "mark": mark,
-                    "spike_yd": spike_yd})
+                    "spike_yd": spike_yd, "gather_yd": None if gather is None else dist2(spot, gather)})
     return out
 
 
@@ -1862,6 +1887,8 @@ def show_spike(trace: Trace) -> None:
               f" or more back, the\n  cooldown {'read off anub.hands' if source == 'anub.hands' else 'with no anub.hands'},"
               " with no Forbearance on the kiter")
         show_rework(trace, windows, spent)
+        teleports = circle_teleports(trace, windows, samples)
+        print("  Demonic Circle teleports: " + ("; ".join(teleport_text(trace, row) for row in teleports) or "none"))
     show_crowds(trace, samples)
     show_dodges(trace)
 
@@ -1895,7 +1922,9 @@ def boost_in_reach(window: dict) -> bool:
 
 
 def spent_kite_tools(trace: Trace, windows: list[dict]) -> list[tuple[str, dict]]:
-    """Heroic: each kite tool a bot cast outside its own marks before phase 3, with the phase it went in."""
+    """Heroic: each kite tool a bot cast outside its own marks before phase 3 and still on its base cooldown
+    when the spike of a submerge then running or to come is summoned, with the phase it went in. Feign Death
+    in phase 1 is back by then."""
     if not is_heroic(trace):
         return []
     spans = phase_spans(trace)
@@ -1913,8 +1942,123 @@ def spent_kite_tools(trace: Trace, windows: list[dict]) -> list[tuple[str, dict]
         phase = next((phase for start, stop, phase, _ in spans if start <= rec["t"] < stop), None)
         if phase == 3:
             continue
+        due = next((max(start + SPIKE_SUMMON_MS, rec["t"]) for start, stop, kind, _ in spans
+                    if kind == 2 and stop > rec["t"]), None)
+        if due is None or rec["t"] + KITE_TOOL_COOLDOWN_MS[rec["sp"]] <= due:
+            continue
         out.append((phase_at(spans, rec["t"]) or "-", rec))
     return out
+
+
+def circle_teleports(trace: Trace, windows: list[dict], samples: Samples | None = None) -> list[dict]:
+    """Each Demonic Circle teleport a bot cast: its circle, where it stood as its last summon before went
+    down; at the cast the spike's yards from the kiter and from the circle; the kiter's closest pass by the
+    circle from its last boost in the kite to the cast; and how long it stood after landing on the circle,
+    to its first step off or its death."""
+    samples = samples or Samples(trace)
+    spikes = guids_of_entry(trace, NPC_SPIKE)
+    casts = [rec for rec in trace.of("cast") if not rec.get("tr")]
+    boosts = boost_rows(trace)
+    out = []
+    for rec in casts:
+        guid, when = rec.get("s"), rec["t"]
+        if rec.get("sp") != SPELL_CIRCLE_TELEPORT or guid in trace.humans:
+            continue
+        summon = next((prior for prior in reversed(casts) if prior.get("s") == guid
+                       and prior.get("sp") == SPELL_CIRCLE_SUMMON and prior["t"] + prior.get("ct", 0) <= when), None)
+        placed = samples.row(guid, summon["t"] + summon.get("ct", 0)) if summon else None
+        kiter, spike = samples.row(guid, when), spike_at(samples, spikes, guid, when)
+        if placed is None or kiter is None:
+            continue
+        circle = (placed[1], placed[2])
+        window = next((window for window in windows if window["guid"] == guid
+                       and window["start"] <= when <= window["stop"]), None)
+        since = window["start"] if window else when
+        boost = next((prior for prior in reversed(boosts) if prior.get("s") == guid
+                      and prior["sp"] != SPELL_CIRCLE_TELEPORT and since <= prior["t"] < when), None)
+        passed = None
+        if boost:
+            passed = min((dist2(row[1:3], circle) for row in samples.between(guid, boost["t"], when)), default=None)
+        stamps, rows = samples.track(guid)
+        stood = None
+        first = bisect.bisect_right(stamps, when)
+        landed = next((index for index in range(first, len(stamps))
+                       if stamps[index] - when <= NEAR_MS and dist2(rows[index][1:3], circle) <= LANDED_ON_CIRCLE_YD),
+                      None)
+        if landed is not None:
+            spot = rows[landed][1:3]
+            stood = next((stamps[index] - stamps[landed] for index in range(landed, len(stamps))
+                          if dist2(rows[index][1:3], spot) > LANDED_MOVE_YD or rows[index][5] <= 0), None)
+        out.append({"guid": guid, "t": when, "circle": circle,
+                    "spike_yd": dist2(spike[1:3], kiter[1:3]) if spike else None,
+                    "circle_yd": dist2(spike[1:3], circle) if spike else None,
+                    "boost": boost, "passed": passed, "stood": stood})
+    return out
+
+
+def kite_sphere_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Heroic, per submerge: each sphere downed while he was down that no side ever latched, at the blow and
+    at its spend, with the mark that ended on it and the milliseconds into that kite."""
+    samples = samples or Samples(trace)
+    used = consumed_patches(trace, samples)
+    marks = mark_spans(trace)
+    deaths = sphere_deaths(trace, samples)
+    out = []
+    for start, stop, phase, label in phase_spans(trace):
+        if phase != 2:
+            continue
+        spheres = []
+        for row in deaths:
+            if row["latched"] or not start <= row["killed"] < stop:
+                continue
+            entry = {"guid": row["guid"], "killed": row["killed"], "spent": None, "kiter": None, "into": None}
+            seen = used.get(row["guid"])
+            if seen:
+                entry["spent"] = seen[0]
+                mark = next((span for span in marks if span[3] and span[2] == seen[1]), None)
+                if mark:
+                    entry.update({"kiter": mark[0], "into": seen[0] - mark[1]})
+            spheres.append(entry)
+        out.append({"label": label, "start": start, "spheres": spheres})
+    return out
+
+
+def show_kite_spheres(trace: Trace, samples: Samples) -> None:
+    if not is_heroic(trace):
+        return
+    rows = kite_sphere_rows(trace, samples)
+    if not rows:
+        return
+    print(f"\n  per submerge, the kite spheres downed while he was down (heroic keeps one down at a time, two a"
+          f"\n  submerge): the blow and the spend in seconds into phase 2, the kite it ended, under"
+          f" {KITE_PATCH_EARLY_MS / 1000:.0f} s into it flagged:")
+    for row in rows:
+        parts = []
+        for sphere in row["spheres"]:
+            text = f"{short(trace, sphere['guid'])} down {(sphere['killed'] - row['start']) / 1000:+.1f} s"
+            if sphere["spent"] is None:
+                text += ", never spent"
+            else:
+                text += f", spent {(sphere['spent'] - row['start']) / 1000:+.1f} s"
+                if sphere["kiter"] is not None:
+                    text += f" by {trace.name(sphere['kiter'])} {sphere['into'] / 1000:.1f} s into its kite"
+                    if sphere["into"] < KITE_PATCH_EARLY_MS:
+                        text += ", early"
+            parts.append(text)
+        print(f"    {row['label']:5} {clock(row['start']):>9}  {len(row['spheres'])}: " + ("; ".join(parts) or "none"))
+
+
+def teleport_text(trace: Trace, row: dict) -> str:
+    text = f"{trace.name(row['guid'])} {clock(row['t'])}"
+    if row["spike_yd"] is not None:
+        text += f" spike {row['spike_yd']:.1f} yd off, the circle {row['circle_yd']:.1f} yd from it"
+    if row["boost"]:
+        passed = "-" if row["passed"] is None else f"{row['passed']:.1f}"
+        text += (f"; {KITE_BOOSTS[row['boost']['sp']]} {(row['t'] - row['boost']['t']) / 1000:.1f} s before,"
+                 f" passing the circle at {passed} yd")
+    if row["stood"] is not None:
+        text += f"; stood {row['stood'] / 1000:.1f} s on landing"
+    return text
 
 
 def rework_lines(trace: Trace, window: dict) -> list[str]:
@@ -2236,7 +2380,8 @@ def show_crowds(trace: Trace, samples: Samples) -> None:
     if not rows:
         return
     print(f"\n  per submerge, the living players within {', '.join(f'{yards:.0f}' for yards in CROWD_YD)} yd of where"
-          " he went down, by role,\n  and the first kiter's distance from the spike at its mark:")
+          " he went down, by role, his distance\n  from the gather, and the first kiter's distance from the spike"
+          " at its mark:")
     for row in rows:
         rings = "; ".join(f"{yards:.0f} yd {sum(counts.values())}"
                           + (" (" + ", ".join(f"{role} {counts[role]}" for role in CROWD_ROLES if counts[role]) + ")"
@@ -2246,8 +2391,9 @@ def show_crowds(trace: Trace, samples: Samples) -> None:
         if row["kiter"] is not None:
             gap = "spike unsampled" if row["spike_yd"] is None else f"{row['spike_yd']:.1f} yd from the spike"
             first = f"first mark {trace.name(row['kiter'])} {clock(row['mark'])}, {gap}"
+        gather = "" if row["gather_yd"] is None else f", {row['gather_yd']:.1f} yd from the gather"
         print(f"    {row['label']:5} {clock(row['start']):>9} at {row['spot'][0]:.1f}, {row['spot'][1]:.1f}: {rings}"
-              f"\n          {first}")
+              f"\n          {first}{gather}")
 
 
 def dodge_swaps(trace: Trace) -> list[dict]:
@@ -2728,7 +2874,8 @@ def spent_patches(trace: Trace, samples: Samples | None = None) -> list[dict]:
 def allowance_rows(trace: Trace, deaths: list[dict], spent: list[dict]) -> list[dict]:
     """Per submerge: the `anub.allow` written as he went under and when it next read 0 inside it, the spheres
     that died while he was down (`tank` the ones a side owned, `other` the rest), and the tank patches gone.
-    `over` is heroic only, where the allowance is the tank patches the kiter may spend."""
+    `over` is heroic only, where the allowance is the tank patches the kiter may spend: 0 on a trace with no
+    `anub.allow`, written before heroic kites stopped ending on tank patches."""
     spans = latch_spans(trace, "anub.allow", pull_end(trace))
     heroic = is_heroic(trace)
     out = []
@@ -2737,7 +2884,7 @@ def allowance_rows(trace: Trace, deaths: list[dict], spent: list[dict]) -> list[
             continue
         # a row from another bot's tick can trail the phase edge
         value = held_at(spans, min(start + NEAR_MS, stop - 1))
-        allow = int(value) if value and value.isdigit() else None
+        allow = int(value) if value and value.isdigit() else 0 if heroic and not spans else None
         dropped = next((low for held, low, _ in spans if held == "0" and start + NEAR_MS < low < stop),
                        None) if allow else None
         made = [row for row in deaths if start <= row["killed"] < stop]
@@ -3009,6 +3156,7 @@ def show_spheres(trace: Trace) -> None:
     show_grips(trace, samples)
     show_spots(trace)
     show_tank_patches(trace, samples)
+    show_kite_spheres(trace, samples)
 
 
 # ------------------------------------------------------------------------------------------ burrowers
@@ -4358,6 +4506,7 @@ def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "subspot": [(when, value) for when, value in subspots if start <= when < stop],
                     "subleg": None if searched is None else any(value in ("submerge", "prestep") for value in sub_legs),
                     "subhold": sub_legs.count("subhold"),
+                    "drag_left": cutoff if cutoff < stop else None,
                     "submerge": submerge_gaps(latches, samples, boss, stop) if stop in submerges else None})
     return out
 
@@ -4408,8 +4557,11 @@ def show_threat(trace: Trace) -> None:
             spot = row["submerge"]["spot"]
             gaps = ", ".join(f"patch{side} {yards:.1f} yd" + (" under" if yards < SUBMERGE_PATCH_CLEARANCE else "")
                              for side, yards in sorted(row["submerge"]["patches"].items()))
+            left = ("" if row["drag_left"] is None
+                    else f"; the drag left at {clock(row['drag_left'])}, {(row['stop'] - row['drag_left']) / 1000:.1f} s"
+                         " before")
             print(f"          submerged {clock(row['stop'])} at {spot[0]:.1f}, {spot[1]:.1f}:"
-                  f" {gaps or 'no tank patch latched'}")
+                  f" {gaps or 'no tank patch latched'}{left}")
         if row["subspot"]:
             print(f"          anub.subspot: {subspot_text(row)}")
 
@@ -5331,13 +5483,13 @@ SECTIONS = (
      " the predicted catch with the patch under it, the paladin nearest an anub.bridge turn, the spike within"
      " 14.5 yd of a patch before the turn, Impale on a side tank, each submerge's first tank patch gone, the"
      " escort at the boost and the end and in Permafrost, a kiter dead to anything but the spike with its own"
-     " immunity unused, kite tools spent off the mark",
+     " immunity unused, kite tools spent off the mark, Demonic Circle teleports, his distance from the gather",
      show_spike),
     ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots, killers,"
      " landings, grips from the cast spot, the grip duty to kill and a sphere back up, each far grip's links"
      " against the side's spot, anub.relay rows, anub.spot0 and anub.spot1 changes, each side's first tank"
      " patch, spheres and tank patches spent per submerge against the allowance and when the side's patch came"
-     " back", show_spheres),
+     " back, heroic's kite spheres per submerge", show_spheres),
     ("burrowers", "each burrower: life, submerges, Permafrost, Shadow Strike, dead inside 30 s up, exit, side,"
      " pickup, DPS focus per side, casts off every focus, on older traces focus due per wave and dropped with"
      " the focus alive, each focus pick by side against its tank and the patches, distance from the patch"
@@ -5351,7 +5503,8 @@ SECTIONS = (
      " bot's target", show_frost),
     ("threat", "per surfaced window: his target by role, time to a tank, drag legs, taunts, threat cap, main"
      " tank in a patch, submerge spot to the tank patches, the longest stretch held 10+ yd off the side spots'"
-     " midpoint with no drag leg, the drag's pre-steps, anub.subspot rows", show_threat),
+     " midpoint with no drag leg, the drag's pre-steps, anub.subspot rows, when the submerge drag left",
+     show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, Penetrating Cold heals, defensives, deaths", show_swarm),
     ("healers", "per healer and phase the distance to the main and side tanks, far from a side tank on a burrower,"
      " follow acts, engine passes, anub.hstand; side tanks and the main tank with no healer in reach; raid healer"
