@@ -8,11 +8,13 @@
 
 #include "ICCDefinitions.h"
 #include "ICCHelpers_BloodPrinces.h"
+#include "ICCHelpers_BloodQueen.h"
 #include "ICCHelpers_Deathwhisper.h"
 #include "ICCHelpers_Festergut.h"
 #include "ICCHelpers_Marrowgar.h"
 #include "ICCHelpers_Putricide.h"
 #include "ICCHelpers_Saurfang.h"
+#include "ICCHelpers_Valithria.h"
 #include "RaidEncounter.h"
 
 namespace
@@ -29,6 +31,9 @@ std::vector<IccEncounterHooks> const& HookRows()
         {&IccPutricideDefinition, &IccPutricideBurstWindow, &GetPpOpenerBosses, &IccPutricideResistSchools, nullptr},
         {&IccBloodPrincesDefinition, &IccBloodPrincesBurstWindow, &GetBpcOpenerBosses, &IccBloodPrincesResistSchools,
          nullptr},
+        {&IccBloodQueenDefinition, &IccBloodQueenBurstWindow, &GetBqlOpenerBosses, &IccBloodQueenResistSchools,
+         nullptr},
+        {&IccValithriaDefinition, nullptr, nullptr, &IccValithriaResistSchools, nullptr},
     };
     return rows;
 }

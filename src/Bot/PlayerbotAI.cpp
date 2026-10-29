@@ -66,7 +66,14 @@ namespace
 constexpr uint32 SPELL_TITAN_GRIP = 49152;
 constexpr uint32 SPELL_GRAVITY_LAPSE_TK = 39432;
 constexpr uint32 SPELL_GRAVITY_LAPSE_MGT = 44226;
+constexpr uint32 SPELL_DREAM_STATE = 70766;  // Valithria's dreamers heal each other while flying
 constexpr uint32 VEHICLE_FLAG_FIXED_POSITION = 0x00200000;
+
+bool CanCastWhileFlying(Player* bot)
+{
+    return bot->HasAura(SPELL_GRAVITY_LAPSE_TK) || bot->HasAura(SPELL_GRAVITY_LAPSE_MGT) ||
+           bot->HasAura(SPELL_DREAM_STATE);
+}
 }
 
 std::vector<std::string> PlayerbotAI::dispel_whitelist = {
@@ -3769,8 +3776,7 @@ bool PlayerbotAI::CastSpell(uint32 spellId, Unit* target, Item* itemTarget)
     // aiObjectContext->GetValue<LastMovement&>("last movement")->Get().Set(nullptr);
     // aiObjectContext->GetValue<time_t>("stay time")->Set(0);
 
-    if ((bot->IsFlying() && !bot->HasAura(SPELL_GRAVITY_LAPSE_TK) && !bot->HasAura(SPELL_GRAVITY_LAPSE_MGT)) ||
-        bot->HasUnitState(UNIT_STATE_IN_FLIGHT))
+    if ((bot->IsFlying() && !CanCastWhileFlying(bot)) || bot->HasUnitState(UNIT_STATE_IN_FLIGHT))
     {
         return false;
     }
@@ -4043,8 +4049,7 @@ bool PlayerbotAI::CastSpell(uint32 spellId, float x, float y, float z, Item* ite
 
     // MotionMaster& mm = *bot->GetMotionMaster();
 
-    if ((bot->IsFlying() && !bot->HasAura(SPELL_GRAVITY_LAPSE_TK) && !bot->HasAura(SPELL_GRAVITY_LAPSE_MGT)) ||
-        bot->HasUnitState(UNIT_STATE_IN_FLIGHT))
+    if ((bot->IsFlying() && !CanCastWhileFlying(bot)) || bot->HasUnitState(UNIT_STATE_IN_FLIGHT))
     {
         return false;
     }
