@@ -3166,8 +3166,9 @@ Unit* FactionChampionsChainGripTarget(PlayerbotAI* botAI, Position& stand, bool&
 void FactionChampionsNoteChainGrip(PlayerbotAI* botAI, Unit* target)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    GripChainState* chain = nullptr;
-    if (!bot || !target || !OpenChain(bot, chain) || chain->target.Get() != target->GetGUID())
+    // not OpenChain: its advance would read the cooldown this grip just started and skip the link
+    GripChainState* chain = bot ? ChainFor(bot) : nullptr;
+    if (!target || !target->IsAlive() || !chain || chain->target.Get() != target->GetGUID())
         return;
 
     uint64 const self = bot->GetGUID().GetRawValue();

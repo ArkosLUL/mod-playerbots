@@ -87,6 +87,18 @@ void EachLinkWaitsForTheLanding()
     CHECK(!Due(chain, 3, 9000, false));
 }
 
+// the grip starts its own cooldown, so it has to be noted before the next Advance reads it
+void GripNotedBeforeItsCooldownIsRead()
+{
+    Game game;
+    Chain chain = Open({1, 2}, 1000);
+    game.links[1] = {true, WAIT_MS + 30000};
+    NoteGrip(chain, 1, 1000);
+    CHECK(Advance(chain, 1000, game).empty());
+    CHECK(!Due(chain, 2, 1000 + LAND_MS - 1, false));
+    CHECK(Due(chain, 2, 1000 + LAND_MS, false));
+}
+
 void CooldownAndDeathSkipToTheNext()
 {
     Game game;
@@ -153,6 +165,7 @@ int main()
     DpsDkOpensWithNoTank();
     FourthDkWaitsAsSpare();
     EachLinkWaitsForTheLanding();
+    GripNotedBeforeItsCooldownIsRead();
     CooldownAndDeathSkipToTheNext();
     TimeoutsCountFromTheTurn();
     ClockWrapKeepsTheTurn();

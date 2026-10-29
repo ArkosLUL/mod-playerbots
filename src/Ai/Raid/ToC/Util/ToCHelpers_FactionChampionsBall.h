@@ -49,8 +49,9 @@ Unit* FactionChampionsOpener(PlayerbotAI* botAI, uint32& spellId);
 bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot);
 
 // Where a bot kites: a melee champion it kites from (FactionChampionsKitesFrom) is within 30 yd, however
-// close; one crawling (rooted, out of control or at 60% run speed or less) only within 10 yd, so a bot an iced
-// champion picked keeps casting till it's near. 15 yd hops away from them, on the floor, clear of AoE and
+// close; one crawling (rooted, out of control or at 60% run speed or less) only within 10 yd, a Ret within 17 yd
+// for its 15 yd Hammer of Justice, so a bot an iced champion picked keeps casting till it's near. 15 yd hops
+// away from them, on the floor, clear of AoE and
 // off other healers. Of those within 30 yd
 // of another living healer or nearer one than the bot is now, the farthest from every melee champion; with
 // none, the one nearest a healer. Latched to arrival or 2.5 s, dropped once none is within 30 yd. Not while

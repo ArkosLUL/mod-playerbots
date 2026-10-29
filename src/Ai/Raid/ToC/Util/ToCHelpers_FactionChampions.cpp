@@ -1105,9 +1105,10 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, std::vector<Playe
             for (size_t k = 0; k < casters[i].second.size(); ++k)
             {
                 uint32 const spellId = casters[i].second[k];
-                // moving one off a non-healer onto a healer is worth the break
+                // Moving one off a non-healer onto a healer is worth the break. Its own one here still holding
+                // past the recast counts as landed, so the keep check would drop the duty on the next refresh.
                 Champion const* holder = tied[i][k];
-                if (holder && holder->guid != champion->guid && !(champion->healer && !holder->healer))
+                if (holder && (holder->guid == champion->guid || !(champion->healer && !holder->healer)))
                     continue;
 
                 SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);

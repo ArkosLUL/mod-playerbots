@@ -126,6 +126,8 @@ constexpr float KITE_HOLD = 45.0f;
 // a chaser this slow only catches a bot standing next to it, so its victim keeps casting till it's near
 constexpr float KITE_CRAWL_RATE = 0.6f;
 constexpr float KITE_CRAWL_REACH = 10.0f;
+// the Ret's Hammer of Justice goes on its target within 15 yd, so its victim leaves before that
+constexpr float KITE_CRAWL_REACH_RET = 17.0f;
 // the Hands' reach, heals go to 40 so the healers can drift a bit
 constexpr float KITE_HEAL_REACH = 30.0f;
 
@@ -352,6 +354,14 @@ bool Crawling(Unit* champion)
 {
     return champion->HasUnitState(UNIT_STATE_LOST_CONTROL) || champion->HasAuraType(SPELL_AURA_MOD_ROOT) ||
            champion->GetSpeedRate(MOVE_RUN) <= KITE_CRAWL_RATE;
+}
+
+float CrawlReach(Unit* champion)
+{
+    uint32 const entry = champion->GetEntry();
+    bool const ret = entry == static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION) ||
+                     entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION);
+    return ret ? KITE_CRAWL_REACH_RET : KITE_CRAWL_REACH;
 }
 
 // Other living healers: a spot this close to one drags the chaser onto it
@@ -986,7 +996,7 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
     ObjectGuid const guid = bot->GetGUID();
     std::vector<Unit*> chasers = MeleeOn(botAI, bot, KITE_CLEAR);
     chasers.erase(std::remove_if(chasers.begin(), chasers.end(), [bot](Unit* chaser)
-                                 { return Crawling(chaser) && bot->GetExactDist2d(chaser) > KITE_CRAWL_REACH; }),
+                                 { return Crawling(chaser) && bot->GetExactDist2d(chaser) > CrawlReach(chaser); }),
                   chasers.end());
     auto const kite = state->kites.find(guid);
     if (chasers.empty() || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->HasAuraType(SPELL_AURA_MOD_ROOT) ||

@@ -150,6 +150,8 @@ void DefineFactionChampions(EncounterBuilder& e)
     // the class nodes spend them closing on a target, the opening run-in too; faction champions speed boost keeps
     // them for a melee champion in contact
     e.Block("faction champions speed boost guard", Role::Any, FactionChampionsLive, 0, {"sprint", "dash"});
+    // the Enh rotation pops it at full health for mana; faction champions personal defensive keeps it for a burst
+    e.Block("faction champions personal reserve", Role::Any, FactionChampionsLive, 0, {"shamanistic rage"});
 
     // heroic champions are immune to taunt, and the generic Death Grip would spend the grip duty's cooldown
     e.Block("faction champions heroic taunt guard", Role::Any, FactionChampionsHeroicLive, Family::Taunt);
