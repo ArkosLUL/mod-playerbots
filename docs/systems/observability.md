@@ -18,7 +18,9 @@ Readers in [tools/botobs/](../../tools/botobs/): `postmortem.py` for one pull, `
 corpus, `bosses/<boss>.py` per encounter. All import the `raidobs/` package, a module per question,
 which imports none of them. Their `--help` lists every view and flag; what it does not say is below.
 A boss reader consumes the probes its encounter publishes rather than re-deriving them: a re-derived
-model rots while its constants still match the source.
+model rots while its constants still match the source. Its test fixtures take each value's shape from
+the helper that writes it: written ahead of the C++ they drift, and a view printing raw values passes
+either way.
 The suite is `python -m unittest discover -s tools/botobs/tests`. There is deliberately no C++ unit
 test target: the core's socket exists (`src/test/CMakeLists.txt` reads `ACORE_MODULE_TEST_SOURCES`,
 which nothing sets), but `BUILD_TESTING=ON` forces gcov flags on the whole build and `unit_tests`
@@ -559,7 +561,9 @@ a shared latch mid-window.
 action that issued it, and one derived from the crowd or the bot's own position moves every tick, so
 latching it emits every tick — `hodir.shuttle` records which branch produced the leg (`tank`, `solo`,
 `crowd`, `none`). Where the value is the news, `DescribeDerived` rounds it to the yard;
-`DescribeAssignment`'s full precision is for stored assignments, which do not drift.
+`DescribeAssignment`'s full precision is for stored assignments, which do not drift. A value naming a
+unit goes through `DescribeAssignment(guid)`, the trace's guid form, so `resolve_guids` can name it;
+`GetCounter()` alone collides across types and names nothing.
 
 **Do not probe what another stream already says.** An action that succeeds is an `OK` in the act stream
 and one that fails a `FAILED` — a note per attempt re-adds what that stream latches. Hodir's tank swap

@@ -117,6 +117,9 @@ key two parts both register when copying; pblint cannot see that collision.
   above it in the same file, so a part keeps its constructor inline on that declaration in its header.
 - Headers collide case-insensitively on Windows and macOS (raid `ToC*.h` vs dungeon `TOC*.h`): name a
   new one so no other header matches ignoring case, or include it by path.
+- An anonymous namespace doesn't shield a type name: a `struct BotState` there makes every use
+  ambiguous against `PlayerbotAI.h`'s `enum BotState` and fails to compile. Prefix per-encounter
+  state types with the stem (`SgBotState`).
 
 ## Trigger semantics
 

@@ -281,8 +281,9 @@ Behaviour: a **priest** casts Fear Ward (6346) on the group main tank, or the ma
 already has it; a **shaman** drops Tremor Totem, gated on it not already being out. Consumers are
 Onyxia from her phase 3 descent on (Bellowing Roar 18431), Auriaya (Terrifying Screech 64386, fixed
 35s cycle so the totem stays up all fight), Yogg-Saron P2/P3 (Malady of the Mind 63830/63881,
-Deafening Roar 64189), and the Blood-Queen (Incite Terror 73070, from 8 s before each air phase walk
-until takeoff).
+Deafening Roar 64189), the Blood-Queen (Incite Terror 73070, from 8 s before each air phase walk
+until takeoff), and Spinestalker (Bellowing Roar 36922, from 8 s before the next roar can come until
+he casts).
 
 **Two defects this design exists to avoid:**
 

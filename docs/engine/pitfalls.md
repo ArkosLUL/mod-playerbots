@@ -928,6 +928,11 @@ id without a row falls back to its implicit target type (`TARGET_UNIT_CONE_ENEMY
 neighbour is hit only within half the width of the target's bearing at any distance: space bearings
 by half-width plus stand error, not full width or radius.
 
+**A cone with SpellVisual 3879 points backwards.** `Spell::SelectImplicitConeTargets` flags it
+`SPELL_ATTR0_CU_CONE_BACK`, so the `spell_cone` or `TARGET_UNIT_CONE_ENEMY_24` angle measures from the
+caster's tail: a negative `spell_cone` angle leaves only that arc in front safe
+([Spinestalker's Tail Sweep](../raids/icecrown-citadel/sindragosa.md#rimefang-and-spinestalker)).
+
 **A cone hits anything inside the caster's boundary at any bearing.** `WorldObjectSpellConeTargetCheck`
 passes a target within `Unit::IsWithinBoundaryRadius` — max(target's boundary radius,
 `MIN_MELEE_REACH` 2.0), centre to centre — before it tests the arc

@@ -287,7 +287,7 @@ Rimefang 37533 (25-man 38220) at (4413.309, 2456.421), Spinestalker 37534 (38219
 | Ability | Script | Guide | Bot |
 |---|---|---|---|
 | Frost Breath 71386 (Rimefang) | 12-15 s, then 20-25 s, 1 s cast; 17-23k Frost and -75% attack speed for 4 s in a 60° front cone | tank him facing away | tank alone in front; a button under 60% |
-| Frost Aura 71387 (Rimefang) | 1200 Frost per 2 s within 100 yd | | none |
+| Frost Aura 71387 (Rimefang) | 1200 Frost per 2 s within 100 yd | | resist hook, frost, while a drake is live |
 | Icy Blast 71376 (Rimefang) | 30-35 s, then 60-70 s: up 25 yd and passive, 4/6/5/7 casts 3 s apart (1.5 s) at a random player's spot: 71377 4.8-6.2k within 7 yd and puddle 38223 for 40 s with 71380/71381, -75% run speed and 5.5-6.5k/7.4-8.6k Frost per 2 s within 7 yd; lands on the top threat | avoid the marked spot and the puddles; don't top threat while he is up | dodge spot and puddles at 9.5 yd; non-tanks braked at 90% while he is up |
 | Bellowing Roar 36922 (Spinestalker) | 20-25 s, then 25-30 s, 2.5 s cast; 4 s fear within 35 yd | Tremor Totem, Fear Ward | anti-fear; ranged and healers 37 yd off him |
 | Cleave 40505 (Spinestalker) | 10-15 s, front | stand at his side | tank alone in front |
@@ -341,7 +341,7 @@ Known gaps: never built and no trace. On a double pull DPS and healers follow Ri
 Spinestalker's tank can be 73 yd from Rimefang's ranged spot. On 10-man his Tail Sweep reaches the
 melee flank: only his front 82° is safe, where his Cleave jumps from the tank. His melee spot is 29.6 yd
 from his ranged spot, at the edge of a ranged shaman's 30 yd Tremor Totem. A puddle on a stand drops it for up to 40 s, with no other spot. Melee have nothing
-to hit while Rimefang flies. No frost resistance hook. Humans hold no duty.
+to hit while Rimefang flies. Humans hold no duty.
 
 `sindragosa.py --drakes`: tank roles, Rimefang's flights, the brake, dodges with Icy Blast 71377/71378
 and puddle 71380/71381 hits, stands, targets, buttons and human calls.
