@@ -180,22 +180,24 @@ Creature* LiveSpear(Player* bot, ObjectGuid const& guid)
     return spear && spear->IsAlive() && spear->GetVehicleBase() ? spear : nullptr;
 }
 
-// Who may pull a spear: no impaled bot (stunned), no tank holding an add, no bot locked to one ability
-// (Bladestorm turns the click's cast into a silent no-op)
+// Who may pull a spear: no impaled bot (stunned), no bot under Arnath's Dominate Mind, no tank holding an
+// add, no bot locked to one ability (Bladestorm turns the click's cast into a silent no-op)
 bool CanPull(Player* bot, Player* member)
 {
     return IsDutyBot(member) && !member->HasAura(SPELL_SS_IMPALING_SPEAR) && !member->GetVehicle() &&
-           !member->HasAuraType(SPELL_AURA_ALLOW_ONLY_ABILITY) &&
+           !member->IsCharmed() && !member->HasAuraType(SPELL_AURA_ALLOW_ONLY_ABILITY) &&
            !(IsTankPlayer(member) && HoldsSomething(bot, member));
 }
 
 void AssignSpears(SsState& st, Player* bot, std::vector<Player*> const& members)
 {
+    // A puller that can no longer pull hands its spear on: the victim loses 10% a second meanwhile
     std::vector<ObjectGuid> lapsed;
     for (auto const& [puller, spear] : st.spear)
     {
         Player* member = ObjectAccessor::GetPlayer(*bot, puller);
-        if (!LiveSpear(bot, spear) || !member || !member->IsAlive() || !IccSameInstance(bot, member))
+        if (!LiveSpear(bot, spear) || !member || !member->IsAlive() || !IccSameInstance(bot, member) ||
+            !CanPull(bot, member))
             lapsed.push_back(puller);
     }
     for (ObjectGuid const& puller : lapsed)
@@ -341,7 +343,8 @@ Player* ElectedThrower(Player* bot, Creature* svalna)
     float bestDistance = 0.0f;
     for (Player* member : MembersOnMap(bot))
     {
-        if (!IsDutyBot(member) || !member->HasItemCount(ITEM_SPEAR, 1) || member->HasAura(SPELL_SS_IMPALING_SPEAR))
+        if (!IsDutyBot(member) || !member->HasItemCount(ITEM_SPEAR, 1) || member->HasAura(SPELL_SS_IMPALING_SPEAR) ||
+            member->IsCharmed())
             continue;
 
         float const distance = member->GetExactDist(svalna);

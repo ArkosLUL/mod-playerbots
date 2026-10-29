@@ -107,7 +107,7 @@ bool IccValithriaDodgeAction::Execute(Event /*event*/)
     if (!FindVdDodgeSpot(botAI, spot))
         return false;
 
-    // Column of Frost hits 11-18k and throws the bot up, Acid Burst 16-18k plus a 20 s DoT: worth any cast
+    // Column of Frost hits 11-20k and throws the bot up, Acid Burst 9-20k plus a 20 s DoT: worth any cast
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED, true);
 }
 

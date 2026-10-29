@@ -393,8 +393,12 @@ void Scan(VdState& st, Creature* valithria, uint32 now)
 
 bool ColumnLive(Column const& column, uint32 now) { return getMSTimeDiff(column.seenMs, now) < COLUMN_LIVE_MS; }
 
+// An unselectable zombie has already burst and only waits out its 2 s despawn
 bool ZombieDying(Creature* zombie)
 {
+    if (zombie->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        return false;
+
     uint32 const acidBurst = sSpellMgr->GetSpellIdForDifficulty(SPELL_ACID_BURST, zombie);
     return zombie->HealthBelowPct(BURST_HEALTH_PCT) || zombie->FindCurrentSpellBySpellId(acidBurst);
 }
@@ -1098,6 +1102,13 @@ bool GetVdKiteLeg(PlayerbotAI* botAI, Position& leg)
     uint32 const now = getMSTime();
     Position const from = bot->GetPosition();
     HazardCircle const chaser(zombie->GetPosition(), KITE_ZOMBIE_CLEAR);
+    // A kiter gets no burst dodge, so its legs keep out of other zombies' Acid Burst. One that starts inside
+    // may still leave it.
+    std::vector<HazardCircle> bursts;
+    for (Creature* other : Resolve(bot, st->zombies))
+        if (other != zombie && ZombieDying(other))
+            bursts.emplace_back(other->GetPosition(), BURST_RADIUS + CLEAR_PAD);
+
     auto const clear = [&](Position const& to)
     {
         if (SegmentCrossesCircle(from, to, chaser) || to.GetExactDist2d(zombie) < 2.0f * KITE_ZOMBIE_CLEAR)
@@ -1105,6 +1116,11 @@ bool GetVdKiteLeg(PlayerbotAI* botAI, Position& leg)
 
         for (auto const& [guid, column] : st->columns)
             if (ColumnLive(column, now) && SegmentCrossesCircle(from, to, {column.pos, COLUMN_RADIUS + CLEAR_PAD}))
+                return false;
+
+        for (HazardCircle const& burst : bursts)
+            if (to.GetExactDist2d(burst.first) < burst.second ||
+                (from.GetExactDist2d(burst.first) >= burst.second && SegmentCrossesCircle(from, to, burst)))
                 return false;
 
         return true;
@@ -1337,8 +1353,7 @@ void TickVdEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // Older builds saved a 25-man half's rti as cross, which keeps a bot off the skull in the icon-led
-    // fights after her
+    // A saved rti of cross keeps a bot off the skull in the icon-led fights after her
     if (vdRtiChecked.For(bot->GetInstanceId()).insert(bot->GetGUID()).second)
     {
         Value<std::string>* rti = botAI->GetAiObjectContext()->GetValue<std::string>("rti");

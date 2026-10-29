@@ -40,10 +40,11 @@ void DefineValithria(EncounterBuilder& e)
     // A zombie swing one-shots all but a tank, so a kiter does nothing but kite and dodge
     e.Exclusive("icc valithria kite hold", Role::Any, &IsVdKiteHeld, 0,
                 {IccValithriaKiteAction::Name, IccValithriaDodgeAction::Name});
-    // Reach toward a far heal target would walk a portal healer off its portal
+    // Reach toward a far heal target would walk a portal healer off its portal. A zombie can chase a healer
+    // holding a claim, so the kite passes too.
     e.OwnMovement("icc valithria portal hold", Role::Heal, &IsVdHoldingPortal, Family::Attack,
-                  {IccValithriaPortalAction::Name, IccValithriaDodgeAction::Name, IccValithriaVoidAction::Name,
-                   IccValithriaHealAction::Name});
+                  {IccValithriaPortalAction::Name, IccValithriaKiteAction::Name, IccValithriaDodgeAction::Name,
+                   IccValithriaVoidAction::Name, IccValithriaHealAction::Name});
     e.Block("icc valithria spell movers", Role::Any, &IsVdMovementOwned,
             Family::Charge | Family::Blink | Family::Disengage);
     // avoid aoe flees 5 yd at most, against the dodges

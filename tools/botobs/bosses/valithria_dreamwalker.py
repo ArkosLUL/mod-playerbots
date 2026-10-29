@@ -77,15 +77,10 @@ def show_banner(trace: Trace) -> None:
     print(f"probes absent from this trace: {', '.join(gone)}" if gone else "all vd.* probes present")
 
 
-def value_counts(trace: Trace, key: str, word_only: bool = False) -> dict[int, collections.Counter]:
-    """Per guid: how many spans each value of `key` started, by its first word when `word_only`."""
-    rows: dict[int, collections.Counter] = {}
-    for guid, spans in holder_spans(trace, key, icc.pull_end(trace)).items():
-        counts: collections.Counter = collections.Counter()
-        for value, _, _ in spans:
-            counts[value.split(" ")[0] if word_only else value] += 1
-        rows[guid] = counts
-    return rows
+def value_counts(trace: Trace, key: str) -> dict[int, collections.Counter]:
+    """Per guid: how many spans each value of `key` started."""
+    return {guid: collections.Counter(value for value, _, _ in spans)
+            for guid, spans in holder_spans(trace, key, icc.pull_end(trace)).items()}
 
 
 def counted(counts: collections.Counter, order: tuple[str, ...] = ()) -> str:

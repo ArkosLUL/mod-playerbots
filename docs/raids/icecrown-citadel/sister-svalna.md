@@ -22,11 +22,13 @@ No ability here has a spelldifficulty row: one id on every difficulty.
 
 - **Live** while Svalna is alive within 100 yd and in combat or a raised captain fights; the
   captains charge before she lands, so this covers the seconds before her state moves.
-- **Spear puller**: per spear, the nearest bot not impaled, in no vehicle, not locked to one ability
-  (Bladestorm makes the click a no-op) and not a tank holding an add; damage dealers rank first, then
-  healers, then free tanks. It drops its cast (the victim loses 10% a second), walks forced to within
-  5 yd and clicks. The claim holds until the spear is gone.
-- **Thrower**: elected among bot holders by distance to her; drops form and cast before using the item.
+- **Spear puller**: per spear, the nearest bot not impaled, charmed (25-man Dominate Mind) or in a
+  vehicle, not locked to one ability (Bladestorm makes the click a no-op) and not a tank holding an
+  add; damage dealers rank first, then healers, then free tanks. It drops its cast (the victim loses
+  10% a second), walks forced to within 5 yd and clicks. The claim lapses once the spear is gone or
+  the puller fails any of these.
+- **Thrower**: elected among uncharmed bot holders by distance to her; drops form and cast before
+  using the item.
 - **Targets**: a player's skull, a tank's own captain, the captains in kill order (a tank skips one
   another tank holds), then her while unshielded.
 

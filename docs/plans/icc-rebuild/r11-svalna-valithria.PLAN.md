@@ -107,14 +107,16 @@ file.
 | No Valithria lust or burst hook: the base gate holds lust off non-boss adds and a victimless friendly boss | `consumables-and-burst.md` | A hook that cannot release |
 | Resist hook fire, frost, nature (Lay Waste, Frostbolt Volley, Acid Burst and Corrosion), for the merge stage to wire | Script schools | None |
 | No opening positions on either: Valithria's archmages and Svalna's landing start the fight | Script | Pre-pull stands |
-| Svalna: the nearest bot DPS, else healer, else a free tank pulls the spear; a holder throws only into Aether Shield, walking to 22 yd | Blog, script (Hurl Spear 25 yd, through immunity) | Everyone runs for it |
+| Svalna: the nearest bot DPS, else healer, else a free tank pulls the spear; a holder throws only into Aether Shield, walking to 18 yd past 24 | Blog, script (Hurl Spear 25 yd, through immunity) | Everyone runs for it |
 | Svalna kill order Arnath, Rupert, Grondel, Brandon (not while Divine Shield), then her when unshielded | Blog: either order; Arnath heals and casts Dominate Mind on 25-man | Svalna first |
 | Svalna gauntlet trash stays on the generic AI | Scope decision; blog | Encounter nodes for the Ymirjar |
 
 ## Carried over
 
 - Merge stage: wire `{&IccValithriaDefinition, nullptr, nullptr, &IccValithriaResistSchools, nullptr}`
-  into `HookRows()`; README updates in the lane report.
+  into `HookRows()`; README updates in the lane report; `src/Bot/PlayerbotAI.cpp`'s `CastSpell` (both
+  overloads) to exempt Dream State 70766 from its `IsFlying()` refusal, as Gravity Lapse is, so heroic
+  dreamers can heal each other.
 - r14: `IcecrownHelpers::vtCloudSync` and `vtPortalClaim` (`ICCScripts.h`) and `IccTryClassCC`
   (`ICCHelpers_Shared`) have no caller left; `encounter.py` still needs its `icc valkyre spear` row,
   which the spear trigger keeps.
@@ -124,7 +126,8 @@ file.
 ## Known gaps
 
 In the boss docs: Svalna's Ymirjar on the generic AI and untraced, 25-man Dominate Mind generic;
-Valithria's lust and Guardian Spirit, the slowed kiter, heroic dreamers healing only while hovering;
-no tank ladder or opening positions on either; humans hold no duty.
+Valithria's lust and Guardian Spirit, the slowed kiter, heroic dreamers never healing (the flight
+cast guard, Carried over), a dreamer at the win left flagged in the air; no tank ladder or opening
+positions on either; humans hold no duty.
 
 ## Blocked
