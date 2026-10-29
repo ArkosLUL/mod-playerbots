@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Read a Sister Svalna pull from a RaidObs trace: Aether Shield, the spears, cheats.
+"""Read a Sister Svalna pull from a RaidObs trace: Aether Shield, the spears, the duties, cheats.
 
     sister_svalna.py <file>            every section
     sister_svalna.py <file> --shield   each Aether Shield and how long it held
     sister_svalna.py <file> --spears   each Impaling Spear victim, and who threw the Infernal Spears
+    sister_svalna.py <file> --duties   spear pullers, throw rules, captain tanks and targets per bot
     sister_svalna.py <file> --cheats   cheat uses in this pull
 
 Svalna has no phase. What the generic views miss here:
@@ -14,10 +15,15 @@ Svalna has no phase. What the generic views miss here:
 - **Impaling Spear 71443 is an aura on the victim** until someone clicks the spear off, which hands
   the clicker an Infernal Spear. Its throw is Hurl Spear 71466, a `cast` from that bot on Svalna, and
   the hit that breaks the shield.
+- **`ss.spear` is the spear each puller was elected for**, `0` once it lapses. `ss.hurl` is a holder's
+  rule: `throw`, `walk` (into 24 yd), `wait` (another holder throws), `hold` (she is unshielded).
+- **`ss.tank` is the raised captain each bot tank holds**, `0` once it lapses. `ss.target` is the
+  resolver's branch: `skull`, `owned`, `captain`, `svalna`, `none`.
 - **Svalna has no cheat site.** Any `cheat` row here is another encounter's code running in her pull.
 """
 from __future__ import annotations
 
+import collections
 import pathlib
 import sys
 
@@ -27,13 +33,16 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from bosses import icecrown_citadel as icc  # noqa: E402
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
-from raidobs.probes import emitted_keys, latch_spans, silent_keys  # noqa: E402
+from raidobs.probes import emitted_keys, holder_spans, latch_spans, resolve_guids, silent_keys  # noqa: E402
 from raidobs.trace import Trace, clock, first_deaths  # noqa: E402
 
 ENCOUNTER = "sister-svalna"
 TITLE = "Sister Svalna"
 IMPALING_SPEAR = 71443
 HURL_SPEAR = 71466
+RELEASED = "0"
+HURLS = ("throw", "walk", "wait", "hold")
+TARGETS = ("skull", "owned", "captain", "svalna", "none")
 
 
 def mine(trace: Trace) -> bool:
@@ -119,6 +128,44 @@ def show_spears(trace: Trace) -> None:
         print(f"    {clock(rec['t']):>9}  {trace.name(rec.get('s')):<14}  on {trace.name(rec.get('tgt'))}")
 
 
+def held(trace: Trace, key: str) -> dict[int, list[tuple[str, int]]]:
+    """Per holder of `key`: each unit it held, by name, or `released`, with when."""
+    return {guid: [(resolve_guids(trace, value) if value != RELEASED else "released", start)
+                   for value, start, _ in spans]
+            for guid, spans in holder_spans(trace, key, icc.pull_end(trace)).items()}
+
+
+def value_counts(trace: Trace, key: str) -> dict[int, collections.Counter]:
+    return {guid: collections.Counter(value for value, _, _ in spans)
+            for guid, spans in holder_spans(trace, key, icc.pull_end(trace)).items()}
+
+
+def counted(counts: collections.Counter, order: tuple[str, ...]) -> str:
+    keys = [key for key in order if counts[key]] + sorted(key for key in counts if key not in order)
+    return ", ".join(f"{key} {counts[key]}" for key in keys) or "-"
+
+
+def show_duties(trace: Trace) -> None:
+    if refuse(trace, "DUTIES"):
+        return
+    for key, title in (("ss.spear", "spear pullers"), ("ss.tank", "captain tanks")):
+        rows = held(trace, key)
+        if not rows:
+            print(f"  {key} never written")
+            continue
+        print(f"  {key}, {title}: each unit held, from when")
+        for guid, spans in sorted(rows.items(), key=lambda item: trace.name(item[0])):
+            print(f"    {trace.name(guid):<14}  " + ", ".join(f"{name} {clock(start)}" for name, start in spans))
+    for key, order in (("ss.hurl", HURLS), ("ss.target", TARGETS)):
+        rows = value_counts(trace, key)
+        if not rows:
+            print(f"  {key} never written")
+            continue
+        print(f"  {key} per bot: spans of each rule")
+        for guid, counts in sorted(rows.items(), key=lambda item: trace.name(item[0])):
+            print(f"    {trace.name(guid):<14}  {counted(counts, order)}")
+
+
 def show_cheats(trace: Trace) -> None:
     if refuse(trace, "CHEATS"):
         return
@@ -135,6 +182,7 @@ def show_cheats(trace: Trace) -> None:
 SECTIONS = (
     ("shield", "each Aether Shield and how long it held", show_shield),
     ("spears", "each Impaling Spear victim and the Hurl Spear casts", show_spears),
+    ("duties", "spear pullers, throw rules, captain tanks and targets per bot", show_duties),
     ("cheats", "cheat uses in this pull", show_cheats),
 )
 

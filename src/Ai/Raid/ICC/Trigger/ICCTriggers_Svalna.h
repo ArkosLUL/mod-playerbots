@@ -7,26 +7,43 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_SVALNA_H
 #define PLAYERBOTS_ICCTRIGGERS_SVALNA_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_Svalna.h"
+#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
 
-class IccValkyreSpearTrigger : public Trigger
+class IccSvalnaSpearTrigger : public Trigger
 {
 public:
     static constexpr char const* Name = "icc valkyre spear";
 
-    IccValkyreSpearTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccSvalnaSpearTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccSisterSvalnaTrigger : public Trigger
+class IccSvalnaHurlTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc sister svalna";
+    static constexpr char const* Name = "icc sister svalna hurl";
 
-    IccSisterSvalnaTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccSvalnaHurlTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
+};
+
+class IccSvalnaTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sister svalna taunt";
+
+    IccSvalnaTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSvalnaTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc sister svalna target";
+
+    IccSvalnaTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetSsTarget) {}
 };
 
 #endif

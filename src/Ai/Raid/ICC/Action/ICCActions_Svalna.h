@@ -7,45 +7,44 @@
 #ifndef PLAYERBOTS_ICCACTIONS_SVALNA_H
 #define PLAYERBOTS_ICCACTIONS_SVALNA_H
 
-#include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
-#include "ICCHelpers_Shared.h"
+#include "ICCActions_RaidWide.h"
 #include "ICCHelpers_Svalna.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include "RaidDirectTargeting.h"
 
-class IccValkyreSpearAction : public AttackAction
+class IccSvalnaSpearAction : public MovementAction
 {
 public:
     static constexpr char const* Name = "icc valkyre spear";
 
-    IccValkyreSpearAction(PlayerbotAI* botAI)
-            : AttackAction(botAI, Name) {}
+    IccSvalnaSpearAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccSisterSvalnaAction : public AttackAction
+class IccSvalnaHurlAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc sister svalna";
+    static constexpr char const* Name = "icc sister svalna hurl";
 
-    IccSisterSvalnaAction(PlayerbotAI* botAI)
-            : AttackAction(botAI, Name) {}
+    IccSvalnaHurlAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
+};
+
+class IccSvalnaTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc sister svalna taunt";
+
+    IccSvalnaTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccSvalnaTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc sister svalna target";
+
+    IccSvalnaTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetSsTarget) {}
 };
 
 #endif

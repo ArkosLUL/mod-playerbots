@@ -7,85 +7,129 @@
 #ifndef PLAYERBOTS_ICCACTIONS_VALITHRIA_H
 #define PLAYERBOTS_ICCACTIONS_VALITHRIA_H
 
-#include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCHelpers_Valithria.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
-#include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include <string>
 
-class IccValithriaGroupAction : public AttackAction
+#include "Action.h"
+#include "ICCActions_RaidWide.h"
+#include "ICCHelpers_Valithria.h"
+#include "MovementActions.h"
+#include "Position.h"
+#include "RaidDirectTargeting.h"
+
+class Creature;
+
+// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
+// re-issued each tick to a bot still walking never lands.
+class IccVdWalkAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc valithria group";
+    IccVdWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
-    IccValithriaGroupAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, Name) {}
-    bool Execute(Event event) override;
-
-    bool Handle25ManGroupLogic();
-    bool HandleMarkingLogic(bool inGroup1, bool inGroup2, bool singleMarkMode);
-    bool Handle10ManGroupLogic();
+protected:
+    // The latched spot while the bot is still walking to it, else nullptr
+    Position const* WalkInFlight();
+    // False without booking anything while a cast pins the bot's feet, unless `interrupt` drops the cast
+    bool WalkTo(Position const& spot, MovementPriority priority, bool interrupt = false);
+    void DropWalk() { walking = false; }
 
 private:
-    bool ApplyCrowdControl(Unit* zombie);
+    bool BookedOnWalkSpot();
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
 };
 
-class IccValithriaZombieKiteAction : public MovementAction
+class IccValithriaDodgeAction : public IccVdWalkAction
 {
 public:
-    static constexpr char const* Name = "icc valithria zombie kite";
+    static constexpr char const* Name = "icc valithria dodge";
 
-    IccValithriaZombieKiteAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name) {}
+    IccValithriaDodgeAction(PlayerbotAI* botAI) : IccVdWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccValithriaPortalAction : public MovementAction
+class IccValithriaKiteAction : public IccVdWalkAction
+{
+public:
+    static constexpr char const* Name = "icc valithria kite";
+
+    IccValithriaKiteAction(PlayerbotAI* botAI) : IccVdWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+// Flies in Dream State on straight splines: the navmesh would pull an airborne point down to the floor.
+class IccValithriaDreamAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "icc valithria dream";
+
+    IccValithriaDreamAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+    bool Execute(Event event) override;
+
+private:
+    bool FlyTo(Position const& dest);
+    bool Land();
+
+    Position flightGoal;
+    bool flying = false;
+};
+
+class IccValithriaPortalAction : public IccVdWalkAction
 {
 public:
     static constexpr char const* Name = "icc valithria portal";
 
-    IccValithriaPortalAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name) {}
+    IccValithriaPortalAction(PlayerbotAI* botAI) : IccVdWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccValithriaHealAction : public AttackAction
+class IccValithriaTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc valithria taunt";
+
+    IccValithriaTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccValithriaSnareAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc valithria snare";
+
+    IccValithriaSnareAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccValithriaVoidAction : public IccVdWalkAction
+{
+public:
+    static constexpr char const* Name = "icc valithria void";
+
+    IccValithriaVoidAction(PlayerbotAI* botAI) : IccVdWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccValithriaTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc valithria target";
+
+    IccValithriaTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetVdTarget) {}
+};
+
+// Heals her by name, the bot's best rank: she is no party member, so no generic heal reaches her
+class IccValithriaHealAction : public MovementAction
 {
 public:
     static constexpr char const* Name = "icc valithria heal";
 
-    IccValithriaHealAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, Name) {}
-    bool Execute(Event event) override;
-};
-
-class IccValithriaDreamCloudAction : public MovementAction
-{
-public:
-    static constexpr char const* Name = "icc valithria dream cloud";
-
-    IccValithriaDreamCloudAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name) {}
+    IccValithriaHealAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
-    std::vector<Creature*> CollectClouds(uint32 entry, Unit* reference);
+    bool CastHeal(Creature* valithria);
 };
 
 #endif
