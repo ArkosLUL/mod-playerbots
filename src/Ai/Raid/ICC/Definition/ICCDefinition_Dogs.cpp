@@ -23,6 +23,8 @@ namespace
 {
 void DefineDogs(EncounterBuilder& e)
 {
+    // Only the zombie guard, a damage dealer, ever asks it: no tank row competes
+    e.Node<IccDogsZombieTauntTrigger, IccDogsZombieTauntAction>(ACTION_RAID + 7);
     e.Node<IccDogsTankDefensiveTrigger, IccDogsCastTankDefensiveAction>(ACTION_RAID + 6);
     e.Node<IccDogsDecimateCoverTrigger, IccDogsCastDecimateCoverAction>(ACTION_RAID + 5);
     e.Node<IccDogsSwapTrigger, IccDogsSwapAction>(ACTION_RAID + 4);

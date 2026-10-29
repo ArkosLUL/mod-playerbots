@@ -30,6 +30,9 @@ constexpr uint32 SPELL_DOGS_PLAGUE_STENCH_TICK = 71160;
 // dog at SWAP_STACKS is taken over by one carrying SWAP_LEAD fewer.
 constexpr uint32 DOGS_SWAP_STACKS = 6;
 constexpr uint32 DOGS_SWAP_LEAD = 4;
+// A tank not holding the dog stops attacking it at CAP of the holder's threat, starts again under RELEASE
+constexpr float DOGS_BRAKE_CAP = 0.9f;
+constexpr float DOGS_BRAKE_RELEASE = 0.8f;
 constexpr float DOGS_TANK_DEFENSIVE_PCT = 40.0f;
 constexpr float DOGS_TANK_LAST_RESORT_PCT = 25.0f;
 // The raid cover after Decimate: two Plague Stench ticks from the moment it landed
@@ -39,15 +42,20 @@ constexpr uint32 DOGS_DECIMATE_HIT_MS = 6000;
 Creature* GetDogsBoss(PlayerbotAI* botAI);
 bool IsDogsLive(PlayerbotAI* botAI);
 
-// A player's skull, else the holder's dog, a free tank's zombie on a non-tank, the dog. A yielding tank gets
-// a zombie or nothing. Notes dogs.target.
+// A player's skull, else the holder's dog, a free tank's or the zombie guard's zombie on a non-tank, the dog.
+// A yielding tank gets a zombie or nothing. Notes dogs.target.
 Unit* GetDogsTarget(PlayerbotAI* botAI);
 
 // This bot is the tank to take the dog: a tank holds it at DOGS_SWAP_STACKS or a non-tank holds it, and this
 // one carries DOGS_SWAP_LEAD fewer, the fewest, its taunt ready. Notes dogs.swap.
 bool IsDogsSwapTaunter(PlayerbotAI* botAI);
-// A tank not holding the dog that still carries Mortal Wound. Notes dogs.yield.
+// A tank not holding the dog that still carries Mortal Wound or sits on the threat brake. Notes dogs.yield.
 bool IsDogsYielding(PlayerbotAI* botAI);
+
+// With fewer than two tanks alive on Precious, one damage-dealing death knight or paladin takes the zombies
+// off the raid: their taunts work in any presence or seal. The zombie hitting a healer within taunt range
+// while its taunt is ready, else nullptr.
+Unit* GetDogsZombieTaunt(PlayerbotAI* botAI);
 
 // The button this tank spends now, 0 for none: the holder through Decimate's cast, any tank under
 // DOGS_TANK_DEFENSIVE_PCT. Physical only.
@@ -58,7 +66,7 @@ bool IsDogsTankDefensiveHeld(PlayerbotAI* botAI);
 bool GetDogsDecimateHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
 RaidCover GetDogsDecimateCover(PlayerbotAI* botAI);
 
-// The pull mark, the calls to a human tank, the reset after the fight
+// The pull mark, the brake, the zombie guard, the calls to a human tank, the reset after the fight
 void TickDogsEncounter(PlayerbotAI* botAI);
 
 #endif

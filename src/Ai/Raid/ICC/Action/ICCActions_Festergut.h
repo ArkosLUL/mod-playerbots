@@ -83,6 +83,16 @@ public:
     bool Execute(Event event) override;
 };
 
+// Divine Shield, cancelled as it lands: the bubble purges Gastric Bloat on apply
+class IccFestergutBloatClearAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc festergut bloat clear";
+
+    IccFestergutBloatClearAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 // Drops the attack on him while the threat brake holds this tank
 class IccFestergutBrakeStopAction : public Action
 {

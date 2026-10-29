@@ -39,7 +39,16 @@ public:
     bool Execute(Event event) override;
 };
 
-// Drops the attack on the dog while this tank still carries Mortal Wound and the other holds it
+class IccDogsZombieTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc dogs zombie taunt";
+
+    IccDogsZombieTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+// Drops the attack on the dog while this tank still carries Mortal Wound or sits on the threat brake
 class IccDogsYieldAction : public Action
 {
 public:

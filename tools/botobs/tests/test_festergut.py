@@ -3,9 +3,10 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic 25H pull pins the stands, two spore windows (a spare carrier sent close, a goo flip of the
-ranged stack), the goo dodges and a leg flip, the picks, a swap election with its taunt, the brake, the
-tank windows with a Pungent Blight cover, and the cheat filter; the shared v14 fixture shows every
-section reads empty on a trace that is not Festergut rather than raising.
+ranged stack, a shift of each group), the goo dodges and a leg flip, the picks, a swap election with its
+taunt, a paladin's bubble at 9, the brake, a drag, the tank windows with a Pungent Blight cover, and the
+cheat filter; the shared v14 fixture shows every section reads empty on a trace that is not Festergut
+rather than raising.
 """
 from __future__ import annotations
 
@@ -52,11 +53,12 @@ def cast(when: int, source: int, spell: int) -> dict:
     return {"t": when, "e": "cast", "s": source, "d": source, "sp": spell}
 
 
-def pull(boss: str = "festergut", diff: int = 3) -> list[dict]:
+def pull(boss: str = "festergut", diff: int = 3, tank_class: int = 1) -> list[dict]:
     return [
         {"e": "hdr", "v": 14, "ts": 1789800000000, "map": 631, "inst": 5, "diff": diff, "boss": boss,
          "bin": 1789799000000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 2, "iccbuffs": 0},
-         "roster": [{"g": guid, "n": name, "r": role, "c": "warrior", "h": 0} for guid, name, role in ROSTER]},
+         "roster": [{"g": guid, "n": name, "r": role, "c": tank_class if role == "tank" else 1, "h": 0}
+                    for guid, name, role in ROSTER]},
         {"t": 0, "e": "pull", "boss": boss, "src": "engage"},
         {"t": 1, "e": "unit", "g": FESTERGUT, "en": fg.NPC_FESTERGUT, "n": "Festergut", "lvl": 83, "b": 1},
         {"t": 1, "e": "spell", "sp": 871, "n": "Shield Wall"},
@@ -72,6 +74,10 @@ def pull(boss: str = "festergut", diff: int = 3) -> list[dict]:
         note(150, ARCANE, "fg.phase", "normal"),
         note(100, MEND, fg.SPORESPOT, 1),
         note(100, MEND, fg.LEG, 1),
+        note(100, MEND, fg.CLOSESHIFT, 0), note(100, MEND, fg.FARSHIFT, 0), note(100, MEND, fg.DRAG, 0),
+        # He settles off his spot after the pull and Bulwark walks him back
+        note(5000, MEND, fg.DRAG, 1), note(5000, BULWARK, fg.STAND, "drag"),
+        note(8000, MEND, fg.DRAG, 0), note(8000, BULWARK, fg.STAND, "tank"),
         # Both spores land on the far side: Arcane is sent close; goo flips the ranged stack to spot 2
         aura(19900, ARCANE, fg.SPELL_GAS_SPORE),
         aura(19900, MEND, fg.SPELL_GAS_SPORE),
@@ -82,6 +88,9 @@ def pull(boss: str = "festergut", diff: int = 3) -> list[dict]:
         note(20100, ARCANE, fg.STAND, "close"), note(20100, SHIV, fg.STAND, "close"),
         note(20100, MEND, fg.STAND, "far"), note(20100, AEGIS, fg.STAND, "close"),
         note(25000, MEND, fg.SPORESPOT, 2),
+        # Goo on the close stack moves it, too far for the holder
+        note(26000, MEND, fg.CLOSESHIFT, 2),
+        note(32000, MEND, fg.CLOSESHIFT, 0),
         note(32000, ARCANE, "fg.phase", "normal"),
         note(32000, ARCANE, fg.CARRIER, 0), note(32000, MEND, fg.CARRIER, 0),
         note(32050, ARCANE, fg.STAND, "slot"), note(32050, SHIV, fg.STAND, "leg"),
@@ -89,6 +98,8 @@ def pull(boss: str = "festergut", diff: int = 3) -> list[dict]:
         aura(59950, SHIV, fg.SPELL_GAS_SPORE),
         note(60000, ARCANE, "fg.phase", "spore"),
         note(60050, SHIV, fg.CARRIER, 1),
+        note(61000, MEND, fg.FARSHIFT, 1),
+        note(72000, MEND, fg.FARSHIFT, 0),
         note(72000, ARCANE, "fg.phase", "normal"),
         # Goo: Arcane dodges three times, twice the same way, Shiv once onto the other leg, Mend never
         {"t": 24000, "e": "haz", "sp": 72296, "shape": "circle", "x": 0.0, "y": 0.0, "z": 0.0, "ttl": 8000,
@@ -109,6 +120,11 @@ def pull(boss: str = "festergut", diff: int = 3) -> list[dict]:
         {"t": 29600, "e": "act", "g": AEGIS, "a": fg.SWAP_ACTION, "rel": 67.0, "vd": "OK"},
         note(29900, AEGIS, fg.SWAP, 0),
         note(31000, BULWARK, fg.BRAKE, 1), note(51000, BULWARK, fg.BRAKE, 0),
+        # Bulwark at 9 again with nobody to take him: the bubble
+        aura(84000, BULWARK, 72552, 9),
+        note(84500, BULWARK, fg.BLOATCLEAR, 1),
+        cast(84600, BULWARK, fg.DIVINE_SHIELD),
+        note(84700, BULWARK, fg.BLOATCLEAR, 0),
         # Tank windows: Inhaled Blight on Aegis, Shield Wall in it; Pungent Blight with a cover
         note(35000, AEGIS, fg.DEFENSIVE, "Shield Wall"),
         cast(35100, AEGIS, 871),
@@ -158,6 +174,7 @@ class Spores(unittest.TestCase):
             (60000, 72000, [(SHIV, "close")], ["2"]),
         ])
         self.assertEqual(rows[0]["stood"], {"close": 3, "far": 1})
+        self.assertEqual([row["shifts"] for row in rows], [["close (fixed out)"], ["far"]])
 
     def test_section(self):
         self.assertEqual(printed(fg.show_spores, load(pull())), (
@@ -165,8 +182,8 @@ class Spores(unittest.TestCase):
             "  2 window(s); carriers gained Gas Spore from 1 s before the window opened\n"
             "\n"
             "         from       held  far    close   far  carriers\n"
-            "     0:20.000   0:12.000  1->2       3     1  Arcane (close), Mend (far)\n"
-            "     1:00.000   0:12.000  2          0     0  Shiv (close)\n"))
+            "     0:20.000   0:12.000  1->2       3     1  Arcane (close), Mend (far); shifted close (fixed out)\n"
+            "     1:00.000   0:12.000  2          0     0  Shiv (close); shifted far\n"))
 
 
 class Goo(unittest.TestCase):
@@ -203,6 +220,14 @@ class Tanks(unittest.TestCase):
         self.assertIn("  Bulwark braked 1 time(s), 0:20.000 in all\n", out)
         self.assertIn("  Gastric Bloat peak: Bulwark 9, Aegis 4\n", out)
 
+    def test_bubble_and_drag(self):
+        trace = load(pull())
+        self.assertEqual(fg.bloat_clears(trace), [(84500, BULWARK, 84600)])
+        self.assertEqual(fg.drag_spans(trace), [(5000, 8000)])
+        out = printed(fg.show_tanks, trace)
+        self.assertIn("  1:24.500  Bulwark at 9 with nobody to take him, bubbled 0.1 s after\n", out)
+        self.assertIn("  dragged back to his spot 1 time(s), 0:03.000 in all\n", out)
+
 
 class Defensives(unittest.TestCase):
     def test_window_cast_call_and_cover(self):
@@ -238,6 +263,12 @@ class Banner(unittest.TestCase):
     def test_normal_mode_does_not_miss_the_heroic_probe(self):
         records = [rec for rec in pull(diff=1) if rec.get("k") != fg.GOO]
         self.assertNotIn("fg.goo", printed(fg.show_banner, load(records)))
+
+    def test_the_bubble_probe_is_missed_only_with_a_paladin_tank(self):
+        records = [rec for rec in pull(tank_class=fg.CLASS_PALADIN) if rec.get("k") != fg.BLOATCLEAR]
+        self.assertIn("fg.bloatclear", printed(fg.show_banner, load(records)))
+        records = [rec for rec in pull() if rec.get("k") != fg.BLOATCLEAR]
+        self.assertNotIn("fg.bloatclear", printed(fg.show_banner, load(records)))
 
     def test_another_icc_boss_is_refused(self):
         self.assertIn("  not a Festergut pull, every section below reads empty",

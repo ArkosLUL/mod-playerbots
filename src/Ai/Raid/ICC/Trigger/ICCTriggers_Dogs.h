@@ -38,6 +38,15 @@ public:
     bool IsActive() override;
 };
 
+class IccDogsZombieTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc dogs zombie taunt";
+
+    IccDogsZombieTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccDogsYieldTrigger : public Trigger
 {
 public:

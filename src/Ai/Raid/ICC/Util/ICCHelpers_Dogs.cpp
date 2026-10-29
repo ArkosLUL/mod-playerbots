@@ -36,8 +36,11 @@
 namespace
 {
 constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
+constexpr uint32 GUARD_REFRESH_MS = 1000;
 constexpr float TAUNT_RANGE = 30.0f;
 constexpr float ZOMBIE_RANGE = 30.0f;
+// Below two tanks nobody is free to take the zombies
+constexpr size_t GUARD_BELOW_TANKS = 2;
 
 struct TargetMemo
 {
@@ -50,6 +53,11 @@ struct DogsState
 {
     uint32 humanCallMs = 0;
     bool humanCallRan = false;
+    uint32 guardMs = 0;
+    bool guardRan = false;
+    RaidObs::ObsGuidSet brake{"dogs.brake"};
+    // At most one member
+    RaidObs::ObsGuidSet guard{"dogs.guard"};
     std::unordered_map<ObjectGuid, TargetMemo> targets;
 };
 
@@ -143,9 +151,73 @@ bool TauntUsable(Player* member)
            info->CheckShapeshift(member->GetShapeshiftForm()) == SPELL_CAST_OK;
 }
 
-bool Yields(Player* bot, Creature* dog)
+bool Yields(DogsState const* state, Player* bot, Creature* dog)
 {
-    return IsDutyBot(bot) && IsTankPlayer(bot) && dog->GetVictim() != bot && bot->HasAura(SPELL_DOGS_MORTAL_WOUND);
+    return IsDutyBot(bot) && IsTankPlayer(bot) && dog->GetVictim() != bot &&
+           (bot->HasAura(SPELL_DOGS_MORTAL_WOUND) || (state && state->brake.count(bot->GetGUID())));
+}
+
+bool IsGuard(DogsState const* state, Player* bot) { return state && state->guard.count(bot->GetGUID()); }
+
+// A tank not holding the dog past DOGS_BRAKE_CAP of the holder's threat, until it falls under
+// DOGS_BRAKE_RELEASE. Read from the threat list: the "threat" value is a uint8 percentage and wraps past 255%.
+void UpdateBrake(DogsState& state, Player* bot, Creature* dog)
+{
+    bool hold = false;
+    Unit* holder = dog->GetVictim();
+    if (bot->IsAlive() && IsDutyBot(bot) && IsTankPlayer(bot) && holder && holder != bot)
+    {
+        float const top = dog->GetThreatMgr().GetThreat(holder);
+        float const own = dog->GetThreatMgr().GetThreat(bot);
+        float const share = state.brake.count(bot->GetGUID()) ? DOGS_BRAKE_RELEASE : DOGS_BRAKE_CAP;
+        hold = top > 0.0f && own > 0.0f && own >= share * top;
+    }
+
+    if (hold)
+        state.brake.insert(bot->GetGUID());
+    else
+        state.brake.erase(bot->GetGUID());
+}
+
+// Plate and a taunt that needs no stance or form: a death knight first, then a paladin
+bool GuardClass(Player* member)
+{
+    return member->getClass() == CLASS_DEATH_KNIGHT || member->getClass() == CLASS_PALADIN;
+}
+
+void UpdateGuard(DogsState& state, Player* bot, Creature* dog, uint32 now)
+{
+    if (state.guardRan && getMSTimeDiff(state.guardMs, now) < GUARD_REFRESH_MS)
+        return;
+
+    state.guardRan = true;
+    state.guardMs = now;
+
+    std::vector<Player*> const members = MembersOnMap(bot);
+    auto const tanks = static_cast<size_t>(std::count_if(members.begin(), members.end(), &IsTankPlayer));
+    auto const rank = [](Player* player)
+    { return std::make_pair(player->getClass() != CLASS_DEATH_KNIGHT, player->GetGUID()); };
+    Player* pick = nullptr;
+    if (dog->GetEntry() == NPC_PRECIOUS && tanks < GUARD_BELOW_TANKS)
+    {
+        for (Player* member : members)
+        {
+            if (!IsDutyBot(member) || IsTankPlayer(member) || PlayerbotAI::IsHeal(member) || !GuardClass(member))
+                continue;
+
+            if (!pick || rank(member) < rank(pick))
+                pick = member;
+        }
+    }
+
+    std::vector<ObjectGuid> stale;
+    for (ObjectGuid const& guid : state.guard)
+        if (!pick || guid != pick->GetGUID())
+            stale.push_back(guid);
+    for (ObjectGuid const& guid : stale)
+        state.guard.erase(guid);
+    if (pick)
+        state.guard.insert(pick->GetGUID());
 }
 
 // The tank to take the dog now. A taunt aura on it means one just landed and its victim catches up next
@@ -207,7 +279,7 @@ Unit* LooseZombie(Player* bot)
     return pick;
 }
 
-Unit* ResolveTarget(PlayerbotAI* botAI, Creature* dog)
+Unit* ResolveTarget(PlayerbotAI* botAI, DogsState const& state, Creature* dog)
 {
     Player* bot = botAI->GetBot();
     bool const tank = IsTankPlayer(bot);
@@ -220,10 +292,10 @@ Unit* ResolveTarget(PlayerbotAI* botAI, Creature* dog)
         return dog;
     }
 
-    bool const yielding = tank && Yields(bot, dog);
+    bool const yielding = tank && Yields(&state, bot, dog);
     char const* why = "skull";
     Unit* pick = GetRaidHumanSkull(botAI, yielding ? &IsZombie : &IsDogsUnit);
-    if (!pick && tank)
+    if (!pick && (tank || IsGuard(&state, bot)))
     {
         why = "zombie";
         pick = LooseZombie(bot);
@@ -320,10 +392,39 @@ Unit* GetDogsTarget(PlayerbotAI* botAI)
     {
         memo.set = true;
         memo.ms = now;
-        memo.pick = ResolveTarget(botAI, dog);
+        memo.pick = ResolveTarget(botAI, *state, dog);
     }
 
     return memo.pick;
+}
+
+Unit* GetDogsZombieTaunt(PlayerbotAI* botAI)
+{
+    Creature* dog = GetDogsBoss(botAI);
+    Player* bot = botAI->GetBot();
+    DogsState* state = dog && bot->GetInstanceId() ? dogsStates.Find(bot->GetInstanceId()) : nullptr;
+    if (!state || !IsGuard(state, bot) || !TauntUsable(bot))
+        return nullptr;
+
+    // Everyone sits at 15% after each Decimate, and a healer under a zombie loses the raid's heals
+    Unit* pick = nullptr;
+    float pickDistance = 0.0f;
+    for (Creature* zombie : IccGetCreaturesByEntries(bot, {NPC_DOGS_PLAGUED_ZOMBIE}, TAUNT_RANGE))
+    {
+        Unit* victim = zombie->IsInCombat() ? zombie->GetVictim() : nullptr;
+        Player* player = victim ? victim->ToPlayer() : nullptr;
+        if (!player || !PlayerbotAI::IsHeal(player) || zombie->HasAuraType(SPELL_AURA_MOD_TAUNT))
+            continue;
+
+        float const distance = bot->GetExactDist2d(zombie);
+        if (!pick || distance < pickDistance || (distance == pickDistance && zombie->GetGUID() < pick->GetGUID()))
+        {
+            pick = zombie;
+            pickDistance = distance;
+        }
+    }
+
+    return pick;
 }
 
 bool IsDogsSwapTaunter(PlayerbotAI* botAI)
@@ -345,7 +446,8 @@ bool IsDogsYielding(PlayerbotAI* botAI)
     if (!dog || !IsDutyBot(bot) || !IsTankPlayer(bot))
         return false;
 
-    bool const yielding = Yields(bot, dog);
+    DogsState const* state = bot->GetInstanceId() ? dogsStates.Find(bot->GetInstanceId()) : nullptr;
+    bool const yielding = Yields(state, bot, dog);
     Note(bot, "dogs.yield", yielding ? "1" : "0");
     return yielding;
 }
@@ -436,6 +538,11 @@ void TickDogsEncounter(PlayerbotAI* botAI)
     IccMarkPull(bot, dog, "stinky-and-precious");
 
     DogsState& state = dogsStates.For(bot->GetInstanceId());
-    if (bot->IsAlive())
-        CallHumanTank(state, bot, dog, getMSTime());
+    UpdateBrake(state, bot, dog);
+    if (!bot->IsAlive())
+        return;
+
+    uint32 const now = getMSTime();
+    UpdateGuard(state, bot, dog, now);
+    CallHumanTank(state, bot, dog, now);
 }

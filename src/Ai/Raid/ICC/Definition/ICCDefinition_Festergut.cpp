@@ -25,6 +25,8 @@ namespace
 void DefineFestergut(EncounterBuilder& e)
 {
     e.Node<IccFestergutGooTrigger, IccFestergutDodgeGooAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
+    // The 10th Gastric Bloat kills the holder and everyone within 10 yd
+    e.Node<IccFestergutBloatClearTrigger, IccFestergutBloatClearAction>(ACTION_RAID + 11);
     e.Node<IccFestergutPungentDefensiveTrigger, IccFestergutCastPungentDefensiveAction>(ACTION_RAID + 10);
     e.Node<IccFestergutPungentCoverTrigger, IccFestergutCastPungentCoverAction>(ACTION_RAID + 9);
     e.Node<IccFestergutTankDefensiveTrigger, IccFestergutCastTankDefensiveAction>(ACTION_RAID + 8);

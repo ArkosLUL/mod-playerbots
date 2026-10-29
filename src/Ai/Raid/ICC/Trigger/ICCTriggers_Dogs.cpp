@@ -16,6 +16,8 @@ bool IccDogsDecimateCoverTrigger::IsActive() { return GetDogsDecimateCover(botAI
 
 bool IccDogsSwapTrigger::IsActive() { return IsDogsSwapTaunter(botAI); }
 
+bool IccDogsZombieTauntTrigger::IsActive() { return GetDogsZombieTaunt(botAI) != nullptr; }
+
 bool IccDogsYieldTrigger::IsActive()
 {
     Creature* dog = GetDogsBoss(botAI);

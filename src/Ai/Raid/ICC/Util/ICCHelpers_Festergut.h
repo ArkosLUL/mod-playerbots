@@ -28,11 +28,16 @@ constexpr uint32 SPELL_FG_GASTRIC_BLOAT = 72219;
 constexpr uint32 SPELL_FG_INHALED_BLIGHT = 69166;
 constexpr uint32 SPELL_FG_PUNGENT_BLIGHT = 69195;
 constexpr uint32 SPELL_FG_INOCULATED = 69291;
+// Its all-school immunity purges Gastric Bloat, which lacks SPELL_ATTR0_NO_IMMUNITIES, as it lands
+constexpr uint32 SPELL_FG_DIVINE_SHIELD = 642;
 
-// His spawn. Every stand below is navprobe-clean (--nav 0x09): the floor is flat at 360.385 out to 45 yd
-// round it, every stand sees him and both tank spots from a 3x3 grid at 1 yd, and the walks between
-// them are straight normal paths. All inside his boss boundary (x 4205-4325, y 3082-3195).
+// His spawn. Every stand below is navprobe-clean (--nav 0x09): the floor is flat at 360.385 out to 44 yd
+// round it (rings at 2-44 yd, 72 headings) and sees his spawn out to 42 yd, every stand sees him and both
+// tank spots from a 3x3 grid at 1 yd, and the walks between them are straight normal paths. All inside
+// his boss boundary (x 4205-4325, y 3082-3195).
 inline Position const ICC_FG_BOSS_SPOT(4267.92f, 3137.26f, 360.385f);
+// Spots derived at run time (the drag, a shifted spore stack) stay inside this, flat and in his sight
+constexpr float FG_FLOOR_RADIUS = 40.0f;
 // 6.5 yd from his spot at 40 degrees either side of west, inside his 10.83 yd melee range (reach 8 +
 // 1.5 + 4/3), so he turns to the holder without moving. 8.4 yd apart: goo on the free tank misses the
 // holder.
@@ -86,8 +91,17 @@ constexpr float FG_SPORE_BURST = 8.0f;
 constexpr float FG_SPORE_RING = 2.5f;
 static_assert(FG_SPORE_RING + 2 * FG_STAND_PARK < FG_SPORE_BURST, "the ring sits inside the burst");
 
-// Legs hold while he stands this close to his spot: 7 + 3.5 stays inside his melee range
+// Goo fouling a spore stack sends the whole group onto one spot clear of it, kept within SHIFT_REACH of
+// the player who can't walk (the holder, or a player it rings round) so the burst still takes him
+constexpr float FG_SHIFT_REACH = FG_SPORE_BURST - FG_STAND_PARK - 0.5f;
+
+// Legs hold while he stands this close to his spot: 7 + 3.5 stays inside his melee range. Past it a bot
+// holder drags him back: he follows a tank only once it is more than 10.83 yd off, so the holder stands
+// DRAG_DISTANCE past his spot on the far side from him until he is back within BOSS_SETTLED.
 constexpr float FG_BOSS_DRIFT = 3.5f;
+constexpr float FG_BOSS_SETTLED = 2.5f;
+constexpr float FG_DRAG_DISTANCE = 9.0f;
+static_assert(FG_BOSS_SETTLED < FG_BOSS_DRIFT, "the drag has to stop short of where it starts");
 
 // Malleable Goo (72297 row 2197) hits 5 yd round where its target stood when Putricide threw it. A bot
 // inside RUN dodges, to a spot CLEARANCE out. The farthest stand is 97 yd from his balcony point and the
@@ -101,6 +115,9 @@ constexpr uint32 FG_GOO_HAZARD_MS = 8500;
 // again before its partner reaches 9. The taunter carries at most TAUNTER_MAX.
 constexpr uint32 FG_SWAP_STACKS = 9;
 constexpr uint32 FG_TAUNTER_MAX_STACKS = FG_SWAP_STACKS - 2;
+// With no bot to take him, a paladin holder bubbles the stacks off, waiting this long after the 9th while
+// another tank lives
+constexpr uint32 FG_BLOAT_CLEAR_GRACE_MS = 6000;
 
 // A tank not holding him stops attacking at CAP of the holder's threat, starts again under RELEASE
 constexpr float FG_BRAKE_CAP = 0.9f;
@@ -131,6 +148,9 @@ Unit* GetFgTarget(PlayerbotAI* botAI);
 bool IsFgSwapTaunter(PlayerbotAI* botAI);
 // A tank not holding him past the threat brake
 bool IsFgBraked(PlayerbotAI* botAI);
+// This bot paladin holds him at FG_SWAP_STACKS with nobody to take him, Divine Shield ready. Notes
+// fg.bloatclear.
+bool IsFgBloatClear(PlayerbotAI* botAI);
 
 // The button this tank spends now, 0 for none. Physical only.
 uint32 GetFgTankDefensive(PlayerbotAI* botAI, char const* noteKind);
@@ -155,8 +175,8 @@ bool IsFgHoldingStand(PlayerbotAI* botAI);
 // The held stand wants a walk, and its spot is clear of goo
 bool GetFgStandWalk(PlayerbotAI* botAI, Position& spot);
 
-// fg.phase, the roster, the spore deal, the leg and far anchor flips, the brake, the stand latch, the
-// Inhaled Blight cycle, the calls to a human tank, the reset after a wipe
+// fg.phase, the roster, the spore deal, the leg and far anchor flips, the stack shifts, the drag, the
+// brake, the stand latch, the Inhaled Blight cycle, the calls to a human tank, the reset after a wipe
 void TickFgEncounter(PlayerbotAI* botAI);
 
 // Every school his raid damage comes in: Gaseous Blight, Blighted Spores and Pungent Blight

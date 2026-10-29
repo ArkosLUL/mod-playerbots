@@ -3,9 +3,9 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic Stinky pull, filed under the contract slug and under the creature as older traces were,
-pins the tank runs, a swap election with its taunt and the yield after it, the picks, a Decimate with
-its tank button and cover, and the cheat filter; the shared v14 fixture shows every section reads empty
-off ICC.
+pins the tank runs, a swap election with its taunt, the yield after it and a brake, the picks and a
+zombie guard, a Decimate with its tank button and cover, and the cheat filter; the shared v14 fixture
+shows every section reads empty off ICC.
 """
 from __future__ import annotations
 
@@ -29,8 +29,9 @@ STINKY = (1 << 32) | 900
 BULWARK = 7501  # tank
 AEGIS = 7502    # tank
 MEND = 7503     # healer
+RIME = 7504     # melee death knight, the zombie guard
 
-ROSTER = ((BULWARK, "Bulwark", "tank"), (AEGIS, "Aegis", "tank"), (MEND, "Mend", "heal"))
+ROSTER = ((BULWARK, "Bulwark", "tank"), (AEGIS, "Aegis", "tank"), (MEND, "Mend", "heal"), (RIME, "Rime", "melee"))
 
 
 def snap(when: int, target: int) -> dict:
@@ -59,6 +60,10 @@ def pull(boss: str = "stinky-and-precious") -> list[dict]:
         {"t": 19600, "e": "act", "g": AEGIS, "a": dogs.SWAP_ACTION, "rel": 64.0, "vd": "OK"},
         note(19900, AEGIS, dogs.SWAP, 0),
         note(20000, BULWARK, dogs.YIELD, 1), note(34000, BULWARK, dogs.YIELD, 0),
+        note(36000, BULWARK, dogs.BRAKE, 1), note(38000, BULWARK, dogs.BRAKE, 0),
+        note(26000, RIME, dogs.GUARD, 1),
+        {"t": 27000, "e": "act", "g": RIME, "a": dogs.ZOMBIE_TAUNT_ACTION, "rel": 67.0, "vd": "OK"},
+        note(40000, RIME, dogs.GUARD, 0),
         note(200, BULWARK, dogs.TARGET, "dog"), note(200, AEGIS, dogs.TARGET, "dog"),
         note(20000, BULWARK, dogs.TARGET, "none"), note(34000, BULWARK, dogs.TARGET, "dog"),
         {"t": 25000, "e": "cast", "s": STINKY, "d": AEGIS, "sp": dogs.SPELL_DECIMATE},
@@ -106,10 +111,12 @@ class Swaps(unittest.TestCase):
         trace = load(pull())
         self.assertEqual(dogs.elections(trace), [(19500, AEGIS, 19600)])
         self.assertEqual(dogs.yields(trace), [(20000, 34000, BULWARK)])
+        self.assertEqual(dogs.brakes(trace), {BULWARK: (1, 2000)})
         self.assertEqual(printed(dogs.show_swaps, trace), (
             "SWAPS\n"
             "  0:19.500  Aegis elected, taunted 0.1 s after\n"
-            "  0:20.000  Bulwark yielded 0:14.000\n"))
+            "  0:20.000  Bulwark yielded 0:14.000\n"
+            "  Bulwark braked 1 time(s), 0:02.000 in all\n"))
 
 
 class Targets(unittest.TestCase):
@@ -117,6 +124,12 @@ class Targets(unittest.TestCase):
         rows = dogs.target_time(load(pull()))
         self.assertEqual(rows["none"], (1, 14000))
         self.assertEqual(rows["dog"][0], 2)
+
+    def test_zombie_guard_and_its_taunts(self):
+        trace = load(pull())
+        self.assertEqual(dogs.guards(trace), [(26000, 40000, RIME, 1)])
+        self.assertIn("  zombie guard Rime from 0:26.000 for 0:14.000, 1 zombie taunt(s)\n",
+                      printed(dogs.show_targets, trace))
 
 
 class Defensives(unittest.TestCase):
