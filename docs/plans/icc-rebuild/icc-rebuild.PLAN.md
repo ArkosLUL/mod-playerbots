@@ -33,6 +33,14 @@ The merge stage alone edits this table.
 | 3e | r11-svalna-valithria | merged; review fixed 1 bug, 6 minor, 1 cleanup (its second bug, dreamers unable to cast in flight, fixed in the seam) | `59eaf33c6`, seam `9cfff45d9` | Svalna: nearest bot pulls each spear, thrown only into Aether Shield, captains to bot tanks, kill order Arnath, Rupert, Grondel, Brandon, then her; Ymirjar gauntlet generic; Valithria: Warcraft Tavern add tiers, melee never on zombies; 1/2 raid healers, the rest on portals; dream flight refreshes, then gathers on the lowest-guid bot or follows a human; descent 3.5 s early, then a real fall; 25 yd ring kite, one ranged snare per zombie; tanks own abominations; heroic portal cap 25 stacks; no lust hook, resist fire, frost and nature; teleports and floor snaps replaced | rebuild needed, no CMake re-run; no 631 trace; no `-Werror` pass; Ymirjar gauntlet and 25-man Dominate Mind generic; no lust or Guardian Spirit on her; Frostbolt-slowed kiter; a dreamer at the win stays flagged in the air; Beacon, Sacred Shield and Earth Shield stay on the tank; humans hold no duty; r14: unused `vtCloudSync`/`vtPortalClaim`, `IccTryClassCC`, helpers duplicated across Svalna and Valithria (`HURL_RANGE`, `IsTankPlayer`, `IsDutyBot`, `MembersOnMap`, `SlotCreature`) |
 | 3f | r12-sindragosa | merged; review fixed 4 bugs, 2 minor (1 bug, 3 minor recorded) | `e7b8b6330`, seam `5a77ced9f` | air tombs held at 20%, broken early only on Asphyxiation and never while a bot hides behind one from a live bomb; holder her victim, else last holder, else main tank; last-phase swap at 12/16 s by a free tank at Buffet ≤ 1, which hides from 1 stack; newest last-phase tomb kept as Buffet cover; air beacon rows 13 yd apart; brake 90%/80% on non-holders but healers; drakes Rimefang first, free tanks braked all fight, Spinestalker's melee on his flank; gauntlet kill order Sorceress, Webweaver, Champion, Warrior, Broodlings, one elected rescue taunt, generic taunts free; drakes resist frost (merge-stage hook row) | rebuild and CMake re-run (5 new .cpp); no 631 trace; no `-Werror` pass; one bot tank: no last-phase swap; 25H unchained spots inside each other's Backlash (needs a new navprobed layout); 10-man tombs keep 22.6k over the floor; splash dodge checks only its destination; ice block collision unchecked offline; 10-man Tail Sweep reaches the melee flank; drakes double pull splits the raid; no gauntlet Frost Nova, Ice Tomb or Web answer; humans hold no duty; r14: unused `IccInstanceState` sg* members and `ICCData.h` Sindragosa ids, check `SPELL_MAGIC_BARRIER`, hoist one walk base and the helpers shared with Svalna and Valithria |
 | 3g | r13-lich-king | merged; review fixed 2 bugs, 2 minor, 2 cleanups (2 minor recorded, 1 decision; Defile circle fixed in the seam) | `1d79488bf`, seam `92aff1e1c` | two `OwnMovement` rules (Attack only under `LichKing` walks, Attack + Reach under `LichKingLate`); walks straight lines (`exact_waypoint`) at the floor Z; winter ranged picks and spheres within 30 yd; passive ≤40% after phase three reads `frostmourne`; plague walk beats the late stack walk; evaded intro resets state; trap walk-out 10.5 yd, stands 11 yd off; `lk.valkyrstun` once per carrying Val'kyr; `lk.floorsnap` kept behind the raid cheat (gameobject floors) | rebuild and CMake re-run (3 new .cpp); no 631 trace; no `-Werror` pass; neither floor navprobed or sight-checked; 25N/10H/25H ranged winter cluster too far from spheres and spirit spots (refine from `--winters`); one bot tank: no add tank or Soul Reaper swap; heroic Harvest Souls has no DBC end; melee reach near traps unchecked; Cleanse strips the plague; humans hold no duty; r14: unused `IccInstanceState` LK members (check `ICC_BUCKET_MARKERS`, `IccRtiNameForBucket`, `IccEnsureIconOn`), hoist one walk base |
+| 3cd-gaps | g6-festergut | pending | | | |
+| 3cd-gaps | g7-rotface | pending | | | |
+| 3cd-gaps | g8-putricide | pending | | | |
+| 3cd-gaps | g9-blood-prince-council | pending | | | |
+| 3efg-gaps | g10-blood-queen | pending | | | |
+| 3efg-gaps | g11-svalna-valithria | pending | | | |
+| 3efg-gaps | g12-sindragosa | pending | | | |
+| 3efg-gaps | g13-lich-king | pending | | | |
 | 5 | r14-closeout | pending | | | |
 
 States: `pending`, `merged`, `blocked` (branch and worktree kept, reason in the lane brief),
@@ -271,7 +279,9 @@ the reason it can't close offline:
 
 - a gap only a live pull settles stays, naming the trace key or reader flag that settles it;
 - what the Humans decision rules out stays;
-- no 631 trace, never built, no `-Werror` pass: those wait for the user's build and pulls.
+- no 631 trace and no `-Werror` pass wait for the user's pulls. The user built `623638b99` clean on
+  2026-10-29, so a lane rewrites each "never built" bullet it touches to say that;
+- r14 bullets (unused fields and ids, helper hoists) stay for `r14-closeout`.
 
 Every gap lane also:
 
@@ -280,7 +290,14 @@ Every gap lane also:
    navprobe bullets) on every stand that must see the boss or a tank, moving a blocked stand and
    re-probing its floor. If navprobe's usage lists no `los`, it records sight as unchecked and goes on.
 
-The shared `src/Ai/Raid/Raid*` files stay as they are: a change one needs goes in the report.
+Lanes from wave 3c on did both already, so their gap lanes redo them only for the stands and tank
+spikes they add or move.
+
+One bot tank: a duty the boss lane gave a second bot tank goes to the bot best able to carry it (a
+damage dealer with a class taunt first), or the doc records why no bot can.
+
+The shared `src/Ai/Raid/Raid*` files stay as they are. An ICC-local answer is fine; a shared change one
+needs goes in the report.
 
 ## Waves
 
@@ -296,6 +313,8 @@ The shared `src/Ai/Raid/Raid*` files stay as they are: a change one needs goes i
 | 3e | `r10-blood-queen`, `r11-svalna-valithria` |
 | 3f | `r12-sindragosa` |
 | 3g | `r13-lich-king` |
+| 3cd-gaps | `g6-festergut`, `g7-rotface`, `g8-putricide`, `g9-blood-prince-council` |
+| 3efg-gaps | `g10-blood-queen`, `g11-svalna-valithria`, `g12-sindragosa`, `g13-lich-king` |
 | 4… | `refine-<boss>`, briefed from the user's pulls |
 | 5 | `r14-closeout` |
 
