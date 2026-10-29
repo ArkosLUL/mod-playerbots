@@ -7,34 +7,126 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_BLOODQUEEN_H
 #define PLAYERBOTS_ICCTRIGGERS_BLOODQUEEN_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_BloodQueen.h"
+#include "ICCTriggers_RaidWide.h"
+#include "RaidAntiFear.h"
 #include "Trigger.h"
 
-class IccBqlGroupPositionTrigger : public Trigger
+class IccBqlDodgeTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc bql group position";
+    static constexpr char const* Name = "icc bql dodge";
 
-    IccBqlGroupPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccBqlDodgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccBqlPactOfDarkfallenTrigger : public Trigger
-{
-public:
-    static constexpr char const* Name = "icc bql pact of darkfallen";
-
-    IccBqlPactOfDarkfallenTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
-    bool IsActive() override;
-};
-
-class IccBqlVampiricBiteTrigger : public Trigger
+class IccBqlBiteTrigger : public Trigger
 {
 public:
     static constexpr char const* Name = "icc bql vampiric bite";
 
-    IccBqlVampiricBiteTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccBqlBiteTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBqlShadowsTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql swarming shadows";
+
+    IccBqlShadowsTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBqlPactTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql pact of darkfallen";
+
+    IccBqlPactTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBqlWhirlDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql whirl defensive";
+
+    IccBqlWhirlDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBqlWhirlCoverTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql whirl cover";
+
+    IccBqlWhirlCoverTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBqlTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql tank defensive";
+
+    IccBqlTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBqlAntiFearTrigger : public RaidAntiFearTrigger
+{
+public:
+    static constexpr char const* Name = "icc bql anti fear";
+
+    IccBqlAntiFearTrigger(PlayerbotAI* botAI) : RaidAntiFearTrigger(botAI, Name) {}
+
+protected:
+    bool FearWindowActive() override;
+};
+
+class IccBqlFrenzyCcTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql frenzy cc";
+
+    IccBqlFrenzyCcTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBqlTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql taunt";
+
+    IccBqlTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBqlBrakeTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql brake";
+
+    IccBqlBrakeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBqlTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc bql target";
+
+    IccBqlTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetBqlTarget) {}
+};
+
+class IccBqlStandTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql stand";
+
+    IccBqlStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
