@@ -19,7 +19,7 @@ draft, no feedback, **conflicting**.
 
 ## Status
 
-Export base (Custom commit `ulduar-rework` mirrors): `69d282d5a` (set by `p3-ulduar`, moved by each `sync`).
+Export base (Custom commit `ulduar-rework` mirrors): `653e2c09e` (set by `p3-ulduar`, moved by each `sync`).
 
 | Wave | Lane | State | Commit / merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
@@ -41,6 +41,7 @@ Export base (Custom commit `ulduar-rework` mirrors): `69d282d5a` (set by `p3-uld
 | sync | Trap Launcher removal | pushed 2026-10-24 | helpers `12294e05f`; ulduar `4bf5ac077` + merge `09d6069bc` | Trap Launcher is a mod-spell-tweaks spell (425777–425782), stock AC has none: `CastTrapLauncherExplosiveAction` removed from helpers (`HunterActions.h` now equals upstream), Freya's lasher trap hold checks only `CastExplosiveTrapAction`. Custom keeps both. Helpers PR text lost its two lines on it | Freya TU syntax-check pass, codestyle passes on both; no other mod-spell-tweaks spell in the six PR diffs |
 | sync | p5-sync (4): Iron Assembly, Auriaya, Thorim | pushed 2026-10-28 | helpers `0f89c4f7d`; ulduar `5f5129ee8` + merge `8e71eec32` + fix `06f0f6e65` (Custom `d205fd233..61498bc20`) | Helpers gain `RaidDefensive`, `RaidResistAura`, `SpellCooldownMs`, symbols Ulduar calls only, trace-name params dropped (`NextMagicDefensive` 3 args, `RaidDefensiveScope{mapId}`, `RaidResistAuraConfig` without `noteKey`); Algalon's own cooldown helper → `SpellCooldownMs`; Iron Assembly trace state, notes, labels and hazard ids stripped; "offensive potion"/"use tinker" removed from the opener burst check (no upstream creator) | Strict pb-check (121 TUs) and codestyle pass; parity: only trace strips and the listed adaptations. #2985 body gained the `RaidDefensive`/`RaidResistAura` bullet, #2986 the Iron Assembly and Thorim gauntlet notes (both verified equal to their files). Not tested in game |
 | sync | p5-sync (5): Algalon, Thorim frost aura | pushed 2026-10-28 | ulduar `8ad6c17b3` (Custom `61498bc20..69d282d5a`) | Fire resistance totem shaman, charges kept off holes, wider dropped-star window, handler kite-first and Big Bang wait, phase 2 tank healers, stray frost aura block; Thorim's shared frost node removed. "trap launcher: explosive trap" left out of the Algalon splash list (mod-spell-tweaks spell); kite stuck notes stripped. Custom's other `-Werror` deletions (2-arg `RaidUnderExplosionLine`, `VezaxManaPct`) were already gone on the branch | Strict pb-check (42 TUs) and codestyle pass; parity: only trace strips and the Trap Launcher name. Not tested in game |
+| sync | p5-sync (6): Freya Army per lasher wave | pushed 2026-10-29 | ulduar `b151ec0eb` (Custom `69d282d5a..653e2c09e`, 3 files) | `IsFreyaArmyTurn`: one DK per lasher wave casts Army; no RaidObs in the delta, applied clean; helpers untouched; `NPC_ARMY_OF_THE_DEAD` is stock core `PetDefines.h` | Strict pb-check (15 TUs) and codestyle pass; parity: identical diff. #2986 Freya note (bring 2 DKs) waits for the user's wording go. Not tested in game |
 
 ## Decisions (user, 2026-10-17)
 
