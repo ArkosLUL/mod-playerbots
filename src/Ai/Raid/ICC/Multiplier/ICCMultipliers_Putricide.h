@@ -9,10 +9,11 @@
 
 #include "Multiplier.h"
 
-class IccAddsPutricideMultiplier : public Multiplier
+// A braked bot's attacks on him and its area damage next to him: its threat would take him off his holder
+class IccPutricideBrakeMultiplier : public Multiplier
 {
 public:
-    IccAddsPutricideMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc adds putricide") {}
+    IccPutricideBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc putricide brake") {}
     float GetValue(Action* action) override;
 };
 
