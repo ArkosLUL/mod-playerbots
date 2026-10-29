@@ -7,124 +7,145 @@
 #ifndef PLAYERBOTS_ICCACTIONS_LICHKING_H
 #define PLAYERBOTS_ICCACTIONS_LICHKING_H
 
+#include <string>
+
 #include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
+#include "ICCActions_RaidWide.h"
 #include "ICCHelpers_LichKing.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
 #include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include "Position.h"
+#include "RaidDirectTargeting.h"
 
-class IccLichKingShadowTrapAction : public MovementAction
+// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
+// re-issued each tick to a bot still walking never lands. Arrival is judged in 2D.
+class IccLkWalkAction : public MovementAction
+{
+public:
+    IccLkWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
+
+protected:
+    // Walks to the spot the getter hands out, booking `priority`. `interrupt` drops a cast that pins the
+    // bot's feet, `nitro` spends Nitro Boosts on a walk past 15 yd.
+    bool WalkFor(bool (*getter)(PlayerbotAI*, Position&), MovementPriority priority, bool interrupt, bool nitro);
+
+private:
+    Position const* WalkInFlight();
+    bool WalkTo(Position const& spot, MovementPriority priority, bool interrupt);
+    bool BookedOnWalkSpot();
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
+};
+
+class IccLichKingQuakeAction : public IccLkWalkAction
+{
+public:
+    static constexpr char const* Name = "icc lich king quake";
+
+    IccLichKingQuakeAction(PlayerbotAI* botAI) : IccLkWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccLichKingShadowTrapAction : public IccLkWalkAction
 {
 public:
     static constexpr char const* Name = "icc lich king shadow trap";
 
-    IccLichKingShadowTrapAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name) {}
+    IccLichKingShadowTrapAction(PlayerbotAI* botAI) : IccLkWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccLichKingNecroticPlagueAction : public MovementAction
+class IccLichKingCastTankDefensiveAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc lich king necrotic plague";
+    static constexpr char const* Name = "icc lich king cast tank defensive";
 
-    IccLichKingNecroticPlagueAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name) {}
+    IccLichKingCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccLichKingWinterAction : public AttackAction
+class IccLichKingTauntAction : public RaidDirectAttackAction
 {
 public:
-    static constexpr char const* Name = "icc lich king winter";
+    static constexpr char const* Name = "icc lich king taunt";
 
-    IccLichKingWinterAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, Name) {}
+    IccLichKingTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
     bool Execute(Event event) override;
-
-    bool IsPositionSafeFromDefile(float x, float y, float z, float minSafeDistance) const;
-    bool IsPositionSafeFromShadowTraps(float x, float y) const;
-    bool IsValidCollectibleAdd(Unit* unit) const;
-    bool HandleTankPositioning();
-    bool HandleMeleePositioning();
-    bool HandleRangedPositioning();
-    bool HandleMainTankAddManagement(Unit* boss, Position const* tankPos);
-    bool HandleAssistTankAddManagement(Unit* boss, Position const* tankPos);
-    bool HandlePetManagement();
-
-private:
-    static constexpr float PLATFORM_Z      = 840.857f;
-    static constexpr float BEHIND_DISTANCE = 4.0f;
-    bool FixPlatformPosition();
-    bool ClearInvalidTarget();
-    Position const* GetMainTankPosition();
-    Position const* GetMainTankRangedPosition();
-    bool TryMoveToPosition(float x, float y, float z, bool forced = true);
 };
 
-class IccLichKingAddsAction : public AttackAction
+class IccLichKingPlagueCureAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc lich king adds";
+    static constexpr char const* Name = "icc lich king plague cure";
 
-    IccLichKingAddsAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, Name) {}
+    IccLichKingPlagueCureAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
-
-    bool HandleTeleportationFixes(Difficulty diff, Unit* terenas);
-    bool HandleHeroicNonTankPositioning(Difficulty diff, Unit* terenas);
-    bool HandleSpiritMarkingAndTargeting(Difficulty diff, Unit* terenas);
-    bool HandleQuakeMechanics(Unit* boss);
-    bool HandleShamblingHorrors(Unit* boss, bool hasPlague);
-    bool HandleRagingSpiritFlanking(Unit* boss, bool hasPlague, Difficulty diff);
-    bool HandleAssistTankAddManagement(Unit* boss, Difficulty diff);
-    bool HandleMeleePositioning(Unit* boss, bool hasPlague, Difficulty diff);
-    bool HandleMainTankTargeting(Unit* boss, Difficulty diff);
-    bool HandleNonTankHeroicPositioning(Unit* boss, Difficulty diff, bool hasPlague);
-    bool HandleRangedPositioning(Unit* boss, bool hasPlague, Difficulty diff);
-    bool HandleDefileMechanics(Unit* boss, Difficulty diff);
-    bool HandleCenterStacking(Unit* boss, Difficulty diff);
-    bool HandleValkyrMechanics(Difficulty diff);
-    bool HandleValkyrMarking(std::vector<Unit*> const& valkyrs, Difficulty diff);
-    bool HandleValkyrAssignment(std::vector<Unit*> const& valkyrs);
-    bool HandleVileSpiritMechanics();
-    bool HandleIceSphereMechanics();
-    bool ApplyCCToValkyr(Unit* valkyr);
-    bool IsValkyr(Unit* unit);
-    std::pair<float, float> DefileAwareStep(float tx, float ty,
-                                           std::vector<Unit*> const& defiles,
-                                           Difficulty diff);
-
-private:
-    // Read once per Execute, for the handlers it calls
-    IccLichKingPhaseId _phase = IccLichKingPhaseId::One;
 };
 
-class IccLichKingSpiritBombAction : public MovementAction
+class IccLichKingPlagueWalkAction : public IccLkWalkAction
 {
 public:
-    static constexpr char const* Name = "icc lich king spirit bomb";
+    static constexpr char const* Name = "icc lich king plague walk";
 
-    IccLichKingSpiritBombAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name) {}
+    IccLichKingPlagueWalkAction(PlayerbotAI* botAI) : IccLkWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
+};
 
-    static bool IsBombThreatActive(PlayerbotAI* botAI, Player* bot);
+class IccLichKingTranquilizeAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc lich king tranquilize";
+
+    IccLichKingTranquilizeAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccLichKingStunAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc lich king stun";
+
+    IccLichKingStunAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccLichKingSilenceDispelAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc lich king silence dispel";
+
+    IccLichKingSilenceDispelAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccLichKingTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc lich king target";
+
+    IccLichKingTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetLkTarget) {}
+};
+
+// A braked bot stops swinging or shooting at him: the resolver hands it nothing, which leaves its attack
+// running
+class IccLichKingBrakeStopAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc lich king brake stop";
+
+    IccLichKingBrakeStopAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccLichKingStandAction : public IccLkWalkAction
+{
+public:
+    static constexpr char const* Name = "icc lich king stand";
+
+    IccLichKingStandAction(PlayerbotAI* botAI) : IccLkWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 #endif
