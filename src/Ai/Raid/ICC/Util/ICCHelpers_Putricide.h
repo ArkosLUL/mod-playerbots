@@ -171,7 +171,7 @@ bool IsPpMovementOwned(PlayerbotAI* botAI);
 // Lust waits for phase 3, the race against Mutated Plague and the puddles
 RaidBurstWindow IccPutricideBurstWindow(PlayerbotAI* botAI);
 std::vector<uint32> const& GetPpOpenerBosses(PlayerbotAI* botAI);
-// Slime Puddle, Mutated Plague and Unbound Plague all hit nature and shadow
+// Every spell of his that hits the raid carries shadow: the puddles, the plagues, the adds, the bombs
 uint8 IccPutricideResistSchools(PlayerbotAI* botAI, uint8 previous);
 
 // The scan, the boss spot, the slots, the driver, the plague receivers, the brake, the stand latch, the calls

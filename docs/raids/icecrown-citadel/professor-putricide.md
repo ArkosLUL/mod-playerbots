@@ -41,7 +41,8 @@ Tank Protection 71770 protects whoever he hits from both adds' picks. He obeys t
 - **Rings** (`pp.slot`): healers, then casters, on 14 slots at 12 yd round the spot; hunters and the overflow
   on 24 at 22 yd. Slots are more than 4.5 yd apart. One covered by a puddle (with a yard of growth), a bomb's
   gas or armed blast, or goo in flight changes for the nearest usable one. Reach and spell movers are held
-  while a stand holds; healers keep heal reach.
+  while a stand holds; healers keep heal reach. The rings let go while anyone but a bot tank holds him
+  more than 15 yd off the spot, and hold again within 10.
 - **Kite** (`pp.kite`): the bloated bot runs 10 yd legs straight away from its cloud, turning up to 120
   degrees round puddles, bombs and goo, clamped to a 36 yd disk round the centre so it follows the wall,
   scored for continuing its last leg. It cuts a cast to move and uses Nitro Boosts.
@@ -75,10 +76,10 @@ Tank Protection 71770 protects whoever he hits from both adds' picks. He obeys t
   cast. A stand walks back only once nothing covers it.
 - **Targets** (`pp.target`): the holder stays on him unless he is passive; others take a player's skull,
   their 25H Variable's add, the ooze, the cloud (not melee while it re-picks), him. A ranged bot takes an add
-  only within 35 yd.
-- **Tank defensives** (`pp.defensive`): a P3 holder in the first 4 s of each hold, any tank under 40%; class
-  buttons held to 25%. A human tank gets the same as calls, and a call to taunt when a bot holder is due to
-  hand him over and no bot can (`pp.humancall`).
+  only within 30 yd (a hunter 35), its spell range from a slot.
+- **Tank defensives** (`pp.defensive`): a P3 holder in the first 4 s of each hold (physical buttons only),
+  any tank under 40%; class buttons held to 25%. A human tank gets the same as calls, and a call to taunt
+  when a bot holder is due to hand him over and no bot can (`pp.humancall`).
 
 All 17 spots' 646 slots sit on the floor (navprobe `--nav 0x09`, settled z 389.39-389.45) and see their spot
 (`los`); rings round the centre from 6 to 45 yd are on the floor, at 50 yd the north-east and north-west
@@ -91,12 +92,13 @@ that probed disk. Gameobject collision isn't in navprobe's sight.
 |---|---|---|
 | Boss spot near the room's centre, moved only when a puddle or bomb fouls it | Script: puddles land on random players, bombs within 6 yd of him; guides: drag him off both | Wowhead's spot under the green tank, which leaves the kite and the stack out of heal reach |
 | Casters and healers at 12 yd, hunters and overflow at 22 | Goo never picks within 16.3/17.5 yd of him; hunters can't shoot him from there; slots 4.5 yd apart for Unbound Plague's 3 yd jump | Guides: ranged spread at range, dodging every goo |
+| Rings let go past 15 yd off the spot unless a bot tank holds him | Lessons: a stand held round a boss who moves off; 15 + 22 yd stays inside a caster's 39 yd reach to him | Keep them, so a human tank's position leaves the casters idle |
 | Kite straight away, then along the wall | WT: kite the whole bloat; a pure-pursuit simulation catches a ring kite in 10-14 s, a straight run gains 1.05 yd/s on it | The old scored open-space flee |
 | Stack on the rooted victim at once, hazards ignored | WT/Wowhead; the eruption's damage is shared within 10 yd of the ooze | Stack only once it is close |
 | Kill order ooze, cloud, him; the lowest health of one entry | WT/Wowhead | Cloud first |
 | Melee leave a cloud at 2 stacks or with no victim | Wowhead: run at 2-3 stacks | none |
 | Regurgitated Ooze on a cloud first, an ooze only from 90 energy or once a cloud is slowed | WT/Wowhead: the slow is worth most on a cloud; energy only from Eat Ooze | Spend on whatever is up |
-| Holds of 2 applications, DPS sharers of one | Wowhead's rotation; taunts 20 s apart stay clear of taunt DR | Tanks only; the old swap on every application went immune by the fourth taunt |
+| Holds of 2 applications, DPS sharers of one | Wowhead's rotation; taunts 20 s apart stay clear of taunt DR | Tanks only; the old swap on every application went immune by the fourth taunt; a hand-over by stack count, never a 4th while anyone has fewer, at more taunts |
 | Brake on every non-holder | Festergut's 90/80% | Tanks only |
 | Unbound Plague pass line from tick 8 | WT: about 10 s each | Wowhead: let the carrier die, battle-res |
 | Tank buttons for P3 holds | WT/Wowhead: Mutated Strength | Also P1-P2 swings |
@@ -118,10 +120,13 @@ Record-only, `EnableICCBuffs`: `pp.heroicbuff` and `pp.spitefulfury` on every me
   be out of heal reach of the inner ring. A bloated carrier keeps the Unbound Plague.
 - One driver: with one bot tank nobody drinks, and a dead holder in 10-man is picked up by nobody while the
   other tank rides. The driver ignores hazards; the abomination's raid damage isn't weighed.
-- Sharers are only Death Knights and Retribution paladins; a sharer dying heals him by its stacks. A human
-  holder is only called, never relieved by a bot.
+- Sharers are only Death Knights and Retribution paladins; a sharer dying heals him by its stacks. After a
+  share the sharer stays braked until the tank's threat is 25% clear of it (`pp.brake`). A human holder is
+  relieved on the bots' rotation but told only its buttons.
+- A hold counts applications, not stacks: a tank taking him back at 2 holds to 4, the count WT says never
+  to reach (`--plague` peaks).
 - A plague landing in the melee cluster can jump before its carrier steps out (1 s); a rooted carrier draws
-  the ooze stack onto itself.
+  the ooze stack onto itself; a holder that catches it walks him onto its receiver.
 - In P3 puddles fill the room; the spot takes the least covered one, no wall drag.
 - At the pull the rings form round the centre while he is still at the table, 39 yd from the healers.
 - The bomb blast timing is read off the DBC, unconfirmed.

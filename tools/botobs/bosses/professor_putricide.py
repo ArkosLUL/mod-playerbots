@@ -219,8 +219,8 @@ def show_plague(trace: Trace) -> None:
         return
     peaks = plague_peaks(trace)
     if peaks:
-        print("  Mutated Plague peak stacks: " + ", ".join(
-            f"{trace.name(guid)} {n}" for guid, n in sorted(peaks.items(), key=lambda item: (-item[1], trace.name(item[0])))))
+        ranked = sorted(peaks.items(), key=lambda item: (-item[1], trace.name(item[0])))
+        print("  Mutated Plague peak stacks: " + ", ".join(f"{trace.name(guid)} {n}" for guid, n in ranked))
     else:
         print("  no Mutated Plague landed")
     swaps = swap_rows(trace)

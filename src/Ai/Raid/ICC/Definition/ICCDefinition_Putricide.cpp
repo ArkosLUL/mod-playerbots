@@ -108,10 +108,9 @@ void DefinePutricide(EncounterBuilder& e)
             Family::Charge | Family::Blink | Family::Disengage);
     // avoid aoe sees the puddles and flees them 5 yd at most, against the dodge
     e.Block("icc putricide avoid aoe", Role::Any, &IsPpLive, Family::AvoidAoe);
-    // He obeys taunt diminishing returns, so only the swap spends a taunt on him
+    // He obeys taunt diminishing returns, so only the swap spends a taunt on him. Death Grip is in the
+    // family too, and would drag the ooze or the cloud off the path the script gives it.
     e.Block("icc putricide taunts", Role::Any, &IsPpLive, Family::Taunt);
-    // A grip drags the ooze or the cloud off the path the script gives it
-    e.Block("icc putricide pulls", Role::Any, &IsPpLive, 0, {"death grip"});
     // A braked tank has no target, and a druid's non-combat nodes drop bear form
     e.Block("icc putricide tank form", Role::Tank, &IsPpLive, 0, {"caster form"});
     // The tank buttons wait for a phase 3 hold or a low tank

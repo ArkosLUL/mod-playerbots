@@ -74,6 +74,10 @@ constexpr float SPOT_BOMB_CLEAR = 9.0f;
 constexpr float SPOT_PICK_MARGIN = 1.0f;
 // The holder stands this much inside his melee range past the spot, so he stops on it
 constexpr float DRAG_SHORT = 1.5f;
+// Held off the spot by anyone but a bot tank, he's out of the rings' reach past this: they let go, and
+// hold again once he's back within RING_REHOLD
+constexpr float RING_RELEASE = 15.0f;
+constexpr float RING_REHOLD = 10.0f;
 
 // A puddle gains a Grow stack every 1.5 s, half a yard of radius: this covers about three seconds of it
 constexpr float PUDDLE_GROWTH = 1.0f;
@@ -101,8 +105,9 @@ constexpr float MELEE_INSIDE = 1.5f;
 // A Gas Cloud whose victim is down to this many stacks re-picks a random player soon: melee leave it
 constexpr uint8 CLOUD_REPICK_STACKS = 2;
 constexpr float CLOUD_CLEAR = 15.0f;
-// Ranged take an add only this close, so they cast from their slot
-constexpr float RANGED_REACH = 35.0f;
+// Ranged take an add only within their spell range of their slot: reach is held there
+constexpr float RANGED_REACH = 30.0f;
+constexpr float HUNTER_REACH = 35.0f;
 
 constexpr float KITE_LEG = 10.0f;
 constexpr float KITE_MIN_TRAVEL = 4.0f;
@@ -230,6 +235,7 @@ struct PpState
     Position spotPos;
     Position tankStand;
     RaidObs::ObsGuidMap<uint8> slot{"pp.slot"};
+    bool ringsHeld = true;
     RaidObs::ObsValue<ObjectGuid> driver{"pp.driver"};
     ObjectGuid eating;
     // Unbound Plague carrier -> the bot it walks onto
@@ -436,9 +442,10 @@ Unit* ResolveTarget(PlayerbotAI* botAI, PpState const& st, Creature* boss)
     Creature* cloud = KillPick(bot, st.clouds);
     // Out of reach from its slot, a ranged bot leaves the add to the others
     bool const ranged = PlayerbotAI::IsRanged(bot);
-    if (ranged && ooze && bot->GetExactDist(ooze) > RANGED_REACH)
+    float const reach = bot->getClass() == CLASS_HUNTER ? HUNTER_REACH : RANGED_REACH;
+    if (ranged && ooze && bot->GetExactDist(ooze) > reach)
         ooze = nullptr;
-    if (ranged && cloud && bot->GetExactDist(cloud) > RANGED_REACH)
+    if (ranged && cloud && bot->GetExactDist(cloud) > reach)
         cloud = nullptr;
 
     Unit* fallback = braked ? nullptr : boss;
@@ -550,7 +557,8 @@ void Scan(PpState& st, Player* bot, Creature* boss, uint32 now)
 
     // spell_putricide_slime_puddle hits within 2.5 yd times the puddle's scale, which every Grow stack raises
     for (Creature* puddle : IccGetCreaturesByEntries(boss, {NPC_PP_PUDDLE}, SCAN_RANGE))
-        st.puddles.push_back({puddle->GetGUID(), puddle->GetPosition(), PP_PUDDLE_SCALE_RADIUS * puddle->GetObjectScale()});
+        st.puddles.push_back(
+            {puddle->GetGUID(), puddle->GetPosition(), PP_PUDDLE_SCALE_RADIUS * puddle->GetObjectScale()});
 
     for (Creature* bomb : IccGetCreaturesByEntries(boss, {NPC_PP_GAS_BOMB}, SCAN_RANGE))
     {
@@ -687,8 +695,11 @@ bool SlotUsable(PpState const& st, uint8 id, uint32 now)
             return false;
 
     for (Bomb const& bomb : st.bombs)
-        if (bomb.at.GetExactDist2d(spot) < (bomb.ageMs >= BLAST_ARMED_MS ? PP_BLAST_RADIUS : PP_GAS_RADIUS) + SLOT_MARGIN)
+    {
+        float const radius = bomb.ageMs >= BLAST_ARMED_MS ? PP_BLAST_RADIUS : PP_GAS_RADIUS;
+        if (bomb.at.GetExactDist2d(spot) < radius + SLOT_MARGIN)
             return false;
+    }
 
     for (Goo const& goo : st.goo)
         if (static_cast<int32>(goo.landsMs - now) > 0 && goo.at.GetExactDist2d(spot) < PP_GOO_RADIUS + SLOT_MARGIN)
@@ -957,6 +968,16 @@ void UpdateHolder(PpState& st, Creature* boss, uint32 now)
     st.holderSinceMs = now;
 }
 
+// A bot tank drags him onto the spot, and at his table he comes back to it
+void UpdateRings(PpState& st, Creature* boss)
+{
+    Unit* victim = boss->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    bool const dragged = st.passive || (holder && IsDutyBot(holder) && IsTankPlayer(holder));
+    float const limit = st.ringsHeld ? RING_RELEASE : RING_REHOLD;
+    st.ringsHeld = dragged || boss->GetExactDist2d(st.spotPos) <= limit;
+}
+
 void RefreshDuties(PpState& st, Player* bot, Creature* boss, uint32 now)
 {
     if (st.dutiesRan && getMSTimeDiff(st.dutyMs, now) < DUTY_REFRESH_MS)
@@ -974,6 +995,7 @@ void RefreshDuties(PpState& st, Player* bot, Creature* boss, uint32 now)
     UpdateEating(st);
     UpdateReceivers(st, boss, members);
     UpdateHolder(st, boss, now);
+    UpdateRings(st, boss);
 }
 
 // Past BRAKE_CAP of the holder's threat until under BRAKE_RELEASE. Read from the threat list: the "threat"
@@ -1053,7 +1075,7 @@ void UpdateStand(PpState& st, Player* bot)
                 spot = st.tankStand;
             }
         }
-        else
+        else if (st.ringsHeld)
         {
             auto const held = st.slot.find(bot->GetGUID());
             if (held != st.slot.end())
@@ -1192,10 +1214,12 @@ bool TauntUsable(Player* member)
             break;
     }
 
-    uint32 const spellId = memberAI && taunt ? memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", taunt)->Get() : 0;
+    uint32 const spellId =
+        memberAI && taunt ? memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", taunt)->Get() : 0;
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     // Growl needs bear form and Taunt Defensive Stance, so a tank elected without them would never land it
-    return info && !member->HasSpellCooldown(spellId) && info->CheckShapeshift(member->GetShapeshiftForm()) == SPELL_CAST_OK;
+    return info && !member->HasSpellCooldown(spellId) &&
+           info->CheckShapeshift(member->GetShapeshiftForm()) == SPELL_CAST_OK;
 }
 
 uint8 Stacks(PpState const& st, Player* member)
@@ -1538,12 +1562,14 @@ bool GetPpKiteLeg(PlayerbotAI* botAI, Position& spot, char const*& branch)
             if (travel < KITE_MIN_TRAVEL)
                 continue;
 
-            if (strict && (Covered(hazards, to, KITE_HAZARD_MARGIN) || LegCrosses(hazards, here, to, KITE_HAZARD_MARGIN)))
+            if (strict &&
+                (Covered(hazards, to, KITE_HAZARD_MARGIN) || LegCrosses(hazards, here, to, KITE_HAZARD_MARGIN)))
                 continue;
 
             float const lx = (px - here.GetPositionX()) / travel;
             float const ly = (py - here.GetPositionY()) / travel;
-            float const score = lx * ax + ly * ay + KITE_CONTINUITY * (lx * last.GetPositionX() + ly * last.GetPositionY());
+            float const continuity = lx * last.GetPositionX() + ly * last.GetPositionY();
+            float const score = lx * ax + ly * ay + KITE_CONTINUITY * continuity;
             if (!found || score > bestScore)
             {
                 found = true;
@@ -1854,10 +1880,10 @@ uint32 GetPpTankDefensive(PlayerbotAI* botAI, char const* noteKind)
 
     uint32 const now = getMSTime();
     uint32 const since = std::max(st->holderSinceMs, st->phase3Ms);
-    bool const window = bot->GetHealthPct() < PP_TANK_DEFENSIVE_PCT ||
-                        (st->phase == 3 && st->phase3Ms && IsHolder(bot, *st) &&
-                         getMSTimeDiff(since, now) < HOLD_DEFENSIVE_MS);
-    if (!window)
+    bool const low = bot->GetHealthPct() < PP_TANK_DEFENSIVE_PCT;
+    bool const hold =
+        st->phase == 3 && st->phase3Ms && IsHolder(bot, *st) && getMSTimeDiff(since, now) < HOLD_DEFENSIVE_MS;
+    if (!low && !hold)
     {
         // Change-latched, so the way out of a window is written too
         if (noteKind)
@@ -1866,7 +1892,8 @@ uint32 GetPpTankDefensive(PlayerbotAI* botAI, char const* noteKind)
         return 0;
     }
 
-    return NextTankDefensive(botAI, bot, noteKind, false);
+    // Mutated Strength's swings are physical, so a hold alone gets no Anti-Magic Shell
+    return NextTankDefensive(botAI, bot, noteKind, !low);
 }
 
 bool IsPpTankDefensiveHeld(PlayerbotAI* botAI)

@@ -37,7 +37,7 @@ constexpr uint32 DRINK_RETRY_MS = 2000;
 // cast whose receipt shows.
 constexpr uint32 VEHICLE_SPELL_RECOVERY_MS = 1000;
 
-void Note(Player* bot, char const* key, std::string const& value)
+void NoteDerived(Player* bot, char const* key, std::string const& value)
 {
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, key, value);
@@ -107,14 +107,14 @@ bool IccPutricideDodgeAction::Execute(Event /*event*/)
 
     if (!botAI->CanMove())
     {
-        Note(bot, "pp.dodge", "pinned");
+        NoteDerived(bot, "pp.dodge", "pinned");
         return false;
     }
 
     Position const* inFlight = WalkInFlight();
     if (inFlight && IsPpDodgeSpotClear(botAI, *inFlight))
     {
-        Note(bot, "pp.dodge", "hold");
+        NoteDerived(bot, "pp.dodge", "hold");
         return true;
     }
 
@@ -123,7 +123,7 @@ bool IccPutricideDodgeAction::Execute(Event /*event*/)
     std::string branch;
     if (!FindPpDodgeSpot(botAI, spot, interrupt, branch))
     {
-        Note(bot, "pp.dodge", std::string(kind) + " none");
+        NoteDerived(bot, "pp.dodge", std::string(kind) + " none");
         return false;
     }
 
@@ -134,11 +134,12 @@ bool IccPutricideDodgeAction::Execute(Event /*event*/)
     float const travel = bot->GetExactDist2d(spot);
     if (!WalkTo(spot, MovementPriority::MOVEMENT_FORCED))
     {
-        Note(bot, "pp.dodge", std::string(kind) + " locked");
+        NoteDerived(bot, "pp.dodge", std::string(kind) + " locked");
         return false;
     }
 
-    Note(bot, "pp.dodge", std::string(kind) + " " + branch + " " + std::to_string(static_cast<int32>(std::lround(travel))));
+    std::string const yards = std::to_string(static_cast<int32>(std::lround(travel)));
+    NoteDerived(bot, "pp.dodge", std::string(kind) + " " + branch + " " + yards);
     return true;
 }
 
@@ -183,7 +184,7 @@ bool IccPutricideKiteAction::Execute(Event /*event*/)
     char const* branch = nullptr;
     if (!GetPpKiteLeg(botAI, spot, branch))
     {
-        Note(bot, "pp.kite", "none");
+        NoteDerived(bot, "pp.kite", "none");
         return false;
     }
 
@@ -194,12 +195,12 @@ bool IccPutricideKiteAction::Execute(Event /*event*/)
     EncounterHelpers::UseNitroBoosts(bot);
     if (!WalkTo(spot, MovementPriority::MOVEMENT_COMBAT))
     {
-        Note(bot, "pp.kite", "locked");
+        NoteDerived(bot, "pp.kite", "locked");
         return false;
     }
 
     CommitPpKiteLeg(botAI, spot);
-    Note(bot, "pp.kite", branch);
+    NoteDerived(bot, "pp.kite", branch);
     return true;
 }
 
