@@ -118,8 +118,10 @@ has anything to catch. Everyone holds Dark and tunnels Fjola; Eydis's tank holds
 off the tank list last), so staging and the fight agree. Fjola's tank (560.5, 88.2), Eydis's
 (565.5, 88.2), 5 yd apart for cleave; a lone tank (563.5, 88.2). Melee at y 87 and 85.5, healers
 84 and 82.5, ranged 81 and 79.8, each row at x 563.25 / 561.5 / 565; past six a role starts over,
-stacking costs nothing here. The twins hover ~6 yd over their tank, so melee reach them from ~10 yd
-2D (3D 11.8). They face the raid and melee eat parries: turning them round would put the tanks in
+stacking costs nothing here. Hunters take the back row from x 565 in. The twins hover ~6 yd over
+their tank, so melee reach them from ~10 yd 2D (3D 11.8), and no shot casts inside that 11.8. A
+twin parks ~8 yd 3D short of whoever she chases, on the side she came from, and stays while her
+victim is inside that: pulled into the tunnel, she stays there. They face the raid and melee eat parries: turning them round would put the tanks in
 the orb field.
 
 **Colours**, `GetWantedEssence`, first match:
@@ -195,7 +197,9 @@ damage per second, too much for the drag the kill used. `twin valkyr tank target
 `TwinValkyrTauntGuardMultiplier` zeroes a taunt on a twin another living tank owns,
 `TwinValkyrControlTankMovementMultiplier` zeroes formation moves for a tank holding its twin.
 Hunters and rogues redirect to their target twin's tank, casting outside the queue, so
-`TwinValkyrRedirectGuardMultiplier` zeroes the class Misdirection and Tricks actions. Twin Spike
+`TwinValkyrRedirectGuardMultiplier` zeroes the class Misdirection and Tricks actions and the
+opener's redirect. A hunter waits for its twin in Auto Shot range: Misdirection's 4 s transfer
+starts on the next attack, Kill Command included. Twin Spike
 gets no defensive node.
 
 **Vortex defensives.** `GetTwinVortexHit`, for a bot whose want is a hold: the shared
@@ -272,7 +276,11 @@ walks multiply. The door deal refreshes once a second.
   against the lust window went unchecked. 8 died at 3:14, after the Light Vortex: that Touch's 3 ticks, then the ~55 yd walk
   Light 1, Dark 1, stand with healers moving at the raid's low point (32% average), and one Light
   orb going off where bots still walking out on Light crossed bots walking home on Dark, its blast
-  killing 4. The raid still waits at Light 1 through the channel, by the user's choice.
+  killing 4. The raid still waits at Light 1 through the channel, by the user's choice. Both hunters
+  shot nothing from 0:13 to 3:05 (5.0k and 3.6k DPS; 12.1k and 7.8k on 25N): Misdirection cast at
+  0:00 ran out unused, Trueshot pulled Fjola at 0:10 and she parked 8 yd from him in the tunnel, and
+  Elemena's heals pulled Eydis in at 0:13.7.
+- No tank walks a twin parked deep back out: the walk crosses the orb field.
 - Each Fjola Touch ticks once: the 25-27 yd walk to Light 1's reach takes 3.2-4.0 s, the first
   tick lands at 2 s.
 - 25H Surges dealt 33k/s after resists (6.66M over 3:21); 4 healers held the raid at 76-81% between

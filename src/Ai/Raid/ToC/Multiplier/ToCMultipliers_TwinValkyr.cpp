@@ -9,6 +9,7 @@
 #include "MovementActions.h"
 #include "Playerbots.h"
 #include "RaidCombatHelpers.h"
+#include "RaidOpener.h"
 #include "RogueActions.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_TwinValkyr.h"
@@ -117,7 +118,8 @@ float TwinValkyrRedirectGuardMultiplier::GetValue(Action* action)
 
     bool const classRedirect = dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
                                dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action) ||
-                               dynamic_cast<CastTricksOfTheTradeAction*>(action);
+                               dynamic_cast<CastTricksOfTheTradeAction*>(action) ||
+                               dynamic_cast<RaidOpenerRedirectAction*>(action);
     if (!classRedirect)
         return 1.0f;
 

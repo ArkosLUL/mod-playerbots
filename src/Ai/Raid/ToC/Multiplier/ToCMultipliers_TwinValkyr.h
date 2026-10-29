@@ -33,8 +33,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// The class redirects pick one tank for the whole raid. Here each twin has her own, and the
-// encounter's redirect node casts them.
+// The class redirects pick one tank for the whole raid, and the opener's fires while the twins
+// are still flying in. Here each twin has her own tank, and the encounter's redirect node casts them.
 class TwinValkyrRedirectGuardMultiplier : public Multiplier
 {
 public:

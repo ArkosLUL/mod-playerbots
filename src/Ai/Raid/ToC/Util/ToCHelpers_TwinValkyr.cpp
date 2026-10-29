@@ -71,6 +71,10 @@ constexpr DoorPoint HEAL_SLOTS[] = {{563.25f, 84.0f}, {561.5f, 84.0f}, {565.0f, 
                                     {563.25f, 82.5f}, {561.5f, 82.5f}, {565.0f, 82.5f}};
 constexpr DoorPoint RANGED_SLOTS[] = {{563.25f, 81.0f}, {561.5f, 81.0f}, {565.0f, 81.0f},
                                       {563.25f, 79.8f}, {561.5f, 79.8f}, {565.0f, 79.8f}};
+// The back row by the gate, far side from Fjola's door first. A twin's hitbox makes anything inside
+// ~11.8 yd 3D melee range, where no shot casts, and the ranged rows sit only 12-14 yd from a twin
+// parked on the arena side of her tank.
+constexpr DoorPoint HUNTER_SLOTS[] = {{565.0f, 79.8f}, {563.25f, 79.8f}, {561.5f, 79.8f}};
 constexpr uint32 TWIN_DOOR_DEAL_MS = 1000;
 
 constexpr float TWIN_TAUNT_RANGE = 30.0f;
@@ -727,6 +731,7 @@ void DealDoorStands(TwinValkyrState& state, Player* bot, uint32 now)
     uint32 melee = 0;
     uint32 heal = 0;
     uint32 ranged = 0;
+    uint32 hunter = 0;
     for (Player* member : DoorBots(bot, group))
     {
         TwinDoorStand stand;
@@ -760,7 +765,7 @@ void DealDoorStands(TwinValkyrState& state, Player* bot, uint32 now)
         {
             stand.role = TwinDoorRole::Ranged;
             stand.label = "ranged";
-            stand.spot = SlotOf(RANGED_SLOTS, ranged);
+            stand.spot = member->getClass() == CLASS_HUNTER ? SlotOf(HUNTER_SLOTS, hunter) : SlotOf(RANGED_SLOTS, ranged);
         }
         else
         {
