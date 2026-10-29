@@ -56,21 +56,23 @@ Tank Protection 71770 protects whoever he hits from both adds' picks. He obeys t
   ranged), never a healer; a bot already riding keeps it, a driver holds no slot. It walks to (4356.60,
   3265.74), below the table, and uses it. While he is off every tank and no other tank stands on foot, a
   riding tank exits (`exit`) and a tank driver on foot is dropped. Otherwise riding: Regurgitated Ooze
-  with 45 energy on a cloud not slowed, on an ooze only from 90 or once a cloud is slowed; else it eats
-  the puddle crowding the spot most, latched until gone, from 1.5 yd inside its edge; else Mutated Slash
+  with 45 energy on a cloud not slowed, on an ooze only from 90 or once a cloud is slowed; else, unless its
+  Unbound Plague pass is due, it eats the puddle crowding the spot most, latched until gone, from 1.5 yd
+  inside its edge; else Mutated Slash
   and its swing on the ooze, the cloud or him. A refused vehicle cast answers true, so the energy is the
   receipt for the 1 s cooldown stamp.
 - **Swap** (`pp.swap`, `icc putricide swap` above the movers): a tank picks him up off anyone else at any
-  phase; with no tank alive a bot Death Knight or paladin damage dealer does (Death Knight, then
-  healthiest) and keeps him. In P3 a hold ends after 2 applications, or at 3 stacks once it has taken one
+  phase; with no tank alive a bot Death Knight or paladin damage dealer does (the driver last, then Death
+  Knights, then the healthiest) and keeps him. In P3 a hold ends after 2 applications, or at 3 stacks once it has taken one
   while his taunt DR is under level 3; then a sharer, else 1.2 s before the next application the tank
   with the fewest stacks below the holder's, taunts. A sharer is a bot Death Knight or Retribution paladin
   damage dealer at 80% health or more, with at most 1 stack and fewer than every tank, that keeps 25%
   (`pp.sharehp`) through two of his swings at his current damage, after its armor, damage taken auras and
   its ready button's cut. It raises the button from 2.5 s (`pp.sharedefensive`) and taunts within 1.2 s
   of the application; without the button up by then it must survive bare or drops out to the tank. A
-  tank takes him back once the stack lands. Never at the immune level of taunt DR or while a taunt aura
-  is on him. Generic taunts and Death Grip are blocked.
+  tank takes him back once the stack lands, inside the sharer's 3 s taunt aura: the latest taunt wins.
+  Never at the immune level of taunt DR or while a taunt aura from anyone he isn't hitting is on him.
+  Generic taunts and Death Grip are blocked.
 - **Brake** (`pp.brake`): while live, any bot but a healer and the holder past 90% of the holder's threat
   holds damage on him and area spells within 18 yd, until under 80%. Its resolver hands it nothing on him;
   pickers, follow and random moves are blocked; a bear stays a bear.
@@ -110,7 +112,7 @@ spots are derived inside that probed disk. Gameobject collision isn't in navprob
 | Kill order ooze, cloud, him; the lowest health of one entry | WT/Wowhead | Cloud first |
 | Melee leave a cloud at 2 stacks or with no victim | Wowhead: run at 2-3 stacks | none |
 | Regurgitated Ooze on a cloud first, an ooze only from 90 energy or once a cloud is slowed | WT/Wowhead: the slow is worth most on a cloud; energy only from Eat Ooze | Spend on whatever is up |
-| Holds of 2 applications, ending at 3 stacks after one when a taker has fewer and DR is under level 3; DPS sharers of one | Wowhead's rotation, taunts 20 s apart clear DR; WT: never 4, delay 3, and 3+3 costs 31% less a tick than 4+2 | Tanks only; the old swap on every application (immune by the fourth taunt); holds of 2 only (4 by the third hold) |
+| Holds of 2 applications, ending at 3 stacks after one when a taker has fewer and DR is under level 3; DPS sharers of one | Wowhead's rotation, taunts 20 s apart clear DR; WT: never 4, delay 3; script: 3+3 costs 31% less a tick than 4+2 | Tanks only; the old swap on every application (immune by the fourth taunt); holds of 2 only (4 by the third hold) |
 | Brake on every non-holder | Festergut's 90/80% | Tanks only |
 | Unbound Plague pass line from tick 8 | WT: about 10 s each | Wowhead: let the carrier die, battle-res |
 | Tank buttons for P3 holds | WT/Wowhead: Mutated Strength | Also P1-P2 swings |
@@ -120,6 +122,8 @@ spots are derived inside that probed disk. Gameobject collision isn't in navprob
 | Drive despite the abomination's raid hit | Every guide drives; a puddle hits 4.4k+ a second and grows to 27.5 yd | No abomination |
 | A riding tank exits when nobody else can tank him; with no tank alive a Death Knight or paladin damage dealer takes him | The exit dismisses the minion, so the table serves a new driver; Gap lanes' rule | A damage dealer holds him while the tank rides; he roams the healers |
 | A sharer keeps 25% through two swings, button up by its taunt 1.2 s before the stack | A dead sharer heals him 300k-2.1M a stack; P3 swings run 30.6-42.2k a second before armor on 10N, twice that on 25-man; Wowhead taunts 1 s before | 80% and a button ready, taunt at 2.5 s |
+| The tank takes a sharer's stack back inside the sharer's taunt aura | `ThreatManager::TauntUpdate`: the latest taunt wins; Wowhead's tank taunts back 2 s after the sharer | Wait out its 3 s aura, three or four P3 swings |
+| A riding carrier stops eating while its pass is due | Eating parks it inside a puddle, which its receiver's dodge won't enter | The receiver stands in the puddle |
 | Sharers stay Death Knights and Retribution paladins | Taunt needs Defensive Stance, Growl Bear Form, and encounter code changes neither | Wowhead's fury warriors and ferals |
 | An anchored carrier's receiver walks to it; stackers keep 6 yd off a plagued ooze victim | Jump 3 yd plus reach; eruption 10 yd round the ooze, which erupts within 5 yd of its victim | The carrier waits or drags him |
 | Goo timed from his position when the impact first showed, kept 16 s | A scan follows the cast within 200 ms; impacts live until the next cast | From where he stands now, dropped at 9 s |
@@ -151,6 +155,7 @@ Record-only, `EnableICCBuffs`: `pp.heroicbuff` and `pp.spitefulfury` on every me
 - The bomb blast timing is read off the DBC, unconfirmed (`--dodges` blast rows).
 - A riding tank that exits picks him up only once within 30 yd of him; a dead holder in 10-man leaves him
   loose that long.
+- A riding carrier slashing a target that stands in a puddle still draws its receiver into it.
 - Humans hold no duty; carriers among them are avoided.
 
 ## What a trace answers
@@ -166,7 +171,7 @@ Record-only, `EnableICCBuffs`: `pp.heroicbuff` and `pp.spitefulfury` on every me
 | `pp.kite` | kiter | Leg branch `away`, `wall`, `cross`; `none`, `locked` |
 | `pp.driver` | raid | The driver's guid, `0` none |
 | `pp.abom` | driver | `drink`, `spit <unit>`, `eat <puddle>`, `slash <unit>`, `exit`, `none` |
-| `pp.swap` | per tank, sharer | `take`, `share`, `back`, `pickup`, `none` |
+| `pp.swap` | per tank, sharer, guard | `take`, `share`, `back`, `pickup`, `none` |
 | `pp.sharehp` | would-be sharer | Health % its model keeps after one application, in 5s; under 25 passed over |
 | `pp.sharedefensive` | sharer | The button it raises before taking him |
 | `pp.brake` | per bot | Held past 90% of the holder's threat |

@@ -68,6 +68,12 @@ Review fixes: a holder carrying the plague kept no tank stand, and its duty hold
 hold, so it couldn't drag him off a puddle; the plagued-victim stack spot wasn't normalized with the bot on the
 victim and could leave the probed disk.
 
+Independent review fixes: the back taunt waited out the sharer's 3 s taunt aura (any taunt aura blocked the
+election), so a sharer took three or four P3 swings against the model's two; now only an aura from someone he
+isn't hitting blocks it. A Death Knight or paladin driver on foot elected guard kept walking to the table with
+him: a driver he hits is dropped, and guards rank the driver last. A riding carrier kept eating while its pass
+was due, parking inside a puddle its receiver's dodge won't enter.
+
 ## Decisions for review
 
 | Choice | Source | Alternative |
@@ -79,7 +85,7 @@ victim and could leave the probed disk.
 | Sharer survival model: two swings at his min/max average, `CalcArmorReducedDamage`, damage taken auras, the button's own MOD_DAMAGE_PERCENT_TAKEN cut, 25% left (`RAID_DEFENSIVE_FLOOR_PCT`) | A dead sharer heals him 300k-2.1M a stack; P3 swings run 30.6-42.2k a second before armor on 10N, about twice that on 25-man | The old gate, 80% health with a button ready |
 | Share taunt moves to 1.2 s before the application, the button from 2.5 s | Wowhead: taunt 1 s before; the window is the lead plus a scan and the tank's taunt back, 1.8 s, two P3 swings | Taunt at 2.5 s (three swings) |
 | Sharers stay Death Knights and Retribution paladins | Taunt needs Defensive Stance (and Shield Wall a shield), Growl Bear Form; encounter code changes no form or stance | Wowhead's fury warriors and ferals |
-| Hold ceiling at 3 after one application, a taker with fewer stacks, DR under level 3 | WT: never 4, delay 3; 3+3 costs 31% less a tick than 4+2; a 10 s hold leaves the next taunt at 65% duration | r8's holds of 2 only, reaching 4 on the third hold |
+| Hold ceiling at 3 after one application, a taker with fewer stacks, DR under level 3 | WT: never 4, delay 3; script: 3+3 costs 31% less a tick than 4+2; a 10 s hold leaves the next taunt at 65% duration | r8's holds of 2 only, reaching 4 on the third hold |
 | An anchored carrier's receiver walks onto it; his holder keeps dragging him meanwhile | 70920 searches 3 yd plus reach; a holder walking would drag him onto the receiver | The carrier waits (rooted) or walks him (holder) |
 | Stackers keep 6 yd off a plagued ooze victim, on the ooze's side | Ooze Eruption hits 10 yd round the ooze, which erupts once within 5 yd of its victim (70459) | Stack at 3.5 yd and catch the plague |
 | Goo timed from his position at the first scan after the cast, impacts kept 16 s | Scans run every 200 ms; the listener keeps an impact until the next cast evicts it at 9 s old | Timed from where he stands now, dropped at 9 s |
@@ -87,12 +93,17 @@ victim and could leave the probed disk.
 | No kite slow but Regurgitated Ooze, no Hand of Freedom duty | Immunity set -362 (snare, root) on the ooze and the cloud; nothing slows the kiter | Player snares |
 | Healers keep heal reach rather than a slot following the kiter | Several healers on a 12 yd ring; one walks when the kiter passes 40 yd | Rotface's lone-healer slot |
 | The driver ignores hazards | 630k/945k/441k/441k health; eating means standing in the puddle | Abomination dodges |
+| Review: the tank takes a sharer's stack back inside the sharer's taunt aura | `ThreatManager::TauntUpdate`: the latest taunt wins; Wowhead's tank taunts back 2 s after the sharer | Wait out its 3 s aura and model three or four P3 swings |
+| Review: a riding carrier stops eating while its pass is due, slashing its target instead | Eating parks it inside a puddle; the receiver's dodge won't enter one | The receiver stands in the puddle for the pass |
 
 ## Carried over
 
 - Merge stage, ICC README: the Malleable Goo listener bullet says Putricide times each landing from the cast
   time and keeps it 9 s; now from where he stood at the first scan after it, kept 16 s. The per-instance state
-  paragraph's Putricide list gains `pp.rings` (`ObsValue`).
+  paragraph's Putricide list gains `pp.rings` (`ObsValue`). The taunt paragraph: "a taunted unit holds the
+  taunter for the 3 s aura" holds against threat only, a later taunt takes it at once
+  (`ThreatManager::TauntUpdate`); Putricide's swap is "held for two Mutated Plague applications, or to 3
+  stacks after one while taunt DR is under level 3".
 - Merge stage, `icc-rebuild.PLAN.md` Status: the r8 row's "one driver (one bot tank: nobody drinks)" and "hold
   counts applications (back at 2 holds to 4)" are closed here.
 - r14, unchanged from r8: `ppBloatLastDir` and `BloatDir` in `ICCScripts.h`, `NPC_GROWING_OOZE_PUDDLE`,
@@ -107,5 +118,6 @@ victim and could leave the probed disk.
 - The sharer model counts no crushing blows, heals or avoidance, and likely passes every 25-man sharer over:
   `pp.sharehp` against the health sharers really kept settles it.
 - A tank that exits the abomination picks him up only once within 30 yd of him.
+- A riding carrier slashing a target that stands in a puddle still draws its receiver into it.
 
 ## Blocked

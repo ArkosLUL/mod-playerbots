@@ -901,10 +901,11 @@ void UpdateDriver(PpState& st, Creature* boss, std::vector<Player*> const& membe
     ObjectGuid const current = st.driver.Get();
     if (!holder || !IsTankPlayer(holder))
     {
-        // A tank on foot has to pick him up, not walk to the table. At his own table he holds nobody.
+        // A tank on foot has to pick him up, not walk to the table, and a driver he's hitting stays to hold him.
+        // At his own table he holds nobody.
         auto const driver = std::find_if(members.begin(), members.end(),
                                          [current](Player* member) { return member->GetGUID() == current; });
-        bool const keep = driver != members.end() && (st.passive || !IsTankPlayer(*driver));
+        bool const keep = driver != members.end() && *driver != holder && (st.passive || !IsTankPlayer(*driver));
         st.driver = keep ? current : ObjectGuid::Empty;
         return;
     }
@@ -1422,12 +1423,20 @@ bool HoldDue(PpState const& st, Player* holder, Creature* boss)
            boss->GetDiminishing(DIMINISHING_TAUNT) < DIMINISHING_LEVEL_3;
 }
 
+// A taunt from anyone he isn't hitting yet just landed, his victim catches up next update. His victim's own
+// aura doesn't hold him, the latest taunt wins, so a tank takes him back off a sharer while that still runs.
+bool TauntPending(Creature* boss, Unit* victim)
+{
+    Unit::AuraEffectList const& taunts = boss->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT);
+    return std::any_of(taunts.begin(), taunts.end(), [victim](AuraEffect const* effect)
+                       { return effect->GetCasterGUID() != victim->GetGUID(); });
+}
+
 Player* SwapTaunter(PpState const& st, Player* bot, Creature* boss, char const*& kind)
 {
     kind = nullptr;
     Unit* victim = boss->GetVictim();
-    // A taunt aura on him means one just landed and his victim catches up next update
-    if (!victim || st.passive || boss->HasAuraType(SPELL_AURA_MOD_TAUNT) ||
+    if (!victim || st.passive || TauntPending(boss, victim) ||
         boss->GetDiminishing(DIMINISHING_TAUNT) >= DIMINISHING_LEVEL_TAUNT_IMMUNE)
         return nullptr;
 
@@ -1486,10 +1495,10 @@ Player* SwapTaunter(PpState const& st, Player* bot, Creature* boss, char const*&
             if (member == holder || !IsTauntDps(member) || !CanTaunt(member, boss))
                 continue;
 
-            auto const rank = [](Player* player)
+            auto const rank = [&st](Player* player)
             {
-                return std::make_tuple(player->getClass() != CLASS_DEATH_KNIGHT, -player->GetHealthPct(),
-                                       player->GetGUID());
+                return std::make_tuple(player->GetGUID() == st.driver.Get(), player->getClass() != CLASS_DEATH_KNIGHT,
+                                       -player->GetHealthPct(), player->GetGUID());
             };
             if (!guard || rank(member) < rank(guard))
                 guard = member;
@@ -2039,9 +2048,11 @@ bool GetPpAbomPlan(PlayerbotAI* botAI, PpAbomPlan& plan)
         }
     }
 
+    // A rider whose Unbound Plague is due leaves the puddles alone: its receiver would have to stand in one
+    bool const passing = IsCarrier(*st, bot) && PassDue(bot, boss);
     for (Puddle const& puddle : st->puddles)
     {
-        if (puddle.guid != st->eating)
+        if (passing || puddle.guid != st->eating)
             continue;
 
         Creature* unit = bot->GetMap()->GetCreature(puddle.guid);
