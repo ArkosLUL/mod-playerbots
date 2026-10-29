@@ -18,6 +18,7 @@
 #include "ICCMultipliers_Rotface.h"
 #include "ICCMultipliers_Saurfang.h"
 #include "ICCMultipliers_Sindragosa.h"
+#include "ICCMultipliers_SindragosaAdds.h"
 #include "ICCMultipliers_Valithria.h"
 
 #endif

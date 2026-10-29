@@ -24,6 +24,8 @@ EncounterDefinition const& IccBloodPrincesDefinition();
 EncounterDefinition const& IccBloodQueenDefinition();
 EncounterDefinition const& IccSvalnaDefinition();
 EncounterDefinition const& IccValithriaDefinition();
+EncounterDefinition const& IccSindragosaDrakesDefinition();
+EncounterDefinition const& IccSindragosaGauntletDefinition();
 EncounterDefinition const& IccSindragosaDefinition();
 EncounterDefinition const& IccLichKingDefinition();
 // Raid-wide: the opener and resistance aura rows, fed by the live encounter's hooks (Util/ICCSeams.h).
@@ -49,6 +51,8 @@ inline std::vector<EncounterDefinition const*> const& IccEncounterDefinitions()
         &IccBloodQueenDefinition(),
         &IccSvalnaDefinition(),
         &IccValithriaDefinition(),
+        &IccSindragosaDrakesDefinition(),
+        &IccSindragosaGauntletDefinition(),
         &IccSindragosaDefinition(),
         &IccLichKingDefinition(),
         &IccRaidWideDefinition(),

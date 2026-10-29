@@ -34,6 +34,7 @@
 #include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "RaidResistAura.h"
 #include "RaidTankDefensive.h"
 #include "Spell.h"
 #include "SpellInfo.h"
@@ -1104,6 +1105,8 @@ void TickSgDrakesEncounter(PlayerbotAI* botAI)
     UpdateBrake(st, botAI);
     UpdateStand(st, botAI);
 }
+
+uint8 IccSindragosaDrakesResistSchools(PlayerbotAI* /*botAI*/, uint8 /*previous*/) { return RAID_RESIST_FROST; }
 
 bool IsSgGauntletLive(PlayerbotAI* botAI)
 {

@@ -81,6 +81,7 @@ NODE_PER_PREFIX = {
     "icc valkyre spear": "sister-svalna",
     "icc sister svalna": "sister-svalna",
     "icc valithria portal": "valithria-dreamwalker",
+    "icc sindragosa gauntlet dodge": "sindragosa-gauntlet",
     "icc sindragosa frost beacon": "sindragosa",
     "icc lich king winter": "the-lich-king",
 }

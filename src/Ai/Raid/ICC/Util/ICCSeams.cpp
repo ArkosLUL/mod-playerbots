@@ -14,6 +14,8 @@
 #include "ICCHelpers_Marrowgar.h"
 #include "ICCHelpers_Putricide.h"
 #include "ICCHelpers_Saurfang.h"
+#include "ICCHelpers_Sindragosa.h"
+#include "ICCHelpers_SindragosaAdds.h"
 #include "ICCHelpers_Valithria.h"
 #include "RaidEncounter.h"
 
@@ -34,6 +36,9 @@ std::vector<IccEncounterHooks> const& HookRows()
         {&IccBloodQueenDefinition, &IccBloodQueenBurstWindow, &GetBqlOpenerBosses, &IccBloodQueenResistSchools,
          nullptr},
         {&IccValithriaDefinition, nullptr, nullptr, &IccValithriaResistSchools, nullptr},
+        {&IccSindragosaDrakesDefinition, nullptr, nullptr, &IccSindragosaDrakesResistSchools, nullptr},
+        {&IccSindragosaDefinition, &IccSindragosaBurstWindow, &GetSgOpenerBosses, &IccSindragosaResistSchools,
+         nullptr},
     };
     return rows;
 }

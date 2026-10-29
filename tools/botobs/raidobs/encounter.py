@@ -236,6 +236,8 @@ ICC_PREFIXES = {
     "icc bql": "blood-queen-lana-thel",
     "icc valkyre spear": "sister-svalna", "icc sister svalna": "sister-svalna",
     "icc valithria": "valithria-dreamwalker",
+    # Ahead of "icc sindragosa": the first prefix a node starts with wins
+    "icc sindragosa gauntlet": "sindragosa-gauntlet",
     "icc sindragosa": "sindragosa",
     "icc lich king": "the-lich-king",
 }

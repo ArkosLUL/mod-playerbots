@@ -21,6 +21,7 @@
 #include "ICCActions_Rotface.h"
 #include "ICCActions_Saurfang.h"
 #include "ICCActions_Sindragosa.h"
+#include "ICCActions_SindragosaAdds.h"
 #include "ICCActions_Svalna.h"
 #include "ICCActions_Valithria.h"
 

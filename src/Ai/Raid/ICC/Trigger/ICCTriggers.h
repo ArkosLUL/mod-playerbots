@@ -21,6 +21,7 @@
 #include "ICCTriggers_Rotface.h"
 #include "ICCTriggers_Saurfang.h"
 #include "ICCTriggers_Sindragosa.h"
+#include "ICCTriggers_SindragosaAdds.h"
 #include "ICCTriggers_Svalna.h"
 #include "ICCTriggers_Valithria.h"
 

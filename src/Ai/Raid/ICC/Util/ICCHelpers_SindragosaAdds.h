@@ -98,6 +98,8 @@ bool IsSgDrakeTankDefensiveHeld(PlayerbotAI* botAI);
 // The scan, the tank roster, the roar clock, the brake, the stand latch, the calls to a human tank, the
 // pull mark, the reset after the fight
 void TickSgDrakesEncounter(PlayerbotAI* botAI);
+// Frost while the drakes are up: Rimefang's Frost Aura reaches the whole raid within 100 yd
+uint8 IccSindragosaDrakesResistSchools(PlayerbotAI* botAI, uint8 previous);
 
 // The gauntlet is in progress and the bot within reach of its controller
 bool IsSgGauntletLive(PlayerbotAI* botAI);
