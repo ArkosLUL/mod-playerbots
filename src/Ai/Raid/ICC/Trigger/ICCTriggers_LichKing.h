@@ -7,9 +7,18 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_LICHKING_H
 #define PLAYERBOTS_ICCTRIGGERS_LICHKING_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_LichKing.h"
+#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
+
+class IccLichKingQuakeTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lich king quake";
+
+    IccLichKingQuakeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
 
 class IccLichKingShadowTrapTrigger : public Trigger
 {
@@ -20,39 +29,92 @@ public:
     bool IsActive() override;
 };
 
-class IccLichKingNecroticPlagueTrigger : public Trigger
+class IccLichKingTankDefensiveTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc lich king necrotic plague";
+    static constexpr char const* Name = "icc lich king tank defensive";
 
-    IccLichKingNecroticPlagueTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccLichKingTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccLichKingWinterTrigger : public Trigger
+class IccLichKingTauntTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc lich king winter";
+    static constexpr char const* Name = "icc lich king taunt";
 
-    IccLichKingWinterTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccLichKingTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccLichKingAddsTrigger : public Trigger
+class IccLichKingPlagueCureTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc lich king adds";
+    static constexpr char const* Name = "icc lich king plague cure";
 
-    IccLichKingAddsTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccLichKingPlagueCureTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccLichKingSpiritBombTrigger : public Trigger
+class IccLichKingPlagueWalkTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc lich king spirit bomb";
+    static constexpr char const* Name = "icc lich king plague walk";
 
-    IccLichKingSpiritBombTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccLichKingPlagueWalkTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccLichKingTranquilizeTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lich king tranquilize";
+
+    IccLichKingTranquilizeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccLichKingStunTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lich king stun";
+
+    IccLichKingStunTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccLichKingSilenceDispelTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lich king silence dispel";
+
+    IccLichKingSilenceDispelTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccLichKingTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc lich king target";
+
+    IccLichKingTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetLkTarget) {}
+};
+
+class IccLichKingBrakeTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lich king brake";
+
+    IccLichKingBrakeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccLichKingStandTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lich king stand";
+
+    IccLichKingStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
