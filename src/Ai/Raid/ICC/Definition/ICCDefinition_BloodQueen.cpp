@@ -39,6 +39,7 @@ void DefineBloodQueen(EncounterBuilder& e)
     e.Node<IccBqlStandTrigger, IccBqlStandAction>(ACTION_RAID + 3, EncounterRow::Mover);
 
     e.LiveMultiplier<IccBqlBrakeMultiplier>(Family::Spell | Family::Melee);
+    e.LiveMultiplier<IccBqlSplashMultiplier>(Family::Spell);
     // The earth totem slot holds one totem, so Tremor stays down only while the shaman's others are held
     e.LiveMultiplier<IccBqlAntiFearTotemGuardMultiplier>(Family::Spell);
 
@@ -51,11 +52,10 @@ void DefineBloodQueen(EncounterBuilder& e)
                 Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti | Family::Follow |
                 Family::MoveRandom);
     // Pacified and silenced, a frenzied bot has the bite and nothing else
-    e.Exclusive("icc bql bite hold", Role::Any, &IsBqlBiting, 0, {IccBqlBiteAction::Name, IccBqlDodgeAction::Name});
+    e.Exclusive("icc bql bite hold", Role::Any, &IsBqlBiting, 0, {IccBqlBiteAction::Name});
     // Every half second it stops drops a shadow where it stands
     e.Exclusive("icc bql shadows hold", Role::Any, &IsBqlShadowCarrier, 0, {IccBqlShadowsAction::Name});
-    e.OwnMovement("icc bql pact hold", Role::Any, &IsBqlPactMember, Family::Attack,
-                  {IccBqlPactAction::Name, IccBqlDodgeAction::Name});
+    e.OwnMovement("icc bql pact hold", Role::Any, &IsBqlPactMember, Family::Attack, {IccBqlPactAction::Name});
     // Nodes and group spots are in reach of her already, and reach would walk a bot off the spread. Every
     // healer node covers the tank spot and her.
     e.OwnMovement("icc bql stand hold", Role::Any, &IsBqlHoldingStand, Family::Attack,

@@ -18,6 +18,18 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Area damage next to a mind-controlled vampire, which would break the CC holding it
+class IccBqlSplashMultiplier : public Multiplier
+{
+public:
+    IccBqlSplashMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc bql splash") {}
+    float GetValue(Action* action) override;
+
+private:
+    uint32 _checkedMs = 0;
+    bool _vampireNear = false;
+};
+
 class IccBqlAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
 {
 public:

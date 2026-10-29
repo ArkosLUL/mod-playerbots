@@ -90,7 +90,11 @@ One lead, no split: the stem shares one state, one shadow scan and one tick.
 | Melee in up to 3 groups 7.5 yd round her (back and ±60°), re-latched past 1.5 yd drift | WT: 2-3 small melee stacks | one stack behind her (generic) |
 | The mirror tank stands on the main tank and never attacks her before the first vampire | script: Blood Mirror takes the player nearest her victim; her bite takes the highest-threat non-victim, the off-tank included | let the off-tank attack and risk the first bite |
 | Bite order DPS, then non-holding tanks, then healers, never her victim, nearest first, targets above 15k health first | WT/Wowhead: no healers (they gain nothing); WT 10-man counts 8 vampires by 3:30, which needs tanks or healers; 70871 sets threat ×0, so a vampire main tank stops holding | never healers (an Uncontrollable Frenzy instead) |
-| CC the Uncontrollable Frenzy victim (Polymorph, Cyclone, Hex, Repentance, Hammer of Justice, Blind, Fear, Scatter Shot), not kill it | brief focus; guides: mind controlled until killed | DPS kill it |
+| CC the Uncontrollable Frenzy victim (Polymorph, Cyclone, Hex, Repentance, Hammer of Justice, Blind, Death Coil, Scatter Shot), not kill it; a holder with nothing left to land hands it on | brief focus; guides: mind controlled until killed; 70924 makes it immune to fear and grips | DPS kill it |
+| Area damage held within 15 yd of a mind-controlled vampire (`icc bql splash`) | Deathwhisper's hold round a Dominate Mind victim; every listed CC but the stuns breaks on damage | no hold: cleaves near her break the CC and spend a DR level |
+| A player's skull on a mind-controlled vampire wins over its CC | Humans decision: a player's skull wins over every resolver | skull read on her only |
+| Threat brake against the main tank's threat while she has no victim, from her walk to the centre until she lands | script: `AttackStop` at the walk, `SelectVictim` on landing; ranged reach her in the air | no brake in the air: she lands on a ranged DPS 35 yd from the tank spot, past taunt range |
+| The main tank leaves the tank spot to fetch her while she is on someone else more than 15 yd off it | taunt reaches 30 yd and the stand blocks reach; Putricide's rings let go past 15 yd | hold the spot all fight |
 | Lust once vampires reach the round's peak (8 on 10-man, 16 on 25-man) or 280 s in | Wowhead: lust at 16 vampires | lust at the pull |
 | Tank class buttons held to 25%; our node presses under 40% and in the last 60 s before Berserk | Wowhead: save tank cooldowns for the end; no predictable tank hit | free class buttons all fight |
 | Tanks stay at the tank spot through the air phase; the mirror tank steps onto an air node until the Whirl ends | WT: tanks stay put so she returns; Whirl splashes 6 yd | both tanks stacked through the Whirl |
@@ -109,7 +113,8 @@ All tasks done.
   (`icc bql tank defensive`: any tank under 40% and her holder and the mirror tank in the last minute,
   class buttons held to 25%, `bql.defensive`, `bql.humancall`; `icc bql whirl cover` and `icc bql whirl
   defensive` on `icc.cover`/`icc.personal`; `icc bql brake`, a `LiveMultiplier` holding non-holders at
-  90% of the holder's threat, frees at 80%); its stem keeps `bql.tank`, `bql.slot`, `bql.airslot`,
+  90% of the holder's threat, frees at 80%; `icc bql splash`, a `LiveMultiplier` holding area damage
+  within 15 yd of a mind-controlled vampire); its stem keeps `bql.tank`, `bql.slot`, `bql.airslot`,
   `bql.group`, `bql.bite`, `bql.cc`, `bql.curve` and `bql.brake` in its own `RaidInstanceState`, and
   `IccInstanceState`'s three `bql.*` containers join the unused list; trigger names `icc bql` dodge,
   vampiric bite, swarming shadows, pact of darkfallen, whirl defensive, whirl cover, tank defensive, anti

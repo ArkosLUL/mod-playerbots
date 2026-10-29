@@ -141,7 +141,8 @@ IccBqlPhase IccBqlPhaseOf(Player* bot, Unit* boss);
 bool IsBqlLive(PlayerbotAI* botAI);
 Creature* GetBqlQueen(PlayerbotAI* botAI);
 
-// Tanks and DPS: a player's skull, else her; nothing for a braked or frenzied bot. Notes bql.target.
+// Tanks and DPS: a player's skull on her or a mind-controlled vampire, else her. Nothing for a frenzied bot,
+// nor for a braked one but a skulled vampire. Notes bql.target.
 Unit* GetBqlTarget(PlayerbotAI* botAI);
 // Her, for the main tank she has left, its taunt ready and her below taunt DR level 3
 Unit* GetBqlTauntTarget(PlayerbotAI* botAI);
@@ -153,6 +154,8 @@ bool IsBqlBiting(PlayerbotAI* botAI);
 Player* GetBqlBiteTarget(PlayerbotAI* botAI);
 // The mind-controlled vampire this bot keeps under control, and the spell, when one is due now
 Unit* GetBqlFrenzyCc(PlayerbotAI* botAI, uint32& spellId);
+// A mind-controlled vampire within range of the bot or its target, where area damage would break its CC
+bool IsBqlVampireInSplash(PlayerbotAI* botAI, float range);
 
 // A Pact member walks to the Pact spot, unless frenzied or carrying shadows. Notes bql.pact.
 bool IsBqlPactMember(PlayerbotAI* botAI);
