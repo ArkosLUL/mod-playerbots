@@ -276,7 +276,7 @@ death inside and no `winter2` after the return.
 | `lk.cure` | per priest, paladin, shaman | `delivered`, `addtank`, `isolated`, `emergency` with the carrier, `none` |
 | `lk.enrage`, `lk.silence` | per hunter; per priest, paladin | the enraged Shambling; the silenced member; `none` |
 | `lk.trap` | per bot, heroic | `dodge <trap>`, `none` |
-| `lk.defile` | the target | the listener's cast, with its 6 yd hazard circle |
+| `lk.defile` | the target | the listener's cast, with its 10 yd hazard circle |
 | `lk.defilerun` | per bot | `run`, `clear`, `puddle <defile>`, `none` |
 | `lk.valkyr` | per bot | `dps`, `stun`, `slow` with the Val'kyr, `none` |
 | `lk.siphon` | free tank, heroic | the siphoner after each taunt, `none` |

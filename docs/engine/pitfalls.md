@@ -221,7 +221,10 @@ portal this way.
   so every point reads off mesh with no height: there the offline check is impossible, not failed.
   Live, a bot's `MoveTo` onto it takes the straight-line `0x11` shortcut, clipped only by the static
   LOS ray, and its Z comes from the object's dynamic collision. ToC's arena (GO 195527) is the case.
-  A transport deck is one too, and `FindNearestPositionClearOfHazards`'s
+  That holds for `exact_waypoint = true` only: with `false`, `SearchForBestPath` returns
+  `INVALID_HEIGHT` whenever `GetMapHeight` misses the object's collision, and the walk does nothing
+  (the Lich King's Frozen Throne and Frostmourne floors). Pass `true` with the floor's own Z and judge
+  the walk by distance moved. A transport deck is one too, and `FindNearestPositionClearOfHazards`'s
   `CheckCollisionAndGetValidCoords` refuses every candidate on it: a dodge on a ship sweeps its own
   points, bounded in transport-local coordinates through `Transport::CalculatePassengerOffset`
   ([Gunship Battle](../raids/icecrown-citadel/icecrown-gunship-battle.md)).

@@ -575,7 +575,9 @@ encounters.
   moving Anub'arak's guid slot from 13 to 11, and the stale mirror read an empty guid with no error.
 - **A phase heuristic must separate the pull intro from a mid-fight transition.** Both read as "in
   combat, boss non-attackable". Full health separates them whenever the real transitions are
-  health-gated.
+  health-gated. A boss briefly passive after an event looks like an earlier phase's passive window
+  too (the Lich King for 1 s after the heroic Frostmourne return), so latch the phases already
+  reached.
 - **Read a boss spell's full effect list, not its damage.** "Damage" spells carry riders that decide
   the whole reaction: Freya's Ground Tremor is `Effect_1` damage plus `Effect_2 = 68`
   `SPELL_EFFECT_INTERRUPT_CAST`, which silences the raid's school for 10s — the damage number says

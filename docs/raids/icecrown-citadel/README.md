@@ -14,14 +14,16 @@ changes so the user can pick which to port. Tactics come from the guides in
 `FrostGiant` (Rotting Frost Giants), `Gunship`, `Saurfang`, `Dogs` (Stinky and Precious), `Festergut`,
 `Rotface`, `Putricide`, `BloodPrinces` (council and trash), `BloodQueen`, `Svalna`, `Valithria`,
 `SindragosaAdds` (two definitions: `SindragosaDrakes` for Rimefang and Spinestalker,
-`SindragosaGauntlet`), `Sindragosa`, `LichKing`. A stem owns:
+`SindragosaGauntlet`), `Sindragosa`, `LichKing` (phases two and three and Frostmourne in `LichKingLate`
+files, under the one definition). A stem owns:
 
 - `Action/ICCActions_<Stem>`, `Trigger/ICCTriggers_<Stem>`, `Multiplier/ICCMultipliers_<Stem>`;
 - `Util/ICCHelpers_<Stem>`: its positions, constants, phase readers and other helpers;
 - `Definition/ICCDefinition_<Stem>.cpp`: one `EncounterDefinition` with its rows and multipliers,
   the accessor declared in `Definition/ICCDefinitions.h`.
 
-A file exists once it has content: `Marrowgar`, `FrostGiant` and `Svalna` have no multipliers.
+A file exists once it has content: `Marrowgar`, `FrostGiant`, `Svalna` and `LichKingLate` have no
+multipliers.
 Raid-wide parts:
 
 - `Util/ICCHelpers_Shared`: helpers several encounters use (class taunt and CC, raid icons, heroic
@@ -71,6 +73,7 @@ point, about 7 s into the pull (~102 and ~104 yd at 15 yd/s). What acts before l
 | Gunship | for bots aboard the raid's ship: the definition tick, `icc gunship rocket pack setup` (no pack equipped, Zafod within 150 yd), `icc gunship cannon near` (a cannoneer with its pack), `icc in cannon`; `icc gunship tank defensive` is asked now but returns false until live; `icc gunship rocket jump`, every rule and the multiplier wait for live |
 | Valithria | `icc valithria dream`'s landing (she is within 100 yd) and the tick's once-per-instance `cross` to `skull` `rti` reset; every other node waits for `IN_PROGRESS`, which comes once the first archmage pulls the combat trigger |
 | Sindragosa | through her fly-in (unattackable, out of combat): the tick, with its once-per-instance `cross` or `star` to `skull` `rti` reset, and `icc sindragosa stand` round her landing spot; every other node and rule waits for her combat |
+| Lich King | the tick, with the same `rti` reset, and `icc lich king stand`'s opening stands while he walks the intro |
 
 Nothing else: Marrowgar's nodes key on his boss state, the giant's and the dogs' on their gate being
 live, any prince's engage pulls Valanar into the state in the same update, and the rest key on fight
@@ -94,9 +97,9 @@ definition alone:
   Stinky and Precious (`GetDogsTarget`), Festergut (`GetFgTarget`), Rotface (`GetRfTarget`),
   Putricide (`GetPpTarget`), the Blood Prince Council (`GetBpcTarget`), the Blood-Queen
   (`GetBqlTarget`), Svalna (`GetSsTarget`), Valithria (`GetVdTarget`), Sindragosa (`GetSgTarget`), her
-  drakes (`GetSgDrakeTarget`) and gauntlet (`GetSgGauntletTarget`) use it, with no icon writes
-  or `rti` use. `RaidRestoreLegacyRti` stays unwired
-  until no ICC code writes `rti`, and it never resets `star`. The Marrowgar and Sindragosa ticks reset
+  drakes (`GetSgDrakeTarget`), gauntlet (`GetSgGauntletTarget`) and the Lich King (`GetLkTarget`)
+  use it, with no icon writes or `rti` use. `RaidRestoreLegacyRti` stays unwired
+  until no ICC code writes `rti`, and it never resets `star`. The Marrowgar, Sindragosa and Lich King ticks reset
   a bot's `cross` or `star` `rti` to `skull` once per instance, the Valithria tick a `cross`, and the
   Gunship tick a `star` while its gate is open; a bot that skips those rooms keeps what the old code set.
 - hooks: a row in `HookRows()` (`Util/ICCSeams.cpp`), `{&Icc<Stem>Definition, burstWindow,
@@ -116,7 +119,8 @@ definition alone:
   Blood-Queen's opener (boss 37955), burst window (lust at the vampire peak, 8 on 10-man and 16 on
   25-man, or at 280 s) and resist schools (shadow), Valithria's resist schools (fire, frost and nature),
   the drakes' resist schools (frost: Rimefang's Frost Aura), Sindragosa's opener (boss 36853), burst
-  window (lust in the last phase) and resist schools (frost).
+  window (lust in the last phase) and resist schools (frost), the Lich King's opener (boss 36597),
+  burst window (lust in phase one) and resist schools (shadow and frost).
 - defensives: `GetRaidCover` and `GetRaidPersonalDefensive` (`RaidDefensive.h`) with
   `ICC_DEFENSIVE_SCOPE` (`icc.cover`, `icc.personal`) and a `RaidPredictedHit` the stem builds.
   Tank buttons go through `NextTankDefensive` (`RaidTankDefensive.h`) with a `Block` over
@@ -156,7 +160,11 @@ definition alone:
     non-holders but healers at 90% of the holder's threat (frees at 80%);
   - her drakes: `icc sindragosa drake tank defensive` (a drake's tank under 40%, physical only;
     Rimefang's on each Frost Breath under 60%; `sg.drake.defensive`, `sg.drake.humancall`), plus `icc
-    sindragosa drake brake` (free tanks all fight, everyone but healers while Rimefang flies).
+    sindragosa drake brake` (free tanks all fight, everyone but healers while Rimefang flies);
+  - the Lich King: `icc lich king tank defensive` (the holder at 15 Plague Siphon stacks and each Soul
+    Reaper, Anti-Magic Shell only on Soul Reaper; the free tank on an unanswered Enrage; any tank under
+    40%; class buttons held to 25%; `lk.defensive`, `lk.humancall`), plus `icc lich king brake`
+    (non-holders at 90% of the holder's threat, frees at 80%).
 - opening positions: a `Mover` row in the definition whose trigger holds the stand while the gate is
   open and not live, its positions navprobed in the stem's helpers. No raid-wide staging.
 
@@ -236,15 +244,12 @@ replaced it.
 
 | Key | Class | Gate | Sites |
 |---|---|---|---|
-| `lk.ragingspiritkill` | gap | raid | `IccLichKingWinterAction`: kills the fullest Raging Spirit past two |
-| `lk.wickedspiritkill` | gap | raid | `HandleSpiritMarkingAndTargeting`: kills the star Wicked Spirit |
-| `lk.hoj` | gap | raid | `HandleAssistTankAddManagement`: Hammer of Justice on Shamblings from any class |
-| `lk.frostmourneescape` | gap | raid | `HandleTeleportationFixes`, normal: snaps a Harvest Soul victim out of Frostmourne on its first tick, skipping the Spirit Warden |
+| `lk.floorsnap` | gap | raid | `FloorSnap` (`ICCHelpers_LichKing.cpp`): a bot sunk through the platform or Frostmourne floor is put back on it |
 | `ldw.nothreat`, `ldw.spitefulfury` | buffs | iccbuffs | the Deathwhisper definition's tick while live |
 | `pp.heroicbuff`, `pp.spitefulfury` | buffs | iccbuffs | the Putricide definition's tick while live, on every member |
 | `sg.heroicbuff`, `sg.spitefulfury` | buffs | iccbuffs | the Sindragosa definition's tick while live, on every member |
-| `lk.heroicbuff` | buffs | iccbuffs | `IccLichKingShadowTrapAction`, `IccLichKingWinterAction`, `IccLichKingAddsAction` (every member) |
-| `lk.empoweredblood`, `lk.valkyrstun` | buffs | iccbuffs | `IccLichKingAddsAction`, `HandleValkyrAssignment` |
+| `lk.heroicbuff`, `lk.empoweredblood` | buffs | iccbuffs | the Lich King definition's tick while he is in combat, on every member (`lk.empoweredblood` 60-40%) |
+| `lk.valkyrstun` | buffs | iccbuffs | the late tick: Hammer of Justice once per carrying Val'kyr |
 
 `*.heroicbuff` is `IccApplyHeroicBuffToMember` (Experienced, Aegis of Dalaran, Pain Suppression, 1%
 Threat), recorded when it adds any, on members in the bot's own instance only. Experienced 71188 and
@@ -280,18 +285,14 @@ Champion or Warrior on a non-tank, generic taunts free. The gunship's board tank
 
 Each boss doc says what its callers risk.
 
-Documented, not wrapped: `IccLichKingAddsAction`'s Val'kyr edge-dive puts the
-carry aura on itself and suicides at the bottom; the Lich King's 1 yd platform snap cancels knockbacks
-mid-flight ([the-lich-king.md](the-lich-king.md#unstucks)). Not cheats: spell clicks and object use in range,
-real item use, own-aura cancels, the spell listeners.
+Not cheats: spell clicks and object use in range, real item use, own-aura cancels, the spell
+listeners.
 
 ## Per-instance state
 
 `IccInstanceState` (`Util/ICCScripts.h`) sits in a `RaidInstanceState` store: `IccState(id)` creates
 it, and a has-state read (`ActiveGooPositions`, the reset) uses `Find`. Assignments and latches are
-traced containers:
-`lk.winterinbound`, `lk.mtinbound`, `lk.rangedinbound`, `lk.sharedslot` (-1 none).
-They are unordered, and no loop over one depends on its order. Saurfang keeps
+traced containers, unordered, and no loop over one depends on its order. Saurfang keeps
 `dbs.slot`, `dbs.kill`, `dbs.cc`, `dbs.markheal` and `dbs.protect` in its stem's own
 `RaidInstanceState`, Festergut `fg.slot`, `fg.carrier`, `fg.leg`, `fg.sporespot` and `fg.brake`,
 Rotface `rf.slot`, `rf.dispel`, `rf.kiter`, `rf.flood` and `rf.oozespot`, Putricide `pp.spot`,
@@ -308,7 +309,8 @@ Valithria `vd.healer`, `vd.portalclaim` and `vd.tank`, Sindragosa `sg.tank`, `sg
 `bpcSpreadLockTimers`, the Blood-Queen's `bqlBotCurrentCurve`, `bqlAirSlotMemory` and
 `bqlBotSlotMemory`, Valithria's `vtCloudSync` and `vtPortalClaim` (the stems reuse their keys),
 Sindragosa's `sgFlaredRedThisPhase`, `sgLastPhase3` and the traced `sg.flaredblue`, `sg.group`,
-`sg.tomb` and `sg.freedfallback`. Timestamps, throttles, caches, edge detectors and struct values stay
+`sg.tomb` and `sg.freedfallback`, the Lich King's traced `lk.winterinbound`, `lk.mtinbound`,
+`lk.rangedinbound` and `lk.sharedslot` (-1 none). Timestamps, throttles, caches, edge detectors and struct values stay
 bare.
 
 **Reset**: `IccBossStateResetScript` stamps the state while any boss is `IN_PROGRESS` and erases it 5 s
@@ -331,7 +333,8 @@ id.
   73019 (10H) or 73020 (25H), so it is matched through `GetSpellIdForDifficulty`. Notes `rf.vilegas`
   on the victim; no Rotface code reads `rotfaceVileGas` any more.
 - **Defile** 72762, a 2 s cast with no difficulty row, read at `OnSpellPrepare`. Notes `lk.defile` on
-  the target and a 6 yd hazard circle for the cast time; the puddle that follows is a sampled creature.
+  the target and a 10 yd hazard circle (the script's 10 × scale, spawn scale 1) for the cast time;
+  the puddle that follows is a sampled creature.
 
 ## Trigger names
 
@@ -350,7 +353,10 @@ valithria` dodge, kite, dream, portal, taunt, snare, void, target and heal; Sind
 sindragosa` blistering cold, splash, bomb hide, frost beacon, tank defensive, taunt, buffet hide,
 unchained magic, hand of freedom, beacon heal, hold, target and stand, her drakes' `icc sindragosa
 drake` dodge, tank defensive, anti fear, brake, target and stand, her gauntlet's `icc sindragosa
-gauntlet` dodge, taunt and target (prefix row ahead of `icc sindragosa` in `ICC_PREFIXES`). The others:
+gauntlet` dodge, taunt and target (prefix row ahead of `icc sindragosa` in `ICC_PREFIXES`); the Lich
+King's `icc lich king` quake, shadow trap, defile, vile spirits, frostmourne, tank defensive, taunt,
+siphon taunt, plague cure, plague walk, tranquilize, stun, valkyr control, silence dispel, harvest
+soul, target, stack, stand and brake. The others:
 `icc dark reckoning` (Deathwhisper), `icc in cannon` and the `icc gunship` ones (Gunship), `icc
 rotting frost giant plague`, `icc dogs` tank defensive, decimate cover, swap, yield and target
 (Stinky and Precious), `icc valkyre spear` and `icc sister svalna` hurl, taunt and target (Svalna). The raid-wide `icc opener swing`, `icc opener redirect` and `icc resistance
@@ -359,7 +365,6 @@ one unbuilt.
 
 ## Known gaps
 
-- Targeting is by raid icon on the Lich King; the probes record every pick.
 - Every gap cheat above: a mechanic it makes survivable is open, and a server with the raid cheat off
   loses it.
 - The hooks answer only while a definition is live, so Festergut's and Valithria's aura hooks, and
