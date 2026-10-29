@@ -8,7 +8,6 @@
 #define PLAYERBOTS_ICCTRIGGERS_BLOODPRINCES_H
 
 #include "ICCHelpers_BloodPrinces.h"
-#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
 
 class IccBpcDodgeTrigger : public Trigger
@@ -65,12 +64,50 @@ public:
     bool IsActive() override;
 };
 
-class IccBpcTargetTrigger : public IccDirectTargetTrigger
+class IccBpcLanceDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bpc lance defensive";
+
+    IccBpcLanceDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBpcFlameDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bpc flame defensive";
+
+    IccBpcFlameDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBpcDispelTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bpc dispel";
+
+    IccBpcDispelTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBpcBrakeTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bpc brake";
+
+    IccBpcBrakeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+// Fires while the bot is off its pick, or its pet off the bomb it juggles or the bot's pick
+class IccBpcTargetTrigger : public Trigger
 {
 public:
     static constexpr char const* Name = "icc bpc target";
 
-    IccBpcTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetBpcTarget) {}
+    IccBpcTargetTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
 };
 
 class IccBpcStandTrigger : public Trigger

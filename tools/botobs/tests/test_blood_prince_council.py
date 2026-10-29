@@ -71,6 +71,11 @@ def pull(boss: str = "blood-prince-council") -> list[dict]:
         note(100, SHIV, "bpc.target", "empowered"),
         note(20000, SHIV, "bpc.target", "skull"),
         note(21000, SHIV, "bpc.target", "empowered"),
+        # The brake holds Shiv off Taldaram for 2.5 s
+        note(46000, SHIV, "bpc.target", "brake"),
+        note(46000, SHIV, "bpc.brake", "1"),
+        note(48500, SHIV, "bpc.brake", "0"),
+        note(48500, SHIV, "bpc.target", "empowered"),
         note(100, VOLLEY, "bpc.target", "empowered"),
         note(20100, VOLLEY, "bpc.target", "bomb"),
         note(21500, VOLLEY, "bpc.target", "empowered"),
@@ -79,7 +84,9 @@ def pull(boss: str = "blood-prince-council") -> list[dict]:
         note(45300, ARCANE, "bpc.slot", "21"),
         note(100, MEND, "bpc.slot", "20"),
         note(15000, SHIV, "bpc.slot", "8"),
+        note(15000, SHIV, "bpc.hits", "1"),
         note(19500, SHIV, "bpc.slot", "0"),
+        note(19500, SHIV, "bpc.hits", "none"),
         note(30000, SHIV, "bpc.dodge", "melee"),
         note(31000, SHIV, "bpc.dodge", "none"),
         # Volley juggles the first bomb, then the second; Arcane takes the first once Volley moves on.
@@ -91,11 +98,20 @@ def pull(boss: str = "blood-prince-council") -> list[dict]:
         note(20000, VOLLEY, "bpc.juggle", "wait"),
         note(20100, VOLLEY, "bpc.juggle", "shoot"),
         note(21500, VOLLEY, "bpc.juggle", "wait"),
+        # Volley's pet stays under the second bomb
+        note(22000, VOLLEY, "bpc.petbomb", str(BOMB_B)),
+        note(40000, VOLLEY, "bpc.petbomb", "0"),
         note(60000, ARCANE, "bpc.ball", "plain step"),
         note(61000, ARCANE, "bpc.ball", "plain clear"),
-        note(95000, MEND, "bpc.ball", "inferno none"),
+        note(95000, MEND, "bpc.ball", "inferno fewest"),
+        note(95000, MEND, "bpc.flame", "idle"),
+        note(96000, MEND, "bpc.flame", "Divine Protection"),
+        note(97000, MEND, "bpc.flame", "idle"),
         note(95000, SHIV, "bpc.soak", "1"),
         note(97000, SHIV, "bpc.soak", "0"),
+        # Mend dispels Glittering Sparks off Bulwark
+        note(70000, BULWARK, "bpc.dispel", str(MEND)),
+        note(70500, BULWARK, "bpc.dispel", "0"),
         note(11000, AEGIS, "bpc.nucleus", "taunt 0"),
         note(12000, AEGIS, "bpc.nucleus", "cooldown"),
         note(22000, AEGIS, "bpc.nucleus", "taunt 1"),
@@ -145,7 +161,7 @@ class Targets(unittest.TestCase):
             "  per bot: spans of each resolver branch\n"
             "\n"
             "    Bulwark  owned 1, recover 1\n"
-            "    Shiv  skull 1, empowered 2\n"
+            "    Shiv  skull 1, brake 1, empowered 3\n"
             "    Volley  bomb 1, empowered 2\n"))
 
 
@@ -168,43 +184,62 @@ class Spread(unittest.TestCase):
         self.assertEqual((rows[ARCANE]["nodes"], rows[ARCANE]["moves"], rows[ARCANE]["released"]), (2, 1, 0))
         self.assertEqual((rows[SHIV]["nodes"], rows[SHIV]["moves"], rows[SHIV]["released"]), (1, 0, 1))
         self.assertEqual(dict(rows[SHIV]["dodges"]), {"melee": 1})
+        self.assertEqual(dict(rows[SHIV]["hits"]), {"1": 1})
 
     def test_section(self):
         self.assertEqual(printed(bpc.show_spread, load(pull())), (
             "SPREAD\n"
-            "  per bot: nodes held, node-to-node moves, releases, vortex dodges\n"
+            "  per bot: nodes held, node-to-node moves, releases, vortex dodges, scatter windows as hits:count\n"
             "\n"
-            "    Arcane  nodes 2  moves 1  released 0  dodges -\n"
-            "    Mend  nodes 1  moves 0  released 0  dodges -\n"
-            "    Shiv  nodes 1  moves 0  released 1  dodges melee 1\n"))
+            "    Arcane  nodes 2  moves 1  released 0  dodges -  hits -\n"
+            "    Mend  nodes 1  moves 0  released 0  dodges -  hits -\n"
+            "    Shiv  nodes 1  moves 0  released 1  dodges melee 1  hits 1:1\n"))
 
 
 class Bombs(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(bpc.show_bombs, load(pull())), (
             "BOMBS\n"
-            "  per duty bot: bombs juggled, bomb-to-bomb switches, shot windows\n"
+            "  per duty bot: bombs juggled, bomb-to-bomb switches, shot windows, bombs its pet stayed under\n"
             "\n"
-            "    Volley  bombs 2  switches 1  shots 1\n"
-            "    Arcane  bombs 1  switches 0  shots 0\n"))
+            "    Volley  bombs 2  switches 1  shots 1  pet 1\n"
+            "    Arcane  bombs 1  switches 0  shots 0  pet 0\n"))
 
 
 class Balls(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(bpc.show_balls, load(pull())), (
             "BALLS\n"
-            "  per bot: ball victim spans by kind and answer, Inferno Flame soaks\n"
+            "  per bot: ball victim spans by kind and answer, Inferno Flame soaks, Inferno catch buttons\n"
             "\n"
-            "    Arcane  plain clear 1, plain step 1  soaks 0\n"
-            "    Mend  inferno none 1  soaks 0\n"
-            "    Shiv  -  soaks 1\n"))
+            "    Arcane  plain clear 1, plain step 1  soaks 0  flame -\n"
+            "    Mend  inferno fewest 1  soaks 0  flame Divine Protection 1\n"
+            "    Shiv  -  soaks 1  flame -\n"))
+
+
+class Brake(unittest.TestCase):
+    def test_section_totals_each_hold(self):
+        self.assertEqual(printed(bpc.show_brake, load(pull())), (
+            "BRAKE\n"
+            "  per bot: threat brake holds on the empowered prince and their total\n"
+            "\n"
+            "    Shiv  holds 1  held 0:02.500\n"))
+
+
+class Dispels(unittest.TestCase):
+    def test_section_counts_each_dispeller(self):
+        self.assertEqual(printed(bpc.show_dispels, load(pull())), (
+            "DISPELS\n"
+            "  per dispeller: Glittering Sparks carriers it was dealt\n"
+            "\n"
+            "    Mend  1\n"))
 
 
 class Nucleus(unittest.TestCase):
     def test_section_groups_taunts_by_word(self):
         self.assertEqual(printed(bpc.show_nucleus, load(pull())), (
             "NUCLEUS\n"
-            "  per tank: spans of each nucleus answer\n"
+            "  per owner: spans of each nucleus answer\n"
             "\n"
             "    Aegis  taunt 2, walk 1, cooldown 1, full 1\n"))
 

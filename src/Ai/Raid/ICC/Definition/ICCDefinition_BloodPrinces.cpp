@@ -23,6 +23,9 @@ namespace
 void DefineBloodPrinces(EncounterBuilder& e)
 {
     e.Node<IccBpcDodgeTrigger, IccBpcDodgeAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
+    e.Node<IccBpcFlameDefensiveTrigger, IccBpcCastFlameDefensiveAction>(ACTION_RAID + 13);
+    e.Node<IccBpcLanceDefensiveTrigger, IccBpcCastLanceDefensiveAction>(ACTION_RAID + 12);
+    e.Node<IccBpcDispelTrigger, IccBpcDispelAction>(ACTION_RAID + 11);
     e.Node<IccBpcTankDefensiveTrigger, IccBpcCastTankDefensiveAction>(ACTION_RAID + 10);
     e.Node<IccBpcBallTrigger, IccBpcBallAction>(ACTION_RAID + 9, EncounterRow::Mover);
     e.Node<IccBpcPrinceTauntTrigger, IccBpcPrinceTauntAction>(ACTION_RAID + 8);
@@ -31,17 +34,26 @@ void DefineBloodPrinces(EncounterBuilder& e)
     // Above the stand: a bot takes a new pick before it walks back to its spot
     e.Node<IccBpcTargetTrigger, IccBpcTargetAction>(ACTION_RAID + 5);
     e.Node<IccBpcStandTrigger, IccBpcStandAction>(ACTION_RAID + 4, EncounterRow::Mover);
+    e.Node<IccBpcBrakeTrigger, IccBpcBrakeStopAction>(ACTION_RAID + 3);
 
     e.LiveMultiplier<IccBpcSplashMultiplier>(Family::Spell);
+    e.LiveMultiplier<IccBpcBrakeMultiplier>(Family::Spell | Family::Melee);
+    e.LiveMultiplier<IccBpcDirectHitMultiplier>(Family::Spell);
 
     e.OwnTargeting("icc bpc targeting", Role::Any, &IccResolverPicks<&GetBpcTarget>,
                    Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
+    // A braked bot's resolver hands it nothing on the empowered prince, so no picker may give him back, and
+    // with no target nothing may walk it off to its master
+    e.Block("icc bpc brake hold", Role::Any, &IsBpcBraked,
+            Family::DpsAssist | Family::TankAssist | Family::DpsAoe | Family::AggressiveTarget |
+                Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti | Family::Follow |
+                Family::MoveRandom);
     // Every node is in range of what its bot works on, and reach would walk a node off the spread
     e.OwnMovement("icc bpc stand hold", Role::Any, &IsBpcHoldingStand, Family::Attack,
                   {IccBpcStandAction::Name, IccBpcDodgeAction::Name, IccBpcBallAction::Name, IccBpcSoakAction::Name,
                    "reach party member to resurrect"});
-    // The princes come to the tank on its spot
-    e.OwnMovement("icc bpc tank hold", Role::Tank, &IsBpcHoldingTankStand, Family::Attack,
+    // The princes come to their owner on its spot, a stand-in for Keleseth included
+    e.OwnMovement("icc bpc tank hold", Role::Any, &IsBpcHoldingTankStand, Family::Attack,
                   {IccBpcStandAction::Name, IccBpcDodgeAction::Name, IccBpcBallAction::Name,
                    IccBpcNucleusAction::Name});
     // Reach would walk a soaker back to its target before the ball passes
@@ -60,10 +72,17 @@ void DefineBloodPrinces(EncounterBuilder& e)
     e.Block("icc bpc taunts", Role::Tank, &IsBpcLive, Family::Taunt);
     // A grip shares the princes' taunt DR, and a ghoul's hit takes a nucleus off its tank
     e.Block("icc bpc pulls", Role::Any, &IsBpcLive, 0, {"death grip", "army of the dead"});
-    // A bomb nobody has hit yet is out of combat, and drop target clears it from the shooter
-    e.Block("icc bpc bomb drop guard", Role::Any, &IsBpcBombShooting, Family::DropTarget);
+    // Keleseth and one nucleus are two attackers, which fires a stand-in's class threat drops, and
+    // Misdirection hands his threat to the main tank
+    e.Block("icc bpc stand-in threat", Role::Any, &IsBpcStandIn, 0,
+            {"soulshatter", "fade", "feign death", "invisibility", "misdirection on main tank"});
+    // A bomb nobody has hit yet and a loose nucleus are out of combat, and drop target clears them from
+    // the bot about to hit them
+    e.Block("icc bpc drop guard", Role::Any, &IsBpcDirectHitPick, Family::DropTarget);
     // The tank buttons wait for Keleseth's empowered Shadow Lance or a low tank
     e.Block("icc bpc tank defensive hold", Role::Tank, &IsBpcTankDefensiveHeld, 0, HeldTankDefensiveNames());
+    // A braked tank has no target, and a druid's non-combat nodes drop bear form
+    e.Block("icc bpc tank form", Role::Tank, &IsBpcLive, 0, {"caster form"});
 
     e.Tick(&TickBpcEncounter);
 }

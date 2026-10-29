@@ -8,9 +8,14 @@
 
 #include <cmath>
 
+#include "Creature.h"
+#include "EncounterHelpers.h"
 #include "ICCHelpers_Shared.h"
+#include "ICCSeams.h"
 #include "LastMovementValue.h"
 #include "Playerbots.h"
+#include "RaidDefensive.h"
+#include "Spell.h"
 #include "Timer.h"
 
 namespace
@@ -85,6 +90,84 @@ bool IccBpcCastTankDefensiveAction::Execute(Event /*event*/)
 {
     uint32 const spellId = GetBpcTankDefensive(botAI, "bpc.defensive");
     return spellId && botAI->CastSpell(spellId, bot);
+}
+
+bool IccBpcCastLanceDefensiveAction::Execute(Event /*event*/)
+{
+    RaidPredictedHit hit;
+    if (!GetBpcLanceHit(botAI, hit))
+        return false;
+
+    RaidPersonalPick const pick = GetRaidPersonalDefensive(botAI, ICC_DEFENSIVE_SCOPE, &hit);
+    if (!pick)
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    return pick.consumable ? botAI->DoSpecificAction(pick.consumable, Event(), true)
+                           : botAI->CastSpell(pick.spellId, bot);
+}
+
+bool IccBpcCastFlameDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = GetBpcFlameDefensive(botAI);
+    if (!spellId)
+        return false;
+
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    return botAI->CastSpell(spellId, bot);
+}
+
+bool IccBpcDispelAction::Execute(Event /*event*/)
+{
+    char const* spell = nullptr;
+    Player* carrier = GetBpcDispelTarget(botAI, spell);
+    return carrier && spell && botAI->CastSpell(spell, carrier);
+}
+
+bool IccBpcBrakeStopAction::Execute(Event /*event*/)
+{
+    Creature* prince = GetBpcBrakeTarget(botAI);
+    if (!prince)
+        return false;
+
+    bool stopped = false;
+    if (bot->GetVictim() == prince)
+    {
+        bot->AttackStop();
+        stopped = true;
+    }
+
+    // AttackStop leaves Auto Shot and wands running
+    Spell* autoRepeat = bot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL);
+    if (autoRepeat && autoRepeat->m_targets.GetUnitTarget() == prince)
+    {
+        bot->InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
+        stopped = true;
+    }
+
+    if (AI_VALUE(Unit*, "current target") == prince)
+    {
+        context->GetValue<Unit*>("current target")->Set(nullptr);
+        stopped = true;
+    }
+
+    return stopped;
+}
+
+bool IccBpcTargetAction::Execute(Event /*event*/)
+{
+    Unit* pick = GetBpcTarget(botAI);
+    Unit* petPick = GetBpcPetTarget(botAI);
+    if (petPick == pick)
+        return AttackDirect(pick);
+
+    // The pet stays on its bomb while the bot fights on
+    EncounterHelpers::CommandPetAttack(botAI, petPick);
+    return pick && AI_VALUE(Unit*, "current target") != pick && Attack(pick);
 }
 
 bool IccBpcBallAction::Execute(Event /*event*/)

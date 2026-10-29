@@ -10,7 +10,6 @@
 #include <string>
 
 #include "Action.h"
-#include "ICCActions_RaidWide.h"
 #include "ICCHelpers_BloodPrinces.h"
 #include "MovementActions.h"
 #include "Position.h"
@@ -92,12 +91,51 @@ public:
     bool Execute(Event event) override;
 };
 
-class IccBpcTargetAction : public IccDirectAttackAction
+class IccBpcCastLanceDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc bpc cast lance defensive";
+
+    IccBpcCastLanceDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccBpcCastFlameDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc bpc cast flame defensive";
+
+    IccBpcCastFlameDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccBpcDispelAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc bpc dispel";
+
+    IccBpcDispelAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+// Drops the swing, Auto Shot or wand and the pick on the empowered prince while the threat brake holds the bot
+class IccBpcBrakeStopAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc bpc brake stop";
+
+    IccBpcBrakeStopAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+// The resolver's pick for the bot, and for its pet the bomb the pet juggles
+class IccBpcTargetAction : public RaidDirectAttackAction
 {
 public:
     static constexpr char const* Name = "icc bpc target";
 
-    IccBpcTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetBpcTarget) {}
+    IccBpcTargetAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 class IccBpcStandAction : public IccBpcWalkAction
