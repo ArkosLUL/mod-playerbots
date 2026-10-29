@@ -127,13 +127,14 @@ constexpr float RANGED_REACH = 30.0f;
 constexpr float QUAKE_FROM = 40.0f;
 constexpr float QUAKE_TO = 38.0f;
 
-// A Shadow Trap fires on anyone within 3 yd once armed and throws everyone within 10 yd
-constexpr float TRAP_TRIGGER = 5.5f;
-constexpr float TRAP_CLEAR = 6.0f;
+// A Shadow Trap fires on any unit within 3 yd once armed, a pet or a totem included, and throws everyone
+// within 10 yd off the platform, so bots keep out of the throw, not just off the trap
+constexpr float TRAP_TRIGGER = 10.5f;
+constexpr float TRAP_CLEAR = 11.0f;
 constexpr float TRAP_SEGMENT = 3.5f;
-constexpr float TRAP_SWEEP = 20.0f;
+constexpr float TRAP_SWEEP = 25.0f;
 constexpr float RELATCH_SWEEP_STEP = 1.5f;
-constexpr float RELATCH_SWEEP_MAX = 12.0f;
+constexpr float RELATCH_SWEEP_MAX = 18.0f;
 constexpr int RELATCH_SWEEP_ANGLES = 16;
 
 // Necrotic Plague jumps to the nearest unit within 10 yd when it is dispelled, expires or kills
@@ -278,7 +279,6 @@ struct TrapInfo
 {
     ObjectGuid guid;
     Position pos;
-    bool arming = false;
 };
 
 struct TauntDuty
@@ -868,7 +868,7 @@ void Scan(LkState& st, Creature* boss, uint32 now)
     }
 
     for (Creature* trap : found(NPC_LK_SHADOW_TRAP))
-        st.traps.push_back({trap->GetGUID(), trap->GetPosition(), trap->HasAura(SPELL_LK_SHADOW_TRAP_ARMING)});
+        st.traps.push_back({trap->GetGUID(), trap->GetPosition()});
 }
 
 float NearestTrap(LkState const& st, Position const& pos)
@@ -1734,7 +1734,7 @@ void UpdateQuakeWalk(LkState const& st, LkBotState& bs, Player* bot)
     bs.quakeSpot = AtRadius(bot->GetPosition(), QUAKE_TO);
 }
 
-void UpdateTrap(LkState const& st, LkBotState& bs, Player* bot, uint32 now)
+void UpdateTrap(LkState const& st, LkBotState& bs, Player* bot, Creature* boss, uint32 now)
 {
     if (st.phase != IccLichKingPhaseId::One || st.traps.empty())
     {
@@ -1769,7 +1769,9 @@ void UpdateTrap(LkState const& st, LkBotState& bs, Player* bot, uint32 now)
     auto const accept = [&](float x, float y)
     { return FloorAccepts(bot, x, y, ctx) && SegmentClearOfTraps(st, from, Position(x, y, FLOOR_Z)); };
 
-    Position const* prefer = bs.stand != StandKind::None ? &bs.standWanted : nullptr;
+    // Melee have no stand: the spot nearest him keeps their reach back to him out of the throw
+    Position const bossPos = boss->GetPosition();
+    Position const* prefer = bs.stand != StandKind::None ? &bs.standWanted : &bossPos;
     Position const found = FindNearestPositionClearOfHazards(bot, circles, TRAP_SWEEP, 2.0f,
                                                              static_cast<float>(M_PI) / 8.0f, prefer, accept);
     if (found.GetPositionX() == 0.0f && found.GetPositionY() == 0.0f)
@@ -2134,7 +2136,7 @@ void UpdateWalks(LkState& st, LkBotState& bs, Player* bot, Creature* boss, uint3
 
     std::vector<Player*> const members = LkMembersOnMap(bot);
     UpdateQuakeWalk(st, bs, bot);
-    UpdateTrap(st, bs, bot, now);
+    UpdateTrap(st, bs, bot, boss, now);
     UpdatePlague(st, bs, bot, members, now);
     UpdateStand(st, bs, bot, boss, now);
 
@@ -2252,7 +2254,8 @@ void CallHumanTank(LkState& st, Player* sender, Creature* boss, uint32 now)
         if (!low && !window)
             continue;
 
-        if (uint32 const spellId = ReadyTankDefensiveSpell(member, false, 0, hitInMs))
+        bool const reaper = member->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_LK_SOUL_REAPER, boss));
+        if (uint32 const spellId = ReadyTankDefensiveSpell(member, !reaper, 0, hitInMs))
             CallHumanTankDefensive(sender, member, spellId, hitInMs,
                                    low ? "you are low" : hitInMs ? "Soul Reaper lands" : "Plague Siphon is high",
                                    "lk.humancall");
@@ -2832,8 +2835,9 @@ uint32 GetLkTankDefensive(PlayerbotAI* botAI, char const* noteKind)
         return 0;
     }
 
-    // Soul Reaper's second hit and Plague Siphon's shadow ticks are magic, so Anti-Magic Shell counts
-    return NextTankDefensive(botAI, bot, noteKind, false);
+    // Soul Reaper's second hit is shadow, so Anti-Magic Shell counts there. Plague Siphon raises his
+    // physical damage, and an Enrage or a low tank means swings.
+    return NextTankDefensive(botAI, bot, noteKind, !reaper);
 }
 
 Unit* GetLkTauntTarget(PlayerbotAI* botAI, uint32& aoeSpell)
@@ -2979,7 +2983,7 @@ void TickLkEncounter(PlayerbotAI* botAI)
         return;
     }
 
-    // A saved rti of cross or star kept bots on the old Val'kyr buckets
+    // A saved rti of cross or star keeps a bot off the skull
     if (lkRtiChecked.For(bot->GetInstanceId()).insert(bot->GetGUID()).second)
     {
         Value<std::string>* rti = botAI->GetAiObjectContext()->GetValue<std::string>("rti");

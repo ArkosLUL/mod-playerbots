@@ -545,6 +545,24 @@ uint32 AuraLeft(Unit* unit, AuraType type)
     return left > 0 ? static_cast<uint32>(left) : 0;
 }
 
+// The single-target taunt IccCastClassTaunt casts
+char const* ClassTauntName(Player* bot)
+{
+    switch (bot->getClass())
+    {
+        case CLASS_WARRIOR:
+            return "taunt";
+        case CLASS_PALADIN:
+            return "hand of reckoning";
+        case CLASS_DEATH_KNIGHT:
+            return "dark command";
+        case CLASS_DRUID:
+            return "growl";
+        default:
+            return nullptr;
+    }
+}
+
 bool TauntedBy(Unit* unit, Player* bot)
 {
     for (AuraEffect const* effect : unit->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT))
@@ -723,8 +741,9 @@ void ScanPlatform(LateState& st, Player* bot, uint32 now)
         info.pos = unit->GetPosition();
         info.healthPct = unit->GetHealthPct();
         info.carrier = carrying && (!heroic || unit->GetHealthPct() > HEROIC_DROP_PCT);
-        info.siphoner = heroic && !carrying && unit->GetPositionZ() > SIPHON_Z &&
-                        unit->GetExactDist2d(LK_CENTER) <= SIPHON_RANGE;
+        // A fresh Val'kyr hangs at the same height over him, not attackable until it grabs someone
+        info.siphoner = heroic && !carrying && !unit->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE) &&
+                        unit->GetPositionZ() > SIPHON_Z && unit->GetExactDist2d(LK_CENTER) <= SIPHON_RANGE;
         st.valkyrs.push_back(info);
     }
 
@@ -1606,13 +1625,18 @@ bool VileWalk(LateState const& st, LateBot& bs, PlayerbotAI* botAI, WalkKind& ki
             }
         }
 
+        if (into && !Guarded(bot))
+        {
+            bs.guard = GuardSpell(botAI, bot);
+            // A soaker whose immunity ran out with nothing else ready only waits: a burst is 19-37k. The
+            // free tank soaks on its health.
+            if (!bs.guard && !IsLkTankPlayer(bot))
+                into = nullptr;
+        }
+
         Position want;
         if (into)
-        {
             want = Position(into->pos.GetPositionX(), into->pos.GetPositionY(), FloorZ());
-            if (!Guarded(bot))
-                bs.guard = GuardSpell(botAI, bot);
-        }
         else if (st.soakValid)
             want = st.soakSpot;
         else
@@ -2086,7 +2110,14 @@ Unit* GetLkSiphonTauntTarget(PlayerbotAI* botAI)
         !IsHeroicMap(bot) || bot->GetVehicle() || !ClassTauntReady(botAI))
         return nullptr;
 
-    // Life Siphon goes to its last taunter: never taunted first, then the one taunted longest ago
+    char const* taunt = ClassTauntName(bot);
+    uint32 const tauntId = taunt ? botAI->GetAiObjectContext()->GetValue<uint32>("spell id", taunt)->Get() : 0;
+    SpellInfo const* tauntInfo = tauntId ? sSpellMgr->GetSpellInfo(tauntId) : nullptr;
+    if (!tauntInfo)
+        return nullptr;
+
+    // Life Siphon goes to its last taunter: never taunted first, then the one taunted longest ago. A Val'kyr
+    // stays taunt immune until it reaches its siphon spot.
     uint32 const now = getMSTime();
     Creature* best = nullptr;
     bool bestFresh = false;
@@ -2097,7 +2128,8 @@ Unit* GetLkSiphonTauntTarget(PlayerbotAI* botAI)
             continue;
 
         Creature* valkyr = CreatureOf(bot, info.guid);
-        if (!valkyr || !valkyr->IsInCombat() || TauntedBy(valkyr, bot) || bot->GetExactDist(valkyr) > TAUNT_RANGE ||
+        if (!valkyr || !valkyr->IsInCombat() || !bot->IsValidAttackTarget(valkyr) ||
+            valkyr->IsImmunedToSpell(tauntInfo) || TauntedBy(valkyr, bot) || bot->GetExactDist(valkyr) > TAUNT_RANGE ||
             !bot->IsWithinLOSInMap(valkyr))
             continue;
 

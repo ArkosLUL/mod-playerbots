@@ -30,7 +30,7 @@ Val'kyr drop triggers (22515, Z 845.9) stand 64-68 yd out.
 | Necrotic Plague 70337/73912/73913/73914, jump 70338/73785/73786/73787 | phase one, 30-31 s then 30-31 s (5 s retry); a random player but his victim. Disease, 15 s, 50k/100k/75k/150k shadow every 5 s. Dispel, expiry or death jumps it to the nearest unit within 10 yd, adds included, not him; expiry or death adds a stack, a dispel's stack is lost. Each jump gives him Plague Siphon 74074, +2% physical damage | the carrier runs to the add pile and is dispelled there before the first tick; in a winter the carrier stands 10 yd off everyone, then is dispelled | carrier walks to the pile's raid side; an elected curer dispels once its nearest unit is an add, or with under 1 s to the tick or under 35% health; class cures held off carriers; with no add alive, and after phase one, it isolates first |
 | Shambling Horror 37698 (70372) | phase one, 1 s cast, 15 s then 60 s; spawns by him, passive 5 s, then attacks threat or a random non-tank. Shockwave 72149/73794/73795/73796: 1.25 s cast, 20-25 s, 20 yd cone at its victim, 90° on 10N. Enrage 72143/72146/72147/72148: 1 s cast, 11-14 s then 20-25 s, +200% damage for 6 s, enrage dispel. Heroic Frenzy 28747 at 20%: +100% damage, +50% haste. Stun and grip land; snare, root and interrupt don't | off-tank faces Shockwave away; Tranquilizing Shot or Anesthetic Poison on Enrage; stunned through Frenzy; the plague kills it, DPS ignore it | add tank holds the pile with its cones off the raid; hunters Tranquilize; the add tank's button on an Enrage no hunter answers; heroic Frenzy: stun rotation, melee finish it |
 | Drudge Ghoul 37695 (70358) | phase one, 0.5 s cast, 10 s then 30 s; three over 3 s by him, passive 5 s, negligible damage | off-tank; keep them alive as plague fodder, no cleave | add tank picks them up; area damage held near adds in phase one |
-| Shadow Trap, heroic, 73539 → 39137 | phase one, 15.5 s then 15.5 s; 0.5 s cast at a random player within 100 yd in sight. Arms after 5 s (73530); then anyone within 3 yd fires 73529 at everyone within 10 yd: 23.6-26.4k and a 30/40 knockback off the platform. Lives 60 s; the first winter's opening hit despawns them | run out, never step on one | anyone within 5.5 yd of a trap walks 7 yd off every trap; a stand within 6 yd of one re-latches; walks keep 3.5 yd off |
+| Shadow Trap, heroic, 73539 → 39137 | phase one, 15.5 s then 15.5 s; 0.5 s cast at a random player within 100 yd in sight. Arms after 5 s (73530); then any unit within 3 yd, a pet or totem too, fires 73529 at everyone within 10 yd: 23.6-26.4k and a 30/40 knockback off the platform. Lives 60 s; the first winter's opening hit despawns them | run out, never step on one; drag him off one | anyone within 10.5 yd of a trap walks 12 yd off every trap, a bot with no stand to the spot nearest him; a stand within 11 yd of one re-latches, so the holder drags him off; walks keep 3.5 yd off |
 | Remorseless Winter 68981/74270/74271/74272, second 72259/74273/74274/74275 | at 70% and 40%, on the first hit at or under while he isn't casting: passive, walks to C, 2.5 s cast, 60 s aura; 68983/73791/73792/73793 deal 7.1-7.9k/9.4-10.6k/9.4-10.6k/14.1-15.9k frost per s within 45 yd | everyone on the ice past 45 yd | two clusters on the ring past 49 yd; ring stands only while the platform isn't `DAMAGED` |
 | Pain and Suffering 72133/73788/73789/73790 | 0.5 s cast from 3.5 s into each winter, every 1.75-2.25 s (heroic 1.25-1.75 s), at a random target: a 100 yd cone from him, 25° on 10N; 2.8-3.2k/4.7-5.3k/4.7-5.3k/7.5-8.5k shadow, then 0.5k/0.8k/0.8k/1.2k per s for 3 s | spread; WH: ranged and healers apart from tanks and melee | the clusters sit the cone's half-width plus 8° apart |
 | Ice Sphere 36633 (69104) | 8 s into each winter, then every 7.5 s; spawns within 10 yd of him and follows a random player at about 3 yd/s. Ice Pulse 69099/73776/73777/73778 every 3 s: 2.8-3.2k/4.7-5.3k/4.7-5.3k/7.5-8.5k frost within 5 yd of its target. A player within 4 yd sets off Ice Burst 69108/73773/73774/73775: 10 yd, 20/35 knockback. Immune to stun, snare and taunt; drops a target beyond 75 yd of C or outside Z 830-855 | ranged kill them at once, hunters first | ranged DPS kill the sphere within 30 yd closest to its target first; winter slots 6 yd apart |
@@ -125,8 +125,9 @@ first: quake, trap, plague, stand (`LichKing`); Defile, Vile Spirits, Val'kyr ch
   80%: nothing of theirs lands on him, nor area damage within 15 yd, the swap taunt excepted, and auto
   attack and shot stop.
 - **Tank buttons** (`lk.defensive`, `lk.humancall`): the holder at 15 Plague Siphon stacks and each
-  Soul Reaper, the free tank on an unanswered Enrage on it, any tank under 40%; class buttons held to
-  25%; a human tank is called on the same windows.
+  Soul Reaper, the free tank on an unanswered Enrage on it, any tank under 40%; Anti-Magic Shell only
+  on Soul Reaper (Plague Siphon is physical); class buttons held to 25%; a human tank is called on the
+  same windows.
 - **Defile** (`lk.defilerun`), from the listener's cast start: the target runs, forced, interrupting,
   Nitro Boosts, to a spot 14 yd off every other member, 12 yd past live puddles, within 40 yd of C, on
   its side of the stack, else 16, 12 or 8 yd straight out. Others within 13 yd of it or its spot step
@@ -136,13 +137,15 @@ first: quake, trap, plague, stand (`LichKing`); Defile, Vile Spirits, Val'kyr ch
   Raging Spirit holds are bucketed, balanced, melee to the nearest, dealt again only when the carriers
   change. One stun in flight and one slow kept up per Val'kyr, the next caster at 0.5 s left, a 1 s
   grace for a cast in flight, one duty per bot, never the holder. Melee chase while the line clears
-  every puddle, ranged past 30 yd too; healers stay. Heroic siphoners (no 68985, Z above 850, within
-  20 yd of C): the free tank taunts each, never-taunted first, then longest ago (`lk.siphon`), and
-  ranged kill the lowest once their bucket has no carrier.
+  every puddle, ranged past 30 yd too; healers stay. Heroic siphoners (attackable, so not a fresh
+  Val'kyr; no 68985, Z above 850, within 20 yd of C): the free tank taunts each once taunts land, at
+  its siphon spot, never-taunted first, then longest ago (`lk.siphon`), and ranged kill the lowest
+  once their bucket has no carrier.
 - **Vile Spirits** (`lk.side`, `lk.vile`): east from the second Quake, flipped at each cast; the holder
   drags him over and the raid follows. One soaker, a bot with Divine Shield, Dispersion, Cloak of
   Shadows or Ice Block ready, non-healers first, else the free tank, walks into woken spirits within
-  8 yd and 5 yd of the floor after its immunity or button. The lowest-guid hunter with Frost Trap ready
+  8 yd and 5 yd of the floor after its immunity or button; a non-tank with nothing left ready waits on
+  its spot. The lowest-guid hunter with Frost Trap ready
   drops it once they wake. Ranged DPS shoot woken spirits within 20 yd of the stack.
 - **Harvest Soul**, normal (`lk.harvest`): inside, non-healers attack the warden and kick Soul Rip
   from the second scan that sees it (Kick, Pummel, Shield Bash, Mind Freeze, Counterspell, Wind
@@ -180,7 +183,8 @@ Source, then the choice:
   damage held near them; tanks' isn't, their area threat holds the pile.
 - WH: the plague cured once delivered, by one curer. WT, WH: Enrage answered by hunters only
   (Anesthetic Poison needs weapon poisons bots don't manage), stuns only on heroic Frenzy.
-- Script (arms after 5 s, fires within 3 yd): every bot dodges traps, not only the main tank.
+- Script (arms after 5 s; any unit within 3 yd, a pet, totem or human too, fires its 10 yd throw): every
+  bot keeps 11 yd off traps, not only the main tank.
 - WT, WH, `spell_cone`: two winter clusters, Pain and Suffering's half-width plus 8° apart, growing
   away from each other (two centred clusters of 6 yd slots don't fit the margin); healers split but on
   10N. No pre-move at 71.5% or 41.5%, which keeps phase two's stack for the Val'kyrs.
@@ -239,6 +243,8 @@ Record-only, `EnableICCBuffs`, heroic: `lk.heroicbuff` (every member), `lk.empow
   bot can step off the stack toward a Wicked Spirit and back.
 - Heroic Harvest Souls 73654/74295-74297 has no timed end in the DBC; a bot under it counts as
   stunned, so one it outlived the return on would hold every duty (`lk.target` `held`).
+- Melee may bounce off a trap close to him: generic reach back to him has no trap check (`--traps`).
+  A Paladin's Cleanse of a silenced plague carrier strips the plague too.
 - Humans hold no duty.
 - r14: the `IccInstanceState` Lich King members (`ICCScripts.h`) go unwritten; check
   `ICC_BUCKET_MARKERS`, `IccRtiNameForBucket` and `IccEnsureIconOn` for other users; hoist one walk

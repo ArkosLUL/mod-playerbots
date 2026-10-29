@@ -42,8 +42,6 @@ constexpr uint32 SPELL_LK_SOUL_SHRIEK = 69242;
 constexpr uint32 SPELL_LK_SHAMBLING_ENRAGE = 72143;
 // No difficulty row: one id on every difficulty
 constexpr uint32 SPELL_LK_PLAGUE_SIPHON = 74074;
-// On a Shadow Trap for its first 5 s. Once it drops, the trap fires on anyone close.
-constexpr uint32 SPELL_LK_SHADOW_TRAP_ARMING = 73530;
 constexpr uint32 SPELL_LK_SHAMBLING_FRENZY = 28747;
 constexpr uint32 SPELL_LK_TRANQUILIZING_SHOT = 19801;
 // He sits with it until Tirion's intro stands him up, and again after a wipe

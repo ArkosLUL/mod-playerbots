@@ -189,9 +189,9 @@ goes wholesale.
    (`lk.enrage` per hunter); heroic Frenzy 28747: one stun in flight from `LkReadyStun`, the next
    stunner when it has under 0.5 s left (`lk.stun`, `ObsGuidMap<ObjectGuid>` bot to unit), and melee DPS
    finish it.
-10. Heroic Shadow Traps, `lk.trap` (`dodge <trap>`, `none`): a bot within 5.5 yd of a trap walks
-    (forced, interrupting) to the nearest spot 6 yd off every trap; every walk's `accept` refuses a
-    segment within 3.5 yd of one.
+10. Heroic Shadow Traps, `lk.trap` (`dodge <trap>`, `none`): a bot within 10.5 yd of a trap walks
+    (forced, interrupting) to the nearest spot 11 yd off every trap (review: the throw reaches 10 yd);
+    every walk's `accept` refuses a segment within 3.5 yd of one.
 11. Multiplier `icc lich king splash`: in phase one, area spells (`SpellSplashes`) hitting within 12 yd
     of a live ghoul or Shambling are held.
 12. Winters (`winter1`, `winter2`):
@@ -310,7 +310,7 @@ commit. New `.cpp` files mean a CMake re-run.
 | Plague cured by one elected curer once delivered; at once under 1 s to the tick or 35% health | WH: dispel before the first tick, at the adds | dispel on landing |
 | Enrage answered by hunters' Tranquilizing Shot only, else the add tank's button | WT, WH; Anesthetic Poison needs a weapon poison the bots don't manage | rogues too |
 | Stun rotation only on heroic Frenzy, melee finish a Frenzied Shambling | WT, WH | stuns on every Enrage too |
-| Shadow Traps: stands and walks 5.5 yd off each trap, the target out within its 5 s arming | script: arms after 5 s, fires on anyone within 3 yd | the old main-tank-only 12 yd dodge |
+| Shadow Traps: every bot within 10.5 yd walks 12 yd off each trap within its 5 s arming, a bot with no stand to the spot nearest him; stands within 11 yd re-latch (up to 18 yd), so the holder drags him off; walks keep 3.5 yd off | script: arms after 5 s, any unit within 3 yd fires it (pets and totems too), the throw reaches 10 yd; WH: drag him off traps | the lane's 5.5 yd, which a pet or human stepping on the trap turns into a throw off the platform |
 | Winters: two clusters on the north ring, the ranged one the Pain and Suffering half-cone plus 8° away (20.5° 10N, 60° otherwise), healers split on 25-man and heroic | WT diagram (raid on one side), WH (ranged and healers apart from tanks and melee); `spell_cone` | one cluster, or the ring spread all round |
 | No pre-move before 70% or 40%; the walk starts at his turn to passive | keeps phase two's stack for the Val'kyrs | pre-move at 71.5% and 41.5% |
 | Ring slots only while the platform isn't `DAMAGED`; at the second winter bots wait at r 42 | instance script: the ring is gone until the second winter's cast lands | walk out at once |
@@ -360,6 +360,10 @@ commit. New `.cpp` files mean a CMake re-run.
 | Passive at 40% and under after phase three has run reads `frostmourne` | he stays passive 1 s after the heroic return, which read `winter2` and sent bots to winter slots with Nitro Boosts | per-bot harvested only |
 | A plague walk wins over the late stack | the stack walked an isolating carrier back into the raid | stack wins |
 | An intro that evades resets the state | opening stands otherwise held bots after he sat back down | wipe or kill only |
+| Tank buttons skip Anti-Magic Shell outside Soul Reaper (`physicalOnly` on the siphon ramp, an Enrage and a low tank) | Plague Siphon 74074 is +2% physical damage per stack; Soul Reaper's delayed hit is shadow | Anti-Magic Shell on every window |
+| A fresh Val'kyr (not attackable, hanging over him) is no siphoner, and the free tank skips a Val'kyr its taunt can't land on | script: taunt immunity lasts until the siphon spot; `IccCastClassTaunt` falls back to shoot or throw | taunt every Val'kyr above Z 850 |
+| A non-tank Vile Spirit soaker whose immunity ran out, with nothing else ready, waits on its spot; the free tank soaks on its health | a burst is 19-37k | keep soaking |
+| `lk.valkyrstun` lands once per carrying Val'kyr, as the Task list says | the old code re-applied Hammer of Justice whenever it lapsed, and the overview keeps the heroic buffs "with the same behaviour" | re-apply while it carries |
 
 ## Carried over
 
@@ -393,6 +397,8 @@ commit. New `.cpp` files mean a CMake re-run.
   followers keep reach and can step off the stack toward a Wicked Spirit.
 - Heroic Harvest Souls has no timed end in the DBC: a bot it outlived the return on would hold every
   duty (`lk.target` `held`).
+- Melee may bounce off a trap close to him: generic reach back to him has no trap check (`--traps`).
+  A Paladin's Cleanse of a silenced plague carrier strips the plague too.
 - Humans hold no duty.
 
 ## Blocked
