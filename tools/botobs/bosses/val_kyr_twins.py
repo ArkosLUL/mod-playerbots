@@ -33,6 +33,8 @@ What the generic views miss here, and what this reads instead:
   for that, so a lone human tank goes unnoticed.
 - **The door stand rides on `tv.door`** as `role:x,y`: the deal runs over the group in guid order, which
   the trace can't replay.
+- **Vortexes and Pacts come from cast rows**, so a twin RaidObs never watched drops out of both. The
+  banner names such a twin.
 """
 from __future__ import annotations
 
@@ -954,6 +956,18 @@ def missing_probes(trace: Trace) -> list[str]:
     return [key for key, _, _ in silent_keys(emitted_keys(trace), encounter_of(trace))]
 
 
+def uncast_twins(trace: Trace) -> list[str]:
+    """Each twin with rows in the trace but not one cast row, so her Vortexes and Pacts are missing
+    from every section."""
+    casters = {rec.get("s") for rec in trace.of("cast")}
+    out = []
+    for entry in (NPC_FJOLA, NPC_EYDIS):
+        guids = guids_of_entry(trace, entry)
+        if guids and not guids & casters:
+            out.append(trace.name(min(guids)))
+    return out
+
+
 def show_banner(trace: Trace) -> None:
     end = pull_end(trace)
     outcome = trace.of("end")[-1].get("out", "?") if trace.of("end") else "no end record"
@@ -965,6 +979,9 @@ def show_banner(trace: Trace) -> None:
     if encounter != ENCOUNTER:
         print("  not a Twin Val'kyr pull, every section below reads empty")
         return
+
+    for name in uncast_twins(trace):
+        print(f"no cast rows for {name}: her Vortex and Pact are missing below")
 
     gone = missing_probes(trace)
     if not gone:

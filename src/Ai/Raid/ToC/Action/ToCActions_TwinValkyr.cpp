@@ -6,6 +6,7 @@
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "LastMovementValue.h"
+#include "Spell.h"
 #include "Timer.h"
 #include "Unit.h"
 #include "WorldSession.h"
@@ -28,6 +29,16 @@ constexpr uint32 DODGE_SPOT_LATCH_MS = 1000;
 constexpr float TWIN_FETCH_STOP = 25.0f;
 // the floor read is taken only this close to the traced height
 constexpr float DOOR_FLOOR_TOLERANCE = 3.0f;
+// a base walk lets a channel this close to its end finish
+constexpr int32 BASE_WALK_CHANNEL_WAIT_MS = 1500;
+
+// A warlock re-channels Drain Soul on low twins, so a base walk waiting on that never starts
+bool LongChannel(Player* bot)
+{
+    Spell* channel = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+    return channel && channel->getState() == SPELL_STATE_CASTING &&
+           channel->GetCastTimeRemaining() > BASE_WALK_CHANNEL_WAIT_MS;
+}
 
 Position DoorFloor(Player* bot, Position const& spot)
 {
@@ -84,8 +95,9 @@ bool TwinValkyrEssenceActionBase::AcquireEssence(TwinColour colour)
     // elevated portal in range and the gossip silently does nothing
     if (bot->GetDistance(portal) > INTERACTION_DISTANCE)
     {
-        // a cast pins the feet; the base colour can wait for it to end, the others can't
-        if (reason != TwinEssenceReason::Base && bot->IsMovementPreventedByCasting())
+        // a cast pins the feet; the base colour can wait for it to end, though not for a long channel,
+        // and the others can't wait at all
+        if (bot->IsMovementPreventedByCasting() && (reason != TwinEssenceReason::Base || LongChannel(bot)))
             bot->InterruptNonMeleeSpells(true);
 
         TwinValkyrBoostEssenceWalk(botAI, reason, portal);
@@ -125,6 +137,28 @@ bool TwinValkyrEssenceActionBase::AcquireEssence(TwinColour colour)
     }
 
     return true;
+}
+
+bool TwinValkyrWalkToTouchPortalAction::Execute(Event /*event*/)
+{
+    Position spot;
+    Creature* portal = nullptr;
+    if (!TwinValkyrTouchCrossDue(botAI, spot, portal))
+        return false;
+
+    // it has to be there before the channel ends
+    if (bot->IsMovementPreventedByCasting())
+        bot->InterruptNonMeleeSpells(true);
+
+    TwinValkyrBoostEssenceWalk(botAI, TwinEssenceReason::Touch, portal);
+    ReleaseWalk(botAI, bot, spot, true);
+
+    if (MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false,
+               false, false, false, MovementPriority::MOVEMENT_FORCED, true, false))
+        return true;
+
+    // the walk in flight is refused as a duplicate; hold the tick until it lands
+    return bot->isMoving();
 }
 
 bool TwinValkyrDodgeOrbAction::Execute(Event /*event*/)

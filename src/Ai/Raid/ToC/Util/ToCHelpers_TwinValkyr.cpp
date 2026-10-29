@@ -87,6 +87,9 @@ constexpr float TWIN_NITRO_MIN_WALK = 15.0f;
 // a Vortex walk ending closer than this to the cast's end takes the boots
 constexpr uint32 TWIN_NITRO_SPARE_MS = 1500;
 
+// gossip reach is ~14 yd 3D (5.5 plus both combat reaches), this leaves room for the floor's slope
+constexpr float TWIN_TOUCH_CROSS_PORTAL_DIST = 10.0f;
+
 constexpr uint32 SPELL_AURA_MASTERY = 31821;
 constexpr uint32 SPELL_BLOODLUST = 2825;
 constexpr uint32 SPELL_HEROISM = 32182;
@@ -164,6 +167,7 @@ struct TwinValkyrState
     ObjectGuid doorGroup;
     std::unordered_map<ObjectGuid, TwinDoorStand> doorStands;
     std::unordered_map<ObjectGuid, bool> doorParked;
+    std::unordered_map<ObjectGuid, bool> touchCrossParked;
 };
 
 RaidInstanceState<TwinValkyrState> twinStates;
@@ -1363,25 +1367,11 @@ bool TwinValkyrDoorHold(PlayerbotAI* botAI)
     return true;
 }
 
-bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI)
+namespace
 {
-    Player* bot = botAI ? botAI->GetBot() : nullptr;
-    TwinValkyrState* state = bot ? ReadTwins(botAI) : nullptr;
-    if (!state || !state->pull.engaged || !bot->IsAlive() || TankRoleOf(bot) != TwinTankRole::None)
-        return false;
-
-    TwinDoorStand const stand = GetTwinDoorStand(bot);
-    if (stand.role == TwinDoorRole::None || MustSwap(bot, WantedEssence(botAI), false))
-        return false;
-
-    // It took the Vortex's colour and walks to a portal of its own once the channel ends, so the stand
-    // would be a detour
-    TwinColour const held = EssenceOf(bot);
-    if (state->vortex != TwinColour::None && held == state->vortex && held != BaseColourOf(bot))
-        return false;
-
-    bool& parked = state->doorParked[bot->GetGUID()];
-    float const distance = bot->GetExactDist2d(stand.spot);
+// A walk back starts past UNPARK and ends inside PARK
+bool ParkedWalkDue(bool& parked, float distance)
+{
     if (distance <= TWIN_DOOR_PARK)
     {
         parked = true;
@@ -1393,6 +1383,76 @@ bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI)
 
     parked = false;
     return true;
+}
+
+// A Touch of the other colour waits out the Vortex, then ticks the whole raid every 2 s until the
+// swap, so the bot waits in gossip reach of its portal instead
+Creature* TouchCrossPortal(PlayerbotAI* botAI, TwinValkyrState const& state, Position& spot)
+{
+    Player* bot = botAI->GetBot();
+    if (!state.pull.engaged || !bot->IsAlive() || state.vortex == TwinColour::None ||
+        TankRoleOf(bot) != TwinTankRole::None || EssenceOf(bot) != state.vortex)
+        return nullptr;
+
+    TwinColour const touch = HasLightTouch(bot) ? TwinColour::Light
+                             : HasDarkTouch(bot) ? TwinColour::Dark
+                                                 : TwinColour::None;
+    if (touch == TwinColour::None || touch == state.vortex)
+        return nullptr;
+
+    Creature* portal = GetEssencePortal(bot, touch);
+    if (!portal)
+        return nullptr;
+
+    // on the way to the stand, so the walk home starts from here
+    TwinDoorStand const stand = GetTwinDoorStand(bot);
+    Position const toward = stand.role != TwinDoorRole::None ? stand.spot : bot->GetPosition();
+    float const angle = portal->GetAngle(toward.GetPositionX(), toward.GetPositionY());
+    spot.Relocate(portal->GetPositionX() + TWIN_TOUCH_CROSS_PORTAL_DIST * std::cos(angle),
+                  portal->GetPositionY() + TWIN_TOUCH_CROSS_PORTAL_DIST * std::sin(angle), portal->GetPositionZ());
+    return portal;
+}
+}  // namespace
+
+bool TwinValkyrTouchCrossDue(PlayerbotAI* botAI, Position& spot, Creature*& portal)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    TwinValkyrState* state = bot ? ReadTwins(botAI) : nullptr;
+    if (!state)
+        return false;
+
+    portal = TouchCrossPortal(botAI, *state, spot);
+    if (!portal)
+    {
+        state->touchCrossParked.erase(bot->GetGUID());
+        return false;
+    }
+
+    return ParkedWalkDue(state->touchCrossParked[bot->GetGUID()], bot->GetExactDist2d(spot));
+}
+
+bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    TwinValkyrState* state = bot ? ReadTwins(botAI) : nullptr;
+    if (!state || !state->pull.engaged || !bot->IsAlive() || TankRoleOf(bot) != TwinTankRole::None)
+        return false;
+
+    TwinDoorStand const stand = GetTwinDoorStand(bot);
+    if (stand.role == TwinDoorRole::None || MustSwap(bot, WantedEssence(botAI), false))
+        return false;
+
+    // It took the Vortex's colour and walks to a portal of its own once the channel ends, or already
+    // waits by its Touch's portal for that, so the stand would be a detour
+    TwinColour const held = EssenceOf(bot);
+    if (state->vortex != TwinColour::None && held == state->vortex && held != BaseColourOf(bot))
+        return false;
+
+    Position touchSpot;
+    if (TouchCrossPortal(botAI, *state, touchSpot))
+        return false;
+
+    return ParkedWalkDue(state->doorParked[bot->GetGUID()], bot->GetExactDist2d(stand.spot));
 }
 
 bool TwinValkyrFetchDue(PlayerbotAI* botAI, Unit* twin)

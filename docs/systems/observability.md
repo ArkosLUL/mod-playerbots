@@ -244,7 +244,8 @@ only the map name to use. Whatever names it first renames the file and emits a s
 record**. Only the map-name fallback is ever upgraded, except by a boss-state table.
 
 Three callers reach it, because the boss cannot always say: `OnCreatureEngage`, the first boss to
-swing at a player; `MarkPull` on an already-open session; and `NamePull(map, name)`, which takes the
+swing at a player or a player's pet, guardian or totem (it also starts watching each creature that
+engages them, so a twin opening on a totem still has cast rows); `MarkPull` on an already-open session; and `NamePull(map, name)`, which takes the
 name outright. Yogg-Saron is why the last two exist — phase one is fought against Sara, the Voice and
 the Guardians, none flagged a boss, so nothing engages and the only boss the file named was General
 Vezax, swept in from the next room. `EncounterGatedTrigger` calls `NamePull` when a trigger fires

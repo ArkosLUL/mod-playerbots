@@ -649,7 +649,9 @@ void ObsSession::Rename(std::string const& slug)
 
 void OnCreatureEngage(Unit* creature, Unit* victim)
 {
-    if (!g_cfg.enabled || !creature || !victim || !victim->IsPlayer())
+    // A pet or totem counts: the hook fires once, and a creature sent at its nearest target can open
+    // on one, never to engage a player here
+    if (!g_cfg.enabled || !creature || !victim || !victim->GetCharmerOrOwnerPlayerOrPlayerItself())
         return;
 
     Creature* asCreature = creature->ToCreature();

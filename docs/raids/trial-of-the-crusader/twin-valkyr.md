@@ -128,7 +128,9 @@ the orb field.
    off the door), and on normal so does the raid through a Light Vortex if a bot paladin running its
    own Fire Resistance Aura had Aura Mastery ready at the cast start (latched then). Otherwise the
    Vortex's colour. Outranks a Touch: the Touch's other colour would eat the whole Vortex, up to
-   80k. Heroic can't hold: 25H lands ~54k through the measured 20% resist and 13% absorbs, ~35k
+   80k. A non-tank touched meanwhile waits 10 yd from its Touch's portal toward its stand
+   (`twin valkyr walk to touch portal`), so that swap lands as the channel ends: each 2 s held ticks
+   the raid (25H 2026-10-29: 6.3 s, 3 ticks, 450k). Heroic can't hold: 25H lands ~54k through the measured 20% resist and 13% absorbs, ~35k
    even with Aura Mastery and Divine Guardian, against 25-33k health.
 2. **Touch** on the bot: its colour.
 3. **Base**: Eydis's tank Light, everyone else Dark, even after a Touch or the Light Vortex left it
@@ -149,7 +151,8 @@ door stand (from Light 1 the nearest Dark portal is Dark 2, 80 yd from the door)
 `MOVEMENT_FORCED`, and gossip in reach. Heroic Light Vortex: Light 1 (~40 yd from the stack, inside
 the 6 s cast with little to spare), wait there through the channel (ranged still reach Eydis,
 healers the tanks), then Dark 1 and back. The door stand waits while a bot holds the Vortex's colour
-and a base walk is due at its end. Touch and Vortex walks first clip a cast that pins the feet. A walk stopped 500 ms short of
+and a base walk is due at its end. Touch and Vortex walks first clip a cast that pins the feet, a base walk only a channel with
+over 1.5 s left (a warlock re-channels Drain Soul on low twins). A walk stopped 500 ms short of
 range clears `last movement`, which otherwise refuses the repeat as a duplicate for 5 s; one still
 walking holds the tick, or a lower node's charge leaps the bot back onto the twin. Touch and
 Vortex walks and the orb dodge also clear a booking headed elsewhere: forced doesn't outrank forced.
@@ -249,6 +252,7 @@ walks multiply. The door deal refreshes once a second.
 | `twin valkyr vortex raid cover` | `twin valkyr cast vortex raid cover` | `ACTION_EMERGENCY + 5` |
 | `twin valkyr vortex defensive` | `twin valkyr cast vortex defensive` | `ACTION_EMERGENCY + 4` |
 | `twin valkyr orb incoming` | `twin valkyr dodge orb` | `ACTION_EMERGENCY + 3` |
+| `twin valkyr touched during vortex` | `twin valkyr walk to touch portal` | `ACTION_EMERGENCY + 2` |
 | `twin valkyr needs base essence` | `twin valkyr take base essence` | `ACTION_RAID + 5` |
 | `twin valkyr engaged by main tank` | `twin valkyr main tank hold light twin` | `ACTION_RAID + 4` |
 | `twin valkyr darkbane needs assist tank` | `twin valkyr assist tank hold dark twin` | `ACTION_RAID + 3` |
@@ -261,10 +265,18 @@ walks multiply. The door deal refreshes once a second.
 - 25N 2026-10-28 (trace `649_3_fjola-lightbane_1793222782`): 2:22, 0 deaths, the raid in the tunnel
   87% of living time, 2 Unleashed hits there. Its Light Vortex swap took Light 2.3-5.1 s into the 8 s
   cast and kept bots off their stands 17.8-23.5 s from the cast (77-108 yd); nobody used Nitro then.
-  Heroic is untested; against the old centre stack (25H 2026-10-25, 2:43, trace
-  `649_39_val-kyr-twins_1792953674`) the targets are no Unleashed hits in the tunnel (56 then),
-  Eydis's Touch at most once per Light Vortex (3 then), tanks alive through each Vortex, DPS
-  cooldowns inside the lust window, a kill around 3:00-3:15.
+- 25H 2026-10-29 (trace `649_2_val-kyr-twins_1793302950`, 4 bot healers): 3:21, 11 deaths. Against
+  the old centre stack (2026-10-25, 2:43, 56 Unleashed hits, 3 Eydis Touches per Light Vortex): 0
+  Unleashed in the tunnel, one Eydis Touch, tanks alive through each Vortex, no bot Vortex tick (13
+  Nitro uses), lust inside Eydis's Pact; the kill missed the 3:00-3:15 target and DPS cooldowns
+  against the lust window went unchecked. 8 died at 3:14, after the Light Vortex: that Touch's 3 ticks, then the ~55 yd walk
+  Light 1, Dark 1, stand with healers moving at the raid's low point (32% average), and one Light
+  orb going off where bots still walking out on Light crossed bots walking home on Dark, its blast
+  killing 4. The raid still waits at Light 1 through the channel, by the user's choice.
+- Each Fjola Touch ticks once: the 25-27 yd walk to Light 1's reach takes 3.2-4.0 s, the first
+  tick lands at 2 s.
+- 25H Surges dealt 33k/s after resists (6.66M over 3:21); 4 healers held the raid at 76-81% between
+  specials, so any Touch tick eats into it.
 - A human paladin on Fire Resistance Aura leaves no bot fire holder (`ResistAura` skips his school),
   so the normal raid hold through a Light Vortex never latches and the raid swaps (25N 2026-10-28).
 - Humans hold no stand and no interrupt duty: there is no `PlayerbotAI` to ask. A human Eydis tank
@@ -317,6 +329,8 @@ Still invisible, and what stands in:
   the shield and a jump in shared health the heal. A Pact the casting column drops more than 1 s
   early with no jump reads `kicked`.
 - **Touch rows** carry the full amount; their `ab` is shield spent, not damage prevented.
+- **Vortexes and Pacts** come from cast rows, so a twin RaidObs never watched drops out of both; the
+  banner names her.
 - **A lone human tank** writes no `tv.tank`, so `--targets` scores its DPS by colour.
 - A kill where no player hit Eydis carries no credit and files `reset` or `wipe`
   ([observability.md](../../systems/observability.md)).

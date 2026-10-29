@@ -326,6 +326,9 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual((rows[SHIV]["right"], rows[SHIV]["wrong"]), (35000, 20000))
         self.assertEqual((rows[FROST]["right"], rows[FROST]["wrong"]), (15000, 40000))
 
+    def test_both_twins_cast(self):
+        self.assertEqual(vk.uncast_twins(self.trace), [])
+
     def test_every_section_prints(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -333,6 +336,20 @@ class SyntheticPull(unittest.TestCase):
             for _, _, section in vk.SECTIONS:
                 section(self.trace)
         self.assertIn("val-kyr-twins", out.getvalue())
+        self.assertNotIn("no cast rows", out.getvalue())
+
+
+class UncastTwin(unittest.TestCase):
+    def test_the_banner_names_a_twin_without_cast_rows(self):
+        records = [rec for rec in twins_pull() if not (rec.get("e") == "cast" and rec.get("s") == FJOLA)]
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, records)
+            with contextlib.redirect_stdout(out):
+                vk.show_banner(trace)
+            self.assertEqual(vk.uncast_twins(trace), ["Fjola Lightbane"])
+            self.assertEqual([cast["colour"] for cast in vk.vortexes(trace)], [])
+        self.assertIn("no cast rows for Fjola Lightbane: her Vortex and Pact are missing below", out.getvalue())
 
 
 class LoneTank(unittest.TestCase):

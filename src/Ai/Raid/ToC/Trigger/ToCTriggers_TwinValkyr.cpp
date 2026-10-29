@@ -55,6 +55,13 @@ bool TwinValkyrVortexDefensiveTrigger::IsActive()
         GetRaidPersonalDefensive(botAI, TOC_DEFENSIVE_SCOPE, GetTwinVortexHit(botAI, hit) ? &hit : nullptr));
 }
 
+bool TwinValkyrTouchedDuringVortexTrigger::IsActive()
+{
+    Position spot;
+    Creature* portal = nullptr;
+    return TwinValkyrTouchCrossDue(botAI, spot, portal);
+}
+
 bool TwinValkyrNeedsBaseEssenceTrigger::IsActive()
 {
     return WantsEssenceFor(botAI, bot, TwinEssenceReason::Base);
@@ -124,6 +131,9 @@ void AddToCTwinValkyrTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("twin valkyr orb incoming", {
         NextAction("twin valkyr dodge orb", ACTION_EMERGENCY + 3) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr touched during vortex", {
+        NextAction("twin valkyr walk to touch portal", ACTION_EMERGENCY + 2) }));
 
     triggers.push_back(new TriggerNode("twin valkyr needs base essence", {
         NextAction("twin valkyr take base essence", ACTION_RAID + 5) }));
