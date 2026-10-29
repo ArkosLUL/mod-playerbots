@@ -18,4 +18,22 @@ public:
     float GetValue(Action* action) override;
 };
 
+// A braked bot's attacks on the empowered prince and its area damage next to him: its threat would take
+// him off his owner
+class IccBpcBrakeMultiplier : public Multiplier
+{
+public:
+    IccBpcBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc bpc brake") {}
+    float GetValue(Action* action) override;
+};
+
+// On a bomb shot or a nucleus grab, a spell that deals no damage on landing: neither Unstable nor the
+// nucleus answers a DoT's application or a debuff
+class IccBpcDirectHitMultiplier : public Multiplier
+{
+public:
+    IccBpcDirectHitMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc bpc direct hit") {}
+    float GetValue(Action* action) override;
+};
+
 #endif

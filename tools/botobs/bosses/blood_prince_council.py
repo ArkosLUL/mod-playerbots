@@ -8,7 +8,9 @@
     blood_prince_council.py <file> --spread    per bot: the lattice nodes it held, its vortex dodges
     blood_prince_council.py <file> --bombs     per duty bot: the Kinetic Bombs it juggled, its shots
     blood_prince_council.py <file> --balls     per bot: ball victim steps and Inferno Flame soaks
-    blood_prince_council.py <file> --nucleus   per tank: Keleseth's tank collecting Dark Nuclei
+    blood_prince_council.py <file> --nucleus   per owner: Keleseth's tank or stand-in collecting Dark Nuclei
+    blood_prince_council.py <file> --brake     per bot: threat brake holds on the empowered prince
+    blood_prince_council.py <file> --dispels   per dispeller: Glittering Sparks carriers it was dealt
     blood_prince_council.py <file> --defensives  tank buttons and calls to a human tank
     blood_prince_council.py <file> --cheats    this encounter's cheat uses
 
@@ -17,20 +19,29 @@ What the generic views miss here:
 - **`bpc.phase` is the empowered prince**: `valanar` from the pull, then `keleseth` or `taldaram` at
   random, then the other, then Valanar again, moving at 45 s and every 46 s after; `none` while the
   Invocation flies to the next one. Per bot, so a step starts at the first bot to note it.
-- **`bpc.target` is the resolver branch**: `owned` (a tank on its own prince), `recover` (its prince
-  is on somebody else), `bomb`, `skull`, `empowered`, `none`.
-- **`bpc.tank` is a bit mask per tank**: 1 Valanar, 2 Keleseth, 4 Taldaram; `0` when it lost them.
+- **`bpc.target` is the resolver branch**: `nucleus` (Keleseth's stand-in hitting one), `owned` (an
+  owner on its own prince), `recover` (its prince is on somebody else), `bomb`, `skull`, `brake` (the
+  threat brake holds it off the empowered prince), `empowered`, `none`.
+- **`bpc.tank` is a bit mask per owner**: 1 Valanar, 2 Keleseth, 4 Taldaram; `0` when it lost them.
+  With one tank in the raid a DPS bot holds 2 as Keleseth's stand-in.
 - **`bpc.slot` is a lattice node per bot**, 1-41, `0` when it gave it up. Healers keep theirs, the
   ranged follow the empowered prince's side, everyone else holds one only through Empowered Shock
-  Vortex. `bpc.dodge` is a bot without a node stepping off a Shock Vortex: `melee`, `clear`,
-  `blocked` (no clear spot within 20 yd).
+  Vortex; `bpc.hits` is the vortex hits that bot takes on it, its own included, `none` outside the
+  cast. `bpc.dodge` is a bot without a node stepping off a Shock Vortex: `melee`, `clear`, `blocked`
+  (no clear spot within 20 yd).
 - **`bpc.bomb` is the bomb a duty bot juggles**, `0` once it is gone; `bpc.juggle` `shoot` while the
-  bomb falls low with nobody's hit on it, `wait` otherwise.
+  bomb falls low with nobody's hit on it, `wait` otherwise. `bpc.petbomb` is the bomb the bot's pet
+  stays under.
 - **`bpc.ball` is a ball's victim**: `plain` or `inferno`, then `clear` (nobody in reach of the
-  explosion), `step` (walking clear) or `none` (no clear spot). `bpc.soak` is `1` on a soaker of the
-  live Ball of Inferno Flame.
-- **`bpc.nucleus` is Keleseth's tank**: `taunt N` with N Shadow Resonance stacks, `walk` toward one
-  out of reach, `cooldown`, `full` at six, `none` with no loose nucleus.
+  explosion), `step` (walking clear), `fewest` (walking to the least crowded node) or `none`.
+  `bpc.soak` is `1` on a soaker of the live Ball of Inferno Flame; `bpc.flame` is the Inferno victim's
+  button, `safe` when the explosion leaves it above a quarter, `none` with nothing to cast, `idle`
+  otherwise.
+- **`bpc.nucleus` is Keleseth's owner**: `taunt N` or `hit N` with N Shadow Resonance stacks, `walk`
+  toward one out of reach, `cooldown`, `full` at six, `none` with no loose nucleus.
+- **`bpc.brake` is `1` while the brake holds**: 90% of the empowered prince's owner's threat (his
+  victim's with no owner on him), freed at 80%.
+- **`bpc.dispel` is a Glittering Sparks carrier**, its value the bot dealt to dispel it.
 - **`bpc.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window: Keleseth's tank
   through his empowered Shadow Lance, any tank under 40%. `bpc.humancall` is a call to a human tank.
 """
@@ -52,7 +63,7 @@ from raidobs.trace import Trace, clock, notes, roster_guids  # noqa: E402
 ENCOUNTER = "blood-prince-council"
 TITLE = "Blood Prince Council"
 PRINCES = ((1, "valanar"), (2, "keleseth"), (4, "taldaram"))
-TARGET_BRANCHES = ("owned", "recover", "bomb", "skull", "empowered", "none")
+TARGET_BRANCHES = ("nucleus", "owned", "recover", "bomb", "skull", "brake", "empowered", "none")
 DEFENSIVE = "bpc.defensive"
 HUMAN_CALL = "bpc.humancall"
 # a button counts for a window from this long before it opens until this long after it closes
@@ -174,11 +185,13 @@ def spread_rows(trace: Trace) -> list[dict]:
             moves += last is not None and last != value
             last = value
         rows[guid] = {"guid": guid, "nodes": len(nodes), "moves": moves, "released": released}
-    for guid in dodges:
+    hits = value_counts(trace, "bpc.hits")
+    for guid in set(dodges) | set(hits):
         rows.setdefault(guid, {"guid": guid, "nodes": 0, "moves": 0, "released": 0})
     for guid, row in rows.items():
         counts = dodges.get(guid, collections.Counter())
         row["dodges"] = collections.Counter({key: n for key, n in counts.items() if key != "none"})
+        row["hits"] = collections.Counter({key: n for key, n in hits.get(guid, {}).items() if key != "none"})
     return sorted(rows.values(), key=lambda row: trace.name(row["guid"]))
 
 
@@ -189,19 +202,18 @@ def show_spread(trace: Trace) -> None:
     if not rows:
         print("  bpc.slot and bpc.dodge never written")
         return
-    print("  per bot: nodes held, node-to-node moves, releases, vortex dodges\n")
+    print("  per bot: nodes held, node-to-node moves, releases, vortex dodges, scatter windows as hits:count\n")
     for row in rows:
+        hits = ", ".join(f"{key}:{row['hits'][key]}" for key in sorted(row["hits"])) or "-"
         print(f"    {trace.name(row['guid'])}  nodes {row['nodes']}  moves {row['moves']}"
-              f"  released {row['released']}  dodges {counted(row['dodges'])}")
+              f"  released {row['released']}  dodges {counted(row['dodges'])}  hits {hits}")
 
 
-def bomb_rows(trace: Trace) -> list[dict]:
-    """Per duty bot: `bombs` (distinct bombs held), `switches` (one bomb straight to another) and
-    `shots` (bpc.juggle `shoot` spans)."""
-    shots = value_counts(trace, "bpc.juggle")
-    rows = []
-    for guid, spans in holder_spans(trace, "bpc.bomb", icc.pull_end(trace)).items():
-        bombs = {value for value, _, _ in spans if value != "0"}
+def distinct_held(trace: Trace, key: str) -> dict[int, tuple[int, int]]:
+    """Per guid: `(distinct units held, straight switches from one to another)` for a unit-valued key."""
+    out = {}
+    for guid, spans in holder_spans(trace, key, icc.pull_end(trace)).items():
+        held = {value for value, _, _ in spans if value != "0"}
         switches = 0
         last = None
         for value, _, _ in spans:
@@ -210,9 +222,22 @@ def bomb_rows(trace: Trace) -> list[dict]:
                 continue
             switches += last is not None and last != value
             last = value
-        rows.append({"guid": guid, "bombs": len(bombs), "switches": switches,
-                     "shots": shots.get(guid, collections.Counter())["shoot"]})
-    return sorted(rows, key=lambda row: (-row["bombs"], trace.name(row["guid"])))
+        out[guid] = (len(held), switches)
+    return out
+
+
+def bomb_rows(trace: Trace) -> list[dict]:
+    """Per duty bot or pet owner: `bombs` (distinct bombs held), `switches` (one bomb straight to
+    another), `shots` (bpc.juggle `shoot` spans) and `pet` (distinct bombs its pet stayed under)."""
+    shots = value_counts(trace, "bpc.juggle")
+    duty = distinct_held(trace, "bpc.bomb")
+    pets = distinct_held(trace, "bpc.petbomb")
+    rows = []
+    for guid in set(duty) | set(pets):
+        bombs, switches = duty.get(guid, (0, 0))
+        rows.append({"guid": guid, "bombs": bombs, "switches": switches,
+                     "shots": shots.get(guid, collections.Counter())["shoot"], "pet": pets.get(guid, (0, 0))[0]})
+    return sorted(rows, key=lambda row: (-row["bombs"], -row["pet"], trace.name(row["guid"])))
 
 
 def show_bombs(trace: Trace) -> None:
@@ -220,11 +245,12 @@ def show_bombs(trace: Trace) -> None:
         return
     rows = bomb_rows(trace)
     if not rows:
-        print("  bpc.bomb never written")
+        print("  bpc.bomb and bpc.petbomb never written")
         return
-    print("  per duty bot: bombs juggled, bomb-to-bomb switches, shot windows\n")
+    print("  per duty bot: bombs juggled, bomb-to-bomb switches, shot windows, bombs its pet stayed under\n")
     for row in rows:
-        print(f"    {trace.name(row['guid'])}  bombs {row['bombs']}  switches {row['switches']}  shots {row['shots']}")
+        print(f"    {trace.name(row['guid'])}  bombs {row['bombs']}  switches {row['switches']}  shots {row['shots']}"
+              f"  pet {row['pet']}")
 
 
 def show_balls(trace: Trace) -> None:
@@ -232,13 +258,17 @@ def show_balls(trace: Trace) -> None:
         return
     victims = value_counts(trace, "bpc.ball")
     soaks = value_counts(trace, "bpc.soak")
+    flames = {guid: collections.Counter({key: n for key, n in counts.items() if key != "idle"})
+              for guid, counts in value_counts(trace, "bpc.flame").items()}
+    flames = {guid: counts for guid, counts in flames.items() if counts}
     if not victims and not soaks:
         print("  bpc.ball and bpc.soak never written")
         return
-    print("  per bot: ball victim spans by kind and answer, Inferno Flame soaks\n")
-    for guid in sorted(set(victims) | set(soaks), key=trace.name):
+    print("  per bot: ball victim spans by kind and answer, Inferno Flame soaks, Inferno catch buttons\n")
+    for guid in sorted(set(victims) | set(soaks) | set(flames), key=trace.name):
         soaked = soaks.get(guid, collections.Counter())["1"]
-        print(f"    {trace.name(guid)}  {counted(victims.get(guid, collections.Counter()))}  soaks {soaked}")
+        print(f"    {trace.name(guid)}  {counted(victims.get(guid, collections.Counter()))}  soaks {soaked}"
+              f"  flame {counted(flames.get(guid, collections.Counter()))}")
 
 
 def show_nucleus(trace: Trace) -> None:
@@ -248,9 +278,46 @@ def show_nucleus(trace: Trace) -> None:
     if not rows:
         print("  bpc.nucleus never written")
         return
-    print("  per tank: spans of each nucleus answer\n")
+    print("  per owner: spans of each nucleus answer\n")
     for guid, counts in by_name(trace, rows):
-        print(f"    {trace.name(guid)}  {counted(counts, ('taunt', 'walk', 'cooldown', 'full', 'none'))}")
+        print(f"    {trace.name(guid)}  {counted(counts, ('taunt', 'hit', 'walk', 'cooldown', 'full', 'none'))}")
+
+
+def brake_rows(trace: Trace) -> list[tuple[int, int, int]]:
+    """`(guid, holds, held ms)` per bot the threat brake held, by name."""
+    rows = []
+    for guid, spans in holder_spans(trace, "bpc.brake", icc.pull_end(trace)).items():
+        held = [(start, stop) for value, start, stop in spans if value == "1"]
+        rows.append((guid, len(held), sum(stop - start for start, stop in held)))
+    return sorted(rows, key=lambda row: trace.name(row[0]))
+
+
+def show_brake(trace: Trace) -> None:
+    if refuse(trace, "BRAKE"):
+        return
+    rows = brake_rows(trace)
+    if not rows:
+        print("  bpc.brake never written")
+        return
+    print("  per bot: threat brake holds on the empowered prince and their total\n")
+    for guid, holds, held in rows:
+        print(f"    {trace.name(guid)}  holds {holds}  held {clock(held)}")
+
+
+def show_dispels(trace: Trace) -> None:
+    if refuse(trace, "DISPELS"):
+        return
+    dealt: collections.Counter = collections.Counter()
+    for _, spans in holder_spans(trace, "bpc.dispel", icc.pull_end(trace)).items():
+        for value, _, _ in spans:
+            if value.isdigit() and value != "0":
+                dealt[int(value)] += 1
+    if not dealt:
+        print("  bpc.dispel never written")
+        return
+    print("  per dispeller: Glittering Sparks carriers it was dealt\n")
+    for guid, n in sorted(dealt.items(), key=lambda item: trace.name(item[0])):
+        print(f"    {trace.name(guid)}  {n}")
 
 
 def casts_named(trace: Trace, names: frozenset) -> list[tuple[int, int, str]]:
@@ -320,7 +387,9 @@ SECTIONS = (
     ("spread", "per bot: lattice nodes held and vortex dodges", show_spread),
     ("bombs", "per duty bot: Kinetic Bombs juggled and shots", show_bombs),
     ("balls", "per bot: ball victim steps and Inferno Flame soaks", show_balls),
-    ("nucleus", "per tank: Dark Nucleus collection", show_nucleus),
+    ("nucleus", "per owner: Dark Nucleus collection", show_nucleus),
+    ("brake", "per bot: threat brake holds on the empowered prince", show_brake),
+    ("dispels", "per dispeller: Glittering Sparks carriers it was dealt", show_dispels),
     ("defensives", "tank buttons and calls to a human tank", show_defensives),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )

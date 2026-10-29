@@ -17,6 +17,7 @@ class Creature;
 class Player;
 class PlayerbotAI;
 class Unit;
+struct RaidPredictedHit;
 
 // icecrown_citadel.h CreaturesIds. GetEntry reports these on every difficulty.
 constexpr uint32 NPC_BPC_VALANAR = 37970;
@@ -44,6 +45,11 @@ constexpr uint32 SPELL_BPC_KINETIC_BOMB_KNOCKBACK = 72087;
 // Difficulty rows: remap at the call
 constexpr uint32 SPELL_BPC_EMPOWERED_SHOCK_VORTEX = 72039;
 constexpr uint32 SPELL_BPC_BALL_OF_FLAMES_PROC = 71756;
+constexpr uint32 SPELL_BPC_FLAMES = 71393;
+constexpr uint32 SPELL_BPC_SHADOW_LANCE = 71405;
+constexpr uint32 SPELL_BPC_EMPOWERED_SHADOW_LANCE = 71815;
+// The magic debuff Taldaram's cone leaves: fire over 8 s and a 40% slow
+constexpr uint32 SPELL_BPC_GLITTERING_SPARKS = 71807;
 
 // Prince bits in bpc.tank
 constexpr uint8 BPC_PRINCE_VALANAR = 1;
@@ -105,19 +111,24 @@ Creature* GetBpcValanar(PlayerbotAI* botAI);
 // bpc.phase.
 Creature* GetBpcEmpoweredPrince(PlayerbotAI* botAI);
 
-// Tanks and DPS: the tank's own princes, a bomb a duty bot shoots, a player's skull, else the empowered
-// prince. Notes bpc.target.
+// Tanks and DPS: a nucleus Keleseth's stand-in hits to take it, the owner's own princes, a bomb a duty bot
+// shoots, a player's skull, else the empowered prince unless the threat brake holds the bot. Notes
+// bpc.target.
 Unit* GetBpcTarget(PlayerbotAI* botAI);
+// Where the bot sends its pet: the bomb the pet juggles, else the bot's own pick
+Unit* GetBpcPetTarget(PlayerbotAI* botAI);
+// A bomb shot or a nucleus grab, which only a damaging hit lands on
+Unit* GetBpcDirectHitTarget(PlayerbotAI* botAI);
+bool IsBpcDirectHitPick(PlayerbotAI* botAI);
+// The empowered prince while the threat brake holds this bot off him, else null
+Creature* GetBpcBrakeTarget(PlayerbotAI* botAI);
+bool IsBpcBraked(PlayerbotAI* botAI);
 // A prince this tank owns, held by somebody else, its taunt ready and the prince below taunt DR level 3
 Unit* GetBpcPrinceToTaunt(PlayerbotAI* botAI);
 
 // Keleseth's tank: the nucleus to taunt now, or a walk toward one out of taunt range. Notes bpc.nucleus.
 Unit* GetBpcNucleusToTaunt(PlayerbotAI* botAI);
 bool GetBpcNucleusWalk(PlayerbotAI* botAI, Position& spot);
-
-// The bomb this duty bot shoots now: one that falls low and carries no knockback
-Unit* GetBpcBombShot(PlayerbotAI* botAI);
-bool IsBpcBombShooting(PlayerbotAI* botAI);
 
 // A ball's victim walks clear of everyone else. Notes bpc.ball.
 bool GetBpcBallWalk(PlayerbotAI* botAI, Position& spot);
@@ -144,14 +155,21 @@ bool IsBpcPrisonHeld(PlayerbotAI* botAI);
 // tank under BPC_TANK_DEFENSIVE_PCT
 uint32 GetBpcTankDefensive(PlayerbotAI* botAI, char const* noteKind);
 bool IsBpcTankDefensiveHeld(PlayerbotAI* botAI);
+// Keleseth's Shadow Lance on a stand-in that is no tank, from its cast
+bool GetBpcLanceHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
+// The Ball of Inferno Flame's victim, once the explosion would leave it under a quarter of its health: a
+// magic button, else Dispersion. Flames ignores immunities. Notes bpc.flame.
+uint32 GetBpcFlameDefensive(PlayerbotAI* botAI);
+// The Glittering Sparks carrier this bot dispels, and with which spell
+Player* GetBpcDispelTarget(PlayerbotAI* botAI, char const*& spell);
 
 // A damage dealer whose area attack would reach a prince without the Invocation, which turns the damage
 // into threat, or a Dark Nucleus. Area searches skip a nucleus, but a cleave or a chain takes it off its
 // tank, and the splash test can't tell those apart.
 bool IsBpcAreaDamageHeld(PlayerbotAI* botAI);
 
-// The scan, the tank roster, the nodes, the bomb and soak duties, the stand latch, the calls to a human
-// tank, the reset after a wipe
+// The scan, the tank roster, the nodes, the bomb, pet, soak and dispel duties, the threat brake, the stand
+// latch, the calls to a human tank, the reset after a wipe
 void TickBpcEncounter(PlayerbotAI* botAI);
 
 // Lust waits for Keleseth's phase
