@@ -7,135 +7,152 @@
 #ifndef PLAYERBOTS_ICCACTIONS_SINDRAGOSA_H
 #define PLAYERBOTS_ICCACTIONS_SINDRAGOSA_H
 
+#include <string>
+
 #include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
-#include "ICCHelpers_Shared.h"
+#include "ICCActions_RaidWide.h"
 #include "ICCHelpers_Sindragosa.h"
-#include "ICCScripts.h"
 #include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include "Position.h"
+#include "RaidDirectTargeting.h"
 
-class IccSindragosaGroupPositionAction : public AttackAction
+// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
+// re-issued each tick to a bot still walking never lands.
+class IccSindragosaBossWalkAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc sindragosa group position";
+    IccSindragosaBossWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
-    IccSindragosaGroupPositionAction(PlayerbotAI* botAI)
-            : AttackAction(botAI, Name) {}
-    bool Execute(Event event) override;
+protected:
+    // Walks to the spot the getter hands out, booking `priority`. `interrupt` drops a cast that pins the
+    // bot's feet; `nitro` spends Nitro Boosts on a long walk.
+    bool WalkFor(bool (*getter)(PlayerbotAI*, Position&), MovementPriority priority, bool interrupt, bool nitro);
 
-    bool HandleTankPositioning(Unit* boss);
-    bool HandleNonTankPositioning();
-    bool MoveIncrementallyToPosition(Position const& targetPos, float maxStep);
+private:
+    Position const* WalkInFlight();
+    bool WalkTo(Position const& spot, MovementPriority priority, bool interrupt);
+    bool BookedOnWalkSpot();
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
 };
 
-class IccSindragosaFrostBeaconAction : public MovementAction
-{
-public:
-    static constexpr char const* Name = "icc sindragosa frost beacon";
-
-    IccSindragosaFrostBeaconAction(PlayerbotAI* botAI)
-            : MovementAction(botAI, Name) {}
-    bool Execute(Event event) override;
-
-    bool HandleSupportActions();
-    bool HandleBeaconedPlayer(Unit const* boss);
-    bool HandleNonBeaconedPlayer(Unit const* boss);
-    bool MoveToPositionIfNeeded(Position const& position, float tolerance);
-    bool MoveToPosition(Position const& position);
-    bool TryDropTombFlares(Unit const* boss);
-
-    private:
-    static constexpr float POSITION_TOLERANCE = 1.0f;
-    static constexpr float TOMB_POSITION_TOLERANCE = 0.5f;
-    static constexpr float MIN_SAFE_DISTANCE = 13.0f;
-    static constexpr float MOVE_TOLERANCE = 2.0f;
-    static constexpr uint32 FLARE_ITEM_COOLDOWN_MS = 1000;
-};
-
-class IccSindragosaHotAction : public Action
-{
-public:
-    static constexpr char const* Name = "icc sindragosa hot";
-
-    IccSindragosaHotAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
-    bool Execute(Event event) override;
-};
-
-class IccSindragosaBlisteringColdAction : public MovementAction
+class IccSindragosaColdAction : public IccSindragosaBossWalkAction
 {
 public:
     static constexpr char const* Name = "icc sindragosa blistering cold";
 
-    IccSindragosaBlisteringColdAction(PlayerbotAI* botAI)
-            : MovementAction(botAI, Name) {}
+    IccSindragosaColdAction(PlayerbotAI* botAI) : IccSindragosaBossWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccSindragosaUnchainedMagicAction : public AttackAction
+class IccSindragosaSplashAction : public IccSindragosaBossWalkAction
+{
+public:
+    static constexpr char const* Name = "icc sindragosa splash";
+
+    IccSindragosaSplashAction(PlayerbotAI* botAI) : IccSindragosaBossWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccSindragosaBombHideAction : public IccSindragosaBossWalkAction
+{
+public:
+    static constexpr char const* Name = "icc sindragosa bomb hide";
+
+    IccSindragosaBombHideAction(PlayerbotAI* botAI) : IccSindragosaBossWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccSindragosaBeaconAction : public IccSindragosaBossWalkAction
+{
+public:
+    static constexpr char const* Name = "icc sindragosa frost beacon";
+
+    IccSindragosaBeaconAction(PlayerbotAI* botAI) : IccSindragosaBossWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccSindragosaCastTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc sindragosa cast tank defensive";
+
+    IccSindragosaCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccSindragosaTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc sindragosa taunt";
+
+    IccSindragosaTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccSindragosaBuffetHideAction : public IccSindragosaBossWalkAction
+{
+public:
+    static constexpr char const* Name = "icc sindragosa buffet hide";
+
+    IccSindragosaBuffetHideAction(PlayerbotAI* botAI) : IccSindragosaBossWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccSindragosaUnchainedAction : public IccSindragosaBossWalkAction
 {
 public:
     static constexpr char const* Name = "icc sindragosa unchained magic";
 
-    IccSindragosaUnchainedMagicAction(PlayerbotAI* botAI)
-            : AttackAction(botAI, Name) {}
+    IccSindragosaUnchainedAction(PlayerbotAI* botAI) : IccSindragosaBossWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccSindragosaChilledToTheBoneAction : public AttackAction
+class IccSindragosaFreedomAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc sindragosa chilled to the bone";
+    static constexpr char const* Name = "icc sindragosa hand of freedom";
 
-    IccSindragosaChilledToTheBoneAction(PlayerbotAI* botAI)
-            : AttackAction(botAI, Name) {}
+    IccSindragosaFreedomAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccSindragosaMysticBuffetAction : public MovementAction
+class IccSindragosaBeaconHealAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc sindragosa mystic buffet";
+    static constexpr char const* Name = "icc sindragosa beacon heal";
 
-    IccSindragosaMysticBuffetAction(PlayerbotAI* botAI)
-            : MovementAction(botAI, Name) {}
+    IccSindragosaBeaconHealAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccSindragosaFrostBombAction : public MovementAction
+class IccSindragosaHoldAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc sindragosa frost bomb";
+    static constexpr char const* Name = "icc sindragosa hold";
 
-    IccSindragosaFrostBombAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name) {}
+    IccSindragosaHoldAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
+};
 
-private:
-    struct FrostBombContext
-    {
-        Unit* marker = nullptr;
-        std::vector<Unit*> tombs;
-    };
-    bool CollectContext(FrostBombContext& ctx) const;
-    int ResolveGroupIndex(Group* group) const;
-    void PinGroupToCurrentZone();
-    std::vector<Unit*> SelectTombs(std::vector<Unit*> const& tombs, int groupIndex, int groupCount) const;
-    Unit* ResolveStickyTomb(std::vector<Unit*> const& myTombs);
-    bool HandleRtiMarking(Group* group, int groupIndex, std::vector<Unit*> const& myTombs, Unit* losTomb);
+class IccSindragosaTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc sindragosa target";
+
+    IccSindragosaTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetSgTarget) {}
+};
+
+class IccSindragosaStandAction : public IccSindragosaBossWalkAction
+{
+public:
+    static constexpr char const* Name = "icc sindragosa stand";
+
+    IccSindragosaStandAction(PlayerbotAI* botAI) : IccSindragosaBossWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 #endif

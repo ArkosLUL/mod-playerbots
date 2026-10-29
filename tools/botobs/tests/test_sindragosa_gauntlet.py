@@ -2,8 +2,9 @@
 
     python -m unittest discover -s tools/botobs/tests
 
-A synthetic 10N pull pins each section, and the shared v14 fixture shows every section reads empty on
-a trace that is not the gauntlet rather than raising.
+A synthetic 10N pull pins each section. The banner reads a fixed declared set, so the source can gain
+or lose keys under it, and the shared v14 fixture shows every section reads empty on a trace that is
+not the gauntlet rather than raising.
 """
 from __future__ import annotations
 
@@ -14,11 +15,13 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 BOTOBS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOTOBS))
 
 from bosses import sindragosa_gauntlet as gauntlet  # noqa: E402
+from raidobs import probes  # noqa: E402
 from raidobs.trace import Trace  # noqa: E402
 
 FULL_V14 = BOTOBS / "fixtures" / "full-v14.ndjson"
@@ -30,15 +33,34 @@ WARDEN = CREATURE | 982
 SORCERESS = CREATURE | 983
 CHAMPION_AGAIN = CREATURE | 984
 BROODLING = CREATURE | 985
-BULWARK = 7401
+BLADE = CREATURE | 986
+BULWARK = 7401  # tank
+SHIV = 7402     # melee
+MEND = 7403     # healer
+
+ROSTER = ((BULWARK, "Bulwark", "tank"), (SHIV, "Shiv", "melee"), (MEND, "Mend", "heal"))
 
 UNITS = ((CHAMPION, 37501, "Nerub'ar Champion"), (WEBWEAVER, 37502, "Nerub'ar Webweaver"),
          (WARDEN, 37228, "Frostwarden Warrior"), (SORCERESS, 37229, "Frostwarden Sorceress"),
-         (CHAMPION_AGAIN, 37501, "Nerub'ar Champion"), (BROODLING, 37232, "Nerub'ar Broodling"))
+         (CHAMPION_AGAIN, 37501, "Nerub'ar Champion"), (BROODLING, 37232, "Nerub'ar Broodling"),
+         (BLADE, 38199, "Frostblade"))
 
 # Each add's sampled span: the first wave's spiders, the Frostwardens, the third wave's spiders.
 SAMPLES = {CHAMPION: (0, 20000), WEBWEAVER: (1000, 22000), WARDEN: (30000, 50000), SORCERESS: (31000, 48000),
            CHAMPION_AGAIN: (60000, 80000), BROODLING: (10000, 65000)}
+
+# Sindragosa's own keys are declared under the same prefix, and the banner must not name them.
+DECLARED = {key: (probes.HOLDER, "ICCHelpers_SindragosaAdds.cpp:1") for key in (
+    "sg.gauntlet.target", "sg.gauntlet.taunt", "sg.gauntlet.dodge", "sg.phase", "sg.tank", "sg.drake.tank",
+    "sg.group")}
+
+
+def note(when: int, guid: int, key: str, value: str) -> dict:
+    return {"t": when, "e": "note", "g": guid, "k": key, "txt": value}
+
+
+def blade_hit(when: int, guid: int) -> dict:
+    return {"t": when, "e": "dmg", "s": BLADE, "d": guid, "sp": 70305, "a": 3000}
 
 
 def snaps() -> list[dict]:
@@ -53,10 +75,28 @@ def pull(boss: str = "sindragosa-gauntlet") -> list[dict]:
     return [
         {"e": "hdr", "v": 14, "ts": 1789800000000, "map": 631, "inst": 5, "diff": 0, "boss": boss,
          "bin": 1789799000000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 2, "iccbuffs": 0},
-         "roster": [{"g": BULWARK, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0}]},
+         "roster": [{"g": guid, "n": name, "r": role, "c": "warrior", "h": 0} for guid, name, role in ROSTER]},
         {"t": 0, "e": "pull", "boss": boss, "src": "bossstate"},
         *({"t": 0, "e": "unit", "g": guid, "en": entry, "n": name} for guid, entry, name in UNITS),
         *snaps(),
+        note(100, SHIV, "sg.gauntlet.target", "champion"),
+        note(5000, SHIV, "sg.gauntlet.target", "skull"),
+        note(30000, BULWARK, "sg.gauntlet.target", "rescue"),
+        note(31000, BULWARK, "sg.gauntlet.target", "sorceress"),
+        # Bulwark owes a taunt on the Warrior hitting a healer, then on a third-wave Champion.
+        note(32000, BULWARK, "sg.gauntlet.taunt", "warrior"),
+        note(34000, BULWARK, "sg.gauntlet.taunt", "none"),
+        note(61000, BULWARK, "sg.gauntlet.taunt", "champion"),
+        # Shiv steps out of the blade twice and is still hit twice; Bulwark never moves.
+        note(40000, SHIV, "sg.gauntlet.dodge", "melee"),
+        blade_hit(41000, SHIV),
+        blade_hit(41500, SHIV),
+        note(42000, SHIV, "sg.gauntlet.dodge", "none"),
+        blade_hit(43000, BULWARK),
+        note(44000, MEND, "sg.gauntlet.dodge", "clear"),
+        note(45000, MEND, "sg.gauntlet.dodge", "none"),
+        note(46000, SHIV, "sg.gauntlet.dodge", "melee"),
+        note(47000, SHIV, "sg.gauntlet.dodge", "none"),
         {"t": 90000, "e": "end", "out": "kill"},
     ]
 
@@ -73,6 +113,11 @@ def printed(show, *args) -> str:
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
         show(*args)
     return out.getvalue()
+
+
+def banner(records: list[dict]) -> str:
+    with mock.patch.object(probes, "declared_keys", return_value=DECLARED):
+        return printed(gauntlet.show_banner, load(records))
 
 
 class Waves(unittest.TestCase):
@@ -99,6 +144,36 @@ class Waves(unittest.TestCase):
         self.assertEqual(rows[0], ("spiders, first wave", 3, 0, 80000))
 
 
+class Targets(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(gauntlet.show_targets, load(pull())), (
+            "TARGETS\n"
+            "  per bot: spans of each resolver rule\n"
+            "\n"
+            "    Bulwark  rescue 1, sorceress 1\n"
+            "    Shiv  champion 1, skull 1\n"))
+
+
+class Taunts(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(gauntlet.show_taunts, load(pull())), (
+            "TAUNTS\n"
+            "  sg.gauntlet.taunt per tank: each rescue taunt it owed, from when\n"
+            "\n"
+            "    Bulwark  warrior 0:32.000, champion 1:01.000\n"))
+
+
+class Dodges(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(gauntlet.show_dodges, load(pull())), (
+            "DODGES\n"
+            "  per player: sg.gauntlet.dodge rules, Frostblade hits\n"
+            "\n"
+            "    Bulwark  dodges -  hits 1\n"
+            "    Mend  dodges clear 1  hits 0\n"
+            "    Shiv  dodges melee 2  hits 2\n"))
+
+
 class Cheats(unittest.TestCase):
     def test_none(self):
         self.assertEqual(printed(gauntlet.show_cheats, load(pull())), "CHEATS\n  no cheat fired\n")
@@ -110,8 +185,12 @@ class Cheats(unittest.TestCase):
 
 
 class Banner(unittest.TestCase):
-    def test_owns_no_probe(self):
-        self.assertIn("no probes of its own", printed(gauntlet.show_banner, load(pull())))
+    def test_spares_sindragosas_keys(self):
+        self.assertIn("all sg.gauntlet.* probes present\n", banner(pull()))
+
+    def test_a_missing_probe_is_named(self):
+        records = [rec for rec in pull() if rec.get("k") != "sg.gauntlet.taunt"]
+        self.assertIn("probes absent from this trace: sg.gauntlet.taunt\n", banner(records))
 
 
 class EveryView(unittest.TestCase):
