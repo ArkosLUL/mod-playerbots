@@ -7,52 +7,78 @@
 #ifndef PLAYERBOTS_ICCTRIGGERS_BLOODPRINCES_H
 #define PLAYERBOTS_ICCTRIGGERS_BLOODPRINCES_H
 
-#include "PlayerbotAI.h"
-#include "Playerbots.h"
+#include "ICCHelpers_BloodPrinces.h"
+#include "ICCTriggers_RaidWide.h"
 #include "Trigger.h"
 
-class IccBpcKelesethTankTrigger : public Trigger
+class IccBpcDodgeTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc bpc keleseth tank";
+    static constexpr char const* Name = "icc bpc dodge";
 
-    IccBpcKelesethTankTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccBpcDodgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccBpcMainTankTrigger : public Trigger
+class IccBpcTankDefensiveTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc bpc main tank";
+    static constexpr char const* Name = "icc bpc tank defensive";
 
-    IccBpcMainTankTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccBpcTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccBpcEmpoweredVortexTrigger : public Trigger
+class IccBpcBallTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc bpc empowered vortex";
+    static constexpr char const* Name = "icc bpc ball";
 
-    IccBpcEmpoweredVortexTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccBpcBallTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccBpcKineticBombTrigger : public Trigger
+class IccBpcPrinceTauntTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc bpc kinetic bomb";
+    static constexpr char const* Name = "icc bpc prince taunt";
 
-    IccBpcKineticBombTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccBpcPrinceTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
-class IccBpcBallOfFlameTrigger : public Trigger
+class IccBpcNucleusTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "icc bpc ball of flame";
+    static constexpr char const* Name = "icc bpc nucleus";
 
-    IccBpcBallOfFlameTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    IccBpcNucleusTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBpcSoakTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bpc soak";
+
+    IccBpcSoakTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccBpcTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc bpc target";
+
+    IccBpcTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetBpcTarget) {}
+};
+
+class IccBpcStandTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bpc stand";
+
+    IccBpcStandTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

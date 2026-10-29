@@ -7,79 +7,105 @@
 #ifndef PLAYERBOTS_ICCACTIONS_BLOODPRINCES_H
 #define PLAYERBOTS_ICCACTIONS_BLOODPRINCES_H
 
+#include <string>
+
 #include "Action.h"
-#include "AttackAction.h"
-#include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "ICCData.h"
+#include "ICCActions_RaidWide.h"
 #include "ICCHelpers_BloodPrinces.h"
-#include "ICCHelpers_Shared.h"
-#include "ICCScripts.h"
-#include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "ObjectGuid.h"
-#include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <set>
+#include "Position.h"
+#include "RaidDirectTargeting.h"
 
-class IccBpcKelesethTankAction : public AttackAction
+// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
+// re-issued each tick to a bot still walking never lands.
+class IccBpcWalkAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "icc bpc keleseth tank";
+    IccBpcWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
-    IccBpcKelesethTankAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, Name) {}
+protected:
+    // The latched spot while the bot is still walking to it, else nullptr
+    Position const* WalkInFlight();
+    // False without booking anything while a cast pins the bot's feet, unless `interrupt` drops the cast
+    bool WalkTo(Position const& spot, MovementPriority priority, bool interrupt = false);
+    void DropWalk() { walking = false; }
+
+private:
+    bool BookedOnWalkSpot();
+
+    Position walkSpot;
+    uint32 walkIssuedMs = 0;
+    bool walking = false;
+};
+
+class IccBpcDodgeAction : public IccBpcWalkAction
+{
+public:
+    static constexpr char const* Name = "icc bpc dodge";
+
+    IccBpcDodgeAction(PlayerbotAI* botAI) : IccBpcWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccBpcMainTankAction : public AttackAction
+class IccBpcCastTankDefensiveAction : public Action
 {
 public:
-    static constexpr char const* Name = "icc bpc main tank";
+    static constexpr char const* Name = "icc bpc cast tank defensive";
 
-    IccBpcMainTankAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, Name) {}
-    bool Execute(Event event) override;
-
-    bool MarkEmpoweredPrince();
-};
-
-class IccBpcEmpoweredVortexAction : public MovementAction
-{
-public:
-    static constexpr char const* Name = "icc bpc empowered vortex";
-
-    IccBpcEmpoweredVortexAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name) {}
-    bool Execute(Event event) override;
-
-    bool MaintainRangedSpacing();
-    bool HandleEmpoweredVortexSpread();
-};
-
-class IccBpcKineticBombAction : public AttackAction
-{
-public:
-    static constexpr char const* Name = "icc bpc kinetic bomb";
-
-    IccBpcKineticBombAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, Name) {}
+    IccBpcCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
-class IccBpcBallOfFlameAction : public MovementAction
+class IccBpcBallAction : public IccBpcWalkAction
 {
 public:
-    static constexpr char const* Name = "icc bpc ball of flame";
+    static constexpr char const* Name = "icc bpc ball";
 
-    IccBpcBallOfFlameAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, Name) {}
+    IccBpcBallAction(PlayerbotAI* botAI) : IccBpcWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccBpcPrinceTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc bpc prince taunt";
+
+    IccBpcPrinceTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccBpcNucleusAction : public IccBpcWalkAction
+{
+public:
+    static constexpr char const* Name = "icc bpc nucleus";
+
+    IccBpcNucleusAction(PlayerbotAI* botAI) : IccBpcWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccBpcSoakAction : public IccBpcWalkAction
+{
+public:
+    static constexpr char const* Name = "icc bpc soak";
+
+    IccBpcSoakAction(PlayerbotAI* botAI) : IccBpcWalkAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccBpcTargetAction : public IccDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "icc bpc target";
+
+    IccBpcTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetBpcTarget) {}
+};
+
+class IccBpcStandAction : public IccBpcWalkAction
+{
+public:
+    static constexpr char const* Name = "icc bpc stand";
+
+    IccBpcStandAction(PlayerbotAI* botAI) : IccBpcWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
