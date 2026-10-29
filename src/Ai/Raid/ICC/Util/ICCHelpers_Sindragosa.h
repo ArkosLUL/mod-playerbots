@@ -51,11 +51,12 @@ inline Position const ICC_SG_FAR_STATION(4525.6f, 2485.15f, 245.082f);
 // On the stairs, out of the bombs' drop box (x 4350-4425)
 inline Position const ICC_SG_STAGE(4346.0f, 2484.57f, 206.2f);
 // Air beacon spots at the stair foot, in assignment order. navprobe --nav 0x09 settles each within 0.03 of
-// 203.38, and paths from the stage reach them.
+// 203.38, and paths from the stage reach them. Ice Tomb hits everyone within 10 yd, so a pair 6 yd apart takes
+// two hits each and the next pair sits 13 yd off, out of it even with both parked a yard short.
 inline Position const ICC_SG_BEACON_SPOTS_25[] = {
-    {4362.0f, 2474.57f, 203.38f}, {4362.0f, 2494.57f, 203.38f}, {4368.0f, 2474.57f, 203.38f},
-    {4368.0f, 2494.57f, 203.38f}, {4362.0f, 2484.57f, 203.38f}, {4368.0f, 2484.57f, 203.38f}};
-inline Position const ICC_SG_BEACON_SPOTS_10[] = {{4364.0f, 2478.57f, 203.38f}, {4364.0f, 2490.57f, 203.38f}};
+    {4362.0f, 2471.57f, 203.38f}, {4362.0f, 2497.57f, 203.38f}, {4368.0f, 2471.57f, 203.38f},
+    {4368.0f, 2497.57f, 203.38f}, {4362.0f, 2484.57f, 203.38f}, {4368.0f, 2484.57f, 203.38f}};
+inline Position const ICC_SG_BEACON_SPOTS_10[] = {{4364.0f, 2478.07f, 203.38f}, {4364.0f, 2491.07f, 203.38f}};
 
 enum class IccSindragosaPhaseId : uint8
 {

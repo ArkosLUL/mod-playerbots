@@ -65,11 +65,11 @@ static_assert(PARK < UNPARK, "a walk has to end inside its own trigger");
 // A floor check that pulls a spot back further than this turns it down
 constexpr float FLOOR_TOLERANCE = 1.5f;
 
-// Blistering Cold reaches 25 yd plus the target's 1.5
+// Blistering Cold reaches 25 yd from her centre: a creature's area spell adds no target size
 constexpr float COLD_RANGE = 29.5f;
 
 constexpr uint32 UNCHAINED_HOLD_STACKS = 3;
-// Backlash's 20 yd plus both sizes
+// Backlash's 20 yd plus a margin
 constexpr float BACKLASH_KEEP = 23.0f;
 constexpr uint32 CHILLED_STOP_STACKS = 6;
 
@@ -87,6 +87,8 @@ constexpr float BOMB_HIDE_BEHIND = 3.5f;
 constexpr float BOMB_TOMB_MIN = 3.0f;
 constexpr float BUFFET_HIDE_BEHIND = 4.0f;
 constexpr uint32 BUFFET_HIDE_STACKS = 3;
+// The free tank resets from one stack, so it can take the swap at SWAP_BUFFET_MAX or under
+constexpr uint32 FREE_TANK_HIDE_STACKS = 1;
 // Heals pick targets out to 38.5 yd
 constexpr float HEAL_REACH = 38.0f;
 // A live tomb this close to a last phase tomb spot fouls it
@@ -131,7 +133,7 @@ constexpr Polar COLD_ESCAPES[] = {{150.0f, 30.0f}, {180.0f, 30.0f}, {210.0f, 30.
 constexpr Polar UNCHAINED_HEALERS[] = {{15.0f, 29.0f}, {35.0f, 30.0f}, {25.0f, 38.0f}};
 constexpr Polar UNCHAINED_OTHERS[] = {{325.0f, 34.0f}, {315.0f, 40.0f}, {340.0f, 40.0f}};
 constexpr uint8 UNCHAINED_SET = 3;
-// Last phase tombs, alternating, outside her 21.6 yd melee and 26.5 yd Blistering Cold
+// Last phase tombs, alternating, outside her 21.6 yd melee and 25 yd Blistering Cold
 constexpr Polar TOMB_SPOTS[] = {{140.0f, 31.0f}, {215.0f, 31.0f}};
 constexpr uint8 BEACON_SPOT_A = 7;
 
@@ -296,6 +298,8 @@ struct SgState
     std::unordered_map<ObjectGuid, ObjectGuid> freedom;
     // The newest tomb formed in the last phase, which the raid hides behind
     ObjectGuid newestTomb;
+    // Air tombs some bot hides behind from a live bomb
+    std::unordered_set<ObjectGuid> coverTombs;
 
     uint32 humanCallMs = 0;
     bool humanCallRan = false;
@@ -477,6 +481,12 @@ Player* PlayerOf(Player* bot, ObjectGuid const& guid)
     return player && player->IsAlive() && IccSameInstance(bot, player) ? player : nullptr;
 }
 
+// Asphyxiation starts about as the 4th bomb lands, so a tomb covering a bot from a live bomb stays up
+bool AirBreakable(SgState const& st, TombInfo const& tomb)
+{
+    return tomb.asphyxiating && !st.coverTombs.count(tomb.guid);
+}
+
 // An air tomb while she still bombs, or the newest last phase tomb, unless its prisoner can't wait
 bool TombHeld(SgState const& st, TombInfo const& tomb)
 {
@@ -484,7 +494,7 @@ bool TombHeld(SgState const& st, TombInfo const& tomb)
         return false;
 
     if (tomb.air)
-        return st.phase == IccSindragosaPhaseId::Air && !st.released && !tomb.asphyxiating;
+        return st.phase == IccSindragosaPhaseId::Air && !st.released && !AirBreakable(st, tomb);
 
     return !tomb.danger && st.phase == IccSindragosaPhaseId::Last && tomb.guid == st.newestTomb;
 }
@@ -980,6 +990,11 @@ void RefreshDuties(SgState& st, Player* bot, Creature* boss, uint32 now)
     AssignUnchained(st, bot, members);
     AssignFreedom(st, bot, members, boss, now);
     UpdateNewestTomb(st);
+
+    st.coverTombs.clear();
+    for (auto const& entry : st.bots)
+        if (entry.second.hideMarker && entry.second.hideTomb)
+            st.coverTombs.insert(entry.second.hideTomb);
 }
 
 // Past BRAKE_CAP of the holder's threat until under BRAKE_RELEASE, read from her threat list
@@ -1214,9 +1229,9 @@ void UpdateBombHide(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
     }
 }
 
-// Behind the newest tomb from her once Mystic Buffet reaches BUFFET_HIDE_STACKS, until it drops or the tomb
-// goes. A healer only where the holder stays in heal reach, the swapping tank never, a heroic carrier only
-// without Instability.
+// Behind the newest tomb from her once Mystic Buffet reaches BUFFET_HIDE_STACKS (the free tank
+// FREE_TANK_HIDE_STACKS), until it drops or the tomb goes. A healer only where the holder stays in heal
+// reach, the holder and swapper never, a heroic carrier only without Instability.
 void UpdateBuffetHide(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
 {
     uint32 const stacks = BuffetStacks(bot, boss);
@@ -1227,7 +1242,8 @@ void UpdateBuffetHide(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
         (bs.buffetTomb && !FindTomb(st, bs.buffetTomb)))
         bs.buffetTomb.Clear();
 
-    if (bs.buffetTomb || stacks < BUFFET_HIDE_STACKS || st.phase != IccSindragosaPhaseId::Last ||
+    uint32 const hideAt = RoleOf(st, bot) == TankRole::Free ? FREE_TANK_HIDE_STACKS : BUFFET_HIDE_STACKS;
+    if (bs.buffetTomb || stacks < hideAt || st.phase != IccSindragosaPhaseId::Last ||
         bs.buffetTried == st.newestTomb || IsHolderOrSwapper(st, bot) || IsBeaconed(bot) || IsTombed(bot) ||
         (IsHeroic(bot) && bot->HasAura(SPELL_SG_INSTABILITY)))
         return;
@@ -1499,7 +1515,6 @@ TombInfo const* BestTomb(SgState const& st, bool (*wanted)(SgState const&, TombI
     return best;
 }
 
-bool Asphyxiating(SgState const&, TombInfo const& tomb) { return tomb.asphyxiating; }
 bool AnyTomb(SgState const&, TombInfo const&) { return true; }
 
 // On the ground: air leftovers, last phase tombs other than the newest, and any whose prisoner can't wait
@@ -1520,7 +1535,7 @@ Unit* AirTombPick(PlayerbotAI* botAI, SgState const& st, SgBotState const* bs, s
     }
 
     if (ranged)
-        if (TombInfo const* tomb = BestTomb(st, &Asphyxiating))
+        if (TombInfo const* tomb = BestTomb(st, &AirBreakable))
             if (Unit* unit = TombUnit(bot, *tomb))
             {
                 rule = "break";

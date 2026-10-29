@@ -34,10 +34,11 @@ inline Position const ICC_SG_RIMEFANG_LAND(4413.309f, 2456.421f, 203.385f);
 inline Position const ICC_SG_RIMEFANG_TANK(4413.31f, 2446.42f, 203.38f);
 inline Position const ICC_SG_RIMEFANG_MELEE(4405.31f, 2456.42f, 203.38f);
 inline Position const ICC_SG_RIMEFANG_RANGED(4391.31f, 2456.42f, 203.38f);
-// Tail Sweep misses only the wedge behind him, and the ranged spot is 37 yd out of Bellowing Roar's 35
+// Tail Sweep is a back cone: 24 degrees on 25-man, all but his front 82 on 10-man, so melee take his flank.
+// The ranged spot is 37 yd out of Bellowing Roar's 35.
 inline Position const ICC_SG_SPINESTALKER_LAND(4418.895f, 2514.233f, 203.385f);
 inline Position const ICC_SG_SPINESTALKER_TANK(4418.90f, 2524.23f, 203.38f);
-inline Position const ICC_SG_SPINESTALKER_MELEE(4418.90f, 2506.23f, 203.38f);
+inline Position const ICC_SG_SPINESTALKER_MELEE(4410.90f, 2514.23f, 203.38f);
 inline Position const ICC_SG_SPINESTALKER_RANGED(4384.13f, 2526.89f, 203.38f);
 
 // A stand parks within SG_DRAKE_STAND_PARK and walks back once pushed past SG_DRAKE_STAND_UNPARK

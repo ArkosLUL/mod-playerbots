@@ -108,12 +108,14 @@ but the unchained healer spots θ35/θ25 at 20 yd and all three at 30 yd, so val
 | heroic unchained, others | 325, 34; 315, 40; 340, 40 |
 | last-phase tomb spots A, B | 140, 31; 215, 31 (hides 4 yd behind: r 35) |
 
-Air phase, absolute: beacon spots 25-man (4362, 2474.57), (4362, 2494.57), (4368, 2474.57), (4368,
-2494.57), (4362, 2484.57), (4368, 2484.57) in that order; 10-man (4364, 2478.57), (4364, 2490.57);
+Air phase, absolute: beacon spots 25-man (4362, 2471.57), (4362, 2497.57), (4368, 2471.57), (4368,
+2497.57), (4362, 2484.57), (4368, 2484.57) in that order; 10-man (4364, 2478.07), (4364, 2491.07);
+pairs 6 yd apart, 13 yd between pairs (Ice Tomb hits within exactly 10 yd, other beacons included);
 stage on the stairs (4346.0, 2484.57, 206.2). The stairs run from x 4325 (z 211) to 4358 (z 203.4);
 paths S → stage, T → stage and stage → spots are `PATHFIND_NORMAL`. Drakes: Rimefang tank (4413.31,
 2446.42), melee (4405.31, 2456.42), ranged and healers (4391.31, 2456.42); Spinestalker tank (4418.90,
-2524.23), melee behind him (4418.90, 2506.23), ranged and healers (4384.13, 2526.89), all z 203.38.
+2524.23), melee on his south flank (4410.90, 2514.23), ranged and healers (4384.13, 2526.89), all z
+203.38.
 
 **Group 1, `sg-boss`**: `Util/ICCHelpers_Sindragosa.{h,cpp}`, `Trigger/ICCTriggers_Sindragosa.{h,cpp}`,
 `Action/ICCActions_Sindragosa.{h,cpp}`, `Multiplier/ICCMultipliers_Sindragosa.{h,cpp}`,
@@ -230,11 +232,14 @@ re-run.
 | No recentring; she drifts about 7 yd toward the holder per last-phase Blistering Cold | each landing resets her to L; a recentre crosses her front or swings her tail over the raid | holder drags her round her north flank |
 | Free tank fights from the melee stand under the brake; last-phase swap 16 s after each breath | WH: swap a few seconds before each breath | WH: every 3 breaths with cooldowns |
 | Unchained Magic hold at 3 Instability | WT 2-3 | WH 3-5 |
-| Heroic carriers on her north flank, healers north-west in reach of the holder, the rest north-east past the tail zone, 23 yd off the raid | WH: DPS tail side, healers head side; Backlash 20 yd plus size | WT: a ring of 20 yd circles round the raid |
+| Heroic carriers on her north flank, healers north-west in reach of the holder, the rest north-east past the tail zone, 23 yd off the raid | WH: DPS tail side, healers head side; Backlash 20 yd plus margin | WT: a ring of 20 yd circles round the raid |
 | Chilled to the Bone stop at 6 | WT, WH 5-8 | 8 |
-| Blistering Cold run past 29.5 yd | 25 yd plus 1.5 target size plus margin | old 33 yd |
-| Air layout at the stair foot, raid staged on the stairs, a hide 3.5 yd behind a tomb per bomb | WH; WT 2 rows of 3; bombs land at x 4350 or more | old tomb spots on the north edge |
+| Blistering Cold run past 29.5 yd | 25 yd plus margin (a creature's area spell adds no target size) | old 33 yd |
+| Air layout at the stair foot, raid staged on the stairs, a hide 3.5 yd behind a tomb per bomb | WH; WT 3 rows of 2; bombs land at x 4350 or more | old tomb spots on the north edge |
+| Air beacons in pairs 6 yd apart, pairs 13 yd apart | WH: 2 by 2, each pair over 10 yd from the next, a pair takes 2x16k; Ice Tomb hits other beacons within exactly 10 yd | singles over 10 yd apart (no shared hit, a wider area) |
 | Tombs held at 20% with DoTs and area damage barred, broken after the 4th bomb, tanks then healers then lowest | WH 20% | the tomb strip cheat |
+| An asphyxiating air tomb stays held while a bot hides behind it from a live bomb | Asphyxiation starts about as the 4th bomb lands; 8%/s on the prisoner for a few seconds against 23-211k on the hiders | break on Asphyxiation at once |
+| The free tank hides from Mystic Buffet at 1 stack in the last phase | WH: the tank swaps in fresh from behind a tomb with 0-1 stacks; at 3 it rarely met the swap's 1 or less | 3 like the raid |
 | Last-phase tombs on two alternating spots 31 yd off her at 140° and 215°, hides 4 yd behind | WH: outer circle, alternating sides, away from melee; Blistering Cold 25 yd, her melee 21.6 yd | one fixed hide (old LOS2) |
 | Mystic Buffet hide at 3 stacks; healers only where the holder stays in reach | WT, WH 3; WH: healers reset on the side that keeps the tank in sight | everyone hides |
 | Older last-phase tombs broken by ranged once a newer one exists, or on Asphyxiation or a prisoner under 40% | WH | break each on spawn |
@@ -243,7 +248,7 @@ re-run.
 | Tank buttons on last-phase breaths from 3 Buffet stacks or under 50%, any tank under 40%, class buttons to 25% | WH cooldown rotation per breath | class buttons free |
 | Lust in the last phase | WH | at the pull |
 | Rimefang first | blog | Spinestalker first |
-| Spinestalker's melee behind him | script: `spell_cone` -82 on 71369 is a 278° front arc, 71370 a 24° front cone | the guide's flank, hit on 10-man |
+| Spinestalker's melee on his south flank | blog: out of his head and tail; visual 3879 makes Tail Sweep a back cone, 24° on 25-man, all but his front 82° on 10-man | a 10-man front-quarter spot, inside his Cleave's jump from the tank |
 | Spinestalker's ranged and healers 37 yd off him | Bellowing Roar 35 yd | anti-fear alone |
 | Gauntlet kill order Sorceress, Webweaver, Champion, Warrior, Broodlings, area damage free | blog: AoE the spiders, then the Ymirjar | generic |
 | The drakes and the gauntlet get definitions of their own | brief; her `BossStateGate` closes while the gauntlet's state is in progress | rows in her definition |
@@ -260,7 +265,7 @@ re-run.
 | Beacon heals: priest Renew then Power Word: Shield (not on Weakened Soul), druid Rejuvenation, shaman Riptide | WH HoTs and shields | Renew only |
 | Runtime floor checks for hides and unchained spots only; stands and beacon spots rely on the brief's navprobe | hides follow tombs and markers, unchained spots her drift | check every stand |
 | In the last phase ranged don't pre-damage the newest tomb | it is the raid's only Buffet cover | damage to 20% |
-| Air tombs broken early on Asphyxiation only, never for a prisoner under 40% | the tomb soaks 99% of its prisoner's frost damage, and its 16k hit alone leaves casters under 40% | the brief's 40% rule in the air too |
+| Air tombs broken early on Asphyxiation only (once no bot hides behind them), never for a prisoner under 40% | the tomb soaks 99% of its prisoner's frost damage, and its 16k hit alone leaves casters under 40% | the brief's 40% rule in the air too |
 | Drakes: no pre-pull positions; stands once a drake fights and has landed | both land defensive; brief task 3 "while landed" | stands round each landing spot during the fly-in |
 | Free drake tanks braked at 90%/80% all fight and their generic taunts blocked; the owner keeps its taunt | a free tank that took a drake would turn its breath, cleave or tail onto melee | brake only while Rimefang flies |
 | Drake brake against the owner, else a tank victim, else the top-threat tank | "top tank" alone could land Rimefang on a free tank | top tank |
@@ -283,6 +288,10 @@ re-run.
   users `GetSgDrakeTarget`, `GetSgGauntletTarget`; tank defensive user `icc sindragosa drake tank
   defensive` (`sg.drake.defensive`, `sg.drake.humancall`); trigger prefixes `icc sindragosa drake`,
   `icc sindragosa gauntlet`.
+- Merge stage, README: the cheat table's `sg.frostbeacon`/`sg.mysticbuffet`/`sg.magicbarrier`/`sg.nothreat`,
+  `sg.flares` and `sg.tombstrip` rows are removed (no cheat left); the gate section's
+  `icc sindragosa group position` rows, the per-instance `sgFlaredRedThisPhase` (`sg.flaredred`) sentence
+  and "targeting is by raid icon on Sindragosa" describe deleted code.
 - Optional, merge stage: a drakes `HookRows()` row resisting frost (Rimefang's Frost Aura 71387).
 - CMake re-run: five new `.cpp` files.
 - r14: `IccInstanceState`'s `sg*` members (`ICCScripts.h`) and `NPC_TOMB1-4`, `SPELL_FROST_BEACON`,
@@ -299,12 +308,22 @@ Also in `sindragosa.md`.
 - One bot tank: no last-phase swap. A swap taunt that misses leaves the swapper on T into the breath.
 - Heroic: the other carriers' spots are about 61 yd from S, reached only by carrier healers; a carrier
   past its set's three spots gets none and holds while anyone is within 23 yd.
-- Hiding relies on ice block GO collision, not checkable offline.
+- 25H: a set's unchained spots sit 9-17 yd apart, inside each other's 20 yd Backlash (reviewer). Needs a
+  new navprobed layout with three per set 21 yd apart, in heal reach of the holder and clear of her
+  breath, tail and the raid across her drift.
+- 10-man tombs keep 22.6k above the 20% floor; ranged converging on the highest held tomb can land more
+  in flight (reviewer). A tomb dying before `sg.tombhold` drops shows it.
+- The splash dodge checks only its destination: the holder's line from T to the stage passes 1.5 yd
+  from 10-man spot 2 (reviewer). A path check would make the shortcut a navmesh sweep per tick while
+  beacons walk with the raid.
+- Hiding relies on ice block GO collision, not checkable offline; a healer behind A sees the holder
+  2.3 yd past that tomb's centre.
 - The 150°/210° escapes sit within 6 yd of last-phase tomb spots A/B.
 - A released air tomb the bot can't attack yields nothing rather than the next one.
 - Tank druid caster form not blocked on the fly-in stands.
-- Drakes: on a double pull DPS and healers follow Rimefang (Spinestalker's tank up to 73 yd off);
-  Spinestalker's melee spot 40.4 yd from his ranged spot; a ranged Tremor Totem misses his melee; a
+- Drakes: on a double pull DPS and healers follow Rimefang (Spinestalker's tank up to 73 yd off); on
+  10-man his Tail Sweep reaches the melee flank (only his front 82° is safe); his melee spot is 29.6 yd
+  from his ranged spot, at the edge of a ranged Tremor Totem's 30 yd; a
   puddle drops a stand up to 40 s with no other spot; melee idle while Rimefang flies; no frost resist.
 - Gauntlet: no Frost Nova, Sorceress Ice Tomb or Web answer.
 - Humans hold no duty.
