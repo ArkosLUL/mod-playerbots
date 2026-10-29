@@ -89,6 +89,7 @@ def pull(boss: str = "professor-putricide", diff: int = 3) -> list[dict]:
         note(9000, AEGIS, "pp.abom", f"slash {PUTRICIDE}"),
         note(71000, AEGIS, "pp.abom", f"spit {CLOUD}"),
         note(72000, AEGIS, "pp.abom", f"slash {PUTRICIDE}"),
+        note(80000, AEGIS, "pp.abom", "exit"),
         aura(71500, CLOUD, 72457, CREATURE | 900),
         note(200100, 0, "pp.driver", "0"),
         # Phase 3: Bulwark holds two, Aegis takes him, Shiv shares one, Bulwark takes him back.
@@ -98,8 +99,10 @@ def pull(boss: str = "professor-putricide", diff: int = 3) -> list[dict]:
         note(229500, AEGIS, "pp.swap", "none"),
         aura(230000, AEGIS, 72463, PUTRICIDE, stacks=1),
         aura(240000, AEGIS, 72463, PUTRICIDE, stacks=2),
+        note(247500, SHIV, "pp.sharehp", "45"),
         note(247600, SHIV, "pp.swap", "share"),
         note(248000, SHIV, "pp.swap", "none"),
+        note(257500, SHIV, "pp.sharehp", "20"),
         aura(250000, SHIV, 72463, PUTRICIDE, stacks=1),
         note(250300, BULWARK, "pp.swap", "back"),
         note(250300, SHIV, "pp.brake", "1"),
@@ -115,6 +118,12 @@ def pull(boss: str = "professor-putricide", diff: int = 3) -> list[dict]:
         note(49000, ARCANE, "pp.receiver", "0"),
         aura(49000, MEND, 72856, PUTRICIDE),
         aura(60000, MEND, 72856, PUTRICIDE, removed=1),
+        # Bulwark catches it holding him, so Arcane walks onto Bulwark.
+        aura(100000, BULWARK, 72856, PUTRICIDE),
+        note(100100, BULWARK, "pp.plague", "hold"),
+        note(108000, ARCANE, "pp.plague", "receive"),
+        note(109000, ARCANE, "pp.plague", "none"),
+        aura(109000, BULWARK, 72856, PUTRICIDE, removed=1),
         # Dodges: goo on Arcane, gas under Shiv, a carrier near Mend, and holds that don't count.
         note(95000, ARCANE, "pp.dodge", "goo move 8"),
         note(95100, ARCANE, "pp.dodge", "hold"),
@@ -124,6 +133,8 @@ def pull(boss: str = "professor-putricide", diff: int = 3) -> list[dict]:
         # The spot moves once; Arcane is pushed off its inner slot onto the outer ring.
         note(100, 0, "pp.spot", "1"),
         note(130000, 0, "pp.spot", "4"),
+        note(100, 0, "pp.rings", "0"),
+        note(8000, 0, "pp.rings", "1"),
         note(100, ARCANE, "pp.slot", "3"),
         note(100, MEND, "pp.slot", "1"),
         note(131000, ARCANE, "pp.slot", "20"),
@@ -181,13 +192,13 @@ class Adds(unittest.TestCase):
 
 class Abomination(unittest.TestCase):
     def test_duties_drop_the_unit(self):
-        self.assertEqual(pp.duty_counts(load(pull())), {"drink": 1, "eat": 1, "slash": 2, "spit": 1})
+        self.assertEqual(pp.duty_counts(load(pull())), {"drink": 1, "eat": 1, "exit": 1, "slash": 2, "spit": 1})
 
     def test_section(self):
         self.assertEqual(printed(pp.show_abom, load(pull())), (
             "ABOMINATION\n"
             "  driver: none@0:00.100, Aegis@0:02.000, none@3:20.100\n"
-            "  duty switches: drink 1, eat 1, slash 2, spit 1\n"
+            "  duty switches: drink 1, eat 1, exit 1, slash 2, spit 1\n"
             "  1 Regurgitated Ooze\n"
             "     1:11.500  Gas Cloud\n"))
 
@@ -200,6 +211,12 @@ class Plague(unittest.TestCase):
         self.assertEqual(pp.swap_rows(load(pull())),
                          [(229000, AEGIS, "take"), (247600, SHIV, "share"), (250300, BULWARK, "back")])
 
+    def test_share_model_spans_lowest_to_highest(self):
+        self.assertEqual(pp.share_health(load(pull())), {SHIV: (20, 45)})
+
+    def test_receivers_only_their_walks(self):
+        self.assertEqual(pp.receive_rows(load(pull())), [(108000, ARCANE)])
+
     def test_section(self):
         self.assertEqual(printed(pp.show_plague, load(pull())), (
             "PLAGUE\n"
@@ -208,11 +225,14 @@ class Plague(unittest.TestCase):
             "     3:49.000  Aegis           take\n"
             "     4:07.600  Shiv            share\n"
             "     4:10.300  Bulwark         back\n"
+            "  share health model: Shiv 20-45% (passed over)\n"
             "  braked: Shiv\n"
             "\n"
-            "  2 Unbound Plague carrier(s)\n"
+            "  3 Unbound Plague carrier(s)\n"
             "     0:40.000   0:09.000  Arcane  hold 1, clear 1, pass 1\n"
-            "     0:49.000   0:11.000  Mend  -\n"))
+            "     0:49.000   0:11.000  Mend  -\n"
+            "     1:40.000   0:09.000  Bulwark  hold 1\n"
+            "  receivers walking in: Arcane@1:48.000\n"))
 
     def test_normal_mode_has_no_unbound_plague(self):
         self.assertIn("normal mode: no Unbound Plague", printed(pp.show_plague, load(pull(diff=1))))
@@ -232,6 +252,7 @@ class Spread(unittest.TestCase):
         self.assertEqual(printed(pp.show_spread, load(pull())), (
             "SPREAD\n"
             "  boss spot: 1@0:00.100, 4@2:10.000\n"
+            "  rings: released@0:00.100, held@0:08.000\n"
             "\n"
             "  pp.slot per bot, each slot it held\n"
             "    Arcane          inner 3@0:00.100, outer 20@2:11.000\n"
@@ -263,8 +284,8 @@ class Banner(unittest.TestCase):
 
     def test_every_probe_the_pull_writes_counts(self):
         gone = pp.missing_probes(load(pull()))
-        for key in ("pp.phase", "pp.target", "pp.stack", "pp.kite", "pp.driver", "pp.abom", "pp.swap", "pp.brake",
-                    "pp.plague", "pp.receiver", "pp.dodge", "pp.spot", "pp.slot"):
+        for key in ("pp.phase", "pp.target", "pp.stack", "pp.kite", "pp.driver", "pp.abom", "pp.swap", "pp.sharehp",
+                    "pp.brake", "pp.plague", "pp.receiver", "pp.dodge", "pp.spot", "pp.rings", "pp.slot"):
             self.assertNotIn(key, gone)
 
 

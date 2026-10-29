@@ -27,7 +27,10 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-bool IsPpDutyHeld(PlayerbotAI* botAI) { return IsPpStacking(botAI) || IsPpPlagueCarrier(botAI); }
+bool IsPpDutyHeld(PlayerbotAI* botAI)
+{
+    return IsPpStacking(botAI) || IsPpPlagueCarrier(botAI) || IsPpPlagueReceiving(botAI);
+}
 
 // Playerbots.EnableICCBuffs on heroic, for every group member, humans too.
 void TickHeroicBuffs(PlayerbotAI* botAI)
@@ -101,9 +104,9 @@ void DefinePutricide(EncounterBuilder& e)
     e.OwnMovement("icc putricide duty hold", Role::Any, &IsPpDutyHeld, Family::Attack,
                   {IccPutricideStackAction::Name, IccPutricidePlagueAction::Name, IccPutricideDodgeAction::Name});
     // The driver walks to the table and then drives: nothing else moves it, and it attacks only through the
-    // abomination, or with a pickup taunt while still on foot
-    e.OwnMovement("icc putricide driver hold", Role::Tank, &IsPpDriver, 0,
-                  {IccPutricideAbominationAction::Name, IccPutricideSwapAction::Name});
+    // abomination, or with a pickup taunt while still on foot. A plague it carries on foot is passed first.
+    e.OwnMovement("icc putricide driver hold", Role::Any, &IsPpDriver, 0,
+                  {IccPutricideAbominationAction::Name, IccPutricideSwapAction::Name, IccPutricidePlagueAction::Name});
     e.Block("icc putricide spell movers", Role::Any, &IsPpMovementOwned,
             Family::Charge | Family::Blink | Family::Disengage);
     // avoid aoe sees the puddles and flees them 5 yd at most, against the dodge

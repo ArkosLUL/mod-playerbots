@@ -121,18 +121,22 @@ void CommitPpKiteLeg(PlayerbotAI* botAI, Position const& to);
 bool GetPpStackWalk(PlayerbotAI* botAI, Position& spot);
 bool IsPpStacking(PlayerbotAI* botAI);
 
-// Heroic Unbound Plague carrier: onto its receiver once due, else clear of everyone
+// Heroic Unbound Plague: a carrier walks onto its receiver once due, else clear of everyone. A carrier that
+// can't walk (his holder, the rooted ooze victim, a rider) has its receiver walk onto it instead.
 bool IsPpPlagueCarrier(PlayerbotAI* botAI);
+bool IsPpPlagueReceiving(PlayerbotAI* botAI);
 bool GetPpPlagueWalk(PlayerbotAI* botAI, Position& spot, char const*& branch);
 
-// The Mutated Abomination's driver, on foot or riding
+// The Mutated Abomination's driver, on foot or riding. A riding tank exits to pick him up when no other tank
+// stands on foot.
 enum class PpAbomDuty : uint8
 {
     None,
     Drink,
     Spit,
     Eat,
-    Slash
+    Slash,
+    Exit
 };
 
 struct PpAbomPlan
@@ -151,8 +155,9 @@ bool GetPpAbomPlan(PlayerbotAI* botAI, PpAbomPlan& plan);
 char const* PpAbomDutyName(PpAbomDuty duty);
 
 // The taunt this bot spends on him now: a pickup off a non-tank, the phase 3 Mutated Plague rotation, a
-// sharer handing him back. A sharer casts `defensive` first while it has one ready and none up.
-bool IsPpSwapTaunter(PlayerbotAI* botAI, uint32& defensive);
+// sharer handing him back. A sharer casts `defensive` first while it has one ready and none up, and `taunt`
+// stays false until the application is close enough that his swings land on it only briefly.
+bool IsPpSwapTaunter(PlayerbotAI* botAI, uint32& defensive, bool& taunt);
 
 // Past 90% of his holder's threat until under 80%: holds damage on him
 bool IsPpBraked(PlayerbotAI* botAI);

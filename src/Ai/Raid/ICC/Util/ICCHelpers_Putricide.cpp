@@ -32,6 +32,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidCombatHelpers.h"
+#include "RaidDefensive.h"
 #include "RaidDifficulty.h"
 #include "RaidDirectTargeting.h"
 #include "RaidHumanTankCall.h"
@@ -87,10 +88,11 @@ constexpr float SLOT_MARGIN = 1.0f + PP_STAND_PARK;
 constexpr uint32 BOMB_LIFETIME_MS = 10000;
 constexpr uint32 BLAST_ARMED_MS = 8000;
 
-// Malleable Goo's missile flies 6 yd/s from him to where its target stood
+// Malleable Goo's missile flies 6 yd/s from him to where its target stood. The listener keeps an impact
+// until the next cast, 25-30 s on, so a throw across the whole room (90 yd, 15 s) is still there.
 constexpr float GOO_SPEED = 6.0f;
 constexpr uint32 GOO_GRACE_MS = 400;
-constexpr uint32 GOO_RETENTION_MS = 9000;
+constexpr uint32 GOO_RETENTION_MS = 16000;
 constexpr uint32 GOO_URGENT_MS = 2000;
 
 // The dodge triggers within half a yard of a hazard's edge and clears it by DODGE_MARGIN: a bot parks up
@@ -120,6 +122,10 @@ constexpr float KITE_KEEP_DOT = -0.2f;
 // Stackers stand inside this of the rooted victim. The ooze erupts 5 yd from it and hits 10 yd round itself.
 constexpr float STACK_RANGE = 3.5f;
 constexpr float STACK_OFFSET = 1.5f;
+// A victim carrying Unbound Plague is stacked on from past its jump, on the side the ooze comes from, which
+// still puts the stack inside the eruption
+constexpr float PLAGUE_STACK = PP_CARRIER_CLEAR + 1.5f;
+constexpr float PLAGUE_STACK_PARK = 1.5f;
 
 // A carrier passes from its 8th tick, or under half health, once its searcher has ticked twice
 constexpr uint32 PASS_TICK = 8;
@@ -132,11 +138,18 @@ constexpr float PASS_TOUCH = 1.5f;
 // Mutated Plague lands on his victim every 10 s
 constexpr int32 PLAGUE_PERIOD_MS = 10000;
 constexpr int32 SWAP_LEAD_MS = 1200;
+// A sharer raises its button from here and taunts from SWAP_LEAD_MS
 constexpr int32 SHARE_LEAD_MS = 2500;
 constexpr uint8 HOLD_APPLICATIONS = 2;
+// A hold that has taken one application ends here when a taker with fewer stacks is free: 3 and 3 cost the
+// raid 31% less a tick than 4 and 2
+constexpr uint8 STACK_CEILING = 3;
 constexpr float TAUNT_RANGE = 30.0f;
 constexpr float SHARER_MIN_HEALTH_PCT = 80.0f;
 constexpr uint8 SHARER_MAX_STACKS = 1;
+// A sharer holds him from its taunt until a tank's lands once the stack has: the lead, a scan and a taunt
+constexpr uint32 SHARE_WINDOW_MS = static_cast<uint32>(SWAP_LEAD_MS) + 600;
+constexpr uint32 SHARE_HEALTH_STEP = 5;
 
 constexpr float BRAKE_CAP = 0.9f;
 constexpr float BRAKE_RELEASE = 0.8f;
@@ -167,6 +180,14 @@ struct Goo
 {
     Position at;
     uint32 landsMs = 0;
+};
+
+// Where he stood when an impact first showed, which is within a scan of where he threw it
+struct GooOrigin
+{
+    uint32 castMs = 0;
+    Position at;
+    Position from;
 };
 
 // A Volatile Ooze with its rooted victim, or a Gas Cloud with its bloated one and the stacks left
@@ -220,6 +241,7 @@ struct PpState
     std::vector<Puddle> puddles;
     std::vector<Bomb> bombs;
     std::vector<Goo> goo;
+    std::vector<GooOrigin> gooOrigins;
     ObjectGuid abomination;
     std::vector<ObjectGuid> carriers;
     // Plague Sickness or the 5 s bounce protection: a pass would hurt, or can't land
@@ -235,7 +257,9 @@ struct PpState
     Position spotPos;
     Position tankStand;
     RaidObs::ObsGuidMap<uint8> slot{"pp.slot"};
-    bool ringsHeld = true;
+    // Held once he first reaches the spot: at the pull he is still at his table, 51 yd off
+    bool arrived = false;
+    RaidObs::ObsValue<bool> rings{"pp.rings"};
     RaidObs::ObsValue<ObjectGuid> driver{"pp.driver"};
     ObjectGuid eating;
     // Unbound Plague carrier -> the bot it walks onto
@@ -568,10 +592,27 @@ void Scan(PpState& st, Player* bot, Creature* boss, uint32 now)
     }
 
     uint32 const instanceId = bot->GetInstanceId();
+    st.gooOrigins.erase(std::remove_if(st.gooOrigins.begin(), st.gooOrigins.end(), [now](GooOrigin const& origin)
+                                       { return getMSTimeDiff(origin.castMs, now) > GOO_RETENTION_MS; }),
+                        st.gooOrigins.end());
     if (!IcecrownHelpers::ActiveGooPositions(instanceId, GOO_RETENTION_MS).empty())
         for (IcecrownHelpers::MalleableGooImpact const& impact : IcecrownHelpers::IccState(instanceId).malleableGoo)
         {
-            uint32 const flightMs = static_cast<uint32>(boss->GetExactDist2d(impact.position) / GOO_SPEED * 1000.0f);
+            if (getMSTimeDiff(impact.castTime, now) > GOO_RETENTION_MS)
+                continue;
+
+            auto origin = std::find_if(st.gooOrigins.begin(), st.gooOrigins.end(),
+                                       [&impact](GooOrigin const& seen)
+                                       {
+                                           return seen.castMs == impact.castTime &&
+                                                  seen.at.GetExactDist2d(impact.position) < 0.1f;
+                                       });
+            if (origin == st.gooOrigins.end())
+                origin = st.gooOrigins.insert(st.gooOrigins.end(),
+                                              {impact.castTime, impact.position, boss->GetPosition()});
+
+            uint32 const flightMs =
+                static_cast<uint32>(origin->from.GetExactDist2d(impact.position) / GOO_SPEED * 1000.0f);
             uint32 const landsMs = impact.castTime + flightMs + GOO_GRACE_MS;
             if (static_cast<int32>(landsMs - now) > 0)
                 st.goo.push_back({impact.position, landsMs});
@@ -716,7 +757,9 @@ void AssignSlots(PpState& st, std::vector<Player*> const& members, uint32 now)
     std::vector<Player*> hunters;
     for (Player* member : members)
     {
-        if (!IsDutyBot(member) || IsTankPlayer(member))
+        // A damage dealer driving the abomination stands by the table, then rides
+        if (!IsDutyBot(member) || IsTankPlayer(member) || member->GetGUID() == st.driver.Get() ||
+            RiddenAbomination(member))
             continue;
 
         if (PlayerbotAI::IsHeal(member))
@@ -789,11 +832,47 @@ void AssignSlots(PpState& st, std::vector<Player*> const& members, uint32 now)
 
 bool DriverCandidate(Player* member, PpState const& st, Unit* victim)
 {
-    return IsDutyBot(member) && IsTankPlayer(member) && member != victim &&
+    return IsDutyBot(member) && !PlayerbotAI::IsHeal(member) && member != victim &&
            !IsVictimOf(st.oozes, member->GetGUID()) && !IsVictimOf(st.clouds, member->GetGUID());
 }
 
-// One bot tank drinks while another holds him: a bot already riding keeps it, else the assist tank first
+bool IsTauntDps(Player* member)
+{
+    return IsRaidDpsBot(member) &&
+           (member->getClass() == CLASS_DEATH_KNIGHT || member->getClass() == CLASS_PALADIN);
+}
+
+// Assist tank, then any free tank, then a damage dealer: melee first (Mutated Slash replaces their swings),
+// Death Knights and paladins last of those since their taunt can pick him up if the holder dies, ranged after
+uint8 DriverRank(Player* member)
+{
+    if (IsTankPlayer(member))
+        return PlayerbotAI::IsAssistTank(member) ? 0 : 1;
+
+    if (PlayerbotAI::IsRanged(member))
+        return 4;
+
+    return IsTauntDps(member) ? 3 : 2;
+}
+
+// He is off every tank and no other tank stands on foot: a riding tank leaves the abomination to take him.
+// Its driver owns the summon, so the exit dismisses it and the table serves the next driver.
+bool RiderExits(PpState const& st, Player* bot, Creature* boss)
+{
+    if (st.passive || st.phase == 3 || !IsTankPlayer(bot))
+        return false;
+
+    Unit* victim = boss->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    if (holder && IsTankPlayer(holder))
+        return false;
+
+    std::vector<Player*> const members = MembersOnMap(bot);
+    return std::none_of(members.begin(), members.end(), [bot](Player* member)
+                        { return member != bot && IsTankPlayer(member) && !RiddenAbomination(member); });
+}
+
+// One bot drinks while a tank holds him: a bot already riding keeps it, else the best ranked candidate
 void UpdateDriver(PpState& st, Creature* boss, std::vector<Player*> const& members)
 {
     if (st.phase == 3)
@@ -822,7 +901,12 @@ void UpdateDriver(PpState& st, Creature* boss, std::vector<Player*> const& membe
     ObjectGuid const current = st.driver.Get();
     if (!holder || !IsTankPlayer(holder))
     {
-        st.driver = current;
+        // A tank on foot has to pick him up, not walk to the table, and a driver he's hitting stays to hold him.
+        // At his own table he holds nobody.
+        auto const driver = std::find_if(members.begin(), members.end(),
+                                         [current](Player* member) { return member->GetGUID() == current; });
+        bool const keep = driver != members.end() && *driver != holder && (st.passive || !IsTankPlayer(*driver));
+        st.driver = keep ? current : ObjectGuid::Empty;
         return;
     }
 
@@ -839,8 +923,7 @@ void UpdateDriver(PpState& st, Creature* boss, std::vector<Player*> const& membe
         if (!DriverCandidate(member, st, victim))
             continue;
 
-        auto const rank = [](Player* player)
-        { return std::make_tuple(PlayerbotAI::IsAssistTank(player) ? 0 : 1, player->GetGUID()); };
+        auto const rank = [](Player* player) { return std::make_tuple(DriverRank(player), player->GetGUID()); };
         if (!pick || rank(member) < rank(pick))
             pick = member;
     }
@@ -968,14 +1051,23 @@ void UpdateHolder(PpState& st, Creature* boss, uint32 now)
     st.holderSinceMs = now;
 }
 
-// A bot tank drags him onto the spot, and at his table he comes back to it
+// A bot tank drags him onto the spot, and at his table he comes back to it. Until he first gets there the
+// raid's own reach brings it to him.
 void UpdateRings(PpState& st, Creature* boss)
 {
+    float const distance = boss->GetExactDist2d(st.spotPos);
+    st.arrived = st.arrived || distance <= RING_REHOLD;
+    if (!st.arrived)
+    {
+        st.rings = false;
+        return;
+    }
+
     Unit* victim = boss->GetVictim();
     Player* holder = victim ? victim->ToPlayer() : nullptr;
     bool const dragged = st.passive || (holder && IsDutyBot(holder) && IsTankPlayer(holder));
-    float const limit = st.ringsHeld ? RING_RELEASE : RING_REHOLD;
-    st.ringsHeld = dragged || boss->GetExactDist2d(st.spotPos) <= limit;
+    float const limit = st.rings.Get() ? RING_RELEASE : RING_REHOLD;
+    st.rings = dragged || distance <= limit;
 }
 
 void RefreshDuties(PpState& st, Player* bot, Creature* boss, uint32 now)
@@ -1047,6 +1139,35 @@ bool IsCarrier(PpState const& st, Player* bot)
     return std::find(st.carriers.begin(), st.carriers.end(), bot->GetGUID()) != st.carriers.end();
 }
 
+// A carrier that can't walk onto its receiver: his holder would drag him along, the ooze's victim is rooted
+// and a rider moves only with the drive
+bool IsAnchoredCarrier(PpState const& st, Player* carrier)
+{
+    return IsTankHolder(carrier, st) || IsVictimOf(st.oozes, carrier->GetGUID()) || RiddenAbomination(carrier);
+}
+
+// From its 8th tick or under half health, once its searcher has ticked twice and with 3 s of plague left
+bool PassDue(Player* carrier, Creature* boss)
+{
+    Aura const* plague = carrier->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_PP_UNBOUND_PLAGUE, boss));
+    AuraEffect const* searcher = carrier->GetAuraEffect(SPELL_PP_UNBOUND_SEARCHER, EFFECT_0);
+    bool const due = PlagueTick(carrier, boss) >= PASS_TICK || carrier->GetHealthPct() < PASS_HEALTH_PCT;
+    return due && plague && plague->GetDuration() >= PASS_MIN_LEFT_MS && searcher &&
+           searcher->GetTickNumber() >= SEARCHER_TICKS;
+}
+
+// The anchored carrier this bot is due to walk onto, nullptr for none
+Player* ReceiveFrom(PpState const& st, Player* bot, Creature* boss)
+{
+    for (auto const& [carrierGuid, receiverGuid] : st.receiver)
+        if (receiverGuid == bot->GetGUID())
+            if (Player* carrier = MemberOf(bot, carrierGuid))
+                if (IsAnchoredCarrier(st, carrier) && PassDue(carrier, boss))
+                    return carrier;
+
+    return nullptr;
+}
+
 bool StackDuty(PpState const& st, Player* bot)
 {
     if (!bot->IsAlive() || !IsDutyBot(bot) || IsTankHolder(bot, st) || RiddenAbomination(bot) || KiteCloud(st, bot) ||
@@ -1058,13 +1179,15 @@ bool StackDuty(PpState const& st, Player* bot)
     return victim && victim != bot;
 }
 
-void UpdateStand(PpState& st, Player* bot)
+void UpdateStand(PpState& st, Player* bot, Creature* boss)
 {
     Stand& stand = st.stands[bot->GetGUID()];
     uint8 id = 0;
     Position spot;
+    // His holder keeps dragging him while its receiver walks in
     bool const free = bot->IsAlive() && IsDutyBot(bot) && !RiddenAbomination(bot) && !KiteCloud(st, bot) &&
-                      !StackDuty(st, bot) && !IsCarrier(st, bot) && bot->GetGUID() != st.driver.Get();
+                      !StackDuty(st, bot) && (!IsCarrier(st, bot) || IsTankHolder(bot, st)) &&
+                      bot->GetGUID() != st.driver.Get() && !ReceiveFrom(st, bot, boss);
     if (free)
     {
         if (IsTankHolder(bot, st))
@@ -1075,7 +1198,7 @@ void UpdateStand(PpState& st, Player* bot)
                 spot = st.tankStand;
             }
         }
-        else if (st.ringsHeld)
+        else if (st.rings.Get())
         {
             auto const held = st.slot.find(bot->GetGUID());
             if (held != st.slot.end())
@@ -1234,27 +1357,86 @@ bool CanTaunt(Player* member, Creature* boss)
            member->IsWithinLOSInMap(boss) && TauntUsable(member);
 }
 
-// A damage dealer whose taunt needs no form or stance and who can take one application: a Death Knight's
-// Dark Command or a Retribution paladin's Hand of Reckoning, a physical defensive ready
-bool CanShare(Player* member, PpState const& st)
+// What a button takes off his swings, read off its own damage taken aura
+uint8 PhysicalCutPct(uint32 spellId)
 {
-    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-    if (!memberAI || !IsRaidDpsBot(member) || member->GetHealthPct() < SHARER_MIN_HEALTH_PCT ||
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info)
+        return 0;
+
+    int32 cut = 0;
+    for (SpellEffectInfo const& effect : info->Effects)
+        if (effect.ApplyAuraName == SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN &&
+            (effect.MiscValue & SPELL_SCHOOL_MASK_NORMAL))
+            cut -= effect.CalcValue();
+
+    return static_cast<uint8>(std::clamp(cut, 0, 100));
+}
+
+// The share of its health a sharer keeps after his swings for one application: his own damage between its
+// min and max, through its armor and damage taken auras, with `cutPct` off for a button not up yet. Notes
+// pp.sharehp when `noter` is the sharer itself.
+float ShareHealthLeftPct(Player* member, Creature* boss, uint8 cutPct, Player* noter)
+{
+    float const swing =
+        (boss->GetFloatValue(UNIT_FIELD_MINDAMAGE) + boss->GetFloatValue(UNIT_FIELD_MAXDAMAGE)) / 2.0f;
+    uint32 const armored =
+        Unit::CalcArmorReducedDamage(boss, member, static_cast<uint32>(swing), nullptr, 0, BASE_ATTACK);
+    float const taken =
+        member->GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN, SPELL_SCHOOL_MASK_NORMAL);
+    float const perSwing = armored * taken * (100 - cutPct) / 100.0f;
+    uint32 const attackMs = std::max<uint32>(boss->GetAttackTime(BASE_ATTACK), 500);
+    float const swings = std::ceil(static_cast<float>(SHARE_WINDOW_MS) / attackMs);
+    float const left = static_cast<float>(member->GetHealth()) - swings * perSwing;
+    float const pct = std::max(0.0f, left * 100.0f / std::max<uint32>(member->GetMaxHealth(), 1));
+    if (noter == member)
+    {
+        uint32 const step = static_cast<uint32>(pct) / SHARE_HEALTH_STEP * SHARE_HEALTH_STEP;
+        NoteDerived(member, "pp.sharehp", std::to_string(step));
+    }
+
+    return pct;
+}
+
+// A damage dealer whose taunt needs no form or stance and who lives through one application: a Death Knight's
+// Dark Command or a Retribution paladin's Hand of Reckoning. A button it needs must be up by the taunt.
+bool CanShare(Player* member, PpState const& st, Creature* boss, int32 nextMs, Player* noter)
+{
+    if (!GET_PLAYERBOT_AI(member) || !IsTauntDps(member) || member->GetHealthPct() < SHARER_MIN_HEALTH_PCT ||
         Stacks(st, member) > SHARER_MAX_STACKS || IsCarrier(st, member))
         return false;
 
-    if (member->getClass() != CLASS_DEATH_KNIGHT && member->getClass() != CLASS_PALADIN)
-        return false;
+    bool const running = RunningTankDefensive(member, true, 0) != nullptr;
+    uint32 const button = running ? 0 : ReadyTankDefensiveSpell(member, true, 0, 0);
+    uint8 const cut = running || nextMs <= SWAP_LEAD_MS ? 0 : PhysicalCutPct(button);
+    return ShareHealthLeftPct(member, boss, cut, noter) >= RAID_DEFENSIVE_FLOOR_PCT;
+}
 
-    return NextPhysicalDefensive(memberAI, member, nullptr, 0) || RunningTankDefensive(member, true, 0);
+// A hold ends after two applications, or at the ceiling once it has taken one while his taunt DR stays low
+bool HoldDue(PpState const& st, Player* holder, Creature* boss)
+{
+    uint8 const held = Stacks(st, holder);
+    if (held >= st.holderStart + HOLD_APPLICATIONS)
+        return true;
+
+    return held >= STACK_CEILING && held > st.holderStart &&
+           boss->GetDiminishing(DIMINISHING_TAUNT) < DIMINISHING_LEVEL_3;
+}
+
+// A taunt from anyone he isn't hitting yet just landed, his victim catches up next update. His victim's own
+// aura doesn't hold him, the latest taunt wins, so a tank takes him back off a sharer while that still runs.
+bool TauntPending(Creature* boss, Unit* victim)
+{
+    Unit::AuraEffectList const& taunts = boss->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT);
+    return std::any_of(taunts.begin(), taunts.end(), [victim](AuraEffect const* effect)
+                       { return effect->GetCasterGUID() != victim->GetGUID(); });
 }
 
 Player* SwapTaunter(PpState const& st, Player* bot, Creature* boss, char const*& kind)
 {
     kind = nullptr;
     Unit* victim = boss->GetVictim();
-    // A taunt aura on him means one just landed and his victim catches up next update
-    if (!victim || st.passive || boss->HasAuraType(SPELL_AURA_MOD_TAUNT) ||
+    if (!victim || st.passive || TauntPending(boss, victim) ||
         boss->GetDiminishing(DIMINISHING_TAUNT) >= DIMINISHING_LEVEL_TAUNT_IMMUNE)
         return nullptr;
 
@@ -1297,23 +1479,45 @@ Player* SwapTaunter(PpState const& st, Player* bot, Creature* boss, char const*&
 
         // Anyone else holding him, at any phase, loses him to a tank at once
         kind = "pickup";
-        return tankPick(255);
+        if (Player* tank = tankPick(255))
+            return tank;
+
+        // With no tank left standing, a Death Knight or paladin damage dealer keeps him off the healers. A
+        // riding tank leaves the abomination for him instead.
+        bool const tankAlive =
+            std::any_of(members.begin(), members.end(), [](Player* member) { return IsTankPlayer(member); });
+        if (tankAlive || (holder && IsDutyBot(holder) && IsTauntDps(holder)))
+            return nullptr;
+
+        Player* guard = nullptr;
+        for (Player* member : members)
+        {
+            if (member == holder || !IsTauntDps(member) || !CanTaunt(member, boss))
+                continue;
+
+            auto const rank = [&st](Player* player)
+            {
+                return std::make_tuple(player->GetGUID() == st.driver.Get(), player->getClass() != CLASS_DEATH_KNIGHT,
+                                       -player->GetHealthPct(), player->GetGUID());
+            };
+            if (!guard || rank(member) < rank(guard))
+                guard = member;
+        }
+
+        return guard;
     }
 
-    if (st.phase != 3 || st.sinceAppMs < 0)
+    if (st.phase != 3 || st.sinceAppMs < 0 || !HoldDue(st, holder, boss) || nextMs > SHARE_LEAD_MS)
         return nullptr;
 
     uint8 const held = Stacks(st, holder);
-    if (held < st.holderStart + HOLD_APPLICATIONS || nextMs > SHARE_LEAD_MS)
-        return nullptr;
-
     Player* tank = tankPick(held);
     uint8 const tankStacks = tank ? Stacks(st, tank) : held;
     Player* sharer = nullptr;
     for (Player* member : members)
     {
-        if (member == holder || IsTankPlayer(member) || Stacks(st, member) >= tankStacks || !CanShare(member, st) ||
-            !CanTaunt(member, boss))
+        if (member == holder || IsTankPlayer(member) || Stacks(st, member) >= tankStacks ||
+            !CanShare(member, st, boss, nextMs, bot) || !CanTaunt(member, boss))
             continue;
 
         auto const rank = [&st](Player* player) { return std::make_tuple(Stacks(st, player), player->GetGUID()); };
@@ -1630,6 +1834,42 @@ bool GetPpStackWalk(PlayerbotAI* botAI, Position& spot)
         return false;
 
     Player* victim = StackVictim(*st, bot);
+    if (IsCarrier(*st, victim))
+    {
+        Creature* ooze = nullptr;
+        for (Add const& add : st->oozes)
+            if (add.victim == victim->GetGUID())
+                ooze = bot->GetMap()->GetCreature(add.guid);
+
+        // Toward the ooze, else toward the bot, else toward the centre
+        Position side = ooze && ooze->GetExactDist2d(victim) > 1.0f ? ooze->GetPosition() : bot->GetPosition();
+        if (side.GetExactDist2d(victim) < 0.5f)
+            side = ICC_PP_CENTER;
+
+        float dx = side.GetPositionX() - victim->GetPositionX();
+        float dy = side.GetPositionY() - victim->GetPositionY();
+        float const length = std::sqrt(dx * dx + dy * dy);
+        dx = length > 0.01f ? dx / length : 1.0f;
+        dy = length > 0.01f ? dy / length : 0.0f;
+        float x = victim->GetPositionX() + dx * PLAGUE_STACK;
+        float y = victim->GetPositionY() + dy * PLAGUE_STACK;
+        // Kept on the probed floor
+        float const out = std::sqrt((x - ICC_PP_CENTER.GetPositionX()) * (x - ICC_PP_CENTER.GetPositionX()) +
+                                    (y - ICC_PP_CENTER.GetPositionY()) * (y - ICC_PP_CENTER.GetPositionY()));
+        if (out > ROOM_RADIUS)
+        {
+            x = ICC_PP_CENTER.GetPositionX() + (x - ICC_PP_CENTER.GetPositionX()) * ROOM_RADIUS / out;
+            y = ICC_PP_CENTER.GetPositionY() + (y - ICC_PP_CENTER.GetPositionY()) * ROOM_RADIUS / out;
+        }
+
+        Position const at(x, y, victim->GetPositionZ());
+        if (bot->GetExactDist2d(at) <= PLAGUE_STACK_PARK)
+            return false;
+
+        spot = at;
+        return true;
+    }
+
     float const distance = victim->GetExactDist2d(bot);
     if (distance <= STACK_RANGE)
         return false;
@@ -1651,7 +1891,15 @@ bool IsPpPlagueCarrier(PlayerbotAI* botAI)
 {
     PpState* st = LiveState(botAI);
     Player* bot = botAI->GetBot();
-    return st && IsDutyBot(bot) && IsCarrier(*st, bot) && !RiddenAbomination(bot) && !KiteCloud(*st, bot);
+    return st && IsDutyBot(bot) && IsCarrier(*st, bot) && !RiddenAbomination(bot) && !KiteCloud(*st, bot) &&
+           !IsTankHolder(bot, *st);
+}
+
+bool IsPpPlagueReceiving(PlayerbotAI* botAI)
+{
+    Creature* boss = nullptr;
+    PpState* st = LiveState(botAI, &boss);
+    return st && ReceiveFrom(*st, botAI->GetBot(), boss);
 }
 
 bool GetPpPlagueWalk(PlayerbotAI* botAI, Position& spot, char const*& branch)
@@ -1659,21 +1907,27 @@ bool GetPpPlagueWalk(PlayerbotAI* botAI, Position& spot, char const*& branch)
     Creature* boss = nullptr;
     PpState* st = LiveState(botAI, &boss);
     Player* bot = botAI->GetBot();
-    if (!st || !IsPpPlagueCarrier(botAI))
+    if (!st)
         return false;
 
-    // A rooted carrier waits for the stack to come to it
-    if (IsVictimOf(st->oozes, bot->GetGUID()))
+    if (!IsPpPlagueCarrier(botAI))
+    {
+        Player* carrier = ReceiveFrom(*st, bot, boss);
+        if (!carrier || carrier->GetExactDist2d(bot) <= PASS_TOUCH)
+            return false;
+
+        branch = "receive";
+        spot = carrier->GetPosition();
+        return true;
+    }
+
+    // Its receiver comes to it
+    if (IsAnchoredCarrier(*st, bot))
         return false;
 
-    Aura const* plague = bot->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_PP_UNBOUND_PLAGUE, boss));
-    AuraEffect const* searcher = bot->GetAuraEffect(SPELL_PP_UNBOUND_SEARCHER, EFFECT_0);
-    bool const due = PlagueTick(bot, boss) >= PASS_TICK || bot->GetHealthPct() < PASS_HEALTH_PCT;
-    bool const ready = plague && plague->GetDuration() >= PASS_MIN_LEFT_MS && searcher &&
-                       searcher->GetTickNumber() >= SEARCHER_TICKS;
     auto const held = st->receiver.find(bot->GetGUID());
     Player* receiver = held != st->receiver.end() ? MemberOf(bot, held->second) : nullptr;
-    if (due && ready && receiver)
+    if (receiver && PassDue(bot, boss))
     {
         float const distance = receiver->GetExactDist2d(bot);
         if (distance <= PASS_TOUCH)
@@ -1750,6 +2004,13 @@ bool GetPpAbomPlan(PlayerbotAI* botAI, PpAbomPlan& plan)
         return true;
     }
 
+    if (RiderExits(*st, bot, boss))
+    {
+        plan.duty = PpAbomDuty::Exit;
+        plan.cast = true;
+        return true;
+    }
+
     AiObjectContext* context = botAI->GetAiObjectContext();
     uint32 const spitId = context->GetValue<uint32>("vehicle spell id", "Regurgitated Ooze")->Get();
     SpellInfo const* spit = spitId ? sSpellMgr->GetSpellInfo(spitId) : nullptr;
@@ -1787,9 +2048,11 @@ bool GetPpAbomPlan(PlayerbotAI* botAI, PpAbomPlan& plan)
         }
     }
 
+    // A rider whose Unbound Plague is due leaves the puddles alone: its receiver would have to stand in one
+    bool const passing = IsCarrier(*st, bot) && PassDue(bot, boss);
     for (Puddle const& puddle : st->puddles)
     {
-        if (puddle.guid != st->eating)
+        if (passing || puddle.guid != st->eating)
             continue;
 
         Creature* unit = bot->GetMap()->GetCreature(puddle.guid);
@@ -1837,32 +2100,43 @@ char const* PpAbomDutyName(PpAbomDuty duty)
             return "eat";
         case PpAbomDuty::Slash:
             return "slash";
+        case PpAbomDuty::Exit:
+            return "exit";
         default:
             return "none";
     }
 }
 
-bool IsPpSwapTaunter(PlayerbotAI* botAI, uint32& defensive)
+bool IsPpSwapTaunter(PlayerbotAI* botAI, uint32& defensive, bool& taunt)
 {
     Creature* boss = nullptr;
     PpState* st = LiveState(botAI, &boss);
     Player* bot = botAI->GetBot();
     defensive = 0;
+    taunt = false;
     if (!st || !IsDutyBot(bot))
         return false;
 
-    // Only a tank or a would-be sharer is ever elected, and the election walks the raid
-    bool const sharerClass = bot->getClass() == CLASS_DEATH_KNIGHT || bot->getClass() == CLASS_PALADIN;
-    if (!IsTankPlayer(bot) && !(sharerClass && IsRaidDpsBot(bot)))
+    // Only a tank, a would-be sharer or a guard is ever elected, and the election walks the raid
+    if (!IsTankPlayer(bot) && !IsTauntDps(bot))
         return false;
 
     char const* kind = nullptr;
     bool const elected = SwapTaunter(*st, bot, boss, kind) == bot;
     NoteDerived(bot, "pp.swap", elected ? kind : "none");
-    if (elected && std::string(kind) == "share" && !RunningTankDefensive(bot, true, 0))
+    if (!elected)
+        return false;
+
+    taunt = true;
+    if (std::string(kind) != "share")
+        return true;
+
+    // Its button goes up from SHARE_LEAD_MS, the taunt only within SWAP_LEAD_MS of the stack
+    if (!RunningTankDefensive(bot, true, 0))
         defensive = NextPhysicalDefensive(botAI, bot, "pp.sharedefensive", 0);
 
-    return elected;
+    taunt = st->sinceAppMs >= 0 && PLAGUE_PERIOD_MS - st->sinceAppMs <= SWAP_LEAD_MS;
+    return true;
 }
 
 bool IsPpBraked(PlayerbotAI* botAI)
@@ -1923,7 +2197,7 @@ bool IsPpMovementOwned(PlayerbotAI* botAI)
     PpState* st = LiveState(botAI);
     Player* bot = botAI->GetBot();
     return st && (HeldStand(botAI) || KiteCloud(*st, bot) || StackDuty(*st, bot) || IsPpPlagueCarrier(botAI) ||
-                  RiddenAbomination(bot) || bot->GetGUID() == st->driver.Get());
+                  IsPpPlagueReceiving(botAI) || RiddenAbomination(bot) || bot->GetGUID() == st->driver.Get());
 }
 
 RaidBurstWindow IccPutricideBurstWindow(PlayerbotAI* botAI)
@@ -1976,7 +2250,7 @@ void CallHumanTank(PpState& st, Player* sender, Creature* boss, uint32 now)
 
     char const* kind = nullptr;
     if (st.phase != 3 || st.sinceAppMs < 0 || PLAGUE_PERIOD_MS - st.sinceAppMs > SWAP_LEAD_MS ||
-        Stacks(st, holder) < st.holderStart + HOLD_APPLICATIONS || SwapTaunter(st, sender, boss, kind))
+        !HoldDue(st, holder, boss) || SwapTaunter(st, sender, boss, kind))
         return;
 
     for (Player* member : MembersOnMap(sender))
@@ -2030,14 +2304,8 @@ void NoteDuties(PpState const& st, PlayerbotAI* botAI)
     Player* victim = StackDuty(st, bot) ? StackVictim(st, bot) : nullptr;
     NoteDerived(bot, "pp.stack", DescribeGuid(victim));
 
-    if (!IsCarrier(st, bot))
-    {
-        NoteDerived(bot, "pp.plague", "none");
-        return;
-    }
-
     Position spot;
-    char const* branch = "hold";
+    char const* branch = IsCarrier(st, bot) ? "hold" : "none";
     GetPpPlagueWalk(botAI, spot, branch);
     NoteDerived(bot, "pp.plague", branch);
 }
@@ -2068,7 +2336,7 @@ void TickPpEncounter(PlayerbotAI* botAI)
     Scan(st, bot, boss, now);
     RefreshDuties(st, bot, boss, now);
     UpdateBrake(st, bot, boss);
-    UpdateStand(st, bot);
+    UpdateStand(st, bot, boss);
     CallHumanTank(st, bot, boss, now);
     NoteDuties(st, botAI);
 }
