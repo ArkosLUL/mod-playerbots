@@ -37,8 +37,8 @@ One lead, no split: every change sits in the stem's one state, scan and tick.
    the reachable node with the fewest vortex hits (`bpc.hits`).
 5. A bomb shooter whose node reaches the bomb shoots from it.
 6. Ball victim: the least crowded nearby node when no spot is clear (`bpc.ball` `fewest`); the Inferno
-   victim's magic button, Dispersion or healthstone on a lethal catch (`icc bpc flame defensive`,
-   `bpc.flame`).
+   victim's magic button or Dispersion on a catch that would leave it under 25% (`icc bpc flame
+   defensive`, `bpc.flame`).
 7. Glittering Sparks: one priest or paladin bot within 30 yd dispels each carrier (`icc bpc dispel`,
    `bpc.dispel`).
 8. Reader, tests, boss doc; Berserk pacing and the soakers' cast windows closed by decision.
@@ -54,11 +54,11 @@ One lead, no split: every change sits in the stem's one state, scan and tick.
 | Pets on bombs all fight, shooters unchanged | Wowhead, WT (pets juggle passively) | pets only when no shooter |
 | Melee bomb duty only when no ranged DPS bot is free within 60 yd | Unstable 72059 procs on melee; 3D melee range 5 yd (bomb reach 0) | no fallback |
 | Non-damaging spells held on a bomb shot or nucleus grab | Unstable's `spell_proc` `SpellTypeMask` 1; the nucleus grabs on direct damage only | DoT-first casters ranked last |
-| Healers leave Valanar's 28 yd zone and the dais field, each tank spot reached by ceil(healers / 2) | 25-man: 14 nodes reach him against ~22 non-tanks | every healer covers every spot (r9), five healers in his zone |
+| Healers leave Valanar's 28 yd zone and the dais field, each tank spot reached by ceil(healers / 2) | 25-man: 15 nodes reach him (14 with Taldaram's own spot) against ~22 non-tanks | every healer covers every spot (r9), five healers in his zone |
 | Dais nodes within 28 yd of his spot held for melee in his phase | WT diagram (melee spread area on the dais), WT and Wowhead (melee to the back) | ranged anywhere |
 | A runner with no free node takes the reachable node with the fewest hits, sharing one if it must | 72039 hits only players within 30 yd of him, 72038 12 yd | stay put (r9) |
 | Soakers keep soaking through an Empowered Shock Vortex cast | 25H Inferno unsoaked 132k against 8k a shared vortex | release them |
-| Inferno victim: magic row, Dispersion, healthstone, never an immunity | Flames 71393 `SPELL_ATTR0_NO_IMMUNITIES`; Wowhead (Divine Guardian, Dispersion) | `GetRaidPersonalDefensive`, whose lethal branch spends an immunity |
+| Inferno victim: magic row but Cloak of Shadows, Dispersion, never an immunity or a healthstone | Flames 71393 `SPELL_ATTR0_NO_IMMUNITIES` and `SPELL_ATTR3_ALWAYS_HIT`; Wowhead (Divine Guardian, Dispersion); the victim mostly walks, which an item use stops | `GetRaidPersonalDefensive`, whose lethal branch spends an immunity |
 | Glittering Sparks dispelled by the nearest priest or paladin bot within 30 yd, no walk, no Mass Dispel | WT, Wowhead (dispel at once); nodes block reach; the cone mostly hits his tank | Mass Dispel on three carriers |
 | No Berserk pacing | 10 min Berserk on all three; lust already in Keleseth's phase | a late lust |
 | A braked bot idles rather than hitting another prince | damage on a prince without the Invocation is threat only | let it hit the others |
@@ -74,7 +74,7 @@ clear. No coordinate added.
   dispel and brake (`icc bpc brake`, action `icc bpc brake stop`).
 - Merge stage, README defensives bullet: the council adds `icc bpc lance defensive` (a Keleseth
   stand-in's `GetRaidPersonalDefensive` on `icc.personal` per lance), `icc bpc flame defensive` (the
-  Inferno victim's magic row or Dispersion, `bpc.flame`) and `icc bpc brake`, a `LiveMultiplier`
+  Inferno victim's magic row but Cloak of Shadows, or Dispersion, `bpc.flame`) and `icc bpc brake`, a `LiveMultiplier`
   holding non-owners at 90% of the empowered prince's owner's threat (frees at 80%).
 - Merge stage, README per-instance state: the council adds `bpc.petbomb`, `bpc.dispel` (`ObsGuidMap`)
   and `bpc.brake` (`ObsGuidSet`).

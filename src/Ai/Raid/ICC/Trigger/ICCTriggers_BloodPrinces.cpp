@@ -12,6 +12,7 @@
 #include "Position.h"
 #include "RaidDefensive.h"
 #include "RaidDirectTargeting.h"
+#include "Spell.h"
 
 bool IccBpcDodgeTrigger::IsActive() { return IsBpcInVortex(botAI); }
 
@@ -34,7 +35,12 @@ bool IccBpcDispelTrigger::IsActive()
 bool IccBpcBrakeTrigger::IsActive()
 {
     Creature* prince = GetBpcBrakeTarget(botAI);
-    return prince && (bot->GetVictim() == prince || AI_VALUE(Unit*, "current target") == prince);
+    if (!prince)
+        return false;
+
+    Spell* autoRepeat = bot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL);
+    return bot->GetVictim() == prince || AI_VALUE(Unit*, "current target") == prince ||
+           (autoRepeat && autoRepeat->m_targets.GetUnitTarget() == prince);
 }
 
 bool IccBpcBallTrigger::IsActive()

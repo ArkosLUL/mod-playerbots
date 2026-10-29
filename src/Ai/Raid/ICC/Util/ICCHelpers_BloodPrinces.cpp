@@ -63,7 +63,7 @@ constexpr float RANGED_KEEP = 31.0f;
 constexpr float HUNTER_TAKE = 32.0f;
 constexpr float HUNTER_KEEP = 35.0f;
 // Nodes this close to Valanar's spot are where his ranged stand, so a healer leaves them while it can
-// still reach a tank spot from outside. 25-man fits only 14 nodes in reach of him.
+// still reach a tank spot from outside. Only 15 nodes are in reach of him, 14 once Taldaram has his own spot.
 constexpr float VALANAR_RANGED_ZONE = 28.0f;
 constexpr float HEALER_ZONE_COST = 1500.0f;
 constexpr float HEALER_SHORT_COST = 1000.0f;
@@ -109,6 +109,7 @@ constexpr float FLAME_FLOOR = 0.25f;
 // The button still runs this long past the catch, the ball's approach being an estimate
 constexpr uint32 FLAME_TAIL_MS = 500;
 constexpr uint32 SPELL_DISPERSION = 47585;
+constexpr uint32 SPELL_CLOAK_OF_SHADOWS = 31224;
 // A Shadow Lance lands once its bolt has flown
 constexpr uint32 LANCE_FLIGHT_MS = 1000;
 constexpr float BOMB_DUTY_RANGE = 60.0f;
@@ -1824,13 +1825,19 @@ Creature* GetBpcBrakeTarget(PlayerbotAI* botAI)
 
 bool IsBpcBraked(PlayerbotAI* botAI) { return GetBpcBrakeTarget(botAI) != nullptr; }
 
-bool GetBpcLanceHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
+bool IsBpcStandIn(PlayerbotAI* botAI)
 {
     BpcState* st = LiveState(botAI);
     Player* bot = botAI->GetBot();
-    if (!st || IsTankPlayer(bot) || !IsNucleusOwner(*st, bot))
+    return st && !IsTankPlayer(bot) && IsNucleusOwner(*st, bot);
+}
+
+bool GetBpcLanceHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
+{
+    if (!IsBpcStandIn(botAI))
         return false;
 
+    Player* bot = botAI->GetBot();
     Creature* keleseth = LivePrince(bot, BPC_PRINCE_KELESETH);
     Spell* cast = keleseth ? keleseth->GetCurrentSpell(CURRENT_GENERIC_SPELL) : nullptr;
     if (!cast || cast->m_targets.GetUnitTargetGUID() != bot->GetGUID())
@@ -1884,6 +1891,10 @@ uint32 GetBpcFlameDefensive(PlayerbotAI* botAI)
 
     uint32 const needMs = static_cast<uint32>(ball->GetExactDist2d(bot) / BALL_SPEED * 1000.0f) + FLAME_TAIL_MS;
     uint32 spellId = NextMagicDefensive(botAI, bot, nullptr, needMs);
+    // Flames always hits, so Cloak's resist chance does nothing against it
+    if (spellId == SPELL_CLOAK_OF_SHADOWS)
+        spellId = 0;
+
     if (!spellId && bot->getClass() == CLASS_PRIEST && bot->HasSpell(SPELL_DISPERSION) &&
         botAI->CanCastSpell(SPELL_DISPERSION, bot))
         spellId = SPELL_DISPERSION;
@@ -1900,13 +1911,15 @@ Player* GetBpcDispelTarget(PlayerbotAI* botAI, char const*& spell)
         return nullptr;
 
     Player* bot = botAI->GetBot();
+    // The deal is only redone every DUTY_MS, so a carrier dispelled since still holds its dispeller
+    uint32 const sparks = sSpellMgr->GetSpellIdForDifficulty(SPELL_BPC_GLITTERING_SPARKS, bot);
     for (auto const& [carrierGuid, dispeller] : st->dispel)
     {
         if (dispeller != bot->GetGUID())
             continue;
 
         Player* carrier = ObjectAccessor::FindPlayer(carrierGuid);
-        if (!carrier || !IccSameInstance(bot, carrier))
+        if (!carrier || !IccSameInstance(bot, carrier) || !carrier->HasAura(sparks))
             continue;
 
         spell = ReadyDispel(bot, carrier);

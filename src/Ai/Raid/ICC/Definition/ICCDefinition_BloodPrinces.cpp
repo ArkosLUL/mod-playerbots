@@ -72,6 +72,10 @@ void DefineBloodPrinces(EncounterBuilder& e)
     e.Block("icc bpc taunts", Role::Tank, &IsBpcLive, Family::Taunt);
     // A grip shares the princes' taunt DR, and a ghoul's hit takes a nucleus off its tank
     e.Block("icc bpc pulls", Role::Any, &IsBpcLive, 0, {"death grip", "army of the dead"});
+    // Keleseth and one nucleus are two attackers, which fires a stand-in's class threat drops, and
+    // Misdirection hands his threat to the main tank
+    e.Block("icc bpc stand-in threat", Role::Any, &IsBpcStandIn, 0,
+            {"soulshatter", "fade", "feign death", "invisibility", "misdirection on main tank"});
     // A bomb nobody has hit yet and a loose nucleus are out of combat, and drop target clears them from
     // the bot about to hit them
     e.Block("icc bpc drop guard", Role::Any, &IsBpcDirectHitPick, Family::DropTarget);

@@ -15,6 +15,7 @@
 #include "LastMovementValue.h"
 #include "Playerbots.h"
 #include "RaidDefensive.h"
+#include "Spell.h"
 #include "Timer.h"
 
 namespace
@@ -137,6 +138,14 @@ bool IccBpcBrakeStopAction::Execute(Event /*event*/)
     if (bot->GetVictim() == prince)
     {
         bot->AttackStop();
+        stopped = true;
+    }
+
+    // AttackStop leaves Auto Shot and wands running
+    Spell* autoRepeat = bot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL);
+    if (autoRepeat && autoRepeat->m_targets.GetUnitTarget() == prince)
+    {
+        bot->InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
         stopped = true;
     }
 

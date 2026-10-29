@@ -48,7 +48,7 @@ constexpr uint32 SPELL_BPC_BALL_OF_FLAMES_PROC = 71756;
 constexpr uint32 SPELL_BPC_FLAMES = 71393;
 constexpr uint32 SPELL_BPC_SHADOW_LANCE = 71405;
 constexpr uint32 SPELL_BPC_EMPOWERED_SHADOW_LANCE = 71815;
-// The magic debuff Taldaram's cone leaves: fire over 8 s and a 40% slow
+// The magic debuff Taldaram's cone leaves: fire over 8 s and a 20% slow, heroic 10 s and 40%
 constexpr uint32 SPELL_BPC_GLITTERING_SPARKS = 71807;
 
 // Prince bits in bpc.tank
@@ -123,6 +123,8 @@ bool IsBpcDirectHitPick(PlayerbotAI* botAI);
 // The empowered prince while the threat brake holds this bot off him, else null
 Creature* GetBpcBrakeTarget(PlayerbotAI* botAI);
 bool IsBpcBraked(PlayerbotAI* botAI);
+// Keleseth's owner when it is no tank: a damage dealer standing in for a raid's second tank
+bool IsBpcStandIn(PlayerbotAI* botAI);
 // A prince this tank owns, held by somebody else, its taunt ready and the prince below taunt DR level 3
 Unit* GetBpcPrinceToTaunt(PlayerbotAI* botAI);
 
@@ -158,7 +160,7 @@ bool IsBpcTankDefensiveHeld(PlayerbotAI* botAI);
 // Keleseth's Shadow Lance on a stand-in that is no tank, from its cast
 bool GetBpcLanceHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
 // The Ball of Inferno Flame's victim, once the explosion would leave it under a quarter of its health: a
-// magic button, else Dispersion. Flames ignores immunities. Notes bpc.flame.
+// magic button but Cloak, else Dispersion. Flames ignores immunities. Notes bpc.flame.
 uint32 GetBpcFlameDefensive(PlayerbotAI* botAI);
 // The Glittering Sparks carrier this bot dispels, and with which spell
 Player* GetBpcDispelTarget(PlayerbotAI* botAI, char const*& spell);

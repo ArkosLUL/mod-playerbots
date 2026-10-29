@@ -118,7 +118,7 @@ public:
     bool Execute(Event event) override;
 };
 
-// Drops the swing and the pick on the empowered prince while the threat brake holds the bot
+// Drops the swing, Auto Shot or wand and the pick on the empowered prince while the threat brake holds the bot
 class IccBpcBrakeStopAction : public Action
 {
 public:
