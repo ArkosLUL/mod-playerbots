@@ -195,6 +195,12 @@ class Kicks(unittest.TestCase):
         self.assertEqual([(row["start"], row["kickers"], row["landed"]) for row in rows],
                          [(35000, [SHIV], False), (39000, [], True)])
 
+    def test_another_sorceress_tomb_is_not_this_cast(self):
+        records = pull()
+        records.insert(-1, aura(35800, MEND, 71330, CREATURE | 987))
+        rows = gauntlet.kick_rows(load(records))
+        self.assertEqual([(row["start"], row["landed"]) for row in rows], [(35000, False), (39000, True)])
+
     def test_section(self):
         self.assertEqual(printed(gauntlet.show_kicks, load(pull())), (
             "KICKS\n"

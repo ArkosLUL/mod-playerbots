@@ -46,7 +46,7 @@ All done.
 
 | Choice | Source | Alternative |
 |---|---|---|
-| One bot tank: no damage dealer takes the swap; the lone holder keeps buttons from 3 stacks and gets a healer's Pain Suppression, Guardian Spirit or Hand of Sacrifice from 5 | her swing ~19-26k (10N) / 37-51k (25N) raw every 1.5 s (`creature_template` 81.6/158.7 × level-83 base); WH: 1 tank with cooldowns, externals per breath | a DK or paladin DPS stand-in |
+| One bot tank: no damage dealer takes the swap; the lone holder keeps buttons from 3 stacks and gets a healer's Pain Suppression, Guardian Spirit or Hand of Sacrifice from 5 | her swing ~29-40k (10N) / 56-77k (25N) raw every 1.5 s (`creature_template` 81.6/158.7 × level-83 base × 1.5 s attack time); WH: 1 tank with cooldowns, externals per breath | a DK or paladin DPS stand-in |
 | A swap taunt still off her 1 s later counts as missed: the swapper goes back to M, no retry | 8 s taunt cooldown against 4-9 s left before the breath | retry with another tank |
 | Heroic carriers on a live-picked grid node; others first within 46 yd of her, nearest S; healers holder in reach and sight, else S, else nearest S | Backlash 20 yd; the r12 sets 9-17 yd apart; simulation over the probed grid (0 short at westward drift, 2/532 with 6 yd sideways) | a new fixed polar layout, which runs off the floor as she drifts |
 | 10-man held tombs stop at 40% (45k) | 20% of 113k left 22.6k for damage in flight | WH's 20% on both sizes |
@@ -54,7 +54,7 @@ All done.
 | Escapes skip one within 12 yd of a beacon or 8 yd of a tomb while another is clear | r12 gap: 150°/210° within 6 yd of A/B | fixed nearest |
 | Drakes: healers split by guid on a double pull | tanks ~78 yd apart | all on Rimefang (r12) |
 | Melee take Spinestalker while Rimefang flies | nothing else in reach | idle |
-| A fouled ranged drake stand moves 5 or 10 yd, floor- and sight-checked at runtime; melee and tank stands still drop | ranged stand still; melee follow their target | fixed alternates per stand |
+| A fouled ranged drake stand moves 5 or 10 yd, floor-, sight- and reach-checked at runtime (40 yd to the drake's landing spot, a healer's 38 yd to its tank spot); melee and tank stands still drop | ranged stand still; melee follow their target | fixed alternates per stand |
 | 10-man Tail Sweep: melee stay on his flank | the only safe 82° is his front, under Cleave; the sweep 3.75-6.25k every 22-25 s | a front-quarter spot |
 | Spinestalker's tank and melee fear left to class anti-fear | the roar's 35 yd covers all of Tremor's or Fear Ward's 30 yd round his tank but his front | move a shaman or priest into the roar |
 | Gauntlet: Ice Tomb kicked by the lowest-guid bot with a reaching interrupt; Frostbolt unkicked | blog silent; the stun hits her victim, mostly a tank; she is immune to fear and horror only | kick everything |

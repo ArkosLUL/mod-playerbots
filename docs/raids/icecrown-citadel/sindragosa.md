@@ -92,8 +92,8 @@ Blistering Cold, splash, bomb hide, beacon, buffet hide, unchained, stand.
   breath.
 - **Holder cover** (`sg.cover`): in the last phase, from 18 s after a breath or through one, a holder
   no swap relieves (none elected, or it missed) at 5 Buffet stacks or more and without one gets the
-  nearest healer bot's Pain Suppression, Guardian Spirit or Hand of Sacrifice, within 40 yd and in
-  sight, unchained-held healers skipped.
+  nearest healer bot's Pain Suppression, Guardian Spirit or Hand of Sacrifice in that spell's range
+  (Hand of Sacrifice's 30 yd misses T from S) and sight, unchained-held healers skipped.
 - **Brake** (`sg.brake`): on the ground, non-holders but healers and a swapper past its taunt, at 90%
   of the holder's threat until 80%. Nothing of theirs lands on her, nor area damage within 30 yd of her.
 - **Blistering Cold** (`sg.cold`): while she casts it, bots within 29.5 yd run, forced, the cast
@@ -155,10 +155,11 @@ Source, then the choice:
   Blistering Cold, and the stands follow.
 - WT and WH (a Buffet-free tank before each breath): the swap 16 s after each breath, her next coming
   20-25 s after it. WH (the tank comes fresh from behind a tomb): the free tank hides from 1 stack.
-- One bot tank: no damage dealer stands in for the swap. Her swing is about 19-26k raw on 10N and 37-51k
-  on 25N every 1.5 s with parry haste, so a damage dealer's armor takes roughly 10-14k and 20-27k a
-  swing for a whole breath cycle. WH (1 tank with cooldowns and high DPS; externals on the breaths):
-  the lone holder keeps its buttons from 3 stacks, a healer external from 5, lust in the last phase.
+- One bot tank: no damage dealer stands in for the swap. Her swing is about 29-40k raw on 10N and 56-77k
+  on 25N every 1.5 s with parry haste (creature damage scales with attack time), so a damage dealer's
+  armor takes roughly 15-21k and 30-41k a swing for a whole breath cycle. WH (1 tank with cooldowns
+  and high DPS; externals on the breaths): the lone holder keeps its buttons from 3 stacks, a healer
+  external from 5, lust in the last phase.
 - A taunt's 8 s cooldown outlasts the 4-9 s left before the breath: a missed swap goes back to M rather
   than share the breath, and the holder's cover takes over.
 - WT 2-3, WH 3-5: Unchained Magic held at 3 Instability.
@@ -346,9 +347,10 @@ Rimefang's flights with no victim.
   ranged also need the drake within 8 yd of its landing spot. Sight clear from each ranged spot to its
   landing and tank spots, Rimefang 25 yd up, and Spinestalker's melee spot. A fouled ranged spot gives
   way to the first spot 5 then 10 yd round it (8 headings) clear of every hazard, on the floor
-  (`ValidateStaticFloorPoint`, 1.5 yd), in static sight of the tank spot and, for Spinestalker, 37 yd
-  off his landing spot (`sg.drake.stand` `... alt`), kept until it fouls, a failed search retried after
-  1 s; a fouled melee or tank spot drops.
+  (`ValidateStaticFloorPoint`, 1.5 yd), in static sight of the tank spot, within 40 yd of the landing
+  spot (a 30 yd spell's reach; the hold blocks reach), a healer's within 38 yd of the tank spot and, for
+  Spinestalker, 37 yd off his landing spot (`sg.drake.stand` `... alt`), kept until it fouls, a failed
+  search retried after 1 s; a fouled melee or tank spot drops.
 
   | Stand | Rimefang | Spinestalker |
   |---|---|---|
@@ -383,8 +385,9 @@ knockback every 22-25 s costing less. Bellowing Roar reaches everyone within Tre
 Ward's 30 yd of his tank but straight ahead of him, so the tank's and melee's fear stays with the class
 anti-fear nodes, and the ranged keep out of it.
 
-Known gaps: no trace. A puddle on a melee or tank spot drops it for up to 40 s. Melee have nothing to
-hit while Rimefang flies with Spinestalker dead. Humans hold no duty.
+Known gaps: no trace. A puddle drops a melee or tank spot for up to 40 s, and Spinestalker's ranged
+spot too once it also fouls his two alternates in reach (a healer's one). Melee have nothing to hit
+while Rimefang flies with Spinestalker dead. Humans hold no duty.
 
 `sindragosa.py --drakes`: tank roles, Rimefang's flights, the brake, dodges with Icy Blast 71377/71378
 and puddle 71380/71381 hits, stands (` alt` off a puddle), targets, buttons and human calls.

@@ -1151,7 +1151,7 @@ bool Covered(Player* holder)
            holder->HasAura(SPELL_SG_HAND_OF_SACRIFICE);
 }
 
-// The external this healer can put on the holder now, or null
+// The external this healer can put on the holder from where it stands, or null
 char const* CoverSpell(Player* healer, Unit* holder)
 {
     PlayerbotAI* ai = GET_PLAYERBOT_AI(healer);
@@ -1164,9 +1164,16 @@ char const* CoverSpell(Player* healer, Unit* holder)
     else if (healer->getClass() == CLASS_PALADIN)
         names = {"hand of sacrifice"};
 
+    // CanCastSpell passes an out of range target, and Hand of Sacrifice's 30 yd doesn't reach the holder from
+    // the ranged stand
     for (char const* name : names)
-        if (ai->CanCastSpell(name, holder))
+    {
+        uint32 const spellId = ai->GetAiObjectContext()->GetValue<uint32>("spell id", name)->Get();
+        SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+        if (info && healer->IsWithinCombatRange(holder, healer->GetSpellMaxRangeForTarget(holder, info)) &&
+            ai->CanCastSpell(spellId, holder))
             return name;
+    }
 
     return nullptr;
 }
@@ -2035,7 +2042,10 @@ Unit* GetSgCoverTarget(PlayerbotAI* botAI, std::string& spell)
     if (!st || !IsHealer(bot) || !IsDutyBot(bot))
         return nullptr;
 
-    Player* holder = st->coverBy == bot->GetGUID() ? PlayerOf(bot, st->holder) : nullptr;
+    // Held since the last duty pass: another cast stacks Instability
+    SgBotState const* bs = BotOf(*st, bot);
+    bool const held = bs && bs->unchainedHeld;
+    Player* holder = st->coverBy == bot->GetGUID() && !held ? PlayerOf(bot, st->holder) : nullptr;
     char const* name = holder && !Covered(holder) ? CoverSpell(bot, holder) : nullptr;
     NoteDerived(bot, "sg.cover", name ? name : "none");
     if (!name)

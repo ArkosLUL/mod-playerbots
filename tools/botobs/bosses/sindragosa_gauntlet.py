@@ -29,7 +29,7 @@ silent `sg.gauntlet.*` ones. What the generic views miss here:
   out. The blade's whirlwind hits are Frostblade 70305 `dmg` rows.
 - **`sg.gauntlet.kick` is `sorceress` while a bot owes the interrupt** on a Sorceress casting Ice Tomb,
   the lowest guid whose interrupt reaches her. A cast landed when an Ice Tomb 71330/71331 `aura` row
-  shows up before its cast time is out.
+  from the same Sorceress shows up before its cast time is out.
 - **`sg.gauntlet.free` is the spell a paladin or priest owes** a member rooted by Frost Nova 71320 or
   Web 71327 inside a Frostblade's whirl: `hand of freedom`, or `dispel magic` on Frost Nova.
 - **No gauntlet code cheats.** Any `cheat` row here is another encounter's code.
@@ -185,9 +185,9 @@ def show_dodges(trace: Trace) -> None:
 
 def kick_rows(trace: Trace) -> list[dict]:
     """Per Ice Tomb cast: `start`, `land`, `kickers` (bots that noted the kick inside it) and `landed` (an
-    Ice Tomb aura showed up before it was out)."""
+    Ice Tomb aura from the same Sorceress showed up before it was out)."""
     owed = holder_spans(trace, "sg.gauntlet.kick", icc.pull_end(trace))
-    tombed = [rec["t"] for rec in trace.of("aura") if rec.get("sp") in ICE_TOMB and not rec.get("r")]
+    tombed = [(rec["t"], rec.get("s")) for rec in trace.of("aura") if rec.get("sp") in ICE_TOMB and not rec.get("r")]
     rows = []
     for rec in trace.of("cast"):
         if rec.get("sp") not in ICE_TOMB:
@@ -197,7 +197,8 @@ def kick_rows(trace: Trace) -> list[dict]:
         kickers = sorted((guid for guid, spans in owed.items()
                           if any(value not in OFF and low <= land and high >= start for value, low, high in spans)),
                          key=trace.name)
-        landed = any(start <= when <= land + LAND_SLACK_MS for when in tombed)
+        # Two Sorceresses can cast at once
+        landed = any(start <= when <= land + LAND_SLACK_MS and caster == rec.get("s") for when, caster in tombed)
         rows.append({"start": start, "land": land, "kickers": kickers, "landed": landed})
     return rows
 

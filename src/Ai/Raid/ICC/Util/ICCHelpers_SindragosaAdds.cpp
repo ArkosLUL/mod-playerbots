@@ -73,6 +73,9 @@ constexpr float DRAKE_ANCHOR = 8.0f;
 constexpr float ALT_STEPS[] = {5.0f, 10.0f};
 constexpr uint8 ALT_HEADINGS = 8;
 constexpr float ROAR_KEEP = 37.0f;
+// The stand hold blocks reach: a 30 yd spell gets to a drake from here, both combat reaches counted
+constexpr float ALT_CAST_REACH = 40.0f;
+constexpr float ALT_HEAL_REACH = 38.0f;
 constexpr float FLOOR_TOLERANCE = 1.5f;
 constexpr float SIGHT_EYE = 2.0f;
 constexpr uint32 ALT_RETRY_MS = 1000;
@@ -674,17 +677,19 @@ bool StaticSight(Player* bot, Position const& from, Position const& to)
 }
 
 // The nearest spot round a fouled ranged stand that is clear of every puddle and impact, on the floor, out of
-// Bellowing Roar and in sight of the drake's tank stand
+// Bellowing Roar, in spell reach of the drake (a healer's in heal reach of its tank stand) and in sight of that
 bool AltStand(DrakeState const& st, Player* bot, uint8 index, Position const& stand, Position& out)
 {
     Position const& tank = StandSpot(index, StandRole::Tank);
+    bool const healer = PlayerbotAI::IsHeal(bot);
     for (float step : ALT_STEPS)
         for (uint8 heading = 0; heading < ALT_HEADINGS; ++heading)
         {
             float const angle = static_cast<float>(heading) * 2.0f * static_cast<float>(M_PI) / ALT_HEADINGS;
             Position const wanted(stand.GetPositionX() + step * std::cos(angle),
                                   stand.GetPositionY() + step * std::sin(angle), stand.GetPositionZ());
-            if (Fouled(st, wanted) ||
+            if (Fouled(st, wanted) || wanted.GetExactDist2d(LandSpot(index)) > ALT_CAST_REACH ||
+                (healer && wanted.GetExactDist2d(tank) > ALT_HEAL_REACH) ||
                 (index == SPINESTALKER && wanted.GetExactDist2d(ICC_SG_SPINESTALKER_LAND) < ROAR_KEEP))
                 continue;
 

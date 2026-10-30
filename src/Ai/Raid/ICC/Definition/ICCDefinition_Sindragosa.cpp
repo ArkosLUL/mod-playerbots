@@ -96,7 +96,7 @@ void DefineSindragosa(EncounterBuilder& e)
                 Family::MoveRandom | Family::PetAttack);
     // Every spell a carrier finishes stacks Instability, and Backlash goes off when it drops
     e.Block("icc sindragosa unchained hold", Role::Any, &IsSgUnchainedHeld, Family::Spell,
-            {IccSindragosaFreedomAction::Name, IccSindragosaBeaconHealAction::Name});
+            {IccSindragosaFreedomAction::Name, IccSindragosaCoverAction::Name, IccSindragosaBeaconHealAction::Name});
     // The stands are in reach of her and of the holder, and reach would walk a bot off its spot
     e.OwnMovement("icc sindragosa movement", Role::Any, &IsSgMovementOwned, Family::Attack);
     e.Block("icc sindragosa spell movers", Role::Any, &IsSgMovementOwned,
