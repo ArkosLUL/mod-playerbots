@@ -866,6 +866,140 @@ inline std::vector<Point> RingPoints(Point centre, float radius, Point from, std
     std::sort(out.begin(), out.end(), [from](Point const& a, Point const& b) { return Dist(from, a) < Dist(from, b); });
     return out;
 }
+
+// A kite's committed way while the spike is slow: straight along dir to the ring at entry, then round it
+struct RingWay
+{
+    bool valid = false;
+    Point dir;
+    float turn = 1.0f;
+    float radius = 40.0f;
+    Point entry;
+    float catchS = 0.0f;
+};
+
+struct RingWayRules
+{
+    Point centre;
+    float ring = 40.0f;
+    float kiterSpeed = 7.0f;
+    float reach = 7.5f;
+    float horizonS = 20.0f;
+    float catchBandS = 2.0f;
+    int headings = 16;
+    // The commit runs till the spike's top speed or till it comes this close
+    float endGap = 20.0f;
+    // Over the commit the kiter keeps this far off every patch, the spike this far off every tank patch; one
+    // already closer at the start only has to get no closer than startSlack inside where it is
+    float kiterKeepout = 8.5f;
+    float tankClearance = 14.5f;
+    float startSlack = 0.5f;
+    // The way passes a kite patch when the kiter comes this close to one over the commit
+    float kitePatchNear = 25.0f;
+    // A warlock's circle: the way that keeps it longer within range, in bands
+    bool circle = false;
+    Point circlePos;
+    float circleRange = 38.0f;
+    float circleBandS = 1.0f;
+};
+
+// Every heading both ways round the ring, judged by the spike's pursuit over the commit: dropped when the
+// kiter comes too near a patch or the spike too near a tank patch, then ranked by the circle's time in range,
+// the later catch in bands, a kite patch passed, and the entry farther from the spike. Invalid when the spike
+// is already at its top speed or no way holds.
+inline RingWay PickRingWay(Spike const& spike, Point kiter, std::vector<Point> const& patches,
+                           std::vector<Point> const& tankPatches, std::vector<Point> const& kitePatches,
+                           RingWayRules const& rules)
+{
+    RingWay best;
+    if (spike.step >= LAST_STEP)
+        return best;
+
+    float const commitS = spike.nextStepS + STEP_S * static_cast<float>(LAST_STEP - 1 - spike.step);
+    std::vector<float> keep;
+    for (Point const& patch : patches)
+        keep.push_back(std::min(rules.kiterKeepout, Dist(kiter, patch) - rules.startSlack));
+
+    std::vector<float> tankKeep;
+    for (Point const& patch : tankPatches)
+        tankKeep.push_back(std::min(rules.tankClearance, Dist(spike.pos, patch) - rules.startSlack));
+
+    int bestCircle = 0;
+    int bestBand = 0;
+    bool bestKite = false;
+    float bestEntryGap = 0.0f;
+    int const ticks = static_cast<int>(std::ceil(rules.horizonS / TICK_S - 0.001f));
+    for (float turn : {1.0f, -1.0f})
+        for (int h = 0; h < rules.headings; ++h)
+        {
+            float const angle = 6.28318531f * static_cast<float>(h) / static_cast<float>(rules.headings);
+            Point const dir = {std::cos(angle), std::sin(angle)};
+            KiterPath const path =
+                MakeKiterPath(kiter, dir, rules.kiterSpeed, rules.centre, PathMember{rules.ring, turn, 1e9f});
+
+            Spike chase = spike;
+            Point at = kiter;
+            float catchS = -1.0f;
+            bool committed = true;
+            bool holds = true;
+            bool kite = false;
+            float inCircleS = 0.0f;
+            for (int i = 0; i < ticks && holds && (committed || catchS < 0.0f); ++i)
+            {
+                float const t = static_cast<float>(i) * TICK_S;
+                ChaseTick(chase, at, t);
+                at = path.At(t + TICK_S);
+                float const gap = Dist(chase.pos, at);
+                if (catchS < 0.0f && gap <= rules.reach)
+                    catchS = t + TICK_S;
+
+                if (!committed)
+                    continue;
+
+                for (size_t k = 0; k < patches.size(); ++k)
+                    holds = holds && Dist(at, patches[k]) >= keep[k];
+
+                for (size_t k = 0; k < tankPatches.size(); ++k)
+                    holds = holds && Dist(chase.pos, tankPatches[k]) >= tankKeep[k];
+
+                kite = kite || std::any_of(kitePatches.begin(), kitePatches.end(), [&](Point const& patch)
+                                           { return Dist(at, patch) <= rules.kitePatchNear; });
+                if (rules.circle && Dist(at, rules.circlePos) <= rules.circleRange)
+                    inCircleS += TICK_S;
+
+                committed = t + TICK_S < commitS && gap > rules.endGap;
+            }
+
+            if (!holds)
+                continue;
+
+            float const caught = catchS < 0.0f ? rules.horizonS : catchS;
+            int const circleBand = rules.circle ? static_cast<int>(inCircleS / rules.circleBandS) : 0;
+            int const band = static_cast<int>(caught / rules.catchBandS);
+            Point const entry = {kiter.x + dir.x * path.straight, kiter.y + dir.y * path.straight};
+            float const entryGap = Dist(entry, spike.pos);
+            bool better = !best.valid;
+            if (!better && circleBand != bestCircle)
+                better = circleBand > bestCircle;
+            else if (!better && band != bestBand)
+                better = band > bestBand;
+            else if (!better && kite != bestKite)
+                better = kite;
+            else if (!better)
+                better = entryGap > bestEntryGap;
+
+            if (!better)
+                continue;
+
+            best = {true, dir, turn, path.radius, entry, caught};
+            bestCircle = circleBand;
+            bestBand = band;
+            bestKite = kite;
+            bestEntryGap = entryGap;
+        }
+
+    return best;
+}
 }  // namespace AnubarakPursuit
 
 #endif

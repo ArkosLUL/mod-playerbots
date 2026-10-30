@@ -26,6 +26,7 @@ namespace
 {
 
 constexpr uint32 ANUBARAK_STALL_MS = 500;
+constexpr uint32 SPELL_CAT_FORM = 768;
 constexpr float ANUBARAK_RANGED_REACH_MARGIN = 2.0f;
 constexpr float ANUBARAK_BOOKED_TOLERANCE = 0.5f;
 constexpr float ANUBARAK_ESCORT_REAIM = 3.0f;
@@ -250,7 +251,20 @@ bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
         if (boost.face)
             bot->SetOrientation(boost.facing);
 
-        if (botAI->CastSpell(boost.spellId, bot))
+        // Cat Form won't cast from another form. RemoveShapeshift leaves Tree of Life on, so drop the aura.
+        bool shifted = false;
+        if (boost.catForm && botAI->CanCastSpell(SPELL_CAT_FORM, bot))
+        {
+            bot->RemoveAurasByType(SPELL_AURA_MOD_SHAPESHIFT);
+            shifted = botAI->CastSpell(SPELL_CAT_FORM, bot);
+        }
+
+        Unit* target = boost.target.IsEmpty() ? bot : botAI->GetUnit(boost.target);
+        if ((!boost.catForm || shifted) && target && botAI->CastSpell(boost.spellId, target))
+            return true;
+
+        // Dash goes next tick from Cat Form
+        if (shifted)
             return true;
     }
 

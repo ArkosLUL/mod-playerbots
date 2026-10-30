@@ -806,6 +806,74 @@ void BoostLeadClearsImpaleAtTheHandsEnd()
     CHECK(Near(BoostLeadS(2.5f, 11.9f, 11.375f, IMPALE_REACH, 1.5f, 2.0f), 2.0f, 0.01f));
     CHECK(Near(BoostLeadS(2.5f, 10.0f, 11.375f, IMPALE_REACH, 1.5f, 2.0f), 2.0f, 0.01f));
 }
+
+AnubarakPursuit::RingWayRules RingRules()
+{
+    AnubarakPursuit::RingWayRules rules;
+    rules.centre = ROOM_CENTER;
+    return rules;
+}
+
+// Where the committed way puts the kiter t seconds in
+Point RingWayAt(AnubarakPursuit::RingWay const& way, Point kiter, float t)
+{
+    AnubarakPursuit::PathMember const member = {way.radius, way.turn, 1e9f};
+    return MakeKiterPath(kiter, way.dir, 7.0f, ROOM_CENTER, member).At(t);
+}
+
+// 2026-10-30 Z: Justice marked at the gather, the base-speed spike 71 yd west. Re-picked every tick he stood
+// 8.2 s by the south tank patch; committed, he runs till past the spike's top speed on the ring.
+void RingWayCommitsFromTheGather()
+{
+    using AnubarakPursuit::PickRingWay;
+    using AnubarakPursuit::RingWay;
+
+    Point const kiter = {774.0f, 130.6f};
+    Spike spike;
+    spike.pos = {708.0f, 157.0f};
+    std::vector<Point> const tanks = {{790.8f, 145.6f}, {790.2f, 120.0f}};
+    RingWay const way = PickRingWay(spike, kiter, tanks, tanks, {}, RingRules());
+    CHECK(way.valid);
+    CHECK(way.catchS > 14.0f);
+    CHECK(way.radius <= 45.0f);
+    for (float t = 0.0f; t <= 14.0f; t += 0.5f)
+    {
+        Point const at = RingWayAt(way, kiter, t);
+        CHECK(Dist(at, ROOM_CENTER) <= 40.5f);
+        for (Point const& tank : tanks)
+            CHECK(Dist(at, tank) >= 8.5f);
+    }
+
+    // At its top speed nothing is left to commit to
+    spike.step = AnubarakPursuit::LAST_STEP;
+    CHECK(!PickRingWay(spike, kiter, tanks, tanks, {}, RingRules()).valid);
+}
+
+// Mirror-even run, kiter east and the spike west: the circle, then a kite patch, picks the side
+void RingWayTakesTheCircleThenThePatch()
+{
+    using AnubarakPursuit::PickRingWay;
+    using AnubarakPursuit::RingWay;
+
+    Point const kiter = {775.0f, 135.0f};
+    Spike spike;
+    spike.pos = {705.0f, 135.0f};
+    for (float side : {1.0f, -1.0f})
+    {
+        AnubarakPursuit::RingWayRules rules = RingRules();
+        rules.circle = true;
+        rules.circlePos = {765.0f, 135.0f + side * 40.0f};
+        RingWay const circled = PickRingWay(spike, kiter, {}, {}, {}, rules);
+        CHECK(circled.valid);
+        CHECK((circled.entry.y - 135.0f) * side > 0.0f);
+        CHECK(Dist(RingWayAt(circled, kiter, 3.0f), rules.circlePos) <= rules.circleRange);
+
+        Point const patch = {745.0f, 135.0f + side * 28.0f};
+        RingWay const patched = PickRingWay(spike, kiter, {patch}, {}, {patch}, RingRules());
+        CHECK(patched.valid);
+        CHECK((patched.entry.y - 135.0f) * side > 0.0f);
+    }
+}
 }  // namespace
 
 int main()
@@ -834,6 +902,8 @@ int main()
     DragPreStepClearsTheStall();
     CloseHoldsTurnApart();
     BoostLeadClearsImpaleAtTheHandsEnd();
+    RingWayCommitsFromTheGather();
+    RingWayTakesTheCircleThenThePatch();
     std::printf("anubarak_pursuit_test: ok\n");
     return 0;
 }

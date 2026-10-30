@@ -105,13 +105,22 @@ bool AnubarakKiteImmunitiesKept(PlayerbotAI* botAI)
            GetAnubarakPhase(botAI) == AnubarakPhase::Submerged;
 }
 
-// Heroic, a submerge still ahead: Sprint's cooldown outlasts a phase 1, so one spent closing on a target
-// is gone for the next kite
+// Heroic, a submerge still ahead: Sprint's and Dash's cooldowns outlast a phase 1, so one spent closing on
+// a target is gone for the next kite
 bool AnubarakKiteSprintKept(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     return AnubarakEngaged(botAI) && bot->GetMap()->IsHeroic() && !bot->HasAura(SPELL_MARK) &&
            GetAnubarakPhase(botAI) != AnubarakPhase::Swarm;
+}
+
+// Heroic: a marked druid shifts to Cat Form for Dash, and its spec's form trigger would shift it straight
+// back and end the Dash
+bool AnubarakKiteCatHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return AnubarakEngaged(botAI) && bot->GetMap()->IsHeroic() && bot->getClass() == CLASS_DRUID &&
+           bot->HasAura(SPELL_MARK) && bot->GetShapeshiftForm() == FORM_CAT;
 }
 
 void DefineAnubarak(EncounterBuilder& e)
@@ -174,7 +183,9 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak no ghouls", Role::Any, AnubarakEngaged, 0, {"army of the dead"});
     e.Block("anubarak kite immunity reserve", Role::Any, AnubarakKiteImmunitiesKept, 0,
             {"divine shield", "ice block", "vanish", "feign death"});
-    e.Block("anubarak kite sprint reserve", Role::Any, AnubarakKiteSprintKept, 0, {"sprint"});
+    e.Block("anubarak kite sprint reserve", Role::Any, AnubarakKiteSprintKept, 0, {"sprint", "dash"});
+    e.Block("anubarak kite cat hold", Role::Any, AnubarakKiteCatHeld, 0,
+            {"caster form", "bear form", "dire bear form", "tree form", "moonkin form"});
     // the side tanks' pickups; from the main tank they pull the burrowers walking past onto him
     e.Block("anubarak main tank shout guard", Role::Any, AnubarakMainTankEngaged, 0,
             {"challenging roar", "challenging shout"});

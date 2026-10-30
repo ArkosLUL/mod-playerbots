@@ -192,9 +192,10 @@ SPELL_FORBEARANCE = 25771
 CLASS_PALADIN = 2
 # The stem casts these as the kiter's last resort, once its anub.protect reads self
 LAST_RESORT_LEAD_MS = 2000
-# 55004 is the Nitro Boosts use, 54861 the speed it gives
+# 55004 is the Nitro Boosts use, 54861 the speed it gives. A druid out of Cat Form shifts into it for Dash,
+# and Feral Charge onto a bug is its last tool.
 KITE_BOOSTS = {11305: "Sprint", 33357: "Dash", 55004: "Nitro Boosts", 54861: "Nitro Boosts", 1953: "Blink",
-               48020: "Demonic Circle: Teleport"}
+               48020: "Demonic Circle: Teleport", 768: "Cat Form", 16979: "Feral Charge", 49376: "Feral Charge"}
 NITRO_SPEED = 54861
 # one boost read twice, a use and its aura or a cast and its triggered copy
 BOOST_PAIR_MS = 1000
@@ -361,11 +362,13 @@ PLAN_NEEDS = {"patch": ("patch",), "hand": ("hand",), "patch+hand": ("patch", "h
 PATCH_PLANS = ("patch", "patch+hand")
 HAND_PLANS = ("hand", "patch+hand")
 # what a kite runs on, any rank; 55004 is the Nitro Boosts use
-KITE_TOOLS = {11305: "Sprint", 8696: "Sprint", 2983: "Sprint", 55004: "Nitro Boosts", 642: "Divine Shield",
-              45438: "Ice Block", 26889: "Vanish", 1857: "Vanish", 1856: "Vanish", SPELL_FEIGN_DEATH: "Feign Death"}
+KITE_TOOLS = {11305: "Sprint", 8696: "Sprint", 2983: "Sprint", 33357: "Dash", 9821: "Dash", 1850: "Dash",
+              55004: "Nitro Boosts", 642: "Divine Shield", 45438: "Ice Block", 26889: "Vanish", 1857: "Vanish",
+              1856: "Vanish", SPELL_FEIGN_DEATH: "Feign Death"}
 # their base cooldowns: one spent off the mark costs a kite only while still out as a submerge's spike comes up
-KITE_TOOL_COOLDOWN_MS = {11305: 180000, 8696: 180000, 2983: 180000, 55004: 180000, 642: 300000, 45438: 300000,
-                         26889: 180000, 1857: 180000, 1856: 180000, SPELL_FEIGN_DEATH: 30000}
+KITE_TOOL_COOLDOWN_MS = {11305: 180000, 8696: 180000, 2983: 180000, 33357: 180000, 9821: 180000, 1850: 180000,
+                         55004: 180000, 642: 300000, 45438: 300000, 26889: 180000, 1857: 180000, 1856: 180000,
+                         SPELL_FEIGN_DEATH: 30000}
 # the spike is summoned on him this long after he goes down
 SPIKE_SUMMON_MS = 2500
 SPELL_CIRCLE_SUMMON = 48018
@@ -396,6 +399,10 @@ HOP_RANGE = radius("ANUBARAK_HOP_RANGE")
 HOP_COOLDOWN_MS = 300000
 # anub.lane: its flags before the colon, the heading in degrees after it
 LANE_GOAL, LANE_CLEAR, LANE_HELD, LANE_ANY_CLEAR = "g", "p", "h", "c"
+# anub.lane's ring commit rows: `ring:<way>` as it latches, then `ring:<exit>` as it ends. A committed run
+# that stands still longer than RING_STILL_MS is flagged.
+RING_WAYS = ("cw", "ccw")
+RING_STILL_MS = 1500
 ESCORT_BY = "anubarak hop escort"
 DODGE_BY = "anubarak avoid spike"
 GATHER_BY = "anubarak gather"
@@ -412,6 +419,10 @@ CLAIM_CAST_FLAG_MS = 300
 # a boost this early in a Hand runs while the spike sits on the kiter anyway
 HAND_BOOST_MS = 8000
 HAND_PATCH_CLEARANCE = radius("ANUBARAK_KITE_HAND_PATCH_CLEARANCE")
+# heroic shoots a submerge's first kite sphere from this long before he goes down
+KITE_PRESHOT_MS = int(radius("ANUBARAK_KITE_PRESHOT_LEFT_S") * 1000)
+# a stray patch this close to a tank patch is no kite patch: the spike's restart test plus its first walk
+KITE_PATCH_TANK_YD = SPIKE_PATCH_REACH + 5.25
 # the emerge despawns the spike a minute after he goes down
 SPIKE_LIFE_MS = 60000
 # rank 3, for a cast whose aura the trace doesn't hold
@@ -1431,6 +1442,46 @@ def lane_heading(rows: list[tuple[int, str]], when: int) -> tuple[float, float] 
     return math.cos(radians), math.sin(radians)
 
 
+def ring_commits(rows: list[tuple[int, str]], start: int, stop: int) -> list[dict]:
+    """The window's ring commits off `anub.lane`: each `ring:cw` or `ring:ccw` to the next row, whose
+    `ring:<exit>` names why it ended; `open` for one still running at the window's end. A `ring:none` is a
+    commit picked with no way holding."""
+    out: list[dict] = []
+    for when, value in rows:
+        if not start <= when <= stop + NOTE_TICK_MS:
+            continue
+        kind, _, rest = value.partition(":")
+        if out and out[-1]["exit"] is None:
+            out[-1].update(stop=when, exit=rest if kind == "ring" else "lane")
+        if kind == "ring" and rest in RING_WAYS and when <= stop:
+            out.append({"start": when, "stop": stop, "way": rest, "exit": None})
+        elif kind == "ring" and rest == "none" and when <= stop:
+            out.append({"start": when, "stop": when, "way": "none", "exit": "none"})
+    for ring in out:
+        if ring["exit"] is None:
+            ring["exit"] = "open"
+    return out
+
+
+def ring_line(trace: Trace, window: dict) -> str | None:
+    """Each ring commit: its way, from when and for how long, its exit, and a stand-still past RING_STILL_MS or
+    a flip-flop while committed, flagged."""
+    parts = []
+    for ring in window["rings"]:
+        if ring["way"] == "none":
+            parts.append(f"none held {rel_s(window, ring['start'])}")
+            continue
+        text = (f"{ring['way']} {rel_s(window, ring['start'])} for {(ring['stop'] - ring['start']) / 1000:.1f} s,"
+                f" out on {ring['exit']}")
+        still, longest = ring["still"]
+        if longest > RING_STILL_MS:
+            text += f", stood still {still / 1000:.1f} s, longest {longest / 1000:.1f} s"
+        if ring["flips"]:
+            text += f", flip-flopped {sum(high - low for low, high, _ in ring['flips']) / 1000:.1f} s"
+        parts.append(text)
+    return "ring commit: " + "; ".join(parts) if parts else None
+
+
 def lane_offs(rows: list[tuple[int, str]], start: int, stop: int) -> list[int]:
     """When the kiter's `anub.lane` step was off the patches while another heading was clear of them."""
     out = []
@@ -1695,6 +1746,9 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                                  if "turn" in window["bridge"] and turn is not None else None)
         window.update({
             "lane_offs": lane_offs(lanes.get(guid, []), start, stop),
+            "rings": [dict(ring, still=stalled(samples, guid, ring["start"], ring["stop"]),
+                           flips=flip_flops(moves.get(guid, []), ring["start"], ring["stop"]))
+                      for ring in ring_commits(lanes.get(guid, []), start, stop)],
             "escort_read": escort_read(samples, escorts, window, moves, frost_auras),
             "claim_casts": claim_casts(window),
             "held_catches": held_catches(samples, spikes, window, marks, submerged, lanes.get(guid, [])),
@@ -1811,6 +1865,9 @@ def show_spike(trace: Trace) -> None:
             run = kite_line(trace, window)
             if run:
                 print(f"            {run}")
+            ring = ring_line(trace, window)
+            if ring:
+                print(f"            {ring}")
             approach = tank_line(window)
             if approach:
                 print(f"            spike to tank patch: {approach}")
@@ -1952,9 +2009,10 @@ def spent_kite_tools(trace: Trace, windows: list[dict]) -> list[tuple[str, dict]
 
 def circle_teleports(trace: Trace, windows: list[dict], samples: Samples | None = None) -> list[dict]:
     """Each Demonic Circle teleport a bot cast: its circle, where it stood as its last summon before went
-    down; at the cast the spike's yards from the kiter and from the circle; the kiter's closest pass by the
-    circle from its last boost in the kite to the cast; and how long it stood after landing on the circle,
-    to its first step off or its death."""
+    down, else, summoned before the trace began, where it stood in the first row after the teleport; at the
+    cast the spike's yards from the kiter and from the circle; the kiter's closest pass by the circle from
+    its last boost in the kite to the cast; and how long it stood after landing on the circle, to its first
+    step off or its death."""
     samples = samples or Samples(trace)
     spikes = guids_of_entry(trace, NPC_SPIKE)
     casts = [rec for rec in trace.of("cast") if not rec.get("tr")]
@@ -1966,7 +2024,12 @@ def circle_teleports(trace: Trace, windows: list[dict], samples: Samples | None 
             continue
         summon = next((prior for prior in reversed(casts) if prior.get("s") == guid
                        and prior.get("sp") == SPELL_CIRCLE_SUMMON and prior["t"] + prior.get("ct", 0) <= when), None)
-        placed = samples.row(guid, summon["t"] + summon.get("ct", 0)) if summon else None
+        if summon:
+            placed = samples.row(guid, summon["t"] + summon.get("ct", 0))
+        else:
+            stamps, rows = samples.track(guid)
+            after = bisect.bisect_right(stamps, when)
+            placed = rows[after] if after < len(stamps) and stamps[after] - when <= NEAR_MS else None
         kiter, spike = samples.row(guid, when), spike_at(samples, spikes, guid, when)
         if placed is None or kiter is None:
             continue
@@ -1996,20 +2059,31 @@ def circle_teleports(trace: Trace, windows: list[dict], samples: Samples | None 
     return out
 
 
+def kite_patches_ready(samples: Samples, latches, when: int) -> int:
+    """Patches a heroic kite may end on at `when`: held by no side, and KITE_PATCH_TANK_YD or more off every
+    latched tank patch."""
+    spots = patch_spots(samples, when)
+    tanks = [spot for spot in (latched_patch(spans, samples, when) for spans in latches) if spot]
+    return sum(1 for guid in unlatched_patches(samples, latches, when)
+               if guid in spots and all(dist2(spots[guid], tank) >= KITE_PATCH_TANK_YD for tank in tanks))
+
+
 def kite_sphere_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
-    """Heroic, per submerge: each sphere downed while he was down that no side ever latched, at the blow and
-    at its spend, with the mark that ended on it and the milliseconds into that kite."""
+    """Heroic, per submerge: each sphere downed from KITE_PRESHOT_MS before he went down to his emerge that no
+    side ever latched, at the blow and at its spend, with the mark that ended on it and the milliseconds into
+    that kite; and the kite patches down as the spike came up."""
     samples = samples or Samples(trace)
     used = consumed_patches(trace, samples)
     marks = mark_spans(trace)
     deaths = sphere_deaths(trace, samples)
+    latches = patch_latches(trace)
     out = []
     for start, stop, phase, label in phase_spans(trace):
         if phase != 2:
             continue
         spheres = []
         for row in deaths:
-            if row["latched"] or not start <= row["killed"] < stop:
+            if row["latched"] or not start - KITE_PRESHOT_MS <= row["killed"] < stop:
                 continue
             entry = {"guid": row["guid"], "killed": row["killed"], "spent": None, "kiter": None, "into": None}
             seen = used.get(row["guid"])
@@ -2019,7 +2093,8 @@ def kite_sphere_rows(trace: Trace, samples: Samples | None = None) -> list[dict]
                 if mark:
                     entry.update({"kiter": mark[0], "into": seen[0] - mark[1]})
             spheres.append(entry)
-        out.append({"label": label, "start": start, "spheres": spheres})
+        out.append({"label": label, "start": start, "spheres": spheres,
+                    "ready": kite_patches_ready(samples, latches, start + SPIKE_SUMMON_MS)})
     return out
 
 
@@ -2029,9 +2104,10 @@ def show_kite_spheres(trace: Trace, samples: Samples) -> None:
     rows = kite_sphere_rows(trace, samples)
     if not rows:
         return
-    print(f"\n  per submerge, the kite spheres downed while he was down (heroic keeps one down at a time, two a"
-          f"\n  submerge): the blow and the spend in seconds into phase 2, the kite it ended, under"
-          f" {KITE_PATCH_EARLY_MS / 1000:.0f} s into it flagged:")
+    print(f"\n  per submerge, the kite spheres downed from {KITE_PRESHOT_MS / 1000:.0f} s before he went down"
+          f" (heroic keeps one down at a time,\n  two a submerge): the blow and the spend in seconds into phase 2,"
+          f" the kite it ended, under {KITE_PATCH_EARLY_MS / 1000:.0f} s\n  into it flagged; a spike that came up"
+          f" with no kite patch down flagged:")
     for row in rows:
         parts = []
         for sphere in row["spheres"]:
@@ -2045,7 +2121,9 @@ def show_kite_spheres(trace: Trace, samples: Samples) -> None:
                     if sphere["into"] < KITE_PATCH_EARLY_MS:
                         text += ", early"
             parts.append(text)
-        print(f"    {row['label']:5} {clock(row['start']):>9}  {len(row['spheres'])}: " + ("; ".join(parts) or "none"))
+        bare = "" if row["ready"] else "  no kite patch down as the spike came up"
+        print(f"    {row['label']:5} {clock(row['start']):>9}  {len(row['spheres'])}: " + ("; ".join(parts) or "none")
+              + bare)
 
 
 def teleport_text(trace: Trace, row: dict) -> str:

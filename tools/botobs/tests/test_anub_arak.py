@@ -2058,6 +2058,22 @@ class ChasePull(unittest.TestCase):
         self.assertEqual([window["flips"] for window in ab.mark_windows(self.trace)],
                          [[], [(26200, 26800, 4)], [], []])
 
+    def test_a_ring_commit_reads_its_way_exit_and_stand_stills(self):
+        rows = [(1000, "pc:248"), (2000, "ring:ccw"), (9000, "ring:fast"), (9200, "pc:45"), (12000, "ring:none"),
+                (14000, "ring:cw")]
+        self.assertEqual(ab.ring_commits(rows, 0, 15000),
+                         [{"start": 2000, "stop": 9000, "way": "ccw", "exit": "fast"},
+                          {"start": 12000, "stop": 12000, "way": "none", "exit": "none"},
+                          {"start": 14000, "stop": 15000, "way": "cw", "exit": "open"}])
+        window = {"start": 1000, "rings": [
+            {"start": 2000, "stop": 9000, "way": "ccw", "exit": "fast", "still": (1600, 1600), "flips": []},
+            {"start": 12000, "stop": 12000, "way": "none", "exit": "none", "still": (0, 0), "flips": []},
+            {"start": 14000, "stop": 15000, "way": "cw", "exit": "open", "still": (0, 0),
+             "flips": [(14200, 14800, 4)]}]}
+        self.assertEqual(ab.ring_line(None, window),
+                         "ring commit: ccw +1.0 s for 7.0 s, out on fast, stood still 1.6 s, longest 1.6 s;"
+                         " none held +11.0 s; cw +13.0 s for 1.0 s, out on open, flip-flopped 0.6 s")
+
     def test_a_feign_death_off_in_the_same_tick_is_dropped(self):
         self.assertEqual([window["feign_drops"] for window in ab.mark_windows(self.trace)], [[], [], [34000], []])
 
@@ -3729,6 +3745,7 @@ CTANK, CLOCK, CHUNTER, CROGUE, CKITER = range(9601, 9606)
 CBOSS = CREATURE | 1700
 CSPIKE = CREATURE | 1701
 CSPHERE = CREATURE | 1702
+CPRESHOT = CREATURE | 1703
 CIRCLE = (X - 20.0, Y)
 SPELL_FEIGN, SPELL_CIRCLE_SUMMON, SPELL_CIRCLE_TELEPORT = 5384, 48018, 48020
 
@@ -3742,7 +3759,7 @@ def circle_lock(when: int) -> tuple[float, float]:
     return (X - 10.0, Y) if when < 45000 else (X - 25.0, Y)
 
 
-def circle_snap(when: int) -> dict:
+def circle_snap(when: int, preshot: bool) -> dict:
     units = [[CTANK, X - 5.0, Y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
              [CLOCK, *circle_lock(when), Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
              [CHUNTER, X + 10.0, Y + 10.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
@@ -3761,14 +3778,21 @@ def circle_snap(when: int) -> dict:
         units.append([CSPHERE, X, Y - 20.0, z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
         if z == PATCH_Z:
             hz.append([PERMAFROST_25H, X, Y - 20.0, PATCH_Z, 6.0, 1])
+    if preshot:
+        z = FLYING_Z if when < 25000 else FALLING_Z if when < 26500 else PATCH_Z
+        units.append([CPRESHOT, X - 30.0, Y + 30.0, z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        if z == PATCH_Z:
+            hz.append([PERMAFROST_25H, X - 30.0, Y + 30.0, PATCH_Z, 6.0, 1])
     return {"t": when, "e": "snap", "u": units, "hz": hz}
 
 
-def circle_pull() -> list[dict]:
+def circle_pull(preshot: bool = True, summon: bool = True) -> list[dict]:
     """A 25H pull, P1 to 40 s, P2 to 102 s. The warlock puts its circle down at 2 s, is marked at 43 s, runs 25 yd
     east of the circle, Nitros at 48 s and teleports at 51 s with the spike 4 yd off, then stands 1.5 s. A kite
-    sphere goes down at 61 s and a kiter marked at 66 s spends it at 70 s. In phase 1 a hunter's Feign Death,
-    back long before the submerge, and a rogue's Sprint, still out."""
+    sphere shot 15 s before the submerge lies down as the spike comes up and is never spent; another goes down
+    at 61 s and a kiter marked at 66 s spends it at 70 s. In phase 1 a hunter's Feign Death, back long before the
+    submerge, and a rogue's Sprint, still out. Without `preshot` no patch is down at the spike, and without
+    `summon` the circle went down before the trace."""
     records = [
         {"e": "hdr", "v": 14, "ts": 1789900000000, "map": ab.MAP_TOC, "inst": 19, "diff": 3, "boss": "anub-arak",
          "roster": [{"g": CTANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
@@ -3779,9 +3803,9 @@ def circle_pull() -> list[dict]:
         {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
         {"t": -500, "e": "unit", "g": CBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
         {"t": 0, "e": "unit", "g": CSPHERE, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"},
+        {"t": 0, "e": "unit", "g": CPRESHOT, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"},
         {"t": 43000, "e": "unit", "g": CSPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
         *(note(when, CTANK, "anub.phase", value) for when, value in ((0, 1), (40000, 2), (102000, 1))),
-        {"t": 2000, "e": "cast", "s": CLOCK, "sp": SPELL_CIRCLE_SUMMON, "tgt": 0, "ct": 500},
         cast(5000, CHUNTER, SPELL_FEIGN, CHUNTER),
         cast(5000, CROGUE, SPELL_SPRINT, CROGUE),
         aura(43000, CLOCK, ab.SPELL_MARK, False, CSPIKE),
@@ -3792,7 +3816,9 @@ def circle_pull() -> list[dict]:
         aura(70000, CKITER, ab.SPELL_MARK, True, CSPIKE),
         {"t": 110000, "e": "end", "out": "wipe"},
     ]
-    records += [circle_snap(when) for when in range(-500, 110000, 500)]
+    if summon:
+        records.append({"t": 2000, "e": "cast", "s": CLOCK, "sp": SPELL_CIRCLE_SUMMON, "tgt": 0, "ct": 500})
+    records += [circle_snap(when, preshot) for when in range(-500, 110000, 500)]
     return records
 
 
@@ -3821,9 +3847,23 @@ class CirclePull(unittest.TestCase):
 
     def test_a_kite_sphere_spent_early_in_its_kite(self):
         [row] = ab.kite_sphere_rows(self.trace)
-        self.assertEqual((row["label"], row["start"]), ("P2", 40000))
-        self.assertEqual(row["spheres"], [{"guid": CSPHERE, "killed": 61000, "spent": 70000, "kiter": CKITER,
+        self.assertEqual((row["label"], row["start"], row["ready"]), ("P2", 40000, 1))
+        self.assertEqual(row["spheres"], [{"guid": CPRESHOT, "killed": 25000, "spent": None, "kiter": None,
+                                           "into": None},
+                                          {"guid": CSPHERE, "killed": 61000, "spent": 70000, "kiter": CKITER,
                                            "into": 4000}])
+
+    def test_no_preshot_and_no_summon_in_the_trace(self):
+        # the circle went down before the trace, so it is where the teleport landed
+        trace = write_trace(self.folder.name, "649_19_anub-arak_1789900001.ndjson", circle_pull(False, False))
+        [row] = ab.circle_teleports(trace, ab.mark_windows(trace))
+        self.assertEqual((row["circle"], row["stood"]), (CIRCLE, 1500))
+        [spheres] = ab.kite_sphere_rows(trace)
+        self.assertEqual(spheres["ready"], 0)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_spheres(trace)
+        self.assertIn("into its kite, early  no kite patch down as the spike came up\n", out.getvalue())
 
     def test_the_sections_print_them(self):
         out = io.StringIO()
@@ -3834,6 +3874,7 @@ class CirclePull(unittest.TestCase):
         self.assertIn("  Demonic Circle teleports: Hellflame 0:51.000 spike 4.0 yd off, the circle 21.0 yd from it;"
                       " Nitro Boosts 3.0 s before, passing the circle at 25.0 yd; stood 1.5 s on landing\n", text)
         self.assertIn("  kite tools a bot spent off its own mark, per phase: P1 Shadow Sprint 0:05.000\n", text)
+        self.assertIn(" down -15.0 s, never spent; ", text)
         self.assertIn("down +21.0 s, spent +30.0 s by Pyro 4.0 s into its kite, early\n", text)
 
 

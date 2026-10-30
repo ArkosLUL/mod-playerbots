@@ -238,6 +238,10 @@ struct AnubarakKiteBoost
     // Blink goes the way the bot faces
     bool face = false;
     float facing = 0.0f;
+    // Dash out of another form: Cat Form first, which no other form can cast
+    bool catForm = false;
+    // Feral Charge goes at this bug
+    ObjectGuid target;
 };
 
 // For Detour, stand is the waypoint round the patch, not the final stand
