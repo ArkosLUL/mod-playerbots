@@ -23,6 +23,7 @@ EncounterDefinition const& IccPutricideDefinition();
 EncounterDefinition const& IccBloodPrincesDefinition();
 EncounterDefinition const& IccBloodQueenDefinition();
 EncounterDefinition const& IccSvalnaDefinition();
+EncounterDefinition const& IccSvalnaGauntletDefinition();
 EncounterDefinition const& IccValithriaDefinition();
 EncounterDefinition const& IccSindragosaDrakesDefinition();
 EncounterDefinition const& IccSindragosaGauntletDefinition();
@@ -50,6 +51,7 @@ inline std::vector<EncounterDefinition const*> const& IccEncounterDefinitions()
         &IccBloodPrincesDefinition(),
         &IccBloodQueenDefinition(),
         &IccSvalnaDefinition(),
+        &IccSvalnaGauntletDefinition(),
         &IccValithriaDefinition(),
         &IccSindragosaDrakesDefinition(),
         &IccSindragosaGauntletDefinition(),

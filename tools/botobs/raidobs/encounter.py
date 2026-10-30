@@ -234,6 +234,8 @@ ICC_PREFIXES = {
     "icc putricide": "professor-putricide",
     "icc bpc": "blood-prince-council",
     "icc bql": "blood-queen-lana-thel",
+    # Ahead of "icc sister svalna": the first prefix a node starts with wins
+    "icc sister svalna gauntlet": "svalna-gauntlet",
     "icc valkyre spear": "sister-svalna", "icc sister svalna": "sister-svalna",
     "icc valithria": "valithria-dreamwalker",
     # Ahead of "icc sindragosa": the first prefix a node starts with wins
@@ -260,6 +262,7 @@ ICC_KEY_PREFIXES = {
     "sindragosa": "sg",
     "the-lich-king": "lk",
     "sindragosa-gauntlet": "sg",
+    "svalna-gauntlet": "ss",
     "blood-prince-trash": "bpc",
     "stinky-and-precious": "dogs",
     "rotting-frost-giant": "rfg",

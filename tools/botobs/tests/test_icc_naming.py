@@ -79,6 +79,7 @@ NODE_PER_PREFIX = {
     "icc bpc kinetic bomb": "blood-prince-council",
     "icc bql vampiric bite": "blood-queen-lana-thel",
     "icc valkyre spear": "sister-svalna",
+    "icc sister svalna gauntlet dodge": "svalna-gauntlet",
     "icc sister svalna": "sister-svalna",
     "icc valithria portal": "valithria-dreamwalker",
     "icc sindragosa gauntlet dodge": "sindragosa-gauntlet",
@@ -193,6 +194,7 @@ class NoteKeyPrefixes(unittest.TestCase):
 
     def test_shared_prefixes_cover_the_gauntlet_and_the_trash(self):
         self.assertTrue(prefix_matches_boss("sg", "sindragosa-gauntlet"))
+        self.assertTrue(prefix_matches_boss("ss", "svalna-gauntlet"))
         self.assertTrue(prefix_matches_boss("bpc", "blood-prince-trash"))
 
     def test_no_icc_prefix_matches_another_raids_slug(self):

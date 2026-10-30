@@ -37,6 +37,7 @@ void RaidIccStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     IccBloodPrincesDefinition().AddMultipliers(botAI, multipliers);
     IccBloodQueenDefinition().AddMultipliers(botAI, multipliers);
     IccSvalnaDefinition().AddMultipliers(botAI, multipliers);
+    IccSvalnaGauntletDefinition().AddMultipliers(botAI, multipliers);
     IccValithriaDefinition().AddMultipliers(botAI, multipliers);
     IccSindragosaDefinition().AddMultipliers(botAI, multipliers);
     IccSindragosaDrakesDefinition().AddMultipliers(botAI, multipliers);
