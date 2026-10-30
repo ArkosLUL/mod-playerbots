@@ -53,6 +53,7 @@ def pull(boss: str = "blood-queen-lana-thel") -> list[dict]:
         {"t": 0, "e": "pull", "boss": boss, "src": "bossstate"},
         {"t": 1, "e": "unit", "g": QUEEN, "en": 37955, "n": "Blood-Queen Lana'thel", "lvl": 83, "b": 1},
         {"t": 1, "e": "spell", "sp": 871, "n": "Shield Wall"},
+        {"t": 1, "e": "spell", "sp": 32375, "n": "Mass Dispel"},
         note(100, BULWARK, "bql.phase", "ground"),
         note(127000, BULWARK, "bql.phase", "center"),
         note(127100, MEND, "bql.phase", "center"),
@@ -73,10 +74,15 @@ def pull(boss: str = "blood-queen-lana-thel") -> list[dict]:
         note(50000, SHIV, "bql.target", "brake"),
         note(52000, SHIV, "bql.brake", "0"),
         note(52000, SHIV, "bql.target", "boss"),
-        # Shiv is handed Mend, then Arcane once Mend took a shadow, and bites; Mend never bites.
+        note(95000, SHIV, "bql.target", "kill"),
+        note(100000, SHIV, "bql.target", "boss"),
+        # Shiv is handed Mend, then Arcane once Mend took a shadow, and bites, round a shadow on the way;
+        # Mend never bites.
         aura(15000, SHIV, 71474),
         note(15100, SHIV, "bql.bite", f"{MEND}"),
         note(15500, SHIV, "bql.bite", f"{ARCANE}"),
+        note(15600, SHIV, "bql.detour", "via"),
+        note(16500, SHIV, "bql.detour", "none"),
         aura(18000, SHIV, 71474, 1),
         aura(18000, SHIV, 71525),
         note(18100, SHIV, "bql.bite", "0"),
@@ -85,14 +91,19 @@ def pull(boss: str = "blood-queen-lana-thel") -> list[dict]:
         aura(90000, MEND, 71474, 1),
         aura(90000, MEND, 70923),
         note(90200, ARCANE, "bql.cc", f"{MEND}"),
+        # Arcane runs out of CC, nobody else can land one, and Mend is killed.
+        note(93000, ARCANE, "bql.cc", "0"),
+        note(95000, MEND, "bql.kill", "1"),
         aura(100000, MEND, 70923, 1),
-        note(100100, ARCANE, "bql.cc", "0"),
-        # One Pact: both bots walk to the first spot, the human carries none of the probes.
+        note(100100, MEND, "bql.kill", "0"),
+        # One Pact: both bots walk to the first spot, then to the human, who carries none of the probes.
         aura(20000, ARCANE, 71340),
         aura(20000, SHIV, 71340),
         aura(20000, ARKOS, 71340),
         note(20100, ARCANE, "bql.pact", "spot 1"),
         note(20100, SHIV, "bql.pact", "spot 1"),
+        note(23000, ARCANE, "bql.pact", "human"),
+        note(23000, SHIV, "bql.pact", "human"),
         aura(24000, ARCANE, 71340, 1),
         aura(24000, SHIV, 71340, 1),
         aura(24000, ARKOS, 71340, 1),
@@ -114,6 +125,18 @@ def pull(boss: str = "blood-queen-lana-thel") -> list[dict]:
         note(10, SHIV, "bql.group", "1"),
         note(127100, SHIV, "bql.airslot", "29"),
         note(140000, SHIV, "bql.airslot", "0"),
+        # Incite Terror fears four; Mend, warded, Mass Dispels Arcane and Shiv free, the other two run it out.
+        aura(127200, ARCANE, 73070),
+        aura(127200, SHIV, 73070),
+        aura(127200, BULWARK, 73070),
+        aura(127300, ARKOS, 73070),
+        note(127400, MEND, "bql.massdispel", f"{ARCANE}"),
+        {"t": 129000, "e": "cast", "s": MEND, "sp": 32375, "tgt": ARCANE},
+        aura(129000, ARCANE, 73070, 1),
+        aura(129000, SHIV, 73070, 1),
+        note(129100, MEND, "bql.massdispel", "0"),
+        aura(131200, BULWARK, 73070, 1),
+        aura(131300, ARKOS, 73070, 1),
         # Bulwark under 40%: offered Shield Wall, casts it a second later.
         note(60000, BULWARK, "bql.defensive", "shield wall"),
         {"t": 61000, "e": "cast", "s": BULWARK, "sp": 871, "tgt": BULWARK},
@@ -157,7 +180,7 @@ class Targets(unittest.TestCase):
             "\n"
             "    Aegis  boss 1, brake 1  brake 1\n"
             "    Bulwark  boss 1  brake 0\n"
-            "    Shiv  boss 3, brake 1, bite 1  brake 1\n"))
+            "    Shiv  boss 4, brake 1, bite 1, kill 1  brake 1\n"))
 
 
 class Tanks(unittest.TestCase):
@@ -191,9 +214,24 @@ class Cc(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(bql.show_cc, load(pull())), (
             "CC\n"
-            "  1 mind-controlled vampire(s): the bots bql.cc set on each\n"
+            "  1 mind-controlled vampire(s): the bots bql.cc set on each, when bql.kill marked it\n"
             "\n"
-            "     1:30.000   0:10.000  Mend  Arcane\n"))
+            "     1:30.000   0:10.000  Mend  Arcane  kill 1:35.000\n"))
+
+
+class Fear(unittest.TestCase):
+    def test_waves_count_the_dispelled(self):
+        waves = bql.fear_waves(load(pull()))
+        self.assertEqual([(wave["start"], len(wave["feared"]), wave["early"]) for wave in waves], [(127200, 4, 2)])
+        self.assertEqual(waves[0]["priests"], {MEND: {"centres": [f"{ARCANE}"], "casts": [129000]}})
+
+    def test_section(self):
+        self.assertEqual(printed(bql.show_fear, load(pull())), (
+            "FEAR\n"
+            "  1 Incite Terror(s): players feared and freed early, each priest's Mass Dispel centres and casts\n"
+            "\n"
+            "     2:07.200  feared 4, freed early 2\n"
+            "      Mend  on Arcane (ranged)  cast +1.8s\n"))
 
 
 class Pact(unittest.TestCase):
@@ -202,8 +240,8 @@ class Pact(unittest.TestCase):
             "PACT\n"
             "  3 Pact member window(s): each member and the spots bql.pact noted for it\n"
             "\n"
-            "     0:20.000   0:04.000  Arcane  spot 1\n"
-            "     0:20.000   0:04.000  Shiv  spot 1\n"
+            "     0:20.000   0:04.000  Arcane  spot 1 -> human\n"
+            "     0:20.000   0:04.000  Shiv  spot 1 -> human\n"
             "     0:20.000   0:04.000  Arkos human  -\n"))
 
 
@@ -220,11 +258,11 @@ class Spread(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(bql.show_spread, load(pull())), (
             "SPREAD\n"
-            "  per bot: ground nodes (moves), air nodes, melee group, shadow dodges\n"
+            "  per bot: ground nodes (moves), air nodes, melee group, shadow dodges, walks round shadows\n"
             "\n"
             "    Arcane  ground 3/5 (moved 1)  dodges -\n"
             "    Mend  ground 4 (moved 0)  dodges clear 1\n"
-            "    Shiv  air 29  group 1  dodges -\n"))
+            "    Shiv  air 29  group 1  dodges -  detours via 1\n"))
 
 
 class Defensives(unittest.TestCase):

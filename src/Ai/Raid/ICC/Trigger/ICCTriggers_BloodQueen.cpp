@@ -40,7 +40,11 @@ bool IccBqlWhirlCoverTrigger::IsActive() { return GetBqlWhirlCover(botAI) != Rai
 
 bool IccBqlTankDefensiveTrigger::IsActive() { return GetBqlTankDefensive(botAI, "bql.defensive") != 0; }
 
+bool IccBqlAntiFearTrigger::IsActive() { return IsBqlSelfWardDue(botAI) || RaidAntiFearTrigger::IsActive(); }
+
 bool IccBqlAntiFearTrigger::FearWindowActive() { return IsBqlFearWindow(botAI); }
+
+bool IccBqlMassDispelTrigger::IsActive() { return GetBqlMassDispelTarget(botAI) != nullptr; }
 
 bool IccBqlFrenzyCcTrigger::IsActive()
 {
