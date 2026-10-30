@@ -12,4 +12,27 @@ bool IccSvalnaSpearTrigger::IsActive() { return GetSsSpearToPull(botAI) != nullp
 
 bool IccSvalnaHurlTrigger::IsActive() { return GetSsSpearToThrow(botAI) != nullptr; }
 
+bool IccSvalnaInterruptTrigger::IsActive()
+{
+    char const* spell = nullptr;
+    return GetSsInterrupt(botAI, spell) != nullptr;
+}
+
+bool IccSvalnaTankDefensiveTrigger::IsActive() { return GetSsTankDefensive(botAI, "ss.defensive") != 0; }
+
 bool IccSvalnaTauntTrigger::IsActive() { return GetSsCaptainToTaunt(botAI) != nullptr; }
+
+bool IccSvalnaGauntletDodgeTrigger::IsActive() { return IsSsGauntletInDanger(botAI); }
+
+bool IccSvalnaGauntletInterruptTrigger::IsActive()
+{
+    char const* spell = nullptr;
+    return GetSsGauntletInterrupt(botAI, spell) != nullptr;
+}
+
+bool IccSvalnaGauntletTankDefensiveTrigger::IsActive()
+{
+    return GetSsGauntletTankDefensive(botAI, "ss.gauntlet.defensive") != 0;
+}
+
+bool IccSvalnaGauntletTauntTrigger::IsActive() { return GetSsGauntletTauntTarget(botAI) != nullptr; }

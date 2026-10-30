@@ -91,4 +91,58 @@ public:
     bool IsActive() override;
 };
 
+class IccValithriaInterruptTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria interrupt";
+
+    IccValithriaInterruptTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccValithriaFreedomTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria freedom";
+
+    IccValithriaFreedomTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccValithriaTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria tank defensive";
+
+    IccValithriaTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccValithriaLustTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria lust";
+
+    IccValithriaLustTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccValithriaGuardianSpiritTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria guardian spirit";
+
+    IccValithriaGuardianSpiritTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccValithriaBeaconTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc valithria beacon";
+
+    IccValithriaBeaconTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 #endif

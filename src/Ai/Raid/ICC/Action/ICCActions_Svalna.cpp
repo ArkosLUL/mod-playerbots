@@ -6,16 +6,24 @@
 
 #include "ICCActions_Svalna.h"
 
+#include <cmath>
+
 #include "Creature.h"
 #include "ICCHelpers_Shared.h"
 #include "Item.h"
+#include "LastMovementValue.h"
 #include "Playerbots.h"
+#include "Timer.h"
 
 namespace
 {
 // Hurl Spear reaches 25 yd; a thrower out of range walks to this far from her
 constexpr float HURL_WALK_TO = 18.0f;
 constexpr float HURL_RANGE = 24.0f;
+
+constexpr float WALK_SPOT_TOLERANCE = 0.5f;
+// A spline issued last tick may not show in isMoving yet
+constexpr uint32 WALK_STALL_MS = 500;
 }  // namespace
 
 bool IccSvalnaSpearAction::Execute(Event /*event*/)
@@ -59,6 +67,19 @@ bool IccSvalnaHurlAction::Execute(Event /*event*/)
     return true;
 }
 
+bool IccSvalnaInterruptAction::Execute(Event /*event*/)
+{
+    char const* spell = nullptr;
+    Unit* arnath = GetSsInterrupt(botAI, spell);
+    return arnath && spell && botAI->CastSpell(spell, arnath);
+}
+
+bool IccSvalnaCastTankDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = GetSsTankDefensive(botAI, "ss.defensive");
+    return spellId && botAI->CastSpell(spellId, bot);
+}
+
 bool IccSvalnaTauntAction::Execute(Event /*event*/)
 {
     Unit* captain = GetSsCaptainToTaunt(botAI);
@@ -67,5 +88,82 @@ bool IccSvalnaTauntAction::Execute(Event /*event*/)
 
     // A taunt moves the captain, not the bot's own target
     AttackDirect(captain);
+    return true;
+}
+
+Position const* IccSsWalkAction::WalkInFlight()
+{
+    // Moving on some other node's walk doesn't count
+    if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
+        return nullptr;
+
+    return &walkSpot;
+}
+
+bool IccSsWalkAction::WalkTo(Position const& spot, MovementPriority priority)
+{
+    // A walk issued mid-cast never starts but still books its travel time
+    if (bot->IsMovementPreventedByCasting())
+        bot->InterruptNonMeleeSpells(true);
+
+    // A stun or an item use stopped the last walk short, and its booking would refuse this one
+    uint32 const now = getMSTime();
+    if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
+        AI_VALUE(LastMovement&, "last movement").clear();
+
+    walkSpot = spot;
+    walking = true;
+    walkIssuedMs = now;
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  false, priority);
+}
+
+bool IccSsWalkAction::BookedOnWalkSpot()
+{
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    return std::fabs(last.lastMoveToX - walkSpot.GetPositionX()) <= WALK_SPOT_TOLERANCE &&
+           std::fabs(last.lastMoveToY - walkSpot.GetPositionY()) <= WALK_SPOT_TOLERANCE;
+}
+
+bool IccSvalnaGauntletDodgeAction::Execute(Event /*event*/)
+{
+    if (!IsSsGauntletInDanger(botAI))
+    {
+        DropWalk();
+        return false;
+    }
+
+    if (WalkInFlight())
+        return true;
+
+    Position spot;
+    if (!FindSsGauntletDodgeSpot(botAI, spot))
+        return false;
+
+    // Whirlwind swings a full weapon hit at everyone it reaches and Frozen Orb lands 15-20k: worth any cast
+    return WalkTo(spot, MovementPriority::MOVEMENT_FORCED);
+}
+
+bool IccSvalnaGauntletInterruptAction::Execute(Event /*event*/)
+{
+    char const* spell = nullptr;
+    Unit* caster = GetSsGauntletInterrupt(botAI, spell);
+    return caster && spell && botAI->CastSpell(spell, caster);
+}
+
+bool IccSvalnaGauntletCastTankDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = GetSsGauntletTankDefensive(botAI, "ss.gauntlet.defensive");
+    return spellId && botAI->CastSpell(spellId, bot);
+}
+
+bool IccSvalnaGauntletTauntAction::Execute(Event /*event*/)
+{
+    Unit* add = GetSsGauntletTauntTarget(botAI);
+    if (!add || !IccCastClassTaunt(bot, botAI, add))
+        return false;
+
+    // A taunt moves the add, not the bot's own target
+    AttackDirect(add);
     return true;
 }

@@ -123,6 +123,27 @@ def pull(boss: str = "valithria-dreamwalker", diff: int = 3) -> list[dict]:
         note(1000, MEND, "vd.void", "none"),
         note(35000, MEND, "vd.void", "step"),
         note(36000, MEND, "vd.void", "none"),
+        # Shiv kicks a Volley; one lands, and Mend dispels the slow off Arcane's kite.
+        note(31000, SHIV, "vd.interrupt", "volley"),
+        note(31500, SHIV, "vd.interrupt", "none"),
+        note(43000, MEND, "vd.freedom", "dispel"),
+        note(43200, MEND, "vd.freedom", "none"),
+        # Bulwark's abomination has it low once; Lumen beacons her while it heals the raid.
+        note(20000, BULWARK, "vd.defensive", "idle"),
+        note(25000, BULWARK, "vd.defensive", "shield wall"),
+        note(26000, BULWARK, "vd.defensive", "idle"),
+        note(27000, MEND, "vd.humancall", "Shield Wall"),
+        note(5000, LUMEN, "vd.beacon", "her"),
+        note(90000, LUMEN, "vd.beacon", "none"),
+        {"t": 5100, "e": "cast", "s": LUMEN, "sp": 53563, "tgt": VALITHRIA, "tr": 1},
+        # The push opens once the second wave is out; Arcane lusts, Mend and Arkos put Guardian Spirit on her.
+        note(200000, MEND, "vd.push", "closed"),
+        note(210000, MEND, "vd.push", "open"),
+        note(212000, ARCANE, "vd.push", "open"),
+        note(250000, MEND, "vd.push", "closed"),
+        {"t": 211000, "e": "cast", "s": ARCANE, "sp": 32182, "tr": 1},
+        {"t": 211500, "e": "cast", "s": MEND, "sp": 47788, "tgt": VALITHRIA, "tr": 1},
+        {"t": 222000, "e": "cast", "s": ARKOS, "sp": 47788, "tgt": VALITHRIA, "tr": 1},
         {"t": 130000, "e": "cheat", "g": BULWARK, "k": "lk.hoj", "n": 2, "tgt": SKELETON},
         {"t": 300000, "e": "end", "out": "kill"},
     ]
@@ -209,21 +230,51 @@ class Adds(unittest.TestCase):
 class Zombies(unittest.TestCase):
     def test_rows_drop_none(self):
         rows = vd.zombie_rows(load(pull()))
-        self.assertEqual([(row["guid"], dict(row["vd.kite"]), dict(row["vd.snare"]), dict(row["vd.dodge"]),
-                           dict(row["vd.void"])) for row in rows], [
-            (ARCANE, {"ring ccw": 1, "reverse": 1}, {}, {}, {}),
-            (MEND, {}, {}, {"column": 1}, {"step": 1}),
-            (SHIV, {}, {"chains of ice": 1}, {}, {}),
+        self.assertEqual([(row["guid"], *(dict(row[key]) for key in vd.ZOMBIE_KEYS)) for row in rows], [
+            (ARCANE, {"ring ccw": 1, "reverse": 1}, {}, {}, {}, {}, {}),
+            (MEND, {}, {}, {}, {"dispel": 1}, {"column": 1}, {"step": 1}),
+            (SHIV, {}, {"chains of ice": 1}, {"volley": 1}, {}, {}, {}),
         ])
 
     def test_section(self):
         self.assertEqual(printed(vd.show_zombies, load(pull())), (
             "ZOMBIES\n"
-            "  per bot: spans of each kite leg rule, snare spell, dodge and void step\n"
+            "  per bot: spans of each kite leg rule, snare spell, kick, freedom, dodge and void step\n"
             "\n"
-            "    Arcane          kite reverse 1, ring ccw 1; snare -; dodge -; void -\n"
-            "    Mend            kite -; snare -; dodge column 1; void step 1\n"
-            "    Shiv            kite -; snare chains of ice 1; dodge -; void -\n"))
+            "    Arcane          kite reverse 1, ring ccw 1; snare -; kick -; free -; dodge -; void -\n"
+            "    Mend            kite -; snare -; kick -; free dispel 1; dodge column 1; void step 1\n"
+            "    Shiv            kite -; snare chains of ice 1; kick volley 1; free -; dodge -; void -\n"))
+
+
+class Push(unittest.TestCase):
+    def test_windows_merge_across_bots(self):
+        self.assertEqual(vd.push_windows(load(pull())), [(210000, 250000)])
+
+    def test_casts_skip_humans(self):
+        self.assertEqual([(when, caster, spell) for when, caster, spell, _ in vd.push_casts(load(pull()))],
+                         [(5100, LUMEN, "Beacon of Light"), (211000, ARCANE, "Heroism"),
+                          (211500, MEND, "Guardian Spirit")])
+
+    def test_section(self):
+        self.assertEqual(printed(vd.show_push, load(pull())), (
+            "PUSH\n"
+            "  vd.push open: 3:30.000 for 0:40.000\n"
+            "\n"
+            "  casts\n"
+            "     0:05.100  Lumen           Beacon of Light on Valithria Dreamwalker\n"
+            "     3:31.000  Arcane          Heroism\n"
+            "     3:31.500  Mend            Guardian Spirit on Valithria Dreamwalker\n"
+            "\n"
+            "  vd.beacon per paladin healer: spans of each rule\n"
+            "    Lumen           her 1, none 1\n"))
+
+
+class Defensives(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(vd.show_defensives, load(pull())), (
+            "DEFENSIVES\n"
+            "    Bulwark         shield wall 0:25.000\n"
+            "  calls to a human tank  Shield Wall 0:27.000\n"))
 
 
 class Cheats(unittest.TestCase):

@@ -29,6 +29,24 @@ public:
     bool IsActive() override;
 };
 
+class IccSvalnaInterruptTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sister svalna interrupt";
+
+    IccSvalnaInterruptTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSvalnaTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sister svalna tank defensive";
+
+    IccSvalnaTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccSvalnaTauntTrigger : public Trigger
 {
 public:
@@ -44,6 +62,51 @@ public:
     static constexpr char const* Name = "icc sister svalna target";
 
     IccSvalnaTargetTrigger(PlayerbotAI* botAI) : IccDirectTargetTrigger(botAI, Name, &GetSsTarget) {}
+};
+
+class IccSvalnaGauntletDodgeTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sister svalna gauntlet dodge";
+
+    IccSvalnaGauntletDodgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSvalnaGauntletInterruptTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sister svalna gauntlet interrupt";
+
+    IccSvalnaGauntletInterruptTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSvalnaGauntletTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sister svalna gauntlet tank defensive";
+
+    IccSvalnaGauntletTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSvalnaGauntletTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sister svalna gauntlet taunt";
+
+    IccSvalnaGauntletTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSvalnaGauntletTargetTrigger : public IccDirectTargetTrigger
+{
+public:
+    static constexpr char const* Name = "icc sister svalna gauntlet target";
+
+    IccSvalnaGauntletTargetTrigger(PlayerbotAI* botAI)
+        : IccDirectTargetTrigger(botAI, Name, &GetSsGauntletTarget) {}
 };
 
 #endif

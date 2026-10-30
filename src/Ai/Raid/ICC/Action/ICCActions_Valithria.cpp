@@ -43,8 +43,8 @@ struct Heal
     uint8 keep;
 };
 
-// Earth Shield, Beacon of Light and Sacred Shield are left out: each sits on one target at a time, and the
-// generic nodes keep them on the tank
+// Earth Shield, Beacon of Light and Sacred Shield are left out: each sits on one target at a time. The
+// generic nodes keep them on the tank, but for the paladins `icc valithria beacon` moves Beacon onto her.
 constexpr Heal DRUID_HEALS[] = {{"lifebloom", 3},   {"rejuvenation", 1}, {"regrowth", 1},
                                 {"wild growth", 0}, {"nourish", 0},      {"healing touch", 0}};
 constexpr Heal PRIEST_HEALS[] = {{"renew", 1}, {"penance", 0}, {"greater heal", 0}, {"flash heal", 0}};
@@ -275,6 +275,44 @@ bool IccValithriaVoidAction::Execute(Event /*event*/)
 
     // A void burns mana, not health: the cast in progress finishes first
     return WalkTo(spot, MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool IccValithriaInterruptAction::Execute(Event /*event*/)
+{
+    char const* spell = nullptr;
+    Unit* archmage = GetVdInterrupt(botAI, spell);
+    return archmage && spell && botAI->CastSpell(spell, archmage);
+}
+
+bool IccValithriaFreedomAction::Execute(Event /*event*/)
+{
+    char const* spell = nullptr;
+    Unit* kiter = GetVdFreedom(botAI, spell);
+    return kiter && spell && botAI->CastSpell(spell, kiter);
+}
+
+bool IccValithriaCastTankDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = GetVdTankDefensive(botAI, "vd.defensive");
+    return spellId && botAI->CastSpell(spellId, bot);
+}
+
+bool IccValithriaLustAction::Execute(Event /*event*/)
+{
+    char const* lust = GetVdLust(botAI);
+    return lust && botAI->CastSpell(lust, bot);
+}
+
+bool IccValithriaGuardianSpiritAction::Execute(Event /*event*/)
+{
+    Creature* valithria = GetVdGuardianSpiritTarget(botAI);
+    return valithria && botAI->CastSpell("guardian spirit", valithria);
+}
+
+bool IccValithriaBeaconAction::Execute(Event /*event*/)
+{
+    Creature* valithria = GetVdBeaconTarget(botAI);
+    return valithria && botAI->CastSpell("beacon of light", valithria);
 }
 
 bool IccValithriaHealAction::Execute(Event /*event*/)

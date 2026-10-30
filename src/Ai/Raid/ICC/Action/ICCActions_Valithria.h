@@ -119,6 +119,61 @@ public:
     IccValithriaTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetVdTarget) {}
 };
 
+class IccValithriaInterruptAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc valithria interrupt";
+
+    IccValithriaInterruptAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccValithriaFreedomAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc valithria freedom";
+
+    IccValithriaFreedomAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccValithriaCastTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc valithria cast tank defensive";
+
+    IccValithriaCastTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+// Cast here rather than through the generic node: the burst gate holds lust off every target in this fight
+class IccValithriaLustAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc valithria lust";
+
+    IccValithriaLustAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccValithriaGuardianSpiritAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc valithria guardian spirit";
+
+    IccValithriaGuardianSpiritAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccValithriaBeaconAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc valithria beacon";
+
+    IccValithriaBeaconAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 // Heals her by name, the bot's best rank: she is no party member, so no generic heal reaches her
 class IccValithriaHealAction : public MovementAction
 {

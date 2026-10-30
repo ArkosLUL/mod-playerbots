@@ -1,8 +1,9 @@
 # Valithria Dreamwalker
 
 Boss id 10, trace slug `valithria-dreamwalker`, prefix `vd.` ([README](README.md)). Code: stem `Valithria`
-(`src/Ai/Raid/ICC/*/ICC*_Valithria.*`); nodes `icc valithria` dodge, kite, dream, portal, taunt, snare,
-void, target, heal; multiplier `icc valithria splash`. Core: `boss_valithria_dreamwalker.cpp`.
+(`src/Ai/Raid/ICC/*/ICC*_Valithria.*`); nodes `icc valithria` dodge, kite, interrupt, freedom, tank
+defensive, lust, guardian spirit, beacon, dream, portal, taunt, snare, void, target, heal; multiplier
+`icc valithria splash`. Core: `boss_valithria_dreamwalker.cpp`.
 
 ## Mechanics
 
@@ -11,21 +12,21 @@ Ids are 10N/25N/10H/25H where they differ; code remaps a difficulty row through
 
 | Ability | Script | Guide | Bots |
 |---|---|---|---|
-| Win and loss | Friendly, at (4203.65, 2483.89), guid slot 10; starts at 50%, healed to 100% wins (credit spell 72706); at 0 the combat trigger 38752 (slot 35) sets `NOT_STARTED` and despawns the room 5 s later. `IN_PROGRESS` once a player pulls one of the archmages channelling on her. Immune to percent heals. Heroic's 7 min berserk is a yell only | Heal her; 5-10 healers in 25, 3-5 in 10, 1 tank | Bot healers heal her by name (`icc valithria heal`) |
+| Win and loss | Friendly, at (4203.65, 2483.89), guid slot 10; starts at 50%, healed to 100% wins (credit spell 72706), `DONE` ~6.5 s later (Dreamwalker's Rage, then Dream Slip kills the trigger), she despawns 4 s after that; at 0 the combat trigger 38752 (slot 35) sets `NOT_STARTED` and despawns the room 5 s later. `IN_PROGRESS` once a player pulls one of the archmages channelling on her. Immune to percent heals. `CREATURE_TYPE_FLAG_TREAT_AS_RAID_UNIT`, so raid-targeted spells reach her. Heroic's 7 min berserk is a yell only | Heal her; 5-10 healers in 25, 3-5 in 10, 1 tank; from 80% after a Dream State, lust, Guardian Spirit 47788 and healing cooldowns; heroic, a paladin's Beacon of Light on her | Bot healers heal her by name (`icc valithria heal`); the push (`vd.push`); Beacon on her |
 | Adds | The Lich King controller summons at the doors, north corners on 10-man (x 4241), all four on 25-man, on decaying timers (floor 5 s), first at: Gluttonous Abomination 37886 5 s, Suppresser 37863 10 s (3 at each of 2 doors), Blistering Zombie 37934 15 s, Risen Archmage 37868 20 s, Blazing Skeleton 36791 30 s. Each attacks a random player within 200 yd; suppressers go for her. None obeys taunt DR | Skeletons and archmages, then worms and suppressers, then zombies and abominations | Resolver by tier, nearest her (`vd.target`) |
 | Lay Waste 69325/71730 | Skeleton, 15-20 s, every 2 s for 12 s 69326 (row 2095) on the raid and her | Kill skeletons first | Tier 1; fire resistance aura |
-| Frostbolt Volley 70759 (row 2112) | Archmage, 2 s cast, 40 yd, slows 50% for 8 s, magic | Interrupt | Tier 1; class interrupts on the target |
+| Frostbolt Volley 70759 (row 2112) | Archmage, 2 s cast every 8-15 s, 40 yd, slows 50% for 8 s, magic snare; archmages are silence immune | Interrupt | Tier 1; one elected kicker per cast (`vd.interrupt`); a slowed kiter freed (`vd.freedom`) |
 | Column of Frost 70704/71747 | Archmage, on a random player past 10 yd: a marker 37918 that 2 s later casts 70702 (row 2101) 11-20k and a knock-up within 3 yd | Move out | Forced dodge to 5.5 yd while the marker is under 2.5 s old (`vd.dodge column`) |
 | Mana Void 71179/71741 | Archmage, on a mana user past 15 yd: a void 38068 burning mana within 6 yd every 0.5 s (71086, row 2100) for 36 s | Move out | Mana users step to 8.5 yd, finishing their cast first (`vd.void`) |
 | Suppression 70588 | Each suppresser channelling on her: -10% healing taken | Burn them, they have no threat | Tier 2 |
 | Acid Burst 70744 (row 2096) | A zombie at 1 health roots and casts it, 0.75 s: 9-20k within 15 yd plus a 20 s DoT, then turns unselectable 2 s before despawning | Nobody near a dying zombie | Everyone but its victim dodges forced to 17.5 yd from under 15% until it bursts (`vd.dodge burst`); kite legs keep out |
 | Zombie melee, Corrosion 70751 | Huge swings stacking -10% armour, 5 stacks; runs 5 yd/s against a player's 7 | Kite, snare with Chains of Ice, ranged only | Victim kites the 25 yd ring (`vd.kite`); one snare per zombie (`vd.snare`); melee never target one; area damage held within 10 yd of one |
-| Gut Spray 70633 (row 2002) | Abomination, 10-13 s, 8 yd cone at its victim: nature DoT, +25% physical taken, disease | One tank, faced away; cleanse | Tank roster (`vd.tank`); generic melee stand behind; class cleanses |
+| Gut Spray 70633 (row 2002) | Abomination, 10-13 s, 8 yd cone at its victim: nature DoT, +25% physical taken, disease | One tank, faced away; cleanse | Tank roster (`vd.tank`); generic melee stand behind; class cleanses; tank valve (`vd.defensive`) |
 | Rot Worms 37907 | An abomination's death spawns them on random players: Flesh Rot 72963 stacks | AoE them, off the healers | Tier 2; tanks taunt them off healers |
 | Portals | Every 45-48 s, first at 45-48 s: 3 (10-man) or 8 (25-man) pre-effects 38186 (heroic 38429) 20-30 yd from her, on her north half on 10-man; their visual 71304 (71986) shows 15 s, then a real portal 37945 (38430) opens on the spot for 10 s and the pre-effect lingers 6 s | 1 healer outside on 10-man, 1-2 on 25-man | Bot healer split; portal healers claim one each (`vd.healer`, `vd.portalclaim`) |
 | Dream State 70766 | The portal's spell click: 20 s, phase 16, flight at +100%; phased from her, the adds and everyone outside. Dream Clouds 37985 (heroic Nightmare 38421) hover 17-24 yd up, 25-48 yd round her, wandering 10 yd, back 10 s (25 s) after use; a player within 5 yd bursts one 0.5-1.25 s later | Pop the nearest at once, then fly together; fly low before the end | Flight mover (`vd.dream`, `vd.cloud`) |
 | Emerald Vigor 70873, heroic Twisted Nightmares 71941 (DB-only row) | On everyone within 10 yd of a burst cloud: +10% healing and damage, 200 mana every 3 s, 40 s, up to 100 stacks; heroic adds 71940, 200 nature a stack a second | Refresh before stacks lapse; heroic: heal each other, mind the stacks | A heroic healer skips portals at 25 stacks |
-| Fall | Leaving Dream State in the air drops the player | Fly low | Descend 3.5 s before the end; a bot still airborne falls with real damage |
+| Fall | Leaving Dream State in the air drops the player | Fly low | Descend 3.5 s before the end; a bot still airborne falls with real damage, after the win too |
 
 ## Layout
 
@@ -33,11 +34,13 @@ navprobe `--nav 0x09` settles every point within 30 yd of her at 364.86-364.88, 
 headings, each in sight of her; 427 sight lines from the 25 yd ring to every cloud spawn and between
 every pair of clouds are clear. Every derived stand stays in that disc: dodge spots, the kite ring at
 25 yd (24 points), the heal walk to 25 yd, the landing point (the bot's bearing from her, at most 25
-yd out, 1 yd above her).
+yd out, 1 yd above her). Her spawn settles at 364.873.
 
 ## Duties
 
-- **Live** while her state is `IN_PROGRESS` and the bot is within 100 yd of her.
+- **Live** while her state is `IN_PROGRESS` and the bot is within 100 yd of her. The gate (`VdGate`)
+  also stays open past `DONE` for a bot still flagged in the air within 100 yd of her spawn, so the
+  dream node lands it with real fall damage after the win.
 - **Healer split** (`vd.healer`): bot healers only, non-paladins first, by guid; one raid healer on
   10-man, two on 25-man, never the last bot healer. The rest take portals.
 - **Portal healers**: each claims the nearest unclaimed pre-effect, walks to it and parks within 1 yd
@@ -48,8 +51,15 @@ yd out, 1 yd above her).
   everyone within 40 yd is above 85%; inside 36 yd and in sight, else walk to 25 yd from her. By
   class, renewing a heal over time with 2 s left: druid Lifebloom (3), Rejuvenation, Regrowth, Wild
   Growth, Nourish, Healing Touch; priest Renew, Penance, Greater Heal, Flash Heal; shaman Riptide,
-  Healing Wave, Lesser Healing Wave; paladin Holy Shock, Holy Light, Flash of Light. Earth Shield,
-  Beacon of Light and Sacred Shield stay on the tank.
+  Healing Wave, Lesser Healing Wave; paladin Holy Shock, Holy Light, Flash of Light. Earth Shield and
+  Sacred Shield stay on the tank.
+- **Beacon of Light**: a paladin bot healer on the raid duty, or on any duty on heroic, keeps its
+  beacon on her, recast inside 5 s of its end, the generic beacon nodes blocked (`vd.beacon`).
+- **Push** (`vd.push`): open while she is at 80%+, no bot healer is in Dream State and a healer carries
+  Emerald Vigor. The lowest-guid shaman bot able to, neither Sated nor Exhausted (the DBC allows that
+  cast), casts Heroism or Bloodlust when none runs, directly, since the base burst gate holds lust off
+  every target here; the lowest-guid priest bot able to casts
+  Guardian Spirit on her whenever hers has run out.
 - **Dream flight**: straight 3D splines with the fly flags set by hand (no client answers the aura,
   and the generic movers fly only with a flying master). First the cloud nearest the bot until a
   stack is newer than the dream; then the group of refreshed bot dreamers flies onto its lowest-guid
@@ -66,9 +76,17 @@ yd out, 1 yd above her).
 - **Kite**: a bot a zombie chases within 45 yd, unless it is a tank holding its abomination. It drops
   its cast, uses Nitro Boosts and walks forced along the ring, two points (30°) at a time away from
   the zombie, else three, one, or back the other way; legs stay 6 yd off the zombie and clear of
-  live columns and other zombies' bursts. It does nothing else meanwhile.
+  live columns and other zombies' bursts. Meanwhile it only kites, dodges and frees itself.
 - **Snare**: per chasing unslowed zombie, the nearest non-healer bot with Chains of Ice (20 yd),
   Concussive Shot (30) or Frost Shock (20) ready and in sight.
+- **Kicker** (`vd.interrupt`): per archmage casting Frostbolt Volley, the nearest bot not casting,
+  dreaming or kiting with a kick ready, in reach and sight, one per archmage, elected in the 200 ms scan.
+- **Freedom** (`vd.freedom`): a kiter the Volley slowed frees itself where it can (Hand of Freedom,
+  Cleanse, Dispel Magic), else the nearest paladin bot with Hand of Freedom, else the nearest bot that
+  can dispel it, within 30 yd and in sight.
+- **Tank valve** (`vd.defensive`): a bot tank its abomination hits spends `NextTankDefensive`
+  (physical) under 40%, 50% under Gut Spray; the class nodes keep theirs to 25%; a human tank in that
+  state is called (`vd.humancall`).
 
 ## Decisions
 
@@ -83,7 +101,13 @@ yd out, 1 yd above her).
 - **Ring kite**: on a ring a pursuer settles inside it and behind, about 17 yd at these speeds, and
   the kiter stays in heal range; a tank holding an abomination face-tanks rather than drag it.
 - **Snares** are ranged only: `IccTryClassCC`'s melee stuns and fears put bots in reach or scatter adds.
-- **No lust hook**: the base gate already holds lust here (Known gaps); a per-boss window can only hold.
+- **Lust from the encounter node**, not a hook: the base gate holds lust off non-boss adds and a friendly
+  boss, and a per-boss window can only hold. The window is the guides' 80% after a Dream State.
+- **Beacon on her** for raid healers and on heroic (WT and Wowhead heroic tips); Earth Shield stays on
+  the tank, no guide asking for it on her and her rarely being hit.
+- **Volley is kicked** (both guides), and a kiter it still slows is freed, rather than the kite reversing.
+- **No opening positions**: the archmages channel on her and pull on approach, so any stand near her
+  starts the fight.
 - **Resist hook**: fire, frost and nature.
 
 ## Cheats
@@ -97,13 +121,8 @@ Removed:
 
 ## Known gaps
 
-- Lust and healer cooldowns: the base burst gate holds lust off non-boss adds and a victimless
-  friendly boss, and no node puts Guardian Spirit on her.
-- The kite has no answer to Frostbolt Volley's slow on the kiter.
-- A dreamer at the win keeps its fly flags until its next move glides it down, no fall: the gate
-  closes at `DONE` before Dream State ends.
-- No tank defensive ladder: no boss hits a bot tank.
-- No opening positions: the archmages start the fight wherever the raid pulls them.
+- No push if she never reaches 80%, and no other healing cooldown is timed to it.
+- A kiter the Volley slows with no paladin or priest bot free in 30 yd stays slow.
 - Humans hold no duty; a bot may claim the portal a human takes, and claims again if one is left.
 - No ICC trace yet carries these probes, so nothing here is measured.
 
@@ -113,8 +132,9 @@ Removed:
 claim per portal healer and each of them in Dream State inside its wave; `--dream` shows `refresh`
 then `cloud` or `gather`, `descend` before every window ends and no death inside one; `--adds` has
 skeletons and archmages first for every damage dealer and `owned` on each abomination's tank;
-`--zombies` shows kites ending without a death to Acid Burst or a zombie swing, and a snare per zombie.
-25H: the same, plus no portal healer past 25 Twisted Nightmares.
+`--zombies` shows kites ending without a death to Acid Burst or a zombie swing, a snare per zombie and
+a kick on most Volleys; `--push` has lust and Guardian Spirit inside the first open window. 25H: the
+same, plus no portal healer past 25 Twisted Nightmares and every paladin healer `her` in `vd.beacon`.
 
 ## What a trace answers
 
@@ -131,6 +151,11 @@ skeletons and archmages first for every damage dealer and `owned` on each abomin
 | `vd.snare` | per non-healer bot | The spell, `none` |
 | `vd.dodge` | per bot | `column`, `burst`, `blocked`, `none` |
 | `vd.void` | per mana user | `step`, `blocked`, `none` |
+| `vd.interrupt` | per bot | `volley` while elected to kick, `none` |
+| `vd.freedom` | per bot | `hand`, `dispel` while elected to free a slowed kiter, `none` |
+| `vd.push` | per shaman and priest bot asking | `open`, `closed` |
+| `vd.beacon` | per paladin bot healer | `her`, `none` |
+| `vd.defensive`, `vd.humancall` | per bot tank; per call | The ladder's cast name, `idle`; the button a human tank was told |
 
 Dream State itself is the `aura` stream (70766), so no probe repeats it; each Column of Frost is a
 3 yd hazard circle for 2.5 s. Notes are change-only per bot.
@@ -141,5 +166,7 @@ Dream State itself is the `aura` stream (70766), so no probe repeats it; each Co
 - `--dream`: each Dream State window, `vd.dream` per bot and the `vd.cloud` counts;
 - `--heal`: `vd.healer` per healer;
 - `--adds`: `vd.target` per bot and `vd.tank` per tank;
-- `--zombies`: kites, snares, dodges and void steps per bot;
+- `--zombies`: kites, snares, kicks, freedom, dodges and void steps per bot;
+- `--push`: the open windows, the lust, Guardian Spirit and Beacon of Light casts, `vd.beacon`;
+- `--defensives`: tank buttons and human tank calls;
 - `--cheats`: uses in the pull, none of them hers.
