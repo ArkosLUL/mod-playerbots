@@ -53,6 +53,7 @@ One lead, no split: every task edits the stem's one helper file and state.
 | Three ground nodes on the dais edge, 33-35 yd north of the centre where no lane runs: 20 nodes in caster reach, 14 in heal reach | navprobe floor, path and sight; the 25-man shortage past 17 | overflow onto the air nodes by the Pact spot |
 | Pact members still hurt nodes along their walk | WT, Wowhead: members cross the raid to a pre-picked spot; a 7.5 yd spread has no 10 yd corridor | route round the lattice: a longer walk, more Pact ticks raid-wide |
 | The boss doc's Blood Mirror row now says the link takes each hit in its own school, armour skipped | core `Unit::DealDamage`, `SPELL_AURA_SHARE_DAMAGE_PCT`: `CalcAbsorbResist` with the hit's school mask; the guides say shadow | keep the guides' "shadow" |
+| Review: a damage-dealer mirror is held off her until the first vampire and bitten after the other damage dealers, like a tank mirror | script: her first bite takes the top threat but her victim, the linked player included; a frenzied mirror walks off the main tank and the link goes to whoever is nearest | treat it as any damage dealer: it hits her from the pull, and a vampire mirror heals 10% of its damage |
 
 All tasks done.
 
@@ -61,7 +62,8 @@ All tasks done.
 - Merge stage, ICC README: trigger names gain `icc bql mass dispel`; the Blood-Queen's state list gains
   `bql.kill` (`ObsGuidSet`) and `bql.massdispel`; its defensives line: `icc bql tank defensive` also
   covers a damage-dealer mirror through `NextPhysicalDefensive`; the taunt paragraph: with one tank
-  player the Blood-Queen's mirror is a damage dealer.
+  player the Blood-Queen's mirror is a damage dealer; the splash line: `icc bql splash` holds only round
+  a vampire kept under control.
 - `docs/raids/README.md` "Anti-fear": for the Blood-Queen, priests knowing Mass Dispel ward themselves
   (ICC-local overrides of the trigger and action) and Mass Dispel the feared after Incite Terror.
 - r14: the r10 items stand.
@@ -69,6 +71,8 @@ All tasks done.
 ## Known gaps
 
 In the boss doc's Known gaps. No 631 trace; the user built `623638b99` clean on 2026-10-29, and this
-lane's changes are unbuilt.
+lane's changes are unbuilt. The review added two, both left open: Fear Ward's 3 min cooldown wards only
+the first Incite Terror (a split of the priests is the alternative), and percent cuts miss the mirrored
+share, so the mirror's buttons cut only Delirious Slash and direct hits.
 
 ## Blocked

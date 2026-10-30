@@ -151,7 +151,7 @@ Creature* GetBqlQueen(PlayerbotAI* botAI);
 Unit* GetBqlTarget(PlayerbotAI* botAI);
 // Her, for the main tank she has left, its taunt ready and her below taunt DR level 3
 Unit* GetBqlTauntTarget(PlayerbotAI* botAI);
-// Past the threat brake, or a tank that isn't the main tank before the first vampire exists
+// Past the threat brake, or a tank or the mirror that isn't the main tank before the first vampire exists
 bool IsBqlBraked(PlayerbotAI* botAI);
 
 // A frenzied bot: only the bite moves it, and it bites the player the tick handed it

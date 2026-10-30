@@ -3,7 +3,8 @@
 Boss id 8, slug `blood-queen-lana-thel`, prefix `bql.` ([README](README.md)). Code: stem `BloodQueen`
 (`src/Ai/Raid/ICC/*/ICC*_BloodQueen.*`); nodes `icc bql` dodge, vampiric bite, swarming shadows, pact of
 darkfallen, mass dispel, whirl defensive, whirl cover, tank defensive, anti fear, frenzy cc, taunt, brake,
-target, stand; multipliers `icc bql brake`, `icc bql splash`, `icc bql anti fear totem guard`. Core: `boss_blood_queen_lana_thel.cpp`.
+target, stand; multipliers `icc bql brake`, `icc bql splash`, `icc bql anti fear totem guard`. Core:
+`boss_blood_queen_lana_thel.cpp`.
 
 ## Mechanics
 
@@ -18,7 +19,7 @@ on players: centre to centre.
 | Presence of the Darkfallen, heroic | Each bite stacks 70995 on her: +5% shadow damage done a vampire | Raid cooldowns late | Counted in the Whirl's predicted hit |
 | Blood Mirror 70821 | From 2.5 s, every 2.5 s: links her victim to the nearest other alive player within 39 yd, vampires included; the victim carries 70821, the linked player 70838 and takes every hit on the victim again in its own school, armour skipped, only absorbs and immunity counting (`SPELL_AURA_SHARE_DAMAGE_PCT`) | The off-tank stays next to the main tank, in stamina gear | Mirror tank stands on the main tank; with one tank player in the raid, a damage dealer does |
 | Delirious Slash 71623 (row 2091) | 10-12 s, then every 20-24 s: 50% weapon damage (heroic 75%) plus a 15 s bleed on the linked player within 10 yd plus both reaches, else her victim | Off-tank in stamina gear | Tank buttons under 40% |
-| Vampiric Bite 71726, hers | Once, at 15 s, on the highest-threat player who is no vampire and not her victim, the linked off-tank included: Essence of the Blood Queen 70867 (row 2082) | Bitten third on threat | Tanks but the main one don't attack her until the first vampire exists |
+| Vampiric Bite 71726, hers | Once, at 15 s, on the highest-threat player who is no vampire and not her victim, the linked off-tank included: Essence of the Blood Queen 70867 (row 2082) | Bitten third on threat | Tanks but the main one, and a damage-dealer mirror, don't attack her until the first vampire exists |
 | Essence of the Blood Queen 70867, 70879 after a bite (rows 2082, 2087) | 75 s (25-man 60 s): +100% damage, heals 10% of damage done; 70871 sets threat ×0. It ends in Frenzied Bloodthirst 70877 (row 2083: 71474 on 25-man), 15 s (25-man 10 s), with pacify and silence | Bite another player inside the window, in a set order, never a healer | Each frenzied bot is handed a target (`bql.bite`) and bites by id |
 | Vampiric Bite 70946, the vampire's (row 2084) | Melee range, not a vampire: renews the biter's Essence, gives the target one; an override spell, never in the spellbook | As above | Cast by id: a name resolves to nothing |
 | Uncontrollable Frenzy 70923 | A Frenzy that runs out: a permanent charm with +100% damage; 70924 (25-man 73015, linked) adds immunity to fear and grips, +300% health (25-man +900%) and +1000% healing taken; she kills them all if she evades | Mind controlled until killed (Wowhead) | One CC bot per victim (`bql.cc`), area damage held round it; one no bot can control for 2 s is killed (`bql.kill`) |
@@ -72,13 +73,14 @@ north, 12-14 yd either side of the tank spot, over a ramp, and drops to the coun
   The main tank taunts her back below DR level 3 when she is on somebody else on the ground.
 - **Targets and brake** (`bql.target`, `bql.brake`): a player's skull on her or a mind-controlled
   vampire, then for a damage dealer no vampire a vampire marked for the kill, else her; nothing for a
-  frenzied bot, nor for a braked one but a vampire. Non-holders
-  other than healers and vampires are braked past 90% of her holder's threat until under 80%, the main
-  tank's while she has none (her walk to the centre until she lands on her top threat); tanks but the main one are braked until a vampire exists or 20 s in.
+  frenzied bot, nor for a braked one but a vampire. Non-holders other than healers and vampires are
+  braked past 90% of her holder's threat until under 80%, the main tank's while she has none (her walk
+  to the centre until she lands on her top threat); tanks but the main one, and a damage-dealer mirror,
+  are braked until a vampire exists or 20 s in.
 - **Bites** (`bql.bite`): each frenzied bot is handed the nearest damage dealer, then a tank she isn't
-  on, then a healer, never her victim or the main tank, nobody another biter holds, no vampire, mind
-  control or shadows carrier; anyone under 15k health after those. It cancels Ice Block, walks within
-  3 yd and bites by id.
+  on or a damage-dealer mirror, then a healer, never her victim or the main tank, nobody another biter
+  holds, no vampire, mind control or shadows carrier; anyone under 15k health after those. It cancels
+  Ice Block, walks within 3 yd and bites by id.
 - **Mind control** (`bql.cc`, `bql.kill`): each Uncontrollable Frenzy victim gets the nearest bot that
   can land a CC now (Polymorph, Cyclone, Hex, Repentance or Hammer of Justice, Blind, Death Coil, Scatter
   Shot: known, off cooldown, in its form, short of DR immunity, not immune, in range); it recasts
@@ -131,7 +133,9 @@ reach only, the main tank and mirror on their stands, any role, attacks only; sp
 - Pact spot 6 yd south of the centre rather than on the medallion: still in the middle, and the same
   lattice keeps three more caster and four more healer nodes.
 - One lattice for ground and air: rings round the centre (old air slots) can't hold the ground rules.
-- The mirror tank stays off her until the first vampire: her bite takes the off-tank, not only DPS.
+- The mirror, a damage dealer too, stays off her until the first vampire and is bitten after the other
+  damage dealers: her bite takes the linked player, not only DPS, and a frenzied mirror walks off the
+  main tank.
 - With one tank player the mirror goes to the most health, plate first (they carry a class taunt too):
   it takes the main tank's hits again plus Delirious Slash, and with nobody posted Blood Mirror lands on
   whoever stands nearest. No damage-dealer mirror beside a second tank player, human included: two
@@ -175,7 +179,14 @@ not cheats.
 - Humans hold no duty; two human Pact members apart still keep the Pact up, the bots meeting one.
 - A 25-man kill takes non-vampire damage off her for seconds: `--cc` kill marks against the victim's
   death time say how long.
-- Mass Dispel needs a warded or unfeared priest within 30 yd of a cluster: `--fear` freed early.
+- Mass Dispel needs a warded or unfeared priest within 30 yd of a cluster, and Fear Ward's 3 min cooldown
+  (2 min glyphed) wards only the first Incite Terror: at the second, 120 s (25-man 100 s) later, only a
+  glyphed 10-man priest is warded, the rest waiting for Tremor Totem or the fear's end. Priests could
+  split, half keeping the ward for the second. `--fear` freed early.
+- Percent cuts (Shield Wall, Divine Protection, Icebound Fortitude) miss the mirrored share, which only
+  absorbs, immunity and health count against (`Unit::DealDamage`): the mirror's buttons cut only
+  Delirious Slash and direct hits, and `--defensives` against its deaths says whether to pick health
+  buttons and absorbs.
 - Pact members walking in hurt bots within 10 yd of their path: a 7.5 yd spread has no 10 yd corridor,
   and the guides' walk to a picked spot pays the same.
 - Three live trails can fill both lanes; the carrier then takes the best partial run (`--shadows`).

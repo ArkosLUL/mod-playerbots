@@ -832,11 +832,12 @@ void AssignAirSlots(BqlState& st, std::vector<Player*> const& members)
     }
 }
 
-// Damage dealers first, then tanks she isn't on, then healers, who gain nothing from it; anyone the bite
-// could kill after those
-uint8 BiteTier(Player* candidate)
+// Damage dealers first, then tanks she isn't on and a damage-dealer mirror, whose Frenzy would walk it off
+// the main tank, then healers, who gain nothing from it; anyone the bite could kill after those
+uint8 BiteTier(BqlState const& st, Player* candidate)
 {
-    uint8 tier = IsTankPlayer(candidate) ? 1 : PlayerbotAI::IsHeal(candidate) ? 2 : 0;
+    bool const tank = IsTankPlayer(candidate) || RoleOf(st, candidate) == TankRole::Mirror;
+    uint8 tier = tank ? 1 : PlayerbotAI::IsHeal(candidate) ? 2 : 0;
     if (candidate->GetHealth() < BITE_SAFE_HEALTH)
         tier += 3;
 
@@ -891,7 +892,7 @@ void AssignBites(BqlState& st, Player* bot, std::vector<Player*> const& members,
             if (claimed.count(member->GetGUID()) || !BiteCandidate(st, member, victim))
                 continue;
 
-            uint8 const tier = BiteTier(member);
+            uint8 const tier = BiteTier(st, member);
             float const distance = biter->GetExactDist2d(member);
             if (!best || tier < bestTier || (tier == bestTier && distance < bestDistance))
             {
@@ -1182,8 +1183,9 @@ void UpdateBrake(BqlState& st, Player* bot, Creature* queen)
     if (IsDutyBot(bot) && !PlayerbotAI::IsHeal(bot) && RoleOf(st, bot) != TankRole::Main && holder &&
         holder != bot && !IsVampire(bot))
     {
-        // Her bite takes the highest threat she isn't on, so a tank that would be second stays out of it
-        if (IsTankPlayer(bot) && !st.vampireSeen)
+        // Her bite takes the highest threat she isn't on, the linked player too, so a tank or a damage-dealer
+        // mirror that would be second stays out of it
+        if ((IsTankPlayer(bot) || RoleOf(st, bot) == TankRole::Mirror) && !st.vampireSeen)
             hold = true;
         else
         {

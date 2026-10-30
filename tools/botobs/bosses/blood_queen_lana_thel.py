@@ -22,7 +22,7 @@ What the generic views miss here:
 - **`bql.target` is the resolver branch**: `boss`, `skull`, `brake` (held off her by the threat
   brake), `bite` (frenzied: the bite is all it does) or `kill` (a mind-controlled vampire no bot can
   control). `bql.brake` is `1` while braked: past 90% of her holder's threat until under 80%, and every
-  tank but the main one until the first vampire.
+  tank but the main one, a damage-dealer mirror too, until the first vampire.
 - **`bql.tank` is a role per tank**: `1` main (holds her on the tank spot), `2` mirror (stands on the
   main tank, so Blood Mirror takes it; a damage dealer when the raid has one tank), `3` spare (fights in
   a melee group); `0` off the roster.
