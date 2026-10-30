@@ -222,6 +222,8 @@ enum class WalkKind : uint8
     Quake,
     Trap,
     Plague,
+    // A melee walk round a trap to its pick, not a dodge: walked on the stand row
+    Reach,
     Stand
 };
 
@@ -2348,7 +2350,7 @@ void UpdateWalks(LkState& st, LkBotState& bs, Player* bot, Creature* boss, Unit*
     else if (plagueWalk)
         SetWalk(bs, bot, WalkKind::Plague, bs.plagueSpot);
     else if (bs.reach && bs.reachValid)
-        SetWalk(bs, bot, WalkKind::Trap, bs.reachSpot);
+        SetWalk(bs, bot, WalkKind::Reach, bs.reachSpot);
     else if (standWalk)
         SetWalk(bs, bot, WalkKind::Stand, bs.standSpot);
     else
@@ -3055,7 +3057,10 @@ bool WalkOf(PlayerbotAI* botAI, WalkKind kind, Position& spot)
 bool GetLkQuakeWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Quake, spot); }
 bool GetLkTrapWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Trap, spot); }
 bool GetLkPlagueWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Plague, spot); }
-bool GetLkStandWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Stand, spot); }
+bool GetLkStandWalk(PlayerbotAI* botAI, Position& spot)
+{
+    return WalkOf(botAI, WalkKind::Stand, spot) || WalkOf(botAI, WalkKind::Reach, spot);
+}
 
 bool IsLkStandUrgent(PlayerbotAI* botAI)
 {

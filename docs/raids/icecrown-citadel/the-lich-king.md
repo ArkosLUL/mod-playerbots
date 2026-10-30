@@ -94,7 +94,8 @@ and back once the spot clears.
 
 Two `RaidInstanceState`s, each a 200 ms scan and 250 ms duty passes, then per bot one walk, highest
 first: quake, trap, plague, trap reach, stand (`LichKing`); Defile, Vile Spirits, the Val'kyr chase
-round a puddle, stack (`LichKingLate`). A late stack yields to a plague walk.
+round a puddle, stack (`LichKingLate`). The walk round a puddle and the stack yield to a plague walk;
+trap reach goes on the stand row, since it dodges nothing.
 
 - **Tanks** (`lk.tank`): the holder is his victim when a group tank, else the last holder alive, else
   the group's main tank, else the first bot tank; the free tank is the next bot tank by guid. Elected
@@ -206,10 +207,11 @@ Source, then the choice:
   10N. No pre-move at 71.5% or 41.5%, which keeps phase two's stack for the Val'kyrs.
 - Script (a sphere spawns within 10 yd of him and follows a random player at 3 yd/s), WH (hunters
   suit spheres): off 10N the ranged cluster sits 44 yd or more off every path to the tank cluster, so
-  the sphere guards stand in its middle, 18-24 yd off those paths and 17-29 yd from the spirit spots;
-  on 10N the ranged cluster at 20.5° covers them already.
+  the sphere guards stand in its middle, on a 25-man roster within 27 yd of every path to it and 7-29
+  yd from the spirit spots; on 10N the ranged cluster at 20.5° covers them already.
 - Gap lanes' one-bot-tank rule, WH (ghouls are plague fodder, abysmal damage): the stand-in holds
-  ghouls only. Taunt needs Defensive Stance and Growl bear form, so no warrior or druid. No stand-in
+  ghouls only, its area damage still held near them, since a damage dealer's would burn the fodder.
+  Taunt needs Defensive Stance and Growl bear form, so no warrior or druid. No stand-in
   takes a Shambling, a Raging Spirit, the Soul Reaper swap or a siphoner: `creature_template` swings
   of 50/131.9/90.5/214.8 × 177 per 2 s (Shambling, +200% enraged), 66.4/152.4/95.2/219.2 (spirit) and
   139/276.1/244.3/492.9 per 1.5 s (him, +100% haste after Soul Reaper) kill a damage dealer, and Life
@@ -268,6 +270,9 @@ Record-only, `EnableICCBuffs`, heroic: `lk.heroicbuff` (every member), `lk.empow
   there may bounce (`--stands` moves). A chaser walks round only the first puddle in its line, and a
   ranged one with a puddle in between shoots only from in range.
 - A bot whose trap dodge found no clear spot holds inside the throw rather than reaching.
+- Trap reach and the walk round a puddle have no cap like the stands' 15 s: one that never lands holds
+  its bot until the pick moves 2 yd, the trap goes or the Val'kyr drops (`lk.trap` `reach`, `lk.valkyr`
+  `round`).
 - Humans hold no duty.
 - r14: the `IccInstanceState` Lich King members (`ICCScripts.h`) go unwritten; check
   `ICC_BUCKET_MARKERS`, `IccRtiNameForBucket` and `IccEnsureIconOn` for other users; hoist one walk
@@ -278,11 +283,11 @@ Record-only, `EnableICCBuffs`, heroic: `lk.heroicbuff` (every member), `lk.empow
 25N first: `--phases` steps one, winter1, two, winter2, three, outro; `--tanks` one holder per phase,
 a reaper swap only on an uncovered Soul Reaper, `lk.brake` on the free tank; `--plague` every carrier
 `delivered` or `isolate` and few `emergency` cures; `--adds` every Enrage Tranquilized; `--winters`
-a third of the ranged as sphere guards, spheres killed before Ice Burst and the Quake hold; `--valkyrs` chained stuns, no
-drop, `round` only beside a puddle; `--defile` runs with no puddle hits; `--vile` one soaker, no burst
-on the stack; `--frostmourne` the warden killed. 25H: the same plus `--traps` with no hit and `reach`
-over `hold`, Frenzy stuns, siphon taunts, bomb dodges with no death inside and no `winter2` after the
-return. With one tank player, `--tanks` names a stand-in.
+a third of the ranged as sphere guards, spheres killed before Ice Burst and the Quake hold;
+`--valkyrs` chained stuns, no drop, `round` only beside a puddle; `--defile` runs with no puddle hits;
+`--vile` one soaker, no burst on the stack; `--frostmourne` the warden killed. 25H: the same plus
+`--traps` with no hit and `reach` over `hold`, Frenzy stuns, siphon taunts, bomb dodges with no death
+inside and no `winter2` after the return. With one tank player, `--tanks` names a stand-in.
 
 ## What a trace answers
 

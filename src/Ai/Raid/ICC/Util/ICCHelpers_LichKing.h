@@ -144,6 +144,7 @@ bool IsLkTankDefensiveHeld(PlayerbotAI* botAI);
 bool GetLkQuakeWalk(PlayerbotAI* botAI, Position& spot);
 bool GetLkTrapWalk(PlayerbotAI* botAI, Position& spot);
 bool GetLkPlagueWalk(PlayerbotAI* botAI, Position& spot);
+// The stand walk, or a melee damage dealer's walk round a trap to its pick
 bool GetLkStandWalk(PlayerbotAI* botAI, Position& spot);
 // The stand is a winter slot or a spirit spot: walked forced, with Nitro Boosts
 bool IsLkStandUrgent(PlayerbotAI* botAI);

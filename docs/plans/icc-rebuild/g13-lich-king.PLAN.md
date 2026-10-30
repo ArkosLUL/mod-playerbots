@@ -50,17 +50,18 @@ One lead, no split: every change sits in the two stems' states, ticks and resolv
 
 | Choice | Source | Alternative |
 |---|---|---|
-| Sphere guards: on 25N/10H/25H, ceil(ranged DPS / 3) ranged DPS bots, hunters first, stand in the middle columns of the tank cluster and shoot its spheres, then its spirits | script: a sphere spawns within 10 yd of him and follows a random player at 3 yd/s (`speed_run` 0.43); the ranged cluster at 60° is 44 yd or more off every path to the tank cluster; a guard at its middle sits 18-24 yd off them and 17-29 yd from the spirit spots; WH: hunters suit spheres best | the ranged cluster closer, inside the 104° Pain and Suffering cone; one cluster |
+| Sphere guards: on 25N/10H/25H, ceil(ranged DPS / 3) ranged DPS bots, hunters first, stand in the middle columns of the tank cluster and shoot its spheres, then its spirits | script: a sphere spawns within 10 yd of him and follows a random player at 3 yd/s (`speed_run` 0.43); the ranged cluster at 60° is 44 yd or more off every path to the tank cluster; on a 25-man roster a guard at its middle sits within 27 yd of every such path and 7-29 yd from the spirit spots; WH: hunters suit spheres best | the ranged cluster closer, inside the 104° Pain and Suffering cone; one cluster |
 | `lk.phase` keeps `one` or `two` while he's aggressive under the threshold until his winter's turn to passive, latched per pull | script: the transition waits for the first hit he takes while not casting | stateless, up to 2 s early |
 | One tank player: a ghoul stand-in in phase one, a DK then a paladin damage dealer, at AT; class taunt on loose ghouls, its pick a loose ghoul, else its own healthiest; no plague walk, the `addtank` cure rule | Gap lanes' one-bot-tank rule; WH: the ghouls are plague fodder the second tank holds, abysmal damage (8.5-29.4 × 177 per 2 s); Taunt needs Defensive Stance, Growl bear form | warrior damage dealers too; no stand-in |
+| The stand-in's area damage stays under the splash hold, which spares tank players only | a damage dealer's area damage would burn the plague's fodder; its class taunt holds them | spare it like a tank |
 | No stand-in for Shamblings, Raging Spirits, the Soul Reaper swap or siphon taunts | `creature_template`: Shambling swings 50/131.9/90.5/214.8 × 177 per 2 s with +200% Enrage and a 150% Shockwave, spirits 66.4/152.4/95.2/219.2, him 139/276.1/244.3/492.9 per 1.5 s and +100% haste after Soul Reaper; Life Siphon heals the Val'kyr 10× whoever it hits | a stand-in on 10N spirits |
 | A Raging Spirit on a human tank is never taunted off it | Humans decision: a human tank plays its own part | taunt it to its assigned bot tank |
 | A Cleansing Totem down while a carrier lives is replaced by Mana Spring, else Healing Stream | Rotface's answer: a new water totem replaces the old | Totemic Recall, which takes every totem |
 | Paladins never Cleanse a plague carrier's silence; priests still dispel it | Cleanse takes a disease with the magic, and the plague jumps from wherever the carrier stands | dispel and let it jump |
 | Harvest Soul's hold needs the stun state as well as the aura | Harvest Souls 73654 has no duration, its aura ends with his channel; its effect 2 is the stun | the aura alone |
-| Trap reach: a melee DPS bot whose straight approach passes within 10.5 yd of a trap walks to the clear spot round its pick nearest it, else holds still | `TRAP_TRIGGER`; generic reach otherwise bounces off the dodge | generic reach |
+| Trap reach: a melee DPS bot whose straight approach passes within 10.5 yd of a trap walks to the clear spot round its pick nearest it on the stand row (it dodges nothing), else holds still | `TRAP_TRIGGER`; generic reach otherwise bounces off the dodge | generic reach |
 | Melee DPS bots whose pick is a Raging Spirit within 12 yd of him leave their stack node | WT, WH: leftover spirits are tanked on him and cleaved | keep the node and bounce |
-| A melee Val'kyr chaser whose line crosses a puddle walks a waypoint beside the first puddle, latched until reached, reach held | WT: Val'kyr stay out of Defile, which grows on every player it hits | stay at K2 (r13) |
+| A melee Val'kyr chaser whose line crosses a puddle walks a waypoint beside the first puddle, latched until reached, reach held, yielding to a plague walk | WT: Val'kyr stay out of Defile, which grows on every player it hits | stay at K2 (r13) |
 | Heroic Frostmourne holds reach for everyone inside; ranged pick the woken Wicked Spirit nearest the leader within 30 yd of themselves | WH: the raid moves as one group | reach kept, a bot steps off the stack |
 | Sight stays unchecked | both floors and the ice shards are gameobjects with no vmap under them, so `los` reads every ray clear | navprobe `los` |
 
@@ -84,6 +85,9 @@ Navprobe reads neither floor (gameobject collision only), so nothing was probed.
 ## Known gaps
 
 - Those in the boss doc.
+- Review, left open: trap reach and the walk round a puddle have no unpark cap, so one that never
+  lands holds its bot until the pick moves, the trap goes or the Val'kyr drops; a cap needs a pull
+  showing it (`lk.trap` `reach`, `lk.valkyr` `round`).
 - No 631 trace; the user built `623638b99` clean, this change needs a rebuild (no new `.cpp`, no CMake
   re-run); no `-Werror` pass beyond `pb-check`.
 

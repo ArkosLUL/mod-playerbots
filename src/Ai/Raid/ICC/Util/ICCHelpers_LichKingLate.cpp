@@ -1857,6 +1857,10 @@ void UpdateBot(LateState& st, LateBot& bs, PlayerbotAI* botAI, Creature* boss, I
             !(phase == IccLichKingPhaseId::Three && VileWalk(st, bs, botAI, kind, spot)))
         {
             UpdateChase(st, bs, bot, phase);
+            // A plague carrier isolating from the raid keeps its walk
+            if (bs.roundValid && IsLkMovementOwned(botAI))
+                bs.roundValid = false;
+
             if (bs.roundValid)
             {
                 kind = WalkKind::Round;
@@ -1878,6 +1882,11 @@ void UpdateBot(LateState& st, LateBot& bs, PlayerbotAI* botAI, Creature* boss, I
                 else
                     hold = true;
             }
+        }
+        else
+        {
+            // Planned again from wherever the Defile or Vile Spirits walk leaves it
+            bs.roundValid = false;
         }
 
         ValkyrDuty(st, bs, bot, phase, valkyrNote);
